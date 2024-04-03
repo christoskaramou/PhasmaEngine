@@ -81,7 +81,7 @@ namespace pe
                             if (m_geometry.HasDirtyDescriptorViews(frame))
                             {
                                 Descriptor *DSetTextures = sets[1];
-                                DSetTextures->SetSampler(0, defaultSampler->Handle());
+                                DSetTextures->SetSampler(0, defaultSampler->ApiHandle());
                                 DSetTextures->SetImageViews(1, m_geometry.GetImageViews(), {});
                                 DSetTextures->Update();
                             }
@@ -124,7 +124,7 @@ namespace pe
                             if (m_geometry.HasDirtyDescriptorViews(frame))
                             {
                                 Descriptor *DSetTextures = sets[1];
-                                DSetTextures->SetSampler(0, defaultSampler->Handle());
+                                DSetTextures->SetSampler(0, defaultSampler->ApiHandle());
                                 DSetTextures->SetImageViews(1, m_geometry.GetImageViews(), {});
                                 DSetTextures->Update();
                             }
@@ -151,7 +151,7 @@ namespace pe
                         if (m_geometry.HasDirtyDescriptorViews(frame))
                         {
                             Descriptor *DSetTextures = sets[1];
-                            DSetTextures->SetSampler(0, defaultSampler->Handle());
+                            DSetTextures->SetSampler(0, defaultSampler->ApiHandle());
                             DSetTextures->SetImageViews(1, m_geometry.GetImageViews(), {});
                             DSetTextures->Update();
                         }

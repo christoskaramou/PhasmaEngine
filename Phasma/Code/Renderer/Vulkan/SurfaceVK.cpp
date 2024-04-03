@@ -11,7 +11,7 @@ namespace pe
         if (!SDL_Vulkan_CreateSurface(window, RHII.GetInstance(), &surfaceVK))
             PE_ERROR(SDL_GetError());
 
-        m_handle = surfaceVK;
+        m_apiHandle = surfaceVK;
 
         int w, h;
         SDL_Vulkan_GetDrawableSize(window, &w, &h);
@@ -20,17 +20,17 @@ namespace pe
 
     Surface::~Surface()
     {
-        if (m_handle)
+        if (m_apiHandle)
         {
-            vkDestroySurfaceKHR(RHII.GetInstance(), m_handle, nullptr);
-            m_handle = {};
+            vkDestroySurfaceKHR(RHII.GetInstance(), m_apiHandle, nullptr);
+            m_apiHandle = {};
         }
     }
 
     void Surface::CheckTransfer()
     {
         VkSurfaceCapabilitiesKHR capabilities;
-        vkGetPhysicalDeviceSurfaceCapabilitiesKHR(RHII.GetGpu(), m_handle, &capabilities);
+        vkGetPhysicalDeviceSurfaceCapabilitiesKHR(RHII.GetGpu(), m_apiHandle, &capabilities);
 
         // Ensure eTransferSrc bit for blit operations
         if (!(capabilities.supportedUsageFlags & VK_IMAGE_USAGE_TRANSFER_SRC_BIT))
@@ -40,10 +40,10 @@ namespace pe
     void Surface::FindFormat()
     {
         uint32_t formatsCount;
-        vkGetPhysicalDeviceSurfaceFormatsKHR(RHII.GetGpu(), m_handle, &formatsCount, nullptr);
+        vkGetPhysicalDeviceSurfaceFormatsKHR(RHII.GetGpu(), m_apiHandle, &formatsCount, nullptr);
 
         std::vector<VkSurfaceFormatKHR> formats(formatsCount);
-        vkGetPhysicalDeviceSurfaceFormatsKHR(RHII.GetGpu(), m_handle, &formatsCount, formats.data());
+        vkGetPhysicalDeviceSurfaceFormatsKHR(RHII.GetGpu(), m_apiHandle, &formatsCount, formats.data());
 
         VkFormat formatVK = formats[0].format;
         VkColorSpaceKHR colorSpaceVK = formats[0].colorSpace;
@@ -72,10 +72,10 @@ namespace pe
     void Surface::FindPresentationMode()
     {
         uint32_t presentModesCount;
-        vkGetPhysicalDeviceSurfacePresentModesKHR(RHII.GetGpu(), m_handle, &presentModesCount, nullptr);
+        vkGetPhysicalDeviceSurfacePresentModesKHR(RHII.GetGpu(), m_apiHandle, &presentModesCount, nullptr);
 
         std::vector<VkPresentModeKHR> presentModes(presentModesCount);
-        vkGetPhysicalDeviceSurfacePresentModesKHR(RHII.GetGpu(), m_handle, &presentModesCount, presentModes.data());
+        vkGetPhysicalDeviceSurfacePresentModesKHR(RHII.GetGpu(), m_apiHandle, &presentModesCount, presentModes.data());
 
         for (const auto &i : presentModes)
         {

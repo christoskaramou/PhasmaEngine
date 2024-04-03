@@ -121,18 +121,18 @@ namespace pe
 
         VkRenderPass renderPass;
         PE_CHECK(vkCreateRenderPass2(RHII.GetDevice(), &renderPassInfo, nullptr, &renderPass));
-        m_handle = renderPass;
+        m_apiHandle = renderPass;
 
         m_name = name;
-        Debug::SetObjectName(m_handle, name);
+        Debug::SetObjectName(m_apiHandle, name);
     }
 
     RenderPass::~RenderPass()
     {
-        if (m_handle)
+        if (m_apiHandle)
         {
-            vkDestroyRenderPass(RHII.GetDevice(), m_handle, nullptr);
-            m_handle = {};
+            vkDestroyRenderPass(RHII.GetDevice(), m_apiHandle, nullptr);
+            m_apiHandle = {};
         }
     }
 }

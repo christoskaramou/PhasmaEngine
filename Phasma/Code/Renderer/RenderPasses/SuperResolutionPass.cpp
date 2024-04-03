@@ -129,10 +129,10 @@ namespace pe
         Camera &camera = *GetGlobalSystem<CameraSystem>()->GetCamera(0);
 
         FfxFsr2DispatchDescription dd = {};
-        dd.commandList = ffxGetCommandListVK(cmd->Handle());
+        dd.commandList = ffxGetCommandListVK(cmd->ApiHandle());
         wchar_t fsr2InputName[] = L"FSR2_Input";
         dd.color = ffxGetTextureResourceVK(m_context.get(),
-                                           m_viewportRT->Handle(),
+                                           m_viewportRT->ApiHandle(),
                                            m_viewportRT->GetSRV(),
                                            m_viewportRT->GetWidth(),
                                            m_viewportRT->GetHeight(),
@@ -140,7 +140,7 @@ namespace pe
                                            fsr2InputName);
         wchar_t fsr2DepthName[] = L"FSR2_Depth";
         dd.depth = ffxGetTextureResourceVK(m_context.get(),
-                                           m_depthStencil->Handle(),
+                                           m_depthStencil->ApiHandle(),
                                            m_depthStencil->GetSRV(),
                                            m_depthStencil->GetWidth(),
                                            m_depthStencil->GetHeight(),
@@ -148,7 +148,7 @@ namespace pe
                                            fsr2DepthName);
         wchar_t fsr2VelocityName[] = L"FSR2_Velocity";
         dd.motionVectors = ffxGetTextureResourceVK(m_context.get(),
-                                                   m_velocityRT->Handle(),
+                                                   m_velocityRT->ApiHandle(),
                                                    m_velocityRT->GetSRV(),
                                                    m_velocityRT->GetWidth(),
                                                    m_velocityRT->GetHeight(),
@@ -180,7 +180,7 @@ namespace pe
                                                                 fsr2TACName);
         wchar_t fsr2OutputName[] = L"FSR2_Output";
         dd.output = ffxGetTextureResourceVK(m_context.get(),
-                                            m_display->Handle(),
+                                            m_display->ApiHandle(),
                                             m_display->GetSRV(),
                                             m_display->GetWidth(),
                                             m_display->GetHeight(),

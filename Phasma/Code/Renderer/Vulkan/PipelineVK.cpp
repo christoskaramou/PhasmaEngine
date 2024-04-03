@@ -163,7 +163,7 @@ namespace pe
             std::vector<VkDescriptorSetLayout> layouts{};
             const auto &descriptors = info.GetDescriptors(0);
             for (uint32_t i = 0; i < descriptors.size(); i++)
-                layouts.push_back(descriptors[i]->GetLayout()->Handle());
+                layouts.push_back(descriptors[i]->GetLayout()->ApiHandle());
 
             VkPipelineLayoutCreateInfo plci{};
             plci.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
@@ -189,7 +189,7 @@ namespace pe
 
             VkPipeline vkPipeline;
             PE_CHECK(vkCreateComputePipelines(RHII.GetDevice(), nullptr, 1, &compinfo, nullptr, &vkPipeline));
-            m_handle = vkPipeline;
+            m_apiHandle = vkPipeline;
 
             vkDestroyShaderModule(RHII.GetDevice(), module, nullptr);
         }
@@ -429,7 +429,7 @@ namespace pe
             std::vector<VkDescriptorSetLayout> layouts{};
             const auto &descriptors = info.GetDescriptors(0);
             for (uint32_t i = 0; i < descriptors.size(); i++)
-                layouts.push_back(descriptors[i]->GetLayout()->Handle());
+                layouts.push_back(descriptors[i]->GetLayout()->ApiHandle());
 
             VkPipelineLayoutCreateInfo plci{};
             plci.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
@@ -444,12 +444,12 @@ namespace pe
             pipeinfo.layout = m_layout;
 
             // Render Pass
-            pipeinfo.renderPass = renderPass->Handle();
+            pipeinfo.renderPass = renderPass->ApiHandle();
 
             // Subpass (Index of subpass this pipeline will be used in)
             pipeinfo.subpass = 0;
 
-            // Base Pipeline Handle
+            // Base Pipeline ApiHandle
             pipeinfo.basePipelineHandle = nullptr;
 
             // Base Pipeline Index
@@ -457,13 +457,13 @@ namespace pe
 
             VkPipeline pipeline;
             PE_CHECK(vkCreateGraphicsPipelines(RHII.GetDevice(), nullptr, 1, &pipeinfo, nullptr, &pipeline));
-            m_handle = pipeline;
+            m_apiHandle = pipeline;
 
             vkDestroyShaderModule(RHII.GetDevice(), vertModule, nullptr);
             if (info.pFragShader && fragModule)
                 vkDestroyShaderModule(RHII.GetDevice(), fragModule, nullptr);
 
-            Debug::SetObjectName(m_handle, info.name);
+            Debug::SetObjectName(m_apiHandle, info.name);
         }
     }
 
@@ -475,10 +475,10 @@ namespace pe
             m_layout = {};
         }
 
-        if (m_handle)
+        if (m_apiHandle)
         {
-            vkDestroyPipeline(RHII.GetDevice(), m_handle, nullptr);
-            m_handle = {};
+            vkDestroyPipeline(RHII.GetDevice(), m_apiHandle, nullptr);
+            m_apiHandle = {};
         }
     }
 }

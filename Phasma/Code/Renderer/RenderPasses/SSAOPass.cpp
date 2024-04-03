@@ -47,7 +47,7 @@ namespace pe
         screenSizeInfo.height = m_ssaoRT->GetHeight();
         screenSizeInfo.depthView = m_depth->GetSRV();
         screenSizeInfo.normalsView = m_normalRT->GetSRV();
-        screenSizeInfo.output = m_ssaoRT->Handle();
+        screenSizeInfo.output = m_ssaoRT->ApiHandle();
         screenSizeInfo.outputView = m_ssaoRT->GetRTV();
         PE_CHECK(FFX_CACAO_VkInitScreenSizeDependentResources(m_context, &screenSizeInfo));
     }
@@ -148,7 +148,7 @@ namespace pe
         cmd->ImageBarriers(barriers);
 
         cmd->BeginDebugRegion("SSAO_Pass");
-        PE_CHECK(FFX_CACAO_VkDraw(m_context, cmd->Handle(), &m_proj, &m_normalsToView));
+        PE_CHECK(FFX_CACAO_VkDraw(m_context, cmd->ApiHandle(), &m_proj, &m_normalsToView));
         cmd->EndDebugRegion();
 
         // image barrier transition happens in draw, so set to correct layout
@@ -181,7 +181,7 @@ namespace pe
         screenSizeInfo.height = m_ssaoRT->GetHeight();
         screenSizeInfo.depthView = m_depth->GetSRV();
         screenSizeInfo.normalsView = m_normalRT->GetSRV();
-        screenSizeInfo.output = m_ssaoRT->Handle();
+        screenSizeInfo.output = m_ssaoRT->ApiHandle();
         screenSizeInfo.outputView = m_ssaoRT->GetRTV();
         PE_CHECK(FFX_CACAO_VkInitScreenSizeDependentResources(m_context, &screenSizeInfo));
     }

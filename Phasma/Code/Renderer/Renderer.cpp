@@ -109,7 +109,6 @@ namespace pe
     {
         std::vector<CommandBuffer *> cmds{};
         cmds.reserve(20);
-        Queue *renderQueue = RHII.GetRenderQueue();
 
         ShadowPass &shadows = *GetGlobalComponent<ShadowPass>();
         SSAOPass &ssao = *GetGlobalComponent<SSAOPass>();
@@ -220,8 +219,8 @@ namespace pe
 
         // Blit to swapchain
         {
-            CommandBuffer *cmdBlit = BlitToSwapchain(nullptr, gSettings.current_rendering_image ? gSettings.current_rendering_image : m_displayRT, imageIndex);
-            cmds.push_back(cmdBlit);
+            Image *blitImage = gSettings.current_rendering_image ? gSettings.current_rendering_image : m_displayRT;
+            cmds.push_back(BlitToSwapchain(blitImage, imageIndex));
         }
 
         return cmds;
@@ -490,19 +489,8 @@ namespace pe
         GetGlobalSystem<PostProcessSystem>()->Resize(width, height);
     }
 
-    CommandBuffer *Renderer::BlitToSwapchain(CommandBuffer *cmd, Image *src, uint32_t imageIndex)
+    CommandBuffer *Renderer::BlitToSwapchain(Image *src, uint32_t imageIndex)
     {
-        CommandBuffer *cmdBlit;
-        if (!cmd)
-        {
-            cmdBlit = CommandBuffer::GetFree(RHII.GetRenderQueue()->GetFamilyId());
-            cmdBlit->Begin();
-        }
-        else
-        {
-            cmdBlit = cmd;
-        }
-
         Image *swapchainImage = RHII.GetSwapchain()->GetImage(imageIndex);
         Viewport &vp = m_renderArea.viewport;
 
@@ -516,6 +504,9 @@ namespace pe
         region.dstSubresource.aspectMask = GetAspectMask(swapchainImage->GetFormat());
         region.dstSubresource.layerCount = 1;
 
+        CommandBuffer *cmdBlit = CommandBuffer::GetFree(RHII.GetRenderQueue()->GetFamilyId());
+        cmdBlit->Begin();
+
         // with 1:1 ratio we can use nearest filter
         Filter filter = src->GetWidth() == (uint32_t)vp.width && src->GetHeight() == (uint32_t)vp.height ? Filter::Nearest : Filter::Linear;
         cmdBlit->BlitImage(src, swapchainImage, &region, filter);
@@ -527,15 +518,9 @@ namespace pe
         barrier.accessMask = Access::None;
         cmdBlit->ImageBarrier(barrier);
 
-        if (!cmd)
-        {
-            cmdBlit->End();
-            return cmdBlit;
-        }
-        else
-        {
-            return nullptr;
-        }
+        cmdBlit->End();
+
+        return cmdBlit;
     }
 
     void Renderer::PollShaders()

@@ -129,20 +129,20 @@ namespace pe
         for (uint32_t i = 0; i < SWAPCHAIN_IMAGES; i++)
         {
             auto *DSBrightFilter = m_passInfoBF.GetDescriptors(i)[0];
-            DSBrightFilter->SetImageView(0, m_frameImage->GetSRV(), m_frameImage->GetSampler()->Handle());
+            DSBrightFilter->SetImageView(0, m_frameImage->GetSRV(), m_frameImage->GetSampler()->ApiHandle());
             DSBrightFilter->Update();
 
             auto *DSGaussianBlurHorizontal = m_passInfoGBH.GetDescriptors(i)[0];
-            DSGaussianBlurHorizontal->SetImageView(0, m_brightFilterRT->GetSRV(), m_brightFilterRT->GetSampler()->Handle());
+            DSGaussianBlurHorizontal->SetImageView(0, m_brightFilterRT->GetSRV(), m_brightFilterRT->GetSampler()->ApiHandle());
             DSGaussianBlurHorizontal->Update();
 
             auto *DSGaussianBlurVertical = m_passInfoGBV.GetDescriptors(i)[0];
-            DSGaussianBlurVertical->SetImageView(0, m_gaussianBlurHorizontalRT->GetSRV(), m_gaussianBlurHorizontalRT->GetSampler()->Handle());
+            DSGaussianBlurVertical->SetImageView(0, m_gaussianBlurHorizontalRT->GetSRV(), m_gaussianBlurHorizontalRT->GetSampler()->ApiHandle());
             DSGaussianBlurVertical->Update();
 
             auto *DSCombine = m_passInfoCombine.GetDescriptors(i)[0];
-            DSCombine->SetImageView(0, m_frameImage->GetSRV(), m_frameImage->GetSampler()->Handle());
-            DSCombine->SetImageView(1, m_gaussianBlurVerticalRT->GetSRV(), m_gaussianBlurVerticalRT->GetSampler()->Handle());
+            DSCombine->SetImageView(0, m_frameImage->GetSRV(), m_frameImage->GetSampler()->ApiHandle());
+            DSCombine->SetImageView(1, m_gaussianBlurVerticalRT->GetSRV(), m_gaussianBlurVerticalRT->GetSampler()->ApiHandle());
             DSCombine->Update();
         }
     }

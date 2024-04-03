@@ -45,7 +45,7 @@ namespace pe
         SDL_GetDesktopDisplayMode(0, &dm);
         m_window = Window::Create(SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED, dm.w - 100, dm.h - 100, flags);
 
-        RHII.Init(m_window->Handle());
+        RHII.Init(m_window->ApiHandle());
 
         Queue *queue = Queue::Get(QueueType::GraphicsBit | QueueType::TransferBit, 1);
         CommandBuffer *cmd = CommandBuffer::GetFree(queue);

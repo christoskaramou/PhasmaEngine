@@ -20,7 +20,7 @@ namespace pe
 
         VkFramebufferCreateInfo fbci{};
         fbci.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
-        fbci.renderPass = renderPass->Handle();
+        fbci.renderPass = renderPass->ApiHandle();
         fbci.attachmentCount = static_cast<uint32_t>(_views.size());
         fbci.pAttachments = _views.data();
         fbci.width = width;
@@ -29,17 +29,17 @@ namespace pe
 
         VkFramebuffer frameBuffer;
         PE_CHECK(vkCreateFramebuffer(RHII.GetDevice(), &fbci, nullptr, &frameBuffer));
-        m_handle = frameBuffer;
+        m_apiHandle = frameBuffer;
 
-        Debug::SetObjectName(m_handle, name);
+        Debug::SetObjectName(m_apiHandle, name);
     }
 
     FrameBuffer::~FrameBuffer()
     {
-        if (m_handle)
+        if (m_apiHandle)
         {
-            vkDestroyFramebuffer(RHII.GetDevice(), m_handle, nullptr);
-            m_handle = {};
+            vkDestroyFramebuffer(RHII.GetDevice(), m_apiHandle, nullptr);
+            m_apiHandle = {};
         }
     }
 }

@@ -10,7 +10,7 @@ namespace pe
     Swapchain::Swapchain(Surface *surface, const std::string &name)
     {
         VkSurfaceCapabilitiesKHR capabilities;
-        vkGetPhysicalDeviceSurfaceCapabilitiesKHR(RHII.GetGpu(), surface->Handle(), &capabilities);
+        vkGetPhysicalDeviceSurfaceCapabilitiesKHR(RHII.GetGpu(), surface->ApiHandle(), &capabilities);
 
         const Rect2Du &actualExtent = surface->GetActualExtent();
         m_extent.x = actualExtent.x;
@@ -20,7 +20,7 @@ namespace pe
 
         VkSwapchainCreateInfoKHR swapchainCreateInfo{};
         swapchainCreateInfo.sType = VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR;
-        swapchainCreateInfo.surface = surface->Handle();
+        swapchainCreateInfo.surface = surface->ApiHandle();
         swapchainCreateInfo.minImageCount = clamp(
             SWAPCHAIN_IMAGES,
             capabilities.minImageCount,
@@ -37,8 +37,8 @@ namespace pe
         swapchainCreateInfo.compositeAlpha = VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR;
         swapchainCreateInfo.presentMode = Translate<VkPresentModeKHR>(surface->GetPresentMode());
         swapchainCreateInfo.clipped = VK_TRUE;
-        if (m_handle)
-            swapchainCreateInfo.oldSwapchain = m_handle;
+        if (m_apiHandle)
+            swapchainCreateInfo.oldSwapchain = m_apiHandle;
 
         // new swapchain with old create info
         VkSwapchainKHR schain;
@@ -58,7 +58,7 @@ namespace pe
         for (unsigned i = 0; i < m_images.size(); i++)
         {
             m_images[i] = new Image();
-            m_images[i]->Handle() = imagesVK[i];
+            m_images[i]->ApiHandle() = imagesVK[i];
             m_images[i]->m_imageInfo.name = "Swapchain_image_" + std::to_string(i);
             m_images[i]->m_imageInfo.format = surface->GetFormat();
             m_images[i]->m_imageInfo.width = actualExtent.width;
@@ -82,7 +82,7 @@ namespace pe
         {
             VkImageViewCreateInfo imageViewCreateInfo{};
             imageViewCreateInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
-            imageViewCreateInfo.image = m_images[i]->Handle();
+            imageViewCreateInfo.image = m_images[i]->ApiHandle();
             imageViewCreateInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;
             imageViewCreateInfo.format = Translate<VkFormat>(surface->GetFormat());
             imageViewCreateInfo.subresourceRange = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1};
@@ -91,33 +91,33 @@ namespace pe
             PE_CHECK(vkCreateImageView(RHII.GetDevice(), &imageViewCreateInfo, nullptr, &imageView));
             m_images[i]->SetRTV(imageView);
 
-            Debug::SetObjectName(m_images[i]->Handle(), "Swapchain_image" + std::to_string(i));
+            Debug::SetObjectName(m_images[i]->ApiHandle(), "Swapchain_image" + std::to_string(i));
             Debug::SetObjectName(m_images[i]->GetRTV(), "Swapchain_image_view" + std::to_string(i));
         }
 
-        if (m_handle)
+        if (m_apiHandle)
         {
-            vkDestroySwapchainKHR(RHII.GetDevice(), m_handle, nullptr);
-            m_handle = {};
+            vkDestroySwapchainKHR(RHII.GetDevice(), m_apiHandle, nullptr);
+            m_apiHandle = {};
         }
 
-        m_handle = schain;
+        m_apiHandle = schain;
 
-        Debug::SetObjectName(m_handle, name);
+        Debug::SetObjectName(m_apiHandle, name);
     }
 
     Swapchain::~Swapchain()
     {
-        if (m_handle)
+        if (m_apiHandle)
         {
-            vkDestroySwapchainKHR(RHII.GetDevice(), m_handle, nullptr);
-            m_handle = {};
+            vkDestroySwapchainKHR(RHII.GetDevice(), m_apiHandle, nullptr);
+            m_apiHandle = {};
         }
 
         for (auto *image : m_images)
         {
             // Invalidate the image handle, swapchain destroys it
-            image->Handle() = {};
+            image->ApiHandle() = {};
             delete image;
         }
     }
@@ -125,7 +125,7 @@ namespace pe
     uint32_t Swapchain::Aquire(Semaphore *semaphore)
     {
         uint32_t imageIndex = 0;
-        PE_CHECK(vkAcquireNextImageKHR(RHII.GetDevice(), m_handle, UINT64_MAX, semaphore->Handle(), nullptr, &imageIndex));
+        PE_CHECK(vkAcquireNextImageKHR(RHII.GetDevice(), m_apiHandle, UINT64_MAX, semaphore->ApiHandle(), nullptr, &imageIndex));
 
         return imageIndex;
     }

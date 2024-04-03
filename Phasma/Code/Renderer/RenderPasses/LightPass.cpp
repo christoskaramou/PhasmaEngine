@@ -135,52 +135,52 @@ namespace pe
             auto &setsOpaque = m_passInfoOpaque.GetDescriptors(i);
 
             auto *DSetOpaque = setsOpaque[0];
-            DSetOpaque->SetImageView(0, m_depthStencilRT->GetSRV(), m_depthStencilRT->GetSampler()->Handle());
-            DSetOpaque->SetImageView(1, m_normalRT->GetSRV(), m_normalRT->GetSampler()->Handle());
-            DSetOpaque->SetImageView(2, m_albedoRT->GetSRV(), m_albedoRT->GetSampler()->Handle());
-            DSetOpaque->SetImageView(3, m_srmRT->GetSRV(), m_srmRT->GetSampler()->Handle());
+            DSetOpaque->SetImageView(0, m_depthStencilRT->GetSRV(), m_depthStencilRT->GetSampler()->ApiHandle());
+            DSetOpaque->SetImageView(1, m_normalRT->GetSRV(), m_normalRT->GetSampler()->ApiHandle());
+            DSetOpaque->SetImageView(2, m_albedoRT->GetSRV(), m_albedoRT->GetSampler()->ApiHandle());
+            DSetOpaque->SetImageView(3, m_srmRT->GetSRV(), m_srmRT->GetSampler()->ApiHandle());
             DSetOpaque->SetBuffer(4, GetGlobalSystem<LightSystem>()->GetUniform(i));
-            DSetOpaque->SetImageView(5, m_ssaoRT->GetSRV(), m_ssaoRT->GetSampler()->Handle());
-            DSetOpaque->SetImageView(6, m_emissiveRT->GetSRV(), m_emissiveRT->GetSampler()->Handle());
+            DSetOpaque->SetImageView(5, m_ssaoRT->GetSRV(), m_ssaoRT->GetSampler()->ApiHandle());
+            DSetOpaque->SetImageView(6, m_emissiveRT->GetSRV(), m_emissiveRT->GetSampler()->ApiHandle());
             DSetOpaque->SetBuffer(7, m_uniform[i]);
-            DSetOpaque->SetImageView(8, m_transparencyRT->GetSRV(), m_transparencyRT->GetSampler()->Handle());
-            DSetOpaque->SetImageView(9, m_ibl_brdf_lut->GetSRV(), m_ibl_brdf_lut->GetSampler()->Handle());
+            DSetOpaque->SetImageView(8, m_transparencyRT->GetSRV(), m_transparencyRT->GetSampler()->ApiHandle());
+            DSetOpaque->SetImageView(9, m_ibl_brdf_lut->GetSRV(), m_ibl_brdf_lut->GetSampler()->ApiHandle());
             DSetOpaque->Update();
 
             auto *DSetShadowsOpaque = setsOpaque[1];
             DSetShadowsOpaque->SetBuffer(0, shadows.m_uniforms[i]);
             DSetShadowsOpaque->SetImageViews(1, views, {});
-            DSetShadowsOpaque->SetSampler(2, shadows.m_sampler->Handle());
+            DSetShadowsOpaque->SetSampler(2, shadows.m_sampler->ApiHandle());
             DSetShadowsOpaque->Update();
 
             auto *DSetSkyboxOpaque = setsOpaque[2];
-            DSetSkyboxOpaque->SetImageView(0, skybox.GetCubeMap()->GetSRV(), skybox.GetCubeMap()->GetSampler()->Handle());
+            DSetSkyboxOpaque->SetImageView(0, skybox.GetCubeMap()->GetSRV(), skybox.GetCubeMap()->GetSampler()->ApiHandle());
             DSetSkyboxOpaque->Update();
 
             // Alpha
             auto &setsAlpha = m_passInfoTransparent.GetDescriptors(i);
 
             auto *DSetAlpha = setsAlpha[0];
-            DSetAlpha->SetImageView(0, m_depthStencilRT->GetSRV(), m_depthStencilRT->GetSampler()->Handle());
-            DSetAlpha->SetImageView(1, m_normalRT->GetSRV(), m_normalRT->GetSampler()->Handle());
-            DSetAlpha->SetImageView(2, m_albedoRT->GetSRV(), m_albedoRT->GetSampler()->Handle());
-            DSetAlpha->SetImageView(3, m_srmRT->GetSRV(), m_srmRT->GetSampler()->Handle());
+            DSetAlpha->SetImageView(0, m_depthStencilRT->GetSRV(), m_depthStencilRT->GetSampler()->ApiHandle());
+            DSetAlpha->SetImageView(1, m_normalRT->GetSRV(), m_normalRT->GetSampler()->ApiHandle());
+            DSetAlpha->SetImageView(2, m_albedoRT->GetSRV(), m_albedoRT->GetSampler()->ApiHandle());
+            DSetAlpha->SetImageView(3, m_srmRT->GetSRV(), m_srmRT->GetSampler()->ApiHandle());
             DSetAlpha->SetBuffer(4, GetGlobalSystem<LightSystem>()->GetUniform(i));
-            DSetAlpha->SetImageView(5, m_ssaoRT->GetSRV(), m_ssaoRT->GetSampler()->Handle());
-            DSetAlpha->SetImageView(6, m_emissiveRT->GetSRV(), m_emissiveRT->GetSampler()->Handle());
+            DSetAlpha->SetImageView(5, m_ssaoRT->GetSRV(), m_ssaoRT->GetSampler()->ApiHandle());
+            DSetAlpha->SetImageView(6, m_emissiveRT->GetSRV(), m_emissiveRT->GetSampler()->ApiHandle());
             DSetAlpha->SetBuffer(7, m_uniform[i]);
-            DSetAlpha->SetImageView(8, m_transparencyRT->GetSRV(), m_transparencyRT->GetSampler()->Handle());
-            DSetAlpha->SetImageView(9, m_ibl_brdf_lut->GetSRV(), m_ibl_brdf_lut->GetSampler()->Handle());
+            DSetAlpha->SetImageView(8, m_transparencyRT->GetSRV(), m_transparencyRT->GetSampler()->ApiHandle());
+            DSetAlpha->SetImageView(9, m_ibl_brdf_lut->GetSRV(), m_ibl_brdf_lut->GetSampler()->ApiHandle());
             DSetAlpha->Update();
 
             auto *DSetShadowsAlpha = setsAlpha[1];
             DSetShadowsAlpha->SetBuffer(0, shadows.m_uniforms[i]);
             DSetShadowsAlpha->SetImageViews(1, views, {});
-            DSetShadowsAlpha->SetSampler(2, shadows.m_sampler->Handle());
+            DSetShadowsAlpha->SetSampler(2, shadows.m_sampler->ApiHandle());
             DSetShadowsAlpha->Update();
 
             auto *DSetSkyboxAlpha = setsAlpha[2];
-            DSetSkyboxAlpha->SetImageView(0, skybox.GetCubeMap()->GetSRV(), skybox.GetCubeMap()->GetSampler()->Handle());
+            DSetSkyboxAlpha->SetImageView(0, skybox.GetCubeMap()->GetSRV(), skybox.GetCubeMap()->GetSampler()->ApiHandle());
             DSetSkyboxAlpha->Update();
         }
     }

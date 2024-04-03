@@ -29,7 +29,7 @@ namespace pe
     {
     public:
         Viewport viewport;
-        Rect2D scissor;
+        Rect2Di scissor;
 
         void Update(float x, float y, float w, float h, float minDepth = 0.f, float maxDepth = 1.f);
     };
@@ -76,7 +76,7 @@ namespace pe
 
         void Resize(uint32_t width, uint32_t height);
 
-        CommandBuffer *BlitToSwapchain(CommandBuffer *cmd, Image *renderedImage, uint32_t imageIndex);
+        CommandBuffer *BlitToSwapchain(Image *renderedImage, uint32_t imageIndex);
 
         void PollShaders();
 

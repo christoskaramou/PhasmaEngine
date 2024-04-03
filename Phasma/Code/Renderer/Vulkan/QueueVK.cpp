@@ -14,7 +14,7 @@ namespace pe
                  ivec3 imageGranularity,
                  const std::string &name)
     {
-        m_handle = handle;
+        m_apiHandle = handle;
         m_familyId = familyId;
         m_queueTypeFlags = queueTypeFlags;
         m_imageGranularity = imageGranularity;
@@ -47,14 +47,14 @@ namespace pe
         for (uint32_t i = 0; i < commandBuffersCount; i++)
         {
             commandBufferSubmitInfos[i].sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_SUBMIT_INFO;
-            commandBufferSubmitInfos[i].commandBuffer = commandBuffers[i]->Handle();
+            commandBufferSubmitInfos[i].commandBuffer = commandBuffers[i]->ApiHandle();
         }
 
         // WaitSemaphores
         for (uint32_t i = 0; i < waitSemaphoresCount; i++)
         {
             waitSemaphoreSubmitInfos[i].sType = VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO;
-            waitSemaphoreSubmitInfos[i].semaphore = waitSemaphores[i]->Handle();
+            waitSemaphoreSubmitInfos[i].semaphore = waitSemaphores[i]->ApiHandle();
             waitSemaphoreSubmitInfos[i].stageMask = Translate<VkPipelineStageFlags2>(waitStages[i]);
             waitSemaphoreSubmitInfos[i].value = waitSemaphores[i]->GetValue();
         }
@@ -69,7 +69,7 @@ namespace pe
         for (; i < count; i++)
         {
             signalSemaphoreSubmitInfos[i].sType = VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO;
-            signalSemaphoreSubmitInfos[i].semaphore = signalSemaphores[i]->Handle();
+            signalSemaphoreSubmitInfos[i].semaphore = signalSemaphores[i]->ApiHandle();
             signalSemaphoreSubmitInfos[i].stageMask = Translate<VkPipelineStageFlags2>(signalStages[i]);
             // TODO: figure the value, +1 is probably wrong, for now income signals are not timeline semaphores either way
             signalSemaphoreSubmitInfos[i].value = signalSemaphores[i]->GetValue() + 1;
@@ -81,7 +81,7 @@ namespace pe
         {
             uint32_t index = i - signalSemaphoresCount;
             signalSemaphoreSubmitInfos[i].sType = VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO;
-            signalSemaphoreSubmitInfos[i].semaphore = commandBuffers[index]->GetSemaphore()->Handle();
+            signalSemaphoreSubmitInfos[i].semaphore = commandBuffers[index]->GetSemaphore()->ApiHandle();
             signalSemaphoreSubmitInfos[i].stageMask = VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT;
             signalSemaphoreSubmitInfos[i].value = commandBuffers[index]->IncreaseAndGetSumbitionsCount();
         }
@@ -91,7 +91,7 @@ namespace pe
             m_semaphore->Wait(m_submitions++); // Wait previous submition so we can submit again
             
             signalSemaphoreSubmitInfos[i].sType = VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO;
-            signalSemaphoreSubmitInfos[i].semaphore = m_semaphore->Handle();
+            signalSemaphoreSubmitInfos[i].semaphore = m_semaphore->ApiHandle();
             signalSemaphoreSubmitInfos[i].stageMask = VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT;
             signalSemaphoreSubmitInfos[i].value = m_submitions;
         }
@@ -105,7 +105,7 @@ namespace pe
         si.signalSemaphoreInfoCount = signalsCount;
         si.pSignalSemaphoreInfos = signalSemaphoreSubmitInfos.data();
 
-        PE_CHECK(vkQueueSubmit2(m_handle, 1, &si, nullptr));
+        PE_CHECK(vkQueueSubmit2(m_apiHandle, 1, &si, nullptr));
     }
 
     void Queue::Present(
@@ -115,7 +115,7 @@ namespace pe
     {
         std::vector<VkSwapchainKHR> swapchainsVK(swapchainCount);
         for (uint32_t i = 0; i < swapchainCount; i++)
-            swapchainsVK[i] = swapchains[i]->Handle();
+            swapchainsVK[i] = swapchains[i]->ApiHandle();
 
         std::vector<VkSemaphore> waitSemaphoresVK(waitSemaphoreCount);
         uint32_t count = waitSemaphoreCount;
@@ -123,7 +123,7 @@ namespace pe
         {
             if (waitSemaphores[i])
             {
-                waitSemaphoresVK[i] = waitSemaphores[i]->Handle();
+                waitSemaphoresVK[i] = waitSemaphores[i]->ApiHandle();
             }
             else
             {
@@ -139,12 +139,12 @@ namespace pe
         pi.pSwapchains = swapchainsVK.data();
         pi.pImageIndices = imageIndices;
 
-        PE_CHECK(vkQueuePresentKHR(m_handle, &pi));
+        PE_CHECK(vkQueuePresentKHR(m_apiHandle, &pi));
     }
 
     void Queue::WaitIdle()
     {
-        PE_CHECK(vkQueueWaitIdle(m_handle));
+        PE_CHECK(vkQueueWaitIdle(m_apiHandle));
     }
 
     void Queue::BeginDebugRegion(const std::string &name)
@@ -197,12 +197,12 @@ namespace pe
                         queueFlags |= QueueType::ProtectedBit;
 
                     VkBool32 present = VK_FALSE;
-                    vkGetPhysicalDeviceSurfaceSupportKHR(RHII.GetGpu(), i, RHII.GetSurface()->Handle(), &present);
+                    vkGetPhysicalDeviceSurfaceSupportKHR(RHII.GetGpu(), i, RHII.GetSurface()->ApiHandle(), &present);
                     if (present)
                         queueFlags |= QueueType::PresentBit;
 
                     Queue *queue = Queue::Create(queueVK, i, queueFlags, mitg, "Queue_Queue_" + std::to_string(i) + "_" + std::to_string(j));
-                    Debug::SetObjectName(queue->Handle(), queue->name);
+                    Debug::SetObjectName(queue->ApiHandle(), queue->name);
 
                     auto it = s_allQueues.find(queueFlags.Value());
                     if (it == s_allQueues.end())

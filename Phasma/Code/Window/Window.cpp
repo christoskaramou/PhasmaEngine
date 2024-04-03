@@ -11,8 +11,8 @@ namespace pe
 {
     Window::Window(int x, int y, int w, int h, uint32_t flags)
     {
-        m_handle = SDL_CreateWindow("", x, y, w, h, flags);
-        if (!m_handle)
+        m_apiHandle = SDL_CreateWindow("", x, y, w, h, flags);
+        if (!m_apiHandle)
         {
             std::cout << SDL_GetError();
             return;
@@ -20,7 +20,7 @@ namespace pe
 
         auto setTitle = [this](const std::any &title)
         {
-            SDL_SetWindowTitle(m_handle, std::any_cast<std::string>(title).c_str());
+            SDL_SetWindowTitle(m_apiHandle, std::any_cast<std::string>(title).c_str());
         };
 
         EventSystem::RegisterCallback(EventSetWindowTitle, setTitle);
@@ -28,7 +28,7 @@ namespace pe
 
     Window::~Window()
     {
-        SDL_DestroyWindow(m_handle);
+        SDL_DestroyWindow(m_apiHandle);
         SDL_Quit();
     }
     
@@ -106,7 +106,7 @@ namespace pe
         if (EventSystem::PollEvent(EventQuit))
             return false;
 
-        // Handle mouse rotation
+        // ApiHandle mouse rotation
         SmoothMouseRotation(camera, SDL_BUTTON(SDL_BUTTON_RIGHT));
 
         if (ImGui::IsKeyDown(ImGuiKey_Escape))
@@ -153,7 +153,7 @@ namespace pe
             if (!isMinimized())
             {
                 int w, h;
-                SDL_Vulkan_GetDrawableSize(m_handle, &w, &h);
+                SDL_Vulkan_GetDrawableSize(m_apiHandle, &w, &h);
                 renderer->Resize(static_cast<uint32_t>(w), static_cast<uint32_t>(h));
             }
         }
@@ -165,7 +165,7 @@ namespace pe
 
     void Window::WrapMouse(int &x, int &y)
     {
-        const Rect2D &rect = GetGlobalSystem<RendererSystem>()->GetRenderArea().scissor;
+        const Rect2Di &rect = GetGlobalSystem<RendererSystem>()->GetRenderArea().scissor;
 
         if (x < rect.x + 15)
         {
@@ -185,12 +185,12 @@ namespace pe
             y = rect.y + rect.height - 15;
         }
 
-        SDL_WarpMouseInWindow(m_handle, x, y);
+        SDL_WarpMouseInWindow(m_apiHandle, x, y);
     }
 
     bool Window::IsInsideRenderWindow(int x, int y)
     {
-        const Rect2D &rect = GetGlobalSystem<RendererSystem>()->GetRenderArea().scissor;
+        const Rect2Di &rect = GetGlobalSystem<RendererSystem>()->GetRenderArea().scissor;
 
         return x > rect.x && y > rect.y && x < rect.x + rect.width &&
                y < rect.y + rect.height;
@@ -198,31 +198,31 @@ namespace pe
 
     bool Window::isMinimized()
     {
-        return (SDL_GetWindowFlags(m_handle) & SDL_WINDOW_MINIMIZED) != 0;
+        return (SDL_GetWindowFlags(m_apiHandle) & SDL_WINDOW_MINIMIZED) != 0;
     }
 
     void Window::GetDrawableSize(int &width, int &height)
     {
-        SDL_Vulkan_GetDrawableSize(m_handle, &width, &height);
+        SDL_Vulkan_GetDrawableSize(m_apiHandle, &width, &height);
     }
 
     void Window::Show()
     {
-        SDL_ShowWindow(m_handle);
+        SDL_ShowWindow(m_apiHandle);
     }
 
     void Window::Hide()
     {
-        SDL_HideWindow(m_handle);
+        SDL_HideWindow(m_apiHandle);
     }
 
     void Window::Minimize()
     {
-        SDL_MinimizeWindow(m_handle);
+        SDL_MinimizeWindow(m_apiHandle);
     }
 
     void Window::Maximize()
     {
-        SDL_MaximizeWindow(m_handle);
+        SDL_MaximizeWindow(m_apiHandle);
     }
 }

@@ -114,15 +114,15 @@ namespace pe
 
         VkSampler vkSampler;
         PE_CHECK(vkCreateSampler(RHII.GetDevice(), &infoVK, nullptr, &vkSampler));
-        m_handle = vkSampler;
+        m_apiHandle = vkSampler;
 
-        Debug::SetObjectName(m_handle, info.name);
+        Debug::SetObjectName(m_apiHandle, info.name);
     }
 
     Sampler::~Sampler()
     {
-        if (m_handle)
-            vkDestroySampler(RHII.GetDevice(), m_handle, nullptr);
+        if (m_apiHandle)
+            vkDestroySampler(RHII.GetDevice(), m_apiHandle, nullptr);
     }
 
     Image *Image::LoadRGBA8(CommandBuffer *cmd, const std::string &path)
@@ -250,10 +250,10 @@ namespace pe
         VmaAllocation allocationVK;
         VmaAllocationInfo allocationInfo;
         PE_CHECK(vmaCreateImage(RHII.GetAllocator(), &imageInfoVK, &allocationCreateInfo, &imageVK, &allocationVK, &allocationInfo));
-        m_handle = imageVK;
+        m_apiHandle = imageVK;
         m_allocation = allocationVK;
 
-        Debug::SetObjectName(m_handle, m_imageInfo.name);
+        Debug::SetObjectName(m_apiHandle, m_imageInfo.name);
     }
 
     Image::~Image()
@@ -286,10 +286,10 @@ namespace pe
             }
         }
 
-        if (m_handle)
+        if (m_apiHandle)
         {
-            vmaDestroyImage(RHII.GetAllocator(), m_handle, m_allocation);
-            m_handle = {};
+            vmaDestroyImage(RHII.GetAllocator(), m_apiHandle, m_allocation);
+            m_apiHandle = {};
         }
 
         if (m_sampler)
@@ -317,7 +317,7 @@ namespace pe
         barrier.newLayout = Translate<VkImageLayout>(info.layout);
         barrier.srcQueueFamilyIndex = oldInfo.queueFamilyId;
         barrier.dstQueueFamilyIndex = info.queueFamilyId;
-        barrier.image = m_handle;
+        barrier.image = m_apiHandle;
         barrier.subresourceRange.aspectMask = GetAspectMaskVK(m_imageInfo.format);
         barrier.subresourceRange.baseMipLevel = info.baseMipLevel;
         barrier.subresourceRange.levelCount = mipLevels;
@@ -330,7 +330,7 @@ namespace pe
         depInfo.pImageMemoryBarriers = &barrier;
 
         cmd->BeginDebugRegion("ImageBarrier: " + m_imageInfo.name);
-        vkCmdPipelineBarrier2(cmd->Handle(), &depInfo);
+        vkCmdPipelineBarrier2(cmd->ApiHandle(), &depInfo);
         cmd->EndDebugRegion();
 
         for (uint32_t i = 0; i < arrayLayers; i++)
@@ -374,7 +374,7 @@ namespace pe
             barrier.newLayout = Translate<VkImageLayout>(info.layout);
             barrier.srcQueueFamilyIndex = cmd->GetFamilyId();
             barrier.dstQueueFamilyIndex = cmd->GetFamilyId();
-            barrier.image = image->m_handle;
+            barrier.image = image->m_apiHandle;
             barrier.subresourceRange.aspectMask = GetAspectMaskVK(imageInfo.format);
             barrier.subresourceRange.baseMipLevel = info.baseMipLevel;
             barrier.subresourceRange.levelCount = mipLevels;
@@ -397,7 +397,7 @@ namespace pe
             depInfo.pImageMemoryBarriers = barriers.data();
 
             cmd->BeginDebugRegion("ImageGroupBarrier: " + names);
-            vkCmdPipelineBarrier2(cmd->Handle(), &depInfo);
+            vkCmdPipelineBarrier2(cmd->ApiHandle(), &depInfo);
             cmd->EndDebugRegion();
         }
     }
@@ -406,14 +406,14 @@ namespace pe
     {
         PE_ERROR_IF(!(m_imageInfo.usage & ImageUsage::ColorAttachmentBit ||
                       m_imageInfo.usage & ImageUsage::DepthStencilAttachmentBit),
-                    "Image was not created with ColorAttachmentBit or DepthStencilAttachmentBit");
+                    "Image was not created with ColorAttachmentBit or DepthStencilAttachmentBit for RTV usage");
 
         m_rtv = CreateImageView(ImageViewType::Type2D, 0, useStencil);
     }
 
     void Image::CreateSRV(ImageViewType type, int mip, bool useStencil)
     {
-        PE_ERROR_IF(!(m_imageInfo.usage & ImageUsage::SampledBit), "Image was not created with SampledBit");
+        PE_ERROR_IF(!(m_imageInfo.usage & ImageUsage::SampledBit), "Image was not created with SampledBit for SRV usage");
 
         ImageViewHandle view = CreateImageView(type, mip, useStencil);
         if (mip == -1)
@@ -424,7 +424,7 @@ namespace pe
 
     void Image::CreateUAV(ImageViewType type, uint32_t mip, bool useStencil)
     {
-        PE_ERROR_IF(!(m_imageInfo.usage & ImageUsage::StorageBit), "Image was not created with StorageBit");
+        PE_ERROR_IF(!(m_imageInfo.usage & ImageUsage::StorageBit), "Image was not created with StorageBit for UAV usage");
 
         m_uavs[mip] = CreateImageView(type, static_cast<int>(mip), useStencil);
     }
@@ -442,7 +442,7 @@ namespace pe
     {
         VkImageViewCreateInfo viewInfoVK{};
         viewInfoVK.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
-        viewInfoVK.image = m_handle;
+        viewInfoVK.image = m_apiHandle;
         viewInfoVK.viewType = Translate<VkImageViewType>(type);
         viewInfoVK.format = Translate<VkFormat>(m_imageInfo.format);
         if (IsDepthFormat(m_imageInfo.format))
@@ -522,9 +522,9 @@ namespace pe
         barrier.mipLevels = m_imageInfo.mipLevels; // we need to transition all mip levels here, so they are all in the same state
         Barrier(cmd, barrier);
 
-        vkCmdCopyBufferToImage(cmd->Handle(),
-                               staging->Handle(),
-                               m_handle,
+        vkCmdCopyBufferToImage(cmd->ApiHandle(),
+                               staging->ApiHandle(),
+                               m_apiHandle,
                                VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
                                1, &region);
 
@@ -578,10 +578,10 @@ namespace pe
         //                          ", mipLevel=" + std::to_string(region.dstSubresource.mipLevel);
         cmd->BeginDebugRegion(src->m_imageInfo.name + " -> " + m_imageInfo.name);
         vkCmdCopyImage(
-            cmd->Handle(),
-            src->m_handle,
+            cmd->ApiHandle(),
+            src->m_apiHandle,
             VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
-            m_handle,
+            m_apiHandle,
             VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
             1, &region);
         cmd->EndDebugRegion();
@@ -648,9 +648,9 @@ namespace pe
         //                          ", baseLayer=" + std::to_string(region->dstSubresource.baseArrayLayer) +
         //                          ", mipLevel=" + std::to_string(region->dstSubresource.mipLevel);
         cmd->BeginDebugRegion(src->m_imageInfo.name + " -> " + m_imageInfo.name);
-        vkCmdBlitImage(cmd->Handle(),
-                       src->Handle(), VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
-                       Handle(), VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+        vkCmdBlitImage(cmd->ApiHandle(),
+                       src->ApiHandle(), VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+                       ApiHandle(), VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
                        1, &regionVK,
                        Translate<VkFilter>(filter));
         cmd->EndDebugRegion();

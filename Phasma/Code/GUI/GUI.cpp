@@ -530,9 +530,9 @@ namespace pe
         initInfo.PhysicalDevice = RHII.GetGpu();
         initInfo.Device = RHII.GetDevice();
         initInfo.QueueFamily = queue->GetFamilyId();
-        initInfo.Queue = queue->Handle();
+        initInfo.Queue = queue->ApiHandle();
         initInfo.PipelineCache = nullptr;
-        initInfo.DescriptorPool = RHII.GetDescriptorPool()->Handle();
+        initInfo.DescriptorPool = RHII.GetDescriptorPool()->ApiHandle();
         initInfo.Subpass = 0;
         initInfo.MinImageCount = RHII.GetSwapchain()->GetImageCount();
         initInfo.ImageCount = RHII.GetSwapchain()->GetImageCount();
@@ -548,11 +548,11 @@ namespace pe
         attachments[0].initialLayout = ImageLayout::Attachment;
         attachments[0].finalLayout = ImageLayout::ShaderReadOnly;
         renderPass = CommandBuffer::GetRenderPass({attachments});
-        ImGui_ImplVulkan_Init(&initInfo, renderPass->Handle());
+        ImGui_ImplVulkan_Init(&initInfo, renderPass->ApiHandle());
 
         CommandBuffer *cmd = CommandBuffer::GetFree(queue);
         cmd->Begin();
-        ImGui_ImplVulkan_CreateFontsTexture(cmd->Handle());
+        ImGui_ImplVulkan_CreateFontsTexture(cmd->ApiHandle());
         cmd->End();
         queue->Submit(1, &cmd, 0, nullptr, nullptr, 0, nullptr, nullptr);
 
@@ -600,7 +600,7 @@ namespace pe
         cmd->ImageBarrier(barrierInfo);
 
         cmd->BeginPass(attachments, "GUI");
-        ImGui_ImplVulkan_RenderDrawData(ImGui::GetDrawData(), cmd->Handle());
+        ImGui_ImplVulkan_RenderDrawData(ImGui::GetDrawData(), cmd->ApiHandle());
         cmd->EndPass();
         cmd->EndDebugRegion();
 

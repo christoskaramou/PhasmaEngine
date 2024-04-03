@@ -41,12 +41,12 @@ namespace pe
         int w = dm.w / 2;
         int h = dm.h / 2;
 
-        m_handle = SDL_CreateWindow("", x, y, w, h, flags);
-        m_renderer = SDL_CreateRenderer(m_handle, -1, 0);
+        m_apiHandle = SDL_CreateWindow("", x, y, w, h, flags);
+        m_renderer = SDL_CreateRenderer(m_apiHandle, -1, 0);
         m_texture = SDL_CreateTextureFromSurface(m_renderer, m_surface);
         SDL_FreeSurface(m_surface);
 
-        SDL_SetWindowAlwaysOnTop(m_handle, SDL_TRUE);
+        SDL_SetWindowAlwaysOnTop(m_apiHandle, SDL_TRUE);
 
         SDL_RenderCopy(m_renderer, m_texture, nullptr, nullptr);
         SDL_RenderPresent(m_renderer);
@@ -54,8 +54,8 @@ namespace pe
 
     SplashScreen::~SplashScreen()
     {
-        if (m_handle)
-            SDL_DestroyWindow(m_handle);
+        if (m_apiHandle)
+            SDL_DestroyWindow(m_apiHandle);
         if (m_renderer)
             SDL_DestroyRenderer(m_renderer);
         if (m_texture)

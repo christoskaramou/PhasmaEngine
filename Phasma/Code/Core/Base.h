@@ -259,16 +259,16 @@ namespace pe
     // which manages the memory for heap allocations through Create
     //
     // Important: Every IHandle should provide a constructor and a destructor managing the
-    // create and destroy of the HANDLE
-    template <class T, class HANDLE>
+    // create and destroy of the API_HANDLE
+    template <class T, class API_HANDLE>
     class IHandle : public IHandleBase, public NoCopy, public NoMove
     {
     public:
         template <class... Params>
         inline static T *Create(Params &&...params)
         {
-            ValidateBaseClass<ApiHandleBase, HANDLE>();
-            ValidateBaseClass<IHandle<T, HANDLE>, T>();
+            ValidateBaseClass<ApiHandleBase, API_HANDLE>();
+            ValidateBaseClass<IHandle<T, API_HANDLE>, T>();
 
             T *ptr = new T(std::forward<Params>(params)...);
 
@@ -280,8 +280,8 @@ namespace pe
 
         inline static void Destroy(T *&ptr)
         {
-            ValidateBaseClass<ApiHandleBase, HANDLE>();
-            ValidateBaseClass<IHandle<T, HANDLE>, T>();
+            ValidateBaseClass<ApiHandleBase, API_HANDLE>();
+            ValidateBaseClass<IHandle<T, API_HANDLE>, T>();
 
             if (ptr && s_allHandles.erase(ptr))
                 delete ptr; // should call ~T() destructor
@@ -290,11 +290,11 @@ namespace pe
         }
 
         virtual ~IHandle() {}
-        HANDLE &Handle() { return m_handle; }
-        const HANDLE &Handle() const { return m_handle; }
+        API_HANDLE &ApiHandle() { return m_apiHandle; }
+        const API_HANDLE &ApiHandle() const { return m_apiHandle; }
 
     protected:
-        IHandle() : m_handle{} {}
+        IHandle() : m_apiHandle{} {}
 
         void Suicide() override
         {
@@ -302,7 +302,7 @@ namespace pe
             Destroy(temp);
         }
 
-        HANDLE m_handle;
+        API_HANDLE m_apiHandle;
     };
 
     using CommandBufferHandle = ApiHandle<ObjectType::CommandBuffer, VkCommandBuffer, Placeholder<0> *>;

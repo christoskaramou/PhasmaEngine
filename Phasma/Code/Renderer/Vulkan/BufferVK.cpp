@@ -39,22 +39,22 @@ namespace pe
         VmaAllocation allocationVK;
         VmaAllocationInfo allocationInfo;
         PE_CHECK(vmaCreateBuffer(RHII.GetAllocator(), &bufferInfo, &allocationCreateInfo, &bufferVK, &allocationVK, &allocationInfo));
-        m_handle = bufferVK;
+        m_apiHandle = bufferVK;
         allocation = allocationVK;
 
         this->name = name;
 
-        Debug::SetObjectName(m_handle, name);
+        Debug::SetObjectName(m_apiHandle, name);
     }
 
     Buffer::~Buffer()
     {
         Unmap();
 
-        if (m_handle)
+        if (m_apiHandle)
         {
-            vmaDestroyBuffer(RHII.GetAllocator(), m_handle, allocation);
-            m_handle = {};
+            vmaDestroyBuffer(RHII.GetAllocator(), m_apiHandle, allocation);
+            m_apiHandle = {};
         }
     }
 
@@ -162,7 +162,7 @@ namespace pe
         region.dstOffset = dstOffset;
         region.size = size;
 
-        vkCmdCopyBuffer(cmd->Handle(), src->Handle(), Handle(), 1, &region);
+        vkCmdCopyBuffer(cmd->ApiHandle(), src->ApiHandle(), ApiHandle(), 1, &region);
     }
 
     void Buffer::Barrier(CommandBuffer *cmd, const BufferBarrierInfo &info)
@@ -173,7 +173,7 @@ namespace pe
         barrier.dstStageMask = Translate<VkPipelineStageFlags2>(info.dstStage);
         barrier.srcAccessMask = Translate<VkAccessFlags2>(info.srcAccess);
         barrier.dstAccessMask = Translate<VkAccessFlags2>(info.dstAccess);
-        barrier.buffer = m_handle;
+        barrier.buffer = m_apiHandle;
         barrier.offset = info.offset;
         barrier.size = info.size ? info.size : VK_WHOLE_SIZE;
 
@@ -182,7 +182,7 @@ namespace pe
         dependencyInfo.bufferMemoryBarrierCount = 1;
         dependencyInfo.pBufferMemoryBarriers = &barrier;
 
-        vkCmdPipelineBarrier2(cmd->Handle(), &dependencyInfo);
+        vkCmdPipelineBarrier2(cmd->ApiHandle(), &dependencyInfo);
     }
 
     void Buffer::Barriers(CommandBuffer *cmd, const std::vector<BufferBarrierInfo> &infos)
@@ -201,7 +201,7 @@ namespace pe
             barrier.dstStageMask = Translate<VkPipelineStageFlags2>(info.dstStage);
             barrier.srcAccessMask = Translate<VkAccessFlags2>(info.srcAccess);
             barrier.dstAccessMask = Translate<VkAccessFlags2>(info.dstAccess);
-            barrier.buffer = info.buffer->m_handle;
+            barrier.buffer = info.buffer->m_apiHandle;
             barrier.offset = info.offset;
             barrier.size = info.size ? info.size : VK_WHOLE_SIZE;
             barriers.push_back(barrier);
@@ -212,7 +212,7 @@ namespace pe
         dependencyInfo.bufferMemoryBarrierCount = static_cast<uint32_t>(barriers.size());
         dependencyInfo.pBufferMemoryBarriers = barriers.data();
 
-        vkCmdPipelineBarrier2(cmd->Handle(), &dependencyInfo);
+        vkCmdPipelineBarrier2(cmd->ApiHandle(), &dependencyInfo);
     }
 }
 #endif

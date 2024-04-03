@@ -25,17 +25,17 @@ namespace pe
 
         VkCommandPool commandPool;
         PE_CHECK(vkCreateCommandPool(RHII.GetDevice(), &cpci, nullptr, &commandPool));
-        m_handle = commandPool;
+        m_apiHandle = commandPool;
 
-        Debug::SetObjectName(m_handle, name);
+        Debug::SetObjectName(m_apiHandle, name);
     }
 
     CommandPool::~CommandPool()
     {
-        if (m_handle)
+        if (m_apiHandle)
         {
-            vkDestroyCommandPool(RHII.GetDevice(), m_handle, nullptr);
-            m_handle = {};
+            vkDestroyCommandPool(RHII.GetDevice(), m_apiHandle, nullptr);
+            m_apiHandle = {};
         }
     }
 
@@ -103,28 +103,28 @@ namespace pe
 
         VkCommandBufferAllocateInfo cbai{};
         cbai.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
-        cbai.commandPool = m_commandPool->Handle();
+        cbai.commandPool = m_commandPool->ApiHandle();
         cbai.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
         cbai.commandBufferCount = 1;
 
         VkCommandBuffer commandBuffer;
         PE_CHECK(vkAllocateCommandBuffers(RHII.GetDevice(), &cbai, &commandBuffer));
-        m_handle = commandBuffer;
+        m_apiHandle = commandBuffer;
 
         m_name = name;
 
-        Debug::SetObjectName(m_handle, name);
+        Debug::SetObjectName(m_apiHandle, name);
     }
 
     CommandBuffer::~CommandBuffer()
     {
         Semaphore::Destroy(m_semaphore);
 
-        if (m_handle && m_commandPool)
+        if (m_apiHandle && m_commandPool)
         {
-            VkCommandBuffer cmd = m_handle;
-            vkFreeCommandBuffers(RHII.GetDevice(), m_commandPool->Handle(), 1, &cmd);
-            m_handle = {};
+            VkCommandBuffer cmd = m_apiHandle;
+            vkFreeCommandBuffers(RHII.GetDevice(), m_commandPool->ApiHandle(), 1, &cmd);
+            m_apiHandle = {};
 
             CommandPool::Return(m_commandPool);
             m_commandPool = nullptr;
@@ -143,7 +143,7 @@ namespace pe
         beginInfo.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
         beginInfo.pInheritanceInfo = nullptr;
 
-        PE_CHECK(vkBeginCommandBuffer(m_handle, &beginInfo));
+        PE_CHECK(vkBeginCommandBuffer(m_apiHandle, &beginInfo));
         m_recording = true;
         m_commandFlags = CommandType::None;
     }
@@ -153,21 +153,21 @@ namespace pe
         if (!m_recording)
             PE_ERROR("CommandBuffer::End: CommandBuffer is not in recording state!");
 
-        PE_CHECK(vkEndCommandBuffer(m_handle));
+        PE_CHECK(vkEndCommandBuffer(m_apiHandle));
         m_recording = false;
     }
 
     void CommandBuffer::Reset()
     {
         if (m_commandPool->GetFlags() & CommandPoolCreate::ResetCommandBuffer)
-            vkResetCommandBuffer(m_handle, 0);
+            vkResetCommandBuffer(m_apiHandle, 0);
         else
-            vkResetCommandPool(RHII.GetDevice(), m_commandPool->Handle(), 0);
+            vkResetCommandPool(RHII.GetDevice(), m_commandPool->ApiHandle(), 0);
     }
 
     void CommandBuffer::SetDepthBias(float constantFactor, float clamp, float slopeFactor)
     {
-        vkCmdSetDepthBias(m_handle, constantFactor, clamp, slopeFactor);
+        vkCmdSetDepthBias(m_apiHandle, constantFactor, clamp, slopeFactor);
     }
 
     void CommandBuffer::BlitImage(Image *src, Image *dst, ImageBlit *region, Filter filter)
@@ -207,7 +207,7 @@ namespace pe
             rangeVK.layerCount = 1;
 
             BeginDebugRegion("Clear Color: " + image->m_imageInfo.name);
-            vkCmdClearColorImage(m_handle, image->Handle(), VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, &clearValue, 1, &rangeVK);
+            vkCmdClearColorImage(m_apiHandle, image->ApiHandle(), VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, &clearValue, 1, &rangeVK);
             EndDebugRegion();
 
             m_commandFlags |= CommandType::TransferBit;
@@ -242,7 +242,7 @@ namespace pe
             rangeVK.layerCount = 1;
 
             BeginDebugRegion("Clear Depth: " + image->m_imageInfo.name);
-            vkCmdClearDepthStencilImage(m_handle, image->Handle(), VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, &clearValue, 1, &rangeVK);
+            vkCmdClearDepthStencilImage(m_apiHandle, image->ApiHandle(), VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, &clearValue, 1, &rangeVK);
             EndDebugRegion();
 
             m_commandFlags |= CommandType::TransferBit;
@@ -354,21 +354,21 @@ namespace pe
 
         VkRenderPassBeginInfo rpi{};
         rpi.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
-        rpi.renderPass = m_renderPass->Handle();
-        rpi.framebuffer = m_frameBuffer->Handle();
+        rpi.renderPass = m_renderPass->ApiHandle();
+        rpi.framebuffer = m_frameBuffer->ApiHandle();
         rpi.renderArea.offset = VkOffset2D{0, 0};
         rpi.renderArea.extent = VkExtent2D{m_frameBuffer->GetWidth(), m_frameBuffer->GetHeight()};
         rpi.clearValueCount = clearOps > 0 ? static_cast<uint32_t>(clearValues.size()) : 0;
         rpi.pClearValues = clearOps > 0 ? clearValues.data() : nullptr;
 
         BeginDebugRegion(name + "_pass");
-        vkCmdBeginRenderPass(m_handle, &rpi, VK_SUBPASS_CONTENTS_INLINE);
+        vkCmdBeginRenderPass(m_apiHandle, &rpi, VK_SUBPASS_CONTENTS_INLINE);
         m_commandFlags |= CommandType::GraphicsBit;
     }
 
     void CommandBuffer::EndPass()
     {
-        vkCmdEndRenderPass(m_handle);
+        vkCmdEndRenderPass(m_apiHandle);
         EndDebugRegion();
 
         m_renderPass = nullptr;
@@ -405,12 +405,12 @@ namespace pe
 
     void CommandBuffer::BindGraphicsPipeline(Pipeline *pipeline)
     {
-        vkCmdBindPipeline(m_handle, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline->Handle());
+        vkCmdBindPipeline(m_apiHandle, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline->ApiHandle());
     }
 
     void CommandBuffer::BindComputePipeline(Pipeline *pipeline)
     {
-        vkCmdBindPipeline(m_handle, VK_PIPELINE_BIND_POINT_COMPUTE, pipeline->Handle());
+        vkCmdBindPipeline(m_apiHandle, VK_PIPELINE_BIND_POINT_COMPUTE, pipeline->ApiHandle());
     }
 
     void CommandBuffer::BindPipeline(PassInfo &passInfo, bool bindDescriptors)
@@ -450,8 +450,8 @@ namespace pe
         m_boundVertexBufferFirstBinding = firstBinding;
         m_boundVertexBufferBindingCount = bindingCount;
 
-        VkBuffer buff = buffer->Handle();
-        vkCmdBindVertexBuffers(m_handle, firstBinding, bindingCount, &buff, &offset);
+        VkBuffer buff = buffer->ApiHandle();
+        vkCmdBindVertexBuffers(m_apiHandle, firstBinding, bindingCount, &buff, &offset);
     }
 
     void CommandBuffer::BindIndexBuffer(Buffer *buffer, size_t offset)
@@ -460,7 +460,7 @@ namespace pe
             return;
 
         m_boundIndexBuffer = buffer;
-        vkCmdBindIndexBuffer(m_handle, buffer->Handle(), offset, VK_INDEX_TYPE_UINT32);
+        vkCmdBindIndexBuffer(m_apiHandle, buffer->ApiHandle(), offset, VK_INDEX_TYPE_UINT32);
     }
 
     void CommandBuffer::BindDescriptors(uint32_t count, Descriptor **descriptors)
@@ -472,12 +472,12 @@ namespace pe
 
         std::vector<VkDescriptorSet> dsets(count);
         for (uint32_t i = 0; i < count; i++)
-            dsets[i] = descriptors[i]->Handle();
+            dsets[i] = descriptors[i]->ApiHandle();
 
         // auto dynamicOffsets = Descriptor::GetAllFrameDynamicOffsets(count, descriptors);
 
         VkPipelineBindPoint pipelineBindPoint = m_boundPipeline->m_info.pCompShader ? VK_PIPELINE_BIND_POINT_COMPUTE : VK_PIPELINE_BIND_POINT_GRAPHICS;
-        vkCmdBindDescriptorSets(m_handle,
+        vkCmdBindDescriptorSets(m_apiHandle,
                                 pipelineBindPoint,
                                 m_boundPipeline->m_layout,
                                 0, count, dsets.data(),
@@ -527,7 +527,7 @@ namespace pe
                 for (uint32_t j = 0; j < info[i].buffers.size(); j++)
                 {
                     bufferInfoVK[i][j] = {};
-                    bufferInfoVK[i][j].buffer = info[i].buffers[j]->Handle();
+                    bufferInfoVK[i][j].buffer = info[i].buffers[j]->ApiHandle();
                     bufferInfoVK[i][j].offset = info[i].offsets.size() > 0 ? info[i].offsets[j] : 0;
                     bufferInfoVK[i][j].range = info[i].ranges.size() > 0 ? info[i].ranges[j] : VK_WHOLE_SIZE;
                 }
@@ -559,7 +559,7 @@ namespace pe
         static auto vkCmdPushDescriptorSetKHR = (PFN_vkCmdPushDescriptorSetKHR)vkGetDeviceProcAddr(RHII.GetDevice(), "vkCmdPushDescriptorSetKHR");
         PE_ERROR_IF(!vkCmdPushDescriptorSetKHR, "CommandBuffer::PushDescriptor: vkCmdPushDescriptorSetKHR not found!");
 
-        vkCmdPushDescriptorSetKHR(m_handle,
+        vkCmdPushDescriptorSetKHR(m_apiHandle,
                                   m_boundPipeline->m_info.pCompShader ? VK_PIPELINE_BIND_POINT_COMPUTE : VK_PIPELINE_BIND_POINT_GRAPHICS,
                                   m_boundPipeline->m_layout,
                                   set,
@@ -577,7 +577,7 @@ namespace pe
         viewport.minDepth = 0.f;
         viewport.maxDepth = 1.f;
 
-        vkCmdSetViewport(m_handle, 0, 1, &viewport);
+        vkCmdSetViewport(m_apiHandle, 0, 1, &viewport);
     }
 
     void CommandBuffer::SetScissor(int x, int y, uint32_t width, uint32_t height)
@@ -586,27 +586,27 @@ namespace pe
         scissor.offset = {x, y};
         scissor.extent = {width, height};
 
-        vkCmdSetScissor(m_handle, 0, 1, &scissor);
+        vkCmdSetScissor(m_apiHandle, 0, 1, &scissor);
     }
 
     void CommandBuffer::SetLineWidth(float width)
     {
-        vkCmdSetLineWidth(m_handle, width);
+        vkCmdSetLineWidth(m_apiHandle, width);
     }
 
     void CommandBuffer::SetDepthTestEnable(uint32_t enable)
     {
-        vkCmdSetDepthTestEnable(m_handle, enable);
+        vkCmdSetDepthTestEnable(m_apiHandle, enable);
     }
 
     void CommandBuffer::SetDepthWriteEnable(uint32_t enable)
     {
-        vkCmdSetDepthWriteEnable(m_handle, enable);
+        vkCmdSetDepthWriteEnable(m_apiHandle, enable);
     }
 
     void CommandBuffer::Dispatch(uint32_t groupCountX, uint32_t groupCountY, uint32_t groupCountZ)
     {
-        vkCmdDispatch(m_handle, groupCountX, groupCountY, groupCountZ);
+        vkCmdDispatch(m_apiHandle, groupCountX, groupCountY, groupCountZ);
         m_commandFlags |= CommandType::ComputeBit;
     }
 
@@ -620,7 +620,7 @@ namespace pe
 
         for (size_t i = 0; i < stages.size(); i++)
         {
-            vkCmdPushConstants(m_handle,
+            vkCmdPushConstants(m_apiHandle,
                                m_boundPipeline->m_layout,
                                Translate<VkShaderStageFlags>(stages[i]),
                                offsets[i],
@@ -631,12 +631,12 @@ namespace pe
 
     void CommandBuffer::Draw(uint32_t vertexCount, uint32_t instanceCount, uint32_t firstVertex, uint32_t firstInstance)
     {
-        vkCmdDraw(m_handle, vertexCount, instanceCount, firstVertex, firstInstance);
+        vkCmdDraw(m_apiHandle, vertexCount, instanceCount, firstVertex, firstInstance);
     }
 
     void CommandBuffer::DrawIndexed(uint32_t indexCount, uint32_t instanceCount, uint32_t firstIndex, int32_t vertexOffset, uint32_t firstInstance)
     {
-        vkCmdDrawIndexed(m_handle, indexCount, instanceCount, firstIndex, vertexOffset, firstInstance);
+        vkCmdDrawIndexed(m_apiHandle, indexCount, instanceCount, firstIndex, vertexOffset, firstInstance);
     }
 
     void CommandBuffer::Submit(Queue *queue,
@@ -685,7 +685,7 @@ namespace pe
         dependencyInfo.memoryBarrierCount = 1;
         dependencyInfo.pMemoryBarriers = &barrier;
 
-        vkCmdPipelineBarrier2(m_handle, &dependencyInfo);
+        vkCmdPipelineBarrier2(m_apiHandle, &dependencyInfo);
     }
 
     void CommandBuffer::MemoryBarriers(const std::vector<MemoryBarrierInfo> &infos)
@@ -706,7 +706,7 @@ namespace pe
         dependencyInfo.memoryBarrierCount = static_cast<uint32_t>(barriers.size());
         dependencyInfo.pMemoryBarriers = barriers.data();
 
-        vkCmdPipelineBarrier2(m_handle, &dependencyInfo);
+        vkCmdPipelineBarrier2(m_apiHandle, &dependencyInfo);
     }
 
     void CommandBuffer::CopyBuffer(Buffer *src, Buffer *dst, const size_t size, size_t srcOffset, size_t dstOffset)
@@ -838,7 +838,7 @@ namespace pe
 
         // CHECKS
         // -------------------------------------------------------------
-        PE_ERROR_IF(!cmd || !cmd->m_handle, "CommandBuffer::Return: CommandBuffer is null or invalid");
+        PE_ERROR_IF(!cmd || !cmd->m_apiHandle, "CommandBuffer::Return: CommandBuffer is null or invalid");
         PE_ERROR_IF(s_allCmds[cmd->GetFamilyId()].find(cmd->m_id) == s_allCmds[cmd->m_familyId].end(), "CommandBuffer::Return: CommandBuffer does not belong to pool");
         PE_ERROR_IF(cmd->m_recording, "CommandBuffer::Return: " + cmd->m_name + " is still recording!");
         PE_ERROR_IF(cmd->m_semaphore->GetValue() != cmd->m_submitions, "CommandBuffer::Return: " + cmd->m_name + " is not finished!");

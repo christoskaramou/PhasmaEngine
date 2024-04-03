@@ -615,7 +615,7 @@ namespace pe
         T height;
     };
 
-    using Rect2D = Rect2D_t<int>;
+    using Rect2Di = Rect2D_t<int>;
     using Rect2Du = Rect2D_t<uint32_t>;
     using Rect2Df = Rect2D_t<float>;
 

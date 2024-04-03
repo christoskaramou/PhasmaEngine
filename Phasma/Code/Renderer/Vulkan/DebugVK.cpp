@@ -192,7 +192,7 @@ namespace pe
         label.color[2] = color;
         label.color[3] = 1.f;
 
-        vkQueueBeginDebugUtilsLabelEXT(queue->Handle(), &label);
+        vkQueueBeginDebugUtilsLabelEXT(queue->ApiHandle(), &label);
     }
 
     void Debug::InsertQueueLabel(Queue *queue, const std::string &name)
@@ -211,7 +211,7 @@ namespace pe
         label.color[2] = color;
         label.color[3] = 1.f;
 
-        vkQueueInsertDebugUtilsLabelEXT(queue->Handle(), &label);
+        vkQueueInsertDebugUtilsLabelEXT(queue->ApiHandle(), &label);
     }
 
     void Debug::EndQueueRegion(Queue *queue)
@@ -219,7 +219,7 @@ namespace pe
         if (!vkQueueEndDebugUtilsLabelEXT)
             return;
 
-        vkQueueEndDebugUtilsLabelEXT(queue->Handle());
+        vkQueueEndDebugUtilsLabelEXT(queue->ApiHandle());
         s_labelDepth--;
     }
 
@@ -241,7 +241,7 @@ namespace pe
 
         cmd->SetPassName(name);
 
-        vkCmdBeginDebugUtilsLabelEXT(cmd->Handle(), &label);
+        vkCmdBeginDebugUtilsLabelEXT(cmd->ApiHandle(), &label);
 
         if (std::this_thread::get_id() == e_MainThreadID) // TODO: make it work with other threads
         {
@@ -270,7 +270,7 @@ namespace pe
         label.color[2] = color;
         label.color[3] = 1.f;
 
-        vkCmdInsertDebugUtilsLabelEXT(cmd->Handle(), &label);
+        vkCmdInsertDebugUtilsLabelEXT(cmd->ApiHandle(), &label);
     }
 
     void Debug::EndCmdRegion(CommandBuffer *cmd)
@@ -278,7 +278,7 @@ namespace pe
         if (!vkCmdEndDebugUtilsLabelEXT)
             return;
 
-        vkCmdEndDebugUtilsLabelEXT(cmd->Handle());
+        vkCmdEndDebugUtilsLabelEXT(cmd->ApiHandle());
         s_labelDepth--;
 
         if (std::this_thread::get_id() == e_MainThreadID) // TODO: make it work with other threads

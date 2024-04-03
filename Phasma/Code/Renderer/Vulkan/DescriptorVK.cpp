@@ -25,17 +25,17 @@ namespace pe
 
         VkDescriptorPool descriptorPoolVK;
         PE_CHECK(vkCreateDescriptorPool(RHII.GetDevice(), &createInfo, nullptr, &descriptorPoolVK));
-        m_handle = descriptorPoolVK;
+        m_apiHandle = descriptorPoolVK;
 
-        Debug::SetObjectName(m_handle, name);
+        Debug::SetObjectName(m_apiHandle, name);
     }
 
     DescriptorPool::~DescriptorPool()
     {
-        if (m_handle)
+        if (m_apiHandle)
         {
-            vkDestroyDescriptorPool(RHII.GetDevice(), m_handle, nullptr);
-            m_handle = {};
+            vkDestroyDescriptorPool(RHII.GetDevice(), m_apiHandle, nullptr);
+            m_apiHandle = {};
         }
     }
 
@@ -113,17 +113,17 @@ namespace pe
 
         VkDescriptorSetLayout layout;
         PE_CHECK(vkCreateDescriptorSetLayout(RHII.GetDevice(), &dslci, nullptr, &layout));
-        m_handle = layout;
+        m_apiHandle = layout;
 
-        Debug::SetObjectName(m_handle, name);
+        Debug::SetObjectName(m_apiHandle, name);
     }
 
     DescriptorLayout::~DescriptorLayout()
     {
-        if (m_handle)
+        if (m_apiHandle)
         {
-            vkDestroyDescriptorSetLayout(RHII.GetDevice(), m_handle, nullptr);
-            m_handle = {};
+            vkDestroyDescriptorSetLayout(RHII.GetDevice(), m_apiHandle, nullptr);
+            m_apiHandle = {};
         }
     }
 
@@ -171,19 +171,19 @@ namespace pe
         variableDescriptorCountAllocInfo.descriptorSetCount = 1;
         variableDescriptorCountAllocInfo.pDescriptorCounts = variableDescCounts;
 
-        VkDescriptorSetLayout dsetLayout = m_layout->Handle();
+        VkDescriptorSetLayout dsetLayout = m_layout->ApiHandle();
         VkDescriptorSetAllocateInfo allocateInfo{};
         allocateInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
-        allocateInfo.descriptorPool = m_pool->Handle();
+        allocateInfo.descriptorPool = m_pool->ApiHandle();
         allocateInfo.descriptorSetCount = 1;
         allocateInfo.pSetLayouts = &dsetLayout;
         allocateInfo.pNext = &variableDescriptorCountAllocInfo; // If the flag was not set in the layout, this will be ignored
 
         VkDescriptorSet dset;
         PE_CHECK(vkAllocateDescriptorSets(RHII.GetDevice(), &allocateInfo, &dset));
-        m_handle = dset;
+        m_apiHandle = dset;
 
-        Debug::SetObjectName(m_handle, name);
+        Debug::SetObjectName(m_apiHandle, name);
     }
 
     Descriptor::~Descriptor()
@@ -251,7 +251,7 @@ namespace pe
         {
             VkWriteDescriptorSet write{};
             write.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-            write.dstSet = m_handle;
+            write.dstSet = m_apiHandle;
             write.dstBinding = info[i].binding;
             write.dstArrayElement = 0;
             write.descriptorType = Translate<VkDescriptorType>(m_bindingInfos[i].type);
@@ -278,7 +278,7 @@ namespace pe
                 for (uint32_t j = 0; j < info[i].buffers.size(); j++)
                 {
                     infosVK[j] = {};
-                    infosVK[j].buffer = info[i].buffers[j]->Handle();
+                    infosVK[j].buffer = info[i].buffers[j]->ApiHandle();
                     infosVK[j].offset = info[i].offsets.size() > 0 ? info[i].offsets[j] : 0;
                     infosVK[j].range = info[i].ranges.size() > 0 ? (info[i].ranges[j] > 0 ? info[i].ranges[j] : VK_WHOLE_SIZE) : VK_WHOLE_SIZE;
                 }

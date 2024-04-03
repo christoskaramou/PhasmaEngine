@@ -13,17 +13,17 @@ namespace pe
 
         VkEvent event;
         PE_CHECK(vkCreateEvent(RHII.GetDevice(), &ci, nullptr, &event));
-        m_handle = event;
+        m_apiHandle = event;
 
-        Debug::SetObjectName(m_handle, name);
+        Debug::SetObjectName(m_apiHandle, name);
     }
 
     Event::~Event()
     {
-        if (m_handle)
+        if (m_apiHandle)
         {
-            vkDestroyEvent(RHII.GetDevice(), m_handle, nullptr);
-            m_handle = {};
+            vkDestroyEvent(RHII.GetDevice(), m_apiHandle, nullptr);
+            m_apiHandle = {};
         }
     }
 
@@ -51,7 +51,7 @@ namespace pe
         barrier.newLayout = Translate<VkImageLayout>(dstLayout);
         barrier.srcQueueFamilyIndex = cmd->GetFamilyId();
         barrier.dstQueueFamilyIndex = cmd->GetFamilyId();
-        barrier.image = image->Handle();
+        barrier.image = image->ApiHandle();
         barrier.subresourceRange.aspectMask = GetAspectMaskVK(image->GetFormat());
         barrier.subresourceRange.baseMipLevel = 0;
         barrier.subresourceRange.levelCount = image->GetMipLevels();
@@ -63,7 +63,7 @@ namespace pe
         depInfo.imageMemoryBarrierCount = 1;
         depInfo.pImageMemoryBarriers = &barrier;
 
-        vkCmdSetEvent2(cmd->Handle(), m_handle, &depInfo);
+        vkCmdSetEvent2(cmd->ApiHandle(), m_apiHandle, &depInfo);
 
         m_set = true;
     }
@@ -80,7 +80,7 @@ namespace pe
         barrier.newLayout = Translate<VkImageLayout>(m_infoImage.newLayout);
         barrier.srcQueueFamilyIndex = m_cmd->GetFamilyId();
         barrier.dstQueueFamilyIndex = m_cmd->GetFamilyId();
-        barrier.image = m_infoImage.image->Handle();
+        barrier.image = m_infoImage.image->ApiHandle();
         barrier.subresourceRange.aspectMask = GetAspectMaskVK(m_infoImage.image->GetFormat());
         barrier.subresourceRange.baseMipLevel = 0;
         barrier.subresourceRange.levelCount = m_infoImage.image->GetMipLevels();
@@ -99,13 +99,13 @@ namespace pe
         info.accessMask = m_infoImage.dstAccess;
         m_infoImage.image->SetCurrentInfoAll(info);
 
-        VkEvent eventVK = m_handle;
-        vkCmdWaitEvents2(m_cmd->Handle(), 1, &eventVK, &depInfo);
+        VkEvent eventVK = m_apiHandle;
+        vkCmdWaitEvents2(m_cmd->ApiHandle(), 1, &eventVK, &depInfo);
     }
 
     void Event::Reset(PipelineStageFlags resetStage)
     {
-        vkCmdResetEvent2(m_cmd->Handle(), m_handle, Translate<VkPipelineStageFlags2>(resetStage));
+        vkCmdResetEvent2(m_cmd->ApiHandle(), m_apiHandle, Translate<VkPipelineStageFlags2>(resetStage));
         m_cmd = nullptr;
         m_infoImage = {};
         m_set = false;

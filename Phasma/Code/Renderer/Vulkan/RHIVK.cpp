@@ -349,7 +349,7 @@ namespace pe
         PE_CHECK(vkCreateDevice(m_gpu, &deviceCreateInfo, nullptr, &deviceVK));
         m_device = deviceVK;
 
-        Debug::SetObjectName(m_surface->Handle(), "RHI_surface");
+        Debug::SetObjectName(m_surface->ApiHandle(), "RHI_surface");
         Debug::SetObjectName(m_gpu, "RHI_gpu");
         Debug::SetObjectName(m_device, "RHI_device");
     }
@@ -372,7 +372,7 @@ namespace pe
 
     void RHI::InitQueues()
     {
-        Queue::Init(m_gpu, m_device, m_surface->Handle());
+        Queue::Init(m_gpu, m_device, m_surface->ApiHandle());
 
         m_renderQueue = Queue::Get(QueueType::GraphicsBit | QueueType::PresentBit, 1);
         m_computeQueue = Queue::Get(QueueType::ComputeBit, 1);

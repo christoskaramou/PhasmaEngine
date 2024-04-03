@@ -59,7 +59,7 @@ namespace pe
         for (uint32_t i = 0; i < SWAPCHAIN_IMAGES; i++)
         {
             auto *DSet = m_passInfo.GetDescriptors(i)[0];
-            DSet->SetImageView(0, m_frameImage->GetSRV(), m_frameImage->GetSampler()->Handle());
+            DSet->SetImageView(0, m_frameImage->GetSRV(), m_frameImage->GetSampler()->ApiHandle());
             DSet->Update();
         }
     }

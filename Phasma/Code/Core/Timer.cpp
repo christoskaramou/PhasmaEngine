@@ -89,15 +89,15 @@ namespace pe
 
         VkQueryPool pool;
         PE_CHECK(vkCreateQueryPool(RHII.GetDevice(), &qpci, nullptr, &pool));
-        m_handle = pool;
+        m_apiHandle = pool;
 
-        Debug::SetObjectName(m_handle, name);
+        Debug::SetObjectName(m_apiHandle, name);
     }
 
     GpuTimer::~GpuTimer()
     {
-        if (m_handle)
-            vkDestroyQueryPool(RHII.GetDevice(), m_handle, nullptr);
+        if (m_apiHandle)
+            vkDestroyQueryPool(RHII.GetDevice(), m_apiHandle, nullptr);
     }
 
     void GpuTimer::Start(CommandBuffer *cmd)
@@ -105,8 +105,8 @@ namespace pe
         PE_ERROR_IF(m_inUse, "GpuTimer::Start() called before End()");
 
         m_cmd = cmd;
-        vkCmdResetQueryPool(m_cmd->Handle(), m_handle, 0, 2);
-        vkCmdWriteTimestamp(m_cmd->Handle(), VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, m_handle, 0);
+        vkCmdResetQueryPool(m_cmd->ApiHandle(), m_apiHandle, 0, 2);
+        vkCmdWriteTimestamp(m_cmd->ApiHandle(), VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, m_apiHandle, 0);
         m_resultsReady = false;
         m_inUse = true;
     }
@@ -115,7 +115,7 @@ namespace pe
     {
         PE_ERROR_IF(!m_inUse, "GpuTimer::End() called before Start()");
 
-        vkCmdWriteTimestamp(m_cmd->Handle(), VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT, m_handle, 1);
+        vkCmdWriteTimestamp(m_cmd->ApiHandle(), VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT, m_apiHandle, 1);
         m_resultsReady = false;
         m_inUse = false;
     }
@@ -128,7 +128,7 @@ namespace pe
             return static_cast<float>(m_queries[1] - m_queries[0]) * m_timestampPeriod * 1e-6f; // ms
 
         VkResult res = vkGetQueryPoolResults(RHII.GetDevice(),
-                                             m_handle,
+                                             m_apiHandle,
                                              0,
                                              2,
                                              2 * sizeof(uint64_t),
@@ -161,7 +161,7 @@ namespace pe
 
     void GpuTimer::Return(GpuTimer *gpuTimer)
     {
-        if (gpuTimer && gpuTimer->Handle())
+        if (gpuTimer && gpuTimer->ApiHandle())
             s_gpuTimers.push(gpuTimer);
     }
 
