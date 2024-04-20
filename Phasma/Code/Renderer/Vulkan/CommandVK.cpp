@@ -403,14 +403,14 @@ namespace pe
         }
     }
 
-    void CommandBuffer::BindGraphicsPipeline(Pipeline *pipeline)
+    void CommandBuffer::BindGraphicsPipeline()
     {
-        vkCmdBindPipeline(m_apiHandle, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline->ApiHandle());
+        vkCmdBindPipeline(m_apiHandle, VK_PIPELINE_BIND_POINT_GRAPHICS, m_boundPipeline->ApiHandle());
     }
 
-    void CommandBuffer::BindComputePipeline(Pipeline *pipeline)
+    void CommandBuffer::BindComputePipeline()
     {
-        vkCmdBindPipeline(m_apiHandle, VK_PIPELINE_BIND_POINT_COMPUTE, pipeline->ApiHandle());
+        vkCmdBindPipeline(m_apiHandle, VK_PIPELINE_BIND_POINT_COMPUTE, m_boundPipeline->ApiHandle());
     }
 
     void CommandBuffer::BindPipeline(PassInfo &passInfo, bool bindDescriptors)
@@ -423,11 +423,11 @@ namespace pe
 
         if (passInfo.pCompShader)
         {
-            BindComputePipeline(m_boundPipeline);
+            BindComputePipeline();
         }
         else
         {
-            BindGraphicsPipeline(m_boundPipeline);
+            BindGraphicsPipeline();
         }
 
         if (bindDescriptors)
@@ -474,14 +474,12 @@ namespace pe
         for (uint32_t i = 0; i < count; i++)
             dsets[i] = descriptors[i]->ApiHandle();
 
-        // auto dynamicOffsets = Descriptor::GetAllFrameDynamicOffsets(count, descriptors);
-
         VkPipelineBindPoint pipelineBindPoint = m_boundPipeline->m_info.pCompShader ? VK_PIPELINE_BIND_POINT_COMPUTE : VK_PIPELINE_BIND_POINT_GRAPHICS;
         vkCmdBindDescriptorSets(m_apiHandle,
                                 pipelineBindPoint,
                                 m_boundPipeline->m_layout,
                                 0, count, dsets.data(),
-                                0, nullptr); // static_cast<uint32_t>(dynamicOffsets.size()), dynamicOffsets.data());
+                                0, nullptr);
     }
 
     void CommandBuffer::BindDescriptors(const std::vector<Descriptor *> &descriptors)

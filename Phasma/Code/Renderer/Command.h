@@ -264,9 +264,9 @@ namespace pe
         static Pipeline *GetPipeline(RenderPass *renderPass, PassInfo &info);
 
     private:
-        void BindGraphicsPipeline(Pipeline *pipeline);
+        void BindGraphicsPipeline();
 
-        void BindComputePipeline(Pipeline *pipeline);
+        void BindComputePipeline();
 
         friend class Queue;
         friend class Renderer;

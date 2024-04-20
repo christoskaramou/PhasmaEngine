@@ -74,6 +74,7 @@ namespace pe
     inline Flags<##Enum> operator^(##Enum a, const Flags<##Enum> &b) { return Flags<##Enum>(a) ^ b; }   \
     inline Flags<##Enum> operator~(##Enum a) { return ~Flags<##Enum>(a); }
 
+    // Vulkan template specializations in Code\Renderer\Vulkan\HelpersVK.cpp
     template <class T, class U>
     T Translate(U u);
 
@@ -573,7 +574,6 @@ namespace pe
         ShaderSampledReadBit = 1 << 21,
         ShaderStorageReadBit = 1 << 22,
     };
-
     using AccessFlags = Flags<Access>;
     DEFINE_FLAGS_OPERATORS(Access)
 
