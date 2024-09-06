@@ -115,6 +115,7 @@ namespace pe
         uint32_t GetMipLevels() { return m_imageInfo.mipLevels; }
         uint32_t GetArrayLayers() { return m_imageInfo.arrayLayers; }
         SampleCount GetSamples() { return m_imageInfo.samples; }
+        const vec4 &GetClearColor() { return m_imageInfo.clearColor; }
         const PipelineColorBlendAttachmentState &GetBlendAttachment() { return m_blendAttachment; }
 
         const ImageBarrierInfo &GetCurrentInfo(uint32_t layer = 0, uint32_t mip = 0) { return m_infos[layer][mip]; }

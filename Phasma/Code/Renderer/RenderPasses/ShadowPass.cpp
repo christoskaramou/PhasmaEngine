@@ -1,4 +1,3 @@
-#if PE_VULKAN
 #include "Renderer/RenderPasses/ShadowPass.h"
 #include "Renderer/RenderPasses/LightPass.h"
 #include "GUI/GUI.h"
@@ -311,4 +310,3 @@ namespace pe
             Buffer::Destroy(m_uniforms[i]);
     }
 }
-#endif

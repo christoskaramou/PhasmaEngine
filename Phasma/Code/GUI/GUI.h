@@ -9,7 +9,7 @@ namespace pe
     constexpr float TITLEBAR_HEIGHT = 19.f;
 
     class Window;
-    class FrameBuffer;
+    class Framebuffer;
     class RenderPass;
     class CommandBuffer;
     class Queue;
@@ -56,7 +56,7 @@ namespace pe
 
         void CreateRenderPass();
 
-        void CreateFrameBuffers();
+        void CreateFramebuffers();
 
         void Destroy();
 

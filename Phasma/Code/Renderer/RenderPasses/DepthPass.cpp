@@ -1,4 +1,3 @@
-#if PE_VULKAN
 #include "Renderer/RenderPasses/DepthPass.h"
 #include "Scene/Model.h"
 #include "Renderer/Swapchain.h"
@@ -157,4 +156,3 @@ namespace pe
     {
     }
 }
-#endif

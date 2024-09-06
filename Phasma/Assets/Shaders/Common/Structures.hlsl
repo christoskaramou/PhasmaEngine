@@ -52,7 +52,7 @@ struct PushConstants_Bloom_Combine
     {
         uint cast_shadows;
         uint num_point_lights;
-        float2 frameBufferSize;
+        float2 framebufferSize;
         uint transparentPass;
         float max_cascade_dist[SHADOWMAP_CASCADES];
     };

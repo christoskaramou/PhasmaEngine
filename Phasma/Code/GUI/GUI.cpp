@@ -621,7 +621,7 @@ namespace pe
     {
     }
 
-    void GUI::CreateFrameBuffers()
+    void GUI::CreateFramebuffers()
     {
     }
 

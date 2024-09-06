@@ -1,4 +1,3 @@
-#if PE_VULKAN
 #include "Renderer/Debug.h"
 #include "Renderer/RHI.h"
 #include "Renderer/Queue.h"
@@ -179,4 +178,3 @@ namespace pe
     }
 #endif
 };
-#endif

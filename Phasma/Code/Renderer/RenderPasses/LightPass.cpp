@@ -1,4 +1,3 @@
-#if PE_VULKAN
 #include "Renderer/RenderPasses/LightPass.h"
 #include "Scene/Model.h"
 #include "Renderer/Swapchain.h"
@@ -79,7 +78,7 @@ namespace pe
         m_passInfoOpaque.pFragShader = Shader::Create("Shaders/Gbuffer/LightingPS.hlsl", ShaderStage::FragmentBit, definesFrag);
         m_passInfoOpaque.dynamicStates = {DynamicState::Viewport, DynamicState::Scissor};
         m_passInfoOpaque.colorBlendAttachments = {m_viewportRT->GetBlendAttachment()};
-        m_passInfoOpaque.colorFormats = m_viewportRT->GetFormatPtr();
+        m_passInfoOpaque.colorFormats = {m_viewportRT->GetFormat()};
         m_passInfoOpaque.depthTestEnable = false;
         m_passInfoOpaque.depthWriteEnable = false;
         m_passInfoOpaque.stencilTestEnable = false;
@@ -92,7 +91,7 @@ namespace pe
         m_passInfoTransparent.dynamicStates = {DynamicState::Viewport, DynamicState::Scissor};
         m_passInfoTransparent.colorBlendAttachments = {m_viewportRT->GetBlendAttachment()};
         m_passInfoTransparent.alphaBlend = true;
-        m_passInfoTransparent.colorFormats = m_viewportRT->GetFormatPtr();
+        m_passInfoTransparent.colorFormats = {m_viewportRT->GetFormat()};
         m_passInfoTransparent.depthTestEnable = false;
         m_passInfoTransparent.depthWriteEnable = false;
         m_passInfoTransparent.UpdateHash();
@@ -309,4 +308,3 @@ namespace pe
             Buffer::Destroy(m_uniform[i]);
     }
 }
-#endif

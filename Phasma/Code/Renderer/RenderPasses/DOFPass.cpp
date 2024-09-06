@@ -49,7 +49,7 @@ namespace pe
         info.dynamicStates = {DynamicState::Viewport, DynamicState::Scissor};
         info.cullMode = CullMode::Back;
         info.colorBlendAttachments = {m_displayRT->GetBlendAttachment()};
-        info.colorFormats = m_displayRT->GetFormatPtr();
+        info.colorFormats = {m_displayRT->GetFormat()};
         info.UpdateHash();
     }
 

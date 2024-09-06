@@ -5,7 +5,7 @@
 namespace pe
 {
     class RenderPass;
-    class FrameBuffer;
+    class Framebuffer;
     class Pipeline;
     class Compute;
     class Buffer;
@@ -151,8 +151,6 @@ namespace pe
 
         void BindDescriptors(uint32_t count, Descriptor **descriptors);
 
-        void BindDescriptors(const std::vector<Descriptor *> &descriptors);
-
         void PushDescriptor(uint32_t set, const std::vector<PushDescriptorInfo> &info);
 
         void SetViewport(float x, float y, float width, float height);
@@ -239,7 +237,7 @@ namespace pe
 
         Semaphore *GetSemaphore() const { return m_semaphore; }
 
-        uint64_t IncreaseAndGetSumbitionsCount() { return ++m_submitions; }
+        uint64_t IncreaseSumbitions() { return ++m_submitions; }
 
         void Wait();
 
@@ -260,13 +258,17 @@ namespace pe
         static CommandBuffer *GetFree(Queue *queue);
         static void Return(CommandBuffer *cmd);
         static RenderPass *GetRenderPass(const std::vector<Attachment> &attachments);
-        static FrameBuffer *GetFrameBuffer(RenderPass *renderPass, const std::vector<Attachment> &attachments);
+        static Framebuffer *GetFramebuffer(RenderPass *renderPass, const std::vector<Attachment> &attachments);
         static Pipeline *GetPipeline(RenderPass *renderPass, PassInfo &info);
 
     private:
         void BindGraphicsPipeline();
 
         void BindComputePipeline();
+
+        void BindGraphicsDescriptors(uint32_t count, Descriptor **descriptors);
+
+        void BindComputeDescriptors(uint32_t count, Descriptor **descriptors);
 
         friend class Queue;
         friend class Renderer;
@@ -275,7 +277,7 @@ namespace pe
         inline static std::vector<std::unordered_map<size_t, CommandBuffer *>> s_availableCmds{};
         inline static std::vector<std::unordered_map<size_t, CommandBuffer *>> s_allCmds{};
         inline static std::unordered_map<size_t, RenderPass *> s_renderPasses{};
-        inline static std::unordered_map<size_t, FrameBuffer *> s_frameBuffers{};
+        inline static std::unordered_map<size_t, Framebuffer *> s_framebuffers{};
         inline static std::unordered_map<size_t, Pipeline *> s_pipelines{};
 
         inline static std::mutex s_getNextMutex{};
@@ -288,12 +290,11 @@ namespace pe
         Event *m_event;
         std::atomic_uint64_t m_submitions;
         bool m_recording = false;
-        bool m_passActive = false;
         std::string m_name;
         std::string m_passName;
         Delegate<> m_afterWaitCallbacks;
         RenderPass *m_renderPass;
-        FrameBuffer *m_frameBuffer;
+        Framebuffer *m_framebuffer;
         Pipeline *m_boundPipeline;
         Buffer *m_boundVertexBuffer;
         size_t m_boundVertexBufferOffset;
@@ -303,5 +304,6 @@ namespace pe
         size_t m_boundIndexBufferOffset;
         PushConstantsBlock<128> m_pushConstants{};
         CommandTypeFlags m_commandFlags;
+        bool m_dynamicPass = false;
     };
 }

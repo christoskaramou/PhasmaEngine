@@ -1,4 +1,3 @@
-#if PE_VULKAN
 #include "Renderer/Renderer.h"
 #include "Renderer/RHI.h"
 #include "Systems/CameraSystem.h"
@@ -6,7 +5,7 @@
 #include "Renderer/Command.h"
 #include "Renderer/Image.h"
 #include "Renderer/RenderPass.h"
-#include "Renderer/FrameBuffer.h"
+#include "Renderer/Framebuffer.h"
 #include "Renderer/Queue.h"
 #include "Renderer/RenderPasses/BloomPass.h"
 #include "Renderer/RenderPasses/DOFPass.h"
@@ -436,9 +435,9 @@ namespace pe
 
     void Renderer::CreateRenderTargets()
     {
-        for (auto &framebuffer : CommandBuffer::s_frameBuffers)
-            FrameBuffer::Destroy(framebuffer.second);
-        CommandBuffer::s_frameBuffers.clear();
+        for (auto &framebuffer : CommandBuffer::s_framebuffers)
+            Framebuffer::Destroy(framebuffer.second);
+        CommandBuffer::s_framebuffers.clear();
 
         for (auto &rt : m_renderTargets)
             Image::Destroy(rt.second);
@@ -607,4 +606,3 @@ namespace pe
             tonemap.UpdatePassInfo();
     }
 }
-#endif

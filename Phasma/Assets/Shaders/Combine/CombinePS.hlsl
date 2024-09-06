@@ -38,7 +38,7 @@ PS_OUTPUT_Color mainPS(PS_INPUT_UV input)
 
             // Volumetric light
             if (cb_effects1.y > 0.5)
-                output.color.xyz += VolumetricLighting(cb_sun, wolrdPos, input.uv, cb_cascades[0], fogFactor, pc.frameBufferSize);
+                output.color.xyz += VolumetricLighting(cb_sun, wolrdPos, input.uv, cb_cascades[0], fogFactor, pc.framebufferSize);
         }
 
         return output;
@@ -121,7 +121,7 @@ PS_OUTPUT_Color mainPS(PS_INPUT_UV input)
 
         // Volumetric light
         if (cb_effects1.y > 0.5)
-            output.color.xyz += VolumetricLighting(cb_sun, wolrdPos, input.uv, cb_cascades[0], fogFactor, pc.frameBufferSize);
+            output.color.xyz += VolumetricLighting(cb_sun, wolrdPos, input.uv, cb_cascades[0], fogFactor, pc.framebufferSize);
     }
 
     return output;

@@ -40,11 +40,11 @@ namespace pe
         PrimitiveTopology topology;
         PolygonMode polygonMode;
         CullMode cullMode;
+        float lineWidth;
         bool alphaBlend;
         std::vector<PipelineColorBlendAttachmentState> colorBlendAttachments;
         std::vector<DynamicState> dynamicStates;
-        Format *colorFormats;
-        float lineWidth;
+        std::vector<Format> colorFormats;
         // Depth
         Format depthFormat;
         bool depthWriteEnable;

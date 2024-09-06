@@ -81,9 +81,6 @@ namespace pe
     template <class T, class U>
     U GetFlags(T flags, std::unordered_map<T, U> &translator)
     {
-        static_assert(std::is_integral_v<T>, "GetFlags: T must be integral");
-        static_assert(std::is_integral_v<U>, "GetFlags: U must be integral");
-
         if (!flags)
             return U{};
 
@@ -110,20 +107,18 @@ namespace pe
     template <class U, size_t N>
     U GetFlags(uint64_t flags, const U (&translator)[N])
     {
-        static_assert(std::is_integral_v<U>, "GetFlags: U must be integral");
-
-        U result{};
+        uint64_t result = 0;
 
         if (!flags)
-            return result;
+            return (U)result;
 
         for (size_t i = 0; i < N; ++i)
         {
             if ((flags & (1ULL << i)) == (1ULL << i))
-                result = result | translator[i];
+                result = result | (uint64_t)translator[i];
         }
 
-        return result;
+        return (U)result;
     }
 
     enum class Launch

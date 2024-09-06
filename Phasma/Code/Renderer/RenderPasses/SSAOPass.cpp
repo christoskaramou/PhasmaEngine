@@ -13,8 +13,29 @@
 #include "Systems/CameraSystem.h"
 #include "Systems/RendererSystem.h"
 
+#if PE_RENDERING_API != PE_VULKAN
 namespace pe
 {
+    SSAOPass::SSAOPass() {}
+
+    SSAOPass::~SSAOPass() {}
+
+    void SSAOPass::Init() {}
+
+    void SSAOPass::Update(Camera *camera) {}
+
+    CommandBuffer *SSAOPass::Draw() { return nullptr; }
+
+    void SSAOPass::Resize(uint32_t width, uint32_t height) {}
+
+    void SSAOPass::Destroy() {}
+}
+
+#else
+namespace pe
+{
+    FFX_CACAO_VkContext *m_context = nullptr;
+
     SSAOPass::SSAOPass()
     {
     }
@@ -22,34 +43,37 @@ namespace pe
     SSAOPass::~SSAOPass()
     {
     }
-
     void SSAOPass::Init()
     {
-        // m_queue = RHII.GetComputeQueue();
-        m_queue = RHII.GetRenderQueue();
-        
-        RendererSystem *rs = GetGlobalSystem<RendererSystem>();
-        m_ssaoRT = rs->GetRenderTarget("ssao");
-        m_normalRT = rs->GetRenderTarget("normal");
-        m_depth = rs->GetDepthStencilTarget("depthStencil");;
+        if (!m_context)
+        {
+            // m_queue = RHII.GetComputeQueue();
+            m_queue = RHII.GetRenderQueue();
 
-        size_t ffxCacaoContextSize = FFX_CACAO_VkGetContextSize();
-        m_context = (FFX_CACAO_VkContext *)malloc(ffxCacaoContextSize);
-        assert(m_context);
-        FFX_CACAO_VkCreateInfo info = {};
-        info.physicalDevice = RHII.GetGpu();
-        info.device = RHII.GetDevice();
-        info.flags = FFX_CACAO_VK_CREATE_USE_DEBUG_MARKERS | FFX_CACAO_VK_CREATE_NAME_OBJECTS; // | FFX_CACAO_VK_CREATE_USE_16_BIT;
-        PE_CHECK(FFX_CACAO_VkInitContext(m_context, &info));
+            RendererSystem *rs = GetGlobalSystem<RendererSystem>();
+            m_ssaoRT = rs->GetRenderTarget("ssao");
+            m_normalRT = rs->GetRenderTarget("normal");
+            m_depth = rs->GetDepthStencilTarget("depthStencil");
+            ;
 
-        FFX_CACAO_VkScreenSizeInfo screenSizeInfo = {};
-        screenSizeInfo.width = m_ssaoRT->GetWidth();
-        screenSizeInfo.height = m_ssaoRT->GetHeight();
-        screenSizeInfo.depthView = m_depth->GetSRV();
-        screenSizeInfo.normalsView = m_normalRT->GetSRV();
-        screenSizeInfo.output = m_ssaoRT->ApiHandle();
-        screenSizeInfo.outputView = m_ssaoRT->GetRTV();
-        PE_CHECK(FFX_CACAO_VkInitScreenSizeDependentResources(m_context, &screenSizeInfo));
+            size_t ffxCacaoContextSize = FFX_CACAO_VkGetContextSize();
+            m_context = (FFX_CACAO_VkContext *)malloc(ffxCacaoContextSize);
+            assert(m_context);
+            FFX_CACAO_VkCreateInfo info = {};
+            info.physicalDevice = RHII.GetGpu();
+            info.device = RHII.GetDevice();
+            info.flags = FFX_CACAO_VK_CREATE_USE_DEBUG_MARKERS | FFX_CACAO_VK_CREATE_NAME_OBJECTS; // | FFX_CACAO_VK_CREATE_USE_16_BIT;
+            PE_CHECK(FFX_CACAO_VkInitContext(m_context, &info));
+
+            FFX_CACAO_VkScreenSizeInfo screenSizeInfo = {};
+            screenSizeInfo.width = m_ssaoRT->GetWidth();
+            screenSizeInfo.height = m_ssaoRT->GetHeight();
+            screenSizeInfo.depthView = m_depth->GetSRV();
+            screenSizeInfo.normalsView = m_normalRT->GetSRV();
+            screenSizeInfo.output = m_ssaoRT->ApiHandle();
+            screenSizeInfo.outputView = m_ssaoRT->GetRTV();
+            PE_CHECK(FFX_CACAO_VkInitScreenSizeDependentResources(m_context, &screenSizeInfo));
+        }
     }
 
     void SSAOPass::Update(Camera *camera)
@@ -174,7 +198,8 @@ namespace pe
         RendererSystem *rs = GetGlobalSystem<RendererSystem>();
         m_ssaoRT = rs->GetRenderTarget("ssao");
         m_normalRT = rs->GetRenderTarget("normal");
-        m_depth = rs->GetDepthStencilTarget("depthStencil");;
+        m_depth = rs->GetDepthStencilTarget("depthStencil");
+        ;
 
         FFX_CACAO_VkScreenSizeInfo screenSizeInfo = {};
         screenSizeInfo.width = m_ssaoRT->GetWidth();
@@ -191,5 +216,7 @@ namespace pe
         PE_CHECK(FFX_CACAO_VkDestroyScreenSizeDependentResources(m_context));
         PE_CHECK(FFX_CACAO_VkDestroyContext(m_context));
         free(m_context);
+        m_context = nullptr;
     }
 }
+#endif

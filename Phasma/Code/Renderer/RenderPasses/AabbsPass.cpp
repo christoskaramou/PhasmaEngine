@@ -55,7 +55,7 @@ namespace pe
         m_passInfo.dynamicStates = {DynamicState::Viewport, DynamicState::Scissor, DynamicState::LineWidth, DynamicState::DepthTestEnable, DynamicState::DepthWriteEnable};
         m_passInfo.topology = PrimitiveTopology::LineList;
         m_passInfo.colorBlendAttachments = {m_viewportRT->GetBlendAttachment()};
-        m_passInfo.colorFormats = m_viewportRT->GetFormatPtr();
+        m_passInfo.colorFormats = {m_viewportRT->GetFormat()};
         m_passInfo.UpdateHash();
     }
 
@@ -107,7 +107,7 @@ namespace pe
 
         PushConstants_AABB constants{};
         constants.projJitter = camera.GetProjJitter();
-        
+
         auto &gSettings = Settings::Get<GlobalSettings>();
 
         cmd->BeginPass(attachments, "AabbsPass");

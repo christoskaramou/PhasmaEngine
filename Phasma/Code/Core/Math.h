@@ -539,25 +539,25 @@ namespace pe
 
     vec3 maximum(cvec3 &v1, cvec3 &v2);
 
-    template <typename T>
+    template <class T>
     inline T minimum(const T &a, const T &b)
     {
         return (b < a) ? b : a;
     };
 
-    template <typename T>
+    template <class T>
     inline T maximum(const T &a, const T &b)
     {
         return (a < b) ? b : a;
     };
 
-    template <typename T>
+    template <class T>
     inline T clamp(const T &x, const T &minX, const T &maxX)
     {
         return minimum(maximum(x, minX), maxX);
     };
 
-    template <typename T>
+    template <class T>
     inline void clamp(T *const x, const T &minX, const T &maxX)
     {
         *x = clamp(*x, minX, maxX);

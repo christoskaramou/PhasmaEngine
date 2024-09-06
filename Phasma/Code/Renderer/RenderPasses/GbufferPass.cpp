@@ -1,4 +1,3 @@
-#if PE_VULKAN
 #include "Renderer/RenderPasses/GbufferPass.h"
 #include "Scene/Model.h"
 #include "Renderer/Swapchain.h"
@@ -82,7 +81,7 @@ namespace pe
 
     void GbufferPass::UpdatePassInfo()
     {
-        Format colorformats[]{
+        std::vector<Format> colorformats{
             normalRT->GetFormat(),
             albedoRT->GetFormat(),
             srmRT->GetFormat(),
@@ -377,4 +376,3 @@ namespace pe
         Buffer::Destroy(uniform);
     }
 }
-#endif

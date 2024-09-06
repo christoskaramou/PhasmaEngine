@@ -45,7 +45,7 @@ namespace pe
         m_passInfo.dynamicStates = {DynamicState::Viewport, DynamicState::Scissor};
         m_passInfo.cullMode = CullMode::Back;
         m_passInfo.colorBlendAttachments = {m_viewportRT->GetBlendAttachment()};
-        m_passInfo.colorFormats = m_viewportRT->GetFormatPtr();
+        m_passInfo.colorFormats = {m_viewportRT->GetFormat()};
         m_passInfo.UpdateHash();
     }
 

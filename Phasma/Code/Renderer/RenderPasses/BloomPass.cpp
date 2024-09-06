@@ -73,7 +73,7 @@ namespace pe
         info.dynamicStates = {DynamicState::Viewport, DynamicState::Scissor};
         info.cullMode = CullMode::Back;
         info.colorBlendAttachments = {m_brightFilterRT->GetBlendAttachment()};
-        info.colorFormats = m_brightFilterRT->GetFormatPtr();
+        info.colorFormats = {m_brightFilterRT->GetFormat()};
         info.UpdateHash();
     }
 
@@ -87,7 +87,7 @@ namespace pe
         info.dynamicStates = {DynamicState::Viewport, DynamicState::Scissor};
         info.cullMode = CullMode::Back;
         info.colorBlendAttachments = {m_gaussianBlurHorizontalRT->GetBlendAttachment()};
-        info.colorFormats = m_gaussianBlurHorizontalRT->GetFormatPtr();
+        info.colorFormats = {m_gaussianBlurHorizontalRT->GetFormat()};
         info.UpdateHash();
     }
 
@@ -101,7 +101,7 @@ namespace pe
         info.dynamicStates = {DynamicState::Viewport, DynamicState::Scissor};
         info.cullMode = CullMode::Back;
         info.colorBlendAttachments = {m_gaussianBlurVerticalRT->GetBlendAttachment()};
-        info.colorFormats = m_gaussianBlurVerticalRT->GetFormatPtr();
+        info.colorFormats = {m_gaussianBlurVerticalRT->GetFormat()};
         info.UpdateHash();
     }
 
@@ -115,7 +115,7 @@ namespace pe
         info.dynamicStates = {DynamicState::Viewport, DynamicState::Scissor};
         info.cullMode = CullMode::Back;
         info.colorBlendAttachments = {m_displayRT->GetBlendAttachment()};
-        info.colorFormats = m_displayRT->GetFormatPtr();
+        info.colorFormats = {m_displayRT->GetFormat()};
         info.UpdateHash();
     }
 

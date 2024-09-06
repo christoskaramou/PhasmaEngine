@@ -24,7 +24,7 @@ namespace pe
         PipelineStageFlags GetWaitStageFlags() { return m_waitStageFlags; }
 
     private:
-        bool m_timeline;
+        const bool m_timeline;
         PipelineStageFlags m_waitStageFlags;
     };
 }

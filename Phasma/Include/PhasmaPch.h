@@ -1,7 +1,5 @@
 #pragma once
 
-#define NOMINMAX
-
 #include <string>
 #include <vector>
 #include <list>
@@ -47,7 +45,7 @@
 #include "SDL/SDL.h"
 #include "SDL/SDL_syswm.h"
 #include "SDL/SDL_vulkan.h"
-#include <vulkan/vulkan.h>
+#include "vulkan/vulkan.h"
 #include "vma/vk_mem_alloc.h"
 #ifdef WIN32
     #include <dxgi1_6.h>
