@@ -48,7 +48,7 @@ namespace pe
         void ClearDirtyDescriptorViews(uint32_t frame) { m_dirtyDescriptorViews[frame] = false; }
 
         // Getters
-        std::vector<ImageViewHandle> &GetImageViews() { return m_imageViews; }
+        std::vector<ImageViewApiHandle> &GetImageViews() { return m_imageViews; }
         OrderedMap<size_t, ModelGltf *> &GetModels() { return m_models; }
         Buffer *GetUniforms(uint32_t frame) { return m_uniforms[frame]; }
         Buffer *GetBuffer() { return m_buffer; }
@@ -87,7 +87,7 @@ namespace pe
         size_t m_aabbVerticesOffset = 0;        // in bytes (offset in geometryBuffer), for AABB range
         size_t m_aabbIndicesOffset = 0;         // in bytes (offset in geometryBuffer), for Shadows range
         std::vector<uint32_t> m_aabbIndices;
-        std::vector<ImageViewHandle> m_imageViews{};
+        std::vector<ImageViewApiHandle> m_imageViews{};
         std::vector<Sampler *> m_samplers{};
         bool m_dirtyDescriptorViews[SWAPCHAIN_IMAGES];
 

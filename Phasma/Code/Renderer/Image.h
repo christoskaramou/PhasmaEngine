@@ -85,7 +85,7 @@ namespace pe
         std::string name;
     };
 
-    class Sampler : public IHandle<Sampler, SamplerHandle>
+    class Sampler : public PeHandle<Sampler, SamplerApiHandle>
     {
     public:
         Sampler(const SamplerCreateInfo &info);
@@ -95,7 +95,7 @@ namespace pe
         SamplerCreateInfo info;
     };
 
-    class Image : public IHandle<Image, ImageHandle>
+    class Image : public PeHandle<Image, ImageApiHandle>
     {
     public:
         Image() {}
@@ -141,11 +141,11 @@ namespace pe
         bool HasSRV(int mip = -1) { return mip == -1 ? !!m_srv : !!m_srvs[mip]; }
         bool HasUAV(uint32_t mip) { return !!m_uavs[mip]; }
 
-        ImageViewHandle GetRTV() { return m_rtv; }
-        ImageViewHandle GetSRV(int mip = -1) { return mip == -1 ? m_srv : m_srvs[mip]; }
-        ImageViewHandle GetUAV(uint32_t mip) { return m_uavs[mip]; }
+        ImageViewApiHandle GetRTV() { return m_rtv; }
+        ImageViewApiHandle GetSRV(int mip = -1) { return mip == -1 ? m_srv : m_srvs[mip]; }
+        ImageViewApiHandle GetUAV(uint32_t mip) { return m_uavs[mip]; }
 
-        void SetRTV(ImageViewHandle view) { m_rtv = view; }
+        void SetRTV(ImageViewApiHandle view) { m_rtv = view; }
 
         bool HasGeneratedMips() { return m_mipmapsGenerated; }
 
@@ -161,7 +161,7 @@ namespace pe
         friend class Renderer;
         friend class RendererSystem;
 
-        ImageViewHandle CreateImageView(ImageViewType type, int mip = -1, bool useStencil = false);
+        ImageViewApiHandle CreateImageView(ImageViewType type, int mip = -1, bool useStencil = false);
 
         void Barrier(CommandBuffer *cmd, const ImageBarrierInfo &info);
 
@@ -183,13 +183,13 @@ namespace pe
         float width_f{};
         float height_f{};
         Sampler *m_sampler;
-        AllocationHandle m_allocation;
+        AllocationApiHandle m_allocation;
         ImageCreateInfo m_imageInfo;
         PipelineColorBlendAttachmentState m_blendAttachment;
-        ImageViewHandle m_rtv; // Render target view
-        ImageViewHandle m_srv; // Shader resource view
-        std::vector<ImageViewHandle> m_srvs; // Shader resource views for multiple mip levels
-        std::vector<ImageViewHandle> m_uavs; // Unordered access views
+        ImageViewApiHandle m_rtv; // Render target view
+        ImageViewApiHandle m_srv; // Shader resource view
+        std::vector<ImageViewApiHandle> m_srvs; // Shader resource views for multiple mip levels
+        std::vector<ImageViewApiHandle> m_uavs; // Unordered access views
         std::vector<std::vector<ImageBarrierInfo>> m_infos{}; // Tracking image barrier info for each layer and mip level
         bool m_mipmapsGenerated = false;
     };

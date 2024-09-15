@@ -40,7 +40,7 @@ namespace pe
         
     }
 
-    void CommandPool::Init(GpuHandle gpu)
+    void CommandPool::Init(GpuApiHandle gpu)
     {
         uint32_t queueFamPropCount;
         vkGetPhysicalDeviceQueueFamilyProperties(gpu, &queueFamPropCount, nullptr);
@@ -298,7 +298,7 @@ namespace pe
         }
         else
         {
-            std::vector<ImageViewHandle> views{};
+            std::vector<ImageViewApiHandle> views{};
             for (const auto &attachment : attachments)
             {
                 Image *image = attachment.image;
@@ -607,7 +607,7 @@ namespace pe
                     imageInfoVK[i][j] = {};
                     imageInfoVK[i][j].imageView = info[i].views[j];
                     imageInfoVK[i][j].imageLayout = Translate<VkImageLayout>(info[i].layouts[j]);
-                    imageInfoVK[i][j].sampler = info[i].type == DescriptorType::CombinedImageSampler ? info[i].samplers[j] : SamplerHandle{};
+                    imageInfoVK[i][j].sampler = info[i].type == DescriptorType::CombinedImageSampler ? info[i].samplers[j] : SamplerApiHandle{};
                 }
 
                 writes[i].descriptorCount = static_cast<uint32_t>(imageInfoVK[i].size());
@@ -867,7 +867,7 @@ namespace pe
         Debug::EndCmdRegion(this);
     }
 
-    void CommandBuffer::Init(GpuHandle gpu, uint32_t countPerFamily)
+    void CommandBuffer::Init(GpuApiHandle gpu, uint32_t countPerFamily)
     {
         uint32_t queueFamPropCount;
         vkGetPhysicalDeviceQueueFamilyProperties(gpu, &queueFamPropCount, nullptr);

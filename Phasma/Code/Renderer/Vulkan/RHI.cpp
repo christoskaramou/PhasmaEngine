@@ -66,7 +66,7 @@ namespace pe
         Queue::Clear();
         CommandBuffer::Clear();
         CommandPool::Clear();
-        IHandleBase::DestroyAllIHandles();
+        PeHandleBase::DestroyAllIHandles();
         vmaDestroyAllocator(m_allocator);
         if (m_device)
             vkDestroyDevice(m_device, nullptr);

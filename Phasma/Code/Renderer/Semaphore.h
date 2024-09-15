@@ -2,7 +2,7 @@
 
 namespace pe
 {
-    class Semaphore : public IHandle<Semaphore, SemaphoreHandle>
+    class Semaphore : public PeHandle<Semaphore, SemaphoreApiHandle>
     {
     public:
         Semaphore(bool timeline, const std::string &name);

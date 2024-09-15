@@ -24,7 +24,7 @@ namespace pe
     const vec4 color{0.0f, 0.0f, 0.0f, 1.0f};
 
     // Get function pointers for the debug report extensions from the device
-    void Debug::Init(InstanceHandle instance)
+    void Debug::Init(InstanceApiHandle instance)
     {
         PE_ERROR_IF(s_instance, "Already initialized!");
         PE_ERROR_IF(!instance, "Invalid initializing instance!");

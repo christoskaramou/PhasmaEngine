@@ -15,7 +15,7 @@ namespace pe
         AccessFlags dstAccess;
     };
 
-    class Event : public IHandle<Event, EventHandle>
+    class Event : public PeHandle<Event, EventApiHandle>
     {
     public:
         Event(const std::string &name);

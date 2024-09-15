@@ -21,7 +21,7 @@ namespace pe
         ImageLayout finalLayout;   // the layout of the attachment that the render pass transitions to when it ends
     };
 
-    class RenderPass : public IHandle<RenderPass, RenderPassHandle>
+    class RenderPass : public PeHandle<RenderPass, RenderPassApiHandle>
     {
     public:
         RenderPass(const std::vector<Attachment> &attachments, const std::string &name);

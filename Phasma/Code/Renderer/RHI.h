@@ -77,13 +77,13 @@ namespace pe
         size_t AlignStorage(size_t size) { return (size + m_minStorageBufferOffsetAlignment - 1) & ~(m_minStorageBufferOffsetAlignment - 1); }
         uint32_t GetMaxPushDescriptorsPerSet() { return m_maxPushDescriptorsPerSet; }
 
-        const InstanceHandle &GetInstance() { return m_instance; }
-        const GpuHandle &GetGpu() { return m_gpu; }
+        const InstanceApiHandle &GetInstance() { return m_instance; }
+        const GpuApiHandle &GetGpu() { return m_gpu; }
         const std::string &GetGpuName() { return m_gpuName; }
-        const DeviceHandle &GetDevice() { return m_device; }
+        const DeviceApiHandle &GetDevice() { return m_device; }
         DescriptorPool *GetDescriptorPool() { return m_descriptorPool; }
         std::vector<Semaphore *> &GetSemaphores(uint32_t frameIndex) { return m_semaphores[frameIndex]; }
-        const AllocatorHandle &GetAllocator() { return m_allocator; }
+        const AllocatorApiHandle &GetAllocator() { return m_allocator; }
         Queue *GetRenderQueue() { return m_renderQueue; }
         Queue *GetComputeQueue() { return m_computeQueue; }
         Queue *GetTransferQueue() { return m_transferQueue; }
@@ -118,13 +118,13 @@ namespace pe
     private:
         RHI();
 
-        InstanceHandle m_instance;
-        GpuHandle m_gpu;
+        InstanceApiHandle m_instance;
+        GpuApiHandle m_gpu;
         std::string m_gpuName;
-        DeviceHandle m_device;
+        DeviceApiHandle m_device;
         DescriptorPool *m_descriptorPool;
         std::vector<Semaphore *> m_semaphores[SWAPCHAIN_IMAGES];
-        AllocatorHandle m_allocator;
+        AllocatorApiHandle m_allocator;
 
         Queue *m_renderQueue;
         Queue *m_computeQueue;

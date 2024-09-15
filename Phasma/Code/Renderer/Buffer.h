@@ -21,7 +21,7 @@ namespace pe
         size_t offset = 0;
     };
 
-    class Buffer : public IHandle<Buffer, BufferHandle>
+    class Buffer : public PeHandle<Buffer, BufferApiHandle>
     {
     public:
         Buffer(size_t size,
@@ -61,7 +61,7 @@ namespace pe
         size_t m_size;
         void *m_data;
         BufferUsageFlags usage;
-        AllocationHandle allocation;
+        AllocationApiHandle allocation;
         std::string name;
     };
 }

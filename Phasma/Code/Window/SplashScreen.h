@@ -2,7 +2,7 @@
 
 namespace pe
 {
-    class SplashScreen : public IHandle<SplashScreen, WindowHandle>
+    class SplashScreen : public PeHandle<SplashScreen, WindowApiHandle>
     {
     public:
         SplashScreen(uint32_t flags);

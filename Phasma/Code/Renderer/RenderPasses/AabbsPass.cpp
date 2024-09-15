@@ -95,14 +95,17 @@ namespace pe
 
         std::vector<ImageBarrierInfo> barrierInfo{};
         barrierInfo.resize(2);
+        
         barrierInfo[0].image = m_viewportRT;
         barrierInfo[0].layout = ImageLayout::Attachment;
         barrierInfo[0].stageFlags = PipelineStage::ColorAttachmentOutputBit;
         barrierInfo[0].accessMask = Access::ColorAttachmentWriteBit;
+
         barrierInfo[1].image = m_depthRT;
         barrierInfo[1].layout = ImageLayout::Attachment;
         barrierInfo[1].stageFlags = PipelineStage::EarlyFragmentTestsBit;
         barrierInfo[1].accessMask = Access::DepthStencilAttachmentWriteBit;
+
         cmd->ImageBarriers(barrierInfo);
 
         PushConstants_AABB constants{};
@@ -121,7 +124,7 @@ namespace pe
         cmd->BindPipeline(m_passInfo);
 
         // Lambda to draw from drawInfos
-        auto DrawFromInfos = [&](auto &drawInfos)
+        auto DrawFromInfos = [&](const auto &drawInfos)
         {
             for (auto &drawInfo : drawInfos)
             {

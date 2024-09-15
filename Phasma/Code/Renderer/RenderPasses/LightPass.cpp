@@ -121,7 +121,7 @@ namespace pe
     void LightPass::UpdateDescriptorSets()
     {
         ShadowPass &shadows = *GetGlobalComponent<ShadowPass>();
-        std::vector<ImageViewHandle> views(shadows.m_textures.size());
+        std::vector<ImageViewApiHandle> views(shadows.m_textures.size());
         for (uint32_t i = 0; i < shadows.m_textures.size(); i++)
             views[i] = shadows.m_textures[i]->GetSRV();
 

@@ -116,7 +116,7 @@ namespace pe
     void Downsampler::UpdateDescriptorSet()
     {
         int mips = static_cast<int>(s_image->GetMipLevels());
-        std::vector<ImageViewHandle> views(mips);
+        std::vector<ImageViewApiHandle> views(mips);
         for (int i = 0; i < mips; i++)
             views[i] = s_image->GetUAV(i);
 

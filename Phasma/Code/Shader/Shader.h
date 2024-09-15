@@ -39,7 +39,7 @@ namespace pe
     class Reflection;
     class PassInfo;
 
-    class Shader : public IHandle<Shader, ShaderHandle>
+    class Shader : public PeHandle<Shader, ShaderApiHandle>
     {
     public:
         Shader(const std::string &sourcePath, ShaderStage shaderStage, const std::vector<Define> &defines = {});

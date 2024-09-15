@@ -8,7 +8,7 @@ namespace pe
         DescriptorType type;
     };
 
-    class DescriptorPool : public IHandle<DescriptorPool, DescriptorPoolHandle>
+    class DescriptorPool : public PeHandle<DescriptorPool, DescriptorPoolApiHandle>
     {
     public:
         DescriptorPool(uint32_t count, DescriptorPoolSize *sizes, const std::string &name);
@@ -37,11 +37,11 @@ namespace pe
         std::vector<uint64_t> offsets{};
         std::vector<uint64_t> ranges{}; // range of the buffers in bytes to use
 
-        std::vector<ImageViewHandle> views{};
-        std::vector<SamplerHandle> samplers{}; // if type == DescriptorType::CombinedImageSampler, these are the samplers for each view
+        std::vector<ImageViewApiHandle> views{};
+        std::vector<SamplerApiHandle> samplers{}; // if type == DescriptorType::CombinedImageSampler, these are the samplers for each view
     };
 
-    class DescriptorLayout : public IHandle<DescriptorLayout, DescriptorSetLayoutHandle>
+    class DescriptorLayout : public PeHandle<DescriptorLayout, DescriptorSetLayoutApiHandle>
     {
     public:
         DescriptorLayout(const std::vector<DescriptorBindingInfo> &bindingInfos,
@@ -98,7 +98,7 @@ namespace pe
         bool m_allowUpdateAfterBind;
     };
 
-    class Descriptor : public IHandle<Descriptor, DescriptorSetHandle>
+    class Descriptor : public PeHandle<Descriptor, DescriptorSetApiHandle>
     {
     public:
         Descriptor(const std::vector<DescriptorBindingInfo> &bindingInfos,
@@ -109,10 +109,10 @@ namespace pe
         ~Descriptor();
 
         void SetImageViews(uint32_t binding,
-                           const std::vector<ImageViewHandle> &views,
-                           const std::vector<SamplerHandle> &samplers);
+                           const std::vector<ImageViewApiHandle> &views,
+                           const std::vector<SamplerApiHandle> &samplers);
 
-        void SetImageView(uint32_t binding, ImageViewHandle view, SamplerHandle sampler);
+        void SetImageView(uint32_t binding, ImageViewApiHandle view, SamplerApiHandle sampler);
 
         void SetBuffers(uint32_t binding,
                         const std::vector<Buffer *> &buffers,
@@ -121,9 +121,9 @@ namespace pe
 
         void SetBuffer(uint32_t binding, Buffer *buffer, uint64_t offset = 0, uint64_t range = 0);
 
-        void SetSamplers(uint32_t binding, const std::vector<SamplerHandle> &samplers);
+        void SetSamplers(uint32_t binding, const std::vector<SamplerApiHandle> &samplers);
 
-        void SetSampler(uint32_t binding, SamplerHandle sampler);
+        void SetSampler(uint32_t binding, SamplerApiHandle sampler);
 
         void Update();
 

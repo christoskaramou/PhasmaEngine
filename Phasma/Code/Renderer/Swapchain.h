@@ -6,7 +6,7 @@ namespace pe
     class Semaphore;
     class Image;
 
-    class Swapchain : public IHandle<Swapchain, SwapchainHandle>
+    class Swapchain : public PeHandle<Swapchain, SwapchainApiHandle>
     {
     public:
         Swapchain(Surface *surface, const std::string &name);

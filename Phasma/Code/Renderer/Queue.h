@@ -6,10 +6,10 @@ namespace pe
     class CommandBuffer;
     class Swapchain;
 
-    class Queue : public IHandle<Queue, QueueHandle>
+    class Queue : public PeHandle<Queue, QueueApiHandle>
     {
     public:
-        Queue(QueueHandle handle,
+        Queue(QueueApiHandle handle,
               uint32_t familyId,
               QueueTypeFlags m_queueTypeFlags,
               ivec3 m_imageGranularity,
@@ -17,7 +17,7 @@ namespace pe
 
         ~Queue();
 
-        static void Init(GpuHandle gpu, DeviceHandle device, SurfaceHandle surface);
+        static void Init(GpuApiHandle gpu, DeviceApiHandle device, SurfaceApiHandle surface);
 
         static void Clear();
 

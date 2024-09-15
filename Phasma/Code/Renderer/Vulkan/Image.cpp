@@ -415,7 +415,7 @@ namespace pe
     {
         PE_ERROR_IF(!(m_imageInfo.usage & ImageUsage::SampledBit), "Image was not created with SampledBit for SRV usage");
 
-        ImageViewHandle view = CreateImageView(type, mip, useStencil);
+        ImageViewApiHandle view = CreateImageView(type, mip, useStencil);
         if (mip == -1)
             m_srv = view;
         else
@@ -438,7 +438,7 @@ namespace pe
         return min(mips, maxMips);
     }
 
-    ImageViewHandle Image::CreateImageView(ImageViewType type, int mip, bool useStencil)
+    ImageViewApiHandle Image::CreateImageView(ImageViewType type, int mip, bool useStencil)
     {
         VkImageViewCreateInfo viewInfoVK{};
         viewInfoVK.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
@@ -472,7 +472,7 @@ namespace pe
 
         VkImageView vkView;
         PE_CHECK(vkCreateImageView(RHII.GetDevice(), &viewInfoVK, nullptr, &vkView));
-        ImageViewHandle view = vkView;
+        ImageViewApiHandle view = vkView;
         Debug::SetObjectName(view, m_imageInfo.name);
 
         return view;

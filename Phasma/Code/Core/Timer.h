@@ -71,7 +71,7 @@ namespace pe
 
     class CommandBuffer;
 
-    class GpuTimer : public IHandle<GpuTimer, QueryPoolHandle>
+    class GpuTimer : public PeHandle<GpuTimer, QueryPoolApiHandle>
     {
     public:
         static GpuTimer *GetFree();

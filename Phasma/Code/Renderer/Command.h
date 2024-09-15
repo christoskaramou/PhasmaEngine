@@ -64,8 +64,8 @@ namespace pe
         std::vector<size_t> ranges{}; // range of the buffers in bytes to use
 
         std::vector<ImageLayout> layouts{};
-        std::vector<ImageViewHandle> views{};
-        std::vector<SamplerHandle> samplers{}; // if type == DescriptorType::CombinedImageSampler, these are the samplers for each view
+        std::vector<ImageViewApiHandle> views{};
+        std::vector<SamplerApiHandle> samplers{}; // if type == DescriptorType::CombinedImageSampler, these are the samplers for each view
     };
 
     template <uint16_t N>
@@ -91,14 +91,14 @@ namespace pe
         uint8_t m_data[N];
     };
 
-    class CommandPool : public IHandle<CommandPool, CommandPoolHandle>
+    class CommandPool : public PeHandle<CommandPool, CommandPoolApiHandle>
     {
     public:
         CommandPool(uint32_t familyId, CommandPoolCreateFlags flags, const std::string &name);
 
         ~CommandPool();
 
-        static void Init(GpuHandle gpu);
+        static void Init(GpuApiHandle gpu);
 
         static void Clear();
 
@@ -120,7 +120,7 @@ namespace pe
         CommandPoolCreateFlags m_flags;
     };
 
-    class CommandBuffer : public IHandle<CommandBuffer, CommandBufferHandle>
+    class CommandBuffer : public PeHandle<CommandBuffer, CommandBufferApiHandle>
     {
     public:
         CommandBuffer(uint32_t familyId, const std::string &name);
@@ -252,7 +252,7 @@ namespace pe
         void AddFlags(CommandTypeFlags flags) { m_commandFlags |= flags; }
 
         // Resourses functionality
-        static void Init(GpuHandle gpu, uint32_t countPerFamily = 0);
+        static void Init(GpuApiHandle gpu, uint32_t countPerFamily = 0);
         static void Clear();
         static CommandBuffer *GetFree(uint32_t familyId);
         static CommandBuffer *GetFree(Queue *queue);

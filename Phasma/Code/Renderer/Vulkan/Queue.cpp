@@ -9,7 +9,7 @@
 
 namespace pe
 {
-    Queue::Queue(QueueHandle handle,
+    Queue::Queue(QueueApiHandle handle,
                  uint32_t familyId,
                  QueueTypeFlags queueTypeFlags,
                  ivec3 imageGranularity,
@@ -163,7 +163,7 @@ namespace pe
         Debug::EndQueueRegion(this);
     }
 
-    void Queue::Init(GpuHandle gpu, DeviceHandle device, SurfaceHandle surface)
+    void Queue::Init(GpuApiHandle gpu, DeviceApiHandle device, SurfaceApiHandle surface)
     {
         uint32_t queueFamPropCount;
         vkGetPhysicalDeviceQueueFamilyProperties(gpu, &queueFamPropCount, nullptr);

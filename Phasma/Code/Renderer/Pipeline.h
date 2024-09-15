@@ -60,7 +60,7 @@ namespace pe
         uint32_t stencilWriteMask;
         uint32_t stencilReference;
 
-        PipelineCacheHandle pipelineCache;
+        PipelineCacheApiHandle pipelineCache;
         std::string name;
 
     private:
@@ -74,7 +74,7 @@ namespace pe
         std::vector<Descriptor *> m_descriptors[SWAPCHAIN_IMAGES];
     };
 
-    class Pipeline : public IHandle<Pipeline, PipelineHandle>
+    class Pipeline : public PeHandle<Pipeline, PipelineApiHandle>
     {
     public:
         Pipeline(RenderPass* renderPass, PassInfo &info);
@@ -85,6 +85,6 @@ namespace pe
         friend class CommandBuffer;
 
         PassInfo &m_info;
-        PipelineLayoutHandle m_layout;
+        PipelineLayoutApiHandle m_layout;
     };
 }

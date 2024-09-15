@@ -9,7 +9,7 @@ namespace pe
     class Debug
     {
     public:
-        static void Init(InstanceHandle instance);
+        static void Init(InstanceApiHandle instance);
 
         static void GetInstanceUtils(std::vector<const char *> &instanceExtensions,
                                      std::vector<const char *> &instanceLayers);
@@ -70,14 +70,14 @@ namespace pe
 
         static void EndCmdRegion(CommandBuffer *cmd);
 
-        inline static InstanceHandle s_instance;
-        inline static DebugMessengerHandle s_debugMessenger;
+        inline static InstanceApiHandle s_instance;
+        inline static DebugMessengerApiHandle s_debugMessenger;
     };
 #else
     class Debug
     {
     public:
-        static void Init(InstanceHandle instance) {}
+        static void Init(InstanceApiHandle instance) {}
 
         static void GetInstanceUtils(std::vector<const char *> &instanceExtensions,
                                      std::vector<const char *> &instanceLayers) {}

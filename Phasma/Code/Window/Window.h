@@ -5,7 +5,7 @@ namespace pe
     class Context;
     class Camera;
 
-    class Window : public IHandle<Window, WindowHandle>
+    class Window : public PeHandle<Window, WindowApiHandle>
     {
     public:
         Window(int x, int y, int w, int h, uint32_t flags);

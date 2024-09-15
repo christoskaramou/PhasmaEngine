@@ -4,7 +4,7 @@ namespace pe
 {
     class Context;
 
-    class Surface : public IHandle<Surface, SurfaceHandle>
+    class Surface : public PeHandle<Surface, SurfaceApiHandle>
     {
     public:
         Surface(SDL_Window *window);
