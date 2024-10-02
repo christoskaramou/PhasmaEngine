@@ -10,11 +10,9 @@ namespace pe
     {
     public:
         App();
-
         ~App();
 
         bool Frame();
-
         void Run();
 
     private:

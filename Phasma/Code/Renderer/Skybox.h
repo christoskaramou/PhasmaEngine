@@ -8,13 +8,10 @@ namespace pe
     {
     public:
         SkyBox();
-
         ~SkyBox();
 
         void LoadSkyBox(CommandBuffer *cmd, const std::array<std::string, 6> &textureNames, uint32_t imageSideSize);
-
         void Destroy();
-
         Image *GetCubeMap() const { return m_cubeMap; }
 
     private:

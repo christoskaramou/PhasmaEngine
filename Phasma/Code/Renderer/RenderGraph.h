@@ -2,7 +2,6 @@
 
 namespace pe
 {
-    class RenderPass;
     struct BarrierInfo;
 
     struct Dependency
@@ -17,9 +16,7 @@ namespace pe
 
     public:
         void AddPass(const Func &func, const std::vector<Dependency> &dependancies);
-
         void Execute();
-
         void ClearPasses();
 
     private:

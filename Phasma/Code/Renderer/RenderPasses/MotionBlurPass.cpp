@@ -1,32 +1,17 @@
 #include "Renderer/RenderPasses/MotionBlurPass.h"
-#include "Renderer/Surface.h"
-#include "Renderer/Swapchain.h"
-#include "GUI/GUI.h"
 #include "Shader/Shader.h"
-#include "Renderer/RHI.h"
-#include "Renderer/Queue.h"
 #include "Renderer/Command.h"
 #include "Renderer/RenderPass.h"
 #include "Renderer/Descriptor.h"
-#include "Renderer/Framebuffer.h"
 #include "Renderer/Image.h"
 #include "Renderer/Pipeline.h"
-#include "Renderer/Buffer.h"
 #include "Systems/RendererSystem.h"
+#include "Systems/CameraSystem.h"
 
 namespace pe
 {
-    MotionBlurPass::MotionBlurPass()
-    {
-    }
-
-    MotionBlurPass::~MotionBlurPass()
-    {
-    }
-
     void MotionBlurPass::Init()
     {
-        m_renderQueue = RHII.GetRenderQueue();
         RendererSystem *rs = GetGlobalSystem<RendererSystem>();
 
         m_displayRT = rs->GetRenderTarget("display");
@@ -35,24 +20,24 @@ namespace pe
 
         m_frameImage = rs->CreateFSSampledImage(false);
 
-        m_attachment = {};
-        m_attachment.image = m_displayRT;
-        m_attachment.initialLayout = ImageLayout::Attachment;
-        m_attachment.finalLayout = ImageLayout::ShaderReadOnly;
+        m_attachments.resize(1);
+        m_attachments[0] = {};
+        m_attachments[0].image = m_displayRT;
+        m_attachments[0].initialLayout = ImageLayout::Attachment;
+        m_attachments[0].finalLayout = ImageLayout::ShaderReadOnly;
     }
 
     void MotionBlurPass::UpdatePassInfo()
     {
-        PassInfo &info = m_passInfo;
-
-        info.name = "motionBlur_pipeline";
-        info.pVertShader = Shader::Create("Shaders/Common/Quad.hlsl", ShaderStage::VertexBit);
-        info.pFragShader = Shader::Create("Shaders/MotionBlur/MotionBlurPS.hlsl", ShaderStage::FragmentBit);
-        info.dynamicStates = {DynamicState::Viewport, DynamicState::Scissor};
-        info.cullMode = CullMode::Back;
-        info.colorBlendAttachments = {m_displayRT->GetBlendAttachment()};
-        info.colorFormats = {m_displayRT->GetFormat()};
-        info.UpdateHash();
+        m_passInfo->name = "motionBlur_pipeline";
+        m_passInfo->pVertShader = Shader::Create("Shaders/Common/Quad.hlsl", ShaderStage::VertexBit);
+        m_passInfo->pFragShader = Shader::Create("Shaders/MotionBlur/MotionBlurPS.hlsl", ShaderStage::FragmentBit);
+        m_passInfo->dynamicStates = {DynamicState::Viewport, DynamicState::Scissor};
+        m_passInfo->cullMode = CullMode::Back;
+        m_passInfo->colorBlendAttachments = {PipelineColorBlendAttachmentState::Default};
+        m_passInfo->colorFormats = {m_displayRT->GetFormat()};
+        m_passInfo->ReflectDescriptors();
+        m_passInfo->UpdateHash();
     }
 
     void MotionBlurPass::CreateUniforms(CommandBuffer *cmd)
@@ -64,7 +49,7 @@ namespace pe
     {
         for (uint32_t i = 0; i < SWAPCHAIN_IMAGES; ++i)
         {
-            auto *DSet = m_passInfo.GetDescriptors(i)[0];
+            auto *DSet = m_passInfo->GetDescriptors(i)[0];
             DSet->SetImageView(0, m_frameImage->GetSRV(), m_frameImage->GetSampler()->ApiHandle());
             DSet->SetImageView(1, m_depth->GetSRV(), m_depth->GetSampler()->ApiHandle());
             DSet->SetImageView(2, m_velocityRT->GetSRV(), m_velocityRT->GetSampler()->ApiHandle());
@@ -76,16 +61,10 @@ namespace pe
     {
     }
 
-    CommandBuffer *MotionBlurPass::Draw()
+    void MotionBlurPass::Draw(CommandBuffer *cmd)
     {
-        CommandBuffer *cmd = CommandBuffer::GetFree(m_renderQueue);
-        cmd->Begin();
-
-        cmd->BeginDebugRegion("MotionBlurPass");
-
+        auto &gSettings = Settings::Get<GlobalSettings>();
         Camera *camera = GetGlobalSystem<CameraSystem>()->GetCamera(0);
-
-        cmd->CopyImage(m_displayRT, m_frameImage);
 
         ImageBarrierInfo barrier{};
         barrier.layout = ImageLayout::ShaderReadOnly;
@@ -105,12 +84,12 @@ namespace pe
         barrier.stageFlags = PipelineStage::ColorAttachmentOutputBit;
         barrier.accessMask = Access::ColorAttachmentWriteBit;
         barriers.push_back(barrier);
-        cmd->ImageBarriers(barriers);
 
-        auto &gSettings = Settings::Get<GlobalSettings>();
-        
-        cmd->BeginPass({m_attachment}, "MotionBlur");
-        cmd->BindPipeline(m_passInfo);
+        cmd->BeginDebugRegion("MotionBlurPass");
+        cmd->CopyImage(m_displayRT, m_frameImage);
+        cmd->ImageBarriers(barriers);
+        cmd->BeginPass(m_attachments, "MotionBlur");
+        cmd->BindPipeline(*m_passInfo);
         cmd->SetViewport(0.f, 0.f, m_displayRT->GetWidth_f(), m_displayRT->GetHeight_f());
         cmd->SetScissor(0, 0, m_displayRT->GetWidth(), m_displayRT->GetHeight());
         cmd->SetConstantAt(0, 1.0f / static_cast<float>(FrameTimer::Instance().GetDelta()));
@@ -120,11 +99,7 @@ namespace pe
         cmd->PushConstants();
         cmd->Draw(3, 1, 0, 0);
         cmd->EndPass();
-
         cmd->EndDebugRegion();
-
-        cmd->End();
-        return cmd;
     }
 
     void MotionBlurPass::Resize(uint32_t width, uint32_t height)

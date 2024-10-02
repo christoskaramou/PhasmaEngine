@@ -19,9 +19,7 @@ namespace pe
     {
     public:
         Hash() : m_hash(0) {}
-
         Hash(const size_t &hash) : m_hash(hash) {}
-
         Hash(const Hash &hash) : m_hash(hash.m_hash) {}
 
         void Combine(const size_t &hash)
@@ -55,7 +53,6 @@ namespace pe
     {
     public:
         StringHash() : Hash() {}
-
         StringHash(const std::string &string) { Combine(string); }
     };
 
@@ -65,10 +62,9 @@ namespace pe
     {
     public:
         Hashable() : m_hash{} {}
-
-        virtual void UpdateHash() = 0;
-
         Hash GetHash() const { return m_hash; }
+        
+        virtual void UpdateHash() = 0;
 
     protected:
         Hash m_hash;

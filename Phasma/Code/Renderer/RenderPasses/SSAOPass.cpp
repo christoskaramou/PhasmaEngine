@@ -1,60 +1,24 @@
+#if PE_VULKAN
 #include "Renderer/RenderPasses/SSAOPass.h"
-#include "Renderer/Swapchain.h"
-#include "Renderer/Surface.h"
-#include "GUI/GUI.h"
 #include "Shader/Shader.h"
 #include "Renderer/RHI.h"
 #include "Renderer/Command.h"
-#include "Renderer/Queue.h"
-#include "Renderer/Descriptor.h"
 #include "Renderer/Image.h"
-#include "Renderer/Pipeline.h"
-#include "Renderer/Buffer.h"
-#include "Systems/CameraSystem.h"
 #include "Systems/RendererSystem.h"
+#include "Systems/CameraSystem.h"
 
-#if PE_RENDERING_API != PE_VULKAN
-namespace pe
-{
-    SSAOPass::SSAOPass() {}
-
-    SSAOPass::~SSAOPass() {}
-
-    void SSAOPass::Init() {}
-
-    void SSAOPass::Update(Camera *camera) {}
-
-    CommandBuffer *SSAOPass::Draw() { return nullptr; }
-
-    void SSAOPass::Resize(uint32_t width, uint32_t height) {}
-
-    void SSAOPass::Destroy() {}
-}
-
-#else
 namespace pe
 {
     FFX_CACAO_VkContext *m_context = nullptr;
 
-    SSAOPass::SSAOPass()
-    {
-    }
-
-    SSAOPass::~SSAOPass()
-    {
-    }
     void SSAOPass::Init()
     {
         if (!m_context)
         {
-            // m_queue = RHII.GetComputeQueue();
-            m_queue = RHII.GetRenderQueue();
-
             RendererSystem *rs = GetGlobalSystem<RendererSystem>();
             m_ssaoRT = rs->GetRenderTarget("ssao");
             m_normalRT = rs->GetRenderTarget("normal");
             m_depth = rs->GetDepthStencilTarget("depthStencil");
-            ;
 
             size_t ffxCacaoContextSize = FFX_CACAO_VkGetContextSize();
             m_context = (FFX_CACAO_VkContext *)malloc(ffxCacaoContextSize);
@@ -135,25 +99,13 @@ namespace pe
         }
     }
 
-    CommandBuffer *SSAOPass::Draw()
+    void SSAOPass::Draw(CommandBuffer *cmd)
     {
-        // TODO: fix the way sync is handled here, this stalls the frames in flight, maybe add multiple m_context resources for ssao
-        if (m_previousCmd)
-        {
-            m_previousCmd->Wait();
-        }
-
-        CommandBuffer *cmd = CommandBuffer::GetFree(m_queue);
-        cmd->Begin();
-
-        cmd->BeginDebugRegion("SSAOPass");
-
         MemoryBarrierInfo barrier{};
         barrier.srcAccessMask = Access::ShaderWriteBit;
         barrier.dstAccessMask = Access::None;
         barrier.srcStageMask = PipelineStage::ComputeShaderBit;
         barrier.dstStageMask = PipelineStage::AllCommandsBit;
-        cmd->MemoryBarrier(barrier);
 
         std::vector<ImageBarrierInfo> barriers(3);
         barriers[0].image = m_normalRT;
@@ -169,26 +121,21 @@ namespace pe
         barriers[2].stageFlags = PipelineStage::ComputeShaderBit;
         barriers[2].accessMask = Access::ShaderWriteBit;
 
+        cmd->BeginDebugRegion("SSAOPass");
+        cmd->MemoryBarrier(barrier);
         cmd->ImageBarriers(barriers);
-
         cmd->BeginDebugRegion("SSAO_Pass");
         PE_CHECK(FFX_CACAO_VkDraw(m_context, cmd->ApiHandle(), &m_proj, &m_normalsToView));
         cmd->EndDebugRegion();
-
-        // image barrier transition happens in draw, so set to correct layout
-        ImageBarrierInfo info{};
-        info.image = m_ssaoRT;
-        info.layout = ImageLayout::ShaderReadOnly;
-        info.stageFlags = PipelineStage::ComputeShaderBit;
-        info.accessMask = Access::ShaderReadBit;
-        m_ssaoRT->SetCurrentInfoAll(info);
-
         cmd->EndDebugRegion();
 
-        cmd->End();
-        m_previousCmd = cmd;
-
-        return cmd;
+        // image barrier transition happens in draw, so set to correct layout
+        ImageBarrierInfo ssaoInfo{};
+        ssaoInfo.image = m_ssaoRT;
+        ssaoInfo.layout = ImageLayout::ShaderReadOnly;
+        ssaoInfo.stageFlags = PipelineStage::ComputeShaderBit;
+        ssaoInfo.accessMask = Access::ShaderReadBit;
+        m_ssaoRT->SetCurrentInfoAll(ssaoInfo);
     }
 
     void SSAOPass::Resize(uint32_t width, uint32_t height)
@@ -218,5 +165,23 @@ namespace pe
         free(m_context);
         m_context = nullptr;
     }
+}
+
+#else
+namespace pe
+{
+    SSAOPass::SSAOPass() {}
+
+    SSAOPass::~SSAOPass() {}
+
+    void SSAOPass::Init() {}
+
+    void SSAOPass::Update(Camera *camera) {}
+
+    CommandBuffer *SSAOPass::Draw(CommandBuffer *cmd) { return nullptr; }
+
+    void SSAOPass::Resize(uint32_t width, uint32_t height) {}
+
+    void SSAOPass::Destroy() {}
 }
 #endif

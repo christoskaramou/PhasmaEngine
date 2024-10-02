@@ -14,44 +14,31 @@ namespace pe
         }
 
         Context(Context const &) = delete; // copy constructor
-
         Context(Context &&) noexcept = delete; // move constructor
-
-        Context &operator=(Context const &) = delete; // copy assignment
-
-        Context &operator=(Context &&) = delete; // move assignment
-
         ~Context() = default; // destructor
+        Context &operator=(Context const &) = delete; // copy assignment
+        Context &operator=(Context &&) = delete; // move assignment
 
     private:
         Context();
 
     public:
         void InitSystems();
-
         void DestroySystems();
-
         void UpdateSystems(double delta);
-
         void DrawSystems();
 
         template <class T, class... Params>
         inline T *CreateSystem(Params &&...params);
-
         template <class T>
         inline T *GetSystem();
-
         template <class T>
         inline void RemoveSystem();
 
         Entity *CreateEntity();
-
         Entity *GetEntity(size_t id);
-
         void RemoveEntity(size_t id);
-
         Entity *GetWorldEntity() { return m_worldEntity; }
-
         std::unordered_map<size_t, std::shared_ptr<ISystem>> GetSystems();
 
     private:
@@ -117,6 +104,11 @@ namespace pe
     inline T *GetGlobalComponent()
     {
         return Context::Get()->GetWorldEntity()->GetComponent<T>();
+    }
+
+    inline uint32_t GetGlobalComponentCount()
+    {
+        return Context::Get()->GetWorldEntity()->GetComponentCount();
     }
     
     template <class T>

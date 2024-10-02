@@ -37,7 +37,6 @@ namespace pe
             vkDestroyCommandPool(RHII.GetDevice(), m_apiHandle, nullptr);
             m_apiHandle = {};
         }
-        
     }
 
     void CommandPool::Init(GpuApiHandle gpu)
@@ -93,14 +92,16 @@ namespace pe
     }
 
     CommandBuffer::CommandBuffer(uint32_t familyId, const std::string &name)
+        : m_id{ID::NextID()},
+          m_familyId{familyId},
+          m_submitions{0},
+          m_renderPass{nullptr},
+          m_boundPipeline{nullptr},
+          m_commandPool{CommandPool::GetFree(familyId)},
+          m_semaphore{Semaphore::Create(true, name + "_semaphore")},
+          m_event{Event::Create(name + "_event")},
+          m_name{name}
     {
-        m_familyId = familyId;
-        m_commandPool = CommandPool::GetFree(familyId);
-        m_semaphore = Semaphore::Create(true, name + "_semaphore");
-        m_event = Event::Create(name + "_event");
-        m_submitions = 0;
-        m_renderPass = nullptr;
-        m_boundPipeline = nullptr;
 
         VkCommandBufferAllocateInfo cbai{};
         cbai.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
@@ -111,8 +112,6 @@ namespace pe
         VkCommandBuffer commandBuffer;
         PE_CHECK(vkAllocateCommandBuffers(RHII.GetDevice(), &cbai, &commandBuffer));
         m_apiHandle = commandBuffer;
-
-        m_name = name;
 
         Debug::SetObjectName(m_apiHandle, name);
     }

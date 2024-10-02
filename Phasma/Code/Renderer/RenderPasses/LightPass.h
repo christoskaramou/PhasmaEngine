@@ -1,8 +1,5 @@
 #pragma once
 
-#include "Renderer/Pipeline.h"
-#include "Renderer/RenderPass.h"
-
 namespace pe
 {
     struct LightPassUBO
@@ -26,49 +23,28 @@ namespace pe
         uint32_t shadows = 1;
         float dummy = 0.0f;
     };
-    
-    class Descriptor;
-    class Image;
-    class RenderPass;
-    class PassInfo;
-    class DescriptorLayout;
-    class CommandBuffer;
-    class Queue;
 
-    class LightPass : public IRenderPassComponent
+    class Image;
+    class Buffer;
+    class CommandBuffer;
+
+    class LightOpaquePass : public IRenderPassComponent
     {
     public:
-        LightPass();
-
-        ~LightPass();
-
         void Init() override;
-
         void UpdatePassInfo() override;
-
         void CreateUniforms(CommandBuffer *cmd) override;
-
         void UpdateDescriptorSets() override;
-
         void Update(Camera *camera) override;
-
-        CommandBuffer *Draw() override;
-
+        void Draw(CommandBuffer *cmd) override;
         void Resize(uint32_t width, uint32_t height) override;
-
         void Destroy() override;
-
-        void SetBlendType(BlendType blendType) { m_blendType = blendType; }
-
-        PassInfo &GetPassInfoOpaque() { return m_passInfoOpaque; };
-
-        PassInfo &GetPassInfoAlpha() { return m_passInfoTransparent; };
 
     private:
         friend class Renderer;
 
         void PassBarriers(CommandBuffer *cmd);
-        
+
         Buffer *m_uniform[SWAPCHAIN_IMAGES];
         Image *m_ibl_brdf_lut;
         Image *m_normalRT;
@@ -80,15 +56,37 @@ namespace pe
         Image *m_depthStencilRT;
         Image *m_ssaoRT;
         Image *m_transparencyRT;
-
-        PassInfo m_passInfoOpaque;
-        PassInfo m_passInfoTransparent;
-        BlendType m_blendType = BlendType::None;
-        Attachment m_attachmentOpaque;
-        Attachment m_attachmentTransparent;
-
         LightPassUBO m_ubo;
+    };
 
-        Queue *m_renderQueue;
+    class LightTransparentPass : public IRenderPassComponent
+    {
+    public:
+        void Init() override;
+        void UpdatePassInfo() override;
+        void CreateUniforms(CommandBuffer *cmd) override;
+        void UpdateDescriptorSets() override;
+        void Update(Camera *camera) override;
+        void Draw(CommandBuffer *cmd) override;
+        void Resize(uint32_t width, uint32_t height) override;
+        void Destroy() override;
+
+    private:
+        friend class Renderer;
+
+        void PassBarriers(CommandBuffer *cmd);
+
+        Buffer *m_uniform[SWAPCHAIN_IMAGES];
+        Image *m_ibl_brdf_lut;
+        Image *m_normalRT;
+        Image *m_albedoRT;
+        Image *m_srmRT;
+        Image *m_velocityRT;
+        Image *m_emissiveRT;
+        Image *m_viewportRT;
+        Image *m_depthStencilRT;
+        Image *m_ssaoRT;
+        Image *m_transparencyRT;
+        LightPassUBO m_ubo;
     };
 }

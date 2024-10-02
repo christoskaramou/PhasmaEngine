@@ -1,15 +1,17 @@
 #include "Scene/Scene.h"
-#include "Renderer/RenderPasses/GbufferPass.h"
-#include "Renderer/RenderPasses/DepthPass.h"
-#include "Renderer/Image.h"
-#include "Renderer/RenderPasses/LightPass.h"
 #include "Systems/RendererSystem.h"
 #include "Systems/LightSystem.h"
+#include "Shader/Shader.h"
+#include "Renderer/Image.h"
 #include "Renderer/RHI.h"
 #include "Renderer/Queue.h"
 #include "Renderer/Command.h"
+#include "Renderer/Pipeline.h"
 #include "Renderer/RenderPasses/ShadowPass.h"
 #include "Renderer/RenderPasses/AabbsPass.h"
+#include "Renderer/RenderPasses/GbufferPass.h"
+#include "Renderer/RenderPasses/DepthPass.h"
+#include "Renderer/RenderPasses/LightPass.h"
 
 namespace pe
 {
@@ -22,8 +24,6 @@ namespace pe
     {
         if (!defaultSampler)
             defaultSampler = Sampler::Create(SamplerCreateInfo{});
-
-        m_renderQueue = RHII.GetRenderQueue();
     }
 
     Scene::~Scene()
@@ -51,7 +51,7 @@ namespace pe
                     [this, frame]()
                     {
                         AabbsPass *ap = GetGlobalComponent<AabbsPass>();
-                        const auto &sets = ap->m_passInfo.GetDescriptors(frame);
+                        const auto &sets = ap->m_passInfo->GetDescriptors(frame);
 
                         // Set 0
                         Descriptor *DSetUniforms = sets[0];
@@ -70,7 +70,7 @@ namespace pe
                         [this, frame]()
                         {
                             DepthPass *dp = GetGlobalComponent<DepthPass>();
-                            const auto &sets = dp->m_passInfo.GetDescriptors(frame);
+                            const auto &sets = dp->m_passInfo->GetDescriptors(frame);
 
                             // set 0
                             Descriptor *DSetUniforms = sets[0];
@@ -96,7 +96,7 @@ namespace pe
                         [this, frame]()
                         {
                             ShadowPass *shadows = GetGlobalComponent<ShadowPass>();
-                            const auto &sets = shadows->m_passInfo.GetDescriptors(frame);
+                            const auto &sets = shadows->m_passInfo->GetDescriptors(frame);
 
                             // set 0
                             Descriptor *DSetUniforms = sets[0];
@@ -112,8 +112,8 @@ namespace pe
                     auto task = e_Update_ThreadPool.Enqueue(
                         [this, frame]()
                         {
-                            GbufferPass *gb = GetGlobalComponent<GbufferPass>();
-                            const auto &sets = gb->m_passInfoOpaque.GetDescriptors(frame);
+                            GbufferOpaquePass *gb = GetGlobalComponent<GbufferOpaquePass>();
+                            const auto &sets = gb->m_passInfo->GetDescriptors(frame);
 
                             // set 0
                             Descriptor *DSetUniforms = sets[0];
@@ -139,8 +139,8 @@ namespace pe
                 auto task = e_Update_ThreadPool.Enqueue(
                     [this, frame]()
                     {
-                        GbufferPass *gb = GetGlobalComponent<GbufferPass>();
-                        const auto &sets = gb->m_passInfoAlpha.GetDescriptors(frame);
+                        GbufferTransparentPass *gb = GetGlobalComponent<GbufferTransparentPass>();
+                        const auto &sets = gb->m_passInfo->GetDescriptors(frame);
 
                         // set 0
                         Descriptor *DSetUniforms = sets[0];
@@ -172,65 +172,54 @@ namespace pe
         m_geometry.UploadBuffers(cmd);
     }
 
-    CommandBuffer *Scene::DrawShadowPass()
+    void Scene::DrawShadowPass(CommandBuffer *cmd)
     {
         ShadowPass *shadows = GetGlobalComponent<ShadowPass>();
         shadows->SetGeometry(&m_geometry);
-
-        return shadows->Draw();
+        shadows->Draw(cmd);
     }
 
-    CommandBuffer *Scene::DepthPrePass()
+    void Scene::DepthPrePass(CommandBuffer *cmd)
     {
         DepthPass *dp = GetGlobalComponent<DepthPass>();
         dp->SetGeometry(&m_geometry);
-
-        return dp->Draw();
+        dp->Draw(cmd);
     }
 
-    CommandBuffer *Scene::DrawGbufferPassOpaque()
+    void Scene::DrawGbufferPassOpaque(CommandBuffer *cmd)
     {
-        GbufferPass *gb = GetGlobalComponent<GbufferPass>();
+        GbufferOpaquePass *gb = GetGlobalComponent<GbufferOpaquePass>();
         gb->SetGeometry(&m_geometry);
-        gb->SetBlendType(BlendType::Opaque);
-
-        return gb->Draw();
+        gb->Draw(cmd);
     }
 
-    CommandBuffer *Scene::DrawGbufferPassTransparent()
+    void Scene::DrawGbufferPassTransparent(CommandBuffer *cmd)
     {
-        GbufferPass *gb = GetGlobalComponent<GbufferPass>();
+        GbufferTransparentPass *gb = GetGlobalComponent<GbufferTransparentPass>();
         gb->SetGeometry(&m_geometry);
-        gb->SetBlendType(BlendType::Transparent);
-
-        return gb->Draw();
+        gb->Draw(cmd);
     }
 
-    CommandBuffer *Scene::DrawLightPassOpaque()
+    void Scene::DrawLightPassOpaque(CommandBuffer *cmd)
     {
-        LightPass *lp = GetGlobalComponent<LightPass>();
-        lp->SetBlendType(BlendType::Opaque);
-
-        return lp->Draw();
+        LightOpaquePass *lp = GetGlobalComponent<LightOpaquePass>();
+        lp->Draw(cmd);
     }
 
-    CommandBuffer *Scene::DrawLightPassTransparent()
+    void Scene::DrawLightPassTransparent(CommandBuffer *cmd)
     {
-        LightPass *lp = GetGlobalComponent<LightPass>();
-        lp->SetBlendType(BlendType::Transparent);
-
-        return lp->Draw();
+        LightTransparentPass *lp = GetGlobalComponent<LightTransparentPass>();
+        lp->Draw(cmd);
     }
 
-    CommandBuffer *Scene::DrawAabbsPass()
+    void Scene::DrawAabbsPass(CommandBuffer *cmd)
     {
         AabbsPass *ap = GetGlobalComponent<AabbsPass>();
         ap->SetGeometry(&m_geometry);
-
-        return ap->Draw();
+        ap->Draw(cmd);
     }
 
-    void Scene::DrawScene()
+    void Scene::DrawScene(CommandBuffer *cmd)
     {
     }
 

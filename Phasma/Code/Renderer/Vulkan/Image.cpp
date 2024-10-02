@@ -3,8 +3,6 @@
 #include "Renderer/RHI.h"
 #include "Renderer/Command.h"
 #include "Renderer/Buffer.h"
-#include "Renderer/Queue.h"
-#include "GUI/GUI.h"
 #include "Utilities/Downsampler.h"
 #include "tinygltf/stb_image.h"
 
@@ -204,9 +202,7 @@ namespace pe
         PE_ERROR_IF(!ImageTilingSupport(info.format, info.tiling), "Image::Image(const ImageCreateInfo &info): Image tiling support error.");
 
         m_imageInfo = info;
-
         m_sampler = nullptr;
-        m_blendAttachment = {};
 
         m_rtv = {};
         m_srvs.resize(m_imageInfo.mipLevels);
@@ -357,7 +353,7 @@ namespace pe
 
             Image *image = info.image;
             const ImageCreateInfo &imageInfo = image->m_imageInfo;
-            
+
             // Get the correct mip levels and array layers if they are not specified (zero)
             uint mipLevels = info.mipLevels ? info.mipLevels : imageInfo.mipLevels;
             uint arrayLayers = info.arrayLayers ? info.arrayLayers : imageInfo.arrayLayers;
@@ -399,6 +395,17 @@ namespace pe
             cmd->BeginDebugRegion("ImageGroupBarrier: " + names);
             vkCmdPipelineBarrier2(cmd->ApiHandle(), &depInfo);
             cmd->EndDebugRegion();
+        }
+    }
+
+    void Image::SetCurrentInfoAll(const ImageBarrierInfo &info)
+    {
+        for (uint32_t i = 0; i < m_infos.size(); i++)
+        {
+            for (uint32_t j = 0; j < m_infos[i].size(); j++)
+            {
+                m_infos[i][j] = info;
+            }
         }
     }
 

@@ -10,7 +10,6 @@ namespace pe
     {
     public:
         ThreadPool(size_t);
-
         ~ThreadPool();
 
         template <class F, class... Args>
@@ -21,7 +20,6 @@ namespace pe
         std::vector<std::thread> m_workers;
         // the task queue
         std::queue<std::function<void()>> m_tasks;
-
         // synchronization
         std::mutex m_queue_mutex;
         std::condition_variable m_condition;

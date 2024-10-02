@@ -19,18 +19,14 @@ namespace pe
     {
     public:
         Event(const std::string &name);
-
         ~Event();
 
         void Set(CommandBuffer *cmd, Image *image,
                  ImageLayout scrLayout, ImageLayout dstLayout,
                  PipelineStageFlags srcStage, PipelineStageFlags dstStage,
                  AccessFlags srcAccess, AccessFlags dstAccess);
-
         void Wait();
-
         void Reset(PipelineStageFlags resetStage);
-
         bool IsSet() const { return m_set; }
 
     private:

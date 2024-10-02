@@ -131,10 +131,12 @@ namespace pe
                            ShaderStage stage,
                            bool pushDescriptor,
                            const std::string &name)
+        : m_pushDescriptor{pushDescriptor},
+          m_bindingInfos{bindingInfos},
+          m_updateInfos(bindingInfos.size()),
+          m_stage{stage},
+          m_dynamicOffsets{}
     {
-        m_pushDescriptor = pushDescriptor;
-        m_bindingInfos = bindingInfos;
-        m_updateInfos.resize(bindingInfos.size());
         std::sort(m_bindingInfos.begin(), m_bindingInfos.end(), [](const DescriptorBindingInfo &a, const DescriptorBindingInfo &b)
                   { return a.binding < b.binding; });
 
@@ -185,11 +187,7 @@ namespace pe
 
         Debug::SetObjectName(m_apiHandle, name);
     }
-
-    Descriptor::~Descriptor()
-    {
-    }
-
+    
     void Descriptor::SetImageViews(uint32_t binding,
                                    const std::vector<ImageViewApiHandle> &views,
                                    const std::vector<SamplerApiHandle> &samplers)

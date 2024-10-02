@@ -4,7 +4,6 @@
 #include "Renderer/Queue.h"
 #include "Renderer/Command.h"
 #include "RenderDoc/renderdoc_app.h"
-#include "GUI/GUI.h"
 
 namespace pe
 {

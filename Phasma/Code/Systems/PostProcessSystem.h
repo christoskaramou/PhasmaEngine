@@ -5,18 +5,12 @@ namespace pe
     class PostProcessSystem : public ISystem
     {
     public:
-        PostProcessSystem();
-
-        ~PostProcessSystem();
-
         void Init(CommandBuffer *cmd) override;
-
         void Update(double delta) override;
-
         void Destroy() override;
-
+    
         void Resize(uint32_t width, uint32_t height);
-
+        
         template <class T>
         T *GetEffect()
         {

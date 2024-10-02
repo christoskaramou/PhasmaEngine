@@ -23,9 +23,7 @@ namespace pe
         Timer();
 
         void Start();
-
         double Count();
-
         void ThreadSleep(double seconds);
 
     protected:
@@ -37,14 +35,10 @@ namespace pe
     {
     public:
         void Tick();
-
         double GetDelta() const;
-
         double CountTotal() const;
-
         void CountUpdatesStamp();
         void CountCpuTotalStamp();
-
         double GetUpdatesStamp() const { return m_updatesStamp; }
         double GetCpuTotal() const { return m_cpuTotalStamp; }
 
@@ -75,19 +69,14 @@ namespace pe
     {
     public:
         static GpuTimer *GetFree();
-
         static void Return(GpuTimer *gpuTimer);
-
         static void DestroyAll();
 
         GpuTimer(const std::string &name);
-
         ~GpuTimer();
 
         void Start(CommandBuffer *cmd);
-
         void End();
-
         float GetTime();
 
     private:

@@ -53,7 +53,6 @@ namespace pe
 
         PE_ERROR_IF(!ret, "Failed to load model: " + file.string());
 
-
         Queue *queue = RHII.GetRenderQueue();
         CommandBuffer *cmd = CommandBuffer::GetFree(queue);
         cmd->Begin();

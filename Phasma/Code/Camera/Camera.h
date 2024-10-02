@@ -14,39 +14,22 @@ namespace pe
         Camera();
 
         void Update();
-
         void UpdatePerspective();
-
         inline float FovyToFovx(float fovy) { return 2.0f * atan(tan(fovy * 0.5f) * GetAspect()); } // In radians
-
         inline float FovxToFovy(float fovx) { return 2.0f * atan(tan(fovx * 0.5f) / GetAspect()); } // In radians
-
         inline float Fovy() { return 2.0f * atan(tan(m_fovx * 0.5f) / GetAspect()); }
-
         float GetAspect();
-
         void UpdateView();
-
         vec3 WorldFront() const;
-
         vec3 WorldRight() const;
-
         vec3 WorldUp() const;
-
         void Move(CameraDirection direction, float speed);
-
         void Rotate(float xoffset, float yoffset);
-
         void ExtractFrustum();
-
         bool PointInFrustum(const vec3 &point, float radius) const;
-
         bool AABBInFrustum(const AABB &aabb) const;
-
         void ReCreateComputePipelines();
-
         void Destroy() override;
-
         inline mat4 GetView() const { return m_view; }
         inline mat4 GetProjection() const { return m_projection; }
         inline mat4 GetViewProjection() const { return m_viewProjection; }

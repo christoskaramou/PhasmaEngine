@@ -6,7 +6,6 @@ namespace pe
     {
     public:
         Dx12Context();
-
         ~Dx12Context();
     };
 }

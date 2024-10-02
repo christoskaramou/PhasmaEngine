@@ -11,54 +11,96 @@ namespace pe
     class PassInfo;
     class Queue;
 
-    class BloomPass : public IRenderPassComponent
+    class BloomBrightFilterPass : public IRenderPassComponent
     {
     public:
-        BloomPass();
-
-        ~BloomPass();
-
         void Init() override;
-
         void UpdatePassInfo() override;
-
         void CreateUniforms(CommandBuffer *cmd) override;
-
         void UpdateDescriptorSets() override;
-
-        void Update(Camera *camera) override;
-
-        CommandBuffer *Draw() override;
-
+        void Update(Camera *camera) override {};
+        void Draw(CommandBuffer *cmd) override;
         void Resize(uint32_t width, uint32_t height) override;
-
-        void Destroy() override;
+        void Destroy() override {};
 
     private:
-        friend class Renderer;
-        
-        void UpdatePassInfoBrightFilter();
-
-        void UpdatePassInfoGaussianBlurHorizontal();
-
-        void UpdatePassInfoGaussianBlurVertical();
-
-        void UpdatePassInfoCombine();
-
-        PassInfo m_passInfoBF;
-        PassInfo m_passInfoGBH;
-        PassInfo m_passInfoGBV;
-        PassInfo m_passInfoCombine;
-        Image *m_frameImage;
-        Image *m_brightFilterRT;
-        Image *m_gaussianBlurHorizontalRT;
-        Image *m_gaussianBlurVerticalRT;
-        Image *m_displayRT;
-        Attachment m_attachmentBF;
-        Attachment m_attachmentGBH;
-        Attachment m_attachmentGBV;
-        Attachment m_attachmentCombine;
-
-        Queue *m_renderQueue;
+        Image *m_brightFilterRT; // Render target
+        Image *m_displayRT;      // Shader Input
     };
+
+    class BloomGaussianBlurHorizontalPass : public IRenderPassComponent
+    {
+    public:
+        void Init() override;
+        void UpdatePassInfo() override;
+        void CreateUniforms(CommandBuffer *cmd) override;
+        void UpdateDescriptorSets() override;
+        void Update(Camera *camera) override {};
+        void Draw(CommandBuffer *cmd) override;
+        void Resize(uint32_t width, uint32_t height) override;
+        void Destroy() override {};
+
+    private:
+        Image *m_gaussianBlurHorizontalRT; // Render target
+        Image *m_brightFilterRT;           // Shader Input
+    };
+
+    class BloomGaussianBlurVerticalPass : public IRenderPassComponent
+    {
+    public:
+        void Init() override;
+        void UpdatePassInfo() override;
+        void CreateUniforms(CommandBuffer *cmd) override;
+        void UpdateDescriptorSets() override;
+        void Update(Camera *camera) override {};
+        void Draw(CommandBuffer *cmd) override;
+        void Resize(uint32_t width, uint32_t height) override;
+        void Destroy() override {};
+
+    private:
+        Image *m_displayRT;                // Render target
+        Image *m_gaussianBlurHorizontalRT; // Shader Input
+    };
+
+    // class BloomCombinePass : public IRenderPassComponent
+    // {
+    // public:
+    //     void Init() override;
+    //     void UpdatePassInfo() override;
+    //     void CreateUniforms(CommandBuffer *cmd) override;
+    //     void UpdateDescriptorSets() override;
+    //     void Update(Camera *camera) override;
+    //     void Draw(CommandBuffer *cmd) override;
+    //     void Resize(uint32_t width, uint32_t height) override;
+    //     void Destroy() override;
+
+    // private:
+    // };
+
+    // class BloomPass : public IRenderPassComponent
+    // {
+    // public:
+    //     BloomPass();
+    //     ~BloomPass();
+
+    //     void Init() override;
+    //     void UpdatePassInfo() override;
+    //     void CreateUniforms(CommandBuffer *cmd) override;
+    //     void UpdateDescriptorSets() override;
+    //     void Update(Camera *camera) override;
+    //     void Draw(CommandBuffer *cmd) override;
+    //     void Resize(uint32_t width, uint32_t height) override;
+    //     void Destroy() override;
+
+    // private:
+    //     friend class Renderer;
+
+    //     void UpdatePassInfoBrightFilter();
+    //     void UpdatePassInfoGaussianBlurHorizontal();
+    //     void UpdatePassInfoGaussianBlurVertical();
+    //     void UpdatePassInfoCombine();
+
+    //     Image *m_frameImage;
+    //     Image *m_displayRT;
+    // };
 }

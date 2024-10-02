@@ -51,62 +51,81 @@ namespace pe
         delete include_result;
     }
 
-    std::vector<Descriptor *> Shader::PassDescriptors(const PassInfo &passInfo)
+    // Function to validate a single shader stage
+    void ValidateShaderStage(Shader *shader, ShaderStage expectedStage)
     {
-        Shader *comp = passInfo.pCompShader;
-        Shader *vert = passInfo.pVertShader;
-        Shader *frag = passInfo.pFragShader;
+        PE_ERROR_IF(shader->GetShaderStage() != expectedStage, "Invalid shader stage");
+    }
 
-        if (comp)
-        {
-            PE_ERROR_IF(comp->GetShaderStage() != ShaderStage::ComputeBit, "Invalid shader stage");
-            return comp->GetReflection().GetDescriptors();
-        }
-        else if (vert && !frag)
-        {
-            PE_ERROR_IF(vert->GetShaderStage() != ShaderStage::VertexBit, "Invalid shader stage");
-            return vert->GetReflection().GetDescriptors();
-        }
-        else if (!vert && frag)
-        {
-            PE_ERROR_IF(frag->GetShaderStage() != ShaderStage::FragmentBit, "Invalid shader stage");
-            return frag->GetReflection().GetDescriptors();
-        }
-        else if (vert && frag)
-        {
-            PE_ERROR_IF(vert->GetShaderStage() != ShaderStage::VertexBit && frag->GetShaderStage() != ShaderStage::FragmentBit, "Invalid shader stages");
-        }
-        else
-        {
-            PE_ERROR("Invalid shader stages");
-        }
+    // Helper function to get a descriptor safely
+    Descriptor *GetDescriptorSafely(const std::vector<Descriptor *> &descriptors, size_t index)
+    {
+        return (index < descriptors.size()) ? descriptors[index] : nullptr;
+    }
 
-        auto vertDesc = vert->GetReflection().GetDescriptors();
-        auto fragDesc = frag->GetReflection().GetDescriptors();
+    // Function to combine descriptor sets from vertex and fragment shaders
+    std::vector<Descriptor *> CombineDescriptors(const std::vector<Descriptor *> &vertDesc, const std::vector<Descriptor *> &fragDesc)
+    {
+        std::vector<Descriptor *> descriptors;
+        size_t maxSize = std::max(vertDesc.size(), fragDesc.size());
+        descriptors.reserve(maxSize);
 
-        std::vector<Descriptor *> descriptors{};
-        descriptors.reserve(std::max(vertDesc.size(), fragDesc.size()));
-
-        if (vertDesc.size() > fragDesc.size())
+        for (size_t i = 0; i < maxSize; ++i)
         {
-            for (size_t i = 0; i < vertDesc.size(); ++i)
-                descriptors.push_back(vertDesc[i] ? vertDesc[i] : fragDesc[i]); // one of the two must have a valid descriptor
-        }
-        else
-        {
-            for (size_t i = 0; i < fragDesc.size(); ++i)
-                descriptors.push_back(fragDesc[i] ? fragDesc[i] : vertDesc[i]); // one of the two must have a valid descriptor
+            // one of the two must have a valid descriptor (!= nullptr)
+            // nullptr means that the descriptor is not present in one of the shaders
+            // if both are nullptr, it means that this Set index (i) is not used in both shaders and this is not allowed
+            Descriptor *vertDescriptor = GetDescriptorSafely(vertDesc, i);
+            Descriptor *fragDescriptor = GetDescriptorSafely(fragDesc, i);
+            descriptors.push_back(vertDescriptor ? vertDescriptor : fragDescriptor);
         }
 
         return descriptors;
     }
 
+    std::vector<Descriptor *> Shader::ReflectPassDescriptors(const PassInfo &passInfo)
+    {
+        Shader *comp = passInfo.pCompShader;
+        Shader *vert = passInfo.pVertShader;
+        Shader *frag = passInfo.pFragShader;
+
+        if (vert && frag)
+        {
+            ValidateShaderStage(vert, ShaderStage::VertexBit);
+            ValidateShaderStage(frag, ShaderStage::FragmentBit);
+            auto vertDesc = vert->GetReflection().GetDescriptors();
+            auto fragDesc = frag->GetReflection().GetDescriptors();
+            return CombineDescriptors(vertDesc, fragDesc);
+        }
+        else if (vert)
+        {
+            ValidateShaderStage(vert, ShaderStage::VertexBit);
+            return vert->GetReflection().GetDescriptors();
+        }
+        else if (frag)
+        {
+            ValidateShaderStage(frag, ShaderStage::FragmentBit);
+            return frag->GetReflection().GetDescriptors();
+        }
+        else if (comp)
+        {
+            ValidateShaderStage(comp, ShaderStage::ComputeBit);
+            return comp->GetReflection().GetDescriptors();
+        }
+        else
+        {
+            PE_ERROR("This state is not used in the current implementation");
+            return {};
+        }
+    }
+
     Shader::Shader(const std::string &sourcePath, ShaderStage shaderStage, const std::vector<Define> &defines)
+        : m_id{ID::NextID()},
+          m_shaderStage{shaderStage}
     {
         std::string path = sourcePath;
         if (path.find(Path::Assets) == std::string::npos)
             path = Path::Assets + sourcePath;
-        m_shaderStage = shaderStage;
         m_isHlsl = path.ends_with(".hlsl");
         m_pathID = StringHash(path);
 

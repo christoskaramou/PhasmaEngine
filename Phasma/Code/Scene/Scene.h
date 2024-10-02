@@ -6,41 +6,27 @@ namespace pe
 {
     class CommandBuffer;
     class ModelGltf;
-    class Queue;
 
     class Scene
     {
     public:
         Scene();
-
         ~Scene();
 
         void Update(double delta);
-
         void InitGeometry(CommandBuffer *cmd);
-
-        CommandBuffer *DrawShadowPass();
-
-        CommandBuffer *DepthPrePass();
-
-        CommandBuffer *DrawGbufferPassOpaque();
-
-        CommandBuffer *DrawGbufferPassTransparent();
-
-        CommandBuffer *DrawLightPassOpaque();
-
-        CommandBuffer *DrawLightPassTransparent();
-
-        CommandBuffer *DrawAabbsPass();
-
-        void DrawScene();
-
+        void DrawShadowPass(CommandBuffer *cmd);
+        void DepthPrePass(CommandBuffer *cmd);
+        void DrawGbufferPassOpaque(CommandBuffer *cmd);
+        void DrawGbufferPassTransparent(CommandBuffer *cmd);
+        void DrawLightPassOpaque(CommandBuffer *cmd);
+        void DrawLightPassTransparent(CommandBuffer *cmd);
+        void DrawAabbsPass(CommandBuffer *cmd);
+        void DrawScene(CommandBuffer *cmd);
         void AddModel(ModelGltf *model);
-
         void RemoveModel(ModelGltf *model);
 
     private:
         Geometry m_geometry{};
-        Queue *m_renderQueue{};
     };
 }

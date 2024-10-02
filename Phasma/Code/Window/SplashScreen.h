@@ -6,7 +6,6 @@ namespace pe
     {
     public:
         SplashScreen(uint32_t flags);
-
         ~SplashScreen();
 
     private:

@@ -1,20 +1,11 @@
 #include "Renderer/RenderPasses/ShadowPass.h"
-#include "Renderer/RenderPasses/LightPass.h"
-#include "GUI/GUI.h"
-#include "Renderer/Swapchain.h"
-#include "Renderer/Vertex.h"
 #include "Shader/Shader.h"
 #include "Renderer/RHI.h"
-#include "Renderer/Queue.h"
-#include "Renderer/Descriptor.h"
-#include "Renderer/Framebuffer.h"
 #include "Renderer/RenderPass.h"
 #include "Renderer/Image.h"
 #include "Renderer/Buffer.h"
 #include "Renderer/Pipeline.h"
 #include "Renderer/Command.h"
-#include "Renderer/Queue.h"
-#include "Renderer/Image.h"
 #include "Systems/RendererSystem.h"
 #include "Scene/Geometry.h"
 #include "Scene/Model.h"
@@ -23,7 +14,6 @@ namespace pe
 {
     void ShadowPass::Init()
     {
-        m_renderQueue = RHII.GetRenderQueue();
         m_textures.resize(Settings::Get<GlobalSettings>().shadow_map_cascades);
         int i = 0;
         for (auto *&texture : m_textures)
@@ -54,21 +44,23 @@ namespace pe
         samplerInfo.name = "Sampler_ClampToEdge_GE_FOW";
         m_sampler = Sampler::Create(samplerInfo);
 
-        m_attachment = {};
-        m_attachment.initialLayout = ImageLayout::Undefined;
-        m_attachment.finalLayout = ImageLayout::ShaderReadOnly;
-        m_attachment.loadOp = AttachmentLoadOp::Clear;
-        m_attachment.storeOp = AttachmentStoreOp::Store;
+        m_attachments.resize(1);
+        m_attachments[0] = {};
+        m_attachments[0].initialLayout = ImageLayout::Undefined;
+        m_attachments[0].finalLayout = ImageLayout::ShaderReadOnly;
+        m_attachments[0].loadOp = AttachmentLoadOp::Clear;
+        m_attachments[0].storeOp = AttachmentStoreOp::Store;
     }
 
     void ShadowPass::UpdatePassInfo()
     {
-        m_passInfo.name = "shadows_pipeline";
-        m_passInfo.pVertShader = Shader::Create("Shaders/Shadows/ShadowsVS.hlsl", ShaderStage::VertexBit);
-        m_passInfo.dynamicStates = {DynamicState::Viewport, DynamicState::Scissor, DynamicState::DepthBias};
-        m_passInfo.cullMode = CullMode::Front;
-        m_passInfo.depthFormat = RHII.GetDepthFormat();
-        m_passInfo.UpdateHash();
+        m_passInfo->name = "shadows_pipeline";
+        m_passInfo->pVertShader = Shader::Create("Shaders/Shadows/ShadowsVS.hlsl", ShaderStage::VertexBit);
+        m_passInfo->dynamicStates = {DynamicState::Viewport, DynamicState::Scissor, DynamicState::DepthBias};
+        m_passInfo->cullMode = CullMode::Front;
+        m_passInfo->depthFormat = RHII.GetDepthFormat();
+        m_passInfo->ReflectDescriptors();
+        m_passInfo->UpdateHash();
     }
 
     void ShadowPass::CreateUniforms(CommandBuffer *cmd)
@@ -241,12 +233,10 @@ namespace pe
         }
     }
 
-    CommandBuffer *ShadowPass::Draw()
+    void ShadowPass::Draw(CommandBuffer *cmd)
     {
         PE_ERROR_IF(m_geometry == nullptr, "Geometry was not set");
 
-        CommandBuffer *cmd = CommandBuffer::GetFree(m_renderQueue);
-        cmd->Begin();
         cmd->BeginDebugRegion("ShadowPass");
 
         if (!m_geometry->HasOpaqueDrawInfo())
@@ -258,15 +248,16 @@ namespace pe
             uint32_t cascades = Settings::Get<GlobalSettings>().shadow_map_cascades;
             for (uint32_t i = 0; i < cascades; i++)
             {
-                m_attachment.image = m_textures[i];
+                PassInfo &passInfo = *m_passInfo;
+                Attachment &attachment = m_attachments[0];
+                attachment.image = m_textures[i];
 
-                cmd->BeginPass({m_attachment}, "Cascade_" + std::to_string(i));
-                cmd->SetViewport(0.f, 0.f, m_attachment.image->GetWidth_f(), m_attachment.image->GetHeight_f());
-                cmd->SetScissor(0, 0, m_attachment.image->GetWidth(), m_attachment.image->GetHeight());
-                cmd->BindPipeline(m_passInfo);
+                cmd->BeginPass(m_attachments, "Cascade_" + std::to_string(i));
+                cmd->SetViewport(0.f, 0.f, attachment.image->GetWidth_f(), attachment.image->GetHeight_f());
+                cmd->SetScissor(0, 0, attachment.image->GetWidth(), attachment.image->GetHeight());
+                cmd->BindPipeline(passInfo);
                 cmd->BindIndexBuffer(m_geometry->GetBuffer(), 0);
                 cmd->BindVertexBuffer(m_geometry->GetBuffer(), m_geometry->GetPositionsOffset());
-
                 cmd->SetConstantAt(0, m_cascades[i]); // cascade view projection
                 cmd->SetConstantAt(17, 0u);           // joints count
 
@@ -289,11 +280,8 @@ namespace pe
         }
         
         cmd->EndDebugRegion();
-        cmd->End();
 
         m_geometry = nullptr;
-
-        return cmd;
     }
 
     void ShadowPass::Resize(uint32_t width, uint32_t height)

@@ -23,6 +23,19 @@ namespace pe
     class RHI : public NoCopy, public NoMove
     {
     public:
+        struct UniformBufferInfo
+        {
+            Buffer *buffer = nullptr;
+            size_t size = 0;
+            Descriptor *descriptor = nullptr;
+        };
+        
+        struct UniformImageInfo
+        {
+            uint32_t count = 0;
+            Descriptor *descriptor = nullptr;
+        };
+
         static RHI *Get()
         {
             static RHI *rhi = new RHI();
@@ -59,11 +72,8 @@ namespace pe
         void InitCmdBuffers(uint32_t bufferCount = 0);
         void CreateSemaphores(uint32_t semaphoresCount);
         void InitDownSampler();
-
         Format GetDepthFormat();
-
         void WaitDeviceIdle();
-
         void NextFrame() { m_frameCounter++; }
         uint32_t GetFrameCounter() { return m_frameCounter; }
         uint32_t GetFrameIndex() { return m_frameCounter % SWAPCHAIN_IMAGES; }
@@ -76,7 +86,6 @@ namespace pe
         size_t AlignUniform(size_t size) { return (size + m_minUniformBufferOffsetAlignment - 1) & ~(m_minUniformBufferOffsetAlignment - 1); }
         size_t AlignStorage(size_t size) { return (size + m_minStorageBufferOffsetAlignment - 1) & ~(m_minStorageBufferOffsetAlignment - 1); }
         uint32_t GetMaxPushDescriptorsPerSet() { return m_maxPushDescriptorsPerSet; }
-
         const InstanceApiHandle &GetInstance() { return m_instance; }
         const GpuApiHandle &GetGpu() { return m_gpu; }
         const std::string &GetGpuName() { return m_gpuName; }
@@ -91,28 +100,12 @@ namespace pe
         SDL_Window *GetWindow() { return m_window; }
         Surface *GetSurface() { return m_surface; }
         Swapchain *GetSwapchain() { return m_swapchain; }
-
-        struct UniformBufferInfo
-        {
-            Buffer *buffer = nullptr;
-            size_t size = 0;
-            Descriptor *descriptor = nullptr;
-        };
-
         size_t CreateUniformBufferInfo();
         void RemoveUniformBufferInfo(size_t index);
         UniformBufferInfo &GetUniformBufferInfo(size_t key) { return m_uniformBuffers[key]; }
-
-        struct UniformImageInfo
-        {
-            uint32_t count = 0;
-            Descriptor *descriptor = nullptr;
-        };
-
         size_t CreateUniformImageInfo();
         void RemoveUniformImageInfo(size_t index);
         UniformImageInfo &GetUniformImageInfo(size_t key) { return m_uniformImages[key]; }
-
         uint64_t GetMemoryUsageSnapshot();
 
     private:
@@ -125,21 +118,16 @@ namespace pe
         DescriptorPool *m_descriptorPool;
         std::vector<Semaphore *> m_semaphores[SWAPCHAIN_IMAGES];
         AllocatorApiHandle m_allocator;
-
         Queue *m_renderQueue;
         Queue *m_computeQueue;
         Queue *m_transferQueue;
         Queue *m_presentQueue;
-
         SDL_Window *m_window;
         Surface *m_surface;
         Swapchain *m_swapchain;
-
         uint32_t m_frameCounter;
-
         std::unordered_map<size_t, UniformBufferInfo> m_uniformBuffers;
         std::unordered_map<size_t, UniformImageInfo> m_uniformImages;
-
         // Limits
         uint32_t m_maxUniformBufferSize;
         uint32_t m_maxStorageBufferSize;

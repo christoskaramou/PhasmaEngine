@@ -26,27 +26,17 @@ namespace pe
     {
     public:
         Geometry();
-
         ~Geometry();
 
         void AddModel(ModelGltf *modell);
-
         void RemoveModel(ModelGltf *model);
-
         void UploadBuffers(CommandBuffer *cmd);
-
         void UpdateGeometry();
-
         bool HasOpaqueDrawInfo() { return !m_drawInfosOpaque.empty(); }
-
         bool HasAlphaDrawInfo() { return !m_drawInfosAlphaCut.empty() || !m_drawInfosAlphaBlend.empty(); }
-
         bool HasDrawInfo() { return HasOpaqueDrawInfo() || HasAlphaDrawInfo(); }
-
         bool HasDirtyDescriptorViews(uint32_t frame) { return m_dirtyDescriptorViews[frame]; }
-
         void ClearDirtyDescriptorViews(uint32_t frame) { m_dirtyDescriptorViews[frame] = false; }
-
         // Getters
         std::vector<ImageViewApiHandle> &GetImageViews() { return m_imageViews; }
         OrderedMap<size_t, ModelGltf *> &GetModels() { return m_models; }
@@ -63,11 +53,8 @@ namespace pe
 
     private:
         void CullNodePrimitives(ModelGltf &model, int node);
-
         void UpdateUniformData();
-
         void ClearDrawInfos();
-
         void DestroyBuffers();
 
         struct CameraData
@@ -78,7 +65,6 @@ namespace pe
 
         CameraData m_cameraData;
         std::vector<Camera *> m_cameras{};
-
         OrderedMap<size_t, ModelGltf *> m_models{};
         Buffer *m_uniforms[SWAPCHAIN_IMAGES];   // per frame uniform buffer
         Buffer *m_buffer;                       // geometry buffer
@@ -90,12 +76,10 @@ namespace pe
         std::vector<ImageViewApiHandle> m_imageViews{};
         std::vector<Sampler *> m_samplers{};
         bool m_dirtyDescriptorViews[SWAPCHAIN_IMAGES];
-
         std::mutex m_mutexDrawInfos;
         std::multimap<float, DrawInfo> m_drawInfosOpaque;
         std::multimap<float, DrawInfo, std::greater<float>> m_drawInfosAlphaCut;
         std::multimap<float, DrawInfo, std::greater<float>> m_drawInfosAlphaBlend;
-
         std::mutex m_mutex;
         std::unordered_map<ModelGltf *, std::unordered_map<int, std::vector<int>>> m_opaque;
         std::unordered_map<ModelGltf *, std::unordered_map<int, std::vector<int>>> m_alphaCut;

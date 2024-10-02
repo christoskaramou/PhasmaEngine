@@ -6,9 +6,9 @@
 #include "Renderer/Descriptor.h"
 #include "Renderer/Image.h"
 #include "Renderer/Swapchain.h"
-#include "Renderer/Swapchain.h"
 #include "Renderer/Queue.h"
 #include "Renderer/Buffer.h"
+#include "Renderer/Surface.h"
 #include "Utilities/Downsampler.h"
 
 #if defined(_WIN32)
@@ -310,9 +310,13 @@ namespace pe
             queueCreateInfos.push_back(queueCreateInfo);
         }
 
+        VkPhysicalDeviceVulkan11Features deviceFeatures11{};
+        deviceFeatures11.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_1_FEATURES;
+
         // Vulkan 1.2 features
         VkPhysicalDeviceVulkan12Features deviceFeatures12{};
         deviceFeatures12.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_2_FEATURES;
+        deviceFeatures12.pNext = &deviceFeatures11;
 
         // Vulkan 1.3 features
         VkPhysicalDeviceVulkan13Features deviceFeatures13{};

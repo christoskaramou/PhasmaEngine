@@ -448,11 +448,13 @@ namespace pe
         //     ImGui::Unindent(16.0f);
         // }
 
-        if (ImGui::Checkbox("Sun Light", (bool*)&gSettings.shadows))
+        if (ImGui::Checkbox("Sun Light", (bool *)&gSettings.shadows))
         {
             // Update light pass descriptor sets for the skybox change
-            LightPass &lightPass = *GetGlobalComponent<LightPass>();
-            lightPass.UpdateDescriptorSets();
+            LightOpaquePass &lightOpaquePass = *GetGlobalComponent<LightOpaquePass>();
+            lightOpaquePass.UpdateDescriptorSets();
+            LightTransparentPass &lightTransparentPass = *GetGlobalComponent<LightTransparentPass>();
+            lightTransparentPass.UpdateDescriptorSets();
         }
         if (gSettings.shadows)
         {
@@ -579,15 +581,10 @@ namespace pe
         InitImGui();
     }
 
-    CommandBuffer *GUI::Draw()
+    void GUI::Draw(CommandBuffer *cmd)
     {
         if (!render || ImGui::GetDrawData()->TotalVtxCount <= 0)
-            return nullptr;
-
-        CommandBuffer *cmd = CommandBuffer::GetFree(m_renderQueue);
-        cmd->Begin();
-
-        cmd->BeginDebugRegion("GUI");
+            return;
 
         Image *displayRT = renderer->GetDisplayRT();
         attachments[0].image = displayRT;
@@ -597,18 +594,13 @@ namespace pe
         barrierInfo.layout = ImageLayout::Attachment;
         barrierInfo.stageFlags = PipelineStage::ColorAttachmentOutputBit;
         barrierInfo.accessMask = Access::ColorAttachmentWriteBit;
-        cmd->ImageBarrier(barrierInfo);
 
+        cmd->ImageBarrier(barrierInfo);
         cmd->BeginPass(attachments, "GUI");
         ImGui_ImplVulkan_RenderDrawData(ImGui::GetDrawData(), cmd->ApiHandle());
         cmd->EndPass();
-        cmd->EndDebugRegion();
-
-        cmd->End();
 
         ImGui::RenderPlatformWindowsDefault(); // draws the windows outside the surface
-
-        return cmd;
     }
 
     void GUI::SetWindowStyle(ImGuiStyle *dst)

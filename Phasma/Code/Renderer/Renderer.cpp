@@ -1,12 +1,12 @@
 #include "Renderer/Renderer.h"
 #include "Renderer/RHI.h"
-#include "Systems/CameraSystem.h"
-#include "Systems/PostProcessSystem.h"
+#include "Renderer/Surface.h"
 #include "Renderer/Command.h"
 #include "Renderer/Image.h"
 #include "Renderer/RenderPass.h"
 #include "Renderer/Framebuffer.h"
 #include "Renderer/Queue.h"
+#include "Renderer/Swapchain.h"
 #include "Renderer/RenderPasses/BloomPass.h"
 #include "Renderer/RenderPasses/DOFPass.h"
 #include "Renderer/RenderPasses/FXAAPass.h"
@@ -19,6 +19,10 @@
 #include "Renderer/RenderPasses/LightPass.h"
 #include "Renderer/RenderPasses/AabbsPass.h"
 #include "Renderer/RenderPasses/TonemapPass.h"
+#include "Renderer/RenderPasses/ShadowPass.h"
+#include "Shader/Shader.h"
+#include "Systems/CameraSystem.h"
+#include "Systems/PostProcessSystem.h"
 
 namespace pe
 {
@@ -82,7 +86,7 @@ namespace pe
     {
     }
 
-    CommandBuffer *Renderer::Upsample(Filter filter)
+    void Renderer::Upsample(CommandBuffer *cmd, Filter filter)
     {
         // Blit viewportRT to displayRT with a filter
         Viewport &vp = m_renderArea.viewport;
@@ -96,24 +100,23 @@ namespace pe
         region.dstSubresource.aspectMask = GetAspectMask(m_displayRT->GetFormat());
         region.dstSubresource.layerCount = 1;
 
-        CommandBuffer *cmd = CommandBuffer::GetFree(RHII.GetRenderQueue());
-        cmd->Begin();
         cmd->BlitImage(m_viewportRT, m_displayRT, &region, filter);
-        cmd->End();
-
-        return cmd;
     }
 
     std::vector<CommandBuffer *> Renderer::RecordPasses(uint32_t imageIndex)
     {
         std::vector<CommandBuffer *> cmds{};
         cmds.reserve(20);
+        cmds.push_back(CommandBuffer::GetFree(RHII.GetRenderQueue()));
+        CommandBuffer *cmd = cmds.back();
 
         ShadowPass &shadows = *GetGlobalComponent<ShadowPass>();
         SSAOPass &ssao = *GetGlobalComponent<SSAOPass>();
         SSRPass &ssr = *GetGlobalComponent<SSRPass>();
         FXAAPass &fxaa = *GetGlobalComponent<FXAAPass>();
-        BloomPass &bloom = *GetGlobalComponent<BloomPass>();
+        BloomBrightFilterPass &bbfp = *GetGlobalComponent<BloomBrightFilterPass>();
+        BloomGaussianBlurHorizontalPass &bgbh = *GetGlobalComponent<BloomGaussianBlurHorizontalPass>();
+        BloomGaussianBlurVerticalPass &bgbv = *GetGlobalComponent<BloomGaussianBlurVerticalPass>();
         DOFPass &dof = *GetGlobalComponent<DOFPass>();
         MotionBlurPass &motionBlur = *GetGlobalComponent<MotionBlurPass>();
         SuperResolutionPass &sr = *GetGlobalComponent<SuperResolutionPass>();
@@ -121,113 +124,118 @@ namespace pe
 
         auto &gSettings = Settings::Get<GlobalSettings>();
 
+        cmd->Begin();
+
         // Shadows Opaque
         if (gSettings.shadows)
         {
-            cmds.push_back(m_scene.DrawShadowPass());
+            m_scene.DrawShadowPass(cmd);
         }
 
         // Depth Pass
         {
-            cmds.push_back(m_scene.DepthPrePass());
+            m_scene.DepthPrePass(cmd);
         }
 
         // Gbuffers Opaque
         {
-            cmds.push_back(m_scene.DrawGbufferPassOpaque());
+            m_scene.DrawGbufferPassOpaque(cmd);
         }
 
         // Screen Space Ambient Occlusion
         if (gSettings.ssao)
         {
-            cmds.push_back(ssao.Draw());
+            ssao.Draw(cmd);
         }
 
         // Lighting Opaque
         {
-            cmds.push_back(m_scene.DrawLightPassOpaque());
+            m_scene.DrawLightPassOpaque(cmd);
         }
 
         // Gbuffers Transparent
         {
-            cmds.push_back(m_scene.DrawGbufferPassTransparent());
+            m_scene.DrawGbufferPassTransparent(cmd);
         }
 
         // Lighting Transparent
         {
-            cmds.push_back(m_scene.DrawLightPassTransparent());
+            m_scene.DrawLightPassTransparent(cmd);
         }
 
         // Screen Space Reflections
         if (gSettings.ssr)
         {
-            cmds.push_back(ssr.Draw());
+            ssr.Draw(cmd);
         }
 
         // Fast Approximate Anti-Aliasing
         if (gSettings.fxaa)
         {
-            cmds.push_back(fxaa.Draw());
+            fxaa.Draw(cmd);
         }
 
         // Aabbs
         if (gSettings.draw_aabbs)
         {
-            cmds.push_back(m_scene.DrawAabbsPass());
+            m_scene.DrawAabbsPass(cmd);
         }
 
         // Upscale
         if (Settings::Get<SRSettings>().enable)
         {
             // FidelityFX Super Resolution
-            cmds.push_back(sr.Draw());
+            sr.Draw(cmd);
         }
         else
         {
-            cmds.push_back(Upsample(Filter::Linear));
+            Upsample(cmd, Filter::Linear);
         }
 
         // Tone Mapping
         if (gSettings.tonemapping)
         {
-            cmds.push_back(tonemap.Draw());
+            tonemap.Draw(cmd);
         }
 
         // Bloom
         if (gSettings.bloom)
         {
-            cmds.push_back(bloom.Draw());
+            bbfp.Draw(cmd);
+            bgbh.Draw(cmd);
+            bgbv.Draw(cmd);
         }
 
         // Depth of Field
         if (gSettings.dof)
         {
-            cmds.push_back(dof.Draw());
+            dof.Draw(cmd);
         }
 
         // Motion Blur
         if (gSettings.motion_blur)
         {
-            cmds.push_back(motionBlur.Draw());
+            motionBlur.Draw(cmd);
         }
 
         // Gui
         {
-            cmds.push_back(m_gui.Draw());
+            m_gui.Draw(cmd);
         }
 
         // Blit to swapchain
         {
             Image *blitImage = gSettings.current_rendering_image ? gSettings.current_rendering_image : m_displayRT;
-            cmds.push_back(BlitToSwapchain(blitImage, imageIndex));
+            BlitToSwapchain(cmd, blitImage, imageIndex);
         }
+
+        cmd->End();
 
         return cmds;
     }
 
     Image *Renderer::CreateRenderTarget(const std::string &name,
                                         Format format,
-                                        bool blendEnable,
                                         ImageUsageFlags additionalFlags,
                                         bool useRenderTergetScale,
                                         bool useMips,
@@ -256,15 +264,6 @@ namespace pe
         SamplerCreateInfo samplerInfo{};
         samplerInfo.anisotropyEnable = 0;
         rt->m_sampler = Sampler::Create(samplerInfo);
-
-        rt->m_blendAttachment.blendEnable = blendEnable ? 1 : 0;
-        rt->m_blendAttachment.srcColorBlendFactor = BlendFactor::SrcAlpha;
-        rt->m_blendAttachment.dstColorBlendFactor = BlendFactor::OneMinusSrcAlpha;
-        rt->m_blendAttachment.colorBlendOp = BlendOp::Add;
-        rt->m_blendAttachment.srcAlphaBlendFactor = BlendFactor::One;
-        rt->m_blendAttachment.dstAlphaBlendFactor = BlendFactor::Zero;
-        rt->m_blendAttachment.alphaBlendOp = BlendOp::Add;
-        rt->m_blendAttachment.colorWriteMask = ColorComponent::RGBABit;
 
         gSettings.rendering_images.push_back(rt);
         m_renderTargets[StringHash(name)] = rt;
@@ -451,19 +450,19 @@ namespace pe
 
         Format surfaceFormat = RHII.GetSurface()->GetFormat();
         m_depthStencil = CreateDepthStencilTarget("depthStencil", RHII.GetDepthFormat(), ImageUsage::TransferDstBit);
-        m_viewportRT = CreateRenderTarget("viewport", surfaceFormat, true, ImageUsage::TransferSrcBit | ImageUsage::TransferDstBit);
-        m_displayRT = CreateRenderTarget("display", surfaceFormat, false, ImageUsage::TransferSrcBit | ImageUsage::TransferDstBit, false);
-        CreateRenderTarget("normal", Format::RGBA16SFloat, false);
-        CreateRenderTarget("albedo", surfaceFormat, true);
-        CreateRenderTarget("srm", surfaceFormat, false); // Specular Roughness Metallic
-        CreateRenderTarget("ssao", Format::R8Unorm, false);
-        CreateRenderTarget("ssr", surfaceFormat, false);
-        CreateRenderTarget("velocity", Format::RG16SFloat, false);
-        CreateRenderTarget("emissive", surfaceFormat, false);
-        CreateRenderTarget("brightFilter", surfaceFormat, false, {}, false);
-        CreateRenderTarget("gaussianBlurHorizontal", surfaceFormat, false, {}, false);
-        CreateRenderTarget("gaussianBlurVertical", surfaceFormat, false, {}, false);
-        CreateRenderTarget("transparency", Format::R8Unorm, false, {}, true, false, Color::Black);
+        m_viewportRT = CreateRenderTarget("viewport", surfaceFormat, ImageUsage::TransferSrcBit | ImageUsage::TransferDstBit);
+        m_displayRT = CreateRenderTarget("display", surfaceFormat, ImageUsage::TransferSrcBit | ImageUsage::TransferDstBit, false);
+        CreateRenderTarget("normal", Format::RGBA16SFloat);
+        CreateRenderTarget("albedo", surfaceFormat);
+        CreateRenderTarget("srm", surfaceFormat); // Specular Roughness Metallic
+        CreateRenderTarget("ssao", Format::R8Unorm);
+        CreateRenderTarget("ssr", surfaceFormat);
+        CreateRenderTarget("velocity", Format::RG16SFloat);
+        CreateRenderTarget("emissive", surfaceFormat);
+        CreateRenderTarget("brightFilter", surfaceFormat, {}, false);
+        CreateRenderTarget("gaussianBlurHorizontal", surfaceFormat, {}, false);
+        CreateRenderTarget("gaussianBlurVertical", surfaceFormat, {}, false);
+        CreateRenderTarget("transparency", Format::R8Unorm, {}, true, false, Color::Black);
     }
 
     void Renderer::Resize(uint32_t width, uint32_t height)
@@ -488,7 +487,7 @@ namespace pe
         GetGlobalSystem<PostProcessSystem>()->Resize(width, height);
     }
 
-    CommandBuffer *Renderer::BlitToSwapchain(Image *src, uint32_t imageIndex)
+    void Renderer::BlitToSwapchain(CommandBuffer *cmd, Image *src, uint32_t imageIndex)
     {
         Image *swapchainImage = RHII.GetSwapchain()->GetImage(imageIndex);
         Viewport &vp = m_renderArea.viewport;
@@ -503,106 +502,42 @@ namespace pe
         region.dstSubresource.aspectMask = GetAspectMask(swapchainImage->GetFormat());
         region.dstSubresource.layerCount = 1;
 
-        CommandBuffer *cmdBlit = CommandBuffer::GetFree(RHII.GetRenderQueue()->GetFamilyId());
-        cmdBlit->Begin();
-
-        // with 1:1 ratio we can use nearest filter
-        Filter filter = src->GetWidth() == (uint32_t)vp.width && src->GetHeight() == (uint32_t)vp.height ? Filter::Nearest : Filter::Linear;
-        cmdBlit->BlitImage(src, swapchainImage, &region, filter);
-
         ImageBarrierInfo barrier{};
         barrier.image = swapchainImage;
         barrier.layout = ImageLayout::PresentSrc;
         barrier.stageFlags = PipelineStage::AllCommandsBit;
         barrier.accessMask = Access::None;
-        cmdBlit->ImageBarrier(barrier);
 
-        cmdBlit->End();
-
-        return cmdBlit;
+        // with 1:1 ratio we can use nearest filter
+        Filter filter = src->GetWidth() == (uint32_t)vp.width && src->GetHeight() == (uint32_t)vp.height ? Filter::Nearest : Filter::Linear;
+        cmd->BlitImage(src, swapchainImage, &region, filter);
+        cmd->ImageBarrier(barrier);
     }
 
     void Renderer::PollShaders()
     {
         RHII.WaitDeviceIdle();
 
-        ShadowPass &shadows = *GetGlobalComponent<ShadowPass>();
-        SSAOPass &ssao = *GetGlobalComponent<SSAOPass>();
-        SSRPass &ssr = *GetGlobalComponent<SSRPass>();
-        FXAAPass &fxaa = *GetGlobalComponent<FXAAPass>();
-        BloomPass &bloom = *GetGlobalComponent<BloomPass>();
-        DOFPass &dof = *GetGlobalComponent<DOFPass>();
-        MotionBlurPass &motionBlur = *GetGlobalComponent<MotionBlurPass>();
-        DepthPass &depthPass = *GetGlobalComponent<DepthPass>();
-        GbufferPass &gbuffer = *GetGlobalComponent<GbufferPass>();
-        LightPass &lightPass = *GetGlobalComponent<LightPass>();
-        AabbsPass &aabbs = *GetGlobalComponent<AabbsPass>();
-        TonemapPass &tonemap = *GetGlobalComponent<TonemapPass>();
-
-        auto NeedsUpdate = [](PassInfo &info)
+        for (auto &rc : m_renderPassComponents)
         {
-            bool isDitry = false;
+            auto info = rc->m_passInfo;
 
             // PollEvent simply catches a pushed event from FileWatcher
-            if (info.pCompShader && EventSystem::PollEvent(info.pCompShader->GetPathID()))
-                isDitry = true;
-            if (info.pVertShader && EventSystem::PollEvent(info.pVertShader->GetPathID()))
-                isDitry = true;
-            if (info.pFragShader && EventSystem::PollEvent(info.pFragShader->GetPathID()))
-                isDitry = true;
-
-            if (isDitry)
+            if (info->pCompShader && EventSystem::PollEvent(info->pCompShader->GetPathID()) ||
+                info->pVertShader && EventSystem::PollEvent(info->pVertShader->GetPathID()) ||
+                info->pFragShader && EventSystem::PollEvent(info->pFragShader->GetPathID())
+            )
             {
-                Shader::Destroy(info.pCompShader);
-                Shader::Destroy(info.pVertShader);
-                Shader::Destroy(info.pFragShader);
+                Shader::Destroy(info->pCompShader);
+                Shader::Destroy(info->pVertShader);
+                Shader::Destroy(info->pFragShader);
 
-                info.pCompShader = nullptr;
-                info.pVertShader = nullptr;
-                info.pFragShader = nullptr;
+                info->pCompShader = nullptr;
+                info->pVertShader = nullptr;
+                info->pFragShader = nullptr;
 
-                return true;
+                rc->UpdatePassInfo();
             }
-
-            return false;
-        };
-
-        if (NeedsUpdate(depthPass.m_passInfo))
-            depthPass.UpdatePassInfo();
-
-        if (NeedsUpdate(gbuffer.m_passInfoOpaque) ||
-            NeedsUpdate(gbuffer.m_passInfoAlpha))
-            gbuffer.UpdatePassInfo();
-
-        if (NeedsUpdate(lightPass.m_passInfoOpaque) ||
-            NeedsUpdate(lightPass.m_passInfoTransparent))
-            lightPass.UpdatePassInfo();
-
-        if (NeedsUpdate(shadows.m_passInfo))
-            shadows.UpdatePassInfo();
-
-        if (NeedsUpdate(bloom.m_passInfoBF))
-            bloom.UpdatePassInfoBrightFilter();
-        if (NeedsUpdate(bloom.m_passInfoGBH))
-            bloom.UpdatePassInfoGaussianBlurHorizontal();
-        if (NeedsUpdate(bloom.m_passInfoGBV))
-            bloom.UpdatePassInfoGaussianBlurVertical();
-        if (NeedsUpdate(bloom.m_passInfoCombine))
-            bloom.UpdatePassInfoCombine();
-
-        if (NeedsUpdate(dof.m_passInfo))
-            dof.UpdatePassInfo();
-
-        if (NeedsUpdate(motionBlur.m_passInfo))
-            motionBlur.UpdatePassInfo();
-
-        if (NeedsUpdate(ssr.m_passInfo))
-            ssr.UpdatePassInfo();
-
-        if (NeedsUpdate(aabbs.m_passInfo))
-            aabbs.UpdatePassInfo();
-
-        if (NeedsUpdate(tonemap.m_passInfo))
-            tonemap.UpdatePassInfo();
+        }
     }
 }

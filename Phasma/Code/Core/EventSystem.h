@@ -8,28 +8,21 @@ namespace pe
         using Func = Delegate<std::any>::FunctionType;
         
         static void Init();
-
         static void Destroy();
 
         // DISPATCHING EVENTS ----------------------------------
         static void RegisterEvent(EventID event);
-
         static void UnregisterEvent(EventID type);
-
         static void RegisterCallback(EventID type, Func &&func);
-        
         static void DispatchEvent(EventID type, std::any &&data);
-
         static void ClearEvents();
         // -----------------------------------------------------
 
         // POLLING EVENTS --------------------------------------
         // Push event have to be polled manually
         static void PushEvent(EventID type);
-
         // Poll a pushed event
         static bool PollEvent(EventID type);
-
         static void ClearPushedEvents();
         // -----------------------------------------------------
 

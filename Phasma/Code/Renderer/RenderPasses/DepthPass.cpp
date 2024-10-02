@@ -32,29 +32,30 @@ namespace pe
 
     void DepthPass::Init()
     {
-        m_renderQueue = RHII.GetRenderQueue();
         RendererSystem *rs = GetGlobalSystem<RendererSystem>();
         m_depthStencil = rs->GetDepthStencilTarget("depthStencil");
 
-        attachment = {};
-        attachment.image = m_depthStencil;
-        attachment.initialLayout = ImageLayout::Undefined;
-        attachment.finalLayout = ImageLayout::Attachment;
-        attachment.loadOp = AttachmentLoadOp::Clear;
-        attachment.storeOp = AttachmentStoreOp::Store;
+        m_attachments.resize(1);
+        m_attachments[0] = {};
+        m_attachments[0].image = m_depthStencil;
+        m_attachments[0].initialLayout = ImageLayout::Undefined;
+        m_attachments[0].finalLayout = ImageLayout::Attachment;
+        m_attachments[0].loadOp = AttachmentLoadOp::Clear;
+        m_attachments[0].storeOp = AttachmentStoreOp::Store;
     }
 
     void DepthPass::UpdatePassInfo()
     {
-        m_passInfo.name = "DepthPrePass_pipeline";
-        m_passInfo.pVertShader = Shader::Create("Shaders/Depth/DepthVS.hlsl", ShaderStage::VertexBit);
-        m_passInfo.pFragShader = Shader::Create("Shaders/Depth/DepthPS.hlsl", ShaderStage::FragmentBit);
-        m_passInfo.dynamicStates = {DynamicState::Viewport, DynamicState::Scissor};
-        m_passInfo.cullMode = CullMode::Front;
-        m_passInfo.depthFormat = RHII.GetDepthFormat();
-        m_passInfo.depthTestEnable = true;
-        m_passInfo.depthWriteEnable = true;
-        m_passInfo.UpdateHash();
+        m_passInfo->name = "DepthPrePass_pipeline";
+        m_passInfo->pVertShader = Shader::Create("Shaders/Depth/DepthVS.hlsl", ShaderStage::VertexBit);
+        m_passInfo->pFragShader = Shader::Create("Shaders/Depth/DepthPS.hlsl", ShaderStage::FragmentBit);
+        m_passInfo->dynamicStates = {DynamicState::Viewport, DynamicState::Scissor};
+        m_passInfo->cullMode = CullMode::Front;
+        m_passInfo->depthFormat = RHII.GetDepthFormat();
+        m_passInfo->depthTestEnable = true;
+        m_passInfo->depthWriteEnable = true;
+        m_passInfo->ReflectDescriptors();
+        m_passInfo->UpdateHash();
     }
 
     void DepthPass::CreateUniforms(CommandBuffer *cmd)
@@ -71,7 +72,7 @@ namespace pe
     {
     }
 
-    CommandBuffer *DepthPass::Draw()
+    void DepthPass::Draw(CommandBuffer *cmd)
     {
         PE_ERROR_IF(m_geometry == nullptr, "Geometry was not set");
 
@@ -83,8 +84,6 @@ namespace pe
             float alphaCut;
         };
 
-        CommandBuffer *cmd = CommandBuffer::GetFree(m_renderQueue);
-        cmd->Begin();
         cmd->BeginDebugRegion("Depth Prepass");
 
         auto &drawInfosOpaque = m_geometry->GetDrawInfosOpaque();
@@ -94,16 +93,16 @@ namespace pe
         }
         else
         {
-            cmd->BeginPass({attachment}, "DepthPass");
-            cmd->SetViewport(0.f, 0.f, m_depthStencil->GetWidth_f(), m_depthStencil->GetHeight_f());
-            cmd->SetScissor(0, 0, m_depthStencil->GetWidth(), m_depthStencil->GetHeight());
-            cmd->BindPipeline(m_passInfo);
-            cmd->BindIndexBuffer(m_geometry->GetBuffer(), 0);
-            cmd->BindVertexBuffer(m_geometry->GetBuffer(), m_geometry->GetPositionsOffset());
-
             PushConstants_DepthPass constants{};
             constants.meshJointCount = 0;
             constants.alphaCut = 0.0f;
+
+            cmd->BeginPass(m_attachments, "DepthPass");
+            cmd->SetViewport(0.f, 0.f, m_depthStencil->GetWidth_f(), m_depthStencil->GetHeight_f());
+            cmd->SetScissor(0, 0, m_depthStencil->GetWidth(), m_depthStencil->GetHeight());
+            cmd->BindPipeline(*m_passInfo);
+            cmd->BindIndexBuffer(m_geometry->GetBuffer(), 0);
+            cmd->BindVertexBuffer(m_geometry->GetBuffer(), m_geometry->GetPositionsOffset());
 
             for (auto &drawInfo : drawInfosOpaque)
             {
@@ -130,15 +129,11 @@ namespace pe
                     primitiveInfo.vertexOffset,
                     0);
             }
-
             cmd->EndPass();
         }
-
-        m_geometry = nullptr;
         cmd->EndDebugRegion();
-        cmd->End();
-
-        return cmd;
+        
+        m_geometry = nullptr;
     }
 
     void DepthPass::Resize(uint32_t width, uint32_t height)

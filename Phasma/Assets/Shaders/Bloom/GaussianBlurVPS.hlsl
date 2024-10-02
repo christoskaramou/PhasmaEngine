@@ -28,6 +28,8 @@ PS_OUTPUT_Color mainPS(PS_INPUT_UV input)
     output.color += GaussianBlurH.Sample(sampler_GaussianBlurH, coords[8]) * 0.065984;
     output.color += GaussianBlurH.Sample(sampler_GaussianBlurH, coords[9]) * 0.028002;
     output.color += GaussianBlurH.Sample(sampler_GaussianBlurH, coords[10]) * 0.0093;
+
+    output.color *= pc.strength;
     output.color.w = 1.0;
 
     return output;

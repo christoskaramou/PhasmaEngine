@@ -217,6 +217,7 @@ namespace pe
     protected:
         ApiHandleBase(void *handle) : m_handle{handle} {}
         virtual ~ApiHandleBase() {}
+
         void *m_handle;
     };
 
@@ -249,11 +250,8 @@ namespace pe
     class PeHandleBase
     {
     public:
-        PeHandleBase() : m_id{ID::NextID()} {}
-
+        PeHandleBase() {}
         virtual ~PeHandleBase() {}
-
-        size_t GetID() const { return m_id; }
 
         inline static void DestroyAllIHandles()
         {
@@ -273,7 +271,6 @@ namespace pe
         virtual void Suicide() = 0;
 
         inline static OrderedMap<PeHandleBase *, PeHandleBase *> s_allApiHandles{};
-        size_t m_id;
     };
 
     // Manages a class that contains handles
@@ -317,6 +314,7 @@ namespace pe
 
     protected:
         PeHandle() : m_apiHandle{} {}
+        PeHandle(const API_HANDLE &apiHandle) : m_apiHandle{apiHandle} {}
 
         void Suicide() override
         {

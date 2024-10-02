@@ -65,14 +65,6 @@ namespace pe
             m_images[i]->m_imageInfo.height = actualExtent.height;
             m_images[i]->width_f = static_cast<float>(actualExtent.width);
             m_images[i]->height_f = static_cast<float>(actualExtent.height);
-            m_images[i]->m_blendAttachment.blendEnable = 1;
-            m_images[i]->m_blendAttachment.srcColorBlendFactor = BlendFactor::SrcAlpha;
-            m_images[i]->m_blendAttachment.dstColorBlendFactor = BlendFactor::OneMinusSrcAlpha;
-            m_images[i]->m_blendAttachment.colorBlendOp = BlendOp::Add;
-            m_images[i]->m_blendAttachment.srcAlphaBlendFactor = BlendFactor::One;
-            m_images[i]->m_blendAttachment.dstAlphaBlendFactor = BlendFactor::Zero;
-            m_images[i]->m_blendAttachment.alphaBlendOp = BlendOp::Add;
-            m_images[i]->m_blendAttachment.colorWriteMask = ColorComponent::RGBABit;
             m_images[i]->m_infos.resize(1);
             m_images[i]->m_infos[0].resize(1, ImageBarrierInfo{});
         }

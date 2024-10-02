@@ -12,17 +12,11 @@
 
 namespace pe
 {
-    PostProcessSystem::PostProcessSystem()
-    {
-    }
-
-    PostProcessSystem::~PostProcessSystem()
-    {
-    }
-
     void PostProcessSystem::Init(CommandBuffer *cmd)
     {
-        m_renderPassComponents[ID::GetTypeID<BloomPass>()] = CreateGlobalComponent<BloomPass>();
+        m_renderPassComponents[ID::GetTypeID<BloomBrightFilterPass>()] = CreateGlobalComponent<BloomBrightFilterPass>();
+        m_renderPassComponents[ID::GetTypeID<BloomGaussianBlurHorizontalPass>()] = CreateGlobalComponent<BloomGaussianBlurHorizontalPass>();
+        m_renderPassComponents[ID::GetTypeID<BloomGaussianBlurVerticalPass>()] = CreateGlobalComponent<BloomGaussianBlurVerticalPass>();
         m_renderPassComponents[ID::GetTypeID<DOFPass>()] = CreateGlobalComponent<DOFPass>();
         m_renderPassComponents[ID::GetTypeID<FXAAPass>()] = CreateGlobalComponent<FXAAPass>();
         m_renderPassComponents[ID::GetTypeID<MotionBlurPass>()] = CreateGlobalComponent<MotionBlurPass>();

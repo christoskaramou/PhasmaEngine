@@ -7,47 +7,21 @@ namespace pe
     class Entity
     {
     public:
-        Entity() : m_context(nullptr), m_id(ID::NextID()), m_enabled(false)
-        {
-        }
+        Entity() : m_context(nullptr), m_id(ID::NextID()), m_enabled(false) {}
+        virtual ~Entity() {}
 
-        virtual ~Entity()
-        {
-        }
-
-        size_t GetID() const
-        {
-            return m_id;
-        }
-
-        Context *GetContext()
-        {
-            return m_context;
-        }
-
-        void SetContext(Context *context)
-        {
-            m_context = context;
-        }
-
-        bool IsEnabled()
-        {
-            return m_enabled;
-        }
-
-        void SetEnabled(bool enabled)
-        {
-            m_enabled = enabled;
-        }
+        size_t GetID() const { return m_id; }
+        Context *GetContext() { return m_context; }
+        void SetContext(Context *context) { m_context = context; }
+        bool IsEnabled() { return m_enabled; }
+        void SetEnabled(bool enabled) { m_enabled = enabled; }
 
         template <class T>
         inline T *GetComponent();
-
         auto &GetComponents() { return m_components; }
-
+        uint32_t GetComponentCount() { return static_cast<uint32_t>(m_components.size()); }
         template <class T, class... Params>
         inline T *CreateComponent(Params &&...params);
-
         template <class T>
         inline void RemoveComponent();
 

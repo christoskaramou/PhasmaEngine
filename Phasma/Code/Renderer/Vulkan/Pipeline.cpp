@@ -7,26 +7,35 @@
 
 namespace pe
 {
-    PipelineColorBlendAttachmentState::PipelineColorBlendAttachmentState()
-    {
-        blendEnable = 0;
-        srcColorBlendFactor = BlendFactor::Zero;
-        dstColorBlendFactor = BlendFactor::Zero;
-        colorBlendOp = BlendOp::Add;
-        srcAlphaBlendFactor = BlendFactor::Zero;
-        dstAlphaBlendFactor = BlendFactor::Zero;
-        alphaBlendOp = BlendOp::Add;
-        colorWriteMask = {};
-    }
+    PipelineColorBlendAttachmentState PipelineColorBlendAttachmentState::Default= {
+        .srcColorBlendFactor = BlendFactor::SrcAlpha,
+        .dstColorBlendFactor = BlendFactor::OneMinusSrcAlpha,
+        .colorBlendOp = BlendOp::Add,
+        .srcAlphaBlendFactor = BlendFactor::One,
+        .dstAlphaBlendFactor = BlendFactor::Zero,
+        .alphaBlendOp = BlendOp::Add,
+        .colorWriteMask = ColorComponent::RGBABit};
 
-    void PassInfo::UpdateHash()
+    PipelineColorBlendAttachmentState PipelineColorBlendAttachmentState::AdditiveColor = {
+        .srcColorBlendFactor = BlendFactor::One,
+        .dstColorBlendFactor = BlendFactor::One,
+        .colorBlendOp = BlendOp::Add,
+        .srcAlphaBlendFactor = BlendFactor::One,
+        .dstAlphaBlendFactor = BlendFactor::One,
+        .alphaBlendOp = BlendOp::Src,
+        .colorWriteMask = ColorComponent::RGBABit};
+
+    void PassInfo::ReflectDescriptors()
     {
         for (auto &descriptors : m_descriptors)
         {
             descriptors.clear();
-            descriptors = Shader::PassDescriptors(*this);
+            descriptors = Shader::ReflectPassDescriptors(*this);
         }
+    }
 
+    void PassInfo::UpdateHash()
+    {
         m_hash = {};
 
         for (auto &descriptors : m_descriptors)
@@ -51,11 +60,10 @@ namespace pe
             m_hash.Combine(static_cast<uint64_t>(cullMode));
             m_hash.Combine(lineWidth);
 
-            m_hash.Combine(alphaBlend);
+            m_hash.Combine(blendEnable);
 
             for (auto &attachment : colorBlendAttachments)
             {
-                m_hash.Combine(attachment.blendEnable);
                 m_hash.Combine(static_cast<uint64_t>(attachment.srcColorBlendFactor));
                 m_hash.Combine(static_cast<uint64_t>(attachment.dstColorBlendFactor));
                 m_hash.Combine(static_cast<uint64_t>(attachment.colorBlendOp));
@@ -104,31 +112,31 @@ namespace pe
     }
 
     PassInfo::PassInfo()
+        : pVertShader{},
+          pFragShader{},
+          pCompShader{},
+          topology{PrimitiveTopology::TriangleList},
+          polygonMode{PolygonMode::Fill},
+          cullMode{CullMode::Back},
+          lineWidth{1.0f},
+          blendEnable{false},
+          colorBlendAttachments{},
+          dynamicStates{},
+          colorFormats{},
+          depthFormat{Format::Undefined},
+          depthWriteEnable{true},
+          depthTestEnable{true},
+          depthCompareOp{Settings::Get<GlobalSettings>().reverse_depth ? CompareOp::GreaterOrEqual : CompareOp::LessOrEqual},
+          pipelineCache{},
+          stencilTestEnable{false},
+          stencilFailOp{StencilOp::Keep},
+          stencilPassOp{StencilOp::Replace},
+          stencilDepthFailOp{StencilOp::Keep},
+          stencilCompareOp{CompareOp::Always},
+          stencilCompareMask{0x00u},
+          stencilWriteMask{0x00u},
+          stencilReference{0}
     {
-        pVertShader = nullptr;
-        pFragShader = nullptr;
-        pCompShader = nullptr;
-        topology = PrimitiveTopology::TriangleList;
-        polygonMode = PolygonMode::Fill;
-        cullMode = CullMode::Back;
-        lineWidth = 1.0f;
-        alphaBlend = false;
-        colorBlendAttachments = {};
-        dynamicStates = {};
-        colorFormats = {};
-        depthFormat = Format::Undefined;
-        depthWriteEnable = true;
-        depthTestEnable = true;
-        depthCompareOp = Settings::Get<GlobalSettings>().reverse_depth ? CompareOp::GreaterOrEqual : CompareOp::LessOrEqual;
-        pipelineCache = {};
-        stencilTestEnable = false;
-        stencilFailOp = StencilOp::Keep;
-        stencilPassOp = StencilOp::Replace;
-        stencilDepthFailOp = StencilOp::Keep;
-        stencilCompareOp = CompareOp::Always;
-        stencilCompareMask = 0x00u;
-        stencilWriteMask = 0x00u;
-        stencilReference = 0;
     }
 
     PassInfo::~PassInfo()
@@ -352,7 +360,7 @@ namespace pe
             for (uint32_t i = 0; i < info.colorBlendAttachments.size(); i++)
             {
                 pcbast[i] = {};
-                if (info.alphaBlend && info.colorBlendAttachments[i].blendEnable)
+                if (info.blendEnable)
                 {
                     pcbast[i].blendEnable = VK_TRUE;
                     pcbast[i].srcColorBlendFactor = Translate<VkBlendFactor>(info.colorBlendAttachments[i].srcColorBlendFactor);

@@ -1,39 +1,35 @@
 #pragma once
 
-#include "Shader/Shader.h"
-#include "Renderer/Vertex.h"
-
 namespace pe
 {
     class RenderPass;
     class DescriptorLayout;
+    class Shader;
 
-    class PipelineColorBlendAttachmentState
+    struct PipelineColorBlendAttachmentState
     {
-    public:
-        PipelineColorBlendAttachmentState();
+        BlendFactor srcColorBlendFactor = BlendFactor::Zero;
+        BlendFactor dstColorBlendFactor = BlendFactor::Zero;
+        BlendOp colorBlendOp = BlendOp::Add;
+        BlendFactor srcAlphaBlendFactor = BlendFactor::Zero;
+        BlendFactor dstAlphaBlendFactor = BlendFactor::Zero;
+        BlendOp alphaBlendOp = BlendOp::Add;
+        ColorComponentFlags colorWriteMask = ColorComponent::RGBABit;
 
-        uint32_t blendEnable;
-        BlendFactor srcColorBlendFactor;
-        BlendFactor dstColorBlendFactor;
-        BlendOp colorBlendOp;
-        BlendFactor srcAlphaBlendFactor;
-        BlendFactor dstAlphaBlendFactor;
-        BlendOp alphaBlendOp;
-        ColorComponentFlags colorWriteMask;
+        static PipelineColorBlendAttachmentState Default;
+        static PipelineColorBlendAttachmentState AdditiveColor;
     };
 
     class PassInfo : public Hashable, public NoCopy
     {
     public:
         PassInfo();
-
         ~PassInfo();
 
+        void ReflectDescriptors();
         void UpdateHash() override;
-
         const std::vector<Descriptor *> &GetDescriptors(uint32_t frame) const { return m_descriptors[frame]; }
-        
+
         Shader *pVertShader;
         Shader *pFragShader;
         Shader *pCompShader;
@@ -41,7 +37,7 @@ namespace pe
         PolygonMode polygonMode;
         CullMode cullMode;
         float lineWidth;
-        bool alphaBlend;
+        bool blendEnable;
         std::vector<PipelineColorBlendAttachmentState> colorBlendAttachments;
         std::vector<DynamicState> dynamicStates;
         std::vector<Format> colorFormats;
@@ -77,8 +73,7 @@ namespace pe
     class Pipeline : public PeHandle<Pipeline, PipelineApiHandle>
     {
     public:
-        Pipeline(RenderPass* renderPass, PassInfo &info);
-
+        Pipeline(RenderPass *renderPass, PassInfo &info);
         ~Pipeline();
 
     private:

@@ -846,13 +846,6 @@ namespace pe
         Point,
     };
 
-    enum class BlendType
-    {
-        None,
-        Opaque,
-        Transparent
-    };
-
     enum class CommandType
     {
         None = 0,

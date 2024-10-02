@@ -8,25 +8,16 @@ namespace pe
     {
     public:
         Surface(SDL_Window *window);
-
         ~Surface();
 
         void CheckTransfer();
-
         void FindFormat();
-
         void FindPresentationMode();
-
         void FindProperties();
-
         const Rect2Du &GetActualExtent() const { return m_actualExtent; }
-
         void SetActualExtent(const Rect2Du &extent) { m_actualExtent = extent; }
-
         Format GetFormat() const { return m_format; }
-
         ColorSpace GetColorSpace() const { return m_colorSpace; }
-
         PresentMode GetPresentMode() const { return m_presentMode; }
 
 private:

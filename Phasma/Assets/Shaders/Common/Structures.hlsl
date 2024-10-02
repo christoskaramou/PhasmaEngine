@@ -40,6 +40,7 @@ struct PushConstants_AABB
 struct PushConstants_Bloom
 {
     float range;
+    float strength;
 };
 
 struct PushConstants_Bloom_Combine

@@ -8,15 +8,9 @@
 
 namespace pe
 {
-    class CommandBuffer;
-    class Descriptor;
     class Buffer;
-    class RenderPass;
-    class Primitive;
     struct Vertex;
     struct AabbVertex;
-    struct PositionVertex;
-    class Scene;
     class Sampler;
 
     struct MaterialInfo
@@ -49,7 +43,8 @@ namespace pe
         friend class ModelGltf;
         friend class Geometry;
         friend class DepthPass;
-        friend class GbufferPass;
+        friend class GbufferOpaquePass;
+        friend class GbufferTransparentPass;
         friend class ShadowPass;
 
         // indices in the image views array in shader
@@ -87,13 +82,13 @@ namespace pe
         static ModelGltf *Load(const std::filesystem::path &file);
 
         ModelGltf();
-
         ~ModelGltf();
 
     private:
         friend class Geometry;
         friend class DepthPass;
-        friend class GbufferPass;
+        friend class GbufferOpaquePass;
+        friend class GbufferTransparentPass;
         friend class ShadowPass;
         friend class AabbsPass;
 
@@ -102,19 +97,16 @@ namespace pe
         void SetPrimitiveFactors(Buffer *combinedBuffer);
         
         bool render = false;
-
         size_t m_id;
         std::vector<Image *> m_images{};
         std::vector<Sampler *> m_samplers{};
         OrderedMap<size_t, Sampler *> m_samplersMap{};
         std::vector<MeshInfo> m_meshesInfo{};
         std::vector<NodeInfo> m_nodesInfo{};
-
         std::vector<Vertex> m_vertices;
         std::vector<PositionUvVertex> m_positionUvs;
         std::vector<AabbVertex> m_aabbVertices;
         std::vector<uint32_t> m_indices;
-
         mat4 matrix = mat4(1.f);
         // Dirty flags are used to update nodes and uniform buffers, they are important
         bool dirtyNodes = false;

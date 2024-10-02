@@ -13,13 +13,10 @@ namespace pe
                     ImageViewApiHandle *views,
                     RenderPass *renderPass,
                     const std::string &name);
-
         ~Framebuffer();
 
         uvec2 GetSize() { return m_size; }
-
         uint32_t GetWidth() { return m_size.x; }
-
         uint32_t GetHeight() { return m_size.y; }
 
     private:

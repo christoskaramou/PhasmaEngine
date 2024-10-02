@@ -4,10 +4,6 @@ namespace pe
 {
     class Image;
 
-    // RenderPass::RenderPass
-    // CommandBuffer::BeginPass
-    // CommandBuffer::GetRenderPass
-    // CommandBuffer::GetFramebuffer
     struct Attachment
     {
         Attachment();
@@ -25,7 +21,6 @@ namespace pe
     {
     public:
         RenderPass(const std::vector<Attachment> &attachments, const std::string &name);
-
         ~RenderPass();
 
     private:

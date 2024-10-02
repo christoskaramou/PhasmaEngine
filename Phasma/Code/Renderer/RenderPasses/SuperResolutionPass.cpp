@@ -1,25 +1,14 @@
 #include "Renderer/RenderPasses/SuperResolutionPass.h"
-#include "Renderer/RHI.h"
-#include "Renderer/Queue.h"
 #include "Renderer/Command.h"
+#include "Renderer/RHI.h"
 #include "Renderer/Image.h"
-#include "Renderer/Surface.h"
 #include "Systems/RendererSystem.h"
 #include "Systems/CameraSystem.h"
-#include "GUI/GUI.h"
 #include "FRS2/ffx_fsr2.h"
 #include "FRS2/vk/ffx_fsr2_vk.h"
 
 namespace pe
 {
-    SuperResolutionPass::SuperResolutionPass()
-    {
-    }
-
-    SuperResolutionPass::~SuperResolutionPass()
-    {
-    }
-
     static void FfxFsr2MessageCallback(FfxFsr2MsgType type, const wchar_t *message)
     {
         // convert wchar_t to char
@@ -44,7 +33,6 @@ namespace pe
 
     void SuperResolutionPass::Init()
     {
-        m_renderQueue = RHII.GetRenderQueue();
         RendererSystem *rs = GetGlobalSystem<RendererSystem>();
 
         m_display = rs->GetDisplayRT();
@@ -79,36 +67,16 @@ namespace pe
         m_jitter = vec2(0.0f);
     }
 
-    void SuperResolutionPass::UpdatePassInfo()
+    void SuperResolutionPass::Draw(CommandBuffer *cmd)
     {
-    }
-
-    void SuperResolutionPass::CreateUniforms(CommandBuffer *cmd)
-    {
-    }
-
-    void SuperResolutionPass::UpdateDescriptorSets()
-    {
-    }
-
-    void SuperResolutionPass::Update(Camera *camera)
-    {
-        // GenerateJitter in main camera update
-    }
-
-    CommandBuffer *SuperResolutionPass::Draw()
-    {
-        CommandBuffer *cmd = CommandBuffer::GetFree(m_renderQueue);
-        cmd->Begin();
-
-        cmd->BeginDebugRegion("Super Resolution");
+        Camera &camera = *GetGlobalSystem<CameraSystem>()->GetCamera(0);
 
         std::vector<ImageBarrierInfo> barriers(4);
         barriers[0].image = m_viewportRT;
         barriers[0].layout = ImageLayout::ShaderReadOnly;
         barriers[0].stageFlags = PipelineStage::ComputeShaderBit;
         barriers[0].accessMask = Access::ShaderReadBit;
-        
+
         barriers[1].image = m_velocityRT;
         barriers[1].layout = ImageLayout::ShaderReadOnly;
         barriers[1].stageFlags = PipelineStage::ComputeShaderBit;
@@ -124,9 +92,11 @@ namespace pe
         barriers[3].stageFlags = PipelineStage::ComputeShaderBit;
         barriers[3].accessMask = Access::ShaderWriteBit;
 
-        cmd->ImageBarriers(barriers);
-
-        Camera &camera = *GetGlobalSystem<CameraSystem>()->GetCamera(0);
+        ImageBarrierInfo displayBarrier{};
+        displayBarrier.image = m_display;
+        displayBarrier.layout = ImageLayout::Attachment;
+        displayBarrier.stageFlags = PipelineStage::ColorAttachmentOutputBit;
+        displayBarrier.accessMask = Access::ColorAttachmentWriteBit;
 
         FfxFsr2DispatchDescription dd = {};
         dd.commandList = ffxGetCommandListVK(cmd->ApiHandle());
@@ -206,23 +176,14 @@ namespace pe
         dd.cameraFar = gSettings.reverse_depth ? camera.GetNearPlane() : camera.GetFarPlane();
         dd.cameraFovAngleVertical = camera.Fovy();
 
+        cmd->BeginDebugRegion("Super Resolution");
+        cmd->ImageBarriers(barriers);
         cmd->BeginDebugRegion("SuperResolution_Pass");
         PE_CHECK(ffxFsr2ContextDispatch(m_context.get(), &dd));
         cmd->EndDebugRegion();
-
-        ImageBarrierInfo info{};
-        info.image = m_display;
-        info.layout = ImageLayout::Attachment;
-        info.stageFlags = PipelineStage::ColorAttachmentOutputBit;
-        info.accessMask = Access::ColorAttachmentWriteBit;
-        cmd->ImageBarrier(info);
-
+        cmd->ImageBarrier(displayBarrier);
         cmd->EndDebugRegion();
-        
         cmd->AddFlags(CommandType::ComputeBit);
-
-        cmd->End();
-        return cmd;
     }
 
     void SuperResolutionPass::Resize(uint32_t width, uint32_t height)
@@ -238,7 +199,7 @@ namespace pe
     void SuperResolutionPass::GenerateJitter()
     {
         auto &srSettings = Settings::Get<SRSettings>();
-        
+
         int jitterPhaseCount = ffxFsr2GetJitterPhaseCount(m_viewportRT->GetWidth(), m_display->GetHeight());
         ffxFsr2GetJitterOffset(&m_jitter.x, &m_jitter.y, RHII.GetFrameCounter(), jitterPhaseCount);
 

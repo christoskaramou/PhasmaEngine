@@ -2,28 +2,26 @@
 #include "Renderer/Queue.h"
 #include "Renderer/Semaphore.h"
 #include "Renderer/Command.h"
-#include "Renderer/Pipeline.h"
 #include "Renderer/Swapchain.h"
 #include "Renderer/RHI.h"
 #include "Renderer/Surface.h"
 
 namespace pe
 {
-    Queue::Queue(QueueApiHandle handle,
+    Queue::Queue(QueueApiHandle apiHandle,
                  uint32_t familyId,
                  QueueTypeFlags queueTypeFlags,
                  ivec3 imageGranularity,
                  const std::string &name)
+        : PeHandle<Queue, QueueApiHandle>(apiHandle),
+          m_id{ID::NextID()},
+          m_familyId{familyId},
+          m_queueTypeFlags{queueTypeFlags},
+          m_imageGranularity{imageGranularity},
+          m_semaphore{Semaphore::Create(true, name + "_queue_semaphore")},
+          m_submitions{0},
+          m_name{name}
     {
-        m_apiHandle = handle;
-        m_familyId = familyId;
-        m_queueTypeFlags = queueTypeFlags;
-        m_imageGranularity = imageGranularity;
-
-        m_semaphore = Semaphore::Create(true, name + "_queue_semaphore");
-        m_submitions = 0;
-
-        this->name = name;
     }
 
     Queue::~Queue()
@@ -90,7 +88,7 @@ namespace pe
         // queue semaphore
         {
             m_semaphore->Wait(m_submitions++); // Wait previous submition so we can submit again
-            
+
             signalSemaphoreSubmitInfos[i].sType = VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO;
             signalSemaphoreSubmitInfos[i].semaphore = m_semaphore->ApiHandle();
             signalSemaphoreSubmitInfos[i].stageMask = VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT;
@@ -203,7 +201,7 @@ namespace pe
                         queueFlags |= QueueType::PresentBit;
 
                     Queue *queue = Queue::Create(queueVK, i, queueFlags, mitg, "Queue_Queue_" + std::to_string(i) + "_" + std::to_string(j));
-                    Debug::SetObjectName(queue->ApiHandle(), queue->name);
+                    Debug::SetObjectName(queue->ApiHandle(), queue->m_name);
 
                     auto it = s_allQueues.find(queueFlags.Value());
                     if (it == s_allQueues.end())
@@ -212,7 +210,7 @@ namespace pe
                         s_allFlags.push_back(queueFlags.Value());
                     }
 
-                    s_allQueues[queueFlags.Value()][queue->GetID()] = queue;
+                    s_allQueues[queueFlags.Value()][queue->m_id] = queue;
                 }
             }
         }
@@ -309,7 +307,7 @@ namespace pe
                 continue;
 
             signalStages |= GetStagesFromCmd(cmd);
-            
+
             Queue *cmdQueue = GetQueueFromCmd(cmd);
             if (cmdQueue != prevQueue)
             {

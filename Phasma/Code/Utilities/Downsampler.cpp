@@ -68,6 +68,7 @@ namespace pe
         s_passInfo->pCompShader = Shader::Create("Shaders/Compute/spd/spd.hlsl", ShaderStage::ComputeBit, defines);
         s_passInfo->name = "Downsample_pipeline";
         
+        s_passInfo->ReflectDescriptors();
         s_passInfo->UpdateHash();
     }
 

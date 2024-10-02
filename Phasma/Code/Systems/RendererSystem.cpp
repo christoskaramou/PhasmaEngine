@@ -1,14 +1,17 @@
 #include "Systems/RendererSystem.h"
+#include "Systems/CameraSystem.h"
 #include "Renderer/RHI.h"
 #include "Renderer/Semaphore.h"
-#include "Renderer/Descriptor.h"
 #include "Renderer/Image.h"
 #include "Renderer/Queue.h"
 #include "Renderer/Command.h"
+#include "Renderer/Surface.h"
+#include "Renderer/Swapchain.h"
 #include "Renderer/RenderPasses/DepthPass.h"
 #include "Renderer/RenderPasses/GbufferPass.h"
 #include "Renderer/RenderPasses/LightPass.h"
 #include "Renderer/RenderPasses/AabbsPass.h"
+#include "Renderer/RenderPasses/ShadowPass.h"
 #include "Systems/PostProcessSystem.h"
 
 namespace pe
@@ -62,8 +65,10 @@ namespace pe
         // Create render components
         m_renderPassComponents[ID::GetTypeID<ShadowPass>()] = CreateGlobalComponent<ShadowPass>();
         m_renderPassComponents[ID::GetTypeID<DepthPass>()] = CreateGlobalComponent<DepthPass>();
-        m_renderPassComponents[ID::GetTypeID<GbufferPass>()] = CreateGlobalComponent<GbufferPass>();
-        m_renderPassComponents[ID::GetTypeID<LightPass>()] = CreateGlobalComponent<LightPass>();
+        m_renderPassComponents[ID::GetTypeID<GbufferOpaquePass>()] = CreateGlobalComponent<GbufferOpaquePass>();
+        m_renderPassComponents[ID::GetTypeID<GbufferTransparentPass>()] = CreateGlobalComponent<GbufferTransparentPass>();
+        m_renderPassComponents[ID::GetTypeID<LightOpaquePass>()] = CreateGlobalComponent<LightOpaquePass>();
+        m_renderPassComponents[ID::GetTypeID<LightTransparentPass>()] = CreateGlobalComponent<LightTransparentPass>();
         m_renderPassComponents[ID::GetTypeID<AabbsPass>()] = CreateGlobalComponent<AabbsPass>();
 
         for (auto &renderPassComponent : m_renderPassComponents)
