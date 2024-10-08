@@ -666,7 +666,7 @@ namespace pe
     ColorSpace Translate(VkColorSpaceKHR value) { return s_translatorPeColorSpace[(uint64_t)value]; }
 
     template <>
-    PresentMode Translate(VkPresentModeKHR value) {  return s_translatorPePresentMode[(uint64_t)value]; }
+    PresentMode Translate(VkPresentModeKHR value) { return s_translatorPePresentMode[(uint64_t)value]; }
 
     template <>
     VkImageLayout Translate(ImageLayout value) { return (VkImageLayout)s_translatorImageLayout[(uint64_t)value]; }

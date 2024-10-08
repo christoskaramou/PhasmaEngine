@@ -206,7 +206,7 @@ namespace pe
                     auto it = s_allQueues.find(queueFlags.Value());
                     if (it == s_allQueues.end())
                     {
-                        s_allQueues[queueFlags.Value()] = std::unordered_map<size_t, Queue *>();
+                        s_allQueues[queueFlags.Value()] = {};
                         s_allFlags.push_back(queueFlags.Value());
                     }
 
@@ -234,7 +234,8 @@ namespace pe
         // Find the best suitable flags in the sorted s_allFlags vector
         for (QueueTypeFlags::Type flags : s_allFlags)
         {
-            if (flags >= queueTypeFlags.Value() && (flags & queueTypeFlags.Value()) == queueTypeFlags.Value())
+            uint64_t value = queueTypeFlags.Value();
+            if (flags >= value && (flags & value) == value)
             {
                 auto &queues = s_allQueues[flags];
                 for (auto it = queues.begin(); it != queues.end(); it++)
