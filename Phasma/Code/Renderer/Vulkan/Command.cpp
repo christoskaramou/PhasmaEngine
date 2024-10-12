@@ -438,16 +438,17 @@ namespace pe
 
             for (uint32_t i = 0; i < m_attachmentCount; i++)
             {
-                if (m_attachments[i].finalLayout != ImageLayout::Undefined ||
+                if (m_attachments[i].finalLayout != m_attachments[i].initialLayout &&
+                    m_attachments[i].finalLayout != ImageLayout::Undefined &&
                     m_attachments[i].finalLayout != ImageLayout::Preinitialized)
-                {
-                    ImageBarrierInfo barrier{};
-                    barrier.image = m_attachments[i].image;
-                    barrier.layout = m_attachments[i].finalLayout;
-                    barrier.stageFlags = PipelineStage::AllGraphicsBit;
-                    barrier.accessMask = Access::None;
-                    barriers.push_back(barrier);
-                }
+                    {
+                        ImageBarrierInfo barrier{};
+                        barrier.image = m_attachments[i].image;
+                        barrier.layout = m_attachments[i].finalLayout;
+                        barrier.stageFlags = PipelineStage::AllGraphicsBit;
+                        barrier.accessMask = Access::None;
+                        barriers.push_back(barrier);
+                    }
             }
             Image::Barriers(this, barriers);
 
