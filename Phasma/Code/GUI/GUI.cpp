@@ -549,7 +549,7 @@ namespace pe
         attachments[0].loadOp = AttachmentLoadOp::Load;
         attachments[0].initialLayout = ImageLayout::Attachment;
         attachments[0].finalLayout = ImageLayout::ShaderReadOnly;
-        renderPass = CommandBuffer::GetRenderPass({attachments});
+        renderPass = CommandBuffer::GetRenderPass(1, attachments.data());
         ImGui_ImplVulkan_Init(&initInfo, renderPass->ApiHandle());
 
         CommandBuffer *cmd = CommandBuffer::GetFree(queue);
@@ -596,7 +596,7 @@ namespace pe
         barrierInfo.accessMask = Access::ColorAttachmentWriteBit;
 
         cmd->ImageBarrier(barrierInfo);
-        cmd->BeginPass(attachments, "GUI");
+        cmd->BeginPass(1, attachments.data(), "GUI");
         ImGui_ImplVulkan_RenderDrawData(ImGui::GetDrawData(), cmd->ApiHandle());
         cmd->EndPass();
 

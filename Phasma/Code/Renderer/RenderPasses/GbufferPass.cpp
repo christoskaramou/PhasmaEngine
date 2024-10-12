@@ -118,7 +118,7 @@ namespace pe
             {
                 Image *colorTargets[6]{normalRT, albedoRT, srmRT, velocityRT, emissiveRT, transparencyRT};
 
-                cmd->BeginPass(m_attachments, "GbufferOpaquePass");
+                cmd->BeginPass(7, m_attachments.data(), "GbufferOpaquePass");
                 cmd->BindIndexBuffer(m_geometry->GetBuffer(), 0);
                 cmd->BindVertexBuffer(m_geometry->GetBuffer(), m_geometry->GetVerticesOffset());
                 cmd->SetViewport(0.f, 0.f, depthStencilRT->GetWidth_f(), depthStencilRT->GetHeight_f());
@@ -313,7 +313,7 @@ namespace pe
         {
             PassBarriers(cmd);
 
-            cmd->BeginPass(m_attachments, "GbufferTransparentPass");
+            cmd->BeginPass(7, m_attachments.data(), "GbufferTransparentPass");
             cmd->BindIndexBuffer(m_geometry->GetBuffer(), 0);
             cmd->BindVertexBuffer(m_geometry->GetBuffer(), m_geometry->GetVerticesOffset());
             cmd->SetViewport(0.f, 0.f, depthStencilRT->GetWidth_f(), depthStencilRT->GetHeight_f());

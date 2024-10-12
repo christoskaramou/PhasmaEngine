@@ -112,7 +112,7 @@ namespace pe
 
         cmd->BeginDebugRegion("Aabbs");
         cmd->ImageBarriers(barrierInfo);
-        cmd->BeginPass(m_attachments, "AabbsPass");
+        cmd->BeginPass(2, m_attachments.data(), "AabbsPass");
         cmd->BindIndexBuffer(m_geometry->GetBuffer(), m_geometry->GetAabbIndicesOffset());
         cmd->BindVertexBuffer(m_geometry->GetBuffer(), m_geometry->GetAabbVerticesOffset());
         cmd->SetViewport(0.f, 0.f, m_viewportRT->GetWidth_f(), m_viewportRT->GetHeight_f());

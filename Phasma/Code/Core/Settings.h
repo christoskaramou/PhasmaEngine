@@ -71,6 +71,6 @@ namespace pe
         bool draw_aabbs = false;
         bool aabbs_depth_dware = true;
         int culls_per_task = 10;
-        bool dynamic_rendering = false;
+        bool dynamic_rendering = true;
     };
 }

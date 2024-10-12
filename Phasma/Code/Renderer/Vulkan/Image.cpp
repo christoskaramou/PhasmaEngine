@@ -548,49 +548,42 @@ namespace pe
 
         cmd->BeginDebugRegion("CopyImage");
 
-        VkImageCopy region{};
-        // Source
-        region.srcSubresource.aspectMask = GetAspectMaskVK(m_imageInfo.format);
-        region.srcSubresource.mipLevel = 0;
-        region.srcSubresource.baseArrayLayer = 0;
-        region.srcSubresource.layerCount = m_imageInfo.arrayLayers;
-        region.srcOffset = VkOffset3D{0, 0, 0};
-        // Destination
-        region.dstSubresource.aspectMask = GetAspectMaskVK(m_imageInfo.format);
-        region.dstSubresource.mipLevel = 0;
-        region.dstSubresource.baseArrayLayer = 0;
-        region.dstSubresource.layerCount = src->m_imageInfo.arrayLayers;
-        region.dstOffset = VkOffset3D{0, 0, 0};
-
-        region.extent = VkExtent3D{src->m_imageInfo.width,
-                                   src->m_imageInfo.height,
-                                   src->m_imageInfo.depth};
-
         std::vector<ImageBarrierInfo> barriers(2);
-        barriers[0].image = this;
+        barriers[0].image = src;
         barriers[0].stageFlags = PipelineStage::TransferBit;
-        barriers[0].accessMask = Access::TransferWriteBit;
-        barriers[0].layout = ImageLayout::TransferDst;
-        barriers[1].image = src;
+        barriers[0].accessMask = Access::TransferReadBit;
+        barriers[0].layout = ImageLayout::TransferSrc;
+        barriers[1].image = this;
         barriers[1].stageFlags = PipelineStage::TransferBit;
-        barriers[1].accessMask = Access::TransferReadBit;
-        barriers[1].layout = ImageLayout::TransferSrc;
+        barriers[1].accessMask = Access::TransferWriteBit;
+        barriers[1].layout = ImageLayout::TransferDst;
         Barriers(cmd, barriers);
 
-        // std::string regionName = src->imageInfo.name + " layerCount=" + std::to_string(region.srcSubresource.layerCount) +
-        //                          ", baseLayer=" + std::to_string(region.srcSubresource.baseArrayLayer) +
-        //                          ", mipLevel=" + std::to_string(region.srcSubresource.mipLevel) +
-        //                          " -> " + imageInfo.name + " layerCount=" + std::to_string(region.dstSubresource.layerCount) +
-        //                          ", baseLayer=" + std::to_string(region.dstSubresource.baseArrayLayer) +
-        //                          ", mipLevel=" + std::to_string(region.dstSubresource.mipLevel);
+        VkImageCopy2 region{};
+        region.sType = VK_STRUCTURE_TYPE_IMAGE_COPY_2;
+        region.srcSubresource.aspectMask = GetAspectMaskVK(m_imageInfo.format);
+        region.srcSubresource.baseArrayLayer = 0;
+        region.srcSubresource.layerCount = 1;
+        region.srcSubresource.mipLevel = 0;
+        region.srcOffset = {0, 0, 0};
+        region.dstSubresource.aspectMask = GetAspectMaskVK(m_imageInfo.format);
+        region.dstSubresource.baseArrayLayer = 0;
+        region.dstSubresource.layerCount = 1;
+        region.dstSubresource.mipLevel = 0;
+        region.dstOffset = {0, 0, 0};
+        region.extent = {m_imageInfo.width, m_imageInfo.height, m_imageInfo.depth};
+
+        VkCopyImageInfo2 copyInfo{};
+        copyInfo.sType = VK_STRUCTURE_TYPE_COPY_IMAGE_INFO_2;
+        copyInfo.srcImage = src->m_apiHandle;
+        copyInfo.srcImageLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
+        copyInfo.dstImage = m_apiHandle;
+        copyInfo.dstImageLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+        copyInfo.regionCount = 1;
+        copyInfo.pRegions = &region;
+
         cmd->BeginDebugRegion(src->m_imageInfo.name + " -> " + m_imageInfo.name);
-        vkCmdCopyImage(
-            cmd->ApiHandle(),
-            src->m_apiHandle,
-            VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
-            m_apiHandle,
-            VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-            1, &region);
+        vkCmdCopyImage2(cmd->ApiHandle(), &copyInfo);
         cmd->EndDebugRegion();
 
         cmd->EndDebugRegion();

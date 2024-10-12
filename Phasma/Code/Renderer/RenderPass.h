@@ -20,7 +20,7 @@ namespace pe
     class RenderPass : public PeHandle<RenderPass, RenderPassApiHandle>
     {
     public:
-        RenderPass(const std::vector<Attachment> &attachments, const std::string &name);
+        RenderPass(uint32_t count, Attachment *attachments, const std::string &name);
         ~RenderPass();
 
     private:

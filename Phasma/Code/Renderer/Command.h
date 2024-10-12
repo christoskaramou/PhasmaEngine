@@ -132,7 +132,7 @@ namespace pe
         void BlitImage(Image *src, Image *dst, ImageBlit *region, Filter filter);
         void ClearColors(std::vector<Image *> images);
         void ClearDepthStencils(std::vector<Image *> images);
-        void BeginPass(const std::vector<Attachment> &attachments, const std::string &name);
+        void BeginPass(uint32_t count, Attachment *attachments, const std::string &name);
         void EndPass();
         void BindPipeline(PassInfo &passInfo, bool bindDescriptors = true);
         void BindVertexBuffer(Buffer *buffer, size_t offset, uint32_t firstBinding = 0, uint32_t bindingCount = 1);
@@ -204,8 +204,8 @@ namespace pe
         static CommandBuffer *GetFree(uint32_t familyId);
         static CommandBuffer *GetFree(Queue *queue);
         static void Return(CommandBuffer *cmd);
-        static RenderPass *GetRenderPass(const std::vector<Attachment> &attachments);
-        static Framebuffer *GetFramebuffer(RenderPass *renderPass, const std::vector<Attachment> &attachments);
+        static RenderPass *GetRenderPass(uint32_t count, Attachment *attachments);
+        static Framebuffer *GetFramebuffer(RenderPass *renderPass, uint32_t count, Attachment *attachments);
         static Pipeline *GetPipeline(RenderPass *renderPass, PassInfo &info);
 
     private:
@@ -238,6 +238,8 @@ namespace pe
         std::string m_name;
         std::string m_passName;
         Delegate<> m_afterWaitCallbacks;
+        uint32_t m_attachmentCount;
+        Attachment *m_attachments;
         RenderPass *m_renderPass;
         Framebuffer *m_framebuffer;
         Pipeline *m_boundPipeline;

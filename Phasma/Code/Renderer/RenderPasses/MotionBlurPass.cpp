@@ -88,7 +88,7 @@ namespace pe
         cmd->BeginDebugRegion("MotionBlurPass");
         cmd->CopyImage(m_displayRT, m_frameImage);
         cmd->ImageBarriers(barriers);
-        cmd->BeginPass(m_attachments, "MotionBlur");
+        cmd->BeginPass(1, m_attachments.data(), "MotionBlur");
         cmd->BindPipeline(*m_passInfo);
         cmd->SetViewport(0.f, 0.f, m_displayRT->GetWidth_f(), m_displayRT->GetHeight_f());
         cmd->SetScissor(0, 0, m_displayRT->GetWidth(), m_displayRT->GetHeight());

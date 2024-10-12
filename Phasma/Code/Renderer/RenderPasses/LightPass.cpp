@@ -31,7 +31,7 @@ namespace pe
         m_attachments.resize(1);
         m_attachments[0] = {};
         m_attachments[0].image = m_viewportRT;
-        m_attachments[0].initialLayout = ImageLayout::Undefined;
+        m_attachments[0].initialLayout = ImageLayout::Attachment;
         m_attachments[0].finalLayout = ImageLayout::Attachment;
         m_attachments[0].loadOp = AttachmentLoadOp::Clear;
     }
@@ -204,7 +204,7 @@ namespace pe
 
         PassBarriers(cmd);
 
-        cmd->BeginPass(m_attachments, "LightOpaquePass");
+        cmd->BeginPass(1, m_attachments.data(), "LightOpaquePass");
         cmd->BindPipeline(*m_passInfo);
         cmd->SetViewport(0.f, 0.f, m_viewportRT->GetWidth_f(), m_viewportRT->GetHeight_f());
         cmd->SetScissor(0, 0, m_viewportRT->GetWidth(), m_viewportRT->GetHeight());
@@ -416,7 +416,7 @@ namespace pe
 
         PassBarriers(cmd);
 
-        cmd->BeginPass(m_attachments, "LightTransparentPass");
+        cmd->BeginPass(1, m_attachments.data(), "LightTransparentPass");
         cmd->BindPipeline(*m_passInfo);
         cmd->SetViewport(0.f, 0.f, m_viewportRT->GetWidth_f(), m_viewportRT->GetHeight_f());
         cmd->SetScissor(0, 0, m_viewportRT->GetWidth(), m_viewportRT->GetHeight());

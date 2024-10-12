@@ -250,12 +250,13 @@ namespace pe
     }
 
     // Note: We don't care about the actual images, having the Attachment struct for convenience
-    RenderPass *CommandBuffer::GetRenderPass(const std::vector<Attachment> &attachments)
+    RenderPass *CommandBuffer::GetRenderPass(uint32_t count, Attachment *attachments)
     {
         Hash hash;
-        hash.Combine(attachments.size());
-        for (const auto &attachment : attachments)
+        hash.Combine(count);
+        for (uint32_t i = 0; i < count; i++)
         {
+            const Attachment &attachment = attachments[i];
             hash.Combine(static_cast<uint32_t>(attachment.image->GetFormat()));
             hash.Combine(static_cast<uint32_t>(attachment.image->m_imageInfo.samples));
             hash.Combine(static_cast<uint32_t>(attachment.loadOp));
@@ -274,7 +275,7 @@ namespace pe
         else
         {
             std::string name = "Auto_Gen_RenderPass_" + std::to_string(s_renderPasses.size());
-            RenderPass *newRenderPass = RenderPass::Create(attachments, name);
+            RenderPass *newRenderPass = RenderPass::Create(count, attachments, name);
             s_renderPasses[hash] = newRenderPass;
 
             return newRenderPass;
@@ -282,13 +283,13 @@ namespace pe
     }
 
     // Note: Cares only about the actual images, just having the Attachment struct for convenience
-    Framebuffer *CommandBuffer::GetFramebuffer(RenderPass *renderPass, const std::vector<Attachment> &attachments)
+    Framebuffer *CommandBuffer::GetFramebuffer(RenderPass *renderPass, uint32_t count, Attachment *attachments)
     {
         Hash hash;
         hash.Combine(reinterpret_cast<std::intptr_t>(renderPass));
 
-        for (const auto &attachment : attachments)
-            hash.Combine(reinterpret_cast<std::intptr_t>(attachment.image));
+        for (uint32_t i = 0; i < count; i++)
+            hash.Combine(reinterpret_cast<std::intptr_t>(attachments[i].image));
 
         auto it = s_framebuffers.find(hash);
         if (it != s_framebuffers.end())
@@ -298,9 +299,11 @@ namespace pe
         else
         {
             std::vector<ImageViewApiHandle> views{};
-            for (const auto &attachment : attachments)
+            views.reserve(count);
+
+            for (uint32_t i = 0; i < count; i++)
             {
-                Image *image = attachment.image;
+                Image *image = attachments[i].image;
                 if (!image->HasRTV())
                     image->CreateRTV();
                 views.push_back(image->GetRTV());
@@ -319,7 +322,7 @@ namespace pe
         }
     }
 
-    void CommandBuffer::BeginPass(const std::vector<Attachment> &attachments, const std::string &name)
+    void CommandBuffer::BeginPass(uint32_t count, Attachment *attachments, const std::string &name)
     {
         BeginDebugRegion(name + "_pass");
         m_commandFlags |= CommandType::GraphicsBit;
@@ -327,11 +330,13 @@ namespace pe
         if (Settings::Get<GlobalSettings>().dynamic_rendering)
         {
             std::vector<VkRenderingAttachmentInfo> colorInfos;
-            colorInfos.reserve(attachments.size());
+            colorInfos.reserve(count);
             VkRenderingAttachmentInfo depthInfo{};
             bool hasDepth = false;
+            m_attachmentCount = count;
+            m_attachments = attachments;
 
-            for (size_t i = 0; i < attachments.size(); i++)
+            for (uint32_t i = 0; i < count; i++)
             {
                 const Attachment &attachment = attachments[i];
 
@@ -344,7 +349,7 @@ namespace pe
 
                     depthInfo.sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO;
                     depthInfo.imageView = attachment.image->GetRTV();
-                    depthInfo.imageLayout = Translate<VkImageLayout>(attachment.finalLayout);
+                    depthInfo.imageLayout = Translate<VkImageLayout>(attachment.initialLayout);
                     depthInfo.loadOp = Translate<VkAttachmentLoadOp>(attachment.loadOp);
                     depthInfo.storeOp = Translate<VkAttachmentStoreOp>(attachment.storeOp);
                     depthInfo.clearValue.depthStencil = {clearDepth, clearStencil};
@@ -356,18 +361,12 @@ namespace pe
                     VkRenderingAttachmentInfo colorInfo{};
                     colorInfo.sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO;
                     colorInfo.imageView = attachment.image->GetRTV();
-                    colorInfo.imageLayout = Translate<VkImageLayout>(attachment.finalLayout);
+                    colorInfo.imageLayout = Translate<VkImageLayout>(attachment.initialLayout);
                     colorInfo.loadOp = Translate<VkAttachmentLoadOp>(attachment.loadOp);
                     colorInfo.storeOp = Translate<VkAttachmentStoreOp>(attachment.storeOp);
                     colorInfo.clearValue.color = {clearColor[0], clearColor[1], clearColor[2], clearColor[3]};
                     colorInfos.push_back(colorInfo);
                 }
-
-                ImageBarrierInfo info{};
-                info.layout = attachment.finalLayout;
-                info.stageFlags = PipelineStage::AllGraphicsBit;
-                info.accessMask = Access::None;
-                attachment.image->SetCurrentInfo(info);
             }
 
             VkRenderingInfo renderingInfo{};
@@ -383,11 +382,12 @@ namespace pe
         }
         else
         {
-            std::vector<VkClearValue> clearValues(attachments.size());
+            std::vector<VkClearValue> clearValues(count);
             uint32_t clearOps = 0;
 
-            for (const auto &attachment : attachments)
+            for (uint32_t i = 0; i < count; i++)
             {
+                const Attachment &attachment = attachments[i];
                 Image *renderTarget = attachment.image;
                 Format format = renderTarget->GetFormat();
                 if (IsDepthFormat(format) && (attachment.loadOp == AttachmentLoadOp::Clear || attachment.stencilLoadOp == AttachmentLoadOp::Clear))
@@ -411,8 +411,8 @@ namespace pe
                 renderTarget->SetCurrentInfo(info);
             }
 
-            m_renderPass = GetRenderPass(attachments);
-            m_framebuffer = GetFramebuffer(m_renderPass, attachments);
+            m_renderPass = GetRenderPass(count, attachments);
+            m_framebuffer = GetFramebuffer(m_renderPass, count, attachments);
 
             VkRenderPassBeginInfo rpi{};
             rpi.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
@@ -432,16 +432,37 @@ namespace pe
         if (Settings::Get<GlobalSettings>().dynamic_rendering)
         {
             vkCmdEndRendering(m_apiHandle);
+
+            std::vector<ImageBarrierInfo> barriers;
+            barriers.reserve(m_attachmentCount);
+
+            for (uint32_t i = 0; i < m_attachmentCount; i++)
+            {
+                if (m_attachments[i].finalLayout != ImageLayout::Undefined ||
+                    m_attachments[i].finalLayout != ImageLayout::Preinitialized)
+                {
+                    ImageBarrierInfo barrier{};
+                    barrier.image = m_attachments[i].image;
+                    barrier.layout = m_attachments[i].finalLayout;
+                    barrier.stageFlags = PipelineStage::AllGraphicsBit;
+                    barrier.accessMask = Access::None;
+                    barriers.push_back(barrier);
+                }
+            }
+            Image::Barriers(this, barriers);
+
+            m_attachmentCount = 0;
+            m_attachments = nullptr;
         }
         else
         {
             vkCmdEndRenderPass(m_apiHandle);
+            m_renderPass = nullptr;
+            m_framebuffer = nullptr;
         }
 
         EndDebugRegion();
 
-        m_renderPass = nullptr;
-        m_framebuffer = nullptr;
         m_boundPipeline = nullptr;
         m_boundVertexBuffer = nullptr;
         m_boundVertexBufferOffset = -1;

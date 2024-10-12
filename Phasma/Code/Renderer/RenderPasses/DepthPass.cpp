@@ -97,7 +97,7 @@ namespace pe
             constants.meshJointCount = 0;
             constants.alphaCut = 0.0f;
 
-            cmd->BeginPass(m_attachments, "DepthPass");
+            cmd->BeginPass(1, m_attachments.data(), "DepthPass");
             cmd->SetViewport(0.f, 0.f, m_depthStencil->GetWidth_f(), m_depthStencil->GetHeight_f());
             cmd->SetScissor(0, 0, m_depthStencil->GetWidth(), m_depthStencil->GetHeight());
             cmd->BindPipeline(*m_passInfo);

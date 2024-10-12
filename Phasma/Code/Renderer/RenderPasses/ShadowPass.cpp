@@ -252,7 +252,7 @@ namespace pe
                 Attachment &attachment = m_attachments[0];
                 attachment.image = m_textures[i];
 
-                cmd->BeginPass(m_attachments, "Cascade_" + std::to_string(i));
+                cmd->BeginPass(1, m_attachments.data(), "Cascade_" + std::to_string(i));
                 cmd->SetViewport(0.f, 0.f, attachment.image->GetWidth_f(), attachment.image->GetHeight_f());
                 cmd->SetScissor(0, 0, attachment.image->GetWidth(), attachment.image->GetHeight());
                 cmd->BindPipeline(passInfo);

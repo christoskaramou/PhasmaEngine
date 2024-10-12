@@ -19,10 +19,8 @@ namespace pe
 
 
     // Attachment references must match the attachment number and order in shader
-    RenderPass::RenderPass(const std::vector<Attachment> &attachments, const std::string &name)
+    RenderPass::RenderPass(uint32_t count, Attachment *attachments, const std::string &name)
     {
-        size_t count = attachments.size();
-
         std::vector<VkAttachmentDescription2> attachmentsVK{};
         attachmentsVK.reserve(count);
         std::vector<VkAttachmentReference2> colorReferencesVK{};
@@ -31,8 +29,9 @@ namespace pe
         depthStencilReferenceVK.attachment = VK_ATTACHMENT_UNUSED;
 
         uint32_t attachmentIndex = 0;
-        for (const auto &attachment : attachments)
+        for (uint32_t i = 0; i < count; i++)
         {
+            const Attachment &attachment = attachments[i];
             Format format = attachment.image->GetFormat();
             SampleCount samples = attachment.image->GetSamples();
 
