@@ -2,22 +2,10 @@
 #include "Renderer/RenderPass.h"
 #include "Renderer/RHI.h"
 #include "Renderer/Image.h"
+#include "Renderer/Command.h"
 
 namespace pe
 {
-    // Target attachments are initialized to match render targets by default
-    Attachment::Attachment()
-    {
-        image = nullptr;
-        loadOp = AttachmentLoadOp::Clear;
-        storeOp = AttachmentStoreOp::Store;
-        stencilLoadOp = AttachmentLoadOp::DontCare;
-        stencilStoreOp = AttachmentStoreOp::DontCare;
-        initialLayout = ImageLayout::Undefined;
-        finalLayout = ImageLayout::Attachment;
-    }
-
-
     // Attachment references must match the attachment number and order in shader
     RenderPass::RenderPass(uint32_t count, Attachment *attachments, const std::string &name)
     {
@@ -42,8 +30,8 @@ namespace pe
             attachmentDescription.storeOp = Translate<VkAttachmentStoreOp>(attachment.storeOp);
             attachmentDescription.stencilLoadOp = Translate<VkAttachmentLoadOp>(attachment.stencilLoadOp);
             attachmentDescription.stencilStoreOp = Translate<VkAttachmentStoreOp>(attachment.stencilStoreOp);
-            attachmentDescription.initialLayout = Translate<VkImageLayout>(attachment.initialLayout);
-            attachmentDescription.finalLayout = Translate<VkImageLayout>(attachment.finalLayout);
+            attachmentDescription.initialLayout = VK_IMAGE_LAYOUT_ATTACHMENT_OPTIMAL;
+            attachmentDescription.finalLayout = VK_IMAGE_LAYOUT_ATTACHMENT_OPTIMAL;
             attachmentsVK.push_back(attachmentDescription);
 
             if (HasDepth(attachment.image->GetFormat()))

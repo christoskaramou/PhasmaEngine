@@ -32,14 +32,10 @@ namespace pe
         m_attachments[0].image = m_viewportRT;
         m_attachments[0].loadOp = AttachmentLoadOp::Load;
         m_attachments[0].storeOp = AttachmentStoreOp::Store;
-        m_attachments[0].initialLayout = ImageLayout::Attachment;
-        m_attachments[0].finalLayout = ImageLayout::ShaderReadOnly;
         m_attachments[1] = {};
         m_attachments[1].image = m_depthRT;
         m_attachments[1].loadOp = AttachmentLoadOp::Load;
         m_attachments[1].storeOp = AttachmentStoreOp::Store;
-        m_attachments[1].initialLayout = ImageLayout::Attachment;
-        m_attachments[1].finalLayout = ImageLayout::ShaderReadOnly;
     }
 
     void AabbsPass::UpdatePassInfo()

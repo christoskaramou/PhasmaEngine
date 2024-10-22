@@ -35,8 +35,6 @@ namespace pe
         m_attachments.resize(1);
         m_attachments[0] = {};
         m_attachments[0].image = m_displayRT;
-        m_attachments[0].initialLayout = ImageLayout::Attachment;
-        m_attachments[0].finalLayout = ImageLayout::ShaderReadOnly;
     }
 
     void DOFPass::UpdatePassInfo()

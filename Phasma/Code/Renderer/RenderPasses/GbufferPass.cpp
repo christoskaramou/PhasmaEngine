@@ -33,8 +33,6 @@ namespace pe
         for (int i = 0; i < 7; i++)
         {
             m_attachments[i] = {};
-            m_attachments[i].initialLayout = ImageLayout::Attachment;
-            m_attachments[i].finalLayout = ImageLayout::ShaderReadOnly;
         }
         m_attachments[0].image = normalRT;
         m_attachments[1].image = albedoRT;
@@ -45,7 +43,6 @@ namespace pe
 
         m_attachments[6].image = depthStencilRT;
         m_attachments[6].loadOp = AttachmentLoadOp::Load;
-        //m_attachments[6].storeOp = AttachmentStoreOp::Store;
     }
 
     void GbufferOpaquePass::UpdatePassInfo()
@@ -209,11 +206,9 @@ namespace pe
         depthStencilRT = rs->GetDepthStencilTarget("depthStencil");
 
         m_attachments.resize(7);
-        for (int i = 0; i < 6; i++)
+        for (int i = 0; i < 7; i++)
         {
             m_attachments[i] = {};
-            m_attachments[i].initialLayout = ImageLayout::ShaderReadOnly;
-            m_attachments[i].finalLayout = ImageLayout::ShaderReadOnly;
             m_attachments[i].loadOp = AttachmentLoadOp::Load;
         }
         m_attachments[0].image = normalRT;
@@ -222,13 +217,7 @@ namespace pe
         m_attachments[3].image = velocityRT;
         m_attachments[4].image = emissiveRT;
         m_attachments[5].image = transparencyRT;
-
-        m_attachments[6] = {};
         m_attachments[6].image = depthStencilRT;
-        m_attachments[6].initialLayout = ImageLayout::Attachment;
-        m_attachments[6].finalLayout = ImageLayout::ShaderReadOnly;
-        m_attachments[6].loadOp = AttachmentLoadOp::Load;
-        m_attachments[6].storeOp = AttachmentStoreOp::Store;
     }
 
     void GbufferTransparentPass::UpdatePassInfo()
@@ -276,7 +265,7 @@ namespace pe
             barriers[i].image = rts[i];
             barriers[i].layout = ImageLayout::Attachment;
             barriers[i].stageFlags = PipelineStage::ColorAttachmentOutputBit;
-            barriers[i].accessMask = Access::ColorAttachmentWriteBit;
+            barriers[i].accessMask = Access::ColorAttachmentReadBit;
         }
 
         // Depth

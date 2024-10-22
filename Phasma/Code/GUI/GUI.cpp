@@ -13,11 +13,9 @@
 #include "Renderer/Command.h"
 #include "Renderer/Descriptor.h"
 #include "Renderer/Semaphore.h"
-#include "Renderer/Framebuffer.h"
 #include "Renderer/Image.h"
 #include "Renderer/Renderer.h"
 #include "Renderer/Queue.h"
-#include "Renderer/Command.h"
 #include "Renderer/RenderPasses/LightPass.h"
 #include "Renderer/RenderPasses/AabbsPass.h"
 #include "Renderer/RenderPasses/SuperResolutionPass.h"
@@ -547,8 +545,6 @@ namespace pe
         attachments[0] = {};
         attachments[0].image = renderer->GetDisplayRT();
         attachments[0].loadOp = AttachmentLoadOp::Load;
-        attachments[0].initialLayout = ImageLayout::Attachment;
-        attachments[0].finalLayout = ImageLayout::ShaderReadOnly;
         renderPass = CommandBuffer::GetRenderPass(1, attachments.data());
         ImGui_ImplVulkan_Init(&initInfo, renderPass->ApiHandle());
 
@@ -607,14 +603,6 @@ namespace pe
     {
         ImGui::StyleColorsClassic();
         ImGui::GetStyle().Colors[ImGuiCol_WindowBg] = ImVec4(0.00f, 0.00f, 0.00f, 0.3f);
-    }
-
-    void GUI::CreateRenderPass()
-    {
-    }
-
-    void GUI::CreateFramebuffers()
-    {
     }
 
     void GUI::Destroy()

@@ -35,7 +35,6 @@ namespace pe
         void Models() const;
         void Properties() const;
         void CreateRenderPass();
-        void CreateFramebuffers();
         void Destroy();
 
     public:

@@ -22,7 +22,7 @@ namespace pe
         .colorBlendOp = BlendOp::Add,
         .srcAlphaBlendFactor = BlendFactor::One,
         .dstAlphaBlendFactor = BlendFactor::One,
-        .alphaBlendOp = BlendOp::Src,
+        .alphaBlendOp = BlendOp::Add,
         .colorWriteMask = ColorComponent::RGBABit};
 
     void PassInfo::ReflectDescriptors()

@@ -543,7 +543,7 @@ namespace pe
         barriers[1].stageFlags = PipelineStage::TransferBit;
         barriers[1].accessMask = Access::TransferWriteBit;
         barriers[1].layout = ImageLayout::TransferDst;
-        Barriers(cmd, barriers);
+        Image::Barriers(cmd, barriers);
 
         VkImageCopy2 region{};
         region.sType = VK_STRUCTURE_TYPE_IMAGE_COPY_2;
@@ -625,7 +625,7 @@ namespace pe
         barriers[1].baseMipLevel = region->dstSubresource.mipLevel;
         barriers[1].mipLevels = 1;
 
-        Barriers(cmd, barriers);
+        Image::Barriers(cmd, barriers);
 
         // std::string regionName = src->imageInfo.name + " layerCount=" + std::to_string(region->srcSubresource.layerCount) +
         //                          ", baseLayer=" + std::to_string(region->srcSubresource.baseArrayLayer) +

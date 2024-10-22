@@ -17,7 +17,6 @@ namespace pe
     class Event;
     struct ImageBarrierInfo;
     struct BufferBarrierInfo;
-    struct Attachment;
 
     template <class T>
     inline uint32_t GetUboDataOffset(T offset)
@@ -28,6 +27,14 @@ namespace pe
         // tbuffer UBO { float4x4 data[MAX_DATA_SIZE]; };
         return static_cast<uint32_t>(offset >> 6);
     }
+    struct Attachment
+    {
+        Image *image = nullptr;
+        AttachmentLoadOp loadOp = AttachmentLoadOp::Clear;
+        AttachmentStoreOp storeOp = AttachmentStoreOp::Store;
+        AttachmentLoadOp stencilLoadOp = AttachmentLoadOp::DontCare;
+        AttachmentStoreOp stencilStoreOp = AttachmentStoreOp::DontCare;
+    };
 
     struct ImageSubresourceLayers
     {

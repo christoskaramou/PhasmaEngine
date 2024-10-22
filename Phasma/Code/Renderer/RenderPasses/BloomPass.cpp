@@ -24,8 +24,6 @@ namespace pe
         m_attachments.resize(1);
         m_attachments[0] = {};
         m_attachments[0].image = m_brightFilterRT;
-        m_attachments[0].initialLayout = ImageLayout::Attachment;
-        m_attachments[0].finalLayout = ImageLayout::ShaderReadOnly;
     }
 
     void BloomBrightFilterPass::UpdatePassInfo()
@@ -92,8 +90,6 @@ namespace pe
         m_attachments.resize(1);
         m_attachments[0] = {};
         m_attachments[0].image = m_gaussianBlurHorizontalRT;
-        m_attachments[0].initialLayout = ImageLayout::Attachment;
-        m_attachments[0].finalLayout = ImageLayout::ShaderReadOnly;
     }
 
     void BloomGaussianBlurHorizontalPass::UpdatePassInfo()
@@ -165,8 +161,6 @@ namespace pe
         m_attachments.resize(1);
         m_attachments[0] = {};
         m_attachments[0].image = m_displayRT;
-        m_attachments[0].initialLayout = ImageLayout::Attachment;
-        m_attachments[0].finalLayout = ImageLayout::ShaderReadOnly;
         m_attachments[0].loadOp = AttachmentLoadOp::Load;
     }
 
@@ -211,7 +205,7 @@ namespace pe
         barriers[1].image = m_displayRT;
         barriers[1].layout = ImageLayout::Attachment;
         barriers[1].stageFlags = PipelineStage::ColorAttachmentOutputBit;
-        barriers[1].accessMask = Access::ColorAttachmentWriteBit;
+        barriers[1].accessMask = Access::ColorAttachmentReadBit;
 
         cmd->ImageBarriers(barriers);
         

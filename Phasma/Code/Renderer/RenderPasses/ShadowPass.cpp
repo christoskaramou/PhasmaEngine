@@ -46,8 +46,6 @@ namespace pe
 
         m_attachments.resize(1);
         m_attachments[0] = {};
-        m_attachments[0].initialLayout = ImageLayout::Attachment;
-        m_attachments[0].finalLayout = ImageLayout::ShaderReadOnly;
         m_attachments[0].loadOp = AttachmentLoadOp::Clear;
         m_attachments[0].storeOp = AttachmentStoreOp::Store;
     }
