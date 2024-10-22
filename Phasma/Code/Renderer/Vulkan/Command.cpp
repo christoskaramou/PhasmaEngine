@@ -326,6 +326,9 @@ namespace pe
         m_commandFlags |= CommandType::GraphicsBit;
         m_dynamicPass = Settings::Get<GlobalSettings>().dynamic_rendering && !skipDynamicPass;
 
+        std::vector<ImageBarrierInfo> attachmentBarriers;
+        attachmentBarriers.reserve(count);
+
         if (m_dynamicPass)
         {
             std::vector<VkRenderingAttachmentInfo> colorInfos;
@@ -335,9 +338,6 @@ namespace pe
             bool hasStencil = false;
             m_attachmentCount = count;
             m_attachments = attachments;
-
-            std::vector<ImageBarrierInfo> attachmentBarriers;
-            attachmentBarriers.reserve(count);
 
             for (uint32_t i = 0; i < count; i++)
             {
@@ -382,7 +382,7 @@ namespace pe
                     barrier.stageFlags = PipelineStage::ColorAttachmentOutputBit;
                     barrier.accessMask = Access::ColorAttachmentWriteBit;
                 }
-                
+
                 attachmentBarriers.push_back(barrier);
             }
 
@@ -422,20 +422,23 @@ namespace pe
                     clearOps++;
                 }
 
-                ImageBarrierInfo info{};
-                info.layout = ImageLayout::Attachment;
+                ImageBarrierInfo barrier{};
+                barrier.image = attachment.image;
+                barrier.layout = ImageLayout::Attachment;
                 if (HasDepth(renderTarget->GetFormat()))
                 {
-                    info.stageFlags = PipelineStage::EarlyFragmentTestsBit | PipelineStage::LateFragmentTestsBit;
-                    info.accessMask = Access::DepthStencilAttachmentWriteBit;
+                    barrier.stageFlags = PipelineStage::EarlyFragmentTestsBit | PipelineStage::LateFragmentTestsBit;
+                    barrier.accessMask = Access::DepthStencilAttachmentWriteBit;
                 }
                 else
                 {
-                    info.stageFlags = PipelineStage::ColorAttachmentOutputBit;
-                    info.accessMask = Access::ColorAttachmentWriteBit;
+                    barrier.stageFlags = PipelineStage::ColorAttachmentOutputBit;
+                    barrier.accessMask = Access::ColorAttachmentWriteBit;
                 }
-                renderTarget->SetCurrentInfo(info);
+                attachmentBarriers.push_back(barrier);
             }
+
+            Image::Barriers(this, attachmentBarriers);
 
             m_renderPass = GetRenderPass(count, attachments);
             m_framebuffer = GetFramebuffer(m_renderPass, count, attachments);
