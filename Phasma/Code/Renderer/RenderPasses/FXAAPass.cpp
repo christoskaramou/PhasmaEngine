@@ -86,6 +86,7 @@ namespace pe
         cmd->BeginDebugRegion("FXAAPass");
         cmd->CopyImage(m_viewportRT, m_frameImage);
         cmd->ImageBarriers(barriers);
+        
         cmd->BeginPass(1, m_attachments.data(), "FXAA");
         cmd->BindPipeline(*m_passInfo);
         cmd->SetViewport(0.f, 0.f, m_viewportRT->GetWidth_f(), m_viewportRT->GetHeight_f());

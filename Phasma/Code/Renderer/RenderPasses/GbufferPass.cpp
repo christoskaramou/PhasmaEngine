@@ -30,10 +30,10 @@ namespace pe
         depthStencilRT = rs->GetDepthStencilTarget("depthStencil");
 
         m_attachments.resize(7);
-        for (int i = 0; i < 6; i++)
+        for (int i = 0; i < 7; i++)
         {
             m_attachments[i] = {};
-            m_attachments[i].initialLayout = ImageLayout::Undefined;
+            m_attachments[i].initialLayout = ImageLayout::Attachment;
             m_attachments[i].finalLayout = ImageLayout::ShaderReadOnly;
         }
         m_attachments[0].image = normalRT;
@@ -43,12 +43,9 @@ namespace pe
         m_attachments[4].image = emissiveRT;
         m_attachments[5].image = transparencyRT;
 
-        m_attachments[6] = {};
         m_attachments[6].image = depthStencilRT;
-        m_attachments[6].initialLayout = ImageLayout::Attachment;
-        m_attachments[6].finalLayout = ImageLayout::ShaderReadOnly;
         m_attachments[6].loadOp = AttachmentLoadOp::Load;
-        m_attachments[6].storeOp = AttachmentStoreOp::Store;
+        //m_attachments[6].storeOp = AttachmentStoreOp::Store;
     }
 
     void GbufferOpaquePass::UpdatePassInfo()
@@ -286,7 +283,7 @@ namespace pe
         barriers[6].image = rts[6];
         barriers[6].layout = ImageLayout::Attachment;
         barriers[6].stageFlags = PipelineStage::EarlyFragmentTestsBit | PipelineStage::LateFragmentTestsBit;
-        barriers[6].accessMask = Access::DepthStencilAttachmentWriteBit;
+        barriers[6].accessMask = Access::DepthStencilAttachmentReadBit;
 
         cmd->ImageBarriers(barriers);
     }

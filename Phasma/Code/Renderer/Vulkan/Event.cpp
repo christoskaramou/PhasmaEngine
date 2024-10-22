@@ -52,7 +52,7 @@ namespace pe
         barrier.srcQueueFamilyIndex = cmd->GetFamilyId();
         barrier.dstQueueFamilyIndex = cmd->GetFamilyId();
         barrier.image = image->ApiHandle();
-        barrier.subresourceRange.aspectMask = GetAspectMaskVK(image->GetFormat());
+        barrier.subresourceRange.aspectMask = Translate<VkImageAspectFlags>(GetAspectMask(image->GetFormat()));
         barrier.subresourceRange.baseMipLevel = 0;
         barrier.subresourceRange.levelCount = image->GetMipLevels();
         barrier.subresourceRange.baseArrayLayer = 0;
@@ -81,7 +81,7 @@ namespace pe
         barrier.srcQueueFamilyIndex = m_cmd->GetFamilyId();
         barrier.dstQueueFamilyIndex = m_cmd->GetFamilyId();
         barrier.image = m_infoImage.image->ApiHandle();
-        barrier.subresourceRange.aspectMask = GetAspectMaskVK(m_infoImage.image->GetFormat());
+        barrier.subresourceRange.aspectMask = Translate<VkImageAspectFlags>(GetAspectMask(m_infoImage.image->GetFormat()));
         barrier.subresourceRange.baseMipLevel = 0;
         barrier.subresourceRange.levelCount = m_infoImage.image->GetMipLevels();
         barrier.subresourceRange.baseArrayLayer = 0;

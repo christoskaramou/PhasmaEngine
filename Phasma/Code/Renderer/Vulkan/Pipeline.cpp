@@ -472,11 +472,12 @@ namespace pe
                 prci.colorAttachmentCount = colorAttachmentCount;
                 prci.pColorAttachmentFormats = vkFormats.data();
 
-                if (IsDepthFormat(info.depthFormat))
+                if (HasDepth(info.depthFormat))
                 {
                     VkFormat depthFormat = Translate<VkFormat>(info.depthFormat);
                     prci.depthAttachmentFormat = depthFormat;
-                    prci.stencilAttachmentFormat = depthFormat;
+                    if (HasStencil(info.depthFormat))
+                        prci.stencilAttachmentFormat = depthFormat;
                 }
 
                 pipeinfo.pNext = &prci;

@@ -29,8 +29,8 @@ namespace pe
             info.name = "ShadowMap_" + std::to_string(i++);
             texture = Image::Create(info);
 
-            texture->CreateRTV();
-            texture->CreateSRV(ImageViewType::Type2D);
+            texture->CreateRTV(true);
+            texture->CreateSRV(ImageViewType::Type2D, -1, true);
         }
 
         SamplerCreateInfo samplerInfo{};
@@ -46,7 +46,7 @@ namespace pe
 
         m_attachments.resize(1);
         m_attachments[0] = {};
-        m_attachments[0].initialLayout = ImageLayout::Undefined;
+        m_attachments[0].initialLayout = ImageLayout::Attachment;
         m_attachments[0].finalLayout = ImageLayout::ShaderReadOnly;
         m_attachments[0].loadOp = AttachmentLoadOp::Clear;
         m_attachments[0].storeOp = AttachmentStoreOp::Store;

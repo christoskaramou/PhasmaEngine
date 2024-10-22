@@ -32,12 +32,11 @@ namespace pe
         for (uint32_t i = 0; i < count; i++)
         {
             const Attachment &attachment = attachments[i];
-            Format format = attachment.image->GetFormat();
             SampleCount samples = attachment.image->GetSamples();
 
             VkAttachmentDescription2 attachmentDescription{};
             attachmentDescription.sType = VK_STRUCTURE_TYPE_ATTACHMENT_DESCRIPTION_2;
-            attachmentDescription.format = Translate<VkFormat>(format);
+            attachmentDescription.format = Translate<VkFormat>(attachment.image->GetFormat());
             attachmentDescription.samples = Translate<VkSampleCountFlagBits>(samples);
             attachmentDescription.loadOp = Translate<VkAttachmentLoadOp>(attachment.loadOp);
             attachmentDescription.storeOp = Translate<VkAttachmentStoreOp>(attachment.storeOp);
@@ -47,7 +46,7 @@ namespace pe
             attachmentDescription.finalLayout = Translate<VkImageLayout>(attachment.finalLayout);
             attachmentsVK.push_back(attachmentDescription);
 
-            if (IsDepthFormat(format))
+            if (HasDepth(attachment.image->GetFormat()))
             {
                 depthStencilReferenceVK.sType = VK_STRUCTURE_TYPE_ATTACHMENT_REFERENCE_2;
                 depthStencilReferenceVK.attachment = attachmentIndex++;

@@ -112,6 +112,7 @@ namespace pe
 
         cmd->BeginDebugRegion("Aabbs");
         cmd->ImageBarriers(barrierInfo);
+
         cmd->BeginPass(2, m_attachments.data(), "AabbsPass");
         cmd->BindIndexBuffer(m_geometry->GetBuffer(), m_geometry->GetAabbIndicesOffset());
         cmd->BindVertexBuffer(m_geometry->GetBuffer(), m_geometry->GetAabbVerticesOffset());
@@ -125,6 +126,7 @@ namespace pe
         DrawFromInfos(m_geometry->GetDrawInfosAlphaCut());
         DrawFromInfos(m_geometry->GetDrawInfosAlphaBlend());
         cmd->EndPass();
+        
         cmd->EndDebugRegion();
 
         m_geometry = nullptr;

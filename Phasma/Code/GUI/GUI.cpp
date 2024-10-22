@@ -593,10 +593,10 @@ namespace pe
         barrierInfo.image = displayRT;
         barrierInfo.layout = ImageLayout::Attachment;
         barrierInfo.stageFlags = PipelineStage::ColorAttachmentOutputBit;
-        barrierInfo.accessMask = Access::ColorAttachmentWriteBit;
+        barrierInfo.accessMask = Access::ColorAttachmentReadBit;
 
         cmd->ImageBarrier(barrierInfo);
-        cmd->BeginPass(1, attachments.data(), "GUI");
+        cmd->BeginPass(1, attachments.data(), "GUI", true);
         ImGui_ImplVulkan_RenderDrawData(ImGui::GetDrawData(), cmd->ApiHandle());
         cmd->EndPass();
 

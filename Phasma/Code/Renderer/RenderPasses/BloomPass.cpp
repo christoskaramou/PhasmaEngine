@@ -214,6 +214,7 @@ namespace pe
         barriers[1].accessMask = Access::ColorAttachmentWriteBit;
 
         cmd->ImageBarriers(barriers);
+        
         cmd->BeginPass(1, m_attachments.data(), "Bloom_GaussianBlurVertical");
         cmd->BindPipeline(*m_passInfo);
         cmd->SetViewport(0.f, 0.f, m_displayRT->GetWidth_f(), m_displayRT->GetHeight_f());

@@ -132,17 +132,19 @@ namespace pe
         barriers[5].image = m_viewportRT;
         barriers[5].layout = ImageLayout::Attachment;
         barriers[5].stageFlags = PipelineStage::ColorAttachmentOutputBit;
-        barriers[5].accessMask = Access::ColorAttachmentWriteBit;
+        barriers[5].accessMask = Access::ColorAttachmentReadBit;
 
         cmd->BeginDebugRegion("SSRPass");
         cmd->CopyImage(m_viewportRT, m_frameImage);
         cmd->ImageBarriers(barriers);
+
         cmd->BeginPass(1, m_attachments.data(), "SSR");
         cmd->BindPipeline(*m_passInfo);
         cmd->SetViewport(0.f, 0.f, m_ssrRT->GetWidth_f(), m_ssrRT->GetHeight_f());
         cmd->SetScissor(0, 0, m_ssrRT->GetWidth(), m_ssrRT->GetHeight());
         cmd->Draw(3, 1, 0, 0);
         cmd->EndPass();
+
         cmd->EndDebugRegion();
     }
 

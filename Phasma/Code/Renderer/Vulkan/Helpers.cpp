@@ -1,89 +1,64 @@
 #if PE_VULKAN
 namespace pe
 {
-    bool IsDepthFormatVK(VkFormat format)
+    bool IsDepthAndStencil(Format format)
     {
-        return format == VK_FORMAT_D32_SFLOAT_S8_UINT ||
-               format == VK_FORMAT_D32_SFLOAT ||
-               format == VK_FORMAT_D24_UNORM_S8_UINT;
+        switch (format)
+        {
+        case Format::D24UnormS8UInt:
+        case Format::D32SFloatS8UInt:
+            return true;
+        default:
+            return false;
+        }
     }
 
-    bool IsDepthFormat(Format format)
+    bool IsDepthOnly(Format format)
     {
-        return format == Format::D32SFloatS8UInt ||
-               format == Format::D32SFloat ||
-               format == Format::D24UnormS8UInt;
+        switch (format)
+        {
+        case Format::D32SFloat:
+            return true;
+        default:
+            return false;
+        }
     }
 
-    bool HasStencilVK(VkFormat format)
+    bool IsStencilOnly(Format format)
     {
-        return format == VK_FORMAT_D32_SFLOAT_S8_UINT ||
-               format == VK_FORMAT_D24_UNORM_S8_UINT;
+        switch (format)
+        {
+        case Format::S8UInt:
+            return true;
+        default:
+            return false;
+        }
     }
 
-    bool IsStencilFormatVK(VkFormat format)
+    bool HasDepth(Format format)
     {
-        return format == VK_FORMAT_S8_UINT;
-    }
-
-    bool IsStencilFormat(Format format)
-    {
-        return format == Format::S8UInt;
+        return IsDepthOnly(format) || IsDepthAndStencil(format);
     }
 
     bool HasStencil(Format format)
     {
-        return format == Format::D32SFloatS8UInt ||
-               format == Format::D24UnormS8UInt;
-    }
-
-    VkImageAspectFlags GetAspectMaskVK(Format format)
-    {
-        if (IsStencilFormat(format))
-        {
-            return VK_IMAGE_ASPECT_STENCIL_BIT;
-        }
-
-        if (IsDepthFormat(format))
-        {
-            VkImageAspectFlags flags = VK_IMAGE_ASPECT_DEPTH_BIT;
-            if (HasStencil(format))
-                flags |= VK_IMAGE_ASPECT_STENCIL_BIT;
-            return flags;
-        }
-
-        return VK_IMAGE_ASPECT_COLOR_BIT;
-    }
-
-    VkImageAspectFlags GetAspectMaskVK(VkFormat format)
-    {
-        if (IsStencilFormatVK(format))
-        {
-            return VK_IMAGE_ASPECT_STENCIL_BIT;
-        }
-
-        if (IsDepthFormatVK(format))
-        {
-            VkImageAspectFlags flags = VK_IMAGE_ASPECT_DEPTH_BIT;
-            if (HasStencilVK(format))
-                flags |= VK_IMAGE_ASPECT_STENCIL_BIT;
-            return flags;
-        }
-
-        return VK_IMAGE_ASPECT_COLOR_BIT;
+        return IsStencilOnly(format) || IsDepthAndStencil(format);
     }
 
     ImageAspectFlags GetAspectMask(Format format)
     {
-        if (IsDepthFormat(format))
-        {
-            ImageAspectFlags flags = ImageAspect::DepthBit;
-            if (HasStencil(format))
-                flags |= ImageAspect::StencilBit;
-            return flags;
-        }
+        ImageAspectFlags flags{};
 
-        return ImageAspect::ColorBit;
+        if (HasDepth(format))
+            flags |= ImageAspect::DepthBit;
+
+        if (HasStencil(format))
+            flags |= ImageAspect::StencilBit;
+
+        if (!flags)
+            flags = ImageAspect::ColorBit;
+
+        return flags;
     }
 
     template <>

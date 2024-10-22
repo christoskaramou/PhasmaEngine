@@ -314,7 +314,7 @@ namespace pe
         barrier.srcQueueFamilyIndex = oldInfo.queueFamilyId;
         barrier.dstQueueFamilyIndex = info.queueFamilyId;
         barrier.image = m_apiHandle;
-        barrier.subresourceRange.aspectMask = GetAspectMaskVK(m_imageInfo.format);
+        barrier.subresourceRange.aspectMask = Translate<VkImageAspectFlags>(GetAspectMask(m_imageInfo.format));
         barrier.subresourceRange.baseMipLevel = info.baseMipLevel;
         barrier.subresourceRange.levelCount = mipLevels;
         barrier.subresourceRange.baseArrayLayer = info.baseArrayLayer;
@@ -371,7 +371,7 @@ namespace pe
             barrier.srcQueueFamilyIndex = cmd->GetFamilyId();
             barrier.dstQueueFamilyIndex = cmd->GetFamilyId();
             barrier.image = image->m_apiHandle;
-            barrier.subresourceRange.aspectMask = GetAspectMaskVK(imageInfo.format);
+            barrier.subresourceRange.aspectMask = Translate<VkImageAspectFlags>(GetAspectMask(imageInfo.format));
             barrier.subresourceRange.baseMipLevel = info.baseMipLevel;
             barrier.subresourceRange.levelCount = mipLevels;
             barrier.subresourceRange.baseArrayLayer = info.baseArrayLayer;
@@ -452,21 +452,7 @@ namespace pe
         viewInfoVK.image = m_apiHandle;
         viewInfoVK.viewType = Translate<VkImageViewType>(type);
         viewInfoVK.format = Translate<VkFormat>(m_imageInfo.format);
-        if (IsDepthFormat(m_imageInfo.format))
-        {
-            if (useStencil && HasStencil(m_imageInfo.format))
-                viewInfoVK.subresourceRange.aspectMask = VK_IMAGE_ASPECT_STENCIL_BIT;
-            else
-                viewInfoVK.subresourceRange.aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT;
-        }
-        else if (IsStencilFormat(m_imageInfo.format))
-        {
-            viewInfoVK.subresourceRange.aspectMask = VK_IMAGE_ASPECT_STENCIL_BIT;
-        }
-        else
-        {
-            viewInfoVK.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-        }
+        viewInfoVK.subresourceRange.aspectMask = Translate<VkImageAspectFlags>(GetAspectMask(m_imageInfo.format));
 
         viewInfoVK.subresourceRange.baseMipLevel = mip == -1 ? 0 : mip;
         viewInfoVK.subresourceRange.levelCount = mip == -1 ? m_imageInfo.mipLevels : 1;
@@ -511,7 +497,7 @@ namespace pe
         region.bufferOffset = 0;
         region.bufferRowLength = 0;
         region.bufferImageHeight = 0;
-        region.imageSubresource.aspectMask = GetAspectMaskVK(m_imageInfo.format);
+        region.imageSubresource.aspectMask = Translate<VkImageAspectFlags>(GetAspectMask(m_imageInfo.format));
         region.imageSubresource.mipLevel = mipLevel;
         region.imageSubresource.baseArrayLayer = baseArrayLayer;
         region.imageSubresource.layerCount = layerCount ? layerCount : m_imageInfo.arrayLayers;
@@ -561,12 +547,12 @@ namespace pe
 
         VkImageCopy2 region{};
         region.sType = VK_STRUCTURE_TYPE_IMAGE_COPY_2;
-        region.srcSubresource.aspectMask = GetAspectMaskVK(m_imageInfo.format);
+        region.srcSubresource.aspectMask = Translate<VkImageAspectFlags>(GetAspectMask(m_imageInfo.format));
         region.srcSubresource.baseArrayLayer = 0;
         region.srcSubresource.layerCount = 1;
         region.srcSubresource.mipLevel = 0;
         region.srcOffset = {0, 0, 0};
-        region.dstSubresource.aspectMask = GetAspectMaskVK(m_imageInfo.format);
+        region.dstSubresource.aspectMask = Translate<VkImageAspectFlags>(GetAspectMask(m_imageInfo.format));
         region.dstSubresource.baseArrayLayer = 0;
         region.dstSubresource.layerCount = 1;
         region.dstSubresource.mipLevel = 0;

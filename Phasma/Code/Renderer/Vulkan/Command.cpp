@@ -200,7 +200,7 @@ namespace pe
             clearValue.float32[3] = color[3];
 
             VkImageSubresourceRange rangeVK{};
-            rangeVK.aspectMask = GetAspectMaskVK(image->GetFormat());
+            rangeVK.aspectMask = Translate<VkImageAspectFlags>(GetAspectMask(image->GetFormat()));
             rangeVK.baseMipLevel = 0;
             rangeVK.levelCount = 1;
             rangeVK.baseArrayLayer = 0;
@@ -235,7 +235,7 @@ namespace pe
             clearValue.stencil = static_cast<uint32_t>(image->m_imageInfo.clearColor[1]);
 
             VkImageSubresourceRange rangeVK{};
-            rangeVK.aspectMask = GetAspectMaskVK(image->GetFormat());
+            rangeVK.aspectMask = Translate<VkImageAspectFlags>(GetAspectMask(image->GetFormat()));
             rangeVK.baseMipLevel = 0;
             rangeVK.levelCount = 1;
             rangeVK.baseArrayLayer = 0;
@@ -322,27 +322,34 @@ namespace pe
         }
     }
 
-    void CommandBuffer::BeginPass(uint32_t count, Attachment *attachments, const std::string &name)
+    void CommandBuffer::BeginPass(uint32_t count, Attachment *attachments, const std::string &name, bool skipDynamicPass)
     {
         BeginDebugRegion(name + "_pass");
         m_commandFlags |= CommandType::GraphicsBit;
+        m_dynamicPass = Settings::Get<GlobalSettings>().dynamic_rendering && !skipDynamicPass;
 
-        if (Settings::Get<GlobalSettings>().dynamic_rendering)
+        if (m_dynamicPass)
         {
             std::vector<VkRenderingAttachmentInfo> colorInfos;
             colorInfos.reserve(count);
             VkRenderingAttachmentInfo depthInfo{};
             bool hasDepth = false;
+            bool hasStencil = false;
             m_attachmentCount = count;
             m_attachments = attachments;
+
+            std::vector<ImageBarrierInfo> attachmentsBarriers;
+            attachmentsBarriers.reserve(count);
 
             for (uint32_t i = 0; i < count; i++)
             {
                 const Attachment &attachment = attachments[i];
 
-                if (IsDepthFormat(attachment.image->GetFormat()))
+                if (HasDepth(attachment.image->GetFormat()))
                 {
                     hasDepth = true;
+                    hasStencil = HasStencil(attachment.image->GetFormat());
+
                     const vec4 &clearColor = attachment.image->GetClearColor();
                     const float clearDepth = clearColor[0];
                     uint32_t clearStencil = static_cast<uint32_t>(clearColor[1]);
@@ -353,6 +360,16 @@ namespace pe
                     depthInfo.loadOp = Translate<VkAttachmentLoadOp>(attachment.loadOp);
                     depthInfo.storeOp = Translate<VkAttachmentStoreOp>(attachment.storeOp);
                     depthInfo.clearValue.depthStencil = {clearDepth, clearStencil};
+
+                    if (attachment.initialLayout != attachment.image->GetCurrentInfo().layout)
+                    {
+                        ImageBarrierInfo barrier{};
+                        barrier.image = attachment.image;
+                        barrier.layout = attachment.initialLayout;
+                        barrier.stageFlags = PipelineStage::EarlyFragmentTestsBit | PipelineStage::LateFragmentTestsBit;
+                        barrier.accessMask = Access::DepthStencilAttachmentWriteBit;
+                        attachmentsBarriers.push_back(barrier);
+                    }
                 }
                 else
                 {
@@ -366,8 +383,21 @@ namespace pe
                     colorInfo.storeOp = Translate<VkAttachmentStoreOp>(attachment.storeOp);
                     colorInfo.clearValue.color = {clearColor[0], clearColor[1], clearColor[2], clearColor[3]};
                     colorInfos.push_back(colorInfo);
+
+                    if (attachment.initialLayout != attachment.image->GetCurrentInfo().layout)
+                    {
+                        ImageBarrierInfo barrier{};
+                        barrier.image = attachment.image;
+                        barrier.layout = attachment.initialLayout;
+                        barrier.stageFlags = PipelineStage::ColorAttachmentOutputBit;
+                        barrier.accessMask = Access::ColorAttachmentWriteBit;
+                        attachmentsBarriers.push_back(barrier);
+                    }
                 }
             }
+
+            if (!attachmentsBarriers.empty())
+                Image::Barriers(this, attachmentsBarriers);
 
             VkRenderingInfo renderingInfo{};
             renderingInfo.sType = VK_STRUCTURE_TYPE_RENDERING_INFO;
@@ -376,7 +406,7 @@ namespace pe
             renderingInfo.colorAttachmentCount = static_cast<uint32_t>(colorInfos.size());
             renderingInfo.pColorAttachments = colorInfos.data();
             renderingInfo.pDepthAttachment = hasDepth ? &depthInfo : nullptr;
-            renderingInfo.pStencilAttachment = hasDepth ? &depthInfo : nullptr;
+            renderingInfo.pStencilAttachment = hasStencil ? &depthInfo : nullptr;
 
             vkCmdBeginRendering(m_apiHandle, &renderingInfo);
         }
@@ -389,8 +419,7 @@ namespace pe
             {
                 const Attachment &attachment = attachments[i];
                 Image *renderTarget = attachment.image;
-                Format format = renderTarget->GetFormat();
-                if (IsDepthFormat(format) && (attachment.loadOp == AttachmentLoadOp::Clear || attachment.stencilLoadOp == AttachmentLoadOp::Clear))
+                if (HasDepth(renderTarget->GetFormat()) && (attachment.loadOp == AttachmentLoadOp::Clear || attachment.stencilLoadOp == AttachmentLoadOp::Clear))
                 {
                     const float clearDepth = renderTarget->m_imageInfo.clearColor[0];
                     uint32_t clearStencil = static_cast<uint32_t>(renderTarget->m_imageInfo.clearColor[1]);
@@ -429,7 +458,7 @@ namespace pe
 
     void CommandBuffer::EndPass()
     {
-        if (Settings::Get<GlobalSettings>().dynamic_rendering)
+        if (m_dynamicPass)
         {
             vkCmdEndRendering(m_apiHandle);
 
@@ -438,17 +467,31 @@ namespace pe
 
             for (uint32_t i = 0; i < m_attachmentCount; i++)
             {
-                if (m_attachments[i].finalLayout != m_attachments[i].initialLayout &&
-                    m_attachments[i].finalLayout != ImageLayout::Undefined &&
-                    m_attachments[i].finalLayout != ImageLayout::Preinitialized)
+                const Attachment &attachment = m_attachments[i];
+                if (attachment.finalLayout != attachment.initialLayout &&
+                    attachment.finalLayout != ImageLayout::Undefined &&
+                    attachment.finalLayout != ImageLayout::Preinitialized)
+                {
+                    ImageBarrierInfo currentInfo = attachment.image->GetCurrentInfo();
+                    if (HasDepth(attachment.image->GetFormat()))
                     {
-                        ImageBarrierInfo barrier{};
-                        barrier.image = m_attachments[i].image;
-                        barrier.layout = m_attachments[i].finalLayout;
-                        barrier.stageFlags = PipelineStage::AllGraphicsBit;
-                        barrier.accessMask = Access::None;
-                        barriers.push_back(barrier);
+                        currentInfo.accessMask = Access::DepthStencilAttachmentWriteBit;
+                        currentInfo.stageFlags = PipelineStage::EarlyFragmentTestsBit | PipelineStage::LateFragmentTestsBit;
                     }
+                    else
+                    {
+                        currentInfo.accessMask = Access::ColorAttachmentWriteBit;
+                        currentInfo.stageFlags = PipelineStage::ColorAttachmentOutputBit;
+                    }
+                    attachment.image->SetCurrentInfoAll(currentInfo);
+
+                    ImageBarrierInfo barrier{};
+                    barrier.image = attachment.image;
+                    barrier.layout = attachment.finalLayout;
+                    barrier.stageFlags = PipelineStage::AllGraphicsBit;
+                    barrier.accessMask = Access::None;
+                    barriers.push_back(barrier);
+                }
             }
             Image::Barriers(this, barriers);
 
@@ -464,6 +507,7 @@ namespace pe
 
         EndDebugRegion();
 
+        m_dynamicPass = false;
         m_boundPipeline = nullptr;
         m_boundVertexBuffer = nullptr;
         m_boundVertexBufferOffset = -1;
@@ -807,11 +851,12 @@ namespace pe
 
         for (uint32_t i = 0; i < infos.size(); i++)
         {
+            const MemoryBarrierInfo &info = infos[i];
             barriers[i].sType = VK_STRUCTURE_TYPE_MEMORY_BARRIER_2;
-            barriers[i].srcStageMask = Translate<VkPipelineStageFlags2>(infos[i].srcStageMask);
-            barriers[i].srcAccessMask = Translate<VkAccessFlags2>(infos[i].srcAccessMask);
-            barriers[i].dstStageMask = Translate<VkPipelineStageFlags2>(infos[i].dstStageMask);
-            barriers[i].dstAccessMask = Translate<VkAccessFlags2>(infos[i].dstAccessMask);
+            barriers[i].srcStageMask = Translate<VkPipelineStageFlags2>(info.srcStageMask);
+            barriers[i].srcAccessMask = Translate<VkAccessFlags2>(info.srcAccessMask);
+            barriers[i].dstStageMask = Translate<VkPipelineStageFlags2>(info.dstStageMask);
+            barriers[i].dstAccessMask = Translate<VkAccessFlags2>(info.dstAccessMask);
         }
 
         VkDependencyInfo dependencyInfo{};

@@ -11,16 +11,12 @@ namespace pe
     extern EventID EventFileWrite;
     // ---------------------------------
 
-    extern bool IsDepthFormatVK(VkFormat format);
-    extern bool IsDepthFormat(Format format);
-    extern VkImageAspectFlags GetAspectMaskVK(Format format);
-    extern VkImageAspectFlags GetAspectMaskVK(VkFormat format);
-    extern ImageAspectFlags GetAspectMask(Format format);
-    extern bool HasStencilVK(VkFormat format);
+    extern bool IsDepthStencil(Format format);
+    extern bool IsDepthOnly(Format format);
+    extern bool IsStencilOnly(Format format);
+    extern bool HasDepth(Format format);
     extern bool HasStencil(Format format);
-    extern bool IsStencilFormatVK(VkFormat format);
-    extern bool IsStencilFormat(Format format);
-    extern void GetInfoFromLayout(ImageLayout layout, PipelineStageFlags &stageFlags, AccessFlags &accessMask);
+    extern ImageAspectFlags GetAspectMask(Format format);
 
     extern ThreadPool e_ThreadPool;
     extern ThreadPool e_Update_ThreadPool;

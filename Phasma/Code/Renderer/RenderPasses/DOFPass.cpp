@@ -95,6 +95,7 @@ namespace pe
         cmd->BeginDebugRegion("DOFPass");
         cmd->CopyImage(m_displayRT, m_frameImage); // Copy RT to image
         cmd->ImageBarriers(barriers);
+
         cmd->BeginPass(1, m_attachments.data(), "DOF");
         cmd->BindPipeline(*m_passInfo);
         cmd->SetViewport(0.f, 0.f, m_displayRT->GetWidth_f(), m_displayRT->GetHeight_f());
@@ -104,6 +105,7 @@ namespace pe
         cmd->PushConstants();
         cmd->Draw(3, 1, 0, 0);
         cmd->EndPass();
+        
         cmd->EndDebugRegion();
     }
 
