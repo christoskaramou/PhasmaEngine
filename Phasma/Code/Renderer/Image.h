@@ -36,6 +36,7 @@ namespace pe
                      queueFamilyId == other.queueFamilyId);
         }
     };
+    using ImageTrackInfo = ImageBarrierInfo;
 
     class SamplerCreateInfo : public Hashable
     {
@@ -101,21 +102,21 @@ namespace pe
         Image(const ImageCreateInfo &info);
         ~Image();
 
-        uint32_t GetWidth() { return m_imageInfo.width; }
-        uint32_t GetHeight() { return m_imageInfo.height; }
-        float GetWidth_f() { return static_cast<float>(m_imageInfo.width); }
-        float GetHeight_f() { return static_cast<float>(m_imageInfo.height); }
+        uint32_t GetWidth() { return m_createInfo.width; }
+        uint32_t GetHeight() { return m_createInfo.height; }
+        float GetWidth_f() { return static_cast<float>(m_createInfo.width); }
+        float GetHeight_f() { return static_cast<float>(m_createInfo.height); }
         Sampler *GetSampler() { return m_sampler; }
-        const std::string &GetName() { return m_imageInfo.name; }
-        Format GetFormat() { return m_imageInfo.format; }
-        Format *GetFormatPtr() { return &m_imageInfo.format; }
-        uint32_t GetMipLevels() { return m_imageInfo.mipLevels; }
-        uint32_t GetArrayLayers() { return m_imageInfo.arrayLayers; }
-        SampleCount GetSamples() { return m_imageInfo.samples; }
-        const vec4 &GetClearColor() { return m_imageInfo.clearColor; }
-        const ImageBarrierInfo &GetCurrentInfo(uint32_t layer = 0, uint32_t mip = 0) { return m_infos[layer][mip]; }
-        void SetCurrentInfo(const ImageBarrierInfo &info, uint32_t layer = 0, uint32_t mip = 0) { m_infos[layer][mip] = info; }
-        void SetCurrentInfoAll(const ImageBarrierInfo &info);
+        const std::string &GetName() { return m_createInfo.name; }
+        Format GetFormat() { return m_createInfo.format; }
+        Format *GetFormatPtr() { return &m_createInfo.format; }
+        uint32_t GetMipLevels() { return m_createInfo.mipLevels; }
+        uint32_t GetArrayLayers() { return m_createInfo.arrayLayers; }
+        SampleCount GetSamples() { return m_createInfo.samples; }
+        const vec4 &GetClearColor() { return m_createInfo.clearColor; }
+        const ImageTrackInfo &GetCurrentInfo(uint32_t layer = 0, uint32_t mip = 0) { return m_trackInfos[layer][mip]; }
+        void SetCurrentInfo(const ImageTrackInfo &info, uint32_t layer = 0, uint32_t mip = 0) { m_trackInfos[layer][mip] = info; }
+        void SetCurrentInfoAll(const ImageTrackInfo &info);
         void CreateRTV(bool useStencil = false);
         void CreateSRV(ImageViewType type, int mip = -1, bool useStencil = false);
         void CreateUAV(ImageViewType type, uint32_t mip, bool useStencil = false);
@@ -152,16 +153,14 @@ namespace pe
         void GenerateMipMaps(CommandBuffer *cmd);
         void BlitImage(CommandBuffer *cmd, Image *src, ImageBlit *region, Filter filter);
 
-        float width_f{};
-        float height_f{};
         Sampler *m_sampler;
         AllocationApiHandle m_allocation;
-        ImageCreateInfo m_imageInfo;
-        ImageViewApiHandle m_rtv;                               // Render target view
-        ImageViewApiHandle m_srv;                               // Shader resource view
-        std::vector<ImageViewApiHandle> m_srvs;                 // Shader resource views for multiple mip levels
-        std::vector<ImageViewApiHandle> m_uavs;                 // Unordered access views
-        std::vector<std::vector<ImageBarrierInfo>> m_infos{};   // Tracking image barrier info for each layer and mip level
+        ImageCreateInfo m_createInfo;
+        ImageViewApiHandle m_rtv;                                // Render target view
+        ImageViewApiHandle m_srv;                                // Shader resource view
+        std::vector<ImageViewApiHandle> m_srvs;                  // Shader resource views for multiple mip levels
+        std::vector<ImageViewApiHandle> m_uavs;                  // Unordered access views
+        std::vector<std::vector<ImageTrackInfo>> m_trackInfos{}; // Tracking image barrier info for each layer and mip level
         bool m_mipmapsGenerated = false;
     };
 }

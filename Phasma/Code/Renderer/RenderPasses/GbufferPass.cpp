@@ -169,17 +169,6 @@ namespace pe
     {
         std::vector<Image *> colorTargets{normalRT, albedoRT, srmRT, velocityRT, emissiveRT, viewportRT, transparencyRT};
         cmd->ClearColors(colorTargets);
-
-        std::vector<ImageBarrierInfo> barriers(colorTargets.size());
-        for (size_t i = 0; i < barriers.size(); i++)
-        {
-            barriers[i].image = colorTargets[i];
-            barriers[i].layout = ImageLayout::Attachment;
-            barriers[i].stageFlags = PipelineStage::ColorAttachmentOutputBit;
-            barriers[i].accessMask = Access::ColorAttachmentWriteBit;
-        }
-
-        cmd->ImageBarriers(barriers);
     }
 
     void GbufferOpaquePass::ClearDepthStencil(CommandBuffer *cmd)
@@ -189,7 +178,6 @@ namespace pe
 
     void GbufferOpaquePass::Destroy()
     {
-        Buffer::Destroy(uniform);
     }
 
     void GbufferTransparentPass::Init()
@@ -256,25 +244,6 @@ namespace pe
 
     void GbufferTransparentPass::PassBarriers(CommandBuffer *cmd)
     {
-        Image *rts[7]{normalRT, albedoRT, srmRT, velocityRT, emissiveRT, transparencyRT, depthStencilRT};
-
-        // Color targets
-        std::vector<ImageBarrierInfo> barriers(7);
-        for (size_t i = 0; i < 6; i++)
-        {
-            barriers[i].image = rts[i];
-            barriers[i].layout = ImageLayout::Attachment;
-            barriers[i].stageFlags = PipelineStage::ColorAttachmentOutputBit;
-            barriers[i].accessMask = Access::ColorAttachmentReadBit;
-        }
-
-        // Depth
-        barriers[6].image = rts[6];
-        barriers[6].layout = ImageLayout::Attachment;
-        barriers[6].stageFlags = PipelineStage::EarlyFragmentTestsBit | PipelineStage::LateFragmentTestsBit;
-        barriers[6].accessMask = Access::DepthStencilAttachmentReadBit;
-
-        cmd->ImageBarriers(barriers);
     }
 
     void GbufferTransparentPass::Draw(CommandBuffer *cmd)
@@ -297,8 +266,6 @@ namespace pe
 
         if (m_geometry->HasAlphaDrawInfo())
         {
-            PassBarriers(cmd);
-
             cmd->BeginPass(7, m_attachments.data(), "GbufferTransparentPass");
             cmd->BindIndexBuffer(m_geometry->GetBuffer(), 0);
             cmd->BindVertexBuffer(m_geometry->GetBuffer(), m_geometry->GetVerticesOffset());
@@ -385,17 +352,6 @@ namespace pe
     {
         std::vector<Image *> colorTargets{normalRT, albedoRT, srmRT, velocityRT, emissiveRT, viewportRT, transparencyRT};
         cmd->ClearColors(colorTargets);
-
-        std::vector<ImageBarrierInfo> barriers(colorTargets.size());
-        for (size_t i = 0; i < barriers.size(); i++)
-        {
-            barriers[i].image = colorTargets[i];
-            barriers[i].layout = ImageLayout::Attachment;
-            barriers[i].stageFlags = PipelineStage::ColorAttachmentOutputBit;
-            barriers[i].accessMask = Access::ColorAttachmentWriteBit;
-        }
-
-        cmd->ImageBarriers(barriers);
     }
 
     void GbufferTransparentPass::ClearDepthStencil(CommandBuffer *cmd)
@@ -405,6 +361,5 @@ namespace pe
 
     void GbufferTransparentPass::Destroy()
     {
-        Buffer::Destroy(uniform);
     }
 }

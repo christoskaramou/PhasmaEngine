@@ -182,7 +182,7 @@ namespace pe
         samplerInfo.addressModeW = SamplerAddressMode::ClampToEdge;
         cubeMap->m_sampler = Sampler::Create(samplerInfo);
 
-        for (uint32_t i = 0; i < cubeMap->m_imageInfo.arrayLayers; ++i)
+        for (uint32_t i = 0; i < cubeMap->m_createInfo.arrayLayers; ++i)
         {
             int texWidth, texHeight, texChannels;
             stbi_uc *pixels = stbi_load(paths[i].c_str(), &texWidth, &texHeight, &texChannels, STBI_rgb_alpha);
@@ -201,43 +201,43 @@ namespace pe
     {
         PE_ERROR_IF(!ImageTilingSupport(info.format, info.tiling), "Image::Image(const ImageCreateInfo &info): Image tiling support error.");
 
-        m_imageInfo = info;
+        m_createInfo = info;
         m_sampler = nullptr;
 
         m_rtv = {};
-        m_srvs.resize(m_imageInfo.mipLevels);
-        for (uint32_t i = 0; i < m_imageInfo.mipLevels; i++)
+        m_srvs.resize(m_createInfo.mipLevels);
+        for (uint32_t i = 0; i < m_createInfo.mipLevels; i++)
             m_srvs[i] = {};
-        m_uavs.resize(m_imageInfo.mipLevels);
-        for (uint32_t i = 0; i < m_imageInfo.mipLevels; i++)
+        m_uavs.resize(m_createInfo.mipLevels);
+        for (uint32_t i = 0; i < m_createInfo.mipLevels; i++)
             m_uavs[i] = {};
 
-        m_infos.resize(m_imageInfo.arrayLayers);
-        for (uint32_t i = 0; i < m_imageInfo.arrayLayers; i++)
+        m_trackInfos.resize(m_createInfo.arrayLayers);
+        for (uint32_t i = 0; i < m_createInfo.arrayLayers; i++)
         {
-            m_infos[i] = std::vector<ImageBarrierInfo>(m_imageInfo.mipLevels);
-            for (uint32_t j = 0; j < m_imageInfo.mipLevels; j++)
+            m_trackInfos[i] = std::vector<ImageTrackInfo>(m_createInfo.mipLevels);
+            for (uint32_t j = 0; j < m_createInfo.mipLevels; j++)
             {
-                ImageBarrierInfo info{};
+                ImageTrackInfo info{};
                 info.image = this;
-                info.layout = m_imageInfo.initialLayout;
-                m_infos[i][j] = info;
+                info.layout = m_createInfo.initialLayout;
+                m_trackInfos[i][j] = info;
             }
         }
 
         VkImageCreateInfo imageInfoVK{};
         imageInfoVK.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
-        imageInfoVK.flags = Translate<VkImageCreateFlags>(m_imageInfo.imageFlags);
-        imageInfoVK.imageType = Translate<VkImageType>(m_imageInfo.imageType);
-        imageInfoVK.format = Translate<VkFormat>(m_imageInfo.format);
-        imageInfoVK.extent = VkExtent3D{m_imageInfo.width, m_imageInfo.height, m_imageInfo.depth};
-        imageInfoVK.mipLevels = m_imageInfo.mipLevels;
-        imageInfoVK.arrayLayers = m_imageInfo.arrayLayers;
-        imageInfoVK.samples = Translate<VkSampleCountFlagBits>(m_imageInfo.samples);
-        imageInfoVK.tiling = Translate<VkImageTiling>(m_imageInfo.tiling);
-        imageInfoVK.usage = Translate<VkImageUsageFlags>(m_imageInfo.usage | ImageUsage::TransferSrcBit); // All images can be copied
-        imageInfoVK.sharingMode = Translate<VkSharingMode>(m_imageInfo.sharingMode);
-        imageInfoVK.initialLayout = Translate<VkImageLayout>(m_imageInfo.initialLayout);
+        imageInfoVK.flags = Translate<VkImageCreateFlags>(m_createInfo.imageFlags);
+        imageInfoVK.imageType = Translate<VkImageType>(m_createInfo.imageType);
+        imageInfoVK.format = Translate<VkFormat>(m_createInfo.format);
+        imageInfoVK.extent = VkExtent3D{m_createInfo.width, m_createInfo.height, m_createInfo.depth};
+        imageInfoVK.mipLevels = m_createInfo.mipLevels;
+        imageInfoVK.arrayLayers = m_createInfo.arrayLayers;
+        imageInfoVK.samples = Translate<VkSampleCountFlagBits>(m_createInfo.samples);
+        imageInfoVK.tiling = Translate<VkImageTiling>(m_createInfo.tiling);
+        imageInfoVK.usage = Translate<VkImageUsageFlags>(m_createInfo.usage | ImageUsage::TransferSrcBit); // All images can be copied
+        imageInfoVK.sharingMode = Translate<VkSharingMode>(m_createInfo.sharingMode);
+        imageInfoVK.initialLayout = Translate<VkImageLayout>(m_createInfo.initialLayout);
 
         VmaAllocationCreateInfo allocationCreateInfo = {};
         allocationCreateInfo.usage = VMA_MEMORY_USAGE_AUTO;
@@ -249,7 +249,7 @@ namespace pe
         m_apiHandle = imageVK;
         m_allocation = allocationVK;
 
-        Debug::SetObjectName(m_apiHandle, m_imageInfo.name);
+        Debug::SetObjectName(m_apiHandle, m_createInfo.name);
     }
 
     Image::~Image()
@@ -299,9 +299,9 @@ namespace pe
     {
         PE_ERROR_IF(!cmd, "Image::Barrier(): no command buffer specified.");
 
-        uint mipLevels = info.mipLevels ? info.mipLevels : m_imageInfo.mipLevels;
-        uint arrayLayers = info.arrayLayers ? info.arrayLayers : m_imageInfo.arrayLayers;
-        const ImageBarrierInfo &oldInfo = m_infos[info.baseArrayLayer][info.baseMipLevel];
+        uint mipLevels = info.mipLevels ? info.mipLevels : m_createInfo.mipLevels;
+        uint arrayLayers = info.arrayLayers ? info.arrayLayers : m_createInfo.arrayLayers;
+        const ImageTrackInfo &oldInfo = m_trackInfos[info.baseArrayLayer][info.baseMipLevel];
 
         VkImageMemoryBarrier2 barrier{};
         barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2;
@@ -314,7 +314,7 @@ namespace pe
         barrier.srcQueueFamilyIndex = oldInfo.queueFamilyId;
         barrier.dstQueueFamilyIndex = info.queueFamilyId;
         barrier.image = m_apiHandle;
-        barrier.subresourceRange.aspectMask = Translate<VkImageAspectFlags>(GetAspectMask(m_imageInfo.format));
+        barrier.subresourceRange.aspectMask = Translate<VkImageAspectFlags>(GetAspectMask(m_createInfo.format));
         barrier.subresourceRange.baseMipLevel = info.baseMipLevel;
         barrier.subresourceRange.levelCount = mipLevels;
         barrier.subresourceRange.baseArrayLayer = info.baseArrayLayer;
@@ -325,13 +325,13 @@ namespace pe
         depInfo.imageMemoryBarrierCount = 1;
         depInfo.pImageMemoryBarriers = &barrier;
 
-        cmd->BeginDebugRegion("ImageBarrier: " + m_imageInfo.name);
+        cmd->BeginDebugRegion("ImageBarrier: " + m_createInfo.name);
         vkCmdPipelineBarrier2(cmd->ApiHandle(), &depInfo);
         cmd->EndDebugRegion();
 
         for (uint32_t i = 0; i < arrayLayers; i++)
             for (uint32_t j = 0; j < mipLevels; j++)
-                m_infos[info.baseArrayLayer + i][info.baseMipLevel + j] = info;
+                m_trackInfos[info.baseArrayLayer + i][info.baseMipLevel + j] = info;
     }
 
     void Image::Barriers(CommandBuffer *cmd, const std::vector<ImageBarrierInfo> &infos)
@@ -352,13 +352,13 @@ namespace pe
                 continue;
 
             Image *image = info.image;
-            const ImageCreateInfo &imageInfo = image->m_imageInfo;
+            const ImageCreateInfo &imageInfo = image->m_createInfo;
 
             // Get the correct mip levels and array layers if they are not specified (zero)
             uint mipLevels = info.mipLevels ? info.mipLevels : imageInfo.mipLevels;
             uint arrayLayers = info.arrayLayers ? info.arrayLayers : imageInfo.arrayLayers;
 
-            const ImageBarrierInfo &oldInfo = image->m_infos[info.baseArrayLayer][info.baseMipLevel];
+            const ImageTrackInfo &oldInfo = image->m_trackInfos[info.baseArrayLayer][info.baseMipLevel];
 
             VkImageMemoryBarrier2 barrier{};
             barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2;
@@ -382,7 +382,7 @@ namespace pe
 
             for (uint32_t i = 0; i < arrayLayers; i++)
                 for (uint32_t j = 0; j < mipLevels; j++)
-                    image->m_infos[info.baseArrayLayer + i][info.baseMipLevel + j] = info;
+                    image->m_trackInfos[info.baseArrayLayer + i][info.baseMipLevel + j] = info;
         }
 
         if (!barriers.empty())
@@ -398,21 +398,21 @@ namespace pe
         }
     }
 
-    void Image::SetCurrentInfoAll(const ImageBarrierInfo &info)
+    void Image::SetCurrentInfoAll(const ImageTrackInfo &info)
     {
-        for (uint32_t i = 0; i < m_infos.size(); i++)
+        for (uint32_t i = 0; i < m_trackInfos.size(); i++)
         {
-            for (uint32_t j = 0; j < m_infos[i].size(); j++)
+            for (uint32_t j = 0; j < m_trackInfos[i].size(); j++)
             {
-                m_infos[i][j] = info;
+                m_trackInfos[i][j] = info;
             }
         }
     }
 
     void Image::CreateRTV(bool useStencil)
     {
-        PE_ERROR_IF(!(m_imageInfo.usage & ImageUsage::ColorAttachmentBit ||
-                      m_imageInfo.usage & ImageUsage::DepthStencilAttachmentBit),
+        PE_ERROR_IF(!(m_createInfo.usage & ImageUsage::ColorAttachmentBit ||
+                      m_createInfo.usage & ImageUsage::DepthStencilAttachmentBit),
                     "Image was not created with ColorAttachmentBit or DepthStencilAttachmentBit for RTV usage");
 
         m_rtv = CreateImageView(ImageViewType::Type2D, 0, useStencil);
@@ -420,7 +420,7 @@ namespace pe
 
     void Image::CreateSRV(ImageViewType type, int mip, bool useStencil)
     {
-        PE_ERROR_IF(!(m_imageInfo.usage & ImageUsage::SampledBit), "Image was not created with SampledBit for SRV usage");
+        PE_ERROR_IF(!(m_createInfo.usage & ImageUsage::SampledBit), "Image was not created with SampledBit for SRV usage");
 
         ImageViewApiHandle view = CreateImageView(type, mip, useStencil);
         if (mip == -1)
@@ -431,7 +431,7 @@ namespace pe
 
     void Image::CreateUAV(ImageViewType type, uint32_t mip, bool useStencil)
     {
-        PE_ERROR_IF(!(m_imageInfo.usage & ImageUsage::StorageBit), "Image was not created with StorageBit for UAV usage");
+        PE_ERROR_IF(!(m_createInfo.usage & ImageUsage::StorageBit), "Image was not created with StorageBit for UAV usage");
 
         m_uavs[mip] = CreateImageView(type, static_cast<int>(mip), useStencil);
     }
@@ -451,13 +451,13 @@ namespace pe
         viewInfoVK.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
         viewInfoVK.image = m_apiHandle;
         viewInfoVK.viewType = Translate<VkImageViewType>(type);
-        viewInfoVK.format = Translate<VkFormat>(m_imageInfo.format);
-        viewInfoVK.subresourceRange.aspectMask = Translate<VkImageAspectFlags>(GetAspectMask(m_imageInfo.format));
+        viewInfoVK.format = Translate<VkFormat>(m_createInfo.format);
+        viewInfoVK.subresourceRange.aspectMask = Translate<VkImageAspectFlags>(GetAspectMask(m_createInfo.format));
 
         viewInfoVK.subresourceRange.baseMipLevel = mip == -1 ? 0 : mip;
-        viewInfoVK.subresourceRange.levelCount = mip == -1 ? m_imageInfo.mipLevels : 1;
+        viewInfoVK.subresourceRange.levelCount = mip == -1 ? m_createInfo.mipLevels : 1;
         viewInfoVK.subresourceRange.baseArrayLayer = 0;
-        viewInfoVK.subresourceRange.layerCount = m_imageInfo.arrayLayers;
+        viewInfoVK.subresourceRange.layerCount = m_createInfo.arrayLayers;
         viewInfoVK.components.r = VK_COMPONENT_SWIZZLE_IDENTITY;
         viewInfoVK.components.g = VK_COMPONENT_SWIZZLE_IDENTITY;
         viewInfoVK.components.b = VK_COMPONENT_SWIZZLE_IDENTITY;
@@ -466,7 +466,7 @@ namespace pe
         VkImageView vkView;
         PE_CHECK(vkCreateImageView(RHII.GetDevice(), &viewInfoVK, nullptr, &vkView));
         ImageViewApiHandle view = vkView;
-        Debug::SetObjectName(view, m_imageInfo.name);
+        Debug::SetObjectName(view, m_createInfo.name);
 
         return view;
     }
@@ -497,12 +497,12 @@ namespace pe
         region.bufferOffset = 0;
         region.bufferRowLength = 0;
         region.bufferImageHeight = 0;
-        region.imageSubresource.aspectMask = Translate<VkImageAspectFlags>(GetAspectMask(m_imageInfo.format));
+        region.imageSubresource.aspectMask = Translate<VkImageAspectFlags>(GetAspectMask(m_createInfo.format));
         region.imageSubresource.mipLevel = mipLevel;
         region.imageSubresource.baseArrayLayer = baseArrayLayer;
-        region.imageSubresource.layerCount = layerCount ? layerCount : m_imageInfo.arrayLayers;
+        region.imageSubresource.layerCount = layerCount ? layerCount : m_createInfo.arrayLayers;
         region.imageOffset = VkOffset3D{0, 0, 0};
-        region.imageExtent = VkExtent3D{m_imageInfo.width, m_imageInfo.height, m_imageInfo.depth};
+        region.imageExtent = VkExtent3D{m_createInfo.width, m_createInfo.height, m_createInfo.depth};
 
         ImageBarrierInfo barrier{};
         barrier.image = this;
@@ -512,7 +512,7 @@ namespace pe
         barrier.baseArrayLayer = region.imageSubresource.baseArrayLayer;
         barrier.arrayLayers = region.imageSubresource.layerCount;
         barrier.baseMipLevel = region.imageSubresource.mipLevel;
-        barrier.mipLevels = m_imageInfo.mipLevels; // we need to transition all mip levels here, so they are all in the same state
+        barrier.mipLevels = m_createInfo.mipLevels; // we need to transition all mip levels here, so they are all in the same state
         Barrier(cmd, barrier);
 
         vkCmdCopyBufferToImage(cmd->ApiHandle(),
@@ -529,7 +529,7 @@ namespace pe
     // TODO: add multiple regions for all mip levels
     void Image::CopyImage(CommandBuffer *cmd, Image *src)
     {
-        PE_ERROR_IF(m_imageInfo.width != src->m_imageInfo.width && m_imageInfo.height != src->m_imageInfo.height,
+        PE_ERROR_IF(m_createInfo.width != src->m_createInfo.width && m_createInfo.height != src->m_createInfo.height,
                     "Image sizes are different");
 
         cmd->BeginDebugRegion("CopyImage");
@@ -547,17 +547,17 @@ namespace pe
 
         VkImageCopy2 region{};
         region.sType = VK_STRUCTURE_TYPE_IMAGE_COPY_2;
-        region.srcSubresource.aspectMask = Translate<VkImageAspectFlags>(GetAspectMask(m_imageInfo.format));
+        region.srcSubresource.aspectMask = Translate<VkImageAspectFlags>(GetAspectMask(m_createInfo.format));
         region.srcSubresource.baseArrayLayer = 0;
         region.srcSubresource.layerCount = 1;
         region.srcSubresource.mipLevel = 0;
         region.srcOffset = {0, 0, 0};
-        region.dstSubresource.aspectMask = Translate<VkImageAspectFlags>(GetAspectMask(m_imageInfo.format));
+        region.dstSubresource.aspectMask = Translate<VkImageAspectFlags>(GetAspectMask(m_createInfo.format));
         region.dstSubresource.baseArrayLayer = 0;
         region.dstSubresource.layerCount = 1;
         region.dstSubresource.mipLevel = 0;
         region.dstOffset = {0, 0, 0};
-        region.extent = {m_imageInfo.width, m_imageInfo.height, m_imageInfo.depth};
+        region.extent = {m_createInfo.width, m_createInfo.height, m_createInfo.depth};
 
         VkCopyImageInfo2 copyInfo{};
         copyInfo.sType = VK_STRUCTURE_TYPE_COPY_IMAGE_INFO_2;
@@ -568,7 +568,7 @@ namespace pe
         copyInfo.regionCount = 1;
         copyInfo.pRegions = &region;
 
-        cmd->BeginDebugRegion(src->m_imageInfo.name + " -> " + m_imageInfo.name);
+        cmd->BeginDebugRegion(src->m_createInfo.name + " -> " + m_createInfo.name);
         vkCmdCopyImage2(cmd->ApiHandle(), &copyInfo);
         cmd->EndDebugRegion();
 
@@ -577,7 +577,7 @@ namespace pe
 
     void Image::GenerateMipMaps(CommandBuffer *cmd)
     {
-        if (m_mipmapsGenerated || m_imageInfo.mipLevels < 2)
+        if (m_mipmapsGenerated || m_createInfo.mipLevels < 2)
             return;
 
         Downsampler::Dispatch(cmd, this);
@@ -633,7 +633,7 @@ namespace pe
         //                          " -> " + imageInfo.name + " layerCount=" + std::to_string(region->dstSubresource.layerCount) +
         //                          ", baseLayer=" + std::to_string(region->dstSubresource.baseArrayLayer) +
         //                          ", mipLevel=" + std::to_string(region->dstSubresource.mipLevel);
-        cmd->BeginDebugRegion(src->m_imageInfo.name + " -> " + m_imageInfo.name);
+        cmd->BeginDebugRegion(src->m_createInfo.name + " -> " + m_createInfo.name);
         vkCmdBlitImage(cmd->ApiHandle(),
                        src->ApiHandle(), VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
                        ApiHandle(), VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,

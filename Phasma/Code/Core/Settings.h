@@ -26,7 +26,7 @@ namespace pe
         bool frustum_culling = true;
         bool shadows = true;
         uint32_t shadow_map_size = 2048;
-        uint32_t shadow_map_cascades = 4;
+        uint32_t num_cascades = 4;
         float render_scale = 1.0f;
         bool ssao = true;
         bool fxaa = true;

@@ -77,6 +77,7 @@ namespace pe
             // if both are nullptr, it means that this Set index (i) is not used in both shaders and this is not allowed
             Descriptor *vertDescriptor = GetDescriptorSafely(vertDesc, i);
             Descriptor *fragDescriptor = GetDescriptorSafely(fragDesc, i);
+            PE_ERROR_IF(!vertDescriptor && !fragDescriptor, "Descriptor set is not used by any shader");
             descriptors.push_back(vertDescriptor ? vertDescriptor : fragDescriptor);
         }
 

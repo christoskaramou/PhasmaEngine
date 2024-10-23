@@ -56,19 +56,15 @@ namespace pe
 
     void TonemapPass::Draw(CommandBuffer *cmd)
     {
-        std::vector<ImageBarrierInfo> barriers(2);
-        barriers[0].image = m_frameImage;
-        barriers[0].layout = ImageLayout::ShaderReadOnly;
-        barriers[0].stageFlags = PipelineStage::FragmentShaderBit;
-        barriers[0].accessMask = Access::ShaderReadBit;
-        barriers[1].image = m_displayRT;
-        barriers[1].layout = ImageLayout::Attachment;
-        barriers[1].stageFlags = PipelineStage::ColorAttachmentOutputBit;
-        barriers[1].accessMask = Access::ColorAttachmentWriteBit;
+        ImageBarrierInfo barrier;
+        barrier.image = m_frameImage;
+        barrier.layout = ImageLayout::ShaderReadOnly;
+        barrier.stageFlags = PipelineStage::FragmentShaderBit;
+        barrier.accessMask = Access::ShaderReadBit;
 
         cmd->BeginDebugRegion("TonemapPass");
         cmd->CopyImage(m_displayRT, m_frameImage); // Copy RT to image
-        cmd->ImageBarriers(barriers);
+        cmd->ImageBarrier(barrier);
 
         cmd->BeginPass(1, m_attachments.data(), "Tonemap");
         cmd->BindPipeline(*m_passInfo);

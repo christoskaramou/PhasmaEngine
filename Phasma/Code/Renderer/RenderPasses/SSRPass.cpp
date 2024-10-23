@@ -100,7 +100,7 @@ namespace pe
 
     void SSRPass::Draw(CommandBuffer *cmd)
     {
-        std::vector<ImageBarrierInfo> barriers(6);
+        std::vector<ImageBarrierInfo> barriers(5);
 
         barriers[0].image = m_frameImage;
         barriers[0].layout = ImageLayout::ShaderReadOnly;
@@ -126,11 +126,6 @@ namespace pe
         barriers[4].layout = ImageLayout::ShaderReadOnly;
         barriers[4].stageFlags = PipelineStage::FragmentShaderBit;
         barriers[4].accessMask = Access::ShaderReadBit;
-
-        barriers[5].image = m_viewportRT;
-        barriers[5].layout = ImageLayout::Attachment;
-        barriers[5].stageFlags = PipelineStage::ColorAttachmentOutputBit;
-        barriers[5].accessMask = Access::ColorAttachmentReadBit;
 
         cmd->BeginDebugRegion("SSRPass");
         cmd->CopyImage(m_viewportRT, m_frameImage);

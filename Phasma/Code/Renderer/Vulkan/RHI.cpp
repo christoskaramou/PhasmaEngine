@@ -86,27 +86,24 @@ namespace pe
         PE_ERROR_IF(!SDL_Vulkan_GetInstanceExtensions(window, &extCount, nullptr), SDL_GetError());
         instanceExtensions.resize(extCount);
         PE_ERROR_IF(!SDL_Vulkan_GetInstanceExtensions(window, &extCount, instanceExtensions.data()), SDL_GetError());
-
-        if (IsInstanceExtensionValid(VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME))
-            instanceExtensions.push_back(VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME);
         // =============================================
 
         // === Debugging ===============================
-        Debug::GetInstanceUtils(instanceExtensions, instanceLayers);
-        std::vector<VkValidationFeatureEnableEXT> enabledFeatures{};
-        VkValidationFeaturesEXT validationFeatures{};
-        if (IsInstanceLayerValid("VK_LAYER_KHRONOS_validation"))
-        {
-            enabledFeatures.push_back(VK_VALIDATION_FEATURE_ENABLE_GPU_ASSISTED_EXT);
-            enabledFeatures.push_back(VK_VALIDATION_FEATURE_ENABLE_GPU_ASSISTED_RESERVE_BINDING_SLOT_EXT);
-            enabledFeatures.push_back(VK_VALIDATION_FEATURE_ENABLE_BEST_PRACTICES_EXT);
-            // enabledFeatures.push_back(VK_VALIDATION_FEATURE_ENABLE_DEBUG_PRINTF_EXT);
-            enabledFeatures.push_back(VK_VALIDATION_FEATURE_ENABLE_SYNCHRONIZATION_VALIDATION_EXT);
+        // Debug::GetInstanceUtils(instanceExtensions, instanceLayers);
+        // std::vector<VkValidationFeatureEnableEXT> enabledFeatures{};
+        // VkValidationFeaturesEXT validationFeatures{};
+        // if (IsInstanceLayerValid("VK_LAYER_KHRONOS_validation"))
+        // {
+        //     enabledFeatures.push_back(VK_VALIDATION_FEATURE_ENABLE_GPU_ASSISTED_EXT);
+        //     enabledFeatures.push_back(VK_VALIDATION_FEATURE_ENABLE_GPU_ASSISTED_RESERVE_BINDING_SLOT_EXT);
+        //     enabledFeatures.push_back(VK_VALIDATION_FEATURE_ENABLE_BEST_PRACTICES_EXT);
+        //     // enabledFeatures.push_back(VK_VALIDATION_FEATURE_ENABLE_DEBUG_PRINTF_EXT);
+        //     enabledFeatures.push_back(VK_VALIDATION_FEATURE_ENABLE_SYNCHRONIZATION_VALIDATION_EXT);
 
-            validationFeatures.sType = VK_STRUCTURE_TYPE_VALIDATION_FEATURES_EXT;
-            validationFeatures.enabledValidationFeatureCount = static_cast<uint32_t>(enabledFeatures.size());
-            validationFeatures.pEnabledValidationFeatures = enabledFeatures.data();
-        }
+        //     validationFeatures.sType = VK_STRUCTURE_TYPE_VALIDATION_FEATURES_EXT;
+        //     validationFeatures.enabledValidationFeatureCount = static_cast<uint32_t>(enabledFeatures.size());
+        //     validationFeatures.pEnabledValidationFeatures = enabledFeatures.data();
+        // }
         // =============================================
 
         uint32_t apiVersion;
@@ -120,7 +117,7 @@ namespace pe
 
         VkInstanceCreateInfo instInfo{};
         instInfo.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
-        instInfo.pNext = &validationFeatures;
+        // instInfo.pNext = &validationFeatures;
         instInfo.pApplicationInfo = &appInfo;
         instInfo.enabledLayerCount = static_cast<uint32_t>(instanceLayers.size());
         instInfo.ppEnabledLayerNames = instanceLayers.data();
@@ -287,9 +284,7 @@ namespace pe
 
         std::vector<const char *> deviceExtensions{};
         deviceExtensions.push_back(VK_KHR_SWAPCHAIN_EXTENSION_NAME);
-        deviceExtensions.push_back(VK_KHR_SYNCHRONIZATION_2_EXTENSION_NAME);
         deviceExtensions.push_back(VK_KHR_PUSH_DESCRIPTOR_EXTENSION_NAME);
-        deviceExtensions.push_back(VK_KHR_SEPARATE_DEPTH_STENCIL_LAYOUTS_EXTENSION_NAME);
 
         std::vector<VkDeviceQueueCreateInfo> queueCreateInfos{};
         uint32_t queueFamPropCount;

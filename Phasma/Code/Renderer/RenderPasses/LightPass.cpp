@@ -37,7 +37,7 @@ namespace pe
     void LightOpaquePass::UpdatePassInfo()
     {
         const std::vector<Define> definesFrag{
-            Define{"SHADOWMAP_CASCADES", std::to_string(Settings::Get<GlobalSettings>().shadow_map_cascades)},
+            Define{"SHADOWMAP_CASCADES", std::to_string(Settings::Get<GlobalSettings>().num_cascades)},
             Define{"SHADOWMAP_SIZE", std::to_string((float)Settings::Get<GlobalSettings>().shadow_map_size)},
             Define{"SHADOWMAP_TEXEL_SIZE", std::to_string(1.0f / (float)Settings::Get<GlobalSettings>().shadow_map_size)},
             Define{"MAX_POINT_LIGHTS", std::to_string(MAX_POINT_LIGHTS)},
@@ -149,11 +149,9 @@ namespace pe
     void LightOpaquePass::PassBarriers(CommandBuffer *cmd)
     {
         bool shadowsEnabled = Settings::Get<GlobalSettings>().shadows;
-        RendererSystem &rs = *GetGlobalSystem<RendererSystem>();
-        const SkyBox &skybox = shadowsEnabled ? rs.GetSkyBoxDay() : rs.GetSkyBoxNight();
         ShadowPass &shadows = *GetGlobalComponent<ShadowPass>();
 
-        std::vector<ImageBarrierInfo> barriers(9 + shadows.m_textures.size());
+        std::vector<ImageBarrierInfo> barriers(8 + (shadowsEnabled ? shadows.m_textures.size() : 0));
         for (size_t i = 0; i < barriers.size(); i++)
         {
             barriers[i].layout = ImageLayout::ShaderReadOnly;
@@ -170,14 +168,10 @@ namespace pe
         barriers[6].image = m_ssaoRT;
         barriers[7].image = m_transparencyRT;
 
-        barriers[8].image = m_viewportRT;
-        barriers[8].layout = ImageLayout::Attachment;
-        barriers[8].stageFlags = PipelineStage::ColorAttachmentOutputBit;
-        barriers[8].accessMask = Access::ColorAttachmentWriteBit;
-
-        for (uint32_t i = 0; i < shadows.m_textures.size(); i++)
+        if (shadowsEnabled)
         {
-            barriers[i + 9].image = shadows.m_textures[i];
+            for (uint32_t i = 0; i < shadows.m_textures.size(); i++)
+                barriers[i + 8].image = shadows.m_textures[i];
         }
 
         cmd->ImageBarriers(barriers);
@@ -186,10 +180,7 @@ namespace pe
     void LightOpaquePass::Draw(CommandBuffer *cmd)
     {
         bool shadowsEnabled = m_ubo.shadows;
-        uint32_t shadowmapCascades = Settings::Get<GlobalSettings>().shadow_map_cascades;
-
-        RendererSystem &rs = *GetGlobalSystem<RendererSystem>();
-        const SkyBox &skybox = shadowsEnabled ? rs.GetSkyBoxDay() : rs.GetSkyBoxNight();
+        uint32_t numCascades = Settings::Get<GlobalSettings>().num_cascades;
         ShadowPass &shadows = *GetGlobalComponent<ShadowPass>();
 
         cmd->SetConstantAt(0, shadowsEnabled ? 1.0f : 0.0f); // Shadow cast
@@ -197,8 +188,11 @@ namespace pe
         cmd->SetConstantAt(2, m_viewportRT->GetWidth_f());   // framebuffer width
         cmd->SetConstantAt(3, m_viewportRT->GetHeight_f());  // framebuffer height
         cmd->SetConstantAt(4, 0u);                           // is transparent pass
-        for (uint32_t i = 0; i < shadowmapCascades; i++)
-            cmd->SetConstantAt(i + 5, shadows.m_viewZ[i]); // shadowmap cascade distances
+        if (shadowsEnabled)
+        {
+            for (uint32_t i = 0; i < numCascades; i++)
+                cmd->SetConstantAt(i + 5, shadows.m_viewZ[i]); // shadowmap cascade distances
+        }
 
         PassBarriers(cmd);
 
@@ -248,7 +242,7 @@ namespace pe
         ShadowPass &shadows = *GetGlobalComponent<ShadowPass>();
 
         const std::vector<Define> definesFrag{
-            Define{"SHADOWMAP_CASCADES", std::to_string(Settings::Get<GlobalSettings>().shadow_map_cascades)},
+            Define{"SHADOWMAP_CASCADES", std::to_string(Settings::Get<GlobalSettings>().num_cascades)},
             Define{"SHADOWMAP_SIZE", std::to_string((float)Settings::Get<GlobalSettings>().shadow_map_size)},
             Define{"SHADOWMAP_TEXEL_SIZE", std::to_string(1.0f / (float)Settings::Get<GlobalSettings>().shadow_map_size)},
             Define{"MAX_POINT_LIGHTS", std::to_string(MAX_POINT_LIGHTS)},
@@ -363,7 +357,7 @@ namespace pe
         const SkyBox &skybox = shadowsEnabled ? rs.GetSkyBoxDay() : rs.GetSkyBoxNight();
         ShadowPass &shadows = *GetGlobalComponent<ShadowPass>();
 
-        std::vector<ImageBarrierInfo> barriers(9 + shadows.m_textures.size());
+        std::vector<ImageBarrierInfo> barriers(8 + shadows.m_textures.size());
         for (size_t i = 0; i < barriers.size(); i++)
         {
             barriers[i].layout = ImageLayout::ShaderReadOnly;
@@ -380,14 +374,9 @@ namespace pe
         barriers[6].image = m_ssaoRT;
         barriers[7].image = m_transparencyRT;
 
-        barriers[8].image = m_viewportRT;
-        barriers[8].layout = ImageLayout::Attachment;
-        barriers[8].stageFlags = PipelineStage::ColorAttachmentOutputBit;
-        barriers[8].accessMask = Access::ColorAttachmentWriteBit;
-
         for (uint32_t i = 0; i < shadows.m_textures.size(); i++)
         {
-            barriers[i + 9].image = shadows.m_textures[i];
+            barriers[i + 8].image = shadows.m_textures[i];
         }
 
         cmd->ImageBarriers(barriers);
@@ -396,7 +385,7 @@ namespace pe
     void LightTransparentPass::Draw(CommandBuffer *cmd)
     {
         bool shadowsEnabled = m_ubo.shadows;
-        uint32_t shadowmapCascades = Settings::Get<GlobalSettings>().shadow_map_cascades;
+        uint32_t shadowmapCascades = Settings::Get<GlobalSettings>().num_cascades;
 
         RendererSystem &rs = *GetGlobalSystem<RendererSystem>();
         const SkyBox &skybox = shadowsEnabled ? rs.GetSkyBoxDay() : rs.GetSkyBoxNight();

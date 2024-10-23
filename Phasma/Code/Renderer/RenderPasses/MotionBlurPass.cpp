@@ -77,11 +77,6 @@ namespace pe
         barriers.push_back(barrier);
         barrier.image = m_depth;
         barriers.push_back(barrier);
-        barrier.image = m_displayRT;
-        barrier.layout = ImageLayout::Attachment;
-        barrier.stageFlags = PipelineStage::ColorAttachmentOutputBit;
-        barrier.accessMask = Access::ColorAttachmentWriteBit;
-        barriers.push_back(barrier);
 
         cmd->BeginDebugRegion("MotionBlurPass");
         cmd->CopyImage(m_displayRT, m_frameImage);

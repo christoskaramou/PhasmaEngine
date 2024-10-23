@@ -56,17 +56,13 @@ namespace pe
 
     void BloomBrightFilterPass::Draw(CommandBuffer *cmd)
     {
-        std::vector<ImageBarrierInfo> barriers(2);
-        barriers[0].image = m_displayRT;
-        barriers[0].layout = ImageLayout::ShaderReadOnly;
-        barriers[0].stageFlags = PipelineStage::FragmentShaderBit;
-        barriers[0].accessMask = Access::ShaderReadBit;
-        barriers[1].image = m_brightFilterRT;
-        barriers[1].layout = ImageLayout::Attachment;
-        barriers[1].stageFlags = PipelineStage::ColorAttachmentOutputBit;
-        barriers[1].accessMask = Access::ColorAttachmentWriteBit;
+        ImageBarrierInfo barrier{};
+        barrier.image = m_displayRT;
+        barrier.layout = ImageLayout::ShaderReadOnly;
+        barrier.stageFlags = PipelineStage::FragmentShaderBit;
+        barrier.accessMask = Access::ShaderReadBit;
 
-        cmd->ImageBarriers(barriers);
+        cmd->ImageBarrier(barrier);
         cmd->BeginPass(1, m_attachments.data(), "Bloom_BrightFilter");
         cmd->BindPipeline(*m_passInfo);
         cmd->SetViewport(0.f, 0.f, m_brightFilterRT->GetWidth_f(), m_brightFilterRT->GetHeight_f());
@@ -124,17 +120,13 @@ namespace pe
     {
         auto &gSettings = Settings::Get<GlobalSettings>();
 
-        std::vector<ImageBarrierInfo> barriers(2);
-        barriers[0].image = m_brightFilterRT;
-        barriers[0].layout = ImageLayout::ShaderReadOnly;
-        barriers[0].stageFlags = PipelineStage::FragmentShaderBit;
-        barriers[0].accessMask = Access::ShaderReadBit;
-        barriers[1].image = m_gaussianBlurHorizontalRT;
-        barriers[1].layout = ImageLayout::Attachment;
-        barriers[1].stageFlags = PipelineStage::ColorAttachmentOutputBit;
-        barriers[1].accessMask = Access::ColorAttachmentWriteBit;
+        ImageBarrierInfo barrier;
+        barrier.image = m_brightFilterRT;
+        barrier.layout = ImageLayout::ShaderReadOnly;
+        barrier.stageFlags = PipelineStage::FragmentShaderBit;
+        barrier.accessMask = Access::ShaderReadBit;
 
-        cmd->ImageBarriers(barriers);
+        cmd->ImageBarrier(barrier);
         cmd->BeginPass(1, m_attachments.data(), "Bloom_GaussianBlurHorizontal");
         cmd->BindPipeline(*m_passInfo);
         cmd->SetViewport(0.f, 0.f, m_gaussianBlurHorizontalRT->GetWidth_f(), m_gaussianBlurHorizontalRT->GetHeight_f());
@@ -197,18 +189,13 @@ namespace pe
     {
         auto &gSettings = Settings::Get<GlobalSettings>();
 
-        std::vector<ImageBarrierInfo> barriers(2);
-        barriers[0].image = m_gaussianBlurHorizontalRT;
-        barriers[0].layout = ImageLayout::ShaderReadOnly;
-        barriers[0].stageFlags = PipelineStage::FragmentShaderBit;
-        barriers[0].accessMask = Access::ShaderReadBit;
-        barriers[1].image = m_displayRT;
-        barriers[1].layout = ImageLayout::Attachment;
-        barriers[1].stageFlags = PipelineStage::ColorAttachmentOutputBit;
-        barriers[1].accessMask = Access::ColorAttachmentReadBit;
+        ImageBarrierInfo barrier;
+        barrier.image = m_gaussianBlurHorizontalRT;
+        barrier.layout = ImageLayout::ShaderReadOnly;
+        barrier.stageFlags = PipelineStage::FragmentShaderBit;
+        barrier.accessMask = Access::ShaderReadBit;
 
-        cmd->ImageBarriers(barriers);
-        
+        cmd->ImageBarrier(barrier);
         cmd->BeginPass(1, m_attachments.data(), "Bloom_GaussianBlurVertical");
         cmd->BindPipeline(*m_passInfo);
         cmd->SetViewport(0.f, 0.f, m_displayRT->GetWidth_f(), m_displayRT->GetHeight_f());

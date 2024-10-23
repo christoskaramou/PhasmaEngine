@@ -61,46 +61,4 @@ namespace pe
         Image *m_displayRT;                // Render target
         Image *m_gaussianBlurHorizontalRT; // Shader Input
     };
-
-    // class BloomCombinePass : public IRenderPassComponent
-    // {
-    // public:
-    //     void Init() override;
-    //     void UpdatePassInfo() override;
-    //     void CreateUniforms(CommandBuffer *cmd) override;
-    //     void UpdateDescriptorSets() override;
-    //     void Update(Camera *camera) override;
-    //     void Draw(CommandBuffer *cmd) override;
-    //     void Resize(uint32_t width, uint32_t height) override;
-    //     void Destroy() override;
-
-    // private:
-    // };
-
-    // class BloomPass : public IRenderPassComponent
-    // {
-    // public:
-    //     BloomPass();
-    //     ~BloomPass();
-
-    //     void Init() override;
-    //     void UpdatePassInfo() override;
-    //     void CreateUniforms(CommandBuffer *cmd) override;
-    //     void UpdateDescriptorSets() override;
-    //     void Update(Camera *camera) override;
-    //     void Draw(CommandBuffer *cmd) override;
-    //     void Resize(uint32_t width, uint32_t height) override;
-    //     void Destroy() override;
-
-    // private:
-    //     friend class Renderer;
-
-    //     void UpdatePassInfoBrightFilter();
-    //     void UpdatePassInfoGaussianBlurHorizontal();
-    //     void UpdatePassInfoGaussianBlurVertical();
-    //     void UpdatePassInfoCombine();
-
-    //     Image *m_frameImage;
-    //     Image *m_displayRT;
-    // };
 }

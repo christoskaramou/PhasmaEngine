@@ -67,7 +67,6 @@ namespace pe
 
         void PassBarriers(CommandBuffer *cmd);
 
-        Buffer *uniform;
         Image *ibl_brdf_lut;
         Image *normalRT;
         Image *albedoRT;

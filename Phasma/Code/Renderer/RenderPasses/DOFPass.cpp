@@ -73,7 +73,7 @@ namespace pe
     void DOFPass::Draw(CommandBuffer *cmd)
     {
         auto &gSettings = Settings::Get<GlobalSettings>();
-        std::vector<ImageBarrierInfo> barriers(3);
+        std::vector<ImageBarrierInfo> barriers(2);
 
         barriers[0].image = m_frameImage;
         barriers[0].layout = ImageLayout::ShaderReadOnly;
@@ -84,11 +84,6 @@ namespace pe
         barriers[1].layout = ImageLayout::ShaderReadOnly;
         barriers[1].stageFlags = PipelineStage::FragmentShaderBit;
         barriers[1].accessMask = Access::ShaderReadBit;
-
-        barriers[2].image = m_displayRT;
-        barriers[2].layout = ImageLayout::Attachment;
-        barriers[2].stageFlags = PipelineStage::ColorAttachmentOutputBit;
-        barriers[2].accessMask = Access::ColorAttachmentWriteBit;
 
         cmd->BeginDebugRegion("DOFPass");
         cmd->CopyImage(m_displayRT, m_frameImage); // Copy RT to image

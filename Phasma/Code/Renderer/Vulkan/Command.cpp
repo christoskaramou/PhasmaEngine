@@ -191,7 +191,7 @@ namespace pe
         for (uint32_t i = 0; i < images.size(); i++)
         {
             Image *image = images[i];
-            const vec4 &color = image->m_imageInfo.clearColor;
+            const vec4 &color = image->m_createInfo.clearColor;
 
             VkClearColorValue clearValue{};
             clearValue.float32[0] = color[0];
@@ -206,7 +206,7 @@ namespace pe
             rangeVK.baseArrayLayer = 0;
             rangeVK.layerCount = 1;
 
-            BeginDebugRegion("Clear Color: " + image->m_imageInfo.name);
+            BeginDebugRegion("Clear Color: " + image->m_createInfo.name);
             vkCmdClearColorImage(m_apiHandle, image->ApiHandle(), VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, &clearValue, 1, &rangeVK);
             EndDebugRegion();
 
@@ -231,8 +231,8 @@ namespace pe
             Image *image = images[i];
 
             VkClearDepthStencilValue clearValue{};
-            clearValue.depth = image->m_imageInfo.clearColor[0];
-            clearValue.stencil = static_cast<uint32_t>(image->m_imageInfo.clearColor[1]);
+            clearValue.depth = image->m_createInfo.clearColor[0];
+            clearValue.stencil = static_cast<uint32_t>(image->m_createInfo.clearColor[1]);
 
             VkImageSubresourceRange rangeVK{};
             rangeVK.aspectMask = Translate<VkImageAspectFlags>(GetAspectMask(image->GetFormat()));
@@ -241,7 +241,7 @@ namespace pe
             rangeVK.baseArrayLayer = 0;
             rangeVK.layerCount = 1;
 
-            BeginDebugRegion("Clear Depth: " + image->m_imageInfo.name);
+            BeginDebugRegion("Clear Depth: " + image->m_createInfo.name);
             vkCmdClearDepthStencilImage(m_apiHandle, image->ApiHandle(), VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, &clearValue, 1, &rangeVK);
             EndDebugRegion();
 
@@ -258,7 +258,7 @@ namespace pe
         {
             const Attachment &attachment = attachments[i];
             hash.Combine(static_cast<uint32_t>(attachment.image->GetFormat()));
-            hash.Combine(static_cast<uint32_t>(attachment.image->m_imageInfo.samples));
+            hash.Combine(static_cast<uint32_t>(attachment.image->m_createInfo.samples));
             hash.Combine(static_cast<uint32_t>(attachment.loadOp));
             hash.Combine(static_cast<uint32_t>(attachment.storeOp));
             hash.Combine(static_cast<uint32_t>(attachment.stencilLoadOp));
@@ -308,8 +308,8 @@ namespace pe
             }
 
             std::string name = "Auto_Gen_Framebuffer_" + std::to_string(s_framebuffers.size());
-            Framebuffer *newFramebuffer = Framebuffer::Create(attachments[0].image->m_imageInfo.width,
-                                                              attachments[0].image->m_imageInfo.height,
+            Framebuffer *newFramebuffer = Framebuffer::Create(attachments[0].image->m_createInfo.width,
+                                                              attachments[0].image->m_createInfo.height,
                                                               static_cast<uint32_t>(views.size()),
                                                               views.data(),
                                                               renderPass,
@@ -325,6 +325,8 @@ namespace pe
         BeginDebugRegion(name + "_pass");
         m_commandFlags |= CommandType::GraphicsBit;
         m_dynamicPass = Settings::Get<GlobalSettings>().dynamic_rendering && !skipDynamicPass;
+        m_attachmentCount = count;
+        m_attachments = attachments;
 
         std::vector<ImageBarrierInfo> attachmentBarriers;
         attachmentBarriers.reserve(count);
@@ -336,8 +338,6 @@ namespace pe
             VkRenderingAttachmentInfo depthInfo{};
             bool hasDepth = false;
             bool hasStencil = false;
-            m_attachmentCount = count;
-            m_attachments = attachments;
 
             for (uint32_t i = 0; i < count; i++)
             {
@@ -364,7 +364,10 @@ namespace pe
                     depthInfo.clearValue.depthStencil = {clearDepth, clearStencil};
 
                     barrier.stageFlags = PipelineStage::EarlyFragmentTestsBit | PipelineStage::LateFragmentTestsBit;
-                    barrier.accessMask = Access::DepthStencilAttachmentWriteBit;
+                    if (attachment.loadOp == AttachmentLoadOp::Load)
+                        barrier.accessMask = Access::DepthStencilAttachmentReadBit;
+                    else
+                        barrier.accessMask = Access::DepthStencilAttachmentWriteBit;
                 }
                 else
                 {
@@ -380,7 +383,10 @@ namespace pe
                     colorInfos.push_back(colorInfo);
 
                     barrier.stageFlags = PipelineStage::ColorAttachmentOutputBit;
-                    barrier.accessMask = Access::ColorAttachmentWriteBit;
+                    if (attachment.loadOp == AttachmentLoadOp::Load)
+                        barrier.accessMask = Access::ColorAttachmentReadBit;
+                    else
+                        barrier.accessMask = Access::ColorAttachmentWriteBit;
                 }
 
                 attachmentBarriers.push_back(barrier);
@@ -410,14 +416,14 @@ namespace pe
                 Image *renderTarget = attachment.image;
                 if (HasDepth(renderTarget->GetFormat()) && (attachment.loadOp == AttachmentLoadOp::Clear || attachment.stencilLoadOp == AttachmentLoadOp::Clear))
                 {
-                    const float clearDepth = renderTarget->m_imageInfo.clearColor[0];
-                    uint32_t clearStencil = static_cast<uint32_t>(renderTarget->m_imageInfo.clearColor[1]);
+                    const float clearDepth = renderTarget->m_createInfo.clearColor[0];
+                    uint32_t clearStencil = static_cast<uint32_t>(renderTarget->m_createInfo.clearColor[1]);
                     clearValues[clearOps].depthStencil = {clearDepth, clearStencil};
                     clearOps++;
                 }
                 else if (attachment.loadOp == AttachmentLoadOp::Clear)
                 {
-                    const vec4 &clearColor = renderTarget->m_imageInfo.clearColor;
+                    const vec4 &clearColor = renderTarget->m_createInfo.clearColor;
                     clearValues[clearOps].color = {clearColor[0], clearColor[1], clearColor[2], clearColor[3]};
                     clearOps++;
                 }
@@ -458,21 +464,32 @@ namespace pe
 
     void CommandBuffer::EndPass()
     {
+        // in favor of tracking image layout, stage and access, we need to set the correct access mask for the last operation
+        // attachments with AttachmentLoadOp::Load will have the ReadBit access mask and it is used for waiting to read/load the attachment
+        // but after the render pass is done, the correct access mask should be the WriteBit since it is the last operation
+        // so set the correct track info access mask here before any other access operation happen
+        for (uint32_t i = 0; i < m_attachmentCount; i++)
+        {
+            const Attachment &attachment = m_attachments[i];
+            if (attachment.loadOp == AttachmentLoadOp::Load)
+            {
+                attachment.image->m_trackInfos[0][0].accessMask = HasDepth(attachment.image->GetFormat())
+                                                                      ? Access::DepthStencilAttachmentWriteBit
+                                                                      : Access::ColorAttachmentWriteBit;
+            }
+        }
+
         if (m_dynamicPass)
-        {
             vkCmdEndRendering(m_apiHandle);
-            m_attachmentCount = 0;
-            m_attachments = nullptr;
-        }
         else
-        {
             vkCmdEndRenderPass(m_apiHandle);
-            m_renderPass = nullptr;
-            m_framebuffer = nullptr;
-        }
 
         EndDebugRegion();
 
+        m_attachmentCount = 0;
+        m_attachments = nullptr;
+        m_renderPass = nullptr;
+        m_framebuffer = nullptr;
         m_dynamicPass = false;
         m_boundPipeline = nullptr;
         m_boundVertexBuffer = nullptr;
@@ -486,13 +503,13 @@ namespace pe
     Pipeline *CommandBuffer::GetPipeline(RenderPass *renderPass, PassInfo &passInfo)
     {
         Hash hash;
+
         if (renderPass)
-        {
             hash.Combine(reinterpret_cast<std::intptr_t>(renderPass));
-        }
+
         hash.Combine(passInfo.GetHash());
 
-        auto it = s_pipelines.find(hash); // PassInfo is hashable
+        auto it = s_pipelines.find(hash);
         if (it != s_pipelines.end())
         {
             return it->second;

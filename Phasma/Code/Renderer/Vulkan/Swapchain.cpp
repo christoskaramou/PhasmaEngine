@@ -59,14 +59,12 @@ namespace pe
         {
             m_images[i] = new Image();
             m_images[i]->ApiHandle() = imagesVK[i];
-            m_images[i]->m_imageInfo.name = "Swapchain_image_" + std::to_string(i);
-            m_images[i]->m_imageInfo.format = surface->GetFormat();
-            m_images[i]->m_imageInfo.width = actualExtent.width;
-            m_images[i]->m_imageInfo.height = actualExtent.height;
-            m_images[i]->width_f = static_cast<float>(actualExtent.width);
-            m_images[i]->height_f = static_cast<float>(actualExtent.height);
-            m_images[i]->m_infos.resize(1);
-            m_images[i]->m_infos[0].resize(1, ImageBarrierInfo{});
+            m_images[i]->m_createInfo.name = "Swapchain_image_" + std::to_string(i);
+            m_images[i]->m_createInfo.format = surface->GetFormat();
+            m_images[i]->m_createInfo.width = actualExtent.width;
+            m_images[i]->m_createInfo.height = actualExtent.height;
+            m_images[i]->m_trackInfos.resize(1);
+            m_images[i]->m_trackInfos[0].resize(1, ImageTrackInfo{});
         }
 
         // create image views for each swapchain image

@@ -69,19 +69,6 @@ namespace pe
         } constants{};
         constants.projJitter = camera.GetProjJitter();
 
-        std::vector<ImageBarrierInfo> barrierInfo{};
-        barrierInfo.resize(2);
-
-        barrierInfo[0].image = m_viewportRT;
-        barrierInfo[0].layout = ImageLayout::Attachment;
-        barrierInfo[0].stageFlags = PipelineStage::ColorAttachmentOutputBit;
-        barrierInfo[0].accessMask = Access::ColorAttachmentWriteBit;
-
-        barrierInfo[1].image = m_depthRT;
-        barrierInfo[1].layout = ImageLayout::Attachment;
-        barrierInfo[1].stageFlags = PipelineStage::EarlyFragmentTestsBit;
-        barrierInfo[1].accessMask = Access::DepthStencilAttachmentWriteBit;
-
         // Lambda to draw from drawInfos
         auto DrawFromInfos = [&](const auto &drawInfos)
         {
@@ -107,7 +94,6 @@ namespace pe
         };
 
         cmd->BeginDebugRegion("Aabbs");
-        cmd->ImageBarriers(barrierInfo);
 
         cmd->BeginPass(2, m_attachments.data(), "AabbsPass");
         cmd->BindIndexBuffer(m_geometry->GetBuffer(), m_geometry->GetAabbIndicesOffset());
