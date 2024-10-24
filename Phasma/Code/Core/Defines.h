@@ -70,7 +70,7 @@ namespace pe
 
 #define PE_RENDER_DOC 1
 
-// PE_RENDERING_API is set in CmakeLists.txt
+// PE_RENDERING_API is set in CMakeLists.txt
 #define PE_VULKAN (PE_RENDERING_API == 0)
 #define PE_DX12 (PE_RENDERING_API == 1)
 }

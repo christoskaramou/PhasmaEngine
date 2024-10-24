@@ -636,160 +636,108 @@ namespace pe
 
     template <>
     Format Translate(VkFormat format) { return s_translatorPeFormat[(uint64_t)format]; }
-
     template <>
     ColorSpace Translate(VkColorSpaceKHR value) { return s_translatorPeColorSpace[(uint64_t)value]; }
-
     template <>
     PresentMode Translate(VkPresentModeKHR value) { return s_translatorPePresentMode[(uint64_t)value]; }
-
     template <>
     VkImageLayout Translate(ImageLayout value) { return (VkImageLayout)s_translatorImageLayout[(uint64_t)value]; }
-
     template <>
     VkShaderStageFlags Translate(ShaderStageFlags value) { return (VkShaderStageFlags)GetFlags(value.Value(), s_translatorShaderStage); }
-
     template <>
     VkShaderStageFlags Translate(ShaderStage value) { return Translate<VkShaderStageFlags, ShaderStageFlags>(value); }
-
     template <>
     VkFilter Translate(Filter value) { return (VkFilter)s_translatorFilter[(uint64_t)value]; }
-
     template <>
     VkImageAspectFlags Translate(ImageAspectFlags value) { return (VkImageAspectFlags)GetFlags(value.Value(), s_translatorImageAspect); }
-
     template <>
     VkImageAspectFlags Translate(ImageAspect value) { return Translate<VkImageAspectFlags, ImageAspectFlags>(value); }
-
     template <>
     VkSamplerMipmapMode Translate(SamplerMipmapMode value) { return (VkSamplerMipmapMode)s_translatorSamplerMipmapMode[(uint64_t)value]; }
-
     template <>
     VkSamplerAddressMode Translate(SamplerAddressMode value) { return (VkSamplerAddressMode)s_translatorSamplerAddressMode[(uint64_t)value]; }
-
     template <>
     VkCompareOp Translate(CompareOp value) { return (VkCompareOp)s_translatorCompareOp[(uint64_t)value]; }
-
     template <>
     VkBorderColor Translate(BorderColor value) { return (VkBorderColor)s_translatorBorderColor[(uint64_t)value]; }
-
     template <>
     VkImageType Translate(ImageType value) { return (VkImageType)s_translatorImageType[(uint64_t)value]; }
-
     template <>
     VkImageViewType Translate(ImageViewType value) { return (VkImageViewType)s_translatorImageViewType[(uint64_t)value]; }
-
     template <>
     VkSampleCountFlagBits Translate(SampleCount value) { return (VkSampleCountFlagBits)s_translatorSampleCount[(uint64_t)value]; }
-
     template <>
     VkFormat Translate(Format value) { return (VkFormat)s_translatorFormat[(uint64_t)value]; }
-
     template <>
     VkImageTiling Translate(ImageTiling value) { return (VkImageTiling)s_translatorImageTiling[(uint64_t)value]; }
-
     template <>
     VkImageUsageFlags Translate(ImageUsageFlags value) { return (VkImageUsageFlags)GetFlags(value.Value(), s_translatorImageUsageFlags); }
-
     template <>
     VkImageUsageFlags Translate(ImageUsage value) { return Translate<VkImageUsageFlags, ImageUsageFlags>(value); }
-
     template <>
     VkSharingMode Translate(SharingMode value) { return (VkSharingMode)s_translatorSharingMode[(uint64_t)value]; }
-
     template <>
     VkImageCreateFlags Translate(ImageCreateFlags value) { return (VkImageCreateFlags)GetFlags(value.Value(), s_translatorImageCreateFlags); }
-
     template <>
     VkImageCreateFlags Translate(ImageCreate value) { return Translate<VkImageCreateFlags, ImageCreateFlags>(value); }
-
     template <>
     VkCommandBufferUsageFlags Translate(CommandBufferUsageFlags value) { return (VkCommandBufferUsageFlags)GetFlags(value.Value(), s_translatorCommandBufferUsageFlags); }
-
     template <>
     VkCommandBufferUsageFlags Translate(CommandBufferUsage value) { return Translate<VkCommandBufferUsageFlags, CommandBufferUsageFlags>(value); }
-
     template <>
     VkBufferUsageFlags Translate(BufferUsageFlags value) { return (VkBufferUsageFlags)GetFlags(value.Value(), s_translatorBufferUsageFlags); }
-
     template <>
     VkBufferUsageFlags Translate(BufferUsage value) { return Translate<VkBufferUsageFlags, BufferUsageFlags>(value); }
-
     template <>
     VkColorSpaceKHR Translate(ColorSpace value) { return (VkColorSpaceKHR)s_translatorColorSpace[(uint64_t)value]; }
-
     template <>
     VkPresentModeKHR Translate(PresentMode value) { return (VkPresentModeKHR)s_translatorPresentMode[(uint64_t)value]; }
-
     template <>
     VkPipelineStageFlags2 Translate(PipelineStageFlags value) { return (VkPipelineStageFlags2)GetFlags(value.Value(), s_translatorPipelineStageFlags); }
-
     template <>
     VkPipelineStageFlags2 Translate(PipelineStage value) { return Translate<VkPipelineStageFlags2, PipelineStageFlags>(value); }
-
     template <>
     VkAttachmentLoadOp Translate(AttachmentLoadOp value) { return (VkAttachmentLoadOp)s_translatorAttachmentLoadOp[(uint64_t)value]; }
-
     template <>
     VkAttachmentStoreOp Translate(AttachmentStoreOp value) { return (VkAttachmentStoreOp)s_translatorAttachmentStoreOp[(uint64_t)value]; }
-
     template <>
     VkAccessFlags2 Translate(AccessFlags value) { return (VkAccessFlags2)GetFlags(value.Value(), s_translatorAccessFlags); }
-
     template <>
     VkAccessFlags2 Translate(Access value) { return Translate<VkAccessFlags2, AccessFlags>(value); }
-
     template <>
     VmaAllocationCreateFlags Translate(AllocationCreateFlags value) { return (VmaAllocationCreateFlags)GetFlags(value.Value(), s_translatorAllocationCreateFlags); }
-
     template <>
     VmaAllocationCreateFlags Translate(AllocationCreate value) { return Translate<VmaAllocationCreateFlags, AllocationCreateFlags>(value); }
-
     template <>
     VkBlendFactor Translate(BlendFactor value) { return (VkBlendFactor)s_translatorBlendFactor[(uint64_t)value]; }
-
     template <>
     VkBlendOp Translate(BlendOp value) { return (VkBlendOp)s_translatorBlendOp[(uint64_t)value]; }
-
     template <>
     VkColorComponentFlags Translate(ColorComponentFlags value) { return (VkColorComponentFlags)GetFlags(value.Value(), s_translatorColorComponentFlags); }
-
     template <>
     VkColorComponentFlags Translate(ColorComponent value) { return Translate<VkColorComponentFlags, ColorComponentFlags>(value); }
-
     template <>
     VkDynamicState Translate(DynamicState value) { return (VkDynamicState)s_translatorDynamicState[(uint64_t)value]; }
-
     template <>
     VkDescriptorType Translate(DescriptorType value) { return (VkDescriptorType)s_translatorDescriptorType[(uint64_t)value]; }
-
     template <>
     VkCullModeFlags Translate(CullMode value) { return (VkCullModeFlags)s_translatorCullMode[(uint64_t)value]; }
-
     template <>
     VkObjectType Translate(ObjectType value) { return (VkObjectType)s_translatorObjectType[(uint64_t)value]; }
-
     template <>
     VkVertexInputRate Translate(VertexInputRate value) { return (VkVertexInputRate)s_translatorVertexInputRate[(uint64_t)value]; }
-
     template <>
     VkAttachmentDescriptionFlags Translate(AttachmentDescriptionFlags value) { return (VkAttachmentDescriptionFlags)GetFlags(value.Value(), s_translatorAttachmentDescriptionFlags); }
-
     template <>
     VkAttachmentDescriptionFlags Translate(AttachmentDescription value) { return Translate<VkAttachmentDescriptionFlags, AttachmentDescriptionFlags>(value); }
-
     template <>
     VkCommandPoolCreateFlags Translate(CommandPoolCreateFlags value) { return (VkCommandPoolCreateFlags)GetFlags(value.Value(), s_translatorCommandPoolCreateFlags); }
-
     template <>
     VkCommandPoolCreateFlags Translate(CommandPoolCreate value) { return Translate<VkCommandPoolCreateFlags, CommandPoolCreateFlags>(value); }
-
     template <>
     VkPrimitiveTopology Translate(PrimitiveTopology value) { return (VkPrimitiveTopology)s_translatorPrimitiveTopology[(uint64_t)value]; }
-
     template <>
     VkPolygonMode Translate(PolygonMode value) { return (VkPolygonMode)s_translatorPolygonMode[(uint64_t)value]; }
-
     template <>
     VkStencilOp Translate(StencilOp value) { return (VkStencilOp)s_translatorStencilOp[(uint64_t)value]; }
 }
