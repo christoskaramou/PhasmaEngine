@@ -42,9 +42,9 @@
 #include <codecvt>
 #include <optional>
 
-#include "SDL/SDL.h"
-#include "SDL/SDL_syswm.h"
-#include "SDL/SDL_vulkan.h"
+#include "SDL2/SDL.h"
+#include "SDL2/SDL_syswm.h"
+#include "SDL2/SDL_vulkan.h"
 #include "vulkan/vulkan.h"
 #include "vma/vk_mem_alloc.h"
 #ifdef WIN32

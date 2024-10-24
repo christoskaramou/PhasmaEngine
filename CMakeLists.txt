@@ -34,7 +34,7 @@ set(ASSETS_DIR "${PHASMA_DIR}/Assets")
 include_directories("${PHASMA_DIR}")
 include_directories("${PHASMA_DIR}/Code")
 include_directories("${INCLUDE_DIR}")
-include_directories("${INCLUDE_DIR}/SDL")
+include_directories("${INCLUDE_DIR}/SDL2")
 include_directories("${INCLUDE_DIR}/imgui")
 include_directories("${INCLUDE_DIR}/FSR2")
 
