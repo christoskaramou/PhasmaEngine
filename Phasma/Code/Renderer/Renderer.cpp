@@ -225,8 +225,8 @@ namespace pe
 
         // Blit to swapchain
         {
-            Image *blitImage = gSettings.current_rendering_image ? gSettings.current_rendering_image : m_displayRT;
-            BlitToSwapchain(cmd, blitImage, imageIndex);
+            // Image *blitImage = gSettings.current_rendering_image ? gSettings.current_rendering_image : m_displayRT;
+            BlitToSwapchain(cmd, m_displayRT, imageIndex);
         }
 
         cmd->End();
@@ -251,7 +251,7 @@ namespace pe
         info.format = format;
         info.width = width;
         info.height = heigth;
-        info.usage = additionalFlags | ImageUsage::ColorAttachmentBit | ImageUsage::SampledBit | ImageUsage::StorageBit;
+        info.usage = additionalFlags | ImageUsage::ColorAttachmentBit | ImageUsage::SampledBit | ImageUsage::StorageBit | ImageUsage::TransferDstBit;
         info.clearColor = clearColor;
         info.name = name;
         if (useMips)
@@ -284,7 +284,7 @@ namespace pe
         ImageCreateInfo info{};
         info.width = static_cast<uint32_t>(WIDTH_f * rtScale);
         info.height = static_cast<uint32_t>(HEIGHT_f * rtScale);
-        info.usage = additionalFlags | ImageUsage::DepthStencilAttachmentBit | ImageUsage::SampledBit;
+        info.usage = additionalFlags | ImageUsage::DepthStencilAttachmentBit | ImageUsage::SampledBit | ImageUsage::TransferDstBit;
         info.format = format;
         info.clearColor = vec4(clearDepth, static_cast<float>(clearStencil), 0.f, 0.f);
         info.name = name;

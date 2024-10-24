@@ -68,7 +68,7 @@ namespace pe
         static void InitCaptureApi() {}
         static void DestroyCaptureApi() {}
         template <class HANDLE>
-        static void SetObjectName(HANDLE &handle, const std::string &name) {}
+        static void SetObjectName(const HANDLE &handle, const std::string &name) {}
         static void StartFrameCapture() {}
         static void EndFrameCapture() {}
         static void TriggerCapture() {}

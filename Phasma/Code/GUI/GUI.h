@@ -1,5 +1,7 @@
 #pragma once
 
+struct ImGuiStyle;
+
 namespace pe
 {
     constexpr float TITLEBAR_HEIGHT = 19.f;
@@ -8,7 +10,6 @@ namespace pe
     class CommandBuffer;
     class Queue;
     class RendererSystem;
-    struct ImGuiStyle;
 
     class GUI
     {
@@ -16,34 +17,24 @@ namespace pe
         GUI();
         ~GUI();
 
-        void InitGUI();
+        void Init();
         void Update();
-        void RenderViewPorts();
-        void InitImGui();
         void Draw(CommandBuffer * cmd);
-        static void SetWindowStyle(ImGuiStyle *dst = nullptr);
-        void UpdateWindows();
-        void Menu() const;
-        void Loading() const;
-        void Metrics() const;
-
+    
+    private:
         static void async_fileDialog_ImGuiMenuItem(const char *menuLabel, const char *dialogTitle, const std::vector<const char *> &filter);
         static void async_messageBox_ImGuiMenuItem(const char *menuLabel, const char *messageBoxTitle, const char *message);
 
-        void Scripts() const;
-        void Shaders() const;
-        void Models() const;
-        void Properties() const;
-        void CreateRenderPass();
-        void Destroy();
+        void Menu();
+        void Loading();
+        void Metrics();
+        void Shaders();
+        void Properties();
+
+        bool show_demo_window = false;
+        std::unique_ptr<Attachment> m_attachment;
 
     public:
-        bool show_demo_window = false;
         bool render = true;
-        std::string name;
-        RenderPass *renderPass;
-        std::vector<Attachment> attachments;
-        RendererSystem *renderer;
-        Queue *m_renderQueue;
     };
 }

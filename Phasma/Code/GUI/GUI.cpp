@@ -76,20 +76,6 @@ namespace pe
         }
     }
 
-    void GUI::UpdateWindows()
-    {
-        if (show_demo_window)
-            ImGui::ShowDemoWindow(&show_demo_window);
-
-        Menu();
-        Loading();
-        Metrics();
-        Properties();
-        Shaders();
-        Models();
-        Scripts();
-    }
-
     static std::atomic_bool s_modelLoading = false;
 
     void GUI::async_fileDialog_ImGuiMenuItem(const char *menuLabel, const char *dialogTitle,
@@ -144,7 +130,7 @@ namespace pe
     static bool models_open = false;
     static bool scripts_open = false;
 
-    void GUI::Menu() const
+    void GUI::Menu()
     {
         if (ImGui::BeginMainMenuBar())
         {
@@ -170,7 +156,7 @@ namespace pe
         }
     }
 
-    void GUI::Loading() const
+    void GUI::Loading()
     {
         static const ImVec4 color{0, 232.f / 256, 224.f / 256, 1.f};
         static const ImVec4 bdcolor{0.f, 168.f / 256, 162.f / 256, 1.f};
@@ -195,7 +181,7 @@ namespace pe
         }
     }
 
-    void GUI::Metrics() const
+    void GUI::Metrics()
     {
         if (!metrics_open)
             return;
@@ -217,6 +203,7 @@ namespace pe
         ImGui::Text("CPU Draw: %.3f ms", static_cast<float>(MILLI(frameTimer.GetCpuTotal() - frameTimer.GetUpdatesStamp())));
         ImGui::Unindent(16.0f);
 
+#if PE_DEBUG_MODE
         float gpuTotal = 0.f;
         for (auto &timeInfo : Debug::s_timeInfos)
         {
@@ -242,75 +229,37 @@ namespace pe
         Debug::s_timers.clear();
         Debug::s_timeInfos.clear();
         ImGui::Unindent(16.0f);
+#endif
 
-        ImGui::Separator();
-        ImGui::Separator();
-        ImGui::Separator();
-        ImGui::Text("Render Target");
-        static const char *current_item = "viewport";
-        std::vector<const char *> items(gSettings.rendering_images.size());
-        for (int i = 0; i < items.size(); i++)
-            items[i] = gSettings.rendering_images[i]->GetName().c_str();
+        // ImGui::Separator();
+        // ImGui::Separator();
+        // ImGui::Separator();
+        // ImGui::Text("Render Target");
+        // static const char *current_item = "viewport";
+        // std::vector<const char *> items(gSettings.rendering_images.size());
+        // for (int i = 0; i < items.size(); i++)
+        //     items[i] = gSettings.rendering_images[i]->GetName().c_str();
 
-        if (ImGui::BeginCombo("##combo", current_item))
-        {
-            for (int n = 0; n < items.size(); n++)
-            {
-                bool is_selected = (current_item == items[n]);
-                if (ImGui::Selectable(items[n], is_selected))
-                {
-                    current_item = items[n];
-                    gSettings.current_rendering_image = gSettings.rendering_images[n];
-                }
-                if (is_selected)
-                    ImGui::SetItemDefaultFocus();
-            }
-            ImGui::EndCombo();
-        }
+        // if (ImGui::BeginCombo("##combo", current_item))
+        // {
+        //     for (int n = 0; n < items.size(); n++)
+        //     {
+        //         bool is_selected = (current_item == items[n]);
+        //         if (ImGui::Selectable(items[n], is_selected))
+        //         {
+        //             current_item = items[n];
+        //             gSettings.current_rendering_image = gSettings.rendering_images[n];
+        //         }
+        //         if (is_selected)
+        //             ImGui::SetItemDefaultFocus();
+        //     }
+        //     ImGui::EndCombo();
+        // }
+
         ImGui::End();
     }
 
-    void GUI::Scripts() const
-    {
-        // if (!scripts_open)
-        //	return;
-
-        // ImGui::Begin("Scripts Folder", &scripts_open);
-        //
-        // const char* result = async_inputBox_ImGuiButton("Create New Script", "Script", "Give a name followed by the extension .cs");
-        // if (result)
-        //{
-        //	std::string res = result;
-        //	if (std::find(file_list.begin(), file_list.end(), res) == file_list.end())
-        //	{
-        //		const std::string cmd = "type nul > " + Path::Assets + "Scripts\\" + res;
-        //		system(cmd.c_str());
-        //		file_list.push_back(res);
-        //	}
-        //	else
-        //	{
-        //		SDL_ShowSimpleMessageBox(
-        //				SDL_MESSAGEBOX_INFORMATION, "Script not created", "Script name already exists", g_Window
-        //		);
-        //	}
-        // }
-        //
-        // for (uint32_t i = 0; i < file_list.size(); i++)
-        //{
-        //	std::string name = file_list[i] + "##" + std::to_string(i);
-        //	if (ImGui::Selectable(name.c_str(), false, ImGuiSelectableFlags_AllowDoubleClick))
-        //	{
-        //		if (ImGui::IsMouseDoubleClicked(0))
-        //		{
-        //			std::string s = Path::Assets + "Scripts\\" + file_list[i];
-        //			system(s.c_str());
-        //		}
-        //	}
-        // }
-        // ImGui::End();
-    }
-
-    void GUI::Shaders() const
+    void GUI::Shaders()
     {
         if (!shaders_open)
             return;
@@ -338,13 +287,7 @@ namespace pe
         ImGui::End();
     }
 
-    void GUI::Models() const
-    {
-        if (!models_open)
-            return;
-    }
-
-    void GUI::Properties() const
+    void GUI::Properties()
     {
         if (!properties_open)
             return;
@@ -446,7 +389,7 @@ namespace pe
         //     ImGui::Unindent(16.0f);
         // }
 
-        if (ImGui::Checkbox("Sun Light", (bool *)&gSettings.shadows))
+        if (ImGui::Checkbox("Sun Light", &gSettings.shadows))
         {
             // Update light pass descriptor sets for the skybox change
             LightOpaquePass &lightOpaquePass = *GetGlobalComponent<LightOpaquePass>();
@@ -491,8 +434,18 @@ namespace pe
         ImGui::End();
     }
 
-    void GUI::InitImGui()
+    void GUI::Init()
     {
+        //                   counter clock wise
+        // x, y, z coords orientation   // u, v coords orientation
+        //          |  /|               // (0,0)-------------> u
+        //          | /  +z             //     |
+        //          |/                  //     |
+        //  --------|-------->          //     |
+        //         /|       +x          //     |
+        //        /	|                   //     |
+        //       /  |/ +y               //     |/ v
+
         auto &gSettings = Settings::Get<GlobalSettings>();
         std::string directory = Path::Assets + "Scripts";
         for (auto &file : std::filesystem::recursive_directory_iterator(directory))
@@ -520,7 +473,8 @@ namespace pe
         io.ConfigFlags |= ImGuiConfigFlags_ViewportsEnable;        // Enable multiple viewports
         io.BackendFlags |= ImGuiBackendFlags_RendererHasViewports; // Backend Renderer supports multiple viewports.
 
-        SetWindowStyle();
+        ImGui::StyleColorsClassic();
+        ImGui::GetStyle().Colors[ImGuiCol_WindowBg] = ImVec4(0.00f, 0.00f, 0.00f, 0.3f);
 
         ImGui_ImplSDL2_InitForVulkan(RHII.GetWindow());
 
@@ -540,12 +494,11 @@ namespace pe
         initInfo.Allocator = nullptr;
         initInfo.CheckVkResultFn = nullptr;
 
-        renderer = GetGlobalSystem<RendererSystem>();
-        attachments.resize(1);
-        attachments[0] = {};
-        attachments[0].image = renderer->GetDisplayRT();
-        attachments[0].loadOp = AttachmentLoadOp::Load;
-        renderPass = CommandBuffer::GetRenderPass(1, attachments.data());
+        RendererSystem *renderer = GetGlobalSystem<RendererSystem>();
+        m_attachment = std::make_unique<Attachment>();
+        m_attachment->image = renderer->GetDisplayRT();
+        m_attachment->loadOp = AttachmentLoadOp::Load;
+        RenderPass *renderPass = CommandBuffer::GetRenderPass(1, m_attachment.get());
         ImGui_ImplVulkan_Init(&initInfo, renderPass->ApiHandle());
 
         CommandBuffer *cmd = CommandBuffer::GetFree(queue);
@@ -560,30 +513,14 @@ namespace pe
         queue->WaitIdle();
     }
 
-    void GUI::InitGUI()
-    {
-        //                   counter clock wise
-        // x, y, z coords orientation   // u, v coords orientation
-        //          |  /|               // (0,0)-------------> u
-        //          | /  +z             //     |
-        //          |/                  //     |
-        //  --------|-------->          //     |
-        //         /|       +x          //     |
-        //        /	|                   //     |
-        //       /  |/ +y               //     |/ v
-
-        m_renderQueue = RHII.GetRenderQueue();
-
-        InitImGui();
-    }
-
     void GUI::Draw(CommandBuffer *cmd)
     {
         if (!render || ImGui::GetDrawData()->TotalVtxCount <= 0)
             return;
 
+        RendererSystem *renderer = GetGlobalSystem<RendererSystem>();
         Image *displayRT = renderer->GetDisplayRT();
-        attachments[0].image = displayRT;
+        m_attachment->image = displayRT;
 
         ImageBarrierInfo barrierInfo{};
         barrierInfo.image = displayRT;
@@ -592,31 +529,25 @@ namespace pe
         barrierInfo.accessMask = Access::ColorAttachmentReadBit;
 
         cmd->ImageBarrier(barrierInfo);
-        cmd->BeginPass(1, attachments.data(), "GUI", true);
+        cmd->BeginPass(1, m_attachment.get(), "GUI", true);
         ImGui_ImplVulkan_RenderDrawData(ImGui::GetDrawData(), cmd->ApiHandle());
         cmd->EndPass();
 
         ImGui::RenderPlatformWindowsDefault(); // draws the windows outside the surface
     }
 
-    void GUI::SetWindowStyle(ImGuiStyle *dst)
-    {
-        ImGui::StyleColorsClassic();
-        ImGui::GetStyle().Colors[ImGuiCol_WindowBg] = ImVec4(0.00f, 0.00f, 0.00f, 0.3f);
-    }
-
-    void GUI::Destroy()
-    {
-        if (renderPass)
-        {
-            RenderPass::Destroy(renderPass);
-            renderPass = nullptr;
-        }
-    }
-
     void GUI::Update()
     {
-        if (render)
-            UpdateWindows();
+        if (!render)
+            return;
+
+        if (show_demo_window)
+            ImGui::ShowDemoWindow(&show_demo_window);
+
+        Menu();
+        Loading();
+        Metrics();
+        Properties();
+        Shaders();
     }
 }

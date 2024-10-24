@@ -79,7 +79,7 @@ namespace pe
         }
 
         // Init GUI
-        m_gui.InitGUI();
+        m_gui.Init();
 
         m_renderArea.Update(0.0f, 0.0f, WIDTH_f, HEIGHT_f);
 
@@ -184,7 +184,6 @@ namespace pe
 
         m_skyBoxDay.Destroy();
         m_skyBoxNight.Destroy();
-        m_gui.Destroy();
 
         for (auto &rt : m_renderTargets)
             Image::Destroy(rt.second);

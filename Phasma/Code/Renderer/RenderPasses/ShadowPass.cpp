@@ -24,7 +24,7 @@ namespace pe
             info.width = Settings::Get<GlobalSettings>().shadow_map_size;
             info.height = Settings::Get<GlobalSettings>().shadow_map_size;
             info.tiling = ImageTiling::Optimal;
-            info.usage = ImageUsage::DepthStencilAttachmentBit | ImageUsage::SampledBit;
+            info.usage = ImageUsage::DepthStencilAttachmentBit | ImageUsage::SampledBit | ImageUsage::TransferDstBit;
             info.clearColor = vec4(Color::Depth, Color::Stencil, 0.0f, 1.0f);
             info.name = "ShadowMap_" + std::to_string(i++);
             texture = Image::Create(info);
