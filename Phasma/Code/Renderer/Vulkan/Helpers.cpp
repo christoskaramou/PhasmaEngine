@@ -1,4 +1,4 @@
-#if PE_VULKAN
+#ifdef PE_VULKAN
 namespace pe
 {
     bool IsDepthAndStencil(Format format)

@@ -1,4 +1,4 @@
-#if PE_VULKAN
+#ifdef PE_VULKAN
 #include "Renderer/Semaphore.h"
 #include "Renderer/RHI.h"
 

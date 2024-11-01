@@ -32,7 +32,7 @@
 #define FFX_CACAO_ENABLE_D3D12
 #endif
 
-#if PE_VULKAN
+#ifdef PE_VULKAN
 #define FFX_CACAO_ENABLE_VULKAN
 #endif
 

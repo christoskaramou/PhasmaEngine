@@ -1,5 +1,7 @@
 #include "Shader/Shader.h"
 #include "Renderer/Pipeline.h"
+#include <locale>
+#include <codecvt>
 
 namespace pe
 {
@@ -127,6 +129,10 @@ namespace pe
         std::string path = sourcePath;
         if (path.find(Path::Assets) == std::string::npos)
             path = Path::Assets + sourcePath;
+
+        if (!FileWatcher::Get(path))
+            PE_ERROR("Shader file does not exist");
+
         m_isHlsl = path.ends_with(".hlsl");
         m_pathID = StringHash(path);
 
@@ -148,11 +154,11 @@ namespace pe
         {
             if (m_isHlsl)
             {
-                CompileHlsl(sourcePath, defines);
+                CompileHlsl(defines);
             }
             else
             {
-                CompileGlsl(sourcePath, defines);
+                CompileGlsl(defines);
             }
 
             m_cache.WriteSpvToFile(m_spirv);
@@ -226,7 +232,7 @@ namespace pe
             options.AddMacroDefinition(def.name, def.value);
     }
 
-    bool Shader::CompileGlsl(const std::string &sourcePath, const std::vector<Define> &defines)
+    bool Shader::CompileGlsl(const std::vector<Define> &defines)
     {
         shaderc::CompileOptions options;
 
@@ -267,7 +273,7 @@ namespace pe
         }
 
         shaderc::SpvCompilationResult module = m_compiler.CompileGlslToSpv(
-            m_cache.GetShaderCode(), static_cast<shaderc_shader_kind>(shaderKindFlags), sourcePath.c_str(), GetEntryName().c_str(), options);
+            m_cache.GetShaderCode(), static_cast<shaderc_shader_kind>(shaderKindFlags), m_cache.GetSourcePath().c_str(), GetEntryName().c_str(), options);
 
         if (module.GetCompilationStatus() != shaderc_compilation_status_success)
         {
@@ -282,18 +288,27 @@ namespace pe
 
     std::wstring ConvertUtf8ToWide(const std::string &str)
     {
-        int count = MultiByteToWideChar(CP_UTF8, 0, str.c_str(), static_cast<int>(str.length()), NULL, 0);
-        std::wstring wstr(count, 0);
-        MultiByteToWideChar(CP_UTF8, 0, str.c_str(), static_cast<int>(str.length()), &wstr[0], count);
-        return wstr;
+        std::wstring wide_str;
+        std::mbstate_t state = std::mbstate_t();
+        const char *src = str.data();
+        std::size_t len = str.size();
+        std::vector<wchar_t> buffer(len);
+
+        const char *src_end = src + len;
+        wchar_t *dst = buffer.data();
+        wchar_t *dst_end = dst + buffer.size();
+
+        std::codecvt_utf8<wchar_t> conv;
+        auto result = conv.in(state, src, src_end, src, dst, dst_end, dst);
+
+        if (result == std::codecvt_base::ok)
+            wide_str.assign(buffer.data(), dst);
+
+        return wide_str;
     }
 
-    bool Shader::CompileHlsl(const std::string &sourcePath, const std::vector<Define> &defines)
+    bool Shader::CompileHlsl(const std::vector<Define> &defines)
     {
-        std::string path = sourcePath;
-        if (path.find(Path::Assets) == std::string::npos)
-            path = Path::Assets + sourcePath;
-
         std::vector<LPCWSTR> args{};
 
         args.push_back(L"-spirv");
@@ -358,55 +373,69 @@ namespace pe
             args.push_back(wdefines[i++].c_str());
         }
 
-        using namespace Microsoft::WRL;
-        ComPtr<IDxcUtils> dxc_utils;
-        auto hr = DxcCreateInstance(CLSID_DxcUtils, IID_PPV_ARGS(dxc_utils.ReleaseAndGetAddressOf()));
+        IDxcUtils *dxc_utils = nullptr;
+        auto hr = DxcCreateInstance(CLSID_DxcUtils, IID_PPV_ARGS(&dxc_utils));
         if (FAILED(hr))
             return false;
 
-        ComPtr<IDxcIncludeHandler> include_handler;
-        hr = dxc_utils->CreateDefaultIncludeHandler(include_handler.ReleaseAndGetAddressOf());
+        IDxcIncludeHandler *include_handler = nullptr;
+        hr = dxc_utils->CreateDefaultIncludeHandler(&include_handler);
         if (FAILED(hr))
             return false;
 
-        ComPtr<IDxcCompiler3> dxc_compiler;
+        IDxcCompiler3 *dxc_compiler = nullptr;
         hr = DxcCreateInstance(CLSID_DxcCompiler, IID_PPV_ARGS(&dxc_compiler));
         if (FAILED(hr))
             return false;
 
-        ComPtr<IDxcUtils> pUtils;
-        DxcCreateInstance(CLSID_DxcUtils, IID_PPV_ARGS(pUtils.GetAddressOf()));
-        ComPtr<IDxcBlobEncoding> pSource;
+        IDxcUtils *pUtils = nullptr;
+        DxcCreateInstance(CLSID_DxcUtils, IID_PPV_ARGS(&pUtils));
+        IDxcBlobEncoding *pSource = nullptr;
         uint32_t size = static_cast<uint32_t>(m_cache.GetShaderCode().size());
-        pUtils->CreateBlob(m_cache.GetShaderCode().c_str(), size, CP_UTF8, pSource.GetAddressOf());
+        pUtils->CreateBlob(m_cache.GetShaderCode().c_str(), size, CP_UTF8, &pSource);
 
         DxcBuffer sourceBuffer;
         sourceBuffer.Ptr = pSource->GetBufferPointer();
         sourceBuffer.Size = pSource->GetBufferSize();
         sourceBuffer.Encoding = 0;
 
-        ComPtr<IDxcResult> result;
+        // TODO: Exception thrown at 0x00007FFFCDDEFA4C in Phasma.exe: Microsoft C++ exception: hlsl::Exception at memory location 0x0000000EC72FB3B0.
+        IDxcResult *result = nullptr;
         hr = dxc_compiler->Compile(
             &sourceBuffer,
             args.data(),
             static_cast<uint32_t>(args.size()),
-            include_handler.Get(),
+            include_handler,
             IID_PPV_ARGS(&result));
 
+        HRESULT compileStatus;
+        result->GetStatus(&compileStatus);
+        if (FAILED(compileStatus))
+            return false;
+
         // Error Handling
-        ComPtr<IDxcBlobUtf8> pErrors;
-        result->GetOutput(DXC_OUT_ERRORS, IID_PPV_ARGS(pErrors.GetAddressOf()), nullptr);
+        IDxcBlobUtf8 *pErrors = nullptr;
+        result->GetOutput(DXC_OUT_ERRORS, IID_PPV_ARGS(&pErrors), nullptr);
         if (pErrors && pErrors->GetStringLength() > 0)
             PE_ERROR(pErrors->GetStringPointer());
 
         // Get shader output
-        ComPtr<IDxcBlob> pObject;
-        result->GetOutput(DXC_OUT_OBJECT, IID_PPV_ARGS(pObject.GetAddressOf()), nullptr);
+        IDxcBlob *pObject = nullptr;
+        result->GetOutput(DXC_OUT_OBJECT, IID_PPV_ARGS(&pObject), nullptr);
         if (!pObject)
             return false;
 
         m_spirv.resize(pObject->GetBufferSize() / sizeof(uint32_t));
         memcpy(m_spirv.data(), pObject->GetBufferPointer(), pObject->GetBufferSize());
+
+        dxc_utils->Release();
+        include_handler->Release();
+        dxc_compiler->Release();
+        pUtils->Release();
+        pSource->Release();
+        result->Release();
+        pErrors->Release();
+        pObject->Release();
 
         return true;
     }

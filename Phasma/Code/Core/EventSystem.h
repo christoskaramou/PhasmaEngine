@@ -11,18 +11,18 @@ namespace pe
         static void Destroy();
 
         // DISPATCHING EVENTS ----------------------------------
-        static void RegisterEvent(EventID event);
-        static void UnregisterEvent(EventID type);
-        static void RegisterCallback(EventID type, Func &&func);
-        static void DispatchEvent(EventID type, std::any &&data);
+        static void RegisterEvent(size_t event);
+        static void UnregisterEvent(size_t event);
+        static void RegisterCallback(size_t event, Func &&func);
+        static void DispatchEvent(size_t event, std::any &&data);
         static void ClearEvents();
         // -----------------------------------------------------
 
         // POLLING EVENTS --------------------------------------
         // Push event have to be polled manually
-        static void PushEvent(EventID type);
+        static void PushEvent(size_t event);
         // Poll a pushed event
-        static bool PollEvent(EventID type);
+        static bool PollEvent(size_t event);
         static void ClearPushedEvents();
         // -----------------------------------------------------
 

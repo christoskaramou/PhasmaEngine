@@ -189,10 +189,14 @@ namespace pe
         auto &gSettings = Settings::Get<GlobalSettings>();
         ImGui::Begin("Metrics", &metrics_open);
         ImGui::Text("Dear ImGui %s", ImGui::GetVersion());
-        auto framerate = ImGui::GetIO().Framerate;
-        ImGui::Text("Average %.3f ms (%.1f FPS)", 1000.0f / ImGui::GetIO().Framerate, ImGui::GetIO().Framerate);
-        ImGui::DragInt("FPS", &gSettings.fps, 0.1f);
-        gSettings.fps = max(gSettings.fps, 10);
+        ImGui::Checkbox("Unlock FPS", &gSettings.unlock_fps);
+        float framerate = ImGui::GetIO().Framerate;
+        ImGui::Text("Average %.3f ms (%.1f FPS)", 1000.0f / framerate, framerate);
+        if (!gSettings.unlock_fps)
+        {
+            ImGui::DragInt("FPS", &gSettings.target_fps, 0.1f);
+            gSettings.target_fps = max(gSettings.target_fps, 10);
+        }
         ImGui::Separator();
         ImGui::Separator();
 

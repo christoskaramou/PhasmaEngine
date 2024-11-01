@@ -44,7 +44,7 @@ namespace pe
         return code;
     }
 
-    void ShaderCache::Init(const std::string &sourcePath, const Hash &definesHash)
+    void ShaderCache::Init(const std::string &sourcePath, size_t definesHash)
     {
         m_includes = {};
 

@@ -333,7 +333,7 @@ namespace pe
             if (primitive + culls_per_task > primitivesCount)
                 culls_per_task = primitivesCount - primitive;
 
-            Task task = e_Update_ThreadPool.Enqueue(cullAsync, node, primitive, culls_per_task);
+            auto task = e_Update_ThreadPool.Enqueue(cullAsync, node, primitive, culls_per_task);
             tasks.push_back(std::move(task));
         }
 

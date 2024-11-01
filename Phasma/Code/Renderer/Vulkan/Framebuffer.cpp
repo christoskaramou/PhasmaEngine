@@ -1,4 +1,4 @@
-#if PE_VULKAN
+#ifdef PE_VULKAN
 #include "Renderer/Framebuffer.h"
 #include "Renderer/RenderPass.h"
 #include "Renderer/RHI.h"

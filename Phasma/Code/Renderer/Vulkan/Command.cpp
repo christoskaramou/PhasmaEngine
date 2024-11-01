@@ -1,4 +1,4 @@
-#if PE_VULKAN
+#ifdef PE_VULKAN
 #include "Renderer/Command.h"
 #include "Renderer/RHI.h"
 #include "Renderer/RenderPass.h"

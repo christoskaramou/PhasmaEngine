@@ -52,7 +52,7 @@ namespace pe
 
         inline static std::unordered_map<size_t, DescriptorLayout *> s_descriptorLayouts{};
         
-        inline static Hash CalculateHash(const std::vector<DescriptorBindingInfo> &bindingInfos, ShaderStage stage, bool pushDescriptor = false)
+        inline static size_t CalculateHash(const std::vector<DescriptorBindingInfo> &bindingInfos, ShaderStage stage, bool pushDescriptor = false)
         {
             Hash hash;
             hash.Combine(static_cast<uint32_t>(stage));
@@ -73,7 +73,7 @@ namespace pe
         inline static DescriptorLayout *GetOrCreate(const std::vector<DescriptorBindingInfo> &bindingInfos, ShaderStage stage, bool pushDescriptor = false)
         {
             static size_t count = 0;
-            Hash hash = DescriptorLayout::CalculateHash(bindingInfos, stage, pushDescriptor);
+            size_t hash = DescriptorLayout::CalculateHash(bindingInfos, stage, pushDescriptor);
             auto it = DescriptorLayout::s_descriptorLayouts.find(hash);
             if (it == DescriptorLayout::s_descriptorLayouts.end())
             {

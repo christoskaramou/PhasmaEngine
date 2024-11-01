@@ -101,11 +101,6 @@ namespace pe
         // Wait for the previous corresponding frame commands to finish first
         WaitPreviousFrameCommands();
 
-#if PE_SCRIPTS
-        // universal scripts
-        for (auto &s : scripts)
-            s->update(static_cast<float>(delta));
-#endif
         // GUI
         m_gui.Update();
 
@@ -176,11 +171,6 @@ namespace pe
 
         for (auto &rc : m_renderPassComponents)
             rc->Destroy();
-
-#if PE_SCRIPTS
-        for (auto &script : scripts)
-            delete script;
-#endif
 
         m_skyBoxDay.Destroy();
         m_skyBoxNight.Destroy();

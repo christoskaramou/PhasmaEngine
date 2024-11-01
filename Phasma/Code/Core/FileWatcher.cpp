@@ -12,14 +12,14 @@ namespace pe
 
         StringHash hash(file);
 
-        if (Get(hash) != nullptr)
+        if (FileWatcher::Get(hash) != nullptr)
             return;
 
         std::lock_guard<std::mutex> guard(s_mutex);
         s_watchers[hash] = new FileWatcher(file, std::forward<Func>(callback));
     }
 
-    const FileWatcher *FileWatcher::Get(StringHash hash)
+    const FileWatcher *FileWatcher::Get(size_t hash)
     {
         auto it = s_watchers.find(hash);
         if (it != s_watchers.end())
@@ -30,15 +30,15 @@ namespace pe
 
     const FileWatcher *FileWatcher::Get(const std::string &file)
     {
-        return Get(StringHash(file));
+        return FileWatcher::Get(StringHash(file));
     }
 
     void FileWatcher::Erase(const std::string &file)
     {
-        Erase(StringHash(file));
+        FileWatcher::Erase(StringHash(file));
     }
 
-    void FileWatcher::Erase(StringHash hash)
+    void FileWatcher::Erase(size_t hash)
     {
         std::lock_guard<std::mutex> guard(s_mutex);
 
@@ -59,53 +59,80 @@ namespace pe
         s_watchers.clear();
     }
 
-    void FileWatcher::Start(double interval)
+    void FileWatcher::CheckFiles()
     {
-        if (s_running)
-            return;
-
-        auto watchLambda = [interval]()
-        {
-            Timer timer;
-            s_running = true;
-            while (s_running)
-            {
-                timer.ThreadSleep(interval);
-
-                std::lock_guard<std::mutex> guard(s_mutex);
-                for (auto &watcher : s_watchers)
-                    watcher.second->Watch();
-            }
-        };
-
-        e_FW_ThreadPool.Enqueue(watchLambda);
-
-        // Watch Shaders folder files
+        // Add "Shaders" folder files
         for (auto &file : std::filesystem::recursive_directory_iterator(Path::Assets + "Shaders"))
         {
             std::string filePath = file.path().string();
             std::replace(filePath.begin(), filePath.end(), '\\', '/');
 
-            // The event id will match with the path id from the shader when created
-            EventID event(filePath);
-            EventSystem::RegisterEvent(event);
-
-            auto callback = [event]()
+            StringHash filePathHash(filePath);
+            if (!FileWatcher::Get(filePathHash))
             {
-                // Single event to notify shader changed events
-                // It will trigger Renderer::PollShaders
-                // Polled in Window::ProcessEvents
-                EventSystem::PushEvent(EventCompileShaders);
+                EventSystem::RegisterEvent(filePathHash);
 
-                // After Window::ProcessEvents, the specific shader event accurs
-                // Easy to poll, we have PassInfo::Shader::GetPathID() == EventID
-                // Polled in Renderer::PollShaders
-                EventSystem::PushEvent(event);
-            };
+                auto callback = [filePathHash]()
+                {
+                    EventSystem::PushEvent(filePathHash);
+                    EventSystem::PushEvent(EventCompileShaders);
+                };
 
-            // Add the callback for this shader file
-            Add(filePath, callback);
+                FileWatcher::Add(filePath, callback);
+            }
         }
+
+        // Add "Scripts" folder files
+        for (auto &file : std::filesystem::recursive_directory_iterator(Path::Assets + "Scripts"))
+        {
+            std::string filePath = file.path().string();
+            std::replace(filePath.begin(), filePath.end(), '\\', '/');
+
+            StringHash filePathHash(filePath);
+
+            if (!FileWatcher::Get(filePathHash))
+            {
+                EventSystem::RegisterEvent(filePathHash);
+
+                auto callback = [filePathHash]()
+                {
+                    EventSystem::PushEvent(filePathHash);
+                    EventSystem::PushEvent(EventCompileScripts);
+                };
+
+                FileWatcher::Add(filePath, callback);
+            }
+        }
+    }
+
+    void FileWatcher::WatchFiles()
+    {
+        std::lock_guard<std::mutex> guard(s_mutex);
+        for (auto &watcher : s_watchers)
+            watcher.second->Watch();
+    }
+
+    void FileWatcher::Start()
+    {
+        if (s_running)
+            return;
+
+        s_running = true;
+        FileWatcher::CheckFiles();
+        FileWatcher::WatchFiles();
+
+        auto callback = []()
+        {
+            Timer timer;
+            while (s_running)
+            {
+                FileWatcher::CheckFiles();
+                FileWatcher::WatchFiles();
+                timer.ThreadSleep(1.0);
+            }
+        };
+
+        e_FW_ThreadPool.Enqueue(callback);
     }
 
     FileWatcher::FileWatcher(const std::string &file, Func &&callback)
@@ -127,7 +154,6 @@ namespace pe
         if (m_file.empty())
             return 0;
 
-        std::filesystem::file_time_type lastTime = std::filesystem::last_write_time(m_file);
-        return std::filesystem::file_time_type::time_point(lastTime).time_since_epoch().count();
+        return std::filesystem::last_write_time(m_file).time_since_epoch().count();
     }
 }

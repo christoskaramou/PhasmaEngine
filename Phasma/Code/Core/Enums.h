@@ -63,16 +63,16 @@ namespace pe
         Type m_value;
     };
 
-#define DEFINE_FLAGS_OPERATORS(Enum)                                                                    \
-    inline Flags<##Enum> operator|(##Enum a, ##Enum b) { return Flags<##Enum>(a) | b; }                 \
-    inline Flags<##Enum> operator&(##Enum a, ##Enum b) { return Flags<##Enum>(a) & b; }                 \
-    inline Flags<##Enum> operator^(##Enum a, ##Enum b) { return Flags<##Enum>(a) ^ b; }                 \
-    inline Flags<##Enum> operator<<(##Enum a, unsigned int shift) { return Flags<##Enum>(a) << shift; } \
-    inline Flags<##Enum> operator>>(##Enum a, unsigned int shift) { return Flags<##Enum>(a) >> shift; } \
-    inline Flags<##Enum> operator|(##Enum a, const Flags<##Enum> &b) { return Flags<##Enum>(a) | b; }   \
-    inline Flags<##Enum> operator&(##Enum a, const Flags<##Enum> &b) { return Flags<##Enum>(a) & b; }   \
-    inline Flags<##Enum> operator^(##Enum a, const Flags<##Enum> &b) { return Flags<##Enum>(a) ^ b; }   \
-    inline Flags<##Enum> operator~(##Enum a) { return ~Flags<##Enum>(a); }
+#define DEFINE_FLAGS_OPERATORS(Enum)                                                              \
+    inline Flags<Enum> operator|(Enum a, Enum b) { return Flags<Enum>(a) | b; }                   \
+    inline Flags<Enum> operator&(Enum a, Enum b) { return Flags<Enum>(a) & b; }                   \
+    inline Flags<Enum> operator^(Enum a, Enum b) { return Flags<Enum>(a) ^ b; }                   \
+    inline Flags<Enum> operator<<(Enum a, unsigned int shift) { return Flags<Enum>(a) << shift; } \
+    inline Flags<Enum> operator>>(Enum a, unsigned int shift) { return Flags<Enum>(a) >> shift; } \
+    inline Flags<Enum> operator|(Enum a, const Flags<Enum> &b) { return Flags<Enum>(a) | b; }     \
+    inline Flags<Enum> operator&(Enum a, const Flags<Enum> &b) { return Flags<Enum>(a) & b; }     \
+    inline Flags<Enum> operator^(Enum a, const Flags<Enum> &b) { return Flags<Enum>(a) ^ b; }     \
+    inline Flags<Enum> operator~(Enum a) { return ~Flags<Enum>(a); }
 
     // Vulkan template specializations in Code\Renderer\Vulkan\HelpersVK.cpp
     template <class T, class U>

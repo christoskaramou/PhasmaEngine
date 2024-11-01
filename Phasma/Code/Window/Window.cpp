@@ -1,7 +1,7 @@
 #include "Window.h"
 #include "Renderer/RHI.h"
 #include "Systems/RendererSystem.h"
-#include "Systems/CameraSystem.h"
+#include "Systems/PostProcessSystem.h"
 #include "Systems/CameraSystem.h"
 #include "imgui/imgui_impl_vulkan.h"
 #include "imgui/imgui_impl_sdl.h"
@@ -31,7 +31,7 @@ namespace pe
         SDL_DestroyWindow(m_apiHandle);
         SDL_Quit();
     }
-    
+
     inline bool IsButtonDown(int *x, int *y, uint32_t button)
     {
         return SDL_GetMouseState(x, y) & button;
@@ -85,7 +85,8 @@ namespace pe
 
     bool Window::ProcessEvents(double delta)
     {
-        RendererSystem *renderer = GetGlobalSystem<RendererSystem>();
+        RendererSystem *rendererSystem = GetGlobalSystem<RendererSystem>();
+        PostProcessSystem *postProcessSystem = GetGlobalSystem<PostProcessSystem>();
         CameraSystem *cameraSystem = GetGlobalSystem<CameraSystem>();
         Camera *camera = cameraSystem->GetCamera(0);
 
@@ -143,10 +144,16 @@ namespace pe
             Debug::TriggerCapture();
 
         if (ImGui::IsKeyDown(ImGuiKey_LeftCtrl) && ImGui::IsKeyPressed(ImGuiKey_G, false))
-            renderer->ToggleGUI();
+            rendererSystem->ToggleGUI();
 
         if (EventSystem::PollEvent(EventCompileShaders))
-            renderer->PollShaders();
+        {
+            rendererSystem->PollShaders();
+            postProcessSystem->PollShaders();
+        }
+
+        if (EventSystem::PollEvent(EventCompileScripts))
+            rendererSystem->PollShaders();
 
         if (EventSystem::PollEvent(EventResize))
         {
@@ -154,7 +161,7 @@ namespace pe
             {
                 int w, h;
                 SDL_Vulkan_GetDrawableSize(m_apiHandle, &w, &h);
-                renderer->Resize(static_cast<uint32_t>(w), static_cast<uint32_t>(h));
+                rendererSystem->Resize(static_cast<uint32_t>(w), static_cast<uint32_t>(h));
             }
         }
 

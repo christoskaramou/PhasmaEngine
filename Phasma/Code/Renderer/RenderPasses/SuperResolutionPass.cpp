@@ -14,8 +14,7 @@ namespace pe
         // convert wchar_t to char
         size_t size = wcslen(message) + 1;
         char *buffer = new char[size];
-        size_t outSize;
-        wcstombs_s(&outSize, buffer, size, message, size - 1);
+        std::wcstombs(buffer, message, size);
 
         switch (type)
         {

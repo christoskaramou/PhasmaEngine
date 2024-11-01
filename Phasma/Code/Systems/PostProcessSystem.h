@@ -10,6 +10,7 @@ namespace pe
         void Destroy() override;
     
         void Resize(uint32_t width, uint32_t height);
+        void PollShaders();
         
         template <class T>
         T *GetEffect()
@@ -19,6 +20,6 @@ namespace pe
         }
 
     private:
-        std::unordered_map<size_t, IRenderPassComponent *> m_renderPassComponents;
+        OrderedMap<size_t, IRenderPassComponent *> m_renderPassComponents;
     };
 }

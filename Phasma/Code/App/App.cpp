@@ -30,7 +30,8 @@ namespace pe
                 return;
             }
         }
-
+        
+        FileWatcher::Start();
         EventSystem::Init();
 
 #ifdef NDEBUG
@@ -38,7 +39,7 @@ namespace pe
 #endif
 
         uint32_t flags = SDL_WINDOW_HIDDEN | SDL_WINDOW_RESIZABLE | SDL_WINDOW_ALLOW_HIGHDPI;
-#if PE_VULKAN
+#ifdef PE_VULKAN
         flags |= SDL_WINDOW_VULKAN;
 #endif
         SDL_DisplayMode dm;
@@ -63,8 +64,6 @@ namespace pe
         CommandBuffer::Return(cmd);
 
         queue->WaitIdle();
-
-        FileWatcher::Start(0.25);
 
         // Render some frames so everything is initialized before destroying the splash screen
         for (int i = 0; i < SWAPCHAIN_IMAGES; i++)
@@ -116,7 +115,8 @@ namespace pe
             m_frameTimer.CountCpuTotalStamp();
         }
 
-        m_frameTimer.ThreadSleep(1.0 / static_cast<double>(Settings::Get<GlobalSettings>().fps) - m_frameTimer.Count());
+        if (!Settings::Get<GlobalSettings>().unlock_fps)
+            m_frameTimer.ThreadSleep(1.0 / static_cast<double>(Settings::Get<GlobalSettings>().target_fps) - m_frameTimer.Count());
         m_frameTimer.Tick();
 
         RHII.NextFrame();

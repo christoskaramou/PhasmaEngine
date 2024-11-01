@@ -1,4 +1,4 @@
-#if PE_VULKAN
+#ifdef PE_VULKAN
 #include "Renderer/RenderPasses/SSAOPass.h"
 #include "Shader/Shader.h"
 #include "Renderer/RHI.h"

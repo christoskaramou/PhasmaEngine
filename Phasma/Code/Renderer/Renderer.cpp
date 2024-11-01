@@ -49,39 +49,6 @@ namespace pe
         scissor.height = static_cast<int>(h);
     }
 
-    void Renderer::CheckModelsQueue()
-    {
-#if PE_SCRIPTS
-        for (auto it = Queue::addScript.begin(); it != Queue::addScript.end();)
-        {
-            delete Model::models[std::get<0>(*it)].script;
-            Model::models[std::get<0>(*it)].script = new Script(std::get<1>(*it).c_str());
-            it = Queue::addScript.erase(it);
-        }
-        for (auto it = Queue::removeScript.begin(); it != Queue::removeScript.end();)
-        {
-            if (Model::models[*it].script)
-            {
-                delete Model::models[*it].script;
-                Model::models[*it].script = nullptr;
-            }
-            it = Queue::removeScript.erase(it);
-        }
-
-        for (auto it = Queue::compileScript.begin(); it != Queue::compileScript.end();)
-        {
-            std::string name;
-            if (Model::models[*it].script)
-            {
-                name = Model::models[*it].script->name;
-                delete Model::models[*it].script;
-                Model::models[*it].script = new Script(name.c_str());
-            }
-            it = Queue::compileScript.erase(it);
-        }
-#endif
-    }
-
     void Renderer::ComputeAnimations()
     {
     }
@@ -351,49 +318,6 @@ namespace pe
         return sampledImage;
     }
 
-#if PE_SCRIPTS
-    // Callbacks for scripts -------------------
-    static void LoadModel(MonoString *folderPath, MonoString *modelName, uint32_t instances)
-    {
-        const std::string curPath = std::filesystem::current_path().string() + "\\";
-        const std::string path(mono_string_to_utf8(folderPath));
-        const std::string name(mono_string_to_utf8(modelName));
-        for (; instances > 0; instances--)
-            Queue::loadModel.emplace_back(curPath + path, name);
-    }
-
-    static bool KeyDown(uint32_t key)
-    {
-        return ImGui::GetIO().KeysDown[key];
-    }
-
-    static bool MouseButtonDown(uint32_t button)
-    {
-        return ImGui::GetIO().MouseDown[button];
-    }
-
-    static ImVec2 GetMousePos()
-    {
-        return ImGui::GetIO().MousePos;
-    }
-
-    static void SetMousePos(float x, float y)
-    {
-        SDL_WarpMouseInWindow(GUI::g_Window, static_cast<int>(x), static_cast<int>(y));
-    }
-
-    static float GetMouseWheel()
-    {
-        return ImGui::GetIO().MouseWheel;
-    }
-
-    static void SetTimeScale(float time_scale)
-    {
-        GUI::time_scale = time_scale;
-    }
-    // ----------------------------------------
-#endif
-
     void Renderer::LoadResources(CommandBuffer *cmd)
     {
         // SKYBOXES LOAD
@@ -413,19 +337,6 @@ namespace pe
             Path::Assets + "Objects/lmcity/lmcity_bk.png",
             Path::Assets + "Objects/lmcity/lmcity_ft.png"};
         m_skyBoxNight.LoadSkyBox(cmd, skyTextures, 512);
-
-#if PE_SCRIPTS
-        // SCRIPTS
-        Script::Init();
-        Script::addCallback("Global::LoadModel", reinterpret_cast<const void *>(LoadModel));
-        Script::addCallback("Global::KeyDown", reinterpret_cast<const void *>(KeyDown));
-        Script::addCallback("Global::SetTimeScale", reinterpret_cast<const void *>(SetTimeScale));
-        Script::addCallback("Global::MouseButtonDown", reinterpret_cast<const void *>(MouseButtonDown));
-        Script::addCallback("Global::GetMousePos", reinterpret_cast<const void *>(GetMousePos));
-        Script::addCallback("Global::SetMousePos", reinterpret_cast<const void *>(SetMousePos));
-        Script::addCallback("Global::GetMouseWheel", reinterpret_cast<const void *>(GetMouseWheel));
-        scripts.push_back(new Script("Load"));
-#endif
     }
 
     void Renderer::CreateUniforms()

@@ -1,72 +1,37 @@
 #pragma once
 
-#if 0
-#include <mono/jit/jit.h>
-#include <mono/metadata/assembly.h>
-#include <mono/metadata/mono-config.h>
-#include <mono/metadata/debug-helpers.h>
-#include <mono/metadata/threads.h>
-#include <mono/metadata/mono-debug.h>
-
 namespace pe
 {
+    using ScriptFunc_Void = void (*)();
+
     class Script
     {
-    private:
-        static inline MonoDomain* domain = nullptr;
-        static inline MonoThread* mainThread = nullptr;
-
-        MonoDomain* child;
-
-        MonoAssembly* assembly;
-        MonoImage* monoImage;
-        MonoClass* scriptClass;
-        MonoObject* scriptInstance;
-        std::vector<MonoMethod*> methods{};
-        MonoMethod* ctor;
-        MonoMethod* dtor;
-        MonoMethod* updateFunc;
-        std::vector<MonoClassField*> fields{};
-
-        static bool initialized;
-
     public:
-        std::string name;
-        std::string ext; // .dll, .exe
-        std::vector<std::string> includes{"CPPcallbacks.cs", "Helper.cs", "MonoGame.Framework.dll"}; // include scripts and libs
+        Script(const std::string &path);
 
-        static std::vector<std::string> dlls;
+        ScriptFunc_Void Init = nullptr;
+        ScriptFunc_Void Update = nullptr;
+        ScriptFunc_Void Draw = nullptr;
+        ScriptFunc_Void Destroy = nullptr;
+
+    private:
+        friend class ScriptManager;
+
+        std::string m_path;
+        size_t m_hash;
+    };
+
+    class ScriptManager
+    {
+    public:
         static void Init();
-        static void Cleanup();
-        static void addCallback(const char* target, const void* staticFunction);
-        Script(const char* file, const char* extension = "dll");
-        ~Script();
+        static void CompileScript(const Script &script);
+        static void LoadScript(const Script &script);
+        static void UnloadScript(const Script &script);
+        static void UnloadAllScripts();
+        static void PollScripts();
 
-        void update(float delta) const;
-
-        template<class T>
-        void getValue(T& value, const char* name)
-        {
-            MonoClassField* idField = mono_class_get_field_from_name(scriptClass, name);
-            if (idField)
-                mono_field_get_value(scriptInstance, idField, &value);
-        }
-
-        template<class T>
-        T getValue(const char* name)
-        {
-            T value;
-            getValue(value, name);
-            return value;
-        }
-
-        template<class T>
-        void setValue(T& value, const char* name)
-        {
-            MonoClassField* idField = mono_class_get_field_from_name(scriptClass, name);
-            if (idField)
-                mono_field_set_value(scriptInstance, idField, &value);
-        }
+    private:
+        inline static std::map<size_t, Script> s_scripts{};
     };
 }
-#endif

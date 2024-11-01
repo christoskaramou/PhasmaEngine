@@ -44,6 +44,7 @@ namespace pe
 
     protected:
         friend class Renderer;
+        friend class PostProcessSystem;
         
         std::vector<Attachment> m_attachments;
         std::vector<Descriptor *> m_descriptors;

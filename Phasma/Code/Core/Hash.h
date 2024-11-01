@@ -42,8 +42,8 @@ namespace pe
         }
 
         bool operator==(const Hash &other) { return m_hash == other.m_hash; }
-
         operator size_t() { return m_hash; }
+        operator size_t() const { return m_hash; }
 
     private:
         size_t m_hash;
@@ -55,8 +55,6 @@ namespace pe
         StringHash() : Hash() {}
         StringHash(const std::string &string) { Combine(string); }
     };
-
-    using EventID = StringHash;
 
     class Hashable
     {

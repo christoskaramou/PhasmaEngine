@@ -3,12 +3,13 @@
 namespace pe
 {
     // PREDEFINED EVENTS ---------------
-    extern EventID EventQuit;
-    extern EventID EventCustom;
-    extern EventID EventSetWindowTitle;
-    extern EventID EventCompileShaders;
-    extern EventID EventResize;
-    extern EventID EventFileWrite;
+    extern size_t EventQuit;
+    extern size_t EventCustom;
+    extern size_t EventSetWindowTitle;
+    extern size_t EventCompileShaders;
+    extern size_t EventCompileScripts;
+    extern size_t EventResize;
+    extern size_t EventFileWrite;
     // ---------------------------------
 
     extern bool IsDepthStencil(Format format);

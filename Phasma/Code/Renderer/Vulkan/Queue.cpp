@@ -1,4 +1,4 @@
-#if PE_VULKAN
+#ifdef PE_VULKAN
 #include "Renderer/Queue.h"
 #include "Renderer/Semaphore.h"
 #include "Renderer/Command.h"

@@ -3,12 +3,13 @@
 namespace pe
 {
     // PREDEFINED EVENTS ---------------------------------------
-    EventID EventQuit           = EventID("PE_Quit");
-    EventID EventCustom         = EventID("PE_Custom");
-    EventID EventSetWindowTitle = EventID("PE_SetWindowTitle");
-    EventID EventCompileShaders = EventID("PE_CompileShaders");
-    EventID EventResize         = EventID("PE_Resize");
-    EventID EventFileWrite      = EventID("PE_FileWrite");
+    size_t EventQuit           = StringHash("PE_Quit");
+    size_t EventCustom         = StringHash("PE_Custom");
+    size_t EventSetWindowTitle = StringHash("PE_SetWindowTitle");
+    size_t EventCompileShaders = StringHash("PE_CompileShaders");
+    size_t EventCompileScripts = StringHash("PE_CompileScripts");
+    size_t EventResize         = StringHash("PE_Resize");
+    size_t EventFileWrite      = StringHash("PE_FileWrite");
     // ----------------------------------------------------------
 
     void EventSystem::Init()
@@ -18,6 +19,7 @@ namespace pe
         RegisterEvent(EventCustom);
         RegisterEvent(EventSetWindowTitle);
         RegisterEvent(EventCompileShaders);
+        RegisterEvent(EventCompileScripts);
         RegisterEvent(EventResize);
         RegisterEvent(EventFileWrite);
     }
@@ -27,7 +29,7 @@ namespace pe
         ClearEvents();
     }
 
-    void EventSystem::RegisterEvent(EventID event)
+    void EventSystem::RegisterEvent(size_t event)
     {
         // Use emplace for efficient in-place construction
         // inserted is a bool that's true if insertion took place
@@ -35,7 +37,7 @@ namespace pe
         PE_ERROR_IF(!inserted, "Event is already registered!");
     }
 
-    void EventSystem::RegisterCallback(EventID event, Func &&func)
+    void EventSystem::RegisterCallback(size_t event, Func &&func)
     {
         auto it = m_events.find(event);
 
@@ -46,7 +48,7 @@ namespace pe
         it->second += std::forward<Func>(func);
     }
 
-    void EventSystem::DispatchEvent(EventID event, std::any &&data)
+    void EventSystem::DispatchEvent(size_t event, std::any &&data)
     {
         auto it = m_events.find(event);
 
@@ -57,7 +59,7 @@ namespace pe
         it->second.Invoke(std::forward<std::any>(data));
     }
 
-    void EventSystem::UnregisterEvent(EventID event)
+    void EventSystem::UnregisterEvent(size_t event)
     {
         auto it = m_events.find(event);
 
@@ -68,7 +70,7 @@ namespace pe
         m_events.erase(it);
     }
 
-    bool EventSystem::PollEvent(EventID event)
+    bool EventSystem::PollEvent(size_t event)
     {
         auto it = m_pushEvents.find(event);
 
@@ -78,10 +80,11 @@ namespace pe
 
         // Erase the event using the iterator, avoiding another lookup
         m_pushEvents.erase(it);
+        
         return true;
     }
 
-    void EventSystem::PushEvent(EventID event)
+    void EventSystem::PushEvent(size_t event)
     {
         // Use emplace for efficient in-place construction
         m_pushEvents.emplace(event);

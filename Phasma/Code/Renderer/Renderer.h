@@ -71,8 +71,6 @@ namespace pe
         void ToggleGUI() { m_gui.render = !m_gui.render; }
 
     protected:
-        static void CheckModelsQueue();
-
         void ComputeAnimations();
         void Upsample(CommandBuffer *cmd, Filter filter);
         void CreateRenderTargets();
@@ -90,8 +88,5 @@ namespace pe
         SkyBox m_skyBoxDay;
         SkyBox m_skyBoxNight;
         GUI m_gui;
-#if PE_SCRIPTS
-        std::vector<Script *> scripts{};
-#endif
     };
 }

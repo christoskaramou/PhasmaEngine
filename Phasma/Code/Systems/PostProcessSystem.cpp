@@ -1,6 +1,9 @@
 #include "Systems/PostProcessSystem.h"
 #include "Systems/RendererSystem.h"
 #include "Systems/CameraSystem.h"
+#include "Renderer/RHI.h"
+#include "Renderer/Pipeline.h"
+#include "Shader/Shader.h"
 #include "Renderer/RenderPasses/BloomPass.h"
 #include "Renderer/RenderPasses/DOFPass.h"
 #include "Renderer/RenderPasses/FXAAPass.h"
@@ -27,9 +30,9 @@ namespace pe
 
         for (auto &renderPassComponent : m_renderPassComponents)
         {
-            renderPassComponent.second->Init();
-            renderPassComponent.second->UpdatePassInfo();
-            renderPassComponent.second->CreateUniforms(cmd);
+            renderPassComponent->Init();
+            renderPassComponent->UpdatePassInfo();
+            renderPassComponent->CreateUniforms(cmd);
         }
     }
 
@@ -41,10 +44,10 @@ namespace pe
         tasks.reserve(m_renderPassComponents.size());
         for (auto &renderPassComponent : m_renderPassComponents)
         {
-            if (renderPassComponent.second->IsEnabled())
+            if (renderPassComponent->IsEnabled())
             {
                 auto task = e_Update_ThreadPool.Enqueue([renderPassComponent, camera_main]()
-                                                        { renderPassComponent.second->Update(camera_main); });
+                                                        { renderPassComponent->Update(camera_main); });
                 tasks.push_back(std::move(task));
             }
         }
@@ -56,12 +59,38 @@ namespace pe
     void PostProcessSystem::Destroy()
     {
         for (auto &renderPassComponent : m_renderPassComponents)
-            renderPassComponent.second->Destroy();
+            renderPassComponent->Destroy();
     }
 
     void PostProcessSystem::Resize(uint32_t width, uint32_t height)
     {
         for (auto &renderPassComponent : m_renderPassComponents)
-            renderPassComponent.second->Resize(width, height);
+            renderPassComponent->Resize(width, height);
+    }
+
+    void PostProcessSystem::PollShaders()
+    {
+        RHII.WaitDeviceIdle();
+
+        for (auto &rc : m_renderPassComponents)
+        {
+            auto info = rc->m_passInfo;
+
+            // PollEvent simply catches a pushed event from FileWatcher
+            if ((info->pCompShader && EventSystem::PollEvent(info->pCompShader->GetPathID())) ||
+                (info->pVertShader && EventSystem::PollEvent(info->pVertShader->GetPathID())) ||
+                (info->pFragShader && EventSystem::PollEvent(info->pFragShader->GetPathID())))
+            {
+                Shader::Destroy(info->pCompShader);
+                Shader::Destroy(info->pVertShader);
+                Shader::Destroy(info->pFragShader);
+
+                info->pCompShader = nullptr;
+                info->pVertShader = nullptr;
+                info->pFragShader = nullptr;
+
+                rc->UpdatePassInfo();
+            }
+        }
     }
 }

@@ -8,12 +8,12 @@ namespace pe
         using Func = std::function<void()>;
 
         static void Add(const std::string &file, Func &&callback);
-        static const FileWatcher *Get(StringHash hash);
+        static const FileWatcher *Get(size_t hash);
         static const FileWatcher *Get(const std::string &file);
-        static void Erase(StringHash hash);
+        static void Erase(size_t hash);
         static void Erase(const std::string &file);
         static void Clear();
-        static void Start(double interval);
+        static void Start();
         inline static void Stop() { s_running = false; }
         inline static bool IsRunning() { return s_running; }
 
@@ -25,6 +25,9 @@ namespace pe
     private:
         FileWatcher() = default;
         FileWatcher(const std::string &file, Func &&callback);
+        
+        inline static void CheckFiles();
+        inline static void WatchFiles();
 
         std::string m_file;
         std::time_t m_time;

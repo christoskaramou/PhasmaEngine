@@ -25,7 +25,7 @@ namespace pe
         m_surface = SDL_CreateRGBSurfaceFrom(data, width, height, 32, width * 4, 0x000000FF, 0x0000FF00, 0x00FF0000, 0xFF000000);
         if (!m_surface)
         {
-            SDL_Log("Failed to load image at %s: %s\n", surface_path, SDL_GetError());
+            SDL_Log("Failed to load image at %s: %s\n", surface_path.c_str(), SDL_GetError());
             return;
         }
 

@@ -55,14 +55,14 @@ namespace pe
         size_t BytesCount() { return m_spirv.size() * sizeof(uint32_t); }
         Reflection &GetReflection() { return m_reflection; }
         ShaderCache &GetCache() { return m_cache; }
-        StringHash GetPathID() { return m_pathID; }
+        size_t GetPathID() { return m_pathID; }
         const PushConstantDesc &GetPushConstantDesc() { return m_reflection.GetPushConstantDesc(); }
         size_t GetID() { return m_id; }
 
     private:
-        bool CompileGlsl(const std::string &sourcePath, const std::vector<Define> &defines);
+        bool CompileGlsl(const std::vector<Define> &defines);
         void AddDefineGlsl(const Define &define, shaderc::CompileOptions &options);
-        bool CompileHlsl(const std::string &sourcePath, const std::vector<Define> &defines);
+        bool CompileHlsl(const std::vector<Define> &defines);
 
         const size_t m_id;
         ShaderCache m_cache;
@@ -70,7 +70,7 @@ namespace pe
         ShaderStage m_shaderStage;
         shaderc::Compiler m_compiler;
         std::vector<uint32_t> m_spirv{};
-        StringHash m_pathID;
+        size_t m_pathID;
         bool m_isHlsl = false;
         
         inline static std::vector<Define> m_globalDefines{};

@@ -2,6 +2,26 @@ cmake_minimum_required(VERSION 3.10)
 set(PROJECT_NAME Phasma)
 project(${PROJECT_NAME} CXX)
 
+set (PE_DIST)
+set (PE_DIST_DEFS PE_VULKAN)
+# Check the operating system
+if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
+    message(STATUS "Detected operating system: Linux")
+    list(APPEND PE_DIST PE_LINUX)
+elseif(CMAKE_SYSTEM_NAME STREQUAL "Windows")
+    message(STATUS "Detected operating system: Windows")
+    list(APPEND PE_DIST PE_WIN32)
+    list(APPEND PE_DIST_DEFS
+        WIN32_LEAN_AND_MEAN
+        NOMINMAX
+        UNICODE
+        _UNICODE
+    )
+else()
+    error("Unsupported operating system")
+    message(STATUS "Detected operating system: ${CMAKE_SYSTEM_NAME}")
+endif()
+
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 if (MSVC)
@@ -14,14 +34,15 @@ if (MSVC)
     set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} /Oi")
     set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /Oi") 
 endif()
-message("CMAKE_CXX_FLAGS = ${CMAKE_CXX_FLAGS}")
+message(STATUS "CMAKE_C_FLAGS = ${CMAKE_C_FLAGS}")
+message(STATUS "CMAKE_CXX_FLAGS = ${CMAKE_CXX_FLAGS}")
 
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY_DEBUG "${CMAKE_CURRENT_BINARY_DIR}/Debug")
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY_RELEASE "${CMAKE_CURRENT_BINARY_DIR}/Release")
 
-message("CMAKE_SOURCE_DIR = ${CMAKE_SOURCE_DIR}")
-message("CMAKE_RUNTIME_OUTPUT_DIRECTORY_DEBUG = ${CMAKE_RUNTIME_OUTPUT_DIRECTORY_DEBUG}")
-message("CMAKE_RUNTIME_OUTPUT_DIRECTORY_RELEASE = ${CMAKE_RUNTIME_OUTPUT_DIRECTORY_RELEASE}")
+message(STATUS "CMAKE_SOURCE_DIR = ${CMAKE_SOURCE_DIR}")
+message(STATUS "CMAKE_RUNTIME_OUTPUT_DIRECTORY_DEBUG = ${CMAKE_RUNTIME_OUTPUT_DIRECTORY_DEBUG}")
+message(STATUS "CMAKE_RUNTIME_OUTPUT_DIRECTORY_RELEASE = ${CMAKE_RUNTIME_OUTPUT_DIRECTORY_RELEASE}")
 
 # Phasma directories
 set(PHASMA_DIR "${CMAKE_CURRENT_SOURCE_DIR}/Phasma")
@@ -55,26 +76,15 @@ add_executable(${PROJECT_NAME} ${SRC_FILES})
 # Precompiled headers
 target_precompile_headers(${PROJECT_NAME} PRIVATE "${INCLUDE_DIR}/PhasmaPch.h")
 
-set (PE_VULKAN 0)
-set (PE_DX12 1)
-
 # Compile Definitions
-set(ADDITIONAL_COMPILE_DEFINITIONS
-    $<$<CONFIG:Debug>:
-        _DEBUG
-    >
-    $<$<CONFIG:Release>:
-        NDEBUG
-    >
-    WIN32
+set(COMPILE_DEFS
+    $<$<CONFIG:Debug>:_DEBUG>
+    $<$<CONFIG:Release>:NDEBUG>
+    ${PE_DIST}
+    ${PE_DIST_DEFS}
     _CONSOLE
-    UNICODE
-    _UNICODE
-    PE_RENDERING_API=${PE_VULKAN}
-    NOMINMAX
-    WIN32_LEAN_AND_MEAN
 )
-target_compile_definitions(${PROJECT_NAME} PRIVATE "${ADDITIONAL_COMPILE_DEFINITIONS}")
+target_compile_definitions(${PROJECT_NAME} PRIVATE ${COMPILE_DEFS})
 
 # Libraries
 set(LIB_FILES
@@ -94,7 +104,7 @@ set(LIB_FILES
     SDL2
     vulkan-1
 )
-target_link_libraries(${PROJECT_NAME} PRIVATE "${LIB_FILES}")
+target_link_libraries(${PROJECT_NAME} PRIVATE ${LIB_FILES})
 
 # Copy assets and DLLs to build directory
 add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
