@@ -21,16 +21,16 @@ namespace pe
     class SuperResolutionPass : public IRenderPassComponent
     {
     public:
-        void Init() override;
+        void Init() override {};
         void UpdatePassInfo() override {};
         void CreateUniforms(CommandBuffer *cmd) override {};
         void UpdateDescriptorSets() override {};
         void Update(Camera *camera) override {};
-        void Draw(CommandBuffer *cmd) override;
-        void Resize(uint32_t width, uint32_t height) override;
-        void Destroy() override;
+        void Draw(CommandBuffer *cmd) override {};
+        void Resize(uint32_t width, uint32_t height) override {};
+        void Destroy() override {};
 
-        void GenerateJitter();
+        void GenerateJitter() {};
         const vec2 &GetJitter() { return m_jitter; }
         const vec2 &GetProjectionJitter() { return m_projectionJitter; }
 

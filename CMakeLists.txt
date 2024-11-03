@@ -89,21 +89,12 @@ target_compile_definitions(${PROJECT_NAME} PRIVATE ${COMPILE_DEFS})
 
 # Libraries
 set(LIB_FILES
-    $<$<CONFIG:Debug>:
-        spirv-cross-cored
-        ffx_fsr2_api_x64d
-        ffx_fsr2_api_vk_x64d
-    >
-    $<$<CONFIG:Release>:
-        spirv-cross-core
-        ffx_fsr2_api_x64
-        ffx_fsr2_api_vk_x64
-    >
+    spirv-cross-core
     shaderc_shared
     dxcompiler
     SDL2main
     SDL2
-    vulkan-1
+    vulkan
 )
 target_link_libraries(${PROJECT_NAME} PRIVATE ${LIB_FILES})
 

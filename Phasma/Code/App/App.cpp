@@ -45,6 +45,7 @@ namespace pe
         SDL_DisplayMode dm;
         SDL_GetDesktopDisplayMode(0, &dm);
         m_window = Window::Create(SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED, dm.w - 100, dm.h - 100, flags);
+        PE_ERROR_IF(!m_window->ApiHandle(), SDL_GetError());
 
         RHII.Init(m_window->ApiHandle());
 
