@@ -28,11 +28,7 @@ namespace pe
 #else
                 char str[PATH_MAX];
                 ssize_t length = readlink("/proc/self/exe", str, sizeof(str) - 1);
-                if (length < 0)
-                {
-                    Executable = std::filesystem::current_path().string();
-                }
-                else
+                if (length >= 0)
                 {
                     str[length] = '\0'; // Null-terminate the string
                     Executable = std::filesystem::path(str).remove_filename().string();
