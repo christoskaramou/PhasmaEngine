@@ -66,8 +66,6 @@ link_directories("${LIBS_DIR}/fsr/Debug")
 link_directories("${LIBS_DIR}/fsr/Release")
 link_directories("${LIBS_DIR}/sdl2")
 link_directories("${LIBS_DIR}/spirv")
-link_directories("${LIBS_DIR}/spirv/Debug")
-link_directories("${LIBS_DIR}/spirv/Release")
 link_directories("${LIBS_DIR}/vulkan")
 
 # Source files
@@ -88,8 +86,17 @@ set(COMPILE_DEFS
 target_compile_definitions(${PROJECT_NAME} PRIVATE ${COMPILE_DEFS})
 
 # Libraries
-set(LIB_FILES
-    spirv-cross-core
+if (PE_DIST MATCHES "PE_WIN32")
+    set(LIB_FILES
+        $<$<CONFIG:Debug>:spirv-cross-cored>
+        $<$<CONFIG:Release>:spirv-cross-core>
+    )
+else()
+    set(LIB_FILES
+        spirv-cross-core
+    )
+endif()
+list(APPEND LIB_FILES 
     shaderc_shared
     dxcompiler
     SDL2main
