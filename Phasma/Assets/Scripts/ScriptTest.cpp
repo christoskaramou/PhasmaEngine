@@ -24,3 +24,5 @@ void ScriptTest::Destroy()
 {
     std::cout << "Destroy()" << std::endl;
 }
+
+REGISTER_SCRIPT(ScriptTest)

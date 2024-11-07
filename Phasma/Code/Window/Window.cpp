@@ -6,6 +6,7 @@
 #include "imgui/imgui_impl_vulkan.h"
 #include "imgui/imgui_impl_sdl.h"
 #include "imgui/imgui_internal.h"
+#include "Script/ScriptManager.h"
 
 namespace pe
 {
@@ -153,7 +154,10 @@ namespace pe
         }
 
         if (EventSystem::PollEvent(EventCompileScripts))
-            rendererSystem->PollShaders();
+        {
+            ScriptManager::Shutdown();
+            ScriptManager::Init();
+        }
 
         if (EventSystem::PollEvent(EventResize))
         {

@@ -1,14 +1,18 @@
 #pragma once
 
-class ScriptTest
+// TODO: How will it figure out the path to the script?
+#include "../../Code/Script/ScriptObject.h"
+#include <iostream>
+
+class ScriptTest : public pe::ScriptObject
 {
 public:
     ScriptTest();
 
-    void Init();
-    void Update();
-    void Draw();
-    void Destroy();
+    void Init() override;
+    void Update() override;
+    void Draw() override;
+    void Destroy() override;
 
 private:
     int i = 1;

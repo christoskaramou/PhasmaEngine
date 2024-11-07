@@ -2,36 +2,27 @@
 
 namespace pe
 {
-    using ScriptFunc_Void = void (*)();
+    class ScriptObject;
 
     class Script
     {
     public:
-        Script(const std::string &path);
+        Script(const std::string &path) : m_scriptObject{nullptr}, m_createObjectFunc{nullptr}, m_path{path} {}
 
-        ScriptFunc_Void Init = nullptr;
-        ScriptFunc_Void Update = nullptr;
-        ScriptFunc_Void Draw = nullptr;
-        ScriptFunc_Void Destroy = nullptr;
+        void Init();
+        void Update();
+        void Draw();
+        void Destroy();
 
     private:
         friend class ScriptManager;
 
+        using CreateObjectFunc = ScriptObject *(*)();
+
+        void CreateObject();
+
+        ScriptObject *m_scriptObject;
+        CreateObjectFunc m_createObjectFunc;
         std::string m_path;
-        size_t m_hash;
-    };
-
-    class ScriptManager
-    {
-    public:
-        static void Init();
-        static void CompileScript(const Script &script);
-        static void LoadScript(const Script &script);
-        static void UnloadScript(const Script &script);
-        static void UnloadAllScripts();
-        static void PollScripts();
-
-    private:
-        inline static std::map<size_t, Script> s_scripts{};
     };
 }

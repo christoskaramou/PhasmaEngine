@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.10)
-set(PROJECT_NAME Phasma)
+set(PROJECT_NAME Scripts)
 project(${PROJECT_NAME} CXX)
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -46,12 +46,26 @@ message(STATUS "CMAKE_RUNTIME_OUTPUT_DIRECTORY_DEBUG = ${CMAKE_RUNTIME_OUTPUT_DI
 message(STATUS "CMAKE_RUNTIME_OUTPUT_DIRECTORY_RELEASE = ${CMAKE_RUNTIME_OUTPUT_DIRECTORY_RELEASE}")
 
 # Phasma directories
-set(PHASMA_DIR "${CMAKE_CURRENT_SOURCE_DIR}/Phasma")
+set(SCRIPTS_DIR "${CMAKE_CURRENT_SOURCE_DIR}")
+if(IS_DIRECTORY "${SCRIPTS_DIR}/../../../Phasma")
+    set(PHASMA_DIR "${SCRIPTS_DIR}/../..")
+else()
+    set(PHASMA_DIR "${SCRIPTS_DIR}/../..") # fix this for when only the executable is used, but not the source code
+endif()
 set(CODE_DIR "${PHASMA_DIR}/Code")
 set(INCLUDE_DIR "${PHASMA_DIR}/Include")
 set(LIBS_DIR "${PHASMA_DIR}/Libs")
 set(DLLS_DIR "${PHASMA_DIR}/DLLs")
 set(ASSETS_DIR "${PHASMA_DIR}/Assets")
+
+message(STATUS "SCRIPTS_DIR = ${SCRIPTS_DIR}")
+message(STATUS "PHASMA_DIR = ${PHASMA_DIR}")
+message(STATUS "CODE_DIR = ${CODE_DIR}")
+message(STATUS "INCLUDE_DIR = ${INCLUDE_DIR}")
+message(STATUS "LIBS_DIR = ${LIBS_DIR}")
+message(STATUS "DLLS_DIR = ${DLLS_DIR}")
+message(STATUS "ASSETS_DIR = ${ASSETS_DIR}")
+
 
 # Include directories
 include_directories("${PHASMA_DIR}")
@@ -73,13 +87,13 @@ link_directories("${LIBS_DIR}/vulkan")
 file(GLOB_RECURSE INCLUDE_FILES CONFIGURE_DEPENDS "${INCLUDE_DIR}/*.cpp")
 
 # Collect .cpp files from the Code directory
-file(GLOB_RECURSE CODE_FILES CONFIGURE_DEPENDS "${CODE_DIR}/*.cpp")
+file(GLOB_RECURSE SCRIPT_FILES CONFIGURE_DEPENDS "${SCRIPTS_DIR}/*.cpp")
 
 # Combine the collected source files
-set(SRC_FILES ${INCLUDE_FILES} ${CODE_FILES})
+set(SRC_FILES ${INCLUDE_FILES} ${SCRIPT_FILES})
 
-# Create the executable
-add_executable(${PROJECT_NAME} ${SRC_FILES} ${PHASMA_DIR}/main.cpp)
+# Create the DLL
+add_library(${PROJECT_NAME} SHARED ${SRC_FILES})
 
 # Precompiled headers
 target_precompile_headers(${PROJECT_NAME} PRIVATE "${INCLUDE_DIR}/PhasmaPch.h")
@@ -89,7 +103,7 @@ set(COMPILE_DEFS
     $<$<CONFIG:Debug>:_DEBUG PE_DEBUG>
     $<$<CONFIG:Release>:NDEBUG PE_RELEASE>
     $<$<CONFIG:MinSizeRel>:NDEBUG PE_MINSIZEREL>
-    $<$<CONFIG:RelWithDebInfo>:NDEBUG PE_RELWITHDEBINFO>
+    $<$<CONFIG:RelWithDebInfo>:NDEBUG PE_RELWITHDEBGINFO>
     ${PE_DIST}
     ${PE_DIST_DEFS}
     _CONSOLE
@@ -117,11 +131,3 @@ list(APPEND LIB_FILES
     vulkan
 )
 target_link_libraries(${PROJECT_NAME} PRIVATE ${LIB_FILES})
-
-# Copy assets and DLLs to build directory
-add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
-    COMMAND ${CMAKE_COMMAND} -E copy_if_different "${DLLS_DIR}/SDL2.dll" "$<CONFIG>"
-    COMMAND ${CMAKE_COMMAND} -E copy_if_different "${DLLS_DIR}/shaderc_shared.dll" "$<CONFIG>"
-    COMMAND ${CMAKE_COMMAND} -E copy_if_different "${DLLS_DIR}/dxcompiler.dll" "$<CONFIG>"
-    COMMAND ${CMAKE_COMMAND} -E copy_directory "${ASSETS_DIR}" "$<CONFIG>/Assets"
-)
