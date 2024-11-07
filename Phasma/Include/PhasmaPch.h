@@ -48,7 +48,7 @@
 #include "vulkan/vulkan.h"
 #include "vma/vk_mem_alloc.h"
 #if defined(PE_WIN32)
-#include <windows.h>
+#include <dxgi1_6.h>
 #else
 #include <dlfcn.h>
 #endif
