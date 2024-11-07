@@ -57,20 +57,24 @@ namespace pe
     void ScriptManager::LoadModule()
     {
         s_module = nullptr;
+        std::string path;
+
 #ifdef PE_DEBUG
-        std::string path = Path::Executable + "Assets/Scripts/Build/Debug/Scripts";
-#elif PE_RELEASE
-        std::string path = Path::Executable + "Assets/Scripts/Build/Release/Scripts";
-#elif PE_MINSIZEREL
-        std::string path = Path::Executable + "Assets/Scripts/Build/MinSizeRel/Scripts";
-#elif PE_RELWITHDEBINFO
-        std::string path = Path::Executable + "Assets/Scripts/Build/RelWithDebInfo/Scripts";
+        path = Path::Executable + "Assets/Scripts/Build/";
+#elif defined(PE_RELEASE)
+        path = Path::Executable + "Assets/Scripts/Build/Release/";
+#elif defined(PE_MINSIZEREL)
+        path = Path::Executable + "Assets/Scripts/Build/MinSizeRel/";
+#elif defined(PE_RELWITHDEBINFO)
+        path = Path::Executable + "Assets/Scripts/Build/RelWithDebInfo/";
 #endif
 
-#if defined(_WIN32)
+#if defined(PE_WIN32)
+        path += "Scripts.dll";
         std::wstring widePath(path.begin(), path.end());
         s_module = (void *)LoadLibrary(widePath.c_str());
 #else
+        path += "libScripts.so";
         //  m_module = dlopen(path.c_str(), RTLD_NOW);
         s_module = dlopen(path.c_str(), RTLD_LAZY);
 #endif
@@ -80,7 +84,7 @@ namespace pe
 
     void ScriptManager::UnloadModule()
     {
-#if defined(_WIN32)
+#if defined(PE_WIN32)
         FreeLibrary((HMODULE)s_module);
 #else
         dlclose(s_module);

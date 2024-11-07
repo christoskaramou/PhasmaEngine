@@ -2,12 +2,6 @@
 #include "ScriptManager.h"
 #include "ScriptObject.h"
 
-#if defined(_WIN32)
-#include <windows.h>
-#else
-#include <dlfcn.h>
-#endif
-
 namespace pe
 {
     void Script::Init()
@@ -44,10 +38,10 @@ namespace pe
         // Load the factory function
         m_createObjectFunc = nullptr;
         std::string factoryFuncName = "CreateObject_" + className;
-#if defined(_WIN32)
+#if defined(PE_WIN32)
         m_createObjectFunc = (CreateObjectFunc)GetProcAddress((HMODULE)ScriptManager::GetModule(), factoryFuncName.c_str());
 #else
-        m_createObjectFunc = (CreateObjectFunc)dlsym(m_lib, factoryFuncName.c_str());
+        m_createObjectFunc = (CreateObjectFunc)dlsym(ScriptManager::GetModule(), factoryFuncName.c_str());
 #endif
         PE_ERROR_IF(!m_createObjectFunc, "Failed to load CreateScript function");
         m_scriptObject = m_createObjectFunc();

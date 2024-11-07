@@ -1,6 +1,6 @@
 #pragma once
 
-#if defined(_WIN32)
+#if defined(PE_WIN32)
 #define FUNC_EXPORT extern "C" __declspec(dllexport)
 #else
 #define FUNC_EXPORT extern "C"
