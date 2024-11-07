@@ -34,6 +34,7 @@ namespace pe
 
         FileWatcher::Start();
         EventSystem::Init();
+        // ScriptManager::Init();
 
 #ifdef NDEBUG
         m_splashScreen = SplashScreen::Create(SDL_WINDOW_SHOWN | SDL_WINDOW_BORDERLESS);

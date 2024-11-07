@@ -59,22 +59,20 @@ namespace pe
         s_module = nullptr;
         std::string path;
 
-#ifdef PE_DEBUG
-        path = Path::Executable + "Assets/Scripts/Build/";
-#elif defined(PE_RELEASE)
-        path = Path::Executable + "Assets/Scripts/Build/Release/";
-#elif defined(PE_MINSIZEREL)
-        path = Path::Executable + "Assets/Scripts/Build/MinSizeRel/";
-#elif defined(PE_RELWITHDEBINFO)
-        path = Path::Executable + "Assets/Scripts/Build/RelWithDebInfo/";
-#endif
-
 #if defined(PE_WIN32)
-        path += "Scripts.dll";
+#ifdef PE_DEBUG
+        path = Path::Executable + "Assets/Scripts/Build/Debug/Scripts.dll";
+#elif defined(PE_RELEASE)
+        path = Path::Executable + "Assets/Scripts/Build/Release/Scripts.dll";
+#elif defined(PE_MINSIZEREL)
+        path = Path::Executable + "Assets/Scripts/Build/MinSizeRel/Scripts.dll";
+#elif defined(PE_RELWITHDEBINFO)
+        path = Path::Executable + "Assets/Scripts/Build/RelWithDebInfo/Scripts.dll";
+#endif
         std::wstring widePath(path.begin(), path.end());
         s_module = (void *)LoadLibrary(widePath.c_str());
 #else
-        path += "libScripts.so";
+        path = Path::Executable + "Assets/Scripts/Build/libScripts.so";
         //  m_module = dlopen(path.c_str(), RTLD_NOW);
         s_module = dlopen(path.c_str(), RTLD_LAZY);
 #endif
