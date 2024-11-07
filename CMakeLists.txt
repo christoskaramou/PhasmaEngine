@@ -47,6 +47,7 @@ message(STATUS "CMAKE_RUNTIME_OUTPUT_DIRECTORY_RELEASE = ${CMAKE_RUNTIME_OUTPUT_
 
 # Phasma directories
 set(PHASMA_DIR "${CMAKE_CURRENT_SOURCE_DIR}/Phasma")
+set(CODE_DIR "${PHASMA_DIR}/Code")
 set(INCLUDE_DIR "${PHASMA_DIR}/Include")
 set(LIBS_DIR "${PHASMA_DIR}/Libs")
 set(DLLS_DIR "${PHASMA_DIR}/DLLs")
@@ -54,7 +55,7 @@ set(ASSETS_DIR "${PHASMA_DIR}/Assets")
 
 # Include directories
 include_directories("${PHASMA_DIR}")
-include_directories("${PHASMA_DIR}/Code")
+include_directories("${CODE_DIR}")
 include_directories("${INCLUDE_DIR}")
 include_directories("${INCLUDE_DIR}/SDL2")
 include_directories("${INCLUDE_DIR}/imgui")
@@ -68,17 +69,27 @@ link_directories("${LIBS_DIR}/sdl2")
 link_directories("${LIBS_DIR}/spirv")
 link_directories("${LIBS_DIR}/vulkan")
 
-# Source files
-file(GLOB_RECURSE SRC_FILES CONFIGURE_DEPENDS "${PHASMA_DIR}/*.cpp")
-add_executable(${PROJECT_NAME} ${SRC_FILES})
+# Collect .cpp files from the Include directory
+file(GLOB_RECURSE INCLUDE_FILES CONFIGURE_DEPENDS "${INCLUDE_DIR}/*.cpp")
+
+# Collect .cpp files from the Code directory
+file(GLOB_RECURSE CODE_FILES CONFIGURE_DEPENDS "${CODE_DIR}/*.cpp")
+
+# Combine the collected source files
+set(SRC_FILES ${INCLUDE_FILES} ${CODE_FILES})
+
+# Create the executable
+add_executable(${PROJECT_NAME} ${SRC_FILES} ${PHASMA_DIR}/main.cpp)
 
 # Precompiled headers
 target_precompile_headers(${PROJECT_NAME} PRIVATE "${INCLUDE_DIR}/PhasmaPch.h")
 
 # Compile Definitions
 set(COMPILE_DEFS
-    $<$<CONFIG:Debug>:_DEBUG>
-    $<$<CONFIG:Release>:NDEBUG>
+    $<$<CONFIG:Debug>:_DEBUG PE_DEBUG>
+    $<$<CONFIG:Release>:NDEBUG PE_RELEASE>
+    $<$<CONFIG:MinSizeRel>:NDEBUG PE_MINSIZEREL>
+    $<$<CONFIG:RelWithDebInfo>:NDEBUG PE_RELWITHDEBINFO>
     ${PE_DIST}
     ${PE_DIST_DEFS}
     _CONSOLE
@@ -90,6 +101,8 @@ if (PE_DIST MATCHES "PE_WIN32")
     set(LIB_FILES
         $<$<CONFIG:Debug>:spirv-cross-cored>
         $<$<CONFIG:Release>:spirv-cross-core>
+        $<$<CONFIG:MinsizeRel>:spirv-cross-core>
+        $<$<CONFIG:RelWithDebInfo>:spirv-cross-core>
     )
 else()
     set(LIB_FILES
