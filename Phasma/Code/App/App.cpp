@@ -119,7 +119,7 @@ namespace pe
         }
 
         if (!Settings::Get<GlobalSettings>().unlock_fps)
-            m_frameTimer.ThreadSleep(1.0 / static_cast<double>(Settings::Get<GlobalSettings>().target_fps) - m_frameTimer.Count());
+            m_frameTimer.ThreadSleep(1.0 / Settings::Get<GlobalSettings>().target_fps - m_frameTimer.Count());
         m_frameTimer.Tick();
 
         RHII.NextFrame();
