@@ -4,28 +4,32 @@ project(${PROJECT_NAME} CXX)
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
-set (PE_DIST)
-set (PE_DIST_DEFS PE_VULKAN)
 # Check the operating system
 if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
-    message(STATUS "Detected operating system: Linux")
-    list(APPEND PE_DIST PE_LINUX)
+    message(STATUS "CMAKE_SYSTEM_NAME = ${CMAKE_SYSTEM_NAME}")
+    set(PE_DEFS
+        PE_LINUX
+        PE_VULKAN
+        _CONSOLE
+    )
     add_compile_options(-fms-extensions)
 elseif(CMAKE_SYSTEM_NAME STREQUAL "Windows")
-    message(STATUS "Detected operating system: Windows")
-    list(APPEND PE_DIST PE_WIN32)
-    list(APPEND PE_DIST_DEFS
+    message(STATUS "CMAKE_SYSTEM_NAME = ${CMAKE_SYSTEM_NAME}")
+    set(PE_DEFS
+        PE_WIN32
+        PE_VULKAN
         WIN32_LEAN_AND_MEAN
         NOMINMAX
         UNICODE
         _UNICODE
+        _CONSOLE
     )
 else()
     error("Unsupported operating system")
     message(STATUS "Detected operating system: ${CMAKE_SYSTEM_NAME}")
 endif()
 
-if (MSVC)
+if(MSVC)
     include(ProcessorCount)
     ProcessorCount(N)
     if(NOT N EQUAL 0)
@@ -94,14 +98,12 @@ set(COMPILE_DEFS
     $<$<CONFIG:Release>:NDEBUG PE_RELEASE>
     $<$<CONFIG:MinSizeRel>:NDEBUG PE_MINSIZEREL>
     $<$<CONFIG:RelWithDebInfo>:NDEBUG PE_RELWITHDEBINFO>
-    ${PE_DIST}
-    ${PE_DIST_DEFS}
-    _CONSOLE
+    ${PE_DEFS}
 )
 target_compile_definitions(${PROJECT_NAME} PRIVATE ${COMPILE_DEFS})
 
 # Libraries
-if (PE_DIST MATCHES "PE_WIN32")
+if(CMAKE_SYSTEM_NAME STREQUAL "Windows")
     set(LIB_FILES
         $<$<CONFIG:Debug>:spirv-cross-cored>
         $<$<CONFIG:Release>:spirv-cross-core>
