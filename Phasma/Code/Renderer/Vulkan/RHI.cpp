@@ -89,7 +89,7 @@ namespace pe
         // =============================================
 
         // === Debugging ===============================
-        // Debug::GetInstanceUtils(instanceExtensions, instanceLayers);
+        Debug::GetInstanceUtils(instanceExtensions, instanceLayers);
         // std::vector<VkValidationFeatureEnableEXT> enabledFeatures{};
         // VkValidationFeaturesEXT validationFeatures{};
         // if (IsInstanceLayerValid("VK_LAYER_KHRONOS_validation"))
