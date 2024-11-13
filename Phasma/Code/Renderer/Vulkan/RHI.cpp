@@ -101,10 +101,7 @@ namespace pe
         //     enabledFeatures.push_back(VK_VALIDATION_FEATURE_ENABLE_SYNCHRONIZATION_VALIDATION_EXT);
 
         //     validationFeatures.sType = VK_STRUCTURE_TYPE_VALIDATION_FEATURES_EXT;
-        //     validationFeatures.enabledValidationFeatureCount = static_cast<uint32_t>(enabledFeatures.size());
-        //     validationFeatures.pEnabledValidationFeatures = enabledFeatures.data();
-        // }
-        // =============================================
+        //     validationFeatures.enabledValidationFeatureCount =function(std::forward<Args>(args)...);
 
         uint32_t apiVersion;
         vkEnumerateInstanceVersion(&apiVersion);

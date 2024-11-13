@@ -31,6 +31,9 @@ namespace pe
         void Shaders();
         void Properties();
 
+        float GetQueueTotalTime(Queue *queue);
+        void ShowQueueGpuTimings(Queue *queue);
+
         bool show_demo_window = false;
         std::unique_ptr<Attachment> m_attachment;
 

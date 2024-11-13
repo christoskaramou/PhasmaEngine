@@ -181,6 +181,77 @@ namespace pe
         }
     }
 
+    float GUI::GetQueueTotalTime(Queue *queue)
+    {
+        float total = 0.f;
+        uint32_t frame = RHII.GetFrameIndex();
+        for (auto *cmd : queue->m_frameCmdsSubmitted[frame])
+        {
+            for (uint32_t i = 0; i < cmd->m_gpuTimerCount; i++)
+            {
+                auto &timeInfo = cmd->m_gpuTimerInfos[i];
+
+                // Top level timers are in CommandBuffer::Begin
+                if (timeInfo.depth == 0)
+                    total += timeInfo.timer->GetTime();
+            }
+        }
+
+        return total;
+    }
+
+    void SetTextColorTemp(float time)
+    {
+        // Clamp time to the range [0.0f, 1.0f]
+        time = std::clamp(time, 0.0f, 1.0f);
+
+        // Define start (green) and end (red) colors
+        ImVec4 startColor = ImVec4(0.9f, 0.9f, 0.9f, 1.0f); // White
+        ImVec4 endColor = ImVec4(1.0f, 0.3f, 0.3f, 1.0f);   // Red
+
+        // Perform the lerp for each component
+        ImVec4 resultColor(
+            startColor.x + time * (endColor.x - startColor.x), // Red
+            startColor.y + time * (endColor.y - startColor.y), // Green
+            startColor.z + time * (endColor.z - startColor.z), // Blue
+            1.0f                                               // Alpha
+        );
+
+        // Apply the resulting color
+        ImGui::GetStyle().Colors[ImGuiCol_Text] = resultColor;
+    }
+
+    void ResetTextColor()
+    {
+        ImGui::GetStyle().Colors[ImGuiCol_Text] = ImVec4(0.90f, 0.90f, 0.90f, 1.00f);
+    }
+
+    void GUI::ShowQueueGpuTimings(Queue *queue)
+    {
+        uint32_t frame = RHII.GetFrameIndex();
+        for (auto *cmd : queue->m_frameCmdsSubmitted[frame])
+        {
+            for (uint32_t i = 0; i < cmd->m_gpuTimerCount; i++)
+            {
+                auto &timeInfo = cmd->m_gpuTimerInfos[i];
+
+                // Top level timers are in CommandBuffer::Begin
+                if (timeInfo.depth == 0)
+                    continue;
+
+                if (timeInfo.depth > 0)
+                    ImGui::Indent(timeInfo.depth * 16.0f);
+
+                float time = timeInfo.timer->GetTime();
+                SetTextColorTemp(time);
+                ImGui::Text("%s: %.3f ms", timeInfo.name.c_str(), time);
+
+                if (timeInfo.depth > 0)
+                    ImGui::Unindent(timeInfo.depth * 16.0f);
+            }
+        }
+    }
+
     void GUI::Metrics()
     {
         if (!metrics_open)
@@ -208,31 +279,46 @@ namespace pe
         ImGui::Unindent(16.0f);
 
 #if PE_DEBUG_MODE
+        std::unordered_set<Queue *> queues{
+            RHII.GetRenderQueue(),
+            RHII.GetTransferQueue(),
+            RHII.GetComputeQueue(),
+            RHII.GetPresentQueue()};
+
         float gpuTotal = 0.f;
-        for (auto &timeInfo : Debug::s_timeInfos)
-        {
-            if (timeInfo.depth == 0)
-                gpuTotal += timeInfo.timer->GetTime();
-        }
+        for (auto *queue : queues)
+            gpuTotal += GetQueueTotalTime(queue);
 
         ImGui::Text("GPU Total: %.3f ms", gpuTotal);
         ImGui::Indent(16.0f);
-
-        for (auto &timeInfo : Debug::s_timeInfos)
+        for (auto *queue : queues)
         {
-            if (timeInfo.depth > 0)
-                ImGui::Indent(timeInfo.depth * 16.0f);
+            std::string name;
+            if (queue == RHII.GetRenderQueue())
+                name = "Render Queue";
+            else if (queue == RHII.GetTransferQueue())
+                name = "Transfer Queue";
+            else if (queue == RHII.GetComputeQueue())
+                name = "Compute Queue";
+            else if (queue == RHII.GetPresentQueue())
+                name = "Present Queue";
 
-            ImGui::Text("%s: %.3f ms", timeInfo.name.c_str(), timeInfo.timer->GetTime());
-
-            if (timeInfo.depth > 0)
-                ImGui::Unindent(timeInfo.depth * 16.0f);
-
-            GpuTimer::Return(timeInfo.timer);
+            float time = GetQueueTotalTime(queue);
+            SetTextColorTemp(time);
+            ImGui::Text("%s: %.3f ms", name.c_str(), time);
+            ShowQueueGpuTimings(queue);
         }
-        Debug::s_timers.clear();
-        Debug::s_timeInfos.clear();
         ImGui::Unindent(16.0f);
+        ImGui::GetStyle().Colors[ImGuiCol_Text] = ImVec4(0.90f, 0.90f, 0.90f, 1.00f);
+
+        uint32_t frame = RHII.GetFrameIndex();
+        for (auto *queue : queues)
+        {
+            for (auto *cmd : queue->m_frameCmdsSubmitted[frame])
+                cmd->m_gpuTimerCount = 0;
+
+            queue->m_frameCmdsSubmitted[frame].clear();
+        }
 #endif
 
         // ImGui::Separator();

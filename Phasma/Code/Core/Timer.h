@@ -34,13 +34,13 @@ namespace pe
     class FrameTimer : public Timer
     {
     public:
-        void Tick();
-        double GetDelta() const;
         double CountTotal() const;
         void CountUpdatesStamp();
         void CountCpuTotalStamp();
+        void CountDeltaTime();
         double GetUpdatesStamp() const { return m_updatesStamp; }
         double GetCpuTotal() const { return m_cpuTotalStamp; }
+        double GetDelta() const;
 
         static FrameTimer &Instance()
         {
@@ -60,18 +60,20 @@ namespace pe
         double m_updatesStamp;
         double m_cpuTotalStamp;
         std::chrono::duration<double> m_delta{};
-        std::chrono::high_resolution_clock::time_point m_total;
+    };
+
+    class GpuTimer;
+    struct GpuTimerInfo
+    {
+        GpuTimer *timer;
+        std::string name;
+        size_t depth;
     };
 
     class CommandBuffer;
-
     class GpuTimer : public PeHandle<GpuTimer, QueryPoolApiHandle>
     {
     public:
-        static GpuTimer *GetFree();
-        static void Return(GpuTimer *gpuTimer);
-        static void DestroyAll();
-
         GpuTimer(const std::string &name);
         ~GpuTimer();
 

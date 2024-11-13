@@ -46,8 +46,7 @@ namespace pe
 #endif
         SDL_DisplayMode dm;
         SDL_GetDesktopDisplayMode(0, &dm);
-        m_window = Window::Create(SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED, dm.w - 100, dm.h - 100, flags);
-        PE_ERROR_IF(!m_window->ApiHandle(), SDL_GetError());
+        m_window = Window::Create(100, 100, dm.w - 100, dm.h - 100, flags);
 
         RHII.Init(m_window->ApiHandle());
 
@@ -103,24 +102,20 @@ namespace pe
             return false;
 
         if (!m_window->isMinimized())
-        {
             UpdateGlobalSystems(m_frameTimer.GetDelta());
-            m_frameTimer.CountUpdatesStamp();
-        }
 
         // Get ImGui render data ready
         ImGui::Render();
         ImGui::UpdatePlatformWindows();
+        m_frameTimer.CountUpdatesStamp();
 
         if (!m_window->isMinimized())
-        {
             DrawGlobalSystems();
-            m_frameTimer.CountCpuTotalStamp();
-        }
+        m_frameTimer.CountCpuTotalStamp();
 
         if (!Settings::Get<GlobalSettings>().unlock_fps)
             m_frameTimer.ThreadSleep(1.0 / Settings::Get<GlobalSettings>().target_fps - m_frameTimer.Count());
-        m_frameTimer.Tick();
+        m_frameTimer.CountDeltaTime();
 
         RHII.NextFrame();
 

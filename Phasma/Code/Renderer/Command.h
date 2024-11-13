@@ -223,6 +223,7 @@ namespace pe
 
         friend class Queue;
         friend class Renderer;
+        friend class Debug;
 
         // Resources
         inline static std::vector<std::unordered_map<size_t, CommandBuffer *>> s_availableCmds{};
@@ -259,5 +260,11 @@ namespace pe
         PushConstantsBlock<128> m_pushConstants{};
         CommandTypeFlags m_commandFlags;
         bool m_dynamicPass = false;
+
+        // Gpu timers
+        friend class GUI;
+        uint32_t m_gpuTimerCount = 0;
+        std::vector<GpuTimerInfo> m_gpuTimerInfos{};
+        std::stack<size_t> m_gpuTimerIdsStack{};
     };
 }

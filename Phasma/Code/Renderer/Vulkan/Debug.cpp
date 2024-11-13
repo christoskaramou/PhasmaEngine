@@ -96,11 +96,10 @@ namespace pe
         void *pUserData)
     {
         if (messageSeverity > VK_DEBUG_UTILS_MESSAGE_SEVERITY_INFO_BIT_EXT)
-            std::cerr
-                << GetDebugMessageString(messageType) << " "
-                << GetDebugSeverityString(messageSeverity) << " from \""
-                << pCallbackData->pMessageIdName << "\": "
-                << pCallbackData->pMessage << std::endl;
+            std::cerr << GetDebugMessageString(messageType) << " "
+                      << GetDebugSeverityString(messageSeverity) << " from \""
+                      << pCallbackData->pMessageIdName << "\": "
+                      << pCallbackData->pMessage << std::endl;
 
         return VK_FALSE;
     }
@@ -199,6 +198,7 @@ namespace pe
         vkQueueEndDebugUtilsLabelEXT(queue->ApiHandle());
     }
 
+    std::mutex Debug_mutex{};
     void Debug::BeginCmdRegion(CommandBuffer *cmd, const std::string &name)
     {
         if (!vkCmdBeginDebugUtilsLabelEXT)
@@ -217,15 +217,22 @@ namespace pe
 
         vkCmdBeginDebugUtilsLabelEXT(cmd->ApiHandle(), &label);
 
-        if (std::this_thread::get_id() == e_MainThreadID) // TODO: make it work with other threads
+        if (cmd->m_gpuTimerInfos.size() < cmd->m_gpuTimerCount + 1)
         {
-            std::lock_guard<std::mutex> lock(s_infosMutex);
-
-            GpuTimer *timer = GpuTimer::GetFree();
-            timer->Start(cmd);
-            s_timers[cmd].push_back({timer, name});
-            s_timeInfos[timer] = {timer, "", 0};
+            for (int i = 0; i < 10; ++i)
+            {
+                GpuTimerInfo info{};
+                info.timer = GpuTimer::Create("gpu timer_" + std::to_string(cmd->m_gpuTimerInfos.size()));
+                cmd->m_gpuTimerInfos.push_back(info);
+            }
         }
+
+        GpuTimerInfo &timerInfo = cmd->m_gpuTimerInfos[cmd->m_gpuTimerCount];
+        timerInfo.timer->Start(cmd);
+        timerInfo.name = name;
+        timerInfo.depth = cmd->m_gpuTimerIdsStack.size();
+        cmd->m_gpuTimerIdsStack.push(cmd->m_gpuTimerCount);
+        cmd->m_gpuTimerCount++;
     }
 
     void Debug::InsertCmdLabel(CommandBuffer *cmd, const std::string &name)
@@ -252,20 +259,8 @@ namespace pe
 
         vkCmdEndDebugUtilsLabelEXT(cmd->ApiHandle());
 
-        if (std::this_thread::get_id() == e_MainThreadID) // TODO: make it work with other threads
-        {
-            std::lock_guard<std::mutex> lock(s_infosMutex);
-
-            auto &timerInfos = s_timers[cmd];
-            auto &timerInfo = timerInfos.back();
-            timerInfo.timer->End();
-
-            auto &timeInfo = s_timeInfos[timerInfo.timer];
-            timeInfo.name = timerInfo.name;
-            timeInfo.depth = static_cast<uint32_t>(timerInfos.size()) - 1;
-
-            timerInfos.pop_back();
-        }
+        cmd->m_gpuTimerInfos[cmd->m_gpuTimerIdsStack.top()].timer->End();
+        cmd->m_gpuTimerIdsStack.pop();
     }
 #endif
 };

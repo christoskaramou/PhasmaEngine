@@ -146,10 +146,14 @@ namespace pe
         PE_CHECK(vkBeginCommandBuffer(m_apiHandle, &beginInfo));
         m_recording = true;
         m_commandFlags = CommandType::None;
+
+        BeginDebugRegion(m_name);
     }
 
     void CommandBuffer::End()
-    {
+    {  
+        EndDebugRegion();
+        
         if (!m_recording)
             PE_ERROR("CommandBuffer::End: CommandBuffer is not in recording state!");
 

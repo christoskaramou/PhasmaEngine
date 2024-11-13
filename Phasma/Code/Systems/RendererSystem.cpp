@@ -149,9 +149,6 @@ namespace pe
         Swapchain *swapchain = RHII.GetSwapchain();
         uint32_t imageIndex = swapchain->Aquire(aquireSignalSemaphore);
 
-        static Timer timer;
-        timer.Start();
-
         auto &frameCmds = m_cmds[frameIndex];
 
         // RECORD COMMANDS

@@ -12,6 +12,10 @@ namespace pe
         VkSurfaceCapabilitiesKHR capabilities;
         vkGetPhysicalDeviceSurfaceCapabilitiesKHR(RHII.GetGpu(), surface->ApiHandle(), &capabilities);
 
+        PE_ERROR_IF(SWAPCHAIN_IMAGES < capabilities.minImageCount, "Swapchain image count error");
+        if (capabilities.maxImageCount > 0)
+            PE_ERROR_IF(SWAPCHAIN_IMAGES > capabilities.maxImageCount, "Swapchain image count error");
+
         const Rect2Du &actualExtent = surface->GetActualExtent();
         m_extent.x = actualExtent.x;
         m_extent.y = actualExtent.y;
@@ -21,13 +25,7 @@ namespace pe
         VkSwapchainCreateInfoKHR swapchainCreateInfo{};
         swapchainCreateInfo.sType = VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR;
         swapchainCreateInfo.surface = surface->ApiHandle();
-        swapchainCreateInfo.minImageCount = clamp(
-            SWAPCHAIN_IMAGES,
-            capabilities.minImageCount,
-            capabilities.maxImageCount);
-
-        PE_ERROR_IF(SWAPCHAIN_IMAGES < swapchainCreateInfo.minImageCount, "Swapchain image count error");
-
+        swapchainCreateInfo.minImageCount = SWAPCHAIN_IMAGES;
         swapchainCreateInfo.imageFormat = Translate<VkFormat>(surface->GetFormat());
         swapchainCreateInfo.imageColorSpace = Translate<VkColorSpaceKHR>(surface->GetColorSpace());
         swapchainCreateInfo.imageExtent = VkExtent2D{m_extent.width, m_extent.height};
@@ -44,17 +42,15 @@ namespace pe
         VkSwapchainKHR schain;
         PE_CHECK(vkCreateSwapchainKHR(RHII.GetDevice(), &swapchainCreateInfo, nullptr, &schain));
 
-        // TODO: Maybe check the result in a loop?
-        uint32_t swapchainImageCount;
-        PE_CHECK(vkGetSwapchainImagesKHR(RHII.GetDevice(), schain, &swapchainImageCount, nullptr));
-
-        std::vector<VkImage> imagesVK(swapchainImageCount);
-        PE_CHECK(vkGetSwapchainImagesKHR(RHII.GetDevice(), schain, &swapchainImageCount, imagesVK.data()));
+        uint32_t imageCount = 0;
+        PE_CHECK(vkGetSwapchainImagesKHR(RHII.GetDevice(), schain, &imageCount, nullptr));
+        std::vector<VkImage> imagesVK(imageCount);
+        PE_CHECK(vkGetSwapchainImagesKHR(RHII.GetDevice(), schain, &imageCount, imagesVK.data()));
 
         for (auto *image : m_images)
             Image::Destroy(image);
 
-        m_images.resize(imagesVK.size());
+        m_images.resize(SWAPCHAIN_IMAGES);
         for (unsigned i = 0; i < m_images.size(); i++)
         {
             m_images[i] = new Image();

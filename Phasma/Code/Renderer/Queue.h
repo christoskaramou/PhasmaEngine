@@ -21,7 +21,6 @@ namespace pe
               const std::string &name);
         ~Queue();
 
-
         void Submit(uint32_t commandBuffersCount, CommandBuffer **commandBuffers,
                     uint32_t waitSemaphoresCount,
                     PipelineStageFlags *waitStages, Semaphore **waitSemaphores,
@@ -51,5 +50,10 @@ namespace pe
         std::string m_name;
         Semaphore *m_semaphore;
         std::atomic_uint64_t m_submitions;
+
+#if PE_DEBUG_MODE
+        friend class GUI;
+        std::vector<std::vector<CommandBuffer *>> m_frameCmdsSubmitted{};
+#endif
     };
 }

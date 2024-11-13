@@ -22,6 +22,8 @@ namespace pe
           m_submitions{0},
           m_name{name}
     {
+        // Debug
+        m_frameCmdsSubmitted.resize(SWAPCHAIN_IMAGES);
     }
 
     Queue::~Queue()
@@ -87,7 +89,8 @@ namespace pe
 
         // queue semaphore
         {
-            m_semaphore->Wait(m_submitions++); // Wait previous submition so we can submit again
+            m_semaphore->Wait(m_submitions++); // Wait previous submition
+            m_submitions++;
 
             signalSemaphoreSubmitInfos[i].sType = VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO;
             signalSemaphoreSubmitInfos[i].semaphore = m_semaphore->ApiHandle();
@@ -105,6 +108,11 @@ namespace pe
         si.pSignalSemaphoreInfos = signalSemaphoreSubmitInfos.data();
 
         PE_CHECK(vkQueueSubmit2(m_apiHandle, 1, &si, nullptr));
+
+#if PE_DEBUG_MODE
+        uint32_t frame = RHII.GetFrameIndex();
+        m_frameCmdsSubmitted[frame].insert(m_frameCmdsSubmitted[frame].end(), commandBuffers, commandBuffers + commandBuffersCount);
+#endif
     }
 
     void Queue::Present(
@@ -200,7 +208,7 @@ namespace pe
                     if (present)
                         queueFlags |= QueueType::PresentBit;
 
-                    Queue *queue = Queue::Create(queueVK, i, queueFlags, mitg, "Queue_Queue_" + std::to_string(i) + "_" + std::to_string(j));
+                    Queue *queue = Queue::Create(queueVK, i, queueFlags, mitg, "Queue_" + std::to_string(i) + "_" + std::to_string(j));
                     Debug::SetObjectName(queue->ApiHandle(), queue->m_name);
 
                     auto it = s_allQueues.find(queueFlags.Value());

@@ -16,8 +16,6 @@ namespace pe
         int w, h;
         SDL_Vulkan_GetDrawableSize(window, &w, &h);
         m_actualExtent = Rect2Du{0, 0, static_cast<uint32_t>(w), static_cast<uint32_t>(h)};
-
-        
     }
 
     Surface::~Surface()

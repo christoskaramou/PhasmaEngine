@@ -36,13 +36,12 @@ namespace pe
 
     FrameTimer::FrameTimer() : Timer()
     {
-        m_total = std::chrono::high_resolution_clock::now();
         m_delta = {};
         m_updatesStamp = 0.0;
         m_cpuTotalStamp = 0.0;
     }
 
-    void FrameTimer::Tick()
+    void FrameTimer::CountDeltaTime()
     {
         m_delta = std::chrono::high_resolution_clock::now() - m_start;
     }
@@ -50,12 +49,6 @@ namespace pe
     double FrameTimer::GetDelta() const
     {
         return m_delta.count();
-    }
-
-    double FrameTimer::CountTotal() const
-    {
-        const std::chrono::duration<double> t_duration = std::chrono::high_resolution_clock::now() - m_total;
-        return t_duration.count();
     }
 
     void FrameTimer::CountUpdatesStamp()
@@ -143,34 +136,5 @@ namespace pe
             return 0.f;
 
         return static_cast<float>(m_queries[1] - m_queries[0]) * m_timestampPeriod * 1e-6f; // ms
-    }
-
-    GpuTimer *GpuTimer::GetFree()
-    {
-        if (s_gpuTimers.empty())
-        {
-            for (int i = 0; i < 10; ++i)
-                s_gpuTimers.push(GpuTimer::Create("gpu timer_" + std::to_string(s_gpuTimers.size())));
-        }
-
-        GpuTimer *gpuTimer = s_gpuTimers.top();
-        s_gpuTimers.pop();
-
-        return gpuTimer;
-    }
-
-    void GpuTimer::Return(GpuTimer *gpuTimer)
-    {
-        if (gpuTimer && gpuTimer->ApiHandle())
-            s_gpuTimers.push(gpuTimer);
-    }
-
-    void GpuTimer::DestroyAll()
-    {
-        while (!s_gpuTimers.empty())
-        {
-            GpuTimer::Destroy(s_gpuTimers.top());
-            s_gpuTimers.pop();
-        }
     }
 }

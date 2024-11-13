@@ -29,7 +29,7 @@ namespace pe
             size_t size = 0;
             Descriptor *descriptor = nullptr;
         };
-        
+
         struct UniformImageInfo
         {
             uint32_t count = 0;

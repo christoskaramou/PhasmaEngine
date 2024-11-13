@@ -20,20 +20,20 @@ namespace pe
         }
 
         // Invokes all functions stored in the delegate
-        inline void Invoke(Args&&... args) const
+        inline void Invoke(Args &&...args) const
         {
             for (const auto &function : m_functions)
             {
-            function(std::forward<Args>(args)...);
+                function(std::forward<Args>(args)...);
             }
         }
 
         // Invokes all functions stored in the delegate in reverse order
-        inline void ReverseInvoke(Args&&... args) const
+        inline void ReverseInvoke(Args &&...args) const
         {
             for (int i = static_cast<int>(m_functions.size()) - 1; i >= 0; --i)
             {
-            m_functions[i](std::forward<Args>(args)...);
+                m_functions[i](std::forward<Args>(args)...);
             }
         }
 
