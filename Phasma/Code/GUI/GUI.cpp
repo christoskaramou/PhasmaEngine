@@ -337,32 +337,6 @@ namespace pe
             queue->m_frameCmdsSubmitted[frame].clear();
         }
 #endif
-
-        // ImGui::Separator();
-        // ImGui::Separator();
-        // ImGui::Separator();
-        // ImGui::Text("Render Target");
-        // static const char *current_item = "viewport";
-        // std::vector<const char *> items(gSettings.rendering_images.size());
-        // for (int i = 0; i < items.size(); i++)
-        //     items[i] = gSettings.rendering_images[i]->GetName().c_str();
-
-        // if (ImGui::BeginCombo("##combo", current_item))
-        // {
-        //     for (int n = 0; n < items.size(); n++)
-        //     {
-        //         bool is_selected = (current_item == items[n]);
-        //         if (ImGui::Selectable(items[n], is_selected))
-        //         {
-        //             current_item = items[n];
-        //             gSettings.current_rendering_image = gSettings.rendering_images[n];
-        //         }
-        //         if (is_selected)
-        //             ImGui::SetItemDefaultFocus();
-        //     }
-        //     ImGui::EndCombo();
-        // }
-
         ImGui::End();
     }
 
@@ -477,24 +451,6 @@ namespace pe
             ImGui::Unindent(16.0f);
             ImGui::Separator();
         }
-
-        // ImGui::Checkbox("Fog", &use_fog);
-        // if (use_fog)
-        // {
-        //     ImGui::Indent(16.0f);
-        //     ImGui::DragFloat("Ground Thickness", &fog_ground_thickness, 0.1f, 1.0f);
-        //     ImGui::DragFloat("Global Thickness", &fog_global_thickness, 0.1f, 1.0f);
-        //     ImGui::DragFloat("Max Height", &fog_max_height, 0.01f, 0.1f);
-        //     ImGui::Checkbox("Volumetric", &use_Volumetric_lights);
-        //     if (use_Volumetric_lights)
-        //     {
-        //         ImGui::Indent(16.0f);
-        //         ImGui::InputInt("Iterations", &volumetric_steps, 1, 3);
-        //         ImGui::InputFloat("Dither", &volumetric_dither_strength, 1.0f, 10.0f);
-        //         ImGui::Unindent(16.0f);
-        //     }
-        //     ImGui::Unindent(16.0f);
-        // }
 
         if (ImGui::Checkbox("Sun Light", &gSettings.shadows))
         {

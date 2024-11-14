@@ -6,10 +6,8 @@ namespace pe
 {
     constexpr float TITLEBAR_HEIGHT = 19.f;
 
-    class RenderPass;
     class CommandBuffer;
     class Queue;
-    class RendererSystem;
 
     class GUI
     {
