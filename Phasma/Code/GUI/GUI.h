@@ -32,7 +32,7 @@ namespace pe
         void Properties();
 
         float GetQueueTotalTime(Queue *queue);
-        void ShowQueueGpuTimings(Queue *queue);
+        void ShowQueueGpuTimings(Queue *queue, float maxTime);
 
         bool show_demo_window = false;
         std::unique_ptr<Attachment> m_attachment;

@@ -200,10 +200,10 @@ namespace pe
         return total;
     }
 
-    void SetTextColorTemp(float time)
+    void SetTextColorTemp(float time, float maxTime)
     {
         // Clamp time to the range [0.0f, 1.0f]
-        time = std::clamp(time, 0.0f, 1.0f);
+        time = std::clamp(time / maxTime, 0.0f, 1.0f);
 
         // Define start (green) and end (red) colors
         ImVec4 startColor = ImVec4(0.9f, 0.9f, 0.9f, 1.0f); // White
@@ -226,7 +226,7 @@ namespace pe
         ImGui::GetStyle().Colors[ImGuiCol_Text] = ImVec4(0.90f, 0.90f, 0.90f, 1.00f);
     }
 
-    void GUI::ShowQueueGpuTimings(Queue *queue)
+    void GUI::ShowQueueGpuTimings(Queue *queue, float maxTime)
     {
         uint32_t frame = RHII.GetFrameIndex();
         for (auto *cmd : queue->m_frameCmdsSubmitted[frame])
@@ -243,7 +243,7 @@ namespace pe
                     ImGui::Indent(timeInfo.depth * 16.0f);
 
                 float time = timeInfo.timer->GetTime();
-                SetTextColorTemp(time);
+                SetTextColorTemp(time, maxTime);
                 ImGui::Text("%s: %.3f ms", timeInfo.name.c_str(), time);
 
                 if (timeInfo.depth > 0)
@@ -258,11 +258,25 @@ namespace pe
             return;
 
         auto &gSettings = Settings::Get<GlobalSettings>();
+        static std::deque<float> fpsDeque(100, 0.0f);
+        static std::vector<float> fpsVector(100, 0.0f);
+        static float highestValue = 100.0f;
+        static Timer delay;
+        float framerate = ImGui::GetIO().Framerate;
+        if (delay.Count() > 0.2)
+        {
+            delay.Start();
+            fpsDeque.pop_front();          // Remove the oldest value
+            fpsDeque.push_back(framerate); // Add the new value at the end
+            highestValue = max(highestValue, framerate + 60.0f);
+            std::copy(fpsDeque.begin(), fpsDeque.end(), fpsVector.begin());
+        }
+
         ImGui::Begin("Metrics", &metrics_open);
         ImGui::Text("Dear ImGui %s", ImGui::GetVersion());
+        ImGui::TextColored(ImVec4(1.0f, 1.0f, 0.0f, 1.0f), "Average %.3f ms (%.1f FPS)", 1000.0f / framerate, framerate);
+        ImGui::PlotLines("##FrameTimes", fpsVector.data(), static_cast<int>(fpsVector.size()), 0, NULL, 0.0f, highestValue, ImVec2(0, 80));
         ImGui::Checkbox("Unlock FPS", &gSettings.unlock_fps);
-        float framerate = ImGui::GetIO().Framerate;
-        ImGui::Text("Average %.3f ms (%.1f FPS)", 1000.0f / framerate, framerate);
         if (!gSettings.unlock_fps)
         {
             ImGui::DragInt("FPS", &gSettings.target_fps, 0.1f);
@@ -274,8 +288,11 @@ namespace pe
         FrameTimer &frameTimer = FrameTimer::Instance();
         ImGui::Text("CPU Total: %.3f ms", static_cast<float>(MILLI(frameTimer.GetCpuTotal())));
         ImGui::Indent(16.0f);
+        SetTextColorTemp(frameTimer.GetUpdatesStamp(), frameTimer.GetCpuTotal());
         ImGui::Text("CPU Updates: %.3f ms", static_cast<float>(MILLI(frameTimer.GetUpdatesStamp())));
+        SetTextColorTemp(frameTimer.GetCpuTotal() - frameTimer.GetUpdatesStamp(), frameTimer.GetCpuTotal());
         ImGui::Text("CPU Draw: %.3f ms", static_cast<float>(MILLI(frameTimer.GetCpuTotal() - frameTimer.GetUpdatesStamp())));
+        ResetTextColor();
         ImGui::Unindent(16.0f);
 
 #if PE_DEBUG_MODE
@@ -304,9 +321,9 @@ namespace pe
                 name = "Present Queue";
 
             float time = GetQueueTotalTime(queue);
-            SetTextColorTemp(time);
+            SetTextColorTemp(time, gpuTotal);
             ImGui::Text("%s: %.3f ms", name.c_str(), time);
-            ShowQueueGpuTimings(queue);
+            ShowQueueGpuTimings(queue, gpuTotal);
         }
         ImGui::Unindent(16.0f);
         ImGui::GetStyle().Colors[ImGuiCol_Text] = ImVec4(0.90f, 0.90f, 0.90f, 1.00f);
