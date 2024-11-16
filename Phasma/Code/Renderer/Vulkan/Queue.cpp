@@ -22,8 +22,9 @@ namespace pe
           m_submitions{0},
           m_name{name}
     {
-        // Debug
+#if PE_DEBUG_MODE
         m_frameCmdsSubmitted.resize(SWAPCHAIN_IMAGES);
+#endif
     }
 
     Queue::~Queue()

@@ -217,7 +217,7 @@ namespace pe
 
         vkCmdBeginDebugUtilsLabelEXT(cmd->ApiHandle(), &label);
 
-        if (cmd->m_gpuTimerInfos.size() < cmd->m_gpuTimerCount + 1)
+        if (cmd->m_gpuTimerInfos.size() < cmd->m_gpuTimerInfosCount + 1)
         {
             for (int i = 0; i < 10; ++i)
             {
@@ -227,12 +227,12 @@ namespace pe
             }
         }
 
-        GpuTimerInfo &timerInfo = cmd->m_gpuTimerInfos[cmd->m_gpuTimerCount];
+        GpuTimerInfo &timerInfo = cmd->m_gpuTimerInfos[cmd->m_gpuTimerInfosCount];
         timerInfo.timer->Start(cmd);
         timerInfo.name = name;
         timerInfo.depth = cmd->m_gpuTimerIdsStack.size();
-        cmd->m_gpuTimerIdsStack.push(cmd->m_gpuTimerCount);
-        cmd->m_gpuTimerCount++;
+        cmd->m_gpuTimerIdsStack.push(cmd->m_gpuTimerInfosCount);
+        cmd->m_gpuTimerInfosCount++;
     }
 
     void Debug::InsertCmdLabel(CommandBuffer *cmd, const std::string &name)

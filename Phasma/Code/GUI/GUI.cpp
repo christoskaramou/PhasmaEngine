@@ -181,32 +181,13 @@ namespace pe
         }
     }
 
-    float GUI::GetQueueTotalTime(Queue *queue)
-    {
-        float total = 0.f;
-        uint32_t frame = RHII.GetFrameIndex();
-        for (auto *cmd : queue->m_frameCmdsSubmitted[frame])
-        {
-            for (uint32_t i = 0; i < cmd->m_gpuTimerCount; i++)
-            {
-                auto &timeInfo = cmd->m_gpuTimerInfos[i];
-
-                // Top level timers are in CommandBuffer::Begin
-                if (timeInfo.depth == 0)
-                    total += timeInfo.timer->GetTime();
-            }
-        }
-
-        return total;
-    }
-
     void SetTextColorTemp(float time, float maxTime)
     {
         const ImVec4 startColor = ImVec4(0.9f, 0.9f, 0.9f, 1.0f); // White
         const ImVec4 endColor = ImVec4(1.0f, 0.3f, 0.3f, 1.0f);   // Red
 
         time = std::clamp(time / maxTime, 0.0f, 1.0f);
-        
+
         ImVec4 resultColor(
             startColor.x + time * (endColor.x - startColor.x), // Red
             startColor.y + time * (endColor.y - startColor.y), // Green
@@ -222,12 +203,32 @@ namespace pe
         ImGui::GetStyle().Colors[ImGuiCol_Text] = ImVec4(0.90f, 0.90f, 0.90f, 1.00f);
     }
 
+#if PE_DEBUG_MODE
+    float GUI::GetQueueTotalTime(Queue *queue)
+    {
+        float total = 0.f;
+        uint32_t frame = RHII.GetFrameIndex();
+        for (auto *cmd : queue->m_frameCmdsSubmitted[frame])
+        {
+            for (uint32_t i = 0; i < cmd->m_gpuTimerInfosCount; i++)
+            {
+                auto &timeInfo = cmd->m_gpuTimerInfos[i];
+
+                // Top level timers are in CommandBuffer::Begin
+                if (timeInfo.depth == 0)
+                    total += timeInfo.timer->GetTime();
+            }
+        }
+
+        return total;
+    }
+
     void GUI::ShowQueueGpuTimings(Queue *queue, float maxTime)
     {
         uint32_t frame = RHII.GetFrameIndex();
         for (auto *cmd : queue->m_frameCmdsSubmitted[frame])
         {
-            for (uint32_t i = 0; i < cmd->m_gpuTimerCount; i++)
+            for (uint32_t i = 0; i < cmd->m_gpuTimerInfosCount; i++)
             {
                 auto &timeInfo = cmd->m_gpuTimerInfos[i];
 
@@ -247,6 +248,7 @@ namespace pe
             }
         }
     }
+#endif
 
     void GUI::Metrics()
     {
@@ -328,7 +330,7 @@ namespace pe
         for (auto *queue : queues)
         {
             for (auto *cmd : queue->m_frameCmdsSubmitted[frame])
-                cmd->m_gpuTimerCount = 0;
+                cmd->m_gpuTimerInfosCount = 0;
 
             queue->m_frameCmdsSubmitted[frame].clear();
         }

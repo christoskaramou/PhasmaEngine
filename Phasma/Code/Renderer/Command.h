@@ -261,10 +261,12 @@ namespace pe
         CommandTypeFlags m_commandFlags;
         bool m_dynamicPass = false;
 
+#if PE_DEBUG_MODE
         // Gpu timers
         friend class GUI;
-        uint32_t m_gpuTimerCount = 0;
+        uint32_t m_gpuTimerInfosCount = 0;
         std::vector<GpuTimerInfo> m_gpuTimerInfos{};
         std::stack<size_t> m_gpuTimerIdsStack{};
+#endif
     };
 }
