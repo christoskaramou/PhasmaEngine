@@ -202,14 +202,11 @@ namespace pe
 
     void SetTextColorTemp(float time, float maxTime)
     {
-        // Clamp time to the range [0.0f, 1.0f]
+        const ImVec4 startColor = ImVec4(0.9f, 0.9f, 0.9f, 1.0f); // White
+        const ImVec4 endColor = ImVec4(1.0f, 0.3f, 0.3f, 1.0f);   // Red
+
         time = std::clamp(time / maxTime, 0.0f, 1.0f);
-
-        // Define start (green) and end (red) colors
-        ImVec4 startColor = ImVec4(0.9f, 0.9f, 0.9f, 1.0f); // White
-        ImVec4 endColor = ImVec4(1.0f, 0.3f, 0.3f, 1.0f);   // Red
-
-        // Perform the lerp for each component
+        
         ImVec4 resultColor(
             startColor.x + time * (endColor.x - startColor.x), // Red
             startColor.y + time * (endColor.y - startColor.y), // Green
@@ -217,7 +214,6 @@ namespace pe
             1.0f                                               // Alpha
         );
 
-        // Apply the resulting color
         ImGui::GetStyle().Colors[ImGuiCol_Text] = resultColor;
     }
 
