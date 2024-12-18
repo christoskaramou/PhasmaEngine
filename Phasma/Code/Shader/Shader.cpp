@@ -206,7 +206,7 @@ namespace pe
         return empty;
     }
 
-    void Shader::SetGlobalDefine(const std::string &name, const std::string &value)
+    void Shader::AddGlobalDefine(const std::string &name, const std::string &value)
     {
         for (auto &def : m_globalDefines)
         {

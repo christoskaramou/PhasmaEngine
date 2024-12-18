@@ -406,30 +406,20 @@ namespace pe
 
         for (auto &setInfo : setInfos)
         {
-            if (setInfo.empty())
-                continue;
-
-            std::sort(setInfo.begin(), setInfo.end(), [](auto &a, auto &b)
-                      { return a.binding < b.binding; });
+            if (!setInfo.empty())
+            {
+                std::sort(setInfo.begin(), setInfo.end(), [](auto &a, auto &b)
+                          { return a.binding < b.binding; });
+            }
         }
 
         for (auto &setInfo : setInfos)
         {
-            if (setInfo.empty())
-            {
-                descriptors.push_back(nullptr);
-                continue;
-            }
+            Descriptor *descriptor = nullptr;
 
-            // // count all bindings and decide if we can use push descriptor
-            // uint32_t count = 0;
-            // for (const DescriptorBindingInfo &bindingInfo : setInfo)
-            // count += bindingInfo.count;
-            // bool pushDescriptor = count <= RHII.GetMaxPushDescriptorsPerSet();
+            if (!setInfo.empty())
+                descriptor = Descriptor::Create(setInfo, m_shader->GetShaderStage(), false, "auto_descriptor_" + m_shader->GetID());
 
-            bool usePushDescriptor = false;
-
-            Descriptor *descriptor = Descriptor::Create(setInfo, m_shader->GetShaderStage(), usePushDescriptor, "auto_descriptor_" + m_shader->GetID());
             descriptors.push_back(descriptor);
         }
 

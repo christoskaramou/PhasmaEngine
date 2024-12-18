@@ -25,8 +25,6 @@ namespace pe
     {
         m_device = {};
         m_window = nullptr;
-        m_uniformBuffers = {};
-        m_uniformImages = {};
         m_maxUniformBufferSize = 0;
         m_maxStorageBufferSize = 0;
         m_minUniformBufferOffsetAlignment = 0;
@@ -454,32 +452,6 @@ namespace pe
     void RHI::WaitDeviceIdle()
     {
         PE_CHECK(vkDeviceWaitIdle(m_device));
-    }
-
-    size_t RHI::CreateUniformBufferInfo()
-    {
-        size_t key = ID::NextID();
-        m_uniformBuffers[key] = UniformBufferInfo{};
-        return key;
-    }
-
-    void RHI::RemoveUniformBufferInfo(size_t key)
-    {
-        if (m_uniformBuffers.find(key) != m_uniformBuffers.end())
-            m_uniformBuffers.erase(key);
-    }
-
-    size_t RHI::CreateUniformImageInfo()
-    {
-        size_t key = ID::NextID();
-        m_uniformImages[key] = UniformImageInfo{};
-        return key;
-    }
-
-    void RHI::RemoveUniformImageInfo(size_t key)
-    {
-        if (m_uniformImages.find(key) != m_uniformImages.end())
-            m_uniformImages.erase(key);
     }
 
     uint64_t RHI::GetMemoryUsageSnapshot()

@@ -23,19 +23,6 @@ namespace pe
     class RHI : public NoCopy, public NoMove
     {
     public:
-        struct UniformBufferInfo
-        {
-            Buffer *buffer = nullptr;
-            size_t size = 0;
-            Descriptor *descriptor = nullptr;
-        };
-
-        struct UniformImageInfo
-        {
-            uint32_t count = 0;
-            Descriptor *descriptor = nullptr;
-        };
-
         static RHI *Get()
         {
             static RHI *rhi = new RHI();
@@ -100,12 +87,6 @@ namespace pe
         SDL_Window *GetWindow() { return m_window; }
         Surface *GetSurface() { return m_surface; }
         Swapchain *GetSwapchain() { return m_swapchain; }
-        size_t CreateUniformBufferInfo();
-        void RemoveUniformBufferInfo(size_t index);
-        UniformBufferInfo &GetUniformBufferInfo(size_t key) { return m_uniformBuffers[key]; }
-        size_t CreateUniformImageInfo();
-        void RemoveUniformImageInfo(size_t index);
-        UniformImageInfo &GetUniformImageInfo(size_t key) { return m_uniformImages[key]; }
         uint64_t GetMemoryUsageSnapshot();
 
     private:
@@ -126,8 +107,7 @@ namespace pe
         Surface *m_surface;
         Swapchain *m_swapchain;
         uint32_t m_frameCounter;
-        std::unordered_map<size_t, UniformBufferInfo> m_uniformBuffers;
-        std::unordered_map<size_t, UniformImageInfo> m_uniformImages;
+        
         // Limits
         uint32_t m_maxUniformBufferSize;
         uint32_t m_maxStorageBufferSize;

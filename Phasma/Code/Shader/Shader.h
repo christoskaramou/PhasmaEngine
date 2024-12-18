@@ -42,7 +42,7 @@ namespace pe
     class Shader : public PeHandle<Shader, ShaderApiHandle>
     {
     public:
-        static void SetGlobalDefine(const std::string &name, const std::string &value);
+        static void AddGlobalDefine(const std::string &name, const std::string &value);
         static std::vector<Descriptor *> ReflectPassDescriptors(const PassInfo &passInfo);
 
         Shader(const std::string &sourcePath, ShaderStage shaderStage, const std::vector<Define> &defines = {});

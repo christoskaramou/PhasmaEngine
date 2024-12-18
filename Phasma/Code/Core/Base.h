@@ -40,7 +40,7 @@ namespace pe
         }
 
         template <class T>
-        constexpr size_t GetTypeID(T &&obj)
+        constexpr size_t GetTypeID(T &&)
         {
             return GetTypeID<std::remove_reference_t<T>>();
         }
