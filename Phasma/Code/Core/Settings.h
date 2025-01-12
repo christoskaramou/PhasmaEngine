@@ -70,7 +70,7 @@ namespace pe
         std::atomic_uint32_t loading_total{};
         bool freeze_frustum_culling = false;
         bool draw_aabbs = false;
-        bool aabbs_depth_dware = true;
+        bool aabbs_depth_aware = true;
         int culls_per_task = 10;
         bool dynamic_rendering = true;
     };

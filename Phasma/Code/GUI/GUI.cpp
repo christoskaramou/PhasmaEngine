@@ -286,9 +286,9 @@ namespace pe
         FrameTimer &frameTimer = FrameTimer::Instance();
         ImGui::Text("CPU Total: %.3f ms", static_cast<float>(MILLI(frameTimer.GetCpuTotal())));
         ImGui::Indent(16.0f);
-        SetTextColorTemp(frameTimer.GetUpdatesStamp(), frameTimer.GetCpuTotal());
+        SetTextColorTemp(static_cast<float>(frameTimer.GetUpdatesStamp()), static_cast<float>(frameTimer.GetCpuTotal()));
         ImGui::Text("CPU Updates: %.3f ms", static_cast<float>(MILLI(frameTimer.GetUpdatesStamp())));
-        SetTextColorTemp(frameTimer.GetCpuTotal() - frameTimer.GetUpdatesStamp(), frameTimer.GetCpuTotal());
+        SetTextColorTemp(static_cast<float>(frameTimer.GetCpuTotal() - frameTimer.GetUpdatesStamp()), static_cast<float>(frameTimer.GetCpuTotal()));
         ImGui::Text("CPU Draw: %.3f ms", static_cast<float>(MILLI(frameTimer.GetCpuTotal() - frameTimer.GetUpdatesStamp())));
         ResetTextColor();
         ImGui::Unindent(16.0f);
@@ -485,9 +485,9 @@ namespace pe
         ImGui::Checkbox("Draw AABBs", &gSettings.draw_aabbs);
         if (gSettings.draw_aabbs)
         {
-            bool depthAware = gSettings.aabbs_depth_dware;
+            bool depthAware = gSettings.aabbs_depth_aware;
             ImGui::Indent(16.0f);
-            ImGui::Checkbox("Depth Aware", &gSettings.aabbs_depth_dware);
+            ImGui::Checkbox("Depth Aware", &gSettings.aabbs_depth_aware);
             ImGui::Unindent(16.0f);
         }
         ImGui::DragInt("Culls Per Task", &gSettings.culls_per_task, 1.f, 1, 100);

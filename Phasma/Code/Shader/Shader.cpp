@@ -154,11 +154,11 @@ namespace pe
         {
             if (m_isHlsl)
             {
-                CompileHlsl(defines);
+                PE_ERROR_IF(!CompileHlsl(defines), "Failed to compile shader:" + path);
             }
             else
             {
-                CompileGlsl(defines);
+                PE_ERROR_IF(!CompileGlsl(defines), "Failed to compile shader: " + path);
             }
 
             m_cache.WriteSpvToFile(m_spirv);
@@ -307,6 +307,20 @@ namespace pe
         return wide_str;
     }
 
+    namespace
+    {
+        void PrintDxcError(IDxcResult *result)
+        {
+            // Error Handling
+            IDxcBlobUtf8 *pErrors = nullptr;
+            result->GetOutput(DXC_OUT_ERRORS, IID_PPV_ARGS(&pErrors), nullptr);
+            if (pErrors && pErrors->GetStringLength() > 0)
+                PE_INFO(pErrors->GetStringPointer());
+
+            pErrors->Release();
+        }
+    }
+
     bool Shader::CompileHlsl(const std::vector<Define> &defines)
     {
         std::vector<LPCWSTR> args{};
@@ -376,17 +390,26 @@ namespace pe
         IDxcUtils *dxc_utils = nullptr;
         auto hr = DxcCreateInstance(CLSID_DxcUtils, IID_PPV_ARGS(&dxc_utils));
         if (FAILED(hr))
+        {
+            PE_INFO("Failed to create IDxcUtils");
             return false;
+        }
 
         IDxcIncludeHandler *include_handler = nullptr;
         hr = dxc_utils->CreateDefaultIncludeHandler(&include_handler);
         if (FAILED(hr))
+        {
+            PE_INFO("Failed to create IDxcIncludeHandler");
             return false;
+        }
 
         IDxcCompiler3 *dxc_compiler = nullptr;
         hr = DxcCreateInstance(CLSID_DxcCompiler, IID_PPV_ARGS(&dxc_compiler));
         if (FAILED(hr))
+        {
+            PE_INFO("Failed to create IDxcCompiler3");
             return false;
+        }
 
         IDxcUtils *pUtils = nullptr;
         DxcCreateInstance(CLSID_DxcUtils, IID_PPV_ARGS(&pUtils));
@@ -410,20 +433,21 @@ namespace pe
 
         HRESULT compileStatus;
         result->GetStatus(&compileStatus);
-        if (FAILED(compileStatus))
-            return false;
 
-        // Error Handling
-        IDxcBlobUtf8 *pErrors = nullptr;
-        result->GetOutput(DXC_OUT_ERRORS, IID_PPV_ARGS(&pErrors), nullptr);
-        if (pErrors && pErrors->GetStringLength() > 0)
-            PE_ERROR(pErrors->GetStringPointer());
+        if (FAILED(compileStatus))
+        {
+            PrintDxcError(result);
+            return false;
+        }
 
         // Get shader output
         IDxcBlob *pObject = nullptr;
         result->GetOutput(DXC_OUT_OBJECT, IID_PPV_ARGS(&pObject), nullptr);
         if (!pObject)
+        {
+            PrintDxcError(result);
             return false;
+        }
 
         m_spirv.resize(pObject->GetBufferSize() / sizeof(uint32_t));
         memcpy(m_spirv.data(), pObject->GetBufferPointer(), pObject->GetBufferSize());
@@ -434,7 +458,6 @@ namespace pe
         pUtils->Release();
         pSource->Release();
         result->Release();
-        pErrors->Release();
         pObject->Release();
 
         return true;

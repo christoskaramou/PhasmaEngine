@@ -322,13 +322,16 @@ namespace pe
         Settings::Get<GlobalSettings>().dynamic_rendering = deviceFeatures13.dynamicRendering;
 
         // Check needed features
-        PE_ERROR_IF(!deviceFeatures12.descriptorBindingPartiallyBound &&
-                        !deviceFeatures12.runtimeDescriptorArray &&
-                        !deviceFeatures12.shaderSampledImageArrayNonUniformIndexing &&
-                        !deviceFeatures12.descriptorBindingVariableDescriptorCount,
-                    "Bindless descriptors are not supported on this device!");
-        PE_ERROR_IF(!deviceFeatures2.features.shaderInt64 && !deviceFeatures2.features.shaderInt16, "shaderInt64 and shaderInt16 are not supported!");
+        PE_ERROR_IF(!deviceFeatures12.descriptorBindingPartiallyBound, "Partially bound descriptors are not supported on this device!");
+        PE_ERROR_IF(!deviceFeatures12.runtimeDescriptorArray, "Runtime descriptor array is not supported on this device!");
+        PE_ERROR_IF(!deviceFeatures12.shaderSampledImageArrayNonUniformIndexing, "Sampled image array non uniform indexing is not supported on this device!");
+        PE_ERROR_IF(!deviceFeatures12.shaderStorageBufferArrayNonUniformIndexing, "Storage buffer array non uniform indexing is not supported on this device!");
+        PE_ERROR_IF(!deviceFeatures12.descriptorBindingVariableDescriptorCount, "Variable descriptor count is not supported on this device!");
+        PE_ERROR_IF(!deviceFeatures2.features.shaderInt64, "Int64 is not supported on this device!");
+        PE_ERROR_IF(!deviceFeatures2.features.shaderInt16, "Int16 is not supported on this device!");
         PE_ERROR_IF(!deviceFeatures12.separateDepthStencilLayouts, "Separate depth stencil layouts are not supported!");
+        PE_ERROR_IF(!deviceFeatures2.features.multiDrawIndirect, "Multi draw indirect is not supported!");
+        PE_ERROR_IF(!deviceFeatures2.features.drawIndirectFirstInstance, "Draw indirect first instance is not supported!");
 
         VkDeviceCreateInfo deviceCreateInfo{};
         deviceCreateInfo.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
