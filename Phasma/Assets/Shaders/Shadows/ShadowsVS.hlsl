@@ -1,10 +1,8 @@
 #include "../Common/Structures.hlsl"
 #include "../Common/Common.hlsl"
 
-static const int MAX_DATA_SIZE = 2048;
-
 [[vk::push_constant]] PushConstants_Shadows pc;
-[[vk::binding(0, 0)]] tbuffer UBO { float4x4 data[MAX_DATA_SIZE]; };
+[[vk::binding(0, 0)]] StructuredBuffer<float4x4> data;
 
 float4x4 GetMeshMatrix()            { return data[pc.meshIndex]; }
 float4x4 GetJointMatrix(uint index) { return data[pc.meshIndex + 2 + index]; }

@@ -1,12 +1,8 @@
 #include "../Common/Structures.hlsl"
 #include "../Common/Common.hlsl"
 
-static const int MAX_DATA_SIZE = 2048; // TODO: calculate on init
-
-
 [[vk::push_constant]] PushConstants_GBuffer pc;
-
-[[vk::binding(0, 0)]] tbuffer UBO { float4x4 data[MAX_DATA_SIZE]; };
+[[vk::binding(0, 0)]] StructuredBuffer<float4x4> data;
 
 // Matrices
 float4x4 GetViewProjection()         { return data[0]; }
