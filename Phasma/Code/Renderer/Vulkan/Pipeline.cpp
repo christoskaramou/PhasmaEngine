@@ -7,7 +7,7 @@
 
 namespace pe
 {
-    PipelineColorBlendAttachmentState PipelineColorBlendAttachmentState::Default= {
+    PipelineColorBlendAttachmentState PipelineColorBlendAttachmentState::Default = {
         .srcColorBlendFactor = BlendFactor::SrcAlpha,
         .dstColorBlendFactor = BlendFactor::OneMinusSrcAlpha,
         .colorBlendOp = BlendOp::Add,

@@ -8,7 +8,6 @@ namespace pe
 {
     IRenderPassComponent::IRenderPassComponent()
         : m_attachments{},
-          m_descriptors{},
           m_passInfo{std::make_shared<PassInfo>()}
     {
     }

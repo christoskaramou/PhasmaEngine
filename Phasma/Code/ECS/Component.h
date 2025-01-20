@@ -47,7 +47,6 @@ namespace pe
         friend class PostProcessSystem;
         
         std::vector<Attachment> m_attachments;
-        std::vector<Descriptor *> m_descriptors;
         std::shared_ptr<PassInfo> m_passInfo;
     };
 }

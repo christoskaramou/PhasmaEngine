@@ -1,4 +1,4 @@
-#include "Light.hlsl"
+#include "Lighting.hlsl"
 
 PS_OUTPUT_Color mainPS(PS_INPUT_UV input)
 {
