@@ -68,10 +68,18 @@ namespace pe
         uint32_t GetFrameDynamicOffset(size_t size, uint32_t frameIndex) { return static_cast<uint32_t>(size / SWAPCHAIN_IMAGES) * frameIndex; }
         uint32_t GetMaxUniformBufferSize() { return m_maxUniformBufferSize; }
         uint32_t GetMaxStorageBufferSize() { return m_maxStorageBufferSize; }
+        uint32_t GetMaxDrawIndirectCount() { return m_maxDrawIndirectCount; }
         uint64_t GetMinUniformBufferOffsetAlignment() { return m_minUniformBufferOffsetAlignment; }
         uint64_t GetMinStorageBufferOffsetAlignment() { return m_minStorageBufferOffsetAlignment; }
         size_t AlignUniform(size_t size) { return (size + m_minUniformBufferOffsetAlignment - 1) & ~(m_minUniformBufferOffsetAlignment - 1); }
         size_t AlignStorage(size_t size) { return (size + m_minStorageBufferOffsetAlignment - 1) & ~(m_minStorageBufferOffsetAlignment - 1); }
+        template <size_t As>
+        size_t AlignStorageAs(size_t size)
+        {
+            size_t alignStorage = (size + As - 1) & ~(As - 1);
+            PE_ERROR_IF(alignStorage != AlignStorage(alignStorage), "Alignment error");
+            return alignStorage;
+        }
         uint32_t GetMaxPushDescriptorsPerSet() { return m_maxPushDescriptorsPerSet; }
         const InstanceApiHandle &GetInstance() { return m_instance; }
         const GpuApiHandle &GetGpu() { return m_gpu; }
@@ -107,12 +115,13 @@ namespace pe
         Surface *m_surface;
         Swapchain *m_swapchain;
         uint32_t m_frameCounter;
-        
+
         // Limits
         uint32_t m_maxUniformBufferSize;
         uint32_t m_maxStorageBufferSize;
         uint64_t m_minUniformBufferOffsetAlignment;
         uint64_t m_minStorageBufferOffsetAlignment;
         uint32_t m_maxPushDescriptorsPerSet;
+        uint32_t m_maxDrawIndirectCount;
     };
 }

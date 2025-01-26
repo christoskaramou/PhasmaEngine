@@ -84,7 +84,7 @@ namespace pe
 
         cmd->BeginDebugRegion("Depth Prepass");
 
-        auto &drawInfosOpaque = m_geometry->GetDrawInfosOpaque();
+        const auto &drawInfosOpaque = m_geometry->GetDrawInfosOpaque();
         if (drawInfosOpaque.empty())
         {
             ClearDepthStencil(cmd);
@@ -104,15 +104,15 @@ namespace pe
 
             for (auto &drawInfo : drawInfosOpaque)
             {
-                ModelGltf &model = *drawInfo.second.model;
+                ModelGltf &model = *drawInfo.model;
 
-                int node = drawInfo.second.node;
+                int node = drawInfo.node;
                 int mesh = model.nodes[node].mesh;
                 if (mesh < 0)
                     continue;
                 constants.meshIndex = GetUboDataOffset(model.m_meshesInfo[mesh].dataOffset);
 
-                int primitive = drawInfo.second.primitive;
+                int primitive = drawInfo.primitive;
                 PrimitiveInfo &primitiveInfo = model.m_meshesInfo[mesh].primitivesInfo[primitive];
                 for (int i = 0; i < 5; i++)
                     constants.primitiveImageIndex[i] = primitiveInfo.viewsIndex[i];

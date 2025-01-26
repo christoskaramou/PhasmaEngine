@@ -27,6 +27,7 @@ namespace pe
         const size_t dataSize = sizeof(mat4);         // material factors
         uint32_t vertexOffset = 0, verticesCount = 0; // offset and count in used vertex buffer
         uint32_t indexOffset = 0, indicesCount = 0;   // offset and count in used index buffer
+        uint32_t indirectIndex = 0;                   // index of the indirect command of the primitive in the indirect buffer
         uint32_t positionsOffset = 0;
         size_t aabbVertexOffset = 0;
         uint32_t aabbColor;
@@ -95,7 +96,7 @@ namespace pe
         void UpdateNodeMatrix(int node);
         void UpdateNodeMatrices();
         void SetPrimitiveFactors(Buffer *combinedBuffer);
-        
+
         bool render = false;
         size_t m_id;
         std::vector<Image *> m_images{};

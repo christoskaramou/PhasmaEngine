@@ -10,6 +10,7 @@
 #include "Systems/LightSystem.h"
 #include "Renderer/RHI.h"
 #include "Renderer/Queue.h"
+#include "Renderer/RenderPasses/GbufferPass.h"
 
 namespace pe
 {
@@ -56,7 +57,9 @@ namespace pe
         size_t numberOfIndices = 24; // with aabb indices
         size_t numberOfVertices = 0;
         size_t numberOfAabbVertices = 0;
-        size_t uniformsSize = 0;
+        size_t storageSize = 0;
+        uint32_t indirectCount = 0;
+        m_primitivesCount = 0;
 
         // calculate offsets
         for (auto &model : m_models)
@@ -86,6 +89,7 @@ namespace pe
                 for (int j = 0; j < model.meshes[i].primitives.size(); j++)
                 {
                     model.m_meshesInfo[i].primitivesInfo[j].indexOffset += static_cast<uint32_t>(indicesCount);
+                    m_primitivesCount++;
                 }
             }
             indicesCount += model.m_indices.size();
@@ -198,8 +202,10 @@ namespace pe
         aabbVertexBarrierInfo.offset = m_aabbVerticesOffset;
         cmd->BufferBarrier(aabbVertexBarrierInfo);
 
-        // uniforms
-        uniformsSize = 2 * sizeof(mat4); // view projection and previous view projection
+        // storage buffer
+        storageSize = sizeof(PerFrameData);
+        // will store ids of constant buffer for each primitive
+        storageSize += RHII.AlignStorageAs<64>(m_primitivesCount * sizeof(uint32_t));
         for (auto &modelPtr : m_models)
         {
             ModelGltf &model = *modelPtr;
@@ -209,23 +215,64 @@ namespace pe
                 if (mesh < 0)
                     continue;
 
-                model.m_meshesInfo[mesh].dataOffset = uniformsSize;
-                uniformsSize += model.m_meshesInfo[mesh].dataSize;
+                model.m_meshesInfo[mesh].dataOffset = storageSize;
+                storageSize += model.m_meshesInfo[mesh].dataSize;
                 for (int j = 0; j < model.meshes[mesh].primitives.size(); j++)
                 {
-                    model.m_meshesInfo[mesh].primitivesInfo[j].dataOffset = uniformsSize;
-                    uniformsSize += model.m_meshesInfo[mesh].primitivesInfo[j].dataSize;
+                    model.m_meshesInfo[mesh].primitivesInfo[j].dataOffset = storageSize;
+                    storageSize += model.m_meshesInfo[mesh].primitivesInfo[j].dataSize;
                 }
             }
         }
 
         for (int i = 0; i < SWAPCHAIN_IMAGES; i++)
         {
-            m_uniforms[i] = Buffer::Create(
-                uniformsSize,
+            m_storage[i] = Buffer::Create(
+                storageSize,
                 BufferUsage::StorageBufferBit,
                 AllocationCreate::HostAccessSequentialWriteBit,
-                "uniforms_Geometry_buffer_" + std::to_string(i));
+                "storage_Geometry_buffer_" + std::to_string(i));
+        }
+
+        // indirect commands
+        m_indirectCommands.clear();
+        m_indirectCommands.reserve(m_primitivesCount);
+        for (auto &modelPtr : m_models)
+        {
+            ModelGltf &model = *modelPtr;
+            for (int i = 0; i < model.nodes.size(); i++)
+            {
+                int mesh = model.nodes[i].mesh;
+                if (mesh < 0)
+                    continue;
+
+                for (int j = 0; j < model.meshes[mesh].primitives.size(); j++)
+                {
+                    PrimitiveInfo &primitiveInfo = model.m_meshesInfo[mesh].primitivesInfo[j];
+                    primitiveInfo.indirectIndex = indirectCount;
+
+                    DrawIndexedIndirectCommand indirectCommand{};
+                    indirectCommand.indexCount = primitiveInfo.indicesCount;
+                    indirectCommand.instanceCount = 1;
+                    indirectCommand.firstIndex = primitiveInfo.indexOffset;
+                    indirectCommand.vertexOffset = primitiveInfo.vertexOffset;
+                    indirectCommand.firstInstance = 0;
+                    m_indirectCommands.push_back(indirectCommand);
+
+                    indirectCount++;
+                }
+            }
+        }
+
+        PE_ERROR_IF(indirectCount != m_primitivesCount, "Geometry::UploadBuffers: Indirect count mismatch!");
+
+        for (int i = 0; i < SWAPCHAIN_IMAGES; i++)
+        {
+            m_indirect[i] = Buffer::Create(
+                indirectCount * sizeof(DrawIndexedIndirectCommand),
+                BufferUsage::IndirectBufferBit | BufferUsage::TransferDstBit,
+                AllocationCreate::HostAccessSequentialWriteBit,
+                "indirect_Geometry_buffer_" + std::to_string(i));
         }
 
         m_imageViews.clear();
@@ -234,7 +281,7 @@ namespace pe
         {
             for (int i = 0; i < SWAPCHAIN_IMAGES; i++)
             {
-                model->SetPrimitiveFactors(m_uniforms[i]);
+                model->SetPrimitiveFactors(m_storage[i]);
             }
 
             // Update views and indices
@@ -261,6 +308,53 @@ namespace pe
 
         for (uint32_t i = 0; i < SWAPCHAIN_IMAGES; i++)
             m_dirtyDescriptorViews[i] = true;
+
+        // GbufferPass constants initialization
+        GbufferOpaquePass *gbo = GetGlobalComponent<GbufferOpaquePass>();
+        GbufferTransparentPass *gbt = GetGlobalComponent<GbufferTransparentPass>();
+        gbo->m_constants = Buffer::Create(
+            m_primitivesCount * sizeof(Constants_GBuffer),
+            BufferUsage::StorageBufferBit | BufferUsage::TransferDstBit,
+            AllocationCreate::HostAccessSequentialWriteBit,
+            "GbufferPass_constants");
+        gbt->m_constants = gbo->m_constants;
+
+        // fill GbufferPass buffer with the constants
+        size_t offset = 0;
+        gbo->m_constants->Map();
+        for (auto &modelPtr : m_models)
+        {
+            ModelGltf &model = *modelPtr;
+            for (int i = 0; i < model.nodes.size(); i++)
+            {
+                int mesh = model.nodes[i].mesh;
+                if (mesh < 0)
+                    continue;
+
+                for (int j = 0; j < model.meshes[mesh].primitives.size(); j++)
+                {
+                    PrimitiveInfo &primitiveInfo = model.m_meshesInfo[mesh].primitivesInfo[j];
+                    auto &primitiveGltf = model.meshes[mesh].primitives[j];
+
+                    Constants_GBuffer constants{};
+                    constants.alphaCut = static_cast<float>(model.materials[primitiveGltf.material].alphaCutoff);
+                    constants.meshDataOffset = static_cast<uint32_t>(model.m_meshesInfo[mesh].dataOffset);
+                    constants.primitiveDataOffset = static_cast<uint32_t>(primitiveInfo.dataOffset);
+                    for (int k = 0; k < 5; k++)
+                        constants.primitiveImageIndex[k] = primitiveInfo.viewsIndex[k];
+
+                    MemoryRange mr{};
+                    mr.data = &constants;
+                    mr.offset = offset;
+                    mr.size = sizeof(Constants_GBuffer);
+                    gbo->m_constants->Copy(1, &mr, true);
+
+                    offset += sizeof(Constants_GBuffer);
+                }
+            }
+        }
+        gbo->m_constants->Flush();
+        gbo->m_constants->Unmap();
     }
 
     void Geometry::CullNodePrimitives(ModelGltf &model, int node)
@@ -277,55 +371,40 @@ namespace pe
         auto &meshInfo = model.m_meshesInfo[mesh];
         auto &primitivesInfo = meshInfo.primitivesInfo;
 
-        m_mutex.lock();
-        auto &opaque = m_opaque[&model][node];
-        auto &alphaCut = m_alphaCut[&model][node];
-        auto &alphaBlend = m_alphaBlend[&model][node];
-        m_mutex.unlock();
-
         // TODO: pack more than one primitive in a task
-        auto cullAsync = [this, &camera, &model, &meshInfo, &primitivesInfo, &opaque, &alphaCut, &alphaBlend](int node, int startPrimitive, int count)
+        auto cullAsync = [&camera, &model, &primitivesInfo](int node, int startPrimitive, int count)
         {
+            std::vector<DrawInfo> results{};
+            results.reserve(count);
+
             const int endPrimitive = startPrimitive + count;
             for (int primitive = startPrimitive; primitive < endPrimitive; primitive++)
             {
                 auto &primitiveInfo = primitivesInfo[primitive];
 
                 if (Settings::Get<GlobalSettings>().frustum_culling)
+                {
                     primitiveInfo.cull = !camera.AABBInFrustum(primitiveInfo.worldBoundingBox);
+                }
                 else
+                {
                     primitiveInfo.cull = false;
+                }
 
                 if (!primitiveInfo.cull)
                 {
-                    glm::vec3 center = primitiveInfo.worldBoundingBox.GetCenter();
+                    vec3 center = primitiveInfo.worldBoundingBox.GetCenter();
                     float distance = distance2(camera.GetPosition(), center);
 
-                    DrawInfo drawInfo = {&model, node, primitive, distance};
-
-                    m_mutexDrawInfos.lock();
-                    switch (primitiveInfo.renderType)
-                    {
-                    case RenderType::Opaque:
-                        m_drawInfosOpaque.insert({distance, drawInfo});
-                        opaque.push_back(primitive);
-                        break;
-                    case RenderType::AlphaCut:
-                        m_drawInfosAlphaCut.insert({distance, drawInfo});
-                        alphaCut.push_back(primitive);
-                        break;
-                    case RenderType::AlphaBlend:
-                        m_drawInfosAlphaBlend.insert({distance, drawInfo});
-                        alphaBlend.push_back(primitive);
-                        break;
-                    }
-                    m_mutexDrawInfos.unlock();
+                    results.emplace_back(DrawInfo{&model, node, primitive, distance});
                 }
             }
+
+            return results;
         };
 
         int primitivesCount = static_cast<int>(meshGltf.primitives.size());
-        std::vector<Task<void>> tasks{};
+        std::vector<Task<std::vector<DrawInfo>>> tasks{};
         tasks.reserve(primitivesCount);
         int culls_per_task = Settings::Get<GlobalSettings>().culls_per_task;
         for (int primitive = 0; primitive < primitivesCount; primitive += culls_per_task)
@@ -338,7 +417,27 @@ namespace pe
         }
 
         for (auto &task : tasks)
-            task.get();
+        {
+            auto drawInfos = task.get();
+
+            for (auto &drawInfo : drawInfos)
+            {
+                PrimitiveInfo &primitiveInfo = primitivesInfo[drawInfo.primitive];
+
+                switch (primitiveInfo.renderType)
+                {
+                case RenderType::Opaque:
+                    m_drawInfosOpaque.push_back(drawInfo);
+                    break;
+                case RenderType::AlphaCut:
+                    m_drawInfosAlphaCut.push_back(drawInfo);
+                    break;
+                case RenderType::AlphaBlend:
+                    m_drawInfosAlphaBlend.push_back(drawInfo);
+                    break;
+                }
+            }
+        }
 
         auto &children = model.nodes[node].children;
         for (int child : children)
@@ -352,17 +451,46 @@ namespace pe
         uint32_t frame = RHII.GetFrameIndex();
 
         // Map buffer
-        m_uniforms[frame]->Map();
+        m_storage[frame]->Map();
 
-        // Update camera data
-        m_cameraData.viewProjection = m_cameras[0]->GetViewProjection();
-        m_cameraData.previousViewProjection = m_cameras[0]->GetPreviousViewProjection();
+        // Update per frame data
+        m_frameData.viewProjection = m_cameras[0]->GetViewProjection();
+        m_frameData.previousViewProjection = m_cameras[0]->GetPreviousViewProjection();
 
         MemoryRange mr{};
-        mr.data = &m_cameraData;
+        mr.data = &m_frameData;
+        mr.size = sizeof(PerFrameData);
         mr.offset = 0;
-        mr.size = sizeof(CameraData);
-        m_uniforms[frame]->Copy(1, &mr, true);
+        m_storage[frame]->Copy(1, &mr, true);
+
+        // Update per primitive id data
+        std::vector<uint32_t> ids{};
+        ids.reserve(m_drawInfosOpaque.size() + m_drawInfosAlphaCut.size() + m_drawInfosAlphaBlend.size());
+        for (auto &drawInfo : m_drawInfosOpaque)
+        {
+            auto &model = *drawInfo.model;
+            auto &primitiveInfo = model.m_meshesInfo[model.nodes[drawInfo.node].mesh].primitivesInfo[drawInfo.primitive];
+            uint32_t id = primitiveInfo.indirectIndex;
+            ids.push_back(id);
+        }
+        for (auto &drawInfo : m_drawInfosAlphaCut)
+        {
+            auto &model = *drawInfo.model;
+            auto &primitiveInfo = model.m_meshesInfo[model.nodes[drawInfo.node].mesh].primitivesInfo[drawInfo.primitive];
+            uint32_t id = primitiveInfo.indirectIndex;
+            ids.push_back(id);
+        }
+        for (auto &drawInfo : m_drawInfosAlphaBlend)
+        {
+            auto &model = *drawInfo.model;
+            auto &primitiveInfo = model.m_meshesInfo[model.nodes[drawInfo.node].mesh].primitivesInfo[drawInfo.primitive];
+            uint32_t id = primitiveInfo.indirectIndex;
+            ids.push_back(id);
+        }
+        mr.data = ids.data();
+        mr.size = ids.size() * sizeof(uint32_t);
+        mr.offset = sizeof(PerFrameData);
+        m_storage[frame]->Copy(1, &mr, true);
 
         for (auto &modelPtr : m_models)
         {
@@ -389,7 +517,7 @@ namespace pe
                 mr.data = &nodeInfo.ubo;
                 mr.offset = meshInfo.dataOffset;
                 mr.size = meshInfo.dataSize;
-                m_uniforms[frame]->Copy(1, &mr, true);
+                m_storage[frame]->Copy(1, &mr, true);
 
                 nodeInfo.dirtyUniforms[frame] = false;
             }
@@ -398,20 +526,78 @@ namespace pe
         }
 
         // Unmap buffer
-        m_uniforms[frame]->Unmap();
+        m_storage[frame]->Unmap();
+    }
+
+    void Geometry::UpdateIndirectData()
+    {
+        uint32_t frame = RHII.GetFrameIndex();
+
+        m_indirect[frame]->Map();
+
+        uint32_t firstInstance = 0;
+        for (auto &drawInfo : m_drawInfosOpaque)
+        {
+            auto &model = *drawInfo.model;
+            auto &primitiveInfo = model.m_meshesInfo[model.nodes[drawInfo.node].mesh].primitivesInfo[drawInfo.primitive];
+            auto &indirectCommand = m_indirectCommands[primitiveInfo.indirectIndex];
+            indirectCommand.firstInstance = firstInstance;
+
+            MemoryRange mr{};
+            mr.data = &indirectCommand;
+            mr.size = sizeof(DrawIndexedIndirectCommand);
+            mr.offset = firstInstance * sizeof(DrawIndexedIndirectCommand);
+            m_indirect[frame]->Copy(1, &mr, true);
+
+            firstInstance++;
+        }
+
+        for (auto &drawInfo : m_drawInfosAlphaCut)
+        {
+            auto &model = *drawInfo.model;
+            auto &primitiveInfo = model.m_meshesInfo[model.nodes[drawInfo.node].mesh].primitivesInfo[drawInfo.primitive];
+            auto &indirectCommand = m_indirectCommands[primitiveInfo.indirectIndex];
+            indirectCommand.firstInstance = firstInstance;
+
+            MemoryRange mr{};
+            mr.data = &indirectCommand;
+            mr.size = sizeof(DrawIndexedIndirectCommand);
+            mr.offset = firstInstance * sizeof(DrawIndexedIndirectCommand);
+            m_indirect[frame]->Copy(1, &mr, true);
+
+            firstInstance++;
+        }
+
+        for (auto &drawInfo : m_drawInfosAlphaBlend)
+        {
+            auto &model = *drawInfo.model;
+            auto &primitiveInfo = model.m_meshesInfo[model.nodes[drawInfo.node].mesh].primitivesInfo[drawInfo.primitive];
+            auto &indirectCommand = m_indirectCommands[primitiveInfo.indirectIndex];
+            indirectCommand.firstInstance = firstInstance;
+
+            MemoryRange mr{};
+            mr.data = &indirectCommand;
+            mr.size = sizeof(DrawIndexedIndirectCommand);
+            mr.offset = firstInstance * sizeof(DrawIndexedIndirectCommand);
+            m_indirect[frame]->Copy(1, &mr, true);
+
+            firstInstance++;
+        }
+
+        m_indirect[frame]->Flush();
+        m_indirect[frame]->Unmap();
     }
 
     void Geometry::UpdateGeometry()
     {
-        ClearDrawInfos();
-
-        std::vector<Task<void>> tasks{};
+        ClearDrawInfos(true);
 
         auto cullNodePrimitives = [this](ModelGltf &model, int node)
         {
             CullNodePrimitives(model, node);
         };
 
+        std::vector<Task<void>> tasks{};
         for (auto &modelPtr : m_models)
         {
             ModelGltf &model = *modelPtr;
@@ -434,29 +620,84 @@ namespace pe
         for (auto &task : tasks)
             task.get();
 
+        // front to back
+        std::sort(m_drawInfosOpaque.begin(), m_drawInfosOpaque.end(), [](const DrawInfo &a, const DrawInfo &b)
+                  { return a.distance < b.distance; });
+        // back to front
+        std::sort(m_drawInfosAlphaCut.begin(), m_drawInfosAlphaCut.end(), [](const DrawInfo &a, const DrawInfo &b)
+                  { return a.distance > b.distance; });
+        // back to front
+        std::sort(m_drawInfosAlphaBlend.begin(), m_drawInfosAlphaBlend.end(), [](const DrawInfo &a, const DrawInfo &b)
+                  { return a.distance > b.distance; });
+
         if (HasDrawInfo())
+        {
             UpdateUniformData();
+            UpdateIndirectData();
+        }
     }
 
-    void Geometry::ClearDrawInfos()
+    void Geometry::ClearDrawInfos(bool reserveMax)
     {
         m_drawInfosOpaque.clear();
         m_drawInfosAlphaCut.clear();
         m_drawInfosAlphaBlend.clear();
 
-        m_opaque.clear();
-        m_alphaCut.clear();
-        m_alphaBlend.clear();
+        if (reserveMax)
+        {
+            uint32_t maxOpaque = 0;
+            uint32_t maxAlphaCut = 0;
+            uint32_t maxAlphaBlend = 0;
+
+            // count max primitives
+            for (auto &modelPtr : m_models)
+            {
+                ModelGltf &model = *modelPtr;
+                if (!model.render)
+                    continue;
+
+                for (auto &scene : model.scenes)
+                {
+                    for (int node : scene.nodes)
+                    {
+                        int mesh = model.nodes[node].mesh;
+                        if (mesh < 0)
+                            continue;
+
+                        for (int primitive = 0; primitive < model.meshes[mesh].primitives.size(); primitive++)
+                        {
+                            PrimitiveInfo &primitiveInfo = model.m_meshesInfo[mesh].primitivesInfo[primitive];
+
+                            switch (primitiveInfo.renderType)
+                            {
+                            case RenderType::Opaque:
+                                maxOpaque++;
+                                break;
+                            case RenderType::AlphaCut:
+                                maxAlphaCut++;
+                                break;
+                            case RenderType::AlphaBlend:
+                                maxAlphaBlend++;
+                                break;
+                            }
+                        }
+                    }
+                }
+            }
+
+            m_drawInfosOpaque.reserve(maxOpaque);
+            m_drawInfosAlphaCut.reserve(maxAlphaCut);
+            m_drawInfosAlphaBlend.reserve(maxAlphaBlend);
+        }
     }
 
     void Geometry::DestroyBuffers()
     {
         Buffer::Destroy(m_buffer);
-        m_buffer = nullptr;
         for (int i = 0; i < SWAPCHAIN_IMAGES; i++)
         {
-            Buffer::Destroy(m_uniforms[i]);
-            m_uniforms[i] = nullptr;
+            Buffer::Destroy(m_storage[i]);
+            Buffer::Destroy(m_indirect[i]);
         }
     }
 }

@@ -160,8 +160,8 @@ namespace pe
         void PushConstants();
         void Draw(uint32_t vertexCount, uint32_t instanceCount, uint32_t firstVertex, uint32_t firstInstance);
         void DrawIndexed(uint32_t indexCount, uint32_t instanceCount, uint32_t firstIndex, int32_t vertexOffset, uint32_t firstInstance);
-        void DrawIndirect(Buffer *indirectBuffer, uint32_t offset, uint32_t drawCount, uint32_t stride);
-        void DrawIndexedIndirect(Buffer *indirectBuffer, uint32_t offset, uint32_t drawCount, uint32_t stride);
+        void DrawIndirect(Buffer *indirectBuffer, size_t offset, uint32_t drawCount, uint32_t stride);
+        void DrawIndexedIndirect(Buffer *indirectBuffer, size_t offset, uint32_t drawCount, uint32_t stride);
         void Submit(Queue *queue,
                     uint32_t waitSemaphoresCount,
                     PipelineStageFlags *waitStages, Semaphore **waitSemaphores,

@@ -15,11 +15,15 @@ namespace pe
         int node;
         int primitive;
         float distance;
+    };
 
-        bool operator<(const DrawInfo &rhs) const
-        {
-            return distance < rhs.distance;
-        }
+    struct DrawIndexedIndirectCommand
+    {
+        uint32_t indexCount;
+        uint32_t instanceCount;
+        uint32_t firstIndex;
+        int32_t vertexOffset;
+        uint32_t firstInstance;
     };
 
     class Geometry
@@ -40,49 +44,54 @@ namespace pe
         // Getters
         std::vector<ImageViewApiHandle> &GetImageViews() { return m_imageViews; }
         OrderedMap<size_t, ModelGltf *> &GetModels() { return m_models; }
-        Buffer *GetUniforms(uint32_t frame) { return m_uniforms[frame]; }
+        Buffer *GetUniforms(uint32_t frame) { return m_storage[frame]; }
+        Buffer *GetIndirect(uint32_t frame) { return m_indirect[frame]; }
         Buffer *GetBuffer() { return m_buffer; }
         size_t GetVerticesOffset() { return m_verticesOffset; }
         size_t GetPositionsOffset() { return m_positionsOffset; }
         size_t GetAabbVerticesOffset() { return m_aabbVerticesOffset; }
         size_t GetAabbIndicesOffset() { return m_aabbIndicesOffset; }
         std::vector<uint32_t> &GetAabbIndices() { return m_aabbIndices; }
-        std::multimap<float, DrawInfo> &GetDrawInfosOpaque() { return m_drawInfosOpaque; }
-        std::multimap<float, DrawInfo, std::greater<float>> &GetDrawInfosAlphaCut() { return m_drawInfosAlphaCut; }
-        std::multimap<float, DrawInfo, std::greater<float>> &GetDrawInfosAlphaBlend() { return m_drawInfosAlphaBlend; }
+        const std::vector<DrawInfo> &GetDrawInfosOpaque() const { return m_drawInfosOpaque; }
+        const std::vector<DrawInfo> &GetDrawInfosAlphaCut() const { return m_drawInfosAlphaCut; }
+        const std::vector<DrawInfo> &GetDrawInfosAlphaBlend() const { return m_drawInfosAlphaBlend; }
+        uint32_t GetPrimitivesCount()
+        {
+            return m_primitivesCount;
+            sizeof(PerFrameData);
+        }
+        void UpdateIndirectData();
 
     private:
         void CullNodePrimitives(ModelGltf &model, int node);
         void UpdateUniformData();
-        void ClearDrawInfos();
+        void ClearDrawInfos(bool reserveMax);
         void DestroyBuffers();
 
-        struct CameraData
+        struct alignas(64) PerFrameData
         {
             mat4 viewProjection;
             mat4 previousViewProjection;
         };
 
-        CameraData m_cameraData;
+        PerFrameData m_frameData;
         std::vector<Camera *> m_cameras{};
         OrderedMap<size_t, ModelGltf *> m_models{};
-        Buffer *m_uniforms[SWAPCHAIN_IMAGES];   // per frame uniform buffer
-        Buffer *m_buffer;                       // geometry buffer
-        size_t m_verticesOffset = 0;            // in bytes (offset in geometryBuffer), for Vertex range
-        size_t m_positionsOffset = 0;           // in bytes (offset in geometryBuffer), for PositionUvVertex range
-        size_t m_aabbVerticesOffset = 0;        // in bytes (offset in geometryBuffer), for AABB range
-        size_t m_aabbIndicesOffset = 0;         // in bytes (offset in geometryBuffer), for Shadows range
+        Buffer *m_buffer;                     // geometry buffer
+        Buffer *m_storage[SWAPCHAIN_IMAGES];  // per frame storage buffer
+        Buffer *m_indirect[SWAPCHAIN_IMAGES]; // pre frame indirect commands buffer
+        size_t m_verticesOffset = 0;          // in bytes (offset in geometryBuffer), for Vertex range
+        size_t m_positionsOffset = 0;         // in bytes (offset in geometryBuffer), for PositionUvVertex range
+        size_t m_aabbVerticesOffset = 0;      // in bytes (offset in geometryBuffer), for AABB range
+        size_t m_aabbIndicesOffset = 0;       // in bytes (offset in geometryBuffer), for Shadows range
         std::vector<uint32_t> m_aabbIndices;
         std::vector<ImageViewApiHandle> m_imageViews{};
         std::vector<Sampler *> m_samplers{};
         bool m_dirtyDescriptorViews[SWAPCHAIN_IMAGES];
-        std::mutex m_mutexDrawInfos;
-        std::multimap<float, DrawInfo> m_drawInfosOpaque;
-        std::multimap<float, DrawInfo, std::greater<float>> m_drawInfosAlphaCut;
-        std::multimap<float, DrawInfo, std::greater<float>> m_drawInfosAlphaBlend;
-        std::mutex m_mutex;
-        std::unordered_map<ModelGltf *, std::unordered_map<int, std::vector<int>>> m_opaque;
-        std::unordered_map<ModelGltf *, std::unordered_map<int, std::vector<int>>> m_alphaCut;
-        std::unordered_map<ModelGltf *, std::unordered_map<int, std::vector<int>>> m_alphaBlend;
+        std::vector<DrawInfo> m_drawInfosOpaque;
+        std::vector<DrawInfo> m_drawInfosAlphaCut;
+        std::vector<DrawInfo> m_drawInfosAlphaBlend;
+        uint32_t m_primitivesCount = 0;
+        std::vector<DrawIndexedIndirectCommand> m_indirectCommands{};
     };
 }

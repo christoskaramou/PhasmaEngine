@@ -208,6 +208,7 @@ namespace pe
         m_minUniformBufferOffsetAlignment = gpuPropertiesVK.properties.limits.minUniformBufferOffsetAlignment;
         m_minStorageBufferOffsetAlignment = gpuPropertiesVK.properties.limits.minStorageBufferOffsetAlignment;
         m_maxPushDescriptorsPerSet = pushDescriptorProperties.maxPushDescriptors;
+        m_maxDrawIndirectCount = gpuPropertiesVK.properties.limits.maxDrawIndirectCount;
     }
 
     bool RHI::IsInstanceExtensionValid(const char *name)

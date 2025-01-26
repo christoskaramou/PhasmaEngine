@@ -783,12 +783,12 @@ namespace pe
         vkCmdDrawIndexed(m_apiHandle, indexCount, instanceCount, firstIndex, vertexOffset, firstInstance);
     }
 
-    void CommandBuffer::DrawIndirect(Buffer *indirectBuffer, uint32_t offset, uint32_t drawCount, uint32_t stride)
+    void CommandBuffer::DrawIndirect(Buffer *indirectBuffer, size_t offset, uint32_t drawCount, uint32_t stride)
     {
         vkCmdDrawIndirect(m_apiHandle, indirectBuffer->ApiHandle(), offset, drawCount, stride);
     }
 
-    void CommandBuffer::DrawIndexedIndirect(Buffer *indirectBuffer, uint32_t offset, uint32_t drawCount, uint32_t stride)
+    void CommandBuffer::DrawIndexedIndirect(Buffer *indirectBuffer, size_t offset, uint32_t drawCount, uint32_t stride)
     {
         vkCmdDrawIndexedIndirect(m_apiHandle, indirectBuffer->ApiHandle(), offset, drawCount, stride);
     }

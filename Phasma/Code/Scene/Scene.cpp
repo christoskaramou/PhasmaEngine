@@ -118,14 +118,16 @@ namespace pe
                             // set 0
                             Descriptor *DSetUniforms = sets[0];
                             DSetUniforms->SetBuffer(0, m_geometry.GetUniforms(frame));
+                            DSetUniforms->SetBuffer(1, gb->m_constants);
                             DSetUniforms->Update();
 
                             // set 1
+                            Descriptor *DSetTextures = sets[1];
+                            DSetTextures->SetBuffer(0, gb->m_constants);
                             if (m_geometry.HasDirtyDescriptorViews(frame))
                             {
-                                Descriptor *DSetTextures = sets[1];
-                                DSetTextures->SetSampler(0, defaultSampler->ApiHandle());
-                                DSetTextures->SetImageViews(1, m_geometry.GetImageViews(), {});
+                                DSetTextures->SetSampler(1, defaultSampler->ApiHandle());
+                                DSetTextures->SetImageViews(2, m_geometry.GetImageViews(), {});
                                 DSetTextures->Update();
                             }
                         });
@@ -145,14 +147,16 @@ namespace pe
                         // set 0
                         Descriptor *DSetUniforms = sets[0];
                         DSetUniforms->SetBuffer(0, m_geometry.GetUniforms(frame));
+                        DSetUniforms->SetBuffer(1, gb->m_constants);
                         DSetUniforms->Update();
 
                         // set 1
+                        Descriptor *DSetTextures = sets[1];
+                        DSetTextures->SetBuffer(0, gb->m_constants);
                         if (m_geometry.HasDirtyDescriptorViews(frame))
                         {
-                            Descriptor *DSetTextures = sets[1];
-                            DSetTextures->SetSampler(0, defaultSampler->ApiHandle());
-                            DSetTextures->SetImageViews(1, m_geometry.GetImageViews(), {});
+                            DSetTextures->SetSampler(1, defaultSampler->ApiHandle());
+                            DSetTextures->SetImageViews(2, m_geometry.GetImageViews(), {});
                             DSetTextures->Update();
                         }
                     });

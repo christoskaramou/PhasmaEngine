@@ -38,6 +38,7 @@ namespace pe
             {
                 depthStencilReferenceVK.sType = VK_STRUCTURE_TYPE_ATTACHMENT_REFERENCE_2;
                 depthStencilReferenceVK.attachment = attachmentIndex++;
+                depthStencilReferenceVK.aspectMask = GetAspectMask(attachment.image->GetFormat());
                 depthStencilReferenceVK.layout = VK_IMAGE_LAYOUT_ATTACHMENT_OPTIMAL;
             }
             else
@@ -46,6 +47,7 @@ namespace pe
                 reference.sType = VK_STRUCTURE_TYPE_ATTACHMENT_REFERENCE_2;
                 reference.attachment = attachmentIndex++;
                 reference.layout = VK_IMAGE_LAYOUT_ATTACHMENT_OPTIMAL;
+                reference.aspectMask = GetAspectMask(attachment.image->GetFormat());
                 colorReferencesVK.push_back(reference);
             }
         }

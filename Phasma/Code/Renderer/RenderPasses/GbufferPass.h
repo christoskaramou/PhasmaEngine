@@ -7,6 +7,22 @@ namespace pe
     class Geometry;
     class CommandBuffer;
 
+    struct PushConstants_GBuffer
+    {
+        uint32_t jointsCount;
+        vec2 projJitter;
+        vec2 prevProjJitter;
+        uint32_t transparentPass;
+    };
+    
+    struct Constants_GBuffer
+    {
+        float alphaCut;
+        uint32_t meshDataOffset;
+        uint32_t primitiveDataOffset;
+        uint32_t primitiveImageIndex[5];
+    };
+
     class GbufferOpaquePass : public IRenderPassComponent
     {
     public:
@@ -30,7 +46,6 @@ namespace pe
 
         void PassBarriers(CommandBuffer *cmd);
 
-        Buffer *uniform;
         Image *ibl_brdf_lut;
         Image *normalRT;
         Image *albedoRT;
@@ -40,6 +55,7 @@ namespace pe
         Image *viewportRT;
         Image *transparencyRT;
         Image *depthStencilRT;
+        Buffer *m_constants;
 
         Geometry *m_geometry;
     };
@@ -76,6 +92,7 @@ namespace pe
         Image *viewportRT;
         Image *transparencyRT;
         Image *depthStencilRT;
+        Buffer *m_constants;
 
         Geometry *m_geometry;
     };

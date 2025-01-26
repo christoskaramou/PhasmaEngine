@@ -2,34 +2,36 @@
 #include "../Common/Common.hlsl"
 
 [[vk::push_constant]] PushConstants_GBuffer pc;
-
-[[vk::binding(0, 1)]] SamplerState material_sampler;
-[[vk::binding(1, 1)]] Texture2D textures[];
+[[vk::binding(0, 1)]] StructuredBuffer<Constants_GBuffer> constants;
+[[vk::binding(1, 1)]] SamplerState material_sampler;
+[[vk::binding(2, 1)]] Texture2D textures[];
 
 float4 SampleArray(float2 uv, float index)
 {
     return textures[index].Sample(material_sampler, uv);
 }
 
-float4 GetBaseColor(float2 uv)          { return SampleArray(uv, pc.primitiveImageIndex[0]); }
-float4 GetMetallicRoughness(float2 uv)  { return SampleArray(uv, pc.primitiveImageIndex[1]); }
-float4 GetNormal(float2 uv)             { return SampleArray(uv, pc.primitiveImageIndex[2]); }
-float4 GetOcclusion(float2 uv)          { return SampleArray(uv, pc.primitiveImageIndex[3]); }
-float4 GetEmissive(float2 uv)           { return SampleArray(uv, pc.primitiveImageIndex[4]); }
+float4 GetBaseColor(uint id, float2 uv)          { return SampleArray(uv, constants[id].primitiveImageIndex[0]); }
+float4 GetMetallicRoughness(uint id, float2 uv)  { return SampleArray(uv, constants[id].primitiveImageIndex[1]); }
+float4 GetNormal(uint id, float2 uv)             { return SampleArray(uv, constants[id].primitiveImageIndex[2]); }
+float4 GetOcclusion(uint id, float2 uv)          { return SampleArray(uv, constants[id].primitiveImageIndex[3]); }
+float4 GetEmissive(uint id, float2 uv)           { return SampleArray(uv, constants[id].primitiveImageIndex[4]); }
 
 PS_OUTPUT_Gbuffer mainPS(PS_INPUT_Gbuffer input)
 {
     PS_OUTPUT_Gbuffer output;
+
+    const uint id = input.id;
     
     float2 uv = input.uv;
-    float4 basicColor = GetBaseColor(uv) * input.color;
-    if (basicColor.a < pc.alphaCut)
+    float4 basicColor = GetBaseColor(id, uv) * input.color;
+    if (basicColor.a < constants[id].alphaCut)
             discard;
 
-    float3 metRough         = GetMetallicRoughness(uv).xyz;
-    float3 emissive         = GetEmissive(uv).xyz;
-    float3 tangentNormal    = GetNormal(uv).xyz;
-    float ao                = GetOcclusion(uv).r;
+    float3 metRough         = GetMetallicRoughness(id, uv).xyz;
+    float3 emissive         = GetEmissive(id, uv).xyz;
+    float3 tangentNormal    = GetNormal(id, uv).xyz;
+    float ao                = GetOcclusion(id, uv).r;
 
     output.normal           = CalculateNormal(input.positionWS.xyz, tangentNormal, input.normal, input.uv) * 0.5f + 0.5f;
     output.albedo           = float4(basicColor.xyz * ao, basicColor.a) * input.baseColorFactor;

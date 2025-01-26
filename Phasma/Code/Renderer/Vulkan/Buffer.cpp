@@ -13,12 +13,16 @@ namespace pe
         if (usage & BufferUsage::UniformBufferBit)
         {
             size = RHII.AlignUniform(size);
-            PE_ERROR_IF(size > RHII.GetMaxUniformBufferSize(), "Buffer size is too big");
+            PE_ERROR_IF(size > RHII.GetMaxUniformBufferSize(), "Uniform buffer size is too big");
         }
-        else if (usage & BufferUsage::StorageBufferBit)
+        if (usage & BufferUsage::StorageBufferBit)
         {
             size = RHII.AlignStorage(size);
-            PE_ERROR_IF(size > RHII.GetMaxStorageBufferSize(), "Buffer size is too big");
+            PE_ERROR_IF(size > RHII.GetMaxStorageBufferSize(), "Storage buffer size is too big");
+        }
+        if (usage & BufferUsage::IndirectBufferBit)
+        {
+            PE_ERROR_IF(size > RHII.GetMaxDrawIndirectCount() * sizeof(VkDrawIndexedIndirectCommand), "Indirect command buffer size is too big");
         }
 
         m_size = size;

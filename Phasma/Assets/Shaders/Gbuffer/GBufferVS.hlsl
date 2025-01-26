@@ -1,41 +1,72 @@
 #include "../Common/Structures.hlsl"
 #include "../Common/Common.hlsl"
 
+// --- ByteAddressBuffer data ---
+// PerFrameData                 -> 2 * sizeof(mat4)
+// Constant Buffer indices      -> num of draw calls * sizeof(uint)
+// for (num of draw calls)
+//      MeshData                -> sizeof(mat4) * 2
+//      for (mesh primitives)
+//          PrimitiveData       -> sizeof(mat4)
+// --- ByteAddressBuffer data ---
+
+
 [[vk::push_constant]] PushConstants_GBuffer pc;
-[[vk::binding(0, 0)]] StructuredBuffer<float4x4> data;
+[[vk::binding(0, 0)]] ByteAddressBuffer data;
+[[vk::binding(1, 0)]] StructuredBuffer<Constants_GBuffer> constants;
+
+uint GetConstantBufferID(uint instanceID)
+{
+    return data.Load(128 + instanceID * 4);
+}
+
+float4x4 LoadMatrix(uint offset)
+{
+    float4x4 result;
+    
+    result[0] = asfloat(data.Load4(offset + 0 * 16));
+    result[1] = asfloat(data.Load4(offset + 1 * 16));
+    result[2] = asfloat(data.Load4(offset + 2 * 16));
+    result[3] = asfloat(data.Load4(offset + 3 * 16));
+    
+    return result;
+}
 
 // Matrices
-float4x4 GetViewProjection()         { return data[0]; }
-float4x4 GetPreviousViewProjection() { return data[1]; }
-float4x4 GetMeshMatrix()             { return data[pc.meshIndex]; }
-float4x4 GetMeshPreviousMatrix()     { return data[pc.meshIndex + 1]; }
-float4x4 GetJointMatrix(uint index)  { return data[pc.meshIndex + 2 + index]; }
+float4x4 GetViewProjection()                  { return LoadMatrix(0); }
+float4x4 GetPreviousViewProjection()          { return LoadMatrix(64); }
+float4x4 GetMeshMatrix(uint id)               { return LoadMatrix(constants[id].meshDataOffset); }
+float4x4 GetMeshPreviousMatrix(uint id)       { return LoadMatrix(constants[id].meshDataOffset + 64); }
+float4x4 GetJointMatrix(uint id, uint index)  { return LoadMatrix(constants[id].meshDataOffset + 128 + index * 64); }
 
 // Factors
-float4 GetBaseColorFactor()     { return data[pc.primitiveDataIndex][0]; }
-float3 GetEmissiveFactor()      { return data[pc.primitiveDataIndex][1].xyz; }
-float4 GetMetRoughAlphacutOcl() { return data[pc.primitiveDataIndex][2]; }
+float4 GetBaseColorFactor(uint id)     { return asfloat(data.Load4(constants[id].primitiveDataOffset + 0)); }
+float3 GetEmissiveFactor(uint id)      { return asfloat(data.Load3(constants[id].primitiveDataOffset + 16)); }
+float4 GetMetRoughAlphacutOcl(uint id) { return asfloat(data.Load4(constants[id].primitiveDataOffset + 32)); }
 
 VS_OUTPUT_Gbuffer mainVS(VS_INPUT_Gbuffer input)
 {
     VS_OUTPUT_Gbuffer output;
     output.uv = input.texCoord.xy;
 
+    const uint id = GetConstantBufferID(input.id);
+    output.id = id;
+
     float4x4 boneTransform = identity_mat;
-    if (pc.jointsCount)
+    if (pc.jointsCount) // TODO: fix this when we have a proper joint count
     {
-        boneTransform = mul(GetJointMatrix(input.joints[0]), input.weights[0]) +
-                        mul(GetJointMatrix(input.joints[1]), input.weights[1]) +
-                        mul(GetJointMatrix(input.joints[2]), input.weights[2]) +
-                        mul(GetJointMatrix(input.joints[3]), input.weights[3]);
+        boneTransform = mul(GetJointMatrix(id, input.joints[0]), input.weights[0]) +
+                        mul(GetJointMatrix(id, input.joints[1]), input.weights[1]) +
+                        mul(GetJointMatrix(id, input.joints[2]), input.weights[2]) +
+                        mul(GetJointMatrix(id, input.joints[3]), input.weights[3]);
     }
 
     // World space and clip space positions
     float4 inPos            = float4(input.position, 1.0f);
-    float4x4 worldTransform = mul(boneTransform, GetMeshMatrix());
+    float4x4 worldTransform = mul(boneTransform, GetMeshMatrix(id));
     output.positionWS       = mul(inPos, worldTransform);
-    output.positionCS       = mul(inPos, mul(boneTransform, mul(GetMeshMatrix(), GetViewProjection())));
-    output.prevPositionCS   = mul(inPos, mul(boneTransform, mul(GetMeshPreviousMatrix(), GetPreviousViewProjection())));
+    output.positionCS       = mul(inPos, mul(boneTransform, mul(GetMeshMatrix(id), GetViewProjection())));
+    output.prevPositionCS   = mul(inPos, mul(boneTransform, mul(GetMeshPreviousMatrix(id), GetPreviousViewProjection())));
     output.position         = output.positionCS;
     
     // Normal
@@ -47,9 +78,9 @@ VS_OUTPUT_Gbuffer mainVS(VS_INPUT_Gbuffer input)
     output.color = input.color;
 
     // Factors
-    output.baseColorFactor      = GetBaseColorFactor();
-    output.emissiveFactor       = GetEmissiveFactor();
-    output.metRoughAlphacutOcl  = GetMetRoughAlphacutOcl();
+    output.baseColorFactor      = GetBaseColorFactor(id);
+    output.emissiveFactor       = GetEmissiveFactor(id);
+    output.metRoughAlphacutOcl  = GetMetRoughAlphacutOcl(id);
 
     return output;
 }

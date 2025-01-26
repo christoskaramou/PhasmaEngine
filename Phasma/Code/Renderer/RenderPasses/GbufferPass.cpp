@@ -43,6 +43,8 @@ namespace pe
 
         m_attachments[6].image = depthStencilRT;
         m_attachments[6].loadOp = AttachmentLoadOp::Load;
+
+        m_constants = nullptr;
     }
 
     void GbufferOpaquePass::UpdatePassInfo()
@@ -87,19 +89,7 @@ namespace pe
     {
         PE_ERROR_IF(m_geometry == nullptr, "Geometry was not set");
 
-        Camera &camera = *GetGlobalSystem<CameraSystem>()->GetCamera(0);
-
-        struct PushConstants_GBuffer
-        {
-            uint32_t jointsCount;
-            vec2 projJitter;
-            vec2 prevProjJitter;
-            float alphaCut;
-            uint32_t transparentPass;
-            uint32_t meshIndex;
-            uint32_t primitiveDataIndex;
-            uint32_t primitiveImageIndex[5];
-        };
+        Camera *camera = GetGlobalSystem<CameraSystem>()->GetCamera(0);
 
         if (!m_geometry->HasDrawInfo())
         {
@@ -110,7 +100,15 @@ namespace pe
         {
             if (m_geometry->HasOpaqueDrawInfo())
             {
-                Image *colorTargets[6]{normalRT, albedoRT, srmRT, velocityRT, emissiveRT, transparencyRT};
+                PushConstants_GBuffer pushConstants{};
+                pushConstants.jointsCount = 0u;
+                pushConstants.projJitter = camera->GetProjJitter();
+                pushConstants.prevProjJitter = camera->GetPrevProjJitter();
+                pushConstants.transparentPass = 0u;
+
+                uint32_t frame = RHII.GetFrameIndex();
+                size_t offset = 0;
+                uint32_t count = static_cast<uint32_t>(m_geometry->GetDrawInfosOpaque().size());
 
                 cmd->BeginPass(7, m_attachments.data(), "GbufferOpaquePass");
                 cmd->BindIndexBuffer(m_geometry->GetBuffer(), 0);
@@ -118,41 +116,9 @@ namespace pe
                 cmd->SetViewport(0.f, 0.f, depthStencilRT->GetWidth_f(), depthStencilRT->GetHeight_f());
                 cmd->SetScissor(0, 0, depthStencilRT->GetWidth(), depthStencilRT->GetHeight());
                 cmd->BindPipeline(*m_passInfo);
-
-                PushConstants_GBuffer constants{};
-                constants.jointsCount = 0u;
-                constants.projJitter = camera.GetProjJitter();
-                constants.prevProjJitter = camera.GetPrevProjJitter();
-                constants.alphaCut = 0.0f;
-                constants.transparentPass = 0u;
-
-                for (auto &drawInfo : m_geometry->GetDrawInfosOpaque())
-                {
-                    ModelGltf &model = *drawInfo.second.model;
-
-                    int node = drawInfo.second.node;
-                    int mesh = model.nodes[node].mesh;
-                    if (mesh < 0)
-                        continue;
-
-                    int primitive = drawInfo.second.primitive;
-                    PrimitiveInfo &primitiveInfo = model.m_meshesInfo[mesh].primitivesInfo[primitive];
-
-                    constants.meshIndex = GetUboDataOffset(model.m_meshesInfo[mesh].dataOffset);
-                    constants.primitiveDataIndex = GetUboDataOffset(primitiveInfo.dataOffset);
-                    for (int i = 0; i < 5; i++)
-                        constants.primitiveImageIndex[i] = primitiveInfo.viewsIndex[i];
-
-                    cmd->SetConstants(constants);
-                    cmd->PushConstants();
-
-                    cmd->DrawIndexed(
-                        primitiveInfo.indicesCount,
-                        1,
-                        primitiveInfo.indexOffset,
-                        primitiveInfo.vertexOffset,
-                        0);
-                }
+                cmd->SetConstants(pushConstants);
+                cmd->PushConstants();
+                cmd->DrawIndexedIndirect(m_geometry->GetIndirect(frame), offset, count, sizeof(DrawIndexedIndirectCommand));
                 cmd->EndPass();
             }
         }
@@ -206,6 +172,8 @@ namespace pe
         m_attachments[4].image = emissiveRT;
         m_attachments[5].image = transparencyRT;
         m_attachments[6].image = depthStencilRT;
+
+        m_constants = nullptr;
     }
 
     void GbufferTransparentPass::UpdatePassInfo()
@@ -250,93 +218,29 @@ namespace pe
     {
         PE_ERROR_IF(m_geometry == nullptr, "Geometry was not set");
 
-        Camera &camera = *GetGlobalSystem<CameraSystem>()->GetCamera(0);
-
-        struct PushConstants_GBuffer
-        {
-            uint32_t jointsCount;
-            vec2 projJitter;
-            vec2 prevProjJitter;
-            float alphaCut;
-            uint32_t transparentPass;
-            uint32_t meshIndex;
-            uint32_t primitiveDataIndex;
-            uint32_t primitiveImageIndex[5];
-        };
+        Camera *camera = GetGlobalSystem<CameraSystem>()->GetCamera(0);
 
         if (m_geometry->HasAlphaDrawInfo())
         {
+            PushConstants_GBuffer pushConstants{};
+            pushConstants.jointsCount = 0u;
+            pushConstants.projJitter = camera->GetProjJitter();
+            pushConstants.prevProjJitter = camera->GetPrevProjJitter();
+            pushConstants.transparentPass = 1u;
+
+            uint32_t frame = RHII.GetFrameIndex();
+            size_t offset = m_geometry->GetDrawInfosOpaque().size() * sizeof(DrawIndexedIndirectCommand);
+            uint32_t count = static_cast<uint32_t>(m_geometry->GetDrawInfosAlphaCut().size() + m_geometry->GetDrawInfosAlphaBlend().size());
+
             cmd->BeginPass(7, m_attachments.data(), "GbufferTransparentPass");
             cmd->BindIndexBuffer(m_geometry->GetBuffer(), 0);
             cmd->BindVertexBuffer(m_geometry->GetBuffer(), m_geometry->GetVerticesOffset());
             cmd->SetViewport(0.f, 0.f, depthStencilRT->GetWidth_f(), depthStencilRT->GetHeight_f());
             cmd->SetScissor(0, 0, depthStencilRT->GetWidth(), depthStencilRT->GetHeight());
             cmd->BindPipeline(*m_passInfo);
-
-            PushConstants_GBuffer constants{};
-            constants.jointsCount = 0u;
-            constants.projJitter = camera.GetProjJitter();
-            constants.prevProjJitter = camera.GetPrevProjJitter();
-            constants.transparentPass = 1u;
-
-            for (auto &drawInfo : m_geometry->GetDrawInfosAlphaCut())
-            {
-                ModelGltf &model = *drawInfo.second.model;
-
-                int node = drawInfo.second.node;
-                int mesh = model.nodes[node].mesh;
-                if (mesh < 0)
-                    continue;
-
-                int primitive = drawInfo.second.primitive;
-                PrimitiveInfo &primitiveInfo = model.m_meshesInfo[mesh].primitivesInfo[primitive];
-                auto &primitiveGltf = model.meshes[mesh].primitives[primitive];
-
-                constants.alphaCut = static_cast<float>(model.materials[primitiveGltf.material].alphaCutoff);
-                constants.meshIndex = GetUboDataOffset(model.m_meshesInfo[mesh].dataOffset);
-                constants.primitiveDataIndex = GetUboDataOffset(primitiveInfo.dataOffset);
-                for (int i = 0; i < 5; i++)
-                    constants.primitiveImageIndex[i] = primitiveInfo.viewsIndex[i];
-
-                cmd->SetConstants(constants);
-                cmd->PushConstants();
-
-                cmd->DrawIndexed(
-                    primitiveInfo.indicesCount,
-                    1,
-                    primitiveInfo.indexOffset,
-                    primitiveInfo.vertexOffset,
-                    0);
-            }
-
-            for (auto &drawInfo : m_geometry->GetDrawInfosAlphaBlend())
-            {
-                ModelGltf &model = *drawInfo.second.model;
-
-                int node = drawInfo.second.node;
-                int mesh = model.nodes[node].mesh;
-                if (mesh < 0)
-                    continue;
-
-                int primitive = drawInfo.second.primitive;
-                PrimitiveInfo &primitiveInfo = model.m_meshesInfo[mesh].primitivesInfo[primitive];
-
-                constants.alphaCut = 0.0f;
-                constants.meshIndex = GetUboDataOffset(model.m_meshesInfo[mesh].dataOffset);
-                constants.primitiveDataIndex = GetUboDataOffset(primitiveInfo.dataOffset);
-                for (int i = 0; i < 5; i++)
-                    constants.primitiveImageIndex[i] = primitiveInfo.viewsIndex[i];
-
-                cmd->SetConstants(constants);
-                cmd->PushConstants();
-
-                cmd->DrawIndexed(
-                    primitiveInfo.indicesCount,
-                    1,
-                    primitiveInfo.indexOffset,
-                    primitiveInfo.vertexOffset,
-                    0);
-            }
+            cmd->SetConstants(pushConstants);
+            cmd->PushConstants();
+            cmd->DrawIndexedIndirect(m_geometry->GetIndirect(frame), offset, count, sizeof(DrawIndexedIndirectCommand));
             cmd->EndPass();
         }
 
@@ -361,5 +265,6 @@ namespace pe
 
     void GbufferTransparentPass::Destroy()
     {
+        Buffer::Destroy(m_constants);
     }
 }

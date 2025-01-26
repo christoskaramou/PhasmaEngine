@@ -74,14 +74,14 @@ namespace pe
         {
             for (auto &drawInfo : drawInfos)
             {
-                ModelGltf &model = *drawInfo.second.model;
+                ModelGltf &model = *drawInfo.model;
 
-                int node = drawInfo.second.node;
+                int node = drawInfo.node;
                 int mesh = model.nodes[node].mesh;
                 if (mesh < 0)
                     continue;
 
-                int primitive = drawInfo.second.primitive;
+                int primitive = drawInfo.primitive;
                 PrimitiveInfo &primitiveInfo = model.m_meshesInfo[mesh].primitivesInfo[primitive];
 
                 constants.meshIndex = GetUboDataOffset(model.m_meshesInfo[mesh].dataOffset);

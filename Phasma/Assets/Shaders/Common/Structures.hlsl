@@ -59,16 +59,19 @@ struct PushConstants_Bloom_Combine
     };
 #endif
 
-
 struct PushConstants_GBuffer
 {
     uint jointsCount;
     float2 projJitter;
     float2 prevProjJitter;
-    float alphaCut;
     uint transparentPass;
-    uint meshIndex;
-    uint primitiveDataIndex;
+};
+
+struct Constants_GBuffer
+{
+    float alphaCut;
+    uint meshDataOffset;
+    uint primitiveDataOffset;
     uint primitiveImageIndex[5];
 };
 
@@ -96,6 +99,7 @@ struct VS_INPUT_Gbuffer
     float4 color                : COLOR;
     uint4 joints                : BLENDINDICES;
     float4 weights              : BLENDWEIGHT;
+    uint id                     : SV_InstanceID;
 };
 
 struct VS_OUTPUT_Position
@@ -121,6 +125,7 @@ struct VS_OUTPUT_Gbuffer
     float4 prevPositionCS       : POSITION1;
     float4 positionWS           : POSITION2;
     float4 position             : SV_POSITION;
+    uint id                     : SV_InstanceID;
 };
 
 struct VS_OUTPUT_AABB
@@ -142,6 +147,7 @@ struct PS_INPUT_Gbuffer
     float4 positionCS           : POSITION0;
     float4 prevPositionCS       : POSITION1;
     float4 positionWS           : POSITION2;
+    uint id                     : SV_InstanceID;
 };
 
 struct PS_INPUT_Position_Uv
