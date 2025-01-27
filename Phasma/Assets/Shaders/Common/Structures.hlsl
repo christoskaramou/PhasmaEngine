@@ -4,10 +4,7 @@
 // ------------ Push constants -------------
 struct PushConstants_DepthPass
 {
-    uint meshIndex;
-    uint meshJointCount;
-    uint primitiveImageIndex[5];
-    float alphaCut;
+    uint jointsCount;
 };
 
 struct PushConstants_f2
@@ -67,7 +64,7 @@ struct PushConstants_GBuffer
     uint transparentPass;
 };
 
-struct Constants_GBuffer
+struct Primitive_Constants
 {
     float alphaCut;
     uint meshDataOffset;
@@ -89,6 +86,7 @@ struct VS_INPUT_Depth
     float2 uv                   : TEXCOORD0;
     uint4 joints                : BLENDINDICES;
     float4 weights              : BLENDWEIGHT;
+    uint id                     : SV_InstanceID;
 };
 
 struct VS_INPUT_Gbuffer
@@ -111,6 +109,13 @@ struct VS_OUTPUT_Position_Uv
 {
     float2 uv                   : TEXCOORD0;
     float4 position             : SV_POSITION;
+};
+
+struct VS_OUTPUT_Position_Uv_ID
+{
+    float2 uv                   : TEXCOORD0;
+    float4 position             : SV_POSITION;
+    uint id                     : SV_InstanceID;
 };
 
 struct VS_OUTPUT_Gbuffer
@@ -154,6 +159,13 @@ struct PS_INPUT_Position_Uv
 {
     float2 uv                   : TEXCOORD0;
     float4 position             : SV_POSITION;
+};
+
+struct PS_INPUT_Position_Uv_ID
+{
+    float2 uv                   : TEXCOORD0;
+    float4 position             : SV_POSITION;
+    uint id                     : SV_InstanceID;
 };
 
 struct PS_INPUT_UV

@@ -10,10 +10,9 @@
 //          PrimitiveData       -> sizeof(mat4)
 // --- ByteAddressBuffer data ---
 
-
 [[vk::push_constant]] PushConstants_GBuffer pc;
 [[vk::binding(0, 0)]] ByteAddressBuffer data;
-[[vk::binding(1, 0)]] StructuredBuffer<Constants_GBuffer> constants;
+[[vk::binding(1, 0)]] StructuredBuffer<Primitive_Constants> constants;
 
 uint GetConstantBufferID(uint instanceID)
 {

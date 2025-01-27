@@ -55,6 +55,7 @@ namespace pe
     struct MemoryBarrierInfo : public BarrierInfo
     {
         MemoryBarrierInfo() { type = BarrierType::Memory; }
+        
         PipelineStageFlags srcStageMask = PipelineStage::None;
         PipelineStageFlags dstStageMask = PipelineStage::None;
         AccessFlags srcAccessMask = Access::None;
@@ -89,9 +90,7 @@ namespace pe
             PE_ERROR_IF(offsetBytes + sizeof(T) > N, "PushConstants buffer overflow");
             memcpy(&m_data[offsetBytes], &value, sizeof(T));
         }
-
         void Reset() { memset(m_data, 0, N); }
-
         const void *Data() const { return m_data; }
 
     private:
@@ -102,19 +101,14 @@ namespace pe
     {
     public:
         CommandPool(uint32_t familyId, CommandPoolCreateFlags flags, const std::string &name);
-
         ~CommandPool();
 
         static void Init(GpuApiHandle gpu);
-
         static void Clear();
-
         static CommandPool *GetFree(uint32_t familyId);
-
         static void Return(CommandPool *commandPool);
 
         uint32_t GetFamilyId() const { return m_familyId; }
-
         CommandPoolCreateFlags GetFlags() { return m_flags; }
 
     private:

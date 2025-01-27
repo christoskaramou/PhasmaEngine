@@ -15,7 +15,7 @@ namespace pe
         uint32_t transparentPass;
     };
     
-    struct Constants_GBuffer
+    struct Primitive_Constants
     {
         float alphaCut;
         uint32_t meshDataOffset;

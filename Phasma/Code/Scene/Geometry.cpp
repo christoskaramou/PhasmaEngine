@@ -313,7 +313,7 @@ namespace pe
         GbufferOpaquePass *gbo = GetGlobalComponent<GbufferOpaquePass>();
         GbufferTransparentPass *gbt = GetGlobalComponent<GbufferTransparentPass>();
         gbo->m_constants = Buffer::Create(
-            m_primitivesCount * sizeof(Constants_GBuffer),
+            m_primitivesCount * sizeof(Primitive_Constants),
             BufferUsage::StorageBufferBit | BufferUsage::TransferDstBit,
             AllocationCreate::HostAccessSequentialWriteBit,
             "GbufferPass_constants");
@@ -336,7 +336,7 @@ namespace pe
                     PrimitiveInfo &primitiveInfo = model.m_meshesInfo[mesh].primitivesInfo[j];
                     auto &primitiveGltf = model.meshes[mesh].primitives[j];
 
-                    Constants_GBuffer constants{};
+                    Primitive_Constants constants{};
                     constants.alphaCut = static_cast<float>(model.materials[primitiveGltf.material].alphaCutoff);
                     constants.meshDataOffset = static_cast<uint32_t>(model.m_meshesInfo[mesh].dataOffset);
                     constants.primitiveDataOffset = static_cast<uint32_t>(primitiveInfo.dataOffset);
@@ -346,10 +346,10 @@ namespace pe
                     MemoryRange mr{};
                     mr.data = &constants;
                     mr.offset = offset;
-                    mr.size = sizeof(Constants_GBuffer);
+                    mr.size = sizeof(Primitive_Constants);
                     gbo->m_constants->Copy(1, &mr, true);
 
-                    offset += sizeof(Constants_GBuffer);
+                    offset += sizeof(Primitive_Constants);
                 }
             }
         }

@@ -489,17 +489,25 @@ namespace pe
                 pipeinfo.renderPass = renderPass->ApiHandle();
             }
 
-            // Subpass (Index of subpass this pipeline will be used in)
+            // Subpass (Index of renderpass subpass this pipeline will be used in)
             pipeinfo.subpass = 0;
 
-            // Base Pipeline ApiHandle
+            // Base Pipeline
             pipeinfo.basePipelineHandle = nullptr;
 
             // Base Pipeline Index
             pipeinfo.basePipelineIndex = -1;
 
+            VkPipelineCacheCreateInfo cacheInfo{};
+            cacheInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_CACHE_CREATE_INFO;
+            cacheInfo.pInitialData = nullptr;
+            cacheInfo.initialDataSize = 0;
+            VkPipelineCache pipelineCache;
+            PE_CHECK(vkCreatePipelineCache(RHII.GetDevice(), &cacheInfo, nullptr, &pipelineCache));
+            m_cache = pipelineCache;
+
             VkPipeline pipeline;
-            PE_CHECK(vkCreateGraphicsPipelines(RHII.GetDevice(), nullptr, 1, &pipeinfo, nullptr, &pipeline));
+            PE_CHECK(vkCreateGraphicsPipelines(RHII.GetDevice(), m_cache, 1, &pipeinfo, nullptr, &pipeline));
             m_apiHandle = pipeline;
 
             vkDestroyShaderModule(RHII.GetDevice(), vertModule, nullptr);
@@ -522,6 +530,12 @@ namespace pe
         {
             vkDestroyPipeline(RHII.GetDevice(), m_apiHandle, nullptr);
             m_apiHandle = {};
+        }
+
+        if (m_cache)
+        {
+            vkDestroyPipelineCache(RHII.GetDevice(), m_cache, nullptr);
+            m_cache = {};
         }
     }
 }

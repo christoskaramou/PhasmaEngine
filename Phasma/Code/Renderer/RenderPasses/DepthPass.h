@@ -6,6 +6,11 @@ namespace pe
     class Geometry;
     class CommandBuffer;
 
+    struct PushConstants_DepthPass
+    {
+        uint32_t jointsCount;
+    };
+
     class DepthPass : public IRenderPassComponent
     {
     public:
@@ -17,7 +22,7 @@ namespace pe
         void CreateUniforms(CommandBuffer *cmd) override;
         void UpdateDescriptorSets() override;
         void Update(Camera *camera) override;
-        void Draw(CommandBuffer * cmd) override;
+        void Draw(CommandBuffer *cmd) override;
         void Resize(uint32_t width, uint32_t height) override;
         void Destroy() override;
 
@@ -28,7 +33,7 @@ namespace pe
         friend class Geometry;
         friend class Scene;
         friend class Renderer;
-        
+
         Image *m_depthStencil;
         Geometry *m_geometry;
     };

@@ -74,26 +74,18 @@ namespace pe
     {
         PE_ERROR_IF(m_geometry == nullptr, "Geometry was not set");
 
-        struct PushConstants_DepthPass
-        {
-            uint32_t meshIndex;
-            uint32_t meshJointCount;
-            uint32_t primitiveImageIndex[5];
-            float alphaCut;
-        };
-
-        cmd->BeginDebugRegion("Depth Prepass");
-
-        const auto &drawInfosOpaque = m_geometry->GetDrawInfosOpaque();
-        if (drawInfosOpaque.empty())
+        if (!m_geometry->HasOpaqueDrawInfo())
         {
             ClearDepthStencil(cmd);
         }
         else
         {
-            PushConstants_DepthPass constants{};
-            constants.meshJointCount = 0;
-            constants.alphaCut = 0.0f;
+            PushConstants_DepthPass pushConstants{};
+            pushConstants.jointsCount = 0u;
+
+            uint32_t frame = RHII.GetFrameIndex();
+            size_t offset = 0;
+            uint32_t count = static_cast<uint32_t>(m_geometry->GetDrawInfosOpaque().size());
 
             cmd->BeginPass(1, m_attachments.data(), "DepthPass");
             cmd->SetViewport(0.f, 0.f, m_depthStencil->GetWidth_f(), m_depthStencil->GetHeight_f());
@@ -101,36 +93,12 @@ namespace pe
             cmd->BindPipeline(*m_passInfo);
             cmd->BindIndexBuffer(m_geometry->GetBuffer(), 0);
             cmd->BindVertexBuffer(m_geometry->GetBuffer(), m_geometry->GetPositionsOffset());
-
-            for (auto &drawInfo : drawInfosOpaque)
-            {
-                ModelGltf &model = *drawInfo.model;
-
-                int node = drawInfo.node;
-                int mesh = model.nodes[node].mesh;
-                if (mesh < 0)
-                    continue;
-                constants.meshIndex = GetUboDataOffset(model.m_meshesInfo[mesh].dataOffset);
-
-                int primitive = drawInfo.primitive;
-                PrimitiveInfo &primitiveInfo = model.m_meshesInfo[mesh].primitivesInfo[primitive];
-                for (int i = 0; i < 5; i++)
-                    constants.primitiveImageIndex[i] = primitiveInfo.viewsIndex[i];
-
-                cmd->SetConstants(constants);
-                cmd->PushConstants();
-
-                cmd->DrawIndexed(
-                    primitiveInfo.indicesCount,
-                    1,
-                    primitiveInfo.indexOffset,
-                    primitiveInfo.vertexOffset,
-                    0);
-            }
+            cmd->SetConstants(pushConstants);
+            cmd->PushConstants();
+            cmd->DrawIndexedIndirect(m_geometry->GetIndirect(frame), offset, count, sizeof(DrawIndexedIndirectCommand));
             cmd->EndPass();
         }
-        cmd->EndDebugRegion();
-        
+
         m_geometry = nullptr;
     }
 

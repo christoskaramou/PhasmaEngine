@@ -2,7 +2,7 @@
 #include "../Common/Common.hlsl"
 
 [[vk::push_constant]] PushConstants_GBuffer pc;
-[[vk::binding(0, 1)]] StructuredBuffer<Constants_GBuffer> constants;
+[[vk::binding(0, 1)]] StructuredBuffer<Primitive_Constants> constants;
 [[vk::binding(1, 1)]] SamplerState material_sampler;
 [[vk::binding(2, 1)]] Texture2D textures[];
 

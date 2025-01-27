@@ -81,5 +81,6 @@ namespace pe
 
         PassInfo &m_info;
         PipelineLayoutApiHandle m_layout;
+        PipelineCacheApiHandle m_cache;
     };
 }
