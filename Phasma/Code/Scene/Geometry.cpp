@@ -73,7 +73,7 @@ namespace pe
         m_buffer = Buffer::Create(
             sizeof(uint32_t) * numberOfIndices + sizeof(Vertex) * numberOfVertices + sizeof(PositionUvVertex) * numberOfVertices + sizeof(AabbVertex) * numberOfAabbVertices,
             BufferUsage::TransferDstBit | BufferUsage::IndexBufferBit | BufferUsage::VertexBufferBit,
-            AllocationCreate::None,
+            AllocationCreate::DedicatedMemoryBit,
             "combined_Geometry_buffer");
 
         // indices
@@ -256,7 +256,7 @@ namespace pe
                     indirectCommand.instanceCount = 1;
                     indirectCommand.firstIndex = primitiveInfo.indexOffset;
                     indirectCommand.vertexOffset = primitiveInfo.vertexOffset;
-                    indirectCommand.firstInstance = 0;
+                    indirectCommand.firstInstance = indirectCount;
                     m_indirectCommands.push_back(indirectCommand);
 
                     indirectCount++;
@@ -265,6 +265,23 @@ namespace pe
         }
 
         PE_ERROR_IF(indirectCount != m_primitivesCount, "Geometry::UploadBuffers: Indirect count mismatch!");
+
+        m_indirectAll = Buffer::Create(
+            indirectCount * sizeof(DrawIndexedIndirectCommand),
+            BufferUsage::IndirectBufferBit | BufferUsage::TransferDstBit,
+            AllocationCreate::DedicatedMemoryBit,
+            "indirect_Geometry_buffer_all");
+        cmd->CopyBufferStaged(m_indirectAll, m_indirectCommands.data(), m_indirectCommands.size() * sizeof(DrawIndexedIndirectCommand), 0);  
+
+        BufferBarrierInfo indirectBarrierInfo{};
+        indirectBarrierInfo.buffer = m_indirectAll;
+        indirectBarrierInfo.srcAccess = Access::TransferWriteBit;
+        indirectBarrierInfo.dstAccess = Access::IndirectCommandReadBit;
+        indirectBarrierInfo.srcStage = PipelineStage::TransferBit;
+        indirectBarrierInfo.dstStage = PipelineStage::DrawIndirectBit;
+        indirectBarrierInfo.size = indirectCount * sizeof(DrawIndexedIndirectCommand);
+        indirectBarrierInfo.offset = 0;
+        cmd->BufferBarrier(indirectBarrierInfo);      
 
         for (int i = 0; i < SWAPCHAIN_IMAGES; i++)
         {

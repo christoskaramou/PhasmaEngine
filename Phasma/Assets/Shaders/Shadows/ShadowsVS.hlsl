@@ -2,29 +2,45 @@
 #include "../Common/Common.hlsl"
 
 [[vk::push_constant]] PushConstants_Shadows pc;
-[[vk::binding(0, 0)]] StructuredBuffer<float4x4> data;
+[[vk::binding(0, 0)]] ByteAddressBuffer data;
+[[vk::binding(1, 0)]] StructuredBuffer<Primitive_Constants> constants;
 
-float4x4 GetMeshMatrix()            { return data[pc.meshIndex]; }
-float4x4 GetJointMatrix(uint index) { return data[pc.meshIndex + 2 + index]; }
+float4x4 LoadMatrix(uint offset)
+{
+    float4x4 result;
+    
+    result[0] = asfloat(data.Load4(offset + 0 * 16));
+    result[1] = asfloat(data.Load4(offset + 1 * 16));
+    result[2] = asfloat(data.Load4(offset + 2 * 16));
+    result[3] = asfloat(data.Load4(offset + 3 * 16));
+    
+    return result;
+}
+
+// Matrices
+float4x4 GetMeshMatrix(uint id)               { return LoadMatrix(constants[id].meshDataOffset); }
+float4x4 GetJointMatrix(uint id, uint index)  { return LoadMatrix(constants[id].meshDataOffset + 128 + index * 64); }
+
 
 VS_OUTPUT_Position_Uv mainVS(VS_INPUT_Depth input)
 {
     VS_OUTPUT_Position_Uv output;
+
+    const uint id = input.id;
     
     float4x4 jointTransform = identity_mat;
-    if (pc.meshJointCount > 0)
+    if (pc.jointsCount > 0)
     {
-        jointTransform = mul(GetJointMatrix(input.joints[0]), input.weights[0]) +
-                         mul(GetJointMatrix(input.joints[1]), input.weights[1]) +
-                         mul(GetJointMatrix(input.joints[2]), input.weights[2]) +
-                         mul(GetJointMatrix(input.joints[3]), input.weights[3]);
+        jointTransform = mul(GetJointMatrix(id, input.joints[0]), input.weights[0]) +
+                         mul(GetJointMatrix(id, input.joints[1]), input.weights[1]) +
+                         mul(GetJointMatrix(id, input.joints[2]), input.weights[2]) +
+                         mul(GetJointMatrix(id, input.joints[3]), input.weights[3]);
     }
 
-    float4x4 combinedMatrix = mul(jointTransform, GetMeshMatrix());
+    float4x4 combinedMatrix = mul(jointTransform, GetMeshMatrix(id));
     float4x4 final = mul(combinedMatrix, pc.vp);
 
     output.position = mul(float4(input.position, 1.0), final);
-    //output.uv = input.uv; // TODO: UVs are not used in shadow pass, remove this when we have shadow vertices in the buffer
 
     return output;
 }

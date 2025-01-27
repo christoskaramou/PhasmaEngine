@@ -10,6 +10,12 @@ namespace pe
     class Sampler;
     class ModelGltf;
 
+    struct PushConstants_Shadows
+    {
+        mat4 vp;
+        uint32_t jointsCount;
+    };
+
     class ShadowPass : public IRenderPassComponent
     {
     public:
@@ -18,7 +24,7 @@ namespace pe
         void CreateUniforms(CommandBuffer *cmd) override;
         void UpdateDescriptorSets() override;
         void Update(Camera *camera) override;
-        void Draw(CommandBuffer * cmd) override;
+        void Draw(CommandBuffer *cmd) override;
         void Resize(uint32_t width, uint32_t height) override;
         void Destroy() override;
 
@@ -32,15 +38,13 @@ namespace pe
         friend class LightTransparentPass;
         friend class Renderer;
 
-        void DrawNode(CommandBuffer *cmd, ModelGltf &model, int node, uint32_t cascade);
         void CalculateCascades(Camera *camera);
-        
+
         Buffer *m_uniforms[SWAPCHAIN_IMAGES];
         std::vector<mat4> m_cascades;
         vec4 m_viewZ;
         std::vector<Image *> m_textures{};
         Sampler *m_sampler;
         Geometry *m_geometry = nullptr;
-
     };
 }

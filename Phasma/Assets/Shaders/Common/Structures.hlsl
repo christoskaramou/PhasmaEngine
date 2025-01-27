@@ -23,8 +23,7 @@ struct PushConstants_MotionBlur
 struct PushConstants_Shadows
 {
     float4x4 vp;
-    uint meshIndex;
-    uint meshJointCount;
+    uint jointsCount;
 };
 
 struct PushConstants_AABB

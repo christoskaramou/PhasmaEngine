@@ -98,12 +98,14 @@ namespace pe
                     auto task = e_Update_ThreadPool.Enqueue(
                         [this, frame]()
                         {
+                            GbufferOpaquePass *gb = GetGlobalComponent<GbufferOpaquePass>();
                             ShadowPass *shadows = GetGlobalComponent<ShadowPass>();
                             const auto &sets = shadows->m_passInfo->GetDescriptors(frame);
 
                             // set 0
                             Descriptor *DSetUniforms = sets[0];
                             DSetUniforms->SetBuffer(0, m_geometry.GetUniforms(frame));
+                            DSetUniforms->SetBuffer(1, gb->m_constants);
                             DSetUniforms->Update();
                         });
 

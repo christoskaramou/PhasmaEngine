@@ -199,38 +199,6 @@ namespace pe
         cmd->ClearDepthStencils(m_textures);
     }
 
-    void ShadowPass::DrawNode(CommandBuffer *cmd, ModelGltf &model, int node, uint32_t cascade)
-    {
-        if (node < 0)
-            return;
-
-        int mesh = model.nodes[node].mesh;
-        if (mesh < 0)
-            return;
-
-        cmd->SetConstantAt(16, GetUboDataOffset(model.m_meshesInfo[mesh].dataOffset)); // mesh index
-
-        auto &primitivesInfo = model.m_meshesInfo[mesh].primitivesInfo;
-
-        for (int primitive = 0; primitive < model.meshes[mesh].primitives.size(); ++primitive)
-        {
-            PrimitiveInfo &primitiveInfo = model.m_meshesInfo[mesh].primitivesInfo[primitive];
-
-            cmd->PushConstants();
-            cmd->DrawIndexed(
-                primitiveInfo.indicesCount,
-                1,
-                primitiveInfo.indexOffset,
-                primitiveInfo.vertexOffset,
-                0);
-        }
-
-        for (int child : model.nodes[node].children)
-        {
-            DrawNode(cmd, model, child, cascade);
-        }
-    }
-
     void ShadowPass::Draw(CommandBuffer *cmd)
     {
         PE_ERROR_IF(m_geometry == nullptr, "Geometry was not set");
@@ -243,9 +211,14 @@ namespace pe
         }
         else
         {
+            PushConstants_Shadows pushConstants{};
+            pushConstants.jointsCount = 0u;
+
             uint32_t cascades = Settings::Get<GlobalSettings>().num_cascades;
             for (uint32_t i = 0; i < cascades; i++)
             {
+                pushConstants.vp = m_cascades[i];
+                
                 PassInfo &passInfo = *m_passInfo;
                 Attachment &attachment = m_attachments[0];
                 attachment.image = m_textures[i];
@@ -256,23 +229,9 @@ namespace pe
                 cmd->BindPipeline(passInfo);
                 cmd->BindIndexBuffer(m_geometry->GetBuffer(), 0);
                 cmd->BindVertexBuffer(m_geometry->GetBuffer(), m_geometry->GetPositionsOffset());
-                cmd->SetConstantAt(0, m_cascades[i]); // cascade view projection
-                cmd->SetConstantAt(17, 0u);           // joints count
-
-                for (auto &modelPtr : m_geometry->GetModels())
-                {
-                    ModelGltf &model = *modelPtr;
-                    if (!model.render)
-                        continue;
-
-                    for (auto &scene : model.scenes)
-                    {
-                        for (int node : scene.nodes)
-                        {
-                            DrawNode(cmd, model, node, i);
-                        }
-                    }
-                }
+                cmd->SetConstants(pushConstants);
+                cmd->PushConstants();
+                cmd->DrawIndexedIndirect(m_geometry->GetIndirectAll(), 0, m_geometry->GetPrimitivesCount(), sizeof(DrawIndexedIndirectCommand));
                 cmd->EndPass();
             }
         }

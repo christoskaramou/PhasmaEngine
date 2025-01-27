@@ -46,6 +46,7 @@ namespace pe
         OrderedMap<size_t, ModelGltf *> &GetModels() { return m_models; }
         Buffer *GetUniforms(uint32_t frame) { return m_storage[frame]; }
         Buffer *GetIndirect(uint32_t frame) { return m_indirect[frame]; }
+        Buffer *GetIndirectAll() { return m_indirectAll; }
         Buffer *GetBuffer() { return m_buffer; }
         size_t GetVerticesOffset() { return m_verticesOffset; }
         size_t GetPositionsOffset() { return m_positionsOffset; }
@@ -60,11 +61,11 @@ namespace pe
             return m_primitivesCount;
             sizeof(PerFrameData);
         }
-        void UpdateIndirectData();
 
     private:
         void CullNodePrimitives(ModelGltf &model, int node);
         void UpdateUniformData();
+        void UpdateIndirectData();
         void ClearDrawInfos(bool reserveMax);
         void DestroyBuffers();
 
@@ -80,6 +81,7 @@ namespace pe
         Buffer *m_buffer;                     // geometry buffer
         Buffer *m_storage[SWAPCHAIN_IMAGES];  // per frame storage buffer
         Buffer *m_indirect[SWAPCHAIN_IMAGES]; // pre frame indirect commands buffer
+        Buffer *m_indirectAll;                // pre frame indirect commands buffer
         size_t m_verticesOffset = 0;          // in bytes (offset in geometryBuffer), for Vertex range
         size_t m_positionsOffset = 0;         // in bytes (offset in geometryBuffer), for PositionUvVertex range
         size_t m_aabbVerticesOffset = 0;      // in bytes (offset in geometryBuffer), for AABB range
