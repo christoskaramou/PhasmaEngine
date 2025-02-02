@@ -93,7 +93,7 @@ namespace pe
         memcpy((char *)m_data + offset, data, size);
     }
 
-    void Buffer::Copy(uint32_t count, MemoryRange *ranges, bool keepMapped)
+    void Buffer::Copy(uint32_t count, BufferRange *ranges, bool keepMapped)
     {
         // Map or check if the buffer is already mapped
         Map();
@@ -124,11 +124,11 @@ namespace pe
             "staging_buffer");
 
         // Copy data to staging buffer
-        MemoryRange mr{};
-        mr.data = data;
-        mr.size = size;
-        mr.offset = 0;
-        staging->Copy(1, &mr, false);
+        BufferRange range{};
+        range.data = data;
+        range.size = size;
+        range.offset = 0;
+        staging->Copy(1, &range, false);
 
         // Copy staging buffer to this buffer
         CopyBuffer(cmd, staging, size, 0, dtsOffset);
@@ -170,13 +170,15 @@ namespace pe
 
     void Buffer::Barrier(CommandBuffer *cmd, const BufferBarrierInfo &info)
     {
+        PE_ERROR_IF(!info.buffer, "Buffer::Barrier: no buffer specified");
+
         VkBufferMemoryBarrier2 barrier = {};
         barrier.sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER_2;
         barrier.srcStageMask = Translate<VkPipelineStageFlags2>(info.srcStage);
         barrier.dstStageMask = Translate<VkPipelineStageFlags2>(info.dstStage);
         barrier.srcAccessMask = Translate<VkAccessFlags2>(info.srcAccess);
         barrier.dstAccessMask = Translate<VkAccessFlags2>(info.dstAccess);
-        barrier.buffer = m_apiHandle;
+        barrier.buffer = info.buffer->m_apiHandle;
         barrier.offset = info.offset;
         barrier.size = info.size ? info.size : VK_WHOLE_SIZE;
 
@@ -190,13 +192,14 @@ namespace pe
 
     void Buffer::Barriers(CommandBuffer *cmd, const std::vector<BufferBarrierInfo> &infos)
     {
+        if (infos.empty())
+            return;
+
         std::vector<VkBufferMemoryBarrier2> barriers;
         barriers.reserve(infos.size());
-        for (uint32_t i = 0; i < infos.size(); i++)
+        for (const auto &info : infos)
         {
-            const BufferBarrierInfo &info = infos[i];
-            if (!info.buffer)
-                continue;
+            PE_ERROR_IF(!info.buffer, "Buffer::Barriers: no buffer specified");
 
             VkBufferMemoryBarrier2 barrier = {};
             barrier.sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER;

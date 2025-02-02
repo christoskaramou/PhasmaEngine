@@ -90,11 +90,11 @@ namespace pe
             m_reflectionInput[2] = camera->GetView();
             m_reflectionInput[3] = camera->GetInvProjection();
 
-            MemoryRange mr{};
-            mr.data = &m_reflectionInput;
-            mr.size = sizeof(m_reflectionInput);
-            mr.offset = 0; // RHII.GetFrameDynamicOffset(UBReflection->Size(), RHII.GetFrameIndex());
-            m_UBReflection[RHII.GetFrameIndex()]->Copy(1, &mr, false);
+            BufferRange range{};
+            range.data = &m_reflectionInput;
+            range.size = sizeof(m_reflectionInput);
+            range.offset = 0; // RHII.GetFrameDynamicOffset(UBReflection->Size(), RHII.GetFrameIndex());
+            m_UBReflection[RHII.GetFrameIndex()]->Copy(1, &range, false);
         }
     }
 

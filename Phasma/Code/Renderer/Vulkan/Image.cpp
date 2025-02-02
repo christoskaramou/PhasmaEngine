@@ -297,11 +297,12 @@ namespace pe
 
     void Image::Barrier(CommandBuffer *cmd, const ImageBarrierInfo &info)
     {
-        PE_ERROR_IF(!cmd, "Image::Barrier(): no command buffer specified.");
+        PE_ERROR_IF(!info.image, "Image::Barrier: no image specified.");
+        Image &image = *info.image;
 
-        uint mipLevels = info.mipLevels ? info.mipLevels : m_createInfo.mipLevels;
-        uint arrayLayers = info.arrayLayers ? info.arrayLayers : m_createInfo.arrayLayers;
-        const ImageTrackInfo &oldInfo = m_trackInfos[info.baseArrayLayer][info.baseMipLevel];
+        uint mipLevels = info.mipLevels ? info.mipLevels : image.m_createInfo.mipLevels;
+        uint arrayLayers = info.arrayLayers ? info.arrayLayers : image.m_createInfo.arrayLayers;
+        const ImageTrackInfo &oldInfo = image.m_trackInfos[info.baseArrayLayer][info.baseMipLevel];
 
         VkImageMemoryBarrier2 barrier{};
         barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2;
@@ -313,8 +314,8 @@ namespace pe
         barrier.newLayout = Translate<VkImageLayout>(info.layout);
         barrier.srcQueueFamilyIndex = oldInfo.queueFamilyId;
         barrier.dstQueueFamilyIndex = info.queueFamilyId;
-        barrier.image = m_apiHandle;
-        barrier.subresourceRange.aspectMask = Translate<VkImageAspectFlags>(GetAspectMask(m_createInfo.format));
+        barrier.image = image.m_apiHandle;
+        barrier.subresourceRange.aspectMask = Translate<VkImageAspectFlags>(GetAspectMask(image.m_createInfo.format));
         barrier.subresourceRange.baseMipLevel = info.baseMipLevel;
         barrier.subresourceRange.levelCount = mipLevels;
         barrier.subresourceRange.baseArrayLayer = info.baseArrayLayer;
@@ -325,31 +326,26 @@ namespace pe
         depInfo.imageMemoryBarrierCount = 1;
         depInfo.pImageMemoryBarriers = &barrier;
 
-        cmd->BeginDebugRegion("ImageBarrier: " + m_createInfo.name);
+        cmd->BeginDebugRegion("ImageBarrier");
         vkCmdPipelineBarrier2(cmd->ApiHandle(), &depInfo);
         cmd->EndDebugRegion();
 
         for (uint32_t i = 0; i < arrayLayers; i++)
             for (uint32_t j = 0; j < mipLevels; j++)
-                m_trackInfos[info.baseArrayLayer + i][info.baseMipLevel + j] = info;
+                image.m_trackInfos[info.baseArrayLayer + i][info.baseMipLevel + j] = info;
     }
 
     void Image::Barriers(CommandBuffer *cmd, const std::vector<ImageBarrierInfo> &infos)
     {
-        PE_ERROR_IF(!cmd, "Image::GroupBarrier(): no command buffer specified.");
-
         if (infos.empty())
             return;
-
-        std::string names;
 
         std::vector<VkImageMemoryBarrier2> barriers;
         barriers.reserve(infos.size());
 
         for (auto &info : infos)
         {
-            if (info.image == nullptr)
-                continue;
+            PE_ERROR_IF(!info.image, "Image::Barriers: no image specified.");
 
             Image *image = info.image;
             const ImageCreateInfo &imageInfo = image->m_createInfo;
@@ -378,24 +374,19 @@ namespace pe
             barrier.subresourceRange.layerCount = arrayLayers;
             barriers.push_back(barrier);
 
-            names += imageInfo.name + ", ";
-
             for (uint32_t i = 0; i < arrayLayers; i++)
                 for (uint32_t j = 0; j < mipLevels; j++)
                     image->m_trackInfos[info.baseArrayLayer + i][info.baseMipLevel + j] = info;
         }
 
-        if (!barriers.empty())
-        {
-            VkDependencyInfo depInfo{};
-            depInfo.sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO;
-            depInfo.imageMemoryBarrierCount = static_cast<uint32_t>(barriers.size());
-            depInfo.pImageMemoryBarriers = barriers.data();
+        VkDependencyInfo depInfo{};
+        depInfo.sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO;
+        depInfo.imageMemoryBarrierCount = static_cast<uint32_t>(barriers.size());
+        depInfo.pImageMemoryBarriers = barriers.data();
 
-            cmd->BeginDebugRegion("ImageGroupBarrier: " + names);
-            vkCmdPipelineBarrier2(cmd->ApiHandle(), &depInfo);
-            cmd->EndDebugRegion();
-        }
+        cmd->BeginDebugRegion("ImageGroupBarrier");
+        vkCmdPipelineBarrier2(cmd->ApiHandle(), &depInfo);
+        cmd->EndDebugRegion();
     }
 
     void Image::SetCurrentInfoAll(const ImageTrackInfo &info)
@@ -488,10 +479,10 @@ namespace pe
             "staging_buffer");
 
         // Copy data to staging buffer
-        MemoryRange mr{};
-        mr.data = data;
-        mr.size = size;
-        staging->Copy(1, &mr, false);
+        BufferRange range{};
+        range.data = data;
+        range.size = size;
+        staging->Copy(1, &range, false);
 
         VkBufferImageCopy region;
         region.bufferOffset = 0;

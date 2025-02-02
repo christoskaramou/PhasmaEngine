@@ -56,11 +56,7 @@ namespace pe
         const std::vector<DrawInfo> &GetDrawInfosOpaque() const { return m_drawInfosOpaque; }
         const std::vector<DrawInfo> &GetDrawInfosAlphaCut() const { return m_drawInfosAlphaCut; }
         const std::vector<DrawInfo> &GetDrawInfosAlphaBlend() const { return m_drawInfosAlphaBlend; }
-        uint32_t GetPrimitivesCount()
-        {
-            return m_primitivesCount;
-            sizeof(PerFrameData);
-        }
+        uint32_t GetPrimitivesCount() { return m_primitivesCount; }
 
     private:
         void CullNodePrimitives(ModelGltf &model, int node);

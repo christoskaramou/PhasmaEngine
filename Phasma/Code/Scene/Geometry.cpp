@@ -271,7 +271,7 @@ namespace pe
             BufferUsage::IndirectBufferBit | BufferUsage::TransferDstBit,
             AllocationCreate::DedicatedMemoryBit,
             "indirect_Geometry_buffer_all");
-        cmd->CopyBufferStaged(m_indirectAll, m_indirectCommands.data(), m_indirectCommands.size() * sizeof(DrawIndexedIndirectCommand), 0);  
+        cmd->CopyBufferStaged(m_indirectAll, m_indirectCommands.data(), m_indirectCommands.size() * sizeof(DrawIndexedIndirectCommand), 0);
 
         BufferBarrierInfo indirectBarrierInfo{};
         indirectBarrierInfo.buffer = m_indirectAll;
@@ -281,7 +281,7 @@ namespace pe
         indirectBarrierInfo.dstStage = PipelineStage::DrawIndirectBit;
         indirectBarrierInfo.size = indirectCount * sizeof(DrawIndexedIndirectCommand);
         indirectBarrierInfo.offset = 0;
-        cmd->BufferBarrier(indirectBarrierInfo);      
+        cmd->BufferBarrier(indirectBarrierInfo);
 
         for (int i = 0; i < SWAPCHAIN_IMAGES; i++)
         {
@@ -360,11 +360,11 @@ namespace pe
                     for (int k = 0; k < 5; k++)
                         constants.primitiveImageIndex[k] = primitiveInfo.viewsIndex[k];
 
-                    MemoryRange mr{};
-                    mr.data = &constants;
-                    mr.offset = offset;
-                    mr.size = sizeof(Primitive_Constants);
-                    gbo->m_constants->Copy(1, &mr, true);
+                    BufferRange range{};
+                    range.data = &constants;
+                    range.offset = offset;
+                    range.size = sizeof(Primitive_Constants);
+                    gbo->m_constants->Copy(1, &range, true);
 
                     offset += sizeof(Primitive_Constants);
                 }
@@ -376,12 +376,7 @@ namespace pe
 
     void Geometry::CullNodePrimitives(ModelGltf &model, int node)
     {
-        if (node < 0)
-            return;
-
         int mesh = model.nodes[node].mesh;
-        if (mesh < 0)
-            return;
 
         const Camera &camera = *m_cameras[0];
         auto &meshGltf = model.meshes[mesh];
@@ -455,12 +450,6 @@ namespace pe
                 }
             }
         }
-
-        auto &children = model.nodes[node].children;
-        for (int child : children)
-        {
-            CullNodePrimitives(model, child);
-        }
     }
 
     void Geometry::UpdateUniformData()
@@ -474,11 +463,11 @@ namespace pe
         m_frameData.viewProjection = m_cameras[0]->GetViewProjection();
         m_frameData.previousViewProjection = m_cameras[0]->GetPreviousViewProjection();
 
-        MemoryRange mr{};
-        mr.data = &m_frameData;
-        mr.size = sizeof(PerFrameData);
-        mr.offset = 0;
-        m_storage[frame]->Copy(1, &mr, true);
+        BufferRange range{};
+        range.data = &m_frameData;
+        range.size = sizeof(PerFrameData);
+        range.offset = 0;
+        m_storage[frame]->Copy(1, &range, true);
 
         // Update per primitive id data
         std::vector<uint32_t> ids{};
@@ -504,10 +493,10 @@ namespace pe
             uint32_t id = primitiveInfo.indirectIndex;
             ids.push_back(id);
         }
-        mr.data = ids.data();
-        mr.size = ids.size() * sizeof(uint32_t);
-        mr.offset = sizeof(PerFrameData);
-        m_storage[frame]->Copy(1, &mr, true);
+        range.data = ids.data();
+        range.size = ids.size() * sizeof(uint32_t);
+        range.offset = sizeof(PerFrameData);
+        m_storage[frame]->Copy(1, &range, true);
 
         for (auto &modelPtr : m_models)
         {
@@ -525,16 +514,12 @@ namespace pe
                 if (mesh < 0)
                     continue;
 
-                tinygltf::Node &nodeGltf = model.nodes[node];
-                if (nodeGltf.mesh < 0)
-                    continue;
+                MeshInfo &meshInfo = model.m_meshesInfo[mesh];
 
-                MeshInfo &meshInfo = model.m_meshesInfo[nodeGltf.mesh];
-
-                mr.data = &nodeInfo.ubo;
-                mr.offset = meshInfo.dataOffset;
-                mr.size = meshInfo.dataSize;
-                m_storage[frame]->Copy(1, &mr, true);
+                range.data = &nodeInfo.ubo;
+                range.offset = meshInfo.dataOffset;
+                range.size = meshInfo.dataSize;
+                m_storage[frame]->Copy(1, &range, true);
 
                 nodeInfo.dirtyUniforms[frame] = false;
             }
@@ -560,11 +545,11 @@ namespace pe
             auto &indirectCommand = m_indirectCommands[primitiveInfo.indirectIndex];
             indirectCommand.firstInstance = firstInstance;
 
-            MemoryRange mr{};
-            mr.data = &indirectCommand;
-            mr.size = sizeof(DrawIndexedIndirectCommand);
-            mr.offset = firstInstance * sizeof(DrawIndexedIndirectCommand);
-            m_indirect[frame]->Copy(1, &mr, true);
+            BufferRange range{};
+            range.data = &indirectCommand;
+            range.size = sizeof(DrawIndexedIndirectCommand);
+            range.offset = firstInstance * sizeof(DrawIndexedIndirectCommand);
+            m_indirect[frame]->Copy(1, &range, true);
 
             firstInstance++;
         }
@@ -576,11 +561,11 @@ namespace pe
             auto &indirectCommand = m_indirectCommands[primitiveInfo.indirectIndex];
             indirectCommand.firstInstance = firstInstance;
 
-            MemoryRange mr{};
-            mr.data = &indirectCommand;
-            mr.size = sizeof(DrawIndexedIndirectCommand);
-            mr.offset = firstInstance * sizeof(DrawIndexedIndirectCommand);
-            m_indirect[frame]->Copy(1, &mr, true);
+            BufferRange range{};
+            range.data = &indirectCommand;
+            range.size = sizeof(DrawIndexedIndirectCommand);
+            range.offset = firstInstance * sizeof(DrawIndexedIndirectCommand);
+            m_indirect[frame]->Copy(1, &range, true);
 
             firstInstance++;
         }
@@ -592,11 +577,11 @@ namespace pe
             auto &indirectCommand = m_indirectCommands[primitiveInfo.indirectIndex];
             indirectCommand.firstInstance = firstInstance;
 
-            MemoryRange mr{};
-            mr.data = &indirectCommand;
-            mr.size = sizeof(DrawIndexedIndirectCommand);
-            mr.offset = firstInstance * sizeof(DrawIndexedIndirectCommand);
-            m_indirect[frame]->Copy(1, &mr, true);
+            BufferRange range{};
+            range.data = &indirectCommand;
+            range.size = sizeof(DrawIndexedIndirectCommand);
+            range.offset = firstInstance * sizeof(DrawIndexedIndirectCommand);
+            m_indirect[frame]->Copy(1, &range, true);
 
             firstInstance++;
         }
@@ -625,12 +610,11 @@ namespace pe
             model.UpdateNodeMatrices();
 
             // cull primitives
-            for (auto &scene : model.scenes)
+            for (int i = 0; i < model.nodes.size(); i++)
             {
-                for (int node : scene.nodes)
-                {
-                    tasks.push_back(e_Update_ThreadPool.Enqueue(cullNodePrimitives, std::ref(model), node));
-                }
+                int mesh = model.nodes[i].mesh;
+                if (mesh > -1)
+                    tasks.push_back(e_Update_ThreadPool.Enqueue(cullNodePrimitives, std::ref(model), i));
             }
         }
 
@@ -673,30 +657,27 @@ namespace pe
                 if (!model.render)
                     continue;
 
-                for (auto &scene : model.scenes)
+                for (int node = 0; node < model.nodes.size(); node++)
                 {
-                    for (int node : scene.nodes)
+                    int mesh = model.nodes[node].mesh;
+                    if (mesh < 0)
+                        continue;
+
+                    for (int primitive = 0; primitive < model.meshes[mesh].primitives.size(); primitive++)
                     {
-                        int mesh = model.nodes[node].mesh;
-                        if (mesh < 0)
-                            continue;
+                        PrimitiveInfo &primitiveInfo = model.m_meshesInfo[mesh].primitivesInfo[primitive];
 
-                        for (int primitive = 0; primitive < model.meshes[mesh].primitives.size(); primitive++)
+                        switch (primitiveInfo.renderType)
                         {
-                            PrimitiveInfo &primitiveInfo = model.m_meshesInfo[mesh].primitivesInfo[primitive];
-
-                            switch (primitiveInfo.renderType)
-                            {
-                            case RenderType::Opaque:
-                                maxOpaque++;
-                                break;
-                            case RenderType::AlphaCut:
-                                maxAlphaCut++;
-                                break;
-                            case RenderType::AlphaBlend:
-                                maxAlphaBlend++;
-                                break;
-                            }
+                        case RenderType::Opaque:
+                            maxOpaque++;
+                            break;
+                        case RenderType::AlphaCut:
+                            maxAlphaCut++;
+                            break;
+                        case RenderType::AlphaBlend:
+                            maxAlphaBlend++;
+                            break;
                         }
                     }
                 }

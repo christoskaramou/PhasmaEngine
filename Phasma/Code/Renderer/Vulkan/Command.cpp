@@ -807,7 +807,7 @@ namespace pe
 
     void CommandBuffer::BufferBarrier(const BufferBarrierInfo &info)
     {
-        info.buffer->Barrier(this, info);
+        Buffer::Barrier(this, info);
     }
 
     void CommandBuffer::BufferBarriers(const std::vector<BufferBarrierInfo> &infos)
@@ -817,7 +817,7 @@ namespace pe
 
     void CommandBuffer::ImageBarrier(const ImageBarrierInfo &info)
     {
-        info.image->Barrier(this, info);
+        Image::Barrier(this, info);
     }
 
     void CommandBuffer::ImageBarriers(const std::vector<ImageBarrierInfo> &infos)

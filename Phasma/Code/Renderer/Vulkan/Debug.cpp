@@ -198,7 +198,6 @@ namespace pe
         vkQueueEndDebugUtilsLabelEXT(queue->ApiHandle());
     }
 
-    std::mutex Debug_mutex{};
     void Debug::BeginCmdRegion(CommandBuffer *cmd, const std::string &name)
     {
         if (!vkCmdBeginDebugUtilsLabelEXT)

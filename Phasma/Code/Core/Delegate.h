@@ -1,4 +1,5 @@
 #pragma once
+
 namespace pe
 {
     template <class... Args>
@@ -8,15 +9,15 @@ namespace pe
         using FunctionType = std::function<void(Args...)>;
 
         // Adds a function to the delegate
-        inline void Add(FunctionType func)
+        inline void Add(FunctionType &&func)
         {
-            m_functions.push_back(std::move(func));
+            m_functions.push_back(std::forward<FunctionType>(func));
         }
 
         // Adds a function to the delegate
-        inline void operator+=(FunctionType func)
+        inline void operator+=(FunctionType &&func)
         {
-            m_functions.push_back(std::move(func));
+            m_functions.push_back(std::forward<FunctionType>(func));
         }
 
         // Invokes all functions stored in the delegate
@@ -31,7 +32,7 @@ namespace pe
         // Invokes all functions stored in the delegate in reverse order
         inline void ReverseInvoke(Args &&...args) const
         {
-            for (int i = static_cast<int>(m_functions.size()) - 1; i >= 0; --i)
+            for (size_t i = m_functions.size(); i-- > 0;)
             {
                 m_functions[i](std::forward<Args>(args)...);
             }
@@ -50,7 +51,6 @@ namespace pe
         }
 
     private:
-        std::deque<FunctionType> m_functions;
+        std::vector<FunctionType> m_functions;
     };
-
 }

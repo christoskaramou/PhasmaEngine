@@ -46,12 +46,12 @@ namespace pe
             spot.end = spot.start + normalize(vec4(rand(-1.f, 1.f), rand(-1.f, 1.f), rand(-1.f, 1.f), 0.f));
         }
 
-        MemoryRange mr{};
-        mr.data = &m_lubo;
-        mr.size = sizeof(LightsUBO);
-        mr.offset = 0;
+        BufferRange range{};
+        range.data = &m_lubo;
+        range.size = sizeof(LightsUBO);
+        range.offset = 0;
         for (uint32_t i = 0; i < SWAPCHAIN_IMAGES; i++)
-            m_uniform[i]->Copy(1, &mr, false);
+            m_uniform[i]->Copy(1, &range, false);
 
         std::vector<DescriptorBindingInfo> bindingInfos(1);
         bindingInfos[0].binding = 0;
@@ -69,11 +69,11 @@ namespace pe
 
         size_t frameOffset = 0; // RHII.GetFrameDynamicOffset(uniform->Size(), RHII.GetFrameIndex());
 
-        MemoryRange mr{};
-        mr.data = &m_lubo;
-        mr.size = 3 * sizeof(vec4);
-        mr.offset = frameOffset;
-        m_uniform[RHII.GetFrameIndex()]->Copy(1, &mr, false);
+        BufferRange range{};
+        range.data = &m_lubo;
+        range.size = 3 * sizeof(vec4);
+        range.offset = frameOffset;
+        m_uniform[RHII.GetFrameIndex()]->Copy(1, &range, false);
 
         if (gSettings.randomize_lights)
         {
@@ -85,12 +85,12 @@ namespace pe
                 m_lubo.pointLights[i].position = vec4(rand(-10.5f, 10.5f), rand(.7f, 6.7f), rand(-4.5f, 4.5f), 10.f);
             }
 
-            mr.data = m_lubo.pointLights;
-            mr.size = sizeof(PointLight) * MAX_POINT_LIGHTS;
-            mr.offset = offsetof(LightsUBO, pointLights);
+            range.data = m_lubo.pointLights;
+            range.size = sizeof(PointLight) * MAX_POINT_LIGHTS;
+            range.offset = offsetof(LightsUBO, pointLights);
 
             for (uint32_t i = 0; i < SWAPCHAIN_IMAGES; i++)
-                m_uniform[i]->Copy(1, &mr, false);
+                m_uniform[i]->Copy(1, &range, false);
         }
     }
 

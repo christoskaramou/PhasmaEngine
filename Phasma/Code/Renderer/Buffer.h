@@ -2,7 +2,7 @@
 
 namespace pe
 {
-    struct MemoryRange
+    struct BufferRange
     {
         void *data;    // source data
         size_t size;   // source data size in bytes
@@ -36,14 +36,15 @@ namespace pe
         void Unmap();
         void Flush(size_t size = 0, size_t offset = 0) const;
         void Zero() const;
-        void Copy(uint32_t count, MemoryRange *ranges, bool keepMapped);
+        void Copy(uint32_t count, BufferRange *ranges, bool keepMapped);
         size_t Size();
         void *Data();
-        void Barrier(CommandBuffer *cmd, const BufferBarrierInfo &info);
-        static void Barriers(CommandBuffer *cmd, const std::vector<BufferBarrierInfo> &infos);
 
     private:
         friend class CommandBuffer;
+        
+        static void Barrier(CommandBuffer *cmd, const BufferBarrierInfo &info);
+        static void Barriers(CommandBuffer *cmd, const std::vector<BufferBarrierInfo> &infos);
 
         void CopyBuffer(CommandBuffer* cmd, Buffer *src, size_t size, size_t srcOffset, size_t dstOffset);
         void CopyBufferStaged(CommandBuffer *cmd, void *data, size_t size, size_t dtsOffset);

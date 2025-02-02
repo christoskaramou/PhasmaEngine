@@ -87,11 +87,11 @@ namespace pe
         {
             CalculateCascades(camera);
 
-            MemoryRange mr{};
-            mr.data = m_cascades.data();
-            mr.size = gSettings.num_cascades * sizeof(mat4);
-            mr.offset = 0; // RHII.GetFrameDynamicOffset(uniformBuffer->Size(), RHII.GetFrameIndex());
-            m_uniforms[RHII.GetFrameIndex()]->Copy(1, &mr, false);
+            BufferRange range{};
+            range.data = m_cascades.data();
+            range.size = gSettings.num_cascades * sizeof(mat4);
+            range.offset = 0; // RHII.GetFrameDynamicOffset(uniformBuffer->Size(), RHII.GetFrameIndex());
+            m_uniforms[RHII.GetFrameIndex()]->Copy(1, &range, false);
         }
     }
 

@@ -139,11 +139,11 @@ namespace pe
         m_ubo.fog_ground_thickness = gSettings.fog_ground_thickness;
         m_ubo.shadows = gSettings.shadows;
 
-        MemoryRange mr{};
-        mr.data = &m_ubo;
-        mr.size = sizeof(m_ubo);
-        mr.offset = 0;
-        m_uniform[RHII.GetFrameIndex()]->Copy(1, &mr, false);
+        BufferRange range{};
+        range.data = &m_ubo;
+        range.size = sizeof(m_ubo);
+        range.offset = 0;
+        m_uniform[RHII.GetFrameIndex()]->Copy(1, &range, false);
     }
 
     void LightOpaquePass::PassBarriers(CommandBuffer *cmd)
@@ -343,11 +343,11 @@ namespace pe
         m_ubo.fog_ground_thickness = gSettings.fog_ground_thickness;
         m_ubo.shadows = gSettings.shadows;
 
-        MemoryRange mr{};
-        mr.data = &m_ubo;
-        mr.size = sizeof(m_ubo);
-        mr.offset = 0;
-        m_uniform[RHII.GetFrameIndex()]->Copy(1, &mr, false);
+        BufferRange range{};
+        range.data = &m_ubo;
+        range.size = sizeof(m_ubo);
+        range.offset = 0;
+        m_uniform[RHII.GetFrameIndex()]->Copy(1, &range, false);
     }
 
     void LightTransparentPass::PassBarriers(CommandBuffer *cmd)

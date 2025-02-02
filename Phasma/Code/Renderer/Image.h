@@ -139,10 +139,10 @@ namespace pe
         friend class Renderer;
         friend class RendererSystem;
 
+        static void Barrier(CommandBuffer *cmd, const ImageBarrierInfo &info);
         static void Barriers(CommandBuffer *cmd, const std::vector<ImageBarrierInfo> &infos);
 
         ImageViewApiHandle CreateImageView(ImageViewType type, int mip = -1, bool useStencil = false);
-        void Barrier(CommandBuffer *cmd, const ImageBarrierInfo &info);
         void CopyDataToImageStaged(CommandBuffer *cmd,
                                    void *data,
                                    size_t size = 0,

@@ -15,10 +15,10 @@
 
 namespace pe
 {
-    Image *m_defaultBlack = nullptr;
-    Image *m_defaultNormal = nullptr;
-    Image *m_defaultWhite = nullptr;
-    Sampler *m_defaultSampler = nullptr;
+    Image *g_defaultBlack = nullptr;
+    Image *g_defaultNormal = nullptr;
+    Image *g_defaultWhite = nullptr;
+    Sampler *g_defaultSampler = nullptr;
 
     ModelGltf::ModelGltf() : m_id{ID::NextID()}
     {
@@ -58,23 +58,25 @@ namespace pe
         cmd->Begin();
 
         // Upload images
-        if (!m_defaultBlack)
-            m_defaultBlack = Image::LoadRGBA8(cmd, Path::Assets + "Objects/black.png");
-        if (!m_defaultNormal)
-            m_defaultNormal = Image::LoadRGBA8(cmd, Path::Assets + "Objects/normal.png");
-        if (!m_defaultWhite)
-            m_defaultWhite = Image::LoadRGBA8(cmd, Path::Assets + "Objects/white.png");
-        if (!m_defaultSampler)
+        if (!g_defaultBlack)
+            g_defaultBlack = Image::LoadRGBA8(cmd, Path::Assets + "Objects/black.png");
+        if (!g_defaultNormal)
+            g_defaultNormal = Image::LoadRGBA8(cmd, Path::Assets + "Objects/normal.png");
+        if (!g_defaultWhite)
+            g_defaultWhite = Image::LoadRGBA8(cmd, Path::Assets + "Objects/white.png");
+        if (!g_defaultSampler)
         {
             SamplerCreateInfo info{};
             info.name = "Default Sampler";
             info.UpdateHash();
-            m_defaultSampler = Sampler::Create(info);
+            g_defaultSampler = Sampler::Create(info);
         }
 
         model.m_images.reserve(model.images.size() + 3);
         for (auto &image : model.images)
         {
+            PE_ERROR_IF(image.image.empty(), "Image data is empty: " + image.uri);
+            
             ImageCreateInfo info{};
             info.format = Format::RGBA8Unorm;
             info.mipLevels = Image::CalculateMips(image.width, image.height);
@@ -102,9 +104,9 @@ namespace pe
 
             model.m_images.push_back(uploadImage);
         }
-        model.m_images.push_back(m_defaultBlack);
-        model.m_images.push_back(m_defaultNormal);
-        model.m_images.push_back(m_defaultWhite);
+        model.m_images.push_back(g_defaultBlack);
+        model.m_images.push_back(g_defaultNormal);
+        model.m_images.push_back(g_defaultWhite);
 
         // Create Samplers
         model.m_samplers.reserve(model.samplers.size() + 1);
@@ -170,8 +172,8 @@ namespace pe
             model.m_samplers.push_back(uploadSampler);
             model.m_samplersMap[info.GetHash()] = uploadSampler; // take as granted that samplers are not duplicated
         }
-        model.m_samplers.push_back(m_defaultSampler);
-        model.m_samplersMap[m_defaultSampler->info.GetHash()] = m_defaultSampler;
+        model.m_samplers.push_back(g_defaultSampler);
+        model.m_samplersMap[g_defaultSampler->info.GetHash()] = g_defaultSampler;
 
         // Material info for pipeline creation
         model.m_meshesInfo.resize(model.meshes.size());
@@ -286,32 +288,32 @@ namespace pe
                 textureIndex = material.pbrMetallicRoughness.baseColorTexture.index;
                 imageIndex = textureIndex > -1 ? model.textures[textureIndex].source : -1;
                 samplerIndex = textureIndex > -1 ? model.textures[textureIndex].sampler : -1;
-                primitiveInfo.images[0] = imageIndex > -1 ? model.m_images[imageIndex] : m_defaultBlack;
-                primitiveInfo.samplers[0] = samplerIndex > -1 ? model.m_samplers[samplerIndex] : m_defaultSampler;
+                primitiveInfo.images[0] = imageIndex > -1 ? model.m_images[imageIndex] : g_defaultBlack;
+                primitiveInfo.samplers[0] = samplerIndex > -1 ? model.m_samplers[samplerIndex] : g_defaultSampler;
 
                 textureIndex = material.pbrMetallicRoughness.metallicRoughnessTexture.index;
                 imageIndex = textureIndex > -1 ? model.textures[textureIndex].source : -1;
                 samplerIndex = textureIndex > -1 ? model.textures[textureIndex].sampler : -1;
-                primitiveInfo.images[1] = imageIndex > -1 ? model.m_images[imageIndex] : m_defaultBlack;
-                primitiveInfo.samplers[1] = samplerIndex > -1 ? model.m_samplers[samplerIndex] : m_defaultSampler;
+                primitiveInfo.images[1] = imageIndex > -1 ? model.m_images[imageIndex] : g_defaultBlack;
+                primitiveInfo.samplers[1] = samplerIndex > -1 ? model.m_samplers[samplerIndex] : g_defaultSampler;
 
                 textureIndex = material.normalTexture.index;
                 imageIndex = textureIndex > -1 ? model.textures[textureIndex].source : -1;
                 samplerIndex = textureIndex > -1 ? model.textures[textureIndex].sampler : -1;
-                primitiveInfo.images[2] = imageIndex > -1 ? model.m_images[imageIndex] : m_defaultNormal;
-                primitiveInfo.samplers[2] = samplerIndex > -1 ? model.m_samplers[samplerIndex] : m_defaultSampler;
+                primitiveInfo.images[2] = imageIndex > -1 ? model.m_images[imageIndex] : g_defaultNormal;
+                primitiveInfo.samplers[2] = samplerIndex > -1 ? model.m_samplers[samplerIndex] : g_defaultSampler;
 
                 textureIndex = material.occlusionTexture.index;
                 imageIndex = textureIndex > -1 ? model.textures[textureIndex].source : -1;
                 samplerIndex = textureIndex > -1 ? model.textures[textureIndex].sampler : -1;
-                primitiveInfo.images[3] = imageIndex > -1 ? model.m_images[imageIndex] : m_defaultWhite;
-                primitiveInfo.samplers[3] = samplerIndex > -1 ? model.m_samplers[samplerIndex] : m_defaultSampler;
+                primitiveInfo.images[3] = imageIndex > -1 ? model.m_images[imageIndex] : g_defaultWhite;
+                primitiveInfo.samplers[3] = samplerIndex > -1 ? model.m_samplers[samplerIndex] : g_defaultSampler;
 
                 textureIndex = material.emissiveTexture.index;
                 imageIndex = textureIndex > -1 ? model.textures[textureIndex].source : -1;
                 samplerIndex = textureIndex > -1 ? model.textures[textureIndex].sampler : -1;
-                primitiveInfo.images[4] = imageIndex > -1 ? model.m_images[imageIndex] : m_defaultBlack;
-                primitiveInfo.samplers[4] = samplerIndex > -1 ? model.m_samplers[samplerIndex] : m_defaultSampler;
+                primitiveInfo.images[4] = imageIndex > -1 ? model.m_images[imageIndex] : g_defaultBlack;
+                primitiveInfo.samplers[4] = samplerIndex > -1 ? model.m_samplers[samplerIndex] : g_defaultSampler;
 
                 // ------------ Vertices ------------
                 // Attributes
@@ -420,7 +422,8 @@ namespace pe
                     else if (accessorIndices.componentType == TINYGLTF_COMPONENT_TYPE_UNSIGNED_INT)
                     {
                         const auto dataIndices = reinterpret_cast<const uint32_t *>(&bufferIndices.data[accessorIndices.byteOffset + bufferViewIndices.byteOffset]);
-                        std::copy(dataIndices, dataIndices + accessorIndices.count, indices.begin() + indexOffset);
+                        for (size_t i = 0; i < accessorIndices.count; i++)
+                            indices.push_back(dataIndices[i]);
                         indexOffset += static_cast<uint32_t>(accessorIndices.count);
                     }
                     else if (accessorIndices.componentType == TINYGLTF_COMPONENT_TYPE_UNSIGNED_BYTE)
@@ -598,7 +601,7 @@ namespace pe
     void ModelGltf::SetPrimitiveFactors(Buffer *uniformBuffer)
     {
         // copy factors in uniform buffer
-        MemoryRange mr{};
+        BufferRange range{};
         uniformBuffer->Map();
 
         for (int i = 0; i < nodes.size(); i++)
@@ -630,10 +633,10 @@ namespace pe
                 factors[3][1] = static_cast<float>(material.normalTexture.scale);       // scaledNormal = normalize((<sampled normal texture value> * 2.0 - 1.0) * vec3(<normal scale>, <normal scale>, 1.0))
                 factors[3][2] = static_cast<float>(material.occlusionTexture.strength); // occludedColor = lerp(color, color * <sampled occlusion texture value>, <occlusion strength>)
 
-                mr.data = &factors;
-                mr.size = m_meshesInfo[mesh].primitivesInfo[j].dataSize;
-                mr.offset = m_meshesInfo[mesh].primitivesInfo[j].dataOffset;
-                uniformBuffer->Copy(1, &mr, true);
+                range.data = &factors;
+                range.size = m_meshesInfo[mesh].primitivesInfo[j].dataSize;
+                range.offset = m_meshesInfo[mesh].primitivesInfo[j].dataOffset;
+                uniformBuffer->Copy(1, &range, true);
             }
         }
 
