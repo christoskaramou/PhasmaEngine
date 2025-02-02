@@ -43,8 +43,6 @@ namespace pe
 
         m_attachments[6].image = depthStencilRT;
         m_attachments[6].loadOp = AttachmentLoadOp::Load;
-
-        m_constants = nullptr;
     }
 
     void GbufferOpaquePass::UpdatePassInfo()
@@ -172,8 +170,6 @@ namespace pe
         m_attachments[4].image = emissiveRT;
         m_attachments[5].image = transparencyRT;
         m_attachments[6].image = depthStencilRT;
-
-        m_constants = nullptr;
     }
 
     void GbufferTransparentPass::UpdatePassInfo()

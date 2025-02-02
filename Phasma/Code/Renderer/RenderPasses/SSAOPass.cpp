@@ -146,7 +146,6 @@ namespace pe
         m_ssaoRT = rs->GetRenderTarget("ssao");
         m_normalRT = rs->GetRenderTarget("normal");
         m_depth = rs->GetDepthStencilTarget("depthStencil");
-        ;
 
         FFX_CACAO_VkScreenSizeInfo screenSizeInfo = {};
         screenSizeInfo.width = m_ssaoRT->GetWidth();
