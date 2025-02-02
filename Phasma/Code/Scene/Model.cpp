@@ -236,8 +236,12 @@ namespace pe
                 primitiveInfo.vertexOffset = verticesCount;
                 primitiveInfo.verticesCount = static_cast<uint32_t>(accessorPos.count);
                 verticesCount += static_cast<uint32_t>(accessorPos.count);
-                primitiveInfo.boundingBox.min = make_vec3(&accessorPos.minValues[0]);
-                primitiveInfo.boundingBox.max = make_vec3(&accessorPos.maxValues[0]);
+                primitiveInfo.boundingBox.min.x = static_cast<float>(accessorPos.minValues[0]);
+                primitiveInfo.boundingBox.min.y = static_cast<float>(accessorPos.minValues[1]);
+                primitiveInfo.boundingBox.min.z = static_cast<float>(accessorPos.minValues[2]);
+                primitiveInfo.boundingBox.max.x = static_cast<float>(accessorPos.maxValues[0]);
+                primitiveInfo.boundingBox.max.y = static_cast<float>(accessorPos.maxValues[1]);
+                primitiveInfo.boundingBox.max.z = static_cast<float>(accessorPos.maxValues[2]);
 
                 const auto &accessorIndices = model.accessors[mesh.primitives[j].indices];
                 primitiveInfo.indexOffset = indicesCount;

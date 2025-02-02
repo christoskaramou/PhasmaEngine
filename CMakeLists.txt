@@ -124,6 +124,9 @@ list(APPEND LIB_FILES
 )
 target_link_libraries(${PROJECT_NAME} PRIVATE ${LIB_FILES})
 
+# target_compile_options(${PROJECT_NAME} PRIVATE -fsanitize=address)
+# target_link_options(${PROJECT_NAME} PRIVATE -fsanitize=address)
+
 # Copy assets and DLLs to build directory
 add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
     COMMAND ${CMAKE_COMMAND} -E copy_if_different "${DLLS_DIR}/SDL2.dll" "$<CONFIG>"

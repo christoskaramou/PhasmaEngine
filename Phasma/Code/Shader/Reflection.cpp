@@ -418,7 +418,7 @@ namespace pe
             Descriptor *descriptor = nullptr;
 
             if (!setInfo.empty())
-                descriptor = Descriptor::Create(setInfo, m_shader->GetShaderStage(), false, "auto_descriptor_" + m_shader->GetID());
+                descriptor = Descriptor::Create(setInfo, m_shader->GetShaderStage(), false, "auto_descriptor");
 
             descriptors.push_back(descriptor);
         }
