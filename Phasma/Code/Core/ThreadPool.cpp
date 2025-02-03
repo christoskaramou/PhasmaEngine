@@ -23,16 +23,16 @@ namespace pe
                     {
                         std::function<void()> task;
                         {
-                            std::unique_lock<std::mutex> lock(this->m_queue_mutex);
+                            std::unique_lock<std::mutex> lock(m_queue_mutex);
 
-                            this->m_condition.wait(lock, [this]
-                                                   { return this->m_stop || !this->m_tasks.empty(); });
+                            m_condition.wait(lock, [this]
+                                             { return m_stop || !m_tasks.empty(); });
 
-                            if (this->m_stop && this->m_tasks.empty())
+                            if (m_stop && m_tasks.empty())
                                 return;
 
-                            task = std::move(this->m_tasks.front());
-                            this->m_tasks.pop();
+                            task = std::move(m_tasks.front());
+                            m_tasks.pop();
                         }
                         task();
                     }

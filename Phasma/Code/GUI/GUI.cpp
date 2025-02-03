@@ -529,7 +529,6 @@ namespace pe
 
         ImGui::CreateContext();
         ImGuiIO &io = ImGui::GetIO();
-        (void)io;
         io.ConfigFlags |= ImGuiConfigFlags_DockingEnable;          // Enable docking
         io.ConfigFlags |= ImGuiConfigFlags_ViewportsEnable;        // Enable multiple viewports
         io.BackendFlags |= ImGuiBackendFlags_RendererHasViewports; // Backend Renderer supports multiple viewports.
