@@ -27,7 +27,7 @@ namespace pe
         // tbuffer UBO { float4x4 data[MAX_DATA_SIZE]; };
         return static_cast<uint32_t>(offset >> 6);
     }
-    
+
     struct Attachment
     {
         Image *image = nullptr;
@@ -56,7 +56,7 @@ namespace pe
     struct MemoryBarrierInfo : public BarrierInfo
     {
         MemoryBarrierInfo() { type = BarrierType::Memory; }
-        
+
         PipelineStageFlags srcStageMask = PipelineStage::None;
         PipelineStageFlags dstStageMask = PipelineStage::None;
         AccessFlags srcAccessMask = Access::None;
@@ -139,7 +139,7 @@ namespace pe
         void BindPipeline(PassInfo &passInfo, bool bindDescriptors = true);
         void BindVertexBuffer(Buffer *buffer, size_t offset, uint32_t firstBinding = 0, uint32_t bindingCount = 1);
         void BindIndexBuffer(Buffer *buffer, size_t offset);
-        void BindDescriptors(uint32_t count, Descriptor **descriptors);
+        void BindDescriptors(uint32_t count, Descriptor *const *descriptors);
         void PushDescriptor(uint32_t set, const std::vector<PushDescriptorInfo> &info);
         void SetViewport(float x, float y, float width, float height);
         void SetScissor(int x, int y, uint32_t width, uint32_t height);
@@ -204,8 +204,8 @@ namespace pe
     private:
         void BindGraphicsPipeline();
         void BindComputePipeline();
-        void BindGraphicsDescriptors(uint32_t count, Descriptor **descriptors);
-        void BindComputeDescriptors(uint32_t count, Descriptor **descriptors);
+        void BindGraphicsDescriptors(uint32_t count, Descriptor *const *descriptors);
+        void BindComputeDescriptors(uint32_t count, Descriptor *const *descriptors);
 
         friend class Queue;
         friend class Renderer;

@@ -150,9 +150,9 @@ namespace pe
     }
 
     void CommandBuffer::End()
-    {  
+    {
         EndDebugRegion();
-        
+
         if (!m_recording)
             PE_ERROR("CommandBuffer::End: CommandBuffer is not in recording state!");
 
@@ -582,7 +582,7 @@ namespace pe
         vkCmdBindIndexBuffer(m_apiHandle, buffer->ApiHandle(), offset, VK_INDEX_TYPE_UINT32);
     }
 
-    void CommandBuffer::BindGraphicsDescriptors(uint32_t count, Descriptor **descriptors)
+    void CommandBuffer::BindGraphicsDescriptors(uint32_t count, Descriptor *const *descriptors)
     {
         std::vector<VkDescriptorSet> dsets(count);
         for (uint32_t i = 0; i < count; i++)
@@ -597,7 +597,7 @@ namespace pe
                                 0, nullptr);
     }
 
-    void CommandBuffer::BindComputeDescriptors(uint32_t count, Descriptor **descriptors)
+    void CommandBuffer::BindComputeDescriptors(uint32_t count, Descriptor *const *descriptors)
     {
         std::vector<VkDescriptorSet> dsets(count);
         for (uint32_t i = 0; i < count; i++)
@@ -612,7 +612,7 @@ namespace pe
                                 0, nullptr);
     }
 
-    void CommandBuffer::BindDescriptors(uint32_t count, Descriptor **descriptors)
+    void CommandBuffer::BindDescriptors(uint32_t count, Descriptor *const *descriptors)
     {
         PE_ERROR_IF(!m_boundPipeline, "CommandBuffer::BindDescriptors: No bound pipeline found!");
 
@@ -784,7 +784,7 @@ namespace pe
     {
         vkCmdDrawIndexedIndirect(m_apiHandle, indirectBuffer->ApiHandle(), offset, drawCount, stride);
     }
-    
+
     void CommandBuffer::BufferBarrier(const BufferBarrierInfo &info)
     {
         Buffer::Barrier(this, info);
@@ -973,7 +973,7 @@ namespace pe
         PE_ERROR_IF(!cmd || !cmd->m_apiHandle, "CommandBuffer::Return: CommandBuffer is null or invalid");
         PE_ERROR_IF(s_allCmds[cmd->GetFamilyId()].find(cmd->m_id) == s_allCmds[cmd->m_familyId].end(), "CommandBuffer::Return: CommandBuffer does not belong to pool");
         PE_ERROR_IF(cmd->m_recording, "CommandBuffer::Return: " + cmd->m_name + " is still recording!");
-        PE_ERROR_IF(cmd->m_semaphore->GetValue() != cmd->m_submitions, "CommandBuffer::Return: " + cmd->m_name + " is not finished!");
+        PE_ERROR_IF(cmd->m_semaphore->GetValue() != cmd->m_submitions, "CommandBuffer::Return: " + cmd->m_name + " has not finished!");
         //--------------------------------------------------------------
 
         s_availableCmds[cmd->GetFamilyId()][cmd->m_id] = cmd;

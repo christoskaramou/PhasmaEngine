@@ -21,12 +21,12 @@ namespace pe
               const std::string &name);
         ~Queue();
 
-        void Submit(uint32_t commandBuffersCount, CommandBuffer **commandBuffers,
-                    uint32_t waitSemaphoresCount = 0, Semaphore **waitSemaphores = nullptr,
-                    uint32_t signalSemaphoresCount = 0, Semaphore **signalSemaphores = nullptr);
-        void Present(uint32_t swapchainCount, Swapchain **swapchains,
+        void Submit(uint32_t commandBuffersCount, CommandBuffer *const *commandBuffers,
+                    uint32_t waitSemaphoresCount = 0, Semaphore *const *waitSemaphores = nullptr,
+                    uint32_t signalSemaphoresCount = 0, Semaphore *const *signalSemaphores = nullptr);
+        void Present(uint32_t swapchainCount, Swapchain *const *swapchains,
                      uint32_t *imageIndices,
-                     uint32_t waitSemaphoreCount, Semaphore **waitSemaphores);
+                     uint32_t waitSemaphoreCount, Semaphore *const *waitSemaphores);
         void WaitIdle();
         void BeginDebugRegion(const std::string &name);
         void InsertDebugLabel(const std::string &name);
