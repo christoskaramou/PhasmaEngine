@@ -36,47 +36,52 @@ namespace pe
         std::lock_guard<std::mutex> lock(s_submitMutex);
 
         std::vector<VkCommandBufferSubmitInfo> commandBufferSubmitInfos{};
-        commandBufferSubmitInfos.reserve(commandBuffersCount);
-
         std::vector<VkSemaphoreSubmitInfo> waitSemaphoreSubmitInfos{};
-        waitSemaphoreSubmitInfos.reserve(waitSemaphoresCount);
-
         std::vector<VkSemaphoreSubmitInfo> signalSemaphoreSubmitInfos{};
-        signalSemaphoreSubmitInfos.reserve(signalSemaphoresCount + commandBuffersCount);
+
+        commandBufferSubmitInfos.reserve(commandBuffersCount);
+        waitSemaphoreSubmitInfos.reserve(waitSemaphoresCount);
+        signalSemaphoreSubmitInfos.reserve(signalSemaphoresCount + commandBuffersCount); // every command buffer has a signal semaphore for the wait() function
 
         // command buffers
         for (uint32_t i = 0; i < commandBuffersCount; i++)
         {
-            if (commandBuffers[i])
+            CommandBuffer *cmd = commandBuffers[i];
+            if (cmd)
             {
                 VkCommandBufferSubmitInfo cbInfo{};
                 cbInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_SUBMIT_INFO;
-                cbInfo.commandBuffer = commandBuffers[i]->ApiHandle();
+                cbInfo.commandBuffer = cmd->ApiHandle();
                 commandBufferSubmitInfos.push_back(cbInfo);
-                
+
                 // signal timeline semaphore for the command buffer wait()
-                Semaphore *semaphore = commandBuffers[i]->GetSemaphore();
+                Semaphore *semaphore = cmd->GetSemaphore();
                 semaphore->SetStageFlags(PipelineStage::AllCommandsBit);
-                
+
                 VkSemaphoreSubmitInfo info{};
                 info.sType = VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO;
                 info.semaphore = semaphore->ApiHandle();
                 info.stageMask = Translate<VkPipelineStageFlags2>(semaphore->GetStageFlags());
-                info.value = commandBuffers[i]->IncreaseSumbitions();
+                info.value = cmd->IncreaseSumbitions();
                 signalSemaphoreSubmitInfos.push_back(info);
+
+#if PE_DEBUG_MODE
+                uint32_t frame = RHII.GetFrameIndex();
+                m_frameCmdsSubmitted[frame].push_back(cmd);
+#endif
             }
         }
 
         // wait semaphores
         for (uint32_t i = 0; i < waitSemaphoresCount; i++)
         {
-            if (waitSemaphores[i])
+            Semaphore *semaphore = waitSemaphores[i];
+            if (semaphore)
             {
                 VkSemaphoreSubmitInfo info{};
                 info.sType = VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO;
-                info.semaphore = waitSemaphores[i]->ApiHandle();
-                info.stageMask = Translate<VkPipelineStageFlags2>(waitSemaphores[i]->GetStageFlags());
-                info.value = waitSemaphores[i]->GetValue();
+                info.semaphore = semaphore->ApiHandle();
+                info.stageMask = Translate<VkPipelineStageFlags2>(semaphore->GetStageFlags());
                 waitSemaphoreSubmitInfos.push_back(info);
             }
         }
@@ -84,14 +89,13 @@ namespace pe
         // signal semaphores
         for (uint32_t i = 0; i < signalSemaphoresCount; i++)
         {
-            if (signalSemaphores[i])
+            Semaphore *semaphore = signalSemaphores[i];
+            if (semaphore)
             {
                 VkSemaphoreSubmitInfo info{};
                 info.sType = VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO;
-                info.semaphore = signalSemaphores[i]->ApiHandle();
-                info.stageMask = Translate<VkPipelineStageFlags2>(signalSemaphores[i]->GetStageFlags());
-                // TODO: figure the value, for now income signals are not timeline semaphores either way
-                info.value = 0;
+                info.semaphore = semaphore->ApiHandle();
+                info.stageMask = Translate<VkPipelineStageFlags2>(semaphore->GetStageFlags());
                 signalSemaphoreSubmitInfos.push_back(info);
             }
         }
@@ -106,11 +110,6 @@ namespace pe
         si.pSignalSemaphoreInfos = signalSemaphoreSubmitInfos.data();
 
         PE_CHECK(vkQueueSubmit2(m_apiHandle, 1, &si, nullptr));
-
-#if PE_DEBUG_MODE
-        uint32_t frame = RHII.GetFrameIndex();
-        m_frameCmdsSubmitted[frame].insert(m_frameCmdsSubmitted[frame].end(), commandBuffers, commandBuffers + commandBuffersCount);
-#endif
     }
 
     void Queue::Present(

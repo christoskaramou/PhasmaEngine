@@ -402,7 +402,7 @@ namespace pe
                 vertPcr.offset = 0;
                 vertPcr.stageFlags = VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT;
                 pcrs.push_back(vertPcr);
-                PE_ERROR_IF(vertPcr.size > 128, "Push constant size is greater than 128 bytes");
+                PE_ERROR_IF(vertPcr.size > RHII.GetMaxPushConstantsSize(), "Push constant size is greater than maxPushConstantsSize");
 
                 info.m_pushConstantStages.push_back(ShaderStage::VertexBit | ShaderStage::FragmentBit);
                 info.m_pushConstantOffsets.push_back(vertPcr.offset);
@@ -418,7 +418,7 @@ namespace pe
                     vertPcr.offset = 0;
                     vertPcr.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
                     pcrs.push_back(vertPcr);
-                    PE_ERROR_IF(vertPcr.size > 128, "Vertex push constant size is greater than 128 bytes");
+                    PE_ERROR_IF(vertPcr.size > RHII.GetMaxPushConstantsSize(), "Vertex push constant size is greater than maxPushConstantsSize");
 
                     info.m_pushConstantStages.push_back(ShaderStage::VertexBit);
                     info.m_pushConstantOffsets.push_back(vertPcr.offset);
@@ -430,7 +430,7 @@ namespace pe
                     fragPcr.offset = vertPcr.size;
                     fragPcr.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
                     pcrs.push_back(fragPcr);
-                    PE_ERROR_IF(fragPcr.offset + fragPcr.size > 128, "Fragment push constant size is greater than 128 bytes");
+                    PE_ERROR_IF(fragPcr.offset + fragPcr.size > RHII.GetMaxPushConstantsSize(), "Fragment push constant size is greater than maxPushConstantsSize");
 
                     info.m_pushConstantStages.push_back(ShaderStage::FragmentBit);
                     info.m_pushConstantOffsets.push_back(fragPcr.offset);

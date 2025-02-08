@@ -81,6 +81,7 @@ namespace pe
             return alignStorage;
         }
         uint32_t GetMaxPushDescriptorsPerSet() { return m_maxPushDescriptorsPerSet; }
+        uint32_t GetMaxPushConstantsSize() { return m_maxPushConstantsSize; }
         const InstanceApiHandle &GetInstance() { return m_instance; }
         const GpuApiHandle &GetGpu() { return m_gpu; }
         const std::string &GetGpuName() { return m_gpuName; }
@@ -122,6 +123,7 @@ namespace pe
         uint64_t m_minUniformBufferOffsetAlignment;
         uint64_t m_minStorageBufferOffsetAlignment;
         uint32_t m_maxPushDescriptorsPerSet;
+        uint32_t m_maxPushConstantsSize;
         uint32_t m_maxDrawIndirectCount;
     };
 }
