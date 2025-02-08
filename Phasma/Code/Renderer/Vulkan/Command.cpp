@@ -145,7 +145,6 @@ namespace pe
 
         PE_CHECK(vkBeginCommandBuffer(m_apiHandle, &beginInfo));
         m_recording = true;
-        m_commandFlags = CommandType::None;
 
         BeginDebugRegion(m_name);
     }
@@ -177,7 +176,6 @@ namespace pe
     void CommandBuffer::BlitImage(Image *src, Image *dst, ImageBlit *region, Filter filter)
     {
         dst->BlitImage(this, src, region, filter);
-        m_commandFlags |= CommandType::TransferBit;
     }
 
     void CommandBuffer::ClearColors(std::vector<Image *> images)
@@ -213,8 +211,6 @@ namespace pe
             BeginDebugRegion("Clear Color: " + image->m_createInfo.name);
             vkCmdClearColorImage(m_apiHandle, image->ApiHandle(), VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, &clearValue, 1, &rangeVK);
             EndDebugRegion();
-
-            m_commandFlags |= CommandType::TransferBit;
         }
     }
 
@@ -248,8 +244,6 @@ namespace pe
             BeginDebugRegion("Clear Depth: " + image->m_createInfo.name);
             vkCmdClearDepthStencilImage(m_apiHandle, image->ApiHandle(), VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, &clearValue, 1, &rangeVK);
             EndDebugRegion();
-
-            m_commandFlags |= CommandType::TransferBit;
         }
     }
 
@@ -327,7 +321,6 @@ namespace pe
     void CommandBuffer::BeginPass(uint32_t count, Attachment *attachments, const std::string &name, bool skipDynamicPass)
     {
         BeginDebugRegion(name + "_pass");
-        m_commandFlags |= CommandType::GraphicsBit;
         m_dynamicPass = Settings::Get<GlobalSettings>().dynamic_rendering && !skipDynamicPass;
         m_attachmentCount = count;
         m_attachments = attachments;
@@ -751,7 +744,6 @@ namespace pe
     void CommandBuffer::Dispatch(uint32_t groupCountX, uint32_t groupCountY, uint32_t groupCountZ)
     {
         vkCmdDispatch(m_apiHandle, groupCountX, groupCountY, groupCountZ);
-        m_commandFlags |= CommandType::ComputeBit;
     }
 
     void CommandBuffer::PushConstants()
@@ -870,19 +862,16 @@ namespace pe
                                               uint32_t mipLevel)
     {
         image->CopyDataToImageStaged(this, data, size, baseArrayLayer, layerCount, mipLevel);
-        m_commandFlags |= CommandType::TransferBit;
     }
 
     void CommandBuffer::CopyImage(Image *src, Image *dst)
     {
         dst->CopyImage(this, src);
-        m_commandFlags |= CommandType::TransferBit;
     }
 
     void CommandBuffer::GenerateMipMaps(Image *image)
     {
         image->GenerateMipMaps(this);
-        m_commandFlags |= CommandType::TransferBit;
     }
 
     void CommandBuffer::SetEvent(Image *image,

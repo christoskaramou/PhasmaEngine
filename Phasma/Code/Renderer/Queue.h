@@ -12,7 +12,7 @@ namespace pe
         static void Init(GpuApiHandle gpu, DeviceApiHandle device, SurfaceApiHandle surface);
         static void Clear();
         static Queue *Get(QueueTypeFlags queueTypeFlags, int minImageGranularity);
-        static Semaphore *SubmitCommands(Semaphore *wait, std::vector<CommandBuffer *> cmds);
+        static Semaphore *SubmitCommands(Semaphore *wait, const std::vector<CommandBuffer *> &cmds);
 
         Queue(QueueApiHandle handle,
               uint32_t familyId,
@@ -22,10 +22,8 @@ namespace pe
         ~Queue();
 
         void Submit(uint32_t commandBuffersCount, CommandBuffer **commandBuffers,
-                    uint32_t waitSemaphoresCount,
-                    PipelineStageFlags *waitStages, Semaphore **waitSemaphores,
-                    uint32_t signalSemaphoresCount,
-                    PipelineStageFlags *signalStages, Semaphore **signalSemaphores);
+                    uint32_t waitSemaphoresCount = 0, Semaphore **waitSemaphores = nullptr,
+                    uint32_t signalSemaphoresCount = 0, Semaphore **signalSemaphores = nullptr);
         void Present(uint32_t swapchainCount, Swapchain **swapchains,
                      uint32_t *imageIndices,
                      uint32_t waitSemaphoreCount, Semaphore **waitSemaphores);

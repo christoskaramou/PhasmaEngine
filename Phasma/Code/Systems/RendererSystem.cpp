@@ -155,11 +155,12 @@ namespace pe
         frameCmds = RecordPasses(imageIndex);
 
         // SUBMIT TO QUEUE
-        aquireSignalSemaphore->SetWaitStageFlags(PipelineStage::ColorAttachmentOutputBit | PipelineStage::ComputeShaderBit);
+        aquireSignalSemaphore->SetStageFlags(PipelineStage::ColorAttachmentOutputBit | PipelineStage::ComputeShaderBit);
         Semaphore *submitsSemaphore = Queue::SubmitCommands(aquireSignalSemaphore, frameCmds);
 
         // PRESENT
-        RHII.GetRenderQueue()->Present(1, &swapchain, &imageIndex, 1, &submitsSemaphore);
+        if (submitsSemaphore)
+            RHII.GetRenderQueue()->Present(1, &swapchain, &imageIndex, 1, &submitsSemaphore);
     }
 
     void RendererSystem::Destroy()

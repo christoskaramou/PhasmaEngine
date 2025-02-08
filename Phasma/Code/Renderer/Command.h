@@ -188,10 +188,8 @@ namespace pe
         uint64_t IncreaseSumbitions() { return ++m_submitions; }
         void Wait();
         CommandPool *GetCommandPool() const { return m_commandPool; }
-        CommandTypeFlags GetCommandFlags() const { return m_commandFlags; }
         void AddAfterWaitCallback(Delegate<>::FunctionType &&func);
         void SetPassName(const std::string &name) { m_passName = name; }
-        void AddFlags(CommandTypeFlags flags) { m_commandFlags |= flags; }
 
         // Resourses functionality
         static void Init(GpuApiHandle gpu, uint32_t countPerFamily = 0);
@@ -246,7 +244,6 @@ namespace pe
         Buffer *m_boundIndexBuffer;
         size_t m_boundIndexBufferOffset;
         PushConstantsBlock<128> m_pushConstants{};
-        CommandTypeFlags m_commandFlags;
         bool m_dynamicPass = false;
 
 #if PE_DEBUG_MODE

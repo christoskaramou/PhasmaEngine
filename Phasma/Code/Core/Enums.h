@@ -846,16 +846,6 @@ namespace pe
         Point,
     };
 
-    enum class CommandType
-    {
-        None = 0,
-        GraphicsBit = 1 << 0,
-        ComputeBit = 1 << 1,
-        TransferBit = 1 << 2,
-    };
-    using CommandTypeFlags = Flags<CommandType>;
-    DEFINE_FLAGS_OPERATORS(CommandType);
-
     enum class StencilOp
     {
         Keep,

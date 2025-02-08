@@ -12,12 +12,12 @@ namespace pe
         void Wait(uint64_t value);
         void Signal(uint64_t value);
         uint64_t GetValue();
-        void SetWaitStageFlags(PipelineStageFlags flags) { m_waitStageFlags = flags; }
-        void AddWaitStageFlags(PipelineStageFlags flags) { m_waitStageFlags |= flags; }
-        PipelineStageFlags GetWaitStageFlags() { return m_waitStageFlags; }
+        void SetStageFlags(PipelineStageFlags flags) { m_stageFlags = flags; }
+        void AddStageFlags(PipelineStageFlags flags) { m_stageFlags |= flags; }
+        PipelineStageFlags GetStageFlags() { return m_stageFlags; }
 
     private:
         const bool m_timeline;
-        PipelineStageFlags m_waitStageFlags;
+        PipelineStageFlags m_stageFlags;
     };
 }
