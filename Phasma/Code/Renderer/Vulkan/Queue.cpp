@@ -55,10 +55,13 @@ namespace pe
                 commandBufferSubmitInfos.push_back(cbInfo);
                 
                 // signal timeline semaphore for the command buffer wait()
+                Semaphore *semaphore = commandBuffers[i]->GetSemaphore();
+                semaphore->SetStageFlags(PipelineStage::AllCommandsBit);
+                
                 VkSemaphoreSubmitInfo info{};
                 info.sType = VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO;
-                info.semaphore = commandBuffers[i]->GetSemaphore()->ApiHandle();
-                info.stageMask = VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT;
+                info.semaphore = semaphore->ApiHandle();
+                info.stageMask = Translate<VkPipelineStageFlags2>(semaphore->GetStageFlags());
                 info.value = commandBuffers[i]->IncreaseSumbitions();
                 signalSemaphoreSubmitInfos.push_back(info);
             }
