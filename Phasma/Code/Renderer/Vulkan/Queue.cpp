@@ -18,8 +18,6 @@ namespace pe
           m_familyId{familyId},
           m_queueTypeFlags{queueTypeFlags},
           m_imageGranularity{imageGranularity},
-          m_semaphore{Semaphore::Create(true, name + "_queue_semaphore")},
-          m_submitions{0},
           m_name{name}
     {
 #if PE_DEBUG_MODE
@@ -29,7 +27,6 @@ namespace pe
 
     Queue::~Queue()
     {
-        Semaphore::Destroy(m_semaphore);
     }
 
     void Queue::Submit(uint32_t commandBuffersCount, CommandBuffer **commandBuffers,
@@ -43,7 +40,7 @@ namespace pe
         std::vector<VkCommandBufferSubmitInfo> commandBufferSubmitInfos(commandBuffersCount);
         std::vector<VkSemaphoreSubmitInfo> waitSemaphoreSubmitInfos(waitSemaphoresCount);
         // semaphores requested + command buffers semaphores + queue semaphore
-        std::vector<VkSemaphoreSubmitInfo> signalSemaphoreSubmitInfos(signalSemaphoresCount + commandBuffersCount + 1);
+        std::vector<VkSemaphoreSubmitInfo> signalSemaphoreSubmitInfos(signalSemaphoresCount + commandBuffersCount);
 
         // CommandBuffers
         for (uint32_t i = 0; i < commandBuffersCount; i++)
@@ -86,17 +83,6 @@ namespace pe
             signalSemaphoreSubmitInfos[i].semaphore = commandBuffers[index]->GetSemaphore()->ApiHandle();
             signalSemaphoreSubmitInfos[i].stageMask = VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT;
             signalSemaphoreSubmitInfos[i].value = commandBuffers[index]->IncreaseSumbitions();
-        }
-
-        // queue semaphore
-        {
-            m_semaphore->Wait(m_submitions++); // Wait previous submition
-            m_submitions++;
-
-            signalSemaphoreSubmitInfos[i].sType = VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO;
-            signalSemaphoreSubmitInfos[i].semaphore = m_semaphore->ApiHandle();
-            signalSemaphoreSubmitInfos[i].stageMask = VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT;
-            signalSemaphoreSubmitInfos[i].value = m_submitions;
         }
 
         VkSubmitInfo2 si{};

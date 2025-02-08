@@ -13,8 +13,8 @@ namespace pe
         VkSemaphoreTypeCreateInfoKHR ti{};
         if (timeline)
         {
-            ti.sType = VK_STRUCTURE_TYPE_SEMAPHORE_TYPE_CREATE_INFO_KHR;
-            ti.semaphoreType = VK_SEMAPHORE_TYPE_TIMELINE_KHR;
+            ti.sType = VK_STRUCTURE_TYPE_SEMAPHORE_TYPE_CREATE_INFO;
+            ti.semaphoreType = VK_SEMAPHORE_TYPE_TIMELINE;
             ti.initialValue = 0;
             si.pNext = &ti;
         }

@@ -48,8 +48,6 @@ namespace pe
         QueueTypeFlags m_queueTypeFlags;
         ivec3 m_imageGranularity;
         std::string m_name;
-        Semaphore *m_semaphore;
-        std::atomic_uint64_t m_submitions;
 
 #if PE_DEBUG_MODE
         friend class GUI;

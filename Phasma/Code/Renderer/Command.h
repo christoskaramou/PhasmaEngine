@@ -157,11 +157,6 @@ namespace pe
         void DrawIndexed(uint32_t indexCount, uint32_t instanceCount, uint32_t firstIndex, int32_t vertexOffset, uint32_t firstInstance);
         void DrawIndirect(Buffer *indirectBuffer, size_t offset, uint32_t drawCount, uint32_t stride);
         void DrawIndexedIndirect(Buffer *indirectBuffer, size_t offset, uint32_t drawCount, uint32_t stride);
-        void Submit(Queue *queue,
-                    uint32_t waitSemaphoresCount,
-                    PipelineStageFlags *waitStages, Semaphore **waitSemaphores,
-                    uint32_t signalSemaphoresCount,
-                    PipelineStageFlags *signalStages, Semaphore **signalSemaphores);
         void BufferBarrier(const BufferBarrierInfo &info);
         void BufferBarriers(const std::vector<BufferBarrierInfo> &infos);
         void ImageBarrier(const ImageBarrierInfo &info);

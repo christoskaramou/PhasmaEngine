@@ -792,19 +792,7 @@ namespace pe
     {
         vkCmdDrawIndexedIndirect(m_apiHandle, indirectBuffer->ApiHandle(), offset, drawCount, stride);
     }
-
-    void CommandBuffer::Submit(Queue *queue,
-                               uint32_t waitSemaphoresCount,
-                               PipelineStageFlags *waitStages, Semaphore **waitSemaphores,
-                               uint32_t signalSemaphoresCount,
-                               PipelineStageFlags *signalStages, Semaphore **signalSemaphores)
-    {
-        CommandBuffer *cmd = this;
-        queue->Submit(1, &cmd,
-                      waitSemaphoresCount, waitStages, waitSemaphores,
-                      signalSemaphoresCount, signalStages, signalSemaphores);
-    }
-
+    
     void CommandBuffer::BufferBarrier(const BufferBarrierInfo &info)
     {
         Buffer::Barrier(this, info);

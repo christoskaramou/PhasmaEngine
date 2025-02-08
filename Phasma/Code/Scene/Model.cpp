@@ -531,7 +531,7 @@ namespace pe
         scene.InitGeometry(cmd);
 
         cmd->End();
-        cmd->Submit(queue, 0, nullptr, nullptr, 0, nullptr, nullptr);
+        queue->Submit(1, &cmd, 0, nullptr, nullptr, 0, nullptr, nullptr);
         cmd->Wait();
         modelGltf->render = true;
 
