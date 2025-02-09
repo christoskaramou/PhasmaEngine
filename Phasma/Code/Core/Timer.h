@@ -1,22 +1,22 @@
 #pragma once
 
-constexpr double MILLI(double seconds)
-{
-    return seconds * 1000.0;
-}
-
-constexpr double MICRO(double seconds)
-{
-    return seconds * 1000000.0;
-}
-
-constexpr double NANO(double seconds)
-{
-    return seconds * 1000000000.0;
-}
-
 namespace pe
 {
+    constexpr double MILLI(double seconds)
+    {
+        return seconds * 1000.0;
+    }
+    
+    constexpr double MICRO(double seconds)
+    {
+        return seconds * 1000000.0;
+    }
+    
+    constexpr double NANO(double seconds)
+    {
+        return seconds * 1000000000.0;
+    }
+    
     class Timer
     {
     public:

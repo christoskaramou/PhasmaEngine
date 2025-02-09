@@ -20,9 +20,6 @@ namespace pe
 
     App::App() : m_frameTimer(FrameTimer::Instance())
     {
-        // freopen("log.txt", "w", stdout);
-        // freopen("errors.txt", "w", stderr);
-
         if (!SDL_WasInit(SDL_INIT_VIDEO | SDL_INIT_EVENTS))
         {
             if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_EVENTS) < 0)
@@ -87,6 +84,7 @@ namespace pe
         RHII.Remove();
         Window::Destroy(m_window);
         EventSystem::Destroy();
+        // ScriptManager::Shutdown();
     }
 
     bool App::Frame()

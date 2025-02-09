@@ -7,11 +7,9 @@
 #if defined(WIN32) && PE_RENDER_DOC == 1
 #include <Windows.h>
 #include <filesystem>
-namespace fs = std::filesystem;
 #elif defined(__linux__) && PE_RENDER_DOC == 1
 #include <dlfcn.h>
 #include <filesystem>
-namespace fs = std::filesystem;
 #endif
 
 namespace pe
@@ -117,7 +115,7 @@ namespace pe
 
         for (const auto &path : searchPaths)
         {
-            if (fs::exists(path + "librenderdoc.so"))
+            if (std::filesystem::exists(path + "librenderdoc.so"))
                 return path;
         }
 

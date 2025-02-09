@@ -1,6 +1,5 @@
 #ifdef PE_VULKAN
 #include "Renderer/Surface.h"
-#include "Systems/RendererSystem.h"
 #include "Renderer/RHI.h"
 
 namespace pe

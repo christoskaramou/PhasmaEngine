@@ -1,6 +1,5 @@
 #ifdef PE_VULKAN
 #include "Renderer/RHI.h"
-#include "Systems/RendererSystem.h"
 #include "Renderer/Command.h"
 #include "Renderer/Semaphore.h"
 #include "Renderer/Descriptor.h"

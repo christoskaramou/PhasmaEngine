@@ -155,8 +155,8 @@ namespace pe
 
         if (EventSystem::PollEvent(EventCompileScripts))
         {
-            ScriptManager::Shutdown();
-            ScriptManager::Init();
+            // ScriptManager::Shutdown();
+            // ScriptManager::Init();
         }
 
         if (EventSystem::PollEvent(EventResize))
