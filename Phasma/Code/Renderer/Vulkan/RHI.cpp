@@ -86,19 +86,9 @@ namespace pe
         // =============================================
 
         // === Debugging ===============================
-        Debug::GetInstanceUtils(instanceExtensions, instanceLayers);
-        // std::vector<VkValidationFeatureEnableEXT> enabledFeatures{};
-        // VkValidationFeaturesEXT validationFeatures{};
-        // if (IsInstanceLayerValid("VK_LAYER_KHRONOS_validation"))
-        // {
-        //     enabledFeatures.push_back(VK_VALIDATION_FEATURE_ENABLE_GPU_ASSISTED_EXT);
-        //     enabledFeatures.push_back(VK_VALIDATION_FEATURE_ENABLE_GPU_ASSISTED_RESERVE_BINDING_SLOT_EXT);
-        //     enabledFeatures.push_back(VK_VALIDATION_FEATURE_ENABLE_BEST_PRACTICES_EXT);
-        //     // enabledFeatures.push_back(VK_VALIDATION_FEATURE_ENABLE_DEBUG_PRINTF_EXT);
-        //     enabledFeatures.push_back(VK_VALIDATION_FEATURE_ENABLE_SYNCHRONIZATION_VALIDATION_EXT);
-
-        //     validationFeatures.sType = VK_STRUCTURE_TYPE_VALIDATION_FEATURES_EXT;
-        //     validationFeatures.enabledValidationFeatureCount =function(std::forward<Args>(args)...);
+        if (RHII.IsInstanceExtensionValid("VK_EXT_debug_utils"))
+            instanceExtensions.push_back("VK_EXT_debug_utils");
+        // =============================================
 
         uint32_t apiVersion;
         vkEnumerateInstanceVersion(&apiVersion);

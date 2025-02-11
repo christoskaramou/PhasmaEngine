@@ -41,22 +41,6 @@ namespace pe
         vkCmdInsertDebugUtilsLabelEXT = (PFN_vkCmdInsertDebugUtilsLabelEXT)vkGetInstanceProcAddr(s_instance, "vkCmdInsertDebugUtilsLabelEXT");
     }
 
-    void Debug::GetInstanceUtils(std::vector<const char *> &instanceExtensions,
-                                 std::vector<const char *> &instanceLayers)
-    {
-        if (RHII.IsInstanceExtensionValid("VK_EXT_debug_utils"))
-            instanceExtensions.push_back("VK_EXT_debug_utils");
-
-#if defined(_DEBUG) && PE_DEBUG_MESSENGER
-        // === Debug Layers ============================
-        // To use these debug layers, here is assumed VulkanSDK is installed
-        // Also VK_LAYER_PATH environmental variable has to be created and target the bin
-        // e.g VK_LAYER_PATH = C:\VulkanSDK\1.2.189.1\Bin
-        if (RHII.IsInstanceLayerValid("VK_LAYER_KHRONOS_validation"))
-            instanceLayers.push_back("VK_LAYER_KHRONOS_validation");
-#endif
-    }
-
     std::string GetDebugMessageString(VkDebugUtilsMessageTypeFlagsEXT value)
     {
         switch (value)

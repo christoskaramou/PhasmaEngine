@@ -11,7 +11,6 @@ namespace pe
     {
     public:
         static void Init(InstanceApiHandle instance);
-        static void GetInstanceUtils(std::vector<const char *> &instanceExtensions, std::vector<const char *> &instanceLayers);
         static void CreateDebugMessenger();
         static void DestroyDebugMessenger();
         template <class HANDLE>
@@ -47,7 +46,6 @@ namespace pe
     {
     public:
         static void Init(InstanceApiHandle instance) {}
-        static void GetInstanceUtils(std::vector<const char *> &instanceExtensions, std::vector<const char *> &instanceLayers) {}
         static void CreateDebugMessenger() {}
         static void DestroyDebugMessenger() {}
         static void InitCaptureApi() {}
