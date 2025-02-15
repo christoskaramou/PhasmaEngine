@@ -618,12 +618,6 @@ namespace pe
 
         Image::Barriers(cmd, barriers);
 
-        // std::string regionName = src->imageInfo.name + " layerCount=" + std::to_string(region->srcSubresource.layerCount) +
-        //                          ", baseLayer=" + std::to_string(region->srcSubresource.baseArrayLayer) +
-        //                          ", mipLevel=" + std::to_string(region->srcSubresource.mipLevel) +
-        //                          " -> " + imageInfo.name + " layerCount=" + std::to_string(region->dstSubresource.layerCount) +
-        //                          ", baseLayer=" + std::to_string(region->dstSubresource.baseArrayLayer) +
-        //                          ", mipLevel=" + std::to_string(region->dstSubresource.mipLevel);
         cmd->BeginDebugRegion(src->m_createInfo.name + " -> " + m_createInfo.name);
         vkCmdBlitImage(cmd->ApiHandle(),
                        src->ApiHandle(), VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,

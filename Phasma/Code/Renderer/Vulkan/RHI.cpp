@@ -85,23 +85,24 @@ namespace pe
         PE_ERROR_IF(!SDL_Vulkan_GetInstanceExtensions(window, &extCount, instanceExtensions.data()), SDL_GetError());
         // =============================================
 
+#if !defined(PE_RELEASE) || !defined(PE_MINSIZEREL)
         // === Debugging ===============================
         if (RHII.IsInstanceExtensionValid("VK_EXT_debug_utils"))
             instanceExtensions.push_back("VK_EXT_debug_utils");
-        // =============================================
+// =============================================
+#endif
 
-        uint32_t apiVersion;
-        vkEnumerateInstanceVersion(&apiVersion);
+        // uint32_t apiVersion;
+        // vkEnumerateInstanceVersion(&apiVersion);
 
         VkApplicationInfo appInfo{};
         appInfo.sType = VK_STRUCTURE_TYPE_APPLICATION_INFO;
         appInfo.pApplicationName = "PhasmaEngine";
         appInfo.pEngineName = "PhasmaEngine";
-        appInfo.apiVersion = apiVersion;
+        appInfo.apiVersion = VK_API_VERSION_1_3;
 
         VkInstanceCreateInfo instInfo{};
         instInfo.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
-        // instInfo.pNext = &validationFeatures;
         instInfo.pApplicationInfo = &appInfo;
         instInfo.enabledLayerCount = static_cast<uint32_t>(instanceLayers.size());
         instInfo.ppEnabledLayerNames = instanceLayers.data();
@@ -129,7 +130,6 @@ namespace pe
     void RHI::FindGpu()
     {
         uint32_t gpuCount;
-        vkEnumeratePhysicalDevices(m_instance, &gpuCount, nullptr);
         vkEnumeratePhysicalDevices(m_instance, &gpuCount, nullptr);
 
         std::vector<VkPhysicalDevice> gpuList(gpuCount);
@@ -271,6 +271,12 @@ namespace pe
         std::vector<const char *> deviceExtensions{};
         deviceExtensions.push_back(VK_KHR_SWAPCHAIN_EXTENSION_NAME);
         deviceExtensions.push_back(VK_KHR_PUSH_DESCRIPTOR_EXTENSION_NAME);
+        if (IsDeviceExtensionValid(VK_EXT_MEMORY_PRIORITY_EXTENSION_NAME) &&
+            IsDeviceExtensionValid(VK_EXT_PAGEABLE_DEVICE_LOCAL_MEMORY_EXTENSION_NAME))
+        {
+            deviceExtensions.push_back(VK_EXT_MEMORY_PRIORITY_EXTENSION_NAME);
+            deviceExtensions.push_back(VK_EXT_PAGEABLE_DEVICE_LOCAL_MEMORY_EXTENSION_NAME);
+        }
 
         std::vector<VkDeviceQueueCreateInfo> queueCreateInfos{};
         uint32_t queueFamPropCount;
@@ -469,6 +475,32 @@ namespace pe
             memoryUsage += memoryBudgetProperties.heapUsage[i];
 
         return memoryUsage;
+    }
+
+    void RHI::ChangePresentMode(PresentMode mode)
+    {
+        WaitDeviceIdle();
+
+        m_surface->SetPresentMode(mode);
+        Swapchain::Destroy(m_swapchain);
+        CreateSwapchain(m_surface);
+
+        // Set Window Title
+        std::string title = "PhasmaEngine";
+        title += " - Device: " + RHII.GetGpuName();
+        title += " - API: Vulkan";
+        title += " - Present Mode: " + PresentModeToString(mode);
+#if PE_DEBUG
+        title += " - Debug";
+#elif PE_RELEASE
+        title += " - Release";
+#elif PE_MINSIZEREL
+        title += " - MinSizeRel";
+#elif PE_RELWITHDEBINFO
+        title += " - RelWithDebInfo";
+#endif
+
+        EventSystem::DispatchEvent(EventSetWindowTitle, title);
     }
 }
 #endif

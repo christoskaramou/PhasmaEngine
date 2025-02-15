@@ -10,6 +10,7 @@ namespace pe
     extern size_t EventCompileScripts;
     extern size_t EventResize;
     extern size_t EventFileWrite;
+    extern size_t EventPresentMode;
     // ---------------------------------
 
     extern bool IsDepthStencil(Format format);
@@ -18,6 +19,7 @@ namespace pe
     extern bool HasDepth(Format format);
     extern bool HasStencil(Format format);
     extern ImageAspectFlags GetAspectMask(Format format);
+    extern std::string PresentModeToString(PresentMode presentMode);
 
     extern ThreadPool e_ThreadPool;
     extern ThreadPool e_Update_ThreadPool;

@@ -97,6 +97,7 @@ namespace pe
         Surface *GetSurface() { return m_surface; }
         Swapchain *GetSwapchain() { return m_swapchain; }
         uint64_t GetMemoryUsageSnapshot();
+        void ChangePresentMode(PresentMode mode);
 
     private:
         RHI();

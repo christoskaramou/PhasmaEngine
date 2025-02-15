@@ -393,6 +393,27 @@ namespace pe
             EventSystem::PushEvent(EventResize);
         }
         ImGui::Separator();
+        
+        static const char *presentModes[] = {"Immediate", "Mailbox", "Fifo", "FifoRelaxed"};
+        static uint32_t presentModeIndex = static_cast<uint32_t>(RHII.GetSurface()->GetPresentMode());
+        ImGui::Text("Present Mode");
+        if (ImGui::BeginCombo("##present_mode", presentModes[presentModeIndex]))
+        {
+            for (int i = 0; i < IM_ARRAYSIZE(presentModes); i++)
+            {
+                const bool isSelected = (presentModeIndex == i);
+                if (ImGui::Selectable(presentModes[i], isSelected))
+                {
+                    presentModeIndex = i;
+                    gSettings.present_mode = static_cast<PresentMode>(i);
+                    EventSystem::PushEvent(EventPresentMode);
+                }
+                if (isSelected)
+                    ImGui::SetItemDefaultFocus();
+            }
+            ImGui::EndCombo();
+        }
+        ImGui::Separator();
 
         ImGui::Checkbox("IBL", &gSettings.IBL);
         if (gSettings.IBL)

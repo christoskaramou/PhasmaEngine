@@ -10,6 +10,7 @@ namespace pe
     size_t EventCompileScripts = StringHash("PE_CompileScripts");
     size_t EventResize         = StringHash("PE_Resize");
     size_t EventFileWrite      = StringHash("PE_FileWrite");
+    size_t EventPresentMode    = StringHash("PE_PresentMode");
     // ----------------------------------------------------------
 
     void EventSystem::Init()
@@ -80,7 +81,7 @@ namespace pe
 
         // Erase the event using the iterator, avoiding another lookup
         m_pushEvents.erase(it);
-        
+
         return true;
     }
 

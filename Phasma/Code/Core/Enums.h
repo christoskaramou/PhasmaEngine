@@ -503,9 +503,7 @@ namespace pe
         Immediate,
         Mailbox,
         Fifo,
-        FifoRelaxed,
-        SharedDemandRefresh,
-        SharedContinuousRefresh,
+        FifoRelaxed
     };
 
     enum class PipelineStage : uint64_t

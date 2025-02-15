@@ -44,64 +44,68 @@ namespace pe
         std::vector<VkSurfaceFormatKHR> formats(formatsCount);
         vkGetPhysicalDeviceSurfaceFormatsKHR(RHII.GetGpu(), m_apiHandle, &formatsCount, formats.data());
 
-        VkFormat formatVK = formats[0].format;
-        VkColorSpaceKHR colorSpaceVK = formats[0].colorSpace;
+        m_format = Format::Undefined;
         for (const auto &f : formats)
         {
-            if (f.format == VK_FORMAT_B8G8R8A8_UNORM && f.colorSpace == VK_COLOR_SPACE_SRGB_NONLINEAR_KHR)
+            VkFormatProperties fProps;
+            vkGetPhysicalDeviceFormatProperties(RHII.GetGpu(), Translate<VkFormat>(m_format), &fProps);
+
+            if ((f.format == VK_FORMAT_B8G8R8A8_UNORM || f.format == VK_FORMAT_R8G8B8A8_UNORM) &&
+                f.colorSpace == VK_COLOR_SPACE_SRGB_NONLINEAR_KHR)
             {
-                formatVK = f.format;
-                colorSpaceVK = f.colorSpace;
+                m_format = Translate<Format>(f.format);
+                m_colorSpace = Translate<ColorSpace>(f.colorSpace);
                 break;
             }
         }
-        
-        m_format = Translate<Format>(formatVK);
-        m_colorSpace = Translate<ColorSpace>(colorSpaceVK);
 
-        // Check for blit operation
-        VkFormatProperties fProps;
-        vkGetPhysicalDeviceFormatProperties(RHII.GetGpu(), Translate<VkFormat>(m_format), &fProps);
-        if (!(fProps.optimalTilingFeatures & VK_FORMAT_FEATURE_BLIT_SRC_BIT))
-            PE_ERROR("No blit source operation supported");
-        if (!(fProps.optimalTilingFeatures & VK_FORMAT_FEATURE_BLIT_DST_BIT))
-            PE_ERROR("No blit destination operation supported");
+        PE_ERROR_IF(m_format == Format::Undefined, "Surface format not found");
     }
 
-    void Surface::FindPresentationMode()
+    bool SupportsPresentMode(VkSurfaceKHR surface, VkPresentModeKHR mode)
     {
-        uint32_t presentModesCount;
-        vkGetPhysicalDeviceSurfacePresentModesKHR(RHII.GetGpu(), m_apiHandle, &presentModesCount, nullptr);
-
-        std::vector<VkPresentModeKHR> presentModes(presentModesCount);
-        vkGetPhysicalDeviceSurfacePresentModesKHR(RHII.GetGpu(), m_apiHandle, &presentModesCount, presentModes.data());
-
-        for (const auto &i : presentModes)
+        static std::vector<VkPresentModeKHR> presentModes{};
+        if (presentModes.empty())
         {
-            if (i == VK_PRESENT_MODE_MAILBOX_KHR)
-            {
-                m_presentMode = Translate<PresentMode>(i);
-                return;
-            }
+            uint32_t presentModesCount;
+            vkGetPhysicalDeviceSurfacePresentModesKHR(RHII.GetGpu(), surface, &presentModesCount, nullptr);
+            presentModes.resize(presentModesCount);
+            vkGetPhysicalDeviceSurfacePresentModesKHR(RHII.GetGpu(), surface, &presentModesCount, presentModes.data());
         }
 
-        for (const auto &i : presentModes)
+        for (const auto &presentMode : presentModes)
         {
-            if (i == VK_PRESENT_MODE_IMMEDIATE_KHR)
-            {
-                m_presentMode = Translate<PresentMode>(i);
-                return;
-            }
+            if (presentMode == mode)
+                return true;
         }
 
-        m_presentMode = Translate<PresentMode>(VK_PRESENT_MODE_FIFO_KHR);
+        return false;
+    }
+
+    void Surface::SetPresentMode(PresentMode preferredMode)
+    {
+        if (SupportsPresentMode(m_apiHandle, Translate<VkPresentModeKHR>(preferredMode)))
+        {
+            m_presentMode = preferredMode;
+        }
+        else
+        {
+            if (SupportsPresentMode(m_apiHandle, VK_PRESENT_MODE_MAILBOX_KHR))
+                m_presentMode = PresentMode::Mailbox;
+            else if (SupportsPresentMode(m_apiHandle, VK_PRESENT_MODE_IMMEDIATE_KHR))
+                m_presentMode = PresentMode::Immediate;
+            else if (SupportsPresentMode(m_apiHandle, VK_PRESENT_MODE_FIFO_RELAXED_KHR))
+                m_presentMode = PresentMode::FifoRelaxed;
+            else
+                m_presentMode = PresentMode::Fifo;
+        }
     }
 
     void Surface::FindProperties()
     {
         CheckTransfer();
         FindFormat();
-        FindPresentationMode();
+        SetPresentMode(PresentMode::Mailbox);
     }
 }
 #endif

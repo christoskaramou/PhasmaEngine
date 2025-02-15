@@ -12,7 +12,7 @@ namespace pe
 
         void CheckTransfer();
         void FindFormat();
-        void FindPresentationMode();
+        void SetPresentMode(PresentMode preferredMode);
         void FindProperties();
         const Rect2Du &GetActualExtent() const { return m_actualExtent; }
         void SetActualExtent(const Rect2Du &extent) { m_actualExtent = extent; }

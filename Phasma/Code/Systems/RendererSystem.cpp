@@ -28,10 +28,6 @@ namespace pe
             return "Fifo";
         case PresentMode::FifoRelaxed:
             return "FifoRelaxed";
-        case PresentMode::SharedDemandRefresh:
-            return "SharedDemandRefresh";
-        case PresentMode::SharedContinuousRefresh:
-            return "SharedContinuousRefresh";
         }
 
         PE_ERROR("Unknown PresentMode");
@@ -48,11 +44,15 @@ namespace pe
         title += " - Device: " + RHII.GetGpuName();
         title += " - API: Vulkan";
         title += " - Present Mode: " + PresentModeToString(surface->GetPresentMode());
-#if _DEBUG
-        title += " - Configuration: Debug";
-#else
-        title += " - Configuration: Release";
-#endif // _DEBUG
+#if PE_DEBUG
+        title += " - Debug";
+#elif PE_RELEASE
+        title += " - Release";
+#elif PE_MINSIZEREL
+        title += " - MinSizeRel";
+#elif PE_RELWITHDEBINFO
+        title += " - RelWithDebInfo";
+#endif
 
         EventSystem::DispatchEvent(EventSetWindowTitle, title);
 
@@ -116,7 +116,7 @@ namespace pe
         for (auto &rc : m_renderPassComponents)
         {
             auto task = e_Update_ThreadPool.Enqueue([rc, camera_main]()
-                                             { rc->Update(camera_main); });
+                                                    { rc->Update(camera_main); });
             tasks.push_back(std::move(task));
         }
         for (auto &task : tasks)

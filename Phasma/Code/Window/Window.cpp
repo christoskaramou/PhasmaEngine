@@ -159,6 +159,12 @@ namespace pe
             // ScriptManager::Init();
         }
 
+        if (EventSystem::PollEvent(EventPresentMode))
+        {
+            GlobalSettings &gSettings = Settings::Get<GlobalSettings>();
+            RHII.ChangePresentMode(gSettings.present_mode);
+        }
+
         if (EventSystem::PollEvent(EventResize))
         {
             if (!isMinimized())

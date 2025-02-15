@@ -128,9 +128,7 @@ namespace pe
         {VK_PRESENT_MODE_IMMEDIATE_KHR, PresentMode::Immediate},
         {VK_PRESENT_MODE_MAILBOX_KHR, PresentMode::Mailbox},
         {VK_PRESENT_MODE_FIFO_KHR, PresentMode::Fifo},
-        {VK_PRESENT_MODE_FIFO_RELAXED_KHR, PresentMode::FifoRelaxed},
-        {VK_PRESENT_MODE_SHARED_DEMAND_REFRESH_KHR, PresentMode::SharedDemandRefresh},
-        {VK_PRESENT_MODE_SHARED_CONTINUOUS_REFRESH_KHR, PresentMode::SharedContinuousRefresh}};
+        {VK_PRESENT_MODE_FIFO_RELAXED_KHR, PresentMode::FifoRelaxed}};
 
     static uint64_t s_translatorImageLayout[]{
         VK_IMAGE_LAYOUT_UNDEFINED,
@@ -344,9 +342,7 @@ namespace pe
         VK_PRESENT_MODE_IMMEDIATE_KHR,
         VK_PRESENT_MODE_MAILBOX_KHR,
         VK_PRESENT_MODE_FIFO_KHR,
-        VK_PRESENT_MODE_FIFO_RELAXED_KHR,
-        VK_PRESENT_MODE_SHARED_DEMAND_REFRESH_KHR,
-        VK_PRESENT_MODE_SHARED_CONTINUOUS_REFRESH_KHR};
+        VK_PRESENT_MODE_FIFO_RELAXED_KHR};
 
     static uint64_t s_translatorPipelineStageFlags[]{
         VK_PIPELINE_STAGE_2_NONE,
