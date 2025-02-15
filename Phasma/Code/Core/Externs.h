@@ -19,7 +19,7 @@ namespace pe
     extern bool HasDepth(Format format);
     extern bool HasStencil(Format format);
     extern ImageAspectFlags GetAspectMask(Format format);
-    extern std::string PresentModeToString(PresentMode presentMode);
+    extern const char *PresentModeToString(PresentMode presentMode);
 
     extern ThreadPool e_ThreadPool;
     extern ThreadPool e_Update_ThreadPool;

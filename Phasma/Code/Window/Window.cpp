@@ -162,7 +162,7 @@ namespace pe
         if (EventSystem::PollEvent(EventPresentMode))
         {
             GlobalSettings &gSettings = Settings::Get<GlobalSettings>();
-            RHII.ChangePresentMode(gSettings.present_mode);
+            RHII.ChangePresentMode(gSettings.preferred_present_mode);
         }
 
         if (EventSystem::PollEvent(EventResize))

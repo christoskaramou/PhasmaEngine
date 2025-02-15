@@ -73,6 +73,6 @@ namespace pe
         bool aabbs_depth_aware = true;
         int culls_per_task = 10;
         bool dynamic_rendering = true;
-        PresentMode present_mode = PresentMode::Mailbox;
+        PresentMode preferred_present_mode = PresentMode::Mailbox;
     };
 }

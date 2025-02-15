@@ -16,22 +16,23 @@
 
 namespace pe
 {
-    std::string PresentModeToString(PresentMode presentMode)
+    const char *PresentModeToString(PresentMode presentMode)
     {
+        const char *modesNames[] = {"Immediate", "Mailbox", "Fifo", "FifoRelaxed", ""};
         switch (presentMode)
         {
         case PresentMode::Immediate:
-            return "Immediate";
+            return modesNames[0];
         case PresentMode::Mailbox:
-            return "Mailbox";
+            return modesNames[1];
         case PresentMode::Fifo:
-            return "Fifo";
+            return modesNames[2];
         case PresentMode::FifoRelaxed:
-            return "FifoRelaxed";
+            return modesNames[3];
         }
 
         PE_ERROR("Unknown PresentMode");
-        return "";
+        return modesNames[5];
     }
 
     void RendererSystem::Init(CommandBuffer *cmd)
@@ -43,7 +44,7 @@ namespace pe
         std::string title = "PhasmaEngine";
         title += " - Device: " + RHII.GetGpuName();
         title += " - API: Vulkan";
-        title += " - Present Mode: " + PresentModeToString(surface->GetPresentMode());
+        title += " - Present Mode: " + std::string(PresentModeToString(surface->GetPresentMode()));
 #if PE_DEBUG
         title += " - Debug";
 #elif PE_RELEASE

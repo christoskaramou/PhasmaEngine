@@ -393,27 +393,33 @@ namespace pe
             EventSystem::PushEvent(EventResize);
         }
         ImGui::Separator();
-        
-        static const char *presentModes[] = {"Immediate", "Mailbox", "Fifo", "FifoRelaxed"};
-        static uint32_t presentModeIndex = static_cast<uint32_t>(RHII.GetSurface()->GetPresentMode());
+
         ImGui::Text("Present Mode");
-        if (ImGui::BeginCombo("##present_mode", presentModes[presentModeIndex]))
+        static PresentMode currentPresentMode = RHII.GetSurface()->GetPresentMode();
+        
+        if (ImGui::BeginCombo("##present_mode", PresentModeToString(currentPresentMode)))
         {
-            for (int i = 0; i < IM_ARRAYSIZE(presentModes); i++)
+            const auto &presentModes = RHII.GetSurface()->GetSupportedPresentModes();
+            for (uint32_t i = 0; i < static_cast<uint32_t>(presentModes.size()); i++)
             {
-                const bool isSelected = (presentModeIndex == i);
-                if (ImGui::Selectable(presentModes[i], isSelected))
+                const bool isSelected = (currentPresentMode == presentModes[i]);
+                if (ImGui::Selectable(PresentModeToString(presentModes[i]), isSelected))
                 {
-                    presentModeIndex = i;
-                    gSettings.present_mode = static_cast<PresentMode>(i);
-                    EventSystem::PushEvent(EventPresentMode);
+                    if (currentPresentMode != presentModes[i])
+                    {
+                        currentPresentMode = presentModes[i];
+                        gSettings.preferred_present_mode = currentPresentMode;
+                        EventSystem::PushEvent(EventPresentMode);
+                    }
                 }
                 if (isSelected)
+                {
                     ImGui::SetItemDefaultFocus();
+                }
             }
             ImGui::EndCombo();
         }
-        ImGui::Separator();
+        ImGui::Separator();        
 
         ImGui::Checkbox("IBL", &gSettings.IBL);
         if (gSettings.IBL)

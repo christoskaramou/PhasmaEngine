@@ -489,7 +489,7 @@ namespace pe
         std::string title = "PhasmaEngine";
         title += " - Device: " + RHII.GetGpuName();
         title += " - API: Vulkan";
-        title += " - Present Mode: " + PresentModeToString(m_surface->GetPresentMode());
+        title += " - Present Mode: " + std::string(PresentModeToString(m_surface->GetPresentMode()));
 #if PE_DEBUG
         title += " - Debug";
 #elif PE_RELEASE

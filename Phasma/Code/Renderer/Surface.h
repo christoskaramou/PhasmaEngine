@@ -19,11 +19,15 @@ namespace pe
         Format GetFormat() const { return m_format; }
         ColorSpace GetColorSpace() const { return m_colorSpace; }
         PresentMode GetPresentMode() const { return m_presentMode; }
+        const std::vector<PresentMode> &GetSupportedPresentModes() const { return m_supportedPresentModes; }
 
 private:
+        bool SupportsPresentMode(PresentMode mode);
+
         Rect2Du m_actualExtent;
         Format m_format;
         ColorSpace m_colorSpace;
         PresentMode m_presentMode;
+        std::vector<PresentMode> m_supportedPresentModes{};
     };
 }

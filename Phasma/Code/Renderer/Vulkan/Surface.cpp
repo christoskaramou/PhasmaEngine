@@ -62,20 +62,25 @@ namespace pe
         PE_ERROR_IF(m_format == Format::Undefined, "Surface format not found");
     }
 
-    bool SupportsPresentMode(VkSurfaceKHR surface, VkPresentModeKHR mode)
+
+
+    bool Surface::SupportsPresentMode(PresentMode mode)
     {
         static std::vector<VkPresentModeKHR> presentModes{};
         if (presentModes.empty())
         {
             uint32_t presentModesCount;
-            vkGetPhysicalDeviceSurfacePresentModesKHR(RHII.GetGpu(), surface, &presentModesCount, nullptr);
+            vkGetPhysicalDeviceSurfacePresentModesKHR(RHII.GetGpu(), m_apiHandle, &presentModesCount, nullptr);
             presentModes.resize(presentModesCount);
-            vkGetPhysicalDeviceSurfacePresentModesKHR(RHII.GetGpu(), surface, &presentModesCount, presentModes.data());
+            vkGetPhysicalDeviceSurfacePresentModesKHR(RHII.GetGpu(), m_apiHandle, &presentModesCount, presentModes.data());
+
+            for (const auto &presentMode : presentModes)
+                m_supportedPresentModes.push_back(Translate<PresentMode>(presentMode));
         }
 
         for (const auto &presentMode : presentModes)
         {
-            if (presentMode == mode)
+            if (presentMode == Translate<VkPresentModeKHR>(mode))
                 return true;
         }
 
@@ -84,17 +89,17 @@ namespace pe
 
     void Surface::SetPresentMode(PresentMode preferredMode)
     {
-        if (SupportsPresentMode(m_apiHandle, Translate<VkPresentModeKHR>(preferredMode)))
+        if (SupportsPresentMode(preferredMode))
         {
             m_presentMode = preferredMode;
         }
         else
         {
-            if (SupportsPresentMode(m_apiHandle, VK_PRESENT_MODE_MAILBOX_KHR))
+            if (SupportsPresentMode(PresentMode::Mailbox))
                 m_presentMode = PresentMode::Mailbox;
-            else if (SupportsPresentMode(m_apiHandle, VK_PRESENT_MODE_IMMEDIATE_KHR))
+            else if (SupportsPresentMode(PresentMode::Immediate))
                 m_presentMode = PresentMode::Immediate;
-            else if (SupportsPresentMode(m_apiHandle, VK_PRESENT_MODE_FIFO_RELAXED_KHR))
+            else if (SupportsPresentMode(PresentMode::FifoRelaxed))
                 m_presentMode = PresentMode::FifoRelaxed;
             else
                 m_presentMode = PresentMode::Fifo;
