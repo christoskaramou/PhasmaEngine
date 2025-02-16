@@ -85,12 +85,12 @@ namespace pe
         PE_ERROR_IF(!SDL_Vulkan_GetInstanceExtensions(window, &extCount, instanceExtensions.data()), SDL_GetError());
         // =============================================
 
-//#if !defined(PE_RELEASE) || !defined(PE_MINSIZEREL)
+#if !defined(PE_RELEASE) || !defined(PE_MINSIZEREL)
         // === Debugging ===============================
         if (RHII.IsInstanceExtensionValid("VK_EXT_debug_utils"))
             instanceExtensions.push_back("VK_EXT_debug_utils");
-// =============================================
-//#endif
+        // =============================================
+#endif
 
         // uint32_t apiVersion;
         // vkEnumerateInstanceVersion(&apiVersion);
@@ -314,7 +314,7 @@ namespace pe
         deviceFeatures2.pNext = &deviceFeatures13;
         // Supported features
         vkGetPhysicalDeviceFeatures2(m_gpu, &deviceFeatures2);
-        
+
         Settings::Get<GlobalSettings>().dynamic_rendering &= static_cast<bool>(deviceFeatures13.dynamicRendering);
 
         // Check needed features

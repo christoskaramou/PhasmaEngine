@@ -586,7 +586,6 @@ namespace pe
         init_info.MSAASamples = VK_SAMPLE_COUNT_1_BIT;
         init_info.Allocator = nullptr;
         init_info.CheckVkResultFn = nullptr;
-        init_info.MSAASamples = VK_SAMPLE_COUNT_1_BIT;
         if (gSettings.dynamic_rendering)
         {
             init_info.UseDynamicRendering = true;
