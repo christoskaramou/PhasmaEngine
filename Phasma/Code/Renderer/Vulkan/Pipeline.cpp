@@ -285,16 +285,8 @@ namespace pe
 
             // Dynamic states
             std::vector<VkDynamicState> ds(info.dynamicStates.size());
-            bool dynamicViewport = false;
-            bool dynamicScissor = false;
             for (uint32_t i = 0; i < info.dynamicStates.size(); i++)
-            {
-                if (info.dynamicStates[i] == DynamicState::Viewport)
-                    dynamicViewport = true;
-                if (info.dynamicStates[i] == DynamicState::Scissor)
-                    dynamicScissor = true;
                 ds[i] = Translate<VkDynamicState>(info.dynamicStates[i]);
-            }
 
             VkPipelineDynamicStateCreateInfo dsi{};
             dsi.sType = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO;
