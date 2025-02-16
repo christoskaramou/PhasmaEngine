@@ -18,7 +18,7 @@ namespace pe
 
         VkDescriptorPoolCreateInfo createInfo{};
         createInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
-        createInfo.flags = VK_DESCRIPTOR_POOL_CREATE_UPDATE_AFTER_BIND_BIT;
+        createInfo.flags = VK_DESCRIPTOR_POOL_CREATE_UPDATE_AFTER_BIND_BIT | VK_DESCRIPTOR_POOL_CREATE_FREE_DESCRIPTOR_SET_BIT ;
         createInfo.poolSizeCount = static_cast<uint32_t>(descPoolsize.size());
         createInfo.pPoolSizes = descPoolsize.data();
         createInfo.maxSets = 1; // Unique descriptor sets for each descriptor pool

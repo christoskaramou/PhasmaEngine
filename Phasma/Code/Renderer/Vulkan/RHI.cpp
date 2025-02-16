@@ -85,12 +85,12 @@ namespace pe
         PE_ERROR_IF(!SDL_Vulkan_GetInstanceExtensions(window, &extCount, instanceExtensions.data()), SDL_GetError());
         // =============================================
 
-#if !defined(PE_RELEASE) || !defined(PE_MINSIZEREL)
+//#if !defined(PE_RELEASE) || !defined(PE_MINSIZEREL)
         // === Debugging ===============================
         if (RHII.IsInstanceExtensionValid("VK_EXT_debug_utils"))
             instanceExtensions.push_back("VK_EXT_debug_utils");
 // =============================================
-#endif
+//#endif
 
         // uint32_t apiVersion;
         // vkEnumerateInstanceVersion(&apiVersion);
@@ -297,14 +297,13 @@ namespace pe
             queueCreateInfos.push_back(queueCreateInfo);
         }
 
+        // Vulkan 1.1 features
         VkPhysicalDeviceVulkan11Features deviceFeatures11{};
         deviceFeatures11.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_1_FEATURES;
-
         // Vulkan 1.2 features
         VkPhysicalDeviceVulkan12Features deviceFeatures12{};
         deviceFeatures12.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_2_FEATURES;
         deviceFeatures12.pNext = &deviceFeatures11;
-
         // Vulkan 1.3 features
         VkPhysicalDeviceVulkan13Features deviceFeatures13{};
         deviceFeatures13.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_3_FEATURES;
@@ -313,10 +312,10 @@ namespace pe
         VkPhysicalDeviceFeatures2 deviceFeatures2{};
         deviceFeatures2.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2;
         deviceFeatures2.pNext = &deviceFeatures13;
-
         // Supported features
         vkGetPhysicalDeviceFeatures2(m_gpu, &deviceFeatures2);
-        Settings::Get<GlobalSettings>().dynamic_rendering = deviceFeatures13.dynamicRendering;
+        
+        Settings::Get<GlobalSettings>().dynamic_rendering &= static_cast<bool>(deviceFeatures13.dynamicRendering);
 
         // Check needed features
         PE_ERROR_IF(!deviceFeatures12.descriptorBindingPartiallyBound, "Partially bound descriptors are not supported on this device!");

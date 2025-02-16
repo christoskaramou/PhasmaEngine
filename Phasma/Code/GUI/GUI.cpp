@@ -21,7 +21,7 @@
 #include "Renderer/RenderPasses/SuperResolutionPass.h"
 #include "Systems/RendererSystem.h"
 #include "imgui/imgui_impl_vulkan.h"
-#include "imgui/imgui_impl_sdl.h"
+#include "imgui/imgui_impl_sdl2.h"
 #include "imgui/imgui_internal.h"
 #include "Core/Timer.h"
 
@@ -396,7 +396,7 @@ namespace pe
 
         ImGui::Text("Present Mode");
         static PresentMode currentPresentMode = RHII.GetSurface()->GetPresentMode();
-        
+
         if (ImGui::BeginCombo("##present_mode", PresentModeToString(currentPresentMode)))
         {
             const auto &presentModes = RHII.GetSurface()->GetSupportedPresentModes();
@@ -419,7 +419,7 @@ namespace pe
             }
             ImGui::EndCombo();
         }
-        ImGui::Separator();        
+        ImGui::Separator();
 
         ImGui::Checkbox("IBL", &gSettings.IBL);
         if (gSettings.IBL)
@@ -565,37 +565,44 @@ namespace pe
 
         ImGui_ImplSDL2_InitForVulkan(RHII.GetWindow());
 
-        Queue *queue = Queue::Get(QueueType::GraphicsBit | QueueType::TransferBit, 1);
-        ImGui_ImplVulkan_InitInfo initInfo{};
-        initInfo.Instance = RHII.GetInstance();
-        initInfo.PhysicalDevice = RHII.GetGpu();
-        initInfo.Device = RHII.GetDevice();
-        initInfo.QueueFamily = queue->GetFamilyId();
-        initInfo.Queue = queue->ApiHandle();
-        initInfo.PipelineCache = nullptr;
-        initInfo.DescriptorPool = RHII.GetDescriptorPool()->ApiHandle();
-        initInfo.Subpass = 0;
-        initInfo.MinImageCount = RHII.GetSwapchain()->GetImageCount();
-        initInfo.ImageCount = RHII.GetSwapchain()->GetImageCount();
-        initInfo.MSAASamples = VK_SAMPLE_COUNT_1_BIT;
-        initInfo.Allocator = nullptr;
-        initInfo.CheckVkResultFn = nullptr;
-
         RendererSystem *renderer = GetGlobalSystem<RendererSystem>();
         m_attachment = std::make_unique<Attachment>();
         m_attachment->image = renderer->GetDisplayRT();
         m_attachment->loadOp = AttachmentLoadOp::Load;
-        RenderPass *renderPass = CommandBuffer::GetRenderPass(1, m_attachment.get());
-        ImGui_ImplVulkan_Init(&initInfo, renderPass->ApiHandle());
+        VkFormat format = Translate<VkFormat>(RHII.GetSurface()->GetFormat());
+        Queue *queue = Queue::Get(QueueType::GraphicsBit | QueueType::TransferBit, 1);
 
-        CommandBuffer *cmd = CommandBuffer::GetFree(queue);
-        cmd->Begin();
-        ImGui_ImplVulkan_CreateFontsTexture(cmd->ApiHandle());
-        cmd->End();
-        queue->Submit(1, &cmd);
-
-        cmd->Wait();
-        CommandBuffer::Return(cmd);
+        ImGui_ImplVulkan_InitInfo init_info{};
+        init_info.Instance = RHII.GetInstance();
+        init_info.PhysicalDevice = RHII.GetGpu();
+        init_info.Device = RHII.GetDevice();
+        init_info.QueueFamily = queue->GetFamilyId();
+        init_info.Queue = queue->ApiHandle();
+        init_info.PipelineCache = nullptr;
+        init_info.DescriptorPool = RHII.GetDescriptorPool()->ApiHandle();
+        init_info.Subpass = 0;
+        init_info.MinImageCount = RHII.GetSwapchain()->GetImageCount();
+        init_info.ImageCount = RHII.GetSwapchain()->GetImageCount();
+        init_info.MSAASamples = VK_SAMPLE_COUNT_1_BIT;
+        init_info.Allocator = nullptr;
+        init_info.CheckVkResultFn = nullptr;
+        init_info.MSAASamples = VK_SAMPLE_COUNT_1_BIT;
+        if (gSettings.dynamic_rendering)
+        {
+            init_info.UseDynamicRendering = true;
+            init_info.PipelineRenderingCreateInfo = {.sType = VK_STRUCTURE_TYPE_PIPELINE_RENDERING_CREATE_INFO};
+            init_info.PipelineRenderingCreateInfo.colorAttachmentCount = 1;
+            init_info.PipelineRenderingCreateInfo.pColorAttachmentFormats = &format;
+        }
+        else
+        {
+            RenderPass *renderPass = CommandBuffer::GetRenderPass(1, m_attachment.get());
+            init_info.UseDynamicRendering = false;
+            init_info.RenderPass = renderPass->ApiHandle();
+        }
+        
+        ImGui_ImplVulkan_Init(&init_info);
+        ImGui_ImplVulkan_CreateFontsTexture();
 
         queue->WaitIdle();
     }
@@ -616,7 +623,7 @@ namespace pe
         barrierInfo.accessMask = Access::ColorAttachmentReadBit;
 
         cmd->ImageBarrier(barrierInfo);
-        cmd->BeginPass(1, m_attachment.get(), "GUI", true);
+        cmd->BeginPass(1, m_attachment.get(), "GUI", !Settings::Get<GlobalSettings>().dynamic_rendering);
         ImGui_ImplVulkan_RenderDrawData(ImGui::GetDrawData(), cmd->ApiHandle());
         cmd->EndPass();
 

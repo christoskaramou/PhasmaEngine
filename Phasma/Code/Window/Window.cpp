@@ -4,7 +4,7 @@
 #include "Systems/PostProcessSystem.h"
 #include "Systems/CameraSystem.h"
 #include "imgui/imgui_impl_vulkan.h"
-#include "imgui/imgui_impl_sdl.h"
+#include "imgui/imgui_impl_sdl2.h"
 #include "imgui/imgui_internal.h"
 #include "Script/ScriptManager.h"
 
