@@ -283,7 +283,6 @@ namespace pe
     {
         Hash hash;
         hash.Combine(reinterpret_cast<std::intptr_t>(renderPass));
-
         for (uint32_t i = 0; i < count; i++)
             hash.Combine(reinterpret_cast<std::intptr_t>(attachments[i].image));
 

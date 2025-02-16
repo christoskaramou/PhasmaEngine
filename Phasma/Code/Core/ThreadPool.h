@@ -19,11 +19,11 @@ namespace pe
         // need to keep track of threads so we can join them
         std::vector<std::thread> m_workers;
         // the task queue
-        std::queue<std::function<void()>> m_tasks;
+        std::deque<std::function<void()>> m_tasks;
         // synchronization
         std::mutex m_queue_mutex;
         std::condition_variable m_condition;
-        bool m_stop;
+        std::atomic<bool> m_stop{false};
     };
 
     // add new work item to the pool
@@ -42,8 +42,8 @@ namespace pe
             if (m_stop)
                 throw std::runtime_error("enqueue on stopped ThreadPool");
 
-            m_tasks.emplace([pckg_task_param = std::move(pckg_task)]() mutable
-                            { (*pckg_task_param)(); });
+            m_tasks.emplace_back([pckg_task_param = std::move(pckg_task)]() mutable
+                                 { (*pckg_task_param)(); });
         }
         m_condition.notify_one();
         return task;

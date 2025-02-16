@@ -10,7 +10,7 @@ namespace pe
     ThreadPool e_GUI_ThreadPool(std::thread::hardware_concurrency());    // GUI ThreadPool
 
     // the constructor just launches some amount of workers
-    inline ThreadPool::ThreadPool(size_t threads) : m_stop(false)
+    inline ThreadPool::ThreadPool(size_t threads) : m_stop{false}
     {
         m_workers.reserve(threads);
 
@@ -21,10 +21,9 @@ namespace pe
                 {
                     for (;;)
                     {
-                        std::function<void()> task;
+                        std::optional<std::function<void()>> task;
                         {
                             std::unique_lock<std::mutex> lock(m_queue_mutex);
-
                             m_condition.wait(lock, [this]
                                              { return m_stop || !m_tasks.empty(); });
 
@@ -32,9 +31,9 @@ namespace pe
                                 return;
 
                             task = std::move(m_tasks.front());
-                            m_tasks.pop();
+                            m_tasks.pop_front();
                         }
-                        task();
+                        (*task)();
                     }
                 });
         }
