@@ -25,6 +25,10 @@ namespace pe
             4, 5, 5, 6, 6, 7, 7, 4, // Far face edges
             0, 4, 1, 5, 2, 6, 3, 7  // Connecting edges between near and far faces
         };
+
+        m_drawInfosOpaque.resize(SWAPCHAIN_IMAGES, {});
+        m_drawInfosAlphaCut.resize(SWAPCHAIN_IMAGES, {});
+        m_drawInfosAlphaBlend.resize(SWAPCHAIN_IMAGES, {});
     }
 
     Geometry::~Geometry()
@@ -376,76 +380,32 @@ namespace pe
 
     void Geometry::CullNodePrimitives(ModelGltf &model, int node)
     {
-        int mesh = model.nodes[node].mesh;
-
         const Camera &camera = *m_cameras[0];
+        bool frustumCulling = Settings::Get<GlobalSettings>().frustum_culling;
+
+        int mesh = model.nodes[node].mesh;
         auto &meshGltf = model.meshes[mesh];
         auto &meshInfo = model.m_meshesInfo[mesh];
-        auto &primitivesInfo = meshInfo.primitivesInfo;
-
-        // TODO: pack more than one primitive in a task
-        auto cullAsync = [&camera, &model, &primitivesInfo](int node, int startPrimitive, int count)
-        {
-            std::vector<DrawInfo> results{};
-            results.reserve(count);
-
-            const int endPrimitive = startPrimitive + count;
-            for (int primitive = startPrimitive; primitive < endPrimitive; primitive++)
-            {
-                auto &primitiveInfo = primitivesInfo[primitive];
-
-                if (Settings::Get<GlobalSettings>().frustum_culling)
-                {
-                    primitiveInfo.cull = !camera.AABBInFrustum(primitiveInfo.worldBoundingBox);
-                }
-                else
-                {
-                    primitiveInfo.cull = false;
-                }
-
-                if (!primitiveInfo.cull)
-                {
-                    vec3 center = primitiveInfo.worldBoundingBox.GetCenter();
-                    float distance = distance2(camera.GetPosition(), center);
-
-                    results.emplace_back(DrawInfo{&model, node, primitive, distance});
-                }
-            }
-
-            return results;
-        };
-
         int primitivesCount = static_cast<int>(meshGltf.primitives.size());
-        std::vector<Task<std::vector<DrawInfo>>> tasks{};
-        tasks.reserve(primitivesCount);
-        int culls_per_task = Settings::Get<GlobalSettings>().culls_per_task;
-        for (int primitive = 0; primitive < primitivesCount; primitive += culls_per_task)
+        for (int i = 0; i < primitivesCount; i++)
         {
-            if (primitive + culls_per_task > primitivesCount)
-                culls_per_task = primitivesCount - primitive;
-
-            auto task = e_Update_ThreadPool.Enqueue(cullAsync, node, primitive, culls_per_task);
-            tasks.push_back(std::move(task));
-        }
-
-        for (auto &task : tasks)
-        {
-            auto drawInfos = task.get();
-
-            for (auto &drawInfo : drawInfos)
+            auto &primitiveInfo = meshInfo.primitivesInfo[i];
+            primitiveInfo.cull = frustumCulling ? !camera.AABBInFrustum(primitiveInfo.worldBoundingBox) : false;
+            if (!primitiveInfo.cull)
             {
-                PrimitiveInfo &primitiveInfo = primitivesInfo[drawInfo.primitive];
+                vec3 center = primitiveInfo.worldBoundingBox.GetCenter();
+                float distance = distance2(camera.GetPosition(), center);
 
                 switch (primitiveInfo.renderType)
                 {
                 case RenderType::Opaque:
-                    m_drawInfosOpaque.push_back(drawInfo);
+                    m_drawInfosOpaque.emplace_back(DrawInfo{&model, node, i, distance});
                     break;
                 case RenderType::AlphaCut:
-                    m_drawInfosAlphaCut.push_back(drawInfo);
+                    m_drawInfosAlphaCut.emplace_back(DrawInfo{&model, node, i, distance});
                     break;
                 case RenderType::AlphaBlend:
-                    m_drawInfosAlphaBlend.push_back(drawInfo);
+                    m_drawInfosAlphaBlend.emplace_back(DrawInfo{&model, node, i, distance});
                     break;
                 }
             }
@@ -469,7 +429,7 @@ namespace pe
         range.offset = 0;
         m_storage[frame]->Copy(1, &range, true);
 
-        // Update per primitive id data
+        // Update per primitive id dat
         std::vector<uint32_t> ids{};
         ids.reserve(m_drawInfosOpaque.size() + m_drawInfosAlphaCut.size() + m_drawInfosAlphaBlend.size());
         for (auto &drawInfo : m_drawInfosOpaque)

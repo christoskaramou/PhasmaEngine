@@ -28,7 +28,6 @@ namespace pe
         void ExtractFrustum();
         bool PointInFrustum(const vec3 &point, float radius) const;
         bool AABBInFrustum(const AABB &aabb) const;
-        void ReCreateComputePipelines();
         void Destroy() override;
         inline mat4 GetView() const { return m_view; }
         inline mat4 GetProjection() const { return m_projection; }
@@ -53,7 +52,7 @@ namespace pe
         vec3 m_position, m_euler, m_worldOrientation;
         vec3 m_front, m_right, m_up;
         float m_nearPlane, m_farPlane, m_fovx, m_rotationSpeed;
-        std::vector<Plane> m_frustum{};
+        std::array<Plane, 6> m_frustum{};
         vec2 m_projJitter;
         vec2 m_prevProjJitter;
     };

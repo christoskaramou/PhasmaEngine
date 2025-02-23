@@ -161,7 +161,11 @@ namespace pe
         static const ImVec4 color{0, 232.f / 256, 224.f / 256, 1.f};
         static const ImVec4 bdcolor{0.f, 168.f / 256, 162.f / 256, 1.f};
         static const float radius = 25.f;
-        static const int flags = ImGuiWindowFlags_NoNav | ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoInputs |
+        static const int flags = ImGuiWindowFlags_NoNav |
+                                 ImGuiWindowFlags_NoInputs |
+                                 ImGuiWindowFlags_NoResize |
+                                 ImGuiWindowFlags_NoScrollbar |
+                                 ImGuiWindowFlags_NoCollapse |
                                  ImGuiWindowFlags_NoBackground;
 
         auto &gSettings = Settings::Get<GlobalSettings>();
@@ -172,8 +176,8 @@ namespace pe
             SDL_GetWindowPosition(RHII.GetWindow(), &x, &y);
             ImVec2 size(-0.001f, 25.f);
             ImGui::SetNextWindowPos(ImVec2(x + WIDTH_f / 2 - 200.f, y + topBarHeight + HEIGHT_f / 2 - size.y / 2));
-            ImGui::SetNextWindowSize(ImVec2(400.f, 25.f));
-            ImGui::Begin("Model Loading", &metrics_open, flags);
+            ImGui::SetNextWindowSize(ImVec2(400.f, 100.f));
+            ImGui::Begin(gSettings.loading_name.c_str(), &metrics_open, flags);
             // LoadingIndicatorCircle("Loading", radius, color, bdcolor, 10, 4.5f);
             const float progress = gSettings.loading_current / static_cast<float>(gSettings.loading_total);
             ImGui::ProgressBar(progress, size);
@@ -599,7 +603,7 @@ namespace pe
             init_info.UseDynamicRendering = false;
             init_info.RenderPass = renderPass->ApiHandle();
         }
-        
+
         ImGui_ImplVulkan_Init(&init_info);
         ImGui_ImplVulkan_CreateFontsTexture();
 

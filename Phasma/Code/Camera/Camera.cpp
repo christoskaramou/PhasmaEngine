@@ -24,19 +24,10 @@ namespace pe
         m_projJitter = vec2(0.f, 0.f);
         m_prevProjJitter = vec2(0.f, 0.f);
 
-        m_frustum.resize(6);
-
-        // m_frustumCompute = Compute::Create("Shaders/Compute/FrustumCS.hlsl", 64, 96, "camera_frustum_compute");
-    }
-
-    void Camera::ReCreateComputePipelines()
-    {
-        // m_frustumCompute.CreatePipeline("Shaders/Compute/FrustumCS.hlsl");
     }
 
     void Camera::Destroy()
     {
-        // m_frustumCompute.Destroy();
     }
 
     void Camera::Update()
@@ -55,7 +46,7 @@ namespace pe
 
     float Camera::GetAspect()
     {
-        auto &renderArea = Context::Get()->GetSystem<RendererSystem>()->GetRenderArea();
+        RenderArea &renderArea = Context::Get()->GetSystem<RendererSystem>()->GetRenderArea();
         return renderArea.viewport.width / renderArea.viewport.height;
     }
 
@@ -134,7 +125,7 @@ namespace pe
         // Transpose just to make the calculations look simpler
         mat4 pv = transpose(m_viewProjection);
 
-        auto extractAndNormalize = [&](int index, const vec4 &row_diff)
+        auto ExtractAndNormalize = [&](int index, const vec4 &row_diff)
         {
             vec4 temp = row_diff / length(vec3(row_diff));
             m_frustum[index].normal[0] = temp.x;
@@ -144,21 +135,21 @@ namespace pe
         };
 
         // Right and Left planes
-        extractAndNormalize(0, pv[3] - pv[0]);
-        extractAndNormalize(1, pv[3] + pv[0]);
+        ExtractAndNormalize(0, pv[3] - pv[0]);
+        ExtractAndNormalize(1, pv[3] + pv[0]);
 
         // Bottom and Top planes
-        extractAndNormalize(2, pv[3] - pv[1]);
-        extractAndNormalize(3, pv[3] + pv[1]);
+        ExtractAndNormalize(2, pv[3] - pv[1]);
+        ExtractAndNormalize(3, pv[3] + pv[1]);
 
         // Far and Near planes
-        extractAndNormalize(4, pv[3] - pv[2]);
-        extractAndNormalize(5, pv[3] + pv[2]);
+        ExtractAndNormalize(4, pv[3] - pv[2]);
+        ExtractAndNormalize(5, pv[3] + pv[2]);
     }
 
     bool Camera::PointInFrustum(const vec3 &point, float radius) const
     {
-        for (const auto &plane : m_frustum)
+        for (const Plane &plane : m_frustum)
         {
             vec3 normal = make_vec3(plane.normal);
             const float dist = dot(normal, point) + plane.d;
@@ -169,6 +160,7 @@ namespace pe
             if (fabs(dist) < radius)
                 return true;
         }
+        
         return true;
     }
 
@@ -177,26 +169,16 @@ namespace pe
         const vec3 &center = aabb.GetCenter();
         const vec3 &size = aabb.GetSize();
 
-        // Iterate through all six planes of the frustum
-        for (int i = 0; i < 6; ++i)
+        for (const Plane &plane : m_frustum)
         {
-            const Plane &plane = m_frustum[i];
             vec3 normal = vec3(plane.normal[0], plane.normal[1], plane.normal[2]);
-
-            // Calculate the distance from the center of the AABB to the plane
             float distance = dot(normal, center) + plane.d;
-
-            // Calculate the projection of half the AABB size onto the plane normal
             float radius = dot(abs(normal), size * 0.5f);
 
-            // Check if the AABB is outside of the frustum
             if (distance < -radius)
-            {
-                return false; // The AABB is completely outside the frustum
-            }
+                return false;
         }
 
-        // The AABB is either inside or partially intersecting the frustum
         return true;
     }
 }

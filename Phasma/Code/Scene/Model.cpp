@@ -44,6 +44,15 @@ namespace pe
         std::string err;
         std::string warn;
 
+        auto &gSettings = Settings::Get<GlobalSettings>();
+        auto &progress = gSettings.loading_current;
+        auto &total = gSettings.loading_total;
+        auto &loading = gSettings.loading_name;
+
+        progress = 0;
+        total = 1;
+        loading = "Reading from file";
+
         if (file.extension() == ".gltf")
             ret = loader.LoadASCIIFromFile(&model, &err, &warn, file.string());
         else if (file.extension() == ".glb")
@@ -52,6 +61,11 @@ namespace pe
             PE_ERROR("Model type not supported");
 
         PE_ERROR_IF(!ret, "Failed to load model: " + file.string());
+
+
+        progress = 0;
+        total = static_cast<uint32_t>(model.images.size() + model.samplers.size());
+        loading = "Loading Images";
 
         Queue *queue = RHII.GetRenderQueue();
         CommandBuffer *cmd = CommandBuffer::GetFree(queue);
@@ -103,6 +117,9 @@ namespace pe
             cmd->ImageBarrier(barrier);
 
             model.m_images.push_back(uploadImage);
+
+            // Update loading bar
+            progress++;
         }
         model.m_images.push_back(g_defaultBlack);
         model.m_images.push_back(g_defaultNormal);
@@ -171,9 +188,23 @@ namespace pe
             Sampler *uploadSampler = Sampler::Create(info);
             model.m_samplers.push_back(uploadSampler);
             model.m_samplersMap[info.GetHash()] = uploadSampler; // take as granted that samplers are not duplicated
+
+            // Update loading bar
+            progress++;
         }
         model.m_samplers.push_back(g_defaultSampler);
         model.m_samplersMap[g_defaultSampler->info.GetHash()] = g_defaultSampler;
+
+        progress = 0;
+        uint32_t totalPrimitives = 0;
+        for (size_t i = 0; i < model.meshes.size(); i++)
+        {
+            tinygltf::Mesh &mesh = model.meshes[i];
+            for (size_t j = 0; j < mesh.primitives.size(); j++)
+            totalPrimitives++;
+        }
+        total = totalPrimitives;
+        loading = "Loading material pipeline info";
 
         // Material info for pipeline creation
         model.m_meshesInfo.resize(model.meshes.size());
@@ -217,8 +248,15 @@ namespace pe
                 }
                 materialInfo.cullMode = material.doubleSided ? CullMode::None : CullMode::Front;
                 materialInfo.alphaBlend = material.alphaMode == "BLEND" || material.alphaMode == "MASK";
+
+                // Update loading bar
+                progress++;
             }
         }
+
+        progress = 0;
+        total = totalPrimitives;
+        loading = "Loading aabbs";
 
         uint32_t verticesCount = 0;
         uint32_t indicesCount = 0;
@@ -251,8 +289,15 @@ namespace pe
                 primitiveInfo.aabbVertexOffset = primitivesCount * 8;
 
                 primitivesCount++;
+
+                // Update loading bar
+                progress++;
             }
         }
+
+        progress = 0;
+        total = verticesCount + indicesCount;
+        loading = "Loading vertices and indices";
 
         model.m_vertices.reserve(verticesCount);
         model.m_positionUvs.reserve(verticesCount);
@@ -407,6 +452,9 @@ namespace pe
 
                     vertices.push_back(vertex);
                     positionUvs.push_back(positionUvVertex);
+
+                    // Update loading bar
+                    progress++;
                 }
 
                 // ------------ Indices ------------
@@ -442,6 +490,9 @@ namespace pe
                     {
                         PE_ERROR("Invalid indices type");
                     }
+
+                    // Update loading bar
+                    progress += primitive.indices;
                 }
 
                 // AABBs Vertices
@@ -465,6 +516,10 @@ namespace pe
                 }
             }
         }
+
+        progress = 0;
+        total = static_cast<uint32_t>(model.nodes.size());
+        loading = "Loading nodes";
 
         // update nodes info
         model.dirtyNodes = true; // set dirty so the 1st call to UpdateNodeMatrix will update nodeInfo.ubo.worldMatrix and primitiveInfo.worldBoundingBox
@@ -518,17 +573,32 @@ namespace pe
             {
                 model.m_nodesInfo[child].parent = i;
             }
+
+            // Update loading bar
+            progress++;
         }
 
+        progress = 0;
+        total = static_cast<uint32_t>(model.nodes.size());
+        loading = "Updating node matrices";
         for (int i = 0; i < model.nodes.size(); i++)
         {
             model.UpdateNodeMatrix(i);
+
+            // Update loading bar
+            progress++;
         }
+
+        progress = 0;
+        total = 1;
+        loading = "Upoading buffers";
 
         modelGltf->render = false;
         Scene &scene = GetGlobalSystem<RendererSystem>()->GetScene();
         scene.AddModel(modelGltf);
         scene.InitGeometry(cmd);
+
+        progress++;
 
         cmd->End();
         queue->Submit(1, &cmd);

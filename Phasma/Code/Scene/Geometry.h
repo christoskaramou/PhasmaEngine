@@ -82,6 +82,7 @@ namespace pe
         size_t m_positionsOffset = 0;         // in bytes (offset in geometryBuffer), for PositionUvVertex range
         size_t m_aabbVerticesOffset = 0;      // in bytes (offset in geometryBuffer), for AABB range
         size_t m_aabbIndicesOffset = 0;       // in bytes (offset in geometryBuffer), for Shadows range
+        uint32_t m_primitivesCount = 0;
         std::vector<uint32_t> m_aabbIndices;
         std::vector<ImageViewApiHandle> m_imageViews{};
         std::vector<Sampler *> m_samplers{};
@@ -89,7 +90,6 @@ namespace pe
         std::vector<DrawInfo> m_drawInfosOpaque;
         std::vector<DrawInfo> m_drawInfosAlphaCut;
         std::vector<DrawInfo> m_drawInfosAlphaBlend;
-        uint32_t m_primitivesCount = 0;
         std::vector<DrawIndexedIndirectCommand> m_indirectCommands{};
     };
 }
