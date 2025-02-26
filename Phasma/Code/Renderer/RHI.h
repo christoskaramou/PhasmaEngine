@@ -53,10 +53,8 @@ namespace pe
         void CreateAllocator();
         void InitQueues();
         void CreateSwapchain(Surface *surface);
-        void InitCommandPools();
         void CreateDescriptorPool(uint32_t maxDescriptorSets);
         void CreateGlobalDescriptors();
-        void InitCmdBuffers(uint32_t bufferCount = 0);
         void CreateSemaphores(uint32_t semaphoresCount);
         void InitDownSampler();
         Format GetDepthFormat();
@@ -87,12 +85,13 @@ namespace pe
         const std::string &GetGpuName() { return m_gpuName; }
         const DeviceApiHandle &GetDevice() { return m_device; }
         DescriptorPool *GetDescriptorPool() { return m_descriptorPool; }
-        std::vector<Semaphore *> &GetSemaphores(uint32_t frameIndex) { return m_semaphores[frameIndex]; }
+        Semaphore *GetFreeBinarySemaphore(uint32_t frame);
+        void ClaimUsedBinarySemaphores(uint32_t frame);
         const AllocatorApiHandle &GetAllocator() { return m_allocator; }
+        Queue *GetMainQueue() { return m_mainQueue; }
         Queue *GetRenderQueue() { return m_renderQueue; }
         Queue *GetComputeQueue() { return m_computeQueue; }
         Queue *GetTransferQueue() { return m_transferQueue; }
-        Queue *GetPresentQueue() { return m_presentQueue; }
         SDL_Window *GetWindow() { return m_window; }
         Surface *GetSurface() { return m_surface; }
         Swapchain *GetSwapchain() { return m_swapchain; }
@@ -107,12 +106,14 @@ namespace pe
         std::string m_gpuName;
         DeviceApiHandle m_device;
         DescriptorPool *m_descriptorPool;
-        std::vector<Semaphore *> m_semaphores[SWAPCHAIN_IMAGES];
+        std::mutex m_binarySemaphoresMutex;
+        std::stack<Semaphore *> m_binarySemaphores[SWAPCHAIN_IMAGES];
+        std::stack<Semaphore *> m_usedBinarySemaphores[SWAPCHAIN_IMAGES];
         AllocatorApiHandle m_allocator;
+        Queue *m_mainQueue;
         Queue *m_renderQueue;
         Queue *m_computeQueue;
         Queue *m_transferQueue;
-        Queue *m_presentQueue;
         SDL_Window *m_window;
         Surface *m_surface;
         Swapchain *m_swapchain;

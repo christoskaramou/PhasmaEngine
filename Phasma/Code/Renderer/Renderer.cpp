@@ -70,12 +70,9 @@ namespace pe
         cmd->BlitImage(m_viewportRT, m_displayRT, &region, filter);
     }
 
-    std::vector<CommandBuffer *> Renderer::RecordPasses(uint32_t imageIndex)
+    CommandBuffer *Renderer::RecordPasses(uint32_t imageIndex)
     {
-        std::vector<CommandBuffer *> cmds{};
-        cmds.reserve(20);
-        cmds.push_back(CommandBuffer::GetFree(RHII.GetRenderQueue()));
-        CommandBuffer *cmd = cmds.back();
+        CommandBuffer *cmd = RHII.GetMainQueue()->GetCommandBuffer(CommandPoolCreate::TransientBit);
 
         ShadowPass &shadows = *GetGlobalComponent<ShadowPass>();
         SSAOPass &ssao = *GetGlobalComponent<SSAOPass>();
@@ -198,7 +195,7 @@ namespace pe
 
         cmd->End();
 
-        return cmds;
+        return cmd;
     }
 
     Image *Renderer::CreateRenderTarget(const std::string &name,
@@ -436,8 +433,7 @@ namespace pe
             // PollEvent simply catches a pushed event from FileWatcher
             if (info->pCompShader && EventSystem::PollEvent(info->pCompShader->GetPathID()) ||
                 info->pVertShader && EventSystem::PollEvent(info->pVertShader->GetPathID()) ||
-                info->pFragShader && EventSystem::PollEvent(info->pFragShader->GetPathID())
-            )
+                info->pFragShader && EventSystem::PollEvent(info->pFragShader->GetPathID()))
             {
                 Shader::Destroy(info->pCompShader);
                 Shader::Destroy(info->pVertShader);

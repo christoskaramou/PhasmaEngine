@@ -75,7 +75,7 @@ namespace pe
         void Upsample(CommandBuffer *cmd, Filter filter);
         void CreateRenderTargets();
 
-        std::vector<CommandBuffer *> RecordPasses(uint32_t imageIndex);
+        CommandBuffer *RecordPasses(uint32_t imageIndex);
         Image *m_displayRT;
         Image *m_viewportRT;
         Image *m_depthStencil;
@@ -83,7 +83,7 @@ namespace pe
         std::unordered_map<size_t, Image *> m_renderTargets{};
         std::unordered_map<size_t, Image *> m_depthStencilTargets{};
         Scene m_scene;
-        std::vector<CommandBuffer *> m_cmds[SWAPCHAIN_IMAGES];
+        CommandBuffer * m_cmds[SWAPCHAIN_IMAGES];
         RenderArea m_renderArea;
         SkyBox m_skyBoxDay;
         SkyBox m_skyBoxNight;

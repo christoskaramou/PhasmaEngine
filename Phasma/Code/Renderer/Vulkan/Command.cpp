@@ -13,96 +13,15 @@
 
 namespace pe
 {
-    CommandPool::CommandPool(uint32_t familyId, CommandPoolCreateFlags flags, const std::string &name)
-    {
-        m_familyId = familyId;
-        m_flags = flags;
-
-        VkCommandPoolCreateInfo cpci{};
-        cpci.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
-        cpci.queueFamilyIndex = familyId;
-        cpci.flags = Translate<VkCommandPoolCreateFlags>(flags);
-
-        VkCommandPool commandPool;
-        PE_CHECK(vkCreateCommandPool(RHII.GetDevice(), &cpci, nullptr, &commandPool));
-        m_apiHandle = commandPool;
-
-        Debug::SetObjectName(m_apiHandle, name);
-    }
-
-    CommandPool::~CommandPool()
-    {
-        if (m_apiHandle)
-        {
-            vkDestroyCommandPool(RHII.GetDevice(), m_apiHandle, nullptr);
-            m_apiHandle = {};
-        }
-    }
-
-    void CommandPool::Init(GpuApiHandle gpu)
-    {
-        uint32_t queueFamPropCount;
-        vkGetPhysicalDeviceQueueFamilyProperties(gpu, &queueFamPropCount, nullptr);
-
-        // CommandPools are creating CommandBuffers from a specific family id, this will have to
-        // match with the Queue created from a falily id that this CommandBuffer will be submited to.
-        s_allCps.resize(queueFamPropCount);
-        s_availableCps.resize(queueFamPropCount);
-        for (uint32_t i = 0; i < queueFamPropCount; i++)
-            s_availableCps[i] = {};
-    }
-
-    void CommandPool::Clear()
-    {
-        for (auto &cps : s_allCps)
-        {
-            for (auto &cp : cps)
-                CommandPool::Destroy(cp.second);
-        }
-
-        s_allCps.clear();
-        s_availableCps.clear();
-    }
-
-    CommandPool *CommandPool::GetFree(uint32_t familyId)
-    {
-        std::lock_guard<std::mutex> lock(s_getNextMutex);
-
-        if (s_availableCps[familyId].empty())
-        {
-            CommandPoolCreateFlags flags = CommandPoolCreate::TransientBit; // | CommandPoolCreate::ResetCommandBuffer;
-            CommandPool *cp = CommandPool::Create(familyId, flags, "CommandPool_" + std::to_string(familyId) + "_" + std::to_string(s_allCps[familyId].size()));
-            s_allCps[familyId][cp] = cp;
-            return cp;
-        }
-
-        CommandPool *cp = s_availableCps[familyId].begin()->second;
-        s_availableCps[familyId].erase(cp);
-        return cp;
-    }
-
-    void CommandPool::Return(CommandPool *commandPool)
-    {
-        std::lock_guard<std::mutex> lock(s_returnMutex);
-
-        uint32_t familyId = commandPool->GetFamilyId();
-
-        if (s_availableCps[familyId].find(commandPool) == s_availableCps[familyId].end())
-            s_availableCps[familyId][commandPool] = commandPool;
-    }
-
-    CommandBuffer::CommandBuffer(uint32_t familyId, const std::string &name)
+    CommandBuffer::CommandBuffer(CommandPool *commandPool, const std::string &name)
         : m_id{ID::NextID()},
-          m_familyId{familyId},
-          m_submitions{0},
+          m_submissions{0},
           m_renderPass{nullptr},
           m_boundPipeline{nullptr},
-          m_commandPool{CommandPool::GetFree(familyId)},
-          m_semaphore{Semaphore::Create(true, name + "_semaphore")},
+          m_commandPool{commandPool},
           m_event{Event::Create(name + "_event")},
           m_name{name}
     {
-
         VkCommandBufferAllocateInfo cbai{};
         cbai.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
         cbai.commandPool = m_commandPool->ApiHandle();
@@ -118,23 +37,17 @@ namespace pe
 
     CommandBuffer::~CommandBuffer()
     {
-        Semaphore::Destroy(m_semaphore);
-
-        if (m_apiHandle && m_commandPool)
-        {
-            VkCommandBuffer cmd = m_apiHandle;
-            vkFreeCommandBuffers(RHII.GetDevice(), m_commandPool->ApiHandle(), 1, &cmd);
-            m_apiHandle = {};
-
-            CommandPool::Return(m_commandPool);
-            m_commandPool = nullptr;
-        }
+        // if (m_apiHandle)
+        // {
+        //     VkCommandBuffer cmd = m_apiHandle;
+        //     vkFreeCommandBuffers(RHII.GetDevice(), m_commandPool->ApiHandle(), 1, &cmd);
+        //     m_apiHandle = {};
+        // }
     }
 
     void CommandBuffer::Begin()
     {
-        if (m_recording)
-            PE_ERROR("CommandBuffer::Begin: CommandBuffer is already recording!");
+        PE_ERROR_IF(m_recording, "CommandBuffer::Begin: CommandBuffer is already recording!");
 
         Reset();
 
@@ -153,8 +66,7 @@ namespace pe
     {
         EndDebugRegion();
 
-        if (!m_recording)
-            PE_ERROR("CommandBuffer::End: CommandBuffer is not in recording state!");
+        PE_ERROR_IF(!m_recording, "CommandBuffer::End: CommandBuffer is not in recording state!");
 
         PE_CHECK(vkEndCommandBuffer(m_apiHandle));
         m_recording = false;
@@ -162,10 +74,9 @@ namespace pe
 
     void CommandBuffer::Reset()
     {
-        if (m_commandPool->GetFlags() & CommandPoolCreate::ResetCommandBuffer)
-            vkResetCommandBuffer(m_apiHandle, 0);
-        else
-            vkResetCommandPool(RHII.GetDevice(), m_commandPool->ApiHandle(), 0);
+        PE_ERROR_IF(!(m_commandPool->GetFlags() & CommandPoolCreate::ResetCommandBuffer), "CommandBuffer::Reset: CommandPool does not have the reset flag!");
+
+        vkResetCommandBuffer(m_apiHandle, 0);
     }
 
     void CommandBuffer::SetDepthBias(float constantFactor, float clamp, float slopeFactor)
@@ -906,91 +817,34 @@ namespace pe
         Debug::EndCmdRegion(this);
     }
 
-    void CommandBuffer::Init(GpuApiHandle gpu, uint32_t countPerFamily)
+    Queue *CommandBuffer::GetQueue() const
     {
-        uint32_t queueFamPropCount;
-        vkGetPhysicalDeviceQueueFamilyProperties(gpu, &queueFamPropCount, nullptr);
-
-        // CommandPools are creating CommandBuffers from a specific family id, this will have to
-        // match with the Queue created from a falily id that this CommandBuffer will be submited to.
-        s_allCmds = std::vector<std::unordered_map<size_t, CommandBuffer *>>(queueFamPropCount);
-        s_availableCmds = std::vector<std::unordered_map<size_t, CommandBuffer *>>(queueFamPropCount);
-        for (uint32_t i = 0; i < queueFamPropCount; i++)
-        {
-            s_allCmds[i] = std::unordered_map<size_t, CommandBuffer *>();
-            s_availableCmds[i] = std::unordered_map<size_t, CommandBuffer *>();
-            for (uint32_t j = 0; j < countPerFamily; j++)
-            {
-                std::string name = "CommandBuffer_" + std::to_string(i) + "_" + std::to_string(j);
-                CommandBuffer *cmd = CommandBuffer::Create(i, name);
-                s_allCmds[i][cmd->m_id] = cmd;
-                s_availableCmds[i][cmd->m_id] = cmd;
-            }
-        }
+        return m_commandPool->GetQueue();
     }
-
-    void CommandBuffer::Clear()
+    
+    uint32_t CommandBuffer::GetFamilyId() const
     {
-        for (auto &cmds : s_allCmds)
-        {
-            for (auto cmd : cmds)
-                CommandBuffer::Destroy(cmd.second);
-        }
-
-        s_availableCmds.clear();
-    }
-
-    CommandBuffer *CommandBuffer::GetFree(uint32_t familyId)
-    {
-        std::lock_guard<std::mutex> lock(s_getNextMutex);
-
-        if (s_availableCmds[familyId].empty())
-        {
-            std::string name = "CommandBuffer_" + std::to_string(familyId) + "_" + std::to_string(s_allCmds[familyId].size());
-            CommandBuffer *cmd = CommandBuffer::Create(familyId, name);
-            s_allCmds[familyId][cmd->m_id] = cmd;
-            return cmd;
-        }
-
-        CommandBuffer *cmd = s_availableCmds[familyId].begin()->second;
-        s_availableCmds[familyId].erase(cmd->m_id);
-
-        return cmd;
-    }
-
-    CommandBuffer *CommandBuffer::GetFree(Queue *queue)
-    {
-        return GetFree(queue->GetFamilyId());
-    }
-
-    void CommandBuffer::Return(CommandBuffer *cmd)
-    {
-        std::lock_guard<std::mutex> lock(s_returnMutex);
-
-        // CHECKS
-        // -------------------------------------------------------------
-        PE_ERROR_IF(!cmd || !cmd->m_apiHandle, "CommandBuffer::Return: CommandBuffer is null or invalid");
-        PE_ERROR_IF(s_allCmds[cmd->GetFamilyId()].find(cmd->m_id) == s_allCmds[cmd->m_familyId].end(), "CommandBuffer::Return: CommandBuffer does not belong to pool");
-        PE_ERROR_IF(cmd->m_recording, "CommandBuffer::Return: " + cmd->m_name + " is still recording!");
-        PE_ERROR_IF(cmd->m_semaphore->GetValue() != cmd->m_submitions, "CommandBuffer::Return: " + cmd->m_name + " has not finished!");
-        //--------------------------------------------------------------
-
-        s_availableCmds[cmd->GetFamilyId()][cmd->m_id] = cmd;
+        return GetQueue()->GetFamilyId();
     }
 
     void CommandBuffer::Wait()
     {
-        std::lock_guard<std::mutex> lock(s_WaitMutex);
+        std::lock_guard<std::mutex> lock(m_WaitMutex);
 
-        PE_ERROR_IF(m_recording, "CommandBuffer::Wait: " + m_name + " is still recording!");
+        PE_ERROR_IF(m_recording, "CommandBuffer::Wait: CommandBuffer is still recording!");
 
-        m_semaphore->Wait(m_submitions);
+        GetQueue()->GetSubmissionsSemaphore()->Wait(m_submissions);
 
         if (!m_afterWaitCallbacks.IsEmpty())
         {
             m_afterWaitCallbacks.ReverseInvoke();
             m_afterWaitCallbacks.Clear();
         }
+    }
+
+    void CommandBuffer::Return()
+    {
+        GetQueue()->ReturnCommandBuffer(this);
     }
 
     void CommandBuffer::AddAfterWaitCallback(Delegate<>::FunctionType &&func)

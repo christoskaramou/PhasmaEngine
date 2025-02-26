@@ -93,7 +93,7 @@ namespace pe
             barrierInfo.accessMask = Access::None;
             cmd->ImageBarrier(barrierInfo); // transition from undefined to present
 
-            m_cmds[i] = std::vector<CommandBuffer *>{};
+            m_cmds[i] = nullptr;
         }
     }
 
@@ -126,42 +126,43 @@ namespace pe
 
     void RendererSystem::WaitPreviousFrameCommands()
     {
-        uint32_t frameIndex = RHII.GetFrameIndex();
-        auto &frameCmds = m_cmds[frameIndex];
+        uint32_t frame = RHII.GetFrameIndex();
 
-        // Wait for unfinished work
-        for (auto &cmd : frameCmds)
+        auto &frameCmd = m_cmds[frame];
+        if (frameCmd)
         {
-            if (cmd)
-            {
-                cmd->Wait();
-                CommandBuffer::Return(cmd);
-            }
+            frameCmd->Wait();
+            frameCmd->Return();
+            frameCmd = nullptr;
         }
-        frameCmds.clear();
+
+        RHII.ClaimUsedBinarySemaphores(frame);
     }
 
     void RendererSystem::Draw()
     {
-        uint32_t frameIndex = RHII.GetFrameIndex();
+        uint32_t frame = RHII.GetFrameIndex();
 
         // acquire the image
-        Semaphore *aquireSignalSemaphore = RHII.GetSemaphores(frameIndex)[0];
+        Semaphore *aquireSignalSemaphore = RHII.GetFreeBinarySemaphore(frame);
         Swapchain *swapchain = RHII.GetSwapchain();
         uint32_t imageIndex = swapchain->Aquire(aquireSignalSemaphore);
 
-        auto &frameCmds = m_cmds[frameIndex];
 
         // RECORD COMMANDS
-        frameCmds = RecordPasses(imageIndex);
+        auto &frameCmd = m_cmds[frame];
+        frameCmd = RecordPasses(imageIndex);
 
         // SUBMIT TO QUEUE
         aquireSignalSemaphore->SetStageFlags(PipelineStage::ColorAttachmentOutputBit | PipelineStage::ComputeShaderBit);
-        Semaphore *submitsSemaphore = Queue::SubmitCommands(aquireSignalSemaphore, frameCmds);
+        Semaphore *signal = RHII.GetFreeBinarySemaphore(frame);
+        signal->SetStageFlags(PipelineStage::AllCommandsBit);
+
+        Queue *queue = RHII.GetMainQueue();
+        queue->Submit(1, &frameCmd, aquireSignalSemaphore, signal);
 
         // PRESENT
-        if (submitsSemaphore)
-            RHII.GetRenderQueue()->Present(1, &swapchain, &imageIndex, 1, &submitsSemaphore);
+        queue->Present(swapchain, imageIndex, signal);
     }
 
     void RendererSystem::Destroy()

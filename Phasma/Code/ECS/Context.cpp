@@ -12,8 +12,8 @@ namespace pe
 
     void Context::InitSystems()
     {
-        Queue *queue = Queue::Get(QueueType::GraphicsBit | QueueType::TransferBit, 1);
-        CommandBuffer *cmd = CommandBuffer::GetFree(queue);
+        Queue *queue = RHII.GetMainQueue();
+        CommandBuffer *cmd = queue->GetCommandBuffer(CommandPoolCreate::TransientBit);
         cmd->Begin();
 
         for (auto &system : m_systems)
@@ -23,10 +23,9 @@ namespace pe
         }
 
         cmd->End();
-        queue->Submit(1, &cmd);
+        queue->Submit(1, &cmd, nullptr, nullptr);
         cmd->Wait();
-
-        CommandBuffer::Return(cmd);
+        cmd->Return();
     }
 
     void Context::DestroySystems()

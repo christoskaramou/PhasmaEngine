@@ -299,10 +299,9 @@ namespace pe
 
 #if PE_DEBUG_MODE
         std::unordered_set<Queue *> queues{
-            RHII.GetRenderQueue(),
+            RHII.GetMainQueue(),
             RHII.GetTransferQueue(),
-            RHII.GetComputeQueue(),
-            RHII.GetPresentQueue()};
+            RHII.GetComputeQueue()};
 
         float gpuTotal = 0.f;
         for (auto *queue : queues)
@@ -313,14 +312,14 @@ namespace pe
         for (auto *queue : queues)
         {
             std::string name;
-            if (queue == RHII.GetRenderQueue())
+            if (queue == RHII.GetMainQueue())
+                name = "Main Queue";
+            else if (queue == RHII.GetRenderQueue())
                 name = "Render Queue";
             else if (queue == RHII.GetTransferQueue())
                 name = "Transfer Queue";
             else if (queue == RHII.GetComputeQueue())
                 name = "Compute Queue";
-            else if (queue == RHII.GetPresentQueue())
-                name = "Present Queue";
 
             float time = GetQueueTotalTime(queue);
             SetTextColorTemp(time, gpuTotal);

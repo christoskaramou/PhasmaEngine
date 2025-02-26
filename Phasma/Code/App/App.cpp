@@ -47,8 +47,8 @@ namespace pe
 
         RHII.Init(m_window->ApiHandle());
 
-        Queue *queue = Queue::Get(QueueType::GraphicsBit | QueueType::TransferBit, 1);
-        CommandBuffer *cmd = CommandBuffer::GetFree(queue);
+        Queue *queue = RHII.GetMainQueue();
+        CommandBuffer *cmd = queue->GetCommandBuffer(CommandPoolCreate::TransientBit);
 
         cmd->Begin();
         CreateGlobalSystem<CameraSystem>()->Init(cmd);
@@ -57,11 +57,11 @@ namespace pe
         CreateGlobalSystem<PostProcessSystem>()->Init(cmd);
         cmd->End();
 
-        queue->Submit(1, &cmd);
+        queue->Submit(1, &cmd, nullptr, nullptr);
 
         cmd->Wait();
-        CommandBuffer::Return(cmd);
-
+        cmd->Return();
+        
         queue->WaitIdle();
 
         // Render some frames so everything is initialized before destroying the splash screen

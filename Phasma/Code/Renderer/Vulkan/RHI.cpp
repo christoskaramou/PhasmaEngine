@@ -48,11 +48,8 @@ namespace pe
         CreateDevice();
         CreateAllocator();
         InitQueues();
-        InitCommandPools();
-        InitCmdBuffers(SWAPCHAIN_IMAGES);
         CreateSwapchain(m_surface);
         CreateDescriptorPool(150); // General purpose descriptor pool
-        CreateSemaphores(50);
         InitDownSampler();
     }
 
@@ -61,8 +58,6 @@ namespace pe
         WaitDeviceIdle();
 
         Queue::Clear();
-        CommandBuffer::Clear();
-        CommandPool::Clear();
         PeHandleBase::DestroyAllIHandles();
         vmaDestroyAllocator(m_allocator);
         if (m_device)
@@ -366,20 +361,34 @@ namespace pe
     {
         Queue::Init(m_gpu, m_device, m_surface->ApiHandle());
 
-        m_renderQueue = Queue::Get(QueueType::GraphicsBit | QueueType::PresentBit, 1);
-        m_computeQueue = Queue::Get(QueueType::ComputeBit, 1);
-        m_transferQueue = Queue::Get(QueueType::TransferBit, 1);
-        m_presentQueue = Queue::Get(QueueType::PresentBit, 1); // needs VK_SHARING_MODE_CONCURRENT for different queue families
+        // main queue
+        m_mainQueue = Queue::Get(QueueType::GraphicsBit | QueueType::PresentBit | QueueType::ComputeBit | QueueType::TransferBit, 1);
+
+        // render queue
+        m_renderQueue = Queue::Get(QueueType::GraphicsBit | QueueType::PresentBit, 1, {m_mainQueue});
+        if (!m_renderQueue)
+            m_renderQueue = Queue::Get(QueueType::GraphicsBit | QueueType::PresentBit, 1);
+
+        // compute queue
+        m_computeQueue = Queue::Get(QueueType::ComputeBit, 1, {m_mainQueue, m_renderQueue});
+        if (!m_computeQueue)
+            m_computeQueue = Queue::Get(QueueType::ComputeBit, 1, {m_renderQueue});
+        if (!m_computeQueue)
+            m_computeQueue = Queue::Get(QueueType::ComputeBit, 1);
+
+        // transfer queue
+        m_transferQueue = Queue::Get(QueueType::TransferBit, 1, {m_mainQueue, m_renderQueue, m_computeQueue});
+        if (!m_transferQueue)
+            m_transferQueue = Queue::Get(QueueType::TransferBit, 1, {m_renderQueue, m_computeQueue});
+        if (!m_transferQueue)
+            m_transferQueue = Queue::Get(QueueType::TransferBit, 1, {m_computeQueue});
+        if (!m_transferQueue)
+            m_transferQueue = Queue::Get(QueueType::TransferBit, 1);
     }
 
     void RHI::CreateSwapchain(Surface *surface)
     {
         m_swapchain = Swapchain::Create(surface, "RHI_swapchain");
-    }
-
-    void RHI::InitCommandPools()
-    {
-        CommandPool::Init(m_gpu);
     }
 
     void RHI::CreateDescriptorPool(uint32_t maxDescriptorSets)
@@ -396,21 +405,6 @@ namespace pe
         descPoolsizes[4].type = DescriptorType::UniformBufferDynamic;
         descPoolsizes[4].descriptorCount = maxDescriptorSets;
         m_descriptorPool = DescriptorPool::Create(5, descPoolsizes, "RHI_descriptor_pool");
-    }
-
-    void RHI::InitCmdBuffers(uint32_t bufferCount)
-    {
-        CommandBuffer::Init(m_gpu, bufferCount);
-    }
-
-    void RHI::CreateSemaphores(uint32_t semaphoresCount)
-    {
-        for (uint32_t i = 0; i < SWAPCHAIN_IMAGES; i++)
-        {
-            m_semaphores[i].resize(semaphoresCount);
-            for (uint32_t j = 0; j < semaphoresCount; j++)
-                m_semaphores[i][j] = Semaphore::Create(false, "RHI_semaphore_" + std::to_string(i) + "_" + std::to_string(j));
-        }
     }
 
     void RHI::InitDownSampler()
@@ -451,6 +445,36 @@ namespace pe
     void RHI::WaitDeviceIdle()
     {
         PE_CHECK(vkDeviceWaitIdle(m_device));
+    }
+
+    Semaphore *RHI::GetFreeBinarySemaphore(uint32_t frame)
+    {
+        std::lock_guard<std::mutex> lock(m_binarySemaphoresMutex);
+
+        auto &frameBinarySemaphores = m_binarySemaphores[frame];
+        auto &usedFrameBinarySemaphores = m_usedBinarySemaphores[frame];
+
+        if (frameBinarySemaphores.empty())
+            frameBinarySemaphores.push(Semaphore::Create(false, "RHI_binary_semaphore"));
+
+        usedFrameBinarySemaphores.push(frameBinarySemaphores.top());
+        frameBinarySemaphores.pop();
+
+        return usedFrameBinarySemaphores.top();
+    }
+
+    void RHI::ClaimUsedBinarySemaphores(uint32_t frame)
+    {
+        std::lock_guard<std::mutex> lock(m_binarySemaphoresMutex);
+
+        auto &frameBinarySemaphores = m_binarySemaphores[frame];
+        auto &usedFrameBinarySemaphores = m_usedBinarySemaphores[frame];
+
+        while (!usedFrameBinarySemaphores.empty())
+        {
+            frameBinarySemaphores.push(usedFrameBinarySemaphores.top());
+            usedFrameBinarySemaphores.pop();
+        }
     }
 
     uint64_t RHI::GetMemoryUsageSnapshot()

@@ -67,8 +67,8 @@ namespace pe
         total = static_cast<uint32_t>(model.images.size() + model.samplers.size());
         loading = "Loading Images";
 
-        Queue *queue = RHII.GetRenderQueue();
-        CommandBuffer *cmd = CommandBuffer::GetFree(queue);
+        Queue *queue = RHII.GetMainQueue();
+        CommandBuffer *cmd = queue->GetCommandBuffer(CommandPoolCreate::TransientBit);
         cmd->Begin();
 
         // Upload images
@@ -601,7 +601,7 @@ namespace pe
         progress++;
 
         cmd->End();
-        queue->Submit(1, &cmd);
+        queue->Submit(1, &cmd, nullptr, nullptr);
         cmd->Wait();
         modelGltf->render = true;
 

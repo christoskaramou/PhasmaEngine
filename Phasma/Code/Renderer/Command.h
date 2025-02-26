@@ -15,6 +15,7 @@ namespace pe
     class Queue;
     class PassInfo;
     class Event;
+    class CommandPool;
     struct ImageBarrierInfo;
     struct BufferBarrierInfo;
 
@@ -98,34 +99,10 @@ namespace pe
         uint8_t m_data[N];
     };
 
-    class CommandPool : public PeHandle<CommandPool, CommandPoolApiHandle>
-    {
-    public:
-        CommandPool(uint32_t familyId, CommandPoolCreateFlags flags, const std::string &name);
-        ~CommandPool();
-
-        static void Init(GpuApiHandle gpu);
-        static void Clear();
-        static CommandPool *GetFree(uint32_t familyId);
-        static void Return(CommandPool *commandPool);
-
-        uint32_t GetFamilyId() const { return m_familyId; }
-        CommandPoolCreateFlags GetFlags() { return m_flags; }
-
-    private:
-        inline static std::vector<std::unordered_map<CommandPool *, CommandPool *>> s_availableCps{};
-        inline static std::vector<std::unordered_map<CommandPool *, CommandPool *>> s_allCps{};
-        inline static std::mutex s_getNextMutex{};
-        inline static std::mutex s_returnMutex{};
-
-        uint32_t m_familyId;
-        CommandPoolCreateFlags m_flags;
-    };
-
     class CommandBuffer : public PeHandle<CommandBuffer, CommandBufferApiHandle>
     {
     public:
-        CommandBuffer(uint32_t familyId, const std::string &name);
+        CommandBuffer(CommandPool *commandPool, const std::string &name);
         ~CommandBuffer();
 
         void Begin();
@@ -183,20 +160,16 @@ namespace pe
         void BeginDebugRegion(const std::string &name);
         void InsertDebugLabel(const std::string &name);
         void EndDebugRegion();
-        uint32_t GetFamilyId() const { return m_familyId; }
-        Semaphore *GetSemaphore() const { return m_semaphore; }
-        uint64_t IncreaseSumbitions() { return ++m_submitions; }
+        uint32_t GetFamilyId() const;
+        Queue *GetQueue() const;
+        void SetSubmissions(uint64_t submissions) { m_submissions = submissions; }
         void Wait();
+        void Return();
         CommandPool *GetCommandPool() const { return m_commandPool; }
         void AddAfterWaitCallback(Delegate<>::FunctionType &&func);
         void SetPassName(const std::string &name) { m_passName = name; }
 
         // Resourses functionality
-        static void Init(GpuApiHandle gpu, uint32_t countPerFamily = 0);
-        static void Clear();
-        static CommandBuffer *GetFree(uint32_t familyId);
-        static CommandBuffer *GetFree(Queue *queue);
-        static void Return(CommandBuffer *cmd);
         static RenderPass *GetRenderPass(uint32_t count, Attachment *attachments);
         static Framebuffer *GetFramebuffer(RenderPass *renderPass, uint32_t count, Attachment *attachments);
         static Pipeline *GetPipeline(RenderPass *renderPass, PassInfo &info);
@@ -212,22 +185,15 @@ namespace pe
         friend class Debug;
 
         // Resources
-        inline static std::vector<std::unordered_map<size_t, CommandBuffer *>> s_availableCmds{};
-        inline static std::vector<std::unordered_map<size_t, CommandBuffer *>> s_allCmds{};
         inline static std::unordered_map<size_t, RenderPass *> s_renderPasses{};
         inline static std::unordered_map<size_t, Framebuffer *> s_framebuffers{};
         inline static std::unordered_map<size_t, Pipeline *> s_pipelines{};
 
-        inline static std::mutex s_getNextMutex{};
-        inline static std::mutex s_returnMutex{};
-        inline static std::mutex s_WaitMutex{};
-
+        std::mutex m_WaitMutex{};
         size_t m_id;
         CommandPool *m_commandPool;
-        uint32_t m_familyId;
-        Semaphore *m_semaphore;
         Event *m_event;
-        std::atomic_uint64_t m_submitions;
+        uint64_t m_submissions;
         bool m_recording = false;
         std::string m_name;
         std::string m_passName;
