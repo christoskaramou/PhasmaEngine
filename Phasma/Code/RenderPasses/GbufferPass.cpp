@@ -1,6 +1,6 @@
 #include "GbufferPass.h"
 #include "Scene/Model.h"
-#include "Shader/Shader.h"
+#include "Renderer/Shader.h"
 #include "tinygltf/stb_image.h"
 #include "Renderer/RHI.h"
 #include "Renderer/Command.h"

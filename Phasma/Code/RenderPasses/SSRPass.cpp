@@ -6,7 +6,7 @@
 #include "Renderer/Pipeline.h"
 #include "Renderer/Buffer.h"
 #include "Renderer/RHI.h"
-#include "Shader/Shader.h"
+#include "Renderer/Shader.h"
 #include "Systems/RendererSystem.h"
 #include "Systems/CameraSystem.h"
 

@@ -172,6 +172,7 @@ namespace pe
                 int w, h;
                 SDL_Vulkan_GetDrawableSize(m_apiHandle, &w, &h);
                 rendererSystem->Resize(static_cast<uint32_t>(w), static_cast<uint32_t>(h));
+                postProcessSystem->Resize(static_cast<uint32_t>(w), static_cast<uint32_t>(h));
             }
         }
 

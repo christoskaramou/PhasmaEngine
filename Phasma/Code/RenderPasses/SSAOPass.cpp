@@ -1,6 +1,6 @@
 #ifdef PE_VULKAN
 #include "SSAOPass.h"
-#include "Shader/Shader.h"
+#include "Renderer/Shader.h"
 #include "Renderer/RHI.h"
 #include "Renderer/Command.h"
 #include "Renderer/Image.h"

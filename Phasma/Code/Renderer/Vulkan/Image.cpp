@@ -3,7 +3,7 @@
 #include "Renderer/RHI.h"
 #include "Renderer/Command.h"
 #include "Renderer/Buffer.h"
-#include "Utilities/Downsampler.h"
+#include "Renderer/Downsampler.h"
 #include "tinygltf/stb_image.h"
 
 namespace pe

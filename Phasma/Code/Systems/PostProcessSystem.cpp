@@ -3,7 +3,7 @@
 #include "Systems/CameraSystem.h"
 #include "Renderer/RHI.h"
 #include "Renderer/Pipeline.h"
-#include "Shader/Shader.h"
+#include "Renderer/Shader.h"
 #include "RenderPasses/BloomPass.h"
 #include "RenderPasses/DOFPass.h"
 #include "RenderPasses/FXAAPass.h"

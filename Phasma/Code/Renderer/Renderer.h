@@ -1,10 +1,5 @@
 #pragma once
 
-#include "GUI/GUI.h"
-#include "Renderer/Skybox.h"
-#include "Script/Script.h"
-#include "Scene/Scene.h"
-
 namespace pe
 {
     class CommandBuffer;
@@ -59,34 +54,21 @@ namespace pe
         Image *GetViewportRT() { return m_viewportRT; }
         Image *GetDepthStencilRT() { return m_depthStencil; }
         Image *CreateFSSampledImage(bool useRenderTergetScale = true);
-        void LoadResources(CommandBuffer *cmd);
-        void CreateUniforms();
         void Resize(uint32_t width, uint32_t height);
         void BlitToSwapchain(CommandBuffer *cmd, Image *renderedImage, uint32_t imageIndex);
         void PollShaders();
-        Scene &GetScene() { return m_scene; }
-        const SkyBox &GetSkyBoxDay() const { return m_skyBoxDay; }
-        const SkyBox &GetSkyBoxNight() const { return m_skyBoxNight; }
-        const GUI &GetGUI() const { return m_gui; }
-        void ToggleGUI() { m_gui.ToggleRender(); }
 
     protected:
-        void ComputeAnimations();
         void Upsample(CommandBuffer *cmd, Filter filter);
         void CreateRenderTargets();
 
-        CommandBuffer *RecordPasses(uint32_t imageIndex);
         Image *m_displayRT;
         Image *m_viewportRT;
         Image *m_depthStencil;
         OrderedMap<size_t, IRenderPassComponent *> m_renderPassComponents{};
         std::unordered_map<size_t, Image *> m_renderTargets{};
         std::unordered_map<size_t, Image *> m_depthStencilTargets{};
-        Scene m_scene;
         CommandBuffer * m_cmds[SWAPCHAIN_IMAGES];
         RenderArea m_renderArea;
-        SkyBox m_skyBoxDay;
-        SkyBox m_skyBoxNight;
-        GUI m_gui;
     };
 }

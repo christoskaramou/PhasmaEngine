@@ -1,5 +1,5 @@
-#include "Utilities/Downsampler.h"
-#include "Shader/Shader.h"
+#include "Renderer/Downsampler.h"
+#include "Renderer/Shader.h"
 #include "Renderer/RHI.h"
 #include "Renderer/Command.h"
 #include "Renderer/Descriptor.h"

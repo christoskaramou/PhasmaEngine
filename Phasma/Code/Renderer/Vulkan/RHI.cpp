@@ -8,7 +8,7 @@
 #include "Renderer/Queue.h"
 #include "Renderer/Buffer.h"
 #include "Renderer/Surface.h"
-#include "Utilities/Downsampler.h"
+#include "Renderer/Downsampler.h"
 
 #if defined(_WIN32)
 // On Windows, Vulkan commands use the stdcall convention

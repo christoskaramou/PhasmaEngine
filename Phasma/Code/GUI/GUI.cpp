@@ -1,7 +1,7 @@
 #include "GUI.h"
 #include "TinyFileDialogs/tinyfiledialogs.h"
 #include "Renderer/Vertex.h"
-#include "Shader/Shader.h"
+#include "Renderer/Shader.h"
 #include "Renderer/RHI.h"
 #include "Scene/Model.h"
 #include "Systems/CameraSystem.h"

@@ -1,7 +1,7 @@
 #include "Scene/Scene.h"
 #include "Systems/RendererSystem.h"
 #include "Systems/LightSystem.h"
-#include "Shader/Shader.h"
+#include "Renderer/Shader.h"
 #include "Renderer/Image.h"
 #include "Renderer/RHI.h"
 #include "Renderer/Queue.h"

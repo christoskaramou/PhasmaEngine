@@ -1,7 +1,5 @@
-#include "Shader/Shader.h"
+#include "Renderer/Shader.h"
 #include "Renderer/Pipeline.h"
-#include <locale>
-#include <codecvt>
 
 namespace pe
 {
