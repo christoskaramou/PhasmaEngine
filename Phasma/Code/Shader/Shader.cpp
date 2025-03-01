@@ -288,23 +288,33 @@ namespace pe
 
     std::wstring ConvertUtf8ToWide(const std::string &str)
     {
-        std::wstring wide_str;
-        std::mbstate_t state = std::mbstate_t();
-        const char *src = str.data();
-        std::size_t len = str.size();
-        std::vector<wchar_t> buffer(len);
+#ifdef _WIN32
+        if (str.empty())
+            return std::wstring();
 
-        const char *src_end = src + len;
-        wchar_t *dst = buffer.data();
-        wchar_t *dst_end = dst + buffer.size();
+        int size_needed = MultiByteToWideChar(CP_UTF8, 0, str.c_str(), -1, nullptr, 0);
+        if (size_needed <= 0)
+            return std::wstring();
 
-        std::codecvt_utf8<wchar_t> conv;
-        auto result = conv.in(state, src, src_end, src, dst, dst_end, dst);
-
-        if (result == std::codecvt_base::ok)
-            wide_str.assign(buffer.data(), dst);
+        std::wstring wide_str(size_needed - 1, 0); // -1 to remove null terminator
+        MultiByteToWideChar(CP_UTF8, 0, str.c_str(), -1, &wide_str[0], size_needed);
 
         return wide_str;
+#else
+        if (str.empty())
+            return std::wstring();
+
+        std::mbstate_t state = std::mbstate_t();
+        const char *src = str.c_str();
+        std::size_t len = std::mbsrtowcs(nullptr, &src, 0, &state);
+        if (len == static_cast<std::size_t>(-1))
+            return std::wstring();
+
+        std::vector<wchar_t> buffer(len + 1);
+        std::mbsrtowcs(buffer.data(), &src, buffer.size(), &state);
+
+        return std::wstring(buffer.data());
+#endif
     }
 
     namespace
