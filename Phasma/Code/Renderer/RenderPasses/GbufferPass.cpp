@@ -20,40 +20,42 @@ namespace pe
     {
         RendererSystem *rs = GetGlobalSystem<RendererSystem>();
 
-        srmRT = rs->GetRenderTarget("srm"); // Specular Roughness Metallic
-        normalRT = rs->GetRenderTarget("normal");
-        albedoRT = rs->GetRenderTarget("albedo");
-        velocityRT = rs->GetRenderTarget("velocity");
-        emissiveRT = rs->GetRenderTarget("emissive");
-        viewportRT = rs->GetRenderTarget("viewport");
-        transparencyRT = rs->GetRenderTarget("transparency");
-        depthStencilRT = rs->GetDepthStencilTarget("depthStencil");
+        m_srmRT = rs->GetRenderTarget("srm"); // Specular Roughness Metallic
+        m_normalRT = rs->GetRenderTarget("normal");
+        m_albedoRT = rs->GetRenderTarget("albedo");
+        m_velocityRT = rs->GetRenderTarget("velocity");
+        m_emissiveRT = rs->GetRenderTarget("emissive");
+        m_viewportRT = rs->GetRenderTarget("viewport");
+        m_transparencyRT = rs->GetRenderTarget("transparency");
+        m_depthStencilRT = rs->GetDepthStencilTarget("depthStencil");
 
         m_attachments.resize(7);
         for (int i = 0; i < 7; i++)
         {
             m_attachments[i] = {};
         }
-        m_attachments[0].image = normalRT;
-        m_attachments[1].image = albedoRT;
-        m_attachments[2].image = srmRT;
-        m_attachments[3].image = velocityRT;
-        m_attachments[4].image = emissiveRT;
-        m_attachments[5].image = transparencyRT;
+        m_attachments[0].image = m_normalRT;
+        m_attachments[1].image = m_albedoRT;
+        m_attachments[2].image = m_srmRT;
+        m_attachments[3].image = m_velocityRT;
+        m_attachments[4].image = m_emissiveRT;
+        m_attachments[5].image = m_transparencyRT;
 
-        m_attachments[6].image = depthStencilRT;
+        m_attachments[6].image = m_depthStencilRT;
         m_attachments[6].loadOp = AttachmentLoadOp::Load;
+
+        m_geometry = nullptr;
     }
 
     void GbufferOpaquePass::UpdatePassInfo()
     {
         std::vector<Format> colorformats{
-            normalRT->GetFormat(),
-            albedoRT->GetFormat(),
-            srmRT->GetFormat(),
-            velocityRT->GetFormat(),
-            emissiveRT->GetFormat(),
-            transparencyRT->GetFormat()};
+            m_normalRT->GetFormat(),
+            m_albedoRT->GetFormat(),
+            m_srmRT->GetFormat(),
+            m_velocityRT->GetFormat(),
+            m_emissiveRT->GetFormat(),
+            m_transparencyRT->GetFormat()};
 
         Format depthFormat = RHII.GetDepthFormat();
 
@@ -111,8 +113,8 @@ namespace pe
                 cmd->BeginPass(7, m_attachments.data(), "GbufferOpaquePass");
                 cmd->BindIndexBuffer(m_geometry->GetBuffer(), 0);
                 cmd->BindVertexBuffer(m_geometry->GetBuffer(), m_geometry->GetVerticesOffset());
-                cmd->SetViewport(0.f, 0.f, depthStencilRT->GetWidth_f(), depthStencilRT->GetHeight_f());
-                cmd->SetScissor(0, 0, depthStencilRT->GetWidth(), depthStencilRT->GetHeight());
+                cmd->SetViewport(0.f, 0.f, m_depthStencilRT->GetWidth_f(), m_depthStencilRT->GetHeight_f());
+                cmd->SetScissor(0, 0, m_depthStencilRT->GetWidth(), m_depthStencilRT->GetHeight());
                 cmd->BindPipeline(*m_passInfo);
                 cmd->SetConstants(pushConstants);
                 cmd->PushConstants();
@@ -131,13 +133,13 @@ namespace pe
 
     void GbufferOpaquePass::ClearRenderTargets(CommandBuffer *cmd)
     {
-        std::vector<Image *> colorTargets{normalRT, albedoRT, srmRT, velocityRT, emissiveRT, viewportRT, transparencyRT};
+        std::vector<Image *> colorTargets{m_normalRT, m_albedoRT, m_srmRT, m_velocityRT, m_emissiveRT, m_viewportRT, m_transparencyRT};
         cmd->ClearColors(colorTargets);
     }
 
     void GbufferOpaquePass::ClearDepthStencil(CommandBuffer *cmd)
     {
-        cmd->ClearDepthStencils({depthStencilRT});
+        cmd->ClearDepthStencils({m_depthStencilRT});
     }
 
     void GbufferOpaquePass::Destroy()
@@ -148,14 +150,14 @@ namespace pe
     {
         RendererSystem *rs = GetGlobalSystem<RendererSystem>();
 
-        srmRT = rs->GetRenderTarget("srm"); // Specular Roughness Metallic
-        normalRT = rs->GetRenderTarget("normal");
-        albedoRT = rs->GetRenderTarget("albedo");
-        velocityRT = rs->GetRenderTarget("velocity");
-        emissiveRT = rs->GetRenderTarget("emissive");
-        viewportRT = rs->GetRenderTarget("viewport");
-        transparencyRT = rs->GetRenderTarget("transparency");
-        depthStencilRT = rs->GetDepthStencilTarget("depthStencil");
+        m_srmRT = rs->GetRenderTarget("srm"); // Specular Roughness Metallic
+        m_normalRT = rs->GetRenderTarget("normal");
+        m_albedoRT = rs->GetRenderTarget("albedo");
+        m_velocityRT = rs->GetRenderTarget("velocity");
+        m_emissiveRT = rs->GetRenderTarget("emissive");
+        m_viewportRT = rs->GetRenderTarget("viewport");
+        m_transparencyRT = rs->GetRenderTarget("transparency");
+        m_depthStencilRT = rs->GetDepthStencilTarget("depthStencil");
 
         m_attachments.resize(7);
         for (int i = 0; i < 7; i++)
@@ -163,24 +165,26 @@ namespace pe
             m_attachments[i] = {};
             m_attachments[i].loadOp = AttachmentLoadOp::Load;
         }
-        m_attachments[0].image = normalRT;
-        m_attachments[1].image = albedoRT;
-        m_attachments[2].image = srmRT;
-        m_attachments[3].image = velocityRT;
-        m_attachments[4].image = emissiveRT;
-        m_attachments[5].image = transparencyRT;
-        m_attachments[6].image = depthStencilRT;
+        m_attachments[0].image = m_normalRT;
+        m_attachments[1].image = m_albedoRT;
+        m_attachments[2].image = m_srmRT;
+        m_attachments[3].image = m_velocityRT;
+        m_attachments[4].image = m_emissiveRT;
+        m_attachments[5].image = m_transparencyRT;
+        m_attachments[6].image = m_depthStencilRT;
+
+        m_geometry = nullptr;
     }
 
     void GbufferTransparentPass::UpdatePassInfo()
     {
         std::vector<Format> colorformats{
-            normalRT->GetFormat(),
-            albedoRT->GetFormat(),
-            srmRT->GetFormat(),
-            velocityRT->GetFormat(),
-            emissiveRT->GetFormat(),
-            transparencyRT->GetFormat()};
+            m_normalRT->GetFormat(),
+            m_albedoRT->GetFormat(),
+            m_srmRT->GetFormat(),
+            m_velocityRT->GetFormat(),
+            m_emissiveRT->GetFormat(),
+            m_transparencyRT->GetFormat()};
 
         Format depthFormat = RHII.GetDepthFormat();
 
@@ -231,8 +235,8 @@ namespace pe
             cmd->BeginPass(7, m_attachments.data(), "GbufferTransparentPass");
             cmd->BindIndexBuffer(m_geometry->GetBuffer(), 0);
             cmd->BindVertexBuffer(m_geometry->GetBuffer(), m_geometry->GetVerticesOffset());
-            cmd->SetViewport(0.f, 0.f, depthStencilRT->GetWidth_f(), depthStencilRT->GetHeight_f());
-            cmd->SetScissor(0, 0, depthStencilRT->GetWidth(), depthStencilRT->GetHeight());
+            cmd->SetViewport(0.f, 0.f, m_depthStencilRT->GetWidth_f(), m_depthStencilRT->GetHeight_f());
+            cmd->SetScissor(0, 0, m_depthStencilRT->GetWidth(), m_depthStencilRT->GetHeight());
             cmd->BindPipeline(*m_passInfo);
             cmd->SetConstants(pushConstants);
             cmd->PushConstants();
@@ -250,13 +254,13 @@ namespace pe
 
     void GbufferTransparentPass::ClearRenderTargets(CommandBuffer *cmd)
     {
-        std::vector<Image *> colorTargets{normalRT, albedoRT, srmRT, velocityRT, emissiveRT, viewportRT, transparencyRT};
+        std::vector<Image *> colorTargets{m_normalRT, m_albedoRT, m_srmRT, m_velocityRT, m_emissiveRT, m_viewportRT, m_transparencyRT};
         cmd->ClearColors(colorTargets);
     }
 
     void GbufferTransparentPass::ClearDepthStencil(CommandBuffer *cmd)
     {
-        cmd->ClearDepthStencils({depthStencilRT});
+        cmd->ClearDepthStencils({m_depthStencilRT});
     }
 
     void GbufferTransparentPass::Destroy()

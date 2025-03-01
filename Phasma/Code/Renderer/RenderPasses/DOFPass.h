@@ -9,9 +9,6 @@ namespace pe
     class DOFPass : public IRenderPassComponent
     {
     public:
-        DOFPass();
-        ~DOFPass();
-
         void Init() override;
         void UpdatePassInfo() override;
         void CreateUniforms(CommandBuffer *cmd) override;

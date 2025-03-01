@@ -16,14 +16,6 @@
 
 namespace pe
 {
-    DOFPass::DOFPass()
-    {
-    }
-
-    DOFPass::~DOFPass()
-    {
-    }
-
     void DOFPass::Init()
     {
         RendererSystem *rs = GetGlobalSystem<RendererSystem>();

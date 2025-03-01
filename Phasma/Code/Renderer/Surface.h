@@ -28,6 +28,6 @@ private:
         Format m_format;
         ColorSpace m_colorSpace;
         PresentMode m_presentMode;
-        std::vector<PresentMode> m_supportedPresentModes{};
+        std::vector<PresentMode> m_supportedPresentModes;
     };
 }

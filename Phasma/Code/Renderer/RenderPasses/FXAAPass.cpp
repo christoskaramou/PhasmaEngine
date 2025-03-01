@@ -15,14 +15,6 @@
 
 namespace pe
 {
-    FXAAPass::FXAAPass()
-    {
-    }
-
-    FXAAPass::~FXAAPass()
-    {
-    }
-
     void FXAAPass::Init()
     {
         RendererSystem *rs = GetGlobalSystem<RendererSystem>();

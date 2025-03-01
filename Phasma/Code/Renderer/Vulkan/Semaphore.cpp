@@ -5,7 +5,8 @@
 namespace pe
 {
     Semaphore::Semaphore(bool timeline, const std::string &name)
-        : m_timeline(timeline)
+        : m_timeline{timeline},
+          m_stageFlags{PipelineStage::None}
     {
         VkSemaphoreCreateInfo si{};
         si.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;

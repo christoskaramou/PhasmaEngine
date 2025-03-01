@@ -52,8 +52,8 @@ namespace pe
 
         size_t m_size;
         void *m_data;
-        BufferUsageFlags usage;
-        AllocationApiHandle allocation;
-        std::string name;
+        BufferUsageFlags m_usage;
+        AllocationApiHandle m_allocation;
+        std::string m_name;
     };
 }

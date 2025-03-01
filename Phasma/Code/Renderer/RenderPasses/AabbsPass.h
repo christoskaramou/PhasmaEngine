@@ -10,9 +10,6 @@ namespace pe
     class AabbsPass : public IRenderPassComponent
     {
     public:
-        AabbsPass();
-        ~AabbsPass();
-
         void Init() override;
         void UpdatePassInfo() override;
         void CreateUniforms(CommandBuffer *cmd) override {};

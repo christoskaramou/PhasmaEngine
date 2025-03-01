@@ -9,7 +9,7 @@ namespace pe
     class ThreadPool
     {
     public:
-        ThreadPool(size_t);
+        ThreadPool(size_t threads);
         ~ThreadPool();
 
         template <class F, class... Args>

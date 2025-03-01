@@ -22,14 +22,6 @@
 
 namespace pe
 {
-    DepthPass::DepthPass()
-    {
-    }
-
-    DepthPass::~DepthPass()
-    {
-    }
-
     void DepthPass::Init()
     {
         RendererSystem *rs = GetGlobalSystem<RendererSystem>();

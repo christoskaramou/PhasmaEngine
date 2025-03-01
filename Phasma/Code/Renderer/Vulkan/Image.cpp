@@ -9,23 +9,23 @@
 namespace pe
 {
     SamplerCreateInfo::SamplerCreateInfo()
+        : magFilter{Filter::Linear},
+          minFilter{Filter::Linear},
+          mipmapMode{SamplerMipmapMode::Linear},
+          addressModeU{SamplerAddressMode::Repeat},
+          addressModeV{SamplerAddressMode::Repeat},
+          addressModeW{SamplerAddressMode::Repeat},
+          mipLodBias{0.f},
+          anisotropyEnable{1},
+          maxAnisotropy{16.0f},
+          compareEnable{0},
+          compareOp{CompareOp::Less},
+          minLod{-1000.f},
+          maxLod{1000.f},
+          borderColor{BorderColor::FloatOpaqueBlack},
+          unnormalizedCoordinates{0},
+          name{""}
     {
-        magFilter = Filter::Linear;
-        minFilter = Filter::Linear;
-        mipmapMode = SamplerMipmapMode::Linear;
-        addressModeU = SamplerAddressMode::Repeat;
-        addressModeV = SamplerAddressMode::Repeat;
-        addressModeW = SamplerAddressMode::Repeat;
-        mipLodBias = 0.f;
-        anisotropyEnable = 1;
-        maxAnisotropy = 16.0f;
-        compareEnable = 0;
-        compareOp = CompareOp::Less;
-        minLod = -1000.f;
-        maxLod = 1000.f;
-        borderColor = BorderColor::FloatOpaqueBlack;
-        unnormalizedCoordinates = 0;
-        name = "";
     }
 
     void SamplerCreateInfo::UpdateHash()
@@ -49,23 +49,23 @@ namespace pe
     }
 
     ImageCreateInfo::ImageCreateInfo()
+        : width{0},
+          height{0},
+          depth{1},
+          tiling{ImageTiling::Optimal},
+          usage{ImageUsage::None},
+          format{Format::Undefined},
+          initialLayout{ImageLayout::Undefined},
+          imageFlags{ImageCreate::None},
+          imageType{ImageType::Type2D},
+          mipLevels{1},
+          arrayLayers{1},
+          samples{SampleCount::Count1},
+          sharingMode{SharingMode::Exclusive},
+          queueFamilyIndexCount{0},
+          pQueueFamilyIndices{nullptr},
+          clearColor{Color::Transparent}
     {
-        width = 0;
-        height = 0;
-        depth = 1;
-        tiling = ImageTiling::Optimal;
-        usage = ImageUsage::None;
-        format = Format::Undefined;
-        initialLayout = ImageLayout::Undefined;
-        imageFlags = ImageCreate::None;
-        imageType = ImageType::Type2D;
-        mipLevels = 1;
-        arrayLayers = 1;
-        samples = SampleCount::Count1;
-        sharingMode = SharingMode::Exclusive;
-        queueFamilyIndexCount = 0;
-        pQueueFamilyIndices = nullptr;
-        clearColor = Color::Transparent;
     }
 
     bool ImageTilingSupport(Format format, ImageTiling tiling)
@@ -86,35 +86,35 @@ namespace pe
     }
 
     Sampler::Sampler(const SamplerCreateInfo &info)
+        : m_info{info}
     {
-        this->info = info;
         auto &gSettings = Settings::Get<GlobalSettings>();
 
         VkSamplerCreateInfo infoVK{};
         infoVK.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO;
         infoVK.pNext = nullptr;
         infoVK.flags = 0;
-        infoVK.magFilter = Translate<VkFilter>(info.magFilter);
-        infoVK.minFilter = Translate<VkFilter>(info.minFilter);
-        infoVK.mipmapMode = Translate<VkSamplerMipmapMode>(info.mipmapMode);
-        infoVK.addressModeU = Translate<VkSamplerAddressMode>(info.addressModeU);
-        infoVK.addressModeV = Translate<VkSamplerAddressMode>(info.addressModeV);
-        infoVK.addressModeW = Translate<VkSamplerAddressMode>(info.addressModeW);
+        infoVK.magFilter = Translate<VkFilter>(m_info.magFilter);
+        infoVK.minFilter = Translate<VkFilter>(m_info.minFilter);
+        infoVK.mipmapMode = Translate<VkSamplerMipmapMode>(m_info.mipmapMode);
+        infoVK.addressModeU = Translate<VkSamplerAddressMode>(m_info.addressModeU);
+        infoVK.addressModeV = Translate<VkSamplerAddressMode>(m_info.addressModeV);
+        infoVK.addressModeW = Translate<VkSamplerAddressMode>(m_info.addressModeW);
         infoVK.mipLodBias = log2(gSettings.render_scale) - 1.0f;
-        infoVK.anisotropyEnable = info.anisotropyEnable;
-        infoVK.maxAnisotropy = info.maxAnisotropy;
-        infoVK.compareEnable = info.compareEnable;
-        infoVK.compareOp = Translate<VkCompareOp>(info.compareOp);
-        infoVK.minLod = info.minLod;
-        infoVK.maxLod = info.maxLod;
-        infoVK.borderColor = Translate<VkBorderColor>(info.borderColor);
-        infoVK.unnormalizedCoordinates = info.unnormalizedCoordinates;
+        infoVK.anisotropyEnable = m_info.anisotropyEnable;
+        infoVK.maxAnisotropy = m_info.maxAnisotropy;
+        infoVK.compareEnable = m_info.compareEnable;
+        infoVK.compareOp = Translate<VkCompareOp>(m_info.compareOp);
+        infoVK.minLod = m_info.minLod;
+        infoVK.maxLod = m_info.maxLod;
+        infoVK.borderColor = Translate<VkBorderColor>(m_info.borderColor);
+        infoVK.unnormalizedCoordinates = m_info.unnormalizedCoordinates;
 
         VkSampler vkSampler;
         PE_CHECK(vkCreateSampler(RHII.GetDevice(), &infoVK, nullptr, &vkSampler));
         m_apiHandle = vkSampler;
 
-        Debug::SetObjectName(m_apiHandle, info.name);
+        Debug::SetObjectName(m_apiHandle, m_info.name);
     }
 
     Sampler::~Sampler()

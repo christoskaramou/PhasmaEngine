@@ -5,6 +5,10 @@
 namespace pe
 {
     Surface::Surface(SDL_Window *window)
+        : m_format{Format::Undefined},
+          m_colorSpace{},
+          m_presentMode{PresentMode::Fifo},
+          m_supportedPresentModes{}
     {
         VkSurfaceKHR surfaceVK;
         if (!SDL_Vulkan_CreateSurface(window, RHII.GetInstance(), &surfaceVK))
@@ -31,9 +35,9 @@ namespace pe
         VkSurfaceCapabilitiesKHR capabilities;
         vkGetPhysicalDeviceSurfaceCapabilitiesKHR(RHII.GetGpu(), m_apiHandle, &capabilities);
 
-        // Ensure eTransferSrc bit for blit operations
-        if (!(capabilities.supportedUsageFlags & VK_IMAGE_USAGE_TRANSFER_SRC_BIT))
-            PE_ERROR("Surface doesnt support VK_IMAGE_USAGE_TRANSFER_SRC_BIT");
+        // Ensure blit operations
+        uint32_t flags = VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT;
+        PE_ERROR_IF(!(capabilities.supportedUsageFlags & flags), "Surface doesnt support nessesary operations");
     }
 
     void Surface::FindFormat()
@@ -61,8 +65,6 @@ namespace pe
 
         PE_ERROR_IF(m_format == Format::Undefined, "Surface format not found");
     }
-
-
 
     bool Surface::SupportsPresentMode(PresentMode mode)
     {

@@ -28,6 +28,9 @@
 namespace pe
 {
     GUI::GUI()
+        : m_render{true},
+          m_attachment{std::make_unique<Attachment>()},
+          m_show_demo_window{false}
     {
     }
 
@@ -569,7 +572,6 @@ namespace pe
         ImGui_ImplSDL2_InitForVulkan(RHII.GetWindow());
 
         RendererSystem *renderer = GetGlobalSystem<RendererSystem>();
-        m_attachment = std::make_unique<Attachment>();
         m_attachment->image = renderer->GetDisplayRT();
         m_attachment->loadOp = AttachmentLoadOp::Load;
         VkFormat format = Translate<VkFormat>(RHII.GetSurface()->GetFormat());
@@ -611,7 +613,7 @@ namespace pe
 
     void GUI::Draw(CommandBuffer *cmd)
     {
-        if (!render || ImGui::GetDrawData()->TotalVtxCount <= 0)
+        if (!m_render || ImGui::GetDrawData()->TotalVtxCount <= 0)
             return;
 
         RendererSystem *renderer = GetGlobalSystem<RendererSystem>();
@@ -634,11 +636,11 @@ namespace pe
 
     void GUI::Update()
     {
-        if (!render)
+        if (!m_render)
             return;
 
-        if (show_demo_window)
-            ImGui::ShowDemoWindow(&show_demo_window);
+        if (m_show_demo_window)
+            ImGui::ShowDemoWindow(&m_show_demo_window);
 
         Menu();
         Loading();

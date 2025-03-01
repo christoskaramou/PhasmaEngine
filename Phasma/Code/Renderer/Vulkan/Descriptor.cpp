@@ -142,13 +142,13 @@ namespace pe
 
         // Get the count per descriptor type
         std::unordered_map<DescriptorType, uint32_t> typeCounts{};
-        for (auto i = 0; i < bindingInfos.size(); i++)
+        for (auto i = 0; i < m_bindingInfos.size(); i++)
         {
-            auto it = typeCounts.find(bindingInfos[i].type);
+            auto it = typeCounts.find(m_bindingInfos[i].type);
             if (it == typeCounts.end())
-                typeCounts[bindingInfos[i].type] = bindingInfos[i].count;
+                typeCounts[m_bindingInfos[i].type] = m_bindingInfos[i].count;
             else
-                it->second += bindingInfos[i].count;
+                it->second += m_bindingInfos[i].count;
         }
 
         // Create pool sizes from typeCounts above
@@ -163,7 +163,7 @@ namespace pe
 
         // Create DescriptorPool and DescriptorLayout for this descriptor set
         m_pool = DescriptorPool::Create(i, poolSizes.data(), name + "_pool");
-        m_layout = DescriptorLayout::GetOrCreate(bindingInfos, stage, pushDescriptor);
+        m_layout = DescriptorLayout::GetOrCreate(m_bindingInfos, m_stage, m_pushDescriptor);
 
         // DescriptorLayout calculates the variable count on creation
         uint32_t variableDescCounts[] = {m_layout->GetVariableCount()};
@@ -240,60 +240,62 @@ namespace pe
         std::vector<VkWriteDescriptorSet> writes{};
         std::vector<std::vector<VkDescriptorImageInfo>> imageInfosVK{};
         std::vector<std::vector<VkDescriptorBufferInfo>> bufferInfosVK{};
-        auto &info = m_updateInfos;
-        imageInfosVK.reserve(info.size());
-        bufferInfosVK.reserve(info.size());
-        writes.reserve(info.size());
+        imageInfosVK.reserve(m_updateInfos.size());
+        bufferInfosVK.reserve(m_updateInfos.size());
+        writes.reserve(m_updateInfos.size());
 
-        for (uint32_t i = 0; i < info.size(); i++)
+        for (uint32_t i = 0; i < m_updateInfos.size(); i++)
         {
+            auto &updateInfo = m_updateInfos[i];
+            auto &bindingInfo = m_bindingInfos[i];
+
             VkWriteDescriptorSet write{};
             write.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
             write.dstSet = m_apiHandle;
-            write.dstBinding = info[i].binding;
+            write.dstBinding = updateInfo.binding;
             write.dstArrayElement = 0;
-            write.descriptorType = Translate<VkDescriptorType>(m_bindingInfos[i].type);
-            if (info[i].views.size() > 0)
+            write.descriptorType = Translate<VkDescriptorType>(bindingInfo.type);
+            if (updateInfo.views.size() > 0)
             {
                 auto &infosVK = imageInfosVK.emplace_back(std::vector<VkDescriptorImageInfo>{});
-                infosVK.resize(info[i].views.size());
-                for (uint32_t j = 0; j < info[i].views.size(); j++)
+                infosVK.resize(updateInfo.views.size());
+                for (uint32_t j = 0; j < updateInfo.views.size(); j++)
                 {
                     infosVK[j] = {};
-                    infosVK[j].imageView = info[i].views[j];
-                    infosVK[j].imageLayout = Translate<VkImageLayout>(m_bindingInfos[i].imageLayout);
-                    infosVK[j].sampler = m_bindingInfos[i].type == DescriptorType::CombinedImageSampler ? info[i].samplers[j] : SamplerApiHandle{};
+                    infosVK[j].imageView = updateInfo.views[j];
+                    infosVK[j].imageLayout = Translate<VkImageLayout>(bindingInfo.imageLayout);
+                    infosVK[j].sampler = bindingInfo.type == DescriptorType::CombinedImageSampler ? updateInfo.samplers[j] : SamplerApiHandle{};
                 }
 
                 write.descriptorCount = static_cast<uint32_t>(infosVK.size());
                 write.pImageInfo = infosVK.data();
                 imageInfosVK.push_back(infosVK);
             }
-            else if (info[i].buffers.size() > 0)
+            else if (updateInfo.buffers.size() > 0)
             {
                 auto &infosVK = bufferInfosVK.emplace_back(std::vector<VkDescriptorBufferInfo>{});
-                infosVK.resize(info[i].buffers.size());
-                for (uint32_t j = 0; j < info[i].buffers.size(); j++)
+                infosVK.resize(updateInfo.buffers.size());
+                for (uint32_t j = 0; j < updateInfo.buffers.size(); j++)
                 {
                     infosVK[j] = {};
-                    infosVK[j].buffer = info[i].buffers[j]->ApiHandle();
-                    infosVK[j].offset = info[i].offsets.size() > 0 ? info[i].offsets[j] : 0;
-                    infosVK[j].range = info[i].ranges.size() > 0 ? (info[i].ranges[j] > 0 ? info[i].ranges[j] : VK_WHOLE_SIZE) : VK_WHOLE_SIZE;
+                    infosVK[j].buffer = updateInfo.buffers[j]->ApiHandle();
+                    infosVK[j].offset = updateInfo.offsets.size() > 0 ? updateInfo.offsets[j] : 0;
+                    infosVK[j].range = updateInfo.ranges.size() > 0 ? (updateInfo.ranges[j] > 0 ? updateInfo.ranges[j] : VK_WHOLE_SIZE) : VK_WHOLE_SIZE;
                 }
 
                 write.descriptorCount = static_cast<uint32_t>(infosVK.size());
                 write.pBufferInfo = infosVK.data();
             }
-            else if (info[i].samplers.size() > 0 && m_bindingInfos[i].type != DescriptorType::CombinedImageSampler)
+            else if (updateInfo.samplers.size() > 0 && bindingInfo.type != DescriptorType::CombinedImageSampler)
             {
                 auto &infosVK = imageInfosVK.emplace_back(std::vector<VkDescriptorImageInfo>{});
-                infosVK.resize(info[i].samplers.size());
-                for (uint32_t j = 0; j < info[i].samplers.size(); j++)
+                infosVK.resize(updateInfo.samplers.size());
+                for (uint32_t j = 0; j < updateInfo.samplers.size(); j++)
                 {
                     infosVK[j] = {};
                     infosVK[j].imageView = nullptr;
                     infosVK[j].imageLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-                    infosVK[j].sampler = info[i].samplers[j];
+                    infosVK[j].sampler = updateInfo.samplers[j];
                 }
 
                 write.descriptorCount = static_cast<uint32_t>(infosVK.size());

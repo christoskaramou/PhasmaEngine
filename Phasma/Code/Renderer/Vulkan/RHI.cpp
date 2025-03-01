@@ -20,20 +20,6 @@
 
 namespace pe
 {
-    RHI::RHI()
-    {
-        m_device = {};
-        m_window = nullptr;
-        m_maxUniformBufferSize = 0;
-        m_maxStorageBufferSize = 0;
-        m_minUniformBufferOffsetAlignment = 0;
-        m_minStorageBufferOffsetAlignment = 0;
-    }
-
-    RHI::~RHI()
-    {
-    }
-
     void RHI::Init(SDL_Window *window)
     {
         m_window = window;

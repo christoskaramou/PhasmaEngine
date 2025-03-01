@@ -11,21 +11,13 @@
 
 namespace pe
 {
-    AabbsPass::AabbsPass()
-    {
-        m_geometry = nullptr;
-    }
-
-    AabbsPass::~AabbsPass()
-    {
-    }
-
     void AabbsPass::Init()
     {
         RendererSystem *rs = GetGlobalSystem<RendererSystem>();
 
         m_viewportRT = rs->GetRenderTarget("viewport");
         m_depthRT = rs->GetDepthStencilTarget("depthStencil");
+        m_geometry = nullptr;
 
         m_attachments.resize(2);
         m_attachments[0] = {};
@@ -109,7 +101,7 @@ namespace pe
         DrawFromInfos(m_geometry->GetDrawInfosAlphaCut());
         DrawFromInfos(m_geometry->GetDrawInfosAlphaBlend());
         cmd->EndPass();
-        
+
         cmd->EndDebugRegion();
 
         m_geometry = nullptr;

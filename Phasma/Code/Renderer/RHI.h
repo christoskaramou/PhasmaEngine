@@ -35,8 +35,6 @@ namespace pe
                 delete Get();
         }
 
-        ~RHI();
-
         void Init(SDL_Window *window);
         void Destroy();
         void CreateInstance(SDL_Window *window);
@@ -99,7 +97,7 @@ namespace pe
         void ChangePresentMode(PresentMode mode);
 
     private:
-        RHI();
+        RHI() = default;
 
         InstanceApiHandle m_instance;
         GpuApiHandle m_gpu;

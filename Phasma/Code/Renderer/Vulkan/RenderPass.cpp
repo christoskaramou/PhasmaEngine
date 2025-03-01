@@ -8,6 +8,7 @@ namespace pe
 {
     // Attachment references must match the attachment number and order in shader
     RenderPass::RenderPass(uint32_t count, Attachment *attachments, const std::string &name)
+        : m_name{name}
     {
         std::vector<VkAttachmentDescription2> attachmentsVK{};
         attachmentsVK.reserve(count);
@@ -111,7 +112,6 @@ namespace pe
         PE_CHECK(vkCreateRenderPass2(RHII.GetDevice(), &renderPassInfo, nullptr, &renderPass));
         m_apiHandle = renderPass;
 
-        m_name = name;
         Debug::SetObjectName(m_apiHandle, name);
     }
 

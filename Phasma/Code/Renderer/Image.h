@@ -92,7 +92,10 @@ namespace pe
         Sampler(const SamplerCreateInfo &info);
         ~Sampler();
 
-        SamplerCreateInfo info;
+        const SamplerCreateInfo &GetInfo() { return m_info; }
+
+    private:
+        SamplerCreateInfo m_info;
     };
 
     class Image : public PeHandle<Image, ImageApiHandle>

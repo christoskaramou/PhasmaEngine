@@ -8,6 +8,7 @@
 namespace pe
 {
     Swapchain::Swapchain(Surface *surface, const std::string &name)
+        : m_images{}
     {
         VkSurfaceCapabilitiesKHR capabilities;
         vkGetPhysicalDeviceSurfaceCapabilitiesKHR(RHII.GetGpu(), surface->ApiHandle(), &capabilities);
@@ -46,9 +47,6 @@ namespace pe
         PE_CHECK(vkGetSwapchainImagesKHR(RHII.GetDevice(), schain, &imageCount, nullptr));
         std::vector<VkImage> imagesVK(imageCount);
         PE_CHECK(vkGetSwapchainImagesKHR(RHII.GetDevice(), schain, &imageCount, imagesVK.data()));
-
-        for (auto *image : m_images)
-            Image::Destroy(image);
 
         m_images.resize(SWAPCHAIN_IMAGES);
         for (unsigned i = 0; i < m_images.size(); i++)

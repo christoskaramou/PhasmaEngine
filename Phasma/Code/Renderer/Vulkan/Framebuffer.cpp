@@ -11,8 +11,8 @@ namespace pe
                              ImageViewApiHandle *views,
                              RenderPass *renderPass,
                              const std::string &name)
+        : m_size{width, height}
     {
-        m_size = uvec2(width, height);
 
         std::vector<VkImageView> _views(count);
         for (uint32_t i = 0; i < count; i++)

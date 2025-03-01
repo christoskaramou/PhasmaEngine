@@ -9,9 +9,6 @@ namespace pe
     class FXAAPass : public IRenderPassComponent
     {
     public:
-        FXAAPass();
-        ~FXAAPass();
-        
         void Init() override;
         void UpdatePassInfo() override;
         void CreateUniforms(CommandBuffer *cmd) override;

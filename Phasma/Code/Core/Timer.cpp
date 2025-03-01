@@ -5,9 +5,9 @@
 namespace pe
 {
     Timer::Timer()
+        : m_start{},
+          m_system_delay{0}
     {
-        m_start = {};
-        m_system_delay = 0;
     }
 
     void Timer::Start()
@@ -34,11 +34,12 @@ namespace pe
         m_system_delay = static_cast<size_t>(NANO(timer.Count())) - delay.count();
     }
 
-    FrameTimer::FrameTimer() : Timer()
+    FrameTimer::FrameTimer()
+        : Timer(),
+          m_updatesStamp{0.0},
+          m_cpuTotalStamp{0.0},
+          m_delta{}
     {
-        m_delta = {};
-        m_updatesStamp = 0.0;
-        m_cpuTotalStamp = 0.0;
     }
 
     void FrameTimer::CountDeltaTime()
@@ -62,11 +63,11 @@ namespace pe
     }
 
     GpuTimer::GpuTimer(const std::string &name)
+        : m_queries{},
+          m_cmd{nullptr},
+          m_resultsReady{false},
+          m_inUse{false}
     {
-        m_inUse = false;
-        m_cmd = nullptr;
-        m_resultsReady = false;
-
         VkPhysicalDeviceProperties gpuProps;
         vkGetPhysicalDeviceProperties(RHII.GetGpu(), &gpuProps);
 

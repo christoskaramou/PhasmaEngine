@@ -193,7 +193,7 @@ namespace pe
             progress++;
         }
         model.m_samplers.push_back(g_defaultSampler);
-        model.m_samplersMap[g_defaultSampler->info.GetHash()] = g_defaultSampler;
+        model.m_samplersMap[g_defaultSampler->GetInfo().GetHash()] = g_defaultSampler;
 
         progress = 0;
         uint32_t totalPrimitives = 0;

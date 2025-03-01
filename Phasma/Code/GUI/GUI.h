@@ -18,6 +18,8 @@ namespace pe
         void Init();
         void Update();
         void Draw(CommandBuffer * cmd);
+        bool Render() { return m_render; }
+        void ToggleRender() { m_render = !m_render; }
     
     private:
         static void async_fileDialog_ImGuiMenuItem(const char *menuLabel, const char *dialogTitle, const std::vector<const char *> &filter);
@@ -28,14 +30,11 @@ namespace pe
         void Metrics();
         void Shaders();
         void Properties();
-
         float GetQueueTotalTime(Queue *queue);
         void ShowQueueGpuTimings(Queue *queue, float maxTime);
 
-        bool show_demo_window = false;
+        bool m_render;
         std::unique_ptr<Attachment> m_attachment;
-
-    public:
-        bool render = true;
+        bool m_show_demo_window;
     };
 }

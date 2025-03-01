@@ -82,7 +82,7 @@ namespace pe
         float GetTime();
 
     private:
-        uint64_t m_queries[2]{};
+        uint64_t m_queries[2];
         float m_timestampPeriod;
         CommandBuffer *m_cmd;
         bool m_resultsReady;

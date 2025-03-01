@@ -14,9 +14,6 @@ namespace pe
     class DepthPass : public IRenderPassComponent
     {
     public:
-        DepthPass();
-        ~DepthPass();
-
         void Init() override;
         void UpdatePassInfo() override;
         void CreateUniforms(CommandBuffer *cmd) override;

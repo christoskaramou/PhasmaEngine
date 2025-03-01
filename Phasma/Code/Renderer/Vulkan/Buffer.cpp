@@ -9,29 +9,32 @@ namespace pe
                    BufferUsageFlags usage,
                    AllocationCreateFlags createFlags,
                    const std::string &name)
-    {
-        if (usage & BufferUsage::UniformBufferBit)
-        {
-            size = RHII.AlignUniform(size);
-            PE_ERROR_IF(size > RHII.GetMaxUniformBufferSize(), "Uniform buffer size is too big");
-        }
-        if (usage & BufferUsage::StorageBufferBit)
-        {
-            size = RHII.AlignStorage(size);
-            PE_ERROR_IF(size > RHII.GetMaxStorageBufferSize(), "Storage buffer size is too big");
-        }
-        if (usage & BufferUsage::IndirectBufferBit)
-        {
-            PE_ERROR_IF(size > RHII.GetMaxDrawIndirectCount() * sizeof(VkDrawIndexedIndirectCommand), "Indirect command buffer size is too big");
-        }
+                    : m_size{size},
+                      m_data{nullptr},
+                      m_usage{usage},
+                      m_allocation{},
+                      m_name{name}
 
-        m_size = size;
-        m_data = nullptr;
+    {
+        if (m_usage & BufferUsage::UniformBufferBit)
+        {
+            m_size = RHII.AlignUniform(m_size);
+            PE_ERROR_IF(m_size > RHII.GetMaxUniformBufferSize(), "Uniform buffer size is too big");
+        }
+        if (m_usage & BufferUsage::StorageBufferBit)
+        {
+            m_size = RHII.AlignStorage(m_size);
+            PE_ERROR_IF(m_size > RHII.GetMaxStorageBufferSize(), "Storage buffer size is too big");
+        }
+        if (m_usage & BufferUsage::IndirectBufferBit)
+        {
+            PE_ERROR_IF(m_size > RHII.GetMaxDrawIndirectCount() * sizeof(VkDrawIndexedIndirectCommand), "Indirect command buffer size is too big");
+        }
 
         VkBufferCreateInfo bufferInfo{};
         bufferInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
-        bufferInfo.size = size;
-        bufferInfo.usage = Translate<VkBufferUsageFlags>(usage);
+        bufferInfo.size = m_size;
+        bufferInfo.usage = Translate<VkBufferUsageFlags>(m_usage);
         bufferInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
 
         VmaAllocationCreateInfo allocationCreateInfo{};
@@ -43,11 +46,9 @@ namespace pe
         VmaAllocationInfo allocationInfo;
         PE_CHECK(vmaCreateBuffer(RHII.GetAllocator(), &bufferInfo, &allocationCreateInfo, &bufferVK, &allocationVK, &allocationInfo));
         m_apiHandle = bufferVK;
-        allocation = allocationVK;
+        m_allocation = allocationVK;
 
-        this->name = name;
-
-        Debug::SetObjectName(m_apiHandle, name);
+        Debug::SetObjectName(m_apiHandle, m_name);
     }
 
     Buffer::~Buffer()
@@ -56,7 +57,7 @@ namespace pe
 
         if (m_apiHandle)
         {
-            vmaDestroyBuffer(RHII.GetAllocator(), m_apiHandle, allocation);
+            vmaDestroyBuffer(RHII.GetAllocator(), m_apiHandle, m_allocation);
             m_apiHandle = {};
         }
     }
@@ -65,14 +66,14 @@ namespace pe
     {
         if (m_data)
             return;
-        PE_CHECK(vmaMapMemory(RHII.GetAllocator(), allocation, &m_data));
+        PE_CHECK(vmaMapMemory(RHII.GetAllocator(), m_allocation, &m_data));
     }
 
     void Buffer::Unmap()
     {
         if (!m_data)
             return;
-        vmaUnmapMemory(RHII.GetAllocator(), allocation);
+        vmaUnmapMemory(RHII.GetAllocator(), m_allocation);
         m_data = nullptr;
     }
 
@@ -142,7 +143,7 @@ namespace pe
         if (!m_data)
             return;
 
-        PE_CHECK(vmaFlushAllocation(RHII.GetAllocator(), allocation, offset, size > 0 ? size : m_size));
+        PE_CHECK(vmaFlushAllocation(RHII.GetAllocator(), m_allocation, offset, size > 0 ? size : m_size));
     }
 
     size_t Buffer::Size()

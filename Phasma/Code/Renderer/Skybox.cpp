@@ -4,14 +4,6 @@
 
 namespace pe
 {
-    SkyBox::SkyBox()
-    {
-    }
-
-    SkyBox::~SkyBox()
-    {
-    }
-
     void SkyBox::LoadSkyBox(CommandBuffer *cmd, const std::array<std::string, 6> &textureNames, uint32_t imageSideSize)
     {
         m_cubeMap = Image::LoadRGBA8Cubemap(cmd, textureNames, imageSideSize);

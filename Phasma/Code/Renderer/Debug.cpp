@@ -6,11 +6,10 @@
 
 #if defined(WIN32) && PE_RENDER_DOC == 1
 #include <Windows.h>
-#include <filesystem>
 #elif defined(__linux__) && PE_RENDER_DOC == 1
 #include <dlfcn.h>
-#include <filesystem>
 #endif
+#include <filesystem>
 
 namespace pe
 {

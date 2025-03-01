@@ -46,15 +46,15 @@ namespace pe
 
         void PassBarriers(CommandBuffer *cmd);
 
-        Image *ibl_brdf_lut;
-        Image *normalRT;
-        Image *albedoRT;
-        Image *srmRT;
-        Image *velocityRT;
-        Image *emissiveRT;
-        Image *viewportRT;
-        Image *transparencyRT;
-        Image *depthStencilRT;
+        Image *m_ibl_brdf_lut;
+        Image *m_normalRT;
+        Image *m_albedoRT;
+        Image *m_srmRT;
+        Image *m_velocityRT;
+        Image *m_emissiveRT;
+        Image *m_viewportRT;
+        Image *m_transparencyRT;
+        Image *m_depthStencilRT;
         Buffer *m_constants;
 
         Geometry *m_geometry;
@@ -83,15 +83,15 @@ namespace pe
 
         void PassBarriers(CommandBuffer *cmd);
 
-        Image *ibl_brdf_lut;
-        Image *normalRT;
-        Image *albedoRT;
-        Image *srmRT;
-        Image *velocityRT;
-        Image *emissiveRT;
-        Image *viewportRT;
-        Image *transparencyRT;
-        Image *depthStencilRT;
+        Image *m_ibl_brdf_lut;
+        Image *m_normalRT;
+        Image *m_albedoRT;
+        Image *m_srmRT;
+        Image *m_velocityRT;
+        Image *m_emissiveRT;
+        Image *m_viewportRT;
+        Image *m_transparencyRT;
+        Image *m_depthStencilRT;
         Buffer *m_constants;
 
         Geometry *m_geometry;
