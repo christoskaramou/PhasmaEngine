@@ -1,4 +1,4 @@
-#include "Renderer/RenderPasses/DepthPass.h"
+#include "DepthPass.h"
 #include "Scene/Model.h"
 #include "Renderer/Swapchain.h"
 #include "Renderer/Surface.h"

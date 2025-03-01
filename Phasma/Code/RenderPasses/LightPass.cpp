@@ -1,5 +1,5 @@
-#include "Renderer/RenderPasses/LightPass.h"
-#include "Renderer/RenderPasses/ShadowPass.h"
+#include "LightPass.h"
+#include "ShadowPass.h"
 #include "Renderer/RHI.h"
 #include "Renderer/Command.h"
 #include "Renderer/Descriptor.h"

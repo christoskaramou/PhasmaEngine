@@ -1,5 +1,5 @@
-#include "Renderer/RenderPasses/AabbsPass.h"
-#include "Renderer/RenderPasses/ShadowPass.h"
+#include "AabbsPass.h"
+#include "ShadowPass.h"
 #include "Shader/Shader.h"
 #include "Renderer/Command.h"
 #include "Renderer/RenderPass.h"

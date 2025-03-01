@@ -4,14 +4,14 @@
 #include "Renderer/RHI.h"
 #include "Renderer/Pipeline.h"
 #include "Shader/Shader.h"
-#include "Renderer/RenderPasses/BloomPass.h"
-#include "Renderer/RenderPasses/DOFPass.h"
-#include "Renderer/RenderPasses/FXAAPass.h"
-#include "Renderer/RenderPasses/MotionBlurPass.h"
-#include "Renderer/RenderPasses/SSAOPass.h"
-#include "Renderer/RenderPasses/SSRPass.h"
-#include "Renderer/RenderPasses/SuperResolutionPass.h"
-#include "Renderer/RenderPasses/TonemapPass.h"
+#include "RenderPasses/BloomPass.h"
+#include "RenderPasses/DOFPass.h"
+#include "RenderPasses/FXAAPass.h"
+#include "RenderPasses/MotionBlurPass.h"
+#include "RenderPasses/SSAOPass.h"
+#include "RenderPasses/SSRPass.h"
+#include "RenderPasses/SuperResolutionPass.h"
+#include "RenderPasses/TonemapPass.h"
 
 namespace pe
 {

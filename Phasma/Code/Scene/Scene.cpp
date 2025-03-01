@@ -7,11 +7,11 @@
 #include "Renderer/Queue.h"
 #include "Renderer/Command.h"
 #include "Renderer/Pipeline.h"
-#include "Renderer/RenderPasses/ShadowPass.h"
-#include "Renderer/RenderPasses/AabbsPass.h"
-#include "Renderer/RenderPasses/GbufferPass.h"
-#include "Renderer/RenderPasses/DepthPass.h"
-#include "Renderer/RenderPasses/LightPass.h"
+#include "RenderPasses/ShadowPass.h"
+#include "RenderPasses/AabbsPass.h"
+#include "RenderPasses/GbufferPass.h"
+#include "RenderPasses/DepthPass.h"
+#include "RenderPasses/LightPass.h"
 
 namespace pe
 {

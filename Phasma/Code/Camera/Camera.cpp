@@ -1,7 +1,7 @@
 #include "Camera/Camera.h"
 #include "GUI/GUI.h"
 #include "Renderer/RHI.h"
-#include "Renderer/RenderPasses/SuperResolutionPass.h"
+#include "RenderPasses/SuperResolutionPass.h"
 #include "Systems/RendererSystem.h"
 #include "Systems/PostProcessSystem.h"
 

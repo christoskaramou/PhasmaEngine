@@ -1,4 +1,4 @@
-#include "Renderer/RenderPasses/MotionBlurPass.h"
+#include "MotionBlurPass.h"
 #include "Shader/Shader.h"
 #include "Renderer/Command.h"
 #include "Renderer/RenderPass.h"

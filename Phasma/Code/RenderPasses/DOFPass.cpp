@@ -1,4 +1,4 @@
-#include "Renderer/RenderPasses/DOFPass.h"
+#include "DOFPass.h"
 #include "GUI/GUI.h"
 #include "Renderer/Swapchain.h"
 #include "Renderer/Surface.h"

@@ -1,4 +1,4 @@
-#include "Renderer/RenderPasses/SSRPass.h"
+#include "SSRPass.h"
 #include "Renderer/Command.h"
 #include "Renderer/RenderPass.h"
 #include "Renderer/Descriptor.h"

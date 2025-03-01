@@ -1,4 +1,4 @@
-#include "Renderer/RenderPasses/BloomPass.h"
+#include "BloomPass.h"
 #include "GUI/GUI.h"
 #include "Renderer/Swapchain.h"
 #include "Renderer/Surface.h"

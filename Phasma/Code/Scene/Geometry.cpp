@@ -10,7 +10,7 @@
 #include "Systems/LightSystem.h"
 #include "Renderer/RHI.h"
 #include "Renderer/Queue.h"
-#include "Renderer/RenderPasses/GbufferPass.h"
+#include "RenderPasses/GbufferPass.h"
 
 namespace pe
 {

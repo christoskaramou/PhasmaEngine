@@ -1,4 +1,4 @@
-#include "Renderer/RenderPasses/ShadowPass.h"
+#include "ShadowPass.h"
 #include "Shader/Shader.h"
 #include "Renderer/RHI.h"
 #include "Renderer/RenderPass.h"

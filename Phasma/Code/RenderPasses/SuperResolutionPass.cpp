@@ -1,4 +1,4 @@
-// #include "Renderer/RenderPasses/SuperResolutionPass.h"
+// #include "SuperResolutionPass.h"
 // #include "Renderer/Command.h"
 // #include "Renderer/RHI.h"
 // #include "Renderer/Image.h"

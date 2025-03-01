@@ -7,11 +7,11 @@
 #include "Renderer/Command.h"
 #include "Renderer/Surface.h"
 #include "Renderer/Swapchain.h"
-#include "Renderer/RenderPasses/DepthPass.h"
-#include "Renderer/RenderPasses/GbufferPass.h"
-#include "Renderer/RenderPasses/LightPass.h"
-#include "Renderer/RenderPasses/AabbsPass.h"
-#include "Renderer/RenderPasses/ShadowPass.h"
+#include "RenderPasses/DepthPass.h"
+#include "RenderPasses/GbufferPass.h"
+#include "RenderPasses/LightPass.h"
+#include "RenderPasses/AabbsPass.h"
+#include "RenderPasses/ShadowPass.h"
 #include "Systems/PostProcessSystem.h"
 
 namespace pe
