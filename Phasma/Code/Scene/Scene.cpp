@@ -32,7 +32,7 @@ namespace pe
             Sampler::Destroy(defaultSampler);
     }
 
-    void Scene::Update(double delta)
+    void Scene::Update()
     {
         // Cull and update geometry shader resources
         m_geometry.UpdateGeometry();

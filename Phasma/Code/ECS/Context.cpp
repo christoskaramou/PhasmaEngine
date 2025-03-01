@@ -38,12 +38,12 @@ namespace pe
         m_systems.clear();
     }
 
-    void Context::UpdateSystems(double delta)
+    void Context::UpdateSystems()
     {
         for (auto &system : m_systems)
         {
             if (system.second->IsEnabled())
-                system.second->Update(delta);
+                system.second->Update();
         }
     }
 
@@ -86,9 +86,9 @@ namespace pe
         return m_systems;
     }
 
-    void UpdateGlobalSystems(double delta)
+    void UpdateGlobalSystems()
     {
-        Context::Get()->UpdateSystems(delta);
+        Context::Get()->UpdateSystems();
     }
 
     void DrawGlobalSystems()

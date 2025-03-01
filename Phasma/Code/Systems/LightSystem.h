@@ -25,7 +25,7 @@ namespace pe
         ~LightSystem();
 
         void Init(CommandBuffer *cmd) override;
-        void Update(double delta) override;
+        void Update() override;
         void Destroy() override;
 
         Buffer *GetUniform(uint32_t frame) { return m_uniform[frame]; }

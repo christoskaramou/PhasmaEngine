@@ -100,7 +100,7 @@ namespace pe
             return false;
 
         if (!m_window->isMinimized())
-            UpdateGlobalSystems(m_frameTimer.GetDelta());
+            UpdateGlobalSystems();
 
         // Get ImGui render data ready
         ImGui::Render();

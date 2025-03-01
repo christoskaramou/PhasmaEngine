@@ -36,7 +36,7 @@ namespace pe
         }
     }
 
-    void PostProcessSystem::Update(double delta)
+    void PostProcessSystem::Update()
     {
         Camera *camera_main = GetGlobalSystem<CameraSystem>()->GetCamera(0);
 

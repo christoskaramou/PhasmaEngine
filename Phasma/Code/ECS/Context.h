@@ -25,7 +25,7 @@ namespace pe
     public:
         void InitSystems();
         void DestroySystems();
-        void UpdateSystems(double delta);
+        void UpdateSystems();
         void DrawSystems();
 
         template <class T, class... Params>
@@ -128,7 +128,7 @@ namespace pe
         return Context::Get()->GetSystem<T>();
     }
 
-    void UpdateGlobalSystems(double delta);
+    void UpdateGlobalSystems();
 
     void DrawGlobalSystems();
 }

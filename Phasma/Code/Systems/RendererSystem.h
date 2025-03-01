@@ -10,7 +10,7 @@ namespace pe
     {
     public:
         void Init(CommandBuffer *cmd) override;
-        void Update(double delta) override;
+        void Update() override;
         void Destroy() override;
         void Draw() override;
 

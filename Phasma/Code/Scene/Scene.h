@@ -13,7 +13,7 @@ namespace pe
         Scene();
         ~Scene();
 
-        void Update(double delta);
+        void Update();
         void InitGeometry(CommandBuffer *cmd);
         void DrawShadowPass(CommandBuffer *cmd);
         void DepthPrePass(CommandBuffer *cmd);

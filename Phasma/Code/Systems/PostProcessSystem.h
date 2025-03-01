@@ -6,7 +6,7 @@ namespace pe
     {
     public:
         void Init(CommandBuffer *cmd) override;
-        void Update(double delta) override;
+        void Update() override;
         void Destroy() override;
     
         void Resize(uint32_t width, uint32_t height);

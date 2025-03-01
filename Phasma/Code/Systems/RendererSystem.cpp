@@ -97,7 +97,7 @@ namespace pe
         }
     }
 
-    void RendererSystem::Update(double delta)
+    void RendererSystem::Update()
     {
         // Wait for the previous corresponding frame commands to finish first
         WaitPreviousFrameCommands();
@@ -106,7 +106,7 @@ namespace pe
         m_gui.Update();
 
         // Scene
-        m_scene.Update(delta);
+        m_scene.Update();
 
         CameraSystem *cameraSystem = GetGlobalSystem<CameraSystem>();
         Camera *camera_main = cameraSystem->GetCamera(0);

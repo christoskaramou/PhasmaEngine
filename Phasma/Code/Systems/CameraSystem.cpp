@@ -17,7 +17,7 @@ namespace pe
     {
     }
 
-    void CameraSystem::Update(double delta)
+    void CameraSystem::Update()
     {
         const std::vector<Camera *> &components = GetComponentsOfType<Camera>();
         for (Camera *camera : components)

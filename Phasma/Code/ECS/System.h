@@ -13,7 +13,7 @@ namespace pe
         virtual ~ISystem() {}
 
         virtual void Init(CommandBuffer *cmd) = 0;
-        virtual void Update(double delta) = 0;
+        virtual void Update() = 0;
         virtual void Destroy() = 0;
 
         bool IsEnabled() { return m_enabled; }

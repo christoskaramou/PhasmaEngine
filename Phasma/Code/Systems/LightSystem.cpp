@@ -58,7 +58,7 @@ namespace pe
         bindingInfos[0].type = DescriptorType::UniformBufferDynamic;
     }
 
-    void LightSystem::Update(double delta)
+    void LightSystem::Update()
     {
         auto &gSettings = Settings::Get<GlobalSettings>();
 
