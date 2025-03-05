@@ -33,8 +33,8 @@ namespace pe
     void AabbsPass::UpdatePassInfo()
     {
         m_passInfo->name = "AABBs_pipeline";
-        m_passInfo->pVertShader = Shader::Create("Shaders/Utilities/AABBsVS.hlsl", ShaderStage::VertexBit);
-        m_passInfo->pFragShader = Shader::Create("Shaders/Utilities/AABBsPS.hlsl", ShaderStage::FragmentBit);
+        m_passInfo->pVertShader = Shader::Create(Path::Assets + "Shaders/Utilities/AABBsVS.hlsl", ShaderStage::VertexBit, std::vector<Define>{}, ShaderCodeType::HLSL);
+        m_passInfo->pFragShader = Shader::Create(Path::Assets + "Shaders/Utilities/AABBsPS.hlsl", ShaderStage::FragmentBit, std::vector<Define>{}, ShaderCodeType::HLSL);
         m_passInfo->dynamicStates = {DynamicState::Viewport, DynamicState::Scissor, DynamicState::LineWidth, DynamicState::DepthTestEnable, DynamicState::DepthWriteEnable};
         m_passInfo->topology = PrimitiveTopology::LineList;
         m_passInfo->colorBlendAttachments = {PipelineColorBlendAttachmentState::Default};

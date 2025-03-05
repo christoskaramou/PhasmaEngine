@@ -28,8 +28,8 @@ namespace pe
     void MotionBlurPass::UpdatePassInfo()
     {
         m_passInfo->name = "motionBlur_pipeline";
-        m_passInfo->pVertShader = Shader::Create("Shaders/Common/Quad.hlsl", ShaderStage::VertexBit);
-        m_passInfo->pFragShader = Shader::Create("Shaders/MotionBlur/MotionBlurPS.hlsl", ShaderStage::FragmentBit);
+        m_passInfo->pVertShader = Shader::Create(Path::Assets + "Shaders/Common/Quad.hlsl", ShaderStage::VertexBit, std::vector<Define>{}, ShaderCodeType::HLSL);
+        m_passInfo->pFragShader = Shader::Create(Path::Assets + "Shaders/MotionBlur/MotionBlurPS.hlsl", ShaderStage::FragmentBit, std::vector<Define>{}, ShaderCodeType::HLSL);
         m_passInfo->dynamicStates = {DynamicState::Viewport, DynamicState::Scissor};
         m_passInfo->cullMode = CullMode::Back;
         m_passInfo->colorBlendAttachments = {PipelineColorBlendAttachmentState::Default};
@@ -53,10 +53,6 @@ namespace pe
             DSet->SetImageView(2, m_velocityRT->GetSRV(), m_velocityRT->GetSampler()->ApiHandle());
             DSet->Update();
         }
-    }
-
-    void MotionBlurPass::Update(Camera *camera)
-    {
     }
 
     void MotionBlurPass::Draw(CommandBuffer *cmd)

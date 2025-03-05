@@ -30,8 +30,8 @@ namespace pe
     void FXAAPass::UpdatePassInfo()
     {
         m_passInfo->name = "fxaa_pipeline";
-        m_passInfo->pVertShader = Shader::Create("Shaders/Common/Quad.hlsl", ShaderStage::VertexBit);
-        m_passInfo->pFragShader = Shader::Create("Shaders/FXAA/FXAAPS.hlsl", ShaderStage::FragmentBit);
+        m_passInfo->pVertShader = Shader::Create(Path::Assets + "Shaders/Common/Quad.hlsl", ShaderStage::VertexBit, std::vector<Define>{}, ShaderCodeType::HLSL);
+        m_passInfo->pFragShader = Shader::Create(Path::Assets + "Shaders/FXAA/FXAAPS.hlsl", ShaderStage::FragmentBit, std::vector<Define>{}, ShaderCodeType::HLSL);
         m_passInfo->dynamicStates = {DynamicState::Viewport, DynamicState::Scissor};
         m_passInfo->cullMode = CullMode::Back;
         m_passInfo->colorBlendAttachments = {PipelineColorBlendAttachmentState::Default};
@@ -55,10 +55,6 @@ namespace pe
         }
     }
 
-    void FXAAPass::Update(Camera *camera)
-    {
-    }
-
     void FXAAPass::Draw(CommandBuffer *cmd)
     {
         ImageBarrierInfo barrier;
@@ -70,7 +66,7 @@ namespace pe
         cmd->BeginDebugRegion("FXAAPass");
         cmd->CopyImage(m_viewportRT, m_frameImage);
         cmd->ImageBarrier(barrier);
-        
+
         cmd->BeginPass(1, m_attachments.data(), "FXAA");
         cmd->BindPipeline(*m_passInfo);
         cmd->SetViewport(0.f, 0.f, m_viewportRT->GetWidth_f(), m_viewportRT->GetHeight_f());

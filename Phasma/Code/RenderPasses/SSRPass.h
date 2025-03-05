@@ -4,7 +4,6 @@ namespace pe
 {
     class Image;
     class Buffer;
-    class Camera;
     class CommandBuffer;
 
     class SSRPass : public IRenderPassComponent
@@ -14,7 +13,7 @@ namespace pe
         void UpdatePassInfo() override;
         void CreateUniforms(CommandBuffer *cmd) override;
         void UpdateDescriptorSets() override;
-        void Update(Camera *camera) override;
+        void Update() override;
         void Draw(CommandBuffer * cmd) override;
         void Resize(uint32_t width, uint32_t height) override;
         void Destroy() override;

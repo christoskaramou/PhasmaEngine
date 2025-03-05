@@ -7,6 +7,7 @@
 #include "Renderer/Pipeline.h"
 #include "Renderer/Command.h"
 #include "Systems/RendererSystem.h"
+#include "Systems/CameraSystem.h"
 #include "Scene/Geometry.h"
 #include "Scene/Model.h"
 
@@ -53,7 +54,7 @@ namespace pe
     void ShadowPass::UpdatePassInfo()
     {
         m_passInfo->name = "shadows_pipeline";
-        m_passInfo->pVertShader = Shader::Create("Shaders/Shadows/ShadowsVS.hlsl", ShaderStage::VertexBit);
+        m_passInfo->pVertShader = Shader::Create(Path::Assets + "Shaders/Shadows/ShadowsVS.hlsl", ShaderStage::VertexBit, std::vector<Define>{}, ShaderCodeType::HLSL);
         m_passInfo->dynamicStates = {DynamicState::Viewport, DynamicState::Scissor, DynamicState::DepthBias};
         m_passInfo->cullMode = CullMode::Front;
         m_passInfo->depthFormat = RHII.GetDepthFormat();
@@ -80,12 +81,13 @@ namespace pe
     {
     }
 
-    void ShadowPass::Update(Camera *camera)
+    void ShadowPass::Update()
     {
         auto &gSettings = Settings::Get<GlobalSettings>();
         if (gSettings.shadows)
         {
-            CalculateCascades(camera);
+            Camera *camera_main = GetGlobalSystem<CameraSystem>()->GetCamera(0);
+            CalculateCascades(camera_main);
 
             BufferRange range{};
             range.data = m_cascades.data();

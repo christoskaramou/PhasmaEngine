@@ -37,8 +37,8 @@ namespace pe
     void DepthPass::UpdatePassInfo()
     {
         m_passInfo->name = "DepthPrePass_pipeline";
-        m_passInfo->pVertShader = Shader::Create("Shaders/Depth/DepthVS.hlsl", ShaderStage::VertexBit);
-        m_passInfo->pFragShader = Shader::Create("Shaders/Depth/DepthPS.hlsl", ShaderStage::FragmentBit);
+        m_passInfo->pVertShader = Shader::Create(Path::Assets + "Shaders/Depth/DepthVS.hlsl", ShaderStage::VertexBit, std::vector<Define>{}, ShaderCodeType::HLSL);
+        m_passInfo->pFragShader = Shader::Create(Path::Assets + "Shaders/Depth/DepthPS.hlsl", ShaderStage::FragmentBit, std::vector<Define>{}, ShaderCodeType::HLSL);
         m_passInfo->dynamicStates = {DynamicState::Viewport, DynamicState::Scissor};
         m_passInfo->cullMode = CullMode::Front;
         m_passInfo->depthFormat = RHII.GetDepthFormat();
@@ -56,10 +56,6 @@ namespace pe
     void DepthPass::UpdateDescriptorSets()
     {
         // depth pass descriptor sets are updated with Scene::Update
-    }
-
-    void DepthPass::Update(Camera *camera)
-    {
     }
 
     void DepthPass::Draw(CommandBuffer *cmd)

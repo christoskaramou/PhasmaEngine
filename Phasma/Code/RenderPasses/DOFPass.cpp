@@ -32,8 +32,8 @@ namespace pe
     void DOFPass::UpdatePassInfo()
     {
         m_passInfo->name = "dof_pipeline";
-        m_passInfo->pVertShader = Shader::Create("Shaders/Common/Quad.hlsl", ShaderStage::VertexBit);
-        m_passInfo->pFragShader = Shader::Create("Shaders/DepthOfField/DOFPS.hlsl", ShaderStage::FragmentBit);
+        m_passInfo->pVertShader = Shader::Create(Path::Assets + "Shaders/Common/Quad.hlsl", ShaderStage::VertexBit, std::vector<Define>{}, ShaderCodeType::HLSL);
+        m_passInfo->pFragShader = Shader::Create(Path::Assets + "Shaders/DepthOfField/DOFPS.hlsl", ShaderStage::FragmentBit, std::vector<Define>{}, ShaderCodeType::HLSL);
         m_passInfo->dynamicStates = {DynamicState::Viewport, DynamicState::Scissor};
         m_passInfo->cullMode = CullMode::Back;
         m_passInfo->colorBlendAttachments = {PipelineColorBlendAttachmentState::Default};
@@ -56,10 +56,6 @@ namespace pe
             DSet->SetImageView(1, m_depth->GetSRV(), m_depth->GetSampler()->ApiHandle());
             DSet->Update();
         }
-    }
-
-    void DOFPass::Update(Camera *camera)
-    {
     }
 
     void DOFPass::Draw(CommandBuffer *cmd)

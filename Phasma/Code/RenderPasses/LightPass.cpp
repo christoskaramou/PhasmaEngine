@@ -45,8 +45,8 @@ namespace pe
 
         // Opaque light pass
         m_passInfo->name = "lighting_opaque_pipeline";
-        m_passInfo->pVertShader = Shader::Create("Shaders/Common/Quad.hlsl", ShaderStage::VertexBit);
-        m_passInfo->pFragShader = Shader::Create("Shaders/Gbuffer/LightingPS.hlsl", ShaderStage::FragmentBit, definesFrag);
+        m_passInfo->pVertShader = Shader::Create(Path::Assets + "Shaders/Common/Quad.hlsl", ShaderStage::VertexBit, std::vector<Define>{}, ShaderCodeType::HLSL);
+        m_passInfo->pFragShader = Shader::Create(Path::Assets + "Shaders/Gbuffer/LightingPS.hlsl", ShaderStage::FragmentBit, definesFrag, ShaderCodeType::HLSL);
         m_passInfo->dynamicStates = {DynamicState::Viewport, DynamicState::Scissor};
         m_passInfo->colorBlendAttachments = {PipelineColorBlendAttachmentState::Default};
         m_passInfo->colorFormats = {m_viewportRT->GetFormat()};
@@ -117,9 +117,10 @@ namespace pe
         }
     }
 
-    void LightOpaquePass::Update(Camera *camera)
+    void LightOpaquePass::Update()
     {
         const auto &gSettings = Settings::Get<GlobalSettings>();
+        Camera *camera = GetGlobalSystem<CameraSystem>()->GetCamera(0);
 
         m_ubo.invViewProj = camera->GetInvViewProjection();
         m_ubo.ssao = gSettings.ssao;
@@ -249,8 +250,8 @@ namespace pe
             Define{"MAX_SPOT_LIGHTS", std::to_string(MAX_SPOT_LIGHTS)}};
 
         m_passInfo->name = "lighting_transparent_pipeline";
-        m_passInfo->pVertShader = Shader::Create("Shaders/Common/Quad.hlsl", ShaderStage::VertexBit);
-        m_passInfo->pFragShader = Shader::Create("Shaders/Gbuffer/LightingPS.hlsl", ShaderStage::FragmentBit, definesFrag);
+        m_passInfo->pVertShader = Shader::Create(Path::Assets + "Shaders/Common/Quad.hlsl", ShaderStage::VertexBit, std::vector<Define>{}, ShaderCodeType::HLSL);
+        m_passInfo->pFragShader = Shader::Create(Path::Assets + "Shaders/Gbuffer/LightingPS.hlsl", ShaderStage::FragmentBit, definesFrag, ShaderCodeType::HLSL);
         m_passInfo->dynamicStates = {DynamicState::Viewport, DynamicState::Scissor};
         m_passInfo->colorBlendAttachments = {PipelineColorBlendAttachmentState::Default};
         m_passInfo->blendEnable = true;
@@ -321,9 +322,10 @@ namespace pe
         }
     }
 
-    void LightTransparentPass::Update(Camera *camera)
+    void LightTransparentPass::Update()
     {
         const auto &gSettings = Settings::Get<GlobalSettings>();
+        Camera *camera = GetGlobalSystem<CameraSystem>()->GetCamera(0);
 
         m_ubo.invViewProj = camera->GetInvViewProjection();
         m_ubo.ssao = gSettings.ssao;

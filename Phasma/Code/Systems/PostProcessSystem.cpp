@@ -47,7 +47,7 @@ namespace pe
             if (renderPassComponent->IsEnabled())
             {
                 auto task = e_Update_ThreadPool.Enqueue([renderPassComponent, camera_main]()
-                                                        { renderPassComponent->Update(camera_main); });
+                                                        { renderPassComponent->Update(); });
                 tasks.push_back(std::move(task));
             }
         }

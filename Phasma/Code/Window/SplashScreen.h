@@ -2,6 +2,7 @@
 
 namespace pe
 {
+    using WindowApiHandle = ApiHandle<ObjectType::Unknown, SDL_Window *, Placeholder<0> *>;
     class SplashScreen : public PeHandle<SplashScreen, WindowApiHandle>
     {
     public:

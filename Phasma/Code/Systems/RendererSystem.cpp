@@ -146,7 +146,7 @@ namespace pe
         for (auto &rc : m_renderPassComponents)
         {
             auto task = e_Update_ThreadPool.Enqueue([rc, camera_main]()
-                                                    { rc->Update(camera_main); });
+                                                    { rc->Update(); });
             tasks.push_back(std::move(task));
         }
         for (auto &task : tasks)
@@ -304,7 +304,6 @@ namespace pe
         Semaphore *aquireSignalSemaphore = RHII.GetFreeBinarySemaphore(frame);
         Swapchain *swapchain = RHII.GetSwapchain();
         uint32_t imageIndex = swapchain->Aquire(aquireSignalSemaphore);
-
 
         // RECORD COMMANDS
         auto &frameCmd = m_cmds[frame];

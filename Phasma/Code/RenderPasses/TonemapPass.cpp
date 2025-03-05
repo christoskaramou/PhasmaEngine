@@ -25,8 +25,8 @@ namespace pe
     void TonemapPass::UpdatePassInfo()
     {
         m_passInfo->name = "tonemap_pipeline";
-        m_passInfo->pVertShader = Shader::Create("Shaders/Common/Quad.hlsl", ShaderStage::VertexBit);
-        m_passInfo->pFragShader = Shader::Create("Shaders/Tonemap/TonemapPS.hlsl", ShaderStage::FragmentBit);
+        m_passInfo->pVertShader = Shader::Create(Path::Assets + "Shaders/Common/Quad.hlsl", ShaderStage::VertexBit, std::vector<Define>{}, ShaderCodeType::HLSL);
+        m_passInfo->pFragShader = Shader::Create(Path::Assets + "Shaders/Tonemap/TonemapPS.hlsl", ShaderStage::FragmentBit, std::vector<Define>{}, ShaderCodeType::HLSL);
         m_passInfo->dynamicStates = {DynamicState::Viewport, DynamicState::Scissor};
         m_passInfo->cullMode = CullMode::Back;
         m_passInfo->colorBlendAttachments = {PipelineColorBlendAttachmentState::Default};
@@ -49,11 +49,7 @@ namespace pe
             DSet->Update();
         }
     }
-
-    void TonemapPass::Update(Camera *camera)
-    {
-    }
-
+    
     void TonemapPass::Draw(CommandBuffer *cmd)
     {
         ImageBarrierInfo barrier;

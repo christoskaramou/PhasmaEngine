@@ -5,6 +5,7 @@ namespace pe
     class Context;
     class Camera;
 
+    using WindowApiHandle = ApiHandle<ObjectType::Unknown, SDL_Window *, Placeholder<0> *>;
     class Window : public PeHandle<Window, WindowApiHandle>
     {
     public:

@@ -34,8 +34,8 @@ namespace pe
     void SSRPass::UpdatePassInfo()
     {
         m_passInfo->name = "ssr_pipeline";
-        m_passInfo->pVertShader = Shader::Create("Shaders/Common/Quad.hlsl", ShaderStage::VertexBit);
-        m_passInfo->pFragShader = Shader::Create("Shaders/SSR/SSRPS.hlsl", ShaderStage::FragmentBit);
+        m_passInfo->pVertShader = Shader::Create(Path::Assets + "Shaders/Common/Quad.hlsl", ShaderStage::VertexBit, std::vector<Define>{}, ShaderCodeType::HLSL);
+        m_passInfo->pFragShader = Shader::Create(Path::Assets + "Shaders/SSR/SSRPS.hlsl", ShaderStage::FragmentBit, std::vector<Define>{}, ShaderCodeType::HLSL);
         m_passInfo->dynamicStates = {DynamicState::Viewport, DynamicState::Scissor};
         m_passInfo->cullMode = CullMode::Back;
         m_passInfo->colorBlendAttachments = {PipelineColorBlendAttachmentState::Default};
@@ -77,11 +77,12 @@ namespace pe
         }
     }
 
-    void SSRPass::Update(Camera *camera)
+    void SSRPass::Update()
     {
         auto &gSettings = Settings::Get<GlobalSettings>();
         if (gSettings.ssr)
         {
+            Camera *camera = GetGlobalSystem<CameraSystem>()->GetCamera(0);
             m_reflectionInput[0][0] = vec4(camera->GetPosition(), 1.0f);
             m_reflectionInput[0][1] = vec4(camera->GetFront(), 1.0f);
             m_reflectionInput[0][2] = vec4();
