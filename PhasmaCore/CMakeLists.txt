@@ -1,0 +1,142 @@
+cmake_minimum_required(VERSION 3.10)
+project(PhasmaCore CXX)
+set(CMAKE_CXX_STANDARD 20)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+message(STATUS "PhasmaCore = ${CMAKE_CURRENT_SOURCE_DIR}")
+
+# Check the operating system
+if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
+    message(STATUS "CMAKE_SYSTEM_NAME = ${CMAKE_SYSTEM_NAME}")
+    set(PE_DEFS
+        PE_LINUX
+        PE_VULKAN
+        _CONSOLE
+    )
+    add_compile_options(-fms-extensions)
+elseif(CMAKE_SYSTEM_NAME STREQUAL "Windows")
+    message(STATUS "CMAKE_SYSTEM_NAME = ${CMAKE_SYSTEM_NAME}")
+    set(PE_DEFS
+        PE_WIN32
+        PE_VULKAN
+        WIN32_LEAN_AND_MEAN
+        NOMINMAX
+        UNICODE
+        _UNICODE
+        _CONSOLE
+    )
+else()
+    error("Unsupported operating system")
+    message(STATUS "Detected operating system: ${CMAKE_SYSTEM_NAME}")
+endif()
+
+if(MSVC)
+    include(ProcessorCount)
+    ProcessorCount(N)
+    if(NOT N EQUAL 0)
+        set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} /MP${N}")
+        set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /MP${N}")
+    endif()
+    set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} /Oi /permissive-")
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /Oi /permissive-") 
+endif()
+
+# Collect all .cpp and .c files from the source directories
+file(GLOB_RECURSE CORE_SOURCES CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/Code/Core/*.cpp")
+file(GLOB_RECURSE ECS_SOURCES CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/Code/ECS/*.cpp")
+file(GLOB_RECURSE RENDERER_SOURCES CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/Code/Renderer/*.cpp")
+file(GLOB_RECURSE TINYGLTF_SOURCES CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/third_party/tinygltf/*.cpp")
+file(GLOB_RECURSE VMA_SOURCES CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/third_party/vma/*.cpp")
+
+# Add PhasmaCore static library
+add_library(PhasmaCore STATIC
+        ${CORE_SOURCES}
+        ${ECS_SOURCES}
+        ${RENDERER_SOURCES}
+        ${TINYGLTF_SOURCES}
+        ${VMA_SOURCES}
+)
+
+# Precompiled headers
+target_precompile_headers(PhasmaCore PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/Code/pch/PhasmaPch.h")
+
+# Set the include directories (we'll copy headers to PhasmaCore/include)
+target_include_directories(PhasmaCore PUBLIC
+    ${CMAKE_CURRENT_SOURCE_DIR}/Code
+    ${CMAKE_CURRENT_SOURCE_DIR}/Code/Core
+    ${CMAKE_CURRENT_SOURCE_DIR}/Code/ECS
+    ${CMAKE_CURRENT_SOURCE_DIR}/Code/Renderer
+    ${CMAKE_CURRENT_SOURCE_DIR}/third_party
+    ${CMAKE_CURRENT_SOURCE_DIR}/third_party/dxc
+    ${CMAKE_CURRENT_SOURCE_DIR}/third_party/RenderDoc
+    ${CMAKE_CURRENT_SOURCE_DIR}/third_party/shaderc
+    ${CMAKE_CURRENT_SOURCE_DIR}/third_party/spirv_cross
+    ${CMAKE_CURRENT_SOURCE_DIR}/third_party/tinygltf
+    ${CMAKE_CURRENT_SOURCE_DIR}/third_party/vk_video
+    ${CMAKE_CURRENT_SOURCE_DIR}/third_party/vma
+    ${CMAKE_CURRENT_SOURCE_DIR}/third_party/vulkan
+    ${CMAKE_CURRENT_SOURCE_DIR}/third_party/vk_video
+    ${CMAKE_CURRENT_SOURCE_DIR}/third_party/SDL2
+)
+
+# Link directories
+# cannot find this when running from main CMakeLists.txt
+target_link_directories(PhasmaCore PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/Libs/dx")
+target_link_directories(PhasmaCore PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/Libs/sdl2")
+target_link_directories(PhasmaCore PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/Libs/spirv")
+target_link_directories(PhasmaCore PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/Libs/vulkan")
+
+# Compile Definitions
+set(COMPILE_DEFS
+    $<$<CONFIG:Debug>:_DEBUG PE_DEBUG>
+    $<$<CONFIG:Release>:NDEBUG PE_RELEASE>
+    $<$<CONFIG:MinSizeRel>:NDEBUG PE_MINSIZEREL>
+    $<$<CONFIG:RelWithDebInfo>:NDEBUG PE_RELWITHDEBINFO>
+    ${PE_DEFS}
+)
+target_compile_definitions(PhasmaCore PUBLIC ${COMPILE_DEFS})
+
+# Libraries
+if(CMAKE_SYSTEM_NAME STREQUAL "Windows")
+    set(LIB_FILES
+        $<$<CONFIG:Debug>:spirv-cross-cored>
+        $<$<CONFIG:Release>:spirv-cross-core>
+        $<$<CONFIG:MinsizeRel>:spirv-cross-core>
+        $<$<CONFIG:RelWithDebInfo>:spirv-cross-core>
+    )
+else()
+    set(LIB_FILES
+        spirv-cross-core
+    )
+endif()
+list(APPEND LIB_FILES 
+    shaderc_shared
+    dxcompiler
+    SDL2main
+    SDL2
+    vulkan
+)
+target_link_libraries(PhasmaCore PUBLIC ${LIB_FILES})
+
+# Set output directory for the built library
+set_target_properties(PhasmaCore PROPERTIES
+    ARCHIVE_OUTPUT_DIRECTORY_DEBUG   "${CMAKE_CURRENT_BINARY_DIR}/Debug"
+    ARCHIVE_OUTPUT_DIRECTORY_RELEASE "${CMAKE_CURRENT_BINARY_DIR}/Release"
+    ARCHIVE_OUTPUT_DIRECTORY_MINSIZEREL "${CMAKE_CURRENT_BINARY_DIR}/MinSizeRel"
+    ARCHIVE_OUTPUT_DIRECTORY_RELWITHDEBINFO "${CMAKE_CURRENT_BINARY_DIR}/RelWithDebInfo"
+)
+
+# Copy headers into the corresponding folder in PhasmaCore/include/
+file(COPY ${CMAKE_CURRENT_SOURCE_DIR}/Code/
+    DESTINATION ${CMAKE_CURRENT_BINARY_DIR}/Include/
+    FILES_MATCHING PATTERN "*.h" PATTERN "*.hpp" PATTERN "*.inl")
+
+file(COPY ${CMAKE_CURRENT_SOURCE_DIR}/third_party/
+    DESTINATION ${CMAKE_CURRENT_BINARY_DIR}/Include/third_party
+    FILES_MATCHING PATTERN "*.h" PATTERN "*.hpp" PATTERN "*.inl")
+
+# Copy assets and DLLs to build directory
+add_custom_command(TARGET PhasmaCore POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different "${CMAKE_CURRENT_SOURCE_DIR}/DLLs/SDL2.dll" "$<TARGET_FILE_DIR:PhasmaCore>"
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different "${CMAKE_CURRENT_SOURCE_DIR}/DLLs/shaderc_shared.dll" "$<TARGET_FILE_DIR:PhasmaCore>"
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different "${CMAKE_CURRENT_SOURCE_DIR}/DLLs/dxcompiler.dll" "$<TARGET_FILE_DIR:PhasmaCore>"
+)

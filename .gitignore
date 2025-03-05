@@ -10,6 +10,13 @@
 !/README.md
 !/.gitignore
 
+!/PhasmaCore/
+!/PhasmaCore/Code/
+!/PhasmaCore/DLLs/
+!/PhasmaCore/Libs/
+!/PhasmaCore/third_party/
+!/PhasmaCore/CMakeLists.txt
+
 # User-specific files
 *.suo
 *.user
