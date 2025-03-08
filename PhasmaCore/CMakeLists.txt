@@ -62,9 +62,6 @@ target_precompile_headers(PhasmaCore PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/Code/pc
 # Set the include directories (we'll copy headers to PhasmaCore/include)
 target_include_directories(PhasmaCore PUBLIC
     ${CMAKE_CURRENT_SOURCE_DIR}/Code
-    ${CMAKE_CURRENT_SOURCE_DIR}/Code/Core
-    ${CMAKE_CURRENT_SOURCE_DIR}/Code/ECS
-    ${CMAKE_CURRENT_SOURCE_DIR}/Code/Renderer
     ${CMAKE_CURRENT_SOURCE_DIR}/third_party
     ${CMAKE_CURRENT_SOURCE_DIR}/third_party/dxc
     ${CMAKE_CURRENT_SOURCE_DIR}/third_party/RenderDoc
