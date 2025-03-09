@@ -13,6 +13,7 @@
 !/PhasmaCore/Code/
 !/PhasmaCore/DLLs/
 !/PhasmaCore/Libs/
+!/PhasmaCore/pch/
 !/PhasmaCore/third_party/
 !/PhasmaCore/CMakeLists.txt
 
@@ -290,3 +291,4 @@ Phasma/log.txt
 
 # Shader cache
 Phasma/Assets/ShaderCache/
+imgui.ini
