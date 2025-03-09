@@ -8,7 +8,6 @@ namespace pe
         using Func = std::function<void(size_t fileEvent)>;
 
         static size_t GetFileEvent(const std::string &file);
-        static void AddFolder(const std::string &folder, Func &&callback);
         static void Add(const std::string &file, Func &&callback);
         static const FileWatcher *Get(size_t hash);
         static const FileWatcher *Get(const std::string &file);
@@ -29,7 +28,7 @@ namespace pe
         FileWatcher() = default;
         FileWatcher(const std::string &file, Func &&callback);
         
-        inline static void CheckFiles();
+        inline static void UpdateFolders();
         inline static void WatchFiles();
 
         size_t m_hash;
@@ -37,6 +36,8 @@ namespace pe
         std::time_t m_time;
         Func m_callback;
 
+        inline static std::vector<std::string> s_files{};
+        inline static std::vector<std::string> s_folders{};
         inline static std::unordered_map<size_t, FileWatcher *> s_watchers{};
         inline static std::atomic_bool s_running{false};
         inline static std::mutex s_mutex{};

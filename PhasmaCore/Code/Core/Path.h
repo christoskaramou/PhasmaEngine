@@ -11,7 +11,6 @@ namespace pe
     class Path
     {
     public:
-        inline static std::string Assets;
         inline static std::string Executable;
 
     private:
@@ -39,8 +38,6 @@ namespace pe
                     Executable = std::filesystem::current_path().string();
 
                 std::replace(Executable.begin(), Executable.end(), '\\', '/');
-                
-                Assets = Executable + "Assets/";
             }
         };
 

@@ -57,9 +57,9 @@ add_library(PhasmaCore STATIC
 )
 
 # Precompiled headers
-target_precompile_headers(PhasmaCore PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/Code/pch/PhasmaPch.h")
+target_precompile_headers(PhasmaCore PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/pch/PhasmaPch.h")
 
-# Set the include directories (we'll copy headers to PhasmaCore/include)
+# Set the include directories
 target_include_directories(PhasmaCore PUBLIC
     ${CMAKE_CURRENT_SOURCE_DIR}/Code
     ${CMAKE_CURRENT_SOURCE_DIR}/third_party
@@ -78,7 +78,7 @@ target_include_directories(PhasmaCore PUBLIC
 # Link directories
 # cannot find this when running from main CMakeLists.txt
 target_link_directories(PhasmaCore PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/Libs/dx")
-target_link_directories(PhasmaCore PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/Libs/sdl2")
+target_link_directories(PhasmaCore PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/Libs/SDL2")
 target_link_directories(PhasmaCore PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/Libs/spirv")
 target_link_directories(PhasmaCore PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/Libs/vulkan")
 
@@ -114,26 +114,16 @@ list(APPEND LIB_FILES
 )
 target_link_libraries(PhasmaCore PUBLIC ${LIB_FILES})
 
-# Set output directory for the built library
-set_target_properties(PhasmaCore PROPERTIES
-    ARCHIVE_OUTPUT_DIRECTORY_DEBUG   "${CMAKE_CURRENT_BINARY_DIR}/Debug"
-    ARCHIVE_OUTPUT_DIRECTORY_RELEASE "${CMAKE_CURRENT_BINARY_DIR}/Release"
-    ARCHIVE_OUTPUT_DIRECTORY_MINSIZEREL "${CMAKE_CURRENT_BINARY_DIR}/MinSizeRel"
-    ARCHIVE_OUTPUT_DIRECTORY_RELWITHDEBINFO "${CMAKE_CURRENT_BINARY_DIR}/RelWithDebInfo"
-)
-
 # Copy headers into the corresponding folder in PhasmaCore/include/
 file(COPY ${CMAKE_CURRENT_SOURCE_DIR}/Code/
     DESTINATION ${CMAKE_CURRENT_BINARY_DIR}/Include/
-    FILES_MATCHING PATTERN "*.h" PATTERN "*.hpp" PATTERN "*.inl")
+    FILES_MATCHING PATTERN "*.h" PATTERN "*.hpp" PATTERN "*.inl" PATTERN "*.hlsl" PATTERN "*.spv")
 
 file(COPY ${CMAKE_CURRENT_SOURCE_DIR}/third_party/
     DESTINATION ${CMAKE_CURRENT_BINARY_DIR}/Include/third_party
     FILES_MATCHING PATTERN "*.h" PATTERN "*.hpp" PATTERN "*.inl")
 
-# Copy assets and DLLs to build directory
-add_custom_command(TARGET PhasmaCore POST_BUILD
-    COMMAND ${CMAKE_COMMAND} -E copy_if_different "${CMAKE_CURRENT_SOURCE_DIR}/DLLs/SDL2.dll" "$<TARGET_FILE_DIR:PhasmaCore>"
-    COMMAND ${CMAKE_COMMAND} -E copy_if_different "${CMAKE_CURRENT_SOURCE_DIR}/DLLs/shaderc_shared.dll" "$<TARGET_FILE_DIR:PhasmaCore>"
-    COMMAND ${CMAKE_COMMAND} -E copy_if_different "${CMAKE_CURRENT_SOURCE_DIR}/DLLs/dxcompiler.dll" "$<TARGET_FILE_DIR:PhasmaCore>"
+# Copy dlls to build directory
+file(COPY ${CMAKE_CURRENT_SOURCE_DIR}/DLLs/
+    DESTINATION ${CMAKE_CURRENT_BINARY_DIR}/DLLs
 )
