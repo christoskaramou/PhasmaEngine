@@ -51,7 +51,11 @@ target_link_libraries(Phasma PRIVATE PhasmaCore)
 add_custom_command(TARGET Phasma POST_BUILD
     COMMAND ${CMAKE_COMMAND} -E copy_directory "${CMAKE_CURRENT_SOURCE_DIR}/Phasma/Assets" "$<TARGET_FILE_DIR:Phasma>/Assets"
 )
-add_custom_command(TARGET Phasma POST_BUILD
-    COMMAND ${CMAKE_COMMAND} -E copy_if_different "${CMAKE_BINARY_DIR}/PhasmaCore/DLLs/dxcompiler.dll" "$<TARGET_FILE_DIR:Phasma>"
-    COMMAND ${CMAKE_COMMAND} -E copy_if_different "${CMAKE_BINARY_DIR}/PhasmaCore/DLLs/shaderc_shared.dll" "$<TARGET_FILE_DIR:Phasma>"
-)
+
+# Copy shader compilers for windows
+if(CMAKE_SYSTEM_NAME STREQUAL "Windows")
+    add_custom_command(TARGET Phasma POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different "${CMAKE_BINARY_DIR}/PhasmaCore/DLLs/dxcompiler.dll" "$<TARGET_FILE_DIR:Phasma>"
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different "${CMAKE_BINARY_DIR}/PhasmaCore/DLLs/shaderc_shared.dll" "$<TARGET_FILE_DIR:Phasma>"
+    )
+endif()

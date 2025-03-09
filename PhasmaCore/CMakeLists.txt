@@ -123,7 +123,10 @@ file(COPY ${CMAKE_CURRENT_SOURCE_DIR}/third_party/
     DESTINATION ${CMAKE_CURRENT_BINARY_DIR}/Include/third_party
     FILES_MATCHING PATTERN "*.h" PATTERN "*.hpp" PATTERN "*.inl")
 
-# Copy dlls to build directory
-file(COPY ${CMAKE_CURRENT_SOURCE_DIR}/DLLs/
-    DESTINATION ${CMAKE_CURRENT_BINARY_DIR}/DLLs
-)
+# Copy shader compilers for windows
+if(CMAKE_SYSTEM_NAME STREQUAL "Windows")
+    # Copy dlls to build directory
+    file(COPY ${CMAKE_CURRENT_SOURCE_DIR}/DLLs/
+        DESTINATION ${CMAKE_CURRENT_BINARY_DIR}/DLLs
+    )
+endif()
