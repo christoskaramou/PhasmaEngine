@@ -73,11 +73,11 @@ namespace pe
 
         // Upload images
         if (!g_defaultBlack)
-            g_defaultBlack = Image::LoadRGBA8(cmd, Path::Assets + "Objects/black.png");
+            g_defaultBlack = Image::LoadRGBA8(cmd, Path::Executable + "Assets/Objects/black.png");
         if (!g_defaultNormal)
-            g_defaultNormal = Image::LoadRGBA8(cmd, Path::Assets + "Objects/normal.png");
+            g_defaultNormal = Image::LoadRGBA8(cmd, Path::Executable + "Assets/Objects/normal.png");
         if (!g_defaultWhite)
-            g_defaultWhite = Image::LoadRGBA8(cmd, Path::Assets + "Objects/white.png");
+            g_defaultWhite = Image::LoadRGBA8(cmd, Path::Executable + "Assets/Objects/white.png");
         if (!g_defaultSampler)
         {
             SamplerCreateInfo info{};

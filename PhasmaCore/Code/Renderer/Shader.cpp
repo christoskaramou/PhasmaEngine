@@ -120,8 +120,22 @@ namespace pe
         }
     }
 
-    Shader::Shader(const std::string &spirvPath, ShaderStage shaderStage)
-        : m_shaderStage{shaderStage}
+    Shader::Shader(const uint32_t *spirv, size_t size, ShaderStage shaderStage, const std::string &entryName)
+        : m_shaderStage{shaderStage},
+          m_entryName{entryName}
+    {
+        m_spirv.resize(size);
+        memcpy(m_spirv.data(), spirv, size * sizeof(uint32_t));
+
+        if (m_spirv.size() > 0)
+        {
+            m_reflection.Init(this);
+        }
+    }
+
+    Shader::Shader(const std::string &spirvPath, ShaderStage shaderStage, const std::string &entryName)
+        : m_shaderStage{shaderStage},
+          m_entryName{entryName}
     {
         std::string path = spirvPath;
         std::replace(path.begin(), path.end(), '\\', '/');
@@ -138,13 +152,16 @@ namespace pe
         }
 
         if (m_spirv.size() > 0)
+        {
             m_reflection.Init(this);
+        }
     }
 
-    Shader::Shader(const std::string &sourcePath, ShaderStage shaderStage, const std::vector<Define> &localDefines, ShaderCodeType type)
+    Shader::Shader(const std::string &sourcePath, ShaderStage shaderStage, const std::string &entryName, const std::vector<Define> &localDefines, ShaderCodeType type)
         : m_localDefines{localDefines},
           m_shaderStage{shaderStage},
-          m_type{type}
+          m_type{type},
+          m_entryName{entryName}
     {
         std::string path = sourcePath;
         std::replace(path.begin(), path.end(), '\\', '/');
@@ -191,34 +208,6 @@ namespace pe
 
     Shader::~Shader()
     {
-    }
-
-    const std::string &Shader::GetEntryName()
-    {
-        static std::string empty = "";
-        static std::string entryNameGlsl = "main";
-        static std::string entryNameHlslVS = "mainVS";
-        static std::string entryNameHlslPS = "mainPS";
-        static std::string entryNameHlslCS = "mainCS";
-
-        if (m_type == ShaderCodeType::HLSL)
-        {
-            if (m_shaderStage == ShaderStage::VertexBit)
-                return entryNameHlslVS;
-            if (m_shaderStage == ShaderStage::FragmentBit)
-                return entryNameHlslPS;
-            if (m_shaderStage == ShaderStage::ComputeBit)
-                return entryNameHlslCS;
-
-            PE_ERROR("Invalid shader stage!");
-        }
-        else if (m_type == ShaderCodeType::GLSL)
-        {
-            return entryNameGlsl;
-        }
-
-        PE_ERROR("Invalid shader stage!");
-        return empty;
     }
 
     void Shader::AddGlobalDefine(const std::string &name, const std::string &value)

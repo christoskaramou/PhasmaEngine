@@ -68,31 +68,6 @@ namespace pe
         return watcher->GetHash();
     }
 
-    void FileWatcher::AddFolder(const std::string &folder, Func &&callback)
-    {
-        for (auto &file : std::filesystem::recursive_directory_iterator(folder))
-            FileWatcher::Add(file.path().string(), std::forward<Func>(callback));
-    }
-
-    void FileWatcher::CheckFiles()
-    {
-        // Add "Shaders" folder files
-        AddFolder(Path::Assets + "Shaders",
-                  [](size_t fileEvent)
-                  {
-                      EventSystem::PushEvent(fileEvent);
-                      EventSystem::PushEvent(EventCompileShaders);
-                  });
-        
-        // Add "Scripts" folder files
-        AddFolder(Path::Assets + "Scripts",
-                  [](size_t fileEvent)
-                  {
-                      EventSystem::PushEvent(fileEvent);
-                      EventSystem::PushEvent(EventCompileScripts);
-                  });
-    }
-
     void FileWatcher::WatchFiles()
     {
         std::lock_guard<std::mutex> guard(s_mutex);
@@ -106,7 +81,7 @@ namespace pe
             return;
 
         s_running = true;
-        FileWatcher::CheckFiles();
+        //FileWatcher::CheckFiles();
         FileWatcher::WatchFiles();
 
         auto callback = []()
@@ -114,7 +89,7 @@ namespace pe
             Timer timer;
             while (s_running)
             {
-                FileWatcher::CheckFiles();
+                //FileWatcher::CheckFiles();
                 FileWatcher::WatchFiles();
                 timer.ThreadSleep(1.0);
             }

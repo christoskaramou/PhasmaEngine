@@ -6,7 +6,7 @@ namespace pe
     void ScriptManager::Init()
     {
         // Configure CMake
-        std::string cmakeCommand = "cmake -S " + Path::Assets + "Scripts -B " + Path::Executable + "Assets/Scripts/Build";
+        std::string cmakeCommand = "cmake -S " + Path::Executable + "Assets/Scripts -B " + Path::Executable + "Assets/Scripts/Build";
         if (std::system(cmakeCommand.c_str()) != 0)
             PE_ERROR("Failed to configure CMake");
 
@@ -27,7 +27,7 @@ namespace pe
         LoadModule();
 
         // Find .cpp files in the Scripts directory
-        for (auto &file : std::filesystem::recursive_directory_iterator(Path::Assets + "Scripts"))
+        for (auto &file : std::filesystem::recursive_directory_iterator(Path::Executable + "Assets/Scripts"))
         {
             if (file.path().extension() == ".cpp")
             {

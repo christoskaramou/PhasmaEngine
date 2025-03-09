@@ -29,6 +29,21 @@ namespace pe
             }
         }
 
+        auto shaderCallback = [](size_t fileEvent)
+        {
+            EventSystem::PushEvent(fileEvent);
+            EventSystem::PushEvent(EventCompileShaders);
+        };
+        for (auto &file : std::filesystem::recursive_directory_iterator(Path::Executable + "Assets/Shaders"))
+            FileWatcher::Add(file.path().string(), shaderCallback);
+
+        // auto scriptCallback = [](size_t fileEvent)
+        // {
+        //     EventSystem::PushEvent(fileEvent);
+        //     EventSystem::PushEvent(EventCompileScripts);
+        // };
+        // for (auto &file : std::filesystem::recursive_directory_iterator(Path::Executable + "Assets/Scripts"))
+        //     FileWatcher::Add(file.path().string(), scriptCallback);
         FileWatcher::Start();
         EventSystem::Init();
         // ScriptManager::Init();
@@ -61,7 +76,7 @@ namespace pe
 
         cmd->Wait();
         cmd->Return();
-        
+
         queue->WaitIdle();
 
         // Render some frames so everything is initialized before destroying the splash screen

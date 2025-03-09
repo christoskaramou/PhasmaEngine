@@ -45,8 +45,8 @@ namespace pe
 
         // Opaque light pass
         m_passInfo->name = "lighting_opaque_pipeline";
-        m_passInfo->pVertShader = Shader::Create(Path::Assets + "Shaders/Common/Quad.hlsl", ShaderStage::VertexBit, std::vector<Define>{}, ShaderCodeType::HLSL);
-        m_passInfo->pFragShader = Shader::Create(Path::Assets + "Shaders/Gbuffer/LightingPS.hlsl", ShaderStage::FragmentBit, definesFrag, ShaderCodeType::HLSL);
+        m_passInfo->pVertShader = Shader::Create(Path::Executable + "Assets/Shaders/Common/Quad.hlsl", ShaderStage::VertexBit, "mainVS", std::vector<Define>{}, ShaderCodeType::HLSL);
+        m_passInfo->pFragShader = Shader::Create(Path::Executable + "Assets/Shaders/Gbuffer/LightingPS.hlsl", ShaderStage::FragmentBit, "mainPS", definesFrag, ShaderCodeType::HLSL);
         m_passInfo->dynamicStates = {DynamicState::Viewport, DynamicState::Scissor};
         m_passInfo->colorBlendAttachments = {PipelineColorBlendAttachmentState::Default};
         m_passInfo->colorFormats = {m_viewportRT->GetFormat()};
@@ -59,7 +59,7 @@ namespace pe
 
     void LightOpaquePass::CreateUniforms(CommandBuffer *cmd)
     {
-        const std::string path = Path::Assets + "Objects/ibl_brdf_lut.png";
+        const std::string path = Path::Executable + "Assets/Objects/ibl_brdf_lut.png";
         m_ibl_brdf_lut = Image::LoadRGBA8(cmd, path);
 
         for (uint32_t i = 0; i < SWAPCHAIN_IMAGES; i++)
@@ -250,8 +250,8 @@ namespace pe
             Define{"MAX_SPOT_LIGHTS", std::to_string(MAX_SPOT_LIGHTS)}};
 
         m_passInfo->name = "lighting_transparent_pipeline";
-        m_passInfo->pVertShader = Shader::Create(Path::Assets + "Shaders/Common/Quad.hlsl", ShaderStage::VertexBit, std::vector<Define>{}, ShaderCodeType::HLSL);
-        m_passInfo->pFragShader = Shader::Create(Path::Assets + "Shaders/Gbuffer/LightingPS.hlsl", ShaderStage::FragmentBit, definesFrag, ShaderCodeType::HLSL);
+        m_passInfo->pVertShader = Shader::Create(Path::Executable + "Assets/Shaders/Common/Quad.hlsl", ShaderStage::VertexBit, "mainVS", std::vector<Define>{}, ShaderCodeType::HLSL);
+        m_passInfo->pFragShader = Shader::Create(Path::Executable + "Assets/Shaders/Gbuffer/LightingPS.hlsl", ShaderStage::FragmentBit, "mainPS", definesFrag, ShaderCodeType::HLSL);
         m_passInfo->dynamicStates = {DynamicState::Viewport, DynamicState::Scissor};
         m_passInfo->colorBlendAttachments = {PipelineColorBlendAttachmentState::Default};
         m_passInfo->blendEnable = true;
@@ -264,7 +264,7 @@ namespace pe
 
     void LightTransparentPass::CreateUniforms(CommandBuffer *cmd)
     {
-        const std::string path = Path::Assets + "Objects/ibl_brdf_lut.png";
+        const std::string path = Path::Executable + "Assets/Objects/ibl_brdf_lut.png";
         m_ibl_brdf_lut = Image::LoadRGBA8(cmd, path);
 
         for (uint32_t i = 0; i < SWAPCHAIN_IMAGES; i++)

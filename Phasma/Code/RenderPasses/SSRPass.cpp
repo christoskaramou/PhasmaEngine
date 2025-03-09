@@ -34,8 +34,8 @@ namespace pe
     void SSRPass::UpdatePassInfo()
     {
         m_passInfo->name = "ssr_pipeline";
-        m_passInfo->pVertShader = Shader::Create(Path::Assets + "Shaders/Common/Quad.hlsl", ShaderStage::VertexBit, std::vector<Define>{}, ShaderCodeType::HLSL);
-        m_passInfo->pFragShader = Shader::Create(Path::Assets + "Shaders/SSR/SSRPS.hlsl", ShaderStage::FragmentBit, std::vector<Define>{}, ShaderCodeType::HLSL);
+        m_passInfo->pVertShader = Shader::Create(Path::Executable + "Assets/Shaders/Common/Quad.hlsl", ShaderStage::VertexBit, "mainVS", std::vector<Define>{}, ShaderCodeType::HLSL);
+        m_passInfo->pFragShader = Shader::Create(Path::Executable + "Assets/Shaders/SSR/SSRPS.hlsl", ShaderStage::FragmentBit, "mainPS", std::vector<Define>{}, ShaderCodeType::HLSL);
         m_passInfo->dynamicStates = {DynamicState::Viewport, DynamicState::Scissor};
         m_passInfo->cullMode = CullMode::Back;
         m_passInfo->colorBlendAttachments = {PipelineColorBlendAttachmentState::Default};

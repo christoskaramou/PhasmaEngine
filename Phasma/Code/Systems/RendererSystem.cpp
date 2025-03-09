@@ -47,20 +47,20 @@ namespace pe
     {
         // SKYBOXES LOAD
         std::array<std::string, 6> skyTextures = {
-            Path::Assets + "Objects/sky/right.png",
-            Path::Assets + "Objects/sky/left.png",
-            Path::Assets + "Objects/sky/top.png",
-            Path::Assets + "Objects/sky/bottom.png",
-            Path::Assets + "Objects/sky/back.png",
-            Path::Assets + "Objects/sky/front.png"};
+            Path::Executable + "Assets/Objects/sky/right.png",
+            Path::Executable + "Assets/Objects/sky/left.png",
+            Path::Executable + "Assets/Objects/sky/top.png",
+            Path::Executable + "Assets/Objects/sky/bottom.png",
+            Path::Executable + "Assets/Objects/sky/back.png",
+            Path::Executable + "Assets/Objects/sky/front.png"};
         m_skyBoxDay.LoadSkyBox(cmd, skyTextures, 1024);
         skyTextures = {
-            Path::Assets + "Objects/lmcity/lmcity_rt.png",
-            Path::Assets + "Objects/lmcity/lmcity_lf.png",
-            Path::Assets + "Objects/lmcity/lmcity_up.png",
-            Path::Assets + "Objects/lmcity/lmcity_dn.png",
-            Path::Assets + "Objects/lmcity/lmcity_bk.png",
-            Path::Assets + "Objects/lmcity/lmcity_ft.png"};
+            Path::Executable + "Assets/Objects/lmcity/lmcity_rt.png",
+            Path::Executable + "Assets/Objects/lmcity/lmcity_lf.png",
+            Path::Executable + "Assets/Objects/lmcity/lmcity_up.png",
+            Path::Executable + "Assets/Objects/lmcity/lmcity_dn.png",
+            Path::Executable + "Assets/Objects/lmcity/lmcity_bk.png",
+            Path::Executable + "Assets/Objects/lmcity/lmcity_ft.png"};
         m_skyBoxNight.LoadSkyBox(cmd, skyTextures, 512);
     }
 

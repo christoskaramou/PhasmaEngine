@@ -49,8 +49,8 @@ namespace pe
         m_hash.Combine(definesHash);
 
         m_tempFilePath = Path::Executable;
-        m_tempFilePath += "/ShaderCache";
-        m_tempFilePath += "/" + std::to_string(m_hash);
+        m_tempFilePath += "ShaderCache/";
+        m_tempFilePath += std::to_string(m_hash);
     }
 
     bool ShaderCache::ShaderNeedsCompile()

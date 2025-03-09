@@ -60,8 +60,8 @@ namespace pe
         Format depthFormat = RHII.GetDepthFormat();
 
         m_passInfo->name = "gbuffer_opaque_pipeline";
-        m_passInfo->pVertShader = Shader::Create(Path::Assets + "Shaders/Gbuffer/GBufferVS.hlsl", ShaderStage::VertexBit, std::vector<Define>{}, ShaderCodeType::HLSL);
-        m_passInfo->pFragShader = Shader::Create(Path::Assets + "Shaders/Gbuffer/GBufferPS.hlsl", ShaderStage::FragmentBit, std::vector<Define>{}, ShaderCodeType::HLSL);
+        m_passInfo->pVertShader = Shader::Create(Path::Executable + "Assets/Shaders/Gbuffer/GBufferVS.hlsl", ShaderStage::VertexBit, "mainVS", std::vector<Define>{}, ShaderCodeType::HLSL);
+        m_passInfo->pFragShader = Shader::Create(Path::Executable + "Assets/Shaders/Gbuffer/GBufferPS.hlsl", ShaderStage::FragmentBit, "mainPS", std::vector<Define>{}, ShaderCodeType::HLSL);
         m_passInfo->dynamicStates = {DynamicState::Viewport, DynamicState::Scissor};
         m_passInfo->cullMode = CullMode::Front;
         m_passInfo->blendEnable = false;
@@ -189,8 +189,8 @@ namespace pe
         Format depthFormat = RHII.GetDepthFormat();
 
         m_passInfo->name = "gbuffer_transparent_pipeline";
-        m_passInfo->pVertShader = Shader::Create(Path::Assets + "Shaders/Gbuffer/GBufferVS.hlsl", ShaderStage::VertexBit, std::vector<Define>{}, ShaderCodeType::HLSL);
-        m_passInfo->pFragShader = Shader::Create(Path::Assets + "Shaders/Gbuffer/GBufferPS.hlsl", ShaderStage::FragmentBit, std::vector<Define>{}, ShaderCodeType::HLSL);
+        m_passInfo->pVertShader = Shader::Create(Path::Executable + "Assets/Shaders/Gbuffer/GBufferVS.hlsl", ShaderStage::VertexBit, "mainVS", std::vector<Define>{}, ShaderCodeType::HLSL);
+        m_passInfo->pFragShader = Shader::Create(Path::Executable + "Assets/Shaders/Gbuffer/GBufferPS.hlsl", ShaderStage::FragmentBit, "mainPS", std::vector<Define>{}, ShaderCodeType::HLSL);
         m_passInfo->dynamicStates = {DynamicState::Viewport, DynamicState::Scissor};
         m_passInfo->cullMode = CullMode::Front;
         m_passInfo->blendEnable = true;

@@ -15,10 +15,10 @@ if(MSVC)
     set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /Oi /permissive-") 
 endif()
 
-set(CMAKE_RUNTIME_OUTPUT_DIRECTORY_DEBUG "${CMAKE_CURRENT_BINARY_DIR}/Debug")
-set(CMAKE_RUNTIME_OUTPUT_DIRECTORY_RELEASE "${CMAKE_CURRENT_BINARY_DIR}/Release")
-set(CMAKE_RUNTIME_OUTPUT_DIRECTORY_MINSIZEREL "${CMAKE_CURRENT_BINARY_DIR}/MinSizeRel")
-set(CMAKE_RUNTIME_OUTPUT_DIRECTORY_RELWITHDEBINFO "${CMAKE_CURRENT_BINARY_DIR}/RelWithDebInfo")
+set(CMAKE_RUNTIME_OUTPUT_DIRECTORY_DEBUG "${CMAKE_BINARY_DIR}/Debug")
+set(CMAKE_RUNTIME_OUTPUT_DIRECTORY_RELEASE "${CMAKE_BINARY_DIR}/Release")
+set(CMAKE_RUNTIME_OUTPUT_DIRECTORY_MINSIZEREL "${CMAKE_BINARY_DIR}/MinSizeRel")
+set(CMAKE_RUNTIME_OUTPUT_DIRECTORY_RELWITHDEBINFO "${CMAKE_BINARY_DIR}/RelWithDebInfo")
 
 # Add PhasmaCore subdirectory
 add_subdirectory(PhasmaCore)
@@ -31,13 +31,6 @@ add_executable(Phasma ${CODE_SRC_FILES} ${INCLUDE_SRC_FILES} ${CMAKE_CURRENT_SOU
 # Phasma precompiled headers
 target_precompile_headers(Phasma REUSE_FROM PhasmaCore)
 
-# Phasma include directories from PhasmaCore in build directory
-target_include_directories(Phasma PRIVATE "${CMAKE_CURRENT_BINARY_DIR}/PhasmaCore/Include")
-target_include_directories(Phasma PRIVATE "${CMAKE_CURRENT_BINARY_DIR}/PhasmaCore/Include/third_party")
-target_include_directories(Phasma PRIVATE "${CMAKE_CURRENT_BINARY_DIR}/PhasmaCore/Include/third_party/SDL2")
-target_include_directories(Phasma PRIVATE "${CMAKE_CURRENT_BINARY_DIR}/PhasmaCore/Include/third_party/imgui")
-target_include_directories(Phasma PRIVATE "${CMAKE_CURRENT_BINARY_DIR}/PhasmaCore/Include/third_party/FSR2")
-
 # Phasma include directories
 target_include_directories(Phasma PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/Phasma")
 target_include_directories(Phasma PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/Phasma/Code")
@@ -45,8 +38,8 @@ target_include_directories(Phasma PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/Phasma/In
 target_include_directories(Phasma PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/Phasma/Include/imgui")
 
 # Phasma link directories
-target_link_directories(Phasma PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/Phasma/Libs/fsr/Debug")
-target_link_directories(Phasma PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/Phasma/Libs/fsr/Release")
+# target_link_directories(Phasma PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/Phasma/Libs/fsr/Debug")
+# target_link_directories(Phasma PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/Phasma/Libs/fsr/Release")
 
 # Libraries
 target_link_libraries(Phasma PRIVATE PhasmaCore)
@@ -55,4 +48,10 @@ target_link_libraries(Phasma PRIVATE PhasmaCore)
 # target_link_options(Phasma PRIVATE -fsanitize=address)
 
 # Copy assets to build directory
-add_custom_command(TARGET Phasma POST_BUILD COMMAND ${CMAKE_COMMAND} -E copy_directory "${CMAKE_CURRENT_SOURCE_DIR}/Phasma/Assets" "$<TARGET_FILE_DIR:Phasma>/Assets")
+add_custom_command(TARGET Phasma POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E copy_directory "${CMAKE_CURRENT_SOURCE_DIR}/Phasma/Assets" "$<TARGET_FILE_DIR:Phasma>/Assets"
+)
+add_custom_command(TARGET Phasma POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different "${CMAKE_BINARY_DIR}/PhasmaCore/DLLs/dxcompiler.dll" "$<TARGET_FILE_DIR:Phasma>"
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different "${CMAKE_BINARY_DIR}/PhasmaCore/DLLs/shaderc_shared.dll" "$<TARGET_FILE_DIR:Phasma>"
+)

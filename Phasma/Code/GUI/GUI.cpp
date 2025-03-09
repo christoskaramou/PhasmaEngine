@@ -361,7 +361,7 @@ namespace pe
             {
                 if (ImGui::IsMouseDoubleClicked(0))
                 {
-                    std::string s = Path::Assets + "Shaders\\" + gSettings.shader_list[i];
+                    std::string s = Path::Executable + "Assets/Shaders/" + gSettings.shader_list[i];
                     auto lambda = [s]()
                     { system(s.c_str()); };
                     e_GUI_ThreadPool.Enqueue(lambda);
@@ -540,7 +540,7 @@ namespace pe
         //       /  |/ +y               //     |/ v
 
         auto &gSettings = Settings::Get<GlobalSettings>();
-        std::string directory = Path::Assets + "Scripts";
+        std::string directory = Path::Executable + "Assets/Scripts";
         for (auto &file : std::filesystem::recursive_directory_iterator(directory))
         {
             auto pathStr = file.path().string();
@@ -548,7 +548,7 @@ namespace pe
                 gSettings.file_list.push_back(pathStr.erase(0, pathStr.find(directory) + directory.size() + 1));
         }
 
-        directory = Path::Assets + "Shaders";
+        directory = Path::Executable + "Assets/Shaders";
         for (auto &file : std::filesystem::recursive_directory_iterator(directory))
         {
             auto pathStr = file.path().string();
@@ -574,7 +574,7 @@ namespace pe
         m_attachment->image = renderer->GetDisplayRT();
         m_attachment->loadOp = AttachmentLoadOp::Load;
         VkFormat format = Translate<VkFormat>(RHII.GetSurface()->GetFormat());
-        Queue *queue = Queue::Get(QueueType::GraphicsBit | QueueType::TransferBit, 1);
+        Queue *queue = RHII.GetMainQueue();
 
         ImGui_ImplVulkan_InitInfo init_info{};
         init_info.Instance = RHII.GetInstance();

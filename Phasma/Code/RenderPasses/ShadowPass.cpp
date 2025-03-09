@@ -54,7 +54,7 @@ namespace pe
     void ShadowPass::UpdatePassInfo()
     {
         m_passInfo->name = "shadows_pipeline";
-        m_passInfo->pVertShader = Shader::Create(Path::Assets + "Shaders/Shadows/ShadowsVS.hlsl", ShaderStage::VertexBit, std::vector<Define>{}, ShaderCodeType::HLSL);
+        m_passInfo->pVertShader = Shader::Create(Path::Executable + "Assets/Shaders/Shadows/ShadowsVS.hlsl", ShaderStage::VertexBit, "mainVS", std::vector<Define>{}, ShaderCodeType::HLSL);
         m_passInfo->dynamicStates = {DynamicState::Viewport, DynamicState::Scissor, DynamicState::DepthBias};
         m_passInfo->cullMode = CullMode::Front;
         m_passInfo->depthFormat = RHII.GetDepthFormat();
