@@ -12,6 +12,8 @@ namespace pe
 #define PE_DEBUG_MODE 1
 #define PE_ERROR_MESSAGES 0
 #define PE_DEBUG_MESSENGER 0
+#define PE_USE_GLM 1
+#define PE_RENDER_DOC 1
 
 #if PE_ERROR_MESSAGES && _DEBUG
 
@@ -41,33 +43,14 @@ namespace pe
             PE_ERROR_MSG("Check result error: " + std::to_string(res), func, file, line);
     }
 
-#define PE_CHECK(res) PE_CHECK_RESULT(res, __func__, __FILE__, __LINE__)
-#define PE_ERROR(msg) PE_ERROR_MSG(msg, __func__, __FILE__, __LINE__)
-#define PE_ERROR_IF(condition, msg) PE_ERROR_IF_MSG(condition, msg, __func__, __FILE__, __LINE__)
-#define PE_INFO(msg) do { std::cout << msg << std::endl; } while (0)
-
+    #define PE_CHECK(res) PE_CHECK_RESULT(res, __func__, __FILE__, __LINE__)
+    #define PE_ERROR(msg) PE_ERROR_MSG(msg, __func__, __FILE__, __LINE__)
+    #define PE_ERROR_IF(condition, msg) PE_ERROR_IF_MSG(condition, msg, __func__, __FILE__, __LINE__)
+    #define PE_INFO(msg) do { std::cout << msg << std::endl; } while (0)
 #else
-
-    inline void PE_CHECK_RESULT(int res)
-    {
-        if (res != 0)
-            throw std::runtime_error("error");
-    }
-
-    inline void PE_ERROR_IF_MSG(bool condition)
-    {
-        if (condition)
-            throw std::runtime_error("error");
-    }
-
-#define PE_CHECK(res) PE_CHECK_RESULT(res)
-#define PE_ERROR(msg) do { throw std::runtime_error("error"); } while (0)
-#define PE_ERROR_IF(condition, msg) PE_ERROR_IF_MSG(condition)
-#define PE_INFO(msg) do { std::cout << msg << std::endl; } while (0)
-
+    #define PE_CHECK(res) do { if (res != 0) throw std::runtime_error("error"); } while (0)
+    #define PE_ERROR(msg) do { throw std::runtime_error("error"); } while (0)
+    #define PE_ERROR_IF(condition, msg) do { if (condition) throw std::runtime_error("error"); } while (0)
+    #define PE_INFO(msg) do { std::cout << msg << std::endl; } while (0)
 #endif
-
-#define PE_USE_GLM 1
-
-#define PE_RENDER_DOC 0
 }
