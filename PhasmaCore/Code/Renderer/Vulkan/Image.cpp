@@ -300,8 +300,8 @@ namespace pe
         PE_ERROR_IF(!info.image, "Image::Barrier: no image specified.");
         Image &image = *info.image;
 
-        uint mipLevels = info.mipLevels ? info.mipLevels : image.m_createInfo.mipLevels;
-        uint arrayLayers = info.arrayLayers ? info.arrayLayers : image.m_createInfo.arrayLayers;
+        uint32_t mipLevels = info.mipLevels ? info.mipLevels : image.m_createInfo.mipLevels;
+        uint32_t arrayLayers = info.arrayLayers ? info.arrayLayers : image.m_createInfo.arrayLayers;
         const ImageTrackInfo &oldInfo = image.m_trackInfos[info.baseArrayLayer][info.baseMipLevel];
 
         VkImageMemoryBarrier2 barrier{};
@@ -351,8 +351,8 @@ namespace pe
             const ImageCreateInfo &imageInfo = image->m_createInfo;
 
             // Get the correct mip levels and array layers if they are not specified (zero)
-            uint mipLevels = info.mipLevels ? info.mipLevels : imageInfo.mipLevels;
-            uint arrayLayers = info.arrayLayers ? info.arrayLayers : imageInfo.arrayLayers;
+            uint32_t mipLevels = info.mipLevels ? info.mipLevels : imageInfo.mipLevels;
+            uint32_t arrayLayers = info.arrayLayers ? info.arrayLayers : imageInfo.arrayLayers;
 
             const ImageTrackInfo &oldInfo = image->m_trackInfos[info.baseArrayLayer][info.baseMipLevel];
 
