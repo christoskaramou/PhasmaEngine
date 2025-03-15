@@ -108,6 +108,12 @@ namespace pe
         m_surface->FindProperties();
     }
 
+    struct GPUScore
+    {
+        VkPhysicalDevice gpu;
+        uint32_t score;
+    };
+
     void RHI::FindGpu()
     {
         uint32_t gpuCount;
@@ -116,23 +122,17 @@ namespace pe
         std::vector<VkPhysicalDevice> gpuList(gpuCount);
         vkEnumeratePhysicalDevices(m_instance, &gpuCount, gpuList.data());
 
-        std::vector<VkPhysicalDevice> validGpuList{};
-        VkPhysicalDevice preferredGpu;
-        VkPhysicalDeviceType preferredGpuType = VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU;
-        // VkPhysicalDeviceType preferredGpuType = VK_PHYSICAL_DEVICE_TYPE_INTEGRATED_GPU;
-
-        for (auto &GPU : gpuList)
+        std::vector<GPUScore> gpuScores{};
+        for (auto &gpu : gpuList)
         {
             uint32_t queueFamPropCount;
-            vkGetPhysicalDeviceQueueFamilyProperties2(GPU, &queueFamPropCount, nullptr);
-
+            vkGetPhysicalDeviceQueueFamilyProperties2(gpu, &queueFamPropCount, nullptr);
             std::vector<VkQueueFamilyProperties2> queueFamilyProperties(queueFamPropCount);
             for (auto &qfp : queueFamilyProperties)
                 qfp.sType = VK_STRUCTURE_TYPE_QUEUE_FAMILY_PROPERTIES_2;
-            vkGetPhysicalDeviceQueueFamilyProperties2(GPU, &queueFamPropCount, queueFamilyProperties.data());
+            vkGetPhysicalDeviceQueueFamilyProperties2(gpu, &queueFamPropCount, queueFamilyProperties.data());
 
             VkQueueFlags flags{};
-
             for (auto &qfp : queueFamilyProperties)
             {
                 if (qfp.queueFamilyProperties.queueFlags & VK_QUEUE_GRAPHICS_BIT)
@@ -147,21 +147,38 @@ namespace pe
                 flags & VK_QUEUE_COMPUTE_BIT &&
                 flags & VK_QUEUE_TRANSFER_BIT)
             {
-                VkPhysicalDeviceProperties2 properties{};
-                properties.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROPERTIES_2;
+                VkPhysicalDeviceProperties2 properties2{};
+                properties2.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROPERTIES_2;
+                vkGetPhysicalDeviceProperties2(gpu, &properties2);
 
-                vkGetPhysicalDeviceProperties2(GPU, &properties);
-                if (properties.properties.deviceType == preferredGpuType)
+                GPUScore gpuScore{};
+                gpuScore.gpu = gpu;
+                switch (properties2.properties.deviceType)
                 {
-                    preferredGpu = GPU;
+                case VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU:
+                    gpuScore.score = 4;
                     break;
+                case VK_PHYSICAL_DEVICE_TYPE_INTEGRATED_GPU:
+                    gpuScore.score = 3;
+                    break;
+                case VK_PHYSICAL_DEVICE_TYPE_VIRTUAL_GPU:
+                    gpuScore.score = 2;
+                    break;
+                case VK_PHYSICAL_DEVICE_TYPE_CPU:
+                    gpuScore.score = 1;
+                    break;
+                default:
+                    continue;
                 }
 
-                validGpuList.push_back(GPU);
+                gpuScores.push_back(gpuScore);
             }
         }
 
-        m_gpu = preferredGpu ? preferredGpu : validGpuList[0];
+        PE_ERROR_IF(gpuScores.empty(), "No suitable GPU found!");
+        std::sort(gpuScores.begin(), gpuScores.end(), [](const GPUScore &a, const GPUScore &b)
+                  { return a.score > b.score; });
+        m_gpu = gpuScores.front().gpu;
 
         VkPhysicalDevicePushDescriptorPropertiesKHR pushDescriptorProperties{};
         pushDescriptorProperties.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PUSH_DESCRIPTOR_PROPERTIES_KHR;
@@ -169,7 +186,6 @@ namespace pe
         VkPhysicalDeviceProperties2 gpuPropertiesVK;
         gpuPropertiesVK.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROPERTIES_2;
         gpuPropertiesVK.pNext = &pushDescriptorProperties;
-
         vkGetPhysicalDeviceProperties2(m_gpu, &gpuPropertiesVK);
 
         m_gpuName = gpuPropertiesVK.properties.deviceName;
@@ -224,7 +240,7 @@ namespace pe
 
     bool RHI::IsDeviceExtensionValid(const char *name)
     {
-        PE_ERROR_IF(!m_gpu, "Must find GPU before checking device extensions!");
+        PE_ERROR_IF(!m_gpu, "Must find gpu before checking device extensions!");
 
         static std::vector<VkExtensionProperties> extensions;
         if (extensions.empty())
