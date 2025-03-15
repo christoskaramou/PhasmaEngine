@@ -28,10 +28,10 @@ namespace pe
         viewport.minDepth = minDepth;
         viewport.maxDepth = maxDepth;
 
-        scissor.x = static_cast<int>(x);
-        scissor.y = static_cast<int>(y);
-        scissor.width = static_cast<int>(w);
-        scissor.height = static_cast<int>(h);
+        scissor.x = static_cast<int32_t>(x);
+        scissor.y = static_cast<int32_t>(y);
+        scissor.width = static_cast<int32_t>(w);
+        scissor.height = static_cast<int32_t>(h);
     }
 
     void Renderer::Upsample(CommandBuffer *cmd, Filter filter)
@@ -43,8 +43,8 @@ namespace pe
         region.srcOffsets[1] = Offset3D{static_cast<int32_t>(m_viewportRT->GetWidth()), static_cast<int32_t>(m_viewportRT->GetHeight()), 1};
         region.srcSubresource.aspectMask = GetAspectMask(m_viewportRT->GetFormat());
         region.srcSubresource.layerCount = 1;
-        region.dstOffsets[0] = Offset3D{(int32_t)vp.x, (int32_t)vp.y, 0};
-        region.dstOffsets[1] = Offset3D{(int32_t)vp.x + (int32_t)vp.width, (int32_t)vp.y + (int32_t)vp.height, 1};
+        region.dstOffsets[0] = Offset3D{static_cast<int32_t>(vp.x), static_cast<int32_t>(vp.y), 0};
+        region.dstOffsets[1] = Offset3D{static_cast<int32_t>(vp.x) + static_cast<int32_t>(vp.width), static_cast<int32_t>(vp.y) + static_cast<int32_t>(vp.height), 1};
         region.dstSubresource.aspectMask = GetAspectMask(m_displayRT->GetFormat());
         region.dstSubresource.layerCount = 1;
 
