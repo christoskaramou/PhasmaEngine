@@ -1,6 +1,6 @@
 #include "Skybox.h"
-#include "Renderer/Image.h"
-#include "Renderer/Command.h"
+#include "API/Image.h"
+#include "API/Command.h"
 
 namespace pe
 {

@@ -1,7 +1,7 @@
 #pragma once
 
 #include "GUI/GUI.h"
-#include "Renderer/Light.h"
+#include "API/Light.h"
 
 namespace pe
 {

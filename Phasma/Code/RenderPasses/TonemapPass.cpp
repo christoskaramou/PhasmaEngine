@@ -1,11 +1,11 @@
 #include "TonemapPass.h"
-#include "Renderer/Shader.h"
-#include "Renderer/Command.h"
-#include "Renderer/Descriptor.h"
-#include "Renderer/Image.h"
-#include "Renderer/Pipeline.h"
+#include "API/Shader.h"
+#include "API/Command.h"
+#include "API/Descriptor.h"
+#include "API/Image.h"
+#include "API/Pipeline.h"
 #include "Systems/RendererSystem.h"
-#include "Renderer/RenderPass.h"
+#include "API/RenderPass.h"
 
 
 namespace pe

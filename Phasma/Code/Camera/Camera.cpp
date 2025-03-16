@@ -1,6 +1,6 @@
 #include "Camera/Camera.h"
 #include "GUI/GUI.h"
-#include "Renderer/RHI.h"
+#include "API/RHI.h"
 #include "RenderPasses/SuperResolutionPass.h"
 #include "Systems/RendererSystem.h"
 #include "Systems/PostProcessSystem.h"

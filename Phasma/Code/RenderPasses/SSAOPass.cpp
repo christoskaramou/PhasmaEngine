@@ -1,9 +1,9 @@
 #ifdef PE_VULKAN
 #include "SSAOPass.h"
-#include "Renderer/Shader.h"
-#include "Renderer/RHI.h"
-#include "Renderer/Command.h"
-#include "Renderer/Image.h"
+#include "API/Shader.h"
+#include "API/RHI.h"
+#include "API/Command.h"
+#include "API/Image.h"
 #include "Systems/RendererSystem.h"
 #include "Systems/CameraSystem.h"
 

@@ -3,8 +3,8 @@
 #include "Script/Script.h"
 #include "Systems/CameraSystem.h"
 #include "tinygltf/tiny_gltf.h"
-#include "Renderer/Vertex.h"
-#include "Renderer/Pipeline.h"
+#include "API/Vertex.h"
+#include "API/Pipeline.h"
 
 namespace pe
 {

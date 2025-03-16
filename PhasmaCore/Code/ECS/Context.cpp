@@ -1,7 +1,7 @@
 #include "ECS/Context.h"
-#include "Renderer/RHI.h"
-#include "Renderer/Queue.h"
-#include "Renderer/Command.h"
+#include "API/RHI.h"
+#include "API/Queue.h"
+#include "API/Command.h"
 
 namespace pe
 {

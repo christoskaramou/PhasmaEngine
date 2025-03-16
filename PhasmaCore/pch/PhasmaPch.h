@@ -53,26 +53,26 @@
 #include <dlfcn.h>
 #endif
 
-#include "Core/Defines.h"
-#include "Core/Enums.h"
-#include "Core/Settings.h"
-#include "Core/Hash.h"
-#include "Core/Math.h"
-#include "Core/Base.h"
-#include "Core/Path.h"
-#include "Core/ThreadPool.h"
-#include "Core/Delegate.h"
-#include "Core/Timer.h"
-#include "Core/FileSystem.h"
-#include "Core/FileWatcher.h"
-#include "Core/EventSystem.h"
-#include "Core/Externs.h"
+#include "Base/Defines.h"
+#include "Base/Enums.h"
+#include "Base/Settings.h"
+#include "Base/Hash.h"
+#include "Base/Math.h"
+#include "Base/Base.h"
+#include "Base/Path.h"
+#include "Base/ThreadPool.h"
+#include "Base/Delegate.h"
+#include "Base/Timer.h"
+#include "Base/FileSystem.h"
+#include "Base/FileWatcher.h"
+#include "Base/EventSystem.h"
+#include "Base/Externs.h"
 
 #include "ECS/Component.h"
 #include "ECS/System.h"
 #include "ECS/Entity.h"
 #include "ECS/Context.h"
 
-#include "Renderer/Debug.h"
+#include "API/Debug.h"
 
 #define STBI_MSC_SECURE_CRT

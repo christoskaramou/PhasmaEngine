@@ -1,9 +1,9 @@
 #include "LightSystem.h"
 #include "GUI/GUI.h"
-#include "Renderer/RHI.h"
-#include "Renderer/Descriptor.h"
+#include "API/RHI.h"
+#include "API/Descriptor.h"
 #include "Systems/CameraSystem.h"
-#include "Renderer/Buffer.h"
+#include "API/Buffer.h"
 
 namespace pe
 {

@@ -1,6 +1,6 @@
 #pragma once
-#include "Renderer/Pipeline.h"
-#include "Renderer/RenderPass.h"
+#include "API/Pipeline.h"
+#include "API/RenderPass.h"
 
 namespace pe
 {
