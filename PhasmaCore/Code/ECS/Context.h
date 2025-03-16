@@ -78,6 +78,8 @@ namespace pe
         auto it = m_systems.find(ID::GetTypeID<T>());
         if (it != m_systems.end())
             return static_cast<T *>(it->second.get());
+
+        PE_ERROR("System not found");
         return nullptr;
     }
 

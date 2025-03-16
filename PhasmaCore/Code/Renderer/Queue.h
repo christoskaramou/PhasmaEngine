@@ -52,6 +52,10 @@ namespace pe
         CommandBuffer *GetCommandBuffer(CommandPoolCreateFlags flags);
         void ReturnCommandBuffer(CommandBuffer *cmd);
 
+#if PE_DEBUG_MODE
+        std::vector<CommandBuffer *> &GetFrameCmdsSubmitted(uint32_t frame) { return m_frameCmdsSubmitted[frame]; }
+#endif
+
     private:
         friend class RHI;
         static Queue *Get(QueueTypeFlags queueTypeFlags, int minImageGranularity, const std::vector<Queue *> &exclude = {});
@@ -72,7 +76,6 @@ namespace pe
         std::mutex m_cmdMutex{};
 
 #if PE_DEBUG_MODE
-        friend class GUI;
         std::vector<std::vector<CommandBuffer *>> m_frameCmdsSubmitted{};
 #endif
     };
