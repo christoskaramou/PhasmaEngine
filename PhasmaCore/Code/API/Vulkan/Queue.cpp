@@ -58,9 +58,6 @@ namespace pe
           m_name{name},
           m_submissionsSemaphore{Semaphore::Create(true, name + "_submissionsSemaphore")}
     {
-#if PE_DEBUG_MODE
-        m_frameCmdsSubmitted.resize(SWAPCHAIN_IMAGES);
-#endif
     }
 
     Queue::~Queue()
@@ -126,10 +123,6 @@ namespace pe
                 cbInfo.commandBuffer = cmd->ApiHandle();
                 commandBufferSubmitInfos.push_back(cbInfo);
                 cmd->SetSubmissions(m_submissions);
-#if PE_DEBUG_MODE
-                uint32_t frame = RHII.GetFrameIndex();
-                m_frameCmdsSubmitted[frame].push_back(cmd);
-#endif
             }
         }
 

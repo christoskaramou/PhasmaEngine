@@ -80,6 +80,7 @@ namespace pe
         void Start(CommandBuffer *cmd);
         void End();
         float GetTime();
+        CommandBuffer *GetCommandBuffer() const { return m_cmd; }
 
     private:
         uint64_t m_queries[2];

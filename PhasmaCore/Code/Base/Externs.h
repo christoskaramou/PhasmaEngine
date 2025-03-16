@@ -11,6 +11,7 @@ namespace pe
     extern size_t EventResize;
     extern size_t EventFileWrite;
     extern size_t EventPresentMode;
+    extern size_t EventAfterCommandWait;
     // ---------------------------------
 
     extern bool IsDepthStencil(Format format);

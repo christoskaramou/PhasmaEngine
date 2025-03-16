@@ -20,6 +20,12 @@ namespace pe
     class Buffer;
     class Queue;
 
+    struct MemoryInfo
+    {
+        uint64_t total = 0;
+        uint64_t used = 0;
+    };
+
     class RHI : public NoCopy, public NoMove
     {
     public:
@@ -93,7 +99,7 @@ namespace pe
         SDL_Window *GetWindow() { return m_window; }
         Surface *GetSurface() { return m_surface; }
         Swapchain *GetSwapchain() { return m_swapchain; }
-        uint64_t GetMemoryUsageSnapshot();
+        MemoryInfo GetMemoryUsageSnapshot();
         void ChangePresentMode(PresentMode mode);
 
     private:

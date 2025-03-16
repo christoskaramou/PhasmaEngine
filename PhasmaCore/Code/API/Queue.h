@@ -52,10 +52,6 @@ namespace pe
         CommandBuffer *GetCommandBuffer(CommandPoolCreateFlags flags);
         void ReturnCommandBuffer(CommandBuffer *cmd);
 
-#if PE_DEBUG_MODE
-        std::vector<CommandBuffer *> &GetFrameCmdsSubmitted(uint32_t frame) { return m_frameCmdsSubmitted[frame]; }
-#endif
-
     private:
         friend class RHI;
         static Queue *Get(QueueTypeFlags queueTypeFlags, int minImageGranularity, const std::vector<Queue *> &exclude = {});
@@ -74,9 +70,5 @@ namespace pe
         Semaphore *m_submissionsSemaphore{nullptr};
         std::unordered_map<std::thread::id, std::vector<CommandPool *>> m_commandPools{};
         std::mutex m_cmdMutex{};
-
-#if PE_DEBUG_MODE
-        std::vector<std::vector<CommandBuffer *>> m_frameCmdsSubmitted{};
-#endif
     };
 }

@@ -167,7 +167,7 @@ namespace pe
         void Return();
         CommandPool *GetCommandPool() const { return m_commandPool; }
         void AddAfterWaitCallback(Delegate<>::FunctionType &&func);
-        void SetPassName(const std::string &name) { m_passName = name; }
+        uint32_t GetGpuTimerInfosCount() const { return m_gpuTimerInfosCount; }
 
         // Resourses functionality
         static RenderPass *GetRenderPass(uint32_t count, Attachment *attachments);
@@ -177,7 +177,6 @@ namespace pe
 
     private:
         friend class Queue;
-        friend class Debug;
 
         void BindGraphicsPipeline();
         void BindComputePipeline();
@@ -196,7 +195,6 @@ namespace pe
         uint64_t m_submissions;
         bool m_recording = false;
         std::string m_name;
-        std::string m_passName;
         Delegate<> m_afterWaitCallbacks;
         uint32_t m_attachmentCount;
         Attachment *m_attachments;
@@ -213,8 +211,8 @@ namespace pe
         bool m_dynamicPass = false;
 
 #if PE_DEBUG_MODE
-        // Gpu timers
-        friend class GUI;
+        friend class Debug;
+        
         uint32_t m_gpuTimerInfosCount = 0;
         std::vector<GpuTimerInfo> m_gpuTimerInfos{};
         std::stack<size_t> m_gpuTimerIdsStack{};

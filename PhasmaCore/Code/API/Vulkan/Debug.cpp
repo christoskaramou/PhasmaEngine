@@ -195,9 +195,6 @@ namespace pe
         label.color[1] = color.y;
         label.color[2] = color.z;
         label.color[3] = color.w;
-
-        cmd->SetPassName(name);
-
         vkCmdBeginDebugUtilsLabelEXT(cmd->ApiHandle(), &label);
 
         if (cmd->m_gpuTimerInfos.size() < cmd->m_gpuTimerInfosCount + 1)
