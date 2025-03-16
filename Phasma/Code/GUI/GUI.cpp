@@ -14,7 +14,6 @@
 #include "Renderer/Descriptor.h"
 #include "Renderer/Semaphore.h"
 #include "Renderer/Image.h"
-#include "Renderer/Renderer.h"
 #include "Renderer/Queue.h"
 #include "RenderPasses/LightPass.h"
 #include "RenderPasses/AabbsPass.h"
@@ -214,7 +213,7 @@ namespace pe
     {
         float total = 0.f;
         uint32_t frame = RHII.GetFrameIndex();
-        for (auto *cmd : queue->m_frameCmdsSubmitted[frame])
+        for (auto *cmd : queue->GetFrameCmdsSubmitted(frame))
         {
             for (uint32_t i = 0; i < cmd->m_gpuTimerInfosCount; i++)
             {
@@ -232,7 +231,7 @@ namespace pe
     void GUI::ShowQueueGpuTimings(Queue *queue, float maxTime)
     {
         uint32_t frame = RHII.GetFrameIndex();
-        for (auto *cmd : queue->m_frameCmdsSubmitted[frame])
+        for (auto *cmd : queue->GetFrameCmdsSubmitted(frame))
         {
             for (uint32_t i = 0; i < cmd->m_gpuTimerInfosCount; i++)
             {
@@ -334,10 +333,10 @@ namespace pe
         uint32_t frame = RHII.GetFrameIndex();
         for (auto *queue : queues)
         {
-            for (auto *cmd : queue->m_frameCmdsSubmitted[frame])
+            for (auto *cmd : queue->GetFrameCmdsSubmitted(frame))
                 cmd->m_gpuTimerInfosCount = 0;
 
-            queue->m_frameCmdsSubmitted[frame].clear();
+                queue->GetFrameCmdsSubmitted(frame).clear();
         }
 #endif
         ImGui::End();

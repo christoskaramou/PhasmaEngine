@@ -110,6 +110,7 @@ namespace pe
         float GetWidth_f() { return static_cast<float>(m_createInfo.width); }
         float GetHeight_f() { return static_cast<float>(m_createInfo.height); }
         Sampler *GetSampler() { return m_sampler; }
+        void SetSampler(Sampler *sampler) { m_sampler = sampler; }
         const std::string &GetName() { return m_createInfo.name; }
         Format GetFormat() { return m_createInfo.format; }
         Format *GetFormatPtr() { return &m_createInfo.format; }
@@ -139,8 +140,6 @@ namespace pe
     private:
         friend class CommandBuffer;
         friend class Swapchain;
-        friend class Renderer;
-        friend class RendererSystem;
 
         static void Barrier(CommandBuffer *cmd, const ImageBarrierInfo &info);
         static void Barriers(CommandBuffer *cmd, const std::vector<ImageBarrierInfo> &infos);

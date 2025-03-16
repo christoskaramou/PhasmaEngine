@@ -28,7 +28,6 @@ namespace pe
     private:
         friend class CommandBuffer;
         friend class Queue;
-        friend class GUI;
 
         static void SetObjectName(uint64_t handle, ObjectType type, const std::string &name);
         static void BeginQueueRegion(Queue *queue, const std::string &name);

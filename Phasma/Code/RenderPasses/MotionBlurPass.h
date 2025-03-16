@@ -17,8 +17,6 @@ namespace pe
         void Destroy() override;
 
     private:
-        friend class Renderer;
-
         Image *m_frameImage;
         Image *m_displayRT;
         Image *m_velocityRT;

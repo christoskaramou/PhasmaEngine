@@ -173,16 +173,16 @@ namespace pe
         static RenderPass *GetRenderPass(uint32_t count, Attachment *attachments);
         static Framebuffer *GetFramebuffer(RenderPass *renderPass, uint32_t count, Attachment *attachments);
         static Pipeline *GetPipeline(RenderPass *renderPass, PassInfo &info);
+        inline static auto &GetFramebuffers() { return s_framebuffers; }
 
     private:
+        friend class Queue;
+        friend class Debug;
+
         void BindGraphicsPipeline();
         void BindComputePipeline();
         void BindGraphicsDescriptors(uint32_t count, Descriptor *const *descriptors);
         void BindComputeDescriptors(uint32_t count, Descriptor *const *descriptors);
-
-        friend class Queue;
-        friend class Renderer;
-        friend class Debug;
 
         // Resources
         inline static std::unordered_map<size_t, RenderPass *> s_renderPasses{};

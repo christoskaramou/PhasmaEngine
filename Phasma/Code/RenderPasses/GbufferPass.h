@@ -41,7 +41,6 @@ namespace pe
 
     private:
         friend class Geometry;
-        friend class Renderer;
         friend class Scene;
 
         void PassBarriers(CommandBuffer *cmd);
@@ -78,7 +77,6 @@ namespace pe
 
     private:
         friend class Geometry;
-        friend class Renderer;
         friend class Scene;
 
         void PassBarriers(CommandBuffer *cmd);

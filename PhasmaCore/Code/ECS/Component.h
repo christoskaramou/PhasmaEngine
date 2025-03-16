@@ -41,10 +41,10 @@ namespace pe
         virtual void Resize(uint32_t width, uint32_t height) = 0;
         virtual void Destroy() = 0;
 
-    protected:
-        friend class Renderer;
-        friend class PostProcessSystem;
-        
+        std::vector<Attachment> &GetAttachments() { return m_attachments; }
+        std::shared_ptr<PassInfo> GetPassInfo() { return m_passInfo; }
+
+    protected:        
         std::vector<Attachment> m_attachments;
         std::shared_ptr<PassInfo> m_passInfo;
     };

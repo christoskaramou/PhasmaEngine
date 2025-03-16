@@ -74,7 +74,7 @@ namespace pe
 
         for (auto &rc : m_renderPassComponents)
         {
-            auto info = rc->m_passInfo;
+            std::shared_ptr<PassInfo> info = rc->GetPassInfo();
 
             // PollEvent simply catches a pushed event from FileWatcher
             if ((info->pCompShader && EventSystem::PollEvent(info->pCompShader->GetPathID())) ||

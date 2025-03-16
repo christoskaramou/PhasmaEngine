@@ -19,8 +19,6 @@ namespace pe
         void Destroy() override;
 
     private:
-        friend class Renderer;
-
         mat4 m_reflectionInput[4];
         Buffer *m_UBReflection[SWAPCHAIN_IMAGES];
         Image *m_ssrRT;

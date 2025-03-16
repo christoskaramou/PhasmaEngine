@@ -36,7 +36,6 @@ namespace pe
         friend class Scene;
         friend class LightOpaquePass;
         friend class LightTransparentPass;
-        friend class Renderer;
 
         void CalculateCascades(Camera *camera);
 

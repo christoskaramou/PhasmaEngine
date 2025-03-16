@@ -41,8 +41,6 @@ namespace pe
         void Destroy() override;
 
     private:
-        friend class Renderer;
-
         void PassBarriers(CommandBuffer *cmd);
 
         Buffer *m_uniform[SWAPCHAIN_IMAGES];
@@ -72,8 +70,6 @@ namespace pe
         void Destroy() override;
 
     private:
-        friend class Renderer;
-
         void PassBarriers(CommandBuffer *cmd);
 
         Buffer *m_uniform[SWAPCHAIN_IMAGES];

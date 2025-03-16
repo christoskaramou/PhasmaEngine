@@ -29,7 +29,6 @@ namespace pe
     private:
         friend class Geometry;
         friend class Scene;
-        friend class Renderer;
 
         Image *m_depthStencil;
         Geometry *m_geometry;

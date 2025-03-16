@@ -21,7 +21,6 @@ namespace pe
 
     private:
         friend class Scene;
-        friend class Renderer;
 
         Image *m_viewportRT;
         Image *m_depthRT;
