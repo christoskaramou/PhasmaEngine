@@ -821,7 +821,7 @@ namespace pe
     {
         return m_commandPool->GetQueue();
     }
-    
+
     uint32_t CommandBuffer::GetFamilyId() const
     {
         return GetQueue()->GetFamilyId();
@@ -840,6 +840,11 @@ namespace pe
             m_afterWaitCallbacks.ReverseInvoke();
             m_afterWaitCallbacks.Clear();
         }
+
+#if PE_DEBUG_MODE
+        EventSystem::DispatchEvent(EventAfterCommandWait, m_gpuTimerInfos);
+        m_gpuTimerInfosCount = 0;
+#endif
     }
 
     void CommandBuffer::Return()

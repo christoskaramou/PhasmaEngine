@@ -3,14 +3,15 @@
 namespace pe
 {
     // PREDEFINED EVENTS ---------------------------------------
-    size_t EventQuit           = StringHash("PE_Quit");
-    size_t EventCustom         = StringHash("PE_Custom");
-    size_t EventSetWindowTitle = StringHash("PE_SetWindowTitle");
-    size_t EventCompileShaders = StringHash("PE_CompileShaders");
-    size_t EventCompileScripts = StringHash("PE_CompileScripts");
-    size_t EventResize         = StringHash("PE_Resize");
-    size_t EventFileWrite      = StringHash("PE_FileWrite");
-    size_t EventPresentMode    = StringHash("PE_PresentMode");
+    size_t EventQuit             = StringHash("PE_Quit");
+    size_t EventCustom           = StringHash("PE_Custom");
+    size_t EventSetWindowTitle   = StringHash("PE_SetWindowTitle");
+    size_t EventCompileShaders   = StringHash("PE_CompileShaders");
+    size_t EventCompileScripts   = StringHash("PE_CompileScripts");
+    size_t EventResize           = StringHash("PE_Resize");
+    size_t EventFileWrite        = StringHash("PE_FileWrite");
+    size_t EventPresentMode      = StringHash("PE_PresentMode");
+    size_t EventAfterCommandWait = StringHash("PE_AfterCommandWait");
     // ----------------------------------------------------------
 
     void EventSystem::Init()
@@ -23,6 +24,7 @@ namespace pe
         RegisterEvent(EventCompileScripts);
         RegisterEvent(EventResize);
         RegisterEvent(EventFileWrite);
+        RegisterEvent(EventAfterCommandWait);
     }
 
     void EventSystem::Destroy()

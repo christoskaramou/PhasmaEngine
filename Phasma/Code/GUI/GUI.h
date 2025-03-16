@@ -30,11 +30,12 @@ namespace pe
         void Metrics();
         void Shaders();
         void Properties();
-        float GetQueueTotalTime(Queue *queue);
-        void ShowQueueGpuTimings(Queue *queue, float maxTime);
+        float FetchTotalGPUTime();
+        void ShowGpuTimings(float maxTime);
 
         bool m_render;
         std::unique_ptr<Attachment> m_attachment;
         bool m_show_demo_window;
+        std::vector<GpuTimerInfo> m_gpuTimerInfos;
     };
 }

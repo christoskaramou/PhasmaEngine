@@ -209,48 +209,36 @@ namespace pe
     }
 
 #if PE_DEBUG_MODE
-    float GUI::GetQueueTotalTime(Queue *queue)
+    float GUI::FetchTotalGPUTime()
     {
         float total = 0.f;
-        uint32_t frame = RHII.GetFrameIndex();
-        for (auto *cmd : queue->GetFrameCmdsSubmitted(frame))
+        for (auto &gpuTimerInfo : m_gpuTimerInfos)
         {
-            for (uint32_t i = 0; i < cmd->m_gpuTimerInfosCount; i++)
-            {
-                auto &timeInfo = cmd->m_gpuTimerInfos[i];
-
-                // Top level timers are in CommandBuffer::Begin
-                if (timeInfo.depth == 0)
-                    total += timeInfo.timer->GetTime();
-            }
+            // Top level timers only
+            if (gpuTimerInfo.depth == 0)
+                total += gpuTimerInfo.timer->GetTime();
         }
 
         return total;
     }
 
-    void GUI::ShowQueueGpuTimings(Queue *queue, float maxTime)
+    void GUI::ShowGpuTimings(float maxTime)
     {
-        uint32_t frame = RHII.GetFrameIndex();
-        for (auto *cmd : queue->GetFrameCmdsSubmitted(frame))
+        for (auto &gpuTimerInfo : m_gpuTimerInfos)
         {
-            for (uint32_t i = 0; i < cmd->m_gpuTimerInfosCount; i++)
-            {
-                auto &timeInfo = cmd->m_gpuTimerInfos[i];
+            // Top level timers are in CommandBuffer::Begin
+            if (gpuTimerInfo.depth == 0)
+                continue;
 
-                // Top level timers are in CommandBuffer::Begin
-                if (timeInfo.depth == 0)
-                    continue;
+            if (gpuTimerInfo.depth > 0)
+                ImGui::Indent(gpuTimerInfo.depth * 16.0f);
 
-                if (timeInfo.depth > 0)
-                    ImGui::Indent(timeInfo.depth * 16.0f);
+            float time = gpuTimerInfo.timer->GetTime();
+            SetTextColorTemp(time, maxTime);
+            ImGui::Text("%s: %.3f ms", gpuTimerInfo.name.c_str(), time);
 
-                float time = timeInfo.timer->GetTime();
-                SetTextColorTemp(time, maxTime);
-                ImGui::Text("%s: %.3f ms", timeInfo.name.c_str(), time);
-
-                if (timeInfo.depth > 0)
-                    ImGui::Unindent(timeInfo.depth * 16.0f);
-            }
+            if (gpuTimerInfo.depth > 0)
+                ImGui::Unindent(gpuTimerInfo.depth * 16.0f);
         }
     }
 #endif
@@ -264,15 +252,31 @@ namespace pe
         static std::deque<float> fpsDeque(100, 0.0f);
         static std::vector<float> fpsVector(100, 0.0f);
         static float highestValue = 100.0f;
+        static std::deque<float> memoryUsedDeque(100, 0.0f);
+        static std::deque<float> memoryTotalDeque(100, 0.0f);
+        static std::vector<float> memoryUsedVector(100, 0.0f);
+        static std::vector<float> memoryTotalVector(100, 0.0f);
+        static float highestMemoryValue = 100.0f;
+        MemoryInfo memoryInfo = RHII.GetMemoryUsageSnapshot();
+
         static Timer delay;
         float framerate = ImGui::GetIO().Framerate;
         if (delay.Count() > 0.2)
         {
             delay.Start();
-            fpsDeque.pop_front();          // Remove the oldest value
-            fpsDeque.push_back(framerate); // Add the new value at the end
+
+            fpsDeque.pop_front();
+            fpsDeque.push_back(framerate);
             highestValue = max(highestValue, framerate + 60.0f);
             std::copy(fpsDeque.begin(), fpsDeque.end(), fpsVector.begin());
+            
+            memoryUsedDeque.pop_front();
+            memoryUsedDeque.push_back(memoryInfo.used / (1024.0f * 1024.0f));
+            memoryTotalDeque.pop_front();
+            memoryTotalDeque.push_back(memoryInfo.total / (1024.0f * 1024.0f));
+            highestMemoryValue = max(highestMemoryValue, memoryInfo.total / (1024.0f * 1024.0f) + 50.0f);
+            std::copy(memoryUsedDeque.begin(), memoryUsedDeque.end(), memoryUsedVector.begin());
+            std::copy(memoryTotalDeque.begin(), memoryTotalDeque.end(), memoryTotalVector.begin());
         }
 
         ImGui::Begin("Metrics", &metrics_open);
@@ -286,6 +290,9 @@ namespace pe
             gSettings.target_fps = max(gSettings.target_fps, 10);
         }
         ImGui::Separator();
+        ImGui::Text("Total Memory: %.2f MB", memoryInfo.total / (1024.0f * 1024.0f));
+        ImGui::Text("Used Memory: %.2f MB", memoryInfo.used / (1024.0f * 1024.0f));
+        ImGui::PlotLines("##MemoryUsage", memoryUsedVector.data(), static_cast<int>(memoryUsedVector.size()), 0, NULL, 0.0f, highestMemoryValue, ImVec2(0, 80));
         ImGui::Separator();
 
         FrameTimer &frameTimer = FrameTimer::Instance();
@@ -299,45 +306,11 @@ namespace pe
         ImGui::Unindent(16.0f);
 
 #if PE_DEBUG_MODE
-        std::unordered_set<Queue *> queues{
-            RHII.GetMainQueue(),
-            RHII.GetTransferQueue(),
-            RHII.GetComputeQueue()};
-
-        float gpuTotal = 0.f;
-        for (auto *queue : queues)
-            gpuTotal += GetQueueTotalTime(queue);
-
+        float gpuTotal = FetchTotalGPUTime();
         ImGui::Text("GPU Total: %.3f ms", gpuTotal);
-        ImGui::Indent(16.0f);
-        for (auto *queue : queues)
-        {
-            std::string name;
-            if (queue == RHII.GetMainQueue())
-                name = "Main Queue";
-            else if (queue == RHII.GetRenderQueue())
-                name = "Render Queue";
-            else if (queue == RHII.GetTransferQueue())
-                name = "Transfer Queue";
-            else if (queue == RHII.GetComputeQueue())
-                name = "Compute Queue";
-
-            float time = GetQueueTotalTime(queue);
-            SetTextColorTemp(time, gpuTotal);
-            ImGui::Text("%s: %.3f ms", name.c_str(), time);
-            ShowQueueGpuTimings(queue, gpuTotal);
-        }
-        ImGui::Unindent(16.0f);
+        ShowGpuTimings(gpuTotal);
         ImGui::GetStyle().Colors[ImGuiCol_Text] = ImVec4(0.90f, 0.90f, 0.90f, 1.00f);
-
-        uint32_t frame = RHII.GetFrameIndex();
-        for (auto *queue : queues)
-        {
-            for (auto *cmd : queue->GetFrameCmdsSubmitted(frame))
-                cmd->m_gpuTimerInfosCount = 0;
-
-                queue->GetFrameCmdsSubmitted(frame).clear();
-        }
+        m_gpuTimerInfos.clear();
 #endif
         ImGui::End();
     }
@@ -605,6 +578,23 @@ namespace pe
 
         ImGui_ImplVulkan_Init(&init_info);
         ImGui_ImplVulkan_CreateFontsTexture();
+
+        auto &gpuTimerInfos = m_gpuTimerInfos;
+        auto AddGpuTimerInfo = [&gpuTimerInfos](std::any &&data)
+        {
+            try
+            {
+                auto &commandTimerInfos = std::any_cast<std::vector<GpuTimerInfo> &>(data);
+                auto *cmd = commandTimerInfos[0].timer->GetCommandBuffer();
+                uint32_t count = cmd->GetGpuTimerInfosCount();
+                gpuTimerInfos.insert(gpuTimerInfos.end(), commandTimerInfos.begin(), commandTimerInfos.begin() + count);
+            }
+            catch (const std::bad_any_cast &)
+            {
+                PE_ERROR("Bad any cast in GUI::Init()::AddGpuTimerInfo " + e.what());
+            }
+        };
+        EventSystem::RegisterCallback(EventAfterCommandWait, AddGpuTimerInfo);
 
         queue->WaitIdle();
     }
