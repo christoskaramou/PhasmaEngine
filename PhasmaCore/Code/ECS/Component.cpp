@@ -1,8 +1,8 @@
 #include "ECS/Component.h"
-#include "Renderer/Command.h"
-#include "Renderer/Descriptor.h"
-#include "Renderer/Pipeline.h"
-#include "Renderer/RHI.h"
+#include "API/Command.h"
+#include "API/Descriptor.h"
+#include "API/Pipeline.h"
+#include "API/RHI.h"
 
 namespace pe
 {
