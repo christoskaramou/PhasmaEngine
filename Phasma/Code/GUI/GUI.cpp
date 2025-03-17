@@ -248,7 +248,7 @@ namespace pe
         if (!metrics_open)
             return;
 
-        auto &gSettings = Settings::Get<GlobalSettings>();
+        static auto &gSettings = Settings::Get<GlobalSettings>();
         static std::deque<float> fpsDeque(100, 0.0f);
         static std::vector<float> fpsVector(100, 0.0f);
         static float highestValue = 100.0f;
@@ -256,8 +256,8 @@ namespace pe
         static std::deque<float> memoryTotalDeque(100, 0.0f);
         static std::vector<float> memoryUsedVector(100, 0.0f);
         static std::vector<float> memoryTotalVector(100, 0.0f);
-        static float highestMemoryValue = 100.0f;
-        MemoryInfo memoryInfo = RHII.GetMemoryUsageSnapshot();
+        static MemoryInfo memoryInfo = RHII.GetMemoryUsageSnapshot();
+        constexpr float toMB = 1 / (1024.0f * 1024.0f);
 
         static Timer delay;
         float framerate = ImGui::GetIO().Framerate;
@@ -265,16 +265,17 @@ namespace pe
         {
             delay.Start();
 
+            memoryInfo = RHII.GetMemoryUsageSnapshot();
+
             fpsDeque.pop_front();
             fpsDeque.push_back(framerate);
             highestValue = max(highestValue, framerate + 60.0f);
             std::copy(fpsDeque.begin(), fpsDeque.end(), fpsVector.begin());
             
             memoryUsedDeque.pop_front();
-            memoryUsedDeque.push_back(memoryInfo.used / (1024.0f * 1024.0f));
+            memoryUsedDeque.push_back(memoryInfo.used * toMB);
             memoryTotalDeque.pop_front();
-            memoryTotalDeque.push_back(memoryInfo.total / (1024.0f * 1024.0f));
-            highestMemoryValue = max(highestMemoryValue, memoryInfo.total / (1024.0f * 1024.0f) + 50.0f);
+            memoryTotalDeque.push_back(memoryInfo.total * toMB);
             std::copy(memoryUsedDeque.begin(), memoryUsedDeque.end(), memoryUsedVector.begin());
             std::copy(memoryTotalDeque.begin(), memoryTotalDeque.end(), memoryTotalVector.begin());
         }
@@ -290,9 +291,9 @@ namespace pe
             gSettings.target_fps = max(gSettings.target_fps, 10);
         }
         ImGui::Separator();
-        ImGui::Text("Total Memory: %.2f MB", memoryInfo.total / (1024.0f * 1024.0f));
-        ImGui::Text("Used Memory: %.2f MB", memoryInfo.used / (1024.0f * 1024.0f));
-        ImGui::PlotLines("##MemoryUsage", memoryUsedVector.data(), static_cast<int>(memoryUsedVector.size()), 0, NULL, 0.0f, highestMemoryValue, ImVec2(0, 80));
+        ImGui::Text("Total Memory: %.2f MB", memoryInfo.total * toMB);
+        ImGui::Text("Used Memory: %.2f MB", memoryInfo.used * toMB);
+        ImGui::PlotLines("##MemoryUsage", memoryUsedVector.data(), static_cast<int>(memoryUsedVector.size()), 0, NULL, 0.0f, memoryInfo.total * toMB, ImVec2(0, 80));
         ImGui::Separator();
 
         FrameTimer &frameTimer = FrameTimer::Instance();
