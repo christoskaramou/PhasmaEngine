@@ -45,19 +45,19 @@ namespace pe
         PE_CHECK(vkResetCommandPool(RHII.GetDevice(), m_apiHandle, 0));
     }
 
-    Queue::Queue(QueueApiHandle apiHandle,
+    Queue::Queue(DeviceApiHandle device,
                  uint32_t familyId,
-                 QueueTypeFlags queueTypeFlags,
-                 ivec3 imageGranularity,
                  const std::string &name)
-        : PeHandle<Queue, QueueApiHandle>(apiHandle),
-          m_id{ID::NextID()},
+        : m_id{ID::NextID()},
           m_familyId{familyId},
-          m_queueTypeFlags{queueTypeFlags},
-          m_imageGranularity{imageGranularity},
           m_name{name},
           m_submissionsSemaphore{Semaphore::Create(true, name + "_submissionsSemaphore")}
     {
+        VkQueue queueVK;
+        vkGetDeviceQueue(device, familyId, 0, &queueVK);
+        m_apiHandle = queueVK;
+
+        Debug::SetObjectName(m_apiHandle, m_name);
     }
 
     Queue::~Queue()
@@ -140,8 +140,6 @@ namespace pe
 
     void Queue::Present(Swapchain *swapchain, uint32_t imageIndex, Semaphore *wait)
     {
-        PE_ERROR_IF(!(m_queueTypeFlags & QueueType::PresentBit), "Queue::Present: Queue does not support present!");
-
         VkSwapchainKHR swapchainVK = swapchain->ApiHandle();
         VkSemaphore waitSemaphoreVK = VK_NULL_HANDLE;
         if (wait)
@@ -181,101 +179,6 @@ namespace pe
     void Queue::EndDebugRegion()
     {
         Debug::EndQueueRegion(this);
-    }
-
-    void Queue::Init(GpuApiHandle gpu, DeviceApiHandle device, SurfaceApiHandle surface)
-    {
-        uint32_t queueFamPropCount;
-        vkGetPhysicalDeviceQueueFamilyProperties(gpu, &queueFamPropCount, nullptr);
-
-        std::vector<VkQueueFamilyProperties> queueFamilyProperties(queueFamPropCount);
-        vkGetPhysicalDeviceQueueFamilyProperties(gpu, &queueFamPropCount, queueFamilyProperties.data());
-
-        auto &properties = queueFamilyProperties;
-        for (uint32_t i = 0; i < properties.size(); i++)
-        {
-            for (uint32_t j = 0; j < properties[i].queueCount; j++)
-            {
-                VkQueue queueVK;
-                vkGetDeviceQueue(device, i, j, &queueVK);
-                if (queueVK)
-                {
-                    ivec3 mitg;
-                    mitg.x = properties[i].minImageTransferGranularity.width;
-                    mitg.y = properties[i].minImageTransferGranularity.height;
-                    mitg.z = properties[i].minImageTransferGranularity.depth;
-
-                    QueueTypeFlags queueFlags{};
-                    if (properties[i].queueFlags & VK_QUEUE_GRAPHICS_BIT)
-                        queueFlags |= QueueType::GraphicsBit;
-                    if (properties[i].queueFlags & VK_QUEUE_COMPUTE_BIT)
-                        queueFlags |= QueueType::ComputeBit;
-                    if (properties[i].queueFlags & VK_QUEUE_TRANSFER_BIT)
-                        queueFlags |= QueueType::TransferBit;
-                    if (properties[i].queueFlags & VK_QUEUE_SPARSE_BINDING_BIT)
-                        queueFlags |= QueueType::SparseBindingBit;
-                    if (properties[i].queueFlags & VK_QUEUE_PROTECTED_BIT)
-                        queueFlags |= QueueType::ProtectedBit;
-
-                    VkBool32 present = VK_FALSE;
-                    vkGetPhysicalDeviceSurfaceSupportKHR(RHII.GetGpu(), i, RHII.GetSurface()->ApiHandle(), &present);
-                    if (present)
-                        queueFlags |= QueueType::PresentBit;
-
-                    Queue *queue = Queue::Create(queueVK, i, queueFlags, mitg, "Queue_" + std::to_string(i) + "_" + std::to_string(j));
-                    Debug::SetObjectName(queue->ApiHandle(), queue->m_name);
-
-                    auto it = s_allQueues.find(queueFlags.Value());
-                    if (it == s_allQueues.end())
-                    {
-                        s_allQueues[queueFlags.Value()] = {};
-                        s_allFlags.push_back(queueFlags.Value());
-                    }
-
-                    s_allQueues[queueFlags.Value()][queue->m_id] = queue;
-                }
-            }
-        }
-
-        std::sort(s_allFlags.begin(), s_allFlags.end());
-    }
-
-    void Queue::Clear()
-    {
-        for (auto &queueMap : s_allQueues)
-            for (auto &queue : queueMap.second)
-                Queue::Destroy(queue.second);
-
-        s_allQueues.clear();
-    }
-
-    Queue *Queue::Get(QueueTypeFlags queueTypeFlags, int minImageGranularity, const std::vector<Queue *> &exclude)
-    {
-        std::lock_guard<std::mutex> lock(s_getMutex);
-
-        // Find the best suitable flags in the sorted s_allFlags vector
-        for (QueueTypeFlags::Type flags : s_allFlags)
-        {
-            uint64_t value = queueTypeFlags.Value();
-            if (flags >= value && (flags & value) == value)
-            {
-                auto &queues = s_allQueues[flags];
-                for (auto it = queues.begin(); it != queues.end(); it++)
-                {
-                    Queue *queue = it->second;
-                    if (queue->GetImageGranularity().x <= minImageGranularity &&
-                        queue->GetImageGranularity().y <= minImageGranularity &&
-                        queue->GetImageGranularity().z <= minImageGranularity)
-                    {
-                        auto it = std::find(exclude.begin(), exclude.end(), queue);
-                        if (it == exclude.end())
-                            return queue;
-                    }
-                }
-            }
-        }
-
-        return nullptr;
     }
 
     CommandBuffer *Queue::GetCommandBuffer(CommandPoolCreateFlags flags)

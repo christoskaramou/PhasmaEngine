@@ -55,7 +55,6 @@ namespace pe
         bool IsDeviceExtensionValid(const char *name);
         void CreateDevice();
         void CreateAllocator();
-        void InitQueues();
         void CreateSwapchain(Surface *surface);
         void CreateDescriptorPool(uint32_t maxDescriptorSets);
         void CreateGlobalDescriptors();
@@ -93,9 +92,6 @@ namespace pe
         void ClaimUsedBinarySemaphores(uint32_t frame);
         const AllocatorApiHandle &GetAllocator() { return m_allocator; }
         Queue *GetMainQueue() { return m_mainQueue; }
-        Queue *GetRenderQueue() { return m_renderQueue; }
-        Queue *GetComputeQueue() { return m_computeQueue; }
-        Queue *GetTransferQueue() { return m_transferQueue; }
         SDL_Window *GetWindow() { return m_window; }
         Surface *GetSurface() { return m_surface; }
         Swapchain *GetSwapchain() { return m_swapchain; }
@@ -115,9 +111,6 @@ namespace pe
         std::stack<Semaphore *> m_usedBinarySemaphores[SWAPCHAIN_IMAGES];
         AllocatorApiHandle m_allocator;
         Queue *m_mainQueue;
-        Queue *m_renderQueue;
-        Queue *m_computeQueue;
-        Queue *m_transferQueue;
         SDL_Window *m_window;
         Surface *m_surface;
         Swapchain *m_swapchain;
