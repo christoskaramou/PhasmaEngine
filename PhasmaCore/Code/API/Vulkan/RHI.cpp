@@ -33,7 +33,6 @@ namespace pe
         GetSurfaceProperties();
         CreateDevice();
         CreateAllocator();
-        InitQueues();
         CreateSwapchain(m_surface);
         CreateDescriptorPool(150); // General purpose descriptor pool
         InitDownSampler();
@@ -43,7 +42,7 @@ namespace pe
     {
         WaitDeviceIdle();
 
-        Queue::Clear();
+        Queue::Destroy(m_mainQueue);
         PeHandleBase::DestroyAllIHandles();
         vmaDestroyAllocator(m_allocator);
         if (m_device)
@@ -118,7 +117,6 @@ namespace pe
     {
         uint32_t gpuCount;
         vkEnumeratePhysicalDevices(m_instance, &gpuCount, nullptr);
-
         std::vector<VkPhysicalDevice> gpuList(gpuCount);
         vkEnumeratePhysicalDevices(m_instance, &gpuCount, gpuList.data());
 
@@ -132,46 +130,40 @@ namespace pe
                 qfp.sType = VK_STRUCTURE_TYPE_QUEUE_FAMILY_PROPERTIES_2;
             vkGetPhysicalDeviceQueueFamilyProperties2(gpu, &queueFamPropCount, queueFamilyProperties.data());
 
-            VkQueueFlags flags{};
             for (auto &qfp : queueFamilyProperties)
             {
-                if (qfp.queueFamilyProperties.queueFlags & VK_QUEUE_GRAPHICS_BIT)
-                    flags |= VK_QUEUE_GRAPHICS_BIT;
-                if (qfp.queueFamilyProperties.queueFlags & VK_QUEUE_COMPUTE_BIT)
-                    flags |= VK_QUEUE_COMPUTE_BIT;
-                if (qfp.queueFamilyProperties.queueFlags & VK_QUEUE_TRANSFER_BIT)
-                    flags |= VK_QUEUE_TRANSFER_BIT;
-            }
-
-            if (flags & VK_QUEUE_GRAPHICS_BIT &&
-                flags & VK_QUEUE_COMPUTE_BIT &&
-                flags & VK_QUEUE_TRANSFER_BIT)
-            {
-                VkPhysicalDeviceProperties2 properties2{};
-                properties2.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROPERTIES_2;
-                vkGetPhysicalDeviceProperties2(gpu, &properties2);
-
-                GPUScore gpuScore{};
-                gpuScore.gpu = gpu;
-                switch (properties2.properties.deviceType)
+                if (qfp.queueFamilyProperties.queueCount > 0 &&
+                    qfp.queueFamilyProperties.queueFlags & VK_QUEUE_GRAPHICS_BIT &&
+                    qfp.queueFamilyProperties.queueFlags & VK_QUEUE_COMPUTE_BIT &&
+                    qfp.queueFamilyProperties.queueFlags & VK_QUEUE_TRANSFER_BIT)
                 {
-                case VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU:
-                    gpuScore.score = 4;
-                    break;
-                case VK_PHYSICAL_DEVICE_TYPE_INTEGRATED_GPU:
-                    gpuScore.score = 3;
-                    break;
-                case VK_PHYSICAL_DEVICE_TYPE_VIRTUAL_GPU:
-                    gpuScore.score = 2;
-                    break;
-                case VK_PHYSICAL_DEVICE_TYPE_CPU:
-                    gpuScore.score = 1;
-                    break;
-                default:
-                    continue;
-                }
+                    VkPhysicalDeviceProperties2 properties2{};
+                    properties2.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROPERTIES_2;
+                    vkGetPhysicalDeviceProperties2(gpu, &properties2);
 
-                gpuScores.push_back(gpuScore);
+                    GPUScore gpuScore{};
+                    gpuScore.gpu = gpu;
+                    switch (properties2.properties.deviceType)
+                    {
+                    case VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU:
+                        gpuScore.score = 4;
+                        break;
+                    case VK_PHYSICAL_DEVICE_TYPE_INTEGRATED_GPU:
+                        gpuScore.score = 3;
+                        break;
+                    case VK_PHYSICAL_DEVICE_TYPE_VIRTUAL_GPU:
+                        gpuScore.score = 2;
+                        break;
+                    case VK_PHYSICAL_DEVICE_TYPE_CPU:
+                        gpuScore.score = 1;
+                        break;
+                    default:
+                        continue;
+                    }
+
+                    gpuScores.push_back(gpuScore);
+                    break;
+                }
             }
         }
 
@@ -275,23 +267,26 @@ namespace pe
             deviceExtensions.push_back(VK_EXT_PAGEABLE_DEVICE_LOCAL_MEMORY_EXTENSION_NAME);
         }
 
-        std::vector<VkDeviceQueueCreateInfo> queueCreateInfos{};
         uint32_t queueFamPropCount;
         vkGetPhysicalDeviceQueueFamilyProperties(m_gpu, &queueFamPropCount, nullptr);
         std::vector<VkQueueFamilyProperties> queueFamilyProperties(queueFamPropCount);
         vkGetPhysicalDeviceQueueFamilyProperties(m_gpu, &queueFamPropCount, queueFamilyProperties.data());
 
-        std::vector<std::vector<float>> priorities(queueFamPropCount);
+        float priority = 1.f;
+        VkDeviceQueueCreateInfo queueCreateInfo{};
         for (uint32_t i = 0; i < queueFamPropCount; i++)
         {
-            priorities[i] = std::vector<float>(queueFamilyProperties[i].queueCount, 1.f);
-
-            VkDeviceQueueCreateInfo queueCreateInfo{};
-            queueCreateInfo.sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
-            queueCreateInfo.queueFamilyIndex = i;
-            queueCreateInfo.queueCount = queueFamilyProperties[i].queueCount;
-            queueCreateInfo.pQueuePriorities = priorities[i].data();
-            queueCreateInfos.push_back(queueCreateInfo);
+            if (queueFamilyProperties[i].queueCount > 0 &&
+                queueFamilyProperties[i].queueFlags & VK_QUEUE_GRAPHICS_BIT &&
+                queueFamilyProperties[i].queueFlags & VK_QUEUE_COMPUTE_BIT &&
+                queueFamilyProperties[i].queueFlags & VK_QUEUE_TRANSFER_BIT)
+            {
+                queueCreateInfo.sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
+                queueCreateInfo.queueFamilyIndex = i;
+                queueCreateInfo.queueCount = 1;
+                queueCreateInfo.pQueuePriorities = &priority;
+                break;
+            }
         }
 
         // Vulkan 1.1 features
@@ -328,8 +323,8 @@ namespace pe
 
         VkDeviceCreateInfo deviceCreateInfo{};
         deviceCreateInfo.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
-        deviceCreateInfo.queueCreateInfoCount = static_cast<uint32_t>(queueCreateInfos.size());
-        deviceCreateInfo.pQueueCreateInfos = queueCreateInfos.data();
+        deviceCreateInfo.queueCreateInfoCount = 1;
+        deviceCreateInfo.pQueueCreateInfos = &queueCreateInfo;
         deviceCreateInfo.enabledExtensionCount = static_cast<uint32_t>(deviceExtensions.size());
         deviceCreateInfo.ppEnabledExtensionNames = deviceExtensions.data();
         deviceCreateInfo.pNext = &deviceFeatures2;
@@ -341,6 +336,8 @@ namespace pe
         Debug::SetObjectName(m_surface->ApiHandle(), "RHI_surface");
         Debug::SetObjectName(m_gpu, "RHI_gpu");
         Debug::SetObjectName(m_device, "RHI_device");
+
+        m_mainQueue = Queue::Create(m_device, queueCreateInfo.queueFamilyIndex, "Main_queue");
     }
 
     void RHI::CreateAllocator()
@@ -357,35 +354,6 @@ namespace pe
         VmaAllocator allocatorVK;
         PE_CHECK(vmaCreateAllocator(&allocator_info, &allocatorVK));
         m_allocator = allocatorVK;
-    }
-
-    void RHI::InitQueues()
-    {
-        Queue::Init(m_gpu, m_device, m_surface->ApiHandle());
-
-        // main queue
-        m_mainQueue = Queue::Get(QueueType::GraphicsBit | QueueType::PresentBit | QueueType::ComputeBit | QueueType::TransferBit, 1);
-
-        // render queue
-        m_renderQueue = Queue::Get(QueueType::GraphicsBit | QueueType::PresentBit, 1, {m_mainQueue});
-        if (!m_renderQueue)
-            m_renderQueue = Queue::Get(QueueType::GraphicsBit | QueueType::PresentBit, 1);
-
-        // compute queue
-        m_computeQueue = Queue::Get(QueueType::ComputeBit, 1, {m_mainQueue, m_renderQueue});
-        if (!m_computeQueue)
-            m_computeQueue = Queue::Get(QueueType::ComputeBit, 1, {m_renderQueue});
-        if (!m_computeQueue)
-            m_computeQueue = Queue::Get(QueueType::ComputeBit, 1);
-
-        // transfer queue
-        m_transferQueue = Queue::Get(QueueType::TransferBit, 1, {m_mainQueue, m_renderQueue, m_computeQueue});
-        if (!m_transferQueue)
-            m_transferQueue = Queue::Get(QueueType::TransferBit, 1, {m_renderQueue, m_computeQueue});
-        if (!m_transferQueue)
-            m_transferQueue = Queue::Get(QueueType::TransferBit, 1, {m_computeQueue});
-        if (!m_transferQueue)
-            m_transferQueue = Queue::Get(QueueType::TransferBit, 1);
     }
 
     void RHI::CreateSwapchain(Surface *surface)
@@ -492,7 +460,7 @@ namespace pe
             .pNext = &memoryBudgetProperties};
 
         vkGetPhysicalDeviceMemoryProperties2(m_gpu, &memoryProperties2);
-        
+
         MemoryInfo memoryInfo{};
         for (uint32_t i = 0; i < memoryProperties2.memoryProperties.memoryTypeCount; i++)
             memoryInfo.total += memoryBudgetProperties.heapBudget[i];
