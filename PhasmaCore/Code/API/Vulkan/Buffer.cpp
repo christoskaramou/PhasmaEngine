@@ -79,18 +79,14 @@ namespace pe
 
     void Buffer::Zero() const
     {
-        if (!m_data)
-            PE_ERROR("Buffer::Zero: Buffer is not mapped");
+        PE_ERROR_IF(!m_data, "Buffer::Zero: Buffer is not mapped");
         memset(m_data, 0, m_size);
     }
 
     void Buffer::CopyDataRaw(const void *data, size_t size, size_t offset)
     {
-        if (!m_data)
-            PE_ERROR("Buffer::CopyDataRaw: Buffer is not mapped");
-        if (offset + size > m_size)
-            PE_ERROR("Buffer::CopyDataRaw: Source data size is too large");
-
+        PE_ERROR_IF(!m_data, "Buffer::CopyDataRaw: Buffer is not mapped");
+        PE_ERROR_IF(offset + size > m_size, "Buffer::CopyDataRaw: Source data size is too large");
         memcpy((char *)m_data + offset, data, size);
     }
 
@@ -114,8 +110,7 @@ namespace pe
 
     void Buffer::CopyBufferStaged(CommandBuffer *cmd, void *data, size_t size, size_t dtsOffset)
     {
-        if (dtsOffset + size > m_size)
-            PE_ERROR("Buffer::StagedCopy: Data size is too large");
+        PE_ERROR_IF(dtsOffset + size > m_size, "Buffer::StagedCopy: Data size is too large");
 
         // Staging buffer
         Buffer *staging = Buffer::Create(

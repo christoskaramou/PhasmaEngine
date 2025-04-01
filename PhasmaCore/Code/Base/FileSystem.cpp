@@ -6,8 +6,7 @@ namespace pe
         : m_file(file), m_mode(mode | std::ios_base::binary) // Add binary mode
     {
         // One of these modes must be set
-        if (!(m_mode & std::ios_base::in) && !(m_mode & std::ios_base::out))
-            PE_ERROR("FileSystem: No mode set");
+        PE_ERROR_IF(!(m_mode & std::ios_base::in) && !(m_mode & std::ios_base::out), "FileSystem: No mode set");
 
         m_fstream.open(m_file, m_mode);
 

@@ -7,8 +7,8 @@ namespace pe
     {
         // Configure CMake
         std::string cmakeCommand = "cmake -S " + Path::Executable + "Assets/Scripts -B " + Path::Executable + "Assets/Scripts/Build";
-        if (std::system(cmakeCommand.c_str()) != 0)
-            PE_ERROR("Failed to configure CMake");
+        int res = std::system(cmakeCommand.c_str());
+        PE_ERROR_IF(res != 0, "Failed to configure CMake");
 
 // Compile the source into a shared library
 #ifdef PE_DEBUG
@@ -20,8 +20,8 @@ namespace pe
 #elif defined(PE_RELWITHDEBINFO)
         std::string buildCommand = "cmake --build " + Path::Executable + "Assets/Scripts/Build --config RelWithDebInfo";
 #endif
-        if (std::system(buildCommand.c_str()) != 0)
-            PE_ERROR("Failed to build the scripts");
+        res = std::system(buildCommand.c_str());
+        PE_ERROR_IF(res != 0, "Failed to build the scripts");
 
         // Load the compiled module
         LoadModule();

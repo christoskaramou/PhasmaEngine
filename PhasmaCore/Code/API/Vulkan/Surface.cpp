@@ -11,8 +11,8 @@ namespace pe
           m_supportedPresentModes{}
     {
         VkSurfaceKHR surfaceVK;
-        if (!SDL_Vulkan_CreateSurface(window, RHII.GetInstance(), &surfaceVK))
-            PE_ERROR(SDL_GetError());
+        SDL_bool res = SDL_Vulkan_CreateSurface(window, RHII.GetInstance(), &surfaceVK);
+        PE_ERROR_IF(!res, SDL_GetError());
 
         m_apiHandle = surfaceVK;
 
