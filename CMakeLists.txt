@@ -1,8 +1,8 @@
 cmake_minimum_required(VERSION 3.10)
-project(Phasma CXX)
+project(PhasmaEditor CXX)
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
-message(STATUS "Phasma = ${CMAKE_CURRENT_SOURCE_DIR}")
+message(STATUS "PhasmaEditor = ${CMAKE_CURRENT_SOURCE_DIR}")
 
 if(MSVC)
     include(ProcessorCount)
@@ -23,39 +23,39 @@ set(CMAKE_RUNTIME_OUTPUT_DIRECTORY_RELWITHDEBINFO "${CMAKE_BINARY_DIR}/RelWithDe
 # Add PhasmaCore subdirectory
 add_subdirectory(PhasmaCore)
 
-# Phasma executable
-file(GLOB_RECURSE CODE_SRC_FILES CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/Phasma/Code/*.cpp")
-file(GLOB_RECURSE INCLUDE_SRC_FILES CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/Phasma/Include/*.cpp")
-add_executable(Phasma ${CODE_SRC_FILES} ${INCLUDE_SRC_FILES} ${CMAKE_CURRENT_SOURCE_DIR}/Phasma/main.cpp)
+# PhasmaEditor executable
+file(GLOB_RECURSE CODE_SRC_FILES CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/PhasmaEditor/Code/*.cpp")
+file(GLOB_RECURSE INCLUDE_SRC_FILES CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/PhasmaEditor/Include/*.cpp")
+add_executable(PhasmaEditor ${CODE_SRC_FILES} ${INCLUDE_SRC_FILES} ${CMAKE_CURRENT_SOURCE_DIR}/PhasmaEditor/main.cpp)
 
-# Phasma precompiled headers
-target_precompile_headers(Phasma REUSE_FROM PhasmaCore)
+# PhasmaEditor precompiled headers
+target_precompile_headers(PhasmaEditor REUSE_FROM PhasmaCore)
 
-# Phasma include directories
-target_include_directories(Phasma PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/Phasma")
-target_include_directories(Phasma PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/Phasma/Code")
-target_include_directories(Phasma PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/Phasma/Include")
-target_include_directories(Phasma PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/Phasma/Include/imgui")
+# PhasmaEditor include directories
+target_include_directories(PhasmaEditor PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/PhasmaEditor")
+target_include_directories(PhasmaEditor PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/PhasmaEditor/Code")
+target_include_directories(PhasmaEditor PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/PhasmaEditor/Include")
+target_include_directories(PhasmaEditor PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/PhasmaEditor/Include/imgui")
 
-# Phasma link directories
-# target_link_directories(Phasma PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/Phasma/Libs/fsr/Debug")
-# target_link_directories(Phasma PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/Phasma/Libs/fsr/Release")
+# PhasmaEditor link directories
+# target_link_directories(PhasmaEditor PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/PhasmaEditor/Libs/fsr/Debug")
+# target_link_directories(PhasmaEditor PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/PhasmaEditor/Libs/fsr/Release")
 
 # Libraries
-target_link_libraries(Phasma PRIVATE PhasmaCore)
+target_link_libraries(PhasmaEditor PRIVATE PhasmaCore)
 
-# target_compile_options(Phasma PRIVATE -fsanitize=address)
-# target_link_options(Phasma PRIVATE -fsanitize=address)
+# target_compile_options(PhasmaEditor PRIVATE -fsanitize=address)
+# target_link_options(PhasmaEditor PRIVATE -fsanitize=address)
 
 # Copy assets to build directory
-add_custom_command(TARGET Phasma POST_BUILD
-    COMMAND ${CMAKE_COMMAND} -E copy_directory "${CMAKE_CURRENT_SOURCE_DIR}/Phasma/Assets" "$<TARGET_FILE_DIR:Phasma>/Assets"
+add_custom_command(TARGET PhasmaEditor POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E copy_directory "${CMAKE_CURRENT_SOURCE_DIR}/PhasmaEditor/Assets" "$<TARGET_FILE_DIR:PhasmaEditor>/Assets"
 )
 
 # Copy shader compilers for windows
 if(CMAKE_SYSTEM_NAME STREQUAL "Windows")
-    add_custom_command(TARGET Phasma POST_BUILD
-        COMMAND ${CMAKE_COMMAND} -E copy_if_different "${CMAKE_BINARY_DIR}/PhasmaCore/DLLs/dxcompiler.dll" "$<TARGET_FILE_DIR:Phasma>"
-        COMMAND ${CMAKE_COMMAND} -E copy_if_different "${CMAKE_BINARY_DIR}/PhasmaCore/DLLs/shaderc_shared.dll" "$<TARGET_FILE_DIR:Phasma>"
+    add_custom_command(TARGET PhasmaEditor POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different "${CMAKE_BINARY_DIR}/PhasmaCore/DLLs/dxcompiler.dll" "$<TARGET_FILE_DIR:PhasmaEditor>"
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different "${CMAKE_BINARY_DIR}/PhasmaCore/DLLs/shaderc_shared.dll" "$<TARGET_FILE_DIR:PhasmaEditor>"
     )
 endif()
