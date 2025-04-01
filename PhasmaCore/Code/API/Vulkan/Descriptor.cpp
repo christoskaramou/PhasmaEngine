@@ -86,8 +86,7 @@ namespace pe
             {
                 // Note: As for now, it can be only one unbound array in a descriptor set and it must be the last binding
                 // Vulkan limitation?
-                if (i != bindingInfos.size() - 1)
-                    PE_ERROR("DescriptorLayout: An unbound array must be the last binding");
+                PE_ERROR_IF(i != bindingInfos.size() - 1, "DescriptorLayout: An unbound array must be the last binding");
 
                 bindingFlags[i] |= VK_DESCRIPTOR_BINDING_VARIABLE_DESCRIPTOR_COUNT_BIT;
                 m_variableCount = bindingsVK[i].descriptorCount;

@@ -70,9 +70,7 @@ namespace pe
     {
         VkPhysicalDeviceProperties gpuProps;
         vkGetPhysicalDeviceProperties(RHII.GetGpu(), &gpuProps);
-
-        if (!gpuProps.limits.timestampComputeAndGraphics)
-            PE_ERROR("Timestamps not supported");
+        PE_ERROR_IF(!gpuProps.limits.timestampComputeAndGraphics, "Timestamps not supported");
 
         m_timestampPeriod = gpuProps.limits.timestampPeriod;
 

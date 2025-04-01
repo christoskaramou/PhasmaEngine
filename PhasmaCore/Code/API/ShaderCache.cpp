@@ -5,13 +5,11 @@ namespace pe
     // Parse includes recursively and return the full code
     std::string ShaderCache::ParseShader(const std::string &sourcePath)
     {
-        if (!std::filesystem::exists(sourcePath))
-            PE_ERROR("file does not exist!");
+        PE_ERROR_IF(!std::filesystem::exists(sourcePath), "file does not exist!");
 
         std::filesystem::path path(sourcePath);
         FileSystem file(path.string(), std::ios::in | std::ios::ate);
-        if (!file.IsOpen())
-            PE_ERROR("file could not be opened!");
+        PE_ERROR_IF(!file.IsOpen(), "file could not be opened!");
 
         std::string code = file.ReadAll();
         file.SetReadCursor(0);
