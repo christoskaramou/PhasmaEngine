@@ -271,7 +271,7 @@ namespace pe
             fpsDeque.push_back(framerate);
             highestValue = max(highestValue, framerate + 60.0f);
             std::copy(fpsDeque.begin(), fpsDeque.end(), fpsVector.begin());
-            
+
             memoryUsedDeque.pop_front();
             memoryUsedDeque.push_back(memoryInfo.used * toMB);
             memoryTotalDeque.pop_front();
@@ -291,8 +291,8 @@ namespace pe
             gSettings.target_fps = max(gSettings.target_fps, 10);
         }
         ImGui::Separator();
-        ImGui::Text("Total Memory: %.2f MB", memoryInfo.total * toMB);
         ImGui::Text("Used Memory: %.2f MB", memoryInfo.used * toMB);
+        ImGui::Text("Total Memory: %.2f MB", memoryInfo.total * toMB);
         ImGui::PlotLines("##MemoryUsage", memoryUsedVector.data(), static_cast<int>(memoryUsedVector.size()), 0, NULL, 0.0f, memoryInfo.total * toMB, ImVec2(0, 80));
         ImGui::Separator();
 

@@ -36,13 +36,22 @@ target_include_directories(PhasmaEditor PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/Pha
 target_include_directories(PhasmaEditor PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/PhasmaEditor/Code")
 target_include_directories(PhasmaEditor PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/PhasmaEditor/Include")
 target_include_directories(PhasmaEditor PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/PhasmaEditor/Include/imgui")
+target_include_directories(PhasmaEditor PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/PhasmaEditor/Include/assimp")
 
 # PhasmaEditor link directories
 # target_link_directories(PhasmaEditor PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/PhasmaEditor/Libs/fsr/Debug")
 # target_link_directories(PhasmaEditor PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/PhasmaEditor/Libs/fsr/Release")
 
 # Libraries
-target_link_libraries(PhasmaEditor PRIVATE PhasmaCore)
+target_link_directories(PhasmaEditor PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/PhasmaEditor/Libs/assimp")
+set(LIB_FILES
+    $<$<CONFIG:Debug>:assimp-vc143-mtd>
+    $<$<CONFIG:Release>:assimp-vc143-mt>
+    $<$<CONFIG:MinsizeRel>:assimp-vc143-mt>
+    $<$<CONFIG:RelWithDebInfo>:assimp-vc143-mt>
+    zlibstatic
+)
+target_link_libraries(PhasmaEditor PRIVATE PhasmaCore ${LIB_FILES})
 
 # target_compile_options(PhasmaEditor PRIVATE -fsanitize=address)
 # target_link_options(PhasmaEditor PRIVATE -fsanitize=address)
