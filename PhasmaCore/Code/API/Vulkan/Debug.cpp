@@ -243,5 +243,5 @@ namespace pe
         cmd->m_gpuTimerIdsStack.pop();
     }
 #endif
-};
+}
 #endif
