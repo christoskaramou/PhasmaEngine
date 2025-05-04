@@ -94,7 +94,7 @@ namespace pe
         subpassDependencies[1].srcSubpass = 0;
         subpassDependencies[1].dstSubpass = VK_SUBPASS_EXTERNAL;
         subpassDependencies[1].srcStageMask = dstStageMask;
-        subpassDependencies[1].dstStageMask = VK_PIPELINE_STAGE_ALL_GRAPHICS_BIT;
+        subpassDependencies[1].dstStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
         subpassDependencies[1].srcAccessMask = dstAccessMask;
         subpassDependencies[1].dstAccessMask = VK_ACCESS_NONE;
         subpassDependencies[1].dependencyFlags = VK_DEPENDENCY_BY_REGION_BIT;
