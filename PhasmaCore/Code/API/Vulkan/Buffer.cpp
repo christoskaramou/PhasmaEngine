@@ -5,15 +5,12 @@
 
 namespace pe
 {
-    Buffer::Buffer(size_t size,
-                   BufferUsageFlags usage,
-                   AllocationCreateFlags createFlags,
-                   const std::string &name)
-                    : m_size{size},
-                      m_data{nullptr},
-                      m_usage{usage},
-                      m_allocation{},
-                      m_name{name}
+    Buffer::Buffer(size_t size, BufferUsageFlags usage, AllocationCreateFlags createFlags, const std::string &name)
+        : m_size{size},
+          m_data{nullptr},
+          m_usage{usage},
+          m_allocation{},
+          m_name{name}
 
     {
         if (m_usage & BufferUsage::UniformBufferBit)
