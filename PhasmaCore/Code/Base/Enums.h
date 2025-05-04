@@ -121,16 +121,6 @@ namespace pe
         return (U)result;
     }
 
-    enum class Launch
-    {
-        Async,
-        AsyncDeferred,
-        AsyncNoWait, // Does not block the main thread, useful for loading.
-        Sync,
-        SyncDeferred,
-        All, // Used for convenience to call all the above in one go.
-    };
-    
     enum class ShaderCodeType
     {
         HLSL,
