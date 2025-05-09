@@ -10,6 +10,7 @@
 
 namespace pe
 {
+    #pragma region DownsamplerSPV
     const uint32_t c_downsamplerSPV[] = {
         0x07230203, 0x00010000, 0x000e0000, 0x00000495, 0x00000000, 0x00020011, 0x00000001, 0x0003000e, 
         0x00000000, 0x00000001, 0x0007000f, 0x00000005, 0x00000001, 0x6e69616d, 0x00005343, 0x00000002, 
@@ -816,6 +817,7 @@ namespace pe
         0x00010038, 
     };
     constexpr size_t c_downsamplerSPVSize = sizeof(c_downsamplerSPV) / sizeof(uint32_t);
+    #pragma endregion
 
     void Downsampler::Init()
     {

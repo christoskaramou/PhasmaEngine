@@ -17,6 +17,7 @@ namespace pe
 
     struct ShaderInOutDesc : public BaseDesc
     {
+        int binding = INT32_MIN;
         int location = INT32_MIN;
     };
 
