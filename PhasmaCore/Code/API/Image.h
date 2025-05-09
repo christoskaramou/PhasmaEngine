@@ -113,7 +113,6 @@ namespace pe
         void SetSampler(Sampler *sampler) { m_sampler = sampler; }
         const std::string &GetName() { return m_createInfo.name; }
         Format GetFormat() { return m_createInfo.format; }
-        Format *GetFormatPtr() { return &m_createInfo.format; }
         uint32_t GetMipLevels() { return m_createInfo.mipLevels; }
         uint32_t GetArrayLayers() { return m_createInfo.arrayLayers; }
         SampleCount GetSamples() { return m_createInfo.samples; }

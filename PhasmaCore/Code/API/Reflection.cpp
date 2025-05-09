@@ -54,7 +54,7 @@ namespace pe
         // Specialization constants
         for (const spirv_cross::SpecializationConstant &specConstant : specConstants)
         {
-            SpecializationConstantDesc desc;
+            SpecializationConstantDesc desc{};
             const spirv_cross::SPIRConstant &constant = compiler.get_constant(specConstant.id);
             desc.name = GetResourceName(compiler, specConstant.id);
             desc.typeInfo = compiler.get_type(constant.constant_type);
@@ -66,9 +66,10 @@ namespace pe
         // Shader inputs
         for (const spirv_cross::Resource &resource : resources.stage_inputs)
         {
-            ShaderInOutDesc desc;
+            ShaderInOutDesc desc{};
             desc.name = GetResourceName(compiler, resource.id);
             desc.typeInfo = compiler.get_type(resource.type_id);
+            desc.binding = compiler.get_decoration(resource.id, spv::DecorationBinding);
             desc.location = compiler.get_decoration(resource.id, spv::DecorationLocation);
 
             m_inputs.push_back(desc);
@@ -79,7 +80,7 @@ namespace pe
         // Shader outputs
         for (const spirv_cross::Resource &resource : resources.stage_outputs)
         {
-            ShaderInOutDesc desc;
+            ShaderInOutDesc desc{};
             desc.name = GetResourceName(compiler, resource.id);
             desc.typeInfo = compiler.get_type(resource.type_id);
             desc.location = compiler.get_decoration(resource.id, spv::DecorationLocation);
@@ -92,7 +93,7 @@ namespace pe
         // Combined Image Samplers
         for (const spirv_cross::Resource &resource : resources.sampled_images)
         {
-            CombinedImageSamplerDesc desc;
+            CombinedImageSamplerDesc desc{};
             desc.name = GetResourceName(compiler, resource.id);
             desc.typeInfo = compiler.get_type(resource.type_id);
             desc.set = compiler.get_decoration(resource.id, spv::DecorationDescriptorSet);
@@ -104,7 +105,7 @@ namespace pe
         // Samplers
         for (const spirv_cross::Resource &resource : resources.separate_samplers)
         {
-            SamplerDesc desc;
+            SamplerDesc desc{};
             desc.name = GetResourceName(compiler, resource.id);
             desc.typeInfo = compiler.get_type(resource.type_id);
             desc.set = compiler.get_decoration(resource.id, spv::DecorationDescriptorSet);
@@ -116,7 +117,7 @@ namespace pe
         // Images
         for (const spirv_cross::Resource &resource : resources.separate_images)
         {
-            ImageDesc desc;
+            ImageDesc desc{};
             desc.name = GetResourceName(compiler, resource.id);
             desc.typeInfo = compiler.get_type(resource.type_id);
             desc.set = compiler.get_decoration(resource.id, spv::DecorationDescriptorSet);
@@ -128,7 +129,7 @@ namespace pe
         // Storage Images
         for (const spirv_cross::Resource &resource : resources.storage_images)
         {
-            ImageDesc desc;
+            ImageDesc desc{};
             desc.name = GetResourceName(compiler, resource.id);
             desc.typeInfo = compiler.get_type(resource.type_id);
             desc.set = compiler.get_decoration(resource.id, spv::DecorationDescriptorSet);
@@ -140,7 +141,7 @@ namespace pe
         // Uniform Buffers
         for (const spirv_cross::Resource &resource : resources.uniform_buffers)
         {
-            BufferDesc desc;
+            BufferDesc desc{};
             desc.name = GetResourceName(compiler, resource.id);
             desc.typeInfo = compiler.get_type(resource.type_id);
             desc.set = compiler.get_decoration(resource.id, spv::DecorationDescriptorSet);
@@ -153,7 +154,7 @@ namespace pe
         // Storage Buffers
         for (const spirv_cross::Resource &resource : resources.storage_buffers)
         {
-            BufferDesc desc;
+            BufferDesc desc{};
             desc.name = GetResourceName(compiler, resource.id);
             desc.typeInfo = compiler.get_type(resource.type_id);
             desc.set = compiler.get_decoration(resource.id, spv::DecorationDescriptorSet);
@@ -225,7 +226,7 @@ namespace pe
         return ReflectionVariableType::None; // Default case
     }
 
-    static const std::unordered_map<std::pair<uint32_t, ReflectionVariableType>, Format, PairHash_um> s_attributeTypeMap = {
+    static const std::unordered_map<std::pair<uint32_t, ReflectionVariableType>, Format, PairHash_um> s_attributeFormatMap = {
         {{1, ReflectionVariableType::SInt}, {Format::R8SInt}},
         {{1, ReflectionVariableType::UInt}, {Format::R8UInt}},
         {{2, ReflectionVariableType::SInt}, {Format::R16SInt}},
@@ -248,13 +249,13 @@ namespace pe
         {{16, ReflectionVariableType::SFloat}, {Format::RGBA32SFloat}},
     };
 
-    Format GetAttributeType(const ShaderInOutDesc &input)
+    Format GetAttributeFormat(const ShaderInOutDesc &input)
     {
         uint32_t size = GetTypeSize(input) * input.typeInfo.vecsize * input.typeInfo.columns;
         ReflectionVariableType type = GetReflectionVariableType(input);
 
-        auto it = s_attributeTypeMap.find({size, type});
-        if (it != s_attributeTypeMap.end())
+        auto it = s_attributeFormatMap.find({size, type});
+        if (it != s_attributeFormatMap.end())
         {
             return it->second;
         }
@@ -267,20 +268,34 @@ namespace pe
     {
         PE_ERROR_IF(m_shader->GetShaderStage() != ShaderStage::VertexBit, "Vertex bindings are only available for vertex shaders");
 
-        uint32_t stride = 0;
+        // separate bindings by binding number
+        std::unordered_map<uint32_t, std::vector<ShaderInOutDesc>> bindingsMap{};
         for (const ShaderInOutDesc &input : m_inputs)
-            stride += GetTypeSize(input) * input.typeInfo.vecsize * input.typeInfo.columns;
+        {
+            if (input.binding == INT32_MIN)
+                continue;
 
-        if (stride == 0)
-            return {};
+            bindingsMap[input.binding].push_back(input);
+        }
+
+        // sort by location
+        for (auto &pair : bindingsMap)
+        {
+            std::sort(pair.second.begin(), pair.second.end(), [](auto &a, auto &b)
+                      { return a.location < b.location; });
+        }
 
         std::vector<VertexInputBindingDescription> vertexBindings{};
+        for (const auto &pair : bindingsMap)
+        {
+            VertexInputBindingDescription binding{};
+            binding.binding = pair.first;
+            binding.inputRate = VertexInputRate::Vertex;
+            for (const ShaderInOutDesc &input : pair.second)
+                binding.stride += GetTypeSize(input) * input.typeInfo.vecsize * input.typeInfo.columns;
 
-        VertexInputBindingDescription binding;
-        binding.binding = 0;
-        binding.stride = stride;
-        binding.inputRate = VertexInputRate::Vertex;
-        vertexBindings.push_back(binding);
+            vertexBindings.push_back(binding);
+        }
 
         return vertexBindings;
     }
@@ -295,10 +310,10 @@ namespace pe
         for (const ShaderInOutDesc &input : m_inputs)
         {
             uint32_t size = GetTypeSize(input) * input.typeInfo.vecsize * input.typeInfo.columns;
-            VertexInputAttributeDescription attribute;
+            VertexInputAttributeDescription attribute{};
             attribute.location = input.location;
-            attribute.binding = 0;
-            attribute.format = GetAttributeType(input);
+            attribute.binding = input.binding;
+            attribute.format = GetAttributeFormat(input);
             attribute.offset = offset;
             offset += size;
 
@@ -337,7 +352,7 @@ namespace pe
 
         for (const CombinedImageSamplerDesc &desc : m_combinedImageSamplers)
         {
-            DescriptorBindingInfo info;
+            DescriptorBindingInfo info{};
             info.binding = desc.binding;
             info.count = GetResourceArrayCount(desc.typeInfo);
             info.imageLayout = ImageLayout::ShaderReadOnly;
@@ -349,7 +364,7 @@ namespace pe
 
         for (const SamplerDesc &desc : m_samplers)
         {
-            DescriptorBindingInfo info;
+            DescriptorBindingInfo info{};
             info.binding = desc.binding;
             info.count = GetResourceArrayCount(desc.typeInfo);
             info.type = DescriptorType::Sampler;
@@ -360,7 +375,7 @@ namespace pe
 
         for (const ImageDesc &desc : m_images)
         {
-            DescriptorBindingInfo info;
+            DescriptorBindingInfo info{};
             info.binding = desc.binding;
             info.count = GetResourceArrayCount(desc.typeInfo);
             info.imageLayout = ImageLayout::ShaderReadOnly;
@@ -372,7 +387,7 @@ namespace pe
 
         for (const ImageDesc &desc : m_storageImages)
         {
-            DescriptorBindingInfo info;
+            DescriptorBindingInfo info{};
             info.binding = desc.binding;
             info.count = GetResourceArrayCount(desc.typeInfo);
             info.imageLayout = ImageLayout::General;
@@ -384,7 +399,7 @@ namespace pe
 
         for (const BufferDesc &desc : m_uniformBuffers)
         {
-            DescriptorBindingInfo info;
+            DescriptorBindingInfo info{};
             info.binding = desc.binding;
             info.count = GetResourceArrayCount(desc.typeInfo);
             info.type = DescriptorType::UniformBuffer;
@@ -395,7 +410,7 @@ namespace pe
 
         for (const BufferDesc &desc : m_storageBuffers)
         {
-            DescriptorBindingInfo info;
+            DescriptorBindingInfo info{};
             info.binding = desc.binding;
             info.count = GetResourceArrayCount(desc.typeInfo);
             info.type = DescriptorType::StorageBuffer;
@@ -406,19 +421,14 @@ namespace pe
 
         for (auto &setInfo : setInfos)
         {
+            Descriptor *descriptor = nullptr;
+
             if (!setInfo.empty())
             {
                 std::sort(setInfo.begin(), setInfo.end(), [](auto &a, auto &b)
                           { return a.binding < b.binding; });
-            }
-        }
-
-        for (auto &setInfo : setInfos)
-        {
-            Descriptor *descriptor = nullptr;
-
-            if (!setInfo.empty())
                 descriptor = Descriptor::Create(setInfo, m_shader->GetShaderStage(), false, "auto_descriptor");
+            }
 
             descriptors.push_back(descriptor);
         }
