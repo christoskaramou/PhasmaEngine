@@ -85,6 +85,9 @@ namespace pe
         ModelGltf();
         ~ModelGltf();
 
+        void UpdateNodeMatrices();
+        void SetPrimitiveFactors(Buffer *uniformBuffer);
+
     private:
         friend class Geometry;
         friend class DepthPass;
@@ -94,10 +97,18 @@ namespace pe
         friend class AabbsPass;
 
         void UpdateNodeMatrix(int node);
-        void UpdateNodeMatrices();
-        void SetPrimitiveFactors(Buffer *combinedBuffer);
 
-        bool render = false;
+        bool LoadFile(const std::filesystem::path &file, tinygltf::TinyGLTF &loader, std::string &err, std::string &warn);
+        void UploadImages(CommandBuffer *cmd);
+        void CreateSamplers();
+        void ExtractMaterialInfo();
+        void ProcessPrimitivesGeometry();
+        void FillBuffersAndAABBs();
+        void SetupNodes();
+        void UpdateAllNodeMatrices();
+        void UploadBuffers(CommandBuffer *cmd);
+
+        std::atomic_bool m_render = false;
         size_t m_id;
         std::vector<Image *> m_images{};
         std::vector<Sampler *> m_samplers{};
@@ -112,5 +123,9 @@ namespace pe
         // Dirty flags are used to update nodes and uniform buffers, they are important
         bool dirtyNodes = false;
         bool dirtyUniforms[SWAPCHAIN_IMAGES];
+
+        uint32_t m_verticesCount = 0;
+        uint32_t m_indicesCount = 0;
+        uint32_t m_primitivesCount = 0;
     };
 }
