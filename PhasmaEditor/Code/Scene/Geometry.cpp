@@ -563,7 +563,7 @@ namespace pe
         for (auto &modelPtr : m_models)
         {
             ModelGltf &model = *modelPtr;
-            if (!model.render)
+            if (!model.m_render)
                 continue;
 
             // update node world matrices if needed
@@ -614,7 +614,7 @@ namespace pe
             for (auto &modelPtr : m_models)
             {
                 ModelGltf &model = *modelPtr;
-                if (!model.render)
+                if (!model.m_render)
                     continue;
 
                 for (int node = 0; node < model.nodes.size(); node++)

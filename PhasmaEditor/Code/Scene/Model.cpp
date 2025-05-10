@@ -39,39 +39,53 @@ namespace pe
         ModelGltf *modelGltf = new ModelGltf();
         ModelGltf &model = *modelGltf;
 
-        bool ret = false;
         tinygltf::TinyGLTF loader;
-        std::string err;
-        std::string warn;
+        std::string err, warn;
 
+        auto &gSettings = Settings::Get<GlobalSettings>();
+        gSettings.loading_name = "Reading from file";
+
+        if (!model.LoadFile(file, loader, err, warn))
+            PE_ERROR("Failed to load model: " + file.string());
+
+        Queue *queue = RHII.GetMainQueue();
+        CommandBuffer *cmd = queue->GetCommandBuffer(CommandPoolCreate::TransientBit);
+
+        cmd->Begin();
+        model.UploadImages(cmd);
+        model.CreateSamplers();
+        model.ExtractMaterialInfo();
+        model.ProcessPrimitivesGeometry();
+        model.FillBuffersAndAABBs();
+        model.SetupNodes();
+        model.UpdateAllNodeMatrices();
+        model.UploadBuffers(cmd);
+        cmd->End();
+
+        queue->Submit(1, &cmd, nullptr, nullptr);
+        cmd->Wait();
+
+        modelGltf->m_render = true;
+
+        return modelGltf;
+    }
+
+    bool ModelGltf::LoadFile(const std::filesystem::path &file, tinygltf::TinyGLTF &loader, std::string &err, std::string &warn)
+    {
+        if (file.extension() == ".gltf")
+            return loader.LoadASCIIFromFile(this, &err, &warn, file.string());
+        else if (file.extension() == ".glb")
+            return loader.LoadBinaryFromFile(this, &err, &warn, file.string());
+        return false;
+    }
+
+    void ModelGltf::UploadImages(CommandBuffer *cmd)
+    {
         auto &gSettings = Settings::Get<GlobalSettings>();
         auto &progress = gSettings.loading_current;
         auto &total = gSettings.loading_total;
         auto &loading = gSettings.loading_name;
 
-        progress = 0;
-        total = 1;
-        loading = "Reading from file";
-
-        if (file.extension() == ".gltf")
-            ret = loader.LoadASCIIFromFile(&model, &err, &warn, file.string());
-        else if (file.extension() == ".glb")
-            ret = loader.LoadBinaryFromFile(&model, &err, &warn, file.string());
-        else
-            PE_ERROR("Model type not supported");
-
-        PE_ERROR_IF(!ret, "Failed to load model: " + file.string());
-
-
-        progress = 0;
-        total = static_cast<uint32_t>(model.images.size() + model.samplers.size());
-        loading = "Loading Images";
-
-        Queue *queue = RHII.GetMainQueue();
-        CommandBuffer *cmd = queue->GetCommandBuffer(CommandPoolCreate::TransientBit);
-        cmd->Begin();
-
-        // Upload images
         if (!g_defaultBlack)
             g_defaultBlack = Image::LoadRGBA8(cmd, Path::Executable + "Assets/Objects/black.png");
         if (!g_defaultNormal)
@@ -86,11 +100,11 @@ namespace pe
             g_defaultSampler = Sampler::Create(info);
         }
 
-        model.m_images.reserve(model.images.size() + 3);
-        for (auto &image : model.images)
+        m_images.reserve(images.size() + 3);
+        for (auto &image : images)
         {
             PE_ERROR_IF(image.image.empty(), "Image data is empty: " + image.uri);
-            
+
             ImageCreateInfo info{};
             info.format = Format::RGBA8Unorm;
             info.mipLevels = Image::CalculateMips(image.width, image.height);
@@ -116,18 +130,25 @@ namespace pe
             barrier.accessMask = Access::ShaderReadBit;
             cmd->ImageBarrier(barrier);
 
-            model.m_images.push_back(uploadImage);
+            m_images.push_back(uploadImage);
 
             // Update loading bar
             progress++;
         }
-        model.m_images.push_back(g_defaultBlack);
-        model.m_images.push_back(g_defaultNormal);
-        model.m_images.push_back(g_defaultWhite);
+        m_images.push_back(g_defaultBlack);
+        m_images.push_back(g_defaultNormal);
+        m_images.push_back(g_defaultWhite);
+    }
 
-        // Create Samplers
-        model.m_samplers.reserve(model.samplers.size() + 1);
-        for (auto &sampler : model.samplers)
+    void ModelGltf::CreateSamplers()
+    {
+        auto &gSettings = Settings::Get<GlobalSettings>();
+        auto &progress = gSettings.loading_current;
+        auto &total = gSettings.loading_total;
+        auto &loading = gSettings.loading_name;
+
+        m_samplers.reserve(samplers.size() + 1);
+        for (auto &sampler : samplers)
         {
             SamplerCreateInfo info{};
             info.name = sampler.name;
@@ -186,32 +207,39 @@ namespace pe
 
             info.UpdateHash();
             Sampler *uploadSampler = Sampler::Create(info);
-            model.m_samplers.push_back(uploadSampler);
-            model.m_samplersMap[info.GetHash()] = uploadSampler; // take as granted that samplers are not duplicated
+            m_samplers.push_back(uploadSampler);
+            m_samplersMap[info.GetHash()] = uploadSampler; // take as granted that samplers are not duplicated
 
             // Update loading bar
             progress++;
         }
-        model.m_samplers.push_back(g_defaultSampler);
-        model.m_samplersMap[g_defaultSampler->GetInfo().GetHash()] = g_defaultSampler;
+        m_samplers.push_back(g_defaultSampler);
+        m_samplersMap[g_defaultSampler->GetInfo().GetHash()] = g_defaultSampler;
+    }
+
+    void ModelGltf::ExtractMaterialInfo()
+    {
+        auto &gSettings = Settings::Get<GlobalSettings>();
+        auto &progress = gSettings.loading_current;
+        auto &total = gSettings.loading_total;
+        auto &loading = gSettings.loading_name;
 
         progress = 0;
-        uint32_t totalPrimitives = 0;
-        for (size_t i = 0; i < model.meshes.size(); i++)
+        for (size_t i = 0; i < meshes.size(); i++)
         {
-            tinygltf::Mesh &mesh = model.meshes[i];
+            tinygltf::Mesh &mesh = meshes[i];
             for (size_t j = 0; j < mesh.primitives.size(); j++)
-            totalPrimitives++;
+                m_primitivesCount++;
         }
-        total = totalPrimitives;
+        total = m_primitivesCount;
         loading = "Loading material pipeline info";
 
         // Material info for pipeline creation
-        model.m_meshesInfo.resize(model.meshes.size());
-        for (size_t i = 0; i < model.meshes.size(); i++)
+        m_meshesInfo.resize(meshes.size());
+        for (size_t i = 0; i < meshes.size(); i++)
         {
-            tinygltf::Mesh &mesh = model.meshes[i];
-            MeshInfo &meshInfo = model.m_meshesInfo[i];
+            tinygltf::Mesh &mesh = meshes[i];
+            MeshInfo &meshInfo = m_meshesInfo[i];
             meshInfo.primitivesInfo.resize(mesh.primitives.size());
 
             for (size_t j = 0; j < mesh.primitives.size(); j++)
@@ -219,7 +247,7 @@ namespace pe
                 tinygltf::Primitive &primitive = mesh.primitives[j];
                 PrimitiveInfo &primitiveInfo = meshInfo.primitivesInfo[j];
 
-                tinygltf::Material &material = model.materials[primitive.material];
+                tinygltf::Material &material = materials[primitive.material];
                 MaterialInfo &materialInfo = primitiveInfo.materialInfo;
 
                 switch (primitive.mode)
@@ -253,27 +281,33 @@ namespace pe
                 progress++;
             }
         }
+    }
+
+    void ModelGltf::ProcessPrimitivesGeometry()
+    {
+        auto &gSettings = Settings::Get<GlobalSettings>();
+        auto &progress = gSettings.loading_current;
+        auto &total = gSettings.loading_total;
+        auto &loading = gSettings.loading_name;
 
         progress = 0;
-        total = totalPrimitives;
+        total = m_primitivesCount;
         loading = "Loading aabbs";
 
-        uint32_t verticesCount = 0;
-        uint32_t indicesCount = 0;
-        uint32_t primitivesCount = 0;
-        for (int i = 0; i < model.meshes.size(); i++)
+        m_primitivesCount = 0;
+        for (int i = 0; i < meshes.size(); i++)
         {
-            tinygltf::Mesh &mesh = model.meshes[i];
-            MeshInfo &meshInfo = model.m_meshesInfo[i];
+            tinygltf::Mesh &mesh = meshes[i];
+            MeshInfo &meshInfo = m_meshesInfo[i];
             for (int j = 0; j < mesh.primitives.size(); j++)
             {
                 PrimitiveInfo &primitiveInfo = meshInfo.primitivesInfo[j];
 
                 auto posIt = mesh.primitives[j].attributes.find("POSITION");
-                const auto &accessorPos = model.accessors[posIt->second];
-                primitiveInfo.vertexOffset = verticesCount;
+                const auto &accessorPos = accessors[posIt->second];
+                primitiveInfo.vertexOffset = m_verticesCount;
                 primitiveInfo.verticesCount = static_cast<uint32_t>(accessorPos.count);
-                verticesCount += static_cast<uint32_t>(accessorPos.count);
+                m_verticesCount += static_cast<uint32_t>(accessorPos.count);
                 primitiveInfo.boundingBox.min.x = static_cast<float>(accessorPos.minValues[0]);
                 primitiveInfo.boundingBox.min.y = static_cast<float>(accessorPos.minValues[1]);
                 primitiveInfo.boundingBox.min.z = static_cast<float>(accessorPos.minValues[2]);
@@ -281,43 +315,51 @@ namespace pe
                 primitiveInfo.boundingBox.max.y = static_cast<float>(accessorPos.maxValues[1]);
                 primitiveInfo.boundingBox.max.z = static_cast<float>(accessorPos.maxValues[2]);
 
-                const auto &accessorIndices = model.accessors[mesh.primitives[j].indices];
-                primitiveInfo.indexOffset = indicesCount;
+                const auto &accessorIndices = accessors[mesh.primitives[j].indices];
+                primitiveInfo.indexOffset = m_indicesCount;
                 primitiveInfo.indicesCount = static_cast<uint32_t>(accessorIndices.count);
-                indicesCount += static_cast<uint32_t>(accessorIndices.count);
+                m_indicesCount += static_cast<uint32_t>(accessorIndices.count);
 
-                primitiveInfo.aabbVertexOffset = primitivesCount * 8;
+                primitiveInfo.aabbVertexOffset = m_primitivesCount * 8;
 
-                primitivesCount++;
+                m_primitivesCount++;
 
                 // Update loading bar
                 progress++;
             }
         }
+    }
+
+    void ModelGltf::FillBuffersAndAABBs()
+    {
+        auto &gSettings = Settings::Get<GlobalSettings>();
+        auto &progress = gSettings.loading_current;
+        auto &total = gSettings.loading_total;
+        auto &loading = gSettings.loading_name;
 
         progress = 0;
-        total = verticesCount + indicesCount;
+        total = m_verticesCount + m_indicesCount;
         loading = "Loading vertices and indices";
 
-        model.m_vertices.reserve(verticesCount);
-        model.m_positionUvs.reserve(verticesCount);
-        model.m_aabbVertices.reserve(primitivesCount * 8);
-        model.m_indices.reserve(indicesCount);
-        auto &vertices = model.m_vertices;
-        auto &positionUvs = model.m_positionUvs;
-        auto &indices = model.m_indices;
-        auto &aabbVertices = model.m_aabbVertices;
+        m_vertices.reserve(m_verticesCount);
+        m_positionUvs.reserve(m_verticesCount);
+        m_aabbVertices.reserve(m_primitivesCount * 8);
+        m_indices.reserve(m_indicesCount);
+        auto &vertices = m_vertices;
+        auto &positionUvs = m_positionUvs;
+        auto &indices = m_indices;
+        auto &aabbVertices = m_aabbVertices;
         size_t indexOffset = 0;
 
-        for (uint32_t i = 0; i < model.meshes.size(); i++)
+        for (uint32_t i = 0; i < meshes.size(); i++)
         {
-            tinygltf::Mesh &mesh = model.meshes[i];
-            MeshInfo &meshInfo = model.m_meshesInfo[i];
+            tinygltf::Mesh &mesh = meshes[i];
+            MeshInfo &meshInfo = m_meshesInfo[i];
             for (uint32_t j = 0; j < mesh.primitives.size(); j++)
             {
                 tinygltf::Primitive &primitive = mesh.primitives[j];
                 PrimitiveInfo &primitiveInfo = meshInfo.primitivesInfo[j];
-                tinygltf::Material &material = model.materials[primitive.material];
+                tinygltf::Material &material = materials[primitive.material];
 
                 // ----------- Alpha Mode -----------
                 if (material.alphaMode == "BLEND")
@@ -335,34 +377,34 @@ namespace pe
                 int samplerIndex;
 
                 textureIndex = material.pbrMetallicRoughness.baseColorTexture.index;
-                imageIndex = textureIndex > -1 ? model.textures[textureIndex].source : -1;
-                samplerIndex = textureIndex > -1 ? model.textures[textureIndex].sampler : -1;
-                primitiveInfo.images[0] = imageIndex > -1 ? model.m_images[imageIndex] : g_defaultBlack;
-                primitiveInfo.samplers[0] = samplerIndex > -1 ? model.m_samplers[samplerIndex] : g_defaultSampler;
+                imageIndex = textureIndex > -1 ? textures[textureIndex].source : -1;
+                samplerIndex = textureIndex > -1 ? textures[textureIndex].sampler : -1;
+                primitiveInfo.images[0] = imageIndex > -1 ? m_images[imageIndex] : g_defaultBlack;
+                primitiveInfo.samplers[0] = samplerIndex > -1 ? m_samplers[samplerIndex] : g_defaultSampler;
 
                 textureIndex = material.pbrMetallicRoughness.metallicRoughnessTexture.index;
-                imageIndex = textureIndex > -1 ? model.textures[textureIndex].source : -1;
-                samplerIndex = textureIndex > -1 ? model.textures[textureIndex].sampler : -1;
-                primitiveInfo.images[1] = imageIndex > -1 ? model.m_images[imageIndex] : g_defaultBlack;
-                primitiveInfo.samplers[1] = samplerIndex > -1 ? model.m_samplers[samplerIndex] : g_defaultSampler;
+                imageIndex = textureIndex > -1 ? textures[textureIndex].source : -1;
+                samplerIndex = textureIndex > -1 ? textures[textureIndex].sampler : -1;
+                primitiveInfo.images[1] = imageIndex > -1 ? m_images[imageIndex] : g_defaultBlack;
+                primitiveInfo.samplers[1] = samplerIndex > -1 ? m_samplers[samplerIndex] : g_defaultSampler;
 
                 textureIndex = material.normalTexture.index;
-                imageIndex = textureIndex > -1 ? model.textures[textureIndex].source : -1;
-                samplerIndex = textureIndex > -1 ? model.textures[textureIndex].sampler : -1;
-                primitiveInfo.images[2] = imageIndex > -1 ? model.m_images[imageIndex] : g_defaultNormal;
-                primitiveInfo.samplers[2] = samplerIndex > -1 ? model.m_samplers[samplerIndex] : g_defaultSampler;
+                imageIndex = textureIndex > -1 ? textures[textureIndex].source : -1;
+                samplerIndex = textureIndex > -1 ? textures[textureIndex].sampler : -1;
+                primitiveInfo.images[2] = imageIndex > -1 ? m_images[imageIndex] : g_defaultNormal;
+                primitiveInfo.samplers[2] = samplerIndex > -1 ? m_samplers[samplerIndex] : g_defaultSampler;
 
                 textureIndex = material.occlusionTexture.index;
-                imageIndex = textureIndex > -1 ? model.textures[textureIndex].source : -1;
-                samplerIndex = textureIndex > -1 ? model.textures[textureIndex].sampler : -1;
-                primitiveInfo.images[3] = imageIndex > -1 ? model.m_images[imageIndex] : g_defaultWhite;
-                primitiveInfo.samplers[3] = samplerIndex > -1 ? model.m_samplers[samplerIndex] : g_defaultSampler;
+                imageIndex = textureIndex > -1 ? textures[textureIndex].source : -1;
+                samplerIndex = textureIndex > -1 ? textures[textureIndex].sampler : -1;
+                primitiveInfo.images[3] = imageIndex > -1 ? m_images[imageIndex] : g_defaultWhite;
+                primitiveInfo.samplers[3] = samplerIndex > -1 ? m_samplers[samplerIndex] : g_defaultSampler;
 
                 textureIndex = material.emissiveTexture.index;
-                imageIndex = textureIndex > -1 ? model.textures[textureIndex].source : -1;
-                samplerIndex = textureIndex > -1 ? model.textures[textureIndex].sampler : -1;
-                primitiveInfo.images[4] = imageIndex > -1 ? model.m_images[imageIndex] : g_defaultBlack;
-                primitiveInfo.samplers[4] = samplerIndex > -1 ? model.m_samplers[samplerIndex] : g_defaultSampler;
+                imageIndex = textureIndex > -1 ? textures[textureIndex].source : -1;
+                samplerIndex = textureIndex > -1 ? textures[textureIndex].sampler : -1;
+                primitiveInfo.images[4] = imageIndex > -1 ? m_images[imageIndex] : g_defaultBlack;
+                primitiveInfo.samplers[4] = samplerIndex > -1 ? m_samplers[samplerIndex] : g_defaultSampler;
 
                 // ------------ Vertices ------------
                 // Attributes
@@ -381,29 +423,29 @@ namespace pe
                 bool hasJoints = jointsIt != primitive.attributes.end();
                 bool hasWeights = weightsIt != primitive.attributes.end();
 
-                tinygltf::Accessor *accessorPos = &model.accessors[posIt->second];
-                tinygltf::Accessor *accessorUV = hasUv0 ? &model.accessors[uv0It->second] : nullptr;
-                tinygltf::Accessor *accessorUV2 = hasUv1 ? &model.accessors[uv1It->second] : nullptr;
-                tinygltf::Accessor *accessorNormal = hasNormal ? &model.accessors[normalIt->second] : nullptr;
-                tinygltf::Accessor *accessorColor = hasColor ? &model.accessors[colorIt->second] : nullptr;
-                tinygltf::Accessor *accessorJoints = hasJoints ? &model.accessors[jointsIt->second] : nullptr;
-                tinygltf::Accessor *accessorWeights = hasWeights ? &model.accessors[weightsIt->second] : nullptr;
+                tinygltf::Accessor *accessorPos = &accessors[posIt->second];
+                tinygltf::Accessor *accessorUV = hasUv0 ? &accessors[uv0It->second] : nullptr;
+                tinygltf::Accessor *accessorUV2 = hasUv1 ? &accessors[uv1It->second] : nullptr;
+                tinygltf::Accessor *accessorNormal = hasNormal ? &accessors[normalIt->second] : nullptr;
+                tinygltf::Accessor *accessorColor = hasColor ? &accessors[colorIt->second] : nullptr;
+                tinygltf::Accessor *accessorJoints = hasJoints ? &accessors[jointsIt->second] : nullptr;
+                tinygltf::Accessor *accessorWeights = hasWeights ? &accessors[weightsIt->second] : nullptr;
 
-                tinygltf::BufferView *bufferViewPos = &model.bufferViews[accessorPos->bufferView];
-                tinygltf::BufferView *bufferViewUV0 = hasUv0 ? &model.bufferViews[accessorUV->bufferView] : nullptr;
-                tinygltf::BufferView *bufferViewUV1 = hasUv1 ? &model.bufferViews[accessorUV2->bufferView] : nullptr;
-                tinygltf::BufferView *bufferViewNormal = hasNormal ? &model.bufferViews[accessorNormal->bufferView] : nullptr;
-                tinygltf::BufferView *bufferViewColor = hasColor ? &model.bufferViews[accessorColor->bufferView] : nullptr;
-                tinygltf::BufferView *bufferViewJoints = hasJoints ? &model.bufferViews[accessorJoints->bufferView] : nullptr;
-                tinygltf::BufferView *bufferViewWeights = hasWeights ? &model.bufferViews[accessorWeights->bufferView] : nullptr;
+                tinygltf::BufferView *bufferViewPos = &bufferViews[accessorPos->bufferView];
+                tinygltf::BufferView *bufferViewUV0 = hasUv0 ? &bufferViews[accessorUV->bufferView] : nullptr;
+                tinygltf::BufferView *bufferViewUV1 = hasUv1 ? &bufferViews[accessorUV2->bufferView] : nullptr;
+                tinygltf::BufferView *bufferViewNormal = hasNormal ? &bufferViews[accessorNormal->bufferView] : nullptr;
+                tinygltf::BufferView *bufferViewColor = hasColor ? &bufferViews[accessorColor->bufferView] : nullptr;
+                tinygltf::BufferView *bufferViewJoints = hasJoints ? &bufferViews[accessorJoints->bufferView] : nullptr;
+                tinygltf::BufferView *bufferViewWeights = hasWeights ? &bufferViews[accessorWeights->bufferView] : nullptr;
 
-                tinygltf::Buffer *bufferPos = &model.buffers[bufferViewPos->buffer];
-                tinygltf::Buffer *bufferUV0 = bufferViewUV0 ? &model.buffers[bufferViewUV0->buffer] : nullptr;
-                tinygltf::Buffer *bufferUV1 = bufferViewUV1 ? &model.buffers[bufferViewUV1->buffer] : nullptr;
-                tinygltf::Buffer *bufferNormal = bufferViewNormal ? &model.buffers[bufferViewNormal->buffer] : nullptr;
-                tinygltf::Buffer *bufferColor = bufferViewColor ? &model.buffers[bufferViewColor->buffer] : nullptr;
-                tinygltf::Buffer *bufferJoints = bufferViewJoints ? &model.buffers[bufferViewJoints->buffer] : nullptr;
-                tinygltf::Buffer *bufferWeights = bufferViewWeights ? &model.buffers[bufferViewWeights->buffer] : nullptr;
+                tinygltf::Buffer *bufferPos = &buffers[bufferViewPos->buffer];
+                tinygltf::Buffer *bufferUV0 = bufferViewUV0 ? &buffers[bufferViewUV0->buffer] : nullptr;
+                tinygltf::Buffer *bufferUV1 = bufferViewUV1 ? &buffers[bufferViewUV1->buffer] : nullptr;
+                tinygltf::Buffer *bufferNormal = bufferViewNormal ? &buffers[bufferViewNormal->buffer] : nullptr;
+                tinygltf::Buffer *bufferColor = bufferViewColor ? &buffers[bufferViewColor->buffer] : nullptr;
+                tinygltf::Buffer *bufferJoints = bufferViewJoints ? &buffers[bufferViewJoints->buffer] : nullptr;
+                tinygltf::Buffer *bufferWeights = bufferViewWeights ? &buffers[bufferViewWeights->buffer] : nullptr;
 
                 const auto dataPos = reinterpret_cast<const float *>(&bufferPos->data[accessorPos->byteOffset + bufferViewPos->byteOffset]);
                 const auto dataUV0 = bufferUV0 ? reinterpret_cast<const float *>(&bufferUV0->data[accessorUV->byteOffset + bufferViewUV0->byteOffset]) : nullptr;
@@ -460,9 +502,9 @@ namespace pe
                 // ------------ Indices ------------
                 if (primitive.indices >= 0) // need to point to a valid accessor
                 {
-                    const auto &accessorIndices = model.accessors[primitive.indices];
-                    const auto &bufferViewIndices = model.bufferViews[accessorIndices.bufferView];
-                    const auto &bufferIndices = model.buffers[bufferViewIndices.buffer];
+                    const auto &accessorIndices = accessors[primitive.indices];
+                    const auto &bufferViewIndices = bufferViews[accessorIndices.bufferView];
+                    const auto &bufferIndices = buffers[bufferViewIndices.buffer];
                     if (accessorIndices.componentType == TINYGLTF_COMPONENT_TYPE_UNSIGNED_SHORT)
                     {
                         // transform to uint32_t
@@ -516,18 +558,26 @@ namespace pe
                 }
             }
         }
+    }
+
+    void ModelGltf::SetupNodes()
+    {
+        auto &gSettings = Settings::Get<GlobalSettings>();
+        auto &progress = gSettings.loading_current;
+        auto &total = gSettings.loading_total;
+        auto &loading = gSettings.loading_name;
 
         progress = 0;
-        total = static_cast<uint32_t>(model.nodes.size());
+        total = static_cast<uint32_t>(nodes.size());
         loading = "Loading nodes";
 
         // update nodes info
-        model.dirtyNodes = true; // set dirty so the 1st call to UpdateNodeMatrix will update nodeInfo.ubo.worldMatrix and primitiveInfo.worldBoundingBox
-        model.m_nodesInfo.resize(model.nodes.size());
-        for (int i = 0; i < model.nodes.size(); i++)
+        dirtyNodes = true; // set dirty so the 1st call to UpdateNodeMatrix will update nodeInfo.ubo.worldMatrix and primitiveInfo.worldBoundingBox
+        m_nodesInfo.resize(nodes.size());
+        for (int i = 0; i < nodes.size(); i++)
         {
-            tinygltf::Node &node = model.nodes[i];
-            NodeInfo &nodeInfo = model.m_nodesInfo[i];
+            tinygltf::Node &node = nodes[i];
+            NodeInfo &nodeInfo = m_nodesInfo[i];
             nodeInfo.dirty = true; // set dirty so the 1st call to UpdateNodeMatrix will update nodeInfo.ubo.worldMatrix and primitiveInfo.worldBoundingBox
 
             if (node.matrix.size() == 16)
@@ -571,41 +621,45 @@ namespace pe
 
             for (int child : node.children)
             {
-                model.m_nodesInfo[child].parent = i;
+                m_nodesInfo[child].parent = i;
             }
 
             // Update loading bar
             progress++;
         }
+    }
+
+    void ModelGltf::UpdateAllNodeMatrices()
+    {
+        auto &gSettings = Settings::Get<GlobalSettings>();
+        auto &progress = gSettings.loading_current;
+        auto &total = gSettings.loading_total;
+        auto &loading = gSettings.loading_name;
 
         progress = 0;
-        total = static_cast<uint32_t>(model.nodes.size());
+        total = static_cast<uint32_t>(nodes.size());
         loading = "Updating node matrices";
-        for (int i = 0; i < model.nodes.size(); i++)
+        for (int i = 0; i < nodes.size(); i++)
         {
-            model.UpdateNodeMatrix(i);
+            UpdateNodeMatrix(i);
 
             // Update loading bar
             progress++;
         }
+    }
 
-        progress = 0;
-        total = 1;
-        loading = "Upoading buffers";
+    void ModelGltf::UpdateNodeMatrices()
+    {
+        if (!dirtyNodes)
+            return;
 
-        modelGltf->render = false;
-        Scene &scene = GetGlobalSystem<RendererSystem>()->GetScene();
-        scene.AddModel(modelGltf);
-        scene.InitGeometry(cmd);
+        tinygltf::Scene &scene = scenes[defaultScene];
+        for (int i = 0; i < scene.nodes.size(); i++)
+        {
+            UpdateNodeMatrix(i);
+        }
 
-        progress++;
-
-        cmd->End();
-        queue->Submit(1, &cmd, nullptr, nullptr);
-        cmd->Wait();
-        modelGltf->render = true;
-
-        return modelGltf;
+        dirtyNodes = false;
     }
 
     // Updates the node and recursively its children
@@ -658,20 +712,6 @@ namespace pe
         }
     }
 
-    void ModelGltf::UpdateNodeMatrices()
-    {
-        if (!dirtyNodes)
-            return;
-
-        tinygltf::Scene &scene = scenes[defaultScene];
-        for (int i = 0; i < scene.nodes.size(); i++)
-        {
-            UpdateNodeMatrix(i);
-        }
-
-        dirtyNodes = false;
-    }
-
     void ModelGltf::SetPrimitiveFactors(Buffer *uniformBuffer)
     {
         // copy factors in uniform buffer
@@ -715,5 +755,23 @@ namespace pe
         }
 
         uniformBuffer->Unmap();
+    }
+
+    void ModelGltf::UploadBuffers(CommandBuffer *cmd)
+    {
+        auto &gSettings = Settings::Get<GlobalSettings>();
+        auto &progress = gSettings.loading_current;
+        auto &total = gSettings.loading_total;
+        auto &loading = gSettings.loading_name;
+
+        progress = 0;
+        total = 1;
+        loading = "Upoading buffers";
+
+        Scene &scene = GetGlobalSystem<RendererSystem>()->GetScene();
+        scene.AddModel(this);
+        scene.InitGeometry(cmd);
+
+        progress++;
     }
 }
