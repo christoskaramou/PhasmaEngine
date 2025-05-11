@@ -140,20 +140,17 @@ namespace pe
         // Scene
         m_scene.Update();
 
-        CameraSystem *cameraSystem = GetGlobalSystem<CameraSystem>();
-        Camera *camera_main = cameraSystem->GetCamera(0);
+        Camera *camera_main = GetGlobalSystem<CameraSystem>()->GetCamera(0);
 
         // Render Components
-        std::vector<Task<void>> tasks;
-        tasks.reserve(m_renderPassComponents.size());
+        std::vector<std::shared_future<void>> futures;
+        futures.reserve(m_renderPassComponents.size());
         for (auto &rc : m_renderPassComponents)
-        {
-            auto task = e_Update_ThreadPool.Enqueue([rc, camera_main]()
-                                                    { rc->Update(); });
-            tasks.push_back(std::move(task));
-        }
-        for (auto &task : tasks)
-            task.get();
+            futures.push_back(e_Update_ThreadPool.Enqueue([rc, camera_main]()
+                                                          { rc->Update(); }));
+
+        for (auto &future : futures)
+            future.wait();
     }
 
     void RendererSystem::WaitPreviousFrameCommands()

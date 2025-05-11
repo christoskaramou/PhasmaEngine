@@ -40,20 +40,19 @@ namespace pe
     {
         Camera *camera_main = GetGlobalSystem<CameraSystem>()->GetCamera(0);
 
-        std::vector<Task<void>> tasks;
-        tasks.reserve(m_renderPassComponents.size());
+        std::vector<std::shared_future<void>> futures;
+        futures.reserve(m_renderPassComponents.size());
         for (auto &renderPassComponent : m_renderPassComponents)
         {
             if (renderPassComponent->IsEnabled())
             {
-                auto task = e_Update_ThreadPool.Enqueue([renderPassComponent, camera_main]()
-                                                        { renderPassComponent->Update(); });
-                tasks.push_back(std::move(task));
+                futures.push_back(e_Update_ThreadPool.Enqueue([renderPassComponent, camera_main]()
+                                                              { renderPassComponent->Update(); }));
             }
         }
 
-        for (auto &task : tasks)
-            task.get();
+        for (auto &future : futures)
+            future.wait();
     }
 
     void PostProcessSystem::Destroy()

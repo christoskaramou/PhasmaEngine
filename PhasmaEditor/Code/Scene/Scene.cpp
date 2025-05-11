@@ -34,143 +34,107 @@ namespace pe
 
     void Scene::Update()
     {
-        // Cull and update geometry shader resources
+        // Cull and update geometry
         m_geometry.UpdateGeometry();
 
         if (m_geometry.HasDrawInfo())
         {
             uint32_t frame = RHII.GetFrameIndex();
 
-            std::vector<Task<void>> tasks{};
-            tasks.reserve(10);
-
             // AabbsPass
             if (Settings::Get<GlobalSettings>().draw_aabbs)
             {
-                auto task = e_Update_ThreadPool.Enqueue(
-                    [this, frame]()
-                    {
-                        AabbsPass *ap = GetGlobalComponent<AabbsPass>();
-                        const auto &sets = ap->m_passInfo->GetDescriptors(frame);
+                AabbsPass *ap = GetGlobalComponent<AabbsPass>();
+                const auto &sets = ap->m_passInfo->GetDescriptors(frame);
 
-                        // Set 0
-                        Descriptor *DSetUniforms = sets[0];
-                        DSetUniforms->SetBuffer(0, m_geometry.GetUniforms(frame));
-                        DSetUniforms->Update();
-                    });
-
-                tasks.push_back(std::move(task));
+                // Set 0
+                Descriptor *DSetUniforms = sets[0];
+                DSetUniforms->SetBuffer(0, m_geometry.GetUniforms(frame));
+                DSetUniforms->Update();
             }
 
             if (m_geometry.HasOpaqueDrawInfo())
             {
                 // DepthPass
                 {
-                    auto task = e_Update_ThreadPool.Enqueue(
-                        [this, frame]()
-                        {
-                            GbufferOpaquePass *gb = GetGlobalComponent<GbufferOpaquePass>();
-                            DepthPass *dp = GetGlobalComponent<DepthPass>();
-                            const auto &sets = dp->m_passInfo->GetDescriptors(frame);
+                    GbufferOpaquePass *gb = GetGlobalComponent<GbufferOpaquePass>();
+                    DepthPass *dp = GetGlobalComponent<DepthPass>();
+                    const auto &sets = dp->m_passInfo->GetDescriptors(frame);
 
-                            // set 0
-                            Descriptor *DSetUniforms = sets[0];
-                            DSetUniforms->SetBuffer(0, m_geometry.GetUniforms(frame));
-                            DSetUniforms->SetBuffer(1, gb->m_constants);
-                            DSetUniforms->Update();
+                    // set 0
+                    Descriptor *DSetUniforms = sets[0];
+                    DSetUniforms->SetBuffer(0, m_geometry.GetUniforms(frame));
+                    DSetUniforms->SetBuffer(1, gb->m_constants);
+                    DSetUniforms->Update();
 
-                            // set 1
-                            Descriptor *DSetTextures = sets[1];
-                            DSetTextures->SetBuffer(0, gb->m_constants);
-                            if (m_geometry.HasDirtyDescriptorViews(frame))
-                            {
-                                DSetTextures->SetSampler(1, defaultSampler->ApiHandle());
-                                DSetTextures->SetImageViews(2, m_geometry.GetImageViews(), {});
-                                DSetTextures->Update();
-                            }
-                        });
-
-                    tasks.push_back(std::move(task));
+                    // set 1
+                    Descriptor *DSetTextures = sets[1];
+                    DSetTextures->SetBuffer(0, gb->m_constants);
+                    if (m_geometry.HasDirtyDescriptorViews(frame))
+                    {
+                        DSetTextures->SetSampler(1, defaultSampler->ApiHandle());
+                        DSetTextures->SetImageViews(2, m_geometry.GetImageViews(), {});
+                        DSetTextures->Update();
+                    }
                 }
 
                 // ShadowPass Opaque
                 {
-                    auto task = e_Update_ThreadPool.Enqueue(
-                        [this, frame]()
-                        {
-                            GbufferOpaquePass *gb = GetGlobalComponent<GbufferOpaquePass>();
-                            ShadowPass *shadows = GetGlobalComponent<ShadowPass>();
-                            const auto &sets = shadows->m_passInfo->GetDescriptors(frame);
+                    GbufferOpaquePass *gb = GetGlobalComponent<GbufferOpaquePass>();
+                    ShadowPass *shadows = GetGlobalComponent<ShadowPass>();
+                    const auto &sets = shadows->m_passInfo->GetDescriptors(frame);
 
-                            // set 0
-                            Descriptor *DSetUniforms = sets[0];
-                            DSetUniforms->SetBuffer(0, m_geometry.GetUniforms(frame));
-                            DSetUniforms->SetBuffer(1, gb->m_constants);
-                            DSetUniforms->Update();
-                        });
-
-                    tasks.push_back(std::move(task));
+                    // set 0
+                    Descriptor *DSetUniforms = sets[0];
+                    DSetUniforms->SetBuffer(0, m_geometry.GetUniforms(frame));
+                    DSetUniforms->SetBuffer(1, gb->m_constants);
+                    DSetUniforms->Update();
                 }
 
                 // GbufferPass Opaque
                 {
-                    auto task = e_Update_ThreadPool.Enqueue(
-                        [this, frame]()
-                        {
-                            GbufferOpaquePass *gb = GetGlobalComponent<GbufferOpaquePass>();
-                            const auto &sets = gb->m_passInfo->GetDescriptors(frame);
+                    GbufferOpaquePass *gb = GetGlobalComponent<GbufferOpaquePass>();
+                    const auto &sets = gb->m_passInfo->GetDescriptors(frame);
 
-                            // set 0
-                            Descriptor *DSetUniforms = sets[0];
-                            DSetUniforms->SetBuffer(0, m_geometry.GetUniforms(frame));
-                            DSetUniforms->SetBuffer(1, gb->m_constants);
-                            DSetUniforms->Update();
+                    // set 0
+                    Descriptor *DSetUniforms = sets[0];
+                    DSetUniforms->SetBuffer(0, m_geometry.GetUniforms(frame));
+                    DSetUniforms->SetBuffer(1, gb->m_constants);
+                    DSetUniforms->Update();
 
-                            // set 1
-                            Descriptor *DSetTextures = sets[1];
-                            DSetTextures->SetBuffer(0, gb->m_constants);
-                            if (m_geometry.HasDirtyDescriptorViews(frame))
-                            {
-                                DSetTextures->SetSampler(1, defaultSampler->ApiHandle());
-                                DSetTextures->SetImageViews(2, m_geometry.GetImageViews(), {});
-                                DSetTextures->Update();
-                            }
-                        });
-
-                    tasks.push_back(std::move(task));
+                    // set 1
+                    Descriptor *DSetTextures = sets[1];
+                    DSetTextures->SetBuffer(0, gb->m_constants);
+                    if (m_geometry.HasDirtyDescriptorViews(frame))
+                    {
+                        DSetTextures->SetSampler(1, defaultSampler->ApiHandle());
+                        DSetTextures->SetImageViews(2, m_geometry.GetImageViews(), {});
+                        DSetTextures->Update();
+                    }
                 }
             }
             // GbufferPass Trasparent
             if (m_geometry.HasAlphaDrawInfo())
             {
-                auto task = e_Update_ThreadPool.Enqueue(
-                    [this, frame]()
-                    {
-                        GbufferTransparentPass *gb = GetGlobalComponent<GbufferTransparentPass>();
-                        const auto &sets = gb->m_passInfo->GetDescriptors(frame);
+                GbufferTransparentPass *gb = GetGlobalComponent<GbufferTransparentPass>();
+                const auto &sets = gb->m_passInfo->GetDescriptors(frame);
 
-                        // set 0
-                        Descriptor *DSetUniforms = sets[0];
-                        DSetUniforms->SetBuffer(0, m_geometry.GetUniforms(frame));
-                        DSetUniforms->SetBuffer(1, gb->m_constants);
-                        DSetUniforms->Update();
+                // set 0
+                Descriptor *DSetUniforms = sets[0];
+                DSetUniforms->SetBuffer(0, m_geometry.GetUniforms(frame));
+                DSetUniforms->SetBuffer(1, gb->m_constants);
+                DSetUniforms->Update();
 
-                        // set 1
-                        Descriptor *DSetTextures = sets[1];
-                        DSetTextures->SetBuffer(0, gb->m_constants);
-                        if (m_geometry.HasDirtyDescriptorViews(frame))
-                        {
-                            DSetTextures->SetSampler(1, defaultSampler->ApiHandle());
-                            DSetTextures->SetImageViews(2, m_geometry.GetImageViews(), {});
-                            DSetTextures->Update();
-                        }
-                    });
-
-                tasks.push_back(std::move(task));
+                // set 1
+                Descriptor *DSetTextures = sets[1];
+                DSetTextures->SetBuffer(0, gb->m_constants);
+                if (m_geometry.HasDirtyDescriptorViews(frame))
+                {
+                    DSetTextures->SetSampler(1, defaultSampler->ApiHandle());
+                    DSetTextures->SetImageViews(2, m_geometry.GetImageViews(), {});
+                    DSetTextures->Update();
+                }
             }
-
-            for (auto &task : tasks)
-                task.get();
 
             m_geometry.ClearDirtyDescriptorViews(frame);
         }
