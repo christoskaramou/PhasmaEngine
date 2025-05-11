@@ -14,7 +14,7 @@ namespace pe
         ~Scene();
 
         void Update();
-        void InitGeometry(CommandBuffer *cmd);
+        void UpdateGeometryBuffers(CommandBuffer *cmd);
         void DrawShadowPass(CommandBuffer *cmd);
         void DepthPrePass(CommandBuffer *cmd);
         void DrawGbufferPassOpaque(CommandBuffer *cmd);

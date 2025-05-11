@@ -55,8 +55,8 @@ namespace pe
         model.UploadImages(cmd);
         model.CreateSamplers();
         model.ExtractMaterialInfo();
-        model.ProcessPrimitivesGeometry();
-        model.FillBuffersAndAABBs();
+        model.ProcessAabbs();
+        model.AcquireGeometryInfo();
         model.SetupNodes();
         model.UpdateAllNodeMatrices();
         model.UploadBuffers(cmd);
@@ -283,7 +283,7 @@ namespace pe
         }
     }
 
-    void ModelGltf::ProcessPrimitivesGeometry()
+    void ModelGltf::ProcessAabbs()
     {
         auto &gSettings = Settings::Get<GlobalSettings>();
         auto &progress = gSettings.loading_current;
@@ -330,7 +330,7 @@ namespace pe
         }
     }
 
-    void ModelGltf::FillBuffersAndAABBs()
+    void ModelGltf::AcquireGeometryInfo()
     {
         auto &gSettings = Settings::Get<GlobalSettings>();
         auto &progress = gSettings.loading_current;
@@ -770,7 +770,7 @@ namespace pe
 
         Scene &scene = GetGlobalSystem<RendererSystem>()->GetScene();
         scene.AddModel(this);
-        scene.InitGeometry(cmd);
+        scene.UpdateGeometryBuffers(cmd);
 
         progress++;
     }

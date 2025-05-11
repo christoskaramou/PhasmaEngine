@@ -34,9 +34,7 @@ namespace pe
     Geometry::~Geometry()
     {
         for (auto *model : m_models)
-        {
             delete model;
-        }
         m_models.clear();
         DestroyBuffers();
     }
@@ -53,17 +51,21 @@ namespace pe
 
     void Geometry::UploadBuffers(CommandBuffer *cmd)
     {
-        // All models geometry is combined into one buffer with this order:
-        // Indices - Vertices
-
-        // if reuploading, destroy old buffers
         DestroyBuffers();
+        CreateGeometryBuffer();
+        CopyIndices(cmd);
+        CopyVertices(cmd);
+        CreateStorageBuffers();
+        CreateIndirectBuffers(cmd);
+        UpdateImageViews();
+        CopyGBufferConstants(cmd);
+    }
+
+    void Geometry::CreateGeometryBuffer()
+    {
         size_t numberOfIndices = 24; // with aabb indices
         size_t numberOfVertices = 0;
         size_t numberOfAabbVertices = 0;
-        size_t storageSize = 0;
-        uint32_t indirectCount = 0;
-        m_primitivesCount = 0;
 
         // calculate offsets
         for (auto &model : m_models)
@@ -73,15 +75,20 @@ namespace pe
             numberOfAabbVertices += model->m_aabbVertices.size();
         }
 
-        // create buffers
+        // create geometry buffer
         m_buffer = Buffer::Create(
             sizeof(uint32_t) * numberOfIndices + sizeof(Vertex) * numberOfVertices + sizeof(PositionUvVertex) * numberOfVertices + sizeof(AabbVertex) * numberOfAabbVertices,
             BufferUsage::TransferDstBit | BufferUsage::IndexBufferBit | BufferUsage::VertexBufferBit,
             AllocationCreate::DedicatedMemoryBit,
             "combined_Geometry_buffer");
+    }
 
+    void Geometry::CopyIndices(CommandBuffer *cmd)
+    {
         // indices
+        m_primitivesCount = 0;
         size_t indicesCount = 0;
+
         for (auto &modelPtr : m_models)
         {
             ModelGltf &model = *modelPtr;
@@ -98,6 +105,7 @@ namespace pe
             }
             indicesCount += model.m_indices.size();
         }
+
         BufferBarrierInfo indexBarrierInfo{};
         indexBarrierInfo.buffer = m_buffer;
         indexBarrierInfo.srcAccess = Access::TransferWriteBit;
@@ -121,7 +129,10 @@ namespace pe
         aabbIndexBarrierInfo.size = m_aabbIndices.size() * sizeof(uint32_t);
         aabbIndexBarrierInfo.offset = m_aabbIndicesOffset;
         cmd->BufferBarrier(aabbIndexBarrierInfo);
+    }
 
+    void Geometry::CopyVertices(CommandBuffer *cmd)
+    {
         // vertices
         m_verticesOffset = m_aabbIndicesOffset + 24 * sizeof(uint32_t);
         size_t verticesCount = 0;
@@ -205,9 +216,12 @@ namespace pe
         aabbVertexBarrierInfo.size = aabbCount * sizeof(AabbVertex);
         aabbVertexBarrierInfo.offset = m_aabbVerticesOffset;
         cmd->BufferBarrier(aabbVertexBarrierInfo);
+    }
 
+    void Geometry::CreateStorageBuffers()
+    {
         // storage buffer
-        storageSize = sizeof(PerFrameData);
+        size_t storageSize = sizeof(PerFrameData);
         // will store ids of constant buffer for each primitive
         storageSize += RHII.AlignStorageAs<64>(m_primitivesCount * sizeof(uint32_t));
         for (auto &modelPtr : m_models)
@@ -237,8 +251,12 @@ namespace pe
                 AllocationCreate::HostAccessSequentialWriteBit,
                 "storage_Geometry_buffer_" + std::to_string(i));
         }
+    }
 
+    void Geometry::CreateIndirectBuffers(CommandBuffer *cmd)
+    {
         // indirect commands
+        uint32_t indirectCount = 0;
         m_indirectCommands.clear();
         m_indirectCommands.reserve(m_primitivesCount);
         for (auto &modelPtr : m_models)
@@ -295,7 +313,10 @@ namespace pe
                 AllocationCreate::HostAccessSequentialWriteBit,
                 "indirect_Geometry_buffer_" + std::to_string(i));
         }
+    }
 
+    void Geometry::UpdateImageViews()
+    {
         m_imageViews.clear();
         OrderedMap<Image *, uint32_t> imagesMap{};
         for (auto &model : m_models)
@@ -329,7 +350,10 @@ namespace pe
 
         for (uint32_t i = 0; i < SWAPCHAIN_IMAGES; i++)
             m_dirtyDescriptorViews[i] = true;
+    }
 
+    void Geometry::CopyGBufferConstants(CommandBuffer *cmd)
+    {
         // GbufferPass constants initialization
         GbufferOpaquePass *gbo = GetGlobalComponent<GbufferOpaquePass>();
         GbufferTransparentPass *gbt = GetGlobalComponent<GbufferTransparentPass>();
@@ -554,12 +578,7 @@ namespace pe
     {
         ClearDrawInfos(true);
 
-        auto cullNodePrimitives = [this](ModelGltf &model, int node)
-        {
-            CullNodePrimitives(model, node);
-        };
-
-        std::vector<Task<void>> tasks{};
+        std::vector<Task<void>> tasks;
         for (auto &modelPtr : m_models)
         {
             ModelGltf &model = *modelPtr;
@@ -572,30 +591,30 @@ namespace pe
             // cull primitives
             for (int i = 0; i < model.nodes.size(); i++)
             {
-                int mesh = model.nodes[i].mesh;
-                if (mesh > -1)
-                    tasks.push_back(e_Update_ThreadPool.Enqueue(cullNodePrimitives, std::ref(model), i));
+                if (model.nodes[i].mesh > -1)
+                    tasks.push_back(e_Update_ThreadPool.Enqueue(&Geometry::CullNodePrimitives, this, std::ref(model), i));
             }
         }
 
         for (auto &task : tasks)
             task.get();
 
-        // front to back
-        std::sort(m_drawInfosOpaque.begin(), m_drawInfosOpaque.end(), [](const DrawInfo &a, const DrawInfo &b)
-                  { return a.distance < b.distance; });
-        // back to front
-        std::sort(m_drawInfosAlphaCut.begin(), m_drawInfosAlphaCut.end(), [](const DrawInfo &a, const DrawInfo &b)
-                  { return a.distance > b.distance; });
-        // back to front
-        std::sort(m_drawInfosAlphaBlend.begin(), m_drawInfosAlphaBlend.end(), [](const DrawInfo &a, const DrawInfo &b)
-                  { return a.distance > b.distance; });
-
+        SortDrawInfos();
         if (HasDrawInfo())
         {
             UpdateUniformData();
             UpdateIndirectData();
         }
+    }
+
+    void Geometry::SortDrawInfos()
+    {
+        std::sort(m_drawInfosOpaque.begin(), m_drawInfosOpaque.end(), [](const DrawInfo &a, const DrawInfo &b)
+                  { return a.distance < b.distance; });
+        std::sort(m_drawInfosAlphaCut.begin(), m_drawInfosAlphaCut.end(), [](const DrawInfo &a, const DrawInfo &b)
+                  { return a.distance > b.distance; });
+        std::sort(m_drawInfosAlphaBlend.begin(), m_drawInfosAlphaBlend.end(), [](const DrawInfo &a, const DrawInfo &b)
+                  { return a.distance > b.distance; });
     }
 
     void Geometry::ClearDrawInfos(bool reserveMax)

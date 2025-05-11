@@ -176,7 +176,7 @@ namespace pe
         }
     }
 
-    void Scene::InitGeometry(CommandBuffer *cmd)
+    void Scene::UpdateGeometryBuffers(CommandBuffer *cmd)
     {
         m_geometry.UploadBuffers(cmd);
     }
