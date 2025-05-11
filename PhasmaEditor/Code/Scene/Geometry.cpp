@@ -578,7 +578,7 @@ namespace pe
     {
         ClearDrawInfos(true);
 
-        std::vector<Task<void>> tasks;
+        std::vector<std::shared_future<void>> futures;
         for (auto &modelPtr : m_models)
         {
             ModelGltf &model = *modelPtr;
@@ -592,12 +592,12 @@ namespace pe
             for (int i = 0; i < model.nodes.size(); i++)
             {
                 if (model.nodes[i].mesh > -1)
-                    tasks.push_back(e_Update_ThreadPool.Enqueue(&Geometry::CullNodePrimitives, this, std::ref(model), i));
+                    futures.push_back(e_Update_ThreadPool.Enqueue(&Geometry::CullNodePrimitives, this, std::ref(model), i));
             }
         }
 
-        for (auto &task : tasks)
-            task.get();
+        for (auto &future : futures)
+            future.wait();
 
         SortDrawInfos();
         if (HasDrawInfo())
