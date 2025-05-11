@@ -102,8 +102,8 @@ namespace pe
         void UploadImages(CommandBuffer *cmd);
         void CreateSamplers();
         void ExtractMaterialInfo();
-        void ProcessPrimitivesGeometry();
-        void FillBuffersAndAABBs();
+        void ProcessAabbs();
+        void AcquireGeometryInfo();
         void SetupNodes();
         void UpdateAllNodeMatrices();
         void UploadBuffers(CommandBuffer *cmd);
