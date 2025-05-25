@@ -373,7 +373,7 @@ namespace pe
                     PE_ERROR("Invalid alphaMode type");
 
                 // -------- Image & Sampler Setup --------
-                auto setTexture = [&](int slot, int gltfIndex, Image *defaultImage)
+                auto setTexture = [this, &primitiveInfo](TextureType type, int gltfIndex, Image *defaultImage)
                 {
                     Image *image = defaultImage;
                     Sampler *sampler = g_defaultSampler;
@@ -387,14 +387,14 @@ namespace pe
                             sampler = m_samplers[texture.sampler];
                     }
 
-                    primitiveInfo.images[slot] = image;
-                    primitiveInfo.samplers[slot] = sampler;
+                    primitiveInfo.images[static_cast<int>(type)] = image;
+                    primitiveInfo.samplers[static_cast<int>(type)] = sampler;
                 };
-                setTexture(0, material.pbrMetallicRoughness.baseColorTexture.index, g_defaultBlack);
-                setTexture(1, material.pbrMetallicRoughness.metallicRoughnessTexture.index, g_defaultBlack);
-                setTexture(2, material.normalTexture.index, g_defaultNormal);
-                setTexture(3, material.occlusionTexture.index, g_defaultWhite);
-                setTexture(4, material.emissiveTexture.index, g_defaultBlack);
+                setTexture(TextureType::BaseColor, material.pbrMetallicRoughness.baseColorTexture.index, g_defaultBlack);
+                setTexture(TextureType::MetallicRoughness, material.pbrMetallicRoughness.metallicRoughnessTexture.index, g_defaultBlack);
+                setTexture(TextureType::Normal, material.normalTexture.index, g_defaultNormal);
+                setTexture(TextureType::Occlusion, material.occlusionTexture.index, g_defaultWhite);
+                setTexture(TextureType::Emissive, material.emissiveTexture.index, g_defaultBlack);
 
                 // -------- Attribute Extraction --------
                 auto getAccessor = [this, &primitive](const std::string &attrName) -> const tinygltf::Accessor *

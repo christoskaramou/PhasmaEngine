@@ -17,6 +17,7 @@ namespace pe
         uint32_t offset;
     };
 
+    // gbuffer vertex structure
     struct Vertex
     {
         float position[3];
@@ -27,11 +28,13 @@ namespace pe
         float weights[4];
     };
 
+    // aabb vertex structure
     struct AabbVertex
     {
         float position[3];
     };
 
+    // position and uv vertex structure for depth and shadows
     struct PositionUvVertex
     {
         float position[3];
