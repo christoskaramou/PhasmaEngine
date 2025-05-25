@@ -852,9 +852,12 @@ namespace pe
         DecrementAndWrap,
     };
 
-    enum class DependencyOp
+    enum class TextureType
     {
-        DontCare,
-        Wait,
+        BaseColor,
+        MetallicRoughness,
+        Normal,
+        Occlusion,
+        Emissive,
     };
 }
