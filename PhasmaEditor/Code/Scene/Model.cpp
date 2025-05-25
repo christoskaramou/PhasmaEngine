@@ -301,13 +301,16 @@ namespace pe
             MeshInfo &meshInfo = m_meshesInfo[i];
             for (int j = 0; j < mesh.primitives.size(); j++)
             {
-                PrimitiveInfo &primitiveInfo = meshInfo.primitivesInfo[j];
-
                 auto posIt = mesh.primitives[j].attributes.find("POSITION");
                 const auto &accessorPos = accessors[posIt->second];
+                const auto &accessorIndices = accessors[mesh.primitives[j].indices];
+
+                PrimitiveInfo &primitiveInfo = meshInfo.primitivesInfo[j];
                 primitiveInfo.vertexOffset = m_verticesCount;
                 primitiveInfo.verticesCount = static_cast<uint32_t>(accessorPos.count);
-                m_verticesCount += static_cast<uint32_t>(accessorPos.count);
+                primitiveInfo.indexOffset = m_indicesCount;
+                primitiveInfo.indicesCount = static_cast<uint32_t>(accessorIndices.count);
+                primitiveInfo.aabbVertexOffset = m_primitivesCount * 8;
                 primitiveInfo.boundingBox.min.x = static_cast<float>(accessorPos.minValues[0]);
                 primitiveInfo.boundingBox.min.y = static_cast<float>(accessorPos.minValues[1]);
                 primitiveInfo.boundingBox.min.z = static_cast<float>(accessorPos.minValues[2]);
@@ -315,13 +318,8 @@ namespace pe
                 primitiveInfo.boundingBox.max.y = static_cast<float>(accessorPos.maxValues[1]);
                 primitiveInfo.boundingBox.max.z = static_cast<float>(accessorPos.maxValues[2]);
 
-                const auto &accessorIndices = accessors[mesh.primitives[j].indices];
-                primitiveInfo.indexOffset = m_indicesCount;
-                primitiveInfo.indicesCount = static_cast<uint32_t>(accessorIndices.count);
+                m_verticesCount += static_cast<uint32_t>(accessorPos.count);
                 m_indicesCount += static_cast<uint32_t>(accessorIndices.count);
-
-                primitiveInfo.aabbVertexOffset = m_primitivesCount * 8;
-
                 m_primitivesCount++;
 
                 // Update loading bar
@@ -345,23 +343,26 @@ namespace pe
         m_positionUvs.reserve(m_verticesCount);
         m_aabbVertices.reserve(m_primitivesCount * 8);
         m_indices.reserve(m_indicesCount);
+
         auto &vertices = m_vertices;
         auto &positionUvs = m_positionUvs;
         auto &indices = m_indices;
         auto &aabbVertices = m_aabbVertices;
+
         size_t indexOffset = 0;
 
         for (uint32_t i = 0; i < meshes.size(); i++)
         {
             tinygltf::Mesh &mesh = meshes[i];
             MeshInfo &meshInfo = m_meshesInfo[i];
+
             for (uint32_t j = 0; j < mesh.primitives.size(); j++)
             {
                 tinygltf::Primitive &primitive = mesh.primitives[j];
                 PrimitiveInfo &primitiveInfo = meshInfo.primitivesInfo[j];
                 tinygltf::Material &material = materials[primitive.material];
 
-                // ----------- Alpha Mode -----------
+                // -------- Alpha Mode --------
                 if (material.alphaMode == "BLEND")
                     primitiveInfo.renderType = RenderType::AlphaBlend;
                 else if (material.alphaMode == "MASK")
@@ -371,89 +372,75 @@ namespace pe
                 else
                     PE_ERROR("Invalid alphaMode type");
 
-                // ---------- Image Views ----------
-                int imageIndex;
-                int textureIndex;
-                int samplerIndex;
+                // -------- Image & Sampler Setup --------
+                auto setTexture = [&](int slot, int gltfIndex, Image *defaultImage)
+                {
+                    Image *image = defaultImage;
+                    Sampler *sampler = g_defaultSampler;
 
-                textureIndex = material.pbrMetallicRoughness.baseColorTexture.index;
-                imageIndex = textureIndex > -1 ? textures[textureIndex].source : -1;
-                samplerIndex = textureIndex > -1 ? textures[textureIndex].sampler : -1;
-                primitiveInfo.images[0] = imageIndex > -1 ? m_images[imageIndex] : g_defaultBlack;
-                primitiveInfo.samplers[0] = samplerIndex > -1 ? m_samplers[samplerIndex] : g_defaultSampler;
+                    if (gltfIndex >= 0)
+                    {
+                        const auto &texture = textures[gltfIndex];
+                        if (texture.source >= 0)
+                            image = m_images[texture.source];
+                        if (texture.sampler >= 0)
+                            sampler = m_samplers[texture.sampler];
+                    }
 
-                textureIndex = material.pbrMetallicRoughness.metallicRoughnessTexture.index;
-                imageIndex = textureIndex > -1 ? textures[textureIndex].source : -1;
-                samplerIndex = textureIndex > -1 ? textures[textureIndex].sampler : -1;
-                primitiveInfo.images[1] = imageIndex > -1 ? m_images[imageIndex] : g_defaultBlack;
-                primitiveInfo.samplers[1] = samplerIndex > -1 ? m_samplers[samplerIndex] : g_defaultSampler;
+                    primitiveInfo.images[slot] = image;
+                    primitiveInfo.samplers[slot] = sampler;
+                };
+                setTexture(0, material.pbrMetallicRoughness.baseColorTexture.index, g_defaultBlack);
+                setTexture(1, material.pbrMetallicRoughness.metallicRoughnessTexture.index, g_defaultBlack);
+                setTexture(2, material.normalTexture.index, g_defaultNormal);
+                setTexture(3, material.occlusionTexture.index, g_defaultWhite);
+                setTexture(4, material.emissiveTexture.index, g_defaultBlack);
 
-                textureIndex = material.normalTexture.index;
-                imageIndex = textureIndex > -1 ? textures[textureIndex].source : -1;
-                samplerIndex = textureIndex > -1 ? textures[textureIndex].sampler : -1;
-                primitiveInfo.images[2] = imageIndex > -1 ? m_images[imageIndex] : g_defaultNormal;
-                primitiveInfo.samplers[2] = samplerIndex > -1 ? m_samplers[samplerIndex] : g_defaultSampler;
+                // -------- Attribute Extraction --------
+                auto getAccessor = [this, &primitive](const std::string &attrName) -> const tinygltf::Accessor *
+                {
+                    auto attrIt = primitive.attributes.find(attrName);
+                    if (attrIt == primitive.attributes.end())
+                        return nullptr;
 
-                textureIndex = material.occlusionTexture.index;
-                imageIndex = textureIndex > -1 ? textures[textureIndex].source : -1;
-                samplerIndex = textureIndex > -1 ? textures[textureIndex].sampler : -1;
-                primitiveInfo.images[3] = imageIndex > -1 ? m_images[imageIndex] : g_defaultWhite;
-                primitiveInfo.samplers[3] = samplerIndex > -1 ? m_samplers[samplerIndex] : g_defaultSampler;
+                    return &accessors[attrIt->second];
+                };
 
-                textureIndex = material.emissiveTexture.index;
-                imageIndex = textureIndex > -1 ? textures[textureIndex].source : -1;
-                samplerIndex = textureIndex > -1 ? textures[textureIndex].sampler : -1;
-                primitiveInfo.images[4] = imageIndex > -1 ? m_images[imageIndex] : g_defaultBlack;
-                primitiveInfo.samplers[4] = samplerIndex > -1 ? m_samplers[samplerIndex] : g_defaultSampler;
+                auto getData = [this, &primitive](const std::string &attrName) -> const uint8_t *
+                {
+                    auto attrIt = primitive.attributes.find(attrName);
+                    if (attrIt == primitive.attributes.end())
+                        return nullptr;
 
-                // ------------ Vertices ------------
-                // Attributes
-                auto posIt = primitive.attributes.find("POSITION");
-                auto uv0It = primitive.attributes.find("TEXCOORD_0");
-                auto uv1It = primitive.attributes.find("TEXCOORD_1");
-                auto normalIt = primitive.attributes.find("NORMAL");
-                auto colorIt = primitive.attributes.find("COLOR_0");
-                auto jointsIt = primitive.attributes.find("JOINTS_0");
-                auto weightsIt = primitive.attributes.find("WEIGHTS_0");
+                    auto &accessor = accessors[attrIt->second];
+                    if (accessor.bufferView < 0)
+                        return nullptr;
 
-                bool hasUv0 = uv0It != primitive.attributes.end();
-                bool hasUv1 = uv1It != primitive.attributes.end();
-                bool hasNormal = normalIt != primitive.attributes.end();
-                bool hasColor = colorIt != primitive.attributes.end();
-                bool hasJoints = jointsIt != primitive.attributes.end();
-                bool hasWeights = weightsIt != primitive.attributes.end();
+                    auto &bufferView = bufferViews[accessor.bufferView];
+                    if (bufferView.buffer < 0)
+                        return nullptr;
 
-                tinygltf::Accessor *accessorPos = &accessors[posIt->second];
-                tinygltf::Accessor *accessorUV = hasUv0 ? &accessors[uv0It->second] : nullptr;
-                tinygltf::Accessor *accessorUV2 = hasUv1 ? &accessors[uv1It->second] : nullptr;
-                tinygltf::Accessor *accessorNormal = hasNormal ? &accessors[normalIt->second] : nullptr;
-                tinygltf::Accessor *accessorColor = hasColor ? &accessors[colorIt->second] : nullptr;
-                tinygltf::Accessor *accessorJoints = hasJoints ? &accessors[jointsIt->second] : nullptr;
-                tinygltf::Accessor *accessorWeights = hasWeights ? &accessors[weightsIt->second] : nullptr;
+                    auto &buffer = buffers[bufferView.buffer];
+                    if (buffer.data.empty())
+                        return nullptr;
 
-                tinygltf::BufferView *bufferViewPos = &bufferViews[accessorPos->bufferView];
-                tinygltf::BufferView *bufferViewUV0 = hasUv0 ? &bufferViews[accessorUV->bufferView] : nullptr;
-                tinygltf::BufferView *bufferViewUV1 = hasUv1 ? &bufferViews[accessorUV2->bufferView] : nullptr;
-                tinygltf::BufferView *bufferViewNormal = hasNormal ? &bufferViews[accessorNormal->bufferView] : nullptr;
-                tinygltf::BufferView *bufferViewColor = hasColor ? &bufferViews[accessorColor->bufferView] : nullptr;
-                tinygltf::BufferView *bufferViewJoints = hasJoints ? &bufferViews[accessorJoints->bufferView] : nullptr;
-                tinygltf::BufferView *bufferViewWeights = hasWeights ? &bufferViews[accessorWeights->bufferView] : nullptr;
+                    size_t offset = accessor.byteOffset + bufferView.byteOffset;
+                    if (offset >= buffer.data.size())
+                        return nullptr;
 
-                tinygltf::Buffer *bufferPos = &buffers[bufferViewPos->buffer];
-                tinygltf::Buffer *bufferUV0 = bufferViewUV0 ? &buffers[bufferViewUV0->buffer] : nullptr;
-                tinygltf::Buffer *bufferUV1 = bufferViewUV1 ? &buffers[bufferViewUV1->buffer] : nullptr;
-                tinygltf::Buffer *bufferNormal = bufferViewNormal ? &buffers[bufferViewNormal->buffer] : nullptr;
-                tinygltf::Buffer *bufferColor = bufferViewColor ? &buffers[bufferViewColor->buffer] : nullptr;
-                tinygltf::Buffer *bufferJoints = bufferViewJoints ? &buffers[bufferViewJoints->buffer] : nullptr;
-                tinygltf::Buffer *bufferWeights = bufferViewWeights ? &buffers[bufferViewWeights->buffer] : nullptr;
+                    return &buffer.data[accessor.byteOffset + bufferView.byteOffset];
+                };
 
-                const auto dataPos = reinterpret_cast<const float *>(&bufferPos->data[accessorPos->byteOffset + bufferViewPos->byteOffset]);
-                const auto dataUV0 = bufferUV0 ? reinterpret_cast<const float *>(&bufferUV0->data[accessorUV->byteOffset + bufferViewUV0->byteOffset]) : nullptr;
-                const auto dataUV1 = bufferUV1 ? reinterpret_cast<const float *>(&bufferUV1->data[accessorUV2->byteOffset + bufferViewUV1->byteOffset]) : nullptr;
-                const auto dataNormal = bufferNormal ? reinterpret_cast<const float *>(&bufferNormal->data[accessorNormal->byteOffset + bufferViewNormal->byteOffset]) : nullptr;
-                const auto dataColor = bufferColor ? reinterpret_cast<const float *>(&bufferColor->data[accessorColor->byteOffset + bufferViewColor->byteOffset]) : nullptr;
-                const auto dataJoints = bufferJoints ? reinterpret_cast<const void *>(&bufferJoints->data[accessorJoints->byteOffset + bufferViewJoints->byteOffset]) : nullptr;
-                const auto dataWeights = bufferWeights ? reinterpret_cast<const float *>(&bufferWeights->data[accessorWeights->byteOffset + bufferViewWeights->byteOffset]) : nullptr;
+                const auto *dataPos = reinterpret_cast<const float *>(getData("POSITION"));
+                const auto *dataUV0 = reinterpret_cast<const float *>(getData("TEXCOORD_0"));
+                const auto *dataUV1 = reinterpret_cast<const float *>(getData("TEXCOORD_1"));
+                const auto *dataNormal = reinterpret_cast<const float *>(getData("NORMAL"));
+                const auto *dataColor = reinterpret_cast<const float *>(getData("COLOR_0"));
+                const auto *dataJoints = reinterpret_cast<const void *>(getData("JOINTS_0"));
+                const auto *dataWeights = reinterpret_cast<const float *>(getData("WEIGHTS_0"));
+
+                auto accessorPos = getAccessor("POSITION");
+                PE_ERROR_IF(!accessorPos, "No POSITION attribute found in primitive");
 
                 for (uint32_t i = 0; i < accessorPos->count; i++)
                 {
@@ -462,100 +449,103 @@ namespace pe
 
                     std::copy(dataPos + i * 3, dataPos + (i * 3 + 3), vertex.position);
                     std::copy(dataPos + i * 3, dataPos + (i * 3 + 3), positionUvVertex.position);
+
                     if (dataUV0)
                         std::copy(dataUV0 + i * 2, dataUV0 + (i * 2 + 2), vertex.uv);
+
                     if (dataNormal)
                         std::copy(dataNormal + i * 3, dataNormal + (i * 3 + 3), vertex.normals);
                     else
                         vertex.normals[2] = 1.f;
+
                     if (dataColor)
                         std::copy(dataColor + i * 4, dataColor + (i * 4 + 4), vertex.color);
                     else
                         std::fill(vertex.color, vertex.color + 4, 1.f);
+
                     if (dataJoints)
                     {
+                        auto *accessorJoints = getAccessor("JOINTS_0");
                         if (accessorJoints->componentType == TINYGLTF_COMPONENT_TYPE_UNSIGNED_BYTE)
                         {
-                            // transform to uint32_t
                             const uint8_t *dataJoints8 = reinterpret_cast<const uint8_t *>(dataJoints);
-                            for (uint32_t j = 0; j < 4; i++)
+                            for (uint32_t j = 0; j < 4; j++)
                                 vertex.joints[j] = dataJoints8[i * 4 + j];
                         }
                         else if (accessorJoints->componentType == TINYGLTF_COMPONENT_TYPE_UNSIGNED_SHORT)
                         {
-                            // transform to uint32_t
                             const uint16_t *dataJoints16 = reinterpret_cast<const uint16_t *>(dataJoints);
-                            for (uint32_t j = 0; j < 4; i++)
+                            for (uint32_t j = 0; j < 4; j++)
                                 vertex.joints[j] = dataJoints16[i * 4 + j];
                         }
                     }
+
                     if (dataWeights)
                         std::copy(dataWeights + i * 4, dataWeights + (i * 4 + 4), vertex.weights);
 
                     vertices.push_back(vertex);
                     positionUvs.push_back(positionUvVertex);
-
-                    // Update loading bar
                     progress++;
                 }
 
-                // ------------ Indices ------------
-                if (primitive.indices >= 0) // need to point to a valid accessor
+                // -------- Indices --------
+                if (primitive.indices >= 0)
                 {
                     const auto &accessorIndices = accessors[primitive.indices];
                     const auto &bufferViewIndices = bufferViews[accessorIndices.bufferView];
                     const auto &bufferIndices = buffers[bufferViewIndices.buffer];
-                    if (accessorIndices.componentType == TINYGLTF_COMPONENT_TYPE_UNSIGNED_SHORT)
+                    const auto dataPtr = &bufferIndices.data[accessorIndices.byteOffset + bufferViewIndices.byteOffset];
+
+                    switch (accessorIndices.componentType)
                     {
-                        // transform to uint32_t
-                        const auto dataIndices = reinterpret_cast<const uint16_t *>(&bufferIndices.data[accessorIndices.byteOffset + bufferViewIndices.byteOffset]);
+                    case TINYGLTF_COMPONENT_TYPE_UNSIGNED_SHORT:
+                    {
+                        const auto dataIndices = reinterpret_cast<const uint16_t *>(dataPtr);
                         for (size_t i = 0; i < accessorIndices.count; i++)
                             indices.push_back(static_cast<uint32_t>(dataIndices[i]));
-                        indexOffset += static_cast<uint32_t>(accessorIndices.count);
+                        break;
                     }
-                    else if (accessorIndices.componentType == TINYGLTF_COMPONENT_TYPE_UNSIGNED_INT)
+                    case TINYGLTF_COMPONENT_TYPE_UNSIGNED_INT:
                     {
-                        const auto dataIndices = reinterpret_cast<const uint32_t *>(&bufferIndices.data[accessorIndices.byteOffset + bufferViewIndices.byteOffset]);
+                        const auto dataIndices = reinterpret_cast<const uint32_t *>(dataPtr);
                         for (size_t i = 0; i < accessorIndices.count; i++)
                             indices.push_back(dataIndices[i]);
-                        indexOffset += static_cast<uint32_t>(accessorIndices.count);
+                        break;
                     }
-                    else if (accessorIndices.componentType == TINYGLTF_COMPONENT_TYPE_UNSIGNED_BYTE)
+                    case TINYGLTF_COMPONENT_TYPE_UNSIGNED_BYTE:
                     {
-                        // transform to uint32_t
-                        const auto dataIndices = reinterpret_cast<const uint8_t *>(&bufferIndices.data[accessorIndices.byteOffset + bufferViewIndices.byteOffset]);
+                        const auto dataIndices = reinterpret_cast<const uint8_t *>(dataPtr);
                         for (size_t i = 0; i < accessorIndices.count; i++)
                             indices.push_back(static_cast<uint32_t>(dataIndices[i]));
-                        indexOffset += static_cast<uint32_t>(accessorIndices.count);
+                        break;
                     }
-                    else
-                    {
+                    default:
                         PE_ERROR("Invalid indices type");
+                        break;
                     }
 
-                    // Update loading bar
+                    indexOffset += static_cast<uint32_t>(accessorIndices.count);
                     progress += primitive.indices;
                 }
 
-                // AABBs Vertices
+                // -------- AABB Vertices --------
                 primitiveInfo.aabbColor = (rand(0, 255) << 24) + (rand(0, 255) << 16) + (rand(0, 255) << 8) + 256;
 
                 const vec3 &min = primitiveInfo.boundingBox.min;
                 const vec3 &max = primitiveInfo.boundingBox.max;
 
-                AabbVertex corners[8];
-                corners[0] = AabbVertex{min.x, min.y, min.z};
-                corners[1] = AabbVertex{max.x, min.y, min.z};
-                corners[2] = AabbVertex{max.x, max.y, min.z};
-                corners[3] = AabbVertex{min.x, max.y, min.z};
-                corners[4] = AabbVertex{min.x, min.y, max.z};
-                corners[5] = AabbVertex{max.x, min.y, max.z};
-                corners[6] = AabbVertex{max.x, max.y, max.z};
-                corners[7] = AabbVertex{min.x, max.y, max.z};
-                for (uint32_t i = 0; i < 8; i++)
-                {
-                    aabbVertices.push_back(corners[i]);
-                }
+                AabbVertex corners[8] = {
+                    {min.x, min.y, min.z},
+                    {max.x, min.y, min.z},
+                    {max.x, max.y, min.z},
+                    {min.x, max.y, min.z},
+                    {min.x, min.y, max.z},
+                    {max.x, min.y, max.z},
+                    {max.x, max.y, max.z},
+                    {min.x, max.y, max.z}};
+
+                for (const auto &corner : corners)
+                    aabbVertices.push_back(corner);
             }
         }
     }
