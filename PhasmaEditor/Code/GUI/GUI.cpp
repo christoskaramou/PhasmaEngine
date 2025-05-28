@@ -486,6 +486,7 @@ namespace pe
             gSettings.randomize_lights = true;
         ImGui::SliderFloat("Light Intst", &gSettings.lights_intensity, 0.01f, 30.f);
         ImGui::SliderFloat("Light Rng", &gSettings.lights_range, 0.1f, 30.f);
+        ImGui::Checkbox("Frustum Culling", &gSettings.frustum_culling);
         ImGui::Checkbox("FreezeCamCull", &gSettings.freeze_frustum_culling);
         ImGui::Checkbox("Draw AABBs", &gSettings.draw_aabbs);
         if (gSettings.draw_aabbs)

@@ -344,11 +344,6 @@ namespace pe
         m_aabbVertices.reserve(m_primitivesCount * 8);
         m_indices.reserve(m_indicesCount);
 
-        auto &vertices = m_vertices;
-        auto &positionUvs = m_positionUvs;
-        auto &indices = m_indices;
-        auto &aabbVertices = m_aabbVertices;
-
         size_t indexOffset = 0;
 
         for (uint32_t i = 0; i < meshes.size(); i++)
@@ -483,8 +478,8 @@ namespace pe
                     if (dataWeights)
                         std::copy(dataWeights + i * 4, dataWeights + (i * 4 + 4), vertex.weights);
 
-                    vertices.push_back(vertex);
-                    positionUvs.push_back(positionUvVertex);
+                    m_vertices.push_back(vertex);
+                    m_positionUvs.push_back(positionUvVertex);
                     progress++;
                 }
 
@@ -502,21 +497,21 @@ namespace pe
                     {
                         const auto dataIndices = reinterpret_cast<const uint16_t *>(dataPtr);
                         for (size_t i = 0; i < accessorIndices.count; i++)
-                            indices.push_back(static_cast<uint32_t>(dataIndices[i]));
+                            m_indices.push_back(static_cast<uint32_t>(dataIndices[i]));
                         break;
                     }
                     case TINYGLTF_COMPONENT_TYPE_UNSIGNED_INT:
                     {
                         const auto dataIndices = reinterpret_cast<const uint32_t *>(dataPtr);
                         for (size_t i = 0; i < accessorIndices.count; i++)
-                            indices.push_back(dataIndices[i]);
+                            m_indices.push_back(dataIndices[i]);
                         break;
                     }
                     case TINYGLTF_COMPONENT_TYPE_UNSIGNED_BYTE:
                     {
                         const auto dataIndices = reinterpret_cast<const uint8_t *>(dataPtr);
                         for (size_t i = 0; i < accessorIndices.count; i++)
-                            indices.push_back(static_cast<uint32_t>(dataIndices[i]));
+                            m_indices.push_back(static_cast<uint32_t>(dataIndices[i]));
                         break;
                     }
                     default:
@@ -545,7 +540,7 @@ namespace pe
                     {min.x, max.y, max.z}};
 
                 for (const auto &corner : corners)
-                    aabbVertices.push_back(corner);
+                    m_aabbVertices.push_back(corner);
             }
         }
     }
