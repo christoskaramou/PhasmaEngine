@@ -75,50 +75,25 @@ namespace pe
     inline Flags<Enum> operator~(Enum a) { return ~Flags<Enum>(a); }
 
     // Vulkan template specializations in Code\Renderer\Vulkan\HelpersVK.cpp
-    template <class T, class U>
-    T Translate(U u);
-
-    template <class T, class U>
-    U GetFlags(T flags, std::unordered_map<T, U> &translator)
-    {
-        if (!flags)
-            return U{};
-
-        auto it = translator.find(flags);
-        if (it == translator.end())
-        {
-            // Emplace the new flags pair into translator
-
-            // template< class... Args >
-            // std::pair<iterator,bool> emplace( Args&&... args );
-            it = translator.emplace(flags, U{}).first;
-
-            // Check each existing flag to see if it is included in the new flags
-            for (auto &[existing_flags, value] : translator)
-            {
-                if ((flags & existing_flags) == existing_flags)
-                    it->second |= value;
-            }
-        }
-
-        return it->second;
-    }
+    template <class T, class V>
+    T Translate(V value);
 
     template <class U, size_t N>
     U GetFlags(uint64_t flags, const U (&translator)[N])
     {
-        uint64_t result = 0;
+        static_assert(std::is_enum_v<U> || std::is_integral_v<U>, "U must be enum or integral");
 
         if (!flags)
-            return (U)result;
+            return static_cast<U>(0);
 
+        uint64_t result = 0;
         for (size_t i = 0; i < N; ++i)
         {
-            if ((flags & (1ULL << i)) == (1ULL << i))
-                result = result | (uint64_t)translator[i];
+            if (flags & (1ULL << i))
+                result |= static_cast<uint64_t>(translator[i]);
         }
 
-        return (U)result;
+        return static_cast<U>(result);
     }
 
     enum class ShaderCodeType
