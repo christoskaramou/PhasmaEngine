@@ -185,10 +185,11 @@ namespace pe
     {
         std::lock_guard<std::mutex> lock(m_cmdMutex);
 
-        auto it = m_commandPools.find(std::this_thread::get_id());
+        std::thread::id threadId = std::this_thread::get_id();
+        auto it = m_commandPools.find(threadId);
         if (it == m_commandPools.end())
         {
-            auto [it_new, inserted] = m_commandPools.emplace(std::this_thread::get_id(), std::vector<CommandPool *>());
+            auto [it_new, inserted] = m_commandPools.emplace(threadId, std::vector<CommandPool *>());
             it = it_new;
         }
         auto &commandPools = it->second;

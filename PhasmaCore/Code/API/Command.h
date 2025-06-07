@@ -209,6 +209,7 @@ namespace pe
         size_t m_boundIndexBufferOffset;
         PushConstantsBlock<128> m_pushConstants{};
         bool m_dynamicPass = false;
+        std::thread::id m_threadId; // the thread that created this command buffer, used for synchronization
 
 #if PE_DEBUG_MODE
         friend class Debug;

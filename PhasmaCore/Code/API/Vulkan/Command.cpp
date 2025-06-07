@@ -20,7 +20,8 @@ namespace pe
           m_boundPipeline{nullptr},
           m_commandPool{commandPool},
           m_event{Event::Create(name + "_event")},
-          m_name{name}
+          m_name{name},
+          m_threadId{std::this_thread::get_id()}
     {
         VkCommandBufferAllocateInfo cbai{};
         cbai.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
@@ -48,6 +49,7 @@ namespace pe
     void CommandBuffer::Begin()
     {
         PE_ERROR_IF(m_recording, "CommandBuffer::Begin: CommandBuffer is already recording!");
+        PE_ERROR_IF(m_threadId != std::this_thread::get_id(), "CommandBuffer::Begin: CommandBuffer is used in a different thread!");
 
         Reset();
 
@@ -67,6 +69,7 @@ namespace pe
         EndDebugRegion();
 
         PE_ERROR_IF(!m_recording, "CommandBuffer::End: CommandBuffer is not in recording state!");
+        PE_ERROR_IF(m_threadId != std::this_thread::get_id(), "CommandBuffer::End: CommandBuffer is used in a different thread!");
 
         PE_CHECK(vkEndCommandBuffer(m_apiHandle));
         m_recording = false;

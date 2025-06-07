@@ -116,23 +116,23 @@ namespace pe
     {
         PE_ERROR_IF(m_inUse, "GpuTimer::GetTime() called before End()");
 
-        if (m_resultsReady)
-            return static_cast<float>(m_queries[1] - m_queries[0]) * m_timestampPeriod * 1e-6f; // ms
+        if (!m_resultsReady)
+        {
+            VkResult res = vkGetQueryPoolResults(RHII.GetDevice(),
+                                                 m_apiHandle,
+                                                 0,
+                                                 2,
+                                                 2 * sizeof(uint64_t),
+                                                 &m_queries,
+                                                 sizeof(uint64_t),
+                                                 VK_QUERY_RESULT_64_BIT);
 
-        VkResult res = vkGetQueryPoolResults(RHII.GetDevice(),
-                                             m_apiHandle,
-                                             0,
-                                             2,
-                                             2 * sizeof(uint64_t),
-                                             &m_queries,
-                                             sizeof(uint64_t),
-                                             VK_QUERY_RESULT_64_BIT);
+            if (res != VK_SUCCESS)
+                return 0.f;
 
-        m_cmd = nullptr;
-        m_resultsReady = true;
-
-        if (res != VK_SUCCESS)
-            return 0.f;
+            m_cmd = nullptr;
+            m_resultsReady = true;
+        }
 
         return static_cast<float>(m_queries[1] - m_queries[0]) * m_timestampPeriod * 1e-6f; // ms
     }
