@@ -14,7 +14,7 @@ namespace pe
         static void Erase(size_t hash);
         static void Erase(const std::string &file);
         static void Clear();
-        static void Start();
+        static void Start(double interval = 1.0);
         inline static void Stop() { s_running = false; }
         inline static bool IsRunning() { return s_running; }
 

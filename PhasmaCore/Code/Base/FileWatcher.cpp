@@ -75,23 +75,21 @@ namespace pe
             watcher.second->Watch();
     }
 
-    void FileWatcher::Start()
+    void FileWatcher::Start(double interval)
     {
         if (s_running)
             return;
 
         s_running = true;
-        //FileWatcher::CheckFiles();
         FileWatcher::WatchFiles();
 
-        auto callback = []()
+        auto callback = [interval]()
         {
             Timer timer;
             while (s_running)
             {
-                //FileWatcher::CheckFiles();
                 FileWatcher::WatchFiles();
-                timer.ThreadSleep(1.0);
+                timer.ThreadSleep(interval);
             }
         };
 
