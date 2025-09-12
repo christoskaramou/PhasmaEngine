@@ -48,7 +48,6 @@ namespace pe
     private:
         inline static std::mutex s_submitMutex{};
 
-        size_t m_id;
         uint32_t m_familyId;
         std::string m_name;
         std::atomic_uint64_t m_submissions{0};

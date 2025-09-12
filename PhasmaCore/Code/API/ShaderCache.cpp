@@ -5,7 +5,7 @@ namespace pe
     // Parse includes recursively and return the full code
     std::string ShaderCache::ParseShader(const std::string &sourcePath)
     {
-        PE_ERROR_IF(!std::filesystem::exists(sourcePath), "file does not exist!");
+        PE_ERROR_IF(!std::filesystem::exists(sourcePath), "file does not exist: " + sourcePath);
 
         std::filesystem::path path(sourcePath);
         FileSystem file(path.string(), std::ios::in | std::ios::ate);
@@ -14,21 +14,31 @@ namespace pe
         std::string code = file.ReadAll();
         file.SetReadCursor(0);
         std::string line;
-        while (line = file.ReadLine(), !file.EndOfFile())
+        while (!file.EndOfFile())
         {
+            line = file.ReadLine();
+            if (line.empty())
+                continue;
+
             size_t commentPos = line.find("//");
             if (commentPos != std::string::npos)
                 line = line.substr(0, commentPos);
 
-            size_t pos = line.find("#include");
-            if (pos != std::string::npos)
+            // Use regex to extract include filename
+            std::smatch match;
+            static const std::regex includeRegex(R"(^\s*#include\s*\"([^\"]+)\")");
+            if (std::regex_search(line, match, includeRegex))
             {
-                std::string includeFile = line.substr(line.find("\"") + 1, line.rfind("\"") - line.find("\"") - 1);
-                std::string includeFileFull = path.remove_filename().string() + includeFile;
+                std::string includeFile = match[1].str();
+                std::filesystem::path includePath = path;
+                includePath.remove_filename();
+                std::string includeFileFull = (includePath / includeFile).string();
                 size_t posStart = code.find(line);
                 if (posStart != std::string::npos)
                 {
                     size_t posEnd = code.find("\n", posStart);
+                    if (posEnd == std::string::npos)
+                        posEnd = code.length();
                     code.erase(posStart, posEnd - posStart);
                     code.insert(posStart, ParseShader(includeFileFull));
                 }

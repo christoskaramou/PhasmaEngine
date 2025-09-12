@@ -48,8 +48,7 @@ namespace pe
     Queue::Queue(DeviceApiHandle device,
                  uint32_t familyId,
                  const std::string &name)
-        : m_id{ID::NextID()},
-          m_familyId{familyId},
+        : m_familyId{familyId},
           m_name{name},
           m_submissionsSemaphore{Semaphore::Create(true, name + "_submissionsSemaphore")}
     {
