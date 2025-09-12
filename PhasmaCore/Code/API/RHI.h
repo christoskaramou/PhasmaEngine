@@ -88,8 +88,8 @@ namespace pe
         const std::string &GetGpuName() { return m_gpuName; }
         const DeviceApiHandle &GetDevice() { return m_device; }
         DescriptorPool *GetDescriptorPool() { return m_descriptorPool; }
-        Semaphore *GetFreeBinarySemaphore(uint32_t frame);
-        void ClaimUsedBinarySemaphores(uint32_t frame);
+        Semaphore *AcquireBinarySemaphore(uint32_t frame);
+        void ReturnBinarySemaphores(uint32_t frame);
         const AllocatorApiHandle &GetAllocator() { return m_allocator; }
         Queue *GetMainQueue() { return m_mainQueue; }
         SDL_Window *GetWindow() { return m_window; }

@@ -181,7 +181,7 @@ namespace pe
         Debug::EndQueueRegion(this);
     }
 
-    CommandBuffer *Queue::GetCommandBuffer(CommandPoolCreateFlags flags)
+    CommandBuffer *Queue::AcquireCommandBuffer(CommandPoolCreateFlags flags)
     {
         std::lock_guard<std::mutex> lock(m_cmdMutex);
 

@@ -165,12 +165,12 @@ namespace pe
             frameCmd = nullptr;
         }
 
-        RHII.ClaimUsedBinarySemaphores(frame);
+        RHII.ReturnBinarySemaphores(frame);
     }
 
     CommandBuffer *RendererSystem::RecordPasses(uint32_t imageIndex)
     {
-        CommandBuffer *cmd = RHII.GetMainQueue()->GetCommandBuffer(CommandPoolCreate::TransientBit);
+        CommandBuffer *cmd = RHII.GetMainQueue()->AcquireCommandBuffer();
 
         ShadowPass &shadows = *GetGlobalComponent<ShadowPass>();
         SSAOPass &ssao = *GetGlobalComponent<SSAOPass>();
@@ -301,7 +301,7 @@ namespace pe
         uint32_t frame = RHII.GetFrameIndex();
 
         // acquire the image
-        Semaphore *aquireSignalSemaphore = RHII.GetFreeBinarySemaphore(frame);
+        Semaphore *aquireSignalSemaphore = RHII.AcquireBinarySemaphore(frame);
         Swapchain *swapchain = RHII.GetSwapchain();
         uint32_t imageIndex = swapchain->Aquire(aquireSignalSemaphore);
 
@@ -311,7 +311,7 @@ namespace pe
 
         // SUBMIT TO QUEUE
         aquireSignalSemaphore->SetStageFlags(PipelineStage::ColorAttachmentOutputBit | PipelineStage::ComputeShaderBit);
-        Semaphore *signal = RHII.GetFreeBinarySemaphore(frame);
+        Semaphore *signal = RHII.AcquireBinarySemaphore(frame);
         signal->SetStageFlags(PipelineStage::AllCommandsBit);
 
         Queue *queue = RHII.GetMainQueue();
