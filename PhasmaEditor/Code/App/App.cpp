@@ -63,7 +63,7 @@ namespace pe
         RHII.Init(m_window->ApiHandle());
 
         Queue *queue = RHII.GetMainQueue();
-        CommandBuffer *cmd = queue->GetCommandBuffer(CommandPoolCreate::TransientBit);
+        CommandBuffer *cmd = queue->AcquireCommandBuffer();
 
         cmd->Begin();
         CreateGlobalSystem<CameraSystem>()->Init(cmd);

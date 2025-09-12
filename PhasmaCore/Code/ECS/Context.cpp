@@ -13,7 +13,7 @@ namespace pe
     void Context::InitSystems()
     {
         Queue *queue = RHII.GetMainQueue();
-        CommandBuffer *cmd = queue->GetCommandBuffer(CommandPoolCreate::TransientBit);
+        CommandBuffer *cmd = queue->AcquireCommandBuffer();
         cmd->Begin();
 
         for (auto &system : m_systems)

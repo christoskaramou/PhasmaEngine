@@ -49,7 +49,7 @@ namespace pe
             PE_ERROR("Failed to load model: " + file.string());
 
         Queue *queue = RHII.GetMainQueue();
-        CommandBuffer *cmd = queue->GetCommandBuffer(CommandPoolCreate::TransientBit);
+        CommandBuffer *cmd = queue->AcquireCommandBuffer(CommandPoolCreate::TransientBit);
 
         cmd->Begin();
         model.UploadImages(cmd);

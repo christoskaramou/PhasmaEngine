@@ -417,7 +417,7 @@ namespace pe
         PE_CHECK(vkDeviceWaitIdle(m_device));
     }
 
-    Semaphore *RHI::GetFreeBinarySemaphore(uint32_t frame)
+    Semaphore *RHI::AcquireBinarySemaphore(uint32_t frame)
     {
         std::lock_guard<std::mutex> lock(m_binarySemaphoresMutex);
 
@@ -433,7 +433,7 @@ namespace pe
         return usedFrameBinarySemaphores.top();
     }
 
-    void RHI::ClaimUsedBinarySemaphores(uint32_t frame)
+    void RHI::ReturnBinarySemaphores(uint32_t frame)
     {
         std::lock_guard<std::mutex> lock(m_binarySemaphoresMutex);
 

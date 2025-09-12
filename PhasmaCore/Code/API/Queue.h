@@ -42,7 +42,7 @@ namespace pe
         void EndDebugRegion();
         uint32_t GetFamilyId() const { return m_familyId; }
         Semaphore *GetSubmissionsSemaphore() const { return m_submissionsSemaphore; }
-        CommandBuffer *GetCommandBuffer(CommandPoolCreateFlags flags);
+        CommandBuffer *AcquireCommandBuffer(CommandPoolCreateFlags flags = CommandPoolCreate::TransientBit);
         void ReturnCommandBuffer(CommandBuffer *cmd);
 
     private:
