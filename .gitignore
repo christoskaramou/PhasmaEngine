@@ -4,7 +4,8 @@
 # Ignore almost everything above the root folder
 /*
 /*/
-!/Phasma/
+!/PhasmaCore/
+!/PhasmaEditor/
 !/CMakeLists.txt
 !/LICENCE
 !/README.md
