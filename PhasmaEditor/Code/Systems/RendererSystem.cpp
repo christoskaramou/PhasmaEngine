@@ -114,7 +114,7 @@ namespace pe
         // Init GUI
         m_gui.Init();
 
-        m_renderArea.Update(0.0f, 0.0f, WIDTH_f, HEIGHT_f);
+        m_renderArea.Update(0.0f, 0.0f, RHII.GetWidthf(), RHII.GetHeightf());
 
         for (uint32_t i = 0; i < SWAPCHAIN_IMAGES; i++)
         {
@@ -380,8 +380,8 @@ namespace pe
         auto &gSettings = Settings::Get<GlobalSettings>();
         float rtScale = useRenderTergetScale ? gSettings.render_scale : 1.f;
 
-        uint32_t width = static_cast<uint32_t>(WIDTH_f * rtScale);
-        uint32_t heigth = static_cast<uint32_t>(HEIGHT_f * rtScale);
+        uint32_t width = static_cast<uint32_t>(RHII.GetWidthf() * rtScale);
+        uint32_t heigth = static_cast<uint32_t>(RHII.GetHeightf() * rtScale);
 
         ImageCreateInfo info{};
         info.format = format;
@@ -418,8 +418,8 @@ namespace pe
         float rtScale = useRenderTergetScale ? gSettings.render_scale : 1.f;
 
         ImageCreateInfo info{};
-        info.width = static_cast<uint32_t>(WIDTH_f * rtScale);
-        info.height = static_cast<uint32_t>(HEIGHT_f * rtScale);
+        info.width = static_cast<uint32_t>(RHII.GetWidthf() * rtScale);
+        info.height = static_cast<uint32_t>(RHII.GetHeightf() * rtScale);
         info.usage = additionalFlags | ImageUsage::DepthStencilAttachmentBit | ImageUsage::SampledBit | ImageUsage::TransferDstBit;
         info.format = format;
         info.clearColor = vec4(clearDepth, static_cast<float>(clearStencil), 0.f, 0.f);
@@ -472,8 +472,8 @@ namespace pe
         ImageCreateInfo info{};
         info.format = RHII.GetSurface()->GetFormat();
         info.initialLayout = ImageLayout::Undefined;
-        info.width = static_cast<uint32_t>(WIDTH_f * rtScale);
-        info.height = static_cast<uint32_t>(HEIGHT_f * rtScale);
+        info.width = static_cast<uint32_t>(RHII.GetWidthf() * rtScale);
+        info.height = static_cast<uint32_t>(RHII.GetHeightf() * rtScale);
         info.tiling = ImageTiling::Optimal;
         info.usage = ImageUsage::TransferDstBit | ImageUsage::SampledBit;
         info.name = "FSSampledImage";

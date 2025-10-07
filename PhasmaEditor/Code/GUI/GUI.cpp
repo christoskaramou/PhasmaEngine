@@ -176,7 +176,7 @@ namespace pe
             const float topBarHeight = 16.f;
             SDL_GetWindowPosition(RHII.GetWindow(), &x, &y);
             ImVec2 size(-0.001f, 25.f);
-            ImGui::SetNextWindowPos(ImVec2(x + WIDTH_f / 2 - 200.f, y + topBarHeight + HEIGHT_f / 2 - size.y / 2));
+            ImGui::SetNextWindowPos(ImVec2(x + RHII.GetWidthf() / 2 - 200.f, y + topBarHeight + RHII.GetHeightf() / 2 - size.y / 2));
             ImGui::SetNextWindowSize(ImVec2(400.f, 100.f));
             ImGui::Begin(gSettings.loading_name.c_str(), &metrics_open, flags);
             // LoadingIndicatorCircle("Loading", radius, color, bdcolor, 10, 4.5f);
@@ -352,8 +352,8 @@ namespace pe
         static bool initialized = false;
         if (!initialized)
         {
-            ImGui::SetNextWindowPos(ImVec2(WIDTH_f - 200.f, 100.f));
-            ImGui::SetNextWindowSize(ImVec2(200.f, HEIGHT_f - 150.f));
+            ImGui::SetNextWindowPos(ImVec2(RHII.GetWidthf() - 200.f, 100.f));
+            ImGui::SetNextWindowSize(ImVec2(200.f, RHII.GetHeightf() - 150.f));
             initialized = true;
         }
 
@@ -362,7 +362,7 @@ namespace pe
 
         static float rtScale = gSettings.render_scale;
         ImGui::Begin("Global Properties", &properties_open);
-        ImGui::Text("Resolution: %d x %d", static_cast<int>(WIDTH_f * gSettings.render_scale), static_cast<int>(HEIGHT_f * gSettings.render_scale));
+        ImGui::Text("Resolution: %d x %d", static_cast<int>(RHII.GetWidthf() * gSettings.render_scale), static_cast<int>(RHII.GetHeightf() * gSettings.render_scale));
         ImGui::DragFloat("Quality", &rtScale, 0.01f, 0.05f, 1.0f);
         if (ImGui::Button("Apply"))
         {

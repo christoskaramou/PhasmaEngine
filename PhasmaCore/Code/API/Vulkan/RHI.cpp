@@ -20,6 +20,8 @@
 
 namespace pe
 {
+    RHI &RHII = *RHI::Get();
+
     void RHI::Init(SDL_Window *window)
     {
         m_window = window;
@@ -495,5 +497,10 @@ namespace pe
 
         EventSystem::DispatchEvent(EventSetWindowTitle, title);
     }
+
+    uint32_t RHI::GetWidth() const { return m_surface->GetActualExtent().width; }
+    uint32_t RHI::GetHeight() const { return m_surface->GetActualExtent().height; }
+    float RHI::GetWidthf() const { return static_cast<float>(GetWidth()); }
+    float RHI::GetHeightf() const { return static_cast<float>(GetHeight()); }
 }
 #endif
