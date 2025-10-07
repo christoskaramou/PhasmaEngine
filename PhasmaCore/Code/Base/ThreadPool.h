@@ -5,43 +5,42 @@ namespace pe
     class ThreadPool
     {
     public:
-        ThreadPool(size_t threads);
+        explicit ThreadPool(size_t threads);
         ~ThreadPool();
 
         template <class F, class... Args>
-        auto Enqueue(F &&f, Args &&...args) -> std::shared_future<typename std::invoke_result<F, Args...>::type>;
+        auto Enqueue(F &&fn, Args &&...args) -> std::shared_future<std::invoke_result_t<F, Args...>>;
 
     private:
-        // need to keep track of threads so we can join them
         std::vector<std::thread> m_workers;
-        // the task queue
         std::deque<std::function<void()>> m_tasks;
-        // synchronization
+
         std::mutex m_queue_mutex;
         std::condition_variable m_condition;
-        std::atomic<bool> m_stop{false};
+        bool m_stop{false};
     };
 
-    // add new work item to the pool
     template <class F, class... Args>
-    auto ThreadPool::Enqueue(F &&f, Args &&...args) -> std::shared_future<typename std::invoke_result<F, Args...>::type>
+    auto ThreadPool::Enqueue(F &&fn, Args &&...args) -> std::shared_future<std::invoke_result_t<F, Args...>>
     {
-        using return_type = typename std::invoke_result<F, Args...>::type;
+        using return_type = std::invoke_result_t<F, Args...>;
 
-        auto pckg_task = std::make_shared<std::packaged_task<return_type()>>(std::bind(std::forward<F>(f), std::forward<Args>(args)...));
+        auto task_ptr = std::make_shared<std::packaged_task<return_type()>>(
+            [f = std::forward<F>(fn),
+             t = std::make_tuple(std::forward<Args>(args)...)]() mutable -> return_type
+            {
+                return std::apply(std::move(f), std::move(t));
+            });
 
-        std::shared_future<return_type> task = pckg_task->get_future().share();
+        std::shared_future<return_type> future = task_ptr->get_future().share();
         {
             std::unique_lock<std::mutex> lock(m_queue_mutex);
-
-            // don't allow enqueueing after stopping the pool
             if (m_stop)
                 throw std::runtime_error("enqueue on stopped ThreadPool");
-
-            m_tasks.emplace_back([pckg_task_param = std::move(pckg_task)]() mutable
-                                 { (*pckg_task_param)(); });
+            m_tasks.emplace_back([task_ptr = std::move(task_ptr)]() mutable
+                                 { (*task_ptr)(); });
         }
         m_condition.notify_one();
-        return task;
+        return future;
     }
-}
+} // namespace pe
