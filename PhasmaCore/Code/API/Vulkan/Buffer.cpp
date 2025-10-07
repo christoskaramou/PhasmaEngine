@@ -7,9 +7,7 @@ namespace pe
 {
     Buffer::Buffer(size_t size, BufferUsageFlags usage, AllocationCreateFlags createFlags, const std::string &name)
         : m_size{size},
-          m_data{nullptr},
           m_usage{usage},
-          m_allocation{},
           m_name{name}
 
     {
@@ -44,6 +42,7 @@ namespace pe
         PE_CHECK(vmaCreateBuffer(RHII.GetAllocator(), &bufferInfo, &allocationCreateInfo, &bufferVK, &allocationVK, &allocationInfo));
         m_apiHandle = bufferVK;
         m_allocation = allocationVK;
+        m_data = allocationVK->GetMappedData(); // for persistently mapped buffers created with the MappedBit flag
 
         Debug::SetObjectName(m_apiHandle, m_name);
     }
