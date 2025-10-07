@@ -30,4 +30,8 @@ namespace pe
 
     // Main thread id
     extern std::thread::id e_MainThreadID;
+
+    // global RHI instance
+    class RHI;
+    extern RHI &RHII;
 }

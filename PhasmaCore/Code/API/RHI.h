@@ -1,11 +1,5 @@
 #pragma once
 
-#define RHII (*RHI::Get()) // RHI Instance
-#define WIDTH RHII.GetSurface()->GetActualExtent().width
-#define HEIGHT RHII.GetSurface()->GetActualExtent().height
-#define WIDTH_f static_cast<float>(WIDTH)
-#define HEIGHT_f static_cast<float>(HEIGHT)
-
 namespace pe
 {
     class CommandPool;
@@ -97,6 +91,11 @@ namespace pe
         Swapchain *GetSwapchain() { return m_swapchain; }
         MemoryInfo GetMemoryUsageSnapshot();
         void ChangePresentMode(PresentMode mode);
+
+        uint32_t GetWidth() const;
+        uint32_t GetHeight() const;
+        float GetWidthf() const;
+        float GetHeightf() const;
 
     private:
         RHI() = default;
