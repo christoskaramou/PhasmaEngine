@@ -29,10 +29,10 @@ namespace pe
     void BloomBrightFilterPass::UpdatePassInfo()
     {
         m_passInfo->name = "BrightFilter_pipeline";
-        m_passInfo->pVertShader = Shader::Create(Path::Executable + "Assets/Shaders/Common/Quad.hlsl", ShaderStage::VertexBit, "mainVS", std::vector<Define>{}, ShaderCodeType::HLSL);
-        m_passInfo->pFragShader = Shader::Create(Path::Executable + "Assets/Shaders/Bloom/BrightFilterPS.hlsl", ShaderStage::FragmentBit, "mainPS", std::vector<Define>{}, ShaderCodeType::HLSL);
-        m_passInfo->dynamicStates = {DynamicState::Viewport, DynamicState::Scissor};
-        m_passInfo->cullMode = CullMode::Back;
+        m_passInfo->pVertShader = Shader::Create(Path::Executable + "Assets/Shaders/Common/Quad.hlsl", vk::ShaderStageFlagBits::eVertex, "mainVS", std::vector<Define>{}, ShaderCodeType::HLSL);
+        m_passInfo->pFragShader = Shader::Create(Path::Executable + "Assets/Shaders/Bloom/BrightFilterPS.hlsl", vk::ShaderStageFlagBits::eFragment, "mainPS", std::vector<Define>{}, ShaderCodeType::HLSL);
+        m_passInfo->dynamicStates = {vk::DynamicState::eViewport, vk::DynamicState::eScissor};
+        m_passInfo->cullMode = vk::CullModeFlagBits::eBack;
         m_passInfo->colorBlendAttachments = {PipelineColorBlendAttachmentState::Default};
         m_passInfo->colorFormats = {m_brightFilterRT->GetFormat()};
         m_passInfo->ReflectDescriptors();
@@ -58,9 +58,9 @@ namespace pe
     {
         ImageBarrierInfo barrier{};
         barrier.image = m_displayRT;
-        barrier.layout = ImageLayout::ShaderReadOnly;
-        barrier.stageFlags = PipelineStage::FragmentShaderBit;
-        barrier.accessMask = Access::ShaderReadBit;
+        barrier.layout = vk::ImageLayout::eShaderReadOnlyOptimal;
+        barrier.stageFlags = vk::PipelineStageFlagBits2::eFragmentShader;
+        barrier.accessMask = vk::AccessFlagBits2::eShaderRead;
 
         cmd->ImageBarrier(barrier);
         cmd->BeginPass(1, m_attachments.data(), "Bloom_BrightFilter");
@@ -91,10 +91,10 @@ namespace pe
     void BloomGaussianBlurHorizontalPass::UpdatePassInfo()
     {
         m_passInfo->name = "GaussianBlurHorizontal_pipeline";
-        m_passInfo->pVertShader = Shader::Create(Path::Executable + "Assets/Shaders/Common/Quad.hlsl", ShaderStage::VertexBit, "mainVS", std::vector<Define>{}, ShaderCodeType::HLSL);
-        m_passInfo->pFragShader = Shader::Create(Path::Executable + "Assets/Shaders/Bloom/GaussianBlurHPS.hlsl", ShaderStage::FragmentBit, "mainPS", std::vector<Define>{}, ShaderCodeType::HLSL);
-        m_passInfo->dynamicStates = {DynamicState::Viewport, DynamicState::Scissor};
-        m_passInfo->cullMode = CullMode::Back;
+        m_passInfo->pVertShader = Shader::Create(Path::Executable + "Assets/Shaders/Common/Quad.hlsl", vk::ShaderStageFlagBits::eVertex, "mainVS", std::vector<Define>{}, ShaderCodeType::HLSL);
+        m_passInfo->pFragShader = Shader::Create(Path::Executable + "Assets/Shaders/Bloom/GaussianBlurHPS.hlsl", vk::ShaderStageFlagBits::eFragment, "mainPS", std::vector<Define>{}, ShaderCodeType::HLSL);
+        m_passInfo->dynamicStates = {vk::DynamicState::eViewport, vk::DynamicState::eScissor};
+        m_passInfo->cullMode = vk::CullModeFlagBits::eBack;
         m_passInfo->colorBlendAttachments = {PipelineColorBlendAttachmentState::Default};
         m_passInfo->colorFormats = {m_gaussianBlurHorizontalRT->GetFormat()};
         m_passInfo->ReflectDescriptors();
@@ -122,9 +122,9 @@ namespace pe
 
         ImageBarrierInfo barrier;
         barrier.image = m_brightFilterRT;
-        barrier.layout = ImageLayout::ShaderReadOnly;
-        barrier.stageFlags = PipelineStage::FragmentShaderBit;
-        barrier.accessMask = Access::ShaderReadBit;
+        barrier.layout = vk::ImageLayout::eShaderReadOnlyOptimal;
+        barrier.stageFlags = vk::PipelineStageFlagBits2::eFragmentShader;
+        barrier.accessMask = vk::AccessFlagBits2::eShaderRead;
 
         cmd->ImageBarrier(barrier);
         cmd->BeginPass(1, m_attachments.data(), "Bloom_GaussianBlurHorizontal");
@@ -153,16 +153,16 @@ namespace pe
         m_attachments.resize(1);
         m_attachments[0] = {};
         m_attachments[0].image = m_displayRT;
-        m_attachments[0].loadOp = AttachmentLoadOp::Load;
+        m_attachments[0].loadOp = vk::AttachmentLoadOp::eLoad;
     }
 
     void BloomGaussianBlurVerticalPass::UpdatePassInfo()
     {
         m_passInfo->name = "GaussianBlurVertical_pipeline";
-        m_passInfo->pVertShader = Shader::Create(Path::Executable + "Assets/Shaders/Common/Quad.hlsl", ShaderStage::VertexBit, "mainVS", std::vector<Define>{}, ShaderCodeType::HLSL);
-        m_passInfo->pFragShader = Shader::Create(Path::Executable + "Assets/Shaders/Bloom/GaussianBlurVPS.hlsl", ShaderStage::FragmentBit, "mainPS", std::vector<Define>{}, ShaderCodeType::HLSL);
-        m_passInfo->dynamicStates = {DynamicState::Viewport, DynamicState::Scissor};
-        m_passInfo->cullMode = CullMode::Back;
+        m_passInfo->pVertShader = Shader::Create(Path::Executable + "Assets/Shaders/Common/Quad.hlsl", vk::ShaderStageFlagBits::eVertex, "mainVS", std::vector<Define>{}, ShaderCodeType::HLSL);
+        m_passInfo->pFragShader = Shader::Create(Path::Executable + "Assets/Shaders/Bloom/GaussianBlurVPS.hlsl", vk::ShaderStageFlagBits::eFragment, "mainPS", std::vector<Define>{}, ShaderCodeType::HLSL);
+        m_passInfo->dynamicStates = {vk::DynamicState::eViewport, vk::DynamicState::eScissor};
+        m_passInfo->cullMode = vk::CullModeFlagBits::eBack;
         m_passInfo->blendEnable = true;
         m_passInfo->colorBlendAttachments = {PipelineColorBlendAttachmentState::AdditiveColor};
         m_passInfo->colorFormats = {m_displayRT->GetFormat()};
@@ -191,9 +191,9 @@ namespace pe
 
         ImageBarrierInfo barrier;
         barrier.image = m_gaussianBlurHorizontalRT;
-        barrier.layout = ImageLayout::ShaderReadOnly;
-        barrier.stageFlags = PipelineStage::FragmentShaderBit;
-        barrier.accessMask = Access::ShaderReadBit;
+        barrier.layout = vk::ImageLayout::eShaderReadOnlyOptimal;
+        barrier.stageFlags = vk::PipelineStageFlagBits2::eFragmentShader;
+        barrier.accessMask = vk::AccessFlagBits2::eShaderRead;
 
         cmd->ImageBarrier(barrier);
         cmd->BeginPass(1, m_attachments.data(), "Bloom_GaussianBlurVertical");

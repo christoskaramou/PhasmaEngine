@@ -19,44 +19,39 @@ namespace pe
         int i = 0;
         for (auto *&texture : m_textures)
         {
-            ImageCreateInfo info{};
+            vk::ImageCreateInfo info = Image::CreateInfoInit();
             info.format = RHII.GetDepthFormat();
-            info.initialLayout = ImageLayout::Undefined;
-            info.width = Settings::Get<GlobalSettings>().shadow_map_size;
-            info.height = Settings::Get<GlobalSettings>().shadow_map_size;
-            info.tiling = ImageTiling::Optimal;
-            info.usage = ImageUsage::DepthStencilAttachmentBit | ImageUsage::SampledBit | ImageUsage::TransferDstBit;
-            info.clearColor = vec4(Color::Depth, Color::Stencil, 0.0f, 1.0f);
-            info.name = "ShadowMap_" + std::to_string(i++);
-            texture = Image::Create(info);
+            info.extent = vk::Extent3D{Settings::Get<GlobalSettings>().shadow_map_size, Settings::Get<GlobalSettings>().shadow_map_size, 1};
+            info.usage = vk::ImageUsageFlagBits::eDepthStencilAttachment | vk::ImageUsageFlagBits::eSampled | vk::ImageUsageFlagBits::eTransferDst;
+            texture = Image::Create(info, "ShadowMap_" + std::to_string(i++));
+            texture->SetClearColor(vec4(Color::Depth, Color::Stencil, 0.0f, 1.0f));
 
             texture->CreateRTV(true);
-            texture->CreateSRV(ImageViewType::Type2D, -1, true);
+            texture->CreateSRV(vk::ImageViewType::e2D, -1, true);
         }
 
-        SamplerCreateInfo samplerInfo{};
-        samplerInfo.addressModeU = SamplerAddressMode::ClampToEdge;
-        samplerInfo.addressModeV = SamplerAddressMode::ClampToEdge;
-        samplerInfo.addressModeW = SamplerAddressMode::ClampToEdge;
+        vk::SamplerCreateInfo samplerInfo = Sampler::CreateInfoInit();
+        samplerInfo.addressModeU = vk::SamplerAddressMode::eClampToEdge;
+        samplerInfo.addressModeV = vk::SamplerAddressMode::eClampToEdge;
+        samplerInfo.addressModeW = vk::SamplerAddressMode::eClampToEdge;
         samplerInfo.maxAnisotropy = 1.f;
-        samplerInfo.borderColor = BorderColor::FloatOpaqueWhite;
-        samplerInfo.compareEnable = 1;
-        samplerInfo.compareOp = CompareOp::GreaterOrEqual;
-        samplerInfo.name = "Sampler_ClampToEdge_GE_FOW";
-        m_sampler = Sampler::Create(samplerInfo);
+        samplerInfo.borderColor = vk::BorderColor::eFloatOpaqueWhite;
+        samplerInfo.compareEnable = VK_TRUE;
+        samplerInfo.compareOp = vk::CompareOp::eGreaterOrEqual;
+        m_sampler = Sampler::Create(samplerInfo, "Sampler_ClampToEdge_GE_FOW");
 
         m_attachments.resize(1);
         m_attachments[0] = {};
-        m_attachments[0].loadOp = AttachmentLoadOp::Clear;
-        m_attachments[0].storeOp = AttachmentStoreOp::Store;
+        m_attachments[0].loadOp = vk::AttachmentLoadOp::eClear;
+        m_attachments[0].storeOp = vk::AttachmentStoreOp::eStore;
     }
 
     void ShadowPass::UpdatePassInfo()
     {
         m_passInfo->name = "shadows_pipeline";
-        m_passInfo->pVertShader = Shader::Create(Path::Executable + "Assets/Shaders/Shadows/ShadowsVS.hlsl", ShaderStage::VertexBit, "mainVS", std::vector<Define>{}, ShaderCodeType::HLSL);
-        m_passInfo->dynamicStates = {DynamicState::Viewport, DynamicState::Scissor, DynamicState::DepthBias};
-        m_passInfo->cullMode = CullMode::Front;
+        m_passInfo->pVertShader = Shader::Create(Path::Executable + "Assets/Shaders/Shadows/ShadowsVS.hlsl", vk::ShaderStageFlagBits::eVertex, "mainVS", std::vector<Define>{}, ShaderCodeType::HLSL);
+        m_passInfo->dynamicStates = {vk::DynamicState::eViewport, vk::DynamicState::eScissor, vk::DynamicState::eDepthBias};
+        m_passInfo->cullMode = vk::CullModeFlagBits::eFront;
         m_passInfo->depthFormat = RHII.GetDepthFormat();
         m_passInfo->ReflectDescriptors();
         m_passInfo->UpdateHash();
@@ -68,8 +63,8 @@ namespace pe
         {
             m_uniforms[i] = Buffer::Create(
                 RHII.AlignUniform(Settings::Get<GlobalSettings>().num_cascades * sizeof(mat4)),
-                BufferUsage::UniformBufferBit,
-                AllocationCreate::HostAccessSequentialWriteBit,
+                vk::BufferUsageFlagBits2::eUniformBuffer,
+                VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT,
                 "Shadows_uniform_buffer");
             m_uniforms[i]->Map();
             m_uniforms[i]->Zero();

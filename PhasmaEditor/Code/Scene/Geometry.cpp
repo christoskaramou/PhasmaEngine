@@ -78,8 +78,8 @@ namespace pe
         // create geometry buffer
         m_buffer = Buffer::Create(
             sizeof(uint32_t) * numberOfIndices + sizeof(Vertex) * numberOfVertices + sizeof(PositionUvVertex) * numberOfVertices + sizeof(AabbVertex) * numberOfAabbVertices,
-            BufferUsage::TransferDstBit | BufferUsage::IndexBufferBit | BufferUsage::VertexBufferBit,
-            AllocationCreate::DedicatedMemoryBit,
+            vk::BufferUsageFlagBits2::eTransferDst | vk::BufferUsageFlagBits2::eIndexBuffer | vk::BufferUsageFlagBits2::eVertexBuffer,
+            VMA_ALLOCATION_CREATE_DEDICATED_MEMORY_BIT,
             "combined_Geometry_buffer");
     }
 
@@ -106,12 +106,12 @@ namespace pe
             indicesCount += model.m_indices.size();
         }
 
-        BufferBarrierInfo indexBarrierInfo{};
-        indexBarrierInfo.buffer = m_buffer;
-        indexBarrierInfo.srcAccess = Access::TransferWriteBit;
-        indexBarrierInfo.dstAccess = Access::IndexReadBit;
-        indexBarrierInfo.srcStage = PipelineStage::TransferBit;
-        indexBarrierInfo.dstStage = PipelineStage::VertexInputBit;
+        vk::BufferMemoryBarrier2 indexBarrierInfo{};
+        indexBarrierInfo.buffer = m_buffer->ApiHandle();
+        indexBarrierInfo.srcAccessMask = vk::AccessFlagBits2::eTransferWrite;
+        indexBarrierInfo.dstAccessMask = vk::AccessFlagBits2::eIndexRead;
+        indexBarrierInfo.srcStageMask = vk::PipelineStageFlagBits2::eTransfer;
+        indexBarrierInfo.dstStageMask = vk::PipelineStageFlagBits2::eVertexInput;
         indexBarrierInfo.size = indicesCount * sizeof(uint32_t);
         indexBarrierInfo.offset = 0; // index data starts at the beginning of the buffer
         cmd->BufferBarrier(indexBarrierInfo);
@@ -120,12 +120,12 @@ namespace pe
         m_aabbIndicesOffset = indicesCount * sizeof(uint32_t);
         cmd->CopyBufferStaged(m_buffer, m_aabbIndices.data(), m_aabbIndices.size() * sizeof(uint32_t), m_aabbIndicesOffset);
 
-        BufferBarrierInfo aabbIndexBarrierInfo{};
-        aabbIndexBarrierInfo.buffer = m_buffer;
-        aabbIndexBarrierInfo.srcAccess = Access::TransferWriteBit;
-        aabbIndexBarrierInfo.dstAccess = Access::IndexReadBit;
-        aabbIndexBarrierInfo.srcStage = PipelineStage::TransferBit;
-        aabbIndexBarrierInfo.dstStage = PipelineStage::VertexInputBit;
+        vk::BufferMemoryBarrier2 aabbIndexBarrierInfo{};
+        aabbIndexBarrierInfo.buffer = m_buffer->ApiHandle();
+        aabbIndexBarrierInfo.srcAccessMask = vk::AccessFlagBits2::eTransferWrite;
+        aabbIndexBarrierInfo.dstAccessMask = vk::AccessFlagBits2::eIndexRead;
+        aabbIndexBarrierInfo.srcStageMask = vk::PipelineStageFlagBits2::eTransfer;
+        aabbIndexBarrierInfo.dstStageMask = vk::PipelineStageFlagBits2::eVertexInput;
         aabbIndexBarrierInfo.size = m_aabbIndices.size() * sizeof(uint32_t);
         aabbIndexBarrierInfo.offset = m_aabbIndicesOffset;
         cmd->BufferBarrier(aabbIndexBarrierInfo);
@@ -151,12 +151,12 @@ namespace pe
             verticesCount += model.m_vertices.size();
         }
 
-        BufferBarrierInfo vertexBarrierInfo{};
-        vertexBarrierInfo.buffer = m_buffer;
-        vertexBarrierInfo.srcAccess = Access::TransferWriteBit;
-        vertexBarrierInfo.dstAccess = Access::VertexAttributeReadBit;
-        vertexBarrierInfo.srcStage = PipelineStage::TransferBit;
-        vertexBarrierInfo.dstStage = PipelineStage::VertexInputBit;
+        vk::BufferMemoryBarrier2 vertexBarrierInfo{};
+        vertexBarrierInfo.buffer = m_buffer->ApiHandle();
+        vertexBarrierInfo.srcAccessMask = vk::AccessFlagBits2::eTransferWrite;
+        vertexBarrierInfo.dstAccessMask = vk::AccessFlagBits2::eVertexAttributeRead;
+        vertexBarrierInfo.srcStageMask = vk::PipelineStageFlagBits2::eTransfer;
+        vertexBarrierInfo.dstStageMask = vk::PipelineStageFlagBits2::eVertexInput;
         vertexBarrierInfo.size = verticesCount * sizeof(Vertex);
         vertexBarrierInfo.offset = m_verticesOffset;
         cmd->BufferBarrier(vertexBarrierInfo);
@@ -179,12 +179,12 @@ namespace pe
             positionsCount += model.m_positionUvs.size();
         }
 
-        BufferBarrierInfo posVertexBarrierInfo{};
-        posVertexBarrierInfo.buffer = m_buffer;
-        posVertexBarrierInfo.srcAccess = Access::TransferWriteBit;
-        posVertexBarrierInfo.dstAccess = Access::VertexAttributeReadBit;
-        posVertexBarrierInfo.srcStage = PipelineStage::TransferBit;
-        posVertexBarrierInfo.dstStage = PipelineStage::VertexInputBit;
+        vk::BufferMemoryBarrier2 posVertexBarrierInfo{};
+        posVertexBarrierInfo.buffer = m_buffer->ApiHandle();
+        posVertexBarrierInfo.srcAccessMask = vk::AccessFlagBits2::eTransferWrite;
+        posVertexBarrierInfo.dstAccessMask = vk::AccessFlagBits2::eVertexAttributeRead;
+        posVertexBarrierInfo.srcStageMask = vk::PipelineStageFlagBits2::eTransfer;
+        posVertexBarrierInfo.dstStageMask = vk::PipelineStageFlagBits2::eVertexInput;
         posVertexBarrierInfo.size = positionsCount * sizeof(PositionUvVertex);
         posVertexBarrierInfo.offset = m_positionsOffset;
         cmd->BufferBarrier(posVertexBarrierInfo);
@@ -207,12 +207,12 @@ namespace pe
             aabbCount += model.m_aabbVertices.size();
         }
 
-        BufferBarrierInfo aabbVertexBarrierInfo{};
-        aabbVertexBarrierInfo.buffer = m_buffer;
-        aabbVertexBarrierInfo.srcAccess = Access::TransferWriteBit;
-        aabbVertexBarrierInfo.dstAccess = Access::VertexAttributeReadBit;
-        aabbVertexBarrierInfo.srcStage = PipelineStage::TransferBit;
-        aabbVertexBarrierInfo.dstStage = PipelineStage::VertexInputBit;
+        vk::BufferMemoryBarrier2 aabbVertexBarrierInfo{};
+        aabbVertexBarrierInfo.buffer = m_buffer->ApiHandle();
+        aabbVertexBarrierInfo.srcAccessMask = vk::AccessFlagBits2::eTransferWrite;
+        aabbVertexBarrierInfo.dstAccessMask = vk::AccessFlagBits2::eVertexAttributeRead;
+        aabbVertexBarrierInfo.srcStageMask = vk::PipelineStageFlagBits2::eTransfer;
+        aabbVertexBarrierInfo.dstStageMask = vk::PipelineStageFlagBits2::eVertexInput;
         aabbVertexBarrierInfo.size = aabbCount * sizeof(AabbVertex);
         aabbVertexBarrierInfo.offset = m_aabbVerticesOffset;
         cmd->BufferBarrier(aabbVertexBarrierInfo);
@@ -247,8 +247,8 @@ namespace pe
         {
             m_storage[i] = Buffer::Create(
                 storageSize,
-                BufferUsage::StorageBufferBit,
-                AllocationCreate::HostAccessSequentialWriteBit,
+                vk::BufferUsageFlagBits2::eStorageBuffer,
+                VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT,
                 "storage_Geometry_buffer_" + std::to_string(i));
         }
     }
@@ -290,17 +290,17 @@ namespace pe
 
         m_indirectAll = Buffer::Create(
             indirectCount * sizeof(DrawIndexedIndirectCommand),
-            BufferUsage::IndirectBufferBit | BufferUsage::TransferDstBit,
-            AllocationCreate::DedicatedMemoryBit,
+            vk::BufferUsageFlagBits2::eIndirectBuffer | vk::BufferUsageFlagBits2::eTransferDst,
+            VMA_ALLOCATION_CREATE_DEDICATED_MEMORY_BIT,
             "indirect_Geometry_buffer_all");
         cmd->CopyBufferStaged(m_indirectAll, m_indirectCommands.data(), m_indirectCommands.size() * sizeof(DrawIndexedIndirectCommand), 0);
 
-        BufferBarrierInfo indirectBarrierInfo{};
-        indirectBarrierInfo.buffer = m_indirectAll;
-        indirectBarrierInfo.srcAccess = Access::TransferWriteBit;
-        indirectBarrierInfo.dstAccess = Access::IndirectCommandReadBit;
-        indirectBarrierInfo.srcStage = PipelineStage::TransferBit;
-        indirectBarrierInfo.dstStage = PipelineStage::DrawIndirectBit;
+        vk::BufferMemoryBarrier2 indirectBarrierInfo{};
+        indirectBarrierInfo.buffer = m_indirectAll->ApiHandle();
+        indirectBarrierInfo.srcAccessMask = vk::AccessFlagBits2::eTransferWrite;
+        indirectBarrierInfo.dstAccessMask = vk::AccessFlagBits2::eIndirectCommandRead;
+        indirectBarrierInfo.srcStageMask = vk::PipelineStageFlagBits2::eTransfer;
+        indirectBarrierInfo.dstStageMask = vk::PipelineStageFlagBits2::eDrawIndirect;
         indirectBarrierInfo.size = indirectCount * sizeof(DrawIndexedIndirectCommand);
         indirectBarrierInfo.offset = 0;
         cmd->BufferBarrier(indirectBarrierInfo);
@@ -309,8 +309,8 @@ namespace pe
         {
             m_indirect[i] = Buffer::Create(
                 indirectCount * sizeof(DrawIndexedIndirectCommand),
-                BufferUsage::IndirectBufferBit | BufferUsage::TransferDstBit,
-                AllocationCreate::HostAccessSequentialWriteBit,
+                vk::BufferUsageFlagBits2::eIndirectBuffer | vk::BufferUsageFlagBits2::eTransferDst,
+                VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT,
                 "indirect_Geometry_buffer_" + std::to_string(i));
         }
     }
@@ -359,8 +359,8 @@ namespace pe
         GbufferTransparentPass *gbt = GetGlobalComponent<GbufferTransparentPass>();
         gbo->m_constants = Buffer::Create(
             m_primitivesCount * sizeof(Primitive_Constants),
-            BufferUsage::StorageBufferBit | BufferUsage::TransferDstBit,
-            AllocationCreate::HostAccessSequentialWriteBit,
+            vk::BufferUsageFlagBits2::eStorageBuffer | vk::BufferUsageFlagBits2::eTransferDst,
+            VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT,
             "GbufferPass_constants");
         gbt->m_constants = gbo->m_constants;
 

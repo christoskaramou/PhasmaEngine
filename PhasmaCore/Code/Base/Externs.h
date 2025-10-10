@@ -14,13 +14,13 @@ namespace pe
     extern size_t EventAfterCommandWait;
     // ---------------------------------
 
-    extern bool IsDepthStencil(Format format);
-    extern bool IsDepthOnly(Format format);
-    extern bool IsStencilOnly(Format format);
-    extern bool HasDepth(Format format);
-    extern bool HasStencil(Format format);
-    extern ImageAspectFlags GetAspectMask(Format format);
-    extern const char *PresentModeToString(PresentMode presentMode);
+    extern bool IsDepthStencil(vk::Format format);
+    extern bool IsDepthOnly(vk::Format format);
+    extern bool IsStencilOnly(vk::Format format);
+    extern bool HasDepth(vk::Format format);
+    extern bool HasStencil(vk::Format format);
+    extern vk::ImageAspectFlags GetAspectMask(vk::Format format);
+    extern const char *PresentModeToString(vk::PresentModeKHR presentMode);
 
     extern ThreadPool e_ThreadPool;
     extern ThreadPool e_Update_ThreadPool;

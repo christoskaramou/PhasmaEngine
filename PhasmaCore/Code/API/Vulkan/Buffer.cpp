@@ -5,44 +5,43 @@
 
 namespace pe
 {
-    Buffer::Buffer(size_t size, BufferUsageFlags usage, AllocationCreateFlags createFlags, const std::string &name)
+    Buffer::Buffer(size_t size, vk::BufferUsageFlags2 usage, VmaAllocationCreateFlags createFlags, const std::string &name)
         : m_size{size},
           m_usage{usage},
-          m_name{name}
+          m_name{name},
+          m_data{nullptr}
 
     {
-        if (m_usage & BufferUsage::UniformBufferBit)
+        if (m_usage & vk::BufferUsageFlagBits2::eUniformBuffer)
         {
             m_size = RHII.AlignUniform(m_size);
             PE_ERROR_IF(m_size > RHII.GetMaxUniformBufferSize(), "Uniform buffer size is too big");
         }
-        if (m_usage & BufferUsage::StorageBufferBit)
+        if (m_usage & vk::BufferUsageFlagBits2::eStorageBuffer)
         {
             m_size = RHII.AlignStorage(m_size);
             PE_ERROR_IF(m_size > RHII.GetMaxStorageBufferSize(), "Storage buffer size is too big");
         }
-        if (m_usage & BufferUsage::IndirectBufferBit)
+        if (m_usage & vk::BufferUsageFlagBits2::eIndirectBuffer)
         {
             PE_ERROR_IF(m_size > RHII.GetMaxDrawIndirectCount() * sizeof(VkDrawIndexedIndirectCommand), "Indirect command buffer size is too big");
         }
 
-        VkBufferCreateInfo bufferInfo{};
-        bufferInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
+        vk::BufferUsageFlags2CreateInfo flags2{};
+        flags2.usage = m_usage;
+
+        vk::BufferCreateInfo bufferInfo{};
+        bufferInfo.pNext = &flags2;
         bufferInfo.size = m_size;
-        bufferInfo.usage = Translate<VkBufferUsageFlags>(m_usage);
-        bufferInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+        bufferInfo.sharingMode = vk::SharingMode::eExclusive;
 
         VmaAllocationCreateInfo allocationCreateInfo{};
         allocationCreateInfo.usage = VMA_MEMORY_USAGE_AUTO;
-        allocationCreateInfo.flags = Translate<VmaAllocationCreateFlags>(createFlags);
+        allocationCreateInfo.flags = createFlags;
 
-        VkBuffer bufferVK;
-        VmaAllocation allocationVK;
-        VmaAllocationInfo allocationInfo;
-        PE_CHECK(vmaCreateBuffer(RHII.GetAllocator(), &bufferInfo, &allocationCreateInfo, &bufferVK, &allocationVK, &allocationInfo));
-        m_apiHandle = bufferVK;
-        m_allocation = allocationVK;
-        m_data = allocationVK->GetMappedData(); // for persistently mapped buffers created with the MappedBit flag
+        VkBuffer vkBuffer = {};
+        PE_CHECK(vmaCreateBuffer(RHII.GetAllocator(), reinterpret_cast<const VkBufferCreateInfo *>(&bufferInfo), &allocationCreateInfo, &vkBuffer, &m_allocation, &m_allocationInfo));
+        m_apiHandle = vkBuffer;
 
         Debug::SetObjectName(m_apiHandle, m_name);
     }
@@ -54,7 +53,7 @@ namespace pe
         if (m_apiHandle)
         {
             vmaDestroyBuffer(RHII.GetAllocator(), m_apiHandle, m_allocation);
-            m_apiHandle = {};
+            m_apiHandle = nullptr;
         }
     }
 
@@ -111,8 +110,8 @@ namespace pe
         // Staging buffer
         Buffer *staging = Buffer::Create(
             size,
-            BufferUsage::TransferSrcBit,
-            AllocationCreate::HostAccessSequentialWriteBit,
+            vk::BufferUsageFlagBits2::eTransferSrc,
+            VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT,
             "staging_buffer");
 
         // Copy data to staging buffer
@@ -152,65 +151,46 @@ namespace pe
         PE_ERROR_IF(size + srcOffset > src->Size(), "Buffer::CopyBuffer: Source size is too big");
         PE_ERROR_IF(size + dstOffset > m_size, "Buffer::CopyBuffer: Destination size is too small");
 
-        VkBufferCopy region{};
+        vk::BufferCopy2 region{};
         region.srcOffset = srcOffset;
         region.dstOffset = dstOffset;
         region.size = size;
 
-        vkCmdCopyBuffer(cmd->ApiHandle(), src->ApiHandle(), ApiHandle(), 1, &region);
+        vk::CopyBufferInfo2 copyInfo{};
+        copyInfo.srcBuffer = src->ApiHandle();
+        copyInfo.dstBuffer = ApiHandle();
+        copyInfo.regionCount = 1;
+        copyInfo.pRegions = &region;
+
+        cmd->ApiHandle().copyBuffer2(copyInfo);
     }
 
-    void Buffer::Barrier(CommandBuffer *cmd, const BufferBarrierInfo &info)
+    void Buffer::Barrier(CommandBuffer *cmd, const vk::BufferMemoryBarrier2 &info)
     {
         PE_ERROR_IF(!info.buffer, "Buffer::Barrier: no buffer specified");
 
-        VkBufferMemoryBarrier2 barrier = {};
-        barrier.sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER_2;
-        barrier.srcStageMask = Translate<VkPipelineStageFlags2>(info.srcStage);
-        barrier.dstStageMask = Translate<VkPipelineStageFlags2>(info.dstStage);
-        barrier.srcAccessMask = Translate<VkAccessFlags2>(info.srcAccess);
-        barrier.dstAccessMask = Translate<VkAccessFlags2>(info.dstAccess);
-        barrier.buffer = info.buffer->m_apiHandle;
-        barrier.offset = info.offset;
-        barrier.size = info.size ? info.size : VK_WHOLE_SIZE;
-
-        VkDependencyInfoKHR dependencyInfo = {};
-        dependencyInfo.sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO_KHR;
+        vk::DependencyInfo dependencyInfo = {};
         dependencyInfo.bufferMemoryBarrierCount = 1;
-        dependencyInfo.pBufferMemoryBarriers = &barrier;
+        dependencyInfo.pBufferMemoryBarriers = &info;
 
-        vkCmdPipelineBarrier2(cmd->ApiHandle(), &dependencyInfo);
+        cmd->ApiHandle().pipelineBarrier2(dependencyInfo);
     }
 
-    void Buffer::Barriers(CommandBuffer *cmd, const std::vector<BufferBarrierInfo> &infos)
+    void Buffer::Barriers(CommandBuffer *cmd, const std::vector<vk::BufferMemoryBarrier2> &infos)
     {
         if (infos.empty())
             return;
 
-        std::vector<VkBufferMemoryBarrier2> barriers;
-        barriers.reserve(infos.size());
         for (const auto &info : infos)
         {
             PE_ERROR_IF(!info.buffer, "Buffer::Barriers: no buffer specified");
-
-            VkBufferMemoryBarrier2 barrier = {};
-            barrier.sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER;
-            barrier.srcStageMask = Translate<VkPipelineStageFlags2>(info.srcStage);
-            barrier.dstStageMask = Translate<VkPipelineStageFlags2>(info.dstStage);
-            barrier.srcAccessMask = Translate<VkAccessFlags2>(info.srcAccess);
-            barrier.dstAccessMask = Translate<VkAccessFlags2>(info.dstAccess);
-            barrier.buffer = info.buffer->m_apiHandle;
-            barrier.offset = info.offset;
-            barrier.size = info.size ? info.size : VK_WHOLE_SIZE;
-            barriers.push_back(barrier);
         }
 
-        VkDependencyInfoKHR dependencyInfo = {};
-        dependencyInfo.sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO_KHR;
-        dependencyInfo.bufferMemoryBarrierCount = static_cast<uint32_t>(barriers.size());
-        dependencyInfo.pBufferMemoryBarriers = barriers.data();
+        vk::DependencyInfo dependencyInfo = {};
+        dependencyInfo.bufferMemoryBarrierCount = static_cast<uint32_t>(infos.size());
+        dependencyInfo.pBufferMemoryBarriers = infos.data();
 
-        vkCmdPipelineBarrier2(cmd->ApiHandle(), &dependencyInfo);
+        cmd->ApiHandle().pipelineBarrier2(dependencyInfo);
     }
 }
 #endif

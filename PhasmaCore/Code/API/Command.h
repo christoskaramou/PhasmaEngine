@@ -17,7 +17,6 @@ namespace pe
     class Event;
     class CommandPool;
     struct ImageBarrierInfo;
-    struct BufferBarrierInfo;
 
     template <class T>
     inline uint32_t GetUboDataOffset(T offset)
@@ -32,50 +31,24 @@ namespace pe
     struct Attachment
     {
         Image *image = nullptr;
-        AttachmentLoadOp loadOp = AttachmentLoadOp::Clear;
-        AttachmentStoreOp storeOp = AttachmentStoreOp::Store;
-        AttachmentLoadOp stencilLoadOp = AttachmentLoadOp::DontCare;
-        AttachmentStoreOp stencilStoreOp = AttachmentStoreOp::DontCare;
-    };
-
-    struct ImageSubresourceLayers
-    {
-        ImageAspectFlags aspectMask;
-        uint32_t mipLevel;
-        uint32_t baseArrayLayer;
-        uint32_t layerCount;
-    };
-
-    struct ImageBlit
-    {
-        ImageSubresourceLayers srcSubresource;
-        Offset3D srcOffsets[2];
-        ImageSubresourceLayers dstSubresource;
-        Offset3D dstOffsets[2];
-    };
-
-    struct MemoryBarrierInfo : public BarrierInfo
-    {
-        MemoryBarrierInfo() { type = BarrierType::Memory; }
-
-        PipelineStageFlags srcStageMask = PipelineStage::None;
-        PipelineStageFlags dstStageMask = PipelineStage::None;
-        AccessFlags srcAccessMask = Access::None;
-        AccessFlags dstAccessMask = Access::None;
+        vk::AttachmentLoadOp loadOp = vk::AttachmentLoadOp::eClear;
+        vk::AttachmentStoreOp storeOp = vk::AttachmentStoreOp::eStore;
+        vk::AttachmentLoadOp stencilLoadOp = vk::AttachmentLoadOp::eDontCare;
+        vk::AttachmentStoreOp stencilStoreOp = vk::AttachmentStoreOp::eDontCare;
     };
 
     struct PushDescriptorInfo
     {
-        DescriptorType type = DescriptorType::CombinedImageSampler;
+        vk::DescriptorType type = vk::DescriptorType::eCombinedImageSampler;
         uint32_t binding = (uint32_t)-1;
 
         std::vector<Buffer *> buffers{};
         std::vector<size_t> offsets{};
         std::vector<size_t> ranges{}; // range of the buffers in bytes to use
 
-        std::vector<ImageLayout> layouts{};
-        std::vector<ImageViewApiHandle> views{};
-        std::vector<SamplerApiHandle> samplers{}; // if type == DescriptorType::CombinedImageSampler, these are the samplers for each view
+        std::vector<vk::ImageLayout> layouts{};
+        std::vector<vk::ImageView> views{};
+        std::vector<vk::Sampler> samplers{}; // if type == DescriptorType::CombinedImageSampler, these are the samplers for each view
     };
 
     template <uint16_t N>
@@ -99,7 +72,7 @@ namespace pe
         uint8_t m_data[N];
     };
 
-    class CommandBuffer : public PeHandle<CommandBuffer, CommandBufferApiHandle>
+    class CommandBuffer : public PeHandle<CommandBuffer, vk::CommandBuffer>
     {
     public:
         CommandBuffer(CommandPool *commandPool, const std::string &name);
@@ -108,7 +81,7 @@ namespace pe
         void Begin();
         void End();
         void Reset();
-        void BlitImage(Image *src, Image *dst, ImageBlit *region, Filter filter);
+        void BlitImage(Image *src, Image *dst, const vk::ImageBlit &region, vk::Filter filter);
         void ClearColors(std::vector<Image *> images);
         void ClearDepthStencils(std::vector<Image *> images);
         void BeginPass(uint32_t count, Attachment *attachments, const std::string &name, bool skipDynamicPass = false);
@@ -134,12 +107,12 @@ namespace pe
         void DrawIndexed(uint32_t indexCount, uint32_t instanceCount, uint32_t firstIndex, int32_t vertexOffset, uint32_t firstInstance);
         void DrawIndirect(Buffer *indirectBuffer, size_t offset, uint32_t drawCount, uint32_t stride);
         void DrawIndexedIndirect(Buffer *indirectBuffer, size_t offset, uint32_t drawCount, uint32_t stride);
-        void BufferBarrier(const BufferBarrierInfo &info);
-        void BufferBarriers(const std::vector<BufferBarrierInfo> &infos);
+        void BufferBarrier(const vk::BufferMemoryBarrier2 &info);
+        void BufferBarriers(const std::vector<vk::BufferMemoryBarrier2> &infos);
         void ImageBarrier(const ImageBarrierInfo &info);
         void ImageBarriers(const std::vector<ImageBarrierInfo> &infos);
-        void MemoryBarrier(const MemoryBarrierInfo &info);
-        void MemoryBarriers(const std::vector<MemoryBarrierInfo> &infos);
+        void MemoryBarrier(const vk::MemoryBarrier2 &info);
+        void MemoryBarriers(const std::vector<vk::MemoryBarrier2> &infos);
         void CopyBuffer(Buffer *src, Buffer *dst, const size_t size, size_t srcOffset, size_t dstOffset);
         void CopyBufferStaged(Buffer *buffer, void *data, size_t size, size_t dtsOffset);
         void CopyDataToImageStaged(Image *image,
@@ -151,11 +124,11 @@ namespace pe
         void CopyImage(Image *src, Image *dst);
         void GenerateMipMaps(Image *image);
         void SetEvent(Image *image,
-                      ImageLayout scrLayout, ImageLayout dstLayout,
-                      PipelineStageFlags srcStage, PipelineStageFlags dstStage,
-                      AccessFlags srcAccess, AccessFlags dstAccess);
+                      vk::ImageLayout srcLayout, vk::ImageLayout dstLayout,
+                      vk::PipelineStageFlags2 srcStage, vk::PipelineStageFlags2 dstStage,
+                      vk::AccessFlags2 srcAccess, vk::AccessFlags2 dstAccess);
         void WaitEvent();
-        void ResetEvent(PipelineStageFlags resetStage);
+        void ResetEvent(vk::PipelineStageFlags2 resetStage);
         bool IsRecording() const { return m_recording; }
         void BeginDebugRegion(const std::string &name);
         void InsertDebugLabel(const std::string &name);

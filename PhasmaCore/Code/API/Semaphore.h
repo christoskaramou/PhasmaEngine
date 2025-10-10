@@ -2,7 +2,7 @@
 
 namespace pe
 {
-    class Semaphore : public PeHandle<Semaphore, SemaphoreApiHandle>
+    class Semaphore : public PeHandle<Semaphore, vk::Semaphore>
     {
     public:
         Semaphore(bool timeline, const std::string &name);
@@ -12,12 +12,12 @@ namespace pe
         void Wait(uint64_t value);
         void Signal(uint64_t value);
         uint64_t GetValue();
-        void SetStageFlags(PipelineStageFlags flags) { m_stageFlags = flags; }
-        void AddStageFlags(PipelineStageFlags flags) { m_stageFlags |= flags; }
-        PipelineStageFlags GetStageFlags() { return m_stageFlags; }
+        void SetStageFlags(vk::PipelineStageFlags2 flags) { m_stageFlags = flags; }
+        void AddStageFlags(vk::PipelineStageFlags2 flags) { m_stageFlags |= flags; }
+        vk::PipelineStageFlags2 GetStageFlags() { return m_stageFlags; }
 
     private:
         const bool m_timeline;
-        PipelineStageFlags m_stageFlags;
+        vk::PipelineStageFlags2 m_stageFlags;
     };
 }

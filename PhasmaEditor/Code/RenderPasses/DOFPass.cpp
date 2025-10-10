@@ -32,10 +32,10 @@ namespace pe
     void DOFPass::UpdatePassInfo()
     {
         m_passInfo->name = "dof_pipeline";
-        m_passInfo->pVertShader = Shader::Create(Path::Executable + "Assets/Shaders/Common/Quad.hlsl", ShaderStage::VertexBit, "mainVS", std::vector<Define>{}, ShaderCodeType::HLSL);
-        m_passInfo->pFragShader = Shader::Create(Path::Executable + "Assets/Shaders/DepthOfField/DOFPS.hlsl", ShaderStage::FragmentBit, "mainPS", std::vector<Define>{}, ShaderCodeType::HLSL);
-        m_passInfo->dynamicStates = {DynamicState::Viewport, DynamicState::Scissor};
-        m_passInfo->cullMode = CullMode::Back;
+        m_passInfo->pVertShader = Shader::Create(Path::Executable + "Assets/Shaders/Common/Quad.hlsl", vk::ShaderStageFlagBits::eVertex, "mainVS", std::vector<Define>{}, ShaderCodeType::HLSL);
+        m_passInfo->pFragShader = Shader::Create(Path::Executable + "Assets/Shaders/DepthOfField/DOFPS.hlsl", vk::ShaderStageFlagBits::eFragment, "mainPS", std::vector<Define>{}, ShaderCodeType::HLSL);
+        m_passInfo->dynamicStates = {vk::DynamicState::eViewport, vk::DynamicState::eScissor};
+        m_passInfo->cullMode = vk::CullModeFlagBits::eBack;
         m_passInfo->colorBlendAttachments = {PipelineColorBlendAttachmentState::Default};
         m_passInfo->colorFormats = {m_displayRT->GetFormat()};
         m_passInfo->ReflectDescriptors();
@@ -64,14 +64,14 @@ namespace pe
         std::vector<ImageBarrierInfo> barriers(2);
 
         barriers[0].image = m_frameImage;
-        barriers[0].layout = ImageLayout::ShaderReadOnly;
-        barriers[0].stageFlags = PipelineStage::FragmentShaderBit;
-        barriers[0].accessMask = Access::ShaderReadBit;
+        barriers[0].layout = vk::ImageLayout::eShaderReadOnlyOptimal;
+        barriers[0].stageFlags = vk::PipelineStageFlagBits2::eFragmentShader;
+        barriers[0].accessMask = vk::AccessFlagBits2::eShaderRead;
 
         barriers[1].image = m_depth;
-        barriers[1].layout = ImageLayout::ShaderReadOnly;
-        barriers[1].stageFlags = PipelineStage::FragmentShaderBit;
-        barriers[1].accessMask = Access::ShaderReadBit;
+        barriers[1].layout = vk::ImageLayout::eShaderReadOnlyOptimal;
+        barriers[1].stageFlags = vk::PipelineStageFlagBits2::eFragmentShader;
+        barriers[1].accessMask = vk::AccessFlagBits2::eShaderRead;
 
         cmd->BeginDebugRegion("DOFPass");
         cmd->CopyImage(m_displayRT, m_frameImage); // Copy RT to image

@@ -71,7 +71,7 @@ namespace pe
     };
 
     class CommandBuffer;
-    class GpuTimer : public PeHandle<GpuTimer, QueryPoolApiHandle>
+    class GpuTimer : public PeHandle<GpuTimer, vk::QueryPool>
     {
     public:
         GpuTimer(const std::string &name);

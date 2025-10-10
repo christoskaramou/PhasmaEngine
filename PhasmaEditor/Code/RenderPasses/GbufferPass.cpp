@@ -42,14 +42,14 @@ namespace pe
         m_attachments[5].image = m_transparencyRT;
 
         m_attachments[6].image = m_depthStencilRT;
-        m_attachments[6].loadOp = AttachmentLoadOp::Load;
+        m_attachments[6].loadOp = vk::AttachmentLoadOp::eLoad;
 
         m_geometry = nullptr;
     }
 
     void GbufferOpaquePass::UpdatePassInfo()
     {
-        std::vector<Format> colorformats{
+        std::vector<vk::Format> colorformats{
             m_normalRT->GetFormat(),
             m_albedoRT->GetFormat(),
             m_srmRT->GetFormat(),
@@ -57,13 +57,13 @@ namespace pe
             m_emissiveRT->GetFormat(),
             m_transparencyRT->GetFormat()};
 
-        Format depthFormat = RHII.GetDepthFormat();
+        vk::Format depthFormat = RHII.GetDepthFormat();
 
         m_passInfo->name = "gbuffer_opaque_pipeline";
-        m_passInfo->pVertShader = Shader::Create(Path::Executable + "Assets/Shaders/Gbuffer/GBufferVS.hlsl", ShaderStage::VertexBit, "mainVS", std::vector<Define>{}, ShaderCodeType::HLSL);
-        m_passInfo->pFragShader = Shader::Create(Path::Executable + "Assets/Shaders/Gbuffer/GBufferPS.hlsl", ShaderStage::FragmentBit, "mainPS", std::vector<Define>{}, ShaderCodeType::HLSL);
-        m_passInfo->dynamicStates = {DynamicState::Viewport, DynamicState::Scissor};
-        m_passInfo->cullMode = CullMode::Front;
+        m_passInfo->pVertShader = Shader::Create(Path::Executable + "Assets/Shaders/Gbuffer/GBufferVS.hlsl", vk::ShaderStageFlagBits::eVertex, "mainVS", std::vector<Define>{}, ShaderCodeType::HLSL);
+        m_passInfo->pFragShader = Shader::Create(Path::Executable + "Assets/Shaders/Gbuffer/GBufferPS.hlsl", vk::ShaderStageFlagBits::eFragment, "mainPS", std::vector<Define>{}, ShaderCodeType::HLSL);
+        m_passInfo->dynamicStates = {vk::DynamicState::eViewport, vk::DynamicState::eScissor};
+        m_passInfo->cullMode = vk::CullModeFlagBits::eFront;
         m_passInfo->blendEnable = false;
         m_passInfo->colorBlendAttachments = {
             PipelineColorBlendAttachmentState::Default,
@@ -74,7 +74,7 @@ namespace pe
             PipelineColorBlendAttachmentState::Default};
         m_passInfo->colorFormats = colorformats;
         m_passInfo->depthFormat = depthFormat;
-        m_passInfo->depthCompareOp = CompareOp::Equal; // we use depth prepass for opaque
+        m_passInfo->depthCompareOp = vk::CompareOp::eEqual; // we use depth prepass for opaque
         m_passInfo->depthTestEnable = true;
         m_passInfo->depthWriteEnable = false;
         m_passInfo->ReflectDescriptors();
@@ -163,7 +163,7 @@ namespace pe
         for (int i = 0; i < 7; i++)
         {
             m_attachments[i] = {};
-            m_attachments[i].loadOp = AttachmentLoadOp::Load;
+            m_attachments[i].loadOp = vk::AttachmentLoadOp::eLoad;
         }
         m_attachments[0].image = m_normalRT;
         m_attachments[1].image = m_albedoRT;
@@ -178,7 +178,7 @@ namespace pe
 
     void GbufferTransparentPass::UpdatePassInfo()
     {
-        std::vector<Format> colorformats{
+        std::vector<vk::Format> colorformats{
             m_normalRT->GetFormat(),
             m_albedoRT->GetFormat(),
             m_srmRT->GetFormat(),
@@ -186,13 +186,13 @@ namespace pe
             m_emissiveRT->GetFormat(),
             m_transparencyRT->GetFormat()};
 
-        Format depthFormat = RHII.GetDepthFormat();
+        vk::Format depthFormat = RHII.GetDepthFormat();
 
         m_passInfo->name = "gbuffer_transparent_pipeline";
-        m_passInfo->pVertShader = Shader::Create(Path::Executable + "Assets/Shaders/Gbuffer/GBufferVS.hlsl", ShaderStage::VertexBit, "mainVS", std::vector<Define>{}, ShaderCodeType::HLSL);
-        m_passInfo->pFragShader = Shader::Create(Path::Executable + "Assets/Shaders/Gbuffer/GBufferPS.hlsl", ShaderStage::FragmentBit, "mainPS", std::vector<Define>{}, ShaderCodeType::HLSL);
-        m_passInfo->dynamicStates = {DynamicState::Viewport, DynamicState::Scissor};
-        m_passInfo->cullMode = CullMode::Front;
+        m_passInfo->pVertShader = Shader::Create(Path::Executable + "Assets/Shaders/Gbuffer/GBufferVS.hlsl", vk::ShaderStageFlagBits::eVertex, "mainVS", std::vector<Define>{}, ShaderCodeType::HLSL);
+        m_passInfo->pFragShader = Shader::Create(Path::Executable + "Assets/Shaders/Gbuffer/GBufferPS.hlsl", vk::ShaderStageFlagBits::eFragment, "mainPS", std::vector<Define>{}, ShaderCodeType::HLSL);
+        m_passInfo->dynamicStates = {vk::DynamicState::eViewport, vk::DynamicState::eScissor};
+        m_passInfo->cullMode = vk::CullModeFlagBits::eFront;
         m_passInfo->blendEnable = true;
         m_passInfo->colorBlendAttachments = {
             PipelineColorBlendAttachmentState::Default,
@@ -203,7 +203,7 @@ namespace pe
             PipelineColorBlendAttachmentState::Default};
         m_passInfo->colorFormats = colorformats;
         m_passInfo->depthFormat = depthFormat;
-        m_passInfo->depthCompareOp = Settings::Get<GlobalSettings>().reverse_depth ? CompareOp::GreaterOrEqual : CompareOp::LessOrEqual;
+        m_passInfo->depthCompareOp = Settings::Get<GlobalSettings>().reverse_depth ? vk::CompareOp::eGreaterOrEqual : vk::CompareOp::eLessOrEqual;
         m_passInfo->depthTestEnable = true;
         m_passInfo->depthWriteEnable = true;
         m_passInfo->ReflectDescriptors();

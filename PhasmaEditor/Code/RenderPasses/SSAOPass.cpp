@@ -102,25 +102,25 @@ namespace pe
 
     void SSAOPass::Draw(CommandBuffer *cmd)
     {
-        MemoryBarrierInfo barrier{};
-        barrier.srcAccessMask = Access::ShaderWriteBit;
-        barrier.dstAccessMask = Access::None;
-        barrier.srcStageMask = PipelineStage::ComputeShaderBit;
-        barrier.dstStageMask = PipelineStage::AllCommandsBit;
+        vk::MemoryBarrier2 barrier{};
+        barrier.srcAccessMask = vk::AccessFlagBits2::eShaderWrite;
+        barrier.dstAccessMask = vk::AccessFlagBits2::eNone;
+        barrier.srcStageMask = vk::PipelineStageFlagBits2::eComputeShader;
+        barrier.dstStageMask = vk::PipelineStageFlagBits2::eAllCommands;
 
         std::vector<ImageBarrierInfo> barriers(3);
         barriers[0].image = m_normalRT;
-        barriers[0].layout = ImageLayout::ShaderReadOnly;
-        barriers[0].stageFlags = PipelineStage::ComputeShaderBit;
-        barriers[0].accessMask = Access::ShaderSampledReadBit;
+        barriers[0].layout = vk::ImageLayout::eShaderReadOnlyOptimal;
+        barriers[0].stageFlags = vk::PipelineStageFlagBits2::eComputeShader;
+        barriers[0].accessMask = vk::AccessFlagBits2::eShaderSampledRead;
         barriers[1].image = m_depth;
-        barriers[1].layout = ImageLayout::ShaderReadOnly;
-        barriers[1].stageFlags = PipelineStage::ComputeShaderBit;
-        barriers[1].accessMask = Access::ShaderSampledReadBit;
+        barriers[1].layout = vk::ImageLayout::eShaderReadOnlyOptimal;
+        barriers[1].stageFlags = vk::PipelineStageFlagBits2::eComputeShader;
+        barriers[1].accessMask = vk::AccessFlagBits2::eShaderSampledRead;
         barriers[2].image = m_ssaoRT;
-        barriers[2].layout = ImageLayout::General;
-        barriers[2].stageFlags = PipelineStage::ComputeShaderBit;
-        barriers[2].accessMask = Access::ShaderWriteBit;
+        barriers[2].layout = vk::ImageLayout::eGeneral;
+        barriers[2].stageFlags = vk::PipelineStageFlagBits2::eComputeShader;
+        barriers[2].accessMask = vk::AccessFlagBits2::eShaderWrite;
 
         cmd->BeginDebugRegion("SSAOPass");
         cmd->MemoryBarrier(barrier);
@@ -133,9 +133,9 @@ namespace pe
         // image barrier transition happens in draw, so set to correct layout
         ImageBarrierInfo ssaoInfo{};
         ssaoInfo.image = m_ssaoRT;
-        ssaoInfo.layout = ImageLayout::ShaderReadOnly;
-        ssaoInfo.stageFlags = PipelineStage::ComputeShaderBit;
-        ssaoInfo.accessMask = Access::ShaderReadBit;
+        ssaoInfo.layout = vk::ImageLayout::eShaderReadOnlyOptimal;
+        ssaoInfo.stageFlags = vk::PipelineStageFlagBits2::eComputeShader;
+        ssaoInfo.accessMask = vk::AccessFlagBits2::eShaderRead;
         m_ssaoRT->SetCurrentInfoAll(ssaoInfo);
     }
 

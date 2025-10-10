@@ -401,13 +401,6 @@ namespace pe
         vec3 max;
     };
 
-    struct Offset3D
-    {
-        int32_t x;
-        int32_t y;
-        int32_t z;
-    };
-
     template <class T>
     class Rect2D_t
     {

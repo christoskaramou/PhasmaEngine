@@ -8,16 +8,8 @@ namespace pe
 
     struct PipelineColorBlendAttachmentState
     {
-        BlendFactor srcColorBlendFactor = BlendFactor::Zero;
-        BlendFactor dstColorBlendFactor = BlendFactor::Zero;
-        BlendOp colorBlendOp = BlendOp::Add;
-        BlendFactor srcAlphaBlendFactor = BlendFactor::Zero;
-        BlendFactor dstAlphaBlendFactor = BlendFactor::Zero;
-        BlendOp alphaBlendOp = BlendOp::Add;
-        ColorComponentFlags colorWriteMask = ColorComponent::RGBABit;
-
-        static PipelineColorBlendAttachmentState Default;
-        static PipelineColorBlendAttachmentState AdditiveColor;
+        static vk::PipelineColorBlendAttachmentState Default;
+        static vk::PipelineColorBlendAttachmentState AdditiveColor;
     };
 
     class PassInfo : public Hashable, public NoCopy
@@ -33,30 +25,30 @@ namespace pe
         Shader *pVertShader;
         Shader *pFragShader;
         Shader *pCompShader;
-        PrimitiveTopology topology;
-        PolygonMode polygonMode;
-        CullMode cullMode;
+        vk::PrimitiveTopology topology;
+        vk::PolygonMode polygonMode;
+        vk::CullModeFlags cullMode;
         float lineWidth;
         bool blendEnable;
-        std::vector<PipelineColorBlendAttachmentState> colorBlendAttachments;
-        std::vector<DynamicState> dynamicStates;
-        std::vector<Format> colorFormats;
+        std::vector<vk::PipelineColorBlendAttachmentState> colorBlendAttachments;
+        std::vector<vk::DynamicState> dynamicStates;
+        std::vector<vk::Format> colorFormats;
         // Depth
-        Format depthFormat;
+        vk::Format depthFormat;
         bool depthWriteEnable;
         bool depthTestEnable;
-        CompareOp depthCompareOp;
+        vk::CompareOp depthCompareOp;
         // Stencil
         bool stencilTestEnable;
-        StencilOp stencilFailOp;
-        StencilOp stencilPassOp;
-        StencilOp stencilDepthFailOp;
-        CompareOp stencilCompareOp;
+        vk::StencilOp stencilFailOp;
+        vk::StencilOp stencilPassOp;
+        vk::StencilOp stencilDepthFailOp;
+        vk::CompareOp stencilCompareOp;
         uint32_t stencilCompareMask;
         uint32_t stencilWriteMask;
         uint32_t stencilReference;
 
-        PipelineCacheApiHandle pipelineCache;
+        vk::PipelineCache pipelineCache;
         std::string name;
 
     private:
@@ -64,13 +56,13 @@ namespace pe
         friend class Pipeline;
         friend class Shader;
 
-        std::vector<ShaderStageFlags> m_pushConstantStages;
+        std::vector<vk::ShaderStageFlags> m_pushConstantStages;
         std::vector<uint32_t> m_pushConstantOffsets;
         std::vector<uint32_t> m_pushConstantSizes;
         std::vector<Descriptor *> m_descriptors[SWAPCHAIN_IMAGES];
     };
 
-    class Pipeline : public PeHandle<Pipeline, PipelineApiHandle>
+    class Pipeline : public PeHandle<Pipeline, vk::Pipeline>
     {
     public:
         Pipeline(RenderPass *renderPass, PassInfo &info);
@@ -80,7 +72,7 @@ namespace pe
         friend class CommandBuffer;
 
         PassInfo &m_info;
-        PipelineLayoutApiHandle m_layout;
-        PipelineCacheApiHandle m_cache;
+        vk::PipelineLayout m_layout;
+        vk::PipelineCache m_cache;
     };
 }

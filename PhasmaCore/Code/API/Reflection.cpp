@@ -226,30 +226,30 @@ namespace pe
         return ReflectionVariableType::None; // Default case
     }
 
-    static const std::unordered_map<std::pair<uint32_t, ReflectionVariableType>, Format, PairHash_um> s_attributeFormatMap = {
-        {{1, ReflectionVariableType::SInt}, {Format::R8SInt}},
-        {{1, ReflectionVariableType::UInt}, {Format::R8UInt}},
-        {{2, ReflectionVariableType::SInt}, {Format::R16SInt}},
-        {{2, ReflectionVariableType::UInt}, {Format::R16UInt}},
-        {{2, ReflectionVariableType::SFloat}, {Format::R16SFloat}},
-        {{4, ReflectionVariableType::SInt}, {Format::R32SInt}},
-        {{4, ReflectionVariableType::UInt}, {Format::R32UInt}},
-        {{4, ReflectionVariableType::SFloat}, {Format::R32SFloat}},
-        {{6, ReflectionVariableType::SInt}, {Format::RGB16SInt}},
-        {{6, ReflectionVariableType::UInt}, {Format::RGB16UInt}},
-        {{6, ReflectionVariableType::SFloat}, {Format::RGB16SFloat}},
-        {{8, ReflectionVariableType::SInt}, {Format::RG32SInt}},
-        {{8, ReflectionVariableType::UInt}, {Format::RG32UInt}},
-        {{8, ReflectionVariableType::SFloat}, {Format::RG32SFloat}},
-        {{12, ReflectionVariableType::SInt}, {Format::RGB32SInt}},
-        {{12, ReflectionVariableType::UInt}, {Format::RGB32UInt}},
-        {{12, ReflectionVariableType::SFloat}, {Format::RGB32SFloat}},
-        {{16, ReflectionVariableType::SInt}, {Format::RGBA32SInt}},
-        {{16, ReflectionVariableType::UInt}, {Format::RGBA32UInt}},
-        {{16, ReflectionVariableType::SFloat}, {Format::RGBA32SFloat}},
+    static const std::unordered_map<std::pair<uint32_t, ReflectionVariableType>, vk::Format, PairHash_um> s_attributeFormatMap = {
+        {{1, ReflectionVariableType::SInt}, {vk::Format::eR8Sint}},
+        {{1, ReflectionVariableType::UInt}, {vk::Format::eR8Uint}},
+        {{2, ReflectionVariableType::SInt}, {vk::Format::eR16Sint}},
+        {{2, ReflectionVariableType::UInt}, {vk::Format::eR16Uint}},
+        {{2, ReflectionVariableType::SFloat}, {vk::Format::eR16Sfloat}},
+        {{4, ReflectionVariableType::SInt}, {vk::Format::eR32Sint}},
+        {{4, ReflectionVariableType::UInt}, {vk::Format::eR32Uint}},
+        {{4, ReflectionVariableType::SFloat}, {vk::Format::eR32Sfloat}},
+        {{6, ReflectionVariableType::SInt}, {vk::Format::eR16G16B16Sint}},
+        {{6, ReflectionVariableType::UInt}, {vk::Format::eR16G16B16Uint}},
+        {{6, ReflectionVariableType::SFloat}, {vk::Format::eR16G16B16Sfloat}},
+        {{8, ReflectionVariableType::SInt}, {vk::Format::eR32G32Sint}},
+        {{8, ReflectionVariableType::UInt}, {vk::Format::eR32G32Uint}},
+        {{8, ReflectionVariableType::SFloat}, {vk::Format::eR32G32Sfloat}},
+        {{12, ReflectionVariableType::SInt}, {vk::Format::eR32G32B32Sint}},
+        {{12, ReflectionVariableType::UInt}, {vk::Format::eR32G32B32Uint}},
+        {{12, ReflectionVariableType::SFloat}, {vk::Format::eR32G32B32Sfloat}},
+        {{16, ReflectionVariableType::SInt}, {vk::Format::eR32G32B32A32Sint}},
+        {{16, ReflectionVariableType::UInt}, {vk::Format::eR32G32B32A32Uint}},
+        {{16, ReflectionVariableType::SFloat}, {vk::Format::eR32G32B32A32Sfloat}},
     };
 
-    Format GetAttributeFormat(const ShaderInOutDesc &input)
+    vk::Format GetAttributeFormat(const ShaderInOutDesc &input)
     {
         uint32_t size = GetTypeSize(input) * input.typeInfo.vecsize * input.typeInfo.columns;
         ReflectionVariableType type = GetReflectionVariableType(input);
@@ -261,12 +261,12 @@ namespace pe
         }
 
         PE_ERROR("Unsupported attribute type");
-        return Format::Undefined;
+        return vk::Format::eUndefined;
     }
 
-    std::vector<VertexInputBindingDescription> Reflection::GetVertexBindings()
+    std::vector<vk::VertexInputBindingDescription> Reflection::GetVertexBindings()
     {
-        PE_ERROR_IF(m_shader->GetShaderStage() != ShaderStage::VertexBit, "Vertex bindings are only available for vertex shaders");
+        PE_ERROR_IF(m_shader->GetShaderStage() != vk::ShaderStageFlagBits::eVertex, "Vertex bindings are only available for vertex shaders");
 
         // separate bindings by binding number
         std::unordered_map<uint32_t, std::vector<ShaderInOutDesc>> bindingsMap{};
@@ -285,12 +285,12 @@ namespace pe
                       { return a.location < b.location; });
         }
 
-        std::vector<VertexInputBindingDescription> vertexBindings{};
+        std::vector<vk::VertexInputBindingDescription> vertexBindings{};
         for (const auto &pair : bindingsMap)
         {
-            VertexInputBindingDescription binding{};
+            vk::VertexInputBindingDescription binding{};
             binding.binding = pair.first;
-            binding.inputRate = VertexInputRate::Vertex;
+            binding.inputRate = vk::VertexInputRate::eVertex;
             for (const ShaderInOutDesc &input : pair.second)
                 binding.stride += GetTypeSize(input) * input.typeInfo.vecsize * input.typeInfo.columns;
 
@@ -300,17 +300,17 @@ namespace pe
         return vertexBindings;
     }
 
-    std::vector<VertexInputAttributeDescription> Reflection::GetVertexAttributes()
+    std::vector<vk::VertexInputAttributeDescription> Reflection::GetVertexAttributes()
     {
-        PE_ERROR_IF(m_shader->GetShaderStage() != ShaderStage::VertexBit, "Vertex attributes are only available for vertex shaders");
+        PE_ERROR_IF(m_shader->GetShaderStage() != vk::ShaderStageFlagBits::eVertex, "Vertex attributes are only available for vertex shaders");
 
-        std::vector<VertexInputAttributeDescription> vertexAttributes{};
+        std::vector<vk::VertexInputAttributeDescription> vertexAttributes{};
 
         uint32_t offset = 0;
         for (const ShaderInOutDesc &input : m_inputs)
         {
             uint32_t size = GetTypeSize(input) * input.typeInfo.vecsize * input.typeInfo.columns;
-            VertexInputAttributeDescription attribute{};
+            vk::VertexInputAttributeDescription attribute{};
             attribute.location = input.location;
             attribute.binding = input.binding;
             attribute.format = GetAttributeFormat(input);
@@ -355,8 +355,8 @@ namespace pe
             DescriptorBindingInfo info{};
             info.binding = desc.binding;
             info.count = GetResourceArrayCount(desc.typeInfo);
-            info.imageLayout = ImageLayout::ShaderReadOnly;
-            info.type = DescriptorType::CombinedImageSampler;
+            info.imageLayout = vk::ImageLayout::eShaderReadOnlyOptimal;
+            info.type = vk::DescriptorType::eCombinedImageSampler;
             info.name = desc.name;
 
             setInfos[desc.set].push_back(info);
@@ -367,7 +367,7 @@ namespace pe
             DescriptorBindingInfo info{};
             info.binding = desc.binding;
             info.count = GetResourceArrayCount(desc.typeInfo);
-            info.type = DescriptorType::Sampler;
+            info.type = vk::DescriptorType::eSampler;
             info.name = desc.name;
 
             setInfos[desc.set].push_back(info);
@@ -378,8 +378,8 @@ namespace pe
             DescriptorBindingInfo info{};
             info.binding = desc.binding;
             info.count = GetResourceArrayCount(desc.typeInfo);
-            info.imageLayout = ImageLayout::ShaderReadOnly;
-            info.type = DescriptorType::SampledImage;
+            info.imageLayout = vk::ImageLayout::eShaderReadOnlyOptimal;
+            info.type = vk::DescriptorType::eSampledImage;
             info.name = desc.name;
 
             setInfos[desc.set].push_back(info);
@@ -390,8 +390,8 @@ namespace pe
             DescriptorBindingInfo info{};
             info.binding = desc.binding;
             info.count = GetResourceArrayCount(desc.typeInfo);
-            info.imageLayout = ImageLayout::General;
-            info.type = DescriptorType::StorageImage;
+            info.imageLayout = vk::ImageLayout::eGeneral;
+            info.type = vk::DescriptorType::eStorageImage;
             info.name = desc.name;
 
             setInfos[desc.set].push_back(info);
@@ -402,7 +402,7 @@ namespace pe
             DescriptorBindingInfo info{};
             info.binding = desc.binding;
             info.count = GetResourceArrayCount(desc.typeInfo);
-            info.type = DescriptorType::UniformBuffer;
+            info.type = vk::DescriptorType::eUniformBuffer;
             info.name = desc.name;
 
             setInfos[desc.set].push_back(info);
@@ -413,7 +413,7 @@ namespace pe
             DescriptorBindingInfo info{};
             info.binding = desc.binding;
             info.count = GetResourceArrayCount(desc.typeInfo);
-            info.type = DescriptorType::StorageBuffer;
+            info.type = vk::DescriptorType::eStorageBuffer;
             info.name = desc.name;
 
             setInfos[desc.set].push_back(info);

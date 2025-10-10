@@ -48,16 +48,16 @@ namespace pe
 
         RenderArea &GetRenderArea() { return m_renderArea; }
         Image *CreateRenderTarget(const std::string &name,
-                                  Format format,
-                                  ImageUsageFlags additionalFlags = {},
+                                  vk::Format format,
+                                  vk::ImageUsageFlags additionalFlags = {},
                                   bool useRenderTergetScale = true,
                                   bool useMips = false,
                                   vec4 clearColor = Color::Transparent);
         Image *GetRenderTarget(const std::string &name);
         Image *GetRenderTarget(size_t hash);
         Image *CreateDepthStencilTarget(const std::string &name,
-                                        Format format,
-                                        ImageUsageFlags additionalFlags = {},
+                                        vk::Format format,
+                                        vk::ImageUsageFlags additionalFlags = {},
                                         bool useRenderTergetScale = true,
                                         float clearDepth = Color::Depth,
                                         uint32_t clearStencil = Color::Stencil);
@@ -75,7 +75,7 @@ namespace pe
         void WaitPreviousFrameCommands();
         void LoadResources(CommandBuffer *cmd);
         CommandBuffer *RecordPasses(uint32_t imageIndex);
-        void Upsample(CommandBuffer *cmd, Filter filter);
+        void Upsample(CommandBuffer *cmd, vk::Filter filter);
         void CreateRenderTargets();
 
         Image *m_displayRT;

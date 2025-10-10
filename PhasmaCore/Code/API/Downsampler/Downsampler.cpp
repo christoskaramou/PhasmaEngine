@@ -836,9 +836,9 @@ namespace pe
 
         ImageBarrierInfo barrier{};
         barrier.image = s_image;
-        barrier.layout = ImageLayout::General;
-        barrier.stageFlags = PipelineStage::ComputeShaderBit;
-        barrier.accessMask = Access::ShaderWriteBit;
+        barrier.layout = vk::ImageLayout::eGeneral;
+        barrier.stageFlags = vk::PipelineStageFlagBits2::eComputeShader;
+        barrier.accessMask = vk::AccessFlagBits2::eShaderWrite;
 
         cmd->BeginDebugRegion("Downsampler::Dispatch Command_" + std::to_string(s_currentIndex));
         cmd->ImageBarrier(barrier);
@@ -867,7 +867,7 @@ namespace pe
     void Downsampler::UpdatePassInfo()
     {
         s_passInfo = std::make_shared<PassInfo>();
-        s_passInfo->pCompShader = Shader::Create(c_downsamplerSPV, c_downsamplerSPVSize, ShaderStage::ComputeBit, "mainCS");
+        s_passInfo->pCompShader = Shader::Create(c_downsamplerSPV, c_downsamplerSPVSize, vk::ShaderStageFlagBits::eCompute, "mainCS");
         s_passInfo->name = "Downsample_pipeline";
 
         s_passInfo->ReflectDescriptors();
@@ -878,26 +878,26 @@ namespace pe
     {
         std::vector<DescriptorBindingInfo> bindingInfos(3);
         bindingInfos[0].binding = 0;
-        bindingInfos[0].type = DescriptorType::StorageImage;
-        bindingInfos[0].imageLayout = ImageLayout::General;
+        bindingInfos[0].type = vk::DescriptorType::eStorageImage;
+        bindingInfos[0].imageLayout = vk::ImageLayout::eGeneral;
         bindingInfos[0].count = 13;
 
         bindingInfos[1].binding = 1;
-        bindingInfos[1].type = DescriptorType::StorageImage;
-        bindingInfos[1].imageLayout = ImageLayout::General;
+        bindingInfos[1].type = vk::DescriptorType::eStorageImage;
+        bindingInfos[1].imageLayout = vk::ImageLayout::eGeneral;
 
         bindingInfos[2].binding = 2;
-        bindingInfos[2].type = DescriptorType::StorageBuffer;
+        bindingInfos[2].type = vk::DescriptorType::eStorageBuffer;
 
         for (uint32_t i = 0; i < MAX_DESCRIPTORS_PER_CMD; i++)
         {
             s_atomicCounter[i] = Buffer::Create(
                 sizeof(s_counter),
-                BufferUsage::StorageBufferBit,
-                AllocationCreate::HostAccessSequentialWriteBit,
+                vk::BufferUsageFlagBits2::eStorageBuffer,
+                VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT,
                 "Downsample_storage_buffer_" + std::to_string(i));
 
-            s_DSet[i] = Descriptor::Create(bindingInfos, ShaderStage::ComputeBit, false, "Downsample_descriptor_" + std::to_string(i));
+            s_DSet[i] = Descriptor::Create(bindingInfos, vk::ShaderStageFlagBits::eCompute, false, "Downsample_descriptor_" + std::to_string(i));
         }
     }
 
@@ -910,7 +910,7 @@ namespace pe
         for (uint32_t i = 0; i < mips; i++)
         {
             if (!image->HasUAV(i))
-                image->CreateUAV(ImageViewType::Type2DArray, i);
+                image->CreateUAV(vk::ImageViewType::e2DArray, i);
         }
 
         s_image = image;
@@ -919,7 +919,7 @@ namespace pe
     void Downsampler::UpdateDescriptorSet()
     {
         int mips = static_cast<int>(s_image->GetMipLevels());
-        std::vector<ImageViewApiHandle> views(mips);
+        std::vector<vk::ImageView> views(mips);
         for (int i = 0; i < mips; i++)
             views[i] = s_image->GetUAV(i);
 

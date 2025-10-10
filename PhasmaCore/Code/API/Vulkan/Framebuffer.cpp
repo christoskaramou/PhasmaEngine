@@ -7,29 +7,20 @@ namespace pe
 {
     Framebuffer::Framebuffer(uint32_t width,
                              uint32_t height,
-                             uint32_t count,
-                             ImageViewApiHandle *views,
+                             const std::vector<vk::ImageView> &views,
                              RenderPass *renderPass,
                              const std::string &name)
         : m_size{width, height}
     {
-
-        std::vector<VkImageView> _views(count);
-        for (uint32_t i = 0; i < count; i++)
-            _views[i] = views[i];
-
-        VkFramebufferCreateInfo fbci{};
-        fbci.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
+        vk::FramebufferCreateInfo fbci{};
         fbci.renderPass = renderPass->ApiHandle();
-        fbci.attachmentCount = static_cast<uint32_t>(_views.size());
-        fbci.pAttachments = _views.data();
+        fbci.attachmentCount = static_cast<uint32_t>(views.size());
+        fbci.pAttachments = views.data();
         fbci.width = width;
         fbci.height = height;
         fbci.layers = 1;
 
-        VkFramebuffer framebuffer;
-        PE_CHECK(vkCreateFramebuffer(RHII.GetDevice(), &fbci, nullptr, &framebuffer));
-        m_apiHandle = framebuffer;
+        m_apiHandle = RHII.GetDevice().createFramebuffer(fbci);
 
         Debug::SetObjectName(m_apiHandle, name);
     }
@@ -38,8 +29,8 @@ namespace pe
     {
         if (m_apiHandle)
         {
-            vkDestroyFramebuffer(RHII.GetDevice(), m_apiHandle, nullptr);
-            m_apiHandle = {};
+            RHII.GetDevice().destroyFramebuffer(m_apiHandle);
+            m_apiHandle = vk::Framebuffer{};
         }
     }
 }

@@ -25,10 +25,10 @@ namespace pe
     void TonemapPass::UpdatePassInfo()
     {
         m_passInfo->name = "tonemap_pipeline";
-        m_passInfo->pVertShader = Shader::Create(Path::Executable + "Assets/Shaders/Common/Quad.hlsl", ShaderStage::VertexBit, "mainVS", std::vector<Define>{}, ShaderCodeType::HLSL);
-        m_passInfo->pFragShader = Shader::Create(Path::Executable + "Assets/Shaders/Tonemap/TonemapPS.hlsl", ShaderStage::FragmentBit, "mainPS", std::vector<Define>{}, ShaderCodeType::HLSL);
-        m_passInfo->dynamicStates = {DynamicState::Viewport, DynamicState::Scissor};
-        m_passInfo->cullMode = CullMode::Back;
+        m_passInfo->pVertShader = Shader::Create(Path::Executable + "Assets/Shaders/Common/Quad.hlsl", vk::ShaderStageFlagBits::eVertex, "mainVS", std::vector<Define>{}, ShaderCodeType::HLSL);
+        m_passInfo->pFragShader = Shader::Create(Path::Executable + "Assets/Shaders/Tonemap/TonemapPS.hlsl", vk::ShaderStageFlagBits::eFragment, "mainPS", std::vector<Define>{}, ShaderCodeType::HLSL);
+        m_passInfo->dynamicStates = {vk::DynamicState::eViewport, vk::DynamicState::eScissor};
+        m_passInfo->cullMode = vk::CullModeFlagBits::eBack;
         m_passInfo->colorBlendAttachments = {PipelineColorBlendAttachmentState::Default};
         m_passInfo->colorFormats = {m_displayRT->GetFormat()};
         m_passInfo->ReflectDescriptors();
@@ -54,9 +54,9 @@ namespace pe
     {
         ImageBarrierInfo barrier;
         barrier.image = m_frameImage;
-        barrier.layout = ImageLayout::ShaderReadOnly;
-        barrier.stageFlags = PipelineStage::FragmentShaderBit;
-        barrier.accessMask = Access::ShaderReadBit;
+        barrier.layout = vk::ImageLayout::eShaderReadOnlyOptimal;
+        barrier.stageFlags = vk::PipelineStageFlagBits2::eFragmentShader;
+        barrier.accessMask = vk::AccessFlagBits2::eShaderRead;
 
         cmd->BeginDebugRegion("TonemapPass");
         cmd->CopyImage(m_displayRT, m_frameImage); // Copy RT to image

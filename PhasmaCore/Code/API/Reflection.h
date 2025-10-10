@@ -68,8 +68,8 @@ namespace pe
         ~Reflection();
 
         void Init(Shader *shader);
-        std::vector<VertexInputBindingDescription> GetVertexBindings();
-        std::vector<VertexInputAttributeDescription> GetVertexAttributes();
+        std::vector<vk::VertexInputBindingDescription> GetVertexBindings();
+        std::vector<vk::VertexInputAttributeDescription> GetVertexAttributes();
         std::vector<Descriptor *> GetDescriptors();
         const PushConstantDesc &GetPushConstantDesc() { return m_pushConstants; }
 

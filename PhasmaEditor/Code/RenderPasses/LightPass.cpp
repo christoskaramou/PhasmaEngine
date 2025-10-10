@@ -31,7 +31,7 @@ namespace pe
         m_attachments.resize(1);
         m_attachments[0] = {};
         m_attachments[0].image = m_viewportRT;
-        m_attachments[0].loadOp = AttachmentLoadOp::Clear;
+        m_attachments[0].loadOp = vk::AttachmentLoadOp::eClear;
     }
 
     void LightOpaquePass::UpdatePassInfo()
@@ -45,9 +45,9 @@ namespace pe
 
         // Opaque light pass
         m_passInfo->name = "lighting_opaque_pipeline";
-        m_passInfo->pVertShader = Shader::Create(Path::Executable + "Assets/Shaders/Common/Quad.hlsl", ShaderStage::VertexBit, "mainVS", std::vector<Define>{}, ShaderCodeType::HLSL);
-        m_passInfo->pFragShader = Shader::Create(Path::Executable + "Assets/Shaders/Gbuffer/LightingPS.hlsl", ShaderStage::FragmentBit, "mainPS", definesFrag, ShaderCodeType::HLSL);
-        m_passInfo->dynamicStates = {DynamicState::Viewport, DynamicState::Scissor};
+        m_passInfo->pVertShader = Shader::Create(Path::Executable + "Assets/Shaders/Common/Quad.hlsl", vk::ShaderStageFlagBits::eVertex, "mainVS", std::vector<Define>{}, ShaderCodeType::HLSL);
+        m_passInfo->pFragShader = Shader::Create(Path::Executable + "Assets/Shaders/Gbuffer/LightingPS.hlsl", vk::ShaderStageFlagBits::eFragment, "mainPS", definesFrag, ShaderCodeType::HLSL);
+        m_passInfo->dynamicStates = {vk::DynamicState::eViewport, vk::DynamicState::eScissor};
         m_passInfo->colorBlendAttachments = {PipelineColorBlendAttachmentState::Default};
         m_passInfo->colorFormats = {m_viewportRT->GetFormat()};
         m_passInfo->depthTestEnable = false;
@@ -66,8 +66,8 @@ namespace pe
         {
             m_uniform[i] = Buffer::Create(
                 RHII.AlignUniform(sizeof(LightPassUBO)),
-                BufferUsage::UniformBufferBit,
-                AllocationCreate::HostAccessSequentialWriteBit,
+                vk::BufferUsageFlagBits2::eUniformBuffer,
+                VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT,
                 "Gbuffer_uniform_buffer");
             m_uniform[i]->Map();
             m_uniform[i]->Zero();
@@ -81,7 +81,7 @@ namespace pe
     void LightOpaquePass::UpdateDescriptorSets()
     {
         ShadowPass &shadows = *GetGlobalComponent<ShadowPass>();
-        std::vector<ImageViewApiHandle> views(shadows.m_textures.size());
+        std::vector<vk::ImageView> views(shadows.m_textures.size());
         for (uint32_t i = 0; i < shadows.m_textures.size(); i++)
             views[i] = shadows.m_textures[i]->GetSRV();
 
@@ -155,9 +155,9 @@ namespace pe
         std::vector<ImageBarrierInfo> barriers(8 + (shadowsEnabled ? shadows.m_textures.size() : 0));
         for (size_t i = 0; i < barriers.size(); i++)
         {
-            barriers[i].layout = ImageLayout::ShaderReadOnly;
-            barriers[i].stageFlags = PipelineStage::FragmentShaderBit;
-            barriers[i].accessMask = Access::ShaderReadBit;
+            barriers[i].layout = vk::ImageLayout::eShaderReadOnlyOptimal;
+            barriers[i].stageFlags = vk::PipelineStageFlagBits2::eFragmentShader;
+            barriers[i].accessMask = vk::AccessFlagBits2::eShaderRead;
         }
 
         barriers[0].image = m_depthStencilRT;
@@ -235,7 +235,7 @@ namespace pe
         m_attachments.resize(1);
         m_attachments[0] = {};
         m_attachments[0].image = m_viewportRT;
-        m_attachments[0].loadOp = AttachmentLoadOp::Load;
+        m_attachments[0].loadOp = vk::AttachmentLoadOp::eLoad;
     }
 
     void LightTransparentPass::UpdatePassInfo()
@@ -250,9 +250,9 @@ namespace pe
             Define{"MAX_SPOT_LIGHTS", std::to_string(MAX_SPOT_LIGHTS)}};
 
         m_passInfo->name = "lighting_transparent_pipeline";
-        m_passInfo->pVertShader = Shader::Create(Path::Executable + "Assets/Shaders/Common/Quad.hlsl", ShaderStage::VertexBit, "mainVS", std::vector<Define>{}, ShaderCodeType::HLSL);
-        m_passInfo->pFragShader = Shader::Create(Path::Executable + "Assets/Shaders/Gbuffer/LightingPS.hlsl", ShaderStage::FragmentBit, "mainPS", definesFrag, ShaderCodeType::HLSL);
-        m_passInfo->dynamicStates = {DynamicState::Viewport, DynamicState::Scissor};
+        m_passInfo->pVertShader = Shader::Create(Path::Executable + "Assets/Shaders/Common/Quad.hlsl", vk::ShaderStageFlagBits::eVertex, "mainVS", std::vector<Define>{}, ShaderCodeType::HLSL);
+        m_passInfo->pFragShader = Shader::Create(Path::Executable + "Assets/Shaders/Gbuffer/LightingPS.hlsl", vk::ShaderStageFlagBits::eFragment, "mainPS", definesFrag, ShaderCodeType::HLSL);
+        m_passInfo->dynamicStates = {vk::DynamicState::eViewport, vk::DynamicState::eScissor};
         m_passInfo->colorBlendAttachments = {PipelineColorBlendAttachmentState::Default};
         m_passInfo->blendEnable = true;
         m_passInfo->colorFormats = {m_viewportRT->GetFormat()};
@@ -271,8 +271,8 @@ namespace pe
         {
             m_uniform[i] = Buffer::Create(
                 RHII.AlignUniform(sizeof(LightPassUBO)),
-                BufferUsage::UniformBufferBit,
-                AllocationCreate::HostAccessSequentialWriteBit,
+                vk::BufferUsageFlagBits2::eUniformBuffer,
+                VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT,
                 "Gbuffer_uniform_buffer");
             m_uniform[i]->Map();
             m_uniform[i]->Zero();
@@ -286,7 +286,7 @@ namespace pe
     void LightTransparentPass::UpdateDescriptorSets()
     {
         ShadowPass &shadows = *GetGlobalComponent<ShadowPass>();
-        std::vector<ImageViewApiHandle> views(shadows.m_textures.size());
+        std::vector<vk::ImageView> views(shadows.m_textures.size());
         for (uint32_t i = 0; i < shadows.m_textures.size(); i++)
             views[i] = shadows.m_textures[i]->GetSRV();
 
@@ -362,9 +362,9 @@ namespace pe
         std::vector<ImageBarrierInfo> barriers(8 + shadows.m_textures.size());
         for (size_t i = 0; i < barriers.size(); i++)
         {
-            barriers[i].layout = ImageLayout::ShaderReadOnly;
-            barriers[i].stageFlags = PipelineStage::FragmentShaderBit;
-            barriers[i].accessMask = Access::ShaderReadBit;
+            barriers[i].layout = vk::ImageLayout::eShaderReadOnlyOptimal;
+            barriers[i].stageFlags = vk::PipelineStageFlagBits2::eFragmentShader;
+            barriers[i].accessMask = vk::AccessFlagBits2::eShaderRead;
         }
 
         barriers[0].image = m_depthStencilRT;

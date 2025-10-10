@@ -2,21 +2,6 @@
 
 namespace pe
 {
-    struct VertexInputBindingDescription
-    {
-        uint32_t binding;
-        uint32_t stride;
-        VertexInputRate inputRate;
-    };
-
-    struct VertexInputAttributeDescription
-    {
-        uint32_t location;
-        uint32_t binding;
-        Format format;
-        uint32_t offset;
-    };
-
     // gbuffer vertex structure
     struct Vertex
     {

@@ -7,28 +7,28 @@ namespace pe
     class Swapchain;
     class Queue;
 
-    class CommandPool : public PeHandle<CommandPool, CommandPoolApiHandle>
+    class CommandPool : public PeHandle<CommandPool, vk::CommandPool>
     {
     public:
-        CommandPool(Queue *queue, CommandPoolCreateFlags flags, const std::string &name);
+        CommandPool(Queue *queue, vk::CommandPoolCreateFlags flags, const std::string &name);
         ~CommandPool();
 
         Queue *GetQueue() { return m_queue; }
-        CommandPoolCreateFlags GetFlags() { return m_flags; }
+        vk::CommandPoolCreateFlags GetFlags() { return m_flags; }
         void Reset();
 
     private:
         friend class Queue;
 
         Queue *m_queue;
-        CommandPoolCreateFlags m_flags;
+        vk::CommandPoolCreateFlags m_flags;
         std::stack<CommandBuffer *> m_freeCmdStack{};
     };
 
-    class Queue : public PeHandle<Queue, QueueApiHandle>
+    class Queue : public PeHandle<Queue, vk::Queue>
     {
     public:
-        Queue(DeviceApiHandle device,
+        Queue(vk::Device device,
               uint32_t familyId,
               const std::string &name);
         ~Queue();
@@ -42,7 +42,7 @@ namespace pe
         void EndDebugRegion();
         uint32_t GetFamilyId() const { return m_familyId; }
         Semaphore *GetSubmissionsSemaphore() const { return m_submissionsSemaphore; }
-        CommandBuffer *AcquireCommandBuffer(CommandPoolCreateFlags flags = CommandPoolCreate::TransientBit);
+        CommandBuffer *AcquireCommandBuffer(vk::CommandPoolCreateFlags flags = vk::CommandPoolCreateFlagBits::eTransient);
         void ReturnCommandBuffer(CommandBuffer *cmd);
 
     private:

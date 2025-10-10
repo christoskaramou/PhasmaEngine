@@ -54,7 +54,7 @@ namespace pe
         void CreateGlobalDescriptors();
         void CreateSemaphores(uint32_t semaphoresCount);
         void InitDownSampler();
-        Format GetDepthFormat();
+        vk::Format GetDepthFormat();
         void WaitDeviceIdle();
         void NextFrame() { m_frameCounter++; }
         uint32_t GetFrameCounter() { return m_frameCounter; }
@@ -77,20 +77,20 @@ namespace pe
         }
         uint32_t GetMaxPushDescriptorsPerSet() { return m_maxPushDescriptorsPerSet; }
         uint32_t GetMaxPushConstantsSize() { return m_maxPushConstantsSize; }
-        const InstanceApiHandle &GetInstance() { return m_instance; }
-        const GpuApiHandle &GetGpu() { return m_gpu; }
+        vk::Instance GetInstance() { return m_instance; }
+        vk::PhysicalDevice GetGpu() { return m_gpu; }
         const std::string &GetGpuName() { return m_gpuName; }
-        const DeviceApiHandle &GetDevice() { return m_device; }
+        vk::Device GetDevice() { return m_device; }
         DescriptorPool *GetDescriptorPool() { return m_descriptorPool; }
         Semaphore *AcquireBinarySemaphore(uint32_t frame);
         void ReturnBinarySemaphores(uint32_t frame);
-        const AllocatorApiHandle &GetAllocator() { return m_allocator; }
+        VmaAllocator GetAllocator() { return m_allocator; }
         Queue *GetMainQueue() { return m_mainQueue; }
         SDL_Window *GetWindow() { return m_window; }
         Surface *GetSurface() { return m_surface; }
         Swapchain *GetSwapchain() { return m_swapchain; }
         MemoryInfo GetMemoryUsageSnapshot();
-        void ChangePresentMode(PresentMode mode);
+        void ChangePresentMode(vk::PresentModeKHR mode);
 
         uint32_t GetWidth() const;
         uint32_t GetHeight() const;
@@ -100,15 +100,15 @@ namespace pe
     private:
         RHI() = default;
 
-        InstanceApiHandle m_instance;
-        GpuApiHandle m_gpu;
+        vk::Instance m_instance;
+        vk::PhysicalDevice m_gpu;
         std::string m_gpuName;
-        DeviceApiHandle m_device;
+        vk::Device m_device;
         DescriptorPool *m_descriptorPool;
         std::mutex m_binarySemaphoresMutex;
         std::stack<Semaphore *> m_binarySemaphores[SWAPCHAIN_IMAGES];
         std::stack<Semaphore *> m_usedBinarySemaphores[SWAPCHAIN_IMAGES];
-        AllocatorApiHandle m_allocator;
+        VmaAllocator m_allocator;
         Queue *m_mainQueue;
         SDL_Window *m_window;
         Surface *m_surface;
