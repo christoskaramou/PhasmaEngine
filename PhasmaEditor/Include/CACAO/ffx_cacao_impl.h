@@ -28,13 +28,7 @@
 #define FFX_CACAO_ENABLE_PROFILING
 #endif
 
-#if PE_DX12
-#define FFX_CACAO_ENABLE_D3D12
-#endif
-
-#ifdef PE_VULKAN
 #define FFX_CACAO_ENABLE_VULKAN
-#endif
 
 #ifdef FFX_CACAO_ENABLE_D3D12
 #include <d3d12.h>

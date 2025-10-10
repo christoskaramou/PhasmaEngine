@@ -5,7 +5,7 @@ set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 set (PE_DIST)
-set (PE_DIST_DEFS PE_VULKAN)
+set (PE_DIST_DEFS)
 # Check the operating system
 if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
     message(STATUS "Detected operating system: Linux")
