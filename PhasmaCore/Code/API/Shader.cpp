@@ -52,7 +52,7 @@ namespace pe
     }
 
     // Function to validate a single shader stage
-    void ValidateShaderStage(Shader *shader, ShaderStage expectedStage)
+    void ValidateShaderStage(Shader *shader, vk::ShaderStageFlags expectedStage)
     {
         PE_ERROR_IF(shader->GetShaderStage() != expectedStage, "Invalid shader stage");
     }
@@ -92,25 +92,25 @@ namespace pe
 
         if (vert && frag)
         {
-            ValidateShaderStage(vert, ShaderStage::VertexBit);
-            ValidateShaderStage(frag, ShaderStage::FragmentBit);
+            ValidateShaderStage(vert, vk::ShaderStageFlagBits::eVertex);
+            ValidateShaderStage(frag, vk::ShaderStageFlagBits::eFragment);
             auto vertDesc = vert->GetReflection().GetDescriptors();
             auto fragDesc = frag->GetReflection().GetDescriptors();
             return CombineDescriptors(vertDesc, fragDesc);
         }
         else if (vert)
         {
-            ValidateShaderStage(vert, ShaderStage::VertexBit);
+            ValidateShaderStage(vert, vk::ShaderStageFlagBits::eVertex);
             return vert->GetReflection().GetDescriptors();
         }
         else if (frag)
         {
-            ValidateShaderStage(frag, ShaderStage::FragmentBit);
+            ValidateShaderStage(frag, vk::ShaderStageFlagBits::eFragment);
             return frag->GetReflection().GetDescriptors();
         }
         else if (comp)
         {
-            ValidateShaderStage(comp, ShaderStage::ComputeBit);
+            ValidateShaderStage(comp, vk::ShaderStageFlagBits::eCompute);
             return comp->GetReflection().GetDescriptors();
         }
         else
@@ -120,7 +120,7 @@ namespace pe
         }
     }
 
-    Shader::Shader(const uint32_t *spirv, size_t size, ShaderStage shaderStage, const std::string &entryName)
+    Shader::Shader(const uint32_t *spirv, size_t size, vk::ShaderStageFlags shaderStage, const std::string &entryName)
         : m_shaderStage{shaderStage},
           m_entryName{entryName}
     {
@@ -133,7 +133,7 @@ namespace pe
         }
     }
 
-    Shader::Shader(const std::string &spirvPath, ShaderStage shaderStage, const std::string &entryName)
+    Shader::Shader(const std::string &spirvPath, vk::ShaderStageFlags shaderStage, const std::string &entryName)
         : m_shaderStage{shaderStage},
           m_entryName{entryName}
     {
@@ -157,7 +157,7 @@ namespace pe
         }
     }
 
-    Shader::Shader(const std::string &sourcePath, ShaderStage shaderStage, const std::string &entryName, const std::vector<Define> &localDefines, ShaderCodeType type)
+    Shader::Shader(const std::string &sourcePath, vk::ShaderStageFlags shaderStage, const std::string &entryName, const std::vector<Define> &localDefines, ShaderCodeType type)
         : m_localDefines{localDefines},
           m_shaderStage{shaderStage},
           m_type{type},
@@ -259,15 +259,15 @@ namespace pe
 #endif
 
         uint32_t shaderKindFlags = 0;
-        if (m_shaderStage == ShaderStage::VertexBit)
+        if (m_shaderStage == vk::ShaderStageFlagBits::eVertex)
         {
             shaderKindFlags |= shaderc_shader_kind::shaderc_vertex_shader;
         }
-        else if (m_shaderStage == ShaderStage::FragmentBit)
+        else if (m_shaderStage == vk::ShaderStageFlagBits::eFragment)
         {
             shaderKindFlags |= shaderc_shader_kind::shaderc_fragment_shader;
         }
-        else if (m_shaderStage == ShaderStage::ComputeBit)
+        else if (m_shaderStage == vk::ShaderStageFlagBits::eCompute)
         {
             shaderKindFlags |= shaderc_shader_kind::shaderc_compute_shader;
         }
@@ -343,15 +343,15 @@ namespace pe
 
         // Shader stage
         args.push_back(L"-T");
-        if (m_shaderStage == ShaderStage::VertexBit)
+        if (m_shaderStage == vk::ShaderStageFlagBits::eVertex)
         {
             args.push_back(L"vs_6_0");
         }
-        else if (m_shaderStage == ShaderStage::FragmentBit)
+        else if (m_shaderStage == vk::ShaderStageFlagBits::eFragment)
         {
             args.push_back(L"ps_6_0");
         }
-        else if (m_shaderStage == ShaderStage::ComputeBit)
+        else if (m_shaderStage == vk::ShaderStageFlagBits::eCompute)
         {
             args.push_back(L"cs_6_0");
         }

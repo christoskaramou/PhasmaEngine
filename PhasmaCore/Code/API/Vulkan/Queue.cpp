@@ -8,20 +8,14 @@
 
 namespace pe
 {
-    CommandPool::CommandPool(Queue *queue, CommandPoolCreateFlags flags, const std::string &name)
+    CommandPool::CommandPool(Queue *queue, vk::CommandPoolCreateFlags flags, const std::string &name)
+         : m_queue(queue), m_flags(flags)
     {
-        m_queue = queue;
-        m_flags = flags;
-
-        VkCommandPoolCreateInfo cpci{};
-        cpci.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
+        vk::CommandPoolCreateInfo cpci{};
         cpci.queueFamilyIndex = m_queue->GetFamilyId();
-        cpci.flags = Translate<VkCommandPoolCreateFlags>(flags);
+        cpci.flags = flags;
 
-        VkCommandPool commandPool;
-        PE_CHECK(vkCreateCommandPool(RHII.GetDevice(), &cpci, nullptr, &commandPool));
-        m_apiHandle = commandPool;
-
+        m_apiHandle = RHII.GetDevice().createCommandPool(cpci);
         Debug::SetObjectName(m_apiHandle, name);
     }
 
@@ -29,33 +23,30 @@ namespace pe
     {
         if (m_apiHandle)
         {
-            vkDestroyCommandPool(RHII.GetDevice(), m_apiHandle, nullptr);
-            m_apiHandle = {};
+            RHII.GetDevice().destroyCommandPool(m_apiHandle);
+            m_apiHandle = vk::CommandPool{};
         }
 
         for (uint32_t i = 0; i < m_freeCmdStack.size(); i++)
         {
-            m_freeCmdStack.top()->ApiHandle() = {};
+            m_freeCmdStack.top()->ApiHandle() = vk::CommandBuffer{};
             m_freeCmdStack.pop();
         }
     }
 
     void CommandPool::Reset()
     {
-        PE_CHECK(vkResetCommandPool(RHII.GetDevice(), m_apiHandle, 0));
+        RHII.GetDevice().resetCommandPool(m_apiHandle);
     }
 
-    Queue::Queue(DeviceApiHandle device,
+    Queue::Queue(vk::Device device,
                  uint32_t familyId,
                  const std::string &name)
         : m_familyId{familyId},
           m_name{name},
           m_submissionsSemaphore{Semaphore::Create(true, name + "_submissionsSemaphore")}
     {
-        VkQueue queueVK;
-        vkGetDeviceQueue(device, familyId, 0, &queueVK);
-        m_apiHandle = queueVK;
-
+        m_apiHandle = RHII.GetDevice().getQueue(m_familyId, 0);
         Debug::SetObjectName(m_apiHandle, m_name);
     }
 
@@ -76,9 +67,9 @@ namespace pe
     {
         std::lock_guard<std::mutex> lock(s_submitMutex);
 
-        VkSemaphoreSubmitInfo waitSemaphoreSubmitInfo{};
-        std::vector<VkSemaphoreSubmitInfo> signalSemaphoreSubmitInfos{};
-        std::vector<VkCommandBufferSubmitInfo> commandBufferSubmitInfos{};
+        vk::SemaphoreSubmitInfo waitSemaphoreSubmitInfo{};
+        std::vector<vk::SemaphoreSubmitInfo> signalSemaphoreSubmitInfos{};
+        std::vector<vk::CommandBufferSubmitInfo> commandBufferSubmitInfos{};
 
         signalSemaphoreSubmitInfos.reserve(2);
         commandBufferSubmitInfos.reserve(commandBuffersCount);
@@ -86,27 +77,24 @@ namespace pe
         // wait semaphore
         if (wait)
         {
-            waitSemaphoreSubmitInfo.sType = VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO;
             waitSemaphoreSubmitInfo.semaphore = wait->ApiHandle();
-            waitSemaphoreSubmitInfo.stageMask = Translate<VkPipelineStageFlags2>(wait->GetStageFlags());
+            waitSemaphoreSubmitInfo.stageMask = wait->GetStageFlags();
         }
 
         // signal semaphores
         if (signal)
         {
-            VkSemaphoreSubmitInfo info{};
-            info.sType = VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO;
+            vk::SemaphoreSubmitInfo info{};
             info.semaphore = signal->ApiHandle();
-            info.stageMask = Translate<VkPipelineStageFlags2>(signal->GetStageFlags());
+            info.stageMask = signal->GetStageFlags();
             signalSemaphoreSubmitInfos.push_back(info);
         }
 
         // signal semaphore for the command buffers
         {
-            VkSemaphoreSubmitInfo info{};
-            info.sType = VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO;
+            vk::SemaphoreSubmitInfo info{};
             info.semaphore = m_submissionsSemaphore->ApiHandle();
-            info.stageMask = VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT;
+            info.stageMask = vk::PipelineStageFlagBits2::eBottomOfPipe;
             info.value = ++m_submissions;
             signalSemaphoreSubmitInfos.push_back(info);
         }
@@ -117,16 +105,14 @@ namespace pe
             CommandBuffer *cmd = commandBuffers[i];
             if (cmd)
             {
-                VkCommandBufferSubmitInfo cbInfo{};
-                cbInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_SUBMIT_INFO;
+                vk::CommandBufferSubmitInfo cbInfo{};
                 cbInfo.commandBuffer = cmd->ApiHandle();
                 commandBufferSubmitInfos.push_back(cbInfo);
                 cmd->SetSubmissions(m_submissions);
             }
         }
 
-        VkSubmitInfo2 si{};
-        si.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO_2;
+        vk::SubmitInfo2 si{};
         si.waitSemaphoreInfoCount = wait ? 1 : 0;
         si.pWaitSemaphoreInfos = &waitSemaphoreSubmitInfo;
         si.commandBufferInfoCount = static_cast<uint32_t>(commandBufferSubmitInfos.size());
@@ -134,25 +120,23 @@ namespace pe
         si.signalSemaphoreInfoCount = static_cast<uint32_t>(signalSemaphoreSubmitInfos.size());
         si.pSignalSemaphoreInfos = signalSemaphoreSubmitInfos.data();
 
-        PE_CHECK(vkQueueSubmit2(m_apiHandle, 1, &si, nullptr));
+        auto result = m_apiHandle.submit2(1, &si, nullptr);
+        if (result != vk::Result::eSuccess)
+            PE_ERROR("Failed to submit to queue!");
     }
 
     void Queue::Present(Swapchain *swapchain, uint32_t imageIndex, Semaphore *wait)
     {
-        VkSwapchainKHR swapchainVK = swapchain->ApiHandle();
-        VkSemaphore waitSemaphoreVK = VK_NULL_HANDLE;
-        if (wait)
-            waitSemaphoreVK = wait->ApiHandle();
-
-        VkPresentInfoKHR pi{};
-        pi.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;
-        pi.waitSemaphoreCount = waitSemaphoreVK ? 1 : 0;
-        pi.pWaitSemaphores = &waitSemaphoreVK;
+        vk::PresentInfoKHR pi{};
+        pi.waitSemaphoreCount = wait ? 1 : 0;
+        pi.pWaitSemaphores = wait ? &wait->ApiHandle() : nullptr;
         pi.swapchainCount = 1;
-        pi.pSwapchains = &swapchainVK;
+        pi.pSwapchains = &swapchain->ApiHandle();
         pi.pImageIndices = &imageIndex;
 
-        PE_CHECK(vkQueuePresentKHR(m_apiHandle, &pi));
+        auto result = m_apiHandle.presentKHR(pi);
+        if (result != vk::Result::eSuccess && result != vk::Result::eSuboptimalKHR)
+            PE_ERROR("Failed to present swapchain image!");
     }
 
     void Queue::Wait()
@@ -162,7 +146,7 @@ namespace pe
 
     void Queue::WaitIdle()
     {
-        PE_CHECK(vkQueueWaitIdle(m_apiHandle));
+        m_apiHandle.waitIdle();
     }
 
     void Queue::BeginDebugRegion(const std::string &name)
@@ -180,7 +164,7 @@ namespace pe
         Debug::EndQueueRegion(this);
     }
 
-    CommandBuffer *Queue::AcquireCommandBuffer(CommandPoolCreateFlags flags)
+    CommandBuffer *Queue::AcquireCommandBuffer(vk::CommandPoolCreateFlags flags)
     {
         std::lock_guard<std::mutex> lock(m_cmdMutex);
 
@@ -195,7 +179,7 @@ namespace pe
 
         // ResetCommandBuffer is always set, we use the same command pool per command buffer types
         // TODO: Find a better way to handle this, maybe reset the command pool at the end of the frame for specific command buffers
-        flags |= CommandPoolCreate::ResetCommandBuffer;
+        flags |= vk::CommandPoolCreateFlagBits::eResetCommandBuffer;
         CommandPool *cp = nullptr;
         for (auto *commandPool : commandPools)
         {

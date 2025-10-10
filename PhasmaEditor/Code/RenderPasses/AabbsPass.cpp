@@ -22,21 +22,21 @@ namespace pe
         m_attachments.resize(2);
         m_attachments[0] = {};
         m_attachments[0].image = m_viewportRT;
-        m_attachments[0].loadOp = AttachmentLoadOp::Load;
-        m_attachments[0].storeOp = AttachmentStoreOp::Store;
+        m_attachments[0].loadOp = vk::AttachmentLoadOp::eLoad;
+        m_attachments[0].storeOp = vk::AttachmentStoreOp::eStore;
         m_attachments[1] = {};
         m_attachments[1].image = m_depthRT;
-        m_attachments[1].loadOp = AttachmentLoadOp::Load;
-        m_attachments[1].storeOp = AttachmentStoreOp::Store;
+        m_attachments[1].loadOp = vk::AttachmentLoadOp::eLoad;
+        m_attachments[1].storeOp = vk::AttachmentStoreOp::eStore;
     }
 
     void AabbsPass::UpdatePassInfo()
     {
         m_passInfo->name = "AABBs_pipeline";
-        m_passInfo->pVertShader = Shader::Create(Path::Executable + "Assets/Shaders/Utilities/AABBsVS.hlsl", ShaderStage::VertexBit, "mainVS", std::vector<Define>{}, ShaderCodeType::HLSL);
-        m_passInfo->pFragShader = Shader::Create(Path::Executable + "Assets/Shaders/Utilities/AABBsPS.hlsl", ShaderStage::FragmentBit, "mainPS", std::vector<Define>{}, ShaderCodeType::HLSL);
-        m_passInfo->dynamicStates = {DynamicState::Viewport, DynamicState::Scissor, DynamicState::LineWidth, DynamicState::DepthTestEnable, DynamicState::DepthWriteEnable};
-        m_passInfo->topology = PrimitiveTopology::LineList;
+        m_passInfo->pVertShader = Shader::Create(Path::Executable + "Assets/Shaders/Utilities/AABBsVS.hlsl", vk::ShaderStageFlagBits::eVertex, "mainVS", std::vector<Define>{}, ShaderCodeType::HLSL);
+        m_passInfo->pFragShader = Shader::Create(Path::Executable + "Assets/Shaders/Utilities/AABBsPS.hlsl", vk::ShaderStageFlagBits::eFragment, "mainPS", std::vector<Define>{}, ShaderCodeType::HLSL);
+        m_passInfo->dynamicStates = {vk::DynamicState::eViewport, vk::DynamicState::eScissor, vk::DynamicState::eLineWidth, vk::DynamicState::eDepthTestEnable, vk::DynamicState::eDepthWriteEnable};
+        m_passInfo->topology = vk::PrimitiveTopology::eLineList;
         m_passInfo->colorBlendAttachments = {PipelineColorBlendAttachmentState::Default};
         m_passInfo->colorFormats = {m_viewportRT->GetFormat()};
         m_passInfo->depthFormat = m_depthRT->GetFormat();

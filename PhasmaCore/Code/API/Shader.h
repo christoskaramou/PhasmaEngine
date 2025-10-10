@@ -33,19 +33,19 @@ namespace pe
     class Reflection;
     class PassInfo;
 
-    class Shader : public PeHandle<Shader, ShaderApiHandle>
+    class Shader : public PeHandle<Shader, void *>
     {
     public:
         static void AddGlobalDefine(const std::string &name, const std::string &value);
         static std::vector<Descriptor *> ReflectPassDescriptors(const PassInfo &passInfo);
 
-        Shader(const uint32_t *spirv, size_t size, ShaderStage shaderStage, const std::string &entryName);
-        Shader(const std::string &spirvPath, ShaderStage shaderStage, const std::string &entryName);
-        Shader(const std::string &sourcePath, ShaderStage shaderStage, const std::string &entryName, const std::vector<Define> &localDefines, ShaderCodeType type = ShaderCodeType::HLSL);
+        Shader(const uint32_t *spirv, size_t size, vk::ShaderStageFlags shaderStage, const std::string &entryName);
+        Shader(const std::string &spirvPath, vk::ShaderStageFlags shaderStage, const std::string &entryName);
+        Shader(const std::string &sourcePath, vk::ShaderStageFlags shaderStage, const std::string &entryName, const std::vector<Define> &localDefines, ShaderCodeType type = ShaderCodeType::HLSL);
         ~Shader();
 
         const std::string &GetEntryName() { return m_entryName; }
-        ShaderStage GetShaderStage() { return m_shaderStage; }
+        vk::ShaderStageFlags GetShaderStage() { return m_shaderStage; }
         const uint32_t *GetSpriv() { return m_spirv.data(); }
         size_t Size() { return m_spirv.size(); }
         size_t BytesCount() { return m_spirv.size() * sizeof(uint32_t); }
@@ -63,7 +63,7 @@ namespace pe
         std::vector<Define> m_localDefines;
         ShaderCache m_cache;
         Reflection m_reflection;
-        ShaderStage m_shaderStage;
+        vk::ShaderStageFlags m_shaderStage;
         shaderc::Compiler m_compiler;
         std::vector<uint32_t> m_spirv{};
         size_t m_pathID;

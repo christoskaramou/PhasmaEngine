@@ -23,7 +23,7 @@ namespace pe
     Scene::Scene()
     {
         if (!defaultSampler)
-            defaultSampler = Sampler::Create(SamplerCreateInfo{});
+            defaultSampler = Sampler::Create(Sampler::CreateInfoInit(), "defaultSampler");
     }
 
     Scene::~Scene()

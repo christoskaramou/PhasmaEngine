@@ -30,17 +30,17 @@ namespace pe
         m_attachments.resize(1);
         m_attachments[0] = {};
         m_attachments[0].image = m_depthStencil;
-        m_attachments[0].loadOp = AttachmentLoadOp::Clear;
-        m_attachments[0].storeOp = AttachmentStoreOp::Store;
+        m_attachments[0].loadOp = vk::AttachmentLoadOp::eClear;
+        m_attachments[0].storeOp = vk::AttachmentStoreOp::eStore;
     }
 
     void DepthPass::UpdatePassInfo()
     {
         m_passInfo->name = "DepthPrePass_pipeline";
-        m_passInfo->pVertShader = Shader::Create(Path::Executable + "Assets/Shaders/Depth/DepthVS.hlsl", ShaderStage::VertexBit, "mainVS", std::vector<Define>{}, ShaderCodeType::HLSL);
-        m_passInfo->pFragShader = Shader::Create(Path::Executable + "Assets/Shaders/Depth/DepthPS.hlsl", ShaderStage::FragmentBit, "mainPS", std::vector<Define>{}, ShaderCodeType::HLSL);
-        m_passInfo->dynamicStates = {DynamicState::Viewport, DynamicState::Scissor};
-        m_passInfo->cullMode = CullMode::Front;
+        m_passInfo->pVertShader = Shader::Create(Path::Executable + "Assets/Shaders/Depth/DepthVS.hlsl", vk::ShaderStageFlagBits::eVertex, "mainVS", std::vector<Define>{}, ShaderCodeType::HLSL);
+        m_passInfo->pFragShader = Shader::Create(Path::Executable + "Assets/Shaders/Depth/DepthPS.hlsl", vk::ShaderStageFlagBits::eFragment, "mainPS", std::vector<Define>{}, ShaderCodeType::HLSL);
+        m_passInfo->dynamicStates = {vk::DynamicState::eViewport, vk::DynamicState::eScissor};
+        m_passInfo->cullMode = vk::CullModeFlagBits::eFront;
         m_passInfo->depthFormat = RHII.GetDepthFormat();
         m_passInfo->depthTestEnable = true;
         m_passInfo->depthWriteEnable = true;

@@ -73,6 +73,6 @@ namespace pe
         bool aabbs_depth_aware = true;
         int culls_per_task = 10;
         bool dynamic_rendering = true;
-        PresentMode preferred_present_mode = PresentMode::Mailbox;
+        vk::PresentModeKHR preferred_present_mode = vk::PresentModeKHR::eMailbox;
     };
 }

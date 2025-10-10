@@ -15,8 +15,8 @@ namespace pe
 
     struct MaterialInfo
     {
-        PrimitiveTopology topology;
-        CullMode cullMode;
+        vk::PrimitiveTopology topology;
+        vk::CullModeFlags cullMode;
         bool alphaBlend;
     };
 
@@ -112,7 +112,6 @@ namespace pe
         size_t m_id;
         std::vector<Image *> m_images{};
         std::vector<Sampler *> m_samplers{};
-        OrderedMap<size_t, Sampler *> m_samplersMap{};
         std::vector<MeshInfo> m_meshesInfo{};
         std::vector<NodeInfo> m_nodesInfo{};
         std::vector<Vertex> m_vertices;

@@ -43,7 +43,7 @@ namespace pe
         void ClearDirtyDescriptorViews(uint32_t frame) { m_dirtyDescriptorViews[frame] = false; }
 
         // Getters
-        std::vector<ImageViewApiHandle> &GetImageViews() { return m_imageViews; }
+        std::vector<vk::ImageView> &GetImageViews() { return m_imageViews; }
         OrderedMap<size_t, ModelGltf *> &GetModels() { return m_models; }
         Buffer *GetUniforms(uint32_t frame) { return m_storage[frame]; }
         Buffer *GetIndirect(uint32_t frame) { return m_indirect[frame]; }
@@ -96,7 +96,7 @@ namespace pe
         uint32_t m_primitivesCount = 0;
 
         std::vector<uint32_t> m_aabbIndices;
-        std::vector<ImageViewApiHandle> m_imageViews;
+        std::vector<vk::ImageView> m_imageViews;
         std::vector<Sampler *> m_samplers;
         bool m_dirtyDescriptorViews[SWAPCHAIN_IMAGES]{};
 

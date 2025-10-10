@@ -22,8 +22,8 @@ namespace pe
         {
             m_uniform[i] = Buffer::Create(
                 RHII.AlignUniform(sizeof(LightsUBO)), // * SWAPCHAIN_IMAGES,
-                BufferUsage::UniformBufferBit,
-                AllocationCreate::HostAccessSequentialWriteBit,
+                vk::BufferUsageFlagBits2::eUniformBuffer,
+                VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT,
                 "lights_uniform_buffer");
             m_uniform[i]->Map();
             m_uniform[i]->Zero();
@@ -55,7 +55,7 @@ namespace pe
 
         std::vector<DescriptorBindingInfo> bindingInfos(1);
         bindingInfos[0].binding = 0;
-        bindingInfos[0].type = DescriptorType::UniformBufferDynamic;
+        bindingInfos[0].type = vk::DescriptorType::eUniformBufferDynamic;
     }
 
     void LightSystem::Update()

@@ -23,7 +23,7 @@ namespace pe
     const vec4 color{0.0f, 0.0f, 0.0f, 1.0f};
 
     // Get function pointers for the debug report extensions from the device
-    void Debug::Init(InstanceApiHandle instance)
+    void Debug::Init(vk::Instance instance)
     {
         PE_ERROR_IF(s_instance, "Already initialized!");
         PE_ERROR_IF(!instance, "Invalid instance!");
@@ -125,19 +125,12 @@ namespace pe
 #endif
     }
 
-    void Debug::SetObjectName(uint64_t handle, ObjectType type, const std::string &name)
+    void Debug::SetObjectName(const VkDebugUtilsObjectNameInfoEXT &info)
     {
         if (!vkSetDebugUtilsObjectNameEXT)
             return;
 
-        VkDebugUtilsObjectNameInfoEXT objectInfo{};
-        objectInfo.sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_OBJECT_NAME_INFO_EXT;
-        objectInfo.pNext = VK_NULL_HANDLE;
-        objectInfo.objectType = Translate<VkObjectType>(type);
-        objectInfo.objectHandle = handle;
-        objectInfo.pObjectName = name.c_str();
-
-        vkSetDebugUtilsObjectNameEXT(RHII.GetDevice(), &objectInfo);
+        vkSetDebugUtilsObjectNameEXT(RHII.GetDevice(), &info);
     }
 
     void Debug::BeginQueueRegion(Queue *queue, const std::string &name)

@@ -49,7 +49,7 @@ namespace pe
             PE_ERROR("Failed to load model: " + file.string());
 
         Queue *queue = RHII.GetMainQueue();
-        CommandBuffer *cmd = queue->AcquireCommandBuffer(CommandPoolCreate::TransientBit);
+        CommandBuffer *cmd = queue->AcquireCommandBuffer();
 
         cmd->Begin();
         model.UploadImages(cmd);
@@ -94,10 +94,8 @@ namespace pe
             g_defaultWhite = Image::LoadRGBA8(cmd, Path::Executable + "Assets/Objects/white.png");
         if (!g_defaultSampler)
         {
-            SamplerCreateInfo info{};
-            info.name = "Default Sampler";
-            info.UpdateHash();
-            g_defaultSampler = Sampler::Create(info);
+            vk::SamplerCreateInfo info = Sampler::CreateInfoInit();
+            g_defaultSampler = Sampler::Create(info, "Default Sampler");
         }
 
         m_images.reserve(images.size() + 3);
@@ -105,18 +103,16 @@ namespace pe
         {
             PE_ERROR_IF(image.image.empty(), "Image data is empty: " + image.uri);
 
-            ImageCreateInfo info{};
-            info.format = Format::RGBA8Unorm;
+            vk::ImageCreateInfo info = Image::CreateInfoInit();
+            info.format = vk::Format::eR8G8B8A8Unorm;
             info.mipLevels = Image::CalculateMips(image.width, image.height);
-            info.width = image.width;
-            info.height = image.height;
-            info.usage = ImageUsage::TransferSrcBit | ImageUsage::TransferDstBit | ImageUsage::SampledBit | ImageUsage::StorageBit;
-            info.initialLayout = ImageLayout::Preinitialized;
-            info.name = image.uri;
+            info.extent = vk::Extent3D{ static_cast<uint32_t>(image.width), static_cast<uint32_t>(image.height), 1u };
+            info.usage = vk::ImageUsageFlagBits::eTransferSrc | vk::ImageUsageFlagBits::eTransferDst | vk::ImageUsageFlagBits::eSampled | vk::ImageUsageFlagBits::eStorage;
+            info.initialLayout = vk::ImageLayout::ePreinitialized;
 
-            Image *uploadImage = Image::Create(info);
-            uploadImage->CreateSRV(ImageViewType::Type2D);
-            PE_ERROR_IF(uploadImage->GetSRV().IsNull(), "Failed to create SRV for image: " + image.uri);
+            Image *uploadImage = Image::Create(info, image.uri);
+            uploadImage->CreateSRV(vk::ImageViewType::e2D);
+            PE_ERROR_IF(!uploadImage->GetSRV(), "Failed to create SRV for image: " + image.uri);
 
             void *data = image.image.data();
             size_t size = static_cast<uint32_t>(image.image.size());
@@ -125,9 +121,9 @@ namespace pe
 
             ImageBarrierInfo barrier{};
             barrier.image = uploadImage;
-            barrier.layout = ImageLayout::ShaderReadOnly;
-            barrier.stageFlags = PipelineStage::FragmentShaderBit;
-            barrier.accessMask = Access::ShaderReadBit;
+            barrier.layout = vk::ImageLayout::eShaderReadOnlyOptimal;
+            barrier.stageFlags = vk::PipelineStageFlagBits2::eFragmentShader;
+            barrier.accessMask = vk::AccessFlagBits2::eShaderRead;
             cmd->ImageBarrier(barrier);
 
             m_images.push_back(uploadImage);
@@ -150,71 +146,67 @@ namespace pe
         m_samplers.reserve(samplers.size() + 1);
         for (auto &sampler : samplers)
         {
-            SamplerCreateInfo info{};
-            info.name = sampler.name;
+            vk::SamplerCreateInfo info = Sampler::CreateInfoInit();
             if (sampler.minFilter == TINYGLTF_TEXTURE_FILTER_NEAREST)
             {
-                info.minFilter = Filter::Nearest;
+                info.minFilter = vk::Filter::eNearest;
             }
             else if (sampler.minFilter == TINYGLTF_TEXTURE_FILTER_LINEAR)
             {
-                info.minFilter = Filter::Linear;
+                info.minFilter = vk::Filter::eLinear;
             }
             else if (sampler.minFilter == TINYGLTF_TEXTURE_FILTER_NEAREST_MIPMAP_NEAREST)
             {
-                info.minFilter = Filter::Nearest;
-                info.mipmapMode = SamplerMipmapMode::Nearest;
+                info.minFilter = vk::Filter::eNearest;
+                info.mipmapMode = vk::SamplerMipmapMode::eNearest;
             }
             else if (sampler.minFilter == TINYGLTF_TEXTURE_FILTER_LINEAR_MIPMAP_NEAREST)
             {
-                info.minFilter = Filter::Linear;
-                info.mipmapMode = SamplerMipmapMode::Nearest;
+                info.minFilter = vk::Filter::eLinear;
+                info.mipmapMode = vk::SamplerMipmapMode::eNearest;
             }
             else if (sampler.minFilter == TINYGLTF_TEXTURE_FILTER_NEAREST_MIPMAP_LINEAR)
             {
-                info.minFilter = Filter::Nearest;
-                info.mipmapMode = SamplerMipmapMode::Linear;
+                info.minFilter = vk::Filter::eNearest;
+                info.mipmapMode = vk::SamplerMipmapMode::eLinear;
             }
             else if (sampler.minFilter == TINYGLTF_TEXTURE_FILTER_LINEAR_MIPMAP_LINEAR)
             {
-                info.minFilter = Filter::Linear;
-                info.mipmapMode = SamplerMipmapMode::Linear;
+                info.minFilter = vk::Filter::eLinear;
+                info.mipmapMode = vk::SamplerMipmapMode::eLinear;
             }
             else
             {
-                info.minFilter = Filter::Linear;
-                info.mipmapMode = SamplerMipmapMode::Linear;
+                info.minFilter = vk::Filter::eLinear;
+                info.mipmapMode = vk::SamplerMipmapMode::eLinear;
             }
 
             if (sampler.magFilter == TINYGLTF_TEXTURE_FILTER_NEAREST)
-                info.magFilter = Filter::Nearest;
+                info.magFilter = vk::Filter::eNearest;
             else
-                info.magFilter = Filter::Linear;
+                info.magFilter = vk::Filter::eLinear;
 
             if (sampler.wrapS == TINYGLTF_TEXTURE_WRAP_REPEAT)
-                info.addressModeU = SamplerAddressMode::Repeat;
+                info.addressModeU = vk::SamplerAddressMode::eRepeat;
             else if (sampler.wrapS == TINYGLTF_TEXTURE_WRAP_CLAMP_TO_EDGE)
-                info.addressModeU = SamplerAddressMode::ClampToEdge;
+                info.addressModeU = vk::SamplerAddressMode::eClampToEdge;
             else if (sampler.wrapS == TINYGLTF_TEXTURE_WRAP_MIRRORED_REPEAT)
-                info.addressModeU = SamplerAddressMode::MirroredRepeat;
+                info.addressModeU = vk::SamplerAddressMode::eMirroredRepeat;
 
             if (sampler.wrapT == TINYGLTF_TEXTURE_WRAP_REPEAT)
-                info.addressModeV = SamplerAddressMode::Repeat;
+                info.addressModeV = vk::SamplerAddressMode::eRepeat;
             else if (sampler.wrapT == TINYGLTF_TEXTURE_WRAP_CLAMP_TO_EDGE)
-                info.addressModeV = SamplerAddressMode::ClampToEdge;
+                info.addressModeV = vk::SamplerAddressMode::eClampToEdge;
             else if (sampler.wrapT == TINYGLTF_TEXTURE_WRAP_MIRRORED_REPEAT)
-                info.addressModeV = SamplerAddressMode::MirroredRepeat;
+                info.addressModeV = vk::SamplerAddressMode::eMirroredRepeat;
 
-            info.UpdateHash();
-            Sampler *uploadSampler = Sampler::Create(info);
+            Sampler *uploadSampler = Sampler::Create(info, sampler.name);
             m_samplers.push_back(uploadSampler);
-            m_samplersMap[info.GetHash()] = uploadSampler; // take as granted that samplers are not duplicated
 
             // Update loading bar
             progress++;
         }
         m_samplers.push_back(g_defaultSampler);
-        m_samplersMap[g_defaultSampler->GetInfo().GetHash()] = g_defaultSampler;
     }
 
     void ModelGltf::ExtractMaterialInfo()
@@ -253,28 +245,28 @@ namespace pe
                 switch (primitive.mode)
                 {
                 case TINYGLTF_MODE_POINTS:
-                    materialInfo.topology = PrimitiveTopology::PointList;
+                    materialInfo.topology = vk::PrimitiveTopology::ePointList;
                     break;
                 case TINYGLTF_MODE_LINE:
-                    materialInfo.topology = PrimitiveTopology::LineList;
+                    materialInfo.topology = vk::PrimitiveTopology::eLineList;
                     break;
                 case TINYGLTF_MODE_LINE_STRIP:
-                    materialInfo.topology = PrimitiveTopology::LineStrip;
+                    materialInfo.topology = vk::PrimitiveTopology::eLineStrip;
                     break;
                 case TINYGLTF_MODE_TRIANGLES:
-                    materialInfo.topology = PrimitiveTopology::TriangleList;
+                    materialInfo.topology = vk::PrimitiveTopology::eTriangleList;
                     break;
                 case TINYGLTF_MODE_TRIANGLE_STRIP:
-                    materialInfo.topology = PrimitiveTopology::TriangleStrip;
+                    materialInfo.topology = vk::PrimitiveTopology::eTriangleStrip;
                     break;
                 case TINYGLTF_MODE_TRIANGLE_FAN:
-                    materialInfo.topology = PrimitiveTopology::TriangleFan;
+                    materialInfo.topology = vk::PrimitiveTopology::eTriangleFan;
                     break;
                 default:
                     PE_ERROR("Invalid primitive mode");
                     break;
                 }
-                materialInfo.cullMode = material.doubleSided ? CullMode::None : CullMode::Front;
+                materialInfo.cullMode = material.doubleSided ? vk::CullModeFlagBits::eNone : vk::CullModeFlagBits::eFront;
                 materialInfo.alphaBlend = material.alphaMode == "BLEND" || material.alphaMode == "MASK";
 
                 // Update loading bar

@@ -27,17 +27,17 @@ namespace pe
         m_attachments.resize(1);
         m_attachments[0] = {};
         m_attachments[0].image = m_viewportRT;
-        m_attachments[0].loadOp = AttachmentLoadOp::Load;
-        m_attachments[0].storeOp = AttachmentStoreOp::Store;
+        m_attachments[0].loadOp = vk::AttachmentLoadOp::eLoad;
+        m_attachments[0].storeOp = vk::AttachmentStoreOp::eStore;
     }
 
     void SSRPass::UpdatePassInfo()
     {
         m_passInfo->name = "ssr_pipeline";
-        m_passInfo->pVertShader = Shader::Create(Path::Executable + "Assets/Shaders/Common/Quad.hlsl", ShaderStage::VertexBit, "mainVS", std::vector<Define>{}, ShaderCodeType::HLSL);
-        m_passInfo->pFragShader = Shader::Create(Path::Executable + "Assets/Shaders/SSR/SSRPS.hlsl", ShaderStage::FragmentBit, "mainPS", std::vector<Define>{}, ShaderCodeType::HLSL);
-        m_passInfo->dynamicStates = {DynamicState::Viewport, DynamicState::Scissor};
-        m_passInfo->cullMode = CullMode::Back;
+        m_passInfo->pVertShader = Shader::Create(Path::Executable + "Assets/Shaders/Common/Quad.hlsl", vk::ShaderStageFlagBits::eVertex, "mainVS", std::vector<Define>{}, ShaderCodeType::HLSL);
+        m_passInfo->pFragShader = Shader::Create(Path::Executable + "Assets/Shaders/SSR/SSRPS.hlsl", vk::ShaderStageFlagBits::eFragment, "mainPS", std::vector<Define>{}, ShaderCodeType::HLSL);
+        m_passInfo->dynamicStates = {vk::DynamicState::eViewport, vk::DynamicState::eScissor};
+        m_passInfo->cullMode = vk::CullModeFlagBits::eBack;
         m_passInfo->colorBlendAttachments = {PipelineColorBlendAttachmentState::Default};
         m_passInfo->colorFormats = {m_ssrRT->GetFormat()};
         m_passInfo->ReflectDescriptors();
@@ -50,8 +50,8 @@ namespace pe
         {
             m_UBReflection[i] = Buffer::Create(
                 RHII.AlignUniform(4 * sizeof(mat4)), // * SWAPCHAIN_IMAGES,
-                BufferUsage::UniformBufferBit,
-                AllocationCreate::HostAccessSequentialWriteBit,
+                vk::BufferUsageFlagBits2::eUniformBuffer,
+                VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT,
                 "SSR_UB_Reflection_buffer");
             m_UBReflection[i]->Map();
             m_UBReflection[i]->Zero();
@@ -104,29 +104,29 @@ namespace pe
         std::vector<ImageBarrierInfo> barriers(5);
 
         barriers[0].image = m_frameImage;
-        barriers[0].layout = ImageLayout::ShaderReadOnly;
-        barriers[0].stageFlags = PipelineStage::FragmentShaderBit;
-        barriers[0].accessMask = Access::ShaderReadBit;
+        barriers[0].layout = vk::ImageLayout::eShaderReadOnlyOptimal;
+        barriers[0].stageFlags = vk::PipelineStageFlagBits2::eFragmentShader;
+        barriers[0].accessMask = vk::AccessFlagBits2::eShaderRead;
 
         barriers[1].image = m_normalRT;
-        barriers[1].layout = ImageLayout::ShaderReadOnly;
-        barriers[1].stageFlags = PipelineStage::FragmentShaderBit;
-        barriers[1].accessMask = Access::ShaderReadBit;
+        barriers[1].layout = vk::ImageLayout::eShaderReadOnlyOptimal;
+        barriers[1].stageFlags = vk::PipelineStageFlagBits2::eFragmentShader;
+        barriers[1].accessMask = vk::AccessFlagBits2::eShaderRead;
 
         barriers[2].image = m_depth;
-        barriers[2].layout = ImageLayout::ShaderReadOnly;
-        barriers[2].stageFlags = PipelineStage::FragmentShaderBit;
-        barriers[2].accessMask = Access::ShaderReadBit;
+        barriers[2].layout = vk::ImageLayout::eShaderReadOnlyOptimal;
+        barriers[2].stageFlags = vk::PipelineStageFlagBits2::eFragmentShader;
+        barriers[2].accessMask = vk::AccessFlagBits2::eShaderRead;
 
         barriers[3].image = m_srmRT;
-        barriers[3].layout = ImageLayout::ShaderReadOnly;
-        barriers[3].stageFlags = PipelineStage::FragmentShaderBit;
-        barriers[3].accessMask = Access::ShaderReadBit;
+        barriers[3].layout = vk::ImageLayout::eShaderReadOnlyOptimal;
+        barriers[3].stageFlags = vk::PipelineStageFlagBits2::eFragmentShader;
+        barriers[3].accessMask = vk::AccessFlagBits2::eShaderRead;
 
         barriers[4].image = m_albedoRT;
-        barriers[4].layout = ImageLayout::ShaderReadOnly;
-        barriers[4].stageFlags = PipelineStage::FragmentShaderBit;
-        barriers[4].accessMask = Access::ShaderReadBit;
+        barriers[4].layout = vk::ImageLayout::eShaderReadOnlyOptimal;
+        barriers[4].stageFlags = vk::PipelineStageFlagBits2::eFragmentShader;
+        barriers[4].accessMask = vk::AccessFlagBits2::eShaderRead;
 
         cmd->BeginDebugRegion("SSRPass");
         cmd->CopyImage(m_viewportRT, m_frameImage);

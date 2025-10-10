@@ -10,97 +10,90 @@ namespace pe
     RenderPass::RenderPass(uint32_t count, Attachment *attachments, const std::string &name)
         : m_name{name}
     {
-        std::vector<VkAttachmentDescription2> attachmentsVK{};
+        std::vector<vk::AttachmentDescription2> attachmentsVK{};
         attachmentsVK.reserve(count);
-        std::vector<VkAttachmentReference2> colorReferencesVK{};
+        std::vector<vk::AttachmentReference2> colorReferencesVK{};
         colorReferencesVK.reserve(count);
-        VkAttachmentReference2 depthStencilReferenceVK{};
-        depthStencilReferenceVK.attachment = VK_ATTACHMENT_UNUSED;
+        vk::AttachmentReference2 depthStencilReferenceVK{};
+        depthStencilReferenceVK.attachment = vk::AttachmentUnused;
 
         uint32_t attachmentIndex = 0;
         for (uint32_t i = 0; i < count; i++)
         {
             const Attachment &attachment = attachments[i];
-            SampleCount samples = attachment.image->GetSamples();
 
-            VkAttachmentDescription2 attachmentDescription{};
-            attachmentDescription.sType = VK_STRUCTURE_TYPE_ATTACHMENT_DESCRIPTION_2;
-            attachmentDescription.format = Translate<VkFormat>(attachment.image->GetFormat());
-            attachmentDescription.samples = Translate<VkSampleCountFlagBits>(samples);
-            attachmentDescription.loadOp = Translate<VkAttachmentLoadOp>(attachment.loadOp);
-            attachmentDescription.storeOp = Translate<VkAttachmentStoreOp>(attachment.storeOp);
-            attachmentDescription.stencilLoadOp = Translate<VkAttachmentLoadOp>(attachment.stencilLoadOp);
-            attachmentDescription.stencilStoreOp = Translate<VkAttachmentStoreOp>(attachment.stencilStoreOp);
-            attachmentDescription.initialLayout = VK_IMAGE_LAYOUT_ATTACHMENT_OPTIMAL;
-            attachmentDescription.finalLayout = VK_IMAGE_LAYOUT_ATTACHMENT_OPTIMAL;
+            vk::AttachmentDescription2 attachmentDescription{};
+            attachmentDescription.format = attachment.image->GetFormat();
+            attachmentDescription.samples = attachment.image->GetSamples();
+            attachmentDescription.loadOp = attachment.loadOp;
+            attachmentDescription.storeOp = attachment.storeOp;
+            attachmentDescription.stencilLoadOp = attachment.stencilLoadOp;
+            attachmentDescription.stencilStoreOp = attachment.stencilStoreOp;
+            attachmentDescription.initialLayout = vk::ImageLayout::eAttachmentOptimal;
+            attachmentDescription.finalLayout = vk::ImageLayout::eAttachmentOptimal;
             attachmentsVK.push_back(attachmentDescription);
 
             if (HasDepth(attachment.image->GetFormat()))
             {
-                depthStencilReferenceVK.sType = VK_STRUCTURE_TYPE_ATTACHMENT_REFERENCE_2;
                 depthStencilReferenceVK.attachment = attachmentIndex++;
                 depthStencilReferenceVK.aspectMask = GetAspectMask(attachment.image->GetFormat());
-                depthStencilReferenceVK.layout = VK_IMAGE_LAYOUT_ATTACHMENT_OPTIMAL;
+                depthStencilReferenceVK.layout = vk::ImageLayout::eAttachmentOptimal;
             }
             else
             {
-                VkAttachmentReference2 reference{};
-                reference.sType = VK_STRUCTURE_TYPE_ATTACHMENT_REFERENCE_2;
+                vk::AttachmentReference2 reference{};
                 reference.attachment = attachmentIndex++;
-                reference.layout = VK_IMAGE_LAYOUT_ATTACHMENT_OPTIMAL;
+                reference.layout = vk::ImageLayout::eAttachmentOptimal;
                 reference.aspectMask = GetAspectMask(attachment.image->GetFormat());
                 colorReferencesVK.push_back(reference);
             }
         }
 
-        VkSubpassDescription2 subpassDescription{};
-        subpassDescription.sType = VK_STRUCTURE_TYPE_SUBPASS_DESCRIPTION_2;
-        subpassDescription.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
+        vk::SubpassDescription2 subpassDescription{};
+        subpassDescription.pipelineBindPoint = vk::PipelineBindPoint::eGraphics;
         subpassDescription.colorAttachmentCount = static_cast<uint32_t>(colorReferencesVK.size());
         subpassDescription.pColorAttachments = colorReferencesVK.data();
-        subpassDescription.pDepthStencilAttachment = depthStencilReferenceVK.attachment != VK_ATTACHMENT_UNUSED ? &depthStencilReferenceVK : nullptr;
+        subpassDescription.pDepthStencilAttachment = depthStencilReferenceVK.attachment != vk::AttachmentUnused ? &depthStencilReferenceVK : nullptr;
 
-        VkPipelineStageFlags srcStageMask = VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT;
-        VkPipelineStageFlags dstStageMask = VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT;
-        VkAccessFlags srcAccessMask = VK_ACCESS_NONE;
-        VkAccessFlags dstAccessMask = VK_ACCESS_NONE;
+        vk::PipelineStageFlags srcStageMask = vk::PipelineStageFlagBits::eTopOfPipe;
+        vk::PipelineStageFlags dstStageMask = vk::PipelineStageFlagBits::eBottomOfPipe;
+        vk::AccessFlags srcAccessMask = vk::AccessFlagBits::eNone;
+        vk::AccessFlags dstAccessMask = vk::AccessFlagBits::eNone;
         if (!colorReferencesVK.empty())
         {
-            srcStageMask |= VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
-            dstStageMask |= VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
-            dstAccessMask |= VK_ACCESS_COLOR_ATTACHMENT_READ_BIT | VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+            srcStageMask |= vk::PipelineStageFlagBits::eColorAttachmentOutput;
+            dstStageMask |= vk::PipelineStageFlagBits::eColorAttachmentOutput;
+            dstAccessMask |= vk::AccessFlagBits::eColorAttachmentRead | vk::AccessFlagBits::eColorAttachmentWrite;
         }
-        if (depthStencilReferenceVK.attachment != VK_ATTACHMENT_UNUSED)
+        if (depthStencilReferenceVK.attachment != vk::AttachmentUnused)
         {
-            srcStageMask |= VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT;
-            dstStageMask |= VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT;
-            dstAccessMask |= VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_READ_BIT | VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
+            srcStageMask |= vk::PipelineStageFlagBits::eLateFragmentTests;
+            dstStageMask |= vk::PipelineStageFlagBits::eEarlyFragmentTests;
+            dstAccessMask |= vk::AccessFlagBits::eDepthStencilAttachmentRead | vk::AccessFlagBits::eDepthStencilAttachmentWrite;
         }
 
-        VkSubpassDependency2 subpassDependencies[2];
+        vk::SubpassDependency2 subpassDependencies[2];
 
-        subpassDependencies[0] = {};
-        subpassDependencies[0].sType = VK_STRUCTURE_TYPE_SUBPASS_DEPENDENCY_2;
-        subpassDependencies[0].srcSubpass = VK_SUBPASS_EXTERNAL;
+        subpassDependencies[0] = vk::SubpassDependency2{};
+        subpassDependencies[0].srcSubpass = vk::SubpassExternal;
         subpassDependencies[0].dstSubpass = 0;
         subpassDependencies[0].srcStageMask = srcStageMask;
         subpassDependencies[0].dstStageMask = dstStageMask;
         subpassDependencies[0].srcAccessMask = srcAccessMask;
         subpassDependencies[0].dstAccessMask = dstAccessMask;
-        subpassDependencies[0].dependencyFlags = VK_DEPENDENCY_BY_REGION_BIT;
+        subpassDependencies[0].dependencyFlags = vk::DependencyFlagBits::eByRegion;
 
-        subpassDependencies[1] = {};
-        subpassDependencies[1].sType = VK_STRUCTURE_TYPE_SUBPASS_DEPENDENCY_2;
+        subpassDependencies[1] = vk::SubpassDependency2{};
+        subpassDependencies[1].sType = vk::StructureType::eSubpassDependency2;
         subpassDependencies[1].srcSubpass = 0;
-        subpassDependencies[1].dstSubpass = VK_SUBPASS_EXTERNAL;
+        subpassDependencies[1].dstSubpass = vk::SubpassExternal;
         subpassDependencies[1].srcStageMask = dstStageMask;
-        subpassDependencies[1].dstStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+        subpassDependencies[1].dstStageMask = vk::PipelineStageFlagBits::eColorAttachmentOutput;
         subpassDependencies[1].srcAccessMask = dstAccessMask;
-        subpassDependencies[1].dstAccessMask = VK_ACCESS_NONE;
-        subpassDependencies[1].dependencyFlags = VK_DEPENDENCY_BY_REGION_BIT;
+        subpassDependencies[1].dstAccessMask = vk::AccessFlagBits::eNone;
+        subpassDependencies[1].dependencyFlags = vk::DependencyFlagBits::eByRegion;
 
-        VkRenderPassCreateInfo2 renderPassInfo{};
-        renderPassInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO_2;
+        vk::RenderPassCreateInfo2 renderPassInfo{};
         renderPassInfo.attachmentCount = static_cast<uint32_t>(attachmentsVK.size());
         renderPassInfo.pAttachments = attachmentsVK.data();
         renderPassInfo.subpassCount = 1;
@@ -108,9 +101,7 @@ namespace pe
         renderPassInfo.dependencyCount = 2;
         renderPassInfo.pDependencies = subpassDependencies;
 
-        VkRenderPass renderPass;
-        PE_CHECK(vkCreateRenderPass2(RHII.GetDevice(), &renderPassInfo, nullptr, &renderPass));
-        m_apiHandle = renderPass;
+        m_apiHandle = RHII.GetDevice().createRenderPass2(renderPassInfo);
 
         Debug::SetObjectName(m_apiHandle, name);
     }
@@ -119,8 +110,8 @@ namespace pe
     {
         if (m_apiHandle)
         {
-            vkDestroyRenderPass(RHII.GetDevice(), m_apiHandle, nullptr);
-            m_apiHandle = {};
+            RHII.GetDevice().destroyRenderPass(m_apiHandle);
+            m_apiHandle = vk::RenderPass{};
         }
     }
 }

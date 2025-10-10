@@ -27,23 +27,23 @@
 
 namespace pe
 {
-    const char *PresentModeToString(PresentMode presentMode)
+    const char *PresentModeToString(vk::PresentModeKHR presentMode)
     {
         const char *modesNames[] = {"Immediate", "Mailbox", "Fifo", "FifoRelaxed", ""};
         switch (presentMode)
         {
-        case PresentMode::Immediate:
+        case vk::PresentModeKHR::eImmediate:
             return modesNames[0];
-        case PresentMode::Mailbox:
+        case vk::PresentModeKHR::eMailbox:
             return modesNames[1];
-        case PresentMode::Fifo:
+        case vk::PresentModeKHR::eFifo:
             return modesNames[2];
-        case PresentMode::FifoRelaxed:
+        case vk::PresentModeKHR::eFifoRelaxed:
             return modesNames[3];
         }
 
         PE_ERROR("Unknown PresentMode");
-        return modesNames[5];
+        return modesNames[4];
     }
 
     void RendererSystem::LoadResources(CommandBuffer *cmd)
@@ -69,14 +69,11 @@ namespace pe
 
     void RendererSystem::Init(CommandBuffer *cmd)
     {
-        Surface *surface = RHII.GetSurface();
-        Format surfaceFormat = surface->GetFormat();
-
         // Set Window Title
         std::string title = "PhasmaEngine";
         title += " - Device: " + RHII.GetGpuName();
         title += " - API: Vulkan";
-        title += " - Present Mode: " + std::string(PresentModeToString(surface->GetPresentMode()));
+        title += " - Present Mode: " + std::string(PresentModeToString(RHII.GetSurface()->GetPresentMode()));
 #if PE_DEBUG
         title += " - Debug";
 #elif PE_RELEASE
@@ -120,9 +117,9 @@ namespace pe
         {
             ImageBarrierInfo barrierInfo{};
             barrierInfo.image = RHII.GetSwapchain()->GetImage(i);
-            barrierInfo.layout = ImageLayout::PresentSrc;
-            barrierInfo.stageFlags = PipelineStage::AllCommandsBit;
-            barrierInfo.accessMask = Access::None;
+            barrierInfo.layout = vk::ImageLayout::ePresentSrcKHR;
+            barrierInfo.stageFlags = vk::PipelineStageFlagBits2::eAllCommands;
+            barrierInfo.accessMask = vk::AccessFlagBits2::eNone;
             cmd->ImageBarrier(barrierInfo); // transition from undefined to present
 
             m_cmds[i] = nullptr;
@@ -251,7 +248,7 @@ namespace pe
         }
         else
         {
-            Upsample(cmd, Filter::Linear);
+            Upsample(cmd, vk::Filter::eLinear);
         }
 
         // Tone Mapping
@@ -310,9 +307,9 @@ namespace pe
         frameCmd = RecordPasses(imageIndex);
 
         // SUBMIT TO QUEUE
-        aquireSignalSemaphore->SetStageFlags(PipelineStage::ColorAttachmentOutputBit | PipelineStage::ComputeShaderBit);
+        aquireSignalSemaphore->SetStageFlags(vk::PipelineStageFlagBits2::eColorAttachmentOutput | vk::PipelineStageFlagBits2::eComputeShader);
         Semaphore *signal = RHII.AcquireBinarySemaphore(frame);
-        signal->SetStageFlags(PipelineStage::AllCommandsBit);
+        signal->SetStageFlags(vk::PipelineStageFlagBits2::eAllCommands);
 
         Queue *queue = RHII.GetMainQueue();
         queue->Submit(1, &frameCmd, aquireSignalSemaphore, signal);
@@ -353,26 +350,26 @@ namespace pe
         scissor.height = static_cast<int32_t>(h);
     }
 
-    void RendererSystem::Upsample(CommandBuffer *cmd, Filter filter)
+    void RendererSystem::Upsample(CommandBuffer *cmd, vk::Filter filter)
     {
         // Blit viewportRT to displayRT with a filter
         Viewport &vp = m_renderArea.viewport;
-        ImageBlit region{};
-        region.srcOffsets[0] = Offset3D{0, 0, 0};
-        region.srcOffsets[1] = Offset3D{static_cast<int32_t>(m_viewportRT->GetWidth()), static_cast<int32_t>(m_viewportRT->GetHeight()), 1};
+        vk::ImageBlit region{};
+        region.srcOffsets[0] = vk::Offset3D{0, 0, 0};
+        region.srcOffsets[1] = vk::Offset3D{static_cast<int32_t>(m_viewportRT->GetWidth()), static_cast<int32_t>(m_viewportRT->GetHeight()), 1};
         region.srcSubresource.aspectMask = GetAspectMask(m_viewportRT->GetFormat());
         region.srcSubresource.layerCount = 1;
-        region.dstOffsets[0] = Offset3D{static_cast<int32_t>(vp.x), static_cast<int32_t>(vp.y), 0};
-        region.dstOffsets[1] = Offset3D{static_cast<int32_t>(vp.x) + static_cast<int32_t>(vp.width), static_cast<int32_t>(vp.y) + static_cast<int32_t>(vp.height), 1};
+        region.dstOffsets[0] = vk::Offset3D{static_cast<int32_t>(vp.x), static_cast<int32_t>(vp.y), 0};
+        region.dstOffsets[1] = vk::Offset3D{static_cast<int32_t>(vp.x) + static_cast<int32_t>(vp.width), static_cast<int32_t>(vp.y) + static_cast<int32_t>(vp.height), 1};
         region.dstSubresource.aspectMask = GetAspectMask(m_displayRT->GetFormat());
         region.dstSubresource.layerCount = 1;
 
-        cmd->BlitImage(m_viewportRT, m_displayRT, &region, filter);
+        cmd->BlitImage(m_viewportRT, m_displayRT, region, filter);
     }
 
     Image *RendererSystem::CreateRenderTarget(const std::string &name,
-                                              Format format,
-                                              ImageUsageFlags additionalFlags,
+                                              vk::Format format,
+                                              vk::ImageUsageFlags additionalFlags,
                                               bool useRenderTergetScale,
                                               bool useMips,
                                               vec4 clearColor)
@@ -383,23 +380,22 @@ namespace pe
         uint32_t width = static_cast<uint32_t>(RHII.GetWidthf() * rtScale);
         uint32_t heigth = static_cast<uint32_t>(RHII.GetHeightf() * rtScale);
 
-        ImageCreateInfo info{};
+        vk::ImageCreateInfo info = Image::CreateInfoInit();
         info.format = format;
-        info.width = width;
-        info.height = heigth;
-        info.usage = additionalFlags | ImageUsage::ColorAttachmentBit | ImageUsage::SampledBit | ImageUsage::StorageBit | ImageUsage::TransferDstBit;
-        info.clearColor = clearColor;
-        info.name = name;
+        info.extent = vk::Extent3D{width, heigth, 1u};
+        info.usage = additionalFlags | vk::ImageUsageFlagBits::eColorAttachment | vk::ImageUsageFlagBits::eSampled | vk::ImageUsageFlagBits::eStorage | vk::ImageUsageFlagBits::eTransferDst;
         if (useMips)
             info.mipLevels = static_cast<uint32_t>(std::floor(std::log2(width > heigth ? width : heigth))) + 1;
-        Image *rt = Image::Create(info);
+        Image *rt = Image::Create(info, name);
+        rt->SetClearColor(clearColor);
 
         rt->CreateRTV();
-        rt->CreateSRV(ImageViewType::Type2D);
+        rt->CreateSRV(vk::ImageViewType::e2D);
 
-        SamplerCreateInfo samplerInfo{};
-        samplerInfo.anisotropyEnable = 0;
-        rt->SetSampler(Sampler::Create(samplerInfo));
+        vk::SamplerCreateInfo samplerInfo = Sampler::CreateInfoInit();
+        samplerInfo.anisotropyEnable = VK_FALSE;
+        Sampler *sampler = Sampler::Create(samplerInfo, name + "_sampler");
+        rt->SetSampler(sampler);
 
         gSettings.rendering_images.push_back(rt);
         m_renderTargets[StringHash(name)] = rt;
@@ -408,8 +404,8 @@ namespace pe
     }
 
     Image *RendererSystem::CreateDepthStencilTarget(const std::string &name,
-                                                    Format format,
-                                                    ImageUsageFlags additionalFlags,
+                                                    vk::Format format,
+                                                    vk::ImageUsageFlags additionalFlags,
                                                     bool useRenderTergetScale,
                                                     float clearDepth,
                                                     uint32_t clearStencil)
@@ -417,26 +413,25 @@ namespace pe
         auto &gSettings = Settings::Get<GlobalSettings>();
         float rtScale = useRenderTergetScale ? gSettings.render_scale : 1.f;
 
-        ImageCreateInfo info{};
-        info.width = static_cast<uint32_t>(RHII.GetWidthf() * rtScale);
-        info.height = static_cast<uint32_t>(RHII.GetHeightf() * rtScale);
-        info.usage = additionalFlags | ImageUsage::DepthStencilAttachmentBit | ImageUsage::SampledBit | ImageUsage::TransferDstBit;
+        vk::ImageCreateInfo info = Image::CreateInfoInit();
+        info.extent = vk::Extent3D{static_cast<uint32_t>(RHII.GetWidthf() * rtScale), static_cast<uint32_t>(RHII.GetHeightf() * rtScale), 1u};
+        info.usage = additionalFlags | vk::ImageUsageFlagBits::eDepthStencilAttachment | vk::ImageUsageFlagBits::eSampled | vk::ImageUsageFlagBits::eTransferDst;
         info.format = format;
-        info.clearColor = vec4(clearDepth, static_cast<float>(clearStencil), 0.f, 0.f);
-        info.name = name;
-        Image *depth = Image::Create(info);
+        Image *depth = Image::Create(info, name);
+        depth->SetClearColor(vec4(clearDepth, static_cast<float>(clearStencil), 0.f, 0.f));
 
         depth->CreateRTV();
-        depth->CreateSRV(ImageViewType::Type2D);
+        depth->CreateSRV(vk::ImageViewType::e2D);
 
-        SamplerCreateInfo samplerInfo{};
-        samplerInfo.addressModeU = SamplerAddressMode::ClampToEdge;
-        samplerInfo.addressModeV = SamplerAddressMode::ClampToEdge;
-        samplerInfo.addressModeW = SamplerAddressMode::ClampToEdge;
-        samplerInfo.anisotropyEnable = 0;
-        samplerInfo.borderColor = BorderColor::FloatOpaqueWhite;
-        samplerInfo.compareEnable = 1;
-        depth->SetSampler(Sampler::Create(samplerInfo));
+        vk::SamplerCreateInfo samplerInfo = Sampler::CreateInfoInit();
+        samplerInfo.addressModeU = vk::SamplerAddressMode::eClampToEdge;
+        samplerInfo.addressModeV = vk::SamplerAddressMode::eClampToEdge;
+        samplerInfo.addressModeW = vk::SamplerAddressMode::eClampToEdge;
+        samplerInfo.anisotropyEnable = VK_FALSE;
+        samplerInfo.borderColor = vk::BorderColor::eFloatOpaqueWhite;
+        samplerInfo.compareEnable = VK_TRUE;
+        Sampler *sampler = Sampler::Create(samplerInfo, name + "_sampler");
+        depth->SetSampler(sampler);
 
         gSettings.rendering_images.push_back(depth);
         m_depthStencilTargets[StringHash(name)] = depth;
@@ -469,20 +464,17 @@ namespace pe
         auto &gSettings = Settings::Get<GlobalSettings>();
         float rtScale = useRenderTergetScale ? gSettings.render_scale : 1.f;
 
-        ImageCreateInfo info{};
+        vk::ImageCreateInfo info = Image::CreateInfoInit();
         info.format = RHII.GetSurface()->GetFormat();
-        info.initialLayout = ImageLayout::Undefined;
-        info.width = static_cast<uint32_t>(RHII.GetWidthf() * rtScale);
-        info.height = static_cast<uint32_t>(RHII.GetHeightf() * rtScale);
-        info.tiling = ImageTiling::Optimal;
-        info.usage = ImageUsage::TransferDstBit | ImageUsage::SampledBit;
-        info.name = "FSSampledImage";
-        Image *sampledImage = Image::Create(info);
+        info.extent = vk::Extent3D{static_cast<uint32_t>(RHII.GetWidthf() * rtScale), static_cast<uint32_t>(RHII.GetHeightf() * rtScale), 1u};
+        info.usage = vk::ImageUsageFlagBits::eTransferDst | vk::ImageUsageFlagBits::eSampled;
+        Image *sampledImage = Image::Create(info,"FSSampledImage");
 
-        sampledImage->CreateSRV(ImageViewType::Type2D);
+        sampledImage->CreateSRV(vk::ImageViewType::e2D);
 
-        SamplerCreateInfo samplerInfo{};
-        sampledImage->SetSampler(Sampler::Create(samplerInfo));
+        vk::SamplerCreateInfo samplerInfo = Sampler::CreateInfoInit();
+        Sampler *sampler = Sampler::Create(samplerInfo, "FSSampledImage_sampler");
+        sampledImage->SetSampler(sampler);
 
         return sampledImage;
     }
@@ -503,21 +495,21 @@ namespace pe
 
         Settings::Get<GlobalSettings>().rendering_images.clear();
 
-        Format surfaceFormat = RHII.GetSurface()->GetFormat();
-        m_depthStencil = CreateDepthStencilTarget("depthStencil", RHII.GetDepthFormat(), ImageUsage::TransferDstBit);
-        m_viewportRT = CreateRenderTarget("viewport", surfaceFormat, ImageUsage::TransferSrcBit | ImageUsage::TransferDstBit);
-        m_displayRT = CreateRenderTarget("display", surfaceFormat, ImageUsage::TransferSrcBit | ImageUsage::TransferDstBit, false);
-        CreateRenderTarget("normal", Format::RGBA16SFloat);
+        vk::Format surfaceFormat = RHII.GetSurface()->GetFormat();
+        m_depthStencil = CreateDepthStencilTarget("depthStencil", RHII.GetDepthFormat(), vk::ImageUsageFlagBits::eTransferDst);
+        m_viewportRT = CreateRenderTarget("viewport", surfaceFormat, vk::ImageUsageFlagBits::eTransferSrc | vk::ImageUsageFlagBits::eTransferDst);
+        m_displayRT = CreateRenderTarget("display", surfaceFormat, vk::ImageUsageFlagBits::eTransferSrc | vk::ImageUsageFlagBits::eTransferDst, false);
+        CreateRenderTarget("normal", vk::Format::eR16G16B16A16Sfloat);
         CreateRenderTarget("albedo", surfaceFormat);
         CreateRenderTarget("srm", surfaceFormat); // Specular Roughness Metallic
-        CreateRenderTarget("ssao", Format::R8Unorm);
+        CreateRenderTarget("ssao", vk::Format::eR8Unorm);
         CreateRenderTarget("ssr", surfaceFormat);
-        CreateRenderTarget("velocity", Format::RG16SFloat);
+        CreateRenderTarget("velocity", vk::Format::eR16G16Sfloat);
         CreateRenderTarget("emissive", surfaceFormat);
         CreateRenderTarget("brightFilter", surfaceFormat, {}, false);
         CreateRenderTarget("gaussianBlurHorizontal", surfaceFormat, {}, false);
         CreateRenderTarget("gaussianBlurVertical", surfaceFormat, {}, false);
-        CreateRenderTarget("transparency", Format::R8Unorm, {}, true, false, Color::Black);
+        CreateRenderTarget("transparency", vk::Format::eR8Unorm, {}, true, false, Color::Black);
     }
 
     void RendererSystem::Resize(uint32_t width, uint32_t height)
@@ -545,25 +537,25 @@ namespace pe
         Image *swapchainImage = RHII.GetSwapchain()->GetImage(imageIndex);
         Viewport &vp = m_renderArea.viewport;
 
-        ImageBlit region{};
-        region.srcOffsets[0] = Offset3D{0, 0, 0};
-        region.srcOffsets[1] = Offset3D{static_cast<int32_t>(src->GetWidth()), static_cast<int32_t>(src->GetHeight()), 1};
+        vk::ImageBlit region{};
+        region.srcOffsets[0] = vk::Offset3D{0, 0, 0};
+        region.srcOffsets[1] = vk::Offset3D{static_cast<int32_t>(src->GetWidth()), static_cast<int32_t>(src->GetHeight()), 1};
         region.srcSubresource.aspectMask = GetAspectMask(src->GetFormat());
         region.srcSubresource.layerCount = 1;
-        region.dstOffsets[0] = Offset3D{(int32_t)vp.x, (int32_t)vp.y, 0};
-        region.dstOffsets[1] = Offset3D{(int32_t)vp.x + (int32_t)vp.width, (int32_t)vp.y + (int32_t)vp.height, 1};
+        region.dstOffsets[0] = vk::Offset3D{(int32_t)vp.x, (int32_t)vp.y, 0};
+        region.dstOffsets[1] = vk::Offset3D{(int32_t)vp.x + (int32_t)vp.width, (int32_t)vp.y + (int32_t)vp.height, 1};
         region.dstSubresource.aspectMask = GetAspectMask(swapchainImage->GetFormat());
         region.dstSubresource.layerCount = 1;
 
         ImageBarrierInfo barrier{};
         barrier.image = swapchainImage;
-        barrier.layout = ImageLayout::PresentSrc;
-        barrier.stageFlags = PipelineStage::AllCommandsBit;
-        barrier.accessMask = Access::None;
+        barrier.layout = vk::ImageLayout::ePresentSrcKHR;
+        barrier.stageFlags = vk::PipelineStageFlagBits2::eAllCommands;
+        barrier.accessMask = vk::AccessFlagBits2::eNone;
 
         // with 1:1 ratio we can use nearest filter
-        Filter filter = src->GetWidth() == (uint32_t)vp.width && src->GetHeight() == (uint32_t)vp.height ? Filter::Nearest : Filter::Linear;
-        cmd->BlitImage(src, swapchainImage, &region, filter);
+        vk::Filter filter = src->GetWidth() == (uint32_t)vp.width && src->GetHeight() == (uint32_t)vp.height ? vk::Filter::eNearest : vk::Filter::eLinear;
+        cmd->BlitImage(src, swapchainImage, region, filter);
         cmd->ImageBarrier(barrier);
     }
 

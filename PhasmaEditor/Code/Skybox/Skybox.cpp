@@ -10,9 +10,9 @@ namespace pe
 
         ImageBarrierInfo barrier{};
         barrier.image = m_cubeMap;
-        barrier.layout = ImageLayout::ShaderReadOnly;
-        barrier.stageFlags = PipelineStage::FragmentShaderBit;
-        barrier.accessMask = Access::ShaderReadBit;
+        barrier.layout = vk::ImageLayout::eShaderReadOnlyOptimal;
+        barrier.stageFlags = vk::PipelineStageFlagBits2::eFragmentShader;
+        barrier.accessMask = vk::AccessFlagBits2::eShaderRead;
         cmd->ImageBarrier(barrier);
     }
 

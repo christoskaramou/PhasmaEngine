@@ -4,7 +4,7 @@ namespace pe
 {
     class Context;
 
-    class Surface : public PeHandle<Surface, SurfaceApiHandle>
+    class Surface : public PeHandle<Surface, vk::SurfaceKHR>
     {
     public:
         Surface(SDL_Window *window);
@@ -12,22 +12,22 @@ namespace pe
 
         void CheckTransfer();
         void FindFormat();
-        void SetPresentMode(PresentMode preferredMode);
+        void SetPresentMode(vk::PresentModeKHR preferredMode);
         void FindProperties();
         const Rect2Du &GetActualExtent() const { return m_actualExtent; }
         void SetActualExtent(const Rect2Du &extent) { m_actualExtent = extent; }
-        Format GetFormat() const { return m_format; }
-        ColorSpace GetColorSpace() const { return m_colorSpace; }
-        PresentMode GetPresentMode() const { return m_presentMode; }
-        const std::vector<PresentMode> &GetSupportedPresentModes() const { return m_supportedPresentModes; }
+        vk::Format GetFormat() const { return m_format; }
+        vk::ColorSpaceKHR GetColorSpace() const { return m_colorSpace; }
+        vk::PresentModeKHR GetPresentMode() const { return m_presentMode; }
+        const std::vector<vk::PresentModeKHR> &GetSupportedPresentModes() const { return m_supportedPresentModes; }
 
 private:
-        bool SupportsPresentMode(PresentMode mode);
+        bool SupportsPresentMode(vk::PresentModeKHR mode);
 
         Rect2Du m_actualExtent;
-        Format m_format;
-        ColorSpace m_colorSpace;
-        PresentMode m_presentMode;
-        std::vector<PresentMode> m_supportedPresentModes;
+        vk::Format m_format;
+        vk::ColorSpaceKHR m_colorSpace;
+        vk::PresentModeKHR m_presentMode;
+        std::vector<vk::PresentModeKHR> m_supportedPresentModes;
     };
 }

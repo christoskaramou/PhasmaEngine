@@ -7,26 +7,26 @@ namespace pe
     struct EventSetInfoImage
     {
         Image *image;
-        ImageLayout oldLayout;
-        ImageLayout newLayout;
-        PipelineStageFlags srcStage;
-        AccessFlags srcAccess;
-        PipelineStageFlags dstStage;
-        AccessFlags dstAccess;
+        vk::ImageLayout oldLayout;
+        vk::ImageLayout newLayout;
+        vk::PipelineStageFlags2 srcStage;
+        vk::AccessFlags2 srcAccess;
+        vk::PipelineStageFlags2 dstStage;
+        vk::AccessFlags2 dstAccess;
     };
 
-    class Event : public PeHandle<Event, EventApiHandle>
+    class Event : public PeHandle<Event, vk::Event>
     {
     public:
         Event(const std::string &name);
         ~Event();
 
         void Set(CommandBuffer *cmd, Image *image,
-                 ImageLayout scrLayout, ImageLayout dstLayout,
-                 PipelineStageFlags srcStage, PipelineStageFlags dstStage,
-                 AccessFlags srcAccess, AccessFlags dstAccess);
+                 vk::ImageLayout srcLayout, vk::ImageLayout dstLayout,
+                 vk::PipelineStageFlags2 srcStage, vk::PipelineStageFlags2 dstStage,
+                 vk::AccessFlags2 srcAccess, vk::AccessFlags2 dstAccess);
         void Wait();
-        void Reset(PipelineStageFlags resetStage);
+        void Reset(vk::PipelineStageFlags2 resetStage);
         bool IsSet() const { return m_set; }
 
     private:

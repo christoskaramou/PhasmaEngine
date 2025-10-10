@@ -4,13 +4,12 @@ namespace pe
 {
     class RenderPass;
 
-    class Framebuffer : public PeHandle<Framebuffer, FramebufferApiHandle>
+    class Framebuffer : public PeHandle<Framebuffer, vk::Framebuffer>
     {
     public:
         Framebuffer(uint32_t width,
                     uint32_t height,
-                    uint32_t count,
-                    ImageViewApiHandle *views,
+                    const std::vector<vk::ImageView> &views,
                     RenderPass *renderPass,
                     const std::string &name);
         ~Framebuffer();

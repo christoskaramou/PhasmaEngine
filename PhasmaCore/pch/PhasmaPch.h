@@ -45,7 +45,7 @@
 #include "SDL2/SDL.h"
 #include "SDL2/SDL_syswm.h"
 #include "SDL2/SDL_vulkan.h"
-#include "vulkan/vulkan.h"
+#include "vulkan/vulkan.hpp"
 #include "vma/vk_mem_alloc.h"
 #if defined(PE_WIN32)
 #include <dxgi1_6.h>

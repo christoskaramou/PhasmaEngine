@@ -373,7 +373,7 @@ namespace pe
         ImGui::Separator();
 
         ImGui::Text("Present Mode");
-        static PresentMode currentPresentMode = RHII.GetSurface()->GetPresentMode();
+        static vk::PresentModeKHR currentPresentMode = RHII.GetSurface()->GetPresentMode();
 
         if (ImGui::BeginCombo("##present_mode", PresentModeToString(currentPresentMode)))
         {
@@ -546,8 +546,8 @@ namespace pe
 
         RendererSystem *renderer = GetGlobalSystem<RendererSystem>();
         m_attachment->image = renderer->GetDisplayRT();
-        m_attachment->loadOp = AttachmentLoadOp::Load;
-        VkFormat format = Translate<VkFormat>(RHII.GetSurface()->GetFormat());
+        m_attachment->loadOp = vk::AttachmentLoadOp::eLoad;
+        VkFormat format = static_cast<VkFormat>(RHII.GetSurface()->GetFormat());
         Queue *queue = RHII.GetMainQueue();
 
         ImGui_ImplVulkan_InitInfo init_info{};
@@ -612,9 +612,9 @@ namespace pe
 
         ImageBarrierInfo barrierInfo{};
         barrierInfo.image = displayRT;
-        barrierInfo.layout = ImageLayout::Attachment;
-        barrierInfo.stageFlags = PipelineStage::ColorAttachmentOutputBit;
-        barrierInfo.accessMask = Access::ColorAttachmentReadBit;
+        barrierInfo.layout = vk::ImageLayout::eAttachmentOptimal;
+        barrierInfo.stageFlags = vk::PipelineStageFlagBits2::eColorAttachmentOutput;
+        barrierInfo.accessMask = vk::AccessFlagBits2::eColorAttachmentRead;
 
         cmd->ImageBarrier(barrierInfo);
         cmd->BeginPass(1, m_attachment.get(), "GUI", !Settings::Get<GlobalSettings>().dynamic_rendering);

@@ -6,26 +6,15 @@
 
 namespace pe
 {
-    DescriptorPool::DescriptorPool(uint32_t count, DescriptorPoolSize *sizes, const std::string &name)
+    DescriptorPool::DescriptorPool(const std::vector<vk::DescriptorPoolSize> &sizes, const std::string &name)
     {
-        // Type and count per element in descriptor pool
-        std::vector<VkDescriptorPoolSize> descPoolsize(count);
-        for (uint32_t i = 0; i < count; i++)
-        {
-            descPoolsize[i].type = Translate<VkDescriptorType>(sizes[i].type);
-            descPoolsize[i].descriptorCount = sizes[i].descriptorCount;
-        }
-
-        VkDescriptorPoolCreateInfo createInfo{};
-        createInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
-        createInfo.flags = VK_DESCRIPTOR_POOL_CREATE_UPDATE_AFTER_BIND_BIT | VK_DESCRIPTOR_POOL_CREATE_FREE_DESCRIPTOR_SET_BIT ;
-        createInfo.poolSizeCount = static_cast<uint32_t>(descPoolsize.size());
-        createInfo.pPoolSizes = descPoolsize.data();
+        vk::DescriptorPoolCreateInfo createInfo{};
+        createInfo.flags = vk::DescriptorPoolCreateFlagBits::eUpdateAfterBind | vk::DescriptorPoolCreateFlagBits::eFreeDescriptorSet;
+        createInfo.poolSizeCount = static_cast<uint32_t>(sizes.size());
+        createInfo.pPoolSizes = sizes.data();
         createInfo.maxSets = 1; // Unique descriptor sets for each descriptor pool
 
-        VkDescriptorPool descriptorPoolVK;
-        PE_CHECK(vkCreateDescriptorPool(RHII.GetDevice(), &createInfo, nullptr, &descriptorPoolVK));
-        m_apiHandle = descriptorPoolVK;
+        m_apiHandle = RHII.GetDevice().createDescriptorPool(createInfo);
 
         Debug::SetObjectName(m_apiHandle, name);
     }
@@ -34,13 +23,13 @@ namespace pe
     {
         if (m_apiHandle)
         {
-            vkDestroyDescriptorPool(RHII.GetDevice(), m_apiHandle, nullptr);
-            m_apiHandle = {};
+            RHII.GetDevice().destroyDescriptorPool(m_apiHandle);
+            m_apiHandle = vk::DescriptorPool{};
         }
     }
 
     DescriptorLayout::DescriptorLayout(const std::vector<DescriptorBindingInfo> &bindingInfos,
-                                       ShaderStage stage,
+                                       vk::ShaderStageFlags stage,
                                        const std::string &name,
                                        bool pushDescriptor)
     {
@@ -48,25 +37,25 @@ namespace pe
         m_variableCount = 1;
 
         // Bindings
-        std::vector<VkDescriptorSetLayoutBinding> bindingsVK{};
+        std::vector<vk::DescriptorSetLayoutBinding> bindings{};
         for (auto const &bindingInfo : bindingInfos)
         {
-            VkDescriptorSetLayoutBinding layoutBinding{};
+            vk::DescriptorSetLayoutBinding layoutBinding{};
             layoutBinding.binding = bindingInfo.binding;
-            layoutBinding.descriptorType = Translate<VkDescriptorType>(bindingInfo.type);
+            layoutBinding.descriptorType = bindingInfo.type;
             layoutBinding.descriptorCount = bindingInfo.count;
-            layoutBinding.stageFlags = Translate<VkShaderStageFlags>(stage);
+            layoutBinding.stageFlags = stage;
             layoutBinding.pImmutableSamplers = nullptr;
 
-            bindingsVK.push_back(layoutBinding);
+            bindings.push_back(layoutBinding);
         }
 
         m_allowUpdateAfterBind = true;
-        for (int i = 0; i < bindingsVK.size(); i++)
+        for (int i = 0; i < bindings.size(); i++)
         {
-            if (bindingsVK[i].descriptorType == VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT ||
-                bindingsVK[i].descriptorType == VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC ||
-                bindingsVK[i].descriptorType == VK_DESCRIPTOR_TYPE_STORAGE_BUFFER_DYNAMIC)
+            if (bindings[i].descriptorType == vk::DescriptorType::eInputAttachment ||
+                bindings[i].descriptorType == vk::DescriptorType::eUniformBufferDynamic ||
+                bindings[i].descriptorType == vk::DescriptorType::eStorageBufferDynamic)
             {
                 m_allowUpdateAfterBind = false;
                 break;
@@ -74,13 +63,12 @@ namespace pe
         }
 
         // Bindings flags
-        std::vector<VkDescriptorBindingFlags> bindingFlags(bindingsVK.size());
-        for (int i = 0; i < bindingsVK.size(); i++)
+        std::vector<vk::DescriptorBindingFlags> bindingFlags(bindings.size());
+        for (int i = 0; i < bindings.size(); i++)
         {
-            bindingFlags[i] = VK_DESCRIPTOR_BINDING_PARTIALLY_BOUND_BIT;
 
             if (m_allowUpdateAfterBind && !pushDescriptor)
-                bindingFlags[i] |= VK_DESCRIPTOR_BINDING_UPDATE_AFTER_BIND_BIT;
+                bindingFlags[i] |= vk::DescriptorBindingFlagBits::eUpdateAfterBind;
 
             if (bindingInfos[i].bindless)
             {
@@ -88,31 +76,27 @@ namespace pe
                 // Vulkan limitation?
                 PE_ERROR_IF(i != bindingInfos.size() - 1, "DescriptorLayout: An unbound array must be the last binding");
 
-                bindingFlags[i] |= VK_DESCRIPTOR_BINDING_VARIABLE_DESCRIPTOR_COUNT_BIT;
-                m_variableCount = bindingsVK[i].descriptorCount;
+                bindingFlags[i] |= vk::DescriptorBindingFlagBits::eVariableDescriptorCount;
+                m_variableCount = bindings[i].descriptorCount;
             }
         }
 
         // Set flags to bindings
-        VkDescriptorSetLayoutBindingFlagsCreateInfo layoutBindingFlags{};
-        layoutBindingFlags.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_BINDING_FLAGS_CREATE_INFO;
+        vk::DescriptorSetLayoutBindingFlagsCreateInfo layoutBindingFlags{};
         layoutBindingFlags.bindingCount = static_cast<uint32_t>(bindingFlags.size());
         layoutBindingFlags.pBindingFlags = bindingFlags.data();
 
         // Layout create info
-        VkDescriptorSetLayoutCreateInfo dslci{};
-        dslci.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
-        dslci.bindingCount = static_cast<uint32_t>(bindingsVK.size());
-        dslci.pBindings = bindingsVK.data();
+        vk::DescriptorSetLayoutCreateInfo dslci{};
+        dslci.bindingCount = static_cast<uint32_t>(bindings.size());
+        dslci.pBindings = bindings.data();
         dslci.pNext = &layoutBindingFlags;
         if (pushDescriptor)
-            dslci.flags |= VK_DESCRIPTOR_SET_LAYOUT_CREATE_PUSH_DESCRIPTOR_BIT_KHR;
+            dslci.flags |= vk::DescriptorSetLayoutCreateFlagBits::ePushDescriptor;
         else if (m_allowUpdateAfterBind)
-            dslci.flags |= VK_DESCRIPTOR_SET_LAYOUT_CREATE_UPDATE_AFTER_BIND_POOL_BIT;
+            dslci.flags |= vk::DescriptorSetLayoutCreateFlagBits::eUpdateAfterBindPool;
 
-        VkDescriptorSetLayout layout;
-        PE_CHECK(vkCreateDescriptorSetLayout(RHII.GetDevice(), &dslci, nullptr, &layout));
-        m_apiHandle = layout;
+        m_apiHandle = RHII.GetDevice().createDescriptorSetLayout(dslci);
 
         Debug::SetObjectName(m_apiHandle, name);
     }
@@ -121,13 +105,13 @@ namespace pe
     {
         if (m_apiHandle)
         {
-            vkDestroyDescriptorSetLayout(RHII.GetDevice(), m_apiHandle, nullptr);
-            m_apiHandle = {};
+            RHII.GetDevice().destroyDescriptorSetLayout(m_apiHandle);
+            m_apiHandle = vk::DescriptorSetLayout{};
         }
     }
 
     Descriptor::Descriptor(const std::vector<DescriptorBindingInfo> &bindingInfos,
-                           ShaderStage stage,
+                           vk::ShaderStageFlags stage,
                            bool pushDescriptor,
                            const std::string &name)
         : m_pushDescriptor{pushDescriptor},
@@ -140,7 +124,7 @@ namespace pe
                   { return a.binding < b.binding; });
 
         // Get the count per descriptor type
-        std::unordered_map<DescriptorType, uint32_t> typeCounts{};
+        std::unordered_map<vk::DescriptorType, uint32_t> typeCounts{};
         for (auto i = 0; i < m_bindingInfos.size(); i++)
         {
             auto it = typeCounts.find(m_bindingInfos[i].type);
@@ -151,7 +135,7 @@ namespace pe
         }
 
         // Create pool sizes from typeCounts above
-        std::vector<DescriptorPoolSize> poolSizes(typeCounts.size());
+        std::vector<vk::DescriptorPoolSize> poolSizes(typeCounts.size());
         uint32_t i = 0;
         for (auto const &[type, count] : typeCounts)
         {
@@ -161,35 +145,31 @@ namespace pe
         }
 
         // Create DescriptorPool and DescriptorLayout for this descriptor set
-        m_pool = DescriptorPool::Create(i, poolSizes.data(), name + "_pool");
+        m_pool = DescriptorPool::Create(poolSizes, name + "_pool");
         m_layout = DescriptorLayout::GetOrCreate(m_bindingInfos, m_stage, m_pushDescriptor);
 
         // DescriptorLayout calculates the variable count on creation
         uint32_t variableDescCounts[] = {m_layout->GetVariableCount()};
 
-        VkDescriptorSetVariableDescriptorCountAllocateInfo variableDescriptorCountAllocInfo = {};
-        variableDescriptorCountAllocInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_VARIABLE_DESCRIPTOR_COUNT_ALLOCATE_INFO;
+        vk::DescriptorSetVariableDescriptorCountAllocateInfo variableDescriptorCountAllocInfo = {};
         variableDescriptorCountAllocInfo.descriptorSetCount = 1;
         variableDescriptorCountAllocInfo.pDescriptorCounts = variableDescCounts;
 
-        VkDescriptorSetLayout dsetLayout = m_layout->ApiHandle();
-        VkDescriptorSetAllocateInfo allocateInfo{};
-        allocateInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
+        vk::DescriptorSetLayout dsetLayout = m_layout->ApiHandle();
+        vk::DescriptorSetAllocateInfo allocateInfo{};
         allocateInfo.descriptorPool = m_pool->ApiHandle();
         allocateInfo.descriptorSetCount = 1;
         allocateInfo.pSetLayouts = &dsetLayout;
         allocateInfo.pNext = &variableDescriptorCountAllocInfo; // If the flag was not set in the layout, this will be ignored
 
-        VkDescriptorSet dset;
-        PE_CHECK(vkAllocateDescriptorSets(RHII.GetDevice(), &allocateInfo, &dset));
-        m_apiHandle = dset;
+        m_apiHandle = RHII.GetDevice().allocateDescriptorSets(allocateInfo)[0];
 
         Debug::SetObjectName(m_apiHandle, name);
     }
-    
+
     void Descriptor::SetImageViews(uint32_t binding,
-                                   const std::vector<ImageViewApiHandle> &views,
-                                   const std::vector<SamplerApiHandle> &samplers)
+                                   const std::vector<vk::ImageView> &views,
+                                   const std::vector<vk::Sampler> &samplers)
     {
         DescriptorUpdateInfo info{};
         info.binding = binding;
@@ -198,7 +178,7 @@ namespace pe
         m_updateInfos[binding] = info;
     }
 
-    void Descriptor::SetImageView(uint32_t binding, ImageViewApiHandle view, SamplerApiHandle sampler)
+    void Descriptor::SetImageView(uint32_t binding, vk::ImageView view, vk::Sampler sampler)
     {
         SetImageViews(binding, {view}, {sampler});
     }
@@ -221,7 +201,7 @@ namespace pe
         SetBuffers(binding, {buffer}, {offset}, {range});
     }
 
-    void Descriptor::SetSamplers(uint32_t binding, const std::vector<SamplerApiHandle> &samplers)
+    void Descriptor::SetSamplers(uint32_t binding, const std::vector<vk::Sampler> &samplers)
     {
         DescriptorUpdateInfo info{};
         info.binding = binding;
@@ -229,18 +209,18 @@ namespace pe
         m_updateInfos[binding] = info;
     }
 
-    void Descriptor::SetSampler(uint32_t binding, SamplerApiHandle sampler)
+    void Descriptor::SetSampler(uint32_t binding, vk::Sampler sampler)
     {
         SetSamplers(binding, {sampler});
     }
 
     void Descriptor::Update()
     {
-        std::vector<VkWriteDescriptorSet> writes{};
-        std::vector<std::vector<VkDescriptorImageInfo>> imageInfosVK{};
-        std::vector<std::vector<VkDescriptorBufferInfo>> bufferInfosVK{};
-        imageInfosVK.reserve(m_updateInfos.size());
-        bufferInfosVK.reserve(m_updateInfos.size());
+        std::vector<vk::WriteDescriptorSet> writes{};
+        std::vector<std::vector<vk::DescriptorImageInfo>> imageInfos{};
+        std::vector<std::vector<vk::DescriptorBufferInfo>> bufferInfos{};
+        imageInfos.reserve(m_updateInfos.size());
+        bufferInfos.reserve(m_updateInfos.size());
         writes.reserve(m_updateInfos.size());
 
         for (uint32_t i = 0; i < m_updateInfos.size(); i++)
@@ -248,57 +228,56 @@ namespace pe
             auto &updateInfo = m_updateInfos[i];
             auto &bindingInfo = m_bindingInfos[i];
 
-            VkWriteDescriptorSet write{};
-            write.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+            vk::WriteDescriptorSet write{};
             write.dstSet = m_apiHandle;
             write.dstBinding = updateInfo.binding;
             write.dstArrayElement = 0;
-            write.descriptorType = Translate<VkDescriptorType>(bindingInfo.type);
+            write.descriptorType = bindingInfo.type;
             if (updateInfo.views.size() > 0)
             {
-                auto &infosVK = imageInfosVK.emplace_back(std::vector<VkDescriptorImageInfo>{});
-                infosVK.resize(updateInfo.views.size());
+                auto &infos = imageInfos.emplace_back(std::vector<vk::DescriptorImageInfo>{});
+                infos.resize(updateInfo.views.size());
                 for (uint32_t j = 0; j < updateInfo.views.size(); j++)
                 {
-                    infosVK[j] = {};
-                    infosVK[j].imageView = updateInfo.views[j];
-                    infosVK[j].imageLayout = Translate<VkImageLayout>(bindingInfo.imageLayout);
-                    infosVK[j].sampler = bindingInfo.type == DescriptorType::CombinedImageSampler ? updateInfo.samplers[j] : SamplerApiHandle{};
+                    infos[j] = vk::DescriptorImageInfo{};
+                    infos[j].imageView = updateInfo.views[j];
+                    infos[j].imageLayout = bindingInfo.imageLayout;
+                    infos[j].sampler = bindingInfo.type == vk::DescriptorType::eCombinedImageSampler ? updateInfo.samplers[j] : vk::Sampler{};
                 }
 
-                write.descriptorCount = static_cast<uint32_t>(infosVK.size());
-                write.pImageInfo = infosVK.data();
-                imageInfosVK.push_back(infosVK);
+                write.descriptorCount = static_cast<uint32_t>(infos.size());
+                write.pImageInfo = infos.data();
+                imageInfos.push_back(infos);
             }
             else if (updateInfo.buffers.size() > 0)
             {
-                auto &infosVK = bufferInfosVK.emplace_back(std::vector<VkDescriptorBufferInfo>{});
-                infosVK.resize(updateInfo.buffers.size());
+                auto &infos = bufferInfos.emplace_back(std::vector<vk::DescriptorBufferInfo>{});
+                infos.resize(updateInfo.buffers.size());
                 for (uint32_t j = 0; j < updateInfo.buffers.size(); j++)
                 {
-                    infosVK[j] = {};
-                    infosVK[j].buffer = updateInfo.buffers[j]->ApiHandle();
-                    infosVK[j].offset = updateInfo.offsets.size() > 0 ? updateInfo.offsets[j] : 0;
-                    infosVK[j].range = updateInfo.ranges.size() > 0 ? (updateInfo.ranges[j] > 0 ? updateInfo.ranges[j] : VK_WHOLE_SIZE) : VK_WHOLE_SIZE;
+                    infos[j] = vk::DescriptorBufferInfo{};
+                    infos[j].buffer = updateInfo.buffers[j]->ApiHandle();
+                    infos[j].offset = updateInfo.offsets.size() > 0 ? updateInfo.offsets[j] : 0;
+                    infos[j].range = updateInfo.ranges.size() > 0 ? (updateInfo.ranges[j] > 0 ? updateInfo.ranges[j] : vk::WholeSize) : vk::WholeSize;
                 }
 
-                write.descriptorCount = static_cast<uint32_t>(infosVK.size());
-                write.pBufferInfo = infosVK.data();
+                write.descriptorCount = static_cast<uint32_t>(infos.size());
+                write.pBufferInfo = infos.data();
             }
-            else if (updateInfo.samplers.size() > 0 && bindingInfo.type != DescriptorType::CombinedImageSampler)
+            else if (updateInfo.samplers.size() > 0 && bindingInfo.type != vk::DescriptorType::eCombinedImageSampler)
             {
-                auto &infosVK = imageInfosVK.emplace_back(std::vector<VkDescriptorImageInfo>{});
-                infosVK.resize(updateInfo.samplers.size());
+                auto &infos = imageInfos.emplace_back(std::vector<vk::DescriptorImageInfo>{});
+                infos.resize(updateInfo.samplers.size());
                 for (uint32_t j = 0; j < updateInfo.samplers.size(); j++)
                 {
-                    infosVK[j] = {};
-                    infosVK[j].imageView = nullptr;
-                    infosVK[j].imageLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-                    infosVK[j].sampler = updateInfo.samplers[j];
+                    infos[j] = vk::DescriptorImageInfo{};
+                    infos[j].imageView = nullptr;
+                    infos[j].imageLayout = vk::ImageLayout::eUndefined;
+                    infos[j].sampler = updateInfo.samplers[j];
                 }
 
-                write.descriptorCount = static_cast<uint32_t>(infosVK.size());
-                write.pImageInfo = infosVK.data();
+                write.descriptorCount = static_cast<uint32_t>(infos.size());
+                write.pImageInfo = infos.data();
             }
             else
             {
@@ -308,7 +287,7 @@ namespace pe
             writes.push_back(write);
         }
 
-        vkUpdateDescriptorSets(RHII.GetDevice(), static_cast<uint32_t>(writes.size()), writes.data(), 0, nullptr);
+        RHII.GetDevice().updateDescriptorSets(static_cast<uint32_t>(writes.size()), writes.data(), 0, nullptr);
 
         m_updateInfos.clear();
         m_updateInfos.resize(m_bindingInfos.size());

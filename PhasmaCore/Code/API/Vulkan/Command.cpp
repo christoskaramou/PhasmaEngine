@@ -23,27 +23,18 @@ namespace pe
           m_name{name},
           m_threadId{std::this_thread::get_id()}
     {
-        VkCommandBufferAllocateInfo cbai{};
-        cbai.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
+        vk::CommandBufferAllocateInfo cbai{};
         cbai.commandPool = m_commandPool->ApiHandle();
-        cbai.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
+        cbai.level = vk::CommandBufferLevel::ePrimary;
         cbai.commandBufferCount = 1;
 
-        VkCommandBuffer commandBuffer;
-        PE_CHECK(vkAllocateCommandBuffers(RHII.GetDevice(), &cbai, &commandBuffer));
-        m_apiHandle = commandBuffer;
+        m_apiHandle = RHII.GetDevice().allocateCommandBuffers(cbai)[0];
 
         Debug::SetObjectName(m_apiHandle, name);
     }
 
     CommandBuffer::~CommandBuffer()
     {
-        // if (m_apiHandle)
-        // {
-        //     VkCommandBuffer cmd = m_apiHandle;
-        //     vkFreeCommandBuffers(RHII.GetDevice(), m_commandPool->ApiHandle(), 1, &cmd);
-        //     m_apiHandle = {};
-        // }
     }
 
     void CommandBuffer::Begin()
@@ -53,12 +44,9 @@ namespace pe
 
         Reset();
 
-        VkCommandBufferBeginInfo beginInfo{};
-        beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
-        beginInfo.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
-        beginInfo.pInheritanceInfo = nullptr;
-
-        PE_CHECK(vkBeginCommandBuffer(m_apiHandle, &beginInfo));
+        vk::CommandBufferBeginInfo beginInfo{};
+        beginInfo.flags = vk::CommandBufferUsageFlagBits::eOneTimeSubmit;
+        m_apiHandle.begin(beginInfo);
         m_recording = true;
 
         BeginDebugRegion(m_name);
@@ -71,23 +59,22 @@ namespace pe
         PE_ERROR_IF(!m_recording, "CommandBuffer::End: CommandBuffer is not in recording state!");
         PE_ERROR_IF(m_threadId != std::this_thread::get_id(), "CommandBuffer::End: CommandBuffer is used in a different thread!");
 
-        PE_CHECK(vkEndCommandBuffer(m_apiHandle));
+        m_apiHandle.end();
         m_recording = false;
     }
 
     void CommandBuffer::Reset()
     {
-        PE_ERROR_IF(!(m_commandPool->GetFlags() & CommandPoolCreate::ResetCommandBuffer), "CommandBuffer::Reset: CommandPool does not have the reset flag!");
-
-        vkResetCommandBuffer(m_apiHandle, 0);
+        PE_ERROR_IF(!(m_commandPool->GetFlags() & vk::CommandPoolCreateFlagBits::eResetCommandBuffer), "CommandBuffer::Reset: CommandPool does not have the reset flag!");
+        m_apiHandle.reset();
     }
 
     void CommandBuffer::SetDepthBias(float constantFactor, float clamp, float slopeFactor)
     {
-        vkCmdSetDepthBias(m_apiHandle, constantFactor, clamp, slopeFactor);
+        m_apiHandle.setDepthBias(constantFactor, clamp, slopeFactor);
     }
 
-    void CommandBuffer::BlitImage(Image *src, Image *dst, ImageBlit *region, Filter filter)
+    void CommandBuffer::BlitImage(Image *src, Image *dst, const vk::ImageBlit &region, vk::Filter filter)
     {
         dst->BlitImage(this, src, region, filter);
     }
@@ -98,32 +85,32 @@ namespace pe
         for (uint32_t i = 0; i < images.size(); i++)
         {
             barriers[i].image = images[i];
-            barriers[i].layout = ImageLayout::TransferDst;
-            barriers[i].stageFlags = PipelineStage::TransferBit;
-            barriers[i].accessMask = Access::TransferWriteBit;
+            barriers[i].layout = vk::ImageLayout::eTransferDstOptimal;
+            barriers[i].stageFlags = vk::PipelineStageFlagBits2::eTransfer;
+            barriers[i].accessMask = vk::AccessFlagBits2::eTransferWrite;
         }
         Image::Barriers(this, barriers);
 
         for (uint32_t i = 0; i < images.size(); i++)
         {
             Image *image = images[i];
-            const vec4 &color = image->m_createInfo.clearColor;
+            const vec4 &color = image->m_clearColor;
 
-            VkClearColorValue clearValue{};
+            vk::ClearColorValue clearValue{};
             clearValue.float32[0] = color[0];
             clearValue.float32[1] = color[1];
             clearValue.float32[2] = color[2];
             clearValue.float32[3] = color[3];
 
-            VkImageSubresourceRange rangeVK{};
-            rangeVK.aspectMask = Translate<VkImageAspectFlags>(GetAspectMask(image->GetFormat()));
-            rangeVK.baseMipLevel = 0;
-            rangeVK.levelCount = 1;
-            rangeVK.baseArrayLayer = 0;
-            rangeVK.layerCount = 1;
+            vk::ImageSubresourceRange range{};
+            range.aspectMask = GetAspectMask(image->GetFormat());
+            range.baseMipLevel = 0;
+            range.levelCount = 1;
+            range.baseArrayLayer = 0;
+            range.layerCount = 1;
 
-            BeginDebugRegion("Clear Color: " + image->m_createInfo.name);
-            vkCmdClearColorImage(m_apiHandle, image->ApiHandle(), VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, &clearValue, 1, &rangeVK);
+            BeginDebugRegion("Clear Color: " + image->m_name);
+            m_apiHandle.clearColorImage(image->ApiHandle(), vk::ImageLayout::eTransferDstOptimal, &clearValue, 1, &range);
             EndDebugRegion();
         }
     }
@@ -134,9 +121,9 @@ namespace pe
         for (uint32_t i = 0; i < images.size(); i++)
         {
             barriers[i].image = images[i];
-            barriers[i].layout = ImageLayout::TransferDst;
-            barriers[i].stageFlags = PipelineStage::TransferBit;
-            barriers[i].accessMask = Access::TransferWriteBit;
+            barriers[i].layout = vk::ImageLayout::eTransferDstOptimal;
+            barriers[i].stageFlags = vk::PipelineStageFlagBits2::eTransfer;
+            barriers[i].accessMask = vk::AccessFlagBits2::eTransferWrite;
         }
         Image::Barriers(this, barriers);
 
@@ -144,19 +131,19 @@ namespace pe
         {
             Image *image = images[i];
 
-            VkClearDepthStencilValue clearValue{};
-            clearValue.depth = image->m_createInfo.clearColor[0];
-            clearValue.stencil = static_cast<uint32_t>(image->m_createInfo.clearColor[1]);
+            vk::ClearDepthStencilValue clearValue{};
+            clearValue.depth = image->m_clearColor[0];
+            clearValue.stencil = static_cast<uint32_t>(image->m_clearColor[1]);
 
-            VkImageSubresourceRange rangeVK{};
-            rangeVK.aspectMask = Translate<VkImageAspectFlags>(GetAspectMask(image->GetFormat()));
-            rangeVK.baseMipLevel = 0;
-            rangeVK.levelCount = 1;
-            rangeVK.baseArrayLayer = 0;
-            rangeVK.layerCount = 1;
+            vk::ImageSubresourceRange range{};
+            range.aspectMask = GetAspectMask(image->GetFormat());
+            range.baseMipLevel = 0;
+            range.levelCount = 1;
+            range.baseArrayLayer = 0;
+            range.layerCount = 1;
 
-            BeginDebugRegion("Clear Depth: " + image->m_createInfo.name);
-            vkCmdClearDepthStencilImage(m_apiHandle, image->ApiHandle(), VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, &clearValue, 1, &rangeVK);
+            BeginDebugRegion("Clear Depth: " + image->m_name);
+            m_apiHandle.clearDepthStencilImage(image->ApiHandle(), vk::ImageLayout::eTransferDstOptimal, &clearValue, 1, &range);
             EndDebugRegion();
         }
     }
@@ -207,7 +194,7 @@ namespace pe
         }
         else
         {
-            std::vector<ImageViewApiHandle> views{};
+            std::vector<vk::ImageView> views{};
             views.reserve(count);
 
             for (uint32_t i = 0; i < count; i++)
@@ -219,10 +206,9 @@ namespace pe
             }
 
             std::string name = "Auto_Gen_Framebuffer_" + std::to_string(s_framebuffers.size());
-            Framebuffer *newFramebuffer = Framebuffer::Create(attachments[0].image->m_createInfo.width,
-                                                              attachments[0].image->m_createInfo.height,
-                                                              static_cast<uint32_t>(views.size()),
-                                                              views.data(),
+            Framebuffer *newFramebuffer = Framebuffer::Create(attachments[0].image->m_createInfo.extent.width,
+                                                              attachments[0].image->m_createInfo.extent.height,
+                                                              views,
                                                               renderPass,
                                                               name);
             s_framebuffers[hash] = newFramebuffer;
@@ -243,9 +229,9 @@ namespace pe
 
         if (m_dynamicPass)
         {
-            std::vector<VkRenderingAttachmentInfo> colorInfos;
+            std::vector<vk::RenderingAttachmentInfo> colorInfos;
             colorInfos.reserve(count);
-            VkRenderingAttachmentInfo depthInfo{};
+            vk::RenderingAttachmentInfo depthInfo{};
             bool hasDepth = false;
             bool hasStencil = false;
 
@@ -255,48 +241,46 @@ namespace pe
 
                 ImageBarrierInfo barrier{};
                 barrier.image = attachment.image;
-                barrier.layout = ImageLayout::Attachment;
+                barrier.layout = vk::ImageLayout::eAttachmentOptimal;
 
                 if (HasDepth(attachment.image->GetFormat()))
                 {
                     hasDepth = true;
                     hasStencil = HasStencil(attachment.image->GetFormat());
 
-                    const vec4 &clearColor = attachment.image->GetClearColor();
+                    const vec4 &clearColor = attachment.image->m_clearColor;
                     const float clearDepth = clearColor[0];
                     uint32_t clearStencil = static_cast<uint32_t>(clearColor[1]);
 
-                    depthInfo.sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO;
                     depthInfo.imageView = attachment.image->GetRTV();
-                    depthInfo.imageLayout = VK_IMAGE_LAYOUT_ATTACHMENT_OPTIMAL;
-                    depthInfo.loadOp = Translate<VkAttachmentLoadOp>(attachment.loadOp);
-                    depthInfo.storeOp = Translate<VkAttachmentStoreOp>(attachment.storeOp);
-                    depthInfo.clearValue.depthStencil = {clearDepth, clearStencil};
+                    depthInfo.imageLayout = vk::ImageLayout::eAttachmentOptimal;
+                    depthInfo.loadOp = attachment.loadOp;
+                    depthInfo.storeOp = attachment.storeOp;
+                    depthInfo.clearValue.depthStencil = vk::ClearDepthStencilValue{clearDepth, clearStencil};
 
-                    barrier.stageFlags = PipelineStage::EarlyFragmentTestsBit | PipelineStage::LateFragmentTestsBit;
-                    if (attachment.loadOp == AttachmentLoadOp::Load)
-                        barrier.accessMask = Access::DepthStencilAttachmentReadBit;
+                    barrier.stageFlags = vk::PipelineStageFlagBits2::eEarlyFragmentTests | vk::PipelineStageFlagBits2::eLateFragmentTests;
+                    if (attachment.loadOp == vk::AttachmentLoadOp::eLoad)
+                        barrier.accessMask = vk::AccessFlagBits2::eDepthStencilAttachmentRead;
                     else
-                        barrier.accessMask = Access::DepthStencilAttachmentWriteBit;
+                        barrier.accessMask = vk::AccessFlagBits2::eDepthStencilAttachmentWrite;
                 }
                 else
                 {
-                    const vec4 &clearColor = attachment.image->GetClearColor();
+                    const vec4 &clearColor = attachment.image->m_clearColor;
 
-                    VkRenderingAttachmentInfo colorInfo{};
-                    colorInfo.sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO;
+                    vk::RenderingAttachmentInfo colorInfo{};
                     colorInfo.imageView = attachment.image->GetRTV();
-                    colorInfo.imageLayout = VK_IMAGE_LAYOUT_ATTACHMENT_OPTIMAL;
-                    colorInfo.loadOp = Translate<VkAttachmentLoadOp>(attachment.loadOp);
-                    colorInfo.storeOp = Translate<VkAttachmentStoreOp>(attachment.storeOp);
+                    colorInfo.imageLayout = vk::ImageLayout::eAttachmentOptimal;
+                    colorInfo.loadOp = attachment.loadOp;
+                    colorInfo.storeOp = attachment.storeOp;
                     colorInfo.clearValue.color = {clearColor[0], clearColor[1], clearColor[2], clearColor[3]};
                     colorInfos.push_back(colorInfo);
 
-                    barrier.stageFlags = PipelineStage::ColorAttachmentOutputBit;
-                    if (attachment.loadOp == AttachmentLoadOp::Load)
-                        barrier.accessMask = Access::ColorAttachmentReadBit;
+                    barrier.stageFlags = vk::PipelineStageFlagBits2::eColorAttachmentOutput;
+                    if (attachment.loadOp == vk::AttachmentLoadOp::eLoad)
+                        barrier.accessMask = vk::AccessFlagBits2::eColorAttachmentRead;
                     else
-                        barrier.accessMask = Access::ColorAttachmentWriteBit;
+                        barrier.accessMask = vk::AccessFlagBits2::eColorAttachmentWrite;
                 }
 
                 attachmentBarriers.push_back(barrier);
@@ -304,8 +288,7 @@ namespace pe
 
             Image::Barriers(this, attachmentBarriers);
 
-            VkRenderingInfo renderingInfo{};
-            renderingInfo.sType = VK_STRUCTURE_TYPE_RENDERING_INFO;
+            vk::RenderingInfo renderingInfo{};
             renderingInfo.renderArea = {0, 0, attachments[0].image->GetWidth(), attachments[0].image->GetHeight()};
             renderingInfo.layerCount = 1;
             renderingInfo.colorAttachmentCount = static_cast<uint32_t>(colorInfos.size());
@@ -313,43 +296,43 @@ namespace pe
             renderingInfo.pDepthAttachment = hasDepth ? &depthInfo : nullptr;
             renderingInfo.pStencilAttachment = hasStencil ? &depthInfo : nullptr;
 
-            vkCmdBeginRendering(m_apiHandle, &renderingInfo);
+            m_apiHandle.beginRendering(renderingInfo);
         }
         else
         {
-            std::vector<VkClearValue> clearValues(count);
+            std::vector<vk::ClearValue> clearValues(count);
             uint32_t clearOps = 0;
 
             for (uint32_t i = 0; i < count; i++)
             {
                 const Attachment &attachment = attachments[i];
                 Image *renderTarget = attachment.image;
-                if (HasDepth(renderTarget->GetFormat()) && (attachment.loadOp == AttachmentLoadOp::Clear || attachment.stencilLoadOp == AttachmentLoadOp::Clear))
+                if (HasDepth(renderTarget->GetFormat()) && (attachment.loadOp == vk::AttachmentLoadOp::eClear || attachment.stencilLoadOp == vk::AttachmentLoadOp::eClear))
                 {
-                    const float clearDepth = renderTarget->m_createInfo.clearColor[0];
-                    uint32_t clearStencil = static_cast<uint32_t>(renderTarget->m_createInfo.clearColor[1]);
-                    clearValues[clearOps].depthStencil = {clearDepth, clearStencil};
+                    const float clearDepth = renderTarget->m_clearColor[0];
+                    uint32_t clearStencil = static_cast<uint32_t>(renderTarget->m_clearColor[1]);
+                    clearValues[clearOps].depthStencil = vk::ClearDepthStencilValue{clearDepth, clearStencil};
                     clearOps++;
                 }
-                else if (attachment.loadOp == AttachmentLoadOp::Clear)
+                else if (attachment.loadOp == vk::AttachmentLoadOp::eClear)
                 {
-                    const vec4 &clearColor = renderTarget->m_createInfo.clearColor;
+                    const vec4 &clearColor = renderTarget->m_clearColor;
                     clearValues[clearOps].color = {clearColor[0], clearColor[1], clearColor[2], clearColor[3]};
                     clearOps++;
                 }
 
                 ImageBarrierInfo barrier{};
                 barrier.image = attachment.image;
-                barrier.layout = ImageLayout::Attachment;
+                barrier.layout = vk::ImageLayout::eAttachmentOptimal;
                 if (HasDepth(renderTarget->GetFormat()))
                 {
-                    barrier.stageFlags = PipelineStage::EarlyFragmentTestsBit | PipelineStage::LateFragmentTestsBit;
-                    barrier.accessMask = Access::DepthStencilAttachmentWriteBit;
+                    barrier.stageFlags = vk::PipelineStageFlagBits2::eEarlyFragmentTests | vk::PipelineStageFlagBits2::eLateFragmentTests;
+                    barrier.accessMask = vk::AccessFlagBits2::eDepthStencilAttachmentWrite;
                 }
                 else
                 {
-                    barrier.stageFlags = PipelineStage::ColorAttachmentOutputBit;
-                    barrier.accessMask = Access::ColorAttachmentWriteBit;
+                    barrier.stageFlags = vk::PipelineStageFlagBits2::eColorAttachmentOutput;
+                    barrier.accessMask = vk::AccessFlagBits2::eColorAttachmentWrite;
                 }
                 attachmentBarriers.push_back(barrier);
             }
@@ -359,16 +342,18 @@ namespace pe
             m_renderPass = GetRenderPass(count, attachments);
             m_framebuffer = GetFramebuffer(m_renderPass, count, attachments);
 
-            VkRenderPassBeginInfo rpi{};
-            rpi.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
+            vk::RenderPassBeginInfo rpi{};
             rpi.renderPass = m_renderPass->ApiHandle();
             rpi.framebuffer = m_framebuffer->ApiHandle();
-            rpi.renderArea.offset = VkOffset2D{0, 0};
-            rpi.renderArea.extent = VkExtent2D{m_framebuffer->GetWidth(), m_framebuffer->GetHeight()};
-            rpi.clearValueCount = clearOps > 0 ? static_cast<uint32_t>(clearValues.size()) : 0;
-            rpi.pClearValues = clearOps > 0 ? clearValues.data() : nullptr;
+            rpi.renderArea.offset = vk::Offset2D{0, 0};
+            rpi.renderArea.extent = vk::Extent2D{m_framebuffer->GetWidth(), m_framebuffer->GetHeight()};
+            rpi.clearValueCount = static_cast<uint32_t>(clearValues.size());
+            rpi.pClearValues = clearValues.data();
 
-            vkCmdBeginRenderPass(m_apiHandle, &rpi, VK_SUBPASS_CONTENTS_INLINE);
+            vk::SubpassBeginInfo sbi{};
+            sbi.contents = vk::SubpassContents::eInline;
+
+            m_apiHandle.beginRenderPass2(rpi, sbi);
         }
     }
 
@@ -381,18 +366,18 @@ namespace pe
         for (uint32_t i = 0; i < m_attachmentCount; i++)
         {
             const Attachment &attachment = m_attachments[i];
-            if (attachment.loadOp == AttachmentLoadOp::Load)
+            if (attachment.loadOp == vk::AttachmentLoadOp::eLoad)
             {
                 attachment.image->m_trackInfos[0][0].accessMask = HasDepth(attachment.image->GetFormat())
-                                                                      ? Access::DepthStencilAttachmentWriteBit
-                                                                      : Access::ColorAttachmentWriteBit;
+                                                                      ? vk::AccessFlagBits2::eDepthStencilAttachmentWrite
+                                                                      : vk::AccessFlagBits2::eColorAttachmentWrite;
             }
         }
 
         if (m_dynamicPass)
-            vkCmdEndRendering(m_apiHandle);
+            m_apiHandle.endRendering();
         else
-            vkCmdEndRenderPass(m_apiHandle);
+            m_apiHandle.endRenderPass();
 
         EndDebugRegion();
 
@@ -435,12 +420,12 @@ namespace pe
 
     void CommandBuffer::BindGraphicsPipeline()
     {
-        vkCmdBindPipeline(m_apiHandle, VK_PIPELINE_BIND_POINT_GRAPHICS, m_boundPipeline->ApiHandle());
+        m_apiHandle.bindPipeline(vk::PipelineBindPoint::eGraphics, m_boundPipeline->ApiHandle());
     }
 
     void CommandBuffer::BindComputePipeline()
     {
-        vkCmdBindPipeline(m_apiHandle, VK_PIPELINE_BIND_POINT_COMPUTE, m_boundPipeline->ApiHandle());
+        m_apiHandle.bindPipeline(vk::PipelineBindPoint::eCompute, m_boundPipeline->ApiHandle());
     }
 
     void CommandBuffer::BindPipeline(PassInfo &passInfo, bool bindDescriptors)
@@ -482,8 +467,8 @@ namespace pe
         m_boundVertexBufferFirstBinding = firstBinding;
         m_boundVertexBufferBindingCount = bindingCount;
 
-        VkBuffer buff = buffer->ApiHandle();
-        vkCmdBindVertexBuffers(m_apiHandle, firstBinding, bindingCount, &buff, &offset);
+        vk::Buffer &buff = buffer->ApiHandle();
+        m_apiHandle.bindVertexBuffers(firstBinding, bindingCount, &buff, &offset);
     }
 
     void CommandBuffer::BindIndexBuffer(Buffer *buffer, size_t offset)
@@ -492,37 +477,35 @@ namespace pe
             return;
 
         m_boundIndexBuffer = buffer;
-        vkCmdBindIndexBuffer(m_apiHandle, buffer->ApiHandle(), offset, VK_INDEX_TYPE_UINT32);
+        m_apiHandle.bindIndexBuffer(buffer->ApiHandle(), offset, vk::IndexType::eUint32);
     }
 
     void CommandBuffer::BindGraphicsDescriptors(uint32_t count, Descriptor *const *descriptors)
     {
-        std::vector<VkDescriptorSet> dsets(count);
+        std::vector<vk::DescriptorSet> dsets(count);
         for (uint32_t i = 0; i < count; i++)
         {
             dsets[i] = descriptors[i]->ApiHandle();
         }
 
-        vkCmdBindDescriptorSets(m_apiHandle,
-                                VK_PIPELINE_BIND_POINT_GRAPHICS,
-                                m_boundPipeline->m_layout,
-                                0, count, dsets.data(),
-                                0, nullptr);
+        m_apiHandle.bindDescriptorSets(vk::PipelineBindPoint::eGraphics,
+                                       m_boundPipeline->m_layout,
+                                       0, count, dsets.data(),
+                                       0, nullptr);
     }
 
     void CommandBuffer::BindComputeDescriptors(uint32_t count, Descriptor *const *descriptors)
     {
-        std::vector<VkDescriptorSet> dsets(count);
+        std::vector<vk::DescriptorSet> dsets(count);
         for (uint32_t i = 0; i < count; i++)
         {
             dsets[i] = descriptors[i]->ApiHandle();
         }
 
-        vkCmdBindDescriptorSets(m_apiHandle,
-                                VK_PIPELINE_BIND_POINT_COMPUTE,
-                                m_boundPipeline->m_layout,
-                                0, count, dsets.data(),
-                                0, nullptr);
+        m_apiHandle.bindDescriptorSets(vk::PipelineBindPoint::eCompute,
+                                       m_boundPipeline->m_layout,
+                                       0, count, dsets.data(),
+                                       0, nullptr);
     }
 
     void CommandBuffer::BindDescriptors(uint32_t count, Descriptor *const *descriptors)
@@ -543,61 +526,60 @@ namespace pe
     {
         PE_ERROR_IF(!m_boundPipeline, "CommandBuffer::PushDescriptor: No bound pipeline found!");
 
-        std::vector<VkWriteDescriptorSet> writes{};
-        std::vector<std::vector<VkDescriptorImageInfo>> imageInfoVK{};
-        std::vector<std::vector<VkDescriptorBufferInfo>> bufferInfoVK{};
-        imageInfoVK.resize(info.size());
-        bufferInfoVK.resize(info.size());
+        std::vector<vk::WriteDescriptorSet> writes{};
+        std::vector<std::vector<vk::DescriptorImageInfo>> imageInfo{};
+        std::vector<std::vector<vk::DescriptorBufferInfo>> bufferInfo{};
+        imageInfo.resize(info.size());
+        bufferInfo.resize(info.size());
         writes.resize(info.size());
 
         for (uint32_t i = 0; i < info.size(); i++)
         {
-            writes[i] = {};
-            writes[i].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+            writes[i] = vk::WriteDescriptorSet{};
             writes[i].dstBinding = info[i].binding;
             writes[i].dstArrayElement = 0;
-            writes[i].descriptorType = Translate<VkDescriptorType>(info[i].type);
+            writes[i].descriptorType = info[i].type;
             if (info[i].views.size() > 0)
             {
-                imageInfoVK[i].resize(info[i].views.size());
+                imageInfo[i].resize(info[i].views.size());
                 for (uint32_t j = 0; j < info[i].views.size(); j++)
                 {
-                    imageInfoVK[i][j] = {};
-                    imageInfoVK[i][j].imageView = info[i].views[j];
-                    imageInfoVK[i][j].imageLayout = Translate<VkImageLayout>(info[i].layouts[j]);
-                    imageInfoVK[i][j].sampler = info[i].type == DescriptorType::CombinedImageSampler ? info[i].samplers[j] : SamplerApiHandle{};
+                    imageInfo[i][j] = vk::DescriptorImageInfo{};
+                    imageInfo[i][j].imageView = info[i].views[j];
+                    imageInfo[i][j].imageLayout = info[i].layouts[j];
+                    imageInfo[i][j].sampler = info[i].type == vk::DescriptorType::eCombinedImageSampler ? info[i].samplers[j] : vk::Sampler{};
                 }
 
-                writes[i].descriptorCount = static_cast<uint32_t>(imageInfoVK[i].size());
-                writes[i].pImageInfo = imageInfoVK[i].data();
+                writes[i].descriptorCount = static_cast<uint32_t>(imageInfo[i].size());
+                writes[i].pImageInfo = imageInfo[i].data();
             }
             else if (info[i].buffers.size() > 0)
             {
-                bufferInfoVK[i].resize(info[i].buffers.size());
+                bufferInfo[i].resize(info[i].buffers.size());
                 for (uint32_t j = 0; j < info[i].buffers.size(); j++)
                 {
-                    bufferInfoVK[i][j] = {};
-                    bufferInfoVK[i][j].buffer = info[i].buffers[j]->ApiHandle();
-                    bufferInfoVK[i][j].offset = info[i].offsets.size() > 0 ? info[i].offsets[j] : 0;
-                    bufferInfoVK[i][j].range = info[i].ranges.size() > 0 ? info[i].ranges[j] : VK_WHOLE_SIZE;
+                    bufferInfo[i][j] = vk::DescriptorBufferInfo{};
+                    bufferInfo[i][j].buffer = info[i].buffers[j]->ApiHandle();
+                    bufferInfo[i][j].offset = info[i].offsets.size() > 0 ? info[i].offsets[j] : 0;
+                    bufferInfo[i][j].range = info[i].ranges.size() > 0 ? info[i].ranges[j] : vk::WholeSize;
                 }
 
-                writes[i].descriptorCount = static_cast<uint32_t>(bufferInfoVK[i].size());
-                writes[i].pBufferInfo = bufferInfoVK[i].data();
+                writes[i].descriptorCount = static_cast<uint32_t>(bufferInfo[i].size());
+                writes[i].pBufferInfo = bufferInfo[i].data();
             }
-            else if (info[i].samplers.size() > 0 && info[i].type != DescriptorType::CombinedImageSampler)
+            else if (info[i].samplers.size() > 0 && info[i].type != vk::DescriptorType::eCombinedImageSampler)
             {
-                imageInfoVK[i].resize(info[i].samplers.size());
+                imageInfo[i].resize(info[i].samplers.size());
                 for (uint32_t j = 0; j < info[i].samplers.size(); j++)
                 {
-                    imageInfoVK[i][j] = {};
-                    imageInfoVK[i][j].imageView = nullptr;
-                    imageInfoVK[i][j].imageLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-                    imageInfoVK[i][j].sampler = info[i].samplers[j];
+                    imageInfo[i][j] = vk::DescriptorImageInfo{};
+                    imageInfo[i][j].imageView = nullptr;
+                    imageInfo[i][j].imageLayout = vk::ImageLayout::eUndefined;
+                    imageInfo[i][j].sampler = info[i].samplers[j];
                 }
 
-                writes[i].descriptorCount = static_cast<uint32_t>(imageInfoVK[i].size());
-                writes[i].pImageInfo = imageInfoVK[i].data();
+                writes[i].descriptorCount = static_cast<uint32_t>(imageInfo[i].size());
+                writes[i].pImageInfo = imageInfo[i].data();
             }
             else
             {
@@ -614,12 +596,12 @@ namespace pe
                                   m_boundPipeline->m_layout,
                                   set,
                                   static_cast<uint32_t>(writes.size()),
-                                  writes.data());
+                                  reinterpret_cast<const VkWriteDescriptorSet *>(writes.data()));
     }
 
     void CommandBuffer::SetViewport(float x, float y, float width, float height)
     {
-        VkViewport viewport{};
+        vk::Viewport viewport{};
         viewport.x = x;
         viewport.y = y;
         viewport.width = width;
@@ -627,36 +609,36 @@ namespace pe
         viewport.minDepth = 0.f;
         viewport.maxDepth = 1.f;
 
-        vkCmdSetViewport(m_apiHandle, 0, 1, &viewport);
+        m_apiHandle.setViewport(0, 1, &viewport);
     }
 
     void CommandBuffer::SetScissor(int x, int y, uint32_t width, uint32_t height)
     {
-        VkRect2D scissor{};
-        scissor.offset = {x, y};
-        scissor.extent = {width, height};
+        vk::Rect2D scissor{};
+        scissor.offset = vk::Offset2D{x, y};
+        scissor.extent = vk::Extent2D{width, height};
 
-        vkCmdSetScissor(m_apiHandle, 0, 1, &scissor);
+        m_apiHandle.setScissor(0, 1, &scissor);
     }
 
     void CommandBuffer::SetLineWidth(float width)
     {
-        vkCmdSetLineWidth(m_apiHandle, width);
+        m_apiHandle.setLineWidth(width);
     }
 
     void CommandBuffer::SetDepthTestEnable(uint32_t enable)
     {
-        vkCmdSetDepthTestEnable(m_apiHandle, enable);
+        m_apiHandle.setDepthTestEnable(enable);
     }
 
     void CommandBuffer::SetDepthWriteEnable(uint32_t enable)
     {
-        vkCmdSetDepthWriteEnable(m_apiHandle, enable);
+        m_apiHandle.setDepthWriteEnable(enable);
     }
 
     void CommandBuffer::Dispatch(uint32_t groupCountX, uint32_t groupCountY, uint32_t groupCountZ)
     {
-        vkCmdDispatch(m_apiHandle, groupCountX, groupCountY, groupCountZ);
+        m_apiHandle.dispatch(groupCountX, groupCountY, groupCountZ);
     }
 
     void CommandBuffer::PushConstants()
@@ -669,41 +651,40 @@ namespace pe
 
         for (size_t i = 0; i < stages.size(); i++)
         {
-            vkCmdPushConstants(m_apiHandle,
-                               m_boundPipeline->m_layout,
-                               Translate<VkShaderStageFlags>(stages[i]),
-                               offsets[i],
-                               sizes[i],
-                               m_pushConstants.Data());
+            m_apiHandle.pushConstants(m_boundPipeline->m_layout,
+                                      stages[i],
+                                      offsets[i],
+                                      sizes[i],
+                                      m_pushConstants.Data());
         }
     }
 
     void CommandBuffer::Draw(uint32_t vertexCount, uint32_t instanceCount, uint32_t firstVertex, uint32_t firstInstance)
     {
-        vkCmdDraw(m_apiHandle, vertexCount, instanceCount, firstVertex, firstInstance);
+        m_apiHandle.draw(vertexCount, instanceCount, firstVertex, firstInstance);
     }
 
     void CommandBuffer::DrawIndexed(uint32_t indexCount, uint32_t instanceCount, uint32_t firstIndex, int32_t vertexOffset, uint32_t firstInstance)
     {
-        vkCmdDrawIndexed(m_apiHandle, indexCount, instanceCount, firstIndex, vertexOffset, firstInstance);
+        m_apiHandle.drawIndexed(indexCount, instanceCount, firstIndex, vertexOffset, firstInstance);
     }
 
     void CommandBuffer::DrawIndirect(Buffer *indirectBuffer, size_t offset, uint32_t drawCount, uint32_t stride)
     {
-        vkCmdDrawIndirect(m_apiHandle, indirectBuffer->ApiHandle(), offset, drawCount, stride);
+        m_apiHandle.drawIndirect(indirectBuffer->ApiHandle(), offset, drawCount, stride);
     }
 
     void CommandBuffer::DrawIndexedIndirect(Buffer *indirectBuffer, size_t offset, uint32_t drawCount, uint32_t stride)
     {
-        vkCmdDrawIndexedIndirect(m_apiHandle, indirectBuffer->ApiHandle(), offset, drawCount, stride);
+        m_apiHandle.drawIndexedIndirect(indirectBuffer->ApiHandle(), offset, drawCount, stride);
     }
 
-    void CommandBuffer::BufferBarrier(const BufferBarrierInfo &info)
+    void CommandBuffer::BufferBarrier(const vk::BufferMemoryBarrier2 &info)
     {
         Buffer::Barrier(this, info);
     }
 
-    void CommandBuffer::BufferBarriers(const std::vector<BufferBarrierInfo> &infos)
+    void CommandBuffer::BufferBarriers(const std::vector<vk::BufferMemoryBarrier2> &infos)
     {
         Buffer::Barriers(this, infos);
     }
@@ -718,43 +699,22 @@ namespace pe
         Image::Barriers(this, infos);
     }
 
-    void CommandBuffer::MemoryBarrier(const MemoryBarrierInfo &info)
+    void CommandBuffer::MemoryBarrier(const vk::MemoryBarrier2 &info)
     {
-        VkMemoryBarrier2 barrier{};
-        barrier.sType = VK_STRUCTURE_TYPE_MEMORY_BARRIER_2;
-        barrier.srcStageMask = Translate<VkPipelineStageFlags2>(info.srcStageMask);
-        barrier.srcAccessMask = Translate<VkAccessFlags2>(info.srcAccessMask);
-        barrier.dstStageMask = Translate<VkPipelineStageFlags2>(info.dstStageMask);
-        barrier.dstAccessMask = Translate<VkAccessFlags2>(info.dstAccessMask);
-
-        VkDependencyInfo dependencyInfo{};
-        dependencyInfo.sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO;
+        vk::DependencyInfo dependencyInfo{};
         dependencyInfo.memoryBarrierCount = 1;
-        dependencyInfo.pMemoryBarriers = &barrier;
+        dependencyInfo.pMemoryBarriers = &info;
 
-        vkCmdPipelineBarrier2(m_apiHandle, &dependencyInfo);
+        m_apiHandle.pipelineBarrier2(dependencyInfo);
     }
 
-    void CommandBuffer::MemoryBarriers(const std::vector<MemoryBarrierInfo> &infos)
+    void CommandBuffer::MemoryBarriers(const std::vector<vk::MemoryBarrier2> &infos)
     {
-        std::vector<VkMemoryBarrier2> barriers(infos.size());
+        vk::DependencyInfo dependencyInfo{};
+        dependencyInfo.memoryBarrierCount = static_cast<uint32_t>(infos.size());
+        dependencyInfo.pMemoryBarriers = infos.data();
 
-        for (uint32_t i = 0; i < infos.size(); i++)
-        {
-            const MemoryBarrierInfo &info = infos[i];
-            barriers[i].sType = VK_STRUCTURE_TYPE_MEMORY_BARRIER_2;
-            barriers[i].srcStageMask = Translate<VkPipelineStageFlags2>(info.srcStageMask);
-            barriers[i].srcAccessMask = Translate<VkAccessFlags2>(info.srcAccessMask);
-            barriers[i].dstStageMask = Translate<VkPipelineStageFlags2>(info.dstStageMask);
-            barriers[i].dstAccessMask = Translate<VkAccessFlags2>(info.dstAccessMask);
-        }
-
-        VkDependencyInfo dependencyInfo{};
-        dependencyInfo.sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO;
-        dependencyInfo.memoryBarrierCount = static_cast<uint32_t>(barriers.size());
-        dependencyInfo.pMemoryBarriers = barriers.data();
-
-        vkCmdPipelineBarrier2(m_apiHandle, &dependencyInfo);
+        m_apiHandle.pipelineBarrier2(dependencyInfo);
     }
 
     void CommandBuffer::CopyBuffer(Buffer *src, Buffer *dst, const size_t size, size_t srcOffset, size_t dstOffset)
@@ -788,11 +748,11 @@ namespace pe
     }
 
     void CommandBuffer::SetEvent(Image *image,
-                                 ImageLayout scrLayout, ImageLayout dstLayout,
-                                 PipelineStageFlags srcStage, PipelineStageFlags dstStage,
-                                 AccessFlags srcAccess, AccessFlags dstAccess)
+                                 vk::ImageLayout srcLayout, vk::ImageLayout dstLayout,
+                                 vk::PipelineStageFlags2 srcStage, vk::PipelineStageFlags2 dstStage,
+                                 vk::AccessFlags2 srcAccess, vk::AccessFlags2 dstAccess)
     {
-        m_event->Set(this, image, scrLayout, dstLayout, srcStage, dstStage, srcAccess, dstAccess);
+        m_event->Set(this, image, srcLayout, dstLayout, srcStage, dstStage, srcAccess, dstAccess);
     }
 
     void CommandBuffer::WaitEvent()
@@ -800,7 +760,7 @@ namespace pe
         m_event->Wait();
     }
 
-    void CommandBuffer::ResetEvent(PipelineStageFlags resetStage)
+    void CommandBuffer::ResetEvent(vk::PipelineStageFlags2 resetStage)
     {
         m_event->Reset(resetStage);
     }

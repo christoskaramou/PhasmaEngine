@@ -71,11 +71,6 @@ namespace pe
         NoMove &operator=(NoMove &&) = delete;
     };
 
-    struct BarrierInfo
-    {
-        BarrierType type;
-    };
-
     // Maintains the order of items
     template <class Key, class Value>
     class OrderedMap
@@ -209,44 +204,6 @@ namespace pe
         std::unordered_map<Key, iterator> m_map;
     };
 
-    class ApiHandleBase
-    {
-    public:
-        void *Get() const { return m_handle; }
-
-    protected:
-        ApiHandleBase(void *handle) : m_handle{handle} {}
-        virtual ~ApiHandleBase() {}
-
-        void *m_handle;
-    };
-
-    // Used to abstract rendering api handles
-    // We can add more types here
-    template <ObjectType Ob, class VK_TYPE, class DX_TYPE>
-    class ApiHandle final : public ApiHandleBase
-    {
-        // Only work with pointers
-        static_assert(std::is_pointer_v<VK_TYPE>, "ApiHandle of VK_TYPE type is not a pointer");
-        static_assert(std::is_pointer_v<DX_TYPE>, "ApiHandle of DX_TYPE type is not a pointer");
-
-    public:
-        static constexpr ObjectType ObType = Ob;
-
-        ApiHandle() : ApiHandleBase(nullptr) {}
-        ApiHandle(const VK_TYPE &handle) : ApiHandleBase(handle) {}
-        ApiHandle(const DX_TYPE &handle) : ApiHandleBase(handle) {}
-
-        // Operators for auto casting
-        operator VK_TYPE() const { return static_cast<VK_TYPE>(m_handle); }
-        operator DX_TYPE() const { return static_cast<DX_TYPE>(m_handle); }
-        operator uint64_t() const { return reinterpret_cast<uint64_t>(m_handle); }
-        operator bool() { return m_handle != nullptr; }
-        bool operator!() { return m_handle == nullptr; }
-
-        bool IsNull() const { return m_handle == nullptr; }
-    };
-
     class PeHandleBase
     {
     public:
@@ -286,7 +243,6 @@ namespace pe
         template <class... Params>
         inline static T *Create(Params &&...params)
         {
-            ValidateBaseClass<ApiHandleBase, API_HANDLE>();
             ValidateBaseClass<PeHandle<T, API_HANDLE>, T>();
 
             T *ptr = new T(std::forward<Params>(params)...);
@@ -299,7 +255,6 @@ namespace pe
 
         inline static void Destroy(T *&ptr)
         {
-            ValidateBaseClass<ApiHandleBase, API_HANDLE>();
             ValidateBaseClass<PeHandle<T, API_HANDLE>, T>();
 
             if (ptr && s_allApiHandles.erase(ptr))
@@ -324,32 +279,4 @@ namespace pe
 
         API_HANDLE m_apiHandle;
     };
-
-    using AllocationApiHandle = ApiHandle<ObjectType::Unknown, VmaAllocation, Placeholder<0> *>;
-    using AllocatorApiHandle = ApiHandle<ObjectType::Unknown, VmaAllocator, Placeholder<0> *>;
-    using BufferApiHandle = ApiHandle<ObjectType::Buffer, VkBuffer, Placeholder<0> *>;
-    using CommandBufferApiHandle = ApiHandle<ObjectType::CommandBuffer, VkCommandBuffer, Placeholder<0> *>;
-    using CommandPoolApiHandle = ApiHandle<ObjectType::CommandPool, VkCommandPool, Placeholder<0> *>;
-    using DebugMessengerApiHandle = ApiHandle<ObjectType::DebugUtilsMessenger, VkDebugUtilsMessengerEXT, Placeholder<0> *>;
-    using DescriptorPoolApiHandle = ApiHandle<ObjectType::DescriptorPool, VkDescriptorPool, Placeholder<0> *>;
-    using DescriptorSetApiHandle = ApiHandle<ObjectType::DescriptorSet, VkDescriptorSet, Placeholder<0> *>;
-    using DescriptorSetLayoutApiHandle = ApiHandle<ObjectType::DescriptorSetLayout, VkDescriptorSetLayout, Placeholder<0> *>;
-    using DeviceApiHandle = ApiHandle<ObjectType::Device, VkDevice, Placeholder<0> *>;
-    using EventApiHandle = ApiHandle<ObjectType::Event, VkEvent, Placeholder<0> *>;
-    using FramebufferApiHandle = ApiHandle<ObjectType::Framebuffer, VkFramebuffer, Placeholder<0> *>;
-    using GpuApiHandle = ApiHandle<ObjectType::PhysicalDevice, VkPhysicalDevice, Placeholder<0> *>;
-    using ImageApiHandle = ApiHandle<ObjectType::Image, VkImage, Placeholder<0> *>;
-    using ImageViewApiHandle = ApiHandle<ObjectType::ImageView, VkImageView, Placeholder<0> *>;
-    using InstanceApiHandle = ApiHandle<ObjectType::Instance, VkInstance, Placeholder<0> *>;
-    using PipelineCacheApiHandle = ApiHandle<ObjectType::PipelineCache, VkPipelineCache, Placeholder<0> *>;
-    using PipelineApiHandle = ApiHandle<ObjectType::Pipeline, VkPipeline, Placeholder<0> *>;
-    using PipelineLayoutApiHandle = ApiHandle<ObjectType::PipelineLayout, VkPipelineLayout, Placeholder<0> *>;
-    using QueryPoolApiHandle = ApiHandle<ObjectType::QueryPool, VkQueryPool, Placeholder<0> *>;
-    using QueueApiHandle = ApiHandle<ObjectType::Queue, VkQueue, Placeholder<0> *>;
-    using RenderPassApiHandle = ApiHandle<ObjectType::RenderPass, VkRenderPass, Placeholder <0>*>;
-    using SamplerApiHandle = ApiHandle<ObjectType::Sampler, VkSampler, Placeholder<0> *>;
-    using SemaphoreApiHandle = ApiHandle<ObjectType::Semaphore, VkSemaphore, Placeholder<0> *>;
-    using ShaderApiHandle = ApiHandle<ObjectType::Unknown, Placeholder<0> *, Placeholder<1> *>;
-    using SurfaceApiHandle = ApiHandle<ObjectType::Surface, VkSurfaceKHR, Placeholder<0> *>;
-    using SwapchainApiHandle = ApiHandle<ObjectType::Swapchain, VkSwapchainKHR, Placeholder<0> *>;
 }
