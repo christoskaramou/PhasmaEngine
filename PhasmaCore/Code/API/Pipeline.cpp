@@ -316,7 +316,7 @@ namespace pe
             // Color Blending state
             for (uint32_t i = 0; i < info.colorBlendAttachments.size(); i++)
             {
-                info.colorBlendAttachments[i].blendEnable &= info.blendEnable;
+                info.colorBlendAttachments[i].blendEnable &= static_cast<vk::Bool32>(info.blendEnable);
             }
 
             vk::PipelineColorBlendStateCreateInfo pcbsci{};
