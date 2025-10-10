@@ -52,10 +52,8 @@ namespace pe
         m_splashScreen = SplashScreen::Create(SDL_WINDOW_SHOWN | SDL_WINDOW_BORDERLESS);
 #endif
 
-        uint32_t flags = SDL_WINDOW_HIDDEN | SDL_WINDOW_RESIZABLE | SDL_WINDOW_ALLOW_HIGHDPI;
-#ifdef PE_VULKAN
-        flags |= SDL_WINDOW_VULKAN;
-#endif
+        uint32_t flags = SDL_WINDOW_HIDDEN | SDL_WINDOW_RESIZABLE | SDL_WINDOW_ALLOW_HIGHDPI | SDL_WINDOW_VULKAN;
+
         SDL_DisplayMode dm;
         SDL_GetDesktopDisplayMode(0, &dm);
         m_window = Window::Create(100, 100, dm.w - 100, dm.h - 100, flags);

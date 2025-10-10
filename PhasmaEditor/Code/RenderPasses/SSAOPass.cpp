@@ -1,4 +1,3 @@
-#ifdef PE_VULKAN
 #include "SSAOPass.h"
 #include "API/Shader.h"
 #include "API/RHI.h"
@@ -166,22 +165,3 @@ namespace pe
         m_context = nullptr;
     }
 }
-
-#else
-namespace pe
-{
-    SSAOPass::SSAOPass() {}
-
-    SSAOPass::~SSAOPass() {}
-
-    void SSAOPass::Init() {}
-
-    void SSAOPass::Update(Camera *camera) {}
-
-    CommandBuffer *SSAOPass::Draw(CommandBuffer *cmd) { return nullptr; }
-
-    void SSAOPass::Resize(uint32_t width, uint32_t height) {}
-
-    void SSAOPass::Destroy() {}
-}
-#endif

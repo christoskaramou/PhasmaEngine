@@ -9,7 +9,6 @@ if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
     message(STATUS "CMAKE_SYSTEM_NAME = ${CMAKE_SYSTEM_NAME}")
     set(PE_DEFS
         PE_LINUX
-        PE_VULKAN
         _CONSOLE
     )
     add_compile_options(-fms-extensions)
@@ -17,7 +16,6 @@ elseif(CMAKE_SYSTEM_NAME STREQUAL "Windows")
     message(STATUS "CMAKE_SYSTEM_NAME = ${CMAKE_SYSTEM_NAME}")
     set(PE_DEFS
         PE_WIN32
-        PE_VULKAN
         WIN32_LEAN_AND_MEAN
         NOMINMAX
         UNICODE
