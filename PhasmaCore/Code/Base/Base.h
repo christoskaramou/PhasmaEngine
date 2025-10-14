@@ -6,8 +6,8 @@ namespace pe
     {
         inline size_t NextID()
         {
-            static size_t ID = 0;
-            return ID++;
+            static std::atomic_size_t id{0};
+            return id.fetch_add(1, std::memory_order_relaxed);
         }
 
         // Compile time type id
@@ -106,7 +106,9 @@ namespace pe
             }
         }
 
-        uint32_t size() { return static_cast<uint32_t>(m_list.size()); }
+        size_t size() const { return m_list.size(); }
+
+        bool contains(const Key &key) const { return m_map.find(key) != m_map.end(); }
 
         iterator find(const Key &key)
         {
@@ -128,16 +130,6 @@ namespace pe
             return m_list.end();
         }
 
-        std::optional<iterator> exists(const Key &key)
-        {
-            auto it = m_map.find(key);
-            if (it != m_map.end())
-            {
-                return it->second;
-            }
-            return std::nullopt;
-        }
-
         Value &get(const Key &key)
         {
             auto it = m_map.find(key);
@@ -153,15 +145,23 @@ namespace pe
             return *(m_map.at(key));
         }
 
+        template <class... Args>
+        std::pair<bool, iterator> try_emplace(const Key &key, Args &&...args)
+        {
+            auto it = m_map.find(key);
+            if (it != m_map.end())
+                return {false, it->second};
+            m_list.emplace_back(std::forward<Args>(args)...);
+            auto iter = std::prev(m_list.end());
+            m_map.emplace(key, iter);
+            return {true, iter};
+        }
+
         Value &operator[](const Key &key)
         {
-            auto [it, inserted] = m_map.try_emplace(key, m_list.end());
-            if (inserted)
-            {
-                m_list.push_back(Value());
-                it->second = std::prev(m_list.end());
-            }
-            return *(it->second);
+            auto [inserted, it] = try_emplace(key, Value{});
+            (void)inserted;
+            return *it;
         }
 
         const Value &operator[](const Key &key) const
