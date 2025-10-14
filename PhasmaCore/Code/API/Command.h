@@ -135,7 +135,7 @@ namespace pe
         void EndDebugRegion();
         uint32_t GetFamilyId() const;
         Queue *GetQueue() const;
-        void SetSubmissions(uint64_t submissions) { m_submissions = submissions; }
+        void SetSubmission(uint64_t submission) { m_submission = submission; }
         void Wait();
         void Return();
         CommandPool *GetCommandPool() const { return m_commandPool; }
@@ -165,7 +165,7 @@ namespace pe
         size_t m_id;
         CommandPool *m_commandPool;
         Event *m_event;
-        uint64_t m_submissions;
+        uint64_t m_submission;
         bool m_recording = false;
         std::string m_name;
         Delegate<> m_afterWaitCallbacks;

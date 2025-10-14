@@ -436,7 +436,6 @@ namespace pe
         sourceBuffer.Size = pSource->GetBufferSize();
         sourceBuffer.Encoding = 0;
 
-        // TODO: Exception thrown at 0x00007FFFCDDEFA4C in Phasma.exe: Microsoft C++ exception: hlsl::Exception at memory location 0x0000000EC72FB3B0.
         IDxcResult *result = nullptr;
         hr = dxc_compiler->Compile(
             &sourceBuffer,

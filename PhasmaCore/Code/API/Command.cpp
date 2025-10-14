@@ -14,7 +14,7 @@ namespace pe
 {
     CommandBuffer::CommandBuffer(CommandPool *commandPool, const std::string &name)
         : m_id{ID::NextID()},
-          m_submissions{0},
+          m_submission{0},
           m_renderPass{nullptr},
           m_boundPipeline{nullptr},
           m_commandPool{commandPool},
@@ -795,7 +795,7 @@ namespace pe
 
         PE_ERROR_IF(m_recording, "CommandBuffer::Wait: CommandBuffer is still recording!");
 
-        GetQueue()->GetSubmissionsSemaphore()->Wait(m_submissions);
+        GetQueue()->GetSubmissionsSemaphore()->Wait(m_submission);
 
         if (!m_afterWaitCallbacks.IsEmpty())
         {

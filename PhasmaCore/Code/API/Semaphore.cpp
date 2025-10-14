@@ -35,6 +35,9 @@ namespace pe
     {
         PE_ERROR_IF(!m_timeline, "Semaphore::Wait() called on non-timeline semaphore!");
 
+        if (value <= m_lastCompleted)
+            return;
+
         vk::SemaphoreWaitInfo swi{};
         swi.semaphoreCount = 1;
         swi.pSemaphores = &m_apiHandle;
@@ -43,7 +46,14 @@ namespace pe
         auto result = RHII.GetDevice().waitSemaphores(swi, UINT64_MAX);
         if (result != vk::Result::eSuccess)
         {
-            PE_ERROR("Failed to wait for timeline semaphore!");
+            if (result == vk::Result::eTimeout)
+                PE_INFO("Timeout while waiting for timeline semaphore");
+            else
+                PE_ERROR("Failed to wait for timeline semaphore!");
+        }
+        else
+        {
+            m_lastCompleted = value;
         }
     }
 
