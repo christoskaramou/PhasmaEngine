@@ -19,5 +19,6 @@ namespace pe
     private:
         const bool m_timeline;
         vk::PipelineStageFlags2 m_stageFlags;
+        uint64_t m_lastCompleted{0};
     };
 }

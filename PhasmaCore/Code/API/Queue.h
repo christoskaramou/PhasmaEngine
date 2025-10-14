@@ -50,7 +50,7 @@ namespace pe
 
         uint32_t m_familyId;
         std::string m_name;
-        std::atomic_uint64_t m_submissions{0};
+        std::atomic_uint64_t m_submission{0};
         Semaphore *m_submissionsSemaphore{nullptr};
         std::unordered_map<std::thread::id, std::vector<CommandPool *>> m_commandPools{};
         std::mutex m_cmdMutex{};

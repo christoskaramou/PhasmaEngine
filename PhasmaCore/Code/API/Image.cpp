@@ -169,16 +169,13 @@ namespace pe
           m_sampler(nullptr),
           m_rtv(nullptr),
           m_srv(nullptr),
-          m_name(name)
+          m_name(name),
+          m_srvs(m_createInfo.mipLevels, nullptr),
+          m_uavs(m_createInfo.mipLevels, nullptr)
     {
         PE_ERROR_IF(!ImageTilingSupport(info.format, info.tiling), "Image::Image(const ImageCreateInfo &info): Image tiling support error.");
-
-        m_srvs.resize(m_createInfo.mipLevels);
-        for (uint32_t i = 0; i < m_createInfo.mipLevels; i++)
-            m_srvs[i] = nullptr;
-        m_uavs.resize(m_createInfo.mipLevels);
-        for (uint32_t i = 0; i < m_createInfo.mipLevels; i++)
-            m_uavs[i] = nullptr;
+        PE_ERROR_IF(!m_createInfo.mipLevels, "Image::Image(const ImageCreateInfo &info): Mip levels cannot be zero.");
+        PE_ERROR_IF(!m_createInfo.arrayLayers, "Image::Image(const ImageCreateInfo &info): Array layers cannot be zero.");
 
         m_trackInfos.resize(m_createInfo.arrayLayers);
         for (uint32_t i = 0; i < m_createInfo.arrayLayers; i++)

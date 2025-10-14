@@ -94,7 +94,7 @@ namespace pe
             vk::SemaphoreSubmitInfo info{};
             info.semaphore = m_submissionsSemaphore->ApiHandle();
             info.stageMask = vk::PipelineStageFlagBits2::eBottomOfPipe;
-            info.value = ++m_submissions;
+            info.value = ++m_submission;
             signalSemaphoreSubmitInfos.push_back(info);
         }
 
@@ -107,7 +107,7 @@ namespace pe
                 vk::CommandBufferSubmitInfo cbInfo{};
                 cbInfo.commandBuffer = cmd->ApiHandle();
                 commandBufferSubmitInfos.push_back(cbInfo);
-                cmd->SetSubmissions(m_submissions);
+                cmd->SetSubmission(m_submission);
             }
         }
 
@@ -140,7 +140,7 @@ namespace pe
 
     void Queue::Wait()
     {
-        m_submissionsSemaphore->Wait(m_submissions);
+        m_submissionsSemaphore->Wait(m_submission);
     }
 
     void Queue::WaitIdle()
