@@ -89,6 +89,131 @@ namespace pe
         dl->AddLine(ImVec2(p0.x + 1, p0.y + 1), ImVec2(p1.x - 1, p0.y + 1), IM_COL32(255, 255, 255, 35), 1.0f);
     }
 
+    static ImVec4 Heat(float f) // 0..1 -> green->yellow->red
+    {
+        f = std::clamp(f, 0.0f, 1.0f);
+        ImVec4 g(0.20f, 0.80f, 0.25f, 1.0f), y(0.95f, 0.80f, 0.25f, 1.0f), r(0.85f, 0.25f, 0.25f, 1.0f);
+        return (f < 0.5f)
+                   ? ImVec4(g.x + (y.x - g.x) * (f / 0.5f), g.y + (y.y - g.y) * (f / 0.5f), g.z + (y.z - g.z) * (f / 0.5f), 1.0f)
+                   : ImVec4(y.x + (r.x - y.x) * ((f - 0.5f) / 0.5f), y.y + (r.y - y.y) * ((f - 0.5f) / 0.5f), y.z + (r.z - y.z) * ((f - 0.5f) / 0.5f), 1.0f);
+    }
+
+    static void TinyBar(float frac, float height = 12.0f)
+    {
+        frac = std::clamp(frac, 0.0f, 1.0f);
+        ImVec2 p0 = ImGui::GetCursorScreenPos();
+        ImVec2 p1 = ImVec2(p0.x + ImGui::GetContentRegionAvail().x, p0.y + height);
+        auto *dl = ImGui::GetWindowDrawList();
+
+        const float r = 4.0f;
+        const ImU32 bg = ImGui::GetColorU32(ImVec4(1, 1, 1, 0.08f));
+        const ImU32 br = ImGui::GetColorU32(ImVec4(1, 1, 1, 0.20f));
+
+        // background
+        dl->AddRectFilled(p0, p1, bg, r);
+        dl->AddRect(p0, p1, br, r);
+
+        // fill
+        ImVec2 f1 = ImVec2(p0.x + frac * (p1.x - p0.x), p1.y);
+        dl->AddRectFilled(p0, f1, ImGui::GetColorU32(Heat(frac)), r);
+
+        ImGui::Dummy(ImVec2(0, height)); // advance cursor
+    }
+
+    static void DrawHierarchyCell(const char *name, int depth, float relShare,
+                                  float indent_step = 14.0f, float bullet_r = 4.0f)
+    {
+        ImDrawList *dl = ImGui::GetWindowDrawList();
+        ImGuiStyle &st = ImGui::GetStyle();
+
+        // Row rect in this cell
+        ImVec2 cell_p0 = ImGui::GetCursorScreenPos();
+        ImVec2 cell_p1 = ImVec2(cell_p0.x + ImGui::GetContentRegionAvail().x,
+                                cell_p0.y + ImGui::GetTextLineHeightWithSpacing());
+
+        // Depth guide lines (faint)
+        const ImU32 guideCol = IM_COL32(255, 255, 255, 28);
+        for (int d = 1; d <= depth; ++d)
+        {
+            float x = cell_p0.x + d * indent_step;
+            dl->AddLine(ImVec2(x, cell_p0.y + 2.0f), ImVec2(x, cell_p1.y - 2.0f), guideCol, 1.0f);
+        }
+
+        // Bullet colored by relative cost (heat)
+        auto Heat = [](float f) -> ImU32
+        {
+            f = std::clamp(f, 0.0f, 1.0f);
+            ImVec4 g(0.20f, 0.80f, 0.25f, 1.0f), y(0.95f, 0.80f, 0.25f, 1.0f), r(0.85f, 0.25f, 0.25f, 1.0f);
+            ImVec4 c = (f < 0.5f)
+                           ? ImVec4(g.x + (y.x - g.x) * (f / 0.5f), g.y + (y.y - g.y) * (f / 0.5f), g.z + (y.z - g.z) * (f / 0.5f), 1.0f)
+                           : ImVec4(y.x + (r.x - y.x) * ((f - 0.5f) / 0.5f), y.y + (r.y - y.y) * ((f - 0.5f) / 0.5f), y.z + (r.z - y.z) * ((f - 0.5f) / 0.5f), 1.0f);
+            return ImGui::GetColorU32(c);
+        };
+
+        float x0 = cell_p0.x + depth * indent_step + indent_step * 0.5f;
+        float cy = (cell_p0.y + cell_p1.y) * 0.5f;
+
+        dl->AddCircleFilled(ImVec2(x0, cy), bullet_r, Heat(relShare), 16);
+        dl->AddCircle(ImVec2(x0, cy), bullet_r, IM_COL32(0, 0, 0, 120), 16, 1.0f); // subtle ring
+
+        // Text
+        ImVec2 tp = ImVec2(x0 + bullet_r + 6.0f, cell_p0.y);
+        dl->AddText(tp, ImGui::GetColorU32(ImGui::GetStyle().Colors[ImGuiCol_Text]), name);
+
+        // Advance cursor to end of row height
+        ImGui::Dummy(ImVec2(0, ImGui::GetTextLineHeightWithSpacing()));
+    }
+
+    static void ShowCpuGpuSummary(float cpuTotal, float cpuUpdates, float cpuDraw, float gpuTotal)
+    {
+        ImGuiTableFlags flags =
+            ImGuiTableFlags_BordersInnerV |
+            ImGuiTableFlags_RowBg |
+            ImGuiTableFlags_SizingStretchProp |
+            ImGuiTableFlags_NoSavedSettings;
+
+        if (ImGui::BeginTable("##cpu_gpu_summary", 3, flags, ImVec2(-FLT_MIN, 0)))
+        {
+            ImGui::TableSetupColumn("metric", ImGuiTableColumnFlags_WidthStretch, 0.55f);
+            ImGui::TableSetupColumn("ms", ImGuiTableColumnFlags_WidthFixed, 80.0f);
+            ImGui::TableSetupColumn("rel", ImGuiTableColumnFlags_WidthStretch, 0.45f);
+            ImGui::TableHeadersRow();
+
+            auto Row = [](const char *name, float ms, float norm, float indent = 0.0f)
+            {
+                float rel = (norm > 0.0f) ? (ms / norm) : 0.0f;
+
+                ImGui::TableNextRow();
+
+                // metric (with optional indent)
+                ImGui::TableSetColumnIndex(0);
+                if (indent > 0.0f)
+                    ImGui::Indent(indent);
+                ImGui::TextUnformatted(name);
+                if (indent > 0.0f)
+                    ImGui::Unindent(indent);
+
+                // ms (heat colored vs. norm)
+                ImGui::TableSetColumnIndex(1);
+                ImGui::TextColored(Heat(rel), "%.3f ms", ms);
+
+                // tiny relative bar
+                ImGui::TableSetColumnIndex(2);
+                TinyBar(rel, 10.0f);
+            };
+
+            // CPU block (children colored vs CPU Total)
+            Row("CPU Total", cpuTotal, cpuTotal);
+            Row("CPU Updates", cpuUpdates, cpuTotal, 12.0f);
+            Row("CPU Draw", cpuDraw, cpuTotal, 12.0f);
+
+            // GPU block (self-normalized)
+            Row("GPU Total", gpuTotal, gpuTotal);
+
+            ImGui::EndTable();
+        }
+    }
+
     // https://github.com/ocornut/imgui/issues/1901#issuecomment-444929973
     void LoadingIndicatorCircle(const char *label, const float indicator_radius,
                                 const ImVec4 &main_color, const ImVec4 &backdrop_color,
@@ -451,6 +576,69 @@ namespace pe
                 ImGui::Unindent(gpuTimerInfo.depth * 16.0f);
         }
     }
+
+    void GUI::ShowGpuTimingsTable(float totalMs)
+    {
+        // Optional filter
+        static char filter[64] = "";
+        ImGui::SetNextItemWidth(140);
+        ImGui::InputTextWithHint("##timings_filter", "filter...", filter, IM_ARRAYSIZE(filter));
+
+        ImGuiTableFlags flags =
+            ImGuiTableFlags_BordersInnerV |
+            ImGuiTableFlags_RowBg |
+            ImGuiTableFlags_Resizable |
+            ImGuiTableFlags_SizingStretchProp |
+            ImGuiTableFlags_NoSavedSettings |
+            ImGuiTableFlags_ScrollY;
+
+        // Height: show ~10 rows before scrolling
+        const float row_h = ImGui::GetTextLineHeightWithSpacing() + 4.0f;
+        const float table_h = row_h * 10.0f;
+
+        if (ImGui::BeginTable("##gpu_timings", 3, flags, ImVec2(-FLT_MIN, table_h)))
+        {
+            ImGui::TableSetupColumn("Pass", ImGuiTableColumnFlags_WidthStretch, 0.65f);
+            ImGui::TableSetupColumn("ms", ImGuiTableColumnFlags_WidthFixed, 70.0f);
+            ImGui::TableSetupColumn("rel", ImGuiTableColumnFlags_WidthStretch, 0.35f);
+            ImGui::TableHeadersRow();
+
+            for (const auto &info : m_gpuTimerInfos)
+            {
+                // skip your depth==0 “root” if you don’t want it listed
+                if (info.depth == 0)
+                    continue;
+
+                const float t = info.timer->GetTime();
+                if (t <= 0.0f)
+                    continue;
+
+                // simple name filter
+                if (filter[0] != '\0' && std::string(info.name).find(filter) == std::string::npos)
+                    continue;
+
+                const float rel = (totalMs > 0.0f) ? (t / totalMs) : 0.0f;
+
+                ImGui::TableNextRow();
+
+                // col 0: name (pretty hierarchy)
+                ImGui::TableSetColumnIndex(0);
+                DrawHierarchyCell(info.name.c_str(), info.depth, rel);
+
+                // col 1: ms (heat colored)
+                ImGui::TableSetColumnIndex(1);
+                ImGui::AlignTextToFramePadding();
+                ImGui::TextColored(Heat(rel), "%.3f", t);
+
+                // col 2: tiny relative bar
+                ImGui::TableSetColumnIndex(2);
+                TinyBar(rel);
+            }
+
+            ImGui::EndTable();
+        }
+    }
+
 #endif
 
     void GUI::Metrics()
@@ -500,21 +688,22 @@ namespace pe
         ImGui::PopStyleVar();
         ImGui::Separator();
 
-        FrameTimer &frameTimer = FrameTimer::Instance();
-        ImGui::Text("CPU Total: %.3f ms", static_cast<float>(MILLI(frameTimer.GetCpuTotal())));
-        ImGui::Indent(16.0f);
-        SetTextColorTemp(static_cast<float>(frameTimer.GetUpdatesStamp()), static_cast<float>(frameTimer.GetCpuTotal()));
-        ImGui::Text("CPU Updates: %.3f ms", static_cast<float>(MILLI(frameTimer.GetUpdatesStamp())));
-        SetTextColorTemp(static_cast<float>(frameTimer.GetCpuTotal() - frameTimer.GetUpdatesStamp()), static_cast<float>(frameTimer.GetCpuTotal()));
-        ImGui::Text("CPU Draw: %.3f ms", static_cast<float>(MILLI(frameTimer.GetCpuTotal() - frameTimer.GetUpdatesStamp())));
-        ResetTextColor();
-        ImGui::Unindent(16.0f);
-
+        FrameTimer &ft = FrameTimer::Instance();
+        const float cpuTotal = (float)MILLI(ft.GetCpuTotal());
+        const float cpuUpdates = (float)MILLI(ft.GetUpdatesStamp());
+        const float cpuDraw = (float)MILLI(ft.GetCpuTotal() - ft.GetUpdatesStamp());
 #if PE_DEBUG_MODE
-        float gpuTotal = FetchTotalGPUTime();
-        ImGui::Text("GPU Total: %.3f ms", gpuTotal);
-        ShowGpuTimings(gpuTotal);
-        ImGui::GetStyle().Colors[ImGuiCol_Text] = ImVec4(0.90f, 0.90f, 0.90f, 1.00f);
+        const float gpuTotal = FetchTotalGPUTime();
+#else
+        const float gpuTotal = 0.0f;
+#endif
+        // Compact local spacing
+        ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(ImGui::GetStyle().ItemSpacing.x, 2.0f));
+        ShowCpuGpuSummary(cpuTotal, cpuUpdates, cpuDraw, gpuTotal);
+        ImGui::PopStyleVar();
+#if PE_DEBUG_MODE
+        // keep the nice timings table you added below
+        ShowGpuTimingsTable(gpuTotal);
         m_gpuTimerInfos.clear();
 #endif
         ImGui::End();

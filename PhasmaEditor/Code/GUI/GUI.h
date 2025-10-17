@@ -32,6 +32,7 @@ namespace pe
         void Properties();
         float FetchTotalGPUTime();
         void ShowGpuTimings(float maxTime);
+        void ShowGpuTimingsTable(float totalMs);
 
         bool m_render;
         std::unique_ptr<Attachment> m_attachment;
