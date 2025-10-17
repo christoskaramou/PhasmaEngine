@@ -39,6 +39,56 @@ namespace pe
         ImGui::DestroyContext();
     }
 
+    static void ApplyNiceTheme()
+    {
+        ImGuiStyle &s = ImGui::GetStyle();
+        s.WindowRounding = 8.0f;
+        s.ChildRounding = 8.0f;
+        s.FrameRounding = 6.0f;
+        s.GrabRounding = 6.0f;
+        s.PopupRounding = 6.0f;
+        s.ScrollbarRounding = 6.0f;
+        s.FramePadding = ImVec2(10, 6);
+        s.ItemSpacing = ImVec2(10, 8);
+        s.WindowPadding = ImVec2(14, 10);
+        s.SeparatorTextPadding = ImVec2(12, 6);
+
+        auto &c = s.Colors;
+        c[ImGuiCol_WindowBg] = ImVec4(0.08f, 0.08f, 0.10f, 0.92f);
+        c[ImGuiCol_ChildBg] = ImVec4(0.10f, 0.10f, 0.14f, 0.60f);
+        c[ImGuiCol_FrameBg] = ImVec4(0.16f, 0.16f, 0.22f, 1.00f);
+        c[ImGuiCol_FrameBgHovered] = ImVec4(0.22f, 0.22f, 0.30f, 1.00f);
+        c[ImGuiCol_FrameBgActive] = ImVec4(0.25f, 0.25f, 0.34f, 1.00f);
+        c[ImGuiCol_Border] = ImVec4(1, 1, 1, 0.18f);
+        c[ImGuiCol_Text] = ImVec4(0.92f, 0.92f, 0.92f, 1.0f);
+        c[ImGuiCol_Separator] = ImVec4(1, 1, 1, 0.12f);
+    }
+
+    static void DrawBarBackground(const ImVec2 &p0, const ImVec2 &p1, ImDrawList *dl)
+    {
+        const ImU32 bg = ImGui::GetColorU32(ImGui::GetStyle().Colors[ImGuiCol_FrameBg]);
+        const ImU32 brdr = ImGui::GetColorU32(ImVec4(1, 1, 1, 0.18f));
+        const float r = 6.0f;
+
+        // soft shadow (bottom)
+        dl->AddRectFilled(ImVec2(p0.x, p0.y + 1), ImVec2(p1.x, p1.y + 2), IM_COL32(0, 0, 0, 45), r);
+        // background + border
+        dl->AddRectFilled(p0, p1, bg, r);
+        dl->AddRect(p0, p1, brdr, r);
+
+        // ticks at 25/50/75%
+        const float W = (p1.x - p0.x);
+        const float H = (p1.y - p0.y);
+        for (int i : {25, 50, 75})
+        {
+            float x = p0.x + (i / 100.0f) * W;
+            dl->AddLine(ImVec2(x, p0.y), ImVec2(x, p0.y + H), IM_COL32(255, 255, 255, 30), 1.0f);
+        }
+
+        // top glossy hairline
+        dl->AddLine(ImVec2(p0.x + 1, p0.y + 1), ImVec2(p1.x - 1, p0.y + 1), IM_COL32(255, 255, 255, 35), 1.0f);
+    }
+
     // https://github.com/ocornut/imgui/issues/1901#issuecomment-444929973
     void LoadingIndicatorCircle(const char *label, const float indicator_radius,
                                 const ImVec4 &main_color, const ImVec4 &backdrop_color,
@@ -123,6 +173,166 @@ namespace pe
             };
             e_GUI_ThreadPool.Enqueue(lambda);
         }
+    }
+
+    // ---------- helpers ----------
+    static inline std::string FormatBytes(uint64_t b)
+    {
+        const double KB = 1024.0, MB = KB * KB, GB = KB * KB * KB;
+        char buf[64];
+        if (b >= (uint64_t)GB)
+            snprintf(buf, sizeof(buf), "%.2f GB", b / GB);
+        else if (b >= (uint64_t)MB)
+            snprintf(buf, sizeof(buf), "%.2f MB", b / MB);
+        else
+            snprintf(buf, sizeof(buf), "%.0f KB", b / KB);
+        return buf;
+    }
+
+    static inline ImU32 U32(const ImVec4 &c) { return ImGui::GetColorU32(c); }
+
+    static inline float Clamp01(float x) { return x < 0.f ? 0.f : (x > 1.f ? 1.f : x); }
+
+    static ImVec4 UsageColor(float frac)
+    { // 0..1 → green→yellow→red
+        frac = Clamp01(frac);
+        ImVec4 g(0.20f, 0.80f, 0.25f, 0.95f);
+        ImVec4 y(0.95f, 0.80f, 0.25f, 0.95f);
+        ImVec4 r(0.85f, 0.25f, 0.25f, 0.95f);
+        return (frac < 0.5f)
+                   ? ImVec4(g.x + (y.x - g.x) * (frac / 0.5f), g.y + (y.y - g.y) * (frac / 0.5f), g.z + (y.z - g.z) * (frac / 0.5f), 0.95f)
+                   : ImVec4(y.x + (r.x - y.x) * ((frac - 0.5f) / 0.5f), y.y + (r.y - y.y) * ((frac - 0.5f) / 0.5f), y.z + (r.z - y.z) * ((frac - 0.5f) / 0.5f), 0.95f);
+    }
+
+    // RAM bar: [System Used (others, grey)] + [App Used (gradient)] over System Total
+    static void DrawRamBar(const char *label,
+                           uint64_t sysTotal,
+                           uint64_t appUsed, // process (Private Bytes)
+                           uint64_t sysUsed, // total system used (includes your app)
+                           ImVec2 size = ImVec2(-FLT_MIN, 20.0f))
+    {
+        if (sysTotal == 0)
+            sysTotal = 1;
+
+        appUsed = std::min(appUsed, sysTotal);
+        sysUsed = std::min(sysUsed, sysTotal);
+
+        // System used excluding our app
+        const uint64_t sysOtherUsed = (sysUsed > appUsed) ? (sysUsed - appUsed) : 0;
+
+        const float fApp = (float)appUsed / (float)sysTotal;
+        const float fOther = (float)sysOtherUsed / (float)sysTotal;
+
+        auto UsageColor = [](float f) -> ImVec4
+        {
+            f = std::clamp(f, 0.0f, 1.0f);
+            ImVec4 g(0.20f, 0.80f, 0.25f, 0.95f), y(0.95f, 0.80f, 0.25f, 0.95f), r(0.85f, 0.25f, 0.25f, 0.95f);
+            return (f < 0.5f)
+                       ? ImVec4(g.x + (y.x - g.x) * (f / 0.5f), g.y + (y.y - g.y) * (f / 0.5f), g.z + (y.z - g.z) * (f / 0.5f), 0.95f)
+                       : ImVec4(y.x + (r.x - y.x) * ((f - 0.5f) / 0.5f), y.y + (r.y - y.y) * ((f - 0.5f) / 0.5f), y.z + (r.z - y.z) * ((f - 0.5f) / 0.5f), 0.95f);
+        };
+
+        const ImVec4 colBg = ImGui::GetStyle().Colors[ImGuiCol_FrameBg];
+        const ImVec4 colBrdr = ImVec4(1, 1, 1, 0.25f);
+        const ImVec4 colOther = ImVec4(0.60f, 0.60f, 0.60f, 0.90f); // grey base
+        const ImVec4 colApp = UsageColor(fApp);
+
+        ImGui::TextUnformatted(label);
+        ImVec2 p0 = ImGui::GetCursorScreenPos();
+        if (size.x <= 0)
+            size.x = ImGui::GetContentRegionAvail().x;
+        ImVec2 p1 = ImVec2(p0.x + size.x, p0.y + size.y);
+        auto *dl = ImGui::GetWindowDrawList();
+        const float W = (p1.x - p0.x);
+
+        // frame
+        DrawBarBackground(p0, p1, dl);
+
+        // 1) System Used (others) base
+        float xOther = p0.x + fOther * W;
+        dl->AddRectFilled(p0, ImVec2(xOther, p1.y), ImGui::GetColorU32(colOther), 4.0f);
+
+        // 2) App Used overlay (stacked after others)
+        float xApp0 = xOther;
+        float xApp1 = p0.x + (fOther + fApp) * W;
+        dl->AddRectFilled(ImVec2(xApp0, p0.y), ImVec2(xApp1, p1.y), ImGui::GetColorU32(colApp), 4.0f);
+
+        // Center text: ONLY app / total (%)
+        ImGui::PushID(label);
+        ImGui::InvisibleButton("##ram_bar", size);
+        {
+            char overlay[128];
+            const int pctApp = (int)std::round(100.0 * fApp);
+            snprintf(overlay, sizeof(overlay), "%s / %s  (%d%%)",
+                     FormatBytes(appUsed).c_str(), FormatBytes(sysTotal).c_str(), pctApp);
+            ImVec2 ts = ImGui::CalcTextSize(overlay);
+            ImVec2 tp = ImVec2(p0.x + (size.x - ts.x) * 0.5f, p0.y + (size.y - ts.y) * 0.5f);
+            dl->AddText(tp, ImGui::GetColorU32(ImGui::GetStyle().Colors[ImGuiCol_Text]), overlay);
+        }
+
+        // Tooltip: app / total + system used (other)
+        if (ImGui::IsItemHovered())
+        {
+            ImGui::BeginTooltip();
+            ImGui::Text("%s", label);
+            ImGui::Separator();
+            ImGui::Text("App Used:            %s", FormatBytes(appUsed).c_str());
+            ImGui::Text("System Used (other): %s", FormatBytes(sysOtherUsed).c_str());
+            ImGui::Separator();
+            ImGui::Text("Total RAM:           %s", FormatBytes(sysTotal).c_str());
+            ImGui::EndTooltip();
+        }
+        ImGui::PopID();
+    }
+
+    static void DrawGpuBar(const char *label,
+                           uint64_t used, uint64_t total, // total = budget
+                           ImVec2 size = ImVec2(-FLT_MIN, 20.0f))
+    {
+        if (total == 0)
+            total = 1;
+        used = std::min(used, total);
+        const float f = (float)used / (float)total;
+        const ImVec4 colFill = UsageColor(f);
+
+        ImGui::TextUnformatted(label);
+        ImVec2 p0 = ImGui::GetCursorScreenPos();
+        if (size.x <= 0)
+            size.x = ImGui::GetContentRegionAvail().x;
+        ImVec2 p1 = ImVec2(p0.x + size.x, p0.y + size.y);
+        auto *dl = ImGui::GetWindowDrawList();
+
+        const ImVec4 colBg = ImGui::GetStyle().Colors[ImGuiCol_FrameBg];
+        const ImVec4 colBrdr = ImVec4(1, 1, 1, 0.25f);
+
+        dl->AddRectFilled(p0, p1, U32(colBg), 4.0f);
+        dl->AddRect(p0, p1, U32(colBrdr), 4.0f);
+
+        float x = p0.x + Clamp01(f) * (p1.x - p0.x);
+        dl->AddRectFilled(p0, ImVec2(x, p1.y), U32(colFill), 4.0f);
+
+        ImGui::PushID(label);
+        ImGui::InvisibleButton("##gpu_bar", size);
+
+        // centered overlay with %
+        char overlay[96];
+        int pct = (int)std::round(100.0 * f);
+        snprintf(overlay, sizeof(overlay), "%s / %s  (%d%%)",
+                 FormatBytes(used).c_str(), FormatBytes(total).c_str(), pct);
+        ImVec2 ts = ImGui::CalcTextSize(overlay);
+        ImVec2 tp = ImVec2(p0.x + (size.x - ts.x) * 0.5f, p0.y + (size.y - ts.y) * 0.5f);
+        dl->AddText(tp, U32(ImGui::GetStyle().Colors[ImGuiCol_Text]), overlay);
+
+        if (ImGui::IsItemHovered())
+        {
+            ImGui::BeginTooltip();
+            ImGui::Text("%s", label);
+            ImGui::Separator();
+            ImGui::Text("Used:  %s (%d%% of total)", FormatBytes(used).c_str(), pct);
+            ImGui::Text("Total: %s", FormatBytes(total).c_str());
+            ImGui::EndTooltip();
+        }
+        ImGui::PopID();
     }
 
     static bool metrics_open = true;
@@ -252,12 +462,6 @@ namespace pe
         static std::deque<float> fpsDeque(100, 0.0f);
         static std::vector<float> fpsVector(100, 0.0f);
         static float highestValue = 100.0f;
-        static std::deque<float> memoryUsedDeque(100, 0.0f);
-        static std::deque<float> memoryTotalDeque(100, 0.0f);
-        static std::vector<float> memoryUsedVector(100, 0.0f);
-        static std::vector<float> memoryTotalVector(100, 0.0f);
-        static MemoryInfo memoryInfo = RHII.GetMemoryUsageSnapshot();
-        constexpr float toMB = 1 / (1024.0f * 1024.0f);
 
         static Timer delay;
         float framerate = ImGui::GetIO().Framerate;
@@ -265,19 +469,10 @@ namespace pe
         {
             delay.Start();
 
-            memoryInfo = RHII.GetMemoryUsageSnapshot();
-
             fpsDeque.pop_front();
             fpsDeque.push_back(framerate);
             highestValue = max(highestValue, framerate + 60.0f);
             std::copy(fpsDeque.begin(), fpsDeque.end(), fpsVector.begin());
-
-            memoryUsedDeque.pop_front();
-            memoryUsedDeque.push_back(memoryInfo.used * toMB);
-            memoryTotalDeque.pop_front();
-            memoryTotalDeque.push_back(memoryInfo.total * toMB);
-            std::copy(memoryUsedDeque.begin(), memoryUsedDeque.end(), memoryUsedVector.begin());
-            std::copy(memoryTotalDeque.begin(), memoryTotalDeque.end(), memoryTotalVector.begin());
         }
 
         ImGui::Begin("Metrics", &metrics_open);
@@ -290,10 +485,19 @@ namespace pe
             ImGui::DragInt("FPS", &gSettings.target_fps, 0.1f);
             gSettings.target_fps = max(gSettings.target_fps, 10);
         }
+
+        // Memory Usage
         ImGui::Separator();
-        ImGui::Text("Used Memory: %.2f MB", memoryInfo.used * toMB);
-        ImGui::Text("Total Memory: %.2f MB", memoryInfo.total * toMB);
-        ImGui::PlotLines("##MemoryUsage", memoryUsedVector.data(), static_cast<int>(memoryUsedVector.size()), 0, NULL, 0.0f, memoryInfo.total * toMB, ImVec2(0, 80));
+        const auto ram = RHII.GetSystemAndProcessMemory();
+        const auto gpu = RHII.GetGpuMemorySnapshot();
+        ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(ImGui::GetStyle().ItemSpacing.x, 2.0f)); // compact Y spacing
+        // 1) RAM — system used (other) / process (Private Bytes) / system total
+        DrawRamBar("RAM", ram.sysTotal, ram.procPrivateBytes, ram.sysUsed);
+        // 2) GPU (Host Visible) — used / budget
+        DrawGpuBar("GPU (Host Visible)", gpu.host.used, gpu.host.budget);
+        // 3) GPU (Local/VRAM) — used / budget
+        DrawGpuBar("GPU (Local)", gpu.vram.used, gpu.vram.budget);
+        ImGui::PopStyleVar();
         ImGui::Separator();
 
         FrameTimer &frameTimer = FrameTimer::Instance();
@@ -541,6 +745,7 @@ namespace pe
 
         ImGui::StyleColorsClassic();
         ImGui::GetStyle().Colors[ImGuiCol_WindowBg] = ImVec4(0.00f, 0.00f, 0.00f, 0.3f);
+        ApplyNiceTheme();
 
         ImGui_ImplSDL2_InitForVulkan(RHII.GetWindow());
 
