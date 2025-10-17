@@ -16,8 +16,28 @@ namespace pe
 
     struct MemoryInfo
     {
-        uint64_t total = 0;
         uint64_t used = 0;
+        uint64_t budget = 0;
+        uint64_t size = 0;
+        uint32_t heaps = 0;
+    };
+    struct SystemProcMem
+    {
+        // System
+        uint64_t sysTotal = 0;
+        uint64_t sysUsed = 0;
+
+        // Our process
+        uint64_t procWorkingSet = 0;
+        uint64_t procPrivateBytes = 0;
+        uint64_t procCommit = 0;
+        uint64_t procPeakWS = 0;
+    };
+
+    struct GpuMemorySnapshot
+    {
+        MemoryInfo vram; // DEVICE_LOCAL (VRAM or UMA “local”)
+        MemoryInfo host; // non-DEVICE_LOCAL (GPU-visible system memory)
     };
 
     class RHI : public NoCopy, public NoMove
@@ -89,7 +109,8 @@ namespace pe
         SDL_Window *GetWindow() { return m_window; }
         Surface *GetSurface() { return m_surface; }
         Swapchain *GetSwapchain() { return m_swapchain; }
-        MemoryInfo GetMemoryUsageSnapshot();
+        SystemProcMem GetSystemAndProcessMemory();
+        GpuMemorySnapshot GetGpuMemorySnapshot();
         void ChangePresentMode(vk::PresentModeKHR mode);
 
         uint32_t GetWidth() const;

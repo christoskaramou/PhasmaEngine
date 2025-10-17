@@ -17,6 +17,15 @@
 #define VKAPI_CALL
 #endif
 
+// System + Process RAM (Windows)
+#if defined(_WIN32)
+#include <windows.h>
+#include <psapi.h>
+#pragma comment(lib, "psapi.lib")
+#elif defined(__linux__)
+#include <sys/sysinfo.h>
+#endif
+
 namespace pe
 {
     RHI &RHII = *RHI::Get();
@@ -397,23 +406,161 @@ namespace pe
         }
     }
 
-    MemoryInfo RHI::GetMemoryUsageSnapshot()
+    SystemProcMem RHI::GetSystemAndProcessMemory()
     {
-        if (!IsDeviceExtensionValid(VK_EXT_MEMORY_BUDGET_EXTENSION_NAME))
-            return {};
+        SystemProcMem m{};
 
-        vk::PhysicalDeviceMemoryBudgetPropertiesEXT memoryBudgetProperties{};
-        vk::PhysicalDeviceMemoryProperties2 memoryProperties2{};
-        memoryProperties2.pNext = &memoryBudgetProperties;
-        m_gpu.getMemoryProperties2(&memoryProperties2);
+#if defined(_WIN32)
+        // ---- System ----
+        MEMORYSTATUSEX ms{};
+        ms.dwLength = sizeof(ms);
+        if (GlobalMemoryStatusEx(&ms))
+        {
+            m.sysTotal = (uint64_t)ms.ullTotalPhys;
+            m.sysUsed = m.sysTotal - (uint64_t)ms.ullAvailPhys;
+        }
 
-        MemoryInfo memoryInfo{};
-        for (uint32_t i = 0; i < memoryProperties2.memoryProperties.memoryTypeCount; i++)
-            memoryInfo.total += memoryBudgetProperties.heapBudget[i];
-        for (uint32_t i = 0; i < memoryProperties2.memoryProperties.memoryTypeCount; i++)
-            memoryInfo.used += memoryBudgetProperties.heapUsage[i];
+        // ---- Process ----
+        PROCESS_MEMORY_COUNTERS_EX pmc{};
+        if (GetProcessMemoryInfo(GetCurrentProcess(),
+                                 (PROCESS_MEMORY_COUNTERS *)&pmc,
+                                 sizeof(pmc)))
+        {
+            m.procWorkingSet = (uint64_t)pmc.WorkingSetSize;
+            m.procPrivateBytes = (uint64_t)pmc.PrivateUsage; // “our” committed private memory
+            m.procCommit = (uint64_t)pmc.PrivateUsage;
+            m.procPeakWS = (uint64_t)pmc.PeakWorkingSetSize;
+        }
 
-        return memoryInfo;
+#elif defined(__linux__)
+        // ---- System: MemTotal / MemAvailable from /proc/meminfo ----
+        {
+            std::ifstream mi("/proc/meminfo");
+            uint64_t totalKB = 0, availKB = 0, val = 0;
+            std::string key, unit;
+            if (mi)
+            {
+                while (mi >> key >> val >> unit)
+                {
+                    if (key == "MemTotal:")
+                        totalKB = val;
+                    else if (key == "MemAvailable:")
+                        availKB = val;
+                    mi.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
+                }
+            }
+            if (totalKB && availKB)
+            {
+                m.sysTotal = totalKB * 1024ull;
+                m.sysUsed = (totalKB - availKB) * 1024ull;
+            }
+            else
+            {
+                // Fallback: sysinfo (less accurate for caches/buffers)
+                struct sysinfo si{};
+                if (sysinfo(&si) == 0)
+                {
+                    m.sysTotal = (uint64_t)si.totalram * si.mem_unit;
+                    uint64_t freeB = (uint64_t)si.freeram * si.mem_unit;
+                    m.sysUsed = (m.sysTotal > freeB) ? (m.sysTotal - freeB) : 0;
+                }
+            }
+        }
+
+        // ---- Process: VmRSS + VmHWM from /proc/self/status ----
+        uint64_t vmRSSB = 0, vmHWMB = 0;
+        {
+            std::ifstream st("/proc/self/status");
+            if (st)
+            {
+                std::string k, unit;
+                uint64_t vKB = 0;
+                while (st >> k)
+                {
+                    if (k == "VmRSS:")
+                    {
+                        st >> vKB >> unit;
+                        vmRSSB = vKB * 1024ull;
+                    }
+                    else if (k == "VmHWM:")
+                    {
+                        st >> vKB >> unit;
+                        vmHWMB = vKB * 1024ull;
+                    }
+                    st.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
+                }
+            }
+        }
+
+        // ---- Process: Private bytes from /proc/self/smaps_rollup (fallback: RSS) ----
+        uint64_t privCleanB = 0, privDirtyB = 0;
+        {
+            std::ifstream sm("/proc/self/smaps_rollup");
+            if (sm)
+            {
+                std::string line;
+                while (std::getline(sm, line))
+                {
+                    if (line.rfind("Private_Clean:", 0) == 0)
+                    {
+                        uint64_t kb = 0;
+                        std::istringstream(line.substr(14)) >> kb;
+                        privCleanB = kb * 1024ull;
+                    }
+                    else if (line.rfind("Private_Dirty:", 0) == 0)
+                    {
+                        uint64_t kb = 0;
+                        std::istringstream(line.substr(14)) >> kb;
+                        privDirtyB = kb * 1024ull;
+                    }
+                }
+            }
+        }
+        const uint64_t privTotalB = (privCleanB + privDirtyB) ? (privCleanB + privDirtyB) : vmRSSB;
+
+        m.procWorkingSet = vmRSSB;       // Resident
+        m.procPeakWS = vmHWMB;           // Peak resident
+        m.procPrivateBytes = privTotalB; // “we use”
+        m.procCommit = privTotalB;       // alias
+#endif
+
+        return m;
+    }
+
+    GpuMemorySnapshot RHI::GetGpuMemorySnapshot()
+    {
+        GpuMemorySnapshot snap{};
+
+        // --- Vulkan heaps/budgets (VRAM + host-visible) ---
+        if (IsDeviceExtensionValid(VK_EXT_MEMORY_BUDGET_EXTENSION_NAME))
+        {
+            vk::PhysicalDeviceMemoryBudgetPropertiesEXT budget{};
+            vk::PhysicalDeviceMemoryProperties2 props{};
+            props.pNext = &budget;
+            m_gpu.getMemoryProperties2(&props);
+
+            const auto &heaps = props.memoryProperties.memoryHeaps;
+            const uint32_t n = props.memoryProperties.memoryHeapCount;
+
+            for (uint32_t i = 0; i < n; ++i)
+            {
+                const bool deviceLocal =
+                    (heaps[i].flags & vk::MemoryHeapFlagBits::eDeviceLocal) == vk::MemoryHeapFlagBits::eDeviceLocal;
+
+                MemoryInfo &info = deviceLocal ? snap.vram : snap.host;
+
+                const uint64_t heapSize = heaps[i].size;
+                const uint64_t heapBudget = std::min<uint64_t>(budget.heapBudget[i], heapSize);
+                const uint64_t heapUsed = budget.heapUsage[i];
+
+                info.size += heapSize;
+                info.budget += heapBudget;
+                info.used += heapUsed;
+                info.heaps += 1;
+            }
+        }
+
+        return snap;
     }
 
     void RHI::ChangePresentMode(vk::PresentModeKHR mode)
