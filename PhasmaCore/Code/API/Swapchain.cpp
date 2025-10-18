@@ -19,7 +19,7 @@ namespace pe
 
         vk::SwapchainCreateInfoKHR swapchainCreateInfo{};
         swapchainCreateInfo.surface = surface->ApiHandle();
-        swapchainCreateInfo.minImageCount = capabilities.minImageCount;
+        swapchainCreateInfo.minImageCount = capabilities.minImageCount + 1;
         swapchainCreateInfo.imageFormat = surface->GetFormat();
         swapchainCreateInfo.imageColorSpace = surface->GetColorSpace();
         swapchainCreateInfo.imageExtent = vk::Extent2D{m_extent.width, m_extent.height};
