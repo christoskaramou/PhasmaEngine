@@ -16,11 +16,20 @@ namespace pe
 
     struct MemoryInfo
     {
-        uint64_t used = 0;
-        uint64_t budget = 0;
-        uint64_t size = 0;
+        uint64_t used = 0;   // heapUsage (ALL apps) from VK_EXT_memory_budget
+        uint64_t budget = 0; // min(heapBudget, heapSize)
+        uint64_t size = 0;   // heap size
+        uint64_t app = 0;    // OUR committed bytes (from VMA)
+        uint64_t other = 0;  // used - app (clamped >= 0)
         uint32_t heaps = 0;
     };
+
+    struct GpuMemorySnapshot
+    {
+        MemoryInfo vram; // DEVICE_LOCAL
+        MemoryInfo host; // non-DEVICE_LOCAL
+    };
+
     struct SystemProcMem
     {
         // System
@@ -33,13 +42,7 @@ namespace pe
         uint64_t procCommit = 0;
         uint64_t procPeakWS = 0;
     };
-
-    struct GpuMemorySnapshot
-    {
-        MemoryInfo vram; // DEVICE_LOCAL (VRAM or UMA “local”)
-        MemoryInfo host; // non-DEVICE_LOCAL (GPU-visible system memory)
-    };
-
+    
     class RHI : public NoCopy, public NoMove
     {
     public:

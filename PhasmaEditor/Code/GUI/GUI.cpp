@@ -1,4 +1,5 @@
 #include "GUI.h"
+#include "Helpers.h"
 #include "TinyFileDialogs/tinyfiledialogs.h"
 #include "API/Vertex.h"
 #include "API/Shader.h"
@@ -19,9 +20,6 @@
 #include "RenderPasses/AabbsPass.h"
 #include "RenderPasses/SuperResolutionPass.h"
 #include "Systems/RendererSystem.h"
-#include "imgui/imgui_impl_vulkan.h"
-#include "imgui/imgui_impl_sdl2.h"
-#include "imgui/imgui_internal.h"
 
 namespace pe
 {
@@ -37,219 +35,6 @@ namespace pe
         ImGui_ImplVulkan_Shutdown();
         ImGui_ImplSDL2_Shutdown();
         ImGui::DestroyContext();
-    }
-
-    static void ApplyNiceTheme()
-    {
-        ImGuiStyle &s = ImGui::GetStyle();
-        s.WindowRounding = 8.0f;
-        s.ChildRounding = 8.0f;
-        s.FrameRounding = 6.0f;
-        s.GrabRounding = 6.0f;
-        s.PopupRounding = 6.0f;
-        s.ScrollbarRounding = 6.0f;
-        s.FramePadding = ImVec2(10, 6);
-        s.ItemSpacing = ImVec2(10, 8);
-        s.WindowPadding = ImVec2(14, 10);
-        s.SeparatorTextPadding = ImVec2(12, 6);
-
-        auto &c = s.Colors;
-        c[ImGuiCol_WindowBg] = ImVec4(0.08f, 0.08f, 0.10f, 0.92f);
-        c[ImGuiCol_ChildBg] = ImVec4(0.10f, 0.10f, 0.14f, 0.60f);
-        c[ImGuiCol_FrameBg] = ImVec4(0.16f, 0.16f, 0.22f, 1.00f);
-        c[ImGuiCol_FrameBgHovered] = ImVec4(0.22f, 0.22f, 0.30f, 1.00f);
-        c[ImGuiCol_FrameBgActive] = ImVec4(0.25f, 0.25f, 0.34f, 1.00f);
-        c[ImGuiCol_Border] = ImVec4(1, 1, 1, 0.18f);
-        c[ImGuiCol_Text] = ImVec4(0.92f, 0.92f, 0.92f, 1.0f);
-        c[ImGuiCol_Separator] = ImVec4(1, 1, 1, 0.12f);
-    }
-
-    static void DrawBarBackground(const ImVec2 &p0, const ImVec2 &p1, ImDrawList *dl)
-    {
-        const ImU32 bg = ImGui::GetColorU32(ImGui::GetStyle().Colors[ImGuiCol_FrameBg]);
-        const ImU32 brdr = ImGui::GetColorU32(ImVec4(1, 1, 1, 0.18f));
-        const float r = 6.0f;
-
-        // soft shadow (bottom)
-        dl->AddRectFilled(ImVec2(p0.x, p0.y + 1), ImVec2(p1.x, p1.y + 2), IM_COL32(0, 0, 0, 45), r);
-        // background + border
-        dl->AddRectFilled(p0, p1, bg, r);
-        dl->AddRect(p0, p1, brdr, r);
-
-        // ticks at 25/50/75%
-        const float W = (p1.x - p0.x);
-        const float H = (p1.y - p0.y);
-        for (int i : {25, 50, 75})
-        {
-            float x = p0.x + (i / 100.0f) * W;
-            dl->AddLine(ImVec2(x, p0.y), ImVec2(x, p0.y + H), IM_COL32(255, 255, 255, 30), 1.0f);
-        }
-
-        // top glossy hairline
-        dl->AddLine(ImVec2(p0.x + 1, p0.y + 1), ImVec2(p1.x - 1, p0.y + 1), IM_COL32(255, 255, 255, 35), 1.0f);
-    }
-
-    static ImVec4 Heat(float f) // 0..1 -> green->yellow->red
-    {
-        f = std::clamp(f, 0.0f, 1.0f);
-        ImVec4 g(0.20f, 0.80f, 0.25f, 1.0f), y(0.95f, 0.80f, 0.25f, 1.0f), r(0.85f, 0.25f, 0.25f, 1.0f);
-        return (f < 0.5f)
-                   ? ImVec4(g.x + (y.x - g.x) * (f / 0.5f), g.y + (y.y - g.y) * (f / 0.5f), g.z + (y.z - g.z) * (f / 0.5f), 1.0f)
-                   : ImVec4(y.x + (r.x - y.x) * ((f - 0.5f) / 0.5f), y.y + (r.y - y.y) * ((f - 0.5f) / 0.5f), y.z + (r.z - y.z) * ((f - 0.5f) / 0.5f), 1.0f);
-    }
-
-    static void TinyBar(float frac, float height = 12.0f)
-    {
-        frac = std::clamp(frac, 0.0f, 1.0f);
-        ImVec2 p0 = ImGui::GetCursorScreenPos();
-        ImVec2 p1 = ImVec2(p0.x + ImGui::GetContentRegionAvail().x, p0.y + height);
-        auto *dl = ImGui::GetWindowDrawList();
-
-        const float r = 4.0f;
-        const ImU32 bg = ImGui::GetColorU32(ImVec4(1, 1, 1, 0.08f));
-        const ImU32 br = ImGui::GetColorU32(ImVec4(1, 1, 1, 0.20f));
-
-        // background
-        dl->AddRectFilled(p0, p1, bg, r);
-        dl->AddRect(p0, p1, br, r);
-
-        // fill
-        ImVec2 f1 = ImVec2(p0.x + frac * (p1.x - p0.x), p1.y);
-        dl->AddRectFilled(p0, f1, ImGui::GetColorU32(Heat(frac)), r);
-
-        ImGui::Dummy(ImVec2(0, height)); // advance cursor
-    }
-
-    static void DrawHierarchyCell(const char *name, int depth, float relShare,
-                                  float indent_step = 14.0f, float bullet_r = 4.0f)
-    {
-        ImDrawList *dl = ImGui::GetWindowDrawList();
-        ImGuiStyle &st = ImGui::GetStyle();
-
-        // Row rect in this cell
-        ImVec2 cell_p0 = ImGui::GetCursorScreenPos();
-        ImVec2 cell_p1 = ImVec2(cell_p0.x + ImGui::GetContentRegionAvail().x,
-                                cell_p0.y + ImGui::GetTextLineHeightWithSpacing());
-
-        // Depth guide lines (faint)
-        const ImU32 guideCol = IM_COL32(255, 255, 255, 28);
-        for (int d = 1; d <= depth; ++d)
-        {
-            float x = cell_p0.x + d * indent_step;
-            dl->AddLine(ImVec2(x, cell_p0.y + 2.0f), ImVec2(x, cell_p1.y - 2.0f), guideCol, 1.0f);
-        }
-
-        // Bullet colored by relative cost (heat)
-        auto Heat = [](float f) -> ImU32
-        {
-            f = std::clamp(f, 0.0f, 1.0f);
-            ImVec4 g(0.20f, 0.80f, 0.25f, 1.0f), y(0.95f, 0.80f, 0.25f, 1.0f), r(0.85f, 0.25f, 0.25f, 1.0f);
-            ImVec4 c = (f < 0.5f)
-                           ? ImVec4(g.x + (y.x - g.x) * (f / 0.5f), g.y + (y.y - g.y) * (f / 0.5f), g.z + (y.z - g.z) * (f / 0.5f), 1.0f)
-                           : ImVec4(y.x + (r.x - y.x) * ((f - 0.5f) / 0.5f), y.y + (r.y - y.y) * ((f - 0.5f) / 0.5f), y.z + (r.z - y.z) * ((f - 0.5f) / 0.5f), 1.0f);
-            return ImGui::GetColorU32(c);
-        };
-
-        float x0 = cell_p0.x + depth * indent_step + indent_step * 0.5f;
-        float cy = (cell_p0.y + cell_p1.y) * 0.5f;
-
-        dl->AddCircleFilled(ImVec2(x0, cy), bullet_r, Heat(relShare), 16);
-        dl->AddCircle(ImVec2(x0, cy), bullet_r, IM_COL32(0, 0, 0, 120), 16, 1.0f); // subtle ring
-
-        // Text
-        ImVec2 tp = ImVec2(x0 + bullet_r + 6.0f, cell_p0.y);
-        dl->AddText(tp, ImGui::GetColorU32(ImGui::GetStyle().Colors[ImGuiCol_Text]), name);
-
-        // Advance cursor to end of row height
-        ImGui::Dummy(ImVec2(0, ImGui::GetTextLineHeightWithSpacing()));
-    }
-
-    static void ShowCpuGpuSummary(float cpuTotal, float cpuUpdates, float cpuDraw, float gpuTotal)
-    {
-        ImGuiTableFlags flags =
-            ImGuiTableFlags_BordersInnerV |
-            ImGuiTableFlags_RowBg |
-            ImGuiTableFlags_SizingStretchProp |
-            ImGuiTableFlags_NoSavedSettings;
-
-        if (ImGui::BeginTable("##cpu_gpu_summary", 3, flags, ImVec2(-FLT_MIN, 0)))
-        {
-            ImGui::TableSetupColumn("metric", ImGuiTableColumnFlags_WidthStretch, 0.55f);
-            ImGui::TableSetupColumn("ms", ImGuiTableColumnFlags_WidthFixed, 80.0f);
-            ImGui::TableSetupColumn("rel", ImGuiTableColumnFlags_WidthStretch, 0.45f);
-            ImGui::TableHeadersRow();
-
-            auto Row = [](const char *name, float ms, float norm, float indent = 0.0f)
-            {
-                float rel = (norm > 0.0f) ? (ms / norm) : 0.0f;
-
-                ImGui::TableNextRow();
-
-                // metric (with optional indent)
-                ImGui::TableSetColumnIndex(0);
-                if (indent > 0.0f)
-                    ImGui::Indent(indent);
-                ImGui::TextUnformatted(name);
-                if (indent > 0.0f)
-                    ImGui::Unindent(indent);
-
-                // ms (heat colored vs. norm)
-                ImGui::TableSetColumnIndex(1);
-                ImGui::TextColored(Heat(rel), "%.3f ms", ms);
-
-                // tiny relative bar
-                ImGui::TableSetColumnIndex(2);
-                TinyBar(rel, 10.0f);
-            };
-
-            // CPU block (children colored vs CPU Total)
-            Row("CPU Total", cpuTotal, cpuTotal);
-            Row("CPU Updates", cpuUpdates, cpuTotal, 12.0f);
-            Row("CPU Draw", cpuDraw, cpuTotal, 12.0f);
-
-            // GPU block (self-normalized)
-            Row("GPU Total", gpuTotal, gpuTotal);
-
-            ImGui::EndTable();
-        }
-    }
-
-    // https://github.com/ocornut/imgui/issues/1901#issuecomment-444929973
-    void LoadingIndicatorCircle(const char *label, const float indicator_radius,
-                                const ImVec4 &main_color, const ImVec4 &backdrop_color,
-                                const int circle_count, const float speed)
-    {
-        ImGuiWindow *window = ImGui::GetCurrentWindow();
-        if (window->SkipItems)
-            return;
-
-        ImGuiContext &g = *GImGui;
-        const ImGuiID id = window->GetID(label);
-
-        const ImVec2 pos = window->DC.CursorPos;
-        const float circle_radius = indicator_radius / 10.f;
-        const ImRect bb(pos, ImVec2(pos.x + indicator_radius * 2.0f, pos.y + indicator_radius * 2.0f));
-        ImGui::ItemSize(bb, ImGui::GetStyle().FramePadding.y);
-        if (!ImGui::ItemAdd(bb, id))
-            return;
-
-        const float t = (float)g.Time;
-        const auto degree_offset = 2.0f * IM_PI / circle_count;
-        for (int i = 0; i < circle_count; ++i)
-        {
-            const auto x = indicator_radius * std::sin(degree_offset * i) * 0.9f;
-            const auto y = indicator_radius * std::cos(degree_offset * i) * 0.9f;
-            const auto growth = std::max(0.0f, std::sin(t * speed - i * degree_offset));
-            ImVec4 color;
-            color.x = main_color.x * growth + backdrop_color.x * (1.0f - growth);
-            color.y = main_color.y * growth + backdrop_color.y * (1.0f - growth);
-            color.z = main_color.z * growth + backdrop_color.z * (1.0f - growth);
-            color.w = 1.0f;
-            window->DrawList->AddCircleFilled(ImVec2(pos.x + indicator_radius + x,
-                                                     pos.y + indicator_radius - y),
-                                              circle_radius + growth * circle_radius,
-                                              ImGui::GetColorU32(color));
-        }
     }
 
     static std::atomic_bool s_modelLoading = false;
@@ -298,166 +83,6 @@ namespace pe
             };
             e_GUI_ThreadPool.Enqueue(lambda);
         }
-    }
-
-    // ---------- helpers ----------
-    static inline std::string FormatBytes(uint64_t b)
-    {
-        const double KB = 1024.0, MB = KB * KB, GB = KB * KB * KB;
-        char buf[64];
-        if (b >= (uint64_t)GB)
-            snprintf(buf, sizeof(buf), "%.2f GB", b / GB);
-        else if (b >= (uint64_t)MB)
-            snprintf(buf, sizeof(buf), "%.2f MB", b / MB);
-        else
-            snprintf(buf, sizeof(buf), "%.0f KB", b / KB);
-        return buf;
-    }
-
-    static inline ImU32 U32(const ImVec4 &c) { return ImGui::GetColorU32(c); }
-
-    static inline float Clamp01(float x) { return x < 0.f ? 0.f : (x > 1.f ? 1.f : x); }
-
-    static ImVec4 UsageColor(float frac)
-    { // 0..1 → green→yellow→red
-        frac = Clamp01(frac);
-        ImVec4 g(0.20f, 0.80f, 0.25f, 0.95f);
-        ImVec4 y(0.95f, 0.80f, 0.25f, 0.95f);
-        ImVec4 r(0.85f, 0.25f, 0.25f, 0.95f);
-        return (frac < 0.5f)
-                   ? ImVec4(g.x + (y.x - g.x) * (frac / 0.5f), g.y + (y.y - g.y) * (frac / 0.5f), g.z + (y.z - g.z) * (frac / 0.5f), 0.95f)
-                   : ImVec4(y.x + (r.x - y.x) * ((frac - 0.5f) / 0.5f), y.y + (r.y - y.y) * ((frac - 0.5f) / 0.5f), y.z + (r.z - y.z) * ((frac - 0.5f) / 0.5f), 0.95f);
-    }
-
-    // RAM bar: [System Used (others, grey)] + [App Used (gradient)] over System Total
-    static void DrawRamBar(const char *label,
-                           uint64_t sysTotal,
-                           uint64_t appUsed, // process (Private Bytes)
-                           uint64_t sysUsed, // total system used (includes your app)
-                           ImVec2 size = ImVec2(-FLT_MIN, 20.0f))
-    {
-        if (sysTotal == 0)
-            sysTotal = 1;
-
-        appUsed = std::min(appUsed, sysTotal);
-        sysUsed = std::min(sysUsed, sysTotal);
-
-        // System used excluding our app
-        const uint64_t sysOtherUsed = (sysUsed > appUsed) ? (sysUsed - appUsed) : 0;
-
-        const float fApp = (float)appUsed / (float)sysTotal;
-        const float fOther = (float)sysOtherUsed / (float)sysTotal;
-
-        auto UsageColor = [](float f) -> ImVec4
-        {
-            f = std::clamp(f, 0.0f, 1.0f);
-            ImVec4 g(0.20f, 0.80f, 0.25f, 0.95f), y(0.95f, 0.80f, 0.25f, 0.95f), r(0.85f, 0.25f, 0.25f, 0.95f);
-            return (f < 0.5f)
-                       ? ImVec4(g.x + (y.x - g.x) * (f / 0.5f), g.y + (y.y - g.y) * (f / 0.5f), g.z + (y.z - g.z) * (f / 0.5f), 0.95f)
-                       : ImVec4(y.x + (r.x - y.x) * ((f - 0.5f) / 0.5f), y.y + (r.y - y.y) * ((f - 0.5f) / 0.5f), y.z + (r.z - y.z) * ((f - 0.5f) / 0.5f), 0.95f);
-        };
-
-        const ImVec4 colBg = ImGui::GetStyle().Colors[ImGuiCol_FrameBg];
-        const ImVec4 colBrdr = ImVec4(1, 1, 1, 0.25f);
-        const ImVec4 colOther = ImVec4(0.60f, 0.60f, 0.60f, 0.90f); // grey base
-        const ImVec4 colApp = UsageColor(fApp);
-
-        ImGui::TextUnformatted(label);
-        ImVec2 p0 = ImGui::GetCursorScreenPos();
-        if (size.x <= 0)
-            size.x = ImGui::GetContentRegionAvail().x;
-        ImVec2 p1 = ImVec2(p0.x + size.x, p0.y + size.y);
-        auto *dl = ImGui::GetWindowDrawList();
-        const float W = (p1.x - p0.x);
-
-        // frame
-        DrawBarBackground(p0, p1, dl);
-
-        // 1) System Used (others) base
-        float xOther = p0.x + fOther * W;
-        dl->AddRectFilled(p0, ImVec2(xOther, p1.y), ImGui::GetColorU32(colOther), 4.0f);
-
-        // 2) App Used overlay (stacked after others)
-        float xApp0 = xOther;
-        float xApp1 = p0.x + (fOther + fApp) * W;
-        dl->AddRectFilled(ImVec2(xApp0, p0.y), ImVec2(xApp1, p1.y), ImGui::GetColorU32(colApp), 4.0f);
-
-        // Center text: ONLY app / total (%)
-        ImGui::PushID(label);
-        ImGui::InvisibleButton("##ram_bar", size);
-        {
-            char overlay[128];
-            const int pctApp = (int)std::round(100.0 * fApp);
-            snprintf(overlay, sizeof(overlay), "%s / %s  (%d%%)",
-                     FormatBytes(appUsed).c_str(), FormatBytes(sysTotal).c_str(), pctApp);
-            ImVec2 ts = ImGui::CalcTextSize(overlay);
-            ImVec2 tp = ImVec2(p0.x + (size.x - ts.x) * 0.5f, p0.y + (size.y - ts.y) * 0.5f);
-            dl->AddText(tp, ImGui::GetColorU32(ImGui::GetStyle().Colors[ImGuiCol_Text]), overlay);
-        }
-
-        // Tooltip: app / total + system used (other)
-        if (ImGui::IsItemHovered())
-        {
-            ImGui::BeginTooltip();
-            ImGui::Text("%s", label);
-            ImGui::Separator();
-            ImGui::Text("App Used:            %s", FormatBytes(appUsed).c_str());
-            ImGui::Text("System Used (other): %s", FormatBytes(sysOtherUsed).c_str());
-            ImGui::Separator();
-            ImGui::Text("Total RAM:           %s", FormatBytes(sysTotal).c_str());
-            ImGui::EndTooltip();
-        }
-        ImGui::PopID();
-    }
-
-    static void DrawGpuBar(const char *label,
-                           uint64_t used, uint64_t total, // total = budget
-                           ImVec2 size = ImVec2(-FLT_MIN, 20.0f))
-    {
-        if (total == 0)
-            total = 1;
-        used = std::min(used, total);
-        const float f = (float)used / (float)total;
-        const ImVec4 colFill = UsageColor(f);
-
-        ImGui::TextUnformatted(label);
-        ImVec2 p0 = ImGui::GetCursorScreenPos();
-        if (size.x <= 0)
-            size.x = ImGui::GetContentRegionAvail().x;
-        ImVec2 p1 = ImVec2(p0.x + size.x, p0.y + size.y);
-        auto *dl = ImGui::GetWindowDrawList();
-
-        const ImVec4 colBg = ImGui::GetStyle().Colors[ImGuiCol_FrameBg];
-        const ImVec4 colBrdr = ImVec4(1, 1, 1, 0.25f);
-
-        dl->AddRectFilled(p0, p1, U32(colBg), 4.0f);
-        dl->AddRect(p0, p1, U32(colBrdr), 4.0f);
-
-        float x = p0.x + Clamp01(f) * (p1.x - p0.x);
-        dl->AddRectFilled(p0, ImVec2(x, p1.y), U32(colFill), 4.0f);
-
-        ImGui::PushID(label);
-        ImGui::InvisibleButton("##gpu_bar", size);
-
-        // centered overlay with %
-        char overlay[96];
-        int pct = (int)std::round(100.0 * f);
-        snprintf(overlay, sizeof(overlay), "%s / %s  (%d%%)",
-                 FormatBytes(used).c_str(), FormatBytes(total).c_str(), pct);
-        ImVec2 ts = ImGui::CalcTextSize(overlay);
-        ImVec2 tp = ImVec2(p0.x + (size.x - ts.x) * 0.5f, p0.y + (size.y - ts.y) * 0.5f);
-        dl->AddText(tp, U32(ImGui::GetStyle().Colors[ImGuiCol_Text]), overlay);
-
-        if (ImGui::IsItemHovered())
-        {
-            ImGui::BeginTooltip();
-            ImGui::Text("%s", label);
-            ImGui::Separator();
-            ImGui::Text("Used:  %s (%d%% of total)", FormatBytes(used).c_str(), pct);
-            ImGui::Text("Total: %s", FormatBytes(total).c_str());
-            ImGui::EndTooltip();
-        }
-        ImGui::PopID();
     }
 
     static bool metrics_open = true;
@@ -521,28 +146,6 @@ namespace pe
         }
     }
 
-    void SetTextColorTemp(float time, float maxTime)
-    {
-        const ImVec4 startColor = ImVec4(0.9f, 0.9f, 0.9f, 1.0f); // White
-        const ImVec4 endColor = ImVec4(1.0f, 0.3f, 0.3f, 1.0f);   // Red
-
-        time = std::clamp(time / maxTime, 0.0f, 1.0f);
-
-        ImVec4 resultColor(
-            startColor.x + time * (endColor.x - startColor.x), // Red
-            startColor.y + time * (endColor.y - startColor.y), // Green
-            startColor.z + time * (endColor.z - startColor.z), // Blue
-            1.0f                                               // Alpha
-        );
-
-        ImGui::GetStyle().Colors[ImGuiCol_Text] = resultColor;
-    }
-
-    void ResetTextColor()
-    {
-        ImGui::GetStyle().Colors[ImGuiCol_Text] = ImVec4(0.90f, 0.90f, 0.90f, 1.00f);
-    }
-
 #if PE_DEBUG_MODE
     float GUI::FetchTotalGPUTime()
     {
@@ -569,7 +172,7 @@ namespace pe
                 ImGui::Indent(gpuTimerInfo.depth * 16.0f);
 
             float time = gpuTimerInfo.timer->GetTime();
-            SetTextColorTemp(time, maxTime);
+            ui::SetTextColorTemp(time, maxTime);
             ImGui::Text("%s: %.3f ms", gpuTimerInfo.name.c_str(), time);
 
             if (gpuTimerInfo.depth > 0)
@@ -623,16 +226,16 @@ namespace pe
 
                 // col 0: name (pretty hierarchy)
                 ImGui::TableSetColumnIndex(0);
-                DrawHierarchyCell(info.name.c_str(), info.depth, rel);
+                ui::DrawHierarchyCell(info.name.c_str(), static_cast<int>(info.depth), rel);
 
                 // col 1: ms (heat colored)
                 ImGui::TableSetColumnIndex(1);
                 ImGui::AlignTextToFramePadding();
-                ImGui::TextColored(Heat(rel), "%.3f", t);
+                ImGui::TextColored(ui::Heat(rel), "%.3f", t);
 
                 // col 2: tiny relative bar
                 ImGui::TableSetColumnIndex(2);
-                TinyBar(rel);
+                ui::TinyBar(rel);
             }
 
             ImGui::EndTable();
@@ -680,11 +283,12 @@ namespace pe
         const auto gpu = RHII.GetGpuMemorySnapshot();
         ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(ImGui::GetStyle().ItemSpacing.x, 2.0f)); // compact Y spacing
         // 1) RAM — system used (other) / process (Private Bytes) / system total
-        DrawRamBar("RAM", ram.sysTotal, ram.procPrivateBytes, ram.sysUsed);
-        // 2) GPU (Host Visible) — used / budget
-        DrawGpuBar("GPU (Host Visible)", gpu.host.used, gpu.host.budget);
-        // 3) GPU (Local/VRAM) — used / budget
-        DrawGpuBar("GPU (Local)", gpu.vram.used, gpu.vram.budget);
+        ui::DrawRamBar("RAM", ram.sysTotal, ram.procPrivateBytes, ram.sysUsed);
+        // 2) GPU (Local/VRAM) — used / budget
+        ui::DrawGpuBar("GPU (Local)", gpu.vram.app, gpu.vram.other, std::max<uint64_t>(gpu.vram.budget, 1), ImVec2(-FLT_MIN, 18.0f));
+        // 3) GPU (Host Visible) — used / budget
+        ui::DrawGpuBar("GPU (Host Visible)", gpu.host.app, gpu.host.other, std::max<uint64_t>(gpu.host.budget, 1), ImVec2(-FLT_MIN, 18.0f));
+
         ImGui::PopStyleVar();
         ImGui::Separator();
 
@@ -699,7 +303,7 @@ namespace pe
 #endif
         // Compact local spacing
         ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(ImGui::GetStyle().ItemSpacing.x, 2.0f));
-        ShowCpuGpuSummary(cpuTotal, cpuUpdates, cpuDraw, gpuTotal);
+        ui::ShowCpuGpuSummary(cpuTotal, cpuUpdates, cpuDraw, gpuTotal);
         ImGui::PopStyleVar();
 #if PE_DEBUG_MODE
         // keep the nice timings table you added below
@@ -934,7 +538,7 @@ namespace pe
 
         ImGui::StyleColorsClassic();
         ImGui::GetStyle().Colors[ImGuiCol_WindowBg] = ImVec4(0.00f, 0.00f, 0.00f, 0.3f);
-        ApplyNiceTheme();
+        ui::ApplyNiceTheme();
 
         ImGui_ImplSDL2_InitForVulkan(RHII.GetWindow());
 
