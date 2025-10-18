@@ -74,7 +74,7 @@ namespace pe
             mat4 previousWorldMatrix = mat4(1.f);
         } ubo;
         bool dirty = false;
-        bool dirtyUniforms[SWAPCHAIN_IMAGES];
+        std::vector<bool> dirtyUniforms;
     };
 
     class ModelGltf : public tinygltf::Model
@@ -121,7 +121,7 @@ namespace pe
         mat4 matrix = mat4(1.f);
         // Dirty flags are used to update nodes and uniform buffers, they are important
         bool dirtyNodes = false;
-        bool dirtyUniforms[SWAPCHAIN_IMAGES];
+        std::vector<bool> dirtyUniforms;
 
         uint32_t m_verticesCount = 0;
         uint32_t m_indicesCount = 0;

@@ -6,7 +6,7 @@
 
 namespace pe
 {
-    auto PipelineColorBlendAttachmentState::Default = vk::PipelineColorBlendAttachmentState(
+    vk::PipelineColorBlendAttachmentState PipelineColorBlendAttachmentState::Default = vk::PipelineColorBlendAttachmentState(
         /*.blendEnable            =*/ VK_TRUE,
         /*.srcColorBlendFactor    =*/ vk::BlendFactor::eSrcAlpha,
         /*.dstColorBlendFactor    =*/ vk::BlendFactor::eOneMinusSrcAlpha,
@@ -16,7 +16,7 @@ namespace pe
         /*.alphaBlendOp           =*/ vk::BlendOp::eAdd,
         /*.colorWriteMask         =*/ vk::ColorComponentFlagBits::eR | vk::ColorComponentFlagBits::eG | vk::ColorComponentFlagBits::eB | vk::ColorComponentFlagBits::eA);
 
-    auto PipelineColorBlendAttachmentState::AdditiveColor = vk::PipelineColorBlendAttachmentState(
+    vk::PipelineColorBlendAttachmentState PipelineColorBlendAttachmentState::AdditiveColor = vk::PipelineColorBlendAttachmentState(
         /*.blendEnable            =*/ VK_TRUE,
         /*.srcColorBlendFactor    =*/ vk::BlendFactor::eOne,
         /*.dstColorBlendFactor    =*/ vk::BlendFactor::eOne,
@@ -138,6 +138,7 @@ namespace pe
           stencilWriteMask{0x00u},
           stencilReference{0}
     {
+        m_descriptors.resize(RHII.GetSwapchainImageCount(), std::vector<Descriptor *>{});
     }
 
     PassInfo::~PassInfo()

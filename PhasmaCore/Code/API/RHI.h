@@ -81,9 +81,9 @@ namespace pe
         void WaitDeviceIdle();
         void NextFrame() { m_frameCounter++; }
         uint32_t GetFrameCounter() { return m_frameCounter; }
-        uint32_t GetFrameIndex() { return m_frameCounter % SWAPCHAIN_IMAGES; }
+        uint32_t GetFrameIndex() { return m_frameCounter % GetSwapchainImageCount(); }
         // For dynamic uniform buffers that are dependent on the frame index
-        uint32_t GetFrameDynamicOffset(size_t size, uint32_t frameIndex) { return static_cast<uint32_t>(size / SWAPCHAIN_IMAGES) * frameIndex; }
+        uint32_t GetFrameDynamicOffset(size_t size, uint32_t frameIndex) { return static_cast<uint32_t>(size / GetSwapchainImageCount()) * frameIndex; }
         uint32_t GetMaxUniformBufferSize() { return m_maxUniformBufferSize; }
         uint32_t GetMaxStorageBufferSize() { return m_maxStorageBufferSize; }
         uint32_t GetMaxDrawIndirectCount() { return m_maxDrawIndirectCount; }
@@ -112,6 +112,7 @@ namespace pe
         SDL_Window *GetWindow() { return m_window; }
         Surface *GetSurface() { return m_surface; }
         Swapchain *GetSwapchain() { return m_swapchain; }
+        uint32_t GetSwapchainImageCount();
         SystemProcMem GetSystemAndProcessMemory();
         GpuMemorySnapshot GetGpuMemorySnapshot();
         void ChangePresentMode(vk::PresentModeKHR mode);
@@ -130,8 +131,8 @@ namespace pe
         vk::Device m_device;
         DescriptorPool *m_descriptorPool;
         std::mutex m_binarySemaphoresMutex;
-        std::stack<Semaphore *> m_binarySemaphores[SWAPCHAIN_IMAGES];
-        std::stack<Semaphore *> m_usedBinarySemaphores[SWAPCHAIN_IMAGES];
+        std::vector<std::stack<Semaphore *>> m_binarySemaphores;
+        std::vector<std::stack<Semaphore *>> m_usedBinarySemaphores;
         VmaAllocator m_allocator;
         Queue *m_mainQueue;
         SDL_Window *m_window;

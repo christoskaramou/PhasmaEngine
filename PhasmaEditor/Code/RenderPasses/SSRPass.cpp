@@ -29,6 +29,8 @@ namespace pe
         m_attachments[0].image = m_viewportRT;
         m_attachments[0].loadOp = vk::AttachmentLoadOp::eLoad;
         m_attachments[0].storeOp = vk::AttachmentStoreOp::eStore;
+
+        m_reflectionUBs.resize(RHII.GetSwapchainImageCount());
     }
 
     void SSRPass::UpdatePassInfo()
@@ -46,17 +48,17 @@ namespace pe
 
     void SSRPass::CreateUniforms(CommandBuffer *cmd)
     {
-        for (uint32_t i = 0; i < SWAPCHAIN_IMAGES; ++i)
+        for (auto &uniform : m_reflectionUBs)
         {
-            m_UBReflection[i] = Buffer::Create(
-                RHII.AlignUniform(4 * sizeof(mat4)), // * SWAPCHAIN_IMAGES,
+            uniform = Buffer::Create(
+                RHII.AlignUniform(4 * sizeof(mat4)),
                 vk::BufferUsageFlagBits2::eUniformBuffer,
                 VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT,
                 "SSR_UB_Reflection_buffer");
-            m_UBReflection[i]->Map();
-            m_UBReflection[i]->Zero();
-            m_UBReflection[i]->Flush();
-            m_UBReflection[i]->Unmap();
+            uniform->Map();
+            uniform->Zero();
+            uniform->Flush();
+            uniform->Unmap();
         }
 
         UpdateDescriptorSets();
@@ -64,7 +66,7 @@ namespace pe
 
     void SSRPass::UpdateDescriptorSets()
     {
-        for (uint32_t i = 0; i < SWAPCHAIN_IMAGES; ++i)
+        for (uint32_t i = 0; i < RHII.GetSwapchainImageCount(); ++i)
         {
             auto *DSet = m_passInfo->GetDescriptors(i)[0];
             DSet->SetImageView(0, m_frameImage->GetSRV(), m_frameImage->GetSampler()->ApiHandle());
@@ -72,7 +74,7 @@ namespace pe
             DSet->SetImageView(2, m_normalRT->GetSRV(), m_normalRT->GetSampler()->ApiHandle());
             DSet->SetImageView(3, m_srmRT->GetSRV(), m_srmRT->GetSampler()->ApiHandle());
             DSet->SetImageView(4, m_albedoRT->GetSRV(), m_albedoRT->GetSampler()->ApiHandle());
-            DSet->SetBuffer(5, m_UBReflection[i]);
+            DSet->SetBuffer(5, m_reflectionUBs[i]);
             DSet->Update();
         }
     }
@@ -95,7 +97,7 @@ namespace pe
             range.data = &m_reflectionInput;
             range.size = sizeof(m_reflectionInput);
             range.offset = 0; // RHII.GetFrameDynamicOffset(UBReflection->Size(), RHII.GetFrameIndex());
-            m_UBReflection[RHII.GetFrameIndex()]->Copy(1, &range, false);
+            m_reflectionUBs[RHII.GetFrameIndex()]->Copy(1, &range, false);
         }
     }
 
@@ -151,7 +153,7 @@ namespace pe
 
     void SSRPass::Destroy()
     {
-        for (uint32_t i = 0; i < SWAPCHAIN_IMAGES; ++i)
-            Buffer::Destroy(m_UBReflection[i]);
+        for (auto &uniform : m_reflectionUBs)
+            Buffer::Destroy(uniform);
     }
 }

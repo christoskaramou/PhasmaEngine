@@ -26,9 +26,14 @@ namespace pe
             0, 4, 1, 5, 2, 6, 3, 7  // Connecting edges between near and far faces
         };
 
-        m_drawInfosOpaque.resize(SWAPCHAIN_IMAGES, {});
-        m_drawInfosAlphaCut.resize(SWAPCHAIN_IMAGES, {});
-        m_drawInfosAlphaBlend.resize(SWAPCHAIN_IMAGES, {});
+        uint32_t swapchainImageCount = RHII.GetSwapchainImageCount();
+        m_drawInfosOpaque.resize(swapchainImageCount, {});
+        m_drawInfosAlphaCut.resize(swapchainImageCount, {});
+        m_drawInfosAlphaBlend.resize(swapchainImageCount, {});
+
+        m_storages.resize(swapchainImageCount, nullptr);
+        m_indirects.resize(swapchainImageCount, nullptr);
+        m_dirtyDescriptorViews.resize(swapchainImageCount, false);
     }
 
     Geometry::~Geometry()
@@ -243,13 +248,14 @@ namespace pe
             }
         }
 
-        for (int i = 0; i < SWAPCHAIN_IMAGES; i++)
+        uint32_t i = 0;
+        for (auto &storage : m_storages)
         {
-            m_storage[i] = Buffer::Create(
+            storage = Buffer::Create(
                 storageSize,
                 vk::BufferUsageFlagBits2::eStorageBuffer,
                 VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT,
-                "storage_Geometry_buffer_" + std::to_string(i));
+                "storage_Geometry_buffer_" + std::to_string(i++));
         }
     }
 
@@ -305,13 +311,14 @@ namespace pe
         indirectBarrierInfo.offset = 0;
         cmd->BufferBarrier(indirectBarrierInfo);
 
-        for (int i = 0; i < SWAPCHAIN_IMAGES; i++)
+        uint32_t i = 0;
+        for (auto &indirect : m_indirects)
         {
-            m_indirect[i] = Buffer::Create(
+            indirect = Buffer::Create(
                 indirectCount * sizeof(DrawIndexedIndirectCommand),
                 vk::BufferUsageFlagBits2::eIndirectBuffer | vk::BufferUsageFlagBits2::eTransferDst,
                 VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT,
-                "indirect_Geometry_buffer_" + std::to_string(i));
+                "indirect_Geometry_buffer_" + std::to_string(i++));
         }
     }
 
@@ -321,10 +328,8 @@ namespace pe
         OrderedMap<Image *, uint32_t> imagesMap{};
         for (auto &model : m_models)
         {
-            for (int i = 0; i < SWAPCHAIN_IMAGES; i++)
-            {
-                model->SetPrimitiveFactors(m_storage[i]);
-            }
+            for (auto &storage : m_storages)
+                model->SetPrimitiveFactors(storage);
 
             // Update views and indices
             for (Image *image : model->m_images)
@@ -348,8 +353,8 @@ namespace pe
             }
         }
 
-        for (uint32_t i = 0; i < SWAPCHAIN_IMAGES; i++)
-            m_dirtyDescriptorViews[i] = true;
+        for (auto &&dirtyView : m_dirtyDescriptorViews)
+            dirtyView = true;
     }
 
     void Geometry::CopyGBufferConstants(CommandBuffer *cmd)
@@ -441,7 +446,7 @@ namespace pe
         uint32_t frame = RHII.GetFrameIndex();
 
         // Map buffer
-        m_storage[frame]->Map();
+        m_storages[frame]->Map();
 
         // Update per frame data
         m_frameData.viewProjection = m_cameras[0]->GetViewProjection();
@@ -451,7 +456,7 @@ namespace pe
         range.data = &m_frameData;
         range.size = sizeof(PerFrameData);
         range.offset = 0;
-        m_storage[frame]->Copy(1, &range, true);
+        m_storages[frame]->Copy(1, &range, true);
 
         // Update per primitive id dat
         std::vector<uint32_t> ids{};
@@ -480,7 +485,7 @@ namespace pe
         range.data = ids.data();
         range.size = ids.size() * sizeof(uint32_t);
         range.offset = sizeof(PerFrameData);
-        m_storage[frame]->Copy(1, &range, true);
+        m_storages[frame]->Copy(1, &range, true);
 
         for (auto &modelPtr : m_models)
         {
@@ -503,7 +508,7 @@ namespace pe
                 range.data = &nodeInfo.ubo;
                 range.offset = meshInfo.dataOffset;
                 range.size = meshInfo.dataSize;
-                m_storage[frame]->Copy(1, &range, true);
+                m_storages[frame]->Copy(1, &range, true);
 
                 nodeInfo.dirtyUniforms[frame] = false;
             }
@@ -512,14 +517,14 @@ namespace pe
         }
 
         // Unmap buffer
-        m_storage[frame]->Unmap();
+        m_storages[frame]->Unmap();
     }
 
     void Geometry::UpdateIndirectData()
     {
         uint32_t frame = RHII.GetFrameIndex();
 
-        m_indirect[frame]->Map();
+        m_indirects[frame]->Map();
 
         uint32_t firstInstance = 0;
         for (auto &drawInfo : m_drawInfosOpaque)
@@ -533,7 +538,7 @@ namespace pe
             range.data = &indirectCommand;
             range.size = sizeof(DrawIndexedIndirectCommand);
             range.offset = firstInstance * sizeof(DrawIndexedIndirectCommand);
-            m_indirect[frame]->Copy(1, &range, true);
+            m_indirects[frame]->Copy(1, &range, true);
 
             firstInstance++;
         }
@@ -549,7 +554,7 @@ namespace pe
             range.data = &indirectCommand;
             range.size = sizeof(DrawIndexedIndirectCommand);
             range.offset = firstInstance * sizeof(DrawIndexedIndirectCommand);
-            m_indirect[frame]->Copy(1, &range, true);
+            m_indirects[frame]->Copy(1, &range, true);
 
             firstInstance++;
         }
@@ -565,13 +570,13 @@ namespace pe
             range.data = &indirectCommand;
             range.size = sizeof(DrawIndexedIndirectCommand);
             range.offset = firstInstance * sizeof(DrawIndexedIndirectCommand);
-            m_indirect[frame]->Copy(1, &range, true);
+            m_indirects[frame]->Copy(1, &range, true);
 
             firstInstance++;
         }
 
-        m_indirect[frame]->Flush();
-        m_indirect[frame]->Unmap();
+        m_indirects[frame]->Flush();
+        m_indirects[frame]->Unmap();
     }
 
     void Geometry::UpdateGeometry()
@@ -671,10 +676,11 @@ namespace pe
     void Geometry::DestroyBuffers()
     {
         Buffer::Destroy(m_buffer);
-        for (int i = 0; i < SWAPCHAIN_IMAGES; i++)
-        {
-            Buffer::Destroy(m_storage[i]);
-            Buffer::Destroy(m_indirect[i]);
-        }
+
+        for (auto &storage : m_storages)
+            Buffer::Destroy(storage);
+
+        for (auto &indirect : m_indirects)
+            Buffer::Destroy(indirect);
     }
 }

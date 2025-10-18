@@ -11,10 +11,6 @@ namespace pe
     {
         auto capabilities = RHII.GetGpu().getSurfaceCapabilitiesKHR(surface->ApiHandle());
 
-        PE_ERROR_IF(SWAPCHAIN_IMAGES < capabilities.minImageCount, "Swapchain image count error");
-        if (capabilities.maxImageCount > 0)
-            PE_ERROR_IF(SWAPCHAIN_IMAGES > capabilities.maxImageCount, "Swapchain image count error");
-
         const Rect2Du &actualExtent = surface->GetActualExtent();
         m_extent.x = actualExtent.x;
         m_extent.y = actualExtent.y;
@@ -23,7 +19,7 @@ namespace pe
 
         vk::SwapchainCreateInfoKHR swapchainCreateInfo{};
         swapchainCreateInfo.surface = surface->ApiHandle();
-        swapchainCreateInfo.minImageCount = SWAPCHAIN_IMAGES;
+        swapchainCreateInfo.minImageCount = capabilities.minImageCount;
         swapchainCreateInfo.imageFormat = surface->GetFormat();
         swapchainCreateInfo.imageColorSpace = surface->GetColorSpace();
         swapchainCreateInfo.imageExtent = vk::Extent2D{m_extent.width, m_extent.height};
@@ -40,7 +36,7 @@ namespace pe
         auto swapchain = RHII.GetDevice().createSwapchainKHR(swapchainCreateInfo);
         auto imagesVK = RHII.GetDevice().getSwapchainImagesKHR(swapchain);
 
-        m_images.resize(SWAPCHAIN_IMAGES);
+        m_images.resize(imagesVK.size());
         for (unsigned i = 0; i < m_images.size(); i++)
         {
             m_images[i] = new Image();

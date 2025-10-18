@@ -43,7 +43,7 @@ namespace pe
     private:
         void PassBarriers(CommandBuffer *cmd);
 
-        Buffer *m_uniform[SWAPCHAIN_IMAGES];
+        std::vector<Buffer *> m_uniforms;
         Image *m_ibl_brdf_lut;
         Image *m_normalRT;
         Image *m_albedoRT;
@@ -72,7 +72,7 @@ namespace pe
     private:
         void PassBarriers(CommandBuffer *cmd);
 
-        Buffer *m_uniform[SWAPCHAIN_IMAGES];
+        std::vector<Buffer *> m_uniforms;
         Image *m_ibl_brdf_lut;
         Image *m_normalRT;
         Image *m_albedoRT;

@@ -11,7 +11,6 @@ if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
         PE_LINUX
         _CONSOLE
     )
-    add_compile_options(-fms-extensions)
 elseif(CMAKE_SYSTEM_NAME STREQUAL "Windows")
     message(STATUS "CMAKE_SYSTEM_NAME = ${CMAKE_SYSTEM_NAME}")
     set(PE_DEFS
@@ -53,6 +52,13 @@ add_library(PhasmaCore STATIC
         ${TINYGLTF_SOURCES}
         ${VMA_SOURCES}
 )
+
+if (CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
+    # MS-style declspec/anonymous unions etc., without changing core language types
+    target_compile_options(PhasmaCore PUBLIC -fms-extensions)
+elseif (CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
+    target_compile_options(PhasmaCore PUBLIC -fms-extensions)
+endif()
 
 # Precompiled headers
 target_precompile_headers(PhasmaCore PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/pch/PhasmaPch.h")

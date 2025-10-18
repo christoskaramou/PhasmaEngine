@@ -47,7 +47,7 @@ namespace pe
 
     void FXAAPass::UpdateDescriptorSets()
     {
-        for (uint32_t i = 0; i < SWAPCHAIN_IMAGES; i++)
+        for (uint32_t i = 0; i < RHII.GetSwapchainImageCount(); i++)
         {
             auto *DSet = m_passInfo->GetDescriptors(i)[0];
             DSet->SetImageView(0, m_frameImage->GetSRV(), m_frameImage->GetSampler()->ApiHandle());

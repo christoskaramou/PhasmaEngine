@@ -40,6 +40,8 @@ namespace pe
             return modesNames[2];
         case vk::PresentModeKHR::eFifoRelaxed:
             return modesNames[3];
+        default:
+            break;
         }
 
         PE_ERROR("Unknown PresentMode");
@@ -113,7 +115,8 @@ namespace pe
 
         m_renderArea.Update(0.0f, 0.0f, RHII.GetWidthf(), RHII.GetHeightf());
 
-        for (uint32_t i = 0; i < SWAPCHAIN_IMAGES; i++)
+        m_cmds.resize(RHII.GetSwapchainImageCount());
+        for (uint32_t i = 0; i < RHII.GetSwapchainImageCount(); i++)
         {
             ImageBarrierInfo barrierInfo{};
             barrierInfo.image = RHII.GetSwapchain()->GetImage(i);

@@ -53,11 +53,12 @@
 #include <dxgi1_6.h>
 #include <d3d12.h>
 #include <d3dcompiler.h>
-#else
+#elif defined(PE_LINUX)
 #include <dlfcn.h>
 #include <unistd.h>
 #include <sys/types.h>
 #include <sys/stat.h>
+#include <sys/sysinfo.h>
 #include <fcntl.h>
 #endif
 

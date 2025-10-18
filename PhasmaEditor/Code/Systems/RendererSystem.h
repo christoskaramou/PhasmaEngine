@@ -84,7 +84,7 @@ namespace pe
         OrderedMap<size_t, IRenderPassComponent *> m_renderPassComponents{};
         std::unordered_map<size_t, Image *> m_renderTargets{};
         std::unordered_map<size_t, Image *> m_depthStencilTargets{};
-        CommandBuffer *m_cmds[SWAPCHAIN_IMAGES];
+        std::vector<CommandBuffer *> m_cmds;
         RenderArea m_renderArea;
         Scene m_scene;
         SkyBox m_skyBoxDay;
