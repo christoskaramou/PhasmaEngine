@@ -78,7 +78,7 @@ namespace pe
         queue->WaitIdle();
 
         // Render some frames so everything is initialized before destroying the splash screen
-        for (int i = 0; i < RHII.GetSwapchainImageCount(); i++)
+        for (uint32_t i = 0; i < RHII.GetSwapchainImageCount(); i++)
             Frame();
 
         m_window->Show();
