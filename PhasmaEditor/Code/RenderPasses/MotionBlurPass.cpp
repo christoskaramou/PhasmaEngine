@@ -5,6 +5,7 @@
 #include "API/Descriptor.h"
 #include "API/Image.h"
 #include "API/Pipeline.h"
+#include "API/RHI.h"
 #include "Systems/RendererSystem.h"
 #include "Systems/CameraSystem.h"
 
@@ -45,7 +46,7 @@ namespace pe
 
     void MotionBlurPass::UpdateDescriptorSets()
     {
-        for (uint32_t i = 0; i < SWAPCHAIN_IMAGES; ++i)
+        for (uint32_t i = 0; i < RHII.GetSwapchainImageCount(); ++i)
         {
             auto *DSet = m_passInfo->GetDescriptors(i)[0];
             DSet->SetImageView(0, m_frameImage->GetSRV(), m_frameImage->GetSampler()->ApiHandle());

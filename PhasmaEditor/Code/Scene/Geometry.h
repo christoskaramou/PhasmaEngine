@@ -45,8 +45,8 @@ namespace pe
         // Getters
         std::vector<vk::ImageView> &GetImageViews() { return m_imageViews; }
         OrderedMap<size_t, ModelGltf *> &GetModels() { return m_models; }
-        Buffer *GetUniforms(uint32_t frame) { return m_storage[frame]; }
-        Buffer *GetIndirect(uint32_t frame) { return m_indirect[frame]; }
+        Buffer *GetUniforms(uint32_t frame) { return m_storages[frame]; }
+        Buffer *GetIndirect(uint32_t frame) { return m_indirects[frame]; }
         Buffer *GetIndirectAll() { return m_indirectAll; }
         Buffer *GetBuffer() { return m_buffer; }
         size_t GetVerticesOffset() const { return m_verticesOffset; }
@@ -85,8 +85,8 @@ namespace pe
         OrderedMap<size_t, ModelGltf *> m_models;
 
         Buffer *m_buffer = nullptr;
-        Buffer *m_storage[SWAPCHAIN_IMAGES]{};
-        Buffer *m_indirect[SWAPCHAIN_IMAGES]{};
+        std::vector<Buffer *> m_storages;
+        std::vector<Buffer *> m_indirects;
         Buffer *m_indirectAll = nullptr;
 
         size_t m_verticesOffset = 0;
@@ -98,7 +98,7 @@ namespace pe
         std::vector<uint32_t> m_aabbIndices;
         std::vector<vk::ImageView> m_imageViews;
         std::vector<Sampler *> m_samplers;
-        bool m_dirtyDescriptorViews[SWAPCHAIN_IMAGES]{};
+        std::vector<bool> m_dirtyDescriptorViews;
 
         std::vector<DrawInfo> m_drawInfosOpaque;
         std::vector<DrawInfo> m_drawInfosAlphaCut;

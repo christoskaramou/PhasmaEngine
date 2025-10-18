@@ -9,7 +9,7 @@
 #include "API/Surface.h"
 #include "API/Downsampler/Downsampler.h"
 
-#if defined(_WIN32)
+#if defined(PE_WIN32)
 // On Windows, Vulkan commands use the stdcall convention
 #define VKAPI_CALL __stdcall
 #else
@@ -18,7 +18,7 @@
 #endif
 
 // System + Process RAM (Windows)
-#if defined(_WIN32)
+#if defined(PE_WIN32)
 #pragma comment(lib, "psapi.lib")
 #endif
 
@@ -58,7 +58,7 @@ namespace pe
     // ---------- NVIDIA: NVML (Win/Linux, runtime load) ----------
     struct NvmlAPI
     {
-#if defined(_WIN32)
+#if defined(PE_WIN32)
         HMODULE dll = nullptr;
         FARPROC L(const char *n) { return GetProcAddress(dll, n); }
         bool Load()
@@ -68,7 +68,7 @@ namespace pe
             dll = LoadLibraryA("nvml.dll");
             return dll != nullptr;
         }
-#else
+#elif defined(PE_LINUX)
         void *so = nullptr;
         void *L(const char *n) { return so ? dlsym(so, n) : nullptr; }
         bool Load()
@@ -78,6 +78,8 @@ namespace pe
             so = dlopen("libnvidia-ml.so.1", RTLD_LAZY);
             return so != nullptr;
         }
+#else
+        bool Load() { return false; }
 #endif
         int (*nvmlInit_v2)() = nullptr;
         int (*nvmlShutdown)() = nullptr;
@@ -118,7 +120,7 @@ namespace pe
     }
 
 // ---------- AMD: Linux sysfs amdgpu ----------
-#if defined(__linux__)
+#if defined(PE_LINUX)
     static bool AmdSysfsGlobalVramByBDF(uint32_t dom, uint32_t bus, uint32_t dev, uint64_t &used, uint64_t &total)
     {
         used = total = 0;
@@ -138,7 +140,7 @@ namespace pe
     // ---------- Intel: Level Zero Sysman (Win/Linux, runtime) ----------
     struct L0API
     {
-#if defined(_WIN32)
+#if defined(PE_WIN32)
         HMODULE so = nullptr;
         FARPROC L(const char *n) { return GetProcAddress(so, n); }
         bool Load()
@@ -270,7 +272,7 @@ namespace pe
     }
 
 // ---------- AMD Windows: ADLX (optional) ----------
-#if defined(_WIN32) && defined(PE_USE_ADLX)
+#if defined(PE_WIN32) && defined(PE_USE_ADLX)
 #include <ADLXHelper.h>
 #include <interfaces/IADLXSystem.h>
 #include <interfaces/IADLXPerformanceMonitoring.h>
@@ -635,6 +637,9 @@ namespace pe
     void RHI::CreateSwapchain(Surface *surface)
     {
         m_swapchain = Swapchain::Create(surface, "RHI_swapchain");
+
+        m_binarySemaphores.resize(GetSwapchainImageCount(), std::stack<Semaphore *>());
+        m_usedBinarySemaphores.resize(GetSwapchainImageCount(), std::stack<Semaphore *>());
     }
 
     void RHI::CreateDescriptorPool(uint32_t maxDescriptorSets)
@@ -722,11 +727,13 @@ namespace pe
         }
     }
 
+    uint32_t RHI::GetSwapchainImageCount() { return m_swapchain->GetImageCount(); }
+
     SystemProcMem RHI::GetSystemAndProcessMemory()
     {
         SystemProcMem m{};
 
-#if defined(_WIN32)
+#if defined(PE_WIN32)
         // ---- System ----
         MEMORYSTATUSEX ms{};
         ms.dwLength = sizeof(ms);
@@ -748,7 +755,7 @@ namespace pe
             m.procPeakWS = (uint64_t)pmc.PeakWorkingSetSize;
         }
 
-#elif defined(__linux__)
+#elif defined(PE_LINUX)
         // ---- System: MemTotal / MemAvailable from /proc/meminfo ----
         {
             std::ifstream mi("/proc/meminfo");
@@ -903,7 +910,7 @@ namespace pe
             { // NVIDIA
                 ok = NvmlGlobalVramUsedByBDF(dom, bus, dev, gUsed, gTotal);
             }
-#if defined(__linux__)
+#if defined(PE_LINUX)
             else if (vendor == 0x1002 || vendor == 0x1022)
             { // AMD Linux
                 ok = AmdSysfsGlobalVramByBDF(dom, bus, dev, gUsed, gTotal);
@@ -913,7 +920,7 @@ namespace pe
             { // Intel Win/Linux
                 ok = L0GlobalVramUsed(gUsed, gTotal);
             }
-#if defined(_WIN32)
+#if defined(PE_WIN32)
             else if (vendor == 0x1002 || vendor == 0x1022)
             { // AMD Windows
                 ok = AdlxGlobalVramUsedByAdapter(gUsed, gTotal);

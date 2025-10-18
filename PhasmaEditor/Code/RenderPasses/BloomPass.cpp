@@ -46,7 +46,7 @@ namespace pe
 
     void BloomBrightFilterPass::UpdateDescriptorSets()
     {
-        for (uint32_t i = 0; i < SWAPCHAIN_IMAGES; i++)
+        for (uint32_t i = 0; i < RHII.GetSwapchainImageCount(); i++)
         {
             auto *DSet = m_passInfo->GetDescriptors(i)[0];
             DSet->SetImageView(0, m_displayRT->GetSRV(), m_displayRT->GetSampler()->ApiHandle());
@@ -108,7 +108,7 @@ namespace pe
 
     void BloomGaussianBlurHorizontalPass::UpdateDescriptorSets()
     {
-        for (uint32_t i = 0; i < SWAPCHAIN_IMAGES; i++)
+        for (uint32_t i = 0; i < RHII.GetSwapchainImageCount(); i++)
         {
             auto *DSet = m_passInfo->GetDescriptors(i)[0];
             DSet->SetImageView(0, m_brightFilterRT->GetSRV(), m_brightFilterRT->GetSampler()->ApiHandle());
@@ -177,7 +177,7 @@ namespace pe
 
     void BloomGaussianBlurVerticalPass::UpdateDescriptorSets()
     {
-        for (uint32_t i = 0; i < SWAPCHAIN_IMAGES; i++)
+        for (uint32_t i = 0; i < RHII.GetSwapchainImageCount(); i++)
         {
             auto *DSet = m_passInfo->GetDescriptors(i)[0];
             DSet->SetImageView(0, m_gaussianBlurHorizontalRT->GetSRV(), m_gaussianBlurHorizontalRT->GetSampler()->ApiHandle());

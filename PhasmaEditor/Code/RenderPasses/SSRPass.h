@@ -20,7 +20,7 @@ namespace pe
 
     private:
         mat4 m_reflectionInput[4];
-        Buffer *m_UBReflection[SWAPCHAIN_IMAGES];
+        std::vector<Buffer *> m_reflectionUBs;
         Image *m_ssrRT;
         Image *m_viewportRT;
         Image *m_normalRT;

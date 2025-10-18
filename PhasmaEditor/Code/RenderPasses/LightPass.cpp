@@ -32,6 +32,8 @@ namespace pe
         m_attachments[0] = {};
         m_attachments[0].image = m_viewportRT;
         m_attachments[0].loadOp = vk::AttachmentLoadOp::eClear;
+
+        m_uniforms.resize(RHII.GetSwapchainImageCount());
     }
 
     void LightOpaquePass::UpdatePassInfo()
@@ -62,17 +64,17 @@ namespace pe
         const std::string path = Path::Executable + "Assets/Objects/ibl_brdf_lut.png";
         m_ibl_brdf_lut = Image::LoadRGBA8(cmd, path);
 
-        for (uint32_t i = 0; i < SWAPCHAIN_IMAGES; i++)
+        for (auto &uniform : m_uniforms)
         {
-            m_uniform[i] = Buffer::Create(
+            uniform = Buffer::Create(
                 RHII.AlignUniform(sizeof(LightPassUBO)),
                 vk::BufferUsageFlagBits2::eUniformBuffer,
                 VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT,
                 "Gbuffer_uniform_buffer");
-            m_uniform[i]->Map();
-            m_uniform[i]->Zero();
-            m_uniform[i]->Flush();
-            m_uniform[i]->Unmap();
+            uniform->Map();
+            uniform->Zero();
+            uniform->Flush();
+            uniform->Unmap();
         }
 
         UpdateDescriptorSets();
@@ -88,7 +90,7 @@ namespace pe
         bool shadowsEnabled = Settings::Get<GlobalSettings>().shadows;
         const SkyBox &skybox = shadowsEnabled ? GetGlobalSystem<RendererSystem>()->GetSkyBoxDay() : GetGlobalSystem<RendererSystem>()->GetSkyBoxNight();
 
-        for (uint32_t i = 0; i < SWAPCHAIN_IMAGES; i++)
+        for (uint32_t i = 0; i < RHII.GetSwapchainImageCount(); i++)
         {
             auto &sets = m_passInfo->GetDescriptors(i);
 
@@ -100,7 +102,7 @@ namespace pe
             DSet->SetBuffer(4, GetGlobalSystem<LightSystem>()->GetUniform(i));
             DSet->SetImageView(5, m_ssaoRT->GetSRV(), m_ssaoRT->GetSampler()->ApiHandle());
             DSet->SetImageView(6, m_emissiveRT->GetSRV(), m_emissiveRT->GetSampler()->ApiHandle());
-            DSet->SetBuffer(7, m_uniform[i]);
+            DSet->SetBuffer(7, m_uniforms[i]);
             DSet->SetImageView(8, m_transparencyRT->GetSRV(), m_transparencyRT->GetSampler()->ApiHandle());
             DSet->SetImageView(9, m_ibl_brdf_lut->GetSRV(), m_ibl_brdf_lut->GetSampler()->ApiHandle());
             DSet->Update();
@@ -144,7 +146,7 @@ namespace pe
         range.data = &m_ubo;
         range.size = sizeof(m_ubo);
         range.offset = 0;
-        m_uniform[RHII.GetFrameIndex()]->Copy(1, &range, false);
+        m_uniforms[RHII.GetFrameIndex()]->Copy(1, &range, false);
     }
 
     void LightOpaquePass::PassBarriers(CommandBuffer *cmd)
@@ -214,8 +216,8 @@ namespace pe
 
     void LightOpaquePass::Destroy()
     {
-        for (uint32_t i = 0; i < SWAPCHAIN_IMAGES; i++)
-            Buffer::Destroy(m_uniform[i]);
+        for (auto &uniform : m_uniforms)
+            Buffer::Destroy(uniform);
     }
 
     void LightTransparentPass::Init()
@@ -236,6 +238,8 @@ namespace pe
         m_attachments[0] = {};
         m_attachments[0].image = m_viewportRT;
         m_attachments[0].loadOp = vk::AttachmentLoadOp::eLoad;
+
+        m_uniforms.resize(RHII.GetSwapchainImageCount());
     }
 
     void LightTransparentPass::UpdatePassInfo()
@@ -267,17 +271,17 @@ namespace pe
         const std::string path = Path::Executable + "Assets/Objects/ibl_brdf_lut.png";
         m_ibl_brdf_lut = Image::LoadRGBA8(cmd, path);
 
-        for (uint32_t i = 0; i < SWAPCHAIN_IMAGES; i++)
+        for (auto &uniform : m_uniforms)
         {
-            m_uniform[i] = Buffer::Create(
+            uniform = Buffer::Create(
                 RHII.AlignUniform(sizeof(LightPassUBO)),
                 vk::BufferUsageFlagBits2::eUniformBuffer,
                 VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT,
                 "Gbuffer_uniform_buffer");
-            m_uniform[i]->Map();
-            m_uniform[i]->Zero();
-            m_uniform[i]->Flush();
-            m_uniform[i]->Unmap();
+            uniform->Map();
+            uniform->Zero();
+            uniform->Flush();
+            uniform->Unmap();
         }
 
         UpdateDescriptorSets();
@@ -293,7 +297,7 @@ namespace pe
         bool shadowsEnabled = Settings::Get<GlobalSettings>().shadows;
         const SkyBox &skybox = shadowsEnabled ? GetGlobalSystem<RendererSystem>()->GetSkyBoxDay() : GetGlobalSystem<RendererSystem>()->GetSkyBoxNight();
 
-        for (uint32_t i = 0; i < SWAPCHAIN_IMAGES; i++)
+        for (uint32_t i = 0; i < RHII.GetSwapchainImageCount(); i++)
         {
             auto &sets = m_passInfo->GetDescriptors(i);
 
@@ -305,7 +309,7 @@ namespace pe
             DSet->SetBuffer(4, GetGlobalSystem<LightSystem>()->GetUniform(i));
             DSet->SetImageView(5, m_ssaoRT->GetSRV(), m_ssaoRT->GetSampler()->ApiHandle());
             DSet->SetImageView(6, m_emissiveRT->GetSRV(), m_emissiveRT->GetSampler()->ApiHandle());
-            DSet->SetBuffer(7, m_uniform[i]);
+            DSet->SetBuffer(7, m_uniforms[i]);
             DSet->SetImageView(8, m_transparencyRT->GetSRV(), m_transparencyRT->GetSampler()->ApiHandle());
             DSet->SetImageView(9, m_ibl_brdf_lut->GetSRV(), m_ibl_brdf_lut->GetSampler()->ApiHandle());
             DSet->Update();
@@ -349,7 +353,7 @@ namespace pe
         range.data = &m_ubo;
         range.size = sizeof(m_ubo);
         range.offset = 0;
-        m_uniform[RHII.GetFrameIndex()]->Copy(1, &range, false);
+        m_uniforms[RHII.GetFrameIndex()]->Copy(1, &range, false);
     }
 
     void LightTransparentPass::PassBarriers(CommandBuffer *cmd)
@@ -420,7 +424,7 @@ namespace pe
 
     void LightTransparentPass::Destroy()
     {
-        for (uint32_t i = 0; i < SWAPCHAIN_IMAGES; i++)
-            Buffer::Destroy(m_uniform[i]);
+        for (auto &uniform : m_uniforms)
+            Buffer::Destroy(uniform);
     }
 }

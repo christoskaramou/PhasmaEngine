@@ -22,8 +22,7 @@ namespace pe
 
     ModelGltf::ModelGltf() : m_id{ID::NextID()}
     {
-        for (uint32_t i = 0; i < SWAPCHAIN_IMAGES; i++)
-            dirtyUniforms[i] = false;
+        dirtyUniforms.resize(RHII.GetSwapchainImageCount(), false);
     }
 
     ModelGltf::~ModelGltf()
@@ -556,7 +555,7 @@ namespace pe
             tinygltf::Node &node = nodes[i];
             NodeInfo &nodeInfo = m_nodesInfo[i];
             nodeInfo.dirty = true; // set dirty so the 1st call to UpdateNodeMatrix will update nodeInfo.ubo.worldMatrix and primitiveInfo.worldBoundingBox
-
+            nodeInfo.dirtyUniforms.resize(RHII.GetSwapchainImageCount(), false);
             if (node.matrix.size() == 16)
             {
                 nodeInfo.localMatrix = make_mat4(&node.matrix[0]);
@@ -681,10 +680,10 @@ namespace pe
             }
 
             nodeInfo.dirty = false;
-            for (int frame = 0; frame < SWAPCHAIN_IMAGES; frame++)
+            for (int i = 0; i < RHII.GetSwapchainImageCount(); i++)
             {
-                nodeInfo.dirtyUniforms[frame] = true;
-                dirtyUniforms[frame] = true;
+                nodeInfo.dirtyUniforms[i] = true;
+                dirtyUniforms[i] = true;
             }
         }
     }

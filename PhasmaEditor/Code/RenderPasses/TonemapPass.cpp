@@ -6,7 +6,7 @@
 #include "API/Pipeline.h"
 #include "Systems/RendererSystem.h"
 #include "API/RenderPass.h"
-
+#include "API/RHI.h"
 
 namespace pe
 {
@@ -42,14 +42,14 @@ namespace pe
 
     void TonemapPass::UpdateDescriptorSets()
     {
-        for (uint32_t i = 0; i < SWAPCHAIN_IMAGES; i++)
+        for (uint32_t i = 0; i < RHII.GetSwapchainImageCount(); i++)
         {
             auto *DSet = m_passInfo->GetDescriptors(i)[0];
             DSet->SetImageView(0, m_frameImage->GetSRV(), m_frameImage->GetSampler()->ApiHandle());
             DSet->Update();
         }
     }
-    
+
     void TonemapPass::Draw(CommandBuffer *cmd)
     {
         ImageBarrierInfo barrier;
@@ -68,7 +68,7 @@ namespace pe
         cmd->SetScissor(0, 0, m_displayRT->GetWidth(), m_displayRT->GetHeight());
         cmd->Draw(3, 1, 0, 0);
         cmd->EndPass();
-        
+
         cmd->EndDebugRegion();
     }
 

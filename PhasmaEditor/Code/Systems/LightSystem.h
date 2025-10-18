@@ -28,10 +28,10 @@ namespace pe
         void Update() override;
         void Destroy() override;
 
-        Buffer *GetUniform(uint32_t frame) { return m_uniform[frame]; }
+        Buffer *GetUniform(uint32_t frame) { return m_uniforms[frame]; }
 
     private:
         LightsUBO m_lubo;
-        Buffer *m_uniform[SWAPCHAIN_IMAGES];
+        std::vector<Buffer *>m_uniforms;
     };
 }

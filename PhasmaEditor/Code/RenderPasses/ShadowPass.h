@@ -39,7 +39,7 @@ namespace pe
 
         void CalculateCascades(Camera *camera);
 
-        Buffer *m_uniforms[SWAPCHAIN_IMAGES];
+        std::vector<Buffer *> m_uniforms;
         std::vector<mat4> m_cascades;
         vec4 m_viewZ;
         std::vector<Image *> m_textures{};

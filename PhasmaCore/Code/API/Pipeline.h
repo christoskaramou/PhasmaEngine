@@ -59,7 +59,7 @@ namespace pe
         std::vector<vk::ShaderStageFlags> m_pushConstantStages;
         std::vector<uint32_t> m_pushConstantOffsets;
         std::vector<uint32_t> m_pushConstantSizes;
-        std::vector<Descriptor *> m_descriptors[SWAPCHAIN_IMAGES];
+        std::vector<std::vector<Descriptor *>> m_descriptors;
     };
 
     class Pipeline : public PeHandle<Pipeline, vk::Pipeline>

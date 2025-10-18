@@ -44,6 +44,8 @@ namespace pe
         m_attachments[0] = {};
         m_attachments[0].loadOp = vk::AttachmentLoadOp::eClear;
         m_attachments[0].storeOp = vk::AttachmentStoreOp::eStore;
+
+        m_uniforms.resize(RHII.GetSwapchainImageCount());
     }
 
     void ShadowPass::UpdatePassInfo()
@@ -59,16 +61,16 @@ namespace pe
 
     void ShadowPass::CreateUniforms(CommandBuffer *cmd)
     {
-        for (uint32_t i = 0; i < SWAPCHAIN_IMAGES; i++)
+        for (auto &uniform : m_uniforms)
         {
-            m_uniforms[i] = Buffer::Create(
+            uniform = Buffer::Create(
                 RHII.AlignUniform(Settings::Get<GlobalSettings>().num_cascades * sizeof(mat4)),
                 vk::BufferUsageFlagBits2::eUniformBuffer,
                 VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT,
                 "Shadows_uniform_buffer");
-            m_uniforms[i]->Map();
-            m_uniforms[i]->Zero();
-            m_uniforms[i]->Flush();
+            uniform->Map();
+            uniform->Zero();
+            uniform->Flush();
         }
     }
 
@@ -248,7 +250,7 @@ namespace pe
         for (auto &texture : m_textures)
             Image::Destroy(texture);
 
-        for (uint32_t i = 0; i < SWAPCHAIN_IMAGES; i++)
-            Buffer::Destroy(m_uniforms[i]);
+        for (auto &uniform : m_uniforms)
+            Buffer::Destroy(uniform);
     }
 }

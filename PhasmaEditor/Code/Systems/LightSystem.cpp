@@ -18,17 +18,18 @@ namespace pe
 
     void LightSystem::Init(CommandBuffer *cmd)
     {
-        for (uint32_t i = 0; i < SWAPCHAIN_IMAGES; i++)
+        m_uniforms.resize(RHII.GetSwapchainImageCount());
+        for (auto &uniform : m_uniforms)
         {
-            m_uniform[i] = Buffer::Create(
-                RHII.AlignUniform(sizeof(LightsUBO)), // * SWAPCHAIN_IMAGES,
+            uniform = Buffer::Create(
+                RHII.AlignUniform(sizeof(LightsUBO)),
                 vk::BufferUsageFlagBits2::eUniformBuffer,
                 VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT,
                 "lights_uniform_buffer");
-            m_uniform[i]->Map();
-            m_uniform[i]->Zero();
-            m_uniform[i]->Flush();
-            m_uniform[i]->Unmap();
+            uniform->Map();
+            uniform->Zero();
+            uniform->Flush();
+            uniform->Unmap();
         }
 
         for (int i = 0; i < MAX_POINT_LIGHTS; i++)
@@ -50,8 +51,8 @@ namespace pe
         range.data = &m_lubo;
         range.size = sizeof(LightsUBO);
         range.offset = 0;
-        for (uint32_t i = 0; i < SWAPCHAIN_IMAGES; i++)
-            m_uniform[i]->Copy(1, &range, false);
+        for (auto &uniform : m_uniforms)
+            uniform->Copy(1, &range, false);
 
         std::vector<DescriptorBindingInfo> bindingInfos(1);
         bindingInfos[0].binding = 0;
@@ -73,7 +74,7 @@ namespace pe
         range.data = &m_lubo;
         range.size = 3 * sizeof(vec4);
         range.offset = frameOffset;
-        m_uniform[RHII.GetFrameIndex()]->Copy(1, &range, false);
+        m_uniforms[RHII.GetFrameIndex()]->Copy(1, &range, false);
 
         if (gSettings.randomize_lights)
         {
@@ -89,14 +90,14 @@ namespace pe
             range.size = sizeof(PointLight) * MAX_POINT_LIGHTS;
             range.offset = offsetof(LightsUBO, pointLights);
 
-            for (uint32_t i = 0; i < SWAPCHAIN_IMAGES; i++)
-                m_uniform[i]->Copy(1, &range, false);
+            for (auto &uniform : m_uniforms)
+                uniform->Copy(1, &range, false);
         }
     }
 
     void LightSystem::Destroy()
     {
-        for (uint32_t i = 0; i < SWAPCHAIN_IMAGES; i++)
-            Buffer::Destroy(m_uniform[i]);
+        for (auto &uniform : m_uniforms)
+            Buffer::Destroy(uniform);
     }
 }

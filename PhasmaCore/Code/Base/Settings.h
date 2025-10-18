@@ -2,8 +2,6 @@
 
 namespace pe
 {
-    constexpr uint32_t SWAPCHAIN_IMAGES = 3;
-
     struct Settings
     {
     public:
