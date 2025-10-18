@@ -19,16 +19,332 @@
 
 // System + Process RAM (Windows)
 #if defined(_WIN32)
-#include <windows.h>
-#include <psapi.h>
 #pragma comment(lib, "psapi.lib")
-#elif defined(__linux__)
-#include <sys/sysinfo.h>
 #endif
 
 namespace pe
 {
     RHI &RHII = *RHI::Get();
+
+    static inline uint32_t VkVendorID(const vk::PhysicalDevice &gpu)
+    {
+        return gpu.getProperties().vendorID; // 0x10DE NVIDIA, 0x1002 AMD, 0x8086 Intel
+    }
+
+    static bool GetVkPciBusId(vk::PhysicalDevice gpu, uint32_t &domain, uint32_t &bus, uint32_t &device, uint32_t &function)
+    {
+#if defined(VK_EXT_pci_bus_info)
+        vk::PhysicalDevicePCIBusInfoPropertiesEXT pci{};
+        vk::PhysicalDeviceProperties2 props2{};
+        props2.pNext = &pci;
+        gpu.getProperties2(&props2);
+        if (pci.sType == vk::StructureType::ePhysicalDevicePciBusInfoPropertiesEXT)
+        {
+            domain = pci.pciDomain;
+            bus = pci.pciBus;
+            device = pci.pciDevice;
+            function = pci.pciFunction;
+            return true;
+        }
+#endif
+        domain = bus = device = function = 0;
+        return false;
+    }
+
+    // =========================================================
+    // Global VRAM backends (runtime/optional) with fallbacks
+    // =========================================================
+
+    // ---------- NVIDIA: NVML (Win/Linux, runtime load) ----------
+    struct NvmlAPI
+    {
+#if defined(_WIN32)
+        HMODULE dll = nullptr;
+        FARPROC L(const char *n) { return GetProcAddress(dll, n); }
+        bool Load()
+        {
+            if (dll)
+                return true;
+            dll = LoadLibraryA("nvml.dll");
+            return dll != nullptr;
+        }
+#else
+        void *so = nullptr;
+        void *L(const char *n) { return so ? dlsym(so, n) : nullptr; }
+        bool Load()
+        {
+            if (so)
+                return true;
+            so = dlopen("libnvidia-ml.so.1", RTLD_LAZY);
+            return so != nullptr;
+        }
+#endif
+        int (*nvmlInit_v2)() = nullptr;
+        int (*nvmlShutdown)() = nullptr;
+        int (*nvmlDeviceGetHandleByPciBusId_v2)(const char *, void **) = nullptr;
+        int (*nvmlDeviceGetMemoryInfo)(void *, void *) = nullptr;
+
+        bool Init()
+        {
+            if (!Load())
+                return false;
+            nvmlInit_v2 = (int (*)())L("nvmlInit_v2");
+            nvmlShutdown = (int (*)())L("nvmlShutdown");
+            nvmlDeviceGetHandleByPciBusId_v2 = (int (*)(const char *, void **))L("nvmlDeviceGetHandleByPciBusId_v2");
+            nvmlDeviceGetMemoryInfo = (int (*)(void *, void *))L("nvmlDeviceGetMemoryInfo");
+            return nvmlInit_v2 && nvmlShutdown && nvmlDeviceGetHandleByPciBusId_v2 && nvmlDeviceGetMemoryInfo && nvmlInit_v2() == 0;
+        }
+    } g_nvml;
+
+    static bool NvmlGlobalVramUsedByBDF(uint32_t dom, uint32_t bus, uint32_t dev, uint64_t &used, uint64_t &total)
+    {
+        used = total = 0;
+        if (!g_nvml.Init())
+            return false;
+        char pciStr[32];
+        snprintf(pciStr, sizeof(pciStr), "%04x:%02x:%02x.%u", dom, bus, dev, 0u);
+        void *h = nullptr;
+        if (g_nvml.nvmlDeviceGetHandleByPciBusId_v2(pciStr, &h) != 0 || !h)
+            return false;
+        struct
+        {
+            unsigned long long total, free, used;
+        } mem{};
+        if (g_nvml.nvmlDeviceGetMemoryInfo(h, &mem) != 0)
+            return false;
+        total = (uint64_t)mem.total;
+        used = (uint64_t)mem.used;
+        return true;
+    }
+
+// ---------- AMD: Linux sysfs amdgpu ----------
+#if defined(__linux__)
+    static bool AmdSysfsGlobalVramByBDF(uint32_t dom, uint32_t bus, uint32_t dev, uint64_t &used, uint64_t &total)
+    {
+        used = total = 0;
+        char bdf[32];
+        snprintf(bdf, sizeof(bdf), "%04x:%02x:%02x.%u", dom, bus, dev, 0u);
+        std::string base = std::string("/sys/bus/pci/devices/") + bdf + "/";
+        std::ifstream fu(base + "mem_info_vram_used");
+        std::ifstream ft(base + "mem_info_vram_total");
+        if (!fu || !ft)
+            return false;
+        fu >> used;
+        ft >> total; // bytes
+        return (used > 0 && total > 0);
+    }
+#endif
+
+    // ---------- Intel: Level Zero Sysman (Win/Linux, runtime) ----------
+    struct L0API
+    {
+#if defined(_WIN32)
+        HMODULE so = nullptr;
+        FARPROC L(const char *n) { return GetProcAddress(so, n); }
+        bool Load()
+        {
+            if (so)
+                return true;
+            so = LoadLibraryA("ze_loader.dll");
+            return so != nullptr;
+        }
+#else
+        void *so = nullptr;
+        void *L(const char *n) { return so ? dlsym(so, n) : nullptr; }
+        bool Load()
+        {
+            if (so)
+                return true;
+            so = dlopen("libze_loader.so.1", RTLD_LAZY);
+            return so != nullptr;
+        }
+#endif
+        // core
+        int (*zeInit)(uint32_t) = nullptr;
+        int (*zeDriverGet)(uint32_t *, void **) = nullptr;
+        int (*zeDeviceGet)(void *, uint32_t *, void **) = nullptr;
+        int (*zeDeviceGetProperties)(void *, void *) = nullptr;
+        // sysman
+        int (*zesInit)(uint32_t) = nullptr;
+        int (*zesDeviceGet)(void *, void **) = nullptr;
+        int (*zesDeviceEnumMemoryModules)(void *, uint32_t *, void **) = nullptr;
+        int (*zesMemoryGetState)(void *, void *) = nullptr;
+
+        bool Init()
+        {
+            if (!Load())
+                return false;
+            zeInit = (int (*)(uint32_t))L("zeInit");
+            zeDriverGet = (int (*)(uint32_t *, void **))L("zeDriverGet");
+            zeDeviceGet = (int (*)(void *, uint32_t *, void **))L("zeDeviceGet");
+            zeDeviceGetProperties = (int (*)(void *, void *))L("zeDeviceGetProperties");
+            zesInit = (int (*)(uint32_t))L("zesInit");
+            zesDeviceGet = (int (*)(void *, void **))L("zesDeviceGet");
+            zesDeviceEnumMemoryModules = (int (*)(void *, uint32_t *, void **))L("zesDeviceEnumMemoryModules");
+            zesMemoryGetState = (int (*)(void *, void *))L("zesMemoryGetState");
+            if (!zeInit || !zeDriverGet || !zeDeviceGet || !zeDeviceGetProperties || !zesInit || !zesDeviceGet || !zesDeviceEnumMemoryModules || !zesMemoryGetState)
+                return false;
+            return zeInit(0) == 0 && zesInit(0) == 0;
+        }
+    } g_l0;
+
+    static bool L0GlobalVramUsed(uint64_t &used, uint64_t &total)
+    {
+        used = total = 0;
+        if (!g_l0.Init())
+            return false;
+
+        uint32_t nDrivers = 0;
+        if (g_l0.zeDriverGet(&nDrivers, nullptr) != 0 || nDrivers == 0)
+            return false;
+        std::vector<void *> drivers(nDrivers);
+        g_l0.zeDriverGet(&nDrivers, drivers.data());
+
+        struct ze_device_properties_t
+        {
+            uint32_t stype;
+            const void *pNext;
+            uint32_t type;
+            uint32_t vendorId;
+            uint32_t deviceId;
+            char name[256];
+            uint32_t flags;
+            uint32_t coreClockRate;
+            uint32_t reserved[32];
+        } props{};
+        props.stype = 1;
+        props.pNext = nullptr;
+
+        for (auto d : drivers)
+        {
+            uint32_t nDevices = 0;
+            if (g_l0.zeDeviceGet(d, &nDevices, nullptr) != 0 || nDevices == 0)
+                continue;
+            std::vector<void *> devs(nDevices);
+            g_l0.zeDeviceGet(d, &nDevices, devs.data());
+            for (auto devH : devs)
+            {
+                g_l0.zeDeviceGetProperties(devH, &props);
+                if (props.vendorId != 0x8086)
+                    continue; // Intel only
+
+                void *sysmanDev = nullptr;
+                if (g_l0.zesDeviceGet(devH, &sysmanDev) != 0 || !sysmanDev)
+                    continue;
+                uint32_t nMods = 0;
+                if (g_l0.zesDeviceEnumMemoryModules(sysmanDev, &nMods, nullptr) != 0 || nMods == 0)
+                    continue;
+                std::vector<void *> mods(nMods);
+                g_l0.zesDeviceEnumMemoryModules(sysmanDev, &nMods, mods.data());
+
+                struct zes_mem_state_t
+                {
+                    uint32_t stype;
+                    const void *pNext;
+                    uint32_t type;
+                    uint64_t physicalSize;
+                    uint64_t free;
+                    uint64_t reserved[8];
+                } state{};
+                state.stype = 1;
+                state.pNext = nullptr;
+
+                uint64_t u = 0, tot = 0;
+                for (auto m : mods)
+                {
+                    if (g_l0.zesMemoryGetState(m, &state) == 0)
+                    {
+                        tot += state.physicalSize;
+                        u += (state.physicalSize - state.free);
+                    }
+                }
+                if (tot > 0)
+                {
+                    used = u;
+                    total = tot;
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
+// ---------- AMD Windows: ADLX (optional) ----------
+#if defined(_WIN32) && defined(PE_USE_ADLX)
+#include <ADLXHelper.h>
+#include <interfaces/IADLXSystem.h>
+#include <interfaces/IADLXPerformanceMonitoring.h>
+    static bool AdlxGlobalVramUsedByAdapter(uint64_t &usedOut, uint64_t &totalOut)
+    {
+        usedOut = totalOut = 0;
+
+        static adlx::ADLXHelper g_adlx;
+        if (g_adlx.Initialize() != ADLX_OK)
+            return false;
+
+        adlx::IADLXSystem *sys = g_adlx.GetSystemServices();
+        if (!sys)
+            return false;
+
+        adlx::IADLXPerformanceMonitoringServices *pmon = nullptr;
+        if (sys->GetPerformanceMonitoringServices(&pmon) != ADLX_OK || !pmon)
+            return false;
+
+        adlx::IADLXGPUs *gpus = nullptr;
+        if (sys->GetGPUs(&gpus) != ADLX_OK || !gpus)
+        {
+            pmon->Release();
+            return false;
+        }
+
+        adlx_uint count = 0;
+        gpus->Size(&count);
+        if (count == 0)
+        {
+            gpus->Release();
+            pmon->Release();
+            return false;
+        }
+
+        // TODO: match your Vulkan GPU via PCI if multi-GPU. For now, first GPU.
+        adlx::IADLXGPU *gpu = nullptr;
+        gpus->At(0, &gpu);
+        if (!gpu)
+        {
+            gpus->Release();
+            pmon->Release();
+            return false;
+        }
+
+        adlx::IADLXPerformanceMetrics *metrics = nullptr;
+        if (pmon->GetCurrentPerformanceMetrics(gpu, &metrics) != ADLX_OK || !metrics)
+        {
+            gpu->Release();
+            gpus->Release();
+            pmon->Release();
+            return false;
+        }
+
+        adlx_int vramUsedMB = 0, vramTotalMB = 0;
+        metrics->VRAMUsage(&vramUsedMB);
+        metrics->VRAMTotal(&vramTotalMB);
+
+        usedOut = (uint64_t)vramUsedMB * 1024ull * 1024ull;
+        totalOut = (uint64_t)vramTotalMB * 1024ull * 1024ull;
+
+        metrics->Release();
+        gpu->Release();
+        gpus->Release();
+        pmon->Release();
+        return usedOut > 0 && totalOut > 0;
+    }
+#else
+    static bool AdlxGlobalVramUsedByAdapter(uint64_t &usedOut, uint64_t &totalOut)
+    {
+        usedOut = totalOut = 0;
+        return false;
+    }
+#endif
 
     void RHI::Init(SDL_Window *window)
     {
@@ -531,32 +847,84 @@ namespace pe
     {
         GpuMemorySnapshot snap{};
 
-        // --- Vulkan heaps/budgets (VRAM + host-visible) ---
-        if (IsDeviceExtensionValid(VK_EXT_MEMORY_BUDGET_EXTENSION_NAME))
+        if (!IsDeviceExtensionValid(VK_EXT_MEMORY_BUDGET_EXTENSION_NAME))
+            return snap;
+
+        // --- Vulkan heaps/budgets baseline ---
+        vk::PhysicalDeviceMemoryBudgetPropertiesEXT memBudget{};
+        vk::PhysicalDeviceMemoryProperties2 props{};
+        props.pNext = &memBudget;
+        m_gpu.getMemoryProperties2(&props);
+
+        const auto &heaps = props.memoryProperties.memoryHeaps;
+        const uint32_t heapCount = props.memoryProperties.memoryHeapCount;
+
+        // Our VMA per-heap committed memory
+        std::vector<VmaBudget> vmaBudgets(heapCount);
+        if (m_allocator)
+            vmaGetHeapBudgets(m_allocator, vmaBudgets.data());
+
+        for (uint32_t i = 0; i < heapCount; ++i)
         {
-            vk::PhysicalDeviceMemoryBudgetPropertiesEXT budget{};
-            vk::PhysicalDeviceMemoryProperties2 props{};
-            props.pNext = &budget;
-            m_gpu.getMemoryProperties2(&props);
+            const bool deviceLocal =
+                (heaps[i].flags & vk::MemoryHeapFlagBits::eDeviceLocal) == vk::MemoryHeapFlagBits::eDeviceLocal;
 
-            const auto &heaps = props.memoryProperties.memoryHeaps;
-            const uint32_t n = props.memoryProperties.memoryHeapCount;
+            MemoryInfo &sec = deviceLocal ? snap.vram : snap.host;
 
-            for (uint32_t i = 0; i < n; ++i)
+            const uint64_t heapSize = heaps[i].size;
+            const uint64_t heapBudget = std::min<uint64_t>(memBudget.heapBudget[i], heapSize);
+            const uint64_t heapUsed = memBudget.heapUsage[i]; // ALL Vulkan apps
+            const uint64_t ourCommit = m_allocator ? vmaBudgets[i].statistics.blockBytes : 0;
+
+            sec.size += heapSize;
+            sec.budget += heapBudget;
+            sec.used += heapUsed; // baseline used
+            sec.app += ourCommit; // our VMA-committed
+            sec.heaps += 1;
+        }
+
+        // derive baseline "other" (still Vulkan-only at this point)
+        auto finalize = [](MemoryInfo &mi)
+        {
+            mi.other = (mi.used > mi.app) ? (mi.used - mi.app) : 0;
+        };
+        finalize(snap.vram);
+        finalize(snap.host);
+
+        // ---- Try to override VRAM.used with cross-API global used ----
+        uint32_t dom = 0, bus = 0, dev = 0, fn = 0;
+        if (GetVkPciBusId(m_gpu, dom, bus, dev, fn))
+        {
+            const uint32_t vendor = VkVendorID(m_gpu);
+            uint64_t gUsed = 0, gTotal = 0;
+            bool ok = false;
+
+            if (vendor == 0x10DE)
+            { // NVIDIA
+                ok = NvmlGlobalVramUsedByBDF(dom, bus, dev, gUsed, gTotal);
+            }
+#if defined(__linux__)
+            else if (vendor == 0x1002 || vendor == 0x1022)
+            { // AMD Linux
+                ok = AmdSysfsGlobalVramByBDF(dom, bus, dev, gUsed, gTotal);
+            }
+#endif
+            else if (vendor == 0x8086)
+            { // Intel Win/Linux
+                ok = L0GlobalVramUsed(gUsed, gTotal);
+            }
+#if defined(_WIN32)
+            else if (vendor == 0x1002 || vendor == 0x1022)
+            { // AMD Windows
+                ok = AdlxGlobalVramUsedByAdapter(gUsed, gTotal);
+            }
+#endif
+
+            if (ok && gUsed > 0)
             {
-                const bool deviceLocal =
-                    (heaps[i].flags & vk::MemoryHeapFlagBits::eDeviceLocal) == vk::MemoryHeapFlagBits::eDeviceLocal;
-
-                MemoryInfo &info = deviceLocal ? snap.vram : snap.host;
-
-                const uint64_t heapSize = heaps[i].size;
-                const uint64_t heapBudget = std::min<uint64_t>(budget.heapBudget[i], heapSize);
-                const uint64_t heapUsed = budget.heapUsage[i];
-
-                info.size += heapSize;
-                info.budget += heapBudget;
-                info.used += heapUsed;
-                info.heaps += 1;
+                // Override VRAM.used globally; keep budget/size from Vulkan
+                snap.vram.used = gUsed;
+                snap.vram.other = (snap.vram.used > snap.vram.app) ? (snap.vram.used - snap.vram.app) : 0;
             }
         }
 

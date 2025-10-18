@@ -48,11 +48,17 @@
 #include "vulkan/vulkan.hpp"
 #include "vma/vk_mem_alloc.h"
 #if defined(PE_WIN32)
+#include <windows.h>
+#include <psapi.h>
 #include <dxgi1_6.h>
 #include <d3d12.h>
 #include <d3dcompiler.h>
 #else
 #include <dlfcn.h>
+#include <unistd.h>
+#include <sys/types.h>
+#include <sys/stat.h>
+#include <fcntl.h>
 #endif
 
 #include "Base/Defines.h"
