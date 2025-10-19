@@ -86,7 +86,7 @@ namespace pe
         title += " - RelWithDebInfo";
 #endif
 
-        EventSystem::DispatchEvent(EventSetWindowTitle, title);
+        EventSystem::DispatchEvent(EventType::SetWindowTitle, title);
 
         // Create all render targets
         CreateRenderTargets();
@@ -471,7 +471,7 @@ namespace pe
         info.format = RHII.GetSurface()->GetFormat();
         info.extent = vk::Extent3D{static_cast<uint32_t>(RHII.GetWidthf() * rtScale), static_cast<uint32_t>(RHII.GetHeightf() * rtScale), 1u};
         info.usage = vk::ImageUsageFlagBits::eTransferDst | vk::ImageUsageFlagBits::eSampled;
-        Image *sampledImage = Image::Create(info,"FSSampledImage");
+        Image *sampledImage = Image::Create(info, "FSSampledImage");
 
         sampledImage->CreateSRV(vk::ImageViewType::e2D);
 
@@ -571,9 +571,10 @@ namespace pe
             std::shared_ptr<PassInfo> info = rc->GetPassInfo();
 
             // PollEvent simply catches a pushed event from FileWatcher
-            if (info->pCompShader && EventSystem::PollEvent(info->pCompShader->GetPathID()) ||
-                info->pVertShader && EventSystem::PollEvent(info->pVertShader->GetPathID()) ||
-                info->pFragShader && EventSystem::PollEvent(info->pFragShader->GetPathID()))
+            EventSystem::QueuedEvent event;
+            if ((info->pCompShader && EventSystem::PeekEvent(static_cast<size_t>(info->pCompShader->GetPathID()), event)) ||
+                (info->pVertShader && EventSystem::PeekEvent(static_cast<size_t>(info->pVertShader->GetPathID()), event)) ||
+                (info->pFragShader && EventSystem::PeekEvent(static_cast<size_t>(info->pFragShader->GetPathID()), event)))
             {
                 Shader::Destroy(info->pCompShader);
                 Shader::Destroy(info->pVertShader);

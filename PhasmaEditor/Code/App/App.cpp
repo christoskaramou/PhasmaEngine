@@ -32,7 +32,7 @@ namespace pe
         auto shaderCallback = [](size_t fileEvent)
         {
             EventSystem::PushEvent(fileEvent);
-            EventSystem::PushEvent(EventCompileShaders);
+            EventSystem::PushEvent(EventType::CompileShaders);
         };
         for (auto &file : std::filesystem::recursive_directory_iterator(Path::Executable + "Assets/Shaders"))
             FileWatcher::Add(file.path().string(), shaderCallback);
@@ -40,7 +40,7 @@ namespace pe
         // auto scriptCallback = [](size_t fileEvent)
         // {
         //     EventSystem::PushEvent(fileEvent);
-        //     EventSystem::PushEvent(EventCompileScripts);
+        //     EventSystem::PushEvent(EventType::CompileScripts);
         // };
         // for (auto &file : std::filesystem::recursive_directory_iterator(Path::Executable + "Assets/Scripts"))
         //     FileWatcher::Add(file.path().string(), scriptCallback);

@@ -961,7 +961,7 @@ namespace pe
         title += " - RelWithDebInfo";
 #endif
 
-        EventSystem::DispatchEvent(EventSetWindowTitle, title);
+        EventSystem::DispatchEvent(EventType::SetWindowTitle, title);
     }
 
     uint32_t RHI::GetWidth() const { return m_surface->GetActualExtent().width; }

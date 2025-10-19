@@ -24,7 +24,8 @@ namespace pe
             SDL_SetWindowTitle(m_apiHandle, std::any_cast<std::string>(title).c_str());
         };
 
-        EventSystem::RegisterCallback(EventSetWindowTitle, setTitle);
+        EventSystem::RegisterEvent(EventType::SetWindowTitle);
+        EventSystem::RegisterCallback(EventType::SetWindowTitle, setTitle);
     }
 
     Window::~Window()
@@ -93,20 +94,68 @@ namespace pe
 
         ImGuiIO &io = ImGui::GetIO();
 
-        SDL_Event event;
-        while (SDL_PollEvent(&event))
+        SDL_Event sdlEvent;
+        while (SDL_PollEvent(&sdlEvent))
         {
-            if (event.type == SDL_QUIT)
-                EventSystem::PushEvent(EventQuit);
+            if (sdlEvent.type == SDL_QUIT)
+                EventSystem::PushEvent(EventType::Quit);
 
-            ImGui_ImplSDL2_ProcessEvent(&event);
+            ImGui_ImplSDL2_ProcessEvent(&sdlEvent);
 
-            if (event.type == SDL_WINDOWEVENT && event.window.event == SDL_WINDOWEVENT_SIZE_CHANGED)
-                EventSystem::PushEvent(EventResize);
+            if (sdlEvent.type == SDL_WINDOWEVENT && sdlEvent.window.event == SDL_WINDOWEVENT_SIZE_CHANGED)
+                EventSystem::PushEvent(EventType::Resize);
         }
 
-        if (EventSystem::PollEvent(EventQuit))
-            return false;
+        EventSystem::QueuedEvent event;
+        while (EventSystem::PollEvent(event))
+        {
+            if (auto eventType = std::get_if<pe::EventType>(&event.key))
+            {
+                switch (*eventType)
+                {
+                case EventType::Quit:
+                {
+                    return false;
+                }
+                case EventType::CompileShaders:
+                {
+                    rendererSystem->PollShaders();
+                    postProcessSystem->PollShaders();
+                    break;
+                }
+                case EventType::CompileScripts:
+                {
+                    // ScriptManager::Shutdown();
+                    // ScriptManager::Init();
+                    break;
+                }
+                case EventType::PresentMode:
+                {
+                    GlobalSettings &gSettings = Settings::Get<GlobalSettings>();
+                    RHII.ChangePresentMode(gSettings.preferred_present_mode);
+                    break;
+                }
+                case EventType::Resize:
+                {
+                    if (!isMinimized())
+                    {
+                        int w, h;
+                        SDL_Vulkan_GetDrawableSize(m_apiHandle, &w, &h);
+                        rendererSystem->Resize(static_cast<uint32_t>(w), static_cast<uint32_t>(h));
+                        postProcessSystem->Resize(static_cast<uint32_t>(w), static_cast<uint32_t>(h));
+                    }
+                    break;
+                }
+                default:
+                    break;
+                }
+            }
+            else if (auto id = std::get_if<size_t>(&event.key))
+            {
+                // dynamic file event *id
+                // event.payload could carry info from FileWatcher if you want
+            }
+        }
 
         // ApiHandle mouse rotation
         SmoothMouseRotation(camera, SDL_BUTTON(SDL_BUTTON_RIGHT));
@@ -146,35 +195,6 @@ namespace pe
 
         if (ImGui::IsKeyDown(ImGuiKey_LeftCtrl) && ImGui::IsKeyPressed(ImGuiKey_G, false))
             rendererSystem->ToggleGUI();
-
-        if (EventSystem::PollEvent(EventCompileShaders))
-        {
-            rendererSystem->PollShaders();
-            postProcessSystem->PollShaders();
-        }
-
-        if (EventSystem::PollEvent(EventCompileScripts))
-        {
-            // ScriptManager::Shutdown();
-            // ScriptManager::Init();
-        }
-
-        if (EventSystem::PollEvent(EventPresentMode))
-        {
-            GlobalSettings &gSettings = Settings::Get<GlobalSettings>();
-            RHII.ChangePresentMode(gSettings.preferred_present_mode);
-        }
-
-        if (EventSystem::PollEvent(EventResize))
-        {
-            if (!isMinimized())
-            {
-                int w, h;
-                SDL_Vulkan_GetDrawableSize(m_apiHandle, &w, &h);
-                rendererSystem->Resize(static_cast<uint32_t>(w), static_cast<uint32_t>(h));
-                postProcessSystem->Resize(static_cast<uint32_t>(w), static_cast<uint32_t>(h));
-            }
-        }
 
         EventSystem::ClearPushedEvents();
 

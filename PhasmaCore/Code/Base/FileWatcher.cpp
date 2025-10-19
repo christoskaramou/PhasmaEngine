@@ -15,7 +15,7 @@ namespace pe
             return;
 
         std::lock_guard<std::mutex> guard(s_mutex);
-        EventSystem::RegisterEvent(hash);
+        EventSystem::RegisterEvent(static_cast<size_t>(hash));
         s_watchers[hash] = new FileWatcher(filePath, std::forward<Func>(callback));
     }
 
