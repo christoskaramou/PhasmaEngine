@@ -76,9 +76,10 @@ namespace pe
             std::shared_ptr<PassInfo> info = rc->GetPassInfo();
 
             // PollEvent simply catches a pushed event from FileWatcher
-            if ((info->pCompShader && EventSystem::PollEvent(info->pCompShader->GetPathID())) ||
-                (info->pVertShader && EventSystem::PollEvent(info->pVertShader->GetPathID())) ||
-                (info->pFragShader && EventSystem::PollEvent(info->pFragShader->GetPathID())))
+            EventSystem::QueuedEvent event;
+            if ((info->pCompShader && EventSystem::PeekEvent(static_cast<size_t>(info->pCompShader->GetPathID()), event)) ||
+                (info->pVertShader && EventSystem::PeekEvent(static_cast<size_t>(info->pVertShader->GetPathID()), event)) ||
+                (info->pFragShader && EventSystem::PeekEvent(static_cast<size_t>(info->pFragShader->GetPathID()), event)))
             {
                 Shader::Destroy(info->pCompShader);
                 Shader::Destroy(info->pVertShader);

@@ -2,104 +2,151 @@
 
 namespace pe
 {
-    // PREDEFINED EVENTS ---------------------------------------
-    size_t EventQuit             = StringHash("PE_Quit");
-    size_t EventCustom           = StringHash("PE_Custom");
-    size_t EventSetWindowTitle   = StringHash("PE_SetWindowTitle");
-    size_t EventCompileShaders   = StringHash("PE_CompileShaders");
-    size_t EventCompileScripts   = StringHash("PE_CompileScripts");
-    size_t EventResize           = StringHash("PE_Resize");
-    size_t EventFileWrite        = StringHash("PE_FileWrite");
-    size_t EventPresentMode      = StringHash("PE_PresentMode");
-    size_t EventAfterCommandWait = StringHash("PE_AfterCommandWait");
-    // ----------------------------------------------------------
-
-    void EventSystem::Init()
+    // -------- Lifecycle --------
+    void EventSystem::Init() noexcept
     {
-        // Register predefined events
-        RegisterEvent(EventQuit);
-        RegisterEvent(EventCustom);
-        RegisterEvent(EventSetWindowTitle);
-        RegisterEvent(EventCompileShaders);
-        RegisterEvent(EventCompileScripts);
-        RegisterEvent(EventResize);
-        RegisterEvent(EventFileWrite);
-        RegisterEvent(EventAfterCommandWait);
+        std::scoped_lock lock(s_mutex);
+        s_events.clear();
+        s_queue.clear();
     }
 
-    void EventSystem::Destroy()
+    void EventSystem::Destroy() noexcept
     {
-        ClearEvents();
+        std::scoped_lock lock(s_mutex);
+        s_events.clear();
+        s_queue.clear();
     }
 
-    void EventSystem::RegisterEvent(size_t event)
+    // -------- Register/Dispatch (callback bus) --------
+    void EventSystem::RegisterEvent(EventKey key)
     {
-        // Use emplace for efficient in-place construction
-        // inserted is a bool that's true if insertion took place
-        auto [it, inserted] = m_events.emplace(event, Delegate<std::any>());
-        PE_ERROR_IF(!inserted, "Event is already registered!");
+        std::scoped_lock lock(s_mutex);
+        auto [it, inserted] = s_events.try_emplace(key); // default-constructed delegate
+        PE_ERROR_IF(!inserted, "Event already registered!");
     }
 
-    void EventSystem::RegisterCallback(size_t event, Func &&func)
+    void EventSystem::UnregisterEvent(EventKey key)
     {
-        auto it = m_events.find(event);
-
-        // Check if the event is registered
-        PE_ERROR_IF(it == m_events.end(), "Event not registered!");
-
-        // Attach the callback
-        it->second += std::forward<Func>(func);
+        std::scoped_lock lock(s_mutex);
+        auto it = s_events.find(key);
+        PE_ERROR_IF(it == s_events.end(), "Event not registered!");
+        if (it != s_events.end())
+            s_events.erase(it);
     }
 
-    void EventSystem::DispatchEvent(size_t event, std::any &&data)
+    void EventSystem::RegisterCallback(EventKey key, Func &&func)
     {
-        auto it = m_events.find(event);
-
-        // Check if the event is registered
-        PE_ERROR_IF(it == m_events.end(), "Event not registered!");
-
-        // Invoke the delegate associated with this event
-        it->second.Invoke(std::forward<std::any>(data));
+        std::scoped_lock lock(s_mutex);
+        auto it = s_events.find(key);
+        PE_ERROR_IF(it == s_events.end(), "Event not registered!");
+        if (it != s_events.end())
+            it->second += std::move(func);
     }
 
-    void EventSystem::UnregisterEvent(size_t event)
+    void EventSystem::DispatchEvent(EventKey key, const std::any &data)
     {
-        auto it = m_events.find(event);
-
-        // Check if the event is not registered
-        PE_ERROR_IF(it == m_events.end(), "Event not registered!");
-
-        // Remove the event
-        m_events.erase(it);
+        // Copy delegate under lock, then invoke outside to avoid deadlocks/re-entrancy
+        Delegate<const std::any &> delegateCopy;
+        {
+            std::scoped_lock lock(s_mutex);
+            auto it = s_events.find(key);
+            PE_ERROR_IF(it == s_events.end(), "Event not registered!");
+            if (it == s_events.end())
+                return;
+            delegateCopy = it->second;
+        }
+        delegateCopy.Invoke(data);
     }
 
-    bool EventSystem::PollEvent(size_t event)
+    void EventSystem::ClearEvents() noexcept
     {
-        auto it = m_pushEvents.find(event);
+        std::scoped_lock lock(s_mutex);
+        s_events.clear();
+    }
 
-        // Return false if not found
-        if (it == m_pushEvents.end())
+    // -------- SDL-like queue --------
+    void EventSystem::PushEvent(EventKey key, std::any payload)
+    {
+        std::scoped_lock lock(s_mutex);
+        s_queue.push_back(QueuedEvent{std::move(key), std::move(payload)});
+    }
+
+    bool EventSystem::PollEvent(QueuedEvent &out)
+    {
+        std::scoped_lock lock(s_mutex);
+        if (s_queue.empty())
             return false;
-
-        // Erase the event using the iterator, avoiding another lookup
-        m_pushEvents.erase(it);
-
+        out = std::move(s_queue.front());
+        s_queue.pop_front();
         return true;
     }
 
-    void EventSystem::PushEvent(size_t event)
+    bool EventSystem::PeekEvent(QueuedEvent &out)
     {
-        // Use emplace for efficient in-place construction
-        m_pushEvents.emplace(event);
+        std::scoped_lock lock(s_mutex);
+        if (s_queue.empty())
+            return false;
+        out = s_queue.front(); // copy; do not consume
+        return true;
     }
 
-    void EventSystem::ClearPushedEvents()
+    bool EventSystem::PeekEvent(EventKey key, QueuedEvent &out)
     {
-        m_pushEvents.clear();
+        std::scoped_lock lock(s_mutex);
+        for (const auto &e : s_queue)
+        {
+            if (e.key == key)
+            {
+                out = e;
+                return true;
+            }
+        }
+        return false;
     }
 
-    void EventSystem::ClearEvents()
+    void EventSystem::ClearPushedEvents() noexcept
     {
-        m_events.clear();
+        std::scoped_lock lock(s_mutex);
+        s_queue.clear();
+    }
+
+    // -------- Runtime (size_t) helpers --------
+    bool EventSystem::PeekEvent(size_t id, QueuedEvent &out)
+    {
+        std::scoped_lock lock(s_mutex);
+        for (const auto &e : s_queue)
+        {
+            if (e.key == EventKey{id})
+            {
+                out = e;
+                return true;
+            }
+        }
+        return false;
+    }
+
+    bool EventSystem::PeekAndPop(size_t id, QueuedEvent &out)
+    {
+        std::scoped_lock lock(s_mutex);
+        for (auto it = s_queue.begin(); it != s_queue.end(); ++it)
+        {
+            if (it->key == EventKey{id})
+            {
+                out = *it;         // copy out (payload copied)
+                s_queue.erase(it); // targeted consume
+                return true;
+            }
+        }
+        return false;
+    }
+
+    size_t EventSystem::CountPending(size_t id)
+    {
+        std::scoped_lock lock(s_mutex);
+        size_t c = 0;
+        for (const auto &e : s_queue)
+            if (e.key == EventKey{id})
+                ++c;
+        return c;
     }
 }

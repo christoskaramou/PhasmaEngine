@@ -78,7 +78,7 @@ namespace pe
                 int result = tinyfd_messageBox(messageBoxTitle, message, "yesno", "warning", 0);
                 if (result == 1)
                 {
-                    EventSystem::PushEvent(EventQuit);
+                    EventSystem::PushEvent(EventType::Quit);
                 }
             };
             e_GUI_ThreadPool.Enqueue(lambda);
@@ -322,7 +322,7 @@ namespace pe
         ImGui::Begin("Shaders Folder", &shaders_open);
         if (ImGui::Button("Compile Shaders"))
         {
-            EventSystem::PushEvent(EventCompileShaders);
+            EventSystem::PushEvent(EventType::CompileShaders);
         }
         for (uint32_t i = 0; i < gSettings.shader_list.size(); i++)
         {
@@ -365,7 +365,7 @@ namespace pe
         {
             gSettings.render_scale = clamp(rtScale, 0.1f, 4.0f);
             RHII.WaitDeviceIdle();
-            EventSystem::PushEvent(EventResize);
+            EventSystem::PushEvent(EventType::Resize);
         }
         ImGui::Separator();
 
@@ -384,7 +384,7 @@ namespace pe
                     {
                         currentPresentMode = presentModes[i];
                         gSettings.preferred_present_mode = currentPresentMode;
-                        EventSystem::PushEvent(EventPresentMode);
+                        EventSystem::PushEvent(EventType::PresentMode);
                     }
                 }
                 if (isSelected)
@@ -580,21 +580,27 @@ namespace pe
         ImGui_ImplVulkan_CreateFontsTexture();
 
         auto &gpuTimerInfos = m_gpuTimerInfos;
-        auto AddGpuTimerInfo = [&gpuTimerInfos](std::any &&data)
+        auto AddGpuTimerInfo = [&gpuTimerInfos](const std::any &data)
         {
             try
             {
-                auto &commandTimerInfos = std::any_cast<std::vector<GpuTimerInfo> &>(data);
+                // cast to const ref because 'data' is const
+                const auto &commandTimerInfos = std::any_cast<const std::vector<GpuTimerInfo> &>(data);
+                if (commandTimerInfos.empty())
+                    return;
+
                 auto *cmd = commandTimerInfos[0].timer->GetCommandBuffer();
                 uint32_t count = cmd->GetGpuTimerInfosCount();
                 gpuTimerInfos.insert(gpuTimerInfos.end(), commandTimerInfos.begin(), commandTimerInfos.begin() + count);
             }
-            catch (const std::bad_any_cast &)
+            catch (const std::bad_any_cast &ex)
             {
-                PE_ERROR("Bad any cast in GUI::Init()::AddGpuTimerInfo " + e.what());
+                PE_ERROR(std::string("Bad any cast in GUI::Init()::AddGpuTimerInfo: ") + ex.what());
             }
         };
-        EventSystem::RegisterCallback(EventAfterCommandWait, AddGpuTimerInfo);
+
+        EventSystem::RegisterEvent(EventType::AfterCommandWait);
+        EventSystem::RegisterCallback(EventType::AfterCommandWait, std::move(AddGpuTimerInfo));
 
         queue->WaitIdle();
     }

@@ -680,7 +680,7 @@ namespace pe
             }
 
             nodeInfo.dirty = false;
-            for (int i = 0; i < RHII.GetSwapchainImageCount(); i++)
+            for (uint32_t i = 0; i < RHII.GetSwapchainImageCount(); i++)
             {
                 nodeInfo.dirtyUniforms[i] = true;
                 dirtyUniforms[i] = true;

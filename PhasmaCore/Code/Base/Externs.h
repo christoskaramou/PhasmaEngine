@@ -3,15 +3,6 @@
 namespace pe
 {
     // PREDEFINED EVENTS ---------------
-    extern size_t EventQuit;
-    extern size_t EventCustom;
-    extern size_t EventSetWindowTitle;
-    extern size_t EventCompileShaders;
-    extern size_t EventCompileScripts;
-    extern size_t EventResize;
-    extern size_t EventFileWrite;
-    extern size_t EventPresentMode;
-    extern size_t EventAfterCommandWait;
     // ---------------------------------
 
     extern bool IsDepthStencil(vk::Format format);

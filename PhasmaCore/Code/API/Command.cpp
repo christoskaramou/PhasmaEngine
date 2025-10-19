@@ -804,7 +804,7 @@ namespace pe
         }
 
 #if PE_DEBUG_MODE
-        EventSystem::DispatchEvent(EventAfterCommandWait, m_gpuTimerInfos);
+        EventSystem::DispatchEvent(EventType::AfterCommandWait, m_gpuTimerInfos);
         m_gpuTimerInfosCount = 0;
 #endif
     }
