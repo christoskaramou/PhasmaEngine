@@ -15,9 +15,6 @@
 
 namespace pe
 {
-    // Main thread id
-    std::thread::id e_MainThreadID = std::this_thread::get_id();
-
     App::App() : m_frameTimer(FrameTimer::Instance())
     {
         if (!SDL_WasInit(SDL_INIT_VIDEO | SDL_INIT_EVENTS))

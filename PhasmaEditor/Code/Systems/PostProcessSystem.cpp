@@ -46,7 +46,7 @@ namespace pe
         {
             if (renderPassComponent->IsEnabled())
             {
-                futures.push_back(e_Update_ThreadPool.Enqueue([renderPassComponent, camera_main]()
+                futures.push_back(ThreadPool::Update.Enqueue([renderPassComponent, camera_main]()
                                                               { renderPassComponent->Update(); }));
             }
         }

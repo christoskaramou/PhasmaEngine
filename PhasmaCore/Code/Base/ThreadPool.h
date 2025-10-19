@@ -11,6 +11,14 @@ namespace pe
         template <class F, class... Args>
         auto Enqueue(F &&fn, Args &&...args) -> std::shared_future<std::invoke_result_t<F, Args...>>;
 
+        static ThreadPool General;
+        static ThreadPool Update;
+        static ThreadPool Render;
+        static ThreadPool FW;
+        static ThreadPool GUI;
+        // Main thread id
+        static std::thread::id MainThreadID;
+
     private:
         std::vector<std::thread> m_workers;
         std::deque<std::function<void()>> m_tasks;

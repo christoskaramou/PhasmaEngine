@@ -61,11 +61,11 @@ namespace pe
 
                         s_modelLoading = false;
                     };
-                    e_GUI_ThreadPool.Enqueue(loadAsync);
+                    ThreadPool::GUI.Enqueue(loadAsync);
                 }
             };
 
-            e_GUI_ThreadPool.Enqueue(lambda);
+            ThreadPool::GUI.Enqueue(lambda);
         }
     }
 
@@ -81,7 +81,7 @@ namespace pe
                     EventSystem::PushEvent(EventType::Quit);
                 }
             };
-            e_GUI_ThreadPool.Enqueue(lambda);
+            ThreadPool::GUI.Enqueue(lambda);
         }
     }
 
@@ -334,7 +334,7 @@ namespace pe
                     std::string s = Path::Executable + "Assets/Shaders/" + gSettings.shader_list[i];
                     auto lambda = [s]()
                     { system(s.c_str()); };
-                    e_GUI_ThreadPool.Enqueue(lambda);
+                    ThreadPool::GUI.Enqueue(lambda);
                 }
             }
         }
@@ -372,13 +372,13 @@ namespace pe
         ImGui::Text("Present Mode");
         static vk::PresentModeKHR currentPresentMode = RHII.GetSurface()->GetPresentMode();
 
-        if (ImGui::BeginCombo("##present_mode", PresentModeToString(currentPresentMode)))
+        if (ImGui::BeginCombo("##present_mode", RHII.PresentModeToString(currentPresentMode)))
         {
             const auto &presentModes = RHII.GetSurface()->GetSupportedPresentModes();
             for (uint32_t i = 0; i < static_cast<uint32_t>(presentModes.size()); i++)
             {
                 const bool isSelected = (currentPresentMode == presentModes[i]);
-                if (ImGui::Selectable(PresentModeToString(presentModes[i]), isSelected))
+                if (ImGui::Selectable(RHII.PresentModeToString(presentModes[i]), isSelected))
                 {
                     if (currentPresentMode != presentModes[i])
                     {

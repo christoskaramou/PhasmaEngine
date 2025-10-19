@@ -32,10 +32,10 @@ namespace pe
             attachmentDescription.finalLayout = vk::ImageLayout::eAttachmentOptimal;
             attachmentsVK.push_back(attachmentDescription);
 
-            if (HasDepth(attachment.image->GetFormat()))
+            if (VulkanHelpers::HasDepth(attachment.image->GetFormat()))
             {
                 depthStencilReferenceVK.attachment = attachmentIndex++;
-                depthStencilReferenceVK.aspectMask = GetAspectMask(attachment.image->GetFormat());
+                depthStencilReferenceVK.aspectMask = VulkanHelpers::GetAspectMask(attachment.image->GetFormat());
                 depthStencilReferenceVK.layout = vk::ImageLayout::eAttachmentOptimal;
             }
             else
@@ -43,7 +43,7 @@ namespace pe
                 vk::AttachmentReference2 reference{};
                 reference.attachment = attachmentIndex++;
                 reference.layout = vk::ImageLayout::eAttachmentOptimal;
-                reference.aspectMask = GetAspectMask(attachment.image->GetFormat());
+                reference.aspectMask = VulkanHelpers::GetAspectMask(attachment.image->GetFormat());
                 colorReferencesVK.push_back(reference);
             }
         }

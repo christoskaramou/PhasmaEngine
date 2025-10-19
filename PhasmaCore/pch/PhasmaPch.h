@@ -75,7 +75,6 @@
 #include "Base/FileSystem.h"
 #include "Base/FileWatcher.h"
 #include "Base/EventSystem.h"
-#include "Base/Externs.h"
 
 #include "ECS/Component.h"
 #include "ECS/System.h"
@@ -83,5 +82,6 @@
 #include "ECS/Context.h"
 
 #include "API/Debug.h"
+#include "API/Helpers.h"
 
 #define STBI_MSC_SECURE_CRT

@@ -116,6 +116,7 @@ namespace pe
         SystemProcMem GetSystemAndProcessMemory();
         GpuMemorySnapshot GetGpuMemorySnapshot();
         void ChangePresentMode(vk::PresentModeKHR mode);
+        const char *PresentModeToString(vk::PresentModeKHR presentMode);
 
         uint32_t GetWidth() const;
         uint32_t GetHeight() const;
@@ -149,4 +150,6 @@ namespace pe
         uint32_t m_maxPushConstantsSize;
         uint32_t m_maxDrawIndirectCount;
     };
+
+    inline RHI &RHII = *RHI::Get();
 }

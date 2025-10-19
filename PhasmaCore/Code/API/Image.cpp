@@ -267,7 +267,7 @@ namespace pe
         barrier.srcQueueFamilyIndex = oldInfo.queueFamilyId;
         barrier.dstQueueFamilyIndex = info.queueFamilyId;
         barrier.image = image.m_apiHandle;
-        barrier.subresourceRange.aspectMask = GetAspectMask(image.m_createInfo.format);
+        barrier.subresourceRange.aspectMask = VulkanHelpers::GetAspectMask(image.m_createInfo.format);
         barrier.subresourceRange.baseMipLevel = info.baseMipLevel;
         barrier.subresourceRange.levelCount = mipLevels;
         barrier.subresourceRange.baseArrayLayer = info.baseArrayLayer;
@@ -317,7 +317,7 @@ namespace pe
             barrier.srcQueueFamilyIndex = cmd->GetFamilyId();
             barrier.dstQueueFamilyIndex = cmd->GetFamilyId();
             barrier.image = image->m_apiHandle;
-            barrier.subresourceRange.aspectMask = GetAspectMask(imageInfo.format);
+            barrier.subresourceRange.aspectMask = VulkanHelpers::GetAspectMask(imageInfo.format);
             barrier.subresourceRange.baseMipLevel = info.baseMipLevel;
             barrier.subresourceRange.levelCount = mipLevels;
             barrier.subresourceRange.baseArrayLayer = info.baseArrayLayer;
@@ -389,7 +389,7 @@ namespace pe
         viewInfo.image = m_apiHandle;
         viewInfo.viewType = type;
         viewInfo.format = m_createInfo.format;
-        viewInfo.subresourceRange.aspectMask = GetAspectMask(m_createInfo.format);
+        viewInfo.subresourceRange.aspectMask = VulkanHelpers::GetAspectMask(m_createInfo.format);
         viewInfo.subresourceRange.baseMipLevel = mip == -1 ? 0 : mip;
         viewInfo.subresourceRange.levelCount = mip == -1 ? m_createInfo.mipLevels : 1;
         viewInfo.subresourceRange.baseArrayLayer = 0;
@@ -442,7 +442,7 @@ namespace pe
         region.bufferOffset = 0;
         region.bufferRowLength = 0;
         region.bufferImageHeight = 0;
-        region.imageSubresource.aspectMask = GetAspectMask(m_createInfo.format);
+        region.imageSubresource.aspectMask = VulkanHelpers::GetAspectMask(m_createInfo.format);
         region.imageSubresource.mipLevel = mipLevel;
         region.imageSubresource.baseArrayLayer = baseArrayLayer;
         region.imageSubresource.layerCount = layerCount ? layerCount : m_createInfo.arrayLayers;
@@ -482,12 +482,12 @@ namespace pe
         Image::Barriers(cmd, barriers);
 
         vk::ImageCopy2 region{};
-        region.srcSubresource.aspectMask = GetAspectMask(m_createInfo.format);
+        region.srcSubresource.aspectMask = VulkanHelpers::GetAspectMask(m_createInfo.format);
         region.srcSubresource.baseArrayLayer = 0;
         region.srcSubresource.layerCount = 1;
         region.srcSubresource.mipLevel = 0;
         region.srcOffset = vk::Offset3D{0, 0, 0};
-        region.dstSubresource.aspectMask = GetAspectMask(m_createInfo.format);
+        region.dstSubresource.aspectMask = VulkanHelpers::GetAspectMask(m_createInfo.format);
         region.dstSubresource.baseArrayLayer = 0;
         region.dstSubresource.layerCount = 1;
         region.dstSubresource.mipLevel = 0;

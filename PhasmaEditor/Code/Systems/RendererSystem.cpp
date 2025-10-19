@@ -27,27 +27,6 @@
 
 namespace pe
 {
-    const char *PresentModeToString(vk::PresentModeKHR presentMode)
-    {
-        const char *modesNames[] = {"Immediate", "Mailbox", "Fifo", "FifoRelaxed", ""};
-        switch (presentMode)
-        {
-        case vk::PresentModeKHR::eImmediate:
-            return modesNames[0];
-        case vk::PresentModeKHR::eMailbox:
-            return modesNames[1];
-        case vk::PresentModeKHR::eFifo:
-            return modesNames[2];
-        case vk::PresentModeKHR::eFifoRelaxed:
-            return modesNames[3];
-        default:
-            break;
-        }
-
-        PE_ERROR("Unknown PresentMode");
-        return modesNames[4];
-    }
-
     void RendererSystem::LoadResources(CommandBuffer *cmd)
     {
         // SKYBOXES LOAD
@@ -75,7 +54,7 @@ namespace pe
         std::string title = "PhasmaEngine";
         title += " - Device: " + RHII.GetGpuName();
         title += " - API: Vulkan";
-        title += " - Present Mode: " + std::string(PresentModeToString(RHII.GetSurface()->GetPresentMode()));
+        title += " - Present Mode: " + std::string(RHII.PresentModeToString(RHII.GetSurface()->GetPresentMode()));
 #if PE_DEBUG
         title += " - Debug";
 #elif PE_RELEASE
@@ -146,7 +125,7 @@ namespace pe
         std::vector<std::shared_future<void>> futures;
         futures.reserve(m_renderPassComponents.size());
         for (auto &rc : m_renderPassComponents)
-            futures.push_back(e_Update_ThreadPool.Enqueue([rc, camera_main]()
+            futures.push_back(ThreadPool::Update.Enqueue([rc, camera_main]()
                                                           { rc->Update(); }));
 
         for (auto &future : futures)
@@ -360,11 +339,11 @@ namespace pe
         vk::ImageBlit region{};
         region.srcOffsets[0] = vk::Offset3D{0, 0, 0};
         region.srcOffsets[1] = vk::Offset3D{static_cast<int32_t>(m_viewportRT->GetWidth()), static_cast<int32_t>(m_viewportRT->GetHeight()), 1};
-        region.srcSubresource.aspectMask = GetAspectMask(m_viewportRT->GetFormat());
+        region.srcSubresource.aspectMask = VulkanHelpers::GetAspectMask(m_viewportRT->GetFormat());
         region.srcSubresource.layerCount = 1;
         region.dstOffsets[0] = vk::Offset3D{static_cast<int32_t>(vp.x), static_cast<int32_t>(vp.y), 0};
         region.dstOffsets[1] = vk::Offset3D{static_cast<int32_t>(vp.x) + static_cast<int32_t>(vp.width), static_cast<int32_t>(vp.y) + static_cast<int32_t>(vp.height), 1};
-        region.dstSubresource.aspectMask = GetAspectMask(m_displayRT->GetFormat());
+        region.dstSubresource.aspectMask = VulkanHelpers::GetAspectMask(m_displayRT->GetFormat());
         region.dstSubresource.layerCount = 1;
 
         cmd->BlitImage(m_viewportRT, m_displayRT, region, filter);
@@ -543,11 +522,11 @@ namespace pe
         vk::ImageBlit region{};
         region.srcOffsets[0] = vk::Offset3D{0, 0, 0};
         region.srcOffsets[1] = vk::Offset3D{static_cast<int32_t>(src->GetWidth()), static_cast<int32_t>(src->GetHeight()), 1};
-        region.srcSubresource.aspectMask = GetAspectMask(src->GetFormat());
+        region.srcSubresource.aspectMask = VulkanHelpers::GetAspectMask(src->GetFormat());
         region.srcSubresource.layerCount = 1;
         region.dstOffsets[0] = vk::Offset3D{(int32_t)vp.x, (int32_t)vp.y, 0};
         region.dstOffsets[1] = vk::Offset3D{(int32_t)vp.x + (int32_t)vp.width, (int32_t)vp.y + (int32_t)vp.height, 1};
-        region.dstSubresource.aspectMask = GetAspectMask(swapchainImage->GetFormat());
+        region.dstSubresource.aspectMask = VulkanHelpers::GetAspectMask(swapchainImage->GetFormat());
         region.dstSubresource.layerCount = 1;
 
         ImageBarrierInfo barrier{};

@@ -408,10 +408,10 @@ namespace pe
                 prci.colorAttachmentCount = colorAttachmentCount;
                 prci.pColorAttachmentFormats = vkFormats.data();
 
-                if (HasDepth(info.depthFormat))
+                if (VulkanHelpers::HasDepth(info.depthFormat))
                 {
                     prci.depthAttachmentFormat = info.depthFormat;
-                    if (HasStencil(info.depthFormat))
+                    if (VulkanHelpers::HasStencil(info.depthFormat))
                         prci.stencilAttachmentFormat = info.depthFormat;
                 }
 
