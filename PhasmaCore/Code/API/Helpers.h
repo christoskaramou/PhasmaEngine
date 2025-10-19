@@ -1,6 +1,6 @@
-namespace pe
+namespace pe::VulkanHelpers
 {
-    bool IsDepthAndStencil(vk::Format format)
+    inline static bool IsDepthAndStencil(vk::Format format)
     {
         switch (format)
         {
@@ -12,7 +12,7 @@ namespace pe
         }
     }
 
-    bool IsDepthOnly(vk::Format format)
+    inline static bool IsDepthOnly(vk::Format format)
     {
         switch (format)
         {
@@ -23,7 +23,7 @@ namespace pe
         }
     }
 
-    bool IsStencilOnly(vk::Format format)
+    inline static bool IsStencilOnly(vk::Format format)
     {
         switch (format)
         {
@@ -34,17 +34,17 @@ namespace pe
         }
     }
 
-    bool HasDepth(vk::Format format)
+    inline static bool HasDepth(vk::Format format)
     {
         return IsDepthOnly(format) || IsDepthAndStencil(format);
     }
 
-    bool HasStencil(vk::Format format)
+    inline static bool HasStencil(vk::Format format)
     {
         return IsStencilOnly(format) || IsDepthAndStencil(format);
     }
 
-    vk::ImageAspectFlags GetAspectMask(vk::Format format)
+    inline static vk::ImageAspectFlags GetAspectMask(vk::Format format)
     {
         vk::ImageAspectFlags flags{};
 

@@ -93,7 +93,7 @@ namespace pe
             }
         };
 
-        e_FW_ThreadPool.Enqueue(callback);
+        ThreadPool::FW.Enqueue(callback);
     }
 
     FileWatcher::FileWatcher(const std::string &file, Func &&callback)

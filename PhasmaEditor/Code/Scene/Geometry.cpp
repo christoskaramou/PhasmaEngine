@@ -597,7 +597,7 @@ namespace pe
             for (int i = 0; i < model.nodes.size(); i++)
             {
                 if (model.nodes[i].mesh > -1)
-                    futures.push_back(e_Update_ThreadPool.Enqueue(&Geometry::CullNodePrimitives, this, std::ref(model), i));
+                    futures.push_back(ThreadPool::Update.Enqueue(&Geometry::CullNodePrimitives, this, std::ref(model), i));
             }
         }
 

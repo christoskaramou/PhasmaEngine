@@ -24,8 +24,6 @@
 
 namespace pe
 {
-    RHI &RHII = *RHI::Get();
-
     static inline uint32_t VkVendorID(const vk::PhysicalDevice &gpu)
     {
         return gpu.getProperties().vendorID; // 0x10DE NVIDIA, 0x1002 AMD, 0x8086 Intel
@@ -948,7 +946,7 @@ namespace pe
 
         // Set Window Title
         std::string title = "PhasmaEngine";
-        title += " - Device: " + RHII.GetGpuName();
+        title += " - Device: " + GetGpuName();
         title += " - API: Vulkan";
         title += " - Present Mode: " + std::string(PresentModeToString(m_surface->GetPresentMode()));
 #if PE_DEBUG
@@ -962,6 +960,27 @@ namespace pe
 #endif
 
         EventSystem::DispatchEvent(EventType::SetWindowTitle, title);
+    }
+
+    const char *RHI::PresentModeToString(vk::PresentModeKHR presentMode)
+    {
+        const char *modesNames[] = {"Immediate", "Mailbox", "Fifo", "FifoRelaxed", ""};
+        switch (presentMode)
+        {
+        case vk::PresentModeKHR::eImmediate:
+            return modesNames[0];
+        case vk::PresentModeKHR::eMailbox:
+            return modesNames[1];
+        case vk::PresentModeKHR::eFifo:
+            return modesNames[2];
+        case vk::PresentModeKHR::eFifoRelaxed:
+            return modesNames[3];
+        default:
+            break;
+        }
+
+        PE_ERROR("Unknown PresentMode");
+        return modesNames[4];
     }
 
     uint32_t RHI::GetWidth() const { return m_surface->GetActualExtent().width; }
