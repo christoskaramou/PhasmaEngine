@@ -34,6 +34,12 @@ namespace pe
 
     CommandBuffer::~CommandBuffer()
     {
+        Event::Destroy(m_event);
+
+#if PE_DEBUG_MODE
+        for (auto &gpuTimerInfo : m_gpuTimerInfos)
+            GpuTimer::Destroy(gpuTimerInfo.timer);
+#endif
     }
 
     void CommandBuffer::Begin()
@@ -415,6 +421,27 @@ namespace pe
 
             return newPipeline;
         }
+    }
+
+    void CommandBuffer::ClearCache()
+    {
+        for (auto &[hash, renderPass] : s_renderPasses)
+        {
+            RenderPass::Destroy(renderPass);
+        }
+        s_renderPasses.clear();
+
+        for (auto &[hash, framebuffer] : s_framebuffers)
+        {
+            Framebuffer::Destroy(framebuffer);
+        }
+        s_framebuffers.clear();
+
+        for (auto &[hash, pipeline] : s_pipelines)
+        {
+            Pipeline::Destroy(pipeline);
+        }
+        s_pipelines.clear();
     }
 
     void CommandBuffer::BindGraphicsPipeline()

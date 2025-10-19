@@ -202,50 +202,35 @@ namespace pe
         PE_CHECK(vr);
         m_apiHandle = imageVK;
 
+        vmaSetAllocationName(RHII.GetAllocator(), m_allocation, m_name.c_str());
         Debug::SetObjectName(m_apiHandle, name);
     }
 
     Image::~Image()
     {
         if (m_rtv)
-        {
             RHII.GetDevice().destroyImageView(m_rtv);
-            m_rtv = vk::ImageView{};
-        }
+
         if (m_srv)
-        {
             RHII.GetDevice().destroyImageView(m_srv);
-            m_srv = vk::ImageView{};
-        }
+
         for (auto &view : m_srvs)
         {
             if (view)
-            {
                 RHII.GetDevice().destroyImageView(view);
-                view = vk::ImageView{};
-            }
         }
 
         for (auto &view : m_uavs)
         {
             if (view)
-            {
                 RHII.GetDevice().destroyImageView(view);
-                view = vk::ImageView{};
-            }
-        }
-
-        if (m_apiHandle)
-        {
-            vmaDestroyImage(RHII.GetAllocator(), m_apiHandle, m_allocation);
-            m_apiHandle = vk::Image{};
         }
 
         if (m_sampler)
-        {
             Sampler::Destroy(m_sampler);
-            m_sampler = nullptr;
-        }
+
+        if (m_apiHandle)
+            vmaDestroyImage(RHII.GetAllocator(), m_apiHandle, m_allocation);
     }
 
     void Image::Barrier(CommandBuffer *cmd, const ImageBarrierInfo &info)

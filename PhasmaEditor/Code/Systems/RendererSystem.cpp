@@ -304,6 +304,16 @@ namespace pe
     {
         RHII.WaitDeviceIdle();
 
+        for (auto &cmd : m_cmds)
+        {
+            if (cmd)
+            {
+                cmd->Wait();
+                cmd->Return();
+                cmd = nullptr;
+            }
+        }
+
         for (auto &rc : m_renderPassComponents)
             rc->Destroy();
 

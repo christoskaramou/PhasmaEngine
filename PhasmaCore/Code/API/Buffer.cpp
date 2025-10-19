@@ -42,18 +42,14 @@ namespace pe
         PE_CHECK(vmaCreateBuffer(RHII.GetAllocator(), reinterpret_cast<const VkBufferCreateInfo *>(&bufferInfo), &allocationCreateInfo, &vkBuffer, &m_allocation, &m_allocationInfo));
         m_apiHandle = vkBuffer;
 
+        vmaSetAllocationName(RHII.GetAllocator(), m_allocation, m_name.c_str());
         Debug::SetObjectName(m_apiHandle, m_name);
     }
 
     Buffer::~Buffer()
     {
         Unmap();
-
-        if (m_apiHandle)
-        {
-            vmaDestroyBuffer(RHII.GetAllocator(), m_apiHandle, m_allocation);
-            m_apiHandle = nullptr;
-        }
+        vmaDestroyBuffer(RHII.GetAllocator(), m_apiHandle, m_allocation);
     }
 
     void Buffer::Map()

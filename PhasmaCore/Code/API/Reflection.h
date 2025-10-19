@@ -65,8 +65,6 @@ namespace pe
     class Reflection
     {
     public:
-        ~Reflection();
-
         void Init(Shader *shader);
         std::vector<vk::VertexInputBindingDescription> GetVertexBindings();
         std::vector<vk::VertexInputAttributeDescription> GetVertexAttributes();

@@ -23,10 +23,7 @@ namespace pe
     Surface::~Surface()
     {
         if (m_apiHandle)
-        {
             RHII.GetInstance().destroySurfaceKHR(m_apiHandle);
-            m_apiHandle = vk::SurfaceKHR{};
-        }
     }
 
     void Surface::CheckTransfer()

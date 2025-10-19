@@ -78,19 +78,15 @@ namespace pe
 
     Swapchain::~Swapchain()
     {
-        if (m_apiHandle)
-        {
-            RHII.GetDevice().destroySwapchainKHR(m_apiHandle);
-            m_apiHandle = vk::SwapchainKHR{};
-
-        }
-
         for (auto *image : m_images)
         {
-            // Invalidate the image handle, swapchain destroys it
+            // Invalidate image handle first, destroySwapchainKHR will destroy it
             image->ApiHandle() = vk::Image{};
-            delete image;
+            Image::Destroy(image);
         }
+
+        if (m_apiHandle)
+            RHII.GetDevice().destroySwapchainKHR(m_apiHandle);
     }
 
     uint32_t Swapchain::Aquire(Semaphore *semaphore)

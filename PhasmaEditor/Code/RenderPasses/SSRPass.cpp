@@ -153,6 +153,8 @@ namespace pe
 
     void SSRPass::Destroy()
     {
+        Image::Destroy(m_frameImage);
+
         for (auto &uniform : m_reflectionUBs)
             Buffer::Destroy(uniform);
     }

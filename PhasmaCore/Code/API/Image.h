@@ -108,13 +108,13 @@ namespace pe
         void GenerateMipMaps(CommandBuffer *cmd);
         void BlitImage(CommandBuffer *cmd, Image *src, const vk::ImageBlit &region, vk::Filter filter);
 
-        Sampler *m_sampler;
-        VmaAllocation m_allocation;
-        vk::ImageCreateInfo m_createInfo;
-        vk::ImageView m_rtv;                                     // Render target view
-        vk::ImageView m_srv;                                     // Shader resource view
-        std::vector<vk::ImageView> m_srvs;                       // Shader resource views for multiple mip levels
-        std::vector<vk::ImageView> m_uavs;                       // Unordered access views
+        Sampler *m_sampler{};
+        VmaAllocation m_allocation{};
+        vk::ImageCreateInfo m_createInfo{};
+        vk::ImageView m_rtv{};                                   // Render target view
+        vk::ImageView m_srv{};                                   // Shader resource view
+        std::vector<vk::ImageView> m_srvs{};                     // Shader resource views for multiple mip levels
+        std::vector<vk::ImageView> m_uavs{};                     // Unordered access views
         std::vector<std::vector<ImageTrackInfo>> m_trackInfos{}; // Tracking image barrier info for each layer and mip level
         bool m_mipmapsGenerated = false;
         vec4 m_clearColor = vec4(0.0f, 0.0f, 0.0f, 1.0f);

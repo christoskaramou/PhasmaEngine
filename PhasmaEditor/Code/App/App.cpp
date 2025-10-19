@@ -66,9 +66,7 @@ namespace pe
         CreateGlobalSystem<RendererSystem>()->Init(cmd);
         CreateGlobalSystem<PostProcessSystem>()->Init(cmd);
         cmd->End();
-
         queue->Submit(1, &cmd, nullptr, nullptr);
-
         cmd->Wait();
         cmd->Return();
 
@@ -90,6 +88,7 @@ namespace pe
         FileWatcher::Stop();
         FileWatcher::Clear();
         DestroyGlobalSystems();
+        Context::Remove();
         RHII.Destroy();
         RHII.Remove();
         Window::Destroy(m_window);

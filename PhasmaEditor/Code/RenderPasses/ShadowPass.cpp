@@ -250,6 +250,8 @@ namespace pe
         for (auto &texture : m_textures)
             Image::Destroy(texture);
 
+        Sampler::Destroy(m_sampler);
+
         for (auto &uniform : m_uniforms)
             Buffer::Destroy(uniform);
     }

@@ -76,7 +76,6 @@ namespace pe
         void CreateDescriptorPool(uint32_t maxDescriptorSets);
         void CreateGlobalDescriptors();
         void CreateSemaphores(uint32_t semaphoresCount);
-        void InitDownSampler();
         vk::Format GetDepthFormat();
         void WaitDeviceIdle();
         void NextFrame() { m_frameCounter++; }

@@ -97,7 +97,6 @@ namespace pe
 
         std::vector<uint32_t> m_aabbIndices;
         std::vector<vk::ImageView> m_imageViews;
-        std::vector<Sampler *> m_samplers;
         std::vector<bool> m_dirtyDescriptorViews;
 
         std::vector<DrawInfo> m_drawInfosOpaque;
