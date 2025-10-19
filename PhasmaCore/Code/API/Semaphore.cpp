@@ -25,10 +25,7 @@ namespace pe
     Semaphore::~Semaphore()
     {
         if (m_apiHandle)
-        {
             RHII.GetDevice().destroySemaphore(m_apiHandle);
-            m_apiHandle = vk::Semaphore{};
-        }
     }
 
     void Semaphore::Wait(uint64_t value)

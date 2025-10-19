@@ -37,10 +37,6 @@ namespace pe
         }
     }
 
-    Reflection::~Reflection()
-    {
-    }
-
     void Reflection::Init(Shader *shader)
     {
         m_shader = shader;

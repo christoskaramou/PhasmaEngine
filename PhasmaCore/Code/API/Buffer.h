@@ -28,11 +28,11 @@ namespace pe
 
     private:
         friend class CommandBuffer;
-        
+
         static void Barrier(CommandBuffer *cmd, const vk::BufferMemoryBarrier2 &info);
         static void Barriers(CommandBuffer *cmd, const std::vector<vk::BufferMemoryBarrier2> &infos);
 
-        void CopyBuffer(CommandBuffer* cmd, Buffer *src, size_t size, size_t srcOffset, size_t dstOffset);
+        void CopyBuffer(CommandBuffer *cmd, Buffer *src, size_t size, size_t srcOffset, size_t dstOffset);
         void CopyBufferStaged(CommandBuffer *cmd, void *data, size_t size, size_t dtsOffset);
         void CopyDataRaw(const void *data, size_t size, size_t offset = 0);
 

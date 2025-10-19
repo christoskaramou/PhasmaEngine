@@ -596,6 +596,7 @@ namespace pe
             catch (const std::bad_any_cast &ex)
             {
                 PE_ERROR(std::string("Bad any cast in GUI::Init()::AddGpuTimerInfo: ") + ex.what());
+                (void)ex;
             }
         };
 

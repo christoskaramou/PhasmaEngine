@@ -108,9 +108,6 @@ namespace pe
     RenderPass::~RenderPass()
     {
         if (m_apiHandle)
-        {
             RHII.GetDevice().destroyRenderPass(m_apiHandle);
-            m_apiHandle = vk::RenderPass{};
-        }
     }
 }

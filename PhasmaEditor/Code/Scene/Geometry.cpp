@@ -682,5 +682,7 @@ namespace pe
 
         for (auto &indirect : m_indirects)
             Buffer::Destroy(indirect);
+
+        Buffer::Destroy(m_indirectAll);
     }
 }

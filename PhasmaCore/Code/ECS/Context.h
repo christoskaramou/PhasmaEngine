@@ -13,6 +13,12 @@ namespace pe
             return instance;
         }
 
+        static void Remove()
+        {
+            if (Get())
+                delete Get();
+        }
+
         Context(Context const &) = delete; // copy constructor
         Context(Context &&) noexcept = delete; // move constructor
         ~Context() = default; // destructor

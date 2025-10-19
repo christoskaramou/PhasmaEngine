@@ -7,30 +7,33 @@
 namespace pe
 {
     vk::PipelineColorBlendAttachmentState PipelineColorBlendAttachmentState::Default = vk::PipelineColorBlendAttachmentState(
-        /*.blendEnable            =*/ VK_TRUE,
-        /*.srcColorBlendFactor    =*/ vk::BlendFactor::eSrcAlpha,
-        /*.dstColorBlendFactor    =*/ vk::BlendFactor::eOneMinusSrcAlpha,
-        /*.colorBlendOp           =*/ vk::BlendOp::eAdd,
-        /*.srcAlphaBlendFactor    =*/ vk::BlendFactor::eOne,
-        /*.dstAlphaBlendFactor    =*/ vk::BlendFactor::eZero,
-        /*.alphaBlendOp           =*/ vk::BlendOp::eAdd,
-        /*.colorWriteMask         =*/ vk::ColorComponentFlagBits::eR | vk::ColorComponentFlagBits::eG | vk::ColorComponentFlagBits::eB | vk::ColorComponentFlagBits::eA);
+        /*.blendEnable            =*/VK_TRUE,
+        /*.srcColorBlendFactor    =*/vk::BlendFactor::eSrcAlpha,
+        /*.dstColorBlendFactor    =*/vk::BlendFactor::eOneMinusSrcAlpha,
+        /*.colorBlendOp           =*/vk::BlendOp::eAdd,
+        /*.srcAlphaBlendFactor    =*/vk::BlendFactor::eOne,
+        /*.dstAlphaBlendFactor    =*/vk::BlendFactor::eZero,
+        /*.alphaBlendOp           =*/vk::BlendOp::eAdd,
+        /*.colorWriteMask         =*/vk::ColorComponentFlagBits::eR | vk::ColorComponentFlagBits::eG | vk::ColorComponentFlagBits::eB | vk::ColorComponentFlagBits::eA);
 
     vk::PipelineColorBlendAttachmentState PipelineColorBlendAttachmentState::AdditiveColor = vk::PipelineColorBlendAttachmentState(
-        /*.blendEnable            =*/ VK_TRUE,
-        /*.srcColorBlendFactor    =*/ vk::BlendFactor::eOne,
-        /*.dstColorBlendFactor    =*/ vk::BlendFactor::eOne,
-        /*.colorBlendOp           =*/ vk::BlendOp::eAdd,
-        /*.srcAlphaBlendFactor    =*/ vk::BlendFactor::eOne,
-        /*.dstAlphaBlendFactor    =*/ vk::BlendFactor::eOne,
-        /*.alphaBlendOp           =*/ vk::BlendOp::eAdd,
-        /*.colorWriteMask         =*/ vk::ColorComponentFlagBits::eR | vk::ColorComponentFlagBits::eG | vk::ColorComponentFlagBits::eB | vk::ColorComponentFlagBits::eA);
+        /*.blendEnable            =*/VK_TRUE,
+        /*.srcColorBlendFactor    =*/vk::BlendFactor::eOne,
+        /*.dstColorBlendFactor    =*/vk::BlendFactor::eOne,
+        /*.colorBlendOp           =*/vk::BlendOp::eAdd,
+        /*.srcAlphaBlendFactor    =*/vk::BlendFactor::eOne,
+        /*.dstAlphaBlendFactor    =*/vk::BlendFactor::eOne,
+        /*.alphaBlendOp           =*/vk::BlendOp::eAdd,
+        /*.colorWriteMask         =*/vk::ColorComponentFlagBits::eR | vk::ColorComponentFlagBits::eG | vk::ColorComponentFlagBits::eB | vk::ColorComponentFlagBits::eA);
 
     void PassInfo::ReflectDescriptors()
     {
-        for (auto &descriptors : m_descriptors)
+        for (auto &descriptors : m_descriptorsPF)
         {
-            descriptors.clear();
+            // Clean up existing descriptors
+            for (auto &descriptor : descriptors)
+                Descriptor::Destroy(descriptor);
+
             descriptors = Shader::ReflectPassDescriptors(*this);
         }
     }
@@ -39,14 +42,12 @@ namespace pe
     {
         m_hash = {};
 
-        for (auto &descriptors : m_descriptors)
+        for (auto &descriptors : m_descriptorsPF)
         {
             for (auto *descriptor : descriptors)
             {
                 if (descriptor)
-                {
                     m_hash.Combine(reinterpret_cast<intptr_t>(descriptor->GetLayout()));
-                }
             }
         }
 
@@ -138,19 +139,20 @@ namespace pe
           stencilWriteMask{0x00u},
           stencilReference{0}
     {
-        m_descriptors.resize(RHII.GetSwapchainImageCount(), std::vector<Descriptor *>{});
+        m_descriptorsPF.resize(RHII.GetSwapchainImageCount(), std::vector<Descriptor *>{});
     }
 
     PassInfo::~PassInfo()
     {
         Shader::Destroy(pCompShader);
-        pCompShader = nullptr;
-
         Shader::Destroy(pVertShader);
-        pVertShader = nullptr;
-
         Shader::Destroy(pFragShader);
-        pFragShader = nullptr;
+
+        for (auto &descriptors : m_descriptorsPF)
+        {
+            for (auto &descriptor : descriptors)
+                Descriptor::Destroy(descriptor);
+        }
     }
 
     Pipeline::Pipeline(RenderPass *renderPass, PassInfo &info) : m_info(info)

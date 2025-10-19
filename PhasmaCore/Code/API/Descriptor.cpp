@@ -21,10 +21,7 @@ namespace pe
     DescriptorPool::~DescriptorPool()
     {
         if (m_apiHandle)
-        {
             RHII.GetDevice().destroyDescriptorPool(m_apiHandle);
-            m_apiHandle = vk::DescriptorPool{};
-        }
     }
 
     DescriptorLayout::DescriptorLayout(const std::vector<DescriptorBindingInfo> &bindingInfos,
@@ -164,6 +161,11 @@ namespace pe
         m_apiHandle = RHII.GetDevice().allocateDescriptorSets(allocateInfo)[0];
 
         Debug::SetObjectName(m_apiHandle, name);
+    }
+
+    Descriptor::~Descriptor()
+    {
+        DescriptorPool::Destroy(m_pool);
     }
 
     void Descriptor::SetImageViews(uint32_t binding,

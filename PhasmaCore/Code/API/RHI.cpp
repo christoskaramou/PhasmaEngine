@@ -7,6 +7,10 @@
 #include "API/Queue.h"
 #include "API/Buffer.h"
 #include "API/Surface.h"
+#include "API/Event.h"
+#include "API/Framebuffer.h"
+#include "API/RenderPass.h"
+#include "API/Shader.h"
 #include "API/Downsampler/Downsampler.h"
 
 #if defined(PE_WIN32)
@@ -361,16 +365,78 @@ namespace pe
         CreateAllocator();
         CreateSwapchain(m_surface);
         CreateDescriptorPool(150); // General purpose descriptor pool
-        InitDownSampler();
+
+        Downsampler::Init();
     }
 
     void RHI::Destroy()
     {
         WaitDeviceIdle();
-
+        Downsampler::Destroy();
+        DescriptorLayout::ClearCache();
+        Swapchain::Destroy(m_swapchain);
+        Surface::Destroy(m_surface);
         Queue::Destroy(m_mainQueue);
-        PeHandleBase::DestroyAllIHandles();
+        CommandBuffer::ClearCache();
         vmaDestroyAllocator(m_allocator);
+        for (auto &stack : m_binarySemaphores)
+        {
+            while (!stack.empty())
+            {
+                Semaphore::Destroy(stack.top());
+                stack.pop();
+            }
+        }
+        for (auto &stack : m_usedBinarySemaphores)
+        {
+            while (!stack.empty())
+            {
+                Semaphore::Destroy(stack.top());
+                stack.pop();
+            }
+        }
+        DescriptorPool::Destroy(m_descriptorPool);
+
+#if defined(PE_TRACK_RESOURCES)
+        auto &buffers = Buffer::s_handles;
+        auto &commandBuffers = CommandBuffer::s_handles;
+        auto &descriptorPools = DescriptorPool::s_handles;
+        auto &descriptorLayouts = DescriptorLayout::s_handles;
+        auto &descriptors = Descriptor::s_handles;
+        auto &events = Event::s_handles;
+        auto &framebuffers = Framebuffer::s_handles;
+        auto &samplers = Sampler::s_handles;
+        auto &images = Image::s_handles;
+        auto &pipelines = Pipeline::s_handles;
+        auto &commandPools = CommandPool::s_handles;
+        auto &queues = Queue::s_handles;
+        auto &renderPasses = RenderPass::s_handles;
+        auto &semaphores = Semaphore::s_handles;
+        auto &shaders = Shader::s_handles;
+        auto &surfaces = Surface::s_handles;
+        auto &swapchains = Swapchain::s_handles;
+        auto &gpuTimers = GpuTimer::s_handles;
+        
+        PE_ERROR_IF(!buffers.empty(), "Leaked Buffers");
+        PE_ERROR_IF(!commandBuffers.empty(), "Leaked CommandBuffers");
+        PE_ERROR_IF(!descriptorPools.empty(), "Leaked DescriptorPools");
+        PE_ERROR_IF(!descriptorLayouts.empty(), "Leaked DescriptorLayouts");
+        PE_ERROR_IF(!descriptors.empty(), "Leaked Descriptors");
+        PE_ERROR_IF(!events.empty(), "Leaked Events");
+        PE_ERROR_IF(!framebuffers.empty(), "Leaked Framebuffers");
+        PE_ERROR_IF(!samplers.empty(), "Leaked Samplers");
+        PE_ERROR_IF(!images.empty(), "Leaked Images");
+        PE_ERROR_IF(!pipelines.empty(), "Leaked Pipelines");
+        PE_ERROR_IF(!commandPools.empty(), "Leaked CommandPools");
+        PE_ERROR_IF(!queues.empty(), "Leaked Queues");
+        PE_ERROR_IF(!renderPasses.empty(), "Leaked RenderPasses");
+        PE_ERROR_IF(!semaphores.empty(), "Leaked Semaphores");
+        PE_ERROR_IF(!shaders.empty(), "Leaked Shaders");
+        PE_ERROR_IF(!surfaces.empty(), "Leaked Surfaces");
+        PE_ERROR_IF(!swapchains.empty(), "Leaked Swapchains");
+        PE_ERROR_IF(!gpuTimers.empty(), "Leaked GpuTimers");
+#endif
+
         if (m_device)
             m_device.destroy();
         Debug::DestroyDebugMessenger();
@@ -654,11 +720,6 @@ namespace pe
         descPoolsizes[4].type = vk::DescriptorType::eUniformBufferDynamic;
         descPoolsizes[4].descriptorCount = maxDescriptorSets;
         m_descriptorPool = DescriptorPool::Create(descPoolsizes, "RHI_descriptor_pool");
-    }
-
-    void RHI::InitDownSampler()
-    {
-        Downsampler::Init();
     }
 
     vk::Format RHI::GetDepthFormat()

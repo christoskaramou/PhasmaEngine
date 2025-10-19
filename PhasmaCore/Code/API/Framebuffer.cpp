@@ -27,9 +27,6 @@ namespace pe
     Framebuffer::~Framebuffer()
     {
         if (m_apiHandle)
-        {
             RHII.GetDevice().destroyFramebuffer(m_apiHandle);
-            m_apiHandle = vk::Framebuffer{};
-        }
     }
 }

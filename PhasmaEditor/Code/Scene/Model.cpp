@@ -27,6 +27,8 @@ namespace pe
 
     ModelGltf::~ModelGltf()
     {
+        for (auto sampler : m_samplers)
+            Sampler::Destroy(sampler);
         for (auto image : m_images)
             Image::Destroy(image);
     }
@@ -60,9 +62,9 @@ namespace pe
         model.UpdateAllNodeMatrices();
         model.UploadBuffers(cmd);
         cmd->End();
-
         queue->Submit(1, &cmd, nullptr, nullptr);
         cmd->Wait();
+        cmd->Return();
 
         modelGltf->m_render = true;
 

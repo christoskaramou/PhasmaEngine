@@ -216,6 +216,8 @@ namespace pe
 
     void LightOpaquePass::Destroy()
     {
+        Image::Destroy(m_ibl_brdf_lut);
+
         for (auto &uniform : m_uniforms)
             Buffer::Destroy(uniform);
     }
@@ -424,6 +426,8 @@ namespace pe
 
     void LightTransparentPass::Destroy()
     {
+        Image::Destroy(m_ibl_brdf_lut);
+
         for (auto &uniform : m_uniforms)
             Buffer::Destroy(uniform);
     }

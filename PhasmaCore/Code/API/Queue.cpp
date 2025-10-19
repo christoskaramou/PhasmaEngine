@@ -8,7 +8,7 @@
 namespace pe
 {
     CommandPool::CommandPool(Queue *queue, vk::CommandPoolCreateFlags flags, const std::string &name)
-         : m_queue(queue), m_flags(flags)
+        : m_queue(queue), m_flags(flags)
     {
         vk::CommandPoolCreateInfo cpci{};
         cpci.queueFamilyIndex = m_queue->GetFamilyId();
@@ -21,14 +21,11 @@ namespace pe
     CommandPool::~CommandPool()
     {
         if (m_apiHandle)
-        {
             RHII.GetDevice().destroyCommandPool(m_apiHandle);
-            m_apiHandle = vk::CommandPool{};
-        }
 
-        for (uint32_t i = 0; i < m_freeCmdStack.size(); i++)
+        while (!m_freeCmdStack.empty())
         {
-            m_freeCmdStack.top()->ApiHandle() = vk::CommandBuffer{};
+            CommandBuffer::Destroy(m_freeCmdStack.top());
             m_freeCmdStack.pop();
         }
     }
@@ -51,15 +48,13 @@ namespace pe
 
     Queue::~Queue()
     {
+        Semaphore::Destroy(m_submissionsSemaphore);
+
         for (auto &pair : m_commandPools)
         {
             for (CommandPool *pool : pair.second)
-            {
                 CommandPool::Destroy(pool);
-            }
         }
-
-        Semaphore::Destroy(m_submissionsSemaphore);
     }
 
     void Queue::Submit(uint32_t commandBuffersCount, CommandBuffer *const *commandBuffers, Semaphore *wait, Semaphore *signal)

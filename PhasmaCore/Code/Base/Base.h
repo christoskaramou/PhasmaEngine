@@ -209,25 +209,6 @@ namespace pe
     public:
         PeHandleBase() {}
         virtual ~PeHandleBase() {}
-
-        inline static void DestroyAllIHandles()
-        {
-            std::vector<PeHandleBase *> toDestroy;
-            for (auto apiHandle : s_allApiHandles)
-            {
-                toDestroy.push_back(apiHandle);
-            }
-
-            for (auto it = toDestroy.rbegin(); it != toDestroy.rend(); ++it)
-            {
-                (*it)->Suicide();
-            }
-        }
-
-    protected:
-        virtual void Suicide() = 0;
-
-        inline static OrderedMap<PeHandleBase *, PeHandleBase *> s_allApiHandles{};
     };
 
     // Manages a class that contains handles
@@ -244,11 +225,11 @@ namespace pe
         inline static T *Create(Params &&...params)
         {
             ValidateBaseClass<PeHandle<T, API_HANDLE>, T>();
-
             T *ptr = new T(std::forward<Params>(params)...);
 
-            // Useful for deleting
-            s_allApiHandles.insert(ptr, ptr);
+#if defined(PE_TRACK_RESOURCES)
+            s_handles.push_back(ptr);
+#endif
 
             return ptr;
         }
@@ -257,8 +238,14 @@ namespace pe
         {
             ValidateBaseClass<PeHandle<T, API_HANDLE>, T>();
 
-            if (ptr && s_allApiHandles.erase(ptr))
+            if (ptr)
+            {
                 delete ptr; // should call ~T() destructor
+
+#if defined(PE_TRACK_RESOURCES)
+                std::erase(s_handles, ptr);
+#endif
+            }
 
             ptr = nullptr;
         }
@@ -267,15 +254,13 @@ namespace pe
         API_HANDLE &ApiHandle() { return m_apiHandle; }
         const API_HANDLE &ApiHandle() const { return m_apiHandle; }
 
+#if defined(PE_TRACK_RESOURCES)
+        inline static std::deque<T *> s_handles{};
+#endif
+
     protected:
         PeHandle() : m_apiHandle{} {}
         PeHandle(const API_HANDLE &apiHandle) : m_apiHandle{apiHandle} {}
-
-        void Suicide() override
-        {
-            T *temp = static_cast<T *>(this);
-            Destroy(temp);
-        }
 
         API_HANDLE m_apiHandle;
     };

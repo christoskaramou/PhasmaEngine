@@ -858,10 +858,10 @@ namespace pe
         for (uint32_t i = 0; i < MAX_DESCRIPTORS_PER_CMD; i++)
         {
             Descriptor::Destroy(s_DSet[i]);
-            s_DSet[i] = nullptr;
             Buffer::Destroy(s_atomicCounter[i]);
-            s_atomicCounter[i] = nullptr;
         }
+
+        s_passInfo.reset();
     }
 
     void Downsampler::UpdatePassInfo()

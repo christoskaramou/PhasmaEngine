@@ -16,10 +16,7 @@ namespace pe
     Event::~Event()
     {
         if (m_apiHandle)
-        {
             RHII.GetDevice().destroyEvent(m_apiHandle);
-            m_apiHandle = nullptr;
-        }
     }
 
     void Event::Set(CommandBuffer *cmd, Image *image,

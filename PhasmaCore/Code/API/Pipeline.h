@@ -20,7 +20,7 @@ namespace pe
 
         void ReflectDescriptors();
         void UpdateHash() override;
-        const std::vector<Descriptor *> &GetDescriptors(uint32_t frame) const { return m_descriptors[frame]; }
+        const std::vector<Descriptor *> &GetDescriptors(uint32_t frame) const { return m_descriptorsPF[frame]; }
 
         Shader *pVertShader;
         Shader *pFragShader;
@@ -59,7 +59,7 @@ namespace pe
         std::vector<vk::ShaderStageFlags> m_pushConstantStages;
         std::vector<uint32_t> m_pushConstantOffsets;
         std::vector<uint32_t> m_pushConstantSizes;
-        std::vector<std::vector<Descriptor *>> m_descriptors;
+        std::vector<std::vector<Descriptor *>> m_descriptorsPF;
     };
 
     class Pipeline : public PeHandle<Pipeline, vk::Pipeline>

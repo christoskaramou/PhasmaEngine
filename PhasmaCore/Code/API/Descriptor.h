@@ -81,6 +81,13 @@ namespace pe
             }
         }
 
+        inline static void ClearCache()
+        {
+            for (auto &[hash, layout] : s_descriptorLayouts)
+                DescriptorLayout::Destroy(layout);
+            s_descriptorLayouts.clear();
+        }
+
     private:
         uint32_t m_variableCount;
         bool m_pushDescriptor;
@@ -94,6 +101,7 @@ namespace pe
                    vk::ShaderStageFlags stage,
                    bool pushDescriptor,
                    const std::string &name);
+        ~Descriptor();
 
         void SetImageViews(uint32_t binding,
                            const std::vector<vk::ImageView> &views,

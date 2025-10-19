@@ -26,6 +26,8 @@ else()
     message(STATUS "Detected operating system: ${CMAKE_SYSTEM_NAME}")
 endif()
 
+set(PE_DEFS ${PE_DEFS} PE_TRACK_RESOURCES)
+
 if(MSVC)
     include(ProcessorCount)
     ProcessorCount(N)
