@@ -71,9 +71,9 @@ namespace pe
         const ImageTrackInfo &GetCurrentInfo(uint32_t layer = 0, uint32_t mip = 0) { return m_trackInfos[layer][mip]; }
         void SetCurrentInfo(const ImageTrackInfo &info, uint32_t layer = 0, uint32_t mip = 0) { m_trackInfos[layer][mip] = info; }
         void SetCurrentInfoAll(const ImageTrackInfo &info);
-        void CreateRTV(bool useStencil = false);
-        void CreateSRV(vk::ImageViewType type, int mip = -1, bool useStencil = false);
-        void CreateUAV(vk::ImageViewType type, uint32_t mip, bool useStencil = false);
+        void CreateRTV();
+        void CreateSRV(vk::ImageViewType type, int mip = -1);
+        void CreateUAV(vk::ImageViewType type, uint32_t mip);
         bool HasRTV() { return !!m_rtv; }
         bool HasSRV(int mip = -1) { return mip == -1 ? !!m_srv : !!m_srvs[mip]; }
         bool HasUAV(uint32_t mip) { return !!m_uavs[mip]; }
@@ -97,7 +97,7 @@ namespace pe
         static void Barrier(CommandBuffer *cmd, const ImageBarrierInfo &info);
         static void Barriers(CommandBuffer *cmd, const std::vector<ImageBarrierInfo> &infos);
 
-        vk::ImageView CreateImageView(vk::ImageViewType type, int mip = -1, bool useStencil = false);
+        vk::ImageView CreateImageView(vk::ImageViewType type, int mip = -1);
         void CopyDataToImageStaged(CommandBuffer *cmd,
                                    void *data,
                                    size_t size = 0,
