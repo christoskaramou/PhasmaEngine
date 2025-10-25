@@ -334,29 +334,29 @@ namespace pe
         }
     }
 
-    void Image::CreateRTV(bool useStencil)
+    void Image::CreateRTV()
     {
         PE_ERROR_IF(!(m_createInfo.usage & vk::ImageUsageFlagBits::eColorAttachment ||
                       m_createInfo.usage & vk::ImageUsageFlagBits::eDepthStencilAttachment),
                     "Image was not created with ColorAttachmentBit or DepthStencilAttachmentBit for RTV usage");
 
-        m_rtv = CreateImageView(vk::ImageViewType::e2D, 0, useStencil);
+        m_rtv = CreateImageView(vk::ImageViewType::e2D, 0);
     }
 
-    void Image::CreateSRV(vk::ImageViewType type, int mip, bool useStencil)
+    void Image::CreateSRV(vk::ImageViewType type, int mip)
     {
         PE_ERROR_IF(!(m_createInfo.usage & vk::ImageUsageFlagBits::eSampled), "Image was not created with SampledBit for SRV usage");
-        vk::ImageView view = CreateImageView(type, mip, useStencil);
+        vk::ImageView view = CreateImageView(type, mip);
         if (mip == -1)
             m_srv = view;
         else
             m_srvs[mip] = view;
     }
 
-    void Image::CreateUAV(vk::ImageViewType type, uint32_t mip, bool useStencil)
+    void Image::CreateUAV(vk::ImageViewType type, uint32_t mip)
     {
         PE_ERROR_IF(!(m_createInfo.usage & vk::ImageUsageFlagBits::eStorage), "Image was not created with StorageBit for UAV usage");
-        m_uavs[mip] = CreateImageView(type, static_cast<int>(mip), useStencil);
+        m_uavs[mip] = CreateImageView(type, static_cast<int>(mip));
     }
 
     uint32_t Image::CalculateMips(uint32_t width, uint32_t height)
@@ -368,7 +368,7 @@ namespace pe
         return min(mips, maxMips);
     }
 
-    vk::ImageView Image::CreateImageView(vk::ImageViewType type, int mip, bool useStencil)
+    vk::ImageView Image::CreateImageView(vk::ImageViewType type, int mip)
     {
         vk::ImageViewCreateInfo viewInfo{};
         viewInfo.image = m_apiHandle;

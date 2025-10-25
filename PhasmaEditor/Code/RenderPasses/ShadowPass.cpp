@@ -26,8 +26,8 @@ namespace pe
             texture = Image::Create(info, "ShadowMap_" + std::to_string(i++));
             texture->SetClearColor(vec4(Color::Depth, Color::Stencil, 0.0f, 1.0f));
 
-            texture->CreateRTV(true);
-            texture->CreateSRV(vk::ImageViewType::e2D, -1, true);
+            texture->CreateRTV();
+            texture->CreateSRV(vk::ImageViewType::e2D, -1);
         }
 
         vk::SamplerCreateInfo samplerInfo = Sampler::CreateInfoInit();
