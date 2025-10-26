@@ -77,8 +77,7 @@ namespace pe
         m_passInfo->depthCompareOp = vk::CompareOp::eEqual; // we use depth prepass for opaque
         m_passInfo->depthTestEnable = true;
         m_passInfo->depthWriteEnable = false;
-        m_passInfo->ReflectDescriptors();
-        m_passInfo->UpdateHash();
+        m_passInfo->Update();
     }
 
     void GbufferOpaquePass::PassBarriers(CommandBuffer *cmd)
@@ -206,8 +205,7 @@ namespace pe
         m_passInfo->depthCompareOp = Settings::Get<GlobalSettings>().reverse_depth ? vk::CompareOp::eGreaterOrEqual : vk::CompareOp::eLessOrEqual;
         m_passInfo->depthTestEnable = true;
         m_passInfo->depthWriteEnable = true;
-        m_passInfo->ReflectDescriptors();
-        m_passInfo->UpdateHash();
+        m_passInfo->Update();
     }
 
     void GbufferTransparentPass::PassBarriers(CommandBuffer *cmd)

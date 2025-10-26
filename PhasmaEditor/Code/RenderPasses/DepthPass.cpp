@@ -44,8 +44,7 @@ namespace pe
         m_passInfo->depthFormat = RHII.GetDepthFormat();
         m_passInfo->depthTestEnable = true;
         m_passInfo->depthWriteEnable = true;
-        m_passInfo->ReflectDescriptors();
-        m_passInfo->UpdateHash();
+        m_passInfo->Update();
     }
 
     void DepthPass::CreateUniforms(CommandBuffer *cmd)

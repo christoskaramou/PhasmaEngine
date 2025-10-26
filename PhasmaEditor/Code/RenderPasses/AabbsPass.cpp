@@ -40,8 +40,7 @@ namespace pe
         m_passInfo->colorBlendAttachments = {PipelineColorBlendAttachmentState::Default};
         m_passInfo->colorFormats = {m_viewportRT->GetFormat()};
         m_passInfo->depthFormat = m_depthRT->GetFormat();
-        m_passInfo->ReflectDescriptors();
-        m_passInfo->UpdateHash();
+        m_passInfo->Update();
     }
 
     void AabbsPass::Draw(CommandBuffer *cmd)

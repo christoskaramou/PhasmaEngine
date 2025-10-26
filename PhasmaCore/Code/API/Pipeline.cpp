@@ -26,6 +26,54 @@ namespace pe
         /*.alphaBlendOp           =*/vk::BlendOp::eAdd,
         /*.colorWriteMask         =*/vk::ColorComponentFlagBits::eR | vk::ColorComponentFlagBits::eG | vk::ColorComponentFlagBits::eB | vk::ColorComponentFlagBits::eA);
 
+    PassInfo::PassInfo()
+        : pVertShader{},
+          pFragShader{},
+          pCompShader{},
+          topology{vk::PrimitiveTopology::eTriangleList},
+          polygonMode{vk::PolygonMode::eFill},
+          cullMode{vk::CullModeFlagBits::eBack},
+          lineWidth{1.0f},
+          blendEnable{false},
+          colorBlendAttachments{},
+          dynamicStates{},
+          colorFormats{},
+          depthFormat{vk::Format::eUndefined},
+          depthWriteEnable{true},
+          depthTestEnable{true},
+          depthCompareOp{Settings::Get<GlobalSettings>().reverse_depth ? vk::CompareOp::eGreaterOrEqual : vk::CompareOp::eLessOrEqual},
+          pipelineCache{},
+          stencilTestEnable{false},
+          stencilFailOp{vk::StencilOp::eKeep},
+          stencilPassOp{vk::StencilOp::eReplace},
+          stencilDepthFailOp{vk::StencilOp::eKeep},
+          stencilCompareOp{vk::CompareOp::eAlways},
+          stencilCompareMask{0x00u},
+          stencilWriteMask{0x00u},
+          stencilReference{0}
+    {
+        m_descriptorsPF.resize(RHII.GetSwapchainImageCount(), std::vector<Descriptor *>{});
+    }
+
+    PassInfo::~PassInfo()
+    {
+        Shader::Destroy(pCompShader);
+        Shader::Destroy(pVertShader);
+        Shader::Destroy(pFragShader);
+
+        for (auto &descriptors : m_descriptorsPF)
+        {
+            for (auto &descriptor : descriptors)
+                Descriptor::Destroy(descriptor);
+        }
+    }
+
+    void PassInfo::Update()
+    {
+        ReflectDescriptors();
+        UpdateHash();
+    }
+
     void PassInfo::ReflectDescriptors()
     {
         for (auto &descriptors : m_descriptorsPF)
@@ -110,48 +158,6 @@ namespace pe
             m_hash.Combine(stencilReference);
 
             m_hash.Combine(reinterpret_cast<intptr_t>(static_cast<VkPipelineCache>(pipelineCache)));
-        }
-    }
-
-    PassInfo::PassInfo()
-        : pVertShader{},
-          pFragShader{},
-          pCompShader{},
-          topology{vk::PrimitiveTopology::eTriangleList},
-          polygonMode{vk::PolygonMode::eFill},
-          cullMode{vk::CullModeFlagBits::eBack},
-          lineWidth{1.0f},
-          blendEnable{false},
-          colorBlendAttachments{},
-          dynamicStates{},
-          colorFormats{},
-          depthFormat{vk::Format::eUndefined},
-          depthWriteEnable{true},
-          depthTestEnable{true},
-          depthCompareOp{Settings::Get<GlobalSettings>().reverse_depth ? vk::CompareOp::eGreaterOrEqual : vk::CompareOp::eLessOrEqual},
-          pipelineCache{},
-          stencilTestEnable{false},
-          stencilFailOp{vk::StencilOp::eKeep},
-          stencilPassOp{vk::StencilOp::eReplace},
-          stencilDepthFailOp{vk::StencilOp::eKeep},
-          stencilCompareOp{vk::CompareOp::eAlways},
-          stencilCompareMask{0x00u},
-          stencilWriteMask{0x00u},
-          stencilReference{0}
-    {
-        m_descriptorsPF.resize(RHII.GetSwapchainImageCount(), std::vector<Descriptor *>{});
-    }
-
-    PassInfo::~PassInfo()
-    {
-        Shader::Destroy(pCompShader);
-        Shader::Destroy(pVertShader);
-        Shader::Destroy(pFragShader);
-
-        for (auto &descriptors : m_descriptorsPF)
-        {
-            for (auto &descriptor : descriptors)
-                Descriptor::Destroy(descriptor);
         }
     }
 

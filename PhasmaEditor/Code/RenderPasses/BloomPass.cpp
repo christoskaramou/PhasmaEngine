@@ -35,8 +35,7 @@ namespace pe
         m_passInfo->cullMode = vk::CullModeFlagBits::eBack;
         m_passInfo->colorBlendAttachments = {PipelineColorBlendAttachmentState::Default};
         m_passInfo->colorFormats = {m_brightFilterRT->GetFormat()};
-        m_passInfo->ReflectDescriptors();
-        m_passInfo->UpdateHash();
+        m_passInfo->Update();
     }
 
     void BloomBrightFilterPass::CreateUniforms(CommandBuffer *cmd)
@@ -97,8 +96,7 @@ namespace pe
         m_passInfo->cullMode = vk::CullModeFlagBits::eBack;
         m_passInfo->colorBlendAttachments = {PipelineColorBlendAttachmentState::Default};
         m_passInfo->colorFormats = {m_gaussianBlurHorizontalRT->GetFormat()};
-        m_passInfo->ReflectDescriptors();
-        m_passInfo->UpdateHash();
+        m_passInfo->Update();
     }
 
     void BloomGaussianBlurHorizontalPass::CreateUniforms(CommandBuffer *cmd)
@@ -166,8 +164,7 @@ namespace pe
         m_passInfo->blendEnable = true;
         m_passInfo->colorBlendAttachments = {PipelineColorBlendAttachmentState::AdditiveColor};
         m_passInfo->colorFormats = {m_displayRT->GetFormat()};
-        m_passInfo->ReflectDescriptors();
-        m_passInfo->UpdateHash();
+        m_passInfo->Update();
     }
 
     void BloomGaussianBlurVerticalPass::CreateUniforms(CommandBuffer *cmd)
