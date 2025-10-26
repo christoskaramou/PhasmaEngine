@@ -6,6 +6,7 @@
 #include "API/Swapchain.h"
 #include "API/Queue.h"
 #include "API/Buffer.h"
+#include "API/RingBuffer.h"
 #include "API/Surface.h"
 #include "API/Event.h"
 #include "API/Framebuffer.h"
@@ -378,6 +379,7 @@ namespace pe
         Surface::Destroy(m_surface);
         Queue::Destroy(m_mainQueue);
         CommandBuffer::ClearCache();
+        delete m_uploadMemory;
         vmaDestroyAllocator(m_allocator);
         for (auto &stack : m_binarySemaphores)
         {
@@ -696,6 +698,9 @@ namespace pe
         allocator_info.vulkanApiVersion = apiVersion;
 
         PE_CHECK(vmaCreateAllocator(&allocator_info, &m_allocator));
+
+        m_uploadMemory = new RingBuffer();
+        m_uploadMemory->Allocate(64 * 1024);
     }
 
     void RHI::CreateSwapchain(Surface *surface)

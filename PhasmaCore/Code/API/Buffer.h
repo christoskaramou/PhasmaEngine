@@ -33,7 +33,7 @@ namespace pe
         static void Barriers(CommandBuffer *cmd, const std::vector<vk::BufferMemoryBarrier2> &infos);
 
         void CopyBuffer(CommandBuffer *cmd, Buffer *src, size_t size, size_t srcOffset, size_t dstOffset);
-        void CopyBufferStaged(CommandBuffer *cmd, void *data, size_t size, size_t dtsOffset);
+        void CopyBufferStaged(CommandBuffer *cmd, const void *data, size_t size, size_t dstOffset);
         void CopyDataRaw(const void *data, size_t size, size_t offset = 0);
 
         size_t m_size;

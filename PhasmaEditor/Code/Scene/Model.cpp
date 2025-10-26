@@ -744,7 +744,7 @@ namespace pe
 
         progress = 0;
         total = 1;
-        loading = "Upoading buffers";
+        loading = "Uploading buffers";
 
         Scene &scene = GetGlobalSystem<RendererSystem>()->GetScene();
         scene.AddModel(this);
