@@ -869,9 +869,7 @@ namespace pe
         s_passInfo = std::make_shared<PassInfo>();
         s_passInfo->pCompShader = Shader::Create(c_downsamplerSPV, c_downsamplerSPVSize, vk::ShaderStageFlagBits::eCompute, "mainCS");
         s_passInfo->name = "Downsample_pipeline";
-
-        s_passInfo->ReflectDescriptors();
-        s_passInfo->UpdateHash();
+        s_passInfo->Update();
     }
 
     void Downsampler::CreateUniforms()

@@ -55,8 +55,7 @@ namespace pe
         m_passInfo->dynamicStates = {vk::DynamicState::eViewport, vk::DynamicState::eScissor, vk::DynamicState::eDepthBias};
         m_passInfo->cullMode = vk::CullModeFlagBits::eFront;
         m_passInfo->depthFormat = RHII.GetDepthFormat();
-        m_passInfo->ReflectDescriptors();
-        m_passInfo->UpdateHash();
+        m_passInfo->Update();
     }
 
     void ShadowPass::CreateUniforms(CommandBuffer *cmd)

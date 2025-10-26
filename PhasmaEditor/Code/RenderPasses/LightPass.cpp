@@ -55,8 +55,7 @@ namespace pe
         m_passInfo->depthTestEnable = false;
         m_passInfo->depthWriteEnable = false;
         m_passInfo->stencilTestEnable = false;
-        m_passInfo->ReflectDescriptors();
-        m_passInfo->UpdateHash();
+        m_passInfo->Update();
     }
 
     void LightOpaquePass::CreateUniforms(CommandBuffer *cmd)
@@ -264,8 +263,7 @@ namespace pe
         m_passInfo->colorFormats = {m_viewportRT->GetFormat()};
         m_passInfo->depthTestEnable = false;
         m_passInfo->depthWriteEnable = false;
-        m_passInfo->ReflectDescriptors();
-        m_passInfo->UpdateHash();
+        m_passInfo->Update();
     }
 
     void LightTransparentPass::CreateUniforms(CommandBuffer *cmd)

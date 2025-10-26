@@ -18,8 +18,7 @@ namespace pe
         PassInfo();
         ~PassInfo();
 
-        void ReflectDescriptors();
-        void UpdateHash() override;
+        void Update();
         const std::vector<Descriptor *> &GetDescriptors(uint32_t frame) const { return m_descriptorsPF[frame]; }
 
         Shader *pVertShader;
@@ -55,6 +54,9 @@ namespace pe
         friend class CommandBuffer;
         friend class Pipeline;
         friend class Shader;
+
+        void ReflectDescriptors();
+        void UpdateHash() override;
 
         std::vector<vk::ShaderStageFlags> m_pushConstantStages;
         std::vector<uint32_t> m_pushConstantOffsets;
