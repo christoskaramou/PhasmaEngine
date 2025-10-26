@@ -700,7 +700,6 @@ namespace pe
         PE_CHECK(vmaCreateAllocator(&allocator_info, &m_allocator));
 
         m_uploadMemory = new RingBuffer();
-        m_uploadMemory->Allocate(64 * 1024);
     }
 
     void RHI::CreateSwapchain(Surface *surface)

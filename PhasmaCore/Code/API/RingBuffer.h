@@ -1,10 +1,5 @@
 #pragma once
 
-#include <vector>
-#include <mutex>
-#include <cstdint>
-#include <algorithm>
-
 namespace pe
 {
     class Buffer;
@@ -12,6 +7,8 @@ namespace pe
     struct Allocation
     {
     public:
+        [[nodiscard]] bool Valid() const { return data != nullptr; }
+
         void *data = nullptr;     // mapped data
         size_t size = 0;          // aligned size
         size_t offset = 0;        // byte offset in buffer
@@ -28,7 +25,7 @@ namespace pe
         RingBuffer() = default;
         ~RingBuffer();
 
-        Allocation Allocate(size_t size);
+        [[nodiscard]] Allocation Allocate(size_t size);
         void Free(const Allocation &range);
         void Reset();
 
@@ -49,6 +46,7 @@ namespace pe
             std::vector<Block> blocks; // sorted by offset
 
             void *PtrAt(size_t offset) const;
+            ~Chunk();
         };
 
         static constexpr size_t kAlignment = 16;
@@ -63,9 +61,11 @@ namespace pe
         inline Allocation AllocateFromChunk(Chunk *chunk, size_t sizeAligned);
         inline void FreeInChunk(Chunk *chunk, const Allocation &range);
         inline void MergeFreeBlocks(Chunk *chunk);
-        inline void DestroyUnsused(Chunk *chunk);
+        inline void DestroyUnused(Chunk *chunk);
+        inline bool OwnsChunk(const Chunk *chunk) const;
+        inline Allocation MakeAllocation(Chunk *chunk, size_t sizeAligned, size_t offset) const;
 
-        std::vector<Chunk *> m_chunks;
+        std::vector<std::unique_ptr<Chunk>> m_chunks;
         std::mutex m_mutex;
     };
 }
