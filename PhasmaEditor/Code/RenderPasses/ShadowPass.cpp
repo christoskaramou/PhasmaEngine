@@ -27,7 +27,7 @@ namespace pe
             texture->SetClearColor(vec4(Color::Depth, Color::Stencil, 0.0f, 1.0f));
 
             texture->CreateRTV();
-            texture->CreateSRV(vk::ImageViewType::e2D, -1);
+            texture->CreateSRV(vk::ImageViewType::e2D);
         }
 
         vk::SamplerCreateInfo samplerInfo = Sampler::CreateInfoInit();

@@ -2,6 +2,7 @@
 #include "API/RHI.h"
 #include "API/Command.h"
 #include "API/Buffer.h"
+#include "API/RingBuffer.h"
 #include "API/Downsampler/Downsampler.h"
 #include "tinygltf/stb_image.h"
 
@@ -399,18 +400,9 @@ namespace pe
     {
         PE_ERROR_IF(!cmd, "Image::CopyDataToImageStaged(): no command buffer specified.");
 
-        // Staging buffer
-        Buffer *staging = Buffer::Create(
-            size,
-            vk::BufferUsageFlagBits2::eTransferSrc,
-            VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT,
-            "staging_buffer");
-
-        // Copy data to staging buffer
-        BufferRange range{};
-        range.data = data;
-        range.size = size;
-        staging->Copy(1, &range, false);
+        Allocation alloc = RHII.GetUploadMemory()->Allocate(size);
+        std::memcpy(alloc.data, data, size);
+        alloc.buffer->Flush(size, alloc.offset);
 
         ImageBarrierInfo barrier{};
         barrier.image = this;
@@ -420,11 +412,11 @@ namespace pe
         barrier.baseArrayLayer = baseArrayLayer;
         barrier.arrayLayers = layerCount ? layerCount : m_createInfo.arrayLayers;
         barrier.baseMipLevel = mipLevel;
-        barrier.mipLevels = m_createInfo.mipLevels; // we need to transition all mip levels here, so they are all in the same state
+        barrier.mipLevels = m_createInfo.mipLevels;
         Barrier(cmd, barrier);
 
-        vk::BufferImageCopy2 region;
-        region.bufferOffset = 0;
+        vk::BufferImageCopy2 region{};
+        region.bufferOffset = alloc.offset;
         region.bufferRowLength = 0;
         region.bufferImageHeight = 0;
         region.imageSubresource.aspectMask = VulkanHelpers::GetAspectMask(m_createInfo.format);
@@ -435,16 +427,16 @@ namespace pe
         region.imageExtent = vk::Extent3D{m_createInfo.extent.width, m_createInfo.extent.height, m_createInfo.extent.depth};
 
         vk::CopyBufferToImageInfo2 copyInfo{};
-        copyInfo.srcBuffer = staging->ApiHandle();
+        copyInfo.srcBuffer = alloc.buffer->ApiHandle();
         copyInfo.dstImage = m_apiHandle;
         copyInfo.dstImageLayout = vk::ImageLayout::eTransferDstOptimal;
         copyInfo.regionCount = 1;
         copyInfo.pRegions = &region;
 
         cmd->ApiHandle().copyBufferToImage2(copyInfo);
-        cmd->AddAfterWaitCallback([staging]()
-                                  { Buffer *buf = staging;
-                                    Buffer::Destroy(buf); });
+
+        cmd->AddAfterWaitCallback([alloc]()
+                                  { RHII.GetUploadMemory()->Free(alloc); });
     }
 
     // TODO: add multiple regions for all mip levels

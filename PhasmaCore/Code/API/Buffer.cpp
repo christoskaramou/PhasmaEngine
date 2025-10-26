@@ -1,4 +1,5 @@
 #include "API/Buffer.h"
+#include "API/RingBuffer.h"
 #include "API/RHI.h"
 #include "API/Command.h"
 
@@ -77,7 +78,7 @@ namespace pe
     {
         PE_ERROR_IF(!m_data, "Buffer::CopyDataRaw: Buffer is not mapped");
         PE_ERROR_IF(offset + size > m_size, "Buffer::CopyDataRaw: Source data size is too large");
-        memcpy((char *)m_data + offset, data, size);
+        std::memcpy(static_cast<uint8_t *>(m_data) + offset, data, size);
     }
 
     void Buffer::Copy(uint32_t count, BufferRange *ranges, bool keepMapped)
@@ -98,29 +99,18 @@ namespace pe
         }
     }
 
-    void Buffer::CopyBufferStaged(CommandBuffer *cmd, void *data, size_t size, size_t dtsOffset)
+    void Buffer::CopyBufferStaged(CommandBuffer *cmd, const void *data, size_t size, size_t dstOffset)
     {
-        PE_ERROR_IF(dtsOffset + size > m_size, "Buffer::StagedCopy: Data size is too large");
+        PE_ERROR_IF(dstOffset + size > m_size, "CopyBufferStaged: dst range overflow");
 
-        // Staging buffer
-        Buffer *staging = Buffer::Create(
-            size,
-            vk::BufferUsageFlagBits2::eTransferSrc,
-            VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT,
-            "staging_buffer");
+        Allocation alloc = RHII.GetUploadMemory()->Allocate(size);
+        std::memcpy(alloc.data, data, size);
+        alloc.buffer->Flush(size, alloc.offset);
 
-        // Copy data to staging buffer
-        BufferRange range{};
-        range.data = data;
-        range.size = size;
-        range.offset = 0;
-        staging->Copy(1, &range, false);
+        CopyBuffer(cmd, alloc.buffer, size, alloc.offset, dstOffset);
 
-        // Copy staging buffer to this buffer
-        CopyBuffer(cmd, staging, size, 0, dtsOffset);
-        cmd->AddAfterWaitCallback([staging]()
-                                  { Buffer *buf = staging;
-                                    Buffer::Destroy(buf); });
+        cmd->AddAfterWaitCallback([alloc]()
+                                  { RHII.GetUploadMemory()->Free(alloc); });
     }
 
     void Buffer::Flush(size_t size, size_t offset) const
