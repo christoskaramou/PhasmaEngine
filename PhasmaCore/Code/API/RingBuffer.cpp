@@ -9,17 +9,18 @@ namespace pe
     {
         std::lock_guard<std::mutex> lock(m_mutex);
 
-        for (Chunk *chunk : m_chunks)
-        {
-            Buffer::Destroy(chunk->buffer);
-            delete chunk;
-        }
         m_chunks.clear();
     }
 
     inline void *RingBuffer::Chunk::PtrAt(size_t offset) const
     {
         return static_cast<uint8_t *>(buffer->Data()) + offset;
+    }
+
+    RingBuffer::Chunk::~Chunk()
+    {
+        if (buffer)
+            Buffer::Destroy(buffer);
     }
 
     RingBuffer::Chunk *RingBuffer::CreateChunk(size_t minCapacity)
@@ -34,7 +35,8 @@ namespace pe
                 capacity = grown;
         }
 
-        Chunk *chunk = new Chunk();
+        auto chunkHolder = std::make_unique<Chunk>();
+        Chunk *chunk = chunkHolder.get();
         chunk->buffer = Buffer::Create(
             capacity,
             vk::BufferUsageFlagBits2::eTransferSrc,
@@ -55,7 +57,7 @@ namespace pe
         b.free = true;
         chunk->blocks.push_back(b);
 
-        m_chunks.push_back(chunk);
+        m_chunks.push_back(std::move(chunkHolder));
         return chunk;
     }
 
@@ -90,10 +92,19 @@ namespace pe
         return ~0ull;
     }
 
-    inline Allocation RingBuffer::AllocateFromChunk(Chunk *chunk, size_t sizeAligned)
+    inline Allocation RingBuffer::MakeAllocation(Chunk *chunk, size_t sizeAligned, size_t offset) const
     {
         Allocation alloc{};
+        alloc.data = chunk->PtrAt(offset);
+        alloc.size = sizeAligned;
+        alloc.offset = offset;
+        alloc.buffer = chunk->buffer;
+        alloc.chunk = chunk;
+        return alloc;
+    }
 
+    inline Allocation RingBuffer::AllocateFromChunk(Chunk *chunk, size_t sizeAligned)
+    {
         // 1. try a free block
         {
             int index = FindIndex(chunk, sizeAligned);
@@ -125,12 +136,7 @@ namespace pe
 
                 chunk->usedBytes += sizeAligned;
 
-                alloc.data = chunk->PtrAt(allocOffset);
-                alloc.size = sizeAligned;
-                alloc.offset = allocOffset;
-                alloc.buffer = chunk->buffer;
-                alloc.chunk = chunk;
-                return alloc;
+                return MakeAllocation(chunk, sizeAligned, allocOffset);
             }
         }
 
@@ -193,17 +199,12 @@ namespace pe
 
                 chunk->usedBytes += sizeAligned;
 
-                alloc.data = chunk->PtrAt(appendOffset);
-                alloc.size = sizeAligned;
-                alloc.offset = appendOffset;
-                alloc.buffer = chunk->buffer;
-                alloc.chunk = chunk;
-                return alloc;
+                return MakeAllocation(chunk, sizeAligned, appendOffset);
             }
         }
 
         // failure
-        return alloc;
+        return {};
     }
 
     Allocation RingBuffer::Allocate(size_t size)
@@ -217,18 +218,18 @@ namespace pe
         // try newest chunk first
         if (!m_chunks.empty())
         {
-            Chunk *latest = m_chunks.back();
+            Chunk *latest = m_chunks.back().get();
             Allocation alloc = AllocateFromChunk(latest, sizeAligned);
-            if (alloc.data)
+            if (alloc.Valid())
                 return alloc;
         }
 
         // try other existing chunks
         for (int i = static_cast<int>(m_chunks.size()) - 2; i >= 0; --i)
         {
-            Chunk *chunk = m_chunks[static_cast<size_t>(i)];
+            Chunk *chunk = m_chunks[static_cast<size_t>(i)].get();
             Allocation alloc = AllocateFromChunk(chunk, sizeAligned);
-            if (alloc.data)
+            if (alloc.Valid())
                 return alloc;
         }
 
@@ -277,6 +278,7 @@ namespace pe
     inline void RingBuffer::FreeInChunk(Chunk *chunk, const Allocation &range)
     {
         auto &blocks = chunk->blocks;
+        bool freed = false;
         for (size_t i = 0; i < blocks.size(); ++i)
         {
             Block &block = blocks[i];
@@ -286,15 +288,20 @@ namespace pe
             {
                 block.free = true;
                 chunk->usedBytes -= block.size;
+                freed = true;
                 break;
             }
         }
+
+        PE_ERROR_IF(!freed, "RingBuffer::FreeInChunk: allocation not found in chunk");
+        if (!freed)
+            return;
 
         // Merge and update tail.
         MergeFreeBlocks(chunk);
     }
 
-    inline void RingBuffer::DestroyUnsused(Chunk *chunk)
+    inline void RingBuffer::DestroyUnused(Chunk *chunk)
     {
         if (m_chunks.empty())
             return;
@@ -304,30 +311,31 @@ namespace pe
             return;
 
         // keep the last chunk
-        if (m_chunks.back() == chunk)
+        if (m_chunks.back().get() == chunk)
             return;
 
         // remove and destroy
-        auto it = std::find(m_chunks.begin(), m_chunks.end(), chunk);
+        auto it = std::find_if(m_chunks.begin(), m_chunks.end(),
+                               [chunk](const std::unique_ptr<Chunk> &candidate)
+                               {
+                                   return candidate.get() == chunk;
+                               });
         if (it != m_chunks.end())
-        {
-            Buffer::Destroy(chunk->buffer);
-            delete chunk;
             m_chunks.erase(it);
-        }
     }
 
     void RingBuffer::Free(const Allocation &range)
     {
-        if (!range.data || !range.chunk)
+        if (!range.Valid() || !range.chunk)
             return;
 
         std::lock_guard<std::mutex> lock(m_mutex);
 
         Chunk *chunk = reinterpret_cast<Chunk *>(range.chunk);
+        PE_ERROR_IF(!OwnsChunk(chunk), "RingBuffer::Free: allocation does not belong to this buffer");
 
         FreeInChunk(chunk, range);
-        DestroyUnsused(chunk);
+        DestroyUnused(chunk);
     }
 
     void RingBuffer::Reset()
@@ -338,30 +346,30 @@ namespace pe
             return;
 
         // Keep the latest chunk and destroy the others
-        Chunk *keep = m_chunks.back();
-
-        for (Chunk *chunk : m_chunks)
-        {
-            if (chunk == keep)
-                continue;
-
-            Buffer::Destroy(chunk->buffer);
-            delete chunk;
-        }
-
+        std::unique_ptr<Chunk> keep = std::move(m_chunks.back());
         m_chunks.clear();
-        m_chunks.push_back(keep);
+        m_chunks.push_back(std::move(keep));
+        Chunk *keepPtr = m_chunks.back().get();
 
         // Rebuild keep as a single free block
-        keep->blocks.clear();
-        keep->blocks.reserve(1);
+        keepPtr->blocks.clear();
+        keepPtr->blocks.reserve(1);
         Block b{};
         b.offset = 0;
-        b.size = keep->capacity;
+        b.size = keepPtr->capacity;
         b.free = true;
-        keep->blocks.push_back(b);
+        keepPtr->blocks.push_back(b);
 
-        keep->tail = 0;
-        keep->usedBytes = 0;
+        keepPtr->tail = 0;
+        keepPtr->usedBytes = 0;
+    }
+
+    inline bool RingBuffer::OwnsChunk(const Chunk *chunk) const
+    {
+        return std::any_of(m_chunks.begin(), m_chunks.end(),
+                           [chunk](const std::unique_ptr<Chunk> &candidate)
+                           {
+                               return candidate.get() == chunk;
+                           });
     }
 }
