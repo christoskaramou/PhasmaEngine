@@ -4,6 +4,8 @@ set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 message(STATUS "PhasmaEditor = ${CMAKE_CURRENT_SOURCE_DIR}")
 
+include(FetchContent)
+
 if(MSVC)
     include(ProcessorCount)
     ProcessorCount(N)
@@ -19,6 +21,25 @@ set(CMAKE_RUNTIME_OUTPUT_DIRECTORY_DEBUG "${CMAKE_BINARY_DIR}/Debug")
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY_RELEASE "${CMAKE_BINARY_DIR}/Release")
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY_MINSIZEREL "${CMAKE_BINARY_DIR}/MinSizeRel")
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY_RELWITHDEBINFO "${CMAKE_BINARY_DIR}/RelWithDebInfo")
+
+# # --- Assimp ---
+# message(STATUS "[Phasma] Preparing Assimp (fetch + build) ...")
+# FetchContent_Declare(
+#     assimp
+#     GIT_REPOSITORY https://github.com/assimp/assimp.git
+#     GIT_TAG        v5.4.0
+# )
+# set(ASSIMP_BUILD_TESTS        OFF CACHE BOOL "" FORCE)
+# set(ASSIMP_BUILD_ASSIMP_TOOLS OFF CACHE BOOL "" FORCE)
+# set(ASSIMP_NO_EXPORT          ON  CACHE BOOL "" FORCE)
+# set(BUILD_SHARED_LIBS         OFF CACHE BOOL "" FORCE) # static library
+# set(ASSIMP_BUILD_ZLIB         ON  CACHE BOOL "" FORCE) # some versions of assimp default to system zlib OFF; force ON so it builds clean on Windows
+
+# message(STATUS "[Phasma] FetchContent_MakeAvailable(assimp) -> this will download Assimp if not present")
+# FetchContent_MakeAvailable(assimp)
+
+# message(STATUS "[Phasma] Assimp is now available and will be linked statically.")
+
 
 # Add PhasmaCore subdirectory
 add_subdirectory(PhasmaCore)
@@ -42,7 +63,10 @@ target_include_directories(PhasmaEditor PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/Pha
 # target_link_directories(PhasmaEditor PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/PhasmaEditor/Libs/fsr/Release")
 
 # Libraries
-target_link_libraries(PhasmaEditor PRIVATE PhasmaCore)
+target_link_libraries(PhasmaEditor PRIVATE
+    PhasmaCore
+    #assimp
+)
 
 # target_compile_options(PhasmaEditor PRIVATE -fsanitize=address)
 # target_link_options(PhasmaEditor PRIVATE -fsanitize=address)

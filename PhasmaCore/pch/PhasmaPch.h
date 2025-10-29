@@ -41,6 +41,8 @@
 #include <bitset>
 #include <codecvt>
 #include <optional>
+#include <cstdarg>
+#include <cstdio>
 
 #include "SDL2/SDL.h"
 #include "SDL2/SDL_syswm.h"

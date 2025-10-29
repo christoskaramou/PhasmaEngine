@@ -35,7 +35,7 @@ namespace pe
 
     ModelGltf *ModelGltf::Load(const std::filesystem::path &file)
     {
-        PE_ERROR_IF(!std::filesystem::exists(file), "Model file not found: " + file.string());
+        PE_ERROR_IF(!std::filesystem::exists(file), std::string("Model file not found: " + file.string()).c_str());
 
         ModelGltf *modelGltf = new ModelGltf();
         ModelGltf &model = *modelGltf;
@@ -46,8 +46,7 @@ namespace pe
         auto &gSettings = Settings::Get<GlobalSettings>();
         gSettings.loading_name = "Reading from file";
 
-        if (!model.LoadFile(file, loader, err, warn))
-            PE_ERROR("Failed to load model: " + file.string());
+        PE_ERROR_IF(!model.LoadFile(file, loader, err, warn), std::string("Failed to load model: " + file.string()).c_str());
 
         Queue *queue = RHII.GetMainQueue();
         CommandBuffer *cmd = queue->AcquireCommandBuffer();
@@ -102,7 +101,7 @@ namespace pe
         m_images.reserve(images.size() + 3);
         for (auto &image : images)
         {
-            PE_ERROR_IF(image.image.empty(), "Image data is empty: " + image.uri);
+            PE_ERROR_IF(image.image.empty(), std::string("Image data is empty: " + image.uri).c_str());
 
             vk::ImageCreateInfo info = Image::CreateInfoInit();
             info.format = vk::Format::eR8G8B8A8Unorm;
@@ -113,7 +112,7 @@ namespace pe
 
             Image *uploadImage = Image::Create(info, image.uri);
             uploadImage->CreateSRV(vk::ImageViewType::e2D);
-            PE_ERROR_IF(!uploadImage->GetSRV(), "Failed to create SRV for image: " + image.uri);
+            PE_ERROR_IF(!uploadImage->GetSRV(), std::string("Failed to create SRV for image: " + image.uri).c_str());
 
             void *data = image.image.data();
             size_t size = static_cast<uint32_t>(image.image.size());

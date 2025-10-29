@@ -3081,11 +3081,11 @@ static void vma_aligned_free(void* VMA_NULLABLE ptr)
 #endif
 
 #ifndef VMA_DEBUG_LOG_FORMAT
-   //#define VMA_DEBUG_LOG_FORMAT(format, ...)
-   #define VMA_DEBUG_LOG_FORMAT(format, ...) do { \
-       printf((format), __VA_ARGS__); \
-       printf("\n"); \
-   } while(false)
+   #define VMA_DEBUG_LOG_FORMAT(format, ...)
+//    #define VMA_DEBUG_LOG_FORMAT(format, ...) do { \
+//        printf((format), __VA_ARGS__); \
+//        printf("\n"); \
+//    } while(false)
 #endif
 
 #ifndef VMA_DEBUG_LOG
