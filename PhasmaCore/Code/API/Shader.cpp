@@ -186,11 +186,11 @@ namespace pe
         {
             if (m_type == ShaderCodeType::HLSL)
             {
-                PE_ERROR_IF(!CompileHlsl(localDefines), "Failed to compile shader:" + path);
+                PE_ERROR_IF(!CompileHlsl(localDefines), std::string("Failed to compile shader: " + path).c_str());
             }
             else
             {
-                PE_ERROR_IF(!CompileGlsl(localDefines), "Failed to compile shader: " + path);
+                PE_ERROR_IF(!CompileGlsl(localDefines), std::string("Failed to compile shader: " + path).c_str());
             }
 
             m_cache.WriteSpvToFile(m_spirv);

@@ -77,7 +77,7 @@ namespace pe
         s_module = dlopen(path.c_str(), RTLD_LAZY);
 #endif
 
-        PE_ERROR_IF(!s_module, "Failed to load module: " + path);
+        PE_ERROR_IF(!s_module, std::string("Failed to load module: " + path).c_str());
     }
 
     void ScriptManager::UnloadModule()
