@@ -3,16 +3,11 @@
 #include "API/RHI.h"
 #include "API/Command.h"
 
+#include <algorithm>
+
 namespace pe
 {
-    RingBuffer::~RingBuffer()
-    {
-        std::lock_guard<std::mutex> lock(m_mutex);
-
-        m_chunks.clear();
-    }
-
-    inline void *RingBuffer::Chunk::PtrAt(size_t offset) const
+    void *RingBuffer::Chunk::PtrAt(size_t offset) const
     {
         return static_cast<uint8_t *>(buffer->Data()) + offset;
     }
@@ -23,20 +18,217 @@ namespace pe
             Buffer::Destroy(buffer);
     }
 
+    RingBuffer::~RingBuffer()
+    {
+        std::lock_guard<std::mutex> lock(m_mutex);
+        m_chunks.clear();
+    }
+
+    // -------------------------------------------------------
+    // Static helpers
+    // -------------------------------------------------------
+
+    std::vector<RingBuffer::Block>::iterator
+    RingBuffer::FindBestFitBlock(std::vector<Block> &blocks, size_t sizeAligned)
+    {
+        auto best = blocks.end();
+        size_t bestSize = ~size_t(0);
+
+        for (auto it = blocks.begin(); it != blocks.end(); ++it)
+        {
+            if (it->free && it->size >= sizeAligned && it->size < bestSize)
+            {
+                best = it;
+                bestSize = it->size;
+            }
+        }
+        return best;
+    }
+
+    size_t RingBuffer::TryAppendAtTail(const Chunk *chunk, size_t sizeAligned)
+    {
+        // NOTE:
+        // We assume MergeFreeBlocks() is called on every Free(),
+        // so the memory after 'tail' is always one coalesced free region.
+        // tail is recomputed to max end of USED blocks, so [tail, capacity)
+        // should be free space.
+        //
+        // This is what keeps this cheap and valid.
+        const size_t alignedTail = AlignUp(chunk->tail);
+        return (alignedTail + sizeAligned <= chunk->capacity) ? alignedTail : ~0ull;
+    }
+
+    Allocation RingBuffer::MakeAllocation(Chunk *chunk, size_t sizeAligned, size_t offset)
+    {
+        Allocation alloc{};
+        alloc.data = chunk->PtrAt(offset);
+        alloc.size = sizeAligned;
+        alloc.offset = offset;
+        alloc.buffer = chunk->buffer;
+        alloc.chunk = chunk;
+        return alloc;
+    }
+
+    Allocation RingBuffer::CarveFromBlock(Chunk *chunk,
+                                          std::vector<Block>::iterator it,
+                                          size_t sizeAligned)
+    {
+        const size_t allocOffset = it->offset;
+        const size_t remaining = it->size - sizeAligned;
+
+        // consume the head of this free block
+        it->free = false;
+        it->size = sizeAligned;
+
+        // push the leftover tail (still free) right after it
+        if (remaining > 0)
+        {
+            Block rest{
+                allocOffset + sizeAligned,
+                remaining,
+                true};
+            chunk->blocks.insert(it + 1, rest);
+        }
+
+        const size_t newEnd = allocOffset + sizeAligned;
+        chunk->tail = std::max(chunk->tail, newEnd);
+        chunk->usedBytes += sizeAligned;
+
+        Allocation a = MakeAllocation(chunk, sizeAligned, allocOffset);
+        DebugValidateChunk(chunk);
+        return a;
+    }
+
+    Allocation RingBuffer::AppendNewBlock(Chunk *chunk,
+                                          size_t appendOffset,
+                                          size_t sizeAligned)
+    {
+        // fast path: reuse the last block if it is a matching free tail
+        if (!chunk->blocks.empty())
+        {
+            Block &last = chunk->blocks.back();
+            if (last.free && last.offset == appendOffset)
+            {
+                const size_t remaining = last.size - sizeAligned;
+
+                last.free = false;
+                last.size = sizeAligned;
+
+                if (remaining > 0)
+                {
+                    chunk->blocks.push_back(Block{
+                        appendOffset + sizeAligned,
+                        remaining,
+                        true});
+                }
+
+                const size_t newEnd = appendOffset + sizeAligned;
+                chunk->tail = std::max(chunk->tail, newEnd);
+                chunk->usedBytes += sizeAligned;
+
+                Allocation a = MakeAllocation(chunk, sizeAligned, appendOffset);
+                DebugValidateChunk(chunk);
+                return a;
+            }
+        }
+
+        // otherwise: append a new used block
+        chunk->blocks.push_back(Block{
+            appendOffset,
+            sizeAligned,
+            false});
+
+        const size_t end = appendOffset + sizeAligned;
+        if (end < chunk->capacity)
+        {
+            // trailing free block after the new used block
+            chunk->blocks.push_back(Block{
+                end,
+                chunk->capacity - end,
+                true});
+        }
+
+        chunk->tail = std::max(chunk->tail, end);
+        chunk->usedBytes += sizeAligned;
+
+        Allocation a = MakeAllocation(chunk, sizeAligned, appendOffset);
+        DebugValidateChunk(chunk);
+        return a;
+    }
+
+    void RingBuffer::MergeFreeBlocks(Chunk *chunk)
+    {
+        auto &blocks = chunk->blocks;
+
+        // merge adjacent free blocks in-place
+        for (size_t i = 0; i + 1 < blocks.size();)
+        {
+            Block &curr = blocks[i];
+            Block &next = blocks[i + 1];
+
+            if (curr.free &&
+                next.free &&
+                (curr.offset + curr.size == next.offset))
+            {
+                curr.size += next.size;
+                blocks.erase(blocks.begin() + (i + 1));
+            }
+            else
+            {
+                ++i;
+            }
+        }
+
+        // recompute tail, max end of any USED block
+        size_t maxUsedEnd = 0;
+        for (const Block &blk : blocks)
+        {
+            if (!blk.free)
+            {
+                const size_t end = blk.offset + blk.size;
+                if (end > maxUsedEnd)
+                    maxUsedEnd = end;
+            }
+        }
+        chunk->tail = maxUsedEnd;
+    }
+
+#if defined(_DEBUG)
+    void RingBuffer::DebugValidateChunk(const Chunk *c)
+    {
+        const auto &b = c->blocks;
+        for (size_t i = 1; i < b.size(); ++i)
+        {
+            // 1) strictly increasing offsets
+            // 2) contiguous tiling: prev.offset + prev.size == this.offset
+            PE_ERROR_IF(!(b[i - 1].offset < b[i].offset), "RingBuffer: blocks not strictly ordered by offset");
+            PE_ERROR_IF(b[i - 1].offset + b[i - 1].size != b[i].offset, "RingBuffer: block list not contiguous / sorted");
+        }
+    }
+#endif
+
+    // -------------------------------------------------------
+    // Chunk management
+    // -------------------------------------------------------
+
     RingBuffer::Chunk *RingBuffer::CreateChunk(size_t minCapacity)
     {
         size_t capacity = std::max(kMinCapacity, AlignUp(minCapacity));
 
+        // grow from last capacity using kGrowthFactor
         if (!m_chunks.empty())
         {
-            size_t lastCap = m_chunks.back()->capacity;
-            size_t grown = static_cast<size_t>(static_cast<float>(lastCap) * kGrowthFactor);
+            const size_t lastCap = m_chunks.back()->capacity;
+            const size_t grown =
+                static_cast<size_t>(static_cast<float>(lastCap) * kGrowthFactor);
+
             if (grown > capacity)
                 capacity = grown;
         }
 
         auto chunkHolder = std::make_unique<Chunk>();
         Chunk *chunk = chunkHolder.get();
+
         chunk->buffer = Buffer::Create(
             capacity,
             vk::BufferUsageFlagBits2::eTransferSrc,
@@ -49,161 +241,33 @@ namespace pe
         chunk->tail = 0;
         chunk->usedBytes = 0;
         chunk->blocks.clear();
-        chunk->blocks.reserve(8); // we rarely have more than 8 fragmented blocks
-
-        Block b{};
-        b.offset = 0;
-        b.size = capacity;
-        b.free = true;
-        chunk->blocks.push_back(b);
+        chunk->blocks.reserve(8);
+        chunk->blocks.push_back(Block{0, capacity, true});
 
         m_chunks.push_back(std::move(chunkHolder));
+
+        DebugValidateChunk(chunk);
         return chunk;
     }
 
-    inline int RingBuffer::FindIndex(Chunk *chunk, size_t sizeAligned) const
+    // Try to suballocate from one chunk
+    Allocation RingBuffer::AllocateFromChunk(Chunk *chunk, size_t sizeAligned)
     {
-        int index = -1;
-        size_t size = ~0ull;
-
-        const auto &blocks = chunk->blocks;
-        for (int i = 0; i < static_cast<int>(blocks.size()); ++i)
+        // best fit free block
+        auto it = FindBestFitBlock(chunk->blocks, sizeAligned);
+        if (it != chunk->blocks.end())
         {
-            const Block &blk = blocks[i];
-            if (blk.free && blk.size >= sizeAligned)
-            {
-                if (blk.size < size)
-                {
-                    size = blk.size;
-                    index = i;
-                }
-            }
-        }
-        return index;
-    }
-
-    inline size_t RingBuffer::TryAppend(Chunk *chunk, size_t sizeAligned) const
-    {
-        size_t alignedTail = AlignUp(chunk->tail);
-
-        if (alignedTail + sizeAligned <= chunk->capacity)
-            return alignedTail;
-
-        return ~0ull;
-    }
-
-    inline Allocation RingBuffer::MakeAllocation(Chunk *chunk, size_t sizeAligned, size_t offset) const
-    {
-        Allocation alloc{};
-        alloc.data = chunk->PtrAt(offset);
-        alloc.size = sizeAligned;
-        alloc.offset = offset;
-        alloc.buffer = chunk->buffer;
-        alloc.chunk = chunk;
-        return alloc;
-    }
-
-    inline Allocation RingBuffer::AllocateFromChunk(Chunk *chunk, size_t sizeAligned)
-    {
-        // 1. try a free block
-        {
-            int index = FindIndex(chunk, sizeAligned);
-            if (index >= 0)
-            {
-                Block &block = chunk->blocks[index];
-                const size_t allocOffset = block.offset;
-                const size_t remaining = block.size - sizeAligned;
-
-                // consume the block
-                block.free = false;
-                block.size = sizeAligned;
-
-                // split tail remainder back into a free block
-                if (remaining > 0)
-                {
-                    Block rest{};
-                    rest.offset = allocOffset + sizeAligned;
-                    rest.size = remaining;
-                    rest.free = true;
-
-                    chunk->blocks.insert(chunk->blocks.begin() + (index + 1), rest);
-                }
-
-                // update chunk tail if we extended the end-of-used range
-                size_t newEnd = allocOffset + sizeAligned;
-                if (newEnd > chunk->tail)
-                    chunk->tail = newEnd;
-
-                chunk->usedBytes += sizeAligned;
-
-                return MakeAllocation(chunk, sizeAligned, allocOffset);
-            }
+            return CarveFromBlock(chunk, it, sizeAligned);
         }
 
-        // 2. try append-at-tail
+        // try append at tail
+        const size_t appendOffset = TryAppendAtTail(chunk, sizeAligned);
+        if (appendOffset != ~0ull)
         {
-            size_t appendOffset = TryAppend(chunk, sizeAligned);
-            if (appendOffset != ~0ull)
-            {
-                bool consumedLastFree = false;
-
-                // If the last block is a single big free tail that starts exactly
-                // at appendOffset, just carve from it.
-                if (!chunk->blocks.empty())
-                {
-                    Block &last = chunk->blocks.back();
-                    if (last.free && last.offset == appendOffset)
-                    {
-                        size_t remaining = last.size - sizeAligned;
-
-                        last.free = false;
-                        last.size = sizeAligned;
-
-                        if (remaining > 0)
-                        {
-                            Block rest{};
-                            rest.offset = appendOffset + sizeAligned;
-                            rest.size = remaining;
-                            rest.free = true;
-                            chunk->blocks.push_back(rest);
-                        }
-
-                        consumedLastFree = true;
-                    }
-                }
-
-                if (!consumedLastFree)
-                {
-                    // otherwise push a new used block
-                    Block used{};
-                    used.offset = appendOffset;
-                    used.size = sizeAligned;
-                    used.free = false;
-                    chunk->blocks.push_back(used);
-
-                    // and optionally the trailing free block
-                    const size_t end = appendOffset + sizeAligned;
-                    if (end < chunk->capacity)
-                    {
-                        Block freeBlk{};
-                        freeBlk.offset = end;
-                        freeBlk.size = chunk->capacity - end;
-                        freeBlk.free = true;
-                        chunk->blocks.push_back(freeBlk);
-                    }
-                }
-
-                size_t newEnd = appendOffset + sizeAligned;
-                if (newEnd > chunk->tail)
-                    chunk->tail = newEnd;
-
-                chunk->usedBytes += sizeAligned;
-
-                return MakeAllocation(chunk, sizeAligned, appendOffset);
-            }
+            return AppendNewBlock(chunk, appendOffset, sizeAligned);
         }
 
-        // failure
+        // fail
         return {};
     }
 
@@ -212,116 +276,65 @@ namespace pe
         PE_ERROR_IF(size == 0, "RingBuffer::Allocate: size == 0");
 
         std::lock_guard<std::mutex> lock(m_mutex);
-
         const size_t sizeAligned = AlignUp(size);
 
-        // try newest chunk first
-        if (!m_chunks.empty())
+        // newest -> oldest
+        for (auto it = m_chunks.rbegin(); it != m_chunks.rend(); ++it)
         {
-            Chunk *latest = m_chunks.back().get();
-            Allocation alloc = AllocateFromChunk(latest, sizeAligned);
-            if (alloc.Valid())
-                return alloc;
+            if (Allocation a = AllocateFromChunk(it->get(), sizeAligned); a.Valid())
+                return a;
         }
 
-        // try other existing chunks
-        for (int i = static_cast<int>(m_chunks.size()) - 2; i >= 0; --i)
-        {
-            Chunk *chunk = m_chunks[static_cast<size_t>(i)].get();
-            Allocation alloc = AllocateFromChunk(chunk, sizeAligned);
-            if (alloc.Valid())
-                return alloc;
-        }
+        // no existing chunk fits, create a new one
+        Chunk *fresh = CreateChunk(sizeAligned);
+        Allocation a = AllocateFromChunk(fresh, sizeAligned);
+        PE_ERROR_IF(!a.Valid(), "RingBuffer::Allocate: allocation failed after new chunk");
 
-        // create new chunk and allocate there
-        {
-            Chunk *chunk = CreateChunk(sizeAligned);
-            Allocation alloc = AllocateFromChunk(chunk, sizeAligned);
-            PE_ERROR_IF(!alloc.data, "RingBuffer::Allocate: allocation failed after new chunk");
-            return alloc;
-        }
+        return a;
     }
 
-    inline void RingBuffer::MergeFreeBlocks(Chunk *chunk)
-    {
-        // Compact adjacent free blocks in-place
-        auto &blocks = chunk->blocks;
-        for (size_t i = 0; i + 1 < blocks.size();)
-        {
-            Block &curr = blocks[i];
-            Block &next = blocks[i + 1];
-
-            if (curr.free && next.free)
-            {
-                curr.size += next.size;
-                blocks.erase(blocks.begin() + (i + 1));
-            }
-            else
-            {
-                ++i;
-            }
-        }
-        // Update tail to highest used end
-        size_t maxUsedEnd = 0;
-        for (const Block &blk : blocks)
-        {
-            if (!blk.free)
-            {
-                size_t end = blk.offset + blk.size;
-                if (end > maxUsedEnd)
-                    maxUsedEnd = end;
-            }
-        }
-        chunk->tail = maxUsedEnd;
-    }
-
-    inline void RingBuffer::FreeInChunk(Chunk *chunk, const Allocation &range)
+    void RingBuffer::FreeInChunk(Chunk *chunk, const Allocation &range)
     {
         auto &blocks = chunk->blocks;
-        bool freed = false;
-        for (size_t i = 0; i < blocks.size(); ++i)
-        {
-            Block &block = blocks[i];
-            if (!block.free &&
-                block.offset == range.offset &&
-                block.size == range.size)
-            {
-                block.free = true;
-                chunk->usedBytes -= block.size;
-                freed = true;
-                break;
-            }
-        }
 
-        PE_ERROR_IF(!freed, "RingBuffer::FreeInChunk: allocation not found in chunk");
-        if (!freed)
+        auto it = std::find_if(
+            blocks.begin(), blocks.end(),
+            [&](Block &b)
+            {
+                return !b.free &&
+                       b.offset == range.offset &&
+                       b.size == range.size;
+            });
+
+        PE_ERROR_IF(it == blocks.end(), "RingBuffer::FreeInChunk: allocation not found in chunk");
+        if (it == blocks.end())
             return;
 
-        // Merge and update tail.
+        it->free = true;
+        chunk->usedBytes -= it->size;
+
+        // we merge eagerly -> keeps contiguous free tail
         MergeFreeBlocks(chunk);
+        DebugValidateChunk(chunk);
     }
 
-    inline void RingBuffer::DestroyUnused(Chunk *chunk)
+    void RingBuffer::DestroyUnused(Chunk *chunk)
     {
         if (m_chunks.empty())
             return;
 
-        // destroy only if it is not used
+        // if chunk still has live allocations, keep it
         if (chunk->usedBytes != 0)
             return;
 
-        // keep the last chunk
+        // we keep chunks that are empty only if they are the newest,
+        // to avoid thrash, older empty chunks are destroyed.
         if (m_chunks.back().get() == chunk)
             return;
 
-        // remove and destroy
-        auto it = std::find_if(m_chunks.begin(), m_chunks.end(),
-                               [chunk](const std::unique_ptr<Chunk> &candidate)
-                               {
-                                   return candidate.get() == chunk;
-                               });
-        if (it != m_chunks.end())
-            m_chunks.erase(it);
+        std::erase_if(m_chunks,
+                      [chunk](const std::unique_ptr<Chunk> &c)
+                      { return c.get() == chunk; });
     }
 
     void RingBuffer::Free(const Allocation &range)
@@ -331,8 +344,9 @@ namespace pe
 
         std::lock_guard<std::mutex> lock(m_mutex);
 
-        Chunk *chunk = reinterpret_cast<Chunk *>(range.chunk);
-        PE_ERROR_IF(!OwnsChunk(chunk), "RingBuffer::Free: allocation does not belong to this buffer");
+        Chunk *chunk = static_cast<Chunk *>(range.chunk);
+        PE_ERROR_IF(!OwnsChunk(chunk),
+                    "RingBuffer::Free: allocation does not belong to this buffer");
 
         FreeInChunk(chunk, range);
         DestroyUnused(chunk);
@@ -343,33 +357,42 @@ namespace pe
         std::lock_guard<std::mutex> lock(m_mutex);
 
         if (m_chunks.empty())
+        {
+            CreateChunk(kMinCapacity);
             return;
+        }
 
-        // Keep the latest chunk and destroy the others
-        std::unique_ptr<Chunk> keep = std::move(m_chunks.back());
+        // keep the SMALLEST chunk
+        auto smallest = std::min_element(
+            m_chunks.begin(), m_chunks.end(),
+            [](const std::unique_ptr<Chunk> &a,
+               const std::unique_ptr<Chunk> &b)
+            {
+                return a->capacity < b->capacity;
+            });
+
+        std::unique_ptr<Chunk> keep = std::move(*smallest);
         m_chunks.clear();
+
+        // rebuild as a single big free block
+        keep->blocks.clear();
+        keep->blocks.push_back(Block{0, keep->capacity, true});
+        keep->tail = 0;
+        keep->usedBytes = 0;
+
         m_chunks.push_back(std::move(keep));
-        Chunk *keepPtr = m_chunks.back().get();
 
-        // Rebuild keep as a single free block
-        keepPtr->blocks.clear();
-        keepPtr->blocks.reserve(1);
-        Block b{};
-        b.offset = 0;
-        b.size = keepPtr->capacity;
-        b.free = true;
-        keepPtr->blocks.push_back(b);
-
-        keepPtr->tail = 0;
-        keepPtr->usedBytes = 0;
+        DebugValidateChunk(m_chunks.back().get());
     }
 
-    inline bool RingBuffer::OwnsChunk(const Chunk *chunk) const
+    bool RingBuffer::OwnsChunk(const Chunk *chunk) const
     {
-        return std::any_of(m_chunks.begin(), m_chunks.end(),
-                           [chunk](const std::unique_ptr<Chunk> &candidate)
-                           {
-                               return candidate.get() == chunk;
-                           });
+        return std::any_of(
+            m_chunks.begin(), m_chunks.end(),
+            [chunk](const std::unique_ptr<Chunk> &c)
+            {
+                return c.get() == chunk;
+            });
     }
-}
+
+} // namespace pe
