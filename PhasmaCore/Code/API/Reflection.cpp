@@ -15,7 +15,7 @@ namespace pe
     }
 
     constexpr uint32_t MAX_COUNT_PER_BINDING = 500; // if open or unbounded array, we will use this value with partially bound arrays
-    uint32_t GetResourceArrayCount(spirv_cross::SPIRType typeInfo)
+    uint32_t GetResourceArrayCount(const spirv_cross::SPIRType &typeInfo)
     {
         // TODO: support arrays of arrays
         if (typeInfo.array.empty())
@@ -282,11 +282,14 @@ namespace pe
         }
 
         std::vector<vk::VertexInputBindingDescription> vertexBindings{};
+        vertexBindings.reserve(bindingsMap.size());
+
         for (const auto &pair : bindingsMap)
         {
             vk::VertexInputBindingDescription binding{};
             binding.binding = pair.first;
             binding.inputRate = vk::VertexInputRate::eVertex;
+            binding.stride = 0;
             for (const ShaderInOutDesc &input : pair.second)
                 binding.stride += GetTypeSize(input) * input.typeInfo.vecsize * input.typeInfo.columns;
 
@@ -300,11 +303,18 @@ namespace pe
     {
         PE_ERROR_IF(m_shader->GetShaderStage() != vk::ShaderStageFlagBits::eVertex, "Vertex attributes are only available for vertex shaders");
 
-        std::vector<vk::VertexInputAttributeDescription> vertexAttributes{};
+        std::unordered_map<uint32_t, uint32_t> bindingOffsets{};
 
-        uint32_t offset = 0;
+        std::vector<vk::VertexInputAttributeDescription> vertexAttributes{};
+        vertexAttributes.reserve(m_inputs.size());
+
         for (const ShaderInOutDesc &input : m_inputs)
         {
+            if (input.binding == INT32_MIN)
+                continue;
+
+            uint32_t &offset = bindingOffsets.try_emplace(input.binding, 0).first->second;
+
             uint32_t size = GetTypeSize(input) * input.typeInfo.vecsize * input.typeInfo.columns;
             vk::VertexInputAttributeDescription attribute{};
             attribute.location = input.location;

@@ -50,7 +50,7 @@ namespace pe
     {
         bool operator==(const PushConstantDesc &other) const
         {
-            return size == other.size && structName == other.structName;
+            return size == other.size;
         }
 
         std::string structName;
