@@ -17,15 +17,6 @@ namespace pe
         float distance;
     };
 
-    struct DrawIndexedIndirectCommand
-    {
-        uint32_t indexCount;
-        uint32_t instanceCount;
-        uint32_t firstIndex;
-        int32_t vertexOffset;
-        uint32_t firstInstance;
-    };
-
     class Geometry
     {
     public:
@@ -102,6 +93,6 @@ namespace pe
         std::vector<DrawInfo> m_drawInfosOpaque;
         std::vector<DrawInfo> m_drawInfosAlphaCut;
         std::vector<DrawInfo> m_drawInfosAlphaBlend;
-        std::vector<DrawIndexedIndirectCommand> m_indirectCommands;
+        std::vector<vk::DrawIndexedIndirectCommand> m_indirectCommands;
     };
 }

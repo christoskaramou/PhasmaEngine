@@ -143,7 +143,7 @@ namespace pe
 
         vk::CopyBufferInfo2 copyInfo{};
         copyInfo.srcBuffer = src->ApiHandle();
-        copyInfo.dstBuffer = ApiHandle();
+        copyInfo.dstBuffer = m_apiHandle;
         copyInfo.regionCount = 1;
         copyInfo.pRegions = &region;
 

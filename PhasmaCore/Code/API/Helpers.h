@@ -44,6 +44,11 @@ namespace pe::VulkanHelpers
         return IsStencilOnly(format) || IsDepthAndStencil(format);
     }
 
+    inline static bool HasDepthOrStencil(vk::Format format)
+    {
+        return IsDepthOnly(format) || IsStencilOnly(format) || IsDepthAndStencil(format);
+    }
+
     inline static vk::ImageAspectFlags GetAspectMask(vk::Format format)
     {
         vk::ImageAspectFlags flags{};

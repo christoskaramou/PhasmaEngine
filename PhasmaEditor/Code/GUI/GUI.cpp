@@ -4,7 +4,7 @@
 #include "API/Vertex.h"
 #include "API/Shader.h"
 #include "API/RHI.h"
-#include "Scene/Model.h"
+#include "Scene/ModelGltf.h"
 #include "Systems/CameraSystem.h"
 #include "Window/Window.h"
 #include "API/Surface.h"

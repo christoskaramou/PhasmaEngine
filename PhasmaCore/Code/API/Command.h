@@ -105,8 +105,8 @@ namespace pe
         void PushConstants();
         void Draw(uint32_t vertexCount, uint32_t instanceCount, uint32_t firstVertex, uint32_t firstInstance);
         void DrawIndexed(uint32_t indexCount, uint32_t instanceCount, uint32_t firstIndex, int32_t vertexOffset, uint32_t firstInstance);
-        void DrawIndirect(Buffer *indirectBuffer, size_t offset, uint32_t drawCount, uint32_t stride);
-        void DrawIndexedIndirect(Buffer *indirectBuffer, size_t offset, uint32_t drawCount, uint32_t stride);
+        void DrawIndirect(Buffer *indirectBuffer, size_t offset, uint32_t drawCount, uint32_t stride = sizeof(vk::DrawIndirectCommand));
+        void DrawIndexedIndirect(Buffer *indirectBuffer, size_t offset, uint32_t drawCount, uint32_t stride = sizeof(vk::DrawIndexedIndirectCommand));
         void BufferBarrier(const vk::BufferMemoryBarrier2 &info);
         void BufferBarriers(const std::vector<vk::BufferMemoryBarrier2> &infos);
         void ImageBarrier(const ImageBarrierInfo &info);

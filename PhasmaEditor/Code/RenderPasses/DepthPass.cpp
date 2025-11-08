@@ -1,5 +1,5 @@
 #include "DepthPass.h"
-#include "Scene/Model.h"
+#include "Scene/ModelGltf.h"
 #include "API/Swapchain.h"
 #include "API/Surface.h"
 #include "API/Shader.h"
@@ -82,7 +82,7 @@ namespace pe
             cmd->BindVertexBuffer(m_geometry->GetBuffer(), m_geometry->GetPositionsOffset());
             cmd->SetConstants(pushConstants);
             cmd->PushConstants();
-            cmd->DrawIndexedIndirect(m_geometry->GetIndirect(frame), offset, count, sizeof(DrawIndexedIndirectCommand));
+            cmd->DrawIndexedIndirect(m_geometry->GetIndirect(frame), offset, count);
             cmd->EndPass();
         }
 

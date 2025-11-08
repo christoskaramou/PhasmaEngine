@@ -1,5 +1,5 @@
 #include "Scene/Geometry.h"
-#include "Scene/Model.h"
+#include "Scene/ModelGltf.h"
 #include "API/Buffer.h"
 #include "API/Command.h"
 #include "API/Vertex.h"
@@ -279,7 +279,7 @@ namespace pe
                     PrimitiveInfo &primitiveInfo = model.m_meshesInfo[mesh].primitivesInfo[j];
                     primitiveInfo.indirectIndex = indirectCount;
 
-                    DrawIndexedIndirectCommand indirectCommand{};
+                    vk::DrawIndexedIndirectCommand indirectCommand{};
                     indirectCommand.indexCount = primitiveInfo.indicesCount;
                     indirectCommand.instanceCount = 1;
                     indirectCommand.firstIndex = primitiveInfo.indexOffset;
@@ -295,11 +295,11 @@ namespace pe
         PE_ERROR_IF(indirectCount != m_primitivesCount, "Geometry::UploadBuffers: Indirect count mismatch!");
 
         m_indirectAll = Buffer::Create(
-            indirectCount * sizeof(DrawIndexedIndirectCommand),
+            indirectCount * sizeof(vk::DrawIndexedIndirectCommand),
             vk::BufferUsageFlagBits2::eIndirectBuffer | vk::BufferUsageFlagBits2::eTransferDst,
             VMA_ALLOCATION_CREATE_DEDICATED_MEMORY_BIT,
             "indirect_Geometry_buffer_all");
-        cmd->CopyBufferStaged(m_indirectAll, m_indirectCommands.data(), m_indirectCommands.size() * sizeof(DrawIndexedIndirectCommand), 0);
+        cmd->CopyBufferStaged(m_indirectAll, m_indirectCommands.data(), m_indirectCommands.size() * sizeof(vk::DrawIndexedIndirectCommand), 0);
 
         vk::BufferMemoryBarrier2 indirectBarrierInfo{};
         indirectBarrierInfo.buffer = m_indirectAll->ApiHandle();
@@ -307,7 +307,7 @@ namespace pe
         indirectBarrierInfo.dstAccessMask = vk::AccessFlagBits2::eIndirectCommandRead;
         indirectBarrierInfo.srcStageMask = vk::PipelineStageFlagBits2::eTransfer;
         indirectBarrierInfo.dstStageMask = vk::PipelineStageFlagBits2::eDrawIndirect;
-        indirectBarrierInfo.size = indirectCount * sizeof(DrawIndexedIndirectCommand);
+        indirectBarrierInfo.size = indirectCount * sizeof(vk::DrawIndexedIndirectCommand);
         indirectBarrierInfo.offset = 0;
         cmd->BufferBarrier(indirectBarrierInfo);
 
@@ -315,7 +315,7 @@ namespace pe
         for (auto &indirect : m_indirects)
         {
             indirect = Buffer::Create(
-                indirectCount * sizeof(DrawIndexedIndirectCommand),
+                indirectCount * sizeof(vk::DrawIndexedIndirectCommand),
                 vk::BufferUsageFlagBits2::eIndirectBuffer | vk::BufferUsageFlagBits2::eTransferDst,
                 VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT,
                 "indirect_Geometry_buffer_" + std::to_string(i++));
@@ -506,8 +506,8 @@ namespace pe
                 MeshInfo &meshInfo = model.m_meshesInfo[mesh];
 
                 range.data = &nodeInfo.ubo;
-                range.offset = meshInfo.dataOffset;
                 range.size = meshInfo.dataSize;
+                range.offset = meshInfo.dataOffset;
                 m_storages[frame]->Copy(1, &range, true);
 
                 nodeInfo.dirtyUniforms[frame] = false;
@@ -536,8 +536,8 @@ namespace pe
 
             BufferRange range{};
             range.data = &indirectCommand;
-            range.size = sizeof(DrawIndexedIndirectCommand);
-            range.offset = firstInstance * sizeof(DrawIndexedIndirectCommand);
+            range.size = sizeof(vk::DrawIndexedIndirectCommand);
+            range.offset = firstInstance * sizeof(vk::DrawIndexedIndirectCommand);
             m_indirects[frame]->Copy(1, &range, true);
 
             firstInstance++;
@@ -552,8 +552,8 @@ namespace pe
 
             BufferRange range{};
             range.data = &indirectCommand;
-            range.size = sizeof(DrawIndexedIndirectCommand);
-            range.offset = firstInstance * sizeof(DrawIndexedIndirectCommand);
+            range.size = sizeof(vk::DrawIndexedIndirectCommand);
+            range.offset = firstInstance * sizeof(vk::DrawIndexedIndirectCommand);
             m_indirects[frame]->Copy(1, &range, true);
 
             firstInstance++;
@@ -568,8 +568,8 @@ namespace pe
 
             BufferRange range{};
             range.data = &indirectCommand;
-            range.size = sizeof(DrawIndexedIndirectCommand);
-            range.offset = firstInstance * sizeof(DrawIndexedIndirectCommand);
+            range.size = sizeof(vk::DrawIndexedIndirectCommand);
+            range.offset = firstInstance * sizeof(vk::DrawIndexedIndirectCommand);
             m_indirects[frame]->Copy(1, &range, true);
 
             firstInstance++;

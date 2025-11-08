@@ -194,7 +194,6 @@ namespace pe
             plci.pPushConstantRanges = pcr.size ? &pcr : nullptr;
 
             vk::ShaderModule module = RHII.GetDevice().createShaderModule(csmci);
-
             vk::ComputePipelineCreateInfo compinfo{};
             compinfo.stage.module = module;
             compinfo.stage.pName = info.pCompShader->GetEntryName().c_str();
@@ -204,14 +203,8 @@ namespace pe
             compinfo.layout = m_layout;
 
             auto result = RHII.GetDevice().createComputePipeline(m_cache, compinfo);
-            if (result.result == vk::Result::eSuccess)
-            {
-                m_apiHandle = result.value;
-            }
-            else
-            {
-                PE_ERROR("Failed to create compute pipeline!");
-            }
+            PE_ERROR_IF(result.result != vk::Result::eSuccess, "Failed to create compute pipeline!");
+            m_apiHandle = result.value;
 
             RHII.GetDevice().destroyShaderModule(module);
         }
@@ -219,34 +212,39 @@ namespace pe
         {
             vk::GraphicsPipelineCreateInfo pipeinfo{};
 
-            vk::ShaderModuleCreateInfo vsmci{};
-            vsmci.codeSize = info.pVertShader->BytesCount();
-            vsmci.pCode = info.pVertShader->GetSpriv();
-
-            vk::ShaderModule vertModule = RHII.GetDevice().createShaderModule(vsmci);
-
-            vk::PipelineShaderStageCreateInfo pssci1{};
-            pssci1.stage = vk::ShaderStageFlagBits::eVertex;
-            pssci1.module = vertModule;
-            pssci1.pName = info.pVertShader->GetEntryName().c_str();
-
-            vk::ShaderModuleCreateInfo fsmci{};
+            // Shader stages
+            vk::ShaderModule vertModule;
             vk::ShaderModule fragModule;
-            vk::PipelineShaderStageCreateInfo pssci2{};
+
+            std::vector<vk::PipelineShaderStageCreateInfo> stages;
+            stages.reserve(2);
+
+            if (info.pVertShader)
+            {
+                vk::ShaderModuleCreateInfo smci{};
+                smci.codeSize = info.pVertShader->BytesCount();
+                smci.pCode = info.pVertShader->GetSpriv();
+                vertModule = RHII.GetDevice().createShaderModule(smci);
+
+                vk::PipelineShaderStageCreateInfo pssci{};
+                pssci.stage = vk::ShaderStageFlagBits::eVertex;
+                pssci.module = vertModule;
+                pssci.pName = info.pVertShader->GetEntryName().c_str();
+                stages.push_back(pssci);
+            }
             if (info.pFragShader)
             {
-                fsmci.codeSize = info.pFragShader->BytesCount();
-                fsmci.pCode = info.pFragShader->GetSpriv();
-                fragModule = RHII.GetDevice().createShaderModule(fsmci);
+                vk::ShaderModuleCreateInfo smci{};
+                smci.codeSize = info.pFragShader->BytesCount();
+                smci.pCode = info.pFragShader->GetSpriv();
+                fragModule = RHII.GetDevice().createShaderModule(smci);
 
-                pssci2.stage = vk::ShaderStageFlagBits::eFragment;
-                pssci2.module = fragModule;
-                pssci2.pName = info.pFragShader->GetEntryName().c_str();
+                vk::PipelineShaderStageCreateInfo pssci{};
+                pssci.stage = vk::ShaderStageFlagBits::eFragment;
+                pssci.module = fragModule;
+                pssci.pName = info.pFragShader->GetEntryName().c_str();
+                stages.push_back(pssci);
             }
-
-            std::vector<vk::PipelineShaderStageCreateInfo> stages{pssci1};
-            if (info.pFragShader)
-                stages.push_back(pssci2);
 
             pipeinfo.stageCount = static_cast<uint32_t>(stages.size());
             pipeinfo.pStages = stages.data();
@@ -324,9 +322,7 @@ namespace pe
 
             // Color Blending state
             for (uint32_t i = 0; i < info.colorBlendAttachments.size(); i++)
-            {
                 info.colorBlendAttachments[i].blendEnable &= static_cast<vk::Bool32>(info.blendEnable);
-            }
 
             vk::PipelineColorBlendStateCreateInfo pcbsci{};
             pcbsci.logicOpEnable = VK_FALSE;
@@ -398,30 +394,19 @@ namespace pe
             plci.pSetLayouts = layouts.data();
             plci.pushConstantRangeCount = static_cast<uint32_t>(pcrs.size());
             plci.pPushConstantRanges = pcrs.data();
-
-            m_layout = RHII.GetDevice().createPipelineLayout(plci);
-            pipeinfo.layout = m_layout;
+            pipeinfo.layout = RHII.GetDevice().createPipelineLayout(plci);
+            m_layout = pipeinfo.layout;
 
             // Render Pass
-            uint32_t colorAttachmentCount = static_cast<uint32_t>(info.colorBlendAttachments.size());
-            std::vector<vk::Format> vkFormats(colorAttachmentCount);
             vk::PipelineRenderingCreateInfo prci{};
             if (Settings::Get<GlobalSettings>().dynamic_rendering)
             {
-                for (uint32_t i = 0; i < colorAttachmentCount; i++)
-                {
-                    vkFormats[i] = info.colorFormats[i];
-                }
-
-                prci.colorAttachmentCount = colorAttachmentCount;
-                prci.pColorAttachmentFormats = vkFormats.data();
-
+                prci.colorAttachmentCount = static_cast<uint32_t>(info.colorBlendAttachments.size());
+                prci.pColorAttachmentFormats = info.colorFormats.data();
                 if (VulkanHelpers::HasDepth(info.depthFormat))
-                {
                     prci.depthAttachmentFormat = info.depthFormat;
-                    if (VulkanHelpers::HasStencil(info.depthFormat))
-                        prci.stencilAttachmentFormat = info.depthFormat;
-                }
+                if (VulkanHelpers::HasStencil(info.depthFormat))
+                    prci.stencilAttachmentFormat = info.depthFormat;
 
                 pipeinfo.pNext = &prci;
                 pipeinfo.renderPass = nullptr;
@@ -447,17 +432,12 @@ namespace pe
             m_cache = RHII.GetDevice().createPipelineCache(cacheInfo);
 
             auto result = RHII.GetDevice().createGraphicsPipeline(m_cache, pipeinfo);
-            if (result.result == vk::Result::eSuccess)
-            {
-                m_apiHandle = result.value;
-            }
-            else
-            {
-                PE_ERROR("Failed to create graphics pipeline!");
-            }
+            PE_ERROR_IF(result.result != vk::Result::eSuccess, "Failed to create graphics pipeline!");
+            m_apiHandle = result.value;
 
-            RHII.GetDevice().destroyShaderModule(vertModule);
-            if (info.pFragShader && fragModule)
+            if (vertModule)
+                RHII.GetDevice().destroyShaderModule(vertModule);
+            if (fragModule)
                 RHII.GetDevice().destroyShaderModule(fragModule);
 
             Debug::SetObjectName(m_apiHandle, info.name);

@@ -1,5 +1,4 @@
 #include "GbufferPass.h"
-#include "Scene/Model.h"
 #include "API/Shader.h"
 #include "tinygltf/stb_image.h"
 #include "API/RHI.h"
@@ -10,7 +9,7 @@
 #include "API/Buffer.h"
 #include "API/Pipeline.h"
 #include "Scene/Geometry.h"
-#include "Scene/Model.h"
+#include "Scene/ModelGltf.h"
 #include "Systems/RendererSystem.h"
 #include "Systems/CameraSystem.h"
 
@@ -117,7 +116,7 @@ namespace pe
                 cmd->BindPipeline(*m_passInfo);
                 cmd->SetConstants(pushConstants);
                 cmd->PushConstants();
-                cmd->DrawIndexedIndirect(m_geometry->GetIndirect(frame), offset, count, sizeof(DrawIndexedIndirectCommand));
+                cmd->DrawIndexedIndirect(m_geometry->GetIndirect(frame), offset, count);
                 cmd->EndPass();
             }
         }
@@ -227,7 +226,7 @@ namespace pe
             pushConstants.transparentPass = 1u;
 
             uint32_t frame = RHII.GetFrameIndex();
-            size_t offset = m_geometry->GetDrawInfosOpaque().size() * sizeof(DrawIndexedIndirectCommand);
+            size_t offset = m_geometry->GetDrawInfosOpaque().size() * sizeof(vk::DrawIndexedIndirectCommand);
             uint32_t count = static_cast<uint32_t>(m_geometry->GetDrawInfosAlphaCut().size() + m_geometry->GetDrawInfosAlphaBlend().size());
 
             cmd->BeginPass(7, m_attachments.data(), "GbufferTransparentPass");
@@ -238,7 +237,7 @@ namespace pe
             cmd->BindPipeline(*m_passInfo);
             cmd->SetConstants(pushConstants);
             cmd->PushConstants();
-            cmd->DrawIndexedIndirect(m_geometry->GetIndirect(frame), offset, count, sizeof(DrawIndexedIndirectCommand));
+            cmd->DrawIndexedIndirect(m_geometry->GetIndirect(frame), offset, count);
             cmd->EndPass();
         }
 

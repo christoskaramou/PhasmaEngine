@@ -9,7 +9,7 @@
 #include "Systems/RendererSystem.h"
 #include "Systems/CameraSystem.h"
 #include "Scene/Geometry.h"
-#include "Scene/Model.h"
+#include "Scene/ModelGltf.h"
 
 namespace pe
 {
@@ -229,7 +229,7 @@ namespace pe
                 cmd->BindVertexBuffer(m_geometry->GetBuffer(), m_geometry->GetPositionsOffset());
                 cmd->SetConstants(pushConstants);
                 cmd->PushConstants();
-                cmd->DrawIndexedIndirect(m_geometry->GetIndirectAll(), 0, m_geometry->GetPrimitivesCount(), sizeof(DrawIndexedIndirectCommand));
+                cmd->DrawIndexedIndirect(m_geometry->GetIndirectAll(), 0, m_geometry->GetPrimitivesCount());
                 cmd->EndPass();
             }
         }

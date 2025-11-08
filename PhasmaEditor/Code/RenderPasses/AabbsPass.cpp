@@ -7,7 +7,7 @@
 #include "API/Pipeline.h"
 #include "Systems/RendererSystem.h"
 #include "Systems/CameraSystem.h"
-#include "Scene/Model.h"
+#include "Scene/ModelGltf.h"
 
 namespace pe
 {
