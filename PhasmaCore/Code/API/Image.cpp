@@ -525,7 +525,7 @@ namespace pe
 
         cmd->BeginDebugRegion(src->m_name + " -> " + m_name);
         cmd->ApiHandle().blitImage(src->ApiHandle(), vk::ImageLayout::eTransferSrcOptimal,
-                                   ApiHandle(), vk::ImageLayout::eTransferDstOptimal,
+                                   m_apiHandle, vk::ImageLayout::eTransferDstOptimal,
                                    1, &region,
                                    filter);
         cmd->EndDebugRegion();

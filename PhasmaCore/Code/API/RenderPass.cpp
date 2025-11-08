@@ -32,7 +32,7 @@ namespace pe
             attachmentDescription.finalLayout = vk::ImageLayout::eAttachmentOptimal;
             attachmentsVK.push_back(attachmentDescription);
 
-            if (VulkanHelpers::HasDepth(attachment.image->GetFormat()))
+            if (VulkanHelpers::HasDepthOrStencil(attachment.image->GetFormat()))
             {
                 depthStencilReferenceVK.attachment = attachmentIndex++;
                 depthStencilReferenceVK.aspectMask = VulkanHelpers::GetAspectMask(attachment.image->GetFormat());

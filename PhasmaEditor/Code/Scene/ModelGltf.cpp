@@ -1,4 +1,4 @@
-#include "Scene/Model.h"
+#include "Scene/ModelGltf.h"
 #include "API/Pipeline.h"
 #include "API/Queue.h"
 #include "API/Command.h"

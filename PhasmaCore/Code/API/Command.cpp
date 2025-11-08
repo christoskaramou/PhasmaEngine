@@ -248,10 +248,10 @@ namespace pe
                 barrier.image = attachment.image;
                 barrier.layout = vk::ImageLayout::eAttachmentOptimal;
 
-                if (VulkanHelpers::HasDepth(attachment.image->GetFormat()))
+                if (VulkanHelpers::HasDepthOrStencil(attachment.image->GetFormat()))
                 {
-                    hasDepth = true;
-                    hasStencil = VulkanHelpers::HasStencil(attachment.image->GetFormat());
+                    hasDepth |= VulkanHelpers::HasDepth(attachment.image->GetFormat());
+                    hasStencil |= VulkanHelpers::HasStencil(attachment.image->GetFormat());
 
                     const vec4 &clearColor = attachment.image->m_clearColor;
                     const float clearDepth = clearColor[0];
@@ -312,7 +312,7 @@ namespace pe
             {
                 const Attachment &attachment = attachments[i];
                 Image *renderTarget = attachment.image;
-                if (VulkanHelpers::HasDepth(renderTarget->GetFormat()) && (attachment.loadOp == vk::AttachmentLoadOp::eClear || attachment.stencilLoadOp == vk::AttachmentLoadOp::eClear))
+                if (VulkanHelpers::HasDepthOrStencil(renderTarget->GetFormat()) && (attachment.loadOp == vk::AttachmentLoadOp::eClear || attachment.stencilLoadOp == vk::AttachmentLoadOp::eClear))
                 {
                     const float clearDepth = renderTarget->m_clearColor[0];
                     uint32_t clearStencil = static_cast<uint32_t>(renderTarget->m_clearColor[1]);
@@ -329,7 +329,7 @@ namespace pe
                 ImageBarrierInfo barrier{};
                 barrier.image = attachment.image;
                 barrier.layout = vk::ImageLayout::eAttachmentOptimal;
-                if (VulkanHelpers::HasDepth(renderTarget->GetFormat()))
+                if (VulkanHelpers::HasDepthOrStencil(renderTarget->GetFormat()))
                 {
                     barrier.stageFlags = vk::PipelineStageFlagBits2::eEarlyFragmentTests | vk::PipelineStageFlagBits2::eLateFragmentTests;
                     barrier.accessMask = vk::AccessFlagBits2::eDepthStencilAttachmentWrite;

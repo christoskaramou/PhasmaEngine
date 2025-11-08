@@ -40,13 +40,7 @@ namespace pe
         MaterialInfo materialInfo;
 
     private:
-        // for drawing
-        friend class ModelGltf;
         friend class Geometry;
-        friend class DepthPass;
-        friend class GbufferOpaquePass;
-        friend class GbufferTransparentPass;
-        friend class ShadowPass;
 
         // indices in the image views array in shader
         // 0 = Base Color
