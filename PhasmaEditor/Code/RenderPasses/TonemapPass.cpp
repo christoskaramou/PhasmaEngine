@@ -5,7 +5,6 @@
 #include "API/Image.h"
 #include "API/Pipeline.h"
 #include "Systems/RendererSystem.h"
-#include "API/RenderPass.h"
 #include "API/RHI.h"
 
 namespace pe

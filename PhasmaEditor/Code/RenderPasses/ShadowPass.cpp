@@ -1,7 +1,6 @@
 #include "ShadowPass.h"
 #include "API/Shader.h"
 #include "API/RHI.h"
-#include "API/RenderPass.h"
 #include "API/Image.h"
 #include "API/Buffer.h"
 #include "API/Pipeline.h"
@@ -9,7 +8,6 @@
 #include "Systems/RendererSystem.h"
 #include "Systems/CameraSystem.h"
 #include "Scene/Geometry.h"
-#include "Scene/ModelGltf.h"
 
 namespace pe
 {

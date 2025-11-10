@@ -1,6 +1,5 @@
 #include "SSRPass.h"
 #include "API/Command.h"
-#include "API/RenderPass.h"
 #include "API/Descriptor.h"
 #include "API/Image.h"
 #include "API/Pipeline.h"

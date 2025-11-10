@@ -1,15 +1,11 @@
 #include "Scene/ModelGltf.h"
-#include "API/Pipeline.h"
 #include "API/Queue.h"
 #include "API/Command.h"
-#include "API/Descriptor.h"
 #include "API/Image.h"
 #include "API/Buffer.h"
-#include "API/RenderPass.h"
 #include "API/RHI.h"
 #include "Systems/RendererSystem.h"
 #include "Scene/Scene.h"
-#include "Camera/Camera.h"
 
 #undef max
 

@@ -1,7 +1,5 @@
 #pragma once
 
-#include "API/Pipeline.h"
-
 namespace pe
 {
     class Context;

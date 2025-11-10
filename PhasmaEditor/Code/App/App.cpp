@@ -7,11 +7,13 @@
 #include "API/RHI.h"
 #include "API/Queue.h"
 #include "API/Command.h"
-#include "Window/SplashScreen.h"
 #include "imgui/imgui_impl_vulkan.h"
 #include "imgui/imgui_impl_sdl2.h"
 #include "imgui/imgui_internal.h"
 #include "Script/ScriptManager.h"
+#ifdef NDEBUG
+#include "Window/SplashScreen.h"
+#endif
 
 namespace pe
 {

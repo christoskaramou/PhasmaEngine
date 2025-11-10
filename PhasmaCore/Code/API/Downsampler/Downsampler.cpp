@@ -1,12 +1,10 @@
 #include "API/Downsampler/Downsampler.h"
 #include "API/Shader.h"
-#include "API/RHI.h"
 #include "API/Command.h"
 #include "API/Descriptor.h"
-#include "API/Semaphore.h"
 #include "API/Image.h"
 #include "API/Buffer.h"
-#include "API/Queue.h"
+#include "API/Pipeline.h"
 
 namespace pe
 {

@@ -1,17 +1,12 @@
 #include "DOFPass.h"
-#include "GUI/GUI.h"
-#include "API/Swapchain.h"
 #include "API/Surface.h"
 #include "API/Shader.h"
 #include "API/RHI.h"
 #include "API/Queue.h"
 #include "API/Command.h"
-#include "API/RenderPass.h"
 #include "API/Descriptor.h"
-#include "API/Framebuffer.h"
 #include "API/Image.h"
 #include "API/Pipeline.h"
-#include "Systems/CameraSystem.h"
 #include "Systems/RendererSystem.h"
 
 namespace pe

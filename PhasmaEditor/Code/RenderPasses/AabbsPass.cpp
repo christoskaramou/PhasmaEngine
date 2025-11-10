@@ -2,7 +2,6 @@
 #include "ShadowPass.h"
 #include "API/Shader.h"
 #include "API/Command.h"
-#include "API/RenderPass.h"
 #include "API/Image.h"
 #include "API/Pipeline.h"
 #include "Systems/RendererSystem.h"

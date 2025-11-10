@@ -4,12 +4,8 @@
 #include "API/Command.h"
 #include "API/Vertex.h"
 #include "API/Image.h"
-#include "GUI/GUI.h"
 #include "Camera/Camera.h"
-#include "Systems/RendererSystem.h"
-#include "Systems/LightSystem.h"
 #include "API/RHI.h"
-#include "API/Queue.h"
 #include "RenderPasses/GbufferPass.h"
 
 namespace pe
@@ -27,10 +23,6 @@ namespace pe
         };
 
         uint32_t swapchainImageCount = RHII.GetSwapchainImageCount();
-        m_drawInfosOpaque.resize(swapchainImageCount, {});
-        m_drawInfosAlphaCut.resize(swapchainImageCount, {});
-        m_drawInfosAlphaBlend.resize(swapchainImageCount, {});
-
         m_storages.resize(swapchainImageCount, nullptr);
         m_indirects.resize(swapchainImageCount, nullptr);
         m_dirtyDescriptorViews.resize(swapchainImageCount, false);
