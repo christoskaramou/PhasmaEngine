@@ -2,9 +2,7 @@
 
 #include "API/Reflection.h"
 #include "API/ShaderCache.h"
-#include "API/Descriptor.h"
 #include "shaderc/shaderc.hpp"
-#include "dxc/dxcapi.h"
 
 namespace pe
 {
@@ -32,6 +30,7 @@ namespace pe
 
     class Reflection;
     class PassInfo;
+    class Descriptor;
 
     class Shader : public PeHandle<Shader, void *>
     {

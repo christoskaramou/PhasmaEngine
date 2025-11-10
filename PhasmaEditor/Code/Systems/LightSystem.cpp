@@ -1,9 +1,7 @@
 #include "LightSystem.h"
-#include "GUI/GUI.h"
-#include "API/RHI.h"
-#include "API/Descriptor.h"
-#include "Systems/CameraSystem.h"
 #include "API/Buffer.h"
+#include "API/RHI.h"
+#include "Systems/CameraSystem.h"
 
 namespace pe
 {
@@ -53,10 +51,6 @@ namespace pe
         range.offset = 0;
         for (auto &uniform : m_uniforms)
             uniform->Copy(1, &range, false);
-
-        std::vector<DescriptorBindingInfo> bindingInfos(1);
-        bindingInfos[0].binding = 0;
-        bindingInfos[0].type = vk::DescriptorType::eUniformBufferDynamic;
     }
 
     void LightSystem::Update()

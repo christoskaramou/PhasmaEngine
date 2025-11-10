@@ -6,7 +6,6 @@
 #include "API/Image.h"
 #include "API/Queue.h"
 #include "API/Command.h"
-#include "API/RenderPass.h"
 #include "API/Shader.h"
 #include "API/Surface.h"
 #include "API/Swapchain.h"
@@ -23,7 +22,6 @@
 #include "RenderPasses/AabbsPass.h"
 #include "RenderPasses/TonemapPass.h"
 #include "RenderPasses/ShadowPass.h"
-#include "Systems/PostProcessSystem.h"
 
 namespace pe
 {

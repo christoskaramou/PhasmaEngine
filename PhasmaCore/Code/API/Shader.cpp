@@ -1,5 +1,6 @@
 #include "API/Shader.h"
 #include "API/Pipeline.h"
+#include "dxc/dxcapi.h"
 
 namespace pe
 {
@@ -8,9 +9,7 @@ namespace pe
         return new shaderc_include_result{"", 0, message, strlen(message)};
     }
 
-    shaderc_include_result *
-    FileIncluder::GetInclude(const char *requested_source, shaderc_include_type, const char *requesting_source,
-                             size_t)
+    shaderc_include_result *FileIncluder::GetInclude(const char *requested_source, shaderc_include_type, const char *requesting_source, size_t)
     {
         std::filesystem::path requesting_source_path(requesting_source);
 

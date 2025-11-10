@@ -12,6 +12,7 @@
 #include "API/Framebuffer.h"
 #include "API/RenderPass.h"
 #include "API/Shader.h"
+#include "API/Pipeline.h"
 #include "API/Downsampler/Downsampler.h"
 
 #if defined(PE_WIN32)

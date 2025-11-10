@@ -1,6 +1,5 @@
 #pragma once
 #include "spirv_cross/spirv_cross.hpp"
-#include "API/Vertex.h"
 
 namespace pe
 {
@@ -58,8 +57,6 @@ namespace pe
     };
 
     class Shader;
-    struct VertexInputBindingDescription;
-    struct VertexInputAttributeDescription;
     class Descriptor;
 
     class Reflection
