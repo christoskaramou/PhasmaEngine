@@ -9,7 +9,7 @@
 // Macro to register a script class object creation function
 // It is put in the source file of the script class if an object
 // of this specific class needs to be created
-#define REGISTER_SCRIPT(ClassName)                               \
+#define CREATE_SCRIPT_FUNC(ClassName)                            \
     namespace                                                    \
     {                                                            \
         FUNC_EXPORT pe::ScriptObject *CreateObject_##ClassName() \

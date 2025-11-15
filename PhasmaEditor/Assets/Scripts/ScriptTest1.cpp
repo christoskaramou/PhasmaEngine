@@ -1,4 +1,4 @@
 #include "ScriptTest1.h"
 #include "ScriptTest2.h"
 
-REGISTER_SCRIPT(ScriptTest1)
+CREATE_SCRIPT_FUNC(ScriptTest1)

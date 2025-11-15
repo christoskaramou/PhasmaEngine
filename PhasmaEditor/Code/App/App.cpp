@@ -36,16 +36,27 @@ namespace pe
         for (auto &file : std::filesystem::recursive_directory_iterator(Path::Executable + "Assets/Shaders"))
             FileWatcher::Add(file.path().string(), shaderCallback);
 
-        // auto scriptCallback = [](size_t fileEvent)
-        // {
-        //     EventSystem::PushEvent(fileEvent);
-        //     EventSystem::PushEvent(EventType::CompileScripts);
-        // };
-        // for (auto &file : std::filesystem::recursive_directory_iterator(Path::Executable + "Assets/Scripts"))
-        //     FileWatcher::Add(file.path().string(), scriptCallback);
+#if defined(PE_SCRIPTS)
+        auto scriptCallback = [](size_t fileEvent)
+        {
+            EventSystem::PushEvent(fileEvent);
+            EventSystem::PushEvent(EventType::CompileScripts);
+        };
+
+        for (auto &file : std::filesystem::recursive_directory_iterator(Path::Executable + "Assets/Scripts"))
+        {
+            std::string filePath = file.path().string();
+            std::replace(filePath.begin(), filePath.end(), '\\', '/');
+
+            if (filePath.find("Assets/Scripts/Build") != std::string::npos)
+                continue;
+
+            FileWatcher::Add(file.path().string(), scriptCallback);
+        }
+        ScriptManager::Init();
+#endif
         FileWatcher::Start();
         EventSystem::Init();
-        // ScriptManager::Init();
 
 #ifdef NDEBUG
         m_splashScreen = SplashScreen::Create(SDL_WINDOW_SHOWN | SDL_WINDOW_BORDERLESS);
@@ -95,7 +106,9 @@ namespace pe
         RHII.Remove();
         Window::Destroy(m_window);
         EventSystem::Destroy();
-        // ScriptManager::Shutdown();
+#if defined(PE_SCRIPTS)
+        ScriptManager::Shutdown();
+#endif
     }
 
     bool App::Frame()

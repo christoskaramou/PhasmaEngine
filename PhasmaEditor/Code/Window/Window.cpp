@@ -6,7 +6,9 @@
 #include "imgui/imgui_impl_vulkan.h"
 #include "imgui/imgui_impl_sdl2.h"
 #include "imgui/imgui_internal.h"
+#if defined(PE_SCRIPTS)
 #include "Script/ScriptManager.h"
+#endif
 
 namespace pe
 {
@@ -123,12 +125,14 @@ namespace pe
                     postProcessSystem->PollShaders();
                     break;
                 }
+#if defined(PE_SCRIPTS)
                 case EventType::CompileScripts:
                 {
-                    // ScriptManager::Shutdown();
-                    // ScriptManager::Init();
+                    ScriptManager::Shutdown();
+                    ScriptManager::Init();
                     break;
                 }
+#endif
                 case EventType::PresentMode:
                 {
                     GlobalSettings &gSettings = Settings::Get<GlobalSettings>();
