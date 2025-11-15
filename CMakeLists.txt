@@ -62,6 +62,9 @@ target_include_directories(PhasmaEditor PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/Pha
 # target_link_directories(PhasmaEditor PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/PhasmaEditor/Libs/fsr/Debug")
 # target_link_directories(PhasmaEditor PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/PhasmaEditor/Libs/fsr/Release")
 
+# --- Scripts support ---
+# target_compile_definitions(PhasmaEditor PUBLIC "PE_SCRIPTS")
+
 # Libraries
 target_link_libraries(PhasmaEditor PRIVATE
     PhasmaCore
