@@ -62,12 +62,10 @@ namespace pe
         m_lubo.sun.color = {.9765f, .8431f, .9098f, gSettings.sun_intensity};
         m_lubo.sun.direction = {gSettings.sun_direction[0], gSettings.sun_direction[1], gSettings.sun_direction[2], 1.f};
 
-        size_t frameOffset = 0; // RHII.GetFrameDynamicOffset(uniform->Size(), RHII.GetFrameIndex());
-
         BufferRange range{};
         range.data = &m_lubo;
         range.size = 3 * sizeof(vec4);
-        range.offset = frameOffset;
+        range.offset = 0;
         m_uniforms[RHII.GetFrameIndex()]->Copy(1, &range, false);
 
         if (gSettings.randomize_lights)

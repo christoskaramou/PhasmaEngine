@@ -94,7 +94,7 @@ namespace pe
             BufferRange range{};
             range.data = &m_reflectionInput;
             range.size = sizeof(m_reflectionInput);
-            range.offset = 0; // RHII.GetFrameDynamicOffset(UBReflection->Size(), RHII.GetFrameIndex());
+            range.offset = 0;
             m_reflectionUBs[RHII.GetFrameIndex()]->Copy(1, &range, false);
         }
     }
