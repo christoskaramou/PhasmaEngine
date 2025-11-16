@@ -419,7 +419,7 @@ namespace pe
         auto &surfaces = Surface::s_handles;
         auto &swapchains = Swapchain::s_handles;
         auto &gpuTimers = GpuTimer::s_handles;
-        
+
         PE_ERROR_IF(!buffers.empty(), "Leaked Buffers");
         PE_ERROR_IF(!commandBuffers.empty(), "Leaked CommandBuffers");
         PE_ERROR_IF(!descriptorPools.empty(), "Leaked DescriptorPools");
@@ -1030,23 +1030,35 @@ namespace pe
 
     const char *RHI::PresentModeToString(vk::PresentModeKHR presentMode)
     {
-        const char *modesNames[] = {"Immediate", "Mailbox", "Fifo", "FifoRelaxed", ""};
+        static const char *presentModeNames[] = {
+            "Immediate",
+            "Mailbox",
+            "Fifo",
+            "FifoRelaxed",
+            "SharedDemandRefresh",
+            "SharedContinuousRefresh",
+            "FifoLatestReady"};
+            
         switch (presentMode)
         {
         case vk::PresentModeKHR::eImmediate:
-            return modesNames[0];
+            return presentModeNames[0];
         case vk::PresentModeKHR::eMailbox:
-            return modesNames[1];
+            return presentModeNames[1];
         case vk::PresentModeKHR::eFifo:
-            return modesNames[2];
+            return presentModeNames[2];
         case vk::PresentModeKHR::eFifoRelaxed:
-            return modesNames[3];
+            return presentModeNames[3];
+        case vk::PresentModeKHR::eSharedDemandRefresh:
+            return presentModeNames[4];
+        case vk::PresentModeKHR::eSharedContinuousRefresh:
+            return presentModeNames[5];
+        case vk::PresentModeKHR::eFifoLatestReadyEXT:
+            return presentModeNames[6];
         default:
-            break;
+            PE_ERROR("Unknown PresentMode");
+            return "Unknown";
         }
-
-        PE_ERROR("Unknown PresentMode");
-        return modesNames[4];
     }
 
     uint32_t RHI::GetWidth() const { return m_surface->GetActualExtent().width; }
