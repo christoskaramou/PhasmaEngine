@@ -63,7 +63,6 @@ namespace pe
         void Destroy();
         void CreateInstance(SDL_Window *window);
         void CreateSurface();
-        void GetSurfaceProperties();
         void FindGpu();
         void GetGraphicsFamilyId();
         void GetTransferFamilyId();

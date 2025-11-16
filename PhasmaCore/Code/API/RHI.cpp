@@ -360,9 +360,8 @@ namespace pe
         Debug::InitCaptureApi();
 
         CreateInstance(window);
-        CreateSurface();
         FindGpu();
-        GetSurfaceProperties();
+        CreateSurface();
         CreateDevice();
         CreateAllocator();
         CreateSwapchain(m_surface);
@@ -492,11 +491,6 @@ namespace pe
     void RHI::CreateSurface()
     {
         m_surface = Surface::Create(m_window);
-    }
-
-    void RHI::GetSurfaceProperties()
-    {
-        m_surface->FindProperties();
     }
 
     struct GPUScore
