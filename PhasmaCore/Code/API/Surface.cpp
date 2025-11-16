@@ -4,10 +4,9 @@
 namespace pe
 {
     Surface::Surface(SDL_Window *window)
-        : m_format{vk::Format::eUndefined},
+        : m_format{},
           m_colorSpace{},
-          m_presentMode{vk::PresentModeKHR::eFifo},
-          m_supportedPresentModes{}
+          m_presentMode{}
     {
         VkSurfaceKHR surfaceVK;
         SDL_bool res = SDL_Vulkan_CreateSurface(window, RHII.GetInstance(), &surfaceVK);
@@ -54,10 +53,15 @@ namespace pe
         PE_ERROR_IF(m_format == vk::Format::eUndefined, "Surface format not found");
     }
 
+    std::vector<vk::PresentModeKHR> Surface::GetSupportedPresentModes() const
+    {
+        return RHII.GetGpu().getSurfacePresentModesKHR(m_apiHandle);
+    }
+
     bool Surface::SupportsPresentMode(vk::PresentModeKHR mode)
     {
-        m_supportedPresentModes = RHII.GetGpu().getSurfacePresentModesKHR(m_apiHandle);
-        for (const auto &presentMode : m_supportedPresentModes)
+        const auto &presentModes = GetSupportedPresentModes();
+        for (const auto &presentMode : presentModes)
         {
             if (presentMode == mode)
                 return true;
@@ -74,14 +78,7 @@ namespace pe
         }
         else
         {
-            if (SupportsPresentMode(vk::PresentModeKHR::eMailbox))
-                m_presentMode = vk::PresentModeKHR::eMailbox;
-            else if (SupportsPresentMode(vk::PresentModeKHR::eImmediate))
-                m_presentMode = vk::PresentModeKHR::eImmediate;
-            else if (SupportsPresentMode(vk::PresentModeKHR::eFifoRelaxed))
-                m_presentMode = vk::PresentModeKHR::eFifoRelaxed;
-            else
-                m_presentMode = vk::PresentModeKHR::eFifo;
+            m_presentMode = vk::PresentModeKHR::eFifo;
         }
     }
 
@@ -89,6 +86,6 @@ namespace pe
     {
         CheckTransfer();
         FindFormat();
-        SetPresentMode(vk::PresentModeKHR::eMailbox);
+        SetPresentMode(vk::PresentModeKHR::eFifo);
     }
 }
