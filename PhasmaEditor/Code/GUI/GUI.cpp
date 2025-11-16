@@ -263,12 +263,6 @@ namespace pe
         ImGui::Text("Dear ImGui %s", ImGui::GetVersion());
         ImGui::TextColored(ImVec4(1.0f, 1.0f, 0.0f, 1.0f), "Average %.3f ms (%.1f FPS)", 1000.0f / framerate, framerate);
         ImGui::PlotLines("##FrameTimes", fpsVector.data(), static_cast<int>(fpsVector.size()), 0, NULL, 0.0f, highestValue, ImVec2(0, 80));
-        ImGui::Checkbox("Unlock FPS", &gSettings.unlock_fps);
-        if (!gSettings.unlock_fps)
-        {
-            ImGui::DragInt("FPS", &gSettings.target_fps, 0.1f);
-            gSettings.target_fps = max(gSettings.target_fps, 10);
-        }
 
         // Memory Usage
         ImGui::Separator();

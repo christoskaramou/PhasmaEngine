@@ -19,7 +19,7 @@ namespace pe
         vk::Format GetFormat() const { return m_format; }
         vk::ColorSpaceKHR GetColorSpace() const { return m_colorSpace; }
         vk::PresentModeKHR GetPresentMode() const { return m_presentMode; }
-        const std::vector<vk::PresentModeKHR> &GetSupportedPresentModes() const { return m_supportedPresentModes; }
+        std::vector<vk::PresentModeKHR> GetSupportedPresentModes() const;
 
 private:
         bool SupportsPresentMode(vk::PresentModeKHR mode);
@@ -28,6 +28,5 @@ private:
         vk::Format m_format;
         vk::ColorSpaceKHR m_colorSpace;
         vk::PresentModeKHR m_presentMode;
-        std::vector<vk::PresentModeKHR> m_supportedPresentModes;
     };
 }

@@ -1038,7 +1038,7 @@ namespace pe
             "SharedDemandRefresh",
             "SharedContinuousRefresh",
             "FifoLatestReady"};
-            
+
         switch (presentMode)
         {
         case vk::PresentModeKHR::eImmediate:

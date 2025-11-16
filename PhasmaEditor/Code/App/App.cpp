@@ -134,9 +134,6 @@ namespace pe
         if (!m_window->isMinimized())
             DrawGlobalSystems();
         m_frameTimer.CountCpuTotalStamp();
-
-        if (!Settings::Get<GlobalSettings>().unlock_fps)
-            m_frameTimer.ThreadSleep(1.0 / Settings::Get<GlobalSettings>().target_fps - m_frameTimer.Count());
         m_frameTimer.CountDeltaTime();
 
         RHII.NextFrame();

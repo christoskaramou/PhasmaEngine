@@ -54,8 +54,6 @@ namespace pe
         bool randomize_lights = false;
         float sun_intensity = 7.f;
         std::array<float, 3> sun_direction{0.1f, 0.9f, 0.1f};
-        int target_fps = 60;
-        bool unlock_fps = false;
         float camera_speed = 3.5f;
         std::array<float, 3> depth_bias{0.0f, 0.0f, -6.2f};
         float time_scale = 1.f;
