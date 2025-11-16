@@ -220,7 +220,7 @@ namespace pe
         // storage buffer
         size_t storageSize = sizeof(PerFrameData);
         // will store ids of constant buffer for each primitive
-        storageSize += RHII.AlignStorageAs<64>(m_primitivesCount * sizeof(uint32_t));
+        storageSize += RHII.AlignStorageAs(m_primitivesCount * sizeof(uint32_t), 64);
         for (auto &modelPtr : m_models)
         {
             ModelGltf &model = *modelPtr;

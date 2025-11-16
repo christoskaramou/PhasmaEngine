@@ -86,7 +86,7 @@ namespace pe
             BufferRange range{};
             range.data = m_cascades.data();
             range.size = gSettings.num_cascades * sizeof(mat4);
-            range.offset = 0; // RHII.GetFrameDynamicOffset(uniformBuffer->Size(), RHII.GetFrameIndex());
+            range.offset = 0;
             m_uniforms[RHII.GetFrameIndex()]->Copy(1, &range, false);
         }
     }
