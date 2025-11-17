@@ -381,22 +381,6 @@ namespace pe
         CommandBuffer::ClearCache();
         delete m_uploadMemory;
         vmaDestroyAllocator(m_allocator);
-        for (auto &stack : m_binarySemaphores)
-        {
-            while (!stack.empty())
-            {
-                Semaphore::Destroy(stack.top());
-                stack.pop();
-            }
-        }
-        for (auto &stack : m_usedBinarySemaphores)
-        {
-            while (!stack.empty())
-            {
-                Semaphore::Destroy(stack.top());
-                stack.pop();
-            }
-        }
         DescriptorPool::Destroy(m_descriptorPool);
 
 #if defined(PE_TRACK_RESOURCES)
@@ -699,9 +683,6 @@ namespace pe
     void RHI::CreateSwapchain(Surface *surface)
     {
         m_swapchain = Swapchain::Create(surface, "RHI_swapchain");
-
-        m_binarySemaphores.resize(GetSwapchainImageCount(), std::stack<Semaphore *>());
-        m_usedBinarySemaphores.resize(GetSwapchainImageCount(), std::stack<Semaphore *>());
     }
 
     void RHI::CreateDescriptorPool(uint32_t maxDescriptorSets)
@@ -752,36 +733,6 @@ namespace pe
     void RHI::WaitDeviceIdle()
     {
         m_device.waitIdle();
-    }
-
-    Semaphore *RHI::AcquireBinarySemaphore(uint32_t frame)
-    {
-        std::lock_guard<std::mutex> lock(m_binarySemaphoresMutex);
-
-        auto &frameBinarySemaphores = m_binarySemaphores[frame];
-        auto &usedFrameBinarySemaphores = m_usedBinarySemaphores[frame];
-
-        if (frameBinarySemaphores.empty())
-            frameBinarySemaphores.push(Semaphore::Create(false, "RHI_binary_semaphore"));
-
-        usedFrameBinarySemaphores.push(frameBinarySemaphores.top());
-        frameBinarySemaphores.pop();
-
-        return usedFrameBinarySemaphores.top();
-    }
-
-    void RHI::ReturnBinarySemaphores(uint32_t frame)
-    {
-        std::lock_guard<std::mutex> lock(m_binarySemaphoresMutex);
-
-        auto &frameBinarySemaphores = m_binarySemaphores[frame];
-        auto &usedFrameBinarySemaphores = m_usedBinarySemaphores[frame];
-
-        while (!usedFrameBinarySemaphores.empty())
-        {
-            frameBinarySemaphores.push(usedFrameBinarySemaphores.top());
-            usedFrameBinarySemaphores.pop();
-        }
     }
 
     uint32_t RHI::GetSwapchainImageCount() { return m_swapchain->GetImageCount(); }
