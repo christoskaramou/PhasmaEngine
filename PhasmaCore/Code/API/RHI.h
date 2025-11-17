@@ -94,8 +94,6 @@ namespace pe
         const std::string &GetGpuName() { return m_gpuName; }
         vk::Device GetDevice() { return m_device; }
         DescriptorPool *GetDescriptorPool() { return m_descriptorPool; }
-        Semaphore *AcquireBinarySemaphore(uint32_t frame);
-        void ReturnBinarySemaphores(uint32_t frame);
         VmaAllocator GetAllocator() { return m_allocator; }
         Queue *GetMainQueue() { return m_mainQueue; }
         SDL_Window *GetWindow() { return m_window; }
@@ -121,9 +119,6 @@ namespace pe
         std::string m_gpuName;
         vk::Device m_device;
         DescriptorPool *m_descriptorPool;
-        std::mutex m_binarySemaphoresMutex;
-        std::vector<std::stack<Semaphore *>> m_binarySemaphores;
-        std::vector<std::stack<Semaphore *>> m_usedBinarySemaphores;
         VmaAllocator m_allocator;
         Queue *m_mainQueue;
         SDL_Window *m_window;

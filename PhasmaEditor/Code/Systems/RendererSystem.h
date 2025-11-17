@@ -31,6 +31,7 @@ namespace pe
     };
 
     class GpuTimer;
+    class Semaphore;
 
     class RendererSystem : public IDrawSystem
     {
@@ -77,6 +78,8 @@ namespace pe
         CommandBuffer *RecordPasses(uint32_t imageIndex);
         void Upsample(CommandBuffer *cmd, vk::Filter filter);
         void CreateRenderTargets();
+        Semaphore *AcquireBinarySemaphore(uint32_t frame);
+        void ReturnBinarySemaphores(uint32_t frame);
 
         Image *m_displayRT;
         Image *m_viewportRT;
@@ -85,6 +88,9 @@ namespace pe
         std::unordered_map<size_t, Image *> m_renderTargets{};
         std::unordered_map<size_t, Image *> m_depthStencilTargets{};
         std::vector<CommandBuffer *> m_cmds;
+        std::mutex m_binarySemaphoresMutex;
+        std::vector<std::stack<Semaphore *>> m_binarySemaphores;
+        std::vector<std::stack<Semaphore *>> m_usedBinarySemaphores;
         RenderArea m_renderArea;
         Scene m_scene;
         SkyBox m_skyBoxDay;
