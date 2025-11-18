@@ -92,8 +92,9 @@ namespace pe
 
         m_renderArea.Update(0.0f, 0.0f, RHII.GetWidthf(), RHII.GetHeightf());
 
-        m_cmds.resize(RHII.GetSwapchainImageCount());
-        for (uint32_t i = 0; i < RHII.GetSwapchainImageCount(); i++)
+        uint32_t imageCount = RHII.GetSwapchainImageCount();
+        m_cmds.resize(imageCount, nullptr);
+        for (uint32_t i = 0; i < imageCount; i++)
         {
             ImageBarrierInfo barrierInfo{};
             barrierInfo.image = RHII.GetSwapchain()->GetImage(i);
@@ -101,11 +102,10 @@ namespace pe
             barrierInfo.stageFlags = vk::PipelineStageFlagBits2::eAllCommands;
             barrierInfo.accessMask = vk::AccessFlagBits2::eNone;
             cmd->ImageBarrier(barrierInfo); // transition from undefined to present
-
-            m_cmds[i] = nullptr;
         }
-
-        for (uint32_t i = 0; i < RHII.GetSwapchainImageCount(); i++)
+        m_acquireSemaphores.reserve(imageCount);
+        m_presentSemaphores.reserve(imageCount);
+        for (uint32_t i = 0; i < imageCount; i++)
         {
             m_acquireSemaphores.push_back(Semaphore::Create(false, "AcquireSemaphore_" + std::to_string(i)));
             m_presentSemaphores.push_back(Semaphore::Create(false, "PresentSemaphore_" + std::to_string(i)));
@@ -330,7 +330,7 @@ namespace pe
 
         for (auto &semaphore : m_acquireSemaphores)
             Semaphore::Destroy(semaphore);
-        
+
         for (auto &semaphore : m_presentSemaphores)
             Semaphore::Destroy(semaphore);
     }
