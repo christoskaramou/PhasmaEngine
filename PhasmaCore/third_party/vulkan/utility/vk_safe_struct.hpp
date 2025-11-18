@@ -3,10 +3,10 @@
 
 /***************************************************************************
  *
- * Copyright (c) 2015-2024 The Khronos Group Inc.
- * Copyright (c) 2015-2024 Valve Corporation
- * Copyright (c) 2015-2024 LunarG, Inc.
- * Copyright (c) 2015-2024 Google Inc.
+ * Copyright (c) 2015-2025 The Khronos Group Inc.
+ * Copyright (c) 2015-2025 Valve Corporation
+ * Copyright (c) 2015-2025 LunarG, Inc.
+ * Copyright (c) 2015-2025 Google Inc.
  *
  * SPDX-License-Identifier: Apache-2.0
  *
@@ -4133,7 +4133,7 @@ struct safe_VkPhysicalDeviceSubgroupSizeControlProperties {
 };
 struct safe_VkPipelineShaderStageRequiredSubgroupSizeCreateInfo {
     VkStructureType sType;
-    void* pNext{};
+    const void* pNext{};
     uint32_t requiredSubgroupSize;
 
     safe_VkPipelineShaderStageRequiredSubgroupSizeCreateInfo(const VkPipelineShaderStageRequiredSubgroupSizeCreateInfo* in_struct,
@@ -7546,6 +7546,26 @@ struct safe_VkDisplayPlaneCapabilities2KHR {
     VkDisplayPlaneCapabilities2KHR* ptr() { return reinterpret_cast<VkDisplayPlaneCapabilities2KHR*>(this); }
     VkDisplayPlaneCapabilities2KHR const* ptr() const { return reinterpret_cast<VkDisplayPlaneCapabilities2KHR const*>(this); }
 };
+struct safe_VkPhysicalDeviceShaderBfloat16FeaturesKHR {
+    VkStructureType sType;
+    void* pNext{};
+    VkBool32 shaderBFloat16Type;
+    VkBool32 shaderBFloat16DotProduct;
+    VkBool32 shaderBFloat16CooperativeMatrix;
+
+    safe_VkPhysicalDeviceShaderBfloat16FeaturesKHR(const VkPhysicalDeviceShaderBfloat16FeaturesKHR* in_struct,
+                                                   PNextCopyState* copy_state = {}, bool copy_pnext = true);
+    safe_VkPhysicalDeviceShaderBfloat16FeaturesKHR(const safe_VkPhysicalDeviceShaderBfloat16FeaturesKHR& copy_src);
+    safe_VkPhysicalDeviceShaderBfloat16FeaturesKHR& operator=(const safe_VkPhysicalDeviceShaderBfloat16FeaturesKHR& copy_src);
+    safe_VkPhysicalDeviceShaderBfloat16FeaturesKHR();
+    ~safe_VkPhysicalDeviceShaderBfloat16FeaturesKHR();
+    void initialize(const VkPhysicalDeviceShaderBfloat16FeaturesKHR* in_struct, PNextCopyState* copy_state = {});
+    void initialize(const safe_VkPhysicalDeviceShaderBfloat16FeaturesKHR* copy_src, PNextCopyState* copy_state = {});
+    VkPhysicalDeviceShaderBfloat16FeaturesKHR* ptr() { return reinterpret_cast<VkPhysicalDeviceShaderBfloat16FeaturesKHR*>(this); }
+    VkPhysicalDeviceShaderBfloat16FeaturesKHR const* ptr() const {
+        return reinterpret_cast<VkPhysicalDeviceShaderBfloat16FeaturesKHR const*>(this);
+    }
+};
 #ifdef VK_ENABLE_BETA_EXTENSIONS
 struct safe_VkPhysicalDevicePortabilitySubsetFeaturesKHR {
     VkStructureType sType;
@@ -8445,6 +8465,27 @@ struct safe_VkPhysicalDeviceRayTracingMaintenance1FeaturesKHR {
         return reinterpret_cast<VkPhysicalDeviceRayTracingMaintenance1FeaturesKHR const*>(this);
     }
 };
+struct safe_VkPhysicalDeviceShaderUntypedPointersFeaturesKHR {
+    VkStructureType sType;
+    void* pNext{};
+    VkBool32 shaderUntypedPointers;
+
+    safe_VkPhysicalDeviceShaderUntypedPointersFeaturesKHR(const VkPhysicalDeviceShaderUntypedPointersFeaturesKHR* in_struct,
+                                                          PNextCopyState* copy_state = {}, bool copy_pnext = true);
+    safe_VkPhysicalDeviceShaderUntypedPointersFeaturesKHR(const safe_VkPhysicalDeviceShaderUntypedPointersFeaturesKHR& copy_src);
+    safe_VkPhysicalDeviceShaderUntypedPointersFeaturesKHR& operator=(
+        const safe_VkPhysicalDeviceShaderUntypedPointersFeaturesKHR& copy_src);
+    safe_VkPhysicalDeviceShaderUntypedPointersFeaturesKHR();
+    ~safe_VkPhysicalDeviceShaderUntypedPointersFeaturesKHR();
+    void initialize(const VkPhysicalDeviceShaderUntypedPointersFeaturesKHR* in_struct, PNextCopyState* copy_state = {});
+    void initialize(const safe_VkPhysicalDeviceShaderUntypedPointersFeaturesKHR* copy_src, PNextCopyState* copy_state = {});
+    VkPhysicalDeviceShaderUntypedPointersFeaturesKHR* ptr() {
+        return reinterpret_cast<VkPhysicalDeviceShaderUntypedPointersFeaturesKHR*>(this);
+    }
+    VkPhysicalDeviceShaderUntypedPointersFeaturesKHR const* ptr() const {
+        return reinterpret_cast<VkPhysicalDeviceShaderUntypedPointersFeaturesKHR const*>(this);
+    }
+};
 struct safe_VkPhysicalDeviceShaderMaximalReconvergenceFeaturesKHR {
     VkStructureType sType;
     void* pNext{};
@@ -8467,6 +8508,110 @@ struct safe_VkPhysicalDeviceShaderMaximalReconvergenceFeaturesKHR {
     VkPhysicalDeviceShaderMaximalReconvergenceFeaturesKHR const* ptr() const {
         return reinterpret_cast<VkPhysicalDeviceShaderMaximalReconvergenceFeaturesKHR const*>(this);
     }
+};
+struct safe_VkSurfaceCapabilitiesPresentId2KHR {
+    VkStructureType sType;
+    void* pNext{};
+    VkBool32 presentId2Supported;
+
+    safe_VkSurfaceCapabilitiesPresentId2KHR(const VkSurfaceCapabilitiesPresentId2KHR* in_struct, PNextCopyState* copy_state = {},
+                                            bool copy_pnext = true);
+    safe_VkSurfaceCapabilitiesPresentId2KHR(const safe_VkSurfaceCapabilitiesPresentId2KHR& copy_src);
+    safe_VkSurfaceCapabilitiesPresentId2KHR& operator=(const safe_VkSurfaceCapabilitiesPresentId2KHR& copy_src);
+    safe_VkSurfaceCapabilitiesPresentId2KHR();
+    ~safe_VkSurfaceCapabilitiesPresentId2KHR();
+    void initialize(const VkSurfaceCapabilitiesPresentId2KHR* in_struct, PNextCopyState* copy_state = {});
+    void initialize(const safe_VkSurfaceCapabilitiesPresentId2KHR* copy_src, PNextCopyState* copy_state = {});
+    VkSurfaceCapabilitiesPresentId2KHR* ptr() { return reinterpret_cast<VkSurfaceCapabilitiesPresentId2KHR*>(this); }
+    VkSurfaceCapabilitiesPresentId2KHR const* ptr() const {
+        return reinterpret_cast<VkSurfaceCapabilitiesPresentId2KHR const*>(this);
+    }
+};
+struct safe_VkPresentId2KHR {
+    VkStructureType sType;
+    const void* pNext{};
+    uint32_t swapchainCount;
+    const uint64_t* pPresentIds{};
+
+    safe_VkPresentId2KHR(const VkPresentId2KHR* in_struct, PNextCopyState* copy_state = {}, bool copy_pnext = true);
+    safe_VkPresentId2KHR(const safe_VkPresentId2KHR& copy_src);
+    safe_VkPresentId2KHR& operator=(const safe_VkPresentId2KHR& copy_src);
+    safe_VkPresentId2KHR();
+    ~safe_VkPresentId2KHR();
+    void initialize(const VkPresentId2KHR* in_struct, PNextCopyState* copy_state = {});
+    void initialize(const safe_VkPresentId2KHR* copy_src, PNextCopyState* copy_state = {});
+    VkPresentId2KHR* ptr() { return reinterpret_cast<VkPresentId2KHR*>(this); }
+    VkPresentId2KHR const* ptr() const { return reinterpret_cast<VkPresentId2KHR const*>(this); }
+};
+struct safe_VkPhysicalDevicePresentId2FeaturesKHR {
+    VkStructureType sType;
+    void* pNext{};
+    VkBool32 presentId2;
+
+    safe_VkPhysicalDevicePresentId2FeaturesKHR(const VkPhysicalDevicePresentId2FeaturesKHR* in_struct,
+                                               PNextCopyState* copy_state = {}, bool copy_pnext = true);
+    safe_VkPhysicalDevicePresentId2FeaturesKHR(const safe_VkPhysicalDevicePresentId2FeaturesKHR& copy_src);
+    safe_VkPhysicalDevicePresentId2FeaturesKHR& operator=(const safe_VkPhysicalDevicePresentId2FeaturesKHR& copy_src);
+    safe_VkPhysicalDevicePresentId2FeaturesKHR();
+    ~safe_VkPhysicalDevicePresentId2FeaturesKHR();
+    void initialize(const VkPhysicalDevicePresentId2FeaturesKHR* in_struct, PNextCopyState* copy_state = {});
+    void initialize(const safe_VkPhysicalDevicePresentId2FeaturesKHR* copy_src, PNextCopyState* copy_state = {});
+    VkPhysicalDevicePresentId2FeaturesKHR* ptr() { return reinterpret_cast<VkPhysicalDevicePresentId2FeaturesKHR*>(this); }
+    VkPhysicalDevicePresentId2FeaturesKHR const* ptr() const {
+        return reinterpret_cast<VkPhysicalDevicePresentId2FeaturesKHR const*>(this);
+    }
+};
+struct safe_VkSurfaceCapabilitiesPresentWait2KHR {
+    VkStructureType sType;
+    void* pNext{};
+    VkBool32 presentWait2Supported;
+
+    safe_VkSurfaceCapabilitiesPresentWait2KHR(const VkSurfaceCapabilitiesPresentWait2KHR* in_struct,
+                                              PNextCopyState* copy_state = {}, bool copy_pnext = true);
+    safe_VkSurfaceCapabilitiesPresentWait2KHR(const safe_VkSurfaceCapabilitiesPresentWait2KHR& copy_src);
+    safe_VkSurfaceCapabilitiesPresentWait2KHR& operator=(const safe_VkSurfaceCapabilitiesPresentWait2KHR& copy_src);
+    safe_VkSurfaceCapabilitiesPresentWait2KHR();
+    ~safe_VkSurfaceCapabilitiesPresentWait2KHR();
+    void initialize(const VkSurfaceCapabilitiesPresentWait2KHR* in_struct, PNextCopyState* copy_state = {});
+    void initialize(const safe_VkSurfaceCapabilitiesPresentWait2KHR* copy_src, PNextCopyState* copy_state = {});
+    VkSurfaceCapabilitiesPresentWait2KHR* ptr() { return reinterpret_cast<VkSurfaceCapabilitiesPresentWait2KHR*>(this); }
+    VkSurfaceCapabilitiesPresentWait2KHR const* ptr() const {
+        return reinterpret_cast<VkSurfaceCapabilitiesPresentWait2KHR const*>(this);
+    }
+};
+struct safe_VkPhysicalDevicePresentWait2FeaturesKHR {
+    VkStructureType sType;
+    void* pNext{};
+    VkBool32 presentWait2;
+
+    safe_VkPhysicalDevicePresentWait2FeaturesKHR(const VkPhysicalDevicePresentWait2FeaturesKHR* in_struct,
+                                                 PNextCopyState* copy_state = {}, bool copy_pnext = true);
+    safe_VkPhysicalDevicePresentWait2FeaturesKHR(const safe_VkPhysicalDevicePresentWait2FeaturesKHR& copy_src);
+    safe_VkPhysicalDevicePresentWait2FeaturesKHR& operator=(const safe_VkPhysicalDevicePresentWait2FeaturesKHR& copy_src);
+    safe_VkPhysicalDevicePresentWait2FeaturesKHR();
+    ~safe_VkPhysicalDevicePresentWait2FeaturesKHR();
+    void initialize(const VkPhysicalDevicePresentWait2FeaturesKHR* in_struct, PNextCopyState* copy_state = {});
+    void initialize(const safe_VkPhysicalDevicePresentWait2FeaturesKHR* copy_src, PNextCopyState* copy_state = {});
+    VkPhysicalDevicePresentWait2FeaturesKHR* ptr() { return reinterpret_cast<VkPhysicalDevicePresentWait2FeaturesKHR*>(this); }
+    VkPhysicalDevicePresentWait2FeaturesKHR const* ptr() const {
+        return reinterpret_cast<VkPhysicalDevicePresentWait2FeaturesKHR const*>(this);
+    }
+};
+struct safe_VkPresentWait2InfoKHR {
+    VkStructureType sType;
+    const void* pNext{};
+    uint64_t presentId;
+    uint64_t timeout;
+
+    safe_VkPresentWait2InfoKHR(const VkPresentWait2InfoKHR* in_struct, PNextCopyState* copy_state = {}, bool copy_pnext = true);
+    safe_VkPresentWait2InfoKHR(const safe_VkPresentWait2InfoKHR& copy_src);
+    safe_VkPresentWait2InfoKHR& operator=(const safe_VkPresentWait2InfoKHR& copy_src);
+    safe_VkPresentWait2InfoKHR();
+    ~safe_VkPresentWait2InfoKHR();
+    void initialize(const VkPresentWait2InfoKHR* in_struct, PNextCopyState* copy_state = {});
+    void initialize(const safe_VkPresentWait2InfoKHR* copy_src, PNextCopyState* copy_state = {});
+    VkPresentWait2InfoKHR* ptr() { return reinterpret_cast<VkPresentWait2InfoKHR*>(this); }
+    VkPresentWait2InfoKHR const* ptr() const { return reinterpret_cast<VkPresentWait2InfoKHR const*>(this); }
 };
 struct safe_VkPhysicalDeviceRayTracingPositionFetchFeaturesKHR {
     VkStructureType sType;
@@ -8696,6 +8841,174 @@ struct safe_VkPipelineBinaryHandlesInfoKHR {
     void initialize(const safe_VkPipelineBinaryHandlesInfoKHR* copy_src, PNextCopyState* copy_state = {});
     VkPipelineBinaryHandlesInfoKHR* ptr() { return reinterpret_cast<VkPipelineBinaryHandlesInfoKHR*>(this); }
     VkPipelineBinaryHandlesInfoKHR const* ptr() const { return reinterpret_cast<VkPipelineBinaryHandlesInfoKHR const*>(this); }
+};
+struct safe_VkSurfacePresentModeKHR {
+    VkStructureType sType;
+    void* pNext{};
+    VkPresentModeKHR presentMode;
+
+    safe_VkSurfacePresentModeKHR(const VkSurfacePresentModeKHR* in_struct, PNextCopyState* copy_state = {}, bool copy_pnext = true);
+    safe_VkSurfacePresentModeKHR(const safe_VkSurfacePresentModeKHR& copy_src);
+    safe_VkSurfacePresentModeKHR& operator=(const safe_VkSurfacePresentModeKHR& copy_src);
+    safe_VkSurfacePresentModeKHR();
+    ~safe_VkSurfacePresentModeKHR();
+    void initialize(const VkSurfacePresentModeKHR* in_struct, PNextCopyState* copy_state = {});
+    void initialize(const safe_VkSurfacePresentModeKHR* copy_src, PNextCopyState* copy_state = {});
+    VkSurfacePresentModeKHR* ptr() { return reinterpret_cast<VkSurfacePresentModeKHR*>(this); }
+    VkSurfacePresentModeKHR const* ptr() const { return reinterpret_cast<VkSurfacePresentModeKHR const*>(this); }
+};
+struct safe_VkSurfacePresentScalingCapabilitiesKHR {
+    VkStructureType sType;
+    void* pNext{};
+    VkPresentScalingFlagsKHR supportedPresentScaling;
+    VkPresentGravityFlagsKHR supportedPresentGravityX;
+    VkPresentGravityFlagsKHR supportedPresentGravityY;
+    VkExtent2D minScaledImageExtent;
+    VkExtent2D maxScaledImageExtent;
+
+    safe_VkSurfacePresentScalingCapabilitiesKHR(const VkSurfacePresentScalingCapabilitiesKHR* in_struct,
+                                                PNextCopyState* copy_state = {}, bool copy_pnext = true);
+    safe_VkSurfacePresentScalingCapabilitiesKHR(const safe_VkSurfacePresentScalingCapabilitiesKHR& copy_src);
+    safe_VkSurfacePresentScalingCapabilitiesKHR& operator=(const safe_VkSurfacePresentScalingCapabilitiesKHR& copy_src);
+    safe_VkSurfacePresentScalingCapabilitiesKHR();
+    ~safe_VkSurfacePresentScalingCapabilitiesKHR();
+    void initialize(const VkSurfacePresentScalingCapabilitiesKHR* in_struct, PNextCopyState* copy_state = {});
+    void initialize(const safe_VkSurfacePresentScalingCapabilitiesKHR* copy_src, PNextCopyState* copy_state = {});
+    VkSurfacePresentScalingCapabilitiesKHR* ptr() { return reinterpret_cast<VkSurfacePresentScalingCapabilitiesKHR*>(this); }
+    VkSurfacePresentScalingCapabilitiesKHR const* ptr() const {
+        return reinterpret_cast<VkSurfacePresentScalingCapabilitiesKHR const*>(this);
+    }
+};
+struct safe_VkSurfacePresentModeCompatibilityKHR {
+    VkStructureType sType;
+    void* pNext{};
+    uint32_t presentModeCount;
+    VkPresentModeKHR* pPresentModes{};
+
+    safe_VkSurfacePresentModeCompatibilityKHR(const VkSurfacePresentModeCompatibilityKHR* in_struct,
+                                              PNextCopyState* copy_state = {}, bool copy_pnext = true);
+    safe_VkSurfacePresentModeCompatibilityKHR(const safe_VkSurfacePresentModeCompatibilityKHR& copy_src);
+    safe_VkSurfacePresentModeCompatibilityKHR& operator=(const safe_VkSurfacePresentModeCompatibilityKHR& copy_src);
+    safe_VkSurfacePresentModeCompatibilityKHR();
+    ~safe_VkSurfacePresentModeCompatibilityKHR();
+    void initialize(const VkSurfacePresentModeCompatibilityKHR* in_struct, PNextCopyState* copy_state = {});
+    void initialize(const safe_VkSurfacePresentModeCompatibilityKHR* copy_src, PNextCopyState* copy_state = {});
+    VkSurfacePresentModeCompatibilityKHR* ptr() { return reinterpret_cast<VkSurfacePresentModeCompatibilityKHR*>(this); }
+    VkSurfacePresentModeCompatibilityKHR const* ptr() const {
+        return reinterpret_cast<VkSurfacePresentModeCompatibilityKHR const*>(this);
+    }
+};
+struct safe_VkPhysicalDeviceSwapchainMaintenance1FeaturesKHR {
+    VkStructureType sType;
+    void* pNext{};
+    VkBool32 swapchainMaintenance1;
+
+    safe_VkPhysicalDeviceSwapchainMaintenance1FeaturesKHR(const VkPhysicalDeviceSwapchainMaintenance1FeaturesKHR* in_struct,
+                                                          PNextCopyState* copy_state = {}, bool copy_pnext = true);
+    safe_VkPhysicalDeviceSwapchainMaintenance1FeaturesKHR(const safe_VkPhysicalDeviceSwapchainMaintenance1FeaturesKHR& copy_src);
+    safe_VkPhysicalDeviceSwapchainMaintenance1FeaturesKHR& operator=(
+        const safe_VkPhysicalDeviceSwapchainMaintenance1FeaturesKHR& copy_src);
+    safe_VkPhysicalDeviceSwapchainMaintenance1FeaturesKHR();
+    ~safe_VkPhysicalDeviceSwapchainMaintenance1FeaturesKHR();
+    void initialize(const VkPhysicalDeviceSwapchainMaintenance1FeaturesKHR* in_struct, PNextCopyState* copy_state = {});
+    void initialize(const safe_VkPhysicalDeviceSwapchainMaintenance1FeaturesKHR* copy_src, PNextCopyState* copy_state = {});
+    VkPhysicalDeviceSwapchainMaintenance1FeaturesKHR* ptr() {
+        return reinterpret_cast<VkPhysicalDeviceSwapchainMaintenance1FeaturesKHR*>(this);
+    }
+    VkPhysicalDeviceSwapchainMaintenance1FeaturesKHR const* ptr() const {
+        return reinterpret_cast<VkPhysicalDeviceSwapchainMaintenance1FeaturesKHR const*>(this);
+    }
+};
+struct safe_VkSwapchainPresentFenceInfoKHR {
+    VkStructureType sType;
+    const void* pNext{};
+    uint32_t swapchainCount;
+    VkFence* pFences{};
+
+    safe_VkSwapchainPresentFenceInfoKHR(const VkSwapchainPresentFenceInfoKHR* in_struct, PNextCopyState* copy_state = {},
+                                        bool copy_pnext = true);
+    safe_VkSwapchainPresentFenceInfoKHR(const safe_VkSwapchainPresentFenceInfoKHR& copy_src);
+    safe_VkSwapchainPresentFenceInfoKHR& operator=(const safe_VkSwapchainPresentFenceInfoKHR& copy_src);
+    safe_VkSwapchainPresentFenceInfoKHR();
+    ~safe_VkSwapchainPresentFenceInfoKHR();
+    void initialize(const VkSwapchainPresentFenceInfoKHR* in_struct, PNextCopyState* copy_state = {});
+    void initialize(const safe_VkSwapchainPresentFenceInfoKHR* copy_src, PNextCopyState* copy_state = {});
+    VkSwapchainPresentFenceInfoKHR* ptr() { return reinterpret_cast<VkSwapchainPresentFenceInfoKHR*>(this); }
+    VkSwapchainPresentFenceInfoKHR const* ptr() const { return reinterpret_cast<VkSwapchainPresentFenceInfoKHR const*>(this); }
+};
+struct safe_VkSwapchainPresentModesCreateInfoKHR {
+    VkStructureType sType;
+    const void* pNext{};
+    uint32_t presentModeCount;
+    const VkPresentModeKHR* pPresentModes{};
+
+    safe_VkSwapchainPresentModesCreateInfoKHR(const VkSwapchainPresentModesCreateInfoKHR* in_struct,
+                                              PNextCopyState* copy_state = {}, bool copy_pnext = true);
+    safe_VkSwapchainPresentModesCreateInfoKHR(const safe_VkSwapchainPresentModesCreateInfoKHR& copy_src);
+    safe_VkSwapchainPresentModesCreateInfoKHR& operator=(const safe_VkSwapchainPresentModesCreateInfoKHR& copy_src);
+    safe_VkSwapchainPresentModesCreateInfoKHR();
+    ~safe_VkSwapchainPresentModesCreateInfoKHR();
+    void initialize(const VkSwapchainPresentModesCreateInfoKHR* in_struct, PNextCopyState* copy_state = {});
+    void initialize(const safe_VkSwapchainPresentModesCreateInfoKHR* copy_src, PNextCopyState* copy_state = {});
+    VkSwapchainPresentModesCreateInfoKHR* ptr() { return reinterpret_cast<VkSwapchainPresentModesCreateInfoKHR*>(this); }
+    VkSwapchainPresentModesCreateInfoKHR const* ptr() const {
+        return reinterpret_cast<VkSwapchainPresentModesCreateInfoKHR const*>(this);
+    }
+};
+struct safe_VkSwapchainPresentModeInfoKHR {
+    VkStructureType sType;
+    const void* pNext{};
+    uint32_t swapchainCount;
+    const VkPresentModeKHR* pPresentModes{};
+
+    safe_VkSwapchainPresentModeInfoKHR(const VkSwapchainPresentModeInfoKHR* in_struct, PNextCopyState* copy_state = {},
+                                       bool copy_pnext = true);
+    safe_VkSwapchainPresentModeInfoKHR(const safe_VkSwapchainPresentModeInfoKHR& copy_src);
+    safe_VkSwapchainPresentModeInfoKHR& operator=(const safe_VkSwapchainPresentModeInfoKHR& copy_src);
+    safe_VkSwapchainPresentModeInfoKHR();
+    ~safe_VkSwapchainPresentModeInfoKHR();
+    void initialize(const VkSwapchainPresentModeInfoKHR* in_struct, PNextCopyState* copy_state = {});
+    void initialize(const safe_VkSwapchainPresentModeInfoKHR* copy_src, PNextCopyState* copy_state = {});
+    VkSwapchainPresentModeInfoKHR* ptr() { return reinterpret_cast<VkSwapchainPresentModeInfoKHR*>(this); }
+    VkSwapchainPresentModeInfoKHR const* ptr() const { return reinterpret_cast<VkSwapchainPresentModeInfoKHR const*>(this); }
+};
+struct safe_VkSwapchainPresentScalingCreateInfoKHR {
+    VkStructureType sType;
+    const void* pNext{};
+    VkPresentScalingFlagsKHR scalingBehavior;
+    VkPresentGravityFlagsKHR presentGravityX;
+    VkPresentGravityFlagsKHR presentGravityY;
+
+    safe_VkSwapchainPresentScalingCreateInfoKHR(const VkSwapchainPresentScalingCreateInfoKHR* in_struct,
+                                                PNextCopyState* copy_state = {}, bool copy_pnext = true);
+    safe_VkSwapchainPresentScalingCreateInfoKHR(const safe_VkSwapchainPresentScalingCreateInfoKHR& copy_src);
+    safe_VkSwapchainPresentScalingCreateInfoKHR& operator=(const safe_VkSwapchainPresentScalingCreateInfoKHR& copy_src);
+    safe_VkSwapchainPresentScalingCreateInfoKHR();
+    ~safe_VkSwapchainPresentScalingCreateInfoKHR();
+    void initialize(const VkSwapchainPresentScalingCreateInfoKHR* in_struct, PNextCopyState* copy_state = {});
+    void initialize(const safe_VkSwapchainPresentScalingCreateInfoKHR* copy_src, PNextCopyState* copy_state = {});
+    VkSwapchainPresentScalingCreateInfoKHR* ptr() { return reinterpret_cast<VkSwapchainPresentScalingCreateInfoKHR*>(this); }
+    VkSwapchainPresentScalingCreateInfoKHR const* ptr() const {
+        return reinterpret_cast<VkSwapchainPresentScalingCreateInfoKHR const*>(this);
+    }
+};
+struct safe_VkReleaseSwapchainImagesInfoKHR {
+    VkStructureType sType;
+    const void* pNext{};
+    VkSwapchainKHR swapchain;
+    uint32_t imageIndexCount;
+    const uint32_t* pImageIndices{};
+
+    safe_VkReleaseSwapchainImagesInfoKHR(const VkReleaseSwapchainImagesInfoKHR* in_struct, PNextCopyState* copy_state = {},
+                                         bool copy_pnext = true);
+    safe_VkReleaseSwapchainImagesInfoKHR(const safe_VkReleaseSwapchainImagesInfoKHR& copy_src);
+    safe_VkReleaseSwapchainImagesInfoKHR& operator=(const safe_VkReleaseSwapchainImagesInfoKHR& copy_src);
+    safe_VkReleaseSwapchainImagesInfoKHR();
+    ~safe_VkReleaseSwapchainImagesInfoKHR();
+    void initialize(const VkReleaseSwapchainImagesInfoKHR* in_struct, PNextCopyState* copy_state = {});
+    void initialize(const safe_VkReleaseSwapchainImagesInfoKHR* copy_src, PNextCopyState* copy_state = {});
+    VkReleaseSwapchainImagesInfoKHR* ptr() { return reinterpret_cast<VkReleaseSwapchainImagesInfoKHR*>(this); }
+    VkReleaseSwapchainImagesInfoKHR const* ptr() const { return reinterpret_cast<VkReleaseSwapchainImagesInfoKHR const*>(this); }
 };
 struct safe_VkCooperativeMatrixPropertiesKHR {
     VkStructureType sType;
@@ -9152,6 +9465,76 @@ struct safe_VkVideoEncodeAV1RateControlLayerInfoKHR {
         return reinterpret_cast<VkVideoEncodeAV1RateControlLayerInfoKHR const*>(this);
     }
 };
+struct safe_VkPhysicalDeviceVideoDecodeVP9FeaturesKHR {
+    VkStructureType sType;
+    void* pNext{};
+    VkBool32 videoDecodeVP9;
+
+    safe_VkPhysicalDeviceVideoDecodeVP9FeaturesKHR(const VkPhysicalDeviceVideoDecodeVP9FeaturesKHR* in_struct,
+                                                   PNextCopyState* copy_state = {}, bool copy_pnext = true);
+    safe_VkPhysicalDeviceVideoDecodeVP9FeaturesKHR(const safe_VkPhysicalDeviceVideoDecodeVP9FeaturesKHR& copy_src);
+    safe_VkPhysicalDeviceVideoDecodeVP9FeaturesKHR& operator=(const safe_VkPhysicalDeviceVideoDecodeVP9FeaturesKHR& copy_src);
+    safe_VkPhysicalDeviceVideoDecodeVP9FeaturesKHR();
+    ~safe_VkPhysicalDeviceVideoDecodeVP9FeaturesKHR();
+    void initialize(const VkPhysicalDeviceVideoDecodeVP9FeaturesKHR* in_struct, PNextCopyState* copy_state = {});
+    void initialize(const safe_VkPhysicalDeviceVideoDecodeVP9FeaturesKHR* copy_src, PNextCopyState* copy_state = {});
+    VkPhysicalDeviceVideoDecodeVP9FeaturesKHR* ptr() { return reinterpret_cast<VkPhysicalDeviceVideoDecodeVP9FeaturesKHR*>(this); }
+    VkPhysicalDeviceVideoDecodeVP9FeaturesKHR const* ptr() const {
+        return reinterpret_cast<VkPhysicalDeviceVideoDecodeVP9FeaturesKHR const*>(this);
+    }
+};
+struct safe_VkVideoDecodeVP9ProfileInfoKHR {
+    VkStructureType sType;
+    const void* pNext{};
+    StdVideoVP9Profile stdProfile;
+
+    safe_VkVideoDecodeVP9ProfileInfoKHR(const VkVideoDecodeVP9ProfileInfoKHR* in_struct, PNextCopyState* copy_state = {},
+                                        bool copy_pnext = true);
+    safe_VkVideoDecodeVP9ProfileInfoKHR(const safe_VkVideoDecodeVP9ProfileInfoKHR& copy_src);
+    safe_VkVideoDecodeVP9ProfileInfoKHR& operator=(const safe_VkVideoDecodeVP9ProfileInfoKHR& copy_src);
+    safe_VkVideoDecodeVP9ProfileInfoKHR();
+    ~safe_VkVideoDecodeVP9ProfileInfoKHR();
+    void initialize(const VkVideoDecodeVP9ProfileInfoKHR* in_struct, PNextCopyState* copy_state = {});
+    void initialize(const safe_VkVideoDecodeVP9ProfileInfoKHR* copy_src, PNextCopyState* copy_state = {});
+    VkVideoDecodeVP9ProfileInfoKHR* ptr() { return reinterpret_cast<VkVideoDecodeVP9ProfileInfoKHR*>(this); }
+    VkVideoDecodeVP9ProfileInfoKHR const* ptr() const { return reinterpret_cast<VkVideoDecodeVP9ProfileInfoKHR const*>(this); }
+};
+struct safe_VkVideoDecodeVP9CapabilitiesKHR {
+    VkStructureType sType;
+    void* pNext{};
+    StdVideoVP9Level maxLevel;
+
+    safe_VkVideoDecodeVP9CapabilitiesKHR(const VkVideoDecodeVP9CapabilitiesKHR* in_struct, PNextCopyState* copy_state = {},
+                                         bool copy_pnext = true);
+    safe_VkVideoDecodeVP9CapabilitiesKHR(const safe_VkVideoDecodeVP9CapabilitiesKHR& copy_src);
+    safe_VkVideoDecodeVP9CapabilitiesKHR& operator=(const safe_VkVideoDecodeVP9CapabilitiesKHR& copy_src);
+    safe_VkVideoDecodeVP9CapabilitiesKHR();
+    ~safe_VkVideoDecodeVP9CapabilitiesKHR();
+    void initialize(const VkVideoDecodeVP9CapabilitiesKHR* in_struct, PNextCopyState* copy_state = {});
+    void initialize(const safe_VkVideoDecodeVP9CapabilitiesKHR* copy_src, PNextCopyState* copy_state = {});
+    VkVideoDecodeVP9CapabilitiesKHR* ptr() { return reinterpret_cast<VkVideoDecodeVP9CapabilitiesKHR*>(this); }
+    VkVideoDecodeVP9CapabilitiesKHR const* ptr() const { return reinterpret_cast<VkVideoDecodeVP9CapabilitiesKHR const*>(this); }
+};
+struct safe_VkVideoDecodeVP9PictureInfoKHR {
+    VkStructureType sType;
+    const void* pNext{};
+    const StdVideoDecodeVP9PictureInfo* pStdPictureInfo{};
+    int32_t referenceNameSlotIndices[VK_MAX_VIDEO_VP9_REFERENCES_PER_FRAME_KHR];
+    uint32_t uncompressedHeaderOffset;
+    uint32_t compressedHeaderOffset;
+    uint32_t tilesOffset;
+
+    safe_VkVideoDecodeVP9PictureInfoKHR(const VkVideoDecodeVP9PictureInfoKHR* in_struct, PNextCopyState* copy_state = {},
+                                        bool copy_pnext = true);
+    safe_VkVideoDecodeVP9PictureInfoKHR(const safe_VkVideoDecodeVP9PictureInfoKHR& copy_src);
+    safe_VkVideoDecodeVP9PictureInfoKHR& operator=(const safe_VkVideoDecodeVP9PictureInfoKHR& copy_src);
+    safe_VkVideoDecodeVP9PictureInfoKHR();
+    ~safe_VkVideoDecodeVP9PictureInfoKHR();
+    void initialize(const VkVideoDecodeVP9PictureInfoKHR* in_struct, PNextCopyState* copy_state = {});
+    void initialize(const safe_VkVideoDecodeVP9PictureInfoKHR* copy_src, PNextCopyState* copy_state = {});
+    VkVideoDecodeVP9PictureInfoKHR* ptr() { return reinterpret_cast<VkVideoDecodeVP9PictureInfoKHR*>(this); }
+    VkVideoDecodeVP9PictureInfoKHR const* ptr() const { return reinterpret_cast<VkVideoDecodeVP9PictureInfoKHR const*>(this); }
+};
 struct safe_VkPhysicalDeviceVideoMaintenance1FeaturesKHR {
     VkStructureType sType;
     void* pNext{};
@@ -9189,6 +9572,44 @@ struct safe_VkVideoInlineQueryInfoKHR {
     void initialize(const safe_VkVideoInlineQueryInfoKHR* copy_src, PNextCopyState* copy_state = {});
     VkVideoInlineQueryInfoKHR* ptr() { return reinterpret_cast<VkVideoInlineQueryInfoKHR*>(this); }
     VkVideoInlineQueryInfoKHR const* ptr() const { return reinterpret_cast<VkVideoInlineQueryInfoKHR const*>(this); }
+};
+struct safe_VkPhysicalDeviceUnifiedImageLayoutsFeaturesKHR {
+    VkStructureType sType;
+    void* pNext{};
+    VkBool32 unifiedImageLayouts;
+    VkBool32 unifiedImageLayoutsVideo;
+
+    safe_VkPhysicalDeviceUnifiedImageLayoutsFeaturesKHR(const VkPhysicalDeviceUnifiedImageLayoutsFeaturesKHR* in_struct,
+                                                        PNextCopyState* copy_state = {}, bool copy_pnext = true);
+    safe_VkPhysicalDeviceUnifiedImageLayoutsFeaturesKHR(const safe_VkPhysicalDeviceUnifiedImageLayoutsFeaturesKHR& copy_src);
+    safe_VkPhysicalDeviceUnifiedImageLayoutsFeaturesKHR& operator=(
+        const safe_VkPhysicalDeviceUnifiedImageLayoutsFeaturesKHR& copy_src);
+    safe_VkPhysicalDeviceUnifiedImageLayoutsFeaturesKHR();
+    ~safe_VkPhysicalDeviceUnifiedImageLayoutsFeaturesKHR();
+    void initialize(const VkPhysicalDeviceUnifiedImageLayoutsFeaturesKHR* in_struct, PNextCopyState* copy_state = {});
+    void initialize(const safe_VkPhysicalDeviceUnifiedImageLayoutsFeaturesKHR* copy_src, PNextCopyState* copy_state = {});
+    VkPhysicalDeviceUnifiedImageLayoutsFeaturesKHR* ptr() {
+        return reinterpret_cast<VkPhysicalDeviceUnifiedImageLayoutsFeaturesKHR*>(this);
+    }
+    VkPhysicalDeviceUnifiedImageLayoutsFeaturesKHR const* ptr() const {
+        return reinterpret_cast<VkPhysicalDeviceUnifiedImageLayoutsFeaturesKHR const*>(this);
+    }
+};
+struct safe_VkAttachmentFeedbackLoopInfoEXT {
+    VkStructureType sType;
+    const void* pNext{};
+    VkBool32 feedbackLoopEnable;
+
+    safe_VkAttachmentFeedbackLoopInfoEXT(const VkAttachmentFeedbackLoopInfoEXT* in_struct, PNextCopyState* copy_state = {},
+                                         bool copy_pnext = true);
+    safe_VkAttachmentFeedbackLoopInfoEXT(const safe_VkAttachmentFeedbackLoopInfoEXT& copy_src);
+    safe_VkAttachmentFeedbackLoopInfoEXT& operator=(const safe_VkAttachmentFeedbackLoopInfoEXT& copy_src);
+    safe_VkAttachmentFeedbackLoopInfoEXT();
+    ~safe_VkAttachmentFeedbackLoopInfoEXT();
+    void initialize(const VkAttachmentFeedbackLoopInfoEXT* in_struct, PNextCopyState* copy_state = {});
+    void initialize(const safe_VkAttachmentFeedbackLoopInfoEXT* copy_src, PNextCopyState* copy_state = {});
+    VkAttachmentFeedbackLoopInfoEXT* ptr() { return reinterpret_cast<VkAttachmentFeedbackLoopInfoEXT*>(this); }
+    VkAttachmentFeedbackLoopInfoEXT const* ptr() const { return reinterpret_cast<VkAttachmentFeedbackLoopInfoEXT const*>(this); }
 };
 struct safe_VkCalibratedTimestampInfoKHR {
     VkStructureType sType;
@@ -9250,6 +9671,191 @@ struct safe_VkBindDescriptorBufferEmbeddedSamplersInfoEXT {
     }
     VkBindDescriptorBufferEmbeddedSamplersInfoEXT const* ptr() const {
         return reinterpret_cast<VkBindDescriptorBufferEmbeddedSamplersInfoEXT const*>(this);
+    }
+};
+struct safe_VkCopyMemoryIndirectInfoKHR {
+    VkStructureType sType;
+    const void* pNext{};
+    VkAddressCopyFlagsKHR srcCopyFlags;
+    VkAddressCopyFlagsKHR dstCopyFlags;
+    uint32_t copyCount;
+    VkStridedDeviceAddressRangeKHR copyAddressRange;
+
+    safe_VkCopyMemoryIndirectInfoKHR(const VkCopyMemoryIndirectInfoKHR* in_struct, PNextCopyState* copy_state = {},
+                                     bool copy_pnext = true);
+    safe_VkCopyMemoryIndirectInfoKHR(const safe_VkCopyMemoryIndirectInfoKHR& copy_src);
+    safe_VkCopyMemoryIndirectInfoKHR& operator=(const safe_VkCopyMemoryIndirectInfoKHR& copy_src);
+    safe_VkCopyMemoryIndirectInfoKHR();
+    ~safe_VkCopyMemoryIndirectInfoKHR();
+    void initialize(const VkCopyMemoryIndirectInfoKHR* in_struct, PNextCopyState* copy_state = {});
+    void initialize(const safe_VkCopyMemoryIndirectInfoKHR* copy_src, PNextCopyState* copy_state = {});
+    VkCopyMemoryIndirectInfoKHR* ptr() { return reinterpret_cast<VkCopyMemoryIndirectInfoKHR*>(this); }
+    VkCopyMemoryIndirectInfoKHR const* ptr() const { return reinterpret_cast<VkCopyMemoryIndirectInfoKHR const*>(this); }
+};
+struct safe_VkCopyMemoryToImageIndirectInfoKHR {
+    VkStructureType sType;
+    const void* pNext{};
+    VkAddressCopyFlagsKHR srcCopyFlags;
+    uint32_t copyCount;
+    VkStridedDeviceAddressRangeKHR copyAddressRange;
+    VkImage dstImage;
+    VkImageLayout dstImageLayout;
+    const VkImageSubresourceLayers* pImageSubresources{};
+
+    safe_VkCopyMemoryToImageIndirectInfoKHR(const VkCopyMemoryToImageIndirectInfoKHR* in_struct, PNextCopyState* copy_state = {},
+                                            bool copy_pnext = true);
+    safe_VkCopyMemoryToImageIndirectInfoKHR(const safe_VkCopyMemoryToImageIndirectInfoKHR& copy_src);
+    safe_VkCopyMemoryToImageIndirectInfoKHR& operator=(const safe_VkCopyMemoryToImageIndirectInfoKHR& copy_src);
+    safe_VkCopyMemoryToImageIndirectInfoKHR();
+    ~safe_VkCopyMemoryToImageIndirectInfoKHR();
+    void initialize(const VkCopyMemoryToImageIndirectInfoKHR* in_struct, PNextCopyState* copy_state = {});
+    void initialize(const safe_VkCopyMemoryToImageIndirectInfoKHR* copy_src, PNextCopyState* copy_state = {});
+    VkCopyMemoryToImageIndirectInfoKHR* ptr() { return reinterpret_cast<VkCopyMemoryToImageIndirectInfoKHR*>(this); }
+    VkCopyMemoryToImageIndirectInfoKHR const* ptr() const {
+        return reinterpret_cast<VkCopyMemoryToImageIndirectInfoKHR const*>(this);
+    }
+};
+struct safe_VkPhysicalDeviceCopyMemoryIndirectFeaturesKHR {
+    VkStructureType sType;
+    void* pNext{};
+    VkBool32 indirectMemoryCopy;
+    VkBool32 indirectMemoryToImageCopy;
+
+    safe_VkPhysicalDeviceCopyMemoryIndirectFeaturesKHR(const VkPhysicalDeviceCopyMemoryIndirectFeaturesKHR* in_struct,
+                                                       PNextCopyState* copy_state = {}, bool copy_pnext = true);
+    safe_VkPhysicalDeviceCopyMemoryIndirectFeaturesKHR(const safe_VkPhysicalDeviceCopyMemoryIndirectFeaturesKHR& copy_src);
+    safe_VkPhysicalDeviceCopyMemoryIndirectFeaturesKHR& operator=(
+        const safe_VkPhysicalDeviceCopyMemoryIndirectFeaturesKHR& copy_src);
+    safe_VkPhysicalDeviceCopyMemoryIndirectFeaturesKHR();
+    ~safe_VkPhysicalDeviceCopyMemoryIndirectFeaturesKHR();
+    void initialize(const VkPhysicalDeviceCopyMemoryIndirectFeaturesKHR* in_struct, PNextCopyState* copy_state = {});
+    void initialize(const safe_VkPhysicalDeviceCopyMemoryIndirectFeaturesKHR* copy_src, PNextCopyState* copy_state = {});
+    VkPhysicalDeviceCopyMemoryIndirectFeaturesKHR* ptr() {
+        return reinterpret_cast<VkPhysicalDeviceCopyMemoryIndirectFeaturesKHR*>(this);
+    }
+    VkPhysicalDeviceCopyMemoryIndirectFeaturesKHR const* ptr() const {
+        return reinterpret_cast<VkPhysicalDeviceCopyMemoryIndirectFeaturesKHR const*>(this);
+    }
+};
+struct safe_VkPhysicalDeviceCopyMemoryIndirectPropertiesKHR {
+    VkStructureType sType;
+    void* pNext{};
+    VkQueueFlags supportedQueues;
+
+    safe_VkPhysicalDeviceCopyMemoryIndirectPropertiesKHR(const VkPhysicalDeviceCopyMemoryIndirectPropertiesKHR* in_struct,
+                                                         PNextCopyState* copy_state = {}, bool copy_pnext = true);
+    safe_VkPhysicalDeviceCopyMemoryIndirectPropertiesKHR(const safe_VkPhysicalDeviceCopyMemoryIndirectPropertiesKHR& copy_src);
+    safe_VkPhysicalDeviceCopyMemoryIndirectPropertiesKHR& operator=(
+        const safe_VkPhysicalDeviceCopyMemoryIndirectPropertiesKHR& copy_src);
+    safe_VkPhysicalDeviceCopyMemoryIndirectPropertiesKHR();
+    ~safe_VkPhysicalDeviceCopyMemoryIndirectPropertiesKHR();
+    void initialize(const VkPhysicalDeviceCopyMemoryIndirectPropertiesKHR* in_struct, PNextCopyState* copy_state = {});
+    void initialize(const safe_VkPhysicalDeviceCopyMemoryIndirectPropertiesKHR* copy_src, PNextCopyState* copy_state = {});
+    VkPhysicalDeviceCopyMemoryIndirectPropertiesKHR* ptr() {
+        return reinterpret_cast<VkPhysicalDeviceCopyMemoryIndirectPropertiesKHR*>(this);
+    }
+    VkPhysicalDeviceCopyMemoryIndirectPropertiesKHR const* ptr() const {
+        return reinterpret_cast<VkPhysicalDeviceCopyMemoryIndirectPropertiesKHR const*>(this);
+    }
+};
+struct safe_VkVideoEncodeIntraRefreshCapabilitiesKHR {
+    VkStructureType sType;
+    void* pNext{};
+    VkVideoEncodeIntraRefreshModeFlagsKHR intraRefreshModes;
+    uint32_t maxIntraRefreshCycleDuration;
+    uint32_t maxIntraRefreshActiveReferencePictures;
+    VkBool32 partitionIndependentIntraRefreshRegions;
+    VkBool32 nonRectangularIntraRefreshRegions;
+
+    safe_VkVideoEncodeIntraRefreshCapabilitiesKHR(const VkVideoEncodeIntraRefreshCapabilitiesKHR* in_struct,
+                                                  PNextCopyState* copy_state = {}, bool copy_pnext = true);
+    safe_VkVideoEncodeIntraRefreshCapabilitiesKHR(const safe_VkVideoEncodeIntraRefreshCapabilitiesKHR& copy_src);
+    safe_VkVideoEncodeIntraRefreshCapabilitiesKHR& operator=(const safe_VkVideoEncodeIntraRefreshCapabilitiesKHR& copy_src);
+    safe_VkVideoEncodeIntraRefreshCapabilitiesKHR();
+    ~safe_VkVideoEncodeIntraRefreshCapabilitiesKHR();
+    void initialize(const VkVideoEncodeIntraRefreshCapabilitiesKHR* in_struct, PNextCopyState* copy_state = {});
+    void initialize(const safe_VkVideoEncodeIntraRefreshCapabilitiesKHR* copy_src, PNextCopyState* copy_state = {});
+    VkVideoEncodeIntraRefreshCapabilitiesKHR* ptr() { return reinterpret_cast<VkVideoEncodeIntraRefreshCapabilitiesKHR*>(this); }
+    VkVideoEncodeIntraRefreshCapabilitiesKHR const* ptr() const {
+        return reinterpret_cast<VkVideoEncodeIntraRefreshCapabilitiesKHR const*>(this);
+    }
+};
+struct safe_VkVideoEncodeSessionIntraRefreshCreateInfoKHR {
+    VkStructureType sType;
+    const void* pNext{};
+    VkVideoEncodeIntraRefreshModeFlagBitsKHR intraRefreshMode;
+
+    safe_VkVideoEncodeSessionIntraRefreshCreateInfoKHR(const VkVideoEncodeSessionIntraRefreshCreateInfoKHR* in_struct,
+                                                       PNextCopyState* copy_state = {}, bool copy_pnext = true);
+    safe_VkVideoEncodeSessionIntraRefreshCreateInfoKHR(const safe_VkVideoEncodeSessionIntraRefreshCreateInfoKHR& copy_src);
+    safe_VkVideoEncodeSessionIntraRefreshCreateInfoKHR& operator=(
+        const safe_VkVideoEncodeSessionIntraRefreshCreateInfoKHR& copy_src);
+    safe_VkVideoEncodeSessionIntraRefreshCreateInfoKHR();
+    ~safe_VkVideoEncodeSessionIntraRefreshCreateInfoKHR();
+    void initialize(const VkVideoEncodeSessionIntraRefreshCreateInfoKHR* in_struct, PNextCopyState* copy_state = {});
+    void initialize(const safe_VkVideoEncodeSessionIntraRefreshCreateInfoKHR* copy_src, PNextCopyState* copy_state = {});
+    VkVideoEncodeSessionIntraRefreshCreateInfoKHR* ptr() {
+        return reinterpret_cast<VkVideoEncodeSessionIntraRefreshCreateInfoKHR*>(this);
+    }
+    VkVideoEncodeSessionIntraRefreshCreateInfoKHR const* ptr() const {
+        return reinterpret_cast<VkVideoEncodeSessionIntraRefreshCreateInfoKHR const*>(this);
+    }
+};
+struct safe_VkVideoEncodeIntraRefreshInfoKHR {
+    VkStructureType sType;
+    const void* pNext{};
+    uint32_t intraRefreshCycleDuration;
+    uint32_t intraRefreshIndex;
+
+    safe_VkVideoEncodeIntraRefreshInfoKHR(const VkVideoEncodeIntraRefreshInfoKHR* in_struct, PNextCopyState* copy_state = {},
+                                          bool copy_pnext = true);
+    safe_VkVideoEncodeIntraRefreshInfoKHR(const safe_VkVideoEncodeIntraRefreshInfoKHR& copy_src);
+    safe_VkVideoEncodeIntraRefreshInfoKHR& operator=(const safe_VkVideoEncodeIntraRefreshInfoKHR& copy_src);
+    safe_VkVideoEncodeIntraRefreshInfoKHR();
+    ~safe_VkVideoEncodeIntraRefreshInfoKHR();
+    void initialize(const VkVideoEncodeIntraRefreshInfoKHR* in_struct, PNextCopyState* copy_state = {});
+    void initialize(const safe_VkVideoEncodeIntraRefreshInfoKHR* copy_src, PNextCopyState* copy_state = {});
+    VkVideoEncodeIntraRefreshInfoKHR* ptr() { return reinterpret_cast<VkVideoEncodeIntraRefreshInfoKHR*>(this); }
+    VkVideoEncodeIntraRefreshInfoKHR const* ptr() const { return reinterpret_cast<VkVideoEncodeIntraRefreshInfoKHR const*>(this); }
+};
+struct safe_VkVideoReferenceIntraRefreshInfoKHR {
+    VkStructureType sType;
+    const void* pNext{};
+    uint32_t dirtyIntraRefreshRegions;
+
+    safe_VkVideoReferenceIntraRefreshInfoKHR(const VkVideoReferenceIntraRefreshInfoKHR* in_struct, PNextCopyState* copy_state = {},
+                                             bool copy_pnext = true);
+    safe_VkVideoReferenceIntraRefreshInfoKHR(const safe_VkVideoReferenceIntraRefreshInfoKHR& copy_src);
+    safe_VkVideoReferenceIntraRefreshInfoKHR& operator=(const safe_VkVideoReferenceIntraRefreshInfoKHR& copy_src);
+    safe_VkVideoReferenceIntraRefreshInfoKHR();
+    ~safe_VkVideoReferenceIntraRefreshInfoKHR();
+    void initialize(const VkVideoReferenceIntraRefreshInfoKHR* in_struct, PNextCopyState* copy_state = {});
+    void initialize(const safe_VkVideoReferenceIntraRefreshInfoKHR* copy_src, PNextCopyState* copy_state = {});
+    VkVideoReferenceIntraRefreshInfoKHR* ptr() { return reinterpret_cast<VkVideoReferenceIntraRefreshInfoKHR*>(this); }
+    VkVideoReferenceIntraRefreshInfoKHR const* ptr() const {
+        return reinterpret_cast<VkVideoReferenceIntraRefreshInfoKHR const*>(this);
+    }
+};
+struct safe_VkPhysicalDeviceVideoEncodeIntraRefreshFeaturesKHR {
+    VkStructureType sType;
+    void* pNext{};
+    VkBool32 videoEncodeIntraRefresh;
+
+    safe_VkPhysicalDeviceVideoEncodeIntraRefreshFeaturesKHR(const VkPhysicalDeviceVideoEncodeIntraRefreshFeaturesKHR* in_struct,
+                                                            PNextCopyState* copy_state = {}, bool copy_pnext = true);
+    safe_VkPhysicalDeviceVideoEncodeIntraRefreshFeaturesKHR(
+        const safe_VkPhysicalDeviceVideoEncodeIntraRefreshFeaturesKHR& copy_src);
+    safe_VkPhysicalDeviceVideoEncodeIntraRefreshFeaturesKHR& operator=(
+        const safe_VkPhysicalDeviceVideoEncodeIntraRefreshFeaturesKHR& copy_src);
+    safe_VkPhysicalDeviceVideoEncodeIntraRefreshFeaturesKHR();
+    ~safe_VkPhysicalDeviceVideoEncodeIntraRefreshFeaturesKHR();
+    void initialize(const VkPhysicalDeviceVideoEncodeIntraRefreshFeaturesKHR* in_struct, PNextCopyState* copy_state = {});
+    void initialize(const safe_VkPhysicalDeviceVideoEncodeIntraRefreshFeaturesKHR* copy_src, PNextCopyState* copy_state = {});
+    VkPhysicalDeviceVideoEncodeIntraRefreshFeaturesKHR* ptr() {
+        return reinterpret_cast<VkPhysicalDeviceVideoEncodeIntraRefreshFeaturesKHR*>(this);
+    }
+    VkPhysicalDeviceVideoEncodeIntraRefreshFeaturesKHR const* ptr() const {
+        return reinterpret_cast<VkPhysicalDeviceVideoEncodeIntraRefreshFeaturesKHR const*>(this);
     }
 };
 struct safe_VkVideoEncodeQuantizationMapCapabilitiesKHR {
@@ -9591,6 +10197,266 @@ struct safe_VkPhysicalDeviceLayeredApiVulkanPropertiesKHR {
     }
     VkPhysicalDeviceLayeredApiVulkanPropertiesKHR const* ptr() const {
         return reinterpret_cast<VkPhysicalDeviceLayeredApiVulkanPropertiesKHR const*>(this);
+    }
+};
+struct safe_VkMemoryBarrierAccessFlags3KHR {
+    VkStructureType sType;
+    const void* pNext{};
+    VkAccessFlags3KHR srcAccessMask3;
+    VkAccessFlags3KHR dstAccessMask3;
+
+    safe_VkMemoryBarrierAccessFlags3KHR(const VkMemoryBarrierAccessFlags3KHR* in_struct, PNextCopyState* copy_state = {},
+                                        bool copy_pnext = true);
+    safe_VkMemoryBarrierAccessFlags3KHR(const safe_VkMemoryBarrierAccessFlags3KHR& copy_src);
+    safe_VkMemoryBarrierAccessFlags3KHR& operator=(const safe_VkMemoryBarrierAccessFlags3KHR& copy_src);
+    safe_VkMemoryBarrierAccessFlags3KHR();
+    ~safe_VkMemoryBarrierAccessFlags3KHR();
+    void initialize(const VkMemoryBarrierAccessFlags3KHR* in_struct, PNextCopyState* copy_state = {});
+    void initialize(const safe_VkMemoryBarrierAccessFlags3KHR* copy_src, PNextCopyState* copy_state = {});
+    VkMemoryBarrierAccessFlags3KHR* ptr() { return reinterpret_cast<VkMemoryBarrierAccessFlags3KHR*>(this); }
+    VkMemoryBarrierAccessFlags3KHR const* ptr() const { return reinterpret_cast<VkMemoryBarrierAccessFlags3KHR const*>(this); }
+};
+struct safe_VkPhysicalDeviceMaintenance8FeaturesKHR {
+    VkStructureType sType;
+    void* pNext{};
+    VkBool32 maintenance8;
+
+    safe_VkPhysicalDeviceMaintenance8FeaturesKHR(const VkPhysicalDeviceMaintenance8FeaturesKHR* in_struct,
+                                                 PNextCopyState* copy_state = {}, bool copy_pnext = true);
+    safe_VkPhysicalDeviceMaintenance8FeaturesKHR(const safe_VkPhysicalDeviceMaintenance8FeaturesKHR& copy_src);
+    safe_VkPhysicalDeviceMaintenance8FeaturesKHR& operator=(const safe_VkPhysicalDeviceMaintenance8FeaturesKHR& copy_src);
+    safe_VkPhysicalDeviceMaintenance8FeaturesKHR();
+    ~safe_VkPhysicalDeviceMaintenance8FeaturesKHR();
+    void initialize(const VkPhysicalDeviceMaintenance8FeaturesKHR* in_struct, PNextCopyState* copy_state = {});
+    void initialize(const safe_VkPhysicalDeviceMaintenance8FeaturesKHR* copy_src, PNextCopyState* copy_state = {});
+    VkPhysicalDeviceMaintenance8FeaturesKHR* ptr() { return reinterpret_cast<VkPhysicalDeviceMaintenance8FeaturesKHR*>(this); }
+    VkPhysicalDeviceMaintenance8FeaturesKHR const* ptr() const {
+        return reinterpret_cast<VkPhysicalDeviceMaintenance8FeaturesKHR const*>(this);
+    }
+};
+struct safe_VkPhysicalDeviceMaintenance9FeaturesKHR {
+    VkStructureType sType;
+    void* pNext{};
+    VkBool32 maintenance9;
+
+    safe_VkPhysicalDeviceMaintenance9FeaturesKHR(const VkPhysicalDeviceMaintenance9FeaturesKHR* in_struct,
+                                                 PNextCopyState* copy_state = {}, bool copy_pnext = true);
+    safe_VkPhysicalDeviceMaintenance9FeaturesKHR(const safe_VkPhysicalDeviceMaintenance9FeaturesKHR& copy_src);
+    safe_VkPhysicalDeviceMaintenance9FeaturesKHR& operator=(const safe_VkPhysicalDeviceMaintenance9FeaturesKHR& copy_src);
+    safe_VkPhysicalDeviceMaintenance9FeaturesKHR();
+    ~safe_VkPhysicalDeviceMaintenance9FeaturesKHR();
+    void initialize(const VkPhysicalDeviceMaintenance9FeaturesKHR* in_struct, PNextCopyState* copy_state = {});
+    void initialize(const safe_VkPhysicalDeviceMaintenance9FeaturesKHR* copy_src, PNextCopyState* copy_state = {});
+    VkPhysicalDeviceMaintenance9FeaturesKHR* ptr() { return reinterpret_cast<VkPhysicalDeviceMaintenance9FeaturesKHR*>(this); }
+    VkPhysicalDeviceMaintenance9FeaturesKHR const* ptr() const {
+        return reinterpret_cast<VkPhysicalDeviceMaintenance9FeaturesKHR const*>(this);
+    }
+};
+struct safe_VkPhysicalDeviceMaintenance9PropertiesKHR {
+    VkStructureType sType;
+    void* pNext{};
+    VkBool32 image2DViewOf3DSparse;
+    VkDefaultVertexAttributeValueKHR defaultVertexAttributeValue;
+
+    safe_VkPhysicalDeviceMaintenance9PropertiesKHR(const VkPhysicalDeviceMaintenance9PropertiesKHR* in_struct,
+                                                   PNextCopyState* copy_state = {}, bool copy_pnext = true);
+    safe_VkPhysicalDeviceMaintenance9PropertiesKHR(const safe_VkPhysicalDeviceMaintenance9PropertiesKHR& copy_src);
+    safe_VkPhysicalDeviceMaintenance9PropertiesKHR& operator=(const safe_VkPhysicalDeviceMaintenance9PropertiesKHR& copy_src);
+    safe_VkPhysicalDeviceMaintenance9PropertiesKHR();
+    ~safe_VkPhysicalDeviceMaintenance9PropertiesKHR();
+    void initialize(const VkPhysicalDeviceMaintenance9PropertiesKHR* in_struct, PNextCopyState* copy_state = {});
+    void initialize(const safe_VkPhysicalDeviceMaintenance9PropertiesKHR* copy_src, PNextCopyState* copy_state = {});
+    VkPhysicalDeviceMaintenance9PropertiesKHR* ptr() { return reinterpret_cast<VkPhysicalDeviceMaintenance9PropertiesKHR*>(this); }
+    VkPhysicalDeviceMaintenance9PropertiesKHR const* ptr() const {
+        return reinterpret_cast<VkPhysicalDeviceMaintenance9PropertiesKHR const*>(this);
+    }
+};
+struct safe_VkQueueFamilyOwnershipTransferPropertiesKHR {
+    VkStructureType sType;
+    void* pNext{};
+    uint32_t optimalImageTransferToQueueFamilies;
+
+    safe_VkQueueFamilyOwnershipTransferPropertiesKHR(const VkQueueFamilyOwnershipTransferPropertiesKHR* in_struct,
+                                                     PNextCopyState* copy_state = {}, bool copy_pnext = true);
+    safe_VkQueueFamilyOwnershipTransferPropertiesKHR(const safe_VkQueueFamilyOwnershipTransferPropertiesKHR& copy_src);
+    safe_VkQueueFamilyOwnershipTransferPropertiesKHR& operator=(const safe_VkQueueFamilyOwnershipTransferPropertiesKHR& copy_src);
+    safe_VkQueueFamilyOwnershipTransferPropertiesKHR();
+    ~safe_VkQueueFamilyOwnershipTransferPropertiesKHR();
+    void initialize(const VkQueueFamilyOwnershipTransferPropertiesKHR* in_struct, PNextCopyState* copy_state = {});
+    void initialize(const safe_VkQueueFamilyOwnershipTransferPropertiesKHR* copy_src, PNextCopyState* copy_state = {});
+    VkQueueFamilyOwnershipTransferPropertiesKHR* ptr() {
+        return reinterpret_cast<VkQueueFamilyOwnershipTransferPropertiesKHR*>(this);
+    }
+    VkQueueFamilyOwnershipTransferPropertiesKHR const* ptr() const {
+        return reinterpret_cast<VkQueueFamilyOwnershipTransferPropertiesKHR const*>(this);
+    }
+};
+struct safe_VkPhysicalDeviceVideoMaintenance2FeaturesKHR {
+    VkStructureType sType;
+    void* pNext{};
+    VkBool32 videoMaintenance2;
+
+    safe_VkPhysicalDeviceVideoMaintenance2FeaturesKHR(const VkPhysicalDeviceVideoMaintenance2FeaturesKHR* in_struct,
+                                                      PNextCopyState* copy_state = {}, bool copy_pnext = true);
+    safe_VkPhysicalDeviceVideoMaintenance2FeaturesKHR(const safe_VkPhysicalDeviceVideoMaintenance2FeaturesKHR& copy_src);
+    safe_VkPhysicalDeviceVideoMaintenance2FeaturesKHR& operator=(const safe_VkPhysicalDeviceVideoMaintenance2FeaturesKHR& copy_src);
+    safe_VkPhysicalDeviceVideoMaintenance2FeaturesKHR();
+    ~safe_VkPhysicalDeviceVideoMaintenance2FeaturesKHR();
+    void initialize(const VkPhysicalDeviceVideoMaintenance2FeaturesKHR* in_struct, PNextCopyState* copy_state = {});
+    void initialize(const safe_VkPhysicalDeviceVideoMaintenance2FeaturesKHR* copy_src, PNextCopyState* copy_state = {});
+    VkPhysicalDeviceVideoMaintenance2FeaturesKHR* ptr() {
+        return reinterpret_cast<VkPhysicalDeviceVideoMaintenance2FeaturesKHR*>(this);
+    }
+    VkPhysicalDeviceVideoMaintenance2FeaturesKHR const* ptr() const {
+        return reinterpret_cast<VkPhysicalDeviceVideoMaintenance2FeaturesKHR const*>(this);
+    }
+};
+struct safe_VkVideoDecodeH264InlineSessionParametersInfoKHR {
+    VkStructureType sType;
+    const void* pNext{};
+    const StdVideoH264SequenceParameterSet* pStdSPS{};
+    const StdVideoH264PictureParameterSet* pStdPPS{};
+
+    safe_VkVideoDecodeH264InlineSessionParametersInfoKHR(const VkVideoDecodeH264InlineSessionParametersInfoKHR* in_struct,
+                                                         PNextCopyState* copy_state = {}, bool copy_pnext = true);
+    safe_VkVideoDecodeH264InlineSessionParametersInfoKHR(const safe_VkVideoDecodeH264InlineSessionParametersInfoKHR& copy_src);
+    safe_VkVideoDecodeH264InlineSessionParametersInfoKHR& operator=(
+        const safe_VkVideoDecodeH264InlineSessionParametersInfoKHR& copy_src);
+    safe_VkVideoDecodeH264InlineSessionParametersInfoKHR();
+    ~safe_VkVideoDecodeH264InlineSessionParametersInfoKHR();
+    void initialize(const VkVideoDecodeH264InlineSessionParametersInfoKHR* in_struct, PNextCopyState* copy_state = {});
+    void initialize(const safe_VkVideoDecodeH264InlineSessionParametersInfoKHR* copy_src, PNextCopyState* copy_state = {});
+    VkVideoDecodeH264InlineSessionParametersInfoKHR* ptr() {
+        return reinterpret_cast<VkVideoDecodeH264InlineSessionParametersInfoKHR*>(this);
+    }
+    VkVideoDecodeH264InlineSessionParametersInfoKHR const* ptr() const {
+        return reinterpret_cast<VkVideoDecodeH264InlineSessionParametersInfoKHR const*>(this);
+    }
+};
+struct safe_VkVideoDecodeH265InlineSessionParametersInfoKHR {
+    VkStructureType sType;
+    const void* pNext{};
+    const StdVideoH265VideoParameterSet* pStdVPS{};
+    const StdVideoH265SequenceParameterSet* pStdSPS{};
+    const StdVideoH265PictureParameterSet* pStdPPS{};
+
+    safe_VkVideoDecodeH265InlineSessionParametersInfoKHR(const VkVideoDecodeH265InlineSessionParametersInfoKHR* in_struct,
+                                                         PNextCopyState* copy_state = {}, bool copy_pnext = true);
+    safe_VkVideoDecodeH265InlineSessionParametersInfoKHR(const safe_VkVideoDecodeH265InlineSessionParametersInfoKHR& copy_src);
+    safe_VkVideoDecodeH265InlineSessionParametersInfoKHR& operator=(
+        const safe_VkVideoDecodeH265InlineSessionParametersInfoKHR& copy_src);
+    safe_VkVideoDecodeH265InlineSessionParametersInfoKHR();
+    ~safe_VkVideoDecodeH265InlineSessionParametersInfoKHR();
+    void initialize(const VkVideoDecodeH265InlineSessionParametersInfoKHR* in_struct, PNextCopyState* copy_state = {});
+    void initialize(const safe_VkVideoDecodeH265InlineSessionParametersInfoKHR* copy_src, PNextCopyState* copy_state = {});
+    VkVideoDecodeH265InlineSessionParametersInfoKHR* ptr() {
+        return reinterpret_cast<VkVideoDecodeH265InlineSessionParametersInfoKHR*>(this);
+    }
+    VkVideoDecodeH265InlineSessionParametersInfoKHR const* ptr() const {
+        return reinterpret_cast<VkVideoDecodeH265InlineSessionParametersInfoKHR const*>(this);
+    }
+};
+struct safe_VkVideoDecodeAV1InlineSessionParametersInfoKHR {
+    VkStructureType sType;
+    const void* pNext{};
+    const StdVideoAV1SequenceHeader* pStdSequenceHeader{};
+
+    safe_VkVideoDecodeAV1InlineSessionParametersInfoKHR(const VkVideoDecodeAV1InlineSessionParametersInfoKHR* in_struct,
+                                                        PNextCopyState* copy_state = {}, bool copy_pnext = true);
+    safe_VkVideoDecodeAV1InlineSessionParametersInfoKHR(const safe_VkVideoDecodeAV1InlineSessionParametersInfoKHR& copy_src);
+    safe_VkVideoDecodeAV1InlineSessionParametersInfoKHR& operator=(
+        const safe_VkVideoDecodeAV1InlineSessionParametersInfoKHR& copy_src);
+    safe_VkVideoDecodeAV1InlineSessionParametersInfoKHR();
+    ~safe_VkVideoDecodeAV1InlineSessionParametersInfoKHR();
+    void initialize(const VkVideoDecodeAV1InlineSessionParametersInfoKHR* in_struct, PNextCopyState* copy_state = {});
+    void initialize(const safe_VkVideoDecodeAV1InlineSessionParametersInfoKHR* copy_src, PNextCopyState* copy_state = {});
+    VkVideoDecodeAV1InlineSessionParametersInfoKHR* ptr() {
+        return reinterpret_cast<VkVideoDecodeAV1InlineSessionParametersInfoKHR*>(this);
+    }
+    VkVideoDecodeAV1InlineSessionParametersInfoKHR const* ptr() const {
+        return reinterpret_cast<VkVideoDecodeAV1InlineSessionParametersInfoKHR const*>(this);
+    }
+};
+struct safe_VkPhysicalDeviceDepthClampZeroOneFeaturesKHR {
+    VkStructureType sType;
+    void* pNext{};
+    VkBool32 depthClampZeroOne;
+
+    safe_VkPhysicalDeviceDepthClampZeroOneFeaturesKHR(const VkPhysicalDeviceDepthClampZeroOneFeaturesKHR* in_struct,
+                                                      PNextCopyState* copy_state = {}, bool copy_pnext = true);
+    safe_VkPhysicalDeviceDepthClampZeroOneFeaturesKHR(const safe_VkPhysicalDeviceDepthClampZeroOneFeaturesKHR& copy_src);
+    safe_VkPhysicalDeviceDepthClampZeroOneFeaturesKHR& operator=(const safe_VkPhysicalDeviceDepthClampZeroOneFeaturesKHR& copy_src);
+    safe_VkPhysicalDeviceDepthClampZeroOneFeaturesKHR();
+    ~safe_VkPhysicalDeviceDepthClampZeroOneFeaturesKHR();
+    void initialize(const VkPhysicalDeviceDepthClampZeroOneFeaturesKHR* in_struct, PNextCopyState* copy_state = {});
+    void initialize(const safe_VkPhysicalDeviceDepthClampZeroOneFeaturesKHR* copy_src, PNextCopyState* copy_state = {});
+    VkPhysicalDeviceDepthClampZeroOneFeaturesKHR* ptr() {
+        return reinterpret_cast<VkPhysicalDeviceDepthClampZeroOneFeaturesKHR*>(this);
+    }
+    VkPhysicalDeviceDepthClampZeroOneFeaturesKHR const* ptr() const {
+        return reinterpret_cast<VkPhysicalDeviceDepthClampZeroOneFeaturesKHR const*>(this);
+    }
+};
+struct safe_VkPhysicalDeviceRobustness2FeaturesKHR {
+    VkStructureType sType;
+    void* pNext{};
+    VkBool32 robustBufferAccess2;
+    VkBool32 robustImageAccess2;
+    VkBool32 nullDescriptor;
+
+    safe_VkPhysicalDeviceRobustness2FeaturesKHR(const VkPhysicalDeviceRobustness2FeaturesKHR* in_struct,
+                                                PNextCopyState* copy_state = {}, bool copy_pnext = true);
+    safe_VkPhysicalDeviceRobustness2FeaturesKHR(const safe_VkPhysicalDeviceRobustness2FeaturesKHR& copy_src);
+    safe_VkPhysicalDeviceRobustness2FeaturesKHR& operator=(const safe_VkPhysicalDeviceRobustness2FeaturesKHR& copy_src);
+    safe_VkPhysicalDeviceRobustness2FeaturesKHR();
+    ~safe_VkPhysicalDeviceRobustness2FeaturesKHR();
+    void initialize(const VkPhysicalDeviceRobustness2FeaturesKHR* in_struct, PNextCopyState* copy_state = {});
+    void initialize(const safe_VkPhysicalDeviceRobustness2FeaturesKHR* copy_src, PNextCopyState* copy_state = {});
+    VkPhysicalDeviceRobustness2FeaturesKHR* ptr() { return reinterpret_cast<VkPhysicalDeviceRobustness2FeaturesKHR*>(this); }
+    VkPhysicalDeviceRobustness2FeaturesKHR const* ptr() const {
+        return reinterpret_cast<VkPhysicalDeviceRobustness2FeaturesKHR const*>(this);
+    }
+};
+struct safe_VkPhysicalDeviceRobustness2PropertiesKHR {
+    VkStructureType sType;
+    void* pNext{};
+    VkDeviceSize robustStorageBufferAccessSizeAlignment;
+    VkDeviceSize robustUniformBufferAccessSizeAlignment;
+
+    safe_VkPhysicalDeviceRobustness2PropertiesKHR(const VkPhysicalDeviceRobustness2PropertiesKHR* in_struct,
+                                                  PNextCopyState* copy_state = {}, bool copy_pnext = true);
+    safe_VkPhysicalDeviceRobustness2PropertiesKHR(const safe_VkPhysicalDeviceRobustness2PropertiesKHR& copy_src);
+    safe_VkPhysicalDeviceRobustness2PropertiesKHR& operator=(const safe_VkPhysicalDeviceRobustness2PropertiesKHR& copy_src);
+    safe_VkPhysicalDeviceRobustness2PropertiesKHR();
+    ~safe_VkPhysicalDeviceRobustness2PropertiesKHR();
+    void initialize(const VkPhysicalDeviceRobustness2PropertiesKHR* in_struct, PNextCopyState* copy_state = {});
+    void initialize(const safe_VkPhysicalDeviceRobustness2PropertiesKHR* copy_src, PNextCopyState* copy_state = {});
+    VkPhysicalDeviceRobustness2PropertiesKHR* ptr() { return reinterpret_cast<VkPhysicalDeviceRobustness2PropertiesKHR*>(this); }
+    VkPhysicalDeviceRobustness2PropertiesKHR const* ptr() const {
+        return reinterpret_cast<VkPhysicalDeviceRobustness2PropertiesKHR const*>(this);
+    }
+};
+struct safe_VkPhysicalDevicePresentModeFifoLatestReadyFeaturesKHR {
+    VkStructureType sType;
+    void* pNext{};
+    VkBool32 presentModeFifoLatestReady;
+
+    safe_VkPhysicalDevicePresentModeFifoLatestReadyFeaturesKHR(
+        const VkPhysicalDevicePresentModeFifoLatestReadyFeaturesKHR* in_struct, PNextCopyState* copy_state = {},
+        bool copy_pnext = true);
+    safe_VkPhysicalDevicePresentModeFifoLatestReadyFeaturesKHR(
+        const safe_VkPhysicalDevicePresentModeFifoLatestReadyFeaturesKHR& copy_src);
+    safe_VkPhysicalDevicePresentModeFifoLatestReadyFeaturesKHR& operator=(
+        const safe_VkPhysicalDevicePresentModeFifoLatestReadyFeaturesKHR& copy_src);
+    safe_VkPhysicalDevicePresentModeFifoLatestReadyFeaturesKHR();
+    ~safe_VkPhysicalDevicePresentModeFifoLatestReadyFeaturesKHR();
+    void initialize(const VkPhysicalDevicePresentModeFifoLatestReadyFeaturesKHR* in_struct, PNextCopyState* copy_state = {});
+    void initialize(const safe_VkPhysicalDevicePresentModeFifoLatestReadyFeaturesKHR* copy_src, PNextCopyState* copy_state = {});
+    VkPhysicalDevicePresentModeFifoLatestReadyFeaturesKHR* ptr() {
+        return reinterpret_cast<VkPhysicalDevicePresentModeFifoLatestReadyFeaturesKHR*>(this);
+    }
+    VkPhysicalDevicePresentModeFifoLatestReadyFeaturesKHR const* ptr() const {
+        return reinterpret_cast<VkPhysicalDevicePresentModeFifoLatestReadyFeaturesKHR const*>(this);
     }
 };
 struct safe_VkDebugReportCallbackCreateInfoEXT {
@@ -13180,174 +14046,6 @@ struct safe_VkPhysicalDeviceShaderAtomicFloat2FeaturesEXT {
         return reinterpret_cast<VkPhysicalDeviceShaderAtomicFloat2FeaturesEXT const*>(this);
     }
 };
-struct safe_VkSurfacePresentModeEXT {
-    VkStructureType sType;
-    void* pNext{};
-    VkPresentModeKHR presentMode;
-
-    safe_VkSurfacePresentModeEXT(const VkSurfacePresentModeEXT* in_struct, PNextCopyState* copy_state = {}, bool copy_pnext = true);
-    safe_VkSurfacePresentModeEXT(const safe_VkSurfacePresentModeEXT& copy_src);
-    safe_VkSurfacePresentModeEXT& operator=(const safe_VkSurfacePresentModeEXT& copy_src);
-    safe_VkSurfacePresentModeEXT();
-    ~safe_VkSurfacePresentModeEXT();
-    void initialize(const VkSurfacePresentModeEXT* in_struct, PNextCopyState* copy_state = {});
-    void initialize(const safe_VkSurfacePresentModeEXT* copy_src, PNextCopyState* copy_state = {});
-    VkSurfacePresentModeEXT* ptr() { return reinterpret_cast<VkSurfacePresentModeEXT*>(this); }
-    VkSurfacePresentModeEXT const* ptr() const { return reinterpret_cast<VkSurfacePresentModeEXT const*>(this); }
-};
-struct safe_VkSurfacePresentScalingCapabilitiesEXT {
-    VkStructureType sType;
-    void* pNext{};
-    VkPresentScalingFlagsEXT supportedPresentScaling;
-    VkPresentGravityFlagsEXT supportedPresentGravityX;
-    VkPresentGravityFlagsEXT supportedPresentGravityY;
-    VkExtent2D minScaledImageExtent;
-    VkExtent2D maxScaledImageExtent;
-
-    safe_VkSurfacePresentScalingCapabilitiesEXT(const VkSurfacePresentScalingCapabilitiesEXT* in_struct,
-                                                PNextCopyState* copy_state = {}, bool copy_pnext = true);
-    safe_VkSurfacePresentScalingCapabilitiesEXT(const safe_VkSurfacePresentScalingCapabilitiesEXT& copy_src);
-    safe_VkSurfacePresentScalingCapabilitiesEXT& operator=(const safe_VkSurfacePresentScalingCapabilitiesEXT& copy_src);
-    safe_VkSurfacePresentScalingCapabilitiesEXT();
-    ~safe_VkSurfacePresentScalingCapabilitiesEXT();
-    void initialize(const VkSurfacePresentScalingCapabilitiesEXT* in_struct, PNextCopyState* copy_state = {});
-    void initialize(const safe_VkSurfacePresentScalingCapabilitiesEXT* copy_src, PNextCopyState* copy_state = {});
-    VkSurfacePresentScalingCapabilitiesEXT* ptr() { return reinterpret_cast<VkSurfacePresentScalingCapabilitiesEXT*>(this); }
-    VkSurfacePresentScalingCapabilitiesEXT const* ptr() const {
-        return reinterpret_cast<VkSurfacePresentScalingCapabilitiesEXT const*>(this);
-    }
-};
-struct safe_VkSurfacePresentModeCompatibilityEXT {
-    VkStructureType sType;
-    void* pNext{};
-    uint32_t presentModeCount;
-    VkPresentModeKHR* pPresentModes{};
-
-    safe_VkSurfacePresentModeCompatibilityEXT(const VkSurfacePresentModeCompatibilityEXT* in_struct,
-                                              PNextCopyState* copy_state = {}, bool copy_pnext = true);
-    safe_VkSurfacePresentModeCompatibilityEXT(const safe_VkSurfacePresentModeCompatibilityEXT& copy_src);
-    safe_VkSurfacePresentModeCompatibilityEXT& operator=(const safe_VkSurfacePresentModeCompatibilityEXT& copy_src);
-    safe_VkSurfacePresentModeCompatibilityEXT();
-    ~safe_VkSurfacePresentModeCompatibilityEXT();
-    void initialize(const VkSurfacePresentModeCompatibilityEXT* in_struct, PNextCopyState* copy_state = {});
-    void initialize(const safe_VkSurfacePresentModeCompatibilityEXT* copy_src, PNextCopyState* copy_state = {});
-    VkSurfacePresentModeCompatibilityEXT* ptr() { return reinterpret_cast<VkSurfacePresentModeCompatibilityEXT*>(this); }
-    VkSurfacePresentModeCompatibilityEXT const* ptr() const {
-        return reinterpret_cast<VkSurfacePresentModeCompatibilityEXT const*>(this);
-    }
-};
-struct safe_VkPhysicalDeviceSwapchainMaintenance1FeaturesEXT {
-    VkStructureType sType;
-    void* pNext{};
-    VkBool32 swapchainMaintenance1;
-
-    safe_VkPhysicalDeviceSwapchainMaintenance1FeaturesEXT(const VkPhysicalDeviceSwapchainMaintenance1FeaturesEXT* in_struct,
-                                                          PNextCopyState* copy_state = {}, bool copy_pnext = true);
-    safe_VkPhysicalDeviceSwapchainMaintenance1FeaturesEXT(const safe_VkPhysicalDeviceSwapchainMaintenance1FeaturesEXT& copy_src);
-    safe_VkPhysicalDeviceSwapchainMaintenance1FeaturesEXT& operator=(
-        const safe_VkPhysicalDeviceSwapchainMaintenance1FeaturesEXT& copy_src);
-    safe_VkPhysicalDeviceSwapchainMaintenance1FeaturesEXT();
-    ~safe_VkPhysicalDeviceSwapchainMaintenance1FeaturesEXT();
-    void initialize(const VkPhysicalDeviceSwapchainMaintenance1FeaturesEXT* in_struct, PNextCopyState* copy_state = {});
-    void initialize(const safe_VkPhysicalDeviceSwapchainMaintenance1FeaturesEXT* copy_src, PNextCopyState* copy_state = {});
-    VkPhysicalDeviceSwapchainMaintenance1FeaturesEXT* ptr() {
-        return reinterpret_cast<VkPhysicalDeviceSwapchainMaintenance1FeaturesEXT*>(this);
-    }
-    VkPhysicalDeviceSwapchainMaintenance1FeaturesEXT const* ptr() const {
-        return reinterpret_cast<VkPhysicalDeviceSwapchainMaintenance1FeaturesEXT const*>(this);
-    }
-};
-struct safe_VkSwapchainPresentFenceInfoEXT {
-    VkStructureType sType;
-    const void* pNext{};
-    uint32_t swapchainCount;
-    VkFence* pFences{};
-
-    safe_VkSwapchainPresentFenceInfoEXT(const VkSwapchainPresentFenceInfoEXT* in_struct, PNextCopyState* copy_state = {},
-                                        bool copy_pnext = true);
-    safe_VkSwapchainPresentFenceInfoEXT(const safe_VkSwapchainPresentFenceInfoEXT& copy_src);
-    safe_VkSwapchainPresentFenceInfoEXT& operator=(const safe_VkSwapchainPresentFenceInfoEXT& copy_src);
-    safe_VkSwapchainPresentFenceInfoEXT();
-    ~safe_VkSwapchainPresentFenceInfoEXT();
-    void initialize(const VkSwapchainPresentFenceInfoEXT* in_struct, PNextCopyState* copy_state = {});
-    void initialize(const safe_VkSwapchainPresentFenceInfoEXT* copy_src, PNextCopyState* copy_state = {});
-    VkSwapchainPresentFenceInfoEXT* ptr() { return reinterpret_cast<VkSwapchainPresentFenceInfoEXT*>(this); }
-    VkSwapchainPresentFenceInfoEXT const* ptr() const { return reinterpret_cast<VkSwapchainPresentFenceInfoEXT const*>(this); }
-};
-struct safe_VkSwapchainPresentModesCreateInfoEXT {
-    VkStructureType sType;
-    const void* pNext{};
-    uint32_t presentModeCount;
-    const VkPresentModeKHR* pPresentModes{};
-
-    safe_VkSwapchainPresentModesCreateInfoEXT(const VkSwapchainPresentModesCreateInfoEXT* in_struct,
-                                              PNextCopyState* copy_state = {}, bool copy_pnext = true);
-    safe_VkSwapchainPresentModesCreateInfoEXT(const safe_VkSwapchainPresentModesCreateInfoEXT& copy_src);
-    safe_VkSwapchainPresentModesCreateInfoEXT& operator=(const safe_VkSwapchainPresentModesCreateInfoEXT& copy_src);
-    safe_VkSwapchainPresentModesCreateInfoEXT();
-    ~safe_VkSwapchainPresentModesCreateInfoEXT();
-    void initialize(const VkSwapchainPresentModesCreateInfoEXT* in_struct, PNextCopyState* copy_state = {});
-    void initialize(const safe_VkSwapchainPresentModesCreateInfoEXT* copy_src, PNextCopyState* copy_state = {});
-    VkSwapchainPresentModesCreateInfoEXT* ptr() { return reinterpret_cast<VkSwapchainPresentModesCreateInfoEXT*>(this); }
-    VkSwapchainPresentModesCreateInfoEXT const* ptr() const {
-        return reinterpret_cast<VkSwapchainPresentModesCreateInfoEXT const*>(this);
-    }
-};
-struct safe_VkSwapchainPresentModeInfoEXT {
-    VkStructureType sType;
-    const void* pNext{};
-    uint32_t swapchainCount;
-    const VkPresentModeKHR* pPresentModes{};
-
-    safe_VkSwapchainPresentModeInfoEXT(const VkSwapchainPresentModeInfoEXT* in_struct, PNextCopyState* copy_state = {},
-                                       bool copy_pnext = true);
-    safe_VkSwapchainPresentModeInfoEXT(const safe_VkSwapchainPresentModeInfoEXT& copy_src);
-    safe_VkSwapchainPresentModeInfoEXT& operator=(const safe_VkSwapchainPresentModeInfoEXT& copy_src);
-    safe_VkSwapchainPresentModeInfoEXT();
-    ~safe_VkSwapchainPresentModeInfoEXT();
-    void initialize(const VkSwapchainPresentModeInfoEXT* in_struct, PNextCopyState* copy_state = {});
-    void initialize(const safe_VkSwapchainPresentModeInfoEXT* copy_src, PNextCopyState* copy_state = {});
-    VkSwapchainPresentModeInfoEXT* ptr() { return reinterpret_cast<VkSwapchainPresentModeInfoEXT*>(this); }
-    VkSwapchainPresentModeInfoEXT const* ptr() const { return reinterpret_cast<VkSwapchainPresentModeInfoEXT const*>(this); }
-};
-struct safe_VkSwapchainPresentScalingCreateInfoEXT {
-    VkStructureType sType;
-    const void* pNext{};
-    VkPresentScalingFlagsEXT scalingBehavior;
-    VkPresentGravityFlagsEXT presentGravityX;
-    VkPresentGravityFlagsEXT presentGravityY;
-
-    safe_VkSwapchainPresentScalingCreateInfoEXT(const VkSwapchainPresentScalingCreateInfoEXT* in_struct,
-                                                PNextCopyState* copy_state = {}, bool copy_pnext = true);
-    safe_VkSwapchainPresentScalingCreateInfoEXT(const safe_VkSwapchainPresentScalingCreateInfoEXT& copy_src);
-    safe_VkSwapchainPresentScalingCreateInfoEXT& operator=(const safe_VkSwapchainPresentScalingCreateInfoEXT& copy_src);
-    safe_VkSwapchainPresentScalingCreateInfoEXT();
-    ~safe_VkSwapchainPresentScalingCreateInfoEXT();
-    void initialize(const VkSwapchainPresentScalingCreateInfoEXT* in_struct, PNextCopyState* copy_state = {});
-    void initialize(const safe_VkSwapchainPresentScalingCreateInfoEXT* copy_src, PNextCopyState* copy_state = {});
-    VkSwapchainPresentScalingCreateInfoEXT* ptr() { return reinterpret_cast<VkSwapchainPresentScalingCreateInfoEXT*>(this); }
-    VkSwapchainPresentScalingCreateInfoEXT const* ptr() const {
-        return reinterpret_cast<VkSwapchainPresentScalingCreateInfoEXT const*>(this);
-    }
-};
-struct safe_VkReleaseSwapchainImagesInfoEXT {
-    VkStructureType sType;
-    const void* pNext{};
-    VkSwapchainKHR swapchain;
-    uint32_t imageIndexCount;
-    const uint32_t* pImageIndices{};
-
-    safe_VkReleaseSwapchainImagesInfoEXT(const VkReleaseSwapchainImagesInfoEXT* in_struct, PNextCopyState* copy_state = {},
-                                         bool copy_pnext = true);
-    safe_VkReleaseSwapchainImagesInfoEXT(const safe_VkReleaseSwapchainImagesInfoEXT& copy_src);
-    safe_VkReleaseSwapchainImagesInfoEXT& operator=(const safe_VkReleaseSwapchainImagesInfoEXT& copy_src);
-    safe_VkReleaseSwapchainImagesInfoEXT();
-    ~safe_VkReleaseSwapchainImagesInfoEXT();
-    void initialize(const VkReleaseSwapchainImagesInfoEXT* in_struct, PNextCopyState* copy_state = {});
-    void initialize(const safe_VkReleaseSwapchainImagesInfoEXT* copy_src, PNextCopyState* copy_state = {});
-    VkReleaseSwapchainImagesInfoEXT* ptr() { return reinterpret_cast<VkReleaseSwapchainImagesInfoEXT*>(this); }
-    VkReleaseSwapchainImagesInfoEXT const* ptr() const { return reinterpret_cast<VkReleaseSwapchainImagesInfoEXT const*>(this); }
-};
 struct safe_VkPhysicalDeviceDeviceGeneratedCommandsPropertiesNV {
     VkStructureType sType;
     void* pNext{};
@@ -13613,7 +14311,7 @@ struct safe_VkPhysicalDeviceTexelBufferAlignmentFeaturesEXT {
 };
 struct safe_VkRenderPassTransformBeginInfoQCOM {
     VkStructureType sType;
-    void* pNext{};
+    const void* pNext{};
     VkSurfaceTransformFlagBitsKHR transform;
 
     safe_VkRenderPassTransformBeginInfoQCOM(const VkRenderPassTransformBeginInfoQCOM* in_struct, PNextCopyState* copy_state = {},
@@ -13631,7 +14329,7 @@ struct safe_VkRenderPassTransformBeginInfoQCOM {
 };
 struct safe_VkCommandBufferInheritanceRenderPassTransformInfoQCOM {
     VkStructureType sType;
-    void* pNext{};
+    const void* pNext{};
     VkSurfaceTransformFlagBitsKHR transform;
     VkRect2D renderArea;
 
@@ -13773,45 +14471,6 @@ struct safe_VkDeviceDeviceMemoryReportCreateInfoEXT {
     VkDeviceDeviceMemoryReportCreateInfoEXT* ptr() { return reinterpret_cast<VkDeviceDeviceMemoryReportCreateInfoEXT*>(this); }
     VkDeviceDeviceMemoryReportCreateInfoEXT const* ptr() const {
         return reinterpret_cast<VkDeviceDeviceMemoryReportCreateInfoEXT const*>(this);
-    }
-};
-struct safe_VkPhysicalDeviceRobustness2FeaturesEXT {
-    VkStructureType sType;
-    void* pNext{};
-    VkBool32 robustBufferAccess2;
-    VkBool32 robustImageAccess2;
-    VkBool32 nullDescriptor;
-
-    safe_VkPhysicalDeviceRobustness2FeaturesEXT(const VkPhysicalDeviceRobustness2FeaturesEXT* in_struct,
-                                                PNextCopyState* copy_state = {}, bool copy_pnext = true);
-    safe_VkPhysicalDeviceRobustness2FeaturesEXT(const safe_VkPhysicalDeviceRobustness2FeaturesEXT& copy_src);
-    safe_VkPhysicalDeviceRobustness2FeaturesEXT& operator=(const safe_VkPhysicalDeviceRobustness2FeaturesEXT& copy_src);
-    safe_VkPhysicalDeviceRobustness2FeaturesEXT();
-    ~safe_VkPhysicalDeviceRobustness2FeaturesEXT();
-    void initialize(const VkPhysicalDeviceRobustness2FeaturesEXT* in_struct, PNextCopyState* copy_state = {});
-    void initialize(const safe_VkPhysicalDeviceRobustness2FeaturesEXT* copy_src, PNextCopyState* copy_state = {});
-    VkPhysicalDeviceRobustness2FeaturesEXT* ptr() { return reinterpret_cast<VkPhysicalDeviceRobustness2FeaturesEXT*>(this); }
-    VkPhysicalDeviceRobustness2FeaturesEXT const* ptr() const {
-        return reinterpret_cast<VkPhysicalDeviceRobustness2FeaturesEXT const*>(this);
-    }
-};
-struct safe_VkPhysicalDeviceRobustness2PropertiesEXT {
-    VkStructureType sType;
-    void* pNext{};
-    VkDeviceSize robustStorageBufferAccessSizeAlignment;
-    VkDeviceSize robustUniformBufferAccessSizeAlignment;
-
-    safe_VkPhysicalDeviceRobustness2PropertiesEXT(const VkPhysicalDeviceRobustness2PropertiesEXT* in_struct,
-                                                  PNextCopyState* copy_state = {}, bool copy_pnext = true);
-    safe_VkPhysicalDeviceRobustness2PropertiesEXT(const safe_VkPhysicalDeviceRobustness2PropertiesEXT& copy_src);
-    safe_VkPhysicalDeviceRobustness2PropertiesEXT& operator=(const safe_VkPhysicalDeviceRobustness2PropertiesEXT& copy_src);
-    safe_VkPhysicalDeviceRobustness2PropertiesEXT();
-    ~safe_VkPhysicalDeviceRobustness2PropertiesEXT();
-    void initialize(const VkPhysicalDeviceRobustness2PropertiesEXT* in_struct, PNextCopyState* copy_state = {});
-    void initialize(const safe_VkPhysicalDeviceRobustness2PropertiesEXT* copy_src, PNextCopyState* copy_state = {});
-    VkPhysicalDeviceRobustness2PropertiesEXT* ptr() { return reinterpret_cast<VkPhysicalDeviceRobustness2PropertiesEXT*>(this); }
-    VkPhysicalDeviceRobustness2PropertiesEXT const* ptr() const {
-        return reinterpret_cast<VkPhysicalDeviceRobustness2PropertiesEXT const*>(this);
     }
 };
 struct safe_VkSamplerCustomBorderColorCreateInfoEXT {
@@ -13967,6 +14626,7 @@ struct safe_VkDeviceDiagnosticsConfigCreateInfoNV {
         return reinterpret_cast<VkDeviceDiagnosticsConfigCreateInfoNV const*>(this);
     }
 };
+#ifdef VK_ENABLE_BETA_EXTENSIONS
 struct safe_VkCudaModuleCreateInfoNV {
     VkStructureType sType;
     const void* pNext{};
@@ -14067,6 +14727,120 @@ struct safe_VkPhysicalDeviceCudaKernelLaunchPropertiesNV {
     VkPhysicalDeviceCudaKernelLaunchPropertiesNV const* ptr() const {
         return reinterpret_cast<VkPhysicalDeviceCudaKernelLaunchPropertiesNV const*>(this);
     }
+};
+#endif  // VK_ENABLE_BETA_EXTENSIONS
+struct safe_VkPhysicalDeviceTileShadingFeaturesQCOM {
+    VkStructureType sType;
+    void* pNext{};
+    VkBool32 tileShading;
+    VkBool32 tileShadingFragmentStage;
+    VkBool32 tileShadingColorAttachments;
+    VkBool32 tileShadingDepthAttachments;
+    VkBool32 tileShadingStencilAttachments;
+    VkBool32 tileShadingInputAttachments;
+    VkBool32 tileShadingSampledAttachments;
+    VkBool32 tileShadingPerTileDraw;
+    VkBool32 tileShadingPerTileDispatch;
+    VkBool32 tileShadingDispatchTile;
+    VkBool32 tileShadingApron;
+    VkBool32 tileShadingAnisotropicApron;
+    VkBool32 tileShadingAtomicOps;
+    VkBool32 tileShadingImageProcessing;
+
+    safe_VkPhysicalDeviceTileShadingFeaturesQCOM(const VkPhysicalDeviceTileShadingFeaturesQCOM* in_struct,
+                                                 PNextCopyState* copy_state = {}, bool copy_pnext = true);
+    safe_VkPhysicalDeviceTileShadingFeaturesQCOM(const safe_VkPhysicalDeviceTileShadingFeaturesQCOM& copy_src);
+    safe_VkPhysicalDeviceTileShadingFeaturesQCOM& operator=(const safe_VkPhysicalDeviceTileShadingFeaturesQCOM& copy_src);
+    safe_VkPhysicalDeviceTileShadingFeaturesQCOM();
+    ~safe_VkPhysicalDeviceTileShadingFeaturesQCOM();
+    void initialize(const VkPhysicalDeviceTileShadingFeaturesQCOM* in_struct, PNextCopyState* copy_state = {});
+    void initialize(const safe_VkPhysicalDeviceTileShadingFeaturesQCOM* copy_src, PNextCopyState* copy_state = {});
+    VkPhysicalDeviceTileShadingFeaturesQCOM* ptr() { return reinterpret_cast<VkPhysicalDeviceTileShadingFeaturesQCOM*>(this); }
+    VkPhysicalDeviceTileShadingFeaturesQCOM const* ptr() const {
+        return reinterpret_cast<VkPhysicalDeviceTileShadingFeaturesQCOM const*>(this);
+    }
+};
+struct safe_VkPhysicalDeviceTileShadingPropertiesQCOM {
+    VkStructureType sType;
+    void* pNext{};
+    uint32_t maxApronSize;
+    VkBool32 preferNonCoherent;
+    VkExtent2D tileGranularity;
+    VkExtent2D maxTileShadingRate;
+
+    safe_VkPhysicalDeviceTileShadingPropertiesQCOM(const VkPhysicalDeviceTileShadingPropertiesQCOM* in_struct,
+                                                   PNextCopyState* copy_state = {}, bool copy_pnext = true);
+    safe_VkPhysicalDeviceTileShadingPropertiesQCOM(const safe_VkPhysicalDeviceTileShadingPropertiesQCOM& copy_src);
+    safe_VkPhysicalDeviceTileShadingPropertiesQCOM& operator=(const safe_VkPhysicalDeviceTileShadingPropertiesQCOM& copy_src);
+    safe_VkPhysicalDeviceTileShadingPropertiesQCOM();
+    ~safe_VkPhysicalDeviceTileShadingPropertiesQCOM();
+    void initialize(const VkPhysicalDeviceTileShadingPropertiesQCOM* in_struct, PNextCopyState* copy_state = {});
+    void initialize(const safe_VkPhysicalDeviceTileShadingPropertiesQCOM* copy_src, PNextCopyState* copy_state = {});
+    VkPhysicalDeviceTileShadingPropertiesQCOM* ptr() { return reinterpret_cast<VkPhysicalDeviceTileShadingPropertiesQCOM*>(this); }
+    VkPhysicalDeviceTileShadingPropertiesQCOM const* ptr() const {
+        return reinterpret_cast<VkPhysicalDeviceTileShadingPropertiesQCOM const*>(this);
+    }
+};
+struct safe_VkRenderPassTileShadingCreateInfoQCOM {
+    VkStructureType sType;
+    const void* pNext{};
+    VkTileShadingRenderPassFlagsQCOM flags;
+    VkExtent2D tileApronSize;
+
+    safe_VkRenderPassTileShadingCreateInfoQCOM(const VkRenderPassTileShadingCreateInfoQCOM* in_struct,
+                                               PNextCopyState* copy_state = {}, bool copy_pnext = true);
+    safe_VkRenderPassTileShadingCreateInfoQCOM(const safe_VkRenderPassTileShadingCreateInfoQCOM& copy_src);
+    safe_VkRenderPassTileShadingCreateInfoQCOM& operator=(const safe_VkRenderPassTileShadingCreateInfoQCOM& copy_src);
+    safe_VkRenderPassTileShadingCreateInfoQCOM();
+    ~safe_VkRenderPassTileShadingCreateInfoQCOM();
+    void initialize(const VkRenderPassTileShadingCreateInfoQCOM* in_struct, PNextCopyState* copy_state = {});
+    void initialize(const safe_VkRenderPassTileShadingCreateInfoQCOM* copy_src, PNextCopyState* copy_state = {});
+    VkRenderPassTileShadingCreateInfoQCOM* ptr() { return reinterpret_cast<VkRenderPassTileShadingCreateInfoQCOM*>(this); }
+    VkRenderPassTileShadingCreateInfoQCOM const* ptr() const {
+        return reinterpret_cast<VkRenderPassTileShadingCreateInfoQCOM const*>(this);
+    }
+};
+struct safe_VkPerTileBeginInfoQCOM {
+    VkStructureType sType;
+    const void* pNext{};
+
+    safe_VkPerTileBeginInfoQCOM(const VkPerTileBeginInfoQCOM* in_struct, PNextCopyState* copy_state = {}, bool copy_pnext = true);
+    safe_VkPerTileBeginInfoQCOM(const safe_VkPerTileBeginInfoQCOM& copy_src);
+    safe_VkPerTileBeginInfoQCOM& operator=(const safe_VkPerTileBeginInfoQCOM& copy_src);
+    safe_VkPerTileBeginInfoQCOM();
+    ~safe_VkPerTileBeginInfoQCOM();
+    void initialize(const VkPerTileBeginInfoQCOM* in_struct, PNextCopyState* copy_state = {});
+    void initialize(const safe_VkPerTileBeginInfoQCOM* copy_src, PNextCopyState* copy_state = {});
+    VkPerTileBeginInfoQCOM* ptr() { return reinterpret_cast<VkPerTileBeginInfoQCOM*>(this); }
+    VkPerTileBeginInfoQCOM const* ptr() const { return reinterpret_cast<VkPerTileBeginInfoQCOM const*>(this); }
+};
+struct safe_VkPerTileEndInfoQCOM {
+    VkStructureType sType;
+    const void* pNext{};
+
+    safe_VkPerTileEndInfoQCOM(const VkPerTileEndInfoQCOM* in_struct, PNextCopyState* copy_state = {}, bool copy_pnext = true);
+    safe_VkPerTileEndInfoQCOM(const safe_VkPerTileEndInfoQCOM& copy_src);
+    safe_VkPerTileEndInfoQCOM& operator=(const safe_VkPerTileEndInfoQCOM& copy_src);
+    safe_VkPerTileEndInfoQCOM();
+    ~safe_VkPerTileEndInfoQCOM();
+    void initialize(const VkPerTileEndInfoQCOM* in_struct, PNextCopyState* copy_state = {});
+    void initialize(const safe_VkPerTileEndInfoQCOM* copy_src, PNextCopyState* copy_state = {});
+    VkPerTileEndInfoQCOM* ptr() { return reinterpret_cast<VkPerTileEndInfoQCOM*>(this); }
+    VkPerTileEndInfoQCOM const* ptr() const { return reinterpret_cast<VkPerTileEndInfoQCOM const*>(this); }
+};
+struct safe_VkDispatchTileInfoQCOM {
+    VkStructureType sType;
+    const void* pNext{};
+
+    safe_VkDispatchTileInfoQCOM(const VkDispatchTileInfoQCOM* in_struct, PNextCopyState* copy_state = {}, bool copy_pnext = true);
+    safe_VkDispatchTileInfoQCOM(const safe_VkDispatchTileInfoQCOM& copy_src);
+    safe_VkDispatchTileInfoQCOM& operator=(const safe_VkDispatchTileInfoQCOM& copy_src);
+    safe_VkDispatchTileInfoQCOM();
+    ~safe_VkDispatchTileInfoQCOM();
+    void initialize(const VkDispatchTileInfoQCOM* in_struct, PNextCopyState* copy_state = {});
+    void initialize(const safe_VkDispatchTileInfoQCOM* copy_src, PNextCopyState* copy_state = {});
+    VkDispatchTileInfoQCOM* ptr() { return reinterpret_cast<VkDispatchTileInfoQCOM*>(this); }
+    VkDispatchTileInfoQCOM const* ptr() const { return reinterpret_cast<VkDispatchTileInfoQCOM const*>(this); }
 };
 struct safe_VkQueryLowLatencySupportNV {
     VkStructureType sType;
@@ -15355,29 +16129,6 @@ struct safe_VkPhysicalDevicePrimitiveTopologyListRestartFeaturesEXT {
         return reinterpret_cast<VkPhysicalDevicePrimitiveTopologyListRestartFeaturesEXT const*>(this);
     }
 };
-struct safe_VkPhysicalDevicePresentModeFifoLatestReadyFeaturesEXT {
-    VkStructureType sType;
-    void* pNext{};
-    VkBool32 presentModeFifoLatestReady;
-
-    safe_VkPhysicalDevicePresentModeFifoLatestReadyFeaturesEXT(
-        const VkPhysicalDevicePresentModeFifoLatestReadyFeaturesEXT* in_struct, PNextCopyState* copy_state = {},
-        bool copy_pnext = true);
-    safe_VkPhysicalDevicePresentModeFifoLatestReadyFeaturesEXT(
-        const safe_VkPhysicalDevicePresentModeFifoLatestReadyFeaturesEXT& copy_src);
-    safe_VkPhysicalDevicePresentModeFifoLatestReadyFeaturesEXT& operator=(
-        const safe_VkPhysicalDevicePresentModeFifoLatestReadyFeaturesEXT& copy_src);
-    safe_VkPhysicalDevicePresentModeFifoLatestReadyFeaturesEXT();
-    ~safe_VkPhysicalDevicePresentModeFifoLatestReadyFeaturesEXT();
-    void initialize(const VkPhysicalDevicePresentModeFifoLatestReadyFeaturesEXT* in_struct, PNextCopyState* copy_state = {});
-    void initialize(const safe_VkPhysicalDevicePresentModeFifoLatestReadyFeaturesEXT* copy_src, PNextCopyState* copy_state = {});
-    VkPhysicalDevicePresentModeFifoLatestReadyFeaturesEXT* ptr() {
-        return reinterpret_cast<VkPhysicalDevicePresentModeFifoLatestReadyFeaturesEXT*>(this);
-    }
-    VkPhysicalDevicePresentModeFifoLatestReadyFeaturesEXT const* ptr() const {
-        return reinterpret_cast<VkPhysicalDevicePresentModeFifoLatestReadyFeaturesEXT const*>(this);
-    }
-};
 #ifdef VK_USE_PLATFORM_FUCHSIA
 struct safe_VkImportMemoryZirconHandleInfoFUCHSIA {
     VkStructureType sType;
@@ -16041,6 +16792,96 @@ struct safe_VkPhysicalDevicePrimitivesGeneratedQueryFeaturesEXT {
     }
     VkPhysicalDevicePrimitivesGeneratedQueryFeaturesEXT const* ptr() const {
         return reinterpret_cast<VkPhysicalDevicePrimitivesGeneratedQueryFeaturesEXT const*>(this);
+    }
+};
+struct safe_VkPhysicalDeviceVideoEncodeRgbConversionFeaturesVALVE {
+    VkStructureType sType;
+    void* pNext{};
+    VkBool32 videoEncodeRgbConversion;
+
+    safe_VkPhysicalDeviceVideoEncodeRgbConversionFeaturesVALVE(
+        const VkPhysicalDeviceVideoEncodeRgbConversionFeaturesVALVE* in_struct, PNextCopyState* copy_state = {},
+        bool copy_pnext = true);
+    safe_VkPhysicalDeviceVideoEncodeRgbConversionFeaturesVALVE(
+        const safe_VkPhysicalDeviceVideoEncodeRgbConversionFeaturesVALVE& copy_src);
+    safe_VkPhysicalDeviceVideoEncodeRgbConversionFeaturesVALVE& operator=(
+        const safe_VkPhysicalDeviceVideoEncodeRgbConversionFeaturesVALVE& copy_src);
+    safe_VkPhysicalDeviceVideoEncodeRgbConversionFeaturesVALVE();
+    ~safe_VkPhysicalDeviceVideoEncodeRgbConversionFeaturesVALVE();
+    void initialize(const VkPhysicalDeviceVideoEncodeRgbConversionFeaturesVALVE* in_struct, PNextCopyState* copy_state = {});
+    void initialize(const safe_VkPhysicalDeviceVideoEncodeRgbConversionFeaturesVALVE* copy_src, PNextCopyState* copy_state = {});
+    VkPhysicalDeviceVideoEncodeRgbConversionFeaturesVALVE* ptr() {
+        return reinterpret_cast<VkPhysicalDeviceVideoEncodeRgbConversionFeaturesVALVE*>(this);
+    }
+    VkPhysicalDeviceVideoEncodeRgbConversionFeaturesVALVE const* ptr() const {
+        return reinterpret_cast<VkPhysicalDeviceVideoEncodeRgbConversionFeaturesVALVE const*>(this);
+    }
+};
+struct safe_VkVideoEncodeRgbConversionCapabilitiesVALVE {
+    VkStructureType sType;
+    void* pNext{};
+    VkVideoEncodeRgbModelConversionFlagsVALVE rgbModels;
+    VkVideoEncodeRgbRangeCompressionFlagsVALVE rgbRanges;
+    VkVideoEncodeRgbChromaOffsetFlagsVALVE xChromaOffsets;
+    VkVideoEncodeRgbChromaOffsetFlagsVALVE yChromaOffsets;
+
+    safe_VkVideoEncodeRgbConversionCapabilitiesVALVE(const VkVideoEncodeRgbConversionCapabilitiesVALVE* in_struct,
+                                                     PNextCopyState* copy_state = {}, bool copy_pnext = true);
+    safe_VkVideoEncodeRgbConversionCapabilitiesVALVE(const safe_VkVideoEncodeRgbConversionCapabilitiesVALVE& copy_src);
+    safe_VkVideoEncodeRgbConversionCapabilitiesVALVE& operator=(const safe_VkVideoEncodeRgbConversionCapabilitiesVALVE& copy_src);
+    safe_VkVideoEncodeRgbConversionCapabilitiesVALVE();
+    ~safe_VkVideoEncodeRgbConversionCapabilitiesVALVE();
+    void initialize(const VkVideoEncodeRgbConversionCapabilitiesVALVE* in_struct, PNextCopyState* copy_state = {});
+    void initialize(const safe_VkVideoEncodeRgbConversionCapabilitiesVALVE* copy_src, PNextCopyState* copy_state = {});
+    VkVideoEncodeRgbConversionCapabilitiesVALVE* ptr() {
+        return reinterpret_cast<VkVideoEncodeRgbConversionCapabilitiesVALVE*>(this);
+    }
+    VkVideoEncodeRgbConversionCapabilitiesVALVE const* ptr() const {
+        return reinterpret_cast<VkVideoEncodeRgbConversionCapabilitiesVALVE const*>(this);
+    }
+};
+struct safe_VkVideoEncodeProfileRgbConversionInfoVALVE {
+    VkStructureType sType;
+    const void* pNext{};
+    VkBool32 performEncodeRgbConversion;
+
+    safe_VkVideoEncodeProfileRgbConversionInfoVALVE(const VkVideoEncodeProfileRgbConversionInfoVALVE* in_struct,
+                                                    PNextCopyState* copy_state = {}, bool copy_pnext = true);
+    safe_VkVideoEncodeProfileRgbConversionInfoVALVE(const safe_VkVideoEncodeProfileRgbConversionInfoVALVE& copy_src);
+    safe_VkVideoEncodeProfileRgbConversionInfoVALVE& operator=(const safe_VkVideoEncodeProfileRgbConversionInfoVALVE& copy_src);
+    safe_VkVideoEncodeProfileRgbConversionInfoVALVE();
+    ~safe_VkVideoEncodeProfileRgbConversionInfoVALVE();
+    void initialize(const VkVideoEncodeProfileRgbConversionInfoVALVE* in_struct, PNextCopyState* copy_state = {});
+    void initialize(const safe_VkVideoEncodeProfileRgbConversionInfoVALVE* copy_src, PNextCopyState* copy_state = {});
+    VkVideoEncodeProfileRgbConversionInfoVALVE* ptr() {
+        return reinterpret_cast<VkVideoEncodeProfileRgbConversionInfoVALVE*>(this);
+    }
+    VkVideoEncodeProfileRgbConversionInfoVALVE const* ptr() const {
+        return reinterpret_cast<VkVideoEncodeProfileRgbConversionInfoVALVE const*>(this);
+    }
+};
+struct safe_VkVideoEncodeSessionRgbConversionCreateInfoVALVE {
+    VkStructureType sType;
+    const void* pNext{};
+    VkVideoEncodeRgbModelConversionFlagBitsVALVE rgbModel;
+    VkVideoEncodeRgbRangeCompressionFlagBitsVALVE rgbRange;
+    VkVideoEncodeRgbChromaOffsetFlagBitsVALVE xChromaOffset;
+    VkVideoEncodeRgbChromaOffsetFlagBitsVALVE yChromaOffset;
+
+    safe_VkVideoEncodeSessionRgbConversionCreateInfoVALVE(const VkVideoEncodeSessionRgbConversionCreateInfoVALVE* in_struct,
+                                                          PNextCopyState* copy_state = {}, bool copy_pnext = true);
+    safe_VkVideoEncodeSessionRgbConversionCreateInfoVALVE(const safe_VkVideoEncodeSessionRgbConversionCreateInfoVALVE& copy_src);
+    safe_VkVideoEncodeSessionRgbConversionCreateInfoVALVE& operator=(
+        const safe_VkVideoEncodeSessionRgbConversionCreateInfoVALVE& copy_src);
+    safe_VkVideoEncodeSessionRgbConversionCreateInfoVALVE();
+    ~safe_VkVideoEncodeSessionRgbConversionCreateInfoVALVE();
+    void initialize(const VkVideoEncodeSessionRgbConversionCreateInfoVALVE* in_struct, PNextCopyState* copy_state = {});
+    void initialize(const safe_VkVideoEncodeSessionRgbConversionCreateInfoVALVE* copy_src, PNextCopyState* copy_state = {});
+    VkVideoEncodeSessionRgbConversionCreateInfoVALVE* ptr() {
+        return reinterpret_cast<VkVideoEncodeSessionRgbConversionCreateInfoVALVE*>(this);
+    }
+    VkVideoEncodeSessionRgbConversionCreateInfoVALVE const* ptr() const {
+        return reinterpret_cast<VkVideoEncodeSessionRgbConversionCreateInfoVALVE const*>(this);
     }
 };
 struct safe_VkPhysicalDeviceImageViewMinLodFeaturesEXT {
@@ -16798,26 +17639,6 @@ struct safe_VkDescriptorSetLayoutHostMappingInfoVALVE {
         return reinterpret_cast<VkDescriptorSetLayoutHostMappingInfoVALVE const*>(this);
     }
 };
-struct safe_VkPhysicalDeviceDepthClampZeroOneFeaturesEXT {
-    VkStructureType sType;
-    void* pNext{};
-    VkBool32 depthClampZeroOne;
-
-    safe_VkPhysicalDeviceDepthClampZeroOneFeaturesEXT(const VkPhysicalDeviceDepthClampZeroOneFeaturesEXT* in_struct,
-                                                      PNextCopyState* copy_state = {}, bool copy_pnext = true);
-    safe_VkPhysicalDeviceDepthClampZeroOneFeaturesEXT(const safe_VkPhysicalDeviceDepthClampZeroOneFeaturesEXT& copy_src);
-    safe_VkPhysicalDeviceDepthClampZeroOneFeaturesEXT& operator=(const safe_VkPhysicalDeviceDepthClampZeroOneFeaturesEXT& copy_src);
-    safe_VkPhysicalDeviceDepthClampZeroOneFeaturesEXT();
-    ~safe_VkPhysicalDeviceDepthClampZeroOneFeaturesEXT();
-    void initialize(const VkPhysicalDeviceDepthClampZeroOneFeaturesEXT* in_struct, PNextCopyState* copy_state = {});
-    void initialize(const safe_VkPhysicalDeviceDepthClampZeroOneFeaturesEXT* copy_src, PNextCopyState* copy_state = {});
-    VkPhysicalDeviceDepthClampZeroOneFeaturesEXT* ptr() {
-        return reinterpret_cast<VkPhysicalDeviceDepthClampZeroOneFeaturesEXT*>(this);
-    }
-    VkPhysicalDeviceDepthClampZeroOneFeaturesEXT const* ptr() const {
-        return reinterpret_cast<VkPhysicalDeviceDepthClampZeroOneFeaturesEXT const*>(this);
-    }
-};
 struct safe_VkPhysicalDeviceNonSeamlessCubeMapFeaturesEXT {
     VkStructureType sType;
     void* pNext{};
@@ -16931,70 +17752,71 @@ struct safe_VkRenderPassStripeSubmitInfoARM {
     VkRenderPassStripeSubmitInfoARM* ptr() { return reinterpret_cast<VkRenderPassStripeSubmitInfoARM*>(this); }
     VkRenderPassStripeSubmitInfoARM const* ptr() const { return reinterpret_cast<VkRenderPassStripeSubmitInfoARM const*>(this); }
 };
-struct safe_VkPhysicalDeviceFragmentDensityMapOffsetFeaturesQCOM {
+struct safe_VkPhysicalDeviceFragmentDensityMapOffsetFeaturesEXT {
     VkStructureType sType;
     void* pNext{};
     VkBool32 fragmentDensityMapOffset;
 
-    safe_VkPhysicalDeviceFragmentDensityMapOffsetFeaturesQCOM(const VkPhysicalDeviceFragmentDensityMapOffsetFeaturesQCOM* in_struct,
-                                                              PNextCopyState* copy_state = {}, bool copy_pnext = true);
-    safe_VkPhysicalDeviceFragmentDensityMapOffsetFeaturesQCOM(
-        const safe_VkPhysicalDeviceFragmentDensityMapOffsetFeaturesQCOM& copy_src);
-    safe_VkPhysicalDeviceFragmentDensityMapOffsetFeaturesQCOM& operator=(
-        const safe_VkPhysicalDeviceFragmentDensityMapOffsetFeaturesQCOM& copy_src);
-    safe_VkPhysicalDeviceFragmentDensityMapOffsetFeaturesQCOM();
-    ~safe_VkPhysicalDeviceFragmentDensityMapOffsetFeaturesQCOM();
-    void initialize(const VkPhysicalDeviceFragmentDensityMapOffsetFeaturesQCOM* in_struct, PNextCopyState* copy_state = {});
-    void initialize(const safe_VkPhysicalDeviceFragmentDensityMapOffsetFeaturesQCOM* copy_src, PNextCopyState* copy_state = {});
-    VkPhysicalDeviceFragmentDensityMapOffsetFeaturesQCOM* ptr() {
-        return reinterpret_cast<VkPhysicalDeviceFragmentDensityMapOffsetFeaturesQCOM*>(this);
+    safe_VkPhysicalDeviceFragmentDensityMapOffsetFeaturesEXT(const VkPhysicalDeviceFragmentDensityMapOffsetFeaturesEXT* in_struct,
+                                                             PNextCopyState* copy_state = {}, bool copy_pnext = true);
+    safe_VkPhysicalDeviceFragmentDensityMapOffsetFeaturesEXT(
+        const safe_VkPhysicalDeviceFragmentDensityMapOffsetFeaturesEXT& copy_src);
+    safe_VkPhysicalDeviceFragmentDensityMapOffsetFeaturesEXT& operator=(
+        const safe_VkPhysicalDeviceFragmentDensityMapOffsetFeaturesEXT& copy_src);
+    safe_VkPhysicalDeviceFragmentDensityMapOffsetFeaturesEXT();
+    ~safe_VkPhysicalDeviceFragmentDensityMapOffsetFeaturesEXT();
+    void initialize(const VkPhysicalDeviceFragmentDensityMapOffsetFeaturesEXT* in_struct, PNextCopyState* copy_state = {});
+    void initialize(const safe_VkPhysicalDeviceFragmentDensityMapOffsetFeaturesEXT* copy_src, PNextCopyState* copy_state = {});
+    VkPhysicalDeviceFragmentDensityMapOffsetFeaturesEXT* ptr() {
+        return reinterpret_cast<VkPhysicalDeviceFragmentDensityMapOffsetFeaturesEXT*>(this);
     }
-    VkPhysicalDeviceFragmentDensityMapOffsetFeaturesQCOM const* ptr() const {
-        return reinterpret_cast<VkPhysicalDeviceFragmentDensityMapOffsetFeaturesQCOM const*>(this);
+    VkPhysicalDeviceFragmentDensityMapOffsetFeaturesEXT const* ptr() const {
+        return reinterpret_cast<VkPhysicalDeviceFragmentDensityMapOffsetFeaturesEXT const*>(this);
     }
 };
-struct safe_VkPhysicalDeviceFragmentDensityMapOffsetPropertiesQCOM {
+struct safe_VkPhysicalDeviceFragmentDensityMapOffsetPropertiesEXT {
     VkStructureType sType;
     void* pNext{};
     VkExtent2D fragmentDensityOffsetGranularity;
 
-    safe_VkPhysicalDeviceFragmentDensityMapOffsetPropertiesQCOM(
-        const VkPhysicalDeviceFragmentDensityMapOffsetPropertiesQCOM* in_struct, PNextCopyState* copy_state = {},
+    safe_VkPhysicalDeviceFragmentDensityMapOffsetPropertiesEXT(
+        const VkPhysicalDeviceFragmentDensityMapOffsetPropertiesEXT* in_struct, PNextCopyState* copy_state = {},
         bool copy_pnext = true);
-    safe_VkPhysicalDeviceFragmentDensityMapOffsetPropertiesQCOM(
-        const safe_VkPhysicalDeviceFragmentDensityMapOffsetPropertiesQCOM& copy_src);
-    safe_VkPhysicalDeviceFragmentDensityMapOffsetPropertiesQCOM& operator=(
-        const safe_VkPhysicalDeviceFragmentDensityMapOffsetPropertiesQCOM& copy_src);
-    safe_VkPhysicalDeviceFragmentDensityMapOffsetPropertiesQCOM();
-    ~safe_VkPhysicalDeviceFragmentDensityMapOffsetPropertiesQCOM();
-    void initialize(const VkPhysicalDeviceFragmentDensityMapOffsetPropertiesQCOM* in_struct, PNextCopyState* copy_state = {});
-    void initialize(const safe_VkPhysicalDeviceFragmentDensityMapOffsetPropertiesQCOM* copy_src, PNextCopyState* copy_state = {});
-    VkPhysicalDeviceFragmentDensityMapOffsetPropertiesQCOM* ptr() {
-        return reinterpret_cast<VkPhysicalDeviceFragmentDensityMapOffsetPropertiesQCOM*>(this);
+    safe_VkPhysicalDeviceFragmentDensityMapOffsetPropertiesEXT(
+        const safe_VkPhysicalDeviceFragmentDensityMapOffsetPropertiesEXT& copy_src);
+    safe_VkPhysicalDeviceFragmentDensityMapOffsetPropertiesEXT& operator=(
+        const safe_VkPhysicalDeviceFragmentDensityMapOffsetPropertiesEXT& copy_src);
+    safe_VkPhysicalDeviceFragmentDensityMapOffsetPropertiesEXT();
+    ~safe_VkPhysicalDeviceFragmentDensityMapOffsetPropertiesEXT();
+    void initialize(const VkPhysicalDeviceFragmentDensityMapOffsetPropertiesEXT* in_struct, PNextCopyState* copy_state = {});
+    void initialize(const safe_VkPhysicalDeviceFragmentDensityMapOffsetPropertiesEXT* copy_src, PNextCopyState* copy_state = {});
+    VkPhysicalDeviceFragmentDensityMapOffsetPropertiesEXT* ptr() {
+        return reinterpret_cast<VkPhysicalDeviceFragmentDensityMapOffsetPropertiesEXT*>(this);
     }
-    VkPhysicalDeviceFragmentDensityMapOffsetPropertiesQCOM const* ptr() const {
-        return reinterpret_cast<VkPhysicalDeviceFragmentDensityMapOffsetPropertiesQCOM const*>(this);
+    VkPhysicalDeviceFragmentDensityMapOffsetPropertiesEXT const* ptr() const {
+        return reinterpret_cast<VkPhysicalDeviceFragmentDensityMapOffsetPropertiesEXT const*>(this);
     }
 };
-struct safe_VkSubpassFragmentDensityMapOffsetEndInfoQCOM {
+struct safe_VkRenderPassFragmentDensityMapOffsetEndInfoEXT {
     VkStructureType sType;
     const void* pNext{};
     uint32_t fragmentDensityOffsetCount;
     const VkOffset2D* pFragmentDensityOffsets{};
 
-    safe_VkSubpassFragmentDensityMapOffsetEndInfoQCOM(const VkSubpassFragmentDensityMapOffsetEndInfoQCOM* in_struct,
-                                                      PNextCopyState* copy_state = {}, bool copy_pnext = true);
-    safe_VkSubpassFragmentDensityMapOffsetEndInfoQCOM(const safe_VkSubpassFragmentDensityMapOffsetEndInfoQCOM& copy_src);
-    safe_VkSubpassFragmentDensityMapOffsetEndInfoQCOM& operator=(const safe_VkSubpassFragmentDensityMapOffsetEndInfoQCOM& copy_src);
-    safe_VkSubpassFragmentDensityMapOffsetEndInfoQCOM();
-    ~safe_VkSubpassFragmentDensityMapOffsetEndInfoQCOM();
-    void initialize(const VkSubpassFragmentDensityMapOffsetEndInfoQCOM* in_struct, PNextCopyState* copy_state = {});
-    void initialize(const safe_VkSubpassFragmentDensityMapOffsetEndInfoQCOM* copy_src, PNextCopyState* copy_state = {});
-    VkSubpassFragmentDensityMapOffsetEndInfoQCOM* ptr() {
-        return reinterpret_cast<VkSubpassFragmentDensityMapOffsetEndInfoQCOM*>(this);
+    safe_VkRenderPassFragmentDensityMapOffsetEndInfoEXT(const VkRenderPassFragmentDensityMapOffsetEndInfoEXT* in_struct,
+                                                        PNextCopyState* copy_state = {}, bool copy_pnext = true);
+    safe_VkRenderPassFragmentDensityMapOffsetEndInfoEXT(const safe_VkRenderPassFragmentDensityMapOffsetEndInfoEXT& copy_src);
+    safe_VkRenderPassFragmentDensityMapOffsetEndInfoEXT& operator=(
+        const safe_VkRenderPassFragmentDensityMapOffsetEndInfoEXT& copy_src);
+    safe_VkRenderPassFragmentDensityMapOffsetEndInfoEXT();
+    ~safe_VkRenderPassFragmentDensityMapOffsetEndInfoEXT();
+    void initialize(const VkRenderPassFragmentDensityMapOffsetEndInfoEXT* in_struct, PNextCopyState* copy_state = {});
+    void initialize(const safe_VkRenderPassFragmentDensityMapOffsetEndInfoEXT* copy_src, PNextCopyState* copy_state = {});
+    VkRenderPassFragmentDensityMapOffsetEndInfoEXT* ptr() {
+        return reinterpret_cast<VkRenderPassFragmentDensityMapOffsetEndInfoEXT*>(this);
     }
-    VkSubpassFragmentDensityMapOffsetEndInfoQCOM const* ptr() const {
-        return reinterpret_cast<VkSubpassFragmentDensityMapOffsetEndInfoQCOM const*>(this);
+    VkRenderPassFragmentDensityMapOffsetEndInfoEXT const* ptr() const {
+        return reinterpret_cast<VkRenderPassFragmentDensityMapOffsetEndInfoEXT const*>(this);
     }
 };
 struct safe_VkPhysicalDeviceCopyMemoryIndirectFeaturesNV {
@@ -17015,27 +17837,6 @@ struct safe_VkPhysicalDeviceCopyMemoryIndirectFeaturesNV {
     }
     VkPhysicalDeviceCopyMemoryIndirectFeaturesNV const* ptr() const {
         return reinterpret_cast<VkPhysicalDeviceCopyMemoryIndirectFeaturesNV const*>(this);
-    }
-};
-struct safe_VkPhysicalDeviceCopyMemoryIndirectPropertiesNV {
-    VkStructureType sType;
-    void* pNext{};
-    VkQueueFlags supportedQueues;
-
-    safe_VkPhysicalDeviceCopyMemoryIndirectPropertiesNV(const VkPhysicalDeviceCopyMemoryIndirectPropertiesNV* in_struct,
-                                                        PNextCopyState* copy_state = {}, bool copy_pnext = true);
-    safe_VkPhysicalDeviceCopyMemoryIndirectPropertiesNV(const safe_VkPhysicalDeviceCopyMemoryIndirectPropertiesNV& copy_src);
-    safe_VkPhysicalDeviceCopyMemoryIndirectPropertiesNV& operator=(
-        const safe_VkPhysicalDeviceCopyMemoryIndirectPropertiesNV& copy_src);
-    safe_VkPhysicalDeviceCopyMemoryIndirectPropertiesNV();
-    ~safe_VkPhysicalDeviceCopyMemoryIndirectPropertiesNV();
-    void initialize(const VkPhysicalDeviceCopyMemoryIndirectPropertiesNV* in_struct, PNextCopyState* copy_state = {});
-    void initialize(const safe_VkPhysicalDeviceCopyMemoryIndirectPropertiesNV* copy_src, PNextCopyState* copy_state = {});
-    VkPhysicalDeviceCopyMemoryIndirectPropertiesNV* ptr() {
-        return reinterpret_cast<VkPhysicalDeviceCopyMemoryIndirectPropertiesNV*>(this);
-    }
-    VkPhysicalDeviceCopyMemoryIndirectPropertiesNV const* ptr() const {
-        return reinterpret_cast<VkPhysicalDeviceCopyMemoryIndirectPropertiesNV const*>(this);
     }
 };
 struct safe_VkPhysicalDeviceMemoryDecompressionFeaturesNV {
@@ -17143,6 +17944,91 @@ struct safe_VkPipelineIndirectDeviceAddressInfoNV {
     VkPipelineIndirectDeviceAddressInfoNV* ptr() { return reinterpret_cast<VkPipelineIndirectDeviceAddressInfoNV*>(this); }
     VkPipelineIndirectDeviceAddressInfoNV const* ptr() const {
         return reinterpret_cast<VkPipelineIndirectDeviceAddressInfoNV const*>(this);
+    }
+};
+struct safe_VkPhysicalDeviceRayTracingLinearSweptSpheresFeaturesNV {
+    VkStructureType sType;
+    void* pNext{};
+    VkBool32 spheres;
+    VkBool32 linearSweptSpheres;
+
+    safe_VkPhysicalDeviceRayTracingLinearSweptSpheresFeaturesNV(
+        const VkPhysicalDeviceRayTracingLinearSweptSpheresFeaturesNV* in_struct, PNextCopyState* copy_state = {},
+        bool copy_pnext = true);
+    safe_VkPhysicalDeviceRayTracingLinearSweptSpheresFeaturesNV(
+        const safe_VkPhysicalDeviceRayTracingLinearSweptSpheresFeaturesNV& copy_src);
+    safe_VkPhysicalDeviceRayTracingLinearSweptSpheresFeaturesNV& operator=(
+        const safe_VkPhysicalDeviceRayTracingLinearSweptSpheresFeaturesNV& copy_src);
+    safe_VkPhysicalDeviceRayTracingLinearSweptSpheresFeaturesNV();
+    ~safe_VkPhysicalDeviceRayTracingLinearSweptSpheresFeaturesNV();
+    void initialize(const VkPhysicalDeviceRayTracingLinearSweptSpheresFeaturesNV* in_struct, PNextCopyState* copy_state = {});
+    void initialize(const safe_VkPhysicalDeviceRayTracingLinearSweptSpheresFeaturesNV* copy_src, PNextCopyState* copy_state = {});
+    VkPhysicalDeviceRayTracingLinearSweptSpheresFeaturesNV* ptr() {
+        return reinterpret_cast<VkPhysicalDeviceRayTracingLinearSweptSpheresFeaturesNV*>(this);
+    }
+    VkPhysicalDeviceRayTracingLinearSweptSpheresFeaturesNV const* ptr() const {
+        return reinterpret_cast<VkPhysicalDeviceRayTracingLinearSweptSpheresFeaturesNV const*>(this);
+    }
+};
+struct safe_VkAccelerationStructureGeometryLinearSweptSpheresDataNV {
+    VkStructureType sType;
+    const void* pNext{};
+    VkFormat vertexFormat;
+    safe_VkDeviceOrHostAddressConstKHR vertexData;
+    VkDeviceSize vertexStride;
+    VkFormat radiusFormat;
+    safe_VkDeviceOrHostAddressConstKHR radiusData;
+    VkDeviceSize radiusStride;
+    VkIndexType indexType;
+    safe_VkDeviceOrHostAddressConstKHR indexData;
+    VkDeviceSize indexStride;
+    VkRayTracingLssIndexingModeNV indexingMode;
+    VkRayTracingLssPrimitiveEndCapsModeNV endCapsMode;
+
+    safe_VkAccelerationStructureGeometryLinearSweptSpheresDataNV(
+        const VkAccelerationStructureGeometryLinearSweptSpheresDataNV* in_struct, PNextCopyState* copy_state = {},
+        bool copy_pnext = true);
+    safe_VkAccelerationStructureGeometryLinearSweptSpheresDataNV(
+        const safe_VkAccelerationStructureGeometryLinearSweptSpheresDataNV& copy_src);
+    safe_VkAccelerationStructureGeometryLinearSweptSpheresDataNV& operator=(
+        const safe_VkAccelerationStructureGeometryLinearSweptSpheresDataNV& copy_src);
+    safe_VkAccelerationStructureGeometryLinearSweptSpheresDataNV();
+    ~safe_VkAccelerationStructureGeometryLinearSweptSpheresDataNV();
+    void initialize(const VkAccelerationStructureGeometryLinearSweptSpheresDataNV* in_struct, PNextCopyState* copy_state = {});
+    void initialize(const safe_VkAccelerationStructureGeometryLinearSweptSpheresDataNV* copy_src, PNextCopyState* copy_state = {});
+    VkAccelerationStructureGeometryLinearSweptSpheresDataNV* ptr() {
+        return reinterpret_cast<VkAccelerationStructureGeometryLinearSweptSpheresDataNV*>(this);
+    }
+    VkAccelerationStructureGeometryLinearSweptSpheresDataNV const* ptr() const {
+        return reinterpret_cast<VkAccelerationStructureGeometryLinearSweptSpheresDataNV const*>(this);
+    }
+};
+struct safe_VkAccelerationStructureGeometrySpheresDataNV {
+    VkStructureType sType;
+    const void* pNext{};
+    VkFormat vertexFormat;
+    safe_VkDeviceOrHostAddressConstKHR vertexData;
+    VkDeviceSize vertexStride;
+    VkFormat radiusFormat;
+    safe_VkDeviceOrHostAddressConstKHR radiusData;
+    VkDeviceSize radiusStride;
+    VkIndexType indexType;
+    safe_VkDeviceOrHostAddressConstKHR indexData;
+    VkDeviceSize indexStride;
+
+    safe_VkAccelerationStructureGeometrySpheresDataNV(const VkAccelerationStructureGeometrySpheresDataNV* in_struct,
+                                                      PNextCopyState* copy_state = {}, bool copy_pnext = true);
+    safe_VkAccelerationStructureGeometrySpheresDataNV(const safe_VkAccelerationStructureGeometrySpheresDataNV& copy_src);
+    safe_VkAccelerationStructureGeometrySpheresDataNV& operator=(const safe_VkAccelerationStructureGeometrySpheresDataNV& copy_src);
+    safe_VkAccelerationStructureGeometrySpheresDataNV();
+    ~safe_VkAccelerationStructureGeometrySpheresDataNV();
+    void initialize(const VkAccelerationStructureGeometrySpheresDataNV* in_struct, PNextCopyState* copy_state = {});
+    void initialize(const safe_VkAccelerationStructureGeometrySpheresDataNV* copy_src, PNextCopyState* copy_state = {});
+    VkAccelerationStructureGeometrySpheresDataNV* ptr() {
+        return reinterpret_cast<VkAccelerationStructureGeometrySpheresDataNV*>(this);
+    }
+    VkAccelerationStructureGeometrySpheresDataNV const* ptr() const {
+        return reinterpret_cast<VkAccelerationStructureGeometrySpheresDataNV const*>(this);
     }
 };
 struct safe_VkPhysicalDeviceLinearColorAttachmentFeaturesNV {
@@ -17498,6 +18384,465 @@ struct safe_VkDirectDriverLoadingListLUNARG {
     void initialize(const safe_VkDirectDriverLoadingListLUNARG* copy_src, PNextCopyState* copy_state = {});
     VkDirectDriverLoadingListLUNARG* ptr() { return reinterpret_cast<VkDirectDriverLoadingListLUNARG*>(this); }
     VkDirectDriverLoadingListLUNARG const* ptr() const { return reinterpret_cast<VkDirectDriverLoadingListLUNARG const*>(this); }
+};
+struct safe_VkTensorDescriptionARM {
+    VkStructureType sType;
+    const void* pNext{};
+    VkTensorTilingARM tiling;
+    VkFormat format;
+    uint32_t dimensionCount;
+    const int64_t* pDimensions{};
+    const int64_t* pStrides{};
+    VkTensorUsageFlagsARM usage;
+
+    safe_VkTensorDescriptionARM(const VkTensorDescriptionARM* in_struct, PNextCopyState* copy_state = {}, bool copy_pnext = true);
+    safe_VkTensorDescriptionARM(const safe_VkTensorDescriptionARM& copy_src);
+    safe_VkTensorDescriptionARM& operator=(const safe_VkTensorDescriptionARM& copy_src);
+    safe_VkTensorDescriptionARM();
+    ~safe_VkTensorDescriptionARM();
+    void initialize(const VkTensorDescriptionARM* in_struct, PNextCopyState* copy_state = {});
+    void initialize(const safe_VkTensorDescriptionARM* copy_src, PNextCopyState* copy_state = {});
+    VkTensorDescriptionARM* ptr() { return reinterpret_cast<VkTensorDescriptionARM*>(this); }
+    VkTensorDescriptionARM const* ptr() const { return reinterpret_cast<VkTensorDescriptionARM const*>(this); }
+};
+struct safe_VkTensorCreateInfoARM {
+    VkStructureType sType;
+    const void* pNext{};
+    VkTensorCreateFlagsARM flags;
+    safe_VkTensorDescriptionARM* pDescription{};
+    VkSharingMode sharingMode;
+    uint32_t queueFamilyIndexCount;
+    const uint32_t* pQueueFamilyIndices{};
+
+    safe_VkTensorCreateInfoARM(const VkTensorCreateInfoARM* in_struct, PNextCopyState* copy_state = {}, bool copy_pnext = true);
+    safe_VkTensorCreateInfoARM(const safe_VkTensorCreateInfoARM& copy_src);
+    safe_VkTensorCreateInfoARM& operator=(const safe_VkTensorCreateInfoARM& copy_src);
+    safe_VkTensorCreateInfoARM();
+    ~safe_VkTensorCreateInfoARM();
+    void initialize(const VkTensorCreateInfoARM* in_struct, PNextCopyState* copy_state = {});
+    void initialize(const safe_VkTensorCreateInfoARM* copy_src, PNextCopyState* copy_state = {});
+    VkTensorCreateInfoARM* ptr() { return reinterpret_cast<VkTensorCreateInfoARM*>(this); }
+    VkTensorCreateInfoARM const* ptr() const { return reinterpret_cast<VkTensorCreateInfoARM const*>(this); }
+};
+struct safe_VkTensorViewCreateInfoARM {
+    VkStructureType sType;
+    const void* pNext{};
+    VkTensorViewCreateFlagsARM flags;
+    VkTensorARM tensor;
+    VkFormat format;
+
+    safe_VkTensorViewCreateInfoARM(const VkTensorViewCreateInfoARM* in_struct, PNextCopyState* copy_state = {},
+                                   bool copy_pnext = true);
+    safe_VkTensorViewCreateInfoARM(const safe_VkTensorViewCreateInfoARM& copy_src);
+    safe_VkTensorViewCreateInfoARM& operator=(const safe_VkTensorViewCreateInfoARM& copy_src);
+    safe_VkTensorViewCreateInfoARM();
+    ~safe_VkTensorViewCreateInfoARM();
+    void initialize(const VkTensorViewCreateInfoARM* in_struct, PNextCopyState* copy_state = {});
+    void initialize(const safe_VkTensorViewCreateInfoARM* copy_src, PNextCopyState* copy_state = {});
+    VkTensorViewCreateInfoARM* ptr() { return reinterpret_cast<VkTensorViewCreateInfoARM*>(this); }
+    VkTensorViewCreateInfoARM const* ptr() const { return reinterpret_cast<VkTensorViewCreateInfoARM const*>(this); }
+};
+struct safe_VkTensorMemoryRequirementsInfoARM {
+    VkStructureType sType;
+    const void* pNext{};
+    VkTensorARM tensor;
+
+    safe_VkTensorMemoryRequirementsInfoARM(const VkTensorMemoryRequirementsInfoARM* in_struct, PNextCopyState* copy_state = {},
+                                           bool copy_pnext = true);
+    safe_VkTensorMemoryRequirementsInfoARM(const safe_VkTensorMemoryRequirementsInfoARM& copy_src);
+    safe_VkTensorMemoryRequirementsInfoARM& operator=(const safe_VkTensorMemoryRequirementsInfoARM& copy_src);
+    safe_VkTensorMemoryRequirementsInfoARM();
+    ~safe_VkTensorMemoryRequirementsInfoARM();
+    void initialize(const VkTensorMemoryRequirementsInfoARM* in_struct, PNextCopyState* copy_state = {});
+    void initialize(const safe_VkTensorMemoryRequirementsInfoARM* copy_src, PNextCopyState* copy_state = {});
+    VkTensorMemoryRequirementsInfoARM* ptr() { return reinterpret_cast<VkTensorMemoryRequirementsInfoARM*>(this); }
+    VkTensorMemoryRequirementsInfoARM const* ptr() const {
+        return reinterpret_cast<VkTensorMemoryRequirementsInfoARM const*>(this);
+    }
+};
+struct safe_VkBindTensorMemoryInfoARM {
+    VkStructureType sType;
+    const void* pNext{};
+    VkTensorARM tensor;
+    VkDeviceMemory memory;
+    VkDeviceSize memoryOffset;
+
+    safe_VkBindTensorMemoryInfoARM(const VkBindTensorMemoryInfoARM* in_struct, PNextCopyState* copy_state = {},
+                                   bool copy_pnext = true);
+    safe_VkBindTensorMemoryInfoARM(const safe_VkBindTensorMemoryInfoARM& copy_src);
+    safe_VkBindTensorMemoryInfoARM& operator=(const safe_VkBindTensorMemoryInfoARM& copy_src);
+    safe_VkBindTensorMemoryInfoARM();
+    ~safe_VkBindTensorMemoryInfoARM();
+    void initialize(const VkBindTensorMemoryInfoARM* in_struct, PNextCopyState* copy_state = {});
+    void initialize(const safe_VkBindTensorMemoryInfoARM* copy_src, PNextCopyState* copy_state = {});
+    VkBindTensorMemoryInfoARM* ptr() { return reinterpret_cast<VkBindTensorMemoryInfoARM*>(this); }
+    VkBindTensorMemoryInfoARM const* ptr() const { return reinterpret_cast<VkBindTensorMemoryInfoARM const*>(this); }
+};
+struct safe_VkWriteDescriptorSetTensorARM {
+    VkStructureType sType;
+    const void* pNext{};
+    uint32_t tensorViewCount;
+    VkTensorViewARM* pTensorViews{};
+
+    safe_VkWriteDescriptorSetTensorARM(const VkWriteDescriptorSetTensorARM* in_struct, PNextCopyState* copy_state = {},
+                                       bool copy_pnext = true);
+    safe_VkWriteDescriptorSetTensorARM(const safe_VkWriteDescriptorSetTensorARM& copy_src);
+    safe_VkWriteDescriptorSetTensorARM& operator=(const safe_VkWriteDescriptorSetTensorARM& copy_src);
+    safe_VkWriteDescriptorSetTensorARM();
+    ~safe_VkWriteDescriptorSetTensorARM();
+    void initialize(const VkWriteDescriptorSetTensorARM* in_struct, PNextCopyState* copy_state = {});
+    void initialize(const safe_VkWriteDescriptorSetTensorARM* copy_src, PNextCopyState* copy_state = {});
+    VkWriteDescriptorSetTensorARM* ptr() { return reinterpret_cast<VkWriteDescriptorSetTensorARM*>(this); }
+    VkWriteDescriptorSetTensorARM const* ptr() const { return reinterpret_cast<VkWriteDescriptorSetTensorARM const*>(this); }
+};
+struct safe_VkTensorFormatPropertiesARM {
+    VkStructureType sType;
+    const void* pNext{};
+    VkFormatFeatureFlags2 optimalTilingTensorFeatures;
+    VkFormatFeatureFlags2 linearTilingTensorFeatures;
+
+    safe_VkTensorFormatPropertiesARM(const VkTensorFormatPropertiesARM* in_struct, PNextCopyState* copy_state = {},
+                                     bool copy_pnext = true);
+    safe_VkTensorFormatPropertiesARM(const safe_VkTensorFormatPropertiesARM& copy_src);
+    safe_VkTensorFormatPropertiesARM& operator=(const safe_VkTensorFormatPropertiesARM& copy_src);
+    safe_VkTensorFormatPropertiesARM();
+    ~safe_VkTensorFormatPropertiesARM();
+    void initialize(const VkTensorFormatPropertiesARM* in_struct, PNextCopyState* copy_state = {});
+    void initialize(const safe_VkTensorFormatPropertiesARM* copy_src, PNextCopyState* copy_state = {});
+    VkTensorFormatPropertiesARM* ptr() { return reinterpret_cast<VkTensorFormatPropertiesARM*>(this); }
+    VkTensorFormatPropertiesARM const* ptr() const { return reinterpret_cast<VkTensorFormatPropertiesARM const*>(this); }
+};
+struct safe_VkPhysicalDeviceTensorPropertiesARM {
+    VkStructureType sType;
+    void* pNext{};
+    uint32_t maxTensorDimensionCount;
+    uint64_t maxTensorElements;
+    uint64_t maxPerDimensionTensorElements;
+    int64_t maxTensorStride;
+    uint64_t maxTensorSize;
+    uint32_t maxTensorShaderAccessArrayLength;
+    uint32_t maxTensorShaderAccessSize;
+    uint32_t maxDescriptorSetStorageTensors;
+    uint32_t maxPerStageDescriptorSetStorageTensors;
+    uint32_t maxDescriptorSetUpdateAfterBindStorageTensors;
+    uint32_t maxPerStageDescriptorUpdateAfterBindStorageTensors;
+    VkBool32 shaderStorageTensorArrayNonUniformIndexingNative;
+    VkShaderStageFlags shaderTensorSupportedStages;
+
+    safe_VkPhysicalDeviceTensorPropertiesARM(const VkPhysicalDeviceTensorPropertiesARM* in_struct, PNextCopyState* copy_state = {},
+                                             bool copy_pnext = true);
+    safe_VkPhysicalDeviceTensorPropertiesARM(const safe_VkPhysicalDeviceTensorPropertiesARM& copy_src);
+    safe_VkPhysicalDeviceTensorPropertiesARM& operator=(const safe_VkPhysicalDeviceTensorPropertiesARM& copy_src);
+    safe_VkPhysicalDeviceTensorPropertiesARM();
+    ~safe_VkPhysicalDeviceTensorPropertiesARM();
+    void initialize(const VkPhysicalDeviceTensorPropertiesARM* in_struct, PNextCopyState* copy_state = {});
+    void initialize(const safe_VkPhysicalDeviceTensorPropertiesARM* copy_src, PNextCopyState* copy_state = {});
+    VkPhysicalDeviceTensorPropertiesARM* ptr() { return reinterpret_cast<VkPhysicalDeviceTensorPropertiesARM*>(this); }
+    VkPhysicalDeviceTensorPropertiesARM const* ptr() const {
+        return reinterpret_cast<VkPhysicalDeviceTensorPropertiesARM const*>(this);
+    }
+};
+struct safe_VkTensorMemoryBarrierARM {
+    VkStructureType sType;
+    const void* pNext{};
+    VkPipelineStageFlags2 srcStageMask;
+    VkAccessFlags2 srcAccessMask;
+    VkPipelineStageFlags2 dstStageMask;
+    VkAccessFlags2 dstAccessMask;
+    uint32_t srcQueueFamilyIndex;
+    uint32_t dstQueueFamilyIndex;
+    VkTensorARM tensor;
+
+    safe_VkTensorMemoryBarrierARM(const VkTensorMemoryBarrierARM* in_struct, PNextCopyState* copy_state = {},
+                                  bool copy_pnext = true);
+    safe_VkTensorMemoryBarrierARM(const safe_VkTensorMemoryBarrierARM& copy_src);
+    safe_VkTensorMemoryBarrierARM& operator=(const safe_VkTensorMemoryBarrierARM& copy_src);
+    safe_VkTensorMemoryBarrierARM();
+    ~safe_VkTensorMemoryBarrierARM();
+    void initialize(const VkTensorMemoryBarrierARM* in_struct, PNextCopyState* copy_state = {});
+    void initialize(const safe_VkTensorMemoryBarrierARM* copy_src, PNextCopyState* copy_state = {});
+    VkTensorMemoryBarrierARM* ptr() { return reinterpret_cast<VkTensorMemoryBarrierARM*>(this); }
+    VkTensorMemoryBarrierARM const* ptr() const { return reinterpret_cast<VkTensorMemoryBarrierARM const*>(this); }
+};
+struct safe_VkTensorDependencyInfoARM {
+    VkStructureType sType;
+    const void* pNext{};
+    uint32_t tensorMemoryBarrierCount;
+    safe_VkTensorMemoryBarrierARM* pTensorMemoryBarriers{};
+
+    safe_VkTensorDependencyInfoARM(const VkTensorDependencyInfoARM* in_struct, PNextCopyState* copy_state = {},
+                                   bool copy_pnext = true);
+    safe_VkTensorDependencyInfoARM(const safe_VkTensorDependencyInfoARM& copy_src);
+    safe_VkTensorDependencyInfoARM& operator=(const safe_VkTensorDependencyInfoARM& copy_src);
+    safe_VkTensorDependencyInfoARM();
+    ~safe_VkTensorDependencyInfoARM();
+    void initialize(const VkTensorDependencyInfoARM* in_struct, PNextCopyState* copy_state = {});
+    void initialize(const safe_VkTensorDependencyInfoARM* copy_src, PNextCopyState* copy_state = {});
+    VkTensorDependencyInfoARM* ptr() { return reinterpret_cast<VkTensorDependencyInfoARM*>(this); }
+    VkTensorDependencyInfoARM const* ptr() const { return reinterpret_cast<VkTensorDependencyInfoARM const*>(this); }
+};
+struct safe_VkPhysicalDeviceTensorFeaturesARM {
+    VkStructureType sType;
+    void* pNext{};
+    VkBool32 tensorNonPacked;
+    VkBool32 shaderTensorAccess;
+    VkBool32 shaderStorageTensorArrayDynamicIndexing;
+    VkBool32 shaderStorageTensorArrayNonUniformIndexing;
+    VkBool32 descriptorBindingStorageTensorUpdateAfterBind;
+    VkBool32 tensors;
+
+    safe_VkPhysicalDeviceTensorFeaturesARM(const VkPhysicalDeviceTensorFeaturesARM* in_struct, PNextCopyState* copy_state = {},
+                                           bool copy_pnext = true);
+    safe_VkPhysicalDeviceTensorFeaturesARM(const safe_VkPhysicalDeviceTensorFeaturesARM& copy_src);
+    safe_VkPhysicalDeviceTensorFeaturesARM& operator=(const safe_VkPhysicalDeviceTensorFeaturesARM& copy_src);
+    safe_VkPhysicalDeviceTensorFeaturesARM();
+    ~safe_VkPhysicalDeviceTensorFeaturesARM();
+    void initialize(const VkPhysicalDeviceTensorFeaturesARM* in_struct, PNextCopyState* copy_state = {});
+    void initialize(const safe_VkPhysicalDeviceTensorFeaturesARM* copy_src, PNextCopyState* copy_state = {});
+    VkPhysicalDeviceTensorFeaturesARM* ptr() { return reinterpret_cast<VkPhysicalDeviceTensorFeaturesARM*>(this); }
+    VkPhysicalDeviceTensorFeaturesARM const* ptr() const {
+        return reinterpret_cast<VkPhysicalDeviceTensorFeaturesARM const*>(this);
+    }
+};
+struct safe_VkDeviceTensorMemoryRequirementsARM {
+    VkStructureType sType;
+    const void* pNext{};
+    safe_VkTensorCreateInfoARM* pCreateInfo{};
+
+    safe_VkDeviceTensorMemoryRequirementsARM(const VkDeviceTensorMemoryRequirementsARM* in_struct, PNextCopyState* copy_state = {},
+                                             bool copy_pnext = true);
+    safe_VkDeviceTensorMemoryRequirementsARM(const safe_VkDeviceTensorMemoryRequirementsARM& copy_src);
+    safe_VkDeviceTensorMemoryRequirementsARM& operator=(const safe_VkDeviceTensorMemoryRequirementsARM& copy_src);
+    safe_VkDeviceTensorMemoryRequirementsARM();
+    ~safe_VkDeviceTensorMemoryRequirementsARM();
+    void initialize(const VkDeviceTensorMemoryRequirementsARM* in_struct, PNextCopyState* copy_state = {});
+    void initialize(const safe_VkDeviceTensorMemoryRequirementsARM* copy_src, PNextCopyState* copy_state = {});
+    VkDeviceTensorMemoryRequirementsARM* ptr() { return reinterpret_cast<VkDeviceTensorMemoryRequirementsARM*>(this); }
+    VkDeviceTensorMemoryRequirementsARM const* ptr() const {
+        return reinterpret_cast<VkDeviceTensorMemoryRequirementsARM const*>(this);
+    }
+};
+struct safe_VkTensorCopyARM {
+    VkStructureType sType;
+    const void* pNext{};
+    uint32_t dimensionCount;
+    const uint64_t* pSrcOffset{};
+    const uint64_t* pDstOffset{};
+    const uint64_t* pExtent{};
+
+    safe_VkTensorCopyARM(const VkTensorCopyARM* in_struct, PNextCopyState* copy_state = {}, bool copy_pnext = true);
+    safe_VkTensorCopyARM(const safe_VkTensorCopyARM& copy_src);
+    safe_VkTensorCopyARM& operator=(const safe_VkTensorCopyARM& copy_src);
+    safe_VkTensorCopyARM();
+    ~safe_VkTensorCopyARM();
+    void initialize(const VkTensorCopyARM* in_struct, PNextCopyState* copy_state = {});
+    void initialize(const safe_VkTensorCopyARM* copy_src, PNextCopyState* copy_state = {});
+    VkTensorCopyARM* ptr() { return reinterpret_cast<VkTensorCopyARM*>(this); }
+    VkTensorCopyARM const* ptr() const { return reinterpret_cast<VkTensorCopyARM const*>(this); }
+};
+struct safe_VkCopyTensorInfoARM {
+    VkStructureType sType;
+    const void* pNext{};
+    VkTensorARM srcTensor;
+    VkTensorARM dstTensor;
+    uint32_t regionCount;
+    safe_VkTensorCopyARM* pRegions{};
+
+    safe_VkCopyTensorInfoARM(const VkCopyTensorInfoARM* in_struct, PNextCopyState* copy_state = {}, bool copy_pnext = true);
+    safe_VkCopyTensorInfoARM(const safe_VkCopyTensorInfoARM& copy_src);
+    safe_VkCopyTensorInfoARM& operator=(const safe_VkCopyTensorInfoARM& copy_src);
+    safe_VkCopyTensorInfoARM();
+    ~safe_VkCopyTensorInfoARM();
+    void initialize(const VkCopyTensorInfoARM* in_struct, PNextCopyState* copy_state = {});
+    void initialize(const safe_VkCopyTensorInfoARM* copy_src, PNextCopyState* copy_state = {});
+    VkCopyTensorInfoARM* ptr() { return reinterpret_cast<VkCopyTensorInfoARM*>(this); }
+    VkCopyTensorInfoARM const* ptr() const { return reinterpret_cast<VkCopyTensorInfoARM const*>(this); }
+};
+struct safe_VkMemoryDedicatedAllocateInfoTensorARM {
+    VkStructureType sType;
+    const void* pNext{};
+    VkTensorARM tensor;
+
+    safe_VkMemoryDedicatedAllocateInfoTensorARM(const VkMemoryDedicatedAllocateInfoTensorARM* in_struct,
+                                                PNextCopyState* copy_state = {}, bool copy_pnext = true);
+    safe_VkMemoryDedicatedAllocateInfoTensorARM(const safe_VkMemoryDedicatedAllocateInfoTensorARM& copy_src);
+    safe_VkMemoryDedicatedAllocateInfoTensorARM& operator=(const safe_VkMemoryDedicatedAllocateInfoTensorARM& copy_src);
+    safe_VkMemoryDedicatedAllocateInfoTensorARM();
+    ~safe_VkMemoryDedicatedAllocateInfoTensorARM();
+    void initialize(const VkMemoryDedicatedAllocateInfoTensorARM* in_struct, PNextCopyState* copy_state = {});
+    void initialize(const safe_VkMemoryDedicatedAllocateInfoTensorARM* copy_src, PNextCopyState* copy_state = {});
+    VkMemoryDedicatedAllocateInfoTensorARM* ptr() { return reinterpret_cast<VkMemoryDedicatedAllocateInfoTensorARM*>(this); }
+    VkMemoryDedicatedAllocateInfoTensorARM const* ptr() const {
+        return reinterpret_cast<VkMemoryDedicatedAllocateInfoTensorARM const*>(this);
+    }
+};
+struct safe_VkPhysicalDeviceExternalTensorInfoARM {
+    VkStructureType sType;
+    const void* pNext{};
+    VkTensorCreateFlagsARM flags;
+    safe_VkTensorDescriptionARM* pDescription{};
+    VkExternalMemoryHandleTypeFlagBits handleType;
+
+    safe_VkPhysicalDeviceExternalTensorInfoARM(const VkPhysicalDeviceExternalTensorInfoARM* in_struct,
+                                               PNextCopyState* copy_state = {}, bool copy_pnext = true);
+    safe_VkPhysicalDeviceExternalTensorInfoARM(const safe_VkPhysicalDeviceExternalTensorInfoARM& copy_src);
+    safe_VkPhysicalDeviceExternalTensorInfoARM& operator=(const safe_VkPhysicalDeviceExternalTensorInfoARM& copy_src);
+    safe_VkPhysicalDeviceExternalTensorInfoARM();
+    ~safe_VkPhysicalDeviceExternalTensorInfoARM();
+    void initialize(const VkPhysicalDeviceExternalTensorInfoARM* in_struct, PNextCopyState* copy_state = {});
+    void initialize(const safe_VkPhysicalDeviceExternalTensorInfoARM* copy_src, PNextCopyState* copy_state = {});
+    VkPhysicalDeviceExternalTensorInfoARM* ptr() { return reinterpret_cast<VkPhysicalDeviceExternalTensorInfoARM*>(this); }
+    VkPhysicalDeviceExternalTensorInfoARM const* ptr() const {
+        return reinterpret_cast<VkPhysicalDeviceExternalTensorInfoARM const*>(this);
+    }
+};
+struct safe_VkExternalTensorPropertiesARM {
+    VkStructureType sType;
+    const void* pNext{};
+    VkExternalMemoryProperties externalMemoryProperties;
+
+    safe_VkExternalTensorPropertiesARM(const VkExternalTensorPropertiesARM* in_struct, PNextCopyState* copy_state = {},
+                                       bool copy_pnext = true);
+    safe_VkExternalTensorPropertiesARM(const safe_VkExternalTensorPropertiesARM& copy_src);
+    safe_VkExternalTensorPropertiesARM& operator=(const safe_VkExternalTensorPropertiesARM& copy_src);
+    safe_VkExternalTensorPropertiesARM();
+    ~safe_VkExternalTensorPropertiesARM();
+    void initialize(const VkExternalTensorPropertiesARM* in_struct, PNextCopyState* copy_state = {});
+    void initialize(const safe_VkExternalTensorPropertiesARM* copy_src, PNextCopyState* copy_state = {});
+    VkExternalTensorPropertiesARM* ptr() { return reinterpret_cast<VkExternalTensorPropertiesARM*>(this); }
+    VkExternalTensorPropertiesARM const* ptr() const { return reinterpret_cast<VkExternalTensorPropertiesARM const*>(this); }
+};
+struct safe_VkExternalMemoryTensorCreateInfoARM {
+    VkStructureType sType;
+    const void* pNext{};
+    VkExternalMemoryHandleTypeFlags handleTypes;
+
+    safe_VkExternalMemoryTensorCreateInfoARM(const VkExternalMemoryTensorCreateInfoARM* in_struct, PNextCopyState* copy_state = {},
+                                             bool copy_pnext = true);
+    safe_VkExternalMemoryTensorCreateInfoARM(const safe_VkExternalMemoryTensorCreateInfoARM& copy_src);
+    safe_VkExternalMemoryTensorCreateInfoARM& operator=(const safe_VkExternalMemoryTensorCreateInfoARM& copy_src);
+    safe_VkExternalMemoryTensorCreateInfoARM();
+    ~safe_VkExternalMemoryTensorCreateInfoARM();
+    void initialize(const VkExternalMemoryTensorCreateInfoARM* in_struct, PNextCopyState* copy_state = {});
+    void initialize(const safe_VkExternalMemoryTensorCreateInfoARM* copy_src, PNextCopyState* copy_state = {});
+    VkExternalMemoryTensorCreateInfoARM* ptr() { return reinterpret_cast<VkExternalMemoryTensorCreateInfoARM*>(this); }
+    VkExternalMemoryTensorCreateInfoARM const* ptr() const {
+        return reinterpret_cast<VkExternalMemoryTensorCreateInfoARM const*>(this);
+    }
+};
+struct safe_VkPhysicalDeviceDescriptorBufferTensorFeaturesARM {
+    VkStructureType sType;
+    void* pNext{};
+    VkBool32 descriptorBufferTensorDescriptors;
+
+    safe_VkPhysicalDeviceDescriptorBufferTensorFeaturesARM(const VkPhysicalDeviceDescriptorBufferTensorFeaturesARM* in_struct,
+                                                           PNextCopyState* copy_state = {}, bool copy_pnext = true);
+    safe_VkPhysicalDeviceDescriptorBufferTensorFeaturesARM(const safe_VkPhysicalDeviceDescriptorBufferTensorFeaturesARM& copy_src);
+    safe_VkPhysicalDeviceDescriptorBufferTensorFeaturesARM& operator=(
+        const safe_VkPhysicalDeviceDescriptorBufferTensorFeaturesARM& copy_src);
+    safe_VkPhysicalDeviceDescriptorBufferTensorFeaturesARM();
+    ~safe_VkPhysicalDeviceDescriptorBufferTensorFeaturesARM();
+    void initialize(const VkPhysicalDeviceDescriptorBufferTensorFeaturesARM* in_struct, PNextCopyState* copy_state = {});
+    void initialize(const safe_VkPhysicalDeviceDescriptorBufferTensorFeaturesARM* copy_src, PNextCopyState* copy_state = {});
+    VkPhysicalDeviceDescriptorBufferTensorFeaturesARM* ptr() {
+        return reinterpret_cast<VkPhysicalDeviceDescriptorBufferTensorFeaturesARM*>(this);
+    }
+    VkPhysicalDeviceDescriptorBufferTensorFeaturesARM const* ptr() const {
+        return reinterpret_cast<VkPhysicalDeviceDescriptorBufferTensorFeaturesARM const*>(this);
+    }
+};
+struct safe_VkPhysicalDeviceDescriptorBufferTensorPropertiesARM {
+    VkStructureType sType;
+    void* pNext{};
+    size_t tensorCaptureReplayDescriptorDataSize;
+    size_t tensorViewCaptureReplayDescriptorDataSize;
+    size_t tensorDescriptorSize;
+
+    safe_VkPhysicalDeviceDescriptorBufferTensorPropertiesARM(const VkPhysicalDeviceDescriptorBufferTensorPropertiesARM* in_struct,
+                                                             PNextCopyState* copy_state = {}, bool copy_pnext = true);
+    safe_VkPhysicalDeviceDescriptorBufferTensorPropertiesARM(
+        const safe_VkPhysicalDeviceDescriptorBufferTensorPropertiesARM& copy_src);
+    safe_VkPhysicalDeviceDescriptorBufferTensorPropertiesARM& operator=(
+        const safe_VkPhysicalDeviceDescriptorBufferTensorPropertiesARM& copy_src);
+    safe_VkPhysicalDeviceDescriptorBufferTensorPropertiesARM();
+    ~safe_VkPhysicalDeviceDescriptorBufferTensorPropertiesARM();
+    void initialize(const VkPhysicalDeviceDescriptorBufferTensorPropertiesARM* in_struct, PNextCopyState* copy_state = {});
+    void initialize(const safe_VkPhysicalDeviceDescriptorBufferTensorPropertiesARM* copy_src, PNextCopyState* copy_state = {});
+    VkPhysicalDeviceDescriptorBufferTensorPropertiesARM* ptr() {
+        return reinterpret_cast<VkPhysicalDeviceDescriptorBufferTensorPropertiesARM*>(this);
+    }
+    VkPhysicalDeviceDescriptorBufferTensorPropertiesARM const* ptr() const {
+        return reinterpret_cast<VkPhysicalDeviceDescriptorBufferTensorPropertiesARM const*>(this);
+    }
+};
+struct safe_VkDescriptorGetTensorInfoARM {
+    VkStructureType sType;
+    const void* pNext{};
+    VkTensorViewARM tensorView;
+
+    safe_VkDescriptorGetTensorInfoARM(const VkDescriptorGetTensorInfoARM* in_struct, PNextCopyState* copy_state = {},
+                                      bool copy_pnext = true);
+    safe_VkDescriptorGetTensorInfoARM(const safe_VkDescriptorGetTensorInfoARM& copy_src);
+    safe_VkDescriptorGetTensorInfoARM& operator=(const safe_VkDescriptorGetTensorInfoARM& copy_src);
+    safe_VkDescriptorGetTensorInfoARM();
+    ~safe_VkDescriptorGetTensorInfoARM();
+    void initialize(const VkDescriptorGetTensorInfoARM* in_struct, PNextCopyState* copy_state = {});
+    void initialize(const safe_VkDescriptorGetTensorInfoARM* copy_src, PNextCopyState* copy_state = {});
+    VkDescriptorGetTensorInfoARM* ptr() { return reinterpret_cast<VkDescriptorGetTensorInfoARM*>(this); }
+    VkDescriptorGetTensorInfoARM const* ptr() const { return reinterpret_cast<VkDescriptorGetTensorInfoARM const*>(this); }
+};
+struct safe_VkTensorCaptureDescriptorDataInfoARM {
+    VkStructureType sType;
+    const void* pNext{};
+    VkTensorARM tensor;
+
+    safe_VkTensorCaptureDescriptorDataInfoARM(const VkTensorCaptureDescriptorDataInfoARM* in_struct,
+                                              PNextCopyState* copy_state = {}, bool copy_pnext = true);
+    safe_VkTensorCaptureDescriptorDataInfoARM(const safe_VkTensorCaptureDescriptorDataInfoARM& copy_src);
+    safe_VkTensorCaptureDescriptorDataInfoARM& operator=(const safe_VkTensorCaptureDescriptorDataInfoARM& copy_src);
+    safe_VkTensorCaptureDescriptorDataInfoARM();
+    ~safe_VkTensorCaptureDescriptorDataInfoARM();
+    void initialize(const VkTensorCaptureDescriptorDataInfoARM* in_struct, PNextCopyState* copy_state = {});
+    void initialize(const safe_VkTensorCaptureDescriptorDataInfoARM* copy_src, PNextCopyState* copy_state = {});
+    VkTensorCaptureDescriptorDataInfoARM* ptr() { return reinterpret_cast<VkTensorCaptureDescriptorDataInfoARM*>(this); }
+    VkTensorCaptureDescriptorDataInfoARM const* ptr() const {
+        return reinterpret_cast<VkTensorCaptureDescriptorDataInfoARM const*>(this);
+    }
+};
+struct safe_VkTensorViewCaptureDescriptorDataInfoARM {
+    VkStructureType sType;
+    const void* pNext{};
+    VkTensorViewARM tensorView;
+
+    safe_VkTensorViewCaptureDescriptorDataInfoARM(const VkTensorViewCaptureDescriptorDataInfoARM* in_struct,
+                                                  PNextCopyState* copy_state = {}, bool copy_pnext = true);
+    safe_VkTensorViewCaptureDescriptorDataInfoARM(const safe_VkTensorViewCaptureDescriptorDataInfoARM& copy_src);
+    safe_VkTensorViewCaptureDescriptorDataInfoARM& operator=(const safe_VkTensorViewCaptureDescriptorDataInfoARM& copy_src);
+    safe_VkTensorViewCaptureDescriptorDataInfoARM();
+    ~safe_VkTensorViewCaptureDescriptorDataInfoARM();
+    void initialize(const VkTensorViewCaptureDescriptorDataInfoARM* in_struct, PNextCopyState* copy_state = {});
+    void initialize(const safe_VkTensorViewCaptureDescriptorDataInfoARM* copy_src, PNextCopyState* copy_state = {});
+    VkTensorViewCaptureDescriptorDataInfoARM* ptr() { return reinterpret_cast<VkTensorViewCaptureDescriptorDataInfoARM*>(this); }
+    VkTensorViewCaptureDescriptorDataInfoARM const* ptr() const {
+        return reinterpret_cast<VkTensorViewCaptureDescriptorDataInfoARM const*>(this);
+    }
+};
+struct safe_VkFrameBoundaryTensorsARM {
+    VkStructureType sType;
+    const void* pNext{};
+    uint32_t tensorCount;
+    VkTensorARM* pTensors{};
+
+    safe_VkFrameBoundaryTensorsARM(const VkFrameBoundaryTensorsARM* in_struct, PNextCopyState* copy_state = {},
+                                   bool copy_pnext = true);
+    safe_VkFrameBoundaryTensorsARM(const safe_VkFrameBoundaryTensorsARM& copy_src);
+    safe_VkFrameBoundaryTensorsARM& operator=(const safe_VkFrameBoundaryTensorsARM& copy_src);
+    safe_VkFrameBoundaryTensorsARM();
+    ~safe_VkFrameBoundaryTensorsARM();
+    void initialize(const VkFrameBoundaryTensorsARM* in_struct, PNextCopyState* copy_state = {});
+    void initialize(const safe_VkFrameBoundaryTensorsARM* copy_src, PNextCopyState* copy_state = {});
+    VkFrameBoundaryTensorsARM* ptr() { return reinterpret_cast<VkFrameBoundaryTensorsARM*>(this); }
+    VkFrameBoundaryTensorsARM const* ptr() const { return reinterpret_cast<VkFrameBoundaryTensorsARM const*>(this); }
 };
 struct safe_VkPhysicalDeviceShaderModuleIdentifierFeaturesEXT {
     VkStructureType sType;
@@ -17870,6 +19215,59 @@ struct safe_VkAntiLagDataAMD {
     VkAntiLagDataAMD* ptr() { return reinterpret_cast<VkAntiLagDataAMD*>(this); }
     VkAntiLagDataAMD const* ptr() const { return reinterpret_cast<VkAntiLagDataAMD const*>(this); }
 };
+#ifdef VK_ENABLE_BETA_EXTENSIONS
+struct safe_VkPhysicalDeviceDenseGeometryFormatFeaturesAMDX {
+    VkStructureType sType;
+    void* pNext{};
+    VkBool32 denseGeometryFormat;
+
+    safe_VkPhysicalDeviceDenseGeometryFormatFeaturesAMDX(const VkPhysicalDeviceDenseGeometryFormatFeaturesAMDX* in_struct,
+                                                         PNextCopyState* copy_state = {}, bool copy_pnext = true);
+    safe_VkPhysicalDeviceDenseGeometryFormatFeaturesAMDX(const safe_VkPhysicalDeviceDenseGeometryFormatFeaturesAMDX& copy_src);
+    safe_VkPhysicalDeviceDenseGeometryFormatFeaturesAMDX& operator=(
+        const safe_VkPhysicalDeviceDenseGeometryFormatFeaturesAMDX& copy_src);
+    safe_VkPhysicalDeviceDenseGeometryFormatFeaturesAMDX();
+    ~safe_VkPhysicalDeviceDenseGeometryFormatFeaturesAMDX();
+    void initialize(const VkPhysicalDeviceDenseGeometryFormatFeaturesAMDX* in_struct, PNextCopyState* copy_state = {});
+    void initialize(const safe_VkPhysicalDeviceDenseGeometryFormatFeaturesAMDX* copy_src, PNextCopyState* copy_state = {});
+    VkPhysicalDeviceDenseGeometryFormatFeaturesAMDX* ptr() {
+        return reinterpret_cast<VkPhysicalDeviceDenseGeometryFormatFeaturesAMDX*>(this);
+    }
+    VkPhysicalDeviceDenseGeometryFormatFeaturesAMDX const* ptr() const {
+        return reinterpret_cast<VkPhysicalDeviceDenseGeometryFormatFeaturesAMDX const*>(this);
+    }
+};
+struct safe_VkAccelerationStructureDenseGeometryFormatTrianglesDataAMDX {
+    VkStructureType sType;
+    const void* pNext{};
+    safe_VkDeviceOrHostAddressConstKHR compressedData;
+    VkDeviceSize dataSize;
+    uint32_t numTriangles;
+    uint32_t numVertices;
+    uint32_t maxPrimitiveIndex;
+    uint32_t maxGeometryIndex;
+    VkCompressedTriangleFormatAMDX format;
+
+    safe_VkAccelerationStructureDenseGeometryFormatTrianglesDataAMDX(
+        const VkAccelerationStructureDenseGeometryFormatTrianglesDataAMDX* in_struct, PNextCopyState* copy_state = {},
+        bool copy_pnext = true);
+    safe_VkAccelerationStructureDenseGeometryFormatTrianglesDataAMDX(
+        const safe_VkAccelerationStructureDenseGeometryFormatTrianglesDataAMDX& copy_src);
+    safe_VkAccelerationStructureDenseGeometryFormatTrianglesDataAMDX& operator=(
+        const safe_VkAccelerationStructureDenseGeometryFormatTrianglesDataAMDX& copy_src);
+    safe_VkAccelerationStructureDenseGeometryFormatTrianglesDataAMDX();
+    ~safe_VkAccelerationStructureDenseGeometryFormatTrianglesDataAMDX();
+    void initialize(const VkAccelerationStructureDenseGeometryFormatTrianglesDataAMDX* in_struct, PNextCopyState* copy_state = {});
+    void initialize(const safe_VkAccelerationStructureDenseGeometryFormatTrianglesDataAMDX* copy_src,
+                    PNextCopyState* copy_state = {});
+    VkAccelerationStructureDenseGeometryFormatTrianglesDataAMDX* ptr() {
+        return reinterpret_cast<VkAccelerationStructureDenseGeometryFormatTrianglesDataAMDX*>(this);
+    }
+    VkAccelerationStructureDenseGeometryFormatTrianglesDataAMDX const* ptr() const {
+        return reinterpret_cast<VkAccelerationStructureDenseGeometryFormatTrianglesDataAMDX const*>(this);
+    }
+};
+#endif  // VK_ENABLE_BETA_EXTENSIONS
 struct safe_VkPhysicalDeviceShaderObjectFeaturesEXT {
     VkStructureType sType;
     void* pNext{};
@@ -18072,6 +19470,101 @@ struct safe_VkPhysicalDeviceRayTracingInvocationReorderFeaturesNV {
     }
     VkPhysicalDeviceRayTracingInvocationReorderFeaturesNV const* ptr() const {
         return reinterpret_cast<VkPhysicalDeviceRayTracingInvocationReorderFeaturesNV const*>(this);
+    }
+};
+struct safe_VkPhysicalDeviceCooperativeVectorPropertiesNV {
+    VkStructureType sType;
+    void* pNext{};
+    VkShaderStageFlags cooperativeVectorSupportedStages;
+    VkBool32 cooperativeVectorTrainingFloat16Accumulation;
+    VkBool32 cooperativeVectorTrainingFloat32Accumulation;
+    uint32_t maxCooperativeVectorComponents;
+
+    safe_VkPhysicalDeviceCooperativeVectorPropertiesNV(const VkPhysicalDeviceCooperativeVectorPropertiesNV* in_struct,
+                                                       PNextCopyState* copy_state = {}, bool copy_pnext = true);
+    safe_VkPhysicalDeviceCooperativeVectorPropertiesNV(const safe_VkPhysicalDeviceCooperativeVectorPropertiesNV& copy_src);
+    safe_VkPhysicalDeviceCooperativeVectorPropertiesNV& operator=(
+        const safe_VkPhysicalDeviceCooperativeVectorPropertiesNV& copy_src);
+    safe_VkPhysicalDeviceCooperativeVectorPropertiesNV();
+    ~safe_VkPhysicalDeviceCooperativeVectorPropertiesNV();
+    void initialize(const VkPhysicalDeviceCooperativeVectorPropertiesNV* in_struct, PNextCopyState* copy_state = {});
+    void initialize(const safe_VkPhysicalDeviceCooperativeVectorPropertiesNV* copy_src, PNextCopyState* copy_state = {});
+    VkPhysicalDeviceCooperativeVectorPropertiesNV* ptr() {
+        return reinterpret_cast<VkPhysicalDeviceCooperativeVectorPropertiesNV*>(this);
+    }
+    VkPhysicalDeviceCooperativeVectorPropertiesNV const* ptr() const {
+        return reinterpret_cast<VkPhysicalDeviceCooperativeVectorPropertiesNV const*>(this);
+    }
+};
+struct safe_VkPhysicalDeviceCooperativeVectorFeaturesNV {
+    VkStructureType sType;
+    void* pNext{};
+    VkBool32 cooperativeVector;
+    VkBool32 cooperativeVectorTraining;
+
+    safe_VkPhysicalDeviceCooperativeVectorFeaturesNV(const VkPhysicalDeviceCooperativeVectorFeaturesNV* in_struct,
+                                                     PNextCopyState* copy_state = {}, bool copy_pnext = true);
+    safe_VkPhysicalDeviceCooperativeVectorFeaturesNV(const safe_VkPhysicalDeviceCooperativeVectorFeaturesNV& copy_src);
+    safe_VkPhysicalDeviceCooperativeVectorFeaturesNV& operator=(const safe_VkPhysicalDeviceCooperativeVectorFeaturesNV& copy_src);
+    safe_VkPhysicalDeviceCooperativeVectorFeaturesNV();
+    ~safe_VkPhysicalDeviceCooperativeVectorFeaturesNV();
+    void initialize(const VkPhysicalDeviceCooperativeVectorFeaturesNV* in_struct, PNextCopyState* copy_state = {});
+    void initialize(const safe_VkPhysicalDeviceCooperativeVectorFeaturesNV* copy_src, PNextCopyState* copy_state = {});
+    VkPhysicalDeviceCooperativeVectorFeaturesNV* ptr() {
+        return reinterpret_cast<VkPhysicalDeviceCooperativeVectorFeaturesNV*>(this);
+    }
+    VkPhysicalDeviceCooperativeVectorFeaturesNV const* ptr() const {
+        return reinterpret_cast<VkPhysicalDeviceCooperativeVectorFeaturesNV const*>(this);
+    }
+};
+struct safe_VkCooperativeVectorPropertiesNV {
+    VkStructureType sType;
+    void* pNext{};
+    VkComponentTypeKHR inputType;
+    VkComponentTypeKHR inputInterpretation;
+    VkComponentTypeKHR matrixInterpretation;
+    VkComponentTypeKHR biasInterpretation;
+    VkComponentTypeKHR resultType;
+    VkBool32 transpose;
+
+    safe_VkCooperativeVectorPropertiesNV(const VkCooperativeVectorPropertiesNV* in_struct, PNextCopyState* copy_state = {},
+                                         bool copy_pnext = true);
+    safe_VkCooperativeVectorPropertiesNV(const safe_VkCooperativeVectorPropertiesNV& copy_src);
+    safe_VkCooperativeVectorPropertiesNV& operator=(const safe_VkCooperativeVectorPropertiesNV& copy_src);
+    safe_VkCooperativeVectorPropertiesNV();
+    ~safe_VkCooperativeVectorPropertiesNV();
+    void initialize(const VkCooperativeVectorPropertiesNV* in_struct, PNextCopyState* copy_state = {});
+    void initialize(const safe_VkCooperativeVectorPropertiesNV* copy_src, PNextCopyState* copy_state = {});
+    VkCooperativeVectorPropertiesNV* ptr() { return reinterpret_cast<VkCooperativeVectorPropertiesNV*>(this); }
+    VkCooperativeVectorPropertiesNV const* ptr() const { return reinterpret_cast<VkCooperativeVectorPropertiesNV const*>(this); }
+};
+struct safe_VkConvertCooperativeVectorMatrixInfoNV {
+    VkStructureType sType;
+    const void* pNext{};
+    size_t srcSize;
+    safe_VkDeviceOrHostAddressConstKHR srcData;
+    size_t* pDstSize{};
+    safe_VkDeviceOrHostAddressKHR dstData;
+    VkComponentTypeKHR srcComponentType;
+    VkComponentTypeKHR dstComponentType;
+    uint32_t numRows;
+    uint32_t numColumns;
+    VkCooperativeVectorMatrixLayoutNV srcLayout;
+    size_t srcStride;
+    VkCooperativeVectorMatrixLayoutNV dstLayout;
+    size_t dstStride;
+
+    safe_VkConvertCooperativeVectorMatrixInfoNV(const VkConvertCooperativeVectorMatrixInfoNV* in_struct,
+                                                PNextCopyState* copy_state = {}, bool copy_pnext = true);
+    safe_VkConvertCooperativeVectorMatrixInfoNV(const safe_VkConvertCooperativeVectorMatrixInfoNV& copy_src);
+    safe_VkConvertCooperativeVectorMatrixInfoNV& operator=(const safe_VkConvertCooperativeVectorMatrixInfoNV& copy_src);
+    safe_VkConvertCooperativeVectorMatrixInfoNV();
+    ~safe_VkConvertCooperativeVectorMatrixInfoNV();
+    void initialize(const VkConvertCooperativeVectorMatrixInfoNV* in_struct, PNextCopyState* copy_state = {});
+    void initialize(const safe_VkConvertCooperativeVectorMatrixInfoNV* copy_src, PNextCopyState* copy_state = {});
+    VkConvertCooperativeVectorMatrixInfoNV* ptr() { return reinterpret_cast<VkConvertCooperativeVectorMatrixInfoNV*>(this); }
+    VkConvertCooperativeVectorMatrixInfoNV const* ptr() const {
+        return reinterpret_cast<VkConvertCooperativeVectorMatrixInfoNV const*>(this);
     }
 };
 struct safe_VkPhysicalDeviceExtendedSparseAddressSpaceFeaturesNV {
@@ -18450,6 +19943,431 @@ struct safe_VkLatencySurfaceCapabilitiesNV {
     void initialize(const safe_VkLatencySurfaceCapabilitiesNV* copy_src, PNextCopyState* copy_state = {});
     VkLatencySurfaceCapabilitiesNV* ptr() { return reinterpret_cast<VkLatencySurfaceCapabilitiesNV*>(this); }
     VkLatencySurfaceCapabilitiesNV const* ptr() const { return reinterpret_cast<VkLatencySurfaceCapabilitiesNV const*>(this); }
+};
+struct safe_VkPhysicalDeviceDataGraphFeaturesARM {
+    VkStructureType sType;
+    void* pNext{};
+    VkBool32 dataGraph;
+    VkBool32 dataGraphUpdateAfterBind;
+    VkBool32 dataGraphSpecializationConstants;
+    VkBool32 dataGraphDescriptorBuffer;
+    VkBool32 dataGraphShaderModule;
+
+    safe_VkPhysicalDeviceDataGraphFeaturesARM(const VkPhysicalDeviceDataGraphFeaturesARM* in_struct,
+                                              PNextCopyState* copy_state = {}, bool copy_pnext = true);
+    safe_VkPhysicalDeviceDataGraphFeaturesARM(const safe_VkPhysicalDeviceDataGraphFeaturesARM& copy_src);
+    safe_VkPhysicalDeviceDataGraphFeaturesARM& operator=(const safe_VkPhysicalDeviceDataGraphFeaturesARM& copy_src);
+    safe_VkPhysicalDeviceDataGraphFeaturesARM();
+    ~safe_VkPhysicalDeviceDataGraphFeaturesARM();
+    void initialize(const VkPhysicalDeviceDataGraphFeaturesARM* in_struct, PNextCopyState* copy_state = {});
+    void initialize(const safe_VkPhysicalDeviceDataGraphFeaturesARM* copy_src, PNextCopyState* copy_state = {});
+    VkPhysicalDeviceDataGraphFeaturesARM* ptr() { return reinterpret_cast<VkPhysicalDeviceDataGraphFeaturesARM*>(this); }
+    VkPhysicalDeviceDataGraphFeaturesARM const* ptr() const {
+        return reinterpret_cast<VkPhysicalDeviceDataGraphFeaturesARM const*>(this);
+    }
+};
+struct safe_VkDataGraphPipelineConstantARM {
+    VkStructureType sType;
+    const void* pNext{};
+    uint32_t id;
+    const void* pConstantData{};
+
+    safe_VkDataGraphPipelineConstantARM(const VkDataGraphPipelineConstantARM* in_struct, PNextCopyState* copy_state = {},
+                                        bool copy_pnext = true);
+    safe_VkDataGraphPipelineConstantARM(const safe_VkDataGraphPipelineConstantARM& copy_src);
+    safe_VkDataGraphPipelineConstantARM& operator=(const safe_VkDataGraphPipelineConstantARM& copy_src);
+    safe_VkDataGraphPipelineConstantARM();
+    ~safe_VkDataGraphPipelineConstantARM();
+    void initialize(const VkDataGraphPipelineConstantARM* in_struct, PNextCopyState* copy_state = {});
+    void initialize(const safe_VkDataGraphPipelineConstantARM* copy_src, PNextCopyState* copy_state = {});
+    VkDataGraphPipelineConstantARM* ptr() { return reinterpret_cast<VkDataGraphPipelineConstantARM*>(this); }
+    VkDataGraphPipelineConstantARM const* ptr() const { return reinterpret_cast<VkDataGraphPipelineConstantARM const*>(this); }
+};
+struct safe_VkDataGraphPipelineResourceInfoARM {
+    VkStructureType sType;
+    const void* pNext{};
+    uint32_t descriptorSet;
+    uint32_t binding;
+    uint32_t arrayElement;
+
+    safe_VkDataGraphPipelineResourceInfoARM(const VkDataGraphPipelineResourceInfoARM* in_struct, PNextCopyState* copy_state = {},
+                                            bool copy_pnext = true);
+    safe_VkDataGraphPipelineResourceInfoARM(const safe_VkDataGraphPipelineResourceInfoARM& copy_src);
+    safe_VkDataGraphPipelineResourceInfoARM& operator=(const safe_VkDataGraphPipelineResourceInfoARM& copy_src);
+    safe_VkDataGraphPipelineResourceInfoARM();
+    ~safe_VkDataGraphPipelineResourceInfoARM();
+    void initialize(const VkDataGraphPipelineResourceInfoARM* in_struct, PNextCopyState* copy_state = {});
+    void initialize(const safe_VkDataGraphPipelineResourceInfoARM* copy_src, PNextCopyState* copy_state = {});
+    VkDataGraphPipelineResourceInfoARM* ptr() { return reinterpret_cast<VkDataGraphPipelineResourceInfoARM*>(this); }
+    VkDataGraphPipelineResourceInfoARM const* ptr() const {
+        return reinterpret_cast<VkDataGraphPipelineResourceInfoARM const*>(this);
+    }
+};
+struct safe_VkDataGraphPipelineCompilerControlCreateInfoARM {
+    VkStructureType sType;
+    const void* pNext{};
+    const char* pVendorOptions{};
+
+    safe_VkDataGraphPipelineCompilerControlCreateInfoARM(const VkDataGraphPipelineCompilerControlCreateInfoARM* in_struct,
+                                                         PNextCopyState* copy_state = {}, bool copy_pnext = true);
+    safe_VkDataGraphPipelineCompilerControlCreateInfoARM(const safe_VkDataGraphPipelineCompilerControlCreateInfoARM& copy_src);
+    safe_VkDataGraphPipelineCompilerControlCreateInfoARM& operator=(
+        const safe_VkDataGraphPipelineCompilerControlCreateInfoARM& copy_src);
+    safe_VkDataGraphPipelineCompilerControlCreateInfoARM();
+    ~safe_VkDataGraphPipelineCompilerControlCreateInfoARM();
+    void initialize(const VkDataGraphPipelineCompilerControlCreateInfoARM* in_struct, PNextCopyState* copy_state = {});
+    void initialize(const safe_VkDataGraphPipelineCompilerControlCreateInfoARM* copy_src, PNextCopyState* copy_state = {});
+    VkDataGraphPipelineCompilerControlCreateInfoARM* ptr() {
+        return reinterpret_cast<VkDataGraphPipelineCompilerControlCreateInfoARM*>(this);
+    }
+    VkDataGraphPipelineCompilerControlCreateInfoARM const* ptr() const {
+        return reinterpret_cast<VkDataGraphPipelineCompilerControlCreateInfoARM const*>(this);
+    }
+};
+struct safe_VkDataGraphPipelineCreateInfoARM {
+    VkStructureType sType;
+    const void* pNext{};
+    VkPipelineCreateFlags2KHR flags;
+    VkPipelineLayout layout;
+    uint32_t resourceInfoCount;
+    safe_VkDataGraphPipelineResourceInfoARM* pResourceInfos{};
+
+    safe_VkDataGraphPipelineCreateInfoARM(const VkDataGraphPipelineCreateInfoARM* in_struct, PNextCopyState* copy_state = {},
+                                          bool copy_pnext = true);
+    safe_VkDataGraphPipelineCreateInfoARM(const safe_VkDataGraphPipelineCreateInfoARM& copy_src);
+    safe_VkDataGraphPipelineCreateInfoARM& operator=(const safe_VkDataGraphPipelineCreateInfoARM& copy_src);
+    safe_VkDataGraphPipelineCreateInfoARM();
+    ~safe_VkDataGraphPipelineCreateInfoARM();
+    void initialize(const VkDataGraphPipelineCreateInfoARM* in_struct, PNextCopyState* copy_state = {});
+    void initialize(const safe_VkDataGraphPipelineCreateInfoARM* copy_src, PNextCopyState* copy_state = {});
+    VkDataGraphPipelineCreateInfoARM* ptr() { return reinterpret_cast<VkDataGraphPipelineCreateInfoARM*>(this); }
+    VkDataGraphPipelineCreateInfoARM const* ptr() const { return reinterpret_cast<VkDataGraphPipelineCreateInfoARM const*>(this); }
+};
+struct safe_VkDataGraphPipelineShaderModuleCreateInfoARM {
+    VkStructureType sType;
+    const void* pNext{};
+    VkShaderModule module;
+    const char* pName{};
+    safe_VkSpecializationInfo* pSpecializationInfo{};
+    uint32_t constantCount;
+    safe_VkDataGraphPipelineConstantARM* pConstants{};
+
+    safe_VkDataGraphPipelineShaderModuleCreateInfoARM(const VkDataGraphPipelineShaderModuleCreateInfoARM* in_struct,
+                                                      PNextCopyState* copy_state = {}, bool copy_pnext = true);
+    safe_VkDataGraphPipelineShaderModuleCreateInfoARM(const safe_VkDataGraphPipelineShaderModuleCreateInfoARM& copy_src);
+    safe_VkDataGraphPipelineShaderModuleCreateInfoARM& operator=(const safe_VkDataGraphPipelineShaderModuleCreateInfoARM& copy_src);
+    safe_VkDataGraphPipelineShaderModuleCreateInfoARM();
+    ~safe_VkDataGraphPipelineShaderModuleCreateInfoARM();
+    void initialize(const VkDataGraphPipelineShaderModuleCreateInfoARM* in_struct, PNextCopyState* copy_state = {});
+    void initialize(const safe_VkDataGraphPipelineShaderModuleCreateInfoARM* copy_src, PNextCopyState* copy_state = {});
+    VkDataGraphPipelineShaderModuleCreateInfoARM* ptr() {
+        return reinterpret_cast<VkDataGraphPipelineShaderModuleCreateInfoARM*>(this);
+    }
+    VkDataGraphPipelineShaderModuleCreateInfoARM const* ptr() const {
+        return reinterpret_cast<VkDataGraphPipelineShaderModuleCreateInfoARM const*>(this);
+    }
+};
+struct safe_VkDataGraphPipelineSessionCreateInfoARM {
+    VkStructureType sType;
+    const void* pNext{};
+    VkDataGraphPipelineSessionCreateFlagsARM flags;
+    VkPipeline dataGraphPipeline;
+
+    safe_VkDataGraphPipelineSessionCreateInfoARM(const VkDataGraphPipelineSessionCreateInfoARM* in_struct,
+                                                 PNextCopyState* copy_state = {}, bool copy_pnext = true);
+    safe_VkDataGraphPipelineSessionCreateInfoARM(const safe_VkDataGraphPipelineSessionCreateInfoARM& copy_src);
+    safe_VkDataGraphPipelineSessionCreateInfoARM& operator=(const safe_VkDataGraphPipelineSessionCreateInfoARM& copy_src);
+    safe_VkDataGraphPipelineSessionCreateInfoARM();
+    ~safe_VkDataGraphPipelineSessionCreateInfoARM();
+    void initialize(const VkDataGraphPipelineSessionCreateInfoARM* in_struct, PNextCopyState* copy_state = {});
+    void initialize(const safe_VkDataGraphPipelineSessionCreateInfoARM* copy_src, PNextCopyState* copy_state = {});
+    VkDataGraphPipelineSessionCreateInfoARM* ptr() { return reinterpret_cast<VkDataGraphPipelineSessionCreateInfoARM*>(this); }
+    VkDataGraphPipelineSessionCreateInfoARM const* ptr() const {
+        return reinterpret_cast<VkDataGraphPipelineSessionCreateInfoARM const*>(this);
+    }
+};
+struct safe_VkDataGraphPipelineSessionBindPointRequirementsInfoARM {
+    VkStructureType sType;
+    const void* pNext{};
+    VkDataGraphPipelineSessionARM session;
+
+    safe_VkDataGraphPipelineSessionBindPointRequirementsInfoARM(
+        const VkDataGraphPipelineSessionBindPointRequirementsInfoARM* in_struct, PNextCopyState* copy_state = {},
+        bool copy_pnext = true);
+    safe_VkDataGraphPipelineSessionBindPointRequirementsInfoARM(
+        const safe_VkDataGraphPipelineSessionBindPointRequirementsInfoARM& copy_src);
+    safe_VkDataGraphPipelineSessionBindPointRequirementsInfoARM& operator=(
+        const safe_VkDataGraphPipelineSessionBindPointRequirementsInfoARM& copy_src);
+    safe_VkDataGraphPipelineSessionBindPointRequirementsInfoARM();
+    ~safe_VkDataGraphPipelineSessionBindPointRequirementsInfoARM();
+    void initialize(const VkDataGraphPipelineSessionBindPointRequirementsInfoARM* in_struct, PNextCopyState* copy_state = {});
+    void initialize(const safe_VkDataGraphPipelineSessionBindPointRequirementsInfoARM* copy_src, PNextCopyState* copy_state = {});
+    VkDataGraphPipelineSessionBindPointRequirementsInfoARM* ptr() {
+        return reinterpret_cast<VkDataGraphPipelineSessionBindPointRequirementsInfoARM*>(this);
+    }
+    VkDataGraphPipelineSessionBindPointRequirementsInfoARM const* ptr() const {
+        return reinterpret_cast<VkDataGraphPipelineSessionBindPointRequirementsInfoARM const*>(this);
+    }
+};
+struct safe_VkDataGraphPipelineSessionBindPointRequirementARM {
+    VkStructureType sType;
+    const void* pNext{};
+    VkDataGraphPipelineSessionBindPointARM bindPoint;
+    VkDataGraphPipelineSessionBindPointTypeARM bindPointType;
+    uint32_t numObjects;
+
+    safe_VkDataGraphPipelineSessionBindPointRequirementARM(const VkDataGraphPipelineSessionBindPointRequirementARM* in_struct,
+                                                           PNextCopyState* copy_state = {}, bool copy_pnext = true);
+    safe_VkDataGraphPipelineSessionBindPointRequirementARM(const safe_VkDataGraphPipelineSessionBindPointRequirementARM& copy_src);
+    safe_VkDataGraphPipelineSessionBindPointRequirementARM& operator=(
+        const safe_VkDataGraphPipelineSessionBindPointRequirementARM& copy_src);
+    safe_VkDataGraphPipelineSessionBindPointRequirementARM();
+    ~safe_VkDataGraphPipelineSessionBindPointRequirementARM();
+    void initialize(const VkDataGraphPipelineSessionBindPointRequirementARM* in_struct, PNextCopyState* copy_state = {});
+    void initialize(const safe_VkDataGraphPipelineSessionBindPointRequirementARM* copy_src, PNextCopyState* copy_state = {});
+    VkDataGraphPipelineSessionBindPointRequirementARM* ptr() {
+        return reinterpret_cast<VkDataGraphPipelineSessionBindPointRequirementARM*>(this);
+    }
+    VkDataGraphPipelineSessionBindPointRequirementARM const* ptr() const {
+        return reinterpret_cast<VkDataGraphPipelineSessionBindPointRequirementARM const*>(this);
+    }
+};
+struct safe_VkDataGraphPipelineSessionMemoryRequirementsInfoARM {
+    VkStructureType sType;
+    const void* pNext{};
+    VkDataGraphPipelineSessionARM session;
+    VkDataGraphPipelineSessionBindPointARM bindPoint;
+    uint32_t objectIndex;
+
+    safe_VkDataGraphPipelineSessionMemoryRequirementsInfoARM(const VkDataGraphPipelineSessionMemoryRequirementsInfoARM* in_struct,
+                                                             PNextCopyState* copy_state = {}, bool copy_pnext = true);
+    safe_VkDataGraphPipelineSessionMemoryRequirementsInfoARM(
+        const safe_VkDataGraphPipelineSessionMemoryRequirementsInfoARM& copy_src);
+    safe_VkDataGraphPipelineSessionMemoryRequirementsInfoARM& operator=(
+        const safe_VkDataGraphPipelineSessionMemoryRequirementsInfoARM& copy_src);
+    safe_VkDataGraphPipelineSessionMemoryRequirementsInfoARM();
+    ~safe_VkDataGraphPipelineSessionMemoryRequirementsInfoARM();
+    void initialize(const VkDataGraphPipelineSessionMemoryRequirementsInfoARM* in_struct, PNextCopyState* copy_state = {});
+    void initialize(const safe_VkDataGraphPipelineSessionMemoryRequirementsInfoARM* copy_src, PNextCopyState* copy_state = {});
+    VkDataGraphPipelineSessionMemoryRequirementsInfoARM* ptr() {
+        return reinterpret_cast<VkDataGraphPipelineSessionMemoryRequirementsInfoARM*>(this);
+    }
+    VkDataGraphPipelineSessionMemoryRequirementsInfoARM const* ptr() const {
+        return reinterpret_cast<VkDataGraphPipelineSessionMemoryRequirementsInfoARM const*>(this);
+    }
+};
+struct safe_VkBindDataGraphPipelineSessionMemoryInfoARM {
+    VkStructureType sType;
+    const void* pNext{};
+    VkDataGraphPipelineSessionARM session;
+    VkDataGraphPipelineSessionBindPointARM bindPoint;
+    uint32_t objectIndex;
+    VkDeviceMemory memory;
+    VkDeviceSize memoryOffset;
+
+    safe_VkBindDataGraphPipelineSessionMemoryInfoARM(const VkBindDataGraphPipelineSessionMemoryInfoARM* in_struct,
+                                                     PNextCopyState* copy_state = {}, bool copy_pnext = true);
+    safe_VkBindDataGraphPipelineSessionMemoryInfoARM(const safe_VkBindDataGraphPipelineSessionMemoryInfoARM& copy_src);
+    safe_VkBindDataGraphPipelineSessionMemoryInfoARM& operator=(const safe_VkBindDataGraphPipelineSessionMemoryInfoARM& copy_src);
+    safe_VkBindDataGraphPipelineSessionMemoryInfoARM();
+    ~safe_VkBindDataGraphPipelineSessionMemoryInfoARM();
+    void initialize(const VkBindDataGraphPipelineSessionMemoryInfoARM* in_struct, PNextCopyState* copy_state = {});
+    void initialize(const safe_VkBindDataGraphPipelineSessionMemoryInfoARM* copy_src, PNextCopyState* copy_state = {});
+    VkBindDataGraphPipelineSessionMemoryInfoARM* ptr() {
+        return reinterpret_cast<VkBindDataGraphPipelineSessionMemoryInfoARM*>(this);
+    }
+    VkBindDataGraphPipelineSessionMemoryInfoARM const* ptr() const {
+        return reinterpret_cast<VkBindDataGraphPipelineSessionMemoryInfoARM const*>(this);
+    }
+};
+struct safe_VkDataGraphPipelineInfoARM {
+    VkStructureType sType;
+    const void* pNext{};
+    VkPipeline dataGraphPipeline;
+
+    safe_VkDataGraphPipelineInfoARM(const VkDataGraphPipelineInfoARM* in_struct, PNextCopyState* copy_state = {},
+                                    bool copy_pnext = true);
+    safe_VkDataGraphPipelineInfoARM(const safe_VkDataGraphPipelineInfoARM& copy_src);
+    safe_VkDataGraphPipelineInfoARM& operator=(const safe_VkDataGraphPipelineInfoARM& copy_src);
+    safe_VkDataGraphPipelineInfoARM();
+    ~safe_VkDataGraphPipelineInfoARM();
+    void initialize(const VkDataGraphPipelineInfoARM* in_struct, PNextCopyState* copy_state = {});
+    void initialize(const safe_VkDataGraphPipelineInfoARM* copy_src, PNextCopyState* copy_state = {});
+    VkDataGraphPipelineInfoARM* ptr() { return reinterpret_cast<VkDataGraphPipelineInfoARM*>(this); }
+    VkDataGraphPipelineInfoARM const* ptr() const { return reinterpret_cast<VkDataGraphPipelineInfoARM const*>(this); }
+};
+struct safe_VkDataGraphPipelinePropertyQueryResultARM {
+    VkStructureType sType;
+    const void* pNext{};
+    VkDataGraphPipelinePropertyARM property;
+    VkBool32 isText;
+    size_t dataSize;
+    void* pData{};
+
+    safe_VkDataGraphPipelinePropertyQueryResultARM(const VkDataGraphPipelinePropertyQueryResultARM* in_struct,
+                                                   PNextCopyState* copy_state = {}, bool copy_pnext = true);
+    safe_VkDataGraphPipelinePropertyQueryResultARM(const safe_VkDataGraphPipelinePropertyQueryResultARM& copy_src);
+    safe_VkDataGraphPipelinePropertyQueryResultARM& operator=(const safe_VkDataGraphPipelinePropertyQueryResultARM& copy_src);
+    safe_VkDataGraphPipelinePropertyQueryResultARM();
+    ~safe_VkDataGraphPipelinePropertyQueryResultARM();
+    void initialize(const VkDataGraphPipelinePropertyQueryResultARM* in_struct, PNextCopyState* copy_state = {});
+    void initialize(const safe_VkDataGraphPipelinePropertyQueryResultARM* copy_src, PNextCopyState* copy_state = {});
+    VkDataGraphPipelinePropertyQueryResultARM* ptr() { return reinterpret_cast<VkDataGraphPipelinePropertyQueryResultARM*>(this); }
+    VkDataGraphPipelinePropertyQueryResultARM const* ptr() const {
+        return reinterpret_cast<VkDataGraphPipelinePropertyQueryResultARM const*>(this);
+    }
+};
+struct safe_VkDataGraphPipelineIdentifierCreateInfoARM {
+    VkStructureType sType;
+    const void* pNext{};
+    uint32_t identifierSize;
+    const uint8_t* pIdentifier{};
+
+    safe_VkDataGraphPipelineIdentifierCreateInfoARM(const VkDataGraphPipelineIdentifierCreateInfoARM* in_struct,
+                                                    PNextCopyState* copy_state = {}, bool copy_pnext = true);
+    safe_VkDataGraphPipelineIdentifierCreateInfoARM(const safe_VkDataGraphPipelineIdentifierCreateInfoARM& copy_src);
+    safe_VkDataGraphPipelineIdentifierCreateInfoARM& operator=(const safe_VkDataGraphPipelineIdentifierCreateInfoARM& copy_src);
+    safe_VkDataGraphPipelineIdentifierCreateInfoARM();
+    ~safe_VkDataGraphPipelineIdentifierCreateInfoARM();
+    void initialize(const VkDataGraphPipelineIdentifierCreateInfoARM* in_struct, PNextCopyState* copy_state = {});
+    void initialize(const safe_VkDataGraphPipelineIdentifierCreateInfoARM* copy_src, PNextCopyState* copy_state = {});
+    VkDataGraphPipelineIdentifierCreateInfoARM* ptr() {
+        return reinterpret_cast<VkDataGraphPipelineIdentifierCreateInfoARM*>(this);
+    }
+    VkDataGraphPipelineIdentifierCreateInfoARM const* ptr() const {
+        return reinterpret_cast<VkDataGraphPipelineIdentifierCreateInfoARM const*>(this);
+    }
+};
+struct safe_VkDataGraphPipelineDispatchInfoARM {
+    VkStructureType sType;
+    void* pNext{};
+    VkDataGraphPipelineDispatchFlagsARM flags;
+
+    safe_VkDataGraphPipelineDispatchInfoARM(const VkDataGraphPipelineDispatchInfoARM* in_struct, PNextCopyState* copy_state = {},
+                                            bool copy_pnext = true);
+    safe_VkDataGraphPipelineDispatchInfoARM(const safe_VkDataGraphPipelineDispatchInfoARM& copy_src);
+    safe_VkDataGraphPipelineDispatchInfoARM& operator=(const safe_VkDataGraphPipelineDispatchInfoARM& copy_src);
+    safe_VkDataGraphPipelineDispatchInfoARM();
+    ~safe_VkDataGraphPipelineDispatchInfoARM();
+    void initialize(const VkDataGraphPipelineDispatchInfoARM* in_struct, PNextCopyState* copy_state = {});
+    void initialize(const safe_VkDataGraphPipelineDispatchInfoARM* copy_src, PNextCopyState* copy_state = {});
+    VkDataGraphPipelineDispatchInfoARM* ptr() { return reinterpret_cast<VkDataGraphPipelineDispatchInfoARM*>(this); }
+    VkDataGraphPipelineDispatchInfoARM const* ptr() const {
+        return reinterpret_cast<VkDataGraphPipelineDispatchInfoARM const*>(this);
+    }
+};
+struct safe_VkQueueFamilyDataGraphPropertiesARM {
+    VkStructureType sType;
+    const void* pNext{};
+    VkPhysicalDeviceDataGraphProcessingEngineARM engine;
+    VkPhysicalDeviceDataGraphOperationSupportARM operation;
+
+    safe_VkQueueFamilyDataGraphPropertiesARM(const VkQueueFamilyDataGraphPropertiesARM* in_struct, PNextCopyState* copy_state = {},
+                                             bool copy_pnext = true);
+    safe_VkQueueFamilyDataGraphPropertiesARM(const safe_VkQueueFamilyDataGraphPropertiesARM& copy_src);
+    safe_VkQueueFamilyDataGraphPropertiesARM& operator=(const safe_VkQueueFamilyDataGraphPropertiesARM& copy_src);
+    safe_VkQueueFamilyDataGraphPropertiesARM();
+    ~safe_VkQueueFamilyDataGraphPropertiesARM();
+    void initialize(const VkQueueFamilyDataGraphPropertiesARM* in_struct, PNextCopyState* copy_state = {});
+    void initialize(const safe_VkQueueFamilyDataGraphPropertiesARM* copy_src, PNextCopyState* copy_state = {});
+    VkQueueFamilyDataGraphPropertiesARM* ptr() { return reinterpret_cast<VkQueueFamilyDataGraphPropertiesARM*>(this); }
+    VkQueueFamilyDataGraphPropertiesARM const* ptr() const {
+        return reinterpret_cast<VkQueueFamilyDataGraphPropertiesARM const*>(this);
+    }
+};
+struct safe_VkDataGraphProcessingEngineCreateInfoARM {
+    VkStructureType sType;
+    const void* pNext{};
+    uint32_t processingEngineCount;
+    VkPhysicalDeviceDataGraphProcessingEngineARM* pProcessingEngines{};
+
+    safe_VkDataGraphProcessingEngineCreateInfoARM(const VkDataGraphProcessingEngineCreateInfoARM* in_struct,
+                                                  PNextCopyState* copy_state = {}, bool copy_pnext = true);
+    safe_VkDataGraphProcessingEngineCreateInfoARM(const safe_VkDataGraphProcessingEngineCreateInfoARM& copy_src);
+    safe_VkDataGraphProcessingEngineCreateInfoARM& operator=(const safe_VkDataGraphProcessingEngineCreateInfoARM& copy_src);
+    safe_VkDataGraphProcessingEngineCreateInfoARM();
+    ~safe_VkDataGraphProcessingEngineCreateInfoARM();
+    void initialize(const VkDataGraphProcessingEngineCreateInfoARM* in_struct, PNextCopyState* copy_state = {});
+    void initialize(const safe_VkDataGraphProcessingEngineCreateInfoARM* copy_src, PNextCopyState* copy_state = {});
+    VkDataGraphProcessingEngineCreateInfoARM* ptr() { return reinterpret_cast<VkDataGraphProcessingEngineCreateInfoARM*>(this); }
+    VkDataGraphProcessingEngineCreateInfoARM const* ptr() const {
+        return reinterpret_cast<VkDataGraphProcessingEngineCreateInfoARM const*>(this);
+    }
+};
+struct safe_VkPhysicalDeviceQueueFamilyDataGraphProcessingEngineInfoARM {
+    VkStructureType sType;
+    const void* pNext{};
+    uint32_t queueFamilyIndex;
+    VkPhysicalDeviceDataGraphProcessingEngineTypeARM engineType;
+
+    safe_VkPhysicalDeviceQueueFamilyDataGraphProcessingEngineInfoARM(
+        const VkPhysicalDeviceQueueFamilyDataGraphProcessingEngineInfoARM* in_struct, PNextCopyState* copy_state = {},
+        bool copy_pnext = true);
+    safe_VkPhysicalDeviceQueueFamilyDataGraphProcessingEngineInfoARM(
+        const safe_VkPhysicalDeviceQueueFamilyDataGraphProcessingEngineInfoARM& copy_src);
+    safe_VkPhysicalDeviceQueueFamilyDataGraphProcessingEngineInfoARM& operator=(
+        const safe_VkPhysicalDeviceQueueFamilyDataGraphProcessingEngineInfoARM& copy_src);
+    safe_VkPhysicalDeviceQueueFamilyDataGraphProcessingEngineInfoARM();
+    ~safe_VkPhysicalDeviceQueueFamilyDataGraphProcessingEngineInfoARM();
+    void initialize(const VkPhysicalDeviceQueueFamilyDataGraphProcessingEngineInfoARM* in_struct, PNextCopyState* copy_state = {});
+    void initialize(const safe_VkPhysicalDeviceQueueFamilyDataGraphProcessingEngineInfoARM* copy_src,
+                    PNextCopyState* copy_state = {});
+    VkPhysicalDeviceQueueFamilyDataGraphProcessingEngineInfoARM* ptr() {
+        return reinterpret_cast<VkPhysicalDeviceQueueFamilyDataGraphProcessingEngineInfoARM*>(this);
+    }
+    VkPhysicalDeviceQueueFamilyDataGraphProcessingEngineInfoARM const* ptr() const {
+        return reinterpret_cast<VkPhysicalDeviceQueueFamilyDataGraphProcessingEngineInfoARM const*>(this);
+    }
+};
+struct safe_VkQueueFamilyDataGraphProcessingEnginePropertiesARM {
+    VkStructureType sType;
+    const void* pNext{};
+    VkExternalSemaphoreHandleTypeFlags foreignSemaphoreHandleTypes;
+    VkExternalMemoryHandleTypeFlags foreignMemoryHandleTypes;
+
+    safe_VkQueueFamilyDataGraphProcessingEnginePropertiesARM(const VkQueueFamilyDataGraphProcessingEnginePropertiesARM* in_struct,
+                                                             PNextCopyState* copy_state = {}, bool copy_pnext = true);
+    safe_VkQueueFamilyDataGraphProcessingEnginePropertiesARM(
+        const safe_VkQueueFamilyDataGraphProcessingEnginePropertiesARM& copy_src);
+    safe_VkQueueFamilyDataGraphProcessingEnginePropertiesARM& operator=(
+        const safe_VkQueueFamilyDataGraphProcessingEnginePropertiesARM& copy_src);
+    safe_VkQueueFamilyDataGraphProcessingEnginePropertiesARM();
+    ~safe_VkQueueFamilyDataGraphProcessingEnginePropertiesARM();
+    void initialize(const VkQueueFamilyDataGraphProcessingEnginePropertiesARM* in_struct, PNextCopyState* copy_state = {});
+    void initialize(const safe_VkQueueFamilyDataGraphProcessingEnginePropertiesARM* copy_src, PNextCopyState* copy_state = {});
+    VkQueueFamilyDataGraphProcessingEnginePropertiesARM* ptr() {
+        return reinterpret_cast<VkQueueFamilyDataGraphProcessingEnginePropertiesARM*>(this);
+    }
+    VkQueueFamilyDataGraphProcessingEnginePropertiesARM const* ptr() const {
+        return reinterpret_cast<VkQueueFamilyDataGraphProcessingEnginePropertiesARM const*>(this);
+    }
+};
+struct safe_VkDataGraphPipelineConstantTensorSemiStructuredSparsityInfoARM {
+    VkStructureType sType;
+    const void* pNext{};
+    uint32_t dimension;
+    uint32_t zeroCount;
+    uint32_t groupSize;
+
+    safe_VkDataGraphPipelineConstantTensorSemiStructuredSparsityInfoARM(
+        const VkDataGraphPipelineConstantTensorSemiStructuredSparsityInfoARM* in_struct, PNextCopyState* copy_state = {},
+        bool copy_pnext = true);
+    safe_VkDataGraphPipelineConstantTensorSemiStructuredSparsityInfoARM(
+        const safe_VkDataGraphPipelineConstantTensorSemiStructuredSparsityInfoARM& copy_src);
+    safe_VkDataGraphPipelineConstantTensorSemiStructuredSparsityInfoARM& operator=(
+        const safe_VkDataGraphPipelineConstantTensorSemiStructuredSparsityInfoARM& copy_src);
+    safe_VkDataGraphPipelineConstantTensorSemiStructuredSparsityInfoARM();
+    ~safe_VkDataGraphPipelineConstantTensorSemiStructuredSparsityInfoARM();
+    void initialize(const VkDataGraphPipelineConstantTensorSemiStructuredSparsityInfoARM* in_struct,
+                    PNextCopyState* copy_state = {});
+    void initialize(const safe_VkDataGraphPipelineConstantTensorSemiStructuredSparsityInfoARM* copy_src,
+                    PNextCopyState* copy_state = {});
+    VkDataGraphPipelineConstantTensorSemiStructuredSparsityInfoARM* ptr() {
+        return reinterpret_cast<VkDataGraphPipelineConstantTensorSemiStructuredSparsityInfoARM*>(this);
+    }
+    VkDataGraphPipelineConstantTensorSemiStructuredSparsityInfoARM const* ptr() const {
+        return reinterpret_cast<VkDataGraphPipelineConstantTensorSemiStructuredSparsityInfoARM const*>(this);
+    }
 };
 struct safe_VkPhysicalDeviceMultiviewPerViewRenderAreasFeaturesQCOM {
     VkStructureType sType;
@@ -18857,6 +20775,96 @@ struct safe_VkPhysicalDeviceDescriptorPoolOverallocationFeaturesNV {
         return reinterpret_cast<VkPhysicalDeviceDescriptorPoolOverallocationFeaturesNV const*>(this);
     }
 };
+struct safe_VkPhysicalDeviceTileMemoryHeapFeaturesQCOM {
+    VkStructureType sType;
+    void* pNext{};
+    VkBool32 tileMemoryHeap;
+
+    safe_VkPhysicalDeviceTileMemoryHeapFeaturesQCOM(const VkPhysicalDeviceTileMemoryHeapFeaturesQCOM* in_struct,
+                                                    PNextCopyState* copy_state = {}, bool copy_pnext = true);
+    safe_VkPhysicalDeviceTileMemoryHeapFeaturesQCOM(const safe_VkPhysicalDeviceTileMemoryHeapFeaturesQCOM& copy_src);
+    safe_VkPhysicalDeviceTileMemoryHeapFeaturesQCOM& operator=(const safe_VkPhysicalDeviceTileMemoryHeapFeaturesQCOM& copy_src);
+    safe_VkPhysicalDeviceTileMemoryHeapFeaturesQCOM();
+    ~safe_VkPhysicalDeviceTileMemoryHeapFeaturesQCOM();
+    void initialize(const VkPhysicalDeviceTileMemoryHeapFeaturesQCOM* in_struct, PNextCopyState* copy_state = {});
+    void initialize(const safe_VkPhysicalDeviceTileMemoryHeapFeaturesQCOM* copy_src, PNextCopyState* copy_state = {});
+    VkPhysicalDeviceTileMemoryHeapFeaturesQCOM* ptr() {
+        return reinterpret_cast<VkPhysicalDeviceTileMemoryHeapFeaturesQCOM*>(this);
+    }
+    VkPhysicalDeviceTileMemoryHeapFeaturesQCOM const* ptr() const {
+        return reinterpret_cast<VkPhysicalDeviceTileMemoryHeapFeaturesQCOM const*>(this);
+    }
+};
+struct safe_VkPhysicalDeviceTileMemoryHeapPropertiesQCOM {
+    VkStructureType sType;
+    void* pNext{};
+    VkBool32 queueSubmitBoundary;
+    VkBool32 tileBufferTransfers;
+
+    safe_VkPhysicalDeviceTileMemoryHeapPropertiesQCOM(const VkPhysicalDeviceTileMemoryHeapPropertiesQCOM* in_struct,
+                                                      PNextCopyState* copy_state = {}, bool copy_pnext = true);
+    safe_VkPhysicalDeviceTileMemoryHeapPropertiesQCOM(const safe_VkPhysicalDeviceTileMemoryHeapPropertiesQCOM& copy_src);
+    safe_VkPhysicalDeviceTileMemoryHeapPropertiesQCOM& operator=(const safe_VkPhysicalDeviceTileMemoryHeapPropertiesQCOM& copy_src);
+    safe_VkPhysicalDeviceTileMemoryHeapPropertiesQCOM();
+    ~safe_VkPhysicalDeviceTileMemoryHeapPropertiesQCOM();
+    void initialize(const VkPhysicalDeviceTileMemoryHeapPropertiesQCOM* in_struct, PNextCopyState* copy_state = {});
+    void initialize(const safe_VkPhysicalDeviceTileMemoryHeapPropertiesQCOM* copy_src, PNextCopyState* copy_state = {});
+    VkPhysicalDeviceTileMemoryHeapPropertiesQCOM* ptr() {
+        return reinterpret_cast<VkPhysicalDeviceTileMemoryHeapPropertiesQCOM*>(this);
+    }
+    VkPhysicalDeviceTileMemoryHeapPropertiesQCOM const* ptr() const {
+        return reinterpret_cast<VkPhysicalDeviceTileMemoryHeapPropertiesQCOM const*>(this);
+    }
+};
+struct safe_VkTileMemoryRequirementsQCOM {
+    VkStructureType sType;
+    void* pNext{};
+    VkDeviceSize size;
+    VkDeviceSize alignment;
+
+    safe_VkTileMemoryRequirementsQCOM(const VkTileMemoryRequirementsQCOM* in_struct, PNextCopyState* copy_state = {},
+                                      bool copy_pnext = true);
+    safe_VkTileMemoryRequirementsQCOM(const safe_VkTileMemoryRequirementsQCOM& copy_src);
+    safe_VkTileMemoryRequirementsQCOM& operator=(const safe_VkTileMemoryRequirementsQCOM& copy_src);
+    safe_VkTileMemoryRequirementsQCOM();
+    ~safe_VkTileMemoryRequirementsQCOM();
+    void initialize(const VkTileMemoryRequirementsQCOM* in_struct, PNextCopyState* copy_state = {});
+    void initialize(const safe_VkTileMemoryRequirementsQCOM* copy_src, PNextCopyState* copy_state = {});
+    VkTileMemoryRequirementsQCOM* ptr() { return reinterpret_cast<VkTileMemoryRequirementsQCOM*>(this); }
+    VkTileMemoryRequirementsQCOM const* ptr() const { return reinterpret_cast<VkTileMemoryRequirementsQCOM const*>(this); }
+};
+struct safe_VkTileMemoryBindInfoQCOM {
+    VkStructureType sType;
+    const void* pNext{};
+    VkDeviceMemory memory;
+
+    safe_VkTileMemoryBindInfoQCOM(const VkTileMemoryBindInfoQCOM* in_struct, PNextCopyState* copy_state = {},
+                                  bool copy_pnext = true);
+    safe_VkTileMemoryBindInfoQCOM(const safe_VkTileMemoryBindInfoQCOM& copy_src);
+    safe_VkTileMemoryBindInfoQCOM& operator=(const safe_VkTileMemoryBindInfoQCOM& copy_src);
+    safe_VkTileMemoryBindInfoQCOM();
+    ~safe_VkTileMemoryBindInfoQCOM();
+    void initialize(const VkTileMemoryBindInfoQCOM* in_struct, PNextCopyState* copy_state = {});
+    void initialize(const safe_VkTileMemoryBindInfoQCOM* copy_src, PNextCopyState* copy_state = {});
+    VkTileMemoryBindInfoQCOM* ptr() { return reinterpret_cast<VkTileMemoryBindInfoQCOM*>(this); }
+    VkTileMemoryBindInfoQCOM const* ptr() const { return reinterpret_cast<VkTileMemoryBindInfoQCOM const*>(this); }
+};
+struct safe_VkTileMemorySizeInfoQCOM {
+    VkStructureType sType;
+    const void* pNext{};
+    VkDeviceSize size;
+
+    safe_VkTileMemorySizeInfoQCOM(const VkTileMemorySizeInfoQCOM* in_struct, PNextCopyState* copy_state = {},
+                                  bool copy_pnext = true);
+    safe_VkTileMemorySizeInfoQCOM(const safe_VkTileMemorySizeInfoQCOM& copy_src);
+    safe_VkTileMemorySizeInfoQCOM& operator=(const safe_VkTileMemorySizeInfoQCOM& copy_src);
+    safe_VkTileMemorySizeInfoQCOM();
+    ~safe_VkTileMemorySizeInfoQCOM();
+    void initialize(const VkTileMemorySizeInfoQCOM* in_struct, PNextCopyState* copy_state = {});
+    void initialize(const safe_VkTileMemorySizeInfoQCOM* copy_src, PNextCopyState* copy_state = {});
+    VkTileMemorySizeInfoQCOM* ptr() { return reinterpret_cast<VkTileMemorySizeInfoQCOM*>(this); }
+    VkTileMemorySizeInfoQCOM const* ptr() const { return reinterpret_cast<VkTileMemorySizeInfoQCOM const*>(this); }
+};
 struct safe_VkDisplaySurfaceStereoCreateInfoNV {
     VkStructureType sType;
     const void* pNext{};
@@ -18907,6 +20915,82 @@ struct safe_VkPhysicalDeviceRawAccessChainsFeaturesNV {
     VkPhysicalDeviceRawAccessChainsFeaturesNV* ptr() { return reinterpret_cast<VkPhysicalDeviceRawAccessChainsFeaturesNV*>(this); }
     VkPhysicalDeviceRawAccessChainsFeaturesNV const* ptr() const {
         return reinterpret_cast<VkPhysicalDeviceRawAccessChainsFeaturesNV const*>(this);
+    }
+};
+struct safe_VkExternalComputeQueueDeviceCreateInfoNV {
+    VkStructureType sType;
+    const void* pNext{};
+    uint32_t reservedExternalQueues;
+
+    safe_VkExternalComputeQueueDeviceCreateInfoNV(const VkExternalComputeQueueDeviceCreateInfoNV* in_struct,
+                                                  PNextCopyState* copy_state = {}, bool copy_pnext = true);
+    safe_VkExternalComputeQueueDeviceCreateInfoNV(const safe_VkExternalComputeQueueDeviceCreateInfoNV& copy_src);
+    safe_VkExternalComputeQueueDeviceCreateInfoNV& operator=(const safe_VkExternalComputeQueueDeviceCreateInfoNV& copy_src);
+    safe_VkExternalComputeQueueDeviceCreateInfoNV();
+    ~safe_VkExternalComputeQueueDeviceCreateInfoNV();
+    void initialize(const VkExternalComputeQueueDeviceCreateInfoNV* in_struct, PNextCopyState* copy_state = {});
+    void initialize(const safe_VkExternalComputeQueueDeviceCreateInfoNV* copy_src, PNextCopyState* copy_state = {});
+    VkExternalComputeQueueDeviceCreateInfoNV* ptr() { return reinterpret_cast<VkExternalComputeQueueDeviceCreateInfoNV*>(this); }
+    VkExternalComputeQueueDeviceCreateInfoNV const* ptr() const {
+        return reinterpret_cast<VkExternalComputeQueueDeviceCreateInfoNV const*>(this);
+    }
+};
+struct safe_VkExternalComputeQueueCreateInfoNV {
+    VkStructureType sType;
+    const void* pNext{};
+    VkQueue preferredQueue;
+
+    safe_VkExternalComputeQueueCreateInfoNV(const VkExternalComputeQueueCreateInfoNV* in_struct, PNextCopyState* copy_state = {},
+                                            bool copy_pnext = true);
+    safe_VkExternalComputeQueueCreateInfoNV(const safe_VkExternalComputeQueueCreateInfoNV& copy_src);
+    safe_VkExternalComputeQueueCreateInfoNV& operator=(const safe_VkExternalComputeQueueCreateInfoNV& copy_src);
+    safe_VkExternalComputeQueueCreateInfoNV();
+    ~safe_VkExternalComputeQueueCreateInfoNV();
+    void initialize(const VkExternalComputeQueueCreateInfoNV* in_struct, PNextCopyState* copy_state = {});
+    void initialize(const safe_VkExternalComputeQueueCreateInfoNV* copy_src, PNextCopyState* copy_state = {});
+    VkExternalComputeQueueCreateInfoNV* ptr() { return reinterpret_cast<VkExternalComputeQueueCreateInfoNV*>(this); }
+    VkExternalComputeQueueCreateInfoNV const* ptr() const {
+        return reinterpret_cast<VkExternalComputeQueueCreateInfoNV const*>(this);
+    }
+};
+struct safe_VkExternalComputeQueueDataParamsNV {
+    VkStructureType sType;
+    const void* pNext{};
+    uint32_t deviceIndex;
+
+    safe_VkExternalComputeQueueDataParamsNV(const VkExternalComputeQueueDataParamsNV* in_struct, PNextCopyState* copy_state = {},
+                                            bool copy_pnext = true);
+    safe_VkExternalComputeQueueDataParamsNV(const safe_VkExternalComputeQueueDataParamsNV& copy_src);
+    safe_VkExternalComputeQueueDataParamsNV& operator=(const safe_VkExternalComputeQueueDataParamsNV& copy_src);
+    safe_VkExternalComputeQueueDataParamsNV();
+    ~safe_VkExternalComputeQueueDataParamsNV();
+    void initialize(const VkExternalComputeQueueDataParamsNV* in_struct, PNextCopyState* copy_state = {});
+    void initialize(const safe_VkExternalComputeQueueDataParamsNV* copy_src, PNextCopyState* copy_state = {});
+    VkExternalComputeQueueDataParamsNV* ptr() { return reinterpret_cast<VkExternalComputeQueueDataParamsNV*>(this); }
+    VkExternalComputeQueueDataParamsNV const* ptr() const {
+        return reinterpret_cast<VkExternalComputeQueueDataParamsNV const*>(this);
+    }
+};
+struct safe_VkPhysicalDeviceExternalComputeQueuePropertiesNV {
+    VkStructureType sType;
+    void* pNext{};
+    uint32_t externalDataSize;
+    uint32_t maxExternalQueues;
+
+    safe_VkPhysicalDeviceExternalComputeQueuePropertiesNV(const VkPhysicalDeviceExternalComputeQueuePropertiesNV* in_struct,
+                                                          PNextCopyState* copy_state = {}, bool copy_pnext = true);
+    safe_VkPhysicalDeviceExternalComputeQueuePropertiesNV(const safe_VkPhysicalDeviceExternalComputeQueuePropertiesNV& copy_src);
+    safe_VkPhysicalDeviceExternalComputeQueuePropertiesNV& operator=(
+        const safe_VkPhysicalDeviceExternalComputeQueuePropertiesNV& copy_src);
+    safe_VkPhysicalDeviceExternalComputeQueuePropertiesNV();
+    ~safe_VkPhysicalDeviceExternalComputeQueuePropertiesNV();
+    void initialize(const VkPhysicalDeviceExternalComputeQueuePropertiesNV* in_struct, PNextCopyState* copy_state = {});
+    void initialize(const safe_VkPhysicalDeviceExternalComputeQueuePropertiesNV* copy_src, PNextCopyState* copy_state = {});
+    VkPhysicalDeviceExternalComputeQueuePropertiesNV* ptr() {
+        return reinterpret_cast<VkPhysicalDeviceExternalComputeQueuePropertiesNV*>(this);
+    }
+    VkPhysicalDeviceExternalComputeQueuePropertiesNV const* ptr() const {
+        return reinterpret_cast<VkPhysicalDeviceExternalComputeQueuePropertiesNV const*>(this);
     }
 };
 struct safe_VkPhysicalDeviceCommandBufferInheritanceFeaturesNV {
@@ -18976,6 +21060,25 @@ struct safe_VkPhysicalDeviceShaderReplicatedCompositesFeaturesEXT {
         return reinterpret_cast<VkPhysicalDeviceShaderReplicatedCompositesFeaturesEXT const*>(this);
     }
 };
+struct safe_VkPhysicalDeviceShaderFloat8FeaturesEXT {
+    VkStructureType sType;
+    void* pNext{};
+    VkBool32 shaderFloat8;
+    VkBool32 shaderFloat8CooperativeMatrix;
+
+    safe_VkPhysicalDeviceShaderFloat8FeaturesEXT(const VkPhysicalDeviceShaderFloat8FeaturesEXT* in_struct,
+                                                 PNextCopyState* copy_state = {}, bool copy_pnext = true);
+    safe_VkPhysicalDeviceShaderFloat8FeaturesEXT(const safe_VkPhysicalDeviceShaderFloat8FeaturesEXT& copy_src);
+    safe_VkPhysicalDeviceShaderFloat8FeaturesEXT& operator=(const safe_VkPhysicalDeviceShaderFloat8FeaturesEXT& copy_src);
+    safe_VkPhysicalDeviceShaderFloat8FeaturesEXT();
+    ~safe_VkPhysicalDeviceShaderFloat8FeaturesEXT();
+    void initialize(const VkPhysicalDeviceShaderFloat8FeaturesEXT* in_struct, PNextCopyState* copy_state = {});
+    void initialize(const safe_VkPhysicalDeviceShaderFloat8FeaturesEXT* copy_src, PNextCopyState* copy_state = {});
+    VkPhysicalDeviceShaderFloat8FeaturesEXT* ptr() { return reinterpret_cast<VkPhysicalDeviceShaderFloat8FeaturesEXT*>(this); }
+    VkPhysicalDeviceShaderFloat8FeaturesEXT const* ptr() const {
+        return reinterpret_cast<VkPhysicalDeviceShaderFloat8FeaturesEXT const*>(this);
+    }
+};
 struct safe_VkPhysicalDeviceRayTracingValidationFeaturesNV {
     VkStructureType sType;
     void* pNext{};
@@ -18995,6 +21098,388 @@ struct safe_VkPhysicalDeviceRayTracingValidationFeaturesNV {
     }
     VkPhysicalDeviceRayTracingValidationFeaturesNV const* ptr() const {
         return reinterpret_cast<VkPhysicalDeviceRayTracingValidationFeaturesNV const*>(this);
+    }
+};
+struct safe_VkPhysicalDeviceClusterAccelerationStructureFeaturesNV {
+    VkStructureType sType;
+    void* pNext{};
+    VkBool32 clusterAccelerationStructure;
+
+    safe_VkPhysicalDeviceClusterAccelerationStructureFeaturesNV(
+        const VkPhysicalDeviceClusterAccelerationStructureFeaturesNV* in_struct, PNextCopyState* copy_state = {},
+        bool copy_pnext = true);
+    safe_VkPhysicalDeviceClusterAccelerationStructureFeaturesNV(
+        const safe_VkPhysicalDeviceClusterAccelerationStructureFeaturesNV& copy_src);
+    safe_VkPhysicalDeviceClusterAccelerationStructureFeaturesNV& operator=(
+        const safe_VkPhysicalDeviceClusterAccelerationStructureFeaturesNV& copy_src);
+    safe_VkPhysicalDeviceClusterAccelerationStructureFeaturesNV();
+    ~safe_VkPhysicalDeviceClusterAccelerationStructureFeaturesNV();
+    void initialize(const VkPhysicalDeviceClusterAccelerationStructureFeaturesNV* in_struct, PNextCopyState* copy_state = {});
+    void initialize(const safe_VkPhysicalDeviceClusterAccelerationStructureFeaturesNV* copy_src, PNextCopyState* copy_state = {});
+    VkPhysicalDeviceClusterAccelerationStructureFeaturesNV* ptr() {
+        return reinterpret_cast<VkPhysicalDeviceClusterAccelerationStructureFeaturesNV*>(this);
+    }
+    VkPhysicalDeviceClusterAccelerationStructureFeaturesNV const* ptr() const {
+        return reinterpret_cast<VkPhysicalDeviceClusterAccelerationStructureFeaturesNV const*>(this);
+    }
+};
+struct safe_VkPhysicalDeviceClusterAccelerationStructurePropertiesNV {
+    VkStructureType sType;
+    void* pNext{};
+    uint32_t maxVerticesPerCluster;
+    uint32_t maxTrianglesPerCluster;
+    uint32_t clusterScratchByteAlignment;
+    uint32_t clusterByteAlignment;
+    uint32_t clusterTemplateByteAlignment;
+    uint32_t clusterBottomLevelByteAlignment;
+    uint32_t clusterTemplateBoundsByteAlignment;
+    uint32_t maxClusterGeometryIndex;
+
+    safe_VkPhysicalDeviceClusterAccelerationStructurePropertiesNV(
+        const VkPhysicalDeviceClusterAccelerationStructurePropertiesNV* in_struct, PNextCopyState* copy_state = {},
+        bool copy_pnext = true);
+    safe_VkPhysicalDeviceClusterAccelerationStructurePropertiesNV(
+        const safe_VkPhysicalDeviceClusterAccelerationStructurePropertiesNV& copy_src);
+    safe_VkPhysicalDeviceClusterAccelerationStructurePropertiesNV& operator=(
+        const safe_VkPhysicalDeviceClusterAccelerationStructurePropertiesNV& copy_src);
+    safe_VkPhysicalDeviceClusterAccelerationStructurePropertiesNV();
+    ~safe_VkPhysicalDeviceClusterAccelerationStructurePropertiesNV();
+    void initialize(const VkPhysicalDeviceClusterAccelerationStructurePropertiesNV* in_struct, PNextCopyState* copy_state = {});
+    void initialize(const safe_VkPhysicalDeviceClusterAccelerationStructurePropertiesNV* copy_src, PNextCopyState* copy_state = {});
+    VkPhysicalDeviceClusterAccelerationStructurePropertiesNV* ptr() {
+        return reinterpret_cast<VkPhysicalDeviceClusterAccelerationStructurePropertiesNV*>(this);
+    }
+    VkPhysicalDeviceClusterAccelerationStructurePropertiesNV const* ptr() const {
+        return reinterpret_cast<VkPhysicalDeviceClusterAccelerationStructurePropertiesNV const*>(this);
+    }
+};
+struct safe_VkClusterAccelerationStructureClustersBottomLevelInputNV {
+    VkStructureType sType;
+    void* pNext{};
+    uint32_t maxTotalClusterCount;
+    uint32_t maxClusterCountPerAccelerationStructure;
+
+    safe_VkClusterAccelerationStructureClustersBottomLevelInputNV(
+        const VkClusterAccelerationStructureClustersBottomLevelInputNV* in_struct, PNextCopyState* copy_state = {},
+        bool copy_pnext = true);
+    safe_VkClusterAccelerationStructureClustersBottomLevelInputNV(
+        const safe_VkClusterAccelerationStructureClustersBottomLevelInputNV& copy_src);
+    safe_VkClusterAccelerationStructureClustersBottomLevelInputNV& operator=(
+        const safe_VkClusterAccelerationStructureClustersBottomLevelInputNV& copy_src);
+    safe_VkClusterAccelerationStructureClustersBottomLevelInputNV();
+    ~safe_VkClusterAccelerationStructureClustersBottomLevelInputNV();
+    void initialize(const VkClusterAccelerationStructureClustersBottomLevelInputNV* in_struct, PNextCopyState* copy_state = {});
+    void initialize(const safe_VkClusterAccelerationStructureClustersBottomLevelInputNV* copy_src, PNextCopyState* copy_state = {});
+    VkClusterAccelerationStructureClustersBottomLevelInputNV* ptr() {
+        return reinterpret_cast<VkClusterAccelerationStructureClustersBottomLevelInputNV*>(this);
+    }
+    VkClusterAccelerationStructureClustersBottomLevelInputNV const* ptr() const {
+        return reinterpret_cast<VkClusterAccelerationStructureClustersBottomLevelInputNV const*>(this);
+    }
+};
+struct safe_VkClusterAccelerationStructureTriangleClusterInputNV {
+    VkStructureType sType;
+    void* pNext{};
+    VkFormat vertexFormat;
+    uint32_t maxGeometryIndexValue;
+    uint32_t maxClusterUniqueGeometryCount;
+    uint32_t maxClusterTriangleCount;
+    uint32_t maxClusterVertexCount;
+    uint32_t maxTotalTriangleCount;
+    uint32_t maxTotalVertexCount;
+    uint32_t minPositionTruncateBitCount;
+
+    safe_VkClusterAccelerationStructureTriangleClusterInputNV(const VkClusterAccelerationStructureTriangleClusterInputNV* in_struct,
+                                                              PNextCopyState* copy_state = {}, bool copy_pnext = true);
+    safe_VkClusterAccelerationStructureTriangleClusterInputNV(
+        const safe_VkClusterAccelerationStructureTriangleClusterInputNV& copy_src);
+    safe_VkClusterAccelerationStructureTriangleClusterInputNV& operator=(
+        const safe_VkClusterAccelerationStructureTriangleClusterInputNV& copy_src);
+    safe_VkClusterAccelerationStructureTriangleClusterInputNV();
+    ~safe_VkClusterAccelerationStructureTriangleClusterInputNV();
+    void initialize(const VkClusterAccelerationStructureTriangleClusterInputNV* in_struct, PNextCopyState* copy_state = {});
+    void initialize(const safe_VkClusterAccelerationStructureTriangleClusterInputNV* copy_src, PNextCopyState* copy_state = {});
+    VkClusterAccelerationStructureTriangleClusterInputNV* ptr() {
+        return reinterpret_cast<VkClusterAccelerationStructureTriangleClusterInputNV*>(this);
+    }
+    VkClusterAccelerationStructureTriangleClusterInputNV const* ptr() const {
+        return reinterpret_cast<VkClusterAccelerationStructureTriangleClusterInputNV const*>(this);
+    }
+};
+struct safe_VkClusterAccelerationStructureMoveObjectsInputNV {
+    VkStructureType sType;
+    void* pNext{};
+    VkClusterAccelerationStructureTypeNV type;
+    VkBool32 noMoveOverlap;
+    VkDeviceSize maxMovedBytes;
+
+    safe_VkClusterAccelerationStructureMoveObjectsInputNV(const VkClusterAccelerationStructureMoveObjectsInputNV* in_struct,
+                                                          PNextCopyState* copy_state = {}, bool copy_pnext = true);
+    safe_VkClusterAccelerationStructureMoveObjectsInputNV(const safe_VkClusterAccelerationStructureMoveObjectsInputNV& copy_src);
+    safe_VkClusterAccelerationStructureMoveObjectsInputNV& operator=(
+        const safe_VkClusterAccelerationStructureMoveObjectsInputNV& copy_src);
+    safe_VkClusterAccelerationStructureMoveObjectsInputNV();
+    ~safe_VkClusterAccelerationStructureMoveObjectsInputNV();
+    void initialize(const VkClusterAccelerationStructureMoveObjectsInputNV* in_struct, PNextCopyState* copy_state = {});
+    void initialize(const safe_VkClusterAccelerationStructureMoveObjectsInputNV* copy_src, PNextCopyState* copy_state = {});
+    VkClusterAccelerationStructureMoveObjectsInputNV* ptr() {
+        return reinterpret_cast<VkClusterAccelerationStructureMoveObjectsInputNV*>(this);
+    }
+    VkClusterAccelerationStructureMoveObjectsInputNV const* ptr() const {
+        return reinterpret_cast<VkClusterAccelerationStructureMoveObjectsInputNV const*>(this);
+    }
+};
+union safe_VkClusterAccelerationStructureOpInputNV {
+    safe_VkClusterAccelerationStructureClustersBottomLevelInputNV* pClustersBottomLevel;
+    safe_VkClusterAccelerationStructureTriangleClusterInputNV* pTriangleClusters;
+    safe_VkClusterAccelerationStructureMoveObjectsInputNV* pMoveObjects;
+
+    safe_VkClusterAccelerationStructureOpInputNV(const VkClusterAccelerationStructureOpInputNV* in_struct,
+                                                 PNextCopyState* copy_state = {});
+    safe_VkClusterAccelerationStructureOpInputNV(const safe_VkClusterAccelerationStructureOpInputNV& copy_src);
+    safe_VkClusterAccelerationStructureOpInputNV& operator=(const safe_VkClusterAccelerationStructureOpInputNV& copy_src);
+    safe_VkClusterAccelerationStructureOpInputNV();
+    ~safe_VkClusterAccelerationStructureOpInputNV();
+    void initialize(const VkClusterAccelerationStructureOpInputNV* in_struct, PNextCopyState* copy_state = {});
+    void initialize(const safe_VkClusterAccelerationStructureOpInputNV* copy_src, PNextCopyState* copy_state = {});
+    VkClusterAccelerationStructureOpInputNV* ptr() { return reinterpret_cast<VkClusterAccelerationStructureOpInputNV*>(this); }
+    VkClusterAccelerationStructureOpInputNV const* ptr() const {
+        return reinterpret_cast<VkClusterAccelerationStructureOpInputNV const*>(this);
+    }
+};
+struct safe_VkClusterAccelerationStructureInputInfoNV {
+    VkStructureType sType;
+    void* pNext{};
+    uint32_t maxAccelerationStructureCount;
+    VkBuildAccelerationStructureFlagsKHR flags;
+    VkClusterAccelerationStructureOpTypeNV opType;
+    VkClusterAccelerationStructureOpModeNV opMode;
+    safe_VkClusterAccelerationStructureOpInputNV opInput;
+
+    safe_VkClusterAccelerationStructureInputInfoNV(const VkClusterAccelerationStructureInputInfoNV* in_struct,
+                                                   PNextCopyState* copy_state = {}, bool copy_pnext = true);
+    safe_VkClusterAccelerationStructureInputInfoNV(const safe_VkClusterAccelerationStructureInputInfoNV& copy_src);
+    safe_VkClusterAccelerationStructureInputInfoNV& operator=(const safe_VkClusterAccelerationStructureInputInfoNV& copy_src);
+    safe_VkClusterAccelerationStructureInputInfoNV();
+    ~safe_VkClusterAccelerationStructureInputInfoNV();
+    void initialize(const VkClusterAccelerationStructureInputInfoNV* in_struct, PNextCopyState* copy_state = {});
+    void initialize(const safe_VkClusterAccelerationStructureInputInfoNV* copy_src, PNextCopyState* copy_state = {});
+    VkClusterAccelerationStructureInputInfoNV* ptr() { return reinterpret_cast<VkClusterAccelerationStructureInputInfoNV*>(this); }
+    VkClusterAccelerationStructureInputInfoNV const* ptr() const {
+        return reinterpret_cast<VkClusterAccelerationStructureInputInfoNV const*>(this);
+    }
+};
+struct safe_VkClusterAccelerationStructureCommandsInfoNV {
+    VkStructureType sType;
+    void* pNext{};
+    safe_VkClusterAccelerationStructureInputInfoNV input;
+    VkDeviceAddress dstImplicitData;
+    VkDeviceAddress scratchData;
+    VkStridedDeviceAddressRegionKHR dstAddressesArray;
+    VkStridedDeviceAddressRegionKHR dstSizesArray;
+    VkStridedDeviceAddressRegionKHR srcInfosArray;
+    VkDeviceAddress srcInfosCount;
+    VkClusterAccelerationStructureAddressResolutionFlagsNV addressResolutionFlags;
+
+    safe_VkClusterAccelerationStructureCommandsInfoNV(const VkClusterAccelerationStructureCommandsInfoNV* in_struct,
+                                                      PNextCopyState* copy_state = {}, bool copy_pnext = true);
+    safe_VkClusterAccelerationStructureCommandsInfoNV(const safe_VkClusterAccelerationStructureCommandsInfoNV& copy_src);
+    safe_VkClusterAccelerationStructureCommandsInfoNV& operator=(const safe_VkClusterAccelerationStructureCommandsInfoNV& copy_src);
+    safe_VkClusterAccelerationStructureCommandsInfoNV();
+    ~safe_VkClusterAccelerationStructureCommandsInfoNV();
+    void initialize(const VkClusterAccelerationStructureCommandsInfoNV* in_struct, PNextCopyState* copy_state = {});
+    void initialize(const safe_VkClusterAccelerationStructureCommandsInfoNV* copy_src, PNextCopyState* copy_state = {});
+    VkClusterAccelerationStructureCommandsInfoNV* ptr() {
+        return reinterpret_cast<VkClusterAccelerationStructureCommandsInfoNV*>(this);
+    }
+    VkClusterAccelerationStructureCommandsInfoNV const* ptr() const {
+        return reinterpret_cast<VkClusterAccelerationStructureCommandsInfoNV const*>(this);
+    }
+};
+struct safe_VkAccelerationStructureBuildSizesInfoKHR {
+    VkStructureType sType;
+    const void* pNext{};
+    VkDeviceSize accelerationStructureSize;
+    VkDeviceSize updateScratchSize;
+    VkDeviceSize buildScratchSize;
+
+    safe_VkAccelerationStructureBuildSizesInfoKHR(const VkAccelerationStructureBuildSizesInfoKHR* in_struct,
+                                                  PNextCopyState* copy_state = {}, bool copy_pnext = true);
+    safe_VkAccelerationStructureBuildSizesInfoKHR(const safe_VkAccelerationStructureBuildSizesInfoKHR& copy_src);
+    safe_VkAccelerationStructureBuildSizesInfoKHR& operator=(const safe_VkAccelerationStructureBuildSizesInfoKHR& copy_src);
+    safe_VkAccelerationStructureBuildSizesInfoKHR();
+    ~safe_VkAccelerationStructureBuildSizesInfoKHR();
+    void initialize(const VkAccelerationStructureBuildSizesInfoKHR* in_struct, PNextCopyState* copy_state = {});
+    void initialize(const safe_VkAccelerationStructureBuildSizesInfoKHR* copy_src, PNextCopyState* copy_state = {});
+    VkAccelerationStructureBuildSizesInfoKHR* ptr() { return reinterpret_cast<VkAccelerationStructureBuildSizesInfoKHR*>(this); }
+    VkAccelerationStructureBuildSizesInfoKHR const* ptr() const {
+        return reinterpret_cast<VkAccelerationStructureBuildSizesInfoKHR const*>(this);
+    }
+};
+struct safe_VkRayTracingPipelineClusterAccelerationStructureCreateInfoNV {
+    VkStructureType sType;
+    void* pNext{};
+    VkBool32 allowClusterAccelerationStructure;
+
+    safe_VkRayTracingPipelineClusterAccelerationStructureCreateInfoNV(
+        const VkRayTracingPipelineClusterAccelerationStructureCreateInfoNV* in_struct, PNextCopyState* copy_state = {},
+        bool copy_pnext = true);
+    safe_VkRayTracingPipelineClusterAccelerationStructureCreateInfoNV(
+        const safe_VkRayTracingPipelineClusterAccelerationStructureCreateInfoNV& copy_src);
+    safe_VkRayTracingPipelineClusterAccelerationStructureCreateInfoNV& operator=(
+        const safe_VkRayTracingPipelineClusterAccelerationStructureCreateInfoNV& copy_src);
+    safe_VkRayTracingPipelineClusterAccelerationStructureCreateInfoNV();
+    ~safe_VkRayTracingPipelineClusterAccelerationStructureCreateInfoNV();
+    void initialize(const VkRayTracingPipelineClusterAccelerationStructureCreateInfoNV* in_struct, PNextCopyState* copy_state = {});
+    void initialize(const safe_VkRayTracingPipelineClusterAccelerationStructureCreateInfoNV* copy_src,
+                    PNextCopyState* copy_state = {});
+    VkRayTracingPipelineClusterAccelerationStructureCreateInfoNV* ptr() {
+        return reinterpret_cast<VkRayTracingPipelineClusterAccelerationStructureCreateInfoNV*>(this);
+    }
+    VkRayTracingPipelineClusterAccelerationStructureCreateInfoNV const* ptr() const {
+        return reinterpret_cast<VkRayTracingPipelineClusterAccelerationStructureCreateInfoNV const*>(this);
+    }
+};
+struct safe_VkPhysicalDevicePartitionedAccelerationStructureFeaturesNV {
+    VkStructureType sType;
+    void* pNext{};
+    VkBool32 partitionedAccelerationStructure;
+
+    safe_VkPhysicalDevicePartitionedAccelerationStructureFeaturesNV(
+        const VkPhysicalDevicePartitionedAccelerationStructureFeaturesNV* in_struct, PNextCopyState* copy_state = {},
+        bool copy_pnext = true);
+    safe_VkPhysicalDevicePartitionedAccelerationStructureFeaturesNV(
+        const safe_VkPhysicalDevicePartitionedAccelerationStructureFeaturesNV& copy_src);
+    safe_VkPhysicalDevicePartitionedAccelerationStructureFeaturesNV& operator=(
+        const safe_VkPhysicalDevicePartitionedAccelerationStructureFeaturesNV& copy_src);
+    safe_VkPhysicalDevicePartitionedAccelerationStructureFeaturesNV();
+    ~safe_VkPhysicalDevicePartitionedAccelerationStructureFeaturesNV();
+    void initialize(const VkPhysicalDevicePartitionedAccelerationStructureFeaturesNV* in_struct, PNextCopyState* copy_state = {});
+    void initialize(const safe_VkPhysicalDevicePartitionedAccelerationStructureFeaturesNV* copy_src,
+                    PNextCopyState* copy_state = {});
+    VkPhysicalDevicePartitionedAccelerationStructureFeaturesNV* ptr() {
+        return reinterpret_cast<VkPhysicalDevicePartitionedAccelerationStructureFeaturesNV*>(this);
+    }
+    VkPhysicalDevicePartitionedAccelerationStructureFeaturesNV const* ptr() const {
+        return reinterpret_cast<VkPhysicalDevicePartitionedAccelerationStructureFeaturesNV const*>(this);
+    }
+};
+struct safe_VkPhysicalDevicePartitionedAccelerationStructurePropertiesNV {
+    VkStructureType sType;
+    void* pNext{};
+    uint32_t maxPartitionCount;
+
+    safe_VkPhysicalDevicePartitionedAccelerationStructurePropertiesNV(
+        const VkPhysicalDevicePartitionedAccelerationStructurePropertiesNV* in_struct, PNextCopyState* copy_state = {},
+        bool copy_pnext = true);
+    safe_VkPhysicalDevicePartitionedAccelerationStructurePropertiesNV(
+        const safe_VkPhysicalDevicePartitionedAccelerationStructurePropertiesNV& copy_src);
+    safe_VkPhysicalDevicePartitionedAccelerationStructurePropertiesNV& operator=(
+        const safe_VkPhysicalDevicePartitionedAccelerationStructurePropertiesNV& copy_src);
+    safe_VkPhysicalDevicePartitionedAccelerationStructurePropertiesNV();
+    ~safe_VkPhysicalDevicePartitionedAccelerationStructurePropertiesNV();
+    void initialize(const VkPhysicalDevicePartitionedAccelerationStructurePropertiesNV* in_struct, PNextCopyState* copy_state = {});
+    void initialize(const safe_VkPhysicalDevicePartitionedAccelerationStructurePropertiesNV* copy_src,
+                    PNextCopyState* copy_state = {});
+    VkPhysicalDevicePartitionedAccelerationStructurePropertiesNV* ptr() {
+        return reinterpret_cast<VkPhysicalDevicePartitionedAccelerationStructurePropertiesNV*>(this);
+    }
+    VkPhysicalDevicePartitionedAccelerationStructurePropertiesNV const* ptr() const {
+        return reinterpret_cast<VkPhysicalDevicePartitionedAccelerationStructurePropertiesNV const*>(this);
+    }
+};
+struct safe_VkPartitionedAccelerationStructureFlagsNV {
+    VkStructureType sType;
+    void* pNext{};
+    VkBool32 enablePartitionTranslation;
+
+    safe_VkPartitionedAccelerationStructureFlagsNV(const VkPartitionedAccelerationStructureFlagsNV* in_struct,
+                                                   PNextCopyState* copy_state = {}, bool copy_pnext = true);
+    safe_VkPartitionedAccelerationStructureFlagsNV(const safe_VkPartitionedAccelerationStructureFlagsNV& copy_src);
+    safe_VkPartitionedAccelerationStructureFlagsNV& operator=(const safe_VkPartitionedAccelerationStructureFlagsNV& copy_src);
+    safe_VkPartitionedAccelerationStructureFlagsNV();
+    ~safe_VkPartitionedAccelerationStructureFlagsNV();
+    void initialize(const VkPartitionedAccelerationStructureFlagsNV* in_struct, PNextCopyState* copy_state = {});
+    void initialize(const safe_VkPartitionedAccelerationStructureFlagsNV* copy_src, PNextCopyState* copy_state = {});
+    VkPartitionedAccelerationStructureFlagsNV* ptr() { return reinterpret_cast<VkPartitionedAccelerationStructureFlagsNV*>(this); }
+    VkPartitionedAccelerationStructureFlagsNV const* ptr() const {
+        return reinterpret_cast<VkPartitionedAccelerationStructureFlagsNV const*>(this);
+    }
+};
+struct safe_VkWriteDescriptorSetPartitionedAccelerationStructureNV {
+    VkStructureType sType;
+    void* pNext{};
+    uint32_t accelerationStructureCount;
+    const VkDeviceAddress* pAccelerationStructures{};
+
+    safe_VkWriteDescriptorSetPartitionedAccelerationStructureNV(
+        const VkWriteDescriptorSetPartitionedAccelerationStructureNV* in_struct, PNextCopyState* copy_state = {},
+        bool copy_pnext = true);
+    safe_VkWriteDescriptorSetPartitionedAccelerationStructureNV(
+        const safe_VkWriteDescriptorSetPartitionedAccelerationStructureNV& copy_src);
+    safe_VkWriteDescriptorSetPartitionedAccelerationStructureNV& operator=(
+        const safe_VkWriteDescriptorSetPartitionedAccelerationStructureNV& copy_src);
+    safe_VkWriteDescriptorSetPartitionedAccelerationStructureNV();
+    ~safe_VkWriteDescriptorSetPartitionedAccelerationStructureNV();
+    void initialize(const VkWriteDescriptorSetPartitionedAccelerationStructureNV* in_struct, PNextCopyState* copy_state = {});
+    void initialize(const safe_VkWriteDescriptorSetPartitionedAccelerationStructureNV* copy_src, PNextCopyState* copy_state = {});
+    VkWriteDescriptorSetPartitionedAccelerationStructureNV* ptr() {
+        return reinterpret_cast<VkWriteDescriptorSetPartitionedAccelerationStructureNV*>(this);
+    }
+    VkWriteDescriptorSetPartitionedAccelerationStructureNV const* ptr() const {
+        return reinterpret_cast<VkWriteDescriptorSetPartitionedAccelerationStructureNV const*>(this);
+    }
+};
+struct safe_VkPartitionedAccelerationStructureInstancesInputNV {
+    VkStructureType sType;
+    void* pNext{};
+    VkBuildAccelerationStructureFlagsKHR flags;
+    uint32_t instanceCount;
+    uint32_t maxInstancePerPartitionCount;
+    uint32_t partitionCount;
+    uint32_t maxInstanceInGlobalPartitionCount;
+
+    safe_VkPartitionedAccelerationStructureInstancesInputNV(const VkPartitionedAccelerationStructureInstancesInputNV* in_struct,
+                                                            PNextCopyState* copy_state = {}, bool copy_pnext = true);
+    safe_VkPartitionedAccelerationStructureInstancesInputNV(
+        const safe_VkPartitionedAccelerationStructureInstancesInputNV& copy_src);
+    safe_VkPartitionedAccelerationStructureInstancesInputNV& operator=(
+        const safe_VkPartitionedAccelerationStructureInstancesInputNV& copy_src);
+    safe_VkPartitionedAccelerationStructureInstancesInputNV();
+    ~safe_VkPartitionedAccelerationStructureInstancesInputNV();
+    void initialize(const VkPartitionedAccelerationStructureInstancesInputNV* in_struct, PNextCopyState* copy_state = {});
+    void initialize(const safe_VkPartitionedAccelerationStructureInstancesInputNV* copy_src, PNextCopyState* copy_state = {});
+    VkPartitionedAccelerationStructureInstancesInputNV* ptr() {
+        return reinterpret_cast<VkPartitionedAccelerationStructureInstancesInputNV*>(this);
+    }
+    VkPartitionedAccelerationStructureInstancesInputNV const* ptr() const {
+        return reinterpret_cast<VkPartitionedAccelerationStructureInstancesInputNV const*>(this);
+    }
+};
+struct safe_VkBuildPartitionedAccelerationStructureInfoNV {
+    VkStructureType sType;
+    void* pNext{};
+    safe_VkPartitionedAccelerationStructureInstancesInputNV input;
+    VkDeviceAddress srcAccelerationStructureData;
+    VkDeviceAddress dstAccelerationStructureData;
+    VkDeviceAddress scratchData;
+    VkDeviceAddress srcInfos;
+    VkDeviceAddress srcInfosCount;
+
+    safe_VkBuildPartitionedAccelerationStructureInfoNV(const VkBuildPartitionedAccelerationStructureInfoNV* in_struct,
+                                                       PNextCopyState* copy_state = {}, bool copy_pnext = true);
+    safe_VkBuildPartitionedAccelerationStructureInfoNV(const safe_VkBuildPartitionedAccelerationStructureInfoNV& copy_src);
+    safe_VkBuildPartitionedAccelerationStructureInfoNV& operator=(
+        const safe_VkBuildPartitionedAccelerationStructureInfoNV& copy_src);
+    safe_VkBuildPartitionedAccelerationStructureInfoNV();
+    ~safe_VkBuildPartitionedAccelerationStructureInfoNV();
+    void initialize(const VkBuildPartitionedAccelerationStructureInfoNV* in_struct, PNextCopyState* copy_state = {});
+    void initialize(const safe_VkBuildPartitionedAccelerationStructureInfoNV* copy_src, PNextCopyState* copy_state = {});
+    VkBuildPartitionedAccelerationStructureInfoNV* ptr() {
+        return reinterpret_cast<VkBuildPartitionedAccelerationStructureInfoNV*>(this);
+    }
+    VkBuildPartitionedAccelerationStructureInfoNV const* ptr() const {
+        return reinterpret_cast<VkBuildPartitionedAccelerationStructureInfoNV const*>(this);
     }
 };
 struct safe_VkPhysicalDeviceDeviceGeneratedCommandsFeaturesEXT {
@@ -19398,6 +21883,24 @@ struct safe_VkPipelineViewportDepthClampControlCreateInfoEXT {
         return reinterpret_cast<VkPipelineViewportDepthClampControlCreateInfoEXT const*>(this);
     }
 };
+#ifdef VK_USE_PLATFORM_OHOS
+struct safe_VkSurfaceCreateInfoOHOS {
+    VkStructureType sType;
+    const void* pNext{};
+    VkSurfaceCreateFlagsOHOS flags;
+    OHNativeWindow* window{};
+
+    safe_VkSurfaceCreateInfoOHOS(const VkSurfaceCreateInfoOHOS* in_struct, PNextCopyState* copy_state = {}, bool copy_pnext = true);
+    safe_VkSurfaceCreateInfoOHOS(const safe_VkSurfaceCreateInfoOHOS& copy_src);
+    safe_VkSurfaceCreateInfoOHOS& operator=(const safe_VkSurfaceCreateInfoOHOS& copy_src);
+    safe_VkSurfaceCreateInfoOHOS();
+    ~safe_VkSurfaceCreateInfoOHOS();
+    void initialize(const VkSurfaceCreateInfoOHOS* in_struct, PNextCopyState* copy_state = {});
+    void initialize(const safe_VkSurfaceCreateInfoOHOS* copy_src, PNextCopyState* copy_state = {});
+    VkSurfaceCreateInfoOHOS* ptr() { return reinterpret_cast<VkSurfaceCreateInfoOHOS*>(this); }
+    VkSurfaceCreateInfoOHOS const* ptr() const { return reinterpret_cast<VkSurfaceCreateInfoOHOS const*>(this); }
+};
+#endif  // VK_USE_PLATFORM_OHOS
 struct safe_VkPhysicalDeviceHdrVividFeaturesHUAWEI {
     VkStructureType sType;
     void* pNext{};
@@ -19512,6 +22015,80 @@ struct safe_VkPhysicalDeviceCooperativeMatrix2PropertiesNV {
         return reinterpret_cast<VkPhysicalDeviceCooperativeMatrix2PropertiesNV const*>(this);
     }
 };
+struct safe_VkPhysicalDevicePipelineOpacityMicromapFeaturesARM {
+    VkStructureType sType;
+    void* pNext{};
+    VkBool32 pipelineOpacityMicromap;
+
+    safe_VkPhysicalDevicePipelineOpacityMicromapFeaturesARM(const VkPhysicalDevicePipelineOpacityMicromapFeaturesARM* in_struct,
+                                                            PNextCopyState* copy_state = {}, bool copy_pnext = true);
+    safe_VkPhysicalDevicePipelineOpacityMicromapFeaturesARM(
+        const safe_VkPhysicalDevicePipelineOpacityMicromapFeaturesARM& copy_src);
+    safe_VkPhysicalDevicePipelineOpacityMicromapFeaturesARM& operator=(
+        const safe_VkPhysicalDevicePipelineOpacityMicromapFeaturesARM& copy_src);
+    safe_VkPhysicalDevicePipelineOpacityMicromapFeaturesARM();
+    ~safe_VkPhysicalDevicePipelineOpacityMicromapFeaturesARM();
+    void initialize(const VkPhysicalDevicePipelineOpacityMicromapFeaturesARM* in_struct, PNextCopyState* copy_state = {});
+    void initialize(const safe_VkPhysicalDevicePipelineOpacityMicromapFeaturesARM* copy_src, PNextCopyState* copy_state = {});
+    VkPhysicalDevicePipelineOpacityMicromapFeaturesARM* ptr() {
+        return reinterpret_cast<VkPhysicalDevicePipelineOpacityMicromapFeaturesARM*>(this);
+    }
+    VkPhysicalDevicePipelineOpacityMicromapFeaturesARM const* ptr() const {
+        return reinterpret_cast<VkPhysicalDevicePipelineOpacityMicromapFeaturesARM const*>(this);
+    }
+};
+#ifdef VK_USE_PLATFORM_METAL_EXT
+struct safe_VkImportMemoryMetalHandleInfoEXT {
+    VkStructureType sType;
+    const void* pNext{};
+    VkExternalMemoryHandleTypeFlagBits handleType;
+    void* handle{};
+
+    safe_VkImportMemoryMetalHandleInfoEXT(const VkImportMemoryMetalHandleInfoEXT* in_struct, PNextCopyState* copy_state = {},
+                                          bool copy_pnext = true);
+    safe_VkImportMemoryMetalHandleInfoEXT(const safe_VkImportMemoryMetalHandleInfoEXT& copy_src);
+    safe_VkImportMemoryMetalHandleInfoEXT& operator=(const safe_VkImportMemoryMetalHandleInfoEXT& copy_src);
+    safe_VkImportMemoryMetalHandleInfoEXT();
+    ~safe_VkImportMemoryMetalHandleInfoEXT();
+    void initialize(const VkImportMemoryMetalHandleInfoEXT* in_struct, PNextCopyState* copy_state = {});
+    void initialize(const safe_VkImportMemoryMetalHandleInfoEXT* copy_src, PNextCopyState* copy_state = {});
+    VkImportMemoryMetalHandleInfoEXT* ptr() { return reinterpret_cast<VkImportMemoryMetalHandleInfoEXT*>(this); }
+    VkImportMemoryMetalHandleInfoEXT const* ptr() const { return reinterpret_cast<VkImportMemoryMetalHandleInfoEXT const*>(this); }
+};
+struct safe_VkMemoryMetalHandlePropertiesEXT {
+    VkStructureType sType;
+    void* pNext{};
+    uint32_t memoryTypeBits;
+
+    safe_VkMemoryMetalHandlePropertiesEXT(const VkMemoryMetalHandlePropertiesEXT* in_struct, PNextCopyState* copy_state = {},
+                                          bool copy_pnext = true);
+    safe_VkMemoryMetalHandlePropertiesEXT(const safe_VkMemoryMetalHandlePropertiesEXT& copy_src);
+    safe_VkMemoryMetalHandlePropertiesEXT& operator=(const safe_VkMemoryMetalHandlePropertiesEXT& copy_src);
+    safe_VkMemoryMetalHandlePropertiesEXT();
+    ~safe_VkMemoryMetalHandlePropertiesEXT();
+    void initialize(const VkMemoryMetalHandlePropertiesEXT* in_struct, PNextCopyState* copy_state = {});
+    void initialize(const safe_VkMemoryMetalHandlePropertiesEXT* copy_src, PNextCopyState* copy_state = {});
+    VkMemoryMetalHandlePropertiesEXT* ptr() { return reinterpret_cast<VkMemoryMetalHandlePropertiesEXT*>(this); }
+    VkMemoryMetalHandlePropertiesEXT const* ptr() const { return reinterpret_cast<VkMemoryMetalHandlePropertiesEXT const*>(this); }
+};
+struct safe_VkMemoryGetMetalHandleInfoEXT {
+    VkStructureType sType;
+    const void* pNext{};
+    VkDeviceMemory memory;
+    VkExternalMemoryHandleTypeFlagBits handleType;
+
+    safe_VkMemoryGetMetalHandleInfoEXT(const VkMemoryGetMetalHandleInfoEXT* in_struct, PNextCopyState* copy_state = {},
+                                       bool copy_pnext = true);
+    safe_VkMemoryGetMetalHandleInfoEXT(const safe_VkMemoryGetMetalHandleInfoEXT& copy_src);
+    safe_VkMemoryGetMetalHandleInfoEXT& operator=(const safe_VkMemoryGetMetalHandleInfoEXT& copy_src);
+    safe_VkMemoryGetMetalHandleInfoEXT();
+    ~safe_VkMemoryGetMetalHandleInfoEXT();
+    void initialize(const VkMemoryGetMetalHandleInfoEXT* in_struct, PNextCopyState* copy_state = {});
+    void initialize(const safe_VkMemoryGetMetalHandleInfoEXT* copy_src, PNextCopyState* copy_state = {});
+    VkMemoryGetMetalHandleInfoEXT* ptr() { return reinterpret_cast<VkMemoryGetMetalHandleInfoEXT*>(this); }
+    VkMemoryGetMetalHandleInfoEXT const* ptr() const { return reinterpret_cast<VkMemoryGetMetalHandleInfoEXT const*>(this); }
+};
+#endif  // VK_USE_PLATFORM_METAL_EXT
 struct safe_VkPhysicalDeviceVertexAttributeRobustnessFeaturesEXT {
     VkStructureType sType;
     void* pNext{};
@@ -19532,6 +22109,188 @@ struct safe_VkPhysicalDeviceVertexAttributeRobustnessFeaturesEXT {
     }
     VkPhysicalDeviceVertexAttributeRobustnessFeaturesEXT const* ptr() const {
         return reinterpret_cast<VkPhysicalDeviceVertexAttributeRobustnessFeaturesEXT const*>(this);
+    }
+};
+struct safe_VkPhysicalDeviceFormatPackFeaturesARM {
+    VkStructureType sType;
+    void* pNext{};
+    VkBool32 formatPack;
+
+    safe_VkPhysicalDeviceFormatPackFeaturesARM(const VkPhysicalDeviceFormatPackFeaturesARM* in_struct,
+                                               PNextCopyState* copy_state = {}, bool copy_pnext = true);
+    safe_VkPhysicalDeviceFormatPackFeaturesARM(const safe_VkPhysicalDeviceFormatPackFeaturesARM& copy_src);
+    safe_VkPhysicalDeviceFormatPackFeaturesARM& operator=(const safe_VkPhysicalDeviceFormatPackFeaturesARM& copy_src);
+    safe_VkPhysicalDeviceFormatPackFeaturesARM();
+    ~safe_VkPhysicalDeviceFormatPackFeaturesARM();
+    void initialize(const VkPhysicalDeviceFormatPackFeaturesARM* in_struct, PNextCopyState* copy_state = {});
+    void initialize(const safe_VkPhysicalDeviceFormatPackFeaturesARM* copy_src, PNextCopyState* copy_state = {});
+    VkPhysicalDeviceFormatPackFeaturesARM* ptr() { return reinterpret_cast<VkPhysicalDeviceFormatPackFeaturesARM*>(this); }
+    VkPhysicalDeviceFormatPackFeaturesARM const* ptr() const {
+        return reinterpret_cast<VkPhysicalDeviceFormatPackFeaturesARM const*>(this);
+    }
+};
+struct safe_VkPhysicalDeviceFragmentDensityMapLayeredFeaturesVALVE {
+    VkStructureType sType;
+    void* pNext{};
+    VkBool32 fragmentDensityMapLayered;
+
+    safe_VkPhysicalDeviceFragmentDensityMapLayeredFeaturesVALVE(
+        const VkPhysicalDeviceFragmentDensityMapLayeredFeaturesVALVE* in_struct, PNextCopyState* copy_state = {},
+        bool copy_pnext = true);
+    safe_VkPhysicalDeviceFragmentDensityMapLayeredFeaturesVALVE(
+        const safe_VkPhysicalDeviceFragmentDensityMapLayeredFeaturesVALVE& copy_src);
+    safe_VkPhysicalDeviceFragmentDensityMapLayeredFeaturesVALVE& operator=(
+        const safe_VkPhysicalDeviceFragmentDensityMapLayeredFeaturesVALVE& copy_src);
+    safe_VkPhysicalDeviceFragmentDensityMapLayeredFeaturesVALVE();
+    ~safe_VkPhysicalDeviceFragmentDensityMapLayeredFeaturesVALVE();
+    void initialize(const VkPhysicalDeviceFragmentDensityMapLayeredFeaturesVALVE* in_struct, PNextCopyState* copy_state = {});
+    void initialize(const safe_VkPhysicalDeviceFragmentDensityMapLayeredFeaturesVALVE* copy_src, PNextCopyState* copy_state = {});
+    VkPhysicalDeviceFragmentDensityMapLayeredFeaturesVALVE* ptr() {
+        return reinterpret_cast<VkPhysicalDeviceFragmentDensityMapLayeredFeaturesVALVE*>(this);
+    }
+    VkPhysicalDeviceFragmentDensityMapLayeredFeaturesVALVE const* ptr() const {
+        return reinterpret_cast<VkPhysicalDeviceFragmentDensityMapLayeredFeaturesVALVE const*>(this);
+    }
+};
+struct safe_VkPhysicalDeviceFragmentDensityMapLayeredPropertiesVALVE {
+    VkStructureType sType;
+    void* pNext{};
+    uint32_t maxFragmentDensityMapLayers;
+
+    safe_VkPhysicalDeviceFragmentDensityMapLayeredPropertiesVALVE(
+        const VkPhysicalDeviceFragmentDensityMapLayeredPropertiesVALVE* in_struct, PNextCopyState* copy_state = {},
+        bool copy_pnext = true);
+    safe_VkPhysicalDeviceFragmentDensityMapLayeredPropertiesVALVE(
+        const safe_VkPhysicalDeviceFragmentDensityMapLayeredPropertiesVALVE& copy_src);
+    safe_VkPhysicalDeviceFragmentDensityMapLayeredPropertiesVALVE& operator=(
+        const safe_VkPhysicalDeviceFragmentDensityMapLayeredPropertiesVALVE& copy_src);
+    safe_VkPhysicalDeviceFragmentDensityMapLayeredPropertiesVALVE();
+    ~safe_VkPhysicalDeviceFragmentDensityMapLayeredPropertiesVALVE();
+    void initialize(const VkPhysicalDeviceFragmentDensityMapLayeredPropertiesVALVE* in_struct, PNextCopyState* copy_state = {});
+    void initialize(const safe_VkPhysicalDeviceFragmentDensityMapLayeredPropertiesVALVE* copy_src, PNextCopyState* copy_state = {});
+    VkPhysicalDeviceFragmentDensityMapLayeredPropertiesVALVE* ptr() {
+        return reinterpret_cast<VkPhysicalDeviceFragmentDensityMapLayeredPropertiesVALVE*>(this);
+    }
+    VkPhysicalDeviceFragmentDensityMapLayeredPropertiesVALVE const* ptr() const {
+        return reinterpret_cast<VkPhysicalDeviceFragmentDensityMapLayeredPropertiesVALVE const*>(this);
+    }
+};
+struct safe_VkPipelineFragmentDensityMapLayeredCreateInfoVALVE {
+    VkStructureType sType;
+    const void* pNext{};
+    uint32_t maxFragmentDensityMapLayers;
+
+    safe_VkPipelineFragmentDensityMapLayeredCreateInfoVALVE(const VkPipelineFragmentDensityMapLayeredCreateInfoVALVE* in_struct,
+                                                            PNextCopyState* copy_state = {}, bool copy_pnext = true);
+    safe_VkPipelineFragmentDensityMapLayeredCreateInfoVALVE(
+        const safe_VkPipelineFragmentDensityMapLayeredCreateInfoVALVE& copy_src);
+    safe_VkPipelineFragmentDensityMapLayeredCreateInfoVALVE& operator=(
+        const safe_VkPipelineFragmentDensityMapLayeredCreateInfoVALVE& copy_src);
+    safe_VkPipelineFragmentDensityMapLayeredCreateInfoVALVE();
+    ~safe_VkPipelineFragmentDensityMapLayeredCreateInfoVALVE();
+    void initialize(const VkPipelineFragmentDensityMapLayeredCreateInfoVALVE* in_struct, PNextCopyState* copy_state = {});
+    void initialize(const safe_VkPipelineFragmentDensityMapLayeredCreateInfoVALVE* copy_src, PNextCopyState* copy_state = {});
+    VkPipelineFragmentDensityMapLayeredCreateInfoVALVE* ptr() {
+        return reinterpret_cast<VkPipelineFragmentDensityMapLayeredCreateInfoVALVE*>(this);
+    }
+    VkPipelineFragmentDensityMapLayeredCreateInfoVALVE const* ptr() const {
+        return reinterpret_cast<VkPipelineFragmentDensityMapLayeredCreateInfoVALVE const*>(this);
+    }
+};
+#ifdef VK_ENABLE_BETA_EXTENSIONS
+struct safe_VkSetPresentConfigNV {
+    VkStructureType sType;
+    const void* pNext{};
+    uint32_t numFramesPerBatch;
+    uint32_t presentConfigFeedback;
+
+    safe_VkSetPresentConfigNV(const VkSetPresentConfigNV* in_struct, PNextCopyState* copy_state = {}, bool copy_pnext = true);
+    safe_VkSetPresentConfigNV(const safe_VkSetPresentConfigNV& copy_src);
+    safe_VkSetPresentConfigNV& operator=(const safe_VkSetPresentConfigNV& copy_src);
+    safe_VkSetPresentConfigNV();
+    ~safe_VkSetPresentConfigNV();
+    void initialize(const VkSetPresentConfigNV* in_struct, PNextCopyState* copy_state = {});
+    void initialize(const safe_VkSetPresentConfigNV* copy_src, PNextCopyState* copy_state = {});
+    VkSetPresentConfigNV* ptr() { return reinterpret_cast<VkSetPresentConfigNV*>(this); }
+    VkSetPresentConfigNV const* ptr() const { return reinterpret_cast<VkSetPresentConfigNV const*>(this); }
+};
+struct safe_VkPhysicalDevicePresentMeteringFeaturesNV {
+    VkStructureType sType;
+    void* pNext{};
+    VkBool32 presentMetering;
+
+    safe_VkPhysicalDevicePresentMeteringFeaturesNV(const VkPhysicalDevicePresentMeteringFeaturesNV* in_struct,
+                                                   PNextCopyState* copy_state = {}, bool copy_pnext = true);
+    safe_VkPhysicalDevicePresentMeteringFeaturesNV(const safe_VkPhysicalDevicePresentMeteringFeaturesNV& copy_src);
+    safe_VkPhysicalDevicePresentMeteringFeaturesNV& operator=(const safe_VkPhysicalDevicePresentMeteringFeaturesNV& copy_src);
+    safe_VkPhysicalDevicePresentMeteringFeaturesNV();
+    ~safe_VkPhysicalDevicePresentMeteringFeaturesNV();
+    void initialize(const VkPhysicalDevicePresentMeteringFeaturesNV* in_struct, PNextCopyState* copy_state = {});
+    void initialize(const safe_VkPhysicalDevicePresentMeteringFeaturesNV* copy_src, PNextCopyState* copy_state = {});
+    VkPhysicalDevicePresentMeteringFeaturesNV* ptr() { return reinterpret_cast<VkPhysicalDevicePresentMeteringFeaturesNV*>(this); }
+    VkPhysicalDevicePresentMeteringFeaturesNV const* ptr() const {
+        return reinterpret_cast<VkPhysicalDevicePresentMeteringFeaturesNV const*>(this);
+    }
+};
+#endif  // VK_ENABLE_BETA_EXTENSIONS
+struct safe_VkRenderingEndInfoEXT {
+    VkStructureType sType;
+    const void* pNext{};
+
+    safe_VkRenderingEndInfoEXT(const VkRenderingEndInfoEXT* in_struct, PNextCopyState* copy_state = {}, bool copy_pnext = true);
+    safe_VkRenderingEndInfoEXT(const safe_VkRenderingEndInfoEXT& copy_src);
+    safe_VkRenderingEndInfoEXT& operator=(const safe_VkRenderingEndInfoEXT& copy_src);
+    safe_VkRenderingEndInfoEXT();
+    ~safe_VkRenderingEndInfoEXT();
+    void initialize(const VkRenderingEndInfoEXT* in_struct, PNextCopyState* copy_state = {});
+    void initialize(const safe_VkRenderingEndInfoEXT* copy_src, PNextCopyState* copy_state = {});
+    VkRenderingEndInfoEXT* ptr() { return reinterpret_cast<VkRenderingEndInfoEXT*>(this); }
+    VkRenderingEndInfoEXT const* ptr() const { return reinterpret_cast<VkRenderingEndInfoEXT const*>(this); }
+};
+struct safe_VkPhysicalDeviceZeroInitializeDeviceMemoryFeaturesEXT {
+    VkStructureType sType;
+    void* pNext{};
+    VkBool32 zeroInitializeDeviceMemory;
+
+    safe_VkPhysicalDeviceZeroInitializeDeviceMemoryFeaturesEXT(
+        const VkPhysicalDeviceZeroInitializeDeviceMemoryFeaturesEXT* in_struct, PNextCopyState* copy_state = {},
+        bool copy_pnext = true);
+    safe_VkPhysicalDeviceZeroInitializeDeviceMemoryFeaturesEXT(
+        const safe_VkPhysicalDeviceZeroInitializeDeviceMemoryFeaturesEXT& copy_src);
+    safe_VkPhysicalDeviceZeroInitializeDeviceMemoryFeaturesEXT& operator=(
+        const safe_VkPhysicalDeviceZeroInitializeDeviceMemoryFeaturesEXT& copy_src);
+    safe_VkPhysicalDeviceZeroInitializeDeviceMemoryFeaturesEXT();
+    ~safe_VkPhysicalDeviceZeroInitializeDeviceMemoryFeaturesEXT();
+    void initialize(const VkPhysicalDeviceZeroInitializeDeviceMemoryFeaturesEXT* in_struct, PNextCopyState* copy_state = {});
+    void initialize(const safe_VkPhysicalDeviceZeroInitializeDeviceMemoryFeaturesEXT* copy_src, PNextCopyState* copy_state = {});
+    VkPhysicalDeviceZeroInitializeDeviceMemoryFeaturesEXT* ptr() {
+        return reinterpret_cast<VkPhysicalDeviceZeroInitializeDeviceMemoryFeaturesEXT*>(this);
+    }
+    VkPhysicalDeviceZeroInitializeDeviceMemoryFeaturesEXT const* ptr() const {
+        return reinterpret_cast<VkPhysicalDeviceZeroInitializeDeviceMemoryFeaturesEXT const*>(this);
+    }
+};
+struct safe_VkPhysicalDevicePipelineCacheIncrementalModeFeaturesSEC {
+    VkStructureType sType;
+    void* pNext{};
+    VkBool32 pipelineCacheIncrementalMode;
+
+    safe_VkPhysicalDevicePipelineCacheIncrementalModeFeaturesSEC(
+        const VkPhysicalDevicePipelineCacheIncrementalModeFeaturesSEC* in_struct, PNextCopyState* copy_state = {},
+        bool copy_pnext = true);
+    safe_VkPhysicalDevicePipelineCacheIncrementalModeFeaturesSEC(
+        const safe_VkPhysicalDevicePipelineCacheIncrementalModeFeaturesSEC& copy_src);
+    safe_VkPhysicalDevicePipelineCacheIncrementalModeFeaturesSEC& operator=(
+        const safe_VkPhysicalDevicePipelineCacheIncrementalModeFeaturesSEC& copy_src);
+    safe_VkPhysicalDevicePipelineCacheIncrementalModeFeaturesSEC();
+    ~safe_VkPhysicalDevicePipelineCacheIncrementalModeFeaturesSEC();
+    void initialize(const VkPhysicalDevicePipelineCacheIncrementalModeFeaturesSEC* in_struct, PNextCopyState* copy_state = {});
+    void initialize(const safe_VkPhysicalDevicePipelineCacheIncrementalModeFeaturesSEC* copy_src, PNextCopyState* copy_state = {});
+    VkPhysicalDevicePipelineCacheIncrementalModeFeaturesSEC* ptr() {
+        return reinterpret_cast<VkPhysicalDevicePipelineCacheIncrementalModeFeaturesSEC*>(this);
+    }
+    VkPhysicalDevicePipelineCacheIncrementalModeFeaturesSEC const* ptr() const {
+        return reinterpret_cast<VkPhysicalDevicePipelineCacheIncrementalModeFeaturesSEC const*>(this);
     }
 };
 struct safe_VkAccelerationStructureGeometryTrianglesDataKHR {
@@ -19855,26 +22614,6 @@ struct safe_VkCopyAccelerationStructureInfoKHR {
     VkCopyAccelerationStructureInfoKHR* ptr() { return reinterpret_cast<VkCopyAccelerationStructureInfoKHR*>(this); }
     VkCopyAccelerationStructureInfoKHR const* ptr() const {
         return reinterpret_cast<VkCopyAccelerationStructureInfoKHR const*>(this);
-    }
-};
-struct safe_VkAccelerationStructureBuildSizesInfoKHR {
-    VkStructureType sType;
-    const void* pNext{};
-    VkDeviceSize accelerationStructureSize;
-    VkDeviceSize updateScratchSize;
-    VkDeviceSize buildScratchSize;
-
-    safe_VkAccelerationStructureBuildSizesInfoKHR(const VkAccelerationStructureBuildSizesInfoKHR* in_struct,
-                                                  PNextCopyState* copy_state = {}, bool copy_pnext = true);
-    safe_VkAccelerationStructureBuildSizesInfoKHR(const safe_VkAccelerationStructureBuildSizesInfoKHR& copy_src);
-    safe_VkAccelerationStructureBuildSizesInfoKHR& operator=(const safe_VkAccelerationStructureBuildSizesInfoKHR& copy_src);
-    safe_VkAccelerationStructureBuildSizesInfoKHR();
-    ~safe_VkAccelerationStructureBuildSizesInfoKHR();
-    void initialize(const VkAccelerationStructureBuildSizesInfoKHR* in_struct, PNextCopyState* copy_state = {});
-    void initialize(const safe_VkAccelerationStructureBuildSizesInfoKHR* copy_src, PNextCopyState* copy_state = {});
-    VkAccelerationStructureBuildSizesInfoKHR* ptr() { return reinterpret_cast<VkAccelerationStructureBuildSizesInfoKHR*>(this); }
-    VkAccelerationStructureBuildSizesInfoKHR const* ptr() const {
-        return reinterpret_cast<VkAccelerationStructureBuildSizesInfoKHR const*>(this);
     }
 };
 struct safe_VkRayTracingShaderGroupCreateInfoKHR {
