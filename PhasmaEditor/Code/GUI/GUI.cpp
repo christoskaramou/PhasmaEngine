@@ -383,6 +383,13 @@ namespace pe
         }
         ImGui::Separator();
 
+        static bool dynamic_rendering = false;
+        if (ImGui::Checkbox("Dynamic Rendering", &dynamic_rendering))
+        {
+            EventSystem::PushEvent(EventType::DynamicRendering, dynamic_rendering);
+        }
+        ImGui::Separator();
+
         ImGui::Checkbox("IBL", &gSettings.IBL);
         if (gSettings.IBL)
         {
@@ -549,14 +556,14 @@ namespace pe
         init_info.MSAASamples = VK_SAMPLE_COUNT_1_BIT;
         init_info.Allocator = nullptr;
         init_info.CheckVkResultFn = nullptr;
-        if (gSettings.dynamic_rendering)
-        {
-            init_info.UseDynamicRendering = true;
-            init_info.PipelineRenderingCreateInfo = {.sType = VK_STRUCTURE_TYPE_PIPELINE_RENDERING_CREATE_INFO};
-            init_info.PipelineRenderingCreateInfo.colorAttachmentCount = 1;
-            init_info.PipelineRenderingCreateInfo.pColorAttachmentFormats = &format;
-        }
-        else
+        // if (gSettings.dynamic_rendering)
+        // {
+        //     init_info.UseDynamicRendering = true;
+        //     init_info.PipelineRenderingCreateInfo = {.sType = VK_STRUCTURE_TYPE_PIPELINE_RENDERING_CREATE_INFO};
+        //     init_info.PipelineRenderingCreateInfo.colorAttachmentCount = 1;
+        //     init_info.PipelineRenderingCreateInfo.pColorAttachmentFormats = &format;
+        // }
+        // else
         {
             RenderPass *renderPass = CommandBuffer::GetRenderPass(1, m_attachment.get());
             init_info.UseDynamicRendering = false;
@@ -609,7 +616,7 @@ namespace pe
         barrierInfo.accessMask = vk::AccessFlagBits2::eColorAttachmentRead;
 
         cmd->ImageBarrier(barrierInfo);
-        cmd->BeginPass(1, m_attachment.get(), "GUI", !Settings::Get<GlobalSettings>().dynamic_rendering);
+        cmd->BeginPass(1, m_attachment.get(), "GUI", true);
         ImGui_ImplVulkan_RenderDrawData(ImGui::GetDrawData(), cmd->ApiHandle());
         cmd->EndPass();
 
