@@ -89,7 +89,7 @@ namespace pe
             RHII.GetDevice().destroySwapchainKHR(m_apiHandle);
     }
 
-    uint32_t Swapchain::Aquire(Semaphore *semaphore)
+    uint32_t Swapchain::AquireNextImage(Semaphore *semaphore)
     {
         auto result = RHII.GetDevice().acquireNextImageKHR(m_apiHandle, UINT64_MAX, semaphore->ApiHandle(), nullptr);
         PE_ERROR_IF(result.result != vk::Result::eSuccess && result.result != vk::Result::eSuboptimalKHR,

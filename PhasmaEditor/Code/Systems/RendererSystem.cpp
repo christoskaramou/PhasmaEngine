@@ -104,11 +104,16 @@ namespace pe
             cmd->ImageBarrier(barrierInfo); // transition from undefined to present
         }
         m_acquireSemaphores.reserve(imageCount);
-        m_presentSemaphores.reserve(imageCount);
+        m_submitSemaphores.reserve(imageCount);
         for (uint32_t i = 0; i < imageCount; i++)
         {
-            m_acquireSemaphores.push_back(Semaphore::Create(false, "AcquireSemaphore_" + std::to_string(i)));
-            m_presentSemaphores.push_back(Semaphore::Create(false, "PresentSemaphore_" + std::to_string(i)));
+            Semaphore *acquireSemaphore = Semaphore::Create(false, "AcquireSemaphore_" + std::to_string(i));
+            acquireSemaphore->SetStageFlags(vk::PipelineStageFlagBits2::eColorAttachmentOutput | vk::PipelineStageFlagBits2::eComputeShader);
+            m_acquireSemaphores.push_back(acquireSemaphore);
+
+            Semaphore *submitSemaphore = Semaphore::Create(false, "SubmitSemaphore_" + std::to_string(i));
+            submitSemaphore->SetStageFlags(vk::PipelineStageFlagBits2::eAllCommands);
+            m_submitSemaphores.push_back(submitSemaphore);
         }
     }
 
@@ -282,24 +287,22 @@ namespace pe
         uint32_t frame = RHII.GetFrameIndex();
 
         // acquire the image
-        Semaphore *aquireSignalSemaphore = m_acquireSemaphores[frame];
+        Semaphore *acquireSemaphore = m_acquireSemaphores[frame];
+
         Swapchain *swapchain = RHII.GetSwapchain();
-        uint32_t imageIndex = swapchain->Aquire(aquireSignalSemaphore);
+        uint32_t imageIndex = swapchain->AquireNextImage(acquireSemaphore);
 
         // RECORD COMMANDS
         auto &frameCmd = m_cmds[frame];
         frameCmd = RecordPasses(imageIndex);
 
         // SUBMIT TO QUEUE
-        aquireSignalSemaphore->SetStageFlags(vk::PipelineStageFlagBits2::eColorAttachmentOutput | vk::PipelineStageFlagBits2::eComputeShader);
-        Semaphore *signal = m_presentSemaphores[imageIndex];
-        signal->SetStageFlags(vk::PipelineStageFlagBits2::eAllCommands);
-
+        Semaphore *submitSemaphore = m_submitSemaphores[imageIndex];
         Queue *queue = RHII.GetMainQueue();
-        queue->Submit(1, &frameCmd, aquireSignalSemaphore, signal);
+        queue->Submit(1, &frameCmd, acquireSemaphore, submitSemaphore);
 
         // PRESENT
-        queue->Present(swapchain, imageIndex, signal);
+        queue->Present(swapchain, imageIndex, submitSemaphore);
     }
 
     void RendererSystem::Destroy()
@@ -331,7 +334,7 @@ namespace pe
         for (auto &semaphore : m_acquireSemaphores)
             Semaphore::Destroy(semaphore);
 
-        for (auto &semaphore : m_presentSemaphores)
+        for (auto &semaphore : m_submitSemaphores)
             Semaphore::Destroy(semaphore);
     }
 
