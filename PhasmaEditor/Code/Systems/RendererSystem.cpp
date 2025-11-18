@@ -105,8 +105,11 @@ namespace pe
             m_cmds[i] = nullptr;
         }
 
-        m_binarySemaphores.resize(RHII.GetSwapchainImageCount(), std::stack<Semaphore *>());
-        m_usedBinarySemaphores.resize(RHII.GetSwapchainImageCount(), std::stack<Semaphore *>());
+        for (uint32_t i = 0; i < RHII.GetSwapchainImageCount(); i++)
+        {
+            m_acquireSemaphores.push_back(Semaphore::Create(false, "AcquireSemaphore_" + std::to_string(i)));
+            m_presentSemaphores.push_back(Semaphore::Create(false, "PresentSemaphore_" + std::to_string(i)));
+        }
     }
 
     void RendererSystem::Update()
@@ -144,8 +147,6 @@ namespace pe
             frameCmd->Return();
             frameCmd = nullptr;
         }
-
-        ReturnBinarySemaphores(frame);
     }
 
     CommandBuffer *RendererSystem::RecordPasses(uint32_t imageIndex)
@@ -281,7 +282,7 @@ namespace pe
         uint32_t frame = RHII.GetFrameIndex();
 
         // acquire the image
-        Semaphore *aquireSignalSemaphore = AcquireBinarySemaphore(frame);
+        Semaphore *aquireSignalSemaphore = m_acquireSemaphores[frame];
         Swapchain *swapchain = RHII.GetSwapchain();
         uint32_t imageIndex = swapchain->Aquire(aquireSignalSemaphore);
 
@@ -291,7 +292,7 @@ namespace pe
 
         // SUBMIT TO QUEUE
         aquireSignalSemaphore->SetStageFlags(vk::PipelineStageFlagBits2::eColorAttachmentOutput | vk::PipelineStageFlagBits2::eComputeShader);
-        Semaphore *signal = AcquireBinarySemaphore(frame);
+        Semaphore *signal = m_presentSemaphores[imageIndex];
         signal->SetStageFlags(vk::PipelineStageFlagBits2::eAllCommands);
 
         Queue *queue = RHII.GetMainQueue();
@@ -327,22 +328,11 @@ namespace pe
         for (auto &dt : m_depthStencilTargets)
             Image::Destroy(dt.second);
 
-        for (auto &stack : m_binarySemaphores)
-        {
-            while (!stack.empty())
-            {
-                Semaphore::Destroy(stack.top());
-                stack.pop();
-            }
-        }
-        for (auto &stack : m_usedBinarySemaphores)
-        {
-            while (!stack.empty())
-            {
-                Semaphore::Destroy(stack.top());
-                stack.pop();
-            }
-        }
+        for (auto &semaphore : m_acquireSemaphores)
+            Semaphore::Destroy(semaphore);
+        
+        for (auto &semaphore : m_presentSemaphores)
+            Semaphore::Destroy(semaphore);
     }
 
     void RenderArea::Update(float x, float y, float w, float h, float minDepth, float maxDepth)
@@ -520,36 +510,6 @@ namespace pe
         CreateRenderTarget("gaussianBlurHorizontal", surfaceFormat, {}, false);
         CreateRenderTarget("gaussianBlurVertical", surfaceFormat, {}, false);
         CreateRenderTarget("transparency", vk::Format::eR8Unorm, {}, true, false, Color::Black);
-    }
-
-    Semaphore *RendererSystem::AcquireBinarySemaphore(uint32_t frame)
-    {
-        std::lock_guard<std::mutex> lock(m_binarySemaphoresMutex);
-
-        auto &frameBinarySemaphores = m_binarySemaphores[frame];
-        auto &usedFrameBinarySemaphores = m_usedBinarySemaphores[frame];
-
-        if (frameBinarySemaphores.empty())
-            frameBinarySemaphores.push(Semaphore::Create(false, "RHI_binary_semaphore"));
-
-        usedFrameBinarySemaphores.push(frameBinarySemaphores.top());
-        frameBinarySemaphores.pop();
-
-        return usedFrameBinarySemaphores.top();
-    }
-
-    void RendererSystem::ReturnBinarySemaphores(uint32_t frame)
-    {
-        std::lock_guard<std::mutex> lock(m_binarySemaphoresMutex);
-
-        auto &frameBinarySemaphores = m_binarySemaphores[frame];
-        auto &usedFrameBinarySemaphores = m_usedBinarySemaphores[frame];
-
-        while (!usedFrameBinarySemaphores.empty())
-        {
-            frameBinarySemaphores.push(usedFrameBinarySemaphores.top());
-            usedFrameBinarySemaphores.pop();
-        }
     }
 
     void RendererSystem::Resize(uint32_t width, uint32_t height)
