@@ -88,7 +88,7 @@ namespace pe
         std::vector<CommandBuffer *> m_cmds;
         std::mutex m_binarySemaphoresMutex;
         std::vector<Semaphore *> m_acquireSemaphores;
-        std::vector<Semaphore *> m_presentSemaphores;
+        std::vector<Semaphore *> m_submitSemaphores;
         RenderArea m_renderArea;
         Scene m_scene;
         SkyBox m_skyBoxDay;
