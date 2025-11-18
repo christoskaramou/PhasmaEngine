@@ -1,5 +1,6 @@
 #include "Window.h"
 #include "API/RHI.h"
+#include "API/Queue.h"
 #include "Systems/RendererSystem.h"
 #include "Systems/PostProcessSystem.h"
 #include "Systems/CameraSystem.h"
@@ -148,6 +149,13 @@ namespace pe
                         rendererSystem->Resize(static_cast<uint32_t>(w), static_cast<uint32_t>(h));
                         postProcessSystem->Resize(static_cast<uint32_t>(w), static_cast<uint32_t>(h));
                     }
+                    break;
+                }
+                case EventType::DynamicRendering:
+                {
+                    bool enable = std::any_cast<bool>(event.payload);
+                    RHII.GetMainQueue()->WaitIdle();
+                    Settings::Get<GlobalSettings>().dynamic_rendering = enable;
                     break;
                 }
                 default:

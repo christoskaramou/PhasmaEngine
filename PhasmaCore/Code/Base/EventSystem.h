@@ -14,6 +14,7 @@ namespace pe
         FileWrite,
         PresentMode,
         AfterCommandWait,
+        DynamicRendering,
     };
 
     // One key type for both core + dynamic events
