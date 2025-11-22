@@ -81,7 +81,7 @@ namespace pe
 
     void CommandBuffer::BlitImage(Image *src, Image *dst, const vk::ImageBlit &region, vk::Filter filter)
     {
-        dst->BlitImage(this, src, region, filter);
+        dst->Blit(this, src, region, filter);
     }
 
     void CommandBuffer::ClearColors(std::vector<Image *> images)

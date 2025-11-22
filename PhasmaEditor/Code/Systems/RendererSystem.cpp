@@ -372,7 +372,7 @@ namespace pe
 
     Image *RendererSystem::CreateRenderTarget(const std::string &name,
                                               vk::Format format,
-                                              vk::ImageUsageFlags additionalFlags,
+                                              vk::ImageUsageFlags usage,
                                               bool useRenderTergetScale,
                                               bool useMips,
                                               vec4 clearColor)
@@ -386,7 +386,7 @@ namespace pe
         vk::ImageCreateInfo info = Image::CreateInfoInit();
         info.format = format;
         info.extent = vk::Extent3D{width, heigth, 1u};
-        info.usage = additionalFlags | vk::ImageUsageFlagBits::eColorAttachment | vk::ImageUsageFlagBits::eSampled | vk::ImageUsageFlagBits::eStorage | vk::ImageUsageFlagBits::eTransferDst;
+        info.usage = usage | vk::ImageUsageFlagBits::eColorAttachment | vk::ImageUsageFlagBits::eSampled | vk::ImageUsageFlagBits::eStorage | vk::ImageUsageFlagBits::eTransferDst;
         if (useMips)
             info.mipLevels = static_cast<uint32_t>(std::floor(std::log2(width > heigth ? width : heigth))) + 1;
         Image *rt = Image::Create(info, name);
@@ -408,7 +408,7 @@ namespace pe
 
     Image *RendererSystem::CreateDepthStencilTarget(const std::string &name,
                                                     vk::Format format,
-                                                    vk::ImageUsageFlags additionalFlags,
+                                                    vk::ImageUsageFlags usage,
                                                     bool useRenderTergetScale,
                                                     float clearDepth,
                                                     uint32_t clearStencil)
@@ -418,7 +418,7 @@ namespace pe
 
         vk::ImageCreateInfo info = Image::CreateInfoInit();
         info.extent = vk::Extent3D{static_cast<uint32_t>(RHII.GetWidthf() * rtScale), static_cast<uint32_t>(RHII.GetHeightf() * rtScale), 1u};
-        info.usage = additionalFlags | vk::ImageUsageFlagBits::eDepthStencilAttachment | vk::ImageUsageFlagBits::eSampled | vk::ImageUsageFlagBits::eTransferDst;
+        info.usage = usage | vk::ImageUsageFlagBits::eDepthStencilAttachment | vk::ImageUsageFlagBits::eSampled | vk::ImageUsageFlagBits::eTransferDst;
         info.format = format;
         Image *depth = Image::Create(info, name);
         depth->SetClearColor(vec4(clearDepth, static_cast<float>(clearStencil), 0.f, 0.f));
