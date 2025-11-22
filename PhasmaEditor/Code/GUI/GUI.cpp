@@ -383,7 +383,7 @@ namespace pe
         }
         ImGui::Separator();
 
-        static bool dynamic_rendering = false;
+        static bool dynamic_rendering = gSettings.dynamic_rendering;
         if (ImGui::Checkbox("Dynamic Rendering", &dynamic_rendering))
         {
             EventSystem::PushEvent(EventType::DynamicRendering, dynamic_rendering);

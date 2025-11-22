@@ -104,7 +104,7 @@ namespace pe
                                    uint32_t mipLevel = 0);
         void CopyImage(CommandBuffer *cmd, Image *src);
         void GenerateMipMaps(CommandBuffer *cmd);
-        void BlitImage(CommandBuffer *cmd, Image *src, const vk::ImageBlit &region, vk::Filter filter);
+        void Blit(CommandBuffer *cmd, Image *src, const vk::ImageBlit &region, vk::Filter filter);
 
         Sampler *m_sampler{};
         VmaAllocation m_allocation{};
