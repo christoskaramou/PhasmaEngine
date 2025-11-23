@@ -862,7 +862,15 @@ namespace pe
     {
         GpuMemorySnapshot snap{};
 
-        if (!IsDeviceExtensionValid(VK_EXT_MEMORY_BUDGET_EXTENSION_NAME))
+        static bool s_extMemoryBudgetChecked = false;
+        static bool s_extMemoryBudgetAvailable = false;
+        if (!s_extMemoryBudgetChecked)
+        {
+            s_extMemoryBudgetAvailable = IsDeviceExtensionValid(VK_EXT_MEMORY_BUDGET_EXTENSION_NAME);
+            s_extMemoryBudgetChecked = true;
+        }
+        
+        if (!s_extMemoryBudgetAvailable)
             return snap;
 
         // --- Vulkan heaps/budgets baseline ---
