@@ -130,15 +130,8 @@ namespace pe
         m_ubo.fsr2 = gSettings.fsr2;
         m_ubo.IBL = gSettings.IBL;
         m_ubo.IBL_intensity = gSettings.IBL_intensity;
-        m_ubo.volumetric = gSettings.volumetric;
-        m_ubo.volumetric_steps = gSettings.volumetric_steps;
-        m_ubo.volumetric_dither_strength = gSettings.volumetric_dither_strength;
         m_ubo.lights_intensity = gSettings.lights_intensity;
         m_ubo.lights_range = gSettings.lights_range;
-        m_ubo.fog = gSettings.fog;
-        m_ubo.fog_thickness = gSettings.fog_thickness;
-        m_ubo.fog_max_height = gSettings.fog_max_height;
-        m_ubo.fog_ground_thickness = gSettings.fog_ground_thickness;
         m_ubo.shadows = gSettings.shadows;
 
         BufferRange range{};
@@ -338,15 +331,8 @@ namespace pe
         m_ubo.fsr2 = gSettings.fsr2;
         m_ubo.IBL = gSettings.IBL;
         m_ubo.IBL_intensity = gSettings.IBL_intensity;
-        m_ubo.volumetric = gSettings.volumetric;
-        m_ubo.volumetric_steps = gSettings.volumetric_steps;
-        m_ubo.volumetric_dither_strength = gSettings.volumetric_dither_strength;
         m_ubo.lights_intensity = gSettings.lights_intensity;
         m_ubo.lights_range = gSettings.lights_range;
-        m_ubo.fog = gSettings.fog;
-        m_ubo.fog_thickness = gSettings.fog_thickness;
-        m_ubo.fog_max_height = gSettings.fog_max_height;
-        m_ubo.fog_ground_thickness = gSettings.fog_ground_thickness;
         m_ubo.shadows = gSettings.shadows;
 
         BufferRange range{};

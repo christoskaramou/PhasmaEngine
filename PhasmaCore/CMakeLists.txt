@@ -81,6 +81,11 @@ target_include_directories(PhasmaCore PUBLIC
     ${CMAKE_CURRENT_SOURCE_DIR}/third_party/SDL2
 )
 
+# Add Assimp include directory if available
+if(TARGET assimp)
+    target_include_directories(PhasmaCore PUBLIC ${assimp_SOURCE_DIR}/include)
+endif()
+
 # Link directories
 # cannot find this when running from main CMakeLists.txt
 target_link_directories(PhasmaCore PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/Libs/dx")

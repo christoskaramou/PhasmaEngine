@@ -193,12 +193,12 @@ namespace pe
     {
     }
 
-    void Scene::AddModel(ModelGltf *model)
+    void Scene::AddModel(Model *model)
     {
         m_geometry.AddModel(model);
     }
 
-    void Scene::RemoveModel(ModelGltf *model)
+    void Scene::RemoveModel(Model *model)
     {
         m_geometry.RemoveModel(model);
     }

@@ -1,5 +1,5 @@
 #include "Scene/Geometry.h"
-#include "Scene/ModelGltf.h"
+#include "Scene/Model.h"
 #include "API/Buffer.h"
 #include "API/Command.h"
 #include "API/Vertex.h"
@@ -36,14 +36,14 @@ namespace pe
         DestroyBuffers();
     }
 
-    void Geometry::AddModel(ModelGltf *model)
+    void Geometry::AddModel(Model *model)
     {
-        m_models.insert(model->m_id, model);
+        m_models.insert(model->GetId(), model);
     }
 
-    void Geometry::RemoveModel(ModelGltf *model)
+    void Geometry::RemoveModel(Model *model)
     {
-        m_models.erase(model->m_id);
+        m_models.erase(model->GetId());
     }
 
     void Geometry::UploadBuffers(CommandBuffer *cmd)
@@ -88,19 +88,29 @@ namespace pe
 
         for (auto &modelPtr : m_models)
         {
-            ModelGltf &model = *modelPtr;
-            cmd->CopyBufferStaged(m_buffer, model.m_indices.data(), sizeof(uint32_t) * model.m_indices.size(), indicesCount * sizeof(uint32_t));
+            Model &model = *modelPtr;
+            const auto &indices = model.GetIndices();
+            cmd->CopyBufferStaged(m_buffer, const_cast<uint32_t *>(indices.data()), sizeof(uint32_t) * indices.size(), indicesCount * sizeof(uint32_t));
 
-            // add the geometryBuffer index offset to primitive indices
-            for (int i = 0; i < model.meshes.size(); i++)
+            // Update index offsets for all primitives
+            auto &meshesInfo = model.GetMeshesInfo();
+            for (auto &meshInfo : meshesInfo)
             {
-                for (int j = 0; j < model.meshes[i].primitives.size(); j++)
-                {
-                    model.m_meshesInfo[i].primitivesInfo[j].indexOffset += static_cast<uint32_t>(indicesCount);
-                    m_primitivesCount++;
-                }
+                for (auto &primitiveInfo : meshInfo.primitivesInfo)
+                    primitiveInfo.indexOffset += static_cast<uint32_t>(indicesCount);
             }
-            indicesCount += model.m_indices.size();
+
+            // Count primitives only from meshes attached to nodes
+            const int nodeCount = model.GetNodeCount();
+            for (int nodeIndex = 0; nodeIndex < nodeCount; nodeIndex++)
+            {
+                const int meshIndex = model.GetNodeMesh(nodeIndex);
+                if (meshIndex < 0 || meshIndex >= static_cast<int>(meshesInfo.size()))
+                    continue;
+
+                m_primitivesCount += static_cast<uint32_t>(meshesInfo[meshIndex].primitivesInfo.size());
+            }
+            indicesCount += indices.size();
         }
 
         vk::BufferMemoryBarrier2 indexBarrierInfo{};
@@ -135,17 +145,18 @@ namespace pe
         size_t verticesCount = 0;
         for (auto &modelPtr : m_models)
         {
-            ModelGltf &model = *modelPtr;
-            cmd->CopyBufferStaged(m_buffer, model.m_vertices.data(), sizeof(Vertex) * model.m_vertices.size(), m_verticesOffset + verticesCount * sizeof(Vertex));
+            Model &model = *modelPtr;
+            auto &meshesInfo = model.GetMeshesInfo();
+            const auto &vertices = model.GetVertices();
+            const size_t vertexCount = vertices.size();
+            cmd->CopyBufferStaged(m_buffer, const_cast<Vertex *>(vertices.data()), sizeof(Vertex) * vertexCount, m_verticesOffset + verticesCount * sizeof(Vertex));
             // add the combined buffer offset to primitive vertices
-            for (int i = 0; i < model.meshes.size(); i++)
+            for (auto &meshInfo : meshesInfo)
             {
-                for (int j = 0; j < model.meshes[i].primitives.size(); j++)
-                {
-                    model.m_meshesInfo[i].primitivesInfo[j].vertexOffset += static_cast<uint32_t>(verticesCount);
-                }
+                for (auto &primitiveInfo : meshInfo.primitivesInfo)
+                    primitiveInfo.vertexOffset += static_cast<uint32_t>(verticesCount);
             }
-            verticesCount += model.m_vertices.size();
+            verticesCount += vertexCount;
         }
 
         vk::BufferMemoryBarrier2 vertexBarrierInfo{};
@@ -163,17 +174,18 @@ namespace pe
         size_t positionsCount = 0;
         for (auto &modelPtr : m_models)
         {
-            ModelGltf &model = *modelPtr;
-            cmd->CopyBufferStaged(m_buffer, model.m_positionUvs.data(), model.m_positionUvs.size() * sizeof(PositionUvVertex), m_positionsOffset + positionsCount * sizeof(PositionUvVertex));
+            Model &model = *modelPtr;
+            const auto &positionUvs = model.GetPositionUvs();
+            const size_t positionCount = positionUvs.size();
+            cmd->CopyBufferStaged(m_buffer, const_cast<PositionUvVertex *>(positionUvs.data()), positionCount * sizeof(PositionUvVertex), m_positionsOffset + positionsCount * sizeof(PositionUvVertex));
             // add the combined buffer offset to primitive vertices
-            for (int i = 0; i < model.meshes.size(); i++)
+            auto &meshesInfo = model.GetMeshesInfo();
+            for (auto &meshInfo : meshesInfo)
             {
-                for (int j = 0; j < model.meshes[i].primitives.size(); j++)
-                {
-                    model.m_meshesInfo[i].primitivesInfo[j].positionsOffset += static_cast<uint32_t>(positionsCount);
-                }
+                for (auto &primitiveInfo : meshInfo.primitivesInfo)
+                    primitiveInfo.positionsOffset += static_cast<uint32_t>(positionsCount);
             }
-            positionsCount += model.m_positionUvs.size();
+            positionsCount += positionCount;
         }
 
         vk::BufferMemoryBarrier2 posVertexBarrierInfo{};
@@ -191,17 +203,18 @@ namespace pe
         size_t aabbCount = 0;
         for (auto &modelPtr : m_models)
         {
-            ModelGltf &model = *modelPtr;
-            cmd->CopyBufferStaged(m_buffer, model.m_aabbVertices.data(), model.m_aabbVertices.size() * sizeof(AabbVertex), m_aabbVerticesOffset + aabbCount * sizeof(AabbVertex));
+            Model &model = *modelPtr;
+            const auto &aabbVertices = model.GetAabbVertices();
+            const size_t aabbVertexCount = aabbVertices.size();
+            cmd->CopyBufferStaged(m_buffer, const_cast<AabbVertex *>(aabbVertices.data()), aabbVertexCount * sizeof(AabbVertex), m_aabbVerticesOffset + aabbCount * sizeof(AabbVertex));
             // add the combined buffer offset to primitive vertices
-            for (int i = 0; i < model.meshes.size(); i++)
+            auto &meshesInfo = model.GetMeshesInfo();
+            for (auto &meshInfo : meshesInfo)
             {
-                for (int j = 0; j < model.meshes[i].primitives.size(); j++)
-                {
-                    model.m_meshesInfo[i].primitivesInfo[j].aabbVertexOffset += static_cast<uint32_t>(aabbCount);
-                }
+                for (auto &primitiveInfo : meshInfo.primitivesInfo)
+                    primitiveInfo.aabbVertexOffset += static_cast<uint32_t>(aabbCount);
             }
-            aabbCount += model.m_aabbVertices.size();
+            aabbCount += aabbVertexCount;
         }
 
         vk::BufferMemoryBarrier2 aabbVertexBarrierInfo{};
@@ -223,19 +236,22 @@ namespace pe
         storageSize += RHII.AlignStorageAs(m_primitivesCount * sizeof(uint32_t), 64);
         for (auto &modelPtr : m_models)
         {
-            ModelGltf &model = *modelPtr;
-            for (int i = 0; i < model.nodes.size(); i++)
+            Model &model = *modelPtr;
+            auto &meshesInfo = model.GetMeshesInfo();
+            const int nodeCount = model.GetNodeCount();
+            for (int nodeIndex = 0; nodeIndex < nodeCount; nodeIndex++)
             {
-                int mesh = model.nodes[i].mesh;
-                if (mesh < 0)
+                int meshIndex = model.GetNodeMesh(nodeIndex);
+                if (meshIndex < 0 || meshIndex >= static_cast<int>(meshesInfo.size()))
                     continue;
 
-                model.m_meshesInfo[mesh].dataOffset = storageSize;
-                storageSize += model.m_meshesInfo[mesh].dataSize;
-                for (int j = 0; j < model.meshes[mesh].primitives.size(); j++)
+                MeshInfo &meshInfo = meshesInfo[meshIndex];
+                meshInfo.dataOffset = storageSize;
+                storageSize += meshInfo.dataSize;
+                for (auto &primitiveInfo : meshInfo.primitivesInfo)
                 {
-                    model.m_meshesInfo[mesh].primitivesInfo[j].dataOffset = storageSize;
-                    storageSize += model.m_meshesInfo[mesh].primitivesInfo[j].dataSize;
+                    primitiveInfo.dataOffset = storageSize;
+                    storageSize += primitiveInfo.dataSize;
                 }
             }
         }
@@ -259,16 +275,18 @@ namespace pe
         m_indirectCommands.reserve(m_primitivesCount);
         for (auto &modelPtr : m_models)
         {
-            ModelGltf &model = *modelPtr;
-            for (int i = 0; i < model.nodes.size(); i++)
+            Model &model = *modelPtr;
+            auto &meshesInfo = model.GetMeshesInfo();
+            const int nodeCount = model.GetNodeCount();
+            for (int nodeIndex = 0; nodeIndex < nodeCount; nodeIndex++)
             {
-                int mesh = model.nodes[i].mesh;
-                if (mesh < 0)
+                int meshIndex = model.GetNodeMesh(nodeIndex);
+                if (meshIndex < 0 || meshIndex >= static_cast<int>(meshesInfo.size()))
                     continue;
 
-                for (int j = 0; j < model.meshes[mesh].primitives.size(); j++)
+                auto &meshInfo = meshesInfo[meshIndex];
+                for (auto &primitiveInfo : meshInfo.primitivesInfo)
                 {
-                    PrimitiveInfo &primitiveInfo = model.m_meshesInfo[mesh].primitivesInfo[j];
                     primitiveInfo.indirectIndex = indirectCount;
 
                     vk::DrawIndexedIndirectCommand indirectCommand{};
@@ -316,27 +334,32 @@ namespace pe
 
     void Geometry::UpdateImageViews()
     {
+        size_t totalImageCount = 0;
+        for (auto &modelPtr : m_models)
+            totalImageCount += modelPtr->GetImages().size();
+
         m_imageViews.clear();
+        m_imageViews.reserve(totalImageCount);
         OrderedMap<Image *, uint32_t> imagesMap{};
-        for (auto &model : m_models)
+        for (auto &modelPtr : m_models)
         {
+            Model &model = *modelPtr;
             for (auto &storage : m_storages)
-                model->SetPrimitiveFactors(storage);
+                model.SetPrimitiveFactors(storage);
 
             // Update views and indices
-            for (Image *image : model->m_images)
+            for (Image *image : model.GetImages())
             {
-                imagesMap.insert(image, static_cast<uint32_t>(m_imageViews.size()));
-                m_imageViews.push_back(image->GetSRV());
+                auto insertResult = imagesMap.insert(image, static_cast<uint32_t>(m_imageViews.size()));
+                if (insertResult.first)
+                    m_imageViews.push_back(image->GetSRV());
             }
 
-            for (int i = 0; i < model->meshes.size(); i++)
+            auto &meshesInfo = model.GetMeshesInfo();
+            for (auto &meshInfo : meshesInfo)
             {
-                tinygltf::Mesh &mesh = model->meshes[i];
-                MeshInfo &meshInfo = model->m_meshesInfo[i];
-                for (int j = 0; j < mesh.primitives.size(); j++)
+                for (auto &primitiveInfo : meshInfo.primitivesInfo)
                 {
-                    PrimitiveInfo &primitiveInfo = meshInfo.primitivesInfo[j];
                     for (int k = 0; k < 5; k++)
                     {
                         primitiveInfo.viewsIndex[k] = imagesMap[primitiveInfo.images[k]];
@@ -366,21 +389,23 @@ namespace pe
         gbo->m_constants->Map();
         for (auto &modelPtr : m_models)
         {
-            ModelGltf &model = *modelPtr;
-            for (int i = 0; i < model.nodes.size(); i++)
+            Model &model = *modelPtr;
+            auto &meshesInfo = model.GetMeshesInfo();
+            const int nodeCount = model.GetNodeCount();
+            for (int nodeIndex = 0; nodeIndex < nodeCount; nodeIndex++)
             {
-                int mesh = model.nodes[i].mesh;
-                if (mesh < 0)
+                int meshIndex = model.GetNodeMesh(nodeIndex);
+                if (meshIndex < 0 || meshIndex >= static_cast<int>(meshesInfo.size()))
                     continue;
 
-                for (int j = 0; j < model.meshes[mesh].primitives.size(); j++)
+                MeshInfo &meshInfo = meshesInfo[meshIndex];
+                for (size_t primitiveIndex = 0; primitiveIndex < meshInfo.primitivesInfo.size(); primitiveIndex++)
                 {
-                    PrimitiveInfo &primitiveInfo = model.m_meshesInfo[mesh].primitivesInfo[j];
-                    auto &primitiveGltf = model.meshes[mesh].primitives[j];
+                    PrimitiveInfo &primitiveInfo = meshInfo.primitivesInfo[primitiveIndex];
 
                     Primitive_Constants constants{};
-                    constants.alphaCut = static_cast<float>(model.materials[primitiveGltf.material].alphaCutoff);
-                    constants.meshDataOffset = static_cast<uint32_t>(model.m_meshesInfo[mesh].dataOffset);
+                    constants.alphaCut = model.GetPrimitiveAlphaCutoff(meshIndex, static_cast<int>(primitiveIndex));
+                    constants.meshDataOffset = static_cast<uint32_t>(meshInfo.dataOffset);
                     constants.primitiveDataOffset = static_cast<uint32_t>(primitiveInfo.dataOffset);
                     for (int k = 0; k < 5; k++)
                         constants.primitiveImageIndex[k] = primitiveInfo.viewsIndex[k];
@@ -399,37 +424,57 @@ namespace pe
         gbo->m_constants->Unmap();
     }
 
-    void Geometry::CullNodePrimitives(ModelGltf &model, int node)
+    void Geometry::CullNodePrimitives(Model &model, int node)
     {
         const Camera &camera = *m_cameras[0];
         bool frustumCulling = Settings::Get<GlobalSettings>().frustum_culling;
 
-        int mesh = model.nodes[node].mesh;
-        auto &meshGltf = model.meshes[mesh];
-        auto &meshInfo = model.m_meshesInfo[mesh];
-        int primitivesCount = static_cast<int>(meshGltf.primitives.size());
+        int mesh = model.GetNodeMesh(node);
+        if (mesh < 0)
+            return;
+
+        auto &meshInfo = model.GetMeshesInfo()[mesh];
+        int primitivesCount = model.GetMeshPrimitiveCount(mesh);
+
+        // local lists (thread-safe)
+        std::vector<DrawInfo> localOpaque;
+        std::vector<DrawInfo> localAlphaCut;
+        std::vector<DrawInfo> localAlphaBlend;
+        localOpaque.reserve(primitivesCount);
+        localAlphaCut.reserve(primitivesCount);
+        localAlphaBlend.reserve(primitivesCount);
+
         for (int i = 0; i < primitivesCount; i++)
         {
             auto &primitiveInfo = meshInfo.primitivesInfo[i];
             primitiveInfo.cull = frustumCulling ? !camera.AABBInFrustum(primitiveInfo.worldBoundingBox) : false;
-            if (!primitiveInfo.cull)
-            {
-                vec3 center = primitiveInfo.worldBoundingBox.GetCenter();
-                float distance = distance2(camera.GetPosition(), center);
+            if (primitiveInfo.cull)
+                continue;
 
-                switch (primitiveInfo.renderType)
-                {
-                case RenderType::Opaque:
-                    m_drawInfosOpaque.emplace_back(DrawInfo{&model, node, i, distance});
-                    break;
-                case RenderType::AlphaCut:
-                    m_drawInfosAlphaCut.emplace_back(DrawInfo{&model, node, i, distance});
-                    break;
-                case RenderType::AlphaBlend:
-                    m_drawInfosAlphaBlend.emplace_back(DrawInfo{&model, node, i, distance});
-                    break;
-                }
+            vec3 center = primitiveInfo.worldBoundingBox.GetCenter();
+            float distance = distance2(camera.GetPosition(), center);
+
+            switch (primitiveInfo.renderType)
+            {
+            case RenderType::Opaque:
+                localOpaque.push_back(DrawInfo{&model, node, i, distance});
+                break;
+            case RenderType::AlphaCut:
+                localAlphaCut.push_back(DrawInfo{&model, node, i, distance});
+                break;
+            case RenderType::AlphaBlend:
+                localAlphaBlend.push_back(DrawInfo{&model, node, i, distance});
+                break;
             }
+        }
+
+        // merge once under lock
+        if (!localOpaque.empty() || !localAlphaCut.empty() || !localAlphaBlend.empty())
+        {
+            std::scoped_lock lock(m_drawInfosMutex);
+            m_drawInfosOpaque.insert(m_drawInfosOpaque.end(), localOpaque.begin(), localOpaque.end());
+            m_drawInfosAlphaCut.insert(m_drawInfosAlphaCut.end(), localAlphaCut.begin(), localAlphaCut.end());
+            m_drawInfosAlphaBlend.insert(m_drawInfosAlphaBlend.end(), localAlphaBlend.begin(), localAlphaBlend.end());
         }
     }
 
@@ -456,21 +501,21 @@ namespace pe
         for (auto &drawInfo : m_drawInfosOpaque)
         {
             auto &model = *drawInfo.model;
-            auto &primitiveInfo = model.m_meshesInfo[model.nodes[drawInfo.node].mesh].primitivesInfo[drawInfo.primitive];
+            auto &primitiveInfo = model.GetMeshesInfo()[model.GetNodeMesh(drawInfo.node)].primitivesInfo[drawInfo.primitive];
             uint32_t id = primitiveInfo.indirectIndex;
             ids.push_back(id);
         }
         for (auto &drawInfo : m_drawInfosAlphaCut)
         {
             auto &model = *drawInfo.model;
-            auto &primitiveInfo = model.m_meshesInfo[model.nodes[drawInfo.node].mesh].primitivesInfo[drawInfo.primitive];
+            auto &primitiveInfo = model.GetMeshesInfo()[model.GetNodeMesh(drawInfo.node)].primitivesInfo[drawInfo.primitive];
             uint32_t id = primitiveInfo.indirectIndex;
             ids.push_back(id);
         }
         for (auto &drawInfo : m_drawInfosAlphaBlend)
         {
             auto &model = *drawInfo.model;
-            auto &primitiveInfo = model.m_meshesInfo[model.nodes[drawInfo.node].mesh].primitivesInfo[drawInfo.primitive];
+            auto &primitiveInfo = model.GetMeshesInfo()[model.GetNodeMesh(drawInfo.node)].primitivesInfo[drawInfo.primitive];
             uint32_t id = primitiveInfo.indirectIndex;
             ids.push_back(id);
         }
@@ -481,21 +526,21 @@ namespace pe
 
         for (auto &modelPtr : m_models)
         {
-            ModelGltf &model = *modelPtr;
-            if (!model.dirtyUniforms[frame])
+            Model &model = *modelPtr;
+            if (!model.GetDirtyUniforms()[frame])
                 continue;
 
-            for (int node = 0; node < model.nodes.size(); node++)
+            for (int node = 0; node < model.GetNodeCount(); node++)
             {
-                NodeInfo &nodeInfo = model.m_nodesInfo[node];
+                NodeInfo &nodeInfo = model.GetNodesInfo()[node];
                 if (!nodeInfo.dirtyUniforms[frame])
                     continue;
 
-                int mesh = model.nodes[node].mesh;
+                int mesh = model.GetNodeMesh(node);
                 if (mesh < 0)
                     continue;
 
-                MeshInfo &meshInfo = model.m_meshesInfo[mesh];
+                MeshInfo &meshInfo = model.GetMeshesInfo()[mesh];
 
                 range.data = &nodeInfo.ubo;
                 range.size = meshInfo.dataSize;
@@ -505,7 +550,7 @@ namespace pe
                 nodeInfo.dirtyUniforms[frame] = false;
             }
 
-            model.dirtyUniforms[frame] = false;
+            model.GetDirtyUniforms()[frame] = false;
         }
 
         // Unmap buffer
@@ -522,7 +567,7 @@ namespace pe
         for (auto &drawInfo : m_drawInfosOpaque)
         {
             auto &model = *drawInfo.model;
-            auto &primitiveInfo = model.m_meshesInfo[model.nodes[drawInfo.node].mesh].primitivesInfo[drawInfo.primitive];
+            auto &primitiveInfo = model.GetMeshesInfo()[model.GetNodeMesh(drawInfo.node)].primitivesInfo[drawInfo.primitive];
             auto &indirectCommand = m_indirectCommands[primitiveInfo.indirectIndex];
             indirectCommand.firstInstance = firstInstance;
 
@@ -538,7 +583,7 @@ namespace pe
         for (auto &drawInfo : m_drawInfosAlphaCut)
         {
             auto &model = *drawInfo.model;
-            auto &primitiveInfo = model.m_meshesInfo[model.nodes[drawInfo.node].mesh].primitivesInfo[drawInfo.primitive];
+            auto &primitiveInfo = model.GetMeshesInfo()[model.GetNodeMesh(drawInfo.node)].primitivesInfo[drawInfo.primitive];
             auto &indirectCommand = m_indirectCommands[primitiveInfo.indirectIndex];
             indirectCommand.firstInstance = firstInstance;
 
@@ -554,7 +599,7 @@ namespace pe
         for (auto &drawInfo : m_drawInfosAlphaBlend)
         {
             auto &model = *drawInfo.model;
-            auto &primitiveInfo = model.m_meshesInfo[model.nodes[drawInfo.node].mesh].primitivesInfo[drawInfo.primitive];
+            auto &primitiveInfo = model.GetMeshesInfo()[model.GetNodeMesh(drawInfo.node)].primitivesInfo[drawInfo.primitive];
             auto &indirectCommand = m_indirectCommands[primitiveInfo.indirectIndex];
             indirectCommand.firstInstance = firstInstance;
 
@@ -578,17 +623,17 @@ namespace pe
         std::vector<std::shared_future<void>> futures;
         for (auto &modelPtr : m_models)
         {
-            ModelGltf &model = *modelPtr;
-            if (!model.m_render)
+            Model &model = *modelPtr;
+            if (!model.IsRenderReady())
                 continue;
 
             // update node world matrices if needed
             model.UpdateNodeMatrices();
 
             // cull primitives
-            for (int i = 0; i < model.nodes.size(); i++)
+            for (int i = 0; i < model.GetNodeCount(); i++)
             {
-                if (model.nodes[i].mesh > -1)
+                if (model.GetNodeMesh(i) > -1)
                     futures.push_back(ThreadPool::Update.Enqueue(&Geometry::CullNodePrimitives, this, std::ref(model), i));
             }
         }
@@ -629,19 +674,19 @@ namespace pe
             // count max primitives
             for (auto &modelPtr : m_models)
             {
-                ModelGltf &model = *modelPtr;
-                if (!model.m_render)
+                Model &model = *modelPtr;
+                if (!model.IsRenderReady())
                     continue;
 
-                for (int node = 0; node < model.nodes.size(); node++)
+                for (int node = 0; node < model.GetNodeCount(); node++)
                 {
-                    int mesh = model.nodes[node].mesh;
+                    int mesh = model.GetNodeMesh(node);
                     if (mesh < 0)
                         continue;
 
-                    for (int primitive = 0; primitive < model.meshes[mesh].primitives.size(); primitive++)
+                    for (int primitive = 0; primitive < model.GetMeshPrimitiveCount(mesh); primitive++)
                     {
-                        PrimitiveInfo &primitiveInfo = model.m_meshesInfo[mesh].primitivesInfo[primitive];
+                        PrimitiveInfo &primitiveInfo = model.GetMeshesInfo()[mesh].primitivesInfo[primitive];
 
                         switch (primitiveInfo.renderType)
                         {

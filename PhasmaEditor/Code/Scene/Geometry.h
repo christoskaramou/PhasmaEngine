@@ -2,7 +2,7 @@
 
 namespace pe
 {
-    class ModelGltf;
+    class Model;
     class Buffer;
     class CommandBuffer;
     class Camera;
@@ -11,7 +11,7 @@ namespace pe
 
     struct DrawInfo
     {
-        ModelGltf *model;
+        Model *model;
         int node;
         int primitive;
         float distance;
@@ -23,8 +23,8 @@ namespace pe
         Geometry();
         ~Geometry();
 
-        void AddModel(ModelGltf *model);
-        void RemoveModel(ModelGltf *model);
+        void AddModel(Model *model);
+        void RemoveModel(Model *model);
         void UploadBuffers(CommandBuffer *cmd);
         void UpdateGeometry();
         bool HasOpaqueDrawInfo() const { return !m_drawInfosOpaque.empty(); }
@@ -35,7 +35,7 @@ namespace pe
 
         // Getters
         std::vector<vk::ImageView> &GetImageViews() { return m_imageViews; }
-        OrderedMap<size_t, ModelGltf *> &GetModels() { return m_models; }
+        OrderedMap<size_t, Model *> &GetModels() { return m_models; }
         Buffer *GetUniforms(uint32_t frame) { return m_storages[frame]; }
         Buffer *GetIndirect(uint32_t frame) { return m_indirects[frame]; }
         Buffer *GetIndirectAll() { return m_indirectAll; }
@@ -51,7 +51,7 @@ namespace pe
         uint32_t GetPrimitivesCount() const { return m_primitivesCount; }
 
     private:
-        void CullNodePrimitives(ModelGltf &model, int node);
+        void CullNodePrimitives(Model &model, int node);
         void UpdateUniformData();
         void UpdateIndirectData();
         void ClearDrawInfos(bool reserveMax);
@@ -73,7 +73,7 @@ namespace pe
 
         PerFrameData m_frameData;
         std::vector<Camera *> m_cameras;
-        OrderedMap<size_t, ModelGltf *> m_models;
+        OrderedMap<size_t, Model *> m_models;
 
         Buffer *m_buffer = nullptr;
         std::vector<Buffer *> m_storages;
@@ -94,5 +94,7 @@ namespace pe
         std::vector<DrawInfo> m_drawInfosAlphaCut;
         std::vector<DrawInfo> m_drawInfosAlphaBlend;
         std::vector<vk::DrawIndexedIndirectCommand> m_indirectCommands;
+
+        std::mutex m_drawInfosMutex;
     };
 }

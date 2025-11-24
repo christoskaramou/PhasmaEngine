@@ -9,7 +9,6 @@ PhasmaEngine is intended as a project for learning 3D graphics and techniques, u
 * Screen Space Ambient Occlusion
 * Tone Mapping - HDR
 * Image Based Lighting
-* Volumetric Lighting
 * Depth of Field
 * Upscale (FRS2)
 * FXAA

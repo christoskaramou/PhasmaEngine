@@ -2,7 +2,7 @@
 #include "Helpers.h"
 #include "TinyFileDialogs/tinyfiledialogs.h"
 #include "API/RHI.h"
-#include "Scene/ModelGltf.h"
+#include "Scene/Model.h"
 #include "API/Surface.h"
 #include "API/Swapchain.h"
 #include "API/RenderPass.h"
@@ -50,7 +50,7 @@ namespace pe
                         s_modelLoading = true;
 
                         std::filesystem::path path(result);
-                        ModelGltf::Load(path);
+                        Model::Load(path);
 
                         s_modelLoading = false;
                     };
@@ -487,7 +487,6 @@ namespace pe
             ImGui::Checkbox("Depth Aware", &gSettings.aabbs_depth_aware);
             ImGui::Unindent(16.0f);
         }
-        ImGui::DragInt("Culls Per Task", &gSettings.culls_per_task, 1.f, 1, 100);
 
         ImGui::End();
     }
