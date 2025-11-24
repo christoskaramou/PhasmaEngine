@@ -31,15 +31,8 @@ TexSamplerDecl(6, 0, Emission)
     uint        cb_fsr2;
     uint        cb_IBL;
     float       cb_IBL_intensity;
-    uint        cb_volumetric;
-    uint        cb_volumetric_steps;
-    float       cb_volumetric_dither_strength;
     float       cb_lightsIntensity;
     float       cb_lightsRange;
-    uint        cb_fog;
-    float       cb_fogThickness;
-    float       cb_fogMaxHeight;
-    float       cb_fogGroundThickness;
     uint        cb_shadows;
 };
 TexSamplerDecl(8, 0, Transparency)
@@ -359,43 +352,6 @@ float ComputeScattering(float dirDotL)
     float e = abs(1.0f + scat * scat - (2.0f * scat) * dirDotL);
 
     return (1.0f - scat * scat) / pow(e, 0.1f);
-}
-
-float3 VolumetricLighting(DirectionalLight light, float3 worldPos, float2 uv, float4x4 lightViewProj, float fogFactor, float2 size)
-{
-    float  iterations           = cb_volumetric_steps;
-    float3 pixelToCamera        = cb_camPos.xyz - worldPos;
-    float  pixelToCameraLength  = length(pixelToCamera);
-    float3 rayDir               = pixelToCamera / pixelToCameraLength;
-    float  stepLength           = pixelToCameraLength / iterations;
-    float3 rayStep              = rayDir * stepLength;
-    float3 rayPos               = worldPos;
-
-    // Apply dithering as it will allows us to get away with a crazy low sample count ;-)
-    float3 ditherValue  = Dither(uv * size) * cb_volumetric_dither_strength; // dithering strength 400 default
-    rayPos              += rayStep * ditherValue;
-
-    float3 volumetricFactor = 0.0f;
-    for (int i = 0; i < iterations; i++)
-    {
-        // Compute position in light space
-        float4 posLight = mul(float4(rayPos, 1.0f), lightViewProj);
-        posLight /= posLight.w;
-
-        // Compute ray uv
-        float2 rayUV = posLight.xy * 0.5f + 0.5f;
-
-        // Check to see if the light can "see" the pixel		
-        float depthDelta = Shadow[SHADOWMAP_CASCADES-1].SampleCmpLevelZero(sampler_Shadow, rayUV, posLight.z);
-        if (depthDelta > 0.0f)
-        {
-            volumetricFactor += ComputeScattering(dot(rayDir, light.direction.xyz));
-        }
-        rayPos += rayStep;
-    }
-    volumetricFactor /= iterations;
-
-    return volumetricFactor * light.color.xyz * light.color.a * fogFactor * 10.0;
 }
 
 #endif

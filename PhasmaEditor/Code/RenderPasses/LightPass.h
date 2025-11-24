@@ -11,17 +11,9 @@ namespace pe
         uint32_t fsr2 = 0;
         uint32_t IBL = 1;
         float IBL_intensity = 0.75f;
-        uint32_t volumetric = 0;
-        uint32_t volumetric_steps = 32;
-        float volumetric_dither_strength = 400.0f;
         float lights_intensity = 7.0f;
         float lights_range = 7.0f;
-        uint32_t fog = 0;
-        float fog_thickness = 0.3f;
-        float fog_max_height = 3.0f;
-        float fog_ground_thickness = 30.0f;
         uint32_t shadows = 1;
-        float dummy = 0.0f;
     };
 
     class Image;

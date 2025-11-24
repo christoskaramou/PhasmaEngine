@@ -6,7 +6,7 @@
 #include "API/Pipeline.h"
 #include "Systems/RendererSystem.h"
 #include "Systems/CameraSystem.h"
-#include "Scene/ModelGltf.h"
+#include "Scene/Model.h"
 
 namespace pe
 {
@@ -65,17 +65,17 @@ namespace pe
         {
             for (auto &drawInfo : drawInfos)
             {
-                ModelGltf &model = *drawInfo.model;
+                Model &model = *drawInfo.model;
 
                 int node = drawInfo.node;
-                int mesh = model.nodes[node].mesh;
+                int mesh = model.GetNodeMesh(node);
                 if (mesh < 0)
                     continue;
 
                 int primitive = drawInfo.primitive;
-                PrimitiveInfo &primitiveInfo = model.m_meshesInfo[mesh].primitivesInfo[primitive];
+                PrimitiveInfo &primitiveInfo = model.GetMeshesInfo()[mesh].primitivesInfo[primitive];
 
-                constants.meshIndex = GetUboDataOffset(model.m_meshesInfo[mesh].dataOffset);
+                constants.meshIndex = GetUboDataOffset(model.GetMeshesInfo()[mesh].dataOffset);
                 constants.color = primitiveInfo.aabbColor;
 
                 cmd->SetConstants(constants);

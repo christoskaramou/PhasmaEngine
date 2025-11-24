@@ -16,18 +16,7 @@ namespace pe
     Image *g_defaultWhite = nullptr;
     Sampler *g_defaultSampler = nullptr;
 
-    ModelGltf::ModelGltf() : m_id{ID::NextID()}
-    {
-        dirtyUniforms.resize(RHII.GetSwapchainImageCount(), false);
-    }
-
-    ModelGltf::~ModelGltf()
-    {
-        for (auto sampler : m_samplers)
-            Sampler::Destroy(sampler);
-        for (auto image : m_images)
-            Image::Destroy(image);
-    }
+    ModelGltf::ModelGltf() = default;
 
     ModelGltf *ModelGltf::Load(const std::filesystem::path &file)
     {
@@ -36,13 +25,10 @@ namespace pe
         ModelGltf *modelGltf = new ModelGltf();
         ModelGltf &model = *modelGltf;
 
-        tinygltf::TinyGLTF loader;
-        std::string err, warn;
-
         auto &gSettings = Settings::Get<GlobalSettings>();
         gSettings.loading_name = "Reading from file";
 
-        PE_ERROR_IF(!model.LoadFile(file, loader, err, warn), std::string("Failed to load model: " + file.string()).c_str());
+        PE_ERROR_IF(!model.LoadFile(file), std::string("Failed to load model: " + file.string()).c_str());
 
         Queue *queue = RHII.GetMainQueue();
         CommandBuffer *cmd = queue->AcquireCommandBuffer();
@@ -66,12 +52,15 @@ namespace pe
         return modelGltf;
     }
 
-    bool ModelGltf::LoadFile(const std::filesystem::path &file, tinygltf::TinyGLTF &loader, std::string &err, std::string &warn)
+    bool ModelGltf::LoadFile(const std::filesystem::path &file)
     {
+        tinygltf::TinyGLTF loader;
+        std::string err, warn;
+
         if (file.extension() == ".gltf")
-            return loader.LoadASCIIFromFile(this, &err, &warn, file.string());
+            return loader.LoadASCIIFromFile(&m_gltfModel, &err, &warn, file.string());
         else if (file.extension() == ".glb")
-            return loader.LoadBinaryFromFile(this, &err, &warn, file.string());
+            return loader.LoadBinaryFromFile(&m_gltfModel, &err, &warn, file.string());
         return false;
     }
 
@@ -92,17 +81,18 @@ namespace pe
         {
             vk::SamplerCreateInfo info = Sampler::CreateInfoInit();
             g_defaultSampler = Sampler::Create(info, "Default Sampler");
+            m_samplers.push_back(g_defaultSampler);
         }
 
-        m_images.reserve(images.size() + 3);
-        for (auto &image : images)
+        m_images.reserve(m_gltfModel.images.size() + 3);
+        for (auto &image : m_gltfModel.images)
         {
             PE_ERROR_IF(image.image.empty(), std::string("Image data is empty: " + image.uri).c_str());
 
             vk::ImageCreateInfo info = Image::CreateInfoInit();
             info.format = vk::Format::eR8G8B8A8Unorm;
             info.mipLevels = Image::CalculateMips(image.width, image.height);
-            info.extent = vk::Extent3D{ static_cast<uint32_t>(image.width), static_cast<uint32_t>(image.height), 1u };
+            info.extent = vk::Extent3D{static_cast<uint32_t>(image.width), static_cast<uint32_t>(image.height), 1u};
             info.usage = vk::ImageUsageFlagBits::eTransferSrc | vk::ImageUsageFlagBits::eTransferDst | vk::ImageUsageFlagBits::eSampled | vk::ImageUsageFlagBits::eStorage;
             info.initialLayout = vk::ImageLayout::ePreinitialized;
 
@@ -139,8 +129,8 @@ namespace pe
         auto &total = gSettings.loading_total;
         auto &loading = gSettings.loading_name;
 
-        m_samplers.reserve(samplers.size() + 1);
-        for (auto &sampler : samplers)
+        m_samplers.reserve(m_gltfModel.samplers.size() + 1);
+        for (auto &sampler : m_gltfModel.samplers)
         {
             vk::SamplerCreateInfo info = Sampler::CreateInfoInit();
             if (sampler.minFilter == TINYGLTF_TEXTURE_FILTER_NEAREST)
@@ -202,7 +192,6 @@ namespace pe
             // Update loading bar
             progress++;
         }
-        m_samplers.push_back(g_defaultSampler);
     }
 
     void ModelGltf::ExtractMaterialInfo()
@@ -213,9 +202,9 @@ namespace pe
         auto &loading = gSettings.loading_name;
 
         progress = 0;
-        for (size_t i = 0; i < meshes.size(); i++)
+        for (size_t i = 0; i < m_gltfModel.meshes.size(); i++)
         {
-            tinygltf::Mesh &mesh = meshes[i];
+            tinygltf::Mesh &mesh = m_gltfModel.meshes[i];
             for (size_t j = 0; j < mesh.primitives.size(); j++)
                 m_primitivesCount++;
         }
@@ -223,10 +212,10 @@ namespace pe
         loading = "Loading material pipeline info";
 
         // Material info for pipeline creation
-        m_meshesInfo.resize(meshes.size());
-        for (size_t i = 0; i < meshes.size(); i++)
+        m_meshesInfo.resize(m_gltfModel.meshes.size());
+        for (size_t i = 0; i < m_gltfModel.meshes.size(); i++)
         {
-            tinygltf::Mesh &mesh = meshes[i];
+            tinygltf::Mesh &mesh = m_gltfModel.meshes[i];
             MeshInfo &meshInfo = m_meshesInfo[i];
             meshInfo.primitivesInfo.resize(mesh.primitives.size());
 
@@ -235,7 +224,7 @@ namespace pe
                 tinygltf::Primitive &primitive = mesh.primitives[j];
                 PrimitiveInfo &primitiveInfo = meshInfo.primitivesInfo[j];
 
-                tinygltf::Material &material = materials[primitive.material];
+                tinygltf::Material &material = m_gltfModel.materials[primitive.material];
                 MaterialInfo &materialInfo = primitiveInfo.materialInfo;
 
                 switch (primitive.mode)
@@ -283,15 +272,15 @@ namespace pe
         loading = "Loading aabbs";
 
         m_primitivesCount = 0;
-        for (int i = 0; i < meshes.size(); i++)
+        for (int i = 0; i < m_gltfModel.meshes.size(); i++)
         {
-            tinygltf::Mesh &mesh = meshes[i];
+            tinygltf::Mesh &mesh = m_gltfModel.meshes[i];
             MeshInfo &meshInfo = m_meshesInfo[i];
             for (int j = 0; j < mesh.primitives.size(); j++)
             {
                 auto posIt = mesh.primitives[j].attributes.find("POSITION");
-                const auto &accessorPos = accessors[posIt->second];
-                const auto &accessorIndices = accessors[mesh.primitives[j].indices];
+                const auto &accessorPos = m_gltfModel.accessors[posIt->second];
+                const auto &accessorIndices = m_gltfModel.accessors[mesh.primitives[j].indices];
 
                 PrimitiveInfo &primitiveInfo = meshInfo.primitivesInfo[j];
                 primitiveInfo.vertexOffset = m_verticesCount;
@@ -334,16 +323,16 @@ namespace pe
 
         size_t indexOffset = 0;
 
-        for (uint32_t i = 0; i < meshes.size(); i++)
+        for (uint32_t i = 0; i < m_gltfModel.meshes.size(); i++)
         {
-            tinygltf::Mesh &mesh = meshes[i];
+            tinygltf::Mesh &mesh = m_gltfModel.meshes[i];
             MeshInfo &meshInfo = m_meshesInfo[i];
 
             for (uint32_t j = 0; j < mesh.primitives.size(); j++)
             {
                 tinygltf::Primitive &primitive = mesh.primitives[j];
                 PrimitiveInfo &primitiveInfo = meshInfo.primitivesInfo[j];
-                tinygltf::Material &material = materials[primitive.material];
+                tinygltf::Material &material = m_gltfModel.materials[primitive.material];
 
                 // -------- Alpha Mode --------
                 if (material.alphaMode == "BLEND")
@@ -363,7 +352,7 @@ namespace pe
 
                     if (gltfIndex >= 0)
                     {
-                        const auto &texture = textures[gltfIndex];
+                        const auto &texture = m_gltfModel.textures[gltfIndex];
                         if (texture.source >= 0)
                             image = m_images[texture.source];
                         if (texture.sampler >= 0)
@@ -380,91 +369,112 @@ namespace pe
                 setTexture(TextureType::Emissive, material.emissiveTexture.index, g_defaultBlack);
 
                 // -------- Attribute Extraction --------
-                auto getAccessor = [this, &primitive](const std::string &attrName) -> const tinygltf::Accessor *
+                auto getAttributeData = [this, &primitive](const char* attrName) -> std::pair<const uint8_t*, const tinygltf::Accessor*>
                 {
                     auto attrIt = primitive.attributes.find(attrName);
                     if (attrIt == primitive.attributes.end())
-                        return nullptr;
+                        return {nullptr, nullptr};
 
-                    return &accessors[attrIt->second];
-                };
-
-                auto getData = [this, &primitive](const std::string &attrName) -> const uint8_t *
-                {
-                    auto attrIt = primitive.attributes.find(attrName);
-                    if (attrIt == primitive.attributes.end())
-                        return nullptr;
-
-                    auto &accessor = accessors[attrIt->second];
+                    const auto &accessor = m_gltfModel.accessors[attrIt->second];
                     if (accessor.bufferView < 0)
-                        return nullptr;
+                        return {nullptr, &accessor};
 
-                    auto &bufferView = bufferViews[accessor.bufferView];
+                    const auto &bufferView = m_gltfModel.bufferViews[accessor.bufferView];
                     if (bufferView.buffer < 0)
-                        return nullptr;
+                        return {nullptr, &accessor};
 
-                    auto &buffer = buffers[bufferView.buffer];
+                    const auto &buffer = m_gltfModel.buffers[bufferView.buffer];
                     if (buffer.data.empty())
-                        return nullptr;
+                        return {nullptr, &accessor};
 
                     size_t offset = accessor.byteOffset + bufferView.byteOffset;
                     if (offset >= buffer.data.size())
-                        return nullptr;
+                        return {nullptr, &accessor};
 
-                    return &buffer.data[accessor.byteOffset + bufferView.byteOffset];
+                    return {&buffer.data[offset], &accessor};
                 };
 
-                const auto *dataPos = reinterpret_cast<const float *>(getData("POSITION"));
-                const auto *dataUV0 = reinterpret_cast<const float *>(getData("TEXCOORD_0"));
-                const auto *dataUV1 = reinterpret_cast<const float *>(getData("TEXCOORD_1"));
-                const auto *dataNormal = reinterpret_cast<const float *>(getData("NORMAL"));
-                const auto *dataColor = reinterpret_cast<const float *>(getData("COLOR_0"));
-                const auto *dataJoints = reinterpret_cast<const void *>(getData("JOINTS_0"));
-                const auto *dataWeights = reinterpret_cast<const float *>(getData("WEIGHTS_0"));
+                auto [dataPosRaw, accessorPos] = getAttributeData("POSITION");
+                auto [dataUV0Raw, accessorUV0] = getAttributeData("TEXCOORD_0");
+                auto [dataNormRaw, accessorNorm] = getAttributeData("NORMAL");
+                auto [dataColRaw, accessorCol] = getAttributeData("COLOR_0");
+                auto [dataJointsRaw, accessorJoints] = getAttributeData("JOINTS_0");
+                auto [dataWeightsRaw, accessorWeights] = getAttributeData("WEIGHTS_0");
 
-                auto accessorPos = getAccessor("POSITION");
+                const float* dataPos = reinterpret_cast<const float*>(dataPosRaw);
+                const float* dataUV0 = reinterpret_cast<const float*>(dataUV0Raw);
+                const float* dataNormal = reinterpret_cast<const float*>(dataNormRaw);
+                const float* dataColor = reinterpret_cast<const float*>(dataColRaw);
+                const void* dataJoints = dataJointsRaw;
+                const float* dataWeights = reinterpret_cast<const float*>(dataWeightsRaw);
                 PE_ERROR_IF(!accessorPos, "No POSITION attribute found in primitive");
+                PE_ERROR_IF(!dataPos, "POSITION attribute stream is empty");
 
                 for (uint32_t i = 0; i < accessorPos->count; i++)
                 {
                     Vertex vertex{};
                     PositionUvVertex positionUvVertex{};
 
-                    std::copy(dataPos + i * 3, dataPos + (i * 3 + 3), vertex.position);
-                    std::copy(dataPos + i * 3, dataPos + (i * 3 + 3), positionUvVertex.position);
+                    // Position
+                    FillVertexPosition(vertex, dataPos[i * 3], dataPos[i * 3 + 1], dataPos[i * 3 + 2]);
+                    FillVertexPosition(positionUvVertex, dataPos[i * 3], dataPos[i * 3 + 1], dataPos[i * 3 + 2]);
 
+                    // UV
                     if (dataUV0)
-                        std::copy(dataUV0 + i * 2, dataUV0 + (i * 2 + 2), vertex.uv);
+                        FillVertexUV(vertex, dataUV0[i * 2], dataUV0[i * 2 + 1]);
+                    else
+                        FillVertexUV(vertex, 0.0f, 0.0f);
 
+                    // Normal
                     if (dataNormal)
-                        std::copy(dataNormal + i * 3, dataNormal + (i * 3 + 3), vertex.normals);
+                        FillVertexNormal(vertex, dataNormal[i * 3], dataNormal[i * 3 + 1], dataNormal[i * 3 + 2]);
                     else
-                        vertex.normals[2] = 1.f;
+                        FillVertexNormal(vertex, 0.0f, 0.0f, 1.0f);
 
+                    // Color
                     if (dataColor)
-                        std::copy(dataColor + i * 4, dataColor + (i * 4 + 4), vertex.color);
+                        FillVertexColor(vertex, dataColor[i * 4], dataColor[i * 4 + 1], dataColor[i * 4 + 2], dataColor[i * 4 + 3]);
                     else
-                        std::fill(vertex.color, vertex.color + 4, 1.f);
+                        FillVertexColor(vertex, 1.0f, 1.0f, 1.0f, 1.0f);
 
-                    if (dataJoints)
+                    // Joints and Weights
+                    uint8_t joints[4] = {0, 0, 0, 0};
+                    float weights[4] = {0.0f, 0.0f, 0.0f, 0.0f};
+
+                    if (dataJoints && accessorJoints)
                     {
-                        auto *accessorJoints = getAccessor("JOINTS_0");
+                        const size_t jointIdx = i * 4;
                         if (accessorJoints->componentType == TINYGLTF_COMPONENT_TYPE_UNSIGNED_BYTE)
                         {
                             const uint8_t *dataJoints8 = reinterpret_cast<const uint8_t *>(dataJoints);
-                            for (uint32_t j = 0; j < 4; j++)
-                                vertex.joints[j] = dataJoints8[i * 4 + j];
+                            joints[0] = dataJoints8[jointIdx];
+                            joints[1] = dataJoints8[jointIdx + 1];
+                            joints[2] = dataJoints8[jointIdx + 2];
+                            joints[3] = dataJoints8[jointIdx + 3];
                         }
                         else if (accessorJoints->componentType == TINYGLTF_COMPONENT_TYPE_UNSIGNED_SHORT)
                         {
                             const uint16_t *dataJoints16 = reinterpret_cast<const uint16_t *>(dataJoints);
-                            for (uint32_t j = 0; j < 4; j++)
-                                vertex.joints[j] = dataJoints16[i * 4 + j];
+                            joints[0] = static_cast<uint8_t>(dataJoints16[jointIdx]);
+                            joints[1] = static_cast<uint8_t>(dataJoints16[jointIdx + 1]);
+                            joints[2] = static_cast<uint8_t>(dataJoints16[jointIdx + 2]);
+                            joints[3] = static_cast<uint8_t>(dataJoints16[jointIdx + 3]);
                         }
                     }
 
                     if (dataWeights)
-                        std::copy(dataWeights + i * 4, dataWeights + (i * 4 + 4), vertex.weights);
+                    {
+                        const size_t weightIdx = i * 4;
+                        weights[0] = dataWeights[weightIdx];
+                        weights[1] = dataWeights[weightIdx + 1];
+                        weights[2] = dataWeights[weightIdx + 2];
+                        weights[3] = dataWeights[weightIdx + 3];
+                    }
+
+                    FillVertexJointsWeights(vertex, joints[0], joints[1], joints[2], joints[3],
+                                          weights[0], weights[1], weights[2], weights[3]);
+                    FillVertexJointsWeights(positionUvVertex, joints[0], joints[1], joints[2], joints[3],
+                                          weights[0], weights[1], weights[2], weights[3]);
 
                     m_vertices.push_back(vertex);
                     m_positionUvs.push_back(positionUvVertex);
@@ -474,9 +484,9 @@ namespace pe
                 // -------- Indices --------
                 if (primitive.indices >= 0)
                 {
-                    const auto &accessorIndices = accessors[primitive.indices];
-                    const auto &bufferViewIndices = bufferViews[accessorIndices.bufferView];
-                    const auto &bufferIndices = buffers[bufferViewIndices.buffer];
+                    const auto &accessorIndices = m_gltfModel.accessors[primitive.indices];
+                    const auto &bufferViewIndices = m_gltfModel.bufferViews[accessorIndices.bufferView];
+                    const auto &bufferIndices = m_gltfModel.buffers[bufferViewIndices.buffer];
                     const auto dataPtr = &bufferIndices.data[accessorIndices.byteOffset + bufferViewIndices.byteOffset];
 
                     switch (accessorIndices.componentType)
@@ -541,15 +551,15 @@ namespace pe
         auto &loading = gSettings.loading_name;
 
         progress = 0;
-        total = static_cast<uint32_t>(nodes.size());
+        total = static_cast<uint32_t>(m_gltfModel.nodes.size());
         loading = "Loading nodes";
 
         // update nodes info
         dirtyNodes = true; // set dirty so the 1st call to UpdateNodeMatrix will update nodeInfo.ubo.worldMatrix and primitiveInfo.worldBoundingBox
-        m_nodesInfo.resize(nodes.size());
-        for (int i = 0; i < nodes.size(); i++)
+        m_nodesInfo.resize(m_gltfModel.nodes.size());
+        for (int i = 0; i < m_gltfModel.nodes.size(); i++)
         {
-            tinygltf::Node &node = nodes[i];
+            tinygltf::Node &node = m_gltfModel.nodes[i];
             NodeInfo &nodeInfo = m_nodesInfo[i];
             nodeInfo.dirty = true; // set dirty so the 1st call to UpdateNodeMatrix will update nodeInfo.ubo.worldMatrix and primitiveInfo.worldBoundingBox
             nodeInfo.dirtyUniforms.resize(RHII.GetSwapchainImageCount(), false);
@@ -610,9 +620,9 @@ namespace pe
         auto &loading = gSettings.loading_name;
 
         progress = 0;
-        total = static_cast<uint32_t>(nodes.size());
+        total = static_cast<uint32_t>(m_gltfModel.nodes.size());
         loading = "Updating node matrices";
-        for (int i = 0; i < nodes.size(); i++)
+        for (int i = 0; i < m_gltfModel.nodes.size(); i++)
         {
             UpdateNodeMatrix(i);
 
@@ -621,130 +631,88 @@ namespace pe
         }
     }
 
-    void ModelGltf::UpdateNodeMatrices()
-    {
-        if (!dirtyNodes)
-            return;
-
-        tinygltf::Scene &scene = scenes[defaultScene];
-        for (int i = 0; i < scene.nodes.size(); i++)
-        {
-            UpdateNodeMatrix(i);
-        }
-
-        dirtyNodes = false;
-    }
-
     // Updates the node and recursively its children
     void ModelGltf::UpdateNodeMatrix(int node)
     {
-        if (node < 0)
+        Model::UpdateNodeMatrix(node);
+
+        // Update children recursively
+        if (node >= 0 && node < static_cast<int>(m_gltfModel.nodes.size()))
+        {
+            for (int child : m_gltfModel.nodes[node].children)
+            {
+                UpdateNodeMatrix(child);
+            }
+        }
+    }
+
+    int ModelGltf::GetMeshCount() const
+    {
+        return static_cast<int>(m_gltfModel.meshes.size());
+    }
+
+    int ModelGltf::GetNodeCount() const
+    {
+        return static_cast<int>(m_gltfModel.nodes.size());
+    }
+
+    int ModelGltf::GetNodeMesh(int nodeIndex) const
+    {
+        if (nodeIndex < 0 || nodeIndex >= static_cast<int>(m_gltfModel.nodes.size()))
+            return -1;
+        return m_gltfModel.nodes[nodeIndex].mesh;
+    }
+
+    int ModelGltf::GetMeshPrimitiveCount(int meshIndex) const
+    {
+        if (meshIndex < 0 || meshIndex >= static_cast<int>(m_gltfModel.meshes.size()))
+            return 0;
+        return static_cast<int>(m_gltfModel.meshes[meshIndex].primitives.size());
+    }
+
+    int ModelGltf::GetPrimitiveMaterial(int meshIndex, int primitiveIndex) const
+    {
+        if (meshIndex < 0 || meshIndex >= static_cast<int>(m_gltfModel.meshes.size()))
+            return -1;
+        if (primitiveIndex < 0 || primitiveIndex >= static_cast<int>(m_gltfModel.meshes[meshIndex].primitives.size()))
+            return -1;
+        return m_gltfModel.meshes[meshIndex].primitives[primitiveIndex].material;
+    }
+
+    void ModelGltf::GetPrimitiveMaterialFactors(int meshIndex, int primitiveIndex, mat4 &factors) const
+    {
+        int materialIndex = GetPrimitiveMaterial(meshIndex, primitiveIndex);
+        if (materialIndex < 0 || materialIndex >= static_cast<int>(m_gltfModel.materials.size()))
+        {
+            factors = mat4(1.f);
             return;
-
-        NodeInfo &nodeInfo = m_nodesInfo[node];
-        nodeInfo.ubo.previousWorldMatrix = nodeInfo.ubo.worldMatrix;
-        if (nodeInfo.dirty)
-        {
-            mat4 trans = nodeInfo.localMatrix;
-            int parent = nodeInfo.parent;
-            while (parent >= 0)
-            {
-                const NodeInfo &parentInfo = m_nodesInfo[parent];
-                trans = parentInfo.localMatrix * trans;
-                parent = parentInfo.parent;
-            }
-            nodeInfo.ubo.worldMatrix = matrix * trans;
         }
 
-        for (int child : nodes[node].children)
-        {
-            UpdateNodeMatrix(child);
-        }
+        const tinygltf::Material &material = m_gltfModel.materials[materialIndex];
 
-        if (nodeInfo.dirty)
-        {
-            int mesh = nodes[node].mesh;
-            if (mesh < 0)
-                return;
+        factors[0][0] = static_cast<float>(material.pbrMetallicRoughness.baseColorFactor[0]);
+        factors[0][1] = static_cast<float>(material.pbrMetallicRoughness.baseColorFactor[1]);
+        factors[0][2] = static_cast<float>(material.pbrMetallicRoughness.baseColorFactor[2]);
+        factors[0][3] = static_cast<float>(material.pbrMetallicRoughness.baseColorFactor[3]);
 
-            auto &primitives = meshes[mesh].primitives;
-            for (int i = 0; i < primitives.size(); i++)
-            {
-                // cache world bounding box
-                PrimitiveInfo &primitiveInfo = m_meshesInfo[mesh].primitivesInfo[i];
-                primitiveInfo.worldBoundingBox.min = nodeInfo.ubo.worldMatrix * vec4(primitiveInfo.boundingBox.min, 1.f);
-                primitiveInfo.worldBoundingBox.max = nodeInfo.ubo.worldMatrix * vec4(primitiveInfo.boundingBox.max, 1.f);
-            }
+        factors[1][0] = static_cast<float>(material.emissiveFactor[0]);
+        factors[1][1] = static_cast<float>(material.emissiveFactor[1]);
+        factors[1][2] = static_cast<float>(material.emissiveFactor[2]);
 
-            nodeInfo.dirty = false;
-            for (uint32_t i = 0; i < RHII.GetSwapchainImageCount(); i++)
-            {
-                nodeInfo.dirtyUniforms[i] = true;
-                dirtyUniforms[i] = true;
-            }
-        }
+        factors[2][0] = static_cast<float>(material.pbrMetallicRoughness.metallicFactor);
+        factors[2][1] = static_cast<float>(material.pbrMetallicRoughness.roughnessFactor);
+        factors[2][2] = static_cast<float>(material.alphaCutoff);
+
+        factors[3][0] = 0.f;                                                    // hasbones
+        factors[3][1] = static_cast<float>(material.normalTexture.scale);       // scaledNormal
+        factors[3][2] = static_cast<float>(material.occlusionTexture.strength); // occlusion strength
     }
 
-    void ModelGltf::SetPrimitiveFactors(Buffer *uniformBuffer)
+    float ModelGltf::GetPrimitiveAlphaCutoff(int meshIndex, int primitiveIndex) const
     {
-        // copy factors in uniform buffer
-        BufferRange range{};
-        uniformBuffer->Map();
-
-        for (int i = 0; i < nodes.size(); i++)
-        {
-            int mesh = nodes[i].mesh;
-            if (mesh < 0)
-                continue;
-
-            for (int j = 0; j < meshes[mesh].primitives.size(); j++)
-            {
-                tinygltf::Material &material = materials[meshes[mesh].primitives[j].material];
-
-                mat4 factors;
-
-                factors[0][0] = static_cast<float>(material.pbrMetallicRoughness.baseColorFactor[0]);
-                factors[0][1] = static_cast<float>(material.pbrMetallicRoughness.baseColorFactor[1]);
-                factors[0][2] = static_cast<float>(material.pbrMetallicRoughness.baseColorFactor[2]);
-                factors[0][3] = static_cast<float>(material.pbrMetallicRoughness.baseColorFactor[3]);
-
-                factors[1][0] = static_cast<float>(material.emissiveFactor[0]);
-                factors[1][1] = static_cast<float>(material.emissiveFactor[1]);
-                factors[1][2] = static_cast<float>(material.emissiveFactor[2]);
-
-                factors[2][0] = static_cast<float>(material.pbrMetallicRoughness.metallicFactor);
-                factors[2][1] = static_cast<float>(material.pbrMetallicRoughness.roughnessFactor);
-                factors[2][2] = static_cast<float>(material.alphaCutoff);
-
-                factors[3][0] = 0.f;                                                    // hasbones
-                factors[3][1] = static_cast<float>(material.normalTexture.scale);       // scaledNormal = normalize((<sampled normal texture value> * 2.0 - 1.0) * vec3(<normal scale>, <normal scale>, 1.0))
-                factors[3][2] = static_cast<float>(material.occlusionTexture.strength); // occludedColor = lerp(color, color * <sampled occlusion texture value>, <occlusion strength>)
-
-                range.data = &factors;
-                range.size = m_meshesInfo[mesh].primitivesInfo[j].dataSize;
-                range.offset = m_meshesInfo[mesh].primitivesInfo[j].dataOffset;
-                uniformBuffer->Copy(1, &range, true);
-            }
-        }
-
-        uniformBuffer->Unmap();
-    }
-
-    void ModelGltf::UploadBuffers(CommandBuffer *cmd)
-    {
-        auto &gSettings = Settings::Get<GlobalSettings>();
-        auto &progress = gSettings.loading_current;
-        auto &total = gSettings.loading_total;
-        auto &loading = gSettings.loading_name;
-
-        progress = 0;
-        total = 1;
-        loading = "Uploading buffers";
-
-        Scene &scene = GetGlobalSystem<RendererSystem>()->GetScene();
-        scene.AddModel(this);
-        scene.UpdateGeometryBuffers(cmd);
-
-        progress++;
+        int materialIndex = GetPrimitiveMaterial(meshIndex, primitiveIndex);
+        if (materialIndex < 0 || materialIndex >= static_cast<int>(m_gltfModel.materials.size()))
+            return 0.5f;
+        return static_cast<float>(m_gltfModel.materials[materialIndex].alphaCutoff);
     }
 }

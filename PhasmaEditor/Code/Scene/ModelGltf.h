@@ -1,124 +1,42 @@
 #pragma once
 
-#include "Script/Script.h"
-#include "Systems/CameraSystem.h"
+#include "Scene/Model.h"
 #include "tinygltf/tiny_gltf.h"
-#include "API/Vertex.h"
-#include "API/Pipeline.h"
 
 namespace pe
 {
-    class Buffer;
-    struct Vertex;
-    struct AabbVertex;
-    class Sampler;
+    class CommandBuffer;
 
-    struct MaterialInfo
-    {
-        vk::PrimitiveTopology topology;
-        vk::CullModeFlags cullMode;
-        bool alphaBlend;
-    };
-
-    struct PrimitiveInfo
-    {
-        bool cull = true;
-        size_t dataOffset = -1;
-        const size_t dataSize = sizeof(mat4);         // material factors
-        uint32_t vertexOffset = 0, verticesCount = 0; // offset and count in used vertex buffer
-        uint32_t indexOffset = 0, indicesCount = 0;   // offset and count in used index buffer
-        uint32_t indirectIndex = 0;                   // index of the indirect command of the primitive in the indirect buffer
-        uint32_t positionsOffset = 0;
-        size_t aabbVertexOffset = 0;
-        uint32_t aabbColor;
-        vec4 boundingSphere;
-        AABB boundingBox;
-        AABB worldBoundingBox;
-        RenderType renderType;
-        Image *images[5];
-        Sampler *samplers[5];
-        MaterialInfo materialInfo;
-
-    private:
-        friend class Geometry;
-
-        // indices in the image views array in shader
-        // 0 = Base Color
-        // 1 = Normal
-        // 2 = Metallic Roughness
-        // 3 = Occlusion
-        // 4 = Emissive
-        uint32_t viewsIndex[5] = {0, 0, 0, 0, 0}; // Updated in Geometry::UploadBuffers
-    };
-
-    struct MeshInfo
-    {
-        size_t dataOffset = -1;
-        const size_t dataSize = sizeof(mat4) * 2; // transform and previous transform
-        std::vector<PrimitiveInfo> primitivesInfo{};
-    };
-
-    struct NodeInfo
-    {
-        int parent = -1;
-        mat4 localMatrix;
-        struct UBO
-        {
-            mat4 worldMatrix = mat4(1.f);
-            mat4 previousWorldMatrix = mat4(1.f);
-        } ubo;
-        bool dirty = false;
-        std::vector<bool> dirtyUniforms;
-    };
-
-    class ModelGltf : public tinygltf::Model
+    class ModelGltf : public Model
     {
     public:
         static ModelGltf *Load(const std::filesystem::path &file);
 
         ModelGltf();
-        ~ModelGltf();
+        ~ModelGltf() override = default;
 
-        void UpdateNodeMatrices();
-        void SetPrimitiveFactors(Buffer *uniformBuffer);
+        bool LoadFile(const std::filesystem::path &file) override;
+        void UploadImages(CommandBuffer *cmd) override;
+        void CreateSamplers() override;
+        void ExtractMaterialInfo() override;
+        void ProcessAabbs() override;
+        void AcquireGeometryInfo() override;
+        void SetupNodes() override;
+        void UpdateAllNodeMatrices() override;
+        int GetMeshCount() const override;
+        int GetNodeCount() const override;
+        int GetNodeMesh(int nodeIndex) const override;
+        int GetMeshPrimitiveCount(int meshIndex) const override;
+        int GetPrimitiveMaterial(int meshIndex, int primitiveIndex) const override;
+        void GetPrimitiveMaterialFactors(int meshIndex, int primitiveIndex, mat4 &factors) const override;
+        float GetPrimitiveAlphaCutoff(int meshIndex, int primitiveIndex) const override;
+
+        tinygltf::Model &GetGltfModel() { return m_gltfModel; }
+        const tinygltf::Model &GetGltfModel() const { return m_gltfModel; }
 
     private:
-        friend class Geometry;
-        friend class DepthPass;
-        friend class GbufferOpaquePass;
-        friend class GbufferTransparentPass;
-        friend class ShadowPass;
-        friend class AabbsPass;
+        void UpdateNodeMatrix(int node) override;
 
-        void UpdateNodeMatrix(int node);
-
-        bool LoadFile(const std::filesystem::path &file, tinygltf::TinyGLTF &loader, std::string &err, std::string &warn);
-        void UploadImages(CommandBuffer *cmd);
-        void CreateSamplers();
-        void ExtractMaterialInfo();
-        void ProcessAabbs();
-        void AcquireGeometryInfo();
-        void SetupNodes();
-        void UpdateAllNodeMatrices();
-        void UploadBuffers(CommandBuffer *cmd);
-
-        std::atomic_bool m_render = false;
-        size_t m_id;
-        std::vector<Image *> m_images{};
-        std::vector<Sampler *> m_samplers{};
-        std::vector<MeshInfo> m_meshesInfo{};
-        std::vector<NodeInfo> m_nodesInfo{};
-        std::vector<Vertex> m_vertices;
-        std::vector<PositionUvVertex> m_positionUvs;
-        std::vector<AabbVertex> m_aabbVertices;
-        std::vector<uint32_t> m_indices;
-        mat4 matrix = mat4(1.f);
-        // Dirty flags are used to update nodes and uniform buffers, they are important
-        bool dirtyNodes = false;
-        std::vector<bool> dirtyUniforms;
-
-        uint32_t m_verticesCount = 0;
-        uint32_t m_indicesCount = 0;
-        uint32_t m_primitivesCount = 0;
+        tinygltf::Model m_gltfModel;
     };
 }

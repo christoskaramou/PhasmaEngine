@@ -5,7 +5,7 @@
 namespace pe
 {
     class CommandBuffer;
-    class ModelGltf;
+    class Model;
 
     class Scene
     {
@@ -23,8 +23,8 @@ namespace pe
         void DrawLightPassTransparent(CommandBuffer *cmd);
         void DrawAabbsPass(CommandBuffer *cmd);
         void DrawScene(CommandBuffer *cmd);
-        void AddModel(ModelGltf *model);
-        void RemoveModel(ModelGltf *model);
+        void AddModel(Model *model);
+        void RemoveModel(Model *model);
 
     private:
         Geometry m_geometry{};
