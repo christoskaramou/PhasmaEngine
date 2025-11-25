@@ -35,6 +35,7 @@ float4x4 LoadMatrix(uint offset)
 float4x4 GetViewProjection()                  { return LoadMatrix(0); }
 float4x4 GetMeshMatrix(uint id)               { return LoadMatrix(constants[id].meshDataOffset); }
 float4x4 GetJointMatrix(uint id, uint index)  { return LoadMatrix(constants[id].meshDataOffset + 128 + index * 64); }
+float4 GetBaseColorFactor(uint id)            { return asfloat(data.Load4(constants[id].primitiveDataOffset + 0)); }
 
 VS_OUTPUT_Position_Uv_ID mainVS(VS_INPUT_Depth input)
 {
@@ -57,6 +58,7 @@ VS_OUTPUT_Position_Uv_ID mainVS(VS_INPUT_Depth input)
 
     output.position = mul(float4(input.position, 1.0), final);
     output.uv = input.uv;
+    output.alphaFactor = GetBaseColorFactor(id).a;
 
     return output;
 }

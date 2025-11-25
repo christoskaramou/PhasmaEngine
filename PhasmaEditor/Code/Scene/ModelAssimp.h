@@ -4,8 +4,6 @@
 #include <assimp/Importer.hpp>
 #include <assimp/scene.h>
 #include <assimp/postprocess.h>
-#include <unordered_map>
-#include <initializer_list>
 
 namespace pe
 {

@@ -1,5 +1,6 @@
 #include "../Common/Structures.hlsl"
 #include "../Common/Common.hlsl"
+#include "../Common/MaterialFlags.hlsl"
 
 [[vk::push_constant]] PushConstants_GBuffer pc;
 [[vk::binding(0, 1)]] StructuredBuffer<Primitive_Constants> constants;
@@ -24,20 +25,28 @@ PS_OUTPUT_Gbuffer mainPS(PS_INPUT_Gbuffer input)
     const uint id = input.id;
     
     float2 uv = input.uv;
-    float4 basicColor = GetBaseColor(id, uv) * input.color;
-    if (basicColor.a < constants[id].alphaCut)
-            discard;
+    uint textureMask = constants[id].textureMask;
 
-    float3 metRough         = GetMetallicRoughness(id, uv).xyz;
-    float3 emissive         = GetEmissive(id, uv).xyz;
-    float3 tangentNormal    = GetNormal(id, uv).xyz;
-    float ao                = GetOcclusion(id, uv).r;
+    float4 sampledBaseColor = HasTexture(textureMask, TEX_BASE_COLOR_BIT) ? GetBaseColor(id, uv) : float4(1.0f, 1.0f, 1.0f, 1.0f);
+    float4 combinedColor    = sampledBaseColor * input.color * input.baseColorFactor;
 
-    output.normal           = CalculateNormal(input.positionWS.xyz, tangentNormal, input.normal, input.uv) * 0.5f + 0.5f;
-    output.albedo           = float4(basicColor.xyz * ao, basicColor.a) * input.baseColorFactor;
-    output.metRough         = float3(0.0f, metRough.y, metRough.z);
-    output.emissive         = float4(emissive * input.emissiveFactor, 0.0f);
-    output.transparency     = pc.transparentPass ? 1.0f : 0.0f;
+    if (combinedColor.a < constants[id].alphaCut)
+        discard;
+
+    float3 mrSample = HasTexture(textureMask, TEX_METAL_ROUGH_BIT) ? GetMetallicRoughness(id, uv).xyz : float3(1.0f, 1.0f, 1.0f);
+    float3 tangentNormal = HasTexture(textureMask, TEX_NORMAL_BIT) ? GetNormal(id, uv).xyz : float3(0.0f, 0.0f, 1.0f);
+    float occlusionSample = HasTexture(textureMask, TEX_OCCLUSION_BIT) ? GetOcclusion(id, uv).r : 1.0f;
+    float3 emissiveSample = HasTexture(textureMask, TEX_EMISSIVE_BIT) ? GetEmissive(id, uv).xyz : float3(1.0f, 1.0f, 1.0f);
+
+    float metallic = saturate(input.metRoughAlphacutOcl.x * mrSample.z);
+    float roughness = saturate(input.metRoughAlphacutOcl.y * mrSample.y);
+    float occlusion = lerp(1.0f, occlusionSample, input.metRoughAlphacutOcl.w);
+
+    output.normal = CalculateNormal(input.positionWS.xyz, tangentNormal, input.normal, input.uv) * 0.5f + 0.5f;
+    output.albedo = float4(combinedColor.xyz * occlusion, combinedColor.a);
+    output.metRough = float3(0.0f, roughness, metallic);
+    output.emissive = float4(emissiveSample * input.emissiveFactor, 0.0f);
+    output.transparency = pc.transparentPass ? 1.0f : 0.0f;
 
     // Calculate the velocity
     // Ensure that the positions are in NDC space by dividing by the w component

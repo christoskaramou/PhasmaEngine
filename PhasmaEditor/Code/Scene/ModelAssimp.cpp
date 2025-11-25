@@ -9,8 +9,6 @@
 #include "Scene/Scene.h"
 #include "Base/Path.h"
 #include <assimp/GltfMaterial.h>
-#include <algorithm>
-#include <cctype>
 
 #undef max
 
@@ -590,16 +588,33 @@ namespace pe
             return;
         }
 
+        if (meshIndex < 0 || meshIndex >= static_cast<int>(m_meshesInfo.size()))
+        {
+            factors = mat4(1.f);
+            return;
+        }
+        if (primitiveIndex < 0 || primitiveIndex >= static_cast<int>(m_meshesInfo[meshIndex].primitivesInfo.size()))
+        {
+            factors = mat4(1.f);
+            return;
+        }
+
         aiMaterial *material = m_scene->mMaterials[materialIndex];
+        factors = mat4(1.f);
+
+        const PrimitiveInfo *primitiveInfo = GetPrimitiveInfo(meshIndex, primitiveIndex);
+        const bool hasNormalMap = primitiveInfo && (primitiveInfo->textureMask & TextureBit(TextureType::Normal));
+        const bool hasOcclusionMap = primitiveInfo && (primitiveInfo->textureMask & TextureBit(TextureType::Occlusion));
 
         aiColor4D baseColor(1.f, 1.f, 1.f, 1.f);
         aiColor3D diffuseColor(1.f, 1.f, 1.f);
         aiColor3D emissive(0.f, 0.f, 0.f);
-        float metallic = 1.f;
+        aiColor3D specular(0.f, 0.f, 0.f);
+        float metallic = 0.f;
         float roughness = 1.f;
         float alphaCutoff = 0.5f;
-        float normalScale = 1.f;
-        float occlusionStrength = 1.f;
+        float normalScale = hasNormalMap ? 1.f : 0.f;
+        float occlusionStrength = hasOcclusionMap ? 1.f : 0.f;
 
 #ifdef AI_MATKEY_BASE_COLOR
         if (material->Get(AI_MATKEY_BASE_COLOR, baseColor) != AI_SUCCESS)
@@ -615,16 +630,34 @@ namespace pe
         }
 
         material->Get(AI_MATKEY_COLOR_EMISSIVE, emissive);
+        material->Get(AI_MATKEY_COLOR_SPECULAR, specular);
 
-#ifdef AI_MATKEY_METALLIC_FACTOR
-        material->Get(AI_MATKEY_METALLIC_FACTOR, metallic);
-#endif
-#ifdef AI_MATKEY_ROUGHNESS_FACTOR
-        material->Get(AI_MATKEY_ROUGHNESS_FACTOR, roughness);
-#endif
+    #ifdef AI_MATKEY_METALLIC_FACTOR
+        bool hasMetallicFactor = material->Get(AI_MATKEY_METALLIC_FACTOR, metallic) == AI_SUCCESS;
+    #else
+        bool hasMetallicFactor = false;
+    #endif
+    #ifdef AI_MATKEY_ROUGHNESS_FACTOR
+        bool hasRoughnessFactor = material->Get(AI_MATKEY_ROUGHNESS_FACTOR, roughness) == AI_SUCCESS;
+    #else
+        bool hasRoughnessFactor = false;
+    #endif
 #ifdef AI_MATKEY_GLTF_ALPHACUTOFF
         material->Get(AI_MATKEY_GLTF_ALPHACUTOFF, alphaCutoff);
 #endif
+
+        if (!hasMetallicFactor)
+        {
+            float specularIntensity = std::max(specular.r, std::max(specular.g, specular.b));
+            metallic = glm::clamp(specularIntensity, 0.f, 1.f);
+        }
+
+        if (!hasRoughnessFactor)
+        {
+            float shininess = 0.f;
+            if (material->Get(AI_MATKEY_SHININESS, shininess) == AI_SUCCESS && shininess > 0.f)
+            roughness = glm::clamp(std::sqrt(2.f / (shininess + 2.f)), 0.f, 1.f);
+        }
 
         factors[0][0] = baseColor.r;
         factors[0][1] = baseColor.g;
@@ -638,10 +671,11 @@ namespace pe
         factors[2][0] = metallic;
         factors[2][1] = roughness;
         factors[2][2] = alphaCutoff;
+        factors[2][3] = occlusionStrength;
 
         factors[3][0] = 0.f; // has bones flag (unused for now)
         factors[3][1] = normalScale;
-        factors[3][2] = occlusionStrength;
+        factors[3][2] = 0.f;
     }
 
     float ModelAssimp::GetPrimitiveAlphaCutoff(int meshIndex, int primitiveIndex) const
@@ -734,6 +768,7 @@ namespace pe
     void ModelAssimp::AssignTexture(PrimitiveInfo &primitiveInfo, TextureType type, aiMaterial *material, std::initializer_list<aiTextureType> textureTypes, Image *defaultImage)
     {
         Image *image = defaultImage;
+        bool hasTexture = false;
         for (aiTextureType aiType : textureTypes)
         {
             std::filesystem::path texPath = GetTexturePath(material, aiType, 0);
@@ -743,12 +778,15 @@ namespace pe
             if (Image *loaded = FindTexture(texPath))
             {
                 image = loaded;
+                hasTexture = true;
                 break;
             }
         }
 
         primitiveInfo.images[static_cast<int>(type)] = image ? image : defaultImage;
         primitiveInfo.samplers[static_cast<int>(type)] = g_defaultSampler;
+        if (hasTexture)
+            primitiveInfo.textureMask |= (1u << static_cast<uint32_t>(type));
     }
 
     RenderType ModelAssimp::DetermineRenderType(aiMaterial *material) const

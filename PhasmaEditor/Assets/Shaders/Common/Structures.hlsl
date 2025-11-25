@@ -68,6 +68,7 @@ struct Primitive_Constants
     float alphaCut;
     uint meshDataOffset;
     uint primitiveDataOffset;
+    uint textureMask;
     uint primitiveImageIndex[5];
 };
 
@@ -113,6 +114,7 @@ struct VS_OUTPUT_Position_Uv
 struct VS_OUTPUT_Position_Uv_ID
 {
     float2 uv                   : TEXCOORD0;
+    float alphaFactor           : TEXCOORD1;
     float4 position             : SV_POSITION;
     uint id                     : SV_InstanceID;
 };
@@ -163,6 +165,7 @@ struct PS_INPUT_Position_Uv
 struct PS_INPUT_Position_Uv_ID
 {
     float2 uv                   : TEXCOORD0;
+    float alphaFactor           : TEXCOORD1;
     float4 position             : SV_POSITION;
     uint id                     : SV_InstanceID;
 };
