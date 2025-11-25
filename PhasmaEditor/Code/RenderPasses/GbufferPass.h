@@ -14,12 +14,13 @@ namespace pe
         vec2 prevProjJitter;
         uint32_t transparentPass;
     };
-    
+
     struct Primitive_Constants
     {
         float alphaCut;
         uint32_t meshDataOffset;
         uint32_t primitiveDataOffset;
+        uint32_t textureMask;
         uint32_t primitiveImageIndex[5];
     };
 

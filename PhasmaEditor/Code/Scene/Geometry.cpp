@@ -407,6 +407,7 @@ namespace pe
                     constants.alphaCut = model.GetPrimitiveAlphaCutoff(meshIndex, static_cast<int>(primitiveIndex));
                     constants.meshDataOffset = static_cast<uint32_t>(meshInfo.dataOffset);
                     constants.primitiveDataOffset = static_cast<uint32_t>(primitiveInfo.dataOffset);
+                    constants.textureMask = primitiveInfo.textureMask;
                     for (int k = 0; k < 5; k++)
                         constants.primitiveImageIndex[k] = primitiveInfo.viewsIndex[k];
 

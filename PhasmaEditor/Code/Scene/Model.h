@@ -36,8 +36,9 @@ namespace pe
         AABB boundingBox;
         AABB worldBoundingBox;
         RenderType renderType;
-        Image *images[5];
-        Sampler *samplers[5];
+        Image *images[5]{nullptr};
+        Sampler *samplers[5]{nullptr};
+        uint32_t textureMask = 0;
         MaterialInfo materialInfo;
 
     private:
@@ -133,6 +134,11 @@ namespace pe
         friend class AabbsPass;
 
         virtual void UpdateNodeMatrix(int node);
+        const PrimitiveInfo *GetPrimitiveInfo(int meshIndex, int primitiveIndex) const;
+        static constexpr uint32_t TextureBit(TextureType type)
+        {
+            return 1u << static_cast<uint32_t>(type);
+        }
 
         // Helper methods for vertex processing (inline for performance)
         static inline void FillVertexPosition(Vertex &vertex, float x, float y, float z);
@@ -142,9 +148,9 @@ namespace pe
         static inline void FillVertexNormal(Vertex &vertex, float x, float y, float z);
         static inline void FillVertexColor(Vertex &vertex, float r, float g, float b, float a);
         static inline void FillVertexJointsWeights(Vertex &vertex, uint8_t j0, uint8_t j1, uint8_t j2, uint8_t j3,
-                                           float w0, float w1, float w2, float w3);
+                                                   float w0, float w1, float w2, float w3);
         static inline void FillVertexJointsWeights(PositionUvVertex &vertex, uint8_t j0, uint8_t j1, uint8_t j2, uint8_t j3,
-                                           float w0, float w1, float w2, float w3);
+                                                   float w0, float w1, float w2, float w3);
 
         std::atomic_bool m_render = false;
         size_t m_id;
@@ -209,7 +215,7 @@ namespace pe
     }
 
     inline void Model::FillVertexJointsWeights(Vertex &vertex, uint8_t j0, uint8_t j1, uint8_t j2, uint8_t j3,
-                                              float w0, float w1, float w2, float w3)
+                                               float w0, float w1, float w2, float w3)
     {
         vertex.joints[0] = j0;
         vertex.joints[1] = j1;
@@ -222,7 +228,7 @@ namespace pe
     }
 
     inline void Model::FillVertexJointsWeights(PositionUvVertex &vertex, uint8_t j0, uint8_t j1, uint8_t j2, uint8_t j3,
-                                              float w0, float w1, float w2, float w3)
+                                               float w0, float w1, float w2, float w3)
     {
         vertex.joints[0] = j0;
         vertex.joints[1] = j1;

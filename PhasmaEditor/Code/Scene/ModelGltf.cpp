@@ -6,6 +6,8 @@
 #include "API/RHI.h"
 #include "Systems/RendererSystem.h"
 #include "Scene/Scene.h"
+#include <algorithm>
+#include <cctype>
 
 #undef max
 
@@ -15,6 +17,42 @@ namespace pe
     Image *g_defaultNormal = nullptr;
     Image *g_defaultWhite = nullptr;
     Sampler *g_defaultSampler = nullptr;
+
+    namespace
+    {
+        RenderType ResolveRenderType(const std::string &alphaMode)
+        {
+            std::string mode = alphaMode;
+            std::transform(mode.begin(), mode.end(), mode.begin(), [](unsigned char c)
+                           { return static_cast<char>(std::toupper(c)); });
+
+            if (mode == "BLEND")
+                return RenderType::AlphaBlend;
+            if (mode == "MASK")
+                return RenderType::AlphaCut;
+
+            return RenderType::Opaque;
+        }
+
+        const tinygltf::Material &GetMaterialOrDefault(const tinygltf::Model &model, int materialIndex)
+        {
+            static tinygltf::Material defaultMaterial = []()
+            {
+                tinygltf::Material material{};
+                material.alphaMode = "OPAQUE";
+                material.doubleSided = false;
+                material.pbrMetallicRoughness.baseColorFactor = {1.0, 1.0, 1.0, 1.0};
+                material.pbrMetallicRoughness.metallicFactor = 0.0;
+                material.pbrMetallicRoughness.roughnessFactor = 1.0;
+                return material;
+            }();
+
+            if (materialIndex >= 0 && materialIndex < static_cast<int>(model.materials.size()))
+                return model.materials[materialIndex];
+
+            return defaultMaterial;
+        }
+    }
 
     ModelGltf::ModelGltf() = default;
 
@@ -224,7 +262,7 @@ namespace pe
                 tinygltf::Primitive &primitive = mesh.primitives[j];
                 PrimitiveInfo &primitiveInfo = meshInfo.primitivesInfo[j];
 
-                tinygltf::Material &material = m_gltfModel.materials[primitive.material];
+                const tinygltf::Material &material = GetMaterialOrDefault(m_gltfModel, primitive.material);
                 MaterialInfo &materialInfo = primitiveInfo.materialInfo;
 
                 switch (primitive.mode)
@@ -252,7 +290,7 @@ namespace pe
                     break;
                 }
                 materialInfo.cullMode = material.doubleSided ? vk::CullModeFlagBits::eNone : vk::CullModeFlagBits::eFront;
-                materialInfo.alphaBlend = material.alphaMode == "BLEND" || material.alphaMode == "MASK";
+                materialInfo.alphaBlend = ResolveRenderType(material.alphaMode) != RenderType::Opaque;
 
                 // Update loading bar
                 progress++;
@@ -279,14 +317,21 @@ namespace pe
             for (int j = 0; j < mesh.primitives.size(); j++)
             {
                 auto posIt = mesh.primitives[j].attributes.find("POSITION");
+                PE_ERROR_IF(posIt == mesh.primitives[j].attributes.end(), "Primitive missing POSITION attribute");
+                if (posIt == mesh.primitives[j].attributes.end())
+                    continue;
+
                 const auto &accessorPos = m_gltfModel.accessors[posIt->second];
-                const auto &accessorIndices = m_gltfModel.accessors[mesh.primitives[j].indices];
+
+                const tinygltf::Accessor *indicesAccessor = nullptr;
+                if (mesh.primitives[j].indices >= 0 && mesh.primitives[j].indices < static_cast<int>(m_gltfModel.accessors.size()))
+                    indicesAccessor = &m_gltfModel.accessors[mesh.primitives[j].indices];
 
                 PrimitiveInfo &primitiveInfo = meshInfo.primitivesInfo[j];
                 primitiveInfo.vertexOffset = m_verticesCount;
                 primitiveInfo.verticesCount = static_cast<uint32_t>(accessorPos.count);
                 primitiveInfo.indexOffset = m_indicesCount;
-                primitiveInfo.indicesCount = static_cast<uint32_t>(accessorIndices.count);
+                primitiveInfo.indicesCount = indicesAccessor ? static_cast<uint32_t>(indicesAccessor->count) : primitiveInfo.verticesCount;
                 primitiveInfo.aabbVertexOffset = m_primitivesCount * 8;
                 primitiveInfo.boundingBox.min.x = static_cast<float>(accessorPos.minValues[0]);
                 primitiveInfo.boundingBox.min.y = static_cast<float>(accessorPos.minValues[1]);
@@ -296,7 +341,7 @@ namespace pe
                 primitiveInfo.boundingBox.max.z = static_cast<float>(accessorPos.maxValues[2]);
 
                 m_verticesCount += static_cast<uint32_t>(accessorPos.count);
-                m_indicesCount += static_cast<uint32_t>(accessorIndices.count);
+                m_indicesCount += primitiveInfo.indicesCount;
                 m_primitivesCount++;
 
                 // Update loading bar
@@ -321,8 +366,6 @@ namespace pe
         m_aabbVertices.reserve(m_primitivesCount * 8);
         m_indices.reserve(m_indicesCount);
 
-        size_t indexOffset = 0;
-
         for (uint32_t i = 0; i < m_gltfModel.meshes.size(); i++)
         {
             tinygltf::Mesh &mesh = m_gltfModel.meshes[i];
@@ -332,35 +375,34 @@ namespace pe
             {
                 tinygltf::Primitive &primitive = mesh.primitives[j];
                 PrimitiveInfo &primitiveInfo = meshInfo.primitivesInfo[j];
-                tinygltf::Material &material = m_gltfModel.materials[primitive.material];
+                const tinygltf::Material &material = GetMaterialOrDefault(m_gltfModel, primitive.material);
 
                 // -------- Alpha Mode --------
-                if (material.alphaMode == "BLEND")
-                    primitiveInfo.renderType = RenderType::AlphaBlend;
-                else if (material.alphaMode == "MASK")
-                    primitiveInfo.renderType = RenderType::AlphaCut;
-                else if (material.alphaMode == "OPAQUE")
-                    primitiveInfo.renderType = RenderType::Opaque;
-                else
-                    PE_ERROR("Invalid alphaMode type");
+                primitiveInfo.renderType = ResolveRenderType(material.alphaMode);
 
                 // -------- Image & Sampler Setup --------
                 auto setTexture = [this, &primitiveInfo](TextureType type, int gltfIndex, Image *defaultImage)
                 {
                     Image *image = defaultImage;
                     Sampler *sampler = g_defaultSampler;
+                    bool hasTexture = false;
 
                     if (gltfIndex >= 0)
                     {
                         const auto &texture = m_gltfModel.textures[gltfIndex];
-                        if (texture.source >= 0)
+                        if (texture.source >= 0 && texture.source < static_cast<int>(m_images.size()))
+                        {
                             image = m_images[texture.source];
+                            hasTexture = true;
+                        }
                         if (texture.sampler >= 0)
                             sampler = m_samplers[texture.sampler];
                     }
 
                     primitiveInfo.images[static_cast<int>(type)] = image;
                     primitiveInfo.samplers[static_cast<int>(type)] = sampler;
+                    if (hasTexture)
+                        primitiveInfo.textureMask |= (1u << static_cast<uint32_t>(type));
                 };
                 setTexture(TextureType::BaseColor, material.pbrMetallicRoughness.baseColorTexture.index, g_defaultBlack);
                 setTexture(TextureType::MetallicRoughness, material.pbrMetallicRoughness.metallicRoughnessTexture.index, g_defaultBlack);
@@ -369,7 +411,7 @@ namespace pe
                 setTexture(TextureType::Emissive, material.emissiveTexture.index, g_defaultBlack);
 
                 // -------- Attribute Extraction --------
-                auto getAttributeData = [this, &primitive](const char* attrName) -> std::pair<const uint8_t*, const tinygltf::Accessor*>
+                auto getAttributeData = [this, &primitive](const char *attrName) -> std::pair<const uint8_t *, const tinygltf::Accessor *>
                 {
                     auto attrIt = primitive.attributes.find(attrName);
                     if (attrIt == primitive.attributes.end())
@@ -401,12 +443,12 @@ namespace pe
                 auto [dataJointsRaw, accessorJoints] = getAttributeData("JOINTS_0");
                 auto [dataWeightsRaw, accessorWeights] = getAttributeData("WEIGHTS_0");
 
-                const float* dataPos = reinterpret_cast<const float*>(dataPosRaw);
-                const float* dataUV0 = reinterpret_cast<const float*>(dataUV0Raw);
-                const float* dataNormal = reinterpret_cast<const float*>(dataNormRaw);
-                const float* dataColor = reinterpret_cast<const float*>(dataColRaw);
-                const void* dataJoints = dataJointsRaw;
-                const float* dataWeights = reinterpret_cast<const float*>(dataWeightsRaw);
+                const float *dataPos = reinterpret_cast<const float *>(dataPosRaw);
+                const float *dataUV0 = reinterpret_cast<const float *>(dataUV0Raw);
+                const float *dataNormal = reinterpret_cast<const float *>(dataNormRaw);
+                const float *dataColor = reinterpret_cast<const float *>(dataColRaw);
+                const void *dataJoints = dataJointsRaw;
+                const float *dataWeights = reinterpret_cast<const float *>(dataWeightsRaw);
                 PE_ERROR_IF(!accessorPos, "No POSITION attribute found in primitive");
                 PE_ERROR_IF(!dataPos, "POSITION attribute stream is empty");
 
@@ -472,9 +514,9 @@ namespace pe
                     }
 
                     FillVertexJointsWeights(vertex, joints[0], joints[1], joints[2], joints[3],
-                                          weights[0], weights[1], weights[2], weights[3]);
+                                            weights[0], weights[1], weights[2], weights[3]);
                     FillVertexJointsWeights(positionUvVertex, joints[0], joints[1], joints[2], joints[3],
-                                          weights[0], weights[1], weights[2], weights[3]);
+                                            weights[0], weights[1], weights[2], weights[3]);
 
                     m_vertices.push_back(vertex);
                     m_positionUvs.push_back(positionUvVertex);
@@ -517,8 +559,13 @@ namespace pe
                         break;
                     }
 
-                    indexOffset += static_cast<uint32_t>(accessorIndices.count);
-                    progress += primitive.indices;
+                    progress += primitiveInfo.indicesCount;
+                }
+                else
+                {
+                    for (uint32_t iVertex = 0; iVertex < primitiveInfo.verticesCount; iVertex++)
+                        m_indices.push_back(iVertex);
+                    progress += primitiveInfo.verticesCount;
                 }
 
                 // -------- AABB Vertices --------
@@ -681,14 +728,26 @@ namespace pe
 
     void ModelGltf::GetPrimitiveMaterialFactors(int meshIndex, int primitiveIndex, mat4 &factors) const
     {
-        int materialIndex = GetPrimitiveMaterial(meshIndex, primitiveIndex);
-        if (materialIndex < 0 || materialIndex >= static_cast<int>(m_gltfModel.materials.size()))
+        if (meshIndex < 0 || meshIndex >= static_cast<int>(m_meshesInfo.size()))
+        {
+            factors = mat4(1.f);
+            return;
+        }
+        if (primitiveIndex < 0 || primitiveIndex >= static_cast<int>(m_meshesInfo[meshIndex].primitivesInfo.size()))
         {
             factors = mat4(1.f);
             return;
         }
 
-        const tinygltf::Material &material = m_gltfModel.materials[materialIndex];
+        int materialIndex = GetPrimitiveMaterial(meshIndex, primitiveIndex);
+        const tinygltf::Material &material = GetMaterialOrDefault(m_gltfModel, materialIndex);
+        factors = mat4(1.f);
+
+        const PrimitiveInfo *primitiveInfo = GetPrimitiveInfo(meshIndex, primitiveIndex);
+        const bool hasOcclusionTexture = primitiveInfo && (primitiveInfo->textureMask & TextureBit(TextureType::Occlusion));
+        const bool hasNormalTexture = primitiveInfo && (primitiveInfo->textureMask & TextureBit(TextureType::Normal));
+        float occlusionStrength = hasOcclusionTexture ? static_cast<float>(material.occlusionTexture.strength) : 0.0f;
+        float normalScale = hasNormalTexture ? static_cast<float>(material.normalTexture.scale) : 0.0f;
 
         factors[0][0] = static_cast<float>(material.pbrMetallicRoughness.baseColorFactor[0]);
         factors[0][1] = static_cast<float>(material.pbrMetallicRoughness.baseColorFactor[1]);
@@ -702,17 +761,22 @@ namespace pe
         factors[2][0] = static_cast<float>(material.pbrMetallicRoughness.metallicFactor);
         factors[2][1] = static_cast<float>(material.pbrMetallicRoughness.roughnessFactor);
         factors[2][2] = static_cast<float>(material.alphaCutoff);
+        factors[2][3] = occlusionStrength;
 
-        factors[3][0] = 0.f;                                                    // hasbones
-        factors[3][1] = static_cast<float>(material.normalTexture.scale);       // scaledNormal
-        factors[3][2] = static_cast<float>(material.occlusionTexture.strength); // occlusion strength
+        factors[3][0] = 0.f;               // hasbones
+        factors[3][1] = normalScale;       // scaledNormal
+        factors[3][2] = 0.f;               // legacy slot unused
     }
 
     float ModelGltf::GetPrimitiveAlphaCutoff(int meshIndex, int primitiveIndex) const
     {
-        int materialIndex = GetPrimitiveMaterial(meshIndex, primitiveIndex);
-        if (materialIndex < 0 || materialIndex >= static_cast<int>(m_gltfModel.materials.size()))
+        if (meshIndex < 0 || meshIndex >= static_cast<int>(m_meshesInfo.size()))
             return 0.5f;
-        return static_cast<float>(m_gltfModel.materials[materialIndex].alphaCutoff);
+        if (primitiveIndex < 0 || primitiveIndex >= static_cast<int>(m_meshesInfo[meshIndex].primitivesInfo.size()))
+            return 0.5f;
+
+        int materialIndex = GetPrimitiveMaterial(meshIndex, primitiveIndex);
+        const tinygltf::Material &material = GetMaterialOrDefault(m_gltfModel, materialIndex);
+        return static_cast<float>(material.alphaCutoff);
     }
 }

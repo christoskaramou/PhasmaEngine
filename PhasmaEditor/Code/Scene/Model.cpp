@@ -6,8 +6,6 @@
 #include "API/Image.h"
 #include "Systems/RendererSystem.h"
 #include "Scene/Scene.h"
-#include <algorithm>
-#include <cctype>
 
 namespace pe
 {
@@ -23,8 +21,8 @@ namespace pe
         std::string ext = file.extension().string();
         std::transform(ext.begin(), ext.end(), ext.begin(), [](unsigned char c) { return std::tolower(c); });
 
-        // if (ext == ".gltf" || ext == ".glb")
-        //     return ModelGltf::Load(file);
+        if (ext == ".gltf" || ext == ".glb")
+            return ModelGltf::Load(file);
 
         return ModelAssimp::Load(file);
     }
@@ -92,6 +90,18 @@ namespace pe
                 dirtyUniforms[i] = true;
             }
         }
+    }
+
+    const PrimitiveInfo *Model::GetPrimitiveInfo(int meshIndex, int primitiveIndex) const
+    {
+        if (meshIndex < 0 || meshIndex >= static_cast<int>(m_meshesInfo.size()))
+            return nullptr;
+
+        const auto &primitives = m_meshesInfo[meshIndex].primitivesInfo;
+        if (primitiveIndex < 0 || primitiveIndex >= static_cast<int>(primitives.size()))
+            return nullptr;
+
+        return &primitives[primitiveIndex];
     }
 
     void Model::SetPrimitiveFactors(Buffer *uniformBuffer)
