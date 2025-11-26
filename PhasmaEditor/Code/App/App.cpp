@@ -128,11 +128,16 @@ namespace pe
 
         // Get ImGui render data ready
         ImGui::Render();
-        ImGui::UpdatePlatformWindows();
         m_frameTimer.CountUpdatesStamp();
 
         if (!m_window->isMinimized())
+        {
             DrawGlobalSystems();
+            
+            // Render platform windows (floating ImGui windows) after main rendering
+            GetGlobalSystem<RendererSystem>()->DrawPlatformWindows();
+        }
+        
         m_frameTimer.CountCpuTotalStamp();
         m_frameTimer.CountDeltaTime();
 

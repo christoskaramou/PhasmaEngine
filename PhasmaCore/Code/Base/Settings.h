@@ -52,6 +52,7 @@ namespace pe
         float time_scale = 1.f;
         std::vector<std::string> file_list{};
         std::vector<std::string> shader_list{};
+        std::vector<std::string> model_list{};
         Image *current_rendering_image = nullptr;
         std::vector<Image *> rendering_images{};
         std::string loading_name = "Loading";

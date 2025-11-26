@@ -135,7 +135,7 @@ namespace pe
 #define PE_ERROR_MESSAGES 0
 #define PE_DEBUG_MESSENGER 0
 #define PE_USE_GLM 1
-#define PE_RENDER_DOC 0
+#define PE_RENDER_DOC 1
 }
 
 #define PE_CHECK(res)                                         \
