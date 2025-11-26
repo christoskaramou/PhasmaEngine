@@ -5,7 +5,7 @@ namespace pe
     class DescriptorPool : public PeHandle<DescriptorPool, vk::DescriptorPool>
     {
     public:
-        DescriptorPool(const std::vector<vk::DescriptorPoolSize> &sizes, const std::string &name);
+        DescriptorPool(const std::vector<vk::DescriptorPoolSize> &sizes, const std::string &name, uint32_t maxSets = 1);
         ~DescriptorPool();
     };
 

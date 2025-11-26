@@ -457,7 +457,7 @@ namespace pe
         appInfo.sType = vk::StructureType::eApplicationInfo;
         appInfo.pApplicationName = "PhasmaEngine";
         appInfo.pEngineName = "PhasmaEngine";
-        appInfo.apiVersion = VK_API_VERSION_1_3;
+        appInfo.apiVersion = VK_API_VERSION_1_4;
 
         vk::InstanceCreateInfo instInfo{};
         instInfo.pApplicationInfo = &appInfo;
@@ -698,7 +698,7 @@ namespace pe
         descPoolsizes[3].descriptorCount = maxDescriptorSets;
         descPoolsizes[4].type = vk::DescriptorType::eUniformBufferDynamic;
         descPoolsizes[4].descriptorCount = maxDescriptorSets;
-        m_descriptorPool = DescriptorPool::Create(descPoolsizes, "RHI_descriptor_pool");
+        m_descriptorPool = DescriptorPool::Create(descPoolsizes, "RHI_descriptor_pool", maxDescriptorSets);
     }
 
     vk::Format RHI::GetDepthFormat()
@@ -869,7 +869,7 @@ namespace pe
             s_extMemoryBudgetAvailable = IsDeviceExtensionValid(VK_EXT_MEMORY_BUDGET_EXTENSION_NAME);
             s_extMemoryBudgetChecked = true;
         }
-        
+
         if (!s_extMemoryBudgetAvailable)
             return snap;
 

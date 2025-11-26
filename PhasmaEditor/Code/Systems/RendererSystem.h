@@ -40,6 +40,7 @@ namespace pe
         void Update() override;
         void Destroy() override;
         void Draw() override;
+        void DrawPlatformWindows();
 
         Scene &GetScene() { return m_scene; }
         const SkyBox &GetSkyBoxDay() const { return m_skyBoxDay; }

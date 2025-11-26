@@ -304,6 +304,11 @@ namespace pe
         // PRESENT
         queue->Present(swapchain, imageIndex, submitSemaphore);
     }
+    
+    void RendererSystem::DrawPlatformWindows()
+    {
+        m_gui.DrawPlatformWindows();
+    }
 
     void RendererSystem::Destroy()
     {

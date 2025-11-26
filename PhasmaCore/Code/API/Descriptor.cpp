@@ -5,13 +5,15 @@
 
 namespace pe
 {
-    DescriptorPool::DescriptorPool(const std::vector<vk::DescriptorPoolSize> &sizes, const std::string &name)
+    DescriptorPool::DescriptorPool(const std::vector<vk::DescriptorPoolSize> &sizes,
+                                   const std::string &name,
+                                   uint32_t maxSets)
     {
         vk::DescriptorPoolCreateInfo createInfo{};
         createInfo.flags = vk::DescriptorPoolCreateFlagBits::eUpdateAfterBind | vk::DescriptorPoolCreateFlagBits::eFreeDescriptorSet;
         createInfo.poolSizeCount = static_cast<uint32_t>(sizes.size());
         createInfo.pPoolSizes = sizes.data();
-        createInfo.maxSets = 1; // Unique descriptor sets for each descriptor pool
+        createInfo.maxSets = std::max(1u, maxSets);
 
         m_apiHandle = RHII.GetDevice().createDescriptorPool(createInfo);
 
