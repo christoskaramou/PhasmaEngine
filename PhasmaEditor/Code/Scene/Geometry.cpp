@@ -10,17 +10,17 @@
 
 namespace pe
 {
+    // AABBs Indices
+    std::vector<uint32_t> Geometry::s_aabbIndices = {
+        0, 1, 1, 2, 2, 3, 3, 0, // Near face edges
+        4, 5, 5, 6, 6, 7, 7, 4, // Far face edges
+        0, 4, 1, 5, 2, 6, 3, 7  // Connecting edges between near and far faces
+    };
+
     Geometry::Geometry()
     {
         Camera *camera = GetGlobalSystem<CameraSystem>()->GetCamera(0);
         m_cameras.push_back(camera);
-
-        // AABBs Indices
-        m_aabbIndices = {
-            0, 1, 1, 2, 2, 3, 3, 0, // Near face edges
-            4, 5, 5, 6, 6, 7, 7, 4, // Far face edges
-            0, 4, 1, 5, 2, 6, 3, 7  // Connecting edges between near and far faces
-        };
 
         uint32_t swapchainImageCount = RHII.GetSwapchainImageCount();
         m_storages.resize(swapchainImageCount, nullptr);
@@ -125,7 +125,7 @@ namespace pe
 
         // Aabb indices
         m_aabbIndicesOffset = indicesCount * sizeof(uint32_t);
-        cmd->CopyBufferStaged(m_buffer, m_aabbIndices.data(), m_aabbIndices.size() * sizeof(uint32_t), m_aabbIndicesOffset);
+        cmd->CopyBufferStaged(m_buffer, s_aabbIndices.data(), s_aabbIndices.size() * sizeof(uint32_t), m_aabbIndicesOffset);
 
         vk::BufferMemoryBarrier2 aabbIndexBarrierInfo{};
         aabbIndexBarrierInfo.buffer = m_buffer->ApiHandle();
@@ -133,7 +133,7 @@ namespace pe
         aabbIndexBarrierInfo.dstAccessMask = vk::AccessFlagBits2::eIndexRead;
         aabbIndexBarrierInfo.srcStageMask = vk::PipelineStageFlagBits2::eTransfer;
         aabbIndexBarrierInfo.dstStageMask = vk::PipelineStageFlagBits2::eVertexInput;
-        aabbIndexBarrierInfo.size = m_aabbIndices.size() * sizeof(uint32_t);
+        aabbIndexBarrierInfo.size = s_aabbIndices.size() * sizeof(uint32_t);
         aabbIndexBarrierInfo.offset = m_aabbIndicesOffset;
         cmd->BufferBarrier(aabbIndexBarrierInfo);
     }

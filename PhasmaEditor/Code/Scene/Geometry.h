@@ -44,11 +44,12 @@ namespace pe
         size_t GetPositionsOffset() const { return m_positionsOffset; }
         size_t GetAabbVerticesOffset() const { return m_aabbVerticesOffset; }
         size_t GetAabbIndicesOffset() const { return m_aabbIndicesOffset; }
-        std::vector<uint32_t> &GetAabbIndices() { return m_aabbIndices; }
         const std::vector<DrawInfo> &GetDrawInfosOpaque() const { return m_drawInfosOpaque; }
         const std::vector<DrawInfo> &GetDrawInfosAlphaCut() const { return m_drawInfosAlphaCut; }
         const std::vector<DrawInfo> &GetDrawInfosAlphaBlend() const { return m_drawInfosAlphaBlend; }
         uint32_t GetPrimitivesCount() const { return m_primitivesCount; }
+
+        static const std::vector<uint32_t> &GetAabbIndices() { return s_aabbIndices; }
 
     private:
         void CullNodePrimitives(Model &model, int node);
@@ -86,7 +87,6 @@ namespace pe
         size_t m_aabbIndicesOffset = 0;
         uint32_t m_primitivesCount = 0;
 
-        std::vector<uint32_t> m_aabbIndices;
         std::vector<vk::ImageView> m_imageViews;
         std::vector<bool> m_dirtyDescriptorViews;
 
@@ -96,5 +96,7 @@ namespace pe
         std::vector<vk::DrawIndexedIndirectCommand> m_indirectCommands;
 
         std::mutex m_drawInfosMutex;
+        
+        static std::vector<uint32_t> s_aabbIndices;
     };
 }

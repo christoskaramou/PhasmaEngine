@@ -5,7 +5,7 @@
 
 namespace pe
 {
-    Buffer::Buffer(size_t size, vk::BufferUsageFlags2 usage, VmaAllocationCreateFlags createFlags, const std::string &name)
+    Buffer::Buffer(size_t size, vk::BufferUsageFlags2 usage, VmaAllocationCreateFlags vmaCreateFlags, const std::string &name)
         : m_size{size},
           m_usage{usage},
           m_name{name},
@@ -37,7 +37,7 @@ namespace pe
 
         VmaAllocationCreateInfo allocationCreateInfo{};
         allocationCreateInfo.usage = VMA_MEMORY_USAGE_AUTO;
-        allocationCreateInfo.flags = createFlags;
+        allocationCreateInfo.flags = vmaCreateFlags;
 
         VkBuffer vkBuffer = {};
         PE_CHECK(vmaCreateBuffer(RHII.GetAllocator(), reinterpret_cast<const VkBufferCreateInfo *>(&bufferInfo), &allocationCreateInfo, &vkBuffer, &m_allocation, &m_allocationInfo));

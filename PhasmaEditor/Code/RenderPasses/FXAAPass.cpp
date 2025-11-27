@@ -50,7 +50,7 @@ namespace pe
 
     void FXAAPass::Draw(CommandBuffer *cmd)
     {
-        ImageBarrierInfo barrier;
+        ImageBarrierInfo barrier{};
         barrier.image = m_frameImage;
         barrier.layout = vk::ImageLayout::eShaderReadOnlyOptimal;
         barrier.stageFlags = vk::PipelineStageFlagBits2::eFragmentShader;
