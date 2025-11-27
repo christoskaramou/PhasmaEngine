@@ -250,7 +250,6 @@ namespace pe
 
                 write.descriptorCount = static_cast<uint32_t>(infos.size());
                 write.pImageInfo = infos.data();
-                imageInfos.push_back(infos);
             }
             else if (updateInfo.buffers.size() > 0)
             {

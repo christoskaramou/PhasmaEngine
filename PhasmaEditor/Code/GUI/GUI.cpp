@@ -937,9 +937,9 @@ namespace pe
         ui::ApplyNiceTheme();
 
         ImGui_ImplSDL2_InitForVulkan(RHII.GetWindow());
-        
+
         // Verify the SDL2 backend supports platform windows
-        PE_ERROR_IF(!(io.BackendFlags & ImGuiBackendFlags_PlatformHasViewports), 
+        PE_ERROR_IF(!(io.BackendFlags & ImGuiBackendFlags_PlatformHasViewports),
                     "SDL2 backend doesn't support platform viewports!");
 
         RendererSystem *renderer = GetGlobalSystem<RendererSystem>();
@@ -980,7 +980,7 @@ namespace pe
 
         ImGui_ImplVulkan_Init(&init_info);
         ImGui_ImplVulkan_CreateFontsTexture();
-        
+
         // Verify Vulkan backend supports platform windows
         // PE_ERROR_IF(!(io.BackendFlags & ImGuiBackendFlags_RendererHasViewports),
         //             "Vulkan backend doesn't support renderer viewports!");

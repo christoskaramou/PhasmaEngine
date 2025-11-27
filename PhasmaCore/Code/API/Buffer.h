@@ -14,7 +14,7 @@ namespace pe
     public:
         Buffer(size_t size,
                vk::BufferUsageFlags2 usage,
-               VmaAllocationCreateFlags createFlags,
+               VmaAllocationCreateFlags vmaCreateFlags,
                const std::string &name);
         ~Buffer();
 

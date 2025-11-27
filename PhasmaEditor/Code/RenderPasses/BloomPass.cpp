@@ -112,7 +112,7 @@ namespace pe
     {
         auto &gSettings = Settings::Get<GlobalSettings>();
 
-        ImageBarrierInfo barrier;
+        ImageBarrierInfo barrier{};
         barrier.image = m_brightFilterRT;
         barrier.layout = vk::ImageLayout::eShaderReadOnlyOptimal;
         barrier.stageFlags = vk::PipelineStageFlagBits2::eFragmentShader;
@@ -180,7 +180,7 @@ namespace pe
     {
         auto &gSettings = Settings::Get<GlobalSettings>();
 
-        ImageBarrierInfo barrier;
+        ImageBarrierInfo barrier{};
         barrier.image = m_gaussianBlurHorizontalRT;
         barrier.layout = vk::ImageLayout::eShaderReadOnlyOptimal;
         barrier.stageFlags = vk::PipelineStageFlagBits2::eFragmentShader;
