@@ -1,5 +1,9 @@
 #pragma once
 
+#include "Base/Base.h"
+#include "ECS/Entity.h"
+#include "ECS/System.h"
+
 namespace pe
 {
     class RHI;
@@ -7,17 +11,8 @@ namespace pe
     class Context final
     {
     public:
-        static auto Get()
-        {
-            static auto instance = new Context();
-            return instance;
-        }
-
-        static void Remove()
-        {
-            if (Get())
-                delete Get();
-        }
+        static Context *Get();
+        static void Remove();
 
         Context(Context const &) = delete; // copy constructor
         Context(Context &&) noexcept = delete; // move constructor
@@ -42,17 +37,19 @@ namespace pe
         inline void RemoveSystem();
 
         Entity *CreateEntity();
-        Entity *GetEntity(size_t id);
+        Entity *GetEntity(size_t id) const;
         void RemoveEntity(size_t id);
-        Entity *GetWorldEntity() { return m_worldEntity; }
-        std::unordered_map<size_t, std::shared_ptr<ISystem>> GetSystems();
+        [[nodiscard]] Entity *GetWorldEntity() const noexcept { return m_worldEntity; }
+        const std::unordered_map<size_t, std::unique_ptr<ISystem>> &GetSystems() const noexcept;
 
     private:
+        static std::unique_ptr<Context> &InstanceStorage();
+
         Entity *m_worldEntity;
 
-        std::unordered_map<size_t, std::shared_ptr<ISystem>> m_systems;
+        std::unordered_map<size_t, std::unique_ptr<ISystem>> m_systems;
         std::unordered_map<size_t, IDrawSystem *> m_drawSystems;
-        std::unordered_map<size_t, std::shared_ptr<Entity>> m_entities;
+        std::unordered_map<size_t, std::unique_ptr<Entity>> m_entities;
     };
 
     template <class T, class... Params>
@@ -64,14 +61,15 @@ namespace pe
         auto it = m_systems.find(id);
         if (it == m_systems.end())
         {
-            auto system = std::make_shared<T>(std::forward<Params>(params)...);
+            auto system = std::make_unique<T>(std::forward<Params>(params)...);
             system->SetEnabled(true);
-            m_systems[id] = system;
+            auto *systemPtr = system.get();
+            m_systems.emplace(id, std::move(system));
 
-            if constexpr (std::is_base_of<IDrawSystem, T>::value)
-                m_drawSystems[id] = static_cast<IDrawSystem *>(system.get());
+            if constexpr (std::is_base_of_v<IDrawSystem, T>)
+                m_drawSystems[id] = static_cast<IDrawSystem *>(systemPtr);
 
-            return static_cast<T *>(system.get());
+            return systemPtr;
         }
         return static_cast<T *>(it->second.get());
     }
@@ -94,10 +92,12 @@ namespace pe
     {
         ValidateBaseClass<ISystem, T>();
 
-        auto it = m_systems.find(ID::GetTypeID<T>());
+        auto typeId = ID::GetTypeID<T>();
+        auto it = m_systems.find(typeId);
         if (it != m_systems.end())
         {
             it->second->Destroy();
+            m_drawSystems.erase(typeId);
             m_systems.erase(it);
         }
     }

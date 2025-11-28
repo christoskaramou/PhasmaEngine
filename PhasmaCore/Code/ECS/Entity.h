@@ -3,23 +3,24 @@
 namespace pe
 {
     class Context;
+    class IComponent;
 
     class Entity
     {
     public:
         Entity() : m_context(nullptr), m_id(ID::NextID()), m_enabled(false) {}
-        virtual ~Entity() {}
+        virtual ~Entity() = default;
 
-        size_t GetID() const { return m_id; }
-        Context *GetContext() { return m_context; }
-        void SetContext(Context *context) { m_context = context; }
-        bool IsEnabled() { return m_enabled; }
-        void SetEnabled(bool enabled) { m_enabled = enabled; }
+        [[nodiscard]] size_t GetID() const noexcept { return m_id; }
+        [[nodiscard]] Context *GetContext() const noexcept { return m_context; }
+        void SetContext(Context *context) noexcept { m_context = context; }
+        [[nodiscard]] bool IsEnabled() const noexcept { return m_enabled; }
+        void SetEnabled(bool enabled) noexcept { m_enabled = enabled; }
 
         template <class T>
         inline T *GetComponent();
-        auto &GetComponents() { return m_components; }
-        uint32_t GetComponentCount() { return static_cast<uint32_t>(m_components.size()); }
+        auto &GetComponents() noexcept { return m_components; }
+        [[nodiscard]] uint32_t GetComponentCount() const noexcept { return static_cast<uint32_t>(m_components.size()); }
         template <class T, class... Params>
         inline T *CreateComponent(Params &&...params);
         template <class T>
@@ -28,7 +29,7 @@ namespace pe
     private:
         size_t m_id;
         Context *m_context;
-        std::unordered_map<size_t, std::shared_ptr<IComponent>> m_components;
+        std::unordered_map<size_t, std::unique_ptr<IComponent>> m_components;
         bool m_enabled;
     };
 
@@ -54,10 +55,10 @@ namespace pe
 
         if (it == m_components.end())
         {
-            auto comp = std::make_shared<T>(std::forward<Params>(params)...);
+            auto comp = std::make_unique<T>(std::forward<Params>(params)...);
             comp->SetEntity(this);
             comp->SetEnabled(true);
-            it = m_components.emplace(id, comp).first;
+            it = m_components.emplace(id, std::move(comp)).first;
         }
 
         return static_cast<T *>(it->second.get());

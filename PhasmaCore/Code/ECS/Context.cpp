@@ -5,6 +5,29 @@
 
 namespace pe
 {
+    std::unique_ptr<Context> &Context::InstanceStorage()
+    {
+        static std::unique_ptr<Context> instance{};
+        return instance;
+    }
+
+    Context *Context::Get()
+    {
+        auto &instance = InstanceStorage();
+        if (!instance)
+            instance.reset(new Context());
+        return instance.get();
+    }
+
+    void Context::Remove()
+    {
+        auto &instance = InstanceStorage();
+        if (!instance)
+            return;
+
+        instance.reset();
+    }
+
     Context::Context()
     {
         m_worldEntity = CreateEntity();
@@ -12,6 +35,9 @@ namespace pe
 
     void Context::InitSystems()
     {
+        if (m_systems.empty())
+            return;
+
         Queue *queue = RHII.GetMainQueue();
         CommandBuffer *cmd = queue->AcquireCommandBuffer();
         cmd->Begin();
@@ -36,6 +62,7 @@ namespace pe
             system.second->Destroy();
 
         m_systems.clear();
+        m_drawSystems.clear();
     }
 
     void Context::UpdateSystems()
@@ -58,17 +85,22 @@ namespace pe
 
     Entity *Context::CreateEntity()
     {
-        Entity *entity = new Entity();
+        auto entity = std::make_unique<Entity>();
         entity->SetContext(this);
         entity->SetEnabled(true);
 
-        size_t key = entity->GetID();
-        m_entities[key] = std::shared_ptr<Entity>(entity);
+        const size_t key = entity->GetID();
+        auto [it, inserted] = m_entities.emplace(key, std::move(entity));
+        if (!inserted)
+        {
+            PE_ERROR("Entity with duplicate id detected");
+            return it->second.get();
+        }
 
-        return m_entities[key].get();
+        return it->second.get();
     }
 
-    Entity *Context::GetEntity(size_t id)
+    Entity *Context::GetEntity(size_t id) const
     {
         auto iterator = m_entities.find(id);
         return iterator != m_entities.end() ? iterator->second.get() : nullptr;
@@ -77,11 +109,19 @@ namespace pe
     void Context::RemoveEntity(size_t id)
     {
         auto it = m_entities.find(id);
-        if (it != m_entities.end())
-            m_entities.erase(it);
+        if (it == m_entities.end())
+            return;
+
+        if (m_worldEntity == it->second.get())
+        {
+            PE_ERROR("Cannot remove the world entity");
+            return;
+        }
+
+        m_entities.erase(it);
     }
 
-    std::unordered_map<size_t, std::shared_ptr<ISystem>> Context::GetSystems()
+    const std::unordered_map<size_t, std::unique_ptr<ISystem>> &Context::GetSystems() const noexcept
     {
         return m_systems;
     }
