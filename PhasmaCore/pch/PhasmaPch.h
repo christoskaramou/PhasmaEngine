@@ -11,6 +11,7 @@
 #include <codecvt>
 #include <condition_variable>
 #include <cstdarg>
+#include <cstdint>
 #include <cstdio>
 #include <deque>
 #include <execution>

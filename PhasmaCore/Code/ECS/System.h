@@ -9,15 +9,15 @@ namespace pe
     class ISystem
     {
     public:
-        ISystem() : m_enabled(false) {}
-        virtual ~ISystem() {}
+        ISystem() noexcept : m_enabled(false) {}
+        virtual ~ISystem() = default;
 
         virtual void Init(CommandBuffer *cmd) = 0;
         virtual void Update() = 0;
         virtual void Destroy() = 0;
 
-        bool IsEnabled() { return m_enabled; }
-        void SetEnabled(bool enabled) { m_enabled = enabled; }
+        [[nodiscard]] bool IsEnabled() const noexcept { return m_enabled; }
+        void SetEnabled(bool enabled) noexcept { m_enabled = enabled; }
 
         template <class T>
         inline void AttachComponent(T *component)
@@ -59,7 +59,7 @@ namespace pe
                 it->second.clear();
         }
 
-        void RemoveAllComponents()
+        void RemoveAllComponents() noexcept
         {
             m_components.clear();
         }
@@ -74,7 +74,7 @@ namespace pe
             auto it = m_components.find(id);
 
             if (it != m_components.end())
-                return *reinterpret_cast<std::vector<T *> *>(&it->second);
+                return *reinterpret_cast<const std::vector<T *> *>(&it->second);
 
             return empty;
         }

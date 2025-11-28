@@ -7,13 +7,13 @@ namespace pe
     class IComponent
     {
     public:
-        IComponent() : m_entity{nullptr}, m_enabled{false} {}
-        virtual ~IComponent() {}
+        IComponent() noexcept : m_entity{nullptr}, m_enabled{false} {}
+        virtual ~IComponent() = default;
 
-        Entity *GetEntity() { return m_entity; }
-        void SetEntity(Entity *entity) { m_entity = entity; }
-        bool IsEnabled() { return m_enabled; }
-        void SetEnabled(bool enabled) { m_enabled = enabled; }
+        [[nodiscard]] Entity *GetEntity() const noexcept { return m_entity; }
+        void SetEntity(Entity *entity) noexcept { m_entity = entity; }
+        [[nodiscard]] bool IsEnabled() const noexcept { return m_enabled; }
+        void SetEnabled(bool enabled) noexcept { m_enabled = enabled; }
         virtual void Destroy() {}
 
     private:
@@ -41,8 +41,8 @@ namespace pe
         virtual void Resize(uint32_t width, uint32_t height) = 0;
         virtual void Destroy() = 0;
 
-        std::vector<Attachment> &GetAttachments() { return m_attachments; }
-        std::shared_ptr<PassInfo> GetPassInfo() { return m_passInfo; }
+        [[nodiscard]] std::vector<Attachment> &GetAttachments() noexcept { return m_attachments; }
+        [[nodiscard]] std::shared_ptr<PassInfo> GetPassInfo() const noexcept { return m_passInfo; }
 
     protected:        
         std::vector<Attachment> m_attachments;
