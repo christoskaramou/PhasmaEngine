@@ -48,7 +48,7 @@ namespace pe
         uint32_t m_dockspaceId;
         bool m_dockspaceInitialized;
         bool m_requestDockReset;
-        std::vector<GpuTimerInfo> m_gpuTimerInfos;
+        std::vector<GpuTimerSample> m_gpuTimerInfos;
         void *m_viewportTextureId;
         bool m_sceneViewFloating;
         bool m_sceneViewRedockQueued;

@@ -70,6 +70,13 @@ namespace pe
         size_t depth;
     };
 
+    struct GpuTimerSample
+    {
+        std::string name;
+        size_t depth = 0;
+        float timeMs = 0.0f;
+    };
+
     class CommandBuffer;
     class GpuTimer : public PeHandle<GpuTimer, vk::QueryPool>
     {

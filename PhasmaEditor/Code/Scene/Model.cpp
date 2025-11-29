@@ -21,8 +21,8 @@ namespace pe
         std::string ext = file.extension().string();
         std::transform(ext.begin(), ext.end(), ext.begin(), [](unsigned char c) { return std::tolower(c); });
 
-        if (ext == ".gltf" || ext == ".glb")
-            return ModelGltf::Load(file);
+        // if (ext == ".gltf" || ext == ".glb")
+        //     return ModelGltf::Load(file);
 
         return ModelAssimp::Load(file);
     }
