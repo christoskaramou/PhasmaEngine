@@ -1,4 +1,5 @@
 #include "Camera/Camera.h"
+#include "Scene/SceneNodeComponent.h"
 #include "RenderPasses/SuperResolutionPass.h"
 #include "Systems/RendererSystem.h"
 #include "Systems/PostProcessSystem.h"
@@ -6,6 +7,7 @@
 namespace pe
 {
     Camera::Camera()
+        : m_sceneNode(nullptr)
     {
         m_worldOrientation = vec3(1.f, -1.f, 1.f);
 
@@ -26,6 +28,15 @@ namespace pe
 
     void Camera::Destroy()
     {
+    }
+
+    void Camera::SetSceneNode(SceneNodeComponent *sceneNode)
+    {
+        m_sceneNode = sceneNode;
+        if (m_sceneNode)
+            m_sceneNode->SetScale(vec3(1.0f));
+
+        SyncSceneNodeTransform();
     }
 
     void Camera::Update()
@@ -87,6 +98,8 @@ namespace pe
             m_position -= m_right * speed;
         if (direction == CameraDirection::LEFT)
             m_position += m_right * speed;
+
+        SyncSceneNodeTransform();
     }
 
     void Camera::Rotate(float xoffset, float yoffset)
@@ -98,6 +111,8 @@ namespace pe
         m_euler.y += y;
 
         m_orientation = quat(m_euler);
+
+        SyncSceneNodeTransform();
     }
 
     vec3 Camera::WorldRight() const
@@ -178,5 +193,14 @@ namespace pe
         }
 
         return true;
+    }
+
+    void Camera::SyncSceneNodeTransform() const
+    {
+        if (!m_sceneNode)
+            return;
+
+        m_sceneNode->SetTranslation(m_position);
+        m_sceneNode->SetRotation(m_orientation);
     }
 }

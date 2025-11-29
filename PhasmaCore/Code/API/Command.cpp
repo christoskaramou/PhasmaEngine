@@ -831,7 +831,19 @@ namespace pe
         }
 
 #if PE_DEBUG_MODE
-        EventSystem::DispatchEvent(EventType::AfterCommandWait, m_gpuTimerInfos);
+    std::vector<GpuTimerSample> samples;
+    samples.reserve(m_gpuTimerInfosCount);
+    for (uint32_t i = 0; i < m_gpuTimerInfosCount; ++i)
+    {
+        const auto &info = m_gpuTimerInfos[i];
+        GpuTimerSample sample{};
+        sample.name = info.name;
+        sample.depth = info.depth;
+        sample.timeMs = info.timer ? info.timer->GetTime() : 0.0f;
+        samples.emplace_back(std::move(sample));
+    }
+
+    EventSystem::DispatchEvent(EventType::AfterCommandWait, std::any{std::move(samples)});
         m_gpuTimerInfosCount = 0;
 #endif
     }

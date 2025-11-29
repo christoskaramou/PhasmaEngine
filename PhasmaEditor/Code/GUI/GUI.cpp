@@ -13,6 +13,8 @@
 #include "RenderPasses/LightPass.h"
 #include "RenderPasses/SuperResolutionPass.h"
 #include "Systems/RendererSystem.h"
+#include "Systems/CameraSystem.h"
+#include "Scene/SceneNodeComponent.h"
 
 namespace pe
 {
@@ -335,7 +337,7 @@ namespace pe
         {
             // Top level timers only
             if (gpuTimerInfo.depth == 0)
-                total += gpuTimerInfo.timer->GetTime();
+                total += gpuTimerInfo.timeMs;
         }
 
         return total;
@@ -352,7 +354,7 @@ namespace pe
             if (gpuTimerInfo.depth > 0)
                 ImGui::Indent(gpuTimerInfo.depth * 16.0f);
 
-            float time = gpuTimerInfo.timer->GetTime();
+            const float time = gpuTimerInfo.timeMs;
             ui::SetTextColorTemp(time, maxTime);
             ImGui::Text("%s: %.3f ms", gpuTimerInfo.name.c_str(), time);
 
@@ -393,7 +395,7 @@ namespace pe
                 if (info.depth == 0)
                     continue;
 
-                const float t = info.timer->GetTime();
+                const float t = info.timeMs;
                 if (t <= 0.0f)
                     continue;
 
@@ -486,6 +488,33 @@ namespace pe
         ShowGpuTimingsTable(gpuTotal);
         m_gpuTimerInfos.clear();
 #endif
+        // Camera Scene Node Info
+        if (CameraSystem *cameraSystem = GetGlobalSystem<CameraSystem>())
+        {
+            Camera *camera = cameraSystem->GetCamera(0);
+            if (camera)
+            {
+                if (SceneNodeComponent *node = camera->GetSceneNode())
+                {
+                    ImGui::Separator();
+                    if (ImGui::TreeNodeEx("Scene Node (Camera)", ImGuiTreeNodeFlags_DefaultOpen))
+                    {
+                        const SceneTransform &local = node->GetLocalTransform();
+                        const vec3 &translation = local.translation;
+                        const quat &rotation = local.rotation;
+                        const vec3 &scale = local.scale;
+                        ImGui::Text("Local T: [%.2f, %.2f, %.2f]", translation.x, translation.y, translation.z);
+                        ImGui::Text("Local R (quat): [%.2f, %.2f, %.2f, %.2f]", rotation.x, rotation.y, rotation.z, rotation.w);
+                        ImGui::Text("Local S: [%.2f, %.2f, %.2f]", scale.x, scale.y, scale.z);
+                        const mat4 &world = node->GetWorldMatrix();
+                        const vec3 worldPosition = vec3(world[3]);
+                        ImGui::Text("World Pos: [%.2f, %.2f, %.2f]", worldPosition.x, worldPosition.y, worldPosition.z);
+                        ImGui::TreePop();
+                    }
+                }
+            }
+        }
+
         ImGui::End();
     }
 
@@ -990,14 +1019,11 @@ namespace pe
         {
             try
             {
-                // cast to const ref because 'data' is const
-                const auto &commandTimerInfos = std::any_cast<const std::vector<GpuTimerInfo> &>(data);
+                const auto &commandTimerInfos = std::any_cast<const std::vector<GpuTimerSample> &>(data);
                 if (commandTimerInfos.empty())
                     return;
 
-                auto *cmd = commandTimerInfos[0].timer->GetCommandBuffer();
-                uint32_t count = cmd->GetGpuTimerInfosCount();
-                gpuTimerInfos.insert(gpuTimerInfos.end(), commandTimerInfos.begin(), commandTimerInfos.begin() + count);
+                gpuTimerInfos.insert(gpuTimerInfos.end(), commandTimerInfos.begin(), commandTimerInfos.end());
             }
             catch (const std::bad_any_cast &ex)
             {
