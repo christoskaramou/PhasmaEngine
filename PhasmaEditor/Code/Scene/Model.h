@@ -71,6 +71,7 @@ namespace pe
         } ubo;
         bool dirty = false;
         std::vector<bool> dirtyUniforms;
+        std::string name;
     };
 
     // Base class for all model loaders
@@ -107,6 +108,8 @@ namespace pe
         uint32_t GetVerticesCount() const { return m_verticesCount; }
         uint32_t GetIndicesCount() const { return m_indicesCount; }
         uint32_t GetPrimitivesCount() const { return m_primitivesCount; }
+        const std::string &GetLabel() const { return m_label; }
+        void SetLabel(const std::string &label) { m_label = label; }
 
         // Virtual methods to be implemented by derived classes
         virtual bool LoadFile(const std::filesystem::path &file) = 0;
@@ -170,6 +173,7 @@ namespace pe
         uint32_t m_verticesCount = 0;
         uint32_t m_indicesCount = 0;
         uint32_t m_primitivesCount = 0;
+        std::string m_label;
     };
 
     // Inline implementations for performance

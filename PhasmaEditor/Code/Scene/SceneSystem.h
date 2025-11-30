@@ -26,6 +26,8 @@ namespace pe
 
         SceneGraph &GetGraph() { return m_graph; }
         const SceneGraph &GetGraph() const { return m_graph; }
+        const std::unordered_map<SceneNodeHandle, SceneNodeComponent *> &GetComponentLookup() const { return m_componentLookup; }
+        SceneNodeComponent *FindComponent(SceneNodeHandle handle) const;
 
         void Init(CommandBuffer *cmd) override;
         void Update() override;

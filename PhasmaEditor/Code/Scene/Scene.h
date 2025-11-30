@@ -25,6 +25,8 @@ namespace pe
         void DrawScene(CommandBuffer *cmd);
         void AddModel(Model *model);
         void RemoveModel(Model *model);
+        Geometry &GetGeometry() { return m_geometry; }
+        const Geometry &GetGeometry() const { return m_geometry; }
 
     private:
         Geometry m_geometry{};

@@ -62,6 +62,14 @@ namespace pe
         return m_graph.GetWorldMatrix(node);
     }
 
+    SceneNodeComponent *SceneSystem::FindComponent(SceneNodeHandle handle) const
+    {
+        auto it = m_componentLookup.find(handle);
+        if (it != m_componentLookup.end())
+            return it->second;
+        return nullptr;
+    }
+
     void SceneSystem::Init(CommandBuffer *cmd)
     {
         (void)cmd;

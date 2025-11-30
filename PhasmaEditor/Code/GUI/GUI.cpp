@@ -15,6 +15,8 @@
 #include "Systems/RendererSystem.h"
 #include "Systems/CameraSystem.h"
 #include "Scene/SceneNodeComponent.h"
+#include "Scene/SceneSystem.h"
+#include "ECS/Entity.h"
 
 namespace pe
 {
@@ -28,7 +30,8 @@ namespace pe
           m_viewportTextureId{nullptr},
           m_sceneViewFloating{false},
           m_sceneViewRedockQueued{false},
-          m_sceneViewImage{nullptr}
+          m_sceneViewImage{nullptr},
+          m_sceneObjectsOpen{true}
     {
     }
 
@@ -217,6 +220,7 @@ namespace pe
         ImGui::DockBuilderDockWindow("Scene View", dockMainId);
         ImGui::DockBuilderDockWindow("Metrics", dockLeft);
         ImGui::DockBuilderDockWindow("Models", dockLeft);
+        ImGui::DockBuilderDockWindow("Scene Objects", dockLeft);
         ImGui::DockBuilderDockWindow("Global Properties", dockRight);
         ImGui::DockBuilderDockWindow("Asset Viewer", dockBottomViewer);
         ImGui::DockBuilderDockWindow("Shaders Folder", dockBottom);
@@ -266,6 +270,7 @@ namespace pe
                 ImGui::MenuItem("Models", nullptr, &models_open);
                 ImGui::MenuItem("Scripts", nullptr, &scripts_open);
                 ImGui::MenuItem("Asset Viewer", nullptr, &asset_viewer_open);
+                ImGui::MenuItem("Scene Objects", nullptr, &m_sceneObjectsOpen);
 
                 bool prevFloating = m_sceneViewFloating;
                 ImGui::MenuItem("Float Scene View", nullptr, &m_sceneViewFloating);
@@ -719,6 +724,179 @@ namespace pe
         ImGui::BeginChild("##asset_viewer_canvas", ImVec2(0, 0), true);
         ImGui::TextDisabled("Visual previews will live here.");
         ImGui::EndChild();
+
+        ImGui::End();
+    }
+
+    void GUI::SceneObjects()
+    {
+        if (!m_sceneObjectsOpen)
+            return;
+
+        SetInitialWindowSizeFraction(1.0f / 6.0f, 1.0f / 3.0f);
+        if (!ImGui::Begin("Scene Objects", &m_sceneObjectsOpen))
+        {
+            ImGui::End();
+            return;
+        }
+
+        bool drewSceneGraph = false;
+        SceneSystem *sceneSystem = GetGlobalSystem<SceneSystem>();
+        if (!sceneSystem)
+        {
+            ImGui::TextDisabled("Scene system is not available.");
+        }
+        else
+        {
+            const SceneGraph &graph = sceneSystem->GetGraph();
+            const auto &nodes = graph.GetNodes();
+            if (nodes.empty())
+            {
+                ImGui::TextDisabled("No scene nodes have been created yet.");
+            }
+            else
+            {
+                auto makeNodeLabel = [&](SceneNodeHandle handle) -> std::string
+                {
+                    std::string label = "Node " + std::to_string(handle);
+                    if (SceneNodeComponent *component = sceneSystem->FindComponent(handle))
+                    {
+                        if (Entity *entity = component->GetEntity())
+                            label += " [Entity " + std::to_string(entity->GetID()) + "]";
+                    }
+                    return label;
+                };
+
+                auto drawNode = [&](auto &&self, SceneNodeHandle handle) -> void
+                {
+                    const SceneNode *node = graph.GetNode(handle);
+                    if (!node)
+                        return;
+
+                    const bool hasChildren = node->firstChild != InvalidSceneNode && graph.GetNode(node->firstChild) != nullptr;
+                    ImGuiTreeNodeFlags flags = ImGuiTreeNodeFlags_OpenOnArrow | ImGuiTreeNodeFlags_OpenOnDoubleClick;
+                    if (!hasChildren)
+                        flags |= ImGuiTreeNodeFlags_Leaf | ImGuiTreeNodeFlags_NoTreePushOnOpen;
+
+                    const std::string label = makeNodeLabel(handle);
+                    const bool open = ImGui::TreeNodeEx(reinterpret_cast<void *>(static_cast<uintptr_t>(handle)), flags, "%s", label.c_str());
+                    const bool shouldPush = (flags & ImGuiTreeNodeFlags_NoTreePushOnOpen) == 0;
+
+                    if (open && shouldPush)
+                    {
+                        SceneNodeHandle childHandle = node->firstChild;
+                        while (childHandle != InvalidSceneNode)
+                        {
+                            self(self, childHandle);
+                            const SceneNode *childNode = graph.GetNode(childHandle);
+                            if (!childNode)
+                                break;
+                            childHandle = childNode->nextSibling;
+                        }
+                        ImGui::TreePop();
+                    }
+                    else if (open && !shouldPush)
+                    {
+                        // Leaf nodes that were opened do not push to the stack.
+                    }
+                };
+
+                bool anyRoots = false;
+                for (const SceneNode &node : nodes)
+                {
+                    if (node.id == InvalidSceneNode || node.parent != InvalidSceneNode)
+                        continue;
+
+                    anyRoots = true;
+                    drawNode(drawNode, node.id);
+                }
+
+                if (!anyRoots)
+                    ImGui::TextDisabled("Scene graph has no root nodes.");
+            }
+
+            drewSceneGraph = true;
+        }
+
+        if (drewSceneGraph)
+            ImGui::Separator();
+
+        RendererSystem *renderer = GetGlobalSystem<RendererSystem>();
+        if (renderer)
+        {
+            auto &models = renderer->GetScene().GetGeometry().GetModels();
+            if (!models.size())
+            {
+                ImGui::TextDisabled("No models loaded yet.");
+            }
+            else
+            {
+                ImGui::TextDisabled("Loaded Models");
+
+                for (auto &model : models)
+                {
+                    if (!model)
+                        continue;
+
+                    const std::string &modelLabel = model->GetLabel();
+                    ImGui::PushID(model);
+                    const bool modelOpen = ImGui::TreeNodeEx(modelLabel.c_str(), ImGuiTreeNodeFlags_OpenOnArrow | ImGuiTreeNodeFlags_OpenOnDoubleClick, "%s", modelLabel.c_str());
+
+                    if (modelOpen)
+                    {
+                        const auto &nodeInfos = model->GetNodesInfo();
+                        if (nodeInfos.empty())
+                        {
+                            ImGui::TextDisabled("Model has no nodes.");
+                        }
+                        else
+                        {
+                            std::vector<std::vector<int>> children(nodeInfos.size());
+                            for (int idx = 0; idx < static_cast<int>(nodeInfos.size()); ++idx)
+                            {
+                                int parent = nodeInfos[idx].parent;
+                                if (parent >= 0 && parent < static_cast<int>(children.size()))
+                                    children[parent].push_back(idx);
+                            }
+
+                            auto drawModelNode = [&](auto &&self, int nodeIndex) -> void
+                            {
+                                const NodeInfo &info = nodeInfos[nodeIndex];
+                                const bool hasKids = nodeIndex < static_cast<int>(children.size()) && !children[nodeIndex].empty();
+                                ImGuiTreeNodeFlags nodeFlags = ImGuiTreeNodeFlags_OpenOnArrow | ImGuiTreeNodeFlags_OpenOnDoubleClick;
+                                if (!hasKids)
+                                    nodeFlags |= ImGuiTreeNodeFlags_Leaf | ImGuiTreeNodeFlags_NoTreePushOnOpen;
+
+                                const std::string &nodeName = info.name.empty() ? ("Node " + std::to_string(nodeIndex)) : info.name;
+                                const bool open = ImGui::TreeNodeEx(reinterpret_cast<void *>(static_cast<intptr_t>(nodeIndex)), nodeFlags, "%s", nodeName.c_str());
+                                const bool push = (nodeFlags & ImGuiTreeNodeFlags_NoTreePushOnOpen) == 0;
+
+                                if (open && push)
+                                {
+                                    for (int child : children[nodeIndex])
+                                        self(self, child);
+                                    ImGui::TreePop();
+                                }
+                            };
+
+                            for (int idx = 0; idx < static_cast<int>(nodeInfos.size()); ++idx)
+                            {
+                                if (nodeInfos[idx].parent != -1)
+                                    continue;
+                                drawModelNode(drawModelNode, idx);
+                            }
+                        }
+
+                        ImGui::TreePop();
+                    }
+                    ImGui::PopID();
+                }
+            }
+        }
+        else
+        {
+            ImGui::TextDisabled("Renderer system is not available.");
+        }
 
         ImGui::End();
     }
@@ -1204,6 +1382,7 @@ namespace pe
 
         Loading();
         SceneView();
+        SceneObjects();
         Metrics();
         Models();
         Scripts();
