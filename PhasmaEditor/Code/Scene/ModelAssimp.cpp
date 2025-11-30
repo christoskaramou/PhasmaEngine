@@ -27,6 +27,7 @@ namespace pe
 
         ModelAssimp *modelAssimp = new ModelAssimp();
         ModelAssimp &model = *modelAssimp;
+        model.SetLabel(file.filename().string());
 
         auto &gSettings = Settings::Get<GlobalSettings>();
         gSettings.loading_name = "Reading from file";
@@ -450,6 +451,7 @@ namespace pe
             int idx = static_cast<int>(m_nodesInfo.size());
             m_nodesInfo.push_back(NodeInfo{});
             NodeInfo &ni = m_nodesInfo.back();
+            ni.name = node && node->mName.length > 0 ? node->mName.C_Str() : ("Node " + std::to_string(idx));
 
             ni.parent = parent;
             ni.localMatrix = local;

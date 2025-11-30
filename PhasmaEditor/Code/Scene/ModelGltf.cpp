@@ -6,8 +6,6 @@
 #include "API/RHI.h"
 #include "Systems/RendererSystem.h"
 #include "Scene/Scene.h"
-#include <algorithm>
-#include <cctype>
 
 #undef max
 
@@ -610,6 +608,7 @@ namespace pe
             NodeInfo &nodeInfo = m_nodesInfo[i];
             nodeInfo.dirty = true; // set dirty so the 1st call to UpdateNodeMatrix will update nodeInfo.ubo.worldMatrix and primitiveInfo.worldBoundingBox
             nodeInfo.dirtyUniforms.resize(RHII.GetSwapchainImageCount(), false);
+            nodeInfo.name = !node.name.empty() ? node.name : ("Node " + std::to_string(i));
             if (node.matrix.size() == 16)
             {
                 nodeInfo.localMatrix = make_mat4(&node.matrix[0]);

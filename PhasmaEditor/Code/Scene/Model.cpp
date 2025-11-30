@@ -12,6 +12,7 @@ namespace pe
     Model::Model() : m_id{ID::NextID()}
     {
         dirtyUniforms.resize(RHII.GetSwapchainImageCount(), false);
+        m_label = "Model_" + std::to_string(m_id);
     }
 
     Model *Model::Load(const std::filesystem::path &file)

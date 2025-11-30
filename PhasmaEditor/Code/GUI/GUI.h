@@ -36,6 +36,7 @@ namespace pe
         void Models();
         void Scripts();
         void AssetViewer();
+        void SceneObjects();
         void SceneView();
         void Properties();
         float FetchTotalGPUTime();
@@ -53,5 +54,6 @@ namespace pe
         bool m_sceneViewFloating;
         bool m_sceneViewRedockQueued;
         Image *m_sceneViewImage;
+        bool m_sceneObjectsOpen;
     };
 }

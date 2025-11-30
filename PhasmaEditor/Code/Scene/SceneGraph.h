@@ -53,6 +53,7 @@ namespace pe
 
         void MarkDirty(SceneNodeHandle node);
         void UpdateWorldTransforms();
+        const std::vector<SceneNode> &GetNodes() const noexcept { return m_nodes; }
 
     private:
         [[nodiscard]] bool IsValid(SceneNodeHandle node) const;
