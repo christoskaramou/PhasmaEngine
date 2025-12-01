@@ -14,10 +14,10 @@
 
 namespace pe
 {
-    extern Image *g_defaultBlack;
-    extern Image *g_defaultNormal;
-    extern Image *g_defaultWhite;
-    extern Sampler *g_defaultSampler;
+    Image *g_defaultBlack;
+    Image *g_defaultNormal;
+    Image *g_defaultWhite;
+    Sampler *g_defaultSampler;
 
     ModelAssimp::ModelAssimp() = default;
 

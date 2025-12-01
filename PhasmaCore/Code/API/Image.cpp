@@ -4,7 +4,9 @@
 #include "API/Buffer.h"
 #include "API/RingBuffer.h"
 #include "API/Downsampler/Downsampler.h"
-#include "tinygltf/stb_image.h"
+
+#define STB_IMAGE_IMPLEMENTATION
+#include "stb/stb_image.h"
 
 namespace pe
 {

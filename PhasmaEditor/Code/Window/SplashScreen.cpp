@@ -1,5 +1,5 @@
 #include "Window/SplashScreen.h"
-#include "tinygltf/stb_image.h"
+#include "stb/stb_image.h"
 
 namespace pe
 {
