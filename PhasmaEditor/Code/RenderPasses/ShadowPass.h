@@ -7,7 +7,6 @@ namespace pe
     class Geometry;
     class CommandBuffer;
     class Sampler;
-    class ModelGltf;
     class Camera;
 
     struct PushConstants_Shadows

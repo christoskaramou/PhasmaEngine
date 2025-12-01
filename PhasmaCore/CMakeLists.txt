@@ -43,7 +43,6 @@ endif()
 file(GLOB_RECURSE BASE_SOURCES CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/Code/Base/*.cpp")
 file(GLOB_RECURSE ECS_SOURCES CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/Code/ECS/*.cpp")
 file(GLOB_RECURSE API_SOURCES CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/Code/API/*.cpp")
-file(GLOB_RECURSE TINYGLTF_SOURCES CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/third_party/tinygltf/*.cpp")
 file(GLOB_RECURSE VMA_SOURCES CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/third_party/vma/*.cpp")
 
 # Add PhasmaCore static library
@@ -51,7 +50,6 @@ add_library(PhasmaCore STATIC
         ${BASE_SOURCES}
         ${ECS_SOURCES}
         ${API_SOURCES}
-        ${TINYGLTF_SOURCES}
         ${VMA_SOURCES}
 )
 
@@ -73,7 +71,6 @@ target_include_directories(PhasmaCore PUBLIC
     ${CMAKE_CURRENT_SOURCE_DIR}/third_party/RenderDoc
     ${CMAKE_CURRENT_SOURCE_DIR}/third_party/shaderc
     ${CMAKE_CURRENT_SOURCE_DIR}/third_party/spirv_cross
-    ${CMAKE_CURRENT_SOURCE_DIR}/third_party/tinygltf
     ${CMAKE_CURRENT_SOURCE_DIR}/third_party/vk_video
     ${CMAKE_CURRENT_SOURCE_DIR}/third_party/vma
     ${CMAKE_CURRENT_SOURCE_DIR}/third_party/vulkan
