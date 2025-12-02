@@ -399,12 +399,11 @@ namespace pe
                     continue;
 
                 MeshInfo &meshInfo = meshesInfo[meshIndex];
-                for (size_t primitiveIndex = 0; primitiveIndex < meshInfo.primitivesInfo.size(); primitiveIndex++)
+                for (PrimitiveInfo &primitiveInfo : meshInfo.primitivesInfo)
                 {
-                    PrimitiveInfo &primitiveInfo = meshInfo.primitivesInfo[primitiveIndex];
 
                     Primitive_Constants constants{};
-                    constants.alphaCut = model.GetPrimitiveAlphaCutoff(meshIndex, static_cast<int>(primitiveIndex));
+                    constants.alphaCut = primitiveInfo.alphaCutoff;
                     constants.meshDataOffset = static_cast<uint32_t>(meshInfo.dataOffset);
                     constants.primitiveDataOffset = static_cast<uint32_t>(primitiveInfo.dataOffset);
                     constants.textureMask = primitiveInfo.textureMask;
@@ -435,7 +434,7 @@ namespace pe
             return;
 
         auto &meshInfo = model.GetMeshesInfo()[mesh];
-        int primitivesCount = model.GetMeshPrimitiveCount(mesh);
+        int primitivesCount = static_cast<int>(meshInfo.primitivesInfo.size());
 
         // local lists (thread-safe)
         std::vector<DrawInfo> localOpaque;
@@ -445,9 +444,9 @@ namespace pe
         localAlphaCut.reserve(primitivesCount);
         localAlphaBlend.reserve(primitivesCount);
 
-        for (int i = 0; i < primitivesCount; i++)
+        for (size_t i = 0; i < meshInfo.primitivesInfo.size(); i++)
         {
-            auto &primitiveInfo = meshInfo.primitivesInfo[i];
+            PrimitiveInfo &primitiveInfo = meshInfo.primitivesInfo[i];
             primitiveInfo.cull = frustumCulling ? !camera.AABBInFrustum(primitiveInfo.worldBoundingBox) : false;
             if (primitiveInfo.cull)
                 continue;
@@ -458,13 +457,13 @@ namespace pe
             switch (primitiveInfo.renderType)
             {
             case RenderType::Opaque:
-                localOpaque.push_back(DrawInfo{&model, node, i, distance});
+                localOpaque.push_back(DrawInfo{&model, node, static_cast<int>(i), distance});
                 break;
             case RenderType::AlphaCut:
-                localAlphaCut.push_back(DrawInfo{&model, node, i, distance});
+                localAlphaCut.push_back(DrawInfo{&model, node, static_cast<int>(i), distance});
                 break;
             case RenderType::AlphaBlend:
-                localAlphaBlend.push_back(DrawInfo{&model, node, i, distance});
+                localAlphaBlend.push_back(DrawInfo{&model, node, static_cast<int>(i), distance});
                 break;
             }
         }
@@ -685,9 +684,9 @@ namespace pe
                     if (mesh < 0)
                         continue;
 
-                    for (int primitive = 0; primitive < model.GetMeshPrimitiveCount(mesh); primitive++)
+                    const auto &primitives = model.GetMeshesInfo()[mesh].primitivesInfo;
+                    for (const PrimitiveInfo &primitiveInfo : primitives)
                     {
-                        PrimitiveInfo &primitiveInfo = model.GetMeshesInfo()[mesh].primitivesInfo[primitive];
 
                         switch (primitiveInfo.renderType)
                         {
