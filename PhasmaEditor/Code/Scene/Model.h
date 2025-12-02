@@ -40,6 +40,8 @@ namespace pe
         Sampler *samplers[5]{nullptr};
         uint32_t textureMask = 0;
         MaterialInfo materialInfo;
+        mat4 materialFactors = mat4(1.f);
+        float alphaCutoff = 0.5f;
 
     private:
         friend class Geometry;
@@ -111,22 +113,8 @@ namespace pe
         const std::string &GetLabel() const { return m_label; }
         void SetLabel(const std::string &label) { m_label = label; }
 
-        // Virtual methods to be implemented by derived classes
-        virtual bool LoadFile(const std::filesystem::path &file) = 0;
-        virtual void UploadImages(CommandBuffer *cmd) = 0;
-        virtual void CreateSamplers() = 0;
-        virtual void ExtractMaterialInfo() = 0;
-        virtual void ProcessAabbs() = 0;
-        virtual void AcquireGeometryInfo() = 0;
-        virtual void SetupNodes() = 0;
-        virtual void UpdateAllNodeMatrices() = 0;
-        virtual int GetMeshCount() const = 0;
         virtual int GetNodeCount() const = 0;
         virtual int GetNodeMesh(int nodeIndex) const = 0;
-        virtual int GetMeshPrimitiveCount(int meshIndex) const = 0;
-        virtual int GetPrimitiveMaterial(int meshIndex, int primitiveIndex) const = 0;
-        virtual void GetPrimitiveMaterialFactors(int meshIndex, int primitiveIndex, mat4 &factors) const = 0;
-        virtual float GetPrimitiveAlphaCutoff(int meshIndex, int primitiveIndex) const = 0;
 
     protected:
         friend class Geometry;

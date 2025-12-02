@@ -19,7 +19,8 @@ namespace pe
         PE_ERROR_IF(!std::filesystem::exists(file), std::string("Model file not found: " + file.string()).c_str());
 
         std::string ext = file.extension().string();
-        std::transform(ext.begin(), ext.end(), ext.begin(), [](unsigned char c) { return std::tolower(c); });
+        std::transform(ext.begin(), ext.end(), ext.begin(), [](unsigned char c)
+                       { return std::tolower(c); });
 
         return ModelAssimp::Load(file);
     }
@@ -113,14 +114,12 @@ namespace pe
             if (mesh < 0)
                 continue;
 
-            for (int j = 0; j < GetMeshPrimitiveCount(mesh); j++)
+            auto &meshInfo = m_meshesInfo[mesh];
+            for (auto &primitiveInfo : meshInfo.primitivesInfo)
             {
-                mat4 factors;
-                GetPrimitiveMaterialFactors(mesh, j, factors);
-
-                range.data = &factors;
-                range.size = m_meshesInfo[mesh].primitivesInfo[j].dataSize;
-                range.offset = m_meshesInfo[mesh].primitivesInfo[j].dataOffset;
+                range.data = &primitiveInfo.materialFactors;
+                range.size = primitiveInfo.dataSize;
+                range.offset = primitiveInfo.dataOffset;
                 uniformBuffer->Copy(1, &range, true);
             }
         }
