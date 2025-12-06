@@ -5,14 +5,16 @@
 // PerFrameData                 -> 2 * sizeof(mat4)
 // Constant Buffer indices      -> num of draw calls * sizeof(uint)
 // for (num of draw calls)
-//      MeshData                -> sizeof(mat4) * 2
-//      for (mesh primitives)
-//          PrimitiveData       -> sizeof(mat4)
+//      MeshData               -> sizeof(mat4) * 2
+//      MeshConstants          -> sizeof(mat4)
 // --- ByteAddressBuffer data ---
 
 [[vk::push_constant]] PushConstants_GBuffer pc;
 [[vk::binding(0, 0)]] ByteAddressBuffer data;
-[[vk::binding(1, 0)]] StructuredBuffer<Primitive_Constants> constants;
+[[vk::binding(1, 0)]] StructuredBuffer<Mesh_Constants> constants;
+
+static const uint MATRIX_SIZE = 64u;
+static const uint MESH_DATA_SIZE = MATRIX_SIZE * 2u;
 
 uint GetConstantBufferID(uint instanceID)
 {
@@ -35,13 +37,14 @@ float4x4 LoadMatrix(uint offset)
 float4x4 GetViewProjection()                  { return LoadMatrix(0); }
 float4x4 GetPreviousViewProjection()          { return LoadMatrix(64); }
 float4x4 GetMeshMatrix(uint id)               { return LoadMatrix(constants[id].meshDataOffset); }
-float4x4 GetMeshPreviousMatrix(uint id)       { return LoadMatrix(constants[id].meshDataOffset + 64); }
-float4x4 GetJointMatrix(uint id, uint index)  { return LoadMatrix(constants[id].meshDataOffset + 128 + index * 64); }
+float4x4 GetMeshPreviousMatrix(uint id)       { return LoadMatrix(constants[id].meshDataOffset + MATRIX_SIZE); }
+float4x4 GetJointMatrix(uint id, uint index)  { return LoadMatrix(constants[id].meshDataOffset + MESH_DATA_SIZE + index * MATRIX_SIZE); }
 
 // Factors
-float4 GetBaseColorFactor(uint id)     { return asfloat(data.Load4(constants[id].primitiveDataOffset + 0)); }
-float3 GetEmissiveFactor(uint id)      { return asfloat(data.Load3(constants[id].primitiveDataOffset + 16)); }
-float4 GetMetRoughAlphacutOcl(uint id) { return asfloat(data.Load4(constants[id].primitiveDataOffset + 32)); }
+uint GetMeshConstantsOffset(uint id)   { return constants[id].meshDataOffset + MESH_DATA_SIZE; }
+float4 GetBaseColorFactor(uint id)     { const uint offset = GetMeshConstantsOffset(id); return asfloat(data.Load4(offset + 0)); }
+float3 GetEmissiveFactor(uint id)      { const uint offset = GetMeshConstantsOffset(id); return asfloat(data.Load3(offset + 16)); }
+float4 GetMetRoughAlphacutOcl(uint id) { const uint offset = GetMeshConstantsOffset(id); return asfloat(data.Load4(offset + 32)); }
 
 VS_OUTPUT_Gbuffer mainVS(VS_INPUT_Gbuffer input)
 {

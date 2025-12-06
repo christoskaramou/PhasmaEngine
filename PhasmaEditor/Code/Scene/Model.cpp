@@ -48,10 +48,10 @@ namespace pe
 
     void Model::UpdateNodeMatrix(int node)
     {
-        if (node < 0 || node >= static_cast<int>(m_nodesInfo.size()))
+        if (node < 0 || node >= static_cast<int>(m_nodeInfos.size()))
             return;
 
-        NodeInfo &nodeInfo = m_nodesInfo[node];
+        NodeInfo &nodeInfo = m_nodeInfos[node];
         nodeInfo.ubo.previousWorldMatrix = nodeInfo.ubo.worldMatrix;
         if (nodeInfo.dirty)
         {
@@ -59,7 +59,7 @@ namespace pe
             int parent = nodeInfo.parent;
             while (parent >= 0)
             {
-                const NodeInfo &parentInfo = m_nodesInfo[parent];
+                const NodeInfo &parentInfo = m_nodeInfos[parent];
                 trans = parentInfo.localMatrix * trans;
                 parent = parentInfo.parent;
             }
@@ -71,14 +71,9 @@ namespace pe
             int mesh = GetNodeMesh(node);
             if (mesh >= 0)
             {
-                auto &primitives = m_meshesInfo[mesh].primitivesInfo;
-                for (size_t i = 0; i < primitives.size(); i++)
-                {
-                    // cache world bounding box
-                    PrimitiveInfo &primitiveInfo = primitives[i];
-                    primitiveInfo.worldBoundingBox.min = nodeInfo.ubo.worldMatrix * vec4(primitiveInfo.boundingBox.min, 1.f);
-                    primitiveInfo.worldBoundingBox.max = nodeInfo.ubo.worldMatrix * vec4(primitiveInfo.boundingBox.max, 1.f);
-                }
+                MeshInfo &meshInfo = m_meshInfos[mesh];
+                meshInfo.worldBoundingBox.min = nodeInfo.ubo.worldMatrix * vec4(meshInfo.boundingBox.min, 1.f);
+                meshInfo.worldBoundingBox.max = nodeInfo.ubo.worldMatrix * vec4(meshInfo.boundingBox.max, 1.f);
             }
 
             nodeInfo.dirty = false;
@@ -90,19 +85,7 @@ namespace pe
         }
     }
 
-    const PrimitiveInfo *Model::GetPrimitiveInfo(int meshIndex, int primitiveIndex) const
-    {
-        if (meshIndex < 0 || meshIndex >= static_cast<int>(m_meshesInfo.size()))
-            return nullptr;
-
-        const auto &primitives = m_meshesInfo[meshIndex].primitivesInfo;
-        if (primitiveIndex < 0 || primitiveIndex >= static_cast<int>(primitives.size()))
-            return nullptr;
-
-        return &primitives[primitiveIndex];
-    }
-
-    void Model::SetPrimitiveFactors(Buffer *uniformBuffer)
+    void Model::SetMeshFactors(Buffer *uniformBuffer)
     {
         // copy factors in uniform buffer
         BufferRange range{};
@@ -114,14 +97,11 @@ namespace pe
             if (mesh < 0)
                 continue;
 
-            auto &meshInfo = m_meshesInfo[mesh];
-            for (auto &primitiveInfo : meshInfo.primitivesInfo)
-            {
-                range.data = &primitiveInfo.materialFactors;
-                range.size = primitiveInfo.dataSize;
-                range.offset = primitiveInfo.dataOffset;
-                uniformBuffer->Copy(1, &range, true);
-            }
+            auto &meshInfo = m_meshInfos[mesh];
+            range.data = &meshInfo.materialFactors;
+            range.size = sizeof(mat4);
+            range.offset = meshInfo.GetMeshDataOffset();
+            uniformBuffer->Copy(1, &range, true);
         }
 
         uniformBuffer->Unmap();

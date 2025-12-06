@@ -227,7 +227,7 @@ namespace pe
                 cmd->BindVertexBuffer(m_geometry->GetBuffer(), m_geometry->GetPositionsOffset());
                 cmd->SetConstants(pushConstants);
                 cmd->PushConstants();
-                cmd->DrawIndexedIndirect(m_geometry->GetIndirectAll(), 0, m_geometry->GetPrimitivesCount());
+                cmd->DrawIndexedIndirect(m_geometry->GetIndirectAll(), 0, m_geometry->GetMeshCount());
                 cmd->EndPass();
             }
         }

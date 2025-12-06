@@ -34,9 +34,9 @@ namespace pe
         std::filesystem::path ResolveTexturePath(const std::filesystem::path &relativePath) const;
         Image *LoadTexture(CommandBuffer *cmd, const std::filesystem::path &texturePath);
         Image *FindTexture(const std::filesystem::path &texturePath) const;
-        void AssignTexture(PrimitiveInfo &primitiveInfo, TextureType type, aiMaterial *material, std::initializer_list<aiTextureType> textureTypes, Image *defaultImage);
+        void AssignTexture(MeshInfo &meshInfo, TextureType type, aiMaterial *material, std::initializer_list<aiTextureType> textureTypes, Image *defaultImage);
         RenderType DetermineRenderType(aiMaterial *material) const;
-        void ComputeMaterialData(PrimitiveInfo &primitiveInfo, aiMaterial *material) const;
+        void ComputeMaterialData(MeshInfo &meshInfo, aiMaterial *material) const;
 
         Assimp::Importer m_importer;
         const aiScene *m_scene = nullptr;

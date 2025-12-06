@@ -5,19 +5,19 @@
 // PerFrameData                 -> 2 * sizeof(mat4)
 // Constant Buffer indices      -> num of draw calls * sizeof(uint)
 // for (num of draw calls)
-//      MeshData                -> sizeof(mat4) * 2
-//      for (mesh primitives)
-//          PrimitiveData       -> sizeof(mat4)
+//      MeshData               -> sizeof(mat4) * 2
+//      MeshConstants          -> sizeof(mat4)
 // --- ByteAddressBuffer data ---
 
 [[vk::push_constant]] PushConstants_DepthPass pc;
 [[vk::binding(0, 0)]] ByteAddressBuffer data;
-[[vk::binding(1, 0)]] StructuredBuffer<Primitive_Constants> constants;
+[[vk::binding(1, 0)]] StructuredBuffer<Mesh_Constants> constants;
 
-uint GetConstantBufferID(uint instanceID)
-{
-    return data.Load(128 + instanceID * 4);
-}
+static const uint MATRIX_SIZE = 64u;
+static const uint MESH_DATA_SIZE = MATRIX_SIZE * 2u;
+
+uint GetConstantBufferID(uint instanceID) { return data.Load(128 + instanceID * 4); }
+uint GetMeshConstantsOffset(uint id) { return constants[id].meshDataOffset + MESH_DATA_SIZE; }
 
 float4x4 LoadMatrix(uint offset)
 {
@@ -34,8 +34,12 @@ float4x4 LoadMatrix(uint offset)
 // Matrices
 float4x4 GetViewProjection()                  { return LoadMatrix(0); }
 float4x4 GetMeshMatrix(uint id)               { return LoadMatrix(constants[id].meshDataOffset); }
-float4x4 GetJointMatrix(uint id, uint index)  { return LoadMatrix(constants[id].meshDataOffset + 128 + index * 64); }
-float4 GetBaseColorFactor(uint id)            { return asfloat(data.Load4(constants[id].primitiveDataOffset + 0)); }
+float4x4 GetJointMatrix(uint id, uint index)  { return LoadMatrix(constants[id].meshDataOffset + MESH_DATA_SIZE + index * MATRIX_SIZE); }
+float4 GetBaseColorFactor(uint id)
+{
+    const uint meshConstantsOffset = GetMeshConstantsOffset(id);
+    return asfloat(data.Load4(meshConstantsOffset + 0));
+}
 
 VS_OUTPUT_Position_Uv_ID mainVS(VS_INPUT_Depth input)
 {

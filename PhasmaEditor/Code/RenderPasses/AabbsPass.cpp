@@ -72,15 +72,13 @@ namespace pe
                 if (mesh < 0)
                     continue;
 
-                int primitive = drawInfo.primitive;
-                PrimitiveInfo &primitiveInfo = model.GetMeshesInfo()[mesh].primitivesInfo[primitive];
-
-                constants.meshIndex = GetUboDataOffset(model.GetMeshesInfo()[mesh].dataOffset);
-                constants.color = primitiveInfo.aabbColor;
+                MeshInfo &meshInfo = model.GetMeshInfos()[mesh];
+                constants.meshIndex = GetUboDataOffset(meshInfo.dataOffset);
+                constants.color = meshInfo.aabbColor;
 
                 cmd->SetConstants(constants);
                 cmd->PushConstants();
-                cmd->DrawIndexed(24, 1, 0, static_cast<int>(primitiveInfo.aabbVertexOffset), 0);
+                cmd->DrawIndexed(24, 1, 0, static_cast<int>(meshInfo.aabbVertexOffset), 0);
             }
         };
 
