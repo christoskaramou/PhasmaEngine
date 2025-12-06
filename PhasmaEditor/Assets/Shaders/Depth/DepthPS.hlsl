@@ -3,7 +3,7 @@
 #include "../Common/MaterialFlags.hlsl"
 
 [[vk::push_constant]] PushConstants_DepthPass pc;
-[[vk::binding(0, 1)]] StructuredBuffer<Primitive_Constants> constants;
+[[vk::binding(0, 1)]] StructuredBuffer<Mesh_Constants> constants;
 [[vk::binding(1, 1)]] SamplerState material_sampler;
 [[vk::binding(2, 1)]] Texture2D textures[];
 
@@ -14,7 +14,7 @@ float4 SampleArray(float2 uv, float index)
 
 float4 GetBaseColor(uint id, float2 uv)
 {
-    return SampleArray(uv, constants[id].primitiveImageIndex[0]);
+    return SampleArray(uv, constants[id].meshImageIndex[0]);
 }
 
 void mainPS(PS_INPUT_Position_Uv_ID input)

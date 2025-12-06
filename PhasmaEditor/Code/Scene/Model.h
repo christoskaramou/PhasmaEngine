@@ -21,18 +21,18 @@ namespace pe
         bool alphaBlend;
     };
 
-    struct PrimitiveInfo
+    struct MeshInfo
     {
-        bool cull = true;
         size_t dataOffset = -1;
-        const size_t dataSize = sizeof(mat4);         // material factors
+        const size_t dataSize = sizeof(mat4) * 2; // transform and previous transform
+        bool cull = true;
         uint32_t vertexOffset = 0, verticesCount = 0; // offset and count in used vertex buffer
         uint32_t indexOffset = 0, indicesCount = 0;   // offset and count in used index buffer
-        uint32_t indirectIndex = 0;                   // index of the indirect command of the primitive in the indirect buffer
+        uint32_t indirectIndex = 0;                   // index of the indirect command of the mesh in the indirect buffer
         uint32_t positionsOffset = 0;
         size_t aabbVertexOffset = 0;
-        uint32_t aabbColor;
-        vec4 boundingSphere;
+        uint32_t aabbColor = 0;
+        vec4 boundingSphere = vec4(0.f);
         AABB boundingBox;
         AABB worldBoundingBox;
         RenderType renderType;
@@ -42,6 +42,8 @@ namespace pe
         MaterialInfo materialInfo;
         mat4 materialFactors = mat4(1.f);
         float alphaCutoff = 0.5f;
+
+        size_t GetMeshDataOffset() const { return dataOffset + dataSize; }
 
     private:
         friend class Geometry;
@@ -53,13 +55,6 @@ namespace pe
         // 3 = Occlusion
         // 4 = Emissive
         uint32_t viewsIndex[5] = {0, 0, 0, 0, 0}; // Updated in Geometry::UploadBuffers
-    };
-
-    struct MeshInfo
-    {
-        size_t dataOffset = -1;
-        const size_t dataSize = sizeof(mat4) * 2; // transform and previous transform
-        std::vector<PrimitiveInfo> primitivesInfo{};
     };
 
     struct NodeInfo
@@ -88,7 +83,7 @@ namespace pe
 
         // Common interface methods
         void UpdateNodeMatrices();
-        void SetPrimitiveFactors(Buffer *uniformBuffer);
+        void SetMeshFactors(Buffer *uniformBuffer);
         void UploadBuffers(CommandBuffer *cmd);
 
         // Getters
@@ -100,16 +95,16 @@ namespace pe
         const std::vector<uint32_t> &GetIndices() const { return m_indices; }
         const std::vector<Image *> &GetImages() const { return m_images; }
         const std::vector<Sampler *> &GetSamplers() const { return m_samplers; }
-        const std::vector<MeshInfo> &GetMeshesInfo() const { return m_meshesInfo; }
-        const std::vector<NodeInfo> &GetNodesInfo() const { return m_nodesInfo; }
-        std::vector<MeshInfo> &GetMeshesInfo() { return m_meshesInfo; }
-        std::vector<NodeInfo> &GetNodesInfo() { return m_nodesInfo; }
+        const std::vector<MeshInfo> &GetMeshInfos() const { return m_meshInfos; }
+        const std::vector<NodeInfo> &GetNodeInfos() const { return m_nodeInfos; }
+        std::vector<MeshInfo> &GetMeshInfos() { return m_meshInfos; }
+        std::vector<NodeInfo> &GetNodeInfos() { return m_nodeInfos; }
         mat4 &GetMatrix() { return matrix; }
         bool &GetDirtyNodes() { return dirtyNodes; }
         std::vector<bool> &GetDirtyUniforms() { return dirtyUniforms; }
         uint32_t GetVerticesCount() const { return m_verticesCount; }
         uint32_t GetIndicesCount() const { return m_indicesCount; }
-        uint32_t GetPrimitivesCount() const { return m_primitivesCount; }
+        uint32_t GetMeshCount() const { return m_meshCount; }
         const std::string &GetLabel() const { return m_label; }
         void SetLabel(const std::string &label) { m_label = label; }
 
@@ -125,7 +120,6 @@ namespace pe
         friend class AabbsPass;
 
         virtual void UpdateNodeMatrix(int node);
-        const PrimitiveInfo *GetPrimitiveInfo(int meshIndex, int primitiveIndex) const;
         static constexpr uint32_t TextureBit(TextureType type)
         {
             return 1u << static_cast<uint32_t>(type);
@@ -147,8 +141,8 @@ namespace pe
         size_t m_id;
         std::vector<Image *> m_images{};
         std::vector<Sampler *> m_samplers{};
-        std::vector<MeshInfo> m_meshesInfo{};
-        std::vector<NodeInfo> m_nodesInfo{};
+        std::vector<MeshInfo> m_meshInfos{};
+        std::vector<NodeInfo> m_nodeInfos{};
         std::vector<Vertex> m_vertices;
         std::vector<PositionUvVertex> m_positionUvs;
         std::vector<AabbVertex> m_aabbVertices;
@@ -160,7 +154,7 @@ namespace pe
 
         uint32_t m_verticesCount = 0;
         uint32_t m_indicesCount = 0;
-        uint32_t m_primitivesCount = 0;
+        uint32_t m_meshCount = 0;
         std::string m_label;
     };
 

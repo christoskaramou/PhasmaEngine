@@ -63,13 +63,12 @@ struct PushConstants_GBuffer
     uint transparentPass;
 };
 
-struct Primitive_Constants
+struct Mesh_Constants
 {
     float alphaCut;
     uint meshDataOffset;
-    uint primitiveDataOffset;
     uint textureMask;
-    uint primitiveImageIndex[5];
+    uint meshImageIndex[5];
 };
 
 // -----------------------------------------

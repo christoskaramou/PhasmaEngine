@@ -3,7 +3,10 @@
 
 [[vk::push_constant]] PushConstants_Shadows pc;
 [[vk::binding(0, 0)]] ByteAddressBuffer data;
-[[vk::binding(1, 0)]] StructuredBuffer<Primitive_Constants> constants;
+[[vk::binding(1, 0)]] StructuredBuffer<Mesh_Constants> constants;
+
+static const uint MATRIX_SIZE = 64u;
+static const uint MESH_DATA_SIZE = MATRIX_SIZE * 2u;
 
 float4x4 LoadMatrix(uint offset)
 {
@@ -19,7 +22,7 @@ float4x4 LoadMatrix(uint offset)
 
 // Matrices
 float4x4 GetMeshMatrix(uint id)               { return LoadMatrix(constants[id].meshDataOffset); }
-float4x4 GetJointMatrix(uint id, uint index)  { return LoadMatrix(constants[id].meshDataOffset + 128 + index * 64); }
+float4x4 GetJointMatrix(uint id, uint index)  { return LoadMatrix(constants[id].meshDataOffset + MESH_DATA_SIZE + index * MATRIX_SIZE); }
 
 
 VS_OUTPUT_Position_Uv mainVS(VS_INPUT_Depth input)

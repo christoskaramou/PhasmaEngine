@@ -15,13 +15,12 @@ namespace pe
         uint32_t transparentPass;
     };
 
-    struct Primitive_Constants
+    struct Mesh_Constants
     {
         float alphaCut;
         uint32_t meshDataOffset;
-        uint32_t primitiveDataOffset;
         uint32_t textureMask;
-        uint32_t primitiveImageIndex[5];
+        uint32_t meshImageIndex[5];
     };
 
     class GbufferOpaquePass : public IRenderPassComponent

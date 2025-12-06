@@ -13,7 +13,6 @@ namespace pe
     {
         Model *model;
         int node;
-        int primitive;
         float distance;
     };
 
@@ -47,12 +46,12 @@ namespace pe
         const std::vector<DrawInfo> &GetDrawInfosOpaque() const { return m_drawInfosOpaque; }
         const std::vector<DrawInfo> &GetDrawInfosAlphaCut() const { return m_drawInfosAlphaCut; }
         const std::vector<DrawInfo> &GetDrawInfosAlphaBlend() const { return m_drawInfosAlphaBlend; }
-        uint32_t GetPrimitivesCount() const { return m_primitivesCount; }
+        uint32_t GetMeshCount() const { return m_meshCount; }
 
         static const std::vector<uint32_t> &GetAabbIndices() { return s_aabbIndices; }
 
     private:
-        void CullNodePrimitives(Model &model, int node);
+        void CullNode(Model &model, int node);
         void UpdateUniformData();
         void UpdateIndirectData();
         void ClearDrawInfos(bool reserveMax);
@@ -85,7 +84,7 @@ namespace pe
         size_t m_positionsOffset = 0;
         size_t m_aabbVerticesOffset = 0;
         size_t m_aabbIndicesOffset = 0;
-        uint32_t m_primitivesCount = 0;
+        uint32_t m_meshCount = 0;
 
         std::vector<vk::ImageView> m_imageViews;
         std::vector<bool> m_dirtyDescriptorViews;

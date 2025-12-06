@@ -174,28 +174,25 @@ namespace pe
         auto &loading = gSettings.loading_name;
 
         progress = 0;
-        m_primitivesCount = 0;
+        m_meshCount = 0;
 
         for (unsigned int i = 0; i < m_scene->mNumMeshes; i++)
         {
             const aiMesh *mesh = m_scene->mMeshes[i];
             if (mesh->mPrimitiveTypes & aiPrimitiveType_TRIANGLE)
-                m_primitivesCount++;
+                m_meshCount++;
         }
 
-        total = m_primitivesCount;
+        total = m_meshCount;
         loading = "Loading material pipeline info";
 
-        m_meshesInfo.resize(m_scene->mNumMeshes);
+        m_meshInfos.resize(m_scene->mNumMeshes);
 
         for (unsigned int i = 0; i < m_scene->mNumMeshes; i++)
         {
             const aiMesh *mesh = m_scene->mMeshes[i];
-            MeshInfo &meshInfo = m_meshesInfo[i];
-            meshInfo.primitivesInfo.resize(1); // Each mesh is one primitive
-
-            PrimitiveInfo &primitiveInfo = meshInfo.primitivesInfo[0];
-            MaterialInfo &materialInfo = primitiveInfo.materialInfo;
+            MeshInfo &meshInfo = m_meshInfos[i];
+            MaterialInfo &materialInfo = meshInfo.materialInfo;
 
             materialInfo.topology = vk::PrimitiveTopology::eTriangleList;
 
@@ -218,10 +215,10 @@ namespace pe
         auto &loading = gSettings.loading_name;
 
         progress = 0;
-        total = m_primitivesCount;
+        total = m_meshCount;
         loading = "Loading aabbs";
 
-        m_primitivesCount = 0;
+        m_meshCount = 0;
         m_verticesCount = 0;
         m_indicesCount = 0;
 
@@ -231,32 +228,31 @@ namespace pe
             if (!(mesh->mPrimitiveTypes & aiPrimitiveType_TRIANGLE))
                 continue;
 
-            MeshInfo &meshInfo = m_meshesInfo[i];
-            PrimitiveInfo &primitiveInfo = meshInfo.primitivesInfo[0];
+            MeshInfo &meshInfo = m_meshInfos[i];
 
-            primitiveInfo.vertexOffset = m_verticesCount;
-            primitiveInfo.verticesCount = mesh->mNumVertices;
-            primitiveInfo.indexOffset = m_indicesCount;
-            primitiveInfo.indicesCount = mesh->mNumFaces * 3; // Triangles
-            primitiveInfo.aabbVertexOffset = m_primitivesCount * 8;
+            meshInfo.vertexOffset = m_verticesCount;
+            meshInfo.verticesCount = mesh->mNumVertices;
+            meshInfo.indexOffset = m_indicesCount;
+            meshInfo.indicesCount = mesh->mNumFaces * 3; // Triangles
+            meshInfo.aabbVertexOffset = m_meshCount * 8;
 
             // Calculate bounding box
             if (mesh->mNumVertices > 0)
             {
-                primitiveInfo.boundingBox.min = vec3(mesh->mVertices[0].x, mesh->mVertices[0].y, mesh->mVertices[0].z);
-                primitiveInfo.boundingBox.max = primitiveInfo.boundingBox.min;
+                meshInfo.boundingBox.min = vec3(mesh->mVertices[0].x, mesh->mVertices[0].y, mesh->mVertices[0].z);
+                meshInfo.boundingBox.max = meshInfo.boundingBox.min;
 
                 for (unsigned int j = 1; j < mesh->mNumVertices; j++)
                 {
                     vec3 pos(mesh->mVertices[j].x, mesh->mVertices[j].y, mesh->mVertices[j].z);
-                    primitiveInfo.boundingBox.min = glm::min(primitiveInfo.boundingBox.min, pos);
-                    primitiveInfo.boundingBox.max = glm::max(primitiveInfo.boundingBox.max, pos);
+                    meshInfo.boundingBox.min = glm::min(meshInfo.boundingBox.min, pos);
+                    meshInfo.boundingBox.max = glm::max(meshInfo.boundingBox.max, pos);
                 }
             }
 
             m_verticesCount += mesh->mNumVertices;
             m_indicesCount += mesh->mNumFaces * 3;
-            m_primitivesCount++;
+            m_meshCount++;
 
             progress++;
         }
@@ -275,7 +271,7 @@ namespace pe
 
         m_vertices.reserve(m_verticesCount);
         m_positionUvs.reserve(m_verticesCount);
-        m_aabbVertices.reserve(m_primitivesCount * 8);
+        m_aabbVertices.reserve(m_meshCount * 8);
         m_indices.reserve(m_indicesCount);
 
         uint32_t indexBaseOffset = 0; // Track index offset to ensure it matches ProcessAabbs
@@ -286,18 +282,17 @@ namespace pe
             if (!(mesh->mPrimitiveTypes & aiPrimitiveType_TRIANGLE))
                 continue;
 
-            MeshInfo &meshInfo = m_meshesInfo[i];
-            PrimitiveInfo &primitiveInfo = meshInfo.primitivesInfo[0];
+            MeshInfo &meshInfo = m_meshInfos[i];
             aiMaterial *material = m_scene->mMaterials[mesh->mMaterialIndex];
 
-            primitiveInfo.renderType = DetermineRenderType(material);
+            meshInfo.renderType = DetermineRenderType(material);
 
-            AssignTexture(primitiveInfo, TextureType::BaseColor, material, {aiTextureType_BASE_COLOR, aiTextureType_DIFFUSE}, g_defaultBlack);
-            AssignTexture(primitiveInfo, TextureType::MetallicRoughness, material, {aiTextureType_UNKNOWN, aiTextureType_DIFFUSE_ROUGHNESS, aiTextureType_SPECULAR, aiTextureType_METALNESS}, g_defaultBlack);
-            AssignTexture(primitiveInfo, TextureType::Normal, material, {aiTextureType_NORMAL_CAMERA, aiTextureType_NORMALS, aiTextureType_HEIGHT}, g_defaultNormal);
-            AssignTexture(primitiveInfo, TextureType::Occlusion, material, {aiTextureType_AMBIENT_OCCLUSION, aiTextureType_LIGHTMAP}, g_defaultWhite);
-            AssignTexture(primitiveInfo, TextureType::Emissive, material, {aiTextureType_EMISSION_COLOR, aiTextureType_EMISSIVE}, g_defaultBlack);
-            ComputeMaterialData(primitiveInfo, material);
+            AssignTexture(meshInfo, TextureType::BaseColor, material, {aiTextureType_BASE_COLOR, aiTextureType_DIFFUSE}, g_defaultBlack);
+            AssignTexture(meshInfo, TextureType::MetallicRoughness, material, {aiTextureType_UNKNOWN, aiTextureType_DIFFUSE_ROUGHNESS, aiTextureType_SPECULAR, aiTextureType_METALNESS}, g_defaultBlack);
+            AssignTexture(meshInfo, TextureType::Normal, material, {aiTextureType_NORMAL_CAMERA, aiTextureType_NORMALS, aiTextureType_HEIGHT}, g_defaultNormal);
+            AssignTexture(meshInfo, TextureType::Occlusion, material, {aiTextureType_AMBIENT_OCCLUSION, aiTextureType_LIGHTMAP}, g_defaultWhite);
+            AssignTexture(meshInfo, TextureType::Emissive, material, {aiTextureType_EMISSION_COLOR, aiTextureType_EMISSIVE}, g_defaultBlack);
+            ComputeMaterialData(meshInfo, material);
 
             // Process vertices - cache pointers for better performance
             const aiVector3D *positions = mesh->mVertices;
@@ -356,7 +351,7 @@ namespace pe
 
             // Process indices
             // Verify indexOffset matches what we set in ProcessAabbs
-            PE_ERROR_IF(primitiveInfo.indexOffset != indexBaseOffset, "Index offset mismatch in AcquireGeometryInfo");
+            PE_ERROR_IF(meshInfo.indexOffset != indexBaseOffset, "Index offset mismatch in AcquireGeometryInfo");
 
             const size_t expectedIndices = mesh->mNumFaces * 3;
             const size_t indicesStart = m_indices.size();
@@ -380,10 +375,10 @@ namespace pe
             indexBaseOffset += mesh->mNumFaces * 3;
 
             // AABB vertices
-            primitiveInfo.aabbColor = (rand(0, 255) << 24) + (rand(0, 255) << 16) + (rand(0, 255) << 8) + 256;
+            meshInfo.aabbColor = (rand(0, 255) << 24) + (rand(0, 255) << 16) + (rand(0, 255) << 8) + 256;
 
-            const vec3 &min = primitiveInfo.boundingBox.min;
-            const vec3 &max = primitiveInfo.boundingBox.max;
+            const vec3 &min = meshInfo.boundingBox.min;
+            const vec3 &max = meshInfo.boundingBox.max;
 
             AabbVertex corners[8] = {
                 {min.x, min.y, min.z},
@@ -426,8 +421,8 @@ namespace pe
 
         dirtyNodes = true;
         m_nodeToMesh.clear();
-        m_nodesInfo.clear();
-        m_nodesInfo.reserve(nodeCount);
+        m_nodeInfos.clear();
+        m_nodeInfos.reserve(nodeCount);
 
         ProcessNode(m_scene->mRootNode, -1);
 
@@ -439,9 +434,9 @@ namespace pe
     {
         auto pushNode = [&](int parent, const mat4 &local, int meshIdx) -> int
         {
-            int idx = static_cast<int>(m_nodesInfo.size());
-            m_nodesInfo.push_back(NodeInfo{});
-            NodeInfo &ni = m_nodesInfo.back();
+            int idx = static_cast<int>(m_nodeInfos.size());
+            m_nodeInfos.push_back(NodeInfo{});
+            NodeInfo &ni = m_nodeInfos.back();
             ni.name = node && node->mName.length > 0 ? node->mName.C_Str() : ("Node " + std::to_string(idx));
 
             ni.parent = parent;
@@ -512,7 +507,7 @@ namespace pe
         int rootNodeCount = 0;
         for (int i = 0; i < GetNodeCount(); i++)
         {
-            if (m_nodesInfo[i].parent == -1)
+            if (m_nodeInfos[i].parent == -1)
                 rootNodeCount++;
         }
         total = rootNodeCount;
@@ -521,7 +516,7 @@ namespace pe
         // Update root nodes only - recursive UpdateNodeMatrix will handle children
         for (int i = 0; i < GetNodeCount(); i++)
         {
-            if (m_nodesInfo[i].parent == -1)
+            if (m_nodeInfos[i].parent == -1)
             {
                 UpdateNodeMatrix(i);
                 progress++;
@@ -536,14 +531,14 @@ namespace pe
 
         for (int i = 0; i < GetNodeCount(); i++)
         {
-            if (m_nodesInfo[i].parent == node)
+            if (m_nodeInfos[i].parent == node)
                 UpdateNodeMatrix(i);
         }
     }
 
     int ModelAssimp::GetNodeCount() const
     {
-        return static_cast<int>(m_nodesInfo.size());
+        return static_cast<int>(m_nodeInfos.size());
     }
 
     int ModelAssimp::GetNodeMesh(int nodeIndex) const
@@ -626,7 +621,7 @@ namespace pe
         return it->second;
     }
 
-    void ModelAssimp::AssignTexture(PrimitiveInfo &primitiveInfo, TextureType type, aiMaterial *material, std::initializer_list<aiTextureType> textureTypes, Image *defaultImage)
+    void ModelAssimp::AssignTexture(MeshInfo &meshInfo, TextureType type, aiMaterial *material, std::initializer_list<aiTextureType> textureTypes, Image *defaultImage)
     {
         Image *image = defaultImage;
         bool hasTexture = false;
@@ -644,26 +639,26 @@ namespace pe
             }
         }
 
-        primitiveInfo.images[static_cast<int>(type)] = image ? image : defaultImage;
-        primitiveInfo.samplers[static_cast<int>(type)] = g_defaultSampler;
+        meshInfo.images[static_cast<int>(type)] = image ? image : defaultImage;
+        meshInfo.samplers[static_cast<int>(type)] = g_defaultSampler;
         if (hasTexture)
-            primitiveInfo.textureMask |= (1u << static_cast<uint32_t>(type));
+            meshInfo.textureMask |= (1u << static_cast<uint32_t>(type));
     }
 
-    void ModelAssimp::ComputeMaterialData(PrimitiveInfo &primitiveInfo, aiMaterial *material) const
+    void ModelAssimp::ComputeMaterialData(MeshInfo &meshInfo, aiMaterial *material) const
     {
         mat4 factors(1.f);
         float alphaCutoff = 0.5f;
 
         if (!material)
         {
-            primitiveInfo.materialFactors = factors;
-            primitiveInfo.alphaCutoff = alphaCutoff;
+            meshInfo.materialFactors = factors;
+            meshInfo.alphaCutoff = alphaCutoff;
             return;
         }
 
-        const bool hasNormalMap = (primitiveInfo.textureMask & TextureBit(TextureType::Normal)) != 0;
-        const bool hasOcclusionMap = (primitiveInfo.textureMask & TextureBit(TextureType::Occlusion)) != 0;
+        const bool hasNormalMap = (meshInfo.textureMask & TextureBit(TextureType::Normal)) != 0;
+        const bool hasOcclusionMap = (meshInfo.textureMask & TextureBit(TextureType::Occlusion)) != 0;
 
         aiColor4D baseColor(1.f, 1.f, 1.f, 1.f);
         aiColor3D diffuseColor(1.f, 1.f, 1.f);
@@ -735,8 +730,8 @@ namespace pe
         factors[3][1] = normalScale;
         factors[3][2] = 0.f;
 
-        primitiveInfo.materialFactors = factors;
-        primitiveInfo.alphaCutoff = alphaCutoff;
+        meshInfo.materialFactors = factors;
+        meshInfo.alphaCutoff = alphaCutoff;
     }
 
     RenderType ModelAssimp::DetermineRenderType(aiMaterial *material) const

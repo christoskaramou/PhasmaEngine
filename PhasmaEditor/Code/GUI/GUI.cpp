@@ -844,7 +844,7 @@ namespace pe
 
                     if (modelOpen)
                     {
-                        const auto &nodeInfos = model->GetNodesInfo();
+                        const auto &nodeInfos = model->GetNodeInfos();
                         if (nodeInfos.empty())
                         {
                             ImGui::TextDisabled("Model has no nodes.");
