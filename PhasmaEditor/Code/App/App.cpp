@@ -16,6 +16,8 @@
 #include "Window/SplashScreen.h"
 #endif
 
+#include "Scene/SceneDebugExamples.h"
+
 namespace pe
 {
     App::App() : m_frameTimer(FrameTimer::Instance())
