@@ -7,6 +7,7 @@
 #include "Systems/RendererSystem.h"
 #include "Systems/CameraSystem.h"
 #include "Scene/Model.h"
+#include "Scene/Scene.h"
 
 namespace pe
 {
@@ -16,7 +17,7 @@ namespace pe
 
         m_viewportRT = rs->GetRenderTarget("viewport");
         m_depthRT = rs->GetDepthStencilTarget("depthStencil");
-        m_geometry = nullptr;
+        m_scene = nullptr;
 
         m_attachments.resize(2);
         m_attachments[0] = {};
@@ -44,8 +45,8 @@ namespace pe
 
     void AabbsPass::Draw(CommandBuffer *cmd)
     {
-        PE_ERROR_IF(m_geometry == nullptr, "Geometry was not set");
-        if (!m_geometry->HasDrawInfo())
+        PE_ERROR_IF(m_scene == nullptr, "Scene was not set");
+        if (!m_scene->HasDrawInfo())
             return;
 
         auto &gSettings = Settings::Get<GlobalSettings>();
@@ -85,22 +86,22 @@ namespace pe
         cmd->BeginDebugRegion("Aabbs");
 
         cmd->BeginPass(2, m_attachments.data(), "AabbsPass");
-        cmd->BindIndexBuffer(m_geometry->GetBuffer(), m_geometry->GetAabbIndicesOffset());
-        cmd->BindVertexBuffer(m_geometry->GetBuffer(), m_geometry->GetAabbVerticesOffset());
+        cmd->BindIndexBuffer(m_scene->GetBuffer(), m_scene->GetAabbIndicesOffset());
+        cmd->BindVertexBuffer(m_scene->GetBuffer(), m_scene->GetAabbVerticesOffset());
         cmd->SetViewport(0.f, 0.f, m_viewportRT->GetWidth_f(), m_viewportRT->GetHeight_f());
         cmd->SetScissor(0, 0, m_viewportRT->GetWidth(), m_viewportRT->GetHeight());
         cmd->SetLineWidth(1.f + gSettings.render_scale * gSettings.render_scale);
         cmd->SetDepthTestEnable(gSettings.aabbs_depth_aware);
         cmd->SetDepthWriteEnable(false);
         cmd->BindPipeline(*m_passInfo);
-        DrawFromInfos(m_geometry->GetDrawInfosOpaque());
-        DrawFromInfos(m_geometry->GetDrawInfosAlphaCut());
-        DrawFromInfos(m_geometry->GetDrawInfosAlphaBlend());
+        DrawFromInfos(m_scene->GetDrawInfosOpaque());
+        DrawFromInfos(m_scene->GetDrawInfosAlphaCut());
+        DrawFromInfos(m_scene->GetDrawInfosAlphaBlend());
         cmd->EndPass();
 
         cmd->EndDebugRegion();
 
-        m_geometry = nullptr;
+        m_scene = nullptr;
     }
 
     void AabbsPass::Resize(uint32_t width, uint32_t height)

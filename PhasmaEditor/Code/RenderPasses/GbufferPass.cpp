@@ -5,7 +5,7 @@
 #include "API/Image.h"
 #include "API/Buffer.h"
 #include "API/Pipeline.h"
-#include "Scene/Geometry.h"
+#include "Scene/Scene.h"
 #include "Systems/RendererSystem.h"
 #include "Systems/CameraSystem.h"
 
@@ -39,7 +39,7 @@ namespace pe
         m_attachments[6].image = m_depthStencilRT;
         m_attachments[6].loadOp = vk::AttachmentLoadOp::eLoad;
 
-        m_geometry = nullptr;
+        m_scene = nullptr;
     }
 
     void GbufferOpaquePass::UpdatePassInfo()
@@ -81,18 +81,18 @@ namespace pe
 
     void GbufferOpaquePass::Draw(CommandBuffer *cmd)
     {
-        PE_ERROR_IF(m_geometry == nullptr, "Geometry was not set");
+        PE_ERROR_IF(m_scene == nullptr, "Scene was not set");
 
         Camera *camera = GetGlobalSystem<CameraSystem>()->GetCamera(0);
 
-        if (!m_geometry->HasDrawInfo())
+        if (!m_scene->HasDrawInfo())
         {
             // Just clear the render targets
             ClearRenderTargets(cmd);
         }
         else
         {
-            if (m_geometry->HasOpaqueDrawInfo())
+            if (m_scene->HasOpaqueDrawInfo())
             {
                 PushConstants_GBuffer pushConstants{};
                 pushConstants.jointsCount = 0u;
@@ -102,22 +102,22 @@ namespace pe
 
                 uint32_t frame = RHII.GetFrameIndex();
                 size_t offset = 0;
-                uint32_t count = static_cast<uint32_t>(m_geometry->GetDrawInfosOpaque().size());
+                uint32_t count = static_cast<uint32_t>(m_scene->GetDrawInfosOpaque().size());
 
                 cmd->BeginPass(7, m_attachments.data(), "GbufferOpaquePass");
-                cmd->BindIndexBuffer(m_geometry->GetBuffer(), 0);
-                cmd->BindVertexBuffer(m_geometry->GetBuffer(), m_geometry->GetVerticesOffset());
+                cmd->BindIndexBuffer(m_scene->GetBuffer(), 0);
+                cmd->BindVertexBuffer(m_scene->GetBuffer(), m_scene->GetVerticesOffset());
                 cmd->SetViewport(0.f, 0.f, m_depthStencilRT->GetWidth_f(), m_depthStencilRT->GetHeight_f());
                 cmd->SetScissor(0, 0, m_depthStencilRT->GetWidth(), m_depthStencilRT->GetHeight());
                 cmd->BindPipeline(*m_passInfo);
                 cmd->SetConstants(pushConstants);
                 cmd->PushConstants();
-                cmd->DrawIndexedIndirect(m_geometry->GetIndirect(frame), offset, count);
+                cmd->DrawIndexedIndirect(m_scene->GetIndirect(frame), offset, count);
                 cmd->EndPass();
             }
         }
 
-        m_geometry = nullptr;
+        m_scene = nullptr;
     }
 
     void GbufferOpaquePass::Resize(uint32_t width, uint32_t height)
@@ -167,7 +167,7 @@ namespace pe
         m_attachments[5].image = m_transparencyRT;
         m_attachments[6].image = m_depthStencilRT;
 
-        m_geometry = nullptr;
+        m_scene = nullptr;
     }
 
     void GbufferTransparentPass::UpdatePassInfo()
@@ -209,11 +209,11 @@ namespace pe
 
     void GbufferTransparentPass::Draw(CommandBuffer *cmd)
     {
-        PE_ERROR_IF(m_geometry == nullptr, "Geometry was not set");
+        PE_ERROR_IF(m_scene == nullptr, "Scene was not set");
 
         Camera *camera = GetGlobalSystem<CameraSystem>()->GetCamera(0);
 
-        if (m_geometry->HasAlphaDrawInfo())
+        if (m_scene->HasAlphaDrawInfo())
         {
             PushConstants_GBuffer pushConstants{};
             pushConstants.jointsCount = 0u;
@@ -222,22 +222,22 @@ namespace pe
             pushConstants.transparentPass = 1u;
 
             uint32_t frame = RHII.GetFrameIndex();
-            size_t offset = m_geometry->GetDrawInfosOpaque().size() * sizeof(vk::DrawIndexedIndirectCommand);
-            uint32_t count = static_cast<uint32_t>(m_geometry->GetDrawInfosAlphaCut().size() + m_geometry->GetDrawInfosAlphaBlend().size());
+            size_t offset = m_scene->GetDrawInfosOpaque().size() * sizeof(vk::DrawIndexedIndirectCommand);
+            uint32_t count = static_cast<uint32_t>(m_scene->GetDrawInfosAlphaCut().size() + m_scene->GetDrawInfosAlphaBlend().size());
 
             cmd->BeginPass(7, m_attachments.data(), "GbufferTransparentPass");
-            cmd->BindIndexBuffer(m_geometry->GetBuffer(), 0);
-            cmd->BindVertexBuffer(m_geometry->GetBuffer(), m_geometry->GetVerticesOffset());
+            cmd->BindIndexBuffer(m_scene->GetBuffer(), 0);
+            cmd->BindVertexBuffer(m_scene->GetBuffer(), m_scene->GetVerticesOffset());
             cmd->SetViewport(0.f, 0.f, m_depthStencilRT->GetWidth_f(), m_depthStencilRT->GetHeight_f());
             cmd->SetScissor(0, 0, m_depthStencilRT->GetWidth(), m_depthStencilRT->GetHeight());
             cmd->BindPipeline(*m_passInfo);
             cmd->SetConstants(pushConstants);
             cmd->PushConstants();
-            cmd->DrawIndexedIndirect(m_geometry->GetIndirect(frame), offset, count);
+            cmd->DrawIndexedIndirect(m_scene->GetIndirect(frame), offset, count);
             cmd->EndPass();
         }
 
-        m_geometry = nullptr;
+        m_scene = nullptr;
     }
 
     void GbufferTransparentPass::Resize(uint32_t width, uint32_t height)
