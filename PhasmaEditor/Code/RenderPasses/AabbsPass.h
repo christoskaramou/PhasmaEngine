@@ -4,7 +4,7 @@ namespace pe
 {
     class Image;
     class CommandBuffer;
-    class Geometry;
+    class Scene;
 
     class AabbsPass : public IRenderPassComponent
     {
@@ -17,13 +17,13 @@ namespace pe
         void Draw(CommandBuffer *cmd) override;
         void Resize(uint32_t width, uint32_t height) override;
         void Destroy() override;
-        void SetGeometry(Geometry *geometry) { m_geometry = geometry; }
+        void SetScene(Scene *scene) { m_scene = scene; }
 
     private:
         friend class Scene;
 
         Image *m_viewportRT;
         Image *m_depthRT;
-        Geometry *m_geometry;
+        Scene *m_scene = nullptr;
     };
 }

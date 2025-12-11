@@ -824,7 +824,7 @@ namespace pe
         RendererSystem *renderer = GetGlobalSystem<RendererSystem>();
         if (renderer)
         {
-            auto &models = renderer->GetScene().GetGeometry().GetModels();
+            auto &models = renderer->GetScene().GetModels();
             if (!models.size())
             {
                 ImGui::TextDisabled("No models loaded yet.");

@@ -4,10 +4,10 @@ namespace pe
 {
     class Image;
     class Buffer;
-    class Geometry;
     class CommandBuffer;
     class Sampler;
     class Camera;
+    class Scene;
 
     struct PushConstants_Shadows
     {
@@ -27,11 +27,10 @@ namespace pe
         void Resize(uint32_t width, uint32_t height) override;
         void Destroy() override;
 
-        void SetGeometry(Geometry *geometry) { m_geometry = geometry; }
+        void SetScene(Scene *scene) { m_scene = scene; }
         void ClearDepths(CommandBuffer *cmd);
 
     private:
-        friend class Geometry;
         friend class Scene;
         friend class LightOpaquePass;
         friend class LightTransparentPass;
@@ -43,6 +42,6 @@ namespace pe
         vec4 m_viewZ;
         std::vector<Image *> m_textures{};
         Sampler *m_sampler;
-        Geometry *m_geometry = nullptr;
+        Scene *m_scene = nullptr;
     };
 }

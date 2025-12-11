@@ -4,8 +4,8 @@ namespace pe
 {
     class Image;
     class Buffer;
-    class Geometry;
     class CommandBuffer;
+    class Scene;
 
     struct PushConstants_GBuffer
     {
@@ -35,12 +35,11 @@ namespace pe
         void Resize(uint32_t width, uint32_t height) override;
         void Destroy() override;
 
-        void SetGeometry(Geometry *geometry) { m_geometry = geometry; }
+        void SetScene(Scene *scene) { m_scene = scene; }
         void ClearRenderTargets(CommandBuffer *cmd);
         void ClearDepthStencil(CommandBuffer *cmd);
 
     private:
-        friend class Geometry;
         friend class Scene;
 
         void PassBarriers(CommandBuffer *cmd);
@@ -56,7 +55,7 @@ namespace pe
         Image *m_depthStencilRT;
         Buffer *m_constants;
 
-        Geometry *m_geometry;
+        Scene *m_scene = nullptr;
     };
 
     class GbufferTransparentPass : public IRenderPassComponent
@@ -71,12 +70,11 @@ namespace pe
         void Resize(uint32_t width, uint32_t height) override;
         void Destroy() override;
 
-        void SetGeometry(Geometry *geometry) { m_geometry = geometry; }
+        void SetScene(Scene *scene) { m_scene = scene; }
         void ClearRenderTargets(CommandBuffer *cmd);
         void ClearDepthStencil(CommandBuffer *cmd);
 
     private:
-        friend class Geometry;
         friend class Scene;
 
         void PassBarriers(CommandBuffer *cmd);
@@ -92,6 +90,6 @@ namespace pe
         Image *m_depthStencilRT;
         Buffer *m_constants;
 
-        Geometry *m_geometry;
+        Scene *m_scene = nullptr;
     };
 }

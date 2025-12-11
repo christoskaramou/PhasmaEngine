@@ -6,7 +6,7 @@
 #include "API/Buffer.h"
 #include "API/Pipeline.h"
 #include "Systems/RendererSystem.h"
-#include "Scene/Geometry.h"
+#include "Scene/Scene.h"
 
 namespace pe
 {
@@ -47,9 +47,9 @@ namespace pe
 
     void DepthPass::Draw(CommandBuffer *cmd)
     {
-        PE_ERROR_IF(m_geometry == nullptr, "Geometry was not set");
+        PE_ERROR_IF(m_scene == nullptr, "Scene was not set");
 
-        if (!m_geometry->HasOpaqueDrawInfo())
+        if (!m_scene->HasOpaqueDrawInfo())
         {
             ClearDepthStencil(cmd);
         }
@@ -60,21 +60,21 @@ namespace pe
 
             uint32_t frame = RHII.GetFrameIndex();
             size_t offset = 0;
-            uint32_t count = static_cast<uint32_t>(m_geometry->GetDrawInfosOpaque().size());
+            uint32_t count = static_cast<uint32_t>(m_scene->GetDrawInfosOpaque().size());
 
             cmd->BeginPass(1, m_attachments.data(), "DepthPass");
             cmd->SetViewport(0.f, 0.f, m_depthStencil->GetWidth_f(), m_depthStencil->GetHeight_f());
             cmd->SetScissor(0, 0, m_depthStencil->GetWidth(), m_depthStencil->GetHeight());
             cmd->BindPipeline(*m_passInfo);
-            cmd->BindIndexBuffer(m_geometry->GetBuffer(), 0);
-            cmd->BindVertexBuffer(m_geometry->GetBuffer(), m_geometry->GetPositionsOffset());
+            cmd->BindIndexBuffer(m_scene->GetBuffer(), 0);
+            cmd->BindVertexBuffer(m_scene->GetBuffer(), m_scene->GetPositionsOffset());
             cmd->SetConstants(pushConstants);
             cmd->PushConstants();
-            cmd->DrawIndexedIndirect(m_geometry->GetIndirect(frame), offset, count);
+            cmd->DrawIndexedIndirect(m_scene->GetIndirect(frame), offset, count);
             cmd->EndPass();
         }
 
-        m_geometry = nullptr;
+        m_scene = nullptr;
     }
 
     void DepthPass::Resize(uint32_t width, uint32_t height)

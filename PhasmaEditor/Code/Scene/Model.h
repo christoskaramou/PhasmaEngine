@@ -46,7 +46,7 @@ namespace pe
         size_t GetMeshDataOffset() const { return dataOffset + dataSize; }
 
     private:
-        friend class Geometry;
+        friend class Scene;
 
         // indices in the image views array in shader
         // 0 = Base Color
@@ -54,7 +54,7 @@ namespace pe
         // 2 = Metallic Roughness
         // 3 = Occlusion
         // 4 = Emissive
-        uint32_t viewsIndex[5] = {0, 0, 0, 0, 0}; // Updated in Geometry::UploadBuffers
+        uint32_t viewsIndex[5] = {0, 0, 0, 0, 0}; // Updated in Scene::UpdateImageViews
     };
 
     struct NodeInfo
@@ -112,7 +112,7 @@ namespace pe
         virtual int GetNodeMesh(int nodeIndex) const = 0;
 
     protected:
-        friend class Geometry;
+        friend class Scene;
         friend class DepthPass;
         friend class GbufferOpaquePass;
         friend class GbufferTransparentPass;

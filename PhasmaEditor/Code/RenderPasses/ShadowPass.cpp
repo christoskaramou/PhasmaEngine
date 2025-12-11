@@ -7,7 +7,7 @@
 #include "API/Command.h"
 #include "Systems/RendererSystem.h"
 #include "Systems/CameraSystem.h"
-#include "Scene/Geometry.h"
+#include "Scene/Scene.h"
 
 namespace pe
 {
@@ -197,11 +197,11 @@ namespace pe
 
     void ShadowPass::Draw(CommandBuffer *cmd)
     {
-        PE_ERROR_IF(m_geometry == nullptr, "Geometry was not set");
+        PE_ERROR_IF(m_scene == nullptr, "Scene was not set");
 
         cmd->BeginDebugRegion("ShadowPass");
 
-        if (!m_geometry->HasOpaqueDrawInfo())
+        if (!m_scene->HasOpaqueDrawInfo())
         {
             ClearDepths(cmd);
         }
@@ -223,18 +223,18 @@ namespace pe
                 cmd->SetViewport(0.f, 0.f, attachment.image->GetWidth_f(), attachment.image->GetHeight_f());
                 cmd->SetScissor(0, 0, attachment.image->GetWidth(), attachment.image->GetHeight());
                 cmd->BindPipeline(passInfo);
-                cmd->BindIndexBuffer(m_geometry->GetBuffer(), 0);
-                cmd->BindVertexBuffer(m_geometry->GetBuffer(), m_geometry->GetPositionsOffset());
+                cmd->BindIndexBuffer(m_scene->GetBuffer(), 0);
+                cmd->BindVertexBuffer(m_scene->GetBuffer(), m_scene->GetPositionsOffset());
                 cmd->SetConstants(pushConstants);
                 cmd->PushConstants();
-                cmd->DrawIndexedIndirect(m_geometry->GetIndirectAll(), 0, m_geometry->GetMeshCount());
+                cmd->DrawIndexedIndirect(m_scene->GetIndirectAll(), 0, m_scene->GetMeshCount());
                 cmd->EndPass();
             }
         }
         
         cmd->EndDebugRegion();
 
-        m_geometry = nullptr;
+        m_scene = nullptr;
     }
 
     void ShadowPass::Resize(uint32_t width, uint32_t height)
