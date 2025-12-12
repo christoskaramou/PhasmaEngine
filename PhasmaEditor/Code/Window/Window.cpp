@@ -7,6 +7,8 @@
 #include "imgui/imgui_impl_vulkan.h"
 #include "imgui/imgui_impl_sdl2.h"
 #include "imgui/imgui_internal.h"
+#include "Scene/Scene.h"
+#include "Scene/Model.h"
 #if defined(PE_SCRIPTS)
 #include "Script/ScriptManager.h"
 #endif
@@ -156,6 +158,17 @@ namespace pe
                     bool enable = std::any_cast<bool>(event.payload);
                     RHII.GetMainQueue()->WaitIdle();
                     Settings::Get<GlobalSettings>().dynamic_rendering = enable;
+                    break;
+                }
+                case EventType::ModelLoaded:
+                {
+                    Model *model = std::any_cast<Model *>(event.payload);
+                    if (!model)
+                        break;
+                    RHII.GetMainQueue()->Wait();
+                    rendererSystem->GetScene().AddModel(model);
+                    rendererSystem->GetScene().UpdateGeometryBuffers();
+                    model->SetRenderReady(true);
                     break;
                 }
                 default:

@@ -15,6 +15,7 @@ namespace pe
         PresentMode,
         AfterCommandWait,
         DynamicRendering,
+        ModelLoaded,
     };
 
     // One key type for both core + dynamic events

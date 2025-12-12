@@ -8,6 +8,7 @@
 #include "API/Buffer.h"
 #include "API/Vertex.h"
 #include "API/Pipeline.h"
+#include "API/Queue.h"
 #include "Camera/Camera.h"
 #include "RenderPasses/ShadowPass.h"
 #include "RenderPasses/AabbsPass.h"
@@ -152,9 +153,15 @@ namespace pe
         }
     }
 
-    void Scene::UpdateGeometryBuffers(CommandBuffer *cmd)
+    void Scene::UpdateGeometryBuffers()
     {
+        CommandBuffer *cmd = RHII.GetMainQueue()->AcquireCommandBuffer();
+        cmd->Begin();
         UploadBuffers(cmd);
+        cmd->End();
+        RHII.GetMainQueue()->Submit(1, &cmd, nullptr, nullptr);
+        cmd->Wait();
+        cmd->Return();
     }
 
     void Scene::DrawShadowPass(CommandBuffer *cmd)
@@ -220,6 +227,9 @@ namespace pe
 
     void Scene::UploadBuffers(CommandBuffer *cmd)
     {
+        if (!m_models.size())
+            return;
+
         DestroyBuffers();
         CreateGeometryBuffer();
         CopyIndices(cmd);
@@ -227,7 +237,7 @@ namespace pe
         CreateStorageBuffers();
         CreateIndirectBuffers(cmd);
         UpdateImageViews();
-        CopyGBufferConstants(cmd);
+        CreateGBufferConstants(cmd);
     }
 
     void Scene::CreateGeometryBuffer()
@@ -504,7 +514,7 @@ namespace pe
             dirtyView = true;
     }
 
-    void Scene::CopyGBufferConstants(CommandBuffer *cmd)
+    void Scene::CreateGBufferConstants(CommandBuffer *cmd)
     {
         GbufferOpaquePass *gbo = GetGlobalComponent<GbufferOpaquePass>();
         GbufferTransparentPass *gbt = GetGlobalComponent<GbufferTransparentPass>();

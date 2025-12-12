@@ -43,7 +43,7 @@ namespace pe
         mat4 materialFactors = mat4(1.f);
         float alphaCutoff = 0.5f;
 
-        size_t GetMeshDataOffset() const { return dataOffset + dataSize; }
+        size_t GetMeshFactorsOffset() const { return dataOffset + dataSize; }
 
     private:
         friend class Scene;
@@ -83,11 +83,11 @@ namespace pe
 
         // Common interface methods
         void UpdateNodeMatrices();
-        void SetMeshFactors(Buffer *uniformBuffer);
-        void UploadBuffers(CommandBuffer *cmd);
+        void SetMeshFactors(Buffer *buffer);
 
         // Getters
         size_t GetId() const { return m_id; }
+        void SetRenderReady(bool ready) { m_render = ready; }
         bool IsRenderReady() const { return m_render; }
         const std::vector<Vertex> &GetVertices() const { return m_vertices; }
         const std::vector<PositionUvVertex> &GetPositionUvs() const { return m_positionUvs; }
@@ -120,10 +120,7 @@ namespace pe
         friend class AabbsPass;
 
         virtual void UpdateNodeMatrix(int node);
-        static constexpr uint32_t TextureBit(TextureType type)
-        {
-            return 1u << static_cast<uint32_t>(type);
-        }
+        static constexpr uint32_t TextureBit(TextureType type) { return 1u << static_cast<uint32_t>(type); }
 
         // Helper methods for vertex processing (inline for performance)
         static inline void FillVertexPosition(Vertex &vertex, float x, float y, float z);

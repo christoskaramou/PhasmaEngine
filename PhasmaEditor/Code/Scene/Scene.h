@@ -24,7 +24,7 @@ namespace pe
         ~Scene();
 
         void Update();
-        void UpdateGeometryBuffers(CommandBuffer *cmd);
+        void UpdateGeometryBuffers();
         void DrawShadowPass(CommandBuffer *cmd);
         void DepthPrePass(CommandBuffer *cmd);
         void DrawGbufferPassOpaque(CommandBuffer *cmd);
@@ -75,7 +75,7 @@ namespace pe
         void CreateStorageBuffers();
         void CreateIndirectBuffers(CommandBuffer *cmd);
         void UpdateImageViews();
-        void CopyGBufferConstants(CommandBuffer *cmd);
+        void CreateGBufferConstants(CommandBuffer *cmd);
 
         struct alignas(64) PerFrameData
         {

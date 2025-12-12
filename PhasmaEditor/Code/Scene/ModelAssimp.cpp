@@ -21,7 +21,7 @@ namespace pe
 
     ModelAssimp::ModelAssimp() = default;
 
-    ModelAssimp *ModelAssimp::Load(const std::filesystem::path &file)
+    Model *ModelAssimp::Load(const std::filesystem::path &file)
     {
         PE_ERROR_IF(!std::filesystem::exists(file), std::string("Model file not found: " + file.string()).c_str());
 
@@ -44,13 +44,10 @@ namespace pe
         model.AcquireGeometryInfo();
         model.SetupNodes();
         model.UpdateAllNodeMatrices();
-        model.UploadBuffers(cmd);
         cmd->End();
         queue->Submit(1, &cmd, nullptr, nullptr);
         cmd->Wait();
         cmd->Return();
-
-        modelAssimp->m_render = true;
 
         return modelAssimp;
     }
