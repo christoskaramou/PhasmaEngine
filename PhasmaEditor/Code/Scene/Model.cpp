@@ -22,7 +22,12 @@ namespace pe
         std::transform(ext.begin(), ext.end(), ext.begin(), [](unsigned char c)
                        { return std::tolower(c); });
 
-        return ModelAssimp::Load(file);
+        Model *modelAssimp = ModelAssimp::Load(file);
+        PE_ERROR_IF(!modelAssimp, std::string("Failed to load model: " + file.string()).c_str());
+
+        EventSystem::PushEvent(EventType::ModelLoaded, modelAssimp);
+
+        return modelAssimp;
     }
 
     Model::~Model()
@@ -85,12 +90,11 @@ namespace pe
         }
     }
 
-    void Model::SetMeshFactors(Buffer *uniformBuffer)
+    void Model::SetMeshFactors(Buffer *buffer)
     {
         // copy factors in uniform buffer
         BufferRange range{};
-        uniformBuffer->Map();
-
+        buffer->Map();
         for (int i = 0; i < GetNodeCount(); i++)
         {
             int mesh = GetNodeMesh(i);
@@ -100,28 +104,10 @@ namespace pe
             auto &meshInfo = m_meshInfos[mesh];
             range.data = &meshInfo.materialFactors;
             range.size = sizeof(mat4);
-            range.offset = meshInfo.GetMeshDataOffset();
-            uniformBuffer->Copy(1, &range, true);
+            range.offset = meshInfo.GetMeshFactorsOffset();
+            buffer->Copy(1, &range, true);
         }
 
-        uniformBuffer->Unmap();
-    }
-
-    void Model::UploadBuffers(CommandBuffer *cmd)
-    {
-        auto &gSettings = Settings::Get<GlobalSettings>();
-        auto &progress = gSettings.loading_current;
-        auto &total = gSettings.loading_total;
-        auto &loading = gSettings.loading_name;
-
-        progress = 0;
-        total = 1;
-        loading = "Uploading buffers";
-
-        Scene &scene = GetGlobalSystem<RendererSystem>()->GetScene();
-        scene.AddModel(this);
-        scene.UpdateGeometryBuffers(cmd);
-
-        progress++;
+        buffer->Unmap();
     }
 }

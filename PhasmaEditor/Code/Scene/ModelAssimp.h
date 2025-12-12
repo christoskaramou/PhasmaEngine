@@ -12,7 +12,7 @@ namespace pe
     class ModelAssimp : public Model
     {
     public:
-        static ModelAssimp *Load(const std::filesystem::path &file);
+        static Model *Load(const std::filesystem::path &file);
 
         ModelAssimp();
         ~ModelAssimp() override = default;

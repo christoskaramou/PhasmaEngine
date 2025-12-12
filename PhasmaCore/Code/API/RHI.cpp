@@ -986,10 +986,10 @@ namespace pe
             "Immediate",
             "Mailbox",
             "Fifo",
-            "FifoRelaxed",
-            "SharedDemandRefresh",
-            "SharedContinuousRefresh",
-            "FifoLatestReady"};
+            "Fifo Relaxed",
+            "Shared Demand Refresh",
+            "Shared Continuous Refresh",
+            "Fifo Latest Ready"};
 
         switch (presentMode)
         {
@@ -1005,7 +1005,7 @@ namespace pe
             return presentModeNames[4];
         case vk::PresentModeKHR::eSharedContinuousRefresh:
             return presentModeNames[5];
-        case vk::PresentModeKHR::eFifoLatestReadyEXT:
+        case vk::PresentModeKHR::eFifoLatestReady:
             return presentModeNames[6];
         default:
             PE_ERROR("Unknown PresentMode");
