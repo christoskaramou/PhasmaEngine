@@ -36,7 +36,6 @@ namespace pe
         void Models();
         void Scripts();
         void AssetViewer();
-        void SceneObjects();
         void SceneView();
         void Properties();
         float FetchTotalGPUTime();
