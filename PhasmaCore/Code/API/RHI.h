@@ -12,8 +12,8 @@ namespace pe
     class Image;
     class Surface;
     class Buffer;
-    class RingBuffer;
     class Queue;
+    class StagingManager;
 
     struct MemoryInfo
     {
@@ -104,7 +104,7 @@ namespace pe
         GpuMemorySnapshot GetGpuMemorySnapshot();
         void ChangePresentMode(vk::PresentModeKHR mode);
         const char *PresentModeToString(vk::PresentModeKHR presentMode);
-        RingBuffer *GetUploadMemory() { return m_uploadMemory; }
+        StagingManager *GetStagingManager() { return m_stagingManager; }
 
         uint32_t GetWidth() const;
         uint32_t GetHeight() const;
@@ -125,7 +125,7 @@ namespace pe
         Surface *m_surface;
         Swapchain *m_swapchain;
         uint32_t m_frameCounter;
-        RingBuffer *m_uploadMemory;
+        StagingManager *m_stagingManager;
 
         // Limits
         uint32_t m_maxUniformBufferSize;

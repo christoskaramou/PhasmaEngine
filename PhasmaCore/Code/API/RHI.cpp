@@ -6,13 +6,13 @@
 #include "API/Swapchain.h"
 #include "API/Queue.h"
 #include "API/Buffer.h"
-#include "API/RingBuffer.h"
 #include "API/Surface.h"
 #include "API/Event.h"
 #include "API/Framebuffer.h"
 #include "API/RenderPass.h"
 #include "API/Shader.h"
 #include "API/Pipeline.h"
+#include "API/StagingManager.h"
 #include "API/Downsampler/Downsampler.h"
 
 #if defined(PE_WIN32)
@@ -379,7 +379,7 @@ namespace pe
         Surface::Destroy(m_surface);
         Queue::Destroy(m_mainQueue);
         CommandBuffer::ClearCache();
-        delete m_uploadMemory;
+        delete m_stagingManager;
         vmaDestroyAllocator(m_allocator);
         DescriptorPool::Destroy(m_descriptorPool);
 
@@ -677,7 +677,7 @@ namespace pe
 
         PE_CHECK(vmaCreateAllocator(&allocator_info, &m_allocator));
 
-        m_uploadMemory = new RingBuffer();
+        m_stagingManager = new StagingManager();
     }
 
     void RHI::CreateSwapchain(Surface *surface)
