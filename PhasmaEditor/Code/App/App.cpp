@@ -1,7 +1,6 @@
 #include "Code/App/App.h"
 #include "Window/Window.h"
 #include "Systems/CameraSystem.h"
-#include "Scene/SceneSystem.h"
 #include "Systems/RendererSystem.h"
 #include "Systems/LightSystem.h"
 #include "Systems/PostProcessSystem.h"
@@ -15,8 +14,6 @@
 #ifdef NDEBUG
 #include "Window/SplashScreen.h"
 #endif
-
-#include "Scene/SceneDebugExamples.h"
 
 namespace pe
 {
@@ -77,7 +74,6 @@ namespace pe
         CommandBuffer *cmd = queue->AcquireCommandBuffer();
 
         cmd->Begin();
-        CreateGlobalSystem<SceneSystem>()->Init(cmd);
         CreateGlobalSystem<CameraSystem>()->Init(cmd);
         CreateGlobalSystem<LightSystem>()->Init(cmd);
         CreateGlobalSystem<RendererSystem>()->Init(cmd);

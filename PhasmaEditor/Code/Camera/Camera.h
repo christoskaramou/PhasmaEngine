@@ -2,8 +2,6 @@
 
 namespace pe
 {
-    class SceneNodeComponent;
-
     class Camera : public IComponent
     {
     public:
@@ -31,8 +29,6 @@ namespace pe
         bool PointInFrustum(const vec3 &point, float radius) const;
         bool AABBInFrustum(const AABB &aabb) const;
         void Destroy() override;
-        void SetSceneNode(SceneNodeComponent *sceneNode);
-        SceneNodeComponent *GetSceneNode() const { return m_sceneNode; }
         inline mat4 GetView() const { return m_view; }
         inline mat4 GetProjection() const { return m_projection; }
         inline mat4 GetViewProjection() const { return m_viewProjection; }
@@ -59,8 +55,5 @@ namespace pe
         std::array<Plane, 6> m_frustum{};
         vec2 m_projJitter;
         vec2 m_prevProjJitter;
-        SceneNodeComponent *m_sceneNode;
-
-        void SyncSceneNodeTransform() const;
     };
 }
