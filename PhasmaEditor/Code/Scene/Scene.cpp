@@ -235,6 +235,7 @@ namespace pe
         CopyIndices(cmd);
         CopyVertices(cmd);
         CreateStorageBuffers();
+        MarkUniformsDirty();
         CreateIndirectBuffers(cmd);
         UpdateImageViews();
         CreateGBufferConstants(cmd);
@@ -417,6 +418,26 @@ namespace pe
                 vk::BufferUsageFlagBits2::eStorageBuffer,
                 VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT,
                 "storage_Geometry_buffer_" + std::to_string(i++));
+        }
+    }
+
+    void Scene::MarkUniformsDirty()
+    {
+        const uint32_t frameCount = RHII.GetSwapchainImageCount();
+
+        for (auto &modelPtr : m_models)
+        {
+            Model &model = *modelPtr;
+
+            auto &modelDirtyUniforms = model.GetDirtyUniforms();
+            modelDirtyUniforms.resize(frameCount, true);
+            std::fill(modelDirtyUniforms.begin(), modelDirtyUniforms.end(), true);
+
+            for (auto &nodeInfo : model.GetNodeInfos())
+            {
+                nodeInfo.dirtyUniforms.resize(frameCount, true);
+                std::fill(nodeInfo.dirtyUniforms.begin(), nodeInfo.dirtyUniforms.end(), true);
+            }
         }
     }
 
