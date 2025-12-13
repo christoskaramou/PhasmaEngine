@@ -2,7 +2,7 @@
 #include "API/RHI.h"
 #include "API/Command.h"
 #include "API/Buffer.h"
-#include "API/RingBuffer.h"
+#include "API/StagingManager.h"
 #include "API/Downsampler/Downsampler.h"
 
 #define STB_IMAGE_IMPLEMENTATION
@@ -402,9 +402,9 @@ namespace pe
     {
         PE_ERROR_IF(!cmd, "Image::CopyDataToImageStaged(): no command buffer specified.");
 
-        Allocation alloc = RHII.GetUploadMemory()->Allocate(size);
+        StagingAllocation alloc = RHII.GetStagingManager()->Allocate(size);
         std::memcpy(alloc.data, data, size);
-        alloc.buffer->Flush(size, alloc.offset);
+        alloc.buffer->Flush(size, 0);
 
         ImageBarrierInfo barrier{};
         barrier.image = this;
@@ -418,7 +418,7 @@ namespace pe
         Barrier(cmd, barrier);
 
         vk::BufferImageCopy2 region{};
-        region.bufferOffset = alloc.offset;
+        region.bufferOffset = 0;
         region.bufferRowLength = 0;
         region.bufferImageHeight = 0;
         region.imageSubresource.aspectMask = VulkanHelpers::GetAspectMask(m_createInfo.format);
@@ -437,8 +437,8 @@ namespace pe
 
         cmd->ApiHandle().copyBufferToImage2(copyInfo);
 
-        cmd->AddAfterWaitCallback([alloc]()
-                                  { RHII.GetUploadMemory()->Free(alloc); });
+        cmd->AddAfterWaitCallback([alloc = std::move(alloc)]()
+                                  { RHII.GetStagingManager()->SetUnused(alloc); });
     }
 
     // TODO: add multiple regions for all mip levels

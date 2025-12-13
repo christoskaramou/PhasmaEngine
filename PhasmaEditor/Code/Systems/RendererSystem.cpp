@@ -7,6 +7,7 @@
 #include "API/Queue.h"
 #include "API/Command.h"
 #include "API/Shader.h"
+#include "API/StagingManager.h"
 #include "API/Surface.h"
 #include "API/Swapchain.h"
 #include "RenderPasses/BloomPass.h"
@@ -121,6 +122,7 @@ namespace pe
     {
         // Wait for the previous corresponding frame commands to finish first
         WaitPreviousFrameCommands();
+        RHII.GetStagingManager()->RemoveUnused();
 
         // GUI
         m_gui.Update();

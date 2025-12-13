@@ -44,6 +44,7 @@ namespace pe
         Semaphore *GetSubmissionsSemaphore() const { return m_submissionsSemaphore; }
         CommandBuffer *AcquireCommandBuffer(vk::CommandPoolCreateFlags flags = vk::CommandPoolCreateFlagBits::eTransient);
         void ReturnCommandBuffer(CommandBuffer *cmd);
+        uint64_t GetSubmissionCount() const { return m_submission.load(std::memory_order_acquire); }
 
     private:
         inline static std::mutex s_submitMutex{};

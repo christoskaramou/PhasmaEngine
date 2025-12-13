@@ -1,5 +1,5 @@
 #include "API/Buffer.h"
-#include "API/RingBuffer.h"
+#include "API/StagingManager.h"
 #include "API/RHI.h"
 #include "API/Command.h"
 
@@ -103,14 +103,14 @@ namespace pe
     {
         PE_ERROR_IF(dstOffset + size > m_size, "CopyBufferStaged: dst range overflow");
 
-        Allocation alloc = RHII.GetUploadMemory()->Allocate(size);
+        StagingAllocation alloc = RHII.GetStagingManager()->Allocate(size);
         std::memcpy(alloc.data, data, size);
-        alloc.buffer->Flush(size, alloc.offset);
+        alloc.buffer->Flush(size, 0);
 
-        CopyBuffer(cmd, alloc.buffer, size, alloc.offset, dstOffset);
+        CopyBuffer(cmd, alloc.buffer, size, 0, dstOffset);
 
-        cmd->AddAfterWaitCallback([alloc]()
-                                  { RHII.GetUploadMemory()->Free(alloc); });
+        cmd->AddAfterWaitCallback([alloc = std::move(alloc)]()
+                                  { RHII.GetStagingManager()->SetUnused(alloc); });
     }
 
     void Buffer::Flush(size_t size, size_t offset) const
