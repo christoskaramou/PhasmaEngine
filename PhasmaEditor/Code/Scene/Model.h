@@ -122,18 +122,6 @@ namespace pe
         virtual void UpdateNodeMatrix(int node);
         static constexpr uint32_t TextureBit(TextureType type) { return 1u << static_cast<uint32_t>(type); }
 
-        // Helper methods for vertex processing (inline for performance)
-        static inline void FillVertexPosition(Vertex &vertex, float x, float y, float z);
-        static inline void FillVertexPosition(PositionUvVertex &vertex, float x, float y, float z);
-        static inline void FillVertexUV(Vertex &vertex, float u, float v);
-        static inline void FillVertexUV(PositionUvVertex &vertex, float u, float v);
-        static inline void FillVertexNormal(Vertex &vertex, float x, float y, float z);
-        static inline void FillVertexColor(Vertex &vertex, float r, float g, float b, float a);
-        static inline void FillVertexJointsWeights(Vertex &vertex, uint8_t j0, uint8_t j1, uint8_t j2, uint8_t j3,
-                                                   float w0, float w1, float w2, float w3);
-        static inline void FillVertexJointsWeights(PositionUvVertex &vertex, uint8_t j0, uint8_t j1, uint8_t j2, uint8_t j3,
-                                                   float w0, float w1, float w2, float w3);
-
         std::atomic_bool m_render = false;
         size_t m_id;
         std::vector<Image *> m_images{};
@@ -154,72 +142,4 @@ namespace pe
         uint32_t m_meshCount = 0;
         std::string m_label;
     };
-
-    // Inline implementations for performance
-    inline void Model::FillVertexPosition(Vertex &vertex, float x, float y, float z)
-    {
-        vertex.position[0] = x;
-        vertex.position[1] = y;
-        vertex.position[2] = z;
-    }
-
-    inline void Model::FillVertexPosition(PositionUvVertex &vertex, float x, float y, float z)
-    {
-        vertex.position[0] = x;
-        vertex.position[1] = y;
-        vertex.position[2] = z;
-    }
-
-    inline void Model::FillVertexUV(Vertex &vertex, float u, float v)
-    {
-        vertex.uv[0] = u;
-        vertex.uv[1] = v;
-    }
-
-    inline void Model::FillVertexUV(PositionUvVertex &vertex, float u, float v)
-    {
-        vertex.uv[0] = u;
-        vertex.uv[1] = v;
-    }
-
-    inline void Model::FillVertexNormal(Vertex &vertex, float x, float y, float z)
-    {
-        vertex.normals[0] = x;
-        vertex.normals[1] = y;
-        vertex.normals[2] = z;
-    }
-
-    inline void Model::FillVertexColor(Vertex &vertex, float r, float g, float b, float a)
-    {
-        vertex.color[0] = r;
-        vertex.color[1] = g;
-        vertex.color[2] = b;
-        vertex.color[3] = a;
-    }
-
-    inline void Model::FillVertexJointsWeights(Vertex &vertex, uint8_t j0, uint8_t j1, uint8_t j2, uint8_t j3,
-                                               float w0, float w1, float w2, float w3)
-    {
-        vertex.joints[0] = j0;
-        vertex.joints[1] = j1;
-        vertex.joints[2] = j2;
-        vertex.joints[3] = j3;
-        vertex.weights[0] = w0;
-        vertex.weights[1] = w1;
-        vertex.weights[2] = w2;
-        vertex.weights[3] = w3;
-    }
-
-    inline void Model::FillVertexJointsWeights(PositionUvVertex &vertex, uint8_t j0, uint8_t j1, uint8_t j2, uint8_t j3,
-                                               float w0, float w1, float w2, float w3)
-    {
-        vertex.joints[0] = j0;
-        vertex.joints[1] = j1;
-        vertex.joints[2] = j2;
-        vertex.joints[3] = j3;
-        vertex.weights[0] = w0;
-        vertex.weights[1] = w1;
-        vertex.weights[2] = w2;
-        vertex.weights[3] = w3;
-    }
 }

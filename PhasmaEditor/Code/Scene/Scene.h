@@ -69,6 +69,7 @@ namespace pe
         void ClearDrawInfos(bool reserveMax);
         void DestroyBuffers();
         void SortDrawInfos();
+        void MarkUniformsDirty();
         void CreateGeometryBuffer();
         void CopyIndices(CommandBuffer *cmd);
         void CopyVertices(CommandBuffer *cmd);
