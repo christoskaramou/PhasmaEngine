@@ -161,6 +161,11 @@ namespace pe
         CommandBuffer *cmd = RHII.GetMainQueue()->AcquireCommandBuffer();
 
         ShadowPass &shadows = *GetGlobalComponent<ShadowPass>();
+        DepthPass &dp = *GetGlobalComponent<DepthPass>();
+        GbufferOpaquePass &gbo = *GetGlobalComponent<GbufferOpaquePass>();
+        GbufferTransparentPass &gbt = *GetGlobalComponent<GbufferTransparentPass>();
+        LightOpaquePass &lo = *GetGlobalComponent<LightOpaquePass>();
+        LightTransparentPass &lt = *GetGlobalComponent<LightTransparentPass>();
         SSAOPass &ssao = *GetGlobalComponent<SSAOPass>();
         SSRPass &ssr = *GetGlobalComponent<SSRPass>();
         FXAAPass &fxaa = *GetGlobalComponent<FXAAPass>();
@@ -171,6 +176,7 @@ namespace pe
         MotionBlurPass &motionBlur = *GetGlobalComponent<MotionBlurPass>();
         SuperResolutionPass &sr = *GetGlobalComponent<SuperResolutionPass>();
         TonemapPass &tonemap = *GetGlobalComponent<TonemapPass>();
+        AabbsPass &aabbs = *GetGlobalComponent<AabbsPass>();
 
         auto &gSettings = Settings::Get<GlobalSettings>();
 
@@ -179,17 +185,20 @@ namespace pe
         // Shadows Opaque
         if (gSettings.shadows)
         {
-            m_scene.DrawShadowPass(cmd);
+            shadows.SetScene(&m_scene);
+            shadows.Draw(cmd);
         }
 
         // Depth Pass
         {
-            m_scene.DepthPrePass(cmd);
+            dp.SetScene(&m_scene);
+            dp.Draw(cmd);
         }
 
         // Gbuffers Opaque
         {
-            m_scene.DrawGbufferPassOpaque(cmd);
+            gbo.SetScene(&m_scene);
+            gbo.Draw(cmd);
         }
 
         // Screen Space Ambient Occlusion
@@ -200,17 +209,18 @@ namespace pe
 
         // Lighting Opaque
         {
-            m_scene.DrawLightPassOpaque(cmd);
+            lo.Draw(cmd);
         }
 
         // Gbuffers Transparent
         {
-            m_scene.DrawGbufferPassTransparent(cmd);
+            gbt.SetScene(&m_scene);
+            gbt.Draw(cmd);
         }
 
         // Lighting Transparent
         {
-            m_scene.DrawLightPassTransparent(cmd);
+            lt.Draw(cmd);
         }
 
         // Screen Space Reflections
@@ -228,7 +238,8 @@ namespace pe
         // Aabbs
         if (gSettings.draw_aabbs)
         {
-            m_scene.DrawAabbsPass(cmd);
+            aabbs.SetScene(&m_scene);
+            aabbs.Draw(cmd);
         }
 
         // Upscale
@@ -306,7 +317,7 @@ namespace pe
         // PRESENT
         queue->Present(swapchain, imageIndex, submitSemaphore);
     }
-    
+
     void RendererSystem::DrawPlatformWindows()
     {
         m_gui.DrawPlatformWindows();
