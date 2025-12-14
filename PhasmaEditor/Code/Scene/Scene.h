@@ -25,14 +25,6 @@ namespace pe
 
         void Update();
         void UpdateGeometryBuffers();
-        void DrawShadowPass(CommandBuffer *cmd);
-        void DepthPrePass(CommandBuffer *cmd);
-        void DrawGbufferPassOpaque(CommandBuffer *cmd);
-        void DrawGbufferPassTransparent(CommandBuffer *cmd);
-        void DrawLightPassOpaque(CommandBuffer *cmd);
-        void DrawLightPassTransparent(CommandBuffer *cmd);
-        void DrawAabbsPass(CommandBuffer *cmd);
-        void DrawScene(CommandBuffer *cmd);
         void AddModel(Model *model);
         void RemoveModel(Model *model);
 

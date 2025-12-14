@@ -164,57 +164,6 @@ namespace pe
         cmd->Return();
     }
 
-    void Scene::DrawShadowPass(CommandBuffer *cmd)
-    {
-        ShadowPass *shadows = GetGlobalComponent<ShadowPass>();
-        shadows->SetScene(this);
-        shadows->Draw(cmd);
-    }
-
-    void Scene::DepthPrePass(CommandBuffer *cmd)
-    {
-        DepthPass *dp = GetGlobalComponent<DepthPass>();
-        dp->SetScene(this);
-        dp->Draw(cmd);
-    }
-
-    void Scene::DrawGbufferPassOpaque(CommandBuffer *cmd)
-    {
-        GbufferOpaquePass *gb = GetGlobalComponent<GbufferOpaquePass>();
-        gb->SetScene(this);
-        gb->Draw(cmd);
-    }
-
-    void Scene::DrawGbufferPassTransparent(CommandBuffer *cmd)
-    {
-        GbufferTransparentPass *gb = GetGlobalComponent<GbufferTransparentPass>();
-        gb->SetScene(this);
-        gb->Draw(cmd);
-    }
-
-    void Scene::DrawLightPassOpaque(CommandBuffer *cmd)
-    {
-        LightOpaquePass *lp = GetGlobalComponent<LightOpaquePass>();
-        lp->Draw(cmd);
-    }
-
-    void Scene::DrawLightPassTransparent(CommandBuffer *cmd)
-    {
-        LightTransparentPass *lp = GetGlobalComponent<LightTransparentPass>();
-        lp->Draw(cmd);
-    }
-
-    void Scene::DrawAabbsPass(CommandBuffer *cmd)
-    {
-        AabbsPass *ap = GetGlobalComponent<AabbsPass>();
-        ap->SetScene(this);
-        ap->Draw(cmd);
-    }
-
-    void Scene::DrawScene(CommandBuffer *cmd)
-    {
-    }
-
     void Scene::AddModel(Model *model)
     {
         m_models.insert(model->GetId(), model);
