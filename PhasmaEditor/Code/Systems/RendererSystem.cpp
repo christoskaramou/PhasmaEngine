@@ -122,7 +122,6 @@ namespace pe
     {
         // Wait for the previous corresponding frame commands to finish first
         WaitPreviousFrameCommands();
-        RHII.GetStagingManager()->RemoveUnused();
 
         // GUI
         m_gui.Update();
@@ -130,13 +129,11 @@ namespace pe
         // Scene
         m_scene.Update();
 
-        Camera *camera_main = GetGlobalSystem<CameraSystem>()->GetCamera(0);
-
         // Render Components
         std::vector<std::shared_future<void>> futures;
         futures.reserve(m_renderPassComponents.size());
         for (auto &rc : m_renderPassComponents)
-            futures.push_back(ThreadPool::Update.Enqueue([rc, camera_main]()
+            futures.push_back(ThreadPool::Update.Enqueue([rc]()
                                                          { rc->Update(); }));
 
         for (auto &future : futures)
@@ -154,6 +151,8 @@ namespace pe
             frameCmd->Return();
             frameCmd = nullptr;
         }
+
+        RHII.GetStagingManager()->RemoveUnused();
     }
 
     CommandBuffer *RendererSystem::RecordPasses(uint32_t imageIndex)
