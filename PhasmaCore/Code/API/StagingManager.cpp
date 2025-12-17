@@ -19,7 +19,7 @@ namespace pe
         m_allocations.clear();
     }
 
-    StagingAllocation &StagingManager::Allocate(size_t size)
+    StagingAllocation StagingManager::Allocate(size_t size)
     {
         std::lock_guard<std::mutex> lock(m_mutex);
 
