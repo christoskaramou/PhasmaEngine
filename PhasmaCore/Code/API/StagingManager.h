@@ -21,7 +21,7 @@ namespace pe
     public:
         ~StagingManager();
         
-        StagingAllocation &Allocate(size_t size);
+        StagingAllocation Allocate(size_t size);
         void RemoveUnused();
         void SetUnused(const StagingAllocation &allocation);
         const std::deque<StagingAllocation> &GetAllocations() { return m_allocations; }
