@@ -30,7 +30,7 @@ namespace pe
                 using T = std::decay_t<decltype(v)>;
                 if constexpr (std::is_same_v<T, EventType>) {
                     using U = std::underlying_type_t<EventType>;
-                    return std::hash<U>{}(static_cast<U>(v)) ^ 0x9e3779b97f4a7c15ull;
+                    return std::hash<U>{}(static_cast<U>(v)) ^ static_cast<size_t>(0x9e3779b97f4a7c15ull);
                 } else {
                     return std::hash<size_t>{}(v);
                 } }, k);
