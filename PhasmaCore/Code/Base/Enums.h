@@ -1,5 +1,9 @@
 #pragma once
 
+#if defined(None)
+#undef None
+#endif
+
 namespace pe
 {
     class FlagsBase
