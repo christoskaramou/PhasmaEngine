@@ -32,6 +32,7 @@ FetchContent_Declare(
 set(ASSIMP_BUILD_TESTS        OFF CACHE BOOL "" FORCE)
 set(ASSIMP_BUILD_ASSIMP_TOOLS OFF CACHE BOOL "" FORCE)
 set(ASSIMP_NO_EXPORT          ON  CACHE BOOL "" FORCE)
+set(ASSIMP_WARNINGS_AS_ERRORS OFF CACHE BOOL "" FORCE)
 set(BUILD_SHARED_LIBS         OFF CACHE BOOL "" FORCE) # static library
 set(ASSIMP_BUILD_ZLIB         ON  CACHE BOOL "" FORCE) # some versions of assimp default to system zlib OFF; force ON so it builds clean on Windows
 
