@@ -506,7 +506,7 @@ namespace pe
         {
             EventSystem::PushEvent(EventType::CompileShaders);
         }
-        const ImGuiSelectableFlags flags = ImGuiSelectableFlags_AllowDoubleClick | ImGuiSelectableFlags_SpanAvailWidth;
+        const ImGuiSelectableFlags flags = ImGuiSelectableFlags_AllowDoubleClick;
         for (uint32_t i = 0; i < gSettings.shader_list.size(); i++)
         {
             const std::string &relative = gSettings.shader_list[i];
@@ -539,7 +539,7 @@ namespace pe
         modelFilter.Draw("Filter##models", ImGui::GetFontSize() * 14.0f);
         ImGui::Separator();
 
-        const ImGuiSelectableFlags selectFlags = ImGuiSelectableFlags_SpanAvailWidth | ImGuiSelectableFlags_AllowDoubleClick;
+        const ImGuiSelectableFlags selectFlags = ImGuiSelectableFlags_AllowDoubleClick;
         if (ImGui::BeginChild("##models_child", ImVec2(0, 0), true))
         {
             if (gSettings.model_list.empty())
@@ -590,7 +590,7 @@ namespace pe
         scriptFilter.Draw("Filter##scripts", ImGui::GetFontSize() * 14.0f);
         ImGui::Separator();
 
-        const ImGuiSelectableFlags selectFlags = ImGuiSelectableFlags_SpanAvailWidth | ImGuiSelectableFlags_AllowDoubleClick;
+        const ImGuiSelectableFlags selectFlags = ImGuiSelectableFlags_AllowDoubleClick;
         if (ImGui::BeginChild("##scripts_child", ImVec2(0, 0), true))
         {
             if (gSettings.file_list.empty())

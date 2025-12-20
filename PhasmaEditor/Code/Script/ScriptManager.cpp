@@ -12,13 +12,13 @@ namespace pe
 
 // Compile the source into a shared library
 #ifdef PE_DEBUG
-        std::string buildCommand = "cmake --build " + Path::Executable + "Assets/Scripts/build --config Debug";
+        std::string buildCommand = "cmake --build " + Path::Executable + "Assets/Scripts/Build --config Debug";
 #elif defined(PE_RELEASE)
-        std::string buildCommand = "cmake --build " + Path::Executable + "Assets/Scripts/build --config Release";
+        std::string buildCommand = "cmake --build " + Path::Executable + "Assets/Scripts/Build --config Release";
 #elif defined(PE_MINSIZEREL)
-        std::string buildCommand = "cmake --build " + Path::Executable + "Assets/Scripts/build --config MinSizeRel";
+        std::string buildCommand = "cmake --build " + Path::Executable + "Assets/Scripts/Build --config MinSizeRel";
 #elif defined(PE_RELWITHDEBINFO)
-        std::string buildCommand = "cmake --build " + Path::Executable + "Assets/Scripts/build --config RelWithDebInfo";
+        std::string buildCommand = "cmake --build " + Path::Executable + "Assets/Scripts/Build --config RelWithDebInfo";
 #endif
         res = std::system(buildCommand.c_str());
         PE_ERROR_IF(res != 0, "Failed to build the scripts");
@@ -32,8 +32,8 @@ namespace pe
             std::string filePath = file.path().string();
             std::replace(filePath.begin(), filePath.end(), '\\', '/');
             
-            if (filePath.find("Assets/Scripts/Build") != std::string::npos)
-                continue;
+        if (filePath.find("Assets/Scripts/Build") != std::string::npos)
+            continue;
 
             if (file.path().extension() == ".cpp")
             {
@@ -64,18 +64,18 @@ namespace pe
 
 #if defined(PE_WIN32)
 #ifdef PE_DEBUG
-        path = Path::Executable + "Assets/Scripts/build/Debug/Scripts.dll";
+        path = Path::Executable + "Assets/Scripts/Build/Debug/Scripts.dll";
 #elif defined(PE_RELEASE)
-        path = Path::Executable + "Assets/Scripts/build/Release/Scripts.dll";
+        path = Path::Executable + "Assets/Scripts/Build/Release/Scripts.dll";
 #elif defined(PE_MINSIZEREL)
-        path = Path::Executable + "Assets/Scripts/build/MinSizeRel/Scripts.dll";
+        path = Path::Executable + "Assets/Scripts/Build/MinSizeRel/Scripts.dll";
 #elif defined(PE_RELWITHDEBINFO)
-        path = Path::Executable + "Assets/Scripts/build/RelWithDebInfo/Scripts.dll";
+        path = Path::Executable + "Assets/Scripts/Build/RelWithDebInfo/Scripts.dll";
 #endif
         std::wstring widePath(path.begin(), path.end());
         s_module = (void *)LoadLibrary(widePath.c_str());
 #else
-        path = Path::Executable + "Assets/Scripts/build/libScripts.so";
+        path = Path::Executable + "Assets/Scripts/Build/libScripts.so";
         //  m_module = dlopen(path.c_str(), RTLD_NOW);
         s_module = dlopen(path.c_str(), RTLD_LAZY);
 #endif
