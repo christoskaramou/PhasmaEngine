@@ -217,7 +217,11 @@
 /* Enable various video drivers */
 #define SDL_VIDEO_DRIVER_DUMMY 1
 #define SDL_VIDEO_DRIVER_OFFSCREEN 1
+#if defined(__has_include) && !__has_include(<X11/Xlib.h>)
+/* X11 headers not available */
+#else
 #define SDL_VIDEO_DRIVER_X11 1
+#endif
 #define SDL_VIDEO_DRIVER_WAYLAND 1
 
 #define SDL_VIDEO_RENDER_OGL 1
@@ -226,7 +230,11 @@
 /* Enable OpenGL support */
 #define SDL_VIDEO_OPENGL 1
 #define SDL_VIDEO_OPENGL_ES2 1
+#if defined(__has_include) && !__has_include(<X11/Xlib.h>)
+/* X11 headers not available */
+#else
 #define SDL_VIDEO_OPENGL_GLX 1
+#endif
 #define SDL_VIDEO_OPENGL_EGL 1
 
 /* Enable Vulkan support */
