@@ -15,4 +15,4 @@ namespace pe
         void Update() override;
         void Destroy() override;
     };
-}
+} // namespace pe

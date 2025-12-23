@@ -129,4 +129,4 @@ namespace pe
         vk::ShaderStageFlags m_stage;
     };
 
-}
+} // namespace pe

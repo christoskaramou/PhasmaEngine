@@ -13,7 +13,7 @@ namespace pe
                 return;
             }
         }
-    
+
         std::string surface_path = Path::Executable + "Assets/SplashScreen/splash_screen.jpg";
         if (!std::filesystem::exists(surface_path))
         {
@@ -61,4 +61,4 @@ namespace pe
         if (m_texture)
             SDL_DestroyTexture(m_texture);
     }
-}
+} // namespace pe

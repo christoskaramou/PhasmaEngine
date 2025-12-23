@@ -1,7 +1,7 @@
 #include "StagingManager.h"
 #include "Buffer.h"
-#include "RHI.h"
 #include "Queue.h"
+#include "RHI.h"
 
 namespace pe
 {
@@ -85,4 +85,4 @@ namespace pe
             }
         }
     }
-}
+} // namespace pe

@@ -1,18 +1,19 @@
 #include "Code/App/App.h"
-#include "Window/Window.h"
+#include "API/Command.h"
+#include "API/Queue.h"
+#include "API/RHI.h"
 #include "Systems/CameraSystem.h"
-#include "Systems/RendererSystem.h"
 #include "Systems/LightSystem.h"
 #include "Systems/PostProcessSystem.h"
-#include "API/RHI.h"
-#include "API/Queue.h"
-#include "API/Command.h"
-#include "imgui/imgui_impl_vulkan.h"
+#include "Systems/RendererSystem.h"
+#include "Window/Window.h"
 #include "imgui/imgui_impl_sdl2.h"
-#include "imgui/imgui_internal.h"
-#include "Script/ScriptManager.h"
+#include "imgui/imgui_impl_vulkan.h"
 #ifdef NDEBUG
 #include "Window/SplashScreen.h"
+#endif
+#if defined(PE_SCRIPTS)
+#include "Script/ScriptManager.h"
 #endif
 
 namespace pe
@@ -133,11 +134,11 @@ namespace pe
         if (!m_window->isMinimized())
         {
             DrawGlobalSystems();
-            
+
             // Render platform windows (floating ImGui windows) after main rendering
             GetGlobalSystem<RendererSystem>()->DrawPlatformWindows();
         }
-        
+
         m_frameTimer.CountCpuTotalStamp();
         m_frameTimer.CountDeltaTime();
 
@@ -152,4 +153,4 @@ namespace pe
         {
         }
     }
-}
+} // namespace pe

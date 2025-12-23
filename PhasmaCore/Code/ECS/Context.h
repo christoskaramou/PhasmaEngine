@@ -14,11 +14,11 @@ namespace pe
         static Context *Get();
         static void Remove();
 
-        Context(Context const &) = delete; // copy constructor
-        Context(Context &&) noexcept = delete; // move constructor
-        ~Context() = default; // destructor
+        Context(Context const &) = delete;            // copy constructor
+        Context(Context &&) noexcept = delete;        // move constructor
+        ~Context() = default;                         // destructor
         Context &operator=(Context const &) = delete; // copy assignment
-        Context &operator=(Context &&) = delete; // move assignment
+        Context &operator=(Context &&) = delete;      // move assignment
 
     private:
         Context();
@@ -118,7 +118,7 @@ namespace pe
     {
         return Context::Get()->GetWorldEntity()->GetComponentCount();
     }
-    
+
     template <class T>
     inline T *CreateGlobalSystem()
     {
@@ -139,4 +139,4 @@ namespace pe
     void UpdateGlobalSystems();
 
     void DrawGlobalSystems();
-}
+} // namespace pe

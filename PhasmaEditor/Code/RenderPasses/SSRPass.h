@@ -14,7 +14,7 @@ namespace pe
         void CreateUniforms(CommandBuffer *cmd) override;
         void UpdateDescriptorSets() override;
         void Update() override;
-        void Draw(CommandBuffer * cmd) override;
+        void Draw(CommandBuffer *cmd) override;
         void Resize(uint32_t width, uint32_t height) override;
         void Destroy() override;
 
@@ -29,4 +29,4 @@ namespace pe
         Image *m_albedoRT;
         Image *m_frameImage;
     };
-}
+} // namespace pe

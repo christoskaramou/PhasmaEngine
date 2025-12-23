@@ -117,4 +117,4 @@ namespace pe
 
         return std::filesystem::last_write_time(m_file).time_since_epoch().count();
     }
-}
+} // namespace pe

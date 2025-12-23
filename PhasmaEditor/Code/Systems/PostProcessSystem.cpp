@@ -1,5 +1,4 @@
 #include "Systems/PostProcessSystem.h"
-#include "Systems/CameraSystem.h"
 #include "API/RHI.h"
 #include "API/Shader.h"
 #include "RenderPasses/BloomPass.h"
@@ -10,6 +9,7 @@
 #include "RenderPasses/SSRPass.h"
 #include "RenderPasses/SuperResolutionPass.h"
 #include "RenderPasses/TonemapPass.h"
+#include "Systems/CameraSystem.h"
 
 namespace pe
 {
@@ -45,7 +45,7 @@ namespace pe
             if (renderPassComponent->IsEnabled())
             {
                 futures.push_back(ThreadPool::Update.Enqueue([renderPassComponent, camera_main]()
-                                                              { renderPassComponent->Update(); }));
+                                                             { renderPassComponent->Update(); }));
             }
         }
 
@@ -91,4 +91,4 @@ namespace pe
             }
         }
     }
-}
+} // namespace pe

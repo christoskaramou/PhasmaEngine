@@ -1,6 +1,6 @@
 #include "Skybox.h"
-#include "API/Image.h"
 #include "API/Command.h"
+#include "API/Image.h"
 
 namespace pe
 {
@@ -20,4 +20,4 @@ namespace pe
     {
         Image::Destroy(m_cubeMap);
     }
-}
+} // namespace pe

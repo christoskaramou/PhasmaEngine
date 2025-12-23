@@ -22,10 +22,10 @@ namespace pe
 
         inline static std::mutex s_dispatchMutex{};
         inline static std::shared_ptr<PassInfo> s_passInfo{};
-        inline static const uint32_t MAX_DESCRIPTORS_PER_CMD = 100;     // Downsampler is not reusable within a command recording, needs multiple descriptors
+        inline static const uint32_t MAX_DESCRIPTORS_PER_CMD = 100; // Downsampler is not reusable within a command recording, needs multiple descriptors
         inline static uint32_t s_currentIndex{};
         inline static Descriptor *s_DSet[MAX_DESCRIPTORS_PER_CMD]{};
-        inline static Image *s_image = nullptr;                         // max 12 mips/views
+        inline static Image *s_image = nullptr; // max 12 mips/views
         inline static uint32_t s_counter[6]{};
         inline static Buffer *s_atomicCounter[MAX_DESCRIPTORS_PER_CMD]{};
         struct PushConstants
@@ -35,4 +35,4 @@ namespace pe
             uvec2 workGroupOffset;
         } inline static s_pushConstants{};
     };
-}
+} // namespace pe

@@ -18,10 +18,10 @@ namespace pe
         vk::PresentModeKHR GetPresentMode() const { return m_presentMode; }
         std::vector<vk::PresentModeKHR> GetSupportedPresentModes() const;
 
-private:
+    private:
         Rect2Du m_actualExtent;
         vk::Format m_format;
         vk::ColorSpaceKHR m_colorSpace;
         vk::PresentModeKHR m_presentMode;
     };
-}
+} // namespace pe

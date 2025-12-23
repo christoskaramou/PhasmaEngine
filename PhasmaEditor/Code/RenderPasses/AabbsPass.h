@@ -26,4 +26,4 @@ namespace pe
         Image *m_depthRT;
         Scene *m_scene = nullptr;
     };
-}
+} // namespace pe

@@ -1,6 +1,7 @@
 #include "API/Reflection.h"
-#include "API/Shader.h"
 #include "API/Descriptor.h"
+#include "API/Shader.h"
+#include "spirv_cross/spirv_cross.hpp"
 
 namespace pe
 {
@@ -440,4 +441,4 @@ namespace pe
 
         return descriptors;
     }
-}
+} // namespace pe

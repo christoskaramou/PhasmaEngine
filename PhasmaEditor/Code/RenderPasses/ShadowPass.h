@@ -44,4 +44,4 @@ namespace pe
         Sampler *m_sampler;
         Scene *m_scene = nullptr;
     };
-}
+} // namespace pe

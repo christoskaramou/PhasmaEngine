@@ -20,4 +20,4 @@ namespace pe
         std::vector<Image *> m_images;
         Rect2Du m_extent;
     };
-}
+} // namespace pe

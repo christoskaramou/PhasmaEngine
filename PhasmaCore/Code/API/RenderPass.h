@@ -13,4 +13,4 @@ namespace pe
     private:
         std::string m_name;
     };
-}
+} // namespace pe

@@ -20,4 +20,4 @@ namespace pe
         Image *occlusionTexture;
         Image *emissiveTexture;
     };
-}
+} // namespace pe

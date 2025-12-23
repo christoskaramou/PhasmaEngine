@@ -1,13 +1,12 @@
 #include "Scene/ModelAssimp.h"
-#include "API/Queue.h"
+#include "API/Buffer.h"
 #include "API/Command.h"
 #include "API/Image.h"
-#include "API/Buffer.h"
+#include "API/Queue.h"
 #include "API/RHI.h"
-#include "API/Image.h"
-#include "Systems/RendererSystem.h"
-#include "Scene/Scene.h"
 #include "Base/Path.h"
+#include "Scene/Scene.h"
+#include "Systems/RendererSystem.h"
 #include <assimp/GltfMaterial.h>
 
 #undef max
@@ -752,4 +751,4 @@ namespace pe
 
         return RenderType::Opaque;
     }
-}
+} // namespace pe

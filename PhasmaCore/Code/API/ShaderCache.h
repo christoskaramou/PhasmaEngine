@@ -21,4 +21,4 @@ namespace pe
         std::string m_tempFilePath;
         std::vector<std::string> m_includes;
     };
-}
+} // namespace pe

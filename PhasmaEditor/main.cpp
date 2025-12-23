@@ -2,8 +2,8 @@
 
 int main(int argc, char *argv[])
 {
-	pe::App app;
-	app.Run();
+    pe::App app;
+    app.Run();
 
-	return 0;
+    return 0;
 }

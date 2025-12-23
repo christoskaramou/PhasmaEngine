@@ -31,9 +31,9 @@ namespace pe
         {
             std::string filePath = file.path().string();
             std::replace(filePath.begin(), filePath.end(), '\\', '/');
-            
-        if (filePath.find("Assets/Scripts/Build") != std::string::npos)
-            continue;
+
+            if (filePath.find("Assets/Scripts/Build") != std::string::npos)
+                continue;
 
             if (file.path().extension() == ".cpp")
             {
@@ -92,4 +92,4 @@ namespace pe
 #endif
         s_module = nullptr;
     }
-}
+} // namespace pe

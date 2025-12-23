@@ -2,8 +2,8 @@
 
 #include "Scene/Model.h"
 #include <assimp/Importer.hpp>
-#include <assimp/scene.h>
 #include <assimp/postprocess.h>
+#include <assimp/scene.h>
 
 namespace pe
 {
@@ -44,4 +44,4 @@ namespace pe
         std::vector<int> m_nodeToMesh; // Maps node index to mesh index (-1 if no mesh)
         std::unordered_map<std::string, Image *> m_textureCache;
     };
-}
+} // namespace pe

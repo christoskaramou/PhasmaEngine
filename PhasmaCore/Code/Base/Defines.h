@@ -1,10 +1,4 @@
 #pragma once
-#include <string>
-#include <stdexcept>
-#include <iostream>
-#include <cstdarg>
-#include <cstdio>
-#include <type_traits>
 
 namespace pe
 {
@@ -136,7 +130,7 @@ namespace pe
 #define PE_DEBUG_MESSENGER 0
 #define PE_USE_GLM 1
 #define PE_RENDER_DOC 0
-}
+} // namespace pe
 
 #define PE_CHECK(res)                                         \
     do                                                        \

@@ -13,4 +13,4 @@ namespace pe
     IRenderPassComponent::~IRenderPassComponent()
     {
     }
-}
+} // namespace pe

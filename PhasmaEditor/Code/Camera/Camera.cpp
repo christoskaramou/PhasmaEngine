@@ -1,7 +1,7 @@
 #include "Camera/Camera.h"
 #include "RenderPasses/SuperResolutionPass.h"
-#include "Systems/RendererSystem.h"
 #include "Systems/PostProcessSystem.h"
+#include "Systems/RendererSystem.h"
 
 namespace pe
 {
@@ -178,4 +178,4 @@ namespace pe
 
         return true;
     }
-}
+} // namespace pe

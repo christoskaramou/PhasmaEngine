@@ -43,4 +43,4 @@ namespace pe
         VmaAllocationInfo m_allocationInfo;
         std::string m_name;
     };
-}
+} // namespace pe

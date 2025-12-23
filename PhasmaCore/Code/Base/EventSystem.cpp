@@ -149,4 +149,4 @@ namespace pe
                 ++c;
         return c;
     }
-}
+} // namespace pe

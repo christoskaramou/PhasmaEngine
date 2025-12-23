@@ -64,4 +64,4 @@ namespace pe::VulkanHelpers
 
         return flags;
     }
-}
+} // namespace pe::VulkanHelpers

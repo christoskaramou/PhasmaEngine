@@ -118,4 +118,4 @@ namespace pe
         vec4 m_clearColor = vec4(0.0f, 0.0f, 0.0f, 1.0f);
         std::string m_name;
     };
-}
+} // namespace pe

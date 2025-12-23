@@ -92,4 +92,4 @@ namespace pe
         for (auto &uniform : m_uniforms)
             Buffer::Destroy(uniform);
     }
-}
+} // namespace pe

@@ -185,4 +185,4 @@ namespace pe
         Occlusion,
         Emissive,
     };
-}
+} // namespace pe

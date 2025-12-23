@@ -14,4 +14,4 @@ namespace pe
     private:
         Image *m_cubeMap;
     };
-}
+} // namespace pe

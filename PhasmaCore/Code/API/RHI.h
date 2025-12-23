@@ -137,4 +137,4 @@ namespace pe
     };
 
     inline RHI &RHII = *RHI::Get();
-}
+} // namespace pe

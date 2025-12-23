@@ -37,15 +37,15 @@ namespace pe
         virtual void CreateUniforms(CommandBuffer *cmd) = 0;
         virtual void UpdateDescriptorSets() = 0;
         virtual void Update() = 0;
-        virtual void Draw(CommandBuffer * cmd) = 0;
+        virtual void Draw(CommandBuffer *cmd) = 0;
         virtual void Resize(uint32_t width, uint32_t height) = 0;
         virtual void Destroy() = 0;
 
         [[nodiscard]] std::vector<Attachment> &GetAttachments() noexcept { return m_attachments; }
         [[nodiscard]] std::shared_ptr<PassInfo> GetPassInfo() const noexcept { return m_passInfo; }
 
-    protected:        
+    protected:
         std::vector<Attachment> m_attachments;
         std::shared_ptr<PassInfo> m_passInfo;
     };
-}
+} // namespace pe

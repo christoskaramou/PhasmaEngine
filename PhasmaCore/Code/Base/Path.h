@@ -43,4 +43,4 @@ namespace pe
 
         inline static Constructor s_constructor;
     };
-}
+} // namespace pe

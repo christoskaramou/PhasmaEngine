@@ -56,4 +56,4 @@ namespace pe
         std::unordered_map<std::thread::id, std::vector<CommandPool *>> m_commandPools{};
         std::mutex m_cmdMutex{};
     };
-}
+} // namespace pe

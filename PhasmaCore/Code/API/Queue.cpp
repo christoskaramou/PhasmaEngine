@@ -1,8 +1,8 @@
 #include "API/Queue.h"
-#include "API/Semaphore.h"
 #include "API/Command.h"
-#include "API/Swapchain.h"
 #include "API/RHI.h"
+#include "API/Semaphore.h"
+#include "API/Swapchain.h"
 
 namespace pe
 {
@@ -204,4 +204,4 @@ namespace pe
         std::lock_guard<std::mutex> lock(m_cmdMutex);
         cmd->GetCommandPool()->m_freeCmdStack.push(cmd);
     }
-}
+} // namespace pe

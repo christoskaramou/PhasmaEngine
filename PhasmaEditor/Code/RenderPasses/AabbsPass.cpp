@@ -1,13 +1,13 @@
 #include "AabbsPass.h"
-#include "ShadowPass.h"
-#include "API/Shader.h"
 #include "API/Command.h"
 #include "API/Image.h"
 #include "API/Pipeline.h"
-#include "Systems/RendererSystem.h"
-#include "Systems/CameraSystem.h"
+#include "API/Shader.h"
 #include "Scene/Model.h"
 #include "Scene/Scene.h"
+#include "ShadowPass.h"
+#include "Systems/CameraSystem.h"
+#include "Systems/RendererSystem.h"
 
 namespace pe
 {
@@ -113,4 +113,4 @@ namespace pe
     void AabbsPass::Destroy()
     {
     }
-}
+} // namespace pe

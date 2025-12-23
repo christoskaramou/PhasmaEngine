@@ -1,14 +1,14 @@
 #include "API/Command.h"
+#include "API/Buffer.h"
+#include "API/Descriptor.h"
+#include "API/Event.h"
+#include "API/Framebuffer.h"
+#include "API/Image.h"
+#include "API/Pipeline.h"
+#include "API/Queue.h"
 #include "API/RHI.h"
 #include "API/RenderPass.h"
-#include "API/Framebuffer.h"
-#include "API/Pipeline.h"
-#include "API/Descriptor.h"
-#include "API/Buffer.h"
-#include "API/Image.h"
-#include "API/Queue.h"
 #include "API/Semaphore.h"
-#include "API/Event.h"
 
 namespace pe
 {
@@ -831,19 +831,19 @@ namespace pe
         }
 
 #if PE_DEBUG_MODE
-    std::vector<GpuTimerSample> samples;
-    samples.reserve(m_gpuTimerInfosCount);
-    for (uint32_t i = 0; i < m_gpuTimerInfosCount; ++i)
-    {
-        const auto &info = m_gpuTimerInfos[i];
-        GpuTimerSample sample{};
-        sample.name = info.name;
-        sample.depth = info.depth;
-        sample.timeMs = info.timer ? info.timer->GetTime() : 0.0f;
-        samples.emplace_back(std::move(sample));
-    }
+        std::vector<GpuTimerSample> samples;
+        samples.reserve(m_gpuTimerInfosCount);
+        for (uint32_t i = 0; i < m_gpuTimerInfosCount; ++i)
+        {
+            const auto &info = m_gpuTimerInfos[i];
+            GpuTimerSample sample{};
+            sample.name = info.name;
+            sample.depth = info.depth;
+            sample.timeMs = info.timer ? info.timer->GetTime() : 0.0f;
+            samples.emplace_back(std::move(sample));
+        }
 
-    EventSystem::DispatchEvent(EventType::AfterCommandWait, std::any{std::move(samples)});
+        EventSystem::DispatchEvent(EventType::AfterCommandWait, std::any{std::move(samples)});
         m_gpuTimerInfosCount = 0;
 #endif
     }
@@ -857,4 +857,4 @@ namespace pe
     {
         m_afterWaitCallbacks += std::forward<Delegate<>::FunctionType>(func);
     }
-}
+} // namespace pe

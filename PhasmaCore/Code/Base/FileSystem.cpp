@@ -64,4 +64,4 @@ namespace pe
     {
         m_fstream.close();
     }
-}
+} // namespace pe
