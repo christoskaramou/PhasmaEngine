@@ -6,6 +6,7 @@ namespace pe
     class Models : public Widget
     {
     public:
+        Models() : Widget("Models") {}
         void Update() override;
     };
 } // namespace pe

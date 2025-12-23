@@ -45,6 +45,8 @@ namespace pe
         std::vector<GpuTimerSample> m_gpuTimerInfos;
         bool m_sceneObjectsOpen;
 
-        std::vector<Widget *> m_widgets;
+        std::vector<std::shared_ptr<Widget>> m_widgets;
+        std::vector<std::shared_ptr<Widget>> m_menuWindowWidgets;
+        std::vector<std::shared_ptr<Widget>> m_menuAssetsWidgets;
     };
 } // namespace pe
