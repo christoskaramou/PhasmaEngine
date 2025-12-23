@@ -167,53 +167,79 @@ namespace pe
                         }
                         else // Grid
                         {
-                            float padding = 10.0f;
-                            float cellSize = m_gridIconSize + padding;
                             float panelWidth = ImGui::GetContentRegionAvail().x;
-                            int columnCount = (int)(panelWidth / cellSize);
-                            if (columnCount < 1)
-                                columnCount = 1;
+                            float iconSize = m_gridIconSize;
+                            float pad = ImGui::GetStyle().FramePadding.x;
+                            float buttonSize = iconSize + pad * 2.0f;
+                            float itemSpacingX = ImGui::GetStyle().ItemSpacing.x;
+                            
+                            // Calculate visible right edge for wrapping
+                            float windowVisibleX2 = ImGui::GetWindowPos().x + ImGui::GetWindowContentRegionMax().x;
 
-                            ImGui::Columns(columnCount, 0, false);
-
-                            for (const auto &entry : entries)
+                            for (size_t i = 0; i < entries.size(); ++i)
                             {
+                                const auto &entry = entries[i];
                                 std::string filename = entry.path().filename().string();
                                 bool isDir = entry.is_directory();
                                 bool isSelected = (m_selectedEntry == entry.path());
 
                                 ImGui::PushID(filename.c_str());
-                                ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0, 0, 0, 0));
-                                void *iconID = (isDir && m_folderIconDS) ? m_folderIconDS : ((!isDir && m_fileIconDS) ? m_fileIconDS : nullptr);
+                                ImGui::BeginGroup(); // Group Icon + Text
 
+                                // Selection Style
+                                if (isSelected)
+                                    ImGui::PushStyleColor(ImGuiCol_Button, ImGui::GetStyle().Colors[ImGuiCol_ButtonActive]);
+                                else
+                                    ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0, 0, 0, 0));
+
+                                void *iconID = (isDir && m_folderIconDS) ? m_folderIconDS : ((!isDir && m_fileIconDS) ? m_fileIconDS : nullptr);
+                                
+                                bool clicked = false;
                                 if (iconID)
                                 {
-                                    ImGui::ImageButton(filename.c_str(), (ImTextureID)iconID, ImVec2(m_gridIconSize, m_gridIconSize));
+                                    if (ImGui::ImageButton("##icon", (ImTextureID)iconID, ImVec2(iconSize, iconSize)))
+                                        clicked = true;
                                 }
                                 else
                                 {
-                                    ImGui::Button(filename.c_str(), ImVec2(m_gridIconSize, m_gridIconSize));
+                                    if (ImGui::Button("##icon", ImVec2(buttonSize, buttonSize)))
+                                        clicked = true;
                                 }
+
                                 ImGui::PopStyleColor();
 
+                                // Text
+                                float groupX = ImGui::GetCursorPosX();
+                                float textW = ImGui::CalcTextSize(filename.c_str()).x;
+                                if (textW < buttonSize)
+                                    ImGui::SetCursorPosX(groupX + (buttonSize - textW) * 0.5f);
+
+                                ImGui::PushTextWrapPos(groupX + buttonSize); 
+                                ImGui::TextWrapped("%s", filename.c_str());
+                                ImGui::PopTextWrapPos();
+
+                                ImGui::EndGroup();
+
+                                // Interaction
                                 if (ImGui::IsItemHovered() && ImGui::IsMouseDoubleClicked(0))
                                 {
                                     HandleItemConnect(entry);
                                 }
-                                else if (ImGui::IsItemClicked())
+                                else if (clicked || ImGui::IsItemClicked()) // Check both Button and Group click
                                 {
                                     m_selectedEntry = entry.path();
-                                    // Handle single click selection logic if needed,
-                                    // although HandleItemConnect handles selection too.
-                                    // But HandleItemConnect does extra work (previews).
-                                    // Let's just update selection for now.
                                 }
 
-                                ImGui::TextWrapped("%s", filename.c_str());
-                                ImGui::NextColumn();
                                 ImGui::PopID();
+
+                                // Flow Control
+                                float last_x2 = ImGui::GetItemRectMax().x;
+                                float next_x2 = last_x2 + itemSpacingX + buttonSize;
+
+                                // If next item fits, same line
+                                if (i + 1 < entries.size() && next_x2 < windowVisibleX2)
+                                    ImGui::SameLine();
                             }
-                            ImGui::Columns(1);
                         }
                     }
                 }

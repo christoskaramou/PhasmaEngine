@@ -25,7 +25,7 @@ namespace pe
             List,
             Grid
         };
-        ViewMode m_viewMode = ViewMode::List;
+        ViewMode m_viewMode = ViewMode::Grid;
         float m_gridIconSize = 64.0f;
     };
 } // namespace pe
