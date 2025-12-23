@@ -3,19 +3,19 @@
 #if defined(PE_WIN32)
 #define FUNC_EXPORT extern "C" __declspec(dllexport)
 #else
-#define FUNC_EXPORT extern "C"
+#define FUNC_EXPORT extern "C" __attribute__((visibility("default")))
 #endif
 
 // Macro to register a script class object creation function
 // It is put in the source file of the script class if an object
 // of this specific class needs to be created
-#define CREATE_SCRIPT_FUNC(ClassName)                               \
-    namespace                                                    \
+// Macro to register a script class object creation function
+// It is put in the source file of the script class if an object
+// of this specific class needs to be created
+#define CREATE_SCRIPT_FUNC(ClassName)                            \
+    FUNC_EXPORT pe::ScriptObject *CreateObject_##ClassName()     \
     {                                                            \
-        FUNC_EXPORT pe::ScriptObject *CreateObject_##ClassName() \
-        {                                                        \
-            return new ClassName();                              \
-        }                                                        \
+        return new ClassName();                                  \
     }
 
 namespace pe

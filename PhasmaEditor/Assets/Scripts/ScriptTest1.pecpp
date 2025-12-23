@@ -1,0 +1,4 @@
+#include "ScriptTest1.peh"
+#include "ScriptTest2.peh"
+
+CREATE_SCRIPT_FUNC(ScriptTest1)

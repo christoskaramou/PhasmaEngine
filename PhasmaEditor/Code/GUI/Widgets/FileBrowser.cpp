@@ -58,7 +58,7 @@ namespace pe
             {
                 // For safety/relevance, keep it within Project root folders
                 std::string parent = m_currentPath.parent_path().string();
-                if (parent.find("PhrasmaEngine") != std::string::npos || parent.find("PhasmaEditor") != std::string::npos)
+                if (parent.find("PhasmaEngine") != std::string::npos || parent.find("PhasmaEditor") != std::string::npos)
                     m_currentPath = m_currentPath.parent_path();
             }
             ImGui::SameLine();
@@ -99,9 +99,9 @@ namespace pe
                                 std::string ext = entry.path().extension().string();
                                 if (ext == ".gltf" || ext == ".glb" || ext == ".obj" || ext == ".fbx" || ext == ".dae" || ext == ".stl" || ext == ".ply" || ext == ".3ds" || ext == ".blend")
                                     type = AssetPreviewType::Model;
-                                else if (ext == ".cpp" && entry.path().string().find("Scripts") != std::string::npos)
+                                else if (ext == ".peh" || ext == ".pecpp")
                                     type = AssetPreviewType::Script;
-                                else if ((ext == ".vert" || ext == ".frag" || ext == ".comp" || ext == ".glsl" || ext == ".hlsl") && entry.path().string().find("Shaders") != std::string::npos)
+                                else if (ext == ".vert" || ext == ".frag" || ext == ".comp" || ext == ".glsl" || ext == ".hlsl")
                                     type = AssetPreviewType::Shader;
 
                                 if (type != AssetPreviewType::None)

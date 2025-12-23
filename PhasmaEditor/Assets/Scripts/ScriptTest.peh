@@ -1,7 +1,7 @@
 #pragma once
 
 // TODO: How will it figure out the path to the script?
-#include "ScriptObject.h"
+#include "ScriptObject.peh"
 #include <iostream>
 
 class ScriptTest : public pe::ScriptObject

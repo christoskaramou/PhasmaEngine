@@ -1,4 +1,4 @@
-#include "ScriptTest.h"
+#include "ScriptTest.peh"
 
 ScriptTest::ScriptTest()
 {

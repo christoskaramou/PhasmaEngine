@@ -1,6 +1,6 @@
 #pragma once
 
-#include "ScriptTest.h"
+#include "ScriptTest.peh"
 #include <iostream>
 
 class ScriptTest1 : public ScriptTest
