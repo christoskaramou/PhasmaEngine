@@ -431,7 +431,7 @@ namespace pe::ui
         ImGui::GetStyle().Colors[ImGuiCol_Text] = resultColor;
     }
 
-    void ResetTextColor()
+    inline void ResetTextColor()
     {
         ImGui::GetStyle().Colors[ImGuiCol_Text] = ImVec4(0.90f, 0.90f, 0.90f, 1.00f);
     }
