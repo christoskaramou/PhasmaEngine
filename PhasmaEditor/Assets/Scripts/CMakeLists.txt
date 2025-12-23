@@ -75,4 +75,6 @@ target_include_directories(Scripts PRIVATE
 )
 set(CMAKE_CXX_OUTPUT_EXTENSION .o)
 set_source_files_properties(${SCRIPT_SOURCES} PROPERTIES LANGUAGE CXX)
-set_source_files_properties(${SCRIPT_SOURCES} PROPERTIES COMPILE_FLAGS "-x c++")
+if(NOT MSVC)
+    set_source_files_properties(${SCRIPT_SOURCES} PROPERTIES COMPILE_FLAGS "-x c++")
+endif()
