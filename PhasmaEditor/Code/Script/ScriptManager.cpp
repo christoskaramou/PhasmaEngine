@@ -6,19 +6,20 @@ namespace pe
     void ScriptManager::Init()
     {
         // Configure CMake
-        std::string cmakeCommand = "cmake -S " + Path::Executable + "Assets/Scripts -B " + Path::Executable + "Assets/Scripts/Build";
+        std::string cmakeCommand = "cmake -S " + Path::Executable + "Assets/Scripts -B " + Path::Executable + "Assets/Scripts/build";
         int res = std::system(cmakeCommand.c_str());
         PE_ERROR_IF(res != 0, "Failed to configure CMake");
 
 // Compile the source into a shared library
+        std::string buildCommand = "";
 #ifdef PE_DEBUG
-        std::string buildCommand = "cmake --build " + Path::Executable + "Assets/Scripts/Build --config Debug";
+        buildCommand = "cmake --build " + Path::Executable + "Assets/Scripts/build --config Debug";
 #elif defined(PE_RELEASE)
-        std::string buildCommand = "cmake --build " + Path::Executable + "Assets/Scripts/Build --config Release";
+        buildCommand = "cmake --build " + Path::Executable + "Assets/Scripts/build --config Release";
 #elif defined(PE_MINSIZEREL)
-        std::string buildCommand = "cmake --build " + Path::Executable + "Assets/Scripts/Build --config MinSizeRel";
+        buildCommand = "cmake --build " + Path::Executable + "Assets/Scripts/build --config MinSizeRel";
 #elif defined(PE_RELWITHDEBINFO)
-        std::string buildCommand = "cmake --build " + Path::Executable + "Assets/Scripts/Build --config RelWithDebInfo";
+        buildCommand = "cmake --build " + Path::Executable + "Assets/Scripts/build --config RelWithDebInfo";
 #endif
         res = std::system(buildCommand.c_str());
         PE_ERROR_IF(res != 0, "Failed to build the scripts");
@@ -32,10 +33,10 @@ namespace pe
             std::string filePath = file.path().string();
             std::replace(filePath.begin(), filePath.end(), '\\', '/');
 
-            if (filePath.find("Assets/Scripts/Build") != std::string::npos)
+            if (filePath.find("Assets/Scripts/build") != std::string::npos)
                 continue;
 
-            if (file.path().extension() == ".cpp")
+            if (file.path().extension() == ".pecpp")
             {
                 // Create a new script object
                 Script *script = new Script(filePath);
@@ -75,7 +76,7 @@ namespace pe
         std::wstring widePath(path.begin(), path.end());
         s_module = (void *)LoadLibrary(widePath.c_str());
 #else
-        path = Path::Executable + "Assets/Scripts/Build/libScripts.so";
+        path = Path::Executable + "Assets/Scripts/build/libScripts.so";
         //  m_module = dlopen(path.c_str(), RTLD_NOW);
         s_module = dlopen(path.c_str(), RTLD_LAZY);
 #endif

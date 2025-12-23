@@ -53,12 +53,19 @@ endif()
 
 # --- Sources ---
 # All .cpp files under Assets/Scripts
-file(GLOB_RECURSE SCRIPT_SOURCES CONFIGURE_DEPENDS
-    "${CMAKE_CURRENT_SOURCE_DIR}/*.cpp"
+file(GLOB_RECURSE SCRIPT_SOURCES
+    "${CMAKE_CURRENT_SOURCE_DIR}/*.pecpp"
 )
+
+# Tell CMake that .pecpp files should be treated as C++ sources
+list(APPEND CMAKE_CXX_SOURCE_FILE_EXTENSIONS pecpp)
 
 # --- Target ---
 add_library(Scripts SHARED ${SCRIPT_SOURCES})
+foreach(PROJ_SOURCE ${SCRIPT_SOURCES})
+    set_source_files_properties(${PROJ_SOURCE} PROPERTIES LANGUAGE CXX)
+endforeach()
+set_target_properties(Scripts PROPERTIES LINKER_LANGUAGE CXX)
 
 target_compile_definitions(Scripts PRIVATE ${PE_DEFS})
 
@@ -66,3 +73,6 @@ target_compile_definitions(Scripts PRIVATE ${PE_DEFS})
 target_include_directories(Scripts PRIVATE
     "${CMAKE_CURRENT_SOURCE_DIR}"
 )
+set(CMAKE_CXX_OUTPUT_EXTENSION .o)
+set_source_files_properties(${SCRIPT_SOURCES} PROPERTIES LANGUAGE CXX)
+set_source_files_properties(${SCRIPT_SOURCES} PROPERTIES COMPILE_FLAGS "-x c++")
