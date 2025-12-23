@@ -1,7 +1,7 @@
 #include "API/Event.h"
-#include "API/RHI.h"
 #include "API/Command.h"
 #include "API/Image.h"
+#include "API/RHI.h"
 
 namespace pe
 {
@@ -97,4 +97,4 @@ namespace pe
         m_infoImage = {};
         m_set = false;
     }
-}
+} // namespace pe

@@ -1,16 +1,16 @@
 #include "LightPass.h"
-#include "ShadowPass.h"
-#include "API/RHI.h"
+#include "API/Buffer.h"
 #include "API/Command.h"
 #include "API/Descriptor.h"
 #include "API/Image.h"
-#include "API/Buffer.h"
+#include "API/Pipeline.h"
+#include "API/RHI.h"
 #include "API/RenderPass.h"
 #include "API/Shader.h"
-#include "API/Pipeline.h"
-#include "Systems/RendererSystem.h"
-#include "Systems/LightSystem.h"
+#include "ShadowPass.h"
 #include "Systems/CameraSystem.h"
+#include "Systems/LightSystem.h"
+#include "Systems/RendererSystem.h"
 
 namespace pe
 {
@@ -415,4 +415,4 @@ namespace pe
         for (auto &uniform : m_uniforms)
             Buffer::Destroy(uniform);
     }
-}
+} // namespace pe

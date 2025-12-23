@@ -79,4 +79,4 @@ namespace pe
         static void EndCmdRegion(CommandBuffer *cmd) {}
     };
 #endif
-};
+}; // namespace pe

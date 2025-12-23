@@ -77,4 +77,4 @@ namespace pe
         vk::PipelineLayout m_layout;
         vk::PipelineCache m_cache;
     };
-}
+} // namespace pe

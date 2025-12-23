@@ -64,4 +64,4 @@ namespace pe
         bool dynamic_rendering = true;
         vk::PresentModeKHR preferred_present_mode = vk::PresentModeKHR::eMailbox;
     };
-}
+} // namespace pe

@@ -24,4 +24,4 @@ namespace pe
         vec4 start; // .w = radius;
         vec4 end;
     };
-}
+} // namespace pe

@@ -1,7 +1,7 @@
 #pragma once
 
-#include "GUI/GUI.h"
 #include "API/Light.h"
+#include "GUI/GUI.h"
 
 namespace pe
 {
@@ -32,6 +32,6 @@ namespace pe
 
     private:
         LightsUBO m_lubo;
-        std::vector<Buffer *>m_uniforms;
+        std::vector<Buffer *> m_uniforms;
     };
-}
+} // namespace pe

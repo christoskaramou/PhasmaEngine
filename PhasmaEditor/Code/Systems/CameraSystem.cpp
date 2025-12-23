@@ -35,4 +35,4 @@ namespace pe
         for (auto camera : components)
             camera->Destroy();
     }
-}
+} // namespace pe

@@ -46,4 +46,4 @@ namespace pe
         PE_ERROR_IF(!m_createObjectFunc, "Failed to load CreateScript function");
         m_scriptObject = m_createObjectFunc();
     }
-}
+} // namespace pe

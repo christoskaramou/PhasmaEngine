@@ -91,4 +91,4 @@ namespace pe
 
         file.Write(reinterpret_cast<const char *>(spirv.data()), spirv.size() * sizeof(uint32_t));
     }
-}
+} // namespace pe

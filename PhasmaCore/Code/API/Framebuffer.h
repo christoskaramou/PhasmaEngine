@@ -21,4 +21,4 @@ namespace pe
     private:
         uvec2 m_size;
     };
-}
+} // namespace pe

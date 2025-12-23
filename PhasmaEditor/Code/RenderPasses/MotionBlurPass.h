@@ -22,4 +22,4 @@ namespace pe
         Image *m_velocityRT;
         Image *m_depth;
     };
-}
+} // namespace pe

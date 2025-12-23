@@ -27,7 +27,7 @@ namespace pe
     private:
         FileWatcher() = default;
         FileWatcher(const std::string &file, Func &&callback);
-        
+
         inline static void UpdateFolders();
         inline static void WatchFiles();
 
@@ -42,4 +42,4 @@ namespace pe
         inline static std::atomic_bool s_running{false};
         inline static std::mutex s_mutex{};
     };
-}
+} // namespace pe

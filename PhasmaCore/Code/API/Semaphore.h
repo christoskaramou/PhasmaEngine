@@ -21,4 +21,4 @@ namespace pe
         vk::PipelineStageFlags2 m_stageFlags;
         uint64_t m_lastCompleted{0};
     };
-}
+} // namespace pe

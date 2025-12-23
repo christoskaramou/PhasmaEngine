@@ -60,4 +60,4 @@ namespace pe
         Image *m_displayRT;                // Render target
         Image *m_gaussianBlurHorizontalRT; // Shader Input
     };
-}
+} // namespace pe

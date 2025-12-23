@@ -1,7 +1,5 @@
 #pragma once
 
-#include "imgui/imgui_impl_vulkan.h"
-#include "imgui/imgui_impl_sdl2.h"
 #include "imgui/imgui_internal.h"
 
 // ========================= UI Utils =========================
@@ -437,4 +435,4 @@ namespace pe::ui
     {
         ImGui::GetStyle().Colors[ImGuiCol_Text] = ImVec4(0.90f, 0.90f, 0.90f, 1.00f);
     }
-}
+} // namespace pe::ui

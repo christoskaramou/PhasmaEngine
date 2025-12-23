@@ -1546,6 +1546,6 @@ namespace pe
 
         return halton_vec[counter++ % samples];
     }
-}
+} // namespace pe
 
 #endif

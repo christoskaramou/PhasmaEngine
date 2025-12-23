@@ -55,4 +55,4 @@ namespace pe
         Image *m_sceneViewImage;
         bool m_sceneObjectsOpen;
     };
-}
+} // namespace pe

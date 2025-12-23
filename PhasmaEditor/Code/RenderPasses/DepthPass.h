@@ -32,4 +32,4 @@ namespace pe
         Image *m_depthStencil;
         Scene *m_scene = nullptr;
     };
-}
+} // namespace pe

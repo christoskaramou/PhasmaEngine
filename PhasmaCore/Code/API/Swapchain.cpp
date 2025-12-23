@@ -1,6 +1,6 @@
 #include "API/Swapchain.h"
-#include "API/RHI.h"
 #include "API/Image.h"
+#include "API/RHI.h"
 #include "API/Semaphore.h"
 #include "API/Surface.h"
 
@@ -97,4 +97,4 @@ namespace pe
 
         return result.value;
     }
-}
+} // namespace pe

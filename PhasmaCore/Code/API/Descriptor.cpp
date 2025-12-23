@@ -1,7 +1,7 @@
 #include "API/Descriptor.h"
-#include "API/RHI.h"
-#include "API/Image.h"
 #include "API/Buffer.h"
+#include "API/Image.h"
+#include "API/RHI.h"
 
 namespace pe
 {
@@ -294,4 +294,4 @@ namespace pe
         m_updateInfos.clear();
         m_updateInfos.resize(m_bindingInfos.size());
     }
-}
+} // namespace pe

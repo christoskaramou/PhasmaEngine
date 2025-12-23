@@ -1,25 +1,20 @@
 #include "Scene/Scene.h"
-
-#include "Scene/Model.h"
+#include "API/Buffer.h"
+#include "API/Command.h"
 #include "API/Descriptor.h"
 #include "API/Image.h"
-#include "API/RHI.h"
-#include "API/Command.h"
-#include "API/Buffer.h"
-#include "API/Vertex.h"
-#include "API/Pipeline.h"
 #include "API/Queue.h"
-#include "Camera/Camera.h"
-#include "RenderPasses/ShadowPass.h"
-#include "RenderPasses/AabbsPass.h"
-#include "RenderPasses/GbufferPass.h"
-#include "RenderPasses/DepthPass.h"
-#include "RenderPasses/LightPass.h"
-#include "Systems/CameraSystem.h"
+#include "API/RHI.h"
+#include "API/Vertex.h"
 #include "Base/ThreadPool.h"
-
-#include <algorithm>
-#include <future>
+#include "Camera/Camera.h"
+#include "RenderPasses/AabbsPass.h"
+#include "RenderPasses/DepthPass.h"
+#include "RenderPasses/GbufferPass.h"
+#include "RenderPasses/LightPass.h"
+#include "RenderPasses/ShadowPass.h"
+#include "Scene/Model.h"
+#include "Systems/CameraSystem.h"
 
 namespace pe
 {
@@ -816,4 +811,4 @@ namespace pe
         Buffer::Destroy(m_indirectAll);
         m_indirectAll = nullptr;
     }
-}
+} // namespace pe

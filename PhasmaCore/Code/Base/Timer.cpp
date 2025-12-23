@@ -1,6 +1,6 @@
 #include "Base/Timer.h"
-#include "API/RHI.h"
 #include "API/Command.h"
+#include "API/RHI.h"
 
 namespace pe
 {
@@ -136,4 +136,4 @@ namespace pe
 
         return static_cast<float>(m_queries[1] - m_queries[0]) * m_timestampPeriod * 1e-6f; // ms
     }
-}
+} // namespace pe

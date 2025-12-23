@@ -70,7 +70,7 @@ namespace pe
     }
 
     inline void FillVertexJointsWeights(Vertex &vertex, uint8_t j0, uint8_t j1, uint8_t j2, uint8_t j3,
-                                 float w0, float w1, float w2, float w3)
+                                        float w0, float w1, float w2, float w3)
     {
         vertex.joints[0] = j0;
         vertex.joints[1] = j1;
@@ -83,7 +83,7 @@ namespace pe
     }
 
     inline void FillVertexJointsWeights(PositionUvVertex &vertex, uint8_t j0, uint8_t j1, uint8_t j2, uint8_t j3,
-                                 float w0, float w1, float w2, float w3)
+                                        float w0, float w1, float w2, float w3)
     {
         vertex.joints[0] = j0;
         vertex.joints[1] = j1;
@@ -94,4 +94,4 @@ namespace pe
         vertex.weights[2] = w2;
         vertex.weights[3] = w3;
     }
-}
+} // namespace pe

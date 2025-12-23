@@ -21,4 +21,4 @@ namespace pe
         void Minimize();
         void Maximize();
     };
-}
+} // namespace pe

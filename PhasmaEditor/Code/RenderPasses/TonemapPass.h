@@ -13,14 +13,14 @@ namespace pe
         void CreateUniforms(CommandBuffer *cmd) override;
         void UpdateDescriptorSets() override;
         void Update() override {};
-        void Draw(CommandBuffer * cmd) override;
+        void Draw(CommandBuffer *cmd) override;
         void Resize(uint32_t width, uint32_t height) override;
         void Destroy() override;
 
     private:
         friend class Renderer;
-        
+
         Image *m_frameImage;
         Image *m_displayRT;
     };
-}
+} // namespace pe

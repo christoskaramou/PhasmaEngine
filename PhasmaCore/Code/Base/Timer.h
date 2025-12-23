@@ -6,17 +6,17 @@ namespace pe
     {
         return seconds * 1000.0;
     }
-    
+
     constexpr double MICRO(double seconds)
     {
         return seconds * 1000000.0;
     }
-    
+
     constexpr double NANO(double seconds)
     {
         return seconds * 1000000000.0;
     }
-    
+
     class Timer
     {
     public:
@@ -98,4 +98,4 @@ namespace pe
 
         inline static std::stack<GpuTimer *> s_gpuTimers{};
     };
-}
+} // namespace pe

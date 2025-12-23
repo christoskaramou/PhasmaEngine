@@ -27,4 +27,4 @@ namespace pe
         std::ios_base::openmode m_mode;
         size_t m_size;
     };
-}
+} // namespace pe

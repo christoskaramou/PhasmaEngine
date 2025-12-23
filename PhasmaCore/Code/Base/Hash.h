@@ -61,7 +61,7 @@ namespace pe
     public:
         Hashable() : m_hash{} {}
         Hash GetHash() const { return m_hash; }
-        
+
         virtual void UpdateHash() = 0;
 
     protected:
@@ -79,4 +79,4 @@ namespace pe
             return hash;
         }
     };
-}
+} // namespace pe

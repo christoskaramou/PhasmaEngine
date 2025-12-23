@@ -44,7 +44,7 @@ namespace pe
         {
             return GetTypeID<std::remove_reference_t<T>>();
         }
-    }
+    } // namespace ID
 
     template <uint32_t N>
     struct Placeholder
@@ -84,6 +84,8 @@ namespace pe
 
         iterator begin() { return m_list.begin(); }
         iterator end() { return m_list.end(); }
+        const_iterator begin() const { return m_list.begin(); }
+        const_iterator end() const { return m_list.end(); }
         reverse_iterator rbegin() { return m_list.rbegin(); }
         reverse_iterator rend() { return m_list.rend(); }
         const_iterator cbegin() const { return m_list.cbegin(); }
@@ -93,10 +95,7 @@ namespace pe
 
         OrderedMap() = default;
 
-        OrderedMap(size_t capacity)
-        {
-            m_map.reserve(capacity);
-        }
+        OrderedMap(size_t capacity) { m_map.reserve(capacity); }
 
         OrderedMap(std::initializer_list<std::pair<const Key, Value>> init)
         {
@@ -140,10 +139,7 @@ namespace pe
             return *(it->second);
         }
 
-        const Value &get(const Key &key) const
-        {
-            return *(m_map.at(key));
-        }
+        const Value &get(const Key &key) const { return *(m_map.at(key)); }
 
         template <class... Args>
         std::pair<bool, iterator> try_emplace(const Key &key, Args &&...args)
@@ -164,10 +160,7 @@ namespace pe
             return *it;
         }
 
-        const Value &operator[](const Key &key) const
-        {
-            return *(m_map.at(key));
-        }
+        const Value &operator[](const Key &key) const { return *(m_map.at(key)); }
 
         std::pair<bool, std::optional<iterator>> insert(const Key &key, const Value &value)
         {
@@ -264,4 +257,4 @@ namespace pe
 
         API_HANDLE m_apiHandle;
     };
-}
+} // namespace pe

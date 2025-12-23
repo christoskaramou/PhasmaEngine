@@ -1,10 +1,11 @@
 #include "SSAOPass.h"
-#include "API/Shader.h"
-#include "API/RHI.h"
 #include "API/Command.h"
 #include "API/Image.h"
-#include "Systems/RendererSystem.h"
+#include "API/RHI.h"
+#include "CACAO/ffx_cacao_impl.h"
 #include "Systems/CameraSystem.h"
+#include "Systems/RendererSystem.h"
+
 
 namespace pe
 {
@@ -164,4 +165,4 @@ namespace pe
         free(m_context);
         m_context = nullptr;
     }
-}
+} // namespace pe

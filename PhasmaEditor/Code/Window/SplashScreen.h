@@ -13,4 +13,4 @@ namespace pe
         SDL_Renderer *m_renderer;
         SDL_Texture *m_texture;
     };
-}
+} // namespace pe

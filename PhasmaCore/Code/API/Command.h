@@ -187,10 +187,10 @@ namespace pe
 
 #if PE_DEBUG_MODE
         friend class Debug;
-        
+
         uint32_t m_gpuTimerInfosCount = 0;
         std::vector<GpuTimerInfo> m_gpuTimerInfos{};
         std::stack<size_t> m_gpuTimerIdsStack{};
 #endif
     };
-}
+} // namespace pe

@@ -1,6 +1,5 @@
 #pragma once
 #include "CACAO/ffx_cacao.h"
-#include "CACAO/ffx_cacao_impl.h"
 
 namespace pe
 {
@@ -26,4 +25,4 @@ namespace pe
         FFX_CACAO_Matrix4x4 m_proj;          /* row major projection matrix */
         FFX_CACAO_Matrix4x4 m_normalsToView; /* row major matrix to convert normals to viewspace */
     };
-}
+} // namespace pe

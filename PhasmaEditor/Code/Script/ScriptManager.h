@@ -20,4 +20,4 @@ namespace pe
         inline static void *s_module = nullptr;
         inline static std::vector<Script *> m_scripts{};
     };
-}
+} // namespace pe

@@ -1,12 +1,11 @@
 #include "DOFPass.h"
-#include "API/Surface.h"
-#include "API/Shader.h"
-#include "API/RHI.h"
-#include "API/Queue.h"
 #include "API/Command.h"
 #include "API/Descriptor.h"
 #include "API/Image.h"
 #include "API/Pipeline.h"
+#include "API/Queue.h"
+#include "API/RHI.h"
+#include "API/Shader.h"
 #include "Systems/RendererSystem.h"
 
 namespace pe
@@ -80,7 +79,7 @@ namespace pe
         cmd->PushConstants();
         cmd->Draw(3, 1, 0, 0);
         cmd->EndPass();
-        
+
         cmd->EndDebugRegion();
     }
 
@@ -95,4 +94,4 @@ namespace pe
     {
         Image::Destroy(m_frameImage);
     }
-}
+} // namespace pe

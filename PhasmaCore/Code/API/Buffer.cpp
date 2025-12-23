@@ -1,7 +1,7 @@
 #include "API/Buffer.h"
-#include "API/StagingManager.h"
-#include "API/RHI.h"
 #include "API/Command.h"
+#include "API/RHI.h"
+#include "API/StagingManager.h"
 
 namespace pe
 {
@@ -177,4 +177,4 @@ namespace pe
 
         cmd->ApiHandle().pipelineBarrier2(dependencyInfo);
     }
-}
+} // namespace pe

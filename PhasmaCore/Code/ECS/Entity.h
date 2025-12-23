@@ -75,4 +75,4 @@ namespace pe
         if (it != m_components.end())
             m_components.erase(it);
     }
-}
+} // namespace pe

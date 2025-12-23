@@ -89,4 +89,4 @@ namespace pe
     public:
         virtual void Draw() = 0;
     };
-}
+} // namespace pe

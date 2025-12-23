@@ -53,4 +53,4 @@ namespace pe
     private:
         std::vector<FunctionType> m_functions;
     };
-}
+} // namespace pe

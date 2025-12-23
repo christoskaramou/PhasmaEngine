@@ -1,10 +1,10 @@
 #include "Scene/Model.h"
-#include "Scene/ModelAssimp.h"
 #include "API/Buffer.h"
-#include "API/RHI.h"
 #include "API/Image.h"
-#include "Systems/RendererSystem.h"
+#include "API/RHI.h"
+#include "Scene/ModelAssimp.h"
 #include "Scene/Scene.h"
+#include "Systems/RendererSystem.h"
 
 namespace pe
 {
@@ -110,4 +110,4 @@ namespace pe
 
         buffer->Unmap();
     }
-}
+} // namespace pe

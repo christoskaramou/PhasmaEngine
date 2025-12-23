@@ -103,4 +103,4 @@ namespace pe
 
         static std::vector<uint32_t> s_aabbIndices;
     };
-}
+} // namespace pe

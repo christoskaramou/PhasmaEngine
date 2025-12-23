@@ -56,4 +56,4 @@ namespace pe
         vec2 m_projJitter;
         vec2 m_prevProjJitter;
     };
-}
+} // namespace pe

@@ -64,4 +64,4 @@ namespace pe
 
         m_presentMode = vk::PresentModeKHR::eFifo;
     }
-}
+} // namespace pe

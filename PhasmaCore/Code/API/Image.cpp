@@ -1,9 +1,9 @@
 #include "API/Image.h"
-#include "API/RHI.h"
-#include "API/Command.h"
 #include "API/Buffer.h"
-#include "API/StagingManager.h"
+#include "API/Command.h"
 #include "API/Downsampler/Downsampler.h"
+#include "API/RHI.h"
+#include "API/StagingManager.h"
 
 #define STB_IMAGE_IMPLEMENTATION
 #include "stb/stb_image.h"
@@ -534,4 +534,4 @@ namespace pe
 
         cmd->EndDebugRegion();
     }
-}
+} // namespace pe

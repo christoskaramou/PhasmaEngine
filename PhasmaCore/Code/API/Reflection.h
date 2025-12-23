@@ -1,5 +1,5 @@
 #pragma once
-#include "spirv_cross/spirv_cross.hpp"
+#include "spirv_cross/spirv_common.hpp"
 
 namespace pe
 {
@@ -81,4 +81,4 @@ namespace pe
         PushConstantDesc m_pushConstants{};
         Shader *m_shader{};
     };
-}
+} // namespace pe

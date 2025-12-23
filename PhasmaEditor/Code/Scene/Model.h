@@ -1,9 +1,9 @@
 #pragma once
 
+#include "API/Pipeline.h"
+#include "API/Vertex.h"
 #include "Script/Script.h"
 #include "Systems/CameraSystem.h"
-#include "API/Vertex.h"
-#include "API/Pipeline.h"
 
 namespace pe
 {
@@ -142,4 +142,4 @@ namespace pe
         uint32_t m_meshCount = 0;
         std::string m_label;
     };
-}
+} // namespace pe

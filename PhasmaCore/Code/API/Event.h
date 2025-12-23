@@ -34,4 +34,4 @@ namespace pe
         EventSetInfoImage m_infoImage{};
         bool m_set;
     };
-}
+} // namespace pe

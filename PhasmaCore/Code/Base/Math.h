@@ -386,7 +386,7 @@ namespace pe
     float halton(uint32_t index, uint32_t base);
     vec2 halton_2_3(uint32_t index);
     vec2 halton_2_3_next(uint32_t samples = 16);
-}
+} // namespace pe
 
 #endif
 
@@ -455,5 +455,5 @@ namespace pe
 
         inline static float Depth{Settings::Get<GlobalSettings>().reverse_depth ? 0.0f : 1.0f};
         inline static uint32_t Stencil{0};
-    }
-}
+    } // namespace Color
+} // namespace pe

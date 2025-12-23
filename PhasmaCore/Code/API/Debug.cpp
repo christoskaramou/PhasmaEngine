@@ -1,7 +1,7 @@
 #include "API/Debug.h"
-#include "API/RHI.h"
-#include "API/Queue.h"
 #include "API/Command.h"
+#include "API/Queue.h"
+#include "API/RHI.h"
 #include "RenderDoc/renderdoc_app.h"
 
 #if defined(WIN32) && PE_RENDER_DOC == 1
@@ -9,7 +9,6 @@
 #elif defined(__linux__) && PE_RENDER_DOC == 1
 #include <dlfcn.h>
 #endif
-#include <filesystem>
 
 namespace pe
 {
@@ -30,7 +29,7 @@ namespace pe
         if (status != ERROR_SUCCESS) // ensure installer folders key is successfully opened
             return std::wstring();
 
-        // Get the class name and the value count.
+            // Get the class name and the value count.
 #define MAX_VALUE_NAME 8192
         TCHAR achClass[MAX_PATH] = TEXT("");
         DWORD cchClassName = MAX_PATH;
@@ -428,4 +427,4 @@ namespace pe
         cmd->m_gpuTimerIdsStack.pop();
     }
 #endif
-}
+} // namespace pe

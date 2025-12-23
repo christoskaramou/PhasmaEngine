@@ -47,4 +47,4 @@ namespace pe
         vec2 m_jitter;
         vec2 m_projectionJitter;
     };
-}
+} // namespace pe

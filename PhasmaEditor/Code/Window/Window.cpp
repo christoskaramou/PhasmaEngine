@@ -1,14 +1,12 @@
 #include "Window.h"
-#include "API/RHI.h"
 #include "API/Queue.h"
-#include "Systems/RendererSystem.h"
-#include "Systems/PostProcessSystem.h"
-#include "Systems/CameraSystem.h"
-#include "imgui/imgui_impl_vulkan.h"
-#include "imgui/imgui_impl_sdl2.h"
-#include "imgui/imgui_internal.h"
-#include "Scene/Scene.h"
+#include "API/RHI.h"
 #include "Scene/Model.h"
+#include "Scene/Scene.h"
+#include "Systems/CameraSystem.h"
+#include "Systems/PostProcessSystem.h"
+#include "Systems/RendererSystem.h"
+#include "imgui/imgui_impl_sdl2.h"
 #if defined(PE_SCRIPTS)
 #include "Script/ScriptManager.h"
 #endif
@@ -288,4 +286,4 @@ namespace pe
     {
         SDL_MaximizeWindow(m_apiHandle);
     }
-}
+} // namespace pe

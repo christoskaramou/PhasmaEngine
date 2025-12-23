@@ -72,4 +72,4 @@ namespace pe
 
         return RHII.GetDevice().getSemaphoreCounterValue(m_apiHandle);
     }
-}
+} // namespace pe

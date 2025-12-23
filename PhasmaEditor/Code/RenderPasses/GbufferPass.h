@@ -92,4 +92,4 @@ namespace pe
 
         Scene *m_scene = nullptr;
     };
-}
+} // namespace pe

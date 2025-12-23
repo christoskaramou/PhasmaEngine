@@ -68,7 +68,7 @@ namespace pe
         size_t m_pathID;
         ShaderCodeType m_type;
         std::string m_entryName;
-        
+
         inline static std::vector<Define> m_globalDefines{};
     };
-}
+} // namespace pe

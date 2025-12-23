@@ -1,9 +1,9 @@
 #pragma once
 
-#include "Skybox/Skybox.h"
 #include "GUI/GUI.h"
-#include "Script/Script.h"
 #include "Scene/Scene.h"
+#include "Script/Script.h"
+#include "Skybox/Skybox.h"
 
 namespace pe
 {
@@ -96,4 +96,4 @@ namespace pe
         SkyBox m_skyBoxNight;
         GUI m_gui;
     };
-}
+} // namespace pe

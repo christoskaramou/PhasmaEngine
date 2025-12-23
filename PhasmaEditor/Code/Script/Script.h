@@ -25,4 +25,4 @@ namespace pe
         CreateObjectFunc m_createObjectFunc;
         std::string m_path;
     };
-}
+} // namespace pe

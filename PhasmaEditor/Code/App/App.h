@@ -20,4 +20,4 @@ namespace pe
         FrameTimer &m_frameTimer;
         SplashScreen *m_splashScreen = nullptr;
     };
-}
+} // namespace pe

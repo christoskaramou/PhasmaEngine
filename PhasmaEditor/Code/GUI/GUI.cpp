@@ -1,20 +1,21 @@
 #include "GUI.h"
-#include "Helpers.h"
-#include "TinyFileDialogs/tinyfiledialogs.h"
-#include "API/RHI.h"
-#include "Scene/Model.h"
-#include "API/Surface.h"
-#include "API/Swapchain.h"
-#include "API/RenderPass.h"
 #include "API/Command.h"
 #include "API/Descriptor.h"
 #include "API/Image.h"
 #include "API/Queue.h"
+#include "API/RHI.h"
+#include "API/RenderPass.h"
+#include "API/Surface.h"
+#include "API/Swapchain.h"
+#include "Helpers.h"
 #include "RenderPasses/LightPass.h"
 #include "RenderPasses/SuperResolutionPass.h"
+#include "Scene/Model.h"
 #include "Systems/RendererSystem.h"
-#include "Systems/CameraSystem.h"
-#include "ECS/Entity.h"
+#include "TinyFileDialogs/tinyfiledialogs.h"
+#include "imgui/imgui_impl_sdl2.h"
+#include "imgui/imgui_impl_vulkan.h"
+
 
 namespace pe
 {
@@ -1187,4 +1188,4 @@ namespace pe
         Properties();
         Shaders();
     }
-}
+} // namespace pe

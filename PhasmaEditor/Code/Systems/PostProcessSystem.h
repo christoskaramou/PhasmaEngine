@@ -8,10 +8,10 @@ namespace pe
         void Init(CommandBuffer *cmd) override;
         void Update() override;
         void Destroy() override;
-    
+
         void Resize(uint32_t width, uint32_t height);
         void PollShaders();
-        
+
         template <class T>
         T *GetEffect()
         {
@@ -22,4 +22,4 @@ namespace pe
     private:
         OrderedMap<size_t, IRenderPassComponent *> m_renderPassComponents;
     };
-}
+} // namespace pe

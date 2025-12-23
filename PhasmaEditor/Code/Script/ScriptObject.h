@@ -28,4 +28,4 @@ namespace pe
         virtual void Draw() {};
         virtual void Destroy() {};
     };
-}
+} // namespace pe

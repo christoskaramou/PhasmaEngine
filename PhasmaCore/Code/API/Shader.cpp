@@ -332,7 +332,7 @@ namespace pe
 
             pErrors->Release();
         }
-    }
+    } // namespace
 
     bool Shader::CompileHlsl(const std::vector<Define> &localDefines)
     {
@@ -474,4 +474,4 @@ namespace pe
 
         return true;
     }
-}
+} // namespace pe

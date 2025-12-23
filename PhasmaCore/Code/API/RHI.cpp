@@ -1,19 +1,19 @@
 #include "API/RHI.h"
-#include "API/Command.h"
-#include "API/Semaphore.h"
-#include "API/Descriptor.h"
-#include "API/Image.h"
-#include "API/Swapchain.h"
-#include "API/Queue.h"
 #include "API/Buffer.h"
-#include "API/Surface.h"
+#include "API/Command.h"
+#include "API/Descriptor.h"
+#include "API/Downsampler/Downsampler.h"
 #include "API/Event.h"
 #include "API/Framebuffer.h"
-#include "API/RenderPass.h"
-#include "API/Shader.h"
+#include "API/Image.h"
 #include "API/Pipeline.h"
+#include "API/Queue.h"
+#include "API/RenderPass.h"
+#include "API/Semaphore.h"
+#include "API/Shader.h"
 #include "API/StagingManager.h"
-#include "API/Downsampler/Downsampler.h"
+#include "API/Surface.h"
+#include "API/Swapchain.h"
 
 #if defined(PE_WIN32)
 // On Windows, Vulkan commands use the stdcall convention
@@ -278,8 +278,8 @@ namespace pe
 // ---------- AMD Windows: ADLX (optional) ----------
 #if defined(PE_WIN32) && defined(PE_USE_ADLX)
 #include <ADLXHelper.h>
-#include <interfaces/IADLXSystem.h>
 #include <interfaces/IADLXPerformanceMonitoring.h>
+#include <interfaces/IADLXSystem.h>
     static bool AdlxGlobalVramUsedByAdapter(uint64_t &usedOut, uint64_t &totalOut)
     {
         usedOut = totalOut = 0;
@@ -447,7 +447,7 @@ namespace pe
         // === Debugging ===============================
         if (RHII.IsInstanceExtensionValid("VK_EXT_debug_utils"))
             instanceExtensions.push_back("VK_EXT_debug_utils");
-        // =============================================
+            // =============================================
 #endif
 
         // uint32_t apiVersion;
@@ -788,7 +788,9 @@ namespace pe
             else
             {
                 // Fallback: sysinfo (less accurate for caches/buffers)
-                struct sysinfo si{};
+                struct sysinfo si
+                {
+                };
                 if (sysinfo(&si) == 0)
                 {
                     m.sysTotal = (uint64_t)si.totalram * si.mem_unit;
@@ -1017,4 +1019,4 @@ namespace pe
     uint32_t RHI::GetHeight() const { return m_surface->GetActualExtent().height; }
     float RHI::GetWidthf() const { return static_cast<float>(GetWidth()); }
     float RHI::GetHeightf() const { return static_cast<float>(GetHeight()); }
-}
+} // namespace pe

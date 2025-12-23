@@ -77,4 +77,4 @@ namespace pe
         Image *m_transparencyRT;
         LightPassUBO m_ubo;
     };
-}
+} // namespace pe
