@@ -1,14 +1,19 @@
 #include "SceneView.h"
+#include "API/Image.h"
+#include "API/RHI.h"
 #include "GUI/GUI.h"
 #include "GUI/GUIState.h"
 #include "Systems/RendererSystem.h"
-#include "API/Image.h"
-#include "API/RHI.h"
 #include "imgui/imgui_impl_vulkan.h"
 #include "imgui/imgui_internal.h"
 
 namespace pe
 {
+    void SceneView::Init(GUI *gui)
+    {
+        Widget::Init(gui);
+    }
+
     void SceneView::Update()
     {
         if (GUIState::s_sceneViewFloating)

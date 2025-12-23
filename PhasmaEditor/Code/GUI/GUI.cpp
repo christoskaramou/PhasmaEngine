@@ -7,21 +7,20 @@
 #include "API/RenderPass.h"
 #include "API/Surface.h"
 #include "API/Swapchain.h"
+#include "GUIState.h"
 #include "Helpers.h"
 #include "RenderPasses/LightPass.h"
 #include "RenderPasses/SuperResolutionPass.h"
 #include "Scene/Model.h"
 #include "Systems/RendererSystem.h"
 #include "TinyFileDialogs/tinyfiledialogs.h"
-#include "Widgets/Metrics.h"
-#include "Widgets/Properties.h"
-#include "Widgets/Shaders.h"
-#include "Widgets/Models.h"
-#include "Widgets/Scripts.h"
 #include "Widgets/AssetViewer.h"
-#include "Widgets/SceneView.h"
+#include "Widgets/FileBrowser.h"
 #include "Widgets/Loading.h"
-#include "GUIState.h"
+#include "Widgets/Metrics.h"
+#include "Widgets/Models.h"
+#include "Widgets/Properties.h"
+#include "Widgets/SceneView.h"
 #include "imgui/imgui_impl_sdl2.h"
 #include "imgui/imgui_impl_vulkan.h"
 
@@ -40,9 +39,6 @@ namespace pe
 
     GUI::~GUI()
     {
-        for (auto widget : m_widgets)
-            delete widget;
-
         if (GUIState::s_viewportTextureId)
         {
             ImGui_ImplVulkan_RemoveTexture((VkDescriptorSet)GUIState::s_viewportTextureId);
@@ -73,7 +69,7 @@ namespace pe
                     auto loadAsync = [result]()
                     {
                         GUIState::s_modelLoading = true;
-                        
+
                         std::filesystem::path path(result);
                         Model::Load(path);
 
@@ -102,13 +98,6 @@ namespace pe
             ThreadPool::GUI.Enqueue(lambda);
         }
     }
-
-    static bool metrics_open = true;
-    static bool properties_open = true;
-    static bool shaders_open = false;
-    static bool models_open = false;
-    static bool scripts_open = false;
-    static bool asset_viewer_open = true;
 
     static void SetInitialWindowSizeFraction(float widthFraction, float heightFraction = -1.0f, ImGuiCond cond = ImGuiCond_FirstUseEver)
     {
@@ -194,8 +183,7 @@ namespace pe
         ImGui::DockBuilderDockWindow("Scene Objects", dockLeft);
         ImGui::DockBuilderDockWindow("Global Properties", dockRight);
         ImGui::DockBuilderDockWindow("Asset Viewer", dockBottomViewer);
-        ImGui::DockBuilderDockWindow("Shaders Folder", dockBottom);
-        ImGui::DockBuilderDockWindow("Scripts", dockBottom);
+        ImGui::DockBuilderDockWindow("File Browser", dockBottom);
 
         ImGui::DockBuilderFinish(dockspace);
     }
@@ -217,8 +205,6 @@ namespace pe
             {
                 ImGui::MenuItem("Undo", "Ctrl+Z", false, false);
                 ImGui::MenuItem("Redo", "Ctrl+Y", false, false);
-                ImGui::Separator();
-                ImGui::MenuItem("Preferences...", "Ctrl+,", &properties_open);
                 ImGui::EndMenu();
             }
 
@@ -228,20 +214,20 @@ namespace pe
                 {
                     EventSystem::PushEvent(EventType::CompileShaders);
                 }
-                ImGui::MenuItem("Shaders Browser", nullptr, &shaders_open);
-                ImGui::MenuItem("Scripts Browser", nullptr, &scripts_open);
+
+                for (auto &widget : m_menuAssetsWidgets)
+                {
+                    ImGui::MenuItem(widget->GetName().c_str(), nullptr, widget->GetOpen());
+                }
                 ImGui::EndMenu();
             }
 
             if (ImGui::BeginMenu("Window"))
             {
-                ImGui::MenuItem("Metrics", nullptr, &metrics_open);
-                ImGui::MenuItem("Global Properties", nullptr, &properties_open);
-                ImGui::MenuItem("Shaders Folder", nullptr, &shaders_open);
-                ImGui::MenuItem("Models", nullptr, &models_open);
-                ImGui::MenuItem("Scripts", nullptr, &scripts_open);
-                ImGui::MenuItem("Asset Viewer", nullptr, &asset_viewer_open);
-                ImGui::MenuItem("Scene Objects", nullptr, &m_sceneObjectsOpen);
+                for (auto &widget : m_menuWindowWidgets)
+                {
+                    ImGui::MenuItem(widget->GetName().c_str(), nullptr, widget->GetOpen());
+                }
 
                 if (ImGui::BeginMenu("Viewport"))
                 {
@@ -279,7 +265,6 @@ namespace pe
             if (ImGui::BeginMenu("Help"))
             {
                 ImGui::MenuItem("Dear ImGui Demo", nullptr, &m_show_demo_window);
-                ImGui::MenuItem("Show Metrics", nullptr, &metrics_open);
                 ImGui::EndMenu();
             }
             ImGui::EndMainMenuBar();
@@ -288,19 +273,8 @@ namespace pe
 
     void GUI::Init()
     {
-        //                   counter clock wise
-        // x, y, z coords orientation   // u, v coords orientation
-        //          |  /|               // (0,0)-------------> u
-        //          | /  +z             //     |
-        //          |/                  //     |
-        //  --------|-------->          //     |
-        //         /|       +x          //     |
-        //        /	|                   //     |
-        //       /  |/ +y               //     |/ v
-
         auto &gSettings = Settings::Get<GlobalSettings>();
-        gSettings.file_list.clear();
-        gSettings.shader_list.clear();
+
         gSettings.model_list.clear();
 
         auto Deduplicate = [](auto &vec)
@@ -308,37 +282,6 @@ namespace pe
             std::sort(vec.begin(), vec.end());
             vec.erase(std::unique(vec.begin(), vec.end()), vec.end());
         };
-
-        const std::filesystem::path scriptsDir = std::filesystem::path(Path::Executable + "Assets/Scripts");
-        if (std::filesystem::exists(scriptsDir))
-        {
-            for (auto &file : std::filesystem::recursive_directory_iterator(scriptsDir))
-            {
-                if (!file.is_regular_file())
-                    continue;
-                if (file.path().extension() == ".cs")
-                    gSettings.file_list.push_back(std::filesystem::relative(file.path(), scriptsDir).generic_string());
-            }
-        }
-        Deduplicate(gSettings.file_list);
-
-        const std::filesystem::path shadersDir = std::filesystem::path(Path::Executable + "Assets/Shaders");
-        if (std::filesystem::exists(shadersDir))
-        {
-            for (auto &file : std::filesystem::recursive_directory_iterator(shadersDir))
-            {
-                if (!file.is_regular_file())
-                    continue;
-
-                auto extension = file.path().extension().string();
-                if (extension == ".vert" || extension == ".frag" || extension == ".comp" || extension == ".glsl" ||
-                    extension == ".hlsl")
-                {
-                    gSettings.shader_list.push_back(std::filesystem::relative(file.path(), shadersDir).generic_string());
-                }
-            }
-        }
-        Deduplicate(gSettings.shader_list);
 
         const std::filesystem::path modelsDir = std::filesystem::path(Path::Executable + "Assets/Objects");
         if (std::filesystem::exists(modelsDir))
@@ -431,15 +374,20 @@ namespace pe
         EventSystem::RegisterEvent(EventType::AfterCommandWait);
         EventSystem::RegisterCallback(EventType::AfterCommandWait, std::move(AddGpuTimerInfo));
 
-        m_widgets.push_back(new class Properties());
-        m_widgets.push_back(new class Metrics());
-        m_widgets.push_back(new class Shaders());
-        m_widgets.push_back(new class Models());
-        m_widgets.push_back(new class Scripts());
-        m_widgets.push_back(new class AssetViewer());
-        m_widgets.push_back(new class SceneView());
-        m_widgets.push_back(new class Loading());
-        for (auto widget : m_widgets)
+        auto properties = std::make_shared<Properties>();
+        auto metrics = std::make_shared<Metrics>();
+        auto models = std::make_shared<Models>();
+        auto assetViewer = std::make_shared<AssetViewer>();
+        auto sceneView = std::make_shared<SceneView>();
+        auto loading = std::make_shared<Loading>();
+        auto fileBrowser = std::make_shared<FileBrowser>();
+
+        m_widgets = {properties, metrics, models, assetViewer, sceneView, loading, fileBrowser};
+
+        // Populate Menu Vectors
+        m_menuWindowWidgets = {metrics, properties, models, assetViewer, sceneView, fileBrowser};
+        m_menuAssetsWidgets = {};
+        for (auto &widget : m_widgets)
             widget->Init(this);
 
         queue->WaitIdle();
@@ -489,8 +437,6 @@ namespace pe
         ImGui::RenderPlatformWindowsDefault();
     }
 
-
-
     void GUI::Update()
     {
         if (!m_render)
@@ -502,8 +448,7 @@ namespace pe
         if (m_show_demo_window)
             ImGui::ShowDemoWindow(&m_show_demo_window);
 
-        auto size = m_widgets.size();
-        for (auto widget : m_widgets)
+        for (auto &widget : m_widgets)
         {
             if (widget->IsOpen())
                 widget->Update();

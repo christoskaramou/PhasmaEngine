@@ -50,8 +50,6 @@ namespace pe
         float camera_speed = 3.5f;
         std::array<float, 3> depth_bias{0.0f, 0.0f, -6.2f};
         float time_scale = 1.f;
-        std::vector<std::string> file_list{};
-        std::vector<std::string> shader_list{};
         std::vector<std::string> model_list{};
         Image *current_rendering_image = nullptr;
         std::vector<Image *> rendering_images{};

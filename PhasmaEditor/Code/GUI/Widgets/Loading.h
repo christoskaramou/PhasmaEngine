@@ -6,6 +6,7 @@ namespace pe
     class Loading : public Widget
     {
     public:
+        Loading() : Widget("Loading") {}
         void Update() override;
     };
 } // namespace pe
