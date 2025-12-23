@@ -435,4 +435,13 @@ namespace pe::ui
     {
         ImGui::GetStyle().Colors[ImGuiCol_Text] = ImVec4(0.90f, 0.90f, 0.90f, 1.00f);
     }
+
+    inline void SetInitialWindowSizeFraction(float widthFraction, float heightFraction = -1.0f, ImGuiCond cond = ImGuiCond_FirstUseEver)
+    {
+        const ImGuiViewport *viewport = ImGui::GetMainViewport();
+        ImVec2 size = ImVec2(
+            viewport->WorkSize.x * widthFraction,
+            viewport->WorkSize.y * (heightFraction > 0.0f ? heightFraction : widthFraction));
+        ImGui::SetNextWindowSize(size, cond);
+    }
 } // namespace pe::ui

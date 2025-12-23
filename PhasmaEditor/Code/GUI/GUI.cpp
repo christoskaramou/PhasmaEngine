@@ -13,34 +13,43 @@
 #include "Scene/Model.h"
 #include "Systems/RendererSystem.h"
 #include "TinyFileDialogs/tinyfiledialogs.h"
+#include "Widgets/Metrics.h"
+#include "Widgets/Properties.h"
+#include "Widgets/Shaders.h"
+#include "Widgets/Models.h"
+#include "Widgets/Scripts.h"
+#include "Widgets/AssetViewer.h"
+#include "Widgets/SceneView.h"
+#include "Widgets/Loading.h"
+#include "GUIState.h"
 #include "imgui/imgui_impl_sdl2.h"
 #include "imgui/imgui_impl_vulkan.h"
-
 
 namespace pe
 {
     GUI::GUI()
-        : m_render{true},
-          m_attachment{std::make_unique<Attachment>()},
-          m_show_demo_window{false},
-          m_dockspaceId{0},
-          m_dockspaceInitialized{false},
-          m_requestDockReset{false},
-          m_viewportTextureId{nullptr},
-          m_sceneViewFloating{false},
-          m_sceneViewRedockQueued{false},
-          m_sceneViewImage{nullptr},
-          m_sceneObjectsOpen{true}
+        : m_render(true),
+          m_attachment(std::make_unique<Attachment>()),
+          m_show_demo_window(false),
+          m_dockspaceId(0),
+          m_dockspaceInitialized(false),
+          m_requestDockReset(false),
+          m_sceneObjectsOpen(true)
     {
     }
 
     GUI::~GUI()
     {
-        if (m_viewportTextureId)
-            ImGui_ImplVulkan_RemoveTexture((VkDescriptorSet)m_viewportTextureId);
+        for (auto widget : m_widgets)
+            delete widget;
 
-        Image::Destroy(m_sceneViewImage);
+        if (GUIState::s_viewportTextureId)
+        {
+            ImGui_ImplVulkan_RemoveTexture((VkDescriptorSet)GUIState::s_viewportTextureId);
+            GUIState::s_viewportTextureId = nullptr;
+        }
 
+        Image::Destroy(GUIState::s_sceneViewImage);
         ImGui_ImplVulkan_Shutdown();
         ImGui_ImplSDL2_Shutdown();
         ImGui::DestroyContext();
@@ -53,7 +62,7 @@ namespace pe
     {
         if (ImGui::MenuItem(menuLabel))
         {
-            if (s_modelLoading)
+            if (GUIState::s_modelLoading)
                 return;
 
             auto lambda = [dialogTitle, filter]()
@@ -63,12 +72,12 @@ namespace pe
                 {
                     auto loadAsync = [result]()
                     {
-                        s_modelLoading = true;
-
+                        GUIState::s_modelLoading = true;
+                        
                         std::filesystem::path path(result);
                         Model::Load(path);
 
-                        s_modelLoading = false;
+                        GUIState::s_modelLoading = false;
                     };
                     ThreadPool::GUI.Enqueue(loadAsync);
                 }
@@ -100,43 +109,6 @@ namespace pe
     static bool models_open = false;
     static bool scripts_open = false;
     static bool asset_viewer_open = true;
-
-    enum class AssetPreviewType
-    {
-        None,
-        Model,
-        Script,
-        Shader
-    };
-
-    struct AssetPreviewState
-    {
-        AssetPreviewType type = AssetPreviewType::None;
-        std::string label{};
-        std::string fullPath{};
-    };
-
-    static AssetPreviewState s_assetPreview{};
-
-    static void OpenExternalPath(const std::string &absPath)
-    {
-#if defined(_WIN32)
-        std::string command = "cmd /c start \"\" \"" + absPath + "\"";
-#elif defined(__APPLE__)
-        std::string command = "open \"" + absPath + "\"";
-#else
-        std::string command = "xdg-open \"" + absPath + "\"";
-#endif
-        ThreadPool::GUI.Enqueue([command]()
-                                { system(command.c_str()); });
-    }
-
-    static void UpdateAssetPreview(AssetPreviewType type, const std::string &label, const std::string &fullPath)
-    {
-        s_assetPreview.type = type;
-        s_assetPreview.label = label;
-        s_assetPreview.fullPath = fullPath;
-    }
 
     static void SetInitialWindowSizeFraction(float widthFraction, float heightFraction = -1.0f, ImGuiCond cond = ImGuiCond_FirstUseEver)
     {
@@ -271,17 +243,27 @@ namespace pe
                 ImGui::MenuItem("Asset Viewer", nullptr, &asset_viewer_open);
                 ImGui::MenuItem("Scene Objects", nullptr, &m_sceneObjectsOpen);
 
-                bool prevFloating = m_sceneViewFloating;
-                ImGui::MenuItem("Float Scene View", nullptr, &m_sceneViewFloating);
-
-                if (prevFloating != m_sceneViewFloating)
+                if (ImGui::BeginMenu("Viewport"))
                 {
-                    if (!m_sceneViewFloating)
-                        m_sceneViewRedockQueued = true;
-                    else
-                        m_sceneViewRedockQueued = false;
+                    if (ImGui::MenuItem("Floating", nullptr, &GUIState::s_sceneViewFloating))
+                    {
+                        if (GUIState::s_sceneViewFloating)
+                        {
+                            // Reset when becoming floating
+                            GUIState::s_sceneViewFloating = true;
+                        }
+                        else
+                        {
+                            GUIState::s_sceneViewRedockQueued = true;
+                        }
+                    }
+                    if (ImGui::MenuItem("Redock", nullptr, false, GUIState::s_sceneViewFloating))
+                    {
+                        GUIState::s_sceneViewFloating = false;
+                        GUIState::s_sceneViewRedockQueued = true;
+                    }
+                    ImGui::EndMenu();
                 }
-
                 ImGui::EndMenu();
             }
 
@@ -302,567 +284,6 @@ namespace pe
             }
             ImGui::EndMainMenuBar();
         }
-    }
-
-    void GUI::Loading()
-    {
-        static const ImVec4 color{0, 232.f / 256, 224.f / 256, 1.f};
-        static const ImVec4 bdcolor{0.f, 168.f / 256, 162.f / 256, 1.f};
-        static const float radius = 25.f;
-        static const int flags = ImGuiWindowFlags_NoNav |
-                                 ImGuiWindowFlags_NoInputs |
-                                 ImGuiWindowFlags_NoResize |
-                                 ImGuiWindowFlags_NoScrollbar |
-                                 ImGuiWindowFlags_NoCollapse |
-                                 ImGuiWindowFlags_NoBackground;
-
-        auto &gSettings = Settings::Get<GlobalSettings>();
-        if (s_modelLoading)
-        {
-            int x, y;
-            const float topBarHeight = 16.f;
-            SDL_GetWindowPosition(RHII.GetWindow(), &x, &y);
-            ImVec2 size(-0.001f, 25.f);
-            ImGui::SetNextWindowPos(ImVec2(x + RHII.GetWidthf() / 2 - 200.f, y + topBarHeight + RHII.GetHeightf() / 2 - size.y / 2));
-            ImGui::SetNextWindowSize(ImVec2(400.f, 100.f));
-            ImGui::Begin(gSettings.loading_name.c_str(), &metrics_open, flags);
-            // LoadingIndicatorCircle("Loading", radius, color, bdcolor, 10, 4.5f);
-            const float progress = gSettings.loading_current / static_cast<float>(gSettings.loading_total);
-            ImGui::ProgressBar(progress, size);
-            ImGui::End();
-        }
-    }
-
-#if PE_DEBUG_MODE
-    float GUI::FetchTotalGPUTime()
-    {
-        float total = 0.f;
-        for (auto &gpuTimerInfo : m_gpuTimerInfos)
-        {
-            // Top level timers only
-            if (gpuTimerInfo.depth == 0)
-                total += gpuTimerInfo.timeMs;
-        }
-
-        return total;
-    }
-
-    void GUI::ShowGpuTimings(float maxTime)
-    {
-        for (auto &gpuTimerInfo : m_gpuTimerInfos)
-        {
-            // Top level timers are in CommandBuffer::Begin
-            if (gpuTimerInfo.depth == 0)
-                continue;
-
-            if (gpuTimerInfo.depth > 0)
-                ImGui::Indent(gpuTimerInfo.depth * 16.0f);
-
-            const float time = gpuTimerInfo.timeMs;
-            ui::SetTextColorTemp(time, maxTime);
-            ImGui::Text("%s: %.3f ms", gpuTimerInfo.name.c_str(), time);
-
-            if (gpuTimerInfo.depth > 0)
-                ImGui::Unindent(gpuTimerInfo.depth * 16.0f);
-        }
-    }
-
-    void GUI::ShowGpuTimingsTable(float totalMs)
-    {
-        // Optional filter
-        static char filter[64] = "";
-        ImGui::SetNextItemWidth(140);
-        ImGui::InputTextWithHint("##timings_filter", "filter...", filter, IM_ARRAYSIZE(filter));
-
-        ImGuiTableFlags flags =
-            ImGuiTableFlags_BordersInnerV |
-            ImGuiTableFlags_RowBg |
-            ImGuiTableFlags_Resizable |
-            ImGuiTableFlags_SizingStretchProp |
-            ImGuiTableFlags_NoSavedSettings |
-            ImGuiTableFlags_ScrollY;
-
-        // Height: show ~10 rows before scrolling
-        const float row_h = ImGui::GetTextLineHeightWithSpacing() + 4.0f;
-        const float table_h = row_h * 10.0f;
-
-        if (ImGui::BeginTable("##gpu_timings", 3, flags, ImVec2(-FLT_MIN, table_h)))
-        {
-            ImGui::TableSetupColumn("Pass", ImGuiTableColumnFlags_WidthStretch, 0.65f);
-            ImGui::TableSetupColumn("ms", ImGuiTableColumnFlags_WidthFixed, 70.0f);
-            ImGui::TableSetupColumn("rel", ImGuiTableColumnFlags_WidthStretch, 0.35f);
-            ImGui::TableHeadersRow();
-
-            for (const auto &info : m_gpuTimerInfos)
-            {
-                // skip your depth==0 “root” if you don’t want it listed
-                if (info.depth == 0)
-                    continue;
-
-                const float t = info.timeMs;
-                if (t <= 0.0f)
-                    continue;
-
-                // simple name filter
-                if (filter[0] != '\0' && std::string(info.name).find(filter) == std::string::npos)
-                    continue;
-
-                const float rel = (totalMs > 0.0f) ? (t / totalMs) : 0.0f;
-
-                ImGui::TableNextRow();
-
-                // col 0: name (pretty hierarchy)
-                ImGui::TableSetColumnIndex(0);
-                ui::DrawHierarchyCell(info.name.c_str(), static_cast<int>(info.depth), rel);
-
-                // col 1: ms (heat colored)
-                ImGui::TableSetColumnIndex(1);
-                ImGui::AlignTextToFramePadding();
-                ImGui::TextColored(ui::Heat(rel), "%.3f", t);
-
-                // col 2: tiny relative bar
-                ImGui::TableSetColumnIndex(2);
-                ui::TinyBar(rel);
-            }
-
-            ImGui::EndTable();
-        }
-    }
-
-#endif
-
-    void GUI::Metrics()
-    {
-        if (!metrics_open)
-            return;
-
-        static auto &gSettings = Settings::Get<GlobalSettings>();
-        static std::deque<float> fpsDeque(100, 0.0f);
-        static std::vector<float> fpsVector(100, 0.0f);
-        static float highestValue = 100.0f;
-
-        static Timer delay;
-        float framerate = ImGui::GetIO().Framerate;
-        if (delay.Count() > 0.2)
-        {
-            delay.Start();
-
-            fpsDeque.pop_front();
-            fpsDeque.push_back(framerate);
-            highestValue = max(highestValue, framerate + 60.0f);
-            std::copy(fpsDeque.begin(), fpsDeque.end(), fpsVector.begin());
-        }
-
-        SetInitialWindowSizeFraction(1.0f / 5.5f, 1.0f / 3.0f);
-        ImGui::Begin("Metrics", &metrics_open);
-        ImGui::Text("Dear ImGui %s", ImGui::GetVersion());
-        ImGui::TextColored(ImVec4(1.0f, 1.0f, 0.0f, 1.0f), "Average %.3f ms (%.1f FPS)", 1000.0f / framerate, framerate);
-        ImGui::PlotLines("##FrameTimes", fpsVector.data(), static_cast<int>(fpsVector.size()), 0, NULL, 0.0f, highestValue, ImVec2(0, 80));
-
-        // Memory Usage
-        ImGui::Separator();
-        const auto ram = RHII.GetSystemAndProcessMemory();
-        const auto gpu = RHII.GetGpuMemorySnapshot();
-        ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(ImGui::GetStyle().ItemSpacing.x, 2.0f)); // compact Y spacing
-        // 1) RAM — system used (other) / process (Private Bytes) / system total
-        ui::DrawRamBar("RAM", ram.sysTotal, ram.procPrivateBytes, ram.sysUsed);
-        // 2) GPU (Local/VRAM) — used / budget
-        ui::DrawGpuBar("GPU (Local)", gpu.vram.app, gpu.vram.other, std::max<uint64_t>(gpu.vram.budget, 1), ImVec2(-FLT_MIN, 18.0f));
-        // 3) GPU (Host Visible) — used / budget
-        ui::DrawGpuBar("GPU (Host Visible)", gpu.host.app, gpu.host.other, std::max<uint64_t>(gpu.host.budget, 1), ImVec2(-FLT_MIN, 18.0f));
-
-        ImGui::PopStyleVar();
-        ImGui::Separator();
-
-        FrameTimer &ft = FrameTimer::Instance();
-        const float cpuTotal = (float)MILLI(ft.GetCpuTotal());
-        const float cpuUpdates = (float)MILLI(ft.GetUpdatesStamp());
-        const float cpuDraw = (float)MILLI(ft.GetCpuTotal() - ft.GetUpdatesStamp());
-#if PE_DEBUG_MODE
-        const float gpuTotal = FetchTotalGPUTime();
-#else
-        const float gpuTotal = 0.0f;
-#endif
-        // Compact local spacing
-        ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(ImGui::GetStyle().ItemSpacing.x, 2.0f));
-        ui::ShowCpuGpuSummary(cpuTotal, cpuUpdates, cpuDraw, gpuTotal);
-        ImGui::PopStyleVar();
-#if PE_DEBUG_MODE
-        // keep the nice timings table you added below
-        ShowGpuTimingsTable(gpuTotal);
-        m_gpuTimerInfos.clear();
-#endif
-        ImGui::End();
-    }
-
-    void GUI::Shaders()
-    {
-        if (!shaders_open)
-            return;
-
-        auto &gSettings = Settings::Get<GlobalSettings>();
-        SetInitialWindowSizeFraction(1.0f / 5.5f, 1.0f / 3.5f);
-        ImGui::Begin("Shaders Folder", &shaders_open);
-        if (ImGui::Button("Compile Shaders"))
-        {
-            EventSystem::PushEvent(EventType::CompileShaders);
-        }
-        const ImGuiSelectableFlags flags = ImGuiSelectableFlags_AllowDoubleClick;
-        for (uint32_t i = 0; i < gSettings.shader_list.size(); i++)
-        {
-            const std::string &relative = gSettings.shader_list[i];
-            std::string label = relative + "##shader_" + std::to_string(i);
-            const bool selected = (s_assetPreview.type == AssetPreviewType::Shader && s_assetPreview.label == relative);
-            if (ImGui::Selectable(label.c_str(), selected, flags))
-            {
-                std::string fullPath = Path::Executable + "Assets/Shaders/" + relative;
-                UpdateAssetPreview(AssetPreviewType::Shader, relative, fullPath);
-                if (ImGui::IsMouseDoubleClicked(0))
-                {
-                    OpenExternalPath(fullPath);
-                }
-            }
-        }
-        ImGui::End();
-    }
-
-    void GUI::Models()
-    {
-        if (!models_open)
-            return;
-
-        auto &gSettings = Settings::Get<GlobalSettings>();
-        SetInitialWindowSizeFraction(1.0f / 6.0f, 1.0f / 3.0f);
-        ImGui::Begin("Models", &models_open);
-        ImGui::TextDisabled("Double click an asset to load it into the scene");
-
-        static ImGuiTextFilter modelFilter;
-        modelFilter.Draw("Filter##models", ImGui::GetFontSize() * 14.0f);
-        ImGui::Separator();
-
-        const ImGuiSelectableFlags selectFlags = ImGuiSelectableFlags_AllowDoubleClick;
-        if (ImGui::BeginChild("##models_child", ImVec2(0, 0), true))
-        {
-            if (gSettings.model_list.empty())
-            {
-                ImGui::TextDisabled("No model assets were found under Assets/Objects");
-            }
-
-            for (const auto &entry : gSettings.model_list)
-            {
-                if (!modelFilter.PassFilter(entry.c_str()))
-                    continue;
-
-                const bool selected = (s_assetPreview.type == AssetPreviewType::Model && s_assetPreview.label == entry);
-                if (ImGui::Selectable(entry.c_str(), selected, selectFlags))
-                {
-                    std::string fullPath = Path::Executable + "Assets/Objects/" + entry;
-                    UpdateAssetPreview(AssetPreviewType::Model, entry, fullPath);
-                    if (ImGui::IsMouseDoubleClicked(0) && !s_modelLoading)
-                    {
-                        auto loadTask = [fullPath]()
-                        {
-                            s_modelLoading = true;
-                            Model::Load(std::filesystem::path(fullPath));
-                            s_modelLoading = false;
-                        };
-                        ThreadPool::GUI.Enqueue(loadTask);
-                    }
-                }
-            }
-
-            ImGui::EndChild();
-        }
-
-        ImGui::End();
-    }
-
-    void GUI::Scripts()
-    {
-        if (!scripts_open)
-            return;
-
-        auto &gSettings = Settings::Get<GlobalSettings>();
-        SetInitialWindowSizeFraction(1.0f / 6.0f, 1.0f / 3.0f);
-        ImGui::Begin("Scripts", &scripts_open);
-        ImGui::TextDisabled("Double click a script to open it externally");
-
-        static ImGuiTextFilter scriptFilter;
-        scriptFilter.Draw("Filter##scripts", ImGui::GetFontSize() * 14.0f);
-        ImGui::Separator();
-
-        const ImGuiSelectableFlags selectFlags = ImGuiSelectableFlags_AllowDoubleClick;
-        if (ImGui::BeginChild("##scripts_child", ImVec2(0, 0), true))
-        {
-            if (gSettings.file_list.empty())
-            {
-                ImGui::TextDisabled("No .cs scripts found under Assets/Scripts");
-            }
-
-            for (const auto &entry : gSettings.file_list)
-            {
-                if (!scriptFilter.PassFilter(entry.c_str()))
-                    continue;
-
-                const bool selected = (s_assetPreview.type == AssetPreviewType::Script && s_assetPreview.label == entry);
-                if (ImGui::Selectable(entry.c_str(), selected, selectFlags))
-                {
-                    std::string fullPath = Path::Executable + "Assets/Scripts/" + entry;
-                    UpdateAssetPreview(AssetPreviewType::Script, entry, fullPath);
-                    if (ImGui::IsMouseDoubleClicked(0))
-                    {
-                        OpenExternalPath(fullPath);
-                    }
-                }
-            }
-
-            ImGui::EndChild();
-        }
-
-        ImGui::End();
-    }
-
-    static const char *AssetPreviewTypeToText(AssetPreviewType type)
-    {
-        switch (type)
-        {
-        case AssetPreviewType::Model:
-            return "Model";
-        case AssetPreviewType::Script:
-            return "Script";
-        case AssetPreviewType::Shader:
-            return "Shader";
-        default:
-            return "None";
-        }
-    }
-
-    void GUI::AssetViewer()
-    {
-        if (!asset_viewer_open)
-            return;
-
-        SetInitialWindowSizeFraction(0.35f, 1.0f / 4.0f);
-        ImGui::Begin("Asset Viewer", &asset_viewer_open);
-
-        if (s_assetPreview.type == AssetPreviewType::None || s_assetPreview.label.empty())
-        {
-            ImGui::TextDisabled("Select a model, script, or shader to inspect it here.");
-            ImGui::End();
-            return;
-        }
-
-        ImGui::Text("Type: %s", AssetPreviewTypeToText(s_assetPreview.type));
-        ImGui::Text("Asset: %s", s_assetPreview.label.c_str());
-        if (!s_assetPreview.fullPath.empty())
-        {
-            ImGui::TextWrapped("Path: %s", s_assetPreview.fullPath.c_str());
-            if (ImGui::Button("Open File"))
-            {
-                OpenExternalPath(s_assetPreview.fullPath);
-            }
-            const std::string folder = std::filesystem::path(s_assetPreview.fullPath).parent_path().string();
-            if (!folder.empty())
-            {
-                ImGui::SameLine();
-                if (ImGui::Button("Reveal In Explorer"))
-                    OpenExternalPath(folder);
-            }
-
-            if (s_assetPreview.type == AssetPreviewType::Model)
-            {
-                ImGui::SameLine();
-                const bool canLoad = !s_modelLoading;
-                if (!canLoad)
-                    ImGui::BeginDisabled();
-
-                if (ImGui::Button("Load Model"))
-                {
-                    auto path = std::filesystem::path(s_assetPreview.fullPath);
-                    ThreadPool::GUI.Enqueue([path]()
-                                            {
-                                                s_modelLoading = true;
-                                                Model::Load(path);
-                                                s_modelLoading = false; });
-                }
-
-                if (!canLoad)
-                    ImGui::EndDisabled();
-            }
-        }
-
-        ImGui::Separator();
-        ImGui::TextDisabled("Preview");
-        ImGui::BeginChild("##asset_viewer_canvas", ImVec2(0, 0), true);
-        ImGui::TextDisabled("Visual previews will live here.");
-        ImGui::EndChild();
-
-        ImGui::End();
-    }
-
-    void GUI::Properties()
-    {
-        if (!properties_open)
-            return;
-
-        auto &gSettings = Settings::Get<GlobalSettings>();
-        auto &srSettings = Settings::Get<SRSettings>();
-
-        static float rtScale = gSettings.render_scale;
-        static bool propertiesSized = false;
-        if (!propertiesSized)
-        {
-            SetInitialWindowSizeFraction(1.0f / 7.0f, 0.35f, ImGuiCond_Always);
-            propertiesSized = true;
-        }
-        else
-        {
-            SetInitialWindowSizeFraction(1.0f / 7.0f, 0.35f, ImGuiCond_Appearing);
-        }
-        ImGui::Begin("Global Properties", &properties_open);
-        ImGui::Text("Resolution: %d x %d", static_cast<int>(RHII.GetWidthf() * gSettings.render_scale), static_cast<int>(RHII.GetHeightf() * gSettings.render_scale));
-        ImGui::DragFloat("Quality", &rtScale, 0.01f, 0.05f, 1.0f);
-        if (ImGui::Button("Apply"))
-        {
-            gSettings.render_scale = clamp(rtScale, 0.1f, 4.0f);
-            RHII.WaitDeviceIdle();
-            EventSystem::PushEvent(EventType::Resize);
-        }
-        ImGui::Separator();
-
-        ImGui::Text("Present Mode");
-        static vk::PresentModeKHR currentPresentMode = RHII.GetSurface()->GetPresentMode();
-
-        if (ImGui::BeginCombo("##present_mode", RHII.PresentModeToString(currentPresentMode)))
-        {
-            const auto &presentModes = RHII.GetSurface()->GetSupportedPresentModes();
-            for (uint32_t i = 0; i < static_cast<uint32_t>(presentModes.size()); i++)
-            {
-                const bool isSelected = (currentPresentMode == presentModes[i]);
-                if (ImGui::Selectable(RHII.PresentModeToString(presentModes[i]), isSelected))
-                {
-                    if (currentPresentMode != presentModes[i])
-                    {
-                        currentPresentMode = presentModes[i];
-                        gSettings.preferred_present_mode = currentPresentMode;
-                        EventSystem::PushEvent(EventType::PresentMode);
-                    }
-                }
-                if (isSelected)
-                {
-                    ImGui::SetItemDefaultFocus();
-                }
-            }
-            ImGui::EndCombo();
-        }
-        ImGui::Separator();
-
-        static bool dynamic_rendering = gSettings.dynamic_rendering;
-        if (ImGui::Checkbox("Dynamic Rendering", &dynamic_rendering))
-        {
-            EventSystem::PushEvent(EventType::DynamicRendering, dynamic_rendering);
-        }
-        ImGui::Separator();
-
-        ImGui::Checkbox("IBL", &gSettings.IBL);
-        if (gSettings.IBL)
-        {
-            ImGui::Indent(16.0f);
-            ImGui::DragFloat("IBL Intensity", &gSettings.IBL_intensity, 0.01f, 0.0f, 10.0f);
-            ImGui::Unindent(16.0f);
-        }
-        ImGui::Checkbox("SSR", &gSettings.ssr);
-        ImGui::Checkbox("SSAO", &gSettings.ssao);
-        ImGui::Checkbox("Depth of Field", &gSettings.dof);
-        if (gSettings.dof)
-        {
-            ImGui::Indent(16.0f);
-            ImGui::DragFloat("Scale##DOF", &gSettings.dof_focus_scale, 0.05f, 0.5f);
-            ImGui::DragFloat("Range##DOF", &gSettings.dof_blur_range, 0.05f, 0.5f);
-            ImGui::Unindent(16.0f);
-            ImGui::Separator();
-        }
-        ImGui::Checkbox("Motion Blur", &gSettings.motion_blur);
-        if (gSettings.motion_blur)
-        {
-            ImGui::Indent(16.0f);
-            ImGui::DragFloat("Strength#mb", &gSettings.motion_blur_strength, 0.05f, 0.2f);
-            ImGui::DragInt("Samples#mb", &gSettings.motion_blur_samples, 0.1f, 8, 64);
-            ImGui::Unindent(16.0f);
-            ImGui::Separator();
-        }
-        ImGui::Checkbox("Tone Mapping", &gSettings.tonemapping);
-#if 0
-        ImGui::Checkbox("FSR2", &srSettings.enable);
-#else
-        // TODO: FSR2 is out of sync and out of date
-        ImGui::Checkbox("FSR2 (broken)", &srSettings.enable);
-        srSettings.enable = false;
-#endif
-        if (srSettings.enable)
-        {
-            ImGui::Indent(16.0f);
-            ImGui::InputFloat2("Motion", (float *)&srSettings.motionScale);
-            ImGui::InputFloat2("Proj", (float *)&srSettings.projScale);
-            ImGui::Unindent(16.0f);
-            ImGui::Separator();
-        }
-
-        ImGui::Checkbox("FXAA", &gSettings.fxaa);
-
-        ImGui::Checkbox("Bloom", &gSettings.bloom);
-        if (gSettings.bloom)
-        {
-            ImGui::Indent(16.0f);
-            ImGui::SliderFloat("Strength", &gSettings.bloom_strength, 0.01f, 10.f);
-            ImGui::SliderFloat("Range", &gSettings.bloom_range, 0.1f, 20.f);
-            ImGui::Unindent(16.0f);
-            ImGui::Separator();
-        }
-
-        if (ImGui::Checkbox("Sun Light", &gSettings.shadows))
-        {
-            // Update light pass descriptor sets for the skybox change
-            LightOpaquePass &lightOpaquePass = *GetGlobalComponent<LightOpaquePass>();
-            lightOpaquePass.UpdateDescriptorSets();
-            LightTransparentPass &lightTransparentPass = *GetGlobalComponent<LightTransparentPass>();
-            lightTransparentPass.UpdateDescriptorSets();
-        }
-        if (gSettings.shadows)
-        {
-            ImGui::Indent(16.0f);
-            ImGui::SliderFloat("Intst", &gSettings.sun_intensity, 0.1f, 50.f);
-            ImGui::DragFloat3("Dir", gSettings.sun_direction.data(), 0.01f, -1.f, 1.f);
-            ImGui::DragFloat("Slope", &gSettings.depth_bias[2], 0.15f, 0.5f);
-            ImGui::Separator();
-            {
-                vec3 direction = normalize(make_vec3(&gSettings.sun_direction[0]));
-                gSettings.sun_direction[0] = direction.x;
-                gSettings.sun_direction[1] = direction.y;
-                gSettings.sun_direction[2] = direction.z;
-            }
-            ImGui::Unindent(16.0f);
-        }
-
-        ImGui::DragFloat("CamSpeed", &gSettings.camera_speed, 0.1f, 1.f);
-        ImGui::DragFloat("TimeScale", &gSettings.time_scale, 0.05f, 0.2f);
-        ImGui::Separator();
-        if (ImGui::Button("Randomize Lights"))
-            gSettings.randomize_lights = true;
-        ImGui::SliderFloat("Light Intst", &gSettings.lights_intensity, 0.01f, 30.f);
-        ImGui::SliderFloat("Light Rng", &gSettings.lights_range, 0.1f, 30.f);
-        ImGui::Checkbox("Frustum Culling", &gSettings.frustum_culling);
-        ImGui::Checkbox("FreezeCamCull", &gSettings.freeze_frustum_culling);
-        ImGui::Checkbox("Draw AABBs", &gSettings.draw_aabbs);
-        if (gSettings.draw_aabbs)
-        {
-            bool depthAware = gSettings.aabbs_depth_aware;
-            ImGui::Indent(16.0f);
-            ImGui::Checkbox("Depth Aware", &gSettings.aabbs_depth_aware);
-            ImGui::Unindent(16.0f);
-        }
-
-        ImGui::End();
     }
 
     void GUI::Init()
@@ -951,8 +372,6 @@ namespace pe
         RendererSystem *renderer = GetGlobalSystem<RendererSystem>();
         m_attachment->image = renderer->GetDisplayRT();
         m_attachment->loadOp = vk::AttachmentLoadOp::eLoad;
-        Image::Destroy(m_sceneViewImage);
-        m_sceneViewImage = renderer->CreateFSSampledImage(false);
         VkFormat format = static_cast<VkFormat>(RHII.GetSurface()->GetFormat());
         Queue *queue = RHII.GetMainQueue();
 
@@ -1012,6 +431,17 @@ namespace pe
         EventSystem::RegisterEvent(EventType::AfterCommandWait);
         EventSystem::RegisterCallback(EventType::AfterCommandWait, std::move(AddGpuTimerInfo));
 
+        m_widgets.push_back(new class Properties());
+        m_widgets.push_back(new class Metrics());
+        m_widgets.push_back(new class Shaders());
+        m_widgets.push_back(new class Models());
+        m_widgets.push_back(new class Scripts());
+        m_widgets.push_back(new class AssetViewer());
+        m_widgets.push_back(new class SceneView());
+        m_widgets.push_back(new class Loading());
+        for (auto widget : m_widgets)
+            widget->Init(this);
+
         queue->WaitIdle();
     }
 
@@ -1025,16 +455,16 @@ namespace pe
         m_attachment->image = displayRT;
 
         const bool canCopySceneView =
-            m_sceneViewImage && displayRT &&
-            m_sceneViewImage->GetWidth() == displayRT->GetWidth() &&
-            m_sceneViewImage->GetHeight() == displayRT->GetHeight();
+            GUIState::s_sceneViewImage && displayRT &&
+            GUIState::s_sceneViewImage->GetWidth() == displayRT->GetWidth() &&
+            GUIState::s_sceneViewImage->GetHeight() == displayRT->GetHeight();
 
         if (canCopySceneView)
         {
-            cmd->CopyImage(displayRT, m_sceneViewImage);
+            cmd->CopyImage(displayRT, GUIState::s_sceneViewImage);
 
             ImageBarrierInfo sceneViewBarrier{};
-            sceneViewBarrier.image = m_sceneViewImage;
+            sceneViewBarrier.image = GUIState::s_sceneViewImage;
             sceneViewBarrier.layout = vk::ImageLayout::eShaderReadOnlyOptimal;
             sceneViewBarrier.stageFlags = vk::PipelineStageFlagBits2::eFragmentShader;
             sceneViewBarrier.accessMask = vk::AccessFlagBits2::eShaderRead;
@@ -1059,114 +489,7 @@ namespace pe
         ImGui::RenderPlatformWindowsDefault();
     }
 
-    void GUI::SceneView()
-    {
-        if (m_sceneViewFloating)
-        {
-            ImGui::SetNextWindowDockID(0, ImGuiCond_Always);
-        }
-        else if (m_sceneViewRedockQueued && m_dockspaceId != 0)
-        {
-            ImGui::DockBuilderDockWindow("Scene View", m_dockspaceId);
-            m_sceneViewRedockQueued = false;
-        }
 
-        ImGuiWindowFlags sceneViewFlags = 0;
-        if (m_sceneViewFloating)
-            sceneViewFlags |= ImGuiWindowFlags_NoDocking;
-
-        ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0.0f, 0.0f));
-        ImGui::Begin("Scene View", nullptr, sceneViewFlags);
-        ImGui::PopStyleVar();
-
-        RendererSystem *renderer = GetGlobalSystem<RendererSystem>();
-        Image *displayRT = renderer->GetDisplayRT();
-
-        auto recreateSceneTexture = [this, renderer, displayRT]()
-        {
-            if (!displayRT)
-                return;
-
-            Image::Destroy(m_sceneViewImage);
-            m_sceneViewImage = renderer->CreateFSSampledImage(false);
-
-            if (m_viewportTextureId)
-            {
-                ImGui_ImplVulkan_RemoveTexture((VkDescriptorSet)m_viewportTextureId);
-                m_viewportTextureId = nullptr;
-            }
-        };
-
-        if (!m_sceneViewImage || !displayRT ||
-            m_sceneViewImage->GetWidth() != displayRT->GetWidth() ||
-            m_sceneViewImage->GetHeight() != displayRT->GetHeight())
-        {
-            recreateSceneTexture();
-        }
-
-        Image *sceneTexture = m_sceneViewImage ? m_sceneViewImage : displayRT;
-
-        // Ensure we have a valid render target with sampler and SRV
-        if (!sceneTexture || !sceneTexture->HasSRV() || !sceneTexture->GetSampler())
-        {
-            ImGui::TextDisabled("Initializing viewport...");
-            ImGui::End();
-            return;
-        }
-
-        // Create descriptor set for the render target if not already created
-        if (!m_viewportTextureId)
-        {
-            VkSampler sampler = sceneTexture->GetSampler()->ApiHandle();
-            VkImageView imageView = sceneTexture->GetSRV();
-
-            if (sampler && imageView)
-            {
-                m_viewportTextureId = (void *)ImGui_ImplVulkan_AddTexture(sampler, imageView, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
-            }
-        }
-
-        if (m_viewportTextureId)
-        {
-            // Get available content region
-            ImVec2 viewportPanelSize = ImGui::GetContentRegionAvail();
-
-            if (viewportPanelSize.x > 0 && viewportPanelSize.y > 0)
-            {
-                // Calculate aspect-preserving size
-                float targetAspect = (float)sceneTexture->GetWidth() / (float)sceneTexture->GetHeight();
-                float panelAspect = viewportPanelSize.x / viewportPanelSize.y;
-
-                ImVec2 imageSize;
-                if (panelAspect > targetAspect)
-                {
-                    // Panel is wider, fit to height
-                    imageSize.y = viewportPanelSize.y;
-                    imageSize.x = imageSize.y * targetAspect;
-                }
-                else
-                {
-                    // Panel is taller, fit to width
-                    imageSize.x = viewportPanelSize.x;
-                    imageSize.y = imageSize.x / targetAspect;
-                }
-
-                // Center the image
-                ImVec2 cursorPos = ImGui::GetCursorPos();
-                cursorPos.x += (viewportPanelSize.x - imageSize.x) * 0.5f;
-                cursorPos.y += (viewportPanelSize.y - imageSize.y) * 0.5f;
-                ImGui::SetCursorPos(cursorPos);
-
-                ImGui::Image(static_cast<ImTextureID>(reinterpret_cast<intptr_t>(m_viewportTextureId)), imageSize);
-            }
-        }
-        else
-        {
-            ImGui::TextDisabled("Rendering...");
-        }
-
-        ImGui::End();
-    }
 
     void GUI::Update()
     {
@@ -1179,13 +502,11 @@ namespace pe
         if (m_show_demo_window)
             ImGui::ShowDemoWindow(&m_show_demo_window);
 
-        Loading();
-        SceneView();
-        Metrics();
-        Models();
-        Scripts();
-        AssetViewer();
-        Properties();
-        Shaders();
+        auto size = m_widgets.size();
+        for (auto widget : m_widgets)
+        {
+            if (widget->IsOpen())
+                widget->Update();
+        }
     }
 } // namespace pe
