@@ -301,6 +301,7 @@ namespace pe
         ImGuiIO &io = ImGui::GetIO();
         io.ConfigFlags |= ImGuiConfigFlags_DockingEnable;   // Enable docking
         io.ConfigFlags |= ImGuiConfigFlags_ViewportsEnable; // Enable multiple viewports
+        io.ConfigFlags |= ImGuiConfigFlags_IsSRGB;          // Enable SRGB support
 
         ImGui::StyleColorsClassic();
         ImGui::GetStyle().Colors[ImGuiCol_WindowBg] = ImVec4(0.00f, 0.00f, 0.00f, 0.3f);

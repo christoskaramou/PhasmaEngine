@@ -120,6 +120,8 @@ namespace pe
 
     void Queue::Present(Swapchain *swapchain, uint32_t imageIndex, Semaphore *wait)
     {
+        std::lock_guard<std::mutex> lock(s_submitMutex);
+
         vk::PresentInfoKHR pi{};
         pi.waitSemaphoreCount = wait ? 1 : 0;
         pi.pWaitSemaphores = wait ? &wait->ApiHandle() : nullptr;
