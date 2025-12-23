@@ -1,0 +1,32 @@
+#include "GUIState.h"
+
+namespace pe
+{
+    AssetPreviewState GUIState::s_assetPreview{};
+    std::atomic_bool GUIState::s_modelLoading{false};
+
+    void *GUIState::s_viewportTextureId = nullptr;
+    bool GUIState::s_sceneViewFloating = false;
+    bool GUIState::s_sceneViewRedockQueued = false;
+    Image *GUIState::s_sceneViewImage = nullptr;
+
+    void GUIState::OpenExternalPath(const std::string &absPath)
+    {
+#if defined(_WIN32)
+        std::string command = "cmd /c start \"\" \"" + absPath + "\"";
+#elif defined(__APPLE__)
+        std::string command = "open \"" + absPath + "\"";
+#else
+        std::string command = "xdg-open \"" + absPath + "\"";
+#endif
+        ThreadPool::GUI.Enqueue([command]()
+                                { system(command.c_str()); });
+    }
+
+    void GUIState::UpdateAssetPreview(AssetPreviewType type, const std::string &label, const std::string &fullPath)
+    {
+        s_assetPreview.type = type;
+        s_assetPreview.label = label;
+        s_assetPreview.fullPath = fullPath;
+    }
+} // namespace pe

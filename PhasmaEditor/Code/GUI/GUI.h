@@ -1,4 +1,5 @@
 #pragma once
+#include "Widget.h"
 
 struct ImGuiStyle;
 
@@ -23,6 +24,10 @@ namespace pe
         bool Render() { return m_render; }
         void ToggleRender() { m_render = !m_render; }
 
+        const std::vector<GpuTimerSample> &GetGpuTimerInfos() { return m_gpuTimerInfos; }
+        std::vector<GpuTimerSample> &GetGpuTimerInfosMutable() { return m_gpuTimerInfos; }
+        uint32_t GetDockspaceId() const { return m_dockspaceId; }
+
     private:
         static void async_fileDialog_ImGuiMenuItem(const char *menuLabel, const char *dialogTitle, const std::vector<const char *> &filter);
         static void async_messageBox_ImGuiMenuItem(const char *menuLabel, const char *messageBoxTitle, const char *message);
@@ -30,17 +35,6 @@ namespace pe
         void Menu();
         void BuildDockspace();
         void ResetDockspaceLayout(uint32_t dockspaceId);
-        void Loading();
-        void Metrics();
-        void Shaders();
-        void Models();
-        void Scripts();
-        void AssetViewer();
-        void SceneView();
-        void Properties();
-        float FetchTotalGPUTime();
-        void ShowGpuTimings(float maxTime);
-        void ShowGpuTimingsTable(float totalMs);
 
         bool m_render;
         std::unique_ptr<Attachment> m_attachment;
@@ -49,10 +43,8 @@ namespace pe
         bool m_dockspaceInitialized;
         bool m_requestDockReset;
         std::vector<GpuTimerSample> m_gpuTimerInfos;
-        void *m_viewportTextureId;
-        bool m_sceneViewFloating;
-        bool m_sceneViewRedockQueued;
-        Image *m_sceneViewImage;
         bool m_sceneObjectsOpen;
+
+        std::vector<Widget *> m_widgets;
     };
 } // namespace pe
