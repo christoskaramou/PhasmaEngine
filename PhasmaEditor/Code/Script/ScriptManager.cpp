@@ -10,9 +10,9 @@ namespace pe
         int res = std::system(cmakeCommand.c_str());
         PE_ERROR_IF(res != 0, "Failed to configure CMake");
 
-// Compile the source into a shared library
+        // Compile the source into a shared library
         std::string buildCommand = "";
-#ifdef PE_DEBUG
+#if defined(PE_DEBUG)
         buildCommand = "cmake --build " + Path::Executable + "Assets/Scripts/build --config Debug";
 #elif defined(PE_RELEASE)
         buildCommand = "cmake --build " + Path::Executable + "Assets/Scripts/build --config Release";
@@ -27,7 +27,7 @@ namespace pe
         // Load the compiled module
         LoadModule();
 
-        // Find .cpp files in the Scripts directory
+        // Find .pecpp files in Scripts folder
         for (auto &file : std::filesystem::recursive_directory_iterator(Path::Executable + "Assets/Scripts"))
         {
             std::string filePath = file.path().string();
