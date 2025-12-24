@@ -18,6 +18,16 @@ namespace pe
             Image::Destroy(m_folderIcon);
         if (m_fileIcon)
             Image::Destroy(m_fileIcon);
+        if (m_txtIcon)
+            Image::Destroy(m_txtIcon);
+        if (m_shaderIcon)
+            Image::Destroy(m_shaderIcon);
+        if (m_modelIcon)
+            Image::Destroy(m_modelIcon);
+        if (m_scriptIcon)
+            Image::Destroy(m_scriptIcon);
+        if (m_imageIcon)
+            Image::Destroy(m_imageIcon);
     }
 
     void FileBrowser::Init(GUI *gui)
@@ -32,6 +42,11 @@ namespace pe
 
         m_folderIcon = Image::LoadRGBA8(cmd, Path::Executable + "Assets/Icons/folder_icon.png");
         m_fileIcon = Image::LoadRGBA8(cmd, Path::Executable + "Assets/Icons/file_icon.png");
+        m_txtIcon = Image::LoadRGBA8(cmd, Path::Executable + "Assets/Icons/txt_icon.png");
+        m_shaderIcon = Image::LoadRGBA8(cmd, Path::Executable + "Assets/Icons/shader_icon.png");
+        m_modelIcon = Image::LoadRGBA8(cmd, Path::Executable + "Assets/Icons/model_icon.png");
+        m_scriptIcon = Image::LoadRGBA8(cmd, Path::Executable + "Assets/Icons/script_icon.png");
+        m_imageIcon = Image::LoadRGBA8(cmd, Path::Executable + "Assets/Icons/image_icon.png");
 
         cmd->End();
         queue->Submit(1, &cmd, nullptr, nullptr);
@@ -43,6 +58,21 @@ namespace pe
 
         if (m_fileIcon && m_fileIcon->GetSampler() && m_fileIcon->GetSRV())
             m_fileIconDS = (void *)ImGui_ImplVulkan_AddTexture(m_fileIcon->GetSampler()->ApiHandle(), m_fileIcon->GetSRV(), VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+            
+        if (m_txtIcon && m_txtIcon->GetSampler() && m_txtIcon->GetSRV())
+            m_txtIconDS = (void *)ImGui_ImplVulkan_AddTexture(m_txtIcon->GetSampler()->ApiHandle(), m_txtIcon->GetSRV(), VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+
+        if (m_shaderIcon && m_shaderIcon->GetSampler() && m_shaderIcon->GetSRV())
+            m_shaderIconDS = (void *)ImGui_ImplVulkan_AddTexture(m_shaderIcon->GetSampler()->ApiHandle(), m_shaderIcon->GetSRV(), VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+
+        if (m_modelIcon && m_modelIcon->GetSampler() && m_modelIcon->GetSRV())
+            m_modelIconDS = (void *)ImGui_ImplVulkan_AddTexture(m_modelIcon->GetSampler()->ApiHandle(), m_modelIcon->GetSRV(), VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+
+        if (m_scriptIcon && m_scriptIcon->GetSampler() && m_scriptIcon->GetSRV())
+            m_scriptIconDS = (void *)ImGui_ImplVulkan_AddTexture(m_scriptIcon->GetSampler()->ApiHandle(), m_scriptIcon->GetSRV(), VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+
+        if (m_imageIcon && m_imageIcon->GetSampler() && m_imageIcon->GetSRV())
+            m_imageIconDS = (void *)ImGui_ImplVulkan_AddTexture(m_imageIcon->GetSampler()->ApiHandle(), m_imageIcon->GetSRV(), VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
     }
 
     void FileBrowser::Update()
@@ -153,10 +183,26 @@ namespace pe
                                     ImGui::Image((ImTextureID)m_folderIconDS, ImVec2(20, 20));
                                     ImGui::SameLine();
                                 }
-                                else if (!isDir && m_fileIconDS)
+                                else if (!isDir)
                                 {
-                                    ImGui::Image((ImTextureID)m_fileIconDS, ImVec2(20, 20));
-                                    ImGui::SameLine();
+                                    void *iconID = m_fileIconDS;
+                                    std::string ext = entry.path().extension().string();
+                                    if (ext == ".txt" || ext == ".md" || ext == ".json" || ext == ".xml")
+                                        iconID = m_txtIconDS ? m_txtIconDS : m_fileIconDS;
+                                    else if (ext == ".vert" || ext == ".frag" || ext == ".comp" || ext == ".glsl" || ext == ".hlsl")
+                                        iconID = m_shaderIconDS ? m_shaderIconDS : m_fileIconDS;
+                                    else if (ext == ".gltf" || ext == ".glb" || ext == ".obj" || ext == ".fbx" || ext == ".dae" || ext == ".stl" || ext == ".ply" || ext == ".3ds" || ext == ".blend")
+                                        iconID = m_modelIconDS ? m_modelIconDS : m_fileIconDS;
+                                    else if (ext == ".peh" || ext == ".pecpp")
+                                        iconID = m_scriptIconDS ? m_scriptIconDS : m_fileIconDS;
+                                    else if (ext == ".png" || ext == ".jpg" || ext == ".jpeg" || ext == ".tga" || ext == ".bmp" || ext == ".psd" || ext == ".gif" || ext == ".hdr" || ext == ".pic")
+                                        iconID = m_imageIconDS ? m_imageIconDS : m_fileIconDS;
+
+                                    if (iconID)
+                                    {
+                                        ImGui::Image((ImTextureID)iconID, ImVec2(20, 20));
+                                        ImGui::SameLine();
+                                    }
                                 }
 
                                 if (ImGui::Selectable(label.c_str(), isSelected, ImGuiSelectableFlags_AllowDoubleClick))
@@ -192,7 +238,23 @@ namespace pe
                                 else
                                     ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0, 0, 0, 0));
 
-                                void *iconID = (isDir && m_folderIconDS) ? m_folderIconDS : ((!isDir && m_fileIconDS) ? m_fileIconDS : nullptr);
+                                void *iconID = nullptr;
+                                if (isDir) {
+                                    iconID = m_folderIconDS;
+                                } else {
+                                    iconID = m_fileIconDS;
+                                    std::string ext = entry.path().extension().string();
+                                    if (ext == ".txt" || ext == ".md" || ext == ".json" || ext == ".xml")
+                                        iconID = m_txtIconDS ? m_txtIconDS : m_fileIconDS;
+                                    else if (ext == ".vert" || ext == ".frag" || ext == ".comp" || ext == ".glsl" || ext == ".hlsl")
+                                        iconID = m_shaderIconDS ? m_shaderIconDS : m_fileIconDS;
+                                    else if (ext == ".gltf" || ext == ".glb" || ext == ".obj" || ext == ".fbx" || ext == ".dae" || ext == ".stl" || ext == ".ply" || ext == ".3ds" || ext == ".blend")
+                                        iconID = m_modelIconDS ? m_modelIconDS : m_fileIconDS;
+                                    else if (ext == ".peh" || ext == ".pecpp")
+                                        iconID = m_scriptIconDS ? m_scriptIconDS : m_fileIconDS;
+                                    else if (ext == ".png" || ext == ".jpg" || ext == ".jpeg" || ext == ".tga" || ext == ".bmp" || ext == ".psd" || ext == ".gif" || ext == ".hdr" || ext == ".pic")
+                                        iconID = m_imageIconDS ? m_imageIconDS : m_fileIconDS;
+                                }
                                 
                                 bool clicked = false;
                                 if (iconID)
