@@ -16,6 +16,7 @@
 #include "TinyFileDialogs/tinyfiledialogs.h"
 #include "Widgets/AssetViewer.h"
 #include "Widgets/FileBrowser.h"
+#include "Widgets/Hierarchy.h"
 #include "Widgets/Loading.h"
 #include "Widgets/Metrics.h"
 #include "Widgets/Models.h"
@@ -32,8 +33,7 @@ namespace pe
           m_show_demo_window(false),
           m_dockspaceId(0),
           m_dockspaceInitialized(false),
-          m_requestDockReset(false),
-          m_sceneObjectsOpen(true)
+          m_requestDockReset(false)
     {
     }
 
@@ -168,21 +168,19 @@ namespace pe
         constexpr float dockRightFrac = 1.0f / 7.0f;
         constexpr float dockLeftFrac = 1.0f / 7.0f;
         constexpr float dockBottomFrac = 1.0f / 4.5f;
-        constexpr float dockViewerFrac = 0.32f;
 
         ImGuiID dockMainId = dockspace;
         ImGuiID dockRight = ImGui::DockBuilderSplitNode(dockMainId, ImGuiDir_Right, dockRightFrac, nullptr, &dockMainId);
         ImGuiID dockLeft = ImGui::DockBuilderSplitNode(dockMainId, ImGuiDir_Left, dockLeftFrac, nullptr, &dockMainId);
         ImGuiID dockBottom = ImGui::DockBuilderSplitNode(dockMainId, ImGuiDir_Down, dockBottomFrac, nullptr, &dockMainId);
-        ImGuiID dockBottomViewer = ImGui::DockBuilderSplitNode(dockBottom, ImGuiDir_Left, dockViewerFrac, nullptr, &dockBottom);
 
         // Central node is now dockMainId - dock the Scene View there
         ImGui::DockBuilderDockWindow("Scene View", dockMainId);
         ImGui::DockBuilderDockWindow("Metrics", dockLeft);
         ImGui::DockBuilderDockWindow("Models", dockLeft);
-        ImGui::DockBuilderDockWindow("Scene Objects", dockLeft);
+        ImGui::DockBuilderDockWindow("Hierarchy", dockLeft);
         ImGui::DockBuilderDockWindow("Global Properties", dockRight);
-        ImGui::DockBuilderDockWindow("Asset Viewer", dockBottomViewer);
+        ImGui::DockBuilderDockWindow("Asset Viewer", dockBottom);
         ImGui::DockBuilderDockWindow("File Browser", dockBottom);
 
         ImGui::DockBuilderFinish(dockspace);
@@ -297,7 +295,7 @@ namespace pe
         io.ConfigFlags |= ImGuiConfigFlags_IsSRGB;          // Enable SRGB support
 
         ImGui::StyleColorsClassic();
-        ImGui::GetStyle().Colors[ImGuiCol_WindowBg] = ImVec4(0.00f, 0.00f, 0.00f, 0.3f);
+
         ui::ApplyNiceTheme();
 
         ImGui_ImplSDL2_InitForVulkan(RHII.GetWindow());
@@ -375,11 +373,12 @@ namespace pe
         auto sceneView = std::make_shared<SceneView>();
         auto loading = std::make_shared<Loading>();
         auto fileBrowser = std::make_shared<FileBrowser>();
+        auto hierarchy = std::make_shared<Hierarchy>();
 
-        m_widgets = {properties, metrics, models, assetViewer, sceneView, loading, fileBrowser};
+        m_widgets = {properties, metrics, models, assetViewer, sceneView, loading, fileBrowser, hierarchy};
 
         // Populate Menu Vectors
-        m_menuWindowWidgets = {metrics, properties, models, assetViewer, sceneView, fileBrowser};
+        m_menuWindowWidgets = {metrics, properties, models, assetViewer, sceneView, fileBrowser, hierarchy};
         m_menuAssetsWidgets = {};
         for (auto &widget : m_widgets)
             widget->Init(this);

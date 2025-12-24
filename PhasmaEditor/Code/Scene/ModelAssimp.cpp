@@ -8,6 +8,7 @@
 #include "Scene/Scene.h"
 #include "Systems/RendererSystem.h"
 #include <assimp/GltfMaterial.h>
+#include <cstdint>
 
 #undef max
 
@@ -371,7 +372,10 @@ namespace pe
             indexBaseOffset += mesh->mNumFaces * 3;
 
             // AABB vertices
-            meshInfo.aabbColor = (rand(0, 255) << 24) + (rand(0, 255) << 16) + (rand(0, 255) << 8) + 256;
+            meshInfo.aabbColor = static_cast<uint32_t>(rand(0, 255) << 24) | // R
+                                 static_cast<uint32_t>(rand(0, 255) << 16) | // G
+                                 static_cast<uint32_t>(rand(0, 255) << 8) |  // B
+                                 static_cast<uint32_t>(255);                 // A
 
             const vec3 &min = meshInfo.boundingBox.min;
             const vec3 &max = meshInfo.boundingBox.max;

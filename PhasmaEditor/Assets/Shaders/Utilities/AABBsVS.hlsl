@@ -14,6 +14,6 @@ VS_OUTPUT_AABB mainVS(VS_INPUT_Position input)
 {
     VS_OUTPUT_AABB output;
     output.position = mul(float4(input.position, 1.0f), mul(GetMeshMatrix(), GetViewProjection()));
-    output.color    = UnpackColorRGBA(pc.color).rgb;
+    output.color    = UnpackColorRGBA(pc.color);
     return output;
 }
