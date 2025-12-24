@@ -43,7 +43,6 @@ namespace pe
         bool m_dockspaceInitialized;
         bool m_requestDockReset;
         std::vector<GpuTimerSample> m_gpuTimerInfos;
-        bool m_sceneObjectsOpen;
 
         std::vector<std::shared_ptr<Widget>> m_widgets;
         std::vector<std::shared_ptr<Widget>> m_menuWindowWidgets;
