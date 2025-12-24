@@ -76,9 +76,7 @@ namespace pe
             VkImageView imageView = sceneTexture->GetSRV();
 
             if (sampler && imageView)
-            {
                 GUIState::s_viewportTextureId = (void *)ImGui_ImplVulkan_AddTexture(sampler, imageView, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
-            }
         }
 
         if (GUIState::s_viewportTextureId)

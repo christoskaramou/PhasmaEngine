@@ -211,23 +211,18 @@ namespace pe
             if (ImGui::BeginMenu("Assets"))
             {
                 if (ImGui::MenuItem("Recompile Shaders", "Ctrl+Shift+R"))
-                {
                     EventSystem::PushEvent(EventType::CompileShaders);
-                }
 
                 for (auto &widget : m_menuAssetsWidgets)
-                {
                     ImGui::MenuItem(widget->GetName().c_str(), nullptr, widget->GetOpen());
-                }
+
                 ImGui::EndMenu();
             }
 
             if (ImGui::BeginMenu("Window"))
             {
                 for (auto &widget : m_menuWindowWidgets)
-                {
                     ImGui::MenuItem(widget->GetName().c_str(), nullptr, widget->GetOpen());
-                }
 
                 if (ImGui::BeginMenu("Viewport"))
                 {
@@ -256,9 +251,7 @@ namespace pe
             if (ImGui::BeginMenu("Layout"))
             {
                 if (ImGui::MenuItem("Reset to Default Layout", "Ctrl+Shift+L"))
-                {
                     m_requestDockReset = true;
-                }
                 ImGui::EndMenu();
             }
 

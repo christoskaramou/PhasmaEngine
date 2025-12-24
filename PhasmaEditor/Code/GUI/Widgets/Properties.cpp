@@ -71,9 +71,7 @@ namespace pe
 
         static bool dynamic_rendering = gSettings.dynamic_rendering;
         if (ImGui::Checkbox("Dynamic Rendering", &dynamic_rendering))
-        {
             EventSystem::PushEvent(EventType::DynamicRendering, dynamic_rendering);
-        }
         ImGui::Separator();
 
         ImGui::Checkbox("IBL", &gSettings.IBL);
