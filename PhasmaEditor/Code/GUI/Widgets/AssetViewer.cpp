@@ -41,9 +41,8 @@ namespace pe
         {
             ImGui::TextWrapped("Path: %s", GUIState::s_assetPreview.fullPath.c_str());
             if (ImGui::Button("Open File"))
-            {
                 GUIState::OpenExternalPath(GUIState::s_assetPreview.fullPath);
-            }
+
             const std::string folder = std::filesystem::path(GUIState::s_assetPreview.fullPath).parent_path().string();
             if (!folder.empty())
             {

@@ -13,6 +13,8 @@ namespace pe
         void Update() override;
 
     private:
+        void *GetIconForFile(const std::filesystem::path &path) const;
+
         std::filesystem::path m_currentPath;
         std::filesystem::path m_selectedEntry;
         Image *m_folderIcon = nullptr;

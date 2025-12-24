@@ -12,22 +12,39 @@
 
 namespace pe
 {
+    namespace
+    {
+        void DestroyIcon(Image *&icon)
+        {
+            if (icon)
+            {
+                Image::Destroy(icon);
+                icon = nullptr;
+            }
+        }
+
+        void *LoadAndRegisterIcon(CommandBuffer *cmd, const std::string &path, Image *&outIcon)
+        {
+            outIcon = Image::LoadRGBA8(cmd, path);
+            if (outIcon && outIcon->GetSampler() && outIcon->GetSRV())
+            {
+                return (void *)ImGui_ImplVulkan_AddTexture(
+                    outIcon->GetSampler()->ApiHandle(),
+                    outIcon->GetSRV(),
+                    VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+            }
+            return nullptr;
+        }
+    } // namespace
     FileBrowser::~FileBrowser()
     {
-        if (m_folderIcon)
-            Image::Destroy(m_folderIcon);
-        if (m_fileIcon)
-            Image::Destroy(m_fileIcon);
-        if (m_txtIcon)
-            Image::Destroy(m_txtIcon);
-        if (m_shaderIcon)
-            Image::Destroy(m_shaderIcon);
-        if (m_modelIcon)
-            Image::Destroy(m_modelIcon);
-        if (m_scriptIcon)
-            Image::Destroy(m_scriptIcon);
-        if (m_imageIcon)
-            Image::Destroy(m_imageIcon);
+        Image::Destroy(m_folderIcon);
+        Image::Destroy(m_fileIcon);
+        Image::Destroy(m_txtIcon);
+        Image::Destroy(m_shaderIcon);
+        Image::Destroy(m_modelIcon);
+        Image::Destroy(m_scriptIcon);
+        Image::Destroy(m_imageIcon);
     }
 
     void FileBrowser::Init(GUI *gui)
@@ -40,39 +57,39 @@ namespace pe
         CommandBuffer *cmd = queue->AcquireCommandBuffer();
         cmd->Begin();
 
-        m_folderIcon = Image::LoadRGBA8(cmd, Path::Executable + "Assets/Icons/folder_icon.png");
-        m_fileIcon = Image::LoadRGBA8(cmd, Path::Executable + "Assets/Icons/file_icon.png");
-        m_txtIcon = Image::LoadRGBA8(cmd, Path::Executable + "Assets/Icons/txt_icon.png");
-        m_shaderIcon = Image::LoadRGBA8(cmd, Path::Executable + "Assets/Icons/shader_icon.png");
-        m_modelIcon = Image::LoadRGBA8(cmd, Path::Executable + "Assets/Icons/model_icon.png");
-        m_scriptIcon = Image::LoadRGBA8(cmd, Path::Executable + "Assets/Icons/script_icon.png");
-        m_imageIcon = Image::LoadRGBA8(cmd, Path::Executable + "Assets/Icons/image_icon.png");
+        m_folderIconDS = LoadAndRegisterIcon(cmd, Path::Executable + "Assets/Icons/folder_icon.png", m_folderIcon);
+        m_fileIconDS = LoadAndRegisterIcon(cmd, Path::Executable + "Assets/Icons/file_icon.png", m_fileIcon);
+        m_txtIconDS = LoadAndRegisterIcon(cmd, Path::Executable + "Assets/Icons/txt_icon.png", m_txtIcon);
+        m_shaderIconDS = LoadAndRegisterIcon(cmd, Path::Executable + "Assets/Icons/shader_icon.png", m_shaderIcon);
+        m_modelIconDS = LoadAndRegisterIcon(cmd, Path::Executable + "Assets/Icons/model_icon.png", m_modelIcon);
+        m_scriptIconDS = LoadAndRegisterIcon(cmd, Path::Executable + "Assets/Icons/script_icon.png", m_scriptIcon);
+        m_imageIconDS = LoadAndRegisterIcon(cmd, Path::Executable + "Assets/Icons/image_icon.png", m_imageIcon);
 
         cmd->End();
         queue->Submit(1, &cmd, nullptr, nullptr);
         cmd->Wait();
         cmd->Return();
+    }
 
-        if (m_folderIcon && m_folderIcon->GetSampler() && m_folderIcon->GetSRV())
-            m_folderIconDS = (void *)ImGui_ImplVulkan_AddTexture(m_folderIcon->GetSampler()->ApiHandle(), m_folderIcon->GetSRV(), VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+    void *FileBrowser::GetIconForFile(const std::filesystem::path &path) const
+    {
+        if (std::filesystem::is_directory(path))
+            return m_folderIconDS;
 
-        if (m_fileIcon && m_fileIcon->GetSampler() && m_fileIcon->GetSRV())
-            m_fileIconDS = (void *)ImGui_ImplVulkan_AddTexture(m_fileIcon->GetSampler()->ApiHandle(), m_fileIcon->GetSRV(), VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
-            
-        if (m_txtIcon && m_txtIcon->GetSampler() && m_txtIcon->GetSRV())
-            m_txtIconDS = (void *)ImGui_ImplVulkan_AddTexture(m_txtIcon->GetSampler()->ApiHandle(), m_txtIcon->GetSRV(), VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+        std::string ext = path.extension().string();
 
-        if (m_shaderIcon && m_shaderIcon->GetSampler() && m_shaderIcon->GetSRV())
-            m_shaderIconDS = (void *)ImGui_ImplVulkan_AddTexture(m_shaderIcon->GetSampler()->ApiHandle(), m_shaderIcon->GetSRV(), VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+        if (ext == ".txt" || ext == ".md" || ext == ".json" || ext == ".xml")
+            return m_txtIconDS ? m_txtIconDS : m_fileIconDS;
+        else if (ext == ".vert" || ext == ".frag" || ext == ".comp" || ext == ".glsl" || ext == ".hlsl")
+            return m_shaderIconDS ? m_shaderIconDS : m_fileIconDS;
+        else if (ext == ".gltf" || ext == ".glb" || ext == ".obj" || ext == ".fbx" || ext == ".dae" || ext == ".stl" || ext == ".ply" || ext == ".3ds" || ext == ".blend")
+            return m_modelIconDS ? m_modelIconDS : m_fileIconDS;
+        else if (ext == ".peh" || ext == ".pecpp")
+            return m_scriptIconDS ? m_scriptIconDS : m_fileIconDS;
+        else if (ext == ".png" || ext == ".jpg" || ext == ".jpeg" || ext == ".tga" || ext == ".bmp" || ext == ".psd" || ext == ".gif" || ext == ".hdr" || ext == ".pic")
+            return m_imageIconDS ? m_imageIconDS : m_fileIconDS;
 
-        if (m_modelIcon && m_modelIcon->GetSampler() && m_modelIcon->GetSRV())
-            m_modelIconDS = (void *)ImGui_ImplVulkan_AddTexture(m_modelIcon->GetSampler()->ApiHandle(), m_modelIcon->GetSRV(), VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
-
-        if (m_scriptIcon && m_scriptIcon->GetSampler() && m_scriptIcon->GetSRV())
-            m_scriptIconDS = (void *)ImGui_ImplVulkan_AddTexture(m_scriptIcon->GetSampler()->ApiHandle(), m_scriptIcon->GetSRV(), VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
-
-        if (m_imageIcon && m_imageIcon->GetSampler() && m_imageIcon->GetSRV())
-            m_imageIconDS = (void *)ImGui_ImplVulkan_AddTexture(m_imageIcon->GetSampler()->ApiHandle(), m_imageIcon->GetSRV(), VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+        return m_fileIconDS;
     }
 
     void FileBrowser::Update()
@@ -118,9 +135,7 @@ namespace pe
                             if (entry.is_directory())
                             {
                                 if (ImGui::IsMouseDoubleClicked(0))
-                                {
                                     m_currentPath = entry.path();
-                                }
                             }
                             else
                             {
@@ -135,9 +150,7 @@ namespace pe
                                     type = AssetPreviewType::Shader;
 
                                 if (type != AssetPreviewType::None)
-                                {
                                     GUIState::UpdateAssetPreview(type, filename, entry.path().string());
-                                }
 
                                 if (ImGui::IsMouseDoubleClicked(0))
                                 {
@@ -174,41 +187,18 @@ namespace pe
                             for (const auto &entry : entries)
                             {
                                 std::string filename = entry.path().filename().string();
-                                bool isDir = entry.is_directory();
                                 std::string label = filename;
                                 bool isSelected = (m_selectedEntry == entry.path());
 
-                                if (isDir && m_folderIconDS)
+                                void *iconID = GetIconForFile(entry.path());
+                                if (iconID)
                                 {
-                                    ImGui::Image((ImTextureID)m_folderIconDS, ImVec2(20, 20));
+                                    ImGui::Image((ImTextureID)iconID, ImVec2(20, 20));
                                     ImGui::SameLine();
-                                }
-                                else if (!isDir)
-                                {
-                                    void *iconID = m_fileIconDS;
-                                    std::string ext = entry.path().extension().string();
-                                    if (ext == ".txt" || ext == ".md" || ext == ".json" || ext == ".xml")
-                                        iconID = m_txtIconDS ? m_txtIconDS : m_fileIconDS;
-                                    else if (ext == ".vert" || ext == ".frag" || ext == ".comp" || ext == ".glsl" || ext == ".hlsl")
-                                        iconID = m_shaderIconDS ? m_shaderIconDS : m_fileIconDS;
-                                    else if (ext == ".gltf" || ext == ".glb" || ext == ".obj" || ext == ".fbx" || ext == ".dae" || ext == ".stl" || ext == ".ply" || ext == ".3ds" || ext == ".blend")
-                                        iconID = m_modelIconDS ? m_modelIconDS : m_fileIconDS;
-                                    else if (ext == ".peh" || ext == ".pecpp")
-                                        iconID = m_scriptIconDS ? m_scriptIconDS : m_fileIconDS;
-                                    else if (ext == ".png" || ext == ".jpg" || ext == ".jpeg" || ext == ".tga" || ext == ".bmp" || ext == ".psd" || ext == ".gif" || ext == ".hdr" || ext == ".pic")
-                                        iconID = m_imageIconDS ? m_imageIconDS : m_fileIconDS;
-
-                                    if (iconID)
-                                    {
-                                        ImGui::Image((ImTextureID)iconID, ImVec2(20, 20));
-                                        ImGui::SameLine();
-                                    }
                                 }
 
                                 if (ImGui::Selectable(label.c_str(), isSelected, ImGuiSelectableFlags_AllowDoubleClick))
-                                {
                                     HandleItemConnect(entry);
-                                }
                             }
                         }
                         else // Grid
@@ -218,15 +208,12 @@ namespace pe
                             float pad = ImGui::GetStyle().FramePadding.x;
                             float buttonSize = iconSize + pad * 2.0f;
                             float itemSpacingX = ImGui::GetStyle().ItemSpacing.x;
-                            
-                            // Calculate visible right edge for wrapping
                             float windowVisibleX2 = ImGui::GetWindowPos().x + ImGui::GetWindowContentRegionMax().x;
 
                             for (size_t i = 0; i < entries.size(); ++i)
                             {
                                 const auto &entry = entries[i];
                                 std::string filename = entry.path().filename().string();
-                                bool isDir = entry.is_directory();
                                 bool isSelected = (m_selectedEntry == entry.path());
 
                                 ImGui::PushID(filename.c_str());
@@ -238,24 +225,8 @@ namespace pe
                                 else
                                     ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0, 0, 0, 0));
 
-                                void *iconID = nullptr;
-                                if (isDir) {
-                                    iconID = m_folderIconDS;
-                                } else {
-                                    iconID = m_fileIconDS;
-                                    std::string ext = entry.path().extension().string();
-                                    if (ext == ".txt" || ext == ".md" || ext == ".json" || ext == ".xml")
-                                        iconID = m_txtIconDS ? m_txtIconDS : m_fileIconDS;
-                                    else if (ext == ".vert" || ext == ".frag" || ext == ".comp" || ext == ".glsl" || ext == ".hlsl")
-                                        iconID = m_shaderIconDS ? m_shaderIconDS : m_fileIconDS;
-                                    else if (ext == ".gltf" || ext == ".glb" || ext == ".obj" || ext == ".fbx" || ext == ".dae" || ext == ".stl" || ext == ".ply" || ext == ".3ds" || ext == ".blend")
-                                        iconID = m_modelIconDS ? m_modelIconDS : m_fileIconDS;
-                                    else if (ext == ".peh" || ext == ".pecpp")
-                                        iconID = m_scriptIconDS ? m_scriptIconDS : m_fileIconDS;
-                                    else if (ext == ".png" || ext == ".jpg" || ext == ".jpeg" || ext == ".tga" || ext == ".bmp" || ext == ".psd" || ext == ".gif" || ext == ".hdr" || ext == ".pic")
-                                        iconID = m_imageIconDS ? m_imageIconDS : m_fileIconDS;
-                                }
-                                
+                                void *iconID = GetIconForFile(entry.path());
+
                                 bool clicked = false;
                                 if (iconID)
                                 {
@@ -276,7 +247,7 @@ namespace pe
                                 if (textW < buttonSize)
                                     ImGui::SetCursorPosX(groupX + (buttonSize - textW) * 0.5f);
 
-                                ImGui::PushTextWrapPos(groupX + buttonSize); 
+                                ImGui::PushTextWrapPos(groupX + buttonSize);
                                 ImGui::TextWrapped("%s", filename.c_str());
                                 ImGui::PopTextWrapPos();
 
