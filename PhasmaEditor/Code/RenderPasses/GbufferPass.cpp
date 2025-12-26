@@ -194,7 +194,7 @@ namespace pe
             PipelineColorBlendAttachmentState::Default,
             PipelineColorBlendAttachmentState::Default,
             PipelineColorBlendAttachmentState::Default,
-            PipelineColorBlendAttachmentState::Default};
+            PipelineColorBlendAttachmentState::TransparencyBlend};
         m_passInfo->colorFormats = colorformats;
         m_passInfo->depthFormat = depthFormat;
         m_passInfo->depthCompareOp = Settings::Get<GlobalSettings>().reverse_depth ? vk::CompareOp::eGreaterOrEqual : vk::CompareOp::eLessOrEqual;
