@@ -192,8 +192,7 @@ namespace pe
         {
             if (ImGui::BeginMenu("File"))
             {
-                static std::vector<const char *> filter{"*.gltf", "*.glb"};
-                async_fileDialog_ImGuiMenuItem("Load...", "Choose Model", filter);
+                async_fileDialog_ImGuiMenuItem("Load...", "Choose Model", FileBrowser::s_modelExtensionsVec);
                 ImGui::Separator();
                 async_messageBox_ImGuiMenuItem("Exit", "Exit", "Are you sure you want to exit?");
                 ImGui::EndMenu();
@@ -279,10 +278,7 @@ namespace pe
         {
             for (auto &file : std::filesystem::recursive_directory_iterator(modelsDir))
             {
-                if (!file.is_regular_file())
-                    continue;
-                auto extension = file.path().extension().string();
-                if (extension == ".gltf" || extension == ".glb")
+                if (FileBrowser::IsModelFile(file.path()))
                     gSettings.model_list.push_back(std::filesystem::relative(file.path(), modelsDir).generic_string());
             }
         }

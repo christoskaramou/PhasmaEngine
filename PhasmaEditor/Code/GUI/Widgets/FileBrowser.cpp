@@ -36,6 +36,28 @@ namespace pe
             return nullptr;
         }
     } // namespace
+
+    std::unordered_set<std::string> FileBrowser::s_textExtensions = {
+        ".json", ".md", ".txt", ".xml"};
+    std::unordered_set<std::string> FileBrowser::s_shaderExtensions = {
+        ".comp", ".frag", ".glsl", ".hlsl", ".vert"};
+    std::unordered_set<std::string> FileBrowser::s_scriptExtensions = {
+        ".pecpp", ".peh"};
+    std::unordered_set<std::string> FileBrowser::s_imageExtensions = {
+        ".bmp", ".gif", ".hdr", ".jpeg", ".jpg", ".pic", ".png", ".psd", ".tga"};
+    std::unordered_set<std::string> FileBrowser::s_modelExtensions = {
+        ".3d", ".3ds", ".3mf", ".amf", ".ase", ".assbin", ".b3d", ".blend", ".bvh", ".cob",
+        ".collada", ".csm", ".dae", ".dxf", ".fbx", ".glb", ".gltf", ".hmp", ".ifc", ".iqm",
+        ".irr", ".irrmesh", ".lwo", ".lws", ".m3d", ".md2", ".md3", ".md5", ".mdc", ".mdl",
+        ".mmd", ".ms3d", ".ndo", ".nff", ".obj", ".off", ".ogre", ".opengex", ".ply",
+        ".q3bsp", ".q3d", ".raw", ".sib", ".smd", ".stl", ".terragen", ".x", ".x3d", ".xgl"};
+    std::vector<const char *> FileBrowser::s_modelExtensionsVec = {
+        ".3d", ".3ds", ".3mf", ".amf", ".ase", ".assbin", ".b3d", ".blend", ".bvh", ".cob",
+        ".collada", ".csm", ".dae", ".dxf", ".fbx", ".glb", ".gltf", ".hmp", ".ifc", ".iqm",
+        ".irr", ".irrmesh", ".lwo", ".lws", ".m3d", ".md2", ".md3", ".md5", ".mdc", ".mdl",
+        ".mmd", ".ms3d", ".ndo", ".nff", ".obj", ".off", ".ogre", ".opengex", ".ply",
+        ".q3bsp", ".q3d", ".raw", ".sib", ".smd", ".stl", ".terragen", ".x", ".x3d", ".xgl"};
+
     FileBrowser::~FileBrowser()
     {
         Image::Destroy(m_folderIcon);
@@ -73,20 +95,17 @@ namespace pe
 
     void *FileBrowser::GetIconForFile(const std::filesystem::path &path) const
     {
-        if (std::filesystem::is_directory(path))
+        if (IsDirectory(path))
             return m_folderIconDS;
-
-        std::string ext = path.extension().string();
-
-        if (ext == ".txt" || ext == ".md" || ext == ".json" || ext == ".xml")
+        if (IsTextFile(path))
             return m_txtIconDS ? m_txtIconDS : m_fileIconDS;
-        else if (ext == ".vert" || ext == ".frag" || ext == ".comp" || ext == ".glsl" || ext == ".hlsl")
+        if (IsShaderFile(path))
             return m_shaderIconDS ? m_shaderIconDS : m_fileIconDS;
-        else if (ext == ".gltf" || ext == ".glb" || ext == ".obj" || ext == ".fbx" || ext == ".dae" || ext == ".stl" || ext == ".ply" || ext == ".3ds" || ext == ".blend")
+        if (IsModelFile(path))
             return m_modelIconDS ? m_modelIconDS : m_fileIconDS;
-        else if (ext == ".peh" || ext == ".pecpp")
+        if (IsScriptFile(path))
             return m_scriptIconDS ? m_scriptIconDS : m_fileIconDS;
-        else if (ext == ".png" || ext == ".jpg" || ext == ".jpeg" || ext == ".tga" || ext == ".bmp" || ext == ".psd" || ext == ".gif" || ext == ".hdr" || ext == ".pic")
+        if (IsImageFile(path))
             return m_imageIconDS ? m_imageIconDS : m_fileIconDS;
 
         return m_fileIconDS;
@@ -132,32 +151,29 @@ namespace pe
                         {
                             m_selectedEntry = entry.path();
 
-                            if (entry.is_directory())
+                            if (IsDirectory(m_selectedEntry))
                             {
                                 if (ImGui::IsMouseDoubleClicked(0))
-                                    m_currentPath = entry.path();
+                                    m_currentPath = m_selectedEntry;
                             }
                             else
                             {
-                                std::string filename = entry.path().filename().string();
                                 AssetPreviewType type = AssetPreviewType::None;
-                                std::string ext = entry.path().extension().string();
-                                if (ext == ".gltf" || ext == ".glb" || ext == ".obj" || ext == ".fbx" || ext == ".dae" || ext == ".stl" || ext == ".ply" || ext == ".3ds" || ext == ".blend")
+                                if (IsModelFile(m_selectedEntry))
                                     type = AssetPreviewType::Model;
-                                else if (ext == ".peh" || ext == ".pecpp")
+                                else if (IsScriptFile(m_selectedEntry))
                                     type = AssetPreviewType::Script;
-                                else if (ext == ".vert" || ext == ".frag" || ext == ".comp" || ext == ".glsl" || ext == ".hlsl")
+                                else if (IsShaderFile(m_selectedEntry))
                                     type = AssetPreviewType::Shader;
 
                                 if (type != AssetPreviewType::None)
-                                    GUIState::UpdateAssetPreview(type, filename, entry.path().string());
+                                    GUIState::UpdateAssetPreview(type, m_selectedEntry.filename().string(), m_selectedEntry.string());
 
                                 if (ImGui::IsMouseDoubleClicked(0))
                                 {
                                     if (type == AssetPreviewType::Model && !GUIState::s_modelLoading)
                                     {
-                                        auto path = entry.path();
-                                        ThreadPool::GUI.Enqueue([path]()
+                                        ThreadPool::GUI.Enqueue([path = m_selectedEntry]()
                                                                 {
                                                                     GUIState::s_modelLoading = true;
                                                                     Model::Load(path);
@@ -165,7 +181,7 @@ namespace pe
                                     }
                                     else if (type == AssetPreviewType::Script || type == AssetPreviewType::Shader)
                                     {
-                                        GUIState::OpenExternalPath(entry.path().string());
+                                        GUIState::OpenExternalPath(m_selectedEntry.string());
                                     }
                                 }
                             }
@@ -176,11 +192,17 @@ namespace pe
                             entries.push_back(entry);
 
                         // Sort: Directories first
-                        std::sort(entries.begin(), entries.end(), [](const auto &a, const auto &b)
+                        std::sort(entries.begin(), entries.end(),
+                                  [](const auto &a, const auto &b)
                                   {
-                            if (a.is_directory() != b.is_directory())
-                                return a.is_directory() > b.is_directory();
-                            return a.path().filename().string() < b.path().filename().string(); });
+                                      const bool aDir = IsDirectory(a.path());
+                                      const bool bDir = IsDirectory(b.path());
+
+                                      if (aDir != bDir)
+                                          return aDir; // true comes first => directories first
+
+                                      return a.path().filename().string() < b.path().filename().string();
+                                  });
 
                         if (m_viewMode == ViewMode::List)
                         {
