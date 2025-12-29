@@ -108,7 +108,7 @@ namespace pe
         Window::Destroy(m_window);
         EventSystem::Destroy();
 #if defined(PE_SCRIPTS)
-        ScriptManager::Shutdown();
+        ScriptManager::Destroy();
 #endif
     }
 
@@ -127,6 +127,10 @@ namespace pe
         if (!m_window->isMinimized())
             UpdateGlobalSystems();
 
+#if defined(PE_SCRIPTS)
+        ScriptManager::Update();
+#endif
+
         // Get ImGui render data ready
         ImGui::Render();
         m_frameTimer.CountUpdatesStamp();
@@ -134,6 +138,10 @@ namespace pe
         if (!m_window->isMinimized())
         {
             DrawGlobalSystems();
+
+#if defined(PE_SCRIPTS)
+            ScriptManager::Draw();
+#endif
 
             // Render platform windows (floating ImGui windows) after main rendering
             GetGlobalSystem<RendererSystem>()->DrawPlatformWindows();
