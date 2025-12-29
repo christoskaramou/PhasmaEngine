@@ -46,7 +46,39 @@ namespace pe
         }
     }
 
-    void ScriptManager::Shutdown()
+    void ScriptManager::Update()
+    {
+        std::vector<std::future<void>> updateFutures(m_scripts.size());
+        for (size_t i = 0; i < m_scripts.size(); i++)
+        {
+            if (m_scripts[i])
+                updateFutures[i] = std::async(std::launch::async, &Script::Update, m_scripts[i]);
+        }
+
+        for (auto &future : updateFutures)
+        {
+            if (future.valid())
+                future.wait();
+        }
+    }
+
+    void ScriptManager::Draw()
+    {
+        std::vector<std::future<void>> drawFutures(m_scripts.size());
+        for (size_t i = 0; i < m_scripts.size(); i++)
+        {
+            if (m_scripts[i])
+                drawFutures[i] = std::async(std::launch::async, &Script::Draw, m_scripts[i]);
+        }
+
+        for (auto &future : drawFutures)
+        {
+            if (future.valid())
+                future.wait();
+        }
+    }
+
+    void ScriptManager::Destroy()
     {
         for (auto script : m_scripts)
         {

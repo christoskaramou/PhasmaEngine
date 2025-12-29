@@ -8,7 +8,9 @@ namespace pe
     {
     public:
         static void Init();
-        static void Shutdown();
+        static void Update();
+        static void Draw();
+        static void Destroy();
 
         inline static void *GetModule() { return s_module; }
         inline static const std::vector<Script *> &GetScripts() { return m_scripts; }
