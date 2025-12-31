@@ -26,7 +26,7 @@ namespace pe
 
             // Use regex to extract include filename
             std::smatch match;
-            static const std::regex includeRegex(R"(^\s*#include\s*\"([^\"]+)\")");
+            static const std::regex includeRegex(R"(^\s*#include\s*\"([^\"]+)\"\s*$)");
             if (std::regex_search(line, match, includeRegex))
             {
                 std::string includeFile = match[1].str();

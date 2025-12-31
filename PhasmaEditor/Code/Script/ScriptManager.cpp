@@ -97,13 +97,13 @@ namespace pe
 
 #if defined(PE_WIN32)
 #ifdef PE_DEBUG
-        path = Path::Executable + "Assets/Scripts/Build/Debug/Scripts.dll";
+        path = Path::Executable + "Assets/Scripts/build/Debug/Scripts.dll";
 #elif defined(PE_RELEASE)
-        path = Path::Executable + "Assets/Scripts/Build/Release/Scripts.dll";
+        path = Path::Executable + "Assets/Scripts/build/Release/Scripts.dll";
 #elif defined(PE_MINSIZEREL)
-        path = Path::Executable + "Assets/Scripts/Build/MinSizeRel/Scripts.dll";
+        path = Path::Executable + "Assets/Scripts/build/MinSizeRel/Scripts.dll";
 #elif defined(PE_RELWITHDEBINFO)
-        path = Path::Executable + "Assets/Scripts/Build/RelWithDebInfo/Scripts.dll";
+        path = Path::Executable + "Assets/Scripts/build/RelWithDebInfo/Scripts.dll";
 #endif
         std::wstring widePath(path.begin(), path.end());
         s_module = (void *)LoadLibrary(widePath.c_str());
