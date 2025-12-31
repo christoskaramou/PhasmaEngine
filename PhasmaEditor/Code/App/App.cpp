@@ -43,17 +43,9 @@ namespace pe
             EventSystem::PushEvent(fileEvent);
             EventSystem::PushEvent(EventType::CompileScripts);
         };
-
         for (auto &file : std::filesystem::recursive_directory_iterator(Path::Executable + "Assets/Scripts"))
-        {
-            std::string filePath = file.path().string();
-            std::replace(filePath.begin(), filePath.end(), '\\', '/');
-
-            if (filePath.find("Assets/Scripts/Build") != std::string::npos)
-                continue;
-
             FileWatcher::Add(file.path().string(), scriptCallback);
-        }
+
         ScriptManager::Init();
 #endif
         FileWatcher::Start();
