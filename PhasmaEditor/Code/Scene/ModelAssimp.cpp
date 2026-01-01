@@ -1,23 +1,33 @@
 #include "Scene/ModelAssimp.h"
-#include "API/Buffer.h"
 #include "API/Command.h"
-#include "API/Image.h"
 #include "API/Queue.h"
 #include "API/RHI.h"
-#include "Base/Path.h"
-#include "Scene/Scene.h"
 #include "Systems/RendererSystem.h"
 #include <assimp/GltfMaterial.h>
-#include <cstdint>
 
 #undef max
 
 namespace pe
 {
-    Image *g_defaultBlack;
-    Image *g_defaultNormal;
-    Image *g_defaultWhite;
-    Sampler *g_defaultSampler;
+    namespace
+    {
+        static void CountNodesRecursive(const aiNode *node, int &count)
+        {
+            count++;
+            for (unsigned int i = 0; i < node->mNumChildren; i++)
+                CountNodesRecursive(node->mChildren[i], count);
+        }
+
+        static inline mat4 AiToGlmMat4(const aiMatrix4x4 &a)
+        {
+            // Assimp is row-major-ish; your old code did the "transpose-style" mapping already.
+            return mat4(
+                a.a1, a.b1, a.c1, a.d1,
+                a.a2, a.b2, a.c2, a.d2,
+                a.a3, a.b3, a.c3, a.d3,
+                a.a4, a.b4, a.c4, a.d4);
+        }
+    } // namespace
 
     ModelAssimp::ModelAssimp() = default;
 
@@ -38,16 +48,24 @@ namespace pe
         CommandBuffer *cmd = queue->AcquireCommandBuffer();
 
         cmd->Begin();
+
+        // 1) textures (and defaults)
         model.UploadImages(cmd);
-        model.ExtractMaterialInfo();
-        model.ProcessAabbs();
-        model.AcquireGeometryInfo();
+
+        // 2) materials + geometry + aabbs (single coherent pass)
+        model.BuildMeshes();
+
+        // 3) nodes
         model.SetupNodes();
-        model.UpdateAllNodeMatrices();
+        model.UpdateNodeMatrices();
+
         cmd->End();
         queue->Submit(1, &cmd, nullptr, nullptr);
         cmd->Wait();
         cmd->Return();
+
+        // cache is only needed during build
+        modelAssimp->m_textureCache.clear();
 
         return modelAssimp;
     }
@@ -74,7 +92,7 @@ namespace pe
         flags |= aiProcess_FlipWindingOrder;
 
         m_scene = m_importer.ReadFile(file.string(), flags);
-        if (!m_scene || m_scene->mFlags & AI_SCENE_FLAGS_INCOMPLETE || !m_scene->mRootNode)
+        if (!m_scene || (m_scene->mFlags & AI_SCENE_FLAGS_INCOMPLETE) || !m_scene->mRootNode)
         {
             PE_ERROR(std::string("Assimp error: " + std::string(m_importer.GetErrorString())).c_str());
             return false;
@@ -90,130 +108,75 @@ namespace pe
         auto &total = gSettings.loading_total;
         auto &loading = gSettings.loading_name;
 
-        if (!g_defaultBlack)
-            g_defaultBlack = Image::LoadRGBA8(cmd, Path::Executable + "Assets/Objects/black.png");
-        if (!g_defaultNormal)
-            g_defaultNormal = Image::LoadRGBA8(cmd, Path::Executable + "Assets/Objects/normal.png");
-        if (!g_defaultWhite)
-            g_defaultWhite = Image::LoadRGBA8(cmd, Path::Executable + "Assets/Objects/white.png");
-        if (!g_defaultSampler)
-        {
-            vk::SamplerCreateInfo info = Sampler::CreateInfoInit();
-            g_defaultSampler = Sampler::Create(info, "Default Sampler");
-            m_samplers.push_back(g_defaultSampler);
-        }
+        loading = "Loading textures";
+        progress = 0;
 
-        const std::initializer_list<aiTextureType> textureTypes = {
+        ResetResources(cmd);
+
+        // texture types we consider when preloading
+        const std::initializer_list<aiTextureType> preloadTypes = {
             aiTextureType_BASE_COLOR,
             aiTextureType_DIFFUSE,
             aiTextureType_NORMALS,
+            aiTextureType_NORMAL_CAMERA,
+            aiTextureType_HEIGHT,
             aiTextureType_UNKNOWN,
             aiTextureType_SPECULAR,
             aiTextureType_LIGHTMAP,
+            aiTextureType_AMBIENT_OCCLUSION,
             aiTextureType_EMISSIVE,
+            aiTextureType_EMISSION_COLOR,
             aiTextureType_METALNESS,
-            aiTextureType_DIFFUSE_ROUGHNESS};
+            aiTextureType_DIFFUSE_ROUGHNESS,
+        };
 
-        m_images.clear();
-        m_textureCache.clear();
-
-        // Count total textures for progress UI
-        total = 0;
-        for (unsigned int i = 0; i < m_scene->mNumMaterials; i++)
-        {
-            aiMaterial *material = m_scene->mMaterials[i];
-            for (aiTextureType type : textureTypes)
-                total += material->GetTextureCount(type);
-        }
-
-        progress = 0;
-        loading = "Loading textures";
-
-        m_images.reserve(total + 3);
+        // count unique textures for UI
+        std::unordered_set<std::string> uniqueTexKeys;
+        uniqueTexKeys.reserve(m_scene->mNumMaterials * 4);
 
         for (unsigned int i = 0; i < m_scene->mNumMaterials; i++)
         {
             aiMaterial *material = m_scene->mMaterials[i];
-            for (aiTextureType type : textureTypes)
+            for (aiTextureType type : preloadTypes)
             {
                 unsigned int textureCount = material->GetTextureCount(type);
                 for (unsigned int j = 0; j < textureCount; j++)
                 {
-                    std::filesystem::path texPath = GetTexturePath(material, type, j);
+                    std::filesystem::path texPath = GetTexturePath(material, type, static_cast<int>(j));
                     if (texPath.empty())
                         continue;
-
-                    bool needsLoad = FindTexture(texPath) == nullptr;
-                    Image *img = LoadTexture(cmd, texPath);
-                    if (img && needsLoad)
-                        progress++;
+                    uniqueTexKeys.insert(texPath.generic_string());
                 }
             }
         }
 
-        auto ensureDefaultImage = [&](Image *image)
+        total = static_cast<uint32_t>(uniqueTexKeys.size());
+
+        // load all unique
+        for (const std::string &key : uniqueTexKeys)
         {
-            if (!image)
-                return;
-            if (std::find(m_images.begin(), m_images.end(), image) == m_images.end())
-                m_images.push_back(image);
-        };
-        ensureDefaultImage(g_defaultBlack);
-        ensureDefaultImage(g_defaultNormal);
-        ensureDefaultImage(g_defaultWhite);
+            Image *img = LoadTexture(cmd, key);
+            if (img)
+                progress++;
+        }
+
+        // NOTE: defaults already added via ResetResources()
     }
 
-    void ModelAssimp::ExtractMaterialInfo()
+    void ModelAssimp::BuildMeshes()
     {
+        const auto &defaults = GetDefaultResources();
+
         auto &gSettings = Settings::Get<GlobalSettings>();
         auto &progress = gSettings.loading_current;
         auto &total = gSettings.loading_total;
         auto &loading = gSettings.loading_name;
 
+        loading = "Loading materials + geometry";
         progress = 0;
-        m_meshCount = 0;
 
-        for (unsigned int i = 0; i < m_scene->mNumMeshes; i++)
-        {
-            const aiMesh *mesh = m_scene->mMeshes[i];
-            if (mesh->mPrimitiveTypes & aiPrimitiveType_TRIANGLE)
-                m_meshCount++;
-        }
-
-        total = m_meshCount;
-        loading = "Loading material pipeline info";
-
+        m_meshInfos.clear();
         m_meshInfos.resize(m_scene->mNumMeshes);
-
-        for (unsigned int i = 0; i < m_scene->mNumMeshes; i++)
-        {
-            const aiMesh *mesh = m_scene->mMeshes[i];
-            MeshInfo &meshInfo = m_meshInfos[i];
-            MaterialInfo &materialInfo = meshInfo.materialInfo;
-
-            materialInfo.topology = vk::PrimitiveTopology::eTriangleList;
-
-            int twoSided = 0;
-            aiMaterial *material = m_scene->mMaterials[mesh->mMaterialIndex];
-            material->Get(AI_MATKEY_TWOSIDED, twoSided);
-            materialInfo.cullMode = twoSided ? vk::CullModeFlagBits::eNone : vk::CullModeFlagBits::eFront;
-            RenderType renderType = DetermineRenderType(material);
-            materialInfo.alphaBlend = renderType != RenderType::Opaque;
-
-            progress++;
-        }
-    }
-
-    void ModelAssimp::ProcessAabbs()
-    {
-        auto &gSettings = Settings::Get<GlobalSettings>();
-        auto &progress = gSettings.loading_current;
-        auto &total = gSettings.loading_total;
-        auto &loading = gSettings.loading_name;
-
-        progress = 0;
-        total = m_meshCount;
-        loading = "Loading aabbs";
 
         m_meshCount = 0;
         m_verticesCount = 0;
@@ -225,93 +188,98 @@ namespace pe
             if (!(mesh->mPrimitiveTypes & aiPrimitiveType_TRIANGLE))
                 continue;
 
-            MeshInfo &meshInfo = m_meshInfos[i];
+            MeshInfo &mi = m_meshInfos[i];
 
-            meshInfo.vertexOffset = m_verticesCount;
-            meshInfo.verticesCount = mesh->mNumVertices;
-            meshInfo.indexOffset = m_indicesCount;
-            meshInfo.indicesCount = mesh->mNumFaces * 3; // Triangles
-            meshInfo.aabbVertexOffset = m_meshCount * 8;
+            mi.vertexOffset = m_verticesCount;
+            mi.verticesCount = mesh->mNumVertices;
 
-            // Calculate bounding box
-            if (mesh->mNumVertices > 0)
-            {
-                meshInfo.boundingBox.min = vec3(mesh->mVertices[0].x, mesh->mVertices[0].y, mesh->mVertices[0].z);
-                meshInfo.boundingBox.max = meshInfo.boundingBox.min;
+            mi.indexOffset = m_indicesCount;
+            mi.indicesCount = mesh->mNumFaces * 3;
 
-                for (unsigned int j = 1; j < mesh->mNumVertices; j++)
-                {
-                    vec3 pos(mesh->mVertices[j].x, mesh->mVertices[j].y, mesh->mVertices[j].z);
-                    meshInfo.boundingBox.min = glm::min(meshInfo.boundingBox.min, pos);
-                    meshInfo.boundingBox.max = glm::max(meshInfo.boundingBox.max, pos);
-                }
-            }
+            mi.aabbVertexOffset = static_cast<size_t>(m_meshCount) * 8;
 
             m_verticesCount += mesh->mNumVertices;
             m_indicesCount += mesh->mNumFaces * 3;
             m_meshCount++;
-
-            progress++;
         }
-    }
 
-    void ModelAssimp::AcquireGeometryInfo()
-    {
-        auto &gSettings = Settings::Get<GlobalSettings>();
-        auto &progress = gSettings.loading_current;
-        auto &total = gSettings.loading_total;
-        auto &loading = gSettings.loading_name;
-
-        progress = 0;
         total = m_verticesCount + m_indicesCount;
-        loading = "Loading vertices and indices";
+
+        m_vertices.clear();
+        m_positionUvs.clear();
+        m_aabbVertices.clear();
+        m_indices.clear();
 
         m_vertices.reserve(m_verticesCount);
         m_positionUvs.reserve(m_verticesCount);
-        m_aabbVertices.reserve(m_meshCount * 8);
         m_indices.reserve(m_indicesCount);
+        m_aabbVertices.reserve(static_cast<size_t>(m_meshCount) * 8);
 
-        uint32_t indexBaseOffset = 0; // Track index offset to ensure it matches ProcessAabbs
-
+        // pass 2: build per mesh
         for (unsigned int i = 0; i < m_scene->mNumMeshes; i++)
         {
             const aiMesh *mesh = m_scene->mMeshes[i];
             if (!(mesh->mPrimitiveTypes & aiPrimitiveType_TRIANGLE))
                 continue;
 
-            MeshInfo &meshInfo = m_meshInfos[i];
+            MeshInfo &mi = m_meshInfos[i];
+
+            // pipeline/material info
+            mi.materialInfo.topology = vk::PrimitiveTopology::eTriangleList;
+
             aiMaterial *material = m_scene->mMaterials[mesh->mMaterialIndex];
 
-            meshInfo.renderType = DetermineRenderType(material);
+            int twoSided = 0;
+            material->Get(AI_MATKEY_TWOSIDED, twoSided);
+            mi.materialInfo.cullMode = twoSided ? vk::CullModeFlagBits::eNone : vk::CullModeFlagBits::eFront;
 
-            AssignTexture(meshInfo, TextureType::BaseColor, material, {aiTextureType_BASE_COLOR, aiTextureType_DIFFUSE}, g_defaultBlack);
-            AssignTexture(meshInfo, TextureType::MetallicRoughness, material, {aiTextureType_UNKNOWN, aiTextureType_DIFFUSE_ROUGHNESS, aiTextureType_SPECULAR, aiTextureType_METALNESS}, g_defaultBlack);
-            AssignTexture(meshInfo, TextureType::Normal, material, {aiTextureType_NORMAL_CAMERA, aiTextureType_NORMALS, aiTextureType_HEIGHT}, g_defaultNormal);
-            AssignTexture(meshInfo, TextureType::Occlusion, material, {aiTextureType_AMBIENT_OCCLUSION, aiTextureType_LIGHTMAP}, g_defaultWhite);
-            AssignTexture(meshInfo, TextureType::Emissive, material, {aiTextureType_EMISSION_COLOR, aiTextureType_EMISSIVE}, g_defaultBlack);
-            ComputeMaterialData(meshInfo, material);
+            mi.renderType = DetermineRenderType(material);
+            mi.materialInfo.alphaBlend = (mi.renderType != RenderType::Opaque);
 
-            // Process vertices - cache pointers for better performance
+            // defaults
+            mi.images[static_cast<int>(TextureType::BaseColor)] = defaults.black;
+            mi.images[static_cast<int>(TextureType::MetallicRoughness)] = defaults.black;
+            mi.images[static_cast<int>(TextureType::Normal)] = defaults.normal;
+            mi.images[static_cast<int>(TextureType::Occlusion)] = defaults.white;
+            mi.images[static_cast<int>(TextureType::Emissive)] = defaults.black;
+
+            for (auto &s : mi.samplers)
+                s = defaults.sampler;
+
+            mi.textureMask = 0;
+
+            // assign textures (from cache loaded in UploadImages)
+            AssignTexture(mi, TextureType::BaseColor, material, {aiTextureType_BASE_COLOR, aiTextureType_DIFFUSE});
+            AssignTexture(mi, TextureType::MetallicRoughness, material, {aiTextureType_UNKNOWN, aiTextureType_DIFFUSE_ROUGHNESS, aiTextureType_SPECULAR, aiTextureType_METALNESS});
+            AssignTexture(mi, TextureType::Normal, material, {aiTextureType_NORMAL_CAMERA, aiTextureType_NORMALS, aiTextureType_HEIGHT});
+            AssignTexture(mi, TextureType::Occlusion, material, {aiTextureType_AMBIENT_OCCLUSION, aiTextureType_LIGHTMAP});
+            AssignTexture(mi, TextureType::Emissive, material, {aiTextureType_EMISSION_COLOR, aiTextureType_EMISSIVE});
+
+            ComputeMaterialData(mi, material);
+
+            // geometry
             const aiVector3D *positions = mesh->mVertices;
             const aiVector3D *normals = mesh->mNormals;
             const aiVector3D *uvs = mesh->mTextureCoords[0];
             const aiColor4D *colors = mesh->mColors[0];
 
-            for (unsigned int j = 0; j < mesh->mNumVertices; j++)
+            // bounding box (local)
+            bool bbInit = false;
+            vec3 bbMin(0.f), bbMax(0.f);
+
+            for (unsigned int v = 0; v < mesh->mNumVertices; v++)
             {
                 Vertex vertex{};
                 PositionUvVertex positionUvVertex{};
 
-                // Position
-                const aiVector3D &pos = positions[j];
-                FillVertexPosition(vertex, pos.x, pos.y, pos.z);
-                FillVertexPosition(positionUvVertex, pos.x, pos.y, pos.z);
+                const aiVector3D &p = positions[v];
+                FillVertexPosition(vertex, p.x, p.y, p.z);
+                FillVertexPosition(positionUvVertex, p.x, p.y, p.z);
 
-                // UV
                 if (uvs)
                 {
-                    FillVertexUV(vertex, uvs[j].x, uvs[j].y);
-                    FillVertexUV(positionUvVertex, uvs[j].x, uvs[j].y);
+                    FillVertexUV(vertex, uvs[v].x, uvs[v].y);
+                    FillVertexUV(positionUvVertex, uvs[v].x, uvs[v].y);
                 }
                 else
                 {
@@ -319,88 +287,96 @@ namespace pe
                     FillVertexUV(positionUvVertex, 0.0f, 0.0f);
                 }
 
-                // Normal
                 if (normals)
                 {
-                    const aiVector3D &norm = normals[j];
-                    FillVertexNormal(vertex, norm.x, norm.y, norm.z);
+                    const aiVector3D &n = normals[v];
+                    FillVertexNormal(vertex, n.x, n.y, n.z);
                 }
                 else
+                {
                     FillVertexNormal(vertex, 0.0f, 0.0f, 1.0f);
+                }
 
-                // Color
                 if (colors)
                 {
-                    const aiColor4D &col = colors[j];
-                    FillVertexColor(vertex, col.r, col.g, col.b, col.a);
+                    const aiColor4D &c = colors[v];
+                    FillVertexColor(vertex, c.r, c.g, c.b, c.a);
                 }
                 else
+                {
                     FillVertexColor(vertex, 1.0f, 1.0f, 1.0f, 1.0f);
+                }
 
-                // Joints and weights (for skeletal animation - not implemented yet)
-                FillVertexJointsWeights(vertex, 0, 0, 0, 0, 0.0f, 0.0f, 0.0f, 0.0f);
-                FillVertexJointsWeights(positionUvVertex, 0, 0, 0, 0, 0.0f, 0.0f, 0.0f, 0.0f);
+                FillVertexJointsWeights(vertex, 0, 0, 0, 0, 0.f, 0.f, 0.f, 0.f);
+                FillVertexJointsWeights(positionUvVertex, 0, 0, 0, 0, 0.f, 0.f, 0.f, 0.f);
 
                 m_vertices.push_back(vertex);
                 m_positionUvs.push_back(positionUvVertex);
                 progress++;
-            }
 
-            // Process indices
-            // Verify indexOffset matches what we set in ProcessAabbs
-            PE_ERROR_IF(meshInfo.indexOffset != indexBaseOffset, "Index offset mismatch in AcquireGeometryInfo");
-
-            const size_t expectedIndices = mesh->mNumFaces * 3;
-            const size_t indicesStart = m_indices.size();
-            m_indices.resize(indicesStart + expectedIndices);
-
-            size_t indexWrite = indicesStart;
-            for (unsigned int j = 0; j < mesh->mNumFaces; j++)
-            {
-                const aiFace &face = mesh->mFaces[j];
-                if (face.mNumIndices == 3)
+                // update AABB
+                vec3 pos(p.x, p.y, p.z);
+                if (!bbInit)
                 {
-                    m_indices[indexWrite++] = face.mIndices[0];
-                    m_indices[indexWrite++] = face.mIndices[1];
-                    m_indices[indexWrite++] = face.mIndices[2];
+                    bbMin = pos;
+                    bbMax = pos;
+                    bbInit = true;
+                }
+                else
+                {
+                    bbMin = glm::min(bbMin, pos);
+                    bbMax = glm::max(bbMax, pos);
                 }
             }
-            m_indices.resize(indexWrite); // Trim if some faces weren't triangles
+
+            if (bbInit)
+            {
+                mi.boundingBox.min = bbMin;
+                mi.boundingBox.max = bbMax;
+            }
+
+            // indices (kept local; vertexOffset is used in vkCmdDrawIndexed vertexOffset param)
+            const size_t expected = static_cast<size_t>(mesh->mNumFaces) * 3;
+            const size_t start = m_indices.size();
+            m_indices.resize(start + expected);
+
+            size_t w = start;
+            for (unsigned int f = 0; f < mesh->mNumFaces; f++)
+            {
+                const aiFace &face = mesh->mFaces[f];
+                if (face.mNumIndices != 3)
+                    continue;
+
+                m_indices[w++] = face.mIndices[0];
+                m_indices[w++] = face.mIndices[1];
+                m_indices[w++] = face.mIndices[2];
+            }
+
+            m_indices.resize(w);
             progress += mesh->mNumFaces;
 
-            // Update offsets for next mesh
-            indexBaseOffset += mesh->mNumFaces * 3;
+            // aabb vertices (8 corners)
+            mi.aabbColor = static_cast<uint32_t>(rand(0, 255) << 24) |
+                           static_cast<uint32_t>(rand(0, 255) << 16) |
+                           static_cast<uint32_t>(rand(0, 255) << 8) |
+                           static_cast<uint32_t>(255);
 
-            // AABB vertices
-            meshInfo.aabbColor = static_cast<uint32_t>(rand(0, 255) << 24) | // R
-                                 static_cast<uint32_t>(rand(0, 255) << 16) | // G
-                                 static_cast<uint32_t>(rand(0, 255) << 8) |  // B
-                                 static_cast<uint32_t>(255);                 // A
-
-            const vec3 &min = meshInfo.boundingBox.min;
-            const vec3 &max = meshInfo.boundingBox.max;
+            const vec3 &mn = mi.boundingBox.min;
+            const vec3 &mx = mi.boundingBox.max;
 
             AabbVertex corners[8] = {
-                {min.x, min.y, min.z},
-                {max.x, min.y, min.z},
-                {max.x, max.y, min.z},
-                {min.x, max.y, min.z},
-                {min.x, min.y, max.z},
-                {max.x, min.y, max.z},
-                {max.x, max.y, max.z},
-                {min.x, max.y, max.z}};
+                {mn.x, mn.y, mn.z},
+                {mx.x, mn.y, mn.z},
+                {mx.x, mx.y, mn.z},
+                {mn.x, mx.y, mn.z},
+                {mn.x, mn.y, mx.z},
+                {mx.x, mn.y, mx.z},
+                {mx.x, mx.y, mx.z},
+                {mn.x, mx.y, mx.z},
+            };
 
-            for (const auto &corner : corners)
-                m_aabbVertices.push_back(corner);
-        }
-    }
-
-    void CountNodes(const aiNode *node, int &count)
-    {
-        count++;
-        for (unsigned int i = 0; i < node->mNumChildren; i++)
-        {
-            CountNodes(node->mChildren[i], count);
+            for (const auto &c : corners)
+                m_aabbVertices.push_back(c);
         }
     }
 
@@ -411,71 +387,69 @@ namespace pe
         auto &total = gSettings.loading_total;
         auto &loading = gSettings.loading_name;
 
-        progress = 0;
         loading = "Loading nodes";
+        progress = 0;
 
-        // Count total nodes first
         int nodeCount = 0;
-        CountNodes(m_scene->mRootNode, nodeCount);
+        CountNodesRecursive(m_scene->mRootNode, nodeCount);
         total = nodeCount;
 
         dirtyNodes = true;
-        m_nodeToMesh.clear();
         m_nodeInfos.clear();
+        m_nodeToMesh.clear();
+
         m_nodeInfos.reserve(nodeCount);
+        m_nodeToMesh.reserve(nodeCount);
 
         ProcessNode(m_scene->mRootNode, -1);
 
-        m_nodeToMesh.resize(GetNodeCount(), -1);
-        progress = GetNodeCount();
+        // ensure mapping size matches
+        if (m_nodeToMesh.size() < m_nodeInfos.size())
+            m_nodeToMesh.resize(m_nodeInfos.size(), -1);
+
+        progress = static_cast<uint32_t>(m_nodeInfos.size());
     }
 
     void ModelAssimp::ProcessNode(const aiNode *node, int parentIndex)
     {
-        auto pushNode = [&](int parent, const mat4 &local, int meshIdx) -> int
+        auto pushNode = [&](const aiNode *srcNode, int parent, const mat4 &local, int meshIdx) -> int
         {
-            int idx = static_cast<int>(m_nodeInfos.size());
+            const int idx = static_cast<int>(m_nodeInfos.size());
             m_nodeInfos.push_back(NodeInfo{});
-            NodeInfo &ni = m_nodeInfos.back();
-            ni.name = node && node->mName.length > 0 ? node->mName.C_Str() : ("Node " + std::to_string(idx));
 
+            NodeInfo &ni = m_nodeInfos.back();
+            ni.name = (srcNode && srcNode->mName.length > 0) ? srcNode->mName.C_Str() : ("Node " + std::to_string(idx));
             ni.parent = parent;
             ni.localMatrix = local;
             ni.dirty = true;
             ni.dirtyUniforms.resize(RHII.GetSwapchainImageCount(), false);
 
             if (m_nodeToMesh.size() <= static_cast<size_t>(idx))
-                m_nodeToMesh.resize(idx + 1, -1);
-            m_nodeToMesh[idx] = meshIdx;
+                m_nodeToMesh.resize(static_cast<size_t>(idx) + 1, -1);
 
+            m_nodeToMesh[idx] = meshIdx;
             return idx;
         };
 
-        // Assimp -> GLM (transpose)
-        aiMatrix4x4 aiMat = node->mTransformation;
-        mat4 local(
-            aiMat.a1, aiMat.b1, aiMat.c1, aiMat.d1,
-            aiMat.a2, aiMat.b2, aiMat.c2, aiMat.d2,
-            aiMat.a3, aiMat.b3, aiMat.c3, aiMat.d3,
-            aiMat.a4, aiMat.b4, aiMat.c4, aiMat.d4);
+        const mat4 local = AiToGlmMat4(node->mTransformation);
 
-        // Transform node that owns children
-        int transformNodeIdx = pushNode(parentIndex, local, -1);
+        // this node is the transform carrier
+        const int transformNodeIdx = pushNode(node, parentIndex, local, -1);
 
-        // Attach meshes (one per node, glTF-like)
+        // attach meshes (glTF-like: 1 mesh per node; extra meshes become siblings sharing the same transform)
         if (node->mNumMeshes > 0)
         {
             bool firstAssigned = false;
 
             for (unsigned int k = 0; k < node->mNumMeshes; ++k)
             {
-                int meshIdx = node->mMeshes[k];
+                const int meshIdx = static_cast<int>(node->mMeshes[k]);
                 if (meshIdx < 0 || meshIdx >= static_cast<int>(m_scene->mNumMeshes))
                     continue;
 
                 const aiMesh *m = m_scene->mMeshes[meshIdx];
                 if (!(m->mPrimitiveTypes & aiPrimitiveType_TRIANGLE))
-                    continue; // ignore non-triangle splits
+                    continue;
 
                 if (!firstAssigned)
                 {
@@ -484,68 +458,14 @@ namespace pe
                 }
                 else
                 {
-                    // sibling with same transform
-                    pushNode(parentIndex, local, meshIdx);
+                    pushNode(node, parentIndex, local, meshIdx);
                 }
             }
         }
 
-        // Children inherit transformNodeIdx
+        // children inherit transformNodeIdx
         for (unsigned int i = 0; i < node->mNumChildren; ++i)
             ProcessNode(node->mChildren[i], transformNodeIdx);
-    }
-
-    void ModelAssimp::UpdateAllNodeMatrices()
-    {
-        auto &gSettings = Settings::Get<GlobalSettings>();
-        auto &progress = gSettings.loading_current;
-        auto &total = gSettings.loading_total;
-        auto &loading = gSettings.loading_name;
-
-        progress = 0;
-        // Count root nodes (nodes with parent == -1)
-        int rootNodeCount = 0;
-        for (int i = 0; i < GetNodeCount(); i++)
-        {
-            if (m_nodeInfos[i].parent == -1)
-                rootNodeCount++;
-        }
-        total = rootNodeCount;
-        loading = "Updating node matrices";
-
-        // Update root nodes only - recursive UpdateNodeMatrix will handle children
-        for (int i = 0; i < GetNodeCount(); i++)
-        {
-            if (m_nodeInfos[i].parent == -1)
-            {
-                UpdateNodeMatrix(i);
-                progress++;
-            }
-        }
-    }
-
-    void ModelAssimp::UpdateNodeMatrix(int node)
-    {
-        // Call base class to handle the matrix update
-        Model::UpdateNodeMatrix(node);
-
-        for (int i = 0; i < GetNodeCount(); i++)
-        {
-            if (m_nodeInfos[i].parent == node)
-                UpdateNodeMatrix(i);
-        }
-    }
-
-    int ModelAssimp::GetNodeCount() const
-    {
-        return static_cast<int>(m_nodeInfos.size());
-    }
-
-    int ModelAssimp::GetNodeMesh(int nodeIndex) const
-    {
-        if (nodeIndex < 0 || nodeIndex >= static_cast<int>(m_nodeToMesh.size()))
-            return -1;
-        return m_nodeToMesh[nodeIndex];
     }
 
     std::filesystem::path ModelAssimp::GetTexturePath(const aiMaterial *material, aiTextureType type, int index) const
@@ -554,95 +474,52 @@ namespace pe
         if (material->GetTexture(type, index, &path) != AI_SUCCESS || path.length == 0)
             return {};
 
+        // embedded textures like "*0" not handled here
         if (path.C_Str()[0] == '*')
             return {};
 
-        return ResolveTexturePath(path.C_Str());
-    }
+        std::filesystem::path rel = path.C_Str();
 
-    std::filesystem::path ModelAssimp::ResolveTexturePath(const std::filesystem::path &relativePath) const
-    {
-        std::filesystem::path candidates[] = {
-            relativePath,
-            m_filePath / relativePath,
-            m_filePath / relativePath.filename()};
+        // candidates: raw, (modelDir / rel), (modelDir / filename)
+        const std::filesystem::path candidates[] = {
+            rel,
+            m_filePath / rel,
+            m_filePath / rel.filename(),
+        };
 
-        for (const auto &candidate : candidates)
+        for (const auto &c : candidates)
         {
-            if (candidate.empty())
+            if (c.empty())
                 continue;
 
             std::error_code ec;
-            auto normalized = candidate.is_absolute() ? std::filesystem::weakly_canonical(candidate, ec) : (m_filePath / candidate).lexically_normal();
-            if (!ec && std::filesystem::exists(normalized))
-                return normalized;
-            if (std::filesystem::exists(candidate))
-                return candidate;
+            std::filesystem::path norm = std::filesystem::weakly_canonical(c, ec);
+            if (!ec && std::filesystem::exists(norm))
+                return norm;
+
+            if (std::filesystem::exists(c))
+                return c;
         }
 
         return {};
     }
 
-    Image *ModelAssimp::LoadTexture(CommandBuffer *cmd, const std::filesystem::path &texturePath)
+    void ModelAssimp::AssignTexture(MeshInfo &meshInfo, TextureType type, aiMaterial *material,
+                                    std::initializer_list<aiTextureType> textureTypes)
     {
-        if (texturePath.empty())
-            return nullptr;
-
-        std::error_code ec;
-        std::filesystem::path normalized = std::filesystem::weakly_canonical(texturePath, ec);
-        if (ec)
-            normalized = texturePath;
-
-        std::string key = normalized.generic_string();
-        auto it = m_textureCache.find(key);
-        if (it != m_textureCache.end())
-            return it->second;
-
-        if (!std::filesystem::exists(normalized))
-            return nullptr;
-
-        Image *image = Image::LoadRGBA8(cmd, normalized.string());
-        if (!image)
-            return nullptr;
-
-        m_images.push_back(image);
-        m_textureCache.emplace(std::move(key), image);
-        return image;
-    }
-
-    Image *ModelAssimp::FindTexture(const std::filesystem::path &texturePath) const
-    {
-        if (texturePath.empty())
-            return nullptr;
-
-        auto it = m_textureCache.find(texturePath.generic_string());
-        if (it == m_textureCache.end())
-            return nullptr;
-        return it->second;
-    }
-
-    void ModelAssimp::AssignTexture(MeshInfo &meshInfo, TextureType type, aiMaterial *material, std::initializer_list<aiTextureType> textureTypes, Image *defaultImage)
-    {
-        Image *image = defaultImage;
-        bool hasTexture = false;
         for (aiTextureType aiType : textureTypes)
         {
             std::filesystem::path texPath = GetTexturePath(material, aiType, 0);
             if (texPath.empty())
                 continue;
 
-            if (Image *loaded = FindTexture(texPath))
+            if (Image *loaded = GetTextureFromCache(texPath))
             {
-                image = loaded;
-                hasTexture = true;
-                break;
+                meshInfo.images[static_cast<int>(type)] = loaded;
+                meshInfo.textureMask |= TextureBit(type);
+                return;
             }
         }
-
-        meshInfo.images[static_cast<int>(type)] = image ? image : defaultImage;
-        meshInfo.samplers[static_cast<int>(type)] = g_defaultSampler;
-        if (hasTexture)
-            meshInfo.textureMask |= (1u << static_cast<uint32_t>(type));
     }
 
     void ModelAssimp::ComputeMaterialData(MeshInfo &meshInfo, aiMaterial *material) const
@@ -664,6 +541,7 @@ namespace pe
         aiColor3D diffuseColor(1.f, 1.f, 1.f);
         aiColor3D emissive(0.f, 0.f, 0.f);
         aiColor3D specular(0.f, 0.f, 0.f);
+
         float metallic = 0.f;
         float roughness = 1.f;
         float normalScale = hasNormalMap ? 1.f : 0.f;
@@ -690,19 +568,21 @@ namespace pe
 #else
         bool hasMetallicFactor = false;
 #endif
+
 #ifdef AI_MATKEY_ROUGHNESS_FACTOR
         bool hasRoughnessFactor = material->Get(AI_MATKEY_ROUGHNESS_FACTOR, roughness) == AI_SUCCESS;
 #else
         bool hasRoughnessFactor = false;
 #endif
+
 #ifdef AI_MATKEY_GLTF_ALPHACUTOFF
         material->Get(AI_MATKEY_GLTF_ALPHACUTOFF, alphaCutoff);
 #endif
 
         if (!hasMetallicFactor)
         {
-            float specularIntensity = std::max(specular.r, std::max(specular.g, specular.b));
-            metallic = glm::clamp(specularIntensity, 0.f, 1.f);
+            float specI = std::max(specular.r, std::max(specular.g, specular.b));
+            metallic = glm::clamp(specI, 0.f, 1.f);
         }
 
         if (!hasRoughnessFactor)
@@ -712,11 +592,15 @@ namespace pe
                 roughness = glm::clamp(std::sqrt(2.f / (shininess + 2.f)), 0.f, 1.f);
         }
 
+        // packing to shader expectations:
+        // row0: baseColor rgba
+        // row1: emissive rgb
+        // row2: metallic, roughness, alphaCutoff, occlusionStrength
+        // row3: (unused), normalScale, (unused)
         factors[0][0] = baseColor.r;
         factors[0][1] = baseColor.g;
         factors[0][2] = baseColor.b;
         factors[0][3] = baseColor.a;
-
         factors[1][0] = emissive.r;
         factors[1][1] = emissive.g;
         factors[1][2] = emissive.b;
@@ -726,9 +610,7 @@ namespace pe
         factors[2][2] = alphaCutoff;
         factors[2][3] = occlusionStrength;
 
-        factors[3][0] = 0.f;
         factors[3][1] = normalScale;
-        factors[3][2] = 0.f;
 
         meshInfo.materialFactors = factors;
         meshInfo.alphaCutoff = alphaCutoff;
@@ -740,7 +622,8 @@ namespace pe
         if (material->Get(AI_MATKEY_GLTF_ALPHAMODE, alphaMode) == AI_SUCCESS)
         {
             std::string mode(alphaMode.C_Str());
-            std::transform(mode.begin(), mode.end(), mode.begin(), [](unsigned char c)
+            std::transform(mode.begin(), mode.end(), mode.begin(),
+                           [](unsigned char c)
                            { return static_cast<char>(std::toupper(c)); });
 
             if (mode == "BLEND")
@@ -755,4 +638,5 @@ namespace pe
 
         return RenderType::Opaque;
     }
+
 } // namespace pe
