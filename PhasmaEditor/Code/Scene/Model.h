@@ -1,9 +1,5 @@
 #pragma once
-
-#include "API/Pipeline.h"
 #include "API/Vertex.h"
-#include "Script/Script.h"
-#include "Systems/CameraSystem.h"
 
 namespace pe
 {
@@ -23,22 +19,28 @@ namespace pe
 
     struct MeshInfo
     {
-        size_t dataOffset = -1;
+        size_t dataOffset = static_cast<size_t>(-1);
         const size_t dataSize = sizeof(mat4) * 2; // transform and previous transform
         bool cull = true;
+
         uint32_t vertexOffset = 0, verticesCount = 0; // offset and count in used vertex buffer
         uint32_t indexOffset = 0, indicesCount = 0;   // offset and count in used index buffer
         uint32_t indirectIndex = 0;                   // index of the indirect command of the mesh in the indirect buffer
         uint32_t positionsOffset = 0;
+
         size_t aabbVertexOffset = 0;
         uint32_t aabbColor = 0;
+
         vec4 boundingSphere = vec4(0.f);
         AABB boundingBox;
         AABB worldBoundingBox;
+
         RenderType renderType;
+
         Image *images[5]{nullptr};
         Sampler *samplers[5]{nullptr};
         uint32_t textureMask = 0;
+
         MaterialInfo materialInfo;
         mat4 materialFactors = mat4(1.f);
         float alphaCutoff = 0.5f;
@@ -61,11 +63,13 @@ namespace pe
     {
         int parent = -1;
         mat4 localMatrix;
+
         struct UBO
         {
             mat4 worldMatrix = mat4(1.f);
             mat4 previousWorldMatrix = mat4(1.f);
         } ubo;
+
         bool dirty = false;
         std::vector<bool> dirtyUniforms;
         std::string name;
@@ -80,36 +84,45 @@ namespace pe
 
         // Factory method to load models based on file extension
         static Model *Load(const std::filesystem::path &file);
+        static void DestroyDefaults();
 
         // Common interface methods
         void UpdateNodeMatrices();
         void SetMeshFactors(Buffer *buffer);
+        Image *LoadTexture(CommandBuffer *cmd, const std::filesystem::path &texturePath);
+        Image *GetTextureFromCache(const std::filesystem::path &texturePath) const;
 
         // Getters
         size_t GetId() const { return m_id; }
         void SetRenderReady(bool ready) { m_render = ready; }
         bool IsRenderReady() const { return m_render; }
+
         const std::vector<Vertex> &GetVertices() const { return m_vertices; }
         const std::vector<PositionUvVertex> &GetPositionUvs() const { return m_positionUvs; }
         const std::vector<AabbVertex> &GetAabbVertices() const { return m_aabbVertices; }
         const std::vector<uint32_t> &GetIndices() const { return m_indices; }
+
         const std::vector<Image *> &GetImages() const { return m_images; }
         const std::vector<Sampler *> &GetSamplers() const { return m_samplers; }
+
         const std::vector<MeshInfo> &GetMeshInfos() const { return m_meshInfos; }
         const std::vector<NodeInfo> &GetNodeInfos() const { return m_nodeInfos; }
         std::vector<MeshInfo> &GetMeshInfos() { return m_meshInfos; }
         std::vector<NodeInfo> &GetNodeInfos() { return m_nodeInfos; }
+
         mat4 &GetMatrix() { return matrix; }
         bool &GetDirtyNodes() { return dirtyNodes; }
         std::vector<bool> &GetDirtyUniforms() { return dirtyUniforms; }
+
         uint32_t GetVerticesCount() const { return m_verticesCount; }
         uint32_t GetIndicesCount() const { return m_indicesCount; }
         uint32_t GetMeshCount() const { return m_meshCount; }
+
         const std::string &GetLabel() const { return m_label; }
         void SetLabel(const std::string &label) { m_label = label; }
 
-        virtual int GetNodeCount() const = 0;
-        virtual int GetNodeMesh(int nodeIndex) const = 0;
+        int GetNodeCount() const { return static_cast<int>(m_nodeInfos.size()); }
+        int GetNodeMesh(int nodeIndex) const;
 
     protected:
         friend class Scene;
@@ -122,17 +135,48 @@ namespace pe
         virtual void UpdateNodeMatrix(int node);
         static constexpr uint32_t TextureBit(TextureType type) { return 1u << static_cast<uint32_t>(type); }
 
+        struct DefaultResources
+        {
+            Image *black = nullptr;
+            Image *normal = nullptr;
+            Image *white = nullptr;
+            Sampler *sampler = nullptr;
+
+            void EnsureCreated(CommandBuffer *cmd);
+        };
+
+        static DefaultResources &GetDefaultResources(CommandBuffer *cmd);
+        static const DefaultResources &GetDefaultResources();
+        static DefaultResources &Defaults();
+
+        void ResetResources(CommandBuffer *cmd);
+
+        // Resource ownership helpers:
+        // - owned resources are destroyed in ~Model()
+        // - shared resources are NOT destroyed (e.g. default textures/sampler)
+        void AddImage(Image *image, bool owned);
+        void AddSampler(Sampler *sampler, bool owned);
+
         std::atomic_bool m_render = false;
         size_t m_id;
+
         std::vector<Image *> m_images{};
         std::vector<Sampler *> m_samplers{};
+
+        std::unordered_set<Image *> m_sharedImages{};
+        std::unordered_set<Sampler *> m_sharedSamplers{};
+
         std::vector<MeshInfo> m_meshInfos{};
         std::vector<NodeInfo> m_nodeInfos{};
+        std::vector<int> m_nodeToMesh{};
+
         std::vector<Vertex> m_vertices;
         std::vector<PositionUvVertex> m_positionUvs;
         std::vector<AabbVertex> m_aabbVertices;
         std::vector<uint32_t> m_indices;
+
         mat4 matrix = mat4(1.f);
+
         // Dirty flags are used to update nodes and uniform buffers, they are important
         bool dirtyNodes = false;
         std::vector<bool> dirtyUniforms;
@@ -140,6 +184,11 @@ namespace pe
         uint32_t m_verticesCount = 0;
         uint32_t m_indicesCount = 0;
         uint32_t m_meshCount = 0;
+
         std::string m_label;
+        std::filesystem::path m_filePath;
+
+        std::unordered_map<std::string, Image *> m_textureCache;
+        bool m_previousMatricesIsDirty = false;
     };
 } // namespace pe

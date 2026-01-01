@@ -2,6 +2,7 @@
 #include "API/Command.h"
 #include "API/Queue.h"
 #include "API/RHI.h"
+#include "Scene/Model.h"
 #include "Systems/CameraSystem.h"
 #include "Systems/LightSystem.h"
 #include "Systems/PostProcessSystem.h"
@@ -94,6 +95,7 @@ namespace pe
         FileWatcher::Stop();
         FileWatcher::Clear();
         DestroyGlobalSystems();
+        Model::DestroyDefaults();
         Context::Remove();
         RHII.Destroy();
         RHII.Remove();

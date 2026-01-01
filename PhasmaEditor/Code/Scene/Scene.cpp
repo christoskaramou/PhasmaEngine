@@ -3,6 +3,7 @@
 #include "API/Command.h"
 #include "API/Descriptor.h"
 #include "API/Image.h"
+#include "API/Pipeline.h"
 #include "API/Queue.h"
 #include "API/RHI.h"
 #include "API/Vertex.h"
