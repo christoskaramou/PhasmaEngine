@@ -1,7 +1,5 @@
 #pragma once
 
-#include "Base/Base.h"
-
 namespace pe
 {
     class Buffer;
@@ -27,6 +25,8 @@ namespace pe
         void UpdateGeometryBuffers();
         void AddModel(Model *model);
         void RemoveModel(Model *model);
+
+        Camera *GetCamera(int index) const { return m_cameras.at(index); }
 
         OrderedMap<size_t, Model *> &GetModels() { return m_models; }
         const OrderedMap<size_t, Model *> &GetModels() const { return m_models; }

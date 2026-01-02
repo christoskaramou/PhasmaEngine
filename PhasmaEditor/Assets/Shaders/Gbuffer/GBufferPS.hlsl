@@ -54,12 +54,11 @@ PS_OUTPUT_Gbuffer mainPS(PS_INPUT_Gbuffer input)
     float2 previousNDC = input.prevPositionCS.xy / input.prevPositionCS.w;
     
     // Apply jitter correction to the NDC positions
-    // Subtract current frame's jitter and add previous frame's jitter
     currentNDC -= float2(pc.projJitter.x, pc.projJitter.y);
-    previousNDC += float2(pc.prevProjJitter.x, pc.prevProjJitter.y);
+    previousNDC -= float2(pc.prevProjJitter.x, pc.prevProjJitter.y);
     
     // Calculate the velocity in NDC space
-    float2 velocityNDC = currentNDC - previousNDC;
+    float2 velocityNDC = previousNDC - currentNDC;
     
     // Store the velocity in the output
     output.velocity = velocityNDC;

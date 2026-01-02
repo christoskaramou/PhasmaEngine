@@ -7,8 +7,9 @@
 #include "API/RHI.h"
 #include "API/RenderPass.h"
 #include "API/Shader.h"
+#include "Camera/Camera.h"
+#include "RenderPasses/SuperResolutionPass.h"
 #include "ShadowPass.h"
-#include "Systems/CameraSystem.h"
 #include "Systems/LightSystem.h"
 #include "Systems/RendererSystem.h"
 
@@ -121,13 +122,14 @@ namespace pe
     void LightOpaquePass::Update()
     {
         const auto &gSettings = Settings::Get<GlobalSettings>();
-        Camera *camera = GetGlobalSystem<CameraSystem>()->GetCamera(0);
+        const auto &srSettings = Settings::Get<SRSettings>();
+        Camera *camera = GetGlobalSystem<RendererSystem>()->GetScene().GetCamera(0);
 
         m_ubo.invViewProj = camera->GetInvViewProjection();
         m_ubo.ssao = gSettings.ssao;
         m_ubo.ssr = gSettings.ssr;
         m_ubo.tonemapping = gSettings.tonemapping;
-        m_ubo.fsr2 = gSettings.fsr2;
+        m_ubo.fsr2 = srSettings.enable;
         m_ubo.IBL = gSettings.IBL;
         m_ubo.IBL_intensity = gSettings.IBL_intensity;
         m_ubo.lights_intensity = gSettings.lights_intensity;
@@ -322,13 +324,14 @@ namespace pe
     void LightTransparentPass::Update()
     {
         const auto &gSettings = Settings::Get<GlobalSettings>();
-        Camera *camera = GetGlobalSystem<CameraSystem>()->GetCamera(0);
+        const auto &srSettings = Settings::Get<SRSettings>();
+        Camera *camera = GetGlobalSystem<RendererSystem>()->GetScene().GetCamera(0);
 
         m_ubo.invViewProj = camera->GetInvViewProjection();
         m_ubo.ssao = gSettings.ssao;
         m_ubo.ssr = gSettings.ssr;
         m_ubo.tonemapping = gSettings.tonemapping;
-        m_ubo.fsr2 = gSettings.fsr2;
+        m_ubo.fsr2 = srSettings.enable;
         m_ubo.IBL = gSettings.IBL;
         m_ubo.IBL_intensity = gSettings.IBL_intensity;
         m_ubo.lights_intensity = gSettings.lights_intensity;

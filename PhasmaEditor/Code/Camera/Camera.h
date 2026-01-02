@@ -18,6 +18,7 @@ namespace pe
         inline float FovyToFovx(float fovy) { return 2.0f * atan(tan(fovy * 0.5f) * GetAspect()); } // In radians
         inline float FovxToFovy(float fovx) { return 2.0f * atan(tan(fovx * 0.5f) / GetAspect()); } // In radians
         inline float Fovy() { return 2.0f * atan(tan(m_fovx * 0.5f) / GetAspect()); }
+        inline float Fovx() { return m_fovx; }
         float GetAspect();
         void UpdateView();
         vec3 WorldFront() const;

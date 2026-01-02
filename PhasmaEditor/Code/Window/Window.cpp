@@ -1,12 +1,13 @@
 #include "Window.h"
 #include "API/Queue.h"
 #include "API/RHI.h"
+#include "Camera/Camera.h"
 #include "Scene/Model.h"
 #include "Scene/Scene.h"
-#include "Systems/CameraSystem.h"
 #include "Systems/PostProcessSystem.h"
 #include "Systems/RendererSystem.h"
 #include "imgui/imgui_impl_sdl2.h"
+
 #if defined(PE_SCRIPTS)
 #include "Script/ScriptManager.h"
 #endif
@@ -92,8 +93,7 @@ namespace pe
     {
         RendererSystem *rendererSystem = GetGlobalSystem<RendererSystem>();
         PostProcessSystem *postProcessSystem = GetGlobalSystem<PostProcessSystem>();
-        CameraSystem *cameraSystem = GetGlobalSystem<CameraSystem>();
-        Camera *camera = cameraSystem->GetCamera(0);
+        Camera *camera = rendererSystem->GetScene().GetCamera(0);
 
         ImGuiIO &io = ImGui::GetIO();
 

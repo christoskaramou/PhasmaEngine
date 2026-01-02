@@ -3,9 +3,8 @@
 #include "API/Image.h"
 #include "API/RHI.h"
 #include "CACAO/ffx_cacao_impl.h"
-#include "Systems/CameraSystem.h"
+#include "Camera/Camera.h"
 #include "Systems/RendererSystem.h"
-
 
 namespace pe
 {
@@ -45,7 +44,7 @@ namespace pe
         auto &gSettings = Settings::Get<GlobalSettings>();
         if (gSettings.ssao)
         {
-            Camera *camera = GetGlobalSystem<CameraSystem>()->GetCamera(0);
+            Camera *camera = GetGlobalSystem<RendererSystem>()->GetScene().GetCamera(0);
             mat4 projection = camera->GetProjection();
             memcpy(&m_proj.elements[0][0], &projection[0].x, sizeof(m_proj));
 

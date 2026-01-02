@@ -5,8 +5,8 @@
 #include "API/Pipeline.h"
 #include "API/RHI.h"
 #include "API/Shader.h"
+#include "Camera/Camera.h"
 #include "Scene/Scene.h"
-#include "Systems/CameraSystem.h"
 #include "Systems/RendererSystem.h"
 
 namespace pe
@@ -80,7 +80,7 @@ namespace pe
         auto &gSettings = Settings::Get<GlobalSettings>();
         if (gSettings.shadows)
         {
-            Camera *camera_main = GetGlobalSystem<CameraSystem>()->GetCamera(0);
+            Camera *camera_main = GetGlobalSystem<RendererSystem>()->GetScene().GetCamera(0);
             CalculateCascades(camera_main);
 
             BufferRange range{};

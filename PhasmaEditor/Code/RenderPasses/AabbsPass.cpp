@@ -3,10 +3,10 @@
 #include "API/Image.h"
 #include "API/Pipeline.h"
 #include "API/Shader.h"
+#include "Camera/Camera.h"
 #include "Scene/Model.h"
 #include "Scene/Scene.h"
 #include "ShadowPass.h"
-#include "Systems/CameraSystem.h"
 #include "Systems/RendererSystem.h"
 
 namespace pe
@@ -50,7 +50,7 @@ namespace pe
             return;
 
         auto &gSettings = Settings::Get<GlobalSettings>();
-        Camera &camera = *GetGlobalSystem<CameraSystem>()->GetCamera(0);
+        Camera &camera = *GetGlobalSystem<RendererSystem>()->GetScene().GetCamera(0);
         ShadowPass *shadows = GetGlobalComponent<ShadowPass>();
 
         struct PushConstants_AABB

@@ -5,7 +5,7 @@
 #include "API/Pipeline.h"
 #include "API/RHI.h"
 #include "API/Shader.h"
-#include "Systems/CameraSystem.h"
+#include "Camera/Camera.h"
 #include "Systems/RendererSystem.h"
 
 namespace pe
@@ -57,7 +57,7 @@ namespace pe
     void MotionBlurPass::Draw(CommandBuffer *cmd)
     {
         auto &gSettings = Settings::Get<GlobalSettings>();
-        Camera *camera = GetGlobalSystem<CameraSystem>()->GetCamera(0);
+        Camera *camera = GetGlobalSystem<RendererSystem>()->GetScene().GetCamera(0);
 
         ImageBarrierInfo barrier{};
         barrier.layout = vk::ImageLayout::eShaderReadOnlyOptimal;

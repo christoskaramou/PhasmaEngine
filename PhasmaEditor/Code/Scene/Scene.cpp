@@ -14,7 +14,6 @@
 #include "RenderPasses/LightPass.h"
 #include "RenderPasses/ShadowPass.h"
 #include "Scene/Model.h"
-#include "Systems/CameraSystem.h"
 
 namespace pe
 {
@@ -33,7 +32,7 @@ namespace pe
         if (!defaultSampler)
             defaultSampler = Sampler::Create(Sampler::CreateInfoInit(), "defaultSampler");
 
-        Camera *camera = GetGlobalSystem<CameraSystem>()->GetCamera(0);
+        Camera *camera = new Camera();
         m_cameras.push_back(camera);
 
         uint32_t swapchainImageCount = RHII.GetSwapchainImageCount();
@@ -48,6 +47,10 @@ namespace pe
             delete model;
         m_models.clear();
 
+        for (auto *camera : m_cameras)
+            delete camera;
+        m_cameras.clear();
+
         DestroyBuffers();
 
         if (defaultSampler)
@@ -56,6 +59,9 @@ namespace pe
 
     void Scene::Update()
     {
+        for (auto *camera : m_cameras)
+            camera->Update();
+
         UpdateGeometry();
 
         if (HasDrawInfo())
