@@ -24,10 +24,12 @@ set(CMAKE_RUNTIME_OUTPUT_DIRECTORY_RELWITHDEBINFO "${CMAKE_BINARY_DIR}/RelWithDe
 
 # --- Assimp ---
 message(STATUS "[Phasma] Preparing Assimp (fetch + build) ...")
+set(FETCHCONTENT_QUIET FALSE)
 FetchContent_Declare(
     assimp
     GIT_REPOSITORY https://github.com/assimp/assimp.git
     GIT_TAG        v5.4.0
+    GIT_PROGRESS   TRUE
 )
 set(ASSIMP_BUILD_TESTS        OFF CACHE BOOL "" FORCE)
 set(ASSIMP_BUILD_ASSIMP_TOOLS OFF CACHE BOOL "" FORCE)
