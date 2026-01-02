@@ -1,6 +1,7 @@
 #include "Systems/PostProcessSystem.h"
 #include "API/RHI.h"
 #include "API/Shader.h"
+#include "Camera/Camera.h"
 #include "RenderPasses/BloomPass.h"
 #include "RenderPasses/DOFPass.h"
 #include "RenderPasses/FXAAPass.h"
@@ -9,7 +10,7 @@
 #include "RenderPasses/SSRPass.h"
 #include "RenderPasses/SuperResolutionPass.h"
 #include "RenderPasses/TonemapPass.h"
-#include "Systems/CameraSystem.h"
+#include "Systems/RendererSystem.h"
 
 namespace pe
 {
@@ -36,7 +37,7 @@ namespace pe
 
     void PostProcessSystem::Update()
     {
-        Camera *camera_main = GetGlobalSystem<CameraSystem>()->GetCamera(0);
+        Camera *camera_main = GetGlobalSystem<RendererSystem>()->GetScene().GetCamera(0);
 
         std::vector<std::shared_future<void>> futures;
         futures.reserve(m_renderPassComponents.size());

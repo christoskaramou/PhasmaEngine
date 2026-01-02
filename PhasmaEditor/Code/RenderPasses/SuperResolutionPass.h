@@ -20,16 +20,16 @@ namespace pe
     class SuperResolutionPass : public IRenderPassComponent
     {
     public:
-        void Init() override {};
-        void UpdatePassInfo() override {};
-        void CreateUniforms(CommandBuffer *cmd) override {};
-        void UpdateDescriptorSets() override {};
-        void Update() override {};
-        void Draw(CommandBuffer *cmd) override {};
-        void Resize(uint32_t width, uint32_t height) override {};
-        void Destroy() override {};
+        void Init() override;
+        void UpdatePassInfo() override;
+        void CreateUniforms(CommandBuffer *cmd) override;
+        void UpdateDescriptorSets() override;
+        void Update() override;
+        void Draw(CommandBuffer *cmd) override;
+        void Resize(uint32_t width, uint32_t height) override;
+        void Destroy() override;
 
-        void GenerateJitter() {};
+        void GenerateJitter();
         const vec2 &GetJitter() { return m_jitter; }
         const vec2 &GetProjectionJitter() { return m_projectionJitter; }
 
@@ -38,7 +38,6 @@ namespace pe
     private:
         std::shared_ptr<FfxFsr2Context> m_context;
         std::shared_ptr<FfxFsr2ContextDescription> m_contextDescription;
-        float m_memoryUsageInMegabytes;
         Image *m_display;
         Image *m_viewportRT;
         Image *m_velocityRT;

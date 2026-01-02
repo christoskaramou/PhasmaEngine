@@ -30,7 +30,6 @@ namespace pe
         bool fxaa = true;
         bool ssr = false;
         bool tonemapping = false;
-        bool fsr2 = false;
         bool dof = false;
         float dof_focus_scale = 15.0f;
         float dof_blur_range = 5.0f;

@@ -102,13 +102,7 @@ namespace pe
             ImGui::Separator();
         }
         ImGui::Checkbox("Tone Mapping", &gSettings.tonemapping);
-#if 0
         ImGui::Checkbox("FSR2", &srSettings.enable);
-#else
-        // TODO: FSR2 is out of sync and out of date
-        ImGui::Checkbox("FSR2 (broken)", &srSettings.enable);
-        srSettings.enable = false;
-#endif
         if (srSettings.enable)
         {
             ImGui::Indent(16.0f);

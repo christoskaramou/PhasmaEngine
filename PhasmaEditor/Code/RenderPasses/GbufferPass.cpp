@@ -5,8 +5,8 @@
 #include "API/Pipeline.h"
 #include "API/RHI.h"
 #include "API/Shader.h"
+#include "Camera/Camera.h"
 #include "Scene/Scene.h"
-#include "Systems/CameraSystem.h"
 #include "Systems/RendererSystem.h"
 
 namespace pe
@@ -83,7 +83,7 @@ namespace pe
     {
         PE_ERROR_IF(m_scene == nullptr, "Scene was not set");
 
-        Camera *camera = GetGlobalSystem<CameraSystem>()->GetCamera(0);
+        Camera *camera = GetGlobalSystem<RendererSystem>()->GetScene().GetCamera(0);
 
         if (!m_scene->HasDrawInfo())
         {
@@ -211,7 +211,7 @@ namespace pe
     {
         PE_ERROR_IF(m_scene == nullptr, "Scene was not set");
 
-        Camera *camera = GetGlobalSystem<CameraSystem>()->GetCamera(0);
+        Camera *camera = GetGlobalSystem<RendererSystem>()->GetScene().GetCamera(0);
 
         if (m_scene->HasAlphaDrawInfo())
         {

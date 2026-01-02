@@ -6,7 +6,7 @@
 #include "API/Pipeline.h"
 #include "API/RHI.h"
 #include "API/Shader.h"
-#include "Systems/CameraSystem.h"
+#include "Camera/Camera.h"
 #include "Systems/RendererSystem.h"
 
 namespace pe
@@ -82,7 +82,7 @@ namespace pe
         auto &gSettings = Settings::Get<GlobalSettings>();
         if (gSettings.ssr)
         {
-            Camera *camera = GetGlobalSystem<CameraSystem>()->GetCamera(0);
+            Camera *camera = GetGlobalSystem<RendererSystem>()->GetScene().GetCamera(0);
             m_reflectionInput[0][0] = vec4(camera->GetPosition(), 1.0f);
             m_reflectionInput[0][1] = vec4(camera->GetFront(), 1.0f);
             m_reflectionInput[0][2] = vec4();

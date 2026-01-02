@@ -3,7 +3,6 @@
 #include "API/Queue.h"
 #include "API/RHI.h"
 #include "Scene/Model.h"
-#include "Systems/CameraSystem.h"
 #include "Systems/LightSystem.h"
 #include "Systems/PostProcessSystem.h"
 #include "Systems/RendererSystem.h"
@@ -68,7 +67,6 @@ namespace pe
         CommandBuffer *cmd = queue->AcquireCommandBuffer();
 
         cmd->Begin();
-        CreateGlobalSystem<CameraSystem>()->Init(cmd);
         CreateGlobalSystem<LightSystem>()->Init(cmd);
         CreateGlobalSystem<RendererSystem>()->Init(cmd);
         CreateGlobalSystem<PostProcessSystem>()->Init(cmd);
