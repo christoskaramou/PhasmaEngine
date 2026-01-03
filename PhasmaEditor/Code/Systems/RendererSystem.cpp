@@ -1,4 +1,4 @@
-#include "Systems/RendererSystem.h"
+#include "RendererSystem.h"
 #include "API/Command.h"
 #include "API/Framebuffer.h"
 #include "API/Image.h"
@@ -22,28 +22,27 @@
 #include "RenderPasses/ShadowPass.h"
 #include "RenderPasses/SuperResolutionPass.h"
 #include "RenderPasses/TonemapPass.h"
-
 namespace pe
 {
     void RendererSystem::LoadResources(CommandBuffer *cmd)
     {
-        // SKYBOXES LOAD
         std::array<std::string, 6> skyTextures = {
-            Path::Executable + "Assets/Objects/sky/right.png",
-            Path::Executable + "Assets/Objects/sky/left.png",
-            Path::Executable + "Assets/Objects/sky/top.png",
-            Path::Executable + "Assets/Objects/sky/bottom.png",
-            Path::Executable + "Assets/Objects/sky/back.png",
-            Path::Executable + "Assets/Objects/sky/front.png"};
+            Path::Executable + "Assets/Skyboxes/sky/right.png",
+            Path::Executable + "Assets/Skyboxes/sky/left.png",
+            Path::Executable + "Assets/Skyboxes/sky/top.png",
+            Path::Executable + "Assets/Skyboxes/sky/bottom.png",
+            Path::Executable + "Assets/Skyboxes/sky/back.png",
+            Path::Executable + "Assets/Skyboxes/sky/front.png"};
         m_skyBoxDay.LoadSkyBox(cmd, skyTextures, 1024);
+
         skyTextures = {
-            Path::Executable + "Assets/Objects/lmcity/lmcity_rt.png",
-            Path::Executable + "Assets/Objects/lmcity/lmcity_lf.png",
-            Path::Executable + "Assets/Objects/lmcity/lmcity_up.png",
-            Path::Executable + "Assets/Objects/lmcity/lmcity_dn.png",
-            Path::Executable + "Assets/Objects/lmcity/lmcity_bk.png",
-            Path::Executable + "Assets/Objects/lmcity/lmcity_ft.png"};
-        m_skyBoxNight.LoadSkyBox(cmd, skyTextures, 512);
+            Path::Executable + "Assets/Skyboxes/sky_night/px.png",
+            Path::Executable + "Assets/Skyboxes/sky_night/nx.png",
+            Path::Executable + "Assets/Skyboxes/sky_night/py.png",
+            Path::Executable + "Assets/Skyboxes/sky_night/ny.png",
+            Path::Executable + "Assets/Skyboxes/sky_night/pz.png",
+            Path::Executable + "Assets/Skyboxes/sky_night/nz.png"};
+        m_skyBoxNight.LoadSkyBox(cmd, skyTextures, 1024);
     }
 
     void RendererSystem::Init(CommandBuffer *cmd)
