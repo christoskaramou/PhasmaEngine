@@ -72,14 +72,19 @@ namespace pe
             RHII.GetDevice().destroySampler(m_apiHandle);
     }
 
-    Image *Image::LoadRGBA8(CommandBuffer *cmd, const std::string &path)
+    Image *Image::LoadRGBA(CommandBuffer *cmd, const std::string &path, vk::Format format, bool isFloat)
     {
         int texWidth, texHeight, texChannels;
-        unsigned char *pixels = stbi_load(path.c_str(), &texWidth, &texHeight, &texChannels, STBI_rgb_alpha);
+        void *pixels = nullptr;
+        if (isFloat)
+            pixels = stbi_loadf(path.c_str(), &texWidth, &texHeight, &texChannels, STBI_rgb_alpha);
+        else
+            pixels = stbi_load(path.c_str(), &texWidth, &texHeight, &texChannels, STBI_rgb_alpha);
+
         PE_ERROR_IF(!pixels, "No pixel data loaded");
 
         vk::ImageCreateInfo info = CreateInfoInit();
-        info.format = vk::Format::eR8G8B8A8Unorm;
+        info.format = format;
         info.extent = vk::Extent3D{static_cast<uint32_t>(texWidth), static_cast<uint32_t>(texHeight), 1};
         info.mipLevels = Image::CalculateMips(texWidth, texHeight);
         info.usage = vk::ImageUsageFlagBits::eTransferSrc | vk::ImageUsageFlagBits::eTransferDst | vk::ImageUsageFlagBits::eSampled | vk::ImageUsageFlagBits::eStorage;
@@ -94,7 +99,7 @@ namespace pe
         samplerInfo.borderColor = vk::BorderColor::eFloatTransparentBlack;
         image->m_sampler = Sampler::Create(samplerInfo);
 
-        cmd->CopyDataToImageStaged(image, pixels, texWidth * texHeight * STBI_rgb_alpha);
+        cmd->CopyDataToImageStaged(image, pixels, texWidth * texHeight * (isFloat ? 16 : 4));
         cmd->GenerateMipMaps(image);
 
         ImageBarrierInfo barrier{};
@@ -110,38 +115,17 @@ namespace pe
         return image;
     }
 
-    Image *Image::LoadRGBA8Cubemap(CommandBuffer *cmd, const std::array<std::string, 6> &paths, int imageSize)
+    Image *Image::LoadRGBA8(CommandBuffer *cmd, const std::string &path)
     {
-        vk::ImageCreateInfo info = CreateInfoInit();
-        info.flags = vk::ImageCreateFlagBits::eCubeCompatible;
-        info.format = vk::Format::eR8G8B8A8Unorm;
-        info.extent = vk::Extent3D{static_cast<uint32_t>(imageSize), static_cast<uint32_t>(imageSize), 1};
-        info.arrayLayers = 6;
-        info.usage = vk::ImageUsageFlagBits::eTransferDst | vk::ImageUsageFlagBits::eSampled;
-        Image *cubeMap = Image::Create(info, "cube_map");
-
-        cubeMap->CreateSRV(vk::ImageViewType::eCube);
-
-        vk::SamplerCreateInfo samplerInfo = Sampler::CreateInfoInit();
-        samplerInfo.addressModeU = vk::SamplerAddressMode::eClampToEdge;
-        samplerInfo.addressModeV = vk::SamplerAddressMode::eClampToEdge;
-        samplerInfo.addressModeW = vk::SamplerAddressMode::eClampToEdge;
-        cubeMap->m_sampler = Sampler::Create(samplerInfo);
-
-        for (uint32_t i = 0; i < cubeMap->m_createInfo.arrayLayers; ++i)
-        {
-            int texWidth, texHeight, texChannels;
-            stbi_uc *pixels = stbi_load(paths[i].c_str(), &texWidth, &texHeight, &texChannels, STBI_rgb_alpha);
-            PE_ERROR_IF(!pixels, "No pixel data loaded");
-
-            size_t size = static_cast<size_t>(texWidth) * static_cast<size_t>(texHeight) * STBI_rgb_alpha;
-            cmd->CopyDataToImageStaged(cubeMap, pixels, size, i, 1);
-            cmd->AddAfterWaitCallback([pixels]()
-                                      { stbi_image_free(pixels); });
-        }
-
-        return cubeMap;
+        return LoadRGBA(cmd, path, vk::Format::eR8G8B8A8Unorm, false);
     }
+
+    Image *Image::LoadRGBA32F(CommandBuffer *cmd, const std::string &path)
+    {
+        return LoadRGBA(cmd, path, vk::Format::eR32G32B32A32Sfloat, true);
+    }
+
+
 
     vk::ImageCreateInfo Image::CreateInfoInit()
     {
