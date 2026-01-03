@@ -84,8 +84,10 @@ namespace pe
         void SetClearColor(const vec4 &color) { m_clearColor = color; }
 
         static uint32_t CalculateMips(uint32_t width, uint32_t height);
+        static Image *LoadRGBA(CommandBuffer *cmd, const std::string &path, vk::Format format, bool isFloat = false);
         static Image *LoadRGBA8(CommandBuffer *cmd, const std::string &path);
-        static Image *LoadRGBA8Cubemap(CommandBuffer *cmd, const std::array<std::string, 6> &paths, int imageSize);
+        static Image *LoadRGBA32F(CommandBuffer *cmd, const std::string &path);
+
         static vk::ImageCreateInfo CreateInfoInit();
 
     private:

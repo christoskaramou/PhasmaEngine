@@ -7,7 +7,8 @@ namespace pe
     class SkyBox
     {
     public:
-        void LoadSkyBox(CommandBuffer *cmd, const std::array<std::string, 6> &textureNames, uint32_t imageSideSize);
+        void LoadSkyBox(CommandBuffer *cmd, const std::array<std::string, 6> &textureNames);
+        void LoadSkyBox(CommandBuffer *cmd, const std::string &path);
         void Destroy();
         Image *GetCubeMap() const { return m_cubeMap; }
 

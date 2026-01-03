@@ -26,23 +26,8 @@ namespace pe
 {
     void RendererSystem::LoadResources(CommandBuffer *cmd)
     {
-        std::array<std::string, 6> skyTextures = {
-            Path::Executable + "Assets/Skyboxes/sky/right.png",
-            Path::Executable + "Assets/Skyboxes/sky/left.png",
-            Path::Executable + "Assets/Skyboxes/sky/top.png",
-            Path::Executable + "Assets/Skyboxes/sky/bottom.png",
-            Path::Executable + "Assets/Skyboxes/sky/back.png",
-            Path::Executable + "Assets/Skyboxes/sky/front.png"};
-        m_skyBoxDay.LoadSkyBox(cmd, skyTextures, 1024);
-
-        skyTextures = {
-            Path::Executable + "Assets/Skyboxes/sky_night/px.png",
-            Path::Executable + "Assets/Skyboxes/sky_night/nx.png",
-            Path::Executable + "Assets/Skyboxes/sky_night/py.png",
-            Path::Executable + "Assets/Skyboxes/sky_night/ny.png",
-            Path::Executable + "Assets/Skyboxes/sky_night/pz.png",
-            Path::Executable + "Assets/Skyboxes/sky_night/nz.png"};
-        m_skyBoxNight.LoadSkyBox(cmd, skyTextures, 1024);
+        m_skyBoxDay.LoadSkyBox(cmd, "Assets/Skyboxes/golden_gate_hills/golden_gate_hills_4k.hdr");
+        m_skyBoxNight.LoadSkyBox(cmd, "Assets/Skyboxes/rogland_clear_night/rogland_clear_night_4k.hdr");
     }
 
     void RendererSystem::Init(CommandBuffer *cmd)
