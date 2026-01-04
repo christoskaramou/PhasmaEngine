@@ -15,6 +15,8 @@ namespace pe
         float distance;
     };
 
+    class ParticleManager;
+
     class Scene
     {
     public:
@@ -26,8 +28,8 @@ namespace pe
         void AddModel(Model *model);
         void RemoveModel(Model *model);
 
+        ParticleManager *GetParticleManager() { return m_particleManager; }
         Camera *GetCamera(int index) const { return m_cameras.at(index); }
-
         OrderedMap<size_t, Model *> &GetModels() { return m_models; }
         const OrderedMap<size_t, Model *> &GetModels() const { return m_models; }
 
@@ -79,6 +81,8 @@ namespace pe
         PerFrameData m_frameData{};
         std::vector<Camera *> m_cameras;
         OrderedMap<size_t, Model *> m_models;
+
+        ParticleManager *m_particleManager = nullptr;
 
         Buffer *m_buffer = nullptr;
         std::vector<Buffer *> m_storages;

@@ -26,8 +26,8 @@ namespace pe
     void DOFPass::UpdatePassInfo()
     {
         m_passInfo->name = "dof_pipeline";
-        m_passInfo->pVertShader = Shader::Create(Path::Executable + "Assets/Shaders/Common/Quad.hlsl", vk::ShaderStageFlagBits::eVertex, "mainVS", std::vector<Define>{}, ShaderCodeType::HLSL);
-        m_passInfo->pFragShader = Shader::Create(Path::Executable + "Assets/Shaders/DepthOfField/DOFPS.hlsl", vk::ShaderStageFlagBits::eFragment, "mainPS", std::vector<Define>{}, ShaderCodeType::HLSL);
+        m_passInfo->pVertShader = Shader::Create(Path::Assets + "Shaders/Common/Quad.hlsl", vk::ShaderStageFlagBits::eVertex, "mainVS", std::vector<Define>{}, ShaderCodeType::HLSL);
+        m_passInfo->pFragShader = Shader::Create(Path::Assets + "Shaders/DepthOfField/DOFPS.hlsl", vk::ShaderStageFlagBits::eFragment, "mainPS", std::vector<Define>{}, ShaderCodeType::HLSL);
         m_passInfo->dynamicStates = {vk::DynamicState::eViewport, vk::DynamicState::eScissor};
         m_passInfo->cullMode = vk::CullModeFlagBits::eBack;
         m_passInfo->colorBlendAttachments = {PipelineColorBlendAttachmentState::Default};

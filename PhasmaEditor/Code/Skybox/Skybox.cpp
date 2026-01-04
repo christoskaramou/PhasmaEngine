@@ -81,7 +81,7 @@ namespace pe
 
         // 3. Setup Compute Pass
         PassInfo *passInfo = new PassInfo();
-        passInfo->pCompShader = Shader::Create(Path::Executable + "Assets/Shaders/Compute/EquirectangularToCubemap.hlsl", vk::ShaderStageFlagBits::eCompute, "main", std::vector<Define>{}, ShaderCodeType::HLSL);
+        passInfo->pCompShader = Shader::Create(Path::Assets + "Shaders/Compute/EquirectangularToCubemap.hlsl", vk::ShaderStageFlagBits::eCompute, "main", std::vector<Define>{}, ShaderCodeType::HLSL);
         passInfo->Update();
 
         // 5. Barriers - Image Layout Transitions

@@ -35,7 +35,7 @@ namespace pe
                 const bool selected = (GUIState::s_assetPreview.type == AssetPreviewType::Model && GUIState::s_assetPreview.label == entry);
                 if (ImGui::Selectable(entry.c_str(), selected, selectFlags))
                 {
-                    std::string fullPath = Path::Executable + "Assets/Objects/" + entry;
+                    std::string fullPath = Path::Assets + "Objects/" + entry;
                     GUIState::UpdateAssetPreview(AssetPreviewType::Model, entry, fullPath);
                     if (ImGui::IsMouseDoubleClicked(0) && !GUIState::s_modelLoading)
                     {
@@ -49,7 +49,6 @@ namespace pe
                     }
                 }
             }
-
         }
         ImGui::EndChild();
 

@@ -1,14 +1,14 @@
 #include "FileBrowser.h"
-#include "GUI/GUI.h"
-#include "GUI/GUIState.h"
-#include "GUI/Helpers.h"
-#include "Scene/Model.h"
-
 #include "API/Command.h"
 #include "API/Image.h"
 #include "API/Queue.h"
 #include "API/RHI.h"
+#include "GUI/GUI.h"
+#include "GUI/GUIState.h"
+#include "GUI/Helpers.h"
+#include "Scene/Model.h"
 #include "imgui/imgui_impl_vulkan.h"
+
 
 namespace pe
 {
@@ -72,20 +72,20 @@ namespace pe
     void FileBrowser::Init(GUI *gui)
     {
         Widget::Init(gui);
-        m_currentPath = std::filesystem::path(Path::Executable + "Assets/");
+        m_currentPath = std::filesystem::path(Path::Assets);
 
         // Load Icons
         Queue *queue = RHII.GetMainQueue();
         CommandBuffer *cmd = queue->AcquireCommandBuffer();
         cmd->Begin();
 
-        m_folderIconDS = LoadAndRegisterIcon(cmd, Path::Executable + "Assets/Icons/folder_icon.png", m_folderIcon);
-        m_fileIconDS = LoadAndRegisterIcon(cmd, Path::Executable + "Assets/Icons/file_icon.png", m_fileIcon);
-        m_txtIconDS = LoadAndRegisterIcon(cmd, Path::Executable + "Assets/Icons/txt_icon.png", m_txtIcon);
-        m_shaderIconDS = LoadAndRegisterIcon(cmd, Path::Executable + "Assets/Icons/shader_icon.png", m_shaderIcon);
-        m_modelIconDS = LoadAndRegisterIcon(cmd, Path::Executable + "Assets/Icons/model_icon.png", m_modelIcon);
-        m_scriptIconDS = LoadAndRegisterIcon(cmd, Path::Executable + "Assets/Icons/script_icon.png", m_scriptIcon);
-        m_imageIconDS = LoadAndRegisterIcon(cmd, Path::Executable + "Assets/Icons/image_icon.png", m_imageIcon);
+        m_folderIconDS = LoadAndRegisterIcon(cmd, Path::Assets + "Icons/folder_icon.png", m_folderIcon);
+        m_fileIconDS = LoadAndRegisterIcon(cmd, Path::Assets + "Icons/file_icon.png", m_fileIcon);
+        m_txtIconDS = LoadAndRegisterIcon(cmd, Path::Assets + "Icons/txt_icon.png", m_txtIcon);
+        m_shaderIconDS = LoadAndRegisterIcon(cmd, Path::Assets + "Icons/shader_icon.png", m_shaderIcon);
+        m_modelIconDS = LoadAndRegisterIcon(cmd, Path::Assets + "Icons/model_icon.png", m_modelIcon);
+        m_scriptIconDS = LoadAndRegisterIcon(cmd, Path::Assets + "Icons/script_icon.png", m_scriptIcon);
+        m_imageIconDS = LoadAndRegisterIcon(cmd, Path::Assets + "Icons/image_icon.png", m_imageIcon);
 
         cmd->End();
         queue->Submit(1, &cmd, nullptr, nullptr);

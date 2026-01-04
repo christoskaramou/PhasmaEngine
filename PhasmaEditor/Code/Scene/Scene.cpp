@@ -8,6 +8,7 @@
 #include "API/RHI.h"
 #include "API/Vertex.h"
 #include "Camera/Camera.h"
+#include "Particles/ParticleManager.h"
 #include "RenderPasses/AabbsPass.h"
 #include "RenderPasses/DepthPass.h"
 #include "RenderPasses/GbufferPass.h"
@@ -39,6 +40,9 @@ namespace pe
         m_storages.resize(swapchainImageCount, nullptr);
         m_indirects.resize(swapchainImageCount, nullptr);
         m_dirtyDescriptorViews.resize(swapchainImageCount, false);
+
+        m_particleManager = new ParticleManager();
+        // m_particleManager->Init(); // disable until it is done
     }
 
     Scene::~Scene()
@@ -52,6 +56,12 @@ namespace pe
         m_cameras.clear();
 
         DestroyBuffers();
+
+        if (m_particleManager)
+        {
+            delete m_particleManager;
+            m_particleManager = nullptr;
+        }
 
         if (defaultSampler)
             Sampler::Destroy(defaultSampler);

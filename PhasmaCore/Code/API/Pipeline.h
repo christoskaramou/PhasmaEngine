@@ -11,6 +11,7 @@ namespace pe
         static vk::PipelineColorBlendAttachmentState Default;
         static vk::PipelineColorBlendAttachmentState AdditiveColor;
         static vk::PipelineColorBlendAttachmentState TransparencyBlend;
+        static vk::PipelineColorBlendAttachmentState ParticlesBlend;
     };
 
     class PassInfo : public Hashable, public NoCopy

@@ -20,8 +20,8 @@ namespace pe
 
         void Watch();
         std::time_t GetFileTime();
-        inline std::string GetFile() { return m_file; };
-        inline Func GetCallback() { return m_callback; }
+        inline std::string GetFile() const { return m_file; }
+        inline Func GetCallback() const { return m_callback; }
         inline size_t GetHash() const { return m_hash; }
 
     private:

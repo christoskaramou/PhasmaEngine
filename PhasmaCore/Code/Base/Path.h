@@ -12,6 +12,7 @@ namespace pe
     {
     public:
         inline static std::string Executable;
+        inline static std::string Assets;
 
     private:
         // Helper to initialize static variables
@@ -38,6 +39,11 @@ namespace pe
                     Executable = std::filesystem::current_path().string();
 
                 std::replace(Executable.begin(), Executable.end(), '\\', '/');
+
+                if (std::filesystem::exists(Executable + "../../PhasmaEditor/Assets"))
+                    Assets = Executable + "../../PhasmaEditor/Assets/";
+                else if (std::filesystem::exists(Executable + "Assets"))
+                    Assets = Executable + "Assets/";
             }
         };
 
