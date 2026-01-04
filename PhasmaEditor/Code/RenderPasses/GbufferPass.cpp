@@ -55,8 +55,8 @@ namespace pe
         vk::Format depthFormat = RHII.GetDepthFormat();
 
         m_passInfo->name = "gbuffer_opaque_pipeline";
-        m_passInfo->pVertShader = Shader::Create(Path::Executable + "Assets/Shaders/Gbuffer/GBufferVS.hlsl", vk::ShaderStageFlagBits::eVertex, "mainVS", std::vector<Define>{}, ShaderCodeType::HLSL);
-        m_passInfo->pFragShader = Shader::Create(Path::Executable + "Assets/Shaders/Gbuffer/GBufferPS.hlsl", vk::ShaderStageFlagBits::eFragment, "mainPS", std::vector<Define>{}, ShaderCodeType::HLSL);
+        m_passInfo->pVertShader = Shader::Create(Path::Assets + "Shaders/Gbuffer/GBufferVS.hlsl", vk::ShaderStageFlagBits::eVertex, "mainVS", std::vector<Define>{}, ShaderCodeType::HLSL);
+        m_passInfo->pFragShader = Shader::Create(Path::Assets + "Shaders/Gbuffer/GBufferPS.hlsl", vk::ShaderStageFlagBits::eFragment, "mainPS", std::vector<Define>{}, ShaderCodeType::HLSL);
         m_passInfo->dynamicStates = {vk::DynamicState::eViewport, vk::DynamicState::eScissor};
         m_passInfo->cullMode = vk::CullModeFlagBits::eFront;
         m_passInfo->blendEnable = false;
@@ -183,8 +183,8 @@ namespace pe
         vk::Format depthFormat = RHII.GetDepthFormat();
 
         m_passInfo->name = "gbuffer_transparent_pipeline";
-        m_passInfo->pVertShader = Shader::Create(Path::Executable + "Assets/Shaders/Gbuffer/GBufferVS.hlsl", vk::ShaderStageFlagBits::eVertex, "mainVS", std::vector<Define>{}, ShaderCodeType::HLSL);
-        m_passInfo->pFragShader = Shader::Create(Path::Executable + "Assets/Shaders/Gbuffer/GBufferPS.hlsl", vk::ShaderStageFlagBits::eFragment, "mainPS", std::vector<Define>{}, ShaderCodeType::HLSL);
+        m_passInfo->pVertShader = Shader::Create(Path::Assets + "Shaders/Gbuffer/GBufferVS.hlsl", vk::ShaderStageFlagBits::eVertex, "mainVS", std::vector<Define>{}, ShaderCodeType::HLSL);
+        m_passInfo->pFragShader = Shader::Create(Path::Assets + "Shaders/Gbuffer/GBufferPS.hlsl", vk::ShaderStageFlagBits::eFragment, "mainPS", std::vector<Define>{}, ShaderCodeType::HLSL);
         m_passInfo->dynamicStates = {vk::DynamicState::eViewport, vk::DynamicState::eScissor};
         m_passInfo->cullMode = vk::CullModeFlagBits::eFront;
         m_passInfo->blendEnable = true;

@@ -273,7 +273,7 @@ namespace pe
             vec.erase(std::unique(vec.begin(), vec.end()), vec.end());
         };
 
-        const std::filesystem::path modelsDir = std::filesystem::path(Path::Executable + "Assets/Objects");
+        const std::filesystem::path modelsDir = std::filesystem::path(Path::Assets + "Objects");
         if (std::filesystem::exists(modelsDir))
         {
             for (auto &file : std::filesystem::recursive_directory_iterator(modelsDir))

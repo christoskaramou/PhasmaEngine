@@ -2,7 +2,6 @@
 
 #include "GUI/GUI.h"
 #include "Scene/Scene.h"
-#include "Script/Script.h"
 #include "Skybox/Skybox.h"
 
 namespace pe

@@ -215,4 +215,54 @@ struct SpotLight
     float4 end; // .w = radius
 };
 // -----------------------------------------
+struct Particle
+{
+    float4 position; // w: life
+    float4 velocity; // w: size
+    float4 color;
+};
+
+struct ParticleEmitter
+{
+    float4 position;
+    float4 velocity;
+    float4 color;
+    float life;
+    float size;
+    float spawnRate;
+};
+
+// -----------------------------------------
+struct PushConstants_Particle
+{
+    float4 cameraPosition;
+    float4 cameraForward;
+    float deltaTime;
+    uint particleCount;
+};
+
+struct PerFrameData_Particle
+{
+    float4x4 viewProjection;
+    float4x4 previousViewProjection;
+};
+
+struct VS_OUTPUT_Particle
+{
+    float4 pos : SV_POSITION;
+    float4 color : COLOR0;
+    [[vk::builtin("PointSize")]] float pointSize : PSIZE;
+};
+
+struct PS_INPUT_Particle
+{
+    float4 pos : SV_POSITION;
+    float4 color : COLOR0;
+};
+
+struct PS_OUTPUT_Particle
+{
+    float4 color : SV_Target0;
+};
+
 #endif // STRUCTURES_H_

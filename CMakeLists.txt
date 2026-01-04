@@ -50,7 +50,8 @@ add_subdirectory(PhasmaCore)
 # PhasmaEditor executable
 file(GLOB_RECURSE CODE_SRC_FILES CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/PhasmaEditor/Code/*.cpp")
 file(GLOB_RECURSE INCLUDE_SRC_FILES CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/PhasmaEditor/Include/*.cpp")
-add_executable(PhasmaEditor ${CODE_SRC_FILES} ${INCLUDE_SRC_FILES} ${CMAKE_CURRENT_SOURCE_DIR}/PhasmaEditor/main.cpp)
+file(GLOB_RECURSE ASSET_FILES CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/PhasmaEditor/Assets/*")
+add_executable(PhasmaEditor ${CODE_SRC_FILES} ${INCLUDE_SRC_FILES} ${ASSET_FILES} ${CMAKE_CURRENT_SOURCE_DIR}/PhasmaEditor/main.cpp)
 
 # PhasmaEditor precompiled headers
 target_precompile_headers(PhasmaEditor REUSE_FROM PhasmaCore)
@@ -85,10 +86,18 @@ target_link_libraries(PhasmaEditor PRIVATE
 # target_compile_options(PhasmaEditor PRIVATE -fsanitize=address)
 # target_link_options(PhasmaEditor PRIVATE -fsanitize=address)
 
-# Copy assets to build directory
-add_custom_command(TARGET PhasmaEditor POST_BUILD
-    COMMAND ${CMAKE_COMMAND} -E copy_directory "${CMAKE_CURRENT_SOURCE_DIR}/PhasmaEditor/Assets" "$<TARGET_FILE_DIR:PhasmaEditor>/Assets"
+# Copy assets to build directory (re-runs when assets change)
+set(ASSETS_COPY_STAMP "${CMAKE_CURRENT_BINARY_DIR}/AssetsCopy.stamp")
+set(PHASMAEDITOR_RUNTIME_DIR "$<IF:$<CONFIG:Debug>,${CMAKE_RUNTIME_OUTPUT_DIRECTORY_DEBUG},$<IF:$<CONFIG:Release>,${CMAKE_RUNTIME_OUTPUT_DIRECTORY_RELEASE},$<IF:$<CONFIG:RelWithDebInfo>,${CMAKE_RUNTIME_OUTPUT_DIRECTORY_RELWITHDEBINFO},${CMAKE_RUNTIME_OUTPUT_DIRECTORY_MINSIZEREL}>>>")
+add_custom_command(
+    OUTPUT "${ASSETS_COPY_STAMP}"
+    COMMAND ${CMAKE_COMMAND} -E copy_directory "${CMAKE_CURRENT_SOURCE_DIR}/PhasmaEditor/Assets" "${PHASMAEDITOR_RUNTIME_DIR}/Assets"
+    COMMAND ${CMAKE_COMMAND} -E touch "${ASSETS_COPY_STAMP}"
+    DEPENDS ${ASSET_FILES}
+    COMMENT "[Phasma] Copying assets to build directory"
 )
+add_custom_target(PhasmaEditorAssets ALL DEPENDS "${ASSETS_COPY_STAMP}")
+add_dependencies(PhasmaEditor PhasmaEditorAssets)
 
 # Copy shader compilers for windows
 if(CMAKE_SYSTEM_NAME STREQUAL "Windows")

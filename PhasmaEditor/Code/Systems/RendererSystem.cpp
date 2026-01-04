@@ -17,11 +17,14 @@
 #include "RenderPasses/GbufferPass.h"
 #include "RenderPasses/LightPass.h"
 #include "RenderPasses/MotionBlurPass.h"
+#include "RenderPasses/ParticleComputePass.h"
+#include "RenderPasses/ParticlePass.h"
 #include "RenderPasses/SSAOPass.h"
 #include "RenderPasses/SSRPass.h"
 #include "RenderPasses/ShadowPass.h"
 #include "RenderPasses/SuperResolutionPass.h"
 #include "RenderPasses/TonemapPass.h"
+
 namespace pe
 {
     void RendererSystem::LoadResources(CommandBuffer *cmd)
@@ -63,6 +66,8 @@ namespace pe
         m_renderPassComponents[ID::GetTypeID<LightOpaquePass>()] = CreateGlobalComponent<LightOpaquePass>();
         m_renderPassComponents[ID::GetTypeID<LightTransparentPass>()] = CreateGlobalComponent<LightTransparentPass>();
         m_renderPassComponents[ID::GetTypeID<AabbsPass>()] = CreateGlobalComponent<AabbsPass>();
+        m_renderPassComponents[ID::GetTypeID<ParticleComputePass>()] = CreateGlobalComponent<ParticleComputePass>();
+        m_renderPassComponents[ID::GetTypeID<ParticlePass>()] = CreateGlobalComponent<ParticlePass>();
 
         for (auto &renderPassComponent : m_renderPassComponents)
         {
@@ -159,6 +164,8 @@ namespace pe
         SuperResolutionPass &sr = *GetGlobalComponent<SuperResolutionPass>();
         TonemapPass &tonemap = *GetGlobalComponent<TonemapPass>();
         AabbsPass &aabbs = *GetGlobalComponent<AabbsPass>();
+        ParticleComputePass &pcp = *GetGlobalComponent<ParticleComputePass>();
+        ParticlePass &pp = *GetGlobalComponent<ParticlePass>();
 
         auto &gSettings = Settings::Get<GlobalSettings>();
 
@@ -203,6 +210,16 @@ namespace pe
         // Lighting Transparent
         {
             lt.Draw(cmd);
+        }
+
+        // Particle Passes
+        {
+            pcp.SetScene(&m_scene);
+            pcp.Draw(cmd);
+        }
+        {
+            pp.SetScene(&m_scene);
+            pp.Draw(cmd);
         }
 
         // Screen Space Reflections

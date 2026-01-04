@@ -6,20 +6,20 @@ namespace pe
     void ScriptManager::Init()
     {
         // Configure CMake
-        std::string cmakeCommand = "cmake -S " + Path::Executable + "Assets/Scripts -B " + Path::Executable + "Assets/Scripts/build";
+        std::string cmakeCommand = "cmake -S " + Path::Assets + "Scripts -B " + Path::Assets + "Scripts/build";
         int res = std::system(cmakeCommand.c_str());
         PE_ERROR_IF(res != 0, "Failed to configure CMake");
 
         // Compile the source into a shared library
         std::string buildCommand = "";
 #if defined(PE_DEBUG)
-        buildCommand = "cmake --build " + Path::Executable + "Assets/Scripts/build --config Debug";
+        buildCommand = "cmake --build " + Path::Assets + "Scripts/build --config Debug";
 #elif defined(PE_RELEASE)
-        buildCommand = "cmake --build " + Path::Executable + "Assets/Scripts/build --config Release";
+        buildCommand = "cmake --build " + Path::Assets + "Scripts/build --config Release";
 #elif defined(PE_MINSIZEREL)
-        buildCommand = "cmake --build " + Path::Executable + "Assets/Scripts/build --config MinSizeRel";
+        buildCommand = "cmake --build " + Path::Assets + "Scripts/build --config MinSizeRel";
 #elif defined(PE_RELWITHDEBINFO)
-        buildCommand = "cmake --build " + Path::Executable + "Assets/Scripts/build --config RelWithDebInfo";
+        buildCommand = "cmake --build " + Path::Assets + "Scripts/build --config RelWithDebInfo";
 #endif
         res = std::system(buildCommand.c_str());
         PE_ERROR_IF(res != 0, "Failed to build the scripts");
@@ -28,7 +28,7 @@ namespace pe
         LoadModule();
 
         // Find .pecpp files in Scripts folder
-        for (auto &file : std::filesystem::recursive_directory_iterator(Path::Executable + "Assets/Scripts"))
+        for (auto &file : std::filesystem::recursive_directory_iterator(Path::Assets + "Scripts"))
         {
             std::string filePath = file.path().string();
             std::replace(filePath.begin(), filePath.end(), '\\', '/');
@@ -97,18 +97,18 @@ namespace pe
 
 #if defined(PE_WIN32)
 #ifdef PE_DEBUG
-        path = Path::Executable + "Assets/Scripts/build/Debug/Scripts.dll";
+        path = Path::Assets + "Scripts/build/Debug/Scripts.dll";
 #elif defined(PE_RELEASE)
-        path = Path::Executable + "Assets/Scripts/build/Release/Scripts.dll";
+        path = Path::Assets + "Scripts/build/Release/Scripts.dll";
 #elif defined(PE_MINSIZEREL)
-        path = Path::Executable + "Assets/Scripts/build/MinSizeRel/Scripts.dll";
+        path = Path::Assets + "Scripts/build/MinSizeRel/Scripts.dll";
 #elif defined(PE_RELWITHDEBINFO)
-        path = Path::Executable + "Assets/Scripts/build/RelWithDebInfo/Scripts.dll";
+        path = Path::Assets + "Scripts/build/RelWithDebInfo/Scripts.dll";
 #endif
         std::wstring widePath(path.begin(), path.end());
         s_module = (void *)LoadLibrary(widePath.c_str());
 #else
-        path = Path::Executable + "Assets/Scripts/build/libScripts.so";
+        path = Path::Assets + "Scripts/build/libScripts.so";
         //  m_module = dlopen(path.c_str(), RTLD_NOW);
         s_module = dlopen(path.c_str(), RTLD_LAZY);
 #endif

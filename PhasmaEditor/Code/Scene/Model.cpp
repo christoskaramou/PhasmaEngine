@@ -109,11 +109,11 @@ namespace pe
     void Model::DefaultResources::EnsureCreated(CommandBuffer *cmd)
     {
         if (!black)
-            black = Image::LoadRGBA8(cmd, Path::Executable + "Assets/Objects/black.png");
+            black = Image::LoadRGBA8(cmd, Path::Assets + "Objects/black.png");
         if (!normal)
-            normal = Image::LoadRGBA8(cmd, Path::Executable + "Assets/Objects/normal.png");
+            normal = Image::LoadRGBA8(cmd, Path::Assets + "Objects/normal.png");
         if (!white)
-            white = Image::LoadRGBA8(cmd, Path::Executable + "Assets/Objects/white.png");
+            white = Image::LoadRGBA8(cmd, Path::Assets + "Objects/white.png");
 
         if (!sampler)
         {

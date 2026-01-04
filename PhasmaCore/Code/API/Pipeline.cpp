@@ -36,6 +36,16 @@ namespace pe
         /*.alphaBlendOp           =*/vk::BlendOp::eAdd,
         /*.colorWriteMask         =*/vk::ColorComponentFlagBits::eR);
 
+    vk::PipelineColorBlendAttachmentState PipelineColorBlendAttachmentState::ParticlesBlend = vk::PipelineColorBlendAttachmentState(
+        /*.blendEnable            =*/VK_TRUE,
+        /*.srcColorBlendFactor    =*/vk::BlendFactor::eOne,
+        /*.dstColorBlendFactor    =*/vk::BlendFactor::eOneMinusSrcColor,
+        /*.colorBlendOp           =*/vk::BlendOp::eAdd,
+        /*.srcAlphaBlendFactor    =*/vk::BlendFactor::eOne,
+        /*.dstAlphaBlendFactor    =*/vk::BlendFactor::eOne,
+        /*.alphaBlendOp           =*/vk::BlendOp::eAdd,
+        /*.colorWriteMask         =*/vk::ColorComponentFlagBits::eR | vk::ColorComponentFlagBits::eG | vk::ColorComponentFlagBits::eB | vk::ColorComponentFlagBits::eA);
+
     PassInfo::PassInfo()
         : pVertShader{},
           pFragShader{},

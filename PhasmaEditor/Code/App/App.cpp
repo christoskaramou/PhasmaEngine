@@ -4,6 +4,7 @@
 #include "API/RHI.h"
 #include "Scene/Model.h"
 #include "Systems/LightSystem.h"
+
 #include "Systems/PostProcessSystem.h"
 #include "Systems/RendererSystem.h"
 #include "Window/Window.h"
@@ -34,8 +35,11 @@ namespace pe
             EventSystem::PushEvent(fileEvent);
             EventSystem::PushEvent(EventType::CompileShaders);
         };
-        for (auto &file : std::filesystem::recursive_directory_iterator(Path::Executable + "Assets/Shaders"))
-            FileWatcher::Add(file.path().string(), shaderCallback);
+        if (std::filesystem::exists(Path::Assets + "Shaders"))
+        {
+            for (auto &file : std::filesystem::recursive_directory_iterator(Path::Assets + "Shaders"))
+                FileWatcher::Add(file.path().string(), shaderCallback);
+        }
 
 #if defined(PE_SCRIPTS)
         auto scriptCallback = [](size_t fileEvent)
@@ -43,8 +47,11 @@ namespace pe
             EventSystem::PushEvent(fileEvent);
             EventSystem::PushEvent(EventType::CompileScripts);
         };
-        for (auto &file : std::filesystem::recursive_directory_iterator(Path::Executable + "Assets/Scripts"))
-            FileWatcher::Add(file.path().string(), scriptCallback);
+        if (std::filesystem::exists(Path::Assets + "Scripts"))
+        {
+            for (auto &file : std::filesystem::recursive_directory_iterator(Path::Assets + "Scripts"))
+                FileWatcher::Add(file.path().string(), scriptCallback);
+        }
 
         ScriptManager::Init();
 #endif
@@ -68,6 +75,7 @@ namespace pe
 
         cmd->Begin();
         CreateGlobalSystem<LightSystem>()->Init(cmd);
+
         CreateGlobalSystem<RendererSystem>()->Init(cmd);
         CreateGlobalSystem<PostProcessSystem>()->Init(cmd);
         cmd->End();
