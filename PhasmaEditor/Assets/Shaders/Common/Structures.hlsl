@@ -251,6 +251,7 @@ struct VS_OUTPUT_Particle
 {
     float4 pos : SV_POSITION;
     float4 color : COLOR0;
+    [[vk::builtin("PointSize")]] float pointSize : PSIZE;
 };
 
 struct PS_INPUT_Particle

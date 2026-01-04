@@ -51,6 +51,7 @@ add_subdirectory(PhasmaCore)
 file(GLOB_RECURSE CODE_SRC_FILES CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/PhasmaEditor/Code/*.cpp")
 file(GLOB_RECURSE INCLUDE_SRC_FILES CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/PhasmaEditor/Include/*.cpp")
 file(GLOB_RECURSE ASSET_FILES CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/PhasmaEditor/Assets/*")
+set_source_files_properties(${ASSET_FILES} PROPERTIES VS_TOOL_OVERRIDE "None")
 add_executable(PhasmaEditor ${CODE_SRC_FILES} ${INCLUDE_SRC_FILES} ${ASSET_FILES} ${CMAKE_CURRENT_SOURCE_DIR}/PhasmaEditor/main.cpp)
 
 # PhasmaEditor precompiled headers
