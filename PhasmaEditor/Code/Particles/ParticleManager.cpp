@@ -21,7 +21,7 @@ namespace pe
         if (m_particleBuffer)
             return;
 
-        m_particleCount = 10000;
+        m_particleCount = 1000;
         size_t bufferSize = m_particleCount * sizeof(Particle);
 
         m_particleBuffer = Buffer::Create(

@@ -5,10 +5,14 @@ namespace pe
     class Scene;
 
     class Buffer;
+    class Image;
+    class Sampler;
 
     class ParticlePass : public IRenderPassComponent
     {
     public:
+        ~ParticlePass() override;;
+
         void Init() override;
         void UpdatePassInfo() override;
         void CreateUniforms(CommandBuffer *cmd) override;
@@ -22,5 +26,7 @@ namespace pe
 
     private:
         Scene *m_scene = nullptr;
+        std::vector<Image *> m_fireTextures;
+        Sampler *m_sampler = nullptr;
     };
 } // namespace pe

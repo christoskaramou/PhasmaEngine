@@ -26,6 +26,20 @@ namespace pe
         ImGui::SetNextItemWidth(140);
         ImGui::InputTextWithHint("##timings_filter", "filter...", filter, IM_ARRAYSIZE(filter));
 
+        auto ContainsCaseInsensitive = [](std::string_view haystack, std::string_view needle)
+        {
+            if (needle.empty())
+                return true;
+
+            auto it = std::search(haystack.begin(), haystack.end(),
+                                  needle.begin(), needle.end(),
+                                  [](unsigned char a, unsigned char b)
+                                  {
+                                      return std::tolower(a) == std::tolower(b);
+                                  });
+            return it != haystack.end();
+        };
+
         ImGuiTableFlags flags =
             ImGuiTableFlags_BordersInnerV |
             ImGuiTableFlags_RowBg |
@@ -56,7 +70,7 @@ namespace pe
                     continue;
 
                 // simple name filter
-                if (filter[0] != '\0' && std::string(info.name).find(filter) == std::string::npos)
+                if (filter[0] != '\0' && !ContainsCaseInsensitive(info.name, filter))
                     continue;
 
                 const float rel = (totalMs > 0.0f) ? (t / totalMs) : 0.0f;
