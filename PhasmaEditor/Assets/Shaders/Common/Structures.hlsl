@@ -220,6 +220,7 @@ struct Particle
     float4 position; // w: life
     float4 velocity; // w: size
     float4 color;
+    float4 extra; // x: textureIndex
 };
 
 struct ParticleEmitter
@@ -239,25 +240,30 @@ struct PushConstants_Particle
     float4 cameraForward;
     float deltaTime;
     uint particleCount;
+    float totalTime;
 };
 
 struct PerFrameData_Particle
 {
     float4x4 viewProjection;
-    float4x4 previousViewProjection;
+    float4 cameraRight;
+    float4 cameraUp;
 };
 
 struct VS_OUTPUT_Particle
 {
     float4 pos : SV_POSITION;
     float4 color : COLOR0;
-    [[vk::builtin("PointSize")]] float pointSize : PSIZE;
+    float2 uv : TEXCOORD0;
+    float textureIndex : TEXCOORD1;
 };
 
 struct PS_INPUT_Particle
 {
     float4 pos : SV_POSITION;
     float4 color : COLOR0;
+    float2 uv : TEXCOORD0;
+    float textureIndex : TEXCOORD1;
 };
 
 struct PS_OUTPUT_Particle

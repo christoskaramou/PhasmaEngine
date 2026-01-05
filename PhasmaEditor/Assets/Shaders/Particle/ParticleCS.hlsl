@@ -13,22 +13,35 @@ float rand(inout float2 seed)
 // Reset particle
 void Reset(inout Particle p, uint index)
 {
-    float2 seed = float2(index, pc.deltaTime * (index + 1));
+    float2 seed = float2(index * 1.37, pc.totalTime * (index + 1));
     
-    // Random position around a center point (e.g., 0,0,5)
-    float3 center = float3(0.0, 0.0, 5.0);
-    float3 offset = float3(rand(seed) - 0.5, rand(seed) - 0.5, rand(seed) - 0.5) * 5.0; // 5m spread
-    p.position.xyz = center + offset;
+    // Spawn at bottom center
+    float3 center = float3(0.0, -1.0, 0.0);
+    float radius = sqrt(rand(seed)) * 0.3;
+    float angle = rand(seed) * 6.2831853;
+    float2 ring = float2(cos(angle), sin(angle)) * radius;
+    p.position.xyz = center + float3(ring.x, 0.0, ring.y);
     
-    // Random Life
-    p.position.w = 2.0 + rand(seed) * 3.0; // 2-5 seconds
+    // Random Life (Short for fire)
+    float life = 0.9 + rand(seed) * 0.7; // 0.9-1.6 seconds
+    p.position.w = life;
+    p.extra.y = life;
     
-    // Random Velocity (Upward tendency?)
-    p.velocity.xyz = float3(rand(seed) - 0.5, rand(seed) * 2.0, rand(seed) - 0.5) * 2.0;
-    p.velocity.w = 10.0 + rand(seed) * 40.0; // Size 10-50
+    // Upward Velocity with turbulence
+    float swirl = 0.6 + rand(seed) * 0.6;
+    p.velocity.xyz = float3(ring.x, 0.0, ring.y) * swirl + float3(0.0, 2.0 + rand(seed) * 2.0, 0.0);
     
-    // Random Color
-    p.color = float4(rand(seed), rand(seed), rand(seed), 1.0);
+    // Size
+    p.velocity.w = 0.08 + rand(seed) * 0.16;
+    
+    // Random Texture (0, 1, 2)
+    p.extra.x = floor(rand(seed) * 3.0);
+    if (p.extra.x > 2.0) p.extra.x = 2.0;
+    p.extra.z = rand(seed);
+    p.extra.w = rand(seed);
+
+    // Start Color (Bright Yellow/Orange)
+    p.color = float4(1.2, 0.9, 0.5, 1.0);
 }
 
 [numthreads(256, 1, 1)]
@@ -36,26 +49,50 @@ void mainCS(uint3 DTid : SV_DispatchThreadID)
 {
     uint index = DTid.x;
     
-    // Check bounds
     if (index >= pc.particleCount) return;
 
     // Update Life
     particles[index].position.w -= pc.deltaTime;
     
-    // If dead, reset
     if (particles[index].position.w <= 0.0)
     {
         Reset(particles[index], index);
     }
     else
     {
+        float lifeRatio = saturate(particles[index].position.w / max(particles[index].extra.y, 0.0001));
+        float age = 1.0 - lifeRatio;
+
+        float t = pc.totalTime * 2.5 + particles[index].extra.z * 6.2831853;
+        float2 swirl = float2(sin(t), cos(t));
+        float swirlStrength = lerp(1.2, 0.2, age);
+        particles[index].velocity.xz += swirl * (swirlStrength * pc.deltaTime);
+        
+        // Buoyancy/Gravity (Upward) with light damping
+        particles[index].velocity.y += lerp(2.0, 0.6, age) * pc.deltaTime;
+        particles[index].velocity.xz *= 1.0 - (0.6 * pc.deltaTime);
+        
         // Update Position
         particles[index].position.xyz += particles[index].velocity.xyz * pc.deltaTime;
         
-        // Simple Gravity
-        particles[index].velocity.y -= 1.0 * pc.deltaTime;
+        // Color Fade: White/Yellow -> Orange -> Smoke
+        float3 core = float3(1.2, 0.95, 0.6);
+        float3 mid = float3(1.0, 0.45, 0.1);
+        float3 smoke = float3(0.12, 0.1, 0.08);
+        float3 color;
         
-        // Color Fade
-        particles[index].color.a = clamp(particles[index].position.w, 0.0, 1.0);
+        if (lifeRatio > 0.6)
+            color = lerp(mid, core, (lifeRatio - 0.6) / 0.4);
+        else if (lifeRatio > 0.25)
+            color = lerp(smoke, mid, (lifeRatio - 0.25) / 0.35);
+        else
+            color = lerp(smoke * 0.5, smoke, lifeRatio / 0.25);
+
+        float fadeIn = smoothstep(0.0, 0.12, age);
+        float fadeOut = smoothstep(0.0, 0.25, lifeRatio);
+        float flicker = 0.85 + 0.3 * sin((pc.totalTime + particles[index].extra.w) * 18.0);
+        float alpha = fadeIn * fadeOut * saturate(flicker);
+        
+        particles[index].color = float4(color, alpha);
     }
 }

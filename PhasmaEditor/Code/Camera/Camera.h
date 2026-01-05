@@ -39,6 +39,8 @@ namespace pe
         inline mat4 GetInvViewProjection() const { return m_invViewProjection; }
         inline vec3 GetPosition() const { return m_position; }
         inline vec3 GetFront() const { return m_front; }
+        inline vec3 GetRight() const { return m_right; }
+        inline vec3 GetUp() const { return m_up; }
         inline float GetNearPlane() const { return m_nearPlane; }
         inline float GetFarPlane() const { return m_farPlane; }
         inline vec2 GetProjJitter() const { return m_projJitter; }

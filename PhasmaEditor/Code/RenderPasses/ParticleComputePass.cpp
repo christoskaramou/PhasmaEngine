@@ -67,10 +67,15 @@ namespace pe
             vec4 cameraForward;
             float deltaTime;
             uint32_t particleCount;
+            float totalTime;
         } pc{};
 
         pc.deltaTime = static_cast<float>(FrameTimer::Instance().GetDelta());
         pc.particleCount = scene.GetParticleManager()->GetParticleCount();
+        
+        static float accumTime = 0.0f;
+        accumTime += pc.deltaTime;
+        pc.totalTime = accumTime;
 
         // Update Push Constants
         if (m_scene)

@@ -9,6 +9,7 @@ namespace pe
         vec4 position; // w: life
         vec4 velocity; // w: size
         vec4 color;
+        vec4 extra; // x: textureIndex
     };
 
     struct ParticleEmitter

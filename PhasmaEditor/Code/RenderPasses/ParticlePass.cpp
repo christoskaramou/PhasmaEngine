@@ -7,13 +7,17 @@
 #include "API/RHI.h"
 #include "API/Shader.h"
 #include "Camera/Camera.h"
-#include "Scene/Scene.h"
 #include "Particles/ParticleManager.h"
 #include "Scene/Scene.h"
 #include "Systems/RendererSystem.h"
 
 namespace pe
 {
+    ParticlePass::~ParticlePass()
+    {
+        Destroy();
+    }
+
     void ParticlePass::Init()
     {
         RendererSystem *rs = GetGlobalSystem<RendererSystem>();
@@ -40,7 +44,7 @@ namespace pe
         auto *depthRT = rs->GetDepthStencilTarget("depthStencil");
         m_passInfo->pVertShader = Shader::Create(Path::Assets + "Shaders/Particle/ParticleVS.hlsl", vk::ShaderStageFlagBits::eVertex, "mainVS", std::vector<Define>{}, ShaderCodeType::HLSL);
         m_passInfo->pFragShader = Shader::Create(Path::Assets + "Shaders/Particle/ParticlePS.hlsl", vk::ShaderStageFlagBits::eFragment, "mainPS", std::vector<Define>{}, ShaderCodeType::HLSL);
-        m_passInfo->topology = vk::PrimitiveTopology::ePointList;
+        m_passInfo->topology = vk::PrimitiveTopology::eTriangleList;
         m_passInfo->cullMode = vk::CullModeFlagBits::eNone;
         m_passInfo->blendEnable = true;
         m_passInfo->colorBlendAttachments = {PipelineColorBlendAttachmentState::ParticlesBlend}; // Standard alpha blending with all channels
@@ -55,6 +59,19 @@ namespace pe
 
     void ParticlePass::CreateUniforms(CommandBuffer *cmd)
     {
+        if (m_fireTextures.empty())
+        {
+            m_fireTextures.push_back(Image::LoadRGBA8(cmd, Path::Assets + "Particles/fire_01.png"));
+            m_fireTextures.push_back(Image::LoadRGBA8(cmd, Path::Assets + "Particles/fire_02.png"));
+            m_fireTextures.push_back(Image::LoadRGBA8(cmd, Path::Assets + "Particles/fire_03.png"));
+
+            vk::SamplerCreateInfo samplerCI = Sampler::CreateInfoInit();
+            samplerCI.addressModeU = vk::SamplerAddressMode::eClampToEdge;
+            samplerCI.addressModeV = vk::SamplerAddressMode::eClampToEdge;
+            samplerCI.addressModeW = vk::SamplerAddressMode::eClampToEdge;
+            m_sampler = new Sampler(samplerCI, "ParticleSampler");
+        }
+
         UpdateDescriptorSets();
     }
 
@@ -62,18 +79,27 @@ namespace pe
     {
         RendererSystem *rs = GetGlobalSystem<RendererSystem>();
         Scene &scene = rs->GetScene();
-        if (!scene.GetParticleManager()) return;
+        if (!scene.GetParticleManager())
+            return;
 
         Buffer *particleBuffer = scene.GetParticleManager()->GetParticleBuffer();
-        if (!particleBuffer) return;
+        if (!particleBuffer)
+            return;
 
         for (uint32_t i = 0; i < RHII.GetSwapchainImageCount(); i++)
         {
             auto &descriptors = m_passInfo->GetDescriptors(i);
-            if (descriptors.size() > 0)
+            descriptors[0]->SetBuffer(0, particleBuffer);
+            descriptors[0]->Update();
+
+            if (!m_fireTextures.empty() && descriptors.size() > 1)
             {
-                descriptors[0]->SetBuffer(0, particleBuffer);
-                descriptors[0]->Update();
+                std::vector<vk::ImageView> views;
+                for (auto *img : m_fireTextures)
+                    views.push_back(img->GetSRV());
+                descriptors[1]->SetImageViews(0, views, {});
+                descriptors[1]->SetSampler(1, m_sampler->ApiHandle());
+                descriptors[1]->Update();
             }
         }
     }
@@ -86,7 +112,7 @@ namespace pe
     {
         if (!m_scene)
             return;
-        
+
         if (!m_scene->GetParticleManager())
             return;
 
@@ -108,7 +134,8 @@ namespace pe
         struct PushConstants
         {
             mat4 viewProjection;
-            mat4 previousViewProjection;
+            vec4 cameraRight;
+            vec4 cameraUp;
         } pc{};
 
         // Camera logic remains same...
@@ -116,7 +143,8 @@ namespace pe
         if (camera)
         {
             pc.viewProjection = camera->GetViewProjection();
-            pc.previousViewProjection = camera->GetPreviousViewProjection();
+            pc.cameraRight = vec4(camera->GetRight(), 0.0f);
+            pc.cameraUp = vec4(camera->GetUp(), 0.0f);
         }
 
         cmd->BeginPass(static_cast<uint32_t>(m_attachments.size()), m_attachments.data(), "ParticlePass");
@@ -130,8 +158,8 @@ namespace pe
         cmd->SetConstants(pc);
         cmd->PushConstants();
 
-        // Draw points (no vertex buffer needed, generating from SV_VertexID)
-        cmd->Draw(m_scene->GetParticleManager()->GetParticleCount(), 1, 0, 0);
+        // Draw quads (6 vertices per particle)
+        cmd->Draw(m_scene->GetParticleManager()->GetParticleCount() * 6, 1, 0, 0);
 
         cmd->EndPass();
     }
@@ -144,5 +172,14 @@ namespace pe
 
     void ParticlePass::Destroy()
     {
+        for (auto *img : m_fireTextures)
+            Image::Destroy(img);
+        m_fireTextures.clear();
+
+        if (m_sampler)
+        {
+            delete m_sampler;
+            m_sampler = nullptr;
+        }
     }
 } // namespace pe
