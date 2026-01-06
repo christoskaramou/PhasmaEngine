@@ -6,12 +6,11 @@ namespace pe
 
     class Buffer;
     class Image;
-    class Sampler;
 
     class ParticlePass : public IRenderPassComponent
     {
     public:
-        ~ParticlePass() override;;
+        ~ParticlePass() override;
 
         void Init() override;
         void UpdatePassInfo() override;
@@ -26,7 +25,6 @@ namespace pe
 
     private:
         Scene *m_scene = nullptr;
-        std::vector<Image *> m_fireTextures;
-        Sampler *m_sampler = nullptr;
+        uint32_t m_lastBufferVersion = 0;
     };
 } // namespace pe

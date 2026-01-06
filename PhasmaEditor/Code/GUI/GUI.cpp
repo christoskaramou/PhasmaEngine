@@ -13,13 +13,14 @@
 #include "RenderPasses/SuperResolutionPass.h"
 #include "Scene/Model.h"
 #include "Systems/RendererSystem.h"
-#include "TinyFileDialogs/tinyfiledialogs.h"
 #include "Widgets/AssetViewer.h"
 #include "Widgets/FileBrowser.h"
+#include "Widgets/FileSelector.h"
 #include "Widgets/Hierarchy.h"
 #include "Widgets/Loading.h"
 #include "Widgets/Metrics.h"
 #include "Widgets/Models.h"
+#include "Widgets/Particles.h"
 #include "Widgets/Properties.h"
 #include "Widgets/SceneView.h"
 #include "imgui/imgui_impl_sdl2.h"
@@ -53,49 +54,70 @@ namespace pe
 
     static std::atomic_bool s_modelLoading = false;
 
-    void GUI::async_fileDialog_ImGuiMenuItem(const char *menuLabel, const char *dialogTitle,
-                                             const std::vector<const char *> &filter)
+    void GUI::ShowLoadModelMenuItem()
     {
-        if (ImGui::MenuItem(menuLabel))
+        if (ImGui::MenuItem("Load...", "Choose Model"))
         {
             if (GUIState::s_modelLoading)
                 return;
 
-            auto lambda = [dialogTitle, filter]()
+            auto *fs = GetWidget<FileSelector>();
+            if (fs)
             {
-                const char *result = tinyfd_openFileDialog(dialogTitle, "", static_cast<int>(filter.size()), filter.data(), "", 0);
-                if (result)
-                {
-                    auto loadAsync = [result]()
+                std::vector<std::string> exts;
+                for (const char *ext : FileBrowser::s_modelExtensionsVec)
+                    exts.push_back(ext);
+
+                fs->OpenSelection([](const std::string &path)
+                                  {
+                    auto loadAsync = [path]()
                     {
                         GUIState::s_modelLoading = true;
-
-                        std::filesystem::path path(result);
                         Model::Load(path);
-
                         GUIState::s_modelLoading = false;
                     };
-                    ThreadPool::GUI.Enqueue(loadAsync);
-                }
-            };
-
-            ThreadPool::GUI.Enqueue(lambda);
+                    ThreadPool::GUI.Enqueue(loadAsync); }, exts);
+            }
         }
     }
 
-    void GUI::async_messageBox_ImGuiMenuItem(const char *menuLabel, const char *messageBoxTitle, const char *message)
+    void GUI::ShowExitMenuItem()
     {
-        if (ImGui::MenuItem(menuLabel))
+        if (ImGui::MenuItem("Exit", "Exit"))
         {
-            auto lambda = [messageBoxTitle, message]()
+            m_showExitConfirmation = true;
+        }
+    }
+
+    void GUI::DrawExitPopup()
+    {
+        if (m_showExitConfirmation)
+        {
+            ImGui::OpenPopup("Exit Confirmation");
+            m_showExitConfirmation = false;
+        }
+
+        // Center the modal
+        ImVec2 center = ImGui::GetMainViewport()->GetCenter();
+        ImGui::SetNextWindowPos(center, ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
+
+        if (ImGui::BeginPopupModal("Exit Confirmation", NULL, ImGuiWindowFlags_AlwaysAutoResize))
+        {
+            ImGui::Text("Are you sure you want to exit?\n\n");
+            ImGui::Separator();
+
+            if (ImGui::Button("OK", ImVec2(120, 0)))
             {
-                int result = tinyfd_messageBox(messageBoxTitle, message, "yesno", "warning", 0);
-                if (result == 1)
-                {
-                    EventSystem::PushEvent(EventType::Quit);
-                }
-            };
-            ThreadPool::GUI.Enqueue(lambda);
+                EventSystem::PushEvent(EventType::Quit);
+                ImGui::CloseCurrentPopup();
+            }
+            ImGui::SetItemDefaultFocus();
+            ImGui::SameLine();
+            if (ImGui::Button("Cancel", ImVec2(120, 0)))
+            {
+                ImGui::CloseCurrentPopup();
+            }
+            ImGui::EndPopup();
         }
     }
 
@@ -192,9 +214,9 @@ namespace pe
         {
             if (ImGui::BeginMenu("File"))
             {
-                async_fileDialog_ImGuiMenuItem("Load...", "Choose Model", FileBrowser::s_modelExtensionsVec);
+                ShowLoadModelMenuItem();
                 ImGui::Separator();
-                async_messageBox_ImGuiMenuItem("Exit", "Exit", "Are you sure you want to exit?");
+                ShowExitMenuItem();
                 ImGui::EndMenu();
             }
 
@@ -341,8 +363,7 @@ namespace pe
         // PE_ERROR_IF(!(io.BackendFlags & ImGuiBackendFlags_RendererHasViewports),
         //             "Vulkan backend doesn't support renderer viewports!");
 
-        auto &gpuTimerInfos = m_gpuTimerInfos;
-        auto AddGpuTimerInfo = [&gpuTimerInfos](const std::any &data)
+        auto AddGpuTimerInfo = [this](const std::any &data)
         {
             try
             {
@@ -350,7 +371,8 @@ namespace pe
                 if (commandTimerInfos.empty())
                     return;
 
-                gpuTimerInfos.insert(gpuTimerInfos.end(), commandTimerInfos.begin(), commandTimerInfos.end());
+                std::lock_guard<std::mutex> lock(m_timerMutex);
+                m_gpuTimerInfos.insert(m_gpuTimerInfos.end(), commandTimerInfos.begin(), commandTimerInfos.end());
             }
             catch (const std::bad_any_cast &ex)
             {
@@ -368,12 +390,14 @@ namespace pe
         auto sceneView = std::make_shared<SceneView>();
         auto loading = std::make_shared<Loading>();
         auto fileBrowser = std::make_shared<FileBrowser>();
+        auto fileSelector = std::make_shared<FileSelector>(); // Separate instance for popups
         auto hierarchy = std::make_shared<Hierarchy>();
+        auto particles = std::make_shared<Particles>();
 
-        m_widgets = {properties, metrics, models, assetViewer, sceneView, loading, fileBrowser, hierarchy};
+        m_widgets = {properties, metrics, models, assetViewer, sceneView, loading, fileBrowser, fileSelector, hierarchy, particles};
 
         // Populate Menu Vectors
-        m_menuWindowWidgets = {metrics, properties, models, assetViewer, sceneView, fileBrowser, hierarchy};
+        m_menuWindowWidgets = {metrics, properties, models, assetViewer, sceneView, fileBrowser, hierarchy, particles};
         m_menuAssetsWidgets = {};
         for (auto &widget : m_widgets)
             widget->Init(this);
@@ -431,6 +455,7 @@ namespace pe
             return;
 
         Menu();
+        DrawExitPopup();
         BuildDockspace();
 
         if (m_show_demo_window)
@@ -441,5 +466,16 @@ namespace pe
             if (widget->IsOpen())
                 widget->Update();
         }
+    }
+
+    std::vector<GpuTimerSample> GUI::PopGpuTimerInfos()
+    {
+        std::lock_guard<std::mutex> lock(m_timerMutex);
+        if (m_gpuTimerInfos.empty())
+            return {};
+
+        std::vector<GpuTimerSample> timers;
+        timers.swap(m_gpuTimerInfos);
+        return timers;
     }
 } // namespace pe

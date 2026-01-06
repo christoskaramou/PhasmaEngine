@@ -1,13 +1,13 @@
 #include "Window.h"
 #include "API/Queue.h"
 #include "API/RHI.h"
+#include "Base/Timer.h"
 #include "Camera/Camera.h"
 #include "Scene/Model.h"
 #include "Scene/Scene.h"
 #include "Systems/PostProcessSystem.h"
 #include "Systems/RendererSystem.h"
 #include "imgui/imgui_impl_sdl2.h"
-
 #if defined(PE_SCRIPTS)
 #include "Script/ScriptManager.h"
 #endif
@@ -88,7 +88,7 @@ namespace pe
         }
     }
 
-    bool Window::ProcessEvents(double delta)
+    bool Window::ProcessEvents()
     {
         RendererSystem *rendererSystem = GetGlobalSystem<RendererSystem>();
         PostProcessSystem *postProcessSystem = GetGlobalSystem<PostProcessSystem>();
@@ -179,26 +179,34 @@ namespace pe
             }
         }
 
-        // ApiHandle mouse rotation
         SmoothMouseRotation(camera, SDL_BUTTON(SDL_BUTTON_RIGHT));
-
-        if (ImGui::IsKeyDown(ImGuiKey_Escape))
+        if (ImGui::IsKeyPressed(ImGuiKey_Escape, false))
         {
-            const SDL_MessageBoxButtonData buttons[] = {
-                {SDL_MESSAGEBOX_BUTTON_ESCAPEKEY_DEFAULT, 0, "cancel"},
-                {SDL_MESSAGEBOX_BUTTON_RETURNKEY_DEFAULT, 1, "yes"}};
-            const SDL_MessageBoxColorScheme colorScheme = {
-                {{255, 0, 0}, {0, 255, 0}, {255, 255, 0}, {0, 0, 255}, {255, 0, 255}}};
-            const SDL_MessageBoxData messageboxdata = {
-                SDL_MESSAGEBOX_INFORMATION, nullptr, "Exit", "Are you sure you want to exit?",
-                SDL_arraysize(buttons), buttons, &colorScheme};
-            int buttonid;
-            SDL_ShowMessageBox(&messageboxdata, &buttonid);
-            if (buttonid == 1)
-                return false;
+            // Backup Exit Popup - Only if GUI is not rendering
+            if (!rendererSystem->GetGUI().Render())
+            {
+                const SDL_MessageBoxButtonData buttons[] = {
+                    {SDL_MESSAGEBOX_BUTTON_ESCAPEKEY_DEFAULT, 0, "cancel"},
+                    {SDL_MESSAGEBOX_BUTTON_RETURNKEY_DEFAULT, 1, "yes"}};
+                const SDL_MessageBoxColorScheme colorScheme = {
+                    {{255, 0, 0}, {0, 255, 0}, {255, 255, 0}, {0, 0, 255}, {255, 0, 255}}};
+                const SDL_MessageBoxData messageboxdata = {
+                    SDL_MESSAGEBOX_INFORMATION, nullptr, "Exit", "Are you sure you want to exit?",
+                    SDL_arraysize(buttons), buttons, &colorScheme};
+                int buttonid;
+                SDL_ShowMessageBox(&messageboxdata, &buttonid);
+                if (buttonid == 1)
+                    return false;
+            }
+            else
+            {
+                if (!ImGui::IsPopupOpen("", ImGuiPopupFlags_AnyPopupId))
+                    rendererSystem->GetGUI().TriggerExitConfirmation();
+            }
         }
 
-        float speed = Settings::Get<GlobalSettings>().camera_speed * static_cast<float>(delta);
+        float delta = static_cast<float>(FrameTimer::Instance().GetDelta());
+        float speed = Settings::Get<GlobalSettings>().camera_speed * delta;
         if ((ImGui::IsKeyDown(ImGuiKey_W) || ImGui::IsKeyDown(ImGuiKey_S)) &&
             (ImGui::IsKeyDown(ImGuiKey_A) || ImGui::IsKeyDown(ImGuiKey_D)))
             speed *= 0.707f;

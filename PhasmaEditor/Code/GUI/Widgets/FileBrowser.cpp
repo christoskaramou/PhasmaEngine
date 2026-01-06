@@ -9,7 +9,6 @@
 #include "Scene/Model.h"
 #include "imgui/imgui_impl_vulkan.h"
 
-
 namespace pe
 {
     namespace
@@ -67,6 +66,11 @@ namespace pe
         Image::Destroy(m_modelIcon);
         Image::Destroy(m_scriptIcon);
         Image::Destroy(m_imageIcon);
+
+        for (auto &pair : m_fileCache)
+            Image::Destroy(pair.second);
+        m_fileCache.clear();
+        m_fileDescriptors.clear();
     }
 
     void FileBrowser::Init(GUI *gui)
@@ -93,7 +97,7 @@ namespace pe
         cmd->Return();
     }
 
-    void *FileBrowser::GetIconForFile(const std::filesystem::path &path) const
+    void *FileBrowser::GetIconForFile(const std::filesystem::path &path)
     {
         if (IsDirectory(path))
             return m_folderIconDS;
@@ -106,13 +110,81 @@ namespace pe
         if (IsScriptFile(path))
             return m_scriptIconDS ? m_scriptIconDS : m_fileIconDS;
         if (IsImageFile(path))
+        {
+            std::string pathStr = path.string();
+
+            // Check cache
+            auto it = m_fileDescriptors.find(pathStr);
+            if (it != m_fileDescriptors.end())
+                return it->second;
+
+            // Check if already pending
+            if (m_pendingFiles.find(pathStr) == m_pendingFiles.end())
+            {
+                m_pendingFiles.insert(pathStr);
+
+                ThreadPool::GUI.Enqueue([this, pathStr]()
+                                        {
+                    Queue *queue = RHII.GetMainQueue();
+                    // Acquire CB from thread-local pool
+                    CommandBuffer *cmd = queue->AcquireCommandBuffer();
+                    
+                    cmd->Begin();
+                    Image* img = Image::LoadRGBA8(cmd, pathStr);
+                    cmd->End();
+
+                    queue->Submit(1, &cmd, nullptr, nullptr);
+                    cmd->Wait();
+                    cmd->Return();
+
+                    if (img)
+                    {
+                        std::lock_guard<std::mutex> lock(m_queueMutex);
+                        m_loadedQueue.push_back({pathStr, img});
+                    } });
+            }
+
             return m_imageIconDS ? m_imageIconDS : m_fileIconDS;
+        }
 
         return m_fileIconDS;
     }
 
+    void FileBrowser::ProcessLoadedImages()
+    {
+        std::lock_guard<std::mutex> lock(m_queueMutex);
+        if (m_loadedQueue.empty())
+            return;
+
+        for (auto &pair : m_loadedQueue)
+        {
+            if (pair.second)
+            {
+                void *ds = nullptr;
+                if (pair.second->GetSampler() && pair.second->GetSRV())
+                {
+                    ds = (void *)ImGui_ImplVulkan_AddTexture(
+                        pair.second->GetSampler()->ApiHandle(),
+                        pair.second->GetSRV(),
+                        VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+                }
+
+                m_fileCache[pair.first] = pair.second;
+                m_fileDescriptors[pair.first] = ds;
+            }
+            else
+            {
+                Image::Destroy(pair.second);
+            }
+            m_pendingFiles.erase(pair.first);
+        }
+        m_loadedQueue.clear();
+    }
+
     void FileBrowser::Update()
     {
+        ProcessLoadedImages();
+
         if (!m_open)
             return;
 
@@ -122,7 +194,6 @@ namespace pe
             // Top Bar: Navigation
             if (ImGui::Button("..") && m_currentPath.has_parent_path())
             {
-                // For safety/relevance, keep it within Project root folders
                 std::string parent = m_currentPath.parent_path().string();
                 if (parent.find("PhasmaEngine") != std::string::npos || parent.find("PhasmaEditor") != std::string::npos)
                     m_currentPath = m_currentPath.parent_path();
@@ -139,178 +210,159 @@ namespace pe
 
             ImGui::Separator();
 
-            // File List
-            float footerHeight = ImGui::GetStyle().ItemSpacing.y + ImGui::GetFrameHeightWithSpacing();
-            if (ImGui::BeginChild("##file_browser_list", ImVec2(0, -footerHeight), true))
+            auto onNormalActionCaptured = [this](const std::filesystem::path &path)
             {
-                try
+                if (IsDirectory(path))
                 {
-                    if (std::filesystem::exists(m_currentPath) && std::filesystem::is_directory(m_currentPath))
+                    m_currentPath = path;
+                }
+                else
+                {
+                    AssetPreviewType type = AssetPreviewType::None;
+                    if (IsModelFile(path))
+                        type = AssetPreviewType::Model;
+                    else if (IsScriptFile(path))
+                        type = AssetPreviewType::Script;
+                    else if (IsShaderFile(path))
+                        type = AssetPreviewType::Shader;
+
+                    if (type != AssetPreviewType::None)
+                        GUIState::UpdateAssetPreview(type, path.filename().string(), path.string());
+
+                    if (type == AssetPreviewType::Model && !GUIState::s_modelLoading)
                     {
-                        auto HandleItemConnect = [&](const std::filesystem::directory_entry &entry)
+                        ThreadPool::GUI.Enqueue([path]()
+                                                {
+                                                        GUIState::s_modelLoading = true;
+                                                        Model::Load(path);
+                                                        GUIState::s_modelLoading = false; });
+                    }
+                    else if (type == AssetPreviewType::Script || type == AssetPreviewType::Shader)
+                    {
+                        GUIState::OpenExternalPath(path.string());
+                    }
+                }
+            };
+
+            DrawDirectoryContent(m_currentPath, onNormalActionCaptured);
+        }
+        ImGui::End();
+    }
+
+    void FileBrowser::DrawDirectoryContent(const std::filesystem::path &path, std::function<void(const std::filesystem::path &)> onDoubleClick, std::function<bool(const std::filesystem::path &)> filter)
+    {
+        float footerHeight = ImGui::GetStyle().ItemSpacing.y + ImGui::GetFrameHeightWithSpacing() * 0.0f;
+
+        if (ImGui::BeginChild("##file_browser_list", ImVec2(0, -footerHeight), true))
+        {
+            try
+            {
+                if (std::filesystem::exists(path) && std::filesystem::is_directory(path))
+                {
+                    std::vector<std::filesystem::directory_entry> entries;
+                    for (const auto &entry : std::filesystem::directory_iterator(path))
+                        entries.push_back(entry);
+
+                    std::sort(entries.begin(), entries.end(), [](const auto &a, const auto &b)
+                              { return IsDirectory(a.path()) > IsDirectory(b.path()); });
+
+                    // Filter
+                    if (filter)
+                    {
+                        std::vector<std::filesystem::directory_entry> filtered;
+                        for (auto &e : entries)
                         {
-                            m_selectedEntry = entry.path();
-
-                            if (IsDirectory(m_selectedEntry))
-                            {
-                                if (ImGui::IsMouseDoubleClicked(0))
-                                    m_currentPath = m_selectedEntry;
-                            }
-                            else
-                            {
-                                AssetPreviewType type = AssetPreviewType::None;
-                                if (IsModelFile(m_selectedEntry))
-                                    type = AssetPreviewType::Model;
-                                else if (IsScriptFile(m_selectedEntry))
-                                    type = AssetPreviewType::Script;
-                                else if (IsShaderFile(m_selectedEntry))
-                                    type = AssetPreviewType::Shader;
-
-                                if (type != AssetPreviewType::None)
-                                    GUIState::UpdateAssetPreview(type, m_selectedEntry.filename().string(), m_selectedEntry.string());
-
-                                if (ImGui::IsMouseDoubleClicked(0))
-                                {
-                                    if (type == AssetPreviewType::Model && !GUIState::s_modelLoading)
-                                    {
-                                        ThreadPool::GUI.Enqueue([path = m_selectedEntry]()
-                                                                {
-                                                                    GUIState::s_modelLoading = true;
-                                                                    Model::Load(path);
-                                                                    GUIState::s_modelLoading = false; });
-                                    }
-                                    else if (type == AssetPreviewType::Script || type == AssetPreviewType::Shader)
-                                    {
-                                        GUIState::OpenExternalPath(m_selectedEntry.string());
-                                    }
-                                }
-                            }
-                        };
-
-                        std::vector<std::filesystem::directory_entry> entries;
-                        for (const auto &entry : std::filesystem::directory_iterator(m_currentPath))
-                            entries.push_back(entry);
-
-                        // Sort: Directories first
-                        std::sort(entries.begin(), entries.end(),
-                                  [](const auto &a, const auto &b)
-                                  {
-                                      const bool aDir = IsDirectory(a.path());
-                                      const bool bDir = IsDirectory(b.path());
-
-                                      if (aDir != bDir)
-                                          return aDir; // true comes first => directories first
-
-                                      return a.path().filename().string() < b.path().filename().string();
-                                  });
-
-                        if (m_viewMode == ViewMode::List)
-                        {
-                            for (const auto &entry : entries)
-                            {
-                                std::string filename = entry.path().filename().string();
-                                std::string label = filename;
-                                bool isSelected = (m_selectedEntry == entry.path());
-
-                                void *iconID = GetIconForFile(entry.path());
-                                if (iconID)
-                                {
-                                    ImGui::Image((ImTextureID)iconID, ImVec2(20, 20));
-                                    ImGui::SameLine();
-                                }
-
-                                if (ImGui::Selectable(label.c_str(), isSelected, ImGuiSelectableFlags_AllowDoubleClick))
-                                    HandleItemConnect(entry);
-                            }
+                            if (filter(e.path()))
+                                filtered.push_back(e);
                         }
-                        else // Grid
+                        entries = filtered;
+                    }
+
+                    if (m_viewMode == ViewMode::List)
+                    {
+                        for (const auto &entry : entries)
                         {
-                            float panelWidth = ImGui::GetContentRegionAvail().x;
-                            float iconSize = m_gridIconSize;
-                            float pad = ImGui::GetStyle().FramePadding.x;
-                            float buttonSize = iconSize + pad * 2.0f;
-                            float itemSpacingX = ImGui::GetStyle().ItemSpacing.x;
-                            float windowVisibleX2 = ImGui::GetWindowPos().x + ImGui::GetWindowContentRegionMax().x;
+                            std::string filename = entry.path().filename().string();
+                            bool isSelected = (m_selectedEntry == entry.path());
 
-                            for (size_t i = 0; i < entries.size(); ++i)
+                            void *iconID = GetIconForFile(entry.path());
+                            if (iconID)
                             {
-                                const auto &entry = entries[i];
-                                std::string filename = entry.path().filename().string();
-                                bool isSelected = (m_selectedEntry == entry.path());
+                                ImGui::Image((ImTextureID)iconID, ImVec2(20, 20));
+                                ImGui::SameLine();
+                            }
 
-                                ImGui::PushID(filename.c_str());
-                                ImGui::BeginGroup(); // Group Icon + Text
-
-                                // Selection Style
-                                if (isSelected)
-                                    ImGui::PushStyleColor(ImGuiCol_Button, ImGui::GetStyle().Colors[ImGuiCol_ButtonActive]);
-                                else
-                                    ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0, 0, 0, 0));
-
-                                void *iconID = GetIconForFile(entry.path());
-
-                                bool clicked = false;
-                                if (iconID)
-                                {
-                                    if (ImGui::ImageButton("##icon", (ImTextureID)iconID, ImVec2(iconSize, iconSize)))
-                                        clicked = true;
-                                }
-                                else
-                                {
-                                    if (ImGui::Button("##icon", ImVec2(buttonSize, buttonSize)))
-                                        clicked = true;
-                                }
-
-                                ImGui::PopStyleColor();
-
-                                // Text
-                                float groupX = ImGui::GetCursorPosX();
-                                float textW = ImGui::CalcTextSize(filename.c_str()).x;
-                                if (textW < buttonSize)
-                                    ImGui::SetCursorPosX(groupX + (buttonSize - textW) * 0.5f);
-
-                                ImGui::PushTextWrapPos(groupX + buttonSize);
-                                ImGui::TextWrapped("%s", filename.c_str());
-                                ImGui::PopTextWrapPos();
-
-                                ImGui::EndGroup();
-
-                                // Interaction
-                                if (ImGui::IsItemHovered() && ImGui::IsMouseDoubleClicked(0))
-                                {
-                                    HandleItemConnect(entry);
-                                }
-                                else if (clicked || ImGui::IsItemClicked()) // Check both Button and Group click
-                                {
-                                    m_selectedEntry = entry.path();
-                                }
-
-                                ImGui::PopID();
-
-                                // Flow Control
-                                float last_x2 = ImGui::GetItemRectMax().x;
-                                float next_x2 = last_x2 + itemSpacingX + buttonSize;
-
-                                // If next item fits, same line
-                                if (i + 1 < entries.size() && next_x2 < windowVisibleX2)
-                                    ImGui::SameLine();
+                            if (ImGui::Selectable(filename.c_str(), isSelected, ImGuiSelectableFlags_AllowDoubleClick))
+                            {
+                                m_selectedEntry = entry.path();
+                                if (ImGui::IsMouseDoubleClicked(0))
+                                    onDoubleClick(entry.path());
                             }
                         }
                     }
-                }
-                catch (const std::filesystem::filesystem_error &e)
-                {
-                    ImGui::TextColored(ImVec4(1, 0, 0, 1), "Error accessing directory: %s", e.what());
+                    else
+                    {
+                        float windowVisibleX2 = ImGui::GetWindowPos().x + ImGui::GetWindowContentRegionMax().x;
+                        float buttonSize = m_gridIconSize;
+                        float itemSpacingX = ImGui::GetStyle().ItemSpacing.x;
+
+                        for (size_t i = 0; i < entries.size(); i++)
+                        {
+                            const auto &entry = entries[i];
+                            std::string filename = entry.path().filename().string();
+
+                            ImGui::PushID(static_cast<int>(i));
+                            ImGui::BeginGroup();
+
+                            void *iconID = GetIconForFile(entry.path());
+                            bool clicked = false;
+                            if (iconID)
+                            {
+                                if (ImGui::ImageButton("##icon", (ImTextureID)iconID, ImVec2(buttonSize, buttonSize)))
+                                    clicked = true;
+                            }
+                            else
+                            {
+                                if (ImGui::Button("##file", ImVec2(buttonSize, buttonSize)))
+                                    clicked = true;
+                            }
+
+                            float groupX = ImGui::GetCursorPosX();
+                            float textW = ImGui::CalcTextSize(filename.c_str()).x;
+                            if (textW < buttonSize)
+                                ImGui::SetCursorPosX(groupX + (buttonSize - textW) * 0.5f);
+
+                            ImGui::PushTextWrapPos(groupX + buttonSize);
+                            ImGui::TextWrapped("%s", filename.c_str());
+                            ImGui::PopTextWrapPos();
+
+                            ImGui::EndGroup();
+
+                            if (ImGui::IsItemHovered() && ImGui::IsMouseDoubleClicked(0))
+                            {
+                                m_selectedEntry = entry.path();
+                                onDoubleClick(entry.path());
+                            }
+                            else if (clicked || ImGui::IsItemClicked())
+                            {
+                                m_selectedEntry = entry.path();
+                            }
+
+                            ImGui::PopID();
+
+                            float last_x2 = ImGui::GetItemRectMax().x;
+                            float next_x2 = last_x2 + itemSpacingX + buttonSize;
+                            if (i + 1 < entries.size() && next_x2 < windowVisibleX2)
+                                ImGui::SameLine();
+                        }
+                    }
                 }
             }
-            ImGui::EndChild();
-
-            ImGui::Separator();
-            if (ImGui::Button("Select"))
+            catch (const std::filesystem::filesystem_error &e)
             {
-                // Generic select action if needed
+                ImGui::TextColored(ImVec4(1, 0, 0, 1), "Error accessing directory: %s", e.what());
             }
         }
-        ImGui::End();
+        ImGui::EndChild();
     }
 } // namespace pe

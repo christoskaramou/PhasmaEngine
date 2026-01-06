@@ -42,7 +42,7 @@ namespace pe
         m_dirtyDescriptorViews.resize(swapchainImageCount, false);
 
         m_particleManager = new ParticleManager();
-        // m_particleManager->Init(); // disable until it is done
+        m_particleManager->Init(); // disable until it is done
     }
 
     Scene::~Scene()

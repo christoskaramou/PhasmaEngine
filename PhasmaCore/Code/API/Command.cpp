@@ -85,6 +85,12 @@ namespace pe
 
         PE_ERROR_IF(!(m_commandPool->GetFlags() & vk::CommandPoolCreateFlagBits::eResetCommandBuffer), "CommandBuffer::Reset: CommandPool does not have the reset flag!");
         m_apiHandle.reset();
+
+#if PE_DEBUG_MODE
+        m_gpuTimerInfosCount = 0;
+        while (!m_gpuTimerIdsStack.empty())
+            m_gpuTimerIdsStack.pop();
+#endif
     }
 
     void CommandBuffer::SetDepthBias(float constantFactor, float clamp, float slopeFactor)

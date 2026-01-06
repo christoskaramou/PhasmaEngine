@@ -40,11 +40,20 @@ namespace pe
           m_cpuTotalStamp{0.0},
           m_delta{}
     {
+        m_lastTime = std::chrono::high_resolution_clock::now();
     }
 
     void FrameTimer::CountDeltaTime()
     {
         m_delta = std::chrono::high_resolution_clock::now() - m_start;
+    }
+    
+    void FrameTimer::Tick()
+    {
+        auto now = std::chrono::high_resolution_clock::now();
+        m_delta = now - m_lastTime;
+        m_lastTime = now;
+        m_start = now;
     }
 
     double FrameTimer::GetDelta() const

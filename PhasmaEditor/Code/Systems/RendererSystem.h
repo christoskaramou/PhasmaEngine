@@ -45,6 +45,7 @@ namespace pe
         const SkyBox &GetSkyBoxDay() const { return m_skyBoxDay; }
         const SkyBox &GetSkyBoxNight() const { return m_skyBoxNight; }
         const GUI &GetGUI() const { return m_gui; }
+        GUI &GetGUI() { return m_gui; }
         void ToggleGUI() { m_gui.ToggleRender(); }
 
         RenderArea &GetRenderArea() { return m_renderArea; }

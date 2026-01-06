@@ -31,10 +31,14 @@ namespace pe
     void ParticleComputePass::UpdateDescriptorSets()
     {
         Scene &scene = GetGlobalSystem<RendererSystem>()->GetScene();
-        if (!scene.GetParticleManager()) return;
+        if (!scene.GetParticleManager())
+            return;
 
         Buffer *particleBuffer = scene.GetParticleManager()->GetParticleBuffer();
-        if (!particleBuffer) return;
+        if (!particleBuffer)
+            return;
+
+        Buffer *emitterBuffer = scene.GetParticleManager()->GetEmitterBuffer();
 
         for (uint32_t i = 0; i < RHII.GetSwapchainImageCount(); i++)
         {
@@ -42,6 +46,10 @@ namespace pe
             if (descriptors.size() > 0)
             {
                 descriptors[0]->SetBuffer(0, particleBuffer);
+                if (emitterBuffer)
+                {
+                    descriptors[0]->SetBuffer(1, emitterBuffer);
+                }
                 descriptors[0]->Update();
             }
         }
@@ -49,6 +57,14 @@ namespace pe
 
     void ParticleComputePass::Update()
     {
+        if (m_scene && m_scene->GetParticleManager())
+        {
+            if (m_scene->GetParticleManager()->GetBufferVersion() > m_lastBufferVersion)
+            {
+                UpdateDescriptorSets();
+                m_lastBufferVersion = m_scene->GetParticleManager()->GetBufferVersion();
+            }
+        }
     }
 
     void ParticleComputePass::Draw(CommandBuffer *cmd)
@@ -56,7 +72,7 @@ namespace pe
         Scene &scene = GetGlobalSystem<RendererSystem>()->GetScene();
         if (!scene.GetParticleManager())
             return;
-        
+
         Buffer *particleBuffer = scene.GetParticleManager()->GetParticleBuffer();
         if (!particleBuffer)
             return;
@@ -68,11 +84,13 @@ namespace pe
             float deltaTime;
             uint32_t particleCount;
             float totalTime;
+            uint32_t emitterCount;
         } pc{};
 
         pc.deltaTime = static_cast<float>(FrameTimer::Instance().GetDelta());
         pc.particleCount = scene.GetParticleManager()->GetParticleCount();
-        
+        pc.emitterCount = scene.GetParticleManager()->GetEmitterCount();
+
         static float accumTime = 0.0f;
         accumTime += pc.deltaTime;
         pc.totalTime = accumTime;

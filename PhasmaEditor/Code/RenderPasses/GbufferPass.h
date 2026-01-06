@@ -10,9 +10,11 @@ namespace pe
     struct PushConstants_GBuffer
     {
         uint32_t jointsCount;
+        float pad0;
         vec2 projJitter;
         vec2 prevProjJitter;
         uint32_t transparentPass;
+        float pad1;
     };
 
     struct Mesh_Constants

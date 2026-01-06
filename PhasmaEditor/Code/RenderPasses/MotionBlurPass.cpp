@@ -81,7 +81,7 @@ namespace pe
         cmd->BindPipeline(*m_passInfo);
         cmd->SetViewport(0.f, 0.f, m_displayRT->GetWidth_f(), m_displayRT->GetHeight_f());
         cmd->SetScissor(0, 0, m_displayRT->GetWidth(), m_displayRT->GetHeight());
-        cmd->SetConstantAt(0, 1.0f / static_cast<float>(FrameTimer::Instance().GetDelta()));
+        cmd->SetConstantAt(0, 1.0f / (static_cast<float>(FrameTimer::Instance().GetDelta()) + FLT_EPSILON));
         cmd->SetConstantAt(1, gSettings.motion_blur_strength);
         cmd->SetConstantAt(2, camera->GetProjJitter());
         cmd->SetConstantAt(4, gSettings.motion_blur_samples);

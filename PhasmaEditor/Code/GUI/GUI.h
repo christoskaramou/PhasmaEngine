@@ -21,16 +21,32 @@ namespace pe
         void Update();
         void Draw(CommandBuffer *cmd);
         void DrawPlatformWindows();
-        bool Render() { return m_render; }
+        bool Render() const { return m_render; }
         void ToggleRender() { m_render = !m_render; }
+        void TriggerExitConfirmation() { m_showExitConfirmation = true; }
 
-        const std::vector<GpuTimerSample> &GetGpuTimerInfos() { return m_gpuTimerInfos; }
-        std::vector<GpuTimerSample> &GetGpuTimerInfosMutable() { return m_gpuTimerInfos; }
+        // Thread-safe GpuTimer access
+        std::vector<GpuTimerSample> PopGpuTimerInfos();
+
         uint32_t GetDockspaceId() const { return m_dockspaceId; }
 
+        template <typename T>
+        T *GetWidget()
+        {
+            for (auto &widget : m_widgets)
+            {
+                if (auto *p = dynamic_cast<T *>(widget.get()))
+                    return p;
+            }
+            return nullptr;
+        }
+
     private:
-        static void async_fileDialog_ImGuiMenuItem(const char *menuLabel, const char *dialogTitle, const std::vector<const char *> &filter);
-        static void async_messageBox_ImGuiMenuItem(const char *menuLabel, const char *messageBoxTitle, const char *message);
+        void ShowLoadModelMenuItem();
+        void ShowExitMenuItem();
+        void DrawExitPopup();
+
+        bool m_showExitConfirmation = false;
 
         void Menu();
         void BuildDockspace();
@@ -43,6 +59,7 @@ namespace pe
         bool m_dockspaceInitialized;
         bool m_requestDockReset;
         std::vector<GpuTimerSample> m_gpuTimerInfos;
+        std::mutex m_timerMutex;
 
         std::vector<std::shared_ptr<Widget>> m_widgets;
         std::vector<std::shared_ptr<Widget>> m_menuWindowWidgets;

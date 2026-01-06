@@ -221,6 +221,7 @@ namespace pe
             T *ptr = new T(std::forward<Params>(params)...);
 
 #if defined(PE_TRACK_RESOURCES)
+            std::lock_guard<std::mutex> lock(s_mutex);
             s_handles.push_back(ptr);
 #endif
 
@@ -233,11 +234,13 @@ namespace pe
 
             if (ptr)
             {
-                delete ptr; // should call ~T() destructor
-
 #if defined(PE_TRACK_RESOURCES)
-                std::erase(s_handles, ptr);
+                {
+                    std::lock_guard<std::mutex> lock(s_mutex);
+                    std::erase(s_handles, ptr);
+                }
 #endif
+                delete ptr; // should call ~T() destructor
             }
 
             ptr = nullptr;
@@ -248,7 +251,11 @@ namespace pe
         const API_HANDLE &ApiHandle() const { return m_apiHandle; }
 
 #if defined(PE_TRACK_RESOURCES)
-        inline static std::deque<T *> s_handles{};
+        static std::vector<T *> GetHandles()
+        {
+            std::lock_guard<std::mutex> lock(s_mutex);
+            return {s_handles.begin(), s_handles.end()};
+        }
 #endif
 
     protected:
@@ -256,5 +263,11 @@ namespace pe
         PeHandle(const API_HANDLE &apiHandle) : m_apiHandle{apiHandle} {}
 
         API_HANDLE m_apiHandle;
+
+#if defined(PE_TRACK_RESOURCES)
+    private:
+        inline static std::deque<T *> s_handles{};
+        inline static std::mutex s_mutex{};
+#endif
     };
 } // namespace pe

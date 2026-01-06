@@ -56,17 +56,11 @@ namespace pe
 
     void ParticlePass::CreateUniforms(CommandBuffer *cmd)
     {
-        if (m_fireTextures.empty())
+        RendererSystem *rs = GetGlobalSystem<RendererSystem>();
+        Scene &scene = rs->GetScene();
+        if (scene.GetParticleManager())
         {
-            m_fireTextures.push_back(Image::LoadRGBA8(cmd, Path::Assets + "Particles/fire_01.png"));
-            m_fireTextures.push_back(Image::LoadRGBA8(cmd, Path::Assets + "Particles/fire_02.png"));
-            m_fireTextures.push_back(Image::LoadRGBA8(cmd, Path::Assets + "Particles/fire_03.png"));
-
-            vk::SamplerCreateInfo samplerCI = Sampler::CreateInfoInit();
-            samplerCI.addressModeU = vk::SamplerAddressMode::eClampToEdge;
-            samplerCI.addressModeV = vk::SamplerAddressMode::eClampToEdge;
-            samplerCI.addressModeW = vk::SamplerAddressMode::eClampToEdge;
-            m_sampler = new Sampler(samplerCI, "ParticleSampler");
+            scene.GetParticleManager()->InitTextures(cmd);
         }
 
         UpdateDescriptorSets();
@@ -89,13 +83,15 @@ namespace pe
             descriptors[0]->SetBuffer(0, particleBuffer);
             descriptors[0]->Update();
 
-            if (!m_fireTextures.empty() && descriptors.size() > 1)
+            auto *pm = scene.GetParticleManager();
+            const auto &textures = pm->GetTextures();
+            if (!textures.empty() && descriptors.size() > 1)
             {
                 std::vector<vk::ImageView> views;
-                for (auto *img : m_fireTextures)
+                for (auto *img : textures)
                     views.push_back(img->GetSRV());
                 descriptors[1]->SetImageViews(0, views, {});
-                descriptors[1]->SetSampler(1, m_sampler->ApiHandle());
+                descriptors[1]->SetSampler(1, pm->GetSampler()->ApiHandle());
                 descriptors[1]->Update();
             }
         }
@@ -103,6 +99,20 @@ namespace pe
 
     void ParticlePass::Update()
     {
+        if (m_scene && m_scene->GetParticleManager())
+        {
+            if (m_scene->GetParticleManager()->HasTextureChanged())
+            {
+                UpdateDescriptorSets();
+                m_scene->GetParticleManager()->ResetTextureChanged();
+            }
+
+            if (m_scene->GetParticleManager()->GetBufferVersion() > m_lastBufferVersion)
+            {
+                UpdateDescriptorSets();
+                m_lastBufferVersion = m_scene->GetParticleManager()->GetBufferVersion();
+            }
+        }
     }
 
     void ParticlePass::Draw(CommandBuffer *cmd)
@@ -169,14 +179,5 @@ namespace pe
 
     void ParticlePass::Destroy()
     {
-        for (auto *img : m_fireTextures)
-            Image::Destroy(img);
-        m_fireTextures.clear();
-
-        if (m_sampler)
-        {
-            delete m_sampler;
-            m_sampler = nullptr;
-        }
     }
 } // namespace pe
