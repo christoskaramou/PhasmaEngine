@@ -125,8 +125,6 @@ namespace pe
         return LoadRGBA(cmd, path, vk::Format::eR32G32B32A32Sfloat, true);
     }
 
-
-
     vk::ImageCreateInfo Image::CreateInfoInit()
     {
         // pNext                 = {};
@@ -327,6 +325,11 @@ namespace pe
                       m_createInfo.usage & vk::ImageUsageFlagBits::eDepthStencilAttachment),
                     "Image was not created with ColorAttachmentBit or DepthStencilAttachmentBit for RTV usage");
 
+        if (m_rtv)
+        {
+            PE_INFO("Image::CreateRTV: RTV already exists, recreating.");
+            RHII.GetDevice().destroyImageView(m_rtv);
+        }
         m_rtv = CreateImageView(vk::ImageViewType::e2D, 0);
     }
 
@@ -335,14 +338,33 @@ namespace pe
         PE_ERROR_IF(!(m_createInfo.usage & vk::ImageUsageFlagBits::eSampled), "Image was not created with SampledBit for SRV usage");
         vk::ImageView view = CreateImageView(type, mip);
         if (mip == -1)
+        {
+            if (m_srv)
+            {
+                PE_INFO("Image::CreateSRV: SRV already exists, recreating.");
+                RHII.GetDevice().destroyImageView(m_srv);
+            }
             m_srv = view;
+        }
         else
+        {
+            if (m_srvs[mip])
+            {
+                PE_INFO("Image::CreateSRV: SRV for mip {} already exists, recreating.", mip);
+                RHII.GetDevice().destroyImageView(m_srvs[mip]);
+            }
             m_srvs[mip] = view;
+        }
     }
 
     void Image::CreateUAV(vk::ImageViewType type, uint32_t mip)
     {
         PE_ERROR_IF(!(m_createInfo.usage & vk::ImageUsageFlagBits::eStorage), "Image was not created with StorageBit for UAV usage");
+        if (m_uavs[mip])
+        {
+            PE_INFO("Image::CreateUAV: UAV for mip {} already exists, recreating.", mip);
+            RHII.GetDevice().destroyImageView(m_uavs[mip]);
+        }
         m_uavs[mip] = CreateImageView(type, static_cast<int>(mip));
     }
 

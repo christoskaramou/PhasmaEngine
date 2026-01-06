@@ -7,14 +7,26 @@ namespace pe
     {
         std::scoped_lock lock(s_mutex);
         s_events.clear();
-        s_queue.clear();
+        s_queues.clear();
+
+        s_events.try_emplace(EventType::Quit);
+        s_events.try_emplace(EventType::Custom);
+        s_events.try_emplace(EventType::SetWindowTitle);
+        s_events.try_emplace(EventType::CompileShaders);
+        s_events.try_emplace(EventType::CompileScripts);
+        s_events.try_emplace(EventType::Resize);
+        s_events.try_emplace(EventType::FileWrite);
+        s_events.try_emplace(EventType::PresentMode);
+        s_events.try_emplace(EventType::AfterCommandWait);
+        s_events.try_emplace(EventType::DynamicRendering);
+        s_events.try_emplace(EventType::ModelLoaded);
     }
 
     void EventSystem::Destroy() noexcept
     {
         std::scoped_lock lock(s_mutex);
         s_events.clear();
-        s_queue.clear();
+        s_queues.clear();
     }
 
     // -------- Register/Dispatch (callback bus) --------
@@ -68,32 +80,32 @@ namespace pe
     void EventSystem::PushEvent(EventKey key, std::any payload)
     {
         std::scoped_lock lock(s_mutex);
-        s_queue.push_back(QueuedEvent{std::move(key), std::move(payload)});
+        s_queues.push_back(QueuedEvent{std::move(key), std::move(payload)});
     }
 
     bool EventSystem::PollEvent(QueuedEvent &out)
     {
         std::scoped_lock lock(s_mutex);
-        if (s_queue.empty())
+        if (s_queues.empty())
             return false;
-        out = std::move(s_queue.front());
-        s_queue.pop_front();
+        out = std::move(s_queues.front());
+        s_queues.pop_front();
         return true;
     }
 
     bool EventSystem::PeekEvent(QueuedEvent &out)
     {
         std::scoped_lock lock(s_mutex);
-        if (s_queue.empty())
+        if (s_queues.empty())
             return false;
-        out = s_queue.front(); // copy; do not consume
+        out = s_queues.front(); // copy; do not consume
         return true;
     }
 
     bool EventSystem::PeekEvent(EventKey key, QueuedEvent &out)
     {
         std::scoped_lock lock(s_mutex);
-        for (const auto &e : s_queue)
+        for (const auto &e : s_queues)
         {
             if (e.key == key)
             {
@@ -107,14 +119,14 @@ namespace pe
     void EventSystem::ClearPushedEvents() noexcept
     {
         std::scoped_lock lock(s_mutex);
-        s_queue.clear();
+        s_queues.clear();
     }
 
     // -------- Runtime (size_t) helpers --------
     bool EventSystem::PeekEvent(size_t id, QueuedEvent &out)
     {
         std::scoped_lock lock(s_mutex);
-        for (const auto &e : s_queue)
+        for (const auto &e : s_queues)
         {
             if (e.key == EventKey{id})
             {
@@ -128,12 +140,12 @@ namespace pe
     bool EventSystem::PeekAndPop(size_t id, QueuedEvent &out)
     {
         std::scoped_lock lock(s_mutex);
-        for (auto it = s_queue.begin(); it != s_queue.end(); ++it)
+        for (auto it = s_queues.begin(); it != s_queues.end(); ++it)
         {
             if (it->key == EventKey{id})
             {
-                out = *it;         // copy out (payload copied)
-                s_queue.erase(it); // targeted consume
+                out = *it;          // copy out (payload copied)
+                s_queues.erase(it); // targeted consume
                 return true;
             }
         }
@@ -144,7 +156,7 @@ namespace pe
     {
         std::scoped_lock lock(s_mutex);
         size_t c = 0;
-        for (const auto &e : s_queue)
+        for (const auto &e : s_queues)
             if (e.key == EventKey{id})
                 ++c;
         return c;

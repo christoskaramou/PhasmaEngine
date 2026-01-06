@@ -359,7 +359,6 @@ namespace pe
             }
         };
 
-        EventSystem::RegisterEvent(EventType::AfterCommandWait);
         EventSystem::RegisterCallback(EventType::AfterCommandWait, std::move(AddGpuTimerInfo));
 
         auto properties = std::make_shared<Properties>();

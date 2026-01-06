@@ -86,6 +86,6 @@ namespace pe
     private:
         inline static std::mutex s_mutex;
         inline static std::unordered_map<EventKey, Delegate<const std::any &>, EventKeyHash> s_events{};
-        inline static std::deque<QueuedEvent> s_queue{};
+        inline static std::deque<QueuedEvent> s_queues{};
     };
 } // namespace pe

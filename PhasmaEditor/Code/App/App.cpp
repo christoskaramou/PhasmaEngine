@@ -75,7 +75,6 @@ namespace pe
 
         cmd->Begin();
         CreateGlobalSystem<LightSystem>()->Init(cmd);
-
         CreateGlobalSystem<RendererSystem>()->Init(cmd);
         CreateGlobalSystem<PostProcessSystem>()->Init(cmd);
         cmd->End();
