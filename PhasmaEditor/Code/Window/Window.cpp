@@ -28,7 +28,6 @@ namespace pe
             SDL_SetWindowTitle(m_apiHandle, std::any_cast<std::string>(title).c_str());
         };
 
-        EventSystem::RegisterEvent(EventType::SetWindowTitle);
         EventSystem::RegisterCallback(EventType::SetWindowTitle, setTitle);
     }
 

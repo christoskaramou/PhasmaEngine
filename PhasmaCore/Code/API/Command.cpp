@@ -70,6 +70,19 @@ namespace pe
 
     void CommandBuffer::Reset()
     {
+        m_attachmentCount = 0;
+        m_attachments = nullptr;
+        m_renderPass = nullptr;
+        m_framebuffer = nullptr;
+        m_dynamicPass = false;
+        m_boundPipeline = nullptr;
+        m_boundVertexBuffer = nullptr;
+        m_boundVertexBufferOffset = -1;
+        m_boundVertexBufferFirstBinding = UINT32_MAX;
+        m_boundVertexBufferBindingCount = UINT32_MAX;
+        m_boundIndexBuffer = nullptr;
+        m_boundIndexBufferOffset = -1;
+
         PE_ERROR_IF(!(m_commandPool->GetFlags() & vk::CommandPoolCreateFlagBits::eResetCommandBuffer), "CommandBuffer::Reset: CommandPool does not have the reset flag!");
         m_apiHandle.reset();
     }

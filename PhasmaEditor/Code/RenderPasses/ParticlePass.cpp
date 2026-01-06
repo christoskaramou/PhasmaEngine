@@ -22,10 +22,6 @@ namespace pe
     {
         RendererSystem *rs = GetGlobalSystem<RendererSystem>();
 
-        // Graphics Pass Info (inherited m_passInfo)
-        m_passInfo = std::make_shared<PassInfo>();
-        m_passInfo->name = "ParticleGraphicsPipeline";
-
         m_attachments.resize(2);
         m_attachments[0].image = rs->GetRenderTarget("viewport");
         m_attachments[0].loadOp = vk::AttachmentLoadOp::eLoad;
@@ -42,6 +38,7 @@ namespace pe
         // Need depth buffer?
         RendererSystem *rs = GetGlobalSystem<RendererSystem>();
         auto *depthRT = rs->GetDepthStencilTarget("depthStencil");
+        m_passInfo->name = "ParticleGraphicsPipeline";
         m_passInfo->pVertShader = Shader::Create(Path::Assets + "Shaders/Particle/ParticleVS.hlsl", vk::ShaderStageFlagBits::eVertex, "mainVS", std::vector<Define>{}, ShaderCodeType::HLSL);
         m_passInfo->pFragShader = Shader::Create(Path::Assets + "Shaders/Particle/ParticlePS.hlsl", vk::ShaderStageFlagBits::eFragment, "mainPS", std::vector<Define>{}, ShaderCodeType::HLSL);
         m_passInfo->topology = vk::PrimitiveTopology::eTriangleList;
