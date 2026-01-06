@@ -11,7 +11,7 @@ namespace pe
         ~Window();
 
         void SmoothMouseRotation(Camera *camera, uint32_t triggerButton);
-        bool ProcessEvents(double delta);
+        bool ProcessEvents();
         void WrapMouse(int &x, int &y);
         bool IsInsideRenderWindow(int x, int y);
         bool isMinimized();

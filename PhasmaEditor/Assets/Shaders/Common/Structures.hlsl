@@ -58,9 +58,11 @@ struct PushConstants_Bloom_Combine
 struct PushConstants_GBuffer
 {
     uint jointsCount;
+    float pad0;
     float2 projJitter;
     float2 prevProjJitter;
     uint transparentPass;
+    float pad1;
 };
 
 struct Mesh_Constants
@@ -225,12 +227,17 @@ struct Particle
 
 struct ParticleEmitter
 {
-    float4 position;
-    float4 velocity;
-    float4 color;
-    float life;
-    float size;
-    float spawnRate;
+    float4 position;      // xyz: position
+    float4 velocity;      // xyz: base velocity direction
+    float4 colorStart;    // rgba: start color
+    float4 colorEnd;      // rgba: end color
+    float4 sizeLife;      // x: sizeMin, y: sizeMax, z: lifeMin, w: lifeMax
+    float4 physics;       // x: spawnRate, y: spawnRadius, z: noiseStrength, w: drag
+    float4 gravity;       // xyz: gravity vector
+    uint textureIndex;
+    uint count;
+    uint offset;
+    uint _pad2;
 };
 
 // -----------------------------------------
@@ -241,6 +248,7 @@ struct PushConstants_Particle
     float deltaTime;
     uint particleCount;
     float totalTime;
+    uint emitterCount;
 };
 
 struct PerFrameData_Particle
@@ -255,7 +263,7 @@ struct VS_OUTPUT_Particle
     float4 pos : SV_POSITION;
     float4 color : COLOR0;
     float2 uv : TEXCOORD0;
-    float textureIndex : TEXCOORD1;
+    nointerpolation float textureIndex : TEXCOORD1;
 };
 
 struct PS_INPUT_Particle
@@ -263,7 +271,7 @@ struct PS_INPUT_Particle
     float4 pos : SV_POSITION;
     float4 color : COLOR0;
     float2 uv : TEXCOORD0;
-    float textureIndex : TEXCOORD1;
+    nointerpolation float textureIndex : TEXCOORD1;
 };
 
 struct PS_OUTPUT_Particle

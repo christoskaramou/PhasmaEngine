@@ -21,6 +21,17 @@ namespace pe
 
         m_projJitter = vec2(0.f, 0.f);
         m_prevProjJitter = vec2(0.f, 0.f);
+
+        m_view = mat4(1.0f);
+        m_previousView = mat4(1.0f);
+        m_projection = mat4(1.0f);
+        m_previousProjection = mat4(1.0f);
+        m_projectionNoJitter = mat4(1.0f);
+        m_viewProjection = mat4(1.0f);
+        m_previousViewProjection = mat4(1.0f);
+        m_invView = mat4(1.0f);
+        m_invProjection = mat4(1.0f);
+        m_invViewProjection = mat4(1.0f);
     }
 
     void Camera::Destroy()
@@ -35,9 +46,19 @@ namespace pe
 
         UpdatePerspective();
         UpdateView();
+        
         m_invViewProjection = m_invView * m_invProjection;
         m_previousViewProjection = m_viewProjection;
         m_viewProjection = m_projection * m_view;
+        
+        // On first update (or if reset), sync previous with current to avoid jump artifacts
+        if (m_previousViewProjection == mat4(1.0f)) 
+        {
+            m_previousViewProjection = m_viewProjection;
+            m_previousView = m_view;
+            m_previousProjection = m_projection;
+        }
+
         ExtractFrustum();
     }
 

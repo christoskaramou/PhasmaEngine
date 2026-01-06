@@ -22,5 +22,6 @@ namespace pe
 
     private:
         Scene *m_scene = nullptr;
+        uint32_t m_lastBufferVersion = 0;
     };
 } // namespace pe

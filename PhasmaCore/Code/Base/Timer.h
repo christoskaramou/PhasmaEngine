@@ -38,6 +38,7 @@ namespace pe
         void CountUpdatesStamp();
         void CountCpuTotalStamp();
         void CountDeltaTime();
+        void Tick();
         double GetUpdatesStamp() const { return m_updatesStamp; }
         double GetCpuTotal() const { return m_cpuTotalStamp; }
         double GetDelta() const;
@@ -60,6 +61,7 @@ namespace pe
         double m_updatesStamp;
         double m_cpuTotalStamp;
         std::chrono::duration<double> m_delta{};
+        std::chrono::high_resolution_clock::time_point m_lastTime;
     };
 
     class GpuTimer;

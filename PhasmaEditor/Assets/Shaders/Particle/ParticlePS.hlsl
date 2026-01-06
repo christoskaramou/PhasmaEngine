@@ -1,6 +1,6 @@
 #include "../Common/Structures.hlsl"
 
-[[vk::binding(0, 1)]] Texture2D textures[3];
+[[vk::binding(0, 1)]] Texture2D textures[16];
 [[vk::binding(1, 1)]] SamplerState samplerState;
 
 PS_OUTPUT_Particle mainPS(PS_INPUT_Particle input)

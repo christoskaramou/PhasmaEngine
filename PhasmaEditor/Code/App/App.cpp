@@ -4,7 +4,6 @@
 #include "API/RHI.h"
 #include "Scene/Model.h"
 #include "Systems/LightSystem.h"
-
 #include "Systems/PostProcessSystem.h"
 #include "Systems/RendererSystem.h"
 #include "Window/Window.h"
@@ -113,14 +112,14 @@ namespace pe
 
     bool App::Frame()
     {
-        m_frameTimer.Start();
+        m_frameTimer.Tick();
 
         // Start ImGui frame
         ImGui_ImplSDL2_NewFrame();
         ImGui_ImplVulkan_NewFrame();
         ImGui::NewFrame();
 
-        if (!m_window->ProcessEvents(m_frameTimer.GetDelta()))
+        if (!m_window->ProcessEvents())
             return false;
 
         if (!m_window->isMinimized())
@@ -147,7 +146,6 @@ namespace pe
         }
 
         m_frameTimer.CountCpuTotalStamp();
-        m_frameTimer.CountDeltaTime();
 
         RHII.NextFrame();
 

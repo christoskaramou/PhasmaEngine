@@ -144,7 +144,7 @@ namespace pe
         const float cpuUpdates = (float)MILLI(ft.GetUpdatesStamp());
         const float cpuDraw = (float)MILLI(ft.GetCpuTotal() - ft.GetUpdatesStamp());
 #if PE_DEBUG_MODE
-        const auto &gpuTimerInfos = m_gui->GetGpuTimerInfos();
+        auto gpuTimerInfos = m_gui->PopGpuTimerInfos();
         const float gpuTotal = FetchTotalGPUTime(gpuTimerInfos);
 #else
         const float gpuTotal = 0.0f;
@@ -156,7 +156,6 @@ namespace pe
 #if PE_DEBUG_MODE
         // keep the nice timings table you added below
         ShowGpuTimingsTable(gpuTimerInfos, gpuTotal);
-        m_gui->GetGpuTimerInfosMutable().clear();
 #endif
         ImGui::End();
     }

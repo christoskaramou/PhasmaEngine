@@ -7,7 +7,7 @@ namespace pe
     class FileBrowser : public Widget
     {
     public:
-        FileBrowser() : Widget("File Browser") {}
+        FileBrowser(const std::string &name = "File Browser") : Widget(name) {}
         ~FileBrowser() override;
         void Init(GUI *gui) override;
         void Update() override;
@@ -20,10 +20,10 @@ namespace pe
         inline static bool IsImageFile(const std::filesystem::path &path) { return s_imageExtensions.find(path.extension().string()) != s_imageExtensions.end(); }
         inline static bool IsModelFile(const std::filesystem::path &path) { return s_modelExtensions.find(path.extension().string()) != s_modelExtensions.end(); }
 
-    private:
+    protected:
         friend class GUI;
 
-        void *GetIconForFile(const std::filesystem::path &path) const;
+        void *GetIconForFile(const std::filesystem::path &path);
 
         static std::unordered_set<std::string> s_textExtensions;
         static std::unordered_set<std::string> s_shaderExtensions;
@@ -49,6 +49,13 @@ namespace pe
         Image *m_imageIcon = nullptr;
         void *m_imageIconDS = nullptr;
 
+        // Thumbnail Cache
+        std::unordered_map<std::string, Image *> m_fileCache;
+        std::unordered_map<std::string, void *> m_fileDescriptors;
+        std::unordered_set<std::string> m_pendingFiles;
+        std::vector<std::pair<std::string, Image *>> m_loadedQueue;
+        std::mutex m_queueMutex;
+
         enum class ViewMode
         {
             List,
@@ -56,5 +63,11 @@ namespace pe
         };
         ViewMode m_viewMode = ViewMode::Grid;
         float m_gridIconSize = 64.0f;
+
+        void DrawDirectoryContent(const std::filesystem::path &path,
+                                  std::function<void(const std::filesystem::path &)> onSelect,
+                                  std::function<bool(const std::filesystem::path &)> filter = nullptr);
+
+        void ProcessLoadedImages();
     };
 } // namespace pe

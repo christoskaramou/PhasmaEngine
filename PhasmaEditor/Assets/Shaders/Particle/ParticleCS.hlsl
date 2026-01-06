@@ -2,6 +2,7 @@
 
 [[vk::push_constant]] PushConstants_Particle pc;
 [[vk::binding(0, 0)]] RWStructuredBuffer<Particle> particles;
+[[vk::binding(1, 0)]] StructuredBuffer<ParticleEmitter> emitters;
 
 // Random number generator
 float rand(inout float2 seed)
@@ -11,37 +12,55 @@ float rand(inout float2 seed)
 }
 
 // Reset particle
-void Reset(inout Particle p, uint index)
+void Reset(inout Particle p, uint index, ParticleEmitter emitter)
 {
     float2 seed = float2(index * 1.37, pc.totalTime * (index + 1));
     
-    // Spawn at bottom center
-    float3 center = float3(0.0, -1.0, 0.0);
-    float radius = sqrt(rand(seed)) * 0.3;
-    float angle = rand(seed) * 6.2831853;
-    float2 ring = float2(cos(angle), sin(angle)) * radius;
-    p.position.xyz = center + float3(ring.x, 0.0, ring.y);
+    // --- 1. Position ---
+    float3 center = emitter.position.xyz;
+    float spawnRadius = emitter.physics.y;
     
-    // Random Life (Short for fire)
-    float life = 0.9 + rand(seed) * 0.7; // 0.9-1.6 seconds
+    // Random point in sphere/circle
+    float theta = rand(seed) * 6.2831853;
+    float phi = acos(2.0 * rand(seed) - 1.0);
+    float r = pow(rand(seed), 0.33) * spawnRadius;
+    
+    float3 offset;
+    offset.x = r * sin(phi) * cos(theta);
+    offset.y = r * sin(phi) * sin(theta);
+    offset.z = r * cos(phi);
+    
+    p.position.xyz = center + offset;
+    
+    // --- 2. Lifetime ---
+    float lifeMin = emitter.sizeLife.z;
+    float lifeMax = emitter.sizeLife.w;
+    float life = lerp(lifeMin, lifeMax, rand(seed));
     p.position.w = life;
-    p.extra.y = life;
+    p.extra.y = life; // Store max life in extra.y for ratio calculation
     
-    // Upward Velocity with turbulence
-    float swirl = 0.6 + rand(seed) * 0.6;
-    p.velocity.xyz = float3(ring.x, 0.0, ring.y) * swirl + float3(0.0, 2.0 + rand(seed) * 2.0, 0.0);
+    // --- 3. Velocity ---
+    float3 baseDirection = emitter.velocity.xyz;
+    float noiseStrength = emitter.physics.z;
     
-    // Size
-    p.velocity.w = 0.08 + rand(seed) * 0.16;
+    // Random direction for noise
+    float3 noise;
+    noise.x = rand(seed) - 0.5;
+    noise.y = rand(seed) - 0.5;
+    noise.z = rand(seed) - 0.5;
     
-    // Random Texture (0, 1, 2)
-    p.extra.x = floor(rand(seed) * 3.0);
-    if (p.extra.x > 2.0) p.extra.x = 2.0;
-    p.extra.z = rand(seed);
-    p.extra.w = rand(seed);
-
-    // Start Color (Bright Yellow/Orange)
-    p.color = float4(1.2, 0.9, 0.5, 1.0);
+    p.velocity.xyz = baseDirection + noise * noiseStrength;
+    
+    // --- 4. Size & Texture ---
+    // Start size
+    p.velocity.w = emitter.sizeLife.x; 
+    
+    p.extra.x = float(emitter.textureIndex);
+    p.extra.z = rand(seed); // Random variation factor
+    p.extra.w = rand(seed); // Random offset
+    
+    // --- 5. Color ---
+    p.color = emitter.colorStart;
 }
 
 [numthreads(256, 1, 1)]
@@ -51,48 +70,81 @@ void mainCS(uint3 DTid : SV_DispatchThreadID)
     
     if (index >= pc.particleCount) return;
 
+    // Find which emitter owns this particle
+    ParticleEmitter emitter;
+    bool found = false;
+    
+    // Iterate to find the emitter range [offset, offset + count)
+    // Note: This linear search is fine for a small number of emitters (e.g. < 64).
+    // For many emitters, a binary search or a separate indirection buffer would be better.
+    for (uint i = 0; i < pc.emitterCount; i++)
+    {
+        ParticleEmitter e = emitters[i];
+        if (index >= e.offset && index < (e.offset + e.count))
+        {
+            emitter = e;
+            found = true;
+            break;
+        }
+    }
+    
+    if (!found) return; // Should not happen if pc.particleCount matches
+
     // Update Life
     particles[index].position.w -= pc.deltaTime;
     
     if (particles[index].position.w <= 0.0)
     {
-        Reset(particles[index], index);
+        // Respawn check
+        float2 seed = float2(index * 1.37, pc.totalTime * (index + 1));
+        
+        float spawnRate = emitter.physics.x;
+        float spawnProbability = saturate(spawnRate * pc.deltaTime);
+        
+        // Also check if we should spawn based on max count
+        // For simple continuous spawning, rate is enough. 
+        // Logic: if dead, try to respawn.
+        
+        if (rand(seed) < spawnProbability)
+        {
+            Reset(particles[index], index, emitter);
+        }
+        else
+        {
+            particles[index].position.w = 0.0;
+        }
     }
     else
     {
-        float lifeRatio = saturate(particles[index].position.w / max(particles[index].extra.y, 0.0001));
-        float age = 1.0 - lifeRatio;
-
-        float t = pc.totalTime * 2.5 + particles[index].extra.z * 6.2831853;
-        float2 swirl = float2(sin(t), cos(t));
-        float swirlStrength = lerp(1.2, 0.2, age);
-        particles[index].velocity.xz += swirl * (swirlStrength * pc.deltaTime);
+        // Alive Particle Update
+        float lifeRatio = 1.0 - saturate(particles[index].position.w / max(particles[index].extra.y, 0.0001));
         
-        // Buoyancy/Gravity (Upward) with light damping
-        particles[index].velocity.y += lerp(2.0, 0.6, age) * pc.deltaTime;
-        particles[index].velocity.xz *= 1.0 - (0.6 * pc.deltaTime);
+        // --- Physics ---
+        float drag = emitter.physics.w;
+        float3 gravity = emitter.gravity.xyz;
+        
+        // Apply Gravity
+        particles[index].velocity.xyz += gravity * pc.deltaTime;
+        
+        // Apply Drag
+        particles[index].velocity.xyz *= (1.0 - drag * pc.deltaTime);
         
         // Update Position
         particles[index].position.xyz += particles[index].velocity.xyz * pc.deltaTime;
         
-        // Color Fade: White/Yellow -> Orange -> Smoke
-        float3 core = float3(1.2, 0.95, 0.6);
-        float3 mid = float3(1.0, 0.45, 0.1);
-        float3 smoke = float3(0.12, 0.1, 0.08);
-        float3 color;
+        // --- Visuals ---
+        // Color Interpolation
+        particles[index].color = lerp(emitter.colorStart, emitter.colorEnd, lifeRatio);
         
-        if (lifeRatio > 0.6)
-            color = lerp(mid, core, (lifeRatio - 0.6) / 0.4);
-        else if (lifeRatio > 0.25)
-            color = lerp(smoke, mid, (lifeRatio - 0.25) / 0.35);
-        else
-            color = lerp(smoke * 0.5, smoke, lifeRatio / 0.25);
-
-        float fadeIn = smoothstep(0.0, 0.12, age);
-        float fadeOut = smoothstep(0.0, 0.25, lifeRatio);
-        float flicker = 0.85 + 0.3 * sin((pc.totalTime + particles[index].extra.w) * 18.0);
-        float alpha = fadeIn * fadeOut * saturate(flicker);
+        // Size Interpolation
+        float sizeMin = emitter.sizeLife.x;
+        float sizeMax = emitter.sizeLife.y;
         
-        particles[index].color = float4(color, alpha);
+        // Simple curve for size: Grow then shrink
+        float sizeCurve = sin(lifeRatio * 3.14159);
+        particles[index].velocity.w = lerp(sizeMin, sizeMax, sizeCurve);
+        
+        // Update Instance Data if needed (texture index is static per particle)
+        particles[index].extra.x = float(emitter.textureIndex);
     }
 }

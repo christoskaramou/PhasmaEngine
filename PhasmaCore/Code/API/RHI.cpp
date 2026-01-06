@@ -384,24 +384,25 @@ namespace pe
         DescriptorPool::Destroy(m_descriptorPool);
 
 #if defined(PE_TRACK_RESOURCES)
-        auto &buffers = Buffer::s_handles;
-        auto &commandBuffers = CommandBuffer::s_handles;
-        auto &descriptorPools = DescriptorPool::s_handles;
-        auto &descriptorLayouts = DescriptorLayout::s_handles;
-        auto &descriptors = Descriptor::s_handles;
-        auto &events = Event::s_handles;
-        auto &framebuffers = Framebuffer::s_handles;
-        auto &samplers = Sampler::s_handles;
-        auto &images = Image::s_handles;
-        auto &pipelines = Pipeline::s_handles;
-        auto &commandPools = CommandPool::s_handles;
-        auto &queues = Queue::s_handles;
-        auto &renderPasses = RenderPass::s_handles;
-        auto &semaphores = Semaphore::s_handles;
-        auto &shaders = Shader::s_handles;
-        auto &surfaces = Surface::s_handles;
-        auto &swapchains = Swapchain::s_handles;
-        auto &gpuTimers = GpuTimer::s_handles;
+
+        auto buffers = Buffer::GetHandles();
+        auto commandBuffers = CommandBuffer::GetHandles();
+        auto descriptorPools = DescriptorPool::GetHandles();
+        auto descriptorLayouts = DescriptorLayout::GetHandles();
+        auto descriptors = Descriptor::GetHandles();
+        auto events = Event::GetHandles();
+        auto framebuffers = Framebuffer::GetHandles();
+        auto samplers = Sampler::GetHandles();
+        auto images = Image::GetHandles();
+        auto pipelines = Pipeline::GetHandles();
+        auto commandPools = CommandPool::GetHandles();
+        auto queues = Queue::GetHandles();
+        auto renderPasses = RenderPass::GetHandles();
+        auto semaphores = Semaphore::GetHandles();
+        auto shaders = Shader::GetHandles();
+        auto surfaces = Surface::GetHandles();
+        auto swapchains = Swapchain::GetHandles();
+        auto gpuTimers = GpuTimer::GetHandles();
 
         PE_ERROR_IF(!buffers.empty(), "Leaked Buffers");
         PE_ERROR_IF(!commandBuffers.empty(), "Leaked CommandBuffers");
@@ -447,7 +448,7 @@ namespace pe
         // === Debugging ===============================
         if (RHII.IsInstanceExtensionValid("VK_EXT_debug_utils"))
             instanceExtensions.push_back("VK_EXT_debug_utils");
-            // =============================================
+        // =============================================
 #endif
 
         // uint32_t apiVersion;
@@ -788,9 +789,7 @@ namespace pe
             else
             {
                 // Fallback: sysinfo (less accurate for caches/buffers)
-                struct sysinfo si
-                {
-                };
+                struct sysinfo si{};
                 if (sysinfo(&si) == 0)
                 {
                     m.sysTotal = (uint64_t)si.totalram * si.mem_unit;

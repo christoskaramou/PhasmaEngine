@@ -1,6 +1,4 @@
 #pragma once
-#include <string>
-#include <atomic>
 
 namespace pe
 {
