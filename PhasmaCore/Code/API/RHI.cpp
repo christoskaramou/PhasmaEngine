@@ -414,6 +414,8 @@ namespace pe
                     using HandleType = decltype(handle);
                     if constexpr (requires { typename HandleType::NativeType; })
                         PE_WARN("  Handle: %p", (void *)(uintptr_t)(typename HandleType::NativeType)handle);
+                    else if constexpr (requires { typename HandleType::CType; })
+                        PE_WARN("  Handle: %p", (void *)(uintptr_t)(typename HandleType::CType)handle);
                     else
                         PE_WARN("  Handle: %p", (void *)(uintptr_t)handle);
                 }

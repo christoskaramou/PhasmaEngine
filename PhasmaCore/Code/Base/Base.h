@@ -246,6 +246,8 @@ namespace pe
                 void *handle = nullptr;
                 if constexpr (requires { typename API_HANDLE::NativeType; })
                     handle = (void *)(uintptr_t)(typename API_HANDLE::NativeType)ptr->ApiHandle();
+                else if constexpr (requires { typename API_HANDLE::CType; })
+                    handle = (void *)(uintptr_t)(typename API_HANDLE::CType)ptr->ApiHandle();
                 else
                     handle = (void *)(uintptr_t)ptr->ApiHandle();
                 PE_INFO("Object %s created (Handle: %p)", Demangle(typeid(API_HANDLE).name()).c_str(), handle);
@@ -265,6 +267,8 @@ namespace pe
                 void *handle = nullptr;
                 if constexpr (requires { typename API_HANDLE::NativeType; })
                     handle = (void *)(uintptr_t)(typename API_HANDLE::NativeType)ptr->ApiHandle();
+                else if constexpr (requires { typename API_HANDLE::CType; })
+                    handle = (void *)(uintptr_t)(typename API_HANDLE::CType)ptr->ApiHandle();
                 else
                     handle = (void *)(uintptr_t)ptr->ApiHandle();
 #endif
