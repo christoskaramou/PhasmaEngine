@@ -19,13 +19,7 @@ namespace pe
             if (!handle || name.empty())
                 return;
 
-            uint64_t handle64 = 0;
-            if constexpr (requires { typename HANDLE::NativeType; })
-                handle64 = static_cast<uint64_t>(reinterpret_cast<uintptr_t>(static_cast<typename HANDLE::NativeType>(handle)));
-            else if constexpr (requires { typename HANDLE::CType; })
-                handle64 = static_cast<uint64_t>(reinterpret_cast<uintptr_t>(static_cast<typename HANDLE::CType>(handle)));
-            else
-                handle64 = static_cast<uint64_t>(reinterpret_cast<uintptr_t>(handle));
+            uint64_t handle64 = static_cast<uint64_t>(detail::ToUintPtr(handle));
 
             VkDebugUtilsObjectNameInfoEXT info{};
             info.sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_OBJECT_NAME_INFO_EXT;

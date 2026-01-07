@@ -410,14 +410,7 @@ namespace pe
                 PE_WARN("Leaked %s: %zu", name, resources.size());
                 for (const auto &res : resources)
                 {
-                    auto handle = res->ApiHandle();
-                    using HandleType = decltype(handle);
-                    if constexpr (requires { typename HandleType::NativeType; })
-                        PE_WARN("  Handle: %p", (void *)(uintptr_t)(typename HandleType::NativeType)handle);
-                    else if constexpr (requires { typename HandleType::CType; })
-                        PE_WARN("  Handle: %p", (void *)(uintptr_t)(typename HandleType::CType)handle);
-                    else
-                        PE_WARN("  Handle: %p", (void *)(uintptr_t)handle);
+                    PE_WARN("  Handle: %p", (void *)detail::ToUintPtr(res->ApiHandle()));
                 }
             }
         };
