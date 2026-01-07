@@ -24,10 +24,11 @@ namespace pe
         vec4 sizeLife;   // x: sizeMin, y: sizeMax, z: lifeMin, w: lifeMax
         vec4 physics;    // x: spawnRate, y: spawnRadius, z: noiseStrength, w: drag
         vec4 gravity;    // xyz: gravity vector
+        vec4 animation;  // x: rows, y: cols, z: speed, w: unused
         uint32_t textureIndex;
         uint32_t count;
         uint32_t offset;
-        uint32_t _pad2;
+        uint32_t orientation; // 0: Billboard, 1: Horizontal, 2: Vertical, 3: Velocity
     };
 
     class ParticleManager

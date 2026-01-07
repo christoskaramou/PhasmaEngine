@@ -81,6 +81,11 @@ namespace pe
         {
             auto &descriptors = m_passInfo->GetDescriptors(i);
             descriptors[0]->SetBuffer(0, particleBuffer);
+
+            Buffer *emitterBuffer = scene.GetParticleManager()->GetEmitterBuffer();
+            if (emitterBuffer)
+                descriptors[0]->SetBuffer(1, emitterBuffer);
+
             descriptors[0]->Update();
 
             auto *pm = scene.GetParticleManager();
@@ -137,21 +142,23 @@ namespace pe
         barrier.size = VK_WHOLE_SIZE;
         cmd->BufferBarrier(barrier);
 
-        // 2. Render Particles (Graphics)
         struct PushConstants
         {
             mat4 viewProjection;
             vec4 cameraRight;
             vec4 cameraUp;
+            vec4 cameraPosition;
+            vec4 cameraForward;
         } pc{};
 
-        // Camera logic remains same...
         Camera *camera = m_scene->GetCamera(0); // Assuming main camera
         if (camera)
         {
             pc.viewProjection = camera->GetViewProjection();
             pc.cameraRight = vec4(camera->GetRight(), 0.0f);
             pc.cameraUp = vec4(camera->GetUp(), 0.0f);
+            pc.cameraPosition = vec4(camera->GetPosition(), 1.0f);
+            pc.cameraForward = vec4(camera->GetFront(), 0.0f);
         }
 
         cmd->BeginPass(static_cast<uint32_t>(m_attachments.size()), m_attachments.data(), "ParticlePass");
@@ -165,7 +172,6 @@ namespace pe
         cmd->SetConstants(pc);
         cmd->PushConstants();
 
-        // Draw quads (6 vertices per particle)
         cmd->Draw(m_scene->GetParticleManager()->GetParticleCount() * 6, 1, 0, 0);
 
         cmd->EndPass();

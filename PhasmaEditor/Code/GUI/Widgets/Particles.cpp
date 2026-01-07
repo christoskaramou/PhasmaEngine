@@ -66,6 +66,7 @@ namespace pe
             newEmitter.sizeLife = vec4(0.05f, 0.15f, 1.0f, 2.0f); // MinSize, MaxSize, MinLife, MaxLife
             newEmitter.physics = vec4(50.0f, 0.5f, 1.0f, 0.1f);   // Rate, Radius, Noise, Drag
             newEmitter.gravity = vec4(0.0f, -9.8f, 0.0f, 0.0f);
+            newEmitter.animation = vec4(1.0f, 1.0f, 1.0f, 0.0f); // Rows, Cols, Speed, Unused
             newEmitter.textureIndex = 0;
             newEmitter.count = 100; // Default count
 
@@ -136,7 +137,7 @@ namespace pe
 
                     // Size & Life
                     float size[2] = {emitter.sizeLife.x, emitter.sizeLife.y};
-                    if (ImGui::DragFloat2("Size (Min/Max)", size, 0.001f, 0.0f, 100.0f))
+                    if (ImGui::DragFloat2("Size (Start/End)", size, 0.001f, 0.0f, 100.0f))
                     {
                         emitter.sizeLife.x = size[0];
                         emitter.sizeLife.y = size[1];
@@ -162,6 +163,36 @@ namespace pe
                         changed = true;
                     if (ImGui::DragFloat("Drag", &emitter.physics.w, 0.01f, 0.0f, 5.0f))
                         changed = true;
+
+                    ImGui::Separator();
+
+                    // Orientation
+                    const char *orientations[] = {"Billboard", "Horizontal", "Vertical", "Velocity"};
+                    int currentOrientation = static_cast<int>(emitter.orientation);
+                    if (ImGui::Combo("Orientation", &currentOrientation, orientations, IM_ARRAYSIZE(orientations)))
+                    {
+                        emitter.orientation = static_cast<uint32_t>(currentOrientation);
+                        changed = true;
+                    }
+
+                    // Animation
+                    if (ImGui::DragFloat2("Anim Rows/Cols", &emitter.animation.x, 1.0f, 1.0f, 64.0f, "%.0f"))
+                    {
+                        if (emitter.animation.x < 1.0f)
+                            emitter.animation.x = 1.0f;
+                        if (emitter.animation.y < 1.0f)
+                            emitter.animation.y = 1.0f;
+                        changed = true;
+                    }
+                    if (ImGui::DragFloat("Anim Speed", &emitter.animation.z, 0.1f, 0.0f, 10.0f))
+                        changed = true;
+
+                    bool interpolate = emitter.animation.w > 0.5f;
+                    if (ImGui::Checkbox("Interpolate Frames", &interpolate))
+                    {
+                        emitter.animation.w = interpolate ? 1.0f : 0.0f;
+                        changed = true;
+                    }
 
                     ImGui::Separator();
 

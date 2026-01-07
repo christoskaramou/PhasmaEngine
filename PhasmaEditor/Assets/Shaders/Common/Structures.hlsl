@@ -231,13 +231,14 @@ struct ParticleEmitter
     float4 velocity;      // xyz: base velocity direction
     float4 colorStart;    // rgba: start color
     float4 colorEnd;      // rgba: end color
-    float4 sizeLife;      // x: sizeMin, y: sizeMax, z: lifeMin, w: lifeMax
+    float4 sizeLife;      // x: sizeStart, y: sizeEnd, z: lifeMin, w: lifeMax
     float4 physics;       // x: spawnRate, y: spawnRadius, z: noiseStrength, w: drag
     float4 gravity;       // xyz: gravity vector
+    float4 animation;     // x: rows, y: cols, z: speed (multi), w: unused
     uint textureIndex;
     uint count;
     uint offset;
-    uint _pad2;
+    uint orientation;     // 0: Billboard, 1: Horizontal, 2: Vertical, 3: Velocity
 };
 
 // -----------------------------------------
@@ -256,6 +257,8 @@ struct PerFrameData_Particle
     float4x4 viewProjection;
     float4 cameraRight;
     float4 cameraUp;
+    float4 cameraPosition;
+    float4 cameraForward;
 };
 
 struct VS_OUTPUT_Particle
@@ -264,6 +267,8 @@ struct VS_OUTPUT_Particle
     float4 color : COLOR0;
     float2 uv : TEXCOORD0;
     nointerpolation float textureIndex : TEXCOORD1;
+    float2 uv2 : TEXCOORD2;
+    float blendFactor : TEXCOORD3;
 };
 
 struct PS_INPUT_Particle
@@ -272,6 +277,8 @@ struct PS_INPUT_Particle
     float4 color : COLOR0;
     float2 uv : TEXCOORD0;
     nointerpolation float textureIndex : TEXCOORD1;
+    float2 uv2 : TEXCOORD2;
+    float blendFactor : TEXCOORD3;
 };
 
 struct PS_OUTPUT_Particle
