@@ -38,32 +38,32 @@ VS_OUTPUT_Particle mainVS(uint vertexID : SV_VertexID)
     if (cornerIndex == 0) // Bottom Left
     {
         position += (-right - up) * size;
-        uv = float2(0.0, 0.0);
+        uv = float2(1.0, 0.0);
     }
     else if (cornerIndex == 1) // Bottom Right
     {
         position += (right - up) * size;
-        uv = float2(1.0, 0.0);
+        uv = float2(0.0, 0.0);
     }
     else if (cornerIndex == 2) // Top Left
     {
         position += (-right + up) * size;
-        uv = float2(0.0, 1.0);
+        uv = float2(1.0, 1.0);
     }
     else if (cornerIndex == 3) // Top Left (Dup)
     {
         position += (-right + up) * size;
-        uv = float2(0.0, 1.0);
+        uv = float2(1.0, 1.0);
     }
     else if (cornerIndex == 4) // Bottom Right (Dup)
     {
         position += (right - up) * size;
-        uv = float2(1.0, 0.0);
+        uv = float2(0.0, 0.0);
     }
     else if (cornerIndex == 5) // Top Right
     {
         position += (right + up) * size;
-        uv = float2(1.0, 1.0);
+        uv = float2(0.0, 1.0);
     }
 
     output.pos = mul(float4(position, 1.0), pc.viewProjection);

@@ -18,10 +18,10 @@ namespace pe
         switch (type)
         {
         case FFX_FSR2_MESSAGE_TYPE_WARNING:
-            std::cout << "FSR2 WARNING: " << buffer.data() << std::endl;
+            PE_WARN("FSR2 WARNING: %s", buffer.data());
             break;
         case FFX_FSR2_MESSAGE_TYPE_ERROR:
-            std::cout << "FSR2 ERROR: " << buffer.data() << std::endl;
+            PE_ERROR("FSR2 ERROR: %s", buffer.data());
             break;
         default:
             PE_ERROR("Unknown FfxFsr2MsgType");

@@ -19,7 +19,7 @@ namespace pe
         m_apiHandle = SDL_CreateWindow("", x, y, w, h, flags);
         if (!m_apiHandle)
         {
-            std::cout << SDL_GetError();
+            PE_ERROR("SDL_GetError: %s", SDL_GetError());
             return;
         }
 

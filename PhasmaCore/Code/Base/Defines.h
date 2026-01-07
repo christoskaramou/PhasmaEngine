@@ -1,5 +1,11 @@
 #pragma once
 
+#define PE_DEBUG_MODE 1
+#define PE_LOGGING 1
+#define PE_DEBUG_MESSENGER 0
+#define PE_USE_GLM 1
+#define PE_RENDER_DOC 0
+
 namespace pe
 {
     template <class Base, class T>
@@ -44,8 +50,31 @@ namespace pe
         return s;
     }
 
-#if PE_ERROR_MESSAGES && _DEBUG
+    inline void PeInfoImpl(const char *fmt, ...)
+    {
+#if PE_LOGGING
+        va_list args;
+        va_start(args, fmt);
+        std::string msgBody = PeVFormat(fmt, args);
+        va_end(args);
 
+        Log::Info(msgBody);
+#endif
+    }
+
+    inline void PeWarnImpl(const char *fmt, ...)
+    {
+#if PE_LOGGING
+        va_list args;
+        va_start(args, fmt);
+        std::string msgBody = PeVFormat(fmt, args);
+        va_end(args);
+
+        Log::Warn(msgBody);
+#endif
+    }
+
+#if defined(PE_DEBUG_MODE)
     inline void PeErrorImpl(const char *func,
                             const char *file,
                             int line,
@@ -57,25 +86,16 @@ namespace pe
         std::string msgBody = PeVFormat(fmt, args);
         va_end(args);
 
-        std::string error =
-            "Error: " + msgBody +
-            "\nFunc: " + func +
-            "\nFile: " + file +
-            "\nLine: " + std::to_string(line) +
-            "\n";
+        if (msgBody.empty())
+            msgBody = "error";
 
-        std::cout << error << std::endl;
-        throw std::runtime_error(error);
-    }
+        std::string msg = "Error in function: " + std::string(func) +
+                          "\nFile: " + std::string(file) +
+                          "\nLine: " + std::to_string(line) +
+                          "\nMessage: " + msgBody;
 
-    inline void PeInfoImpl(const char *fmt, ...)
-    {
-        va_list args;
-        va_start(args, fmt);
-        std::string msgBody = PeVFormat(fmt, args);
-        va_end(args);
-
-        std::cout << msgBody << std::endl;
+        Log::Error(msg);
+        throw std::runtime_error(msg);
     }
 
     inline void PeCheckImpl(int res,
@@ -100,17 +120,8 @@ namespace pe
         if (msgBody.empty())
             msgBody = "error";
 
+        Log::Error(msgBody);
         throw std::runtime_error(msgBody);
-    }
-
-    inline void PeInfoImpl(const char *fmt, ...)
-    {
-        va_list args;
-        va_start(args, fmt);
-        std::string msgBody = PeVFormat(fmt, args);
-        va_end(args);
-
-        std::cout << msgBody << std::endl;
     }
 
     inline void PeCheckImpl(int res,
@@ -120,23 +131,11 @@ namespace pe
     {
         if (res != 0)
         {
-            throw std::runtime_error("error");
+            PeErrorImpl("", "", 0, "Check result error: %d", res);
         }
     }
 #endif
-
-#define PE_DEBUG_MODE 1
-#define PE_ERROR_MESSAGES 0
-#define PE_DEBUG_MESSENGER 0
-#define PE_USE_GLM 1
-#define PE_RENDER_DOC 0
 } // namespace pe
-
-#define PE_CHECK(res)                                         \
-    do                                                        \
-    {                                                         \
-        pe::PeCheckImpl((res), __func__, __FILE__, __LINE__); \
-    } while (0)
 
 #define PE_ERROR(fmt, ...)                                                 \
     do                                                                     \
@@ -153,8 +152,30 @@ namespace pe
         }                                                                      \
     } while (0)
 
+#define PE_CHECK(condition)                                 \
+    do                                                      \
+    {                                                       \
+        int res = (condition);                              \
+        pe::PeCheckImpl(res, __func__, __FILE__, __LINE__); \
+    } while (0)
+
+#define PE_ASSERT(condition, fmt, ...)                                         \
+    do                                                                         \
+    {                                                                          \
+        if (condition)                                                         \
+        {                                                                      \
+            pe::PeErrorImpl(__func__, __FILE__, __LINE__, fmt, ##__VA_ARGS__); \
+        }                                                                      \
+    } while (0)
+
 #define PE_INFO(fmt, ...)                   \
     do                                      \
     {                                       \
         pe::PeInfoImpl(fmt, ##__VA_ARGS__); \
+    } while (0)
+
+#define PE_WARN(fmt, ...)                   \
+    do                                      \
+    {                                       \
+        pe::PeWarnImpl(fmt, ##__VA_ARGS__); \
     } while (0)

@@ -321,6 +321,9 @@ namespace pe
         if (!vkSetDebugUtilsObjectNameEXT)
             return;
 
+        if (info.pObjectName)
+            PE_INFO("Name %s set (Handle: %p)", info.pObjectName, info.objectHandle);
+
         vkSetDebugUtilsObjectNameEXT(RHII.GetDevice(), &info);
     }
 
