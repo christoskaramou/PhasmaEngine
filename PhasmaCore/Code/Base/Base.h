@@ -2,6 +2,31 @@
 
 namespace pe
 {
+    namespace detail
+    {
+        template <typename T>
+        constexpr uintptr_t ToUintPtr(T v) noexcept
+        {
+            if constexpr (std::is_integral_v<T>)
+            {
+                return static_cast<uintptr_t>(v);
+            }
+            else if constexpr (std::is_pointer_v<T>)
+            {
+                return reinterpret_cast<uintptr_t>(v);
+            }
+            else if constexpr (requires { typename T::CType; }) // Vulkan-Hpp handles (vk::Buffer etc.)
+            {
+                using CType = typename T::CType;         // e.g. VkBuffer
+                return ToUintPtr(static_cast<CType>(v)); // explicit cast works in all modes
+            }
+            else
+            {
+                static_assert(!sizeof(T), "ToUintPtr: unsupported handle type");
+            }
+        }
+    } // namespace detail
+
     namespace ID
     {
         inline size_t NextID()
@@ -47,9 +72,10 @@ namespace pe
     } // namespace ID
 
 #ifdef __linux__
+#include <cstdlib>
 #include <cxxabi.h>
 #include <memory>
-#include <cstdlib>
+
 #endif
 
     inline std::string Demangle(const char *name)
@@ -243,13 +269,7 @@ namespace pe
             {
                 std::lock_guard<std::mutex> lock(s_mutex);
                 s_handles.push_back(ptr);
-                void *handle = nullptr;
-                if constexpr (requires { typename API_HANDLE::NativeType; })
-                    handle = (void *)(uintptr_t)(typename API_HANDLE::NativeType)ptr->ApiHandle();
-                else if constexpr (requires { typename API_HANDLE::CType; })
-                    handle = (void *)(uintptr_t)(typename API_HANDLE::CType)ptr->ApiHandle();
-                else
-                    handle = (void *)(uintptr_t)ptr->ApiHandle();
+                void *handle = (void *)detail::ToUintPtr(ptr->ApiHandle());
                 PE_INFO("Object %s created (Handle: %p)", Demangle(typeid(API_HANDLE).name()).c_str(), handle);
             }
 #endif
@@ -264,13 +284,7 @@ namespace pe
             if (ptr)
             {
 #if defined(PE_TRACK_RESOURCES)
-                void *handle = nullptr;
-                if constexpr (requires { typename API_HANDLE::NativeType; })
-                    handle = (void *)(uintptr_t)(typename API_HANDLE::NativeType)ptr->ApiHandle();
-                else if constexpr (requires { typename API_HANDLE::CType; })
-                    handle = (void *)(uintptr_t)(typename API_HANDLE::CType)ptr->ApiHandle();
-                else
-                    handle = (void *)(uintptr_t)ptr->ApiHandle();
+                void *handle = (void *)detail::ToUintPtr(ptr->ApiHandle());
 #endif
 
                 delete ptr; // should call ~T() destructor
