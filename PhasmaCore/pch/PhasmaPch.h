@@ -56,6 +56,7 @@
 #include <d3d12.h>
 #include <d3dcompiler.h>
 #include <dxgi1_6.h>
+#include <share.h>
 #include <psapi.h>
 #include <windows.h>
 #elif defined(PE_LINUX)
@@ -67,6 +68,7 @@
 #include <unistd.h>
 #endif
 
+#include "Base/Log.h"
 #include "Base/Defines.h"
 #include "Base/Enums.h"
 #include "Base/Settings.h"

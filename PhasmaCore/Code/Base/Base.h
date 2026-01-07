@@ -46,6 +46,25 @@ namespace pe
         }
     } // namespace ID
 
+#ifdef __linux__
+#include <cxxabi.h>
+#include <memory>
+#include <cstdlib>
+#endif
+
+    inline std::string Demangle(const char *name)
+    {
+#ifdef __linux__
+        int status = -1;
+        std::unique_ptr<char, void (*)(void *)> res{
+            abi::__cxa_demangle(name, NULL, NULL, &status),
+            std::free};
+        return (status == 0) ? res.get() : name;
+#else
+        return name;
+#endif
+    }
+
     template <uint32_t N>
     struct Placeholder
     {
@@ -221,8 +240,16 @@ namespace pe
             T *ptr = new T(std::forward<Params>(params)...);
 
 #if defined(PE_TRACK_RESOURCES)
-            std::lock_guard<std::mutex> lock(s_mutex);
-            s_handles.push_back(ptr);
+            {
+                std::lock_guard<std::mutex> lock(s_mutex);
+                s_handles.push_back(ptr);
+                void *handle = nullptr;
+                if constexpr (requires { typename API_HANDLE::NativeType; })
+                    handle = (void *)(uintptr_t)(typename API_HANDLE::NativeType)ptr->ApiHandle();
+                else
+                    handle = (void *)(uintptr_t)ptr->ApiHandle();
+                PE_INFO("Object %s created (Handle: %p)", Demangle(typeid(API_HANDLE).name()).c_str(), handle);
+            }
 #endif
 
             return ptr;
@@ -235,12 +262,22 @@ namespace pe
             if (ptr)
             {
 #if defined(PE_TRACK_RESOURCES)
+                void *handle = nullptr;
+                if constexpr (requires { typename API_HANDLE::NativeType; })
+                    handle = (void *)(uintptr_t)(typename API_HANDLE::NativeType)ptr->ApiHandle();
+                else
+                    handle = (void *)(uintptr_t)ptr->ApiHandle();
+#endif
+
+                delete ptr; // should call ~T() destructor
+
+#if defined(PE_TRACK_RESOURCES)
                 {
                     std::lock_guard<std::mutex> lock(s_mutex);
                     std::erase(s_handles, ptr);
+                    PE_INFO("Object %s destroyed (Handle: %p)", Demangle(typeid(API_HANDLE).name()).c_str(), handle);
                 }
 #endif
-                delete ptr; // should call ~T() destructor
             }
 
             ptr = nullptr;

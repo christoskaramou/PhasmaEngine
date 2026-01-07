@@ -24,7 +24,7 @@ namespace pe
         {
             if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_EVENTS) < 0)
             {
-                std::cout << SDL_GetError();
+                PE_ERROR("SDL_GetError: %s", SDL_GetError());
                 return;
             }
         }
@@ -96,6 +96,7 @@ namespace pe
 
     App::~App()
     {
+        PE_INFO("Application exiting");
         FileWatcher::Stop();
         FileWatcher::Clear();
         DestroyGlobalSystems();

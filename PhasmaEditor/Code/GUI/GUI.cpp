@@ -7,6 +7,7 @@
 #include "API/RenderPass.h"
 #include "API/Surface.h"
 #include "API/Swapchain.h"
+#include "Base/Log.h"
 #include "GUIState.h"
 #include "Helpers.h"
 #include "RenderPasses/LightPass.h"
@@ -14,6 +15,7 @@
 #include "Scene/Model.h"
 #include "Systems/RendererSystem.h"
 #include "Widgets/AssetViewer.h"
+#include "Widgets/Console.h"
 #include "Widgets/FileBrowser.h"
 #include "Widgets/FileSelector.h"
 #include "Widgets/Hierarchy.h"
@@ -25,6 +27,7 @@
 #include "Widgets/SceneView.h"
 #include "imgui/imgui_impl_sdl2.h"
 #include "imgui/imgui_impl_vulkan.h"
+
 
 namespace pe
 {
@@ -198,14 +201,25 @@ namespace pe
 
         // Central node is now dockMainId - dock the Scene View there
         ImGui::DockBuilderDockWindow("Scene View", dockMainId);
+
+        // Left - Metrics, Models, Hierarchy
         ImGui::DockBuilderDockWindow("Metrics", dockLeft);
         ImGui::DockBuilderDockWindow("Models", dockLeft);
         ImGui::DockBuilderDockWindow("Hierarchy", dockLeft);
+
+        // Right - Global Properties
         ImGui::DockBuilderDockWindow("Global Properties", dockRight);
+
+        // Bottom - Console, Asset Viewer, File Browser (Tabbed)
+        // Console first to ensure leftmost tab position
+        ImGui::DockBuilderDockWindow("Console", dockBottom);
         ImGui::DockBuilderDockWindow("Asset Viewer", dockBottom);
         ImGui::DockBuilderDockWindow("File Browser", dockBottom);
 
         ImGui::DockBuilderFinish(dockspace);
+
+        // Make Console the active tab
+        ImGui::SetWindowFocus("Console");
     }
 
     void GUI::Menu()
@@ -393,11 +407,17 @@ namespace pe
         auto fileSelector = std::make_shared<FileSelector>(); // Separate instance for popups
         auto hierarchy = std::make_shared<Hierarchy>();
         auto particles = std::make_shared<Particles>();
+        auto console = std::make_shared<Console>();
 
-        m_widgets = {properties, metrics, models, assetViewer, sceneView, loading, fileBrowser, fileSelector, hierarchy, particles};
+        // Console added early to potentially influence tab ordering (Leftmost)
+        m_widgets = {console, properties, metrics, models, assetViewer, sceneView, loading, fileBrowser, fileSelector, hierarchy, particles};
+
+        // Initialize Core Logging and attach Console
+        Log::Attach([console](const std::string &msg, LogType type)
+                    { console->AddLog(type, "%s", msg.c_str()); });
 
         // Populate Menu Vectors
-        m_menuWindowWidgets = {metrics, properties, models, assetViewer, sceneView, fileBrowser, hierarchy, particles};
+        m_menuWindowWidgets = {console, metrics, properties, models, assetViewer, sceneView, fileBrowser, hierarchy, particles};
         m_menuAssetsWidgets = {};
         for (auto &widget : m_widgets)
             widget->Init(this);

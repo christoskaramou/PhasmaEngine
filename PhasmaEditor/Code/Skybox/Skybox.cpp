@@ -84,19 +84,21 @@ namespace pe
         passInfo->pCompShader = Shader::Create(Path::Assets + "Shaders/Compute/EquirectangularToCubemap.hlsl", vk::ShaderStageFlagBits::eCompute, "main", std::vector<Define>{}, ShaderCodeType::HLSL);
         passInfo->Update();
 
-        // 5. Barriers - Image Layout Transitions
+        // 4. Barriers
         ImageBarrierInfo barrier{};
         barrier.image = m_cubeMap;
         barrier.layout = vk::ImageLayout::eGeneral;
         barrier.stageFlags = vk::PipelineStageFlagBits2::eComputeShader;
         barrier.accessMask = vk::AccessFlagBits2::eShaderWrite;
-        barrier.baseArrayLayer = 0;
-        barrier.arrayLayers = m_cubeMap->GetArrayLayers();
-        barrier.baseMipLevel = 0;
-        barrier.mipLevels = m_cubeMap->GetMipLevels();
         cmd->ImageBarrier(barrier);
+        ImageBarrierInfo barrierInput{};
+        barrierInput.image = equiImage;
+        barrierInput.layout = vk::ImageLayout::eShaderReadOnlyOptimal;
+        barrierInput.stageFlags = vk::PipelineStageFlagBits2::eComputeShader;
+        barrierInput.accessMask = vk::AccessFlagBits2::eShaderRead;
+        cmd->ImageBarrier(barrierInput);
 
-        // 4. Update Descriptors
+        // 5. Update Descriptors
         auto &descriptors = passInfo->GetDescriptors(RHII.GetFrameIndex());
         Descriptor *descriptor = descriptors[0];
         descriptor->SetImageView(0, m_cubeMap->GetUAV(0), nullptr);
@@ -105,7 +107,7 @@ namespace pe
         descriptor->Update();
 
         // 6. Dispatch
-        cmd->BindPipeline(*passInfo); // Internally calls BindDescriptors if updated
+        cmd->BindPipeline(*passInfo);
         uint32_t groups = (cubemapSize + 31) / 32;
         cmd->Dispatch(groups, groups, 6);
 
