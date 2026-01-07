@@ -270,11 +270,19 @@ namespace pe
         const VkDebugUtilsMessengerCallbackDataEXT *pCallbackData,
         void *pUserData)
     {
-        if (messageSeverity > VK_DEBUG_UTILS_MESSAGE_SEVERITY_INFO_BIT_EXT)
-            std::cerr << GetDebugMessageString(messageType) << " "
-                      << GetDebugSeverityString(messageSeverity) << " from \""
-                      << pCallbackData->pMessageIdName << "\": "
-                      << pCallbackData->pMessage << std::endl;
+        std::string msg = "VALIDATION: " + GetDebugMessageString(messageType) + " " +
+                          GetDebugSeverityString(messageSeverity) + " from \"" +
+                          pCallbackData->pMessageIdName + "\": " +
+                          pCallbackData->pMessage;
+
+        if (messageSeverity & VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT)
+            pe::Log::Error(msg);
+        else if (messageSeverity & VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT)
+            pe::Log::Warn(msg);
+        else if (messageSeverity & VK_DEBUG_UTILS_MESSAGE_SEVERITY_INFO_BIT_EXT)
+            pe::Log::Info(msg);
+        else if (messageSeverity & VK_DEBUG_UTILS_MESSAGE_SEVERITY_VERBOSE_BIT_EXT)
+            pe::Log::Info(msg);
 
         return VK_FALSE;
     }

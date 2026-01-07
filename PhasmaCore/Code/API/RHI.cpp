@@ -384,7 +384,6 @@ namespace pe
         DescriptorPool::Destroy(m_descriptorPool);
 
 #if defined(PE_TRACK_RESOURCES)
-
         auto buffers = Buffer::GetHandles();
         auto commandBuffers = CommandBuffer::GetHandles();
         auto descriptorPools = DescriptorPool::GetHandles();
@@ -404,24 +403,41 @@ namespace pe
         auto swapchains = Swapchain::GetHandles();
         auto gpuTimers = GpuTimer::GetHandles();
 
-        PE_ERROR_IF(!buffers.empty(), "Leaked Buffers");
-        PE_ERROR_IF(!commandBuffers.empty(), "Leaked CommandBuffers");
-        PE_ERROR_IF(!descriptorPools.empty(), "Leaked DescriptorPools");
-        PE_ERROR_IF(!descriptorLayouts.empty(), "Leaked DescriptorLayouts");
-        PE_ERROR_IF(!descriptors.empty(), "Leaked Descriptors");
-        PE_ERROR_IF(!events.empty(), "Leaked Events");
-        PE_ERROR_IF(!framebuffers.empty(), "Leaked Framebuffers");
-        PE_ERROR_IF(!samplers.empty(), "Leaked Samplers");
-        PE_ERROR_IF(!images.empty(), "Leaked Images");
-        PE_ERROR_IF(!pipelines.empty(), "Leaked Pipelines");
-        PE_ERROR_IF(!commandPools.empty(), "Leaked CommandPools");
-        PE_ERROR_IF(!queues.empty(), "Leaked Queues");
-        PE_ERROR_IF(!renderPasses.empty(), "Leaked RenderPasses");
-        PE_ERROR_IF(!semaphores.empty(), "Leaked Semaphores");
-        PE_ERROR_IF(!shaders.empty(), "Leaked Shaders");
-        PE_ERROR_IF(!surfaces.empty(), "Leaked Surfaces");
-        PE_ERROR_IF(!swapchains.empty(), "Leaked Swapchains");
-        PE_ERROR_IF(!gpuTimers.empty(), "Leaked GpuTimers");
+        auto logLeaks = [](const char *name, const auto &resources)
+        {
+            if (!resources.empty())
+            {
+                PE_WARN("Leaked %s: %zu", name, resources.size());
+                for (const auto &res : resources)
+                {
+                    auto handle = res->ApiHandle();
+                    using HandleType = decltype(handle);
+                    if constexpr (requires { typename HandleType::NativeType; })
+                        PE_WARN("  Handle: %p", (void *)(uintptr_t)(typename HandleType::NativeType)handle);
+                    else
+                        PE_WARN("  Handle: %p", (void *)(uintptr_t)handle);
+                }
+            }
+        };
+
+        logLeaks("Buffers", buffers);
+        logLeaks("CommandBuffers", commandBuffers);
+        logLeaks("DescriptorPools", descriptorPools);
+        logLeaks("DescriptorLayouts", descriptorLayouts);
+        logLeaks("Descriptors", descriptors);
+        logLeaks("Events", events);
+        logLeaks("Framebuffers", framebuffers);
+        logLeaks("Samplers", samplers);
+        logLeaks("Images", images);
+        logLeaks("Pipelines", pipelines);
+        logLeaks("CommandPools", commandPools);
+        logLeaks("Queues", queues);
+        logLeaks("RenderPasses", renderPasses);
+        logLeaks("Semaphores", semaphores);
+        logLeaks("Shaders", shaders);
+        logLeaks("Surfaces", surfaces);
+        logLeaks("Swapchains", swapchains);
+        logLeaks("GpuTimers", gpuTimers);
 #endif
 
         if (m_device)
@@ -444,12 +460,29 @@ namespace pe
         PE_ERROR_IF(!SDL_Vulkan_GetInstanceExtensions(window, &extCount, instanceExtensions.data()), SDL_GetError());
         // =============================================
 
+        // === Layers ==================================
+        if (RHII.IsInstanceLayerValid("VK_LAYER_KHRONOS_validation"))
+            instanceLayers.push_back("VK_LAYER_KHRONOS_validation");
+        // =============================================
+
 #if !defined(PE_RELEASE) || !defined(PE_MINSIZEREL)
         // === Debugging ===============================
         if (RHII.IsInstanceExtensionValid("VK_EXT_debug_utils"))
             instanceExtensions.push_back("VK_EXT_debug_utils");
         // =============================================
 #endif
+
+        const VkBool32 setting_true = true;
+        const VkLayerSettingEXT layer_settings[] = {
+            {"VK_LAYER_KHRONOS_validation", "printf_verbose", VK_LAYER_SETTING_TYPE_BOOL32_EXT, 1, &setting_true},
+            {"VK_LAYER_KHRONOS_validation", "validate_sync", VK_LAYER_SETTING_TYPE_BOOL32_EXT, 1, &setting_true}};
+
+        VkLayerSettingsCreateInfoEXT layer_settings_create_info = {VK_STRUCTURE_TYPE_LAYER_SETTINGS_CREATE_INFO_EXT, nullptr, 2, layer_settings};
+
+        if (RHII.IsInstanceExtensionValid("VK_EXT_layer_settings"))
+        {
+            instanceExtensions.push_back("VK_EXT_layer_settings");
+        }
 
         // uint32_t apiVersion;
         // vkEnumerateInstanceVersion(&apiVersion);
@@ -461,6 +494,7 @@ namespace pe
         appInfo.apiVersion = VK_API_VERSION_1_4;
 
         vk::InstanceCreateInfo instInfo{};
+        instInfo.pNext = &layer_settings_create_info;
         instInfo.pApplicationInfo = &appInfo;
         instInfo.enabledLayerCount = static_cast<uint32_t>(instanceLayers.size());
         instInfo.ppEnabledLayerNames = instanceLayers.data();
