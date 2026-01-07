@@ -12,7 +12,7 @@ float rand(inout float2 seed)
 }
 
 // Reset particle
-void Reset(inout Particle p, uint index, ParticleEmitter emitter)
+void Reset(inout Particle p, uint index, ParticleEmitter emitter, uint emitterIndex)
 {
     float2 seed = float2(index * 1.37, pc.totalTime * (index + 1));
     
@@ -55,7 +55,7 @@ void Reset(inout Particle p, uint index, ParticleEmitter emitter)
     // Start size
     p.velocity.w = emitter.sizeLife.x; 
     
-    p.extra.x = float(emitter.textureIndex);
+    p.extra.x = float(emitterIndex); // Store Emitter Index
     p.extra.z = rand(seed); // Random variation factor
     p.extra.w = rand(seed); // Random offset
     
@@ -68,32 +68,34 @@ void mainCS(uint3 DTid : SV_DispatchThreadID)
 {
     uint index = DTid.x;
     
-    if (index >= pc.particleCount) return;
+    if (index >= pc.particleCount)
+        return;
 
     // Find which emitter owns this particle
     ParticleEmitter emitter;
+    uint emitterIndex = 0;
     bool found = false;
     
-    // Iterate to find the emitter range [offset, offset + count)
-    // Note: This linear search is fine for a small number of emitters (e.g. < 64).
-    // For many emitters, a binary search or a separate indirection buffer would be better.
     for (uint i = 0; i < pc.emitterCount; i++)
     {
         ParticleEmitter e = emitters[i];
         if (index >= e.offset && index < (e.offset + e.count))
         {
             emitter = e;
+            emitterIndex = i;
             found = true;
             break;
         }
     }
     
-    if (!found) return; // Should not happen if pc.particleCount matches
+    if (!found)
+        return; // Should not happen if pc.particleCount matches
 
     // Update Life
     particles[index].position.w -= pc.deltaTime;
+    float currentLife = particles[index].position.w;
     
-    if (particles[index].position.w <= 0.0)
+    if (currentLife <= 0.0)
     {
         // Respawn check
         float2 seed = float2(index * 1.37, pc.totalTime * (index + 1));
@@ -101,13 +103,9 @@ void mainCS(uint3 DTid : SV_DispatchThreadID)
         float spawnRate = emitter.physics.x;
         float spawnProbability = saturate(spawnRate * pc.deltaTime);
         
-        // Also check if we should spawn based on max count
-        // For simple continuous spawning, rate is enough. 
-        // Logic: if dead, try to respawn.
-        
         if (rand(seed) < spawnProbability)
         {
-            Reset(particles[index], index, emitter);
+            Reset(particles[index], index, emitter, emitterIndex);
         }
         else
         {
@@ -117,7 +115,7 @@ void mainCS(uint3 DTid : SV_DispatchThreadID)
     else
     {
         // Alive Particle Update
-        float lifeRatio = 1.0 - saturate(particles[index].position.w / max(particles[index].extra.y, 0.0001));
+        float lifeRatio = 1.0 - saturate(currentLife / max(particles[index].extra.y, 0.0001));
         
         // --- Physics ---
         float drag = emitter.physics.w;
@@ -137,14 +135,12 @@ void mainCS(uint3 DTid : SV_DispatchThreadID)
         particles[index].color = lerp(emitter.colorStart, emitter.colorEnd, lifeRatio);
         
         // Size Interpolation
-        float sizeMin = emitter.sizeLife.x;
-        float sizeMax = emitter.sizeLife.y;
+        float sizeStart = emitter.sizeLife.x;
+        float sizeEnd = emitter.sizeLife.y;
         
-        // Simple curve for size: Grow then shrink
-        float sizeCurve = sin(lifeRatio * 3.14159);
-        particles[index].velocity.w = lerp(sizeMin, sizeMax, sizeCurve);
+        particles[index].velocity.w = lerp(sizeStart, sizeEnd, lifeRatio);
         
-        // Update Instance Data if needed (texture index is static per particle)
-        particles[index].extra.x = float(emitter.textureIndex);
+        // Update Instance Data
+        particles[index].extra.x = float(emitterIndex);
     }
 }

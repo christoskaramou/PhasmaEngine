@@ -11,6 +11,12 @@ PS_OUTPUT_Particle mainPS(PS_INPUT_Particle input)
     uint texID = (uint)input.textureIndex;
     float4 texColor = textures[texID].Sample(samplerState, input.uv);
     
+    if (input.blendFactor > 0.0)
+    {
+        float4 texColor2 = textures[texID].Sample(samplerState, input.uv2);
+        texColor = lerp(texColor, texColor2, input.blendFactor);
+    }
+    
     // Combine with particle color
     output.color = input.color * texColor;
     
