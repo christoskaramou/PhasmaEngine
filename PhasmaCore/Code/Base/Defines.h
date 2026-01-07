@@ -2,9 +2,10 @@
 
 #define PE_DEBUG_MODE 1
 #define PE_LOGGING 1
-#define PE_DEBUG_MESSENGER 0
+#define PE_DEBUG_MESSENGER 1
 #define PE_USE_GLM 1
 #define PE_RENDER_DOC 0
+#define PE_TRACK_RESOURCES 1
 
 namespace pe
 {
