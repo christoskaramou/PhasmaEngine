@@ -20,15 +20,6 @@ namespace pe
         float maxDepth;
     };
 
-    class RenderArea
-    {
-    public:
-        Viewport viewport;
-        Rect2Di scissor;
-
-        void Update(float x, float y, float w, float h, float minDepth = 0.f, float maxDepth = 1.f);
-    };
-
     class GpuTimer;
     class Semaphore;
 
@@ -48,7 +39,6 @@ namespace pe
         GUI &GetGUI() { return m_gui; }
         void ToggleGUI() { m_gui.ToggleRender(); }
 
-        RenderArea &GetRenderArea() { return m_renderArea; }
         Image *CreateRenderTarget(const std::string &name,
                                   vk::Format format,
                                   vk::ImageUsageFlags usage = {},
@@ -90,7 +80,6 @@ namespace pe
         std::mutex m_binarySemaphoresMutex;
         std::vector<Semaphore *> m_acquireSemaphores;
         std::vector<Semaphore *> m_submitSemaphores;
-        RenderArea m_renderArea;
         Scene m_scene;
         SkyBox m_skyBoxDay;
         SkyBox m_skyBoxNight;

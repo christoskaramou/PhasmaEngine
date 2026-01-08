@@ -37,8 +37,8 @@ namespace pe
         if (!m_historyImage)
         {
             vk::ImageCreateInfo info = Image::CreateInfoInit();
-            info.format = m_viewportRT->GetFormat();
-            info.extent = vk::Extent3D{m_viewportRT->GetWidth(), m_viewportRT->GetHeight(), 1};
+            info.format = m_displayRT->GetFormat();
+            info.extent = vk::Extent3D{m_displayRT->GetWidth(), m_displayRT->GetHeight(), 1};
             info.usage = vk::ImageUsageFlagBits::eSampled | vk::ImageUsageFlagBits::eStorage | vk::ImageUsageFlagBits::eTransferDst | vk::ImageUsageFlagBits::eTransferSrc | vk::ImageUsageFlagBits::eColorAttachment;
             m_historyImage = Image::Create(info, "TAA_History");
             m_historyImage->CreateSRV(vk::ImageViewType::e2D);
@@ -82,23 +82,8 @@ namespace pe
                 dset->SetImageView(1, m_historyImage->GetSRV(), m_historyImage->GetSampler()->ApiHandle());
                 dset->SetImageView(2, m_velocityRT->GetSRV(), m_velocityRT->GetSampler()->ApiHandle());
                 dset->SetImageView(3, m_depthStencil->GetSRV(), m_depthStencil->GetSampler()->ApiHandle());
-                // Sampler at binding 4? No, sampler is likely immutable or separate?
-                // Shader:
-                // binding 0: Texture2D in_color
-                // binding 1: Texture2D in_history
-                // binding 2: Texture2D in_velocity
-                // binding 3: Texture2D in_depth
-                // binding 4: SamplerState sampler_linear_clamp
-                // binding 5: RWTexture2D out_color
-
-                // Usually samplers are combined with images or separate. The shader has `register(s0)` for sampler.
-                // If using HLSL, default reflection might map valid bindings.
-                // Binding 4 is Sampler.
                 dset->SetSampler(4, m_historyImage->GetSampler()->ApiHandle());
-
-                // Binding 5: Storage Image
-                dset->SetImageView(5, m_displayRT->GetSRV(), nullptr); // or dedicated UAV view if required. eStorage usage implies SRV/UAV.
-
+                dset->SetImageView(5, m_displayRT->GetSRV(), nullptr);
                 dset->Update();
             }
         }
@@ -112,12 +97,15 @@ namespace pe
     {
         struct TAAConstants
         {
-            vec2 resolution;
+            vec2 resolution;  // Input resolution
+            vec2 displaySize; // Output resolution
             vec2 jitter;
+            vec2 padding;
         };
 
         TAAConstants pc{};
         pc.resolution = vec2(m_viewportRT->GetWidth_f(), m_viewportRT->GetHeight_f());
+        pc.displaySize = vec2(m_displayRT->GetWidth_f(), m_displayRT->GetHeight_f());
         pc.jitter = m_jitter;
 
         // Barriers
@@ -159,11 +147,9 @@ namespace pe
         cmd->ImageBarrier(copyBarrierSrc);
         cmd->ImageBarrier(copyBarrierDst);
 
+        // Copy Display -> History using Upsample-like logic
         cmd->CopyImage(m_displayRT, m_historyImage);
     }
-    // Transition Display back to attachment optimal? or leave as transfer src?
-    // RendererSystem might expect something else. Renderer usually transitions to ePresent or similar later.
-    // Actually RendererSystem::RecordPasses adds barriers too if needed or BlitToSwapchain does.
 
     void TAAPass::Resize(uint32_t width, uint32_t height)
     {
