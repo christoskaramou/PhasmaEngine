@@ -5,6 +5,20 @@
 
 namespace pe
 {
+    namespace
+    {
+        int32_t GetBindingIndex(uint32_t binding, const std::vector<DescriptorBindingInfo> &bindingInfos)
+        {
+            for (int32_t i = 0; i < bindingInfos.size(); i++)
+            {
+                if (bindingInfos[i].binding == binding)
+                    return i;
+            }
+            PE_WARN("Descriptor: Binding not found");
+            return -1;
+        }
+    } // namespace
+
     DescriptorPool::DescriptorPool(const std::vector<vk::DescriptorPoolSize> &sizes,
                                    const std::string &name,
                                    uint32_t maxSets)
@@ -174,11 +188,15 @@ namespace pe
                                    const std::vector<vk::ImageView> &views,
                                    const std::vector<vk::Sampler> &samplers)
     {
+        int32_t bindingIndex = GetBindingIndex(binding, m_bindingInfos);
+        if (bindingIndex == -1)
+            return;
+
         DescriptorUpdateInfo info{};
         info.binding = binding;
         info.views = views;
         info.samplers = samplers;
-        m_updateInfos[binding] = info;
+        m_updateInfos[bindingIndex] = info;
     }
 
     void Descriptor::SetImageView(uint32_t binding, vk::ImageView view, vk::Sampler sampler)
@@ -191,12 +209,16 @@ namespace pe
                                 const std::vector<uint64_t> &offsets,
                                 const std::vector<uint64_t> &ranges)
     {
+        int32_t bindingIndex = GetBindingIndex(binding, m_bindingInfos);
+        if (bindingIndex == -1)
+            return;
+
         DescriptorUpdateInfo info{};
         info.binding = binding;
         info.buffers = buffers;
         info.offsets = offsets;
         info.ranges = ranges;
-        m_updateInfos[binding] = info;
+        m_updateInfos[bindingIndex] = info;
     }
 
     void Descriptor::SetBuffer(uint32_t binding, Buffer *buffer, uint64_t offset, uint64_t range)
@@ -206,10 +228,14 @@ namespace pe
 
     void Descriptor::SetSamplers(uint32_t binding, const std::vector<vk::Sampler> &samplers)
     {
+        int32_t bindingIndex = GetBindingIndex(binding, m_bindingInfos);
+        if (bindingIndex == -1)
+            return;
+
         DescriptorUpdateInfo info{};
         info.binding = binding;
         info.samplers = samplers;
-        m_updateInfos[binding] = info;
+        m_updateInfos[bindingIndex] = info;
     }
 
     void Descriptor::SetSampler(uint32_t binding, vk::Sampler sampler)

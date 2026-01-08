@@ -3,7 +3,6 @@
 #include "API/Surface.h"
 #include "GUI/Helpers.h"
 #include "RenderPasses/LightPass.h"
-#include "RenderPasses/SuperResolutionPass.h"
 
 namespace pe
 {
@@ -13,7 +12,6 @@ namespace pe
             return;
 
         auto &gSettings = Settings::Get<GlobalSettings>();
-        auto &srSettings = Settings::Get<SRSettings>();
 
         static float rtScale = gSettings.render_scale;
 
@@ -82,7 +80,18 @@ namespace pe
             ImGui::Unindent(16.0f);
         }
         ImGui::Checkbox("SSR", &gSettings.ssr);
-        ImGui::Checkbox("SSAO", &gSettings.ssao);
+        ImGui::Checkbox("FXAA", &gSettings.fxaa);
+        ImGui::Checkbox("TAA", &gSettings.taa);
+        ImGui::Checkbox("Tonemapping", &gSettings.tonemapping);
+        ImGui::Checkbox("Bloom", &gSettings.bloom);
+        if (gSettings.bloom)
+        {
+            ImGui::Indent(16.0f);
+            ImGui::SliderFloat("Strength##Bloom", &gSettings.bloom_strength, 0.01f, 10.f);
+            ImGui::SliderFloat("Range##Bloom", &gSettings.bloom_range, 0.1f, 20.f);
+            ImGui::Unindent(16.0f);
+            ImGui::Separator();
+        }
         ImGui::Checkbox("Depth of Field", &gSettings.dof);
         if (gSettings.dof)
         {
@@ -96,30 +105,8 @@ namespace pe
         if (gSettings.motion_blur)
         {
             ImGui::Indent(16.0f);
-            ImGui::DragFloat("Strength#mb", &gSettings.motion_blur_strength, 0.05f, 0.2f);
-            ImGui::DragInt("Samples#mb", &gSettings.motion_blur_samples, 0.1f, 8, 64);
-            ImGui::Unindent(16.0f);
-            ImGui::Separator();
-        }
-        ImGui::Checkbox("Tone Mapping", &gSettings.tonemapping);
-        ImGui::Checkbox("FSR2", &srSettings.enable);
-        if (srSettings.enable)
-        {
-            ImGui::Indent(16.0f);
-            ImGui::InputFloat2("Motion", (float *)&srSettings.motionScale);
-            ImGui::InputFloat2("Proj", (float *)&srSettings.projScale);
-            ImGui::Unindent(16.0f);
-            ImGui::Separator();
-        }
-
-        ImGui::Checkbox("FXAA", &gSettings.fxaa);
-
-        ImGui::Checkbox("Bloom", &gSettings.bloom);
-        if (gSettings.bloom)
-        {
-            ImGui::Indent(16.0f);
-            ImGui::SliderFloat("Strength", &gSettings.bloom_strength, 0.01f, 10.f);
-            ImGui::SliderFloat("Range", &gSettings.bloom_range, 0.1f, 20.f);
+            ImGui::SliderFloat("Strength##MB", &gSettings.motion_blur_strength, 0.01f, 1.f);
+            ImGui::SliderInt("Samples##MB", &gSettings.motion_blur_samples, 2, 32);
             ImGui::Unindent(16.0f);
             ImGui::Separator();
         }

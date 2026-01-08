@@ -1,6 +1,4 @@
 #include "GUI/Widget.h"
-#include <unordered_map>
-
 
 namespace pe
 {

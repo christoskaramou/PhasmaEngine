@@ -22,15 +22,16 @@
 #include "RenderPasses/SSAOPass.h"
 #include "RenderPasses/SSRPass.h"
 #include "RenderPasses/ShadowPass.h"
-#include "RenderPasses/SuperResolutionPass.h"
+#include "RenderPasses/TAAPass.h"
 #include "RenderPasses/TonemapPass.h"
+
 
 namespace pe
 {
     void RendererSystem::LoadResources(CommandBuffer *cmd)
     {
-        m_skyBoxDay.LoadSkyBox(cmd, "Assets/Skyboxes/golden_gate_hills/golden_gate_hills_4k.hdr");
-        m_skyBoxNight.LoadSkyBox(cmd, "Assets/Skyboxes/rogland_clear_night/rogland_clear_night_4k.hdr");
+        m_skyBoxDay.LoadSkyBox(cmd, Path::Assets + "/Skyboxes/golden_gate_hills/golden_gate_hills_4k.hdr");
+        m_skyBoxNight.LoadSkyBox(cmd, Path::Assets + "/Skyboxes/rogland_clear_night/rogland_clear_night_4k.hdr");
     }
 
     void RendererSystem::Init(CommandBuffer *cmd)
@@ -68,6 +69,7 @@ namespace pe
         m_renderPassComponents[ID::GetTypeID<AabbsPass>()] = CreateGlobalComponent<AabbsPass>();
         m_renderPassComponents[ID::GetTypeID<ParticleComputePass>()] = CreateGlobalComponent<ParticleComputePass>();
         m_renderPassComponents[ID::GetTypeID<ParticlePass>()] = CreateGlobalComponent<ParticlePass>();
+        m_renderPassComponents[ID::GetTypeID<TAAPass>()] = CreateGlobalComponent<TAAPass>();
 
         for (auto &renderPassComponent : m_renderPassComponents)
         {
@@ -161,7 +163,8 @@ namespace pe
         BloomGaussianBlurVerticalPass &bgbv = *GetGlobalComponent<BloomGaussianBlurVerticalPass>();
         DOFPass &dof = *GetGlobalComponent<DOFPass>();
         MotionBlurPass &motionBlur = *GetGlobalComponent<MotionBlurPass>();
-        SuperResolutionPass &sr = *GetGlobalComponent<SuperResolutionPass>();
+        TAAPass &taa = *GetGlobalComponent<TAAPass>();
+
         TonemapPass &tonemap = *GetGlobalComponent<TonemapPass>();
         AabbsPass &aabbs = *GetGlobalComponent<AabbsPass>();
         ParticleComputePass &pcp = *GetGlobalComponent<ParticleComputePass>();
@@ -241,11 +244,10 @@ namespace pe
             aabbs.Draw(cmd);
         }
 
-        // Upscale
-        if (Settings::Get<SRSettings>().enable)
+        // Upscale / TAA
+        if (gSettings.taa)
         {
-            // FidelityFX Super Resolution
-            sr.Draw(cmd);
+            taa.Draw(cmd);
         }
         else
         {

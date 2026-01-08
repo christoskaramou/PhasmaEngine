@@ -5,7 +5,6 @@
 #include "API/Queue.h"
 #include "API/RHI.h"
 
-
 namespace pe
 {
     ParticleManager::ParticleManager()

@@ -1,6 +1,5 @@
 #include "Camera/Camera.h"
-#include "RenderPasses/SuperResolutionPass.h"
-#include "Systems/PostProcessSystem.h"
+#include "RenderPasses/TAAPass.h"
 #include "Systems/RendererSystem.h"
 
 namespace pe
@@ -46,13 +45,13 @@ namespace pe
 
         UpdatePerspective();
         UpdateView();
-        
+
         m_invViewProjection = m_invView * m_invProjection;
         m_previousViewProjection = m_viewProjection;
         m_viewProjection = m_projection * m_view;
-        
+
         // On first update (or if reset), sync previous with current to avoid jump artifacts
-        if (m_previousViewProjection == mat4(1.0f)) 
+        if (m_previousViewProjection == mat4(1.0f))
         {
             m_previousViewProjection = m_viewProjection;
             m_previousView = m_view;
@@ -76,15 +75,17 @@ namespace pe
         m_projection = perspective(Fovy(), GetAspect(), m_farPlane, m_nearPlane);
         m_projectionNoJitter = m_projection; // Save the clean projection matrix
 
-        // If using FSR2, apply jitter to the projection matrix
-        if (Settings::Get<SRSettings>().enable)
+        if (Settings::Get<GlobalSettings>().taa)
         {
-            SuperResolutionPass *sr = Context::Get()->GetSystem<PostProcessSystem>()->GetEffect<SuperResolutionPass>();
-            sr->GenerateJitter();
-            m_projJitter = sr->GetProjectionJitter();
+            TAAPass *taa = GetGlobalComponent<TAAPass>();
+            if (taa)
+            {
+                taa->GenerateJitter();
+                m_projJitter = taa->GetProjectionJitter();
 
-            mat4 jitterMat = translate(mat4(1.0f), vec3(m_projJitter.x, m_projJitter.y, 0.f));
-            m_projection = jitterMat * m_projection;
+                mat4 jitterMat = translate(mat4(1.0f), vec3(m_projJitter.x, m_projJitter.y, 0.f));
+                m_projection = jitterMat * m_projection;
+            }
         }
 
         m_invProjection = inverse(m_projection);
