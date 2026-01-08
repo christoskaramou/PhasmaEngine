@@ -1,3 +1,4 @@
+#ifdef PE_WIN32
 #include "SuperResolutionPass.h"
 #include "API/Command.h"
 #include "API/Image.h"
@@ -235,3 +236,45 @@ namespace pe
         m_projectionJitter.y = srSettings.projScale.y * (-2.0f * m_jitter.y / m_viewportRT->GetHeight());
     }
 } // namespace pe
+#else
+#include "SuperResolutionPass.h"
+#include "API/RHI.h"
+#include "Systems/RendererSystem.h"
+#include "API/Image.h"
+#include "API/Command.h"
+
+namespace pe
+{
+    void SuperResolutionPass::Draw(CommandBuffer *cmd)
+    {
+        PE_WARN("FSR2 code is disabled for Linux, using a basic blit");
+
+        RendererSystem *rs = GetGlobalSystem<RendererSystem>();
+        Image *viewport = rs->GetViewportRT();
+        Image *display = rs->GetDisplayRT();
+
+        std::vector<ImageBarrierInfo> barriers(2);
+        barriers[0].image = viewport;
+        barriers[0].layout = vk::ImageLayout::eTransferSrcOptimal;
+        barriers[0].stageFlags = vk::PipelineStageFlagBits2::eTransfer;
+        barriers[0].accessMask = vk::AccessFlagBits2::eTransferRead;
+
+        barriers[1].image = display;
+        barriers[1].layout = vk::ImageLayout::eTransferDstOptimal;
+        barriers[1].stageFlags = vk::PipelineStageFlagBits2::eTransfer;
+        barriers[1].accessMask = vk::AccessFlagBits2::eTransferWrite;
+
+        cmd->ImageBarriers(barriers);
+
+        cmd->CopyImage(viewport, display);
+
+        ImageBarrierInfo displayBarrier{};
+        displayBarrier.image = display;
+        displayBarrier.layout = vk::ImageLayout::eAttachmentOptimal;
+        displayBarrier.stageFlags = vk::PipelineStageFlagBits2::eColorAttachmentOutput;
+        displayBarrier.accessMask = vk::AccessFlagBits2::eColorAttachmentWrite;
+
+        cmd->ImageBarrier(displayBarrier);
+    }
+}
+#endif

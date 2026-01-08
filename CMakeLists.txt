@@ -64,25 +64,26 @@ target_include_directories(PhasmaEditor PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/Pha
 target_include_directories(PhasmaEditor PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/PhasmaEditor/Include/imgui")
 
 # PhasmaEditor link directories
-target_link_directories(PhasmaEditor PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/PhasmaEditor/Libs/fsr/Debug")
-target_link_directories(PhasmaEditor PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/PhasmaEditor/Libs/fsr/Release")
-
-# --- Scripts support ---
-# target_compile_definitions(PhasmaEditor PUBLIC "PE_SCRIPTS")
-
-# Libraries
 target_link_libraries(PhasmaEditor PRIVATE
     PhasmaCore
     assimp
-    $<$<CONFIG:Debug>:ffx_fsr2_api_x64d>
-    $<$<CONFIG:Release>:ffx_fsr2_api_x64>
-    $<$<CONFIG:RelWithDebInfo>:ffx_fsr2_api_x64>
-    $<$<CONFIG:MinSizeRel>:ffx_fsr2_api_x64>
-    $<$<CONFIG:Debug>:ffx_fsr2_api_vk_x64d>
-    $<$<CONFIG:Release>:ffx_fsr2_api_vk_x64>
-    $<$<CONFIG:RelWithDebInfo>:ffx_fsr2_api_vk_x64>
-    $<$<CONFIG:MinSizeRel>:ffx_fsr2_api_vk_x64>
 )
+
+if(WIN32)
+    target_link_directories(PhasmaEditor PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/PhasmaEditor/Libs/fsr/Debug")
+    target_link_directories(PhasmaEditor PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/PhasmaEditor/Libs/fsr/Release")
+
+    target_link_libraries(PhasmaEditor PRIVATE
+        $<$<CONFIG:Debug>:ffx_fsr2_api_x64d>
+        $<$<CONFIG:Release>:ffx_fsr2_api_x64>
+        $<$<CONFIG:RelWithDebInfo>:ffx_fsr2_api_x64>
+        $<$<CONFIG:MinSizeRel>:ffx_fsr2_api_x64>
+        $<$<CONFIG:Debug>:ffx_fsr2_api_vk_x64d>
+        $<$<CONFIG:Release>:ffx_fsr2_api_vk_x64>
+        $<$<CONFIG:RelWithDebInfo>:ffx_fsr2_api_vk_x64>
+        $<$<CONFIG:MinSizeRel>:ffx_fsr2_api_vk_x64>
+    )
+endif()
 
 # target_compile_options(PhasmaEditor PRIVATE -fsanitize=address)
 # target_link_options(PhasmaEditor PRIVATE -fsanitize=address)
