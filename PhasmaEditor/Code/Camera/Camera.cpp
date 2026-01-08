@@ -1,6 +1,8 @@
 #include "Camera/Camera.h"
+#include "API/Image.h"
 #include "RenderPasses/TAAPass.h"
 #include "Systems/RendererSystem.h"
+
 
 namespace pe
 {
@@ -63,8 +65,9 @@ namespace pe
 
     float Camera::GetAspect()
     {
-        RenderArea &renderArea = Context::Get()->GetSystem<RendererSystem>()->GetRenderArea();
-        return renderArea.viewport.width / renderArea.viewport.height;
+        Image *displayRT = GetGlobalSystem<RendererSystem>()->GetDisplayRT();
+        Rect2Di rect = Rect2Di(0, 0, displayRT->GetWidth(), displayRT->GetHeight());
+        return static_cast<float>(rect.width) / static_cast<float>(rect.height);
     }
 
     void Camera::UpdatePerspective()

@@ -139,8 +139,8 @@ namespace pe
             };
 
             // Project frustum corners into world space
-            auto &renderArea = Context::Get()->GetSystem<RendererSystem>()->GetRenderArea();
-            const float aspect = renderArea.viewport.width / renderArea.viewport.height;
+            Image *displayRT = Context::Get()->GetSystem<RendererSystem>()->GetDisplayRT();
+            const float aspect = displayRT->GetWidth_f() / displayRT->GetHeight_f();
             const vec3 position = camera->GetPosition();
             mat4 projection = perspective(camera->Fovy(), aspect, nearClip, farClip);
             mat4 view = lookAt(position, position + camera->GetFront(), camera->WorldUp());

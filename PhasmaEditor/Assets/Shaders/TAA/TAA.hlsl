@@ -1,19 +1,19 @@
 #include "../Common/Common.hlsl"
 
-struct TAAConstants
+struct PushConstants
 {
-    float2 resolution;
-    float2 jitter; // Current frame jitter
+    float2 resolution; // Input resolution
+    float2 displaySize; // Output resolution
+    float2 jitter;
+    float2 padding;
 };
 
-[[vk::push_constant]] ConstantBuffer<TAAConstants> PC : register(b0);
-
+[[vk::push_constant]] ConstantBuffer<PushConstants> pc;
 [[vk::binding(0)]] Texture2D<float4> in_color : register(t0);
 [[vk::binding(1)]] Texture2D<float4> in_history : register(t1);
 [[vk::binding(2)]] Texture2D<float2> in_velocity : register(t2);
 [[vk::binding(3)]] Texture2D<float> in_depth : register(t3);
 [[vk::binding(4)]] SamplerState sampler_linear_clamp : register(s0);
-
 [[vk::binding(5)]] RWTexture2D<float4> out_color : register(u0);
 
 // Simple Catmull-Rom sampling for history could be added later for better quality
@@ -21,13 +21,13 @@ struct TAAConstants
 
 float3 ClipAABB(float3 aabbMin, float3 aabbMax, float3 prevSample, float3 avg)
 {
-#if 1    
-    // Variance clipping (approximate AABB)
+    // Clip history to the neighborhood of the current frame
+    // This reduces ghosting by rejecting history that is too different from current
     float3 p_clip = 0.5 * (aabbMax + aabbMin);
     float3 e_clip = 0.5 * (aabbMax - aabbMin);
 
     float3 v_clip = prevSample - p_clip;
-    float3 v_unit = v_clip.xyz / e_clip;
+    float3 v_unit = v_clip.xyz / e_clip.xyz;
     float3 a_unit = abs(v_unit);
     float ma_unit = max(a_unit.x, max(a_unit.y, a_unit.z));
 
@@ -35,10 +35,6 @@ float3 ClipAABB(float3 aabbMin, float3 aabbMax, float3 prevSample, float3 avg)
         return p_clip + v_clip / ma_unit;
     else
         return prevSample;
-#else
-    // Anchor clip
-    return clamp(prevSample, aabbMin, aabbMax);
-#endif
 }
 
 // Tonemap to reduce flickering (Reinhard)
@@ -46,21 +42,24 @@ float3 Tonemap(float3 x) { return x / (1.0 + Luminance(x)); }
 float3 InverseTonemap(float3 x) { return x / (1.0 - Luminance(x)); }
 
 [numthreads(8, 8, 1)]
-void main(uint3 dispatchThreadID : SV_DispatchThreadID)
+void main(uint3 id : SV_DispatchThreadID)
 {
-    uint2 coord = dispatchThreadID.xy;
-    if (coord.x >= (uint)PC.resolution.x || coord.y >= (uint)PC.resolution.y)
-        return;
+    int2 coord = int2(id.xy);
+    float2 uv = (float2(coord) + 0.5) / pc.displaySize;
 
-    float2 uv = (float2(coord) + 0.5) / PC.resolution; // Center of pixel
+    if (any(uv > 1.0)) return;
+    
+    // Sample current color with handling for upscaling
+    // Since we are upscaling, we sample the low-res input at high-res UVs
+    float3 centerColor = in_color.SampleLevel(sampler_linear_clamp, uv, 0).rgb;
+    
+    // Calculate AABB in the low-res input space
+    // We want the 3x3 block of texels in the input image that surround this UV
+    float3 colorMin = 10000.0;
+    float3 colorMax = -10000.0;
+    float3 colorAvg = 0.0;
 
-    // Sample current color
-    // We should sample neighborhood to build AABB for clamping
-    // 3x3 neighborhood
-    float3 centerColor = in_color.Load(int3(coord, 0)).rgb;
-    float3 colorMin = centerColor;
-    float3 colorMax = centerColor;
-    float3 colorAvg = centerColor;
+    int2 lowResCenter = int2(floor(uv * pc.resolution));
 
     [unroll]
     for(int x = -1; x <= 1; ++x)
@@ -68,9 +67,7 @@ void main(uint3 dispatchThreadID : SV_DispatchThreadID)
         [unroll]
         for(int y = -1; y <= 1; ++y)
         {
-            if (x == 0 && y == 0) continue;
-            
-            float3 neighbor = in_color.Load(int3(coord + int2(x, y), 0)).rgb;
+            float3 neighbor = in_color.Load(int3(lowResCenter + int2(x, y), 0)).rgb;
             colorMin = min(colorMin, neighbor);
             colorMax = max(colorMax, neighbor);
             colorAvg += neighbor;
@@ -84,10 +81,11 @@ void main(uint3 dispatchThreadID : SV_DispatchThreadID)
     centerColor = centerColor + (centerColor - colorAvg) * sharpenStrength;
     centerColor = max(0.0, centerColor);
 
-    float2 velocity = in_velocity.Load(int3(coord, 0)).xy;
+    float2 velocity = in_velocity.SampleLevel(sampler_linear_clamp, uv, 0).xy;
     
-    // Velocity is stored as (PrevNDC - CurrNDC) in GBuffer
     // Convert to UV space (factor 0.5) and add it to current UV to get previous UV
+    // Velocity is from GBuffer (Low Res), stored as (PrevNDC - CurrNDC)
+    // Works correctly regardless of resolution as it is screen relative
     float2 historyUV = uv + velocity * 0.5;
 
     // Out of bounds
@@ -97,15 +95,14 @@ void main(uint3 dispatchThreadID : SV_DispatchThreadID)
         return;
     }
 
-    // Sample history
     float3 historyColor = in_history.SampleLevel(sampler_linear_clamp, historyUV, 0).rgb;
 
-    // Clip history
-    // Clipping in YCoCg or other spaces is better, but RGB is fine for basic TAA
+    // Anti-flicker: clamp history
     historyColor = ClipAABB(colorMin, colorMax, historyColor, colorAvg);
 
     // Feedback factor
-    float velocityLength = length(velocity * PC.resolution); 
+    // Scale velocity by Display Resolution for pixel-accurate motion check in high res
+    float velocityLength = length(velocity * pc.displaySize); 
     
     // Base feedback
     float feedback = 0.96;

@@ -25,7 +25,6 @@
 #include "RenderPasses/TAAPass.h"
 #include "RenderPasses/TonemapPass.h"
 
-
 namespace pe
 {
     void RendererSystem::LoadResources(CommandBuffer *cmd)
@@ -80,8 +79,6 @@ namespace pe
 
         // Init GUI
         m_gui.Init();
-
-        m_renderArea.Update(0.0f, 0.0f, RHII.GetWidthf(), RHII.GetHeightf());
 
         uint32_t imageCount = RHII.GetSwapchainImageCount();
         m_cmds.resize(imageCount, nullptr);
@@ -357,32 +354,15 @@ namespace pe
             Semaphore::Destroy(semaphore);
     }
 
-    void RenderArea::Update(float x, float y, float w, float h, float minDepth, float maxDepth)
-    {
-        viewport.x = x;
-        viewport.y = y;
-        viewport.width = w;
-        viewport.height = h;
-        viewport.minDepth = minDepth;
-        viewport.maxDepth = maxDepth;
-
-        scissor.x = static_cast<int32_t>(x);
-        scissor.y = static_cast<int32_t>(y);
-        scissor.width = static_cast<int32_t>(w);
-        scissor.height = static_cast<int32_t>(h);
-    }
-
     void RendererSystem::Upsample(CommandBuffer *cmd, vk::Filter filter)
     {
-        // Blit viewportRT to displayRT with a filter
-        Viewport &vp = m_renderArea.viewport;
         vk::ImageBlit region{};
         region.srcOffsets[0] = vk::Offset3D{0, 0, 0};
         region.srcOffsets[1] = vk::Offset3D{static_cast<int32_t>(m_viewportRT->GetWidth()), static_cast<int32_t>(m_viewportRT->GetHeight()), 1};
         region.srcSubresource.aspectMask = VulkanHelpers::GetAspectMask(m_viewportRT->GetFormat());
         region.srcSubresource.layerCount = 1;
-        region.dstOffsets[0] = vk::Offset3D{static_cast<int32_t>(vp.x), static_cast<int32_t>(vp.y), 0};
-        region.dstOffsets[1] = vk::Offset3D{static_cast<int32_t>(vp.x) + static_cast<int32_t>(vp.width), static_cast<int32_t>(vp.y) + static_cast<int32_t>(vp.height), 1};
+        region.dstOffsets[0] = vk::Offset3D{0, 0, 0};
+        region.dstOffsets[1] = vk::Offset3D{static_cast<int32_t>(m_displayRT->GetWidth()), static_cast<int32_t>(m_displayRT->GetHeight()), 1};
         region.dstSubresource.aspectMask = VulkanHelpers::GetAspectMask(m_displayRT->GetFormat());
         region.dstSubresource.layerCount = 1;
 
@@ -540,8 +520,6 @@ namespace pe
         RHII.WaitDeviceIdle();
         RHII.GetSurface()->SetActualExtent({0, 0, width, height});
 
-        m_renderArea.Update(0.0f, 0.0f, static_cast<float>(width), static_cast<float>(height));
-
         Swapchain *swapchain = RHII.GetSwapchain();
         Swapchain::Destroy(swapchain);
 
@@ -557,15 +535,14 @@ namespace pe
     void RendererSystem::BlitToSwapchain(CommandBuffer *cmd, Image *src, uint32_t imageIndex)
     {
         Image *swapchainImage = RHII.GetSwapchain()->GetImage(imageIndex);
-        Viewport &vp = m_renderArea.viewport;
 
         vk::ImageBlit region{};
         region.srcOffsets[0] = vk::Offset3D{0, 0, 0};
         region.srcOffsets[1] = vk::Offset3D{static_cast<int32_t>(src->GetWidth()), static_cast<int32_t>(src->GetHeight()), 1};
         region.srcSubresource.aspectMask = VulkanHelpers::GetAspectMask(src->GetFormat());
         region.srcSubresource.layerCount = 1;
-        region.dstOffsets[0] = vk::Offset3D{(int32_t)vp.x, (int32_t)vp.y, 0};
-        region.dstOffsets[1] = vk::Offset3D{(int32_t)vp.x + (int32_t)vp.width, (int32_t)vp.y + (int32_t)vp.height, 1};
+        region.dstOffsets[0] = vk::Offset3D{0, 0, 0};
+        region.dstOffsets[1] = vk::Offset3D{(int32_t)src->GetWidth(), (int32_t)src->GetHeight(), 1};
         region.dstSubresource.aspectMask = VulkanHelpers::GetAspectMask(swapchainImage->GetFormat());
         region.dstSubresource.layerCount = 1;
 
@@ -576,7 +553,7 @@ namespace pe
         barrier.accessMask = vk::AccessFlagBits2::eNone;
 
         // with 1:1 ratio we can use nearest filter
-        vk::Filter filter = src->GetWidth() == (uint32_t)vp.width && src->GetHeight() == (uint32_t)vp.height ? vk::Filter::eNearest : vk::Filter::eLinear;
+        vk::Filter filter = src->GetWidth() == swapchainImage->GetWidth() && src->GetHeight() == swapchainImage->GetHeight() ? vk::Filter::eNearest : vk::Filter::eLinear;
         cmd->BlitImage(src, swapchainImage, region, filter);
         cmd->ImageBarrier(barrier);
     }

@@ -1,13 +1,14 @@
 #include "Window.h"
+#include "API/Image.h"
 #include "API/Queue.h"
 #include "API/RHI.h"
-#include "Base/Timer.h"
 #include "Camera/Camera.h"
 #include "Scene/Model.h"
 #include "Scene/Scene.h"
 #include "Systems/PostProcessSystem.h"
 #include "Systems/RendererSystem.h"
 #include "imgui/imgui_impl_sdl2.h"
+
 #if defined(PE_SCRIPTS)
 #include "Script/ScriptManager.h"
 #endif
@@ -233,7 +234,8 @@ namespace pe
 
     void Window::WrapMouse(int &x, int &y)
     {
-        const Rect2Di &rect = GetGlobalSystem<RendererSystem>()->GetRenderArea().scissor;
+        Image *displayRT = GetGlobalSystem<RendererSystem>()->GetDisplayRT();
+        Rect2Di rect = Rect2Di(0, 0, displayRT->GetWidth(), displayRT->GetHeight());
 
         if (x < rect.x + 15)
         {
@@ -258,7 +260,8 @@ namespace pe
 
     bool Window::IsInsideRenderWindow(int x, int y)
     {
-        const Rect2Di &rect = GetGlobalSystem<RendererSystem>()->GetRenderArea().scissor;
+        Image *displayRT = GetGlobalSystem<RendererSystem>()->GetDisplayRT();
+        Rect2Di rect = Rect2Di(0, 0, displayRT->GetWidth(), displayRT->GetHeight());
 
         return x > rect.x && y > rect.y && x < rect.x + rect.width &&
                y < rect.y + rect.height;
