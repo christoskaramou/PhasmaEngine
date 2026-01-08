@@ -17,6 +17,7 @@ namespace pe
         bool fsr2Debug = true;
     };
 
+#ifdef PE_WIN32
     class SuperResolutionPass : public IRenderPassComponent
     {
     public:
@@ -46,4 +47,28 @@ namespace pe
         vec2 m_jitter;
         vec2 m_projectionJitter;
     };
+#else
+    class SuperResolutionPass : public IRenderPassComponent
+    {
+    public:
+        void Init() override {}
+        void UpdatePassInfo() override {}
+        void CreateUniforms(CommandBuffer *cmd) override {}
+        void UpdateDescriptorSets() override {}
+        void Update() override {}
+        void Draw(CommandBuffer *cmd) override;
+        void Resize(uint32_t width, uint32_t height) override {}
+        void Destroy() override {}
+
+        void GenerateJitter() {}
+        const vec2 &GetJitter() { return m_jitter; }
+        const vec2 &GetProjectionJitter() { return m_projectionJitter; }
+
+        Image *GetOutput() { return nullptr; }
+
+    private:
+        vec2 m_jitter = vec2(0.0f);
+        vec2 m_projectionJitter = vec2(0.0f);
+    };
+#endif
 } // namespace pe
