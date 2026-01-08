@@ -11,7 +11,6 @@
 #include "GUIState.h"
 #include "Helpers.h"
 #include "RenderPasses/LightPass.h"
-#include "RenderPasses/SuperResolutionPass.h"
 #include "Scene/Model.h"
 #include "Systems/RendererSystem.h"
 #include "Widgets/AssetViewer.h"
@@ -27,7 +26,6 @@
 #include "Widgets/SceneView.h"
 #include "imgui/imgui_impl_sdl2.h"
 #include "imgui/imgui_impl_vulkan.h"
-
 
 namespace pe
 {

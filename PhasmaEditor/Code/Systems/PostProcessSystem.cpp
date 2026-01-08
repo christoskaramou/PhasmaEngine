@@ -8,7 +8,6 @@
 #include "RenderPasses/MotionBlurPass.h"
 #include "RenderPasses/SSAOPass.h"
 #include "RenderPasses/SSRPass.h"
-#include "RenderPasses/SuperResolutionPass.h"
 #include "RenderPasses/TonemapPass.h"
 #include "Systems/RendererSystem.h"
 
@@ -24,7 +23,6 @@ namespace pe
         m_renderPassComponents[ID::GetTypeID<MotionBlurPass>()] = CreateGlobalComponent<MotionBlurPass>();
         m_renderPassComponents[ID::GetTypeID<SSAOPass>()] = CreateGlobalComponent<SSAOPass>();
         m_renderPassComponents[ID::GetTypeID<SSRPass>()] = CreateGlobalComponent<SSRPass>();
-        m_renderPassComponents[ID::GetTypeID<SuperResolutionPass>()] = CreateGlobalComponent<SuperResolutionPass>();
         m_renderPassComponents[ID::GetTypeID<TonemapPass>()] = CreateGlobalComponent<TonemapPass>();
 
         for (auto &renderPassComponent : m_renderPassComponents)

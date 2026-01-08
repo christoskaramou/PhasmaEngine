@@ -28,6 +28,7 @@ namespace pe
         float render_scale = 1.0f;
         bool ssao = true;
         bool fxaa = true;
+        bool taa = true;
         bool ssr = false;
         bool tonemapping = false;
         bool dof = false;
