@@ -3,32 +3,34 @@
 
 PhasmaEngine is intended as a project for learning 3D graphics and techniques, using Vulkan API (and soon DirectX12). Until now these are the most important features PhasmaEngine has:
 
+* Dynamic Rendering
 * Deffered Rendering
-* Physical Based Rendering
-* Screen Space Reflections
-* Screen Space Ambient Occlusion
-* Tone Mapping - HDR
 * Image Based Lighting
-* Depth of Field
-* Upscale (FRS2)
+* Screen Space Ambient Occlusion
+* Screen Space Reflections
 * FXAA
+* Upscale (TAA + RCAS)
+* Tone Mapping
 * Bloom
+* Depth of Field
 * Motion Blur
 * Cascaded Shadows
-* Functional and Interactive GUI (ImGui)
-* Scripts with C# (Mono) (Turned off for now)
+* Frustum Culling
+* Particles
+* Physical Based Rendering
+* GUI (ImGui)
+* Scripts with C++
 * Event System
-* Frutum Culling
-* Animation
-* Cube Map Reflections
 * CPU/GPU Metrics
+* Debug Console
 
-Here is a [demo video](https://www.youtube.com/watch?v=Dj1CpDCSy_k) with some of these features.
+Here a old [demo video](https://www.youtube.com/watch?v=Dj1CpDCSy_k) with some of these features.
 
-![Screenshot](Phasma/Images/example_image3.png)
-![Screenshot](Phasma/Images/example_image7.png)
-![Screenshot](Phasma/Images/example_image2.png)
-![Screenshot](Phasma/Images/example_image6.png)
+![Screenshot](PhasmaEditor/Images/example_image3.png)
+![Screenshot](PhasmaEditor/Images/example_image7.png)
+![Screenshot](PhasmaEditor/Images/example_image2.png)
+![Screenshot](PhasmaEditor/Images/example_image6.png)
+![Screenshot](PhasmaEditor/Images/example_image8.png)
 
 ### Building and Compiling
 

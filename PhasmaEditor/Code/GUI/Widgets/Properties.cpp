@@ -79,6 +79,7 @@ namespace pe
             ImGui::DragFloat("IBL Intensity", &gSettings.IBL_intensity, 0.01f, 0.0f, 10.0f);
             ImGui::Unindent(16.0f);
         }
+        ImGui::Checkbox("SSAO", &gSettings.ssao);
         ImGui::Checkbox("SSR", &gSettings.ssr);
         ImGui::Checkbox("FXAA", &gSettings.fxaa);
         ImGui::Checkbox("TAA", &gSettings.taa);
