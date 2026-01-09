@@ -22,6 +22,7 @@
 #include "RenderPasses/SSAOPass.h"
 #include "RenderPasses/SSRPass.h"
 #include "RenderPasses/ShadowPass.h"
+#include "RenderPasses/SharpenPass.h"
 #include "RenderPasses/TAAPass.h"
 #include "RenderPasses/TonemapPass.h"
 
@@ -69,6 +70,7 @@ namespace pe
         m_renderPassComponents[ID::GetTypeID<ParticleComputePass>()] = CreateGlobalComponent<ParticleComputePass>();
         m_renderPassComponents[ID::GetTypeID<ParticlePass>()] = CreateGlobalComponent<ParticlePass>();
         m_renderPassComponents[ID::GetTypeID<TAAPass>()] = CreateGlobalComponent<TAAPass>();
+        m_renderPassComponents[ID::GetTypeID<SharpenPass>()] = CreateGlobalComponent<SharpenPass>();
 
         for (auto &renderPassComponent : m_renderPassComponents)
         {
@@ -161,7 +163,7 @@ namespace pe
         DOFPass &dof = *GetGlobalComponent<DOFPass>();
         MotionBlurPass &motionBlur = *GetGlobalComponent<MotionBlurPass>();
         TAAPass &taa = *GetGlobalComponent<TAAPass>();
-
+        SharpenPass &sharpen = *GetGlobalComponent<SharpenPass>();
         TonemapPass &tonemap = *GetGlobalComponent<TonemapPass>();
         AabbsPass &aabbs = *GetGlobalComponent<AabbsPass>();
         ParticleComputePass &pcp = *GetGlobalComponent<ParticleComputePass>();
@@ -245,6 +247,12 @@ namespace pe
         if (gSettings.taa)
         {
             taa.Draw(cmd);
+
+            // RCAS Sharpening
+            if (gSettings.cas_sharpening)
+            {
+                sharpen.Draw(cmd);
+            }
         }
         else
         {
@@ -393,6 +401,7 @@ namespace pe
 
         rt->CreateRTV();
         rt->CreateSRV(vk::ImageViewType::e2D);
+        rt->CreateUAV(vk::ImageViewType::e2D, 0);
 
         vk::SamplerCreateInfo samplerInfo = Sampler::CreateInfoInit();
         samplerInfo.anisotropyEnable = VK_FALSE;

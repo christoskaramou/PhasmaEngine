@@ -41,8 +41,8 @@ namespace pe
             info.extent = vk::Extent3D{m_displayRT->GetWidth(), m_displayRT->GetHeight(), 1};
             info.usage = vk::ImageUsageFlagBits::eSampled | vk::ImageUsageFlagBits::eStorage | vk::ImageUsageFlagBits::eTransferDst | vk::ImageUsageFlagBits::eTransferSrc | vk::ImageUsageFlagBits::eColorAttachment;
             m_historyImage = Image::Create(info, "TAA_History");
-            m_historyImage->CreateSRV(vk::ImageViewType::e2D);
             m_historyImage->CreateRTV();
+            m_historyImage->CreateSRV(vk::ImageViewType::e2D);
 
             // Linear sampler for history
             vk::SamplerCreateInfo samplerInfo = Sampler::CreateInfoInit();
@@ -54,8 +54,21 @@ namespace pe
             m_historyImage->SetSampler(sampler);
         }
 
+        if (!m_taaResolved)
+        {
+            vk::ImageCreateInfo info = Image::CreateInfoInit();
+            info.format = m_displayRT->GetFormat();
+            info.extent = vk::Extent3D{m_displayRT->GetWidth(), m_displayRT->GetHeight(), 1};
+            info.usage = vk::ImageUsageFlagBits::eSampled | vk::ImageUsageFlagBits::eStorage | vk::ImageUsageFlagBits::eTransferSrc | vk::ImageUsageFlagBits::eTransferDst | vk::ImageUsageFlagBits::eColorAttachment;
+            m_taaResolved = Image::Create(info, "TAA_Resolved");
+            m_taaResolved->CreateRTV();
+            m_taaResolved->CreateSRV(vk::ImageViewType::e2D);
+            m_taaResolved->CreateUAV(vk::ImageViewType::e2D, 0);
+        }
+
         m_jitterIndex = 0;
         m_jitterPhaseCount = 16;
+        m_casSharpeningEnabled = Settings::Get<GlobalSettings>().cas_sharpening;
     }
 
     void TAAPass::UpdatePassInfo()
@@ -72,18 +85,21 @@ namespace pe
 
     void TAAPass::UpdateDescriptorSets()
     {
+        auto &gSettings = Settings::Get<GlobalSettings>();
+        Image *taaOutput = gSettings.cas_sharpening ? m_taaResolved : m_displayRT;
+
         for (uint32_t i = 0; i < RHII.GetSwapchainImageCount(); i++)
         {
             auto &descriptors = m_passInfo->GetDescriptors(i);
             if (!descriptors.empty())
             {
                 Descriptor *dset = descriptors[0];
-                dset->SetImageView(0, m_viewportRT->GetSRV(), m_viewportRT->GetSampler()->ApiHandle());
-                dset->SetImageView(1, m_historyImage->GetSRV(), m_historyImage->GetSampler()->ApiHandle());
-                dset->SetImageView(2, m_velocityRT->GetSRV(), m_velocityRT->GetSampler()->ApiHandle());
-                dset->SetImageView(3, m_depthStencil->GetSRV(), m_depthStencil->GetSampler()->ApiHandle());
+                dset->SetImageView(0, m_viewportRT->GetSRV(), nullptr);
+                dset->SetImageView(1, m_historyImage->GetSRV(), nullptr);
+                dset->SetImageView(2, m_velocityRT->GetSRV(), nullptr);
+                // dset->SetImageView(3, m_depthStencil->GetSRV(), nullptr); // Depth unused
                 dset->SetSampler(4, m_historyImage->GetSampler()->ApiHandle());
-                dset->SetImageView(5, m_displayRT->GetSRV(), nullptr);
+                dset->SetImageView(5, taaOutput->GetUAV(0), nullptr);
                 dset->Update();
             }
         }
@@ -95,6 +111,15 @@ namespace pe
 
     void TAAPass::Draw(CommandBuffer *cmd)
     {
+        auto &gSettings = Settings::Get<GlobalSettings>();
+        if (gSettings.cas_sharpening != m_casSharpeningEnabled)
+        {
+            m_casSharpeningEnabled = gSettings.cas_sharpening;
+            UpdateDescriptorSets();
+        }
+
+        Image *taaOutput = m_casSharpeningEnabled ? m_taaResolved : m_displayRT;
+
         struct TAAConstants
         {
             vec2 resolution;  // Input resolution
@@ -105,7 +130,7 @@ namespace pe
 
         TAAConstants pc{};
         pc.resolution = vec2(m_viewportRT->GetWidth_f(), m_viewportRT->GetHeight_f());
-        pc.displaySize = vec2(m_displayRT->GetWidth_f(), m_displayRT->GetHeight_f());
+        pc.displaySize = vec2(taaOutput->GetWidth_f(), taaOutput->GetHeight_f());
         pc.jitter = m_jitter;
 
         // Barriers
@@ -113,9 +138,10 @@ namespace pe
         barriers.push_back({m_viewportRT, vk::ImageLayout::eShaderReadOnlyOptimal, vk::PipelineStageFlagBits2::eComputeShader, vk::AccessFlagBits2::eShaderRead});
         barriers.push_back({m_historyImage, vk::ImageLayout::eShaderReadOnlyOptimal, vk::PipelineStageFlagBits2::eComputeShader, vk::AccessFlagBits2::eShaderRead});
         barriers.push_back({m_velocityRT, vk::ImageLayout::eShaderReadOnlyOptimal, vk::PipelineStageFlagBits2::eComputeShader, vk::AccessFlagBits2::eShaderRead});
-        barriers.push_back({m_depthStencil, vk::ImageLayout::eShaderReadOnlyOptimal, vk::PipelineStageFlagBits2::eComputeShader, vk::AccessFlagBits2::eShaderRead});
-        barriers.push_back({m_displayRT, vk::ImageLayout::eGeneral, vk::PipelineStageFlagBits2::eComputeShader, vk::AccessFlagBits2::eShaderWrite});
+        // barriers.push_back({m_depthStencil, vk::ImageLayout::eShaderReadOnlyOptimal, vk::PipelineStageFlagBits2::eComputeShader, vk::AccessFlagBits2::eShaderRead});
+        barriers.push_back({taaOutput, vk::ImageLayout::eGeneral, vk::PipelineStageFlagBits2::eComputeShader, vk::AccessFlagBits2::eShaderWrite});
 
+        cmd->BeginDebugRegion("TAA");
         cmd->ImageBarriers(barriers);
 
         // Bind Pipeline & Descriptors
@@ -126,14 +152,13 @@ namespace pe
         cmd->PushConstants();
 
         // Dispatch
-        uint32_t groupX = (m_displayRT->GetWidth() + 7) / 8;
-        uint32_t groupY = (m_displayRT->GetHeight() + 7) / 8;
-
+        uint32_t groupX = (taaOutput->GetWidth() + 7) / 8;
+        uint32_t groupY = (taaOutput->GetHeight() + 7) / 8;
         cmd->Dispatch(groupX, groupY, 1);
 
         // Copy Display -> History
         ImageBarrierInfo copyBarrierSrc{};
-        copyBarrierSrc.image = m_displayRT;
+        copyBarrierSrc.image = taaOutput;
         copyBarrierSrc.layout = vk::ImageLayout::eTransferSrcOptimal;
         copyBarrierSrc.stageFlags = vk::PipelineStageFlagBits2::eTransfer;
         copyBarrierSrc.accessMask = vk::AccessFlagBits2::eTransferRead;
@@ -147,17 +172,14 @@ namespace pe
         cmd->ImageBarrier(copyBarrierSrc);
         cmd->ImageBarrier(copyBarrierDst);
 
-        // Copy Display -> History using Upsample-like logic
-        cmd->CopyImage(m_displayRT, m_historyImage);
+        // Copy Resolved -> History
+        cmd->CopyImage(taaOutput, m_historyImage);
+        cmd->EndDebugRegion();
     }
 
     void TAAPass::Resize(uint32_t width, uint32_t height)
     {
-        if (m_historyImage)
-        {
-            Image::Destroy(m_historyImage);
-            m_historyImage = nullptr;
-        }
+        Destroy();
         Init();
         UpdateDescriptorSets();
     }
@@ -165,6 +187,7 @@ namespace pe
     void TAAPass::Destroy()
     {
         Image::Destroy(m_historyImage);
+        Image::Destroy(m_taaResolved);
     }
 
     void TAAPass::GenerateJitter()

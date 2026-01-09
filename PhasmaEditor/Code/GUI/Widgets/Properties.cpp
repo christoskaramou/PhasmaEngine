@@ -82,6 +82,16 @@ namespace pe
         ImGui::Checkbox("SSR", &gSettings.ssr);
         ImGui::Checkbox("FXAA", &gSettings.fxaa);
         ImGui::Checkbox("TAA", &gSettings.taa);
+        if (gSettings.taa)
+        {
+            ImGui::Indent(16.0f);
+            ImGui::Checkbox("CAS Sharpening", &gSettings.cas_sharpening);
+            if (gSettings.cas_sharpening)
+            {
+                ImGui::SliderFloat("Sharpness##CAS", &gSettings.cas_sharpness, 0.0f, 1.0f);
+            }
+            ImGui::Unindent(16.0f);
+        }
         ImGui::Checkbox("Tonemapping", &gSettings.tonemapping);
         ImGui::Checkbox("Bloom", &gSettings.bloom);
         if (gSettings.bloom)
