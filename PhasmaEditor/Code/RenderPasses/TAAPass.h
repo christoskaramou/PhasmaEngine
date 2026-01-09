@@ -1,7 +1,5 @@
 #pragma once
 
-#include "ECS/Component.h"
-
 namespace pe
 {
     class Image;
@@ -23,6 +21,7 @@ namespace pe
 
         void GenerateJitter();
         const vec2 &GetProjectionJitter() const { return m_projectionJitter; }
+        Image *GetResolvedImage() { return m_taaResolved; }
 
     private:
         Image *m_viewportRT;
@@ -31,10 +30,12 @@ namespace pe
         Image *m_velocityRT;
 
         Image *m_historyImage;
+        Image *m_taaResolved;
 
         vec2 m_jitter;
         vec2 m_projectionJitter;
         int m_jitterPhaseCount;
         int m_jitterIndex;
+        bool m_casSharpeningEnabled{false};
     };
 } // namespace pe

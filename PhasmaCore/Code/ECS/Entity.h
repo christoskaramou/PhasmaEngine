@@ -41,8 +41,9 @@ namespace pe
         auto it = m_components.find(ID::GetTypeID<T>());
         if (it != m_components.end())
             return static_cast<T *>(it->second.get());
-        else
-            return nullptr;
+
+        PE_ERROR("Component not found");
+        return nullptr;
     }
 
     template <class T, class... Params>

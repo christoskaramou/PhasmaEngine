@@ -25,10 +25,12 @@ namespace pe
         bool shadows = true;
         uint32_t shadow_map_size = 2048;
         uint32_t num_cascades = 4;
-        float render_scale = 1.0f;
+        float render_scale = 0.75f;
         bool ssao = true;
-        bool fxaa = true;
+        bool fxaa = false;
         bool taa = true;
+        bool cas_sharpening = true;
+        float cas_sharpness = 0.5f;
         bool ssr = false;
         bool tonemapping = false;
         bool dof = false;
