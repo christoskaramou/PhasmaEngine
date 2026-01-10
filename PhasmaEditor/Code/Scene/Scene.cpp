@@ -1,4 +1,5 @@
 #include "Scene/Scene.h"
+#include "API/AccelerationStructure.h"
 #include "API/Buffer.h"
 #include "API/Command.h"
 #include "API/Descriptor.h"
@@ -65,6 +66,16 @@ namespace pe
 
         if (defaultSampler)
             Sampler::Destroy(defaultSampler);
+
+        for (auto *blas : m_blases)
+            AccelerationStructure::Destroy(blas);
+        m_blases.clear();
+
+        AccelerationStructure::Destroy(m_tlas);
+        Buffer::Destroy(m_instanceBuffer);
+        Buffer::Destroy(m_blasMergedBuffer);
+        Buffer::Destroy(m_scratchBuffer);
+        Buffer::Destroy(m_meshInfoBuffer);
     }
 
     void Scene::Update()
@@ -199,6 +210,8 @@ namespace pe
         CreateIndirectBuffers(cmd);
         UpdateImageViews();
         CreateGBufferConstants(cmd);
+        if (Settings::Get<GlobalSettings>().ray_tracing_support)
+            BuildAccelerationStructures(cmd);
     }
 
     void Scene::CreateGeometryBuffer()
@@ -219,7 +232,7 @@ namespace pe
                 sizeof(Vertex) * numberOfVertices +
                 sizeof(PositionUvVertex) * numberOfVertices +
                 sizeof(AabbVertex) * numberOfAabbVertices,
-            vk::BufferUsageFlagBits2::eTransferDst | vk::BufferUsageFlagBits2::eIndexBuffer | vk::BufferUsageFlagBits2::eVertexBuffer,
+            vk::BufferUsageFlagBits2::eTransferDst | vk::BufferUsageFlagBits2::eIndexBuffer | vk::BufferUsageFlagBits2::eVertexBuffer | vk::BufferUsageFlagBits2::eStorageBuffer | vk::BufferUsageFlagBits2::eShaderDeviceAddress | vk::BufferUsageFlagBits2::eAccelerationStructureBuildInputReadOnlyKHR,
             VMA_ALLOCATION_CREATE_DEDICATED_MEMORY_BIT,
             "combined_Geometry_buffer");
     }
@@ -596,6 +609,8 @@ namespace pe
 
         m_frameData.viewProjection = m_cameras[0]->GetViewProjection();
         m_frameData.previousViewProjection = m_cameras[0]->GetPreviousViewProjection();
+        m_frameData.invView = m_cameras[0]->GetInvView();
+        m_frameData.invProjection = m_cameras[0]->GetInvProjection();
 
         BufferRange range{};
         range.data = &m_frameData;
@@ -826,5 +841,208 @@ namespace pe
 
         Buffer::Destroy(m_indirectAll);
         m_indirectAll = nullptr;
+    }
+    void Scene::BuildAccelerationStructures(CommandBuffer *cmd)
+    {
+        // Cleanup old resources
+        for (auto *blas : m_blases)
+            AccelerationStructure::Destroy(blas);
+        m_blases.clear();
+        AccelerationStructure::Destroy(m_tlas);
+        Buffer::Destroy(m_instanceBuffer);
+        Buffer::Destroy(m_blasMergedBuffer);
+        Buffer::Destroy(m_scratchBuffer);
+
+        if (!GetBuffer()) // No geometry
+            return;
+
+        // Barrier for vertex/index buffer uploads
+        vk::MemoryBarrier2 barrier{};
+        barrier.srcStageMask = vk::PipelineStageFlagBits2::eTransfer;
+        barrier.srcAccessMask = vk::AccessFlagBits2::eTransferWrite;
+        barrier.dstStageMask = vk::PipelineStageFlagBits2::eAccelerationStructureBuildKHR;
+        barrier.dstAccessMask = vk::AccessFlagBits2::eAccelerationStructureReadKHR | vk::AccessFlagBits2::eShaderRead;
+        cmd->MemoryBarrier(barrier);
+
+        vk::DeviceAddress bufferAddress = GetBuffer()->GetDeviceAddress();
+
+        // --- Pass 1: Calculate sizes for BLAS ---
+        vk::DeviceSize totalBlasSize = 0;
+        vk::DeviceSize maxScratchSize = 0;
+
+        struct BlasBuildReq
+        {
+            vk::AccelerationStructureGeometryKHR geometry;
+            vk::AccelerationStructureBuildRangeInfoKHR range;
+            vk::AccelerationStructureBuildSizesInfoKHR sizeInfo;
+            Model *model;
+            size_t meshIndex;
+        };
+        std::vector<BlasBuildReq> buildReqs;
+
+        // Iterate models/meshes
+        for (auto model : m_models)
+        {
+            auto &meshInfos = model->GetMeshInfos();
+            for (size_t i = 0; i < meshInfos.size(); i++)
+            {
+                auto &meshInfo = meshInfos[i];
+                if (meshInfo.indicesCount == 0)
+                    continue;
+
+                vk::AccelerationStructureGeometryKHR geometry{};
+                geometry.geometryType = vk::GeometryTypeKHR::eTriangles;
+                geometry.geometry.triangles.vertexFormat = vk::Format::eR32G32B32Sfloat;
+                geometry.geometry.triangles.vertexData.deviceAddress = bufferAddress + m_verticesOffset + meshInfo.vertexOffset * sizeof(Vertex);
+                geometry.geometry.triangles.vertexStride = sizeof(Vertex);
+                geometry.geometry.triangles.maxVertex = meshInfo.verticesCount;
+                geometry.geometry.triangles.indexType = vk::IndexType::eUint32;
+                geometry.geometry.triangles.indexData.deviceAddress = bufferAddress + meshInfo.indexOffset * sizeof(uint32_t);
+                geometry.flags = vk::GeometryFlagBitsKHR::eOpaque;
+
+                vk::AccelerationStructureBuildRangeInfoKHR range{};
+                range.primitiveCount = meshInfo.indicesCount / 3;
+                range.primitiveOffset = 0;
+                range.firstVertex = 0;
+                range.transformOffset = 0;
+
+                auto sizeInfo = AccelerationStructure::GetBuildSizes(
+                    {geometry},
+                    {range.primitiveCount},
+                    vk::AccelerationStructureTypeKHR::eBottomLevel,
+                    vk::AccelerationStructureBuildTypeKHR::eDevice);
+
+                // Align up
+                totalBlasSize = RHII.Align(totalBlasSize + sizeInfo.accelerationStructureSize, 256);
+                maxScratchSize = std::max(maxScratchSize, sizeInfo.buildScratchSize);
+
+                buildReqs.push_back({geometry, range, sizeInfo, model, i});
+            }
+        }
+
+        if (buildReqs.empty())
+            return;
+
+        // --- Allocation ---
+        m_blasMergedBuffer = Buffer::Create(
+            totalBlasSize,
+            vk::BufferUsageFlagBits2::eAccelerationStructureStorageKHR | vk::BufferUsageFlagBits2::eShaderDeviceAddress,
+            VMA_ALLOCATION_CREATE_DEDICATED_MEMORY_BIT,
+            "BLAS_Merged_Buffer");
+
+        uint32_t instanceCount = static_cast<uint32_t>(buildReqs.size());
+        m_instanceBuffer = Buffer::Create(
+            instanceCount * sizeof(vk::AccelerationStructureInstanceKHR),
+            vk::BufferUsageFlagBits2::eAccelerationStructureBuildInputReadOnlyKHR | vk::BufferUsageFlagBits2::eShaderDeviceAddress | vk::BufferUsageFlagBits2::eTransferDst,
+            VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT,
+            "TLAS_Instance_Buffer");
+
+        // Check TLAS scratch requirements
+        vk::AccelerationStructureBuildGeometryInfoKHR tlasBuildInfo{};
+        tlasBuildInfo.type = vk::AccelerationStructureTypeKHR::eTopLevel;
+        tlasBuildInfo.flags = vk::BuildAccelerationStructureFlagBitsKHR::ePreferFastTrace;
+        tlasBuildInfo.mode = vk::BuildAccelerationStructureModeKHR::eBuild;
+        vk::AccelerationStructureGeometryKHR tlasGeometry{};
+        tlasGeometry.geometryType = vk::GeometryTypeKHR::eInstances;
+        tlasGeometry.geometry.instances = vk::AccelerationStructureGeometryInstancesDataKHR{};
+        tlasBuildInfo.geometryCount = 1;
+        tlasBuildInfo.pGeometries = &tlasGeometry;
+
+        auto tlasSizeInfo = AccelerationStructure::GetBuildSizes(
+            {tlasGeometry},
+            {instanceCount},
+            vk::AccelerationStructureTypeKHR::eTopLevel,
+            vk::AccelerationStructureBuildTypeKHR::eDevice);
+        maxScratchSize = std::max(maxScratchSize, tlasSizeInfo.buildScratchSize);
+
+        m_scratchBuffer = Buffer::Create(
+            maxScratchSize,
+            vk::BufferUsageFlagBits2::eStorageBuffer | vk::BufferUsageFlagBits2::eShaderDeviceAddress,
+            VMA_ALLOCATION_CREATE_DEDICATED_MEMORY_BIT,
+            "AS_Scratch_Buffer");
+
+        // --- Pass 2: Build BLAS ---
+        vk::DeviceSize currentOffset = 0;
+        m_instanceBuffer->Map();
+        auto *instances = (vk::AccelerationStructureInstanceKHR *)m_instanceBuffer->Data();
+
+        for (size_t i = 0; i < buildReqs.size(); i++)
+        {
+            auto &req = buildReqs[i];
+
+            // Re-align offset for this AS
+            currentOffset = RHII.Align(currentOffset, 256);
+
+            std::string name = "BLAS_" + req.model->GetLabel() + "_" + std::to_string(req.meshIndex);
+            AccelerationStructure *blas = new AccelerationStructure(name, m_blasMergedBuffer, currentOffset);
+
+            blas->BuildBLAS(cmd, {req.geometry}, {req.range}, {req.range.primitiveCount}, m_scratchBuffer->GetDeviceAddress());
+
+            m_blases.push_back(blas);
+
+            // Setup Instance
+            auto &instanceInfo = instances[i];
+
+            // For now use identity transform.
+            vk::TransformMatrixKHR transformMatrix;
+            transformMatrix.matrix[0][0] = 1.0f;
+            transformMatrix.matrix[0][1] = 0.0f;
+            transformMatrix.matrix[0][2] = 0.0f;
+            transformMatrix.matrix[0][3] = 0.0f;
+            transformMatrix.matrix[1][0] = 0.0f;
+            transformMatrix.matrix[1][1] = 1.0f;
+            transformMatrix.matrix[1][2] = 0.0f;
+            transformMatrix.matrix[1][3] = 0.0f;
+            transformMatrix.matrix[2][0] = 0.0f;
+            transformMatrix.matrix[2][1] = 0.0f;
+            transformMatrix.matrix[2][2] = 1.0f;
+            transformMatrix.matrix[2][3] = 0.0f;
+
+            instanceInfo.transform = transformMatrix;
+            instanceInfo.instanceCustomIndex = static_cast<uint32_t>(i);
+            instanceInfo.mask = 0xFF;
+            instanceInfo.instanceShaderBindingTableRecordOffset = 0;
+            instanceInfo.flags = static_cast<VkGeometryInstanceFlagBitsKHR>(vk::GeometryInstanceFlagBitsKHR::eTriangleFacingCullDisable);
+            instanceInfo.accelerationStructureReference = blas->GetDeviceAddress();
+
+            currentOffset += req.sizeInfo.accelerationStructureSize;
+        }
+
+        m_instanceBuffer->Flush();
+        m_instanceBuffer->Unmap();
+
+        Buffer::Destroy(m_meshInfoBuffer);
+        m_meshInfoBuffer = Buffer::Create(
+            buildReqs.size() * sizeof(MeshInfoGPU),
+            vk::BufferUsageFlagBits2::eStorageBuffer | vk::BufferUsageFlagBits2::eTransferDst,
+            VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT,
+            "MeshInfo_Buffer");
+
+        m_meshInfoBuffer->Map();
+        auto *meshInfosGPU = (MeshInfoGPU *)m_meshInfoBuffer->Data();
+
+        for (size_t i = 0; i < buildReqs.size(); i++)
+        {
+            auto &req = buildReqs[i];
+            auto &meshInfoGPU = meshInfosGPU[i];
+            
+            // Get original MeshInfo from Model
+            const auto &meshInfo = req.model->GetMeshInfos()[req.meshIndex];
+            
+            meshInfoGPU.indexOffset = meshInfo.indexOffset;
+            meshInfoGPU.vertexOffset = meshInfo.vertexOffset;
+            meshInfoGPU.positionsOffset = meshInfo.positionsOffset;
+            
+            for (int k = 0; k < 5; k++)
+                meshInfoGPU.textures[k] = meshInfo.viewsIndex[k];
+
+            // meshInfoGPU.padding = 0; // removed padding member
+        }
+        m_meshInfoBuffer->Flush();
+        m_meshInfoBuffer->Unmap();
+
+        // --- Build TLAS ---
+        m_tlas = AccelerationStructure::Create("TLAS_Scene", nullptr, 0);
+        m_tlas->BuildTLAS(cmd, instanceCount, m_instanceBuffer, m_scratchBuffer->GetDeviceAddress());
     }
 } // namespace pe

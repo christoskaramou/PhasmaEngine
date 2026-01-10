@@ -45,6 +45,12 @@ namespace pe
         size_t bufferSize = 0;
     };
 
+    struct AccelerationStructureDesc : public BaseDesc
+    {
+        int set = INT32_MIN;
+        int binding = INT32_MIN;
+    };
+
     struct PushConstantDesc : public BaseDesc
     {
         bool operator==(const PushConstantDesc &other) const
@@ -78,6 +84,7 @@ namespace pe
         std::vector<ImageDesc> m_storageImages{};
         std::vector<BufferDesc> m_uniformBuffers{};
         std::vector<BufferDesc> m_storageBuffers{};
+        std::vector<AccelerationStructureDesc> m_accelerationStructures{};
         PushConstantDesc m_pushConstants{};
         Shader *m_shader{};
     };

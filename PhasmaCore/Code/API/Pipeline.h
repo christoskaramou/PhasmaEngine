@@ -5,6 +5,7 @@ namespace pe
     class RenderPass;
     class DescriptorLayout;
     class Shader;
+    class Buffer;
 
     struct PipelineColorBlendAttachmentState
     {
@@ -12,6 +13,21 @@ namespace pe
         static vk::PipelineColorBlendAttachmentState AdditiveColor;
         static vk::PipelineColorBlendAttachmentState TransparencyBlend;
         static vk::PipelineColorBlendAttachmentState ParticlesBlend;
+    };
+
+    struct HitGroup
+    {
+        Shader *closestHit = nullptr;
+        Shader *anyHit = nullptr;
+        Shader *intersection = nullptr;
+    };
+
+    struct Acceleration
+    {
+        Shader *rayGen = nullptr;
+        std::vector<Shader *> miss;
+        std::vector<HitGroup> hitGroups;
+        uint32_t maxRecursionDepth = 1;
     };
 
     class PassInfo : public Hashable, public NoCopy
@@ -34,12 +50,10 @@ namespace pe
         std::vector<vk::PipelineColorBlendAttachmentState> colorBlendAttachments;
         std::vector<vk::DynamicState> dynamicStates;
         std::vector<vk::Format> colorFormats;
-        // Depth
         vk::Format depthFormat;
         bool depthWriteEnable;
         bool depthTestEnable;
         vk::CompareOp depthCompareOp;
-        // Stencil
         bool stencilTestEnable;
         vk::StencilOp stencilFailOp;
         vk::StencilOp stencilPassOp;
@@ -48,7 +62,7 @@ namespace pe
         uint32_t stencilCompareMask;
         uint32_t stencilWriteMask;
         uint32_t stencilReference;
-
+        Acceleration acceleration;
         vk::PipelineCache pipelineCache;
         std::string name;
 
@@ -72,11 +86,27 @@ namespace pe
         Pipeline(RenderPass *renderPass, PassInfo &info);
         ~Pipeline();
 
+
+        
+        PassInfo &GetInfo() { return m_info; }
+
     private:
         friend class CommandBuffer;
+
+        void CreateRayTracingPipeline();
+        void CreateComputePipeline();
+        void CreateGraphicsPipeline(RenderPass *renderPass);
+        void CreateSBT();
 
         PassInfo &m_info;
         vk::PipelineLayout m_layout;
         vk::PipelineCache m_cache;
+
+        // Ray Tracing
+        Buffer *m_sbtBuffer = nullptr;
+        vk::StridedDeviceAddressRegionKHR m_rgenRegion{};
+        vk::StridedDeviceAddressRegionKHR m_missRegion{};
+        vk::StridedDeviceAddressRegionKHR m_hitRegion{};
+        vk::StridedDeviceAddressRegionKHR m_callRegion{};
     };
 } // namespace pe

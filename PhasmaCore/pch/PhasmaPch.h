@@ -50,6 +50,7 @@
 #include "SDL2/SDL.h"
 #include "SDL2/SDL_syswm.h"
 #include "SDL2/SDL_vulkan.h"
+#define VULKAN_HPP_DISPATCH_LOADER_DYNAMIC 1
 #include "vulkan/vulkan.hpp"
 #include "vma/vk_mem_alloc.h"
 #if defined(PE_WIN32)

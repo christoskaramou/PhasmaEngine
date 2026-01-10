@@ -166,6 +166,11 @@ namespace pe
             ImGui::Unindent(16.0f);
         }
 
+        if (gSettings.ray_tracing_support)
+        {
+            ImGui::Checkbox("Ray Tracing", &gSettings.use_ray_tracing);
+        }
+
         ImGui::End();
     }
 } // namespace pe

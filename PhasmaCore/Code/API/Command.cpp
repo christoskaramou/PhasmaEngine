@@ -473,6 +473,11 @@ namespace pe
         m_apiHandle.bindPipeline(vk::PipelineBindPoint::eCompute, m_boundPipeline->ApiHandle());
     }
 
+    void CommandBuffer::BindRayTracingPipeline()
+    {
+        m_apiHandle.bindPipeline(vk::PipelineBindPoint::eRayTracingKHR, m_boundPipeline->ApiHandle());
+    }
+
     void CommandBuffer::BindPipeline(PassInfo &passInfo, bool bindDescriptors)
     {
         Pipeline *pipeline = GetPipeline(m_renderPass, passInfo);
@@ -484,6 +489,10 @@ namespace pe
         if (passInfo.pCompShader)
         {
             BindComputePipeline();
+        }
+        else if (passInfo.acceleration.rayGen)
+        {
+            BindRayTracingPipeline();
         }
         else
         {
@@ -553,6 +562,20 @@ namespace pe
                                        0, nullptr);
     }
 
+    void CommandBuffer::BindRayTracingDescriptors(uint32_t count, Descriptor *const *descriptors)
+    {
+        std::vector<vk::DescriptorSet> dsets(count);
+        for (uint32_t i = 0; i < count; i++)
+        {
+            dsets[i] = descriptors[i]->ApiHandle();
+        }
+
+        m_apiHandle.bindDescriptorSets(vk::PipelineBindPoint::eRayTracingKHR,
+                                       m_boundPipeline->m_layout,
+                                       0, count, dsets.data(),
+                                       0, nullptr);
+    }
+
     void CommandBuffer::BindDescriptors(uint32_t count, Descriptor *const *descriptors)
     {
         PE_ERROR_IF(!m_boundPipeline, "CommandBuffer::BindDescriptors: No bound pipeline found!");
@@ -560,6 +583,10 @@ namespace pe
         if (m_boundPipeline->m_info.pCompShader)
         {
             BindComputeDescriptors(count, descriptors);
+        }
+        else if (m_boundPipeline->m_info.acceleration.rayGen)
+        {
+            BindRayTracingDescriptors(count, descriptors);
         }
         else
         {
@@ -724,6 +751,21 @@ namespace pe
         m_apiHandle.drawIndexedIndirect(indirectBuffer->ApiHandle(), offset, drawCount, stride);
     }
 
+    void CommandBuffer::TraceRays(uint32_t width, uint32_t height, uint32_t depth)
+    {
+        PE_ERROR_IF(!m_boundPipeline, "CommandBuffer::TraceRays: No bound pipeline found!");
+        m_apiHandle.traceRaysKHR(m_boundPipeline->m_rgenRegion,
+                                 m_boundPipeline->m_missRegion,
+                                 m_boundPipeline->m_hitRegion,
+                                 m_boundPipeline->m_callRegion,
+                                 width, height, depth);
+    }
+
+    void CommandBuffer::BuildAccelerationStructures(uint32_t infoCount, const vk::AccelerationStructureBuildGeometryInfoKHR *pInfos, const vk::AccelerationStructureBuildRangeInfoKHR **ppBuildRangeInfos)
+    {
+        m_apiHandle.buildAccelerationStructuresKHR(infoCount, pInfos, ppBuildRangeInfos);
+    }
+
     void CommandBuffer::BufferBarrier(const vk::BufferMemoryBarrier2 &info)
     {
         Buffer::Barrier(this, info);
@@ -767,9 +809,9 @@ namespace pe
         dst->CopyBuffer(this, src, size, srcOffset, dstOffset);
     }
 
-    void CommandBuffer::CopyBufferStaged(Buffer *buffer, void *data, size_t size, size_t dtsOffset)
+    void CommandBuffer::CopyBufferStaged(Buffer *buffer, void *data, size_t size, size_t dstOffset)
     {
-        buffer->CopyBufferStaged(this, data, size, dtsOffset);
+        buffer->CopyBufferStaged(this, data, size, dstOffset);
     }
 
     void CommandBuffer::CopyDataToImageStaged(Image *image,

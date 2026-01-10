@@ -88,8 +88,43 @@ namespace pe
         Shader *comp = passInfo.pCompShader;
         Shader *vert = passInfo.pVertShader;
         Shader *frag = passInfo.pFragShader;
+        Shader *rayGen = passInfo.acceleration.rayGen;
+        auto &miss = passInfo.acceleration.miss;
+        auto &hitGroups = passInfo.acceleration.hitGroups;
 
-        if (vert && frag)
+        if (rayGen)
+        {
+            std::vector<Descriptor *> descriptors;
+            {
+                auto desc = rayGen->GetReflection().GetDescriptors();
+                descriptors = CombineDescriptors(descriptors, desc);
+            }
+            for (auto *shader : miss)
+            {
+                auto desc = shader->GetReflection().GetDescriptors();
+                descriptors = CombineDescriptors(descriptors, desc);
+            }
+            for (auto &hitGroup : hitGroups)
+            {
+                if (hitGroup.closestHit)
+                {
+                    auto desc = hitGroup.closestHit->GetReflection().GetDescriptors();
+                    descriptors = CombineDescriptors(descriptors, desc);
+                }
+                if (hitGroup.anyHit)
+                {
+                    auto desc = hitGroup.anyHit->GetReflection().GetDescriptors();
+                    descriptors = CombineDescriptors(descriptors, desc);
+                }
+                if (hitGroup.intersection)
+                {
+                    auto desc = hitGroup.intersection->GetReflection().GetDescriptors();
+                    descriptors = CombineDescriptors(descriptors, desc);
+                }
+            }
+            return descriptors;
+        }
+        else if (vert && frag)
         {
             ValidateShaderStage(vert, vk::ShaderStageFlagBits::eVertex);
             ValidateShaderStage(frag, vk::ShaderStageFlagBits::eFragment);
@@ -270,6 +305,30 @@ namespace pe
         {
             shaderKindFlags |= shaderc_shader_kind::shaderc_compute_shader;
         }
+        else if (m_shaderStage == vk::ShaderStageFlagBits::eRaygenKHR)
+        {
+            shaderKindFlags |= shaderc_shader_kind::shaderc_raygen_shader;
+        }
+        else if (m_shaderStage == vk::ShaderStageFlagBits::eAnyHitKHR)
+        {
+            shaderKindFlags |= shaderc_shader_kind::shaderc_anyhit_shader;
+        }
+        else if (m_shaderStage == vk::ShaderStageFlagBits::eClosestHitKHR)
+        {
+            shaderKindFlags |= shaderc_shader_kind::shaderc_closesthit_shader;
+        }
+        else if (m_shaderStage == vk::ShaderStageFlagBits::eMissKHR)
+        {
+            shaderKindFlags |= shaderc_shader_kind::shaderc_miss_shader;
+        }
+        else if (m_shaderStage == vk::ShaderStageFlagBits::eIntersectionKHR)
+        {
+            shaderKindFlags |= shaderc_shader_kind::shaderc_intersection_shader;
+        }
+        else if (m_shaderStage == vk::ShaderStageFlagBits::eCallableKHR)
+        {
+            shaderKindFlags |= shaderc_shader_kind::shaderc_callable_shader;
+        }
         else
         {
             PE_ERROR("Invalid shader stage!");
@@ -339,20 +398,30 @@ namespace pe
         std::vector<LPCWSTR> args{};
 
         args.push_back(L"-spirv");
+        args.push_back(L"-fspv-target-env=vulkan1.3");
 
         // Shader stage
         args.push_back(L"-T");
         if (m_shaderStage == vk::ShaderStageFlagBits::eVertex)
         {
-            args.push_back(L"vs_6_0");
+            args.push_back(L"vs_6_3");
         }
         else if (m_shaderStage == vk::ShaderStageFlagBits::eFragment)
         {
-            args.push_back(L"ps_6_0");
+            args.push_back(L"ps_6_3");
         }
         else if (m_shaderStage == vk::ShaderStageFlagBits::eCompute)
         {
-            args.push_back(L"cs_6_0");
+            args.push_back(L"cs_6_3");
+        }
+        else if (m_shaderStage & (vk::ShaderStageFlagBits::eRaygenKHR | 
+                                  vk::ShaderStageFlagBits::eAnyHitKHR | 
+                                  vk::ShaderStageFlagBits::eClosestHitKHR | 
+                                  vk::ShaderStageFlagBits::eMissKHR | 
+                                  vk::ShaderStageFlagBits::eIntersectionKHR | 
+                                  vk::ShaderStageFlagBits::eCallableKHR))
+        {
+            args.push_back(L"lib_6_3");
         }
         else
         {

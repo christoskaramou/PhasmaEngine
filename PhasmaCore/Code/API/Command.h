@@ -107,6 +107,8 @@ namespace pe
         void DrawIndexed(uint32_t indexCount, uint32_t instanceCount, uint32_t firstIndex, int32_t vertexOffset, uint32_t firstInstance);
         void DrawIndirect(Buffer *indirectBuffer, size_t offset, uint32_t drawCount, uint32_t stride = sizeof(vk::DrawIndirectCommand));
         void DrawIndexedIndirect(Buffer *indirectBuffer, size_t offset, uint32_t drawCount, uint32_t stride = sizeof(vk::DrawIndexedIndirectCommand));
+        void TraceRays(uint32_t width, uint32_t height, uint32_t depth);
+        void BuildAccelerationStructures(uint32_t infoCount, const vk::AccelerationStructureBuildGeometryInfoKHR *pInfos, const vk::AccelerationStructureBuildRangeInfoKHR **ppBuildRangeInfos);
         void BufferBarrier(const vk::BufferMemoryBarrier2 &info);
         void BufferBarriers(const std::vector<vk::BufferMemoryBarrier2> &infos);
         void ImageBarrier(const ImageBarrierInfo &info);
@@ -114,7 +116,7 @@ namespace pe
         void MemoryBarrier(const vk::MemoryBarrier2 &info);
         void MemoryBarriers(const std::vector<vk::MemoryBarrier2> &infos);
         void CopyBuffer(Buffer *src, Buffer *dst, const size_t size, size_t srcOffset, size_t dstOffset);
-        void CopyBufferStaged(Buffer *buffer, void *data, size_t size, size_t dtsOffset);
+        void CopyBufferStaged(Buffer *buffer, void *data, size_t size, size_t dstOffset);
         void CopyDataToImageStaged(Image *image,
                                    void *data,
                                    size_t size,
@@ -154,8 +156,10 @@ namespace pe
 
         void BindGraphicsPipeline();
         void BindComputePipeline();
+        void BindRayTracingPipeline();
         void BindGraphicsDescriptors(uint32_t count, Descriptor *const *descriptors);
         void BindComputeDescriptors(uint32_t count, Descriptor *const *descriptors);
+        void BindRayTracingDescriptors(uint32_t count, Descriptor *const *descriptors);
 
         // Resources
         inline static std::unordered_map<size_t, RenderPass *> s_renderPasses{};

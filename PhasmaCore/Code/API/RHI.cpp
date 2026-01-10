@@ -28,6 +28,8 @@
 #pragma comment(lib, "psapi.lib")
 #endif
 
+VULKAN_HPP_DEFAULT_DISPATCH_LOADER_DYNAMIC_STORAGE
+
 namespace pe
 {
     static inline uint32_t VkVendorID(const vk::PhysicalDevice &gpu)
@@ -445,6 +447,11 @@ namespace pe
 
     void RHI::CreateInstance(SDL_Window *window)
     {
+        // Initialize the DynamicLoader
+        static vk::detail::DynamicLoader dl;
+        PFN_vkGetInstanceProcAddr vkGetInstanceProcAddr = dl.getProcAddress<PFN_vkGetInstanceProcAddr>("vkGetInstanceProcAddr");
+        VULKAN_HPP_DEFAULT_DISPATCHER.init(vkGetInstanceProcAddr);
+
         std::vector<const char *> instanceExtensions{};
         std::vector<const char *> instanceLayers{};
 
@@ -489,15 +496,20 @@ namespace pe
         appInfo.apiVersion = VK_API_VERSION_1_4;
 
         vk::InstanceCreateInfo instInfo{};
-        instInfo.pNext = &layer_settings_create_info;
-        instInfo.pApplicationInfo = &appInfo;
-        instInfo.enabledLayerCount = static_cast<uint32_t>(instanceLayers.size());
-        instInfo.ppEnabledLayerNames = instanceLayers.data();
-        instInfo.enabledExtensionCount = static_cast<uint32_t>(instanceExtensions.size());
-        instInfo.ppEnabledExtensionNames = instanceExtensions.data();
-
-        m_instance = vk::createInstance(instInfo);
-
+        // Create Instance
+        {
+            vk::InstanceCreateInfo instanceCI{};
+            instanceCI.pNext = &layer_settings_create_info;
+            instanceCI.pApplicationInfo = &appInfo;
+            instanceCI.enabledExtensionCount = static_cast<uint32_t>(instanceExtensions.size());
+            instanceCI.ppEnabledExtensionNames = instanceExtensions.data();
+            instanceCI.enabledLayerCount = static_cast<uint32_t>(instanceLayers.size());
+            instanceCI.ppEnabledLayerNames = instanceLayers.data();
+            
+            m_instance = vk::createInstance(instanceCI);
+            
+            VULKAN_HPP_DEFAULT_DISPATCHER.init(m_instance);
+        }
         Debug::Init(m_instance);
         Debug::CreateDebugMessenger();
     }
@@ -630,6 +642,28 @@ namespace pe
             deviceExtensions.push_back(VK_EXT_PAGEABLE_DEVICE_LOCAL_MEMORY_EXTENSION_NAME);
         }
 
+        if (IsDeviceExtensionValid(VK_KHR_ACCELERATION_STRUCTURE_EXTENSION_NAME) &&
+            IsDeviceExtensionValid(VK_KHR_RAY_TRACING_PIPELINE_EXTENSION_NAME) &&
+            IsDeviceExtensionValid(VK_KHR_DEFERRED_HOST_OPERATIONS_EXTENSION_NAME) &&
+            IsDeviceExtensionValid(VK_KHR_BUFFER_DEVICE_ADDRESS_EXTENSION_NAME) &&
+            IsDeviceExtensionValid(VK_KHR_SPIRV_1_4_EXTENSION_NAME) &&
+            IsDeviceExtensionValid(VK_KHR_SHADER_FLOAT_CONTROLS_EXTENSION_NAME) &&
+            IsDeviceExtensionValid(VK_KHR_RAY_QUERY_EXTENSION_NAME))
+        {
+            deviceExtensions.push_back(VK_KHR_ACCELERATION_STRUCTURE_EXTENSION_NAME);
+            deviceExtensions.push_back(VK_KHR_RAY_TRACING_PIPELINE_EXTENSION_NAME);
+            deviceExtensions.push_back(VK_KHR_DEFERRED_HOST_OPERATIONS_EXTENSION_NAME);
+            deviceExtensions.push_back(VK_KHR_BUFFER_DEVICE_ADDRESS_EXTENSION_NAME);
+            deviceExtensions.push_back(VK_KHR_SPIRV_1_4_EXTENSION_NAME);
+            deviceExtensions.push_back(VK_KHR_SHADER_FLOAT_CONTROLS_EXTENSION_NAME);
+            deviceExtensions.push_back(VK_KHR_RAY_QUERY_EXTENSION_NAME);
+            Settings::Get<GlobalSettings>().ray_tracing_support = true;
+        }
+        else
+        {
+            Settings::Get<GlobalSettings>().ray_tracing_support = false;
+        }
+
         auto queueFamilyProperties = m_gpu.getQueueFamilyProperties();
         float priority = 1.f;
         vk::DeviceQueueCreateInfo queueCreateInfo{};
@@ -649,18 +683,46 @@ namespace pe
 
         // Vulkan 1.1 features
         vk::PhysicalDeviceVulkan11Features deviceFeatures11{};
+        
         // Vulkan 1.2 features
         vk::PhysicalDeviceVulkan12Features deviceFeatures12{};
+        deviceFeatures12.bufferDeviceAddress = true;
+        deviceFeatures12.timelineSemaphore = true;
+        deviceFeatures12.descriptorIndexing = true;
+        deviceFeatures12.runtimeDescriptorArray = true;
+        deviceFeatures12.descriptorBindingPartiallyBound = true;
+        deviceFeatures12.descriptorBindingVariableDescriptorCount = true;
+        deviceFeatures12.shaderSampledImageArrayNonUniformIndexing = true;
+        deviceFeatures12.shaderStorageImageArrayNonUniformIndexing = true;
         deviceFeatures12.pNext = &deviceFeatures11;
+
         // Vulkan 1.3 features
         vk::PhysicalDeviceVulkan13Features deviceFeatures13{};
+        deviceFeatures13.synchronization2 = true;
+        deviceFeatures13.dynamicRendering = true;
         deviceFeatures13.pNext = &deviceFeatures12;
+
         // Vulkan 1.4 features
         vk::PhysicalDeviceVulkan14Features deviceFeatures14{};
+        deviceFeatures14.pushDescriptor = true;
         deviceFeatures14.pNext = &deviceFeatures13;
 
+        // Ray Tracing Features
+        vk::PhysicalDeviceAccelerationStructureFeaturesKHR accelerationStructureFeatures{};
+        accelerationStructureFeatures.accelerationStructure = true;
+        accelerationStructureFeatures.pNext = &deviceFeatures14;
+
+        vk::PhysicalDeviceRayTracingPipelineFeaturesKHR rayTracingPipelineFeatures{};
+        rayTracingPipelineFeatures.rayTracingPipeline = true;
+        rayTracingPipelineFeatures.pNext = &accelerationStructureFeatures;
+
+        vk::PhysicalDeviceRayQueryFeaturesKHR rayQueryFeatures{};
+        rayQueryFeatures.rayQuery = true;
+        rayQueryFeatures.pNext = &rayTracingPipelineFeatures;
+
         vk::PhysicalDeviceFeatures2 deviceFeatures2{};
-        deviceFeatures2.pNext = &deviceFeatures14;
+        deviceFeatures2.pNext = &rayQueryFeatures;
+        
         // Supported features
         m_gpu.getFeatures2(&deviceFeatures2);
 
@@ -677,6 +739,8 @@ namespace pe
         PE_ERROR_IF(!deviceFeatures12.separateDepthStencilLayouts, "Separate depth stencil layouts are not supported!");
         PE_ERROR_IF(!deviceFeatures2.features.multiDrawIndirect, "Multi draw indirect is not supported!");
         PE_ERROR_IF(!deviceFeatures2.features.drawIndirectFirstInstance, "Draw indirect first instance is not supported!");
+        PE_ERROR_IF(!deviceFeatures12.bufferDeviceAddress, "Buffer Device Address not supported!");
+
 
         vk::DeviceCreateInfo deviceCreateInfo{};
         deviceCreateInfo.queueCreateInfoCount = 1;
@@ -686,7 +750,9 @@ namespace pe
         deviceCreateInfo.pNext = &deviceFeatures2;
 
         m_device = m_gpu.createDevice(deviceCreateInfo);
+        VULKAN_HPP_DEFAULT_DISPATCHER.init(m_device);
 
+        // Debug naming
         Debug::SetObjectName(m_surface->ApiHandle(), "RHI_surface");
         Debug::SetObjectName(m_gpu, "RHI_gpu");
         Debug::SetObjectName(m_device, "RHI_device");
@@ -699,7 +765,7 @@ namespace pe
         uint32_t apiVersion = vk::enumerateInstanceVersion();
 
         VmaAllocatorCreateInfo allocator_info = {};
-        allocator_info.flags = VMA_ALLOCATOR_CREATE_KHR_MAINTENANCE5_BIT;
+        allocator_info.flags = VMA_ALLOCATOR_CREATE_KHR_MAINTENANCE5_BIT | VMA_ALLOCATOR_CREATE_BUFFER_DEVICE_ADDRESS_BIT;
         allocator_info.physicalDevice = m_gpu;
         allocator_info.device = m_device;
         allocator_info.instance = m_instance;

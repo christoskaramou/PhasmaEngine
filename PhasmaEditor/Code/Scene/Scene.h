@@ -7,6 +7,7 @@ namespace pe
     class CommandBuffer;
     class Image;
     class Model;
+    class AccelerationStructure;
 
     struct DrawInfo
     {
@@ -43,6 +44,9 @@ namespace pe
         Buffer *GetIndirect(uint32_t frame) { return m_indirects[frame]; }
         Buffer *GetIndirectAll() { return m_indirectAll; }
         Buffer *GetBuffer() { return m_buffer; }
+        AccelerationStructure *GetTLAS() { return m_tlas; }
+        Buffer *GetInstanceBuffer() { return m_instanceBuffer; }
+        Buffer *GetMeshInfoBuffer() { return m_meshInfoBuffer; }
         size_t GetVerticesOffset() const { return m_verticesOffset; }
         size_t GetPositionsOffset() const { return m_positionsOffset; }
         size_t GetAabbVerticesOffset() const { return m_aabbVerticesOffset; }
@@ -71,11 +75,14 @@ namespace pe
         void CreateIndirectBuffers(CommandBuffer *cmd);
         void UpdateImageViews();
         void CreateGBufferConstants(CommandBuffer *cmd);
+        void BuildAccelerationStructures(CommandBuffer *cmd);
 
         struct alignas(64) PerFrameData
         {
             mat4 viewProjection;
             mat4 previousViewProjection;
+            mat4 invView;
+            mat4 invProjection;
         };
 
         PerFrameData m_frameData{};
@@ -104,6 +111,24 @@ namespace pe
         std::vector<vk::DrawIndexedIndirectCommand> m_indirectCommands;
 
         std::mutex m_drawInfosMutex;
+
+        // Ray Tracing
+        struct alignas(16) MeshInfoGPU
+        {
+            uint32_t indexOffset;
+            uint32_t vertexOffset;
+            uint32_t positionsOffset;
+            int textures[5]; // BaseColor, Normal, Metallic, Occlusion, Emissive
+            // int padding; // implicit padding or explicit? alignas(16) might need care.
+            // 3 uints + 5 ints = 32 bytes (perfectly aligned to 16 if indices are 4 bytes)
+            // 3*4 + 5*4 = 12 + 20 = 32 bytes. No padding needed if struct is 32 bytes.
+        };
+        std::vector<AccelerationStructure *> m_blases;
+        AccelerationStructure *m_tlas = nullptr;
+        Buffer *m_instanceBuffer = nullptr;
+        Buffer *m_blasMergedBuffer = nullptr;
+        Buffer *m_scratchBuffer = nullptr;
+        Buffer *m_meshInfoBuffer = nullptr;
 
         static std::vector<uint32_t> s_aabbIndices;
     };

@@ -177,4 +177,11 @@ namespace pe
 
         cmd->ApiHandle().pipelineBarrier2(dependencyInfo);
     }
+
+    uint64_t Buffer::GetDeviceAddress() const
+    {
+        vk::BufferDeviceAddressInfo info{};
+        info.buffer = m_apiHandle;
+        return RHII.GetDevice().getBufferAddress(info);
+    }
 } // namespace pe

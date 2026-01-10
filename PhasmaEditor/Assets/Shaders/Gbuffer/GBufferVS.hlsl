@@ -2,7 +2,7 @@
 #include "../Common/Common.hlsl"
 
 // --- ByteAddressBuffer data ---
-// PerFrameData                 -> 2 * sizeof(mat4)
+// PerFrameData                 -> 4 * sizeof(mat4)
 // Constant Buffer indices      -> num of draw calls * sizeof(uint)
 // for (num of draw calls)
 //      MeshData               -> sizeof(mat4) * 2
@@ -18,7 +18,7 @@ static const uint MESH_DATA_SIZE = MATRIX_SIZE * 2u;
 
 uint GetConstantBufferID(uint instanceID)
 {
-    return data.Load(128 + instanceID * 4);
+    return data.Load(256 + instanceID * 4);
 }
 
 float4x4 LoadMatrix(uint offset)

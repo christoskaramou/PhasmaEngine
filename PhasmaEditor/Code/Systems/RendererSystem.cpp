@@ -19,6 +19,7 @@
 #include "RenderPasses/MotionBlurPass.h"
 #include "RenderPasses/ParticleComputePass.h"
 #include "RenderPasses/ParticlePass.h"
+#include "RenderPasses/RayTracingPass.h"
 #include "RenderPasses/SSAOPass.h"
 #include "RenderPasses/SSRPass.h"
 #include "RenderPasses/ShadowPass.h"
@@ -71,6 +72,7 @@ namespace pe
         m_renderPassComponents[ID::GetTypeID<ParticlePass>()] = CreateGlobalComponent<ParticlePass>();
         m_renderPassComponents[ID::GetTypeID<TAAPass>()] = CreateGlobalComponent<TAAPass>();
         m_renderPassComponents[ID::GetTypeID<SharpenPass>()] = CreateGlobalComponent<SharpenPass>();
+        m_renderPassComponents[ID::GetTypeID<RayTracingPass>()] = CreateGlobalComponent<RayTracingPass>();
 
         for (auto &renderPassComponent : m_renderPassComponents)
         {
@@ -168,6 +170,7 @@ namespace pe
         AabbsPass &aabbs = *GetGlobalComponent<AabbsPass>();
         ParticleComputePass &pcp = *GetGlobalComponent<ParticleComputePass>();
         ParticlePass &pp = *GetGlobalComponent<ParticlePass>();
+        RayTracingPass &rtp = *GetGlobalComponent<RayTracingPass>();
 
         auto &gSettings = Settings::Get<GlobalSettings>();
 
@@ -294,6 +297,12 @@ namespace pe
         {
             // Image *blitImage = gSettings.current_rendering_image ? gSettings.current_rendering_image : m_displayRT;
             BlitToSwapchain(cmd, m_displayRT, imageIndex);
+        }
+
+        if (gSettings.ray_tracing_support && gSettings.use_ray_tracing)
+        {
+            rtp.SetScene(&m_scene);
+            rtp.Draw(cmd);
         }
 
         cmd->End();
