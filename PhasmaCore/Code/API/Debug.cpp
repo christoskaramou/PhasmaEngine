@@ -4,7 +4,7 @@
 #include "API/RHI.h"
 #include "RenderDoc/renderdoc_app.h"
 
-#define PE_RENDER_DOC 1
+#define PE_RENDER_DOC 0
 
 #if defined(WIN32) && PE_RENDER_DOC == 1
 #include <Windows.h>
@@ -31,7 +31,7 @@ namespace pe
         if (status != ERROR_SUCCESS) // ensure installer folders key is successfully opened
             return std::wstring();
 
-            // Get the class name and the value count.
+        // Get the class name and the value count.
 #define MAX_VALUE_NAME 8192
         TCHAR achClass[MAX_PATH] = TEXT("");
         DWORD cchClassName = MAX_PATH;
@@ -261,9 +261,10 @@ namespace pe
             return "Warning";
         case VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT:
             return "Error";
+        case VK_DEBUG_UTILS_MESSAGE_SEVERITY_FLAG_BITS_MAX_ENUM_EXT:
+        default:
+            return "Unknown";
         }
-
-        return "Unknown";
     }
 
     uint32_t VKAPI_CALL MessageCallback(
