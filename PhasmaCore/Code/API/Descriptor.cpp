@@ -243,13 +243,27 @@ namespace pe
         SetSamplers(binding, {sampler});
     }
 
+    void Descriptor::SetAccelerationStructure(uint32_t binding, vk::AccelerationStructureKHR tlas)
+    {
+        int32_t bindingIndex = GetBindingIndex(binding, m_bindingInfos);
+        if (bindingIndex == -1)
+            return;
+
+        DescriptorUpdateInfo info{};
+        info.binding = binding;
+        info.accelerationStructures = {tlas};
+        m_updateInfos[bindingIndex] = info;
+    }
+
     void Descriptor::Update()
     {
         std::vector<vk::WriteDescriptorSet> writes{};
         std::vector<std::vector<vk::DescriptorImageInfo>> imageInfos{};
         std::vector<std::vector<vk::DescriptorBufferInfo>> bufferInfos{};
+        std::vector<vk::WriteDescriptorSetAccelerationStructureKHR> accelerationWrites{};
         imageInfos.reserve(m_updateInfos.size());
         bufferInfos.reserve(m_updateInfos.size());
+        accelerationWrites.reserve(m_updateInfos.size());
         writes.reserve(m_updateInfos.size());
 
         for (uint32_t i = 0; i < m_updateInfos.size(); i++)
@@ -262,7 +276,7 @@ namespace pe
             write.dstBinding = updateInfo.binding;
             write.dstArrayElement = 0;
             write.descriptorType = bindingInfo.type;
-            if (updateInfo.views.size() > 0)
+            if (updateInfo.views.size())
             {
                 auto &infos = imageInfos.emplace_back(std::vector<vk::DescriptorImageInfo>{});
                 infos.resize(updateInfo.views.size());
@@ -277,7 +291,7 @@ namespace pe
                 write.descriptorCount = static_cast<uint32_t>(infos.size());
                 write.pImageInfo = infos.data();
             }
-            else if (updateInfo.buffers.size() > 0)
+            else if (updateInfo.buffers.size())
             {
                 auto &infos = bufferInfos.emplace_back(std::vector<vk::DescriptorBufferInfo>{});
                 infos.resize(updateInfo.buffers.size());
@@ -292,7 +306,7 @@ namespace pe
                 write.descriptorCount = static_cast<uint32_t>(infos.size());
                 write.pBufferInfo = infos.data();
             }
-            else if (updateInfo.samplers.size() > 0 && bindingInfo.type != vk::DescriptorType::eCombinedImageSampler)
+            else if (updateInfo.samplers.size() && bindingInfo.type != vk::DescriptorType::eCombinedImageSampler)
             {
                 auto &infos = imageInfos.emplace_back(std::vector<vk::DescriptorImageInfo>{});
                 infos.resize(updateInfo.samplers.size());
@@ -306,6 +320,15 @@ namespace pe
 
                 write.descriptorCount = static_cast<uint32_t>(infos.size());
                 write.pImageInfo = infos.data();
+            }
+            else if (updateInfo.accelerationStructures.size())
+            {
+                auto &accelerationWrite = accelerationWrites.emplace_back();
+                accelerationWrite.accelerationStructureCount = static_cast<uint32_t>(updateInfo.accelerationStructures.size());
+                accelerationWrite.pAccelerationStructures = updateInfo.accelerationStructures.data();
+
+                write.pNext = &accelerationWrite;
+                write.descriptorCount = accelerationWrite.accelerationStructureCount;
             }
             else
             {

@@ -506,8 +506,6 @@ namespace pe
     // TODO: add multiple regions for all mip levels
     void Image::Blit(CommandBuffer *cmd, Image *src, const vk::ImageBlit &region, vk::Filter filter)
     {
-        PE_ERROR_IF(!cmd, "BlitImage(): Command buffer is null.");
-
         cmd->BeginDebugRegion("BlitImage");
 
         std::vector<ImageBarrierInfo> barriers(2);

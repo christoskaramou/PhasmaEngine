@@ -62,6 +62,8 @@ namespace pe
         bool draw_aabbs = false;
         bool aabbs_depth_aware = true;
         bool dynamic_rendering = true;
+        bool ray_tracing_support = false;
+        bool use_ray_tracing = false;
         vk::PresentModeKHR preferred_present_mode = vk::PresentModeKHR::eMailbox;
     };
 } // namespace pe

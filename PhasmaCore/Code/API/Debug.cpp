@@ -4,6 +4,8 @@
 #include "API/RHI.h"
 #include "RenderDoc/renderdoc_app.h"
 
+#define PE_RENDER_DOC 1
+
 #if defined(WIN32) && PE_RENDER_DOC == 1
 #include <Windows.h>
 #elif defined(__linux__) && PE_RENDER_DOC == 1

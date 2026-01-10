@@ -25,6 +25,7 @@ namespace pe
         void Copy(uint32_t count, BufferRange *ranges, bool keepMapped);
         size_t Size();
         void *Data();
+        uint64_t GetDeviceAddress() const;
 
     private:
         friend class CommandBuffer;

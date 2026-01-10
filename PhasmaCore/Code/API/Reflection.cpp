@@ -160,6 +160,18 @@ namespace pe
             m_storageBuffers.push_back(desc);
         }
 
+        // Acceleration Structures
+        for (const spirv_cross::Resource &resource : resources.acceleration_structures)
+        {
+            AccelerationStructureDesc desc{};
+            desc.name = GetResourceName(compiler, resource.id);
+            desc.typeInfo = compiler.get_type(resource.type_id);
+            desc.set = compiler.get_decoration(resource.id, spv::DecorationDescriptorSet);
+            desc.binding = compiler.get_decoration(resource.id, spv::DecorationBinding);
+
+            m_accelerationStructures.push_back(desc);
+        }
+
         // Push constants
         for (const spirv_cross::Resource &resource : resources.push_constant_buffers)
         {
@@ -345,6 +357,8 @@ namespace pe
             maxSet = std::max(maxSet, desc.set);
         for (const BufferDesc &desc : m_storageBuffers)
             maxSet = std::max(maxSet, desc.set);
+        for (const AccelerationStructureDesc &desc : m_accelerationStructures)
+            maxSet = std::max(maxSet, desc.set);
 
         if (maxSet == INT32_MIN)
             return {};
@@ -420,6 +434,17 @@ namespace pe
             info.binding = desc.binding;
             info.count = GetResourceArrayCount(desc.typeInfo);
             info.type = vk::DescriptorType::eStorageBuffer;
+            info.name = desc.name;
+
+            setInfos[desc.set].push_back(info);
+        }
+
+        for (const AccelerationStructureDesc &desc : m_accelerationStructures)
+        {
+            DescriptorBindingInfo info{};
+            info.binding = desc.binding;
+            info.count = GetResourceArrayCount(desc.typeInfo);
+            info.type = vk::DescriptorType::eAccelerationStructureKHR;
             info.name = desc.name;
 
             setInfos[desc.set].push_back(info);

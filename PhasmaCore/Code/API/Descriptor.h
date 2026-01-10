@@ -30,6 +30,7 @@ namespace pe
         std::vector<uint64_t> ranges{}; // range of the buffers in bytes to use
         std::vector<vk::ImageView> views{};
         std::vector<vk::Sampler> samplers{}; // if type == DescriptorType::CombinedImageSampler, these are the samplers for each view
+        std::vector<vk::AccelerationStructureKHR> accelerationStructures{};
     };
 
     class DescriptorLayout : public PeHandle<DescriptorLayout, vk::DescriptorSetLayout>
@@ -114,6 +115,7 @@ namespace pe
         void SetBuffer(uint32_t binding, Buffer *buffer, uint64_t offset = 0, uint64_t range = 0);
         void SetSamplers(uint32_t binding, const std::vector<vk::Sampler> &samplers);
         void SetSampler(uint32_t binding, vk::Sampler sampler);
+        void SetAccelerationStructure(uint32_t binding, vk::AccelerationStructureKHR tlas);
         void Update();
         DescriptorPool *GetPool() const { return m_pool; }
         DescriptorLayout *GetLayout() const { return m_layout; }
