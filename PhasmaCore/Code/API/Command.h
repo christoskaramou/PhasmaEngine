@@ -17,6 +17,7 @@ namespace pe
     class Event;
     class CommandPool;
     struct ImageBarrierInfo;
+    struct BufferBarrierInfo;
 
     template <class T>
     inline uint32_t GetUboDataOffset(T offset)
@@ -109,8 +110,8 @@ namespace pe
         void DrawIndexedIndirect(Buffer *indirectBuffer, size_t offset, uint32_t drawCount, uint32_t stride = sizeof(vk::DrawIndexedIndirectCommand));
         void TraceRays(uint32_t width, uint32_t height, uint32_t depth);
         void BuildAccelerationStructures(uint32_t infoCount, const vk::AccelerationStructureBuildGeometryInfoKHR *pInfos, const vk::AccelerationStructureBuildRangeInfoKHR **ppBuildRangeInfos);
-        void BufferBarrier(const vk::BufferMemoryBarrier2 &info);
-        void BufferBarriers(const std::vector<vk::BufferMemoryBarrier2> &infos);
+        void BufferBarrier(const BufferBarrierInfo &info);
+        void BufferBarriers(const std::vector<BufferBarrierInfo> &infos);
         void ImageBarrier(const ImageBarrierInfo &info);
         void ImageBarriers(const std::vector<ImageBarrierInfo> &infos);
         void MemoryBarrier(const vk::MemoryBarrier2 &info);

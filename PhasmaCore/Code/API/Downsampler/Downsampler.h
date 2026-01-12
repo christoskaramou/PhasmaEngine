@@ -3,6 +3,7 @@
 namespace pe
 {
     class Buffer;
+    class Descriptor;
 
     class Downsampler
     {

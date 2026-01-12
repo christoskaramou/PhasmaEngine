@@ -103,7 +103,7 @@ namespace pe
         Descriptor *descriptor = descriptors[0];
         descriptor->SetImageView(0, m_cubeMap->GetUAV(0), nullptr);
         descriptor->SetImageView(1, equiImage->GetSRV(), nullptr);
-        descriptor->SetSampler(2, equiImage->GetSampler()->ApiHandle());
+        descriptor->SetSampler(2, equiImage->GetSampler());
         descriptor->Update();
 
         // 6. Dispatch

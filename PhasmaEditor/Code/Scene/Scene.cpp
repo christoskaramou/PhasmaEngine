@@ -114,7 +114,7 @@ namespace pe
                     setTextures->SetBuffer(0, gb->m_constants);
                     if (HasDirtyDescriptorViews(frame))
                     {
-                        setTextures->SetSampler(1, defaultSampler->ApiHandle());
+                        setTextures->SetSampler(1, defaultSampler);
                         setTextures->SetImageViews(2, GetImageViews(), {});
                         setTextures->Update();
                     }
@@ -144,7 +144,7 @@ namespace pe
                     setTextures->SetBuffer(0, gb->m_constants);
                     if (HasDirtyDescriptorViews(frame))
                     {
-                        setTextures->SetSampler(1, defaultSampler->ApiHandle());
+                        setTextures->SetSampler(1, defaultSampler);
                         setTextures->SetImageViews(2, GetImageViews(), {});
                         setTextures->Update();
                     }
@@ -165,7 +165,7 @@ namespace pe
                 setTextures->SetBuffer(0, gb->m_constants);
                 if (HasDirtyDescriptorViews(frame))
                 {
-                    setTextures->SetSampler(1, defaultSampler->ApiHandle());
+                    setTextures->SetSampler(1, defaultSampler);
                     setTextures->SetImageViews(2, GetImageViews(), {});
                     setTextures->Update();
                 }
@@ -265,12 +265,10 @@ namespace pe
             indicesCount += indices.size();
         }
 
-        vk::BufferMemoryBarrier2 indexBarrierInfo{};
-        indexBarrierInfo.buffer = m_buffer->ApiHandle();
-        indexBarrierInfo.srcAccessMask = vk::AccessFlagBits2::eTransferWrite;
-        indexBarrierInfo.dstAccessMask = vk::AccessFlagBits2::eIndexRead;
-        indexBarrierInfo.srcStageMask = vk::PipelineStageFlagBits2::eTransfer;
-        indexBarrierInfo.dstStageMask = vk::PipelineStageFlagBits2::eVertexInput;
+        BufferBarrierInfo indexBarrierInfo{};
+        indexBarrierInfo.buffer = m_buffer;
+        indexBarrierInfo.stageMask = vk::PipelineStageFlagBits2::eVertexInput;
+        indexBarrierInfo.accessMask = vk::AccessFlagBits2::eIndexRead;
         indexBarrierInfo.size = indicesCount * sizeof(uint32_t);
         indexBarrierInfo.offset = 0;
         cmd->BufferBarrier(indexBarrierInfo);
@@ -278,12 +276,10 @@ namespace pe
         m_aabbIndicesOffset = indicesCount * sizeof(uint32_t);
         cmd->CopyBufferStaged(m_buffer, s_aabbIndices.data(), s_aabbIndices.size() * sizeof(uint32_t), m_aabbIndicesOffset);
 
-        vk::BufferMemoryBarrier2 aabbIndexBarrierInfo{};
-        aabbIndexBarrierInfo.buffer = m_buffer->ApiHandle();
-        aabbIndexBarrierInfo.srcAccessMask = vk::AccessFlagBits2::eTransferWrite;
-        aabbIndexBarrierInfo.dstAccessMask = vk::AccessFlagBits2::eIndexRead;
-        aabbIndexBarrierInfo.srcStageMask = vk::PipelineStageFlagBits2::eTransfer;
-        aabbIndexBarrierInfo.dstStageMask = vk::PipelineStageFlagBits2::eVertexInput;
+        BufferBarrierInfo aabbIndexBarrierInfo{};
+        aabbIndexBarrierInfo.buffer = m_buffer;
+        aabbIndexBarrierInfo.stageMask = vk::PipelineStageFlagBits2::eVertexInput;
+        aabbIndexBarrierInfo.accessMask = vk::AccessFlagBits2::eIndexRead;
         aabbIndexBarrierInfo.size = s_aabbIndices.size() * sizeof(uint32_t);
         aabbIndexBarrierInfo.offset = m_aabbIndicesOffset;
         cmd->BufferBarrier(aabbIndexBarrierInfo);
@@ -304,12 +300,10 @@ namespace pe
             verticesCount += vertexCount;
         }
 
-        vk::BufferMemoryBarrier2 vertexBarrierInfo{};
-        vertexBarrierInfo.buffer = m_buffer->ApiHandle();
-        vertexBarrierInfo.srcAccessMask = vk::AccessFlagBits2::eTransferWrite;
-        vertexBarrierInfo.dstAccessMask = vk::AccessFlagBits2::eVertexAttributeRead;
-        vertexBarrierInfo.srcStageMask = vk::PipelineStageFlagBits2::eTransfer;
-        vertexBarrierInfo.dstStageMask = vk::PipelineStageFlagBits2::eVertexInput;
+        BufferBarrierInfo vertexBarrierInfo{};
+        vertexBarrierInfo.buffer = m_buffer;
+        vertexBarrierInfo.stageMask = vk::PipelineStageFlagBits2::eVertexInput;
+        vertexBarrierInfo.accessMask = vk::AccessFlagBits2::eVertexAttributeRead;
         vertexBarrierInfo.size = verticesCount * sizeof(Vertex);
         vertexBarrierInfo.offset = m_verticesOffset;
         cmd->BufferBarrier(vertexBarrierInfo);
@@ -327,12 +321,10 @@ namespace pe
             positionsCount += positionCount;
         }
 
-        vk::BufferMemoryBarrier2 posVertexBarrierInfo{};
-        posVertexBarrierInfo.buffer = m_buffer->ApiHandle();
-        posVertexBarrierInfo.srcAccessMask = vk::AccessFlagBits2::eTransferWrite;
-        posVertexBarrierInfo.dstAccessMask = vk::AccessFlagBits2::eVertexAttributeRead;
-        posVertexBarrierInfo.srcStageMask = vk::PipelineStageFlagBits2::eTransfer;
-        posVertexBarrierInfo.dstStageMask = vk::PipelineStageFlagBits2::eVertexInput;
+        BufferBarrierInfo posVertexBarrierInfo{};
+        posVertexBarrierInfo.buffer = m_buffer;
+        posVertexBarrierInfo.stageMask = vk::PipelineStageFlagBits2::eVertexInput;
+        posVertexBarrierInfo.accessMask = vk::AccessFlagBits2::eVertexAttributeRead;
         posVertexBarrierInfo.size = positionsCount * sizeof(PositionUvVertex);
         posVertexBarrierInfo.offset = m_positionsOffset;
         cmd->BufferBarrier(posVertexBarrierInfo);
@@ -350,12 +342,10 @@ namespace pe
             aabbCount += aabbVertexCount;
         }
 
-        vk::BufferMemoryBarrier2 aabbVertexBarrierInfo{};
-        aabbVertexBarrierInfo.buffer = m_buffer->ApiHandle();
-        aabbVertexBarrierInfo.srcAccessMask = vk::AccessFlagBits2::eTransferWrite;
-        aabbVertexBarrierInfo.dstAccessMask = vk::AccessFlagBits2::eVertexAttributeRead;
-        aabbVertexBarrierInfo.srcStageMask = vk::PipelineStageFlagBits2::eTransfer;
-        aabbVertexBarrierInfo.dstStageMask = vk::PipelineStageFlagBits2::eVertexInput;
+        BufferBarrierInfo aabbVertexBarrierInfo{};
+        aabbVertexBarrierInfo.buffer = m_buffer;
+        aabbVertexBarrierInfo.stageMask = vk::PipelineStageFlagBits2::eVertexInput;
+        aabbVertexBarrierInfo.accessMask = vk::AccessFlagBits2::eVertexAttributeRead;
         aabbVertexBarrierInfo.size = aabbCount * sizeof(AabbVertex);
         aabbVertexBarrierInfo.offset = m_aabbVerticesOffset;
         cmd->BufferBarrier(aabbVertexBarrierInfo);
@@ -454,12 +444,10 @@ namespace pe
             "indirect_Geometry_buffer_all");
         cmd->CopyBufferStaged(m_indirectAll, m_indirectCommands.data(), m_indirectCommands.size() * sizeof(vk::DrawIndexedIndirectCommand), 0);
 
-        vk::BufferMemoryBarrier2 indirectBarrierInfo{};
-        indirectBarrierInfo.buffer = m_indirectAll->ApiHandle();
-        indirectBarrierInfo.srcAccessMask = vk::AccessFlagBits2::eTransferWrite;
-        indirectBarrierInfo.dstAccessMask = vk::AccessFlagBits2::eIndirectCommandRead;
-        indirectBarrierInfo.srcStageMask = vk::PipelineStageFlagBits2::eTransfer;
-        indirectBarrierInfo.dstStageMask = vk::PipelineStageFlagBits2::eDrawIndirect;
+        BufferBarrierInfo indirectBarrierInfo{};
+        indirectBarrierInfo.buffer = m_indirectAll;
+        indirectBarrierInfo.stageMask = vk::PipelineStageFlagBits2::eDrawIndirect;
+        indirectBarrierInfo.accessMask = vk::AccessFlagBits2::eIndirectCommandRead;
         indirectBarrierInfo.size = indirectCount * sizeof(vk::DrawIndexedIndirectCommand);
         indirectBarrierInfo.offset = 0;
         cmd->BufferBarrier(indirectBarrierInfo);

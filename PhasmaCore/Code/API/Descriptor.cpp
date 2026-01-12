@@ -129,6 +129,7 @@ namespace pe
         : m_pushDescriptor{pushDescriptor},
           m_bindingInfos{bindingInfos},
           m_updateInfos(bindingInfos.size()),
+          m_boundResources(bindingInfos.size()),
           m_stage{stage},
           m_dynamicOffsets{}
     {
@@ -185,8 +186,8 @@ namespace pe
     }
 
     void Descriptor::SetImageViews(uint32_t binding,
-                                   const std::vector<vk::ImageView> &views,
-                                   const std::vector<vk::Sampler> &samplers)
+                                   const std::vector<ImageView *> &views,
+                                   const std::vector<Sampler *> &samplers)
     {
         int32_t bindingIndex = GetBindingIndex(binding, m_bindingInfos);
         if (bindingIndex == -1)
@@ -199,7 +200,7 @@ namespace pe
         m_updateInfos[bindingIndex] = info;
     }
 
-    void Descriptor::SetImageView(uint32_t binding, vk::ImageView view, vk::Sampler sampler)
+    void Descriptor::SetImageView(uint32_t binding, ImageView *view, Sampler *sampler)
     {
         SetImageViews(binding, {view}, {sampler});
     }
@@ -226,7 +227,7 @@ namespace pe
         SetBuffers(binding, {buffer}, {offset}, {range});
     }
 
-    void Descriptor::SetSamplers(uint32_t binding, const std::vector<vk::Sampler> &samplers)
+    void Descriptor::SetSamplers(uint32_t binding, const std::vector<Sampler *> &samplers)
     {
         int32_t bindingIndex = GetBindingIndex(binding, m_bindingInfos);
         if (bindingIndex == -1)
@@ -238,7 +239,7 @@ namespace pe
         m_updateInfos[bindingIndex] = info;
     }
 
-    void Descriptor::SetSampler(uint32_t binding, vk::Sampler sampler)
+    void Descriptor::SetSampler(uint32_t binding, Sampler *sampler)
     {
         SetSamplers(binding, {sampler});
     }
@@ -283,9 +284,9 @@ namespace pe
                 for (uint32_t j = 0; j < updateInfo.views.size(); j++)
                 {
                     infos[j] = vk::DescriptorImageInfo{};
-                    infos[j].imageView = updateInfo.views[j];
+                    infos[j].imageView = updateInfo.views[j]->ApiHandle();
                     infos[j].imageLayout = bindingInfo.imageLayout;
-                    infos[j].sampler = bindingInfo.type == vk::DescriptorType::eCombinedImageSampler ? updateInfo.samplers[j] : vk::Sampler{};
+                    infos[j].sampler = bindingInfo.type == vk::DescriptorType::eCombinedImageSampler ? updateInfo.samplers[j]->ApiHandle() : vk::Sampler{};
                 }
 
                 write.descriptorCount = static_cast<uint32_t>(infos.size());
@@ -315,7 +316,7 @@ namespace pe
                     infos[j] = vk::DescriptorImageInfo{};
                     infos[j].imageView = nullptr;
                     infos[j].imageLayout = vk::ImageLayout::eUndefined;
-                    infos[j].sampler = updateInfo.samplers[j];
+                    infos[j].sampler = updateInfo.samplers[j]->ApiHandle();
                 }
 
                 write.descriptorCount = static_cast<uint32_t>(infos.size());
@@ -335,6 +336,7 @@ namespace pe
                 continue; // We are allowing this since all bindings can be partially bound
             }
 
+            m_boundResources[i] = updateInfo;
             writes.push_back(write);
         }
 

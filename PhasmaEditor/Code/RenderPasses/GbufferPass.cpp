@@ -79,7 +79,7 @@ namespace pe
     {
     }
 
-    void GbufferOpaquePass::Draw(CommandBuffer *cmd)
+    void GbufferOpaquePass::ExecutePass(CommandBuffer *cmd)
     {
         PE_ERROR_IF(m_scene == nullptr, "Scene was not set");
 
@@ -207,7 +207,7 @@ namespace pe
     {
     }
 
-    void GbufferTransparentPass::Draw(CommandBuffer *cmd)
+    void GbufferTransparentPass::ExecutePass(CommandBuffer *cmd)
     {
         PE_ERROR_IF(m_scene == nullptr, "Scene was not set");
 

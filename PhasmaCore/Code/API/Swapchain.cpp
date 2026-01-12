@@ -59,11 +59,11 @@ namespace pe
             imageViewCreateInfo.format = surface->GetFormat();
             imageViewCreateInfo.subresourceRange = {vk::ImageAspectFlagBits::eColor, 0, 1, 0, 1};
 
-            auto imageView = RHII.GetDevice().createImageView(imageViewCreateInfo);
+            auto imageView = ImageView::Create(m_images[i], imageViewCreateInfo, "Swapchain_image_view" + std::to_string(i));
             m_images[i]->SetRTV(imageView);
 
             Debug::SetObjectName(m_images[i]->ApiHandle(), "Swapchain_image" + std::to_string(i));
-            Debug::SetObjectName(m_images[i]->GetRTV(), "Swapchain_image_view" + std::to_string(i));
+            Debug::SetObjectName(m_images[i]->GetRTV()->ApiHandle(), "Swapchain_image_view" + std::to_string(i));
         }
 
         if (m_apiHandle)

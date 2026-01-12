@@ -43,7 +43,7 @@ namespace pe
         m_passInfo->Update();
     }
 
-    void AabbsPass::Draw(CommandBuffer *cmd)
+    void AabbsPass::ExecutePass(CommandBuffer *cmd)
     {
         PE_ERROR_IF(m_scene == nullptr, "Scene was not set");
         if (!m_scene->HasDrawInfo())

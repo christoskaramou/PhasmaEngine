@@ -423,7 +423,7 @@ namespace pe
         queue->WaitIdle();
     }
 
-    void GUI::Draw(CommandBuffer *cmd)
+    void GUI::ExecutePass(CommandBuffer *cmd)
     {
         if (!m_render || ImGui::GetDrawData()->TotalVtxCount <= 0)
             return;

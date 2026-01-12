@@ -694,6 +694,7 @@ namespace pe
         deviceFeatures12.descriptorBindingVariableDescriptorCount = true;
         deviceFeatures12.shaderSampledImageArrayNonUniformIndexing = true;
         deviceFeatures12.shaderStorageImageArrayNonUniformIndexing = true;
+        deviceFeatures12.shaderFloat16 = true;
         deviceFeatures12.pNext = &deviceFeatures11;
 
         // Vulkan 1.3 features
@@ -734,12 +735,13 @@ namespace pe
         PE_ERROR_IF(!deviceFeatures12.shaderSampledImageArrayNonUniformIndexing, "Sampled image array non uniform indexing is not supported on this device!");
         PE_ERROR_IF(!deviceFeatures12.shaderStorageBufferArrayNonUniformIndexing, "Storage buffer array non uniform indexing is not supported on this device!");
         PE_ERROR_IF(!deviceFeatures12.descriptorBindingVariableDescriptorCount, "Variable descriptor count is not supported on this device!");
-        PE_ERROR_IF(!deviceFeatures2.features.shaderInt64, "Int64 is not supported on this device!");
-        PE_ERROR_IF(!deviceFeatures2.features.shaderInt16, "Int16 is not supported on this device!");
         PE_ERROR_IF(!deviceFeatures12.separateDepthStencilLayouts, "Separate depth stencil layouts are not supported!");
+        PE_ERROR_IF(!deviceFeatures12.bufferDeviceAddress, "Buffer Device Address not supported!");
+        PE_ERROR_IF(!deviceFeatures12.shaderFloat16, "Float16 is not supported on this device!");
+        PE_ERROR_IF(!deviceFeatures2.features.shaderInt16, "Int16 is not supported on this device!");
+        PE_ERROR_IF(!deviceFeatures2.features.shaderInt64, "Int64 is not supported on this device!");
         PE_ERROR_IF(!deviceFeatures2.features.multiDrawIndirect, "Multi draw indirect is not supported!");
         PE_ERROR_IF(!deviceFeatures2.features.drawIndirectFirstInstance, "Draw indirect first instance is not supported!");
-        PE_ERROR_IF(!deviceFeatures12.bufferDeviceAddress, "Buffer Device Address not supported!");
 
 
         vk::DeviceCreateInfo deviceCreateInfo{};

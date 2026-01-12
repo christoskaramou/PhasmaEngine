@@ -23,7 +23,6 @@ namespace pe
 
     class CommandBuffer;
     struct Attachment;
-    class Descriptor;
     class PassInfo;
 
     class IRenderPassComponent : public IComponent
@@ -37,7 +36,7 @@ namespace pe
         virtual void CreateUniforms(CommandBuffer *cmd) = 0;
         virtual void UpdateDescriptorSets() = 0;
         virtual void Update() = 0;
-        virtual void Draw(CommandBuffer *cmd) = 0;
+        virtual void ExecutePass(CommandBuffer *cmd) = 0;
         virtual void Resize(uint32_t width, uint32_t height) = 0;
         virtual void Destroy() = 0;
 

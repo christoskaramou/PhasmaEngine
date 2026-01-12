@@ -216,7 +216,7 @@ namespace pe
                             {
                                 m_textureCache[imgPtr] = (void *)ImGui_ImplVulkan_AddTexture(
                                     img->GetSampler()->ApiHandle(),
-                                    img->GetSRV(),
+                                    img->GetSRV()->ApiHandle(),
                                     VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
                             }
                             textureID = m_textureCache[imgPtr];

@@ -42,12 +42,12 @@ namespace pe
         for (uint32_t i = 0; i < RHII.GetSwapchainImageCount(); i++)
         {
             auto *DSet = m_passInfo->GetDescriptors(i)[0];
-            DSet->SetImageView(0, m_displayRT->GetSRV(), m_displayRT->GetSampler()->ApiHandle());
+            DSet->SetImageView(0, m_displayRT->GetSRV(), m_displayRT->GetSampler());
             DSet->Update();
         }
     }
 
-    void BloomBrightFilterPass::Draw(CommandBuffer *cmd)
+    void BloomBrightFilterPass::ExecutePass(CommandBuffer *cmd)
     {
         ImageBarrierInfo barrier{};
         barrier.image = m_displayRT;
@@ -103,12 +103,12 @@ namespace pe
         for (uint32_t i = 0; i < RHII.GetSwapchainImageCount(); i++)
         {
             auto *DSet = m_passInfo->GetDescriptors(i)[0];
-            DSet->SetImageView(0, m_brightFilterRT->GetSRV(), m_brightFilterRT->GetSampler()->ApiHandle());
+            DSet->SetImageView(0, m_brightFilterRT->GetSRV(), m_brightFilterRT->GetSampler());
             DSet->Update();
         }
     }
 
-    void BloomGaussianBlurHorizontalPass::Draw(CommandBuffer *cmd)
+    void BloomGaussianBlurHorizontalPass::ExecutePass(CommandBuffer *cmd)
     {
         auto &gSettings = Settings::Get<GlobalSettings>();
 
@@ -171,12 +171,12 @@ namespace pe
         for (uint32_t i = 0; i < RHII.GetSwapchainImageCount(); i++)
         {
             auto *DSet = m_passInfo->GetDescriptors(i)[0];
-            DSet->SetImageView(0, m_gaussianBlurHorizontalRT->GetSRV(), m_gaussianBlurHorizontalRT->GetSampler()->ApiHandle());
+            DSet->SetImageView(0, m_gaussianBlurHorizontalRT->GetSRV(), m_gaussianBlurHorizontalRT->GetSampler());
             DSet->Update();
         }
     }
 
-    void BloomGaussianBlurVerticalPass::Draw(CommandBuffer *cmd)
+    void BloomGaussianBlurVerticalPass::ExecutePass(CommandBuffer *cmd)
     {
         auto &gSettings = Settings::Get<GlobalSettings>();
 

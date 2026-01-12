@@ -3,7 +3,7 @@
 namespace pe
 {
     class RenderPass;
-    class DescriptorLayout;
+    class Descriptor;
     class Shader;
     class Buffer;
 
@@ -86,8 +86,6 @@ namespace pe
         Pipeline(RenderPass *renderPass, PassInfo &info);
         ~Pipeline();
 
-
-        
         PassInfo &GetInfo() { return m_info; }
 
     private:

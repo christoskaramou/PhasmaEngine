@@ -44,7 +44,7 @@ namespace pe
         // depth pass descriptor sets are updated with Scene::Update
     }
 
-    void DepthPass::Draw(CommandBuffer *cmd)
+    void DepthPass::ExecutePass(CommandBuffer *cmd)
     {
         PE_ERROR_IF(m_scene == nullptr, "Scene was not set");
 
