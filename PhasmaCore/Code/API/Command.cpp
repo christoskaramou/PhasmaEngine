@@ -218,7 +218,7 @@ namespace pe
         }
         else
         {
-            std::vector<vk::ImageView> views{};
+            std::vector<ImageView *> views{};
             views.reserve(count);
 
             for (uint32_t i = 0; i < count; i++)
@@ -276,7 +276,7 @@ namespace pe
                     const float clearDepth = clearColor[0];
                     uint32_t clearStencil = static_cast<uint32_t>(clearColor[1]);
 
-                    depthInfo.imageView = attachment.image->GetRTV();
+                    depthInfo.imageView = attachment.image->GetRTV()->ApiHandle();
                     depthInfo.imageLayout = vk::ImageLayout::eAttachmentOptimal;
                     depthInfo.loadOp = attachment.loadOp;
                     depthInfo.storeOp = attachment.storeOp;
@@ -293,7 +293,7 @@ namespace pe
                     const vec4 &clearColor = attachment.image->m_clearColor;
 
                     vk::RenderingAttachmentInfo colorInfo{};
-                    colorInfo.imageView = attachment.image->GetRTV();
+                    colorInfo.imageView = attachment.image->GetRTV()->ApiHandle();
                     colorInfo.imageLayout = vk::ImageLayout::eAttachmentOptimal;
                     colorInfo.loadOp = attachment.loadOp;
                     colorInfo.storeOp = attachment.storeOp;
@@ -766,12 +766,12 @@ namespace pe
         m_apiHandle.buildAccelerationStructuresKHR(infoCount, pInfos, ppBuildRangeInfos);
     }
 
-    void CommandBuffer::BufferBarrier(const vk::BufferMemoryBarrier2 &info)
+    void CommandBuffer::BufferBarrier(const BufferBarrierInfo &info)
     {
         Buffer::Barrier(this, info);
     }
 
-    void CommandBuffer::BufferBarriers(const std::vector<vk::BufferMemoryBarrier2> &infos)
+    void CommandBuffer::BufferBarriers(const std::vector<BufferBarrierInfo> &infos)
     {
         Buffer::Barriers(this, infos);
     }

@@ -1,20 +1,27 @@
 #include "API/Framebuffer.h"
+#include "API/Image.h"
 #include "API/RHI.h"
 #include "API/RenderPass.h"
+
 
 namespace pe
 {
     Framebuffer::Framebuffer(uint32_t width,
                              uint32_t height,
-                             const std::vector<vk::ImageView> &views,
+                             const std::vector<ImageView *> &views,
                              RenderPass *renderPass,
                              const std::string &name)
         : m_size{width, height}
     {
+        std::vector<vk::ImageView> vkViews;
+        vkViews.reserve(views.size());
+        for (auto view : views)
+            vkViews.push_back(view->ApiHandle());
+
         vk::FramebufferCreateInfo fbci{};
         fbci.renderPass = renderPass->ApiHandle();
         fbci.attachmentCount = static_cast<uint32_t>(views.size());
-        fbci.pAttachments = views.data();
+        fbci.pAttachments = vkViews.data();
         fbci.width = width;
         fbci.height = height;
         fbci.layers = 1;

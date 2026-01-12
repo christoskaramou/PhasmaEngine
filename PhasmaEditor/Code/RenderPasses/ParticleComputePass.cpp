@@ -67,7 +67,7 @@ namespace pe
         }
     }
 
-    void ParticleComputePass::Draw(CommandBuffer *cmd)
+    void ParticleComputePass::ExecutePass(CommandBuffer *cmd)
     {
         Scene &scene = GetGlobalSystem<RendererSystem>()->GetScene();
         if (!scene.GetParticleManager())
@@ -108,12 +108,10 @@ namespace pe
 
         cmd->BeginDebugRegion("ParticleComputePass");
 
-        vk::BufferMemoryBarrier2 barrier{};
-        barrier.srcStageMask = vk::PipelineStageFlagBits2::eVertexShader;
-        barrier.srcAccessMask = vk::AccessFlagBits2::eShaderRead;
-        barrier.dstStageMask = vk::PipelineStageFlagBits2::eComputeShader;
-        barrier.dstAccessMask = vk::AccessFlagBits2::eShaderWrite;
-        barrier.buffer = particleBuffer->ApiHandle();
+        BufferBarrierInfo barrier{};
+        barrier.stageMask = vk::PipelineStageFlagBits2::eComputeShader;
+        barrier.accessMask = vk::AccessFlagBits2::eShaderWrite;
+        barrier.buffer = particleBuffer;
         barrier.size = VK_WHOLE_SIZE;
         cmd->BufferBarrier(barrier);
 

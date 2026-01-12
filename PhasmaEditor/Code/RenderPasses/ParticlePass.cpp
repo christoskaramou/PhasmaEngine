@@ -92,11 +92,11 @@ namespace pe
             const auto &textures = pm->GetTextures();
             if (!textures.empty() && descriptors.size() > 1)
             {
-                std::vector<vk::ImageView> views;
+                std::vector<ImageView *> views;
                 for (auto *img : textures)
                     views.push_back(img->GetSRV());
                 descriptors[1]->SetImageViews(0, views, {});
-                descriptors[1]->SetSampler(1, pm->GetSampler()->ApiHandle());
+                descriptors[1]->SetSampler(1, pm->GetSampler());
                 descriptors[1]->Update();
             }
         }
@@ -120,7 +120,7 @@ namespace pe
         }
     }
 
-    void ParticlePass::Draw(CommandBuffer *cmd)
+    void ParticlePass::ExecutePass(CommandBuffer *cmd)
     {
         if (!m_scene)
             return;
@@ -133,12 +133,10 @@ namespace pe
             return;
 
         // 1. Barrier: Wait for Compute Write to finish before Vertex Read
-        vk::BufferMemoryBarrier2 barrier{};
-        barrier.srcStageMask = vk::PipelineStageFlagBits2::eComputeShader;
-        barrier.srcAccessMask = vk::AccessFlagBits2::eShaderWrite;
-        barrier.dstStageMask = vk::PipelineStageFlagBits2::eVertexShader;
-        barrier.dstAccessMask = vk::AccessFlagBits2::eShaderRead;
-        barrier.buffer = particleBuffer->ApiHandle();
+        BufferBarrierInfo barrier{};
+        barrier.stageMask = vk::PipelineStageFlagBits2::eVertexShader;
+        barrier.accessMask = vk::AccessFlagBits2::eShaderRead;
+        barrier.buffer = particleBuffer;
         barrier.size = VK_WHOLE_SIZE;
         cmd->BufferBarrier(barrier);
 

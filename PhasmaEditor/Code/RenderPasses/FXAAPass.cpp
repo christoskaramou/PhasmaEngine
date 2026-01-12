@@ -43,12 +43,12 @@ namespace pe
         for (uint32_t i = 0; i < RHII.GetSwapchainImageCount(); i++)
         {
             auto *DSet = m_passInfo->GetDescriptors(i)[0];
-            DSet->SetImageView(0, m_frameImage->GetSRV(), m_frameImage->GetSampler()->ApiHandle());
+            DSet->SetImageView(0, m_frameImage->GetSRV(), m_frameImage->GetSampler());
             DSet->Update();
         }
     }
 
-    void FXAAPass::Draw(CommandBuffer *cmd)
+    void FXAAPass::ExecutePass(CommandBuffer *cmd)
     {
         ImageBarrierInfo barrier{};
         barrier.image = m_frameImage;

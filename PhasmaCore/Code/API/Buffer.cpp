@@ -150,30 +150,65 @@ namespace pe
         cmd->ApiHandle().copyBuffer2(copyInfo);
     }
 
-    void Buffer::Barrier(CommandBuffer *cmd, const vk::BufferMemoryBarrier2 &info)
+    void Buffer::Barrier(CommandBuffer *cmd, const BufferBarrierInfo &info)
     {
         PE_ERROR_IF(!info.buffer, "Buffer::Barrier: no buffer specified");
 
-        vk::DependencyInfo dependencyInfo = {};
+        BufferTrackInfo &trackInfo = info.buffer->GetTrackInfo();
+
+        vk::BufferMemoryBarrier2 barrier{};
+        barrier.buffer = info.buffer->ApiHandle();
+        barrier.srcStageMask = trackInfo.stageMask;
+        barrier.srcAccessMask = trackInfo.accessMask;
+        barrier.srcQueueFamilyIndex = trackInfo.queueFamilyIndex;
+        barrier.dstStageMask = info.stageMask;
+        barrier.dstAccessMask = info.accessMask;
+        barrier.dstQueueFamilyIndex = info.queueFamilyIndex;
+        barrier.offset = info.offset;
+        barrier.size = info.size;
+
+        vk::DependencyInfo dependencyInfo{};
         dependencyInfo.bufferMemoryBarrierCount = 1;
-        dependencyInfo.pBufferMemoryBarriers = &info;
+        dependencyInfo.pBufferMemoryBarriers = &barrier;
 
         cmd->ApiHandle().pipelineBarrier2(dependencyInfo);
+
+        trackInfo.stageMask = info.stageMask;
+        trackInfo.accessMask = info.accessMask;
+        trackInfo.queueFamilyIndex = info.queueFamilyIndex;
     }
 
-    void Buffer::Barriers(CommandBuffer *cmd, const std::vector<vk::BufferMemoryBarrier2> &infos)
+    void Buffer::Barriers(CommandBuffer *cmd, const std::vector<BufferBarrierInfo> &infos)
     {
         if (infos.empty())
             return;
 
-        for (const auto &info : infos)
+        std::vector<vk::BufferMemoryBarrier2> barriers(infos.size());
+        for (uint32_t i = 0; i < infos.size(); i++)
         {
+            const auto &info = infos[i];
             PE_ERROR_IF(!info.buffer, "Buffer::Barriers: no buffer specified");
+
+            BufferTrackInfo &trackInfo = info.buffer->GetTrackInfo();
+
+            barriers[i].buffer = info.buffer->ApiHandle();
+            barriers[i].srcStageMask = trackInfo.stageMask;
+            barriers[i].srcAccessMask = trackInfo.accessMask;
+            barriers[i].srcQueueFamilyIndex = trackInfo.queueFamilyIndex;
+            barriers[i].dstStageMask = info.stageMask;
+            barriers[i].dstAccessMask = info.accessMask;
+            barriers[i].dstQueueFamilyIndex = info.queueFamilyIndex;
+            barriers[i].offset = info.offset;
+            barriers[i].size = info.size;
+
+            trackInfo.stageMask = info.stageMask;
+            trackInfo.accessMask = info.accessMask;
+            trackInfo.queueFamilyIndex = info.queueFamilyIndex;
         }
 
-        vk::DependencyInfo dependencyInfo = {};
-        dependencyInfo.bufferMemoryBarrierCount = static_cast<uint32_t>(infos.size());
-        dependencyInfo.pBufferMemoryBarriers = infos.data();
+        vk::DependencyInfo dependencyInfo{};
+        dependencyInfo.bufferMemoryBarrierCount = static_cast<uint32_t>(barriers.size());
+        dependencyInfo.pBufferMemoryBarriers = barriers.data();
 
         cmd->ApiHandle().pipelineBarrier2(dependencyInfo);
     }

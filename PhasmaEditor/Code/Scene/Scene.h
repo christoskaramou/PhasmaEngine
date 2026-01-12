@@ -6,6 +6,7 @@ namespace pe
     class Camera;
     class CommandBuffer;
     class Image;
+    class ImageView;
     class Model;
     class AccelerationStructure;
 
@@ -54,7 +55,7 @@ namespace pe
         const std::vector<DrawInfo> &GetDrawInfosOpaque() const { return m_drawInfosOpaque; }
         const std::vector<DrawInfo> &GetDrawInfosAlphaCut() const { return m_drawInfosAlphaCut; }
         const std::vector<DrawInfo> &GetDrawInfosAlphaBlend() const { return m_drawInfosAlphaBlend; }
-        const std::vector<vk::ImageView> &GetImageViews() const { return m_imageViews; }
+        const std::vector<ImageView *> &GetImageViews() const { return m_imageViews; }
         uint32_t GetMeshCount() const { return m_meshCount; }
         static const std::vector<uint32_t> &GetAabbIndices() { return s_aabbIndices; }
 
@@ -102,7 +103,7 @@ namespace pe
         size_t m_aabbIndicesOffset = 0;
         uint32_t m_meshCount = 0;
 
-        std::vector<vk::ImageView> m_imageViews;
+        std::vector<ImageView *> m_imageViews;
         std::vector<bool> m_dirtyDescriptorViews;
 
         std::vector<DrawInfo> m_drawInfosOpaque;

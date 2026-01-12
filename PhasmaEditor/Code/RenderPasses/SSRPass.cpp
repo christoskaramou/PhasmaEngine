@@ -67,11 +67,11 @@ namespace pe
         for (uint32_t i = 0; i < RHII.GetSwapchainImageCount(); ++i)
         {
             auto *DSet = m_passInfo->GetDescriptors(i)[0];
-            DSet->SetImageView(0, m_frameImage->GetSRV(), m_frameImage->GetSampler()->ApiHandle());
-            DSet->SetImageView(1, m_depth->GetSRV(), m_depth->GetSampler()->ApiHandle());
-            DSet->SetImageView(2, m_normalRT->GetSRV(), m_normalRT->GetSampler()->ApiHandle());
-            DSet->SetImageView(3, m_srmRT->GetSRV(), m_srmRT->GetSampler()->ApiHandle());
-            DSet->SetImageView(4, m_albedoRT->GetSRV(), m_albedoRT->GetSampler()->ApiHandle());
+            DSet->SetImageView(0, m_frameImage->GetSRV(), m_frameImage->GetSampler());
+            DSet->SetImageView(1, m_depth->GetSRV(), m_depth->GetSampler());
+            DSet->SetImageView(2, m_normalRT->GetSRV(), m_normalRT->GetSampler());
+            DSet->SetImageView(3, m_srmRT->GetSRV(), m_srmRT->GetSampler());
+            DSet->SetImageView(4, m_albedoRT->GetSRV(), m_albedoRT->GetSampler());
             DSet->SetBuffer(5, m_reflectionUBs[i]);
             DSet->Update();
         }
@@ -99,7 +99,7 @@ namespace pe
         }
     }
 
-    void SSRPass::Draw(CommandBuffer *cmd)
+    void SSRPass::ExecutePass(CommandBuffer *cmd)
     {
         std::vector<ImageBarrierInfo> barriers(5);
 

@@ -19,7 +19,7 @@ namespace pe
 
         void Init();
         void Update();
-        void Draw(CommandBuffer *cmd);
+        void ExecutePass(CommandBuffer *cmd);
         void DrawPlatformWindows();
         bool Render() const { return m_render; }
         void ToggleRender() { m_render = !m_render; }

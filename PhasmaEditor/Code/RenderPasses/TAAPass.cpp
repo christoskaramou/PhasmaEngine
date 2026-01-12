@@ -98,7 +98,7 @@ namespace pe
                 dset->SetImageView(1, m_historyImage->GetSRV(), nullptr);
                 dset->SetImageView(2, m_velocityRT->GetSRV(), nullptr);
                 // dset->SetImageView(3, m_depthStencil->GetSRV(), nullptr); // Depth unused
-                dset->SetSampler(4, m_historyImage->GetSampler()->ApiHandle());
+                dset->SetSampler(4, m_historyImage->GetSampler());
                 dset->SetImageView(5, taaOutput->GetUAV(0), nullptr);
                 dset->Update();
             }
@@ -109,7 +109,7 @@ namespace pe
     {
     }
 
-    void TAAPass::Draw(CommandBuffer *cmd)
+    void TAAPass::ExecutePass(CommandBuffer *cmd)
     {
         auto &gSettings = Settings::Get<GlobalSettings>();
         if (gSettings.cas_sharpening != m_casSharpeningEnabled)

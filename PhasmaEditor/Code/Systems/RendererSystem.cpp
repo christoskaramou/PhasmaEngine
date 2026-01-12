@@ -180,81 +180,81 @@ namespace pe
         if (gSettings.shadows)
         {
             shadows.SetScene(&m_scene);
-            shadows.Draw(cmd);
+            shadows.ExecutePass(cmd);
         }
 
         // Depth Pass
         {
             dp.SetScene(&m_scene);
-            dp.Draw(cmd);
+            dp.ExecutePass(cmd);
         }
 
         // Gbuffers Opaque
         {
             gbo.SetScene(&m_scene);
-            gbo.Draw(cmd);
+            gbo.ExecutePass(cmd);
         }
 
         // Screen Space Ambient Occlusion
         if (gSettings.ssao)
         {
-            ssao.Draw(cmd);
+            ssao.ExecutePass(cmd);
         }
 
         // Lighting Opaque
         {
-            lo.Draw(cmd);
+            lo.ExecutePass(cmd);
         }
 
         // Gbuffers Transparent
         {
             gbt.SetScene(&m_scene);
-            gbt.Draw(cmd);
+            gbt.ExecutePass(cmd);
         }
 
         // Lighting Transparent
         {
-            lt.Draw(cmd);
+            lt.ExecutePass(cmd);
         }
 
         // Particle Passes
         {
             pcp.SetScene(&m_scene);
-            pcp.Draw(cmd);
+            pcp.ExecutePass(cmd);
         }
         {
             pp.SetScene(&m_scene);
-            pp.Draw(cmd);
+            pp.ExecutePass(cmd);
         }
 
         // Screen Space Reflections
         if (gSettings.ssr)
         {
-            ssr.Draw(cmd);
+            ssr.ExecutePass(cmd);
         }
 
         // Fast Approximate Anti-Aliasing
         if (gSettings.fxaa)
         {
-            fxaa.Draw(cmd);
+            fxaa.ExecutePass(cmd);
         }
 
         // Aabbs
         if (gSettings.draw_aabbs)
         {
             aabbs.SetScene(&m_scene);
-            aabbs.Draw(cmd);
+            aabbs.ExecutePass(cmd);
         }
 
         // Upscale / TAA
         if (gSettings.taa)
         {
-            taa.Draw(cmd);
+            taa.ExecutePass(cmd);
 
             // RCAS Sharpening
             if (gSettings.cas_sharpening)
             {
-                sharpen.Draw(cmd);
+                sharpen.ExecutePass(cmd);
             }
         }
         else
@@ -265,32 +265,32 @@ namespace pe
         // Tone Mapping
         if (gSettings.tonemapping)
         {
-            tonemap.Draw(cmd);
+            tonemap.ExecutePass(cmd);
         }
 
         // Bloom
         if (gSettings.bloom)
         {
-            bbfp.Draw(cmd);
-            bgbh.Draw(cmd);
-            bgbv.Draw(cmd);
+            bbfp.ExecutePass(cmd);
+            bgbh.ExecutePass(cmd);
+            bgbv.ExecutePass(cmd);
         }
 
         // Depth of Field
         if (gSettings.dof)
         {
-            dof.Draw(cmd);
+            dof.ExecutePass(cmd);
         }
 
         // Motion Blur
         if (gSettings.motion_blur)
         {
-            motionBlur.Draw(cmd);
+            motionBlur.ExecutePass(cmd);
         }
 
         // Gui
         {
-            m_gui.Draw(cmd);
+            m_gui.ExecutePass(cmd);
         }
 
         // Blit to swapchain
@@ -302,7 +302,7 @@ namespace pe
         if (gSettings.ray_tracing_support && gSettings.use_ray_tracing)
         {
             rtp.SetScene(&m_scene);
-            rtp.Draw(cmd);
+            rtp.ExecutePass(cmd);
         }
 
         cmd->End();

@@ -29,7 +29,7 @@ namespace pe
             {
                 return (void *)ImGui_ImplVulkan_AddTexture(
                     outIcon->GetSampler()->ApiHandle(),
-                    outIcon->GetSRV(),
+                    outIcon->GetSRV()->ApiHandle(),
                     VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
             }
             return nullptr;
@@ -165,7 +165,7 @@ namespace pe
                 {
                     ds = (void *)ImGui_ImplVulkan_AddTexture(
                         pair.second->GetSampler()->ApiHandle(),
-                        pair.second->GetSRV(),
+                        pair.second->GetSRV()->ApiHandle(),
                         VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
                 }
 

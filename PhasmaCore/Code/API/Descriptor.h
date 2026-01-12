@@ -10,6 +10,8 @@ namespace pe
     };
 
     class Image;
+    class ImageView;
+    class Sampler;
     class Buffer;
 
     struct DescriptorBindingInfo
@@ -28,8 +30,8 @@ namespace pe
         std::vector<Buffer *> buffers{};
         std::vector<uint64_t> offsets{};
         std::vector<uint64_t> ranges{}; // range of the buffers in bytes to use
-        std::vector<vk::ImageView> views{};
-        std::vector<vk::Sampler> samplers{}; // if type == DescriptorType::CombinedImageSampler, these are the samplers for each view
+        std::vector<ImageView *> views{};
+        std::vector<Sampler *> samplers{}; // if type == DescriptorType::CombinedImageSampler, these are the samplers for each view
         std::vector<vk::AccelerationStructureKHR> accelerationStructures{};
     };
 
@@ -105,27 +107,30 @@ namespace pe
         ~Descriptor();
 
         void SetImageViews(uint32_t binding,
-                           const std::vector<vk::ImageView> &views,
-                           const std::vector<vk::Sampler> &samplers);
-        void SetImageView(uint32_t binding, vk::ImageView view, vk::Sampler sampler);
+                           const std::vector<ImageView *> &views,
+                           const std::vector<Sampler *> &samplers);
+        void SetImageView(uint32_t binding, ImageView *view, Sampler *sampler);
         void SetBuffers(uint32_t binding,
                         const std::vector<Buffer *> &buffers,
                         const std::vector<uint64_t> &offsets = {},
                         const std::vector<uint64_t> &ranges = {});
         void SetBuffer(uint32_t binding, Buffer *buffer, uint64_t offset = 0, uint64_t range = 0);
-        void SetSamplers(uint32_t binding, const std::vector<vk::Sampler> &samplers);
-        void SetSampler(uint32_t binding, vk::Sampler sampler);
+        void SetSamplers(uint32_t binding, const std::vector<Sampler *> &samplers);
+        void SetSampler(uint32_t binding, Sampler *sampler);
         void SetAccelerationStructure(uint32_t binding, vk::AccelerationStructureKHR tlas);
         void Update();
         DescriptorPool *GetPool() const { return m_pool; }
         DescriptorLayout *GetLayout() const { return m_layout; }
         vk::ShaderStageFlags GetStage() const { return m_stage; }
+        const std::vector<DescriptorUpdateInfo> &GetBoundResources() const { return m_boundResources; }
+        const std::vector<DescriptorBindingInfo> &GetBindingInfos() const { return m_bindingInfos; }
 
     private:
         DescriptorPool *m_pool;
         DescriptorLayout *m_layout;
         std::vector<DescriptorBindingInfo> m_bindingInfos{};
-        std::vector<DescriptorUpdateInfo> m_updateInfos{};
+        std::vector<DescriptorUpdateInfo> m_updateInfos{}; // for partial updates
+        std::vector<DescriptorUpdateInfo> m_boundResources{};
         bool m_pushDescriptor;
         std::vector<uint32_t> m_dynamicOffsets{};
         vk::ShaderStageFlags m_stage;

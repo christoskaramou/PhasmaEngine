@@ -82,7 +82,7 @@ namespace pe
     void LightOpaquePass::UpdateDescriptorSets()
     {
         ShadowPass &shadows = *GetGlobalComponent<ShadowPass>();
-        std::vector<vk::ImageView> views(shadows.m_textures.size());
+        std::vector<ImageView *> views(shadows.m_textures.size());
         for (uint32_t i = 0; i < shadows.m_textures.size(); i++)
             views[i] = shadows.m_textures[i]->GetSRV();
 
@@ -94,26 +94,26 @@ namespace pe
             auto &sets = m_passInfo->GetDescriptors(i);
 
             auto *DSet = sets[0];
-            DSet->SetImageView(0, m_depthStencilRT->GetSRV(), m_depthStencilRT->GetSampler()->ApiHandle());
-            DSet->SetImageView(1, m_normalRT->GetSRV(), m_normalRT->GetSampler()->ApiHandle());
-            DSet->SetImageView(2, m_albedoRT->GetSRV(), m_albedoRT->GetSampler()->ApiHandle());
-            DSet->SetImageView(3, m_srmRT->GetSRV(), m_srmRT->GetSampler()->ApiHandle());
+            DSet->SetImageView(0, m_depthStencilRT->GetSRV(), m_depthStencilRT->GetSampler());
+            DSet->SetImageView(1, m_normalRT->GetSRV(), m_normalRT->GetSampler());
+            DSet->SetImageView(2, m_albedoRT->GetSRV(), m_albedoRT->GetSampler());
+            DSet->SetImageView(3, m_srmRT->GetSRV(), m_srmRT->GetSampler());
             DSet->SetBuffer(4, GetGlobalSystem<LightSystem>()->GetUniform(i));
-            DSet->SetImageView(5, m_ssaoRT->GetSRV(), m_ssaoRT->GetSampler()->ApiHandle());
-            DSet->SetImageView(6, m_emissiveRT->GetSRV(), m_emissiveRT->GetSampler()->ApiHandle());
+            DSet->SetImageView(5, m_ssaoRT->GetSRV(), m_ssaoRT->GetSampler());
+            DSet->SetImageView(6, m_emissiveRT->GetSRV(), m_emissiveRT->GetSampler());
             DSet->SetBuffer(7, m_uniforms[i]);
-            DSet->SetImageView(8, m_transparencyRT->GetSRV(), m_transparencyRT->GetSampler()->ApiHandle());
-            DSet->SetImageView(9, m_ibl_brdf_lut->GetSRV(), m_ibl_brdf_lut->GetSampler()->ApiHandle());
+            DSet->SetImageView(8, m_transparencyRT->GetSRV(), m_transparencyRT->GetSampler());
+            DSet->SetImageView(9, m_ibl_brdf_lut->GetSRV(), m_ibl_brdf_lut->GetSampler());
             DSet->Update();
 
             auto *DSetShadows = sets[1];
             DSetShadows->SetBuffer(0, shadows.m_uniforms[i]);
             DSetShadows->SetImageViews(1, views, {});
-            DSetShadows->SetSampler(2, shadows.m_sampler->ApiHandle());
+            DSetShadows->SetSampler(2, shadows.m_sampler);
             DSetShadows->Update();
 
             auto *DSetSkybox = sets[2];
-            DSetSkybox->SetImageView(0, skybox.GetCubeMap()->GetSRV(), skybox.GetCubeMap()->GetSampler()->ApiHandle());
+            DSetSkybox->SetImageView(0, skybox.GetCubeMap()->GetSRV(), skybox.GetCubeMap()->GetSampler());
             DSetSkybox->Update();
         }
     }
@@ -173,7 +173,7 @@ namespace pe
         cmd->ImageBarriers(barriers);
     }
 
-    void LightOpaquePass::Draw(CommandBuffer *cmd)
+    void LightOpaquePass::ExecutePass(CommandBuffer *cmd)
     {
         bool shadowsEnabled = m_ubo.shadows;
         uint32_t numCascades = Settings::Get<GlobalSettings>().num_cascades;
@@ -284,7 +284,7 @@ namespace pe
     void LightTransparentPass::UpdateDescriptorSets()
     {
         ShadowPass &shadows = *GetGlobalComponent<ShadowPass>();
-        std::vector<vk::ImageView> views(shadows.m_textures.size());
+        std::vector<ImageView *> views(shadows.m_textures.size());
         for (uint32_t i = 0; i < shadows.m_textures.size(); i++)
             views[i] = shadows.m_textures[i]->GetSRV();
 
@@ -296,26 +296,26 @@ namespace pe
             auto &sets = m_passInfo->GetDescriptors(i);
 
             auto *DSet = sets[0];
-            DSet->SetImageView(0, m_depthStencilRT->GetSRV(), m_depthStencilRT->GetSampler()->ApiHandle());
-            DSet->SetImageView(1, m_normalRT->GetSRV(), m_normalRT->GetSampler()->ApiHandle());
-            DSet->SetImageView(2, m_albedoRT->GetSRV(), m_albedoRT->GetSampler()->ApiHandle());
-            DSet->SetImageView(3, m_srmRT->GetSRV(), m_srmRT->GetSampler()->ApiHandle());
+            DSet->SetImageView(0, m_depthStencilRT->GetSRV(), m_depthStencilRT->GetSampler());
+            DSet->SetImageView(1, m_normalRT->GetSRV(), m_normalRT->GetSampler());
+            DSet->SetImageView(2, m_albedoRT->GetSRV(), m_albedoRT->GetSampler());
+            DSet->SetImageView(3, m_srmRT->GetSRV(), m_srmRT->GetSampler());
             DSet->SetBuffer(4, GetGlobalSystem<LightSystem>()->GetUniform(i));
-            DSet->SetImageView(5, m_ssaoRT->GetSRV(), m_ssaoRT->GetSampler()->ApiHandle());
-            DSet->SetImageView(6, m_emissiveRT->GetSRV(), m_emissiveRT->GetSampler()->ApiHandle());
+            DSet->SetImageView(5, m_ssaoRT->GetSRV(), m_ssaoRT->GetSampler());
+            DSet->SetImageView(6, m_emissiveRT->GetSRV(), m_emissiveRT->GetSampler());
             DSet->SetBuffer(7, m_uniforms[i]);
-            DSet->SetImageView(8, m_transparencyRT->GetSRV(), m_transparencyRT->GetSampler()->ApiHandle());
-            DSet->SetImageView(9, m_ibl_brdf_lut->GetSRV(), m_ibl_brdf_lut->GetSampler()->ApiHandle());
+            DSet->SetImageView(8, m_transparencyRT->GetSRV(), m_transparencyRT->GetSampler());
+            DSet->SetImageView(9, m_ibl_brdf_lut->GetSRV(), m_ibl_brdf_lut->GetSampler());
             DSet->Update();
 
             auto *DSetShadows = sets[1];
             DSetShadows->SetBuffer(0, shadows.m_uniforms[i]);
             DSetShadows->SetImageViews(1, views, {});
-            DSetShadows->SetSampler(2, shadows.m_sampler->ApiHandle());
+            DSetShadows->SetSampler(2, shadows.m_sampler);
             DSetShadows->Update();
 
             auto *DSetSkybox = sets[2];
-            DSetSkybox->SetImageView(0, skybox.GetCubeMap()->GetSRV(), skybox.GetCubeMap()->GetSampler()->ApiHandle());
+            DSetSkybox->SetImageView(0, skybox.GetCubeMap()->GetSRV(), skybox.GetCubeMap()->GetSampler());
             DSetSkybox->Update();
         }
     }
@@ -376,7 +376,7 @@ namespace pe
         cmd->ImageBarriers(barriers);
     }
 
-    void LightTransparentPass::Draw(CommandBuffer *cmd)
+    void LightTransparentPass::ExecutePass(CommandBuffer *cmd)
     {
         bool shadowsEnabled = m_ubo.shadows;
         uint32_t shadowmapCascades = Settings::Get<GlobalSettings>().num_cascades;

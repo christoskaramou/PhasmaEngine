@@ -46,12 +46,12 @@ namespace pe
         {
             auto *DSet = m_passInfo->GetDescriptors(i)[0];
             DSet->SetAccelerationStructure(0, scene.GetTLAS()->ApiHandle());
-            DSet->SetImageView(1, m_display->GetUAV(0), m_display->GetSampler()->ApiHandle());
+            DSet->SetImageView(1, m_display->GetUAV(0), m_display->GetSampler());
             DSet->SetBuffer(2, scene.GetUniforms(i));
             DSet->SetBuffer(3, scene.GetMeshInfoBuffer());
             DSet->SetBuffer(4, scene.GetBuffer());
             DSet->SetBuffer(5, scene.GetBuffer(), scene.GetVerticesOffset());
-            DSet->SetSampler(6, m_display->GetSampler()->ApiHandle());
+            DSet->SetSampler(6, m_display->GetSampler());
             DSet->SetImageViews(6, scene.GetImageViews(), {});
             DSet->SetBuffer(7, scene.GetBuffer(), scene.GetPositionsOffset());
             DSet->Update();
@@ -62,7 +62,7 @@ namespace pe
     {
     }
 
-    void RayTracingPass::Draw(CommandBuffer *cmd)
+    void RayTracingPass::ExecutePass(CommandBuffer *cmd)
     {
         if (!m_scene)
             return;

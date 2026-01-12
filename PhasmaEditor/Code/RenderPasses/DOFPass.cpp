@@ -45,13 +45,13 @@ namespace pe
         for (uint32_t i = 0; i < RHII.GetSwapchainImageCount(); i++)
         {
             auto *DSet = m_passInfo->GetDescriptors(i)[0];
-            DSet->SetImageView(0, m_frameImage->GetSRV(), m_frameImage->GetSampler()->ApiHandle());
-            DSet->SetImageView(1, m_depth->GetSRV(), m_depth->GetSampler()->ApiHandle());
+            DSet->SetImageView(0, m_frameImage->GetSRV(), m_frameImage->GetSampler());
+            DSet->SetImageView(1, m_depth->GetSRV(), m_depth->GetSampler());
             DSet->Update();
         }
     }
 
-    void DOFPass::Draw(CommandBuffer *cmd)
+    void DOFPass::ExecutePass(CommandBuffer *cmd)
     {
         auto &gSettings = Settings::Get<GlobalSettings>();
         std::vector<ImageBarrierInfo> barriers(2);

@@ -68,7 +68,7 @@ namespace pe
         UpdateDescriptorSets();
     }
 
-    void SharpenPass::Draw(CommandBuffer *cmd)
+    void SharpenPass::ExecutePass(CommandBuffer *cmd)
     {
         auto &gSettings = Settings::Get<GlobalSettings>();
 

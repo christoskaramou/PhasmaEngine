@@ -72,6 +72,38 @@ namespace pe
             RHII.GetDevice().destroySampler(m_apiHandle);
     }
 
+    ImageView::ImageView(Image *parent, const vk::ImageViewCreateInfo &info, const std::string &name)
+        : m_parent{parent}, m_info{info}, m_name{name}
+    {
+        m_apiHandle = RHII.GetDevice().createImageView(info);
+        Debug::SetObjectName(m_apiHandle, name);
+    }
+
+    ImageView::~ImageView()
+    {
+        if (m_apiHandle)
+            RHII.GetDevice().destroyImageView(m_apiHandle);
+    }
+
+    vk::ImageViewCreateInfo ImageView::CreateInfoInit()
+    {
+        // pNext                 = {};
+        // flags                 = {};
+        // image                 = {};
+        // viewType              = VULKAN_HPP_NAMESPACE::ImageViewType::e1D;
+        // format                = VULKAN_HPP_NAMESPACE::Format::eUndefined;
+        // components            = {};
+        // subresourceRange      = {};
+
+        vk::ImageViewCreateInfo viewInfo{};
+        viewInfo.viewType = vk::ImageViewType::e2D;
+        viewInfo.subresourceRange.baseMipLevel = 0;
+        viewInfo.subresourceRange.levelCount = 1;
+        viewInfo.subresourceRange.baseArrayLayer = 0;
+        viewInfo.subresourceRange.layerCount = 1;
+        return viewInfo;
+    }
+
     Image *Image::LoadRGBA(CommandBuffer *cmd, const std::string &path, vk::Format format, bool isFloat)
     {
         int texWidth, texHeight, texChannels;
@@ -194,22 +226,24 @@ namespace pe
     Image::~Image()
     {
         if (m_rtv)
-            RHII.GetDevice().destroyImageView(m_rtv);
+            ImageView::Destroy(m_rtv);
 
         if (m_srv)
-            RHII.GetDevice().destroyImageView(m_srv);
+            ImageView::Destroy(m_srv);
 
         for (auto &view : m_srvs)
         {
             if (view)
-                RHII.GetDevice().destroyImageView(view);
+                ImageView::Destroy(view);
         }
+        m_srvs.clear();
 
         for (auto &view : m_uavs)
         {
             if (view)
-                RHII.GetDevice().destroyImageView(view);
+                ImageView::Destroy(view);
         }
+        m_uavs.clear();
 
         if (m_sampler)
             Sampler::Destroy(m_sampler);
@@ -284,8 +318,8 @@ namespace pe
             barrier.dstAccessMask = info.accessMask;
             barrier.oldLayout = oldInfo.layout;
             barrier.newLayout = info.layout;
-            barrier.srcQueueFamilyIndex = cmd->GetFamilyId();
-            barrier.dstQueueFamilyIndex = cmd->GetFamilyId();
+            barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+            barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
             barrier.image = image->m_apiHandle;
             barrier.subresourceRange.aspectMask = VulkanHelpers::GetAspectMask(imageInfo.format);
             barrier.subresourceRange.baseMipLevel = info.baseMipLevel;
@@ -328,21 +362,42 @@ namespace pe
         if (m_rtv)
         {
             PE_INFO("Image::CreateRTV: RTV already exists, recreating.");
-            RHII.GetDevice().destroyImageView(m_rtv);
+            ImageView::Destroy(m_rtv);
         }
-        m_rtv = CreateImageView(vk::ImageViewType::e2D, 0);
+
+        vk::ImageViewCreateInfo viewInfo = ImageView::CreateInfoInit();
+        viewInfo.image = m_apiHandle;
+        viewInfo.viewType = vk::ImageViewType::e2D;
+        viewInfo.format = m_createInfo.format;
+        viewInfo.subresourceRange.aspectMask = VulkanHelpers::GetAspectMask(m_createInfo.format);
+        viewInfo.subresourceRange.baseMipLevel = 0;
+        viewInfo.subresourceRange.levelCount = m_createInfo.mipLevels;
+        viewInfo.subresourceRange.baseArrayLayer = 0;
+        viewInfo.subresourceRange.layerCount = m_createInfo.arrayLayers;
+        m_rtv = ImageView::Create(this, viewInfo, m_name + "_RTV");
     }
 
     void Image::CreateSRV(vk::ImageViewType type, int mip)
     {
         PE_ERROR_IF(!(m_createInfo.usage & vk::ImageUsageFlagBits::eSampled), "Image was not created with SampledBit for SRV usage");
-        vk::ImageView view = CreateImageView(type, mip);
+
+        vk::ImageViewCreateInfo viewInfo = ImageView::CreateInfoInit();
+        viewInfo.image = m_apiHandle;
+        viewInfo.viewType = type;
+        viewInfo.format = m_createInfo.format;
+        viewInfo.subresourceRange.aspectMask = VulkanHelpers::GetAspectMask(m_createInfo.format);
+        viewInfo.subresourceRange.baseMipLevel = mip == -1 ? 0 : mip;
+        viewInfo.subresourceRange.levelCount = mip == -1 ? m_createInfo.mipLevels : 1;
+        viewInfo.subresourceRange.baseArrayLayer = 0;
+        viewInfo.subresourceRange.layerCount = m_createInfo.arrayLayers;
+        ImageView *view = ImageView::Create(this, viewInfo, m_name + "_SRV");
+
         if (mip == -1)
         {
             if (m_srv)
             {
                 PE_INFO("Image::CreateSRV: SRV already exists, recreating.");
-                RHII.GetDevice().destroyImageView(m_srv);
+                ImageView::Destroy(m_srv);
             }
             m_srv = view;
         }
@@ -351,7 +406,7 @@ namespace pe
             if (m_srvs[mip])
             {
                 PE_INFO("Image::CreateSRV: SRV for mip {} already exists, recreating.", mip);
-                RHII.GetDevice().destroyImageView(m_srvs[mip]);
+                ImageView::Destroy(m_srvs[mip]);
             }
             m_srvs[mip] = view;
         }
@@ -363,9 +418,19 @@ namespace pe
         if (m_uavs[mip])
         {
             PE_INFO("Image::CreateUAV: UAV for mip {} already exists, recreating.", mip);
-            RHII.GetDevice().destroyImageView(m_uavs[mip]);
+            ImageView::Destroy(m_uavs[mip]);
         }
-        m_uavs[mip] = CreateImageView(type, static_cast<int>(mip));
+
+        vk::ImageViewCreateInfo viewInfo = ImageView::CreateInfoInit();
+        viewInfo.image = m_apiHandle;
+        viewInfo.viewType = type;
+        viewInfo.format = m_createInfo.format;
+        viewInfo.subresourceRange.aspectMask = VulkanHelpers::GetAspectMask(m_createInfo.format);
+        viewInfo.subresourceRange.baseMipLevel = mip;
+        viewInfo.subresourceRange.levelCount = 1;
+        viewInfo.subresourceRange.baseArrayLayer = 0;
+        viewInfo.subresourceRange.layerCount = m_createInfo.arrayLayers;
+        m_uavs[mip] = ImageView::Create(this, viewInfo, m_name + "_UAV");
     }
 
     uint32_t Image::CalculateMips(uint32_t width, uint32_t height)
@@ -375,28 +440,6 @@ namespace pe
         const uint32_t resolution = max(width, height);
         const uint32_t mips = static_cast<uint32_t>(floor(log2(static_cast<double>(resolution)))) + 1;
         return min(mips, maxMips);
-    }
-
-    vk::ImageView Image::CreateImageView(vk::ImageViewType type, int mip)
-    {
-        vk::ImageViewCreateInfo viewInfo{};
-        viewInfo.image = m_apiHandle;
-        viewInfo.viewType = type;
-        viewInfo.format = m_createInfo.format;
-        viewInfo.subresourceRange.aspectMask = VulkanHelpers::GetAspectMask(m_createInfo.format);
-        viewInfo.subresourceRange.baseMipLevel = mip == -1 ? 0 : mip;
-        viewInfo.subresourceRange.levelCount = mip == -1 ? m_createInfo.mipLevels : 1;
-        viewInfo.subresourceRange.baseArrayLayer = 0;
-        viewInfo.subresourceRange.layerCount = m_createInfo.arrayLayers;
-        viewInfo.components.r = vk::ComponentSwizzle::eIdentity;
-        viewInfo.components.g = vk::ComponentSwizzle::eIdentity;
-        viewInfo.components.b = vk::ComponentSwizzle::eIdentity;
-        viewInfo.components.a = vk::ComponentSwizzle::eIdentity;
-
-        vk::ImageView view = RHII.GetDevice().createImageView(viewInfo);
-        Debug::SetObjectName(view, m_name);
-
-        return view;
     }
 
     void Image::CopyDataToImageStaged(CommandBuffer *cmd,

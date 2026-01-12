@@ -195,7 +195,7 @@ namespace pe
         cmd->ClearDepthStencils(m_textures);
     }
 
-    void ShadowPass::Draw(CommandBuffer *cmd)
+    void ShadowPass::ExecutePass(CommandBuffer *cmd)
     {
         PE_ERROR_IF(m_scene == nullptr, "Scene was not set");
 

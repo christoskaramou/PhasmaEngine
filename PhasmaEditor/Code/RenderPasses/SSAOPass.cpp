@@ -31,10 +31,10 @@ namespace pe
             FFX_CACAO_VkScreenSizeInfo screenSizeInfo = {};
             screenSizeInfo.width = m_ssaoRT->GetWidth();
             screenSizeInfo.height = m_ssaoRT->GetHeight();
-            screenSizeInfo.depthView = m_depth->GetSRV();
-            screenSizeInfo.normalsView = m_normalRT->GetSRV();
+            screenSizeInfo.depthView = m_depth->GetSRV()->ApiHandle();
+            screenSizeInfo.normalsView = m_normalRT->GetSRV()->ApiHandle();
             screenSizeInfo.output = m_ssaoRT->ApiHandle();
-            screenSizeInfo.outputView = m_ssaoRT->GetRTV();
+            screenSizeInfo.outputView = m_ssaoRT->GetRTV()->ApiHandle();
             PE_CHECK(FFX_CACAO_VkInitScreenSizeDependentResources(m_context, &screenSizeInfo));
         }
     }
@@ -99,7 +99,7 @@ namespace pe
         }
     }
 
-    void SSAOPass::Draw(CommandBuffer *cmd)
+    void SSAOPass::ExecutePass(CommandBuffer *cmd)
     {
         vk::MemoryBarrier2 barrier{};
         barrier.srcAccessMask = vk::AccessFlagBits2::eShaderWrite;
@@ -150,10 +150,10 @@ namespace pe
         FFX_CACAO_VkScreenSizeInfo screenSizeInfo = {};
         screenSizeInfo.width = m_ssaoRT->GetWidth();
         screenSizeInfo.height = m_ssaoRT->GetHeight();
-        screenSizeInfo.depthView = m_depth->GetSRV();
-        screenSizeInfo.normalsView = m_normalRT->GetSRV();
+        screenSizeInfo.depthView = m_depth->GetSRV()->ApiHandle();
+        screenSizeInfo.normalsView = m_normalRT->GetSRV()->ApiHandle();
         screenSizeInfo.output = m_ssaoRT->ApiHandle();
-        screenSizeInfo.outputView = m_ssaoRT->GetRTV();
+        screenSizeInfo.outputView = m_ssaoRT->GetRTV()->ApiHandle();
         PE_CHECK(FFX_CACAO_VkInitScreenSizeDependentResources(m_context, &screenSizeInfo));
     }
 
