@@ -458,6 +458,40 @@ namespace pe
             {
                 std::sort(setInfo.begin(), setInfo.end(), [](auto &a, auto &b)
                           { return a.binding < b.binding; });
+
+                // SPIRV-Cross reflection may report both a CombinedImageSampler and a separate Sampler/Image for the same binding
+                // when using HLSL [[vk::combinedImageSampler]] or -fspv-target-env=vulkan1.3
+                // merge or deduplicate these to avoid "duplicate binding" validation error
+                for (size_t i = 0; i < setInfo.size() - 1;)
+                {
+                    if (setInfo[i].binding == setInfo[i + 1].binding)
+                    {
+                        auto &a = setInfo[i];
+                        auto &b = setInfo[i + 1];
+
+                        if (a.type == vk::DescriptorType::eCombinedImageSampler && b.type == vk::DescriptorType::eSampler)
+                        {
+                            setInfo.erase(setInfo.begin() + i + 1);
+                            continue;
+                        }
+                        if (a.type == vk::DescriptorType::eSampler && b.type == vk::DescriptorType::eCombinedImageSampler)
+                        {
+                            setInfo.erase(setInfo.begin() + i);
+                            continue;
+                        }
+
+                        if ((a.type == vk::DescriptorType::eSampledImage && b.type == vk::DescriptorType::eSampler) ||
+                            (a.type == vk::DescriptorType::eSampler && b.type == vk::DescriptorType::eSampledImage))
+                        {
+                            a.type = vk::DescriptorType::eCombinedImageSampler;
+                            a.imageLayout = vk::ImageLayout::eShaderReadOnlyOptimal;
+                            setInfo.erase(setInfo.begin() + i + 1);
+                            continue;
+                        }
+                    }
+                    i++;
+                }
+
                 descriptor = Descriptor::Create(setInfo, m_shader->GetShaderStage(), false, "auto_descriptor");
             }
 
