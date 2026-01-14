@@ -65,6 +65,11 @@ struct PushConstants_GBuffer
     float pad1;
 };
 
+struct PushConstants_RayTracing
+{
+    float4 pad;
+};
+
 struct Mesh_Constants
 {
     float alphaCut;

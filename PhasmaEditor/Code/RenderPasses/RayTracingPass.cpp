@@ -1,11 +1,13 @@
 #include "RayTracingPass.h"
 #include "API/AccelerationStructure.h"
+#include "API/Buffer.h"
 #include "API/Command.h"
 #include "API/Descriptor.h"
 #include "API/Image.h"
 #include "API/Pipeline.h"
 #include "API/RHI.h"
 #include "API/Shader.h"
+#include "GbufferPass.h"
 #include "Scene/Scene.h"
 #include "Systems/RendererSystem.h"
 
@@ -20,9 +22,9 @@ namespace pe
     void RayTracingPass::UpdatePassInfo()
     {
         // Shaders
-        Shader *rayGen = Shader::Create(Path::Assets + "Shaders/RayTracing/RayGen.hlsl", vk::ShaderStageFlagBits::eRaygenKHR, "main", std::vector<Define>{}, ShaderCodeType::HLSL);
-        Shader *miss = Shader::Create(Path::Assets + "Shaders/RayTracing/Miss.hlsl", vk::ShaderStageFlagBits::eMissKHR, "main", std::vector<Define>{}, ShaderCodeType::HLSL);
-        Shader *closestHit = Shader::Create(Path::Assets + "Shaders/RayTracing/ClosestHit.hlsl", vk::ShaderStageFlagBits::eClosestHitKHR, "main", std::vector<Define>{}, ShaderCodeType::HLSL);
+        Shader *rayGen = Shader::Create(Path::Assets + "Shaders/RayTracing/RayTrace.hlsl", vk::ShaderStageFlagBits::eRaygenKHR, "raygeneration", std::vector<Define>{}, ShaderCodeType::HLSL);
+        Shader *closestHit = Shader::Create(Path::Assets + "Shaders/RayTracing/RayTrace.hlsl", vk::ShaderStageFlagBits::eClosestHitKHR, "closesthit", std::vector<Define>{}, ShaderCodeType::HLSL);
+        Shader *miss = Shader::Create(Path::Assets + "Shaders/RayTracing/RayTrace.hlsl", vk::ShaderStageFlagBits::eMissKHR, "miss", std::vector<Define>{}, ShaderCodeType::HLSL);
 
         m_passInfo->name = "RayTracingPipeline";
         m_passInfo->acceleration.rayGen = rayGen;
@@ -42,19 +44,24 @@ namespace pe
         if (!scene.GetTLAS())
             return;
 
+        auto *gbuffer = GetGlobalComponent<GbufferOpaquePass>();
+
         for (uint32_t i = 0; i < RHII.GetSwapchainImageCount(); i++)
         {
-            auto *DSet = m_passInfo->GetDescriptors(i)[0];
-            DSet->SetAccelerationStructure(0, scene.GetTLAS()->ApiHandle());
-            DSet->SetImageView(1, m_display->GetUAV(0), m_display->GetSampler());
-            DSet->SetBuffer(2, scene.GetUniforms(i));
-            DSet->SetBuffer(3, scene.GetMeshInfoBuffer());
-            DSet->SetBuffer(4, scene.GetBuffer());
-            DSet->SetBuffer(5, scene.GetBuffer(), scene.GetVerticesOffset());
-            DSet->SetSampler(6, m_display->GetSampler());
-            DSet->SetImageViews(6, scene.GetImageViews(), {});
-            DSet->SetBuffer(7, scene.GetBuffer(), scene.GetPositionsOffset());
-            DSet->Update();
+            auto &descriptors = m_passInfo->GetDescriptors(i);
+
+            // All bindings go in Set 0 (raytracing shaders share the same descriptor set layout)
+            if (descriptors.size() > 0 && descriptors[0])
+            {
+                auto *desc = descriptors[0];
+                desc->SetAccelerationStructure(0, scene.GetTLAS()->ApiHandle());
+                desc->SetImageView(1, m_display->GetUAV(0), nullptr);
+                desc->SetBuffer(2, scene.GetUniforms(i), 0, scene.GetUniforms(i)->Size());
+                desc->SetBuffer(3, gbuffer->GetConstants(), 0, gbuffer->GetConstants()->Size());
+                desc->SetSampler(4, m_display->GetSampler());
+                desc->SetImageViews(5, scene.GetImageViews(), {});
+                desc->Update();
+            }
         }
     }
 

@@ -288,6 +288,12 @@ namespace pe
             motionBlur.ExecutePass(cmd);
         }
 
+        if (gSettings.ray_tracing_support && gSettings.use_ray_tracing)
+        {
+            rtp.SetScene(&m_scene);
+            rtp.ExecutePass(cmd);
+        }
+
         // Gui
         {
             m_gui.ExecutePass(cmd);
@@ -297,12 +303,6 @@ namespace pe
         {
             // Image *blitImage = gSettings.current_rendering_image ? gSettings.current_rendering_image : m_displayRT;
             BlitToSwapchain(cmd, m_displayRT, imageIndex);
-        }
-
-        if (gSettings.ray_tracing_support && gSettings.use_ray_tracing)
-        {
-            rtp.SetScene(&m_scene);
-            rtp.ExecutePass(cmd);
         }
 
         cmd->End();
