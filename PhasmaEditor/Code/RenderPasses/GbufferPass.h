@@ -37,6 +37,8 @@ namespace pe
         void Resize(uint32_t width, uint32_t height) override;
         void Destroy() override;
 
+        Buffer *GetConstants() { return m_constants; }
+
         void SetScene(Scene *scene) { m_scene = scene; }
         void ClearRenderTargets(CommandBuffer *cmd);
         void ClearDepthStencil(CommandBuffer *cmd);
@@ -71,6 +73,8 @@ namespace pe
         void ExecutePass(CommandBuffer *cmd) override;
         void Resize(uint32_t width, uint32_t height) override;
         void Destroy() override;
+
+        Buffer *GetConstants() { return m_constants; }
 
         void SetScene(Scene *scene) { m_scene = scene; }
         void ClearRenderTargets(CommandBuffer *cmd);

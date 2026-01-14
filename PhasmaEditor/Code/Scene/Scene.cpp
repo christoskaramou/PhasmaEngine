@@ -848,8 +848,8 @@ namespace pe
         vk::MemoryBarrier2 barrier{};
         barrier.srcStageMask = vk::PipelineStageFlagBits2::eTransfer;
         barrier.srcAccessMask = vk::AccessFlagBits2::eTransferWrite;
-        barrier.dstStageMask = vk::PipelineStageFlagBits2::eAccelerationStructureBuildKHR;
-        barrier.dstAccessMask = vk::AccessFlagBits2::eAccelerationStructureReadKHR | vk::AccessFlagBits2::eShaderRead;
+        barrier.dstStageMask = vk::PipelineStageFlagBits2::eAccelerationStructureBuildKHR | vk::PipelineStageFlagBits2::eTransfer;
+        barrier.dstAccessMask = vk::AccessFlagBits2::eAccelerationStructureReadKHR | vk::AccessFlagBits2::eShaderRead | vk::AccessFlagBits2::eTransferRead;
         cmd->MemoryBarrier(barrier);
 
         vk::DeviceAddress bufferAddress = GetBuffer()->GetDeviceAddress();
@@ -1013,14 +1013,14 @@ namespace pe
         {
             auto &req = buildReqs[i];
             auto &meshInfoGPU = meshInfosGPU[i];
-            
+
             // Get original MeshInfo from Model
             const auto &meshInfo = req.model->GetMeshInfos()[req.meshIndex];
-            
+
             meshInfoGPU.indexOffset = meshInfo.indexOffset;
             meshInfoGPU.vertexOffset = meshInfo.vertexOffset;
             meshInfoGPU.positionsOffset = meshInfo.positionsOffset;
-            
+
             for (int k = 0; k < 5; k++)
                 meshInfoGPU.textures[k] = meshInfo.viewsIndex[k];
 

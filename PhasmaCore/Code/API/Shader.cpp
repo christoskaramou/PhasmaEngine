@@ -1,4 +1,5 @@
 #include "API/Shader.h"
+#include "API/Descriptor.h"
 #include "API/Pipeline.h"
 #include "dxc/dxcapi.h"
 
@@ -62,22 +63,67 @@ namespace pe
         return (index < descriptors.size()) ? descriptors[index] : nullptr;
     }
 
+    // Function to merge two descriptors
+    Descriptor *MergeDescriptors(Descriptor *a, Descriptor *b)
+    {
+        if (!a)
+            return b;
+        if (!b)
+            return a;
+        if (a == b)
+            return a;
+
+        // Merge bindings
+        std::vector<DescriptorBindingInfo> mergedBindings = a->GetBindingInfos();
+        const auto &bBindings = b->GetBindingInfos();
+
+        for (const auto &bInfo : bBindings)
+        {
+            bool found = false;
+            for (auto &aInfo : mergedBindings)
+            {
+                if (aInfo.binding == bInfo.binding)
+                {
+                    found = true;
+                    PE_ERROR_IF(aInfo.type != bInfo.type, "Descriptor binding type mismatch during merge");
+                    aInfo.count = std::max(aInfo.count, bInfo.count);
+                    // Ensure bindless flag is preserved if either has it
+                    if (bInfo.bindless && !aInfo.bindless)
+                        aInfo.bindless = true;
+                    // Merge shader stage flags if necessary (Wait, DescriptorBindingInfo doesn't have stage flags, Descriptor does)
+                    // The binding info itself is just type/count.
+                    break;
+                }
+            }
+            if (!found)
+                mergedBindings.push_back(bInfo);
+        }
+
+        vk::ShaderStageFlags mergedStage = a->GetStage() | b->GetStage();
+        bool pushDesc = a->GetLayout()->IsPushDescriptor() || b->GetLayout()->IsPushDescriptor();
+        std::string name = "merged_descriptor";
+
+        Descriptor *merged = Descriptor::Create(mergedBindings, mergedStage, pushDesc, name);
+
+        // We can destroy the old descriptors as they are being replaced by the merged one
+        Descriptor::Destroy(a);
+        Descriptor::Destroy(b);
+
+        return merged;
+    }
+
     // Function to combine descriptor sets from vertex and fragment shaders
-    std::vector<Descriptor *> CombineDescriptors(const std::vector<Descriptor *> &vertDesc, const std::vector<Descriptor *> &fragDesc)
+    std::vector<Descriptor *> CombineDescriptors(const std::vector<Descriptor *> &a, const std::vector<Descriptor *> &b)
     {
         std::vector<Descriptor *> descriptors;
-        size_t maxSize = std::max(vertDesc.size(), fragDesc.size());
+        size_t maxSize = std::max(a.size(), b.size());
         descriptors.reserve(maxSize);
 
         for (size_t i = 0; i < maxSize; ++i)
         {
-            // one of the two must have a valid descriptor (!= nullptr)
-            // nullptr means that the descriptor is not present in one of the shaders
-            // if both are nullptr, it means that this Set index (i) is not used in both shaders and this is not allowed
-            Descriptor *vertDescriptor = GetDescriptorSafely(vertDesc, i);
-            Descriptor *fragDescriptor = GetDescriptorSafely(fragDesc, i);
-            PE_ERROR_IF(!vertDescriptor && !fragDescriptor, "Descriptor set is not used by any shader");
-            descriptors.push_back(vertDescriptor ? vertDescriptor : fragDescriptor);
+            auto *descA = GetDescriptorSafely(a, i);
+            auto *descB = GetDescriptorSafely(b, i);
+            descriptors.push_back(MergeDescriptors(descA, descB));
         }
 
         return descriptors;
@@ -414,11 +460,11 @@ namespace pe
         {
             args.push_back(L"cs_6_3");
         }
-        else if (m_shaderStage & (vk::ShaderStageFlagBits::eRaygenKHR | 
-                                  vk::ShaderStageFlagBits::eAnyHitKHR | 
-                                  vk::ShaderStageFlagBits::eClosestHitKHR | 
-                                  vk::ShaderStageFlagBits::eMissKHR | 
-                                  vk::ShaderStageFlagBits::eIntersectionKHR | 
+        else if (m_shaderStage & (vk::ShaderStageFlagBits::eRaygenKHR |
+                                  vk::ShaderStageFlagBits::eAnyHitKHR |
+                                  vk::ShaderStageFlagBits::eClosestHitKHR |
+                                  vk::ShaderStageFlagBits::eMissKHR |
+                                  vk::ShaderStageFlagBits::eIntersectionKHR |
                                   vk::ShaderStageFlagBits::eCallableKHR))
         {
             args.push_back(L"lib_6_3");
