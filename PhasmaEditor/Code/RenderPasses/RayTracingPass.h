@@ -21,8 +21,9 @@ namespace pe
         void SetScene(Scene *scene) { m_scene = scene; }
 
     private:
+        friend class Scene;
         Scene *m_scene = nullptr;
         Image *m_display = nullptr;
         AccelerationStructure *m_tlas = nullptr; // used to check if tlas is updated
     };
-}
+} // namespace pe

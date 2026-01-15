@@ -1,6 +1,5 @@
 #include "RayTracingPass.h"
 #include "API/AccelerationStructure.h"
-#include "API/Buffer.h"
 #include "API/Command.h"
 #include "API/Descriptor.h"
 #include "API/Image.h"
@@ -53,13 +52,19 @@ namespace pe
             // All bindings go in Set 0 (raytracing shaders share the same descriptor set layout)
             if (descriptors.size() > 0 && descriptors[0])
             {
+                auto *rs = GetGlobalSystem<RendererSystem>();
+                bool shadowsEnabled = Settings::Get<GlobalSettings>().shadows;
+                auto *skybox = shadowsEnabled ? rs->GetSkyBoxDay().GetCubeMap() : rs->GetSkyBoxNight().GetCubeMap();
                 auto *desc = descriptors[0];
                 desc->SetAccelerationStructure(0, scene.GetTLAS()->ApiHandle());
-                desc->SetImageView(1, m_display->GetUAV(0), nullptr);
-                desc->SetBuffer(2, scene.GetUniforms(i), 0, scene.GetUniforms(i)->Size());
-                desc->SetBuffer(3, gbuffer->GetConstants(), 0, gbuffer->GetConstants()->Size());
+                desc->SetImageView(1, m_display->GetUAV(0));
+                desc->SetBuffer(2, scene.GetUniforms(i));
+                desc->SetBuffer(3, gbuffer->GetConstants());
                 desc->SetSampler(4, m_display->GetSampler());
-                desc->SetImageViews(5, scene.GetImageViews(), {});
+                desc->SetImageViews(5, scene.GetImageViews());
+                desc->SetBuffer(6, scene.GetBuffer());
+                desc->SetBuffer(7, scene.GetMeshInfoBuffer());
+                desc->SetImageView(8, skybox->GetSRV());
                 desc->Update();
             }
         }

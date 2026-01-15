@@ -382,7 +382,6 @@ namespace pe
         Queue::Destroy(m_mainQueue);
         CommandBuffer::ClearCache();
         delete m_stagingManager;
-        vmaDestroyAllocator(m_allocator);
         DescriptorPool::Destroy(m_descriptorPool);
 
 #if defined(PE_TRACK_RESOURCES)
@@ -437,6 +436,7 @@ namespace pe
         logLeaks("GpuTimers", gpuTimers);
 #endif
 
+        vmaDestroyAllocator(m_allocator);
         if (m_device)
             m_device.destroy();
         Debug::DestroyDebugMessenger();
@@ -505,9 +505,9 @@ namespace pe
             instanceCI.ppEnabledExtensionNames = instanceExtensions.data();
             instanceCI.enabledLayerCount = static_cast<uint32_t>(instanceLayers.size());
             instanceCI.ppEnabledLayerNames = instanceLayers.data();
-            
+
             m_instance = vk::createInstance(instanceCI);
-            
+
             VULKAN_HPP_DEFAULT_DISPATCHER.init(m_instance);
         }
         Debug::Init(m_instance);
@@ -683,7 +683,7 @@ namespace pe
 
         // Vulkan 1.1 features
         vk::PhysicalDeviceVulkan11Features deviceFeatures11{};
-        
+
         // Vulkan 1.2 features
         vk::PhysicalDeviceVulkan12Features deviceFeatures12{};
         deviceFeatures12.bufferDeviceAddress = true;
@@ -723,7 +723,7 @@ namespace pe
 
         vk::PhysicalDeviceFeatures2 deviceFeatures2{};
         deviceFeatures2.pNext = &rayQueryFeatures;
-        
+
         // Supported features
         m_gpu.getFeatures2(&deviceFeatures2);
 
@@ -742,7 +742,6 @@ namespace pe
         PE_ERROR_IF(!deviceFeatures2.features.shaderInt64, "Int64 is not supported on this device!");
         PE_ERROR_IF(!deviceFeatures2.features.multiDrawIndirect, "Multi draw indirect is not supported!");
         PE_ERROR_IF(!deviceFeatures2.features.drawIndirectFirstInstance, "Draw indirect first instance is not supported!");
-
 
         vk::DeviceCreateInfo deviceCreateInfo{};
         deviceCreateInfo.queueCreateInfoCount = 1;

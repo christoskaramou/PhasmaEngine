@@ -48,8 +48,8 @@ namespace pe
             if (!descriptors.empty())
             {
                 Descriptor *dset = descriptors[0];
-                dset->SetImageView(0, taaResolved->GetSRV(), nullptr);
-                dset->SetImageView(1, displayRT->GetUAV(0), nullptr);
+                dset->SetImageView(0, taaResolved->GetSRV());
+                dset->SetImageView(1, displayRT->GetUAV(0));
                 dset->Update();
             }
         }

@@ -310,7 +310,7 @@ namespace pe
 
             auto *DSetShadows = sets[1];
             DSetShadows->SetBuffer(0, shadows.m_uniforms[i]);
-            DSetShadows->SetImageViews(1, views, {});
+            DSetShadows->SetImageViews(1, views);
             DSetShadows->SetSampler(2, shadows.m_sampler);
             DSetShadows->Update();
 
