@@ -34,7 +34,7 @@ PS_OUTPUT_Gbuffer mainPS(PS_INPUT_Gbuffer input)
         discard;
 
     float3 mrSample = HasTexture(textureMask, TEX_METAL_ROUGH_BIT) ? GetMetallicRoughness(id, uv).xyz : float3(1.0f, 1.0f, 1.0f);
-    float3 tangentNormal = HasTexture(textureMask, TEX_NORMAL_BIT) ? GetNormal(id, uv).xyz : float3(0.0f, 0.0f, 1.0f);
+    float3 tangentNormal = HasTexture(textureMask, TEX_NORMAL_BIT) ? GetNormal(id, uv).xyz : float3(0.5f, 0.5f, 1.0f);
     float occlusionSample = HasTexture(textureMask, TEX_OCCLUSION_BIT) ? GetOcclusion(id, uv).r : 1.0f;
     float3 emissiveSample = HasTexture(textureMask, TEX_EMISSIVE_BIT) ? GetEmissive(id, uv).xyz : float3(1.0f, 1.0f, 1.0f);
 

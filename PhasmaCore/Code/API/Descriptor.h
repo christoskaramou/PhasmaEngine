@@ -108,8 +108,8 @@ namespace pe
 
         void SetImageViews(uint32_t binding,
                            const std::vector<ImageView *> &views,
-                           const std::vector<Sampler *> &samplers);
-        void SetImageView(uint32_t binding, ImageView *view, Sampler *sampler);
+                           const std::vector<Sampler *> &samplers = {});
+        void SetImageView(uint32_t binding, ImageView *view, Sampler *sampler = nullptr);
         void SetBuffers(uint32_t binding,
                         const std::vector<Buffer *> &buffers,
                         const std::vector<uint64_t> &offsets = {},

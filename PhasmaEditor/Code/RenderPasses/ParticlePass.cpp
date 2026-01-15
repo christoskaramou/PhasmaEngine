@@ -95,7 +95,7 @@ namespace pe
                 std::vector<ImageView *> views;
                 for (auto *img : textures)
                     views.push_back(img->GetSRV());
-                descriptors[1]->SetImageViews(0, views, {});
+                descriptors[1]->SetImageViews(0, views);
                 descriptors[1]->SetSampler(1, pm->GetSampler());
                 descriptors[1]->Update();
             }

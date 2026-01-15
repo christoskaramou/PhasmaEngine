@@ -5,7 +5,7 @@ namespace pe
     class Particles : public Widget
     {
     public:
-        Particles() : Widget("Particles") {}
+        Particles() : Widget("Particles") { m_open = false; }
         void Update() override;
 
     private:

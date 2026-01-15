@@ -73,9 +73,10 @@ float3 CalculateNormal(float3 positionWS, float3 tangentNormal, float3 inNormal,
 
     float3 N = normalize(inNormal);
     float3 T = normalize(q1 * st2.y - q2 * st1.y);
-    float3 B = normalize(cross(N, T));
-    float3x3 TBN = float3x3(T, B, N);
+    float det = st1.x * st2.y - st1.y * st2.x;
+    float3 B = normalize(cross(N, T)) * (det < 0.0f ? -1.0f : 1.0f);
 
+    float3x3 TBN = float3x3(T, B, N);
     return normalize(mul(tNormal, TBN));
 }
 

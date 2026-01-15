@@ -14,8 +14,10 @@
 #include "RenderPasses/DepthPass.h"
 #include "RenderPasses/GbufferPass.h"
 #include "RenderPasses/LightPass.h"
+#include "RenderPasses/RayTracingPass.h"
 #include "RenderPasses/ShadowPass.h"
 #include "Scene/Model.h"
+#include "Systems/RendererSystem.h"
 
 namespace pe
 {
@@ -115,7 +117,7 @@ namespace pe
                     if (HasDirtyDescriptorViews(frame))
                     {
                         setTextures->SetSampler(1, defaultSampler);
-                        setTextures->SetImageViews(2, GetImageViews(), {});
+                        setTextures->SetImageViews(2, GetImageViews());
                         setTextures->Update();
                     }
                 }
@@ -145,7 +147,7 @@ namespace pe
                     if (HasDirtyDescriptorViews(frame))
                     {
                         setTextures->SetSampler(1, defaultSampler);
-                        setTextures->SetImageViews(2, GetImageViews(), {});
+                        setTextures->SetImageViews(2, GetImageViews());
                         setTextures->Update();
                     }
                 }
@@ -166,7 +168,7 @@ namespace pe
                 if (HasDirtyDescriptorViews(frame))
                 {
                     setTextures->SetSampler(1, defaultSampler);
-                    setTextures->SetImageViews(2, GetImageViews(), {});
+                    setTextures->SetImageViews(2, GetImageViews());
                     setTextures->Update();
                 }
             }
@@ -485,10 +487,19 @@ namespace pe
                     m_imageViews.push_back(image->GetSRV());
             }
 
+            const auto &defaults = Model::GetDefaultResources();
             for (auto &meshInfo : model.GetMeshInfos())
             {
                 for (int k = 0; k < 5; k++)
-                    meshInfo.viewsIndex[k] = imagesMap[meshInfo.images[k]];
+                {
+                    Image *image = meshInfo.images[k];
+                    bool isDefault = (image == defaults.black || image == defaults.white || image == defaults.normal);
+
+                    if (image && !isDefault)
+                        meshInfo.viewsIndex[k] = imagesMap[image];
+                    else
+                        meshInfo.viewsIndex[k] = 0xFFFFFFFF;
+                }
             }
         }
 
@@ -500,6 +511,7 @@ namespace pe
     {
         GbufferOpaquePass *gbo = GetGlobalComponent<GbufferOpaquePass>();
         GbufferTransparentPass *gbt = GetGlobalComponent<GbufferTransparentPass>();
+        Buffer::Destroy(gbo->m_constants);
         gbo->m_constants = Buffer::Create(
             m_meshCount * sizeof(Mesh_Constants),
             vk::BufferUsageFlagBits2::eStorageBuffer | vk::BufferUsageFlagBits2::eTransferDst,
@@ -865,6 +877,7 @@ namespace pe
             vk::AccelerationStructureBuildSizesInfoKHR sizeInfo;
             Model *model;
             size_t meshIndex;
+            AccelerationStructure *createdBlas = nullptr;
         };
         std::vector<BlasBuildReq> buildReqs;
 
@@ -918,31 +931,6 @@ namespace pe
             VMA_ALLOCATION_CREATE_DEDICATED_MEMORY_BIT,
             "BLAS_Merged_Buffer");
 
-        uint32_t instanceCount = static_cast<uint32_t>(buildReqs.size());
-        m_instanceBuffer = Buffer::Create(
-            instanceCount * sizeof(vk::AccelerationStructureInstanceKHR),
-            vk::BufferUsageFlagBits2::eAccelerationStructureBuildInputReadOnlyKHR | vk::BufferUsageFlagBits2::eShaderDeviceAddress | vk::BufferUsageFlagBits2::eTransferDst,
-            VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT,
-            "TLAS_Instance_Buffer");
-
-        // Check TLAS scratch requirements
-        vk::AccelerationStructureBuildGeometryInfoKHR tlasBuildInfo{};
-        tlasBuildInfo.type = vk::AccelerationStructureTypeKHR::eTopLevel;
-        tlasBuildInfo.flags = vk::BuildAccelerationStructureFlagBitsKHR::ePreferFastTrace;
-        tlasBuildInfo.mode = vk::BuildAccelerationStructureModeKHR::eBuild;
-        vk::AccelerationStructureGeometryKHR tlasGeometry{};
-        tlasGeometry.geometryType = vk::GeometryTypeKHR::eInstances;
-        tlasGeometry.geometry.instances = vk::AccelerationStructureGeometryInstancesDataKHR{};
-        tlasBuildInfo.geometryCount = 1;
-        tlasBuildInfo.pGeometries = &tlasGeometry;
-
-        auto tlasSizeInfo = AccelerationStructure::GetBuildSizes(
-            {tlasGeometry},
-            {instanceCount},
-            vk::AccelerationStructureTypeKHR::eTopLevel,
-            vk::AccelerationStructureBuildTypeKHR::eDevice);
-        maxScratchSize = std::max(maxScratchSize, tlasSizeInfo.buildScratchSize);
-
         m_scratchBuffer = Buffer::Create(
             maxScratchSize,
             vk::BufferUsageFlagBits2::eStorageBuffer | vk::BufferUsageFlagBits2::eShaderDeviceAddress,
@@ -951,8 +939,6 @@ namespace pe
 
         // --- Pass 2: Build BLAS ---
         vk::DeviceSize currentOffset = 0;
-        m_instanceBuffer->Map();
-        auto *instances = (vk::AccelerationStructureInstanceKHR *)m_instanceBuffer->Data();
 
         for (size_t i = 0; i < buildReqs.size(); i++)
         {
@@ -962,46 +948,98 @@ namespace pe
             currentOffset = RHII.Align(currentOffset, 256);
 
             std::string name = "BLAS_" + req.model->GetLabel() + "_" + std::to_string(req.meshIndex);
-            AccelerationStructure *blas = new AccelerationStructure(name, m_blasMergedBuffer, currentOffset);
-
-            blas->BuildBLAS(cmd, {req.geometry}, {req.range}, {req.range.primitiveCount}, m_scratchBuffer->GetDeviceAddress());
-
-            m_blases.push_back(blas);
-
-            // Setup Instance
-            auto &instanceInfo = instances[i];
-
-            // For now use identity transform.
-            vk::TransformMatrixKHR transformMatrix;
-            transformMatrix.matrix[0][0] = 1.0f;
-            transformMatrix.matrix[0][1] = 0.0f;
-            transformMatrix.matrix[0][2] = 0.0f;
-            transformMatrix.matrix[0][3] = 0.0f;
-            transformMatrix.matrix[1][0] = 0.0f;
-            transformMatrix.matrix[1][1] = 1.0f;
-            transformMatrix.matrix[1][2] = 0.0f;
-            transformMatrix.matrix[1][3] = 0.0f;
-            transformMatrix.matrix[2][0] = 0.0f;
-            transformMatrix.matrix[2][1] = 0.0f;
-            transformMatrix.matrix[2][2] = 1.0f;
-            transformMatrix.matrix[2][3] = 0.0f;
-
-            instanceInfo.transform = transformMatrix;
-            instanceInfo.instanceCustomIndex = static_cast<uint32_t>(i);
-            instanceInfo.mask = 0xFF;
-            instanceInfo.instanceShaderBindingTableRecordOffset = 0;
-            instanceInfo.flags = static_cast<VkGeometryInstanceFlagBitsKHR>(vk::GeometryInstanceFlagBitsKHR::eTriangleFacingCullDisable);
-            instanceInfo.accelerationStructureReference = blas->GetDeviceAddress();
+            req.createdBlas = new AccelerationStructure(name, m_blasMergedBuffer, currentOffset);
+            req.createdBlas->BuildBLAS(cmd, {req.geometry}, {req.range}, {req.range.primitiveCount}, m_scratchBuffer->GetDeviceAddress());
+            m_blases.push_back(req.createdBlas);
 
             currentOffset += req.sizeInfo.accelerationStructureSize;
         }
 
+        // --- Pass 2: Instance Requests (One per NODE) ---
+        struct InstanceReq
+        {
+            AccelerationStructure *blas;
+            Model *model;
+            int meshIndex;
+            mat4 transform;
+        };
+        std::vector<InstanceReq> instanceReqs;
+
+        for (auto model : m_models)
+        {
+            for (int i = 0; i < model->GetNodeCount(); i++)
+            {
+                int meshIndex = model->GetNodeMesh(i);
+                if (meshIndex < 0)
+                    continue;
+
+                AccelerationStructure *blas = nullptr;
+                for (auto &bReq : buildReqs)
+                {
+                    if (bReq.model == model && bReq.meshIndex == static_cast<size_t>(meshIndex))
+                    {
+                        blas = bReq.createdBlas;
+                        break;
+                    }
+                }
+                if (!blas)
+                    continue;
+
+                const auto &nodeInfo = model->GetNodeInfos()[i];
+                instanceReqs.push_back({blas, model, meshIndex, nodeInfo.ubo.worldMatrix});
+            }
+        }
+
+        if (instanceReqs.empty())
+            return;
+
+        // --- Create Instance Buffer ---
+        m_instanceBuffer = Buffer::Create(
+            instanceReqs.size() * sizeof(vk::AccelerationStructureInstanceKHR),
+            vk::BufferUsageFlagBits2::eAccelerationStructureBuildInputReadOnlyKHR | vk::BufferUsageFlagBits2::eShaderDeviceAddress | vk::BufferUsageFlagBits2::eTransferDst,
+            VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT,
+            "TLAS_Instance_Buffer");
+
+        m_instanceBuffer->Map();
+        auto *gpuInstances = (vk::AccelerationStructureInstanceKHR *)m_instanceBuffer->Data();
+
+        for (size_t i = 0; i < instanceReqs.size(); i++)
+        {
+            auto &req = instanceReqs[i];
+
+            vk::TransformMatrixKHR transformMatrix;
+            mat4 &t = req.transform;
+            transformMatrix.matrix[0][0] = t[0][0];
+            transformMatrix.matrix[0][1] = t[1][0];
+            transformMatrix.matrix[0][2] = t[2][0];
+            transformMatrix.matrix[0][3] = t[3][0];
+            transformMatrix.matrix[1][0] = t[0][1];
+            transformMatrix.matrix[1][1] = t[1][1];
+            transformMatrix.matrix[1][2] = t[2][1];
+            transformMatrix.matrix[1][3] = t[3][1];
+            transformMatrix.matrix[2][0] = t[0][2];
+            transformMatrix.matrix[2][1] = t[1][2];
+            transformMatrix.matrix[2][2] = t[2][2];
+            transformMatrix.matrix[2][3] = t[3][2];
+
+            gpuInstances[i].transform = transformMatrix;
+            gpuInstances[i].instanceCustomIndex = static_cast<uint32_t>(i);
+            gpuInstances[i].mask = 0xFF;
+            gpuInstances[i].instanceShaderBindingTableRecordOffset = 0;
+            gpuInstances[i].flags = static_cast<VkGeometryInstanceFlagBitsKHR>(vk::GeometryInstanceFlagBitsKHR::eTriangleFacingCullDisable);
+            gpuInstances[i].accelerationStructureReference = req.blas->GetDeviceAddress();
+        }
         m_instanceBuffer->Flush();
         m_instanceBuffer->Unmap();
 
+        // --- TLAS Build ---
+        m_tlas = AccelerationStructure::Create("TLAS", nullptr, 0);
+        m_tlas->BuildTLAS(cmd, static_cast<uint32_t>(instanceReqs.size()), m_instanceBuffer, m_scratchBuffer->GetDeviceAddress());
+
+        // --- Create MeshInfoGPU Buffer (Corresponds to Instances) ---
         Buffer::Destroy(m_meshInfoBuffer);
         m_meshInfoBuffer = Buffer::Create(
-            buildReqs.size() * sizeof(MeshInfoGPU),
+            instanceReqs.size() * sizeof(MeshInfoGPU),
             vk::BufferUsageFlagBits2::eStorageBuffer | vk::BufferUsageFlagBits2::eTransferDst,
             VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT,
             "MeshInfo_Buffer");
@@ -1009,28 +1047,19 @@ namespace pe
         m_meshInfoBuffer->Map();
         auto *meshInfosGPU = (MeshInfoGPU *)m_meshInfoBuffer->Data();
 
-        for (size_t i = 0; i < buildReqs.size(); i++)
+        for (size_t i = 0; i < instanceReqs.size(); i++)
         {
-            auto &req = buildReqs[i];
+            auto &req = instanceReqs[i];
             auto &meshInfoGPU = meshInfosGPU[i];
-
-            // Get original MeshInfo from Model
             const auto &meshInfo = req.model->GetMeshInfos()[req.meshIndex];
 
-            meshInfoGPU.indexOffset = meshInfo.indexOffset;
-            meshInfoGPU.vertexOffset = meshInfo.vertexOffset;
-            meshInfoGPU.positionsOffset = meshInfo.positionsOffset;
+            meshInfoGPU.indexOffset = meshInfo.indexOffset * 4;
+            meshInfoGPU.vertexOffset = static_cast<uint32_t>(m_verticesOffset) + meshInfo.vertexOffset * sizeof(Vertex);
 
             for (int k = 0; k < 5; k++)
                 meshInfoGPU.textures[k] = meshInfo.viewsIndex[k];
-
-            // meshInfoGPU.padding = 0; // removed padding member
         }
         m_meshInfoBuffer->Flush();
         m_meshInfoBuffer->Unmap();
-
-        // --- Build TLAS ---
-        m_tlas = AccelerationStructure::Create("TLAS_Scene", nullptr, 0);
-        m_tlas->BuildTLAS(cmd, instanceCount, m_instanceBuffer, m_scratchBuffer->GetDeviceAddress());
     }
 } // namespace pe

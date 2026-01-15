@@ -3,6 +3,7 @@
 #include "API/Surface.h"
 #include "GUI/Helpers.h"
 #include "RenderPasses/LightPass.h"
+#include "RenderPasses/RayTracingPass.h"
 
 namespace pe
 {
@@ -131,6 +132,8 @@ namespace pe
             lightOpaquePass.UpdateDescriptorSets();
             LightTransparentPass &lightTransparentPass = *GetGlobalComponent<LightTransparentPass>();
             lightTransparentPass.UpdateDescriptorSets();
+            RayTracingPass &rayTracingPass = *GetGlobalComponent<RayTracingPass>();
+            rayTracingPass.UpdateDescriptorSets();
         }
         if (gSettings.shadows)
         {
