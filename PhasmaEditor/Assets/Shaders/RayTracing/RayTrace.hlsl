@@ -1,6 +1,7 @@
 #include "../Common/Common.hlsl"
 #include "../Common/MaterialFlags.hlsl"
 #include "../Common/Structures.hlsl"
+#include "../Gbuffer/PBR.hlsl"
 
 struct MeshInfoGPU
 {
@@ -15,6 +16,7 @@ struct HitPayload
     float3 radiance;
     float  t;
     uint   hitKind;
+    uint   rayType; // 0: Primary, 1: Shadow
 };
 
 struct Vertex
@@ -45,6 +47,24 @@ struct Vertex
 [[vk::binding(6, 0)]] ByteAddressBuffer geometry;
 [[vk::binding(7, 0)]] StructuredBuffer<MeshInfoGPU> meshInfos;
 [[vk::binding(8, 0)]] TextureCube skybox;
+
+[[vk::binding(0, 1)]] cbuffer Lights
+{
+    float4 cb_camPos; // .w is unused
+    DirectionalLight cb_sun;
+    PointLight cb_pointLights[MAX_POINT_LIGHTS];
+    SpotLight  cb_spotLights[MAX_SPOT_LIGHTS];
+};
+
+[[vk::binding(1, 1)]] cbuffer LightBuffer
+{
+    float4x4 ubo_invViewProj;
+    float4x4 ubo_invView;
+    float4x4 ubo_invProj;
+    float ubo_lightsIntensity;
+    float ubo_lightsRange;
+    uint ubo_shadows;
+};
 
 static const uint MATRIX_SIZE = 64u;
 static const uint MESH_DATA_SIZE = MATRIX_SIZE * 2u;
@@ -162,6 +182,92 @@ float3 ComputeIBL(float3 N, float3 V, float3 albedo, float metallic, float rough
     return kD * diffuse + specular; 
 }
 
+float TraceShadowRay(float3 origin, float3 dir, float dist)
+{
+    if (ubo_shadows == 0)
+        return 1.0;
+    
+    RayDesc ray;
+    ray.Origin    = origin;
+    ray.Direction = dir;
+    ray.TMin      = 0.05; // Bias to avoid self-intersection
+    ray.TMax      = dist;
+
+    HitPayload shadowPayload;
+    shadowPayload.radiance = 0.0.xxx;
+    shadowPayload.t        = 0.0; // Init as Hit (0.0) -> Miss will set to -1.0
+    shadowPayload.hitKind  = 0;
+    shadowPayload.rayType  = 1; // Mark as Shadow Ray
+
+    TraceRay(
+        tlas,
+        RAY_FLAG_ACCEPT_FIRST_HIT_AND_END_SEARCH | RAY_FLAG_SKIP_CLOSEST_HIT_SHADER, // Opaque shadow
+        0xFF,
+        0, 0, 0, // miss shader index 0 (same as primary)
+        ray,
+        shadowPayload
+    );
+
+    // If misses, t becomes -1.0. If hits, it remains 0.0 (or whatever initialized to, but NOT -1.0).
+    return (shadowPayload.t == -1.0) ? 1.0 : 0.0;
+}
+
+float3 RT_DirectLight(float3 worldPos, float3 materialNormal, float3 V, float3 albedo, float metallic, float roughness, float3 F0, float occlusion)
+{
+    float3 lightDir = cb_sun.direction.xyz;
+    float3 L        = normalize(lightDir);
+    float3 H        = normalize(V + L);
+    
+    // Shadow
+    float shadow = TraceShadowRay(worldPos, L, 10000.0);
+
+    float NoV = clamp(dot(materialNormal, V), 0.001, 1.0);
+    float NoL = clamp(dot(materialNormal, L), 0.001, 1.0);
+    float HoV = clamp(dot(H, V), 0.001, 1.0);
+    
+    float intensity = cb_sun.color.w;
+
+    float3 specularFresnel = Fresnel(F0, HoV);
+    float3 specRef = cb_sun.color.rgb * intensity * NoL * shadow * CookTorranceSpecular(materialNormal, H, NoL, NoV, specularFresnel, roughness);
+    float3 diffRef = cb_sun.color.rgb * intensity * NoL * shadow * (1.0 - specularFresnel) * (1.0 / PI);
+    
+    float3 diffuseLight = diffRef * albedo * (1.0 - metallic) * occlusion;
+    
+    return diffuseLight + specRef;
+}
+
+float3 RT_ComputePointLight(int index, float3 worldPos, float3 materialNormal, float3 V, float3 albedo, float metallic, float roughness, float3 F0, float occlusion)
+{
+    float3 lightPos = cb_pointLights[index].position.xyz;
+    float3 lightDirFull = worldPos - lightPos;
+    float dist = length(lightDirFull);
+    
+    if (dist > ubo_lightsRange) return 0.0;
+    
+    float3 L = normalize(-lightDirFull);
+    float3 H = normalize(V + L);
+    
+    float attenuation = 1.0 - (dist / ubo_lightsRange);
+    attenuation *= attenuation; // Quadratic
+    
+    // Shadow
+    float shadow = TraceShadowRay(worldPos, L, dist);
+
+    float NoV = clamp(dot(materialNormal, V), 0.001, 1.0);
+    float NoL = clamp(dot(materialNormal, L), 0.001, 1.0);
+    float HoV = clamp(dot(H, V), 0.001, 1.0);
+    
+    float intensity = cb_pointLights[index].color.w * ubo_lightsIntensity;
+
+    float3 specularFresnel = Fresnel(F0, HoV);
+    float3 specRef = cb_pointLights[index].color.rgb * intensity * attenuation * NoL * shadow * CookTorranceSpecular(materialNormal, H, NoL, NoV, specularFresnel, roughness);
+    float3 diffRef = cb_pointLights[index].color.rgb * intensity * attenuation * NoL * shadow * (1.0 - specularFresnel) * (1.0 / PI);
+    
+    float3 diffuseLight = diffRef * albedo * (1.0 - metallic) * occlusion;
+    
+    return diffuseLight + specRef;
+}
+
 [shader("raygeneration")]
 void raygeneration()
 {
@@ -200,17 +306,32 @@ void raygeneration()
     payload.radiance = 0.0.xxx;
     payload.t        = -1.0;
     payload.hitKind  = 0;
+    payload.rayType  = 0;
 
-    // Force bindings to be visible in RayGen reflection
-    if (launchIndex.x == 0xFFFFFFFF) 
+    // Force bindings to be visible in RayGen reflection - use a valid condition
+    if (launchIndex.x == 0 && launchIndex.y == 0) 
     {
         uint dummyId = 0;
-        float4 d1 = GetBaseColor(dummyId, float2(0,0)); // Uses constants, textures, sampler
-        float d2 = asfloat(GetMeshConstantsOffset(dummyId)); // Uses constants
-        // Dummy use of geometry and meshInfos
-        uint3 dummyIndices = GetIndices(dummyId, 0); 
-        float3 d3 = skybox.SampleLevel(material_sampler, float3(0,0,1), 0).rgb;
-        payload.radiance += d1.rgb + d2 + float3(dummyIndices) * 0.00001 + d3;
+        
+        // Set 0 Bindings
+        // - bindings 0 (tlas), 1 (output), 2 (data) are used in main logic
+        // - bindings 3 (constants), 4 (sampler), 5 (textures) used here:
+        float4 dBaseColor = GetBaseColor(dummyId, float2(0,0)); 
+        
+        // - bindings 6 (geometry), 7 (meshInfos) used here:
+        uint3 dIndices = GetIndices(dummyId, 0); 
+        
+        // - binding 8 (skybox) used here:
+        float3 dSky = skybox.SampleLevel(material_sampler, float3(0,0,1), 0).rgb;
+
+        // Set 1 Bindings
+        // - binding 0 (Lights)
+        float3 dLight = cb_sun.color.rgb; 
+        // - binding 1 (LightBuffer)
+        float dBuffer = ubo_lightsIntensity;
+
+        // Accumulate to payload to prevent optimization
+        payload.radiance += dBaseColor.rgb + float3(dIndices) * 0.000001 + dSky * 0.000001 + dLight * 0.000001 + dBuffer * 0.000001;
     }
 
     // (AS, RayFlags, InstanceMask, RayContributionToHitGroupIndex, MultiplierForGeomContribution, MissShaderIndex, Ray, Payload)
@@ -301,7 +422,20 @@ void closesthit(inout HitPayload payload, in BuiltInTriangleIntersectionAttribut
     F0 = lerp(F0, combinedColor.rgb, metallic);
 
     float3 lighting = ComputeIBL(N, V, combinedColor.rgb, metallic, roughness, F0);
-    lighting = lighting * occlusion + emissive;
+    lighting *= occlusion;
+
+    // Direct Lighting
+    lighting += RT_DirectLight(positionWorld, N, V, combinedColor.rgb, metallic, roughness, F0, occlusion);
+    
+    // Point Lights
+    for (int i = 0; i < MAX_POINT_LIGHTS; i++)
+    {
+         // Simple check to skip unused lights (intensity 0 or very far)
+         if (cb_pointLights[i].color.w > 0.0) // .w is unused in struct but maybe packed? Struct has color + pos.
+             lighting += RT_ComputePointLight(i, positionWorld, N, V, combinedColor.rgb, metallic, roughness, F0, occlusion);
+    }
+
+    lighting += emissive;
 
     payload.radiance = lighting;
     payload.t        = RayTCurrent();
@@ -311,6 +445,13 @@ void closesthit(inout HitPayload payload, in BuiltInTriangleIntersectionAttribut
 [shader("miss")]
 void miss(inout HitPayload payload)
 {
+    // Shadow ray check
+    if (payload.rayType == 1)
+    {
+        payload.t = -1.0; // Use t to signal miss
+        return;
+    }
+
     // Simple sky gradient based on ray direction (works even without other resources)
     float3 d = normalize(WorldRayDirection());
     

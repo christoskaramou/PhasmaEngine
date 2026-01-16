@@ -73,15 +73,18 @@ namespace pe
             EventSystem::PushEvent(EventType::DynamicRendering, dynamic_rendering);
         ImGui::Separator();
 
-        ImGui::Checkbox("IBL", &gSettings.IBL);
-        if (gSettings.IBL)
+        if (!gSettings.use_ray_tracing)
         {
-            ImGui::Indent(16.0f);
-            ImGui::DragFloat("IBL Intensity", &gSettings.IBL_intensity, 0.01f, 0.0f, 10.0f);
-            ImGui::Unindent(16.0f);
+            ImGui::Checkbox("IBL", &gSettings.IBL);
+            if (gSettings.IBL)
+            {
+                ImGui::Indent(16.0f);
+                ImGui::DragFloat("IBL Intensity", &gSettings.IBL_intensity, 0.01f, 0.0f, 10.0f);
+                ImGui::Unindent(16.0f);
+            }
+            ImGui::Checkbox("SSAO", &gSettings.ssao);
+            ImGui::Checkbox("SSR", &gSettings.ssr);
         }
-        ImGui::Checkbox("SSAO", &gSettings.ssao);
-        ImGui::Checkbox("SSR", &gSettings.ssr);
         ImGui::Checkbox("FXAA", &gSettings.fxaa);
         ImGui::Checkbox("TAA", &gSettings.taa);
         if (gSettings.taa)
@@ -123,8 +126,11 @@ namespace pe
             ImGui::Separator();
         }
 
-        if (ImGui::Checkbox("Sun Light", &gSettings.shadows))
+        if (ImGui::Checkbox("Day/Night", &gSettings.day))
         {
+            if (!gSettings.use_ray_tracing)
+                gSettings.shadows = gSettings.day;
+
             // Update light pass descriptor sets for the skybox change
             // We need to access GlobalComponents.
             // GetGlobalComponent is likely in RendererSystem.h or Base.h
@@ -135,7 +141,25 @@ namespace pe
             RayTracingPass &rayTracingPass = *GetGlobalComponent<RayTracingPass>();
             rayTracingPass.UpdateDescriptorSets();
         }
-        if (gSettings.shadows)
+
+        if (gSettings.use_ray_tracing)
+        {
+            if (ImGui::Checkbox("Cast Shadows", &gSettings.shadows))
+            {
+                LightOpaquePass &lightOpaquePass = *GetGlobalComponent<LightOpaquePass>();
+                lightOpaquePass.UpdateDescriptorSets();
+                LightTransparentPass &lightTransparentPass = *GetGlobalComponent<LightTransparentPass>();
+                lightTransparentPass.UpdateDescriptorSets();
+                RayTracingPass &rayTracingPass = *GetGlobalComponent<RayTracingPass>();
+                rayTracingPass.UpdateDescriptorSets();
+            }
+        }
+        else
+        {
+            gSettings.shadows = gSettings.day;
+        }
+
+        if (gSettings.day)
         {
             ImGui::Indent(16.0f);
             ImGui::SliderFloat("Intst", &gSettings.sun_intensity, 0.1f, 50.f);
