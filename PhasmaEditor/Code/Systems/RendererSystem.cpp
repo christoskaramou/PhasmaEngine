@@ -176,124 +176,147 @@ namespace pe
 
         cmd->Begin();
 
+        // Check dependencies
+        bool renderRaster = !gSettings.use_ray_tracing;
+        bool renderPostProcess = true; // Mostly always needed unless completely disabled
+        
+        bool renderShadows = gSettings.shadows && renderRaster;
+        bool renderSSAO = gSettings.ssao && renderRaster;
+        bool renderSSR = gSettings.ssr && renderRaster;
+        bool renderParticles = true; // Always on top
+        
+        // Depth/GBuffer needed if Raster is on OR if needed by PostProcess/Particles
+        bool needVelocity = gSettings.taa || gSettings.motion_blur;
+        bool needDepth = renderRaster || renderParticles || gSettings.dof || gSettings.motion_blur || needVelocity;
+        bool needGBuffer = renderRaster || needVelocity || renderSSR || renderSSAO;
+
         // Shadows Opaque
-        if (gSettings.shadows)
+        if (renderShadows)
         {
             shadows.SetScene(&m_scene);
             shadows.ExecutePass(cmd);
         }
 
         // Depth Pass
+        if (needDepth)
         {
             dp.SetScene(&m_scene);
             dp.ExecutePass(cmd);
         }
 
         // Gbuffers Opaque
+        if (needGBuffer)
         {
             gbo.SetScene(&m_scene);
             gbo.ExecutePass(cmd);
         }
 
-        // Screen Space Ambient Occlusion
-        if (gSettings.ssao)
+        if (renderRaster)
         {
-            ssao.ExecutePass(cmd);
+            // Screen Space Ambient Occlusion
+            if (renderSSAO)
+            {
+                ssao.ExecutePass(cmd);
+            }
+
+            // Lighting Opaque
+            {
+                lo.ExecutePass(cmd);
+            }
+
+            // Gbuffers Transparent
+            {
+                gbt.SetScene(&m_scene);
+                gbt.ExecutePass(cmd);
+            }
+
+            // Lighting Transparent
+            {
+                lt.ExecutePass(cmd);
+            }
+        }
+        else
+        {
+             // Ray Tracing Replaces Lighting
+             rtp.SetScene(&m_scene);
+             rtp.ExecutePass(cmd);
         }
 
-        // Lighting Opaque
-        {
-            lo.ExecutePass(cmd);
-        }
-
-        // Gbuffers Transparent
-        {
-            gbt.SetScene(&m_scene);
-            gbt.ExecutePass(cmd);
-        }
-
-        // Lighting Transparent
-        {
-            lt.ExecutePass(cmd);
-        }
-
-        // Particle Passes
+        // Particle Passes (Draw on top)
+        if (renderParticles)
         {
             pcp.SetScene(&m_scene);
             pcp.ExecutePass(cmd);
-        }
-        {
+        
             pp.SetScene(&m_scene);
             pp.ExecutePass(cmd);
         }
 
         // Screen Space Reflections
-        if (gSettings.ssr)
+        if (renderSSR)
         {
             ssr.ExecutePass(cmd);
         }
-
-        // Fast Approximate Anti-Aliasing
-        if (gSettings.fxaa)
+        
+        // Post Process
+        if (renderPostProcess)
         {
-            fxaa.ExecutePass(cmd);
-        }
-
-        // Aabbs
-        if (gSettings.draw_aabbs)
-        {
-            aabbs.SetScene(&m_scene);
-            aabbs.ExecutePass(cmd);
-        }
-
-        // Upscale / TAA
-        if (gSettings.taa)
-        {
-            taa.ExecutePass(cmd);
-
-            // RCAS Sharpening
-            if (gSettings.cas_sharpening)
+            // Fast Approximate Anti-Aliasing
+            if (gSettings.fxaa)
             {
-                sharpen.ExecutePass(cmd);
+                fxaa.ExecutePass(cmd);
+            }
+
+            // Aabbs
+            if (gSettings.draw_aabbs)
+            {
+                aabbs.SetScene(&m_scene);
+                aabbs.ExecutePass(cmd);
+            }
+
+            // Upscale / TAA
+            if (gSettings.taa)
+            {
+                taa.ExecutePass(cmd);
+
+                // RCAS Sharpening
+                if (gSettings.cas_sharpening)
+                {
+                    sharpen.ExecutePass(cmd);
+                }
+            }
+            else
+            {
+                Upsample(cmd, vk::Filter::eLinear);
+            }
+
+            // Tone Mapping
+            if (gSettings.tonemapping)
+            {
+                tonemap.ExecutePass(cmd);
+            }
+
+            // Bloom
+            if (gSettings.bloom)
+            {
+                bbfp.ExecutePass(cmd);
+                bgbh.ExecutePass(cmd);
+                bgbv.ExecutePass(cmd);
+            }
+
+            // Depth of Field
+            if (gSettings.dof)
+            {
+                dof.ExecutePass(cmd);
+            }
+
+            // Motion Blur
+            if (gSettings.motion_blur)
+            {
+                motionBlur.ExecutePass(cmd);
             }
         }
-        else
-        {
-            Upsample(cmd, vk::Filter::eLinear);
-        }
-
-        // Tone Mapping
-        if (gSettings.tonemapping)
-        {
-            tonemap.ExecutePass(cmd);
-        }
-
-        // Bloom
-        if (gSettings.bloom)
-        {
-            bbfp.ExecutePass(cmd);
-            bgbh.ExecutePass(cmd);
-            bgbv.ExecutePass(cmd);
-        }
-
-        // Depth of Field
-        if (gSettings.dof)
-        {
-            dof.ExecutePass(cmd);
-        }
-
-        // Motion Blur
-        if (gSettings.motion_blur)
-        {
-            motionBlur.ExecutePass(cmd);
-        }
-
-        if (gSettings.ray_tracing_support && gSettings.use_ray_tracing)
-        {
-            rtp.SetScene(&m_scene);
-            rtp.ExecutePass(cmd);
-        }
-
+        
         // Gui
         {
             m_gui.ExecutePass(cmd);

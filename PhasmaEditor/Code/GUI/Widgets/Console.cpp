@@ -63,7 +63,7 @@ namespace pe
             ImGui::LogToClipboard();
 
         ImGui::Separator();
-        ImGui::BeginChild("scrolling", ImVec2(0, 0), false, ImGuiWindowFlags_HorizontalScrollbar);
+        ImGui::BeginChild("scrolling", ImVec2(0, 0), false, 0);
 
         if (copy)
             ImGui::LogToClipboard();
@@ -82,7 +82,9 @@ namespace pe
             }
 
             ImGui::PushStyleColor(ImGuiCol_Text, color);
+            ImGui::PushTextWrapPos(0.0f);
             ImGui::TextUnformatted(log.text.c_str());
+            ImGui::PopTextWrapPos();
             ImGui::PopStyleColor();
         };
 

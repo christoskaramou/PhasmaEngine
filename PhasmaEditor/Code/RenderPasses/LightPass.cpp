@@ -87,7 +87,8 @@ namespace pe
             views[i] = shadows.m_textures[i]->GetSRV();
 
         bool shadowsEnabled = Settings::Get<GlobalSettings>().shadows;
-        const SkyBox &skybox = shadowsEnabled ? GetGlobalSystem<RendererSystem>()->GetSkyBoxDay() : GetGlobalSystem<RendererSystem>()->GetSkyBoxNight();
+        bool day = Settings::Get<GlobalSettings>().day;
+        const SkyBox &skybox = day ? GetGlobalSystem<RendererSystem>()->GetSkyBoxDay() : GetGlobalSystem<RendererSystem>()->GetSkyBoxNight();
 
         for (uint32_t i = 0; i < RHII.GetSwapchainImageCount(); i++)
         {
@@ -289,7 +290,8 @@ namespace pe
             views[i] = shadows.m_textures[i]->GetSRV();
 
         bool shadowsEnabled = Settings::Get<GlobalSettings>().shadows;
-        const SkyBox &skybox = shadowsEnabled ? GetGlobalSystem<RendererSystem>()->GetSkyBoxDay() : GetGlobalSystem<RendererSystem>()->GetSkyBoxNight();
+        bool day = Settings::Get<GlobalSettings>().day;
+        const SkyBox &skybox = day ? GetGlobalSystem<RendererSystem>()->GetSkyBoxDay() : GetGlobalSystem<RendererSystem>()->GetSkyBoxNight();
 
         for (uint32_t i = 0; i < RHII.GetSwapchainImageCount(); i++)
         {
@@ -347,8 +349,9 @@ namespace pe
     void LightTransparentPass::PassBarriers(CommandBuffer *cmd)
     {
         bool shadowsEnabled = Settings::Get<GlobalSettings>().shadows;
+        bool day = Settings::Get<GlobalSettings>().day;
         RendererSystem &rs = *GetGlobalSystem<RendererSystem>();
-        const SkyBox &skybox = shadowsEnabled ? rs.GetSkyBoxDay() : rs.GetSkyBoxNight();
+        const SkyBox &skybox = day ? rs.GetSkyBoxDay() : rs.GetSkyBoxNight();
         ShadowPass &shadows = *GetGlobalComponent<ShadowPass>();
 
         std::vector<ImageBarrierInfo> barriers(8 + shadows.m_textures.size());
@@ -379,10 +382,11 @@ namespace pe
     void LightTransparentPass::ExecutePass(CommandBuffer *cmd)
     {
         bool shadowsEnabled = m_ubo.shadows;
+        bool day = Settings::Get<GlobalSettings>().day;
         uint32_t shadowmapCascades = Settings::Get<GlobalSettings>().num_cascades;
 
         RendererSystem &rs = *GetGlobalSystem<RendererSystem>();
-        const SkyBox &skybox = shadowsEnabled ? rs.GetSkyBoxDay() : rs.GetSkyBoxNight();
+        const SkyBox &skybox = day ? rs.GetSkyBoxDay() : rs.GetSkyBoxNight();
         ShadowPass &shadows = *GetGlobalComponent<ShadowPass>();
 
         cmd->SetConstantAt(0, shadowsEnabled ? 1.0f : 0.0f); // Shadow cast

@@ -4,7 +4,19 @@ namespace pe
 {
     class Scene;
     class Image;
+    class Buffer; // Forward declaration
     class AccelerationStructure;
+
+    struct RayTracingPassUBO
+    {
+        mat4 invViewProj;
+        mat4 invView;
+        mat4 invProj;
+        float lights_intensity;
+        float lights_range;
+        uint32_t shadows;
+        float pad;
+    };
 
     class RayTracingPass : public IRenderPassComponent
     {
@@ -25,5 +37,6 @@ namespace pe
         Scene *m_scene = nullptr;
         Image *m_display = nullptr;
         AccelerationStructure *m_tlas = nullptr; // used to check if tlas is updated
+        std::vector<Buffer *> m_uniforms;
     };
 } // namespace pe

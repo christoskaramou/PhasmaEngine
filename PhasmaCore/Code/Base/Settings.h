@@ -47,6 +47,7 @@ namespace pe
         float lights_intensity = 7.0f;
         float lights_range = 7.0f;
         bool randomize_lights = false;
+        bool day = true;
         float sun_intensity = 7.f;
         std::array<float, 3> sun_direction{0.1f, 0.9f, 0.1f};
         float camera_speed = 3.5f;
