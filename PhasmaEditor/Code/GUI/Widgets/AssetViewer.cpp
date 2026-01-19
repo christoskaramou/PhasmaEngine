@@ -61,11 +61,13 @@ namespace pe
                 if (ImGui::Button("Load Model"))
                 {
                     auto path = std::filesystem::path(GUIState::s_assetPreview.fullPath);
-                    ThreadPool::GUI.Enqueue([path]()
-                                            {
-                                                GUIState::s_modelLoading = true;
-                                                Model::Load(path);
-                                                GUIState::s_modelLoading = false; });
+                    auto loadAsync = [path]()
+                    {
+                        GUIState::s_modelLoading = true;
+                        Model::Load(path);
+                        GUIState::s_modelLoading = false;
+                    };
+                    ThreadPool::GUI.Enqueue(loadAsync);
                 }
 
                 if (!canLoad)

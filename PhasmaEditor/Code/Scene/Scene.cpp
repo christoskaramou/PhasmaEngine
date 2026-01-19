@@ -289,6 +289,23 @@ namespace pe
 
     void Scene::CopyVertices(CommandBuffer *cmd)
     {
+        auto &gSettings = Settings::Get<GlobalSettings>();
+        auto &progress = gSettings.loading_current;
+        auto &total = gSettings.loading_total;
+        auto &loading = gSettings.loading_name;
+
+        // Calculate total for progress bar (vertices + positions + aabbs)
+        size_t totalItems = 0;
+        for (auto &modelPtr : m_models)
+        {
+            totalItems += modelPtr->GetVertices().size();
+            totalItems += modelPtr->GetPositionUvs().size();
+            totalItems += modelPtr->GetAabbVertices().size();
+        }
+        total = static_cast<uint32_t>(totalItems);
+        progress = 0;
+        loading = "Uploading to GPU";
+
         m_verticesOffset = m_aabbIndicesOffset + 24 * sizeof(uint32_t);
         size_t verticesCount = 0;
         for (auto &modelPtr : m_models)
@@ -300,6 +317,8 @@ namespace pe
             for (auto &meshInfo : model.GetMeshInfos())
                 meshInfo.vertexOffset += static_cast<uint32_t>(verticesCount);
             verticesCount += vertexCount;
+            
+            progress += static_cast<uint32_t>(vertexCount);
         }
 
         BufferBarrierInfo vertexBarrierInfo{};
@@ -321,6 +340,7 @@ namespace pe
             for (auto &meshInfo : model.GetMeshInfos())
                 meshInfo.positionsOffset += static_cast<uint32_t>(positionsCount);
             positionsCount += positionCount;
+            progress += static_cast<uint32_t>(positionCount);
         }
 
         BufferBarrierInfo posVertexBarrierInfo{};
@@ -342,6 +362,7 @@ namespace pe
             for (auto &meshInfo : model.GetMeshInfos())
                 meshInfo.aabbVertexOffset += static_cast<uint32_t>(aabbCount);
             aabbCount += aabbVertexCount;
+            progress += static_cast<uint32_t>(aabbVertexCount);
         }
 
         BufferBarrierInfo aabbVertexBarrierInfo{};
