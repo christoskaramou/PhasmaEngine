@@ -4,6 +4,7 @@
 #include "API/RHI.h"
 #include "Systems/RendererSystem.h"
 #include <assimp/GltfMaterial.h>
+#include <assimp/ProgressHandler.hpp>
 
 #undef max
 
@@ -27,6 +28,19 @@ namespace pe
                 a.a3, a.b3, a.c3, a.d3,
                 a.a4, a.b4, a.c4, a.d4);
         }
+
+        class CustomAssimpProgressHandler : public Assimp::ProgressHandler
+        {
+        public:
+            bool Update(float percentage) override
+            {
+                auto &gSettings = Settings::Get<GlobalSettings>();
+                gSettings.loading_total = 100;
+                gSettings.loading_current = static_cast<uint32_t>(percentage * 100.f);
+                gSettings.loading_name = "Reading file";
+                return true;
+            }
+        };
     } // namespace
 
     ModelAssimp::ModelAssimp() = default;
@@ -72,6 +86,7 @@ namespace pe
 
     bool ModelAssimp::LoadFile(const std::filesystem::path &file)
     {
+        m_importer.SetProgressHandler(new CustomAssimpProgressHandler());
         m_filePath = file.parent_path();
 
         uint32_t flags = 0;
