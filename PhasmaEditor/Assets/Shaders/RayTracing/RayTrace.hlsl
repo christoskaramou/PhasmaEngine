@@ -160,7 +160,7 @@ float3 GetTriangleTangent(float3 v0, float3 v1, float3 v2, float2 uv0, float2 uv
 }
 
 // Simple PBR IBL
-float3 ComputeIBL(float3 N, float3 V, float3 albedo, float metallic, float roughness, float3 F0)
+float3 ComputeIBL(float3 N, float3 V, float3 albedo, float metallic, float roughness, float3 F0, float shadow)
 {
     float NdotV = max(dot(N, V), 0.0);
     float3 R = reflect(-V, N);
@@ -177,7 +177,7 @@ float3 ComputeIBL(float3 N, float3 V, float3 albedo, float metallic, float rough
     float mip = roughness * 8.0; 
     float3 prefilteredColor = skybox.SampleLevel(material_sampler, R, mip).rgb;
     float2 envBRDF = float2(1.0, 0.0); // Simplified
-    float3 specular = prefilteredColor * (kS * envBRDF.x + envBRDF.y); 
+    float3 specular = prefilteredColor * (kS * envBRDF.x + envBRDF.y) * shadow; 
     
     return kD * diffuse + specular; 
 }
@@ -190,7 +190,7 @@ float TraceShadowRay(float3 origin, float3 dir, float dist)
     RayDesc ray;
     ray.Origin    = origin;
     ray.Direction = dir;
-    ray.TMin      = 0.05; // Bias to avoid self-intersection
+    ray.TMin      = 0.001; // Reduced bias to avoid leaks
     ray.TMax      = dist;
 
     HitPayload shadowPayload;
@@ -212,24 +212,24 @@ float TraceShadowRay(float3 origin, float3 dir, float dist)
     return (shadowPayload.t == -1.0) ? 1.0 : 0.0;
 }
 
-float3 RT_DirectLight(float3 worldPos, float3 materialNormal, float3 V, float3 albedo, float metallic, float roughness, float3 F0, float occlusion)
+float3 RT_DirectLight(float3 worldPos, float3 materialNormal, float3 V, float3 albedo, float metallic, float roughness, float3 F0, float occlusion, float shadow)
 {
     float3 lightDir = cb_sun.direction.xyz;
     float3 L        = normalize(lightDir);
     float3 H        = normalize(V + L);
-    
-    // Shadow
-    float shadow = TraceShadowRay(worldPos, L, 10000.0);
 
-    float NoV = clamp(dot(materialNormal, V), 0.001, 1.0);
-    float NoL = clamp(dot(materialNormal, L), 0.001, 1.0);
+    float NoV_clamped = clamp(dot(materialNormal, V), 0.001, 1.0);
+    float NoL_raw = dot(materialNormal, L);
+    float NoL_clamped = clamp(NoL_raw, 0.001, 1.0);
     float HoV = clamp(dot(H, V), 0.001, 1.0);
     
     float intensity = cb_sun.color.w;
 
     float3 specularFresnel = Fresnel(F0, HoV);
-    float3 specRef = cb_sun.color.rgb * intensity * NoL * shadow * CookTorranceSpecular(materialNormal, H, NoL, NoV, specularFresnel, roughness);
-    float3 diffRef = cb_sun.color.rgb * intensity * NoL * shadow * (1.0 - specularFresnel) * (1.0 / PI);
+    
+    float NoL_sat = saturate(NoL_raw);
+    float3 specRef = cb_sun.color.rgb * intensity * NoL_sat * shadow * CookTorranceSpecular(materialNormal, H, NoL_clamped, NoV_clamped, specularFresnel, roughness);
+    float3 diffRef = cb_sun.color.rgb * intensity * NoL_sat * shadow * (1.0 - specularFresnel) * (1.0 / PI);
     
     float3 diffuseLight = diffRef * albedo * (1.0 - metallic) * occlusion;
     
@@ -253,15 +253,18 @@ float3 RT_ComputePointLight(int index, float3 worldPos, float3 materialNormal, f
     // Shadow
     float shadow = TraceShadowRay(worldPos, L, dist);
 
-    float NoV = clamp(dot(materialNormal, V), 0.001, 1.0);
-    float NoL = clamp(dot(materialNormal, L), 0.001, 1.0);
+    float NoV_clamped = clamp(dot(materialNormal, V), 0.001, 1.0);
+    float NoL_raw = dot(materialNormal, L);
+    float NoL_clamped = clamp(NoL_raw, 0.001, 1.0);
     float HoV = clamp(dot(H, V), 0.001, 1.0);
     
     float intensity = cb_pointLights[index].color.w * ubo_lightsIntensity;
 
     float3 specularFresnel = Fresnel(F0, HoV);
-    float3 specRef = cb_pointLights[index].color.rgb * intensity * attenuation * NoL * shadow * CookTorranceSpecular(materialNormal, H, NoL, NoV, specularFresnel, roughness);
-    float3 diffRef = cb_pointLights[index].color.rgb * intensity * attenuation * NoL * shadow * (1.0 - specularFresnel) * (1.0 / PI);
+    
+    float NoL_sat = saturate(NoL_raw);
+    float3 specRef = cb_pointLights[index].color.rgb * intensity * attenuation * NoL_sat * shadow * CookTorranceSpecular(materialNormal, H, NoL_clamped, NoV_clamped, specularFresnel, roughness);
+    float3 diffRef = cb_pointLights[index].color.rgb * intensity * attenuation * NoL_sat * shadow * (1.0 - specularFresnel) * (1.0 / PI);
     
     float3 diffuseLight = diffRef * albedo * (1.0 - metallic) * occlusion;
     
@@ -421,11 +424,17 @@ void closesthit(inout HitPayload payload, in BuiltInTriangleIntersectionAttribut
     float3 F0 = float3(0.04, 0.04, 0.04);
     F0 = lerp(F0, combinedColor.rgb, metallic);
 
-    float3 lighting = ComputeIBL(N, V, combinedColor.rgb, metallic, roughness, F0);
+    float3 lighting = 0.0.xxx;
+
+    // Shadow for Sun & IBL Specular
+    float3 L = normalize(cb_sun.direction.xyz);
+    float sunShadow = TraceShadowRay(positionWorld, L, 10000.0);
+
+    lighting += ComputeIBL(N, V, combinedColor.rgb, metallic, roughness, F0, sunShadow);
     lighting *= occlusion;
 
     // Direct Lighting
-    lighting += RT_DirectLight(positionWorld, N, V, combinedColor.rgb, metallic, roughness, F0, occlusion);
+    lighting += RT_DirectLight(positionWorld, N, V, combinedColor.rgb, metallic, roughness, F0, occlusion, sunShadow);
     
     // Point Lights
     for (int i = 0; i < MAX_POINT_LIGHTS; i++)
