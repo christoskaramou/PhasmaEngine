@@ -102,9 +102,9 @@ namespace pe
         // flags |= aiProcess_PreTransformVertices;
         // flags |= aiProcess_OptimizeMeshes;
         // flags |= aiProcess_FindInstances;
-        flags |= aiProcess_MakeLeftHanded;
+        // flags |= aiProcess_MakeLeftHanded;
         flags |= aiProcess_FlipUVs;
-        flags |= aiProcess_FlipWindingOrder;
+        // flags |= aiProcess_FlipWindingOrder;
 
         m_scene = m_importer.ReadFile(file.string(), flags);
         if (!m_scene || (m_scene->mFlags & AI_SCENE_FLAGS_INCOMPLETE) || !m_scene->mRootNode)

@@ -317,7 +317,7 @@ namespace pe
             for (auto &meshInfo : model.GetMeshInfos())
                 meshInfo.vertexOffset += static_cast<uint32_t>(verticesCount);
             verticesCount += vertexCount;
-            
+
             progress += static_cast<uint32_t>(vertexCount);
         }
 
@@ -921,6 +921,8 @@ namespace pe
                 geometry.geometry.triangles.indexType = vk::IndexType::eUint32;
                 geometry.geometry.triangles.indexData.deviceAddress = bufferAddress + meshInfo.indexOffset * sizeof(uint32_t);
                 geometry.flags = vk::GeometryFlagBitsKHR::eOpaque;
+                if (meshInfo.renderType == RenderType::AlphaCut || meshInfo.renderType == RenderType::AlphaBlend)
+                    geometry.flags = vk::GeometryFlagBitsKHR::eNoDuplicateAnyHitInvocation;
 
                 vk::AccelerationStructureBuildRangeInfoKHR range{};
                 range.primitiveCount = meshInfo.indicesCount / 3;

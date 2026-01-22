@@ -102,7 +102,7 @@ namespace pe
 
                 uint32_t frame = RHII.GetFrameIndex();
                 size_t offset = 0;
-                uint32_t count = static_cast<uint32_t>(m_scene->GetDrawInfosOpaque().size());
+                uint32_t count = static_cast<uint32_t>(m_scene->GetDrawInfosOpaque().size() + m_scene->GetDrawInfosAlphaCut().size());
 
                 cmd->BeginPass(7, m_attachments.data(), "GbufferOpaquePass");
                 cmd->BindIndexBuffer(m_scene->GetBuffer(), 0);
@@ -222,8 +222,8 @@ namespace pe
             pushConstants.transparentPass = 1u;
 
             uint32_t frame = RHII.GetFrameIndex();
-            size_t offset = m_scene->GetDrawInfosOpaque().size() * sizeof(vk::DrawIndexedIndirectCommand);
-            uint32_t count = static_cast<uint32_t>(m_scene->GetDrawInfosAlphaCut().size() + m_scene->GetDrawInfosAlphaBlend().size());
+            size_t offset = (m_scene->GetDrawInfosOpaque().size() + m_scene->GetDrawInfosAlphaCut().size()) * sizeof(vk::DrawIndexedIndirectCommand);
+            uint32_t count = static_cast<uint32_t>(m_scene->GetDrawInfosAlphaBlend().size());
 
             cmd->BeginPass(7, m_attachments.data(), "GbufferTransparentPass");
             cmd->BindIndexBuffer(m_scene->GetBuffer(), 0);

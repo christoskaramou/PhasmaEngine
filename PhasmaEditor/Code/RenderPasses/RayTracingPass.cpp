@@ -18,7 +18,7 @@ namespace pe
     void RayTracingPass::Init()
     {
         m_scene = nullptr;
-        m_display = Context::Get()->GetSystem<RendererSystem>()->GetViewportRT(); // Write to Viewport for PostProc
+        m_display = Context::Get()->GetSystem<RendererSystem>()->GetViewportRT();
         m_uniforms.resize(RHII.GetSwapchainImageCount());
     }
 
@@ -32,12 +32,14 @@ namespace pe
         // Shaders
         Shader *rayGen = Shader::Create(Path::Assets + "Shaders/RayTracing/RayTrace.hlsl", vk::ShaderStageFlagBits::eRaygenKHR, "raygeneration", defines, ShaderCodeType::HLSL);
         Shader *closestHit = Shader::Create(Path::Assets + "Shaders/RayTracing/RayTrace.hlsl", vk::ShaderStageFlagBits::eClosestHitKHR, "closesthit", defines, ShaderCodeType::HLSL);
+        Shader *anyHit = Shader::Create(Path::Assets + "Shaders/RayTracing/RayTrace.hlsl", vk::ShaderStageFlagBits::eAnyHitKHR, "anyhit", defines, ShaderCodeType::HLSL);
         Shader *miss = Shader::Create(Path::Assets + "Shaders/RayTracing/RayTrace.hlsl", vk::ShaderStageFlagBits::eMissKHR, "miss", defines, ShaderCodeType::HLSL);
 
         m_passInfo->name = "RayTracingPipeline";
         m_passInfo->acceleration.rayGen = rayGen;
         m_passInfo->acceleration.miss = {miss};
-        m_passInfo->acceleration.hitGroups = {{.closestHit = closestHit}};
+        m_passInfo->acceleration.hitGroups = {{.closestHit = closestHit, .anyHit = anyHit}};
+        m_passInfo->acceleration.maxRecursionDepth = 4;
         m_passInfo->Update();
     }
 
