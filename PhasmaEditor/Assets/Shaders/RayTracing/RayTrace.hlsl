@@ -17,6 +17,7 @@ struct HitPayload
     float  t;
     uint   hitKind;
     uint   rayType; // 0: Primary, 1: Shadow
+    uint   depth;
 };
 
 struct Vertex
@@ -194,22 +195,24 @@ float TraceShadowRay(float3 origin, float3 dir, float dist)
     ray.TMax      = dist;
 
     HitPayload shadowPayload;
-    shadowPayload.radiance = 0.0.xxx;
-    shadowPayload.t        = 0.0; // Init as Hit (0.0) -> Miss will set to -1.0
+    shadowPayload.radiance = 1.0.xxx; // Init as visible
+    shadowPayload.t        = 0.0; // Init as Hit -> Miss will set to -1.0
     shadowPayload.hitKind  = 0;
     shadowPayload.rayType  = 1; // Mark as Shadow Ray
 
     TraceRay(
         tlas,
-        RAY_FLAG_ACCEPT_FIRST_HIT_AND_END_SEARCH | RAY_FLAG_SKIP_CLOSEST_HIT_SHADER, // Opaque shadow
+        RAY_FLAG_SKIP_CLOSEST_HIT_SHADER, // Disable opaque flag to allow AnyHit
         0xFF,
-        0, 0, 0, // miss shader index 0 (same as primary)
+        0, 0, 0,
         ray,
         shadowPayload
     );
 
-    // If misses, t becomes -1.0. If hits, it remains 0.0 (or whatever initialized to, but NOT -1.0).
-    return (shadowPayload.t == -1.0) ? 1.0 : 0.0;
+    if (shadowPayload.t != -1.0)
+        return 0.0;
+        
+    return shadowPayload.radiance.x; // Assumes monochromatic for now or use .rgb in DirectLight
 }
 
 float3 RT_DirectLight(float3 worldPos, float3 materialNormal, float3 V, float3 albedo, float metallic, float roughness, float3 F0, float occlusion, float shadow)
@@ -310,30 +313,15 @@ void raygeneration()
     payload.t        = -1.0;
     payload.hitKind  = 0;
     payload.rayType  = 0;
+    payload.depth    = 0;
 
-    // Force bindings to be visible in RayGen reflection - use a valid condition
     if (launchIndex.x == 0 && launchIndex.y == 0) 
     {
-        uint dummyId = 0;
-        
-        // Set 0 Bindings
-        // - bindings 0 (tlas), 1 (output), 2 (data) are used in main logic
-        // - bindings 3 (constants), 4 (sampler), 5 (textures) used here:
-        float4 dBaseColor = GetBaseColor(dummyId, float2(0,0)); 
-        
-        // - bindings 6 (geometry), 7 (meshInfos) used here:
-        uint3 dIndices = GetIndices(dummyId, 0); 
-        
-        // - binding 8 (skybox) used here:
+        float4 dBaseColor = GetBaseColor(0, float2(0,0));
+        uint3 dIndices = GetIndices(0, 0); 
         float3 dSky = skybox.SampleLevel(material_sampler, float3(0,0,1), 0).rgb;
-
-        // Set 1 Bindings
-        // - binding 0 (Lights)
         float3 dLight = cb_sun.color.rgb; 
-        // - binding 1 (LightBuffer)
         float dBuffer = ubo_lightsIntensity;
-
-        // Accumulate to payload to prevent optimization
         payload.radiance += dBaseColor.rgb + float3(dIndices) * 0.000001 + dSky * 0.000001 + dLight * 0.000001 + dBuffer * 0.000001;
     }
 
@@ -350,6 +338,37 @@ void raygeneration()
     );
 
     output[launchIndex.xy] = float4(payload.radiance, 1.0);
+}
+
+[shader("anyhit")]
+void anyhit(inout HitPayload payload, in BuiltInTriangleIntersectionAttributes attr)
+{
+    uint id = InstanceID();
+    uint primitiveId = PrimitiveIndex();
+
+    uint textureMask = constants[id].textureMask;
+    
+    if (!HasTexture(textureMask, TEX_BASE_COLOR_BIT))
+        return;
+
+    uint3 indices = GetIndices(id, primitiveId);
+    Vertex v0 = GetVertex(id, indices.x);
+    Vertex v1 = GetVertex(id, indices.y);
+    Vertex v2 = GetVertex(id, indices.z);
+
+    float3 barycentricCoords = float3(1.0f - attr.barycentrics.x - attr.barycentrics.y, attr.barycentrics.x, attr.barycentrics.y);
+    float2 uv = v0.uv * barycentricCoords.x + v1.uv * barycentricCoords.y + v2.uv * barycentricCoords.z;
+
+    float4 baseColor = GetBaseColor(id, uv);
+    if (baseColor.a < constants[id].alphaCut)
+    {
+        IgnoreHit();
+    }
+    else if (payload.rayType == 1 && baseColor.a < 1.0)
+    {
+        payload.radiance *= (1.0 - baseColor.a);
+        IgnoreHit();
+    }
 }
 
 [shader("closesthit")]
@@ -372,15 +391,12 @@ void closesthit(inout HitPayload payload, in BuiltInTriangleIntersectionAttribut
     
     // World Space conversion
     float3x4 objToWorld = ObjectToWorld3x4();
-    float3x3 worldRotation3x3 = remove_scale3x3((float3x3)objToWorld); // Remove scale for normal/tangent transform
-    
-    //float3 normalWorld = normalize(mul(normalObj, transpose(worldRotation3x3)));
+    float3x3 worldRotation3x3 = remove_scale3x3((float3x3)objToWorld);
     float3 normalWorld = normalize(mul(worldRotation3x3, normalObj));
     float3 positionWorld = WorldRayOrigin() + WorldRayDirection() * RayTCurrent();
 
     // Tangent Space
     float3 tangentObj = GetTriangleTangent(v0.position, v1.position, v2.position, v0.uv, v1.uv, v2.uv);
-    //float3 tangentWorld = normalize(mul(tangentObj, transpose(worldRotation3x3)));
     float3 tangentWorld = normalize(mul(worldRotation3x3, tangentObj));
     
     // GBuffer Logic Adaptation
@@ -390,14 +406,6 @@ void closesthit(inout HitPayload payload, in BuiltInTriangleIntersectionAttribut
     float4 baseColorFactor = GetBaseColorFactor(id);
     float4 sampledBaseColor = HasTexture(textureMask, TEX_BASE_COLOR_BIT) ? GetBaseColor(id, uv) : float4(1.0f, 1.0f, 1.0f, 1.0f);
     float4 combinedColor = sampledBaseColor * color * baseColorFactor;
-    
-    // Alpha Test
-    if (combinedColor.a < constants[id].alphaCut)
-    {
-        // Ideally we should ignore this hit (AnyHit shader needed for full correctness), 
-        // but for ClosestHit we just render it or treat as transparent. 
-        // Real alpha testing requires AnyHit.
-    }
 
     // 2. Material Properties
     float3 mrSample = HasTexture(textureMask, TEX_METAL_ROUGH_BIT) ? GetMetallicRoughness(id, uv).xyz : float3(0.0f, 1.0f, 1.0f);
@@ -413,7 +421,6 @@ void closesthit(inout HitPayload payload, in BuiltInTriangleIntersectionAttribut
     float3 emissive = emissiveSample * GetEmissiveFactor(id);
 
     // 3. Normal Mapping
-    // Explicit TBN
     tangentWorld = normalize(tangentWorld - dot(tangentWorld, normalWorld) * normalWorld);
     float3 bitangentWorld = cross(normalWorld, tangentWorld); 
     float3x3 TBN = float3x3(tangentWorld, bitangentWorld, normalWorld);
@@ -439,12 +446,39 @@ void closesthit(inout HitPayload payload, in BuiltInTriangleIntersectionAttribut
     // Point Lights
     for (int i = 0; i < MAX_POINT_LIGHTS; i++)
     {
-         // Simple check to skip unused lights (intensity 0 or very far)
-         if (cb_pointLights[i].color.w > 0.0) // .w is unused in struct but maybe packed? Struct has color + pos.
+         if (cb_pointLights[i].color.w > 0.0)
              lighting += RT_ComputePointLight(i, positionWorld, N, V, combinedColor.rgb, metallic, roughness, F0, occlusion);
     }
 
     lighting += emissive;
+
+    // Transparency
+    if (combinedColor.a < 1.0f && payload.depth < 3)
+    {
+        RayDesc ray;
+        ray.Origin    = positionWorld;
+        ray.Direction = WorldRayDirection();
+        ray.TMin      = 0.001;
+        ray.TMax      = 10000.0;
+
+        HitPayload transPayload;
+        transPayload.radiance = 0.0.xxx;
+        transPayload.t        = -1.0;
+        transPayload.hitKind  = 0;
+        transPayload.rayType  = 0;
+        transPayload.depth    = payload.depth + 1;
+
+        TraceRay(
+            tlas,
+            RAY_FLAG_NONE,
+            0xFF,
+            0, 0, 0,
+            ray,
+            transPayload
+        );
+        
+        lighting = lerp(transPayload.radiance, lighting, combinedColor.a);
+    }
 
     payload.radiance = lighting;
     payload.t        = RayTCurrent();
@@ -461,11 +495,9 @@ void miss(inout HitPayload payload)
         return;
     }
 
-    // Simple sky gradient based on ray direction (works even without other resources)
-    float3 d = normalize(WorldRayDirection());
-    
-    // Sample skybox
-    payload.radiance = skybox.SampleLevel(material_sampler, d, 0).rgb;
+    // sky gradient based on ray direction (works even without other resources)
+    float3 direction = normalize(WorldRayDirection());
+    payload.radiance = skybox.SampleLevel(material_sampler, direction, 0).rgb;
     payload.t        = -1.0;
     payload.hitKind  = 0;
 }

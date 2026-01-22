@@ -59,7 +59,7 @@ namespace pe
 
             uint32_t frame = RHII.GetFrameIndex();
             size_t offset = 0;
-            uint32_t count = static_cast<uint32_t>(m_scene->GetDrawInfosOpaque().size());
+            uint32_t count = static_cast<uint32_t>(m_scene->GetDrawInfosOpaque().size() + m_scene->GetDrawInfosAlphaCut().size());
 
             cmd->BeginPass(1, m_attachments.data(), "DepthPass");
             cmd->SetViewport(0.f, 0.f, m_depthStencil->GetWidth_f(), m_depthStencil->GetHeight_f());

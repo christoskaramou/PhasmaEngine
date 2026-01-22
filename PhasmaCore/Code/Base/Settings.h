@@ -43,7 +43,7 @@ namespace pe
         float motion_blur_strength = 1.0f;
         int motion_blur_samples = 16;
         bool IBL = true;
-        float IBL_intensity = 0.75f;
+        float IBL_intensity = 0.4f;
         float lights_intensity = 7.0f;
         float lights_range = 7.0f;
         bool randomize_lights = false;
