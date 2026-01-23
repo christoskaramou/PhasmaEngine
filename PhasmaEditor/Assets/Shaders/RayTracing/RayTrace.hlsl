@@ -66,6 +66,7 @@ struct Vertex
     float ubo_lightsIntensity;
     float ubo_lightsRange;
     uint ubo_shadows;
+    uint ubo_use_Disney_PBR;
 };
 
 static const uint MATRIX_SIZE = 64u;
@@ -179,7 +180,21 @@ float3 ComputeIBL(float3 N, float3 V, float3 albedo, float metallic, float rough
     float mip = roughness * roughness * 8.0; 
     float3 prefilteredColor = skybox.SampleLevel(material_sampler, R, mip).rgb;
     float2 envBRDF = LutIBL.SampleLevel(material_sampler, float2(NdotV, roughness), 0).xy;
-    float3 specular = prefilteredColor * (kS * envBRDF.x + envBRDF.y);
+    float3 reflectivity = kS * envBRDF.x + envBRDF.y;
+    
+    if (ubo_use_Disney_PBR)
+    {
+        float E = envBRDF.x + envBRDF.y;
+        float3 energyCompensation = 1.0 + F0 * (1.0 / max(E, 0.001) - 1.0);
+        reflectivity *= energyCompensation;
+    }
+    
+    // Specular Occlusion? RayTrace might not have 'occlusion' passed here, but it should.
+    // Specular Occlusion is not passed to ComputeIBL currently. 
+    // And RT usually relies on trace for occlusion.
+    // So assume we just apply compensation.
+    
+    float3 specular = prefilteredColor * reflectivity;
     
     return kD * diffuse + specular; 
 }
@@ -232,10 +247,26 @@ float3 RT_DirectLight(float3 worldPos, float3 materialNormal, float3 V, float3 a
     float3 specularFresnel = Fresnel(F0, HoV);
     
     float NoL_sat = saturate(NoL_raw);
-    float3 specRef = cb_sun.color.rgb * intensity * NoL_sat * shadow * CookTorranceSpecular(materialNormal, H, NoL_clamped, NoV_clamped, specularFresnel, roughness);
-    float3 diffRef = cb_sun.color.rgb * intensity * NoL_sat * shadow * (1.0 - specularFresnel) * (1.0 / PI);
     
-    float3 diffuseLight = diffRef * albedo * (1.0 - metallic) * occlusion;
+    float3 specRef;
+    if (ubo_use_Disney_PBR)
+        specRef = cb_sun.color.rgb * intensity * NoL_sat * shadow * CookTorranceSpecular_Disney(materialNormal, H, NoL_clamped, NoV_clamped, specularFresnel, roughness);
+    else
+        specRef = cb_sun.color.rgb * intensity * NoL_sat * shadow * CookTorranceSpecular_GSchlick(materialNormal, H, NoL_clamped, NoV_clamped, specularFresnel, roughness);
+
+    float3 diffRef;
+    if (ubo_use_Disney_PBR)
+    {
+        float LoH = clamp(dot(L, H), 0.001, 1.0);
+        float3 disneyDiffuse = DisneyDiffuse(albedo, NoV_clamped, NoL_clamped, LoH, roughness);
+        diffRef = cb_sun.color.rgb * intensity * NoL_sat * shadow * (1.0 - specularFresnel) * disneyDiffuse;
+    }
+    else
+    {
+        diffRef = cb_sun.color.rgb * intensity * NoL_sat * shadow * (1.0 - specularFresnel) * (albedo / PI);
+    }
+    
+    float3 diffuseLight = diffRef * (1.0 - metallic) * occlusion;
     
     return diffuseLight + specRef;
 }
@@ -267,10 +298,26 @@ float3 RT_ComputePointLight(int index, float3 worldPos, float3 materialNormal, f
     float3 specularFresnel = Fresnel(F0, HoV);
     
     float NoL_sat = saturate(NoL_raw);
-    float3 specRef = cb_pointLights[index].color.rgb * intensity * attenuation * NoL_sat * shadow * CookTorranceSpecular(materialNormal, H, NoL_clamped, NoV_clamped, specularFresnel, roughness);
-    float3 diffRef = cb_pointLights[index].color.rgb * intensity * attenuation * NoL_sat * shadow * (1.0 - specularFresnel) * (1.0 / PI);
     
-    float3 diffuseLight = diffRef * albedo * (1.0 - metallic) * occlusion;
+    float3 specRef;
+    if (ubo_use_Disney_PBR)
+        specRef = cb_pointLights[index].color.rgb * intensity * attenuation * NoL_sat * shadow * CookTorranceSpecular_Disney(materialNormal, H, NoL_clamped, NoV_clamped, specularFresnel, roughness);
+    else
+        specRef = cb_pointLights[index].color.rgb * intensity * attenuation * NoL_sat * shadow * CookTorranceSpecular_GSchlick(materialNormal, H, NoL_clamped, NoV_clamped, specularFresnel, roughness);
+
+    float3 diffRef;
+    if (ubo_use_Disney_PBR)
+    {
+        float LoH = clamp(dot(L, H), 0.001, 1.0);
+        float3 disneyDiffuse = DisneyDiffuse(albedo, NoV_clamped, NoL_clamped, LoH, roughness);
+        diffRef = cb_pointLights[index].color.rgb * intensity * attenuation * NoL_sat * shadow * (1.0 - specularFresnel) * disneyDiffuse;
+    }
+    else
+    {
+        diffRef = cb_pointLights[index].color.rgb * intensity * attenuation * NoL_sat * shadow * (1.0 - specularFresnel) * (albedo / PI);
+    }
+    
+    float3 diffuseLight = diffRef * (1.0 - metallic) * occlusion;
     
     return diffuseLight + specRef;
 }

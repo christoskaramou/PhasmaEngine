@@ -65,6 +65,7 @@ namespace pe
         bool dynamic_rendering = true;
         bool ray_tracing_support = false;
         bool use_ray_tracing = false;
+        bool use_Disney_PBR = true;
         vk::PresentModeKHR preferred_present_mode = vk::PresentModeKHR::eMailbox;
     };
 } // namespace pe

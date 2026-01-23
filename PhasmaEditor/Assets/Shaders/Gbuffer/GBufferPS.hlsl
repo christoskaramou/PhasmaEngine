@@ -43,8 +43,8 @@ PS_OUTPUT_Gbuffer mainPS(PS_INPUT_Gbuffer input)
     float occlusion = lerp(1.0f, occlusionSample, input.metRoughAlphacutOcl.w);
 
     output.normal = CalculateNormal(input.positionWS.xyz, tangentNormal, input.normal, input.uv) * 0.5f + 0.5f;
-    output.albedo = float4(combinedColor.xyz * occlusion, combinedColor.a);
-    output.metRough = float3(0.0f, roughness, metallic);
+    output.albedo = float4(combinedColor.xyz, combinedColor.a);
+    output.metRough = float3(occlusion, roughness, metallic);
     output.emissive = float4(emissiveSample * input.emissiveFactor, 0.0f);
     output.transparency = pc.transparentPass ? 1.0f : 0.0f;
 

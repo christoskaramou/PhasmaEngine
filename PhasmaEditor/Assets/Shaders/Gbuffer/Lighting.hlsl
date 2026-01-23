@@ -34,6 +34,7 @@ TexSamplerDecl(6, 0, Emission)
     float       cb_lightsIntensity;
     float       cb_lightsRange;
     uint        cb_shadows;
+    uint        cb_use_Disney_PBR;
 };
 TexSamplerDecl(8, 0, Transparency)
 TexSamplerDecl(9, 0, LutIBL)
@@ -180,11 +181,29 @@ float3 DirectLight(Material material, float3 worldPos, float3 cameraPos, float3 
 
     float3 F0               = ComputeF0(material.albedo, material.metallic);
     float3 specularFresnel  = Fresnel(F0, HoV);
-    float3 specRef          = cb_sun.color.xyz * NoL * shadow * CookTorranceSpecular(N, H, NoL, NoV, specularFresnel, roughness);
-    float3 diffRef          = cb_sun.color.xyz * NoL * shadow * (1.0 - specularFresnel) * (1.0 / PI);
+    
+    // Specular
+    float3 specRef;
+    if (cb_use_Disney_PBR)
+        specRef = cb_sun.color.xyz * NoL * shadow * CookTorranceSpecular_Disney(N, H, NoL, NoV, specularFresnel, roughness);
+    else
+        specRef = cb_sun.color.xyz * NoL * shadow * CookTorranceSpecular_GSchlick(N, H, NoL, NoV, specularFresnel, roughness);
+    
+    // Diffuse
+    float3 diffRef;
+    if (cb_use_Disney_PBR)
+    {
+        float LoH = clamp(dot(L, H), 0.001, 1.0);
+        float3 disneyDiffuse = DisneyDiffuse(material.albedo, NoV, NoL, LoH, roughness);
+        diffRef = cb_sun.color.xyz * NoL * shadow * (1.0 - specularFresnel) * disneyDiffuse;
+    }
+    else
+    {
+        diffRef = cb_sun.color.xyz * NoL * shadow * (1.0 - specularFresnel) * (material.albedo / PI);
+    }
 
     float3 reflectedLight   = specRef;
-    float3 diffuseLight     = diffRef * material.albedo * (1.0 - material.metallic) * occlusion;
+    float3 diffuseLight     = diffRef * (1.0 - material.metallic) * occlusion;
     float3 lighting         = reflectedLight + diffuseLight;
 
     return lighting * cb_sun.color.a;
@@ -220,11 +239,29 @@ float3 ComputePointLight(int lightIndex, Material material, float3 worldPos, flo
 
     float3 F0               = ComputeF0(material.albedo, material.metallic);
     float3 specularFresnel  = Fresnel(F0, HoV);
-    float3 specRef          = NoL * CookTorranceSpecular(N, H, NoL, NoV, specularFresnel, roughness);
-    float3 diffRef          = NoL * (1.0 - specularFresnel) * (1.0 / PI);
+    
+    // Specular
+    float3 specRef;
+    if (cb_use_Disney_PBR)
+        specRef = NoL * CookTorranceSpecular_Disney(N, H, NoL, NoV, specularFresnel, roughness);
+    else
+        specRef = NoL * CookTorranceSpecular_GSchlick(N, H, NoL, NoV, specularFresnel, roughness);
+    
+    // Diffuse
+    float3 diffRef;
+    if (cb_use_Disney_PBR)
+    {
+        float LoH = clamp(dot(L, H), 0.001, 1.0);
+        float3 disneyDiffuse = DisneyDiffuse(material.albedo, NoV, NoL, LoH, roughness);
+        diffRef = NoL * (1.0 - specularFresnel) * disneyDiffuse;
+    }
+    else
+    {
+        diffRef = NoL * (1.0 - specularFresnel) * (material.albedo / PI);
+    }
 
     float3 reflectedLight   = specRef;
-    float3 diffuseLight     = diffRef * material.albedo * (1.0 - material.metallic) * occlusion;
+    float3 diffuseLight     = diffRef * (1.0 - material.metallic) * occlusion;
 
     return pointColor * (reflectedLight + diffuseLight);
 }
@@ -285,7 +322,8 @@ IBL ImageBasedLighting(Material material,
                        float3 normal,
                        float3 camera_to_pixel,
                        TextureCube cube, SamplerState sampler_cube,
-                       Texture2D lutIBL, SamplerState sampler_lutIBL)
+                       Texture2D lutIBL, SamplerState sampler_lutIBL,
+                       float occlusion)
 {
     float3 reflection   = reflect(camera_to_pixel, normal);
     reflection          = GetSpecularDominantDir(normal, reflection, material.roughness);
@@ -297,14 +335,28 @@ IBL ImageBasedLighting(Material material,
 
     // Diffuse
     float3 irradiance   = SampleEnvironment(cube, sampler_cube, normal, 8);
-    float3 diffuse      = irradiance * material.albedo;
+    float3 diffuse      = irradiance * material.albedo * occlusion;
 
     // Specular
     float  mipLevel         = max(0.001f, material.roughness * material.roughness) * 8.0f; // lod 8
     float3 prefilteredColor = SampleEnvironment(cube, sampler_cube, reflection, mipLevel);
     float2 envBRDF          = lutIBL.Sample(sampler_lutIBL, float2(NdV, material.roughness)).xy;
     float3 reflectivity     = F * envBRDF.x + envBRDF.y;
-    float3 specular         = prefilteredColor * reflectivity;
+    
+    // Multi-scattering energy compensation
+    // Compensates for energy loss at high roughness in single-scattering GGX
+    float E = envBRDF.x + envBRDF.y;
+    
+    // Multi-scattering energy compensation
+    if (cb_use_Disney_PBR)
+    {
+        // Compensates for energy loss at high roughness in single-scattering GGX
+        float3 energyCompensation = 1.0 + material.F0 * (1.0 / max(E, 0.001) - 1.0);
+        reflectivity *= energyCompensation;
+    }
+
+    float  specularOcclusion = GetSpecularOcclusion(NdV, material.roughness, occlusion);
+    float3 specular          = prefilteredColor * reflectivity * specularOcclusion;
 
     IBL ibl;
     ibl.final_color         = kD * diffuse + specular;
