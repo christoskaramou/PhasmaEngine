@@ -165,11 +165,22 @@ float3 GetTriangleTangent(float3 v0, float3 v1, float3 v2, float2 uv0, float2 uv
 // Simple PBR IBL
 float3 ComputeIBL(float3 N, float3 V, float3 albedo, float metallic, float roughness, float3 F0)
 {
-    float NdotV = max(dot(N, V), 0.0);
+    float NdotV = saturate(dot(N, V));
     float3 R = reflect(-V, N);
 
-    // Fresnel Schlick
-    float3 kS = F0 + (max(1.0 - roughness, F0) - F0) * pow(1.0 - NdotV, 5.0);
+    // Sample DFG LUT
+    float2 envBRDF = LutIBL.SampleLevel(material_sampler, float2(NdotV, roughness), 0).xy;
+    
+    // Integrated specular response (Fr = F0*A + B)
+    float3 Fr = F0 * envBRDF.x + envBRDF.y;
+    
+    // Multi-scattering energy compensation
+    float E = envBRDF.x + envBRDF.y;
+    float3 energyCompensation = 1.0 + F0 * (1.0 / max(E, 0.001) - 1.0);
+    Fr *= energyCompensation;
+    
+    // Energy split using the same Fr term (consistent partition)
+    float3 kS = saturate(Fr);
     float3 kD = (1.0 - kS) * (1.0 - metallic);
 
     // Irradiance (Diffuse)
@@ -179,22 +190,7 @@ float3 ComputeIBL(float3 N, float3 V, float3 albedo, float metallic, float rough
     // Specular (Reflection)
     float mip = roughness * roughness * 8.0; 
     float3 prefilteredColor = skybox.SampleLevel(material_sampler, R, mip).rgb;
-    float2 envBRDF = LutIBL.SampleLevel(material_sampler, float2(NdotV, roughness), 0).xy;
-    float3 reflectivity = kS * envBRDF.x + envBRDF.y;
-    
-    if (ubo_use_Disney_PBR)
-    {
-        float E = envBRDF.x + envBRDF.y;
-        float3 energyCompensation = 1.0 + F0 * (1.0 / max(E, 0.001) - 1.0);
-        reflectivity *= energyCompensation;
-    }
-    
-    // Specular Occlusion? RayTrace might not have 'occlusion' passed here, but it should.
-    // Specular Occlusion is not passed to ComputeIBL currently. 
-    // And RT usually relies on trace for occlusion.
-    // So assume we just apply compensation.
-    
-    float3 specular = prefilteredColor * reflectivity;
+    float3 specular = prefilteredColor * kS;
     
     return kD * diffuse + specular; 
 }
@@ -231,7 +227,7 @@ float TraceShadowRay(float3 origin, float3 dir, float dist)
     return shadowPayload.radiance.x; // Assumes monochromatic for now or use .rgb in DirectLight
 }
 
-float3 RT_DirectLight(float3 worldPos, float3 materialNormal, float3 V, float3 albedo, float metallic, float roughness, float3 F0, float occlusion, float shadow)
+float3 RT_DirectLight(float3 worldPos, float3 materialNormal, float3 V, float3 albedo, float metallic, float roughness, float3 F0, float occlusion, float shadow, float3 energyCompensation)
 {
     float3 lightDir = cb_sun.direction.xyz;
     float3 L        = normalize(lightDir);
@@ -253,7 +249,9 @@ float3 RT_DirectLight(float3 worldPos, float3 materialNormal, float3 V, float3 a
         specRef = cb_sun.color.rgb * intensity * NoL_sat * shadow * CookTorranceSpecular_Disney(materialNormal, H, NoL_clamped, NoV_clamped, specularFresnel, roughness);
     else
         specRef = cb_sun.color.rgb * intensity * NoL_sat * shadow * CookTorranceSpecular_GSchlick(materialNormal, H, NoL_clamped, NoV_clamped, specularFresnel, roughness);
-
+    
+    specRef *= energyCompensation;
+    
     float3 diffRef;
     if (ubo_use_Disney_PBR)
     {
@@ -271,7 +269,7 @@ float3 RT_DirectLight(float3 worldPos, float3 materialNormal, float3 V, float3 a
     return diffuseLight + specRef;
 }
 
-float3 RT_ComputePointLight(int index, float3 worldPos, float3 materialNormal, float3 V, float3 albedo, float metallic, float roughness, float3 F0, float occlusion)
+float3 RT_ComputePointLight(int index, float3 worldPos, float3 materialNormal, float3 V, float3 albedo, float metallic, float roughness, float3 F0, float occlusion, float3 energyCompensation)
 {
     float3 lightPos = cb_pointLights[index].position.xyz;
     float3 lightDirFull = worldPos - lightPos;
@@ -304,6 +302,8 @@ float3 RT_ComputePointLight(int index, float3 worldPos, float3 materialNormal, f
         specRef = cb_pointLights[index].color.rgb * intensity * attenuation * NoL_sat * shadow * CookTorranceSpecular_Disney(materialNormal, H, NoL_clamped, NoV_clamped, specularFresnel, roughness);
     else
         specRef = cb_pointLights[index].color.rgb * intensity * attenuation * NoL_sat * shadow * CookTorranceSpecular_GSchlick(materialNormal, H, NoL_clamped, NoV_clamped, specularFresnel, roughness);
+
+    specRef *= energyCompensation;
 
     float3 diffRef;
     if (ubo_use_Disney_PBR)
@@ -468,6 +468,12 @@ void closesthit(inout HitPayload payload, in BuiltInTriangleIntersectionAttribut
     float3 V = normalize(-WorldRayDirection());
     float3 F0 = float3(0.04, 0.04, 0.04);
     F0 = lerp(F0, combinedColor.rgb, metallic);
+    
+    // Energy Compensation
+    float NdV = clamp(dot(N, V), 0.001, 1.0); 
+    float2 envBRDF = LutIBL.SampleLevel(material_sampler, float2(NdV, roughness), 0).xy;
+    float E = envBRDF.x + envBRDF.y;
+    float3 energyCompensation = 1.0 + F0 * (1.0 / max(E, 0.001) - 1.0);
 
     float3 lighting = 0.0.xxx;
 
@@ -479,13 +485,13 @@ void closesthit(inout HitPayload payload, in BuiltInTriangleIntersectionAttribut
     lighting *= occlusion;
 
     // Direct Lighting
-    lighting += RT_DirectLight(positionWorld, N, V, combinedColor.rgb, metallic, roughness, F0, occlusion, sunShadow);
+    lighting += RT_DirectLight(positionWorld, N, V, combinedColor.rgb, metallic, roughness, F0, occlusion, sunShadow, energyCompensation);
     
     // Point Lights
     for (int i = 0; i < MAX_POINT_LIGHTS; i++)
     {
          if (cb_pointLights[i].color.w > 0.0)
-             lighting += RT_ComputePointLight(i, positionWorld, N, V, combinedColor.rgb, metallic, roughness, F0, occlusion);
+             lighting += RT_ComputePointLight(i, positionWorld, N, V, combinedColor.rgb, metallic, roughness, F0, occlusion, energyCompensation);
     }
 
     lighting += emissive;

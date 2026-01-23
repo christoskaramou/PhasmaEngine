@@ -9,8 +9,8 @@ PS_OUTPUT_Color mainPS(PS_INPUT_UV input)
 
     float depth = Depth.Sample(sampler_Depth, input.uv).x;
 
-    // if the depth is maximum it hits the skybox
-    if (depth == 0.0)
+    // if the depth is near zero it hits the skybox (use epsilon for robustness)
+    if (depth < 0.0001)
     {
         // Skybox
         float3 wolrdPos  = GetPosFromUV(input.uv, depth, cb_invViewProj);
@@ -21,7 +21,7 @@ PS_OUTPUT_Color mainPS(PS_INPUT_UV input)
     }
 
     float4 albedo    = Albedo.Sample(sampler_Albedo, input.uv);
-    float3 normal    = Normal.Sample(sampler_Normal, input.uv).xyz * 2.0 - 1.0;
+    float3 normal    = normalize(Normal.Sample(sampler_Normal, input.uv).xyz * 2.0 - 1.0);
     float3 metRough  = MetRough.Sample(sampler_MetRough, input.uv).xyz;
     float3 emmission = Emission.Sample(sampler_Emission, input.uv).xyz;
     float3 wolrdPos  = GetPosFromUV(input.uv, depth, cb_invViewProj);
@@ -37,14 +37,21 @@ PS_OUTPUT_Color mainPS(PS_INPUT_UV input)
     float occlusion  = (cb_ssao ? Ssao.Sample(sampler_Ssao, input.uv).x : 1.0) * materialAO;
     float3 fragColor = 0.0;
 
+    // Energy Compensation (Multi-Scattering)
+    float3 V = normalize(cb_camPos.xyz - wolrdPos);
+    float NdV = clamp(dot(normal, V), 0.001, 1.0); // Use 0.001 to avoid NaN
+    float2 envBRDF = LutIBL.Sample(sampler_LutIBL, float2(NdV, material.roughness)).xy;
+    float E = envBRDF.x + envBRDF.y;
+    float3 energyCompensation = 1.0 + material.F0 * (1.0 / max(E, 0.001) - 1.0);
+
     if (cb_shadows)
     {
         float shadow = CalculateShadows(wolrdPos, length(wolrdPos - cb_camPos.xyz), dot(normal, cb_sun.direction.xyz));
-        fragColor    += DirectLight(material, wolrdPos, cb_camPos.xyz, normal, occlusion, shadow);
+        fragColor    += DirectLight(material, wolrdPos, cb_camPos.xyz, normal, occlusion, shadow, energyCompensation);
     }
 
     for (int i = 0; i < pc.num_point_lights; ++i)
-        fragColor += ComputePointLight(i, material, wolrdPos, cb_camPos.xyz, normal, occlusion);
+        fragColor += ComputePointLight(i, material, wolrdPos, cb_camPos.xyz, normal, occlusion, energyCompensation);
 
     // Image Based Lighting
     if (cb_IBL)
