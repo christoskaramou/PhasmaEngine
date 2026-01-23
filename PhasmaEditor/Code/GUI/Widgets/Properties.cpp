@@ -85,6 +85,7 @@ namespace pe
             ImGui::Checkbox("SSAO", &gSettings.ssao);
             ImGui::Checkbox("SSR", &gSettings.ssr);
         }
+        ImGui::Checkbox("Disney PBR", &gSettings.use_Disney_PBR);
         ImGui::Checkbox("FXAA", &gSettings.fxaa);
         ImGui::Checkbox("TAA", &gSettings.taa);
         if (gSettings.taa)

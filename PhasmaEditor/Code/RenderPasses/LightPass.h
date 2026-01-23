@@ -14,6 +14,7 @@ namespace pe
         float lights_intensity = 7.0f;
         float lights_range = 7.0f;
         uint32_t shadows = 1;
+        uint32_t use_Disney_PBR = 1;
     };
 
     class Image;

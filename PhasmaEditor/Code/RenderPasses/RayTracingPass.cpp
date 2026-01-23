@@ -117,6 +117,7 @@ namespace pe
         ubo.lights_intensity = gSettings.lights_intensity;
         ubo.lights_range = gSettings.lights_range;
         ubo.shadows = gSettings.shadows ? 1 : 0;
+        ubo.use_Disney_PBR = gSettings.use_Disney_PBR ? 1 : 0;
 
         BufferRange range{};
         range.data = &ubo;

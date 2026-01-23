@@ -33,7 +33,8 @@ PS_OUTPUT_Color mainPS(PS_INPUT_UV input)
     material.F0        = lerp(0.04f, material.albedo, material.metallic);
 
     // Ambient
-    float occlusion  = cb_ssao ? Ssao.Sample(sampler_Ssao, input.uv).x : 1.0;
+    float materialAO = metRough.x;
+    float occlusion  = (cb_ssao ? Ssao.Sample(sampler_Ssao, input.uv).x : 1.0) * materialAO;
     float3 fragColor = 0.0;
 
     if (cb_shadows)
@@ -48,7 +49,7 @@ PS_OUTPUT_Color mainPS(PS_INPUT_UV input)
     // Image Based Lighting
     if (cb_IBL)
     {
-        IBL ibl = ImageBasedLighting(material, normal, normalize(wolrdPos - cb_camPos.xyz), Cube, sampler_Cube, LutIBL, sampler_LutIBL);
+        IBL ibl = ImageBasedLighting(material, normal, normalize(wolrdPos - cb_camPos.xyz), Cube, sampler_Cube, LutIBL, sampler_LutIBL, occlusion);
         fragColor += ibl.final_color * cb_IBL_intensity;
     }
 
