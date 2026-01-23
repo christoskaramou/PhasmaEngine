@@ -33,6 +33,7 @@ namespace pe
     {
         m_skyBoxDay.LoadSkyBox(cmd, Path::Assets + "/Skyboxes/golden_gate_hills/golden_gate_hills_4k.hdr");
         m_skyBoxNight.LoadSkyBox(cmd, Path::Assets + "/Skyboxes/rogland_clear_night/rogland_clear_night_4k.hdr");
+        m_ibl_brdf_lut = Image::LoadRGBA8(cmd, Path::Assets + "Objects/ibl_brdf_lut.png");
     }
 
     void RendererSystem::Init(CommandBuffer *cmd)
@@ -100,7 +101,7 @@ namespace pe
         for (uint32_t i = 0; i < imageCount; i++)
         {
             Semaphore *acquireSemaphore = Semaphore::Create(false, "AcquireSemaphore_" + std::to_string(i));
-            acquireSemaphore->SetStageFlags(vk::PipelineStageFlagBits2::eColorAttachmentOutput | vk::PipelineStageFlagBits2::eComputeShader);
+            acquireSemaphore->SetStageFlags(vk::PipelineStageFlagBits2::eColorAttachmentOutput | vk::PipelineStageFlagBits2::eComputeShader | vk::PipelineStageFlagBits2::eRayTracingShaderKHR | vk::PipelineStageFlagBits2::eTransfer);
             m_acquireSemaphores.push_back(acquireSemaphore);
 
             Semaphore *submitSemaphore = Semaphore::Create(false, "SubmitSemaphore_" + std::to_string(i));
@@ -380,6 +381,7 @@ namespace pe
 
         m_skyBoxDay.Destroy();
         m_skyBoxNight.Destroy();
+        Image::Destroy(m_ibl_brdf_lut);
 
         for (auto &rt : m_renderTargets)
             Image::Destroy(rt.second);

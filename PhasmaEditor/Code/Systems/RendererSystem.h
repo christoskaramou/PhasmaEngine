@@ -35,6 +35,7 @@ namespace pe
         Scene &GetScene() { return m_scene; }
         const SkyBox &GetSkyBoxDay() const { return m_skyBoxDay; }
         const SkyBox &GetSkyBoxNight() const { return m_skyBoxNight; }
+        Image *GetIBL_LUT() const { return m_ibl_brdf_lut; }
         const GUI &GetGUI() const { return m_gui; }
         GUI &GetGUI() { return m_gui; }
         void ToggleGUI() { m_gui.ToggleRender(); }
@@ -83,6 +84,7 @@ namespace pe
         Scene m_scene;
         SkyBox m_skyBoxDay;
         SkyBox m_skyBoxNight;
+        Image *m_ibl_brdf_lut;
         GUI m_gui;
     };
 } // namespace pe

@@ -47,7 +47,12 @@ namespace pe
             m_images[i]->m_createInfo.extent.width = actualExtent.width;
             m_images[i]->m_createInfo.extent.height = actualExtent.height;
             m_images[i]->m_trackInfos.resize(1);
-            m_images[i]->m_trackInfos[0].resize(1, ImageTrackInfo{});
+            ImageTrackInfo info{};
+            info.image = m_images[i];
+            info.layout = vk::ImageLayout::eUndefined;
+            info.stageFlags = vk::PipelineStageFlagBits2::eColorAttachmentOutput; // Acquire semaphore blocks this stage
+            info.accessMask = vk::AccessFlagBits2::eNone;
+            m_images[i]->m_trackInfos[0].resize(1, info);
         }
 
         // create image views for each swapchain image
