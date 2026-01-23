@@ -43,6 +43,14 @@ namespace pe
         return content;
     }
 
+    std::vector<uint8_t> FileSystem::ReadAllBytes()
+    {
+        SetReadCursor(0);
+        std::vector<uint8_t> bytes(m_size);
+        m_fstream.read(reinterpret_cast<char *>(bytes.data()), m_size);
+        return bytes;
+    }
+
     std::string FileSystem::ReadLine()
     {
         std::string line;

@@ -4,6 +4,7 @@
 #include "API/Downsampler/Downsampler.h"
 #include "API/RHI.h"
 #include "API/StagingManager.h"
+#include <cstdint>
 
 #define STB_IMAGE_IMPLEMENTATION
 #include "stb/stb_image.h"
@@ -155,6 +156,83 @@ namespace pe
     Image *Image::LoadRGBA32F(CommandBuffer *cmd, const std::string &path)
     {
         return LoadRGBA(cmd, path, vk::Format::eR32G32B32A32Sfloat, true);
+    }
+
+    Image *Image::LoadRaw(CommandBuffer *cmd, const std::string &path, const LoadRawParams &params)
+    {
+        std::vector<uint8_t> bytes;
+        {
+            FileSystem f(path, std::ios::in | std::ios::binary);
+            PE_ERROR_IF(!f.IsOpen(), ("Failed to open raw image file: " + path).c_str());
+            bytes = f.ReadAllBytes();
+        }
+
+        uint32_t bytesPerPixel = 0;
+        switch (params.format)
+        {
+        case vk::Format::eR16G16Sfloat:
+        case vk::Format::eR8G8B8A8Unorm:
+        case vk::Format::eR8G8B8A8Srgb:
+            bytesPerPixel = 4;
+            break;
+        case vk::Format::eR16G16B16A16Sfloat:
+            bytesPerPixel = 8;
+            break;
+        case vk::Format::eR32G32B32A32Sfloat:
+            bytesPerPixel = 16;
+            break;
+
+        default:
+            PE_ERROR("Unsupported format for LoadRaw");
+            break;
+        }
+
+        const size_t expectedSize = params.width * params.height * bytesPerPixel;
+        PE_ERROR_IF(bytes.size() != expectedSize, ("Raw image size mismatch. Expected " + std::to_string(expectedSize) + " bytes, got " + std::to_string(bytes.size())).c_str());
+
+        vk::ImageCreateInfo info = CreateInfoInit();
+        info.format = params.format;
+        info.extent = vk::Extent3D{params.width, params.height, 1};
+        info.mipLevels = params.generateMips ? Image::CalculateMips(params.width, params.height) : 1;
+        info.usage = vk::ImageUsageFlagBits::eTransferDst | vk::ImageUsageFlagBits::eSampled;
+        if (params.generateMips)
+            info.usage |= vk::ImageUsageFlagBits::eTransferSrc | vk::ImageUsageFlagBits::eStorage;
+        info.initialLayout = vk::ImageLayout::eUndefined;
+
+        Image *image = Image::Create(info, path);
+        image->m_clearColor = Color::Transparent;
+        image->CreateSRV(vk::ImageViewType::e2D);
+
+        vk::SamplerCreateInfo samplerInfo = Sampler::CreateInfoInit();
+        samplerInfo.minFilter = vk::Filter::eLinear;
+        samplerInfo.magFilter = vk::Filter::eLinear;
+        samplerInfo.mipmapMode = params.generateMips ? vk::SamplerMipmapMode::eLinear : vk::SamplerMipmapMode::eNearest;
+        if (params.clampToEdge)
+        {
+            samplerInfo.addressModeU = vk::SamplerAddressMode::eClampToEdge;
+            samplerInfo.addressModeV = vk::SamplerAddressMode::eClampToEdge;
+            samplerInfo.addressModeW = vk::SamplerAddressMode::eClampToEdge;
+        }
+        samplerInfo.mipLodBias = params.mipLodBias;
+        samplerInfo.minLod = 0.0f;
+        samplerInfo.maxLod = params.generateMips ? static_cast<float>(info.mipLevels) : 0.0f;
+        image->m_sampler = Sampler::Create(samplerInfo);
+
+        cmd->CopyDataToImageStaged(image, bytes.data(), static_cast<uint32_t>(bytes.size()));
+
+        if (params.generateMips)
+            cmd->GenerateMipMaps(image);
+
+        ImageBarrierInfo barrier{};
+        barrier.image = image;
+        barrier.layout = vk::ImageLayout::eShaderReadOnlyOptimal;
+        barrier.stageFlags = vk::PipelineStageFlagBits2::eFragmentShader |
+                             vk::PipelineStageFlagBits2::eComputeShader |
+                             vk::PipelineStageFlagBits2::eRayTracingShaderKHR;
+        barrier.accessMask = vk::AccessFlagBits2::eShaderRead;
+        cmd->ImageBarrier(barrier);
+
+        return image;
     }
 
     vk::ImageCreateInfo Image::CreateInfoInit()

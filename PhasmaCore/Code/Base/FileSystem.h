@@ -16,6 +16,7 @@ namespace pe
         inline size_t GetWriteCursor() { return m_fstream.tellp(); }
         inline bool EndOfFile() { return m_fstream.eof(); }
         std::string ReadAll();
+        std::vector<uint8_t> ReadAllBytes();
         std::string ReadLine();
         void Write(const std::string &data);
         void Write(const char *data, size_t size);

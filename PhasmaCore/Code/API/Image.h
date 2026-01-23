@@ -105,6 +105,17 @@ namespace pe
         static Image *LoadRGBA(CommandBuffer *cmd, const std::string &path, vk::Format format, bool isFloat = false);
         static Image *LoadRGBA8(CommandBuffer *cmd, const std::string &path);
         static Image *LoadRGBA32F(CommandBuffer *cmd, const std::string &path);
+        
+        struct LoadRawParams
+        {
+            uint32_t width;
+            uint32_t height;
+            vk::Format format;
+            bool generateMips = false;
+            bool clampToEdge = false;
+            float mipLodBias = 0.0f;
+        };
+        static Image *LoadRaw(CommandBuffer *cmd, const std::string &path, const LoadRawParams &params);
 
         static vk::ImageCreateInfo CreateInfoInit();
 

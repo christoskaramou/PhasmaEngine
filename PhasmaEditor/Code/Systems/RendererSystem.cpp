@@ -33,7 +33,9 @@ namespace pe
     {
         m_skyBoxDay.LoadSkyBox(cmd, Path::Assets + "/Skyboxes/golden_gate_hills/golden_gate_hills_4k.hdr");
         m_skyBoxNight.LoadSkyBox(cmd, Path::Assets + "/Skyboxes/rogland_clear_night/rogland_clear_night_4k.hdr");
-        m_ibl_brdf_lut = Image::LoadRGBA8(cmd, Path::Assets + "Objects/ibl_brdf_lut.png");
+
+        Image::LoadRawParams loadImageParams = {256, 256, vk::Format::eR16G16Sfloat, false, true, 0.0f};
+        m_ibl_brdf_lut = Image::LoadRaw(cmd, Path::Assets + "Objects/ibl_brdf_lut_rg16f_256.bin", loadImageParams);
     }
 
     void RendererSystem::Init(CommandBuffer *cmd)
