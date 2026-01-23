@@ -48,12 +48,13 @@ namespace pe
         return code;
     }
 
-    void ShaderCache::Init(const std::string &sourcePath, size_t definesHash)
+    void ShaderCache::Init(const std::string &sourcePath, const std::string &entryPoint, size_t definesHash)
     {
         m_sourcePath = sourcePath;
         m_code = ParseShader(m_sourcePath);
 
         m_hash = StringHash(m_code);
+        m_hash.Combine(entryPoint);
         m_hash.Combine(definesHash);
 
         m_tempFilePath = Path::Executable;

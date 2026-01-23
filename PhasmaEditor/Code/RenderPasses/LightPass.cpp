@@ -60,8 +60,6 @@ namespace pe
 
     void LightOpaquePass::CreateUniforms(CommandBuffer *cmd)
     {
-        const std::string path = Path::Assets + "Objects/ibl_brdf_lut.png";
-        m_ibl_brdf_lut = Image::LoadRGBA8(cmd, path);
 
         for (auto &uniform : m_uniforms)
         {
@@ -104,7 +102,8 @@ namespace pe
             DSet->SetImageView(6, m_emissiveRT->GetSRV(), m_emissiveRT->GetSampler());
             DSet->SetBuffer(7, m_uniforms[i]);
             DSet->SetImageView(8, m_transparencyRT->GetSRV(), m_transparencyRT->GetSampler());
-            DSet->SetImageView(9, m_ibl_brdf_lut->GetSRV(), m_ibl_brdf_lut->GetSampler());
+            auto *ibl_brdf_lut = GetGlobalSystem<RendererSystem>()->GetIBL_LUT();
+            DSet->SetImageView(9, ibl_brdf_lut->GetSRV(), ibl_brdf_lut->GetSampler());
             DSet->Update();
 
             auto *DSetShadows = sets[1];
@@ -210,7 +209,6 @@ namespace pe
 
     void LightOpaquePass::Destroy()
     {
-        Image::Destroy(m_ibl_brdf_lut);
 
         for (auto &uniform : m_uniforms)
             Buffer::Destroy(uniform);
@@ -263,8 +261,6 @@ namespace pe
 
     void LightTransparentPass::CreateUniforms(CommandBuffer *cmd)
     {
-        const std::string path = Path::Assets + "Objects/ibl_brdf_lut.png";
-        m_ibl_brdf_lut = Image::LoadRGBA8(cmd, path);
 
         for (auto &uniform : m_uniforms)
         {
@@ -307,7 +303,8 @@ namespace pe
             DSet->SetImageView(6, m_emissiveRT->GetSRV(), m_emissiveRT->GetSampler());
             DSet->SetBuffer(7, m_uniforms[i]);
             DSet->SetImageView(8, m_transparencyRT->GetSRV(), m_transparencyRT->GetSampler());
-            DSet->SetImageView(9, m_ibl_brdf_lut->GetSRV(), m_ibl_brdf_lut->GetSampler());
+            auto *ibl_brdf_lut = GetGlobalSystem<RendererSystem>()->GetIBL_LUT();
+            DSet->SetImageView(9, ibl_brdf_lut->GetSRV(), ibl_brdf_lut->GetSampler());
             DSet->Update();
 
             auto *DSetShadows = sets[1];
@@ -416,8 +413,6 @@ namespace pe
 
     void LightTransparentPass::Destroy()
     {
-        Image::Destroy(m_ibl_brdf_lut);
-
         for (auto &uniform : m_uniforms)
             Buffer::Destroy(uniform);
     }

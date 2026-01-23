@@ -89,6 +89,8 @@ namespace pe
                 desc->SetBuffer(6, scene.GetBuffer());
                 desc->SetBuffer(7, scene.GetMeshInfoBuffer());
                 desc->SetImageView(8, skybox->GetSRV());
+                auto *ibl_brdf_lut = rs->GetIBL_LUT();
+                desc->SetImageView(9, ibl_brdf_lut->GetSRV());
                 desc->Update();
             }
 

@@ -164,7 +164,7 @@ float CalculateShadows(float3 worldPos, float depth, float NdL)
 
 float3 DirectLight(Material material, float3 worldPos, float3 cameraPos, float3 materialNormal, float occlusion, float shadow)
 {
-    float roughness = material.roughness * 0.75 + 0.25;
+    float roughness = max(material.roughness, 0.04);
 
     // Compute directional light.
     float3 lightDir = cb_sun.direction.xyz;
@@ -206,7 +206,7 @@ float3 ComputePointLight(int lightIndex, Material material, float3 worldPos, flo
     float3 pointColor       = cb_pointLights[lightIndex].color.xyz * attenuation;
     pointColor              *= cb_lightsIntensity; // intensity
 
-    float roughness = material.roughness * 0.75 + 0.25;
+    float roughness = max(material.roughness, 0.04);
 
     float3 L = lightDir;
     float3 V = normalize(cameraPos - worldPos);

@@ -42,6 +42,53 @@ namespace pe
         m_shader = shader;
 
         spirv_cross::Compiler compiler{shader->GetSpriv(), shader->Size()};
+
+        if (!shader->GetEntryName().empty())
+        {
+            spv::ExecutionModel model = spv::ExecutionModelMax;
+            switch (static_cast<vk::ShaderStageFlagBits>(static_cast<uint32_t>(shader->GetShaderStage())))
+            {
+            case vk::ShaderStageFlagBits::eVertex:
+                model = spv::ExecutionModelVertex;
+                break;
+            case vk::ShaderStageFlagBits::eFragment:
+                model = spv::ExecutionModelFragment;
+                break;
+            case vk::ShaderStageFlagBits::eCompute:
+                model = spv::ExecutionModelGLCompute;
+                break;
+            case vk::ShaderStageFlagBits::eRaygenKHR:
+                model = spv::ExecutionModelRayGenerationKHR;
+                break;
+            case vk::ShaderStageFlagBits::eAnyHitKHR:
+                model = spv::ExecutionModelAnyHitKHR;
+                break;
+            case vk::ShaderStageFlagBits::eClosestHitKHR:
+                model = spv::ExecutionModelClosestHitKHR;
+                break;
+            case vk::ShaderStageFlagBits::eMissKHR:
+                model = spv::ExecutionModelMissKHR;
+                break;
+            case vk::ShaderStageFlagBits::eIntersectionKHR:
+                model = spv::ExecutionModelIntersectionKHR;
+                break;
+            case vk::ShaderStageFlagBits::eCallableKHR:
+                model = spv::ExecutionModelCallableKHR;
+                break;
+            case vk::ShaderStageFlagBits::eTaskEXT:
+                model = spv::ExecutionModelTaskEXT;
+                break;
+            case vk::ShaderStageFlagBits::eMeshEXT:
+                model = spv::ExecutionModelMeshEXT;
+                break;
+            default:
+                PE_ERROR("Unsupported shader stage for reflection entry point selection");
+            }
+
+            if (model != spv::ExecutionModelMax)
+                compiler.set_entry_point(shader->GetEntryName(), model);
+        }
+
         auto active = compiler.get_active_interface_variables();
         spirv_cross::ShaderResources resources = compiler.get_shader_resources();
         compiler.set_enabled_interface_variables(std::move(active));

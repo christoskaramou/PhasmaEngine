@@ -80,7 +80,7 @@ namespace pe
         {
 
             if (m_allowUpdateAfterBind && !pushDescriptor)
-                bindingFlags[i] |= vk::DescriptorBindingFlagBits::eUpdateAfterBind;
+                bindingFlags[i] |= vk::DescriptorBindingFlagBits::eUpdateAfterBind | vk::DescriptorBindingFlagBits::ePartiallyBound;
 
             if (bindingInfos[i].bindless)
             {

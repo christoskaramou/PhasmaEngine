@@ -48,6 +48,7 @@ struct Vertex
 [[vk::binding(6, 0)]] ByteAddressBuffer geometry;
 [[vk::binding(7, 0)]] StructuredBuffer<MeshInfoGPU> meshInfos;
 [[vk::binding(8, 0)]] TextureCube skybox;
+[[vk::binding(9, 0)]] Texture2D LutIBL;
 
 [[vk::binding(0, 1)]] cbuffer Lights
 {
@@ -161,13 +162,13 @@ float3 GetTriangleTangent(float3 v0, float3 v1, float3 v2, float2 uv0, float2 uv
 }
 
 // Simple PBR IBL
-float3 ComputeIBL(float3 N, float3 V, float3 albedo, float metallic, float roughness, float3 F0, float shadow)
+float3 ComputeIBL(float3 N, float3 V, float3 albedo, float metallic, float roughness, float3 F0)
 {
     float NdotV = max(dot(N, V), 0.0);
     float3 R = reflect(-V, N);
 
     // Fresnel Schlick
-    float3 kS = F0 + (1.0 - F0) * pow(1.0 - NdotV, 5.0);
+    float3 kS = F0 + (max(1.0 - roughness, F0) - F0) * pow(1.0 - NdotV, 5.0);
     float3 kD = (1.0 - kS) * (1.0 - metallic);
 
     // Irradiance (Diffuse)
@@ -175,10 +176,10 @@ float3 ComputeIBL(float3 N, float3 V, float3 albedo, float metallic, float rough
     float3 diffuse = irradiance * albedo;
 
     // Specular (Reflection)
-    float mip = roughness * 8.0; 
+    float mip = roughness * roughness * 8.0; 
     float3 prefilteredColor = skybox.SampleLevel(material_sampler, R, mip).rgb;
-    float2 envBRDF = float2(1.0, 0.0); // Simplified
-    float3 specular = prefilteredColor * (kS * envBRDF.x + envBRDF.y) * shadow; 
+    float2 envBRDF = LutIBL.SampleLevel(material_sampler, float2(NdotV, roughness), 0).xy;
+    float3 specular = prefilteredColor * (kS * envBRDF.x + envBRDF.y);
     
     return kD * diffuse + specular; 
 }
@@ -315,16 +316,6 @@ void raygeneration()
     payload.rayType  = 0;
     payload.depth    = 0;
 
-    if (launchIndex.x == 0 && launchIndex.y == 0) 
-    {
-        float4 dBaseColor = GetBaseColor(0, float2(0,0));
-        uint3 dIndices = GetIndices(0, 0); 
-        float3 dSky = skybox.SampleLevel(material_sampler, float3(0,0,1), 0).rgb;
-        float3 dLight = cb_sun.color.rgb; 
-        float dBuffer = ubo_lightsIntensity;
-        payload.radiance += dBaseColor.rgb + float3(dIndices) * 0.000001 + dSky * 0.000001 + dLight * 0.000001 + dBuffer * 0.000001;
-    }
-
     // (AS, RayFlags, InstanceMask, RayContributionToHitGroupIndex, MultiplierForGeomContribution, MissShaderIndex, Ray, Payload)
     TraceRay(
         tlas,
@@ -437,7 +428,7 @@ void closesthit(inout HitPayload payload, in BuiltInTriangleIntersectionAttribut
     float3 L = normalize(cb_sun.direction.xyz);
     float sunShadow = TraceShadowRay(positionWorld, L, 10000.0);
 
-    lighting += ComputeIBL(N, V, combinedColor.rgb, metallic, roughness, F0, sunShadow);
+    lighting += ComputeIBL(N, V, combinedColor.rgb, metallic, roughness, F0);
     lighting *= occlusion;
 
     // Direct Lighting

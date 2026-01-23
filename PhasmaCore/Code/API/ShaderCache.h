@@ -5,7 +5,7 @@ namespace pe
     class ShaderCache
     {
     public:
-        void Init(const std::string &sourcePath, size_t definesHash = 0);
+        void Init(const std::string &sourcePath, const std::string &entryPoint, size_t definesHash = 0);
         bool ShaderNeedsCompile();
         inline const std::string &GetSourcePath() { return m_sourcePath; }
         inline const std::string &GetShaderCode() { return m_code; }

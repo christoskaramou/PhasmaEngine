@@ -260,7 +260,7 @@ namespace pe
             definesHash.Combine(def.value);
         }
 
-        m_cache.Init(path, definesHash);
+        m_cache.Init(path, m_entryName, definesHash);
 
         if (m_cache.ShaderNeedsCompile())
         {
@@ -473,7 +473,7 @@ namespace pe
         {
             PE_ERROR("Invalid shader stage!");
         }
-        // args.push_back(L"-fspv-preserve-bindings");
+        args.push_back(L"-fspv-preserve-bindings");
         args.push_back(L"-fspv-preserve-interface");
         // args.push_back(L"-fspv-reflect");
 
@@ -484,7 +484,6 @@ namespace pe
 
         args.push_back(DXC_ARG_WARNINGS_ARE_ERRORS);   //-WX
         args.push_back(DXC_ARG_PACK_MATRIX_ROW_MAJOR); //-Zpr
-                                                       // args.push_back(DXC_ARG_PACK_MATRIX_COLUMN_MAJOR); //-Zpc
 
 #if PE_DEBUG_MODE
         // Generate symbols
