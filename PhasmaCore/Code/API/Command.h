@@ -161,6 +161,7 @@ namespace pe
         void BindGraphicsDescriptors(uint32_t count, Descriptor *const *descriptors);
         void BindComputeDescriptors(uint32_t count, Descriptor *const *descriptors);
         void BindRayTracingDescriptors(uint32_t count, Descriptor *const *descriptors);
+        void BatchBindDescriptors(vk::PipelineBindPoint point, uint32_t count, Descriptor *const *descriptors);
 
         // Resources
         inline static std::unordered_map<size_t, RenderPass *> s_renderPasses{};

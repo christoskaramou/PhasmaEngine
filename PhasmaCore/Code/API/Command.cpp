@@ -534,46 +534,55 @@ namespace pe
         m_apiHandle.bindIndexBuffer(buffer->ApiHandle(), offset, vk::IndexType::eUint32);
     }
 
+    void CommandBuffer::BatchBindDescriptors(vk::PipelineBindPoint point, uint32_t count, Descriptor *const *descriptors)
+    {
+        std::vector<vk::DescriptorSet> dsets;
+        dsets.reserve(count);
+
+        uint32_t start = 0;
+        while (start < count)
+        {
+            // skip nulls
+            while (start < count && !descriptors[start])
+                ++start;
+
+            if (start >= count)
+                break;
+
+            dsets.clear();
+
+            uint32_t end = start;
+            while (end < count && descriptors[end])
+            {
+                dsets.push_back(descriptors[end]->ApiHandle());
+                ++end;
+            }
+
+            m_apiHandle.bindDescriptorSets(
+                point,
+                m_boundPipeline->m_layout,
+                start,
+                static_cast<uint32_t>(dsets.size()),
+                dsets.data(),
+                0, nullptr);
+
+            start = end;
+        }
+    }
+
     void CommandBuffer::BindGraphicsDescriptors(uint32_t count, Descriptor *const *descriptors)
     {
-        std::vector<vk::DescriptorSet> dsets(count);
-        for (uint32_t i = 0; i < count; i++)
-        {
-            dsets[i] = descriptors[i]->ApiHandle();
-        }
-
-        m_apiHandle.bindDescriptorSets(vk::PipelineBindPoint::eGraphics,
-                                       m_boundPipeline->m_layout,
-                                       0, count, dsets.data(),
-                                       0, nullptr);
+        BatchBindDescriptors(vk::PipelineBindPoint::eGraphics, count, descriptors);
     }
 
     void CommandBuffer::BindComputeDescriptors(uint32_t count, Descriptor *const *descriptors)
     {
-        std::vector<vk::DescriptorSet> dsets(count);
-        for (uint32_t i = 0; i < count; i++)
-        {
-            dsets[i] = descriptors[i]->ApiHandle();
-        }
-
-        m_apiHandle.bindDescriptorSets(vk::PipelineBindPoint::eCompute,
-                                       m_boundPipeline->m_layout,
-                                       0, count, dsets.data(),
-                                       0, nullptr);
+        BatchBindDescriptors(vk::PipelineBindPoint::eCompute, count, descriptors);
     }
 
     void CommandBuffer::BindRayTracingDescriptors(uint32_t count, Descriptor *const *descriptors)
     {
-        std::vector<vk::DescriptorSet> dsets(count);
-        for (uint32_t i = 0; i < count; i++)
-        {
-            dsets[i] = descriptors[i]->ApiHandle();
-        }
-
-        m_apiHandle.bindDescriptorSets(vk::PipelineBindPoint::eRayTracingKHR,
-                                       m_boundPipeline->m_layout,
-                                       0, count, dsets.data(),
-                                       0, nullptr);
+        BatchBindDescriptors(vk::PipelineBindPoint::eRayTracingKHR, count, descriptors);
     }
 
     void CommandBuffer::BindDescriptors(uint32_t count, Descriptor *const *descriptors)

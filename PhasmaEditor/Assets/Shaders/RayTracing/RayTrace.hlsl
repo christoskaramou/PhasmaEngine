@@ -2,6 +2,7 @@
 #include "../Common/MaterialFlags.hlsl"
 #include "../Common/Structures.hlsl"
 #include "../Gbuffer/PBR.hlsl"
+#include "../Common/IBL.hlsl"
 
 struct MeshInfoGPU
 {
@@ -158,41 +159,17 @@ float3 GetTriangleTangent(float3 v0, float3 v1, float3 v2, float2 uv0, float2 uv
     tangent.x = f * (deltaUV2.y * edge1.x - deltaUV1.y * edge2.x);
     tangent.y = f * (deltaUV2.y * edge1.y - deltaUV1.y * edge2.y);
     tangent.z = f * (deltaUV2.y * edge1.z - deltaUV1.y * edge2.z);
-    
-    return normalize(tangent);
+
+    return length(tangent) > 0.0f ? normalize(tangent) : float3(1, 0, 0);
 }
 
-// Simple PBR IBL
-float3 ComputeIBL(float3 N, float3 V, float3 albedo, float metallic, float roughness, float3 F0)
+// Improved Single-Scatter Energy Compensation (Kulla-Conty approx)
+float3 ComputeIBL(float3 N, float3 V, float3 albedo, float metallic, float roughness, float3 F0, float2 envBRDF)
 {
-    float NdotV = saturate(dot(N, V));
-    float3 R = reflect(-V, N);
-
-    // Sample DFG LUT
-    float2 envBRDF = LutIBL.SampleLevel(material_sampler, float2(NdotV, roughness), 0).xy;
-    
-    // Integrated specular response (Fr = F0*A + B)
-    float3 Fr = F0 * envBRDF.x + envBRDF.y;
-    
-    // Multi-scattering energy compensation
-    float E = envBRDF.x + envBRDF.y;
-    float3 energyCompensation = 1.0 + F0 * (1.0 / max(E, 0.001) - 1.0);
-    Fr *= energyCompensation;
-    
-    // Energy split using the same Fr term (consistent partition)
-    float3 kS = saturate(Fr);
-    float3 kD = (1.0 - kS) * (1.0 - metallic);
-
-    // Irradiance (Diffuse)
-    float3 irradiance = skybox.SampleLevel(material_sampler, N, 6).rgb; 
-    float3 diffuse = irradiance * albedo;
-
-    // Specular (Reflection)
-    float mip = roughness * roughness * 8.0; 
-    float3 prefilteredColor = skybox.SampleLevel(material_sampler, R, mip).rgb;
-    float3 specular = prefilteredColor * kS;
-    
-    return kD * diffuse + specular; 
+    return ComputeIBL_Common(
+        N, V, albedo, metallic, roughness, F0, 1.0 /*occlusion assumed 1 or handled externally?*/,
+        skybox, material_sampler, envBRDF
+    );
 }
 
 float TraceShadowRay(float3 origin, float3 dir, float dist)
@@ -481,7 +458,7 @@ void closesthit(inout HitPayload payload, in BuiltInTriangleIntersectionAttribut
     float3 L = normalize(cb_sun.direction.xyz);
     float sunShadow = TraceShadowRay(positionWorld, L, 10000.0);
 
-    lighting += ComputeIBL(N, V, combinedColor.rgb, metallic, roughness, F0);
+    lighting += ComputeIBL(N, V, combinedColor.rgb, metallic, roughness, F0, envBRDF);
     lighting *= occlusion;
 
     // Direct Lighting

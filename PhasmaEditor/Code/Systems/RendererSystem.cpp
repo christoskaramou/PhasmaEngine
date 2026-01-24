@@ -33,6 +33,7 @@ namespace pe
     {
         m_skyBoxDay.LoadSkyBox(cmd, Path::Assets + "/Skyboxes/golden_gate_hills/golden_gate_hills_4k.hdr");
         m_skyBoxNight.LoadSkyBox(cmd, Path::Assets + "/Skyboxes/rogland_clear_night/rogland_clear_night_4k.hdr");
+        m_skyBoxWhite.LoadSkyBox(cmd, Path::Assets + "/Objects/white_furnace_64x64.hdr");
 
         Image::LoadRawParams loadImageParams = {256, 256, vk::Format::eR16G16Sfloat, false, true, 0.0f};
         m_ibl_brdf_lut = Image::LoadRaw(cmd, Path::Assets + "Objects/ibl_brdf_lut_rg16f_256.bin", loadImageParams);
@@ -182,12 +183,12 @@ namespace pe
         // Check dependencies
         bool renderRaster = !gSettings.use_ray_tracing;
         bool renderPostProcess = true; // Mostly always needed unless completely disabled
-        
+
         bool renderShadows = gSettings.shadows && renderRaster;
         bool renderSSAO = gSettings.ssao && renderRaster;
         bool renderSSR = gSettings.ssr && renderRaster;
         bool renderParticles = true; // Always on top
-        
+
         // Depth/GBuffer needed if Raster is on OR if needed by PostProcess/Particles
         bool needVelocity = gSettings.taa || gSettings.motion_blur;
         bool needDepth = renderRaster || renderParticles || gSettings.dof || gSettings.motion_blur || needVelocity;
@@ -222,27 +223,29 @@ namespace pe
                 ssao.ExecutePass(cmd);
             }
 
-            // Lighting Opaque
             {
-                lo.ExecutePass(cmd);
-            }
+                // Lighting Opaque
+                {
+                    lo.ExecutePass(cmd);
+                }
 
-            // Gbuffers Transparent
-            {
-                gbt.SetScene(&m_scene);
-                gbt.ExecutePass(cmd);
-            }
+                // Gbuffers Transparent
+                {
+                    gbt.SetScene(&m_scene);
+                    gbt.ExecutePass(cmd);
+                }
 
-            // Lighting Transparent
-            {
-                lt.ExecutePass(cmd);
+                // Lighting Transparent
+                {
+                    lt.ExecutePass(cmd);
+                }
             }
         }
         else
         {
-             // Ray Tracing Replaces Lighting
-             rtp.SetScene(&m_scene);
-             rtp.ExecutePass(cmd);
+            // Ray Tracing Replaces Lighting
+            rtp.SetScene(&m_scene);
+            rtp.ExecutePass(cmd);
         }
 
         // Particle Passes (Draw on top)
@@ -250,7 +253,7 @@ namespace pe
         {
             pcp.SetScene(&m_scene);
             pcp.ExecutePass(cmd);
-        
+
             pp.SetScene(&m_scene);
             pp.ExecutePass(cmd);
         }
@@ -260,7 +263,7 @@ namespace pe
         {
             ssr.ExecutePass(cmd);
         }
-        
+
         // Post Process
         if (renderPostProcess)
         {
@@ -319,7 +322,7 @@ namespace pe
                 motionBlur.ExecutePass(cmd);
             }
         }
-        
+
         // Gui
         {
             m_gui.ExecutePass(cmd);
@@ -379,23 +382,33 @@ namespace pe
         }
 
         for (auto &rc : m_renderPassComponents)
+        {
             rc->Destroy();
+            delete rc;
+        }
+        m_renderPassComponents.clear();
 
         m_skyBoxDay.Destroy();
         m_skyBoxNight.Destroy();
+        m_skyBoxWhite.Destroy(); // Restored
+
         Image::Destroy(m_ibl_brdf_lut);
 
         for (auto &rt : m_renderTargets)
             Image::Destroy(rt.second);
+        m_renderTargets.clear();
 
-        for (auto &dt : m_depthStencilTargets)
-            Image::Destroy(dt.second);
+        for (auto &rt : m_depthStencilTargets)
+            Image::Destroy(rt.second);
+        m_depthStencilTargets.clear();
 
-        for (auto &semaphore : m_acquireSemaphores)
+        for (auto *semaphore : m_acquireSemaphores)
             Semaphore::Destroy(semaphore);
+        m_acquireSemaphores.clear();
 
-        for (auto &semaphore : m_submitSemaphores)
+        for (auto *semaphore : m_submitSemaphores)
             Semaphore::Destroy(semaphore);
+        m_submitSemaphores.clear();
     }
 
     void RendererSystem::Upsample(CommandBuffer *cmd, vk::Filter filter)

@@ -39,10 +39,10 @@ PS_OUTPUT_Color mainPS(PS_INPUT_UV input)
 
     // Energy Compensation (Multi-Scattering)
     float3 V = normalize(cb_camPos.xyz - wolrdPos);
-    float NdV = clamp(dot(normal, V), 0.001, 1.0); // Use 0.001 to avoid NaN
+    float NdV = clamp(dot(normal, V), 0.001, 1.0);
     float2 envBRDF = LutIBL.Sample(sampler_LutIBL, float2(NdV, material.roughness)).xy;
-    float E = envBRDF.x + envBRDF.y;
-    float3 energyCompensation = 1.0 + material.F0 * (1.0 / max(E, 0.001) - 1.0);
+    float E_spec = envBRDF.x + envBRDF.y;
+    float3 energyCompensation = 1.0 + material.F0 * (1.0 / max(E_spec, 0.001) - 1.0);
 
     if (cb_shadows)
     {
@@ -56,8 +56,8 @@ PS_OUTPUT_Color mainPS(PS_INPUT_UV input)
     // Image Based Lighting
     if (cb_IBL)
     {
-        IBL ibl = ImageBasedLighting(material, normal, normalize(wolrdPos - cb_camPos.xyz), Cube, sampler_Cube, LutIBL, sampler_LutIBL, occlusion);
-        fragColor += ibl.final_color * cb_IBL_intensity;
+        float3 ibl = ImageBasedLighting(material, normal, V, Cube, sampler_Cube, envBRDF, occlusion);
+        fragColor += ibl * cb_IBL_intensity;
     }
 
     // Add emmission
