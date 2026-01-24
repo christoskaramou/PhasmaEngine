@@ -3,6 +3,7 @@
 
 #include "../Common/Common.hlsl"
 #include "../Common/Structures.hlsl"
+#include "../Common/IBL.hlsl"
 #include "PBR.hlsl"
 #include "Material.hlsl"
 
@@ -324,49 +325,17 @@ struct IBL
     float3 reflectivity;
 };
 
-IBL ImageBasedLighting(Material material,
-                       float3 normal,
-                       float3 camera_to_pixel,
-                       TextureCube cube, SamplerState sampler_cube,
-                       Texture2D lutIBL, SamplerState sampler_lutIBL,
-                       float occlusion)
+float3 ImageBasedLighting(Material material,
+                        float3 normal,
+                        float3 V,
+                        TextureCube cube, SamplerState sampler_cube,
+                        float2 envBRDF,
+                        float occlusion)
 {
-    float3 reflection   = reflect(camera_to_pixel, normal);
-    reflection          = GetSpecularDominantDir(normal, reflection, material.roughness);
-
-    float3 V            = normalize(-camera_to_pixel);
-    float  NdV          = saturate(dot(normal, V));
-
-    // Sample DFG LUT
-    float2 envBRDF      = lutIBL.Sample(sampler_lutIBL, float2(NdV, material.roughness)).xy;
-    
-    // Integrated specular response (Fr = F0*A + B)
-    float3 Fr           = material.F0 * envBRDF.x + envBRDF.y;
-    
-    // Multi-scattering energy compensation
-    float E = envBRDF.x + envBRDF.y;
-    float3 energyCompensation = 1.0 + material.F0 * (1.0 / max(E, 0.001) - 1.0);
-    Fr *= energyCompensation;
-    
-    // Energy split using the same Fr term used for specular (consistent partition)
-    float3 kS           = saturate(Fr);
-    float3 kD           = (1.0 - kS) * (1.0 - material.metallic);
-
-    // Diffuse
-    float3 irradiance   = SampleEnvironment(cube, sampler_cube, normal, 8);
-    float3 diffuse      = irradiance * material.albedo * occlusion;
-
-    // Specular
-    float  mipLevel         = max(0.001f, material.roughness * material.roughness) * 8.0f;
-    float3 prefilteredColor = SampleEnvironment(cube, sampler_cube, reflection, mipLevel);
-    float  specularOcclusion = GetSpecularOcclusion(NdV, material.roughness, occlusion);
-    float3 specular          = prefilteredColor * kS * specularOcclusion;
-
-    IBL ibl;
-    ibl.final_color         = kD * diffuse + specular;
-    ibl.reflectivity        = Fr;
-
-    return ibl;
+    return ComputeIBL_Common(
+        normal, V, material.albedo, material.metallic, material.roughness, material.F0, occlusion,
+        cube, sampler_cube, envBRDF
+    );
 }
 
 float3 DitherValve(float2 screenPos)
