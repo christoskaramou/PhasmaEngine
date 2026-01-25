@@ -50,7 +50,6 @@ namespace pe
         bool day = true;
         float sun_intensity = 7.f;
         std::array<float, 3> sun_direction{0.1f, 0.9f, 0.1f};
-        float camera_speed = 3.5f;
         std::array<float, 3> depth_bias{0.0f, 0.0f, -6.2f};
         float time_scale = 1.f;
         std::vector<std::string> model_list{};

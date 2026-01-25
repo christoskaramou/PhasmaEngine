@@ -24,6 +24,7 @@
 #include "Widgets/Particles.h"
 #include "Widgets/Properties.h"
 #include "Widgets/SceneView.h"
+#include "Widgets/CameraWidget.h"
 #include "imgui/imgui_impl_sdl2.h"
 #include "imgui/imgui_impl_vulkan.h"
 
@@ -207,6 +208,7 @@ namespace pe
 
         // Right - Global Properties
         ImGui::DockBuilderDockWindow("Global Properties", dockRight);
+        ImGui::DockBuilderDockWindow("Camera", dockRight);
 
         // Bottom - Console, Asset Viewer, File Browser (Tabbed)
         // Console first to ensure leftmost tab position
@@ -409,17 +411,18 @@ namespace pe
         auto fileSelector = std::make_shared<FileSelector>(); // Separate instance for popups
         auto hierarchy = std::make_shared<Hierarchy>();
         auto particles = std::make_shared<Particles>();
+        auto cameraWidget = std::make_shared<CameraWidget>();
         auto console = std::make_shared<Console>();
 
         // Console added early to potentially influence tab ordering (Leftmost)
-        m_widgets = {console, properties, metrics, models, assetViewer, sceneView, loading, fileBrowser, fileSelector, hierarchy, particles};
+        m_widgets = {console, properties, metrics, models, assetViewer, sceneView, loading, fileBrowser, fileSelector, hierarchy, particles, cameraWidget};
 
         // Initialize Core Logging and attach Console
         Log::Attach([console](const std::string &msg, LogType type)
                     { console->AddLog(type, "%s", msg.c_str()); });
 
         // Populate Menu Vectors
-        m_menuWindowWidgets = {console, metrics, properties, models, assetViewer, sceneView, fileBrowser, hierarchy, particles};
+        m_menuWindowWidgets = {console, metrics, properties, models, assetViewer, sceneView, fileBrowser, hierarchy, particles, cameraWidget};
         m_menuAssetsWidgets = {};
         for (auto &widget : m_widgets)
             widget->Init(this);
