@@ -5,6 +5,7 @@
 #include "Systems/RendererSystem.h"
 #include <assimp/GltfMaterial.h>
 #include <assimp/ProgressHandler.hpp>
+#include <meshoptimizer.h>
 
 #undef max
 
@@ -192,42 +193,28 @@ namespace pe
 
         m_meshInfos.clear();
         m_meshInfos.resize(m_scene->mNumMeshes);
-
-        m_meshCount = 0;
-        m_verticesCount = 0;
-        m_indicesCount = 0;
-
+        
+        size_t estimatedVertices = 0;
+        size_t estimatedIndices = 0;
         for (unsigned int i = 0; i < m_scene->mNumMeshes; i++)
         {
-            const aiMesh *mesh = m_scene->mMeshes[i];
-            if (!(mesh->mPrimitiveTypes & aiPrimitiveType_TRIANGLE))
-                continue;
-
-            MeshInfo &mi = m_meshInfos[i];
-
-            mi.vertexOffset = m_verticesCount;
-            mi.verticesCount = mesh->mNumVertices;
-
-            mi.indexOffset = m_indicesCount;
-            mi.indicesCount = mesh->mNumFaces * 3;
-
-            mi.aabbVertexOffset = static_cast<size_t>(m_meshCount) * 8;
-
-            m_verticesCount += mesh->mNumVertices;
-            m_indicesCount += mesh->mNumFaces * 3;
-            m_meshCount++;
+            if (m_scene->mMeshes[i]->mPrimitiveTypes & aiPrimitiveType_TRIANGLE)
+            {
+                estimatedVertices += m_scene->mMeshes[i]->mNumVertices;
+                estimatedIndices += m_scene->mMeshes[i]->mNumFaces * 3;
+            }
         }
-
-        total = m_verticesCount + m_indicesCount;
+        
+        total = estimatedVertices + estimatedIndices; // progress total
 
         m_vertices.clear();
         m_positionUvs.clear();
         m_aabbVertices.clear();
         m_indices.clear();
 
-        m_vertices.reserve(m_verticesCount);
-        m_positionUvs.reserve(m_verticesCount);
-        m_indices.reserve(m_indicesCount);
+        m_vertices.reserve(estimatedVertices);
+        m_positionUvs.reserve(estimatedVertices);
+        m_indices.reserve(estimatedIndices);
         m_aabbVertices.reserve(static_cast<size_t>(m_meshCount) * 8);
 
         // pass 2: build per mesh
@@ -277,6 +264,11 @@ namespace pe
             const aiVector3D *normals = mesh->mNormals;
             const aiVector3D *uvs = mesh->mTextureCoords[0];
             const aiColor4D *colors = mesh->mColors[0];
+            
+            std::vector<Vertex> meshVertices;
+            std::vector<PositionUvVertex> meshPosUvs;
+            meshVertices.reserve(mesh->mNumVertices);
+            meshPosUvs.reserve(mesh->mNumVertices);
 
             // bounding box (local)
             bool bbInit = false;
@@ -325,8 +317,9 @@ namespace pe
                 FillVertexJointsWeights(vertex, 0, 0, 0, 0, 0.f, 0.f, 0.f, 0.f);
                 FillVertexJointsWeights(positionUvVertex, 0, 0, 0, 0, 0.f, 0.f, 0.f, 0.f);
 
-                m_vertices.push_back(vertex);
-                m_positionUvs.push_back(positionUvVertex);
+                // Fill temp buffers
+                meshVertices.push_back(vertex);
+                meshPosUvs.push_back(positionUvVertex);
                 progress++;
 
                 // update AABB
@@ -350,25 +343,81 @@ namespace pe
                 mi.boundingBox.max = bbMax;
             }
 
-            // indices (kept local; vertexOffset is used in vkCmdDrawIndexed vertexOffset param)
-            const size_t expected = static_cast<size_t>(mesh->mNumFaces) * 3;
-            const size_t start = m_indices.size();
-            m_indices.resize(start + expected);
-
-            size_t w = start;
+            // Meshoptimizer
+            std::vector<unsigned int> meshIndices;
+            meshIndices.reserve(mesh->mNumFaces * 3);
             for (unsigned int f = 0; f < mesh->mNumFaces; f++)
             {
                 const aiFace &face = mesh->mFaces[f];
-                if (face.mNumIndices != 3)
-                    continue;
-
-                m_indices[w++] = face.mIndices[0];
-                m_indices[w++] = face.mIndices[1];
-                m_indices[w++] = face.mIndices[2];
+                if (face.mNumIndices == 3)
+                {
+                    meshIndices.push_back(face.mIndices[0]);
+                    meshIndices.push_back(face.mIndices[1]);
+                    meshIndices.push_back(face.mIndices[2]);
+                }
             }
 
-            m_indices.resize(w);
+            // Generate remap table
+            std::vector<unsigned int> remap(meshIndices.size());
+            size_t vertex_count = meshopt_generateVertexRemap(
+                remap.data(),
+                meshIndices.data(),
+                meshIndices.size(),
+                meshVertices.data(),
+                meshVertices.size(),
+                sizeof(Vertex)
+            );
+
+            // Remap buffers
+            std::vector<unsigned int> remappedIndices(meshIndices.size());
+            std::vector<Vertex> remappedVertices(vertex_count);
+            std::vector<PositionUvVertex> remappedPosUvs(vertex_count);
+
+            meshopt_remapIndexBuffer(remappedIndices.data(), meshIndices.data(), meshIndices.size(), remap.data());
+            meshopt_remapVertexBuffer(remappedVertices.data(), meshVertices.data(), meshVertices.size(), sizeof(Vertex), remap.data());
+            meshopt_remapVertexBuffer(remappedPosUvs.data(), meshPosUvs.data(), meshPosUvs.size(), sizeof(PositionUvVertex), remap.data());
+
+            // Optimize vertex cache
+            meshopt_optimizeVertexCache(remappedIndices.data(), remappedIndices.data(), remappedIndices.size(), vertex_count);
+
+            // Optimize overdraw
+            meshopt_optimizeOverdraw(remappedIndices.data(), remappedIndices.data(), remappedIndices.size(), reinterpret_cast<float*>(remappedVertices.data()), vertex_count, sizeof(Vertex), 1.05f);
+
+            // Optimize vertex fetch
+            std::vector<unsigned int> fetchRemap(vertex_count);
+            size_t unique_verts = meshopt_optimizeVertexFetchRemap(fetchRemap.data(), remappedIndices.data(), remappedIndices.size(), vertex_count);
+
+            // Remap index buffer with the new fetch-optimized order
+            meshopt_remapIndexBuffer(remappedIndices.data(), remappedIndices.data(), remappedIndices.size(), fetchRemap.data());
+
+            // Remap both vertex buffers
+            std::vector<Vertex> finalVertices(unique_verts);
+            std::vector<PositionUvVertex> finalPosUvs(unique_verts);
+
+            meshopt_remapVertexBuffer(finalVertices.data(), remappedVertices.data(), vertex_count, sizeof(Vertex), fetchRemap.data());
+            meshopt_remapVertexBuffer(finalPosUvs.data(), remappedPosUvs.data(), vertex_count, sizeof(PositionUvVertex), fetchRemap.data());
+            
+            // Use the final unique (and reordered) buffers
+            remappedVertices = std::move(finalVertices);
+            remappedPosUvs = std::move(finalPosUvs);
+            vertex_count = unique_verts;
+            
+            // Update MeshInfo with actual offsets and counts
+            mi.vertexOffset = static_cast<uint32_t>(m_vertices.size());
+            mi.verticesCount = static_cast<uint32_t>(vertex_count);
+            mi.indexOffset = static_cast<uint32_t>(m_indices.size());
+            mi.indicesCount = static_cast<uint32_t>(remappedIndices.size());
+            mi.aabbVertexOffset = m_aabbVertices.size();
+            
+            // Push to global
+            m_vertices.insert(m_vertices.end(), remappedVertices.begin(), remappedVertices.end());
+            m_positionUvs.insert(m_positionUvs.end(), remappedPosUvs.begin(), remappedPosUvs.end());
+            m_indices.insert(m_indices.end(), remappedIndices.begin(), remappedIndices.end());
+
             progress += mesh->mNumFaces;
+            m_meshCount++; // used for aabb offset calculation only if we didn't track it manually
+            m_verticesCount += vertex_count; // Global stats
+            m_indicesCount += remappedIndices.size();
 
             // aabb vertices (8 corners)
             mi.aabbColor = static_cast<uint32_t>(rand(0, 255) << 24) |

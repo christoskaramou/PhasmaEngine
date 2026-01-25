@@ -28,7 +28,7 @@ set(FETCHCONTENT_QUIET FALSE)
 FetchContent_Declare(
     assimp
     GIT_REPOSITORY https://github.com/assimp/assimp.git
-    GIT_TAG        v5.4.0
+    GIT_TAG        v6.0.4
     GIT_PROGRESS   TRUE
 )
 set(ASSIMP_BUILD_TESTS        OFF CACHE BOOL "" FORCE)
@@ -42,6 +42,17 @@ message(STATUS "[Phasma] FetchContent_MakeAvailable(assimp) -> this will downloa
 FetchContent_MakeAvailable(assimp)
 
 message(STATUS "[Phasma] Assimp is now available and will be linked statically.")
+
+# --- MeshOptimizer ---
+message(STATUS "[Phasma] Preparing MeshOptimizer (fetch + build) ...")
+FetchContent_Declare(
+    meshoptimizer
+    GIT_REPOSITORY https://github.com/zeux/meshoptimizer.git
+    GIT_TAG        v0.22
+    GIT_PROGRESS   TRUE
+)
+set(MESHOPT_BUILD_SHARED_LIBS OFF CACHE BOOL "" FORCE)
+FetchContent_MakeAvailable(meshoptimizer)
 
 
 # Add PhasmaCore subdirectory
@@ -68,7 +79,10 @@ target_include_directories(PhasmaEditor PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/Pha
 target_link_libraries(PhasmaEditor PRIVATE
     PhasmaCore
     assimp
+    meshoptimizer
+    zlibstatic
 )
+target_include_directories(PhasmaEditor PRIVATE ${assimp_SOURCE_DIR}/contrib/zlib)
 
 # target_compile_options(PhasmaEditor PRIVATE -fsanitize=address)
 # target_link_options(PhasmaEditor PRIVATE -fsanitize=address)
