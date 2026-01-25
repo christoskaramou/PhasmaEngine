@@ -313,7 +313,11 @@ namespace pe
             for (auto &file : std::filesystem::recursive_directory_iterator(modelsDir))
             {
                 if (FileBrowser::IsModelFile(file.path()))
-                    gSettings.model_list.push_back(std::filesystem::relative(file.path(), modelsDir).generic_string());
+                {
+                    auto relativePath = std::filesystem::relative(file.path(), modelsDir);
+                    auto u8str = relativePath.generic_u8string();
+                    gSettings.model_list.push_back(std::string(reinterpret_cast<const char*>(u8str.c_str())));
+                }
             }
         }
         Deduplicate(gSettings.model_list);

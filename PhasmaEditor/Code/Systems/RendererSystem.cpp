@@ -382,33 +382,24 @@ namespace pe
         }
 
         for (auto &rc : m_renderPassComponents)
-        {
             rc->Destroy();
-            delete rc;
-        }
-        m_renderPassComponents.clear();
 
         m_skyBoxDay.Destroy();
         m_skyBoxNight.Destroy();
-        m_skyBoxWhite.Destroy(); // Restored
-
+        m_skyBoxWhite.Destroy();
         Image::Destroy(m_ibl_brdf_lut);
 
         for (auto &rt : m_renderTargets)
             Image::Destroy(rt.second);
-        m_renderTargets.clear();
 
-        for (auto &rt : m_depthStencilTargets)
-            Image::Destroy(rt.second);
-        m_depthStencilTargets.clear();
+        for (auto &dt : m_depthStencilTargets)
+            Image::Destroy(dt.second);
 
-        for (auto *semaphore : m_acquireSemaphores)
+        for (auto &semaphore : m_acquireSemaphores)
             Semaphore::Destroy(semaphore);
-        m_acquireSemaphores.clear();
 
-        for (auto *semaphore : m_submitSemaphores)
+        for (auto &semaphore : m_submitSemaphores)
             Semaphore::Destroy(semaphore);
-        m_submitSemaphores.clear();
     }
 
     void RendererSystem::Upsample(CommandBuffer *cmd, vk::Filter filter)
