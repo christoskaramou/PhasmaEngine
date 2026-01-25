@@ -19,6 +19,7 @@ namespace pe
         m_farPlane = 100.0f;
         m_fovx = radians(87.0f);
         m_rotationSpeed = radians(2.864f);
+        m_speed = 3.5f;
 
         m_projJitter = vec2(0.f, 0.f);
         m_prevProjJitter = vec2(0.f, 0.f);

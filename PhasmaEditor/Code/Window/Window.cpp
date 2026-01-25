@@ -207,7 +207,7 @@ namespace pe
         }
 
         float delta = static_cast<float>(FrameTimer::Instance().GetDelta());
-        float speed = Settings::Get<GlobalSettings>().camera_speed * delta;
+        float speed = camera->GetSpeed() * delta;
         if ((ImGui::IsKeyDown(ImGuiKey_W) || ImGui::IsKeyDown(ImGuiKey_S)) &&
             (ImGui::IsKeyDown(ImGuiKey_A) || ImGui::IsKeyDown(ImGuiKey_D)))
             speed *= 0.707f;

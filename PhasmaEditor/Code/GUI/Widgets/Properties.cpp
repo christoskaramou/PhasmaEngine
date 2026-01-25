@@ -176,7 +176,7 @@ namespace pe
             ImGui::Unindent(16.0f);
         }
 
-        ImGui::DragFloat("CamSpeed", &gSettings.camera_speed, 0.1f, 1.f);
+
         ImGui::DragFloat("TimeScale", &gSettings.time_scale, 0.05f, 0.2f);
         ImGui::Separator();
         if (ImGui::Button("Randomize Lights"))
