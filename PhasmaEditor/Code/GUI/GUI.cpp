@@ -355,8 +355,8 @@ namespace pe
         init_info.PipelineCache = nullptr;
         init_info.DescriptorPool = RHII.GetDescriptorPool()->ApiHandle();
         init_info.Subpass = 0;
-        init_info.MinImageCount = RHII.GetSwapchain()->GetImageCount();
-        init_info.ImageCount = RHII.GetSwapchain()->GetImageCount();
+        init_info.MinImageCount = RHII.GetSwapchainImageCount();
+        init_info.ImageCount = RHII.GetSwapchainImageCount();
         init_info.MSAASamples = VK_SAMPLE_COUNT_1_BIT;
         init_info.Allocator = nullptr;
         init_info.CheckVkResultFn = nullptr;

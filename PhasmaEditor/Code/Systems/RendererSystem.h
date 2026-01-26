@@ -64,9 +64,9 @@ namespace pe
         void Resize(uint32_t width, uint32_t height);
         void BlitToSwapchain(CommandBuffer *cmd, Image *renderedImage, uint32_t imageIndex);
         void PollShaders();
+        void WaitPreviousFrameCommands();
 
     protected:
-        void WaitPreviousFrameCommands();
         void LoadResources(CommandBuffer *cmd);
         CommandBuffer *RecordPasses(uint32_t imageIndex);
         void Upsample(CommandBuffer *cmd, vk::Filter filter);
