@@ -113,7 +113,12 @@ namespace pe
 
     bool App::Frame()
     {
+        RHII.NextFrame();
+
         m_frameTimer.Tick();
+
+        auto rendererSystem = GetGlobalSystem<RendererSystem>();
+        rendererSystem->WaitPreviousFrameCommands();
 
         // Start ImGui frame
         ImGui_ImplSDL2_NewFrame();
@@ -137,18 +142,14 @@ namespace pe
         if (!m_window->isMinimized())
         {
             DrawGlobalSystems();
-
 #if defined(PE_SCRIPTS)
             ScriptManager::Draw();
 #endif
-
             // Render platform windows (floating ImGui windows) after main rendering
-            GetGlobalSystem<RendererSystem>()->DrawPlatformWindows();
+            rendererSystem->DrawPlatformWindows();
         }
 
         m_frameTimer.CountCpuTotalStamp();
-
-        RHII.NextFrame();
 
         return true;
     }

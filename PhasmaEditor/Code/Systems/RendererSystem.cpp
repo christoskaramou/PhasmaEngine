@@ -115,9 +115,6 @@ namespace pe
 
     void RendererSystem::Update()
     {
-        // Wait for the previous corresponding frame commands to finish first
-        WaitPreviousFrameCommands();
-
         // GUI
         m_gui.Update();
 
