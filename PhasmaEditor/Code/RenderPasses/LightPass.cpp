@@ -84,9 +84,9 @@ namespace pe
         for (uint32_t i = 0; i < shadows.m_textures.size(); i++)
             views[i] = shadows.m_textures[i]->GetSRV();
 
-        bool shadowsEnabled = Settings::Get<GlobalSettings>().shadows;
-        bool day = Settings::Get<GlobalSettings>().day;
-        const SkyBox &skybox = day ? GetGlobalSystem<RendererSystem>()->GetSkyBoxDay() : GetGlobalSystem<RendererSystem>()->GetSkyBoxNight();
+        const SkyBox &skybox = Settings::Get<GlobalSettings>().day
+                                   ? GetGlobalSystem<RendererSystem>()->GetSkyBoxDay()
+                                   : GetGlobalSystem<RendererSystem>()->GetSkyBoxNight();
 
         for (uint32_t i = 0; i < RHII.GetSwapchainImageCount(); i++)
         {
@@ -176,20 +176,15 @@ namespace pe
 
     void LightOpaquePass::ExecutePass(CommandBuffer *cmd)
     {
-        bool shadowsEnabled = m_ubo.shadows;
-        uint32_t numCascades = Settings::Get<GlobalSettings>().num_cascades;
+        uint32_t shadowmapCascades = Settings::Get<GlobalSettings>().num_cascades;
         ShadowPass &shadows = *GetGlobalComponent<ShadowPass>();
 
-        cmd->SetConstantAt(0, shadowsEnabled ? 1.0f : 0.0f); // Shadow cast
-        cmd->SetConstantAt(1, MAX_POINT_LIGHTS);             // num point lights
-        cmd->SetConstantAt(2, m_viewportRT->GetWidth_f());   // framebuffer width
-        cmd->SetConstantAt(3, m_viewportRT->GetHeight_f());  // framebuffer height
-        cmd->SetConstantAt(4, 0u);                           // is transparent pass
-        if (shadowsEnabled)
-        {
-            for (uint32_t i = 0; i < numCascades; i++)
-                cmd->SetConstantAt(i + 5, shadows.m_viewZ[i]); // shadowmap cascade distances
-        }
+        cmd->SetConstantAt(0, MAX_POINT_LIGHTS);            // num point lights
+        cmd->SetConstantAt(1, m_viewportRT->GetWidth_f());  // framebuffer width
+        cmd->SetConstantAt(2, m_viewportRT->GetHeight_f()); // framebuffer height
+        cmd->SetConstantAt(3, 0u);                          // is transparent pass
+        for (uint32_t i = 0; i < shadowmapCascades; i++)
+            cmd->SetConstantAt(i + 4, shadows.m_viewZ[i]); // shadowmap cascade distances
 
         PassBarriers(cmd);
 
@@ -239,8 +234,6 @@ namespace pe
 
     void LightTransparentPass::UpdatePassInfo()
     {
-        ShadowPass &shadows = *GetGlobalComponent<ShadowPass>();
-
         const std::vector<Define> definesFrag{
             Define{"SHADOWMAP_CASCADES", std::to_string(Settings::Get<GlobalSettings>().num_cascades)},
             Define{"SHADOWMAP_SIZE", std::to_string((float)Settings::Get<GlobalSettings>().shadow_map_size)},
@@ -286,9 +279,9 @@ namespace pe
         for (uint32_t i = 0; i < shadows.m_textures.size(); i++)
             views[i] = shadows.m_textures[i]->GetSRV();
 
-        bool shadowsEnabled = Settings::Get<GlobalSettings>().shadows;
-        bool day = Settings::Get<GlobalSettings>().day;
-        const SkyBox &skybox = day ? GetGlobalSystem<RendererSystem>()->GetSkyBoxDay() : GetGlobalSystem<RendererSystem>()->GetSkyBoxNight();
+        const SkyBox &skybox = Settings::Get<GlobalSettings>().day
+                                   ? GetGlobalSystem<RendererSystem>()->GetSkyBoxDay()
+                                   : GetGlobalSystem<RendererSystem>()->GetSkyBoxNight();
 
         for (uint32_t i = 0; i < RHII.GetSwapchainImageCount(); i++)
         {
@@ -347,10 +340,6 @@ namespace pe
 
     void LightTransparentPass::PassBarriers(CommandBuffer *cmd)
     {
-        bool shadowsEnabled = Settings::Get<GlobalSettings>().shadows;
-        bool day = Settings::Get<GlobalSettings>().day;
-        RendererSystem &rs = *GetGlobalSystem<RendererSystem>();
-        const SkyBox &skybox = day ? rs.GetSkyBoxDay() : rs.GetSkyBoxNight();
         ShadowPass &shadows = *GetGlobalComponent<ShadowPass>();
 
         std::vector<ImageBarrierInfo> barriers(8 + shadows.m_textures.size());
@@ -371,30 +360,22 @@ namespace pe
         barriers[7].image = m_transparencyRT;
 
         for (uint32_t i = 0; i < shadows.m_textures.size(); i++)
-        {
             barriers[i + 8].image = shadows.m_textures[i];
-        }
 
         cmd->ImageBarriers(barriers);
     }
 
     void LightTransparentPass::ExecutePass(CommandBuffer *cmd)
     {
-        bool shadowsEnabled = m_ubo.shadows;
-        bool day = Settings::Get<GlobalSettings>().day;
         uint32_t shadowmapCascades = Settings::Get<GlobalSettings>().num_cascades;
-
-        RendererSystem &rs = *GetGlobalSystem<RendererSystem>();
-        const SkyBox &skybox = day ? rs.GetSkyBoxDay() : rs.GetSkyBoxNight();
         ShadowPass &shadows = *GetGlobalComponent<ShadowPass>();
 
-        cmd->SetConstantAt(0, shadowsEnabled ? 1.0f : 0.0f); // Shadow cast
-        cmd->SetConstantAt(1, MAX_POINT_LIGHTS);             // num point lights
-        cmd->SetConstantAt(2, m_viewportRT->GetWidth_f());   // framebuffer width
-        cmd->SetConstantAt(3, m_viewportRT->GetHeight_f());  // framebuffer height
-        cmd->SetConstantAt(4, 1u);                           // transparent pass
+        cmd->SetConstantAt(0, MAX_POINT_LIGHTS);            // num point lights
+        cmd->SetConstantAt(1, m_viewportRT->GetWidth_f());  // framebuffer width
+        cmd->SetConstantAt(2, m_viewportRT->GetHeight_f()); // framebuffer height
+        cmd->SetConstantAt(3, 1u);                          // transparent pass
         for (uint32_t i = 0; i < shadowmapCascades; i++)
-            cmd->SetConstantAt(i + 5, shadows.m_viewZ[i]); // shadowmap cascade distances
+            cmd->SetConstantAt(i + 4, shadows.m_viewZ[i]); // shadowmap cascade distances
 
         PassBarriers(cmd);
 

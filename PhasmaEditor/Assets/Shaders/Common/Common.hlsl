@@ -72,7 +72,12 @@ float3 CalculateNormal(float3 positionWS, float3 tangentNormal, float3 inNormal,
     float2 st2 = ddy(inUV);
 
     float3 N = normalize(inNormal);
-    float3 T = normalize(q1 * st2.y - q2 * st1.y);
+    float3 T_unnormalized = q1 * st2.y - q2 * st1.y;
+    
+    if (dot(T_unnormalized, T_unnormalized) < FLT_EPSILON)
+        return N;
+
+    float3 T = normalize(T_unnormalized);
     float det = st1.x * st2.y - st1.y * st2.x;
     float3 B = normalize(cross(N, T)) * (det < 0.0f ? -1.0f : 1.0f);
 
