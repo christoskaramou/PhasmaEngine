@@ -391,8 +391,9 @@ namespace pe
 
                 MeshInfo &meshInfo = meshesInfo[meshIndex];
                 meshInfo.dataOffset = storageSize;
+
                 storageSize += meshInfo.dataSize;
-                storageSize += sizeof(mat4);
+                storageSize += sizeof(mat4) * 2; // material data (factors)
             }
         }
 
@@ -681,6 +682,8 @@ namespace pe
                     continue;
 
                 MeshInfo &meshInfo = model.GetMeshInfos()[mesh];
+                nodeInfo.ubo.materialFactors[0] = meshInfo.materialFactors[0];
+                nodeInfo.ubo.materialFactors[1] = meshInfo.materialFactors[1];
 
                 range.data = &nodeInfo.ubo;
                 range.size = meshInfo.dataSize;

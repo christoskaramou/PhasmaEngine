@@ -8,8 +8,8 @@ struct MeshInfoGPU
 {
     uint indexOffset;
     uint vertexOffset;
-    uint positionsOffset;
     int textures[5];
+    int padding;
 };
 
 struct HitPayload
@@ -91,8 +91,11 @@ float4x4 LoadMatrix(uint offset)
     return result;
 }
 
-float4 SampleArray(float2 uv, uint index)
+float4 SampleArray(float2 uv, int index)
 {
+    if (index < 0)
+        return float4(1.0, 1.0, 1.0, 1.0);
+
     return textures[NonUniformResourceIndex(index)].SampleLevel(material_sampler, uv, 0);
 }
 
@@ -131,15 +134,11 @@ Vertex GetVertex(uint meshId, uint vertexIndex)
     uint offset = vertexOffset + vertexIndex * 80;
     
     Vertex v;
-    // Layout of Vertex struct matches C++ (pos, uv, normal, color, joints, weights, id?? no id in struct usually)
-    // 3+2+3+4+4+4 = 20 floats = 80 bytes?
-    // pos(12) + uv(8) + normal(12) + color(16) + joints(16) + weights(16) = 80 bytes. Correct.
-    
     v.position = asfloat(geometry.Load3(offset + 0));
     v.uv = asfloat(geometry.Load2(offset + 12));
     v.normal = asfloat(geometry.Load3(offset + 20));
     v.color = asfloat(geometry.Load4(offset + 32));
-    // joints/weights ignored for static mesh shading usually, but read if needed.
+
     return v;
 }
 
@@ -153,7 +152,8 @@ float3 GetTriangleTangent(float3 v0, float3 v1, float3 v2, float2 uv0, float2 uv
 
     float det = deltaUV1.x * deltaUV2.y - deltaUV2.x * deltaUV1.y;
     float f = 1.0f / det;
-    if (isinf(f) || isnan(f)) return float3(1,0,0);
+    if (isinf(f) || isnan(f))
+        return float3(1,0,0);
 
     float3 tangent;
     tangent.x = f * (deltaUV2.y * edge1.x - deltaUV1.y * edge2.x);
@@ -167,7 +167,7 @@ float3 GetTriangleTangent(float3 v0, float3 v1, float3 v2, float2 uv0, float2 uv
 float3 ComputeIBL(float3 N, float3 V, float3 albedo, float metallic, float roughness, float3 F0, float2 envBRDF)
 {
     return ComputeIBL_Common(
-        N, V, albedo, metallic, roughness, F0, 1.0 /*occlusion assumed 1 or handled externally?*/,
+        N, V, albedo, metallic, roughness, F0, 1.0,
         skybox, material_sampler, envBRDF
     );
 }
@@ -191,7 +191,7 @@ float TraceShadowRay(float3 origin, float3 dir, float dist)
 
     TraceRay(
         tlas,
-        RAY_FLAG_SKIP_CLOSEST_HIT_SHADER, // Disable opaque flag to allow AnyHit
+        RAY_FLAG_SKIP_CLOSEST_HIT_SHADER | RAY_FLAG_ACCEPT_FIRST_HIT_AND_END_SEARCH,
         0xFF,
         0, 0, 0,
         ray,
@@ -473,14 +473,42 @@ void closesthit(inout HitPayload payload, in BuiltInTriangleIntersectionAttribut
 
     lighting += emissive;
 
-    // Transparency
-    if (combinedColor.a < 1.0f && payload.depth < 3)
+    // Transmission & Volume
+    float transmissionFactor = asfloat(data.Load(GetMeshConstantsOffset(id) + 28));  // Offset 28 (row1 .w)
+    float thicknessFactor = asfloat(data.Load(GetMeshConstantsOffset(id) + 64));     // Offset 64 (row4 .x)
+    float attenuationDistance = asfloat(data.Load(GetMeshConstantsOffset(id) + 68)); // Offset 68 (row4 .y)
+    float ior = asfloat(data.Load(GetMeshConstantsOffset(id) + 72));                 // Offset 72 (row4 .z)
+    float3 attenuationColor = asfloat(data.Load3(GetMeshConstantsOffset(id) + 80));  // Offset 80 (row5 .xyz)
+
+    // Handle Transmission
+    bool isTransmissive = transmissionFactor > 0.01f;
+    
+    if ((isTransmissive || combinedColor.a < 1.0f) && payload.depth < 2) // 2 Bounces
     {
         RayDesc ray;
-        ray.Origin    = positionWorld;
-        ray.Direction = WorldRayDirection();
-        ray.TMin      = 0.001;
-        ray.TMax      = 10000.0;
+        ray.Origin = positionWorld;
+        ray.TMin   = 0.01;
+        ray.TMax   = 10000.0;
+        
+        float3 nextDir = WorldRayDirection();
+        
+        if (isTransmissive)
+        {
+            float r = 1.0 / ior;
+            if (dot(WorldRayDirection(), N) > 0.0)
+            {
+                r = ior / 1.0; 
+                N = -N;
+            }
+            
+            float3 refracted = refract(WorldRayDirection(), N, r);
+            if (length(refracted) > 0.0)
+                nextDir = normalize(refracted);
+            else
+                nextDir = reflect(WorldRayDirection(), N);
+        }
+
+        ray.Direction = isTransmissive ? nextDir : WorldRayDirection(); // refract or pass through
 
         HitPayload transPayload;
         transPayload.radiance = 0.0.xxx;
@@ -498,7 +526,30 @@ void closesthit(inout HitPayload payload, in BuiltInTriangleIntersectionAttribut
             transPayload
         );
         
-        lighting = lerp(transPayload.radiance, lighting, combinedColor.a);
+        float3 transColor = transPayload.radiance;
+
+        // volume attenuation (Beer's Law)
+        if (isTransmissive)
+        {
+             float dist = transPayload.t;
+             
+             if (thicknessFactor > 0.0)
+             {
+                 dist = thicknessFactor; 
+             }
+             
+             if (dist > 0.0 && attenuationDistance < 10000.0) 
+             {
+                 float3 density = -log(attenuationColor) / attenuationDistance;
+                 float3 transmission = exp(-density * dist);
+                 transColor *= transmission;
+             }
+        }
+        
+        if (isTransmissive)
+             lighting = lerp(lighting, transColor, transmissionFactor);
+        else
+             lighting = lerp(transColor, lighting, combinedColor.a);
     }
 
     payload.radiance = lighting;

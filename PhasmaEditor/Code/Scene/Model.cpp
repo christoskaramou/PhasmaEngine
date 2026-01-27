@@ -258,7 +258,7 @@ namespace pe
 
             auto &meshInfo = m_meshInfos[mesh];
             range.data = &meshInfo.materialFactors;
-            range.size = sizeof(mat4);
+            range.size = sizeof(mat4) * 2;
             range.offset = meshInfo.GetMeshFactorsOffset();
             buffer->Copy(1, &range, true);
         }

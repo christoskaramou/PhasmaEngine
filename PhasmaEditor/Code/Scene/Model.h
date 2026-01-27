@@ -20,7 +20,7 @@ namespace pe
     struct MeshInfo
     {
         size_t dataOffset = static_cast<size_t>(-1);
-        const size_t dataSize = sizeof(mat4) * 2; // transform and previous transform
+        const size_t dataSize = sizeof(mat4) * 4; // transform, previous transform, material factors (2x)
         bool cull = true;
 
         uint32_t vertexOffset = 0, verticesCount = 0; // offset and count in used vertex buffer
@@ -42,7 +42,7 @@ namespace pe
         uint32_t textureMask = 0;
 
         MaterialInfo materialInfo;
-        mat4 materialFactors = mat4(1.f);
+        mat4 materialFactors[2] = {mat4(1.f), mat4(1.f)};
         float alphaCutoff = 0.5f;
 
         size_t GetMeshFactorsOffset() const { return dataOffset + dataSize; }
@@ -68,6 +68,7 @@ namespace pe
         {
             mat4 worldMatrix = mat4(1.f);
             mat4 previousWorldMatrix = mat4(1.f);
+            mat4 materialFactors[2] = {mat4(1.f), mat4(1.f)};
         } ubo;
 
         bool dirty = false;
