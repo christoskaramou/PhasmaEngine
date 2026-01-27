@@ -616,12 +616,13 @@ namespace pe
 
     void ModelAssimp::ComputeMaterialData(MeshInfo &meshInfo, aiMaterial *material) const
     {
-        mat4 factors(1.f);
+        mat4 factors[2] = {mat4(1.f), mat4(1.f)};
         float alphaCutoff = 0.5f;
 
         if (!material)
         {
-            meshInfo.materialFactors = factors;
+            meshInfo.materialFactors[0] = factors[0];
+            meshInfo.materialFactors[1] = factors[1];
             meshInfo.alphaCutoff = alphaCutoff;
             return;
         }
@@ -684,27 +685,63 @@ namespace pe
                 roughness = glm::clamp(std::sqrt(2.f / (shininess + 2.f)), 0.f, 1.f);
         }
 
+        float transmissionFactor = 0.f;
+#ifdef AI_MATKEY_TRANSMISSION_FACTOR
+        material->Get(AI_MATKEY_TRANSMISSION_FACTOR, transmissionFactor);
+#endif
+
+        float thicknessFactor = 0.f;
+#ifdef AI_MATKEY_VOLUME_THICKNESS_FACTOR
+        material->Get(AI_MATKEY_VOLUME_THICKNESS_FACTOR, thicknessFactor);
+#endif
+
+        float attenuationDistance = std::numeric_limits<float>::infinity();
+#ifdef AI_MATKEY_VOLUME_ATTENUATION_DISTANCE
+        material->Get(AI_MATKEY_VOLUME_ATTENUATION_DISTANCE, attenuationDistance);
+#endif
+
+        aiColor3D attenuationColor(1.f, 1.f, 1.f);
+#ifdef AI_MATKEY_VOLUME_ATTENUATION_COLOR
+        material->Get(AI_MATKEY_VOLUME_ATTENUATION_COLOR, attenuationColor);
+#endif
+
+        float ior = 1.5f;
+        material->Get(AI_MATKEY_REFRACTI, ior);
+
         // packing to shader expectations:
         // row0: baseColor rgba
-        // row1: emissive rgb
+        // row1: emissive rgb, transmissionFactor
         // row2: metallic, roughness, alphaCutoff, occlusionStrength
-        // row3: (unused), normalScale, (unused)
-        factors[0][0] = baseColor.r;
-        factors[0][1] = baseColor.g;
-        factors[0][2] = baseColor.b;
-        factors[0][3] = baseColor.a;
-        factors[1][0] = emissive.r;
-        factors[1][1] = emissive.g;
-        factors[1][2] = emissive.b;
+        // row3: (unused), normalScale, (unused), (unused)
+        // row4: thicknessFactor, attenuationDistance, IOR, (unused)
+        // row5: attenuationColor rgb, (unused)
+        
+        factors[0][0][0] = baseColor.r;
+        factors[0][0][1] = baseColor.g;
+        factors[0][0][2] = baseColor.b;
+        factors[0][0][3] = baseColor.a;
+        factors[0][1][0] = emissive.r;
+        factors[0][1][1] = emissive.g;
+        factors[0][1][2] = emissive.b;
+        factors[0][1][3] = transmissionFactor;
 
-        factors[2][0] = metallic;
-        factors[2][1] = roughness;
-        factors[2][2] = alphaCutoff;
-        factors[2][3] = occlusionStrength;
+        factors[0][2][0] = metallic;
+        factors[0][2][1] = roughness;
+        factors[0][2][2] = alphaCutoff;
+        factors[0][2][3] = occlusionStrength;
 
-        factors[3][1] = normalScale;
+        factors[0][3][1] = normalScale;
 
-        meshInfo.materialFactors = factors;
+        factors[1][0][0] = thicknessFactor;
+        factors[1][0][1] = attenuationDistance;
+        factors[1][0][2] = ior;
+        
+        factors[1][1][0] = attenuationColor.r;
+        factors[1][1][1] = attenuationColor.g;
+        factors[1][1][2] = attenuationColor.b;
+
+        meshInfo.materialFactors[0] = factors[0];
+        meshInfo.materialFactors[1] = factors[1];
         meshInfo.alphaCutoff = alphaCutoff;
     }
 

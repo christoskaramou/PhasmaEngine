@@ -118,7 +118,6 @@ namespace pe
         {
             uint32_t indexOffset;
             uint32_t vertexOffset;
-            uint32_t positionsOffset;
             int textures[5]; // BaseColor, Normal, Metallic, Occlusion, Emissive
             // int padding; // implicit padding or explicit? alignas(16) might need care.
             // 3 uints + 5 ints = 32 bytes (perfectly aligned to 16 if indices are 4 bytes)

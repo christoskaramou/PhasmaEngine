@@ -39,7 +39,7 @@ namespace pe
         m_passInfo->acceleration.rayGen = rayGen;
         m_passInfo->acceleration.miss = {miss};
         m_passInfo->acceleration.hitGroups = {{.closestHit = closestHit, .anyHit = anyHit}};
-        m_passInfo->acceleration.maxRecursionDepth = 4;
+        m_passInfo->acceleration.maxRecursionDepth = 3;
         m_passInfo->Update();
     }
 

@@ -74,7 +74,7 @@ struct Mesh_Constants
     float alphaCut;
     uint meshDataOffset;
     uint textureMask;
-    uint meshImageIndex[5];
+    int meshImageIndex[5];
 };
 
 // -----------------------------------------
