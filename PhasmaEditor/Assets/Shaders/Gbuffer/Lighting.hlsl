@@ -140,7 +140,7 @@ float CalculateShadows(float3 worldPos, float depth, float NdL)
 {
     float shadow = 1.0;
 
-    if (pc.cast_shadows)
+    if (cb_shadows)
     {
         float zBias = clamp(SHADOWMAP_TEXEL_SIZE * tan(acos(NdL)), 0, SHADOWMAP_TEXEL_SIZE * 2.0f); 
 

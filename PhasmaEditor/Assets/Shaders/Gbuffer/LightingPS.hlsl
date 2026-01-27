@@ -51,7 +51,7 @@ PS_OUTPUT_Color mainPS(PS_INPUT_UV input)
     if (cb_shadows)
     {
         float shadow = CalculateShadows(wolrdPos, length(wolrdPos - cb_camPos.xyz), dot(normal, cb_sun.direction.xyz));
-        fragColor    += DirectLight(material, wolrdPos, cb_camPos.xyz, normal, occlusion, shadow, energyCompensation);
+        fragColor += DirectLight(material, wolrdPos, cb_camPos.xyz, normal, occlusion, shadow, energyCompensation);
     }
 
     for (int i = 0; i < pc.num_point_lights; ++i)

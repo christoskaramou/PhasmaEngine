@@ -47,7 +47,6 @@ struct PushConstants_Bloom_Combine
 #ifdef SHADOWMAP_CASCADES
     struct PushConstants_Lighting
     {
-        uint cast_shadows;
         uint num_point_lights;
         float2 framebufferSize;
         uint transparentPass;
