@@ -128,21 +128,21 @@ namespace pe
             float splitDist = cascadeSplits[i];
 
             vec3 frustumCorners[8] = {
-                vec3(-1.0f, +1.0f, -1.0f),
-                vec3(+1.0f, +1.0f, -1.0f),
-                vec3(+1.0f, -1.0f, -1.0f),
-                vec3(-1.0f, -1.0f, -1.0f),
-                vec3(-1.0f, +1.0f, +1.0f),
-                vec3(+1.0f, +1.0f, +1.0f),
-                vec3(+1.0f, -1.0f, +1.0f),
-                vec3(-1.0f, -1.0f, +1.0f),
+                vec3(-1.0f, +1.0f, 1.0f),
+                vec3(+1.0f, +1.0f, 1.0f),
+                vec3(+1.0f, -1.0f, 1.0f),
+                vec3(-1.0f, -1.0f, 1.0f),
+                vec3(-1.0f, +1.0f, 0.0f),
+                vec3(+1.0f, +1.0f, 0.0f),
+                vec3(+1.0f, -1.0f, 0.0f),
+                vec3(-1.0f, -1.0f, 0.0f),
             };
 
             // Project frustum corners into world space
             Image *displayRT = Context::Get()->GetSystem<RendererSystem>()->GetDisplayRT();
             const float aspect = displayRT->GetWidth_f() / displayRT->GetHeight_f();
             const vec3 position = camera->GetPosition();
-            mat4 projection = perspective(camera->Fovy(), aspect, nearClip, farClip);
+            mat4 projection = perspective(camera->Fovy(), aspect, farClip, nearClip);
             mat4 view = lookAt(position, position + camera->GetFront(), camera->WorldUp());
             mat4 invVP = inverse(projection * view);
             for (uint32_t i = 0; i < 8; i++)
