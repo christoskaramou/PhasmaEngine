@@ -10,8 +10,12 @@ PS_OUTPUT_Color mainPS(PS_INPUT_UV input)
     float depth = Depth.Sample(sampler_Depth, input.uv).x;
 
     // if the depth is near zero it hits the skybox (use epsilon for robustness)
-    if (depth < 0.0001)
+    if (depth == 0.0)
     {
+        // No need to re-sample skybox for transparent pass
+        if (pc.transparentPass)
+            discard;
+
         // Skybox
         float3 wolrdPos  = GetPosFromUV(input.uv, depth, cb_invViewProj);
         float3 samplePos = normalize(wolrdPos - cb_camPos.xyz);
