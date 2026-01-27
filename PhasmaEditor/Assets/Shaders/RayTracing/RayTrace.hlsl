@@ -531,12 +531,11 @@ void closesthit(inout HitPayload payload, in BuiltInTriangleIntersectionAttribut
         // volume attenuation (Beer's Law)
         if (isTransmissive)
         {
+             transColor *= combinedColor.rgb;
              float dist = transPayload.t;
              
              if (thicknessFactor > 0.0)
-             {
-                 dist = thicknessFactor; 
-             }
+                 dist = thicknessFactor;
              
              if (dist > 0.0 && attenuationDistance < 10000.0) 
              {
