@@ -105,6 +105,33 @@ namespace pe
         return viewInfo;
     }
 
+    static Image *CreateImageAndUpload(CommandBuffer *cmd, const std::string &name, void *data, size_t size, uint32_t width, uint32_t height, vk::Format format, uint32_t mipLevels, vk::ImageUsageFlags usage, const vk::SamplerCreateInfo &samplerInfo)
+    {
+        vk::ImageCreateInfo info = Image::CreateInfoInit();
+        info.format = format;
+        info.extent = vk::Extent3D{width, height, 1};
+        info.mipLevels = mipLevels;
+        info.usage = usage;
+        info.initialLayout = vk::ImageLayout::eUndefined;
+
+        Image *image = Image::Create(info, name);
+        image->SetClearColor(Color::Transparent);
+        image->CreateSRV(vk::ImageViewType::e2D);
+        image->SetSampler(Sampler::Create(samplerInfo));
+
+        cmd->CopyDataToImageStaged(image, data, size);
+        cmd->GenerateMipMaps(image);
+
+        ImageBarrierInfo barrier{};
+        barrier.image = image;
+        barrier.layout = vk::ImageLayout::eShaderReadOnlyOptimal;
+        barrier.stageFlags = vk::PipelineStageFlagBits2::eFragmentShader | vk::PipelineStageFlagBits2::eComputeShader | vk::PipelineStageFlagBits2::eRayTracingShaderKHR;
+        barrier.accessMask = vk::AccessFlagBits2::eShaderRead;
+        cmd->ImageBarrier(barrier);
+
+        return image;
+    }
+
     Image *Image::LoadRGBA(CommandBuffer *cmd, const std::string &path, vk::Format format, bool isFloat)
     {
         int texWidth, texHeight, texChannels;
@@ -116,36 +143,72 @@ namespace pe
 
         PE_ERROR_IF(!pixels, "No pixel data loaded");
 
-        vk::ImageCreateInfo info = CreateInfoInit();
-        info.format = format;
-        info.extent = vk::Extent3D{static_cast<uint32_t>(texWidth), static_cast<uint32_t>(texHeight), 1};
-        info.mipLevels = Image::CalculateMips(texWidth, texHeight);
-        info.usage = vk::ImageUsageFlagBits::eTransferSrc | vk::ImageUsageFlagBits::eTransferDst | vk::ImageUsageFlagBits::eSampled | vk::ImageUsageFlagBits::eStorage;
-        info.initialLayout = vk::ImageLayout::ePreinitialized;
-        Image *image = Image::Create(info, path);
-        image->m_clearColor = Color::Transparent;
-        image->CreateSRV(vk::ImageViewType::e2D);
+        uint32_t mipLevels = Image::CalculateMips(texWidth, texHeight);
+        vk::ImageUsageFlags usage = vk::ImageUsageFlagBits::eTransferSrc | vk::ImageUsageFlagBits::eTransferDst | vk::ImageUsageFlagBits::eSampled | vk::ImageUsageFlagBits::eStorage;
 
         vk::SamplerCreateInfo samplerInfo = Sampler::CreateInfoInit();
         samplerInfo.mipLodBias = log2(Settings::Get<GlobalSettings>().render_scale) - 1.0f;
-        samplerInfo.maxLod = static_cast<float>(info.mipLevels);
+        samplerInfo.maxLod = static_cast<float>(mipLevels);
         samplerInfo.borderColor = vk::BorderColor::eFloatTransparentBlack;
-        image->m_sampler = Sampler::Create(samplerInfo);
 
-        cmd->CopyDataToImageStaged(image, pixels, texWidth * texHeight * (isFloat ? 16 : 4));
-        cmd->GenerateMipMaps(image);
-
-        ImageBarrierInfo barrier{};
-        barrier.image = image;
-        barrier.layout = vk::ImageLayout::eShaderReadOnlyOptimal;
-        barrier.stageFlags = vk::PipelineStageFlagBits2::eFragmentShader;
-        barrier.accessMask = vk::AccessFlagBits2::eShaderRead;
-        cmd->ImageBarrier(barrier);
+        Image *image = CreateImageAndUpload(cmd, path, pixels, texWidth * texHeight * (isFloat ? 16 : 4), texWidth, texHeight, format, mipLevels, usage, samplerInfo);
 
         cmd->AddAfterWaitCallback([pixels]()
                                   { stbi_image_free(pixels); });
 
         return image;
+    }
+
+    Image *Image::LoadRGBAFromMemory(CommandBuffer *cmd, void *data, int size, vk::Format format, bool isFloat)
+    {
+        int texWidth, texHeight, texChannels;
+        void *pixels = nullptr;
+        if (isFloat)
+            pixels = stbi_loadf_from_memory(static_cast<stbi_uc *>(data), size, &texWidth, &texHeight, &texChannels, STBI_rgb_alpha);
+        else
+            pixels = stbi_load_from_memory(static_cast<stbi_uc *>(data), size, &texWidth, &texHeight, &texChannels, STBI_rgb_alpha);
+
+        PE_ERROR_IF(!pixels, "No pixel data loaded");
+
+        uint32_t mipLevels = Image::CalculateMips(texWidth, texHeight);
+        vk::ImageUsageFlags usage = vk::ImageUsageFlagBits::eTransferSrc | vk::ImageUsageFlagBits::eTransferDst | vk::ImageUsageFlagBits::eSampled | vk::ImageUsageFlagBits::eStorage;
+
+        static int embeddedCount = 0;
+        std::string name = "Embedded_Texture_" + std::to_string(embeddedCount++);
+
+        vk::SamplerCreateInfo samplerInfo = Sampler::CreateInfoInit();
+        samplerInfo.mipLodBias = log2(Settings::Get<GlobalSettings>().render_scale) - 1.0f;
+        samplerInfo.maxLod = static_cast<float>(mipLevels);
+        samplerInfo.borderColor = vk::BorderColor::eFloatTransparentBlack;
+
+        Image *image = CreateImageAndUpload(cmd, name, pixels, texWidth * texHeight * (isFloat ? 16 : 4), texWidth, texHeight, format, mipLevels, usage, samplerInfo);
+
+        cmd->AddAfterWaitCallback([pixels]()
+                                  { stbi_image_free(pixels); });
+
+        return image;
+    }
+
+    Image *Image::LoadRGBA8FromMemory(CommandBuffer *cmd, void *data, int size)
+    {
+        return LoadRGBAFromMemory(cmd, data, size, vk::Format::eR8G8B8A8Unorm, false);
+    }
+
+    Image *Image::LoadRawFromMemory(CommandBuffer *cmd, void *data, uint32_t width, uint32_t height, vk::Format format, const std::string &name)
+    {
+        uint32_t mipLevels = Image::CalculateMips(width, height);
+        vk::ImageUsageFlags usage = vk::ImageUsageFlagBits::eTransferSrc | vk::ImageUsageFlagBits::eTransferDst | vk::ImageUsageFlagBits::eSampled | vk::ImageUsageFlagBits::eStorage;
+
+        static int embeddedCount = 0;
+        std::string n = name.empty() ? "Embedded_Raw_" + std::to_string(embeddedCount++) : name;
+
+        vk::SamplerCreateInfo samplerInfo = Sampler::CreateInfoInit();
+        samplerInfo.mipLodBias = log2(Settings::Get<GlobalSettings>().render_scale) - 1.0f;
+        samplerInfo.maxLod = static_cast<float>(mipLevels);
+        samplerInfo.borderColor = vk::BorderColor::eFloatTransparentBlack;
+
+        // Assuming 4 bytes per pixel for raw load
+        return CreateImageAndUpload(cmd, n, data, width * height * 4, width, height, format, mipLevels, usage, samplerInfo);
     }
 
     Image *Image::LoadRGBA8(CommandBuffer *cmd, const std::string &path)
@@ -190,18 +253,10 @@ namespace pe
         const size_t expectedSize = params.width * params.height * bytesPerPixel;
         PE_ERROR_IF(bytes.size() != expectedSize, ("Raw image size mismatch. Expected " + std::to_string(expectedSize) + " bytes, got " + std::to_string(bytes.size())).c_str());
 
-        vk::ImageCreateInfo info = CreateInfoInit();
-        info.format = params.format;
-        info.extent = vk::Extent3D{params.width, params.height, 1};
-        info.mipLevels = params.generateMips ? Image::CalculateMips(params.width, params.height) : 1;
-        info.usage = vk::ImageUsageFlagBits::eTransferDst | vk::ImageUsageFlagBits::eSampled;
+        uint32_t mipLevels = params.generateMips ? Image::CalculateMips(params.width, params.height) : 1;
+        vk::ImageUsageFlags usage = vk::ImageUsageFlagBits::eTransferDst | vk::ImageUsageFlagBits::eSampled;
         if (params.generateMips)
-            info.usage |= vk::ImageUsageFlagBits::eTransferSrc | vk::ImageUsageFlagBits::eStorage;
-        info.initialLayout = vk::ImageLayout::eUndefined;
-
-        Image *image = Image::Create(info, path);
-        image->m_clearColor = Color::Transparent;
-        image->CreateSRV(vk::ImageViewType::e2D);
+            usage |= vk::ImageUsageFlagBits::eTransferSrc | vk::ImageUsageFlagBits::eStorage;
 
         vk::SamplerCreateInfo samplerInfo = Sampler::CreateInfoInit();
         samplerInfo.minFilter = vk::Filter::eLinear;
@@ -215,24 +270,9 @@ namespace pe
         }
         samplerInfo.mipLodBias = params.mipLodBias;
         samplerInfo.minLod = 0.0f;
-        samplerInfo.maxLod = params.generateMips ? static_cast<float>(info.mipLevels) : 0.0f;
-        image->m_sampler = Sampler::Create(samplerInfo);
+        samplerInfo.maxLod = params.generateMips ? static_cast<float>(mipLevels) : 0.0f;
 
-        cmd->CopyDataToImageStaged(image, bytes.data(), static_cast<uint32_t>(bytes.size()));
-
-        if (params.generateMips)
-            cmd->GenerateMipMaps(image);
-
-        ImageBarrierInfo barrier{};
-        barrier.image = image;
-        barrier.layout = vk::ImageLayout::eShaderReadOnlyOptimal;
-        barrier.stageFlags = vk::PipelineStageFlagBits2::eFragmentShader |
-                             vk::PipelineStageFlagBits2::eComputeShader |
-                             vk::PipelineStageFlagBits2::eRayTracingShaderKHR;
-        barrier.accessMask = vk::AccessFlagBits2::eShaderRead;
-        cmd->ImageBarrier(barrier);
-
-        return image;
+        return CreateImageAndUpload(cmd, path, bytes.data(), bytes.size(), params.width, params.height, params.format, mipLevels, usage, samplerInfo);
     }
 
     vk::ImageCreateInfo Image::CreateInfoInit()

@@ -1,4 +1,5 @@
 #include "Scene/ModelAssimp.h"
+#include "API/Image.h"
 #include "API/Command.h"
 #include "API/Queue.h"
 #include "API/RHI.h"
@@ -171,9 +172,36 @@ namespace pe
         // load all unique
         for (const std::string &key : uniqueTexKeys)
         {
-            Image *img = LoadTexture(cmd, key);
-            if (img)
-                progress++;
+            if (key.length() > 0 && key[0] == '*')
+            {
+                int textureIndex = std::stoi(key.substr(1));
+                if (textureIndex < m_scene->mNumTextures)
+                {
+                    aiTexture *tex = m_scene->mTextures[textureIndex];
+                    Image *img = nullptr;
+                    if (tex->mHeight == 0)
+                    {
+                        img = Image::LoadRGBA8FromMemory(cmd, tex->pcData, tex->mWidth);
+                    }
+                    else
+                    {
+                        img = Image::LoadRawFromMemory(cmd, tex->pcData, tex->mWidth, tex->mHeight, vk::Format::eB8G8R8A8Unorm);
+                    }
+
+                    if (img)
+                    {
+                        m_textureCache[key] = img;
+                        AddImage(img, true);
+                        progress++;
+                    }
+                }
+            }
+            else
+            {
+                Image *img = LoadTexture(cmd, key);
+                if (img)
+                    progress++;
+            }
         }
 
         // NOTE: defaults already added via ResetResources()
@@ -539,8 +567,9 @@ namespace pe
             return {};
 
         // embedded textures like "*0" not handled here
+        // embedded textures like "*0"
         if (path.C_Str()[0] == '*')
-            return {};
+            return std::string(path.C_Str());
 
         std::filesystem::path rel = path.C_Str();
 
