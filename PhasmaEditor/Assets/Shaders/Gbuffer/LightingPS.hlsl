@@ -4,7 +4,7 @@ PS_OUTPUT_Color mainPS(PS_INPUT_UV input)
 {
     PS_OUTPUT_Color output;
 
-    if (pc.transparentPass && Transparency.Sample(sampler_Transparency, input.uv).x < 0.5f)
+    if (pc.passType && Transparency.Sample(sampler_Transparency, input.uv).x < 0.5f)
         discard;
 
     float depth = Depth.Sample(sampler_Depth, input.uv).x;
@@ -13,7 +13,7 @@ PS_OUTPUT_Color mainPS(PS_INPUT_UV input)
     if (depth == 0.0)
     {
         // No need to re-sample skybox for transparent pass
-        if (pc.transparentPass)
+        if (pc.passType)
             discard;
 
         // Skybox
@@ -26,7 +26,7 @@ PS_OUTPUT_Color mainPS(PS_INPUT_UV input)
 
     float4 albedo    = Albedo.Sample(sampler_Albedo, input.uv);
     float3 normal    = normalize(Normal.Sample(sampler_Normal, input.uv).xyz * 2.0 - 1.0);
-    float3 metRough  = MetRough.Sample(sampler_MetRough, input.uv).xyz;
+    float4 metRough  = MetRough.Sample(sampler_MetRough, input.uv);
     float3 emmission = Emission.Sample(sampler_Emission, input.uv).xyz;
     float3 wolrdPos  = GetPosFromUV(input.uv, depth, cb_invViewProj);
 
@@ -35,6 +35,7 @@ PS_OUTPUT_Color mainPS(PS_INPUT_UV input)
     material.roughness = metRough.y;
     material.metallic  = metRough.z;
     material.F0        = lerp(0.04f, material.albedo, material.metallic);
+    material.transmission = metRough.w;
 
     // Ambient
     float materialAO = metRough.x;

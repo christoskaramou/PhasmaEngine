@@ -51,7 +51,7 @@ namespace pe
         m_passInfo->name = "shadows_pipeline";
         m_passInfo->pVertShader = Shader::Create(Path::Assets + "Shaders/Shadows/ShadowsVS.hlsl", vk::ShaderStageFlagBits::eVertex, "mainVS", std::vector<Define>{}, ShaderCodeType::HLSL);
         m_passInfo->dynamicStates = {vk::DynamicState::eViewport, vk::DynamicState::eScissor, vk::DynamicState::eDepthBias};
-        m_passInfo->cullMode = vk::CullModeFlagBits::eFront;
+        m_passInfo->cullMode = vk::CullModeFlagBits::eNone;
         m_passInfo->depthFormat = RHII.GetDepthFormat();
         m_passInfo->Update();
     }
@@ -201,7 +201,7 @@ namespace pe
 
         cmd->BeginDebugRegion("ShadowPass");
 
-        if (!m_scene->HasOpaqueDrawInfo())
+        if (!m_scene->HasDrawInfo())
         {
             ClearDepths(cmd);
         }

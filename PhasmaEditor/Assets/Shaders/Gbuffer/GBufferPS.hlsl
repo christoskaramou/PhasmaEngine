@@ -44,9 +44,10 @@ PS_OUTPUT_Gbuffer mainPS(PS_INPUT_Gbuffer input)
 
     output.normal = CalculateNormal(input.positionWS.xyz, tangentNormal, input.normal, input.uv) * 0.5f + 0.5f;
     output.albedo = float4(combinedColor.xyz, combinedColor.a);
-    output.metRough = float3(occlusion, roughness, metallic);
+    float transmission = (pc.passType == 2) ? 1.0f : 0.0f;
+    output.metRough = float4(occlusion, roughness, metallic, transmission);
     output.emissive = float4(emissiveSample * input.emissiveFactor, 0.0f);
-    output.transparency = pc.transparentPass ? 1.0f : 0.0f;
+    output.transparency = pc.passType ? 1.0f : 0.0f;
 
     // Calculate the velocity
     // Ensure that the positions are in NDC space by dividing by the w component

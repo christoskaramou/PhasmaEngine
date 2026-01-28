@@ -13,7 +13,7 @@ namespace pe
         float pad0;
         vec2 projJitter;
         vec2 prevProjJitter;
-        uint32_t transparentPass;
+        uint32_t passType;
         float pad1;
     };
 

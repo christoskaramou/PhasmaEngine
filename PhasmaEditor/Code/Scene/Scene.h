@@ -36,7 +36,7 @@ namespace pe
         const OrderedMap<size_t, Model *> &GetModels() const { return m_models; }
 
         bool HasOpaqueDrawInfo() const { return !m_drawInfosOpaque.empty(); }
-        bool HasAlphaDrawInfo() const { return !m_drawInfosAlphaCut.empty() || !m_drawInfosAlphaBlend.empty(); }
+        bool HasAlphaDrawInfo() const { return !m_drawInfosAlphaCut.empty() || !m_drawInfosAlphaBlend.empty() || !m_drawInfosTransmission.empty(); }
         bool HasDrawInfo() const { return HasOpaqueDrawInfo() || HasAlphaDrawInfo(); }
         bool HasDirtyDescriptorViews(uint32_t frame) const { return m_dirtyDescriptorViews[frame]; }
         void ClearDirtyDescriptorViews(uint32_t frame) { m_dirtyDescriptorViews[frame] = false; }
@@ -55,6 +55,7 @@ namespace pe
         const std::vector<DrawInfo> &GetDrawInfosOpaque() const { return m_drawInfosOpaque; }
         const std::vector<DrawInfo> &GetDrawInfosAlphaCut() const { return m_drawInfosAlphaCut; }
         const std::vector<DrawInfo> &GetDrawInfosAlphaBlend() const { return m_drawInfosAlphaBlend; }
+        const std::vector<DrawInfo> &GetDrawInfosTransmission() const { return m_drawInfosTransmission; }
         const std::vector<ImageView *> &GetImageViews() const { return m_imageViews; }
         uint32_t GetMeshCount() const { return m_meshCount; }
         static const std::vector<uint32_t> &GetAabbIndices() { return s_aabbIndices; }
@@ -109,6 +110,7 @@ namespace pe
         std::vector<DrawInfo> m_drawInfosOpaque;
         std::vector<DrawInfo> m_drawInfosAlphaCut;
         std::vector<DrawInfo> m_drawInfosAlphaBlend;
+        std::vector<DrawInfo> m_drawInfosTransmission;
         std::vector<vk::DrawIndexedIndirectCommand> m_indirectCommands;
 
         std::mutex m_drawInfosMutex;
