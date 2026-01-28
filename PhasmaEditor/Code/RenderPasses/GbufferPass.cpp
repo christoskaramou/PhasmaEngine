@@ -98,7 +98,7 @@ namespace pe
                 pushConstants.jointsCount = 0u;
                 pushConstants.projJitter = camera->GetProjJitter();
                 pushConstants.prevProjJitter = camera->GetPrevProjJitter();
-                pushConstants.transparentPass = 0u;
+                pushConstants.passType = 0u;
 
                 uint32_t frame = RHII.GetFrameIndex();
                 size_t offset = 0;
@@ -219,22 +219,45 @@ namespace pe
             pushConstants.jointsCount = 0u;
             pushConstants.projJitter = camera->GetProjJitter();
             pushConstants.prevProjJitter = camera->GetPrevProjJitter();
-            pushConstants.transparentPass = 1u;
-
+            pushConstants.passType = 1u;
             uint32_t frame = RHII.GetFrameIndex();
-            size_t offset = (m_scene->GetDrawInfosOpaque().size() + m_scene->GetDrawInfosAlphaCut().size()) * sizeof(vk::DrawIndexedIndirectCommand);
-            uint32_t count = static_cast<uint32_t>(m_scene->GetDrawInfosAlphaBlend().size());
 
-            cmd->BeginPass(7, m_attachments.data(), "GbufferTransparentPass");
-            cmd->BindIndexBuffer(m_scene->GetBuffer(), 0);
-            cmd->BindVertexBuffer(m_scene->GetBuffer(), m_scene->GetVerticesOffset());
-            cmd->SetViewport(0.f, 0.f, m_depthStencilRT->GetWidth_f(), m_depthStencilRT->GetHeight_f());
-            cmd->SetScissor(0, 0, m_depthStencilRT->GetWidth(), m_depthStencilRT->GetHeight());
-            cmd->BindPipeline(*m_passInfo);
-            cmd->SetConstants(pushConstants);
-            cmd->PushConstants();
-            cmd->DrawIndexedIndirect(m_scene->GetIndirect(frame), offset, count);
-            cmd->EndPass();
+            // Alpha Blend
+            if (!m_scene->GetDrawInfosAlphaBlend().empty())
+            {
+                size_t offset = (m_scene->GetDrawInfosOpaque().size() + m_scene->GetDrawInfosAlphaCut().size()) * sizeof(vk::DrawIndexedIndirectCommand);
+                uint32_t count = static_cast<uint32_t>(m_scene->GetDrawInfosAlphaBlend().size());
+
+                cmd->BeginPass(7, m_attachments.data(), "GbufferTransparentPass_AlphaBlend");
+                cmd->BindIndexBuffer(m_scene->GetBuffer(), 0);
+                cmd->BindVertexBuffer(m_scene->GetBuffer(), m_scene->GetVerticesOffset());
+                cmd->SetViewport(0.f, 0.f, m_depthStencilRT->GetWidth_f(), m_depthStencilRT->GetHeight_f());
+                cmd->SetScissor(0, 0, m_depthStencilRT->GetWidth(), m_depthStencilRT->GetHeight());
+                cmd->BindPipeline(*m_passInfo);
+                cmd->SetConstants(pushConstants);
+                cmd->PushConstants();
+                cmd->DrawIndexedIndirect(m_scene->GetIndirect(frame), offset, count);
+                cmd->EndPass();
+            }
+
+            // Transmission
+            if (!m_scene->GetDrawInfosTransmission().empty())
+            {
+                pushConstants.passType = 2u;
+                size_t offset = (m_scene->GetDrawInfosOpaque().size() + m_scene->GetDrawInfosAlphaCut().size() + m_scene->GetDrawInfosAlphaBlend().size()) * sizeof(vk::DrawIndexedIndirectCommand);
+                uint32_t count = static_cast<uint32_t>(m_scene->GetDrawInfosTransmission().size());
+
+                cmd->BeginPass(7, m_attachments.data(), "GbufferTransparentPass_Transmission");
+                cmd->BindIndexBuffer(m_scene->GetBuffer(), 0);
+                cmd->BindVertexBuffer(m_scene->GetBuffer(), m_scene->GetVerticesOffset());
+                cmd->SetViewport(0.f, 0.f, m_depthStencilRT->GetWidth_f(), m_depthStencilRT->GetHeight_f());
+                cmd->SetScissor(0, 0, m_depthStencilRT->GetWidth(), m_depthStencilRT->GetHeight());
+                cmd->BindPipeline(*m_passInfo);
+                cmd->SetConstants(pushConstants);
+                cmd->PushConstants();
+                cmd->DrawIndexedIndirect(m_scene->GetIndirect(frame), offset, count);
+                cmd->EndPass();
+            }
         }
 
         m_scene = nullptr;

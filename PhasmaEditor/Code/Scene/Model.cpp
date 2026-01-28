@@ -230,8 +230,8 @@ namespace pe
         int mesh = GetNodeMesh(node);
         if (mesh >= 0 && mesh < static_cast<int>(m_meshInfos.size()))
         {
-            MeshInfo &meshInfo = m_meshInfos[mesh];
-            meshInfo.worldBoundingBox = TransformAabb(meshInfo.boundingBox, nodeInfo.ubo.worldMatrix);
+            const MeshInfo &meshInfo = m_meshInfos[mesh];
+            nodeInfo.worldBoundingBox = TransformAabb(meshInfo.boundingBox, nodeInfo.ubo.worldMatrix);
         }
 
         nodeInfo.dirty = false;

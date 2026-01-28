@@ -390,7 +390,7 @@ namespace pe
                     continue;
 
                 MeshInfo &meshInfo = meshesInfo[meshIndex];
-                meshInfo.dataOffset = storageSize;
+                model.GetNodeInfos()[nodeIndex].dataOffset = storageSize;
 
                 storageSize += meshInfo.dataSize;
                 storageSize += sizeof(mat4) * 2; // material data (factors)
@@ -445,7 +445,7 @@ namespace pe
                     continue;
 
                 MeshInfo &meshInfo = meshesInfo[meshIndex];
-                meshInfo.indirectIndex = indirectCount;
+                model.GetNodeInfos()[nodeIndex].indirectIndex = indirectCount;
 
                 vk::DrawIndexedIndirectCommand indirectCommand{};
                 indirectCommand.indexCount = meshInfo.indicesCount;
@@ -558,7 +558,7 @@ namespace pe
 
                 Mesh_Constants constants{};
                 constants.alphaCut = meshInfo.alphaCutoff;
-                constants.meshDataOffset = static_cast<uint32_t>(meshInfo.dataOffset);
+                constants.meshDataOffset = static_cast<uint32_t>(model.GetNodeInfos()[nodeIndex].dataOffset);
                 constants.textureMask = meshInfo.textureMask;
                 for (int k = 0; k < 5; k++)
                     constants.meshImageIndex[k] = meshInfo.viewsIndex[k];
@@ -590,14 +590,17 @@ namespace pe
         std::vector<DrawInfo> localOpaque;
         std::vector<DrawInfo> localAlphaCut;
         std::vector<DrawInfo> localAlphaBlend;
+        std::vector<DrawInfo> localTransmission;
         localOpaque.reserve(1);
         localAlphaCut.reserve(1);
         localAlphaBlend.reserve(1);
+        localTransmission.reserve(1);
 
-        meshInfo.cull = frustumCulling ? !camera.AABBInFrustum(meshInfo.worldBoundingBox) : false;
-        if (!meshInfo.cull)
+        NodeInfo &nodeInfo = model.GetNodeInfos()[node];
+        bool cull = frustumCulling ? !camera.AABBInFrustum(nodeInfo.worldBoundingBox) : false;
+        if (!cull)
         {
-            vec3 center = meshInfo.worldBoundingBox.GetCenter();
+            vec3 center = nodeInfo.worldBoundingBox.GetCenter();
             float distance = distance2(camera.GetPosition(), center);
 
             switch (meshInfo.renderType)
@@ -611,15 +614,19 @@ namespace pe
             case RenderType::AlphaBlend:
                 localAlphaBlend.push_back(DrawInfo{&model, node, distance});
                 break;
+            case RenderType::Transmission:
+                localTransmission.push_back(DrawInfo{&model, node, distance});
+                break;
             }
         }
 
-        if (!localOpaque.empty() || !localAlphaCut.empty() || !localAlphaBlend.empty())
+        if (!localOpaque.empty() || !localAlphaCut.empty() || !localAlphaBlend.empty() || !localTransmission.empty())
         {
             std::scoped_lock lock(m_drawInfosMutex);
             m_drawInfosOpaque.insert(m_drawInfosOpaque.end(), localOpaque.begin(), localOpaque.end());
             m_drawInfosAlphaCut.insert(m_drawInfosAlphaCut.end(), localAlphaCut.begin(), localAlphaCut.end());
             m_drawInfosAlphaBlend.insert(m_drawInfosAlphaBlend.end(), localAlphaBlend.begin(), localAlphaBlend.end());
+            m_drawInfosTransmission.insert(m_drawInfosTransmission.end(), localTransmission.begin(), localTransmission.end());
         }
     }
 
@@ -641,24 +648,26 @@ namespace pe
         m_storages[frame]->Copy(1, &range, true);
 
         std::vector<uint32_t> ids{};
-        ids.reserve(m_drawInfosOpaque.size() + m_drawInfosAlphaCut.size() + m_drawInfosAlphaBlend.size());
+        ids.reserve(m_drawInfosOpaque.size() + m_drawInfosAlphaCut.size() + m_drawInfosAlphaBlend.size() + m_drawInfosTransmission.size());
         for (auto &drawInfo : m_drawInfosOpaque)
         {
             auto &model = *drawInfo.model;
-            auto &meshInfo = model.GetMeshInfos()[model.GetNodeMesh(drawInfo.node)];
-            ids.push_back(meshInfo.indirectIndex);
+            ids.push_back(model.GetNodeInfos()[drawInfo.node].indirectIndex);
         }
         for (auto &drawInfo : m_drawInfosAlphaCut)
         {
             auto &model = *drawInfo.model;
-            auto &meshInfo = model.GetMeshInfos()[model.GetNodeMesh(drawInfo.node)];
-            ids.push_back(meshInfo.indirectIndex);
+            ids.push_back(model.GetNodeInfos()[drawInfo.node].indirectIndex);
+        }
+        for (auto &drawInfo : m_drawInfosTransmission)
+        {
+            auto &model = *drawInfo.model;
+            ids.push_back(model.GetNodeInfos()[drawInfo.node].indirectIndex);
         }
         for (auto &drawInfo : m_drawInfosAlphaBlend)
         {
             auto &model = *drawInfo.model;
-            auto &meshInfo = model.GetMeshInfos()[model.GetNodeMesh(drawInfo.node)];
-            ids.push_back(meshInfo.indirectIndex);
+            ids.push_back(model.GetNodeInfos()[drawInfo.node].indirectIndex);
         }
         range.data = ids.data();
         range.size = ids.size() * sizeof(uint32_t);
@@ -687,7 +696,7 @@ namespace pe
 
                 range.data = &nodeInfo.ubo;
                 range.size = meshInfo.dataSize;
-                range.offset = meshInfo.dataOffset;
+                range.offset = nodeInfo.dataOffset;
                 m_storages[frame]->Copy(1, &range, true);
 
                 nodeInfo.dirtyUniforms[frame] = false;
@@ -709,8 +718,7 @@ namespace pe
         for (auto &drawInfo : m_drawInfosOpaque)
         {
             auto &model = *drawInfo.model;
-            auto &meshInfo = model.GetMeshInfos()[model.GetNodeMesh(drawInfo.node)];
-            auto &indirectCommand = m_indirectCommands[meshInfo.indirectIndex];
+            auto &indirectCommand = m_indirectCommands[model.GetNodeInfos()[drawInfo.node].indirectIndex];
             indirectCommand.firstInstance = firstInstance;
 
             BufferRange range{};
@@ -725,8 +733,22 @@ namespace pe
         for (auto &drawInfo : m_drawInfosAlphaCut)
         {
             auto &model = *drawInfo.model;
-            auto &meshInfo = model.GetMeshInfos()[model.GetNodeMesh(drawInfo.node)];
-            auto &indirectCommand = m_indirectCommands[meshInfo.indirectIndex];
+            auto &indirectCommand = m_indirectCommands[model.GetNodeInfos()[drawInfo.node].indirectIndex];
+            indirectCommand.firstInstance = firstInstance;
+
+            BufferRange range{};
+            range.data = &indirectCommand;
+            range.size = sizeof(vk::DrawIndexedIndirectCommand);
+            range.offset = firstInstance * sizeof(vk::DrawIndexedIndirectCommand);
+            m_indirects[frame]->Copy(1, &range, true);
+
+            firstInstance++;
+        }
+
+        for (auto &drawInfo : m_drawInfosTransmission)
+        {
+            auto &model = *drawInfo.model;
+            auto &indirectCommand = m_indirectCommands[model.GetNodeInfos()[drawInfo.node].indirectIndex];
             indirectCommand.firstInstance = firstInstance;
 
             BufferRange range{};
@@ -741,8 +763,7 @@ namespace pe
         for (auto &drawInfo : m_drawInfosAlphaBlend)
         {
             auto &model = *drawInfo.model;
-            auto &meshInfo = model.GetMeshInfos()[model.GetNodeMesh(drawInfo.node)];
-            auto &indirectCommand = m_indirectCommands[meshInfo.indirectIndex];
+            auto &indirectCommand = m_indirectCommands[model.GetNodeInfos()[drawInfo.node].indirectIndex];
             indirectCommand.firstInstance = firstInstance;
 
             BufferRange range{};
@@ -797,6 +818,8 @@ namespace pe
                   { return a.distance > b.distance; });
         std::sort(m_drawInfosAlphaBlend.begin(), m_drawInfosAlphaBlend.end(), [](const DrawInfo &a, const DrawInfo &b)
                   { return a.distance > b.distance; });
+        std::sort(m_drawInfosTransmission.begin(), m_drawInfosTransmission.end(), [](const DrawInfo &a, const DrawInfo &b)
+                  { return a.distance > b.distance; });
     }
 
     void Scene::ClearDrawInfos(bool reserveMax)
@@ -804,12 +827,14 @@ namespace pe
         m_drawInfosOpaque.clear();
         m_drawInfosAlphaCut.clear();
         m_drawInfosAlphaBlend.clear();
+        m_drawInfosTransmission.clear();
 
         if (reserveMax)
         {
             uint32_t maxOpaque = 0;
             uint32_t maxAlphaCut = 0;
             uint32_t maxAlphaBlend = 0;
+            uint32_t maxTransmission = 0;
 
             for (auto &modelPtr : m_models)
             {
@@ -836,6 +861,9 @@ namespace pe
                     case RenderType::AlphaBlend:
                         maxAlphaBlend++;
                         break;
+                    case RenderType::Transmission:
+                        maxTransmission++;
+                        break;
                     }
                 }
             }
@@ -843,6 +871,7 @@ namespace pe
             m_drawInfosOpaque.reserve(maxOpaque);
             m_drawInfosAlphaCut.reserve(maxAlphaCut);
             m_drawInfosAlphaBlend.reserve(maxAlphaBlend);
+            m_drawInfosTransmission.reserve(maxTransmission);
         }
     }
 
@@ -866,6 +895,7 @@ namespace pe
         Buffer::Destroy(m_indirectAll);
         m_indirectAll = nullptr;
     }
+
     void Scene::BuildAccelerationStructures(CommandBuffer *cmd)
     {
         // Cleanup old resources
@@ -924,7 +954,7 @@ namespace pe
                 geometry.geometry.triangles.indexType = vk::IndexType::eUint32;
                 geometry.geometry.triangles.indexData.deviceAddress = bufferAddress + meshInfo.indexOffset * sizeof(uint32_t);
                 geometry.flags = vk::GeometryFlagBitsKHR::eOpaque;
-                if (meshInfo.renderType == RenderType::AlphaCut || meshInfo.renderType == RenderType::AlphaBlend)
+                if (meshInfo.renderType == RenderType::AlphaCut || meshInfo.renderType == RenderType::AlphaBlend || meshInfo.renderType == RenderType::Transmission)
                     geometry.flags = vk::GeometryFlagBitsKHR::eNoDuplicateAnyHitInvocation;
 
                 vk::AccelerationStructureBuildRangeInfoKHR range{};

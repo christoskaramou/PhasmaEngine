@@ -73,8 +73,9 @@ namespace pe
                 if (mesh < 0)
                     continue;
 
+                NodeInfo &nodeInfo = model.GetNodeInfos()[node];
                 MeshInfo &meshInfo = model.GetMeshInfos()[mesh];
-                constants.meshIndex = GetUboDataOffset(meshInfo.dataOffset);
+                constants.meshIndex = GetUboDataOffset(nodeInfo.dataOffset);
                 constants.color = meshInfo.aabbColor;
 
                 cmd->SetConstants(constants);
@@ -97,6 +98,7 @@ namespace pe
         DrawFromInfos(m_scene->GetDrawInfosOpaque());
         DrawFromInfos(m_scene->GetDrawInfosAlphaCut());
         DrawFromInfos(m_scene->GetDrawInfosAlphaBlend());
+        DrawFromInfos(m_scene->GetDrawInfosTransmission());
         cmd->EndPass();
 
         cmd->EndDebugRegion();

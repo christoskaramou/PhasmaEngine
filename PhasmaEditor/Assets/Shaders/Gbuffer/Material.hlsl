@@ -7,6 +7,7 @@ struct Material
     float roughness;
     float3 F0;
     float metallic;
+    float transmission;
 };
 
 #endif

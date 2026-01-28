@@ -159,6 +159,7 @@ namespace pe
         Opaque = 1,
         AlphaCut = 2,
         AlphaBlend = 3,
+        Transmission = 4,
     };
 
     enum class ReflectionVariableType

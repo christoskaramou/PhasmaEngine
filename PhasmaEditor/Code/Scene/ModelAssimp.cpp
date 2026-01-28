@@ -761,6 +761,13 @@ namespace pe
                 return RenderType::AlphaCut;
         }
 
+        float transmissionFactor = 0.f;
+#ifdef AI_MATKEY_TRANSMISSION_FACTOR
+        material->Get(AI_MATKEY_TRANSMISSION_FACTOR, transmissionFactor);
+#endif
+        if (transmissionFactor > 0.f)
+            return RenderType::Transmission;
+
         float opacity = 1.0f;
         if (material->Get(AI_MATKEY_OPACITY, opacity) == AI_SUCCESS && opacity < 1.0f)
             return RenderType::AlphaBlend;

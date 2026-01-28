@@ -61,8 +61,11 @@ namespace pe
 
     struct NodeInfo
     {
+        AABB worldBoundingBox;
         int parent = -1;
         mat4 localMatrix;
+        size_t dataOffset = static_cast<size_t>(-1);
+        uint32_t indirectIndex = 0;
 
         struct UBO
         {

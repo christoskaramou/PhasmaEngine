@@ -49,7 +49,7 @@ struct PushConstants_Bloom_Combine
     {
         uint num_point_lights;
         float2 framebufferSize;
-        uint transparentPass;
+        uint passType;
         float max_cascade_dist[SHADOWMAP_CASCADES];
     };
 #endif
@@ -60,7 +60,7 @@ struct PushConstants_GBuffer
     float pad0;
     float2 projJitter;
     float2 prevProjJitter;
-    uint transparentPass;
+    uint passType;
     float pad1;
 };
 
@@ -189,7 +189,7 @@ struct PS_OUTPUT_Gbuffer
 {
     float3 normal               : SV_TARGET0;
     float4 albedo               : SV_TARGET1;
-    float3 metRough             : SV_TARGET2;
+    float4 metRough             : SV_TARGET2;
     float2 velocity             : SV_TARGET3;
     float4 emissive             : SV_TARGET4;
     float transparency          : SV_TARGET5;
