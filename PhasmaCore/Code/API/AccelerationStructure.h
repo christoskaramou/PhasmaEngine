@@ -12,6 +12,7 @@ namespace pe
             const std::vector<vk::AccelerationStructureGeometryKHR> &geometries,
             const std::vector<uint32_t> &maxPrimitiveCounts,
             vk::AccelerationStructureTypeKHR accelerationStructureType,
+            vk::BuildAccelerationStructureFlagsKHR flags,
             vk::AccelerationStructureBuildTypeKHR type);
 
         AccelerationStructure(const std::string &name, Buffer *buffer = nullptr, uint64_t offset = 0);
@@ -22,12 +23,14 @@ namespace pe
                        const std::vector<vk::AccelerationStructureGeometryKHR> &geometries,
                        const std::vector<vk::AccelerationStructureBuildRangeInfoKHR> &buildRanges,
                        const std::vector<uint32_t> &maxPrimitiveCounts,
+                       vk::BuildAccelerationStructureFlagsKHR flags,
                        vk::DeviceAddress scratchAddress = 0);
 
         // TLAS
         void BuildTLAS(CommandBuffer *cmd,
                        uint32_t instanceCount,
                        Buffer *instanceBuffer,
+                       vk::BuildAccelerationStructureFlagsKHR flags,
                        vk::DeviceAddress scratchAddress = 0);
 
         uint64_t GetDeviceAddress() const;

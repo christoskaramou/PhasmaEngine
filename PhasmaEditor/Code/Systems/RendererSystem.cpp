@@ -178,7 +178,7 @@ namespace pe
         cmd->Begin();
 
         // Check dependencies
-        bool renderRaster = !gSettings.use_ray_tracing;
+        bool renderRaster = true; // Always rasterize opaque (Hybrid)
         bool renderPostProcess = true; // Mostly always needed unless completely disabled
 
         bool renderShadows = gSettings.shadows && renderRaster;
@@ -226,19 +226,23 @@ namespace pe
                     lo.ExecutePass(cmd);
                 }
 
-                // Gbuffers Transparent
+                if (!gSettings.use_ray_tracing)
                 {
-                    gbt.SetScene(&m_scene);
-                    gbt.ExecutePass(cmd);
-                }
+                    // Gbuffers Transparent
+                    {
+                        gbt.SetScene(&m_scene);
+                        gbt.ExecutePass(cmd);
+                    }
 
-                // Lighting Transparent
-                {
-                    lt.ExecutePass(cmd);
+                    // Lighting Transparent
+                    {
+                        lt.ExecutePass(cmd);
+                    }
                 }
             }
         }
-        else
+        
+        if (gSettings.use_ray_tracing)
         {
             // Ray Tracing Replaces Lighting
             rtp.SetScene(&m_scene);

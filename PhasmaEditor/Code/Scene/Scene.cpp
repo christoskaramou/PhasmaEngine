@@ -100,6 +100,59 @@ namespace pe
                 setUniforms->Update();
             }
 
+            if (HasDirtyDescriptorViews(frame))
+            {
+                GbufferOpaquePass *gbo = GetGlobalComponent<GbufferOpaquePass>();
+                if (gbo)
+                {
+                    const auto &sets = gbo->m_passInfo->GetDescriptors(frame);
+                    Descriptor *setTextures = sets[1];
+                    setTextures->SetBuffer(0, gbo->m_constants);
+                    setTextures->SetSampler(1, defaultSampler);
+                    setTextures->SetImageViews(2, GetImageViews());
+                    setTextures->Update();
+
+                    // DepthPass uses the same constants and textures for Alpha Cutoff
+                    DepthPass *dp = GetGlobalComponent<DepthPass>();
+                    if (dp)
+                    {
+                        const auto &dpSets = dp->m_passInfo->GetDescriptors(frame);
+                        Descriptor *dpSetTextures = dpSets[1];
+                        dpSetTextures->SetBuffer(0, gbo->m_constants);
+                        dpSetTextures->SetSampler(1, defaultSampler);
+                        dpSetTextures->SetImageViews(2, GetImageViews());
+                        dpSetTextures->Update();
+                    }
+
+                    // RayTracingPass
+                    RayTracingPass *rtp = GetGlobalComponent<RayTracingPass>();
+                    if (rtp)
+                    {
+                        const auto &rtSets = rtp->m_passInfo->GetDescriptors(frame);
+                        if (rtSets.size() > 0 && rtSets[0])
+                        {
+                            Descriptor *rtSet0 = rtSets[0];
+                            rtSet0->SetSampler(4, defaultSampler);
+                            rtSet0->SetImageViews(5, GetImageViews());
+                            rtSet0->Update();
+                        }
+                    }
+                }
+
+                GbufferTransparentPass *gbt = GetGlobalComponent<GbufferTransparentPass>();
+                if (gbt)
+                {
+                    const auto &sets = gbt->m_passInfo->GetDescriptors(frame);
+                    Descriptor *setTextures = sets[1];
+                    setTextures->SetBuffer(0, gbt->m_constants);
+                    setTextures->SetSampler(1, defaultSampler);
+                    setTextures->SetImageViews(2, GetImageViews());
+                    setTextures->Update();
+                }
+
+                ClearDirtyDescriptorViews(frame);
+            }
+
             if (HasOpaqueDrawInfo())
             {
                 {
@@ -111,15 +164,6 @@ namespace pe
                     setUniforms->SetBuffer(0, GetUniforms(frame));
                     setUniforms->SetBuffer(1, gb->m_constants);
                     setUniforms->Update();
-
-                    Descriptor *setTextures = sets[1];
-                    setTextures->SetBuffer(0, gb->m_constants);
-                    if (HasDirtyDescriptorViews(frame))
-                    {
-                        setTextures->SetSampler(1, defaultSampler);
-                        setTextures->SetImageViews(2, GetImageViews());
-                        setTextures->Update();
-                    }
                 }
 
                 {
@@ -141,15 +185,6 @@ namespace pe
                     setUniforms->SetBuffer(0, GetUniforms(frame));
                     setUniforms->SetBuffer(1, gb->m_constants);
                     setUniforms->Update();
-
-                    Descriptor *setTextures = sets[1];
-                    setTextures->SetBuffer(0, gb->m_constants);
-                    if (HasDirtyDescriptorViews(frame))
-                    {
-                        setTextures->SetSampler(1, defaultSampler);
-                        setTextures->SetImageViews(2, GetImageViews());
-                        setTextures->Update();
-                    }
                 }
             }
 
@@ -162,18 +197,7 @@ namespace pe
                 setUniforms->SetBuffer(0, GetUniforms(frame));
                 setUniforms->SetBuffer(1, gb->m_constants);
                 setUniforms->Update();
-
-                Descriptor *setTextures = sets[1];
-                setTextures->SetBuffer(0, gb->m_constants);
-                if (HasDirtyDescriptorViews(frame))
-                {
-                    setTextures->SetSampler(1, defaultSampler);
-                    setTextures->SetImageViews(2, GetImageViews());
-                    setTextures->Update();
-                }
             }
-
-            ClearDirtyDescriptorViews(frame);
         }
     }
 
@@ -557,7 +581,7 @@ namespace pe
                 MeshInfo &meshInfo = meshesInfo[meshIndex];
 
                 Mesh_Constants constants{};
-                constants.alphaCut = meshInfo.alphaCutoff;
+                constants.alphaCut = (meshInfo.renderType == RenderType::AlphaCut) ? meshInfo.alphaCutoff : 0.0f;
                 constants.meshDataOffset = static_cast<uint32_t>(model.GetNodeInfos()[nodeIndex].dataOffset);
                 constants.textureMask = meshInfo.textureMask;
                 for (int k = 0; k < 5; k++)
@@ -935,6 +959,8 @@ namespace pe
         };
         std::vector<BlasBuildReq> buildReqs;
 
+        static constexpr vk::BuildAccelerationStructureFlagsKHR kBlasFlags = vk::BuildAccelerationStructureFlagBitsKHR::ePreferFastTrace;
+
         // Iterate models/meshes
         for (auto model : m_models)
         {
@@ -950,7 +976,7 @@ namespace pe
                 geometry.geometry.triangles.vertexFormat = vk::Format::eR32G32B32Sfloat;
                 geometry.geometry.triangles.vertexData.deviceAddress = bufferAddress + m_verticesOffset + meshInfo.vertexOffset * sizeof(Vertex);
                 geometry.geometry.triangles.vertexStride = sizeof(Vertex);
-                geometry.geometry.triangles.maxVertex = meshInfo.verticesCount;
+                geometry.geometry.triangles.maxVertex = meshInfo.verticesCount ? meshInfo.verticesCount - 1 : 0;
                 geometry.geometry.triangles.indexType = vk::IndexType::eUint32;
                 geometry.geometry.triangles.indexData.deviceAddress = bufferAddress + meshInfo.indexOffset * sizeof(uint32_t);
                 geometry.flags = vk::GeometryFlagBitsKHR::eOpaque;
@@ -967,6 +993,7 @@ namespace pe
                     {geometry},
                     {range.primitiveCount},
                     vk::AccelerationStructureTypeKHR::eBottomLevel,
+                    kBlasFlags,
                     vk::AccelerationStructureBuildTypeKHR::eDevice);
 
                 // Align up
@@ -980,6 +1007,57 @@ namespace pe
         if (buildReqs.empty())
             return;
 
+        struct InstanceReq
+        {
+            AccelerationStructure *blas;
+            Model *model;
+            int meshIndex;
+            mat4 transform;
+        };
+        std::vector<InstanceReq> instanceReqs;
+        instanceReqs.reserve(buildReqs.size()); // Approximate or better
+
+        for (auto model : m_models)
+        {
+            for (int i = 0; i < model->GetNodeCount(); i++)
+            {
+                int meshIndex = model->GetNodeMesh(i);
+                if (meshIndex < 0)
+                    continue;
+                
+                // Check if valid mesh (must match BLAS build logic)
+                if (model->GetMeshInfos()[meshIndex].indicesCount == 0)
+                    continue;
+
+                const auto &nodeInfo = model->GetNodeInfos()[i];
+                instanceReqs.push_back({nullptr, model, meshIndex, nodeInfo.ubo.worldMatrix});
+            }
+        }
+
+        uint32_t instanceCount = static_cast<uint32_t>(instanceReqs.size());
+
+
+        static constexpr vk::BuildAccelerationStructureFlagsKHR kTlasFlags = vk::BuildAccelerationStructureFlagBitsKHR::ePreferFastTrace;
+
+        // Query TLAS scratch
+        vk::AccelerationStructureGeometryKHR tlasGeom{};
+        tlasGeom.geometryType = vk::GeometryTypeKHR::eInstances;
+
+        vk::AccelerationStructureGeometryInstancesDataKHR instData{};
+        instData.arrayOfPointers = VK_FALSE;
+        instData.data.deviceAddress = 0;
+
+        tlasGeom.geometry.instances = instData;
+
+        auto tlasSizes = AccelerationStructure::GetBuildSizes(
+            {tlasGeom},
+            {instanceCount},
+            vk::AccelerationStructureTypeKHR::eTopLevel,
+            kTlasFlags,
+            vk::AccelerationStructureBuildTypeKHR::eDevice);
+
+        maxScratchSize = std::max(maxScratchSize, tlasSizes.buildScratchSize);
+
         // --- Allocation ---
         m_blasMergedBuffer = Buffer::Create(
             totalBlasSize,
@@ -987,8 +1065,14 @@ namespace pe
             VMA_ALLOCATION_CREATE_DEDICATED_MEMORY_BIT,
             "BLAS_Merged_Buffer");
 
+        vk::PhysicalDeviceAccelerationStructurePropertiesKHR asProps{};
+        asProps.pNext = nullptr;
+        vk::PhysicalDeviceProperties2 props{};
+        props.pNext = &asProps;
+        RHII.GetGpu().getProperties2(&props);
+        auto align = asProps.minAccelerationStructureScratchOffsetAlignment;
         m_scratchBuffer = Buffer::Create(
-            maxScratchSize,
+            RHII.Align(maxScratchSize, align),
             vk::BufferUsageFlagBits2::eStorageBuffer | vk::BufferUsageFlagBits2::eShaderDeviceAddress,
             VMA_ALLOCATION_CREATE_DEDICATED_MEMORY_BIT,
             "AS_Scratch_Buffer");
@@ -1005,44 +1089,31 @@ namespace pe
 
             std::string name = "BLAS_" + req.model->GetLabel() + "_" + std::to_string(req.meshIndex);
             req.createdBlas = new AccelerationStructure(name, m_blasMergedBuffer, currentOffset);
-            req.createdBlas->BuildBLAS(cmd, {req.geometry}, {req.range}, {req.range.primitiveCount}, m_scratchBuffer->GetDeviceAddress());
+            req.createdBlas->BuildBLAS(cmd, {req.geometry}, {req.range}, {req.range.primitiveCount}, kBlasFlags, m_scratchBuffer->GetDeviceAddress());
             m_blases.push_back(req.createdBlas);
 
             currentOffset += req.sizeInfo.accelerationStructureSize;
         }
 
-        // --- Pass 2: Instance Requests (One per NODE) ---
-        struct InstanceReq
+        // --- Match Instances to BLAS ---
+        for (auto it = instanceReqs.begin(); it != instanceReqs.end();)
         {
-            AccelerationStructure *blas;
-            Model *model;
-            int meshIndex;
-            mat4 transform;
-        };
-        std::vector<InstanceReq> instanceReqs;
-
-        for (auto model : m_models)
-        {
-            for (int i = 0; i < model->GetNodeCount(); i++)
+            auto &req = *it;
+            for (auto &bReq : buildReqs)
             {
-                int meshIndex = model->GetNodeMesh(i);
-                if (meshIndex < 0)
-                    continue;
-
-                AccelerationStructure *blas = nullptr;
-                for (auto &bReq : buildReqs)
+                if (bReq.model == req.model && bReq.meshIndex == static_cast<size_t>(req.meshIndex))
                 {
-                    if (bReq.model == model && bReq.meshIndex == static_cast<size_t>(meshIndex))
-                    {
-                        blas = bReq.createdBlas;
-                        break;
-                    }
+                    req.blas = bReq.createdBlas;
+                    break;
                 }
-                if (!blas)
-                    continue;
-
-                const auto &nodeInfo = model->GetNodeInfos()[i];
-                instanceReqs.push_back({blas, model, meshIndex, nodeInfo.ubo.worldMatrix});
+            }
+            if (!req.blas)
+            {
+                it = instanceReqs.erase(it);
+            }
+            else
+            {
+                ++it;
             }
         }
 
@@ -1078,9 +1149,13 @@ namespace pe
             transformMatrix.matrix[2][2] = t[2][2];
             transformMatrix.matrix[2][3] = t[3][2];
 
+            const auto &meshInfo = req.model->GetMeshInfos()[req.meshIndex];
+            bool isTransparent = meshInfo.renderType == RenderType::AlphaBlend ||
+                                 meshInfo.renderType == RenderType::Transmission;
+
             gpuInstances[i].transform = transformMatrix;
             gpuInstances[i].instanceCustomIndex = static_cast<uint32_t>(i);
-            gpuInstances[i].mask = 0xFF;
+            gpuInstances[i].mask = isTransparent ? 0x80 : 0x01;
             gpuInstances[i].instanceShaderBindingTableRecordOffset = 0;
             gpuInstances[i].flags = static_cast<VkGeometryInstanceFlagBitsKHR>(vk::GeometryInstanceFlagBitsKHR::eTriangleFacingCullDisable);
             gpuInstances[i].accelerationStructureReference = req.blas->GetDeviceAddress();
@@ -1090,7 +1165,7 @@ namespace pe
 
         // --- TLAS Build ---
         m_tlas = AccelerationStructure::Create("TLAS", nullptr, 0);
-        m_tlas->BuildTLAS(cmd, static_cast<uint32_t>(instanceReqs.size()), m_instanceBuffer, m_scratchBuffer->GetDeviceAddress());
+        m_tlas->BuildTLAS(cmd, static_cast<uint32_t>(instanceReqs.size()), m_instanceBuffer, kTlasFlags, m_scratchBuffer->GetDeviceAddress());
 
         // --- Create MeshInfoGPU Buffer (Corresponds to Instances) ---
         Buffer::Destroy(m_meshInfoBuffer);

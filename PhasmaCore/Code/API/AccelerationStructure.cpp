@@ -9,11 +9,12 @@ namespace pe
         const std::vector<vk::AccelerationStructureGeometryKHR> &geometries,
         const std::vector<uint32_t> &maxPrimitiveCounts,
         vk::AccelerationStructureTypeKHR accelerationStructureType,
+        vk::BuildAccelerationStructureFlagsKHR flags,
         vk::AccelerationStructureBuildTypeKHR type)
     {
         vk::AccelerationStructureBuildGeometryInfoKHR buildInfo{};
         buildInfo.type = accelerationStructureType;
-        buildInfo.flags = vk::BuildAccelerationStructureFlagBitsKHR::ePreferFastTrace;
+        buildInfo.flags = flags;
         buildInfo.mode = vk::BuildAccelerationStructureModeKHR::eBuild;
         buildInfo.geometryCount = static_cast<uint32_t>(geometries.size());
         buildInfo.pGeometries = geometries.data();
@@ -68,11 +69,12 @@ namespace pe
                                           const std::vector<vk::AccelerationStructureGeometryKHR> &geometries,
                                           const std::vector<vk::AccelerationStructureBuildRangeInfoKHR> &buildRanges,
                                           const std::vector<uint32_t> &maxPrimitiveCounts,
+                                          vk::BuildAccelerationStructureFlagsKHR flags,
                                           vk::DeviceAddress scratchAddress)
     {
         vk::AccelerationStructureBuildGeometryInfoKHR buildInfo{};
         buildInfo.type = vk::AccelerationStructureTypeKHR::eBottomLevel;
-        buildInfo.flags = vk::BuildAccelerationStructureFlagBitsKHR::ePreferFastTrace;
+        buildInfo.flags = flags;
         buildInfo.mode = vk::BuildAccelerationStructureModeKHR::eBuild;
         buildInfo.geometryCount = static_cast<uint32_t>(geometries.size());
         buildInfo.pGeometries = geometries.data();
@@ -125,6 +127,7 @@ namespace pe
     void AccelerationStructure::BuildTLAS(CommandBuffer *cmd,
                                           uint32_t instanceCount,
                                           Buffer *instanceBuffer,
+                                          vk::BuildAccelerationStructureFlagsKHR flags,
                                           vk::DeviceAddress scratchAddress)
     {
         vk::AccelerationStructureGeometryInstancesDataKHR instancesVk{};
@@ -136,7 +139,7 @@ namespace pe
 
         vk::AccelerationStructureBuildGeometryInfoKHR buildInfo{};
         buildInfo.type = vk::AccelerationStructureTypeKHR::eTopLevel;
-        buildInfo.flags = vk::BuildAccelerationStructureFlagBitsKHR::ePreferFastTrace;
+        buildInfo.flags = flags;
         buildInfo.mode = vk::BuildAccelerationStructureModeKHR::eBuild;
         buildInfo.geometryCount = 1;
         buildInfo.pGeometries = &geometry;
