@@ -19,6 +19,7 @@ struct HitPayload
     uint   hitKind;
     uint   rayType; // 0: Primary, 1: Shadow
     uint   depth;
+    uint   isRefractive;
 };
 
 struct Vertex
@@ -50,6 +51,7 @@ struct Vertex
 [[vk::binding(7, 0)]] StructuredBuffer<MeshInfoGPU> meshInfos;
 [[vk::binding(8, 0)]] TextureCube skybox;
 [[vk::binding(9, 0)]] Texture2D LutIBL;
+[[vk::binding(10, 0)]] Texture2D<float> depthBuffer;
 
 [[vk::binding(0, 1)]] cbuffer Lights
 {
@@ -68,6 +70,7 @@ struct Vertex
     float ubo_lightsRange;
     uint ubo_shadows;
     uint ubo_use_Disney_PBR;
+    float ubo_iblIntensity;
 };
 
 static const uint MATRIX_SIZE = 64u;
@@ -326,11 +329,19 @@ void raygeneration()
     // Transform direction to world space (no translation)
     float3 dirWorld = normalize(mul(dirView, (float3x3)invView));
 
+    // Read depth from raster
+    float opaqueDepth = depthBuffer.Load(int3(launchIndex.xy, 0)).r;
+    
+    // Calculate distance to surface
+    float4 pViewOpaque = mul(float4(ndc.x, ndc.y, opaqueDepth, 1.0), invProjection);
+    pViewOpaque.xyz /= pViewOpaque.w;
+    float opaqueDist = length(pViewOpaque.xyz);
+
     RayDesc ray;
     ray.Origin    = originWorld;
     ray.Direction = dirWorld;
     ray.TMin      = 0.001;
-    ray.TMax      = 10000.0;
+    ray.TMax      = opaqueDist - 0.00001; // for z fighting
 
     // Payload init
     HitPayload payload;
@@ -339,12 +350,14 @@ void raygeneration()
     payload.hitKind  = 0;
     payload.rayType  = 0;
     payload.depth    = 0;
+    payload.isRefractive = 0;
 
     // (AS, RayFlags, InstanceMask, RayContributionToHitGroupIndex, MultiplierForGeomContribution, MissShaderIndex, Ray, Payload)
+    // Mask 0x80: Transparent Objects Only
     TraceRay(
         tlas,
         RAY_FLAG_NONE,
-        0xFF,
+        0x80,
         0,  // hit group index base (ray type 0)
         0,  // geometry contribution multiplier
         0,  // miss shader index
@@ -352,7 +365,10 @@ void raygeneration()
         payload
     );
 
-    output[launchIndex.xy] = float4(payload.radiance, 1.0);
+    if (payload.t != -1.0)
+    {
+        output[launchIndex.xy] = float4(payload.radiance, 1.0);
+    }
 }
 
 [shader("anyhit")]
@@ -458,7 +474,7 @@ void closesthit(inout HitPayload payload, in BuiltInTriangleIntersectionAttribut
     float3 L = normalize(cb_sun.direction.xyz);
     float sunShadow = TraceShadowRay(positionWorld, L, 10000.0);
 
-    lighting += ComputeIBL(N, V, combinedColor.rgb, metallic, roughness, F0, envBRDF);
+    lighting += ComputeIBL(N, V, combinedColor.rgb, metallic, roughness, F0, envBRDF) * ubo_iblIntensity;
     lighting *= occlusion;
 
     // Direct Lighting
@@ -516,11 +532,14 @@ void closesthit(inout HitPayload payload, in BuiltInTriangleIntersectionAttribut
         transPayload.hitKind  = 0;
         transPayload.rayType  = 0;
         transPayload.depth    = payload.depth + 1;
+        transPayload.isRefractive = isTransmissive ? 1 : 0;
+
+        uint mask = isTransmissive ? 0xFF : 0x80;
 
         TraceRay(
             tlas,
             RAY_FLAG_NONE,
-            0xFF,
+            mask,
             0, 0, 0,
             ray,
             transPayload
@@ -563,6 +582,14 @@ void miss(inout HitPayload payload)
     if (payload.rayType == 1)
     {
         payload.t = -1.0; // Use t to signal miss
+        return;
+    }
+
+    if (payload.depth > 0 && payload.isRefractive == 0)
+    {
+        uint3 launchIndex = DispatchRaysIndex();
+        payload.radiance = output[launchIndex.xy].rgb;
+        payload.t = -1.0;
         return;
     }
 

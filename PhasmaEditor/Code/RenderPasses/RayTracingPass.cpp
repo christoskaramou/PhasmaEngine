@@ -91,6 +91,7 @@ namespace pe
                 desc->SetImageView(8, skybox->GetSRV());
                 auto *ibl_brdf_lut = rs->GetIBL_LUT();
                 desc->SetImageView(9, ibl_brdf_lut->GetSRV());
+                desc->SetImageView(10, rs->GetDepthStencilRT()->GetSRV());
                 desc->Update();
             }
 
@@ -117,7 +118,9 @@ namespace pe
         ubo.lights_intensity = gSettings.lights_intensity;
         ubo.lights_range = gSettings.lights_range;
         ubo.shadows = gSettings.shadows ? 1 : 0;
+        ubo.shadows = gSettings.shadows ? 1 : 0;
         ubo.use_Disney_PBR = gSettings.use_Disney_PBR ? 1 : 0;
+        ubo.ibl_intensity = gSettings.IBL_intensity;
 
         BufferRange range{};
         range.data = &ubo;

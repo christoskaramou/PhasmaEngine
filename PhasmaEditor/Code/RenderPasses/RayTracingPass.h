@@ -16,6 +16,7 @@ namespace pe
         float lights_range;
         uint32_t shadows;
         uint32_t use_Disney_PBR;
+        float ibl_intensity;
     };
 
     class RayTracingPass : public IRenderPassComponent

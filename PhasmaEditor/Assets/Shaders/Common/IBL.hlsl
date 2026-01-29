@@ -25,11 +25,14 @@ float3 ComputeIBL_Common(
     float3 kS = Fr;
     float3 kD = (1.0 - kS) * (1.0 - metallic);
 
-    float3 irradiance = texCube.SampleLevel(samplerCube, N, 6).rgb; 
+    float w, h, l;
+    texCube.GetDimensions(0, w, h, l);
+
+    float3 irradiance = texCube.SampleLevel(samplerCube, N, max(0, l - 3)).rgb; 
     float3 diffuse = irradiance * albedo * occlusion;
 
     // Specular (Reflection)
-    float mip = roughness * roughness * 8.0; 
+    float mip = roughness * roughness * max(0, l - 1); 
     float3 prefilteredColor = texCube.SampleLevel(samplerCube, R, mip).rgb;
 
     float3 specular = prefilteredColor * kS * occlusion;
