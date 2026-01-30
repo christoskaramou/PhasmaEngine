@@ -644,14 +644,11 @@ namespace pe
             }
         }
 
-        if (!localOpaque.empty() || !localAlphaCut.empty() || !localAlphaBlend.empty() || !localTransmission.empty())
-        {
-            std::scoped_lock lock(m_drawInfosMutex);
-            m_drawInfosOpaque.insert(m_drawInfosOpaque.end(), localOpaque.begin(), localOpaque.end());
-            m_drawInfosAlphaCut.insert(m_drawInfosAlphaCut.end(), localAlphaCut.begin(), localAlphaCut.end());
-            m_drawInfosAlphaBlend.insert(m_drawInfosAlphaBlend.end(), localAlphaBlend.begin(), localAlphaBlend.end());
-            m_drawInfosTransmission.insert(m_drawInfosTransmission.end(), localTransmission.begin(), localTransmission.end());
-        }
+        std::scoped_lock lock(m_drawInfosMutex);
+        m_drawInfosOpaque.insert(m_drawInfosOpaque.end(), localOpaque.begin(), localOpaque.end());
+        m_drawInfosAlphaCut.insert(m_drawInfosAlphaCut.end(), localAlphaCut.begin(), localAlphaCut.end());
+        m_drawInfosAlphaBlend.insert(m_drawInfosAlphaBlend.end(), localAlphaBlend.begin(), localAlphaBlend.end());
+        m_drawInfosTransmission.insert(m_drawInfosTransmission.end(), localTransmission.begin(), localTransmission.end());
     }
 
     void Scene::UpdateUniformData()
@@ -839,7 +836,7 @@ namespace pe
         std::sort(m_drawInfosOpaque.begin(), m_drawInfosOpaque.end(), [](const DrawInfo &a, const DrawInfo &b)
                   { return a.distance < b.distance; });
         std::sort(m_drawInfosAlphaCut.begin(), m_drawInfosAlphaCut.end(), [](const DrawInfo &a, const DrawInfo &b)
-                  { return a.distance > b.distance; });
+                  { return a.distance < b.distance; });
         std::sort(m_drawInfosAlphaBlend.begin(), m_drawInfosAlphaBlend.end(), [](const DrawInfo &a, const DrawInfo &b)
                   { return a.distance > b.distance; });
         std::sort(m_drawInfosTransmission.begin(), m_drawInfosTransmission.end(), [](const DrawInfo &a, const DrawInfo &b)
@@ -1024,7 +1021,7 @@ namespace pe
                 int meshIndex = model->GetNodeMesh(i);
                 if (meshIndex < 0)
                     continue;
-                
+
                 // Check if valid mesh (must match BLAS build logic)
                 if (model->GetMeshInfos()[meshIndex].indicesCount == 0)
                     continue;
@@ -1035,7 +1032,6 @@ namespace pe
         }
 
         uint32_t instanceCount = static_cast<uint32_t>(instanceReqs.size());
-
 
         static constexpr vk::BuildAccelerationStructureFlagsKHR kTlasFlags = vk::BuildAccelerationStructureFlagBitsKHR::ePreferFastTrace;
 
@@ -1151,7 +1147,8 @@ namespace pe
 
             const auto &meshInfo = req.model->GetMeshInfos()[req.meshIndex];
             bool isTransparent = meshInfo.renderType == RenderType::AlphaBlend ||
-                                 meshInfo.renderType == RenderType::Transmission;
+                                 meshInfo.renderType == RenderType::Transmission ||
+                                 meshInfo.renderType == RenderType::AlphaCut;
 
             gpuInstances[i].transform = transformMatrix;
             gpuInstances[i].instanceCustomIndex = static_cast<uint32_t>(i);
@@ -1168,6 +1165,15 @@ namespace pe
         m_tlas->BuildTLAS(cmd, static_cast<uint32_t>(instanceReqs.size()), m_instanceBuffer, kTlasFlags, m_scratchBuffer->GetDeviceAddress());
 
         // --- Create MeshInfoGPU Buffer (Corresponds to Instances) ---
+        struct MeshInfoGPU
+        {
+            uint32_t indexOffset;
+            uint32_t vertexOffset;
+            uint32_t positionsOffset;
+            uint32_t renderType; // 1: Opaque, 2: AlphaCut, 3: AlphaBlend, 4: Transmission
+            int32_t textures[5]; // BaseColor, Normal, Metallic, Occlusion, Emissive
+        };
+
         Buffer::Destroy(m_meshInfoBuffer);
         m_meshInfoBuffer = Buffer::Create(
             instanceReqs.size() * sizeof(MeshInfoGPU),
@@ -1186,6 +1192,7 @@ namespace pe
 
             meshInfoGPU.indexOffset = meshInfo.indexOffset * 4;
             meshInfoGPU.vertexOffset = static_cast<uint32_t>(m_verticesOffset) + meshInfo.vertexOffset * sizeof(Vertex);
+            meshInfoGPU.renderType = static_cast<uint32_t>(meshInfo.renderType);
 
             for (int k = 0; k < 5; k++)
                 meshInfoGPU.textures[k] = meshInfo.viewsIndex[k];

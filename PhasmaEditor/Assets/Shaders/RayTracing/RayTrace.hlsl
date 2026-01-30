@@ -8,8 +8,9 @@ struct MeshInfoGPU
 {
     uint indexOffset;
     uint vertexOffset;
+    uint positionsOffset;
+    uint renderType;   // 1: Opaque, 2: AlphaCut, 3: AlphaBlend, 4: Transmission
     int textures[5];
-    int padding;
 };
 
 struct HitPayload
@@ -20,6 +21,7 @@ struct HitPayload
     uint   rayType; // 0: Primary, 1: Shadow
     uint   depth;
     uint   isRefractive;
+    float  alpha;   // Alpha channel for blending
 };
 
 struct Vertex
@@ -71,6 +73,7 @@ struct Vertex
     uint ubo_shadows;
     uint ubo_use_Disney_PBR;
     float ubo_iblIntensity;
+    uint ubo_renderMode;  // 0=Raster, 1=Hybrid, 2=RayTracing
 };
 
 static const uint MATRIX_SIZE = 64u;
@@ -337,11 +340,24 @@ void raygeneration()
     pViewOpaque.xyz /= pViewOpaque.w;
     float opaqueDist = length(pViewOpaque.xyz);
 
+    // MODE-BASED CONFIGURATION
+    // 0 = Raster
+    // 1 = Hybrid
+    // 2 = RayTracing
+    uint mask = 0x80;                  // Default: Transparent only
+    float tMax = opaqueDist - 0.00001; // Default: Limited by depth
+    
+    if (ubo_renderMode == 2)
+    {
+        mask = 0xFF;            // Trace all geometry
+        tMax = 100000.0;        // Unlimited distance
+    }
+
     RayDesc ray;
     ray.Origin    = originWorld;
     ray.Direction = dirWorld;
     ray.TMin      = 0.001;
-    ray.TMax      = opaqueDist - 0.00001; // for z fighting
+    ray.TMax      = tMax;
 
     // Payload init
     HitPayload payload;
@@ -351,13 +367,12 @@ void raygeneration()
     payload.rayType  = 0;
     payload.depth    = 0;
     payload.isRefractive = 0;
+    payload.alpha    = 1.0;
 
-    // (AS, RayFlags, InstanceMask, RayContributionToHitGroupIndex, MultiplierForGeomContribution, MissShaderIndex, Ray, Payload)
-    // Mask 0x80: Transparent Objects Only
     TraceRay(
         tlas,
         RAY_FLAG_NONE,
-        0x80,
+        mask,
         0,  // hit group index base (ray type 0)
         0,  // geometry contribution multiplier
         0,  // miss shader index
@@ -367,7 +382,12 @@ void raygeneration()
 
     if (payload.t != -1.0)
     {
-        output[launchIndex.xy] = float4(payload.radiance, 1.0);
+        output[launchIndex.xy] = float4(payload.radiance, payload.alpha);
+    }
+    else if (ubo_renderMode == 2) // With full RT, show skybox when no hit
+    {
+        float3 direction = normalize(dirWorld);
+        output[launchIndex.xy] = float4(skybox.SampleLevel(material_sampler, direction, 0).rgb, 1.0);
     }
 }
 
@@ -496,10 +516,13 @@ void closesthit(inout HitPayload payload, in BuiltInTriangleIntersectionAttribut
     float ior = asfloat(data.Load(GetMeshConstantsOffset(id) + 72));                 // Offset 72 (row4 .z)
     float3 attenuationColor = asfloat(data.Load3(GetMeshConstantsOffset(id) + 80));  // Offset 80 (row5 .xyz)
 
-    // Handle Transmission
-    bool isTransmissive = transmissionFactor > 0.01f;
-    
-    if ((isTransmissive || combinedColor.a < 1.0f) && payload.depth < 2) // 2 Bounces
+    // Check material type from RenderType enum (1: Opaque, 2: AlphaCut, 3: AlphaBlend, 4: Transmission)
+    uint renderType = meshInfos[id].renderType;
+    bool isAlphaCutMaterial = renderType == 2;
+    bool isAlphaBlendMaterial = renderType == 3;
+    bool isTransmissive = renderType == 4;
+    bool shouldTraceSecondary = isTransmissive || (isAlphaBlendMaterial && combinedColor.a < 1.0f);
+    if (shouldTraceSecondary && payload.depth < 2) // 2 Bounces
     {
         RayDesc ray;
         ray.Origin = positionWorld;
@@ -534,7 +557,8 @@ void closesthit(inout HitPayload payload, in BuiltInTriangleIntersectionAttribut
         transPayload.depth    = payload.depth + 1;
         transPayload.isRefractive = isTransmissive ? 1 : 0;
 
-        uint mask = isTransmissive ? 0xFF : 0x80;
+        // In Full RT mode, alpha blended objects need to see opaque geometry behind them
+        uint mask = (isTransmissive || ubo_renderMode == 2) ? 0xFF : 0x80;
 
         TraceRay(
             tlas,
@@ -573,6 +597,7 @@ void closesthit(inout HitPayload payload, in BuiltInTriangleIntersectionAttribut
     payload.radiance = lighting;
     payload.t        = RayTCurrent();
     payload.hitKind  = HitKind();
+    payload.alpha    = 1.0; // All hits are opaque, transparency is handled from ray continuation
 }
 
 [shader("miss")]
@@ -587,15 +612,17 @@ void miss(inout HitPayload payload)
 
     if (payload.depth > 0 && payload.isRefractive == 0)
     {
-        uint3 launchIndex = DispatchRaysIndex();
-        payload.radiance = output[launchIndex.xy].rgb;
-        payload.t = -1.0;
-        return;
+        if (ubo_renderMode == 1)
+        {
+            uint3 launchIndex = DispatchRaysIndex();
+            payload.radiance = output[launchIndex.xy].rgb;
+            payload.t = -1.0;
+            return;
+        }
     }
 
-    // sky gradient based on ray direction (works even without other resources)
-    float3 direction = normalize(WorldRayDirection());
-    payload.radiance = skybox.SampleLevel(material_sampler, direction, 0).rgb;
-    payload.t        = -1.0;
-    payload.hitKind  = 0;
+    float3 direction = WorldRayDirection();
+    payload.radiance = skybox.SampleLevel(material_sampler, direction, 0).rgb * ubo_iblIntensity;
+    payload.t = -1.0;
+    payload.alpha = 0.0;
 }

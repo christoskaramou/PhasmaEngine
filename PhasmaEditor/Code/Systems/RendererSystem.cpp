@@ -178,7 +178,7 @@ namespace pe
         cmd->Begin();
 
         // Check dependencies
-        bool renderRaster = true; // Always rasterize opaque (Hybrid)
+        bool renderRaster = gSettings.render_mode != RenderMode::RayTracing;
         bool renderPostProcess = true; // Mostly always needed unless completely disabled
 
         bool renderShadows = gSettings.shadows && renderRaster;
@@ -226,7 +226,7 @@ namespace pe
                     lo.ExecutePass(cmd);
                 }
 
-                if (!gSettings.use_ray_tracing)
+                if (gSettings.render_mode == RenderMode::Raster)
                 {
                     // Gbuffers Transparent
                     {
@@ -242,7 +242,7 @@ namespace pe
             }
         }
         
-        if (gSettings.use_ray_tracing)
+        if (gSettings.render_mode != RenderMode::Raster)
         {
             // Ray Tracing Replaces Lighting
             rtp.SetScene(&m_scene);

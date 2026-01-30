@@ -35,8 +35,8 @@ namespace pe
         OrderedMap<size_t, Model *> &GetModels() { return m_models; }
         const OrderedMap<size_t, Model *> &GetModels() const { return m_models; }
 
-        bool HasOpaqueDrawInfo() const { return !m_drawInfosOpaque.empty(); }
-        bool HasAlphaDrawInfo() const { return !m_drawInfosAlphaCut.empty() || !m_drawInfosAlphaBlend.empty() || !m_drawInfosTransmission.empty(); }
+        bool HasOpaqueDrawInfo() const { return !m_drawInfosOpaque.empty() || !m_drawInfosAlphaCut.empty(); }
+        bool HasAlphaDrawInfo() const { return !m_drawInfosAlphaBlend.empty() || !m_drawInfosTransmission.empty(); }
         bool HasDrawInfo() const { return HasOpaqueDrawInfo() || HasAlphaDrawInfo(); }
         bool HasDirtyDescriptorViews(uint32_t frame) const { return m_dirtyDescriptorViews[frame]; }
         void ClearDirtyDescriptorViews(uint32_t frame) { m_dirtyDescriptorViews[frame] = false; }
