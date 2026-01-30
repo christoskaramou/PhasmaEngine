@@ -75,6 +75,8 @@ VS_OUTPUT_Gbuffer mainVS(VS_INPUT_Gbuffer input)
     float3x3 worldRotationScale3x3  = (float3x3)worldTransform;                       // remove translation
     float3x3 worldRotation3X3       = remove_scale3x3(worldRotationScale3x3);         // remove scale
     output.normal                   = normalize(mul(input.normal, worldRotation3X3)); // transform normal to world space
+    output.tangent.xyz              = normalize(mul(input.tangent.xyz, worldRotation3X3)); // transform tangent to world space
+    output.tangent.w                = input.tangent.w; // pass sign
 
     // Color
     output.color = input.color;

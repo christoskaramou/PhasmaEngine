@@ -99,6 +99,7 @@ struct VS_INPUT_Gbuffer
     float3 position             : POSITION;
     float2 texCoord             : TEXCOORD;
     float3 normal               : NORMAL;
+    float4 tangent              : TANGENT;
     float4 color                : COLOR;
     uint4 joints                : BLENDINDICES;
     float4 weights              : BLENDWEIGHT;
@@ -128,6 +129,7 @@ struct VS_OUTPUT_Gbuffer
 {
     float2 uv                   : TEXCOORD0;
     float3 normal               : NORMAL;
+    float4 tangent              : TEXCOORD4;
     float4 color                : COLOR;
     float4 baseColorFactor      : TEXCOORD1;
     float3 emissiveFactor       : TEXCOORD2;
@@ -151,6 +153,7 @@ struct PS_INPUT_Gbuffer
 {
     float2 uv                   : TEXCOORD0;
     float3 normal               : NORMAL;
+    float4 tangent              : TEXCOORD4;
     float4 color                : COLOR;
     float4 baseColorFactor      : TEXCOORD1;
     float3 emissiveFactor       : TEXCOORD2;

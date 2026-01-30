@@ -342,6 +342,20 @@ namespace pe
                     FillVertexColor(vertex, 1.0f, 1.0f, 1.0f, 1.0f);
                 }
 
+                if (mesh->mTangents)
+                {
+                    const aiVector3D &t = mesh->mTangents[v];
+                    const aiVector3D &b = mesh->mBitangents[v];
+                    const aiVector3D &n = normals ? normals[v] : aiVector3D(0.0f, 0.0f, 1.0f);
+                    float det = (n.y * t.z - n.z * t.y) * b.x + (n.z * t.x - n.x * t.z) * b.y + (n.x * t.y - n.y * t.x) * b.z;
+                    float sign = (det < 0.0f) ? -1.0f : 1.0f;
+                    FillVertexTangent(vertex, t.x, t.y, t.z, sign);
+                }
+                else
+                {
+                   FillVertexTangent(vertex, 1.0f, 0.0f, 0.0f, 1.0f);
+                }
+
                 FillVertexJointsWeights(vertex, 0, 0, 0, 0, 0.f, 0.f, 0.f, 0.f);
                 FillVertexJointsWeights(positionUvVertex, 0, 0, 0, 0, 0.f, 0.f, 0.f, 0.f);
 

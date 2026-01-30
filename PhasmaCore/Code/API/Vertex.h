@@ -8,6 +8,7 @@ namespace pe
         float position[3];
         float uv[2];
         float normals[3];
+        float tangent[4];
         float color[4];
         uint32_t joints[4];
         float weights[4];
@@ -59,6 +60,14 @@ namespace pe
         vertex.normals[0] = x;
         vertex.normals[1] = y;
         vertex.normals[2] = z;
+    }
+
+    inline void FillVertexTangent(Vertex &vertex, float x, float y, float z, float w)
+    {
+        vertex.tangent[0] = x;
+        vertex.tangent[1] = y;
+        vertex.tangent[2] = z;
+        vertex.tangent[3] = w;
     }
 
     inline void FillVertexColor(Vertex &vertex, float r, float g, float b, float a)
