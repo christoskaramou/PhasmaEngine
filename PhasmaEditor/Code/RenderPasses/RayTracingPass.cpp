@@ -118,9 +118,9 @@ namespace pe
         ubo.lights_intensity = gSettings.lights_intensity;
         ubo.lights_range = gSettings.lights_range;
         ubo.shadows = gSettings.shadows ? 1 : 0;
-        ubo.shadows = gSettings.shadows ? 1 : 0;
         ubo.use_Disney_PBR = gSettings.use_Disney_PBR ? 1 : 0;
         ubo.ibl_intensity = gSettings.IBL_intensity;
+        ubo.renderMode = static_cast<uint32_t>(gSettings.render_mode);
 
         BufferRange range{};
         range.data = &ubo;
@@ -143,14 +143,21 @@ namespace pe
             m_tlas = tlas;
         }
 
-        ImageBarrierInfo barrier{};
-        barrier.image = m_display;
-        barrier.layout = vk::ImageLayout::eGeneral;
-        barrier.stageFlags = vk::PipelineStageFlagBits2::eRayTracingShaderKHR;
-        barrier.accessMask = vk::AccessFlagBits2::eShaderWrite;
+        ImageBarrierInfo barrierDisplay{};
+        barrierDisplay.image = m_display;
+        barrierDisplay.layout = vk::ImageLayout::eGeneral;
+        barrierDisplay.stageFlags = vk::PipelineStageFlagBits2::eRayTracingShaderKHR;
+        barrierDisplay.accessMask = vk::AccessFlagBits2::eShaderWrite;
+
+        Image *depth = GetGlobalSystem<RendererSystem>()->GetDepthStencilRT();
+        ImageBarrierInfo barrierDepth{};
+        barrierDepth.image = depth;
+        barrierDepth.layout = vk::ImageLayout::eShaderReadOnlyOptimal;
+        barrierDepth.stageFlags = vk::PipelineStageFlagBits2::eRayTracingShaderKHR;
+        barrierDepth.accessMask = vk::AccessFlagBits2::eShaderRead;
 
         cmd->BeginDebugRegion("RayTracingPass");
-        cmd->ImageBarrier(barrier);
+        cmd->ImageBarriers({barrierDisplay, barrierDepth});
         cmd->BindPipeline(*m_passInfo);
         cmd->TraceRays(m_display->GetWidth(), m_display->GetHeight(), 1);
         cmd->EndDebugRegion();

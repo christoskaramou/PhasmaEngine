@@ -73,7 +73,7 @@ namespace pe
             EventSystem::PushEvent(EventType::DynamicRendering, dynamic_rendering);
         ImGui::Separator();
 
-        if (!gSettings.use_ray_tracing)
+        if (gSettings.render_mode != RenderMode::RayTracing)
         {
             ImGui::Checkbox("IBL", &gSettings.IBL);
             if (gSettings.IBL)
@@ -129,7 +129,7 @@ namespace pe
 
         if (ImGui::Checkbox("Day/Night", &gSettings.day))
         {
-            if (!gSettings.use_ray_tracing)
+            if (gSettings.render_mode == RenderMode::Raster)
                 gSettings.shadows = gSettings.day;
 
             // Update light pass descriptor sets for the skybox change
@@ -143,7 +143,8 @@ namespace pe
             rayTracingPass.UpdateDescriptorSets();
         }
 
-        if (gSettings.use_ray_tracing)
+
+        if (gSettings.render_mode != RenderMode::Raster)
         {
             if (ImGui::Checkbox("Cast Shadows", &gSettings.shadows))
             {
@@ -194,9 +195,16 @@ namespace pe
             ImGui::Unindent(16.0f);
         }
 
-        if (gSettings.ray_tracing_support)
         {
-            ImGui::Checkbox("Ray Tracing", &gSettings.use_ray_tracing);
+            const char* rtModeNames[] = { "Raster", "Hybrid", "Ray Tracing" };
+            int currentMode = static_cast<int>(gSettings.render_mode);
+            
+            ImGui::Text("Render Mode");
+            if (ImGui::Combo("##RenderMode", &currentMode, rtModeNames, 3))
+            {
+                if (currentMode != static_cast<int>(gSettings.render_mode))
+                    EventSystem::PushEvent(EventType::SetRenderMode, static_cast<RenderMode>(currentMode));
+            }
         }
 
         ImGui::End();

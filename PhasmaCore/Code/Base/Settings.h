@@ -16,6 +16,13 @@ namespace pe
 
     class Image;
 
+    enum class RenderMode : uint32_t
+    {
+        Raster = 0,         // Rasterization only
+        Hybrid = 1,         // Raster opaque + RT transparent
+        RayTracing = 2      // Full Ray Tracing
+    };
+
     // TODO: Move settings to their classes (instead of having them all here in GlobalSettings)
     struct GlobalSettings : public Settings
     {
@@ -63,7 +70,7 @@ namespace pe
         bool aabbs_depth_aware = true;
         bool dynamic_rendering = true;
         bool ray_tracing_support = false;
-        bool use_ray_tracing = false;
+        RenderMode render_mode = RenderMode::Raster;
         bool use_Disney_PBR = true;
         vk::PresentModeKHR preferred_present_mode = vk::PresentModeKHR::eMailbox;
     };

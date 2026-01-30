@@ -225,7 +225,7 @@ namespace pe
             // Alpha Blend
             if (!m_scene->GetDrawInfosAlphaBlend().empty())
             {
-                size_t offset = (m_scene->GetDrawInfosOpaque().size() + m_scene->GetDrawInfosAlphaCut().size()) * sizeof(vk::DrawIndexedIndirectCommand);
+                size_t offset = (m_scene->GetDrawInfosOpaque().size() + m_scene->GetDrawInfosAlphaCut().size() + m_scene->GetDrawInfosTransmission().size()) * sizeof(vk::DrawIndexedIndirectCommand);
                 uint32_t count = static_cast<uint32_t>(m_scene->GetDrawInfosAlphaBlend().size());
 
                 cmd->BeginPass(7, m_attachments.data(), "GbufferTransparentPass_AlphaBlend");
@@ -244,7 +244,7 @@ namespace pe
             if (!m_scene->GetDrawInfosTransmission().empty())
             {
                 pushConstants.passType = 2u;
-                size_t offset = (m_scene->GetDrawInfosOpaque().size() + m_scene->GetDrawInfosAlphaCut().size() + m_scene->GetDrawInfosAlphaBlend().size()) * sizeof(vk::DrawIndexedIndirectCommand);
+                size_t offset = (m_scene->GetDrawInfosOpaque().size() + m_scene->GetDrawInfosAlphaCut().size()) * sizeof(vk::DrawIndexedIndirectCommand);
                 uint32_t count = static_cast<uint32_t>(m_scene->GetDrawInfosTransmission().size());
 
                 cmd->BeginPass(7, m_attachments.data(), "GbufferTransparentPass_Transmission");

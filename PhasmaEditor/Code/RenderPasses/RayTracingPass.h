@@ -17,6 +17,8 @@ namespace pe
         uint32_t shadows;
         uint32_t use_Disney_PBR;
         float ibl_intensity;
+        uint32_t renderMode;  // 0=Raster, 1=Hybrid, 2=RayTracing
+        uint32_t padding;         // Alignment padding
     };
 
     class RayTracingPass : public IRenderPassComponent

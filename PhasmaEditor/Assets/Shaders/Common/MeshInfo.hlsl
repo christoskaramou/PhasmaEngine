@@ -3,7 +3,8 @@ struct MeshInfoGPU
     uint indexOffset;
     uint vertexOffset;
     uint positionsOffset;
-    int textures[5]; // BaseColor, Normal, Metallic, Occlusion, Emissive
+    uint renderType;   // 1: Opaque, 2: AlphaCut, 3: AlphaBlend, 4: Transmission
+    int textures[5];   // BaseColor, Normal, Metallic, Occlusion, Emissive
 };
 
 struct Vertex

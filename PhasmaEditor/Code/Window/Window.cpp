@@ -169,6 +169,13 @@ namespace pe
                     model->SetRenderReady(true);
                     break;
                 }
+                case EventType::SetRenderMode:
+                {
+                    RHII.GetMainQueue()->WaitIdle();
+                    auto mode = std::any_cast<RenderMode>(event.payload);
+                    Settings::Get<GlobalSettings>().render_mode = mode;
+                    break;
+                }
                 default:
                     break;
                 }
