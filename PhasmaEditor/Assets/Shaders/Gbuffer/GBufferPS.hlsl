@@ -42,7 +42,14 @@ PS_OUTPUT_Gbuffer mainPS(PS_INPUT_Gbuffer input)
     float roughness = saturate(input.metRoughAlphacutOcl.y * mrSample.y);
     float occlusion = lerp(1.0f, occlusionSample, input.metRoughAlphacutOcl.w);
 
-    output.normal = CalculateNormal(input.positionWS.xyz, tangentNormal, input.normal, input.uv) * 0.5f + 0.5f;
+    float3 N = normalize(input.normal);
+    float3 T = normalize(input.tangent.xyz);
+    T = normalize(T - dot(T, N) * N);
+    float3 B = cross(N, T) * input.tangent.w;
+    float3x3 TBN = float3x3(T, B, N);
+    float3 normalWS = normalize(mul(tangentNormal * 2.0 - 1.0, TBN));
+
+    output.normal = normalWS * 0.5f + 0.5f;
     output.albedo = float4(combinedColor.xyz, combinedColor.a);
     float transmission = (pc.passType == 2) ? 1.0f : 0.0f;
     output.metRough = float4(occlusion, roughness, metallic, transmission);

@@ -29,6 +29,7 @@ struct Vertex
     float3 position;
     float2 uv;
     float3 normal;
+    float4 tangent;
     float4 color;
     uint4 joints;
     float4 weights;
@@ -137,13 +138,14 @@ uint3 GetIndices(uint meshId, uint primitiveId)
 Vertex GetVertex(uint meshId, uint vertexIndex)
 {
     uint vertexOffset = meshInfos[meshId].vertexOffset;
-    uint offset = vertexOffset + vertexIndex * 80;
+    uint offset = vertexOffset + vertexIndex * 96;
     
     Vertex v;
     v.position = asfloat(geometry.Load3(offset + 0));
     v.uv = asfloat(geometry.Load2(offset + 12));
     v.normal = asfloat(geometry.Load3(offset + 20));
-    v.color = asfloat(geometry.Load4(offset + 32));
+    v.tangent = asfloat(geometry.Load4(offset + 32));
+    v.color = asfloat(geometry.Load4(offset + 48));
 
     return v;
 }
@@ -438,6 +440,7 @@ void closesthit(inout HitPayload payload, in BuiltInTriangleIntersectionAttribut
 
     float2 uv = v0.uv * barycentricCoords.x + v1.uv * barycentricCoords.y + v2.uv * barycentricCoords.z;
     float3 normalObj = v0.normal * barycentricCoords.x + v1.normal * barycentricCoords.y + v2.normal * barycentricCoords.z;
+    float4 tangentObj = v0.tangent * barycentricCoords.x + v1.tangent * barycentricCoords.y + v2.tangent * barycentricCoords.z;
     float4 color = v0.color * barycentricCoords.x + v1.color * barycentricCoords.y + v2.color * barycentricCoords.z;
     
     // World Space conversion
@@ -447,8 +450,7 @@ void closesthit(inout HitPayload payload, in BuiltInTriangleIntersectionAttribut
     float3 positionWorld = WorldRayOrigin() + WorldRayDirection() * RayTCurrent();
 
     // Tangent Space
-    float3 tangentObj = GetTriangleTangent(v0.position, v1.position, v2.position, v0.uv, v1.uv, v2.uv);
-    float3 tangentWorld = normalize(mul(worldRotation3x3, tangentObj));
+    float3 tangentWorld = normalize(mul(worldRotation3x3, tangentObj.xyz));
     
     // GBuffer Logic Adaptation
     uint textureMask = constants[id].textureMask;
@@ -473,7 +475,7 @@ void closesthit(inout HitPayload payload, in BuiltInTriangleIntersectionAttribut
 
     // 3. Normal Mapping
     tangentWorld = normalize(tangentWorld - dot(tangentWorld, normalWorld) * normalWorld);
-    float3 bitangentWorld = cross(normalWorld, tangentWorld); 
+    float3 bitangentWorld = cross(normalWorld, tangentWorld) * tangentObj.w; 
     float3x3 TBN = float3x3(tangentWorld, bitangentWorld, normalWorld);
     float3 N = normalize(mul(tangentNormalSample * 2.0 - 1.0, TBN));
 
