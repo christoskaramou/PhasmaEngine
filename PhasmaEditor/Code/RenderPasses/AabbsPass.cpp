@@ -1,7 +1,9 @@
 #include "AabbsPass.h"
 #include "API/Command.h"
+#include "API/Descriptor.h"
 #include "API/Image.h"
 #include "API/Pipeline.h"
+#include "API/RHI.h"
 #include "API/Shader.h"
 #include "Camera/Camera.h"
 #include "Scene/Model.h"
@@ -41,6 +43,22 @@ namespace pe
         m_passInfo->colorFormats = {m_viewportRT->GetFormat()};
         m_passInfo->depthFormat = m_depthRT->GetFormat();
         m_passInfo->Update();
+    }
+
+    void AabbsPass::Update()
+    {
+        if (Settings::Get<GlobalSettings>().draw_aabbs)
+        {
+            Scene &scene = GetGlobalSystem<RendererSystem>()->GetScene();
+            if (scene.HasDrawInfo())
+            {
+                uint32_t frame = RHII.GetFrameIndex();
+                const auto &sets = m_passInfo->GetDescriptors(frame);
+                Descriptor *setUniforms = sets[0];
+                setUniforms->SetBuffer(0, scene.GetUniforms(frame));
+                setUniforms->Update();
+            }
+        }
     }
 
     void AabbsPass::ExecutePass(CommandBuffer *cmd)

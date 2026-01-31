@@ -21,11 +21,6 @@
 
 namespace pe
 {
-    namespace
-    {
-        Sampler *defaultSampler = nullptr;
-    }
-
     std::vector<uint32_t> Scene::s_aabbIndices = {
         0, 1, 1, 2, 2, 3, 3, 0,
         4, 5, 5, 6, 6, 7, 7, 4,
@@ -33,8 +28,7 @@ namespace pe
 
     Scene::Scene()
     {
-        if (!defaultSampler)
-            defaultSampler = Sampler::Create(Sampler::CreateInfoInit(), "defaultSampler");
+        m_defaultSampler = Sampler::Create(Sampler::CreateInfoInit(), "defaultSampler");
 
         Camera *camera = new Camera();
         m_cameras.push_back(camera);
@@ -42,10 +36,14 @@ namespace pe
         uint32_t swapchainImageCount = RHII.GetSwapchainImageCount();
         m_storages.resize(swapchainImageCount, nullptr);
         m_indirects.resize(swapchainImageCount, nullptr);
-        m_dirtyDescriptorViews.resize(swapchainImageCount, false);
 
         m_particleManager = new ParticleManager();
         m_particleManager->Init(); // disable until it is done
+    }
+
+    Sampler *Scene::GetDefaultSampler() const
+    {
+        return m_defaultSampler;
     }
 
     Scene::~Scene()
@@ -66,8 +64,8 @@ namespace pe
             m_particleManager = nullptr;
         }
 
-        if (defaultSampler)
-            Sampler::Destroy(defaultSampler);
+        if (m_defaultSampler)
+            Sampler::Destroy(m_defaultSampler);
 
         for (auto *blas : m_blases)
             AccelerationStructure::Destroy(blas);
@@ -78,6 +76,7 @@ namespace pe
         Buffer::Destroy(m_blasMergedBuffer);
         Buffer::Destroy(m_scratchBuffer);
         Buffer::Destroy(m_meshInfoBuffer);
+        Buffer::Destroy(m_meshConstants);
     }
 
     void Scene::Update()
@@ -86,119 +85,6 @@ namespace pe
             camera->Update();
 
         UpdateGeometry();
-
-        if (HasDrawInfo())
-        {
-            uint32_t frame = RHII.GetFrameIndex();
-
-            if (Settings::Get<GlobalSettings>().draw_aabbs)
-            {
-                AabbsPass *ap = GetGlobalComponent<AabbsPass>();
-                const auto &sets = ap->m_passInfo->GetDescriptors(frame);
-                Descriptor *setUniforms = sets[0];
-                setUniforms->SetBuffer(0, GetUniforms(frame));
-                setUniforms->Update();
-            }
-
-            if (HasDirtyDescriptorViews(frame))
-            {
-                GbufferOpaquePass *gbo = GetGlobalComponent<GbufferOpaquePass>();
-                if (gbo)
-                {
-                    const auto &sets = gbo->m_passInfo->GetDescriptors(frame);
-                    Descriptor *setTextures = sets[1];
-                    setTextures->SetBuffer(0, gbo->m_constants);
-                    setTextures->SetSampler(1, defaultSampler);
-                    setTextures->SetImageViews(2, GetImageViews());
-                    setTextures->Update();
-
-                    // DepthPass uses the same constants and textures for Alpha Cutoff
-                    DepthPass *dp = GetGlobalComponent<DepthPass>();
-                    if (dp)
-                    {
-                        const auto &dpSets = dp->m_passInfo->GetDescriptors(frame);
-                        Descriptor *dpSetTextures = dpSets[1];
-                        dpSetTextures->SetBuffer(0, gbo->m_constants);
-                        dpSetTextures->SetSampler(1, defaultSampler);
-                        dpSetTextures->SetImageViews(2, GetImageViews());
-                        dpSetTextures->Update();
-                    }
-
-                    // RayTracingPass
-                    RayTracingPass *rtp = GetGlobalComponent<RayTracingPass>();
-                    if (rtp)
-                    {
-                        const auto &rtSets = rtp->m_passInfo->GetDescriptors(frame);
-                        if (rtSets.size() > 0 && rtSets[0])
-                        {
-                            Descriptor *rtSet0 = rtSets[0];
-                            rtSet0->SetSampler(4, defaultSampler);
-                            rtSet0->SetImageViews(5, GetImageViews());
-                            rtSet0->Update();
-                        }
-                    }
-                }
-
-                GbufferTransparentPass *gbt = GetGlobalComponent<GbufferTransparentPass>();
-                if (gbt)
-                {
-                    const auto &sets = gbt->m_passInfo->GetDescriptors(frame);
-                    Descriptor *setTextures = sets[1];
-                    setTextures->SetBuffer(0, gbt->m_constants);
-                    setTextures->SetSampler(1, defaultSampler);
-                    setTextures->SetImageViews(2, GetImageViews());
-                    setTextures->Update();
-                }
-
-                ClearDirtyDescriptorViews(frame);
-            }
-
-            if (HasOpaqueDrawInfo())
-            {
-                {
-                    GbufferOpaquePass *gb = GetGlobalComponent<GbufferOpaquePass>();
-                    DepthPass *dp = GetGlobalComponent<DepthPass>();
-                    const auto &sets = dp->m_passInfo->GetDescriptors(frame);
-
-                    Descriptor *setUniforms = sets[0];
-                    setUniforms->SetBuffer(0, GetUniforms(frame));
-                    setUniforms->SetBuffer(1, gb->m_constants);
-                    setUniforms->Update();
-                }
-
-                {
-                    GbufferOpaquePass *gb = GetGlobalComponent<GbufferOpaquePass>();
-                    ShadowPass *shadows = GetGlobalComponent<ShadowPass>();
-                    const auto &sets = shadows->m_passInfo->GetDescriptors(frame);
-
-                    Descriptor *setUniforms = sets[0];
-                    setUniforms->SetBuffer(0, GetUniforms(frame));
-                    setUniforms->SetBuffer(1, gb->m_constants);
-                    setUniforms->Update();
-                }
-
-                {
-                    GbufferOpaquePass *gb = GetGlobalComponent<GbufferOpaquePass>();
-                    const auto &sets = gb->m_passInfo->GetDescriptors(frame);
-
-                    Descriptor *setUniforms = sets[0];
-                    setUniforms->SetBuffer(0, GetUniforms(frame));
-                    setUniforms->SetBuffer(1, gb->m_constants);
-                    setUniforms->Update();
-                }
-            }
-
-            if (HasAlphaDrawInfo())
-            {
-                GbufferTransparentPass *gb = GetGlobalComponent<GbufferTransparentPass>();
-                const auto &sets = gb->m_passInfo->GetDescriptors(frame);
-
-                Descriptor *setUniforms = sets[0];
-                setUniforms->SetBuffer(0, GetUniforms(frame));
-                setUniforms->SetBuffer(1, gb->m_constants);
-                setUniforms->Update();
-            }
-        }
     }
 
     void Scene::UpdateGeometryBuffers()
@@ -549,24 +435,20 @@ namespace pe
             }
         }
 
-        for (auto &&dirtyView : m_dirtyDescriptorViews)
-            dirtyView = true;
+        m_geometryVersion++;
     }
 
     void Scene::CreateGBufferConstants(CommandBuffer *cmd)
     {
-        GbufferOpaquePass *gbo = GetGlobalComponent<GbufferOpaquePass>();
-        GbufferTransparentPass *gbt = GetGlobalComponent<GbufferTransparentPass>();
-        Buffer::Destroy(gbo->m_constants);
-        gbo->m_constants = Buffer::Create(
+        Buffer::Destroy(m_meshConstants);
+        m_meshConstants = Buffer::Create(
             m_meshCount * sizeof(Mesh_Constants),
             vk::BufferUsageFlagBits2::eStorageBuffer | vk::BufferUsageFlagBits2::eTransferDst,
             VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT,
-            "GbufferPass_constants");
-        gbt->m_constants = gbo->m_constants;
+            "Scene_meshConstants");
 
         size_t offset = 0;
-        gbo->m_constants->Map();
+        m_meshConstants->Map();
         for (auto &modelPtr : m_models)
         {
             Model &model = *modelPtr;
@@ -591,13 +473,13 @@ namespace pe
                 range.data = &constants;
                 range.offset = offset;
                 range.size = sizeof(Mesh_Constants);
-                gbo->m_constants->Copy(1, &range, true);
+                m_meshConstants->Copy(1, &range, true);
 
                 offset += sizeof(Mesh_Constants);
             }
         }
-        gbo->m_constants->Flush();
-        gbo->m_constants->Unmap();
+        m_meshConstants->Flush();
+        m_meshConstants->Unmap();
     }
 
     void Scene::CullNode(Model &model, int node)

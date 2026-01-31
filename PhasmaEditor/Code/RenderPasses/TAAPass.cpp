@@ -107,16 +107,16 @@ namespace pe
 
     void TAAPass::Update()
     {
-    }
-
-    void TAAPass::ExecutePass(CommandBuffer *cmd)
-    {
         auto &gSettings = Settings::Get<GlobalSettings>();
         if (gSettings.cas_sharpening != m_casSharpeningEnabled)
         {
             m_casSharpeningEnabled = gSettings.cas_sharpening;
             UpdateDescriptorSets();
         }
+    }
+
+    void TAAPass::ExecutePass(CommandBuffer *cmd)
+    {
 
         Image *taaOutput = m_casSharpeningEnabled ? m_taaResolved : m_displayRT;
 

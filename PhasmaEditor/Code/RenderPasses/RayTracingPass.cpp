@@ -8,7 +8,6 @@
 #include "API/RHI.h"
 #include "API/Shader.h"
 #include "Camera/Camera.h"
-#include "GbufferPass.h"
 #include "Scene/Scene.h"
 #include "Systems/LightSystem.h"
 #include "Systems/RendererSystem.h"
@@ -67,8 +66,6 @@ namespace pe
         if (!scene.GetTLAS())
             return;
 
-        auto *gbuffer = GetGlobalComponent<GbufferOpaquePass>();
-
         for (uint32_t i = 0; i < RHII.GetSwapchainImageCount(); i++)
         {
             auto &descriptors = m_passInfo->GetDescriptors(i);
@@ -83,7 +80,7 @@ namespace pe
                 desc->SetAccelerationStructure(0, scene.GetTLAS()->ApiHandle());
                 desc->SetImageView(1, m_display->GetUAV(0));
                 desc->SetBuffer(2, scene.GetUniforms(i));
-                desc->SetBuffer(3, gbuffer->GetConstants());
+                desc->SetBuffer(3, scene.GetMeshConstants());
                 desc->SetSampler(4, m_display->GetSampler());
                 desc->SetImageViews(5, scene.GetImageViews());
                 desc->SetBuffer(6, scene.GetBuffer());
@@ -127,6 +124,40 @@ namespace pe
         range.size = sizeof(ubo);
         range.offset = 0;
         m_uniforms[RHII.GetFrameIndex()]->Copy(1, &range, false);
+
+        Scene &scene = GetGlobalSystem<RendererSystem>()->GetScene();
+
+        // Check if geometry changed (new model loaded) or TLAS changed
+        AccelerationStructure *tlas = scene.GetTLAS();
+        uint64_t geoVersion = scene.GetGeometryVersion();
+        bool tlasChanged = tlas && m_tlas != tlas;
+        bool geoChanged = geoVersion != m_lastGeometryVersion;
+
+        if (tlasChanged || geoChanged)
+        {
+            if (tlasChanged)
+            {
+                UpdateDescriptorSets();
+                m_tlas = tlas;
+            }
+            if (geoChanged)
+            {
+                m_lastGeometryVersion = geoVersion;
+
+                // Update ALL frames' descriptors since buffers changed
+                for (uint32_t i = 0; i < RHII.GetSwapchainImageCount(); i++)
+                {
+                    const auto &rtSets = m_passInfo->GetDescriptors(i);
+                    if (rtSets.size() > 0 && rtSets[0])
+                    {
+                        Descriptor *rtSet0 = rtSets[0];
+                        rtSet0->SetSampler(4, scene.GetDefaultSampler());
+                        rtSet0->SetImageViews(5, scene.GetImageViews());
+                        rtSet0->Update();
+                    }
+                }
+            }
+        }
     }
 
     void RayTracingPass::ExecutePass(CommandBuffer *cmd)
@@ -137,11 +168,6 @@ namespace pe
         AccelerationStructure *tlas = m_scene->GetTLAS();
         if (!tlas)
             return;
-        if (m_tlas != tlas)
-        {
-            UpdateDescriptorSets();
-            m_tlas = tlas;
-        }
 
         ImageBarrierInfo barrierDisplay{};
         barrierDisplay.image = m_display;

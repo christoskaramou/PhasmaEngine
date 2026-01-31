@@ -17,8 +17,8 @@ namespace pe
         uint32_t shadows;
         uint32_t use_Disney_PBR;
         float ibl_intensity;
-        uint32_t renderMode;  // 0=Raster, 1=Hybrid, 2=RayTracing
-        uint32_t padding;         // Alignment padding
+        uint32_t renderMode; // 0=Raster, 1=Hybrid, 2=RayTracing
+        uint32_t padding;    // Alignment padding
     };
 
     class RayTracingPass : public IRenderPassComponent
@@ -36,10 +36,10 @@ namespace pe
         void SetScene(Scene *scene) { m_scene = scene; }
 
     private:
-        friend class Scene;
         Scene *m_scene = nullptr;
         Image *m_display = nullptr;
         AccelerationStructure *m_tlas = nullptr; // used to check if tlas is updated
         std::vector<Buffer *> m_uniforms;
+        uint64_t m_lastGeometryVersion = 0;
     };
 } // namespace pe

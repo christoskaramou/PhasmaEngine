@@ -18,7 +18,7 @@ namespace pe
         void UpdatePassInfo() override;
         void CreateUniforms(CommandBuffer *cmd) override;
         void UpdateDescriptorSets() override;
-        void Update() override {};
+        void Update() override;
         void ExecutePass(CommandBuffer *cmd) override;
         void Resize(uint32_t width, uint32_t height) override;
         void Destroy() override;
@@ -27,9 +27,8 @@ namespace pe
         void ClearDepthStencil(CommandBuffer *cmd);
 
     private:
-        friend class Scene;
-
         Image *m_depthStencil;
         Scene *m_scene = nullptr;
+        uint64_t m_lastGeometryVersion = 0;
     };
 } // namespace pe
