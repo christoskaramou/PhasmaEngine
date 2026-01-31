@@ -2,13 +2,14 @@
 
 namespace pe
 {
+    class AccelerationStructure;
     class Buffer;
     class Camera;
     class CommandBuffer;
     class Image;
     class ImageView;
     class Model;
-    class AccelerationStructure;
+    class Sampler;
 
     struct DrawInfo
     {
@@ -38,8 +39,8 @@ namespace pe
         bool HasOpaqueDrawInfo() const { return !m_drawInfosOpaque.empty() || !m_drawInfosAlphaCut.empty(); }
         bool HasAlphaDrawInfo() const { return !m_drawInfosAlphaBlend.empty() || !m_drawInfosTransmission.empty(); }
         bool HasDrawInfo() const { return HasOpaqueDrawInfo() || HasAlphaDrawInfo(); }
-        bool HasDirtyDescriptorViews(uint32_t frame) const { return m_dirtyDescriptorViews[frame]; }
-        void ClearDirtyDescriptorViews(uint32_t frame) { m_dirtyDescriptorViews[frame] = false; }
+
+        uint64_t GetGeometryVersion() const { return m_geometryVersion; }
 
         Buffer *GetUniforms(uint32_t frame) { return m_storages[frame]; }
         Buffer *GetIndirect(uint32_t frame) { return m_indirects[frame]; }
@@ -58,6 +59,8 @@ namespace pe
         const std::vector<DrawInfo> &GetDrawInfosTransmission() const { return m_drawInfosTransmission; }
         const std::vector<ImageView *> &GetImageViews() const { return m_imageViews; }
         uint32_t GetMeshCount() const { return m_meshCount; }
+        Buffer *GetMeshConstants() { return m_meshConstants; }
+        Sampler *GetDefaultSampler() const;
         static const std::vector<uint32_t> &GetAabbIndices() { return s_aabbIndices; }
 
     private:
@@ -105,7 +108,7 @@ namespace pe
         uint32_t m_meshCount = 0;
 
         std::vector<ImageView *> m_imageViews;
-        std::vector<bool> m_dirtyDescriptorViews;
+        uint64_t m_geometryVersion = 0;
 
         std::vector<DrawInfo> m_drawInfosOpaque;
         std::vector<DrawInfo> m_drawInfosAlphaCut;
@@ -131,6 +134,8 @@ namespace pe
         Buffer *m_blasMergedBuffer = nullptr;
         Buffer *m_scratchBuffer = nullptr;
         Buffer *m_meshInfoBuffer = nullptr;
+        Buffer *m_meshConstants = nullptr;
+        Sampler *m_defaultSampler = nullptr;
 
         static std::vector<uint32_t> s_aabbIndices;
     };

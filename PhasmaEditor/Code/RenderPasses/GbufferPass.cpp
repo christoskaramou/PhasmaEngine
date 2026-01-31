@@ -1,6 +1,6 @@
 #include "GbufferPass.h"
-#include "API/Buffer.h"
 #include "API/Command.h"
+#include "API/Descriptor.h"
 #include "API/Image.h"
 #include "API/Pipeline.h"
 #include "API/RHI.h"
@@ -73,6 +73,38 @@ namespace pe
         m_passInfo->depthTestEnable = true;
         m_passInfo->depthWriteEnable = false;
         m_passInfo->Update();
+    }
+
+    void GbufferOpaquePass::Update()
+    {
+        Scene &scene = GetGlobalSystem<RendererSystem>()->GetScene();
+        uint32_t frame = RHII.GetFrameIndex();
+
+        uint64_t geoVersion = scene.GetGeometryVersion();
+        if (geoVersion != m_lastGeometryVersion)
+        {
+            m_lastGeometryVersion = geoVersion;
+
+            // Update ALL frames' texture descriptors since buffers changed
+            for (uint32_t i = 0; i < RHII.GetSwapchainImageCount(); i++)
+            {
+                const auto &sets = m_passInfo->GetDescriptors(i);
+                Descriptor *setTextures = sets[1];
+                setTextures->SetBuffer(0, scene.GetMeshConstants());
+                setTextures->SetSampler(1, scene.GetDefaultSampler());
+                setTextures->SetImageViews(2, scene.GetImageViews());
+                setTextures->Update();
+            }
+        }
+
+        if (scene.HasOpaqueDrawInfo())
+        {
+            const auto &sets = m_passInfo->GetDescriptors(frame);
+            Descriptor *setUniforms = sets[0];
+            setUniforms->SetBuffer(0, scene.GetUniforms(frame));
+            setUniforms->SetBuffer(1, scene.GetMeshConstants());
+            setUniforms->Update();
+        }
     }
 
     void GbufferOpaquePass::PassBarriers(CommandBuffer *cmd)
@@ -203,6 +235,38 @@ namespace pe
         m_passInfo->Update();
     }
 
+    void GbufferTransparentPass::Update()
+    {
+        Scene &scene = GetGlobalSystem<RendererSystem>()->GetScene();
+        uint32_t frame = RHII.GetFrameIndex();
+
+        uint64_t geoVersion = scene.GetGeometryVersion();
+        if (geoVersion != m_lastGeometryVersion)
+        {
+            m_lastGeometryVersion = geoVersion;
+
+            // Update ALL frames' texture descriptors since buffers changed
+            for (uint32_t i = 0; i < RHII.GetSwapchainImageCount(); i++)
+            {
+                const auto &sets = m_passInfo->GetDescriptors(i);
+                Descriptor *setTextures = sets[1];
+                setTextures->SetBuffer(0, scene.GetMeshConstants());
+                setTextures->SetSampler(1, scene.GetDefaultSampler());
+                setTextures->SetImageViews(2, scene.GetImageViews());
+                setTextures->Update();
+            }
+        }
+
+        if (scene.HasAlphaDrawInfo())
+        {
+            const auto &sets = m_passInfo->GetDescriptors(frame);
+            Descriptor *setUniforms = sets[0];
+            setUniforms->SetBuffer(0, scene.GetUniforms(frame));
+            setUniforms->SetBuffer(1, scene.GetMeshConstants());
+            setUniforms->Update();
+        }
+    }
+
     void GbufferTransparentPass::PassBarriers(CommandBuffer *cmd)
     {
     }
@@ -281,6 +345,5 @@ namespace pe
 
     void GbufferTransparentPass::Destroy()
     {
-        Buffer::Destroy(m_constants);
     }
 } // namespace pe

@@ -32,20 +32,16 @@ namespace pe
         void UpdatePassInfo() override;
         void CreateUniforms(CommandBuffer *cmd) override {};
         void UpdateDescriptorSets() override {};
-        void Update() override {};
+        void Update() override;
         void ExecutePass(CommandBuffer *cmd) override;
         void Resize(uint32_t width, uint32_t height) override;
         void Destroy() override;
-
-        Buffer *GetConstants() { return m_constants; }
 
         void SetScene(Scene *scene) { m_scene = scene; }
         void ClearRenderTargets(CommandBuffer *cmd);
         void ClearDepthStencil(CommandBuffer *cmd);
 
     private:
-        friend class Scene;
-
         void PassBarriers(CommandBuffer *cmd);
 
         Image *m_ibl_brdf_lut;
@@ -57,9 +53,9 @@ namespace pe
         Image *m_viewportRT;
         Image *m_transparencyRT;
         Image *m_depthStencilRT;
-        Buffer *m_constants;
 
         Scene *m_scene = nullptr;
+        uint64_t m_lastGeometryVersion = 0;
     };
 
     class GbufferTransparentPass : public IRenderPassComponent
@@ -69,20 +65,16 @@ namespace pe
         void UpdatePassInfo() override;
         void CreateUniforms(CommandBuffer *cmd) override {};
         void UpdateDescriptorSets() override {};
-        void Update() override {};
+        void Update() override;
         void ExecutePass(CommandBuffer *cmd) override;
         void Resize(uint32_t width, uint32_t height) override;
         void Destroy() override;
-
-        Buffer *GetConstants() { return m_constants; }
 
         void SetScene(Scene *scene) { m_scene = scene; }
         void ClearRenderTargets(CommandBuffer *cmd);
         void ClearDepthStencil(CommandBuffer *cmd);
 
     private:
-        friend class Scene;
-
         void PassBarriers(CommandBuffer *cmd);
 
         Image *m_ibl_brdf_lut;
@@ -94,8 +86,8 @@ namespace pe
         Image *m_viewportRT;
         Image *m_transparencyRT;
         Image *m_depthStencilRT;
-        Buffer *m_constants;
 
         Scene *m_scene = nullptr;
+        uint64_t m_lastGeometryVersion = 0;
     };
 } // namespace pe

@@ -1,5 +1,6 @@
 #include "DepthPass.h"
 #include "API/Command.h"
+#include "API/Descriptor.h"
 #include "API/Image.h"
 #include "API/Pipeline.h"
 #include "API/RHI.h"
@@ -32,6 +33,37 @@ namespace pe
         m_passInfo->depthTestEnable = true;
         m_passInfo->depthWriteEnable = true;
         m_passInfo->Update();
+    }
+
+    void DepthPass::Update()
+    {
+        Scene &scene = GetGlobalSystem<RendererSystem>()->GetScene();
+        uint32_t frame = RHII.GetFrameIndex();
+
+        uint64_t geoVersion = scene.GetGeometryVersion();
+        if (geoVersion != m_lastGeometryVersion)
+        {
+            m_lastGeometryVersion = geoVersion;
+
+            for (uint32_t i = 0; i < RHII.GetSwapchainImageCount(); i++)
+            {
+                const auto &dpSets = m_passInfo->GetDescriptors(i);
+                Descriptor *dpSetTextures = dpSets[1];
+                dpSetTextures->SetBuffer(0, scene.GetMeshConstants());
+                dpSetTextures->SetSampler(1, scene.GetDefaultSampler());
+                dpSetTextures->SetImageViews(2, scene.GetImageViews());
+                dpSetTextures->Update();
+            }
+        }
+
+        if (scene.HasOpaqueDrawInfo())
+        {
+            const auto &sets = m_passInfo->GetDescriptors(frame);
+            Descriptor *setUniforms = sets[0];
+            setUniforms->SetBuffer(0, scene.GetUniforms(frame));
+            setUniforms->SetBuffer(1, scene.GetMeshConstants());
+            setUniforms->Update();
+        }
     }
 
     void DepthPass::CreateUniforms(CommandBuffer *cmd)

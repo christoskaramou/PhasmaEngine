@@ -1,11 +1,13 @@
 #include "ShadowPass.h"
 #include "API/Buffer.h"
 #include "API/Command.h"
+#include "API/Descriptor.h"
 #include "API/Image.h"
 #include "API/Pipeline.h"
 #include "API/RHI.h"
 #include "API/Shader.h"
 #include "Camera/Camera.h"
+#include "GbufferPass.h"
 #include "Scene/Scene.h"
 #include "Systems/RendererSystem.h"
 
@@ -88,6 +90,17 @@ namespace pe
             range.size = gSettings.num_cascades * sizeof(mat4);
             range.offset = 0;
             m_uniforms[RHII.GetFrameIndex()]->Copy(1, &range, false);
+
+            Scene &scene = GetGlobalSystem<RendererSystem>()->GetScene();
+            if (scene.HasOpaqueDrawInfo())
+            {
+                uint32_t frame = RHII.GetFrameIndex();
+                const auto &sets = m_passInfo->GetDescriptors(frame);
+                Descriptor *setUniforms = sets[0];
+                setUniforms->SetBuffer(0, scene.GetUniforms(frame));
+                setUniforms->SetBuffer(1, scene.GetMeshConstants());
+                setUniforms->Update();
+            }
         }
     }
 
