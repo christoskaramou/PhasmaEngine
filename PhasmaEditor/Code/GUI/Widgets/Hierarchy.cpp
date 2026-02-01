@@ -1,4 +1,6 @@
 #include "Hierarchy.h"
+#include "GUI/GUIState.h"
+#include "GUI/IconsFontAwesome.h"
 #include "Scene/Model.h"
 #include "Scene/Scene.h"
 #include "Scene/SelectionManager.h"
@@ -7,6 +9,21 @@
 
 namespace pe
 {
+    // Unity-style colors
+    namespace HierarchyStyle
+    {
+        // Unity dark theme colors
+        const ImVec4 WindowBg = ImVec4(0.22f, 0.22f, 0.22f, 1.0f);
+        const ImVec4 HeaderBg = ImVec4(0.18f, 0.18f, 0.18f, 1.0f);
+        const ImVec4 HeaderHovered = ImVec4(0.26f, 0.26f, 0.26f, 1.0f);
+        const ImVec4 HeaderActive = ImVec4(0.26f, 0.59f, 0.98f, 0.8f);
+        const ImVec4 SelectionBg = ImVec4(0.17f, 0.36f, 0.53f, 1.0f);
+        const ImVec4 SelectionBgUnfocused = ImVec4(0.30f, 0.30f, 0.30f, 1.0f);
+        const ImVec4 TextNormal = ImVec4(0.86f, 0.86f, 0.86f, 1.0f);
+        const ImVec4 TextDisabled = ImVec4(0.50f, 0.50f, 0.50f, 1.0f);
+        const ImVec4 TreeLineBg = ImVec4(0.35f, 0.35f, 0.35f, 0.5f);
+    } // namespace HierarchyStyle
+
     Hierarchy::Hierarchy() : Widget("Hierarchy")
     {
     }
@@ -16,6 +33,26 @@ namespace pe
         if (!m_open)
             return;
 
+        bool useUnityStyle = GUIState::s_guiStyle == GUIStyle::Unity;
+        int styleColorCount = 0;
+        int styleVarCount = 0;
+
+        // Apply Unity-style overrides only when Unity style is selected
+        if (useUnityStyle)
+        {
+            ImGui::PushStyleColor(ImGuiCol_WindowBg, HierarchyStyle::WindowBg);
+            ImGui::PushStyleColor(ImGuiCol_Header, HierarchyStyle::SelectionBg);
+            ImGui::PushStyleColor(ImGuiCol_HeaderHovered, HierarchyStyle::HeaderHovered);
+            ImGui::PushStyleColor(ImGuiCol_HeaderActive, HierarchyStyle::HeaderActive);
+            ImGui::PushStyleColor(ImGuiCol_Text, HierarchyStyle::TextNormal);
+            styleColorCount = 5;
+
+            ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(4.0f, 2.0f));
+            ImGui::PushStyleVar(ImGuiStyleVar_IndentSpacing, 14.0f);
+            ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(4.0f, 2.0f));
+            styleVarCount = 3;
+        }
+
         ImGui::Begin("Hierarchy", &m_open);
 
         RendererSystem *renderer = GetGlobalSystem<RendererSystem>();
@@ -23,100 +60,164 @@ namespace pe
         auto &models = scene.GetModels();
         auto &selection = SelectionManager::Instance();
 
-        // Root node for the scene
-        if (ImGui::TreeNodeEx("Root", ImGuiTreeNodeFlags_DefaultOpen | ImGuiTreeNodeFlags_SpanAvailWidth | ImGuiTreeNodeFlags_OpenOnArrow))
+        // Models listing
+        for (auto model : models)
         {
-            for (auto model : models)
+            if (!model)
+                continue;
+
+            size_t id = model->GetId();
+            std::string name = model->GetLabel();
+            if (name.empty())
+                name = "Model_" + std::to_string(id);
+
+            // Add model icon
+            std::string displayName = std::string(ICON_FA_CUBE) + "  " + name;
+
+            ImGuiTreeNodeFlags modelFlags = ImGuiTreeNodeFlags_SpanAvailWidth |
+                                            ImGuiTreeNodeFlags_OpenOnArrow |
+                                            ImGuiTreeNodeFlags_DefaultOpen |
+                                            ImGuiTreeNodeFlags_FramePadding;
+
+            if (selection.GetSelectedModel() == model && selection.GetSelectedNodeIndex() < 0)
+                modelFlags |= ImGuiTreeNodeFlags_Selected;
+
+            bool modelOpen = ImGui::TreeNodeEx((void *)(intptr_t)id, modelFlags, "%s", displayName.c_str());
+            if (ImGui::IsItemClicked() && !ImGui::IsItemToggledOpen())
             {
-                if (!model)
-                    continue;
-
-                size_t id = model->GetId();
-                std::string name = model->GetLabel();
-                if (name.empty())
-                    name = "Model_" + std::to_string(id);
-
-                ImGuiTreeNodeFlags modelFlags = ImGuiTreeNodeFlags_SpanAvailWidth | ImGuiTreeNodeFlags_OpenOnArrow;
-                if (selection.GetSelectedModel() == model)
-                    modelFlags |= ImGuiTreeNodeFlags_Selected;
-
-                bool modelOpen = ImGui::TreeNodeEx((void *)(intptr_t)id, modelFlags, "%s", name.c_str());
-                if (ImGui::IsItemClicked())
+                int nodeToSelect = -1;
+                for (int i = 0; i < model->GetNodeCount(); i++)
                 {
-                    int nodeToSelect = -1;
-                    for (int i = 0; i < model->GetNodeCount(); i++)
+                    if (model->GetNodeMesh(i) >= 0)
                     {
-                        if (model->GetNodeMesh(i) >= 0)
-                        {
-                            nodeToSelect = i;
-                            break;
-                        }
+                        nodeToSelect = i;
+                        break;
                     }
-                    if (nodeToSelect >= 0)
-                        selection.Select(model, nodeToSelect);
                 }
-
-                if (modelOpen)
-                {
-                    const auto &nodes = model->GetNodeInfos();
-                    int nodeCount = static_cast<int>(nodes.size());
-
-                    // Build adjacency list for efficient traversal
-                    std::vector<std::vector<int>> children(nodeCount);
-                    std::vector<int> roots;
-                    for (int i = 0; i < nodeCount; ++i)
-                    {
-                        if (nodes[i].parent >= 0 && nodes[i].parent < nodeCount)
-                            children[nodes[i].parent].push_back(i);
-                        else
-                            roots.push_back(i);
-                    }
-
-                    // Recursive function to draw nodes
-                    auto DrawNode = [&](auto &&self, int nodeIndex) -> void
-                    {
-                        const auto &node = nodes[nodeIndex];
-                        bool isLeaf = children[nodeIndex].empty();
-
-                        // Use a unique ID mixing model ID and node Index to avoid conflicts
-                        uintptr_t uniqueId = (id << 16) ^ nodeIndex;
-
-                        ImGuiTreeNodeFlags nodeFlags = ImGuiTreeNodeFlags_SpanAvailWidth | ImGuiTreeNodeFlags_OpenOnArrow;
-                        if (isLeaf)
-                            nodeFlags |= ImGuiTreeNodeFlags_Leaf;
-
-                        // Highlight if selected
-                        if (selection.GetSelectedModel() == model && selection.GetSelectedNodeIndex() == nodeIndex)
-                            nodeFlags |= ImGuiTreeNodeFlags_Selected;
-
-                        bool nodeOpen = ImGui::TreeNodeEx((void *)uniqueId, nodeFlags, "%s", node.name.c_str());
-
-                        if (ImGui::IsItemClicked())
-                        {
-                            selection.Select(model, nodeIndex);
-                        }
-
-                        if (nodeOpen)
-                        {
-                            for (int childIndex : children[nodeIndex])
-                            {
-                                self(self, childIndex);
-                            }
-                            ImGui::TreePop();
-                        }
-                    };
-
-                    for (int rootIndex : roots)
-                    {
-                        DrawNode(DrawNode, rootIndex);
-                    }
-
-                    ImGui::TreePop();
-                }
+                if (nodeToSelect >= 0)
+                    selection.Select(model, nodeToSelect);
             }
-            ImGui::TreePop();
+
+            if (modelOpen)
+            {
+                const auto &nodes = model->GetNodeInfos();
+                int nodeCount = static_cast<int>(nodes.size());
+
+                // Build adjacency list for efficient traversal
+                std::vector<std::vector<int>> children(nodeCount);
+                std::vector<int> roots;
+                for (int i = 0; i < nodeCount; ++i)
+                {
+                    if (nodes[i].parent >= 0 && nodes[i].parent < nodeCount)
+                        children[nodes[i].parent].push_back(i);
+                    else
+                        roots.push_back(i);
+                }
+
+                // Recursive draw nodes with icons
+                auto DrawNode = [&](auto &&self, int nodeIndex) -> void
+                {
+                    const auto &node = nodes[nodeIndex];
+                    bool hasChildren = !children[nodeIndex].empty();
+                    int meshIndex = model->GetNodeMesh(nodeIndex);
+                    bool hasMesh = meshIndex >= 0;
+
+                    // Node is a leaf only if it has no children AND no mesh to show
+                    bool isLeaf = !hasChildren && !hasMesh;
+
+                    // Use a unique ID mixing model ID and node Index to avoid conflicts
+                    uintptr_t uniqueId = (id << 16) ^ nodeIndex;
+
+                    // Choose icon based on node type
+                    const char *icon;
+                    std::string nodeName = node.name;
+
+                    // Simple heuristic for node type (can be extended)
+                    std::string lowerName = nodeName;
+                    std::transform(lowerName.begin(), lowerName.end(), lowerName.begin(), ::tolower);
+
+                    if (lowerName.find("camera") != std::string::npos || lowerName.find("cam") != std::string::npos)
+                    {
+                        icon = ICON_FA_VIDEO;
+                    }
+                    else if (lowerName.find("light") != std::string::npos || lowerName.find("lamp") != std::string::npos)
+                    {
+                        icon = ICON_FA_LIGHTBULB;
+                    }
+                    else
+                    {
+                        icon = ICON_FA_VECTOR_SQUARE; // Node icon
+                    }
+
+                    std::string displayNodeName = std::string(icon) + "  " + nodeName;
+
+                    ImGuiTreeNodeFlags nodeFlags = ImGuiTreeNodeFlags_SpanAvailWidth |
+                                                   ImGuiTreeNodeFlags_OpenOnArrow |
+                                                   ImGuiTreeNodeFlags_FramePadding;
+                    if (isLeaf)
+                        nodeFlags |= ImGuiTreeNodeFlags_Leaf;
+
+                    // Highlight if selected (when node itself is selected, not its mesh)
+                    if (selection.GetSelectedModel() == model && selection.GetSelectedNodeIndex() == nodeIndex)
+                        nodeFlags |= ImGuiTreeNodeFlags_Selected;
+
+                    bool nodeOpen = ImGui::TreeNodeEx((void *)uniqueId, nodeFlags, "%s", displayNodeName.c_str());
+
+                    if (ImGui::IsItemClicked() && !ImGui::IsItemToggledOpen())
+                    {
+                        selection.Select(model, nodeIndex);
+                    }
+
+                    if (nodeOpen)
+                    {
+                        // If this node has a mesh, show it as a child
+                        if (hasMesh)
+                        {
+                            uintptr_t meshUniqueId = (id << 16) ^ (nodeIndex + 0x10000); // Different ID for mesh
+                            std::string meshDisplayName = std::string(ICON_FA_SHAPES) + "  Mesh";
+
+                            ImGuiTreeNodeFlags meshFlags = ImGuiTreeNodeFlags_SpanAvailWidth |
+                                                           ImGuiTreeNodeFlags_Leaf |
+                                                           ImGuiTreeNodeFlags_FramePadding;
+
+                            // Mesh is selected if node is selected
+                            if (selection.GetSelectedModel() == model && selection.GetSelectedNodeIndex() == nodeIndex)
+                                meshFlags |= ImGuiTreeNodeFlags_Selected;
+
+                            bool meshOpen = ImGui::TreeNodeEx((void *)meshUniqueId, meshFlags, "%s", meshDisplayName.c_str());
+
+                            if (ImGui::IsItemClicked())
+                            {
+                                selection.Select(model, nodeIndex);
+                            }
+
+                            if (meshOpen)
+                                ImGui::TreePop();
+                        }
+
+                        // Draw child nodes
+                        for (int childIndex : children[nodeIndex])
+                        {
+                            self(self, childIndex);
+                        }
+                        ImGui::TreePop();
+                    }
+                };
+
+                for (int rootIndex : roots)
+                {
+                    DrawNode(DrawNode, rootIndex);
+                }
+
+                ImGui::TreePop();
+            }
         }
 
         ImGui::End();
+
+        if (styleVarCount > 0)
+            ImGui::PopStyleVar(styleVarCount);
+        if (styleColorCount > 0)
+            ImGui::PopStyleColor(styleColorCount);
     }
 } // namespace pe

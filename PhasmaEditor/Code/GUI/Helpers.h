@@ -339,8 +339,28 @@ namespace pe::ui
         }
     }
 
-    inline void ApplyNiceTheme()
+    // Classic PhasmaEngine/ImGui theme
+    inline void ApplyClassicTheme()
     {
+        ImGui::StyleColorsClassic();  // This resets ALL colors to ImGui classic
+        ImGuiStyle &s = ImGui::GetStyle();
+        s.WindowRounding = 4.0f;
+        s.ChildRounding = 4.0f;
+        s.FrameRounding = 2.0f;
+        s.GrabRounding = 2.0f;
+        s.PopupRounding = 2.0f;
+        s.ScrollbarRounding = 2.0f;
+        s.TabRounding = 2.0f;
+        s.FramePadding = ImVec2(8, 4);
+        s.ItemSpacing = ImVec2(8, 6);
+        s.WindowPadding = ImVec2(10, 8);
+        s.SeparatorTextPadding = ImVec2(10, 4);
+    }
+
+    // Unity-like dark theme
+    inline void ApplyUnityTheme()
+    {
+        ImGui::StyleColorsDark();  // Reset ALL colors to dark theme base first
         ImGuiStyle &s = ImGui::GetStyle();
         s.WindowRounding = 8.0f;
         s.ChildRounding = 8.0f;
@@ -348,20 +368,207 @@ namespace pe::ui
         s.GrabRounding = 6.0f;
         s.PopupRounding = 6.0f;
         s.ScrollbarRounding = 6.0f;
+        s.TabRounding = 4.0f;
         s.FramePadding = ImVec2(10, 6);
         s.ItemSpacing = ImVec2(10, 8);
         s.WindowPadding = ImVec2(14, 10);
         s.SeparatorTextPadding = ImVec2(12, 6);
 
         auto &c = s.Colors;
-        c[ImGuiCol_WindowBg] = ImVec4(0.08f, 0.08f, 0.10f, 0.92f);
-        c[ImGuiCol_ChildBg] = ImVec4(0.10f, 0.10f, 0.14f, 0.60f);
-        c[ImGuiCol_FrameBg] = ImVec4(0.16f, 0.16f, 0.22f, 1.00f);
-        c[ImGuiCol_FrameBgHovered] = ImVec4(0.22f, 0.22f, 0.30f, 1.00f);
-        c[ImGuiCol_FrameBgActive] = ImVec4(0.25f, 0.25f, 0.34f, 1.00f);
-        c[ImGuiCol_Border] = ImVec4(1, 1, 1, 0.18f);
-        c[ImGuiCol_Text] = ImVec4(0.92f, 0.92f, 0.92f, 1.0f);
-        c[ImGuiCol_Separator] = ImVec4(1, 1, 1, 0.12f);
+        // Window backgrounds
+        c[ImGuiCol_WindowBg] = ImVec4(0.22f, 0.22f, 0.22f, 1.0f);
+        c[ImGuiCol_ChildBg] = ImVec4(0.20f, 0.20f, 0.20f, 0.60f);
+        c[ImGuiCol_PopupBg] = ImVec4(0.19f, 0.19f, 0.19f, 0.95f);
+        
+        // Frame backgrounds
+        c[ImGuiCol_FrameBg] = ImVec4(0.16f, 0.16f, 0.16f, 1.00f);
+        c[ImGuiCol_FrameBgHovered] = ImVec4(0.26f, 0.26f, 0.26f, 1.00f);
+        c[ImGuiCol_FrameBgActive] = ImVec4(0.30f, 0.30f, 0.30f, 1.00f);
+        
+        // Title bars
+        c[ImGuiCol_TitleBg] = ImVec4(0.16f, 0.16f, 0.16f, 1.0f);
+        c[ImGuiCol_TitleBgActive] = ImVec4(0.18f, 0.18f, 0.18f, 1.0f);
+        c[ImGuiCol_TitleBgCollapsed] = ImVec4(0.16f, 0.16f, 0.16f, 0.75f);
+        c[ImGuiCol_MenuBarBg] = ImVec4(0.19f, 0.19f, 0.19f, 1.0f);
+        
+        // Scrollbar
+        c[ImGuiCol_ScrollbarBg] = ImVec4(0.16f, 0.16f, 0.16f, 1.0f);
+        c[ImGuiCol_ScrollbarGrab] = ImVec4(0.35f, 0.35f, 0.35f, 1.0f);
+        c[ImGuiCol_ScrollbarGrabHovered] = ImVec4(0.45f, 0.45f, 0.45f, 1.0f);
+        c[ImGuiCol_ScrollbarGrabActive] = ImVec4(0.55f, 0.55f, 0.55f, 1.0f);
+        
+        // Headers
+        c[ImGuiCol_Header] = ImVec4(0.17f, 0.36f, 0.53f, 1.0f);
+        c[ImGuiCol_HeaderHovered] = ImVec4(0.26f, 0.45f, 0.62f, 1.0f);
+        c[ImGuiCol_HeaderActive] = ImVec4(0.26f, 0.59f, 0.98f, 0.8f);
+        
+        // Separators
+        c[ImGuiCol_Separator] = ImVec4(0.35f, 0.35f, 0.35f, 0.50f);
+        c[ImGuiCol_SeparatorHovered] = ImVec4(0.45f, 0.45f, 0.45f, 0.78f);
+        c[ImGuiCol_SeparatorActive] = ImVec4(0.55f, 0.55f, 0.55f, 1.00f);
+        
+        // Tab colors - Unity style (blue accent)
+        c[ImGuiCol_Tab] = ImVec4(0.18f, 0.18f, 0.18f, 1.0f);
+        c[ImGuiCol_TabHovered] = ImVec4(0.32f, 0.32f, 0.32f, 1.0f);
+        c[ImGuiCol_TabSelected] = ImVec4(0.28f, 0.28f, 0.28f, 1.0f);
+        c[ImGuiCol_TabSelectedOverline] = ImVec4(0.26f, 0.59f, 0.98f, 1.0f);
+        c[ImGuiCol_TabDimmed] = ImVec4(0.15f, 0.15f, 0.15f, 1.0f);
+        c[ImGuiCol_TabDimmedSelected] = ImVec4(0.22f, 0.22f, 0.22f, 1.0f);
+        c[ImGuiCol_TabDimmedSelectedOverline] = ImVec4(0.50f, 0.50f, 0.50f, 1.0f);
+        
+        // Docking
+        c[ImGuiCol_DockingPreview] = ImVec4(0.26f, 0.59f, 0.98f, 0.70f);
+        c[ImGuiCol_DockingEmptyBg] = ImVec4(0.12f, 0.12f, 0.12f, 1.0f);
+        
+        // Border
+        c[ImGuiCol_Border] = ImVec4(0.35f, 0.35f, 0.35f, 0.50f);
+        c[ImGuiCol_BorderShadow] = ImVec4(0.0f, 0.0f, 0.0f, 0.0f);
+        
+        // Text
+        c[ImGuiCol_Text] = ImVec4(0.86f, 0.86f, 0.86f, 1.0f);
+        c[ImGuiCol_TextDisabled] = ImVec4(0.50f, 0.50f, 0.50f, 1.0f);
+        
+        // Buttons
+        c[ImGuiCol_Button] = ImVec4(0.26f, 0.26f, 0.26f, 1.0f);
+        c[ImGuiCol_ButtonHovered] = ImVec4(0.35f, 0.35f, 0.35f, 1.0f);
+        c[ImGuiCol_ButtonActive] = ImVec4(0.40f, 0.40f, 0.40f, 1.0f);
+        
+        // Checkmarks, sliders - blue accent
+        c[ImGuiCol_CheckMark] = ImVec4(0.26f, 0.59f, 0.98f, 1.0f);
+        c[ImGuiCol_SliderGrab] = ImVec4(0.26f, 0.59f, 0.98f, 0.80f);
+        c[ImGuiCol_SliderGrabActive] = ImVec4(0.26f, 0.59f, 0.98f, 1.0f);
+        
+        // Resize grip
+        c[ImGuiCol_ResizeGrip] = ImVec4(0.26f, 0.59f, 0.98f, 0.25f);
+        c[ImGuiCol_ResizeGripHovered] = ImVec4(0.26f, 0.59f, 0.98f, 0.67f);
+        c[ImGuiCol_ResizeGripActive] = ImVec4(0.26f, 0.59f, 0.98f, 0.95f);
+        
+        // Plots
+        c[ImGuiCol_PlotLines] = ImVec4(0.61f, 0.61f, 0.61f, 1.0f);
+        c[ImGuiCol_PlotLinesHovered] = ImVec4(1.0f, 0.43f, 0.35f, 1.0f);
+        c[ImGuiCol_PlotHistogram] = ImVec4(0.26f, 0.59f, 0.98f, 1.0f);
+        c[ImGuiCol_PlotHistogramHovered] = ImVec4(1.0f, 0.60f, 0.0f, 1.0f);
+        
+        // Tables
+        c[ImGuiCol_TableHeaderBg] = ImVec4(0.19f, 0.19f, 0.19f, 1.0f);
+        c[ImGuiCol_TableBorderStrong] = ImVec4(0.35f, 0.35f, 0.35f, 1.0f);
+        c[ImGuiCol_TableBorderLight] = ImVec4(0.25f, 0.25f, 0.25f, 1.0f);
+        c[ImGuiCol_TableRowBg] = ImVec4(0.0f, 0.0f, 0.0f, 0.0f);
+        c[ImGuiCol_TableRowBgAlt] = ImVec4(1.0f, 1.0f, 1.0f, 0.06f);
+        
+        // Text selected
+        c[ImGuiCol_TextSelectedBg] = ImVec4(0.26f, 0.59f, 0.98f, 0.35f);
+        
+        // Nav highlight
+        c[ImGuiCol_NavHighlight] = ImVec4(0.26f, 0.59f, 0.98f, 1.0f);
+    }
+
+    // UnrealEngine-like dark theme
+    inline void ApplyUnrealTheme()
+    {
+        ImGui::StyleColorsDark();  // Reset ALL colors to dark theme base first
+        ImGuiStyle &s = ImGui::GetStyle();
+        s.WindowRounding = 0.0f;     // Unreal uses sharp corners
+        s.ChildRounding = 0.0f;
+        s.FrameRounding = 0.0f;
+        s.GrabRounding = 0.0f;
+        s.PopupRounding = 0.0f;
+        s.ScrollbarRounding = 0.0f;
+        s.TabRounding = 0.0f;
+        s.FramePadding = ImVec2(6, 4);
+        s.ItemSpacing = ImVec2(6, 4);
+        s.WindowPadding = ImVec2(8, 8);
+        s.SeparatorTextPadding = ImVec2(8, 4);
+        s.WindowBorderSize = 1.0f;
+        s.FrameBorderSize = 0.0f;
+
+        auto &c = s.Colors;
+        // Main backgrounds - dark blue-gray
+        c[ImGuiCol_WindowBg] = ImVec4(0.06f, 0.06f, 0.06f, 1.0f);
+        c[ImGuiCol_ChildBg] = ImVec4(0.07f, 0.07f, 0.07f, 1.0f);
+        c[ImGuiCol_PopupBg] = ImVec4(0.08f, 0.08f, 0.08f, 0.98f);
+        
+        // Frame backgrounds
+        c[ImGuiCol_FrameBg] = ImVec4(0.12f, 0.12f, 0.12f, 1.0f);
+        c[ImGuiCol_FrameBgHovered] = ImVec4(0.18f, 0.18f, 0.18f, 1.0f);
+        c[ImGuiCol_FrameBgActive] = ImVec4(0.22f, 0.22f, 0.22f, 1.0f);
+        
+        // Title bars
+        c[ImGuiCol_TitleBg] = ImVec4(0.04f, 0.04f, 0.04f, 1.0f);
+        c[ImGuiCol_TitleBgActive] = ImVec4(0.04f, 0.04f, 0.04f, 1.0f);
+        c[ImGuiCol_TitleBgCollapsed] = ImVec4(0.04f, 0.04f, 0.04f, 0.75f);
+        c[ImGuiCol_MenuBarBg] = ImVec4(0.10f, 0.10f, 0.10f, 1.0f);
+        
+        // Scrollbar
+        c[ImGuiCol_ScrollbarBg] = ImVec4(0.06f, 0.06f, 0.06f, 1.0f);
+        c[ImGuiCol_ScrollbarGrab] = ImVec4(0.25f, 0.25f, 0.25f, 1.0f);
+        c[ImGuiCol_ScrollbarGrabHovered] = ImVec4(0.35f, 0.35f, 0.35f, 1.0f);
+        c[ImGuiCol_ScrollbarGrabActive] = ImVec4(0.45f, 0.45f, 0.45f, 1.0f);
+        
+        // Headers - orange accent
+        c[ImGuiCol_Header] = ImVec4(0.90f, 0.60f, 0.10f, 0.45f);
+        c[ImGuiCol_HeaderHovered] = ImVec4(0.90f, 0.60f, 0.10f, 0.60f);
+        c[ImGuiCol_HeaderActive] = ImVec4(0.90f, 0.60f, 0.10f, 0.80f);
+        
+        // Separators
+        c[ImGuiCol_Separator] = ImVec4(0.20f, 0.20f, 0.20f, 1.0f);
+        c[ImGuiCol_SeparatorHovered] = ImVec4(0.90f, 0.60f, 0.10f, 0.78f);
+        c[ImGuiCol_SeparatorActive] = ImVec4(0.90f, 0.60f, 0.10f, 1.0f);
+        
+        // Tabs - Unreal style (orange accent)
+        c[ImGuiCol_Tab] = ImVec4(0.10f, 0.10f, 0.10f, 1.0f);
+        c[ImGuiCol_TabHovered] = ImVec4(0.25f, 0.25f, 0.25f, 1.0f);
+        c[ImGuiCol_TabSelected] = ImVec4(0.18f, 0.18f, 0.18f, 1.0f);
+        c[ImGuiCol_TabSelectedOverline] = ImVec4(0.90f, 0.60f, 0.10f, 1.0f);
+        c[ImGuiCol_TabDimmed] = ImVec4(0.06f, 0.06f, 0.06f, 1.0f);
+        c[ImGuiCol_TabDimmedSelected] = ImVec4(0.12f, 0.12f, 0.12f, 1.0f);
+        c[ImGuiCol_TabDimmedSelectedOverline] = ImVec4(0.50f, 0.35f, 0.10f, 1.0f);
+        
+        // Docking
+        c[ImGuiCol_DockingPreview] = ImVec4(0.90f, 0.60f, 0.10f, 0.70f);
+        c[ImGuiCol_DockingEmptyBg] = ImVec4(0.04f, 0.04f, 0.04f, 1.0f);
+        
+        // Borders
+        c[ImGuiCol_Border] = ImVec4(0.20f, 0.20f, 0.20f, 1.0f);
+        c[ImGuiCol_BorderShadow] = ImVec4(0.0f, 0.0f, 0.0f, 0.0f);
+        
+        // Text
+        c[ImGuiCol_Text] = ImVec4(0.90f, 0.90f, 0.90f, 1.0f);
+        c[ImGuiCol_TextDisabled] = ImVec4(0.50f, 0.50f, 0.50f, 1.0f);
+        
+        // Buttons
+        c[ImGuiCol_Button] = ImVec4(0.15f, 0.15f, 0.15f, 1.0f);
+        c[ImGuiCol_ButtonHovered] = ImVec4(0.25f, 0.25f, 0.25f, 1.0f);
+        c[ImGuiCol_ButtonActive] = ImVec4(0.90f, 0.60f, 0.10f, 0.80f);
+        
+        // Sliders and checkboxes - orange accent
+        c[ImGuiCol_SliderGrab] = ImVec4(0.90f, 0.60f, 0.10f, 0.80f);
+        c[ImGuiCol_SliderGrabActive] = ImVec4(0.90f, 0.60f, 0.10f, 1.0f);
+        c[ImGuiCol_CheckMark] = ImVec4(0.90f, 0.60f, 0.10f, 1.0f);
+        
+        // Resize grip
+        c[ImGuiCol_ResizeGrip] = ImVec4(0.25f, 0.25f, 0.25f, 0.50f);
+        c[ImGuiCol_ResizeGripHovered] = ImVec4(0.90f, 0.60f, 0.10f, 0.67f);
+        c[ImGuiCol_ResizeGripActive] = ImVec4(0.90f, 0.60f, 0.10f, 0.95f);
+        
+        // Plots - orange accent
+        c[ImGuiCol_PlotLines] = ImVec4(0.61f, 0.61f, 0.61f, 1.0f);
+        c[ImGuiCol_PlotLinesHovered] = ImVec4(0.90f, 0.60f, 0.10f, 1.0f);
+        c[ImGuiCol_PlotHistogram] = ImVec4(0.90f, 0.60f, 0.10f, 1.0f);
+        c[ImGuiCol_PlotHistogramHovered] = ImVec4(1.0f, 0.70f, 0.20f, 1.0f);
+        
+        // Tables
+        c[ImGuiCol_TableHeaderBg] = ImVec4(0.10f, 0.10f, 0.10f, 1.0f);
+        c[ImGuiCol_TableBorderStrong] = ImVec4(0.20f, 0.20f, 0.20f, 1.0f);
+        c[ImGuiCol_TableBorderLight] = ImVec4(0.15f, 0.15f, 0.15f, 1.0f);
+        c[ImGuiCol_TableRowBg] = ImVec4(0.0f, 0.0f, 0.0f, 0.0f);
+        c[ImGuiCol_TableRowBgAlt] = ImVec4(1.0f, 1.0f, 1.0f, 0.04f);
+        
+        // Text selected
+        c[ImGuiCol_TextSelectedBg] = ImVec4(0.90f, 0.60f, 0.10f, 0.35f);
+        
+        // Nav highlight
+        c[ImGuiCol_NavHighlight] = ImVec4(0.90f, 0.60f, 0.10f, 1.0f);
     }
 
     inline void ShowCpuGpuSummary(float cpuTotal, float cpuUpdates, float cpuDraw, float gpuTotal)

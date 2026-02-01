@@ -9,6 +9,10 @@ namespace pe
     bool GUIState::s_sceneViewFloating = false;
     bool GUIState::s_sceneViewRedockQueued = false;
     Image *GUIState::s_sceneViewImage = nullptr;
+    GUIStyle GUIState::s_guiStyle = GUIStyle::Unity; // Default to Unity style
+    ImFont* GUIState::s_fontClassic = nullptr;
+    ImFont* GUIState::s_fontUnity = nullptr;
+    ImFont* GUIState::s_fontUnreal = nullptr;
 
     void GUIState::OpenExternalPath(const std::string &absPath)
     {
