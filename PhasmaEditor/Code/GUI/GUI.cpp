@@ -191,13 +191,14 @@ namespace pe
         ImGui::DockBuilderSetNodeSize(dockspace, viewport->WorkSize);
 
         constexpr float dockRightFrac = 1.0f / 7.0f;
-        constexpr float dockLeftFrac = 1.0f / 7.0f;
+        constexpr float dockLeftFrac = 1.0f / 6.0f;
         constexpr float dockBottomFrac = 1.0f / 4.5f;
 
         ImGuiID dockMainId = dockspace;
+        
         ImGuiID dockRight = ImGui::DockBuilderSplitNode(dockMainId, ImGuiDir_Right, dockRightFrac, nullptr, &dockMainId);
-        ImGuiID dockLeft = ImGui::DockBuilderSplitNode(dockMainId, ImGuiDir_Left, dockLeftFrac, nullptr, &dockMainId);
         ImGuiID dockBottom = ImGui::DockBuilderSplitNode(dockMainId, ImGuiDir_Down, dockBottomFrac, nullptr, &dockMainId);
+        ImGuiID dockLeft = ImGui::DockBuilderSplitNode(dockMainId, ImGuiDir_Left, dockLeftFrac, nullptr, &dockMainId);
 
         // Central node is now dockMainId - dock the Scene View there
         ImGui::DockBuilderDockWindow("Scene View", dockMainId);
@@ -213,7 +214,6 @@ namespace pe
         ImGui::DockBuilderDockWindow("Transform", dockRight);
 
         // Bottom - Console, Asset Viewer, File Browser (Tabbed)
-        // Console first to ensure leftmost tab position
         ImGui::DockBuilderDockWindow("Console", dockBottom);
         ImGui::DockBuilderDockWindow("Asset Viewer", dockBottom);
         ImGui::DockBuilderDockWindow("File Browser", dockBottom);
