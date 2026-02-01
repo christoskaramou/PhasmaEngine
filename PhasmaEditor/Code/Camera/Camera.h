@@ -32,6 +32,7 @@ namespace pe
         void Destroy() override;
         inline mat4 GetView() const { return m_view; }
         inline mat4 GetProjection() const { return m_projection; }
+        inline mat4 GetProjectionNoJitter() const { return m_projectionNoJitter; }
         inline mat4 GetViewProjection() const { return m_viewProjection; }
         inline mat4 GetPreviousViewProjection() const { return m_previousViewProjection; }
         inline mat4 GetInvView() const { return m_invView; }

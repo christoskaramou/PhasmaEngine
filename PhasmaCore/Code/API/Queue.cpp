@@ -129,9 +129,20 @@ namespace pe
         pi.pSwapchains = &swapchain->ApiHandle();
         pi.pImageIndices = &imageIndex;
 
-        auto result = m_apiHandle.presentKHR(pi);
-        if (result != vk::Result::eSuccess && result != vk::Result::eSuboptimalKHR)
-            PE_ERROR("Failed to present swapchain image!");
+        try
+        {
+            auto result = m_apiHandle.presentKHR(pi);
+            if (result != vk::Result::eSuccess && result != vk::Result::eSuboptimalKHR)
+                PE_ERROR("Failed to present swapchain image!");
+        }
+        catch (vk::OutOfDateKHRError &)
+        {
+            // Just ignore and try again
+        }
+        catch (vk::SystemError &e)
+        {
+            PE_ERROR("Failed to present swapchain image: %s", e.what());
+        }
     }
 
     void Queue::Wait()
