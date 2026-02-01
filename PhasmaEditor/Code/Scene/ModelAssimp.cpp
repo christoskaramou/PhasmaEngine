@@ -5,6 +5,8 @@
 #include "API/RHI.h"
 #include "Systems/RendererSystem.h"
 #include <assimp/GltfMaterial.h>
+#include <assimp/IOStream.hpp>
+#include <assimp/IOSystem.hpp>
 #include <assimp/ProgressHandler.hpp>
 #include <meshoptimizer.h>
 
@@ -40,7 +42,156 @@ namespace pe
                 gSettings.loading_total = 100;
                 gSettings.loading_current = static_cast<uint32_t>(percentage * 100.f);
                 gSettings.loading_name = "Reading file";
+                gSettings.loading_name = "Reading file";
                 return true;
+            }
+        };
+
+        static std::string DecodeURI(const std::string &uri)
+        {
+            std::string decoded;
+            decoded.reserve(uri.length());
+            for (size_t i = 0; i < uri.length(); i++)
+            {
+                if (uri[i] == '%' && i + 2 < uri.length())
+                {
+                    std::string hex = uri.substr(i + 1, 2);
+                    char c = static_cast<char>(strtol(hex.c_str(), nullptr, 16));
+                    decoded += c;
+                    i += 2;
+                }
+                else if (uri[i] == '+')
+                {
+                    decoded += ' ';
+                }
+                else
+                {
+                    decoded += uri[i];
+                }
+            }
+            return decoded;
+        }
+
+        class PhasmaIOStream : public Assimp::IOStream
+        {
+        public:
+            PhasmaIOStream(const std::filesystem::path &file, const std::string &mode)
+                : m_fileSize(0)
+            {
+                std::ios_base::openmode openMode = std::ios_base::binary;
+                if (mode.find('r') != std::string::npos)
+                    openMode |= std::ios_base::in;
+                if (mode.find('w') != std::string::npos)
+                    openMode |= std::ios_base::out;
+
+#ifdef _WIN32
+                m_stream.open(file.wstring(), openMode);
+#else
+                m_stream.open(file.string(), openMode);
+#endif
+
+                if (m_stream.is_open())
+                {
+                    m_stream.seekg(0, std::ios_base::end);
+                    m_fileSize = static_cast<size_t>(m_stream.tellg());
+                    m_stream.seekg(0, std::ios_base::beg);
+                }
+            }
+
+            ~PhasmaIOStream() override
+            {
+                if (m_stream.is_open())
+                    m_stream.close();
+            }
+
+            size_t Read(void *pvBuffer, size_t pSize, size_t pCount) override
+            {
+                m_stream.read(reinterpret_cast<char *>(pvBuffer), pSize * pCount);
+                return static_cast<size_t>(m_stream.gcount()) / pSize;
+            }
+
+            size_t Write(const void *pvBuffer, size_t pSize, size_t pCount) override
+            {
+                m_stream.write(reinterpret_cast<const char *>(pvBuffer), pSize * pCount);
+                return pSize * pCount;
+            }
+
+            aiReturn Seek(size_t pOffset, aiOrigin pOrigin) override
+            {
+                std::ios_base::seekdir dir = std::ios_base::beg;
+                switch (pOrigin)
+                {
+                case aiOrigin_SET:
+                    dir = std::ios_base::beg;
+                    break;
+                case aiOrigin_CUR:
+                    dir = std::ios_base::cur;
+                    break;
+                case aiOrigin_END:
+                    dir = std::ios_base::end;
+                    break;
+                default:
+                    break; // Handle _AI_ORIGIN_ENFORCE_ENUM_SIZE
+                }
+                m_stream.seekg(pOffset, dir);
+                return m_stream.fail() ? aiReturn_FAILURE : aiReturn_SUCCESS;
+            }
+
+            size_t Tell() const override
+            {
+                return static_cast<size_t>(const_cast<std::fstream &>(m_stream).tellg());
+            }
+
+            size_t FileSize() const override
+            {
+                return m_fileSize;
+            }
+
+            void Flush() override
+            {
+                m_stream.flush();
+            }
+
+            bool IsOpen() const { return m_stream.is_open(); }
+
+        private:
+            std::fstream m_stream;
+            size_t m_fileSize;
+        };
+
+        class PhasmaIOSystem : public Assimp::IOSystem
+        {
+        public:
+            bool Exists(const char *pFile) const override
+            {
+                std::filesystem::path path(reinterpret_cast<const char8_t *>(pFile));
+                return std::filesystem::exists(path);
+            }
+
+            char getOsSeparator() const override
+            {
+#ifdef _WIN32
+                return '\\';
+#else
+                return '/';
+#endif
+            }
+
+            Assimp::IOStream *Open(const char *pFile, const char *pMode = "rb") override
+            {
+                std::filesystem::path path(reinterpret_cast<const char8_t *>(pFile));
+                PhasmaIOStream *stream = new PhasmaIOStream(path, pMode);
+                if (!stream->IsOpen())
+                {
+                    delete stream;
+                    return nullptr;
+                }
+                return stream;
+            }
+
+            void Close(Assimp::IOStream *pFile) override
+            {
+                delete pFile;
             }
         };
     } // namespace
@@ -49,16 +200,19 @@ namespace pe
 
     Model *ModelAssimp::Load(const std::filesystem::path &file)
     {
-        PE_ERROR_IF(!std::filesystem::exists(file), std::string("Model file not found: " + file.string()).c_str());
+        auto fileU8 = file.u8string();
+        std::string fileStr(reinterpret_cast<const char *>(fileU8.c_str()));
+        PE_ERROR_IF(!std::filesystem::exists(file), std::string("Model file not found: " + fileStr).c_str());
 
         ModelAssimp *modelAssimp = new ModelAssimp();
         ModelAssimp &model = *modelAssimp;
-        model.SetLabel(file.filename().string());
+        auto labelU8 = file.filename().u8string();
+        model.SetLabel(std::string(reinterpret_cast<const char *>(labelU8.c_str())));
 
         auto &gSettings = Settings::Get<GlobalSettings>();
         gSettings.loading_name = "Reading from file";
 
-        PE_ERROR_IF(!model.LoadFile(file), std::string("Failed to load model: " + file.string()).c_str());
+        PE_ERROR_IF(!model.LoadFile(file), std::string("Failed to load model: " + fileStr).c_str());
 
         Queue *queue = RHII.GetMainQueue();
         CommandBuffer *cmd = queue->AcquireCommandBuffer();
@@ -108,7 +262,14 @@ namespace pe
         flags |= aiProcess_FlipUVs;
         // flags |= aiProcess_FlipWindingOrder;
 
-        m_scene = m_importer.ReadFile(file.string(), flags);
+        auto fileU8 = file.u8string();
+        std::string fileStr(reinterpret_cast<const char *>(fileU8.c_str()));
+
+        // Use custom IOSystem to handle unicode paths on Windows
+        m_importer.SetIOHandler(new PhasmaIOSystem());
+
+        m_scene = m_importer.ReadFile(fileStr, flags);
+
         if (!m_scene || (m_scene->mFlags & AI_SCENE_FLAGS_INCOMPLETE) || !m_scene->mRootNode)
         {
             PE_ERROR(std::string("Assimp error: " + std::string(m_importer.GetErrorString())).c_str());
@@ -162,7 +323,8 @@ namespace pe
                     std::filesystem::path texPath = GetTexturePath(material, type, static_cast<int>(j));
                     if (texPath.empty())
                         continue;
-                    uniqueTexKeys.insert(texPath.generic_string());
+                    auto texPathU8 = texPath.u8string();
+                    uniqueTexKeys.insert(std::string(reinterpret_cast<const char *>(texPathU8.c_str())));
                 }
             }
         }
@@ -198,7 +360,8 @@ namespace pe
             }
             else
             {
-                Image *img = LoadTexture(cmd, key);
+                std::filesystem::path pathKey(reinterpret_cast<const char8_t *>(key.c_str()));
+                Image *img = LoadTexture(cmd, pathKey);
                 if (img)
                     progress++;
             }
@@ -587,7 +750,12 @@ namespace pe
         if (path.C_Str()[0] == '*')
             return std::string(path.C_Str());
 
-        std::filesystem::path rel = path.C_Str();
+        // Use u8path because Assimp stores strings as UTF-8
+        std::string pathStr = DecodeURI(path.C_Str());
+        if (!pathStr.empty() && (pathStr[0] == '/' || pathStr[0] == '\\'))
+            pathStr = pathStr.substr(1);
+
+        std::filesystem::path rel(reinterpret_cast<const char8_t *>(pathStr.c_str()));
 
         // candidates: raw, (modelDir / rel), (modelDir / filename)
         const std::filesystem::path candidates[] = {
@@ -610,6 +778,7 @@ namespace pe
                 return c;
         }
 
+        PE_ERROR("Failed to find texture: %s", pathStr.c_str());
         return {};
     }
 

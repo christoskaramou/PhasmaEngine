@@ -14,11 +14,36 @@ namespace pe
 
         inline static bool IsRegularFile(const std::filesystem::path &path) { return std::filesystem::is_regular_file(path); }
         inline static bool IsDirectory(const std::filesystem::path &path) { return std::filesystem::is_directory(path); }
-        inline static bool IsTextFile(const std::filesystem::path &path) { return s_textExtensions.find(path.extension().string()) != s_textExtensions.end(); }
-        inline static bool IsShaderFile(const std::filesystem::path &path) { return s_shaderExtensions.find(path.extension().string()) != s_shaderExtensions.end(); }
-        inline static bool IsScriptFile(const std::filesystem::path &path) { return s_scriptExtensions.find(path.extension().string()) != s_scriptExtensions.end(); }
-        inline static bool IsImageFile(const std::filesystem::path &path) { return s_imageExtensions.find(path.extension().string()) != s_imageExtensions.end(); }
-        inline static bool IsModelFile(const std::filesystem::path &path) { return s_modelExtensions.find(path.extension().string()) != s_modelExtensions.end(); }
+        inline static bool IsTextFile(const std::filesystem::path &path)
+        {
+            auto u8ext = path.extension().u8string();
+            std::string ext(reinterpret_cast<const char *>(u8ext.c_str()));
+            return s_textExtensions.find(ext) != s_textExtensions.end();
+        }
+        inline static bool IsShaderFile(const std::filesystem::path &path)
+        {
+            auto u8ext = path.extension().u8string();
+            std::string ext(reinterpret_cast<const char *>(u8ext.c_str()));
+            return s_shaderExtensions.find(ext) != s_shaderExtensions.end();
+        }
+        inline static bool IsScriptFile(const std::filesystem::path &path)
+        {
+            auto u8ext = path.extension().u8string();
+            std::string ext(reinterpret_cast<const char *>(u8ext.c_str()));
+            return s_scriptExtensions.find(ext) != s_scriptExtensions.end();
+        }
+        inline static bool IsImageFile(const std::filesystem::path &path)
+        {
+            auto u8ext = path.extension().u8string();
+            std::string ext(reinterpret_cast<const char *>(u8ext.c_str()));
+            return s_imageExtensions.find(ext) != s_imageExtensions.end();
+        }
+        inline static bool IsModelFile(const std::filesystem::path &path)
+        {
+            auto u8ext = path.extension().u8string();
+            std::string ext(reinterpret_cast<const char *>(u8ext.c_str()));
+            return s_modelExtensions.find(ext) != s_modelExtensions.end();
+        }
 
     protected:
         friend class GUI;
@@ -69,5 +94,16 @@ namespace pe
                                   std::function<bool(const std::filesystem::path &)> filter = nullptr);
 
         void ProcessLoadedImages();
+
+        struct FileEntry
+        {
+            std::filesystem::path path;
+            std::string filename; // Cached UTF-8 filename
+            bool isDirectory;
+            void *iconID;
+        };
+        std::vector<FileEntry> m_cache;
+        std::filesystem::path m_cachePath; // Path currently cached
+        void RefreshCache();
     };
 } // namespace pe

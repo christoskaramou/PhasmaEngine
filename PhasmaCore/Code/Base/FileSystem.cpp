@@ -1,4 +1,4 @@
-#include "Base/FileSystem.h"
+#include "FileSystem.h"
 
 namespace pe
 {
@@ -8,7 +8,14 @@ namespace pe
         // One of these modes must be set
         PE_ERROR_IF(!(m_mode & std::ios_base::in) && !(m_mode & std::ios_base::out), "FileSystem: No mode set");
 
+#ifdef _WIN32
+        // On Windows, use wide-string path to support unicode filenames
+        // The input string is expected to be UTF-8 encoded
+        std::filesystem::path filePath(reinterpret_cast<const char8_t *>(m_file.c_str()));
+        m_fstream.open(filePath.wstring(), m_mode);
+#else
         m_fstream.open(m_file, m_mode);
+#endif
 
         if (m_fstream.is_open())
         {

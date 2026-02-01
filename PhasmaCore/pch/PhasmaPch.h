@@ -58,6 +58,7 @@
 #include <d3dcompiler.h>
 #include <dxgi1_6.h>
 #include <share.h>
+#include <shellapi.h>
 #include <psapi.h>
 #include <windows.h>
 #elif defined(PE_LINUX)

@@ -134,12 +134,25 @@ namespace pe
 
     Image *Image::LoadRGBA(CommandBuffer *cmd, const std::string &path, vk::Format format, bool isFloat)
     {
+        // Read file to memory first to support unicode paths on Windows
+        // stbi_load uses fopen which doesn't handle unicode on Windows
+        std::vector<uint8_t> fileData;
+        {
+            FileSystem file(path, std::ios::in | std::ios::binary);
+            if (!file.IsOpen())
+            {
+                PE_ERROR("Failed to open image file: %s", path.c_str());
+                return nullptr;
+            }
+            fileData = file.ReadAllBytes();
+        }
+
         int texWidth, texHeight, texChannels;
         void *pixels = nullptr;
         if (isFloat)
-            pixels = stbi_loadf(path.c_str(), &texWidth, &texHeight, &texChannels, STBI_rgb_alpha);
+            pixels = stbi_loadf_from_memory(fileData.data(), static_cast<int>(fileData.size()), &texWidth, &texHeight, &texChannels, STBI_rgb_alpha);
         else
-            pixels = stbi_load(path.c_str(), &texWidth, &texHeight, &texChannels, STBI_rgb_alpha);
+            pixels = stbi_load_from_memory(fileData.data(), static_cast<int>(fileData.size()), &texWidth, &texHeight, &texChannels, STBI_rgb_alpha);
 
         PE_ERROR_IF(!pixels, "No pixel data loaded");
 

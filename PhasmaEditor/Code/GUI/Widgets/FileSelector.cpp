@@ -49,12 +49,14 @@ namespace pe
             // --- Top Bar ---
             if (ImGui::Button("..") && m_currentPath.has_parent_path())
             {
-                std::string parent = m_currentPath.parent_path().string();
+                auto parentU8 = m_currentPath.parent_path().u8string();
+                std::string parent(reinterpret_cast<const char *>(parentU8.c_str()));
                 if (parent.find("PhasmaEngine") != std::string::npos || parent.find("PhasmaEditor") != std::string::npos)
                     m_currentPath = m_currentPath.parent_path();
             }
             ImGui::SameLine();
-            ImGui::Text("%s", m_currentPath.string().c_str());
+            auto currentPathU8 = m_currentPath.u8string();
+            ImGui::Text("%s", reinterpret_cast<const char *>(currentPathU8.c_str()));
             ImGui::Separator();
 
             // --- Content ---
@@ -68,7 +70,11 @@ namespace pe
                 else
                 {
                     if (m_selectionCallback)
-                        m_selectionCallback(path.string());
+                    {
+                        auto pathU8 = path.u8string();
+                        std::string pathStr(reinterpret_cast<const char *>(pathU8.c_str()));
+                        m_selectionCallback(pathStr);
+                    }
                     CancelSelection();
                 }
             };
@@ -80,7 +86,8 @@ namespace pe
                 if (m_allowedExtensions.empty())
                     return true;
 
-                std::string ext = path.extension().string();
+                auto extU8 = path.extension().u8string();
+                std::string ext(reinterpret_cast<const char *>(extU8.c_str()));
                 for (const auto &ae : m_allowedExtensions)
                     if (ae == ext || ae == "*")
                         return true;
@@ -99,7 +106,11 @@ namespace pe
                 if (!IsDirectory(m_selectedEntry) && std::filesystem::exists(m_selectedEntry))
                 {
                     if (m_selectionCallback)
-                        m_selectionCallback(m_selectedEntry.string());
+                    {
+                        auto pathU8 = m_selectedEntry.u8string();
+                        std::string pathStr(reinterpret_cast<const char *>(pathU8.c_str()));
+                        m_selectionCallback(pathStr);
+                    }
                     CancelSelection();
                 }
             }
