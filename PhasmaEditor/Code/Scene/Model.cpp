@@ -33,8 +33,8 @@ namespace pe
         {
             vec4 t = m * vec4(c, 1.f);
             vec3 p(t.x, t.y, t.z);
-            outMin = glm::min(outMin, p);
-            outMax = glm::max(outMax, p);
+            outMin = min(outMin, p);
+            outMax = max(outMax, p);
         }
 
         AABB out{};
@@ -45,7 +45,7 @@ namespace pe
 
     Model::Model() : m_id{ID::NextID()}
     {
-        dirtyUniforms.resize(RHII.GetSwapchainImageCount(), false);
+        m_dirtyUniforms.resize(RHII.GetSwapchainImageCount(), false);
         m_label = "Model_" + std::to_string(m_id);
     }
 
@@ -186,14 +186,14 @@ namespace pe
 
     void Model::UpdateNodeMatrices()
     {
-        if (!dirtyNodes && !m_previousMatricesIsDirty)
+        if (!m_dirtyNodes && !m_previousMatricesIsDirty)
             return;
 
         for (int i = 0; i < GetNodeCount(); i++)
             UpdateNodeMatrix(i);
 
-        m_previousMatricesIsDirty = dirtyNodes;
-        dirtyNodes = false;
+        m_previousMatricesIsDirty = m_dirtyNodes;
+        m_dirtyNodes = false;
     }
 
     void Model::UpdateNodeMatrix(int node)
@@ -214,17 +214,16 @@ namespace pe
         if (!nodeInfo.dirty && !previousMatrixChanged)
             return;
 
-        // compute world from local * parent chain
-        mat4 trans = nodeInfo.localMatrix;
         int parent = nodeInfo.parent;
-        while (parent >= 0)
+        if (parent >= 0)
         {
-            const NodeInfo &parentInfo = m_nodeInfos[parent];
-            trans = parentInfo.localMatrix * trans;
-            parent = parentInfo.parent;
+            // Parent is already updated
+            nodeInfo.ubo.worldMatrix = m_nodeInfos[parent].ubo.worldMatrix * nodeInfo.localMatrix;
         }
-
-        nodeInfo.ubo.worldMatrix = matrix * trans;
+        else
+        {
+            nodeInfo.ubo.worldMatrix = m_matrix * nodeInfo.localMatrix;
+        }
 
         // update mesh world AABB if node owns a mesh
         int mesh = GetNodeMesh(node);
@@ -235,13 +234,45 @@ namespace pe
         }
 
         nodeInfo.dirty = false;
+        m_nodesMoved.push_back(node);
 
-        // mark per possible frame in flight dirty UBO
         for (uint32_t i = 0; i < RHII.GetSwapchainImageCount(); i++)
         {
             nodeInfo.dirtyUniforms[i] = true;
-            dirtyUniforms[i] = true;
+            m_dirtyUniforms[i] = true;
         }
+    }
+
+    void Model::MarkDirty(int node)
+    {
+        if (node < 0 || node >= static_cast<int>(m_nodeInfos.size()))
+            return;
+
+        // Use cached children list
+        std::vector<int> toProcess;
+        toProcess.reserve(64);
+        toProcess.push_back(node);
+
+        // BFS traversal
+        size_t head = 0;
+        while (head < toProcess.size())
+        {
+            int currentCtx = toProcess[head++];
+            NodeInfo &ni = m_nodeInfos[currentCtx];
+
+            // Mark dirty
+            ni.dirty = true;
+            for (size_t k = 0; k < ni.dirtyUniforms.size(); k++)
+                ni.dirtyUniforms[k] = true;
+
+            // Enqueue children
+            for (int child : ni.children)
+                toProcess.push_back(child);
+        }
+
+        m_dirtyNodes = true;
+        for (size_t i = 0; i < m_dirtyUniforms.size(); i++)
+            m_dirtyUniforms[i] = true;
     }
 
     void Model::SetMeshFactors(Buffer *buffer)

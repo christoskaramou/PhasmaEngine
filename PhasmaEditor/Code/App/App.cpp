@@ -7,6 +7,7 @@
 #include "Systems/PostProcessSystem.h"
 #include "Systems/RendererSystem.h"
 #include "Window/Window.h"
+#include "imgui/ImGuizmo.h"
 #include "imgui/imgui_impl_sdl2.h"
 #include "imgui/imgui_impl_vulkan.h"
 #ifdef NDEBUG
@@ -124,6 +125,7 @@ namespace pe
         ImGui_ImplSDL2_NewFrame();
         ImGui_ImplVulkan_NewFrame();
         ImGui::NewFrame();
+        ImGuizmo::BeginFrame();
 
         if (!m_window->ProcessEvents())
             return false;

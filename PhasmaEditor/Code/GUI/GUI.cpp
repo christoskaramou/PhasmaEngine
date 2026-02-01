@@ -14,6 +14,7 @@
 #include "Scene/Model.h"
 #include "Systems/RendererSystem.h"
 #include "Widgets/AssetViewer.h"
+#include "Widgets/CameraWidget.h"
 #include "Widgets/Console.h"
 #include "Widgets/FileBrowser.h"
 #include "Widgets/FileSelector.h"
@@ -24,7 +25,7 @@
 #include "Widgets/Particles.h"
 #include "Widgets/Properties.h"
 #include "Widgets/SceneView.h"
-#include "Widgets/CameraWidget.h"
+#include "Widgets/TransformWidget.h"
 #include "imgui/imgui_impl_sdl2.h"
 #include "imgui/imgui_impl_vulkan.h"
 
@@ -209,6 +210,7 @@ namespace pe
         // Right - Global Properties
         ImGui::DockBuilderDockWindow("Global Properties", dockRight);
         ImGui::DockBuilderDockWindow("Camera", dockRight);
+        ImGui::DockBuilderDockWindow("Transform", dockRight);
 
         // Bottom - Console, Asset Viewer, File Browser (Tabbed)
         // Console first to ensure leftmost tab position
@@ -318,7 +320,7 @@ namespace pe
                 {
                     auto relativePath = std::filesystem::relative(file.path(), modelsDir);
                     auto u8str = relativePath.generic_u8string();
-                    gSettings.model_list.push_back(std::string(reinterpret_cast<const char*>(u8str.c_str())));
+                    gSettings.model_list.push_back(std::string(reinterpret_cast<const char *>(u8str.c_str())));
                 }
             }
         }
@@ -413,16 +415,17 @@ namespace pe
         auto particles = std::make_shared<Particles>();
         auto cameraWidget = std::make_shared<CameraWidget>();
         auto console = std::make_shared<Console>();
+        auto transformWidget = std::make_shared<TransformWidget>();
 
         // Console added early to potentially influence tab ordering (Leftmost)
-        m_widgets = {console, properties, metrics, models, assetViewer, sceneView, loading, fileBrowser, fileSelector, hierarchy, particles, cameraWidget};
+        m_widgets = {console, properties, metrics, models, assetViewer, sceneView, loading, fileBrowser, fileSelector, hierarchy, particles, cameraWidget, transformWidget};
 
         // Initialize Core Logging and attach Console
         Log::Attach([console](const std::string &msg, LogType type)
                     { console->AddLog(type, "%s", msg.c_str()); });
 
         // Populate Menu Vectors
-        m_menuWindowWidgets = {console, metrics, properties, models, assetViewer, sceneView, fileBrowser, hierarchy, particles, cameraWidget};
+        m_menuWindowWidgets = {console, metrics, properties, models, assetViewer, sceneView, fileBrowser, hierarchy, particles, cameraWidget, transformWidget};
         m_menuAssetsWidgets = {};
         for (auto &widget : m_widgets)
             widget->Init(this);

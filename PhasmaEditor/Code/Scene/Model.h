@@ -63,6 +63,7 @@ namespace pe
     {
         AABB worldBoundingBox;
         int parent = -1;
+        std::vector<int> children;
         mat4 localMatrix;
         size_t dataOffset = static_cast<size_t>(-1);
         uint32_t indirectIndex = 0;
@@ -77,6 +78,7 @@ namespace pe
         bool dirty = false;
         std::vector<bool> dirtyUniforms;
         std::string name;
+        int instanceIndex = -1; // Cache for TLAS update
     };
 
     // Base class for all model loaders
@@ -91,6 +93,7 @@ namespace pe
         static void DestroyDefaults();
 
         // Common interface methods
+        void MarkDirty(int node);
         void UpdateNodeMatrices();
         void SetMeshFactors(Buffer *buffer);
         Image *LoadTexture(CommandBuffer *cmd, const std::filesystem::path &texturePath);
@@ -114,9 +117,12 @@ namespace pe
         std::vector<MeshInfo> &GetMeshInfos() { return m_meshInfos; }
         std::vector<NodeInfo> &GetNodeInfos() { return m_nodeInfos; }
 
-        mat4 &GetMatrix() { return matrix; }
-        bool &GetDirtyNodes() { return dirtyNodes; }
-        std::vector<bool> &GetDirtyUniforms() { return dirtyUniforms; }
+        mat4 &GetMatrix() { return m_matrix; }
+        bool &GetDirtyNodes() { return m_dirtyNodes; }
+        bool IsMoved() { return !m_nodesMoved.empty(); }
+        std::vector<int> &GetNodesMoved() { return m_nodesMoved; }
+        void ClearNodesMoved() { m_nodesMoved.clear(); }
+        std::vector<bool> &GetDirtyUniforms() { return m_dirtyUniforms; }
 
         uint32_t GetVerticesCount() const { return m_verticesCount; }
         uint32_t GetIndicesCount() const { return m_indicesCount; }
@@ -179,11 +185,12 @@ namespace pe
         std::vector<AabbVertex> m_aabbVertices;
         std::vector<uint32_t> m_indices;
 
-        mat4 matrix = mat4(1.f);
+        mat4 m_matrix = mat4(1.f);
 
         // Dirty flags are used to update nodes and uniform buffers, they are important
-        bool dirtyNodes = false;
-        std::vector<bool> dirtyUniforms;
+        bool m_dirtyNodes = false;
+        std::vector<int> m_nodesMoved; // Stores indices of nodes moved this frame
+        std::vector<bool> m_dirtyUniforms;
 
         uint32_t m_verticesCount = 0;
         uint32_t m_indicesCount = 0;

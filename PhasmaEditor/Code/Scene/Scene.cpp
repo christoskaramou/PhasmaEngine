@@ -17,6 +17,7 @@
 #include "RenderPasses/RayTracingPass.h"
 #include "RenderPasses/ShadowPass.h"
 #include "Scene/Model.h"
+#include "Scene/SelectionManager.h"
 #include "Systems/RendererSystem.h"
 
 namespace pe
@@ -105,6 +106,9 @@ namespace pe
 
     void Scene::RemoveModel(Model *model)
     {
+        if (SelectionManager::Instance().GetSelectedModel() == model)
+            SelectionManager::Instance().ClearSelection();
+
         m_models.erase(model->GetId());
     }
 
@@ -891,6 +895,7 @@ namespace pe
             AccelerationStructure *blas;
             Model *model;
             int meshIndex;
+            int nodeIndex; // Added for caching
             mat4 transform;
         };
         std::vector<InstanceReq> instanceReqs;
@@ -909,7 +914,7 @@ namespace pe
                     continue;
 
                 const auto &nodeInfo = model->GetNodeInfos()[i];
-                instanceReqs.push_back({nullptr, model, meshIndex, nodeInfo.ubo.worldMatrix});
+                instanceReqs.push_back({nullptr, model, meshIndex, i, nodeInfo.ubo.worldMatrix});
             }
         }
 
@@ -1038,6 +1043,9 @@ namespace pe
             gpuInstances[i].instanceShaderBindingTableRecordOffset = 0;
             gpuInstances[i].flags = static_cast<VkGeometryInstanceFlagBitsKHR>(vk::GeometryInstanceFlagBitsKHR::eTriangleFacingCullDisable);
             gpuInstances[i].accelerationStructureReference = req.blas->GetDeviceAddress();
+
+            // Cache instance index
+            req.model->GetNodeInfos()[req.nodeIndex].instanceIndex = static_cast<int>(i);
         }
         m_instanceBuffer->Flush();
         m_instanceBuffer->Unmap();
@@ -1081,5 +1089,72 @@ namespace pe
         }
         m_meshInfoBuffer->Flush();
         m_meshInfoBuffer->Unmap();
+    }
+
+    void Scene::UpdateTLASTransformations(CommandBuffer *cmd)
+    {
+        if (!m_tlas || !m_instanceBuffer)
+            return;
+
+        // Check if any model has dirty transforms
+        bool needsUpdate = false;
+        for (auto &modelPtr : m_models)
+        {
+            if (modelPtr->IsMoved())
+            {
+                needsUpdate = true;
+                break;
+            }
+        }
+
+        if (!needsUpdate)
+            return;
+
+        m_instanceBuffer->Map();
+        auto *gpuInstances = (vk::AccelerationStructureInstanceKHR *)m_instanceBuffer->Data();
+        int updatedCount = 0;
+
+        for (auto &modelPtr : m_models)
+        {
+            Model &model = *modelPtr;
+            if (!model.IsMoved())
+                continue;
+
+            const auto &nodesMoved = model.GetNodesMoved();
+            for (int i : nodesMoved)
+            {
+                const auto &nodeInfo = model.GetNodeInfos()[i];
+                int instanceIndex = nodeInfo.instanceIndex;
+
+                if (instanceIndex < 0)
+                    continue;
+
+                const mat4 &t = nodeInfo.ubo.worldMatrix;
+
+                vk::TransformMatrixKHR transformMatrix;
+                transformMatrix.matrix[0][0] = t[0][0];
+                transformMatrix.matrix[0][1] = t[1][0];
+                transformMatrix.matrix[0][2] = t[2][0];
+                transformMatrix.matrix[0][3] = t[3][0];
+                transformMatrix.matrix[1][0] = t[0][1];
+                transformMatrix.matrix[1][1] = t[1][1];
+                transformMatrix.matrix[1][2] = t[2][1];
+                transformMatrix.matrix[1][3] = t[3][1];
+                transformMatrix.matrix[2][0] = t[0][2];
+                transformMatrix.matrix[2][1] = t[1][2];
+                transformMatrix.matrix[2][2] = t[2][2];
+                transformMatrix.matrix[2][3] = t[3][2];
+
+                gpuInstances[instanceIndex].transform = transformMatrix;
+                updatedCount++;
+            }
+            model.ClearNodesMoved(); // Clear the list for this frame
+        }
+        m_instanceBuffer->Flush();
+        m_instanceBuffer->Unmap();
+
+        // Update TLAS in-place using eUpdate mode
+        uint32_t totalInstances = static_cast<uint32_t>(m_instanceBuffer->Size() / sizeof(vk::AccelerationStructureInstanceKHR));
+        m_tlas->UpdateTLAS(cmd, totalInstances, m_instanceBuffer, m_scratchBuffer->GetDeviceAddress());
     }
 } // namespace pe

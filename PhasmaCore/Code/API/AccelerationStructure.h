@@ -33,6 +33,11 @@ namespace pe
                        vk::BuildAccelerationStructureFlagsKHR flags,
                        vk::DeviceAddress scratchAddress = 0);
 
+        void UpdateTLAS(CommandBuffer *cmd,
+                        uint32_t instanceCount,
+                        Buffer *instanceBuffer,
+                        vk::DeviceAddress scratchAddress = 0);
+
         uint64_t GetDeviceAddress() const;
 
     private:
