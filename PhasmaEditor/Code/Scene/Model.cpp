@@ -96,11 +96,13 @@ namespace pe
 
     Model *Model::Load(const std::filesystem::path &file)
     {
-        PE_ERROR_IF(!std::filesystem::exists(file), std::string("Model file not found: " + file.string()).c_str());
+        auto fileU8 = file.u8string();
+        std::string fileStr(reinterpret_cast<const char *>(fileU8.c_str()));
+        PE_ERROR_IF(!std::filesystem::exists(file), std::string("Model file not found: " + fileStr).c_str());
 
         // For now we route everything through Assimp (it supports many formats).
         Model *model = ModelAssimp::Load(file);
-        PE_ERROR_IF(!model, std::string("Failed to load model: " + file.string()).c_str());
+        PE_ERROR_IF(!model, std::string("Failed to load model: " + fileStr).c_str());
 
         EventSystem::PushEvent(EventType::ModelLoaded, model);
         return model;
@@ -318,13 +320,18 @@ namespace pe
             return image;
 
         if (!std::filesystem::exists(normalized))
-            return nullptr;
+        {
+             std::string pathStr(reinterpret_cast<const char *>(normalized.u8string().c_str()));
+             PE_ERROR("Texture not found (LoadTexture): %s", pathStr.c_str());
+             return nullptr;
+        }
 
-        Image *image = Image::LoadRGBA8(cmd, normalized.string());
+        std::string normalizedStr(reinterpret_cast<const char *>(normalized.u8string().c_str()));
+        Image *image = Image::LoadRGBA8(cmd, normalizedStr);
         if (!image)
             return nullptr;
 
-        m_textureCache.emplace(normalized.generic_string(), image);
+        m_textureCache.emplace(normalizedStr, image);
         AddImage(image, true);
         return image;
     }
@@ -334,7 +341,8 @@ namespace pe
         if (texturePath.empty())
             return nullptr;
 
-        auto it = m_textureCache.find(texturePath.generic_string());
+        std::string pathStr(reinterpret_cast<const char *>(texturePath.u8string().c_str()));
+        auto it = m_textureCache.find(pathStr);
         if (it == m_textureCache.end())
             return nullptr;
         return it->second;

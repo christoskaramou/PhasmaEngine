@@ -43,7 +43,10 @@ namespace pe
             if (ImGui::Button("Open File"))
                 GUIState::OpenExternalPath(GUIState::s_assetPreview.fullPath);
 
-            const std::string folder = std::filesystem::path(GUIState::s_assetPreview.fullPath).parent_path().string();
+            // Use u8path to properly interpret UTF-8 string as path on Windows
+            std::filesystem::path p(reinterpret_cast<const char8_t *>(GUIState::s_assetPreview.fullPath.c_str()));
+            auto folderU8 = p.parent_path().u8string();
+            const std::string folder(reinterpret_cast<const char *>(folderU8.c_str()));
             if (!folder.empty())
             {
                 ImGui::SameLine();
@@ -60,7 +63,8 @@ namespace pe
 
                 if (ImGui::Button("Load Model"))
                 {
-                    auto path = std::filesystem::path(GUIState::s_assetPreview.fullPath);
+                    // Use u8path to properly interpret UTF-8 string as path on Windows
+                    std::filesystem::path path(reinterpret_cast<const char8_t *>(GUIState::s_assetPreview.fullPath.c_str()));
                     auto loadAsync = [path]()
                     {
                         GUIState::s_modelLoading = true;

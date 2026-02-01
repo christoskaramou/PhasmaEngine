@@ -42,7 +42,9 @@ namespace pe
                         auto loadTask = [fullPath]()
                         {
                             GUIState::s_modelLoading = true;
-                            Model::Load(std::filesystem::path(fullPath));
+                            // Use u8path to properly interpret UTF-8 string as path on Windows
+                            std::filesystem::path filePath(reinterpret_cast<const char8_t *>(fullPath.c_str()));
+                            Model::Load(filePath);
                             GUIState::s_modelLoading = false;
                         };
                         ThreadPool::GUI.Enqueue(loadTask);
