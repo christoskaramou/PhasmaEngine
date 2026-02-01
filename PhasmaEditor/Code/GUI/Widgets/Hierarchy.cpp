@@ -1,6 +1,7 @@
 #include "Hierarchy.h"
 #include "Scene/Model.h"
 #include "Scene/Scene.h"
+#include "Scene/SelectionManager.h"
 #include "Systems/RendererSystem.h"
 #include "imgui/imgui.h"
 
@@ -15,14 +16,12 @@ namespace pe
         if (!m_open)
             return;
 
-        // Set initial size if needed (though docking usually handles it)
-        // ui::SetInitialWindowSizeFraction(0.2f, 0.5f);
-
         ImGui::Begin("Hierarchy", &m_open);
 
         RendererSystem *renderer = GetGlobalSystem<RendererSystem>();
         Scene &scene = renderer->GetScene();
         auto &models = scene.GetModels();
+        auto &selection = SelectionManager::Instance();
 
         // Root node for the scene
         if (ImGui::TreeNodeEx("Root", ImGuiTreeNodeFlags_DefaultOpen | ImGuiTreeNodeFlags_SpanAvailWidth | ImGuiTreeNodeFlags_OpenOnArrow))
@@ -38,15 +37,23 @@ namespace pe
                     name = "Model_" + std::to_string(id);
 
                 ImGuiTreeNodeFlags modelFlags = ImGuiTreeNodeFlags_SpanAvailWidth | ImGuiTreeNodeFlags_OpenOnArrow;
-                if (m_selectedId == id)
+                if (selection.GetSelectedModel() == model)
                     modelFlags |= ImGuiTreeNodeFlags_Selected;
 
                 bool modelOpen = ImGui::TreeNodeEx((void *)(intptr_t)id, modelFlags, "%s", name.c_str());
                 if (ImGui::IsItemClicked())
                 {
-                    m_selectedId = id;
-                    m_selectedNodeIndex = -1;
-                    // TODO: Do something with it here
+                    int nodeToSelect = -1;
+                    for (int i = 0; i < model->GetNodeCount(); i++)
+                    {
+                        if (model->GetNodeMesh(i) >= 0)
+                        {
+                            nodeToSelect = i;
+                            break;
+                        }
+                    }
+                    if (nodeToSelect >= 0)
+                        selection.Select(model, nodeToSelect);
                 }
 
                 if (modelOpen)
@@ -72,7 +79,6 @@ namespace pe
                         bool isLeaf = children[nodeIndex].empty();
 
                         // Use a unique ID mixing model ID and node Index to avoid conflicts
-                        // Using a simple hash approach for void* pointer
                         uintptr_t uniqueId = (id << 16) ^ nodeIndex;
 
                         ImGuiTreeNodeFlags nodeFlags = ImGuiTreeNodeFlags_SpanAvailWidth | ImGuiTreeNodeFlags_OpenOnArrow;
@@ -80,16 +86,14 @@ namespace pe
                             nodeFlags |= ImGuiTreeNodeFlags_Leaf;
 
                         // Highlight if selected
-                        if (m_selectedId == id && m_selectedNodeIndex == nodeIndex)
+                        if (selection.GetSelectedModel() == model && selection.GetSelectedNodeIndex() == nodeIndex)
                             nodeFlags |= ImGuiTreeNodeFlags_Selected;
 
                         bool nodeOpen = ImGui::TreeNodeEx((void *)uniqueId, nodeFlags, "%s", node.name.c_str());
 
                         if (ImGui::IsItemClicked())
                         {
-                            m_selectedId = id;
-                            m_selectedNodeIndex = nodeIndex;
-                            // TODO: Do something with it here
+                            selection.Select(model, nodeIndex);
                         }
 
                         if (nodeOpen)

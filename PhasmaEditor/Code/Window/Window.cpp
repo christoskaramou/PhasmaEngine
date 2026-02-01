@@ -5,6 +5,7 @@
 #include "Camera/Camera.h"
 #include "Scene/Model.h"
 #include "Scene/Scene.h"
+#include "Scene/SelectionManager.h"
 #include "Systems/PostProcessSystem.h"
 #include "Systems/RendererSystem.h"
 #include "imgui/imgui_impl_sdl2.h"
@@ -233,6 +234,17 @@ namespace pe
 
         if (ImGui::IsKeyDown(ImGuiKey_LeftCtrl) && ImGui::IsKeyPressed(ImGuiKey_G, false))
             rendererSystem->ToggleGUI();
+
+        // Gizmo mode shortcuts (W/E/R) - only when an object is selected and not typing
+        if (!ImGui::GetIO().WantCaptureKeyboard && SelectionManager::Instance().HasSelection())
+        {
+            if (ImGui::IsKeyPressed(ImGuiKey_W, false))
+                SelectionManager::Instance().SetGizmoOperation(GizmoOperation::Translate);
+            if (ImGui::IsKeyPressed(ImGuiKey_E, false))
+                SelectionManager::Instance().SetGizmoOperation(GizmoOperation::Rotate);
+            if (ImGui::IsKeyPressed(ImGuiKey_R, false))
+                SelectionManager::Instance().SetGizmoOperation(GizmoOperation::Scale);
+        }
 
         EventSystem::ClearPushedEvents();
 

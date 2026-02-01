@@ -137,9 +137,12 @@ namespace pe
         geometry.geometryType = vk::GeometryTypeKHR::eInstances;
         geometry.geometry.instances = instancesVk;
 
+        // Add eAllowUpdate to enable subsequent UpdateTLAS calls
+        vk::BuildAccelerationStructureFlagsKHR buildFlags = flags | vk::BuildAccelerationStructureFlagBitsKHR::eAllowUpdate;
+
         vk::AccelerationStructureBuildGeometryInfoKHR buildInfo{};
         buildInfo.type = vk::AccelerationStructureTypeKHR::eTopLevel;
-        buildInfo.flags = flags;
+        buildInfo.flags = buildFlags;
         buildInfo.mode = vk::BuildAccelerationStructureModeKHR::eBuild;
         buildInfo.geometryCount = 1;
         buildInfo.pGeometries = &geometry;
@@ -177,6 +180,53 @@ namespace pe
         m_deviceAddress = RHII.GetDevice().getAccelerationStructureAddressKHR(&addressInfo);
 
         buildInfo.dstAccelerationStructure = m_apiHandle;
+
+        vk::AccelerationStructureBuildRangeInfoKHR buildRange{};
+        buildRange.primitiveCount = instanceCount;
+        buildRange.primitiveOffset = 0;
+        buildRange.firstVertex = 0;
+        buildRange.transformOffset = 0;
+
+        const vk::AccelerationStructureBuildRangeInfoKHR *pBuildRanges = &buildRange;
+        cmd->BuildAccelerationStructures(1, &buildInfo, &pBuildRanges);
+
+        // Add barrier for subsequent use
+        vk::MemoryBarrier2 barrier{};
+        barrier.srcStageMask = vk::PipelineStageFlagBits2::eAccelerationStructureBuildKHR;
+        barrier.srcAccessMask = vk::AccessFlagBits2::eAccelerationStructureWriteKHR;
+        barrier.dstStageMask = vk::PipelineStageFlagBits2::eRayTracingShaderKHR | vk::PipelineStageFlagBits2::eAccelerationStructureBuildKHR;
+        barrier.dstAccessMask = vk::AccessFlagBits2::eAccelerationStructureReadKHR | vk::AccessFlagBits2::eAccelerationStructureWriteKHR;
+        cmd->MemoryBarrier(barrier);
+    }
+
+    void AccelerationStructure::UpdateTLAS(CommandBuffer *cmd,
+                                           uint32_t instanceCount,
+                                           Buffer *instanceBuffer,
+                                           vk::DeviceAddress scratchAddress)
+    {
+        if (!m_apiHandle)
+            return; // Must have been built first
+
+        vk::AccelerationStructureGeometryInstancesDataKHR instancesVk{};
+        instancesVk.data.deviceAddress = instanceBuffer->GetDeviceAddress();
+
+        vk::AccelerationStructureGeometryKHR geometry{};
+        geometry.geometryType = vk::GeometryTypeKHR::eInstances;
+        geometry.geometry.instances = instancesVk;
+
+        vk::AccelerationStructureBuildGeometryInfoKHR buildInfo{};
+        buildInfo.type = vk::AccelerationStructureTypeKHR::eTopLevel;
+        buildInfo.flags = vk::BuildAccelerationStructureFlagBitsKHR::eAllowUpdate | vk::BuildAccelerationStructureFlagBitsKHR::ePreferFastTrace;
+        buildInfo.mode = vk::BuildAccelerationStructureModeKHR::eUpdate; // In-place update
+        buildInfo.srcAccelerationStructure = m_apiHandle;
+        buildInfo.dstAccelerationStructure = m_apiHandle;
+        buildInfo.geometryCount = 1;
+        buildInfo.pGeometries = &geometry;
+
+        if (scratchAddress)
+            buildInfo.scratchData.deviceAddress = scratchAddress;
+        else if (m_scratchBuffer)
+            buildInfo.scratchData.deviceAddress = m_scratchBuffer->GetDeviceAddress();
 
         vk::AccelerationStructureBuildRangeInfoKHR buildRange{};
         buildRange.primitiveCount = instanceCount;

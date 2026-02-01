@@ -28,6 +28,7 @@ namespace pe
 
         void Update();
         void UpdateGeometryBuffers();
+        void UpdateTLASTransformations(CommandBuffer *cmd); // Update instance transforms and rebuild TLAS
         void AddModel(Model *model);
         void RemoveModel(Model *model);
 

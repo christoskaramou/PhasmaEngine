@@ -169,6 +169,9 @@ namespace pe
         if (!tlas)
             return;
 
+        // Update TLAS if any transform changed
+        m_scene->UpdateTLASTransformations(cmd);
+
         ImageBarrierInfo barrierDisplay{};
         barrierDisplay.image = m_display;
         barrierDisplay.layout = vk::ImageLayout::eGeneral;

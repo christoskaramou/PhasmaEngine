@@ -353,7 +353,7 @@ namespace pe
                 }
                 else
                 {
-                   FillVertexTangent(vertex, 1.0f, 0.0f, 0.0f, 1.0f);
+                    FillVertexTangent(vertex, 1.0f, 0.0f, 0.0f, 1.0f);
                 }
 
                 FillVertexJointsWeights(vertex, 0, 0, 0, 0, 0.f, 0.f, 0.f, 0.f);
@@ -374,8 +374,8 @@ namespace pe
                 }
                 else
                 {
-                    bbMin = glm::min(bbMin, pos);
-                    bbMax = glm::max(bbMax, pos);
+                    bbMin = min(bbMin, pos);
+                    bbMax = max(bbMax, pos);
                 }
             }
 
@@ -499,7 +499,7 @@ namespace pe
         CountNodesRecursive(m_scene->mRootNode, nodeCount);
         total = nodeCount;
 
-        dirtyNodes = true;
+        m_dirtyNodes = true;
         m_nodeInfos.clear();
         m_nodeToMesh.clear();
 
@@ -526,6 +526,9 @@ namespace pe
             ni.name = (srcNode && srcNode->mName.length > 0) ? srcNode->mName.C_Str() : ("Node " + std::to_string(idx));
             ni.parent = parent;
             ni.localMatrix = local;
+            if (parent >= 0)
+                m_nodeInfos[parent].children.push_back(idx);
+
             ni.dirty = true;
             ni.dirtyUniforms.resize(RHII.GetSwapchainImageCount(), false);
 
@@ -689,14 +692,14 @@ namespace pe
         if (!hasMetallicFactor)
         {
             float specI = std::max(specular.r, std::max(specular.g, specular.b));
-            metallic = glm::clamp(specI, 0.f, 1.f);
+            metallic = clamp(specI, 0.f, 1.f);
         }
 
         if (!hasRoughnessFactor)
         {
             float shininess = 0.f;
             if (material->Get(AI_MATKEY_SHININESS, shininess) == AI_SUCCESS && shininess > 0.f)
-                roughness = glm::clamp(std::sqrt(2.f / (shininess + 2.f)), 0.f, 1.f);
+                roughness = clamp(std::sqrt(2.f / (shininess + 2.f)), 0.f, 1.f);
         }
 
         float transmissionFactor = 0.f;
@@ -729,7 +732,7 @@ namespace pe
         // row3: (unused), normalScale, (unused), (unused)
         // row4: thicknessFactor, attenuationDistance, IOR, (unused)
         // row5: attenuationColor rgb, (unused)
-        
+
         factors[0][0][0] = baseColor.r;
         factors[0][0][1] = baseColor.g;
         factors[0][0][2] = baseColor.b;
@@ -749,7 +752,7 @@ namespace pe
         factors[1][0][0] = thicknessFactor;
         factors[1][0][1] = attenuationDistance;
         factors[1][0][2] = ior;
-        
+
         factors[1][1][0] = attenuationColor.r;
         factors[1][1][1] = attenuationColor.g;
         factors[1][1][2] = attenuationColor.b;
