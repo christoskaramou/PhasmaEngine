@@ -233,7 +233,7 @@ namespace pe
         ImGuizmo::SetDrawlist();
         ImGuizmo::SetRect(imageMin.x, imageMin.y, imageSize.x, imageSize.y);
         mat4 view = camera->GetView();
-        mat4 proj = camera->GetProjection();
+        mat4 proj = camera->GetProjectionNoJitter();
 
         // Vulkan convention
         proj[1][1] *= -1.0f;

@@ -342,25 +342,32 @@ namespace pe
 
     void RendererSystem::Draw()
     {
-        uint32_t frame = RHII.GetFrameIndex();
+        try
+        {
+            uint32_t frame = RHII.GetFrameIndex();
 
-        // acquire the image
-        Semaphore *acquireSemaphore = m_acquireSemaphores[frame];
+            // acquire the image
+            Semaphore *acquireSemaphore = m_acquireSemaphores[frame];
 
-        Swapchain *swapchain = RHII.GetSwapchain();
-        uint32_t imageIndex = swapchain->AquireNextImage(acquireSemaphore);
+            Swapchain *swapchain = RHII.GetSwapchain();
+            uint32_t imageIndex = swapchain->AquireNextImage(acquireSemaphore);
 
-        // RECORD COMMANDS
-        auto &frameCmd = m_cmds[frame];
-        frameCmd = RecordPasses(imageIndex);
+            // RECORD COMMANDS
+            auto &frameCmd = m_cmds[frame];
+            frameCmd = RecordPasses(imageIndex);
 
-        // SUBMIT TO QUEUE
-        Semaphore *submitSemaphore = m_submitSemaphores[imageIndex];
-        Queue *queue = RHII.GetMainQueue();
-        queue->Submit(1, &frameCmd, acquireSemaphore, submitSemaphore);
+            // SUBMIT TO QUEUE
+            Semaphore *submitSemaphore = m_submitSemaphores[imageIndex];
+            Queue *queue = RHII.GetMainQueue();
+            queue->Submit(1, &frameCmd, acquireSemaphore, submitSemaphore);
 
-        // PRESENT
-        queue->Present(swapchain, imageIndex, submitSemaphore);
+            // PRESENT
+            queue->Present(swapchain, imageIndex, submitSemaphore);
+        }
+        catch (vk::OutOfDateKHRError &)
+        {
+            // Just ignore and try again
+        }
     }
 
     void RendererSystem::DrawPlatformWindows()
