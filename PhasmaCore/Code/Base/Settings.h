@@ -70,7 +70,7 @@ namespace pe
         bool aabbs_depth_aware = true;
         bool dynamic_rendering = true;
         bool ray_tracing_support = false;
-        RenderMode render_mode = RenderMode::Raster;
+        RenderMode render_mode = RenderMode::Hybrid;
         bool use_Disney_PBR = true;
         vk::PresentModeKHR preferred_present_mode = vk::PresentModeKHR::eMailbox;
     };

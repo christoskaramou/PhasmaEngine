@@ -285,6 +285,45 @@ namespace pe
 
             if (ImGui::BeginMenu("Layout"))
             {
+                if (ImGui::BeginMenu("Style"))
+                {
+                    bool isClassic = GUIState::s_guiStyle == GUIStyle::Classic;
+                    bool isUnity = GUIState::s_guiStyle == GUIStyle::Unity;
+                    bool isUnreal = GUIState::s_guiStyle == GUIStyle::Unreal;
+
+                    if (ImGui::MenuItem("Classic", nullptr, isClassic))
+                    {
+                        GUIState::s_guiStyle = GUIStyle::Classic;
+                        ui::ApplyClassicTheme();
+                    }
+                    if (ImGui::MenuItem("Unity", nullptr, isUnity))
+                    {
+                        GUIState::s_guiStyle = GUIStyle::Unity;
+                        ui::ApplyUnityTheme();
+                    }
+                    if (ImGui::MenuItem("Unreal", nullptr, isUnreal))
+                    {
+                        GUIState::s_guiStyle = GUIStyle::Unreal;
+                        ui::ApplyUnrealTheme();
+                    }
+                    ImGui::EndMenu();
+                }
+                if (ImGui::BeginMenu("Font Size"))
+                {
+                    ImGuiIO& io = ImGui::GetIO();
+                    float scale = io.FontGlobalScale;
+                    
+                    if (ImGui::MenuItem("Small", nullptr, scale < 0.95f))
+                        io.FontGlobalScale = 0.85f;
+                    if (ImGui::MenuItem("Medium", nullptr, scale >= 0.95f && scale < 1.15f))
+                        io.FontGlobalScale = 1.0f;
+                    if (ImGui::MenuItem("Large", nullptr, scale >= 1.15f && scale < 1.35f))
+                        io.FontGlobalScale = 1.25f;
+                    if (ImGui::MenuItem("Extra Large", nullptr, scale >= 1.35f))
+                        io.FontGlobalScale = 1.5f;
+                    ImGui::EndMenu();
+                }
+                ImGui::Separator();
                 if (ImGui::MenuItem("Reset to Default Layout", "Ctrl+Shift+L"))
                     m_requestDockReset = true;
                 ImGui::EndMenu();
@@ -334,8 +373,6 @@ namespace pe
 
         ImGui::StyleColorsClassic();
 
-        ui::ApplyNiceTheme();
-
         ImGui_ImplSDL2_InitForVulkan(RHII.GetWindow());
 
         // Verify the SDL2 backend supports platform windows
@@ -377,7 +414,71 @@ namespace pe
         }
 
         ImGui_ImplVulkan_Init(&init_info);
+
+        // Load ALL fonts upfront for dynamic style switching
+        {
+            static const ImWchar icon_ranges[] = { 0xf000, 0xf8ff, 0 }; // FontAwesome range
+            std::string iconFontPath = Path::Assets + "Fonts/fa-solid-900.ttf";
+            std::string interFontPath = Path::Assets + "Fonts/Inter-Regular.ttf";
+            std::string robotoFontPath = Path::Assets + "Fonts/Roboto-Regular.ttf";
+            float fontSize = 15.0f;
+
+            // Helper lambda to add icon font merged into base
+            auto addIconsToFont = [&]() {
+                if (std::filesystem::exists(iconFontPath))
+                {
+                    ImFontConfig config;
+                    config.MergeMode = true;
+                    config.PixelSnapH = true;
+                    config.GlyphMinAdvanceX = fontSize;
+                    io.Fonts->AddFontFromFileTTF(iconFontPath.c_str(), fontSize, &config, icon_ranges);
+                }
+            };
+
+            // 1. Classic font (ImGui default)
+            GUIState::s_fontClassic = io.Fonts->AddFontDefault();
+            addIconsToFont();
+
+            // 2. Unity font (Inter)
+            if (std::filesystem::exists(interFontPath))
+            {
+                GUIState::s_fontUnity = io.Fonts->AddFontFromFileTTF(interFontPath.c_str(), fontSize);
+                addIconsToFont();
+            }
+            else
+            {
+                GUIState::s_fontUnity = GUIState::s_fontClassic;
+            }
+
+            // 3. Unreal font (Roboto)
+            if (std::filesystem::exists(robotoFontPath))
+            {
+                GUIState::s_fontUnreal = io.Fonts->AddFontFromFileTTF(robotoFontPath.c_str(), fontSize);
+                // Add icons at matching size
+                if (std::filesystem::exists(iconFontPath))
+                {
+                    ImFontConfig config;
+                    config.MergeMode = true;
+                    config.PixelSnapH = true;
+                    config.GlyphMinAdvanceX = fontSize;
+                    io.Fonts->AddFontFromFileTTF(iconFontPath.c_str(), fontSize, &config, icon_ranges);
+                }
+            }
+            else
+            {
+                GUIState::s_fontUnreal = GUIState::s_fontClassic;
+            }
+        }
+
         ImGui_ImplVulkan_CreateFontsTexture();
+
+        // Apply initial theme based on default style
+        if (GUIState::s_guiStyle == GUIStyle::Unity)
+            ui::ApplyUnityTheme();
+        else if (GUIState::s_guiStyle == GUIStyle::Unreal)
+            ui::ApplyUnrealTheme();
+        else
+            ui::ApplyClassicTheme();
 
         // Verify Vulkan backend supports platform windows
         // PE_ERROR_IF(!(io.BackendFlags & ImGuiBackendFlags_RendererHasViewports),
@@ -482,6 +583,16 @@ namespace pe
         if (!m_render)
             return;
 
+        // Push the font for the current style
+        ImFont* currentFont = GUIState::s_fontClassic;
+        if (GUIState::s_guiStyle == GUIStyle::Unity)
+            currentFont = GUIState::s_fontUnity;
+        else if (GUIState::s_guiStyle == GUIStyle::Unreal)
+            currentFont = GUIState::s_fontUnreal;
+        
+        if (currentFont)
+            ImGui::PushFont(currentFont);
+
         Menu();
         DrawExitPopup();
         BuildDockspace();
@@ -494,6 +605,9 @@ namespace pe
             if (widget->IsOpen())
                 widget->Update();
         }
+
+        if (currentFont)
+            ImGui::PopFont();
     }
 
     std::vector<GpuTimerSample> GUI::PopGpuTimerInfos()
