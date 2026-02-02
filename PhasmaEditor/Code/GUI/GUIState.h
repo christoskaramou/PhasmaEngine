@@ -39,6 +39,7 @@ namespace pe
         static void *s_viewportTextureId;
         static bool s_sceneViewFloating;
         static bool s_sceneViewRedockQueued;
+        static bool s_sceneViewFocused;
         static Image *s_sceneViewImage;
 
         // GUI Style

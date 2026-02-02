@@ -8,6 +8,7 @@ namespace pe
     void *GUIState::s_viewportTextureId = nullptr;
     bool GUIState::s_sceneViewFloating = false;
     bool GUIState::s_sceneViewRedockQueued = false;
+    bool GUIState::s_sceneViewFocused = false;
     Image *GUIState::s_sceneViewImage = nullptr;
     GUIStyle GUIState::s_guiStyle = GUIStyle::Unity; // Default to Unity style
     ImFont *GUIState::s_fontClassic = nullptr;
