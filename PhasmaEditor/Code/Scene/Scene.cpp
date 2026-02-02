@@ -862,9 +862,16 @@ namespace pe
                 geometry.geometry.triangles.maxVertex = meshInfo.verticesCount ? meshInfo.verticesCount - 1 : 0;
                 geometry.geometry.triangles.indexType = vk::IndexType::eUint32;
                 geometry.geometry.triangles.indexData.deviceAddress = bufferAddress + meshInfo.indexOffset * sizeof(uint32_t);
-                geometry.flags = vk::GeometryFlagBitsKHR::eOpaque;
-                if (meshInfo.renderType == RenderType::AlphaCut || meshInfo.renderType == RenderType::AlphaBlend || meshInfo.renderType == RenderType::Transmission)
+                if (meshInfo.renderType == RenderType::AlphaCut ||
+                    meshInfo.renderType == RenderType::AlphaBlend ||
+                    meshInfo.renderType == RenderType::Transmission)
+                {
                     geometry.flags = vk::GeometryFlagBitsKHR::eNoDuplicateAnyHitInvocation;
+                }
+                else
+                {
+                    geometry.flags = vk::GeometryFlagBitsKHR::eOpaque;
+                }
 
                 vk::AccelerationStructureBuildRangeInfoKHR range{};
                 range.primitiveCount = meshInfo.indicesCount / 3;
