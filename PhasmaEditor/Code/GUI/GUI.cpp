@@ -195,7 +195,7 @@ namespace pe
         constexpr float dockBottomFrac = 1.0f / 4.5f;
 
         ImGuiID dockMainId = dockspace;
-        
+
         ImGuiID dockRight = ImGui::DockBuilderSplitNode(dockMainId, ImGuiDir_Right, dockRightFrac, nullptr, &dockMainId);
         ImGuiID dockBottom = ImGui::DockBuilderSplitNode(dockMainId, ImGuiDir_Down, dockBottomFrac, nullptr, &dockMainId);
         ImGuiID dockLeft = ImGui::DockBuilderSplitNode(dockMainId, ImGuiDir_Left, dockLeftFrac, nullptr, &dockMainId);
@@ -288,6 +288,9 @@ namespace pe
                 if (ImGui::BeginMenu("Style"))
                 {
                     bool isClassic = GUIState::s_guiStyle == GUIStyle::Classic;
+                    bool isModern = GUIState::s_guiStyle == GUIStyle::Modern;
+                    bool isDark = GUIState::s_guiStyle == GUIStyle::Dark;
+                    bool isLight = GUIState::s_guiStyle == GUIStyle::Light;
                     bool isUnity = GUIState::s_guiStyle == GUIStyle::Unity;
                     bool isUnreal = GUIState::s_guiStyle == GUIStyle::Unreal;
 
@@ -295,6 +298,21 @@ namespace pe
                     {
                         GUIState::s_guiStyle = GUIStyle::Classic;
                         ui::ApplyClassicTheme();
+                    }
+                    if (ImGui::MenuItem("Dark", nullptr, isDark))
+                    {
+                        GUIState::s_guiStyle = GUIStyle::Dark;
+                        ui::ApplyDarkTheme();
+                    }
+                    if (ImGui::MenuItem("Light", nullptr, isLight))
+                    {
+                        GUIState::s_guiStyle = GUIStyle::Light;
+                        ui::ApplyLightTheme();
+                    }
+                    if (ImGui::MenuItem("Modern", nullptr, isModern))
+                    {
+                        GUIState::s_guiStyle = GUIStyle::Modern;
+                        ui::ApplyModernTheme();
                     }
                     if (ImGui::MenuItem("Unity", nullptr, isUnity))
                     {
@@ -310,9 +328,9 @@ namespace pe
                 }
                 if (ImGui::BeginMenu("Font Size"))
                 {
-                    ImGuiIO& io = ImGui::GetIO();
+                    ImGuiIO &io = ImGui::GetIO();
                     float scale = io.FontGlobalScale;
-                    
+
                     if (ImGui::MenuItem("Small", nullptr, scale < 0.95f))
                         io.FontGlobalScale = 0.85f;
                     if (ImGui::MenuItem("Medium", nullptr, scale >= 0.95f && scale < 1.15f))
@@ -417,14 +435,15 @@ namespace pe
 
         // Load ALL fonts upfront for dynamic style switching
         {
-            static const ImWchar icon_ranges[] = { 0xf000, 0xf8ff, 0 }; // FontAwesome range
+            static const ImWchar icon_ranges[] = {0xf000, 0xf8ff, 0}; // FontAwesome range
             std::string iconFontPath = Path::Assets + "Fonts/fa-solid-900.ttf";
             std::string interFontPath = Path::Assets + "Fonts/Inter-Regular.ttf";
             std::string robotoFontPath = Path::Assets + "Fonts/Roboto-Regular.ttf";
             float fontSize = 15.0f;
 
             // Helper lambda to add icon font merged into base
-            auto addIconsToFont = [&]() {
+            auto addIconsToFont = [&]()
+            {
                 if (std::filesystem::exists(iconFontPath))
                 {
                     ImFontConfig config;
@@ -472,17 +491,20 @@ namespace pe
 
         ImGui_ImplVulkan_CreateFontsTexture();
 
-        // Apply initial theme based on default style
-        if (GUIState::s_guiStyle == GUIStyle::Unity)
+        if (GUIState::s_guiStyle == GUIStyle::Classic)
+            ui::ApplyClassicTheme();
+        else if (GUIState::s_guiStyle == GUIStyle::Dark)
+            ui::ApplyDarkTheme();
+        else if (GUIState::s_guiStyle == GUIStyle::Light)
+            ui::ApplyLightTheme();
+        else if (GUIState::s_guiStyle == GUIStyle::Modern)
+            ui::ApplyModernTheme();
+        else if (GUIState::s_guiStyle == GUIStyle::Unity)
             ui::ApplyUnityTheme();
         else if (GUIState::s_guiStyle == GUIStyle::Unreal)
             ui::ApplyUnrealTheme();
         else
-            ui::ApplyClassicTheme();
-
-        // Verify Vulkan backend supports platform windows
-        // PE_ERROR_IF(!(io.BackendFlags & ImGuiBackendFlags_RendererHasViewports),
-        //             "Vulkan backend doesn't support renderer viewports!");
+            ui::ApplyUnityTheme();
 
         auto AddGpuTimerInfo = [this](const std::any &data)
         {
@@ -584,12 +606,12 @@ namespace pe
             return;
 
         // Push the font for the current style
-        ImFont* currentFont = GUIState::s_fontClassic;
+        ImFont *currentFont = GUIState::s_fontClassic;
         if (GUIState::s_guiStyle == GUIStyle::Unity)
             currentFont = GUIState::s_fontUnity;
         else if (GUIState::s_guiStyle == GUIStyle::Unreal)
             currentFont = GUIState::s_fontUnreal;
-        
+
         if (currentFont)
             ImGui::PushFont(currentFont);
 
