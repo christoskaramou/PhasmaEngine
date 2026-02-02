@@ -99,6 +99,8 @@ namespace pe
             barrierInfo.accessMask = vk::AccessFlagBits2::eNone;
             cmd->ImageBarrier(barrierInfo); // transition from undefined to present
         }
+
+        m_scene.UploadBuffers(cmd);
         m_acquireSemaphores.reserve(imageCount);
         m_submitSemaphores.reserve(imageCount);
         for (uint32_t i = 0; i < imageCount; i++)

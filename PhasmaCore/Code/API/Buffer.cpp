@@ -27,6 +27,9 @@ namespace pe
             PE_ERROR_IF(m_size > RHII.GetMaxDrawIndirectCount() * sizeof(VkDrawIndexedIndirectCommand), "Indirect command buffer size is too big");
         }
 
+        if (!m_size)
+            m_size = 16;
+
         vk::BufferUsageFlags2CreateInfo flags2{};
         flags2.usage = m_usage;
 

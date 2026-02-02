@@ -28,6 +28,7 @@ namespace pe
 
         void Update();
         void UpdateGeometryBuffers();
+        void UploadBuffers(CommandBuffer *cmd);
         void UpdateTLASTransformations(CommandBuffer *cmd); // Update instance transforms and rebuild TLAS
         void AddModel(Model *model);
         void RemoveModel(Model *model);
@@ -66,7 +67,6 @@ namespace pe
 
     private:
         void UpdateGeometry();
-        void UploadBuffers(CommandBuffer *cmd);
         void CullNode(Model &model, int node);
         void UpdateUniformData();
         void UpdateIndirectData();
@@ -132,6 +132,7 @@ namespace pe
         std::vector<AccelerationStructure *> m_blases;
         AccelerationStructure *m_tlas = nullptr;
         Buffer *m_instanceBuffer = nullptr;
+        uint32_t m_instanceCount = 0;
         Buffer *m_blasMergedBuffer = nullptr;
         Buffer *m_scratchBuffer = nullptr;
         Buffer *m_meshInfoBuffer = nullptr;
