@@ -98,13 +98,22 @@ namespace pe
     {
         auto fileU8 = file.u8string();
         std::string fileStr(reinterpret_cast<const char *>(fileU8.c_str()));
-        PE_ERROR_IF(!std::filesystem::exists(file), std::string("Model file not found: " + fileStr).c_str());
+        if (!std::filesystem::exists(file))
+        {
+            PE_WARN("Model file not found: %s", fileStr.c_str());
+            return nullptr;
+        }
 
         // For now we route everything through Assimp (it supports many formats).
         Model *model = ModelAssimp::Load(file);
-        PE_ERROR_IF(!model, std::string("Failed to load model: " + fileStr).c_str());
+        if (!model)
+        {
+            PE_WARN("Failed to load model: %s", fileStr.c_str());
+            return nullptr;
+        }
 
         EventSystem::PushEvent(EventType::ModelLoaded, model);
+        PE_INFO("Loaded model: %s", fileStr.c_str());
         return model;
     }
 

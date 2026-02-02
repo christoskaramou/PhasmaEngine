@@ -202,7 +202,11 @@ namespace pe
     {
         auto fileU8 = file.u8string();
         std::string fileStr(reinterpret_cast<const char *>(fileU8.c_str()));
-        PE_ERROR_IF(!std::filesystem::exists(file), std::string("Model file not found: " + fileStr).c_str());
+        if (!std::filesystem::exists(file))
+        {
+             PE_INFO("Model file not found: %s", fileStr.c_str());
+             return nullptr;
+        }
 
         ModelAssimp *modelAssimp = new ModelAssimp();
         ModelAssimp &model = *modelAssimp;
@@ -212,7 +216,11 @@ namespace pe
         auto &gSettings = Settings::Get<GlobalSettings>();
         gSettings.loading_name = "Reading from file";
 
-        PE_ERROR_IF(!model.LoadFile(file), std::string("Failed to load model: " + fileStr).c_str());
+        if (!model.LoadFile(file))
+        {
+            delete modelAssimp;
+            return nullptr;
+        }
 
         Queue *queue = RHII.GetMainQueue();
         CommandBuffer *cmd = queue->AcquireCommandBuffer();
@@ -272,7 +280,7 @@ namespace pe
 
         if (!m_scene || (m_scene->mFlags & AI_SCENE_FLAGS_INCOMPLETE) || !m_scene->mRootNode)
         {
-            PE_ERROR(std::string("Assimp error: " + std::string(m_importer.GetErrorString())).c_str());
+            PE_WARN("Assimp error: %s", m_importer.GetErrorString());
             return false;
         }
 
