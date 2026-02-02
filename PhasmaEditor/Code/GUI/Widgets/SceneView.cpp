@@ -39,6 +39,8 @@ namespace pe
         ImGui::Begin("Scene View", nullptr, sceneViewFlags);
         ImGui::PopStyleVar();
 
+        GUIState::s_sceneViewFocused = ImGui::IsWindowFocused();
+
         RendererSystem *renderer = GetGlobalSystem<RendererSystem>();
         Image *displayRT = renderer->GetDisplayRT();
 

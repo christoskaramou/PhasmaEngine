@@ -7,6 +7,7 @@
 #include "Scene/Scene.h"
 #include "Scene/SelectionManager.h"
 #include "Systems/PostProcessSystem.h"
+#include "GUI/GUIState.h"
 #include "Systems/RendererSystem.h"
 #include "imgui/imgui_impl_sdl2.h"
 
@@ -61,7 +62,7 @@ namespace pe
         int x, y;
         static bool skipNextRotation = false;
 
-        if (IsButtonDown(&x, &y, triggerButton))
+        if (GUIState::s_sceneViewFocused && IsButtonDown(&x, &y, triggerButton))
         {
             if (!IsRelativeMouseModeOn())
             {
@@ -216,18 +217,22 @@ namespace pe
 
         float delta = static_cast<float>(FrameTimer::Instance().GetDelta());
         float speed = camera->GetSpeed() * delta;
-        if ((ImGui::IsKeyDown(ImGuiKey_W) || ImGui::IsKeyDown(ImGuiKey_S)) &&
-            (ImGui::IsKeyDown(ImGuiKey_A) || ImGui::IsKeyDown(ImGuiKey_D)))
-            speed *= 0.707f;
+        
+        if (GUIState::s_sceneViewFocused)
+        {
+            if ((ImGui::IsKeyDown(ImGuiKey_W) || ImGui::IsKeyDown(ImGuiKey_S)) &&
+                (ImGui::IsKeyDown(ImGuiKey_A) || ImGui::IsKeyDown(ImGuiKey_D)))
+                speed *= 0.707f;
 
-        if (ImGui::IsKeyDown(ImGuiKey_W))
-            camera->Move(CameraDirection::FORWARD, speed);
-        if (ImGui::IsKeyDown(ImGuiKey_S))
-            camera->Move(CameraDirection::BACKWARD, speed);
-        if (ImGui::IsKeyDown(ImGuiKey_A))
-            camera->Move(CameraDirection::LEFT, speed);
-        if (ImGui::IsKeyDown(ImGuiKey_D))
-            camera->Move(CameraDirection::RIGHT, speed);
+            if (ImGui::IsKeyDown(ImGuiKey_W))
+                camera->Move(CameraDirection::FORWARD, speed);
+            if (ImGui::IsKeyDown(ImGuiKey_S))
+                camera->Move(CameraDirection::BACKWARD, speed);
+            if (ImGui::IsKeyDown(ImGuiKey_A))
+                camera->Move(CameraDirection::LEFT, speed);
+            if (ImGui::IsKeyDown(ImGuiKey_D))
+                camera->Move(CameraDirection::RIGHT, speed);
+        }
 
         if (ImGui::IsKeyDown(ImGuiKey_LeftCtrl) && ImGui::IsKeyPressed(ImGuiKey_T, false))
             Debug::TriggerCapture();
