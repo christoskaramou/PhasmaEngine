@@ -14,9 +14,12 @@ namespace pe
 
     enum class GUIStyle
     {
-        Classic,   // Original PhasmaEngine style
-        Unity,     // Unity-inspired dark theme
-        Unreal     // Unreal Engine-inspired dark theme
+        Classic, // Original PhasmaEngine style
+        Dark,    // ImGui Dark style
+        Light,   // ImGui Light style
+        Modern,  // Modern Dark theme
+        Unity,   // Unity-inspired dark theme
+        Unreal   // Unreal Engine-inspired dark theme
     };
 
     struct AssetPreviewState
@@ -42,9 +45,9 @@ namespace pe
         static GUIStyle s_guiStyle;
 
         // Style-specific fonts (loaded at init, switched dynamically)
-        static ImFont* s_fontClassic;
-        static ImFont* s_fontUnity;
-        static ImFont* s_fontUnreal;
+        static ImFont *s_fontClassic;
+        static ImFont *s_fontUnity;
+        static ImFont *s_fontUnreal;
 
         static void OpenExternalPath(const std::string &absPath);
         static void UpdateAssetPreview(AssetPreviewType type, const std::string &label, const std::string &fullPath);

@@ -342,7 +342,7 @@ namespace pe::ui
     // Classic PhasmaEngine/ImGui theme
     inline void ApplyClassicTheme()
     {
-        ImGui::StyleColorsClassic();  // This resets ALL colors to ImGui classic
+        ImGui::StyleColorsClassic();
         ImGuiStyle &s = ImGui::GetStyle();
         s.WindowRounding = 4.0f;
         s.ChildRounding = 4.0f;
@@ -357,10 +357,141 @@ namespace pe::ui
         s.SeparatorTextPadding = ImVec2(10, 4);
     }
 
+    // ImGui Dark theme
+    inline void ApplyDarkTheme()
+    {
+        ImGui::StyleColorsDark();
+        ImGuiStyle &s = ImGui::GetStyle();
+        s.WindowRounding = 4.0f;
+        s.ChildRounding = 4.0f;
+        s.FrameRounding = 2.0f;
+        s.GrabRounding = 2.0f;
+        s.PopupRounding = 2.0f;
+        s.ScrollbarRounding = 2.0f;
+        s.TabRounding = 2.0f;
+        s.FramePadding = ImVec2(8, 4);
+        s.ItemSpacing = ImVec2(8, 6);
+        s.WindowPadding = ImVec2(10, 8);
+        s.SeparatorTextPadding = ImVec2(10, 4);
+    }
+
+    // ImGui Light theme
+    inline void ApplyLightTheme()
+    {
+        ImGui::StyleColorsLight();
+        ImGuiStyle &s = ImGui::GetStyle();
+        s.WindowRounding = 4.0f;
+        s.ChildRounding = 4.0f;
+        s.FrameRounding = 2.0f;
+        s.GrabRounding = 2.0f;
+        s.PopupRounding = 2.0f;
+        s.ScrollbarRounding = 2.0f;
+        s.TabRounding = 2.0f;
+        s.FramePadding = ImVec2(8, 4);
+        s.ItemSpacing = ImVec2(8, 6);
+        s.WindowPadding = ImVec2(10, 8);
+        s.SeparatorTextPadding = ImVec2(10, 4);
+    }
+
+    // Modern Dark theme (VS Code Dark Modern inspired)
+    inline void ApplyModernTheme()
+    {
+        ImGui::StyleColorsDark();
+        ImGuiStyle &s = ImGui::GetStyle();
+        s.WindowRounding = 6.0f;
+        s.ChildRounding = 6.0f;
+        s.FrameRounding = 4.0f;
+        s.GrabRounding = 4.0f;
+        s.PopupRounding = 4.0f;
+        s.ScrollbarRounding = 12.0f;
+        s.TabRounding = 4.0f;
+        s.FramePadding = ImVec2(10, 6);
+        s.ItemSpacing = ImVec2(8, 6);
+        s.WindowPadding = ImVec2(12, 12);
+        s.SeparatorTextPadding = ImVec2(12, 4);
+        s.WindowBorderSize = 1.0f;
+        s.FrameBorderSize = 0.0f;
+
+        auto &c = s.Colors;
+
+        // Palette
+        const ImVec4 bg_darkest = ImVec4(0.11f, 0.11f, 0.11f, 1.0f);
+        const ImVec4 bg_dark = ImVec4(0.13f, 0.13f, 0.13f, 1.0f);
+        const ImVec4 bg_mid = ImVec4(0.18f, 0.18f, 0.18f, 1.0f);
+        const ImVec4 bg_light = ImVec4(0.23f, 0.23f, 0.23f, 1.0f);
+
+        const ImVec4 accent = ImVec4(0.00f, 0.48f, 0.80f, 1.0f);
+        const ImVec4 accent_hov = ImVec4(0.00f, 0.55f, 0.90f, 1.0f);
+        const ImVec4 accent_act = ImVec4(0.00f, 0.60f, 1.00f, 1.0f);
+
+        const ImVec4 text_main = ImVec4(0.85f, 0.85f, 0.85f, 1.0f);
+        const ImVec4 text_dim = ImVec4(0.55f, 0.55f, 0.55f, 1.0f);
+
+        // Backgrounds
+        c[ImGuiCol_WindowBg] = bg_dark;
+        c[ImGuiCol_ChildBg] = bg_darkest;
+        c[ImGuiCol_PopupBg] = bg_darkest;
+
+        // Frame
+        c[ImGuiCol_FrameBg] = bg_light;
+        c[ImGuiCol_FrameBgHovered] = ImVec4(0.30f, 0.30f, 0.30f, 1.0f);
+        c[ImGuiCol_FrameBgActive] = ImVec4(0.35f, 0.35f, 0.35f, 1.0f);
+
+        // Title
+        c[ImGuiCol_TitleBg] = bg_darkest;
+        c[ImGuiCol_TitleBgActive] = bg_darkest;
+        c[ImGuiCol_TitleBgCollapsed] = bg_darkest;
+        c[ImGuiCol_MenuBarBg] = bg_mid;
+
+        // Scrollbar
+        c[ImGuiCol_ScrollbarBg] = bg_darkest;
+        c[ImGuiCol_ScrollbarGrab] = ImVec4(0.30f, 0.30f, 0.30f, 1.0f);
+        c[ImGuiCol_ScrollbarGrabHovered] = ImVec4(0.40f, 0.40f, 0.40f, 1.0f);
+        c[ImGuiCol_ScrollbarGrabActive] = ImVec4(0.50f, 0.50f, 0.50f, 1.0f);
+
+        // Header
+        c[ImGuiCol_Header] = ImVec4(accent.x, accent.y, accent.z, 0.30f);
+        c[ImGuiCol_HeaderHovered] = ImVec4(accent.x, accent.y, accent.z, 0.50f);
+        c[ImGuiCol_HeaderActive] = ImVec4(accent.x, accent.y, accent.z, 0.80f);
+
+        // Tabs
+        c[ImGuiCol_Tab] = bg_mid;
+        c[ImGuiCol_TabHovered] = bg_light;
+        c[ImGuiCol_TabSelected] = bg_dark;
+        c[ImGuiCol_TabSelectedOverline] = accent;
+        c[ImGuiCol_TabDimmed] = bg_mid;
+        c[ImGuiCol_TabDimmedSelected] = bg_dark;
+        c[ImGuiCol_TabDimmedSelectedOverline] = ImVec4(0.40f, 0.40f, 0.40f, 1.0f);
+
+        // Separators
+        c[ImGuiCol_Separator] = ImVec4(0.28f, 0.28f, 0.28f, 1.0f);
+        c[ImGuiCol_SeparatorHovered] = accent;
+        c[ImGuiCol_SeparatorActive] = accent;
+
+        // Button
+        c[ImGuiCol_Button] = accent;
+        c[ImGuiCol_ButtonHovered] = accent_hov;
+        c[ImGuiCol_ButtonActive] = accent_act;
+
+        // Text
+        c[ImGuiCol_Text] = text_main;
+        c[ImGuiCol_TextDisabled] = text_dim;
+        c[ImGuiCol_TextSelectedBg] = ImVec4(accent.x, accent.y, accent.z, 0.35f);
+
+        // Borders
+        c[ImGuiCol_Border] = ImVec4(0.25f, 0.25f, 0.25f, 1.0f);
+        c[ImGuiCol_NavHighlight] = accent;
+
+        // Check/Slider
+        c[ImGuiCol_CheckMark] = text_main;
+        c[ImGuiCol_SliderGrab] = ImVec4(0.80f, 0.80f, 0.80f, 1.0f);
+        c[ImGuiCol_SliderGrabActive] = ImVec4(1.0f, 1.0f, 1.0f, 1.0f);
+    }
+
     // Unity-like dark theme
     inline void ApplyUnityTheme()
     {
-        ImGui::StyleColorsDark();  // Reset ALL colors to dark theme base first
+        ImGui::StyleColorsDark(); // Reset ALL colors to dark theme base first
         ImGuiStyle &s = ImGui::GetStyle();
         s.WindowRounding = 8.0f;
         s.ChildRounding = 8.0f;
@@ -379,34 +510,34 @@ namespace pe::ui
         c[ImGuiCol_WindowBg] = ImVec4(0.22f, 0.22f, 0.22f, 1.0f);
         c[ImGuiCol_ChildBg] = ImVec4(0.20f, 0.20f, 0.20f, 0.60f);
         c[ImGuiCol_PopupBg] = ImVec4(0.19f, 0.19f, 0.19f, 0.95f);
-        
+
         // Frame backgrounds
         c[ImGuiCol_FrameBg] = ImVec4(0.16f, 0.16f, 0.16f, 1.00f);
         c[ImGuiCol_FrameBgHovered] = ImVec4(0.26f, 0.26f, 0.26f, 1.00f);
         c[ImGuiCol_FrameBgActive] = ImVec4(0.30f, 0.30f, 0.30f, 1.00f);
-        
+
         // Title bars
         c[ImGuiCol_TitleBg] = ImVec4(0.16f, 0.16f, 0.16f, 1.0f);
         c[ImGuiCol_TitleBgActive] = ImVec4(0.18f, 0.18f, 0.18f, 1.0f);
         c[ImGuiCol_TitleBgCollapsed] = ImVec4(0.16f, 0.16f, 0.16f, 0.75f);
         c[ImGuiCol_MenuBarBg] = ImVec4(0.19f, 0.19f, 0.19f, 1.0f);
-        
+
         // Scrollbar
         c[ImGuiCol_ScrollbarBg] = ImVec4(0.16f, 0.16f, 0.16f, 1.0f);
         c[ImGuiCol_ScrollbarGrab] = ImVec4(0.35f, 0.35f, 0.35f, 1.0f);
         c[ImGuiCol_ScrollbarGrabHovered] = ImVec4(0.45f, 0.45f, 0.45f, 1.0f);
         c[ImGuiCol_ScrollbarGrabActive] = ImVec4(0.55f, 0.55f, 0.55f, 1.0f);
-        
+
         // Headers
         c[ImGuiCol_Header] = ImVec4(0.17f, 0.36f, 0.53f, 1.0f);
         c[ImGuiCol_HeaderHovered] = ImVec4(0.26f, 0.45f, 0.62f, 1.0f);
         c[ImGuiCol_HeaderActive] = ImVec4(0.26f, 0.59f, 0.98f, 0.8f);
-        
+
         // Separators
         c[ImGuiCol_Separator] = ImVec4(0.35f, 0.35f, 0.35f, 0.50f);
         c[ImGuiCol_SeparatorHovered] = ImVec4(0.45f, 0.45f, 0.45f, 0.78f);
         c[ImGuiCol_SeparatorActive] = ImVec4(0.55f, 0.55f, 0.55f, 1.00f);
-        
+
         // Tab colors - Unity style (blue accent)
         c[ImGuiCol_Tab] = ImVec4(0.18f, 0.18f, 0.18f, 1.0f);
         c[ImGuiCol_TabHovered] = ImVec4(0.32f, 0.32f, 0.32f, 1.0f);
@@ -415,50 +546,50 @@ namespace pe::ui
         c[ImGuiCol_TabDimmed] = ImVec4(0.15f, 0.15f, 0.15f, 1.0f);
         c[ImGuiCol_TabDimmedSelected] = ImVec4(0.22f, 0.22f, 0.22f, 1.0f);
         c[ImGuiCol_TabDimmedSelectedOverline] = ImVec4(0.50f, 0.50f, 0.50f, 1.0f);
-        
+
         // Docking
         c[ImGuiCol_DockingPreview] = ImVec4(0.26f, 0.59f, 0.98f, 0.70f);
         c[ImGuiCol_DockingEmptyBg] = ImVec4(0.12f, 0.12f, 0.12f, 1.0f);
-        
+
         // Border
         c[ImGuiCol_Border] = ImVec4(0.35f, 0.35f, 0.35f, 0.50f);
         c[ImGuiCol_BorderShadow] = ImVec4(0.0f, 0.0f, 0.0f, 0.0f);
-        
+
         // Text
         c[ImGuiCol_Text] = ImVec4(0.86f, 0.86f, 0.86f, 1.0f);
         c[ImGuiCol_TextDisabled] = ImVec4(0.50f, 0.50f, 0.50f, 1.0f);
-        
+
         // Buttons
         c[ImGuiCol_Button] = ImVec4(0.26f, 0.26f, 0.26f, 1.0f);
         c[ImGuiCol_ButtonHovered] = ImVec4(0.35f, 0.35f, 0.35f, 1.0f);
         c[ImGuiCol_ButtonActive] = ImVec4(0.40f, 0.40f, 0.40f, 1.0f);
-        
+
         // Checkmarks, sliders - blue accent
         c[ImGuiCol_CheckMark] = ImVec4(0.26f, 0.59f, 0.98f, 1.0f);
         c[ImGuiCol_SliderGrab] = ImVec4(0.26f, 0.59f, 0.98f, 0.80f);
         c[ImGuiCol_SliderGrabActive] = ImVec4(0.26f, 0.59f, 0.98f, 1.0f);
-        
+
         // Resize grip
         c[ImGuiCol_ResizeGrip] = ImVec4(0.26f, 0.59f, 0.98f, 0.25f);
         c[ImGuiCol_ResizeGripHovered] = ImVec4(0.26f, 0.59f, 0.98f, 0.67f);
         c[ImGuiCol_ResizeGripActive] = ImVec4(0.26f, 0.59f, 0.98f, 0.95f);
-        
+
         // Plots
         c[ImGuiCol_PlotLines] = ImVec4(0.61f, 0.61f, 0.61f, 1.0f);
         c[ImGuiCol_PlotLinesHovered] = ImVec4(1.0f, 0.43f, 0.35f, 1.0f);
         c[ImGuiCol_PlotHistogram] = ImVec4(0.26f, 0.59f, 0.98f, 1.0f);
         c[ImGuiCol_PlotHistogramHovered] = ImVec4(1.0f, 0.60f, 0.0f, 1.0f);
-        
+
         // Tables
         c[ImGuiCol_TableHeaderBg] = ImVec4(0.19f, 0.19f, 0.19f, 1.0f);
         c[ImGuiCol_TableBorderStrong] = ImVec4(0.35f, 0.35f, 0.35f, 1.0f);
         c[ImGuiCol_TableBorderLight] = ImVec4(0.25f, 0.25f, 0.25f, 1.0f);
         c[ImGuiCol_TableRowBg] = ImVec4(0.0f, 0.0f, 0.0f, 0.0f);
         c[ImGuiCol_TableRowBgAlt] = ImVec4(1.0f, 1.0f, 1.0f, 0.06f);
-        
+
         // Text selected
         c[ImGuiCol_TextSelectedBg] = ImVec4(0.26f, 0.59f, 0.98f, 0.35f);
-        
+
         // Nav highlight
         c[ImGuiCol_NavHighlight] = ImVec4(0.26f, 0.59f, 0.98f, 1.0f);
     }
@@ -466,9 +597,9 @@ namespace pe::ui
     // UnrealEngine-like dark theme
     inline void ApplyUnrealTheme()
     {
-        ImGui::StyleColorsDark();  // Reset ALL colors to dark theme base first
+        ImGui::StyleColorsDark(); // Reset ALL colors to dark theme base first
         ImGuiStyle &s = ImGui::GetStyle();
-        s.WindowRounding = 0.0f;     // Unreal uses sharp corners
+        s.WindowRounding = 0.0f; // Unreal uses sharp corners
         s.ChildRounding = 0.0f;
         s.FrameRounding = 0.0f;
         s.GrabRounding = 0.0f;
@@ -487,34 +618,34 @@ namespace pe::ui
         c[ImGuiCol_WindowBg] = ImVec4(0.06f, 0.06f, 0.06f, 1.0f);
         c[ImGuiCol_ChildBg] = ImVec4(0.07f, 0.07f, 0.07f, 1.0f);
         c[ImGuiCol_PopupBg] = ImVec4(0.08f, 0.08f, 0.08f, 0.98f);
-        
+
         // Frame backgrounds
         c[ImGuiCol_FrameBg] = ImVec4(0.12f, 0.12f, 0.12f, 1.0f);
         c[ImGuiCol_FrameBgHovered] = ImVec4(0.18f, 0.18f, 0.18f, 1.0f);
         c[ImGuiCol_FrameBgActive] = ImVec4(0.22f, 0.22f, 0.22f, 1.0f);
-        
+
         // Title bars
         c[ImGuiCol_TitleBg] = ImVec4(0.04f, 0.04f, 0.04f, 1.0f);
         c[ImGuiCol_TitleBgActive] = ImVec4(0.04f, 0.04f, 0.04f, 1.0f);
         c[ImGuiCol_TitleBgCollapsed] = ImVec4(0.04f, 0.04f, 0.04f, 0.75f);
         c[ImGuiCol_MenuBarBg] = ImVec4(0.10f, 0.10f, 0.10f, 1.0f);
-        
+
         // Scrollbar
         c[ImGuiCol_ScrollbarBg] = ImVec4(0.06f, 0.06f, 0.06f, 1.0f);
         c[ImGuiCol_ScrollbarGrab] = ImVec4(0.25f, 0.25f, 0.25f, 1.0f);
         c[ImGuiCol_ScrollbarGrabHovered] = ImVec4(0.35f, 0.35f, 0.35f, 1.0f);
         c[ImGuiCol_ScrollbarGrabActive] = ImVec4(0.45f, 0.45f, 0.45f, 1.0f);
-        
+
         // Headers - orange accent
         c[ImGuiCol_Header] = ImVec4(0.90f, 0.60f, 0.10f, 0.45f);
         c[ImGuiCol_HeaderHovered] = ImVec4(0.90f, 0.60f, 0.10f, 0.60f);
         c[ImGuiCol_HeaderActive] = ImVec4(0.90f, 0.60f, 0.10f, 0.80f);
-        
+
         // Separators
         c[ImGuiCol_Separator] = ImVec4(0.20f, 0.20f, 0.20f, 1.0f);
         c[ImGuiCol_SeparatorHovered] = ImVec4(0.90f, 0.60f, 0.10f, 0.78f);
         c[ImGuiCol_SeparatorActive] = ImVec4(0.90f, 0.60f, 0.10f, 1.0f);
-        
+
         // Tabs - Unreal style (orange accent)
         c[ImGuiCol_Tab] = ImVec4(0.10f, 0.10f, 0.10f, 1.0f);
         c[ImGuiCol_TabHovered] = ImVec4(0.25f, 0.25f, 0.25f, 1.0f);
@@ -523,50 +654,50 @@ namespace pe::ui
         c[ImGuiCol_TabDimmed] = ImVec4(0.06f, 0.06f, 0.06f, 1.0f);
         c[ImGuiCol_TabDimmedSelected] = ImVec4(0.12f, 0.12f, 0.12f, 1.0f);
         c[ImGuiCol_TabDimmedSelectedOverline] = ImVec4(0.50f, 0.35f, 0.10f, 1.0f);
-        
+
         // Docking
         c[ImGuiCol_DockingPreview] = ImVec4(0.90f, 0.60f, 0.10f, 0.70f);
         c[ImGuiCol_DockingEmptyBg] = ImVec4(0.04f, 0.04f, 0.04f, 1.0f);
-        
+
         // Borders
         c[ImGuiCol_Border] = ImVec4(0.20f, 0.20f, 0.20f, 1.0f);
         c[ImGuiCol_BorderShadow] = ImVec4(0.0f, 0.0f, 0.0f, 0.0f);
-        
+
         // Text
         c[ImGuiCol_Text] = ImVec4(0.90f, 0.90f, 0.90f, 1.0f);
         c[ImGuiCol_TextDisabled] = ImVec4(0.50f, 0.50f, 0.50f, 1.0f);
-        
+
         // Buttons
         c[ImGuiCol_Button] = ImVec4(0.15f, 0.15f, 0.15f, 1.0f);
         c[ImGuiCol_ButtonHovered] = ImVec4(0.25f, 0.25f, 0.25f, 1.0f);
         c[ImGuiCol_ButtonActive] = ImVec4(0.90f, 0.60f, 0.10f, 0.80f);
-        
+
         // Sliders and checkboxes - orange accent
         c[ImGuiCol_SliderGrab] = ImVec4(0.90f, 0.60f, 0.10f, 0.80f);
         c[ImGuiCol_SliderGrabActive] = ImVec4(0.90f, 0.60f, 0.10f, 1.0f);
         c[ImGuiCol_CheckMark] = ImVec4(0.90f, 0.60f, 0.10f, 1.0f);
-        
+
         // Resize grip
         c[ImGuiCol_ResizeGrip] = ImVec4(0.25f, 0.25f, 0.25f, 0.50f);
         c[ImGuiCol_ResizeGripHovered] = ImVec4(0.90f, 0.60f, 0.10f, 0.67f);
         c[ImGuiCol_ResizeGripActive] = ImVec4(0.90f, 0.60f, 0.10f, 0.95f);
-        
+
         // Plots - orange accent
         c[ImGuiCol_PlotLines] = ImVec4(0.61f, 0.61f, 0.61f, 1.0f);
         c[ImGuiCol_PlotLinesHovered] = ImVec4(0.90f, 0.60f, 0.10f, 1.0f);
         c[ImGuiCol_PlotHistogram] = ImVec4(0.90f, 0.60f, 0.10f, 1.0f);
         c[ImGuiCol_PlotHistogramHovered] = ImVec4(1.0f, 0.70f, 0.20f, 1.0f);
-        
+
         // Tables
         c[ImGuiCol_TableHeaderBg] = ImVec4(0.10f, 0.10f, 0.10f, 1.0f);
         c[ImGuiCol_TableBorderStrong] = ImVec4(0.20f, 0.20f, 0.20f, 1.0f);
         c[ImGuiCol_TableBorderLight] = ImVec4(0.15f, 0.15f, 0.15f, 1.0f);
         c[ImGuiCol_TableRowBg] = ImVec4(0.0f, 0.0f, 0.0f, 0.0f);
         c[ImGuiCol_TableRowBgAlt] = ImVec4(1.0f, 1.0f, 1.0f, 0.04f);
-        
+
         // Text selected
         c[ImGuiCol_TextSelectedBg] = ImVec4(0.90f, 0.60f, 0.10f, 0.35f);
-        
+
         // Nav highlight
         c[ImGuiCol_NavHighlight] = ImVec4(0.90f, 0.60f, 0.10f, 1.0f);
     }

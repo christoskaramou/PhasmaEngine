@@ -276,14 +276,14 @@ namespace pe
                 {
                     FileEntry e;
                     e.path = entry.path();
-                    
+
                     // Cache UTF-8 filename
                     auto filenameU8 = e.path.filename().u8string();
                     e.filename = std::string(reinterpret_cast<const char *>(filenameU8.c_str()));
-                    
+
                     e.isDirectory = IsDirectory(e.path);
                     e.iconID = GetIconForFile(e.path);
-                    
+
                     m_cache.push_back(e);
                 }
 
@@ -292,8 +292,7 @@ namespace pe
                           {
                               if (a.isDirectory != b.isDirectory)
                                   return a.isDirectory > b.isDirectory;
-                              return a.filename < b.filename;
-                          });
+                              return a.filename < b.filename; });
             }
             catch (const std::filesystem::filesystem_error &e)
             {
@@ -317,23 +316,24 @@ namespace pe
         {
             bool isList = (m_viewMode == ViewMode::List);
             int count = static_cast<int>(m_cache.size());
-            
+
             if (isList)
             {
                 ImGuiListClipper clipper;
                 clipper.Begin(count);
-                
+
                 while (clipper.Step())
                 {
                     for (int i = clipper.DisplayStart; i < clipper.DisplayEnd; i++)
                     {
                         const auto &entry = m_cache[i];
-                        
+
                         // Filter
-                        if (filter && !filter(entry.path)) continue;
+                        if (filter && !filter(entry.path))
+                            continue;
 
                         bool isSelected = (m_selectedEntry == entry.path);
-                        
+
                         if (entry.iconID)
                         {
                             ImGui::Image((ImTextureID)entry.iconID, ImVec2(20, 20));
@@ -351,18 +351,31 @@ namespace pe
             }
             else // Grid
             {
-                float windowVisibleX2 = ImGui::GetWindowPos().x + ImGui::GetWindowContentRegionMax().x;
                 float buttonSize = m_gridIconSize;
-                float itemSpacingX = ImGui::GetStyle().ItemSpacing.x;
-                
+                ImGuiStyle &style = ImGui::GetStyle();
+                float itemSpacingX = style.ItemSpacing.x;
+                float itemSpacingY = style.ItemSpacing.y;
+
+                // ImageButton arguments are "image size", so widget size is image_size + padding * 2
+                float buttonFullWidth = buttonSize + style.FramePadding.x * 2.0f;
+                float buttonFullHeight = buttonSize + style.FramePadding.y * 2.0f;
+
+                // Reserve space for ~2 lines of text (approx) to keep grid stable
+                float textLineHeight = ImGui::GetTextLineHeight();
+                float maxTextHeight = textLineHeight * 2.0f;
+
+                float cellHeight = buttonFullHeight + style.ItemSpacing.y + maxTextHeight;
+                float cellWidth = buttonFullWidth;
+
                 // Calculate columns
-                int columns = static_cast<int>((ImGui::GetContentRegionAvail().x + itemSpacingX) / (buttonSize + itemSpacingX));
-                if (columns < 1) columns = 1;
+                int columns = static_cast<int>((ImGui::GetContentRegionAvail().x + itemSpacingX) / (cellWidth + itemSpacingX));
+                if (columns < 1)
+                    columns = 1;
 
                 int rows = (count + columns - 1) / columns;
 
                 ImGuiListClipper clipper;
-                clipper.Begin(rows);
+                clipper.Begin(rows, cellHeight + itemSpacingY);
 
                 while (clipper.Step())
                 {
@@ -371,24 +384,22 @@ namespace pe
                         for (int col = 0; col < columns; col++)
                         {
                             int index = row * columns + col;
-                            if (index >= count) break;
+                            if (index >= count)
+                                break;
 
                             const auto &entry = m_cache[index];
-                            if (filter && !filter(entry.path)) continue; // NOTE: Filter breaks grid indexing if dependent. Assuming no filter for grid optimization simplicity or need pre-filter.
-                            // To fix filter with grid clipper, we must filter cached array.
-                            // For now assuming filter is nullptr or rare. 
-                            
+
+                            // Note: Filter currently breaks grid alignment if used here without pre-filtering the cache.
+                            if (filter && !filter(entry.path))
+                                continue;
+
                             ImGui::PushID(index);
-                            
-                            // Calculate cursor position manually since we are skipping
-                            // Not strictly needed if loop structure is standard, but clipper expects lines.
-                            // Since we have nested loop, we just draw items.
-                            // Warning: Clipper works on Y-axis. 
-                            // This nested loop draws ONE ROW.
-                            
-                            if (col > 0) ImGui::SameLine();
-                            
+
+                            if (col > 0)
+                                ImGui::SameLine();
+
                             ImGui::BeginGroup();
+                            float groupStartY = ImGui::GetCursorPosY();
 
                             bool clicked = false;
                             if (entry.iconID)
@@ -398,17 +409,23 @@ namespace pe
                             }
                             else
                             {
-                                if (ImGui::Button("##file", ImVec2(buttonSize, buttonSize)))
+                                // Match ImageButton total size
+                                if (ImGui::Button("##file", ImVec2(buttonFullWidth, buttonFullHeight)))
                                     clicked = true;
                             }
 
-                            // Optional: Center text?
-                            float groupX = ImGui::GetCursorPosX();
-                            // ... truncated text logic ... 
-                            // Simple version:
-                            ImGui::PushTextWrapPos(ImGui::GetCursorPosX() + buttonSize);
+                            // Text
+                            ImGui::PushTextWrapPos(ImGui::GetCursorPosX() + cellWidth);
                             ImGui::TextWrapped("%s", entry.filename.c_str());
                             ImGui::PopTextWrapPos();
+
+                            // Force consistent height for clipper stability
+                            float targetGroupHeight = cellHeight - style.ItemSpacing.y;
+                            float currentY = ImGui::GetCursorPosY();
+                            if (currentY - groupStartY < targetGroupHeight)
+                            {
+                                ImGui::Dummy(ImVec2(0.0f, targetGroupHeight - (currentY - groupStartY)));
+                            }
 
                             ImGui::EndGroup();
 
