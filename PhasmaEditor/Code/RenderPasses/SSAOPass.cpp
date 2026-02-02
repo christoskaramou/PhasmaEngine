@@ -77,13 +77,13 @@ namespace pe
 
             static const FFX_CACAO_Settings cacaoSettings = {
                 /* radius                            */ 1.2f,
-                /* shadowMultiplier                  */ 0.75f,
+                /* shadowMultiplier                  */ 0.3f,
                 /* shadowPower                       */ 1.5f,
                 /* shadowClamp                       */ 0.95f,
                 /* horizonAngleThreshold             */ 0.06f,
                 /* fadeOutFrom                       */ 50.0f,
                 /* fadeOutTo                         */ 300.0f,
-                /* qualityLevel                      */ FFX_CACAO_QUALITY_HIGHEST,
+                /* qualityLevel                      */ FFX_CACAO_QUALITY_MEDIUM,
                 /* adaptiveQualityLimit              */ 0.45f,
                 /* blurPassCount                     */ 2,
                 /* sharpness                         */ 0.98f,
