@@ -115,13 +115,22 @@ namespace pe
                 ImVec2 imageMin = ImGui::GetItemRectMin();
                 ImVec2 imageMax = ImGui::GetItemRectMax();
 
-                if (ImGui::IsItemClicked(ImGuiMouseButton_Left) && !ImGuizmo::IsOver())
+                if (!ImGuizmo::IsOver())
                 {
-                    ImVec2 mousePos = ImGui::GetMousePos();
-                    float normalizedX = (mousePos.x - imageMin.x) / (imageMax.x - imageMin.x);
-                    float normalizedY = (mousePos.y - imageMin.y) / (imageMax.y - imageMin.y);
+                    ImGui::SetCursorPos(cursorPos);
+                    ImGui::InvisibleButton("##SceneViewInput", imageSize, ImGuiButtonFlags_MouseButtonLeft | ImGuiButtonFlags_MouseButtonRight);
 
-                    PerformObjectPicking(normalizedX, normalizedY);
+                    if (ImGui::IsItemClicked(ImGuiMouseButton_Right))
+                        ImGui::SetWindowFocus();
+
+                    if (ImGui::IsItemClicked(ImGuiMouseButton_Left))
+                    {
+                        ImVec2 mousePos = ImGui::GetMousePos();
+                        float normalizedX = (mousePos.x - imageMin.x) / (imageMax.x - imageMin.x);
+                        float normalizedY = (mousePos.y - imageMin.y) / (imageMax.y - imageMin.y);
+
+                        PerformObjectPicking(normalizedX, normalizedY);
+                    }
                 }
 
                 DrawGizmo(imageMin, imageSize);
