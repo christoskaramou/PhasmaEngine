@@ -286,28 +286,6 @@ namespace pe
             m_dirtyUniforms[i] = true;
     }
 
-    void Model::SetMeshFactors(Buffer *buffer)
-    {
-        // copy factors in uniform buffer
-        BufferRange range{};
-        buffer->Map();
-
-        for (int i = 0; i < GetNodeCount(); i++)
-        {
-            int mesh = GetNodeMesh(i);
-            if (mesh < 0)
-                continue;
-
-            auto &meshInfo = m_meshInfos[mesh];
-            range.data = &meshInfo.materialFactors;
-            range.size = sizeof(mat4) * 2;
-            range.offset = meshInfo.GetMeshFactorsOffset();
-            buffer->Copy(1, &range, true);
-        }
-
-        buffer->Unmap();
-    }
-
     int Model::GetNodeMesh(int nodeIndex) const
     {
         if (nodeIndex < 0 || nodeIndex >= static_cast<int>(m_nodeToMesh.size()))
@@ -330,9 +308,9 @@ namespace pe
 
         if (!std::filesystem::exists(normalized))
         {
-             std::string pathStr(reinterpret_cast<const char *>(normalized.u8string().c_str()));
-             PE_ERROR("Texture not found (LoadTexture): %s", pathStr.c_str());
-             return nullptr;
+            std::string pathStr(reinterpret_cast<const char *>(normalized.u8string().c_str()));
+            PE_ERROR("Texture not found (LoadTexture): %s", pathStr.c_str());
+            return nullptr;
         }
 
         std::string normalizedStr(reinterpret_cast<const char *>(normalized.u8string().c_str()));

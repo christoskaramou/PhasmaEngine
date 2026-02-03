@@ -95,7 +95,7 @@ namespace pe
     {
         RendererSystem *rendererSystem = GetGlobalSystem<RendererSystem>();
         PostProcessSystem *postProcessSystem = GetGlobalSystem<PostProcessSystem>();
-        Camera *camera = rendererSystem->GetScene().GetCamera(0);
+        Camera *camera = rendererSystem->GetScene().GetActiveCamera();
 
         ImGuiIO &io = ImGui::GetIO();
 

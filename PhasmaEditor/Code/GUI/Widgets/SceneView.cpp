@@ -148,7 +148,7 @@ namespace pe
     {
         RendererSystem *renderer = GetGlobalSystem<RendererSystem>();
         Scene &scene = renderer->GetScene();
-        Camera *camera = scene.GetCamera(0);
+        Camera *camera = scene.GetActiveCamera();
 
         if (!camera)
             return;
@@ -232,7 +232,7 @@ namespace pe
             return;
 
         RendererSystem *renderer = GetGlobalSystem<RendererSystem>();
-        Camera *camera = renderer->GetScene().GetCamera(0);
+        Camera *camera = renderer->GetScene().GetActiveCamera();
         if (!camera)
             return;
 

@@ -58,7 +58,7 @@ namespace pe
     {
         auto &gSettings = Settings::Get<GlobalSettings>();
 
-        Camera &camera = *GetGlobalSystem<RendererSystem>()->GetScene().GetCamera(0);
+        Camera &camera = *GetGlobalSystem<RendererSystem>()->GetScene().GetActiveCamera();
         m_lubo.camPos = {camera.GetPosition(), 1.0f};
         m_lubo.sun.color = {.9765f, .8431f, .9098f, gSettings.day ? gSettings.sun_intensity : 0.0f};
         m_lubo.sun.direction = {gSettings.sun_direction[0], gSettings.sun_direction[1], gSettings.sun_direction[2], 1.f};

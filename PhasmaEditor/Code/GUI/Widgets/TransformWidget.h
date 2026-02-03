@@ -12,8 +12,10 @@ namespace pe
         ~TransformWidget();
         void Init(GUI *gui) override;
         void Update() override;
+        void DrawEmbed(NodeInfo *node);
 
     private:
+        void DrawNodeInfo(NodeInfo *node);
         void DrawPositionEditor(NodeInfo *node);
         void DrawRotationEditor(NodeInfo *node);
         void DrawScaleEditor(NodeInfo *node);

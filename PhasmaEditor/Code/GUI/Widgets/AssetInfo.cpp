@@ -1,4 +1,4 @@
-#include "AssetViewer.h"
+#include "AssetInfo.h"
 #include "GUI/GUIState.h"
 #include "GUI/Helpers.h"
 #include "Scene/Model.h"
@@ -20,13 +20,13 @@ namespace pe
         }
     }
 
-    void AssetViewer::Update()
+    void AssetInfo::Update()
     {
         if (!m_open)
             return;
 
         ui::SetInitialWindowSizeFraction(0.35f, 1.0f / 4.0f);
-        ImGui::Begin("Asset Viewer", &m_open);
+        ImGui::Begin("Asset Info", &m_open);
 
         if (GUIState::s_assetPreview.type == AssetPreviewType::None || GUIState::s_assetPreview.label.empty())
         {

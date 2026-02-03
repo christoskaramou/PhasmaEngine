@@ -105,7 +105,7 @@ namespace pe
 
     void RayTracingPass::Update()
     {
-        Camera *camera = GetGlobalSystem<RendererSystem>()->GetScene().GetCamera(0);
+        Camera *camera = GetGlobalSystem<RendererSystem>()->GetScene().GetActiveCamera();
         auto &gSettings = Settings::Get<GlobalSettings>();
 
         RayTracingPassUBO ubo{};

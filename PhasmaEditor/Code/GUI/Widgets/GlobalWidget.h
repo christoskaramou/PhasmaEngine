@@ -3,10 +3,10 @@
 
 namespace pe
 {
-    class AssetViewer : public Widget
+    class GlobalWidget : public Widget
     {
     public:
-        AssetViewer() : Widget("Asset Viewer") {}
+        GlobalWidget();
         void Update() override;
     };
 } // namespace pe

@@ -204,8 +204,8 @@ namespace pe
         std::string fileStr(reinterpret_cast<const char *>(fileU8.c_str()));
         if (!std::filesystem::exists(file))
         {
-             PE_INFO("Model file not found: %s", fileStr.c_str());
-             return nullptr;
+            PE_INFO("Model file not found: %s", fileStr.c_str());
+            return nullptr;
         }
 
         ModelAssimp *modelAssimp = new ModelAssimp();
@@ -423,22 +423,16 @@ namespace pe
             if (!(mesh->mPrimitiveTypes & aiPrimitiveType_TRIANGLE))
                 continue;
 
-            MeshInfo &mi = m_meshInfos[i];
-
-            // pipeline/material info
-            mi.materialInfo.topology = vk::PrimitiveTopology::eTriangleList;
-
             aiMaterial *material = m_scene->mMaterials[mesh->mMaterialIndex];
 
             int twoSided = 0;
             material->Get(AI_MATKEY_TWOSIDED, twoSided);
-            mi.materialInfo.cullMode = twoSided ? vk::CullModeFlagBits::eNone : vk::CullModeFlagBits::eFront;
 
+            MeshInfo &mi = m_meshInfos[i];
             mi.renderType = DetermineRenderType(material);
-            mi.materialInfo.alphaBlend = (mi.renderType != RenderType::Opaque);
 
             // defaults
-            mi.images[static_cast<int>(TextureType::BaseColor)] = defaults.black;
+            mi.images[static_cast<int>(TextureType::BaseColor)] = defaults.white;
             mi.images[static_cast<int>(TextureType::MetallicRoughness)] = defaults.black;
             mi.images[static_cast<int>(TextureType::Normal)] = defaults.normal;
             mi.images[static_cast<int>(TextureType::Occlusion)] = defaults.white;

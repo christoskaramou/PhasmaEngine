@@ -1,4 +1,5 @@
 #include "Hierarchy.h"
+#include "Camera/Camera.h"
 #include "GUI/GUIState.h"
 #include "GUI/IconsFontAwesome.h"
 #include "Scene/Model.h"
@@ -60,6 +61,12 @@ namespace pe
         auto &models = scene.GetModels();
         auto &selection = SelectionManager::Instance();
 
+        static Model *s_renameModel = nullptr;
+        static int s_renameNode = -1;
+        static char s_renameBuf[128] = "";
+        static bool s_openRenamePopup = false;
+        std::vector<Model *> modelsToDelete;
+
         // Models listing
         for (auto model : models)
         {
@@ -95,7 +102,44 @@ namespace pe
                     }
                 }
                 if (nodeToSelect >= 0)
-                    selection.Select(model, nodeToSelect);
+                {
+                    selection.Select(model, nodeToSelect, SelectionType::Node);
+                    ImGui::SetWindowFocus("Properties");
+                }
+            }
+
+            if (ImGui::BeginPopupContextItem())
+            {
+                if (ImGui::MenuItem("Focus"))
+                {
+                    Camera *camera = scene.GetActiveCamera();
+                    vec3 min = vec3(FLT_MAX);
+                    vec3 max = vec3(-FLT_MAX);
+                    for (const auto &node : model->GetNodeInfos())
+                    {
+                        min = glm::min(min, node.worldBoundingBox.min);
+                        max = glm::max(max, node.worldBoundingBox.max);
+                    }
+                    if (min.x != FLT_MAX)
+                    {
+                        vec3 center = (min + max) * 0.5f;
+                        float dist = glm::length(max - min);
+                        vec3 dir = camera->GetFront();
+                        camera->SetPosition(center - dir * glm::max(dist, camera->GetNearPlane()));
+                    }
+                }
+                if (ImGui::MenuItem("Rename"))
+                {
+                    s_renameModel = model;
+                    s_renameNode = -1;
+                    strcpy(s_renameBuf, name.c_str());
+                    s_openRenamePopup = true;
+                }
+                if (ImGui::MenuItem("Delete"))
+                {
+                    modelsToDelete.push_back(model);
+                }
+                ImGui::EndPopup();
             }
 
             if (modelOpen)
@@ -158,14 +202,35 @@ namespace pe
                         nodeFlags |= ImGuiTreeNodeFlags_Leaf;
 
                     // Highlight if selected (when node itself is selected, not its mesh)
-                    if (selection.GetSelectedModel() == model && selection.GetSelectedNodeIndex() == nodeIndex)
+                    if (selection.GetSelectedModel() == model && selection.GetSelectedNodeIndex() == nodeIndex && selection.GetSelectionType() == SelectionType::Node)
                         nodeFlags |= ImGuiTreeNodeFlags_Selected;
 
                     bool nodeOpen = ImGui::TreeNodeEx((void *)uniqueId, nodeFlags, "%s", displayNodeName.c_str());
 
                     if (ImGui::IsItemClicked() && !ImGui::IsItemToggledOpen())
                     {
-                        selection.Select(model, nodeIndex);
+                        selection.Select(model, nodeIndex, SelectionType::Node);
+                        ImGui::SetWindowFocus("Properties");
+                    }
+
+                    if (ImGui::BeginPopupContextItem())
+                    {
+                        if (ImGui::MenuItem("Focus"))
+                        {
+                            Camera *camera = scene.GetActiveCamera();
+                            vec3 center = (node.worldBoundingBox.min + node.worldBoundingBox.max) * 0.5f;
+                            float dist = glm::length(node.worldBoundingBox.max - node.worldBoundingBox.min);
+                            vec3 dir = camera->GetFront();
+                            camera->SetPosition(center - dir * glm::max(dist, camera->GetNearPlane()));
+                        }
+                        if (ImGui::MenuItem("Rename"))
+                        {
+                            s_renameModel = model;
+                            s_renameNode = nodeIndex;
+                            strcpy(s_renameBuf, nodeName.c_str());
+                            s_openRenamePopup = true;
+                        }
+                        ImGui::EndPopup();
                     }
 
                     if (nodeOpen)
@@ -181,14 +246,35 @@ namespace pe
                                                            ImGuiTreeNodeFlags_FramePadding;
 
                             // Mesh is selected if node is selected
-                            if (selection.GetSelectedModel() == model && selection.GetSelectedNodeIndex() == nodeIndex)
+                            if (selection.GetSelectedModel() == model && selection.GetSelectedNodeIndex() == nodeIndex && selection.GetSelectionType() == SelectionType::Mesh)
                                 meshFlags |= ImGuiTreeNodeFlags_Selected;
 
                             bool meshOpen = ImGui::TreeNodeEx((void *)meshUniqueId, meshFlags, "%s", meshDisplayName.c_str());
 
                             if (ImGui::IsItemClicked())
                             {
-                                selection.Select(model, nodeIndex);
+                                selection.Select(model, nodeIndex, SelectionType::Mesh);
+                                ImGui::SetWindowFocus("Properties");
+                            }
+
+                            if (ImGui::BeginPopupContextItem())
+                            {
+                                if (ImGui::MenuItem("Focus"))
+                                {
+                                    Camera *camera = scene.GetActiveCamera();
+                                    const auto &meshInfos = model->GetMeshInfos();
+                                    if (meshIndex >= 0 && meshIndex < static_cast<int>(meshInfos.size()))
+                                    {
+                                        const auto &mesh = meshInfos[meshIndex];
+                                        vec3 min = node.worldBoundingBox.min;
+                                        vec3 max = node.worldBoundingBox.max;
+                                        vec3 center = (min + max) * 0.5f;
+                                        float dist = glm::length(max - min);
+                                        vec3 dir = camera->GetFront();
+                                        camera->SetPosition(center - dir * glm::max(dist, camera->GetNearPlane()));
+                                    }
+                                }
+                                ImGui::EndPopup();
                             }
 
                             if (meshOpen)
@@ -211,6 +297,44 @@ namespace pe
 
                 ImGui::TreePop();
             }
+        }
+
+        if (s_openRenamePopup)
+        {
+            ImGui::OpenPopup("Rename Entity");
+            s_openRenamePopup = false;
+        }
+
+        if (ImGui::BeginPopupModal("Rename Entity", NULL, ImGuiWindowFlags_AlwaysAutoResize))
+        {
+            ImGui::InputText("Name", s_renameBuf, IM_ARRAYSIZE(s_renameBuf));
+            if (ImGui::Button("OK", ImVec2(120, 0)))
+            {
+                if (s_renameModel)
+                {
+                    std::string newName = s_renameBuf;
+                    if (s_renameNode == -1)
+                        s_renameModel->SetLabel(newName);
+                    else
+                    {
+                        auto &infos = s_renameModel->GetNodeInfos();
+                        if (s_renameNode >= 0 && s_renameNode < static_cast<int>(infos.size()))
+                            infos[s_renameNode].name = newName;
+                    }
+                }
+                ImGui::CloseCurrentPopup();
+            }
+            ImGui::SameLine();
+            if (ImGui::Button("Cancel", ImVec2(120, 0)))
+            {
+                ImGui::CloseCurrentPopup();
+            }
+            ImGui::EndPopup();
+        }
+
+        for (auto model : modelsToDelete)
+        {
+            scene.RemoveModel(model);
         }
 
         ImGui::End();

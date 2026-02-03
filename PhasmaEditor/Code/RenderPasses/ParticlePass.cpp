@@ -149,7 +149,7 @@ namespace pe
             vec4 cameraForward;
         } pc{};
 
-        Camera *camera = m_scene->GetCamera(0); // Assuming main camera
+        Camera *camera = m_scene->GetActiveCamera();
         if (camera)
         {
             pc.viewProjection = camera->GetViewProjection();

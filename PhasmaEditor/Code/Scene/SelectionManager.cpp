@@ -9,16 +9,18 @@ namespace pe
         return instance;
     }
 
-    void SelectionManager::Select(Model *model, int nodeIndex)
+    void SelectionManager::Select(Model *model, int nodeIndex, SelectionType type)
     {
         m_selectedModel = model;
         m_selectedNodeIndex = nodeIndex;
+        m_selectionType = type;
     }
 
     void SelectionManager::ClearSelection()
     {
         m_selectedModel = nullptr;
         m_selectedNodeIndex = -1;
+        m_selectionType = SelectionType::Node;
     }
 
     bool SelectionManager::HasSelection() const
@@ -34,6 +36,11 @@ namespace pe
     int SelectionManager::GetSelectedNodeIndex() const
     {
         return m_selectedNodeIndex;
+    }
+
+    SelectionType SelectionManager::GetSelectionType() const
+    {
+        return m_selectionType;
     }
 
     NodeInfo *SelectionManager::GetSelectedNodeInfo()

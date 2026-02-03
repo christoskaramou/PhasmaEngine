@@ -3,10 +3,10 @@
 
 namespace pe
 {
-    class Properties : public Widget
+    class AssetInfo : public Widget
     {
     public:
-        Properties() : Widget("Properties") {}
+        AssetInfo() : Widget("Asset Info") {}
         void Update() override;
     };
 } // namespace pe
