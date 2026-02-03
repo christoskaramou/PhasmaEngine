@@ -137,6 +137,11 @@ namespace pe
                 selection.Select(LightType::Directional, 0);
                 ImGui::SetWindowFocus("Properties");
             }
+            if (ImGui::IsItemHovered() && ImGui::IsMouseDoubleClicked(0))
+            {
+                Camera *camera = scene.GetActiveCamera();
+                camera->SetPosition(vec3(0, 0, 0) - camera->GetFront() * 10.0f);
+            }
             if (ImGui::BeginPopupContextItem())
             {
                 if (ImGui::MenuItem("Focus"))
@@ -148,6 +153,8 @@ namespace pe
                 ImGui::EndPopup();
             }
             ImGui::TreePop();
+
+            LightSystem *lightSystem = GetGlobalSystem<LightSystem>();
 
             // Point Lights
             for (int i = 0; i < MAX_POINT_LIGHTS; i++)
@@ -166,19 +173,25 @@ namespace pe
                     selection.Select(LightType::Point, i);
                     ImGui::SetWindowFocus("Properties");
                 }
+                if (ImGui::IsItemHovered() && ImGui::IsMouseDoubleClicked(0))
+                {
+                    Camera *camera = scene.GetActiveCamera();
+                    vec3 pos = vec3(lightSystem->GetLights()->pointLights[i].position);
+                    camera->SetPosition(pos - camera->GetFront() * 5.0f);
+                }
                 if (ImGui::BeginPopupContextItem())
                 {
                     if (ImGui::MenuItem("Focus"))
                     {
                         Camera *camera = scene.GetActiveCamera();
-                        vec3 pos = vec3(GetGlobalSystem<LightSystem>()->GetLights()->pointLights[i].position);
+                        vec3 pos = vec3(lightSystem->GetLights()->pointLights[i].position);
                         camera->SetPosition(pos - camera->GetFront() * 5.0f);
                     }
                     if (ImGui::MenuItem("Delete"))
                     {
                         // Reset light
-                        GetGlobalSystem<LightSystem>()->GetLights()->pointLights[i].color = vec4(0.0f);                          // Intensity 0
-                        GetGlobalSystem<LightSystem>()->GetLights()->pointLights[i].position = vec4(0.0f, 10000.0f, 0.0f, 0.0f); // Move away
+                        lightSystem->GetLights()->pointLights[i].color = vec4(0.0f);                          // Intensity 0
+                        lightSystem->GetLights()->pointLights[i].position = vec4(0.0f, 10000.0f, 0.0f, 0.0f); // Move away
                     }
                     ImGui::EndPopup();
                 }
@@ -202,6 +215,12 @@ namespace pe
                     selection.Select(LightType::Spot, i);
                     ImGui::SetWindowFocus("Properties");
                 }
+                if (ImGui::IsItemHovered() && ImGui::IsMouseDoubleClicked(0))
+                {
+                    Camera *camera = scene.GetActiveCamera();
+                    vec3 pos = GetGlobalSystem<LightSystem>()->GetLights()->spotLights[i].position;
+                    camera->SetPosition(pos - camera->GetFront() * 5.0f);
+                }
                 if (ImGui::BeginPopupContextItem())
                 {
                     if (ImGui::MenuItem("Focus"))
@@ -215,6 +234,48 @@ namespace pe
                         // Reset light
                         GetGlobalSystem<LightSystem>()->GetLights()->spotLights[i].color = vec4(0.0f);                          // Intensity 0
                         GetGlobalSystem<LightSystem>()->GetLights()->spotLights[i].position = vec4(0.0f, 10000.0f, 0.0f, 0.0f); // Move away
+                    }
+                    ImGui::EndPopup();
+                }
+                ImGui::TreePop();
+            }
+
+            // Area Lights
+            for (int i = 0; i < MAX_AREA_LIGHTS; i++)
+            {
+                if (selection.GetSelectionType() == SelectionType::Light &&
+                    selection.GetSelectedLightType() == LightType::Area &&
+                    selection.GetSelectedLightIndex() == i)
+                    lightFlags |= ImGuiTreeNodeFlags_Selected;
+                else
+                    lightFlags &= ~ImGuiTreeNodeFlags_Selected;
+
+                std::string name = "Area Light " + std::to_string(i);
+                ImGui::TreeNodeEx((void *)(intptr_t)(i + 3000), lightFlags, "%s  %s", ICON_FA_LIGHTBULB, name.c_str());
+                if (ImGui::IsItemClicked())
+                {
+                    selection.Select(LightType::Area, i);
+                    ImGui::SetWindowFocus("Properties");
+                }
+                if (ImGui::IsItemHovered() && ImGui::IsMouseDoubleClicked(0))
+                {
+                    Camera *camera = scene.GetActiveCamera();
+                    vec3 pos = GetGlobalSystem<LightSystem>()->GetLights()->areaLights[i].position;
+                    camera->SetPosition(pos - camera->GetFront() * 5.0f);
+                }
+                if (ImGui::BeginPopupContextItem())
+                {
+                    if (ImGui::MenuItem("Focus"))
+                    {
+                        Camera *camera = scene.GetActiveCamera();
+                        vec3 pos = GetGlobalSystem<LightSystem>()->GetLights()->areaLights[i].position;
+                        camera->SetPosition(pos - camera->GetFront() * 5.0f);
+                    }
+                    if (ImGui::MenuItem("Delete"))
+                    {
+                        // Reset light
+                        GetGlobalSystem<LightSystem>()->GetLights()->areaLights[i].color = vec4(0.0f);                          // Intensity 0
+                        GetGlobalSystem<LightSystem>()->GetLights()->areaLights[i].position = vec4(0.0f, 10000.0f, 0.0f, 0.0f); // Move away
                     }
                     ImGui::EndPopup();
                 }
@@ -266,6 +327,24 @@ namespace pe
                 {
                     selection.Select(model, nodeToSelect, SelectionType::Node);
                     ImGui::SetWindowFocus("Properties");
+                }
+            }
+            if (ImGui::IsItemHovered() && ImGui::IsMouseDoubleClicked(0))
+            {
+                Camera *camera = scene.GetActiveCamera();
+                vec3 min = vec3(FLT_MAX);
+                vec3 max = vec3(-FLT_MAX);
+                for (const auto &node : model->GetNodeInfos())
+                {
+                    min = glm::min(min, node.worldBoundingBox.min);
+                    max = glm::max(max, node.worldBoundingBox.max);
+                }
+                if (min.x != FLT_MAX)
+                {
+                    vec3 center = (min + max) * 0.5f;
+                    float dist = glm::length(max - min);
+                    vec3 dir = camera->GetFront();
+                    camera->SetPosition(center - dir * glm::max(dist, camera->GetNearPlane()));
                 }
             }
 
@@ -443,6 +522,15 @@ namespace pe
                         ImGui::EndDragDropTarget();
                     }
 
+                    if (ImGui::IsItemHovered() && ImGui::IsMouseDoubleClicked(0))
+                    {
+                        Camera *camera = scene.GetActiveCamera();
+                        vec3 center = (node.worldBoundingBox.min + node.worldBoundingBox.max) * 0.5f;
+                        float dist = glm::length(node.worldBoundingBox.max - node.worldBoundingBox.min);
+                        vec3 dir = camera->GetFront();
+                        camera->SetPosition(center - dir * glm::max(dist, camera->GetNearPlane()));
+                    }
+
                     if (ImGui::BeginPopupContextItem())
                     {
                         if (ImGui::MenuItem("Focus"))
@@ -487,6 +575,22 @@ namespace pe
                                 ImGui::SetWindowFocus("Properties");
                             }
 
+                            if (ImGui::IsItemHovered() && ImGui::IsMouseDoubleClicked(0))
+                            {
+                                Camera *camera = scene.GetActiveCamera();
+                                const auto &meshInfos = model->GetMeshInfos();
+                                if (meshIndex >= 0 && meshIndex < static_cast<int>(meshInfos.size()))
+                                {
+                                    const auto &mesh = meshInfos[meshIndex];
+                                    vec3 min = node.worldBoundingBox.min;
+                                    vec3 max = node.worldBoundingBox.max;
+                                    vec3 center = (min + max) * 0.5f;
+                                    float dist = glm::length(max - min);
+                                    vec3 dir = camera->GetFront();
+                                    camera->SetPosition(center - dir * glm::max(dist, camera->GetNearPlane()));
+                                }
+                            }
+
                             if (ImGui::BeginPopupContextItem())
                             {
                                 if (ImGui::MenuItem("Focus"))
@@ -529,11 +633,10 @@ namespace pe
             }
         }
 
-
-
         // Fill remaining space with dummy to allow dropping in empty area
         ImVec2 available = ImGui::GetContentRegionAvail();
-        if (available.y < 50.0f) available.y = 50.0f; // Minimum drop area
+        if (available.y < 50.0f)
+            available.y = 50.0f; // Minimum drop area
         ImGui::Dummy(available);
 
         // Window-wide Drop Target for loading models from FileBrowser

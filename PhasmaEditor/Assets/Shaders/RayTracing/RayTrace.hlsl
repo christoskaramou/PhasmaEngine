@@ -62,6 +62,7 @@ struct Vertex
     DirectionalLight cb_sun;
     PointLight cb_pointLights[MAX_POINT_LIGHTS];
     SpotLight  cb_spotLights[MAX_SPOT_LIGHTS];
+    AreaLight  cb_areaLights[MAX_AREA_LIGHTS];
 };
 
 [[vk::binding(1, 1)]] cbuffer LightBuffer
@@ -379,6 +380,128 @@ float3 RT_ComputeSpotLight(int index, float3 worldPos, float3 materialNormal, fl
     return diffuseLight + specRef;
 }
 
+float3 RT_ComputeAreaLight(int index, float3 worldPos, float3 materialNormal, float3 V, float3 albedo, float metallic, float roughness, float3 F0, float occlusion, float3 energyCompensation)
+{
+    float3 lightPos = cb_areaLights[index].position.xyz;
+    float  range    = cb_areaLights[index].position.w;
+    float width     = cb_areaLights[index].size.x;
+    float height    = cb_areaLights[index].size.y;
+
+    // 1. Calculate orientation
+    float p = radians(cb_areaLights[index].rotation.x);
+    float y = radians(cb_areaLights[index].rotation.y);
+    
+    // Light Vectors
+    float3 lightForward;
+    lightForward.x = cos(p) * sin(y);
+    lightForward.y = sin(p);
+    lightForward.z = cos(p) * cos(y);
+    lightForward = normalize(lightForward);
+
+    float3 lightRight = normalize(cross(lightForward, float3(0, 1, 0)));
+    float3 lightUp    = normalize(cross(lightRight, lightForward));
+
+    // 2. Find closest point on area light to WorldPos for Attenuation/Range
+    float3 toLight = worldPos - lightPos;
+    float distPlane = dot(toLight, lightForward);
+    float3 pointOnPlane = worldPos - lightForward * distPlane;
+    float3 localPoint = pointOnPlane - lightPos;
+
+    float u = dot(localPoint, lightRight);
+    float v = dot(localPoint, lightUp);
+
+    u = clamp(u, -width * 0.5, width * 0.5);
+    v = clamp(v, -height * 0.5, height * 0.5);
+
+    float3 closestPoint = lightPos + lightRight * u + lightUp * v;
+    float3 L_closest_vec = closestPoint - worldPos;
+    float closestDist = length(L_closest_vec);
+
+    if (closestDist > range)
+        return 0.0;
+
+    // 3. Specular Representative Point (Karis)
+    float3 N = materialNormal;
+    float3 R = reflect(-V, N);
+
+    // Intersect reflection ray with plane
+    float denom = dot(R, lightForward);
+    float3 targetPoint = closestPoint; // Default to closest point
+
+    if (abs(denom) > 0.001)
+    {
+        float t = dot(lightPos - worldPos, lightForward) / denom;
+        if (t > 0)
+        {
+            float3 intersectP = worldPos + t * R;
+            float3 localP = intersectP - lightPos;
+            float u_spec = dot(localP, lightRight);
+            float v_spec = dot(localP, lightUp);
+            
+            u_spec = clamp(u_spec, -width * 0.5, width * 0.5);
+            v_spec = clamp(v_spec, -height * 0.5, height * 0.5);
+            
+            targetPoint = lightPos + lightRight * u_spec + lightUp * v_spec;
+        }
+    }
+
+    // Use targetPoint for lighting vector L
+    float3 L_vec = targetPoint - worldPos;
+    float distToTarget = length(L_vec);
+    float3 L = normalize(L_vec);
+    
+    // Attenuation
+    // Use closestDist for range falloff to maintain shape
+    float lightDistRatio = closestDist / range;
+    float attenuation = (1.0 - lightDistRatio * lightDistRatio);
+    attenuation = max(0.0, attenuation);
+    attenuation *= attenuation;
+    
+    // Use distToTarget for inverse square to keep intensity correct at distance
+    attenuation /= (distToTarget * distToTarget + 1.0);
+
+    float lightOutputCos = dot(-L, lightForward);
+    if (lightOutputCos <= 0.0) return 0.0;
+    
+    // Shadow (using L to target point)
+    float shadow = TraceShadowRay(worldPos, L, distToTarget);
+
+    float3 areaColor = cb_areaLights[index].color.xyz * cb_areaLights[index].color.w * ubo_lightsIntensity * attenuation * lightOutputCos;
+
+    // Standard PBR ...
+    float3 H = normalize(V + L);
+    
+    float NoV = clamp(dot(N, V), 0.001, 1.0);
+    float NoL = clamp(dot(N, L), 0.001, 1.0);
+    float HoV = clamp(dot(H, V), 0.001, 1.0);
+
+    float3 specularFresnel  = Fresnel(F0, HoV);
+    
+    float3 specRef;
+    if (ubo_use_Disney_PBR)
+        specRef = NoL * shadow * CookTorranceSpecular_Disney(N, H, NoL, NoV, specularFresnel, roughness);
+    else
+        specRef = NoL * shadow * CookTorranceSpecular_GSchlick(N, H, NoL, NoV, specularFresnel, roughness);
+    specRef *= energyCompensation;
+    
+    float3 diffRef;
+    if (ubo_use_Disney_PBR)
+    {
+        float LoH = clamp(dot(L, H), 0.001, 1.0);
+        float3 disneyDiffuse = DisneyDiffuse(albedo, NoV, NoL, LoH, roughness);
+        diffRef = NoL * shadow * (1.0 - specularFresnel) * disneyDiffuse;
+    }
+    else
+    {
+        diffRef = NoL * shadow * (1.0 - specularFresnel) * (albedo / PI);
+    }
+    
+    float3 reflectedLight   = specRef;
+    float3 diffuseLight     = diffRef * (1.0 - metallic) * occlusion;
+
+    return areaColor * (reflectedLight + diffuseLight);
+}
+
 [shader("raygeneration")]
 void raygeneration()
 {
@@ -590,6 +713,13 @@ void closesthit(inout HitPayload payload, in BuiltInTriangleIntersectionAttribut
     {
          if (cb_spotLights[j].color.w > 0.0) // intensity is .w
              lighting += RT_ComputeSpotLight(j, positionWorld, N, V, combinedColor.rgb, metallic, roughness, F0, occlusion, energyCompensation);
+    }
+
+    // Area Lights
+    for (int k = 0; k < pc.num_area_lights; k++)
+    {
+         if (cb_areaLights[k].color.w > 0.0)
+             lighting += RT_ComputeAreaLight(k, positionWorld, N, V, combinedColor.rgb, metallic, roughness, F0, occlusion, energyCompensation);
     }
 
     lighting += emissive;

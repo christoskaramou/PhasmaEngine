@@ -49,6 +49,7 @@ struct PushConstants_Bloom_Combine
     {
         uint num_point_lights;
         uint num_spot_lights;
+        uint num_area_lights;
         float2 framebufferSize;
         uint passType;
         float max_cascade_dist[SHADOWMAP_CASCADES];
@@ -69,7 +70,8 @@ struct PushConstants_RayTracing
 {
     uint num_point_lights;
     uint num_spot_lights;
-    float2 pad;
+    uint num_area_lights;
+    float pad;
 };
 
 struct Mesh_Constants
@@ -225,6 +227,14 @@ struct SpotLight
     float4 color;    // .w = intensity
     float4 position; // .w = range
     float4 rotation; // .z = angle, .w = falloff
+};
+
+struct AreaLight
+{
+    float4 color;    // .w = intensity
+    float4 position; // .w = range
+    float4 rotation; // .x = pitch, .y = yaw
+    float4 size;     // .x = width, .y = height
 };
 // -----------------------------------------
 struct Particle

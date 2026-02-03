@@ -20,6 +20,7 @@ TexSamplerDecl(3, 0, MetRough)
     DirectionalLight cb_sun;
     PointLight cb_pointLights[MAX_POINT_LIGHTS];
     SpotLight  cb_spotLights[MAX_SPOT_LIGHTS];
+    AreaLight  cb_areaLights[MAX_AREA_LIGHTS];
 };
 TexSamplerDecl(5, 0, Ssao)
 TexSamplerDecl(6, 0, Emission)
@@ -357,6 +358,128 @@ float3 ComputeSpotLight(int lightIndex, Material material, float3 worldPos, floa
     float3 diffuseLight     = diffRef * (1.0 - material.metallic) * occlusion;
 
     return spotColor * (reflectedLight + diffuseLight);
+}
+
+float3 ComputeAreaLight(int lightIndex, Material material, float3 worldPos, float3 cameraPos, float3 materialNormal, float occlusion, float3 energyCompensation)
+{
+    float3 lightPos = cb_areaLights[lightIndex].position.xyz;
+    float  range    = cb_areaLights[lightIndex].position.w;
+    float width     = cb_areaLights[lightIndex].size.x;
+    float height    = cb_areaLights[lightIndex].size.y;
+
+    // 1. Calculate orientation
+    float p = radians(cb_areaLights[lightIndex].rotation.x);
+    float y = radians(cb_areaLights[lightIndex].rotation.y);
+    
+    // Light Vectors
+    float3 lightForward;
+    lightForward.x = cos(p) * sin(y);
+    lightForward.y = sin(p);
+    lightForward.z = cos(p) * cos(y);
+    lightForward = normalize(lightForward);
+
+    float3 lightRight = normalize(cross(lightForward, float3(0, 1, 0)));
+    float3 lightUp    = normalize(cross(lightRight, lightForward));
+
+    // 2. Find closest point on area light to WorldPos for Attenuation/Range
+    float3 toLight = worldPos - lightPos;
+    float distPlane = dot(toLight, lightForward);
+    float3 pointOnPlane = worldPos - lightForward * distPlane;
+    float3 localPoint = pointOnPlane - lightPos;
+
+    float u = dot(localPoint, lightRight);
+    float v = dot(localPoint, lightUp);
+
+    u = clamp(u, -width * 0.5, width * 0.5);
+    v = clamp(v, -height * 0.5, height * 0.5);
+
+    float3 closestPoint = lightPos + lightRight * u + lightUp * v;
+    float3 L_closest_vec = closestPoint - worldPos;
+    float closestDist = length(L_closest_vec);
+
+    if (closestDist > range)
+        return 0.0;
+
+    // 3. Specular Representative Point (Karis)
+    float3 V = normalize(cameraPos - worldPos);
+    float3 N = materialNormal;
+    float3 R = reflect(-V, N);
+
+    // Intersect reflection ray with plane
+    float denom = dot(R, lightForward);
+    float3 targetPoint = closestPoint; // Default to closest point
+
+    if (abs(denom) > 0.001)
+    {
+        float t = dot(lightPos - worldPos, lightForward) / denom;
+        if (t > 0)
+        {
+            float3 intersectP = worldPos + t * R;
+            float3 localP = intersectP - lightPos;
+            float u_spec = dot(localP, lightRight);
+            float v_spec = dot(localP, lightUp);
+            
+            u_spec = clamp(u_spec, -width * 0.5, width * 0.5);
+            v_spec = clamp(v_spec, -height * 0.5, height * 0.5);
+            
+            targetPoint = lightPos + lightRight * u_spec + lightUp * v_spec;
+        }
+    }
+
+    // Use targetPoint for lighting vector L
+    float3 L_vec = targetPoint - worldPos;
+    float distToTarget = length(L_vec);
+    float3 L = normalize(L_vec);
+    
+    // Attenuation
+    // Use closestDist for range falloff to maintain shape
+    float lightDistRatio = closestDist / range;
+    float attenuation = (1.0 - lightDistRatio * lightDistRatio);
+    attenuation = max(0.0, attenuation);
+    attenuation *= attenuation;
+    
+    // Use distToTarget for inverse square to keep intensity correct at distance
+    attenuation /= (distToTarget * distToTarget + 1.0);
+
+    float lightOutputCos = dot(-L, lightForward);
+    if (lightOutputCos <= 0.0) return 0.0;
+
+    float3 areaColor = cb_areaLights[lightIndex].color.xyz * cb_areaLights[lightIndex].color.w * cb_lightsIntensity * attenuation * lightOutputCos;
+
+    // Standard PBR ...
+    float roughness = max(material.roughness, 0.04);
+    float3 H = normalize(V + L);
+    
+    float NoV = clamp(dot(N, V), 0.001, 1.0);
+    float NoL = clamp(dot(N, L), 0.001, 1.0);
+    float HoV = clamp(dot(H, V), 0.001, 1.0);
+
+    float3 F0               = ComputeF0(material.albedo, material.metallic);
+    float3 specularFresnel  = Fresnel(F0, HoV);
+    
+    float3 specRef;
+    if (cb_use_Disney_PBR)
+        specRef = NoL * CookTorranceSpecular_Disney(N, H, NoL, NoV, specularFresnel, roughness);
+    else
+        specRef = NoL * CookTorranceSpecular_GSchlick(N, H, NoL, NoV, specularFresnel, roughness);
+    specRef *= energyCompensation;
+    
+    float3 diffRef;
+    if (cb_use_Disney_PBR)
+    {
+        float LoH = clamp(dot(L, H), 0.001, 1.0);
+        float3 disneyDiffuse = DisneyDiffuse(material.albedo, NoV, NoL, LoH, roughness);
+        diffRef = NoL * (1.0 - specularFresnel) * disneyDiffuse;
+    }
+    else
+    {
+        diffRef = NoL * (1.0 - specularFresnel) * (material.albedo / PI);
+    }
+    
+    float3 reflectedLight   = specRef;
+    float3 diffuseLight     = diffRef * (1.0 - material.metallic) * occlusion;
+
+    return areaColor * (reflectedLight + diffuseLight);
 }
 
 float3 SampleEnvironment(TextureCube cube, SamplerState sampler_cube, float3 dir, float mipLevel)

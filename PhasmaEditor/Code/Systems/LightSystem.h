@@ -7,6 +7,7 @@ namespace pe
 {
     constexpr uint32_t MAX_POINT_LIGHTS = 10;
     constexpr uint32_t MAX_SPOT_LIGHTS = 10;
+    constexpr uint32_t MAX_AREA_LIGHTS = 10;
 
     struct LightsUBO
     {
@@ -14,6 +15,7 @@ namespace pe
         DirectionalLight sun;
         PointLight pointLights[MAX_POINT_LIGHTS];
         SpotLight spotLights[MAX_SPOT_LIGHTS];
+        AreaLight areaLights[MAX_AREA_LIGHTS];
     };
 
     class Buffer;
