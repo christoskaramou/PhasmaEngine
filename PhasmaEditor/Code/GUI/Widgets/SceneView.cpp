@@ -1,9 +1,11 @@
 #include "SceneView.h"
 #include "API/Image.h"
 #include "API/RHI.h"
+#include "Base/ThreadPool.h"
 #include "Camera/Camera.h"
 #include "GUI/GUI.h"
 #include "GUI/GUIState.h"
+#include "GUI/IconsFontAwesome.h"
 #include "Scene/Model.h"
 #include "Scene/Scene.h"
 #include "Scene/SelectionManager.h"
@@ -13,10 +15,7 @@
 #include "imgui/ImGuizmo.h"
 #include "imgui/imgui_impl_vulkan.h"
 #include "imgui/imgui_internal.h"
-#include "Base/ThreadPool.h"
 #include <filesystem>
-
-
 
 namespace pe
 {
@@ -139,7 +138,7 @@ namespace pe
                     }
                 }
 
-                DrawGizmo(imageMin, imageSize);
+                DrawGizmos(imageMin, imageSize);
 
                 // Drop Target for SceneView
                 if (ImGui::BeginDragDropTarget())
@@ -268,7 +267,7 @@ namespace pe
         }
     }
 
-    void SceneView::DrawGizmo(const ImVec2 &imageMin, const ImVec2 &imageSize)
+    void SceneView::DrawTransformGizmo(const ImVec2 &imageMin, const ImVec2 &imageSize)
     {
         auto &selection = SelectionManager::Instance();
         if (!selection.HasSelection())
@@ -434,5 +433,92 @@ namespace pe
         nodeInfo->localMatrix = inverse(parentWorldMatrix) * newWorldMatrix;
 
         model->MarkDirty(selectedNodeIndex);
+    }
+
+    void SceneView::DrawGizmos(const ImVec2 &imageMin, const ImVec2 &imageSize)
+    {
+        if (GUIState::s_useTransformGizmo)
+            DrawTransformGizmo(imageMin, imageSize);
+
+        if (GUIState::s_useLightGizmos)
+            DrawLightGizmos(imageMin, imageSize);
+    }
+
+    void SceneView::DrawLightGizmos(const ImVec2 &imageMin, const ImVec2 &imageSize)
+    {
+        RendererSystem *renderer = GetGlobalSystem<RendererSystem>();
+        Scene &scene = renderer->GetScene();
+        Camera *camera = scene.GetActiveCamera();
+
+        if (!camera)
+            return;
+
+        LightSystem *ls = GetGlobalSystem<LightSystem>();
+        LightsUBO *lights = ls->GetLights();
+
+        if (!lights)
+            return;
+
+        mat4 view = camera->GetView();
+        mat4 proj = camera->GetProjectionNoJitter();
+        mat4 viewProj = proj * view;
+
+        auto drawIcon = [&](const vec3 &pos, const char *icon, LightType type, int index)
+        {
+            vec4 clipPos = viewProj * vec4(pos, 1.0f);
+
+            // Allow clicking if in front of camera
+            if (clipPos.w > 0.0f)
+            {
+                vec2 ndcPos = vec2(clipPos) / clipPos.w;
+                float x = (ndcPos.x * 0.5f + 0.5f) * imageSize.x + imageMin.x;
+                float y = (ndcPos.y * 0.5f + 0.5f) * imageSize.y + imageMin.y;
+
+                // Color based on selection
+                bool isSelected = SelectionManager::Instance().GetSelectedLightType() == type &&
+                                  SelectionManager::Instance().GetSelectedLightIndex() == index &&
+                                  SelectionManager::Instance().GetSelectionType() == SelectionType::Light;
+
+                float scale = isSelected ? 2.0f : 1.0f;
+                ImVec2 textSize = ImGui::CalcTextSize(icon);
+                textSize.x *= scale;
+                textSize.y *= scale;
+
+                ImVec2 iconPos(x, y);
+                iconPos.x -= textSize.x * 0.5f;
+                iconPos.y -= textSize.y * 0.5f;
+
+                ImGui::SetCursorScreenPos(iconPos);
+
+                ImVec4 color = isSelected ? ImVec4(1, 1, 0, 1) : ImVec4(1, 1, 1, 1);
+                ImGui::PushStyleColor(ImGuiCol_Text, color);
+
+                ImGui::SetWindowFontScale(scale);
+                ImGui::Text("%s", icon);
+                ImGui::SetWindowFontScale(1.0f);
+
+                ImGui::SetCursorScreenPos(iconPos);
+                ImGui::InvisibleButton(std::string("##LightIcon" + std::to_string((int)type) + "_" + std::to_string(index)).c_str(), textSize);
+
+                if (ImGui::IsItemClicked())
+                {
+                    SelectionManager::Instance().Select(type, index);
+                }
+
+                ImGui::PopStyleColor();
+            }
+        };
+
+        // Point Lights
+        for (int i = 0; i < MAX_POINT_LIGHTS; i++)
+        {
+            drawIcon(vec3(lights->pointLights[i].position), ICON_FA_LIGHTBULB, LightType::Point, i);
+        }
+
+        // Spot Lights
+        for (int i = 0; i < MAX_SPOT_LIGHTS; i++)
+        {
+            drawIcon(vec3(lights->spotLights[i].position), ICON_FA_LIGHTBULB, LightType::Spot, i);
+        }
     }
 } // namespace pe

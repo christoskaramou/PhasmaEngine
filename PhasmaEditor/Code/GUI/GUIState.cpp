@@ -10,6 +10,8 @@ namespace pe
     bool GUIState::s_sceneViewRedockQueued = false;
     bool GUIState::s_sceneViewFocused = false;
     Image *GUIState::s_sceneViewImage = nullptr;
+    bool GUIState::s_useTransformGizmo = true;
+    bool GUIState::s_useLightGizmos = true;
     GUIStyle GUIState::s_guiStyle = GUIStyle::Unity; // Default to Unity style
     ImFont *GUIState::s_fontClassic = nullptr;
     ImFont *GUIState::s_fontUnity = nullptr;

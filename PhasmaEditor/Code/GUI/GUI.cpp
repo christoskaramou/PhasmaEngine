@@ -282,6 +282,13 @@ namespace pe
                 ImGui::EndMenu();
             }
 
+            if (ImGui::BeginMenu("Gizmos"))
+            {
+                ImGui::MenuItem("Transform", nullptr, &GUIState::s_useTransformGizmo);
+                ImGui::MenuItem("Lights", nullptr, &GUIState::s_useLightGizmos);
+                ImGui::EndMenu();
+            }
+
             if (ImGui::BeginMenu("Layout"))
             {
                 if (ImGui::BeginMenu("Style"))
