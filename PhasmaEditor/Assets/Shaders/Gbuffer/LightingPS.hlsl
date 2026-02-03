@@ -58,6 +58,9 @@ PS_OUTPUT_Color mainPS(PS_INPUT_UV input)
     for (int i = 0; i < pc.num_point_lights; ++i)
         fragColor += ComputePointLight(i, material, wolrdPos, cb_camPos.xyz, normal, occlusion, energyCompensation);
 
+    for (int j = 0; j < pc.num_spot_lights; ++j)
+        fragColor += ComputeSpotLight(j, material, wolrdPos, cb_camPos.xyz, normal, occlusion, energyCompensation);
+
     // Image Based Lighting
     if (cb_IBL)
     {

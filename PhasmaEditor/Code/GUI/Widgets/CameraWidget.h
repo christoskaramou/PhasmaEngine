@@ -3,6 +3,8 @@
 
 namespace pe
 {
+    class Camera;
+
     class CameraWidget : public Widget
     {
     public:
@@ -10,5 +12,6 @@ namespace pe
         ~CameraWidget() override = default;
 
         void Update() override;
+        void DrawEmbed(Camera *camera);
     };
 } // namespace pe

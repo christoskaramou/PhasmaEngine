@@ -34,17 +34,21 @@ namespace pe
         for (int i = 0; i < MAX_POINT_LIGHTS; i++)
         {
             PointLight &point = m_lubo.pointLights[i];
-            point.color = vec4(rand(0.f, 1.f), rand(0.f, 1.f), rand(0.f, 1.f), 1.f);
-            point.position = vec4(rand(-10.5f, 10.5f), rand(.7f, 6.7f), rand(-4.5f, 4.5f), 10.f);
+            point.color = vec4(rand(0.f, 1.f), rand(0.f, 1.f), rand(0.f, 1.f), 1.0f);              // .w = intensity
+            point.position = vec4(rand(-10.5f, 10.5f), rand(.7f, 6.7f), rand(-4.5f, 4.5f), 20.0f); // .w = radius
         }
 
         for (int i = 0; i < MAX_SPOT_LIGHTS; i++)
         {
             SpotLight &spot = m_lubo.spotLights[i];
-            spot.color = vec4(rand(0.f, 1.f), rand(0.f, 1.f), rand(0.f, 1.f), 1.f);
-            spot.start = vec4(rand(-10.5f, 10.5f), rand(.7f, 6.7f), rand(-4.5f, 4.5f), 10.f);
-            spot.end = spot.start + normalize(vec4(rand(-1.f, 1.f), rand(-1.f, 1.f), rand(-1.f, 1.f), 0.f));
+            spot.color = vec4(rand(0.f, 1.f), rand(0.f, 1.f), rand(0.f, 1.f), 1.0f);              // .w = intensity
+            spot.position = vec4(rand(-10.5f, 10.5f), rand(.7f, 6.7f), rand(-4.5f, 4.5f), 20.0f); // .w = range
+            spot.rotation = vec4(rand(-90.f, 90.f), rand(-180.f, 180.f), 60.0f, 15.0f);           // .z = angle, .w = falloff
         }
+
+        auto &gSettings = Settings::Get<GlobalSettings>();
+        m_lubo.sun.color = {.9765f, .8431f, .9098f, gSettings.day ? gSettings.sun_intensity : 0.0f};
+        m_lubo.sun.direction = {gSettings.sun_direction[0], gSettings.sun_direction[1], gSettings.sun_direction[2], 1.f};
 
         BufferRange range{};
         range.data = &m_lubo;
@@ -60,14 +64,6 @@ namespace pe
 
         Camera &camera = *GetGlobalSystem<RendererSystem>()->GetScene().GetActiveCamera();
         m_lubo.camPos = {camera.GetPosition(), 1.0f};
-        m_lubo.sun.color = {.9765f, .8431f, .9098f, gSettings.day ? gSettings.sun_intensity : 0.0f};
-        m_lubo.sun.direction = {gSettings.sun_direction[0], gSettings.sun_direction[1], gSettings.sun_direction[2], 1.f};
-
-        BufferRange range{};
-        range.data = &m_lubo;
-        range.size = 3 * sizeof(vec4);
-        range.offset = 0;
-        m_uniforms[RHII.GetFrameIndex()]->Copy(1, &range, false);
 
         if (gSettings.randomize_lights)
         {
@@ -75,17 +71,16 @@ namespace pe
 
             for (uint32_t i = 0; i < MAX_POINT_LIGHTS; i++)
             {
-                m_lubo.pointLights[i].color = vec4(rand(0.f, 1.f), rand(0.f, 1.f), rand(0.f, 1.f), 1.f);
-                m_lubo.pointLights[i].position = vec4(rand(-10.5f, 10.5f), rand(.7f, 6.7f), rand(-4.5f, 4.5f), 10.f);
+                m_lubo.pointLights[i].color = vec4(rand(0.f, 1.f), rand(0.f, 1.f), rand(0.f, 1.f), 1.0f);              // .w = intensity
+                m_lubo.pointLights[i].position = vec4(rand(-10.5f, 10.5f), rand(.7f, 6.7f), rand(-4.5f, 4.5f), 10.0f); // .w = radius
             }
-
-            range.data = m_lubo.pointLights;
-            range.size = sizeof(PointLight) * MAX_POINT_LIGHTS;
-            range.offset = offsetof(LightsUBO, pointLights);
-
-            for (auto &uniform : m_uniforms)
-                uniform->Copy(1, &range, false);
         }
+
+        BufferRange range{};
+        range.data = &m_lubo;
+        range.size = sizeof(LightsUBO);
+        range.offset = 0;
+        m_uniforms[RHII.GetFrameIndex()]->Copy(1, &range, false);
     }
 
     void LightSystem::Destroy()

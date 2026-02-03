@@ -18,9 +18,9 @@ namespace pe
 
     enum class RenderMode : uint32_t
     {
-        Raster = 0,         // Rasterization only
-        Hybrid = 1,         // Raster opaque + RT transparent
-        RayTracing = 2      // Full Ray Tracing
+        Raster = 0,    // Rasterization only
+        Hybrid = 1,    // Raster opaque + RT transparent
+        RayTracing = 2 // Full Ray Tracing
     };
 
     // TODO: Move settings to their classes (instead of having them all here in GlobalSettings)
@@ -51,8 +51,7 @@ namespace pe
         int motion_blur_samples = 16;
         bool IBL = true;
         float IBL_intensity = 0.4f;
-        float lights_intensity = 7.0f;
-        float lights_range = 7.0f;
+        float lights_intensity = 1.0f;
         bool randomize_lights = false;
         bool day = true;
         float sun_intensity = 7.f;

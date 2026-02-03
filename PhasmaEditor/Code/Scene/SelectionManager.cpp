@@ -14,18 +14,30 @@ namespace pe
         m_selectedModel = model;
         m_selectedNodeIndex = nodeIndex;
         m_selectionType = type;
+
+        m_selectedLightIndex = -1; // Deselect light
+    }
+
+    void SelectionManager::Select(LightType type, int index)
+    {
+        m_selectedModel = nullptr; // Deselect model
+        m_selectedNodeIndex = -1;
+
+        m_selectedLightType = type;
+        m_selectedLightIndex = index;
+        m_selectionType = SelectionType::Light;
     }
 
     void SelectionManager::ClearSelection()
     {
         m_selectedModel = nullptr;
         m_selectedNodeIndex = -1;
-        m_selectionType = SelectionType::Node;
+        m_selectedLightIndex = -1;
     }
 
     bool SelectionManager::HasSelection() const
     {
-        return m_selectedModel != nullptr && m_selectedNodeIndex >= 0;
+        return m_selectedModel || m_selectedLightIndex != -1 || m_selectionType == SelectionType::Camera;
     }
 
     Model *SelectionManager::GetSelectedModel() const
@@ -41,6 +53,16 @@ namespace pe
     SelectionType SelectionManager::GetSelectionType() const
     {
         return m_selectionType;
+    }
+
+    LightType SelectionManager::GetSelectedLightType() const
+    {
+        return m_selectedLightType;
+    }
+
+    int SelectionManager::GetSelectedLightIndex() const
+    {
+        return m_selectedLightIndex;
     }
 
     NodeInfo *SelectionManager::GetSelectedNodeInfo()

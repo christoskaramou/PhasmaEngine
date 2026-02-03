@@ -641,9 +641,53 @@ namespace pe
         for (auto *desc : descriptors)
             layouts.push_back(desc->GetLayout()->ApiHandle());
 
+        // Push Constants
+        std::vector<vk::PushConstantRange> pcrs{};
+        uint32_t pushConstantSize = 0;
+        vk::ShaderStageFlags pushConstantStages = {};
+
+        auto checkShader = [&](Shader *shader, vk::ShaderStageFlagBits stage)
+        {
+            if (shader)
+            {
+                auto &desc = shader->GetPushConstantDesc();
+                if (desc.size > 0)
+                {
+                    pushConstantSize = std::max(pushConstantSize, static_cast<uint32_t>(desc.size)); // Assumes same block setup
+                    pushConstantStages |= stage;
+                }
+            }
+        };
+
+        checkShader(m_info.acceleration.rayGen, vk::ShaderStageFlagBits::eRaygenKHR);
+        for (auto *shader : m_info.acceleration.miss)
+            checkShader(shader, vk::ShaderStageFlagBits::eMissKHR);
+        for (auto &hg : m_info.acceleration.hitGroups)
+        {
+            checkShader(hg.closestHit, vk::ShaderStageFlagBits::eClosestHitKHR);
+            checkShader(hg.anyHit, vk::ShaderStageFlagBits::eAnyHitKHR);
+            checkShader(hg.intersection, vk::ShaderStageFlagBits::eIntersectionKHR);
+        }
+
+        if (pushConstantSize > 0)
+        {
+            vk::PushConstantRange pcr{};
+            pcr.stageFlags = pushConstantStages;
+            pcr.offset = 0;
+            pcr.size = pushConstantSize;
+            pcrs.push_back(pcr);
+
+            PE_ERROR_IF(pcr.size > RHII.GetMaxPushConstantsSize(), "RayTracing push constant size is greater than maxPushConstantsSize");
+            m_info.m_pushConstantStages.push_back(pushConstantStages);
+            m_info.m_pushConstantOffsets.push_back(pcr.offset);
+            m_info.m_pushConstantSizes.push_back(pcr.size);
+        }
+
         vk::PipelineLayoutCreateInfo layoutInfo{};
         layoutInfo.setLayoutCount = static_cast<uint32_t>(layouts.size());
         layoutInfo.pSetLayouts = layouts.data();
+        layoutInfo.pushConstantRangeCount = static_cast<uint32_t>(pcrs.size());
+        layoutInfo.pPushConstantRanges = pcrs.data();
         m_layout = RHII.GetDevice().createPipelineLayout(layoutInfo);
 
         vk::RayTracingPipelineCreateInfoKHR pipelineInfo{};

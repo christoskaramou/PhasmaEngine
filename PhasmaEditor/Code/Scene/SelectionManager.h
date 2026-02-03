@@ -15,7 +15,16 @@ namespace pe
     enum class SelectionType
     {
         Node,
-        Mesh
+        Mesh,
+        Camera,
+        Light
+    };
+
+    enum class LightType
+    {
+        Directional,
+        Point,
+        Spot
     };
 
     class SelectionManager
@@ -24,6 +33,7 @@ namespace pe
         static SelectionManager &Instance();
 
         void Select(Model *model, int nodeIndex, SelectionType type = SelectionType::Node);
+        void Select(LightType type, int index);
         void ClearSelection();
 
         bool HasSelection() const;
@@ -33,6 +43,9 @@ namespace pe
         NodeInfo *GetSelectedNodeInfo();
         const NodeInfo *GetSelectedNodeInfo() const;
 
+        LightType GetSelectedLightType() const;
+        int GetSelectedLightIndex() const;
+
         GizmoOperation GetGizmoOperation() const;
         void SetGizmoOperation(GizmoOperation op);
 
@@ -41,6 +54,10 @@ namespace pe
 
         Model *m_selectedModel = nullptr;
         int m_selectedNodeIndex = -1;
+
+        LightType m_selectedLightType = LightType::Directional;
+        int m_selectedLightIndex = -1;
+
         SelectionType m_selectionType = SelectionType::Node;
         GizmoOperation m_gizmoOperation = GizmoOperation::Translate;
     };

@@ -7,10 +7,13 @@
 #include "Scene/Model.h"
 #include "Scene/Scene.h"
 #include "Scene/SelectionManager.h"
+#include "Systems/LightSystem.h"
 #include "Systems/RendererSystem.h"
+#include "glm/gtx/matrix_decompose.hpp"
 #include "imgui/ImGuizmo.h"
 #include "imgui/imgui_impl_vulkan.h"
 #include "imgui/imgui_internal.h"
+
 
 namespace pe
 {
@@ -236,10 +239,6 @@ namespace pe
         if (!camera)
             return;
 
-        NodeInfo *nodeInfo = selection.GetSelectedNodeInfo();
-        if (!nodeInfo)
-            return;
-
         ImGuizmo::SetOrthographic(false);
         ImGuizmo::SetDrawlist();
         ImGuizmo::SetRect(imageMin.x, imageMin.y, imageSize.x, imageSize.y);
@@ -248,8 +247,6 @@ namespace pe
 
         // Vulkan convention
         proj[1][1] *= -1.0f;
-
-        mat4 modelMatrix = nodeInfo->ubo.worldMatrix;
 
         ImGuizmo::OPERATION op = ImGuizmo::TRANSLATE;
         switch (selection.GetGizmoOperation())
@@ -265,13 +262,117 @@ namespace pe
             break;
         }
 
+        mat4 modelMatrix(1.0f);
+        bool useLight = false;
+        LightType lightType;
+        int lightIndex = -1;
+
+        if (selection.GetSelectionType() == SelectionType::Node)
+        {
+            NodeInfo *nodeInfo = selection.GetSelectedNodeInfo();
+            if (!nodeInfo)
+                return;
+            modelMatrix = nodeInfo->ubo.worldMatrix;
+        }
+        else if (selection.GetSelectionType() == SelectionType::Light)
+        {
+            lightType = selection.GetSelectedLightType();
+            lightIndex = selection.GetSelectedLightIndex();
+            LightSystem *ls = GetGlobalSystem<LightSystem>();
+            LightsUBO *lights = ls->GetLights();
+
+            if (!lights)
+                return;
+
+            useLight = true;
+            if (lightType == LightType::Point && lightIndex >= 0 && lightIndex < MAX_POINT_LIGHTS)
+            {
+                modelMatrix = translate(mat4(1.0f), vec3(lights->pointLights[lightIndex].position));
+            }
+            else if (lightType == LightType::Spot && lightIndex >= 0 && lightIndex < MAX_SPOT_LIGHTS)
+            {
+                vec3 start = vec3(lights->spotLights[lightIndex].position);
+
+                // Compute direction from Rotation
+                float p = radians(lights->spotLights[lightIndex].rotation.x);
+                float y = radians(lights->spotLights[lightIndex].rotation.y);
+
+                vec3 dir;
+                dir.x = cos(p) * sin(y);
+                dir.y = sin(p);
+                dir.z = cos(p) * cos(y);
+                dir = normalize(dir);
+
+                vec3 up = vec3(0, 1, 0);
+                if (abs(dot(dir, up)) > 0.99f)
+                    up = vec3(1, 0, 0);
+
+                modelMatrix = inverse(lookAt(start, start + dir, up));
+            }
+            else if (lightType == LightType::Directional)
+            {
+                // Place directional gizmo in front of camera or at origin
+                vec3 pos = vec3(0.0f); // Origin for now
+                vec3 dir = vec3(lights->sun.direction);
+                vec3 up = vec3(0, 1, 0);
+                if (abs(dot(dir, up)) > 0.99f)
+                    up = vec3(1, 0, 0);
+
+                modelMatrix = inverse(lookAt(pos, pos + dir, up));
+            }
+        }
+        else
+        {
+            return;
+        }
+
         mat4 deltaMatrix(1.0f);
         if (ImGuizmo::Manipulate(
                 value_ptr(view), value_ptr(proj),
-                op, ImGuizmo::WORLD,
+                op, ImGuizmo::WORLD, // World mode simpler for lights for now
                 value_ptr(modelMatrix), value_ptr(deltaMatrix)))
         {
-            ApplyTransformToNode(nodeInfo, modelMatrix);
+            if (useLight)
+            {
+                LightSystem *ls = GetGlobalSystem<LightSystem>();
+                LightsUBO *lights = ls->GetLights();
+
+                vec3 scale, pos, skew;
+                vec4 persp;
+                quat rot;
+                decompose(modelMatrix, scale, rot, pos, skew, persp);
+
+                if (lightType == LightType::Point)
+                {
+                    lights->pointLights[lightIndex].position = vec4(pos, lights->pointLights[lightIndex].position.w);
+                    // Radius managed via UI, not gizmo translation for now
+                }
+                else if (lightType == LightType::Spot)
+                {
+                    SpotLight &spot = lights->spotLights[lightIndex];
+                    spot.position = vec4(pos, spot.position.w); // update position
+
+                    // Convert Gizmo Rotation (Quat) to Pitch/Yaw
+                    vec3 forward = rot * vec3(0, 0, -1);
+                    if (length(forward) > 0.001f)
+                        forward = normalize(forward);
+
+                    float pitch = degrees(asin(forward.y));
+                    float yaw = degrees(atan2(forward.x, forward.z));
+
+                    spot.rotation = vec4(pitch, yaw, spot.rotation.z, spot.rotation.w);
+                }
+                else if (lightType == LightType::Directional)
+                {
+                    // Directional light position doesn't matter, only rotation
+                    vec3 newDir = rot * vec3(0, 0, -1);
+                    lights->sun.direction = vec4(newDir, 0.0f);
+                }
+            }
+            else
+            {
+                ApplyTransformToNode(selection.GetSelectedNodeInfo(), modelMatrix);
+            }
         }
     }
 
