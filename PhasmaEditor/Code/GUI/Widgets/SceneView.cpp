@@ -15,7 +15,6 @@
 #include "imgui/ImGuizmo.h"
 #include "imgui/imgui_impl_vulkan.h"
 #include "imgui/imgui_internal.h"
-#include <filesystem>
 
 namespace pe
 {
@@ -210,10 +209,15 @@ namespace pe
 
         vec3 rayOrigin = vec3(nearPoint);
         vec3 rayDir = normalize(vec3(farPoint) - vec3(nearPoint));
+        vec3 camPos = camera->GetPosition();
 
-        Model *hitModel = nullptr;
-        int hitNodeIndex = -1;
-        float closestT = std::numeric_limits<float>::max();
+        struct Intersection
+        {
+            float t;
+            Model *model;
+            int nodeIndex;
+        };
+        std::vector<Intersection> intersections;
 
         auto &models = scene.GetModels();
         for (auto model : models)
@@ -233,6 +237,14 @@ namespace pe
                 vec3 minBound = aabb.min;
                 vec3 maxBound = aabb.max;
 
+                // Check if camera is inside the AABB
+                if (camPos.x >= minBound.x && camPos.x <= maxBound.x &&
+                    camPos.y >= minBound.y && camPos.y <= maxBound.y &&
+                    camPos.z >= minBound.z && camPos.z <= maxBound.z)
+                {
+                    continue;
+                }
+
                 vec3 invDir = 1.0f / rayDir;
                 vec3 t1 = (minBound - rayOrigin) * invDir;
                 vec3 t2 = (maxBound - rayOrigin) * invDir;
@@ -246,25 +258,42 @@ namespace pe
                 if (tNear <= tFar && tFar >= 0.0f)
                 {
                     float t = tNear >= 0.0f ? tNear : tFar;
-                    if (t < closestT)
-                    {
-                        closestT = t;
-                        hitModel = model;
-                        hitNodeIndex = i;
-                    }
+                    intersections.push_back({t, model, i});
                 }
             }
         }
 
         auto &selection = SelectionManager::Instance();
-        if (hitModel)
-        {
-            selection.Select(hitModel, hitNodeIndex);
-        }
-        else
+
+        if (intersections.empty())
         {
             selection.ClearSelection();
+            return;
         }
+
+        // Sort by distance
+        std::sort(intersections.begin(), intersections.end(), [](const Intersection &a, const Intersection &b)
+                  { return a.t < b.t; });
+
+        int selectIndex = 0;
+
+        // Cyclic selection logic
+        if (selection.HasSelection() && selection.GetSelectionType() == SelectionType::Node)
+        {
+            Model *currentModel = selection.GetSelectedModel();
+            int currentNodeIndex = selection.GetSelectedNodeIndex();
+
+            for (int i = 0; i < static_cast<int>(intersections.size()); i++)
+            {
+                if (intersections[i].model == currentModel && intersections[i].nodeIndex == currentNodeIndex)
+                {
+                    selectIndex = (i + 1) % intersections.size();
+                    break;
+                }
+            }
+        }
+
+        selection.Select(intersections[selectIndex].model, intersections[selectIndex].nodeIndex);
     }
 
     vec3 GetDirectionFromRotation(const vec4 &rotation)
@@ -536,7 +565,6 @@ namespace pe
             return;
 
         LightSystem *ls = GetGlobalSystem<LightSystem>();
-
 
         mat4 view = camera->GetView();
         mat4 proj = camera->GetProjectionNoJitter();
