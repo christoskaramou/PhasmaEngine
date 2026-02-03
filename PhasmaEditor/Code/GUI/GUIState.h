@@ -41,6 +41,8 @@ namespace pe
         static bool s_sceneViewRedockQueued;
         static bool s_sceneViewFocused;
         static Image *s_sceneViewImage;
+        static bool s_useTransformGizmo;
+        static bool s_useLightGizmos;
 
         // GUI Style
         static GUIStyle s_guiStyle;
