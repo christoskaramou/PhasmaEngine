@@ -24,9 +24,6 @@ namespace pe
     void RayTracingPass::UpdatePassInfo()
     {
         std::vector<Define> defines = {
-            Define{"MAX_POINT_LIGHTS", std::to_string(MAX_POINT_LIGHTS)},
-            Define{"MAX_SPOT_LIGHTS", std::to_string(MAX_SPOT_LIGHTS)},
-            Define{"MAX_AREA_LIGHTS", std::to_string(MAX_AREA_LIGHTS)},
         };
 
         // Shaders
@@ -96,9 +93,12 @@ namespace pe
             // Set 1
             if (descriptors.size() > 1 && descriptors[1])
             {
+                LightSystem *ls = GetGlobalSystem<LightSystem>();
+
                 auto *desc = descriptors[1];
-                desc->SetBuffer(0, GetGlobalSystem<LightSystem>()->GetUniform(i));
+                desc->SetBuffer(0, ls->GetUniform(i));
                 desc->SetBuffer(1, m_uniforms[i]);
+                desc->SetBuffer(2, ls->GetStorage(i));
                 desc->Update();
             }
         }
@@ -113,6 +113,7 @@ namespace pe
         ubo.invViewProj = camera->GetInvViewProjection();
         ubo.invView = camera->GetInvView();
         ubo.invProj = camera->GetInvProjection();
+        ubo.camPos = vec4(camera->GetPosition(), 1.0f);
         ubo.lights_intensity = gSettings.lights_intensity;
         ubo.shadows = gSettings.shadows ? 1 : 0;
         ubo.use_Disney_PBR = gSettings.use_Disney_PBR ? 1 : 0;
@@ -188,9 +189,10 @@ namespace pe
         cmd->BeginDebugRegion("RayTracingPass");
         cmd->ImageBarriers({barrierDisplay, barrierDepth});
         cmd->BindPipeline(*m_passInfo);
-        cmd->SetConstantAt(0, MAX_POINT_LIGHTS);
-        cmd->SetConstantAt(1, MAX_SPOT_LIGHTS);
-        cmd->SetConstantAt(2, MAX_AREA_LIGHTS);
+        auto *ls = GetGlobalSystem<LightSystem>();
+        cmd->SetConstantAt(0, (uint32_t)ls->GetPointLights().size());
+        cmd->SetConstantAt(1, (uint32_t)ls->GetSpotLights().size());
+        cmd->SetConstantAt(2, (uint32_t)ls->GetAreaLights().size());
         cmd->PushConstants();
         cmd->TraceRays(m_display->GetWidth(), m_display->GetHeight(), 1);
         cmd->EndDebugRegion();

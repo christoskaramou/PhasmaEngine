@@ -76,7 +76,7 @@ namespace pe
                 if (lightWidget)
                 {
                     LightSystem *ls = GetGlobalSystem<LightSystem>();
-                    lightWidget->DrawEmbed(ls->GetLights(), selection.GetSelectedLightType(), selection.GetSelectedLightIndex());
+                    lightWidget->DrawEmbed(ls, selection.GetSelectedLightType(), selection.GetSelectedLightIndex());
                 }
             }
         }
