@@ -435,6 +435,49 @@ namespace pe
         model->MarkDirty(selectedNodeIndex);
     }
 
+    void DrawRing(const vec3 &center, float radius, const vec3 &axis, const mat4 &viewProj, const ImVec2 &viewMin, const ImVec2 &viewSize, ImU32 color, int segments = 32)
+    {
+        ImDrawList *drawList = ImGui::GetWindowDrawList();
+
+        vec3 tangent;
+        if (glm::abs(axis.y) < 0.99f)
+            tangent = glm::normalize(glm::cross(axis, vec3(0, 1, 0)));
+        else
+            tangent = glm::normalize(glm::cross(axis, vec3(1, 0, 0)));
+
+        vec3 bitangent = glm::normalize(glm::cross(axis, tangent));
+
+        ImVec2 prevPoint;
+        for (int i = 0; i <= segments; i++)
+        {
+            float angle = (float)i / (float)segments * 2.0f * 3.14159f;
+            vec3 pos = center + (tangent * cos(angle) + bitangent * sin(angle)) * radius;
+
+            vec4 clipPos = viewProj * vec4(pos, 1.0f);
+            if (clipPos.w <= 0)
+                continue;
+
+            vec2 ndcPos = vec2(clipPos) / clipPos.w;
+            ImVec2 screenPos;
+            screenPos.x = (ndcPos.x * 0.5f + 0.5f) * viewSize.x + viewMin.x;
+            screenPos.y = (ndcPos.y * 0.5f + 0.5f) * viewSize.y + viewMin.y;
+
+            if (i > 0)
+                drawList->AddLine(prevPoint, screenPos, color, 2.0f);
+
+            prevPoint = screenPos;
+        }
+    }
+
+    vec3 GetSpotDirection(const vec4 &rotation)
+    {
+        vec3 euler = glm::radians(vec3(-rotation.x, rotation.y, 0.0f));
+        quat q = quat(euler);
+        vec3 dir = q * vec3(0, 0, 1);
+
+        return glm::normalize(dir);
+    }
+
     void SceneView::DrawGizmos(const ImVec2 &imageMin, const ImVec2 &imageSize)
     {
         if (GUIState::s_useTransformGizmo)
@@ -478,6 +521,89 @@ namespace pe
                 bool isSelected = SelectionManager::Instance().GetSelectedLightType() == type &&
                                   SelectionManager::Instance().GetSelectedLightIndex() == index &&
                                   SelectionManager::Instance().GetSelectionType() == SelectionType::Light;
+
+                if (isSelected)
+                {
+                    ImU32 gizmoColor = IM_COL32(255, 255, 0, 255);
+                    if (type == LightType::Point)
+                    {
+                        float radius = lights->pointLights[index].position.w;
+                        if (radius > 0.0f)
+                        {
+                            DrawRing(pos, radius, vec3(1, 0, 0), viewProj, imageMin, imageSize, gizmoColor);
+                            DrawRing(pos, radius, vec3(0, 1, 0), viewProj, imageMin, imageSize, gizmoColor);
+                            DrawRing(pos, radius, vec3(0, 0, 1), viewProj, imageMin, imageSize, gizmoColor);
+                        }
+                    }
+                    else if (type == LightType::Spot)
+                    {
+                        float range = lights->spotLights[index].position.w;
+                        float innerAngle = lights->spotLights[index].rotation.z;
+                        float falloff = lights->spotLights[index].rotation.w;
+                        float outerAngle = innerAngle + falloff; // Assuming falloff is added to create outer cone
+
+                        vec3 dir = GetSpotDirection(lights->spotLights[index].rotation);
+                        vec3 baseCenter = pos + dir * range;
+
+                        float innerRadius = range * tan(glm::radians(innerAngle));
+                        DrawRing(baseCenter, innerRadius, dir, viewProj, imageMin, imageSize, gizmoColor);
+
+                        float outerRadius = range * tan(glm::radians(outerAngle));
+                        DrawRing(baseCenter, outerRadius, dir, viewProj, imageMin, imageSize, gizmoColor);
+
+                        // Draw lines from tip to base (Inner)
+                        ImDrawList *drawList = ImGui::GetWindowDrawList();
+                        vec3 tangent = glm::normalize(glm::cross(dir, vec3(0, 1, 0)));
+                        if (glm::length(tangent) < 0.001f)
+                            tangent = glm::normalize(glm::cross(dir, vec3(1, 0, 0)));
+                        vec3 bitangent = glm::cross(dir, tangent);
+
+                        // Draw lines for Outer Cone to show the full volume?
+                        // Usually lines go to the outer extent.
+
+                        vec3 pts[4] = {
+                            baseCenter + tangent * outerRadius,
+                            baseCenter - tangent * outerRadius,
+                            baseCenter + bitangent * outerRadius,
+                            baseCenter - bitangent * outerRadius};
+
+                        for (int k = 0; k < 4; k++)
+                        {
+                            vec4 clipP1 = viewProj * vec4(pos, 1.0f);
+                            vec4 clipP2 = viewProj * vec4(pts[k], 1.0f);
+
+                            if (clipP1.w > 0 && clipP2.w > 0)
+                            {
+                                vec2 ndcP1 = vec2(clipP1) / clipP1.w;
+                                vec2 ndcP2 = vec2(clipP2) / clipP2.w;
+
+                                ImVec2 sP1, sP2;
+                                sP1.x = (ndcP1.x * 0.5f + 0.5f) * imageSize.x + imageMin.x;
+                                sP1.y = (ndcP1.y * 0.5f + 0.5f) * imageSize.y + imageMin.y;
+                                sP2.x = (ndcP2.x * 0.5f + 0.5f) * imageSize.x + imageMin.x;
+                                sP2.y = (ndcP2.y * 0.5f + 0.5f) * imageSize.y + imageMin.y;
+
+                                drawList->AddLine(sP1, sP2, gizmoColor, 2.0f);
+                            }
+                        }
+
+                        // Draw central direction line
+                        vec4 clipP1 = viewProj * vec4(pos, 1.0f);
+                        vec4 clipP2 = viewProj * vec4(baseCenter, 1.0f);
+                        if (clipP1.w > 0 && clipP2.w > 0)
+                        {
+                            vec2 ndcP1 = vec2(clipP1) / clipP1.w;
+                            vec2 ndcP2 = vec2(clipP2) / clipP2.w;
+                            ImVec2 sP1, sP2;
+                            sP1.x = (ndcP1.x * 0.5f + 0.5f) * imageSize.x + imageMin.x;
+                            sP1.y = (ndcP1.y * 0.5f + 0.5f) * imageSize.y + imageMin.y;
+                            sP2.x = (ndcP2.x * 0.5f + 0.5f) * imageSize.x + imageMin.x;
+                            sP2.y = (ndcP2.y * 0.5f + 0.5f) * imageSize.y + imageMin.y;
+
+                            drawList->AddLine(sP1, sP2, gizmoColor, 1.0f);
+                        }
+                    }
+                }
 
                 float scale = isSelected ? 2.0f : 1.0f;
                 ImVec2 textSize = ImGui::CalcTextSize(icon);

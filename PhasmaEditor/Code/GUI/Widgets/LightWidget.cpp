@@ -136,8 +136,6 @@ namespace pe
             DrawControl("Angle", ICON_FA_EYE, [&]()
                         { ImGui::DragFloat("##Angle", &light.rotation.z, 0.1f, 0.0f, 180.0f, "%.2f"); });
 
-            if (light.rotation.w == 0.0f)
-                light.rotation.w = 5.0f;
             DrawControl("Falloff", ICON_FA_CIRCLE_DOT, [&]()
                         { ImGui::DragFloat("##Falloff", &light.rotation.w, 0.1f, 0.0f, 180.0f, "%.2f"); });
 
