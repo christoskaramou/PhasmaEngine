@@ -327,23 +327,22 @@ namespace pe
             lightType = selection.GetSelectedLightType();
             lightIndex = selection.GetSelectedLightIndex();
             LightSystem *ls = GetGlobalSystem<LightSystem>();
-            LightsUBO *lights = ls->GetLights();
 
-            if (!lights)
+            if (!ls)
                 return;
 
             useLight = true;
-            if (lightType == LightType::Point && lightIndex >= 0 && lightIndex < MAX_POINT_LIGHTS)
+            if (lightType == LightType::Point && lightIndex >= 0 && lightIndex < (int)ls->GetPointLights().size())
             {
-                modelMatrix = translate(mat4(1.0f), vec3(lights->pointLights[lightIndex].position));
+                modelMatrix = translate(mat4(1.0f), vec3(ls->GetPointLights()[lightIndex].position));
             }
-            else if (lightType == LightType::Spot && lightIndex >= 0 && lightIndex < MAX_SPOT_LIGHTS)
+            else if (lightType == LightType::Spot && lightIndex >= 0 && lightIndex < (int)ls->GetSpotLights().size())
             {
-                vec3 start = vec3(lights->spotLights[lightIndex].position);
+                vec3 start = vec3(ls->GetSpotLights()[lightIndex].position);
 
                 // Compute direction from Rotation
-                float p = radians(lights->spotLights[lightIndex].rotation.x);
-                float y = radians(lights->spotLights[lightIndex].rotation.y);
+                float p = radians(ls->GetSpotLights()[lightIndex].rotation.x);
+                float y = radians(ls->GetSpotLights()[lightIndex].rotation.y);
 
                 vec3 dir;
                 dir.x = cos(p) * sin(y);
@@ -361,17 +360,20 @@ namespace pe
             {
                 // Place directional gizmo in front of camera or at origin
                 vec3 pos = vec3(0.0f); // Origin for now
-                vec3 dir = vec3(lights->sun.direction);
-                vec3 up = vec3(0, 1, 0);
-                if (abs(dot(dir, up)) > 0.99f)
-                    up = vec3(1, 0, 0);
+                if (!ls->GetDirectionalLights().empty())
+                {
+                    vec3 dir = vec3(ls->GetDirectionalLights()[0].direction);
+                    vec3 up = vec3(0, 1, 0);
+                    if (abs(dot(dir, up)) > 0.99f)
+                        up = vec3(1, 0, 0);
 
-                modelMatrix = inverse(lookAt(pos, pos + dir, up));
+                    modelMatrix = inverse(lookAt(pos, pos + dir, up));
+                }
             }
-            else if (lightType == LightType::Area && lightIndex >= 0 && lightIndex < MAX_AREA_LIGHTS)
+            else if (lightType == LightType::Area && lightIndex >= 0 && lightIndex < (int)ls->GetAreaLights().size())
             {
-                vec3 start = vec3(lights->areaLights[lightIndex].position);
-                vec3 dir = GetDirectionFromRotation(lights->areaLights[lightIndex].rotation);
+                vec3 start = vec3(ls->GetAreaLights()[lightIndex].position);
+                vec3 dir = GetDirectionFromRotation(ls->GetAreaLights()[lightIndex].rotation);
 
                 vec3 up = vec3(0, 1, 0);
                 if (abs(dot(dir, up)) > 0.99f)
@@ -394,7 +396,6 @@ namespace pe
             if (useLight)
             {
                 LightSystem *ls = GetGlobalSystem<LightSystem>();
-                LightsUBO *lights = ls->GetLights();
 
                 vec3 scale, pos, skew;
                 vec4 persp;
@@ -403,12 +404,12 @@ namespace pe
 
                 if (lightType == LightType::Point)
                 {
-                    lights->pointLights[lightIndex].position = vec4(pos, lights->pointLights[lightIndex].position.w);
+                    ls->GetPointLights()[lightIndex].position = vec4(pos, ls->GetPointLights()[lightIndex].position.w);
                     // Radius managed via UI, not gizmo translation for now
                 }
                 else if (lightType == LightType::Spot)
                 {
-                    SpotLight &spot = lights->spotLights[lightIndex];
+                    SpotLight &spot = ls->GetSpotLights()[lightIndex];
                     spot.position = vec4(pos, spot.position.w); // update position
 
                     // Convert Gizmo Rotation (Quat) to Pitch/Yaw
@@ -424,12 +425,15 @@ namespace pe
                 else if (lightType == LightType::Directional)
                 {
                     // Directional light position doesn't matter, only rotation
-                    vec3 newDir = rot * vec3(0, 0, -1);
-                    lights->sun.direction = vec4(newDir, 0.0f);
+                    if (!ls->GetDirectionalLights().empty())
+                    {
+                        vec3 newDir = rot * vec3(0, 0, -1);
+                        ls->GetDirectionalLights()[0].direction = vec4(newDir, 0.0f);
+                    }
                 }
                 else if (lightType == LightType::Area)
                 {
-                    AreaLight &area = lights->areaLights[lightIndex];
+                    AreaLight &area = ls->GetAreaLights()[lightIndex];
                     area.position = vec4(pos, area.position.w); // update position
 
                     // Convert Gizmo Rotation (Quat) to Pitch/Yaw
@@ -532,10 +536,7 @@ namespace pe
             return;
 
         LightSystem *ls = GetGlobalSystem<LightSystem>();
-        LightsUBO *lights = ls->GetLights();
 
-        if (!lights)
-            return;
 
         mat4 view = camera->GetView();
         mat4 proj = camera->GetProjectionNoJitter();
@@ -562,7 +563,7 @@ namespace pe
                     ImU32 gizmoColor = IM_COL32(255, 255, 0, 255);
                     if (type == LightType::Point)
                     {
-                        float radius = lights->pointLights[index].position.w;
+                        float radius = ls->GetPointLights()[index].position.w;
                         if (radius > 0.0f)
                         {
                             DrawRing(pos, radius, vec3(1, 0, 0), viewProj, imageMin, imageSize, gizmoColor);
@@ -572,12 +573,12 @@ namespace pe
                     }
                     else if (type == LightType::Spot)
                     {
-                        float range = lights->spotLights[index].position.w;
-                        float innerAngle = lights->spotLights[index].rotation.z;
-                        float falloff = lights->spotLights[index].rotation.w;
+                        float range = ls->GetSpotLights()[index].position.w;
+                        float innerAngle = ls->GetSpotLights()[index].rotation.z;
+                        float falloff = ls->GetSpotLights()[index].rotation.w;
                         float outerAngle = innerAngle + falloff; // Assuming falloff is added to create outer cone
 
-                        vec3 dir = GetSpotDirection(lights->spotLights[index].rotation);
+                        vec3 dir = GetSpotDirection(ls->GetSpotLights()[index].rotation);
                         vec3 baseCenter = pos + dir * range;
 
                         float innerRadius = range * tan(glm::radians(innerAngle));
@@ -640,9 +641,9 @@ namespace pe
                     }
                     else if (type == LightType::Area)
                     {
-                        float width = lights->areaLights[index].size.x;
-                        float height = lights->areaLights[index].size.y;
-                        vec3 dir = GetDirectionFromRotation(lights->areaLights[index].rotation);
+                        float width = ls->GetAreaLights()[index].size.x;
+                        float height = ls->GetAreaLights()[index].size.y;
+                        vec3 dir = GetDirectionFromRotation(ls->GetAreaLights()[index].rotation);
 
                         vec3 right = glm::normalize(glm::cross(dir, vec3(0, 1, 0)));
                         if (glm::length(right) < 0.001f)
@@ -683,7 +684,7 @@ namespace pe
                         }
 
                         // Direction Line
-                        float range = lights->areaLights[index].position.w;
+                        float range = ls->GetAreaLights()[index].position.w;
                         vec3 end = center + dir * range;
                         vec4 clipP1 = viewProj * vec4(center, 1.0f);
                         vec4 clipP2 = viewProj * vec4(end, 1.0f);
@@ -734,21 +735,21 @@ namespace pe
         };
 
         // Point Lights
-        for (int i = 0; i < MAX_POINT_LIGHTS; i++)
+        for (int i = 0; i < (int)ls->GetPointLights().size(); i++)
         {
-            drawIcon(vec3(lights->pointLights[i].position), ICON_FA_LIGHTBULB, LightType::Point, i);
+            drawIcon(vec3(ls->GetPointLights()[i].position), ICON_FA_LIGHTBULB, LightType::Point, i);
         }
 
         // Spot Lights
-        for (int i = 0; i < MAX_SPOT_LIGHTS; i++)
+        for (int i = 0; i < (int)ls->GetSpotLights().size(); i++)
         {
-            drawIcon(vec3(lights->spotLights[i].position), ICON_FA_LIGHTBULB, LightType::Spot, i);
+            drawIcon(vec3(ls->GetSpotLights()[i].position), ICON_FA_LIGHTBULB, LightType::Spot, i);
         }
 
         // Area Lights
-        for (int i = 0; i < MAX_AREA_LIGHTS; i++)
+        for (int i = 0; i < (int)ls->GetAreaLights().size(); i++)
         {
-            drawIcon(vec3(lights->areaLights[i].position), ICON_FA_LIGHTBULB, LightType::Area, i);
+            drawIcon(vec3(ls->GetAreaLights()[i].position), ICON_FA_LIGHTBULB, LightType::Area, i);
         }
     }
 } // namespace pe

@@ -44,6 +44,8 @@ struct Vertex
 // --- ByteAddressBuffer data ---
 
 [[vk::push_constant]] PushConstants_RayTracing pc;
+
+// Set 0
 [[vk::binding(0, 0)]] RaytracingAccelerationStructure tlas;
 [[vk::binding(1, 0)]] RWTexture2D<float4> output;
 [[vk::binding(2, 0)]] ByteAddressBuffer data;
@@ -56,26 +58,74 @@ struct Vertex
 [[vk::binding(9, 0)]] Texture2D LutIBL;
 [[vk::binding(10, 0)]] Texture2D<float> depthBuffer;
 
-[[vk::binding(0, 1)]] cbuffer Lights
+// Set 1
+[[vk::binding(0, 1)]] cbuffer LightSystemUBO
 {
-    float4 cb_camPos; // .w is unused
-    DirectionalLight cb_sun;
-    PointLight cb_pointLights[MAX_POINT_LIGHTS];
-    SpotLight  cb_spotLights[MAX_SPOT_LIGHTS];
-    AreaLight  cb_areaLights[MAX_AREA_LIGHTS];
+
+    uint cb_numDirectionalLights;
+    uint cb_numPointLights;
+    uint cb_numSpotLights;
+    uint cb_numAreaLights;
+    uint cb_offsetDirectionalLights;
+    uint cb_offsetPointLights;
+    uint cb_offsetSpotLights;
+    uint cb_offsetAreaLights;
+};
+[[vk::binding(1, 1)]] cbuffer PassUBO
+{
+    float4x4 cb_invViewProj;
+    float4x4 cb_invView;
+    float4x4 cb_invProj;
+    float4 cb_camPos;
+    float cb_lightsIntensity;
+    uint cb_shadows;
+    uint cb_use_Disney_PBR;
+    float cb_iblIntensity;
+    uint cb_renderMode;  // 0=Raster, 1=Hybrid, 2=RayTracing
 };
 
-[[vk::binding(1, 1)]] cbuffer LightBuffer
+// Set 2
+[[vk::binding(2, 1)]] ByteAddressBuffer LightsBuffer;
+
+// Helper functions for loading lights
+DirectionalLight LoadDirectionalLight(uint index)
 {
-    float4x4 ubo_invViewProj;
-    float4x4 ubo_invView;
-    float4x4 ubo_invProj;
-    float ubo_lightsIntensity;
-    uint ubo_shadows;
-    uint ubo_use_Disney_PBR;
-    float ubo_iblIntensity;
-    uint ubo_renderMode;  // 0=Raster, 1=Hybrid, 2=RayTracing
-};
+    uint offset = cb_offsetDirectionalLights + index * 32;
+    DirectionalLight light;
+    light.color = asfloat(LightsBuffer.Load4(offset));
+    light.direction = asfloat(LightsBuffer.Load4(offset + 16));
+    return light;
+}
+
+PointLight LoadPointLight(uint index)
+{
+    uint offset = cb_offsetPointLights + index * 32;
+    PointLight light;
+    light.color = asfloat(LightsBuffer.Load4(offset));
+    light.position = asfloat(LightsBuffer.Load4(offset + 16));
+    return light;
+}
+
+SpotLight LoadSpotLight(uint index)
+{
+    uint offset = cb_offsetSpotLights + index * 48;
+    SpotLight light;
+    light.color = asfloat(LightsBuffer.Load4(offset));
+    light.position = asfloat(LightsBuffer.Load4(offset + 16));
+    light.rotation = asfloat(LightsBuffer.Load4(offset + 32));
+    return light;
+}
+
+AreaLight LoadAreaLight(uint index)
+{
+    uint offset = cb_offsetAreaLights + index * 64;
+    AreaLight light;
+    light.color = asfloat(LightsBuffer.Load4(offset));
+    light.position = asfloat(LightsBuffer.Load4(offset + 16));
+    light.rotation = asfloat(LightsBuffer.Load4(offset + 32));
+    light.size = asfloat(LightsBuffer.Load4(offset + 48));
+    return light;
+}
 
 static const uint MATRIX_SIZE = 64u;
 static const uint MESH_DATA_SIZE = MATRIX_SIZE * 2u;
@@ -182,7 +232,7 @@ float3 ComputeIBL(float3 N, float3 V, float3 albedo, float metallic, float rough
 
 float TraceShadowRay(float3 origin, float3 dir, float dist)
 {
-    if (ubo_shadows == 0)
+    if (cb_shadows == 0)
         return 1.0;
     
     RayDesc ray;
@@ -212,9 +262,9 @@ float TraceShadowRay(float3 origin, float3 dir, float dist)
     return shadowPayload.radiance.x; // Assumes monochromatic for now or use .rgb in DirectLight
 }
 
-float3 RT_DirectLight(float3 worldPos, float3 materialNormal, float3 V, float3 albedo, float metallic, float roughness, float3 F0, float occlusion, float shadow, float3 energyCompensation)
+float3 RT_DirectLight(DirectionalLight light, float3 worldPos, float3 materialNormal, float3 V, float3 albedo, float metallic, float roughness, float3 F0, float occlusion, float shadow, float3 energyCompensation)
 {
-    float3 lightDir = cb_sun.direction.xyz;
+    float3 lightDir = light.direction.xyz;
     float3 L        = normalize(lightDir);
     float3 H        = normalize(V + L);
 
@@ -223,30 +273,30 @@ float3 RT_DirectLight(float3 worldPos, float3 materialNormal, float3 V, float3 a
     float NoL_clamped = clamp(NoL_raw, 0.001, 1.0);
     float HoV = clamp(dot(H, V), 0.001, 1.0);
     
-    float intensity = cb_sun.color.w;
+    float intensity = light.color.w;
 
     float3 specularFresnel = Fresnel(F0, HoV);
     
     float NoL_sat = saturate(NoL_raw);
     
     float3 specRef;
-    if (ubo_use_Disney_PBR)
-        specRef = cb_sun.color.rgb * intensity * NoL_sat * shadow * CookTorranceSpecular_Disney(materialNormal, H, NoL_clamped, NoV_clamped, specularFresnel, roughness);
+    if (cb_use_Disney_PBR)
+        specRef = light.color.rgb * intensity * NoL_sat * shadow * CookTorranceSpecular_Disney(materialNormal, H, NoL_clamped, NoV_clamped, specularFresnel, roughness);
     else
-        specRef = cb_sun.color.rgb * intensity * NoL_sat * shadow * CookTorranceSpecular_GSchlick(materialNormal, H, NoL_clamped, NoV_clamped, specularFresnel, roughness);
+        specRef = light.color.rgb * intensity * NoL_sat * shadow * CookTorranceSpecular_GSchlick(materialNormal, H, NoL_clamped, NoV_clamped, specularFresnel, roughness);
     
     specRef *= energyCompensation;
     
     float3 diffRef;
-    if (ubo_use_Disney_PBR)
+    if (cb_use_Disney_PBR)
     {
         float LoH = clamp(dot(L, H), 0.001, 1.0);
         float3 disneyDiffuse = DisneyDiffuse(albedo, NoV_clamped, NoL_clamped, LoH, roughness);
-        diffRef = cb_sun.color.rgb * intensity * NoL_sat * shadow * (1.0 - specularFresnel) * disneyDiffuse;
+        diffRef = light.color.rgb * intensity * NoL_sat * shadow * (1.0 - specularFresnel) * disneyDiffuse;
     }
     else
     {
-        diffRef = cb_sun.color.rgb * intensity * NoL_sat * shadow * (1.0 - specularFresnel) * (albedo / PI);
+        diffRef = light.color.rgb * intensity * NoL_sat * shadow * (1.0 - specularFresnel) * (albedo / PI);
     }
     
     float3 diffuseLight = diffRef * (1.0 - metallic) * occlusion;
@@ -256,10 +306,11 @@ float3 RT_DirectLight(float3 worldPos, float3 materialNormal, float3 V, float3 a
 
 float3 RT_ComputePointLight(int index, float3 worldPos, float3 materialNormal, float3 V, float3 albedo, float metallic, float roughness, float3 F0, float occlusion, float3 energyCompensation)
 {
-    float3 lightPos = cb_pointLights[index].position.xyz; // .xyz
+    PointLight light = LoadPointLight(index);
+    float3 lightPos = light.position.xyz; // .xyz
     float3 lightDirFull = worldPos - lightPos;
     float dist = length(lightDirFull);
-    float range = cb_pointLights[index].position.w; // radius is .w
+    float range = light.position.w; // radius is .w
     
     if (dist > range) return 0.0;
     
@@ -277,30 +328,30 @@ float3 RT_ComputePointLight(int index, float3 worldPos, float3 materialNormal, f
     float NoL_clamped = clamp(NoL_raw, 0.001, 1.0);
     float HoV = clamp(dot(H, V), 0.001, 1.0);
     
-    float intensity = cb_pointLights[index].color.w * ubo_lightsIntensity;
+    float intensity = light.color.w * cb_lightsIntensity;
 
     float3 specularFresnel = Fresnel(F0, HoV);
     
     float NoL_sat = saturate(NoL_raw);
     
     float3 specRef;
-    if (ubo_use_Disney_PBR)
-        specRef = cb_pointLights[index].color.rgb * intensity * attenuation * NoL_sat * shadow * CookTorranceSpecular_Disney(materialNormal, H, NoL_clamped, NoV_clamped, specularFresnel, roughness);
+    if (cb_use_Disney_PBR)
+        specRef = light.color.rgb * intensity * attenuation * NoL_sat * shadow * CookTorranceSpecular_Disney(materialNormal, H, NoL_clamped, NoV_clamped, specularFresnel, roughness);
     else
-        specRef = cb_pointLights[index].color.rgb * intensity * attenuation * NoL_sat * shadow * CookTorranceSpecular_GSchlick(materialNormal, H, NoL_clamped, NoV_clamped, specularFresnel, roughness);
+        specRef = light.color.rgb * intensity * attenuation * NoL_sat * shadow * CookTorranceSpecular_GSchlick(materialNormal, H, NoL_clamped, NoV_clamped, specularFresnel, roughness);
 
     specRef *= energyCompensation;
 
     float3 diffRef;
-    if (ubo_use_Disney_PBR)
+    if (cb_use_Disney_PBR)
     {
         float LoH = clamp(dot(L, H), 0.001, 1.0);
         float3 disneyDiffuse = DisneyDiffuse(albedo, NoV_clamped, NoL_clamped, LoH, roughness);
-        diffRef = cb_pointLights[index].color.rgb * intensity * attenuation * NoL_sat * shadow * (1.0 - specularFresnel) * disneyDiffuse;
+        diffRef = light.color.rgb * intensity * attenuation * NoL_sat * shadow * (1.0 - specularFresnel) * disneyDiffuse;
     }
     else
     {
-        diffRef = cb_pointLights[index].color.rgb * intensity * attenuation * NoL_sat * shadow * (1.0 - specularFresnel) * (albedo / PI);
+        diffRef = light.color.rgb * intensity * attenuation * NoL_sat * shadow * (1.0 - specularFresnel) * (albedo / PI);
     }
     
     float3 diffuseLight = diffRef * (1.0 - metallic) * occlusion;
@@ -310,16 +361,17 @@ float3 RT_ComputePointLight(int index, float3 worldPos, float3 materialNormal, f
 
 float3 RT_ComputeSpotLight(int index, float3 worldPos, float3 materialNormal, float3 V, float3 albedo, float metallic, float roughness, float3 F0, float occlusion, float3 energyCompensation)
 {
-    float3 lightPos = cb_spotLights[index].position.xyz; // .xyz
+    SpotLight light = LoadSpotLight(index);
+    float3 lightPos = light.position.xyz; // .xyz
     float3 lightDirFull = worldPos - lightPos;
     float dist = length(lightDirFull);
-    float range = cb_spotLights[index].position.w; // range is .w
+    float range = light.position.w; // range is .w
     
     if (dist > range) return 0.0;
     
     // Rotation to Direction
-    float p = radians(cb_spotLights[index].rotation.x);
-    float y = radians(cb_spotLights[index].rotation.y);
+    float p = radians(light.rotation.x);
+    float y = radians(light.rotation.y);
     float3 spotDir;
     spotDir.x = cos(p) * sin(y);
     spotDir.y = sin(p);
@@ -329,8 +381,8 @@ float3 RT_ComputeSpotLight(int index, float3 worldPos, float3 materialNormal, fl
     float3 L = normalize(-lightDirFull);
     float theta = dot(-L, spotDir);
     
-    float cutoffCos = cos(radians(cb_spotLights[index].rotation.z)); // angle is .z
-    float outerCutoffCos = cos(radians(cb_spotLights[index].rotation.z + cb_spotLights[index].rotation.w)); // falloff is .w
+    float cutoffCos = cos(radians(light.rotation.z)); // angle is .z
+    float outerCutoffCos = cos(radians(light.rotation.z + light.rotation.w)); // falloff is .w
     
     if (theta < outerCutoffCos) return 0.0;
     
@@ -343,7 +395,7 @@ float3 RT_ComputeSpotLight(int index, float3 worldPos, float3 materialNormal, fl
     // Shadow
     float shadow = TraceShadowRay(worldPos, L, dist);
     
-    float intensity = cb_spotLights[index].color.w * ubo_lightsIntensity; // intensity is .w
+    float intensity = light.color.w * cb_lightsIntensity; // intensity is .w
     
     // PBR calc
     float3 H = normalize(V + L);
@@ -356,23 +408,23 @@ float3 RT_ComputeSpotLight(int index, float3 worldPos, float3 materialNormal, fl
     float NoL_sat = saturate(NoL_raw);
     
     float3 specRef;
-    if (ubo_use_Disney_PBR)
-        specRef = cb_spotLights[index].color.rgb * intensity * attenuation * spotIntensity * NoL_sat * shadow * CookTorranceSpecular_Disney(materialNormal, H, NoL_clamped, NoV_clamped, specularFresnel, roughness);
+    if (cb_use_Disney_PBR)
+        specRef = light.color.rgb * intensity * attenuation * spotIntensity * NoL_sat * shadow * CookTorranceSpecular_Disney(materialNormal, H, NoL_clamped, NoV_clamped, specularFresnel, roughness);
     else
-        specRef = cb_spotLights[index].color.rgb * intensity * attenuation * spotIntensity * NoL_sat * shadow * CookTorranceSpecular_GSchlick(materialNormal, H, NoL_clamped, NoV_clamped, specularFresnel, roughness);
+        specRef = light.color.rgb * intensity * attenuation * spotIntensity * NoL_sat * shadow * CookTorranceSpecular_GSchlick(materialNormal, H, NoL_clamped, NoV_clamped, specularFresnel, roughness);
         
     specRef *= energyCompensation;
     
     float3 diffRef;
-    if (ubo_use_Disney_PBR)
+    if (cb_use_Disney_PBR)
     {
         float LoH = clamp(dot(L, H), 0.001, 1.0);
         float3 disneyDiffuse = DisneyDiffuse(albedo, NoV_clamped, NoL_clamped, LoH, roughness);
-        diffRef = cb_spotLights[index].color.rgb * intensity * attenuation * spotIntensity * NoL_sat * shadow * (1.0 - specularFresnel) * disneyDiffuse;
+        diffRef = light.color.rgb * intensity * attenuation * spotIntensity * NoL_sat * shadow * (1.0 - specularFresnel) * disneyDiffuse;
     }
     else
     {
-        diffRef = cb_spotLights[index].color.rgb * intensity * attenuation * spotIntensity * NoL_sat * shadow * (1.0 - specularFresnel) * (albedo / PI);
+        diffRef = light.color.rgb * intensity * attenuation * spotIntensity * NoL_sat * shadow * (1.0 - specularFresnel) * (albedo / PI);
     }
     
     float3 diffuseLight = diffRef * (1.0 - metallic) * occlusion;
@@ -382,14 +434,15 @@ float3 RT_ComputeSpotLight(int index, float3 worldPos, float3 materialNormal, fl
 
 float3 RT_ComputeAreaLight(int index, float3 worldPos, float3 materialNormal, float3 V, float3 albedo, float metallic, float roughness, float3 F0, float occlusion, float3 energyCompensation)
 {
-    float3 lightPos = cb_areaLights[index].position.xyz;
-    float  range    = cb_areaLights[index].position.w;
-    float width     = cb_areaLights[index].size.x;
-    float height    = cb_areaLights[index].size.y;
+    AreaLight light = LoadAreaLight(index);
+    float3 lightPos = light.position.xyz;
+    float  range    = light.position.w;
+    float width     = light.size.x;
+    float height    = light.size.y;
 
     // 1. Calculate orientation
-    float p = radians(cb_areaLights[index].rotation.x);
-    float y = radians(cb_areaLights[index].rotation.y);
+    float p = radians(light.rotation.x);
+    float y = radians(light.rotation.y);
     
     // Light Vectors
     float3 lightForward;
@@ -466,7 +519,7 @@ float3 RT_ComputeAreaLight(int index, float3 worldPos, float3 materialNormal, fl
     // Shadow (using L to target point)
     float shadow = TraceShadowRay(worldPos, L, distToTarget);
 
-    float3 areaColor = cb_areaLights[index].color.xyz * cb_areaLights[index].color.w * ubo_lightsIntensity * attenuation * lightOutputCos;
+    float3 areaColor = light.color.xyz * light.color.w * cb_lightsIntensity * attenuation * lightOutputCos;
 
     // Standard PBR ...
     float3 H = normalize(V + L);
@@ -478,14 +531,14 @@ float3 RT_ComputeAreaLight(int index, float3 worldPos, float3 materialNormal, fl
     float3 specularFresnel  = Fresnel(F0, HoV);
     
     float3 specRef;
-    if (ubo_use_Disney_PBR)
+    if (cb_use_Disney_PBR)
         specRef = NoL * shadow * CookTorranceSpecular_Disney(N, H, NoL, NoV, specularFresnel, roughness);
     else
         specRef = NoL * shadow * CookTorranceSpecular_GSchlick(N, H, NoL, NoV, specularFresnel, roughness);
     specRef *= energyCompensation;
     
     float3 diffRef;
-    if (ubo_use_Disney_PBR)
+    if (cb_use_Disney_PBR)
     {
         float LoH = clamp(dot(L, H), 0.001, 1.0);
         float3 disneyDiffuse = DisneyDiffuse(albedo, NoV, NoL, LoH, roughness);
@@ -544,7 +597,7 @@ void raygeneration()
     uint mask = 0x80;                  // Default: Transparent only
     float tMax = opaqueDist - 0.00001; // Default: Limited by depth
     
-    if (ubo_renderMode == 2)
+    if (cb_renderMode == 2)
     {
         mask = 0xFF;            // Trace all geometry
         tMax = 100000.0;        // Unlimited distance
@@ -581,7 +634,7 @@ void raygeneration()
     {
         output[launchIndex.xy] = float4(payload.radiance, payload.alpha);
     }
-    else if (ubo_renderMode == 2) // With full RT, show skybox when no hit
+    else if (cb_renderMode == 2) // With full RT, show skybox when no hit
     {
         float3 direction = normalize(dirWorld);
         output[launchIndex.xy] = float4(skybox.SampleLevel(material_sampler, direction, 0).rgb, 1.0);
@@ -686,39 +739,45 @@ void closesthit(inout HitPayload payload, in BuiltInTriangleIntersectionAttribut
     float3 energyCompensation = 1.0 + F0 * (1.0 / max(E, 0.001) - 1.0);
 
     float3 lighting = 0.0.xxx;
-
-    // Shadow for Sun & IBL Specular
-    float3 L = normalize(cb_sun.direction.xyz);
-    float sunShadow = TraceShadowRay(positionWorld, L, 10000.0);
-
-    lighting += ComputeIBL(N, V, combinedColor.rgb, metallic, roughness, F0, envBRDF) * ubo_iblIntensity;
+    
+    // IBL
+    lighting += ComputeIBL(N, V, combinedColor.rgb, metallic, roughness, F0, envBRDF) * cb_iblIntensity;
     lighting *= occlusion;
 
     // Direct Lighting
-    lighting += RT_DirectLight(positionWorld, N, V, combinedColor.rgb, metallic, roughness, F0, occlusion, sunShadow, energyCompensation);
+    // Assuming single sun for now, or loop for multiple
+    float3 L = normalize(LoadDirectionalLight(0).direction.xyz);
+    float sunShadow = TraceShadowRay(positionWorld, L, 10000.0);
+    
+    for (uint i = 0; i < cb_numDirectionalLights; i++)
+    {
+        // Only shadowing the first one for now as per previous logic (or optimize shadow tracing)
+        float s = (i == 0) ? sunShadow : 1.0; 
+        lighting += RT_DirectLight(LoadDirectionalLight(i), positionWorld, N, V, combinedColor.rgb, metallic, roughness, F0, occlusion, s, energyCompensation);
+    }
     
     // Point Lights
-    for (int i = 0; i < pc.num_point_lights; i++)
+    for (uint i = 0; i < cb_numPointLights; i++)
     {
-         if (cb_pointLights[i].color.w > 0.0) // intensity is .w
+         if (LoadPointLight(i).color.w > 0.0) // intensity is .w
          {
-             float dist = distance(positionWorld, cb_pointLights[i].position.xyz); // position is .xyz
-             if (dist < cb_pointLights[i].position.w) // radius is .w
+             float dist = distance(positionWorld, LoadPointLight(i).position.xyz); // position is .xyz
+             if (dist < LoadPointLight(i).position.w) // radius is .w
                  lighting += RT_ComputePointLight(i, positionWorld, N, V, combinedColor.rgb, metallic, roughness, F0, occlusion, energyCompensation);
          }
     }
 
     // Spot Lights
-    for (int j = 0; j < pc.num_spot_lights; j++)
+    for (uint j = 0; j < cb_numSpotLights; j++)
     {
-         if (cb_spotLights[j].color.w > 0.0) // intensity is .w
+         if (LoadSpotLight(j).color.w > 0.0) // intensity is .w
              lighting += RT_ComputeSpotLight(j, positionWorld, N, V, combinedColor.rgb, metallic, roughness, F0, occlusion, energyCompensation);
     }
 
     // Area Lights
-    for (int k = 0; k < pc.num_area_lights; k++)
+    for (uint k = 0; k < cb_numAreaLights; k++)
     {
-         if (cb_areaLights[k].color.w > 0.0)
+         if (LoadAreaLight(k).color.w > 0.0)
              lighting += RT_ComputeAreaLight(k, positionWorld, N, V, combinedColor.rgb, metallic, roughness, F0, occlusion, energyCompensation);
     }
 
@@ -773,7 +832,7 @@ void closesthit(inout HitPayload payload, in BuiltInTriangleIntersectionAttribut
         transPayload.isRefractive = isTransmissive ? 1 : 0;
 
         // In Full RT mode, alpha blended objects need to see opaque geometry behind them
-        uint mask = (isTransmissive || ubo_renderMode == 2) ? 0xFF : 0x80;
+        uint mask = (isTransmissive || cb_renderMode == 2) ? 0xFF : 0x80;
 
         TraceRay(
             tlas,
@@ -827,7 +886,7 @@ void miss(inout HitPayload payload)
 
     if (payload.depth > 0 && payload.isRefractive == 0)
     {
-        if (ubo_renderMode == 1)
+        if (cb_renderMode == 1)
         {
             uint3 launchIndex = DispatchRaysIndex();
             payload.radiance = output[launchIndex.xy].rgb;
@@ -837,7 +896,7 @@ void miss(inout HitPayload payload)
     }
 
     float3 direction = WorldRayDirection();
-    payload.radiance = skybox.SampleLevel(material_sampler, direction, 0).rgb * ubo_iblIntensity;
+    payload.radiance = skybox.SampleLevel(material_sampler, direction, 0).rgb * cb_iblIntensity;
     payload.t = -1.0;
     payload.alpha = 0.0;
 }

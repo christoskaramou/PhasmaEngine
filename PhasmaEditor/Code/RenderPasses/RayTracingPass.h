@@ -12,6 +12,7 @@ namespace pe
         mat4 invViewProj;
         mat4 invView;
         mat4 invProj;
+        vec4 camPos;
         float lights_intensity;
         uint32_t shadows;
         uint32_t use_Disney_PBR;

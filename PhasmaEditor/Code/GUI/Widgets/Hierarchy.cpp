@@ -63,8 +63,7 @@ namespace pe
 
         ImGui::Begin("Hierarchy", &m_open);
 
-        RendererSystem *renderer = GetGlobalSystem<RendererSystem>();
-        Scene &scene = renderer->GetScene();
+        Scene &scene = GetGlobalSystem<RendererSystem>()->GetScene();
         auto &models = scene.GetModels();
         auto &selection = SelectionManager::Instance();
 
@@ -157,7 +156,7 @@ namespace pe
             LightSystem *lightSystem = GetGlobalSystem<LightSystem>();
 
             // Point Lights
-            for (int i = 0; i < MAX_POINT_LIGHTS; i++)
+            for (int i = 0; i < (int)lightSystem->GetPointLights().size(); i++)
             {
                 if (selection.GetSelectionType() == SelectionType::Light &&
                     selection.GetSelectedLightType() == LightType::Point &&
@@ -176,7 +175,7 @@ namespace pe
                 if (ImGui::IsItemHovered() && ImGui::IsMouseDoubleClicked(0))
                 {
                     Camera *camera = scene.GetActiveCamera();
-                    vec3 pos = vec3(lightSystem->GetLights()->pointLights[i].position);
+                    vec3 pos = vec3(lightSystem->GetPointLights()[i].position);
                     camera->SetPosition(pos - camera->GetFront() * 5.0f);
                 }
                 if (ImGui::BeginPopupContextItem())
@@ -184,14 +183,14 @@ namespace pe
                     if (ImGui::MenuItem("Focus"))
                     {
                         Camera *camera = scene.GetActiveCamera();
-                        vec3 pos = vec3(lightSystem->GetLights()->pointLights[i].position);
+                        vec3 pos = vec3(lightSystem->GetPointLights()[i].position);
                         camera->SetPosition(pos - camera->GetFront() * 5.0f);
                     }
                     if (ImGui::MenuItem("Delete"))
                     {
                         // Reset light
-                        lightSystem->GetLights()->pointLights[i].color = vec4(0.0f);                          // Intensity 0
-                        lightSystem->GetLights()->pointLights[i].position = vec4(0.0f, 10000.0f, 0.0f, 0.0f); // Move away
+                        lightSystem->GetPointLights()[i].color = vec4(0.0f);                          // Intensity 0
+                        lightSystem->GetPointLights()[i].position = vec4(0.0f, 10000.0f, 0.0f, 0.0f); // Move away
                     }
                     ImGui::EndPopup();
                 }
@@ -199,7 +198,7 @@ namespace pe
             }
 
             // Spot Lights
-            for (int i = 0; i < MAX_SPOT_LIGHTS; i++)
+            for (int i = 0; i < (int)lightSystem->GetSpotLights().size(); i++)
             {
                 if (selection.GetSelectionType() == SelectionType::Light &&
                     selection.GetSelectedLightType() == LightType::Spot &&
@@ -218,7 +217,7 @@ namespace pe
                 if (ImGui::IsItemHovered() && ImGui::IsMouseDoubleClicked(0))
                 {
                     Camera *camera = scene.GetActiveCamera();
-                    vec3 pos = GetGlobalSystem<LightSystem>()->GetLights()->spotLights[i].position;
+                    vec3 pos = lightSystem->GetSpotLights()[i].position;
                     camera->SetPosition(pos - camera->GetFront() * 5.0f);
                 }
                 if (ImGui::BeginPopupContextItem())
@@ -226,14 +225,14 @@ namespace pe
                     if (ImGui::MenuItem("Focus"))
                     {
                         Camera *camera = scene.GetActiveCamera();
-                        vec3 pos = GetGlobalSystem<LightSystem>()->GetLights()->spotLights[i].position;
+                        vec3 pos = lightSystem->GetSpotLights()[i].position;
                         camera->SetPosition(pos - camera->GetFront() * 5.0f);
                     }
                     if (ImGui::MenuItem("Delete"))
                     {
                         // Reset light
-                        GetGlobalSystem<LightSystem>()->GetLights()->spotLights[i].color = vec4(0.0f);                          // Intensity 0
-                        GetGlobalSystem<LightSystem>()->GetLights()->spotLights[i].position = vec4(0.0f, 10000.0f, 0.0f, 0.0f); // Move away
+                        lightSystem->GetSpotLights()[i].color = vec4(0.0f);                          // Intensity 0
+                        lightSystem->GetSpotLights()[i].position = vec4(0.0f, 10000.0f, 0.0f, 0.0f); // Move away
                     }
                     ImGui::EndPopup();
                 }
@@ -241,7 +240,7 @@ namespace pe
             }
 
             // Area Lights
-            for (int i = 0; i < MAX_AREA_LIGHTS; i++)
+            for (int i = 0; i < (int)lightSystem->GetAreaLights().size(); i++)
             {
                 if (selection.GetSelectionType() == SelectionType::Light &&
                     selection.GetSelectedLightType() == LightType::Area &&
@@ -260,7 +259,7 @@ namespace pe
                 if (ImGui::IsItemHovered() && ImGui::IsMouseDoubleClicked(0))
                 {
                     Camera *camera = scene.GetActiveCamera();
-                    vec3 pos = GetGlobalSystem<LightSystem>()->GetLights()->areaLights[i].position;
+                    vec3 pos = lightSystem->GetAreaLights()[i].position;
                     camera->SetPosition(pos - camera->GetFront() * 5.0f);
                 }
                 if (ImGui::BeginPopupContextItem())
@@ -268,14 +267,14 @@ namespace pe
                     if (ImGui::MenuItem("Focus"))
                     {
                         Camera *camera = scene.GetActiveCamera();
-                        vec3 pos = GetGlobalSystem<LightSystem>()->GetLights()->areaLights[i].position;
+                        vec3 pos = lightSystem->GetAreaLights()[i].position;
                         camera->SetPosition(pos - camera->GetFront() * 5.0f);
                     }
                     if (ImGui::MenuItem("Delete"))
                     {
                         // Reset light
-                        GetGlobalSystem<LightSystem>()->GetLights()->areaLights[i].color = vec4(0.0f);                          // Intensity 0
-                        GetGlobalSystem<LightSystem>()->GetLights()->areaLights[i].position = vec4(0.0f, 10000.0f, 0.0f, 0.0f); // Move away
+                        lightSystem->GetAreaLights()[i].color = vec4(0.0f);                          // Intensity 0
+                        lightSystem->GetAreaLights()[i].position = vec4(0.0f, 10000.0f, 0.0f, 0.0f); // Move away
                     }
                     ImGui::EndPopup();
                 }

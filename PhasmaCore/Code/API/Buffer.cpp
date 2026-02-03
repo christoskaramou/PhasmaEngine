@@ -79,6 +79,8 @@ namespace pe
 
     void Buffer::CopyDataRaw(const void *data, size_t size, size_t offset)
     {
+        if (!size)
+            return;
         PE_ERROR_IF(!m_data, "Buffer::CopyDataRaw: Buffer is not mapped");
         PE_ERROR_IF(offset + size > m_size, "Buffer::CopyDataRaw: Source data size is too large");
         std::memcpy(static_cast<uint8_t *>(m_data) + offset, data, size);
@@ -104,6 +106,8 @@ namespace pe
 
     void Buffer::CopyBufferStaged(CommandBuffer *cmd, const void *data, size_t size, size_t dstOffset)
     {
+        if (!size)
+            return;
         PE_ERROR_IF(dstOffset + size > m_size, "CopyBufferStaged: dst range overflow");
 
         StagingAllocation alloc = RHII.GetStagingManager()->Allocate(size);
@@ -118,10 +122,10 @@ namespace pe
 
     void Buffer::Flush(size_t size, size_t offset) const
     {
-        if (!m_data)
+        if (!size || !m_data)
             return;
-
-        PE_CHECK(vmaFlushAllocation(RHII.GetAllocator(), m_allocation, offset, size > 0 ? size : m_size));
+        PE_ERROR_IF(offset + size > m_size, "Buffer::Flush: range overflow");
+        PE_CHECK(vmaFlushAllocation(RHII.GetAllocator(), m_allocation, offset, size));
     }
 
     size_t Buffer::Size()
@@ -136,6 +140,8 @@ namespace pe
 
     void Buffer::CopyBuffer(CommandBuffer *cmd, Buffer *src, size_t size, size_t srcOffset, size_t dstOffset)
     {
+        if (!size)
+            return;
         PE_ERROR_IF(size + srcOffset > src->Size(), "Buffer::CopyBuffer: Source size is too big");
         PE_ERROR_IF(size + dstOffset > m_size, "Buffer::CopyBuffer: Destination size is too small");
 

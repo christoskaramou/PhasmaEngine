@@ -11,9 +11,9 @@ namespace pe
     {
     }
 
-    void LightWidget::DrawEmbed(LightsUBO *lights, LightType type, int index)
+    void LightWidget::DrawEmbed(LightSystem *ls, LightType type, int index)
     {
-        if (!lights)
+        if (!ls)
             return;
 
         auto DrawControl = [](const char *label, const char *icon, auto drawWork)
@@ -59,19 +59,22 @@ namespace pe
             ImGui::Columns(2, "DirLightCols", false);
             ImGui::SetColumnWidth(0, 120.0f);
 
-            DirectionalLight &sun = lights->sun;
-            DrawControl("Color", ICON_FA_PALETTE, [&]()
-                        { ImGui::ColorEdit3("##Color", &sun.color[0]); });
-            DrawControl("Intensity", ICON_FA_BOLT, [&]()
-                        { ImGui::DragFloat("##Intensity", &sun.color.w, 0.1f, 0.0f, 100.0f); });
-            DrawControl("Direction", ICON_FA_LOCATION_ARROW, [&]()
-                        { DrawVec3Inputs(&sun.direction[0]); });
+            if (!ls->GetDirectionalLights().empty())
+            {
+                DirectionalLight &light = ls->GetDirectionalLights()[0];
+                DrawControl("Color", ICON_FA_PALETTE, [&]()
+                            { ImGui::ColorEdit3("##Color", &light.color[0]); });
+                DrawControl("Intensity", ICON_FA_BOLT, [&]()
+                            { ImGui::DragFloat("##Intensity", &light.color.w, 0.1f, 0.0f, 100.0f); });
+                DrawControl("Direction", ICON_FA_LOCATION_ARROW, [&]()
+                            { DrawVec3Inputs(&light.direction[0]); });
+            }
 
             ImGui::Columns(1);
         }
         else if (type == LightType::Point)
         {
-            if (index < 0 || index >= MAX_POINT_LIGHTS)
+            if (index < 0 || index >= (int)ls->GetPointLights().size())
                 return;
 
             ImGui::Text(ICON_FA_LIGHTBULB "  Point Light %d", index);
@@ -80,7 +83,7 @@ namespace pe
             ImGui::Columns(2, "PointLightCols", false);
             ImGui::SetColumnWidth(0, 120.0f);
 
-            PointLight &light = lights->pointLights[index];
+            PointLight &light = ls->GetPointLights()[index];
             DrawControl("Color", ICON_FA_PALETTE, [&]()
                         { ImGui::ColorEdit3("##Color", &light.color[0]); });
             DrawControl("Intensity", ICON_FA_BOLT, [&]()
@@ -94,7 +97,7 @@ namespace pe
         }
         else if (type == LightType::Spot)
         {
-            if (index < 0 || index >= MAX_SPOT_LIGHTS)
+            if (index < 0 || index >= (int)ls->GetSpotLights().size())
                 return;
 
             ImGui::Text(ICON_FA_LIGHTBULB "  Spot Light %d", index);
@@ -103,7 +106,7 @@ namespace pe
             ImGui::Columns(2, "SpotLightCols", false);
             ImGui::SetColumnWidth(0, 120.0f);
 
-            SpotLight &light = lights->spotLights[index];
+            SpotLight &light = ls->GetSpotLights()[index];
 
             // Spot Light Controls
             DrawControl("Color", ICON_FA_PALETTE, [&]()
@@ -143,7 +146,7 @@ namespace pe
         }
         else if (type == LightType::Area)
         {
-            if (index < 0 || index >= MAX_AREA_LIGHTS)
+            if (index < 0 || index >= (int)ls->GetAreaLights().size())
                 return;
 
             ImGui::Text(ICON_FA_LIGHTBULB "  Area Light %d", index);
@@ -152,7 +155,7 @@ namespace pe
             ImGui::Columns(2, "AreaLightCols", false);
             ImGui::SetColumnWidth(0, 120.0f);
 
-            AreaLight &light = lights->areaLights[index];
+            AreaLight &light = ls->GetAreaLights()[index];
 
             // Area Light Controls
             DrawControl("Color", ICON_FA_PALETTE, [&]()

@@ -51,17 +51,30 @@ PS_OUTPUT_Color mainPS(PS_INPUT_UV input)
 
     if (cb_shadows)
     {
-        float shadow = CalculateShadows(wolrdPos, length(wolrdPos - cb_camPos.xyz), dot(normal, cb_sun.direction.xyz));
-        fragColor += DirectLight(material, wolrdPos, cb_camPos.xyz, normal, occlusion, shadow, energyCompensation);
+        // Shadow only for the first directional light for now, or need to handle cascades for multiple
+        float shadow = CalculateShadows(wolrdPos, length(wolrdPos - cb_camPos.xyz), dot(normal, LoadDirectionalLight(0).direction.xyz));
+        
+        for (uint i = 0; i < cb_numDirectionalLights; ++i)
+        {
+            DirectionalLight light = LoadDirectionalLight(i);
+            // Use shadow only for the first one for now or all if they share shadow map (unlikely)
+            float s = (i == 0) ? shadow : 1.0; 
+            fragColor += DirectLight(light, material, wolrdPos, cb_camPos.xyz, normal, occlusion, s, energyCompensation);
+        }
+    }
+    else
+    {
+         for (uint i = 0; i < cb_numDirectionalLights; ++i)
+            fragColor += DirectLight(LoadDirectionalLight(i), material, wolrdPos, cb_camPos.xyz, normal, occlusion, 1.0, energyCompensation);
     }
 
-    for (int i = 0; i < pc.num_point_lights; ++i)
+    for (uint i = 0; i < cb_numPointLights; ++i)
         fragColor += ComputePointLight(i, material, wolrdPos, cb_camPos.xyz, normal, occlusion, energyCompensation);
 
-    for (int j = 0; j < pc.num_spot_lights; ++j)
+    for (uint j = 0; j < cb_numSpotLights; ++j)
         fragColor += ComputeSpotLight(j, material, wolrdPos, cb_camPos.xyz, normal, occlusion, energyCompensation);
 
-    for (int k = 0; k < pc.num_area_lights; ++k)
+    for (uint k = 0; k < cb_numAreaLights; ++k)
         fragColor += ComputeAreaLight(k, material, wolrdPos, cb_camPos.xyz, normal, occlusion, energyCompensation);
 
     // Image Based Lighting

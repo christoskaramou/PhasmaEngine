@@ -14,19 +14,24 @@ TexSamplerDecl(0, 0, Depth)
 TexSamplerDecl(1, 0, Normal)
 TexSamplerDecl(2, 0, Albedo)
 TexSamplerDecl(3, 0, MetRough)
-[[vk::binding(4, 0)]] cbuffer Lights
+[[vk::binding(4, 0)]] cbuffer LightSystemUBO
 {
-    float4 cb_camPos;
-    DirectionalLight cb_sun;
-    PointLight cb_pointLights[MAX_POINT_LIGHTS];
-    SpotLight  cb_spotLights[MAX_SPOT_LIGHTS];
-    AreaLight  cb_areaLights[MAX_AREA_LIGHTS];
+
+    uint cb_numDirectionalLights;
+    uint cb_numPointLights;
+    uint cb_numSpotLights;
+    uint cb_numAreaLights;
+    uint cb_offsetDirectionalLights;
+    uint cb_offsetPointLights;
+    uint cb_offsetSpotLights;
+    uint cb_offsetAreaLights;
 };
 TexSamplerDecl(5, 0, Ssao)
 TexSamplerDecl(6, 0, Emission)
-[[vk::binding(7, 0)]] cbuffer LightBuffer
+[[vk::binding(7, 0)]] cbuffer PassUBO
 {
     float4x4    cb_invViewProj;
+    float4      cb_camPos;
     uint        cb_ssao;
     uint        cb_ssr;
     uint        cb_tonemapping;
@@ -34,12 +39,12 @@ TexSamplerDecl(6, 0, Emission)
     uint        cb_IBL;
     float       cb_IBL_intensity;
     float       cb_lightsIntensity;
-    float       cb_lightsRange;
     uint        cb_shadows;
     uint        cb_use_Disney_PBR;
 };
 TexSamplerDecl(8, 0, Transparency)
 TexSamplerDecl(9, 0, LutIBL)
+[[vk::binding(10, 0)]] ByteAddressBuffer LightsBuffer;
 
 // Set 1
 [[vk::binding(0, 1)]] cbuffer shadow_buffer {float4x4 cb_cascades[SHADOWMAP_CASCADES];};
@@ -48,6 +53,46 @@ TexSamplerDecl(9, 0, LutIBL)
 
  // Set 2
  CubeSamplerDecl(0, 2, Cube)
+
+// Helper functions for loading lights
+DirectionalLight LoadDirectionalLight(uint index)
+{
+    uint offset = cb_offsetDirectionalLights + index * 32;
+    DirectionalLight light;
+    light.color = asfloat(LightsBuffer.Load4(offset));
+    light.direction = asfloat(LightsBuffer.Load4(offset + 16));
+    return light;
+}
+
+PointLight LoadPointLight(uint index)
+{
+    uint offset = cb_offsetPointLights + index * 32;
+    PointLight light;
+    light.color = asfloat(LightsBuffer.Load4(offset));
+    light.position = asfloat(LightsBuffer.Load4(offset + 16));
+    return light;
+}
+
+SpotLight LoadSpotLight(uint index)
+{
+    uint offset = cb_offsetSpotLights + index * 48;
+    SpotLight light;
+    light.color = asfloat(LightsBuffer.Load4(offset));
+    light.position = asfloat(LightsBuffer.Load4(offset + 16));
+    light.rotation = asfloat(LightsBuffer.Load4(offset + 32));
+    return light;
+}
+
+AreaLight LoadAreaLight(uint index)
+{
+    uint offset = cb_offsetAreaLights + index * 64;
+    AreaLight light;
+    light.color = asfloat(LightsBuffer.Load4(offset));
+    light.position = asfloat(LightsBuffer.Load4(offset + 16));
+    light.rotation = asfloat(LightsBuffer.Load4(offset + 32));
+    light.size = asfloat(LightsBuffer.Load4(offset + 48));
+    return light;
+}
 
 static const float2 poissonDisk[8] = {
     float2(0.493393f, 0.394269f),
@@ -165,12 +210,12 @@ float CalculateShadows(float3 worldPos, float depth, float NdL)
     return shadow;
 }
 
-float3 DirectLight(Material material, float3 worldPos, float3 cameraPos, float3 materialNormal, float occlusion, float shadow, float3 energyCompensation)
+float3 DirectLight(DirectionalLight light, Material material, float3 worldPos, float3 cameraPos, float3 materialNormal, float occlusion, float shadow, float3 energyCompensation)
 {
     float roughness = max(material.roughness, 0.04);
 
     // Compute directional light.
-    float3 lightDir = cb_sun.direction.xyz;
+    float3 lightDir = light.direction.xyz;
     float3 L        = lightDir;
     float3 V        = normalize(cameraPos - worldPos);
     float3 H        = normalize(V + L);
@@ -187,9 +232,9 @@ float3 DirectLight(Material material, float3 worldPos, float3 cameraPos, float3 
     // Specular
     float3 specRef;
     if (cb_use_Disney_PBR)
-        specRef = cb_sun.color.xyz * NoL * shadow * CookTorranceSpecular_Disney(N, H, NoL, NoV, specularFresnel, roughness);
+        specRef = light.color.xyz * NoL * shadow * CookTorranceSpecular_Disney(N, H, NoL, NoV, specularFresnel, roughness);
     else
-        specRef = cb_sun.color.xyz * NoL * shadow * CookTorranceSpecular_GSchlick(N, H, NoL, NoV, specularFresnel, roughness);
+        specRef = light.color.xyz * NoL * shadow * CookTorranceSpecular_GSchlick(N, H, NoL, NoV, specularFresnel, roughness);
     
     specRef *= energyCompensation;
     
@@ -199,24 +244,25 @@ float3 DirectLight(Material material, float3 worldPos, float3 cameraPos, float3 
     {
         float LoH = clamp(dot(L, H), 0.001, 1.0);
         float3 disneyDiffuse = DisneyDiffuse(material.albedo, NoV, NoL, LoH, roughness);
-        diffRef = cb_sun.color.xyz * NoL * shadow * (1.0 - specularFresnel) * disneyDiffuse;
+        diffRef = light.color.xyz * NoL * shadow * (1.0 - specularFresnel) * disneyDiffuse;
     }
     else
     {
-        diffRef = cb_sun.color.xyz * NoL * shadow * (1.0 - specularFresnel) * (material.albedo / PI);
+        diffRef = light.color.xyz * NoL * shadow * (1.0 - specularFresnel) * (material.albedo / PI);
     }
 
     float3 reflectedLight   = specRef;
     float3 diffuseLight     = diffRef * (1.0 - material.metallic) * occlusion;
     float3 lighting         = reflectedLight + diffuseLight;
 
-    return lighting * cb_sun.color.a;
+    return lighting * light.color.a;
 }
 
 float3 ComputePointLight(int lightIndex, Material material, float3 worldPos, float3 cameraPos, float3 materialNormal, float occlusion, float3 energyCompensation)
 {
-    float3 lightDirFull = worldPos - cb_pointLights[lightIndex].position.xyz; // position is .xyz
-    float  range        = cb_pointLights[lightIndex].position.w; // radius is .w
+    PointLight light = LoadPointLight(lightIndex);
+    float3 lightDirFull = worldPos - light.position.xyz; // position is .xyz
+    float  range        = light.position.w; // radius is .w
     float  lightDist    = max(0.1, length(lightDirFull));
 
     if (lightDist > range) // max range
@@ -227,8 +273,8 @@ float3 ComputePointLight(int lightIndex, Material material, float3 worldPos, flo
     attenuation             = max(0.0, attenuation);  // Clamp to [0, 1]
     attenuation             *= attenuation; // Quadratic fall-off
     float3 lightDir         = normalize(-lightDirFull);
-    float3 pointColor       = cb_pointLights[lightIndex].color.xyz * attenuation; // color is .xyz
-    pointColor              *= cb_pointLights[lightIndex].color.w * cb_lightsIntensity; // intensity is .w
+    float3 pointColor       = light.color.xyz * attenuation; // color is .xyz
+    pointColor              *= light.color.w * cb_lightsIntensity; // intensity is .w
 
     float roughness = max(material.roughness, 0.04);
 
@@ -277,17 +323,18 @@ float3 ComputePointLight(int lightIndex, Material material, float3 worldPos, flo
 
 float3 ComputeSpotLight(int lightIndex, Material material, float3 worldPos, float3 cameraPos, float3 materialNormal, float occlusion, float3 energyCompensation)
 {
-    float3 lightPos = cb_spotLights[lightIndex].position.xyz; // .xyz
+    SpotLight light = LoadSpotLight(lightIndex);
+    float3 lightPos = light.position.xyz; // .xyz
     float3 lightDirFull = worldPos - lightPos;
-    float  range        = cb_spotLights[lightIndex].position.w; // range is .w
+    float  range        = light.position.w; // range is .w
     float  lightDist    = max(0.1, length(lightDirFull));
 
     if (lightDist > range)
         return 0.0;
 
     // Compute spot direction from Rotation (Pitch, Yaw)
-    float p = radians(cb_spotLights[lightIndex].rotation.x);
-    float y = radians(cb_spotLights[lightIndex].rotation.y);
+    float p = radians(light.rotation.x);
+    float y = radians(light.rotation.y);
     
     // Convert to Direction Vector
     float3 spotDir;
@@ -304,8 +351,8 @@ float3 ComputeSpotLight(int lightIndex, Material material, float3 worldPos, floa
     float theta = dot(-L, spotDir);
 
     // Cone attenuation and Falloff
-    float cutoffCos = cos(radians(cb_spotLights[lightIndex].rotation.z)); // Angle is .z
-    float outerCutoffCos = cos(radians(cb_spotLights[lightIndex].rotation.z + cb_spotLights[lightIndex].rotation.w)); // Falloff is .w
+    float cutoffCos = cos(radians(light.rotation.z)); // Angle is .z
+    float outerCutoffCos = cos(radians(light.rotation.z + light.rotation.w)); // Falloff is .w
     
     if (theta < outerCutoffCos) // Check against outer cutoff
         return 0.0;
@@ -319,8 +366,8 @@ float3 ComputeSpotLight(int lightIndex, Material material, float3 worldPos, floa
     attenuation             = max(0.0, attenuation);
     attenuation             *= attenuation;
 
-    float3 spotColor = cb_spotLights[lightIndex].color.xyz * attenuation * spotIntensity;
-    spotColor       *= cb_spotLights[lightIndex].color.w * cb_lightsIntensity; // intensity is .w
+    float3 spotColor = light.color.xyz * attenuation * spotIntensity;
+    spotColor       *= light.color.w * cb_lightsIntensity; // intensity is .w
 
     float roughness = max(material.roughness, 0.04);
     float3 V = normalize(cameraPos - worldPos);
@@ -362,14 +409,15 @@ float3 ComputeSpotLight(int lightIndex, Material material, float3 worldPos, floa
 
 float3 ComputeAreaLight(int lightIndex, Material material, float3 worldPos, float3 cameraPos, float3 materialNormal, float occlusion, float3 energyCompensation)
 {
-    float3 lightPos = cb_areaLights[lightIndex].position.xyz;
-    float  range    = cb_areaLights[lightIndex].position.w;
-    float width     = cb_areaLights[lightIndex].size.x;
-    float height    = cb_areaLights[lightIndex].size.y;
+    AreaLight light = LoadAreaLight(lightIndex);
+    float3 lightPos = light.position.xyz;
+    float  range    = light.position.w;
+    float width     = light.size.x;
+    float height    = light.size.y;
 
     // 1. Calculate orientation
-    float p = radians(cb_areaLights[lightIndex].rotation.x);
-    float y = radians(cb_areaLights[lightIndex].rotation.y);
+    float p = radians(light.rotation.x);
+    float y = radians(light.rotation.y);
     
     // Light Vectors
     float3 lightForward;
@@ -444,7 +492,7 @@ float3 ComputeAreaLight(int lightIndex, Material material, float3 worldPos, floa
     float lightOutputCos = dot(-L, lightForward);
     if (lightOutputCos <= 0.0) return 0.0;
 
-    float3 areaColor = cb_areaLights[lightIndex].color.xyz * cb_areaLights[lightIndex].color.w * cb_lightsIntensity * attenuation * lightOutputCos;
+    float3 areaColor = light.color.xyz * light.color.w * cb_lightsIntensity * attenuation * lightOutputCos;
 
     // Standard PBR ...
     float roughness = max(material.roughness, 0.04);

@@ -5,17 +5,16 @@
 
 namespace pe
 {
-    constexpr uint32_t MAX_POINT_LIGHTS = 10;
-    constexpr uint32_t MAX_SPOT_LIGHTS = 10;
-    constexpr uint32_t MAX_AREA_LIGHTS = 10;
-
     struct LightsUBO
     {
-        vec4 camPos;
-        DirectionalLight sun;
-        PointLight pointLights[MAX_POINT_LIGHTS];
-        SpotLight spotLights[MAX_SPOT_LIGHTS];
-        AreaLight areaLights[MAX_AREA_LIGHTS];
+        uint32_t numDirectionalLights;
+        uint32_t numPointLights;
+        uint32_t numSpotLights;
+        uint32_t numAreaLights;
+        uint32_t offsetDirectionalLights;
+        uint32_t offsetPointLights;
+        uint32_t offsetSpotLights;
+        uint32_t offsetAreaLights;
     };
 
     class Buffer;
@@ -31,10 +30,21 @@ namespace pe
         void Destroy() override;
 
         Buffer *GetUniform(uint32_t frame) { return m_uniforms[frame]; }
+        Buffer *GetStorage(uint32_t frame) { return m_storageBuffers[frame]; }
         LightsUBO *GetLights() { return &m_lubo; }
+        std::vector<DirectionalLight> &GetDirectionalLights() { return m_directionalLights; }
+        std::vector<PointLight> &GetPointLights() { return m_pointLights; }
+        std::vector<SpotLight> &GetSpotLights() { return m_spotLights; }
+        std::vector<AreaLight> &GetAreaLights() { return m_areaLights; }
 
     private:
         LightsUBO m_lubo;
         std::vector<Buffer *> m_uniforms;
+        std::vector<Buffer *> m_storageBuffers;
+
+        std::vector<DirectionalLight> m_directionalLights;
+        std::vector<PointLight> m_pointLights;
+        std::vector<SpotLight> m_spotLights;
+        std::vector<AreaLight> m_areaLights;
     };
 } // namespace pe
