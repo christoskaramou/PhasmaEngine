@@ -109,7 +109,8 @@ namespace pe
         if (SelectionManager::Instance().GetSelectedModel() == model)
             SelectionManager::Instance().ClearSelection();
 
-        m_models.erase(model->GetId());
+        if (m_models.erase(model->GetId()))
+            delete model;
     }
 
     void Scene::UploadBuffers(CommandBuffer *cmd)
@@ -595,6 +596,10 @@ namespace pe
                 MeshInfo &meshInfo = model.GetMeshInfos()[mesh];
                 nodeInfo.ubo.materialFactors[0] = meshInfo.materialFactors[0];
                 nodeInfo.ubo.materialFactors[1] = meshInfo.materialFactors[1];
+
+                // Override alphaCutoff in the UBO copy if not AlphaCut
+                if (meshInfo.renderType != RenderType::AlphaCut)
+                    nodeInfo.ubo.materialFactors[0][2][2] = 0.0f;
 
                 range.data = &nodeInfo.ubo;
                 range.size = meshInfo.dataSize;

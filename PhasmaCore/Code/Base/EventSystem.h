@@ -15,6 +15,7 @@ namespace pe
         AfterCommandWait,
         DynamicRendering,
         ModelLoaded,
+        ModelRemoved,
         SetRenderMode,
     };
 

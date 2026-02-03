@@ -138,7 +138,10 @@ namespace pe
             }
 
             if (ImGui::DragFloat("Alpha Cutoff", &mesh->alphaCutoff, 0.01f, 0.0f, 1.0f))
+            {
+                mesh->materialFactors[0][2].z = mesh->alphaCutoff;
                 changed = true;
+            }
 
             ImGui::Separator();
             ImGui::Text("Factors");
@@ -151,18 +154,19 @@ namespace pe
                 changed = true;
             }
 
-            // Metallic / Roughness (Packed in Factor 1, Col 0)
-            float metallic = mesh->materialFactors[1][0].x;
-            float roughness = mesh->materialFactors[1][0].y;
+            // Metallic / Roughness / AlphaCutoff (Packed in Factor 0, Col 2)
+            float metallic = mesh->materialFactors[0][2].x;
+            float roughness = mesh->materialFactors[0][2].y;
+            float alphaCutoff = mesh->materialFactors[0][2].z; // Also packed here
 
             if (ImGui::SliderFloat("Metallic", &metallic, 0.0f, 1.0f))
             {
-                mesh->materialFactors[1][0].x = metallic;
+                mesh->materialFactors[0][2].x = metallic;
                 changed = true;
             }
             if (ImGui::SliderFloat("Roughness", &roughness, 0.0f, 1.0f))
             {
-                mesh->materialFactors[1][0].y = roughness;
+                mesh->materialFactors[0][2].y = roughness;
                 changed = true;
             }
 
