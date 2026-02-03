@@ -26,6 +26,7 @@ namespace pe
         std::vector<Define> defines = {
             Define{"MAX_POINT_LIGHTS", std::to_string(MAX_POINT_LIGHTS)},
             Define{"MAX_SPOT_LIGHTS", std::to_string(MAX_SPOT_LIGHTS)},
+            Define{"MAX_AREA_LIGHTS", std::to_string(MAX_AREA_LIGHTS)},
         };
 
         // Shaders
@@ -189,6 +190,7 @@ namespace pe
         cmd->BindPipeline(*m_passInfo);
         cmd->SetConstantAt(0, MAX_POINT_LIGHTS);
         cmd->SetConstantAt(1, MAX_SPOT_LIGHTS);
+        cmd->SetConstantAt(2, MAX_AREA_LIGHTS);
         cmd->PushConstants();
         cmd->TraceRays(m_display->GetWidth(), m_display->GetHeight(), 1);
         cmd->EndDebugRegion();

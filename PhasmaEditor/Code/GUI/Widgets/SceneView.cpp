@@ -267,6 +267,15 @@ namespace pe
         }
     }
 
+    vec3 GetDirectionFromRotation(const vec4 &rotation)
+    {
+        vec3 euler = glm::radians(vec3(-rotation.x, rotation.y, 0.0f));
+        quat q = quat(euler);
+        vec3 dir = q * vec3(0, 0, 1);
+
+        return glm::normalize(dir);
+    }
+
     void SceneView::DrawTransformGizmo(const ImVec2 &imageMin, const ImVec2 &imageSize)
     {
         auto &selection = SelectionManager::Instance();
@@ -359,6 +368,17 @@ namespace pe
 
                 modelMatrix = inverse(lookAt(pos, pos + dir, up));
             }
+            else if (lightType == LightType::Area && lightIndex >= 0 && lightIndex < MAX_AREA_LIGHTS)
+            {
+                vec3 start = vec3(lights->areaLights[lightIndex].position);
+                vec3 dir = GetDirectionFromRotation(lights->areaLights[lightIndex].rotation);
+
+                vec3 up = vec3(0, 1, 0);
+                if (abs(dot(dir, up)) > 0.99f)
+                    up = vec3(1, 0, 0);
+
+                modelMatrix = inverse(lookAt(start, start + dir, up));
+            }
         }
         else
         {
@@ -406,6 +426,21 @@ namespace pe
                     // Directional light position doesn't matter, only rotation
                     vec3 newDir = rot * vec3(0, 0, -1);
                     lights->sun.direction = vec4(newDir, 0.0f);
+                }
+                else if (lightType == LightType::Area)
+                {
+                    AreaLight &area = lights->areaLights[lightIndex];
+                    area.position = vec4(pos, area.position.w); // update position
+
+                    // Convert Gizmo Rotation (Quat) to Pitch/Yaw
+                    vec3 forward = rot * vec3(0, 0, -1);
+                    if (length(forward) > 0.001f)
+                        forward = normalize(forward);
+
+                    float pitch = degrees(asin(forward.y));
+                    float yaw = degrees(atan2(forward.x, forward.z));
+
+                    area.rotation = vec4(pitch, yaw, area.rotation.z, area.rotation.w);
                 }
             }
             else
@@ -603,6 +638,69 @@ namespace pe
                             drawList->AddLine(sP1, sP2, gizmoColor, 1.0f);
                         }
                     }
+                    else if (type == LightType::Area)
+                    {
+                        float width = lights->areaLights[index].size.x;
+                        float height = lights->areaLights[index].size.y;
+                        vec3 dir = GetDirectionFromRotation(lights->areaLights[index].rotation);
+
+                        vec3 right = glm::normalize(glm::cross(dir, vec3(0, 1, 0)));
+                        if (glm::length(right) < 0.001f)
+                            right = glm::normalize(glm::cross(dir, vec3(1, 0, 0)));
+                        vec3 up = glm::normalize(glm::cross(right, dir));
+
+                        vec3 center = pos;
+                        vec3 p1 = center + (right * width * 0.5f) + (up * height * 0.5f);
+                        vec3 p2 = center - (right * width * 0.5f) + (up * height * 0.5f);
+                        vec3 p3 = center - (right * width * 0.5f) - (up * height * 0.5f);
+                        vec3 p4 = center + (right * width * 0.5f) - (up * height * 0.5f);
+
+                        // Draw Rectangle
+                        vec3 pts[4] = {p1, p2, p3, p4};
+                        ImDrawList *drawList = ImGui::GetWindowDrawList();
+
+                        for (int k = 0; k < 4; k++)
+                        {
+                            vec3 pA = pts[k];
+                            vec3 pB = pts[(k + 1) % 4];
+
+                            vec4 clipP1 = viewProj * vec4(pA, 1.0f);
+                            vec4 clipP2 = viewProj * vec4(pB, 1.0f);
+
+                            if (clipP1.w > 0 && clipP2.w > 0)
+                            {
+                                vec2 ndcP1 = vec2(clipP1) / clipP1.w;
+                                vec2 ndcP2 = vec2(clipP2) / clipP2.w;
+
+                                ImVec2 sP1, sP2;
+                                sP1.x = (ndcP1.x * 0.5f + 0.5f) * imageSize.x + imageMin.x;
+                                sP1.y = (ndcP1.y * 0.5f + 0.5f) * imageSize.y + imageMin.y;
+                                sP2.x = (ndcP2.x * 0.5f + 0.5f) * imageSize.x + imageMin.x;
+                                sP2.y = (ndcP2.y * 0.5f + 0.5f) * imageSize.y + imageMin.y;
+
+                                drawList->AddLine(sP1, sP2, gizmoColor, 2.0f);
+                            }
+                        }
+
+                        // Direction Line
+                        float range = lights->areaLights[index].position.w;
+                        vec3 end = center + dir * range;
+                        vec4 clipP1 = viewProj * vec4(center, 1.0f);
+                        vec4 clipP2 = viewProj * vec4(end, 1.0f);
+
+                        if (clipP1.w > 0 && clipP2.w > 0)
+                        {
+                            vec2 ndcP1 = vec2(clipP1) / clipP1.w;
+                            vec2 ndcP2 = vec2(clipP2) / clipP2.w;
+                            ImVec2 sP1, sP2;
+                            sP1.x = (ndcP1.x * 0.5f + 0.5f) * imageSize.x + imageMin.x;
+                            sP1.y = (ndcP1.y * 0.5f + 0.5f) * imageSize.y + imageMin.y;
+                            sP2.x = (ndcP2.x * 0.5f + 0.5f) * imageSize.x + imageMin.x;
+                            sP2.y = (ndcP2.y * 0.5f + 0.5f) * imageSize.y + imageMin.y;
+
+                            drawList->AddLine(sP1, sP2, gizmoColor, 1.0f);
+                        }
+                    }
                 }
 
                 float scale = isSelected ? 2.0f : 1.0f;
@@ -645,6 +743,12 @@ namespace pe
         for (int i = 0; i < MAX_SPOT_LIGHTS; i++)
         {
             drawIcon(vec3(lights->spotLights[i].position), ICON_FA_LIGHTBULB, LightType::Spot, i);
+        }
+
+        // Area Lights
+        for (int i = 0; i < MAX_AREA_LIGHTS; i++)
+        {
+            drawIcon(vec3(lights->areaLights[i].position), ICON_FA_LIGHTBULB, LightType::Area, i);
         }
     }
 } // namespace pe

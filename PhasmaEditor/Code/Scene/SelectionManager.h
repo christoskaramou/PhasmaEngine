@@ -24,7 +24,8 @@ namespace pe
     {
         Directional,
         Point,
-        Spot
+        Spot,
+        Area
     };
 
     class SelectionManager

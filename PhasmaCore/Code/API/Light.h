@@ -24,4 +24,12 @@ namespace pe
         vec4 position; // .w = range
         vec4 rotation; // .z = angle, .w = falloff
     };
+
+    struct AreaLight
+    {
+        vec4 color;    // .w = intensity
+        vec4 position; // .w = range
+        vec4 rotation; // .x = pitch, .y = yaw, .z/.w unused or for size?
+        vec4 size;     // .x = width, .y = height
+    };
 } // namespace pe

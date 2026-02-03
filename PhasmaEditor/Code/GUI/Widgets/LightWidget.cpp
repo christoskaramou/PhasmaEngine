@@ -141,5 +141,54 @@ namespace pe
 
             ImGui::Columns(1);
         }
+        else if (type == LightType::Area)
+        {
+            if (index < 0 || index >= MAX_AREA_LIGHTS)
+                return;
+
+            ImGui::Text(ICON_FA_LIGHTBULB "  Area Light %d", index);
+            ImGui::Separator();
+
+            ImGui::Columns(2, "AreaLightCols", false);
+            ImGui::SetColumnWidth(0, 120.0f);
+
+            AreaLight &light = lights->areaLights[index];
+
+            // Area Light Controls
+            DrawControl("Color", ICON_FA_PALETTE, [&]()
+                        { ImGui::ColorEdit3("##Color", &light.color[0]); });
+            DrawControl("Intensity", ICON_FA_BOLT, [&]()
+                        { ImGui::DragFloat("##Intensity", &light.color.w, 0.1f, 0.0f, 1000.0f); });
+
+            DrawControl("Position", ICON_FA_ARROWS_ALT, [&]()
+                        {
+                ImGui::PushMultiItemsWidths(3, ImGui::GetContentRegionAvail().x);
+                ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2{2, 0});
+                ImGui::DragFloat("##X", &light.position.x, 0.1f, 0.0f, 0.0f, "X: %.2f"); ImGui::PopItemWidth(); ImGui::SameLine();
+                ImGui::DragFloat("##Y", &light.position.y, 0.1f, 0.0f, 0.0f, "Y: %.2f"); ImGui::PopItemWidth(); ImGui::SameLine();
+                ImGui::DragFloat("##Z", &light.position.z, 0.1f, 0.0f, 0.0f, "Z: %.2f"); ImGui::PopItemWidth();
+                ImGui::PopStyleVar(); });
+
+            DrawControl("Rotation", ICON_FA_SYNC_ALT, [&]()
+                        {
+                ImGui::PushMultiItemsWidths(2, ImGui::GetContentRegionAvail().x);
+                ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2{2, 0});
+                ImGui::DragFloat("##RX", &light.rotation.x, 0.1f, 0.0f, 0.0f, "P: %.2f"); ImGui::PopItemWidth(); ImGui::SameLine();
+                ImGui::DragFloat("##RY", &light.rotation.y, 0.1f, 0.0f, 0.0f, "Y: %.2f"); ImGui::PopItemWidth();
+                ImGui::PopStyleVar(); });
+
+            DrawControl("Range", ICON_FA_EXPAND, [&]()
+                        { ImGui::DragFloat("##Range", &light.position.w, 0.1f, 0.0f, 1000.0f, "%.2f"); });
+
+            DrawControl("Size", ICON_FA_RULER_HORIZONTAL, [&]()
+                        {
+                ImGui::PushMultiItemsWidths(2, ImGui::GetContentRegionAvail().x);
+                ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2{2, 0});
+                ImGui::DragFloat("##W", &light.size.x, 0.1f, 0.0f, 1000.0f, "W: %.2f"); ImGui::PopItemWidth(); ImGui::SameLine();
+                ImGui::DragFloat("##H", &light.size.y, 0.1f, 0.0f, 1000.0f, "H: %.2f"); ImGui::PopItemWidth();
+                ImGui::PopStyleVar(); });
+
+            ImGui::Columns(1);
+        }
     }
 } // namespace pe

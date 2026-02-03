@@ -43,7 +43,8 @@ namespace pe
             Define{"SHADOWMAP_SIZE", std::to_string((float)Settings::Get<GlobalSettings>().shadow_map_size)},
             Define{"SHADOWMAP_TEXEL_SIZE", std::to_string(1.0f / (float)Settings::Get<GlobalSettings>().shadow_map_size)},
             Define{"MAX_POINT_LIGHTS", std::to_string(MAX_POINT_LIGHTS)},
-            Define{"MAX_SPOT_LIGHTS", std::to_string(MAX_SPOT_LIGHTS)}};
+            Define{"MAX_SPOT_LIGHTS", std::to_string(MAX_SPOT_LIGHTS)},
+            Define{"MAX_AREA_LIGHTS", std::to_string(MAX_AREA_LIGHTS)}};
 
         // Opaque light pass
         m_passInfo->name = "lighting_opaque_pipeline";
@@ -180,11 +181,13 @@ namespace pe
 
         cmd->SetConstantAt(0, MAX_POINT_LIGHTS);            // num point lights
         cmd->SetConstantAt(1, MAX_SPOT_LIGHTS);             // num spot lights
-        cmd->SetConstantAt(2, m_viewportRT->GetWidth_f());  // framebuffer width
-        cmd->SetConstantAt(3, m_viewportRT->GetHeight_f()); // framebuffer height
-        cmd->SetConstantAt(4, 0u);                          // is transparent pass
+        cmd->SetConstantAt(2, MAX_AREA_LIGHTS);             // num area lights
+        cmd->SetConstantAt(3, 0u);                          // padding
+        cmd->SetConstantAt(4, m_viewportRT->GetWidth_f());  // framebuffer width
+        cmd->SetConstantAt(5, m_viewportRT->GetHeight_f()); // framebuffer height
+        cmd->SetConstantAt(6, 0u);                          // is transparent pass
         for (uint32_t i = 0; i < shadowmapCascades; i++)
-            cmd->SetConstantAt(i + 5, shadows.m_viewZ[i]); // shadowmap cascade distances
+            cmd->SetConstantAt(i + 7, shadows.m_viewZ[i]); // shadowmap cascade distances
 
         PassBarriers(cmd);
 
@@ -239,7 +242,8 @@ namespace pe
             Define{"SHADOWMAP_SIZE", std::to_string((float)Settings::Get<GlobalSettings>().shadow_map_size)},
             Define{"SHADOWMAP_TEXEL_SIZE", std::to_string(1.0f / (float)Settings::Get<GlobalSettings>().shadow_map_size)},
             Define{"MAX_POINT_LIGHTS", std::to_string(MAX_POINT_LIGHTS)},
-            Define{"MAX_SPOT_LIGHTS", std::to_string(MAX_SPOT_LIGHTS)}};
+            Define{"MAX_SPOT_LIGHTS", std::to_string(MAX_SPOT_LIGHTS)},
+            Define{"MAX_AREA_LIGHTS", std::to_string(MAX_AREA_LIGHTS)}};
 
         m_passInfo->name = "lighting_transparent_pipeline";
         m_passInfo->pVertShader = Shader::Create(Path::Assets + "Shaders/Common/Quad.hlsl", vk::ShaderStageFlagBits::eVertex, "mainVS", std::vector<Define>{}, ShaderCodeType::HLSL);
@@ -371,11 +375,13 @@ namespace pe
 
         cmd->SetConstantAt(0, MAX_POINT_LIGHTS);            // num point lights
         cmd->SetConstantAt(1, MAX_SPOT_LIGHTS);             // num spot lights
-        cmd->SetConstantAt(2, m_viewportRT->GetWidth_f());  // framebuffer width
-        cmd->SetConstantAt(3, m_viewportRT->GetHeight_f()); // framebuffer height
-        cmd->SetConstantAt(4, 1u);                          // transparent pass
+        cmd->SetConstantAt(2, MAX_AREA_LIGHTS);             // num area lights
+        cmd->SetConstantAt(3, 0u);                          // padding
+        cmd->SetConstantAt(4, m_viewportRT->GetWidth_f());  // framebuffer width
+        cmd->SetConstantAt(5, m_viewportRT->GetHeight_f()); // framebuffer height
+        cmd->SetConstantAt(6, 1u);                          // transparent pass
         for (uint32_t i = 0; i < shadowmapCascades; i++)
-            cmd->SetConstantAt(i + 5, shadows.m_viewZ[i]); // shadowmap cascade distances
+            cmd->SetConstantAt(i + 7, shadows.m_viewZ[i]); // shadowmap cascade distances
 
         PassBarriers(cmd);
 
