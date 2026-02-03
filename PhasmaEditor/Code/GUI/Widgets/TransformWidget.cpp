@@ -79,43 +79,83 @@ namespace pe
 
     void TransformWidget::Update()
     {
-        if (!m_open)
-            return;
+    }
 
-        ImGui::Begin("Transform", &m_open);
+    void TransformWidget::DrawEmbed(NodeInfo *nodeInfo)
+    {
+        if (ImGui::CollapsingHeader("Node Info", ImGuiTreeNodeFlags_DefaultOpen))
+        {
+            DrawNodeInfo(nodeInfo);
+        }
 
-        auto &selection = SelectionManager::Instance();
-
-        DrawGizmoModeButtons();
         ImGui::Separator();
 
-        if (!selection.HasSelection())
+        if (ImGui::CollapsingHeader("Transform", ImGuiTreeNodeFlags_DefaultOpen))
         {
-            ImGui::TextDisabled("No object selected");
-            ImGui::End();
-            return;
+            DrawGizmoModeButtons();
+            ImGui::Text("Local Transform");
+            DrawPositionEditor(nodeInfo);
+            DrawRotationEditor(nodeInfo);
+            DrawScaleEditor(nodeInfo);
+        }
+    }
+
+    void TransformWidget::DrawNodeInfo(NodeInfo *node)
+    {
+        char buffer[256];
+        memset(buffer, 0, 256);
+        memcpy(buffer, node->name.c_str(), std::min(node->name.length(), sizeof(buffer) - 1));
+        if (ImGui::InputText("Name", buffer, 256))
+        {
+            node->name = buffer;
         }
 
-        NodeInfo *nodeInfo = selection.GetSelectedNodeInfo();
-        if (!nodeInfo)
+        if (ImGui::BeginTable("NodeInfoTypes", 2, ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg))
         {
-            ImGui::TextDisabled("Invalid selection");
-            ImGui::End();
-            return;
+            ImGui::TableNextRow();
+            ImGui::TableSetColumnIndex(0);
+            ImGui::Text("Parent Index");
+            ImGui::TableSetColumnIndex(1);
+            ImGui::Text("%d", node->parent);
+
+            ImGui::TableNextRow();
+            ImGui::TableSetColumnIndex(0);
+            ImGui::Text("Children Count");
+            ImGui::TableSetColumnIndex(1);
+            ImGui::Text("%zu", node->children.size());
+
+            ImGui::TableNextRow();
+            ImGui::TableSetColumnIndex(0);
+            ImGui::Text("Data Offset");
+            ImGui::TableSetColumnIndex(1);
+            ImGui::Text("%zu", node->dataOffset);
+
+            ImGui::TableNextRow();
+            ImGui::TableSetColumnIndex(0);
+            ImGui::Text("Indirect Index");
+            ImGui::TableSetColumnIndex(1);
+            ImGui::Text("%u", node->indirectIndex);
+
+            ImGui::TableNextRow();
+            ImGui::TableSetColumnIndex(0);
+            ImGui::Text("Instance Index");
+            ImGui::TableSetColumnIndex(1);
+            ImGui::Text("%d", node->instanceIndex);
+
+            ImGui::TableNextRow();
+            ImGui::TableSetColumnIndex(0);
+            ImGui::Text("Is Dirty");
+            ImGui::TableSetColumnIndex(1);
+            ImGui::Text("%s", node->dirty ? "true" : "false");
+
+            ImGui::EndTable();
         }
 
-        if (!nodeInfo->name.empty())
+        if (ImGui::CollapsingHeader("World AABB"))
         {
-            ImGui::Text("Node: %s", nodeInfo->name.c_str());
-            ImGui::Separator();
+            ImGui::LabelText("Min", "(%.2f, %.2f, %.2f)", node->worldBoundingBox.min.x, node->worldBoundingBox.min.y, node->worldBoundingBox.min.z);
+            ImGui::LabelText("Max", "(%.2f, %.2f, %.2f)", node->worldBoundingBox.max.x, node->worldBoundingBox.max.y, node->worldBoundingBox.max.z);
         }
-
-        ImGui::Text("Local Transform");
-        DrawPositionEditor(nodeInfo);
-        DrawRotationEditor(nodeInfo);
-        DrawScaleEditor(nodeInfo);
-
-        ImGui::End();
     }
 
     void TransformWidget::DrawGizmoModeButtons()

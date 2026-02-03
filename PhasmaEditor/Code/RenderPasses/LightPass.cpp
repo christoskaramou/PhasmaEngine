@@ -122,7 +122,7 @@ namespace pe
     {
         const auto &gSettings = Settings::Get<GlobalSettings>();
 
-        Camera *camera = GetGlobalSystem<RendererSystem>()->GetScene().GetCamera(0);
+        Camera *camera = GetGlobalSystem<RendererSystem>()->GetScene().GetActiveCamera();
 
         m_ubo.invViewProj = camera->GetInvViewProjection();
         m_ubo.ssao = gSettings.ssao;
@@ -317,7 +317,7 @@ namespace pe
     {
         const auto &gSettings = Settings::Get<GlobalSettings>();
 
-        Camera *camera = GetGlobalSystem<RendererSystem>()->GetScene().GetCamera(0);
+        Camera *camera = GetGlobalSystem<RendererSystem>()->GetScene().GetActiveCamera();
 
         m_ubo.invViewProj = camera->GetInvViewProjection();
         m_ubo.ssao = gSettings.ssao;

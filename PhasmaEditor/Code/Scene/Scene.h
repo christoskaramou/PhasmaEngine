@@ -34,6 +34,7 @@ namespace pe
         void RemoveModel(Model *model);
 
         ParticleManager *GetParticleManager() { return m_particleManager; }
+        Camera *GetActiveCamera() { return m_cameras.at(0); }
         Camera *GetCamera(int index) const { return m_cameras.at(index); }
         OrderedMap<size_t, Model *> &GetModels() { return m_models; }
         const OrderedMap<size_t, Model *> &GetModels() const { return m_models; }

@@ -98,7 +98,7 @@ namespace pe
         // Update Push Constants
         if (m_scene)
         {
-            Camera *camera = m_scene->GetCamera(0); // Assuming main camera
+            Camera *camera = m_scene->GetActiveCamera();
             if (camera)
             {
                 pc.cameraPosition = vec4(camera->GetPosition(), 1.0f);

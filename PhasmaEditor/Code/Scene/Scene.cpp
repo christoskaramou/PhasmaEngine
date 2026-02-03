@@ -410,8 +410,6 @@ namespace pe
         for (auto &modelPtr : m_models)
         {
             Model &model = *modelPtr;
-            for (auto &storage : m_storages)
-                model.SetMeshFactors(storage);
 
             for (Image *image : model.GetImages())
             {
@@ -1026,8 +1024,8 @@ namespace pe
 
             const auto &meshInfo = req.model ? req.model->GetMeshInfos()[req.meshIndex] : MeshInfo{};
             bool isTransparent = req.model && (meshInfo.renderType == RenderType::AlphaBlend ||
-                                 meshInfo.renderType == RenderType::Transmission ||
-                                 meshInfo.renderType == RenderType::AlphaCut);
+                                               meshInfo.renderType == RenderType::Transmission ||
+                                               meshInfo.renderType == RenderType::AlphaCut);
 
             gpuInstances[i].transform = transformMatrix;
             gpuInstances[i].instanceCustomIndex = static_cast<uint32_t>(i);
@@ -1087,7 +1085,8 @@ namespace pe
                 meshInfoGPU.indexOffset = 0;
                 meshInfoGPU.vertexOffset = 0;
                 meshInfoGPU.renderType = 0;
-                for (int k = 0; k < 5; k++) meshInfoGPU.textures[k] = -1;
+                for (int k = 0; k < 5; k++)
+                    meshInfoGPU.textures[k] = -1;
             }
         }
         m_meshInfoBuffer->Flush();

@@ -13,13 +13,15 @@
 #include "RenderPasses/LightPass.h"
 #include "Scene/Model.h"
 #include "Systems/RendererSystem.h"
-#include "Widgets/AssetViewer.h"
+#include "Widgets/AssetInfo.h"
 #include "Widgets/CameraWidget.h"
 #include "Widgets/Console.h"
 #include "Widgets/FileBrowser.h"
 #include "Widgets/FileSelector.h"
+#include "Widgets/GlobalWidget.h"
 #include "Widgets/Hierarchy.h"
 #include "Widgets/Loading.h"
+#include "Widgets/MeshWidget.h"
 #include "Widgets/Metrics.h"
 #include "Widgets/Models.h"
 #include "Widgets/Particles.h"
@@ -28,6 +30,7 @@
 #include "Widgets/TransformWidget.h"
 #include "imgui/imgui_impl_sdl2.h"
 #include "imgui/imgui_impl_vulkan.h"
+
 
 namespace pe
 {
@@ -208,14 +211,14 @@ namespace pe
         ImGui::DockBuilderDockWindow("Models", dockLeft);
         ImGui::DockBuilderDockWindow("Hierarchy", dockLeft);
 
-        // Right - Global Properties
-        ImGui::DockBuilderDockWindow("Global Properties", dockRight);
+        // Right - Global Properties and Properties
+        ImGui::DockBuilderDockWindow("Global", dockRight);
+        ImGui::DockBuilderDockWindow("Properties", dockRight);
         ImGui::DockBuilderDockWindow("Camera", dockRight);
-        ImGui::DockBuilderDockWindow("Transform", dockRight);
 
         // Bottom - Console, Asset Viewer, File Browser (Tabbed)
         ImGui::DockBuilderDockWindow("Console", dockBottom);
-        ImGui::DockBuilderDockWindow("Asset Viewer", dockBottom);
+        ImGui::DockBuilderDockWindow("Asset Info", dockBottom);
         ImGui::DockBuilderDockWindow("File Browser", dockBottom);
 
         ImGui::DockBuilderFinish(dockspace);
@@ -529,7 +532,7 @@ namespace pe
         auto properties = std::make_shared<Properties>();
         auto metrics = std::make_shared<Metrics>();
         auto models = std::make_shared<Models>();
-        auto assetViewer = std::make_shared<AssetViewer>();
+        auto assetInfo = std::make_shared<AssetInfo>();
         auto sceneView = std::make_shared<SceneView>();
         auto loading = std::make_shared<Loading>();
         auto fileBrowser = std::make_shared<FileBrowser>();
@@ -539,16 +542,19 @@ namespace pe
         auto cameraWidget = std::make_shared<CameraWidget>();
         auto console = std::make_shared<Console>();
         auto transformWidget = std::make_shared<TransformWidget>();
+        auto meshWidget = std::make_shared<MeshWidget>();
+        auto globalWidget = std::make_shared<GlobalWidget>();
 
         // Console added early to potentially influence tab ordering (Leftmost)
-        m_widgets = {console, properties, metrics, models, assetViewer, sceneView, loading, fileBrowser, fileSelector, hierarchy, particles, cameraWidget, transformWidget};
+        m_widgets = {console, properties, metrics, models, assetInfo, sceneView, loading, fileBrowser, fileSelector, hierarchy, particles, cameraWidget, transformWidget, meshWidget, globalWidget};
 
         // Initialize Core Logging and attach Console
         Log::Attach([console](const std::string &msg, LogType type)
                     { console->AddLog(type, "%s", msg.c_str()); });
 
         // Populate Menu Vectors
-        m_menuWindowWidgets = {console, metrics, properties, models, assetViewer, sceneView, fileBrowser, hierarchy, particles, cameraWidget, transformWidget};
+        m_menuWindowWidgets = {console, metrics, properties, models, assetInfo, sceneView, fileBrowser, hierarchy, particles, cameraWidget, globalWidget};
+        m_menuAssetsWidgets = {};
         m_menuAssetsWidgets = {};
         for (auto &widget : m_widgets)
             widget->Init(this);

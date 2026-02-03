@@ -68,7 +68,7 @@ namespace pe
             return;
 
         auto &gSettings = Settings::Get<GlobalSettings>();
-        Camera &camera = *GetGlobalSystem<RendererSystem>()->GetScene().GetCamera(0);
+        Camera &camera = *GetGlobalSystem<RendererSystem>()->GetScene().GetActiveCamera();
         ShadowPass *shadows = GetGlobalComponent<ShadowPass>();
 
         struct PushConstants_AABB

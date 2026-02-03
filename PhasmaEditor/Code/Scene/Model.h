@@ -10,42 +10,25 @@ namespace pe
     class CommandBuffer;
     class Image;
 
-    struct MaterialInfo
-    {
-        vk::PrimitiveTopology topology;
-        vk::CullModeFlags cullMode;
-        bool alphaBlend;
-    };
-
     struct MeshInfo
     {
-        size_t dataOffset = static_cast<size_t>(-1);
         const size_t dataSize = sizeof(mat4) * 4; // transform, previous transform, material factors (2x)
         bool cull = true;
-
         uint32_t vertexOffset = 0, verticesCount = 0; // offset and count in used vertex buffer
         uint32_t indexOffset = 0, indicesCount = 0;   // offset and count in used index buffer
         uint32_t indirectIndex = 0;                   // index of the indirect command of the mesh in the indirect buffer
         uint32_t positionsOffset = 0;
-
         size_t aabbVertexOffset = 0;
         uint32_t aabbColor = 0;
-
-        vec4 boundingSphere = vec4(0.f);
         AABB boundingBox;
-        AABB worldBoundingBox;
-
         RenderType renderType;
 
         Image *images[5]{nullptr};
         Sampler *samplers[5]{nullptr};
         uint32_t textureMask = 0;
 
-        MaterialInfo materialInfo;
         mat4 materialFactors[2] = {mat4(1.f), mat4(1.f)};
         float alphaCutoff = 0.5f;
-
-        size_t GetMeshFactorsOffset() const { return dataOffset + dataSize; }
 
     private:
         friend class Scene;
@@ -95,7 +78,6 @@ namespace pe
         // Common interface methods
         void MarkDirty(int node);
         void UpdateNodeMatrices();
-        void SetMeshFactors(Buffer *buffer);
         Image *LoadTexture(CommandBuffer *cmd, const std::filesystem::path &texturePath);
         Image *GetTextureFromCache(const std::filesystem::path &texturePath) const;
 

@@ -14,7 +14,7 @@ namespace pe
         if (!m_open)
             return;
 
-        Camera *camera = GetGlobalSystem<RendererSystem>()->GetScene().GetCamera(0);
+        Camera *camera = GetGlobalSystem<RendererSystem>()->GetScene().GetActiveCamera();
         if (!camera)
             return;
 

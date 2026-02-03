@@ -57,7 +57,7 @@ namespace pe
     void MotionBlurPass::ExecutePass(CommandBuffer *cmd)
     {
         auto &gSettings = Settings::Get<GlobalSettings>();
-        Camera *camera = GetGlobalSystem<RendererSystem>()->GetScene().GetCamera(0);
+        Camera *camera = GetGlobalSystem<RendererSystem>()->GetScene().GetActiveCamera();
 
         ImageBarrierInfo barrier{};
         barrier.layout = vk::ImageLayout::eShaderReadOnlyOptimal;

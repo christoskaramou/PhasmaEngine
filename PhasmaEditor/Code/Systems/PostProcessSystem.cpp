@@ -35,7 +35,7 @@ namespace pe
 
     void PostProcessSystem::Update()
     {
-        Camera *camera_main = GetGlobalSystem<RendererSystem>()->GetScene().GetCamera(0);
+        Camera *camera_main = GetGlobalSystem<RendererSystem>()->GetScene().GetActiveCamera();
 
         std::vector<std::shared_future<void>> futures;
         futures.reserve(m_renderPassComponents.size());

@@ -115,7 +115,7 @@ namespace pe
     {
         PE_ERROR_IF(m_scene == nullptr, "Scene was not set");
 
-        Camera *camera = GetGlobalSystem<RendererSystem>()->GetScene().GetCamera(0);
+        Camera *camera = GetGlobalSystem<RendererSystem>()->GetScene().GetActiveCamera();
 
         if (!m_scene->HasDrawInfo())
         {
@@ -275,7 +275,7 @@ namespace pe
     {
         PE_ERROR_IF(m_scene == nullptr, "Scene was not set");
 
-        Camera *camera = GetGlobalSystem<RendererSystem>()->GetScene().GetCamera(0);
+        Camera *camera = GetGlobalSystem<RendererSystem>()->GetScene().GetActiveCamera();
 
         if (m_scene->HasAlphaDrawInfo())
         {

@@ -82,7 +82,7 @@ namespace pe
         auto &gSettings = Settings::Get<GlobalSettings>();
         if (gSettings.shadows)
         {
-            Camera *camera_main = GetGlobalSystem<RendererSystem>()->GetScene().GetCamera(0);
+            Camera *camera_main = GetGlobalSystem<RendererSystem>()->GetScene().GetActiveCamera();
             CalculateCascades(camera_main);
 
             BufferRange range{};
