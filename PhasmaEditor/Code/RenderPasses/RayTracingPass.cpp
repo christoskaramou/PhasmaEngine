@@ -113,7 +113,6 @@ namespace pe
         ubo.invView = camera->GetInvView();
         ubo.invProj = camera->GetInvProjection();
         ubo.lights_intensity = gSettings.lights_intensity;
-        ubo.lights_range = gSettings.lights_range;
         ubo.shadows = gSettings.shadows ? 1 : 0;
         ubo.use_Disney_PBR = gSettings.use_Disney_PBR ? 1 : 0;
         ubo.ibl_intensity = gSettings.IBL_intensity;
@@ -188,6 +187,9 @@ namespace pe
         cmd->BeginDebugRegion("RayTracingPass");
         cmd->ImageBarriers({barrierDisplay, barrierDepth});
         cmd->BindPipeline(*m_passInfo);
+        cmd->SetConstantAt(0, MAX_POINT_LIGHTS);
+        cmd->SetConstantAt(1, MAX_SPOT_LIGHTS);
+        cmd->PushConstants();
         cmd->TraceRays(m_display->GetWidth(), m_display->GetHeight(), 1);
         cmd->EndDebugRegion();
 

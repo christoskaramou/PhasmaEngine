@@ -214,19 +214,20 @@ float3 DirectLight(Material material, float3 worldPos, float3 cameraPos, float3 
 
 float3 ComputePointLight(int lightIndex, Material material, float3 worldPos, float3 cameraPos, float3 materialNormal, float occlusion, float3 energyCompensation)
 {
-    float3 lightDirFull = worldPos - cb_pointLights[lightIndex].position.xyz;
+    float3 lightDirFull = worldPos - cb_pointLights[lightIndex].position.xyz; // position is .xyz
+    float  range        = cb_pointLights[lightIndex].position.w; // radius is .w
     float  lightDist    = max(0.1, length(lightDirFull));
 
-    if (lightDist > cb_lightsRange) // max range
+    if (lightDist > range) // max range
         return 0.0;
 
-    float lightDistRatio    = lightDist / cb_lightsRange;
+    float lightDistRatio    = lightDist / range;
     float attenuation       = (1.0 - lightDistRatio * lightDistRatio);
     attenuation             = max(0.0, attenuation);  // Clamp to [0, 1]
     attenuation             *= attenuation; // Quadratic fall-off
     float3 lightDir         = normalize(-lightDirFull);
-    float3 pointColor       = cb_pointLights[lightIndex].color.xyz * attenuation;
-    pointColor              *= cb_lightsIntensity; // intensity
+    float3 pointColor       = cb_pointLights[lightIndex].color.xyz * attenuation; // color is .xyz
+    pointColor              *= cb_pointLights[lightIndex].color.w * cb_lightsIntensity; // intensity is .w
 
     float roughness = max(material.roughness, 0.04);
 
@@ -271,6 +272,91 @@ float3 ComputePointLight(int lightIndex, Material material, float3 worldPos, flo
     float3 diffuseLight     = diffRef * (1.0 - material.metallic) * occlusion;
 
     return pointColor * (reflectedLight + diffuseLight);
+}
+
+float3 ComputeSpotLight(int lightIndex, Material material, float3 worldPos, float3 cameraPos, float3 materialNormal, float occlusion, float3 energyCompensation)
+{
+    float3 lightPos = cb_spotLights[lightIndex].position.xyz; // .xyz
+    float3 lightDirFull = worldPos - lightPos;
+    float  range        = cb_spotLights[lightIndex].position.w; // range is .w
+    float  lightDist    = max(0.1, length(lightDirFull));
+
+    if (lightDist > range)
+        return 0.0;
+
+    // Compute spot direction from Rotation (Pitch, Yaw)
+    float p = radians(cb_spotLights[lightIndex].rotation.x);
+    float y = radians(cb_spotLights[lightIndex].rotation.y);
+    
+    // Convert to Direction Vector
+    float3 spotDir;
+    spotDir.x = cos(p) * sin(y);
+    spotDir.y = sin(p);
+    spotDir.z = cos(p) * cos(y);
+    spotDir = normalize(spotDir);
+
+    float3 L = normalize(-lightDirFull);
+    
+    // Check if the pixel is within the cone
+    // L points from Pixel to Light. spotDir points from Light out.
+    // Ideally we aligned -L (Light to Pixel) with spotDir.
+    float theta = dot(-L, spotDir);
+
+    // Cone attenuation and Falloff
+    float cutoffCos = cos(radians(cb_spotLights[lightIndex].rotation.z)); // Angle is .z
+    float outerCutoffCos = cos(radians(cb_spotLights[lightIndex].rotation.z + cb_spotLights[lightIndex].rotation.w)); // Falloff is .w
+    
+    if (theta < outerCutoffCos) // Check against outer cutoff
+        return 0.0;
+    
+    // Use smoothstep for smooth transition between outer (0.0) and inner (1.0).
+    float spotIntensity = smoothstep(outerCutoffCos, cutoffCos, theta);
+
+    // Distance attenuation
+    float lightDistRatio    = lightDist / range;
+    float attenuation       = (1.0 - lightDistRatio * lightDistRatio);
+    attenuation             = max(0.0, attenuation);
+    attenuation             *= attenuation;
+
+    float3 spotColor = cb_spotLights[lightIndex].color.xyz * attenuation * spotIntensity;
+    spotColor       *= cb_spotLights[lightIndex].color.w * cb_lightsIntensity; // intensity is .w
+
+    float roughness = max(material.roughness, 0.04);
+    float3 V = normalize(cameraPos - worldPos);
+    float3 H = normalize(V + L);
+    float3 N = materialNormal;
+    float NoV = clamp(dot(N, V), 0.001, 1.0);
+    float NoL = clamp(dot(N, L), 0.001, 1.0);
+    float HoV = clamp(dot(H, V), 0.001, 1.0);
+
+    float3 F0               = ComputeF0(material.albedo, material.metallic);
+    float3 specularFresnel  = Fresnel(F0, HoV);
+    
+    // Specular
+    float3 specRef;
+    if (cb_use_Disney_PBR)
+        specRef = NoL * CookTorranceSpecular_Disney(N, H, NoL, NoV, specularFresnel, roughness);
+    else
+        specRef = NoL * CookTorranceSpecular_GSchlick(N, H, NoL, NoV, specularFresnel, roughness);
+    specRef *= energyCompensation;
+    
+    // Diffuse
+    float3 diffRef;
+    if (cb_use_Disney_PBR)
+    {
+        float LoH = clamp(dot(L, H), 0.001, 1.0);
+        float3 disneyDiffuse = DisneyDiffuse(material.albedo, NoV, NoL, LoH, roughness);
+        diffRef = NoL * (1.0 - specularFresnel) * disneyDiffuse;
+    }
+    else
+    {
+        diffRef = NoL * (1.0 - specularFresnel) * (material.albedo / PI);
+    }
+
+    float3 reflectedLight   = specRef;
+    float3 diffuseLight     = diffRef * (1.0 - material.metallic) * occlusion;
+
+    return spotColor * (reflectedLight + diffuseLight);
 }
 
 float3 SampleEnvironment(TextureCube cube, SamplerState sampler_cube, float3 dir, float mipLevel)

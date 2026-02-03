@@ -5,6 +5,7 @@
 #include "Scene/Model.h"
 #include "Scene/Scene.h"
 #include "Scene/SelectionManager.h"
+#include "Systems/LightSystem.h"
 #include "Systems/RendererSystem.h"
 #include "imgui/imgui.h"
 
@@ -68,6 +69,130 @@ namespace pe
         std::vector<Model *> modelsToDelete;
 
         // Models listing
+        // Main Camera
+        ImGuiTreeNodeFlags cameraFlags = ImGuiTreeNodeFlags_SpanAvailWidth |
+                                         ImGuiTreeNodeFlags_Leaf |
+                                         ImGuiTreeNodeFlags_FramePadding;
+
+        if (selection.GetSelectionType() == SelectionType::Camera)
+            cameraFlags |= ImGuiTreeNodeFlags_Selected;
+
+        bool cameraOpen = ImGui::TreeNodeEx((void *)"MainCamera", cameraFlags, "%s  Main Camera", ICON_FA_VIDEO);
+        if (ImGui::IsItemClicked())
+        {
+            selection.Select(nullptr, -1, SelectionType::Camera);
+            ImGui::SetWindowFocus("Properties");
+        }
+        if (cameraOpen)
+        {
+            ImGui::TreePop();
+        }
+
+        // Lights
+        if (ImGui::TreeNodeEx("Lights", ImGuiTreeNodeFlags_DefaultOpen | ImGuiTreeNodeFlags_SpanAvailWidth | ImGuiTreeNodeFlags_FramePadding))
+        {
+            ImGuiTreeNodeFlags lightFlags = ImGuiTreeNodeFlags_SpanAvailWidth | ImGuiTreeNodeFlags_Leaf | ImGuiTreeNodeFlags_FramePadding;
+
+            // Directional Light (Sun)
+            if (selection.GetSelectionType() == SelectionType::Light && 
+                selection.GetSelectedLightType() == LightType::Directional)
+                lightFlags |= ImGuiTreeNodeFlags_Selected;
+            else
+                lightFlags &= ~ImGuiTreeNodeFlags_Selected;
+
+            ImGui::TreeNodeEx((void *)"DirectionalLight", lightFlags, "%s  Directional Light", ICON_FA_SUN);
+            if (ImGui::IsItemClicked())
+            {
+                selection.Select(LightType::Directional, 0);
+                ImGui::SetWindowFocus("Properties");
+            }
+            if (ImGui::BeginPopupContextItem())
+            {
+                if (ImGui::MenuItem("Focus"))
+                {
+                    Camera *camera = scene.GetActiveCamera();
+                    // Focus on origin for directional light
+                    camera->SetPosition(vec3(0, 0, 0) - camera->GetFront() * 10.0f);
+                }
+                ImGui::EndPopup();
+            }
+            ImGui::TreePop();
+
+            // Point Lights
+            for (int i = 0; i < MAX_POINT_LIGHTS; i++)
+            {
+                if (selection.GetSelectionType() == SelectionType::Light && 
+                    selection.GetSelectedLightType() == LightType::Point && 
+                    selection.GetSelectedLightIndex() == i)
+                    lightFlags |= ImGuiTreeNodeFlags_Selected;
+                else
+                    lightFlags &= ~ImGuiTreeNodeFlags_Selected;
+
+                std::string name = "Point Light " + std::to_string(i);
+                ImGui::TreeNodeEx((void *)(intptr_t)(i + 1000), lightFlags, "%s  %s", ICON_FA_LIGHTBULB, name.c_str());
+                if (ImGui::IsItemClicked())
+                {
+                    selection.Select(LightType::Point, i);
+                    ImGui::SetWindowFocus("Properties");
+                }
+                if (ImGui::BeginPopupContextItem())
+                {
+                    if (ImGui::MenuItem("Focus"))
+                    {
+                        Camera *camera = scene.GetActiveCamera();
+                        vec3 pos = vec3(GetGlobalSystem<LightSystem>()->GetLights()->pointLights[i].position);
+                        camera->SetPosition(pos - camera->GetFront() * 5.0f);
+                    }
+                    if (ImGui::MenuItem("Delete"))
+                    {
+                        // Reset light
+                        GetGlobalSystem<LightSystem>()->GetLights()->pointLights[i].color = vec4(0.0f); // Intensity 0
+                        GetGlobalSystem<LightSystem>()->GetLights()->pointLights[i].position = vec4(0.0f, 10000.0f, 0.0f, 0.0f); // Move away
+                    }
+                    ImGui::EndPopup();
+                }
+                ImGui::TreePop();
+            }
+
+            // Spot Lights
+            for (int i = 0; i < MAX_SPOT_LIGHTS; i++)
+            {
+                if (selection.GetSelectionType() == SelectionType::Light && 
+                    selection.GetSelectedLightType() == LightType::Spot && 
+                    selection.GetSelectedLightIndex() == i)
+                    lightFlags |= ImGuiTreeNodeFlags_Selected;
+                else
+                    lightFlags &= ~ImGuiTreeNodeFlags_Selected;
+
+                std::string name = "Spot Light " + std::to_string(i);
+                ImGui::TreeNodeEx((void *)(intptr_t)(i + 2000), lightFlags, "%s  %s", ICON_FA_LIGHTBULB, name.c_str());
+                if (ImGui::IsItemClicked())
+                {
+                    selection.Select(LightType::Spot, i);
+                    ImGui::SetWindowFocus("Properties");
+                }
+                if (ImGui::BeginPopupContextItem())
+                {
+                    if (ImGui::MenuItem("Focus"))
+                    {
+                        Camera *camera = scene.GetActiveCamera();
+                        vec3 pos = GetGlobalSystem<LightSystem>()->GetLights()->spotLights[i].position;
+                        camera->SetPosition(pos - camera->GetFront() * 5.0f);
+                    }
+                    if (ImGui::MenuItem("Delete"))
+                    {
+                        // Reset light
+                        GetGlobalSystem<LightSystem>()->GetLights()->spotLights[i].color = vec4(0.0f); // Intensity 0
+                        GetGlobalSystem<LightSystem>()->GetLights()->spotLights[i].position = vec4(0.0f, 10000.0f, 0.0f, 0.0f); // Move away
+                    }
+                    ImGui::EndPopup();
+                }
+                ImGui::TreePop();
+            }
+
+            ImGui::TreePop();
+        }
+
         for (auto model : models)
         {
             if (!model)
@@ -183,6 +308,12 @@ namespace pe
                     if (lowerName.find("camera") != std::string::npos || lowerName.find("cam") != std::string::npos)
                     {
                         icon = ICON_FA_VIDEO;
+                        // Special handling for Camera selection
+                        if (ImGui::IsItemClicked() && !ImGui::IsItemToggledOpen())
+                        {
+                            selection.Select(model, nodeIndex, SelectionType::Camera);
+                            ImGui::SetWindowFocus("Properties");
+                        }
                     }
                     else if (lowerName.find("light") != std::string::npos || lowerName.find("lamp") != std::string::npos)
                     {

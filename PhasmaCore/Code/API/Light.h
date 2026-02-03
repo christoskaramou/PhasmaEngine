@@ -6,22 +6,22 @@ namespace pe
     {
     };
 
-    struct DirectionalLight : public Light
+    struct DirectionalLight
     {
         vec4 color; // .w = intensity
         vec4 direction;
     };
 
-    struct PointLight : public Light
+    struct PointLight
     {
-        vec4 color; // .w = intensity
-        vec4 position;
+        vec4 color;    // .w = intensity
+        vec4 position; // .w = radius
     };
 
-    struct SpotLight : public Light
+    struct SpotLight
     {
-        vec4 color; // .w = intensity
-        vec4 start; // .w = radius;
-        vec4 end;
+        vec4 color;    // .w = intensity
+        vec4 position; // .w = range
+        vec4 rotation; // .z = angle, .w = falloff
     };
 } // namespace pe

@@ -63,6 +63,5 @@ namespace pe
 
         std::vector<std::shared_ptr<Widget>> m_widgets;
         std::vector<std::shared_ptr<Widget>> m_menuWindowWidgets;
-        std::vector<std::shared_ptr<Widget>> m_menuAssetsWidgets;
     };
 } // namespace pe

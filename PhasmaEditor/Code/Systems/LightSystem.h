@@ -29,6 +29,7 @@ namespace pe
         void Destroy() override;
 
         Buffer *GetUniform(uint32_t frame) { return m_uniforms[frame]; }
+        LightsUBO *GetLights() { return &m_lubo; }
 
     private:
         LightsUBO m_lubo;

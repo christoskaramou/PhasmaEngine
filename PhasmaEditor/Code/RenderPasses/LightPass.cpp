@@ -132,7 +132,6 @@ namespace pe
         m_ubo.IBL = gSettings.IBL;
         m_ubo.IBL_intensity = gSettings.IBL_intensity;
         m_ubo.lights_intensity = gSettings.lights_intensity;
-        m_ubo.lights_range = gSettings.lights_range;
         m_ubo.shadows = gSettings.shadows;
         m_ubo.use_Disney_PBR = gSettings.use_Disney_PBR;
 
@@ -180,11 +179,12 @@ namespace pe
         ShadowPass &shadows = *GetGlobalComponent<ShadowPass>();
 
         cmd->SetConstantAt(0, MAX_POINT_LIGHTS);            // num point lights
-        cmd->SetConstantAt(1, m_viewportRT->GetWidth_f());  // framebuffer width
-        cmd->SetConstantAt(2, m_viewportRT->GetHeight_f()); // framebuffer height
-        cmd->SetConstantAt(3, 0u);                          // is transparent pass
+        cmd->SetConstantAt(1, MAX_SPOT_LIGHTS);             // num spot lights
+        cmd->SetConstantAt(2, m_viewportRT->GetWidth_f());  // framebuffer width
+        cmd->SetConstantAt(3, m_viewportRT->GetHeight_f()); // framebuffer height
+        cmd->SetConstantAt(4, 0u);                          // is transparent pass
         for (uint32_t i = 0; i < shadowmapCascades; i++)
-            cmd->SetConstantAt(i + 4, shadows.m_viewZ[i]); // shadowmap cascade distances
+            cmd->SetConstantAt(i + 5, shadows.m_viewZ[i]); // shadowmap cascade distances
 
         PassBarriers(cmd);
 
@@ -327,7 +327,6 @@ namespace pe
         m_ubo.IBL = gSettings.IBL;
         m_ubo.IBL_intensity = gSettings.IBL_intensity;
         m_ubo.lights_intensity = gSettings.lights_intensity;
-        m_ubo.lights_range = gSettings.lights_range;
         m_ubo.shadows = gSettings.shadows;
         m_ubo.use_Disney_PBR = gSettings.use_Disney_PBR;
 
@@ -371,11 +370,12 @@ namespace pe
         ShadowPass &shadows = *GetGlobalComponent<ShadowPass>();
 
         cmd->SetConstantAt(0, MAX_POINT_LIGHTS);            // num point lights
-        cmd->SetConstantAt(1, m_viewportRT->GetWidth_f());  // framebuffer width
-        cmd->SetConstantAt(2, m_viewportRT->GetHeight_f()); // framebuffer height
-        cmd->SetConstantAt(3, 1u);                          // transparent pass
+        cmd->SetConstantAt(1, MAX_SPOT_LIGHTS);             // num spot lights
+        cmd->SetConstantAt(2, m_viewportRT->GetWidth_f());  // framebuffer width
+        cmd->SetConstantAt(3, m_viewportRT->GetHeight_f()); // framebuffer height
+        cmd->SetConstantAt(4, 1u);                          // transparent pass
         for (uint32_t i = 0; i < shadowmapCascades; i++)
-            cmd->SetConstantAt(i + 4, shadows.m_viewZ[i]); // shadowmap cascade distances
+            cmd->SetConstantAt(i + 5, shadows.m_viewZ[i]); // shadowmap cascade distances
 
         PassBarriers(cmd);
 

@@ -20,6 +20,7 @@
 #include "Widgets/FileSelector.h"
 #include "Widgets/GlobalWidget.h"
 #include "Widgets/Hierarchy.h"
+#include "Widgets/LightWidget.h"
 #include "Widgets/Loading.h"
 #include "Widgets/MeshWidget.h"
 #include "Widgets/Metrics.h"
@@ -30,7 +31,6 @@
 #include "Widgets/TransformWidget.h"
 #include "imgui/imgui_impl_sdl2.h"
 #include "imgui/imgui_impl_vulkan.h"
-
 
 namespace pe
 {
@@ -250,10 +250,6 @@ namespace pe
             {
                 if (ImGui::MenuItem("Recompile Shaders", "Ctrl+Shift+R"))
                     EventSystem::PushEvent(EventType::CompileShaders);
-
-                for (auto &widget : m_menuAssetsWidgets)
-                    ImGui::MenuItem(widget->GetName().c_str(), nullptr, widget->GetOpen());
-
                 ImGui::EndMenu();
             }
 
@@ -543,19 +539,18 @@ namespace pe
         auto console = std::make_shared<Console>();
         auto transformWidget = std::make_shared<TransformWidget>();
         auto meshWidget = std::make_shared<MeshWidget>();
+        auto lightWidget = std::make_shared<LightWidget>();
         auto globalWidget = std::make_shared<GlobalWidget>();
 
         // Console added early to potentially influence tab ordering (Leftmost)
-        m_widgets = {console, properties, metrics, models, assetInfo, sceneView, loading, fileBrowser, fileSelector, hierarchy, particles, cameraWidget, transformWidget, meshWidget, globalWidget};
+        m_widgets = {console, properties, metrics, models, assetInfo, sceneView, loading, fileBrowser, fileSelector, hierarchy, particles, cameraWidget, transformWidget, meshWidget, lightWidget, globalWidget};
 
         // Initialize Core Logging and attach Console
         Log::Attach([console](const std::string &msg, LogType type)
                     { console->AddLog(type, "%s", msg.c_str()); });
 
         // Populate Menu Vectors
-        m_menuWindowWidgets = {console, metrics, properties, models, assetInfo, sceneView, fileBrowser, hierarchy, particles, cameraWidget, globalWidget};
-        m_menuAssetsWidgets = {};
-        m_menuAssetsWidgets = {};
+        m_menuWindowWidgets = {console, metrics, properties, models, assetInfo, sceneView, fileBrowser, hierarchy, particles, globalWidget};
         for (auto &widget : m_widgets)
             widget->Init(this);
 

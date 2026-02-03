@@ -13,7 +13,6 @@ namespace pe
         mat4 invView;
         mat4 invProj;
         float lights_intensity;
-        float lights_range;
         uint32_t shadows;
         uint32_t use_Disney_PBR;
         float ibl_intensity;
