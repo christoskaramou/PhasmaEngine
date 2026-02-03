@@ -335,4 +335,76 @@ namespace pe
         return it->second;
     }
 
+    void Model::ReparentNode(int nodeIndex, int newParentIndex)
+    {
+        PE_INFO("ReparentNode: Request to move node %d to parent %d", nodeIndex, newParentIndex);
+
+        if (nodeIndex < 0 || nodeIndex >= static_cast<int>(m_nodeInfos.size()))
+        {
+            PE_INFO("ReparentNode: Invalid node index");
+            return;
+        }
+
+        // Check for self parenting
+        if (nodeIndex == newParentIndex)
+        {
+            PE_INFO("ReparentNode: Self parenting");
+            return;
+        }
+
+        // check if newParentIndex is a child of nodeIndex (circular dependency)
+        // Also check if newParentIndex is valid or -1 (root)
+        if (newParentIndex >= 0)
+        {
+            if (newParentIndex >= static_cast<int>(m_nodeInfos.size()))
+                return;
+
+            int check = newParentIndex;
+            while (check >= 0)
+            {
+                if (check == nodeIndex)
+                {
+                    PE_INFO("ReparentNode: Circular dependency detected");
+                    return;
+                }
+                check = m_nodeInfos[check].parent;
+            }
+        }
+
+        NodeInfo &node = m_nodeInfos[nodeIndex];
+        int oldParentIndex = node.parent;
+
+        if (oldParentIndex == newParentIndex)
+        {
+            PE_INFO("ReparentNode: New parent is same as old parent");
+            return;
+        }
+
+        // Cache current world matrix to preserve transform
+        mat4 currentWorldMatrix = node.ubo.worldMatrix;
+
+        // Remove from old parent
+        if (oldParentIndex >= 0)
+        {
+            auto &children = m_nodeInfos[oldParentIndex].children;
+            children.erase(std::remove(children.begin(), children.end(), nodeIndex), children.end());
+        }
+
+        // Add to new parent
+        if (newParentIndex >= 0)
+        {
+            m_nodeInfos[newParentIndex].children.push_back(nodeIndex);
+        }
+
+        // Update parent
+        node.parent = newParentIndex;
+
+        // Calculate new local matrix to preserve world transform
+        mat4 newParentWorldMatrix = (newParentIndex >= 0) ? m_nodeInfos[newParentIndex].ubo.worldMatrix : m_matrix;
+        node.localMatrix = inverse(newParentWorldMatrix) * currentWorldMatrix;
+
+        // Update flags
+        MarkDirty(nodeIndex);
+        UpdateNodeMatrices();
+    }
 } // namespace pe

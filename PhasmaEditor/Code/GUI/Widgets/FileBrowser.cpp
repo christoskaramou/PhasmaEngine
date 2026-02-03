@@ -346,6 +346,14 @@ namespace pe
                             if (ImGui::IsMouseDoubleClicked(0))
                                 onDoubleClick(entry.path);
                         }
+
+                        if (ImGui::BeginDragDropSource(ImGuiDragDropFlags_SourceAllowNullID))
+                        {
+                            std::string pathStr = entry.path.string();
+                            ImGui::SetDragDropPayload("CONTENT_BROWSER_ITEM", pathStr.c_str(), pathStr.length() + 1);
+                            ImGui::Text("%s", entry.filename.c_str());
+                            ImGui::EndDragDropSource();
+                        }
                     }
                 }
             }
@@ -437,6 +445,14 @@ namespace pe
                             else if (clicked || ImGui::IsItemClicked())
                             {
                                 m_selectedEntry = entry.path;
+                            }
+
+                            if (ImGui::BeginDragDropSource(ImGuiDragDropFlags_SourceAllowNullID))
+                            {
+                                std::string pathStr = entry.path.string();
+                                ImGui::SetDragDropPayload("CONTENT_BROWSER_ITEM", pathStr.c_str(), pathStr.length() + 1);
+                                ImGui::Text("%s", entry.filename.c_str());
+                                ImGui::EndDragDropSource();
                             }
 
                             ImGui::PopID();

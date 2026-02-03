@@ -50,6 +50,14 @@ namespace pe
                         ThreadPool::GUI.Enqueue(loadTask);
                     }
                 }
+
+                if (ImGui::BeginDragDropSource())
+                {
+                    std::string fullPath = Path::Assets + "Objects/" + entry;
+                    ImGui::SetDragDropPayload("CONTENT_BROWSER_ITEM", fullPath.c_str(), fullPath.length() + 1);
+                    ImGui::Text("%s", entry.c_str());
+                    ImGui::EndDragDropSource();
+                }
             }
         }
         ImGui::EndChild();

@@ -13,6 +13,9 @@
 #include "imgui/ImGuizmo.h"
 #include "imgui/imgui_impl_vulkan.h"
 #include "imgui/imgui_internal.h"
+#include "Base/ThreadPool.h"
+#include <filesystem>
+
 
 
 namespace pe
@@ -137,6 +140,43 @@ namespace pe
                 }
 
                 DrawGizmo(imageMin, imageSize);
+
+                // Drop Target for SceneView
+                if (ImGui::BeginDragDropTarget())
+                {
+                    if (const ImGuiPayload *payload = ImGui::AcceptDragDropPayload("CONTENT_BROWSER_ITEM"))
+                    {
+                        const char *pathStr = (const char *)payload->Data;
+                        std::filesystem::path path(pathStr);
+
+                        // Check extension
+                        std::string ext = path.extension().string();
+                        std::transform(ext.begin(), ext.end(), ext.begin(), ::tolower);
+
+                        bool isModel = false;
+                        const char *modelExts[] = {".gltf", ".glb", ".obj", ".fbx"};
+                        for (const char *e : modelExts)
+                        {
+                            if (ext == e)
+                            {
+                                isModel = true;
+                                break;
+                            }
+                        }
+
+                        if (isModel && !GUIState::s_modelLoading)
+                        {
+                            auto loadTask = [path]()
+                            {
+                                GUIState::s_modelLoading = true;
+                                Model::Load(path);
+                                GUIState::s_modelLoading = false;
+                            };
+                            ThreadPool::GUI.Enqueue(loadTask);
+                        }
+                    }
+                    ImGui::EndDragDropTarget();
+                }
             }
         }
         else
