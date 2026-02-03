@@ -26,6 +26,12 @@ namespace pe
         const ImVec4 TreeLineBg = ImVec4(0.35f, 0.35f, 0.35f, 0.5f);
     } // namespace HierarchyStyle
 
+    struct HierarchyDragDropPayload
+    {
+        size_t modelId;
+        int nodeIndex;
+    };
+
     Hierarchy::Hierarchy() : Widget("Hierarchy")
     {
     }
@@ -374,7 +380,7 @@ namespace pe
                         nodeFlags |= ImGuiTreeNodeFlags_Selected;
                         if (m_scrollToSelection && m_modelToExpand == model)
                         {
-                            ImGui::SetScrollHereY();
+                            // ImGui::SetScrollHereY(); // User requested to disable centering scroll
                             m_scrollToSelection = false;
                             m_modelToExpand = nullptr;
                             m_nodesToExpand.clear();
@@ -383,10 +389,58 @@ namespace pe
 
                     bool nodeOpen = ImGui::TreeNodeEx((void *)uniqueId, nodeFlags, "%s", displayNodeName.c_str());
 
+                    // Drag & Drop Source
+                    if (ImGui::BeginDragDropSource())
+                    {
+                        HierarchyDragDropPayload payload;
+                        payload.modelId = model->GetId();
+                        payload.nodeIndex = nodeIndex;
+                        ImGui::SetDragDropPayload("HIERARCHY_NODE", &payload, sizeof(HierarchyDragDropPayload));
+                        ImGui::Text("%s", nodeName.c_str());
+                        ImGui::EndDragDropSource();
+                    }
+
                     if (ImGui::IsItemClicked() && !ImGui::IsItemToggledOpen())
                     {
                         selection.Select(model, nodeIndex, SelectionType::Node);
-                        ImGui::SetWindowFocus("Properties");
+                        // ImGui::SetWindowFocus("Properties"); // Removed to prevent interrupting drag
+                    }
+
+                    // Drag & Drop Target
+                    if (ImGui::BeginDragDropTarget())
+                    {
+                        if (const ImGuiPayload *payload = ImGui::AcceptDragDropPayload("HIERARCHY_NODE"))
+                        {
+                            HierarchyDragDropPayload data = *(const HierarchyDragDropPayload *)payload->Data;
+                            if (data.modelId == model->GetId())
+                            {
+                                PE_INFO("Hierarchy: Dropped node %d onto node %d", data.nodeIndex, nodeIndex);
+                                model->ReparentNode(data.nodeIndex, nodeIndex);
+                            }
+                        }
+
+                        if (const ImGuiPayload *payload = ImGui::AcceptDragDropPayload("CONTENT_BROWSER_ITEM"))
+                        {
+                            const char *pathStr = (const char *)payload->Data;
+                            std::filesystem::path path(pathStr);
+
+                            // Check extension (simplified check)
+                            std::string ext = path.extension().string();
+                            std::transform(ext.begin(), ext.end(), ext.begin(), ::tolower);
+                            bool isModel = (ext == ".gltf" || ext == ".glb" || ext == ".obj" || ext == ".fbx");
+
+                            if (isModel && !GUIState::s_modelLoading)
+                            {
+                                auto loadTask = [path]()
+                                {
+                                    GUIState::s_modelLoading = true;
+                                    Model::Load(path);
+                                    GUIState::s_modelLoading = false;
+                                };
+                                ThreadPool::GUI.Enqueue(loadTask);
+                            }
+                        }
+                        ImGui::EndDragDropTarget();
                     }
 
                     if (ImGui::BeginPopupContextItem())
@@ -473,6 +527,50 @@ namespace pe
 
                 ImGui::TreePop();
             }
+        }
+
+
+
+        // Fill remaining space with dummy to allow dropping in empty area
+        ImVec2 available = ImGui::GetContentRegionAvail();
+        if (available.y < 50.0f) available.y = 50.0f; // Minimum drop area
+        ImGui::Dummy(available);
+
+        // Window-wide Drop Target for loading models from FileBrowser
+        if (ImGui::BeginDragDropTarget())
+        {
+            if (const ImGuiPayload *payload = ImGui::AcceptDragDropPayload("CONTENT_BROWSER_ITEM"))
+            {
+                const char *pathStr = (const char *)payload->Data;
+                std::filesystem::path path(pathStr);
+
+                // Check extension
+                std::string ext = path.extension().string();
+                std::transform(ext.begin(), ext.end(), ext.begin(), ::tolower);
+
+                bool isModel = false;
+                const char *modelExts[] = {".gltf", ".glb", ".obj", ".fbx"};
+                for (const char *e : modelExts)
+                {
+                    if (ext == e)
+                    {
+                        isModel = true;
+                        break;
+                    }
+                }
+
+                if (isModel && !GUIState::s_modelLoading)
+                {
+                    auto loadTask = [path]()
+                    {
+                        GUIState::s_modelLoading = true;
+                        Model::Load(path);
+                        GUIState::s_modelLoading = false;
+                    };
+                    ThreadPool::GUI.Enqueue(loadTask);
+                }
+            }
+            ImGui::EndDragDropTarget();
         }
 
         if (s_openRenamePopup)

@@ -78,6 +78,7 @@ namespace pe
         // Common interface methods
         void MarkDirty(int node);
         void UpdateNodeMatrices();
+        void ReparentNode(int nodeIndex, int newParentIndex);
         Image *LoadTexture(CommandBuffer *cmd, const std::filesystem::path &texturePath);
         Image *GetTextureFromCache(const std::filesystem::path &texturePath) const;
 
