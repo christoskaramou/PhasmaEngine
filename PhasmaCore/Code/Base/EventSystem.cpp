@@ -20,6 +20,7 @@ namespace pe
         s_events.try_emplace(EventType::AfterCommandWait);
         s_events.try_emplace(EventType::DynamicRendering);
         s_events.try_emplace(EventType::ModelLoaded);
+        s_events.try_emplace(EventType::ModelRemoved);
     }
 
     void EventSystem::Destroy() noexcept

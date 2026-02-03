@@ -3,11 +3,11 @@
 #include "API/Queue.h"
 #include "API/RHI.h"
 #include "Camera/Camera.h"
+#include "GUI/GUIState.h"
 #include "Scene/Model.h"
 #include "Scene/Scene.h"
 #include "Scene/SelectionManager.h"
 #include "Systems/PostProcessSystem.h"
-#include "GUI/GUIState.h"
 #include "Systems/RendererSystem.h"
 #include "imgui/imgui_impl_sdl2.h"
 
@@ -171,6 +171,16 @@ namespace pe
                     model->SetRenderReady(true);
                     break;
                 }
+                case EventType::ModelRemoved:
+                {
+                    Model *model = std::any_cast<Model *>(event.payload);
+                    if (!model)
+                        break;
+                    RHII.GetMainQueue()->Wait();
+                    rendererSystem->GetScene().RemoveModel(model);
+                    rendererSystem->GetScene().UpdateGeometryBuffers();
+                    break;
+                }
                 case EventType::SetRenderMode:
                 {
                     RHII.GetMainQueue()->WaitIdle();
@@ -217,7 +227,7 @@ namespace pe
 
         float delta = static_cast<float>(FrameTimer::Instance().GetDelta());
         float speed = camera->GetSpeed() * delta;
-        
+
         if (GUIState::s_sceneViewFocused)
         {
             if ((ImGui::IsKeyDown(ImGuiKey_W) || ImGui::IsKeyDown(ImGuiKey_S)) &&

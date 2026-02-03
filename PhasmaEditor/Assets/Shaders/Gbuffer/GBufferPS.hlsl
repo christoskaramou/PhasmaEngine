@@ -30,7 +30,7 @@ PS_OUTPUT_Gbuffer mainPS(PS_INPUT_Gbuffer input)
     float4 sampledBaseColor = HasTexture(textureMask, TEX_BASE_COLOR_BIT) ? GetBaseColor(id, uv) : float4(1.0f, 1.0f, 1.0f, 1.0f);
     float4 combinedColor    = sampledBaseColor * input.color * input.baseColorFactor;
 
-    if (combinedColor.a < constants[id].alphaCut)
+    if (combinedColor.a < input.metRoughAlphacutOcl.z)
         discard;
 
     float3 mrSample = HasTexture(textureMask, TEX_METAL_ROUGH_BIT) ? GetMetallicRoughness(id, uv).xyz : float3(1.0f, 1.0f, 1.0f);

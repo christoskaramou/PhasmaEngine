@@ -68,6 +68,31 @@ namespace pe
         static bool s_openRenamePopup = false;
         std::vector<Model *> modelsToDelete;
 
+        // Check for selection change
+        Model *currentSelectedModel = selection.GetSelectedModel();
+        int currentSelectedNodeIndex = selection.GetSelectedNodeIndex();
+
+        if (currentSelectedModel != m_lastSelectedModel || currentSelectedNodeIndex != m_lastSelectedNodeIndex)
+        {
+            m_lastSelectedModel = currentSelectedModel;
+            m_lastSelectedNodeIndex = currentSelectedNodeIndex;
+
+            if (currentSelectedModel && currentSelectedNodeIndex >= 0)
+            {
+                m_modelToExpand = currentSelectedModel;
+                m_nodesToExpand.clear();
+                m_scrollToSelection = true;
+
+                // Trace parents up to root
+                int p = currentSelectedModel->GetNodeInfos()[currentSelectedNodeIndex].parent;
+                while (p >= 0)
+                {
+                    m_nodesToExpand.insert(p);
+                    p = currentSelectedModel->GetNodeInfos()[p].parent;
+                }
+            }
+        }
+
         // Models listing
         // Main Camera
         ImGuiTreeNodeFlags cameraFlags = ImGuiTreeNodeFlags_SpanAvailWidth |
@@ -94,7 +119,7 @@ namespace pe
             ImGuiTreeNodeFlags lightFlags = ImGuiTreeNodeFlags_SpanAvailWidth | ImGuiTreeNodeFlags_Leaf | ImGuiTreeNodeFlags_FramePadding;
 
             // Directional Light (Sun)
-            if (selection.GetSelectionType() == SelectionType::Light && 
+            if (selection.GetSelectionType() == SelectionType::Light &&
                 selection.GetSelectedLightType() == LightType::Directional)
                 lightFlags |= ImGuiTreeNodeFlags_Selected;
             else
@@ -121,8 +146,8 @@ namespace pe
             // Point Lights
             for (int i = 0; i < MAX_POINT_LIGHTS; i++)
             {
-                if (selection.GetSelectionType() == SelectionType::Light && 
-                    selection.GetSelectedLightType() == LightType::Point && 
+                if (selection.GetSelectionType() == SelectionType::Light &&
+                    selection.GetSelectedLightType() == LightType::Point &&
                     selection.GetSelectedLightIndex() == i)
                     lightFlags |= ImGuiTreeNodeFlags_Selected;
                 else
@@ -146,7 +171,7 @@ namespace pe
                     if (ImGui::MenuItem("Delete"))
                     {
                         // Reset light
-                        GetGlobalSystem<LightSystem>()->GetLights()->pointLights[i].color = vec4(0.0f); // Intensity 0
+                        GetGlobalSystem<LightSystem>()->GetLights()->pointLights[i].color = vec4(0.0f);                          // Intensity 0
                         GetGlobalSystem<LightSystem>()->GetLights()->pointLights[i].position = vec4(0.0f, 10000.0f, 0.0f, 0.0f); // Move away
                     }
                     ImGui::EndPopup();
@@ -157,8 +182,8 @@ namespace pe
             // Spot Lights
             for (int i = 0; i < MAX_SPOT_LIGHTS; i++)
             {
-                if (selection.GetSelectionType() == SelectionType::Light && 
-                    selection.GetSelectedLightType() == LightType::Spot && 
+                if (selection.GetSelectionType() == SelectionType::Light &&
+                    selection.GetSelectedLightType() == LightType::Spot &&
                     selection.GetSelectedLightIndex() == i)
                     lightFlags |= ImGuiTreeNodeFlags_Selected;
                 else
@@ -182,7 +207,7 @@ namespace pe
                     if (ImGui::MenuItem("Delete"))
                     {
                         // Reset light
-                        GetGlobalSystem<LightSystem>()->GetLights()->spotLights[i].color = vec4(0.0f); // Intensity 0
+                        GetGlobalSystem<LightSystem>()->GetLights()->spotLights[i].color = vec4(0.0f);                          // Intensity 0
                         GetGlobalSystem<LightSystem>()->GetLights()->spotLights[i].position = vec4(0.0f, 10000.0f, 0.0f, 0.0f); // Move away
                     }
                     ImGui::EndPopup();
@@ -213,6 +238,11 @@ namespace pe
 
             if (selection.GetSelectedModel() == model && selection.GetSelectedNodeIndex() < 0)
                 modelFlags |= ImGuiTreeNodeFlags_Selected;
+
+            if (m_modelToExpand == model)
+            {
+                ImGui::SetNextItemOpen(true);
+            }
 
             bool modelOpen = ImGui::TreeNodeEx((void *)(intptr_t)id, modelFlags, "%s", displayName.c_str());
             if (ImGui::IsItemClicked() && !ImGui::IsItemToggledOpen())
@@ -291,6 +321,12 @@ namespace pe
                     int meshIndex = model->GetNodeMesh(nodeIndex);
                     bool hasMesh = meshIndex >= 0;
 
+                    // Auto-expand parents
+                    if (m_modelToExpand == model && m_nodesToExpand.find(nodeIndex) != m_nodesToExpand.end())
+                    {
+                        ImGui::SetNextItemOpen(true);
+                    }
+
                     // Node is a leaf only if it has no children AND no mesh to show
                     bool isLeaf = !hasChildren && !hasMesh;
 
@@ -334,7 +370,16 @@ namespace pe
 
                     // Highlight if selected (when node itself is selected, not its mesh)
                     if (selection.GetSelectedModel() == model && selection.GetSelectedNodeIndex() == nodeIndex && selection.GetSelectionType() == SelectionType::Node)
+                    {
                         nodeFlags |= ImGuiTreeNodeFlags_Selected;
+                        if (m_scrollToSelection && m_modelToExpand == model)
+                        {
+                            ImGui::SetScrollHereY();
+                            m_scrollToSelection = false;
+                            m_modelToExpand = nullptr;
+                            m_nodesToExpand.clear();
+                        }
+                    }
 
                     bool nodeOpen = ImGui::TreeNodeEx((void *)uniqueId, nodeFlags, "%s", displayNodeName.c_str());
 
@@ -465,7 +510,7 @@ namespace pe
 
         for (auto model : modelsToDelete)
         {
-            scene.RemoveModel(model);
+            EventSystem::PushEvent(EventType::ModelRemoved, model);
         }
 
         ImGui::End();
