@@ -16,7 +16,7 @@ namespace pe
         m_position = vec3(0.f, 0.f, 0.f);
 
         m_nearPlane = 0.005f;
-        m_farPlane = 100.0f;
+        m_farPlane = FLT_MAX; // Indicates infinite far plane
         m_fovx = radians(87.0f);
         m_rotationSpeed = radians(2.864f);
         m_speed = 3.5f;
@@ -76,7 +76,27 @@ namespace pe
         m_prevProjJitter = m_projJitter;
         m_previousProjection = m_projection;
 
-        m_projection = perspective(Fovy(), GetAspect(), m_farPlane, m_nearPlane);
+        // Infinite Reverse-Z Projection
+        // Maps:
+        // z_view = -near    => z_ndc = 1
+        // z_view = -infinity => z_ndc = 0
+        //
+        // Matrix (Column-Major):
+        // [ 1/(a*tan)   0       0    0 ]
+        // [    0      1/tan     0    0 ]
+        // [    0        0       0    n ]
+        // [    0        0      -1    0 ]
+        
+        float const tanHalfFovy = tan(Fovy() / 2.0f);
+        float const aspect = GetAspect();
+        
+        m_projection = mat4(0.0f);
+        m_projection[0][0] = 1.0f / (aspect * tanHalfFovy);
+        m_projection[1][1] = 1.0f / tanHalfFovy; // Vulkan Y-flip
+        m_projection[2][2] = 0.0f;
+        m_projection[2][3] = 1.0f;
+        m_projection[3][2] = m_nearPlane;
+        
         m_projectionNoJitter = m_projection; // Save the clean projection matrix
 
         if (Settings::Get<GlobalSettings>().taa)

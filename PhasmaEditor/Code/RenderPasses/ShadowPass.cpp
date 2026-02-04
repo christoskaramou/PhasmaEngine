@@ -114,7 +114,7 @@ namespace pe
         cascadeSplits.resize(cascades);
 
         float nearClip = camera->GetNearPlane();
-        float farClip = camera->GetFarPlane();
+        float farClip = 100.0f;
         float clipRange = farClip - nearClip;
 
         float minZ = nearClip;

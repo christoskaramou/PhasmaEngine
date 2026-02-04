@@ -205,10 +205,18 @@ namespace pe
         nearPoint /= nearPoint.w;
 
         vec4 farPoint = invViewProj * vec4(ndcX, ndcY, 0.0f, 1.0f);
-        farPoint /= farPoint.w;
-
         vec3 rayOrigin = vec3(nearPoint);
-        vec3 rayDir = normalize(vec3(farPoint) - vec3(nearPoint));
+        vec3 rayDir;
+
+        if (abs(farPoint.w) < 1e-6f)
+        {
+            rayDir = normalize(vec3(farPoint));
+        }
+        else
+        {
+            farPoint /= farPoint.w;
+            rayDir = normalize(vec3(farPoint) - vec3(nearPoint));
+        }
         vec3 camPos = camera->GetPosition();
 
         struct Intersection
@@ -578,6 +586,11 @@ namespace pe
             if (clipPos.w > 0.0f)
             {
                 vec2 ndcPos = vec2(clipPos) / clipPos.w;
+                
+                // Cull if off-screen to prevent ImGui scrollbars
+                if (ndcPos.x < -1.0f || ndcPos.x > 1.0f || ndcPos.y < -1.0f || ndcPos.y > 1.0f)
+                    return;
+
                 float x = (ndcPos.x * 0.5f + 0.5f) * imageSize.x + imageMin.x;
                 float y = (ndcPos.y * 0.5f + 0.5f) * imageSize.y + imageMin.y;
 
