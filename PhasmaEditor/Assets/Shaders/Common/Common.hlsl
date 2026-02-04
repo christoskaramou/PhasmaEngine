@@ -45,7 +45,6 @@ float PDsrand(float2 n)
     return PDnrand(n) * 2.0 - 1.0;
 }
 
-
 // inverse_projection gives view space
 // inverse_view_projection gives world space
 float3 GetPosFromUV(float2 UV, float depth, float4x4 mat)
@@ -56,7 +55,14 @@ float3 GetPosFromUV(float2 UV, float depth, float4x4 mat)
     ndcPos.w = 1.0;
 
     float4 clipPos = mul(ndcPos, mat);
-    return (clipPos / clipPos.w).xyz;
+
+    // Avoid division by zero for infinite far plane (where w=0)
+    // For directions (skybox), a large position is sufficient.
+    float w = clipPos.w;
+    if (abs(w) < FLT_EPSILON)
+        w = FLT_EPSILON;
+
+    return (clipPos / w).xyz;
 }
 
 // Find the normal for this fragment, pulling either from a predefined normal map

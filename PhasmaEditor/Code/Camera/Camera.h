@@ -43,7 +43,7 @@ namespace pe
         inline vec3 GetRight() const { return m_right; }
         inline vec3 GetUp() const { return m_up; }
         inline float GetNearPlane() const { return m_nearPlane; }
-        inline float GetFarPlane() const { return m_farPlane; }
+        inline float GetFarPlane() const { return m_farPlane; } // Note: Not used for projection (Infinite Reverse-Z)
         inline float GetRotationSpeed() const { return m_rotationSpeed; }
         inline float GetSpeed() const { return m_speed; }
         inline vec3 GetEuler() const { return m_euler; }
