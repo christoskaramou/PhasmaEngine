@@ -327,7 +327,6 @@ namespace pe
                     }
                     if (ImGui::MenuItem("Unreal", nullptr, isUnreal))
                     {
-                        GUIState::s_guiStyle = GUIStyle::Unreal;
                         ui::ApplyUnrealTheme();
                     }
                     ImGui::EndMenu();
@@ -445,6 +444,9 @@ namespace pe
             std::string iconFontPath = Path::Assets + "Fonts/fa-solid-900.ttf";
             std::string interFontPath = Path::Assets + "Fonts/Inter-Regular.ttf";
             std::string robotoFontPath = Path::Assets + "Fonts/Roboto-Regular.ttf";
+            // std::string sourceSansFontPath = Path::Assets + "Fonts/SourceSans3-Regular.ttf";
+            std::string openSansFontPath = Path::Assets + "Fonts/OpenSans-Regular.ttf";
+            // std::string latoFontPath = Path::Assets + "Fonts/Lato-Regular.ttf";
             float fontSize = 15.0f;
 
             // Helper lambda to add icon font merged into base
@@ -460,39 +462,40 @@ namespace pe
                 }
             };
 
-            // 1. Classic font (ImGui default)
+            // 1. Classic (Default ImGui)
             GUIState::s_fontClassic = io.Fonts->AddFontDefault();
             addIconsToFont();
 
-            // 2. Unity font (Inter)
+            // 2. Unity (Inter)
             if (std::filesystem::exists(interFontPath))
             {
                 GUIState::s_fontUnity = io.Fonts->AddFontFromFileTTF(interFontPath.c_str(), fontSize);
                 addIconsToFont();
             }
             else
-            {
                 GUIState::s_fontUnity = GUIState::s_fontClassic;
-            }
 
-            // 3. Unreal font (Roboto)
+            // 3. Unreal (Roboto)
             if (std::filesystem::exists(robotoFontPath))
             {
                 GUIState::s_fontUnreal = io.Fonts->AddFontFromFileTTF(robotoFontPath.c_str(), fontSize);
-                // Add icons at matching size
-                if (std::filesystem::exists(iconFontPath))
-                {
-                    ImFontConfig config;
-                    config.MergeMode = true;
-                    config.PixelSnapH = true;
-                    config.GlyphMinAdvanceX = fontSize;
-                    io.Fonts->AddFontFromFileTTF(iconFontPath.c_str(), fontSize, &config, icon_ranges);
-                }
+                addIconsToFont();
+            }
+            else
+                GUIState::s_fontUnreal = GUIState::s_fontClassic;
+
+            // 4, 5, 6. Modern, Dark, Light (OpenSans)
+            if (std::filesystem::exists(openSansFontPath))
+            {
+                GUIState::s_fontLight = io.Fonts->AddFontFromFileTTF(openSansFontPath.c_str(), fontSize + 2);
+                addIconsToFont();
             }
             else
             {
-                GUIState::s_fontUnreal = GUIState::s_fontClassic;
+                GUIState::s_fontLight = GUIState::s_fontClassic;
             }
+            GUIState::s_fontDark = GUIState::s_fontLight;
+            GUIState::s_fontModern = GUIState::s_fontLight;
         }
 
         ImGui_ImplVulkan_CreateFontsTexture();
@@ -615,10 +618,29 @@ namespace pe
 
         // Push the font for the current style
         ImFont *currentFont = GUIState::s_fontClassic;
-        if (GUIState::s_guiStyle == GUIStyle::Unity)
+
+        switch (GUIState::s_guiStyle)
+        {
+        case GUIStyle::Dark:
+            currentFont = GUIState::s_fontDark;
+            break;
+        case GUIStyle::Light:
+            currentFont = GUIState::s_fontLight;
+            break;
+        case GUIStyle::Modern:
+            currentFont = GUIState::s_fontModern;
+            break;
+        case GUIStyle::Unity:
             currentFont = GUIState::s_fontUnity;
-        else if (GUIState::s_guiStyle == GUIStyle::Unreal)
+            break;
+        case GUIStyle::Unreal:
             currentFont = GUIState::s_fontUnreal;
+            break;
+        case GUIStyle::Classic:
+        default:
+            currentFont = GUIState::s_fontClassic;
+            break;
+        }
 
         if (currentFont)
             ImGui::PushFont(currentFont);
