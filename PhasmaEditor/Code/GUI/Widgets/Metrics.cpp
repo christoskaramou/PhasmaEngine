@@ -107,11 +107,18 @@ namespace pe
         static float highestValue = 100.0f;
 
         static Timer delay;
-        float framerate = ImGui::GetIO().Framerate;
-        if (delay.Count() > 0.2)
+        static float framerate = 0.001f;
+        
+        static std::vector<GpuTimerSample> displayedGpuTimerInfos;
+        static float displayedGpuTotal = 0.0f;
+
+        bool updateMetrics = false;
+        if (delay.Count() > 0.25)
         {
             delay.Start();
+            updateMetrics = true;
 
+            framerate = ImGui::GetIO().Framerate;
             fpsDeque.pop_front();
             fpsDeque.push_back(framerate);
             highestValue = std::max(highestValue, framerate + 60.0f);
@@ -121,7 +128,7 @@ namespace pe
         ui::SetInitialWindowSizeFraction(1.0f / 5.5f, 1.0f / 3.0f);
         ImGui::Begin("Metrics", &m_open);
         ImGui::Text("Dear ImGui %s", ImGui::GetVersion());
-        ImGui::TextColored(ImVec4(1.0f, 1.0f, 0.0f, 1.0f), "Average %.3f ms (%.1f FPS)", 1000.0f / framerate, framerate);
+        ImGui::Text("Average %.3f ms (%.1f FPS)", 1000.0f / framerate, framerate);
         ImGui::PlotLines("##FrameTimes", fpsVector.data(), static_cast<int>(fpsVector.size()), 0, NULL, 0.0f, highestValue, ImVec2(0, 80));
 
         // Memory Usage
@@ -139,23 +146,33 @@ namespace pe
         ImGui::PopStyleVar();
         ImGui::Separator();
 
+        static float displayedCpuTotal = 0.0f;
+        static float displayedCpuUpdates = 0.0f;
+        static float displayedCpuDraw = 0.0f;
+
         FrameTimer &ft = FrameTimer::Instance();
-        const float cpuTotal = (float)MILLI(ft.GetCpuTotal());
-        const float cpuUpdates = (float)MILLI(ft.GetUpdatesStamp());
-        const float cpuDraw = (float)MILLI(ft.GetCpuTotal() - ft.GetUpdatesStamp());
+        if (updateMetrics)
+        {
+            displayedCpuTotal = (float)MILLI(ft.GetCpuTotal());
+            displayedCpuUpdates = (float)MILLI(ft.GetUpdatesStamp());
+            displayedCpuDraw = (float)MILLI(ft.GetCpuTotal() - (double)ft.GetUpdatesStamp());
+        }
+
 #if PE_DEBUG_MODE
-        auto gpuTimerInfos = m_gui->PopGpuTimerInfos();
-        const float gpuTotal = FetchTotalGPUTime(gpuTimerInfos);
-#else
-        const float gpuTotal = 0.0f;
+        auto currentGpuTimerInfos = m_gui->PopGpuTimerInfos(); 
+        if (updateMetrics && !currentGpuTimerInfos.empty())
+        {
+            displayedGpuTimerInfos = std::move(currentGpuTimerInfos);
+            displayedGpuTotal = FetchTotalGPUTime(displayedGpuTimerInfos);
+        }
 #endif
         // Compact local spacing
         ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(ImGui::GetStyle().ItemSpacing.x, 2.0f));
-        ui::ShowCpuGpuSummary(cpuTotal, cpuUpdates, cpuDraw, gpuTotal);
+        ui::ShowCpuGpuSummary(displayedCpuTotal, displayedCpuUpdates, displayedCpuDraw, displayedGpuTotal);
         ImGui::PopStyleVar();
 #if PE_DEBUG_MODE
         // keep the nice timings table you added below
-        ShowGpuTimingsTable(gpuTimerInfos, gpuTotal);
+        ShowGpuTimingsTable(displayedGpuTimerInfos, displayedGpuTotal);
 #endif
         ImGui::End();
     }

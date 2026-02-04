@@ -16,6 +16,10 @@ namespace pe
     ImFont *GUIState::s_fontClassic = nullptr;
     ImFont *GUIState::s_fontUnity = nullptr;
     ImFont *GUIState::s_fontUnreal = nullptr;
+    ImFont *GUIState::s_fontModern = nullptr;
+    ImFont *GUIState::s_fontDark = nullptr;
+    ImFont *GUIState::s_fontLight = nullptr;
+
 
     void GUIState::OpenExternalPath(const std::string &absPath)
     {
