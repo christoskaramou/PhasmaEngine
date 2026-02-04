@@ -15,6 +15,7 @@
 #include "RenderPasses/DepthPass.h"
 #include "RenderPasses/FXAAPass.h"
 #include "RenderPasses/GbufferPass.h"
+#include "RenderPasses/GridPass.h"
 #include "RenderPasses/LightPass.h"
 #include "RenderPasses/MotionBlurPass.h"
 #include "RenderPasses/ParticleComputePass.h"
@@ -76,6 +77,7 @@ namespace pe
         m_renderPassComponents[ID::GetTypeID<TAAPass>()] = CreateGlobalComponent<TAAPass>();
         m_renderPassComponents[ID::GetTypeID<SharpenPass>()] = CreateGlobalComponent<SharpenPass>();
         m_renderPassComponents[ID::GetTypeID<RayTracingPass>()] = CreateGlobalComponent<RayTracingPass>();
+        m_renderPassComponents[ID::GetTypeID<GridPass>()] = CreateGlobalComponent<GridPass>();
 
         for (auto &renderPassComponent : m_renderPassComponents)
         {
@@ -152,27 +154,28 @@ namespace pe
     {
         CommandBuffer *cmd = RHII.GetMainQueue()->AcquireCommandBuffer();
 
-        ShadowPass &shadows = *GetGlobalComponent<ShadowPass>();
-        DepthPass &dp = *GetGlobalComponent<DepthPass>();
-        GbufferOpaquePass &gbo = *GetGlobalComponent<GbufferOpaquePass>();
-        GbufferTransparentPass &gbt = *GetGlobalComponent<GbufferTransparentPass>();
-        LightOpaquePass &lo = *GetGlobalComponent<LightOpaquePass>();
-        LightTransparentPass &lt = *GetGlobalComponent<LightTransparentPass>();
-        SSAOPass &ssao = *GetGlobalComponent<SSAOPass>();
-        SSRPass &ssr = *GetGlobalComponent<SSRPass>();
-        FXAAPass &fxaa = *GetGlobalComponent<FXAAPass>();
-        BloomBrightFilterPass &bbfp = *GetGlobalComponent<BloomBrightFilterPass>();
-        BloomGaussianBlurHorizontalPass &bgbh = *GetGlobalComponent<BloomGaussianBlurHorizontalPass>();
-        BloomGaussianBlurVerticalPass &bgbv = *GetGlobalComponent<BloomGaussianBlurVerticalPass>();
-        DOFPass &dof = *GetGlobalComponent<DOFPass>();
-        MotionBlurPass &motionBlur = *GetGlobalComponent<MotionBlurPass>();
-        TAAPass &taa = *GetGlobalComponent<TAAPass>();
-        SharpenPass &sharpen = *GetGlobalComponent<SharpenPass>();
-        TonemapPass &tonemap = *GetGlobalComponent<TonemapPass>();
-        AabbsPass &aabbs = *GetGlobalComponent<AabbsPass>();
-        ParticleComputePass &pcp = *GetGlobalComponent<ParticleComputePass>();
-        ParticlePass &pp = *GetGlobalComponent<ParticlePass>();
-        RayTracingPass &rtp = *GetGlobalComponent<RayTracingPass>();
+        auto &shadows = *GetGlobalComponent<ShadowPass>();
+        auto &dp = *GetGlobalComponent<DepthPass>();
+        auto &gbo = *GetGlobalComponent<GbufferOpaquePass>();
+        auto &gbt = *GetGlobalComponent<GbufferTransparentPass>();
+        auto &lo = *GetGlobalComponent<LightOpaquePass>();
+        auto &lt = *GetGlobalComponent<LightTransparentPass>();
+        auto &grid = *GetGlobalComponent<GridPass>();
+        auto &ssao = *GetGlobalComponent<SSAOPass>();
+        auto &ssr = *GetGlobalComponent<SSRPass>();
+        auto &fxaa = *GetGlobalComponent<FXAAPass>();
+        auto &bbfp = *GetGlobalComponent<BloomBrightFilterPass>();
+        auto &bgbh = *GetGlobalComponent<BloomGaussianBlurHorizontalPass>();
+        auto &bgbv = *GetGlobalComponent<BloomGaussianBlurVerticalPass>();
+        auto &dof = *GetGlobalComponent<DOFPass>();
+        auto &motionBlur = *GetGlobalComponent<MotionBlurPass>();
+        auto &taa = *GetGlobalComponent<TAAPass>();
+        auto &sharpen = *GetGlobalComponent<SharpenPass>();
+        auto &tonemap = *GetGlobalComponent<TonemapPass>();
+        auto &aabbs = *GetGlobalComponent<AabbsPass>();
+        auto &pcp = *GetGlobalComponent<ParticleComputePass>();
+        auto &pp = *GetGlobalComponent<ParticlePass>();
+        auto &rtp = *GetGlobalComponent<RayTracingPass>();
 
         auto &gSettings = Settings::Get<GlobalSettings>();
 
@@ -189,7 +192,7 @@ namespace pe
 
         // Depth/GBuffer needed if Raster is on OR if needed by PostProcess/Particles
         bool needVelocity = gSettings.taa || gSettings.motion_blur;
-        bool needDepth = renderRaster || renderParticles || gSettings.dof || gSettings.motion_blur || needVelocity;
+        bool needDepth = renderRaster || renderParticles || gSettings.dof || gSettings.motion_blur || needVelocity || gSettings.draw_aabbs || gSettings.draw_grid;
         bool needGBuffer = renderRaster || needVelocity || renderSSR || renderSSAO;
 
         // Shadows Opaque
@@ -242,7 +245,7 @@ namespace pe
                 }
             }
         }
-        
+
         if (gSettings.render_mode != RenderMode::Raster)
         {
             // Ray Tracing Replaces Lighting
@@ -323,6 +326,13 @@ namespace pe
             {
                 motionBlur.ExecutePass(cmd);
             }
+        }
+
+        // Grid Pass
+        if (gSettings.draw_grid)
+        {
+            grid.SetScene(&m_scene);
+            grid.ExecutePass(cmd);
         }
 
         // Gui
