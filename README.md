@@ -1,10 +1,18 @@
 # PhasmaEngine
 
 
-PhasmaEngine is intended as a project for learning 3D graphics and techniques, using Vulkan API and can run on Windows and Linux. Until now these are the most important features PhasmaEngine has:
+PhasmaEngine is intended as a project for learning 3D graphics and techniques, using Vulkan API and can run on Windows and Linux.
+
+![Screenshot](PhasmaEditor/Images/ABeautifulGame.png)
+
+
+
+Until now these are the most important features PhasmaEngine has:
 
 * Dynamic Rendering
 * Deffered Rendering
+* Ray Tracing
+* Hybrid RT (Transparency/Trasmission/Refraction)
 * Image Based Lighting
 * Screen Space Ambient Occlusion
 * Screen Space Reflections
@@ -23,14 +31,6 @@ PhasmaEngine is intended as a project for learning 3D graphics and techniques, u
 * Event System
 * CPU/GPU Metrics
 * Debug Console
-
-Here a old [demo video](https://www.youtube.com/watch?v=Dj1CpDCSy_k) with some of these features.
-
-![Screenshot](PhasmaEditor/Images/example_image3.png)
-![Screenshot](PhasmaEditor/Images/example_image7.png)
-![Screenshot](PhasmaEditor/Images/example_image2.png)
-![Screenshot](PhasmaEditor/Images/example_image6.png)
-![Screenshot](PhasmaEditor/Images/example_image8.png)
 
 ### Building and Compiling
 
