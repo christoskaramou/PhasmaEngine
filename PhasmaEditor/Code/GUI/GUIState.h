@@ -47,10 +47,13 @@ namespace pe
         // GUI Style
         static GUIStyle s_guiStyle;
 
-        // Style-specific fonts (loaded at init, switched dynamically)
+        // Style-specific fonts
         static ImFont *s_fontClassic;
         static ImFont *s_fontUnity;
         static ImFont *s_fontUnreal;
+        static ImFont *s_fontModern;
+        static ImFont *s_fontDark;
+        static ImFont *s_fontLight;
 
         static void OpenExternalPath(const std::string &absPath);
         static void UpdateAssetPreview(AssetPreviewType type, const std::string &label, const std::string &fullPath);
