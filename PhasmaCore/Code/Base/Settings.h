@@ -66,6 +66,7 @@ namespace pe
         std::atomic_uint32_t loading_total{1};
         bool freeze_frustum_culling = false;
         bool draw_aabbs = false;
+        bool draw_grid = true;
         bool aabbs_depth_aware = true;
         bool dynamic_rendering = true;
         bool ray_tracing_support = false;

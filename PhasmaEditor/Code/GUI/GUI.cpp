@@ -7,7 +7,6 @@
 #include "API/RenderPass.h"
 #include "API/Surface.h"
 #include "API/Swapchain.h"
-#include "Base/Log.h"
 #include "GUIState.h"
 #include "Helpers.h"
 #include "RenderPasses/LightPass.h"
@@ -284,8 +283,10 @@ namespace pe
 
             if (ImGui::BeginMenu("Gizmos"))
             {
+                auto &gSettings = Settings::Get<GlobalSettings>();
                 ImGui::MenuItem("Transform", nullptr, &GUIState::s_useTransformGizmo);
                 ImGui::MenuItem("Lights", nullptr, &GUIState::s_useLightGizmos);
+                ImGui::MenuItem("Grid", nullptr, &gSettings.draw_grid);
                 ImGui::EndMenu();
             }
 
