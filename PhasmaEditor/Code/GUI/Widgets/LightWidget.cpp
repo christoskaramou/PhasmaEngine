@@ -125,22 +125,27 @@ namespace pe
 
             DrawControl("Rotation", ICON_FA_SYNC_ALT, [&]()
                         {
+                vec3 euler = degrees(eulerAngles(quat(light.rotation)));
+                vec3 oldEuler = euler;
                 ImGui::PushMultiItemsWidths(2, ImGui::GetContentRegionAvail().x);
                 ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2{2, 0});
-                ImGui::DragFloat("##RX", &light.rotation.x, 0.1f, 0.0f, 0.0f, "P: %.2f"); ImGui::PopItemWidth(); ImGui::SameLine();
-                ImGui::DragFloat("##RY", &light.rotation.y, 0.1f, 0.0f, 0.0f, "Y: %.2f"); ImGui::PopItemWidth();
-                ImGui::PopStyleVar(); });
+                ImGui::DragFloat("##RX", &euler.x, 0.1f, 0.0f, 0.0f, "P: %.2f"); ImGui::PopItemWidth(); ImGui::SameLine();
+                ImGui::DragFloat("##RY", &euler.y, 0.1f, 0.0f, 0.0f, "Y: %.2f"); ImGui::PopItemWidth();
+                ImGui::PopStyleVar(); 
+                if (euler != oldEuler)
+                {
+                    quat q = quat(radians(vec3(euler.x, euler.y, 0.0f)));
+                    light.rotation = vec4(q.x, q.y, q.z, q.w);
+                } });
 
             DrawControl("Range", ICON_FA_EXPAND, [&]()
                         { ImGui::DragFloat("##Range", &light.position.w, 0.1f, 0.0f, 1000.0f, "%.2f"); });
 
-            if (light.rotation.z == 0.0f)
-                light.rotation.z = 30.0f;
             DrawControl("Angle", ICON_FA_EYE, [&]()
-                        { ImGui::DragFloat("##Angle", &light.rotation.z, 0.1f, 0.0f, 180.0f, "%.2f"); });
+                        { ImGui::DragFloat("##Angle", &light.params.x, 0.1f, 0.0f, 180.0f, "%.2f"); });
 
             DrawControl("Falloff", ICON_FA_CIRCLE_DOT, [&]()
-                        { ImGui::DragFloat("##Falloff", &light.rotation.w, 0.1f, 0.0f, 180.0f, "%.2f"); });
+                        { ImGui::DragFloat("##Falloff", &light.params.y, 0.1f, 0.0f, 180.0f, "%.2f"); });
 
             ImGui::Columns(1);
         }
@@ -174,11 +179,19 @@ namespace pe
 
             DrawControl("Rotation", ICON_FA_SYNC_ALT, [&]()
                         {
-                ImGui::PushMultiItemsWidths(2, ImGui::GetContentRegionAvail().x);
+                vec3 euler = degrees(eulerAngles(quat(light.rotation)));
+                vec3 oldEuler = euler;
+                ImGui::PushMultiItemsWidths(3, ImGui::GetContentRegionAvail().x);
                 ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2{2, 0});
-                ImGui::DragFloat("##RX", &light.rotation.x, 0.1f, 0.0f, 0.0f, "P: %.2f"); ImGui::PopItemWidth(); ImGui::SameLine();
-                ImGui::DragFloat("##RY", &light.rotation.y, 0.1f, 0.0f, 0.0f, "Y: %.2f"); ImGui::PopItemWidth();
-                ImGui::PopStyleVar(); });
+                ImGui::DragFloat("##RX", &euler.x, 0.1f, 0.0f, 0.0f, "P: %.2f"); ImGui::PopItemWidth(); ImGui::SameLine();
+                ImGui::DragFloat("##RY", &euler.y, 0.1f, 0.0f, 0.0f, "Y: %.2f"); ImGui::PopItemWidth(); ImGui::SameLine();
+                ImGui::DragFloat("##RZ", &euler.z, 0.1f, 0.0f, 0.0f, "R: %.2f"); ImGui::PopItemWidth();
+                ImGui::PopStyleVar(); 
+                if (euler != oldEuler)
+                {
+                    quat q = quat(radians(euler));
+                    light.rotation = vec4(q.x, q.y, q.z, q.w);
+                } });
 
             DrawControl("Range", ICON_FA_EXPAND, [&]()
                         { ImGui::DragFloat("##Range", &light.position.w, 0.1f, 0.0f, 1000.0f, "%.2f"); });

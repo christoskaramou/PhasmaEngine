@@ -54,19 +54,22 @@ namespace pe
         m_spotLights.resize(5);
         for (int i = 0; i < 5; i++)
         {
+            quat q = quat(radians(vec3(rand(-90.f, 90.f), rand(-180.f, 180.f), 0.0f)));
             SpotLight &spot = m_spotLights[i];
             spot.color = vec4(rand(0.f, 1.f), rand(0.f, 1.f), rand(0.f, 1.f), 1.0f);              // .w = intensity
             spot.position = vec4(rand(-10.5f, 10.5f), rand(.7f, 6.7f), rand(-4.5f, 4.5f), 10.0f); // .w = range
-            spot.rotation = vec4(rand(-90.f, 90.f), rand(-180.f, 180.f), 15.0f, 5.0f);            // .z = angle, .w = falloff
+            spot.rotation = vec4(q.x, q.y, q.z, q.w);                                             // quaternion
+            spot.params = vec4(15.0f, 5.0f, 0.0f, 0.0f);                                          // .x = angle, .y = falloff
         }
 
         m_areaLights.resize(5);
         for (int i = 0; i < 5; i++)
         {
+            quat q = quat(radians(vec3(rand(-90.f, 90.f), rand(-180.f, 180.f), 0.0f)));
             AreaLight &area = m_areaLights[i];
             area.color = vec4(rand(0.f, 1.f), rand(0.f, 1.f), rand(0.f, 1.f), 1.0f);              // .w = intensity
             area.position = vec4(rand(-10.5f, 10.5f), rand(.7f, 6.7f), rand(-4.5f, 4.5f), 20.0f); // .w = range
-            area.rotation = vec4(rand(-90.f, 90.f), rand(-180.f, 180.f), 0.0f, 0.0f);             // .x = pitch, .y = yaw
+            area.rotation = vec4(q.x, q.y, q.z, q.w);                                             // quaternion
             area.size = vec4(2.0f, 2.0f, 0.0f, 0.0f);                                             // .x = width, .y = height
         }
 

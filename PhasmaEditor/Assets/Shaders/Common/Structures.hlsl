@@ -226,14 +226,15 @@ struct SpotLight
 {
     float4 color;    // .w = intensity
     float4 position; // .w = range
-    float4 rotation; // .z = angle, .w = falloff
+    float4 rotation; // quaternion
+    float4 params;   // .x = angle, .y = falloff
 };
 
 struct AreaLight
 {
     float4 color;    // .w = intensity
     float4 position; // .w = range
-    float4 rotation; // .x = pitch, .y = yaw
+    float4 rotation; // quaternion
     float4 size;     // .x = width, .y = height
 };
 // -----------------------------------------
