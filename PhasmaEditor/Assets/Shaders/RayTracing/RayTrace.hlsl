@@ -108,11 +108,12 @@ PointLight LoadPointLight(uint index)
 
 SpotLight LoadSpotLight(uint index)
 {
-    uint offset = cb_offsetSpotLights + index * 48;
+    uint offset = cb_offsetSpotLights + index * 64;
     SpotLight light;
     light.color = asfloat(LightsBuffer.Load4(offset));
     light.position = asfloat(LightsBuffer.Load4(offset + 16));
     light.rotation = asfloat(LightsBuffer.Load4(offset + 32));
+    light.params = asfloat(LightsBuffer.Load4(offset + 48));
     return light;
 }
 
@@ -369,20 +370,13 @@ float3 RT_ComputeSpotLight(int index, float3 worldPos, float3 materialNormal, fl
     
     if (dist > range) return 0.0;
     
-    // Rotation to Direction
-    float p = radians(light.rotation.x);
-    float y = radians(light.rotation.y);
-    float3 spotDir;
-    spotDir.x = cos(p) * sin(y);
-    spotDir.y = sin(p);
-    spotDir.z = cos(p) * cos(y);
-    spotDir = normalize(spotDir);
-    
+    // Convert to Direction Vector using Quaternion
+    float3 spotDir = normalize(RotateVectorByQuat(float3(0, 0, -1), light.rotation));
     float3 L = normalize(-lightDirFull);
     float theta = dot(-L, spotDir);
     
-    float cutoffCos = cos(radians(light.rotation.z)); // angle is .z
-    float outerCutoffCos = cos(radians(light.rotation.z + light.rotation.w)); // falloff is .w
+    float cutoffCos = cos(radians(light.params.x)); // angle is params.x
+    float outerCutoffCos = cos(radians(light.params.x + light.params.y)); // falloff is params.y
     
     if (theta < outerCutoffCos) return 0.0;
     
@@ -440,17 +434,8 @@ float3 RT_ComputeAreaLight(int index, float3 worldPos, float3 materialNormal, fl
     float width     = light.size.x;
     float height    = light.size.y;
 
-    // 1. Calculate orientation
-    float p = radians(light.rotation.x);
-    float y = radians(light.rotation.y);
-    
-    // Light Vectors
-    float3 lightForward;
-    lightForward.x = cos(p) * sin(y);
-    lightForward.y = sin(p);
-    lightForward.z = cos(p) * cos(y);
-    lightForward = normalize(lightForward);
-
+    // Light Vectors using Quaternion
+    float3 lightForward = normalize(RotateVectorByQuat(float3(0, 0, -1), light.rotation));
     float3 lightRight = normalize(cross(lightForward, float3(0, 1, 0)));
     float3 lightUp    = normalize(cross(lightRight, lightForward));
 

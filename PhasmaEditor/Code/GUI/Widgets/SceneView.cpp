@@ -118,16 +118,17 @@ namespace pe
 
                 ImVec2 imageMin = ImGui::GetItemRectMin();
                 ImVec2 imageMax = ImGui::GetItemRectMax();
+                bool isImageHovered = ImGui::IsItemHovered();
 
-                if (!ImGuizmo::IsOver())
+                // Draw Gizmos (hit tests are done inside Manipulate)
+                DrawGizmos(imageMin, imageSize);
+
+                bool isOverGizmo = ImGuizmo::IsOver();
+                bool isUsingGizmo = ImGuizmo::IsUsing();
+
+                if (!isOverGizmo && !isUsingGizmo)
                 {
-                    ImGui::SetCursorPos(cursorPos);
-                    ImGui::InvisibleButton("##SceneViewInput", imageSize, ImGuiButtonFlags_MouseButtonLeft | ImGuiButtonFlags_MouseButtonRight);
-
-                    if (ImGui::IsItemClicked(ImGuiMouseButton_Right))
-                        ImGui::SetWindowFocus();
-
-                    if (ImGui::IsItemClicked(ImGuiMouseButton_Left))
+                    if (ImGui::IsMouseClicked(ImGuiMouseButton_Left) && isImageHovered)
                     {
                         ImVec2 mousePos = ImGui::GetMousePos();
                         float normalizedX = (mousePos.x - imageMin.x) / (imageMax.x - imageMin.x);
@@ -135,9 +136,12 @@ namespace pe
 
                         PerformObjectPicking(normalizedX, normalizedY);
                     }
-                }
 
-                DrawGizmos(imageMin, imageSize);
+                    if (ImGui::IsMouseClicked(ImGuiMouseButton_Right) && isImageHovered)
+                    {
+                        ImGui::SetWindowFocus();
+                    }
+                }
 
                 // Drop Target for SceneView
                 if (ImGui::BeginDragDropTarget())
@@ -306,9 +310,8 @@ namespace pe
 
     vec3 GetDirectionFromRotation(const vec4 &rotation)
     {
-        vec3 euler = glm::radians(vec3(-rotation.x, rotation.y, 0.0f));
-        quat q = quat(euler);
-        vec3 dir = q * vec3(0, 0, 1);
+        quat q = quat(rotation.w, rotation.x, rotation.y, rotation.z);
+        vec3 dir = q * vec3(0, 0, -1);
 
         return glm::normalize(dir);
     }
@@ -325,12 +328,17 @@ namespace pe
             return;
 
         ImGuizmo::SetOrthographic(false);
-        ImGuizmo::SetDrawlist();
+        ImGuizmo::SetDrawlist(ImGui::GetWindowDrawList());
         ImGuizmo::SetRect(imageMin.x, imageMin.y, imageSize.x, imageSize.y);
-        mat4 view = camera->GetView();
-        mat4 proj = camera->GetProjectionNoJitter();
 
-        // Vulkan convention
+        mat4 view = camera->GetView();
+
+        // Use a standard projection matrix for ImGuizmo to avoid issues with infinite/reverse-Z
+        float fovY = camera->Fovy();
+        float aspect = camera->GetAspect();
+        float nearPlane = camera->GetNearPlane();
+        // Standard perspective (Right-handed for GLM/ImGuizmo default)
+        mat4 proj = perspective(fovY, aspect, nearPlane, 1000.0f);
         proj[1][1] *= -1.0f;
 
         ImGuizmo::OPERATION op = ImGuizmo::TRANSLATE;
@@ -347,7 +355,9 @@ namespace pe
             break;
         }
 
-        mat4 modelMatrix(1.0f);
+        ImGuizmo::MODE mode = ImGuizmo::WORLD; // World mode simpler for lights for now
+
+        mat4 matrix(1.0f);
         bool useLight = false;
         LightType lightType;
         int lightIndex = -1;
@@ -357,7 +367,7 @@ namespace pe
             NodeInfo *nodeInfo = selection.GetSelectedNodeInfo();
             if (!nodeInfo)
                 return;
-            modelMatrix = nodeInfo->ubo.worldMatrix;
+            matrix = nodeInfo->ubo.worldMatrix;
         }
         else if (selection.GetSelectionType() == SelectionType::Light)
         {
@@ -371,52 +381,33 @@ namespace pe
             useLight = true;
             if (lightType == LightType::Point && lightIndex >= 0 && lightIndex < (int)ls->GetPointLights().size())
             {
-                modelMatrix = translate(mat4(1.0f), vec3(ls->GetPointLights()[lightIndex].position));
+                matrix = translate(mat4(1.0f), vec3(ls->GetPointLights()[lightIndex].position));
             }
             else if (lightType == LightType::Spot && lightIndex >= 0 && lightIndex < (int)ls->GetSpotLights().size())
             {
-                vec3 start = vec3(ls->GetSpotLights()[lightIndex].position);
-
-                // Compute direction from Rotation
-                float p = radians(ls->GetSpotLights()[lightIndex].rotation.x);
-                float y = radians(ls->GetSpotLights()[lightIndex].rotation.y);
-
-                vec3 dir;
-                dir.x = cos(p) * sin(y);
-                dir.y = sin(p);
-                dir.z = cos(p) * cos(y);
-                dir = normalize(dir);
-
-                vec3 up = vec3(0, 1, 0);
-                if (abs(dot(dir, up)) > 0.99f)
-                    up = vec3(1, 0, 0);
-
-                modelMatrix = inverse(lookAt(start, start + dir, up));
+                SpotLight &spot = ls->GetSpotLights()[lightIndex];
+                vec3 start = vec3(spot.position);
+                quat rot = quat(spot.rotation.w, spot.rotation.x, spot.rotation.y, spot.rotation.z);
+                matrix = translate(mat4(1.0f), start) * mat4_cast(rot);
             }
             else if (lightType == LightType::Directional)
             {
-                // Place directional gizmo in front of camera or at origin
-                vec3 pos = vec3(0.0f); // Origin for now
+                // Directional light position doesn't matter, only rotation
                 if (!ls->GetDirectionalLights().empty())
                 {
-                    vec3 dir = vec3(ls->GetDirectionalLights()[0].direction);
-                    vec3 up = vec3(0, 1, 0);
-                    if (abs(dot(dir, up)) > 0.99f)
-                        up = vec3(1, 0, 0);
-
-                    modelMatrix = inverse(lookAt(pos, pos + dir, up));
+                    DirectionalLight &dirLight = ls->GetDirectionalLights()[0];
+                    vec3 dir = vec3(dirLight.direction);
+                    // Create a rotation that points along 'dir'
+                    quat rot = rotation(vec3(0, 0, -1), dir); // Rotate from -Z to 'dir'
+                    matrix = mat4_cast(rot);
                 }
             }
             else if (lightType == LightType::Area && lightIndex >= 0 && lightIndex < (int)ls->GetAreaLights().size())
             {
-                vec3 start = vec3(ls->GetAreaLights()[lightIndex].position);
-                vec3 dir = GetDirectionFromRotation(ls->GetAreaLights()[lightIndex].rotation);
-
-                vec3 up = vec3(0, 1, 0);
-                if (abs(dot(dir, up)) > 0.99f)
-                    up = vec3(1, 0, 0);
-
-                modelMatrix = inverse(lookAt(start, start + dir, up));
+                AreaLight &area = ls->GetAreaLights()[lightIndex];
+                vec3 start = vec3(area.position);
+                quat rot = quat(area.rotation.w, area.rotation.x, area.rotation.y, area.rotation.z);
+                matrix = translate(mat4(1.0f), start) * mat4_cast(rot);
             }
         }
         else
@@ -424,69 +415,52 @@ namespace pe
             return;
         }
 
-        mat4 deltaMatrix(1.0f);
-        if (ImGuizmo::Manipulate(
-                value_ptr(view), value_ptr(proj),
-                op, ImGuizmo::WORLD, // World mode simpler for lights for now
-                value_ptr(modelMatrix), value_ptr(deltaMatrix)))
+        if (ImGuizmo::Manipulate(value_ptr(view), value_ptr(proj), op, mode, value_ptr(matrix)))
         {
+            vec3 pos, scale, skew;
+            quat rot;
+            vec4 persp;
+            decompose(matrix, scale, rot, pos, skew, persp);
+
             if (useLight)
             {
-                LightSystem *ls = GetGlobalSystem<LightSystem>();
+                // Guard against NaN
+                if (glm::any(glm::isnan(pos)) || glm::any(glm::isinf(pos)))
+                    return;
+                if (glm::any(glm::isnan(rot)) || glm::any(glm::isinf(rot)))
+                    return;
 
-                vec3 scale, pos, skew;
-                vec4 persp;
-                quat rot;
-                decompose(modelMatrix, scale, rot, pos, skew, persp);
+                LightSystem *ls = GetGlobalSystem<LightSystem>();
 
                 if (lightType == LightType::Point)
                 {
                     ls->GetPointLights()[lightIndex].position = vec4(pos, ls->GetPointLights()[lightIndex].position.w);
-                    // Radius managed via UI, not gizmo translation for now
                 }
                 else if (lightType == LightType::Spot)
                 {
                     SpotLight &spot = ls->GetSpotLights()[lightIndex];
-                    spot.position = vec4(pos, spot.position.w); // update position
-
-                    // Convert Gizmo Rotation (Quat) to Pitch/Yaw
-                    vec3 forward = rot * vec3(0, 0, -1);
-                    if (length(forward) > 0.001f)
-                        forward = normalize(forward);
-
-                    float pitch = degrees(asin(forward.y));
-                    float yaw = degrees(atan2(forward.x, forward.z));
-
-                    spot.rotation = vec4(pitch, yaw, spot.rotation.z, spot.rotation.w);
+                    spot.position = vec4(pos, spot.position.w);
+                    spot.rotation = vec4(rot.x, rot.y, rot.z, rot.w);
                 }
                 else if (lightType == LightType::Directional)
                 {
-                    // Directional light position doesn't matter, only rotation
                     if (!ls->GetDirectionalLights().empty())
                     {
-                        vec3 newDir = rot * vec3(0, 0, -1);
-                        ls->GetDirectionalLights()[0].direction = vec4(newDir, 0.0f);
+                        vec3 newDir = rot * vec3(0, 0, -1); // Assuming -Z is forward
+                        if (!glm::any(glm::isnan(newDir)) && !glm::any(glm::isinf(newDir)))
+                            ls->GetDirectionalLights()[0].direction = vec4(newDir, 0.0f);
                     }
                 }
                 else if (lightType == LightType::Area)
                 {
                     AreaLight &area = ls->GetAreaLights()[lightIndex];
-                    area.position = vec4(pos, area.position.w); // update position
-
-                    // Convert Gizmo Rotation (Quat) to Pitch/Yaw
-                    vec3 forward = rot * vec3(0, 0, -1);
-                    if (length(forward) > 0.001f)
-                        forward = normalize(forward);
-
-                    float pitch = degrees(asin(forward.y));
-                    float yaw = degrees(atan2(forward.x, forward.z));
-
-                    area.rotation = vec4(pitch, yaw, area.rotation.z, area.rotation.w);
+                    area.position = vec4(pos, area.position.w);
+                    area.rotation = vec4(rot.x, rot.y, rot.z, rot.w);
                 }
             }
             else
             {
-                ApplyTransformToNode(selection.GetSelectedNodeInfo(), modelMatrix);
+                ApplyTransformToNode(selection.GetSelectedNodeInfo(), matrix);
             }
         }
     }
@@ -501,11 +475,23 @@ namespace pe
         if (!model)
             return;
 
+        // Guard against NaN
+        for (int i = 0; i < 4; ++i)
+            for (int j = 0; j < 4; ++j)
+                if (std::isnan(newWorldMatrix[i][j]) || std::isinf(newWorldMatrix[i][j]))
+                    return;
+
         int selectedNodeIndex = selection.GetSelectedNodeIndex();
         auto &nodeInfos = model->GetNodeInfos();
 
         int parentIdx = nodeInfo->parent;
         mat4 parentWorldMatrix = (parentIdx >= 0) ? nodeInfos[parentIdx].ubo.worldMatrix : model->GetMatrix();
+
+        // Guard against singular matrix (zero scale)
+        float det = glm::determinant(parentWorldMatrix);
+        if (std::abs(det) < 1e-6f)
+            return;
+
         nodeInfo->localMatrix = inverse(parentWorldMatrix) * newWorldMatrix;
 
         model->MarkDirty(selectedNodeIndex);
@@ -547,9 +533,8 @@ namespace pe
 
     vec3 GetSpotDirection(const vec4 &rotation)
     {
-        vec3 euler = glm::radians(vec3(-rotation.x, rotation.y, 0.0f));
-        quat q = quat(euler);
-        vec3 dir = q * vec3(0, 0, 1);
+        quat q = quat(rotation.w, rotation.x, rotation.y, rotation.z);
+        vec3 dir = q * vec3(0, 0, -1);
 
         return glm::normalize(dir);
     }
@@ -586,7 +571,7 @@ namespace pe
             if (clipPos.w > 0.0f)
             {
                 vec2 ndcPos = vec2(clipPos) / clipPos.w;
-                
+
                 // Cull if off-screen to prevent ImGui scrollbars
                 if (ndcPos.x < -1.0f || ndcPos.x > 1.0f || ndcPos.y < -1.0f || ndcPos.y > 1.0f)
                     return;
@@ -615,9 +600,9 @@ namespace pe
                     else if (type == LightType::Spot)
                     {
                         float range = ls->GetSpotLights()[index].position.w;
-                        float innerAngle = ls->GetSpotLights()[index].rotation.z;
-                        float falloff = ls->GetSpotLights()[index].rotation.w;
-                        float outerAngle = innerAngle + falloff; // Assuming falloff is added to create outer cone
+                        float innerAngle = ls->GetSpotLights()[index].params.x;
+                        float falloff = ls->GetSpotLights()[index].params.y;
+                        float outerAngle = innerAngle + falloff;
 
                         vec3 dir = GetSpotDirection(ls->GetSpotLights()[index].rotation);
                         vec3 baseCenter = pos + dir * range;

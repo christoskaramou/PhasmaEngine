@@ -149,8 +149,7 @@ namespace pe
         DrawVec3Control(TransformType::Position, position);
         if (position != oldPos)
         {
-            vec3 eulerRot = degrees(eulerAngles(rotation));
-            ApplyLocalTransform(node, position, eulerRot, scl);
+            ApplyLocalTransform(node, position, rotation, scl);
         }
     }
 
@@ -167,7 +166,7 @@ namespace pe
         DrawVec3Control(TransformType::Rotation, eulerDeg);
         if (eulerDeg != oldRot)
         {
-            ApplyLocalTransform(node, position, eulerDeg, scl);
+            ApplyLocalTransform(node, position, quat(radians(eulerDeg)), scl);
         }
     }
 
@@ -185,7 +184,7 @@ namespace pe
         if (scl != oldScale)
         {
             scl = max(scl, vec3(0.001f));
-            ApplyLocalTransform(node, position, eulerDeg, scl);
+            ApplyLocalTransform(node, position, rotation, scl);
         }
     }
 
@@ -247,16 +246,24 @@ namespace pe
         ImGui::PopID();
     }
 
-    void TransformWidget::ApplyLocalTransform(NodeInfo *nodeInfo, const vec3 &pos, const vec3 &rot, const vec3 &scl)
+    void TransformWidget::ApplyLocalTransform(NodeInfo *nodeInfo, const vec3 &pos, const quat &rot, const vec3 &scl)
     {
         auto &selection = SelectionManager::Instance();
         Model *model = selection.GetSelectedModel();
         if (!model)
             return;
 
-        // Directly set localMatrix from TRS (no parent chain needed!)
+        // Guard against NaN
+        if (glm::any(glm::isnan(pos)) || glm::any(glm::isinf(pos)))
+            return;
+        if (glm::any(glm::isnan(rot)) || glm::any(glm::isinf(rot)))
+            return;
+        if (glm::any(glm::isnan(scl)) || glm::any(glm::isinf(scl)))
+            return;
+
+        // Directly set localMatrix from TRS
         mat4 translationMat = translate(mat4(1.0f), pos);
-        mat4 rotationMat = mat4(quat(radians(rot)));
+        mat4 rotationMat = mat4(rot);
         mat4 scaleMat = scale(mat4(1.0f), scl);
         nodeInfo->localMatrix = translationMat * rotationMat * scaleMat;
 

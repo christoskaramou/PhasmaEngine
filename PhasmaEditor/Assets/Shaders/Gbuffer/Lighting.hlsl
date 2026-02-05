@@ -75,11 +75,12 @@ PointLight LoadPointLight(uint index)
 
 SpotLight LoadSpotLight(uint index)
 {
-    uint offset = cb_offsetSpotLights + index * 48;
+    uint offset = cb_offsetSpotLights + index * 64;
     SpotLight light;
     light.color = asfloat(LightsBuffer.Load4(offset));
     light.position = asfloat(LightsBuffer.Load4(offset + 16));
     light.rotation = asfloat(LightsBuffer.Load4(offset + 32));
+    light.params = asfloat(LightsBuffer.Load4(offset + 48));
     return light;
 }
 
@@ -332,27 +333,14 @@ float3 ComputeSpotLight(int lightIndex, Material material, float3 worldPos, floa
     if (lightDist > range)
         return 0.0;
 
-    // Compute spot direction from Rotation (Pitch, Yaw)
-    float p = radians(light.rotation.x);
-    float y = radians(light.rotation.y);
-    
-    // Convert to Direction Vector
-    float3 spotDir;
-    spotDir.x = cos(p) * sin(y);
-    spotDir.y = sin(p);
-    spotDir.z = cos(p) * cos(y);
-    spotDir = normalize(spotDir);
-
+    // Convert to Direction Vector using Quaternion
     float3 L = normalize(-lightDirFull);
-    
-    // Check if the pixel is within the cone
-    // L points from Pixel to Light. spotDir points from Light out.
-    // Ideally we aligned -L (Light to Pixel) with spotDir.
+    float3 spotDir = normalize(RotateVectorByQuat(float3(0, 0, -1), light.rotation));
     float theta = dot(-L, spotDir);
 
     // Cone attenuation and Falloff
-    float cutoffCos = cos(radians(light.rotation.z)); // Angle is .z
-    float outerCutoffCos = cos(radians(light.rotation.z + light.rotation.w)); // Falloff is .w
+    float cutoffCos = cos(radians(light.params.x)); // Angle is params.x
+    float outerCutoffCos = cos(radians(light.params.x + light.params.y)); // Falloff is params.y
     
     if (theta < outerCutoffCos) // Check against outer cutoff
         return 0.0;
@@ -415,17 +403,8 @@ float3 ComputeAreaLight(int lightIndex, Material material, float3 worldPos, floa
     float width     = light.size.x;
     float height    = light.size.y;
 
-    // 1. Calculate orientation
-    float p = radians(light.rotation.x);
-    float y = radians(light.rotation.y);
-    
-    // Light Vectors
-    float3 lightForward;
-    lightForward.x = cos(p) * sin(y);
-    lightForward.y = sin(p);
-    lightForward.z = cos(p) * cos(y);
-    lightForward = normalize(lightForward);
-
+    // Light Vectors using Quaternion
+    float3 lightForward = normalize(RotateVectorByQuat(float3(0, 0, -1), light.rotation));
     float3 lightRight = normalize(cross(lightForward, float3(0, 1, 0)));
     float3 lightUp    = normalize(cross(lightRight, lightForward));
 
