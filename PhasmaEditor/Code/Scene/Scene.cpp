@@ -99,6 +99,19 @@ namespace pe
         cmd->Return();
     }
 
+    void Scene::UpdateTextures()
+    {
+        Queue *queue = RHII.GetMainQueue();
+        CommandBuffer *cmd = queue->AcquireCommandBuffer();
+        cmd->Begin();
+        UpdateImageViews();
+        CreateMeshConstants(cmd);
+        cmd->End();
+        queue->Submit(1, &cmd, nullptr, nullptr);
+        cmd->Wait();
+        queue->ReturnCommandBuffer(cmd);
+    }
+
     void Scene::AddModel(Model *model)
     {
         m_models.insert(model->GetId(), model);
@@ -123,7 +136,7 @@ namespace pe
         MarkUniformsDirty();
         CreateIndirectBuffers(cmd);
         UpdateImageViews();
-        CreateGBufferConstants(cmd);
+        CreateMeshConstants(cmd);
         if (Settings::Get<GlobalSettings>().ray_tracing_support)
             BuildAccelerationStructures(cmd);
     }
@@ -453,7 +466,7 @@ namespace pe
         m_geometryVersion++;
     }
 
-    void Scene::CreateGBufferConstants(CommandBuffer *cmd)
+    void Scene::CreateMeshConstants(CommandBuffer *cmd)
     {
         Buffer::Destroy(m_meshConstants);
         m_meshConstants = Buffer::Create(

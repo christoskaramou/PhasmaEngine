@@ -1,9 +1,15 @@
 #include "MeshWidget.h"
+#include "API/Command.h"
 #include "API/Image.h"
+#include "API/Queue.h"
 #include "API/RHI.h"
+#include "FileSelector.h"
+#include "GUI/GUI.h"
 #include "Scene/Model.h"
 #include "Scene/SelectionManager.h"
+#include "Systems/RendererSystem.h"
 #include "imgui/imgui.h"
+#include "imgui/imgui_impl_vulkan.h"
 
 namespace pe
 {
@@ -13,6 +19,11 @@ namespace pe
 
     MeshWidget::~MeshWidget()
     {
+        for (auto &pair : m_textureDescriptors)
+        {
+            if (pair.second)
+                ImGui_ImplVulkan_RemoveTexture((VkDescriptorSet)pair.second);
+        }
     }
 
     void MeshWidget::Update()
@@ -84,41 +95,6 @@ namespace pe
             ImGui::LabelText("Local AABB", "Min: (%.2f, %.2f, %.2f)\nMax: (%.2f, %.2f, %.2f)",
                              mesh->boundingBox.min.x, mesh->boundingBox.min.y, mesh->boundingBox.min.z,
                              mesh->boundingBox.max.x, mesh->boundingBox.max.y, mesh->boundingBox.max.z);
-        }
-
-        DrawMaterialInfo(mesh, model);
-        DrawTextureInfo(mesh, model);
-    }
-
-    void MeshWidget::DrawMaterialInfo(MeshInfo *mesh, Model *model)
-    {
-        if (ImGui::CollapsingHeader("Material", ImGuiTreeNodeFlags_DefaultOpen))
-        {
-            bool changed = false;
-
-            // Render Type
-            const char *renderTypeItems[] = {"Opaque", "AlphaCut", "AlphaBlend", "Transmission"};
-            int currentRenderType = static_cast<int>(mesh->renderType) - 1; // Enum starts at 1
-            if (currentRenderType >= 0 && currentRenderType < 4)
-            {
-                if (ImGui::Combo("Render Type", &currentRenderType, renderTypeItems, IM_ARRAYSIZE(renderTypeItems)))
-                {
-                    mesh->renderType = static_cast<RenderType>(currentRenderType + 1);
-                    changed = true;
-                }
-            }
-            else
-            {
-                ImGui::Text("Render Type: Unknown (%d)", static_cast<int>(mesh->renderType));
-            }
-
-            // Flags
-            bool cull = mesh->cull;
-            if (ImGui::Checkbox("Cull Backfaces", &cull))
-            {
-                mesh->cull = cull;
-                changed = true;
-            }
 
             // AABB Color (debug)
             float aabbColor[4];
@@ -134,44 +110,120 @@ namespace pe
                 uint32_t b = static_cast<uint32_t>(aabbColor[2] * 255.0f + 0.5f);
                 uint32_t a = static_cast<uint32_t>(aabbColor[3] * 255.0f + 0.5f);
                 mesh->aabbColor = (r << 24) | (g << 16) | (b << 8) | a;
-                changed = true;
-            }
-
-            if (ImGui::DragFloat("Alpha Cutoff", &mesh->alphaCutoff, 0.01f, 0.0f, 1.0f))
-            {
-                mesh->materialFactors[0][2].z = mesh->alphaCutoff;
-                changed = true;
-            }
-
-            ImGui::Separator();
-            ImGui::Text("Factors");
-
-            // Base Color Factor
-            vec4 baseColorFactor = mesh->materialFactors[0][0];
-            if (ImGui::ColorEdit4("Base Color", &baseColorFactor.x))
-            {
-                mesh->materialFactors[0][0] = baseColorFactor;
-                changed = true;
-            }
-
-            // Metallic / Roughness / AlphaCutoff (Packed in Factor 0, Col 2)
-            float metallic = mesh->materialFactors[0][2].x;
-            float roughness = mesh->materialFactors[0][2].y;
-            float alphaCutoff = mesh->materialFactors[0][2].z; // Also packed here
-
-            if (ImGui::SliderFloat("Metallic", &metallic, 0.0f, 1.0f))
-            {
-                mesh->materialFactors[0][2].x = metallic;
-                changed = true;
-            }
-            if (ImGui::SliderFloat("Roughness", &roughness, 0.0f, 1.0f))
-            {
-                mesh->materialFactors[0][2].y = roughness;
-                changed = true;
-            }
-
-            if (changed)
                 PropagateMeshChange(mesh, model);
+            }
+        }
+
+        DrawMaterialInfo(mesh, model);
+        DrawTextureInfo(mesh, model);
+    }
+
+    void MeshWidget::DrawMaterialInfo(MeshInfo *mesh, Model *model)
+    {
+        if (ImGui::CollapsingHeader("Material", ImGuiTreeNodeFlags_DefaultOpen))
+        {
+            if (ImGui::BeginTable("MaterialTable", 2, ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg))
+            {
+                ImGui::TableSetupColumn("Property");
+                ImGui::TableSetupColumn("Value", ImGuiTableColumnFlags_WidthStretch);
+
+                bool changed = false;
+
+                // Render Type
+                ImGui::TableNextRow();
+                ImGui::TableSetColumnIndex(0);
+                ImGui::Text("Render Type");
+                ImGui::TableSetColumnIndex(1);
+
+                const char *renderTypeItems[] = {"Opaque", "AlphaCut", "AlphaBlend", "Transmission"};
+                int currentRenderType = static_cast<int>(mesh->renderType) - 1; // Enum starts at 1
+                if (currentRenderType >= 0 && currentRenderType < 4)
+                {
+                    ImGui::SetNextItemWidth(-FLT_MIN);
+                    if (ImGui::Combo("##RenderType", &currentRenderType, renderTypeItems, IM_ARRAYSIZE(renderTypeItems)))
+                    {
+                        mesh->renderType = static_cast<RenderType>(currentRenderType + 1);
+                        changed = true;
+                    }
+                }
+                else
+                {
+                    ImGui::Text("Unknown (%d)", static_cast<int>(mesh->renderType));
+                }
+
+                // Cull Backfaces
+                ImGui::TableNextRow();
+                ImGui::TableSetColumnIndex(0);
+                ImGui::Text("Cull Backfaces");
+                ImGui::TableSetColumnIndex(1);
+
+                bool cull = mesh->cull;
+                if (ImGui::Checkbox("##Cull", &cull))
+                {
+                    mesh->cull = cull;
+                    changed = true;
+                }
+
+                // Alpha Cutoff
+                ImGui::TableNextRow();
+                ImGui::TableSetColumnIndex(0);
+                ImGui::Text("Alpha Cutoff");
+                ImGui::TableSetColumnIndex(1);
+
+                ImGui::SetNextItemWidth(-FLT_MIN);
+                if (ImGui::DragFloat("##AlphaCutoff", &mesh->alphaCutoff, 0.01f, 0.0f, 1.0f))
+                {
+                    mesh->materialFactors[0][2].z = mesh->alphaCutoff;
+                    changed = true;
+                }
+
+                // Base Color Factor
+                ImGui::TableNextRow();
+                ImGui::TableSetColumnIndex(0);
+                ImGui::Text("Base Color");
+                ImGui::TableSetColumnIndex(1);
+
+                vec4 baseColorFactor = mesh->materialFactors[0][0];
+                ImGui::SetNextItemWidth(-FLT_MIN);
+                if (ImGui::ColorEdit4("##BaseColor", &baseColorFactor.x))
+                {
+                    mesh->materialFactors[0][0] = baseColorFactor;
+                    changed = true;
+                }
+
+                // Metallic
+                float metallic = mesh->materialFactors[0][2].x;
+                ImGui::TableNextRow();
+                ImGui::TableSetColumnIndex(0);
+                ImGui::Text("Metallic");
+                ImGui::TableSetColumnIndex(1);
+
+                ImGui::SetNextItemWidth(-FLT_MIN);
+                if (ImGui::SliderFloat("##Metallic", &metallic, 0.0f, 1.0f))
+                {
+                    mesh->materialFactors[0][2].x = metallic;
+                    changed = true;
+                }
+
+                // Roughness
+                float roughness = mesh->materialFactors[0][2].y;
+                ImGui::TableNextRow();
+                ImGui::TableSetColumnIndex(0);
+                ImGui::Text("Roughness");
+                ImGui::TableSetColumnIndex(1);
+
+                ImGui::SetNextItemWidth(-FLT_MIN);
+                if (ImGui::SliderFloat("##Roughness", &roughness, 0.0f, 1.0f))
+                {
+                    mesh->materialFactors[0][2].y = roughness;
+                    changed = true;
+                }
+
+                ImGui::EndTable();
+
+                if (changed)
+                    PropagateMeshChange(mesh, model);
+            }
         }
     }
 
@@ -179,34 +231,142 @@ namespace pe
     {
         if (ImGui::CollapsingHeader("Textures", ImGuiTreeNodeFlags_DefaultOpen))
         {
-            ImGui::Text("Texture Mask: 0x%X", mesh->textureMask);
-
-            const char *textureNames[] = {"Base Color", "Metallic Roughness", "Normal", "Occlusion", "Emissive"};
-
-            for (int i = 0; i < 5; i++)
+            if (ImGui::BeginTable("TextureTable", 2, ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg))
             {
-                Image *img = mesh->images[i];
-                if (img)
-                {
-                    ImGui::Text("%s: %s", textureNames[i], img->GetName().c_str());
-                    if (ImGui::IsItemHovered())
-                        ImGui::SetTooltip("Mips: %u", img->GetMipLevels());
-                }
+                ImGui::TableSetupColumn("Type");
+                ImGui::TableSetupColumn("Texture", ImGuiTableColumnFlags_WidthStretch);
+
+                std::string mask = "";
+                if (mesh->textureMask & (1 << 0))
+                    mask += "Base Color | ";
+                if (mesh->textureMask & (1 << 1))
+                    mask += "Metallic Roughness | ";
+                if (mesh->textureMask & (1 << 2))
+                    mask += "Normal | ";
+                if (mesh->textureMask & (1 << 3))
+                    mask += "Occlusion | ";
+                if (mesh->textureMask & (1 << 4))
+                    mask += "Emissive | ";
+
+                if (!mask.empty())
+                    mask = mask.substr(0, mask.size() - 3);
                 else
+                    mask = "None";
+
+                ImGui::TableNextRow();
+                ImGui::TableSetColumnIndex(0);
+                ImGui::Text("Mask");
+                ImGui::TableSetColumnIndex(1);
+                ImGui::Text("%s (0x%X)", mask.c_str(), mesh->textureMask);
+
+                const char *textureNames[] = {"Base Color", "Metallic Roughness", "Normal", "Occlusion", "Emissive"};
+
+                for (int i = 0; i < 5; i++)
                 {
-                    ImGui::TextDisabled("%s: None", textureNames[i]);
+                    ImGui::TableNextRow();
+                    ImGui::TableSetColumnIndex(0);
+                    ImGui::Text("%s", textureNames[i]);
+                    ImGui::TableSetColumnIndex(1);
+
+                    Image *img = mesh->images[i];
+                    bool clicked = false;
+                    std::string id = "##tex" + std::to_string(i);
+
+                    if (img)
+                    {
+                        void *desc = GetDescriptor(img);
+                        if (desc)
+                        {
+                            if (ImGui::ImageButton(id.c_str(), (ImTextureID)desc, ImVec2(32, 32)))
+                                clicked = true;
+
+                            if (ImGui::IsItemHovered())
+                            {
+                                ImGui::BeginTooltip();
+                                ImGui::Text("%s", img->GetName().c_str());
+                                ImGui::Text("Mips: %u", img->GetMipLevels());
+                                ImGui::Text("Format: %s", vk::to_string(img->GetFormat()).c_str());
+                                float aspect = img->GetWidth_f() / img->GetHeight_f();
+                                ImGui::Image((ImTextureID)desc, ImVec2(256 * aspect, 256));
+                                ImGui::EndTooltip();
+                            }
+                            ImGui::SameLine();
+                            ImGui::Text("%s", img->GetName().c_str());
+                        }
+                        else
+                        {
+                            if (ImGui::Button((img->GetName() + id).c_str()))
+                                clicked = true;
+                        }
+                    }
+                    else
+                    {
+                        if (ImGui::Button(("Select..." + id).c_str()))
+                            clicked = true;
+                    }
+
+                    if (clicked)
+                    {
+                        if (auto *fs = m_gui->GetWidget<FileSelector>())
+                        {
+                            fs->OpenSelection([this, mesh, model, i](const std::string &path)
+                                              {
+                                Queue *queue = RHII.GetMainQueue();
+                                CommandBuffer *cmd = queue->AcquireCommandBuffer();
+                                cmd->Begin();
+                                Image *newImg = model->LoadTexture(cmd, path);
+                                cmd->End();
+                                queue->Submit(1, &cmd, nullptr, nullptr);
+                                cmd->Wait();
+                                queue->ReturnCommandBuffer(cmd);
+
+                                if (newImg)
+                                {
+                                    mesh->images[i] = newImg;
+                                    mesh->textureMask |= (1 << i);
+                                    model->MarkDirty(0);
+                                    PropagateMeshChange(mesh, model);
+                                    
+                                    RendererSystem *renderer = GetGlobalSystem<RendererSystem>();
+                                    if (renderer)
+                                        renderer->GetScene().UpdateTextures();
+                                } }, {".png", ".jpg", ".jpeg", ".tga", ".bmp", ".psd", ".gif", ".hdr", ".pic", ".ppm", ".pgm"});
+                        }
+                    }
                 }
+                ImGui::EndTable();
             }
         }
     }
+
+    void *MeshWidget::GetDescriptor(Image *image)
+    {
+        if (m_textureDescriptors.find(image) == m_textureDescriptors.end())
+        {
+            if (!image->HasSRV())
+            {
+                image->CreateSRV(vk::ImageViewType::e2D);
+            }
+
+            if (!image->GetSampler())
+            {
+                vk::SamplerCreateInfo info = Sampler::CreateInfoInit();
+                image->SetSampler(Sampler::Create(info));
+            }
+
+            m_textureDescriptors[image] = (void *)ImGui_ImplVulkan_AddTexture(
+                image->GetSampler()->ApiHandle(),
+                image->GetSRV()->ApiHandle(),
+                VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+        }
+
+        return m_textureDescriptors[image];
+    }
     void MeshWidget::PropagateMeshChange(MeshInfo *mesh, Model *model)
     {
-        // Find which nodes use this mesh and mark them dirty
-        // This is a bit slow (linear search), but happens only on UI interaction
         const auto &meshInfos = model->GetMeshInfos();
         int meshIndex = -1;
 
-        // Find mesh index
         for (int i = 0; i < static_cast<int>(meshInfos.size()); i++)
         {
             if (&meshInfos[i] == mesh)
