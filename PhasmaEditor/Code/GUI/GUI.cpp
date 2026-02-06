@@ -51,6 +51,9 @@ namespace pe
             GUIState::s_viewportTextureId = nullptr;
         }
 
+        m_menuWindowWidgets.clear();
+        m_widgets.clear();
+
         Image::Destroy(GUIState::s_sceneViewImage);
         ImGui_ImplVulkan_Shutdown();
         ImGui_ImplSDL2_Shutdown();

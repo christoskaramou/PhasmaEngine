@@ -19,5 +19,8 @@ namespace pe
         void DrawMaterialInfo(MeshInfo *mesh, Model *model);
         void DrawTextureInfo(MeshInfo *mesh, Model *model);
         void PropagateMeshChange(MeshInfo *mesh, Model *model);
+        void *GetDescriptor(Image *image);
+
+        std::unordered_map<Image *, void *> m_textureDescriptors;
     };
 } // namespace pe

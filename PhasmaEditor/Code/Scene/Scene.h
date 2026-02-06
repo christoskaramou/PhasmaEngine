@@ -28,6 +28,7 @@ namespace pe
 
         void Update();
         void UpdateGeometryBuffers();
+        void UpdateTextures();
         void UploadBuffers(CommandBuffer *cmd);
         void UpdateTLASTransformations(CommandBuffer *cmd); // Update instance transforms and rebuild TLAS
         void AddModel(Model *model);
@@ -81,7 +82,7 @@ namespace pe
         void CreateStorageBuffers();
         void CreateIndirectBuffers(CommandBuffer *cmd);
         void UpdateImageViews();
-        void CreateGBufferConstants(CommandBuffer *cmd);
+        void CreateMeshConstants(CommandBuffer *cmd);
         void BuildAccelerationStructures(CommandBuffer *cmd);
 
         struct alignas(64) PerFrameData
