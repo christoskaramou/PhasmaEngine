@@ -108,6 +108,10 @@ namespace pe
         size_t m_aabbVerticesOffset = 0;
         size_t m_aabbIndicesOffset = 0;
         uint32_t m_meshCount = 0;
+        uint32_t m_indicesCount = 0;
+        uint32_t m_verticesCount = 0;
+        uint32_t m_positionsCount = 0;
+        uint32_t m_aabbVerticesCount = 0;
 
         std::vector<ImageView *> m_imageViews;
         uint64_t m_geometryVersion = 0;
@@ -133,7 +137,6 @@ namespace pe
         std::vector<AccelerationStructure *> m_blases;
         AccelerationStructure *m_tlas = nullptr;
         Buffer *m_instanceBuffer = nullptr;
-        uint32_t m_instanceCount = 0;
         Buffer *m_blasMergedBuffer = nullptr;
         Buffer *m_scratchBuffer = nullptr;
         Buffer *m_meshInfoBuffer = nullptr;

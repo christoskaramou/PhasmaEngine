@@ -130,22 +130,42 @@ namespace pe
 
     void Scene::CreateGeometryBuffer()
     {
-        size_t numberOfIndices = 24;
-        size_t numberOfVertices = 0;
-        size_t numberOfAabbVertices = 0;
+        m_meshCount = 0;
+        m_indicesCount = 0;
+        m_verticesCount = 0;
+        m_positionsCount = 0;
+        m_aabbVerticesCount = 0;
 
-        for (auto &model : m_models)
+        for (auto &modelPtr : m_models)
         {
-            numberOfIndices += model->m_indices.size();
-            numberOfVertices += model->m_vertices.size();
-            numberOfAabbVertices += model->m_aabbVertices.size();
+            Model &model = *modelPtr;
+            m_indicesCount += static_cast<uint32_t>(model.m_indices.size());
+            m_verticesCount += static_cast<uint32_t>(model.m_vertices.size());
+            m_positionsCount += static_cast<uint32_t>(model.m_positionUvs.size());
+            m_aabbVerticesCount += static_cast<uint32_t>(model.m_aabbVertices.size());
+
+            const int nodeCount = model.GetNodeCount();
+            const auto &meshInfos = model.GetMeshInfos();
+            for (int i = 0; i < nodeCount; i++)
+            {
+                int meshIndex = model.GetNodeMesh(i);
+                if (meshIndex < 0 || meshIndex >= static_cast<int>(meshInfos.size()))
+                    continue;
+
+                if (meshInfos[meshIndex].indicesCount == 0)
+                    continue;
+
+                m_meshCount++;
+            }
         }
 
+        m_aabbIndicesOffset = m_indicesCount * sizeof(uint32_t);
+        m_verticesOffset = m_aabbIndicesOffset + s_aabbIndices.size() * sizeof(uint32_t);
+        m_positionsOffset = m_verticesOffset + m_verticesCount * sizeof(Vertex);
+        m_aabbVerticesOffset = m_positionsOffset + m_positionsCount * sizeof(PositionUvVertex);
+
         m_buffer = Buffer::Create(
-            sizeof(uint32_t) * numberOfIndices +
-                sizeof(Vertex) * numberOfVertices +
-                sizeof(PositionUvVertex) * numberOfVertices +
-                sizeof(AabbVertex) * numberOfAabbVertices,
+            m_aabbVerticesOffset + sizeof(AabbVertex) * m_aabbVerticesCount,
             vk::BufferUsageFlagBits2::eTransferDst | vk::BufferUsageFlagBits2::eIndexBuffer | vk::BufferUsageFlagBits2::eVertexBuffer | vk::BufferUsageFlagBits2::eStorageBuffer | vk::BufferUsageFlagBits2::eShaderDeviceAddress | vk::BufferUsageFlagBits2::eAccelerationStructureBuildInputReadOnlyKHR,
             VMA_ALLOCATION_CREATE_DEDICATED_MEMORY_BIT,
             "combined_Geometry_buffer");
@@ -153,44 +173,32 @@ namespace pe
 
     void Scene::CopyIndices(CommandBuffer *cmd)
     {
-        m_meshCount = 0;
-        size_t indicesCount = 0;
+        uint32_t currentIndicesCount = 0;
 
         for (auto &modelPtr : m_models)
         {
             Model &model = *modelPtr;
             const auto &indices = model.GetIndices();
-            cmd->CopyBufferStaged(m_buffer, const_cast<uint32_t *>(indices.data()), sizeof(uint32_t) * indices.size(), indicesCount * sizeof(uint32_t));
+            cmd->CopyBufferStaged(m_buffer, const_cast<uint32_t *>(indices.data()), sizeof(uint32_t) * indices.size(), currentIndicesCount * sizeof(uint32_t));
 
             auto &meshesInfo = model.GetMeshInfos();
             for (auto &meshInfo : meshesInfo)
-                meshInfo.indexOffset += static_cast<uint32_t>(indicesCount);
+                meshInfo.indexOffset += currentIndicesCount;
 
-            const int nodeCount = model.GetNodeCount();
-            for (int nodeIndex = 0; nodeIndex < nodeCount; nodeIndex++)
-            {
-                const int meshIndex = model.GetNodeMesh(nodeIndex);
-                if (meshIndex < 0 || meshIndex >= static_cast<int>(meshesInfo.size()))
-                    continue;
-
-                m_meshCount++;
-            }
-
-            indicesCount += indices.size();
+            currentIndicesCount += static_cast<uint32_t>(indices.size());
         }
 
-        if (indicesCount > 0)
+        if (m_indicesCount > 0)
         {
             BufferBarrierInfo indexBarrierInfo{};
             indexBarrierInfo.buffer = m_buffer;
             indexBarrierInfo.stageMask = vk::PipelineStageFlagBits2::eVertexInput;
             indexBarrierInfo.accessMask = vk::AccessFlagBits2::eIndexRead;
-            indexBarrierInfo.size = indicesCount * sizeof(uint32_t);
+            indexBarrierInfo.size = m_indicesCount * sizeof(uint32_t);
             indexBarrierInfo.offset = 0;
             cmd->BufferBarrier(indexBarrierInfo);
         }
 
-        m_aabbIndicesOffset = indicesCount * sizeof(uint32_t);
         cmd->CopyBufferStaged(m_buffer, s_aabbIndices.data(), s_aabbIndices.size() * sizeof(uint32_t), m_aabbIndicesOffset);
 
         if (s_aabbIndices.size() > 0)
@@ -212,90 +220,79 @@ namespace pe
         auto &total = gSettings.loading_total;
         auto &loading = gSettings.loading_name;
 
-        // Calculate total for progress bar (vertices + positions + aabbs)
-        size_t totalItems = 0;
-        for (auto &modelPtr : m_models)
-        {
-            totalItems += modelPtr->GetVertices().size();
-            totalItems += modelPtr->GetPositionUvs().size();
-            totalItems += modelPtr->GetAabbVertices().size();
-        }
-        total = static_cast<uint32_t>(totalItems);
+        total = m_verticesCount + m_positionsCount + m_aabbVerticesCount;
         progress = 0;
         loading = "Uploading to GPU";
 
-        m_verticesOffset = m_aabbIndicesOffset + 24 * sizeof(uint32_t);
-        size_t verticesCount = 0;
+        uint32_t currentVerticesCount = 0;
         for (auto &modelPtr : m_models)
         {
             Model &model = *modelPtr;
             const auto &vertices = model.GetVertices();
-            const size_t vertexCount = vertices.size();
-            cmd->CopyBufferStaged(m_buffer, const_cast<Vertex *>(vertices.data()), sizeof(Vertex) * vertexCount, m_verticesOffset + verticesCount * sizeof(Vertex));
+            const uint32_t vertexCount = static_cast<uint32_t>(vertices.size());
+            cmd->CopyBufferStaged(m_buffer, const_cast<Vertex *>(vertices.data()), sizeof(Vertex) * vertexCount, m_verticesOffset + currentVerticesCount * sizeof(Vertex));
             for (auto &meshInfo : model.GetMeshInfos())
-                meshInfo.vertexOffset += static_cast<uint32_t>(verticesCount);
-            verticesCount += vertexCount;
+                meshInfo.vertexOffset += currentVerticesCount;
+            currentVerticesCount += vertexCount;
 
-            progress += static_cast<uint32_t>(vertexCount);
+            progress += vertexCount;
         }
 
-        if (verticesCount > 0)
+        if (m_verticesCount > 0)
         {
             BufferBarrierInfo vertexBarrierInfo{};
             vertexBarrierInfo.buffer = m_buffer;
             vertexBarrierInfo.stageMask = vk::PipelineStageFlagBits2::eVertexInput;
             vertexBarrierInfo.accessMask = vk::AccessFlagBits2::eVertexAttributeRead;
-            vertexBarrierInfo.size = verticesCount * sizeof(Vertex);
+            vertexBarrierInfo.size = m_verticesCount * sizeof(Vertex);
             vertexBarrierInfo.offset = m_verticesOffset;
             cmd->BufferBarrier(vertexBarrierInfo);
         }
 
-        m_positionsOffset = m_verticesOffset + verticesCount * sizeof(Vertex);
-        size_t positionsCount = 0;
+        uint32_t currentPositionsCount = 0;
         for (auto &modelPtr : m_models)
         {
             Model &model = *modelPtr;
             const auto &positionUvs = model.GetPositionUvs();
-            const size_t positionCount = positionUvs.size();
-            cmd->CopyBufferStaged(m_buffer, const_cast<PositionUvVertex *>(positionUvs.data()), positionCount * sizeof(PositionUvVertex), m_positionsOffset + positionsCount * sizeof(PositionUvVertex));
+            const uint32_t positionCount = static_cast<uint32_t>(positionUvs.size());
+            cmd->CopyBufferStaged(m_buffer, const_cast<PositionUvVertex *>(positionUvs.data()), positionCount * sizeof(PositionUvVertex), m_positionsOffset + currentPositionsCount * sizeof(PositionUvVertex));
             for (auto &meshInfo : model.GetMeshInfos())
-                meshInfo.positionsOffset += static_cast<uint32_t>(positionsCount);
-            positionsCount += positionCount;
-            progress += static_cast<uint32_t>(positionCount);
+                meshInfo.positionsOffset += currentPositionsCount;
+            currentPositionsCount += positionCount;
+            progress += positionCount;
         }
 
-        if (positionsCount > 0)
+        if (m_positionsCount > 0)
         {
             BufferBarrierInfo posVertexBarrierInfo{};
             posVertexBarrierInfo.buffer = m_buffer;
             posVertexBarrierInfo.stageMask = vk::PipelineStageFlagBits2::eVertexInput;
             posVertexBarrierInfo.accessMask = vk::AccessFlagBits2::eVertexAttributeRead;
-            posVertexBarrierInfo.size = positionsCount * sizeof(PositionUvVertex);
+            posVertexBarrierInfo.size = m_positionsCount * sizeof(PositionUvVertex);
             posVertexBarrierInfo.offset = m_positionsOffset;
             cmd->BufferBarrier(posVertexBarrierInfo);
         }
 
-        m_aabbVerticesOffset = m_positionsOffset + positionsCount * sizeof(PositionUvVertex);
-        size_t aabbCount = 0;
+        size_t currentAabbVertexCount = 0;
         for (auto &modelPtr : m_models)
         {
             Model &model = *modelPtr;
             const auto &aabbVertices = model.GetAabbVertices();
             const size_t aabbVertexCount = aabbVertices.size();
-            cmd->CopyBufferStaged(m_buffer, const_cast<AabbVertex *>(aabbVertices.data()), aabbVertexCount * sizeof(AabbVertex), m_aabbVerticesOffset + aabbCount * sizeof(AabbVertex));
+            cmd->CopyBufferStaged(m_buffer, const_cast<AabbVertex *>(aabbVertices.data()), aabbVertexCount * sizeof(AabbVertex), m_aabbVerticesOffset + currentAabbVertexCount * sizeof(AabbVertex));
             for (auto &meshInfo : model.GetMeshInfos())
-                meshInfo.aabbVertexOffset += static_cast<uint32_t>(aabbCount);
-            aabbCount += aabbVertexCount;
+                meshInfo.aabbVertexOffset += currentAabbVertexCount;
+            currentAabbVertexCount += aabbVertexCount;
             progress += static_cast<uint32_t>(aabbVertexCount);
         }
 
-        if (aabbCount > 0)
+        if (m_aabbVerticesCount > 0)
         {
             BufferBarrierInfo aabbVertexBarrierInfo{};
             aabbVertexBarrierInfo.buffer = m_buffer;
             aabbVertexBarrierInfo.stageMask = vk::PipelineStageFlagBits2::eVertexInput;
             aabbVertexBarrierInfo.accessMask = vk::AccessFlagBits2::eVertexAttributeRead;
-            aabbVertexBarrierInfo.size = aabbCount * sizeof(AabbVertex);
+            aabbVertexBarrierInfo.size = m_aabbVerticesCount * sizeof(AabbVertex);
             aabbVertexBarrierInfo.offset = m_aabbVerticesOffset;
             cmd->BufferBarrier(aabbVertexBarrierInfo);
         }
@@ -913,7 +910,7 @@ namespace pe
             mat4 transform;
         };
         std::vector<InstanceReq> instanceReqs;
-        instanceReqs.reserve(buildReqs.size()); // Approximate or better
+        instanceReqs.reserve(m_meshCount); // Approximate or better
 
         for (auto model : m_models)
         {
@@ -932,7 +929,7 @@ namespace pe
             }
         }
 
-        uint32_t instanceCount = static_cast<uint32_t>(instanceReqs.size());
+        PE_ERROR_IF(instanceReqs.size() != m_meshCount, "BuildAccelerationStructures instanceCount mismatch!");
 
         static constexpr vk::BuildAccelerationStructureFlagsKHR kTlasFlags = vk::BuildAccelerationStructureFlagBitsKHR::ePreferFastTrace;
 
@@ -948,7 +945,7 @@ namespace pe
 
         auto tlasSizes = AccelerationStructure::GetBuildSizes(
             {tlasGeom},
-            {instanceCount},
+            {m_meshCount},
             vk::AccelerationStructureTypeKHR::eTopLevel,
             kTlasFlags,
             vk::AccelerationStructureBuildTypeKHR::eDevice);
@@ -1014,11 +1011,9 @@ namespace pe
             }
         }
 
-        m_instanceCount = static_cast<uint32_t>(instanceReqs.size());
-
         // --- Create Instance Buffer ---
         m_instanceBuffer = Buffer::Create(
-            std::max((size_t)1, instanceReqs.size()) * sizeof(vk::AccelerationStructureInstanceKHR),
+            std::max((size_t)1, (size_t)m_meshCount) * sizeof(vk::AccelerationStructureInstanceKHR),
             vk::BufferUsageFlagBits2::eAccelerationStructureBuildInputReadOnlyKHR | vk::BufferUsageFlagBits2::eShaderDeviceAddress | vk::BufferUsageFlagBits2::eTransferDst,
             VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT,
             "TLAS_Instance_Buffer");
@@ -1066,7 +1061,7 @@ namespace pe
 
         // --- TLAS Build ---
         m_tlas = AccelerationStructure::Create("TLAS", nullptr, 0);
-        m_tlas->BuildTLAS(cmd, m_instanceCount, m_instanceBuffer, kTlasFlags, m_scratchBuffer->GetDeviceAddress());
+        m_tlas->BuildTLAS(cmd, m_meshCount, m_instanceBuffer, kTlasFlags, m_scratchBuffer->GetDeviceAddress());
 
         // --- Create MeshInfoGPU Buffer (Corresponds to Instances) ---
         struct MeshInfoGPU
@@ -1080,7 +1075,7 @@ namespace pe
 
         Buffer::Destroy(m_meshInfoBuffer);
         m_meshInfoBuffer = Buffer::Create(
-            std::max((size_t)1, instanceReqs.size()) * sizeof(MeshInfoGPU),
+            std::max((size_t)1, (size_t)m_meshCount) * sizeof(MeshInfoGPU),
             vk::BufferUsageFlagBits2::eStorageBuffer | vk::BufferUsageFlagBits2::eTransferDst,
             VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT,
             "MeshInfo_Buffer");
@@ -1179,6 +1174,6 @@ namespace pe
         m_instanceBuffer->Unmap();
 
         // Update TLAS in-place using eUpdate mode
-        m_tlas->UpdateTLAS(cmd, m_instanceCount, m_instanceBuffer, m_scratchBuffer->GetDeviceAddress());
+        m_tlas->UpdateTLAS(cmd, m_meshCount, m_instanceBuffer, m_scratchBuffer->GetDeviceAddress());
     }
 } // namespace pe
