@@ -66,18 +66,28 @@ namespace pe
         }
 
         if (m_defaultSampler)
-            Sampler::Destroy(m_defaultSampler);
+        {
+            RHII.AddToDeletionQueue([s = m_defaultSampler]()
+                                    { Sampler* sampler = s; Sampler::Destroy(sampler); });
+        }
 
         for (auto *blas : m_blases)
-            AccelerationStructure::Destroy(blas);
+            RHII.AddToDeletionQueue([blas]()
+                                    { AccelerationStructure* b = blas; AccelerationStructure::Destroy(b); });
         m_blases.clear();
 
-        AccelerationStructure::Destroy(m_tlas);
-        Buffer::Destroy(m_instanceBuffer);
-        Buffer::Destroy(m_blasMergedBuffer);
-        Buffer::Destroy(m_scratchBuffer);
-        Buffer::Destroy(m_meshInfoBuffer);
-        Buffer::Destroy(m_meshConstants);
+        RHII.AddToDeletionQueue([t = m_tlas]()
+                                { AccelerationStructure* as = t; AccelerationStructure::Destroy(as); });
+        RHII.AddToDeletionQueue([b = m_instanceBuffer]()
+                                { Buffer* buf = b; Buffer::Destroy(buf); });
+        RHII.AddToDeletionQueue([b = m_blasMergedBuffer]()
+                                { Buffer* buf = b; Buffer::Destroy(buf); });
+        RHII.AddToDeletionQueue([b = m_scratchBuffer]()
+                                { Buffer* buf = b; Buffer::Destroy(buf); });
+        RHII.AddToDeletionQueue([b = m_meshInfoBuffer]()
+                                { Buffer* buf = b; Buffer::Destroy(buf); });
+        RHII.AddToDeletionQueue([b = m_meshConstants]()
+                                { Buffer* buf = b; Buffer::Destroy(buf); });
     }
 
     void Scene::Update()
@@ -842,27 +852,57 @@ namespace pe
 
     void Scene::DestroyBuffers()
     {
-        Buffer::Destroy(m_buffer);
+        if (m_buffer)
+        {
+            RHII.AddToDeletionQueue([b = m_buffer]()
+                                    { Buffer* buf = b; Buffer::Destroy(buf); });
+            m_buffer = nullptr;
+        }
 
         for (auto &storage : m_storages)
-            Buffer::Destroy(storage);
+        {
+            if (storage)
+            {
+                RHII.AddToDeletionQueue([b = storage]()
+                                        { Buffer* buf = b; Buffer::Destroy(buf); });
+                storage = nullptr;
+            }
+        }
 
         for (auto &indirect : m_indirects)
-            Buffer::Destroy(indirect);
+        {
+            if (indirect)
+            {
+                RHII.AddToDeletionQueue([b = indirect]()
+                                        { Buffer* buf = b; Buffer::Destroy(buf); });
+                indirect = nullptr;
+            }
+        }
 
-        Buffer::Destroy(m_indirectAll);
+        if (m_indirectAll)
+        {
+            RHII.AddToDeletionQueue([b = m_indirectAll]()
+                                    { Buffer* buf = b; Buffer::Destroy(buf); });
+            m_indirectAll = nullptr;
+        }
     }
 
     void Scene::BuildAccelerationStructures(CommandBuffer *cmd)
     {
         // Cleanup old resources
         for (auto *blas : m_blases)
-            AccelerationStructure::Destroy(blas);
+            RHII.AddToDeletionQueue([blas]()
+                                    { AccelerationStructure* b = blas; AccelerationStructure::Destroy(b); });
         m_blases.clear();
-        AccelerationStructure::Destroy(m_tlas);
-        Buffer::Destroy(m_instanceBuffer);
-        Buffer::Destroy(m_blasMergedBuffer);
-        Buffer::Destroy(m_scratchBuffer);
+
+        RHII.AddToDeletionQueue([t = m_tlas]()
+                                { AccelerationStructure* as = t; AccelerationStructure::Destroy(as); });
+        RHII.AddToDeletionQueue([b = m_instanceBuffer]()
+                                { Buffer* buf = b; Buffer::Destroy(buf); });
+        RHII.AddToDeletionQueue([b = m_blasMergedBuffer]()
+                                { Buffer* buf = b; Buffer::Destroy(buf); });
+        RHII.AddToDeletionQueue([b = m_scratchBuffer]()
+                                { Buffer* buf = b; Buffer::Destroy(buf); });
 
         if (!GetBuffer()) // No geometry
             return;

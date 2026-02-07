@@ -44,6 +44,14 @@ namespace pe
         uint64_t procPeakWS = 0;
     };
 
+    struct DeletionQueue
+    {
+        std::deque<std::function<void()>> deletors;
+        std::mutex mutex;
+        void Push(std::function<void()> &&deletor);
+        void Flush();
+    };
+
     class RHI : public NoCopy, public NoMove
     {
     public:
@@ -105,6 +113,8 @@ namespace pe
         void ChangePresentMode(vk::PresentModeKHR mode);
         const char *PresentModeToString(vk::PresentModeKHR presentMode);
         StagingManager *GetStagingManager() { return m_stagingManager; }
+        void AddToDeletionQueue(std::function<void()> &&deletor);
+        void FlushDeletionQueue(uint32_t frameIndex);
 
         uint32_t GetWidth() const;
         uint32_t GetHeight() const;
@@ -126,6 +136,7 @@ namespace pe
         Swapchain *m_swapchain;
         uint32_t m_frameCounter;
         StagingManager *m_stagingManager;
+        std::vector<DeletionQueue *> m_deletionQueues;
 
         // Limits
         uint32_t m_maxUniformBufferSize;
