@@ -57,7 +57,8 @@ namespace pe
                 continue;
             if (m_sharedSamplers.find(sampler) != m_sharedSamplers.end())
                 continue;
-            Sampler::Destroy(sampler);
+            RHII.AddToDeletionQueue([sampler]()
+                                    { Sampler *s = sampler; Sampler::Destroy(s); });
         }
 
         for (auto image : m_images)
@@ -66,7 +67,8 @@ namespace pe
                 continue;
             if (m_sharedImages.find(image) != m_sharedImages.end())
                 continue;
-            Image::Destroy(image);
+            RHII.AddToDeletionQueue([image]()
+                                    { Image *i = image; Image::Destroy(i); });
         }
     }
 

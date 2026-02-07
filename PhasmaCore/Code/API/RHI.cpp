@@ -370,11 +370,24 @@ namespace pe
         CreateDescriptorPool(150); // General purpose descriptor pool
 
         Downsampler::Init();
+
+        m_deletionQueues.resize(GetSwapchainImageCount());
+        for (auto &queue : m_deletionQueues)
+            queue = new DeletionQueue();
+        m_stagingManager = new StagingManager();
     }
 
     void RHI::Destroy()
     {
         WaitDeviceIdle();
+
+        for (auto &queue : m_deletionQueues)
+        {
+            queue->Flush();
+            delete queue;
+        }
+        m_deletionQueues.clear();
+
         Downsampler::Destroy();
         DescriptorLayout::ClearCache();
         Swapchain::Destroy(m_swapchain);
@@ -1116,4 +1129,33 @@ namespace pe
     uint32_t RHI::GetHeight() const { return m_surface->GetActualExtent().height; }
     float RHI::GetWidthf() const { return static_cast<float>(GetWidth()); }
     float RHI::GetHeightf() const { return static_cast<float>(GetHeight()); }
+    void DeletionQueue::Push(std::function<void()> &&deletor)
+    {
+        std::lock_guard<std::mutex> lock(mutex);
+        deletors.push_back(deletor);
+    }
+
+    void DeletionQueue::Flush()
+    {
+        std::lock_guard<std::mutex> lock(mutex);
+        for (auto &deletor : deletors)
+            deletor();
+        deletors.clear();
+    }
+
+    void RHI::AddToDeletionQueue(std::function<void()> &&deletor)
+    {
+        if (m_deletionQueues.empty())
+        {
+            deletor();
+            return;
+        }
+        m_deletionQueues[GetFrameIndex()]->Push(std::move(deletor));
+    }
+
+    void RHI::FlushDeletionQueue(uint32_t frameIndex)
+    {
+        if (frameIndex < m_deletionQueues.size())
+            m_deletionQueues[frameIndex]->Flush();
+    }
 } // namespace pe

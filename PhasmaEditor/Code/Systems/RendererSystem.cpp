@@ -147,6 +147,7 @@ namespace pe
             frameCmd = nullptr;
         }
 
+        RHII.FlushDeletionQueue(frame);
         RHII.GetStagingManager()->RemoveUnused();
     }
 
