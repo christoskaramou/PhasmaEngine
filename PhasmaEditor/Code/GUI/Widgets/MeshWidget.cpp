@@ -161,9 +161,10 @@ namespace pe
                 ImGui::TableSetColumnIndex(1);
 
                 ImGui::SetNextItemWidth(-FLT_MIN);
-                if (ImGui::SliderFloat("##AlphaCutoff", &mesh->alphaCutoff, 0.0f, 1.0f, "%.3f"))
+                float alphaCutoff = mesh->materialFactors[0][2].z;
+                if (ImGui::SliderFloat("##AlphaCutoff", &alphaCutoff, 0.0f, 1.0f, "%.3f"))
                 {
-                    mesh->materialFactors[0][2].z = mesh->alphaCutoff;
+                    mesh->materialFactors[0][2].z = alphaCutoff;
                     changed = true;
                 }
 

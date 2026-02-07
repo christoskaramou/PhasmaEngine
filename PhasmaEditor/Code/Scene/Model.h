@@ -27,7 +27,6 @@ namespace pe
         uint32_t textureMask = 0;
 
         mat4 materialFactors[2] = {mat4(1.f), mat4(1.f)};
-        float alphaCutoff = 0.5f;
 
     private:
         friend class Scene;

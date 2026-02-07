@@ -531,7 +531,7 @@ namespace pe
                 MeshInfo &meshInfo = meshesInfo[meshIndex];
 
                 Mesh_Constants constants{};
-                constants.alphaCut = (meshInfo.renderType == RenderType::AlphaCut) ? meshInfo.alphaCutoff : 0.0f;
+                constants.alphaCut = (meshInfo.renderType == RenderType::AlphaCut) ? meshInfo.materialFactors[0][2][2] : 0.0f;
                 constants.meshDataOffset = static_cast<uint32_t>(model.GetNodeInfos()[nodeIndex].dataOffset);
                 constants.textureMask = meshInfo.textureMask;
                 for (int k = 0; k < 5; k++)
