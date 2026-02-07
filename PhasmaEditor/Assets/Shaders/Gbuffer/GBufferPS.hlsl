@@ -7,9 +7,11 @@
 [[vk::binding(1, 1)]] SamplerState material_sampler;
 [[vk::binding(2, 1)]] Texture2D textures[];
 
-float4 SampleArray(float2 uv, float index)
+float4 SampleArray(float2 uv, uint index)
 {
-    return textures[index].Sample(material_sampler, uv);
+    if (index == 0xFFFFFFFF)
+        return float4(1.0, 1.0, 1.0, 1.0);
+    return textures[NonUniformResourceIndex(index)].Sample(material_sampler, uv);
 }
 
 float4 GetBaseColor(uint id, float2 uv)          { return SampleArray(uv, constants[id].meshImageIndex[0]); }
