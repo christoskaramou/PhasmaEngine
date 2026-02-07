@@ -35,27 +35,47 @@ PS_OUTPUT_Gbuffer mainPS(PS_INPUT_Gbuffer input)
     if (combinedColor.a < input.metRoughAlphacutOcl.z)
         discard;
 
-    float3 mrSample = HasTexture(textureMask, TEX_METAL_ROUGH_BIT) ? GetMetallicRoughness(id, uv).xyz : float3(1.0f, 1.0f, 1.0f);
-    float3 tangentNormal = HasTexture(textureMask, TEX_NORMAL_BIT) ? GetNormal(id, uv).xyz : float3(0.5f, 0.5f, 1.0f);
-    float occlusionSample = HasTexture(textureMask, TEX_OCCLUSION_BIT) ? GetOcclusion(id, uv).r : 1.0f;
-    float3 emissiveSample = HasTexture(textureMask, TEX_EMISSIVE_BIT) ? GetEmissive(id, uv).xyz : float3(1.0f, 1.0f, 1.0f);
-
-    float metallic = saturate(input.metRoughAlphacutOcl.x * mrSample.z);
-    float roughness = saturate(input.metRoughAlphacutOcl.y * mrSample.y);
-    float occlusion = lerp(1.0f, occlusionSample, input.metRoughAlphacutOcl.w);
-
     float3 N = normalize(input.normal);
-    float3 T = normalize(input.tangent.xyz);
-    T = normalize(T - dot(T, N) * N);
-    float3 B = cross(N, T) * input.tangent.w;
-    float3x3 TBN = float3x3(T, B, N);
-    float3 normalWS = normalize(mul(tangentNormal * 2.0 - 1.0, TBN));
+    float3 normalWS = N;
+    if (HasTexture(textureMask, TEX_NORMAL_BIT))
+    {
+        float3 tangentNormal = GetNormal(id, uv).xyz;
+        float3 T = normalize(input.tangent.xyz);
+        T = normalize(T - dot(T, N) * N);
+        float3 B = cross(N, T) * input.tangent.w;
+        float3x3 TBN = float3x3(T, B, N);
+        normalWS = normalize(mul(tangentNormal * 2.0 - 1.0, TBN));
+    }
+
+    float metallic = input.metRoughAlphacutOcl.x;
+    float roughness = input.metRoughAlphacutOcl.y;
+    if (HasTexture(textureMask, TEX_METAL_ROUGH_BIT))
+    {
+        float3 mrSample = GetMetallicRoughness(id, uv).xyz;
+        metallic *= mrSample.z;
+        roughness *= mrSample.y;
+    }
+    metallic = saturate(metallic);
+    roughness = saturate(roughness);
+
+    float occlusion = 1.0f;
+    if (HasTexture(textureMask, TEX_OCCLUSION_BIT))
+    {
+        float occlusionSample = GetOcclusion(id, uv).r;
+        occlusion = lerp(1.0f, occlusionSample, input.metRoughAlphacutOcl.w);
+    }
+
+    float3 emissive = float3(0.0f, 0.0f, 0.0f);
+    if (HasTexture(textureMask, TEX_EMISSIVE_BIT))
+    {
+        emissive = GetEmissive(id, uv).xyz * input.emissiveFactor;
+    }
 
     output.normal = normalWS * 0.5f + 0.5f;
     output.albedo = float4(combinedColor.xyz, combinedColor.a);
     float transmission = (pc.passType == 2) ? 1.0f : 0.0f;
     output.metRough = float4(occlusion, roughness, metallic, transmission);
-    output.emissive = float4(emissiveSample * input.emissiveFactor, 0.0f);
+    output.emissive = float4(emissive, 0.0f);
     output.transparency = pc.passType ? 1.0f : 0.0f;
 
     // Calculate the velocity

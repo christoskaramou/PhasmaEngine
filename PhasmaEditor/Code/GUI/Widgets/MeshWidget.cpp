@@ -215,7 +215,12 @@ namespace pe
                 ImGui::EndTable();
 
                 if (changed)
+                {
                     PropagateMeshChange(mesh, model);
+                    RendererSystem *renderer = GetGlobalSystem<RendererSystem>();
+                    if (renderer)
+                        renderer->GetScene().UpdateTextures();
+                }
             }
         }
     }
@@ -232,46 +237,42 @@ namespace pe
 
                 // Texture Mask
                 {
-                    std::string mask = "";
-                    if (mesh->textureMask & (1 << 0))
-                        mask += "BC ";
-                    if (mesh->textureMask & (1 << 1))
-                        mask += "MR ";
-                    if (mesh->textureMask & (1 << 2))
-                        mask += "N ";
-                    if (mesh->textureMask & (1 << 3))
-                        mask += "O ";
-                    if (mesh->textureMask & (1 << 4))
-                        mask += "E ";
-                    if (mask.empty())
-                        mask = "None";
-
                     ImGui::TableNextRow();
                     ImGui::TableSetColumnIndex(0);
                     ImGui::AlignTextToFramePadding();
                     ImGui::Text("Mask");
                     ImGui::TableSetColumnIndex(1);
-                    ImGui::Text("%s (0x%X)", mask.c_str(), mesh->textureMask);
 
-                    if (ImGui::IsItemHovered())
+                    const char *labels[] = {"BC", "MR", "N", "O", "E"};
+                    const char *fullNames[] = {"Base Color", "Metallic Roughness", "Normal", "Occlusion", "Emissive"};
+                    bool changed = false;
+
+                    for (int i = 0; i < 5; i++)
                     {
-                        std::string fullMask = "";
-                        if (mesh->textureMask & (1 << 0))
-                            fullMask += "Base Color\n";
-                        if (mesh->textureMask & (1 << 1))
-                            fullMask += "Metallic Roughness\n";
-                        if (mesh->textureMask & (1 << 2))
-                            fullMask += "Normal\n";
-                        if (mesh->textureMask & (1 << 3))
-                            fullMask += "Occlusion\n";
-                        if (mesh->textureMask & (1 << 4))
-                            fullMask += "Emissive\n";
-                        if (fullMask.empty())
-                            fullMask = "None";
+                        bool active = (mesh->textureMask & (1 << i)) != 0;
+                        if (ImGui::Selectable(labels[i], &active, ImGuiSelectableFlags_None, ImVec2(24, 0)))
+                        {
+                            if (active)
+                                mesh->textureMask |= (1 << i);
+                            else
+                                mesh->textureMask &= ~(1 << i);
+                            changed = true;
+                        }
+                        if (ImGui::IsItemHovered())
+                            ImGui::SetTooltip("%s", fullNames[i]);
 
-                        ImGui::BeginTooltip();
-                        ImGui::Text("%s", fullMask.c_str());
-                        ImGui::EndTooltip();
+                        ImGui::SameLine();
+                    }
+                    ImGui::Text(" (0x%X)", mesh->textureMask);
+
+                    if (changed)
+                    {
+                        model->MarkDirty(0);
+                        PropagateMeshChange(mesh, model);
+
+                        RendererSystem *renderer = GetGlobalSystem<RendererSystem>();
+                        if (renderer)
+                            renderer->GetScene().UpdateTextures();
                     }
                 }
 

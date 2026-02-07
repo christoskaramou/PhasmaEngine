@@ -690,27 +690,48 @@ void closesthit(inout HitPayload payload, in BuiltInTriangleIntersectionAttribut
     
     // 1. Base Color
     float4 baseColorFactor = GetBaseColorFactor(id);
-    float4 sampledBaseColor = HasTexture(textureMask, TEX_BASE_COLOR_BIT) ? GetBaseColor(id, uv) : float4(1.0f, 1.0f, 1.0f, 1.0f);
-    float4 combinedColor = sampledBaseColor * color * baseColorFactor;
+    float4 combinedColor = color * baseColorFactor;
+    if (HasTexture(textureMask, TEX_BASE_COLOR_BIT))
+    {
+        combinedColor *= GetBaseColor(id, uv);
+    }
 
     // 2. Material Properties
-    float3 mrSample = HasTexture(textureMask, TEX_METAL_ROUGH_BIT) ? GetMetallicRoughness(id, uv).xyz : float3(0.0f, 1.0f, 1.0f);
-    float3 tangentNormalSample = HasTexture(textureMask, TEX_NORMAL_BIT) ? GetNormal(id, uv).xyz : float3(0.5f, 0.5f, 1.0f);
-    float occlusionSample = HasTexture(textureMask, TEX_OCCLUSION_BIT) ? GetOcclusion(id, uv).r : 1.0f;
-    float3 emissiveSample = HasTexture(textureMask, TEX_EMISSIVE_BIT) ? GetEmissive(id, uv).xyz : float3(0.0f, 0.0f, 0.0f);
-    
-    // Factors
     float4 metRoughAlphacutOcl = GetMetRoughAlphacutOcl(id);
-    float metallic = saturate(metRoughAlphacutOcl.x * mrSample.z);
-    float roughness = saturate(metRoughAlphacutOcl.y * mrSample.y);
-    float occlusion = lerp(1.0f, occlusionSample, metRoughAlphacutOcl.w);
-    float3 emissive = emissiveSample * GetEmissiveFactor(id);
+    float metallic = metRoughAlphacutOcl.x;
+    float roughness = metRoughAlphacutOcl.y;
+    if (HasTexture(textureMask, TEX_METAL_ROUGH_BIT))
+    {
+        float3 mrSample = GetMetallicRoughness(id, uv).xyz;
+        metallic *= mrSample.z;
+        roughness *= mrSample.y;
+    }
+    metallic = saturate(metallic);
+    roughness = saturate(roughness);
+
+    float occlusion = 1.0f;
+    if (HasTexture(textureMask, TEX_OCCLUSION_BIT))
+    {
+        float occlusionSample = GetOcclusion(id, uv).r;
+        occlusion = lerp(1.0f, occlusionSample, metRoughAlphacutOcl.w);
+    }
+
+    float3 emissive = float3(0.0f, 0.0f, 0.0f);
+    if (HasTexture(textureMask, TEX_EMISSIVE_BIT))
+    {
+        emissive = GetEmissive(id, uv).xyz * GetEmissiveFactor(id);
+    }
 
     // 3. Normal Mapping
-    tangentWorld = normalize(tangentWorld - dot(tangentWorld, normalWorld) * normalWorld);
-    float3 bitangentWorld = cross(normalWorld, tangentWorld) * tangentObj.w; 
-    float3x3 TBN = float3x3(tangentWorld, bitangentWorld, normalWorld);
-    float3 N = normalize(mul(tangentNormalSample * 2.0 - 1.0, TBN));
+    float3 N = normalWorld;
+    if (HasTexture(textureMask, TEX_NORMAL_BIT))
+    {
+        float3 tangentNormalSample = GetNormal(id, uv).xyz;
+        tangentWorld = normalize(tangentWorld - dot(tangentWorld, normalWorld) * normalWorld);
+        float3 bitangentWorld = cross(normalWorld, tangentWorld) * tangentObj.w; 
+        float3x3 TBN = float3x3(tangentWorld, bitangentWorld, normalWorld);
+        N = normalize(mul(tangentNormalSample * 2.0 - 1.0, TBN));
+    }
 
     // 4. Lighting (IBL)
     float3 V = normalize(-WorldRayDirection());
