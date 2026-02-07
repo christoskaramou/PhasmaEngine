@@ -13,7 +13,6 @@ namespace pe
     struct MeshInfo
     {
         const size_t dataSize = sizeof(mat4) * 4; // transform, previous transform, material factors (2x)
-        bool cull = true;
         uint32_t vertexOffset = 0, verticesCount = 0; // offset and count in used vertex buffer
         uint32_t indexOffset = 0, indicesCount = 0;   // offset and count in used index buffer
         uint32_t indirectIndex = 0;                   // index of the indirect command of the mesh in the indirect buffer

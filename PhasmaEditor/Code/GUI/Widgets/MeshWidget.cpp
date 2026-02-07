@@ -122,21 +122,23 @@ namespace pe
     {
         if (ImGui::CollapsingHeader("Material", ImGuiTreeNodeFlags_DefaultOpen))
         {
-            if (ImGui::BeginTable("MaterialTable", 2, ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg))
+            if (ImGui::BeginTable("MaterialTable", 2, ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg | ImGuiTableFlags_SizingStretchProp))
             {
-                ImGui::TableSetupColumn("Property");
+                ImGui::TableSetupColumn("Property", ImGuiTableColumnFlags_WidthFixed, 120.f);
                 ImGui::TableSetupColumn("Value", ImGuiTableColumnFlags_WidthStretch);
+                ImGui::TableHeadersRow();
 
                 bool changed = false;
 
                 // Render Type
                 ImGui::TableNextRow();
                 ImGui::TableSetColumnIndex(0);
+                ImGui::AlignTextToFramePadding();
                 ImGui::Text("Render Type");
                 ImGui::TableSetColumnIndex(1);
 
                 const char *renderTypeItems[] = {"Opaque", "AlphaCut", "AlphaBlend", "Transmission"};
-                int currentRenderType = static_cast<int>(mesh->renderType) - 1; // Enum starts at 1
+                int currentRenderType = static_cast<int>(mesh->renderType) - 1;
                 if (currentRenderType >= 0 && currentRenderType < 4)
                 {
                     ImGui::SetNextItemWidth(-FLT_MIN);
@@ -148,30 +150,18 @@ namespace pe
                 }
                 else
                 {
-                    ImGui::Text("Unknown (%d)", static_cast<int>(mesh->renderType));
-                }
-
-                // Cull Backfaces
-                ImGui::TableNextRow();
-                ImGui::TableSetColumnIndex(0);
-                ImGui::Text("Cull Backfaces");
-                ImGui::TableSetColumnIndex(1);
-
-                bool cull = mesh->cull;
-                if (ImGui::Checkbox("##Cull", &cull))
-                {
-                    mesh->cull = cull;
-                    changed = true;
+                    ImGui::TextColored(ImVec4(1.f, 0.4f, 0.4f, 1.f), "Unknown (%d)", static_cast<int>(mesh->renderType));
                 }
 
                 // Alpha Cutoff
                 ImGui::TableNextRow();
                 ImGui::TableSetColumnIndex(0);
+                ImGui::AlignTextToFramePadding();
                 ImGui::Text("Alpha Cutoff");
                 ImGui::TableSetColumnIndex(1);
 
                 ImGui::SetNextItemWidth(-FLT_MIN);
-                if (ImGui::DragFloat("##AlphaCutoff", &mesh->alphaCutoff, 0.01f, 0.0f, 1.0f))
+                if (ImGui::SliderFloat("##AlphaCutoff", &mesh->alphaCutoff, 0.0f, 1.0f, "%.3f"))
                 {
                     mesh->materialFactors[0][2].z = mesh->alphaCutoff;
                     changed = true;
@@ -180,12 +170,13 @@ namespace pe
                 // Base Color Factor
                 ImGui::TableNextRow();
                 ImGui::TableSetColumnIndex(0);
+                ImGui::AlignTextToFramePadding();
                 ImGui::Text("Base Color");
                 ImGui::TableSetColumnIndex(1);
 
                 vec4 baseColorFactor = mesh->materialFactors[0][0];
                 ImGui::SetNextItemWidth(-FLT_MIN);
-                if (ImGui::ColorEdit4("##BaseColor", &baseColorFactor.x))
+                if (ImGui::ColorEdit4("##BaseColor", &baseColorFactor.x, ImGuiColorEditFlags_NoInputs | ImGuiColorEditFlags_AlphaPreviewHalf))
                 {
                     mesh->materialFactors[0][0] = baseColorFactor;
                     changed = true;
@@ -195,11 +186,12 @@ namespace pe
                 float metallic = mesh->materialFactors[0][2].x;
                 ImGui::TableNextRow();
                 ImGui::TableSetColumnIndex(0);
+                ImGui::AlignTextToFramePadding();
                 ImGui::Text("Metallic");
                 ImGui::TableSetColumnIndex(1);
 
                 ImGui::SetNextItemWidth(-FLT_MIN);
-                if (ImGui::SliderFloat("##Metallic", &metallic, 0.0f, 1.0f))
+                if (ImGui::SliderFloat("##Metallic", &metallic, 0.0f, 1.0f, "%.3f"))
                 {
                     mesh->materialFactors[0][2].x = metallic;
                     changed = true;
@@ -209,11 +201,12 @@ namespace pe
                 float roughness = mesh->materialFactors[0][2].y;
                 ImGui::TableNextRow();
                 ImGui::TableSetColumnIndex(0);
+                ImGui::AlignTextToFramePadding();
                 ImGui::Text("Roughness");
                 ImGui::TableSetColumnIndex(1);
 
                 ImGui::SetNextItemWidth(-FLT_MIN);
-                if (ImGui::SliderFloat("##Roughness", &roughness, 0.0f, 1.0f))
+                if (ImGui::SliderFloat("##Roughness", &roughness, 0.0f, 1.0f, "%.3f"))
                 {
                     mesh->materialFactors[0][2].y = roughness;
                     changed = true;
@@ -231,33 +224,56 @@ namespace pe
     {
         if (ImGui::CollapsingHeader("Textures", ImGuiTreeNodeFlags_DefaultOpen))
         {
-            if (ImGui::BeginTable("TextureTable", 2, ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg))
+            if (ImGui::BeginTable("TextureTable", 2, ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg | ImGuiTableFlags_SizingStretchProp))
             {
-                ImGui::TableSetupColumn("Type");
+                ImGui::TableSetupColumn("Type", ImGuiTableColumnFlags_WidthFixed, 140.f);
                 ImGui::TableSetupColumn("Texture", ImGuiTableColumnFlags_WidthStretch);
+                ImGui::TableHeadersRow();
 
-                std::string mask = "";
-                if (mesh->textureMask & (1 << 0))
-                    mask += "Base Color | ";
-                if (mesh->textureMask & (1 << 1))
-                    mask += "Metallic Roughness | ";
-                if (mesh->textureMask & (1 << 2))
-                    mask += "Normal | ";
-                if (mesh->textureMask & (1 << 3))
-                    mask += "Occlusion | ";
-                if (mesh->textureMask & (1 << 4))
-                    mask += "Emissive | ";
+                // Texture Mask
+                {
+                    std::string mask = "";
+                    if (mesh->textureMask & (1 << 0))
+                        mask += "BC ";
+                    if (mesh->textureMask & (1 << 1))
+                        mask += "MR ";
+                    if (mesh->textureMask & (1 << 2))
+                        mask += "N ";
+                    if (mesh->textureMask & (1 << 3))
+                        mask += "O ";
+                    if (mesh->textureMask & (1 << 4))
+                        mask += "E ";
+                    if (mask.empty())
+                        mask = "None";
 
-                if (!mask.empty())
-                    mask = mask.substr(0, mask.size() - 3);
-                else
-                    mask = "None";
+                    ImGui::TableNextRow();
+                    ImGui::TableSetColumnIndex(0);
+                    ImGui::AlignTextToFramePadding();
+                    ImGui::Text("Mask");
+                    ImGui::TableSetColumnIndex(1);
+                    ImGui::Text("%s (0x%X)", mask.c_str(), mesh->textureMask);
 
-                ImGui::TableNextRow();
-                ImGui::TableSetColumnIndex(0);
-                ImGui::Text("Mask");
-                ImGui::TableSetColumnIndex(1);
-                ImGui::Text("%s (0x%X)", mask.c_str(), mesh->textureMask);
+                    if (ImGui::IsItemHovered())
+                    {
+                        std::string fullMask = "";
+                        if (mesh->textureMask & (1 << 0))
+                            fullMask += "Base Color\n";
+                        if (mesh->textureMask & (1 << 1))
+                            fullMask += "Metallic Roughness\n";
+                        if (mesh->textureMask & (1 << 2))
+                            fullMask += "Normal\n";
+                        if (mesh->textureMask & (1 << 3))
+                            fullMask += "Occlusion\n";
+                        if (mesh->textureMask & (1 << 4))
+                            fullMask += "Emissive\n";
+                        if (fullMask.empty())
+                            fullMask = "None";
+
+                        ImGui::BeginTooltip();
+                        ImGui::Text("%s", fullMask.c_str());
+                        ImGui::EndTooltip();
+                    }
+                }
 
                 const char *textureNames[] = {"Base Color", "Metallic Roughness", "Normal", "Occlusion", "Emissive"};
 
@@ -265,44 +281,63 @@ namespace pe
                 {
                     ImGui::TableNextRow();
                     ImGui::TableSetColumnIndex(0);
+                    ImGui::AlignTextToFramePadding();
                     ImGui::Text("%s", textureNames[i]);
-                    ImGui::TableSetColumnIndex(1);
 
+                    ImGui::TableSetColumnIndex(1);
                     Image *img = mesh->images[i];
-                    bool clicked = false;
                     std::string id = "##tex" + std::to_string(i);
 
+                    // Thumbnail / Button
+                    bool clicked = false;
+                    float size = 32.f;
                     if (img)
                     {
                         void *desc = GetDescriptor(img);
                         if (desc)
                         {
-                            if (ImGui::ImageButton(id.c_str(), (ImTextureID)desc, ImVec2(32, 32)))
+                            ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(2, 2));
+                            if (ImGui::ImageButton(id.c_str(), (ImTextureID)desc, ImVec2(size, size)))
                                 clicked = true;
+                            ImGui::PopStyleVar();
 
                             if (ImGui::IsItemHovered())
                             {
                                 ImGui::BeginTooltip();
                                 ImGui::Text("%s", img->GetName().c_str());
-                                ImGui::Text("Mips: %u", img->GetMipLevels());
+                                ImGui::Text("Resolution: %ux%u", img->GetWidth(), img->GetHeight());
                                 ImGui::Text("Format: %s", vk::to_string(img->GetFormat()).c_str());
+                                ImGui::Text("Mips: %u", img->GetMipLevels());
                                 float aspect = img->GetWidth_f() / img->GetHeight_f();
                                 ImGui::Image((ImTextureID)desc, ImVec2(256 * aspect, 256));
                                 ImGui::EndTooltip();
                             }
-                            ImGui::SameLine();
-                            ImGui::Text("%s", img->GetName().c_str());
-                        }
-                        else
-                        {
-                            if (ImGui::Button((img->GetName() + id).c_str()))
-                                clicked = true;
                         }
                     }
                     else
                     {
-                        if (ImGui::Button(("Select..." + id).c_str()))
+                        if (ImGui::Button(("Select..." + id).c_str(), ImVec2(size, size)))
                             clicked = true;
+                    }
+
+                    ImGui::SameLine();
+                    if (img)
+                    {
+                        if (ImGui::Button(("Clear" + id).c_str()))
+                        {
+                            mesh->images[i] = nullptr;
+                            mesh->textureMask &= ~(1 << i);
+                            model->MarkDirty(0);
+                            PropagateMeshChange(mesh, model);
+
+                            RendererSystem *renderer = GetGlobalSystem<RendererSystem>();
+                            if (renderer)
+                                renderer->GetScene().UpdateTextures();
+                        }
+                    }
+                    else
+                    {
+                        ImGui::TextDisabled("None");
                     }
 
                     if (clicked)

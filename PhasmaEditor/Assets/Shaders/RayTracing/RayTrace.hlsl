@@ -149,9 +149,9 @@ float4x4 LoadMatrix(uint offset)
     return result;
 }
 
-float4 SampleArray(float2 uv, int index)
+float4 SampleArray(float2 uv, uint index)
 {
-    if (index < 0)
+    if (index == 0xFFFFFFFF)
         return float4(1.0, 1.0, 1.0, 1.0);
 
     return textures[NonUniformResourceIndex(index)].SampleLevel(material_sampler, uv, 0);
