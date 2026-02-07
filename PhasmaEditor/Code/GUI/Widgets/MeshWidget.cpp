@@ -317,7 +317,7 @@ namespace pe
                     }
                     else
                     {
-                        if (ImGui::Button(("Select..." + id).c_str(), ImVec2(size, size)))
+                        if (ImGui::Button(("Select..." + id).c_str(), ImVec2(-FLT_MIN, 0.f)))
                             clicked = true;
                     }
 

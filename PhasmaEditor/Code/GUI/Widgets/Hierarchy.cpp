@@ -3,6 +3,7 @@
 #include "GUI/GUIState.h"
 #include "GUI/IconsFontAwesome.h"
 #include "Scene/Model.h"
+#include "Scene/Primitives.h"
 #include "Scene/Scene.h"
 #include "Scene/SelectionManager.h"
 #include "Systems/LightSystem.h"
@@ -66,6 +67,112 @@ namespace pe
         Scene &scene = GetGlobalSystem<RendererSystem>()->GetScene();
         auto &models = scene.GetModels();
         auto &selection = SelectionManager::Instance();
+
+        // Add Button
+        float buttonWidth = ImGui::GetContentRegionAvail().x * 0.8f;
+        float x = (ImGui::GetContentRegionAvail().x - buttonWidth) * 0.5f;
+        ImGui::SetCursorPosX(ImGui::GetCursorPosX() + x);
+        if (ImGui::Button("Add", ImVec2(buttonWidth, 0.f)))
+            ImGui::OpenPopup("AddEntityPopup");
+
+        ImGui::Dummy(ImVec2(0.0f, 5.0f));
+
+        if (ImGui::BeginPopup("AddEntityPopup"))
+        {
+            if (ImGui::MenuItem("Camera"))
+            {
+                Camera *camera = scene.AddCamera();
+                // Select new camera
+                // selection.Select(nullptr, -1, SelectionType::Camera); // Need logic to select specific camera index if multiples were supported in UI
+            }
+
+            if (ImGui::BeginMenu("Light"))
+            {
+                LightSystem *lightSystem = GetGlobalSystem<LightSystem>();
+
+                if (ImGui::MenuItem("Point Light"))
+                {
+                    PointLight pointLight;
+                    pointLight.color = vec4(1.0f);
+                    pointLight.position = vec4(0.0f, 0.0f, 0.0f, 10.0f);
+                    lightSystem->GetPointLights().push_back(pointLight);
+                }
+                if (ImGui::MenuItem("Spot Light"))
+                {
+                    SpotLight spotLight;
+                    spotLight.color = vec4(1.0f);
+                    spotLight.position = vec4(0.0f, 0.0f, 0.0f, 10.0f);
+                    spotLight.rotation = vec4(0.0f, 0.0f, 0.0f, 1.0f);
+                    spotLight.params = vec4(15.0f, 5.0f, 0.0f, 0.0f);
+                    lightSystem->GetSpotLights().push_back(spotLight);
+                }
+                if (ImGui::MenuItem("Area Light"))
+                {
+                    AreaLight areaLight;
+                    areaLight.color = vec4(1.0f);
+                    areaLight.position = vec4(0.0f, 0.0f, 0.0f, 10.0f);
+                    areaLight.rotation = vec4(0.0f, 0.0f, 0.0f, 1.0f);
+                    areaLight.size = vec4(2.0f, 2.0f, 0.0f, 0.0f);
+                    lightSystem->GetAreaLights().push_back(areaLight);
+                }
+                ImGui::EndMenu();
+            }
+
+            if (ImGui::MenuItem("Node"))
+            {
+                Model *model = new Model();
+                NodeInfo nodeInfo{};
+                nodeInfo.name = "Node";
+                nodeInfo.localMatrix = mat4(1.0f);
+                model->GetNodeInfos().push_back(nodeInfo);
+                EventSystem::PushEvent(EventType::ModelLoaded, model);
+                // Select the new node (index 0)
+                selection.Select(model, 0, SelectionType::Node);
+            }
+
+            if (ImGui::BeginMenu("Mesh"))
+            {
+                if (ImGui::MenuItem("Plane"))
+                {
+                    Model *model = Primitives::CreatePlane();
+                    EventSystem::PushEvent(EventType::ModelLoaded, model);
+                    selection.Select(model, 0, SelectionType::Node);
+                }
+                if (ImGui::MenuItem("Cube"))
+                {
+                    Model *model = Primitives::CreateCube();
+                    EventSystem::PushEvent(EventType::ModelLoaded, model);
+                    selection.Select(model, 0, SelectionType::Node);
+                }
+                if (ImGui::MenuItem("Sphere"))
+                {
+                    Model *model = Primitives::CreateSphere();
+                    EventSystem::PushEvent(EventType::ModelLoaded, model);
+                    selection.Select(model, 0, SelectionType::Node);
+                }
+                if (ImGui::MenuItem("Cylinder"))
+                {
+                    Model *model = Primitives::CreateCylinder();
+                    EventSystem::PushEvent(EventType::ModelLoaded, model);
+                    selection.Select(model, 0, SelectionType::Node);
+                }
+                if (ImGui::MenuItem("Cone"))
+                {
+                    Model *model = Primitives::CreateCone();
+                    EventSystem::PushEvent(EventType::ModelLoaded, model);
+                    selection.Select(model, 0, SelectionType::Node);
+                }
+                if (ImGui::MenuItem("Quad"))
+                {
+                    Model *model = Primitives::CreateQuad();
+                    EventSystem::PushEvent(EventType::ModelLoaded, model);
+                    selection.Select(model, 0, SelectionType::Node);
+                }
+                ImGui::EndMenu();
+            }
+
+            ImGui::EndPopup();
+        }
 
         static Model *s_renameModel = nullptr;
         static int s_renameNode = -1;

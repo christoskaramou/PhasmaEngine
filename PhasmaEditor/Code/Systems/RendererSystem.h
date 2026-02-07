@@ -35,7 +35,7 @@ namespace pe
         Scene &GetScene() { return m_scene; }
         const SkyBox &GetSkyBoxDay() const { return m_skyBoxDay; }
         const SkyBox &GetSkyBoxNight() const { return m_skyBoxNight; }
-         const SkyBox &GetSkyBoxWhite() const { return m_skyBoxWhite; }
+        const SkyBox &GetSkyBoxWhite() const { return m_skyBoxWhite; }
         Image *GetIBL_LUT() const { return m_ibl_brdf_lut; }
         const GUI &GetGUI() const { return m_gui; }
         GUI &GetGUI() { return m_gui; }
@@ -65,6 +65,7 @@ namespace pe
         void BlitToSwapchain(CommandBuffer *cmd, Image *renderedImage, uint32_t imageIndex);
         void PollShaders();
         void WaitPreviousFrameCommands();
+        void WaitAllFramesCommands();
 
     protected:
         void LoadResources(CommandBuffer *cmd);

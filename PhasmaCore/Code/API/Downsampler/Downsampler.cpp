@@ -6535,7 +6535,7 @@ namespace pe
 
         Descriptor &dSet = *s_DSet[s_currentIndex];
         dSet.SetImageViews(0, views);
-        if (mips >= 6)
+        if (mips >= 7)
             dSet.SetImageView(1, s_image->GetUAV(6));
         dSet.SetBuffer(2, s_atomicCounter[s_currentIndex]);
 
