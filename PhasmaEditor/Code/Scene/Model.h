@@ -12,7 +12,7 @@ namespace pe
 
     struct MeshInfo
     {
-        const size_t dataSize = sizeof(mat4) * 4; // transform, previous transform, material factors (2x)
+        const size_t dataSize = sizeof(mat4) * 4;     // transform, previous transform, material factors (2x)
         uint32_t vertexOffset = 0, verticesCount = 0; // offset and count in used vertex buffer
         uint32_t indexOffset = 0, indicesCount = 0;   // offset and count in used index buffer
         uint32_t indirectIndex = 0;                   // index of the indirect command of the mesh in the indirect buffer
@@ -116,17 +116,6 @@ namespace pe
         int GetNodeCount() const { return static_cast<int>(m_nodeInfos.size()); }
         int GetNodeMesh(int nodeIndex) const;
 
-    protected:
-        friend class Scene;
-        friend class DepthPass;
-        friend class GbufferOpaquePass;
-        friend class GbufferTransparentPass;
-        friend class ShadowPass;
-        friend class AabbsPass;
-
-        virtual void UpdateNodeMatrix(int node);
-        static constexpr uint32_t TextureBit(TextureType type) { return 1u << static_cast<uint32_t>(type); }
-
         struct DefaultResources
         {
             Image *black = nullptr;
@@ -140,6 +129,18 @@ namespace pe
         static DefaultResources &GetDefaultResources(CommandBuffer *cmd);
         static const DefaultResources &GetDefaultResources();
         static DefaultResources &Defaults();
+
+    protected:
+        friend class Scene;
+        friend class DepthPass;
+        friend class GbufferOpaquePass;
+        friend class GbufferTransparentPass;
+        friend class ShadowPass;
+        friend class AabbsPass;
+        friend class Primitives;
+
+        virtual void UpdateNodeMatrix(int node);
+        static constexpr uint32_t TextureBit(TextureType type) { return 1u << static_cast<uint32_t>(type); }
 
         void ResetResources(CommandBuffer *cmd);
 

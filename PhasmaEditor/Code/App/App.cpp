@@ -77,6 +77,7 @@ namespace pe
         CreateGlobalSystem<LightSystem>()->Init(cmd);
         CreateGlobalSystem<RendererSystem>()->Init(cmd);
         CreateGlobalSystem<PostProcessSystem>()->Init(cmd);
+        Model::GetDefaultResources(cmd);
         cmd->End();
         queue->Submit(1, &cmd, nullptr, nullptr);
         cmd->Wait();

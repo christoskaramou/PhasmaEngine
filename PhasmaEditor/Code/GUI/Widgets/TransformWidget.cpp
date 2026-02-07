@@ -47,6 +47,9 @@ namespace pe
 
     void TransformWidget::DrawNodeInfo(NodeInfo *node)
     {
+        if (!node)
+            return;
+
         char buffer[256];
         memset(buffer, 0, 256);
         memcpy(buffer, node->name.c_str(), std::min(node->name.length(), sizeof(buffer) - 1));

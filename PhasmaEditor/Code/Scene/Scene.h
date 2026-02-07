@@ -33,6 +33,7 @@ namespace pe
         void UpdateTLASTransformations(CommandBuffer *cmd); // Update instance transforms and rebuild TLAS
         void AddModel(Model *model);
         void RemoveModel(Model *model);
+        Camera *AddCamera();
 
         ParticleManager *GetParticleManager() { return m_particleManager; }
         Camera *GetActiveCamera() { return m_cameras.at(0); }

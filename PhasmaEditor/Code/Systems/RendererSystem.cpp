@@ -150,6 +150,21 @@ namespace pe
         RHII.GetStagingManager()->RemoveUnused();
     }
 
+    void RendererSystem::WaitAllFramesCommands()
+    {
+        for (auto &frameCmd : m_cmds)
+        {
+            if (frameCmd)
+            {
+                frameCmd->Wait();
+                frameCmd->Return();
+                frameCmd = nullptr;
+            }
+        }
+
+        RHII.GetStagingManager()->RemoveUnused();
+    }
+
     CommandBuffer *RendererSystem::RecordPasses(uint32_t imageIndex)
     {
         CommandBuffer *cmd = RHII.GetMainQueue()->AcquireCommandBuffer();

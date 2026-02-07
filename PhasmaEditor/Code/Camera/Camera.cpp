@@ -3,7 +3,6 @@
 #include "RenderPasses/TAAPass.h"
 #include "Systems/RendererSystem.h"
 
-
 namespace pe
 {
     Camera::Camera()
@@ -11,9 +10,9 @@ namespace pe
         m_worldOrientation = vec3(1.f, -1.f, 1.f);
 
         // total pitch, yaw, roll
-        m_euler = vec3(0.f, 0.0f, 0.f);
+        m_euler = vec3(0.f, radians(-180.0f), 0.f);
         m_orientation = quat(m_euler);
-        m_position = vec3(0.f, 0.f, 0.f);
+        m_position = vec3(0.f, 0.01f, 0.1f);
 
         m_nearPlane = 0.005f;
         m_farPlane = FLT_MAX; // Indicates infinite far plane
@@ -86,17 +85,17 @@ namespace pe
         // [    0      1/tan     0    0 ]
         // [    0        0       0    n ]
         // [    0        0      -1    0 ]
-        
+
         float const tanHalfFovy = tan(Fovy() / 2.0f);
         float const aspect = GetAspect();
-        
+
         m_projection = mat4(0.0f);
         m_projection[0][0] = 1.0f / (aspect * tanHalfFovy);
         m_projection[1][1] = 1.0f / tanHalfFovy; // Vulkan Y-flip
         m_projection[2][2] = 0.0f;
         m_projection[2][3] = 1.0f;
         m_projection[3][2] = m_nearPlane;
-        
+
         m_projectionNoJitter = m_projection; // Save the clean projection matrix
 
         if (Settings::Get<GlobalSettings>().taa)

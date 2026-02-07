@@ -126,8 +126,38 @@ namespace pe
             delete model;
     }
 
+    Camera *Scene::AddCamera()
+    {
+        Camera *camera = new Camera();
+        m_cameras.push_back(camera);
+        return camera;
+    }
+
     void Scene::UploadBuffers(CommandBuffer *cmd)
     {
+        // Reset offsets relative to the model
+        for (auto &modelPtr : m_models)
+        {
+            Model &model = *modelPtr;
+            uint32_t currentVertexOffset = 0;
+            uint32_t currentIndexOffset = 0;
+            uint32_t currentPositionsOffset = 0;
+            size_t currentAabbVertexOffset = 0;
+
+            for (auto &meshInfo : model.GetMeshInfos())
+            {
+                meshInfo.vertexOffset = currentVertexOffset;
+                meshInfo.indexOffset = currentIndexOffset;
+                meshInfo.positionsOffset = currentPositionsOffset;
+                meshInfo.aabbVertexOffset = currentAabbVertexOffset;
+
+                currentVertexOffset += meshInfo.verticesCount;
+                currentIndexOffset += meshInfo.indicesCount;
+                currentPositionsOffset += meshInfo.verticesCount;
+                currentAabbVertexOffset += 8;
+            }
+        }
+
         DestroyBuffers();
         CreateGeometryBuffer();
         CopyIndices(cmd);

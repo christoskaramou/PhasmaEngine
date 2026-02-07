@@ -156,7 +156,7 @@ namespace pe
                 case EventType::DynamicRendering:
                 {
                     bool enable = std::any_cast<bool>(event.payload);
-                    RHII.GetMainQueue()->WaitIdle();
+                    rendererSystem->WaitAllFramesCommands();
                     Settings::Get<GlobalSettings>().dynamic_rendering = enable;
                     break;
                 }
@@ -165,7 +165,7 @@ namespace pe
                     Model *model = std::any_cast<Model *>(event.payload);
                     if (!model)
                         break;
-                    RHII.GetMainQueue()->Wait();
+                    rendererSystem->WaitAllFramesCommands();
                     rendererSystem->GetScene().AddModel(model);
                     rendererSystem->GetScene().UpdateGeometryBuffers();
                     model->SetRenderReady(true);
@@ -176,14 +176,14 @@ namespace pe
                     Model *model = std::any_cast<Model *>(event.payload);
                     if (!model)
                         break;
-                    RHII.GetMainQueue()->Wait();
+                    rendererSystem->WaitAllFramesCommands();
                     rendererSystem->GetScene().RemoveModel(model);
                     rendererSystem->GetScene().UpdateGeometryBuffers();
                     break;
                 }
                 case EventType::SetRenderMode:
                 {
-                    RHII.GetMainQueue()->WaitIdle();
+                    rendererSystem->WaitAllFramesCommands();
                     auto mode = std::any_cast<RenderMode>(event.payload);
                     Settings::Get<GlobalSettings>().render_mode = mode;
                     break;
