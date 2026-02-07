@@ -1,5 +1,7 @@
 #include "Console.h"
 
+#include "GUI/GUIState.h"
+
 namespace pe
 {
     void Console::Clear()
@@ -17,7 +19,7 @@ namespace pe
         buf[IM_ARRAYSIZE(buf) - 1] = 0;
         va_end(args);
 
-        m_logs.push_back({ std::string(buf), type });
+        m_logs.push_back({std::string(buf), type});
 
         if (m_autoScroll)
             m_scrollToBottom = true;
@@ -74,14 +76,25 @@ namespace pe
         ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(0, 0));
 
         // Draw Logs
-        auto draw_log = [&](const LogEntry& log) {
-            ImVec4 color = ImVec4(1.0f, 1.0f, 1.0f, 1.0f); // Default White
+        auto draw_log = [&](const LogEntry &log)
+        {
+            ImVec4 color;
 
+            bool isLight = GUIState::s_guiStyle == GUIStyle::Light;
             switch (log.type)
             {
-            case LogType::Warn: color = ImVec4(1.0f, 1.0f, 0.0f, 1.0f); break; // Yellow
-            case LogType::Error: color = ImVec4(1.0f, 0.0f, 0.0f, 1.0f); break; // Red
-            default: break;
+            case LogType::Info:
+                color = isLight ? ImVec4(0.0f, 0.0f, 0.0f, 1.0f) : ImVec4(1.0f, 1.0f, 1.0f, 1.0f);
+                break;
+            case LogType::Warn:
+                color = isLight ? ImVec4(0.6f, 0.6f, 0.0f, 1.0f) : ImVec4(1.0f, 1.0f, 0.0f, 1.0f);
+                break;
+            case LogType::Error:
+                color = ImVec4(1.0f, 0.0f, 0.0f, 1.0f);
+                break;
+            default:
+                color = isLight ? ImVec4(0.0f, 0.0f, 0.0f, 1.0f) : ImVec4(1.0f, 1.0f, 1.0f, 1.0f);
+                break;
             }
 
             ImGui::PushStyleColor(ImGuiCol_Text, color);
