@@ -43,6 +43,7 @@ namespace pe
         static Image *s_sceneViewImage;
         static bool s_useTransformGizmo;
         static bool s_useLightGizmos;
+        static bool s_useCameraGizmos;
 
         // GUI Style
         static GUIStyle s_guiStyle;

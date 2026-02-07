@@ -66,7 +66,8 @@ namespace pe
                 auto *cameraWidget = m_gui->GetWidget<CameraWidget>();
                 if (cameraWidget)
                 {
-                    Camera *camera = GetGlobalSystem<RendererSystem>()->GetScene().GetActiveCamera();
+                    int index = selection.GetSelectedNodeIndex();
+                    Camera *camera = GetGlobalSystem<RendererSystem>()->GetScene().GetCamera(index);
                     cameraWidget->DrawEmbed(camera);
                 }
             }

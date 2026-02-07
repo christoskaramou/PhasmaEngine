@@ -31,7 +31,7 @@ namespace pe
         }
         else if (GUIState::s_sceneViewRedockQueued && m_gui->GetDockspaceId() != 0)
         {
-            ImGui::DockBuilderDockWindow("Scene View", m_gui->GetDockspaceId());
+            ImGui::DockBuilderDockWindow("Viewport", m_gui->GetDockspaceId());
             GUIState::s_sceneViewRedockQueued = false;
         }
 
@@ -40,7 +40,7 @@ namespace pe
             sceneViewFlags |= ImGuiWindowFlags_NoDocking;
 
         ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0.0f, 0.0f));
-        ImGui::Begin("Scene View", nullptr, sceneViewFlags);
+        ImGui::Begin("Viewport", nullptr, sceneViewFlags);
         ImGui::PopStyleVar();
 
         GUIState::s_sceneViewFocused = ImGui::IsWindowFocused();
@@ -410,6 +410,15 @@ namespace pe
                 matrix = translate(mat4(1.0f), start) * mat4_cast(rot);
             }
         }
+        else if (selection.GetSelectionType() == SelectionType::Camera)
+        {
+            int index = selection.GetSelectedNodeIndex();
+            Camera *camera = GetGlobalSystem<RendererSystem>()->GetScene().GetCamera(index);
+            if (!camera)
+                return;
+
+            matrix = translate(mat4(1.0f), camera->GetPosition()) * mat4_cast(quat(camera->GetEuler()));
+        }
         else
         {
             return;
@@ -456,6 +465,17 @@ namespace pe
                     AreaLight &area = ls->GetAreaLights()[lightIndex];
                     area.position = vec4(pos, area.position.w);
                     area.rotation = vec4(rot.x, rot.y, rot.z, rot.w);
+                }
+            }
+            else if (selection.GetSelectionType() == SelectionType::Camera)
+            {
+                int index = selection.GetSelectedNodeIndex();
+                Camera *camera = GetGlobalSystem<RendererSystem>()->GetScene().GetCamera(index);
+                if (camera)
+                {
+                    camera->SetPosition(pos);
+                    vec3 euler = glm::eulerAngles(rot);
+                    camera->SetEuler(euler);
                 }
             }
             else
@@ -546,6 +566,43 @@ namespace pe
 
         if (GUIState::s_useLightGizmos)
             DrawLightGizmos(imageMin, imageSize);
+
+        DrawCameraGizmos(imageMin, imageSize);
+    }
+
+    bool SceneView::DrawGizmoIcon(const vec3 &pos, const char *icon, const mat4 &viewProj, const ImVec2 &imageMin, const ImVec2 &imageSize, bool isSelected, const char *id)
+    {
+        vec4 clipPos = viewProj * vec4(pos, 1.0f);
+        if (clipPos.w <= 0.0f)
+            return false;
+
+        vec2 ndcPos = vec2(clipPos) / clipPos.w;
+        if (!isSelected && (ndcPos.x < -1.0f || ndcPos.x > 1.0f || ndcPos.y < -1.0f || ndcPos.y > 1.0f))
+            return false;
+
+        float x = (ndcPos.x * 0.5f + 0.5f) * imageSize.x + imageMin.x;
+        float y = (ndcPos.y * 0.5f + 0.5f) * imageSize.y + imageMin.y;
+
+        float scale = isSelected ? 2.0f : 1.0f;
+        ImVec2 textSize = ImGui::CalcTextSize(icon);
+        textSize.x *= scale;
+        textSize.y *= scale;
+
+        // Clamp to window bounds to avoid scrollbars
+        x = glm::clamp(x, imageMin.x + textSize.x * 0.5f, imageMin.x + imageSize.x - textSize.x * 0.5f);
+        y = glm::clamp(y, imageMin.y + textSize.y * 0.5f, imageMin.y + imageSize.y - textSize.y * 0.5f);
+
+        ImVec2 iconPos(x - textSize.x * 0.5f, y - textSize.y * 0.5f);
+
+        ImGui::SetCursorScreenPos(iconPos);
+        ImGui::SetWindowFontScale(scale);
+        ImGui::PushStyleColor(ImGuiCol_Text, isSelected ? ImVec4(1, 1, 0, 1) : ImVec4(1, 1, 1, 1));
+        ImGui::Text("%s", icon);
+        ImGui::PopStyleColor();
+        ImGui::SetWindowFontScale(1.0f);
+
+        ImGui::SetCursorScreenPos(iconPos);
+        return ImGui::InvisibleButton(id, textSize);
     }
 
     void SceneView::DrawLightGizmos(const ImVec2 &imageMin, const ImVec2 &imageSize)
@@ -565,198 +622,161 @@ namespace pe
 
         auto drawIcon = [&](const vec3 &pos, const char *icon, LightType type, int index)
         {
-            vec4 clipPos = viewProj * vec4(pos, 1.0f);
+            // Color based on selection
+            bool isSelected = SelectionManager::Instance().GetSelectedLightType() == type &&
+                              SelectionManager::Instance().GetSelectedLightIndex() == index &&
+                              SelectionManager::Instance().GetSelectionType() == SelectionType::Light;
 
-            // Allow clicking if in front of camera
-            if (clipPos.w > 0.0f)
+            if (isSelected)
             {
-                vec2 ndcPos = vec2(clipPos) / clipPos.w;
-
-                // Cull if off-screen to prevent ImGui scrollbars
-                if (ndcPos.x < -1.0f || ndcPos.x > 1.0f || ndcPos.y < -1.0f || ndcPos.y > 1.0f)
-                    return;
-
-                float x = (ndcPos.x * 0.5f + 0.5f) * imageSize.x + imageMin.x;
-                float y = (ndcPos.y * 0.5f + 0.5f) * imageSize.y + imageMin.y;
-
-                // Color based on selection
-                bool isSelected = SelectionManager::Instance().GetSelectedLightType() == type &&
-                                  SelectionManager::Instance().GetSelectedLightIndex() == index &&
-                                  SelectionManager::Instance().GetSelectionType() == SelectionType::Light;
-
-                if (isSelected)
+                ImU32 gizmoColor = IM_COL32(255, 255, 0, 255);
+                if (type == LightType::Point)
                 {
-                    ImU32 gizmoColor = IM_COL32(255, 255, 0, 255);
-                    if (type == LightType::Point)
+                    float radius = ls->GetPointLights()[index].position.w;
+                    if (radius > 0.0f)
                     {
-                        float radius = ls->GetPointLights()[index].position.w;
-                        if (radius > 0.0f)
-                        {
-                            DrawRing(pos, radius, vec3(1, 0, 0), viewProj, imageMin, imageSize, gizmoColor);
-                            DrawRing(pos, radius, vec3(0, 1, 0), viewProj, imageMin, imageSize, gizmoColor);
-                            DrawRing(pos, radius, vec3(0, 0, 1), viewProj, imageMin, imageSize, gizmoColor);
-                        }
+                        DrawRing(pos, radius, vec3(1, 0, 0), viewProj, imageMin, imageSize, gizmoColor);
+                        DrawRing(pos, radius, vec3(0, 1, 0), viewProj, imageMin, imageSize, gizmoColor);
+                        DrawRing(pos, radius, vec3(0, 0, 1), viewProj, imageMin, imageSize, gizmoColor);
                     }
-                    else if (type == LightType::Spot)
+                }
+                else if (type == LightType::Spot)
+                {
+                    float range = ls->GetSpotLights()[index].position.w;
+                    float innerAngle = ls->GetSpotLights()[index].params.x;
+                    float falloff = ls->GetSpotLights()[index].params.y;
+                    float outerAngle = innerAngle + falloff;
+
+                    vec3 dir = GetSpotDirection(ls->GetSpotLights()[index].rotation);
+                    vec3 baseCenter = pos + dir * range;
+
+                    float innerRadius = range * tan(glm::radians(innerAngle));
+                    DrawRing(baseCenter, innerRadius, dir, viewProj, imageMin, imageSize, gizmoColor);
+
+                    float outerRadius = range * tan(glm::radians(outerAngle));
+                    DrawRing(baseCenter, outerRadius, dir, viewProj, imageMin, imageSize, gizmoColor);
+
+                    // Draw lines from tip to base (Inner)
+                    ImDrawList *drawList = ImGui::GetWindowDrawList();
+                    vec3 tangent = glm::normalize(glm::cross(dir, vec3(0, 1, 0)));
+                    if (glm::length(tangent) < 0.001f)
+                        tangent = glm::normalize(glm::cross(dir, vec3(1, 0, 0)));
+                    vec3 bitangent = glm::cross(dir, tangent);
+
+                    // Draw lines for Outer Cone to show the full volume?
+                    // Usually lines go to the outer extent.
+
+                    vec3 pts[4] = {
+                        baseCenter + tangent * outerRadius,
+                        baseCenter - tangent * outerRadius,
+                        baseCenter + bitangent * outerRadius,
+                        baseCenter - bitangent * outerRadius};
+
+                    for (int k = 0; k < 4; k++)
                     {
-                        float range = ls->GetSpotLights()[index].position.w;
-                        float innerAngle = ls->GetSpotLights()[index].params.x;
-                        float falloff = ls->GetSpotLights()[index].params.y;
-                        float outerAngle = innerAngle + falloff;
-
-                        vec3 dir = GetSpotDirection(ls->GetSpotLights()[index].rotation);
-                        vec3 baseCenter = pos + dir * range;
-
-                        float innerRadius = range * tan(glm::radians(innerAngle));
-                        DrawRing(baseCenter, innerRadius, dir, viewProj, imageMin, imageSize, gizmoColor);
-
-                        float outerRadius = range * tan(glm::radians(outerAngle));
-                        DrawRing(baseCenter, outerRadius, dir, viewProj, imageMin, imageSize, gizmoColor);
-
-                        // Draw lines from tip to base (Inner)
-                        ImDrawList *drawList = ImGui::GetWindowDrawList();
-                        vec3 tangent = glm::normalize(glm::cross(dir, vec3(0, 1, 0)));
-                        if (glm::length(tangent) < 0.001f)
-                            tangent = glm::normalize(glm::cross(dir, vec3(1, 0, 0)));
-                        vec3 bitangent = glm::cross(dir, tangent);
-
-                        // Draw lines for Outer Cone to show the full volume?
-                        // Usually lines go to the outer extent.
-
-                        vec3 pts[4] = {
-                            baseCenter + tangent * outerRadius,
-                            baseCenter - tangent * outerRadius,
-                            baseCenter + bitangent * outerRadius,
-                            baseCenter - bitangent * outerRadius};
-
-                        for (int k = 0; k < 4; k++)
-                        {
-                            vec4 clipP1 = viewProj * vec4(pos, 1.0f);
-                            vec4 clipP2 = viewProj * vec4(pts[k], 1.0f);
-
-                            if (clipP1.w > 0 && clipP2.w > 0)
-                            {
-                                vec2 ndcP1 = vec2(clipP1) / clipP1.w;
-                                vec2 ndcP2 = vec2(clipP2) / clipP2.w;
-
-                                ImVec2 sP1, sP2;
-                                sP1.x = (ndcP1.x * 0.5f + 0.5f) * imageSize.x + imageMin.x;
-                                sP1.y = (ndcP1.y * 0.5f + 0.5f) * imageSize.y + imageMin.y;
-                                sP2.x = (ndcP2.x * 0.5f + 0.5f) * imageSize.x + imageMin.x;
-                                sP2.y = (ndcP2.y * 0.5f + 0.5f) * imageSize.y + imageMin.y;
-
-                                drawList->AddLine(sP1, sP2, gizmoColor, 2.0f);
-                            }
-                        }
-
-                        // Draw central direction line
                         vec4 clipP1 = viewProj * vec4(pos, 1.0f);
-                        vec4 clipP2 = viewProj * vec4(baseCenter, 1.0f);
+                        vec4 clipP2 = viewProj * vec4(pts[k], 1.0f);
+
                         if (clipP1.w > 0 && clipP2.w > 0)
                         {
                             vec2 ndcP1 = vec2(clipP1) / clipP1.w;
                             vec2 ndcP2 = vec2(clipP2) / clipP2.w;
+
                             ImVec2 sP1, sP2;
                             sP1.x = (ndcP1.x * 0.5f + 0.5f) * imageSize.x + imageMin.x;
                             sP1.y = (ndcP1.y * 0.5f + 0.5f) * imageSize.y + imageMin.y;
                             sP2.x = (ndcP2.x * 0.5f + 0.5f) * imageSize.x + imageMin.x;
                             sP2.y = (ndcP2.y * 0.5f + 0.5f) * imageSize.y + imageMin.y;
 
-                            drawList->AddLine(sP1, sP2, gizmoColor, 1.0f);
+                            drawList->AddLine(sP1, sP2, gizmoColor, 2.0f);
                         }
                     }
-                    else if (type == LightType::Area)
+
+                    // Draw central direction line
+                    vec4 clipP1 = viewProj * vec4(pos, 1.0f);
+                    vec4 clipP2 = viewProj * vec4(baseCenter, 1.0f);
+                    if (clipP1.w > 0 && clipP2.w > 0)
                     {
-                        float width = ls->GetAreaLights()[index].size.x;
-                        float height = ls->GetAreaLights()[index].size.y;
-                        vec3 dir = GetDirectionFromRotation(ls->GetAreaLights()[index].rotation);
+                        vec2 ndcP1 = vec2(clipP1) / clipP1.w;
+                        vec2 ndcP2 = vec2(clipP2) / clipP2.w;
+                        ImVec2 sP1, sP2;
+                        sP1.x = (ndcP1.x * 0.5f + 0.5f) * imageSize.x + imageMin.x;
+                        sP1.y = (ndcP1.y * 0.5f + 0.5f) * imageSize.y + imageMin.y;
+                        sP2.x = (ndcP2.x * 0.5f + 0.5f) * imageSize.x + imageMin.x;
+                        sP2.y = (ndcP2.y * 0.5f + 0.5f) * imageSize.y + imageMin.y;
 
-                        vec3 right = glm::normalize(glm::cross(dir, vec3(0, 1, 0)));
-                        if (glm::length(right) < 0.001f)
-                            right = glm::normalize(glm::cross(dir, vec3(1, 0, 0)));
-                        vec3 up = glm::normalize(glm::cross(right, dir));
+                        drawList->AddLine(sP1, sP2, gizmoColor, 1.0f);
+                    }
+                }
+                else if (type == LightType::Area)
+                {
+                    float width = ls->GetAreaLights()[index].size.x;
+                    float height = ls->GetAreaLights()[index].size.y;
+                    vec3 dir = GetDirectionFromRotation(ls->GetAreaLights()[index].rotation);
 
-                        vec3 center = pos;
-                        vec3 p1 = center + (right * width * 0.5f) + (up * height * 0.5f);
-                        vec3 p2 = center - (right * width * 0.5f) + (up * height * 0.5f);
-                        vec3 p3 = center - (right * width * 0.5f) - (up * height * 0.5f);
-                        vec3 p4 = center + (right * width * 0.5f) - (up * height * 0.5f);
+                    vec3 right = glm::normalize(glm::cross(dir, vec3(0, 1, 0)));
+                    if (glm::length(right) < 0.001f)
+                        right = glm::normalize(glm::cross(dir, vec3(1, 0, 0)));
+                    vec3 up = glm::normalize(glm::cross(right, dir));
 
-                        // Draw Rectangle
-                        vec3 pts[4] = {p1, p2, p3, p4};
-                        ImDrawList *drawList = ImGui::GetWindowDrawList();
+                    vec3 center = pos;
+                    vec3 p1 = center + (right * width * 0.5f) + (up * height * 0.5f);
+                    vec3 p2 = center - (right * width * 0.5f) + (up * height * 0.5f);
+                    vec3 p3 = center - (right * width * 0.5f) - (up * height * 0.5f);
+                    vec3 p4 = center + (right * width * 0.5f) - (up * height * 0.5f);
 
-                        for (int k = 0; k < 4; k++)
-                        {
-                            vec3 pA = pts[k];
-                            vec3 pB = pts[(k + 1) % 4];
+                    // Draw Rectangle
+                    vec3 pts[4] = {p1, p2, p3, p4};
+                    ImDrawList *drawList = ImGui::GetWindowDrawList();
 
-                            vec4 clipP1 = viewProj * vec4(pA, 1.0f);
-                            vec4 clipP2 = viewProj * vec4(pB, 1.0f);
+                    for (int k = 0; k < 4; k++)
+                    {
+                        vec3 pA = pts[k];
+                        vec3 pB = pts[(k + 1) % 4];
 
-                            if (clipP1.w > 0 && clipP2.w > 0)
-                            {
-                                vec2 ndcP1 = vec2(clipP1) / clipP1.w;
-                                vec2 ndcP2 = vec2(clipP2) / clipP2.w;
-
-                                ImVec2 sP1, sP2;
-                                sP1.x = (ndcP1.x * 0.5f + 0.5f) * imageSize.x + imageMin.x;
-                                sP1.y = (ndcP1.y * 0.5f + 0.5f) * imageSize.y + imageMin.y;
-                                sP2.x = (ndcP2.x * 0.5f + 0.5f) * imageSize.x + imageMin.x;
-                                sP2.y = (ndcP2.y * 0.5f + 0.5f) * imageSize.y + imageMin.y;
-
-                                drawList->AddLine(sP1, sP2, gizmoColor, 2.0f);
-                            }
-                        }
-
-                        // Direction Line
-                        float range = ls->GetAreaLights()[index].position.w;
-                        vec3 end = center + dir * range;
-                        vec4 clipP1 = viewProj * vec4(center, 1.0f);
-                        vec4 clipP2 = viewProj * vec4(end, 1.0f);
+                        vec4 clipP1 = viewProj * vec4(pA, 1.0f);
+                        vec4 clipP2 = viewProj * vec4(pB, 1.0f);
 
                         if (clipP1.w > 0 && clipP2.w > 0)
                         {
                             vec2 ndcP1 = vec2(clipP1) / clipP1.w;
                             vec2 ndcP2 = vec2(clipP2) / clipP2.w;
+
                             ImVec2 sP1, sP2;
                             sP1.x = (ndcP1.x * 0.5f + 0.5f) * imageSize.x + imageMin.x;
                             sP1.y = (ndcP1.y * 0.5f + 0.5f) * imageSize.y + imageMin.y;
                             sP2.x = (ndcP2.x * 0.5f + 0.5f) * imageSize.x + imageMin.x;
                             sP2.y = (ndcP2.y * 0.5f + 0.5f) * imageSize.y + imageMin.y;
 
-                            drawList->AddLine(sP1, sP2, gizmoColor, 1.0f);
+                            drawList->AddLine(sP1, sP2, gizmoColor, 2.0f);
                         }
                     }
+
+                    // Direction Line
+                    float range = ls->GetAreaLights()[index].position.w;
+                    vec3 end = center + dir * range;
+                    vec4 clipP1 = viewProj * vec4(center, 1.0f);
+                    vec4 clipP2 = viewProj * vec4(end, 1.0f);
+
+                    if (clipP1.w > 0 && clipP2.w > 0)
+                    {
+                        vec2 ndcP1 = vec2(clipP1) / clipP1.w;
+                        vec2 ndcP2 = vec2(clipP2) / clipP2.w;
+                        ImVec2 sP1, sP2;
+                        sP1.x = (ndcP1.x * 0.5f + 0.5f) * imageSize.x + imageMin.x;
+                        sP1.y = (ndcP1.y * 0.5f + 0.5f) * imageSize.y + imageMin.y;
+                        sP2.x = (ndcP2.x * 0.5f + 0.5f) * imageSize.x + imageMin.x;
+                        sP2.y = (ndcP2.y * 0.5f + 0.5f) * imageSize.y + imageMin.y;
+
+                        drawList->AddLine(sP1, sP2, gizmoColor, 1.0f);
+                    }
                 }
+            }
 
-                float scale = isSelected ? 2.0f : 1.0f;
-                ImVec2 textSize = ImGui::CalcTextSize(icon);
-                textSize.x *= scale;
-                textSize.y *= scale;
-
-                ImVec2 iconPos(x, y);
-                iconPos.x -= textSize.x * 0.5f;
-                iconPos.y -= textSize.y * 0.5f;
-
-                ImGui::SetCursorScreenPos(iconPos);
-
-                ImVec4 color = isSelected ? ImVec4(1, 1, 0, 1) : ImVec4(1, 1, 1, 1);
-                ImGui::PushStyleColor(ImGuiCol_Text, color);
-
-                ImGui::SetWindowFontScale(scale);
-                ImGui::Text("%s", icon);
-                ImGui::SetWindowFontScale(1.0f);
-
-                ImGui::SetCursorScreenPos(iconPos);
-                ImGui::InvisibleButton(std::string("##LightIcon" + std::to_string((int)type) + "_" + std::to_string(index)).c_str(), textSize);
-
-                if (ImGui::IsItemClicked())
-                {
-                    SelectionManager::Instance().Select(type, index);
-                }
-
-                ImGui::PopStyleColor();
+            std::string id = "##LightIcon" + std::to_string((int)type) + "_" + std::to_string(index);
+            if (DrawGizmoIcon(pos, icon, viewProj, imageMin, imageSize, isSelected, id.c_str()))
+            {
+                SelectionManager::Instance().Select(type, index);
             }
         };
 
@@ -776,6 +796,97 @@ namespace pe
         for (int i = 0; i < (int)ls->GetAreaLights().size(); i++)
         {
             drawIcon(vec3(ls->GetAreaLights()[i].position), ICON_FA_LIGHTBULB, LightType::Area, i);
+        }
+    }
+    void SceneView::DrawCameraGizmos(const ImVec2 &imageMin, const ImVec2 &imageSize)
+    {
+        if (!GUIState::s_useCameraGizmos)
+            return;
+
+        RendererSystem *renderer = GetGlobalSystem<RendererSystem>();
+        Scene &scene = renderer->GetScene();
+        Camera *activeCamera = scene.GetActiveCamera();
+        if (!activeCamera)
+            return;
+
+        mat4 view = activeCamera->GetView();
+        mat4 proj = activeCamera->GetProjectionNoJitter();
+        mat4 viewProj = proj * view;
+
+        auto &cameras = scene.GetCameras();
+        auto &selection = SelectionManager::Instance();
+
+        for (int i = 0; i < (int)cameras.size(); i++)
+        {
+            if (i == 0)
+                continue; // Hide gizmo for the main active camera
+
+            Camera *camera = cameras[i];
+            // if (camera == activeCamera) continue; // Should we draw active camera icon? User said "icon in viewport"
+
+            vec3 pos = camera->GetPosition();
+            bool isSelected = selection.GetSelectionType() == SelectionType::Camera &&
+                              selection.GetSelectedNodeIndex() == i;
+
+            std::string iconId = "##CameraIcon" + std::to_string(i);
+            if (DrawGizmoIcon(pos, ICON_FA_VIDEO, viewProj, imageMin, imageSize, isSelected, iconId.c_str()))
+            {
+                selection.Select(nullptr, i, SelectionType::Camera);
+            }
+
+            if (isSelected)
+            {
+                // Draw Frustum
+                mat4 invCamVP = camera->GetInvViewProjection();
+                // If camera uses infinite far plane, we use a finite far plane for visualization
+                mat4 visualProj = camera->GetProjectionNoJitter();
+                // The standard projection has far at 0 for infinite reverse-z.
+                // Let's just use the inverse view projection and clamp NDC Z.
+                // Actually, let's use a fixed far distance like 10.0 for visualization if it's infinite.
+
+                bool isInfinite = camera->GetFarPlane() >= 3.402823466e+38F; // FLT_MAX
+                float nearPlane = camera->GetNearPlane();
+                float farZ = isInfinite ? 0.00001f : (nearPlane / camera->GetFarPlane());
+
+                vec4 frustumCornersNDC[8] = {
+                    vec4(-1, -1, 1, 1), vec4(1, -1, 1, 1), vec4(1, 1, 1, 1), vec4(-1, 1, 1, 1),            // Near (z=1 in reverse-z)
+                    vec4(-1, -1, farZ, 1), vec4(1, -1, farZ, 1), vec4(1, 1, farZ, 1), vec4(-1, 1, farZ, 1) // "Far"
+                };
+
+                ImVec2 cornersScreen[8];
+                bool valid[8];
+                for (int j = 0; j < 8; j++)
+                {
+                    vec4 worldPos = invCamVP * frustumCornersNDC[j];
+                    worldPos /= worldPos.w;
+
+                    vec4 activeClipPos = viewProj * vec4(vec3(worldPos), 1.0f);
+                    valid[j] = activeClipPos.w > 0.0f;
+                    if (valid[j])
+                    {
+                        vec2 activeNdc = vec2(activeClipPos) / activeClipPos.w;
+                        cornersScreen[j].x = (activeNdc.x * 0.5f + 0.5f) * imageSize.x + imageMin.x;
+                        cornersScreen[j].y = (activeNdc.y * 0.5f + 0.5f) * imageSize.y + imageMin.y;
+                    }
+                }
+
+                ImDrawList *drawList = ImGui::GetWindowDrawList();
+                ImU32 frustumColor = IM_COL32(255, 255, 0, 255);
+
+                auto drawClippedLine = [&](int a, int b)
+                {
+                    if (valid[a] && valid[b])
+                        drawList->AddLine(cornersScreen[a], cornersScreen[b], frustumColor, 1.0f);
+                };
+
+                for (int j = 0; j < 4; j++)
+                {
+                    drawClippedLine(j, (j + 1) % 4); // Near Plane
+                    if (!isInfinite)
+                        drawClippedLine(j + 4, ((j + 1) % 4) + 4); // Far Plane
+                    drawClippedLine(j, j + 4);                     // Connections
+                }
+            }
         }
     }
 } // namespace pe

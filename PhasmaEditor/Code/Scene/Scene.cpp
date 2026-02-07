@@ -140,7 +140,21 @@ namespace pe
     {
         Camera *camera = new Camera();
         m_cameras.push_back(camera);
+        camera->SetName("Camera_" + std::to_string(m_cameras.size() - 1));
         return camera;
+    }
+
+    void Scene::SetActiveCamera(Camera *camera)
+    {
+        if (!camera)
+            return;
+
+        auto it = std::find(m_cameras.begin(), m_cameras.end(), camera);
+        if (it != m_cameras.end())
+        {
+            // Swap to index 0 to make it active
+            std::swap(m_cameras[0], *it);
+        }
     }
 
     void Scene::UploadBuffers(CommandBuffer *cmd)
