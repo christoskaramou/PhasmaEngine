@@ -805,13 +805,12 @@ namespace pe
     void ModelAssimp::ComputeMaterialData(MeshInfo &meshInfo, aiMaterial *material) const
     {
         mat4 factors[2] = {mat4(1.f), mat4(1.f)};
-        float alphaCutoff = 0.5f;
 
         if (!material)
         {
             meshInfo.materialFactors[0] = factors[0];
             meshInfo.materialFactors[1] = factors[1];
-            meshInfo.alphaCutoff = alphaCutoff;
+
             return;
         }
 
@@ -856,6 +855,7 @@ namespace pe
         bool hasRoughnessFactor = false;
 #endif
 
+        float alphaCutoff = 0.5f;
 #ifdef AI_MATKEY_GLTF_ALPHACUTOFF
         material->Get(AI_MATKEY_GLTF_ALPHACUTOFF, alphaCutoff);
 #endif
@@ -930,7 +930,6 @@ namespace pe
 
         meshInfo.materialFactors[0] = factors[0];
         meshInfo.materialFactors[1] = factors[1];
-        meshInfo.alphaCutoff = alphaCutoff;
     }
 
     RenderType ModelAssimp::DetermineRenderType(aiMaterial *material) const
