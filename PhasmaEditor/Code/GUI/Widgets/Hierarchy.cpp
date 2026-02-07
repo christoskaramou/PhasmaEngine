@@ -175,6 +175,7 @@ namespace pe
         }
 
         static Model *s_renameModel = nullptr;
+        static Camera *s_renameCamera = nullptr;
         static int s_renameNode = -1;
         static char s_renameBuf[128] = "";
         static bool s_openRenamePopup = false;
@@ -205,24 +206,63 @@ namespace pe
             }
         }
 
-        // Models listing
-        // Main Camera
-        ImGuiTreeNodeFlags cameraFlags = ImGuiTreeNodeFlags_SpanAvailWidth |
-                                         ImGuiTreeNodeFlags_Leaf |
-                                         ImGuiTreeNodeFlags_FramePadding;
-
-        if (selection.GetSelectionType() == SelectionType::Camera)
-            cameraFlags |= ImGuiTreeNodeFlags_Selected;
-
-        bool cameraOpen = ImGui::TreeNodeEx((void *)"MainCamera", cameraFlags, "%s  Main Camera", ICON_FA_VIDEO);
-        if (ImGui::IsItemClicked())
+        // Cameras listing
+        auto &cameras = scene.GetCameras();
+        for (int i = 0; i < (int)cameras.size(); i++)
         {
-            selection.Select(nullptr, -1, SelectionType::Camera);
-            ImGui::SetWindowFocus("Properties");
-        }
-        if (cameraOpen)
-        {
-            ImGui::TreePop();
+            Camera *camera = cameras[i];
+            ImGuiTreeNodeFlags cameraFlags = ImGuiTreeNodeFlags_SpanAvailWidth |
+                                             ImGuiTreeNodeFlags_Leaf |
+                                             ImGuiTreeNodeFlags_FramePadding;
+
+            if (selection.GetSelectionType() == SelectionType::Camera && selection.GetSelectedNodeIndex() == i)
+                cameraFlags |= ImGuiTreeNodeFlags_Selected;
+
+            std::string cameraLabel = camera->GetName();
+            if (i == 0)
+                cameraLabel += " (Main)";
+
+            bool cameraOpen = ImGui::TreeNodeEx((void *)camera, cameraFlags, "%s  %s", ICON_FA_VIDEO, cameraLabel.c_str());
+            if (ImGui::IsItemClicked())
+            {
+                selection.Select(nullptr, i, SelectionType::Camera);
+                ImGui::SetWindowFocus("Properties");
+            }
+
+            if (ImGui::BeginPopupContextItem())
+            {
+                if (i > 0 && ImGui::MenuItem("Make Main"))
+                {
+                    scene.SetActiveCamera(camera);
+                }
+                if (i > 0 && ImGui::MenuItem("Focus"))
+                {
+                    selection.Select(nullptr, i, SelectionType::Camera);
+                    Camera *activeCamera = scene.GetActiveCamera();
+                    vec3 center = camera->GetPosition();
+                    vec3 dir = activeCamera->GetFront();
+                    activeCamera->SetPosition(center - dir * 2.0f);
+                    ImGui::SetWindowFocus("Properties");
+                }
+                if (ImGui::MenuItem("Rename"))
+                {
+                    s_renameModel = nullptr;
+                    s_renameCamera = camera;
+                    s_renameNode = -1;
+                    snprintf(s_renameBuf, sizeof(s_renameBuf), "%s", camera->GetName().c_str());
+                    s_openRenamePopup = true;
+                }
+                if (cameras.size() > 1 && ImGui::MenuItem("Delete"))
+                {
+                    // Delete camera logic
+                }
+                ImGui::EndPopup();
+            }
+
+            if (cameraOpen)
+            {
+                ImGui::TreePop();
+            }
         }
 
         // Lights
@@ -478,7 +518,7 @@ namespace pe
                 {
                     s_renameModel = model;
                     s_renameNode = -1;
-                    strcpy(s_renameBuf, name.c_str());
+                    snprintf(s_renameBuf, sizeof(s_renameBuf), "%s", name.c_str());
                     s_openRenamePopup = true;
                 }
                 if (ImGui::MenuItem("Delete"))
@@ -651,7 +691,7 @@ namespace pe
                         {
                             s_renameModel = model;
                             s_renameNode = nodeIndex;
-                            strcpy(s_renameBuf, nodeName.c_str());
+                            snprintf(s_renameBuf, sizeof(s_renameBuf), "%s", nodeName.c_str());
                             s_openRenamePopup = true;
                         }
                         ImGui::EndPopup();

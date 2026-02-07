@@ -12,6 +12,7 @@ namespace pe
     Image *GUIState::s_sceneViewImage = nullptr;
     bool GUIState::s_useTransformGizmo = true;
     bool GUIState::s_useLightGizmos = true;
+    bool GUIState::s_useCameraGizmos = true;
     GUIStyle GUIState::s_guiStyle = GUIStyle::Unity; // Default to Unity style
     ImFont *GUIState::s_fontClassic = nullptr;
     ImFont *GUIState::s_fontUnity = nullptr;
@@ -19,7 +20,6 @@ namespace pe
     ImFont *GUIState::s_fontModern = nullptr;
     ImFont *GUIState::s_fontDark = nullptr;
     ImFont *GUIState::s_fontLight = nullptr;
-
 
     void GUIState::OpenExternalPath(const std::string &absPath)
     {

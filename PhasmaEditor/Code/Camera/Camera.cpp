@@ -13,6 +13,7 @@ namespace pe
         m_euler = vec3(0.f, radians(-180.0f), 0.f);
         m_orientation = quat(m_euler);
         m_position = vec3(0.f, 0.01f, 0.1f);
+        m_name = "Camera_" + std::to_string(reinterpret_cast<uintptr_t>(this));
 
         m_nearPlane = 0.005f;
         m_farPlane = FLT_MAX; // Indicates infinite far plane

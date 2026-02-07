@@ -205,8 +205,8 @@ namespace pe
         ImGuiID dockBottom = ImGui::DockBuilderSplitNode(dockMainId, ImGuiDir_Down, dockBottomFrac, nullptr, &dockMainId);
         ImGuiID dockLeft = ImGui::DockBuilderSplitNode(dockMainId, ImGuiDir_Left, dockLeftFrac, nullptr, &dockMainId);
 
-        // Central node is now dockMainId - dock the Scene View there
-        ImGui::DockBuilderDockWindow("Scene View", dockMainId);
+        // Central node is now dockMainId - dock the Viewport there
+        ImGui::DockBuilderDockWindow("Viewport", dockMainId);
 
         // Left - Metrics, Models, Hierarchy
         ImGui::DockBuilderDockWindow("Metrics", dockLeft);
@@ -289,6 +289,7 @@ namespace pe
                 auto &gSettings = Settings::Get<GlobalSettings>();
                 ImGui::MenuItem("Transform", nullptr, &GUIState::s_useTransformGizmo);
                 ImGui::MenuItem("Lights", nullptr, &GUIState::s_useLightGizmos);
+                ImGui::MenuItem("Cameras", nullptr, &GUIState::s_useCameraGizmos);
                 ImGui::MenuItem("Grid", nullptr, &gSettings.draw_grid);
                 ImGui::EndMenu();
             }

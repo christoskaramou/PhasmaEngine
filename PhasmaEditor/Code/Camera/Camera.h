@@ -48,7 +48,11 @@ namespace pe
         inline float GetSpeed() const { return m_speed; }
         inline vec3 GetEuler() const { return m_euler; }
         inline void SetPosition(const vec3 &position) { m_position = position; }
-        inline void SetEuler(const vec3 &euler) { m_euler = euler; m_orientation = quat(m_euler); }
+        inline void SetEuler(const vec3 &euler)
+        {
+            m_euler = euler;
+            m_orientation = quat(m_euler);
+        }
         inline void SetRotationSpeed(float speed) { m_rotationSpeed = speed; }
         inline void SetSpeed(float speed) { m_speed = speed; }
         inline void SetNearPlane(float nearPlane) { m_nearPlane = nearPlane; }
@@ -60,7 +64,11 @@ namespace pe
         inline vec2 GetProjJitter() const { return m_projJitter; }
         inline vec2 GetPrevProjJitter() const { return m_prevProjJitter; }
 
+        inline const std::string &GetName() const { return m_name; }
+        inline void SetName(const std::string &name) { m_name = name; }
+
     private:
+        std::string m_name;
         mat4 m_view, m_previousView;
         mat4 m_projection, m_previousProjection, m_projectionNoJitter;
         mat4 m_viewProjection, m_previousViewProjection;
