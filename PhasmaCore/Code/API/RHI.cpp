@@ -462,17 +462,16 @@ namespace pe
         PE_ERROR_IF(!SDL_Vulkan_GetInstanceExtensions(window, &extCount, instanceExtensions.data()), SDL_GetError());
         // =============================================
 
+#if !defined(PE_RELEASE) && !defined(PE_MINSIZEREL)
         // === Layers ==================================
         if (RHII.IsInstanceLayerValid("VK_LAYER_KHRONOS_validation"))
             instanceLayers.push_back("VK_LAYER_KHRONOS_validation");
         // =============================================
 
-#if !defined(PE_RELEASE) || !defined(PE_MINSIZEREL)
         // === Debugging ===============================
         if (RHII.IsInstanceExtensionValid("VK_EXT_debug_utils"))
             instanceExtensions.push_back("VK_EXT_debug_utils");
         // =============================================
-#endif
 
         const VkBool32 setting_true = true;
         const VkLayerSettingEXT layer_settings[] = {
@@ -485,6 +484,7 @@ namespace pe
         {
             instanceExtensions.push_back("VK_EXT_layer_settings");
         }
+#endif
 
         // uint32_t apiVersion;
         // vkEnumerateInstanceVersion(&apiVersion);
@@ -499,7 +499,9 @@ namespace pe
         // Create Instance
         {
             vk::InstanceCreateInfo instanceCI{};
+#if !defined(PE_RELEASE) && !defined(PE_MINSIZEREL)
             instanceCI.pNext = &layer_settings_create_info;
+#endif
             instanceCI.pApplicationInfo = &appInfo;
             instanceCI.enabledExtensionCount = static_cast<uint32_t>(instanceExtensions.size());
             instanceCI.ppEnabledExtensionNames = instanceExtensions.data();
