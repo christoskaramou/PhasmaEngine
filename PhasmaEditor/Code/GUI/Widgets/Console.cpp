@@ -48,10 +48,13 @@ namespace pe
         ImGui::SameLine();
         if (ImGui::Button("Open Log"))
         {
+            std::string logPath = Path::Executable + "PhasmaEngine.log";
 #if defined(_WIN32)
-            system("start PhasmaEngine.log");
+            std::string command = "start " + logPath;
+            system(command.c_str());
 #elif defined(__linux__)
-            system("xdg-open PhasmaEngine.log");
+            std::string command = "xdg-open " + logPath;
+            system(command.c_str());
 #endif
         }
         ImGui::SameLine();
