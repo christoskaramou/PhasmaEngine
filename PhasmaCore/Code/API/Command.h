@@ -143,7 +143,6 @@ namespace pe
         void Return();
         CommandPool *GetCommandPool() const { return m_commandPool; }
         void AddAfterWaitCallback(Delegate<>::FunctionType &&func);
-        uint32_t GetGpuTimerInfosCount() const { return m_gpuTimerInfosCount; }
 
         // Resourses functionality
         static RenderPass *GetRenderPass(uint32_t count, Attachment *attachments);

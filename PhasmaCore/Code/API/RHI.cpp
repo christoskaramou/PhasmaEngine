@@ -15,14 +15,6 @@
 #include "API/Surface.h"
 #include "API/Swapchain.h"
 
-#if defined(PE_WIN32)
-// On Windows, Vulkan commands use the stdcall convention
-#define VKAPI_CALL __stdcall
-#else
-// On other platforms, use the default calling convention
-#define VKAPI_CALL
-#endif
-
 // System + Process RAM (Windows)
 #if defined(PE_WIN32)
 #pragma comment(lib, "psapi.lib")
