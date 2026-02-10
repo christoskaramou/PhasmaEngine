@@ -392,14 +392,15 @@ namespace pe
             }
             else if (lightType == LightType::Directional)
             {
-                // Directional light position doesn't matter, only rotation
                 if (!ls->GetDirectionalLights().empty())
                 {
                     DirectionalLight &dirLight = ls->GetDirectionalLights()[0];
                     vec3 dir = vec3(dirLight.direction);
+                    vec3 pos = vec3(dirLight.position);
+                    
                     // Create a rotation that points along 'dir'
                     quat rot = rotation(vec3(0, 0, -1), dir); // Rotate from -Z to 'dir'
-                    matrix = mat4_cast(rot);
+                    matrix = translate(mat4(1.0f), pos) * mat4_cast(rot);
                 }
             }
             else if (lightType == LightType::Area && lightIndex >= 0 && lightIndex < (int)ls->GetAreaLights().size())
@@ -455,9 +456,21 @@ namespace pe
                 {
                     if (!ls->GetDirectionalLights().empty())
                     {
+                        // Update position
+                        ls->GetDirectionalLights()[0].position = vec4(pos, 1.0f);
+
+                        // Update direction
                         vec3 newDir = rot * vec3(0, 0, -1); // Assuming -Z is forward
                         if (!glm::any(glm::isnan(newDir)) && !glm::any(glm::isinf(newDir)))
+                        {
                             ls->GetDirectionalLights()[0].direction = vec4(newDir, 0.0f);
+                            
+                            // Also update GlobalSettings so it persists/propagates
+                            auto& gSettings = Settings::Get<GlobalSettings>();
+                            gSettings.sun_direction[0] = newDir.x;
+                            gSettings.sun_direction[1] = newDir.y;
+                            gSettings.sun_direction[2] = newDir.z;
+                        }
                     }
                 }
                 else if (lightType == LightType::Area)
@@ -771,6 +784,36 @@ namespace pe
                         drawList->AddLine(sP1, sP2, gizmoColor, 1.0f);
                     }
                 }
+                else if (type == LightType::Directional)
+                {
+                    vec3 dir = vec3(ls->GetDirectionalLights()[index].direction);
+                    vec3 center = pos;
+                    vec3 end = center + dir * 2.0f; // Fixed length for directional light visualization
+
+                    ImDrawList *drawList = ImGui::GetWindowDrawList();
+                    
+                    // Draw a line representing direction
+                    vec4 clipP1 = viewProj * vec4(center, 1.0f);
+                    vec4 clipP2 = viewProj * vec4(end, 1.0f);
+
+                    if (clipP1.w > 0 && clipP2.w > 0)
+                    {
+                        vec2 ndcP1 = vec2(clipP1) / clipP1.w;
+                        vec2 ndcP2 = vec2(clipP2) / clipP2.w;
+                        ImVec2 sP1, sP2;
+                        sP1.x = (ndcP1.x * 0.5f + 0.5f) * imageSize.x + imageMin.x;
+                        sP1.y = (ndcP1.y * 0.5f + 0.5f) * imageSize.y + imageMin.y;
+                        sP2.x = (ndcP2.x * 0.5f + 0.5f) * imageSize.x + imageMin.x;
+                        sP2.y = (ndcP2.y * 0.5f + 0.5f) * imageSize.y + imageMin.y;
+
+                        drawList->AddLine(sP1, sP2, gizmoColor, 2.0f);
+                        
+                        // Draw arrow head? Optional.
+                    }
+                    
+                    // Draw a ring to simulate the "sun" disk
+                    DrawRing(center, 0.5f, dir, viewProj, imageMin, imageSize, gizmoColor);
+                }
             }
 
             std::string id = "##LightIcon" + std::to_string((int)type) + "_" + std::to_string(index);
@@ -790,6 +833,12 @@ namespace pe
         for (int i = 0; i < (int)ls->GetSpotLights().size(); i++)
         {
             drawIcon(vec3(ls->GetSpotLights()[i].position), ICON_FA_LIGHTBULB, LightType::Spot, i);
+        }
+
+        // Directional Lights
+        for (int i = 0; i < (int)ls->GetDirectionalLights().size(); i++)
+        {
+             drawIcon(vec3(ls->GetDirectionalLights()[i].position), ICON_FA_SUN, LightType::Directional, i);
         }
 
         // Area Lights

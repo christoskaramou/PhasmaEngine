@@ -57,10 +57,11 @@ TexSamplerDecl(9, 0, LutIBL)
 // Helper functions for loading lights
 DirectionalLight LoadDirectionalLight(uint index)
 {
-    uint offset = cb_offsetDirectionalLights + index * 32;
+    uint offset = cb_offsetDirectionalLights + index * 48;
     DirectionalLight light;
     light.color = asfloat(LightsBuffer.Load4(offset));
     light.direction = asfloat(LightsBuffer.Load4(offset + 16));
+    light.position = asfloat(LightsBuffer.Load4(offset + 32));
     return light;
 }
 
@@ -216,8 +217,8 @@ float3 DirectLight(DirectionalLight light, Material material, float3 worldPos, f
     float roughness = max(material.roughness, 0.04);
 
     // Compute directional light.
-    float3 lightDir = light.direction.xyz;
-    float3 L        = lightDir;
+    float3 lightDir = light.direction.xyz; // Ray direction (from light)
+    float3 L        = -lightDir;           // To-light vector for PBR
     float3 V        = normalize(cameraPos - worldPos);
     float3 H        = normalize(V + L);
     float3 N        = materialNormal;

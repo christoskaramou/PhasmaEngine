@@ -190,7 +190,7 @@ namespace pe
             vec3 maxExtents = vec3(radius);
             vec3 minExtents = -maxExtents;
 
-            vec3 lightDir = -normalize(make_vec3(Settings::Get<GlobalSettings>().sun_direction.data()));
+            vec3 lightDir = normalize(make_vec3(Settings::Get<GlobalSettings>().sun_direction.data()));
             auto v0 = frustumCenter - (lightDir * radius);
             mat4 lightViewMatrix = lookAt(frustumCenter - (lightDir * radius), frustumCenter, camera->WorldUp());
             mat4 lightOrthoMatrix = ortho(minExtents.x, maxExtents.x, minExtents.y, maxExtents.y, maxExtents.z - minExtents.z, -clipRange);

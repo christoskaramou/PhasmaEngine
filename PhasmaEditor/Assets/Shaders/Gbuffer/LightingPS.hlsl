@@ -52,7 +52,7 @@ PS_OUTPUT_Color mainPS(PS_INPUT_UV input)
     if (cb_shadows)
     {
         // Shadow only for the first directional light for now, or need to handle cascades for multiple
-        float shadow = CalculateShadows(wolrdPos, length(wolrdPos - cb_camPos.xyz), dot(normal, LoadDirectionalLight(0).direction.xyz));
+        float shadow = CalculateShadows(wolrdPos, length(wolrdPos - cb_camPos.xyz), dot(normal, -LoadDirectionalLight(0).direction.xyz));
         
         for (uint i = 0; i < cb_numDirectionalLights; ++i)
         {
