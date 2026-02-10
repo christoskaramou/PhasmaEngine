@@ -10,6 +10,7 @@ namespace pe
     {
         vec4 color; // .w = intensity
         vec4 direction;
+        vec4 position;
     };
 
     struct PointLight

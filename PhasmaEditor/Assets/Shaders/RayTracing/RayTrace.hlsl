@@ -265,8 +265,8 @@ float TraceShadowRay(float3 origin, float3 dir, float dist)
 
 float3 RT_DirectLight(DirectionalLight light, float3 worldPos, float3 materialNormal, float3 V, float3 albedo, float metallic, float roughness, float3 F0, float occlusion, float shadow, float3 energyCompensation)
 {
-    float3 lightDir = light.direction.xyz;
-    float3 L        = normalize(lightDir);
+    float3 lightDir = light.direction.xyz; // Ray direction (from light)
+    float3 L        = normalize(-lightDir); // To-light vector for PBR
     float3 H        = normalize(V + L);
 
     float NoV_clamped = clamp(dot(materialNormal, V), 0.001, 1.0);
@@ -752,7 +752,7 @@ void closesthit(inout HitPayload payload, in BuiltInTriangleIntersectionAttribut
 
     // Direct Lighting
     // Assuming single sun for now, or loop for multiple
-    float3 L = normalize(LoadDirectionalLight(0).direction.xyz);
+    float3 L = normalize(-LoadDirectionalLight(0).direction.xyz); // Negate: direction is ray dir, L is to-light
     float sunShadow = TraceShadowRay(positionWorld, L, 10000.0);
     
     for (uint i = 0; i < cb_numDirectionalLights; i++)

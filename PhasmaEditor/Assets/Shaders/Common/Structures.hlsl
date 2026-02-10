@@ -214,6 +214,7 @@ struct DirectionalLight
 {
     float4 color; // .a is the intensity
     float4 direction;
+    float4 position;
 };
 
 struct PointLight

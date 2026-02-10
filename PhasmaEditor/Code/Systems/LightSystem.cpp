@@ -77,6 +77,7 @@ namespace pe
         auto &gSettings = Settings::Get<GlobalSettings>();
         m_directionalLights[0].color = {.9765f, .8431f, .9098f, gSettings.day ? gSettings.sun_intensity : 0.0f};
         m_directionalLights[0].direction = {gSettings.sun_direction[0], gSettings.sun_direction[1], gSettings.sun_direction[2], 1.f};
+        m_directionalLights[0].position = {0.0f, 10.0f, 0.0f, 1.0f};
 
         // Initial update to push data to buffers
         Update();
