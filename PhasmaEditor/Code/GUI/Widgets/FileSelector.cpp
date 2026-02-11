@@ -16,6 +16,8 @@ namespace pe
 
         m_open = true;
 
+        RefreshCache();
+
         ImGui::SetWindowFocus("Select File"); // The window name set in constructor
     }
 

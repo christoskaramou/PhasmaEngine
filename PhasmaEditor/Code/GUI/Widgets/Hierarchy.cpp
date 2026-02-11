@@ -92,28 +92,15 @@ namespace pe
 
                 if (ImGui::MenuItem("Point Light"))
                 {
-                    PointLight pointLight;
-                    pointLight.color = vec4(1.0f);
-                    pointLight.position = vec4(0.0f, 0.0f, 0.0f, 10.0f);
-                    lightSystem->GetPointLights().push_back(pointLight);
+                    lightSystem->CreatePointLight();
                 }
                 if (ImGui::MenuItem("Spot Light"))
                 {
-                    SpotLight spotLight;
-                    spotLight.color = vec4(1.0f);
-                    spotLight.position = vec4(0.0f, 0.0f, 0.0f, 10.0f);
-                    spotLight.rotation = vec4(0.0f, 0.0f, 0.0f, 1.0f);
-                    spotLight.params = vec4(15.0f, 5.0f, 0.0f, 0.0f);
-                    lightSystem->GetSpotLights().push_back(spotLight);
+                    lightSystem->CreateSpotLight();
                 }
                 if (ImGui::MenuItem("Area Light"))
                 {
-                    AreaLight areaLight;
-                    areaLight.color = vec4(1.0f);
-                    areaLight.position = vec4(0.0f, 0.0f, 0.0f, 10.0f);
-                    areaLight.rotation = vec4(0.0f, 0.0f, 0.0f, 1.0f);
-                    areaLight.size = vec4(2.0f, 2.0f, 0.0f, 0.0f);
-                    lightSystem->GetAreaLights().push_back(areaLight);
+                    lightSystem->CreateAreaLight();
                 }
                 ImGui::EndMenu();
             }
@@ -176,6 +163,8 @@ namespace pe
 
         static Model *s_renameModel = nullptr;
         static Camera *s_renameCamera = nullptr;
+        static LightType s_renameLightType = (LightType)-1;
+        static int s_renameLightIndex = -1;
         static int s_renameNode = -1;
         static char s_renameBuf[128] = "";
         static bool s_openRenamePopup = false;
@@ -223,7 +212,7 @@ namespace pe
                 cameraLabel += " (Main)";
 
             bool cameraOpen = ImGui::TreeNodeEx((void *)camera, cameraFlags, "%s  %s", ICON_FA_VIDEO, cameraLabel.c_str());
-            if (ImGui::IsItemClicked())
+            if (ImGui::IsItemClicked(ImGuiMouseButton_Left) || ImGui::IsItemClicked(ImGuiMouseButton_Right))
             {
                 selection.Select(nullptr, i, SelectionType::Camera);
                 ImGui::SetWindowFocus("Properties");
@@ -254,7 +243,7 @@ namespace pe
                 }
                 if (cameras.size() > 1 && ImGui::MenuItem("Delete"))
                 {
-                    // Delete camera logic
+                    scene.RemoveCamera(camera);
                 }
                 ImGui::EndPopup();
             }
@@ -268,39 +257,58 @@ namespace pe
         // Lights
         if (ImGui::TreeNodeEx("Lights", ImGuiTreeNodeFlags_DefaultOpen | ImGuiTreeNodeFlags_SpanAvailWidth | ImGuiTreeNodeFlags_FramePadding))
         {
+            LightSystem *lightSystem = GetGlobalSystem<LightSystem>();
             ImGuiTreeNodeFlags lightFlags = ImGuiTreeNodeFlags_SpanAvailWidth | ImGuiTreeNodeFlags_Leaf | ImGuiTreeNodeFlags_FramePadding;
 
-            // Directional Light (Sun)
-            if (selection.GetSelectionType() == SelectionType::Light &&
-                selection.GetSelectedLightType() == LightType::Directional)
-                lightFlags |= ImGuiTreeNodeFlags_Selected;
-            else
-                lightFlags &= ~ImGuiTreeNodeFlags_Selected;
+            // Directional Lights
+            for (int i = 0; i < (int)lightSystem->GetDirectionalLights().size(); i++)
+            {
+                if (selection.GetSelectionType() == SelectionType::Light &&
+                    selection.GetSelectedLightType() == LightType::Directional &&
+                    selection.GetSelectedLightIndex() == i)
+                    lightFlags |= ImGuiTreeNodeFlags_Selected;
+                else
+                    lightFlags &= ~ImGuiTreeNodeFlags_Selected;
 
-            ImGui::TreeNodeEx((void *)"DirectionalLight", lightFlags, "%s  Directional Light", ICON_FA_SUN);
-            if (ImGui::IsItemClicked())
-            {
-                selection.Select(LightType::Directional, 0);
-                ImGui::SetWindowFocus("Properties");
-            }
-            if (ImGui::IsItemHovered() && ImGui::IsMouseDoubleClicked(0))
-            {
-                Camera *camera = scene.GetActiveCamera();
-                camera->SetPosition(vec3(0, 0, 0) - camera->GetFront() * 10.0f);
-            }
-            if (ImGui::BeginPopupContextItem())
-            {
-                if (ImGui::MenuItem("Focus"))
+                std::string name = lightSystem->GetDirectionalLights()[i].name;
+                ImGui::TreeNodeEx((void *)(intptr_t)(i + 4000), lightFlags, "%s  %s", ICON_FA_SUN, name.c_str());
+                if (ImGui::IsItemClicked(ImGuiMouseButton_Left) || ImGui::IsItemClicked(ImGuiMouseButton_Right))
+                {
+                    selection.Select(LightType::Directional, i);
+                    ImGui::SetWindowFocus("Properties");
+                }
+                if (ImGui::IsItemHovered() && ImGui::IsMouseDoubleClicked(0))
                 {
                     Camera *camera = scene.GetActiveCamera();
-                    // Focus on origin for directional light
-                    camera->SetPosition(vec3(0, 0, 0) - camera->GetFront() * 10.0f);
+                    DirectionalLight &light = lightSystem->GetDirectionalLights()[i];
+                    vec3 pos = vec3(light.position);
+                    camera->SetPosition(pos - camera->GetFront() * 10.0f);
                 }
-                ImGui::EndPopup();
+                if (ImGui::BeginPopupContextItem())
+                {
+                    if (ImGui::MenuItem("Focus"))
+                    {
+                        selection.Select(LightType::Directional, i);
+                        Camera *camera = scene.GetActiveCamera();
+                        DirectionalLight &light = lightSystem->GetDirectionalLights()[i];
+                        vec3 pos = vec3(light.position);
+                        camera->SetPosition(pos - camera->GetFront() * 10.0f);
+                        ImGui::SetWindowFocus("Properties");
+                    }
+                    if (ImGui::MenuItem("Rename"))
+                    {
+                        s_renameModel = nullptr;
+                        s_renameCamera = nullptr;
+                        s_renameLightType = LightType::Directional;
+                        s_renameLightIndex = i;
+                        s_renameNode = -1;
+                        snprintf(s_renameBuf, sizeof(s_renameBuf), "%s", name.c_str());
+                        s_openRenamePopup = true;
+                    }
+                    ImGui::EndPopup();
+                }
+                ImGui::TreePop();
             }
-            ImGui::TreePop();
-
-            LightSystem *lightSystem = GetGlobalSystem<LightSystem>();
 
             // Point Lights
             for (int i = 0; i < (int)lightSystem->GetPointLights().size(); i++)
@@ -312,9 +320,9 @@ namespace pe
                 else
                     lightFlags &= ~ImGuiTreeNodeFlags_Selected;
 
-                std::string name = "Point Light " + std::to_string(i);
+                std::string name = lightSystem->GetPointLights()[i].name;
                 ImGui::TreeNodeEx((void *)(intptr_t)(i + 1000), lightFlags, "%s  %s", ICON_FA_LIGHTBULB, name.c_str());
-                if (ImGui::IsItemClicked())
+                if (ImGui::IsItemClicked(ImGuiMouseButton_Left) || ImGui::IsItemClicked(ImGuiMouseButton_Right))
                 {
                     selection.Select(LightType::Point, i);
                     ImGui::SetWindowFocus("Properties");
@@ -329,15 +337,27 @@ namespace pe
                 {
                     if (ImGui::MenuItem("Focus"))
                     {
+                        selection.Select(LightType::Point, i);
                         Camera *camera = scene.GetActiveCamera();
                         vec3 pos = vec3(lightSystem->GetPointLights()[i].position);
                         camera->SetPosition(pos - camera->GetFront() * 5.0f);
+                        ImGui::SetWindowFocus("Properties");
+                    }
+                    if (ImGui::MenuItem("Rename"))
+                    {
+                        s_renameModel = nullptr;
+                        s_renameCamera = nullptr;
+                        s_renameLightType = LightType::Point;
+                        s_renameLightIndex = i;
+                        s_renameNode = -1;
+                        snprintf(s_renameBuf, sizeof(s_renameBuf), "%s", name.c_str());
+                        s_openRenamePopup = true;
                     }
                     if (ImGui::MenuItem("Delete"))
                     {
-                        // Reset light
-                        lightSystem->GetPointLights()[i].color = vec4(0.0f);                          // Intensity 0
-                        lightSystem->GetPointLights()[i].position = vec4(0.0f, 10000.0f, 0.0f, 0.0f); // Move away
+                        auto &lights = lightSystem->GetPointLights();
+                        lights.erase(lights.begin() + i);
+                        selection.ClearSelection();
                     }
                     ImGui::EndPopup();
                 }
@@ -354,9 +374,9 @@ namespace pe
                 else
                     lightFlags &= ~ImGuiTreeNodeFlags_Selected;
 
-                std::string name = "Spot Light " + std::to_string(i);
+                std::string name = lightSystem->GetSpotLights()[i].name;
                 ImGui::TreeNodeEx((void *)(intptr_t)(i + 2000), lightFlags, "%s  %s", ICON_FA_LIGHTBULB, name.c_str());
-                if (ImGui::IsItemClicked())
+                if (ImGui::IsItemClicked(ImGuiMouseButton_Left) || ImGui::IsItemClicked(ImGuiMouseButton_Right))
                 {
                     selection.Select(LightType::Spot, i);
                     ImGui::SetWindowFocus("Properties");
@@ -371,15 +391,27 @@ namespace pe
                 {
                     if (ImGui::MenuItem("Focus"))
                     {
+                        selection.Select(LightType::Spot, i);
                         Camera *camera = scene.GetActiveCamera();
                         vec3 pos = lightSystem->GetSpotLights()[i].position;
                         camera->SetPosition(pos - camera->GetFront() * 5.0f);
+                        ImGui::SetWindowFocus("Properties");
+                    }
+                    if (ImGui::MenuItem("Rename"))
+                    {
+                        s_renameModel = nullptr;
+                        s_renameCamera = nullptr;
+                        s_renameLightType = LightType::Spot;
+                        s_renameLightIndex = i;
+                        s_renameNode = -1;
+                        snprintf(s_renameBuf, sizeof(s_renameBuf), "%s", name.c_str());
+                        s_openRenamePopup = true;
                     }
                     if (ImGui::MenuItem("Delete"))
                     {
-                        // Reset light
-                        lightSystem->GetSpotLights()[i].color = vec4(0.0f);                          // Intensity 0
-                        lightSystem->GetSpotLights()[i].position = vec4(0.0f, 10000.0f, 0.0f, 0.0f); // Move away
+                        auto &lights = lightSystem->GetSpotLights();
+                        lights.erase(lights.begin() + i);
+                        selection.ClearSelection();
                     }
                     ImGui::EndPopup();
                 }
@@ -396,9 +428,9 @@ namespace pe
                 else
                     lightFlags &= ~ImGuiTreeNodeFlags_Selected;
 
-                std::string name = "Area Light " + std::to_string(i);
+                std::string name = lightSystem->GetAreaLights()[i].name;
                 ImGui::TreeNodeEx((void *)(intptr_t)(i + 3000), lightFlags, "%s  %s", ICON_FA_LIGHTBULB, name.c_str());
-                if (ImGui::IsItemClicked())
+                if (ImGui::IsItemClicked(ImGuiMouseButton_Left) || ImGui::IsItemClicked(ImGuiMouseButton_Right))
                 {
                     selection.Select(LightType::Area, i);
                     ImGui::SetWindowFocus("Properties");
@@ -413,15 +445,27 @@ namespace pe
                 {
                     if (ImGui::MenuItem("Focus"))
                     {
+                        selection.Select(LightType::Area, i);
                         Camera *camera = scene.GetActiveCamera();
                         vec3 pos = lightSystem->GetAreaLights()[i].position;
                         camera->SetPosition(pos - camera->GetFront() * 5.0f);
+                        ImGui::SetWindowFocus("Properties");
+                    }
+                    if (ImGui::MenuItem("Rename"))
+                    {
+                        s_renameModel = nullptr;
+                        s_renameCamera = nullptr;
+                        s_renameLightType = LightType::Area;
+                        s_renameLightIndex = i;
+                        s_renameNode = -1;
+                        snprintf(s_renameBuf, sizeof(s_renameBuf), "%s", name.c_str());
+                        s_openRenamePopup = true;
                     }
                     if (ImGui::MenuItem("Delete"))
                     {
-                        // Reset light
-                        lightSystem->GetAreaLights()[i].color = vec4(0.0f);                          // Intensity 0
-                        lightSystem->GetAreaLights()[i].position = vec4(0.0f, 10000.0f, 0.0f, 0.0f); // Move away
+                        auto &lights = lightSystem->GetAreaLights();
+                        lights.erase(lights.begin() + i);
+                        selection.ClearSelection();
                     }
                     ImGui::EndPopup();
                 }
@@ -458,7 +502,7 @@ namespace pe
             }
 
             bool modelOpen = ImGui::TreeNodeEx((void *)(intptr_t)id, modelFlags, "%s", displayName.c_str());
-            if (ImGui::IsItemClicked() && !ImGui::IsItemToggledOpen())
+            if ((ImGui::IsItemClicked(ImGuiMouseButton_Left) || ImGui::IsItemClicked(ImGuiMouseButton_Right)) && !ImGui::IsItemToggledOpen())
             {
                 int nodeToSelect = -1;
                 for (int i = 0; i < model->GetNodeCount(); i++)
@@ -501,17 +545,28 @@ namespace pe
                     Camera *camera = scene.GetActiveCamera();
                     vec3 min = vec3(FLT_MAX);
                     vec3 max = vec3(-FLT_MAX);
-                    for (const auto &node : model->GetNodeInfos())
+                    int nodeToSelect = -1;
+                    for (int i = 0; i < model->GetNodeCount(); i++)
                     {
+                        const auto &node = model->GetNodeInfos()[i];
                         min = glm::min(min, node.worldBoundingBox.min);
                         max = glm::max(max, node.worldBoundingBox.max);
+                        if (nodeToSelect < 0 && model->GetNodeMesh(i) >= 0)
+                            nodeToSelect = i;
                     }
+
+                    if (nodeToSelect >= 0)
+                    {
+                        selection.Select(model, nodeToSelect, SelectionType::Node);
+                    }
+
                     if (min.x != FLT_MAX)
                     {
                         vec3 center = (min + max) * 0.5f;
                         float dist = glm::length(max - min);
                         vec3 dir = camera->GetFront();
                         camera->SetPosition(center - dir * glm::max(dist, camera->GetNearPlane()));
+                        ImGui::SetWindowFocus("Properties");
                     }
                 }
                 if (ImGui::MenuItem("Rename"))
@@ -625,10 +680,10 @@ namespace pe
                         ImGui::EndDragDropSource();
                     }
 
-                    if (ImGui::IsItemClicked() && !ImGui::IsItemToggledOpen())
+                    if ((ImGui::IsItemClicked(ImGuiMouseButton_Left) || ImGui::IsItemClicked(ImGuiMouseButton_Right)) && !ImGui::IsItemToggledOpen())
                     {
                         selection.Select(model, nodeIndex, SelectionType::Node);
-                        // ImGui::SetWindowFocus("Properties"); // Removed to prevent interrupting drag
+                        ImGui::SetWindowFocus("Properties");
                     }
 
                     // Drag & Drop Target
@@ -681,11 +736,13 @@ namespace pe
                     {
                         if (ImGui::MenuItem("Focus"))
                         {
+                            selection.Select(model, nodeIndex, SelectionType::Node);
                             Camera *camera = scene.GetActiveCamera();
                             vec3 center = (node.worldBoundingBox.min + node.worldBoundingBox.max) * 0.5f;
                             float dist = glm::length(node.worldBoundingBox.max - node.worldBoundingBox.min);
                             vec3 dir = camera->GetFront();
                             camera->SetPosition(center - dir * glm::max(dist, camera->GetNearPlane()));
+                            ImGui::SetWindowFocus("Properties");
                         }
                         if (ImGui::MenuItem("Rename"))
                         {
@@ -715,7 +772,7 @@ namespace pe
 
                             bool meshOpen = ImGui::TreeNodeEx((void *)meshUniqueId, meshFlags, "%s", meshDisplayName.c_str());
 
-                            if (ImGui::IsItemClicked())
+                            if (ImGui::IsItemClicked(ImGuiMouseButton_Left) || ImGui::IsItemClicked(ImGuiMouseButton_Right))
                             {
                                 selection.Select(model, nodeIndex, SelectionType::Mesh);
                                 ImGui::SetWindowFocus("Properties");
@@ -741,6 +798,7 @@ namespace pe
                             {
                                 if (ImGui::MenuItem("Focus"))
                                 {
+                                    selection.Select(model, nodeIndex, SelectionType::Mesh);
                                     Camera *camera = scene.GetActiveCamera();
                                     const auto &meshInfos = model->GetMeshInfos();
                                     if (meshIndex >= 0 && meshIndex < static_cast<int>(meshInfos.size()))
@@ -752,6 +810,7 @@ namespace pe
                                         float dist = glm::length(max - min);
                                         vec3 dir = camera->GetFront();
                                         camera->SetPosition(center - dir * glm::max(dist, camera->GetNearPlane()));
+                                        ImGui::SetWindowFocus("Properties");
                                     }
                                 }
                                 ImGui::EndPopup();
@@ -845,6 +904,23 @@ namespace pe
                             infos[s_renameNode].name = newName;
                     }
                 }
+                else if (s_renameCamera)
+                {
+                    s_renameCamera->SetName(s_renameBuf);
+                }
+                else if (s_renameLightIndex != -1)
+                {
+                    LightSystem *lightSystem = GetGlobalSystem<LightSystem>();
+                    if (s_renameLightType == LightType::Directional)
+                        lightSystem->GetDirectionalLights()[s_renameLightIndex].name = s_renameBuf;
+                    else if (s_renameLightType == LightType::Point)
+                        lightSystem->GetPointLights()[s_renameLightIndex].name = s_renameBuf;
+                    else if (s_renameLightType == LightType::Spot)
+                        lightSystem->GetSpotLights()[s_renameLightIndex].name = s_renameBuf;
+                    else if (s_renameLightType == LightType::Area)
+                        lightSystem->GetAreaLights()[s_renameLightIndex].name = s_renameBuf;
+                }
+                s_renameLightIndex = -1;
                 ImGui::CloseCurrentPopup();
             }
             ImGui::SameLine();
