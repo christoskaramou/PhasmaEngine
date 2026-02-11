@@ -17,6 +17,26 @@ namespace pe
         uint32_t offsetAreaLights;
     };
 
+    struct DirectionalLightEditor : public DirectionalLight
+    {
+        std::string name;
+    };
+
+    struct PointLightEditor : public PointLight
+    {
+        std::string name;
+    };
+
+    struct SpotLightEditor : public SpotLight
+    {
+        std::string name;
+    };
+
+    struct AreaLightEditor : public AreaLight
+    {
+        std::string name;
+    };
+
     class Buffer;
 
     class LightSystem : public ISystem
@@ -32,19 +52,24 @@ namespace pe
         Buffer *GetUniform(uint32_t frame) { return m_uniforms[frame]; }
         Buffer *GetStorage(uint32_t frame) { return m_storageBuffers[frame]; }
         LightsUBO *GetLights() { return &m_lubo; }
-        std::vector<DirectionalLight> &GetDirectionalLights() { return m_directionalLights; }
-        std::vector<PointLight> &GetPointLights() { return m_pointLights; }
-        std::vector<SpotLight> &GetSpotLights() { return m_spotLights; }
-        std::vector<AreaLight> &GetAreaLights() { return m_areaLights; }
+        std::vector<DirectionalLightEditor> &GetDirectionalLights() { return m_directionalLights; }
+        std::vector<PointLightEditor> &GetPointLights() { return m_pointLights; }
+        std::vector<SpotLightEditor> &GetSpotLights() { return m_spotLights; }
+        std::vector<AreaLightEditor> &GetAreaLights() { return m_areaLights; }
+
+        void CreateDirectionalLight();
+        void CreatePointLight();
+        void CreateSpotLight();
+        void CreateAreaLight();
 
     private:
         LightsUBO m_lubo;
         std::vector<Buffer *> m_uniforms;
         std::vector<Buffer *> m_storageBuffers;
 
-        std::vector<DirectionalLight> m_directionalLights;
-        std::vector<PointLight> m_pointLights;
-        std::vector<SpotLight> m_spotLights;
-        std::vector<AreaLight> m_areaLights;
+        std::vector<DirectionalLightEditor> m_directionalLights;
+        std::vector<PointLightEditor> m_pointLights;
+        std::vector<SpotLightEditor> m_spotLights;
+        std::vector<AreaLightEditor> m_areaLights;
     };
 } // namespace pe

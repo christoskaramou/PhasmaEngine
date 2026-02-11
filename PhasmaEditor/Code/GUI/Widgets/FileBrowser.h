@@ -12,6 +12,9 @@ namespace pe
         void Init(GUI *gui) override;
         void Update() override;
 
+        void SetCurrentPath(const std::filesystem::path &path);
+        void RefreshCache();
+
         inline static bool IsRegularFile(const std::filesystem::path &path) { return std::filesystem::is_regular_file(path); }
         inline static bool IsDirectory(const std::filesystem::path &path) { return std::filesystem::is_directory(path); }
         inline static bool IsTextFile(const std::filesystem::path &path)
@@ -50,7 +53,6 @@ namespace pe
 
         void *GetIconForFile(const std::filesystem::path &path);
         void ProcessLoadedImages();
-        void RefreshCache();
         void DrawDirectoryContent(const std::filesystem::path &path,
                                   std::function<void(const std::filesystem::path &)> onDoubleClick = nullptr,
                                   std::function<bool(const std::filesystem::path &)> filter = nullptr,
@@ -104,5 +106,6 @@ namespace pe
         };
         std::vector<FileEntry> m_cache;
         std::filesystem::path m_cachePath; // Path currently cached
+        bool m_wasOpen = false;
     };
 } // namespace pe

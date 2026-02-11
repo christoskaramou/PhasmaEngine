@@ -6,6 +6,7 @@
 #include "GUI/GUI.h"
 #include "GUI/GUIState.h"
 #include "GUI/Helpers.h"
+#include "GUI/IconsFontAwesome.h"
 #include "Scene/Model.h"
 #include "imgui/imgui_impl_vulkan.h"
 
@@ -97,6 +98,12 @@ namespace pe
         cmd->Return();
     }
 
+    void FileBrowser::SetCurrentPath(const std::filesystem::path &path)
+    {
+        m_currentPath = path;
+        RefreshCache();
+    }
+
     void *FileBrowser::GetIconForFile(const std::filesystem::path &path)
     {
         if (IsDirectory(path))
@@ -186,6 +193,12 @@ namespace pe
     {
         ProcessLoadedImages();
 
+        if (m_open && !m_wasOpen)
+        {
+            RefreshCache();
+        }
+        m_wasOpen = m_open;
+
         if (!m_open)
             return;
 
@@ -200,6 +213,10 @@ namespace pe
                 if (parent.find("PhasmaEngine") != std::string::npos || parent.find("PhasmaEditor") != std::string::npos)
                     m_currentPath = m_currentPath.parent_path();
             }
+            ImGui::SameLine();
+            if (ImGui::Button(ICON_FA_SYNC_ALT) || ImGui::Button("Refresh"))
+                RefreshCache();
+
             ImGui::SameLine();
             auto currentPathU8 = m_currentPath.u8string();
             ImGui::Text("%s", reinterpret_cast<const char *>(currentPathU8.c_str()));

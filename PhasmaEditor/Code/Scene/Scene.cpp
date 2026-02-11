@@ -26,7 +26,6 @@
 #include "rapidjson/istreamwrapper.h"
 #include "rapidjson/ostreamwrapper.h"
 #include "rapidjson/prettywriter.h"
-#include <cmath>
 
 namespace pe
 {
@@ -40,6 +39,7 @@ namespace pe
         m_defaultSampler = Sampler::Create(Sampler::CreateInfoInit(), "defaultSampler");
 
         Camera *camera = new Camera();
+        camera->SetName("Camera_" + std::to_string(ID::NextID()));
         m_cameras.push_back(camera);
 
         uint32_t swapchainImageCount = RHII.GetSwapchainImageCount();
@@ -147,9 +147,29 @@ namespace pe
     Camera *Scene::AddCamera()
     {
         Camera *camera = new Camera();
+        camera->SetName("Camera_" + std::to_string(ID::NextID()));
         m_cameras.push_back(camera);
-        camera->SetName("Camera_" + std::to_string(m_cameras.size() - 1));
         return camera;
+    }
+
+    void Scene::RemoveCamera(Camera *camera)
+    {
+        if (m_cameras.size() <= 1)
+            return;
+
+        auto it = std::find(m_cameras.begin(), m_cameras.end(), camera);
+        if (it != m_cameras.end())
+        {
+            if (SelectionManager::Instance().GetSelectionType() == SelectionType::Camera)
+            {
+                int index = static_cast<int>(std::distance(m_cameras.begin(), it));
+                if (SelectionManager::Instance().GetSelectedNodeIndex() == index)
+                    SelectionManager::Instance().ClearSelection();
+            }
+
+            delete *it;
+            m_cameras.erase(it);
+        }
     }
 
     void Scene::SetActiveCamera(Camera *camera)
@@ -1312,6 +1332,46 @@ namespace pe
                 arr.PushBack(SafeFloat(p[i]), allocator);
         };
 
+        // Global Settings
+        rapidjson::Value settings(rapidjson::kObjectType);
+        auto &gSettings = Settings::Get<GlobalSettings>();
+        settings.AddMember("shadows", gSettings.shadows, allocator);
+        settings.AddMember("shadow_map_size", gSettings.shadow_map_size, allocator);
+        settings.AddMember("num_cascades", gSettings.num_cascades, allocator);
+        settings.AddMember("render_scale", gSettings.render_scale, allocator);
+        settings.AddMember("ssao", gSettings.ssao, allocator);
+        settings.AddMember("fxaa", gSettings.fxaa, allocator);
+        settings.AddMember("taa", gSettings.taa, allocator);
+        settings.AddMember("cas_sharpening", gSettings.cas_sharpening, allocator);
+        settings.AddMember("cas_sharpness", gSettings.cas_sharpness, allocator);
+        settings.AddMember("ssr", gSettings.ssr, allocator);
+        settings.AddMember("tonemapping", gSettings.tonemapping, allocator);
+        settings.AddMember("dof", gSettings.dof, allocator);
+        settings.AddMember("dof_focus_scale", gSettings.dof_focus_scale, allocator);
+        settings.AddMember("dof_blur_range", gSettings.dof_blur_range, allocator);
+        settings.AddMember("bloom", gSettings.bloom, allocator);
+        settings.AddMember("bloom_strength", gSettings.bloom_strength, allocator);
+        settings.AddMember("bloom_range", gSettings.bloom_range, allocator);
+        settings.AddMember("motion_blur", gSettings.motion_blur, allocator);
+        settings.AddMember("motion_blur_strength", gSettings.motion_blur_strength, allocator);
+        settings.AddMember("motion_blur_samples", gSettings.motion_blur_samples, allocator);
+        settings.AddMember("IBL", gSettings.IBL, allocator);
+        settings.AddMember("IBL_intensity", gSettings.IBL_intensity, allocator);
+        settings.AddMember("lights_intensity", gSettings.lights_intensity, allocator);
+        settings.AddMember("day", gSettings.day, allocator);
+
+        rapidjson::Value depthBias(rapidjson::kArrayType);
+        depthBias.PushBack(gSettings.depth_bias[0], allocator);
+        depthBias.PushBack(gSettings.depth_bias[1], allocator);
+        depthBias.PushBack(gSettings.depth_bias[2], allocator);
+        settings.AddMember("depth_bias", depthBias.Move(), allocator);
+
+        settings.AddMember("draw_grid", gSettings.draw_grid, allocator);
+        settings.AddMember("draw_aabbs", gSettings.draw_aabbs, allocator);
+        settings.AddMember("render_mode", static_cast<int>(gSettings.render_mode), allocator);
+
+        d.AddMember("settings", settings.Move(), allocator);
+
         // Models
         rapidjson::Value models(rapidjson::kArrayType);
         for (auto *model : m_models)
@@ -1408,6 +1468,7 @@ namespace pe
                 lObj.AddMember("color", color.Move(), allocator);
                 lObj.AddMember("position", pos.Move(), allocator);
                 lObj.AddMember("rotation", rot.Move(), allocator);
+                lObj.AddMember("name", rapidjson::Value(l.name.c_str(), allocator).Move(), allocator);
                 lights.PushBack(lObj.Move(), allocator);
             }
 
@@ -1423,6 +1484,7 @@ namespace pe
 
                 lObj.AddMember("color", color.Move(), allocator);
                 lObj.AddMember("position", pos.Move(), allocator); // .w is radius
+                lObj.AddMember("name", rapidjson::Value(l.name.c_str(), allocator).Move(), allocator);
                 lights.PushBack(lObj.Move(), allocator);
             }
 
@@ -1442,6 +1504,7 @@ namespace pe
                 lObj.AddMember("position", pos.Move(), allocator); // .w is range
                 lObj.AddMember("rotation", rot.Move(), allocator);
                 lObj.AddMember("params", params.Move(), allocator); // angle, falloff
+                lObj.AddMember("name", rapidjson::Value(l.name.c_str(), allocator).Move(), allocator);
                 lights.PushBack(lObj.Move(), allocator);
             }
 
@@ -1461,6 +1524,7 @@ namespace pe
                 lObj.AddMember("position", pos.Move(), allocator); // .w is range
                 lObj.AddMember("rotation", rot.Move(), allocator);
                 lObj.AddMember("size", size.Move(), allocator);
+                lObj.AddMember("name", rapidjson::Value(l.name.c_str(), allocator).Move(), allocator);
                 lights.PushBack(lObj.Move(), allocator);
             }
 
@@ -1489,6 +1553,16 @@ namespace pe
             cameras.PushBack(camObj.Move(), allocator);
         }
         d.AddMember("cameras", cameras.Move(), allocator);
+
+        // Active Camera
+        for (int i = 0; i < m_cameras.size(); i++)
+        {
+            if (m_cameras[i] == GetActiveCamera())
+            {
+                d.AddMember("active_camera", i, allocator);
+                break;
+            }
+        }
 
         // Write to file
         std::ofstream ofs(file);
@@ -1556,6 +1630,74 @@ namespace pe
         {
             delete m_cameras.back();
             m_cameras.pop_back();
+        }
+
+        if (d.HasMember("settings"))
+        {
+            const auto &settings = d["settings"];
+            auto &gSettings = Settings::Get<GlobalSettings>();
+            if (settings.HasMember("shadows"))
+                gSettings.shadows = settings["shadows"].GetBool();
+            if (settings.HasMember("shadow_map_size"))
+                gSettings.shadow_map_size = settings["shadow_map_size"].GetUint();
+            if (settings.HasMember("num_cascades"))
+                gSettings.num_cascades = settings["num_cascades"].GetUint();
+            if (settings.HasMember("render_scale"))
+                gSettings.render_scale = settings["render_scale"].GetFloat();
+            if (settings.HasMember("ssao"))
+                gSettings.ssao = settings["ssao"].GetBool();
+            if (settings.HasMember("fxaa"))
+                gSettings.fxaa = settings["fxaa"].GetBool();
+            if (settings.HasMember("taa"))
+                gSettings.taa = settings["taa"].GetBool();
+            if (settings.HasMember("cas_sharpening"))
+                gSettings.cas_sharpening = settings["cas_sharpening"].GetBool();
+            if (settings.HasMember("cas_sharpness"))
+                gSettings.cas_sharpness = settings["cas_sharpness"].GetFloat();
+            if (settings.HasMember("ssr"))
+                gSettings.ssr = settings["ssr"].GetBool();
+            if (settings.HasMember("tonemapping"))
+                gSettings.tonemapping = settings["tonemapping"].GetBool();
+            if (settings.HasMember("dof"))
+                gSettings.dof = settings["dof"].GetBool();
+            if (settings.HasMember("dof_focus_scale"))
+                gSettings.dof_focus_scale = settings["dof_focus_scale"].GetFloat();
+            if (settings.HasMember("dof_blur_range"))
+                gSettings.dof_blur_range = settings["dof_blur_range"].GetFloat();
+            if (settings.HasMember("bloom"))
+                gSettings.bloom = settings["bloom"].GetBool();
+            if (settings.HasMember("bloom_strength"))
+                gSettings.bloom_strength = settings["bloom_strength"].GetFloat();
+            if (settings.HasMember("bloom_range"))
+                gSettings.bloom_range = settings["bloom_range"].GetFloat();
+            if (settings.HasMember("motion_blur"))
+                gSettings.motion_blur = settings["motion_blur"].GetBool();
+            if (settings.HasMember("motion_blur_strength"))
+                gSettings.motion_blur_strength = settings["motion_blur_strength"].GetFloat();
+            if (settings.HasMember("motion_blur_samples"))
+                gSettings.motion_blur_samples = settings["motion_blur_samples"].GetInt();
+            if (settings.HasMember("IBL"))
+                gSettings.IBL = settings["IBL"].GetBool();
+            if (settings.HasMember("IBL_intensity"))
+                gSettings.IBL_intensity = settings["IBL_intensity"].GetFloat();
+            if (settings.HasMember("lights_intensity"))
+                gSettings.lights_intensity = settings["lights_intensity"].GetFloat();
+            if (settings.HasMember("day"))
+                gSettings.day = settings["day"].GetBool();
+            if (settings.HasMember("depth_bias"))
+            {
+                gSettings.depth_bias[0] = settings["depth_bias"][0].GetFloat();
+                gSettings.depth_bias[1] = settings["depth_bias"][1].GetFloat();
+                gSettings.depth_bias[2] = settings["depth_bias"][2].GetFloat();
+            }
+            if (settings.HasMember("draw_grid"))
+                gSettings.draw_grid = settings["draw_grid"].GetBool();
+            if (settings.HasMember("draw_aabbs"))
+                gSettings.draw_aabbs = settings["draw_aabbs"].GetBool();
+            if (settings.HasMember("render_mode"))
+                gSettings.render_mode = static_cast<RenderMode>(settings["render_mode"].GetInt());
+
+            MarkUniformsDirty();
         }
 
         auto ReadVec3 = [](const rapidjson::Value &arr)
@@ -1691,36 +1833,40 @@ namespace pe
                 std::string type = lVal["type"].GetString();
                 if (type == "directional")
                 {
-                    DirectionalLight l{};
+                    DirectionalLightEditor l{};
                     l.color = ReadVec4(lVal["color"]);
                     l.position = ReadVec4(lVal["position"]);
                     if (lVal.HasMember("rotation"))
                         l.rotation = ReadVec4(lVal["rotation"]);
+                    l.name = lVal.HasMember("name") ? lVal["name"].GetString() : "Directional Light " + std::to_string(ID::NextID());
                     lightSystem->GetDirectionalLights().push_back(l);
                 }
                 else if (type == "point")
                 {
-                    PointLight l{};
+                    PointLightEditor l{};
                     l.color = ReadVec4(lVal["color"]);
                     l.position = ReadVec4(lVal["position"]);
+                    l.name = lVal.HasMember("name") ? lVal["name"].GetString() : "Point Light " + std::to_string(ID::NextID());
                     lightSystem->GetPointLights().push_back(l);
                 }
                 else if (type == "spot")
                 {
-                    SpotLight l{};
+                    SpotLightEditor l{};
                     l.color = ReadVec4(lVal["color"]);
                     l.position = ReadVec4(lVal["position"]);
                     l.rotation = ReadVec4(lVal["rotation"]);
                     l.params = ReadVec4(lVal["params"]);
+                    l.name = lVal.HasMember("name") ? lVal["name"].GetString() : "Spot Light " + std::to_string(ID::NextID());
                     lightSystem->GetSpotLights().push_back(l);
                 }
                 else if (type == "area")
                 {
-                    AreaLight l{};
+                    AreaLightEditor l{};
                     l.color = ReadVec4(lVal["color"]);
                     l.position = ReadVec4(lVal["position"]);
                     l.rotation = ReadVec4(lVal["rotation"]);
                     l.size = ReadVec4(lVal["size"]);
+                    l.name = lVal.HasMember("name") ? lVal["name"].GetString() : "Area Light " + std::to_string(ID::NextID());
                     lightSystem->GetAreaLights().push_back(l);
                 }
             }
@@ -1737,6 +1883,7 @@ namespace pe
                 else
                 {
                     cam = new Camera();
+                    cam->SetName("Camera_" + std::to_string(ID::NextID()));
                     m_cameras.push_back(cam);
                 }
 
@@ -1755,6 +1902,13 @@ namespace pe
                     cam->SetFarPlane(cVal["far_plane"].GetFloat());
                 if (cVal.HasMember("speed"))
                     cam->SetSpeed(cVal["speed"].GetFloat());
+            }
+
+            if (d.HasMember("active_camera"))
+            {
+                uint32_t activeIndex = d["active_camera"].GetUint();
+                if (activeIndex < m_cameras.size())
+                    SetActiveCamera(m_cameras[activeIndex]);
             }
         }
 

@@ -34,12 +34,13 @@ namespace pe
         void AddModel(Model *model);
         void RemoveModel(Model *model);
         Camera *AddCamera();
+        void RemoveCamera(Camera *camera);
         void SetActiveCamera(Camera *camera);
         void SaveScene(const std::filesystem::path &file) const;
         void LoadScene(const std::filesystem::path &file);
 
         ParticleManager *GetParticleManager() { return m_particleManager; }
-        Camera *GetActiveCamera() { return m_cameras.at(0); }
+        Camera *GetActiveCamera() const { return m_cameras.at(0); }
         Camera *GetCamera(int index) const { return m_cameras.at(index); }
         const std::vector<Camera *> &GetCameras() const { return m_cameras; }
         OrderedMap<size_t, Model *> &GetModels() { return m_models; }
