@@ -18,7 +18,15 @@
 #include "RenderPasses/ShadowPass.h"
 #include "Scene/Model.h"
 #include "Scene/SelectionManager.h"
+#include "Systems/LightSystem.h"
 #include "Systems/RendererSystem.h"
+
+#define _SILENCE_CXX17_ITERATOR_BASE_CLASS_DEPRECATION_WARNING
+#include "rapidjson/document.h"
+#include "rapidjson/istreamwrapper.h"
+#include "rapidjson/ostreamwrapper.h"
+#include "rapidjson/prettywriter.h"
+#include <cmath>
 
 namespace pe
 {
@@ -1272,5 +1280,484 @@ namespace pe
 
         // Update TLAS in-place using eUpdate mode
         m_tlas->UpdateTLAS(cmd, m_meshCount, m_instanceBuffer, m_scratchBuffer->GetDeviceAddress());
+    }
+    void Scene::SaveScene(const std::filesystem::path &file) const
+    {
+        rapidjson::Document d;
+        d.SetObject();
+        auto &allocator = d.GetAllocator();
+
+        auto SafeFloat = [](float f)
+        {
+            return std::isnan(f) || std::isinf(f) ? 0.0f : f;
+        };
+
+        auto SetVec3 = [&](rapidjson::Value &arr, const vec3 &v)
+        {
+            arr.SetArray();
+            arr.PushBack(SafeFloat(v.x), allocator).PushBack(SafeFloat(v.y), allocator).PushBack(SafeFloat(v.z), allocator);
+        };
+
+        auto SetVec4 = [&](rapidjson::Value &arr, const vec4 &v)
+        {
+            arr.SetArray();
+            arr.PushBack(SafeFloat(v.x), allocator).PushBack(SafeFloat(v.y), allocator).PushBack(SafeFloat(v.z), allocator).PushBack(SafeFloat(v.w), allocator);
+        };
+
+        auto SetMat4 = [&](rapidjson::Value &arr, const mat4 &m)
+        {
+            arr.SetArray();
+            const float *p = value_ptr(m);
+            for (int i = 0; i < 16; i++)
+                arr.PushBack(SafeFloat(p[i]), allocator);
+        };
+
+        // Models
+        rapidjson::Value models(rapidjson::kArrayType);
+        for (auto *model : m_models)
+        {
+            if (!model)
+                continue;
+
+            rapidjson::Value modelObj(rapidjson::kObjectType);
+
+            // Basic Info
+            std::string pathObj = model->GetFilePath().generic_string();
+            modelObj.AddMember("path", rapidjson::Value(pathObj.c_str(), static_cast<rapidjson::SizeType>(pathObj.length()), allocator).Move(), allocator);
+            modelObj.AddMember("name", rapidjson::Value(model->GetLabel().c_str(), allocator).Move(), allocator);
+
+            rapidjson::Value matrixVal;
+            SetMat4(matrixVal, model->GetMatrix());
+            modelObj.AddMember("matrix", matrixVal.Move(), allocator);
+
+            // Nodes (Hierarchy & Transforms)
+            rapidjson::Value nodesArr(rapidjson::kArrayType);
+            const auto &nodeInfos = model->GetNodeInfos();
+            for (const auto &node : nodeInfos)
+            {
+                rapidjson::Value nodeObj(rapidjson::kObjectType);
+                nodeObj.AddMember("name", rapidjson::Value(node.name.c_str(), allocator).Move(), allocator);
+                nodeObj.AddMember("parent", node.parent, allocator);
+
+                rapidjson::Value localMat;
+                SetMat4(localMat, node.localMatrix);
+                nodeObj.AddMember("local_matrix", localMat.Move(), allocator);
+
+                nodesArr.PushBack(nodeObj.Move(), allocator);
+            }
+            modelObj.AddMember("nodes", nodesArr.Move(), allocator);
+
+            // Meshes (Materials & Textures)
+            rapidjson::Value meshesArr(rapidjson::kArrayType);
+            const auto &meshInfos = model->GetMeshInfos();
+            for (const auto &mesh : meshInfos)
+            {
+                rapidjson::Value meshObj(rapidjson::kObjectType);
+                meshObj.AddMember("render_type", static_cast<int>(mesh.renderType), allocator);
+                meshObj.AddMember("texture_mask", mesh.textureMask, allocator);
+
+                // Material Factors
+                rapidjson::Value factorsArr(rapidjson::kArrayType);
+                rapidjson::Value f0, f1;
+                SetMat4(f0, mesh.materialFactors[0]);
+                SetMat4(f1, mesh.materialFactors[1]);
+                factorsArr.PushBack(f0.Move(), allocator);
+                factorsArr.PushBack(f1.Move(), allocator);
+                meshObj.AddMember("material_factors", factorsArr.Move(), allocator);
+
+                // Textures (Save paths if not default)
+                rapidjson::Value texturesObj(rapidjson::kObjectType);
+                const char *methodNames[] = {"base_color", "metallic_roughness", "normal", "occlusion", "emissive"};
+                for (int i = 0; i < 5; i++)
+                {
+                    if (mesh.images[i] && !mesh.images[i]->GetName().empty())
+                    {
+                        std::string texName = mesh.images[i]->GetName();
+                        if (!texName.empty())
+                        {
+                            texturesObj.AddMember(rapidjson::Value(methodNames[i], allocator).Move(),
+                                                  rapidjson::Value(texName.c_str(), allocator).Move(), allocator);
+                        }
+                    }
+                }
+                meshObj.AddMember("textures", texturesObj.Move(), allocator);
+                meshesArr.PushBack(meshObj.Move(), allocator);
+            }
+            modelObj.AddMember("meshes", meshesArr.Move(), allocator);
+            models.PushBack(modelObj.Move(), allocator);
+        }
+        d.AddMember("models", models.Move(), allocator);
+
+        // Lights
+        auto *lightSystem = GetGlobalSystem<LightSystem>();
+        if (lightSystem)
+        {
+            rapidjson::Value lights(rapidjson::kArrayType);
+
+            // Directional
+            for (const auto &l : lightSystem->GetDirectionalLights())
+            {
+                rapidjson::Value lObj(rapidjson::kObjectType);
+                lObj.AddMember("type", "directional", allocator); // type identifier
+
+                rapidjson::Value color, pos, rot;
+                SetVec4(color, l.color);
+                SetVec4(pos, l.position);
+                SetVec4(rot, l.rotation);
+
+                lObj.AddMember("color", color.Move(), allocator);
+                lObj.AddMember("position", pos.Move(), allocator);
+                lObj.AddMember("rotation", rot.Move(), allocator);
+                lights.PushBack(lObj.Move(), allocator);
+            }
+
+            // Point
+            for (const auto &l : lightSystem->GetPointLights())
+            {
+                rapidjson::Value lObj(rapidjson::kObjectType);
+                lObj.AddMember("type", "point", allocator);
+
+                rapidjson::Value color, pos;
+                SetVec4(color, l.color);
+                SetVec4(pos, l.position);
+
+                lObj.AddMember("color", color.Move(), allocator);
+                lObj.AddMember("position", pos.Move(), allocator); // .w is radius
+                lights.PushBack(lObj.Move(), allocator);
+            }
+
+            // Spot
+            for (const auto &l : lightSystem->GetSpotLights())
+            {
+                rapidjson::Value lObj(rapidjson::kObjectType);
+                lObj.AddMember("type", "spot", allocator);
+
+                rapidjson::Value color, pos, rot, params;
+                SetVec4(color, l.color);
+                SetVec4(pos, l.position);
+                SetVec4(rot, l.rotation);
+                SetVec4(params, l.params);
+
+                lObj.AddMember("color", color.Move(), allocator);
+                lObj.AddMember("position", pos.Move(), allocator); // .w is range
+                lObj.AddMember("rotation", rot.Move(), allocator);
+                lObj.AddMember("params", params.Move(), allocator); // angle, falloff
+                lights.PushBack(lObj.Move(), allocator);
+            }
+
+            // Area
+            for (const auto &l : lightSystem->GetAreaLights())
+            {
+                rapidjson::Value lObj(rapidjson::kObjectType);
+                lObj.AddMember("type", "area", allocator);
+
+                rapidjson::Value color, pos, rot, size;
+                SetVec4(color, l.color);
+                SetVec4(pos, l.position);
+                SetVec4(rot, l.rotation);
+                SetVec4(size, l.size);
+
+                lObj.AddMember("color", color.Move(), allocator);
+                lObj.AddMember("position", pos.Move(), allocator); // .w is range
+                lObj.AddMember("rotation", rot.Move(), allocator);
+                lObj.AddMember("size", size.Move(), allocator);
+                lights.PushBack(lObj.Move(), allocator);
+            }
+
+            d.AddMember("lights", lights.Move(), allocator);
+        }
+
+        // Cameras
+        rapidjson::Value cameras(rapidjson::kArrayType);
+        for (auto *camera : m_cameras)
+        {
+            if (!camera)
+                continue;
+            rapidjson::Value camObj(rapidjson::kObjectType);
+            camObj.AddMember("name", rapidjson::Value(camera->GetName().c_str(), allocator).Move(), allocator);
+
+            rapidjson::Value pos, eul;
+            SetVec3(pos, camera->GetPosition());
+            SetVec3(eul, camera->GetEuler());
+
+            camObj.AddMember("position", pos.Move(), allocator);
+            camObj.AddMember("euler", eul.Move(), allocator);
+            camObj.AddMember("fovx", camera->Fovx(), allocator);
+            camObj.AddMember("near_plane", camera->GetNearPlane(), allocator);
+            camObj.AddMember("far_plane", camera->GetFarPlane(), allocator);
+            camObj.AddMember("speed", camera->GetSpeed(), allocator);
+            cameras.PushBack(camObj.Move(), allocator);
+        }
+        d.AddMember("cameras", cameras.Move(), allocator);
+
+        // Write to file
+        std::ofstream ofs(file);
+        if (!ofs.is_open())
+        {
+            Log::Error("Failed to open file for writing: " + file.string());
+            return;
+        }
+
+        rapidjson::OStreamWrapper osw(ofs);
+        rapidjson::PrettyWriter<rapidjson::OStreamWrapper> writer(osw);
+        writer.SetMaxDecimalPlaces(6);
+
+        if (d.Accept(writer))
+        {
+            if (ofs.bad())
+                Log::Error("File stream error while writing to: " + file.string());
+            else
+                Log::Info("Scene saved to: " + file.string());
+        }
+        else
+        {
+            Log::Error("Failed to write JSON content (invalid data/encoding?) to: " + file.string());
+        }
+    }
+
+    void Scene::LoadScene(const std::filesystem::path &file)
+    {
+        std::ifstream ifs(file);
+        if (!ifs.is_open())
+        {
+            Log::Error("Failed to open scene file: " + file.string());
+            return;
+        }
+
+        rapidjson::IStreamWrapper isw(ifs);
+        rapidjson::Document d;
+        d.ParseStream(isw);
+
+        if (d.HasParseError())
+        {
+            Log::Error("Failed to parse scene file: " + file.string());
+            return;
+        }
+
+        // Clear existing scene
+        std::vector<Model *> modelsToRemove;
+        for (auto *model : m_models)
+            modelsToRemove.push_back(model);
+
+        for (auto *model : modelsToRemove)
+            RemoveModel(model);
+
+        auto *lightSystem = GetGlobalSystem<LightSystem>();
+        if (lightSystem)
+        {
+            lightSystem->GetDirectionalLights().clear();
+            lightSystem->GetPointLights().clear();
+            lightSystem->GetSpotLights().clear();
+            lightSystem->GetAreaLights().clear();
+        }
+
+        // Reuse first camera, remove others
+        while (m_cameras.size() > 1)
+        {
+            delete m_cameras.back();
+            m_cameras.pop_back();
+        }
+
+        auto ReadVec3 = [](const rapidjson::Value &arr)
+        {
+            return vec3(arr[0].GetFloat(), arr[1].GetFloat(), arr[2].GetFloat());
+        };
+        auto ReadVec4 = [](const rapidjson::Value &arr)
+        {
+            return vec4(arr[0].GetFloat(), arr[1].GetFloat(), arr[2].GetFloat(), arr[3].GetFloat());
+        };
+        auto ReadMat4 = [](const rapidjson::Value &arr)
+        {
+            mat4 m;
+            float *p = value_ptr(m);
+            for (int i = 0; i < 16; i++)
+                p[i] = arr[i].GetFloat();
+            return m;
+        };
+
+        if (d.HasMember("models"))
+        {
+            Queue *queue = RHII.GetMainQueue();
+            CommandBuffer *cmd = queue->AcquireCommandBuffer();
+            cmd->Begin();
+
+            const auto &models = d["models"];
+            for (const auto &modelVal : models.GetArray())
+            {
+                std::string path = modelVal["path"].GetString();
+                if (std::filesystem::is_directory(path))
+                    continue;
+
+                Model *model = Model::Load(path);
+                if (model)
+                {
+                    if (modelVal.HasMember("name"))
+                        model->SetLabel(modelVal["name"].GetString());
+                    if (modelVal.HasMember("matrix"))
+                        model->GetMatrix() = ReadMat4(modelVal["matrix"]);
+
+                    // Nodes
+                    if (modelVal.HasMember("nodes"))
+                    {
+                        const auto &nodesVal = modelVal["nodes"];
+                        auto &nodeInfos = model->GetNodeInfos();
+                        for (rapidjson::SizeType i = 0; i < nodesVal.Size() && i < nodeInfos.size(); i++)
+                        {
+                            const auto &nVal = nodesVal[i];
+                            auto &ni = nodeInfos[i];
+                            if (nVal.HasMember("name"))
+                                ni.name = nVal["name"].GetString();
+                            if (nVal.HasMember("parent"))
+                                ni.parent = nVal["parent"].GetInt();
+                            if (nVal.HasMember("local_matrix"))
+                                ni.localMatrix = ReadMat4(nVal["local_matrix"]);
+                        }
+
+                        // Rebuild children
+                        for (auto &ni : nodeInfos)
+                            ni.children.clear();
+                        for (int i = 0; i < static_cast<int>(nodeInfos.size()); i++)
+                        {
+                            if (nodeInfos[i].parent >= 0 && nodeInfos[i].parent < static_cast<int>(nodeInfos.size()))
+                                nodeInfos[nodeInfos[i].parent].children.push_back(i);
+                        }
+
+                        model->GetDirtyNodes() = true;
+                        model->UpdateNodeMatrices();
+                    }
+
+                    // Meshes
+                    if (modelVal.HasMember("meshes"))
+                    {
+                        const auto &meshesVal = modelVal["meshes"];
+                        auto &meshInfos = model->GetMeshInfos();
+                        for (rapidjson::SizeType i = 0; i < meshesVal.Size() && i < meshInfos.size(); i++)
+                        {
+                            const auto &mVal = meshesVal[i];
+                            auto &mi = meshInfos[i];
+                            if (mVal.HasMember("render_type"))
+                                mi.renderType = static_cast<RenderType>(mVal["render_type"].GetInt());
+                            if (mVal.HasMember("material_factors"))
+                            {
+                                mi.materialFactors[0] = ReadMat4(mVal["material_factors"][0]);
+                                mi.materialFactors[1] = ReadMat4(mVal["material_factors"][1]);
+                            }
+
+                            bool hasTextureMask = mVal.HasMember("texture_mask");
+                            if (hasTextureMask)
+                                mi.textureMask = mVal["texture_mask"].GetUint();
+
+                            if (mVal.HasMember("textures"))
+                            {
+                                const auto &texVal = mVal["textures"];
+                                const char *methodNames[] = {"base_color", "metallic_roughness", "normal", "occlusion", "emissive"};
+                                for (int k = 0; k < 5; k++)
+                                {
+                                    if (texVal.HasMember(methodNames[k]))
+                                    {
+                                        std::string texPath = texVal[methodNames[k]].GetString();
+                                        if (std::filesystem::exists(texPath))
+                                        {
+                                            Image *img = model->LoadTexture(cmd, texPath);
+                                            if (img)
+                                            {
+                                                mi.images[k] = img;
+                                                // Only auto-enable mask if no mask was present in JSON
+                                                if (!hasTextureMask)
+                                                    mi.textureMask |= (1 << k);
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    AddModel(model);
+                }
+            }
+
+            cmd->End();
+            queue->Submit(1, &cmd, nullptr, nullptr);
+            cmd->Wait();
+            queue->ReturnCommandBuffer(cmd);
+        }
+
+        if (d.HasMember("lights") && lightSystem)
+        {
+            const auto &lights = d["lights"];
+            for (const auto &lVal : lights.GetArray())
+            {
+                std::string type = lVal["type"].GetString();
+                if (type == "directional")
+                {
+                    DirectionalLight l{};
+                    l.color = ReadVec4(lVal["color"]);
+                    l.position = ReadVec4(lVal["position"]);
+                    if (lVal.HasMember("rotation"))
+                        l.rotation = ReadVec4(lVal["rotation"]);
+                    lightSystem->GetDirectionalLights().push_back(l);
+                }
+                else if (type == "point")
+                {
+                    PointLight l{};
+                    l.color = ReadVec4(lVal["color"]);
+                    l.position = ReadVec4(lVal["position"]);
+                    lightSystem->GetPointLights().push_back(l);
+                }
+                else if (type == "spot")
+                {
+                    SpotLight l{};
+                    l.color = ReadVec4(lVal["color"]);
+                    l.position = ReadVec4(lVal["position"]);
+                    l.rotation = ReadVec4(lVal["rotation"]);
+                    l.params = ReadVec4(lVal["params"]);
+                    lightSystem->GetSpotLights().push_back(l);
+                }
+                else if (type == "area")
+                {
+                    AreaLight l{};
+                    l.color = ReadVec4(lVal["color"]);
+                    l.position = ReadVec4(lVal["position"]);
+                    l.rotation = ReadVec4(lVal["rotation"]);
+                    l.size = ReadVec4(lVal["size"]);
+                    lightSystem->GetAreaLights().push_back(l);
+                }
+            }
+        }
+
+        if (d.HasMember("cameras"))
+        {
+            const auto &cams = d["cameras"];
+            for (rapidjson::SizeType i = 0; i < cams.Size(); ++i)
+            {
+                Camera *cam = nullptr;
+                if (i < m_cameras.size())
+                    cam = m_cameras[i];
+                else
+                {
+                    cam = new Camera();
+                    m_cameras.push_back(cam);
+                }
+
+                const auto &cVal = cams[i];
+                if (cVal.HasMember("name"))
+                    cam->SetName(cVal["name"].GetString());
+                if (cVal.HasMember("position"))
+                    cam->SetPosition(ReadVec3(cVal["position"]));
+                if (cVal.HasMember("euler"))
+                    cam->SetEuler(ReadVec3(cVal["euler"]));
+                if (cVal.HasMember("fovx"))
+                    cam->SetFovx(cVal["fovx"].GetFloat());
+                if (cVal.HasMember("near_plane"))
+                    cam->SetNearPlane(cVal["near_plane"].GetFloat());
+                if (cVal.HasMember("far_plane"))
+                    cam->SetFarPlane(cVal["far_plane"].GetFloat());
+                if (cVal.HasMember("speed"))
+                    cam->SetSpeed(cVal["speed"].GetFloat());
+            }
+        }
+
+        Log::Info("Scene loaded from: " + file.string());
     }
 } // namespace pe

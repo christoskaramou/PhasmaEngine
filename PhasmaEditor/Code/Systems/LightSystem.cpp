@@ -75,10 +75,10 @@ namespace pe
 
         m_directionalLights.resize(1);
         auto &gSettings = Settings::Get<GlobalSettings>();
-        m_directionalLights[0].color = {.9765f, .8431f, .9098f, gSettings.day ? gSettings.sun_intensity : 0.0f};
-        m_directionalLights[0].direction = {gSettings.sun_direction[0], gSettings.sun_direction[1], gSettings.sun_direction[2], 1.f};
-        m_directionalLights[0].position = {0.0f, 10.0f, 0.0f, 1.0f};
-
+        m_directionalLights[0].color = { .9765f, .8431f, .9098f, 7.0f };
+        m_directionalLights[0].position = { 0.0f, 10.0f, 0.0f, 2.0f };
+        quat q = quat(radians(vec3(-90.1f, 0.f, 0.f)));
+        m_directionalLights[0].rotation = { q.x, q.y, q.z, q.w };
         // Initial update to push data to buffers
         Update();
     }
@@ -101,8 +101,11 @@ namespace pe
         // Directional Light update
         if (m_directionalLights.size() > 0)
         {
-            m_directionalLights[0].color.w = gSettings.day ? gSettings.sun_intensity : 0.0f;
-            m_directionalLights[0].direction = {gSettings.sun_direction[0], gSettings.sun_direction[1], gSettings.sun_direction[2], 1.f};
+            static float lastIntensity = m_directionalLights[0].color.w == 0.0f ? 7.0f : m_directionalLights[0].color.w;
+            if (m_directionalLights[0].color.w > 0.0f)
+                lastIntensity = m_directionalLights[0].color.w;
+
+            m_directionalLights[0].color.w = gSettings.day ? lastIntensity : 0.0f;
         }
 
         // Calculate offsets and total size

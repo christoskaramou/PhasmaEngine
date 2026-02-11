@@ -162,16 +162,8 @@ namespace pe
         if (gSettings.day)
         {
             ImGui::Indent(16.0f);
-            ImGui::SliderFloat("Intst", &gSettings.sun_intensity, 0.1f, 50.f);
-            ImGui::DragFloat3("Dir", gSettings.sun_direction.data(), 0.01f, -1.f, 1.f);
             ImGui::DragFloat("Slope", &gSettings.depth_bias[2], 0.15f, 0.5f);
             ImGui::Separator();
-            {
-                vec3 direction = normalize(make_vec3(&gSettings.sun_direction[0]));
-                gSettings.sun_direction[0] = direction.x;
-                gSettings.sun_direction[1] = direction.y;
-                gSettings.sun_direction[2] = direction.z;
-            }
             ImGui::Unindent(16.0f);
         }
 

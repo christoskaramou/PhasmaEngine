@@ -9,8 +9,8 @@ namespace pe
     struct DirectionalLight
     {
         vec4 color; // .w = intensity
-        vec4 direction;
         vec4 position;
+        vec4 rotation; // quaternion
     };
 
     struct PointLight

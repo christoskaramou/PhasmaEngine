@@ -301,7 +301,10 @@ namespace pe
         }
     }
 
-    void FileBrowser::DrawDirectoryContent(const std::filesystem::path &path, std::function<void(const std::filesystem::path &)> onDoubleClick, std::function<bool(const std::filesystem::path &)> filter)
+    void FileBrowser::DrawDirectoryContent(const std::filesystem::path &path,
+                                           std::function<void(const std::filesystem::path &)> onDoubleClick,
+                                           std::function<bool(const std::filesystem::path &)> filter,
+                                           float footerHeight)
     {
         // Re-cache if path changed
         if (m_cachePath != path)
@@ -310,7 +313,8 @@ namespace pe
             RefreshCache();
         }
 
-        float footerHeight = ImGui::GetStyle().ItemSpacing.y + ImGui::GetFrameHeightWithSpacing() * 0.0f;
+        if (footerHeight == 0.0f)
+            footerHeight = ImGui::GetStyle().ItemSpacing.y;
 
         if (ImGui::BeginChild("##file_browser_list", ImVec2(0, -footerHeight), true))
         {

@@ -9,6 +9,7 @@
 #include "Camera/Camera.h"
 #include "GbufferPass.h"
 #include "Scene/Scene.h"
+#include "Systems/LightSystem.h"
 #include "Systems/RendererSystem.h"
 
 namespace pe
@@ -190,8 +191,14 @@ namespace pe
             vec3 maxExtents = vec3(radius);
             vec3 minExtents = -maxExtents;
 
-            vec3 lightDir = normalize(make_vec3(Settings::Get<GlobalSettings>().sun_direction.data()));
-            auto v0 = frustumCenter - (lightDir * radius);
+            LightSystem *ls = GetGlobalSystem<LightSystem>();
+            auto &dirLights = ls->GetDirectionalLights();
+            vec3 lightDir = vec3(0, -1, 0); // Default
+            if (!dirLights.empty())
+            {
+                glm::quat rot = glm::quat(dirLights[0].rotation.w, dirLights[0].rotation.x, dirLights[0].rotation.y, dirLights[0].rotation.z);
+                lightDir = rot * glm::vec3(0, 0, -1);
+            }
             mat4 lightViewMatrix = lookAt(frustumCenter - (lightDir * radius), frustumCenter, camera->WorldUp());
             mat4 lightOrthoMatrix = ortho(minExtents.x, maxExtents.x, minExtents.y, maxExtents.y, maxExtents.z - minExtents.z, -clipRange);
 

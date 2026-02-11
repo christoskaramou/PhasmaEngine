@@ -43,6 +43,8 @@ namespace pe
 
     private:
         void ShowLoadModelMenuItem();
+        void ShowLoadSceneMenuItem();
+        void ShowSaveSceneMenuItem();
         void ShowExitMenuItem();
         void DrawExitPopup();
 

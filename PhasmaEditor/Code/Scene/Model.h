@@ -33,8 +33,8 @@ namespace pe
 
         // indices in the image views array in shader
         // 0 = Base Color
-        // 1 = Normal
-        // 2 = Metallic Roughness
+        // 1 = Metallic Roughness
+        // 2 = Normal
         // 3 = Occlusion
         // 4 = Emissive
         uint32_t viewsIndex[5] = {0, 0, 0, 0, 0}; // Updated in Scene::UpdateImageViews
@@ -110,6 +110,7 @@ namespace pe
         uint32_t GetMeshCount() const { return m_meshCount; }
 
         const std::string &GetLabel() const { return m_label; }
+        const std::filesystem::path &GetFilePath() const { return m_filePath; }
         void SetLabel(const std::string &label) { m_label = label; }
 
         int GetNodeCount() const { return static_cast<int>(m_nodeInfos.size()); }

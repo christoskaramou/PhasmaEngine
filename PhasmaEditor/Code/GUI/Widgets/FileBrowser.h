@@ -49,6 +49,12 @@ namespace pe
         friend class GUI;
 
         void *GetIconForFile(const std::filesystem::path &path);
+        void ProcessLoadedImages();
+        void RefreshCache();
+        void DrawDirectoryContent(const std::filesystem::path &path,
+                                  std::function<void(const std::filesystem::path &)> onDoubleClick = nullptr,
+                                  std::function<bool(const std::filesystem::path &)> filter = nullptr,
+                                  float footerHeight = 0.0f);
 
         static std::unordered_set<std::string> s_textExtensions;
         static std::unordered_set<std::string> s_shaderExtensions;
@@ -89,12 +95,6 @@ namespace pe
         ViewMode m_viewMode = ViewMode::Grid;
         float m_gridIconSize = 64.0f;
 
-        void DrawDirectoryContent(const std::filesystem::path &path,
-                                  std::function<void(const std::filesystem::path &)> onSelect,
-                                  std::function<bool(const std::filesystem::path &)> filter = nullptr);
-
-        void ProcessLoadedImages();
-
         struct FileEntry
         {
             std::filesystem::path path;
@@ -104,6 +104,5 @@ namespace pe
         };
         std::vector<FileEntry> m_cache;
         std::filesystem::path m_cachePath; // Path currently cached
-        void RefreshCache();
     };
 } // namespace pe

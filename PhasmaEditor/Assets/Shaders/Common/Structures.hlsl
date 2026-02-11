@@ -213,8 +213,8 @@ struct PS_OUTPUT_Color
 struct DirectionalLight
 {
     float4 color; // .a is the intensity
-    float4 direction;
     float4 position;
+    float4 rotation; // quaternion
 };
 
 struct PointLight

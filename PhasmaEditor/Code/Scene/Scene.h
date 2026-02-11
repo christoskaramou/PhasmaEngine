@@ -35,6 +35,8 @@ namespace pe
         void RemoveModel(Model *model);
         Camera *AddCamera();
         void SetActiveCamera(Camera *camera);
+        void SaveScene(const std::filesystem::path &file) const;
+        void LoadScene(const std::filesystem::path &file);
 
         ParticleManager *GetParticleManager() { return m_particleManager; }
         Camera *GetActiveCamera() { return m_cameras.at(0); }

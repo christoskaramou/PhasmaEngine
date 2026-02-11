@@ -18,72 +18,96 @@ namespace pe
         if (!m_open)
             return;
 
-        // Use the helper we moved to Helpers.h
-        static bool propertiesSized = false;
-        if (!propertiesSized)
+        // Keep size stable: first time always, after that only on appearing
+        static bool sizedOnce = false;
+        ui::SetInitialWindowSizeFraction(1.0f / 7.0f, 0.35f, sizedOnce ? ImGuiCond_Appearing : ImGuiCond_Always);
+        sizedOnce = true;
+
+        if (!ImGui::Begin("Properties", &m_open))
         {
-            ui::SetInitialWindowSizeFraction(1.0f / 7.0f, 0.35f, ImGuiCond_Always);
-            propertiesSized = true;
-        }
-        else
-        {
-            ui::SetInitialWindowSizeFraction(1.0f / 7.0f, 0.35f, ImGuiCond_Appearing);
+            ImGui::End();
+            return;
         }
 
-        ImGui::Begin("Properties", &m_open);
-
-        auto &selection = SelectionManager::Instance();
-        if (selection.HasSelection())
-        {
-            if (selection.GetSelectionType() == SelectionType::Node)
-            {
-                auto *transformWidget = m_gui->GetWidget<TransformWidget>();
-                if (transformWidget)
-                {
-                    transformWidget->DrawEmbed(selection.GetSelectedNodeInfo());
-                }
-            }
-            else if (selection.GetSelectionType() == SelectionType::Mesh)
-            {
-                auto *meshWidget = m_gui->GetWidget<MeshWidget>();
-                if (meshWidget)
-                {
-                    Model *model = selection.GetSelectedModel();
-                    int nodeIndex = selection.GetSelectedNodeIndex();
-                    int meshIndex = model->GetNodeMesh(nodeIndex);
-                    if (meshIndex >= 0)
-                    {
-                        auto &meshInfos = model->GetMeshInfos();
-                        if (meshIndex < static_cast<int>(meshInfos.size()))
-                        {
-                            meshWidget->DrawEmbed(&meshInfos[meshIndex], model);
-                        }
-                    }
-                }
-            }
-            else if (selection.GetSelectionType() == SelectionType::Camera)
-            {
-                auto *cameraWidget = m_gui->GetWidget<CameraWidget>();
-                if (cameraWidget)
-                {
-                    int index = selection.GetSelectedNodeIndex();
-                    Camera *camera = GetGlobalSystem<RendererSystem>()->GetScene().GetCamera(index);
-                    cameraWidget->DrawEmbed(camera);
-                }
-            }
-            else if (selection.GetSelectionType() == SelectionType::Light)
-            {
-                auto *lightWidget = m_gui->GetWidget<LightWidget>();
-                if (lightWidget)
-                {
-                    LightSystem *ls = GetGlobalSystem<LightSystem>();
-                    lightWidget->DrawEmbed(ls, selection.GetSelectedLightType(), selection.GetSelectedLightIndex());
-                }
-            }
-        }
-        else
+        auto &sel = SelectionManager::Instance();
+        if (!sel.HasSelection())
         {
             ImGui::TextDisabled("No object selected");
+            ImGui::End();
+            return;
+        }
+
+        auto drawNode = [&]()
+        {
+            if (auto *w = m_gui->GetWidget<TransformWidget>())
+                w->DrawEmbed(sel.GetSelectedNodeInfo());
+        };
+
+        auto drawMesh = [&]()
+        {
+            auto *w = m_gui->GetWidget<MeshWidget>();
+            if (!w)
+                return;
+
+            Model *model = sel.GetSelectedModel();
+            if (!model)
+                return;
+
+            const int nodeIndex = sel.GetSelectedNodeIndex();
+            const int meshIndex = model->GetNodeMesh(nodeIndex);
+            if (meshIndex < 0)
+                return;
+
+            auto &meshInfos = model->GetMeshInfos();
+            if (meshIndex >= (int)meshInfos.size())
+                return;
+
+            w->DrawEmbed(&meshInfos[meshIndex], model);
+        };
+
+        auto drawCamera = [&]()
+        {
+            auto *w = m_gui->GetWidget<CameraWidget>();
+            if (!w)
+                return;
+
+            const int index = sel.GetSelectedNodeIndex();
+            auto &cameras = GetGlobalSystem<RendererSystem>()->GetScene().GetCameras();
+            if (index < 0 || index >= (int)cameras.size())
+                return;
+
+            w->DrawEmbed(cameras[index]);
+        };
+
+        auto drawLight = [&]()
+        {
+            auto *w = m_gui->GetWidget<LightWidget>();
+            if (!w)
+                return;
+
+            LightSystem *ls = GetGlobalSystem<LightSystem>();
+            if (!ls)
+                return;
+
+            w->DrawEmbed(ls, sel.GetSelectedLightType(), sel.GetSelectedLightIndex());
+        };
+
+        switch (sel.GetSelectionType())
+        {
+        case SelectionType::Node:
+            drawNode();
+            break;
+        case SelectionType::Mesh:
+            drawMesh();
+            break;
+        case SelectionType::Camera:
+            drawCamera();
+            break;
+        case SelectionType::Light:
+            drawLight();
+            break;
+        default:
+            break;
         }
 
         ImGui::End();

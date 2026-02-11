@@ -32,7 +32,7 @@ namespace pe
 
     void MeshWidget::DrawEmbed(MeshInfo *mesh, Model *model)
     {
-        if (!mesh)
+        if (!mesh || !model)
             return;
 
         ImGui::Text("Mesh Data & Offsets");
