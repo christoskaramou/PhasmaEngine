@@ -29,10 +29,6 @@ namespace pe
                                 {
                                     std::filesystem::path path(reinterpret_cast<const char8_t *>(pathCopy.c_str()));
                                     ShellExecuteW(nullptr, L"open", path.wstring().c_str(), nullptr, nullptr, SW_SHOW); });
-#elif defined(__APPLE__)
-        std::string command = "open \"" + absPath + "\"";
-        ThreadPool::GUI.Enqueue([command]()
-                                { system(command.c_str()); });
 #else
         std::string command = "xdg-open \"" + absPath + "\"";
         ThreadPool::GUI.Enqueue([command]()

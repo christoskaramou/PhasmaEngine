@@ -251,7 +251,7 @@ namespace pe
     bool ModelAssimp::LoadFile(const std::filesystem::path &file)
     {
         m_importer.SetProgressHandler(new CustomAssimpProgressHandler());
-        m_filePath = file.parent_path();
+        m_filePath = file;
 
         uint32_t flags = 0;
         flags |= aiProcess_ValidateDataStructure;
@@ -762,8 +762,8 @@ namespace pe
         // candidates: raw, (modelDir / rel), (modelDir / filename)
         const std::filesystem::path candidates[] = {
             rel,
-            m_filePath / rel,
-            m_filePath / rel.filename(),
+            m_filePath.parent_path() / rel,
+            m_filePath.parent_path() / rel.filename(),
         };
 
         for (const auto &c : candidates)

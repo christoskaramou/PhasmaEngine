@@ -95,29 +95,60 @@ namespace pe
                 return false;
             };
 
-            DrawDirectoryContent(m_currentPath, onSelectAction, filterAction);
+            float footerHeight = ImGui::GetFrameHeightWithSpacing() + ImGui::GetStyle().ItemSpacing.y * 2.0f;
+            DrawDirectoryContent(m_currentPath, onSelectAction, filterAction, footerHeight);
+
+            if (m_selectedEntry != m_prevSelectedEntry)
+            {
+                m_prevSelectedEntry = m_selectedEntry;
+                if (!std::filesystem::is_directory(m_selectedEntry))
+                {
+                    auto filename = m_selectedEntry.filename().u8string();
+                    if (filename.length() < sizeof(m_currentFile))
+                    {
+#ifdef _WIN32
+                        strcpy_s(m_currentFile, reinterpret_cast<const char *>(filename.c_str()));
+#else
+                        strcpy(m_currentFile, reinterpret_cast<const char *>(filename.c_str()));
+#endif
+                    }
+                }
+            }
 
             ImGui::Separator();
+
+            ImGui::InputText("##filename", m_currentFile, sizeof(m_currentFile));
+            ImGui::SameLine();
+
             if (ImGui::Button("Cancel"))
                 CancelSelection();
             ImGui::SameLine();
             if (ImGui::Button("Select"))
             {
-                if (!IsDirectory(m_selectedEntry) && std::filesystem::exists(m_selectedEntry))
+                std::string fileStr = m_currentFile;
+                if (!fileStr.empty())
                 {
-                    if (m_selectionCallback)
+                    std::filesystem::path selectedPath = m_currentPath / fileStr;
+                    if (std::filesystem::is_directory(selectedPath))
                     {
-                        auto pathU8 = m_selectedEntry.u8string();
-                        std::string pathStr(reinterpret_cast<const char *>(pathU8.c_str()));
-                        m_selectionCallback(pathStr);
+                        m_currentPath = selectedPath;
+                        memset(m_currentFile, 0, sizeof(m_currentFile));
                     }
-                    CancelSelection();
+                    else
+                    {
+                        if (m_selectionCallback)
+                        {
+                            auto pathU8 = selectedPath.u8string();
+                            std::string pathStr(reinterpret_cast<const char *>(pathU8.c_str()));
+                            m_selectionCallback(pathStr);
+                        }
+                        CancelSelection();
+                    }
                 }
             }
         }
         ImGui::End();
 
-        // Handle case where End() was reached but m_open might have been toggled internally if we didn't return early
         if (!m_open)
             CancelSelection();
     }

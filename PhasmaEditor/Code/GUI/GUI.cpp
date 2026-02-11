@@ -11,6 +11,7 @@
 #include "Helpers.h"
 #include "RenderPasses/LightPass.h"
 #include "Scene/Model.h"
+#include "Scene/Scene.h"
 #include "Systems/RendererSystem.h"
 #include "Widgets/AssetInfo.h"
 #include "Widgets/CameraWidget.h"
@@ -64,7 +65,7 @@ namespace pe
 
     void GUI::ShowLoadModelMenuItem()
     {
-        if (ImGui::MenuItem("Load...", "Choose Model"))
+        if (ImGui::MenuItem("Load Model...", "Choose Model"))
         {
             if (GUIState::s_modelLoading)
                 return;
@@ -89,12 +90,56 @@ namespace pe
         }
     }
 
+    void GUI::ShowLoadSceneMenuItem()
+    {
+        if (ImGui::MenuItem("Load Scene...", "Load a scene from JSON"))
+        {
+            auto *fs = GetWidget<FileSelector>();
+            if (fs)
+            {
+                std::vector<std::string> exts = {};
+                fs->OpenSelection([](const std::string &path)
+                                  {
+                    auto loadAsync = [path]()
+                    {
+                        auto* rs = GetGlobalSystem<RendererSystem>();
+                        if (rs)
+                            rs->GetScene().LoadScene(path);
+                    };
+                    ThreadPool::GUI.Enqueue(loadAsync); }, exts);
+            }
+        }
+    }
+
+    void GUI::ShowSaveSceneMenuItem()
+    {
+        if (ImGui::MenuItem("Save Scene...", "Save"))
+        {
+            auto *fs = GetWidget<FileSelector>();
+            if (fs)
+            {
+                std::vector<std::string> exts = {".pescene"};
+                fs->OpenSelection([](const std::string &path)
+                                  {
+                    auto saveAsync = [path]()
+                    {
+                        std::filesystem::path savePath(path);
+                        if (savePath.extension() != ".pescene")
+                            savePath += ".pescene";
+
+                        auto* rs = GetGlobalSystem<RendererSystem>();
+                        if (rs)
+                            rs->GetScene().SaveScene(savePath);
+                    };
+                    ThreadPool::GUI.Enqueue(saveAsync); }, exts);
+            }
+        }
+    }
+
     void GUI::ShowExitMenuItem()
     {
         if (ImGui::MenuItem("Exit", "Exit"))
-        {
             m_showExitConfirmation = true;
-        }
     }
 
     void GUI::DrawExitPopup()
@@ -236,6 +281,8 @@ namespace pe
             if (ImGui::BeginMenu("File"))
             {
                 ShowLoadModelMenuItem();
+                ShowLoadSceneMenuItem();
+                ShowSaveSceneMenuItem();
                 ImGui::Separator();
                 ShowExitMenuItem();
                 ImGui::EndMenu();
@@ -558,14 +605,38 @@ namespace pe
         auto globalWidget = std::make_shared<GlobalWidget>();
 
         // Console added early to potentially influence tab ordering (Leftmost)
-        m_widgets = {console, properties, metrics, models, assetInfo, sceneView, loading, fileBrowser, fileSelector, hierarchy, particles, cameraWidget, transformWidget, meshWidget, lightWidget, globalWidget};
+        m_widgets = {console,
+                     properties,
+                     metrics,
+                     models,
+                     assetInfo,
+                     sceneView,
+                     loading,
+                     fileBrowser,
+                     fileSelector,
+                     hierarchy,
+                     particles,
+                     cameraWidget,
+                     transformWidget,
+                     meshWidget,
+                     lightWidget,
+                     globalWidget};
 
         // Initialize Core Logging and attach Console
         Log::Attach([console](const std::string &msg, LogType type)
                     { console->AddLog(type, "%s", msg.c_str()); });
 
         // Populate Menu Vectors
-        m_menuWindowWidgets = {console, metrics, properties, models, assetInfo, sceneView, fileBrowser, hierarchy, particles, globalWidget};
+        m_menuWindowWidgets = {console,
+                               metrics,
+                               properties,
+                               models,
+                               assetInfo,
+                               sceneView,
+                               fileBrowser,
+                               hierarchy,
+                               particles,
+                               globalWidget};
         for (auto &widget : m_widgets)
             widget->Init(this);
 

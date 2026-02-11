@@ -4,6 +4,7 @@
 #include "Scene/SelectionManager.h"
 #include "TransformWidget.h"
 #include "glm/gtx/matrix_decompose.hpp"
+#include "imgui/ImGuizmo.h"
 #include "imgui/imgui.h"
 #include "imgui/imgui_internal.h"
 
@@ -158,18 +159,24 @@ namespace pe
 
     void TransformWidget::DrawRotationEditor(NodeInfo *node)
     {
-        vec3 position, scl, skew;
-        quat rotation;
-        vec4 perspective;
-        decompose(node->localMatrix, scl, rotation, position, skew, perspective);
-
-        vec3 eulerDeg = degrees(eulerAngles(rotation));
+        float t[3], r[3], s[3];
+        ImGuizmo::DecomposeMatrixToComponents(value_ptr(node->localMatrix), t, r, s);
+        vec3 eulerDeg = vec3(r[0], r[1], r[2]);
         vec3 oldRot = eulerDeg;
 
         DrawVec3Control(TransformType::Rotation, eulerDeg);
-        if (eulerDeg != oldRot)
+        if (glm::any(glm::notEqual(eulerDeg, oldRot, 0.001f)))
         {
-            ApplyLocalTransform(node, position, quat(radians(eulerDeg)), scl);
+            float matrix[16];
+            ImGuizmo::RecomposeMatrixFromComponents(t, value_ptr(eulerDeg), s, matrix);
+            node->localMatrix = make_mat4(matrix);
+
+            auto &selection = SelectionManager::Instance();
+            Model *model = selection.GetSelectedModel();
+            if (model)
+            {
+                model->MarkDirty(selection.GetSelectedNodeIndex());
+            }
         }
     }
 

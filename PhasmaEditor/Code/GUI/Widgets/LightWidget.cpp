@@ -2,8 +2,10 @@
 #include "GUI/IconsFontAwesome.h"
 #include "Systems/LightSystem.h"
 #include "glm/gtx/matrix_decompose.hpp"
+#include "imgui/ImGuizmo.h"
 #include "imgui/imgui.h"
 #include "imgui/imgui_internal.h"
+
 
 namespace pe
 {
@@ -66,8 +68,31 @@ namespace pe
                             { ImGui::ColorEdit3("##Color", &light.color[0]); });
                 DrawControl("Intensity", ICON_FA_BOLT, [&]()
                             { ImGui::DragFloat("##Intensity", &light.color.w, 0.1f, 0.0f, 100.0f); });
-                DrawControl("Direction", ICON_FA_LOCATION_ARROW, [&]()
-                            { DrawVec3Inputs(&light.direction[0]); });
+                DrawControl("Position", ICON_FA_ARROWS_ALT, [&]()
+                            { DrawVec3Inputs(&light.position[0]); });
+                DrawControl("Rotation", ICON_FA_SYNC_ALT, [&]()
+                            {
+                                mat4 m = translate(mat4(1.0f), vec3(light.position)) * mat4_cast(quat(light.rotation.w, light.rotation.x, light.rotation.y, light.rotation.z));
+                                float t[3], r[3], s[3];
+                                ImGuizmo::DecomposeMatrixToComponents(value_ptr(m), t, r, s);
+                                vec3 euler = vec3(r[0], r[1], r[2]);
+                                vec3 oldEuler = euler;
+
+                                ImGui::PushMultiItemsWidths(3, ImGui::GetContentRegionAvail().x);
+                                ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2{2, 0});
+                                ImGui::DragFloat("##RX", &euler.x, 0.1f, 0.0f, 0.0f, "P: %.2f"); ImGui::PopItemWidth(); ImGui::SameLine();
+                                ImGui::DragFloat("##RY", &euler.y, 0.1f, 0.0f, 0.0f, "Y: %.2f"); ImGui::PopItemWidth(); ImGui::SameLine();
+                                ImGui::DragFloat("##RZ", &euler.z, 0.1f, 0.0f, 0.0f, "R: %.2f"); ImGui::PopItemWidth();
+                                ImGui::PopStyleVar(); 
+
+                                if (glm::any(glm::notEqual(euler, oldEuler, 0.001f)))
+                                {
+                                    float matrix[16];
+                                    ImGuizmo::RecomposeMatrixFromComponents(t, value_ptr(euler), s, matrix);
+                                    mat4 newMatrix = make_mat4(matrix);
+                                    quat q = quat_cast(newMatrix);
+                                    light.rotation = vec4(q.x, q.y, q.z, q.w);
+                                } });
             }
 
             ImGui::Columns(1);
@@ -125,18 +150,27 @@ namespace pe
 
             DrawControl("Rotation", ICON_FA_SYNC_ALT, [&]()
                         {
-                vec3 euler = degrees(eulerAngles(quat(light.rotation)));
-                vec3 oldEuler = euler;
-                ImGui::PushMultiItemsWidths(2, ImGui::GetContentRegionAvail().x);
-                ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2{2, 0});
-                ImGui::DragFloat("##RX", &euler.x, 0.1f, 0.0f, 0.0f, "P: %.2f"); ImGui::PopItemWidth(); ImGui::SameLine();
-                ImGui::DragFloat("##RY", &euler.y, 0.1f, 0.0f, 0.0f, "Y: %.2f"); ImGui::PopItemWidth();
-                ImGui::PopStyleVar(); 
-                if (euler != oldEuler)
-                {
-                    quat q = quat(radians(vec3(euler.x, euler.y, 0.0f)));
-                    light.rotation = vec4(q.x, q.y, q.z, q.w);
-                } });
+                            mat4 m = translate(mat4(1.0f), vec3(light.position)) * mat4_cast(quat(light.rotation.w, light.rotation.x, light.rotation.y, light.rotation.z));
+                            float t[3], r[3], s[3];
+                            ImGuizmo::DecomposeMatrixToComponents(value_ptr(m), t, r, s);
+                            vec3 euler = vec3(r[0], r[1], r[2]);
+                            vec3 oldEuler = euler;
+
+                            ImGui::PushMultiItemsWidths(3, ImGui::GetContentRegionAvail().x);
+                            ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2{2, 0});
+                            ImGui::DragFloat("##RX", &euler.x, 0.1f, 0.0f, 0.0f, "P: %.2f"); ImGui::PopItemWidth(); ImGui::SameLine();
+                            ImGui::DragFloat("##RY", &euler.y, 0.1f, 0.0f, 0.0f, "Y: %.2f"); ImGui::PopItemWidth(); ImGui::SameLine();
+                            ImGui::DragFloat("##RZ", &euler.z, 0.1f, 0.0f, 0.0f, "R: %.2f"); ImGui::PopItemWidth();
+                            ImGui::PopStyleVar(); 
+
+                            if (glm::any(glm::notEqual(euler, oldEuler, 0.001f)))
+                            {
+                                float matrix[16];
+                                ImGuizmo::RecomposeMatrixFromComponents(t, value_ptr(euler), s, matrix);
+                                mat4 newMatrix = make_mat4(matrix);
+                                quat q = quat_cast(newMatrix);
+                                light.rotation = vec4(q.x, q.y, q.z, q.w);
+                            } });
 
             DrawControl("Range", ICON_FA_EXPAND, [&]()
                         { ImGui::DragFloat("##Range", &light.position.w, 0.1f, 0.0f, 1000.0f, "%.2f"); });
@@ -179,19 +213,27 @@ namespace pe
 
             DrawControl("Rotation", ICON_FA_SYNC_ALT, [&]()
                         {
-                vec3 euler = degrees(eulerAngles(quat(light.rotation)));
-                vec3 oldEuler = euler;
-                ImGui::PushMultiItemsWidths(3, ImGui::GetContentRegionAvail().x);
-                ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2{2, 0});
-                ImGui::DragFloat("##RX", &euler.x, 0.1f, 0.0f, 0.0f, "P: %.2f"); ImGui::PopItemWidth(); ImGui::SameLine();
-                ImGui::DragFloat("##RY", &euler.y, 0.1f, 0.0f, 0.0f, "Y: %.2f"); ImGui::PopItemWidth(); ImGui::SameLine();
-                ImGui::DragFloat("##RZ", &euler.z, 0.1f, 0.0f, 0.0f, "R: %.2f"); ImGui::PopItemWidth();
-                ImGui::PopStyleVar(); 
-                if (euler != oldEuler)
-                {
-                    quat q = quat(radians(euler));
-                    light.rotation = vec4(q.x, q.y, q.z, q.w);
-                } });
+                            mat4 m = translate(mat4(1.0f), vec3(light.position)) * mat4_cast(quat(light.rotation.w, light.rotation.x, light.rotation.y, light.rotation.z));
+                            float t[3], r[3], s[3];
+                            ImGuizmo::DecomposeMatrixToComponents(value_ptr(m), t, r, s);
+                            vec3 euler = vec3(r[0], r[1], r[2]);
+                            vec3 oldEuler = euler;
+
+                            ImGui::PushMultiItemsWidths(3, ImGui::GetContentRegionAvail().x);
+                            ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2{2, 0});
+                            ImGui::DragFloat("##RX", &euler.x, 0.1f, 0.0f, 0.0f, "P: %.2f"); ImGui::PopItemWidth(); ImGui::SameLine();
+                            ImGui::DragFloat("##RY", &euler.y, 0.1f, 0.0f, 0.0f, "Y: %.2f"); ImGui::PopItemWidth(); ImGui::SameLine();
+                            ImGui::DragFloat("##RZ", &euler.z, 0.1f, 0.0f, 0.0f, "R: %.2f"); ImGui::PopItemWidth();
+                            ImGui::PopStyleVar(); 
+
+                            if (glm::any(glm::notEqual(euler, oldEuler, 0.001f)))
+                            {
+                                float matrix[16];
+                                ImGuizmo::RecomposeMatrixFromComponents(t, value_ptr(euler), s, matrix);
+                                mat4 newMatrix = make_mat4(matrix);
+                                quat q = quat_cast(newMatrix);
+                                light.rotation = vec4(q.x, q.y, q.z, q.w);
+                            } });
 
             DrawControl("Range", ICON_FA_EXPAND, [&]()
                         { ImGui::DragFloat("##Range", &light.position.w, 0.1f, 0.0f, 1000.0f, "%.2f"); });
