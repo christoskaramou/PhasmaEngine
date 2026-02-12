@@ -228,7 +228,7 @@ namespace pe
         float delta = static_cast<float>(FrameTimer::Instance().GetDelta());
         float speed = camera->GetSpeed() * delta;
 
-        if (GUIState::s_sceneViewFocused)
+        if (GUIState::s_sceneViewFocused && ImGui::IsMouseDown(ImGuiMouseButton_Right))
         {
             if ((ImGui::IsKeyDown(ImGuiKey_W) || ImGui::IsKeyDown(ImGuiKey_S)) &&
                 (ImGui::IsKeyDown(ImGuiKey_A) || ImGui::IsKeyDown(ImGuiKey_D)))
@@ -244,21 +244,26 @@ namespace pe
                 camera->Move(CameraDirection::RIGHT, speed);
         }
 
-        if (ImGui::IsKeyDown(ImGuiKey_LeftCtrl) && ImGui::IsKeyPressed(ImGuiKey_T, false))
-            Debug::TriggerCapture();
+        const bool isRightClickNav = ImGui::IsMouseDown(ImGuiMouseButton_Right);
 
-        if (ImGui::IsKeyDown(ImGuiKey_LeftCtrl) && ImGui::IsKeyPressed(ImGuiKey_G, false))
-            rendererSystem->ToggleGUI();
-
-        // Gizmo mode shortcuts (W/E/R) - only when an object is selected and not typing
-        if (!ImGui::GetIO().WantCaptureKeyboard && SelectionManager::Instance().HasSelection())
+        if (!isRightClickNav)
         {
-            if (ImGui::IsKeyPressed(ImGuiKey_W, false))
-                SelectionManager::Instance().SetGizmoOperation(GizmoOperation::Translate);
-            if (ImGui::IsKeyPressed(ImGuiKey_E, false))
-                SelectionManager::Instance().SetGizmoOperation(GizmoOperation::Rotate);
-            if (ImGui::IsKeyPressed(ImGuiKey_R, false))
-                SelectionManager::Instance().SetGizmoOperation(GizmoOperation::Scale);
+            if (ImGui::IsKeyDown(ImGuiKey_LeftCtrl) && ImGui::IsKeyPressed(ImGuiKey_T, false))
+                Debug::TriggerCapture();
+
+            if (ImGui::IsKeyDown(ImGuiKey_LeftCtrl) && ImGui::IsKeyPressed(ImGuiKey_G, false))
+                rendererSystem->ToggleGUI();
+
+            // Gizmo mode shortcuts (W/E/R) - only when an object is selected and not typing
+            if (!ImGui::GetIO().WantCaptureKeyboard && SelectionManager::Instance().HasSelection())
+            {
+                if (ImGui::IsKeyPressed(ImGuiKey_W, false))
+                    SelectionManager::Instance().SetGizmoOperation(GizmoOperation::Translate);
+                if (ImGui::IsKeyPressed(ImGuiKey_E, false))
+                    SelectionManager::Instance().SetGizmoOperation(GizmoOperation::Rotate);
+                if (ImGui::IsKeyPressed(ImGuiKey_R, false))
+                    SelectionManager::Instance().SetGizmoOperation(GizmoOperation::Scale);
+            }
         }
 
         EventSystem::ClearPushedEvents();

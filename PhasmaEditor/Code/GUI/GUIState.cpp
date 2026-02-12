@@ -13,6 +13,8 @@ namespace pe
     bool GUIState::s_useTransformGizmo = true;
     bool GUIState::s_useLightGizmos = true;
     bool GUIState::s_useCameraGizmos = true;
+    bool GUIState::s_playMode = false;
+    bool GUIState::s_isPaused = false;
     GUIStyle GUIState::s_guiStyle = GUIStyle::Unity; // Default to Unity style
     ImFont *GUIState::s_fontClassic = nullptr;
     ImFont *GUIState::s_fontUnity = nullptr;

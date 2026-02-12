@@ -47,6 +47,9 @@ namespace pe
         void ShowSaveSceneMenuItem();
         void ShowExitMenuItem();
         void DrawExitPopup();
+        void Toolbar();
+        void Play();
+        void Stop();
 
         bool m_showExitConfirmation = false;
 
