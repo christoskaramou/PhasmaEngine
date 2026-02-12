@@ -647,6 +647,10 @@ namespace pe
         ImGuizmo::SetDrawlist(ImGui::GetWindowDrawList());
         ImGuizmo::SetRect(imageMin.x, imageMin.y, imageSize.x, imageSize.y);
 
+        // Disable interaction if Right Mouse Button is held down
+        const bool isRightClick = ImGui::IsMouseDown(ImGuiMouseButton_Right);
+        ImGuizmo::Enable(!isRightClick);
+
         // --- Build matrices for ImGuizmo in RH space ---
         // Engine is LH, so convert view to RH.
         glm::mat4 viewLH = cam->GetView();
@@ -754,8 +758,15 @@ namespace pe
         ImGui::PopStyleColor();
         ImGui::SetWindowFontScale(1.0f);
 
+        // Disable identification button interaction if Right Mouse Button is held down
+        ImGuiButtonFlags flags = ImGuiButtonFlags_None;
+        if (ImGui::IsMouseDown(ImGuiMouseButton_Right))
+            flags |= ImGuiButtonFlags_PressedOnClickRelease; // Or something that prevents click?
+                                                             // Actually, better to just check it here.
+
         ImGui::SetCursorScreenPos(iconPos);
-        return ImGui::InvisibleButton(id, textSize);
+        bool pressed = ImGui::InvisibleButton(id, textSize);
+        return pressed && !ImGui::IsMouseDown(ImGuiMouseButton_Right);
     }
 
     void SceneView::DrawLightGizmos(const ImVec2 &imageMin, const ImVec2 &imageSize)

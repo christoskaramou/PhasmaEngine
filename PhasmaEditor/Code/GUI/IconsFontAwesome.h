@@ -34,3 +34,6 @@
 #define ICON_FA_BOLT "\xef\x83\xa7"             // f0e7 - bolt (for intensity)
 #define ICON_FA_LOCATION_ARROW "\xef\x84\xa4"   // f124 - location-arrow (for direction)
 #define ICON_FA_RULER_HORIZONTAL "\xef\x95\x87" // f547 - ruler-horizontal (for radius/distance)
+#define ICON_FA_PLAY "\xef\x81\x8b"             // f04b - play
+#define ICON_FA_PAUSE "\xef\x81\x8c"            // f04c - pause
+#define ICON_FA_STOP "\xef\x81\x8d"             // f04d - stop

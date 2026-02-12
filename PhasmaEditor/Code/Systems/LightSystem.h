@@ -1,20 +1,36 @@
 #pragma once
 
-#include "API/Light.h"
 #include "GUI/GUI.h"
 
 namespace pe
 {
-    struct LightsUBO
+    struct DirectionalLight
     {
-        uint32_t numDirectionalLights;
-        uint32_t numPointLights;
-        uint32_t numSpotLights;
-        uint32_t numAreaLights;
-        uint32_t offsetDirectionalLights;
-        uint32_t offsetPointLights;
-        uint32_t offsetSpotLights;
-        uint32_t offsetAreaLights;
+        vec4 color; // .w = intensity
+        vec4 position;
+        vec4 rotation; // quaternion
+    };
+
+    struct PointLight
+    {
+        vec4 color;    // .w = intensity
+        vec4 position; // .w = radius
+    };
+
+    struct SpotLight
+    {
+        vec4 color;    // .w = intensity
+        vec4 position; // .w = range
+        vec4 rotation; // quaternion
+        vec4 params;   // .x = angle, .y = falloff
+    };
+
+    struct AreaLight
+    {
+        vec4 color;    // .w = intensity
+        vec4 position; // .w = range
+        vec4 rotation; // quaternion
+        vec4 size;     // .x = width, .y = height
     };
 
     struct DirectionalLightEditor : public DirectionalLight
@@ -35,6 +51,18 @@ namespace pe
     struct AreaLightEditor : public AreaLight
     {
         std::string name;
+    };
+
+    struct LightsUBO
+    {
+        uint32_t numDirectionalLights;
+        uint32_t numPointLights;
+        uint32_t numSpotLights;
+        uint32_t numAreaLights;
+        uint32_t offsetDirectionalLights;
+        uint32_t offsetPointLights;
+        uint32_t offsetSpotLights;
+        uint32_t offsetAreaLights;
     };
 
     class Buffer;

@@ -9,6 +9,7 @@
 #include "API/Swapchain.h"
 #include "GUIState.h"
 #include "Helpers.h"
+#include "IconsFontAwesome.h"
 #include "RenderPasses/LightPass.h"
 #include "Scene/Model.h"
 #include "Scene/Scene.h"
@@ -189,8 +190,9 @@ namespace pe
             return;
 
         ImGuiViewport *viewport = ImGui::GetMainViewport();
-        ImGui::SetNextWindowPos(viewport->WorkPos);
-        ImGui::SetNextWindowSize(viewport->WorkSize);
+        float toolbarHeight = 35.0f;
+        ImGui::SetNextWindowPos(ImVec2(viewport->WorkPos.x, viewport->WorkPos.y + toolbarHeight));
+        ImGui::SetNextWindowSize(ImVec2(viewport->WorkSize.x, viewport->WorkSize.y - toolbarHeight));
         ImGui::SetNextWindowViewport(viewport->ID);
 
         ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 0.0f);
@@ -723,6 +725,7 @@ namespace pe
 
         Menu();
         DrawExitPopup();
+        Toolbar();
         BuildDockspace();
 
         if (m_show_demo_window)
@@ -747,5 +750,92 @@ namespace pe
         std::vector<GpuTimerSample> timers;
         timers.swap(m_gpuTimerInfos);
         return timers;
+    }
+
+    void GUI::Toolbar()
+    {
+        ImGuiWindowFlags windowFlags = ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoScrollWithMouse | ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoNavFocus | ImGuiWindowFlags_NoBringToFrontOnFocus;
+
+        ImGuiViewport *viewport = ImGui::GetMainViewport();
+        float toolbarHeight = 35.0f;
+        ImGui::SetNextWindowPos(ImVec2(viewport->WorkPos.x, viewport->WorkPos.y));
+        ImGui::SetNextWindowSize(ImVec2(viewport->WorkSize.x, toolbarHeight));
+        ImGui::SetNextWindowViewport(viewport->ID);
+
+        ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0, 0));
+        ImGui::Begin("Toolbar", nullptr, windowFlags);
+        ImGui::PopStyleVar();
+
+        float buttonSize = 25.0f;
+        float centerX = ImGui::GetWindowWidth() * 0.5f;
+        float centerY = (toolbarHeight - buttonSize) * 0.5f;
+        float spacing = ImGui::GetStyle().ItemSpacing.x;
+
+        // Transparent button backgrounds
+        ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0, 0, 0, 0));
+        ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(1, 1, 1, 0.1f));
+        ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(1, 1, 1, 0.2f));
+        ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(0, 0));
+
+        if (GUIState::s_playMode)
+        {
+            // Center two buttons: Offset = (2*size + spacing) / 2
+            float totalWidth = 2.0f * buttonSize + spacing;
+            ImGui::SetCursorPos(ImVec2(centerX - totalWidth * 0.5f, centerY));
+
+            // Stop Button (Red icon)
+            ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.9f, 0.2f, 0.2f, 1.0f));
+            if (ImGui::Button(ICON_FA_STOP, ImVec2(buttonSize, buttonSize)))
+                Stop();
+            ImGui::PopStyleColor();
+
+            ImGui::SameLine();
+
+            // Pause/Play Button (White icon)
+            const char *pauseIcon = GUIState::s_isPaused ? ICON_FA_PLAY : ICON_FA_PAUSE;
+            ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.9f, 0.9f, 0.9f, 1.0f));
+            if (ImGui::Button(pauseIcon, ImVec2(buttonSize, buttonSize)))
+                GUIState::s_isPaused = !GUIState::s_isPaused;
+            ImGui::PopStyleColor();
+        }
+        else
+        {
+            // Center one button
+            ImGui::SetCursorPos(ImVec2(centerX - buttonSize * 0.5f, centerY));
+
+            // Play Button (Green icon)
+            ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.2f, 0.8f, 0.2f, 1.0f));
+            if (ImGui::Button(ICON_FA_PLAY, ImVec2(buttonSize, buttonSize)))
+                Play();
+            ImGui::PopStyleColor();
+        }
+
+        ImGui::PopStyleVar();    // Pop FramePadding
+        ImGui::PopStyleColor(3); // Pop button colors
+        ImGui::End();
+    }
+
+    void GUI::Play()
+    {
+        RendererSystem *rs = GetGlobalSystem<RendererSystem>();
+        if (rs)
+        {
+            rs->GetScene().SaveScene("temp_play.pescene");
+            GUIState::s_playMode = true;
+            GUIState::s_isPaused = false;
+        }
+    }
+
+    void GUI::Stop()
+    {
+        RendererSystem *rs = GetGlobalSystem<RendererSystem>();
+        if (rs)
+        {
+            GUIState::s_playMode = false;
+            GUIState::s_isPaused = false;
+            rs->GetScene().LoadScene("temp_play.pescene");
+            if (std::filesystem::exists("temp_play.pescene"))
+                std::filesystem::remove("temp_play.pescene");
+        }
     }
 } // namespace pe

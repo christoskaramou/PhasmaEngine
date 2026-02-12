@@ -2,6 +2,7 @@
 #include "API/Command.h"
 #include "API/Queue.h"
 #include "API/RHI.h"
+#include "GUI/GUIState.h"
 #include "Scene/Model.h"
 #include "Systems/LightSystem.h"
 #include "Systems/PostProcessSystem.h"
@@ -135,7 +136,8 @@ namespace pe
             UpdateGlobalSystems();
 
 #if defined(PE_SCRIPTS)
-        ScriptManager::Update();
+        if (GUIState::s_playMode && !GUIState::s_isPaused)
+            ScriptManager::Update();
 #endif
 
         // Get ImGui render data ready
