@@ -39,10 +39,9 @@ namespace pe
             bool Update(float percentage) override
             {
                 auto &gSettings = Settings::Get<GlobalSettings>();
-                gSettings.loading_total = 100;
-                gSettings.loading_current = static_cast<uint32_t>(percentage * 100.f);
-                gSettings.loading_name = "Reading file";
-                gSettings.loading_name = "Reading file";
+                gSettings.loading.total = 100;
+                gSettings.loading.current = static_cast<uint32_t>(percentage * 100.f);
+                gSettings.loading.SetName("Reading file");
                 return true;
             }
         };
@@ -214,7 +213,7 @@ namespace pe
         model.SetLabel(std::string(reinterpret_cast<const char *>(labelU8.c_str())));
 
         auto &gSettings = Settings::Get<GlobalSettings>();
-        gSettings.loading_name = "Reading from file";
+        gSettings.loading.SetName("Reading from file");
 
         if (!model.LoadFile(file))
         {
@@ -290,11 +289,10 @@ namespace pe
     void ModelAssimp::UploadImages(CommandBuffer *cmd)
     {
         auto &gSettings = Settings::Get<GlobalSettings>();
-        auto &progress = gSettings.loading_current;
-        auto &total = gSettings.loading_total;
-        auto &loading = gSettings.loading_name;
+        auto &progress = gSettings.loading.current;
+        auto &total = gSettings.loading.total;
 
-        loading = "Loading textures";
+        gSettings.loading.SetName("Loading textures");
         progress = 0;
 
         ResetResources(cmd);
@@ -383,11 +381,10 @@ namespace pe
         const auto &defaults = GetDefaultResources();
 
         auto &gSettings = Settings::Get<GlobalSettings>();
-        auto &progress = gSettings.loading_current;
-        auto &total = gSettings.loading_total;
-        auto &loading = gSettings.loading_name;
+        auto &progress = gSettings.loading.current;
+        auto &total = gSettings.loading.total;
 
-        loading = "Loading materials + geometry";
+        gSettings.loading.SetName("Loading materials + geometry");
         progress = 0;
 
         m_meshInfos.clear();
@@ -653,11 +650,10 @@ namespace pe
     void ModelAssimp::SetupNodes()
     {
         auto &gSettings = Settings::Get<GlobalSettings>();
-        auto &progress = gSettings.loading_current;
-        auto &total = gSettings.loading_total;
-        auto &loading = gSettings.loading_name;
+        auto &progress = gSettings.loading.current;
+        auto &total = gSettings.loading.total;
 
-        loading = "Loading nodes";
+        gSettings.loading.SetName("Loading nodes");
         progress = 0;
 
         int nodeCount = 0;
@@ -759,12 +755,31 @@ namespace pe
 
         std::filesystem::path rel(reinterpret_cast<const char8_t *>(pathStr.c_str()));
 
-        // candidates: raw, (modelDir / rel), (modelDir / filename)
-        const std::filesystem::path candidates[] = {
-            rel,
-            m_filePath.parent_path() / rel,
-            m_filePath.parent_path() / rel.filename(),
+        auto AppendCandidate = [](std::vector<std::filesystem::path> &out, const std::filesystem::path &candidate)
+        {
+            if (candidate.empty())
+                return;
+
+            out.push_back(candidate);
+
+            std::string ext = candidate.extension().string();
+            std::transform(ext.begin(), ext.end(), ext.begin(), [](unsigned char c)
+                           { return static_cast<char>(std::tolower(c)); });
+
+            // Niagara Bistro references PNGs, but many packs ship DDS only.
+            if (ext == ".png" || ext == ".jpg" || ext == ".jpeg" || ext == ".tga" || ext == ".bmp")
+            {
+                std::filesystem::path ddsCandidate = candidate;
+                ddsCandidate.replace_extension(".dds");
+                out.push_back(std::move(ddsCandidate));
+            }
         };
+
+        std::vector<std::filesystem::path> candidates;
+        candidates.reserve(6);
+        AppendCandidate(candidates, rel);
+        AppendCandidate(candidates, m_filePath.parent_path() / rel);
+        AppendCandidate(candidates, m_filePath.parent_path() / rel.filename());
 
         for (const auto &c : candidates)
         {
@@ -780,7 +795,7 @@ namespace pe
                 return c;
         }
 
-        PE_ERROR("Failed to find texture: %s", pathStr.c_str());
+        PE_WARN("Failed to find texture, using default: %s", pathStr.c_str());
         return {};
     }
 

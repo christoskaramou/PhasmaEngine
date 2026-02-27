@@ -4,13 +4,334 @@
 #include "API/Downsampler/Downsampler.h"
 #include "API/RHI.h"
 #include "API/StagingManager.h"
-#include <cstdint>
 
 #define STB_IMAGE_IMPLEMENTATION
 #include "stb/stb_image.h"
 
 namespace pe
 {
+    namespace
+    {
+        constexpr uint32_t MakeFourCC(const char a, const char b, const char c, const char d)
+        {
+            return static_cast<uint32_t>(static_cast<uint8_t>(a)) |
+                   (static_cast<uint32_t>(static_cast<uint8_t>(b)) << 8) |
+                   (static_cast<uint32_t>(static_cast<uint8_t>(c)) << 16) |
+                   (static_cast<uint32_t>(static_cast<uint8_t>(d)) << 24);
+        }
+
+        uint32_t ReadU32(const uint8_t *data, size_t offset)
+        {
+            uint32_t value = 0;
+            std::memcpy(&value, data + offset, sizeof(value));
+            return value;
+        }
+
+        struct DdsInfo
+        {
+            vk::Format format = vk::Format::eUndefined;
+            uint32_t width = 0;
+            uint32_t height = 0;
+            uint32_t mipLevels = 1;
+            uint32_t blockBytes = 0;
+            size_t dataOffset = 0;
+            size_t dataSize = 0;
+        };
+
+        bool MapDxgiToVkFormat(uint32_t dxgiFormat, vk::Format &format, uint32_t &blockBytes)
+        {
+            switch (dxgiFormat)
+            {
+            case 71: // DXGI_FORMAT_BC1_UNORM
+                format = vk::Format::eBc1RgbaUnormBlock;
+                blockBytes = 8;
+                return true;
+            case 72: // DXGI_FORMAT_BC1_UNORM_SRGB
+                format = vk::Format::eBc1RgbaSrgbBlock;
+                blockBytes = 8;
+                return true;
+            case 74: // DXGI_FORMAT_BC2_UNORM
+                format = vk::Format::eBc2UnormBlock;
+                blockBytes = 16;
+                return true;
+            case 75: // DXGI_FORMAT_BC2_UNORM_SRGB
+                format = vk::Format::eBc2SrgbBlock;
+                blockBytes = 16;
+                return true;
+            case 77: // DXGI_FORMAT_BC3_UNORM
+                format = vk::Format::eBc3UnormBlock;
+                blockBytes = 16;
+                return true;
+            case 78: // DXGI_FORMAT_BC3_UNORM_SRGB
+                format = vk::Format::eBc3SrgbBlock;
+                blockBytes = 16;
+                return true;
+            case 80: // DXGI_FORMAT_BC4_UNORM
+                format = vk::Format::eBc4UnormBlock;
+                blockBytes = 8;
+                return true;
+            case 81: // DXGI_FORMAT_BC4_SNORM
+                format = vk::Format::eBc4SnormBlock;
+                blockBytes = 8;
+                return true;
+            case 83: // DXGI_FORMAT_BC5_UNORM
+                format = vk::Format::eBc5UnormBlock;
+                blockBytes = 16;
+                return true;
+            case 84: // DXGI_FORMAT_BC5_SNORM
+                format = vk::Format::eBc5SnormBlock;
+                blockBytes = 16;
+                return true;
+            case 95: // DXGI_FORMAT_BC6H_UF16
+                format = vk::Format::eBc6HUfloatBlock;
+                blockBytes = 16;
+                return true;
+            case 96: // DXGI_FORMAT_BC6H_SF16
+                format = vk::Format::eBc6HSfloatBlock;
+                blockBytes = 16;
+                return true;
+            case 98: // DXGI_FORMAT_BC7_UNORM
+                format = vk::Format::eBc7UnormBlock;
+                blockBytes = 16;
+                return true;
+            case 99: // DXGI_FORMAT_BC7_UNORM_SRGB
+                format = vk::Format::eBc7SrgbBlock;
+                blockBytes = 16;
+                return true;
+            default:
+                return false;
+            }
+        }
+
+        bool MapLegacyDdsToVkFormat(uint32_t fourCC, vk::Format &format, uint32_t &blockBytes)
+        {
+            switch (fourCC)
+            {
+            case MakeFourCC('D', 'X', 'T', '1'):
+                format = vk::Format::eBc1RgbaUnormBlock;
+                blockBytes = 8;
+                return true;
+            case MakeFourCC('D', 'X', 'T', '3'):
+                format = vk::Format::eBc2UnormBlock;
+                blockBytes = 16;
+                return true;
+            case MakeFourCC('D', 'X', 'T', '5'):
+                format = vk::Format::eBc3UnormBlock;
+                blockBytes = 16;
+                return true;
+            case MakeFourCC('A', 'T', 'I', '1'):
+            case MakeFourCC('B', 'C', '4', 'U'):
+                format = vk::Format::eBc4UnormBlock;
+                blockBytes = 8;
+                return true;
+            case MakeFourCC('B', 'C', '4', 'S'):
+                format = vk::Format::eBc4SnormBlock;
+                blockBytes = 8;
+                return true;
+            case MakeFourCC('A', 'T', 'I', '2'):
+            case MakeFourCC('B', 'C', '5', 'U'):
+                format = vk::Format::eBc5UnormBlock;
+                blockBytes = 16;
+                return true;
+            case MakeFourCC('B', 'C', '5', 'S'):
+                format = vk::Format::eBc5SnormBlock;
+                blockBytes = 16;
+                return true;
+            default:
+                return false;
+            }
+        }
+
+        bool ParseDdsInfo(const std::vector<uint8_t> &fileData, DdsInfo &outInfo, std::string &reason)
+        {
+            constexpr size_t kMagicSize = 4;
+            constexpr size_t kHeaderSize = 124;
+            constexpr size_t kDx10HeaderSize = 20;
+
+            if (fileData.size() < kMagicSize + kHeaderSize)
+            {
+                reason = "file too small";
+                return false;
+            }
+
+            if (std::memcmp(fileData.data(), "DDS ", kMagicSize) != 0)
+            {
+                reason = "invalid DDS magic";
+                return false;
+            }
+
+            const uint32_t headerSize = ReadU32(fileData.data(), 4);
+            if (headerSize != kHeaderSize)
+            {
+                reason = "invalid DDS header size";
+                return false;
+            }
+
+            outInfo.height = ReadU32(fileData.data(), 12);
+            outInfo.width = ReadU32(fileData.data(), 16);
+            outInfo.mipLevels = ReadU32(fileData.data(), 28);
+            if (outInfo.width == 0 || outInfo.height == 0)
+            {
+                reason = "invalid texture dimensions";
+                return false;
+            }
+            if (outInfo.mipLevels == 0)
+                outInfo.mipLevels = 1;
+
+            const uint32_t fourCC = ReadU32(fileData.data(), 84);
+            const uint32_t dx10FourCC = MakeFourCC('D', 'X', '1', '0');
+
+            size_t dataOffset = kMagicSize + kHeaderSize;
+            if (fourCC == dx10FourCC)
+            {
+                if (fileData.size() < dataOffset + kDx10HeaderSize)
+                {
+                    reason = "incomplete DDS DX10 header";
+                    return false;
+                }
+
+                const uint32_t dxgiFormat = ReadU32(fileData.data(), dataOffset + 0);
+                const uint32_t resourceDimension = ReadU32(fileData.data(), dataOffset + 4);
+                const uint32_t arraySize = ReadU32(fileData.data(), dataOffset + 12);
+
+                if (resourceDimension != 3 || arraySize != 1)
+                {
+                    reason = "unsupported DDS resource type (only 2D non-array textures are supported)";
+                    return false;
+                }
+
+                if (!MapDxgiToVkFormat(dxgiFormat, outInfo.format, outInfo.blockBytes))
+                {
+                    reason = "unsupported DDS DXGI format " + std::to_string(dxgiFormat);
+                    return false;
+                }
+
+                dataOffset += kDx10HeaderSize;
+            }
+            else
+            {
+                if (!MapLegacyDdsToVkFormat(fourCC, outInfo.format, outInfo.blockBytes))
+                {
+                    reason = "unsupported DDS FourCC";
+                    return false;
+                }
+            }
+
+            size_t requiredBytes = 0;
+            for (uint32_t mip = 0; mip < outInfo.mipLevels; ++mip)
+            {
+                const uint32_t mipWidth = std::max(1u, outInfo.width >> mip);
+                const uint32_t mipHeight = std::max(1u, outInfo.height >> mip);
+                const size_t blockWidth = (mipWidth + 3u) / 4u;
+                const size_t blockHeight = (mipHeight + 3u) / 4u;
+                const size_t mipSize = blockWidth * blockHeight * outInfo.blockBytes;
+                requiredBytes += mipSize;
+            }
+
+            if (dataOffset + requiredBytes > fileData.size())
+            {
+                reason = "DDS data payload is incomplete";
+                return false;
+            }
+
+            outInfo.dataOffset = dataOffset;
+            outInfo.dataSize = requiredBytes;
+            return true;
+        }
+
+        Image *LoadDdsCompressed(CommandBuffer *cmd, const std::string &path, const std::vector<uint8_t> &fileData)
+        {
+            DdsInfo dds{};
+            std::string reason;
+            if (!ParseDdsInfo(fileData, dds, reason))
+            {
+                PE_WARN("Failed to parse DDS '%s': %s", path.c_str(), reason.c_str());
+                return nullptr;
+            }
+
+            vk::ImageCreateInfo info = Image::CreateInfoInit();
+            info.format = dds.format;
+            info.extent = vk::Extent3D{dds.width, dds.height, 1};
+            info.mipLevels = dds.mipLevels;
+            info.usage = vk::ImageUsageFlagBits::eTransferDst | vk::ImageUsageFlagBits::eSampled;
+            info.initialLayout = vk::ImageLayout::eUndefined;
+
+            Image *image = Image::Create(info, path);
+            image->SetClearColor(Color::Transparent);
+            image->CreateSRV(vk::ImageViewType::e2D);
+
+            vk::SamplerCreateInfo samplerInfo = Sampler::CreateInfoInit();
+            samplerInfo.mipLodBias = log2(Settings::Get<GlobalSettings>().render_scale) - 1.0f;
+            samplerInfo.maxLod = static_cast<float>(dds.mipLevels);
+            samplerInfo.borderColor = vk::BorderColor::eFloatTransparentBlack;
+            image->SetSampler(Sampler::Create(samplerInfo));
+
+            StagingAllocation alloc = RHII.GetStagingManager()->Allocate(dds.dataSize);
+            std::memcpy(alloc.data, fileData.data() + dds.dataOffset, dds.dataSize);
+            alloc.buffer->Flush(dds.dataSize, 0);
+
+            ImageBarrierInfo toTransfer{};
+            toTransfer.image = image;
+            toTransfer.layout = vk::ImageLayout::eTransferDstOptimal;
+            toTransfer.stageFlags = vk::PipelineStageFlagBits2::eTransfer;
+            toTransfer.accessMask = vk::AccessFlagBits2::eTransferWrite;
+            toTransfer.baseMipLevel = 0;
+            toTransfer.mipLevels = dds.mipLevels;
+            cmd->ImageBarrier(toTransfer);
+
+            std::vector<vk::BufferImageCopy2> regions;
+            regions.reserve(dds.mipLevels);
+
+            size_t offset = 0;
+            for (uint32_t mip = 0; mip < dds.mipLevels; ++mip)
+            {
+                const uint32_t mipWidth = std::max(1u, dds.width >> mip);
+                const uint32_t mipHeight = std::max(1u, dds.height >> mip);
+                const size_t blockWidth = (mipWidth + 3u) / 4u;
+                const size_t blockHeight = (mipHeight + 3u) / 4u;
+                const size_t mipSize = blockWidth * blockHeight * dds.blockBytes;
+
+                vk::BufferImageCopy2 region{};
+                region.bufferOffset = static_cast<vk::DeviceSize>(offset);
+                region.bufferRowLength = 0;
+                region.bufferImageHeight = 0;
+                region.imageSubresource.aspectMask = vk::ImageAspectFlagBits::eColor;
+                region.imageSubresource.mipLevel = mip;
+                region.imageSubresource.baseArrayLayer = 0;
+                region.imageSubresource.layerCount = 1;
+                region.imageOffset = vk::Offset3D{0, 0, 0};
+                region.imageExtent = vk::Extent3D{mipWidth, mipHeight, 1};
+                regions.push_back(region);
+
+                offset += mipSize;
+            }
+
+            vk::CopyBufferToImageInfo2 copyInfo{};
+            copyInfo.srcBuffer = alloc.buffer->ApiHandle();
+            copyInfo.dstImage = image->ApiHandle();
+            copyInfo.dstImageLayout = vk::ImageLayout::eTransferDstOptimal;
+            copyInfo.regionCount = static_cast<uint32_t>(regions.size());
+            copyInfo.pRegions = regions.data();
+            cmd->ApiHandle().copyBufferToImage2(copyInfo);
+
+            cmd->AddAfterWaitCallback([alloc = std::move(alloc)]() mutable
+                                      { RHII.GetStagingManager()->SetUnused(alloc); });
+
+            ImageBarrierInfo toRead{};
+            toRead.image = image;
+            toRead.layout = vk::ImageLayout::eShaderReadOnlyOptimal;
+            toRead.stageFlags = vk::PipelineStageFlagBits2::eFragmentShader |
+                                vk::PipelineStageFlagBits2::eComputeShader |
+                                vk::PipelineStageFlagBits2::eRayTracingShaderKHR;
+            toRead.accessMask = vk::AccessFlagBits2::eShaderRead;
+            toRead.baseMipLevel = 0;
+            toRead.mipLevels = dds.mipLevels;
+            cmd->ImageBarrier(toRead);
+
+            return image;
+        }
+    } // namespace
+
     bool ImageTilingSupport(vk::Format format, vk::ImageTiling tiling)
     {
         vk::FormatProperties fProps = RHII.GetGpu().getFormatProperties(format);
@@ -147,6 +468,16 @@ namespace pe
             fileData = file.ReadAllBytes();
         }
 
+        if (fileData.size() >= 4 && std::memcmp(fileData.data(), "DDS ", 4) == 0)
+        {
+            if (isFloat)
+            {
+                PE_WARN("DDS float decode is not supported for '%s'", path.c_str());
+                return nullptr;
+            }
+            return LoadDdsCompressed(cmd, path, fileData);
+        }
+
         int texWidth, texHeight, texChannels;
         void *pixels = nullptr;
         if (isFloat)
@@ -154,7 +485,12 @@ namespace pe
         else
             pixels = stbi_load_from_memory(fileData.data(), static_cast<int>(fileData.size()), &texWidth, &texHeight, &texChannels, STBI_rgb_alpha);
 
-        PE_ERROR_IF(!pixels, "No pixel data loaded");
+        if (!pixels)
+        {
+            const char *reason = stbi_failure_reason();
+            PE_WARN("Image decode failed for '%s': %s", path.c_str(), reason ? reason : "unknown");
+            return nullptr;
+        }
 
         uint32_t mipLevels = Image::CalculateMips(texWidth, texHeight);
         vk::ImageUsageFlags usage = vk::ImageUsageFlagBits::eTransferSrc | vk::ImageUsageFlagBits::eTransferDst | vk::ImageUsageFlagBits::eSampled | vk::ImageUsageFlagBits::eStorage;
@@ -181,7 +517,12 @@ namespace pe
         else
             pixels = stbi_load_from_memory(static_cast<stbi_uc *>(data), size, &texWidth, &texHeight, &texChannels, STBI_rgb_alpha);
 
-        PE_ERROR_IF(!pixels, "No pixel data loaded");
+        if (!pixels)
+        {
+            const char *reason = stbi_failure_reason();
+            PE_WARN("Embedded image decode failed: %s", reason ? reason : "unknown");
+            return nullptr;
+        }
 
         uint32_t mipLevels = Image::CalculateMips(texWidth, texHeight);
         vk::ImageUsageFlags usage = vk::ImageUsageFlagBits::eTransferSrc | vk::ImageUsageFlagBits::eTransferDst | vk::ImageUsageFlagBits::eSampled | vk::ImageUsageFlagBits::eStorage;

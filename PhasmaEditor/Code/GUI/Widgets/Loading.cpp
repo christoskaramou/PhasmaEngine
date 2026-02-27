@@ -24,8 +24,11 @@ namespace pe
             ImGui::SetNextWindowFocus();
 
             static bool open = true;
-            const float progress = gSettings.loading_current / static_cast<float>(gSettings.loading_total);
-            ImGui::Begin(gSettings.loading_name.c_str(), &open, flags);
+            const uint32_t total = gSettings.loading.total.load(std::memory_order_relaxed);
+            const uint32_t current = gSettings.loading.current.load(std::memory_order_relaxed);
+            const float progress = total > 0 ? (current / static_cast<float>(total)) : 0.0f;
+            const std::string loadingName = gSettings.loading.GetName();
+            ImGui::Begin(loadingName.c_str(), &open, flags);
             ImGui::ProgressBar(progress, ImVec2(-0.001f, 25.f));
             ImGui::End();
         }

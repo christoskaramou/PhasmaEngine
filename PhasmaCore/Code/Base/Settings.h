@@ -23,6 +23,29 @@ namespace pe
         RayTracing = 2 // Full Ray Tracing
     };
 
+    struct LoadingInfo
+    {
+    public:
+        void SetName(const std::string &newName)
+        {
+            std::lock_guard<std::mutex> lock(nameMutex);
+            name = newName;
+        }
+        
+        [[nodiscard]] std::string GetName() const
+        {
+            std::lock_guard<std::mutex> lock(nameMutex);
+            return name;
+        }
+
+        std::atomic_uint32_t current{0};
+        std::atomic_uint32_t total{1};
+
+    private:
+        mutable std::mutex nameMutex;
+        std::string name = "Loading";
+    };
+
     // TODO: Move settings to their classes (instead of having them all here in GlobalSettings)
     struct GlobalSettings : public Settings
     {
@@ -59,9 +82,7 @@ namespace pe
         std::vector<std::string> model_list{};
         Image *current_rendering_image = nullptr;
         std::vector<Image *> rendering_images{};
-        std::string loading_name = "Loading";
-        std::atomic_uint32_t loading_current{0};
-        std::atomic_uint32_t loading_total{1};
+        LoadingInfo loading;
         bool freeze_frustum_culling = false;
         bool draw_aabbs = false;
         bool draw_grid = true;

@@ -311,7 +311,7 @@ namespace pe
         if (!std::filesystem::exists(normalized))
         {
             std::string pathStr(reinterpret_cast<const char *>(normalized.u8string().c_str()));
-            PE_ERROR("Texture not found (LoadTexture): %s", pathStr.c_str());
+            PE_WARN("Texture not found (LoadTexture), using default: %s", pathStr.c_str());
             return nullptr;
         }
 

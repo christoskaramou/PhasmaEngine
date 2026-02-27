@@ -260,7 +260,14 @@ namespace pe
                         auto loadAsync = [path]()
                         {
                             GUIState::s_modelLoading = true;
-                            Model::Load(path);
+                            try
+                            {
+                                Model::Load(path);
+                            }
+                            catch (const std::exception &e)
+                            {
+                                PE_WARN("Failed to load model: %s", e.what());
+                            }
                             GUIState::s_modelLoading = false;
                         };
                         ThreadPool::GUI.Enqueue(loadAsync);

@@ -311,13 +311,12 @@ namespace pe
     void Scene::CopyVertices(CommandBuffer *cmd)
     {
         auto &gSettings = Settings::Get<GlobalSettings>();
-        auto &progress = gSettings.loading_current;
-        auto &total = gSettings.loading_total;
-        auto &loading = gSettings.loading_name;
+        auto &progress = gSettings.loading.current;
+        auto &total = gSettings.loading.total;
 
         total = m_verticesCount + m_positionsCount + m_aabbVerticesCount;
         progress = 0;
-        loading = "Uploading to GPU";
+        gSettings.loading.SetName("Uploading to GPU");
 
         uint32_t currentVerticesCount = 0;
         for (auto &modelPtr : m_models)
