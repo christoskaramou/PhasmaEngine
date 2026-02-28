@@ -1,5 +1,6 @@
 #pragma once
 
+#include "API/RenderGraph.h"
 #include "GUI/GUI.h"
 #include "Scene/Scene.h"
 #include "Skybox/Skybox.h"
@@ -22,10 +23,59 @@ namespace pe
 
     class GpuTimer;
     class Semaphore;
+    class ShadowPass;
+    class DepthPass;
+    class GbufferOpaquePass;
+    class GbufferTransparentPass;
+    class SSAOPass;
+    class LightOpaquePass;
+    class LightTransparentPass;
+    class RayTracingPass;
+    class ParticleComputePass;
+    class ParticlePass;
+    class SSRPass;
+    class FXAAPass;
+    class AabbsPass;
+    class TAAPass;
+    class SharpenPass;
+    class TonemapPass;
+    class BloomBrightFilterPass;
+    class BloomGaussianBlurHorizontalPass;
+    class BloomGaussianBlurVerticalPass;
+    class DOFPass;
+    class MotionBlurPass;
+    class GridPass;
 
     class RendererSystem : public IDrawSystem
     {
     public:
+        enum class RenderGraphPassId : uint32_t
+        {
+            Shadow = 0,
+            Depth,
+            GBufferOpaque,
+            SSAO,
+            LightOpaque,
+            GBufferTransparent,
+            LightTransparent,
+            RayTracing,
+            ParticleCompute,
+            Particle,
+            SSR,
+            FXAA,
+            Aabbs,
+            TAA,
+            Sharpen,
+            Tonemap,
+            BloomBF,
+            BloomH,
+            BloomV,
+            DOF,
+            MotionBlur,
+            Grid,
+            Count
+        };
+
         void Init(CommandBuffer *cmd) override;
         void Update() override;
         void Destroy() override;
@@ -66,12 +116,16 @@ namespace pe
         void PollShaders();
         void WaitPreviousFrameCommands();
         void WaitAllFramesCommands();
+        void BuildRenderGraph();
+        void UpdateRenderGraphPassStates();
+        void CacheGlobalComponents();
 
     protected:
         void LoadResources(CommandBuffer *cmd);
         CommandBuffer *RecordPasses(uint32_t imageIndex);
         void Upsample(CommandBuffer *cmd, vk::Filter filter);
         void CreateRenderTargets();
+        RenderGraph m_renderGraph;
 
         Image *m_displayRT;
         Image *m_viewportRT;
@@ -84,6 +138,32 @@ namespace pe
         std::vector<Semaphore *> m_acquireSemaphores;
         std::vector<Semaphore *> m_submitSemaphores;
         Scene m_scene;
+        std::array<bool, static_cast<size_t>(RenderGraphPassId::Count)> m_renderGraphPassEnabled{};
+
+        // Cached global component pointers (set by CacheGlobalComponents)
+        ShadowPass *m_shadowPass = nullptr;
+        DepthPass *m_depthPass = nullptr;
+        GbufferOpaquePass *m_gbufferOpaquePass = nullptr;
+        GbufferTransparentPass *m_gbufferTransparentPass = nullptr;
+        SSAOPass *m_ssaoPass = nullptr;
+        LightOpaquePass *m_lightOpaquePass = nullptr;
+        LightTransparentPass *m_lightTransparentPass = nullptr;
+        RayTracingPass *m_rayTracingPass = nullptr;
+        ParticleComputePass *m_particleComputePass = nullptr;
+        ParticlePass *m_particlePass = nullptr;
+        SSRPass *m_ssrPass = nullptr;
+        FXAAPass *m_fxaaPass = nullptr;
+        AabbsPass *m_aabbsPass = nullptr;
+        TAAPass *m_taaPass = nullptr;
+        SharpenPass *m_sharpenPass = nullptr;
+        TonemapPass *m_tonemapPass = nullptr;
+        BloomBrightFilterPass *m_bloomBrightFilterPass = nullptr;
+        BloomGaussianBlurHorizontalPass *m_bloomGaussianBlurHorizontalPass = nullptr;
+        BloomGaussianBlurVerticalPass *m_bloomGaussianBlurVerticalPass = nullptr;
+        DOFPass *m_dofPass = nullptr;
+        MotionBlurPass *m_motionBlurPass = nullptr;
+        GridPass *m_gridPass = nullptr;
+
         SkyBox m_skyBoxDay;
         SkyBox m_skyBoxNight;
         SkyBox m_skyBoxWhite;

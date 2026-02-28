@@ -10,6 +10,10 @@ namespace pe
         IComponent() noexcept : m_entity{nullptr}, m_enabled{false} {}
         virtual ~IComponent() = default;
 
+        virtual void Init() {}
+        virtual void Update(float dt) {}
+        virtual void Draw() {}
+
         [[nodiscard]] Entity *GetEntity() const noexcept { return m_entity; }
         void SetEntity(Entity *entity) noexcept { m_entity = entity; }
         [[nodiscard]] bool IsEnabled() const noexcept { return m_enabled; }
@@ -24,6 +28,7 @@ namespace pe
     class CommandBuffer;
     struct Attachment;
     class PassInfo;
+    class RGBuilder;
 
     class IRenderPassComponent : public IComponent
     {
@@ -36,6 +41,7 @@ namespace pe
         virtual void CreateUniforms(CommandBuffer *cmd) = 0;
         virtual void UpdateDescriptorSets() = 0;
         virtual void Update() = 0;
+        virtual void DeclareInputs(RGBuilder &builder) {}
         virtual void ExecutePass(CommandBuffer *cmd) = 0;
         virtual void Resize(uint32_t width, uint32_t height) = 0;
         virtual void Destroy() = 0;

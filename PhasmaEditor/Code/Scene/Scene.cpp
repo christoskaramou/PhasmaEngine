@@ -421,7 +421,7 @@ namespace pe
             storage = Buffer::Create(
                 storageSize,
                 vk::BufferUsageFlagBits2::eStorageBuffer,
-                VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT,
+                VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT | VMA_ALLOCATION_CREATE_MAPPED_BIT,
                 "storage_Geometry_buffer_" + std::to_string(i++));
         }
     }
@@ -503,7 +503,7 @@ namespace pe
             indirect = Buffer::Create(
                 indirectCount * sizeof(vk::DrawIndexedIndirectCommand),
                 vk::BufferUsageFlagBits2::eIndirectBuffer | vk::BufferUsageFlagBits2::eTransferDst,
-                VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT,
+                VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT | VMA_ALLOCATION_CREATE_MAPPED_BIT,
                 "indirect_Geometry_buffer_" + std::to_string(i++));
         }
     }
@@ -516,24 +516,28 @@ namespace pe
 
         m_imageViews.clear();
         m_imageViews.reserve(totalImageCount);
+        const auto &defaults = Model::GetDefaultResources();
         OrderedMap<Image *, uint32_t> imagesMap{};
         for (auto &modelPtr : m_models)
         {
             Model &model = *modelPtr;
 
-            for (Image *image : model.GetImages())
+            for (const ResourceHandle<Image> &image : model.GetImages())
             {
-                auto insertResult = imagesMap.insert(image, static_cast<uint32_t>(m_imageViews.size()));
+                auto insertResult = imagesMap.insert(image.get(), static_cast<uint32_t>(m_imageViews.size()));
                 if (insertResult.first)
-                    m_imageViews.push_back(image->GetSRV());
+                {
+                    ImageView *srv = image->GetSRV();
+                    PE_ERROR_IF(!srv, "UpdateImageViews: image '%s' has no SRV", image->GetName().c_str());
+                    m_imageViews.push_back(srv ? srv : defaults.white->GetSRV());
+                }
             }
 
-            const auto &defaults = Model::GetDefaultResources();
             for (auto &meshInfo : model.GetMeshInfos())
             {
                 for (int k = 0; k < 5; k++)
                 {
-                    Image *image = meshInfo.images[k];
+                    Image *image = meshInfo.images[k].get();
                     bool isDefault = (image == defaults.black || image == defaults.white || image == defaults.normal);
 
                     if (image && !isDefault)
@@ -591,62 +595,58 @@ namespace pe
         m_meshConstants->Unmap();
     }
 
-    void Scene::CullNode(Model &model, int node)
+    Scene::DrawBatch Scene::CullNodeBatch(Model &model, int beginNode, int endNode, const Camera *camera, bool frustumCulling) const
     {
-        const Camera &camera = *m_cameras[0];
-        bool frustumCulling = Settings::Get<GlobalSettings>().frustum_culling;
+        DrawBatch batch{};
+        if (!camera)
+            return batch;
 
-        int mesh = model.GetNodeMesh(node);
-        if (mesh < 0)
-            return;
+        const vec3 cameraPosition = camera->GetPosition();
+        const int batchNodeCount = std::max(1, endNode - beginNode);
+        const int secondaryEstimated = std::max(1, batchNodeCount / 8);
+        batch.opaque.reserve(batchNodeCount);
+        batch.alphaCut.reserve(secondaryEstimated);
+        batch.alphaBlend.reserve(secondaryEstimated);
+        batch.transmission.reserve(secondaryEstimated);
 
-        MeshInfo &meshInfo = model.GetMeshInfos()[mesh];
-
-        std::vector<DrawInfo> localOpaque;
-        std::vector<DrawInfo> localAlphaCut;
-        std::vector<DrawInfo> localAlphaBlend;
-        std::vector<DrawInfo> localTransmission;
-        localOpaque.reserve(1);
-        localAlphaCut.reserve(1);
-        localAlphaBlend.reserve(1);
-        localTransmission.reserve(1);
-
-        NodeInfo &nodeInfo = model.GetNodeInfos()[node];
-        bool cull = frustumCulling ? !camera.AABBInFrustum(nodeInfo.worldBoundingBox) : false;
-        if (!cull)
+        for (int node = beginNode; node < endNode; node++)
         {
+            int mesh = model.GetNodeMesh(node);
+            if (mesh < 0)
+                continue;
+
+            MeshInfo &meshInfo = model.GetMeshInfos()[mesh];
+            NodeInfo &nodeInfo = model.GetNodeInfos()[node];
+            bool cull = frustumCulling ? !camera->AABBInFrustum(nodeInfo.worldBoundingBox) : false;
+            if (cull)
+                continue;
+
             vec3 center = nodeInfo.worldBoundingBox.GetCenter();
-            float distance = distance2(camera.GetPosition(), center);
+            float distance = distance2(cameraPosition, center);
 
             switch (meshInfo.renderType)
             {
             case RenderType::Opaque:
-                localOpaque.push_back(DrawInfo{&model, node, distance});
+                batch.opaque.push_back(DrawInfo{&model, node, distance});
                 break;
             case RenderType::AlphaCut:
-                localAlphaCut.push_back(DrawInfo{&model, node, distance});
+                batch.alphaCut.push_back(DrawInfo{&model, node, distance});
                 break;
             case RenderType::AlphaBlend:
-                localAlphaBlend.push_back(DrawInfo{&model, node, distance});
+                batch.alphaBlend.push_back(DrawInfo{&model, node, distance});
                 break;
             case RenderType::Transmission:
-                localTransmission.push_back(DrawInfo{&model, node, distance});
+                batch.transmission.push_back(DrawInfo{&model, node, distance});
                 break;
             }
         }
 
-        std::scoped_lock lock(m_drawInfosMutex);
-        m_drawInfosOpaque.insert(m_drawInfosOpaque.end(), localOpaque.begin(), localOpaque.end());
-        m_drawInfosAlphaCut.insert(m_drawInfosAlphaCut.end(), localAlphaCut.begin(), localAlphaCut.end());
-        m_drawInfosAlphaBlend.insert(m_drawInfosAlphaBlend.end(), localAlphaBlend.begin(), localAlphaBlend.end());
-        m_drawInfosTransmission.insert(m_drawInfosTransmission.end(), localTransmission.begin(), localTransmission.end());
+        return batch;
     }
 
     void Scene::UpdateUniformData()
     {
         uint32_t frame = RHII.GetFrameIndex();
-
-        m_storages[frame]->Map();
 
         m_frameData.viewProjection = m_cameras[0]->GetViewProjection();
         m_frameData.previousViewProjection = m_cameras[0]->GetPreviousViewProjection();
@@ -659,30 +659,30 @@ namespace pe
         range.offset = 0;
         m_storages[frame]->Copy(1, &range, true);
 
-        std::vector<uint32_t> ids{};
-        ids.reserve(m_drawInfosOpaque.size() + m_drawInfosAlphaCut.size() + m_drawInfosAlphaBlend.size() + m_drawInfosTransmission.size());
+        m_visibleIndirectIds.clear();
+        m_visibleIndirectIds.reserve(m_drawInfosOpaque.size() + m_drawInfosAlphaCut.size() + m_drawInfosAlphaBlend.size() + m_drawInfosTransmission.size());
         for (auto &drawInfo : m_drawInfosOpaque)
         {
             auto &model = *drawInfo.model;
-            ids.push_back(model.GetNodeInfos()[drawInfo.node].indirectIndex);
+            m_visibleIndirectIds.push_back(model.GetNodeInfos()[drawInfo.node].indirectIndex);
         }
         for (auto &drawInfo : m_drawInfosAlphaCut)
         {
             auto &model = *drawInfo.model;
-            ids.push_back(model.GetNodeInfos()[drawInfo.node].indirectIndex);
+            m_visibleIndirectIds.push_back(model.GetNodeInfos()[drawInfo.node].indirectIndex);
         }
         for (auto &drawInfo : m_drawInfosTransmission)
         {
             auto &model = *drawInfo.model;
-            ids.push_back(model.GetNodeInfos()[drawInfo.node].indirectIndex);
+            m_visibleIndirectIds.push_back(model.GetNodeInfos()[drawInfo.node].indirectIndex);
         }
         for (auto &drawInfo : m_drawInfosAlphaBlend)
         {
             auto &model = *drawInfo.model;
-            ids.push_back(model.GetNodeInfos()[drawInfo.node].indirectIndex);
+            m_visibleIndirectIds.push_back(model.GetNodeInfos()[drawInfo.node].indirectIndex);
         }
-        range.data = ids.data();
-        range.size = ids.size() * sizeof(uint32_t);
+        range.data = m_visibleIndirectIds.data();
+        range.size = m_visibleIndirectIds.size() * sizeof(uint32_t);
         range.offset = sizeof(PerFrameData);
         m_storages[frame]->Copy(1, &range, true);
 
@@ -720,15 +720,11 @@ namespace pe
 
             model.GetDirtyUniforms()[frame] = false;
         }
-
-        m_storages[frame]->Unmap();
     }
 
     void Scene::UpdateIndirectData()
     {
         uint32_t frame = RHII.GetFrameIndex();
-
-        m_indirects[frame]->Map();
 
         uint32_t firstInstance = 0;
         for (auto &drawInfo : m_drawInfosOpaque)
@@ -790,16 +786,24 @@ namespace pe
 
             firstInstance++;
         }
-
-        m_indirects[frame]->Flush();
-        m_indirects[frame]->Unmap();
     }
 
     void Scene::UpdateGeometry()
     {
-        ClearDrawInfos(true);
+        const bool reserveMax = !m_hasDrawInfosReservation || m_drawInfosReservedForGeometryVersion != m_geometryVersion;
+        ClearDrawInfos(reserveMax);
+        if (reserveMax)
+        {
+            m_drawInfosReservedForGeometryVersion = m_geometryVersion;
+            m_hasDrawInfosReservation = true;
+        }
 
-        std::vector<std::shared_future<void>> futures;
+        Camera *camera = m_cameras.empty() ? nullptr : m_cameras[0];
+        bool frustumCulling = Settings::Get<GlobalSettings>().frustum_culling;
+        static constexpr int kCullBatchSize = 128;
+
+        std::vector<std::shared_future<DrawBatch>> futures;
+        futures.reserve((m_meshCount + static_cast<uint32_t>(kCullBatchSize) - 1u) / static_cast<uint32_t>(kCullBatchSize) + static_cast<uint32_t>(m_models.size()));
         for (auto &modelPtr : m_models)
         {
             Model &model = *modelPtr;
@@ -808,15 +812,22 @@ namespace pe
 
             model.UpdateNodeMatrices();
 
-            for (int i = 0; i < model.GetNodeCount(); i++)
+            const int nodeCount = model.GetNodeCount();
+            for (int beginNode = 0; beginNode < nodeCount; beginNode += kCullBatchSize)
             {
-                if (model.GetNodeMesh(i) > -1)
-                    futures.push_back(ThreadPool::Update.Enqueue(&Scene::CullNode, this, std::ref(model), i));
+                const int endNode = std::min(beginNode + kCullBatchSize, nodeCount);
+                futures.push_back(ThreadPool::Update.Enqueue(&Scene::CullNodeBatch, this, std::ref(model), beginNode, endNode, camera, frustumCulling));
             }
         }
 
         for (auto &future : futures)
-            future.wait();
+        {
+            const DrawBatch &batch = future.get();
+            m_drawInfosOpaque.insert(m_drawInfosOpaque.end(), batch.opaque.begin(), batch.opaque.end());
+            m_drawInfosAlphaCut.insert(m_drawInfosAlphaCut.end(), batch.alphaCut.begin(), batch.alphaCut.end());
+            m_drawInfosAlphaBlend.insert(m_drawInfosAlphaBlend.end(), batch.alphaBlend.begin(), batch.alphaBlend.end());
+            m_drawInfosTransmission.insert(m_drawInfosTransmission.end(), batch.transmission.begin(), batch.transmission.end());
+        }
 
         SortDrawInfos();
         UpdateUniformData();
@@ -972,6 +983,7 @@ namespace pe
             AccelerationStructure *createdBlas = nullptr;
         };
         std::vector<BlasBuildReq> buildReqs;
+        buildReqs.reserve(m_meshCount);
 
         static constexpr vk::BuildAccelerationStructureFlagsKHR kBlasFlags = vk::BuildAccelerationStructureFlagBitsKHR::ePreferFastTrace;
 
@@ -1035,6 +1047,28 @@ namespace pe
         };
         std::vector<InstanceReq> instanceReqs;
         instanceReqs.reserve(m_meshCount); // Approximate or better
+
+        struct BlasKey
+        {
+            Model *model;
+            size_t meshIndex;
+
+            bool operator==(const BlasKey &other) const
+            {
+                return model == other.model && meshIndex == other.meshIndex;
+            }
+        };
+        struct BlasKeyHash
+        {
+            size_t operator()(const BlasKey &key) const noexcept
+            {
+                size_t h1 = std::hash<Model *>{}(key.model);
+                size_t h2 = std::hash<size_t>{}(key.meshIndex);
+                return h1 ^ (h2 + 0x9e3779b9 + (h1 << 6) + (h1 >> 2));
+            }
+        };
+        std::unordered_map<BlasKey, AccelerationStructure *, BlasKeyHash> blasByModelMesh;
+        blasByModelMesh.reserve(m_meshCount);
 
         for (auto model : m_models)
         {
@@ -1109,31 +1143,24 @@ namespace pe
             req.createdBlas = new AccelerationStructure(name, m_blasMergedBuffer, currentOffset);
             req.createdBlas->BuildBLAS(cmd, {req.geometry}, {req.range}, {req.range.primitiveCount}, kBlasFlags, m_scratchBuffer->GetDeviceAddress());
             m_blases.push_back(req.createdBlas);
+            blasByModelMesh[{req.model, req.meshIndex}] = req.createdBlas;
 
             currentOffset += req.sizeInfo.accelerationStructureSize;
         }
 
         // --- Match Instances to BLAS ---
-        for (auto it = instanceReqs.begin(); it != instanceReqs.end();)
+        std::vector<InstanceReq> matchedInstances;
+        matchedInstances.reserve(instanceReqs.size());
+        for (auto &req : instanceReqs)
         {
-            auto &req = *it;
-            for (auto &bReq : buildReqs)
-            {
-                if (bReq.model == req.model && bReq.meshIndex == static_cast<size_t>(req.meshIndex))
-                {
-                    req.blas = bReq.createdBlas;
-                    break;
-                }
-            }
-            if (!req.blas)
-            {
-                it = instanceReqs.erase(it);
-            }
-            else
-            {
-                ++it;
-            }
+            auto found = blasByModelMesh.find({req.model, static_cast<size_t>(req.meshIndex)});
+            if (found == blasByModelMesh.end())
+                continue;
+
+            req.blas = found->second;
+            matchedInstances.push_back(req);
         }
+        instanceReqs.swap(matchedInstances);
 
         // --- Create Instance Buffer ---
         m_instanceBuffer = Buffer::Create(
@@ -1799,7 +1826,7 @@ namespace pe
                                         std::string texPath = texVal[methodNames[k]].GetString();
                                         if (std::filesystem::exists(texPath))
                                         {
-                                            Image *img = model->LoadTexture(cmd, texPath);
+                                            ResourceHandle<Image> img = model->LoadTexture(cmd, texPath);
                                             if (img)
                                             {
                                                 mi.images[k] = img;

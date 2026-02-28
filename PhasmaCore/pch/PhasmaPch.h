@@ -84,6 +84,8 @@
 #include "Base/FileSystem.h"
 #include "Base/FileWatcher.h"
 #include "Base/EventSystem.h"
+#include "Base/Resource.h"
+#include "Base/ResourceManager.h"
 
 #include "ECS/Component.h"
 #include "ECS/System.h"

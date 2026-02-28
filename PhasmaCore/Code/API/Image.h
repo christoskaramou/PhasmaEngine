@@ -66,12 +66,15 @@ namespace pe
         std::string m_name;
     };
 
-    class Image : public PeHandle<Image, vk::Image>
+    class Image : public Resource, public PeHandle<Image, vk::Image>
     {
     public:
         Image() {}
         Image(const vk::ImageCreateInfo &info, const std::string &name = "");
-        ~Image();
+        virtual ~Image();
+
+        virtual void Load() override {}
+        virtual void Unload() override;
 
         uint32_t GetWidth() { return m_createInfo.extent.width; }
         uint32_t GetHeight() { return m_createInfo.extent.height; }

@@ -31,21 +31,58 @@ namespace pe
             renderPassComponent->UpdatePassInfo();
             renderPassComponent->CreateUniforms(cmd);
         }
+
+        // All passes (renderer + post-process) are now initialized; build the render graph
+        GetGlobalSystem<RendererSystem>()->CacheGlobalComponents();
+        GetGlobalSystem<RendererSystem>()->BuildRenderGraph();
     }
 
     void PostProcessSystem::Update()
     {
-        Camera *camera_main = GetGlobalSystem<RendererSystem>()->GetScene().GetActiveCamera();
+        const auto &gSettings = Settings::Get<GlobalSettings>();
+
+        auto *bbfp = GetEffect<BloomBrightFilterPass>();
+        auto *bgbh = GetEffect<BloomGaussianBlurHorizontalPass>();
+        auto *bgbv = GetEffect<BloomGaussianBlurVerticalPass>();
+        auto *dof = GetEffect<DOFPass>();
+        auto *fxaa = GetEffect<FXAAPass>();
+        auto *motionBlur = GetEffect<MotionBlurPass>();
+        auto *ssao = GetEffect<SSAOPass>();
+        auto *ssr = GetEffect<SSRPass>();
+        auto *tonemap = GetEffect<TonemapPass>();
+
+        auto shouldUpdate = [&](IRenderPassComponent *rc)
+        {
+            if (!rc || !rc->IsEnabled())
+                return false;
+
+            if (rc == bbfp || rc == bgbh || rc == bgbv)
+                return gSettings.bloom;
+            if (rc == dof)
+                return gSettings.dof;
+            if (rc == fxaa)
+                return gSettings.fxaa;
+            if (rc == motionBlur)
+                return gSettings.motion_blur;
+            if (rc == ssao)
+                return gSettings.ssao && gSettings.render_mode != RenderMode::RayTracing;
+            if (rc == ssr)
+                return gSettings.ssr && gSettings.render_mode != RenderMode::RayTracing;
+            if (rc == tonemap)
+                return gSettings.tonemapping;
+
+            return true;
+        };
 
         std::vector<std::shared_future<void>> futures;
         futures.reserve(m_renderPassComponents.size());
         for (auto &renderPassComponent : m_renderPassComponents)
         {
-            if (renderPassComponent->IsEnabled())
-            {
-                futures.push_back(ThreadPool::Update.Enqueue([renderPassComponent]()
-                                                             { renderPassComponent->Update(); }));
-            }
+            if (!shouldUpdate(renderPassComponent))
+                continue;
+
+            futures.push_back(ThreadPool::Update.Enqueue([renderPassComponent]()
+                                                         { renderPassComponent->Update(); }));
         }
 
         for (auto &future : futures)

@@ -697,31 +697,29 @@ namespace pe
 
     Image::~Image()
     {
-        if (m_rtv)
-            ImageView::Destroy(m_rtv);
+        Unload();
+    }
 
-        if (m_srv)
-            ImageView::Destroy(m_srv);
+    void Image::Unload()
+    {
+        ImageView::Destroy(m_rtv);
+        ImageView::Destroy(m_srv);
 
         for (auto &view : m_srvs)
-        {
-            if (view)
-                ImageView::Destroy(view);
-        }
+            ImageView::Destroy(view);
         m_srvs.clear();
 
         for (auto &view : m_uavs)
-        {
-            if (view)
-                ImageView::Destroy(view);
-        }
+            ImageView::Destroy(view);
         m_uavs.clear();
 
-        if (m_sampler)
-            Sampler::Destroy(m_sampler);
+        Sampler::Destroy(m_sampler);
 
         if (m_apiHandle)
+        {
             vmaDestroyImage(RHII.GetAllocator(), m_apiHandle, m_allocation);
+            m_apiHandle = VK_NULL_HANDLE;
+        }
     }
 
     void Image::Barrier(CommandBuffer *cmd, const ImageBarrierInfo &info)

@@ -78,19 +78,17 @@ namespace pe
         }
     }
 
+    void GridPass::DeclareInputs(RGBuilder &builder)
+    {
+        builder.Read(m_depthRT);
+    }
+
     void GridPass::ExecutePass(CommandBuffer *cmd)
     {
         auto &gSettings = Settings::Get<GlobalSettings>();
         Scene &scene = GetGlobalSystem<RendererSystem>()->GetScene();
 
         cmd->BeginDebugRegion("GridPass");
-
-        ImageBarrierInfo barrier{};
-        barrier.image = m_depthRT;
-        barrier.layout = vk::ImageLayout::eShaderReadOnlyOptimal;
-        barrier.stageFlags = vk::PipelineStageFlagBits2::eFragmentShader;
-        barrier.accessMask = vk::AccessFlagBits2::eShaderRead;
-        cmd->ImageBarrier(barrier);
 
         cmd->BeginPass(1, m_attachments.data(), "GridPass");
 

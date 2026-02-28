@@ -102,6 +102,7 @@ namespace pe
         }
 
         m_scene.UploadBuffers(cmd);
+
         m_acquireSemaphores.reserve(imageCount);
         m_submitSemaphores.reserve(imageCount);
         for (uint32_t i = 0; i < imageCount; i++)
@@ -116,6 +117,34 @@ namespace pe
         }
     }
 
+    void RendererSystem::CacheGlobalComponents()
+    {
+        Entity *world = Context::Get()->GetWorldEntity();
+
+        m_shadowPass = world->GetComponent<ShadowPass>();
+        m_depthPass = world->GetComponent<DepthPass>();
+        m_gbufferOpaquePass = world->GetComponent<GbufferOpaquePass>();
+        m_gbufferTransparentPass = world->GetComponent<GbufferTransparentPass>();
+        m_ssaoPass = world->GetComponent<SSAOPass>();
+        m_lightOpaquePass = world->GetComponent<LightOpaquePass>();
+        m_lightTransparentPass = world->GetComponent<LightTransparentPass>();
+        m_rayTracingPass = world->GetComponent<RayTracingPass>();
+        m_particleComputePass = world->GetComponent<ParticleComputePass>();
+        m_particlePass = world->GetComponent<ParticlePass>();
+        m_ssrPass = world->GetComponent<SSRPass>();
+        m_fxaaPass = world->GetComponent<FXAAPass>();
+        m_aabbsPass = world->GetComponent<AabbsPass>();
+        m_taaPass = world->GetComponent<TAAPass>();
+        m_sharpenPass = world->GetComponent<SharpenPass>();
+        m_tonemapPass = world->GetComponent<TonemapPass>();
+        m_bloomBrightFilterPass = world->GetComponent<BloomBrightFilterPass>();
+        m_bloomGaussianBlurHorizontalPass = world->GetComponent<BloomGaussianBlurHorizontalPass>();
+        m_bloomGaussianBlurVerticalPass = world->GetComponent<BloomGaussianBlurVerticalPass>();
+        m_dofPass = world->GetComponent<DOFPass>();
+        m_motionBlurPass = world->GetComponent<MotionBlurPass>();
+        m_gridPass = world->GetComponent<GridPass>();
+    }
+
     void RendererSystem::Update()
     {
         // GUI
@@ -124,15 +153,96 @@ namespace pe
         // Scene
         m_scene.Update();
 
+        UpdateRenderGraphPassStates();
+
+        const auto isPassEnabled = [&](RenderGraphPassId passId) -> bool
+        {
+            return m_renderGraphPassEnabled[static_cast<size_t>(passId)];
+        };
+
+        auto shouldUpdate = [&](IRenderPassComponent *rc)
+        {
+            if (!rc || !rc->IsEnabled())
+                return false;
+
+            if (rc == m_shadowPass)
+                return isPassEnabled(RenderGraphPassId::Shadow);
+            if (rc == m_depthPass)
+                return isPassEnabled(RenderGraphPassId::Depth);
+            if (rc == m_gbufferOpaquePass)
+                return isPassEnabled(RenderGraphPassId::GBufferOpaque);
+            if (rc == m_gbufferTransparentPass)
+                return isPassEnabled(RenderGraphPassId::GBufferTransparent);
+            if (rc == m_lightOpaquePass)
+                return isPassEnabled(RenderGraphPassId::LightOpaque);
+            if (rc == m_lightTransparentPass)
+                return isPassEnabled(RenderGraphPassId::LightTransparent);
+            if (rc == m_aabbsPass)
+                return isPassEnabled(RenderGraphPassId::Aabbs);
+            if (rc == m_particleComputePass || rc == m_particlePass)
+                return true;
+            if (rc == m_taaPass)
+                return isPassEnabled(RenderGraphPassId::TAA);
+            if (rc == m_sharpenPass)
+                return isPassEnabled(RenderGraphPassId::Sharpen);
+            if (rc == m_rayTracingPass)
+                return isPassEnabled(RenderGraphPassId::RayTracing);
+            if (rc == m_gridPass)
+                return isPassEnabled(RenderGraphPassId::Grid);
+
+            return true;
+        };
+
         // Render Components
         std::vector<std::shared_future<void>> futures;
         futures.reserve(m_renderPassComponents.size());
         for (auto &rc : m_renderPassComponents)
+        {
+            if (!shouldUpdate(rc))
+                continue;
+
             futures.push_back(ThreadPool::Update.Enqueue([rc]()
                                                          { rc->Update(); }));
+        }
 
         for (auto &future : futures)
             future.wait();
+    }
+
+    void RendererSystem::UpdateRenderGraphPassStates()
+    {
+        const auto &gs = Settings::Get<GlobalSettings>();
+
+        const bool renderRaster = gs.render_mode != RenderMode::RayTracing;
+        const bool renderRayTracing = gs.render_mode != RenderMode::Raster;
+        const bool needVelocity = gs.taa || gs.motion_blur;
+        const bool renderSSR = gs.ssr && renderRaster;
+        const bool renderSSAO = gs.ssao && renderRaster;
+        const bool needDepth = renderRaster || needVelocity || gs.dof || gs.motion_blur || gs.draw_aabbs || gs.draw_grid;
+        const bool needGBuffer = renderRaster || needVelocity || renderSSR || renderSSAO;
+
+        m_renderGraphPassEnabled[static_cast<size_t>(RenderGraphPassId::Shadow)] = gs.shadows && renderRaster;
+        m_renderGraphPassEnabled[static_cast<size_t>(RenderGraphPassId::Depth)] = needDepth;
+        m_renderGraphPassEnabled[static_cast<size_t>(RenderGraphPassId::GBufferOpaque)] = needGBuffer;
+        m_renderGraphPassEnabled[static_cast<size_t>(RenderGraphPassId::SSAO)] = renderSSAO;
+        m_renderGraphPassEnabled[static_cast<size_t>(RenderGraphPassId::LightOpaque)] = renderRaster;
+        m_renderGraphPassEnabled[static_cast<size_t>(RenderGraphPassId::GBufferTransparent)] = gs.render_mode == RenderMode::Raster;
+        m_renderGraphPassEnabled[static_cast<size_t>(RenderGraphPassId::LightTransparent)] = renderRaster;
+        m_renderGraphPassEnabled[static_cast<size_t>(RenderGraphPassId::RayTracing)] = renderRayTracing;
+        m_renderGraphPassEnabled[static_cast<size_t>(RenderGraphPassId::ParticleCompute)] = true;
+        m_renderGraphPassEnabled[static_cast<size_t>(RenderGraphPassId::Particle)] = true;
+        m_renderGraphPassEnabled[static_cast<size_t>(RenderGraphPassId::SSR)] = renderSSR;
+        m_renderGraphPassEnabled[static_cast<size_t>(RenderGraphPassId::FXAA)] = gs.fxaa;
+        m_renderGraphPassEnabled[static_cast<size_t>(RenderGraphPassId::Aabbs)] = gs.draw_aabbs;
+        m_renderGraphPassEnabled[static_cast<size_t>(RenderGraphPassId::TAA)] = gs.taa;
+        m_renderGraphPassEnabled[static_cast<size_t>(RenderGraphPassId::Sharpen)] = gs.taa && gs.cas_sharpening;
+        m_renderGraphPassEnabled[static_cast<size_t>(RenderGraphPassId::Tonemap)] = gs.tonemapping;
+        m_renderGraphPassEnabled[static_cast<size_t>(RenderGraphPassId::BloomBF)] = gs.bloom;
+        m_renderGraphPassEnabled[static_cast<size_t>(RenderGraphPassId::BloomH)] = gs.bloom;
+        m_renderGraphPassEnabled[static_cast<size_t>(RenderGraphPassId::BloomV)] = gs.bloom;
+        m_renderGraphPassEnabled[static_cast<size_t>(RenderGraphPassId::DOF)] = gs.dof;
+        m_renderGraphPassEnabled[static_cast<size_t>(RenderGraphPassId::MotionBlur)] = gs.motion_blur;
+        m_renderGraphPassEnabled[static_cast<size_t>(RenderGraphPassId::Grid)] = gs.draw_grid;
     }
 
     void RendererSystem::WaitPreviousFrameCommands()
@@ -166,201 +276,86 @@ namespace pe
         RHII.GetStagingManager()->RemoveUnused();
     }
 
+    void RendererSystem::BuildRenderGraph()
+    {
+        m_renderGraph.Clear();
+        UpdateRenderGraphPassStates();
+
+        auto isPassEnabled = [this](RenderGraphPassId passId)
+        {
+            return [this, passId]()
+            {
+                return m_renderGraphPassEnabled[static_cast<size_t>(passId)];
+            };
+        };
+
+        m_renderGraph.AddPass(static_cast<RenderGraph::PassID>(RenderGraphPassId::Shadow), "Shadow", isPassEnabled(RenderGraphPassId::Shadow), m_shadowPass);
+        m_renderGraph.AddPass(static_cast<RenderGraph::PassID>(RenderGraphPassId::Depth), "Depth", isPassEnabled(RenderGraphPassId::Depth), m_depthPass);
+        m_renderGraph.AddPass(static_cast<RenderGraph::PassID>(RenderGraphPassId::GBufferOpaque), "GBufferOpaque", isPassEnabled(RenderGraphPassId::GBufferOpaque), m_gbufferOpaquePass);
+        m_renderGraph.AddPass(static_cast<RenderGraph::PassID>(RenderGraphPassId::SSAO), "SSAO", isPassEnabled(RenderGraphPassId::SSAO), m_ssaoPass);
+        m_renderGraph.AddPass(static_cast<RenderGraph::PassID>(RenderGraphPassId::LightOpaque), "LightOpaque", isPassEnabled(RenderGraphPassId::LightOpaque), m_lightOpaquePass);
+        m_renderGraph.AddPass(static_cast<RenderGraph::PassID>(RenderGraphPassId::GBufferTransparent), "GBufferTransparent", isPassEnabled(RenderGraphPassId::GBufferTransparent), m_gbufferTransparentPass);
+        m_renderGraph.AddPass(static_cast<RenderGraph::PassID>(RenderGraphPassId::LightTransparent), "LightTransparent", isPassEnabled(RenderGraphPassId::LightTransparent), m_lightTransparentPass);
+        m_renderGraph.AddPass(static_cast<RenderGraph::PassID>(RenderGraphPassId::RayTracing), "RayTracing", isPassEnabled(RenderGraphPassId::RayTracing), m_rayTracingPass);
+        m_renderGraph.AddPass(static_cast<RenderGraph::PassID>(RenderGraphPassId::ParticleCompute), "ParticleCompute", isPassEnabled(RenderGraphPassId::ParticleCompute), m_particleComputePass);
+        m_renderGraph.AddPass(static_cast<RenderGraph::PassID>(RenderGraphPassId::Particle), "Particle", isPassEnabled(RenderGraphPassId::Particle), m_particlePass);
+        m_renderGraph.AddPass(static_cast<RenderGraph::PassID>(RenderGraphPassId::SSR), "SSR", isPassEnabled(RenderGraphPassId::SSR), m_ssrPass);
+        m_renderGraph.AddPass(static_cast<RenderGraph::PassID>(RenderGraphPassId::FXAA), "FXAA", isPassEnabled(RenderGraphPassId::FXAA), m_fxaaPass);
+        m_renderGraph.AddPass(static_cast<RenderGraph::PassID>(RenderGraphPassId::Aabbs), "Aabbs", isPassEnabled(RenderGraphPassId::Aabbs), m_aabbsPass);
+        m_renderGraph.AddPass(static_cast<RenderGraph::PassID>(RenderGraphPassId::TAA), "TAA", isPassEnabled(RenderGraphPassId::TAA), m_taaPass);
+        m_renderGraph.AddPass(static_cast<RenderGraph::PassID>(RenderGraphPassId::Sharpen), "Sharpen", isPassEnabled(RenderGraphPassId::Sharpen), m_sharpenPass);
+        m_renderGraph.AddPass(static_cast<RenderGraph::PassID>(RenderGraphPassId::Tonemap), "Tonemap", isPassEnabled(RenderGraphPassId::Tonemap), m_tonemapPass);
+        m_renderGraph.AddPass(static_cast<RenderGraph::PassID>(RenderGraphPassId::BloomBF), "BloomBF", isPassEnabled(RenderGraphPassId::BloomBF), m_bloomBrightFilterPass);
+        m_renderGraph.AddPass(static_cast<RenderGraph::PassID>(RenderGraphPassId::BloomH), "BloomH", isPassEnabled(RenderGraphPassId::BloomH), m_bloomGaussianBlurHorizontalPass);
+        m_renderGraph.AddPass(static_cast<RenderGraph::PassID>(RenderGraphPassId::BloomV), "BloomV", isPassEnabled(RenderGraphPassId::BloomV), m_bloomGaussianBlurVerticalPass);
+        m_renderGraph.AddPass(static_cast<RenderGraph::PassID>(RenderGraphPassId::DOF), "DOF", isPassEnabled(RenderGraphPassId::DOF), m_dofPass);
+        m_renderGraph.AddPass(static_cast<RenderGraph::PassID>(RenderGraphPassId::MotionBlur), "MotionBlur", isPassEnabled(RenderGraphPassId::MotionBlur), m_motionBlurPass);
+        m_renderGraph.AddPass(static_cast<RenderGraph::PassID>(RenderGraphPassId::Grid), "Grid", isPassEnabled(RenderGraphPassId::Grid), m_gridPass);
+    }
+
     CommandBuffer *RendererSystem::RecordPasses(uint32_t imageIndex)
     {
         CommandBuffer *cmd = RHII.GetMainQueue()->AcquireCommandBuffer();
 
-        auto &shadows = *GetGlobalComponent<ShadowPass>();
-        auto &dp = *GetGlobalComponent<DepthPass>();
-        auto &gbo = *GetGlobalComponent<GbufferOpaquePass>();
-        auto &gbt = *GetGlobalComponent<GbufferTransparentPass>();
-        auto &lo = *GetGlobalComponent<LightOpaquePass>();
-        auto &lt = *GetGlobalComponent<LightTransparentPass>();
-        auto &grid = *GetGlobalComponent<GridPass>();
-        auto &ssao = *GetGlobalComponent<SSAOPass>();
-        auto &ssr = *GetGlobalComponent<SSRPass>();
-        auto &fxaa = *GetGlobalComponent<FXAAPass>();
-        auto &bbfp = *GetGlobalComponent<BloomBrightFilterPass>();
-        auto &bgbh = *GetGlobalComponent<BloomGaussianBlurHorizontalPass>();
-        auto &bgbv = *GetGlobalComponent<BloomGaussianBlurVerticalPass>();
-        auto &dof = *GetGlobalComponent<DOFPass>();
-        auto &motionBlur = *GetGlobalComponent<MotionBlurPass>();
-        auto &taa = *GetGlobalComponent<TAAPass>();
-        auto &sharpen = *GetGlobalComponent<SharpenPass>();
-        auto &tonemap = *GetGlobalComponent<TonemapPass>();
-        auto &aabbs = *GetGlobalComponent<AabbsPass>();
-        auto &pcp = *GetGlobalComponent<ParticleComputePass>();
-        auto &pp = *GetGlobalComponent<ParticlePass>();
-        auto &rtp = *GetGlobalComponent<RayTracingPass>();
+        // Set scene on all scene-dependent passes before execution
+        auto setScene = [this](auto *pass)
+        { if (pass) pass->SetScene(&m_scene); };
+        setScene(m_shadowPass);
+        setScene(m_depthPass);
+        setScene(m_gbufferOpaquePass);
+        setScene(m_gbufferTransparentPass);
+        setScene(m_rayTracingPass);
+        setScene(m_particleComputePass);
+        setScene(m_particlePass);
+        setScene(m_gridPass);
+        setScene(m_aabbsPass);
 
-        auto &gSettings = Settings::Get<GlobalSettings>();
+        const auto &gSettings = Settings::Get<GlobalSettings>();
 
         cmd->Begin();
 
-        // Check dependencies
-        bool renderRaster = gSettings.render_mode != RenderMode::RayTracing;
-        bool renderPostProcess = true; // Mostly always needed unless completely disabled
-
-        bool renderShadows = gSettings.shadows && renderRaster;
-        bool renderSSAO = gSettings.ssao && renderRaster;
-        bool renderSSR = gSettings.ssr && renderRaster;
-        bool renderParticles = true; // Always on top
-
-        // Depth/GBuffer needed if Raster is on OR if needed by PostProcess/Particles
-        bool needVelocity = gSettings.taa || gSettings.motion_blur;
-        bool needDepth = renderRaster || renderParticles || gSettings.dof || gSettings.motion_blur || needVelocity || gSettings.draw_aabbs || gSettings.draw_grid;
-        bool needGBuffer = renderRaster || needVelocity || renderSSR || renderSSAO;
-
-        // Shadows Opaque
-        if (renderShadows)
+        if (gSettings.taa)
         {
-            shadows.SetScene(&m_scene);
-            shadows.ExecutePass(cmd);
+            m_renderGraph.Execute(cmd);
         }
-
-        // Depth Pass
-        if (needDepth)
+        else
         {
-            dp.SetScene(&m_scene);
-            dp.ExecutePass(cmd);
-        }
-
-        // Gbuffers Opaque
-        if (needGBuffer)
-        {
-            gbo.SetScene(&m_scene);
-            gbo.ExecutePass(cmd);
-        }
-
-        if (renderRaster)
-        {
-            // Screen Space Ambient Occlusion
-            if (renderSSAO)
+            constexpr auto tonemapID = static_cast<RenderGraph::PassID>(RenderGraphPassId::Tonemap);
+            if (m_renderGraph.ContainsPass(tonemapID))
             {
-                ssao.ExecutePass(cmd);
-            }
-
-            {
-                // Lighting Opaque
-                {
-                    lo.ExecutePass(cmd);
-                }
-
-                if (gSettings.render_mode == RenderMode::Raster)
-                {
-                    // Gbuffers Transparent
-                    {
-                        gbt.SetScene(&m_scene);
-                        gbt.ExecutePass(cmd);
-                    }
-
-                    // Lighting Transparent
-                    {
-                        lt.ExecutePass(cmd);
-                    }
-                }
-            }
-        }
-
-        if (gSettings.render_mode != RenderMode::Raster)
-        {
-            // Ray Tracing Replaces Lighting
-            rtp.SetScene(&m_scene);
-            rtp.ExecutePass(cmd);
-        }
-
-        // Particle Passes (Draw on top)
-        if (renderParticles)
-        {
-            pcp.SetScene(&m_scene);
-            pcp.ExecutePass(cmd);
-
-            pp.SetScene(&m_scene);
-            pp.ExecutePass(cmd);
-        }
-
-        // Screen Space Reflections
-        if (renderSSR)
-        {
-            ssr.ExecutePass(cmd);
-        }
-
-        // Post Process
-        if (renderPostProcess)
-        {
-            // Fast Approximate Anti-Aliasing
-            if (gSettings.fxaa)
-            {
-                fxaa.ExecutePass(cmd);
-            }
-
-            // Aabbs
-            if (gSettings.draw_aabbs)
-            {
-                aabbs.SetScene(&m_scene);
-                aabbs.ExecutePass(cmd);
-            }
-
-            // Upscale / TAA
-            if (gSettings.taa)
-            {
-                taa.ExecutePass(cmd);
-
-                // RCAS Sharpening
-                if (gSettings.cas_sharpening)
-                {
-                    sharpen.ExecutePass(cmd);
-                }
+                m_renderGraph.ExecuteBefore(cmd, tonemapID);
+                Upsample(cmd, vk::Filter::eLinear);
+                m_renderGraph.ExecuteFrom(cmd, tonemapID);
             }
             else
             {
-                Upsample(cmd, vk::Filter::eLinear);
-            }
-
-            // Tone Mapping
-            if (gSettings.tonemapping)
-            {
-                tonemap.ExecutePass(cmd);
-            }
-
-            // Bloom
-            if (gSettings.bloom)
-            {
-                bbfp.ExecutePass(cmd);
-                bgbh.ExecutePass(cmd);
-                bgbv.ExecutePass(cmd);
-            }
-
-            // Depth of Field
-            if (gSettings.dof)
-            {
-                dof.ExecutePass(cmd);
-            }
-
-            // Motion Blur
-            if (gSettings.motion_blur)
-            {
-                motionBlur.ExecutePass(cmd);
+                m_renderGraph.Execute(cmd);
             }
         }
 
-        // Grid Pass
-        if (gSettings.draw_grid)
-        {
-            grid.SetScene(&m_scene);
-            grid.ExecutePass(cmd);
-        }
+        m_gui.ExecutePass(cmd);
 
-        // Gui
-        {
-            m_gui.ExecutePass(cmd);
-        }
-
-        // Blit to swapchain
-        {
-            // Image *blitImage = gSettings.current_rendering_image ? gSettings.current_rendering_image : m_displayRT;
-            BlitToSwapchain(cmd, m_displayRT, imageIndex);
-        }
+        BlitToSwapchain(cmd, m_displayRT, imageIndex);
 
         cmd->End();
 

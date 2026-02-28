@@ -115,9 +115,17 @@ namespace pe
         }
     }
 
+    void TAAPass::DeclareInputs(RGBuilder &builder)
+    {
+        Image *taaOutput = m_casSharpeningEnabled ? m_taaResolved : m_displayRT;
+        builder.ReadCompute(m_viewportRT);
+        builder.ReadCompute(m_historyImage);
+        builder.ReadCompute(m_velocityRT);
+        builder.WriteCompute(taaOutput);
+    }
+
     void TAAPass::ExecutePass(CommandBuffer *cmd)
     {
-
         Image *taaOutput = m_casSharpeningEnabled ? m_taaResolved : m_displayRT;
 
         struct TAAConstants
@@ -133,16 +141,7 @@ namespace pe
         pc.displaySize = vec2(taaOutput->GetWidth_f(), taaOutput->GetHeight_f());
         pc.jitter = m_jitter;
 
-        // Barriers
-        std::vector<ImageBarrierInfo> barriers;
-        barriers.push_back({m_viewportRT, vk::ImageLayout::eShaderReadOnlyOptimal, vk::PipelineStageFlagBits2::eComputeShader, vk::AccessFlagBits2::eShaderRead});
-        barriers.push_back({m_historyImage, vk::ImageLayout::eShaderReadOnlyOptimal, vk::PipelineStageFlagBits2::eComputeShader, vk::AccessFlagBits2::eShaderRead});
-        barriers.push_back({m_velocityRT, vk::ImageLayout::eShaderReadOnlyOptimal, vk::PipelineStageFlagBits2::eComputeShader, vk::AccessFlagBits2::eShaderRead});
-        // barriers.push_back({m_depthStencil, vk::ImageLayout::eShaderReadOnlyOptimal, vk::PipelineStageFlagBits2::eComputeShader, vk::AccessFlagBits2::eShaderRead});
-        barriers.push_back({taaOutput, vk::ImageLayout::eGeneral, vk::PipelineStageFlagBits2::eComputeShader, vk::AccessFlagBits2::eShaderWrite});
-
         cmd->BeginDebugRegion("TAA");
-        cmd->ImageBarriers(barriers);
 
         // Bind Pipeline & Descriptors
         // Note: BindPipeline auto-binds descriptors if set true (default).

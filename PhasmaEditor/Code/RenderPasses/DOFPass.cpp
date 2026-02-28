@@ -51,24 +51,24 @@ namespace pe
         }
     }
 
+    void DOFPass::DeclareInputs(RGBuilder &builder)
+    {
+        builder.Read(m_depth);
+    }
+
     void DOFPass::ExecutePass(CommandBuffer *cmd)
     {
         auto &gSettings = Settings::Get<GlobalSettings>();
-        std::vector<ImageBarrierInfo> barriers(2);
 
-        barriers[0].image = m_frameImage;
-        barriers[0].layout = vk::ImageLayout::eShaderReadOnlyOptimal;
-        barriers[0].stageFlags = vk::PipelineStageFlagBits2::eFragmentShader;
-        barriers[0].accessMask = vk::AccessFlagBits2::eShaderRead;
-
-        barriers[1].image = m_depth;
-        barriers[1].layout = vk::ImageLayout::eShaderReadOnlyOptimal;
-        barriers[1].stageFlags = vk::PipelineStageFlagBits2::eFragmentShader;
-        barriers[1].accessMask = vk::AccessFlagBits2::eShaderRead;
+        ImageBarrierInfo frameBarrier{};
+        frameBarrier.image = m_frameImage;
+        frameBarrier.layout = vk::ImageLayout::eShaderReadOnlyOptimal;
+        frameBarrier.stageFlags = vk::PipelineStageFlagBits2::eFragmentShader;
+        frameBarrier.accessMask = vk::AccessFlagBits2::eShaderRead;
 
         cmd->BeginDebugRegion("DOFPass");
         cmd->CopyImage(m_displayRT, m_frameImage); // Copy RT to image
-        cmd->ImageBarriers(barriers);
+        cmd->ImageBarrier(frameBarrier);
 
         cmd->BeginPass(1, m_attachments.data(), "DOF");
         cmd->BindPipeline(*m_passInfo);

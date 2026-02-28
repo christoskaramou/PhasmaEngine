@@ -165,8 +165,8 @@ namespace pe
         if (Settings::Get<GlobalSettings>().freeze_frustum_culling)
             return;
 
-        // Transpose just to make the calculations look simpler
-        mat4 pv = transpose(m_viewProjection);
+        mat4 cullViewProjection = m_projectionNoJitter * m_view;
+        mat4 pv = transpose(cullViewProjection);
 
         auto ExtractAndNormalize = [&](int index, const vec4 &row_diff)
         {

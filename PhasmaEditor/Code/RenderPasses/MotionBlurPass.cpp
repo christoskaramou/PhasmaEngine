@@ -54,28 +54,26 @@ namespace pe
         }
     }
 
+    void MotionBlurPass::DeclareInputs(RGBuilder &builder)
+    {
+        builder.Read(m_velocityRT);
+        builder.Read(m_depth);
+    }
+
     void MotionBlurPass::ExecutePass(CommandBuffer *cmd)
     {
         auto &gSettings = Settings::Get<GlobalSettings>();
         Camera *camera = GetGlobalSystem<RendererSystem>()->GetScene().GetActiveCamera();
 
-        ImageBarrierInfo barrier{};
-        barrier.layout = vk::ImageLayout::eShaderReadOnlyOptimal;
-        barrier.stageFlags = vk::PipelineStageFlagBits2::eFragmentShader;
-        barrier.accessMask = vk::AccessFlagBits2::eShaderRead;
-
-        std::vector<ImageBarrierInfo> barriers;
-        barriers.reserve(4);
-        barrier.image = m_frameImage;
-        barriers.push_back(barrier);
-        barrier.image = m_velocityRT;
-        barriers.push_back(barrier);
-        barrier.image = m_depth;
-        barriers.push_back(barrier);
+        ImageBarrierInfo frameBarrier{};
+        frameBarrier.image = m_frameImage;
+        frameBarrier.layout = vk::ImageLayout::eShaderReadOnlyOptimal;
+        frameBarrier.stageFlags = vk::PipelineStageFlagBits2::eFragmentShader;
+        frameBarrier.accessMask = vk::AccessFlagBits2::eShaderRead;
 
         cmd->BeginDebugRegion("MotionBlurPass");
         cmd->CopyImage(m_displayRT, m_frameImage);
-        cmd->ImageBarriers(barriers);
+        cmd->ImageBarrier(frameBarrier);
 
         cmd->BeginPass(1, m_attachments.data(), "MotionBlur");
         cmd->BindPipeline(*m_passInfo);

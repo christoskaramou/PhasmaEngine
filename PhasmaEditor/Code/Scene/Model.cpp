@@ -51,6 +51,11 @@ namespace pe
 
     Model::~Model()
     {
+        Unload();
+    }
+
+    void Model::Unload()
+    {
         for (auto sampler : m_samplers)
         {
             if (!sampler)
@@ -61,27 +66,22 @@ namespace pe
                                     { Sampler *s = sampler; Sampler::Destroy(s); });
         }
 
-        for (auto image : m_images)
-        {
-            if (!image)
-                continue;
-            if (m_sharedImages.find(image) != m_sharedImages.end())
-                continue;
-            RHII.AddToDeletionQueue([image]()
-                                    { Image *i = image; Image::Destroy(i); });
-        }
+        m_images.clear();
     }
 
     void Model::AddImage(Image *image, bool owned)
     {
         if (!image)
             return;
+        (void)owned;
 
-        if (std::find(m_images.begin(), m_images.end(), image) == m_images.end())
-            m_images.push_back(image);
-
-        if (!owned)
-            m_sharedImages.insert(image);
+        auto it = std::find_if(m_images.begin(), m_images.end(),
+                               [image](const ResourceHandle<Image> &handle)
+                               {
+                                   return handle.get() == image;
+                               });
+        if (it == m_images.end())
+            m_images.push_back(ResourceHandle<Image>::FromRaw(image));
     }
 
     void Model::AddSampler(Sampler *sampler, bool owned)
@@ -157,9 +157,7 @@ namespace pe
     {
         m_images.clear();
         m_samplers.clear();
-        m_sharedImages.clear();
         m_sharedSamplers.clear();
-        m_textureCache.clear();
 
         auto &defaults = GetDefaultResources(cmd);
         AddImage(defaults.black, false);
@@ -295,46 +293,38 @@ namespace pe
         return m_nodeToMesh[nodeIndex];
     }
 
-    Image *Model::LoadTexture(CommandBuffer *cmd, const std::filesystem::path &texturePath)
+    ResourceHandle<Image> Model::LoadTexture(CommandBuffer *cmd, const std::filesystem::path &texturePath)
     {
         if (texturePath.empty())
-            return nullptr;
+            return ResourceHandle<Image>();
 
         std::error_code ec;
         std::filesystem::path normalized = std::filesystem::weakly_canonical(texturePath, ec);
         if (ec)
             normalized = texturePath;
 
-        if (Image *image = GetTextureFromCache(normalized))
-            return image;
+        std::string normalizedStr(reinterpret_cast<const char *>(normalized.u8string().c_str()));
 
-        if (!std::filesystem::exists(normalized))
+        ResourceHandle<Image> handle = ResourceManager::Get().Find<Image>(normalizedStr);
+        if (!handle)
         {
-            std::string pathStr(reinterpret_cast<const char *>(normalized.u8string().c_str()));
-            PE_WARN("Texture not found (LoadTexture), using default: %s", pathStr.c_str());
-            return nullptr;
+            Image *rawImg = Image::LoadRGBA8(cmd, normalizedStr);
+            if (!rawImg)
+                return ResourceHandle<Image>();
+
+            std::shared_ptr<Image> sharedImage(rawImg);
+            ResourceManager::Get().Register<Image>(normalizedStr, sharedImage);
+            handle = ResourceHandle<Image>(sharedImage);
         }
 
-        std::string normalizedStr(reinterpret_cast<const char *>(normalized.u8string().c_str()));
-        Image *image = Image::LoadRGBA8(cmd, normalizedStr);
-        if (!image)
-            return nullptr;
-
-        m_textureCache.emplace(normalizedStr, image);
-        AddImage(image, true);
-        return image;
-    }
-
-    Image *Model::GetTextureFromCache(const std::filesystem::path &texturePath) const
-    {
-        if (texturePath.empty())
-            return nullptr;
-
-        std::string pathStr(reinterpret_cast<const char *>(texturePath.u8string().c_str()));
-        auto it = m_textureCache.find(pathStr);
-        if (it == m_textureCache.end())
-            return nullptr;
-        return it->second;
+        auto it = std::find_if(m_images.begin(), m_images.end(),
+                               [&handle](const ResourceHandle<Image> &existing)
+                               {
+                                   return existing.get() == handle.get();
+                               });
+        if (it == m_images.end())
+            m_images.push_back(handle);
+        return handle;
     }
 
     void Model::ReparentNode(int nodeIndex, int newParentIndex)

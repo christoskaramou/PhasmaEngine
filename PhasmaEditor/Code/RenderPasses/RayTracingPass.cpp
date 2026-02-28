@@ -23,8 +23,7 @@ namespace pe
 
     void RayTracingPass::UpdatePassInfo()
     {
-        std::vector<Define> defines = {
-        };
+        std::vector<Define> defines = {};
 
         // Shaders
         Shader *rayGen = Shader::Create(Path::Assets + "Shaders/RayTracing/RayTrace.hlsl", vk::ShaderStageFlagBits::eRaygenKHR, "raygeneration", defines, ShaderCodeType::HLSL);
@@ -161,6 +160,16 @@ namespace pe
         }
     }
 
+    void RayTracingPass::DeclareInputs(RGBuilder &builder)
+    {
+        if (!m_scene || !m_scene->GetTLAS())
+            return;
+
+        Image *depth = GetGlobalSystem<RendererSystem>()->GetDepthStencilRT();
+        builder.WriteRayTracing(m_display);
+        builder.ReadRayTracing(depth);
+    }
+
     void RayTracingPass::ExecutePass(CommandBuffer *cmd)
     {
         if (!m_scene)
@@ -173,21 +182,7 @@ namespace pe
         // Update TLAS if any transform changed
         m_scene->UpdateTLASTransformations(cmd);
 
-        ImageBarrierInfo barrierDisplay{};
-        barrierDisplay.image = m_display;
-        barrierDisplay.layout = vk::ImageLayout::eGeneral;
-        barrierDisplay.stageFlags = vk::PipelineStageFlagBits2::eRayTracingShaderKHR;
-        barrierDisplay.accessMask = vk::AccessFlagBits2::eShaderWrite;
-
-        Image *depth = GetGlobalSystem<RendererSystem>()->GetDepthStencilRT();
-        ImageBarrierInfo barrierDepth{};
-        barrierDepth.image = depth;
-        barrierDepth.layout = vk::ImageLayout::eShaderReadOnlyOptimal;
-        barrierDepth.stageFlags = vk::PipelineStageFlagBits2::eRayTracingShaderKHR;
-        barrierDepth.accessMask = vk::AccessFlagBits2::eShaderRead;
-
         cmd->BeginDebugRegion("RayTracingPass");
-        cmd->ImageBarriers({barrierDisplay, barrierDepth});
         cmd->BindPipeline(*m_passInfo);
         auto *ls = GetGlobalSystem<LightSystem>();
         cmd->SetConstantAt(0, (uint32_t)ls->GetPointLights().size());

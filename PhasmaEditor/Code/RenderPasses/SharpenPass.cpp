@@ -68,6 +68,14 @@ namespace pe
         UpdateDescriptorSets();
     }
 
+    void SharpenPass::DeclareInputs(RGBuilder &builder)
+    {
+        Image *input = GetGlobalComponent<TAAPass>()->GetResolvedImage();
+        Image *output = GetGlobalSystem<RendererSystem>()->GetDisplayRT();
+        builder.ReadCompute(input);
+        builder.WriteCompute(output);
+    }
+
     void SharpenPass::ExecutePass(CommandBuffer *cmd)
     {
         auto &gSettings = Settings::Get<GlobalSettings>();
@@ -84,12 +92,7 @@ namespace pe
         PushConstants pc{};
         pc.sharpness = gSettings.cas_sharpness;
 
-        std::vector<ImageBarrierInfo> barriers;
-        barriers.push_back({input, vk::ImageLayout::eShaderReadOnlyOptimal, vk::PipelineStageFlagBits2::eComputeShader, vk::AccessFlagBits2::eShaderRead});
-        barriers.push_back({output, vk::ImageLayout::eGeneral, vk::PipelineStageFlagBits2::eComputeShader, vk::AccessFlagBits2::eShaderWrite});
-
         cmd->BeginDebugRegion("RCAS");
-        cmd->ImageBarriers(barriers);
         cmd->BindPipeline(*m_passInfo);
         cmd->SetConstants(pc);
         cmd->PushConstants();

@@ -143,35 +143,25 @@ namespace pe
         m_uniforms[RHII.GetFrameIndex()]->Copy(1, &range, false);
     }
 
-    void LightOpaquePass::PassBarriers(CommandBuffer *cmd)
+    void LightOpaquePass::DeclareInputs(RGBuilder &builder)
     {
         bool shadowsEnabled = Settings::Get<GlobalSettings>().shadows;
         ShadowPass &shadows = *GetGlobalComponent<ShadowPass>();
 
-        std::vector<ImageBarrierInfo> barriers(8 + (shadowsEnabled ? shadows.m_textures.size() : 0));
-        for (size_t i = 0; i < barriers.size(); i++)
-        {
-            barriers[i].layout = vk::ImageLayout::eShaderReadOnlyOptimal;
-            barriers[i].stageFlags = vk::PipelineStageFlagBits2::eFragmentShader;
-            barriers[i].accessMask = vk::AccessFlagBits2::eShaderRead;
-        }
-
-        barriers[0].image = m_depthStencilRT;
-        barriers[1].image = m_normalRT;
-        barriers[2].image = m_albedoRT;
-        barriers[3].image = m_srmRT;
-        barriers[4].image = m_velocityRT;
-        barriers[5].image = m_emissiveRT;
-        barriers[6].image = m_ssaoRT;
-        barriers[7].image = m_transparencyRT;
+        builder.Read(m_depthStencilRT);
+        builder.Read(m_normalRT);
+        builder.Read(m_albedoRT);
+        builder.Read(m_srmRT);
+        builder.Read(m_velocityRT);
+        builder.Read(m_emissiveRT);
+        builder.Read(m_ssaoRT);
+        builder.Read(m_transparencyRT);
 
         if (shadowsEnabled)
         {
-            for (uint32_t i = 0; i < shadows.m_textures.size(); i++)
-                barriers[i + 8].image = shadows.m_textures[i];
+            for (auto *tex : shadows.m_textures)
+                builder.Read(tex);
         }
-
-        cmd->ImageBarriers(barriers);
     }
 
     void LightOpaquePass::ExecutePass(CommandBuffer *cmd)
@@ -189,8 +179,6 @@ namespace pe
         cmd->SetConstantAt(6, 0u);                                    // is transparent pass
         for (uint32_t i = 0; i < shadowmapCascades; i++)
             cmd->SetConstantAt(i + 7, shadows.m_viewZ[i]); // shadowmap cascade distances
-
-        PassBarriers(cmd);
 
         cmd->BeginPass(1, m_attachments.data(), "LightOpaquePass");
         cmd->BindPipeline(*m_passInfo);
@@ -341,31 +329,21 @@ namespace pe
         m_uniforms[RHII.GetFrameIndex()]->Copy(1, &range, false);
     }
 
-    void LightTransparentPass::PassBarriers(CommandBuffer *cmd)
+    void LightTransparentPass::DeclareInputs(RGBuilder &builder)
     {
         ShadowPass &shadows = *GetGlobalComponent<ShadowPass>();
 
-        std::vector<ImageBarrierInfo> barriers(8 + shadows.m_textures.size());
-        for (size_t i = 0; i < barriers.size(); i++)
-        {
-            barriers[i].layout = vk::ImageLayout::eShaderReadOnlyOptimal;
-            barriers[i].stageFlags = vk::PipelineStageFlagBits2::eFragmentShader;
-            barriers[i].accessMask = vk::AccessFlagBits2::eShaderRead;
-        }
+        builder.Read(m_depthStencilRT);
+        builder.Read(m_normalRT);
+        builder.Read(m_albedoRT);
+        builder.Read(m_srmRT);
+        builder.Read(m_velocityRT);
+        builder.Read(m_emissiveRT);
+        builder.Read(m_ssaoRT);
+        builder.Read(m_transparencyRT);
 
-        barriers[0].image = m_depthStencilRT;
-        barriers[1].image = m_normalRT;
-        barriers[2].image = m_albedoRT;
-        barriers[3].image = m_srmRT;
-        barriers[4].image = m_velocityRT;
-        barriers[5].image = m_emissiveRT;
-        barriers[6].image = m_ssaoRT;
-        barriers[7].image = m_transparencyRT;
-
-        for (uint32_t i = 0; i < shadows.m_textures.size(); i++)
-            barriers[i + 8].image = shadows.m_textures[i];
-
-        cmd->ImageBarriers(barriers);
+        for (auto *tex : shadows.m_textures)
+            builder.Read(tex);
     }
 
     void LightTransparentPass::ExecutePass(CommandBuffer *cmd)
@@ -383,8 +361,6 @@ namespace pe
         cmd->SetConstantAt(6, 1u);                                    // transparent pass
         for (uint32_t i = 0; i < shadowmapCascades; i++)
             cmd->SetConstantAt(i + 7, shadows.m_viewZ[i]); // shadowmap cascade distances
-
-        PassBarriers(cmd);
 
         cmd->BeginPass(1, m_attachments.data(), "LightTransparentPass");
         cmd->BindPipeline(*m_passInfo);

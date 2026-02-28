@@ -99,6 +99,13 @@ namespace pe
         }
     }
 
+    void SSAOPass::DeclareInputs(RGBuilder &builder)
+    {
+        builder.ReadCompute(m_normalRT);
+        builder.ReadCompute(m_depth);
+        builder.WriteCompute(m_ssaoRT);
+    }
+
     void SSAOPass::ExecutePass(CommandBuffer *cmd)
     {
         vk::MemoryBarrier2 barrier{};
@@ -107,26 +114,9 @@ namespace pe
         barrier.srcStageMask = vk::PipelineStageFlagBits2::eComputeShader;
         barrier.dstStageMask = vk::PipelineStageFlagBits2::eAllCommands;
 
-        std::vector<ImageBarrierInfo> barriers(3);
-        barriers[0].image = m_normalRT;
-        barriers[0].layout = vk::ImageLayout::eShaderReadOnlyOptimal;
-        barriers[0].stageFlags = vk::PipelineStageFlagBits2::eComputeShader;
-        barriers[0].accessMask = vk::AccessFlagBits2::eShaderSampledRead;
-        barriers[1].image = m_depth;
-        barriers[1].layout = vk::ImageLayout::eShaderReadOnlyOptimal;
-        barriers[1].stageFlags = vk::PipelineStageFlagBits2::eComputeShader;
-        barriers[1].accessMask = vk::AccessFlagBits2::eShaderSampledRead;
-        barriers[2].image = m_ssaoRT;
-        barriers[2].layout = vk::ImageLayout::eGeneral;
-        barriers[2].stageFlags = vk::PipelineStageFlagBits2::eComputeShader;
-        barriers[2].accessMask = vk::AccessFlagBits2::eShaderWrite;
-
         cmd->BeginDebugRegion("SSAOPass");
         cmd->MemoryBarrier(barrier);
-        cmd->ImageBarriers(barriers);
-        cmd->BeginDebugRegion("SSAO_Pass");
         PE_CHECK(FFX_CACAO_VkDraw(m_context, cmd->ApiHandle(), &m_proj, &m_normalsToView));
-        cmd->EndDebugRegion();
         cmd->EndDebugRegion();
 
         // image barrier transition happens in draw, so set to correct layout

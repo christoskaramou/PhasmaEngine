@@ -241,9 +241,6 @@ namespace pe
         cmd->Wait();
         cmd->Return();
 
-        // cache is only needed during build
-        modelAssimp->m_textureCache.clear();
-
         return modelAssimp;
     }
 
@@ -346,20 +343,21 @@ namespace pe
                 if (textureIndex < m_scene->mNumTextures)
                 {
                     aiTexture *tex = m_scene->mTextures[textureIndex];
-                    Image *img = nullptr;
+                    Image *rawImg = nullptr;
                     if (tex->mHeight == 0)
                     {
-                        img = Image::LoadRGBA8FromMemory(cmd, tex->pcData, tex->mWidth);
+                        rawImg = Image::LoadRGBA8FromMemory(cmd, tex->pcData, tex->mWidth);
                     }
                     else
                     {
-                        img = Image::LoadRawFromMemory(cmd, tex->pcData, tex->mWidth, tex->mHeight, vk::Format::eB8G8R8A8Unorm);
+                        rawImg = Image::LoadRawFromMemory(cmd, tex->pcData, tex->mWidth, tex->mHeight, vk::Format::eB8G8R8A8Unorm);
                     }
 
-                    if (img)
+                    if (rawImg)
                     {
-                        m_textureCache[key] = img;
-                        AddImage(img, true);
+                        std::shared_ptr<Image> sharedImage(rawImg);
+                        ResourceManager::Get().Register<Image>(key, sharedImage);
+                        m_images.push_back(ResourceHandle<Image>(sharedImage));
                         progress++;
                     }
                 }
@@ -367,7 +365,7 @@ namespace pe
             else
             {
                 std::filesystem::path pathKey(reinterpret_cast<const char8_t *>(key.c_str()));
-                Image *img = LoadTexture(cmd, pathKey);
+                ResourceHandle<Image> img = LoadTexture(cmd, pathKey);
                 if (img)
                     progress++;
             }
@@ -429,11 +427,11 @@ namespace pe
             mi.renderType = DetermineRenderType(material);
 
             // defaults
-            mi.images[static_cast<int>(TextureType::BaseColor)] = defaults.white;
-            mi.images[static_cast<int>(TextureType::MetallicRoughness)] = defaults.black;
-            mi.images[static_cast<int>(TextureType::Normal)] = defaults.normal;
-            mi.images[static_cast<int>(TextureType::Occlusion)] = defaults.white;
-            mi.images[static_cast<int>(TextureType::Emissive)] = defaults.black;
+            mi.images[static_cast<int>(TextureType::BaseColor)] = ResourceHandle<Image>::FromRaw(defaults.white);
+            mi.images[static_cast<int>(TextureType::MetallicRoughness)] = ResourceHandle<Image>::FromRaw(defaults.black);
+            mi.images[static_cast<int>(TextureType::Normal)] = ResourceHandle<Image>::FromRaw(defaults.normal);
+            mi.images[static_cast<int>(TextureType::Occlusion)] = ResourceHandle<Image>::FromRaw(defaults.white);
+            mi.images[static_cast<int>(TextureType::Emissive)] = ResourceHandle<Image>::FromRaw(defaults.black);
 
             for (auto &s : mi.samplers)
                 s = defaults.sampler;
@@ -808,7 +806,8 @@ namespace pe
             if (texPath.empty())
                 continue;
 
-            if (Image *loaded = GetTextureFromCache(texPath))
+            ResourceHandle<Image> loaded = ResourceManager::Get().Find<Image>(texPath.string());
+            if (loaded)
             {
                 meshInfo.images[static_cast<int>(type)] = loaded;
                 meshInfo.textureMask |= TextureBit(type);

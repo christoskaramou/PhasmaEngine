@@ -74,8 +74,16 @@ namespace pe
         static const std::vector<uint32_t> &GetAabbIndices() { return s_aabbIndices; }
 
     private:
+        struct DrawBatch
+        {
+            std::vector<DrawInfo> opaque;
+            std::vector<DrawInfo> alphaCut;
+            std::vector<DrawInfo> alphaBlend;
+            std::vector<DrawInfo> transmission;
+        };
+
         void UpdateGeometry();
-        void CullNode(Model &model, int node);
+        DrawBatch CullNodeBatch(Model &model, int beginNode, int endNode, const Camera *camera, bool frustumCulling) const;
         void UpdateUniformData();
         void UpdateIndirectData();
         void ClearDrawInfos(bool reserveMax);
@@ -128,8 +136,9 @@ namespace pe
         std::vector<DrawInfo> m_drawInfosAlphaBlend;
         std::vector<DrawInfo> m_drawInfosTransmission;
         std::vector<vk::DrawIndexedIndirectCommand> m_indirectCommands;
-
-        std::mutex m_drawInfosMutex;
+        std::vector<uint32_t> m_visibleIndirectIds;
+        uint64_t m_drawInfosReservedForGeometryVersion = 0;
+        bool m_hasDrawInfosReservation = false;
 
         // Ray Tracing
         struct alignas(16) MeshInfoGPU

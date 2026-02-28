@@ -47,15 +47,13 @@ namespace pe
         }
     }
 
+    void BloomBrightFilterPass::DeclareInputs(RGBuilder &builder)
+    {
+        builder.Read(m_displayRT);
+    }
+
     void BloomBrightFilterPass::ExecutePass(CommandBuffer *cmd)
     {
-        ImageBarrierInfo barrier{};
-        barrier.image = m_displayRT;
-        barrier.layout = vk::ImageLayout::eShaderReadOnlyOptimal;
-        barrier.stageFlags = vk::PipelineStageFlagBits2::eFragmentShader;
-        barrier.accessMask = vk::AccessFlagBits2::eShaderRead;
-
-        cmd->ImageBarrier(barrier);
         cmd->BeginPass(1, m_attachments.data(), "Bloom_BrightFilter");
         cmd->BindPipeline(*m_passInfo);
         cmd->SetViewport(0.f, 0.f, m_brightFilterRT->GetWidth_f(), m_brightFilterRT->GetHeight_f());
@@ -108,17 +106,15 @@ namespace pe
         }
     }
 
+    void BloomGaussianBlurHorizontalPass::DeclareInputs(RGBuilder &builder)
+    {
+        builder.Read(m_brightFilterRT);
+    }
+
     void BloomGaussianBlurHorizontalPass::ExecutePass(CommandBuffer *cmd)
     {
         auto &gSettings = Settings::Get<GlobalSettings>();
 
-        ImageBarrierInfo barrier{};
-        barrier.image = m_brightFilterRT;
-        barrier.layout = vk::ImageLayout::eShaderReadOnlyOptimal;
-        barrier.stageFlags = vk::PipelineStageFlagBits2::eFragmentShader;
-        barrier.accessMask = vk::AccessFlagBits2::eShaderRead;
-
-        cmd->ImageBarrier(barrier);
         cmd->BeginPass(1, m_attachments.data(), "Bloom_GaussianBlurHorizontal");
         cmd->BindPipeline(*m_passInfo);
         cmd->SetViewport(0.f, 0.f, m_gaussianBlurHorizontalRT->GetWidth_f(), m_gaussianBlurHorizontalRT->GetHeight_f());
@@ -176,17 +172,15 @@ namespace pe
         }
     }
 
+    void BloomGaussianBlurVerticalPass::DeclareInputs(RGBuilder &builder)
+    {
+        builder.Read(m_gaussianBlurHorizontalRT);
+    }
+
     void BloomGaussianBlurVerticalPass::ExecutePass(CommandBuffer *cmd)
     {
         auto &gSettings = Settings::Get<GlobalSettings>();
 
-        ImageBarrierInfo barrier{};
-        barrier.image = m_gaussianBlurHorizontalRT;
-        barrier.layout = vk::ImageLayout::eShaderReadOnlyOptimal;
-        barrier.stageFlags = vk::PipelineStageFlagBits2::eFragmentShader;
-        barrier.accessMask = vk::AccessFlagBits2::eShaderRead;
-
-        cmd->ImageBarrier(barrier);
         cmd->BeginPass(1, m_attachments.data(), "Bloom_GaussianBlurVertical");
         cmd->BindPipeline(*m_passInfo);
         cmd->SetViewport(0.f, 0.f, m_displayRT->GetWidth_f(), m_displayRT->GetHeight_f());

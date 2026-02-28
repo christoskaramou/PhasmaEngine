@@ -1,5 +1,6 @@
 #pragma once
 
+#include "API/Buffer.h"
 #include "GUI/GUI.h"
 
 namespace pe
@@ -99,5 +100,12 @@ namespace pe
         std::vector<PointLightEditor> m_pointLights;
         std::vector<SpotLightEditor> m_spotLights;
         std::vector<AreaLightEditor> m_areaLights;
+
+        // Reused scratch buffers to avoid per-frame allocations in Update().
+        std::vector<DirectionalLight> m_directionalLightsPOD;
+        std::vector<PointLight> m_pointLightsPOD;
+        std::vector<SpotLight> m_spotLightsPOD;
+        std::vector<AreaLight> m_areaLightsPOD;
+        std::vector<BufferRange> m_uploadRanges;
     };
 } // namespace pe

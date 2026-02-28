@@ -2,6 +2,7 @@
 #include "Scene/Primitives.h"
 #include "API/RHI.h"
 #include "Scene/Model.h"
+#include "API/Image.h"
 
 namespace pe
 {
@@ -110,11 +111,11 @@ namespace pe
 
         // Default Material
         auto &defaults = Model::GetDefaultResources();
-        meshInfo.images[0] = defaults.white;  // BaseColor
-        meshInfo.images[1] = defaults.normal; // Normal
-        meshInfo.images[2] = defaults.white;  // MetallicRoughness
-        meshInfo.images[3] = defaults.white;  // Occlusion
-        meshInfo.images[4] = defaults.black;  // Emissive
+        meshInfo.images[0] = ResourceHandle<Image>::FromRaw(defaults.white);  // BaseColor
+        meshInfo.images[1] = ResourceHandle<Image>::FromRaw(defaults.normal); // Normal
+        meshInfo.images[2] = ResourceHandle<Image>::FromRaw(defaults.white);  // MetallicRoughness
+        meshInfo.images[3] = ResourceHandle<Image>::FromRaw(defaults.white);  // Occlusion
+        meshInfo.images[4] = ResourceHandle<Image>::FromRaw(defaults.black);  // Emissive
 
         meshInfo.samplers[0] = defaults.sampler;
         meshInfo.samplers[1] = defaults.sampler;
@@ -237,10 +238,18 @@ namespace pe
             uint32_t base = (uint32_t)vertices.size();
 
             Vertex v0{}, v1{}, v2{}, v3{};
-            FillVertexPosition(v0, p0.x, p0.y, p0.z); FillVertexNormal(v0, n.x, n.y, n.z); FillVertexUV(v0, uv0.x, uv0.y);
-            FillVertexPosition(v1, p1.x, p1.y, p1.z); FillVertexNormal(v1, n.x, n.y, n.z); FillVertexUV(v1, uv1.x, uv1.y);
-            FillVertexPosition(v2, p2.x, p2.y, p2.z); FillVertexNormal(v2, n.x, n.y, n.z); FillVertexUV(v2, uv2.x, uv2.y);
-            FillVertexPosition(v3, p3.x, p3.y, p3.z); FillVertexNormal(v3, n.x, n.y, n.z); FillVertexUV(v3, uv3.x, uv3.y);
+            FillVertexPosition(v0, p0.x, p0.y, p0.z);
+            FillVertexNormal(v0, n.x, n.y, n.z);
+            FillVertexUV(v0, uv0.x, uv0.y);
+            FillVertexPosition(v1, p1.x, p1.y, p1.z);
+            FillVertexNormal(v1, n.x, n.y, n.z);
+            FillVertexUV(v1, uv1.x, uv1.y);
+            FillVertexPosition(v2, p2.x, p2.y, p2.z);
+            FillVertexNormal(v2, n.x, n.y, n.z);
+            FillVertexUV(v2, uv2.x, uv2.y);
+            FillVertexPosition(v3, p3.x, p3.y, p3.z);
+            FillVertexNormal(v3, n.x, n.y, n.z);
+            FillVertexUV(v3, uv3.x, uv3.y);
 
             FillVertexColor(v0, 1, 1, 1, 1);
             FillVertexColor(v1, 1, 1, 1, 1);

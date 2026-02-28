@@ -112,28 +112,28 @@ namespace pe
             m_directionalLights[0].color.w = gSettings.day ? lastIntensity : 0.0f;
         }
 
-        // Copy light data to POD vectors for GPU upload
-        std::vector<DirectionalLight> directionalLightsPOD(m_directionalLights.size());
+        // Copy light data to POD vectors for GPU upload (reused buffers, no per-frame allocations).
+        m_directionalLightsPOD.resize(m_directionalLights.size());
         for (size_t i = 0; i < m_directionalLights.size(); i++)
-            directionalLightsPOD[i] = m_directionalLights[i];
+            m_directionalLightsPOD[i] = m_directionalLights[i];
 
-        std::vector<PointLight> pointLightsPOD(m_pointLights.size());
+        m_pointLightsPOD.resize(m_pointLights.size());
         for (size_t i = 0; i < m_pointLights.size(); i++)
-            pointLightsPOD[i] = m_pointLights[i];
+            m_pointLightsPOD[i] = m_pointLights[i];
 
-        std::vector<SpotLight> spotLightsPOD(m_spotLights.size());
+        m_spotLightsPOD.resize(m_spotLights.size());
         for (size_t i = 0; i < m_spotLights.size(); i++)
-            spotLightsPOD[i] = m_spotLights[i];
+            m_spotLightsPOD[i] = m_spotLights[i];
 
-        std::vector<AreaLight> areaLightsPOD(m_areaLights.size());
+        m_areaLightsPOD.resize(m_areaLights.size());
         for (size_t i = 0; i < m_areaLights.size(); i++)
-            areaLightsPOD[i] = m_areaLights[i];
+            m_areaLightsPOD[i] = m_areaLights[i];
 
         // Calculate offsets and total size
-        size_t sizeDirectional = directionalLightsPOD.size() * sizeof(DirectionalLight);
-        size_t sizePoint = pointLightsPOD.size() * sizeof(PointLight);
-        size_t sizeSpot = spotLightsPOD.size() * sizeof(SpotLight);
-        size_t sizeArea = areaLightsPOD.size() * sizeof(AreaLight);
+        size_t sizeDirectional = m_directionalLightsPOD.size() * sizeof(DirectionalLight);
+        size_t sizePoint = m_pointLightsPOD.size() * sizeof(PointLight);
+        size_t sizeSpot = m_spotLightsPOD.size() * sizeof(SpotLight);
+        size_t sizeArea = m_areaLightsPOD.size() * sizeof(AreaLight);
 
         // Align offsets to 16 bytes (float4) for safety in HLSL ByteAddressBuffer
         // Although ByteAddressBuffer is naturally 4-byte aligned, structured load works best with alignment
@@ -153,28 +153,25 @@ namespace pe
             m_storageBuffers[frameIndex] = Buffer::Create(
                 totalSize * 2, // Double capacity to avoid frequent reallocations
                 vk::BufferUsageFlagBits2::eStorageBuffer,
-                VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT,
+                VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT | VMA_ALLOCATION_CREATE_MAPPED_BIT,
                 "lights_storage_buffer");
             sb = m_storageBuffers[frameIndex];
         }
 
         // Upload data
-        sb->Map();
-        std::vector<BufferRange> ranges;
+        m_uploadRanges.clear();
+        m_uploadRanges.reserve(4);
         if (sizeDirectional > 0)
-            ranges.push_back({&directionalLightsPOD[0], sizeDirectional, static_cast<size_t>(offsetDirectional)});
+            m_uploadRanges.push_back({m_directionalLightsPOD.data(), sizeDirectional, static_cast<size_t>(offsetDirectional)});
         if (sizePoint > 0)
-            ranges.push_back({&pointLightsPOD[0], sizePoint, static_cast<size_t>(offsetPoint)});
+            m_uploadRanges.push_back({m_pointLightsPOD.data(), sizePoint, static_cast<size_t>(offsetPoint)});
         if (sizeSpot > 0)
-            ranges.push_back({&spotLightsPOD[0], sizeSpot, static_cast<size_t>(offsetSpot)});
+            m_uploadRanges.push_back({m_spotLightsPOD.data(), sizeSpot, static_cast<size_t>(offsetSpot)});
         if (sizeArea > 0)
-            ranges.push_back({&areaLightsPOD[0], sizeArea, static_cast<size_t>(offsetArea)});
+            m_uploadRanges.push_back({m_areaLightsPOD.data(), sizeArea, static_cast<size_t>(offsetArea)});
 
-        if (!ranges.empty())
-            sb->Copy(static_cast<uint32_t>(ranges.size()), ranges.data(), true);
-
-        sb->Flush();
-        sb->Unmap();
+        if (!m_uploadRanges.empty())
+            sb->Copy(static_cast<uint32_t>(m_uploadRanges.size()), m_uploadRanges.data(), true);
 
         // Update UBO
         m_lubo.numDirectionalLights = static_cast<uint32_t>(m_directionalLights.size());

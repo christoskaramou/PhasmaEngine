@@ -287,7 +287,7 @@ namespace pe
                     ImGui::Text("%s", textureNames[i]);
 
                     ImGui::TableSetColumnIndex(1);
-                    Image *img = mesh->images[i];
+                    Image *img = mesh->images[i].get();
                     std::string id = "##tex" + std::to_string(i);
 
                     // Thumbnail / Button
@@ -327,7 +327,7 @@ namespace pe
                     {
                         if (ImGui::Button(("Clear" + id).c_str()))
                         {
-                            mesh->images[i] = nullptr;
+                            mesh->images[i] = ResourceHandle<Image>();
                             mesh->textureMask &= ~(1 << i);
                             model->MarkDirty(0);
                             PropagateMeshChange(mesh, model);
@@ -351,7 +351,8 @@ namespace pe
                                 Queue *queue = RHII.GetMainQueue();
                                 CommandBuffer *cmd = queue->AcquireCommandBuffer();
                                 cmd->Begin();
-                                Image *newImg = model->LoadTexture(cmd, path);
+                                
+                                ResourceHandle<Image> newImg = model->LoadTexture(cmd, path);
                                 cmd->End();
                                 queue->Submit(1, &cmd, nullptr, nullptr);
                                 cmd->Wait();
@@ -367,7 +368,7 @@ namespace pe
                                     RendererSystem *renderer = GetGlobalSystem<RendererSystem>();
                                     if (renderer)
                                         renderer->GetScene().UpdateTextures();
-                                } }, {".png", ".jpg", ".jpeg", ".tga", ".bmp", ".psd", ".gif", ".hdr", ".pic", ".ppm", ".pgm"});
+                                } });
                         }
                     }
                 }

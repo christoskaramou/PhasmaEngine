@@ -99,38 +99,25 @@ namespace pe
         }
     }
 
+    void SSRPass::DeclareInputs(RGBuilder &builder)
+    {
+        builder.Read(m_normalRT);
+        builder.Read(m_depth);
+        builder.Read(m_srmRT);
+        builder.Read(m_albedoRT);
+    }
+
     void SSRPass::ExecutePass(CommandBuffer *cmd)
     {
-        std::vector<ImageBarrierInfo> barriers(5);
-
-        barriers[0].image = m_frameImage;
-        barriers[0].layout = vk::ImageLayout::eShaderReadOnlyOptimal;
-        barriers[0].stageFlags = vk::PipelineStageFlagBits2::eFragmentShader;
-        barriers[0].accessMask = vk::AccessFlagBits2::eShaderRead;
-
-        barriers[1].image = m_normalRT;
-        barriers[1].layout = vk::ImageLayout::eShaderReadOnlyOptimal;
-        barriers[1].stageFlags = vk::PipelineStageFlagBits2::eFragmentShader;
-        barriers[1].accessMask = vk::AccessFlagBits2::eShaderRead;
-
-        barriers[2].image = m_depth;
-        barriers[2].layout = vk::ImageLayout::eShaderReadOnlyOptimal;
-        barriers[2].stageFlags = vk::PipelineStageFlagBits2::eFragmentShader;
-        barriers[2].accessMask = vk::AccessFlagBits2::eShaderRead;
-
-        barriers[3].image = m_srmRT;
-        barriers[3].layout = vk::ImageLayout::eShaderReadOnlyOptimal;
-        barriers[3].stageFlags = vk::PipelineStageFlagBits2::eFragmentShader;
-        barriers[3].accessMask = vk::AccessFlagBits2::eShaderRead;
-
-        barriers[4].image = m_albedoRT;
-        barriers[4].layout = vk::ImageLayout::eShaderReadOnlyOptimal;
-        barriers[4].stageFlags = vk::PipelineStageFlagBits2::eFragmentShader;
-        barriers[4].accessMask = vk::AccessFlagBits2::eShaderRead;
+        ImageBarrierInfo frameBarrier{};
+        frameBarrier.image = m_frameImage;
+        frameBarrier.layout = vk::ImageLayout::eShaderReadOnlyOptimal;
+        frameBarrier.stageFlags = vk::PipelineStageFlagBits2::eFragmentShader;
+        frameBarrier.accessMask = vk::AccessFlagBits2::eShaderRead;
 
         cmd->BeginDebugRegion("SSRPass");
         cmd->CopyImage(m_viewportRT, m_frameImage);
-        cmd->ImageBarriers(barriers);
+        cmd->ImageBarrier(frameBarrier);
 
         cmd->BeginPass(1, m_attachments.data(), "SSR");
         cmd->BindPipeline(*m_passInfo);

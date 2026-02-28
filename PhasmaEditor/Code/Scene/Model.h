@@ -22,7 +22,7 @@ namespace pe
         AABB boundingBox;
         RenderType renderType;
 
-        Image *images[5]{nullptr};
+        ResourceHandle<Image> images[5];
         Sampler *samplers[5]{nullptr};
         uint32_t textureMask = 0;
 
@@ -62,12 +62,14 @@ namespace pe
         int instanceIndex = -1; // Cache for TLAS update
     };
 
-    // Base class for all model loaders
-    class Model
+    class Model : public Resource
     {
     public:
         Model();
         virtual ~Model();
+
+        virtual void Load() override {}
+        virtual void Unload() override;
 
         // Factory method to load models based on file extension
         static Model *Load(const std::filesystem::path &file);
@@ -77,8 +79,7 @@ namespace pe
         void MarkDirty(int node);
         void UpdateNodeMatrices();
         void ReparentNode(int nodeIndex, int newParentIndex);
-        Image *LoadTexture(CommandBuffer *cmd, const std::filesystem::path &texturePath);
-        Image *GetTextureFromCache(const std::filesystem::path &texturePath) const;
+        ResourceHandle<Image> LoadTexture(CommandBuffer *cmd, const std::filesystem::path &texturePath);
 
         // Getters
         size_t GetId() const { return m_id; }
@@ -90,7 +91,7 @@ namespace pe
         const std::vector<AabbVertex> &GetAabbVertices() const { return m_aabbVertices; }
         const std::vector<uint32_t> &GetIndices() const { return m_indices; }
 
-        const std::vector<Image *> &GetImages() const { return m_images; }
+        const std::vector<ResourceHandle<Image>> &GetImages() const { return m_images; }
         const std::vector<Sampler *> &GetSamplers() const { return m_samplers; }
 
         const std::vector<MeshInfo> &GetMeshInfos() const { return m_meshInfos; }
@@ -153,10 +154,9 @@ namespace pe
         std::atomic_bool m_render = false;
         size_t m_id;
 
-        std::vector<Image *> m_images{};
+        std::vector<ResourceHandle<Image>> m_images{};
         std::vector<Sampler *> m_samplers{};
 
-        std::unordered_set<Image *> m_sharedImages{};
         std::unordered_set<Sampler *> m_sharedSamplers{};
 
         std::vector<MeshInfo> m_meshInfos{};
@@ -182,7 +182,6 @@ namespace pe
         std::string m_label;
         std::filesystem::path m_filePath;
 
-        std::unordered_map<std::string, Image *> m_textureCache;
         bool m_previousMatricesIsDirty = false;
     };
 } // namespace pe
