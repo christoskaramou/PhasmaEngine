@@ -40,6 +40,7 @@ namespace pe
     {
     public:
         using PassID = uint32_t;
+        using PassCallback = std::function<void(CommandBuffer *)>;
 
         struct Pass
         {
@@ -47,12 +48,12 @@ namespace pe
             std::string name;
             std::function<bool()> condition;
             IRenderPassComponent *component;
+            PassCallback callback;
         };
 
         void AddPass(PassID id, std::string name, std::function<bool()> condition, IRenderPassComponent *component);
+        void AddPass(PassID id, std::string name, std::function<bool()> condition, PassCallback callback);
         void Execute(CommandBuffer *cmd);
-        void ExecuteBefore(CommandBuffer *cmd, PassID passID);
-        void ExecuteFrom(CommandBuffer *cmd, PassID passID);
         bool ContainsPass(PassID passID) const;
         void Clear();
 

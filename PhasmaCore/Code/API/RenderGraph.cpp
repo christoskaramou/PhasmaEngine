@@ -48,15 +48,28 @@ namespace pe
     {
         PE_ERROR_IF(m_passIndex.find(id) != m_passIndex.end(), "RenderGraph::AddPass duplicate pass id: %u", static_cast<unsigned>(id));
         m_passIndex[id] = m_passes.size();
-        m_passes.push_back({id, std::move(name), std::move(condition), component});
+        m_passes.push_back({id, std::move(name), std::move(condition), component, nullptr});
+    }
+
+    void RenderGraph::AddPass(PassID id, std::string name, std::function<bool()> condition, PassCallback callback)
+    {
+        PE_ERROR_IF(m_passIndex.find(id) != m_passIndex.end(), "RenderGraph::AddPass duplicate pass id: %u", static_cast<unsigned>(id));
+        m_passIndex[id] = m_passes.size();
+        m_passes.push_back({id, std::move(name), std::move(condition), nullptr, std::move(callback)});
     }
 
     void RenderGraph::ExecuteSinglePass(CommandBuffer *cmd, Pass &pass, RGBuilder &builder)
     {
-        if (!pass.component)
+        if (!pass.condition())
             return;
 
-        if (!pass.condition())
+        if (pass.callback)
+        {
+            pass.callback(cmd);
+            return;
+        }
+
+        if (!pass.component)
             return;
 
         builder.Reset();
@@ -83,26 +96,6 @@ namespace pe
     bool RenderGraph::ContainsPass(PassID passID) const
     {
         return FindPassIndex(passID) != m_passes.size();
-    }
-
-    void RenderGraph::ExecuteBefore(CommandBuffer *cmd, PassID passID)
-    {
-        size_t stopIndex = FindPassIndex(passID);
-        if (stopIndex == m_passes.size())
-            return;
-
-        for (size_t i = 0; i < stopIndex; i++)
-            ExecuteSinglePass(cmd, m_passes[i], m_builderScratch);
-    }
-
-    void RenderGraph::ExecuteFrom(CommandBuffer *cmd, PassID passID)
-    {
-        size_t startIndex = FindPassIndex(passID);
-        if (startIndex == m_passes.size())
-            return;
-
-        for (size_t i = startIndex; i < m_passes.size(); i++)
-            ExecuteSinglePass(cmd, m_passes[i], m_builderScratch);
     }
 
     void RenderGraph::Clear()

@@ -66,6 +66,7 @@ namespace pe
             Aabbs,
             TAA,
             Sharpen,
+            Upsample,
             Tonemap,
             BloomBF,
             BloomH,

@@ -236,6 +236,7 @@ namespace pe
         m_renderGraphPassEnabled[static_cast<size_t>(RenderGraphPassId::Aabbs)] = gs.draw_aabbs;
         m_renderGraphPassEnabled[static_cast<size_t>(RenderGraphPassId::TAA)] = gs.taa;
         m_renderGraphPassEnabled[static_cast<size_t>(RenderGraphPassId::Sharpen)] = gs.taa && gs.cas_sharpening;
+        m_renderGraphPassEnabled[static_cast<size_t>(RenderGraphPassId::Upsample)] = !gs.taa;
         m_renderGraphPassEnabled[static_cast<size_t>(RenderGraphPassId::Tonemap)] = gs.tonemapping;
         m_renderGraphPassEnabled[static_cast<size_t>(RenderGraphPassId::BloomBF)] = gs.bloom;
         m_renderGraphPassEnabled[static_cast<size_t>(RenderGraphPassId::BloomH)] = gs.bloom;
@@ -304,6 +305,9 @@ namespace pe
         m_renderGraph.AddPass(static_cast<RenderGraph::PassID>(RenderGraphPassId::Aabbs), "Aabbs", isPassEnabled(RenderGraphPassId::Aabbs), m_aabbsPass);
         m_renderGraph.AddPass(static_cast<RenderGraph::PassID>(RenderGraphPassId::TAA), "TAA", isPassEnabled(RenderGraphPassId::TAA), m_taaPass);
         m_renderGraph.AddPass(static_cast<RenderGraph::PassID>(RenderGraphPassId::Sharpen), "Sharpen", isPassEnabled(RenderGraphPassId::Sharpen), m_sharpenPass);
+        m_renderGraph.AddPass(static_cast<RenderGraph::PassID>(RenderGraphPassId::Upsample), "Upsample", isPassEnabled(RenderGraphPassId::Upsample),
+                              [this](CommandBuffer *cmd)
+                              { Upsample(cmd, vk::Filter::eLinear); });
         m_renderGraph.AddPass(static_cast<RenderGraph::PassID>(RenderGraphPassId::Tonemap), "Tonemap", isPassEnabled(RenderGraphPassId::Tonemap), m_tonemapPass);
         m_renderGraph.AddPass(static_cast<RenderGraph::PassID>(RenderGraphPassId::BloomBF), "BloomBF", isPassEnabled(RenderGraphPassId::BloomBF), m_bloomBrightFilterPass);
         m_renderGraph.AddPass(static_cast<RenderGraph::PassID>(RenderGraphPassId::BloomH), "BloomH", isPassEnabled(RenderGraphPassId::BloomH), m_bloomGaussianBlurHorizontalPass);
@@ -319,7 +323,10 @@ namespace pe
 
         // Set scene on all scene-dependent passes before execution
         auto setScene = [this](auto *pass)
-        { if (pass) pass->SetScene(&m_scene); };
+        {
+            if (pass)
+                pass->SetScene(&m_scene);
+        };
         setScene(m_shadowPass);
         setScene(m_depthPass);
         setScene(m_gbufferOpaquePass);
@@ -330,33 +337,10 @@ namespace pe
         setScene(m_gridPass);
         setScene(m_aabbsPass);
 
-        const auto &gSettings = Settings::Get<GlobalSettings>();
-
         cmd->Begin();
-
-        if (gSettings.taa)
-        {
-            m_renderGraph.Execute(cmd);
-        }
-        else
-        {
-            constexpr auto tonemapID = static_cast<RenderGraph::PassID>(RenderGraphPassId::Tonemap);
-            if (m_renderGraph.ContainsPass(tonemapID))
-            {
-                m_renderGraph.ExecuteBefore(cmd, tonemapID);
-                Upsample(cmd, vk::Filter::eLinear);
-                m_renderGraph.ExecuteFrom(cmd, tonemapID);
-            }
-            else
-            {
-                m_renderGraph.Execute(cmd);
-            }
-        }
-
+        m_renderGraph.Execute(cmd);
         m_gui.ExecutePass(cmd);
-
         BlitToSwapchain(cmd, m_displayRT, imageIndex);
-
         cmd->End();
 
         return cmd;
