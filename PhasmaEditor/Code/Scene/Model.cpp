@@ -312,7 +312,7 @@ namespace pe
             if (!rawImg)
                 return ResourceHandle<Image>();
 
-            std::shared_ptr<Image> sharedImage(rawImg);
+            std::shared_ptr<Image> sharedImage(rawImg, [](Image *img) { Image::Destroy(img); });
             ResourceManager::Get().Register<Image>(normalizedStr, sharedImage);
             handle = ResourceHandle<Image>(sharedImage);
         }

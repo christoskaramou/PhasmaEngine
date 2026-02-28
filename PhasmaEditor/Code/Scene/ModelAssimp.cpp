@@ -355,7 +355,7 @@ namespace pe
 
                     if (rawImg)
                     {
-                        std::shared_ptr<Image> sharedImage(rawImg);
+                        std::shared_ptr<Image> sharedImage(rawImg, [](Image *img) { Image::Destroy(img); });
                         ResourceManager::Get().Register<Image>(key, sharedImage);
                         m_images.push_back(ResourceHandle<Image>(sharedImage));
                         progress++;
