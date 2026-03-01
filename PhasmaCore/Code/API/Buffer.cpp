@@ -1,5 +1,6 @@
 #include "API/Buffer.h"
 #include "API/Command.h"
+#include "API/Helpers.h"
 #include "API/RHI.h"
 #include "API/StagingManager.h"
 
@@ -165,6 +166,14 @@ namespace pe
 
         BufferTrackInfo &trackInfo = info.buffer->GetTrackInfo();
 
+        bool requestRead = VulkanHelpers::IsReadOnlyAccess(info.accessMask);
+        bool previousRead = VulkanHelpers::IsReadOnlyAccess(trackInfo.accessMask);
+        bool sameState = trackInfo.stageMask == info.stageMask &&
+                         trackInfo.accessMask == info.accessMask &&
+                         trackInfo.queueFamilyIndex == info.queueFamilyIndex;
+        if (requestRead && previousRead && sameState)
+            return;
+
         vk::BufferMemoryBarrier2 barrier{};
         barrier.buffer = info.buffer->ApiHandle();
         barrier.srcStageMask = trackInfo.stageMask;
@@ -193,6 +202,7 @@ namespace pe
             return;
 
         std::vector<vk::BufferMemoryBarrier2> barriers(infos.size());
+        uint32_t barrierIndex = 0;
         for (uint32_t i = 0; i < infos.size(); i++)
         {
             const auto &info = infos[i];
@@ -200,23 +210,35 @@ namespace pe
 
             BufferTrackInfo &trackInfo = info.buffer->GetTrackInfo();
 
-            barriers[i].buffer = info.buffer->ApiHandle();
-            barriers[i].srcStageMask = trackInfo.stageMask;
-            barriers[i].srcAccessMask = trackInfo.accessMask;
-            barriers[i].srcQueueFamilyIndex = trackInfo.queueFamilyIndex;
-            barriers[i].dstStageMask = info.stageMask;
-            barriers[i].dstAccessMask = info.accessMask;
-            barriers[i].dstQueueFamilyIndex = info.queueFamilyIndex;
-            barriers[i].offset = info.offset;
-            barriers[i].size = info.size;
+            bool requestRead = VulkanHelpers::IsReadOnlyAccess(info.accessMask);
+            bool previousRead = VulkanHelpers::IsReadOnlyAccess(trackInfo.accessMask);
+            bool sameState = trackInfo.stageMask == info.stageMask &&
+                             trackInfo.accessMask == info.accessMask &&
+                             trackInfo.queueFamilyIndex == info.queueFamilyIndex;
+            if (requestRead && previousRead && sameState)
+                continue;
+
+            barriers[barrierIndex].buffer = info.buffer->ApiHandle();
+            barriers[barrierIndex].srcStageMask = trackInfo.stageMask;
+            barriers[barrierIndex].srcAccessMask = trackInfo.accessMask;
+            barriers[barrierIndex].srcQueueFamilyIndex = trackInfo.queueFamilyIndex;
+            barriers[barrierIndex].dstStageMask = info.stageMask;
+            barriers[barrierIndex].dstAccessMask = info.accessMask;
+            barriers[barrierIndex].dstQueueFamilyIndex = info.queueFamilyIndex;
+            barriers[barrierIndex].offset = info.offset;
+            barriers[barrierIndex].size = info.size;
+            barrierIndex++;
 
             trackInfo.stageMask = info.stageMask;
             trackInfo.accessMask = info.accessMask;
             trackInfo.queueFamilyIndex = info.queueFamilyIndex;
         }
 
+        if (!barrierIndex)
+            return;
+
         vk::DependencyInfo dependencyInfo{};
-        dependencyInfo.bufferMemoryBarrierCount = static_cast<uint32_t>(barriers.size());
+        dependencyInfo.bufferMemoryBarrierCount = barrierIndex;
         dependencyInfo.pBufferMemoryBarriers = barriers.data();
 
         cmd->ApiHandle().pipelineBarrier2(dependencyInfo);

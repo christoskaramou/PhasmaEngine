@@ -244,6 +244,7 @@ namespace pe
         m_renderGraphPassEnabled[static_cast<size_t>(RenderGraphPassId::DOF)] = gs.dof;
         m_renderGraphPassEnabled[static_cast<size_t>(RenderGraphPassId::MotionBlur)] = gs.motion_blur;
         m_renderGraphPassEnabled[static_cast<size_t>(RenderGraphPassId::Grid)] = gs.draw_grid;
+        m_renderGraphPassEnabled[static_cast<size_t>(RenderGraphPassId::GUI)] = m_gui.Render();
     }
 
     void RendererSystem::WaitPreviousFrameCommands()
@@ -315,6 +316,10 @@ namespace pe
         m_renderGraph.AddPass(static_cast<RenderGraph::PassID>(RenderGraphPassId::DOF), "DOF", isPassEnabled(RenderGraphPassId::DOF), m_dofPass);
         m_renderGraph.AddPass(static_cast<RenderGraph::PassID>(RenderGraphPassId::MotionBlur), "MotionBlur", isPassEnabled(RenderGraphPassId::MotionBlur), m_motionBlurPass);
         m_renderGraph.AddPass(static_cast<RenderGraph::PassID>(RenderGraphPassId::Grid), "Grid", isPassEnabled(RenderGraphPassId::Grid), m_gridPass);
+        m_renderGraph.AddPass(static_cast<RenderGraph::PassID>(RenderGraphPassId::GUI), "GUI", isPassEnabled(RenderGraphPassId::GUI),
+                              [this](CommandBuffer *cmd)
+                              { m_gui.ExecutePass(cmd); });
+        m_renderGraph.Compile();
     }
 
     CommandBuffer *RendererSystem::RecordPasses(uint32_t imageIndex)
@@ -339,7 +344,6 @@ namespace pe
 
         cmd->Begin();
         m_renderGraph.Execute(cmd);
-        m_gui.ExecutePass(cmd);
         BlitToSwapchain(cmd, m_displayRT, imageIndex);
         cmd->End();
 

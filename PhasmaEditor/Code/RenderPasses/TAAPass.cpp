@@ -124,6 +124,22 @@ namespace pe
         builder.WriteCompute(taaOutput);
     }
 
+    void TAAPass::DeclareOutputs(RGBuilder &builder)
+    {
+        Image *taaOutput = m_casSharpeningEnabled ? m_taaResolved : m_displayRT;
+
+        // ExecutePass transitions taaOutput/history for the copy operation and leaves
+        // them in transfer layouts, so declare those as the final tracked states.
+        builder.OutputCustom(taaOutput,
+                             vk::ImageLayout::eTransferSrcOptimal,
+                             vk::PipelineStageFlagBits2::eTransfer,
+                             vk::AccessFlagBits2::eTransferRead);
+        builder.OutputCustom(m_historyImage,
+                             vk::ImageLayout::eTransferDstOptimal,
+                             vk::PipelineStageFlagBits2::eTransfer,
+                             vk::AccessFlagBits2::eTransferWrite);
+    }
+
     void TAAPass::ExecutePass(CommandBuffer *cmd)
     {
         Image *taaOutput = m_casSharpeningEnabled ? m_taaResolved : m_displayRT;

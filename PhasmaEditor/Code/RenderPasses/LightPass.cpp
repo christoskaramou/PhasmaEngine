@@ -245,7 +245,6 @@ namespace pe
 
     void LightTransparentPass::CreateUniforms(CommandBuffer *cmd)
     {
-
         for (auto &uniform : m_uniforms)
         {
             uniform = Buffer::Create(

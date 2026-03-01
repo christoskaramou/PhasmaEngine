@@ -74,6 +74,7 @@ namespace pe
             DOF,
             MotionBlur,
             Grid,
+            GUI,
             Count
         };
 

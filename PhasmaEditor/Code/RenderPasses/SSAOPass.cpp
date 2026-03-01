@@ -106,6 +106,14 @@ namespace pe
         builder.WriteCompute(m_ssaoRT);
     }
 
+    void SSAOPass::DeclareOutputs(RGBuilder &builder)
+    {
+        builder.OutputCustom(m_ssaoRT,
+                             vk::ImageLayout::eShaderReadOnlyOptimal,
+                             vk::PipelineStageFlagBits2::eComputeShader,
+                             vk::AccessFlagBits2::eShaderRead);
+    }
+
     void SSAOPass::ExecutePass(CommandBuffer *cmd)
     {
         vk::MemoryBarrier2 barrier{};
@@ -118,14 +126,6 @@ namespace pe
         cmd->MemoryBarrier(barrier);
         PE_CHECK(FFX_CACAO_VkDraw(m_context, cmd->ApiHandle(), &m_proj, &m_normalsToView));
         cmd->EndDebugRegion();
-
-        // image barrier transition happens in draw, so set to correct layout
-        ImageBarrierInfo ssaoInfo{};
-        ssaoInfo.image = m_ssaoRT;
-        ssaoInfo.layout = vk::ImageLayout::eShaderReadOnlyOptimal;
-        ssaoInfo.stageFlags = vk::PipelineStageFlagBits2::eComputeShader;
-        ssaoInfo.accessMask = vk::AccessFlagBits2::eShaderRead;
-        m_ssaoRT->SetCurrentInfoAll(ssaoInfo);
     }
 
     void SSAOPass::Resize(uint32_t width, uint32_t height)

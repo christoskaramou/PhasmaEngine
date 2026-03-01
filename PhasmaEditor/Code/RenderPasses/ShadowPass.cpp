@@ -105,6 +105,17 @@ namespace pe
         }
     }
 
+    void ShadowPass::DeclareOutputs(RGBuilder &builder)
+    {
+        for (auto *texture : m_textures)
+        {
+            if (!texture)
+                continue;
+
+            builder.OutputDepth(texture);
+        }
+    }
+
     constexpr float cascadeSplitLambda = 0.95f;
     void ShadowPass::CalculateCascades(Camera *camera)
     {

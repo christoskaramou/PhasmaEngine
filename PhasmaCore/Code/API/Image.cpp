@@ -2,6 +2,7 @@
 #include "API/Buffer.h"
 #include "API/Command.h"
 #include "API/Downsampler/Downsampler.h"
+#include "API/Helpers.h"
 #include "API/RHI.h"
 #include "API/StagingManager.h"
 
@@ -731,6 +732,15 @@ namespace pe
         uint32_t arrayLayers = info.arrayLayers ? info.arrayLayers : image.m_createInfo.arrayLayers;
         const ImageTrackInfo &oldInfo = image.m_trackInfos[info.baseArrayLayer][info.baseMipLevel];
 
+        bool requestRead = VulkanHelpers::IsReadOnlyAccess(info.accessMask);
+        bool previousRead = VulkanHelpers::IsReadOnlyAccess(oldInfo.accessMask);
+        bool sameState = oldInfo.layout == info.layout &&
+                         oldInfo.stageFlags == info.stageFlags &&
+                         oldInfo.accessMask == info.accessMask &&
+                         oldInfo.queueFamilyId == info.queueFamilyId;
+        if (requestRead && previousRead && sameState)
+            return;
+
         vk::ImageMemoryBarrier2 barrier{};
         barrier.srcStageMask = oldInfo.stageFlags;
         barrier.dstStageMask = info.stageFlags;
@@ -781,6 +791,15 @@ namespace pe
 
             const ImageTrackInfo &oldInfo = image->m_trackInfos[info.baseArrayLayer][info.baseMipLevel];
 
+            bool requestRead = VulkanHelpers::IsReadOnlyAccess(info.accessMask);
+            bool previousRead = VulkanHelpers::IsReadOnlyAccess(oldInfo.accessMask);
+            bool sameState = oldInfo.layout == info.layout &&
+                             oldInfo.stageFlags == info.stageFlags &&
+                             oldInfo.accessMask == info.accessMask &&
+                             oldInfo.queueFamilyId == info.queueFamilyId;
+            if (requestRead && previousRead && sameState)
+                continue;
+
             vk::ImageMemoryBarrier2 barrier{};
             barrier.srcStageMask = oldInfo.stageFlags;
             barrier.dstStageMask = info.stageFlags;
@@ -802,6 +821,9 @@ namespace pe
                 for (uint32_t j = 0; j < mipLevels; j++)
                     image->m_trackInfos[info.baseArrayLayer + i][info.baseMipLevel + j] = info;
         }
+
+        if (barriers.empty())
+            return;
 
         vk::DependencyInfo depInfo{};
         depInfo.imageMemoryBarrierCount = static_cast<uint32_t>(barriers.size());
