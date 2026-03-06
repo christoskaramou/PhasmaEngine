@@ -318,6 +318,9 @@ namespace pe
 
                 if (ImGui::BeginMenu("Viewport"))
                 {
+                    if (auto *sv = GetWidget<SceneView>())
+                        ImGui::MenuItem("Enabled", nullptr, sv->GetOpen());
+
                     if (ImGui::MenuItem("Floating", nullptr, &GUIState::s_sceneViewFloating))
                     {
                         if (GUIState::s_sceneViewFloating)
@@ -612,7 +615,6 @@ namespace pe
         auto meshWidget = std::make_shared<MeshWidget>();
         auto lightWidget = std::make_shared<LightWidget>();
         auto globalWidget = std::make_shared<GlobalWidget>();
-
         // Console added early to potentially influence tab ordering (Leftmost)
         m_widgets = {console,
                      properties,
@@ -641,7 +643,6 @@ namespace pe
                                properties,
                                models,
                                assetInfo,
-                               sceneView,
                                fileBrowser,
                                hierarchy,
                                particles,

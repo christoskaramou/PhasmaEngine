@@ -17,7 +17,8 @@ namespace pe
         Node,
         Mesh,
         Camera,
-        Light
+        Light,
+        Emitter
     };
 
     enum class LightType
@@ -35,6 +36,7 @@ namespace pe
 
         void Select(Model *model, int nodeIndex, SelectionType type = SelectionType::Node);
         void Select(LightType type, int index);
+        void SelectEmitter(int index);
         void ClearSelection();
 
         bool HasSelection() const;
@@ -46,6 +48,7 @@ namespace pe
 
         LightType GetSelectedLightType() const;
         int GetSelectedLightIndex() const;
+        int GetSelectedEmitterIndex() const;
 
         GizmoOperation GetGizmoOperation() const;
         void SetGizmoOperation(GizmoOperation op);
@@ -59,6 +62,7 @@ namespace pe
         LightType m_selectedLightType = LightType::Directional;
         int m_selectedLightIndex = -1;
 
+        int m_selectedEmitterIndex = -1;
         SelectionType m_selectionType = SelectionType::Node;
         GizmoOperation m_gizmoOperation = GizmoOperation::Translate;
     };

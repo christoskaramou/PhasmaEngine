@@ -4,6 +4,8 @@
 #include "GUI/Helpers.h"
 #include "LightWidget.h"
 #include "MeshWidget.h"
+#include "Particles.h"
+#include "Particles/ParticleManager.h"
 #include "Scene/Model.h"
 #include "Scene/Scene.h"
 #include "Scene/SelectionManager.h"
@@ -92,6 +94,23 @@ namespace pe
             w->DrawEmbed(ls, sel.GetSelectedLightType(), sel.GetSelectedLightIndex());
         };
 
+        auto drawEmitter = [&]()
+        {
+            auto *w = m_gui->GetWidget<Particles>();
+            if (!w)
+                return;
+
+            RendererSystem *renderer = GetGlobalSystem<RendererSystem>();
+            if (!renderer)
+                return;
+
+            ParticleManager *pm = renderer->GetScene().GetParticleManager();
+            if (!pm)
+                return;
+
+            w->DrawEmbed(pm, sel.GetSelectedEmitterIndex());
+        };
+
         switch (sel.GetSelectionType())
         {
         case SelectionType::Node:
@@ -105,6 +124,9 @@ namespace pe
             break;
         case SelectionType::Light:
             drawLight();
+            break;
+        case SelectionType::Emitter:
+            drawEmitter();
             break;
         default:
             break;

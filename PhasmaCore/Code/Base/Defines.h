@@ -161,7 +161,7 @@ namespace pe
 #define PE_ASSERT(condition, fmt, ...)                                         \
     do                                                                         \
     {                                                                          \
-        if (condition)                                                         \
+        if (!(condition))                                                      \
         {                                                                      \
             pe::PeErrorImpl(__func__, __FILE__, __LINE__, fmt, ##__VA_ARGS__); \
         }                                                                      \

@@ -46,6 +46,8 @@ namespace pe
         uint32_t GetParticleCount() const { return m_particleCount; }
         uint32_t GetEmitterCount() const { return static_cast<uint32_t>(m_emitters.size()); }
         std::vector<ParticleEmitter> &GetEmitters() { return m_emitters; }
+        std::vector<std::string> &GetEmitterNames() { return m_emitterNames; }
+        const std::vector<std::string> &GetEmitterNames() const { return m_emitterNames; }
         void UpdateEmitterBuffer(); // Call this when emitters change
 
         // Texture Management
@@ -67,6 +69,7 @@ namespace pe
         uint32_t m_gpuCapacity = 0;
         uint32_t m_bufferVersion = 0;
         std::vector<ParticleEmitter> m_emitters;
+        std::vector<std::string> m_emitterNames;
 
         std::vector<Image *> m_textures;
         std::vector<std::string> m_textureNames;

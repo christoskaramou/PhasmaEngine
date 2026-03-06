@@ -175,7 +175,8 @@ namespace pe
             Model *model = selection.GetSelectedModel();
             if (model)
             {
-                model->MarkDirty(selection.GetSelectedNodeIndex());
+                const int nodeIndex = selection.GetSelectedNodeIndex();
+                model->MarkDirty(nodeIndex);
             }
         }
     }
@@ -277,6 +278,7 @@ namespace pe
         mat4 scaleMat = scale(mat4(1.0f), scl);
         nodeInfo->localMatrix = translationMat * rotationMat * scaleMat;
 
-        model->MarkDirty(selection.GetSelectedNodeIndex());
+        const int nodeIndex = selection.GetSelectedNodeIndex();
+        model->MarkDirty(nodeIndex);
     }
 } // namespace pe

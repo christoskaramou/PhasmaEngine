@@ -15,17 +15,29 @@ namespace pe
         m_selectedNodeIndex = nodeIndex;
         m_selectionType = type;
 
-        m_selectedLightIndex = -1; // Deselect light
+        m_selectedLightIndex = -1;
+        m_selectedEmitterIndex = -1;
     }
 
     void SelectionManager::Select(LightType type, int index)
     {
-        m_selectedModel = nullptr; // Deselect model
+        m_selectedModel = nullptr;
         m_selectedNodeIndex = -1;
+        m_selectedEmitterIndex = -1;
 
         m_selectedLightType = type;
         m_selectedLightIndex = index;
         m_selectionType = SelectionType::Light;
+    }
+
+    void SelectionManager::SelectEmitter(int index)
+    {
+        m_selectedModel = nullptr;
+        m_selectedNodeIndex = -1;
+        m_selectedLightIndex = -1;
+
+        m_selectedEmitterIndex = index;
+        m_selectionType = SelectionType::Emitter;
     }
 
     void SelectionManager::ClearSelection()
@@ -33,11 +45,12 @@ namespace pe
         m_selectedModel = nullptr;
         m_selectedNodeIndex = -1;
         m_selectedLightIndex = -1;
+        m_selectedEmitterIndex = -1;
     }
 
     bool SelectionManager::HasSelection() const
     {
-        return m_selectedModel || m_selectedLightIndex != -1 || m_selectionType == SelectionType::Camera;
+        return m_selectedModel || m_selectedLightIndex != -1 || m_selectedEmitterIndex != -1 || m_selectionType == SelectionType::Camera;
     }
 
     Model *SelectionManager::GetSelectedModel() const
@@ -63,6 +76,11 @@ namespace pe
     int SelectionManager::GetSelectedLightIndex() const
     {
         return m_selectedLightIndex;
+    }
+
+    int SelectionManager::GetSelectedEmitterIndex() const
+    {
+        return m_selectedEmitterIndex;
     }
 
     NodeInfo *SelectionManager::GetSelectedNodeInfo()

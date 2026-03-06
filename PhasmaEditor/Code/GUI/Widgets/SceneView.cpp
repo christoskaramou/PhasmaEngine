@@ -6,6 +6,7 @@
 #include "GUI/GUI.h"
 #include "GUI/GUIState.h"
 #include "GUI/IconsFontAwesome.h"
+#include "Particles/ParticleManager.h"
 #include "Scene/Model.h"
 #include "Scene/Scene.h"
 #include "Scene/SelectionManager.h"
@@ -170,6 +171,7 @@ namespace pe
             LightType lightType = LightType::Point;
             int lightIndex = -1;
             int cameraIndex = -1;
+            int emitterIndex = -1;
             NodeInfo *nodeInfo = nullptr;
         };
 
@@ -241,6 +243,37 @@ namespace pe
                     glm::quat rot = glm::quat(c->GetEuler());
                     ctx.matrix = glm::translate(glm::mat4(1.0f), pos) * glm::mat4_cast(rot);
                     ctx.valid = true;
+                }
+            }
+            else if (selection.GetSelectionType() == SelectionType::Emitter)
+            {
+                ctx.emitterIndex = selection.GetSelectedEmitterIndex();
+                ParticleManager *pm = GetGlobalSystem<RendererSystem>()->GetScene().GetParticleManager();
+                if (pm)
+                {
+                    auto &emitters = pm->GetEmitters();
+                    if (ctx.emitterIndex >= 0 && ctx.emitterIndex < (int)emitters.size())
+                    {
+                        glm::vec3 pos = glm::vec3(emitters[ctx.emitterIndex].position);
+                        glm::vec3 vel = glm::vec3(emitters[ctx.emitterIndex].velocity);
+                        float speed = glm::length(vel);
+
+                        glm::quat rot = glm::quat(1.0f, 0.0f, 0.0f, 0.0f);
+                        if (speed > 1e-6f)
+                        {
+                            glm::vec3 dir = vel / speed;
+                            // Rotation from +Y to velocity direction
+                            glm::vec3 up(0.0f, 1.0f, 0.0f);
+                            float d = glm::dot(up, dir);
+                            if (d < -0.9999f)
+                                rot = glm::angleAxis(glm::pi<float>(), glm::vec3(0.0f, 0.0f, 1.0f));
+                            else if (d < 0.9999f)
+                                rot = glm::rotation(up, dir);
+                        }
+
+                        ctx.matrix = glm::translate(glm::mat4(1.0f), pos) * glm::mat4_cast(rot);
+                        ctx.valid = true;
+                    }
                 }
             }
             return ctx;
@@ -354,6 +387,29 @@ namespace pe
                         float translation[3], rotation[3], scale[3];
                         ImGuizmo::DecomposeMatrixToComponents(glm::value_ptr(newMatrix), translation, rotation, scale);
                         cameras[ctx.cameraIndex]->SetEuler(glm::radians(glm::vec3(rotation[0], rotation[1], rotation[2])));
+                    }
+                }
+            }
+            else if (ctx.emitterIndex != -1)
+            {
+                ParticleManager *pm = GetGlobalSystem<RendererSystem>()->GetScene().GetParticleManager();
+                if (pm)
+                {
+                    auto &emitters = pm->GetEmitters();
+                    if (ctx.emitterIndex >= 0 && ctx.emitterIndex < (int)emitters.size())
+                    {
+                        auto &emitter = emitters[ctx.emitterIndex];
+                        emitter.position = glm::vec4(pos, emitter.position.w);
+
+                        // Rotate velocity direction: new direction = rot * +Y, preserve speed
+                        float speed = glm::length(glm::vec3(emitter.velocity));
+                        if (speed > 1e-6f)
+                        {
+                            glm::vec3 newDir = rot * glm::vec3(0.0f, 1.0f, 0.0f);
+                            emitter.velocity = glm::vec4(newDir * speed, emitter.velocity.w);
+                        }
+
+                        pm->UpdateEmitterBuffer();
                     }
                 }
             }
@@ -686,6 +742,10 @@ namespace pe
             op = ImGuizmo::TRANSLATE;
             break;
         }
+
+        // Emitters support translate and rotate (no scale)
+        if (selection.GetSelectionType() == SelectionType::Emitter && op == ImGuizmo::SCALE)
+            op = ImGuizmo::TRANSLATE;
 
         ImGuizmo::MODE mode = ImGuizmo::WORLD;
 

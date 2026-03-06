@@ -44,7 +44,6 @@ namespace pe
         static bool s_useTransformGizmo;
         static bool s_useLightGizmos;
         static bool s_useCameraGizmos;
-
         // Play Mode State
         static bool s_playMode;
         static bool s_isPaused;

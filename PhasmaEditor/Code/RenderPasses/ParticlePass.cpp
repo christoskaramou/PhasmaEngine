@@ -22,34 +22,26 @@ namespace pe
     {
         RendererSystem *rs = GetGlobalSystem<RendererSystem>();
 
-        m_attachments.resize(2);
-        m_attachments[0].image = rs->GetRenderTarget("viewport");
+        m_attachments.resize(1);
+        m_attachments[0].image = rs->GetRenderTarget("display");
         m_attachments[0].loadOp = vk::AttachmentLoadOp::eLoad;
         m_attachments[0].storeOp = vk::AttachmentStoreOp::eStore;
-
-        m_attachments[1].image = rs->GetDepthStencilTarget("depthStencil");
-        m_attachments[1].loadOp = vk::AttachmentLoadOp::eLoad;
-        m_attachments[1].storeOp = vk::AttachmentStoreOp::eStore;
     }
 
     void ParticlePass::UpdatePassInfo()
     {
         // Depth test but no write (soft particles)
         // Need depth buffer?
-        RendererSystem *rs = GetGlobalSystem<RendererSystem>();
-        auto *depthRT = rs->GetDepthStencilTarget("depthStencil");
         m_passInfo->name = "ParticleGraphicsPipeline";
         m_passInfo->pVertShader = Shader::Create(Path::Assets + "Shaders/Particle/ParticleVS.hlsl", vk::ShaderStageFlagBits::eVertex, "mainVS", std::vector<Define>{}, ShaderCodeType::HLSL);
         m_passInfo->pFragShader = Shader::Create(Path::Assets + "Shaders/Particle/ParticlePS.hlsl", vk::ShaderStageFlagBits::eFragment, "mainPS", std::vector<Define>{}, ShaderCodeType::HLSL);
         m_passInfo->topology = vk::PrimitiveTopology::eTriangleList;
         m_passInfo->cullMode = vk::CullModeFlagBits::eNone;
         m_passInfo->blendEnable = true;
-        m_passInfo->colorBlendAttachments = {PipelineColorBlendAttachmentState::ParticlesBlend}; // Standard alpha blending with all channels
+        m_passInfo->colorBlendAttachments = {PipelineColorBlendAttachmentState::ParticlesBlend};
         m_passInfo->colorFormats = {m_attachments[0].image->GetFormat()};
-        m_passInfo->depthFormat = depthRT->GetFormat();
-        m_passInfo->depthTestEnable = false; // Disable for debugging
+        m_passInfo->depthTestEnable = false;
         m_passInfo->depthWriteEnable = false;
-        m_passInfo->depthCompareOp = Settings::Get<GlobalSettings>().reverse_depth ? vk::CompareOp::eGreaterOrEqual : vk::CompareOp::eLessOrEqual;
         m_passInfo->dynamicStates = {vk::DynamicState::eViewport, vk::DynamicState::eScissor};
         m_passInfo->Update();
     }

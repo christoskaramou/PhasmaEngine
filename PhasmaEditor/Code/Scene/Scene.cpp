@@ -1419,8 +1419,9 @@ namespace pe
             // Nodes (Hierarchy & Transforms)
             rapidjson::Value nodesArr(rapidjson::kArrayType);
             const auto &nodeInfos = model->GetNodeInfos();
-            for (const auto &node : nodeInfos)
+            for (int ni = 0; ni < static_cast<int>(nodeInfos.size()); ni++)
             {
+                const auto &node = nodeInfos[ni];
                 rapidjson::Value nodeObj(rapidjson::kObjectType);
                 nodeObj.AddMember("name", rapidjson::Value(node.name.c_str(), allocator).Move(), allocator);
                 nodeObj.AddMember("parent", node.parent, allocator);

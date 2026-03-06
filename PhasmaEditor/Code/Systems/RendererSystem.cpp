@@ -300,7 +300,6 @@ namespace pe
         m_renderGraph.AddPass(static_cast<RenderGraph::PassID>(RenderGraphPassId::LightTransparent), "LightTransparent", isPassEnabled(RenderGraphPassId::LightTransparent), m_lightTransparentPass);
         m_renderGraph.AddPass(static_cast<RenderGraph::PassID>(RenderGraphPassId::RayTracing), "RayTracing", isPassEnabled(RenderGraphPassId::RayTracing), m_rayTracingPass);
         m_renderGraph.AddPass(static_cast<RenderGraph::PassID>(RenderGraphPassId::ParticleCompute), "ParticleCompute", isPassEnabled(RenderGraphPassId::ParticleCompute), m_particleComputePass);
-        m_renderGraph.AddPass(static_cast<RenderGraph::PassID>(RenderGraphPassId::Particle), "Particle", isPassEnabled(RenderGraphPassId::Particle), m_particlePass);
         m_renderGraph.AddPass(static_cast<RenderGraph::PassID>(RenderGraphPassId::SSR), "SSR", isPassEnabled(RenderGraphPassId::SSR), m_ssrPass);
         m_renderGraph.AddPass(static_cast<RenderGraph::PassID>(RenderGraphPassId::FXAA), "FXAA", isPassEnabled(RenderGraphPassId::FXAA), m_fxaaPass);
         m_renderGraph.AddPass(static_cast<RenderGraph::PassID>(RenderGraphPassId::Aabbs), "Aabbs", isPassEnabled(RenderGraphPassId::Aabbs), m_aabbsPass);
@@ -316,6 +315,7 @@ namespace pe
         m_renderGraph.AddPass(static_cast<RenderGraph::PassID>(RenderGraphPassId::DOF), "DOF", isPassEnabled(RenderGraphPassId::DOF), m_dofPass);
         m_renderGraph.AddPass(static_cast<RenderGraph::PassID>(RenderGraphPassId::MotionBlur), "MotionBlur", isPassEnabled(RenderGraphPassId::MotionBlur), m_motionBlurPass);
         m_renderGraph.AddPass(static_cast<RenderGraph::PassID>(RenderGraphPassId::Grid), "Grid", isPassEnabled(RenderGraphPassId::Grid), m_gridPass);
+        m_renderGraph.AddPass(static_cast<RenderGraph::PassID>(RenderGraphPassId::Particle), "Particle", isPassEnabled(RenderGraphPassId::Particle), m_particlePass);
         m_renderGraph.AddPass(static_cast<RenderGraph::PassID>(RenderGraphPassId::GUI), "GUI", isPassEnabled(RenderGraphPassId::GUI),
                               [this](CommandBuffer *cmd)
                               { m_gui.ExecutePass(cmd); });
