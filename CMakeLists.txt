@@ -83,6 +83,8 @@ target_link_libraries(PhasmaEditor PRIVATE
     meshoptimizer
     zlibstatic
 )
+target_compile_definitions(PhasmaEditor PRIVATE RAPIDJSON_HAS_STDSTRING=1 RAPIDJSON_NOMEMBERITERATORCLASS)
+target_include_directories(PhasmaEditor PRIVATE ${assimp_SOURCE_DIR}/contrib/rapidjson/include)
 target_include_directories(PhasmaEditor PRIVATE ${assimp_SOURCE_DIR}/contrib/zlib)
 
 # target_compile_options(PhasmaEditor PRIVATE -fsanitize=address)

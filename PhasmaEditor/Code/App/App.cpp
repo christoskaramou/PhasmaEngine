@@ -2,7 +2,6 @@
 #include "API/Command.h"
 #include "API/Queue.h"
 #include "API/RHI.h"
-#include "GUI/GUIState.h"
 #include "Scene/Model.h"
 #include "Systems/LightSystem.h"
 #include "Systems/PostProcessSystem.h"

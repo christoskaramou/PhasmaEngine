@@ -4,6 +4,7 @@
 #define PE_LOGGING 1
 #define PE_DEBUG_MESSENGER 1
 #define PE_USE_GLM 1
+#undef Bool
 
 namespace pe
 {
