@@ -261,6 +261,24 @@ namespace pagent
             useHttps = false;
         }
 
+        // split host from any path prefix in base_url (e.g. "generativelanguage.googleapis.com/v1beta/openai")
+        std::string pathPrefix;
+        {
+            auto slashPos = cleanHost.find('/');
+            if (slashPos != std::string::npos)
+            {
+                pathPrefix = cleanHost.substr(slashPos); // e.g. "/v1beta/openai"
+                cleanHost  = cleanHost.substr(0, slashPos);
+            }
+        }
+        // When a path prefix is set, it already contains the version (e.g. /v1beta/openai).
+        // Strip the leading /v1 from the endpoint path to avoid duplication:
+        //   pathPrefix="/v1beta/openai" + path="/v1/chat/completions" -> "/v1beta/openai/chat/completions"
+        std::string endpointSuffix = path;
+        if (!pathPrefix.empty() && endpointSuffix.rfind("/v1/", 0) == 0)
+            endpointSuffix = endpointSuffix.substr(3); // strip "/v1"
+        const std::string fullPath = pathPrefix + endpointSuffix;
+
         // build httplib headers
         httplib::Headers hlHeaders;
         for (const auto &[k, v] : headers)
@@ -277,7 +295,7 @@ namespace pagent
             // plain HTTP — always available (e.g. Ollama on localhost)
             httplib::Client cli(cleanHost);
             cli.set_read_timeout(30);
-            auto res = cli.Post(path, hlHeaders, body, "application/json");
+            auto res = cli.Post(fullPath, hlHeaders, body, "application/json");
             if (!res || res->status != 200)
                 errorMsg = res ? ("HTTP " + std::to_string(res->status) + ": " + res->body) : "Connection failed";
             else
@@ -288,7 +306,7 @@ namespace pagent
 #ifdef CPPHTTPLIB_OPENSSL_SUPPORT
             httplib::SSLClient cli(cleanHost);
             cli.set_read_timeout(30);
-            auto res = cli.Post(path, hlHeaders, body, "application/json");
+            auto res = cli.Post(fullPath, hlHeaders, body, "application/json");
             if (!res || res->status != 200)
                 errorMsg = res ? ("HTTP " + std::to_string(res->status) + ": " + res->body) : "Connection failed (SSL)";
             else

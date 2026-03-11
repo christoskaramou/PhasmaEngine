@@ -30,31 +30,67 @@ namespace pe
             Path::Executable + " | "
                                "Assets directory: " +
             Path::Assets + " | "
-                           "Use list_directory to explore the filesystem before loading models.";
+                           "To load a model, always use find_file first to locate it, then call load_model with the full path.";
         config.log_callback = [](const std::string &msg)
         { PE_INFO("%s", msg.c_str()); };
         config.max_tool_rounds = 20;
 
         const char *ollamaUrl = std::getenv("PAGENT_OLLAMA_URL");
         const char *apiKey = std::getenv("PAGENT_API_KEY");
+        const char *modelEnv = std::getenv("PAGENT_MODEL");
+        const char *providerEnv = std::getenv("PAGENT_PROVIDER"); // "anthropic" | "openai" | "gemini" | "ollama"
 
+        std::string providerStr = providerEnv ? providerEnv : "";
+        for (auto &c : providerStr)
+            c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+
+        // Resolve effective Ollama URL: explicit env var, or default when provider=ollama
+        std::string effectiveOllamaUrl;
         if (ollamaUrl)
+            effectiveOllamaUrl = ollamaUrl;
+        else if (providerStr == "ollama")
+            effectiveOllamaUrl = "http://localhost:11434";
+
+        if (!effectiveOllamaUrl.empty())
         {
             config.provider = pagent::Provider::OpenAI;
-            config.base_url = ollamaUrl;
-            config.model = std::getenv("PAGENT_MODEL") ? std::getenv("PAGENT_MODEL") : "llama3.2";
+            config.base_url = effectiveOllamaUrl;
+            config.model = modelEnv ? modelEnv : "llama3.2";
             m_agentConfigured = true;
         }
         else if (apiKey)
         {
-            config.provider = pagent::Provider::Anthropic;
-            config.api_key = apiKey;
-            config.model = std::getenv("PAGENT_MODEL") ? std::getenv("PAGENT_MODEL") : "claude-sonnet-4-6";
+            if (providerStr == "openai")
+            {
+                config.provider = pagent::Provider::OpenAI;
+                config.api_key = apiKey;
+                config.model = modelEnv ? modelEnv : "gpt-4o";
+            }
+            else if (providerStr == "gemini")
+            {
+                config.provider = pagent::Provider::OpenAI;
+                config.base_url = "https://generativelanguage.googleapis.com/v1beta/openai";
+                config.api_key = apiKey;
+                config.model = modelEnv ? modelEnv : "gemini-2.0-flash";
+            }
+            else if (providerStr == "anthropic")
+            {
+                config.provider = pagent::Provider::Anthropic;
+                config.api_key = apiKey;
+                config.model = modelEnv ? modelEnv : "claude-sonnet-4-6";
+            }
+            else
+            {
+                PE_WARN("Unknown PAGENT_PROVIDER '%s', defaulting to Anthropic. Supported values: 'anthropic', 'openai', 'gemini', 'ollama'.", providerStr.c_str());
+                config.provider = pagent::Provider::Anthropic;
+                config.api_key = apiKey;
+                config.model = modelEnv ? modelEnv : "claude-sonnet-4-6";
+            }
             m_agentConfigured = true;
         }
         else
         {
-            PE_WARN("AgentWidget: Set PAGENT_API_KEY or PAGENT_OLLAMA_URL to enable the agent.");
+            PE_WARN("AgentWidget: Set PAGENT_API_KEY (+ optionally PAGENT_PROVIDER=anthropic|openai) or PAGENT_OLLAMA_URL to enable the agent.");
         }
         m_modelName = config.model;
 
@@ -199,7 +235,7 @@ namespace pe
                               }});
 
         m_agent.RegisterTool({.name = "load_model",
-                              .description = "Loads a 3D model file (glTF, FBX, OBJ, etc.) and adds it to the scene.",
+                              .description = "Loads a 3D model file (glTF, FBX, OBJ, etc.) and adds it to the scene. Use find_file first to locate the model path.",
                               .properties = {
                                   {"path", "Absolute or relative file path to the model", pagent::SchemaType::String, true},
                               },
@@ -216,8 +252,68 @@ namespace pe
                                   return JsonObj({{"status", JsonStr("loading")}, {"path", JsonStr(path)}});
                               }});
 
+        m_agent.RegisterTool({.name = "find_file",
+                              .description = "Recursively searches for files whose name contains the given query string (case-insensitive). Use this instead of list_directory to locate models.",
+                              .properties = {
+                                  {"query", "Filename substring to search for (e.g. 'sponza', '.gltf')", pagent::SchemaType::String, true},
+                                  {"root", "Directory to search from. Defaults to Assets directory if empty.", pagent::SchemaType::String, false},
+                              },
+                              .handler = [](const std::string &args) -> std::string
+                              {
+                                  std::string query = JsonUnescape(ExtractArgStr(args, "query"));
+                                  std::string root = JsonUnescape(ExtractArgStr(args, "root"));
+                                  if (query.empty())
+                                      return "{\"error\":\"missing query\"}";
+                                  if (root.empty())
+                                      root = Path::Assets;
+                                  if (!std::filesystem::exists(root))
+                                      return JsonObj({{"error", JsonStr("root not found: " + root)}});
+
+                                  // case-insensitive query
+                                  std::string queryLower = query;
+                                  for (auto &c : queryLower)
+                                      c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+
+                                  std::string results = "[";
+                                  bool first = true;
+                                  int count = 0;
+                                  for (const auto &entry : std::filesystem::recursive_directory_iterator(
+                                           root, std::filesystem::directory_options::skip_permission_denied))
+                                  {
+                                      if (!entry.is_regular_file())
+                                          continue;
+                                      std::string name = entry.path().filename().string();
+                                      std::string nameLower = name;
+                                      for (auto &c : nameLower)
+                                          c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+                                      if (nameLower.find(queryLower) == std::string::npos)
+                                          continue;
+                                      // skip non-ASCII
+                                      bool hasNonAscii = false;
+                                      for (unsigned char c : name)
+                                          if (c > 127)
+                                          {
+                                              hasNonAscii = true;
+                                              break;
+                                          }
+                                      if (hasNonAscii)
+                                          continue;
+
+                                      std::string fullPath = entry.path().string();
+                                      std::replace(fullPath.begin(), fullPath.end(), '\\', '/');
+                                      if (!first)
+                                          results += ",";
+                                      results += "{\"name\":" + JsonStr(name) + ",\"full_path\":" + JsonStr(fullPath) + "}";
+                                      first = false;
+                                      if (++count >= 20)
+                                          break; // cap results
+                                  }
+                                  results += "]";
+                                  return JsonObj({{"query", JsonStr(query)}, {"results", results}});
+                              }});
+
         m_agent.RegisterTool({.name = "list_directory",
-                              .description = "Lists files and subdirectories at the given path. Use this to find models before calling load_model.",
+                              .description = "Lists files and subdirectories at the given path. Prefer find_file for locating models.",
                               .properties = {
                                   {"path", "Directory path to list (use Assets directory from system prompt as starting point)", pagent::SchemaType::String, true},
                               },
@@ -376,9 +472,9 @@ namespace pe
         ImGui::SameLine();
         if (busy)
         {
-            ImGui::PushStyleColor(ImGuiCol_Button,        ImVec4(0.6f, 0.15f, 0.15f, 1.0f));
-            ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.8f, 0.2f,  0.2f,  1.0f));
-            ImGui::PushStyleColor(ImGuiCol_ButtonActive,  ImVec4(0.5f, 0.1f,  0.1f,  1.0f));
+            ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.6f, 0.15f, 0.15f, 1.0f));
+            ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.8f, 0.2f, 0.2f, 1.0f));
+            ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(0.5f, 0.1f, 0.1f, 1.0f));
             if (ImGui::Button("Stop", ImVec2(55, 0)))
                 m_agent.CancelPending();
             ImGui::PopStyleColor(3);
