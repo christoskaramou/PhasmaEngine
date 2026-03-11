@@ -29,6 +29,7 @@
 #include "Widgets/Particles.h"
 #include "Widgets/Properties.h"
 #include "Widgets/SceneView.h"
+#include "Widgets/AgentWidget.h"
 #include "Widgets/TransformWidget.h"
 #include "imgui/imgui_impl_sdl2.h"
 #include "imgui/imgui_impl_vulkan.h"
@@ -272,10 +273,11 @@ namespace pe
         ImGui::DockBuilderDockWindow("Properties", dockRight);
         ImGui::DockBuilderDockWindow("Camera", dockRight);
 
-        // Bottom - Console, Asset Viewer, File Browser (Tabbed)
+        // Bottom - Console, Asset Viewer, File Browser, Agent (Tabbed)
         ImGui::DockBuilderDockWindow("Console", dockBottom);
         ImGui::DockBuilderDockWindow("Asset Info", dockBottom);
         ImGui::DockBuilderDockWindow("File Browser", dockBottom);
+        ImGui::DockBuilderDockWindow("Agent", dockBottom);
 
         ImGui::DockBuilderFinish(dockspace);
 
@@ -610,13 +612,15 @@ namespace pe
         auto hierarchy = std::make_shared<Hierarchy>();
         auto particles = std::make_shared<Particles>();
         auto cameraWidget = std::make_shared<CameraWidget>();
+        auto agentWidget = std::make_shared<AgentWidget>();
         auto console = std::make_shared<Console>();
         auto transformWidget = std::make_shared<TransformWidget>();
         auto meshWidget = std::make_shared<MeshWidget>();
         auto lightWidget = std::make_shared<LightWidget>();
         auto globalWidget = std::make_shared<GlobalWidget>();
         // Console added early to potentially influence tab ordering (Leftmost)
-        m_widgets = {console,
+        m_widgets = {agentWidget,
+                     console,
                      properties,
                      metrics,
                      models,
@@ -638,7 +642,8 @@ namespace pe
                     { console->AddLog(type, "%s", msg.c_str()); });
 
         // Populate Menu Vectors
-        m_menuWindowWidgets = {console,
+        m_menuWindowWidgets = {agentWidget,
+                               console,
                                metrics,
                                properties,
                                models,

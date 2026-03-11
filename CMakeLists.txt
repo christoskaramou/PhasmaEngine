@@ -58,6 +58,9 @@ FetchContent_MakeAvailable(meshoptimizer)
 # Add PhasmaCore subdirectory
 add_subdirectory(PhasmaCore)
 
+# Add PhasmaAgent subdirectory
+add_subdirectory(PhasmaAgent)
+
 # PhasmaEditor executable
 file(GLOB_RECURSE CODE_SRC_FILES CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/PhasmaEditor/Code/*.cpp")
 file(GLOB_RECURSE INCLUDE_SRC_FILES CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/PhasmaEditor/Include/*.cpp")
@@ -79,6 +82,7 @@ target_include_directories(PhasmaEditor PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/Pha
 # Libraries
 target_link_libraries(PhasmaEditor PRIVATE
     PhasmaCore
+    PhasmaAgent
     assimp
     meshoptimizer
     zlibstatic
