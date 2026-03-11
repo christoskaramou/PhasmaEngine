@@ -7,98 +7,13 @@
 #include "Base/Timer.h"
 #include "Base/Settings.h"
 #include "Base/Path.h"
+#include "PhasmaAgent/AgentUtils.h"
 #include "imgui/imgui.h"
+
+using namespace pagent;
 
 namespace pe
 {
-    static std::string AJsonStr(const std::string &s)
-    {
-        std::string out = "\"";
-        for (char c : s)
-        {
-            if (c == '"')
-                out += "\\\"";
-            else if (c == '\\')
-                out += "\\\\";
-            else if (c == '\n')
-                out += "\\n";
-            else
-                out += c;
-        }
-        return out + '"';
-    }
-
-    static std::string AJsonUnescape(const std::string &s)
-    {
-        std::string out;
-        out.reserve(s.size());
-        for (size_t i = 0; i < s.size(); ++i)
-        {
-            if (s[i] == '\\' && i + 1 < s.size())
-            {
-                char next = s[++i];
-                if (next == '\\')
-                    out += '\\';
-                else if (next == '/')
-                    out += '/';
-                else if (next == '"')
-                    out += '"';
-                else if (next == 'n')
-                    out += '\n';
-                else if (next == 't')
-                    out += '\t';
-                else if (next == 'r')
-                    out += '\r';
-                else
-                {
-                    out += '\\';
-                    out += next;
-                }
-            }
-            else
-                out += s[i];
-        }
-        return out;
-    }
-
-    static std::string AJsonObj(std::initializer_list<std::pair<const char *, std::string>> kv)
-    {
-        std::string out = "{";
-        bool first = true;
-        for (auto &[k, v] : kv)
-        {
-            if (!first)
-                out += ",";
-            out += AJsonStr(k) + ":" + v;
-            first = false;
-        }
-        return out + "}";
-    }
-
-    static std::string ExtractJsonStr(const std::string &json, const char *key)
-    {
-        std::string needle = std::string("\"") + key + "\"";
-        auto pos = json.find(needle);
-        if (pos == std::string::npos)
-            return "";
-        pos = json.find('"', pos + needle.size() + 1);
-        if (pos == std::string::npos)
-            return "";
-        auto end = json.find('"', pos + 1);
-        if (end == std::string::npos)
-            return "";
-        return json.substr(pos + 1, end - pos - 1);
-    }
-
-    static float ExtractJsonNum(const std::string &json, const char *key)
-    {
-        std::string needle = std::string("\"") + key + "\":";
-        auto pos = json.find(needle);
-        if (pos == std::string::npos)
-            return 0.0f;
-        return std::stof(json.substr(pos + needle.size()));
-    }
-
     AgentWidget::AgentWidget() : Widget("Agent"), m_agent(pagent::AgentConfig{})
     {
     }
@@ -128,17 +43,20 @@ namespace pe
             config.provider = pagent::Provider::OpenAI;
             config.base_url = ollamaUrl;
             config.model = std::getenv("PAGENT_MODEL") ? std::getenv("PAGENT_MODEL") : "llama3.2";
+            m_agentConfigured = true;
         }
         else if (apiKey)
         {
             config.provider = pagent::Provider::Anthropic;
             config.api_key = apiKey;
             config.model = std::getenv("PAGENT_MODEL") ? std::getenv("PAGENT_MODEL") : "claude-sonnet-4-6";
+            m_agentConfigured = true;
         }
         else
         {
             PE_WARN("AgentWidget: Set PAGENT_API_KEY or PAGENT_OLLAMA_URL to enable the agent.");
         }
+        m_modelName = config.model;
 
         m_agent = pagent::Agent(std::move(config));
         m_agent.SetEventCallback([this](const pagent::AgentEvent &ev)
@@ -164,11 +82,11 @@ namespace pe
                                   {
                                       if (!first)
                                           arr += ",";
-                                      arr += "{\"name\":" + AJsonStr(m->GetFilePath().filename().string()) + "}";
+                                      arr += "{\"name\":" + JsonStr(m->GetFilePath().filename().string()) + "}";
                                       first = false;
                                   }
                                   arr += "]";
-                                  return AJsonObj({{"model_count", std::to_string(models.size())}, {"models", arr}});
+                                  return JsonObj({{"model_count", std::to_string(models.size())}, {"models", arr}});
                               }});
 
         m_agent.RegisterTool({.name = "get_metrics",
@@ -178,7 +96,7 @@ namespace pe
                               {
                                   const double dt = FrameTimer::Instance().GetDelta();
                                   const double fps = dt > 0.0 ? 1.0 / dt : 0.0;
-                                  return AJsonObj({{"fps", std::to_string(fps)}, {"delta_ms", std::to_string(dt * 1000.0)}});
+                                  return JsonObj({{"fps", std::to_string(fps)}, {"delta_ms", std::to_string(dt * 1000.0)}});
                               }});
 
         m_agent.RegisterTool({.name = "compile_shaders",
@@ -196,7 +114,7 @@ namespace pe
                               .handler = [](const std::string &) -> std::string
                               {
                                   auto &s = Settings::Get<GlobalSettings>();
-                                  return AJsonObj({
+                                  return JsonObj({
                                       {"bloom", s.bloom ? "true" : "false"},
                                       {"ssao", s.ssao ? "true" : "false"},
                                       {"shadows", s.shadows ? "true" : "false"},
@@ -218,8 +136,8 @@ namespace pe
                               },
                               .handler = [this](const std::string &args) -> std::string
                               {
-                                  std::string name = ExtractJsonStr(args, "name");
-                                  std::string value = ExtractJsonStr(args, "value");
+                                  std::string name = ExtractArgStr(args, "name");
+                                  std::string value = ExtractArgStr(args, "value");
                                   bool on = (value == "true" || value == "1");
                                   QueueAction([name, on]()
                                               {
@@ -233,7 +151,7 @@ namespace pe
                     else if (name == "dof")         s.dof         = on;
                     else if (name == "motion_blur") s.motion_blur = on;
                     else if (name == "draw_grid")   s.draw_grid   = on; });
-                                  return AJsonObj({{"setting", AJsonStr(name)}, {"value", AJsonStr(value)}, {"status", AJsonStr("queued")}});
+                                  return JsonObj({{"setting", JsonStr(name)}, {"value", JsonStr(value)}, {"status", JsonStr("queued")}});
                               }});
 
         m_agent.RegisterTool({.name = "get_camera_info",
@@ -249,7 +167,7 @@ namespace pe
                                       return "{\"error\":\"no active camera\"}";
                                   auto pos = cam->GetPosition();
                                   auto euler = cam->GetEuler();
-                                  return AJsonObj({
+                                  return JsonObj({
                                       {"pos_x", std::to_string(pos.x)},
                                       {"pos_y", std::to_string(pos.y)},
                                       {"pos_z", std::to_string(pos.z)},
@@ -268,16 +186,16 @@ namespace pe
                               },
                               .handler = [this](const std::string &args) -> std::string
                               {
-                                  float x = ExtractJsonNum(args, "x");
-                                  float y = ExtractJsonNum(args, "y");
-                                  float z = ExtractJsonNum(args, "z");
+                                  float x = ExtractArgNum(args, "x");
+                                  float y = ExtractArgNum(args, "y");
+                                  float z = ExtractArgNum(args, "z");
                                   QueueAction([x, y, z]()
                                               {
                     auto *r = GetGlobalSystem<RendererSystem>();
                     if (!r) return;
                     auto *cam = r->GetScene().GetActiveCamera();
                     if (cam) cam->SetPosition(vec3(x, y, z)); });
-                                  return AJsonObj({{"status", AJsonStr("queued")}, {"x", std::to_string(x)}, {"y", std::to_string(y)}, {"z", std::to_string(z)}});
+                                  return JsonObj({{"status", JsonStr("queued")}, {"x", std::to_string(x)}, {"y", std::to_string(y)}, {"z", std::to_string(z)}});
                               }});
 
         m_agent.RegisterTool({.name = "load_model",
@@ -287,15 +205,15 @@ namespace pe
                               },
                               .handler = [this](const std::string &args) -> std::string
                               {
-                                  std::string path = AJsonUnescape(ExtractJsonStr(args, "path"));
+                                  std::string path = JsonUnescape(ExtractArgStr(args, "path"));
                                   if (path.empty())
                                       return "{\"error\":\"missing path\"}";
                                   if (!std::filesystem::exists(path))
-                                      return AJsonObj({{"error", AJsonStr("file not found: " + path)}});
+                                      return JsonObj({{"error", JsonStr("file not found: " + path)}});
 
                                   QueueAction([path]()
                                               { Model::Load(path); });
-                                  return AJsonObj({{"status", AJsonStr("loading")}, {"path", AJsonStr(path)}});
+                                  return JsonObj({{"status", JsonStr("loading")}, {"path", JsonStr(path)}});
                               }});
 
         m_agent.RegisterTool({.name = "list_directory",
@@ -305,13 +223,13 @@ namespace pe
                               },
                               .handler = [](const std::string &args) -> std::string
                               {
-                                  std::string dir = AJsonUnescape(ExtractJsonStr(args, "path"));
+                                  std::string dir = JsonUnescape(ExtractArgStr(args, "path"));
                                   if (dir.empty())
                                       return "{\"error\":\"missing path\"}";
                                   if (!std::filesystem::exists(dir))
-                                      return AJsonObj({{"error", AJsonStr("path not found: " + dir)}});
+                                      return JsonObj({{"error", JsonStr("path not found: " + dir)}});
                                   if (!std::filesystem::is_directory(dir))
-                                      return AJsonObj({{"error", AJsonStr("not a directory: " + dir)}});
+                                      return JsonObj({{"error", JsonStr("not a directory: " + dir)}});
 
                                   std::string base = dir;
                                   std::replace(base.begin(), base.end(), '\\', '/');
@@ -334,7 +252,7 @@ namespace pe
                                       if (hasNonAscii)
                                           continue;
 
-                                      std::string obj = "{\"name\":" + AJsonStr(name) + ",\"full_path\":" + AJsonStr(base + name) + "}";
+                                      std::string obj = "{\"name\":" + JsonStr(name) + ",\"full_path\":" + JsonStr(base + name) + "}";
                                       if (entry.is_directory())
                                       {
                                           if (!firstD)
@@ -352,7 +270,7 @@ namespace pe
                                   }
                                   files += "]";
                                   dirs += "]";
-                                  return AJsonObj({{"directory", AJsonStr(base)}, {"files", files}, {"subdirs", dirs}});
+                                  return JsonObj({{"directory", JsonStr(base)}, {"files", files}, {"subdirs", dirs}});
                               }});
     }
 
@@ -390,9 +308,34 @@ namespace pe
 
         const bool busy = m_agent.IsBusy();
 
+        // status bar
+        {
+            const float r = 5.0f;
+            const ImVec2 pos = ImGui::GetCursorScreenPos();
+            const ImVec2 center(pos.x + r, pos.y + ImGui::GetTextLineHeight() * 0.5f);
+            const ImU32 dotColor = !m_agentConfigured ? IM_COL32(100, 100, 100, 255)
+                                   : busy             ? IM_COL32(255, 200, 50, 255)
+                                                      : IM_COL32(80, 220, 100, 255);
+            ImGui::GetWindowDrawList()->AddCircleFilled(center, r, dotColor);
+            ImGui::Dummy(ImVec2(r * 2.0f + 4.0f, ImGui::GetTextLineHeight()));
+            ImGui::SameLine();
+            if (!m_agentConfigured)
+            {
+                ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.5f, 0.5f, 0.5f, 1.0f));
+                ImGui::TextUnformatted("Not configured");
+                ImGui::PopStyleColor();
+            }
+            else
+            {
+                ImGui::TextUnformatted(m_modelName.c_str());
+            }
+        }
+        ImGui::Separator();
+
         // chat log
+        const float statusHeight = ImGui::GetFrameHeightWithSpacing() + ImGui::GetStyle().ItemSpacing.y;
         const float inputHeight = ImGui::GetFrameHeightWithSpacing() + 4.0f;
-        ImGui::BeginChild("ChatLog", ImVec2(0, -inputHeight), false, ImGuiWindowFlags_HorizontalScrollbar);
+        ImGui::BeginChild("ChatLog", ImVec2(0, -(inputHeight + statusHeight)), false);
         {
             std::lock_guard lock(m_chatMutex);
             for (const auto &msg : m_chat)
@@ -429,10 +372,22 @@ namespace pe
         ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x - 60.0f);
         if (ImGui::InputText("##input", m_inputBuf, sizeof(m_inputBuf), ImGuiInputTextFlags_EnterReturnsTrue))
             submit = true;
-        ImGui::SameLine();
-        if (ImGui::Button(busy ? "..." : "Send", ImVec2(55, 0)))
-            submit = true;
         ImGui::EndDisabled();
+        ImGui::SameLine();
+        if (busy)
+        {
+            ImGui::PushStyleColor(ImGuiCol_Button,        ImVec4(0.6f, 0.15f, 0.15f, 1.0f));
+            ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.8f, 0.2f,  0.2f,  1.0f));
+            ImGui::PushStyleColor(ImGuiCol_ButtonActive,  ImVec4(0.5f, 0.1f,  0.1f,  1.0f));
+            if (ImGui::Button("Stop", ImVec2(55, 0)))
+                m_agent.CancelPending();
+            ImGui::PopStyleColor(3);
+        }
+        else
+        {
+            if (ImGui::Button("Send", ImVec2(55, 0)))
+                submit = true;
+        }
 
         if (submit && m_inputBuf[0] != '\0')
             SubmitInput();

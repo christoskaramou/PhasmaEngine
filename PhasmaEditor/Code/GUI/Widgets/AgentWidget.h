@@ -40,6 +40,8 @@ namespace pe
         char m_inputBuf[2048] = {};
         bool m_scrollToBottom = false;
         bool m_isStreaming = false;
+        bool m_agentConfigured = false;
+        std::string m_modelName;
 
         std::mutex m_chatMutex;
         std::vector<ChatMessage> m_chat;
