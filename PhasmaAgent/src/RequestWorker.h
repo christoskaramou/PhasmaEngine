@@ -27,7 +27,7 @@ namespace pagent
 
         bool Submit(const std::string &user_message);
         bool IsBusy() const { return m_busy.load(std::memory_order_relaxed); }
-        void Cancel() { m_cancel.store(true, std::memory_order_relaxed); }
+        void Cancel();
         void SetBackend(IProviderBackend *backend) { m_backend = backend; }
 
     private:
@@ -54,5 +54,9 @@ namespace pagent
         std::atomic<bool> m_busy{false};
         std::atomic<bool> m_cancel{false};
         std::atomic<bool> m_stop{false};
+
+        // Set while an HTTP request is in flight so Cancel/destructor can abort it immediately.
+        std::function<void()> m_stopActiveClient;
+        std::mutex m_clientMutex;
     };
 } // namespace pagent

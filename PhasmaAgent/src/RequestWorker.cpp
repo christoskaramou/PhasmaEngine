@@ -24,6 +24,8 @@ namespace pagent
 
     RequestWorker::~RequestWorker()
     {
+        // Abort any in-flight HTTP request so the thread unblocks immediately.
+        Cancel();
         {
             std::lock_guard lock(m_mutex);
             m_stop.store(true, std::memory_order_relaxed);
@@ -31,6 +33,14 @@ namespace pagent
         m_cv.notify_all();
         if (m_thread.joinable())
             m_thread.join();
+    }
+
+    void RequestWorker::Cancel()
+    {
+        m_cancel.store(true, std::memory_order_relaxed);
+        std::lock_guard lock(m_clientMutex);
+        if (m_stopActiveClient)
+            m_stopActiveClient();
     }
 
     bool RequestWorker::Submit(const std::string &user_message)
@@ -295,7 +305,9 @@ namespace pagent
             // plain HTTP — always available (e.g. Ollama on localhost)
             httplib::Client cli(cleanHost);
             cli.set_read_timeout(30);
+            { std::lock_guard lock(m_clientMutex); m_stopActiveClient = [&cli]{ cli.stop(); }; }
             auto res = cli.Post(fullPath, hlHeaders, body, "application/json");
+            { std::lock_guard lock(m_clientMutex); m_stopActiveClient = nullptr; }
             if (!res || res->status != 200)
                 errorMsg = res ? ("HTTP " + std::to_string(res->status) + ": " + res->body) : "Connection failed";
             else
@@ -306,7 +318,9 @@ namespace pagent
 #ifdef CPPHTTPLIB_OPENSSL_SUPPORT
             httplib::SSLClient cli(cleanHost);
             cli.set_read_timeout(30);
+            { std::lock_guard lock(m_clientMutex); m_stopActiveClient = [&cli]{ cli.stop(); }; }
             auto res = cli.Post(fullPath, hlHeaders, body, "application/json");
+            { std::lock_guard lock(m_clientMutex); m_stopActiveClient = nullptr; }
             if (!res || res->status != 200)
                 errorMsg = res ? ("HTTP " + std::to_string(res->status) + ": " + res->body) : "Connection failed (SSL)";
             else

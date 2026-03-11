@@ -1407,8 +1407,9 @@ namespace pe
 
             rapidjson::Value modelObj(rapidjson::kObjectType);
 
-            // Basic Info
-            std::string pathObj = model->GetFilePath().generic_string();
+            // Basic Info — store path relative to the scene file so scenes are portable
+            auto relModelPath = std::filesystem::relative(model->GetFilePath(), file.parent_path());
+            std::string pathObj = relModelPath.generic_string();
             modelObj.AddMember("path", rapidjson::Value(pathObj.c_str(), static_cast<rapidjson::SizeType>(pathObj.length()), allocator).Move(), allocator);
             modelObj.AddMember("name", rapidjson::Value(model->GetLabel().c_str(), allocator).Move(), allocator);
 
@@ -1462,6 +1463,9 @@ namespace pe
                         std::string texName = mesh.images[i]->GetName();
                         if (!texName.empty())
                         {
+                            // Store texture path relative to the scene file
+                            auto relTex = std::filesystem::relative(std::filesystem::path(texName), file.parent_path());
+                            texName = relTex.generic_string();
                             texturesObj.AddMember(rapidjson::Value(methodNames[i], allocator).Move(),
                                                   rapidjson::Value(texName.c_str(), allocator).Move(), allocator);
                         }
@@ -1753,11 +1757,14 @@ namespace pe
             const auto &models = d["models"];
             for (const auto &modelVal : models.GetArray())
             {
-                std::string path = modelVal["path"].GetString();
-                if (std::filesystem::is_directory(path))
+                std::filesystem::path modelPath = modelVal["path"].GetString();
+                if (modelPath.is_relative())
+                    modelPath = file.parent_path() / modelPath;
+                modelPath = modelPath.lexically_normal();
+                if (std::filesystem::is_directory(modelPath))
                     continue;
 
-                Model *model = Model::Load(path);
+                Model *model = Model::Load(modelPath);
                 if (model)
                 {
                     if (modelVal.HasMember("name"))
@@ -1824,7 +1831,9 @@ namespace pe
                                 {
                                     if (texVal.HasMember(methodNames[k]))
                                     {
-                                        std::string texPath = texVal[methodNames[k]].GetString();
+                                        std::filesystem::path texPath = texVal[methodNames[k]].GetString();
+                                        if (texPath.is_relative())
+                                            texPath = (file.parent_path() / texPath).lexically_normal();
                                         if (std::filesystem::exists(texPath))
                                         {
                                             ResourceHandle<Image> img = model->LoadTexture(cmd, texPath);
