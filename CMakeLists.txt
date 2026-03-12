@@ -4,8 +4,6 @@ set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 message(STATUS "PhasmaEditor = ${CMAKE_CURRENT_SOURCE_DIR}")
 
-include(FetchContent)
-
 if(MSVC)
     include(ProcessorCount)
     ProcessorCount(N)
@@ -14,7 +12,7 @@ if(MSVC)
         set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /MP${N}")
     endif()
     set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} /Oi /permissive-")
-    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /Oi /permissive-") 
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /Oi /permissive-")
 endif()
 
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY_DEBUG "${CMAKE_BINARY_DIR}/Debug")
@@ -22,38 +20,35 @@ set(CMAKE_RUNTIME_OUTPUT_DIRECTORY_RELEASE "${CMAKE_BINARY_DIR}/Release")
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY_MINSIZEREL "${CMAKE_BINARY_DIR}/MinSizeRel")
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY_RELWITHDEBINFO "${CMAKE_BINARY_DIR}/RelWithDebInfo")
 
-# --- Assimp ---
-message(STATUS "[Phasma] Preparing Assimp (fetch + build) ...")
-set(FETCHCONTENT_QUIET FALSE)
-FetchContent_Declare(
-    assimp
-    GIT_REPOSITORY https://github.com/assimp/assimp.git
-    GIT_TAG        v6.0.4
-    GIT_PROGRESS   TRUE
-)
-set(ASSIMP_BUILD_TESTS        OFF CACHE BOOL "" FORCE)
-set(ASSIMP_BUILD_ASSIMP_TOOLS OFF CACHE BOOL "" FORCE)
-set(ASSIMP_NO_EXPORT          ON  CACHE BOOL "" FORCE)
-set(ASSIMP_WARNINGS_AS_ERRORS OFF CACHE BOOL "" FORCE)
-set(BUILD_SHARED_LIBS         OFF CACHE BOOL "" FORCE) # static library
-set(ASSIMP_BUILD_ZLIB         ON  CACHE BOOL "" FORCE) # some versions of assimp default to system zlib OFF; force ON so it builds clean on Windows
+set(PE_LIBS_DIR "${CMAKE_CURRENT_SOURCE_DIR}/PhasmaCore/Libs")
+set(PE_THIRD_PARTY_DIR "${CMAKE_CURRENT_SOURCE_DIR}/PhasmaCore/third_party")
 
-message(STATUS "[Phasma] FetchContent_MakeAvailable(assimp) -> this will download Assimp if not present")
-FetchContent_MakeAvailable(assimp)
+# --- Prebuilt Assimp (shared) ---
+message(STATUS "[Phasma] Using prebuilt Assimp ...")
+add_library(assimp SHARED IMPORTED GLOBAL)
+if(CMAKE_SYSTEM_NAME STREQUAL "Windows")
+    set_target_properties(assimp PROPERTIES
+        IMPORTED_IMPLIB "${PE_LIBS_DIR}/assimp/assimp.lib"
+        IMPORTED_LOCATION "${CMAKE_CURRENT_SOURCE_DIR}/PhasmaCore/DLLs/assimp-vc143-mt.dll"
+    )
+else()
+    set_target_properties(assimp PROPERTIES
+        IMPORTED_LOCATION "${PE_LIBS_DIR}/assimp/libassimp.so"
+    )
+endif()
 
-message(STATUS "[Phasma] Assimp is now available and will be linked statically.")
-
-# --- MeshOptimizer ---
-message(STATUS "[Phasma] Preparing MeshOptimizer (fetch + build) ...")
-FetchContent_Declare(
-    meshoptimizer
-    GIT_REPOSITORY https://github.com/zeux/meshoptimizer.git
-    GIT_TAG        v0.22
-    GIT_PROGRESS   TRUE
-)
-set(MESHOPT_BUILD_SHARED_LIBS OFF CACHE BOOL "" FORCE)
-FetchContent_MakeAvailable(meshoptimizer)
-
+# --- Prebuilt MeshOptimizer (static) ---
+message(STATUS "[Phasma] Using prebuilt MeshOptimizer ...")
+add_library(meshoptimizer STATIC IMPORTED GLOBAL)
+if(CMAKE_SYSTEM_NAME STREQUAL "Windows")
+    set_target_properties(meshoptimizer PROPERTIES
+        IMPORTED_LOCATION "${PE_LIBS_DIR}/meshoptimizer/meshoptimizer.lib"
+    )
+else()
+    set_target_properties(meshoptimizer PROPERTIES
+        IMPORTED_LOCATION "${PE_LIBS_DIR}/meshoptimizer/libmeshoptimizer.a"
+    )
+endif()
 
 # Add PhasmaCore subdirectory
 add_subdirectory(PhasmaCore)
@@ -85,11 +80,8 @@ target_link_libraries(PhasmaEditor PRIVATE
     PhasmaAgent
     assimp
     meshoptimizer
-    zlibstatic
 )
 target_compile_definitions(PhasmaEditor PRIVATE RAPIDJSON_HAS_STDSTRING=1 RAPIDJSON_NOMEMBERITERATORCLASS)
-target_include_directories(PhasmaEditor PRIVATE ${assimp_SOURCE_DIR}/contrib/rapidjson/include)
-target_include_directories(PhasmaEditor PRIVATE ${assimp_SOURCE_DIR}/contrib/zlib)
 
 # target_compile_options(PhasmaEditor PRIVATE -fsanitize=address)
 # target_link_options(PhasmaEditor PRIVATE -fsanitize=address)
@@ -112,5 +104,6 @@ if(CMAKE_SYSTEM_NAME STREQUAL "Windows")
     add_custom_command(TARGET PhasmaEditor POST_BUILD
         COMMAND ${CMAKE_COMMAND} -E copy_if_different "${CMAKE_CURRENT_SOURCE_DIR}/PhasmaCore/DLLs/dxcompiler.dll" "$<TARGET_FILE_DIR:PhasmaEditor>"
         COMMAND ${CMAKE_COMMAND} -E copy_if_different "${CMAKE_CURRENT_SOURCE_DIR}/PhasmaCore/DLLs/shaderc_shared.dll" "$<TARGET_FILE_DIR:PhasmaEditor>"
-        COMMAND ${CMAKE_COMMAND} -E copy_if_different "${CMAKE_CURRENT_SOURCE_DIR}/PhasmaCore/DLLs/SDL2.dll" "$<TARGET_FILE_DIR:PhasmaEditor>")
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different "${CMAKE_CURRENT_SOURCE_DIR}/PhasmaCore/DLLs/SDL2.dll" "$<TARGET_FILE_DIR:PhasmaEditor>"
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different "${CMAKE_CURRENT_SOURCE_DIR}/PhasmaCore/DLLs/assimp-vc143-mt.dll" "$<TARGET_FILE_DIR:PhasmaEditor>")
 endif()

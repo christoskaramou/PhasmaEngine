@@ -78,10 +78,13 @@ target_include_directories(PhasmaCore PUBLIC
     ${CMAKE_CURRENT_SOURCE_DIR}/third_party/SDL2
 )
 
-# Add Assimp include directory if available
-if(TARGET assimp)
-    target_include_directories(PhasmaCore PUBLIC ${assimp_SOURCE_DIR}/include)
-endif()
+# Third-party prebuilt includes (assimp, rapidjson, meshoptimizer, zlib)
+target_include_directories(PhasmaCore PUBLIC
+    ${CMAKE_CURRENT_SOURCE_DIR}/third_party/assimp/include
+    ${CMAKE_CURRENT_SOURCE_DIR}/third_party/rapidjson/include
+    ${CMAKE_CURRENT_SOURCE_DIR}/third_party/meshoptimizer
+    ${CMAKE_CURRENT_SOURCE_DIR}/third_party/zlib
+)
 
 # Link directories
 # cannot find this when running from main CMakeLists.txt
