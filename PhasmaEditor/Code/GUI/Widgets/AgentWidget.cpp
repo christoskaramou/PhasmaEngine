@@ -9,6 +9,9 @@
 #include "Base/Timer.h"
 #include "Base/Settings.h"
 #include "Base/Path.h"
+#include "API/Command.h"
+#include "API/RHI.h"
+#include "API/Queue.h"
 #include "PhasmaAgent/AgentUtils.h"
 #include "imgui/imgui.h"
 
@@ -27,11 +30,12 @@ namespace pe
         pagent::AgentConfig config;
         config.system_prompt =
             "You are an AI assistant inside PhasmaEditor, a Vulkan 3D engine editor. "
-            "You can build and modify 3D scenes: load/remove models, create primitives (cube/sphere/plane/cylinder/cone), "
+            "You can build and modify 3D scenes: load/remove models, clone_model, scatter_models, create primitives (cube/sphere/plane/cylinder/cone), "
             "move/scale/rotate objects with set_model_transform, manage lights (add_light, set_light, remove_light, get_lights), "
-            "control the camera (set_camera_position, set_camera_rotation, set_camera_fov, focus_camera_on_model), "
+            "control the camera (set_camera_position, set_camera_rotation, set_camera_fov, focus_camera_on_model, set_camera_dof_focus), "
+            "edit materials (get_materials, set_material_property), "
             "tweak post-processing (set_render_setting for booleans, set_render_value for floats like bloom_strength/IBL_intensity), "
-            "switch render modes (set_render_mode: raster|hybrid|raytracing), toggle day/night (set_time_of_day), "
+            "switch render modes (set_render_mode: raster|hybrid|raytracing), toggle day/night (set_time_of_day), change skybox (set_skybox_hdr), "
             "and save/load scenes (save_scene, load_scene). "
             "To load a model file, always use find_file first to locate it, then call load_model with the full path. "
             "Be concise and chain tool calls to complete multi-step tasks without asking for confirmation. "
@@ -565,7 +569,194 @@ namespace pe
                                   return JsonObj({{"error", JsonStr("model not found: " + query)}});
                               }});
 
-        // ------------------------------------------------------------------ lighting
+        m_agent.RegisterTool({.name = "clone_model",
+                              .description = "Duplicates an already loaded model, optionally placing it at an absolute position.",
+                              .properties = {
+                                  {"name", "Filename/label substring of the model to clone", pagent::SchemaType::String, true},
+                                  {"x", "Absolute Position X (default 0)", pagent::SchemaType::Number, false},
+                                  {"y", "Absolute Position Y (default 0)", pagent::SchemaType::Number, false},
+                                  {"z", "Absolute Position Z (default 0)", pagent::SchemaType::Number, false},
+                              },
+                              .handler = [this](const std::string &args) -> std::string
+                              {
+                                  std::string query = JsonUnescape(ExtractArgStr(args, "name"));
+                                  if (query.empty())
+                                      return "{\"error\":\"missing name\"}";
+                                  float x = ExtractArgNum(args, "x");
+                                  float y = ExtractArgNum(args, "y");
+                                  float z = ExtractArgNum(args, "z");
+
+                                  std::string queryLower = query;
+                                  for (auto &c : queryLower)
+                                      c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+
+                                  auto *r = GetGlobalSystem<RendererSystem>();
+                                  if (!r)
+                                      return "{\"error\":\"no renderer\"}";
+
+                                  std::string pathToLoad;
+                                  for (auto *m : r->GetScene().GetModels())
+                                  {
+                                      std::string fname = m->GetLabel().empty() ? m->GetFilePath().filename().string() : m->GetLabel();
+                                      for (auto &c : fname)
+                                          c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+                                      if (fname.find(queryLower) != std::string::npos)
+                                      {
+                                          pathToLoad = m->GetFilePath().string();
+                                          break;
+                                      }
+                                  }
+
+                                  if (pathToLoad.empty())
+                                      return JsonObj({{"error", JsonStr("model not found: " + query)}});
+
+                                  QueueAction([pathToLoad, x, y, z]()
+                                              {
+                                      Model *m = Model::Load(pathToLoad);
+                                      if (m)
+                                      {
+                                          mat4 T = glm::translate(mat4(1.0f), vec3(x, y, z));
+                                          m->GetMatrix() = T;
+                                          m->GetDirtyNodes() = true;
+                                      } });
+                                  return JsonObj({{"status", JsonStr("queued")}, {"cloned_from", JsonStr(query)}});
+                              }});
+
+        m_agent.RegisterTool({.name = "get_materials",
+                              .description = "Returns material properties (base color, emissive, metallic, roughness, alpha_cutoff) for all meshes of a loaded model.",
+                              .properties = {
+                                  {"name", "Filename/label substring to match", pagent::SchemaType::String, true},
+                              },
+                              .handler = [](const std::string &args) -> std::string
+                              {
+                                  std::string query = JsonUnescape(ExtractArgStr(args, "name"));
+                                  if (query.empty())
+                                      return "{\"error\":\"missing name\"}";
+                                  std::string queryLower = query;
+                                  for (auto &c : queryLower)
+                                      c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+                                  auto *r = GetGlobalSystem<RendererSystem>();
+                                  if (!r)
+                                      return "{\"error\":\"no renderer\"}";
+                                  for (auto *m : r->GetScene().GetModels())
+                                  {
+                                      std::string fname = m->GetLabel().empty() ? m->GetFilePath().filename().string() : m->GetLabel();
+                                      for (auto &c : fname)
+                                          c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+                                      if (fname.find(queryLower) == std::string::npos)
+                                          continue;
+
+                                      std::string mats = "[";
+                                      bool first = true;
+                                      int idx = 0;
+                                      for (auto &mesh : m->GetMeshInfos())
+                                      {
+                                          if (!first)
+                                              mats += ",";
+                                          vec4 bc = mesh.materialFactors[0][0];
+                                          float met = mesh.materialFactors[0][2].x;
+                                          float rou = mesh.materialFactors[0][2].y;
+                                          float alpha = mesh.materialFactors[0][2].z;
+                                          vec4 em = mesh.materialFactors[0][1];
+
+                                          mats += JsonObj({{"mesh_index", std::to_string(idx++)},
+                                                           {"base_color", "[" + std::to_string(bc.r) + "," + std::to_string(bc.g) + "," + std::to_string(bc.b) + "," + std::to_string(bc.a) + "]"},
+                                                           {"emissive", "[" + std::to_string(em.r) + "," + std::to_string(em.g) + "," + std::to_string(em.b) + "]"},
+                                                           {"metallic", std::to_string(met)},
+                                                           {"roughness", std::to_string(rou)},
+                                                           {"alpha_cutoff", std::to_string(alpha)}});
+                                          first = false;
+                                      }
+                                      mats += "]";
+                                      return JsonObj({{"model", JsonStr(m->GetLabel())}, {"materials", mats}});
+                                  }
+                                  return JsonObj({{"error", JsonStr("model not found: " + query)}});
+                              }});
+
+        m_agent.RegisterTool({.name = "set_material_property",
+                              .description = "Sets material properties for a specific mesh of a model.",
+                              .properties = {
+                                  {"name", "Filename/label substring of the model", pagent::SchemaType::String, true},
+                                  {"mesh_index", "0-based mesh index (from get_materials). Use -1 for all meshes.", pagent::SchemaType::Number, true},
+                                  {"base_color_r", "Red 0-1", pagent::SchemaType::Number, false},
+                                  {"base_color_g", "Green 0-1", pagent::SchemaType::Number, false},
+                                  {"base_color_b", "Blue 0-1", pagent::SchemaType::Number, false},
+                                  {"base_color_a", "Alpha 0-1", pagent::SchemaType::Number, false},
+                                  {"emissive_r", "Emissive Red", pagent::SchemaType::Number, false},
+                                  {"emissive_g", "Emissive Green", pagent::SchemaType::Number, false},
+                                  {"emissive_b", "Emissive Blue", pagent::SchemaType::Number, false},
+                                  {"metallic", "Metallic 0-1", pagent::SchemaType::Number, false},
+                                  {"roughness", "Roughness 0-1", pagent::SchemaType::Number, false},
+                                  {"alpha_cutoff", "Alpha Cutoff 0-1", pagent::SchemaType::Number, false},
+                              },
+                              .handler = [this](const std::string &args) -> std::string
+                              {
+                                  std::string query = JsonUnescape(ExtractArgStr(args, "name"));
+                                  if (query.empty())
+                                      return "{\"error\":\"missing name\"}";
+                                  int meshIndex = static_cast<int>(ExtractArgNum(args, "mesh_index"));
+
+                                  bool has_bcr = args.find("\"base_color_r\":") != std::string::npos;
+                                  bool has_bcg = args.find("\"base_color_g\":") != std::string::npos;
+                                  bool has_bcb = args.find("\"base_color_b\":") != std::string::npos;
+                                  bool has_bca = args.find("\"base_color_a\":") != std::string::npos;
+                                  bool has_er = args.find("\"emissive_r\":") != std::string::npos;
+                                  bool has_eg = args.find("\"emissive_g\":") != std::string::npos;
+                                  bool has_eb = args.find("\"emissive_b\":") != std::string::npos;
+                                  bool has_met = args.find("\"metallic\":") != std::string::npos;
+                                  bool has_rou = args.find("\"roughness\":") != std::string::npos;
+                                  bool has_alpha = args.find("\"alpha_cutoff\":") != std::string::npos;
+
+                                  float bcr = ExtractArgNum(args, "base_color_r"), bcg = ExtractArgNum(args, "base_color_g"), bcb = ExtractArgNum(args, "base_color_b"), bca = ExtractArgNum(args, "base_color_a");
+                                  float er = ExtractArgNum(args, "emissive_r"), eg = ExtractArgNum(args, "emissive_g"), eb = ExtractArgNum(args, "emissive_b");
+                                  float met = ExtractArgNum(args, "metallic"), rou = ExtractArgNum(args, "roughness"), alpha = ExtractArgNum(args, "alpha_cutoff");
+
+                                  std::string queryLower = query;
+                                  for (auto &c : queryLower)
+                                      c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+
+                                  QueueAction([=]()
+                                              {
+                                      auto *r = GetGlobalSystem<RendererSystem>();
+                                      if (!r) return;
+                                      for (auto *m : r->GetScene().GetModels())
+                                      {
+                                          std::string fname = m->GetLabel().empty() ? m->GetFilePath().filename().string() : m->GetLabel();
+                                          for (auto &c : fname) c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+                                          if (fname.find(queryLower) == std::string::npos) continue;
+
+                                          auto applyProps = [&](MeshInfo &mesh) {
+                                              if (has_bcr) mesh.materialFactors[0][0].r = bcr;
+                                              if (has_bcg) mesh.materialFactors[0][0].g = bcg;
+                                              if (has_bcb) mesh.materialFactors[0][0].b = bcb;
+                                              if (has_bca) mesh.materialFactors[0][0].a = bca;
+                                              if (has_er) mesh.materialFactors[0][1].r = er;
+                                              if (has_eg) mesh.materialFactors[0][1].g = eg;
+                                              if (has_eb) mesh.materialFactors[0][1].b = eb;
+                                              if (has_met) mesh.materialFactors[0][2].x = met;
+                                              if (has_rou) mesh.materialFactors[0][2].y = rou;
+                                              if (has_alpha) mesh.materialFactors[0][2].z = alpha;
+                                          };
+
+                                          if (meshIndex >= 0 && meshIndex < static_cast<int>(m->GetMeshInfos().size()))
+                                          {
+                                              applyProps(m->GetMeshInfos()[meshIndex]);
+                                          }
+                                          else if (meshIndex == -1)
+                                          {
+                                              for (auto &mesh : m->GetMeshInfos())
+                                                  applyProps(mesh);
+                                          }
+
+                                          for (int i = 0; i < m->GetNodeCount(); ++i)
+                                              m->MarkDirty(i);
+                                          
+                                          r->GetScene().UpdateTextures();
+                                          break;
+                                      } });
+                                  return JsonObj({{"status", JsonStr("queued")}, {"name", JsonStr(query)}});
+                              }});
+
         m_agent.RegisterTool({.name = "get_lights",
                               .description = "Returns all lights in the scene: directional, point, spot, area.",
                               .properties = {},
@@ -878,7 +1069,53 @@ namespace pe
                                   return JsonObj({{"status", JsonStr("queued")}, {"name", JsonStr(query)}});
                               }});
 
-        // ------------------------------------------------------------------ post-process / global settings
+        m_agent.RegisterTool({.name = "set_camera_dof_focus",
+                              .description = "Automatically sets the Depth of Field focus distance to perfectly match a target model's center.",
+                              .properties = {
+                                  {"name", "Filename/label substring of the target model", pagent::SchemaType::String, true},
+                              },
+                              .handler = [this](const std::string &args) -> std::string
+                              {
+                                  std::string query = JsonUnescape(ExtractArgStr(args, "name"));
+                                  if (query.empty())
+                                      return "{\"error\":\"missing name\"}";
+                                  std::string queryLower = query;
+                                  for (auto &c : queryLower)
+                                      c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+
+                                  QueueAction([queryLower]()
+                                              {
+                                      auto *r = GetGlobalSystem<RendererSystem>();
+                                      if (!r) return;
+                                      auto *cam = r->GetScene().GetActiveCamera();
+                                      if (!cam) return;
+                                      for (auto *m : r->GetScene().GetModels())
+                                      {
+                                          std::string fname = m->GetLabel().empty() ? m->GetFilePath().filename().string() : m->GetLabel();
+                                          for (auto &c : fname) c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+                                          if (fname.find(queryLower) == std::string::npos) continue;
+
+                                          AABB worldBB;
+                                          bool first = true;
+                                          for (auto &n : m->GetNodeInfos())
+                                          {
+                                              if (first) { worldBB = n.worldBoundingBox; first = false; }
+                                              else
+                                              {
+                                                  worldBB.min = glm::min(worldBB.min, n.worldBoundingBox.min);
+                                                  worldBB.max = glm::max(worldBB.max, n.worldBoundingBox.max);
+                                              }
+                                          }
+                                          vec3 center = worldBB.GetCenter();
+                                          float dist = glm::distance(cam->GetPosition(), center);
+                                          auto &s = Settings::Get<GlobalSettings>();
+                                          s.dof_focus_scale = dist;
+                                          s.dof = true;
+                                          break;
+                                      } });
+                                  return JsonObj({{"status", JsonStr("queued")}, {"name", JsonStr(query)}});
+                              }});
+
         m_agent.RegisterTool({.name = "set_render_value",
                               .description = "Sets a numeric render setting. "
                                              "name: bloom_strength|bloom_range|render_scale|IBL_intensity|lights_intensity|"
@@ -942,7 +1179,125 @@ namespace pe
                                   return JsonObj({{"status", JsonStr("queued")}, {"time", JsonStr(time)}});
                               }});
 
-        // ------------------------------------------------------------------ scene persistence
+        m_agent.RegisterTool({.name = "set_skybox_hdr",
+                              .description = "Loads a new HDR image as the day or night skybox. Use find_file first to locate the .hdr file.",
+                              .properties = {
+                                  {"path", "Absolute or relative file path to the .hdr file", pagent::SchemaType::String, true},
+                                  {"time", "day or night (default day)", pagent::SchemaType::String, false},
+                              },
+                              .handler = [this](const std::string &args) -> std::string
+                              {
+                                  std::string path = JsonUnescape(ExtractArgStr(args, "path"));
+                                  if (path.empty())
+                                      return "{\"error\":\"missing path\"}";
+                                  if (!std::filesystem::exists(path))
+                                      return JsonObj({{"error", JsonStr("file not found: " + path)}});
+                                  std::string time = ExtractArgStr(args, "time");
+                                  if (time.empty())
+                                      time = "day";
+
+                                  QueueAction([path, time]()
+                                              {
+                                      auto *r = GetGlobalSystem<RendererSystem>();
+                                      if (!r) return;
+                                      Queue *queue = RHII.GetMainQueue();
+                                      CommandBuffer *cmd = queue->AcquireCommandBuffer();
+                                      cmd->Begin();
+                                      SkyBox &skybox = const_cast<SkyBox&>(time == "night" ? r->GetSkyBoxNight() : r->GetSkyBoxDay());
+                                      skybox.Destroy();
+                                      skybox.LoadSkyBox(cmd, path);
+                                      cmd->End();
+                                      queue->Submit(1, &cmd, nullptr, nullptr);
+                                      cmd->Wait();
+                                      cmd->Return();
+                                      
+                                      auto &s = Settings::Get<GlobalSettings>();
+                                      s.day = (time == "day"); });
+                                  return JsonObj({{"status", JsonStr("queued")}, {"path", JsonStr(path)}, {"time", JsonStr(time)}});
+                              }});
+
+        m_agent.RegisterTool({.name = "scatter_models",
+                              .description = "Scatters multiple copies of a loaded model around a center point with randomized rotation and scale.",
+                              .properties = {
+                                  {"name", "Filename/label substring of the model to scatter", pagent::SchemaType::String, true},
+                                  {"count", "Number of copies to create", pagent::SchemaType::Number, true},
+                                  {"radius", "Radius of the scatter area", pagent::SchemaType::Number, true},
+                                  {"x", "Center X (default 0)", pagent::SchemaType::Number, false},
+                                  {"y", "Center Y (default 0)", pagent::SchemaType::Number, false},
+                                  {"z", "Center Z (default 0)", pagent::SchemaType::Number, false},
+                                  {"min_scale", "Minimum random scale (default 0.8)", pagent::SchemaType::Number, false},
+                                  {"max_scale", "Maximum random scale (default 1.2)", pagent::SchemaType::Number, false},
+                              },
+                              .handler = [this](const std::string &args) -> std::string
+                              {
+                                  std::string query = JsonUnescape(ExtractArgStr(args, "name"));
+                                  if (query.empty())
+                                      return "{\"error\":\"missing name\"}";
+                                  int count = static_cast<int>(ExtractArgNum(args, "count"));
+                                  float radius = ExtractArgNum(args, "radius");
+                                  float x = ExtractArgNum(args, "x");
+                                  float y = ExtractArgNum(args, "y");
+                                  float z = ExtractArgNum(args, "z");
+
+                                  float min_scale = ExtractArgNum(args, "min_scale");
+                                  if (min_scale <= 0.0f)
+                                      min_scale = 0.8f;
+                                  float max_scale = ExtractArgNum(args, "max_scale");
+                                  if (max_scale <= 0.0f)
+                                      max_scale = 1.2f;
+
+                                  if (count <= 0 || radius <= 0.0f)
+                                      return "{\"error\":\"invalid count or radius\"}";
+
+                                  std::string queryLower = query;
+                                  for (auto &c : queryLower)
+                                      c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+
+                                  auto *r = GetGlobalSystem<RendererSystem>();
+                                  if (!r)
+                                      return "{\"error\":\"no renderer\"}";
+
+                                  std::string pathToLoad;
+                                  for (auto *m : r->GetScene().GetModels())
+                                  {
+                                      std::string fname = m->GetLabel().empty() ? m->GetFilePath().filename().string() : m->GetLabel();
+                                      for (auto &c : fname)
+                                          c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+                                      if (fname.find(queryLower) != std::string::npos)
+                                      {
+                                          pathToLoad = m->GetFilePath().string();
+                                          break;
+                                      }
+                                  }
+
+                                  if (pathToLoad.empty())
+                                      return JsonObj({{"error", JsonStr("model not found: " + query)}});
+
+                                  QueueAction([pathToLoad, count, radius, x, y, z, min_scale, max_scale]()
+                                              {
+                                      for (int i = 0; i < count; ++i)
+                                      {
+                                          Model *m = Model::Load(pathToLoad);
+                                          if (m)
+                                          {
+                                              float ang = pe::rand(0.0f, 1.0f) * glm::two_pi<float>();
+                                              float rad = std::sqrt(pe::rand(0.0f, 1.0f)) * radius;
+                                              float ox = std::cos(ang) * rad;
+                                              float oz = std::sin(ang) * rad;
+                                              
+                                              float scale = min_scale + pe::rand(0.0f, 1.0f) * (max_scale - min_scale);
+                                              float rotY = pe::rand(0.0f, 1.0f) * glm::two_pi<float>();
+                                              
+                                              mat4 T = glm::translate(mat4(1.0f), vec3(x + ox, y, z + oz));
+                                              mat4 R = glm::rotate(mat4(1.0f), rotY, vec3(0.0f, 1.0f, 0.0f));
+                                              mat4 S = glm::scale(mat4(1.0f), vec3(scale));
+                                              m->GetMatrix() = T * R * S;
+                                              m->GetDirtyNodes() = true;
+                                          }
+                                      } });
+                                  return JsonObj({{"status", JsonStr("queued")}, {"scattered_from", JsonStr(query)}, {"count", std::to_string(count)}});
+                              }});
+
         m_agent.RegisterTool({.name = "save_scene",
                               .description = "Saves the current scene to a .json file. "
                                              "If only a filename is given (e.g. 'demo'), it is saved to the Scenes folder inside Assets. "

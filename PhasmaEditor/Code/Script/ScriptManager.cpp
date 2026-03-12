@@ -1,34 +1,99 @@
 #include "ScriptManager.h"
 #include "Script.h"
 
+#include <vector>
+
+#if defined(PE_WIN32)
+#include <process.h>
+#else
+#include <sys/wait.h>
+#include <unistd.h>
+#endif
+
+namespace
+{
+    int RunProcess(const std::vector<std::string> &args)
+    {
+        if (args.empty())
+            return -1;
+
+#if defined(PE_WIN32)
+        std::vector<const char *> argv;
+        argv.reserve(args.size() + 1);
+        for (const auto &arg : args)
+            argv.push_back(arg.c_str());
+        argv.push_back(nullptr);
+
+        intptr_t result = _spawnvp(_P_WAIT, args[0].c_str(), argv.data());
+        return result == -1 ? -1 : static_cast<int>(result);
+#else
+        pid_t pid = fork();
+        if (pid == 0)
+        {
+            std::vector<char *> argv;
+            argv.reserve(args.size() + 1);
+            for (const auto &arg : args)
+                argv.push_back(const_cast<char *>(arg.c_str()));
+            argv.push_back(nullptr);
+
+            execvp(args[0].c_str(), argv.data());
+            _exit(127);
+        }
+        if (pid < 0)
+            return -1;
+
+        int status = 0;
+        if (waitpid(pid, &status, 0) < 0)
+            return -1;
+
+        if (WIFEXITED(status))
+            return WEXITSTATUS(status);
+
+        return -1;
+#endif
+    }
+}
+
 namespace pe
 {
     void ScriptManager::Init()
     {
+        const std::string scriptsDir = Path::Assets + "Scripts";
+        const std::string buildDir = Path::Assets + "Scripts/build";
+
         // Configure CMake
-        std::string cmakeCommand = "cmake -S " + Path::Assets + "Scripts -B " + Path::Assets + "Scripts/build";
-        int res = std::system(cmakeCommand.c_str());
+        std::vector<std::string> cmakeArgs = {
+            "cmake",
+            "-S",
+            scriptsDir,
+            "-B",
+            buildDir};
+        int res = RunProcess(cmakeArgs);
         PE_ERROR_IF(res != 0, "Failed to configure CMake");
 
         // Compile the source into a shared library
-        std::string buildCommand = "";
+        std::vector<std::string> buildArgs = {
+            "cmake",
+            "--build",
+            buildDir,
+            "--config"};
 #if defined(PE_DEBUG)
-        buildCommand = "cmake --build " + Path::Assets + "Scripts/build --config Debug";
+        buildArgs.push_back("Debug");
 #elif defined(PE_RELEASE)
-        buildCommand = "cmake --build " + Path::Assets + "Scripts/build --config Release";
+        buildArgs.push_back("Release");
 #elif defined(PE_MINSIZEREL)
-        buildCommand = "cmake --build " + Path::Assets + "Scripts/build --config MinSizeRel";
+        buildArgs.push_back("MinSizeRel");
 #elif defined(PE_RELWITHDEBINFO)
-        buildCommand = "cmake --build " + Path::Assets + "Scripts/build --config RelWithDebInfo";
+        buildArgs.push_back("RelWithDebInfo");
 #endif
-        res = std::system(buildCommand.c_str());
+        res = RunProcess(buildArgs);
         PE_ERROR_IF(res != 0, "Failed to build the scripts");
 
         // Load the compiled module
         LoadModule();
 
         // Find .pecpp files in Scripts folder
-        for (auto &file : std::filesystem::recursive_directory_iterator(Path::Assets + "Scripts"))
+        for (auto &file : std::filesystem::recursive_directory_iterator(scriptsDir))
         {
             std::string filePath = file.path().string();
             std::replace(filePath.begin(), filePath.end(), '\\', '/');

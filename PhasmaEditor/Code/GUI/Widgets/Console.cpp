@@ -51,13 +51,7 @@ namespace pe
         if (ImGui::Button("Open Log"))
         {
             std::string logPath = Path::Executable + "PhasmaEngine.log";
-#if defined(_WIN32)
-            std::string command = "start " + logPath;
-            system(command.c_str());
-#elif defined(__linux__)
-            std::string command = "xdg-open " + logPath;
-            system(command.c_str());
-#endif
+            GUIState::OpenExternalPath(logPath);
         }
         ImGui::SameLine();
         m_filter.Draw("Filter", -100.0f);

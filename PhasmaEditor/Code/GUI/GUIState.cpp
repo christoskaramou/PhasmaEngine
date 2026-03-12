@@ -1,5 +1,41 @@
 #include "GUIState.h"
 
+#include <filesystem>
+
+#if !defined(_WIN32)
+#include <sys/wait.h>
+#include <unistd.h>
+#endif
+
+namespace
+{
+#if !defined(_WIN32)
+    void OpenExternalPathPosix(const std::string &path)
+    {
+        if (path.empty())
+            return;
+
+#if defined(__APPLE__)
+        const char *opener = "open";
+#else
+        const char *opener = "xdg-open";
+#endif
+
+        pid_t pid = fork();
+        if (pid == 0)
+        {
+            execlp(opener, opener, path.c_str(), static_cast<char *>(nullptr));
+            _exit(127);
+        }
+        if (pid > 0)
+        {
+            int status = 0;
+            waitpid(pid, &status, 0);
+        }
+    }
+#endif
+}
+
 namespace pe
 {
     AssetPreviewState GUIState::s_assetPreview{};
@@ -25,6 +61,9 @@ namespace pe
 
     void GUIState::OpenExternalPath(const std::string &absPath)
     {
+        if (absPath.empty())
+            return;
+
 #if defined(_WIN32)
         std::string pathCopy = absPath;
         ThreadPool::GUI.Enqueue([pathCopy]()
@@ -32,9 +71,9 @@ namespace pe
                                     std::filesystem::path path(reinterpret_cast<const char8_t *>(pathCopy.c_str()));
                                     ShellExecuteW(nullptr, L"open", path.wstring().c_str(), nullptr, nullptr, SW_SHOW); });
 #else
-        std::string command = "xdg-open \"" + absPath + "\"";
-        ThreadPool::GUI.Enqueue([command]()
-                                { system(command.c_str()); });
+        std::string pathCopy = absPath;
+        ThreadPool::GUI.Enqueue([pathCopy]()
+                                { OpenExternalPathPosix(pathCopy); });
 #endif
     }
 
