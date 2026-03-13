@@ -56,18 +56,18 @@ add_subdirectory(PhasmaCore)
 # Add PhasmaAgent subdirectory
 add_subdirectory(PhasmaAgent)
 
+# PhasmaEditor executable
+file(GLOB_RECURSE CODE_SRC_FILES CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/PhasmaEditor/Code/*.cpp")
+set(PE_EDITOR_THIRD_PARTY_DIR "${CMAKE_CURRENT_SOURCE_DIR}/PhasmaEditor/third_party")
+
 # --- Lua 5.4 (vendored, compiled from source) ---
-file(GLOB LUA_SOURCES "${PE_THIRD_PARTY_DIR}/lua/*.c")
+file(GLOB LUA_SOURCES "${PE_EDITOR_THIRD_PARTY_DIR}/lua/*.c")
 add_library(Lua STATIC ${LUA_SOURCES})
-target_include_directories(Lua PUBLIC "${PE_THIRD_PARTY_DIR}/lua")
+target_include_directories(Lua PUBLIC "${PE_EDITOR_THIRD_PARTY_DIR}/lua")
 set_target_properties(Lua PROPERTIES LINKER_LANGUAGE C)
 if(NOT MSVC)
     target_compile_options(Lua PRIVATE -w)
 endif()
-
-# PhasmaEditor executable
-file(GLOB_RECURSE CODE_SRC_FILES CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/PhasmaEditor/Code/*.cpp")
-set(PE_EDITOR_THIRD_PARTY_DIR "${CMAKE_CURRENT_SOURCE_DIR}/PhasmaEditor/third_party")
 file(GLOB_RECURSE IMGUI_SRC_FILES CONFIGURE_DEPENDS "${PE_EDITOR_THIRD_PARTY_DIR}/imgui/*.cpp")
 file(GLOB_RECURSE CACAO_SRC_FILES CONFIGURE_DEPENDS "${PE_EDITOR_THIRD_PARTY_DIR}/CACAO/*.cpp")
 file(GLOB_RECURSE ASSET_FILES CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/PhasmaEditor/Assets/*")
@@ -83,7 +83,7 @@ target_include_directories(PhasmaEditor PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/Pha
 target_include_directories(PhasmaEditor PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/PhasmaEditor/Code")
 target_include_directories(PhasmaEditor PRIVATE "${PE_EDITOR_THIRD_PARTY_DIR}")
 target_include_directories(PhasmaEditor PRIVATE "${PE_EDITOR_THIRD_PARTY_DIR}/imgui")
-target_include_directories(PhasmaEditor PRIVATE "${PE_THIRD_PARTY_DIR}/sol2")
+target_include_directories(PhasmaEditor PRIVATE "${PE_EDITOR_THIRD_PARTY_DIR}/sol2")
 
 # PhasmaEditor link directories
 # Libraries
