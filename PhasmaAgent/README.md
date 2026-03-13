@@ -64,45 +64,60 @@ while (agent.IsBusy())
 
 PhasmaEditor reads these env vars at startup to configure the Agent widget. Set them before launching the editor.
 
-| Variable           | Description                                                        | Default               |
-|--------------------|--------------------------------------------------------------------|-----------------------|
-| `PAGENT_OLLAMA_URL`| Ollama base URL. When set, Ollama is used regardless of other vars.| —                     |
-| `PAGENT_API_KEY`   | API key for the selected provider (Anthropic, OpenAI, or Gemini). | —                     |
-| `PAGENT_PROVIDER`  | Which provider to use with `PAGENT_API_KEY`: `anthropic` (default), `openai`, `gemini`. | `anthropic` |
-| `PAGENT_MODEL`     | Model name override. Overrides the provider default in all cases. | provider default       |
+| Variable                  | Description                                                        | Default               |
+|---------------------------|--------------------------------------------------------------------|-----------------------|
+| `PAGENT_ANTHROPIC_API_KEY`| API key for Anthropic (from `console.anthropic.com`)               | —                     |
+| `PAGENT_OPENAI_API_KEY`   | API key for OpenAI (from `platform.openai.com`)                    | —                     |
+| `PAGENT_GEMINI_API_KEY`   | API key for Google Gemini (from `aistudio.google.com`)             | —                     |
+| `PAGENT_PROVIDER`         | Which provider to select by default: `anthropic`, `openai`, `gemini`, `ollama`. | first available |
 
-### Provider selection logic
+### Provider discovery logic
 
-1. If `PAGENT_OLLAMA_URL` is set → use Ollama (ignores `PAGENT_API_KEY` and `PAGENT_PROVIDER`)
-2. Else if `PAGENT_API_KEY` is set → use `PAGENT_PROVIDER` to pick the backend
-3. Else → agent is disabled (warning logged)
+All providers with a valid API key are discovered and available in the editor's provider dropdown. Ollama is always included (no key needed).
+
+1. If `PAGENT_ANTHROPIC_API_KEY` is set → Anthropic added (default model: `claude-haiku-4-5`)
+2. If `PAGENT_OPENAI_API_KEY` is set → OpenAI added (default model: `gpt-4.1-mini`)
+3. If `PAGENT_GEMINI_API_KEY` is set → Gemini added (default model: `gemini-2.5-flash`)
+4. Ollama is always added (default model: `llama3.2`, no key required)
+
+`PAGENT_PROVIDER` selects which provider is active by default. If not set, the first discovered provider is used.
 
 ### Examples
 
-**Ollama (local, no key):**
+**Ollama (local, no key needed):**
 ```bash
-export PAGENT_OLLAMA_URL="http://localhost:11434"
-export PAGENT_MODEL="qwen3:14b"
+export PAGENT_PROVIDER="ollama"
+# Ollama is always available, default model: llama3.2
+# Ollama runs automatically when needed (can also be stopped manually to remove GPU memory stress) 
 ```
 
-**Anthropic (default):**
+**Anthropic:**
 ```bash
-export PAGENT_API_KEY="sk-ant-..."
-# PAGENT_MODEL defaults to claude-sonnet-4-6
+export PAGENT_ANTHROPIC_API_KEY="sk-ant-..."
+export PAGENT_PROVIDER="anthropic"
+# default model: claude-haiku-4-5
 ```
 
 **OpenAI:**
 ```bash
-export PAGENT_API_KEY="sk-..."
+export PAGENT_OPENAI_API_KEY="sk-..."
 export PAGENT_PROVIDER="openai"
-export PAGENT_MODEL="gpt-4o"   # optional, defaults to gpt-4o
+# default model: gpt-4.1-mini
 ```
 
 **Gemini:**
 ```bash
-export PAGENT_API_KEY="AIza..."
+export PAGENT_GEMINI_API_KEY="AIza..."
 export PAGENT_PROVIDER="gemini"
-export PAGENT_MODEL="gemini-2.0-flash"   # optional, defaults to gemini-2.0-flash
+# default model: gemini-2.5-flash
+```
+
+**Multiple providers (switch in editor UI):**
+```bash
+export PAGENT_ANTHROPIC_API_KEY="sk-ant-..."
+export PAGENT_OPENAI_API_KEY="sk-..."
+export PAGENT_GEMINI_API_KEY="AIza..."
+export PAGENT_PROVIDER="anthropic"   # default selection, all available in dropdown
 ```
 
 ## Authentication
@@ -255,21 +270,97 @@ tool.handler = [this](const std::string &args) -> std::string {
 | `ExtractArgStr(args, key)` | Extract a string value from a flat JSON args object |
 | `ExtractArgNum(args, key)` | Extract a float value from a flat JSON args object |
 
-## PhasmaEditor Tools
+## PhasmaEditor Tool Examples
 
-When integrated inside PhasmaEditor the following tools are registered:
+Integrated inside PhasmaEditor the following tools are registered:
+
+### Scene & Models
 
 | Tool | Description |
 |---|---|
 | `get_scene_info` | Lists all entities and models currently loaded in the scene |
-| `get_metrics` | Returns current FPS, CPU frame time, and GPU time in ms |
-| `compile_shaders` | Triggers a full shader recompile (same as the editor button) |
+| `get_metrics` | Returns current FPS and frame delta time in ms |
+| `list_models` | Lists available 3D model assets under Assets/Objects/ (with optional filter) |
+| `load_model` | Loads a 3D model and adds it to the scene with an optional unique label |
+| `remove_model` | Removes a loaded model by filename/label substring |
+| `get_model_info` | Returns node count, mesh count, bounding box, and position for a model |
+| `clone_model` | Duplicates a loaded model, optionally placing it at a new position |
+| `scatter_models` | Scatters multiple copies of a model with randomized rotation and scale |
+| `set_model_transform` | Sets position, rotation (Euler degrees), and per-axis scale for a model |
+| `create_primitive` | Creates cube/sphere/plane/cylinder/cone with full transform and unique label |
+| `save_scene` | Saves the current scene to a .pescene file |
+| `load_scene` | Loads a scene from a .pescene file |
+
+### Camera
+
+| Tool | Description |
+|---|---|
+| `get_camera_info` | Returns camera position, pitch/yaw, and horizontal FOV |
+| `set_camera_position` | Moves the camera to a world-space position |
+| `set_camera_rotation` | Sets camera pitch and yaw in degrees |
+| `set_camera_fov` | Sets horizontal field of view in degrees |
+| `focus_camera_on_model` | Frames a model by moving the camera to face its bounding box |
+| `set_camera_dof_focus` | Sets depth of field focus distance to match a target model |
+
+### Rendering
+
+| Tool | Description |
+|---|---|
 | `get_render_settings` | Returns current rendering toggles (bloom, TAA, SSAO, SSR, DOF, etc.) |
 | `set_render_setting` | Enables or disables a named render setting |
-| `get_camera_info` | Returns camera position, yaw, pitch, FOV, near/far planes |
-| `set_camera_position` | Moves the camera to a world-space position |
-| `load_model` | Loads a 3D model from an absolute filesystem path |
+| `set_render_value` | Sets a numeric render value (bloom_strength, IBL_intensity, etc.) |
+| `set_render_mode` | Switches render pipeline: raster, hybrid, or raytracing |
+| `set_time_of_day` | Switches between day and night skybox/IBL |
+| `set_skybox_hdr` | Loads a new HDR image as the day or night skybox |
+| `compile_shaders` | Triggers a full shader recompile |
+
+### Lighting
+
+| Tool | Description |
+|---|---|
+| `get_lights` | Returns all lights in the scene (directional, point, spot, area) |
+| `add_light` | Adds a light with type, color, intensity, position, and type-specific params |
+| `set_light` | Modifies an existing light by type and index |
+| `remove_light` | Removes a light by type and index |
+
+### Materials
+
+| Tool | Description |
+|---|---|
+| `get_materials` | Returns material properties for all meshes of a model |
+| `set_material_property` | Sets base color, emissive, metallic, roughness, or alpha cutoff per mesh |
+
+### Shaders
+
+| Tool | Description |
+|---|---|
+| `list_shaders` | Lists all HLSL shader files in Assets/Shaders/ |
+| `read_shader` | Reads shader source code |
+| `edit_shader` | Find/replace edit on an existing shader (auto-triggers recompilation) |
+| `write_shader` | Creates a new shader file (auto-registers for hot-reload) |
+
+### Filesystem
+
+| Tool | Description |
+|---|---|
+| `find_file` | Recursively searches for files by name substring under Assets/ |
 | `list_directory` | Lists files and subdirectories at a given path |
+
+### Agent Workspace (Persistent Memory)
+
+| Tool | Description |
+|---|---|
+| `read_file` | Reads a text file from the agent workspace (`Assets/Agent/`) |
+| `write_file` | Writes or appends to a text file in the agent workspace |
+
+The agent workspace at `Assets/Agent/` provides persistent storage across editor restarts and model switches:
+
+- **`START.md`** — loaded automatically on every agent startup (via `InjectSystemMessage`). Contains instructions the agent follows at the start of each conversation.
+- **`MEMORY.md`** — agent-maintained notes about what it has learned (user preferences, project specifics).
+- **`TASKS.md`** — pending task list the agent can update and resume across sessions.
+- **`PROGRESSION.md`** — progress log for multi-step work.
+
+The agent reads `START.md` on initialization. The default instructions tell it to check MEMORY.md and TASKS.md at the start of each conversation to resume previous work.
 
 ## Limitations
 
@@ -277,6 +368,5 @@ When integrated inside PhasmaEditor the following tools are registered:
 - **Small models are unreliable for tool use** — models under 7b parameters frequently ignore tool schemas or emit JSON code blocks instead of tool calls. Recommended minimum: `qwen3:14b`, `qwen2.5:7b`, or `llama3.1:8b`.
 - **Tool handlers run on a worker thread** — any engine state mutation must be deferred to the main thread (see deferred queue pattern above).
 - **No streaming progress on tool results** — while the model streams text, tool execution is synchronous; the caller sees a `ToolResult` event only after the handler returns.
-- **Agentic loop has a hard cap** — `AgentConfig::max_tool_rounds` (default 10) prevents runaway loops. Raise it for tasks that require many sequential tool calls.
+- **Agentic loop has a hard cap** — `AgentConfig::max_tool_rounds` (default 20 in PhasmaEditor) prevents runaway loops. Raise it for tasks that require many sequential tool calls.
 - **No multi-modal input** — image or file attachments are not supported; text only.
-- **No persistent memory** — conversation history is in-process only; it resets when the agent is destroyed or `ClearHistory()` is called.

@@ -70,6 +70,11 @@ namespace pe
             "ALWAYS use your tools to perform actions. NEVER tell the user to do something manually when a tool can do it. "
             "Do not use emoji or Unicode symbols in responses. Use plain ASCII text only. "
             "Be concise and chain tool calls to complete multi-step tasks without asking for confirmation. "
+            "You have a persistent workspace at " +
+            Path::Assets + "Agent/ where you can read and write files (read_file, write_file). "
+            "Use this to maintain MEMORY.md (what you learned), TASKS.md (pending work), PROGRESSION.md (progress log), or any other notes. "
+            "On startup, START.md from this workspace is loaded as instructions automatically. "
+            "Always check your workspace files at the start of a conversation to resume previous work if asked. "
             "Executable directory: " +
             Path::Executable + " | "
                                "Assets directory: " +
@@ -92,6 +97,23 @@ namespace pe
                                   { OnAgentEvent(ev); });
 
         RegisterTools();
+
+        // Load START.md instructions if present in the agent workspace
+        {
+            std::string startPath = Path::Assets + "Agent/START.md";
+            if (std::filesystem::exists(startPath))
+            {
+                std::ifstream file(startPath, std::ios::in);
+                if (file.is_open())
+                {
+                    std::string content((std::istreambuf_iterator<char>(file)),
+                                        std::istreambuf_iterator<char>());
+                    if (!content.empty())
+                        m_agent->InjectSystemMessage("Instructions from START.md:\n" + content);
+                }
+            }
+        }
+
         FetchAvailableModels();
     }
 
@@ -1677,6 +1699,92 @@ namespace pe
                                       auto *r = GetGlobalSystem<RendererSystem>();
                                       if (r) r->GetScene().LoadScene(resolved); });
                                    return "{\"status\":\"ok\"}";
+                               }});
+
+        // ------------------------------------------------------------------ workspace file I/O
+        const std::string agentWorkspace = Path::Assets + "Agent/";
+
+        m_agent->RegisterTool({.name = "read_file",
+                               .description = "Reads a text file from the agent workspace (Assets/Agent/). "
+                                              "Use this to read START.md, MEMORY.md, TASKS.md, PROGRESSION.md, or any other workspace file.",
+                               .properties = {
+                                   {"path", "File path relative to workspace (e.g. 'MEMORY.md') or absolute", pagent::SchemaType::String, true},
+                               },
+                               .handler = [agentWorkspace](const std::string &args) -> std::string
+                               {
+                                   std::string path = JsonUnescape(ExtractArgStr(args, "path"));
+                                   if (path.empty())
+                                       return "{\"error\":\"missing path\"}";
+
+                                   std::filesystem::path fpath(path);
+                                   if (fpath.is_relative())
+                                       fpath = std::filesystem::path(agentWorkspace) / fpath;
+
+                                   if (!IsPathSafe(fpath.string(), agentWorkspace))
+                                       return "{\"error\":\"path outside workspace directory\"}";
+
+                                   if (!std::filesystem::exists(fpath))
+                                       return JsonObj({{"error", JsonStr("file not found: " + fpath.string())}});
+
+                                   std::ifstream file(fpath, std::ios::in);
+                                   if (!file.is_open())
+                                       return JsonObj({{"error", JsonStr("cannot open: " + fpath.string())}});
+
+                                   std::string content((std::istreambuf_iterator<char>(file)),
+                                                       std::istreambuf_iterator<char>());
+
+                                   return JsonObj({{"path", JsonStr(fpath.string())}, {"content", JsonStr(content)}});
+                               }});
+
+        m_agent->RegisterTool({.name = "write_file",
+                               .description = "Writes or appends to a text file in the agent workspace (Assets/Agent/). "
+                                              "Use this to persist notes, progress, tasks, or memory across sessions. "
+                                              "Creates the file if it does not exist. Parent directories are created automatically.",
+                               .properties = {
+                                   {"path", "File path relative to workspace (e.g. 'MEMORY.md') or absolute", pagent::SchemaType::String, true},
+                                   {"content", "Text content to write", pagent::SchemaType::String, true},
+                                   {"append", "If 'true', append to existing file instead of overwriting (default: overwrite)", pagent::SchemaType::String, false},
+                               },
+                               .handler = [agentWorkspace](const std::string &args) -> std::string
+                               {
+                                   std::string path = JsonUnescape(ExtractArgStr(args, "path"));
+                                   std::string content = JsonUnescape(ExtractArgStr(args, "content"));
+                                   std::string appendMode = ExtractArgStr(args, "append");
+                                   if (path.empty())
+                                       return "{\"error\":\"missing path\"}";
+                                   if (content.empty())
+                                       return "{\"error\":\"missing content\"}";
+
+                                   std::filesystem::path fpath(path);
+                                   if (fpath.is_relative())
+                                       fpath = std::filesystem::path(agentWorkspace) / fpath;
+
+                                   if (!IsPathSafe(fpath.string(), agentWorkspace))
+                                       return "{\"error\":\"path outside workspace directory\"}";
+
+                                   // Create parent directories if needed
+                                   std::filesystem::path parentDir = fpath.parent_path();
+                                   if (!parentDir.empty() && !std::filesystem::exists(parentDir))
+                                   {
+                                       std::error_code ec;
+                                       std::filesystem::create_directories(parentDir, ec);
+                                       if (ec)
+                                           return JsonObj({{"error", JsonStr("cannot create directory: " + ec.message())}});
+                                   }
+
+                                   auto flags = std::ios::out;
+                                   if (appendMode == "true")
+                                       flags |= std::ios::app;
+                                   else
+                                       flags |= std::ios::trunc;
+
+                                   std::ofstream file(fpath, flags);
+                                   if (!file.is_open())
+                                       return JsonObj({{"error", JsonStr("cannot write: " + fpath.string())}});
+                                   file << content;
+                                   file.close();
+
+                                   return JsonObj({{"status", JsonStr("ok")}, {"path", JsonStr(fpath.string())}});
                                }});
     }
 
