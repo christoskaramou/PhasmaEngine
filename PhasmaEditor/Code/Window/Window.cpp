@@ -131,8 +131,7 @@ namespace pe
 #if defined(PE_SCRIPTS)
                 case EventType::CompileScripts:
                 {
-                    ScriptManager::Destroy();
-                    ScriptManager::Init();
+                    ScriptManager::Reload();
                     break;
                 }
 #endif

@@ -1,193 +1,130 @@
 #include "ScriptManager.h"
-#include "Script.h"
-
-#include <vector>
-
-#if defined(PE_WIN32)
-#include <process.h>
-#else
-#include <sys/wait.h>
-#include <unistd.h>
-#endif
-
-namespace
-{
-    int RunProcess(const std::vector<std::string> &args)
-    {
-        if (args.empty())
-            return -1;
-
-#if defined(PE_WIN32)
-        std::vector<const char *> argv;
-        argv.reserve(args.size() + 1);
-        for (const auto &arg : args)
-            argv.push_back(arg.c_str());
-        argv.push_back(nullptr);
-
-        intptr_t result = _spawnvp(_P_WAIT, args[0].c_str(), argv.data());
-        return result == -1 ? -1 : static_cast<int>(result);
-#else
-        pid_t pid = fork();
-        if (pid == 0)
-        {
-            std::vector<char *> argv;
-            argv.reserve(args.size() + 1);
-            for (const auto &arg : args)
-                argv.push_back(const_cast<char *>(arg.c_str()));
-            argv.push_back(nullptr);
-
-            execvp(args[0].c_str(), argv.data());
-            _exit(127);
-        }
-        if (pid < 0)
-            return -1;
-
-        int status = 0;
-        if (waitpid(pid, &status, 0) < 0)
-            return -1;
-
-        if (WIFEXITED(status))
-            return WEXITSTATUS(status);
-
-        return -1;
-#endif
-    }
-}
 
 namespace pe
 {
     void ScriptManager::Init()
     {
-        const std::string scriptsDir = Path::Assets + "Scripts";
-        const std::string buildDir = Path::Assets + "Scripts/build";
+        s_lua.open_libraries(
+            sol::lib::base,
+            sol::lib::math,
+            sol::lib::string,
+            sol::lib::table,
+            sol::lib::io,
+            sol::lib::os,
+            sol::lib::coroutine);
 
-        // Configure CMake
-        std::vector<std::string> cmakeArgs = {
-            "cmake",
-            "-S",
-            scriptsDir,
-            "-B",
-            buildDir};
-        int res = RunProcess(cmakeArgs);
-        PE_ERROR_IF(res != 0, "Failed to configure CMake");
+        RegisterBindings();
+        LoadScripts();
 
-        // Compile the source into a shared library
-        std::vector<std::string> buildArgs = {
-            "cmake",
-            "--build",
-            buildDir,
-            "--config"};
-#if defined(PE_DEBUG)
-        buildArgs.push_back("Debug");
-#elif defined(PE_RELEASE)
-        buildArgs.push_back("Release");
-#elif defined(PE_MINSIZEREL)
-        buildArgs.push_back("MinSizeRel");
-#elif defined(PE_RELWITHDEBINFO)
-        buildArgs.push_back("RelWithDebInfo");
-#endif
-        res = RunProcess(buildArgs);
-        PE_ERROR_IF(res != 0, "Failed to build the scripts");
-
-        // Load the compiled module
-        LoadModule();
-
-        // Find .pecpp files in Scripts folder
-        for (auto &file : std::filesystem::recursive_directory_iterator(scriptsDir))
+        // Call init() on each loaded script
+        sol::protected_function initFn = s_lua["init"];
+        if (initFn.valid())
         {
-            std::string filePath = file.path().string();
-            std::replace(filePath.begin(), filePath.end(), '\\', '/');
-
-            if (filePath.find("Assets/Scripts/build") != std::string::npos)
-                continue;
-
-            if (file.path().extension() == ".pecpp")
+            auto result = initFn();
+            if (!result.valid())
             {
-                // Create a new script object
-                Script *script = new Script(filePath);
-                script->CreateObject();
-                m_scripts.push_back(script);
+                sol::error err = result;
+                PE_ERROR("Lua init() error: %s", err.what());
             }
         }
+
+        m_initialized = true;
     }
 
     void ScriptManager::Update()
     {
-        std::vector<std::future<void>> updateFutures(m_scripts.size());
-        for (size_t i = 0; i < m_scripts.size(); i++)
+        sol::protected_function updateFn = s_lua["update"];
+        if (updateFn.valid())
         {
-            if (m_scripts[i])
-                updateFutures[i] = std::async(std::launch::async, &Script::Update, m_scripts[i]);
-        }
-
-        for (auto &future : updateFutures)
-        {
-            if (future.valid())
-                future.wait();
+            auto result = updateFn();
+            if (!result.valid())
+            {
+                sol::error err = result;
+                PE_ERROR("Lua update() error: %s", err.what());
+            }
         }
     }
 
     void ScriptManager::Draw()
     {
-        std::vector<std::future<void>> drawFutures(m_scripts.size());
-        for (size_t i = 0; i < m_scripts.size(); i++)
+        sol::protected_function drawFn = s_lua["draw"];
+        if (drawFn.valid())
         {
-            if (m_scripts[i])
-                drawFutures[i] = std::async(std::launch::async, &Script::Draw, m_scripts[i]);
-        }
-
-        for (auto &future : drawFutures)
-        {
-            if (future.valid())
-                future.wait();
+            auto result = drawFn();
+            if (!result.valid())
+            {
+                sol::error err = result;
+                PE_ERROR("Lua draw() error: %s", err.what());
+            }
         }
     }
 
     void ScriptManager::Destroy()
     {
-        for (auto script : m_scripts)
+        if (!m_initialized)
+            return;
+
+        sol::protected_function destroyFn = s_lua["destroy"];
+        if (destroyFn.valid())
         {
-            if (script)
-                delete script;
+            auto result = destroyFn();
+            if (!result.valid())
+            {
+                sol::error err = result;
+                PE_ERROR("Lua destroy() error: %s", err.what());
+            }
         }
-        m_scripts.clear();
 
-        UnloadModule();
+        m_scriptPaths.clear();
+        s_lua = sol::state(); // Reset state
+        m_initialized = false;
     }
 
-    void ScriptManager::LoadModule()
+    void ScriptManager::Reload()
     {
-        s_module = nullptr;
-        std::string path;
-
-#if defined(PE_WIN32)
-#ifdef PE_DEBUG
-        path = Path::Assets + "Scripts/build/Debug/Scripts.dll";
-#elif defined(PE_RELEASE)
-        path = Path::Assets + "Scripts/build/Release/Scripts.dll";
-#elif defined(PE_MINSIZEREL)
-        path = Path::Assets + "Scripts/build/MinSizeRel/Scripts.dll";
-#elif defined(PE_RELWITHDEBINFO)
-        path = Path::Assets + "Scripts/build/RelWithDebInfo/Scripts.dll";
-#endif
-        std::wstring widePath(path.begin(), path.end());
-        s_module = (void *)LoadLibrary(widePath.c_str());
-#else
-        path = Path::Assets + "Scripts/build/libScripts.so";
-        //  m_module = dlopen(path.c_str(), RTLD_NOW);
-        s_module = dlopen(path.c_str(), RTLD_LAZY);
-#endif
-
-        PE_ERROR_IF(!s_module, std::string("Failed to load module: " + path).c_str());
+        Destroy();
+        Init();
     }
 
-    void ScriptManager::UnloadModule()
+    void ScriptManager::LoadScripts()
     {
-#if defined(PE_WIN32)
-        FreeLibrary((HMODULE)s_module);
-#else
-        dlclose(s_module);
-#endif
-        s_module = nullptr;
+        const std::string scriptsDir = Path::Assets + "Scripts";
+
+        if (!std::filesystem::exists(scriptsDir))
+            return;
+
+        for (auto &file : std::filesystem::recursive_directory_iterator(scriptsDir))
+        {
+            if (file.path().extension() == ".lua")
+            {
+                std::string filePath = file.path().string();
+                std::replace(filePath.begin(), filePath.end(), '\\', '/');
+
+                auto result = s_lua.safe_script_file(filePath, sol::script_pass_on_error);
+                if (!result.valid())
+                {
+                    sol::error err = result;
+                    PE_ERROR("Lua script error in '%s': %s", filePath.c_str(), err.what());
+                    continue;
+                }
+
+                m_scriptPaths.push_back(filePath);
+                PE_INFO("Loaded Lua script: %s", filePath.c_str());
+            }
+        }
+    }
+
+    void ScriptManager::RegisterBindings()
+    {
+        // Engine bindings will be registered here
+        // e.g. s_lua.set_function("log", [](const std::string &msg) { PE_INFO("%s", msg.c_str()); });
+        s_lua.set_function("pe_log", [](const std::string &msg)
+                           { PE_INFO("[Lua] %s", msg.c_str()); });
+
+        s_lua.set_function("pe_warn", [](const std::string &msg)
+                           { PE_WARN("[Lua] %s", msg.c_str()); });
+
+        s_lua.set_function("pe_error", [](const std::string &msg)
+                           { PE_ERROR("[Lua] %s", msg.c_str()); });
     }
 } // namespace pe

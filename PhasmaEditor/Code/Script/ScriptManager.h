@@ -1,9 +1,9 @@
 #pragma once
 
+#include <sol/sol.hpp>
+
 namespace pe
 {
-    class Script;
-
     class ScriptManager
     {
     public:
@@ -11,15 +11,16 @@ namespace pe
         static void Update();
         static void Draw();
         static void Destroy();
+        static void Reload();
 
-        inline static void *GetModule() { return s_module; }
-        inline static const std::vector<Script *> &GetScripts() { return m_scripts; }
+        inline static sol::state &GetLua() { return s_lua; }
 
     private:
-        static void LoadModule();
-        static void UnloadModule();
+        static void LoadScripts();
+        static void RegisterBindings();
 
-        inline static void *s_module = nullptr;
-        inline static std::vector<Script *> m_scripts{};
+        inline static sol::state s_lua{};
+        inline static std::vector<std::string> m_scriptPaths{};
+        inline static bool m_initialized = false;
     };
 } // namespace pe

@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.10)
-project(PhasmaEditor CXX)
+project(PhasmaEditor C CXX)
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 message(STATUS "PhasmaEditor = ${CMAKE_CURRENT_SOURCE_DIR}")
@@ -56,13 +56,24 @@ add_subdirectory(PhasmaCore)
 # Add PhasmaAgent subdirectory
 add_subdirectory(PhasmaAgent)
 
+# --- Lua 5.4 (vendored, compiled from source) ---
+file(GLOB LUA_SOURCES "${PE_THIRD_PARTY_DIR}/lua/*.c")
+add_library(Lua STATIC ${LUA_SOURCES})
+target_include_directories(Lua PUBLIC "${PE_THIRD_PARTY_DIR}/lua")
+set_target_properties(Lua PROPERTIES LINKER_LANGUAGE C)
+if(NOT MSVC)
+    target_compile_options(Lua PRIVATE -w)
+endif()
+
 # PhasmaEditor executable
 file(GLOB_RECURSE CODE_SRC_FILES CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/PhasmaEditor/Code/*.cpp")
-file(GLOB_RECURSE INCLUDE_SRC_FILES CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/PhasmaEditor/Include/*.cpp")
+set(PE_EDITOR_THIRD_PARTY_DIR "${CMAKE_CURRENT_SOURCE_DIR}/PhasmaEditor/third_party")
+file(GLOB_RECURSE IMGUI_SRC_FILES CONFIGURE_DEPENDS "${PE_EDITOR_THIRD_PARTY_DIR}/imgui/*.cpp")
+file(GLOB_RECURSE CACAO_SRC_FILES CONFIGURE_DEPENDS "${PE_EDITOR_THIRD_PARTY_DIR}/CACAO/*.cpp")
 file(GLOB_RECURSE ASSET_FILES CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/PhasmaEditor/Assets/*")
 list(FILTER ASSET_FILES EXCLUDE REGEX "\\.obj$")
 set_source_files_properties(${ASSET_FILES} PROPERTIES VS_TOOL_OVERRIDE "None")
-add_executable(PhasmaEditor ${CODE_SRC_FILES} ${INCLUDE_SRC_FILES} ${ASSET_FILES} ${CMAKE_CURRENT_SOURCE_DIR}/PhasmaEditor/main.cpp)
+add_executable(PhasmaEditor ${CODE_SRC_FILES} ${IMGUI_SRC_FILES} ${CACAO_SRC_FILES} ${ASSET_FILES} ${CMAKE_CURRENT_SOURCE_DIR}/PhasmaEditor/main.cpp)
 
 # PhasmaEditor precompiled headers
 target_precompile_headers(PhasmaEditor REUSE_FROM PhasmaCore)
@@ -70,8 +81,9 @@ target_precompile_headers(PhasmaEditor REUSE_FROM PhasmaCore)
 # PhasmaEditor include directories
 target_include_directories(PhasmaEditor PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/PhasmaEditor")
 target_include_directories(PhasmaEditor PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/PhasmaEditor/Code")
-target_include_directories(PhasmaEditor PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/PhasmaEditor/Include")
-target_include_directories(PhasmaEditor PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/PhasmaEditor/Include/imgui")
+target_include_directories(PhasmaEditor PRIVATE "${PE_EDITOR_THIRD_PARTY_DIR}")
+target_include_directories(PhasmaEditor PRIVATE "${PE_EDITOR_THIRD_PARTY_DIR}/imgui")
+target_include_directories(PhasmaEditor PRIVATE "${PE_THIRD_PARTY_DIR}/sol2")
 
 # PhasmaEditor link directories
 # Libraries
@@ -80,8 +92,9 @@ target_link_libraries(PhasmaEditor PRIVATE
     PhasmaAgent
     assimp
     meshoptimizer
+    Lua
 )
-target_compile_definitions(PhasmaEditor PRIVATE RAPIDJSON_HAS_STDSTRING=1 RAPIDJSON_NOMEMBERITERATORCLASS)
+target_compile_definitions(PhasmaEditor PRIVATE RAPIDJSON_HAS_STDSTRING=1 RAPIDJSON_NOMEMBERITERATORCLASS PE_SCRIPTS)
 
 # target_compile_options(PhasmaEditor PRIVATE -fsanitize=address)
 # target_link_options(PhasmaEditor PRIVATE -fsanitize=address)

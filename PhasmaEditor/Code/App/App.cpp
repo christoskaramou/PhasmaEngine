@@ -15,6 +15,7 @@
 #endif
 #if defined(PE_SCRIPTS)
 #include "Script/ScriptManager.h"
+#include "GUI/GUIState.h"
 #endif
 
 namespace pe
@@ -50,7 +51,10 @@ namespace pe
         if (std::filesystem::exists(Path::Assets + "Scripts"))
         {
             for (auto &file : std::filesystem::recursive_directory_iterator(Path::Assets + "Scripts"))
-                FileWatcher::Add(file.path().string(), scriptCallback);
+            {
+                if (file.path().extension() == ".lua")
+                    FileWatcher::Add(file.path().string(), scriptCallback);
+            }
         }
 
         ScriptManager::Init();
