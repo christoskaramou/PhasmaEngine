@@ -3,6 +3,7 @@
 #include <string>
 #include <initializer_list>
 #include <utility>
+#include <filesystem>
 
 namespace pagent
 {
@@ -104,5 +105,27 @@ namespace pagent
         {
             return 0.0f;
         }
+    }
+    // Returns true if 'path' resolves to a location under 'allowedRoot'.
+    // Rejects path traversal attempts (e.g. "../../etc/passwd").
+    // Cross-platform: uses std::filesystem::path iteration, works with both / and \.
+    inline bool IsPathSafe(const std::string &path, const std::string &allowedRoot)
+    {
+        std::error_code ec;
+        auto canonical = std::filesystem::weakly_canonical(path, ec);
+        if (ec)
+            return false;
+        auto root = std::filesystem::weakly_canonical(allowedRoot, ec);
+        if (ec)
+            return false;
+        // Check that every component of root is a prefix of canonical
+        auto rootIt = root.begin();
+        auto pathIt = canonical.begin();
+        for (; rootIt != root.end(); ++rootIt, ++pathIt)
+        {
+            if (pathIt == canonical.end() || *pathIt != *rootIt)
+                return false;
+        }
+        return true;
     }
 } // namespace pagent

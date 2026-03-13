@@ -515,8 +515,28 @@ namespace pe
             // std::string latoFontPath = Path::Assets + "Fonts/Lato-Regular.ttf";
             float fontSize = 15.0f;
 
-            // Helper lambda to add icon font merged into base
-            auto addIconsToFont = [&]()
+            // Symbol glyph ranges for fallback font (DejaVu Sans covers these)
+            static const ImWchar symbolRanges[] = {
+                0x2190,
+                0x21FF, // Arrows
+                0x2200,
+                0x22FF, // Mathematical Operators
+                0x2500,
+                0x257F, // Box Drawing
+                0x2580,
+                0x259F, // Block Elements
+                0x25A0,
+                0x25FF, // Geometric Shapes
+                0x2600,
+                0x26FF, // Miscellaneous Symbols
+                0x2700,
+                0x27BF, // Dingbats
+                0,
+            };
+            std::string fallbackFontPath = Path::Assets + "Fonts/DejaVuSans.ttf";
+
+            // Helper lambda to merge icon font + symbol fallback into the current base font
+            auto addMergedFonts = [&]()
             {
                 if (std::filesystem::exists(iconFontPath))
                 {
@@ -526,17 +546,23 @@ namespace pe
                     config.GlyphMinAdvanceX = fontSize;
                     io.Fonts->AddFontFromFileTTF(iconFontPath.c_str(), fontSize, &config, icon_ranges);
                 }
+                if (std::filesystem::exists(fallbackFontPath))
+                {
+                    ImFontConfig config;
+                    config.MergeMode = true;
+                    io.Fonts->AddFontFromFileTTF(fallbackFontPath.c_str(), fontSize, &config, symbolRanges);
+                }
             };
 
             // 1. Classic (Default ImGui)
             GUIState::s_fontClassic = io.Fonts->AddFontDefault();
-            addIconsToFont();
+            addMergedFonts();
 
             // 2. Unity (Inter)
             if (std::filesystem::exists(interFontPath))
             {
                 GUIState::s_fontUnity = io.Fonts->AddFontFromFileTTF(interFontPath.c_str(), fontSize);
-                addIconsToFont();
+                addMergedFonts();
             }
             else
                 GUIState::s_fontUnity = GUIState::s_fontClassic;
@@ -545,7 +571,7 @@ namespace pe
             if (std::filesystem::exists(robotoFontPath))
             {
                 GUIState::s_fontUnreal = io.Fonts->AddFontFromFileTTF(robotoFontPath.c_str(), fontSize);
-                addIconsToFont();
+                addMergedFonts();
             }
             else
                 GUIState::s_fontUnreal = GUIState::s_fontClassic;
@@ -554,7 +580,7 @@ namespace pe
             if (std::filesystem::exists(openSansFontPath))
             {
                 GUIState::s_fontLight = io.Fonts->AddFontFromFileTTF(openSansFontPath.c_str(), fontSize + 2);
-                addIconsToFont();
+                addMergedFonts();
             }
             else
             {

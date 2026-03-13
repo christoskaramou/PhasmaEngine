@@ -125,8 +125,8 @@ namespace pagent
             const auto messages = m_history.GetMessages(m_config.max_history_messages);
             const auto toolsSchemaJson = m_toolRegistry.GenerateSchemaJson(*m_backend);
 
-            if (round == 0 && m_config.log_callback)
-                m_config.log_callback("[PAgent] Sending request with " + std::to_string(m_toolRegistry.GetToolCount()) + " tools, " + std::to_string(messages.size()) + " messages");
+            if (m_config.log_callback)
+                m_config.log_callback("[PAgent] Round " + std::to_string(round) + ": " + std::to_string(m_toolRegistry.GetToolCount()) + " tools, " + std::to_string(messages.size()) + " msgs, model='" + m_config.model + "', provider=" + std::to_string(static_cast<int>(m_config.provider)));
 
             const std::string body = m_backend->BuildRequestJson(
                 m_config.model,
@@ -136,16 +136,33 @@ namespace pagent
                 messages,
                 toolsSchemaJson);
 
-            // determine host/path
-            std::string host = m_config.base_url.empty()
-                                   ? "api.anthropic.com"
-                                   : m_config.base_url;
+            if (m_config.log_callback)
+                m_config.log_callback("[PAgent] Body size=" + std::to_string(body.size()));
+
+            // determine host/path based on provider
+            std::string host = m_config.base_url;
+            if (host.empty())
+            {
+                switch (m_config.provider)
+                {
+                case Provider::Anthropic:
+                    host = "api.anthropic.com";
+                    break;
+                case Provider::OpenAI:
+                    host = "https://api.openai.com";
+                    break;
+                case Provider::Gemini:
+                    host = "https://generativelanguage.googleapis.com/v1beta/openai";
+                    break;
+                case Provider::Ollama:
+                    host = "http://localhost:11434";
+                    break;
+                }
+            }
             const std::string path = m_backend->GetEndpointPath();
 
-            // build headers
-            std::map<std::string, std::string> headers = {
-                {"content-type", "application/json"},
-            };
+            // build headers (content-type is set by httplib's Post() 4th arg)
+            std::map<std::string, std::string> headers;
             if (!m_config.api_key.empty())
             {
                 const auto [authKey, authVal] = m_backend->GetAuthHeader(m_config.api_key);
@@ -159,10 +176,35 @@ namespace pagent
             }
 
             // HTTP POST + stream parse
+            if (m_config.log_callback)
+                m_config.log_callback("[PAgent] POST " + host + path + " ...");
             std::vector<AgentEvent> turnEvents;
             const auto errMsg = HttpPost(host, path, headers, body, turnEvents);
+            if (m_config.log_callback)
+                m_config.log_callback("[PAgent] POST done, err='" + errMsg + "', events=" + std::to_string(turnEvents.size()));
 
-            if (!errMsg.empty())
+            // If the model doesn't support tools, retry without them
+            if (!errMsg.empty() && errMsg.find("does not support tools") != std::string::npos)
+            {
+                if (m_config.log_callback)
+                    m_config.log_callback("[PAgent] Model does not support tools, retrying without tools");
+
+                const std::string bodyNoTools = m_backend->BuildRequestJson(
+                    m_config.model, m_config.system_prompt, m_config.max_tokens,
+                    m_config.temperature, messages, "");
+
+                turnEvents.clear();
+                const auto retryErr = HttpPost(host, path, headers, bodyNoTools, turnEvents);
+                if (!retryErr.empty())
+                {
+                    AgentEvent ev;
+                    ev.type = AgentEventType::Error;
+                    ev.error_message = retryErr;
+                    PushEvent(std::move(ev));
+                    return;
+                }
+            }
+            else if (!errMsg.empty())
             {
                 AgentEvent ev;
                 ev.type = AgentEventType::Error;
@@ -296,7 +338,7 @@ namespace pagent
             if (slashPos != std::string::npos)
             {
                 pathPrefix = cleanHost.substr(slashPos); // e.g. "/v1beta/openai"
-                cleanHost  = cleanHost.substr(0, slashPos);
+                cleanHost = cleanHost.substr(0, slashPos);
             }
         }
         // When a path prefix is set, it already contains the version (e.g. /v1beta/openai).
@@ -323,9 +365,16 @@ namespace pagent
             // plain HTTP — always available (e.g. Ollama on localhost)
             httplib::Client cli(cleanHost);
             cli.set_read_timeout(30);
-            { std::lock_guard lock(m_clientMutex); m_stopActiveClient = [&cli]{ cli.stop(); }; }
+            {
+                std::lock_guard lock(m_clientMutex);
+                m_stopActiveClient = [&cli]
+                { cli.stop(); };
+            }
             auto res = cli.Post(fullPath, hlHeaders, body, "application/json");
-            { std::lock_guard lock(m_clientMutex); m_stopActiveClient = nullptr; }
+            {
+                std::lock_guard lock(m_clientMutex);
+                m_stopActiveClient = nullptr;
+            }
             if (!res || res->status != 200)
                 errorMsg = res ? ("HTTP " + std::to_string(res->status) + ": " + res->body)
                                : ("Connection failed: " + httplib::to_string(res.error()));
@@ -337,9 +386,16 @@ namespace pagent
 #ifdef CPPHTTPLIB_OPENSSL_SUPPORT
             httplib::SSLClient cli(cleanHost);
             cli.set_read_timeout(30);
-            { std::lock_guard lock(m_clientMutex); m_stopActiveClient = [&cli]{ cli.stop(); }; }
+            {
+                std::lock_guard lock(m_clientMutex);
+                m_stopActiveClient = [&cli]
+                { cli.stop(); };
+            }
             auto res = cli.Post(fullPath, hlHeaders, body, "application/json");
-            { std::lock_guard lock(m_clientMutex); m_stopActiveClient = nullptr; }
+            {
+                std::lock_guard lock(m_clientMutex);
+                m_stopActiveClient = nullptr;
+            }
             if (!res || res->status != 200)
                 errorMsg = res ? ("HTTP " + std::to_string(res->status) + ": " + res->body) : "Connection failed (SSL)";
             else

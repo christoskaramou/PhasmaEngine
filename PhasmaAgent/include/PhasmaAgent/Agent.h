@@ -5,6 +5,7 @@
 #include <functional>
 #include <map>
 #include <memory>
+#include <atomic>
 
 // PhasmaAgent — standalone, provider-agnostic AI agent library.
 // Namespace: pagent
@@ -21,7 +22,9 @@ namespace pagent
     enum class Provider
     {
         Anthropic, // Claude models via api.anthropic.com
-        OpenAI,    // GPT models, Ollama, LM Studio, or any OpenAI-compatible endpoint
+        OpenAI,    // GPT models via api.openai.com
+        Gemini,    // Google Gemini via OpenAI-compatible endpoint
+        Ollama,    // Local Ollama instance (OpenAI-compatible)
     };
 
     enum class SchemaType
@@ -80,14 +83,14 @@ namespace pagent
     struct AgentEvent
     {
         AgentEventType type = AgentEventType::Error;
-        std::string text;            // TextDelta, TextComplete, ToolResult content
-        std::string tool_name;       // ToolCallBegin, ToolCallComplete, ToolResult
-        std::string tool_call_id;    // Matches the model's tool use id
-        std::string tool_input_json; // ToolCallComplete: fully assembled arguments
-        std::string error_message;   // Error
-        int input_tokens = 0;       // Usage
-        int output_tokens = 0;      // Usage
-        int cache_read_tokens = 0;  // Usage (Anthropic prompt caching)
+        std::string text;              // TextDelta, TextComplete, ToolResult content
+        std::string tool_name;         // ToolCallBegin, ToolCallComplete, ToolResult
+        std::string tool_call_id;      // Matches the model's tool use id
+        std::string tool_input_json;   // ToolCallComplete: fully assembled arguments
+        std::string error_message;     // Error
+        int input_tokens = 0;          // Usage
+        int output_tokens = 0;         // Usage
+        int cache_read_tokens = 0;     // Usage (Anthropic prompt caching)
         int cache_creation_tokens = 0; // Usage
     };
 
@@ -174,6 +177,48 @@ namespace pagent
     };
 
     // ---------------------------------------------------------------------------
+    // Provider discovery
+    // ---------------------------------------------------------------------------
+
+    struct ProviderInfo
+    {
+        Provider provider;
+        std::string name; // "Anthropic", "OpenAI", etc.
+        std::string apiKey;
+        std::string defaultModel;
+    };
+
+    // Discovers available providers from environment variables.
+    // Reads PAGENT_ANTHROPIC_API_KEY, PAGENT_OPENAI_API_KEY, PAGENT_GEMINI_API_KEY.
+    // Ollama is always included (no key needed).
+    // Returns them in order; optionally selects one based on PAGENT_PROVIDER env var.
+    std::vector<ProviderInfo> DiscoverProviders();
+
+    // Returns the index into the DiscoverProviders() result matching PAGENT_PROVIDER,
+    // or 0 if not set.
+    int GetDefaultProviderIndex(const std::vector<ProviderInfo> &providers);
+
+    // ---------------------------------------------------------------------------
+    // Token usage
+    // ---------------------------------------------------------------------------
+
+    struct TokenUsage
+    {
+        int turnInput = 0;
+        int turnOutput = 0;
+        int totalInput = 0;
+        int totalOutput = 0;
+        int totalCacheRead = 0;
+        int totalCacheWrite = 0;
+    };
+
+    // Estimate cost in USD based on provider, model, and token counts.
+    // Uses approximate per-model pricing. Returns 0 for local/free models.
+    float EstimateCostUSD(Provider provider, const std::string &model,
+                          int inputTokens, int outputTokens,
+                          int cacheReadTokens = 0, int cacheWriteTokens = 0);
+
+    // ---------------------------------------------------------------------------
     // AgentConfig
     // ---------------------------------------------------------------------------
 
@@ -186,8 +231,8 @@ namespace pagent
         std::string system_prompt;
         int max_tokens = 4096;
         float temperature = 0.7f;
-        int max_tool_rounds = 10;      // Hard cap on agentic loop iterations
-        int max_history_messages = 40;  // Keep last N messages (0 = unlimited). System message always kept.
+        int max_tool_rounds = 10;         // Hard cap on agentic loop iterations
+        int max_history_messages = 40;    // Keep last N messages (0 = unlimited). System message always kept.
         int max_tool_result_chars = 4000; // Truncate tool results beyond this (0 = unlimited)
 
         // Optional: provide your own HTTP transport.
@@ -245,11 +290,49 @@ namespace pagent
         // --- State ---
         bool IsBusy() const;
         void CancelPending(); // Best-effort; may not abort an in-flight HTTP call immediately
+        TokenUsage GetUsage() const;
 
         // --- History ---
         void ClearHistory();
         std::vector<HistoryEntry> GetHistory() const;
         void InjectSystemMessage(const std::string &content); // Inject without sending a request
+        void SetModel(const std::string &model);
+        Provider GetProvider() const;
+
+        // Fetch available model names from the provider. Blocking HTTP call.
+        // For Anthropic returns a hardcoded list (no listing endpoint).
+        static std::vector<std::string> FetchModels(Provider provider,
+                                                    const std::string &api_key,
+                                                    const std::string &base_url = "");
+
+        struct ModelInfo
+        {
+            std::string name;
+            bool local = true; // false for Ollama cloud/remote models that need pulling
+        };
+        static std::vector<ModelInfo> FetchModelInfos(Provider provider,
+                                                      const std::string &api_key,
+                                                      const std::string &base_url = "");
+
+        // Pull/download an Ollama model in the background.
+        // progressCb fires with status strings, completeCb fires with success/failure.
+        // Returns a cancel token; call CancelPull() to abort.
+        using ProgressCallback = std::function<void(const std::string &status)>;
+        using CompleteCallback = std::function<void(bool success)>;
+        using CancelToken = std::shared_ptr<std::atomic<bool>>;
+        static CancelToken PullModel(const std::string &model,
+                                     ProgressCallback progressCb,
+                                     CompleteCallback completeCb);
+        static void CancelPull(const CancelToken &token);
+
+        // Check if a local Ollama model supports tool calling.
+        // Blocking HTTP call to /api/show. Returns true for non-Ollama providers.
+        static bool SupportsTools(Provider provider, const std::string &model,
+                                  const std::string &base_url = "");
+
+        // Unload an Ollama model from GPU memory. No-op for other providers.
+        static void UnloadModel(Provider provider, const std::string &model,
+                                const std::string &base_url = "");
 
     private:
         struct Impl;

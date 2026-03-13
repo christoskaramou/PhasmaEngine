@@ -7,6 +7,7 @@
 #include "AnthropicBackend.h"
 #include "OpenAIBackend.h"
 #include "RequestWorker.h"
+#include "OllamaProcess.h"
 #include <mutex>
 #include <memory>
 
@@ -30,6 +31,9 @@ namespace pagent
         void ClearHistory();
         std::vector<HistoryEntry> GetHistory() const;
         void InjectSystemMessage(const std::string &content);
+        void SetModel(const std::string &model);
+        Provider GetProvider() const { return m_config.provider; }
+        TokenUsage GetUsage() const;
 
     private:
         AgentConfig m_config;
@@ -40,5 +44,7 @@ namespace pagent
         std::unique_ptr<RequestWorker> m_worker;
         Agent::EventCallback m_eventCallback;
         std::mutex m_callbackMutex;
+        OllamaProcess m_ollamaProcess;
+        TokenUsage m_usage;
     };
 } // namespace pagent

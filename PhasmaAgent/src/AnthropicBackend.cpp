@@ -63,7 +63,7 @@ namespace pagent
         const std::string &tools_schema_json) const
     {
         json body;
-        body["model"] = model.empty() ? "claude-sonnet-4-6" : model;
+        body["model"] = model.empty() ? "claude-haiku-4-5" : model;
         body["max_tokens"] = max_tokens;
         body["temperature"] = temperature;
         body["stream"] = true;
@@ -71,9 +71,7 @@ namespace pagent
         if (!system_prompt.empty())
         {
             // Use structured system with cache_control for prompt caching
-            body["system"] = json::array({
-                {{"type", "text"}, {"text", system_prompt}, {"cache_control", {{"type", "ephemeral"}}}}
-            });
+            body["system"] = json::array({{{"type", "text"}, {"text", system_prompt}, {"cache_control", {{"type", "ephemeral"}}}}});
         }
 
         json msgs = json::array();

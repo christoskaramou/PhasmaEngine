@@ -25,6 +25,9 @@ namespace pagent
             m_history,
             m_toolRegistry,
             m_eventQueue);
+
+        if (m_config.provider == Provider::Ollama)
+            m_ollamaProcess.Start(m_config.model);
     }
 
     void Agent::Impl::RegisterTool(ToolDefinition tool)
@@ -58,9 +61,18 @@ namespace pagent
             cb = m_eventCallback;
         }
 
-        if (cb)
+        for (const auto &ev : events)
         {
-            for (const auto &ev : events)
+            if (ev.type == AgentEventType::Usage)
+            {
+                m_usage.turnInput = ev.input_tokens;
+                m_usage.turnOutput = ev.output_tokens;
+                m_usage.totalInput += ev.input_tokens;
+                m_usage.totalOutput += ev.output_tokens;
+                m_usage.totalCacheRead += ev.cache_read_tokens;
+                m_usage.totalCacheWrite += ev.cache_creation_tokens;
+            }
+            if (cb)
                 cb(ev);
         }
     }
@@ -94,5 +106,17 @@ namespace pagent
     void Agent::Impl::InjectSystemMessage(const std::string &content)
     {
         m_history.InjectSystem(content);
+    }
+
+    TokenUsage Agent::Impl::GetUsage() const
+    {
+        return m_usage;
+    }
+
+    void Agent::Impl::SetModel(const std::string &model)
+    {
+        m_config.model = model;
+        if (m_config.provider == Provider::Ollama)
+            m_ollamaProcess.Start(model);
     }
 } // namespace pagent

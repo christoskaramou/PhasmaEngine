@@ -63,10 +63,21 @@ namespace pagent
         const std::string &tools_schema_json) const
     {
         json body;
-        body["model"] = model.empty() ? "gpt-4o" : model;
-        body["max_tokens"] = max_tokens;
+        std::string m = model.empty() ? "gpt-4.1-mini" : model;
+        body["model"] = m;
+
+        // Newer OpenAI models (o-series, gpt-5.x) require max_completion_tokens
+        bool useMaxCompletionTokens = m.rfind("o1-", 0) == 0 ||
+                                      m.rfind("o3-", 0) == 0 ||
+                                      m.rfind("o4-", 0) == 0 ||
+                                      m.rfind("gpt-5", 0) == 0;
+        if (useMaxCompletionTokens)
+            body["max_completion_tokens"] = max_tokens;
+        else
+            body["max_tokens"] = max_tokens;
         body["temperature"] = temperature;
         body["stream"] = true;
+        body["stream_options"] = {{"include_usage", true}};
 
         json msgs = json::array();
 
@@ -197,6 +208,9 @@ namespace pagent
             ev.type = AgentEventType::Usage;
             ev.input_tokens = usage.value("prompt_tokens", 0);
             ev.output_tokens = usage.value("completion_tokens", 0);
+            // OpenAI reports cached tokens inside prompt_tokens_details
+            if (usage.contains("prompt_tokens_details") && usage["prompt_tokens_details"].is_object())
+                ev.cache_read_tokens = usage["prompt_tokens_details"].value("cached_tokens", 0);
             out_events.push_back(std::move(ev));
         }
 
