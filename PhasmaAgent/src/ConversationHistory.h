@@ -10,7 +10,7 @@ namespace pagent
     {
     public:
         void Append(NeutralMessage msg);
-        std::vector<NeutralMessage> GetMessages() const;
+        std::vector<NeutralMessage> GetMessages(int maxMessages = 0) const;
         std::vector<HistoryEntry> GetSnapshot() const;
         void Clear();
         void InjectSystem(const std::string &content);

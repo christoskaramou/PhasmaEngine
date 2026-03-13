@@ -40,21 +40,12 @@ namespace pagent
         case NeutralMessage::Role::Tool:
         {
             // tool results go back as a user message containing a tool_result block.
-            json result_content = msg.tool_result_json;
-            try
-            {
-                result_content = json::parse(msg.tool_result_json);
-            }
-            catch (...)
-            {
-            }
+            // Anthropic requires content to be a string or array of content blocks.
             json content = json::array();
             content.push_back({
                 {"type", "tool_result"},
                 {"tool_use_id", msg.tool_call_id},
-                {"content", result_content.is_string()
-                                ? json(msg.tool_result_json)
-                                : result_content},
+                {"content", msg.tool_result_json},
             });
             return {{"role", "user"}, {"content", content}};
         }
@@ -78,16 +69,38 @@ namespace pagent
         body["stream"] = true;
 
         if (!system_prompt.empty())
-            body["system"] = system_prompt;
+        {
+            // Use structured system with cache_control for prompt caching
+            body["system"] = json::array({
+                {{"type", "text"}, {"text", system_prompt}, {"cache_control", {{"type", "ephemeral"}}}}
+            });
+        }
 
         json msgs = json::array();
         for (const auto &msg : messages)
         {
             if (msg.role == NeutralMessage::Role::System)
-                continue; // system goes in top-level field, not in messages
+                continue;
             auto j = MessageToAnthropicJson(msg);
-            if (!j.is_null())
+            if (j.is_null())
+                continue;
+
+            // Anthropic requires all tool_results from one turn in a single user message.
+            // Merge consecutive tool-result user messages into one.
+            if (msg.role == NeutralMessage::Role::Tool && !msgs.empty() &&
+                msgs.back().value("role", "") == "user" &&
+                msgs.back()["content"].is_array() &&
+                !msgs.back()["content"].empty() &&
+                msgs.back()["content"][0].value("type", "") == "tool_result")
+            {
+                // Append this tool_result block to the previous user message
+                for (auto &block : j["content"])
+                    msgs.back()["content"].push_back(std::move(block));
+            }
+            else
+            {
                 msgs.push_back(std::move(j));
+            }
         }
         body["messages"] = std::move(msgs);
 
@@ -95,7 +108,11 @@ namespace pagent
         {
             try
             {
-                body["tools"] = json::parse(tools_schema_json);
+                auto tools = json::parse(tools_schema_json);
+                // Mark the last tool with cache_control so the entire tools array is cached
+                if (tools.is_array() && !tools.empty())
+                    tools.back()["cache_control"] = {{"type", "ephemeral"}};
+                body["tools"] = std::move(tools);
             }
             catch (...)
             {

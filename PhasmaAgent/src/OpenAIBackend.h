@@ -31,6 +31,7 @@ namespace pagent
         };
 
         std::string m_textAccumulator;
+        std::string m_thinkingAccumulator;
         std::vector<ToolCallAccumulator> m_toolAccumulators;
     };
 } // namespace pagent

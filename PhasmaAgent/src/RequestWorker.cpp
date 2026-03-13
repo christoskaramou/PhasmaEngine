@@ -122,8 +122,11 @@ namespace pagent
             }
 
             // build request
-            const auto messages = m_history.GetMessages();
+            const auto messages = m_history.GetMessages(m_config.max_history_messages);
             const auto toolsSchemaJson = m_toolRegistry.GenerateSchemaJson(*m_backend);
+
+            if (round == 0 && m_config.log_callback)
+                m_config.log_callback("[PAgent] Sending request with " + std::to_string(m_toolRegistry.GetToolCount()) + " tools, " + std::to_string(messages.size()) + " messages");
 
             const std::string body = m_backend->BuildRequestJson(
                 m_config.model,
@@ -140,14 +143,20 @@ namespace pagent
             const std::string path = m_backend->GetEndpointPath();
 
             // build headers
-            const auto [authKey, authVal] = m_backend->GetAuthHeader(m_config.api_key);
             std::map<std::string, std::string> headers = {
-                {authKey, authVal},
                 {"content-type", "application/json"},
             };
-            // anthropic requires this header, harmless for other providers
+            if (!m_config.api_key.empty())
+            {
+                const auto [authKey, authVal] = m_backend->GetAuthHeader(m_config.api_key);
+                headers[authKey] = authVal;
+            }
+            // anthropic requires these headers
             if (m_config.provider == Provider::Anthropic)
+            {
                 headers["anthropic-version"] = "2023-06-01";
+                headers["anthropic-beta"] = "prompt-caching-2024-07-31";
+            }
 
             // HTTP POST + stream parse
             std::vector<AgentEvent> turnEvents;
@@ -214,7 +223,16 @@ namespace pagent
                 }
 
                 Log("Dispatching tool: " + tc.tool_name);
-                const auto resultJson = m_toolRegistry.Dispatch(tc.tool_name, tc.tool_input_json);
+                auto resultJson = m_toolRegistry.Dispatch(tc.tool_name, tc.tool_input_json);
+
+                // Truncate large tool results to save tokens (skip read-type tools that need full content)
+                if (m_config.max_tool_result_chars > 0 &&
+                    static_cast<int>(resultJson.size()) > m_config.max_tool_result_chars &&
+                    tc.tool_name.find("read") == std::string::npos)
+                {
+                    resultJson = resultJson.substr(0, m_config.max_tool_result_chars) +
+                                 "...(truncated, " + std::to_string(resultJson.size()) + " total chars)";
+                }
 
                 AgentEvent resultEv;
                 resultEv.type = AgentEventType::ToolResult;
@@ -309,7 +327,8 @@ namespace pagent
             auto res = cli.Post(fullPath, hlHeaders, body, "application/json");
             { std::lock_guard lock(m_clientMutex); m_stopActiveClient = nullptr; }
             if (!res || res->status != 200)
-                errorMsg = res ? ("HTTP " + std::to_string(res->status) + ": " + res->body) : "Connection failed";
+                errorMsg = res ? ("HTTP " + std::to_string(res->status) + ": " + res->body)
+                               : ("Connection failed: " + httplib::to_string(res.error()));
             else
                 responseBody = std::move(res->body);
         }

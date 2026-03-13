@@ -19,6 +19,7 @@ namespace pe
         };
         Role role;
         std::string text;
+        std::string thinking; // reasoning/thinking content (if any)
     };
 
     class AgentWidget : public Widget
@@ -46,6 +47,7 @@ namespace pe
         std::mutex m_chatMutex;
         std::vector<ChatMessage> m_chat;
         std::string m_streamingText;
+        std::string m_streamingThinking;
         std::mutex m_actionMutex;
         std::vector<std::function<void()>> m_pendingActions;
     };

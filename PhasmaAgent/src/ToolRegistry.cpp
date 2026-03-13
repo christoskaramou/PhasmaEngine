@@ -63,4 +63,9 @@ namespace pagent
             out.push_back(def);
         return out;
     }
+    size_t ToolRegistry::GetToolCount() const
+    {
+        std::lock_guard lock(m_mutex);
+        return m_tools.size();
+    }
 } // namespace pagent

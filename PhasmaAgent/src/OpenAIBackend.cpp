@@ -140,6 +140,7 @@ namespace pagent
     void OpenAIBackend::ResetStreamState()
     {
         m_textAccumulator.clear();
+        m_thinkingAccumulator.clear();
         m_toolAccumulators.clear();
     }
 
@@ -149,6 +150,14 @@ namespace pagent
     {
         if (event_data == "[DONE]")
         {
+            if (!m_thinkingAccumulator.empty())
+            {
+                AgentEvent ev;
+                ev.type = AgentEventType::ThinkingComplete;
+                ev.text = m_thinkingAccumulator;
+                out_events.push_back(std::move(ev));
+                m_thinkingAccumulator.clear();
+            }
             if (!m_textAccumulator.empty())
             {
                 AgentEvent ev;
@@ -189,6 +198,18 @@ namespace pagent
         const auto finish = (choice.contains("finish_reason") && choice["finish_reason"].is_string())
                                 ? choice["finish_reason"].get<std::string>()
                                 : std::string{};
+
+        // reasoning/thinking delta (Qwen3, DeepSeek, etc.)
+        if (delta.contains("reasoning_content") && !delta["reasoning_content"].is_null())
+        {
+            const auto text = delta["reasoning_content"].get<std::string>();
+            m_thinkingAccumulator += text;
+
+            AgentEvent ev;
+            ev.type = AgentEventType::ThinkingDelta;
+            ev.text = text;
+            out_events.push_back(std::move(ev));
+        }
 
         // text delta
         if (delta.contains("content") && !delta["content"].is_null())
@@ -247,6 +268,14 @@ namespace pagent
         }
         else if (finish == "stop")
         {
+            if (!m_thinkingAccumulator.empty())
+            {
+                AgentEvent ev;
+                ev.type = AgentEventType::ThinkingComplete;
+                ev.text = m_thinkingAccumulator;
+                out_events.push_back(std::move(ev));
+                m_thinkingAccumulator.clear();
+            }
             if (!m_textAccumulator.empty())
             {
                 AgentEvent ev;

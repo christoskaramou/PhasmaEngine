@@ -15,6 +15,7 @@ namespace pagent
         std::string GenerateSchemaJson(const IProviderBackend &backend) const;
         std::string Dispatch(const std::string &name, const std::string &input_json) const;
         std::vector<ToolDefinition> GetAll() const;
+        size_t GetToolCount() const;
 
     private:
         std::unordered_map<std::string, ToolDefinition> m_tools;

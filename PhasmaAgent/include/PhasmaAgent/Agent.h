@@ -38,6 +38,8 @@ namespace pagent
     {
         TextDelta,        // Streaming text fragment; read event.text
         TextComplete,     // Full assistant turn text accumulated; read event.text
+        ThinkingDelta,    // Streaming reasoning/thinking fragment; read event.text
+        ThinkingComplete, // Full reasoning text accumulated; read event.text
         ToolCallBegin,    // Model requested a tool; read event.tool_name, event.tool_call_id
         ToolCallComplete, // Tool arguments fully received; read event.tool_input_json
         ToolResult,       // Tool handler executed; read event.tool_name, event.text (result JSON)
@@ -179,7 +181,9 @@ namespace pagent
         std::string system_prompt;
         int max_tokens = 4096;
         float temperature = 0.7f;
-        int max_tool_rounds = 10; // Hard cap on agentic loop iterations
+        int max_tool_rounds = 10;      // Hard cap on agentic loop iterations
+        int max_history_messages = 40;  // Keep last N messages (0 = unlimited). System message always kept.
+        int max_tool_result_chars = 4000; // Truncate tool results beyond this (0 = unlimited)
 
         // Optional: provide your own HTTP transport.
         // When set, httplib and OpenSSL are completely bypassed.

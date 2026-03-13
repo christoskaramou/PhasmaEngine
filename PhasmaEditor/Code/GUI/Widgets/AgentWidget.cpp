@@ -6,9 +6,6 @@
 #include "Systems/RendererSystem.h"
 #include "Systems/LightSystem.h"
 #include "Camera/Camera.h"
-#include "Base/Timer.h"
-#include "Base/Settings.h"
-#include "Base/Path.h"
 #include "API/Command.h"
 #include "API/RHI.h"
 #include "API/Queue.h"
@@ -30,14 +27,21 @@ namespace pe
         pagent::AgentConfig config;
         config.system_prompt =
             "You are an AI assistant inside PhasmaEditor, a Vulkan 3D engine editor. "
-            "You can build and modify 3D scenes: load/remove models, clone_model, scatter_models, create primitives (cube/sphere/plane/cylinder/cone), "
-            "move/scale/rotate objects with set_model_transform, manage lights (add_light, set_light, remove_light, get_lights), "
+            "You can build and modify 3D scenes: load/remove models, clone_model, scatter_models, "
+            "create primitives (cube/sphere/plane/cylinder/cone) with position, rotation, and per-axis scale in one call, "
+            "move/scale/rotate existing objects with set_model_transform, manage lights (add_light, set_light, remove_light, get_lights), "
             "control the camera (set_camera_position, set_camera_rotation, set_camera_fov, focus_camera_on_model, set_camera_dof_focus), "
             "edit materials (get_materials, set_material_property), "
             "tweak post-processing (set_render_setting for booleans, set_render_value for floats like bloom_strength/IBL_intensity), "
             "switch render modes (set_render_mode: raster|hybrid|raytracing), toggle day/night (set_time_of_day), change skybox (set_skybox_hdr), "
+            "read, write, and modify HLSL shaders (list_shaders, read_shader, write_shader — changes auto-trigger hot-reload), "
             "and save/load scenes (save_scene, load_scene). "
-            "To load a model file, always use find_file first to locate it, then call load_model with the full path. "
+            "To load a model, use list_models first to find available assets, then call load_model with the full_path from the result. "
+            "IMPORTANT: When creating primitives or loading models, always provide a unique label (e.g. 'floor', 'front_wall', 'ball_1'). "
+            "Prefer setting position/rotation/scale directly in create_primitive rather than calling set_model_transform separately. "
+            "To modify a shader: use read_shader to see its source, then edit_shader with find/replace to make targeted changes (hot-reload happens automatically). Use write_shader only for creating new shader files. "
+            "ALWAYS use your tools to perform actions. NEVER tell the user to do something manually when a tool can do it. "
+            "Do not use emoji or Unicode symbols in responses. Use plain ASCII text only. "
             "Be concise and chain tool calls to complete multi-step tasks without asking for confirmation. "
             "Executable directory: " +
             Path::Executable + " | "
@@ -115,6 +119,42 @@ namespace pe
 
     void AgentWidget::RegisterTools()
     {
+        m_agent.RegisterTool({.name = "list_models",
+                              .description = "Lists all available 3D model assets that can be loaded. Returns relative paths under Assets/Objects/. Use this before load_model to find the correct path.",
+                              .properties = {
+                                  {"filter", "Optional substring to filter model names (case-insensitive)", pagent::SchemaType::String, false},
+                              },
+                              .handler = [](const std::string &args) -> std::string
+                              {
+                                  std::string filter = ExtractArgStr(args, "filter");
+                                  for (auto &c : filter)
+                                      c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+
+                                  const auto &modelList = Settings::Get<GlobalSettings>().model_list;
+                                  std::string arr = "[";
+                                  bool first = true;
+                                  int count = 0;
+                                  for (const auto &entry : modelList)
+                                  {
+                                      if (!filter.empty())
+                                      {
+                                          std::string lower = entry;
+                                          for (auto &c : lower)
+                                              c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+                                          if (lower.find(filter) == std::string::npos)
+                                              continue;
+                                      }
+                                      if (!first)
+                                          arr += ",";
+                                      arr += JsonStr(entry);
+                                      first = false;
+                                      if (++count >= 50)
+                                          break;
+                                  }
+                                  arr += "]";
+                                  return JsonObj({{"count", std::to_string(count)}, {"models", arr}});
+                              }});
+
         m_agent.RegisterTool({.name = "get_scene_info",
                               .description = "Returns loaded models and entity count.",
                               .properties = {},
@@ -130,7 +170,7 @@ namespace pe
                                   {
                                       if (!first)
                                           arr += ",";
-                                      arr += "{\"name\":" + JsonStr(m->GetFilePath().filename().string()) + "}";
+                                      arr += JsonStr(m->GetFilePath().filename().string());
                                       first = false;
                                   }
                                   arr += "]";
@@ -154,6 +194,188 @@ namespace pe
                               {
                                   EventSystem::DispatchEvent(EventType::CompileShaders, {});
                                   return "{\"status\":\"ok\"}";
+                              }});
+
+        m_agent.RegisterTool({.name = "list_shaders",
+                              .description = "Lists all HLSL shader files in the Shaders directory. Returns file names and paths relative to Assets/Shaders/.",
+                              .properties = {},
+                              .handler = [](const std::string &) -> std::string
+                              {
+                                  std::string shadersDir = Path::Assets + "Shaders";
+                                  if (!std::filesystem::exists(shadersDir))
+                                      return JsonObj({{"error", JsonStr("Shaders directory not found")}});
+
+                                  std::string arr = "[";
+                                  bool first = true;
+                                  for (const auto &entry : std::filesystem::recursive_directory_iterator(
+                                           shadersDir, std::filesystem::directory_options::skip_permission_denied))
+                                  {
+                                      if (!entry.is_regular_file())
+                                          continue;
+                                      std::string ext = entry.path().extension().string();
+                                      for (auto &c : ext)
+                                          c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+                                      if (ext != ".hlsl")
+                                          continue;
+
+                                      std::string relPath = std::filesystem::relative(entry.path(), shadersDir).string();
+                                      std::replace(relPath.begin(), relPath.end(), '\\', '/');
+
+                                      if (!first)
+                                          arr += ",";
+                                      arr += JsonStr(relPath);
+                                      first = false;
+                                  }
+                                  arr += "]";
+                                  return JsonObj({{"files", arr}});
+                              }});
+
+        m_agent.RegisterTool({.name = "read_shader",
+                              .description = "Reads the source code of an HLSL shader file. Provide the path relative to Assets/Shaders/ (e.g. 'Bloom/BrightFilterPS.hlsl') or an absolute path.",
+                              .properties = {
+                                  {"path", "Shader file path (relative to Assets/Shaders/ or absolute)", pagent::SchemaType::String, true},
+                              },
+                              .handler = [](const std::string &args) -> std::string
+                              {
+                                  std::string path = JsonUnescape(ExtractArgStr(args, "path"));
+                                  if (path.empty())
+                                      return "{\"error\":\"missing path\"}";
+
+                                  std::filesystem::path fpath(path);
+                                  if (fpath.is_relative())
+                                      fpath = std::filesystem::path(Path::Assets + "Shaders") / fpath;
+
+                                  if (!std::filesystem::exists(fpath))
+                                      return JsonObj({{"error", JsonStr("file not found: " + fpath.string())}});
+
+                                  std::ifstream file(fpath, std::ios::in);
+                                  if (!file.is_open())
+                                      return JsonObj({{"error", JsonStr("cannot open: " + fpath.string())}});
+
+                                  std::string source((std::istreambuf_iterator<char>(file)),
+                                                     std::istreambuf_iterator<char>());
+
+                                  std::string resolvedPath = fpath.string();
+                                  std::replace(resolvedPath.begin(), resolvedPath.end(), '\\', '/');
+                                  return JsonObj({{"path", JsonStr(resolvedPath)}, {"source", JsonStr(source)}});
+                              }});
+
+        m_agent.RegisterTool({.name = "edit_shader",
+                              .description = "Edits an existing HLSL shader by replacing a specific code section. "
+                                             "Use read_shader first to see the current source, then provide the exact text to find and its replacement. "
+                                             "Recompilation is triggered automatically. Prefer this over write_shader for modifying existing shaders.",
+                              .properties = {
+                                  {"path", "Shader file path (relative to Assets/Shaders/ or absolute)", pagent::SchemaType::String, true},
+                                  {"find", "Exact text to find in the shader (must match exactly, including whitespace)", pagent::SchemaType::String, true},
+                                  {"replace", "Replacement text", pagent::SchemaType::String, true},
+                              },
+                              .handler = [this](const std::string &args) -> std::string
+                              {
+                                  std::string path = JsonUnescape(ExtractArgStr(args, "path"));
+                                  std::string find = JsonUnescape(ExtractArgStr(args, "find"));
+                                  std::string replace = JsonUnescape(ExtractArgStr(args, "replace"));
+                                  if (path.empty())
+                                      return "{\"error\":\"missing path\"}";
+                                  if (find.empty())
+                                      return "{\"error\":\"missing find\"}";
+
+                                  std::filesystem::path fpath(path);
+                                  if (fpath.is_relative())
+                                      fpath = std::filesystem::path(Path::Assets + "Shaders") / fpath;
+
+                                  if (!std::filesystem::exists(fpath))
+                                      return JsonObj({{"error", JsonStr("file not found: " + fpath.string())}});
+
+                                  // Read current source
+                                  std::string source;
+                                  {
+                                      std::ifstream file(fpath, std::ios::in);
+                                      if (!file.is_open())
+                                          return JsonObj({{"error", JsonStr("cannot open: " + fpath.string())}});
+                                      source.assign(std::istreambuf_iterator<char>(file), std::istreambuf_iterator<char>());
+                                  }
+
+                                  // Find and replace
+                                  auto pos = source.find(find);
+                                  if (pos == std::string::npos)
+                                      return JsonObj({{"error", JsonStr("find text not found in shader")}});
+
+                                  source.replace(pos, find.size(), replace);
+
+                                  // Write back
+                                  {
+                                      std::ofstream file(fpath, std::ios::out | std::ios::trunc);
+                                      if (!file.is_open())
+                                          return JsonObj({{"error", JsonStr("cannot write: " + fpath.string())}});
+                                      file << source;
+                                  }
+
+                                  std::string resolvedPath = fpath.string();
+                                  std::replace(resolvedPath.begin(), resolvedPath.end(), '\\', '/');
+
+                                  QueueAction([resolvedPath]()
+                                              { EventSystem::PushEvent(EventType::CompileShaders); });
+
+                                  return JsonObj({{"status", JsonStr("edited")}, {"path", JsonStr(resolvedPath)}});
+                              }});
+
+        m_agent.RegisterTool({.name = "write_shader",
+                              .description = "Creates a NEW shader file with HLSL source code. For editing existing shaders, use edit_shader instead. "
+                                             "New files are automatically registered for hot-reload. "
+                                             "Shader recompilation is triggered automatically after writing. "
+                                             "Provide the path relative to Assets/Shaders/ (e.g. 'PostProcess/MyEffect.hlsl') or an absolute path.",
+                              .properties = {
+                                  {"path", "Shader file path (relative to Assets/Shaders/ or absolute)", pagent::SchemaType::String, true},
+                                  {"source", "HLSL source code to write", pagent::SchemaType::String, true},
+                              },
+                              .handler = [this](const std::string &args) -> std::string
+                              {
+                                  std::string path = JsonUnescape(ExtractArgStr(args, "path"));
+                                  std::string source = JsonUnescape(ExtractArgStr(args, "source"));
+                                  if (path.empty())
+                                      return "{\"error\":\"missing path\"}";
+                                  if (source.empty())
+                                      return "{\"error\":\"missing source\"}";
+
+                                  std::filesystem::path fpath(path);
+                                  if (fpath.is_relative())
+                                      fpath = std::filesystem::path(Path::Assets + "Shaders") / fpath;
+
+                                  // Create parent directories if needed
+                                  std::filesystem::path parentDir = fpath.parent_path();
+                                  if (!parentDir.empty() && !std::filesystem::exists(parentDir))
+                                  {
+                                      std::error_code ec;
+                                      std::filesystem::create_directories(parentDir, ec);
+                                      if (ec)
+                                          return JsonObj({{"error", JsonStr("cannot create directory: " + ec.message())}});
+                                  }
+
+                                  // Refuse to overwrite existing files -- use edit_shader instead
+                                  if (std::filesystem::exists(fpath))
+                                      return JsonObj({{"error", JsonStr("file already exists, use edit_shader to modify it")}});
+
+                                  // Write the shader source
+                                  std::ofstream file(fpath, std::ios::out | std::ios::trunc);
+                                  if (!file.is_open())
+                                      return JsonObj({{"error", JsonStr("cannot write: " + fpath.string())}});
+                                  file << source;
+                                  file.close();
+
+                                  std::string resolvedPath = fpath.string();
+                                  std::replace(resolvedPath.begin(), resolvedPath.end(), '\\', '/');
+
+                                  // Register with FileWatcher and trigger recompilation
+                                  QueueAction([resolvedPath]()
+                                              {
+                                      FileWatcher::Add(resolvedPath, [](size_t fileEvent)
+                                      {
+                                          EventSystem::PushEvent(fileEvent);
+                                          EventSystem::PushEvent(EventType::CompileShaders);
+                                      });
+                                      EventSystem::PushEvent(EventType::CompileShaders); });
+
+                                  return JsonObj({{"status", JsonStr("created")}, {"path", JsonStr(resolvedPath)}});
                               }});
 
         m_agent.RegisterTool({.name = "get_render_settings",
@@ -199,7 +421,7 @@ namespace pe
                     else if (name == "dof")         s.dof         = on;
                     else if (name == "motion_blur") s.motion_blur = on;
                     else if (name == "draw_grid")   s.draw_grid   = on; });
-                                  return JsonObj({{"setting", JsonStr(name)}, {"value", JsonStr(value)}, {"status", JsonStr("queued")}});
+                                  return "{\"status\":\"ok\"}";
                               }});
 
         m_agent.RegisterTool({.name = "get_camera_info",
@@ -243,25 +465,46 @@ namespace pe
                     if (!r) return;
                     auto *cam = r->GetScene().GetActiveCamera();
                     if (cam) cam->SetPosition(vec3(x, y, z)); });
-                                  return JsonObj({{"status", JsonStr("queued")}, {"x", std::to_string(x)}, {"y", std::to_string(y)}, {"z", std::to_string(z)}});
+                                  return "{\"status\":\"ok\"}";
                               }});
 
         m_agent.RegisterTool({.name = "load_model",
-                              .description = "Loads a 3D model file (glTF, FBX, OBJ, etc.) and adds it to the scene. Use find_file first to locate the model path.",
+                              .description = "Loads a 3D model file and adds it to the scene. Returns the assigned label — use this label in set_model_transform and other tools to target this specific model. "
+                                             "Always provide a unique label when loading multiple models of the same type (e.g. 'front_wall', 'back_wall').",
                               .properties = {
-                                  {"path", "Absolute or relative file path to the model", pagent::SchemaType::String, true},
+                                  {"path", "Model name from list_models (e.g. 'Sponza/Sponza.gltf') or absolute path", pagent::SchemaType::String, true},
+                                  {"label", "Unique label for this model instance (e.g. 'front_wall'). Required when loading duplicates.", pagent::SchemaType::String, false},
                               },
                               .handler = [this](const std::string &args) -> std::string
                               {
                                   std::string path = JsonUnescape(ExtractArgStr(args, "path"));
                                   if (path.empty())
                                       return "{\"error\":\"missing path\"}";
-                                  if (!std::filesystem::exists(path))
-                                      return JsonObj({{"error", JsonStr("file not found: " + path)}});
+                                  std::string label = JsonUnescape(ExtractArgStr(args, "label"));
 
-                                  QueueAction([path]()
-                                              { Model::Load(path); });
-                                  return JsonObj({{"status", JsonStr("loading")}, {"path", JsonStr(path)}});
+                                  // If not absolute, resolve relative to Assets/Objects/
+                                  std::filesystem::path fpath(path);
+                                  if (fpath.is_relative())
+                                      fpath = std::filesystem::path(Path::Assets + "Objects") / fpath;
+
+                                  std::string resolved = fpath.string();
+                                  if (!std::filesystem::exists(resolved))
+                                      return JsonObj({{"error", JsonStr("file not found: " + resolved)}});
+
+                                  std::string stem = fpath.stem().string();
+                                  QueueAction([resolved, label, stem]()
+                                              {
+                                      Model *m = Model::Load(resolved);
+                                      if (!m) return;
+                                      std::string base = label.empty() ? stem : label;
+                                      std::string effectiveLabel = base + "_" + std::to_string(m->GetId());
+                                      m->SetLabel(effectiveLabel);
+                                      auto &nodes = m->GetNodeInfos();
+                                      if (!nodes.empty())
+                                          nodes[0].name = effectiveLabel;
+                                  });
+                                  std::string returnLabel = label.empty() ? stem : label;
+                                  return JsonObj({{"status", JsonStr("ok")}, {"label", JsonStr(returnLabel)}});
                               }});
 
         m_agent.RegisterTool({.name = "find_file",
@@ -315,13 +558,13 @@ namespace pe
                                       std::replace(fullPath.begin(), fullPath.end(), '\\', '/');
                                       if (!first)
                                           results += ",";
-                                      results += "{\"name\":" + JsonStr(name) + ",\"full_path\":" + JsonStr(fullPath) + "}";
+                                      results += JsonStr(fullPath);
                                       first = false;
                                       if (++count >= 20)
                                           break; // cap results
                                   }
                                   results += "]";
-                                  return JsonObj({{"query", JsonStr(query)}, {"results", results}});
+                                  return JsonObj({{"results", results}});
                               }});
 
         m_agent.RegisterTool({.name = "list_directory",
@@ -360,50 +603,65 @@ namespace pe
                                       if (hasNonAscii)
                                           continue;
 
-                                      std::string obj = "{\"name\":" + JsonStr(name) + ",\"full_path\":" + JsonStr(base + name) + "}";
                                       if (entry.is_directory())
                                       {
                                           if (!firstD)
                                               dirs += ",";
-                                          dirs += obj;
+                                          dirs += JsonStr(name + "/");
                                           firstD = false;
                                       }
                                       else
                                       {
                                           if (!firstF)
                                               files += ",";
-                                          files += obj;
+                                          files += JsonStr(name);
                                           firstF = false;
                                       }
                                   }
                                   files += "]";
                                   dirs += "]";
-                                  return JsonObj({{"directory", JsonStr(base)}, {"files", files}, {"subdirs", dirs}});
+                                  return JsonObj({{"path", JsonStr(base)}, {"files", files}, {"dirs", dirs}});
                               }});
 
         // ------------------------------------------------------------------ scene objects
         m_agent.RegisterTool({.name = "create_primitive",
-                              .description = "Creates a primitive mesh and adds it to the scene. "
+                              .description = "Creates a primitive mesh with full transform and adds it to the scene. "
                                              "type: cube|sphere|plane|cylinder|cone. "
-                                             "size: uniform size (radius for sphere/cylinder/cone, side for cube, width for plane). "
-                                             "height: height for cylinder/cone (default 2). "
-                                             "x,y,z: world position (default 0).",
+                                             "Provide a unique label when creating multiple primitives of the same type. "
+                                             "Use sx/sy/sz for per-axis scale (e.g. thin walls), or scale for uniform. "
+                                             "Returns the label to use in other tools.",
                               .properties = {
                                   {"type", "Primitive type: cube, sphere, plane, cylinder, cone", pagent::SchemaType::String, true},
-                                  {"size", "Uniform size parameter (default 1.0)", pagent::SchemaType::Number, false},
+                                  {"label", "Unique label (e.g. 'front_wall', 'ball_1')", pagent::SchemaType::String, false},
+                                  {"size", "Base size parameter (default 1.0)", pagent::SchemaType::Number, false},
                                   {"height", "Height for cylinder or cone (default 2.0)", pagent::SchemaType::Number, false},
-                                  {"x", "World X position (default 0)", pagent::SchemaType::Number, false},
-                                  {"y", "World Y position (default 0)", pagent::SchemaType::Number, false},
-                                  {"z", "World Z position (default 0)", pagent::SchemaType::Number, false},
+                                  {"x", "Position X", pagent::SchemaType::Number, false},
+                                  {"y", "Position Y", pagent::SchemaType::Number, false},
+                                  {"z", "Position Z", pagent::SchemaType::Number, false},
+                                  {"rx", "Rotation X degrees", pagent::SchemaType::Number, false},
+                                  {"ry", "Rotation Y degrees", pagent::SchemaType::Number, false},
+                                  {"rz", "Rotation Z degrees", pagent::SchemaType::Number, false},
+                                  {"scale", "Uniform scale (default 1.0, ignored if sx/sy/sz set)", pagent::SchemaType::Number, false},
+                                  {"sx", "Scale X (per-axis)", pagent::SchemaType::Number, false},
+                                  {"sy", "Scale Y (per-axis)", pagent::SchemaType::Number, false},
+                                  {"sz", "Scale Z (per-axis)", pagent::SchemaType::Number, false},
                               },
                               .handler = [this](const std::string &args) -> std::string
                               {
                                   std::string type = ExtractArgStr(args, "type");
+                                  std::string label = JsonUnescape(ExtractArgStr(args, "label"));
                                   float size = ExtractArgNum(args, "size");
                                   float height = ExtractArgNum(args, "height");
                                   float x = ExtractArgNum(args, "x");
                                   float y = ExtractArgNum(args, "y");
                                   float z = ExtractArgNum(args, "z");
+                                  float rx = ExtractArgNum(args, "rx");
+                                  float ry = ExtractArgNum(args, "ry");
+                                  float rz = ExtractArgNum(args, "rz");
+                                  float sxv = ExtractArgNum(args, "sx");
+                                  float syv = ExtractArgNum(args, "sy");
+                                  float szv = ExtractArgNum(args, "sz");
+                                  float s = ExtractArgNum(args, "scale");
                                   if (size <= 0.0f)
                                       size = 1.0f;
                                   if (height <= 0.0f)
@@ -411,7 +669,22 @@ namespace pe
                                   if (type.empty())
                                       return "{\"error\":\"missing type\"}";
 
-                                  QueueAction([type, size, height, x, y, z]()
+                                  bool perAxis = (sxv != 0.0f || syv != 0.0f || szv != 0.0f);
+                                  if (perAxis)
+                                  {
+                                      if (sxv <= 0.0f) sxv = 1.0f;
+                                      if (syv <= 0.0f) syv = 1.0f;
+                                      if (szv <= 0.0f) szv = 1.0f;
+                                  }
+                                  else
+                                  {
+                                      if (s <= 0.0f) s = 1.0f;
+                                      sxv = syv = szv = s;
+                                  }
+
+                                  std::string userLabel = label;
+
+                                  QueueAction([type, userLabel, size, height, x, y, z, rx, ry, rz, sxv, syv, szv]()
                                               {
                                       Model *m = nullptr;
                                       if      (type == "cube")     m = Primitives::CreateCube(size);
@@ -420,11 +693,27 @@ namespace pe
                                       else if (type == "cylinder") m = Primitives::CreateCylinder(size, height);
                                       else if (type == "cone")     m = Primitives::CreateCone(size, height);
                                       if (!m) return;
-                                      m->GetMatrix() = glm::translate(mat4(1.0f), vec3(x, y, z));
-                                      m->SetLabel(type);
-                                      // Use the event path so UpdateGeometryBuffers is called properly
+                                      // Always append model ID to guarantee uniqueness
+                                      std::string base = userLabel.empty() ? type : userLabel;
+                                      std::string effectiveLabel = base + "_" + std::to_string(m->GetId());
+                                      m->SetLabel(effectiveLabel);
+                                      // Set node name so hierarchy shows the label
+                                      auto &nodes = m->GetNodeInfos();
+                                      if (!nodes.empty())
+                                          nodes[0].name = effectiveLabel;
+                                      // Apply full transform to root node so editor widgets reflect it
+                                      mat4 T = glm::translate(mat4(1.0f), vec3(x, y, z));
+                                      mat4 R = glm::mat4_cast(glm::quat(vec3(glm::radians(rx), glm::radians(ry), glm::radians(rz))));
+                                      mat4 S = glm::scale(mat4(1.0f), vec3(sxv, syv, szv));
+                                      if (!nodes.empty())
+                                          nodes[0].localMatrix = T * R * S;
+                                      m->MarkDirty(0);
                                       EventSystem::PushEvent(EventType::ModelLoaded, m); });
-                                  return JsonObj({{"status", JsonStr("queued")}, {"type", JsonStr(type)}, {"x", std::to_string(x)}, {"y", std::to_string(y)}, {"z", std::to_string(z)}});
+                                  // Return the label the agent should use to reference this model
+                                  std::string returnLabel = userLabel.empty()
+                                      ? type // agent must provide label for reliable targeting
+                                      : userLabel;
+                                  return JsonObj({{"status", JsonStr("ok")}, {"label", JsonStr(returnLabel)}});
                               }});
 
         m_agent.RegisterTool({.name = "remove_model",
@@ -456,13 +745,14 @@ namespace pe
                                           if (fname.find(queryLower) != std::string::npos) { target = m; break; }
                                       }
                                       if (target) EventSystem::PushEvent(EventType::ModelRemoved, target); });
-                                  return JsonObj({{"status", JsonStr("queued")}, {"name", JsonStr(query)}});
+                                  return "{\"status\":\"ok\"}";
                               }});
 
         m_agent.RegisterTool({.name = "set_model_transform",
-                              .description = "Sets position, rotation (Euler degrees) and uniform scale for a model. "
+                              .description = "Sets position, rotation (Euler degrees) and scale for a model. "
                                              "Find the model by a filename/label substring. "
-                                             "All transform fields are optional — omitted ones default to 0 (scale defaults to 1).",
+                                             "All transform fields are optional — omitted ones default to 0 (scale defaults to 1). "
+                                             "Use scale for uniform scaling, or sx/sy/sz for per-axis scaling.",
                               .properties = {
                                   {"name", "Filename/label substring to match (e.g. 'sponza')", pagent::SchemaType::String, true},
                                   {"x", "Position X", pagent::SchemaType::Number, false},
@@ -471,7 +761,10 @@ namespace pe
                                   {"rx", "Rotation X in degrees (pitch)", pagent::SchemaType::Number, false},
                                   {"ry", "Rotation Y in degrees (yaw)", pagent::SchemaType::Number, false},
                                   {"rz", "Rotation Z in degrees (roll)", pagent::SchemaType::Number, false},
-                                  {"scale", "Uniform scale (default 1.0)", pagent::SchemaType::Number, false},
+                                  {"scale", "Uniform scale (default 1.0, ignored if sx/sy/sz set)", pagent::SchemaType::Number, false},
+                                  {"sx", "Scale X (per-axis)", pagent::SchemaType::Number, false},
+                                  {"sy", "Scale Y (per-axis)", pagent::SchemaType::Number, false},
+                                  {"sz", "Scale Z (per-axis)", pagent::SchemaType::Number, false},
                               },
                               .handler = [this](const std::string &args) -> std::string
                               {
@@ -484,14 +777,28 @@ namespace pe
                                   float rx = ExtractArgNum(args, "rx");
                                   float ry = ExtractArgNum(args, "ry");
                                   float rz = ExtractArgNum(args, "rz");
+                                  float sx = ExtractArgNum(args, "sx");
+                                  float sy = ExtractArgNum(args, "sy");
+                                  float sz = ExtractArgNum(args, "sz");
                                   float s = ExtractArgNum(args, "scale");
-                                  if (s <= 0.0f)
-                                      s = 1.0f;
+                                  // Per-axis scale takes priority; fall back to uniform scale
+                                  bool perAxis = (sx != 0.0f || sy != 0.0f || sz != 0.0f);
+                                  if (perAxis)
+                                  {
+                                      if (sx <= 0.0f) sx = 1.0f;
+                                      if (sy <= 0.0f) sy = 1.0f;
+                                      if (sz <= 0.0f) sz = 1.0f;
+                                  }
+                                  else
+                                  {
+                                      if (s <= 0.0f) s = 1.0f;
+                                      sx = sy = sz = s;
+                                  }
                                   std::string queryLower = query;
                                   for (auto &c : queryLower)
                                       c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
 
-                                  QueueAction([queryLower, x, y, z, rx, ry, rz, s]()
+                                  QueueAction([queryLower, x, y, z, rx, ry, rz, sx, sy, sz]()
                                               {
                                       auto *r = GetGlobalSystem<RendererSystem>();
                                       if (!r) return;
@@ -504,12 +811,17 @@ namespace pe
                                           if (fname.find(queryLower) == std::string::npos) continue;
                                           mat4 T = glm::translate(mat4(1.0f), vec3(x, y, z));
                                           mat4 R = glm::mat4_cast(glm::quat(vec3(glm::radians(rx), glm::radians(ry), glm::radians(rz))));
-                                          mat4 S = glm::scale(mat4(1.0f), vec3(s));
-                                          m->GetMatrix() = T * R * S;
-                                          m->GetDirtyNodes() = true;
+                                          mat4 S = glm::scale(mat4(1.0f), vec3(sx, sy, sz));
+                                          // Set root node's localMatrix so the editor transform widgets reflect the change
+                                          auto &nodes = m->GetNodeInfos();
+                                          if (!nodes.empty())
+                                          {
+                                              nodes[0].localMatrix = T * R * S;
+                                              m->MarkDirty(0);
+                                          }
                                           break;
                                       } });
-                                  return JsonObj({{"status", JsonStr("queued")}, {"name", JsonStr(query)}});
+                                  return "{\"status\":\"ok\"}";
                               }});
 
         m_agent.RegisterTool({.name = "get_model_info",
@@ -554,14 +866,12 @@ namespace pe
                                               worldBB.max = glm::max(worldBB.max, n.worldBoundingBox.max);
                                           }
                                       }
+                                      std::string name = m->GetLabel().empty() ? m->GetFilePath().filename().string() : m->GetLabel();
                                       return JsonObj({
-                                          {"label", JsonStr(m->GetLabel())},
-                                          {"file", JsonStr(m->GetFilePath().filename().string())},
-                                          {"node_count", std::to_string(m->GetNodeCount())},
-                                          {"mesh_count", std::to_string(m->GetMeshCount())},
-                                          {"pos_x", std::to_string(pos.x)},
-                                          {"pos_y", std::to_string(pos.y)},
-                                          {"pos_z", std::to_string(pos.z)},
+                                          {"name", JsonStr(name)},
+                                          {"nodes", std::to_string(m->GetNodeCount())},
+                                          {"meshes", std::to_string(m->GetMeshCount())},
+                                          {"pos", "[" + std::to_string(pos.x) + "," + std::to_string(pos.y) + "," + std::to_string(pos.z) + "]"},
                                           {"bb_min", "[" + std::to_string(worldBB.min.x) + "," + std::to_string(worldBB.min.y) + "," + std::to_string(worldBB.min.z) + "]"},
                                           {"bb_max", "[" + std::to_string(worldBB.max.x) + "," + std::to_string(worldBB.max.y) + "," + std::to_string(worldBB.max.z) + "]"},
                                       });
@@ -619,7 +929,7 @@ namespace pe
                                           m->GetMatrix() = T;
                                           m->GetDirtyNodes() = true;
                                       } });
-                                  return JsonObj({{"status", JsonStr("queued")}, {"cloned_from", JsonStr(query)}});
+                                  return "{\"status\":\"ok\"}";
                               }});
 
         m_agent.RegisterTool({.name = "get_materials",
@@ -754,7 +1064,7 @@ namespace pe
                                           r->GetScene().UpdateTextures();
                                           break;
                                       } });
-                                  return JsonObj({{"status", JsonStr("queued")}, {"name", JsonStr(query)}});
+                                  return "{\"status\":\"ok\"}";
                               }});
 
         m_agent.RegisterTool({.name = "get_lights",
@@ -878,7 +1188,7 @@ namespace pe
                                           l.position = vec4(x, y, z, range);
                                           l.size = vec4(w, h, 0.0f, 0.0f);
                                       } });
-                                  return JsonObj({{"status", JsonStr("queued")}, {"type", JsonStr(type)}});
+                                  return "{\"status\":\"ok\"}";
                               }});
 
         m_agent.RegisterTool({.name = "set_light",
@@ -950,7 +1260,7 @@ namespace pe
                                           applyColor(l.color); applyPos(l.position);
                                           if (range > 0.0f) l.position.w = range;
                                       } });
-                                  return JsonObj({{"status", JsonStr("queued")}, {"type", JsonStr(type)}, {"index", std::to_string(index)}});
+                                  return "{\"status\":\"ok\"}";
                               }});
 
         m_agent.RegisterTool({.name = "remove_light",
@@ -975,7 +1285,7 @@ namespace pe
                                       else if (type == "point")       removeAt(ls->GetPointLights());
                                       else if (type == "spot")        removeAt(ls->GetSpotLights());
                                       else if (type == "area")        removeAt(ls->GetAreaLights()); });
-                                  return JsonObj({{"status", JsonStr("queued")}, {"type", JsonStr(type)}, {"index", std::to_string(index)}});
+                                  return "{\"status\":\"ok\"}";
                               }});
 
         // ------------------------------------------------------------------ camera
@@ -995,7 +1305,7 @@ namespace pe
                                       if (!r) return;
                                       auto *cam = r->GetScene().GetActiveCamera();
                                       if (cam) cam->SetEuler(vec3(glm::radians(pitch), glm::radians(yaw), 0.0f)); });
-                                  return JsonObj({{"status", JsonStr("queued")}, {"pitch", std::to_string(pitch)}, {"yaw", std::to_string(yaw)}});
+                                  return "{\"status\":\"ok\"}";
                               }});
 
         m_agent.RegisterTool({.name = "set_camera_fov",
@@ -1014,7 +1324,7 @@ namespace pe
                                       if (!r) return;
                                       auto *cam = r->GetScene().GetActiveCamera();
                                       if (cam) cam->SetFovx(glm::radians(fov)); });
-                                  return JsonObj({{"status", JsonStr("queued")}, {"fov", std::to_string(fov)}});
+                                  return "{\"status\":\"ok\"}";
                               }});
 
         m_agent.RegisterTool({.name = "focus_camera_on_model",
@@ -1066,7 +1376,7 @@ namespace pe
                                           cam->SetPosition(center - dir * (radius * mult));
                                           break;
                                       } });
-                                  return JsonObj({{"status", JsonStr("queued")}, {"name", JsonStr(query)}});
+                                  return "{\"status\":\"ok\"}";
                               }});
 
         m_agent.RegisterTool({.name = "set_camera_dof_focus",
@@ -1113,7 +1423,7 @@ namespace pe
                                           s.dof = true;
                                           break;
                                       } });
-                                  return JsonObj({{"status", JsonStr("queued")}, {"name", JsonStr(query)}});
+                                  return "{\"status\":\"ok\"}";
                               }});
 
         m_agent.RegisterTool({.name = "set_render_value",
@@ -1144,7 +1454,7 @@ namespace pe
                                       else if (name == "cas_sharpness")        s.cas_sharpness        = std::clamp(value, 0.0f, 1.0f);
                                       else if (name == "shadow_map_size")      s.shadow_map_size      = static_cast<uint32_t>(value);
                                       else if (name == "time_scale")           s.time_scale           = value; });
-                                  return JsonObj({{"setting", JsonStr(name)}, {"value", std::to_string(value)}, {"status", JsonStr("queued")}});
+                                  return "{\"status\":\"ok\"}";
                               }});
 
         m_agent.RegisterTool({.name = "set_render_mode",
@@ -1161,7 +1471,7 @@ namespace pe
                                       if      (mode == "raster")     s.render_mode = RenderMode::Raster;
                                       else if (mode == "hybrid")     s.render_mode = RenderMode::Hybrid;
                                       else if (mode == "raytracing") s.render_mode = RenderMode::RayTracing; });
-                                  return JsonObj({{"status", JsonStr("queued")}, {"mode", JsonStr(mode)}});
+                                  return "{\"status\":\"ok\"}";
                               }});
 
         m_agent.RegisterTool({.name = "set_time_of_day",
@@ -1176,7 +1486,7 @@ namespace pe
                                               {
                                       auto &s = Settings::Get<GlobalSettings>();
                                       s.day = (time == "day"); });
-                                  return JsonObj({{"status", JsonStr("queued")}, {"time", JsonStr(time)}});
+                                  return "{\"status\":\"ok\"}";
                               }});
 
         m_agent.RegisterTool({.name = "set_skybox_hdr",
@@ -1213,7 +1523,7 @@ namespace pe
                                       
                                       auto &s = Settings::Get<GlobalSettings>();
                                       s.day = (time == "day"); });
-                                  return JsonObj({{"status", JsonStr("queued")}, {"path", JsonStr(path)}, {"time", JsonStr(time)}});
+                                  return "{\"status\":\"ok\"}";
                               }});
 
         m_agent.RegisterTool({.name = "scatter_models",
@@ -1295,7 +1605,7 @@ namespace pe
                                               m->GetDirtyNodes() = true;
                                           }
                                       } });
-                                  return JsonObj({{"status", JsonStr("queued")}, {"scattered_from", JsonStr(query)}, {"count", std::to_string(count)}});
+                                  return "{\"status\":\"ok\"}";
                               }});
 
         m_agent.RegisterTool({.name = "save_scene",
@@ -1326,7 +1636,7 @@ namespace pe
                                               {
                                       auto *r = GetGlobalSystem<RendererSystem>();
                                       if (r) r->GetScene().SaveScene(resolved); });
-                                  return JsonObj({{"status", JsonStr("queued")}, {"path", JsonStr(resolved)}});
+                                  return "{\"status\":\"ok\"}";
                               }});
 
         m_agent.RegisterTool({.name = "load_scene",
@@ -1357,7 +1667,7 @@ namespace pe
                                               {
                                       auto *r = GetGlobalSystem<RendererSystem>();
                                       if (r) r->GetScene().LoadScene(resolved); });
-                                  return JsonObj({{"status", JsonStr("queued")}, {"path", JsonStr(resolved)}});
+                                  return "{\"status\":\"ok\"}";
                               }});
     }
 
@@ -1430,17 +1740,29 @@ namespace pe
 
             if (m_isStreaming)
             {
+                // Show thinking in a dimmed collapsible section
+                if (!m_streamingThinking.empty())
+                {
+                    ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.5f, 0.5f, 0.6f, 1.0f));
+                    if (ImGui::TreeNode("Thinking..."))
+                    {
+                        ImGui::TextWrapped("%s", m_streamingThinking.c_str());
+                        ImGui::TreePop();
+                    }
+                    ImGui::PopStyleColor();
+                }
+
                 ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.85f, 0.85f, 0.85f, 1.0f));
                 if (!m_streamingText.empty())
                 {
                     ImGui::TextWrapped("%s", m_streamingText.c_str());
                 }
-                else
+                else if (m_streamingThinking.empty())
                 {
-                    // animated thinking dots while waiting for first token
+                    // animated dots while waiting for first token
                     const int dots = static_cast<int>(ImGui::GetTime() * 2.0) % 4;
-                    const char *thinking[] = {"[AI] .", "[AI] ..", "[AI] ...", "[AI] .."};
-                    ImGui::TextUnformatted(thinking[dots]);
+                    const char *anim[] = {"[AI] .", "[AI] ..", "[AI] ...", "[AI] .."};
+                    ImGui::TextUnformatted(anim[dots]);
                 }
                 ImGui::PopStyleColor();
             }
@@ -1455,26 +1777,22 @@ namespace pe
 
         ImGui::Separator();
         bool submit = false;
-        // Enter submits; Shift+Enter inserts a newline
-        bool pendingSubmit = false;
-        auto inputCallback = [](ImGuiInputTextCallbackData *data) -> int
-        {
-            bool *pending = static_cast<bool *>(data->UserData);
-            if (data->EventChar == '\n' && !ImGui::GetIO().KeyShift)
-            {
-                *pending = true;
-                return 1; // reject the char so no newline is inserted
-            }
-            return 0;
-        };
+        // Enter submits; Shift+Enter inserts a newline.
+        // We detect Enter via IsKeyPressed so that pasted newlines don't trigger send.
         ImGui::BeginDisabled(busy);
         const float inputWidth = ImGui::GetContentRegionAvail().x - 60.0f;
         ImGui::InputTextMultiline("##input", m_inputBuf, sizeof(m_inputBuf),
                                   ImVec2(inputWidth, inputHeight),
-                                  ImGuiInputTextFlags_CallbackCharFilter,
-                                  inputCallback, &pendingSubmit);
-        if (pendingSubmit)
+                                  ImGuiInputTextFlags_None);
+        bool inputActive = ImGui::IsItemActive();
+        if (inputActive && ImGui::IsKeyPressed(ImGuiKey_Enter) && !ImGui::GetIO().KeyShift)
+        {
             submit = true;
+            // Remove the newline that was just inserted by the input widget
+            size_t len = std::strlen(m_inputBuf);
+            if (len > 0 && m_inputBuf[len - 1] == '\n')
+                m_inputBuf[len - 1] = '\0';
+        }
         ImGui::EndDisabled();
         ImGui::SameLine();
         if (busy)
@@ -1516,30 +1834,54 @@ namespace pe
         std::lock_guard lock(m_chatMutex);
         switch (ev.type)
         {
+        case pagent::AgentEventType::ThinkingDelta:
+            m_streamingThinking += ev.text;
+            m_isStreaming = true;
+            m_scrollToBottom = true;
+            break;
+        case pagent::AgentEventType::ThinkingComplete:
+            // Thinking is stored and will be attached to the next TextComplete message
+            m_scrollToBottom = true;
+            break;
         case pagent::AgentEventType::TextDelta:
             m_streamingText += ev.text;
             m_isStreaming = true;
             m_scrollToBottom = true;
             break;
         case pagent::AgentEventType::TextComplete:
-            if (!ev.text.empty())
-                m_chat.push_back({ChatMessage::Role::Assistant, ev.text});
+        {
+            ChatMessage msg;
+            msg.role = ChatMessage::Role::Assistant;
+            msg.text = ev.text;
+            msg.thinking = m_streamingThinking;
+            if (!msg.text.empty() || !msg.thinking.empty())
+                m_chat.push_back(std::move(msg));
             m_streamingText.clear();
+            m_streamingThinking.clear();
             m_isStreaming = false;
             m_scrollToBottom = true;
             break;
+        }
         case pagent::AgentEventType::ToolCallBegin:
+            // Flush any accumulated thinking before tool calls
+            if (!m_streamingThinking.empty())
+            {
+                m_chat.push_back({ChatMessage::Role::Assistant, "", m_streamingThinking});
+                m_streamingThinking.clear();
+            }
             m_chat.push_back({ChatMessage::Role::System, "[calling: " + ev.tool_name + "]"});
             m_scrollToBottom = true;
             break;
         case pagent::AgentEventType::TurnComplete:
             m_isStreaming = false;
             m_streamingText.clear();
+            m_streamingThinking.clear();
             break;
         case pagent::AgentEventType::Error:
             m_chat.push_back({ChatMessage::Role::System, "[error: " + ev.error_message + "]"});
             m_isStreaming = false;
             m_streamingText.clear();
+            m_streamingThinking.clear();
             m_scrollToBottom = true;
             break;
         default:
@@ -1557,7 +1899,20 @@ namespace pe
             ImGui::PopStyleColor();
             break;
         case ChatMessage::Role::Assistant:
-            ImGui::TextWrapped("[AI] %s", msg.text.c_str());
+            if (!msg.thinking.empty())
+            {
+                ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.5f, 0.5f, 0.6f, 1.0f));
+                ImGui::PushID(&msg);
+                if (ImGui::TreeNode("Thinking"))
+                {
+                    ImGui::TextWrapped("%s", msg.thinking.c_str());
+                    ImGui::TreePop();
+                }
+                ImGui::PopID();
+                ImGui::PopStyleColor();
+            }
+            if (!msg.text.empty())
+                ImGui::TextWrapped("[AI] %s", msg.text.c_str());
             break;
         case ChatMessage::Role::System:
             ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.5f, 0.5f, 0.5f, 1.0f));
