@@ -50,5 +50,12 @@ namespace pe
         std::string m_streamingThinking;
         std::mutex m_actionMutex;
         std::vector<std::function<void()>> m_pendingActions;
+
+        // Token usage tracking
+        int m_totalInputTokens = 0;
+        int m_totalOutputTokens = 0;
+        int m_totalCacheReadTokens = 0;
+        int m_turnInputTokens = 0;
+        int m_turnOutputTokens = 0;
     };
 } // namespace pe

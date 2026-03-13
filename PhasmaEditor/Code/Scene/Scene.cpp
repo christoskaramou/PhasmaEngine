@@ -1,4 +1,5 @@
 #include "Scene/Scene.h"
+#include "Scene/Primitives.h"
 #include "API/AccelerationStructure.h"
 #include "API/Buffer.h"
 #include "API/Command.h"
@@ -1408,9 +1409,16 @@ namespace pe
             rapidjson::Value modelObj(rapidjson::kObjectType);
 
             // Basic Info — store path relative to the scene file so scenes are portable
-            auto relModelPath = std::filesystem::relative(model->GetFilePath(), file.parent_path());
-            std::string pathObj = relModelPath.generic_string();
-            modelObj.AddMember("path", rapidjson::Value(pathObj.c_str(), static_cast<rapidjson::SizeType>(pathObj.length()), allocator).Move(), allocator);
+            if (model->IsPrimitive())
+            {
+                modelObj.AddMember("primitive_type", rapidjson::Value(model->GetPrimitiveType().c_str(), allocator).Move(), allocator);
+            }
+            else
+            {
+                auto relModelPath = std::filesystem::relative(model->GetFilePath(), file.parent_path());
+                std::string pathObj = relModelPath.generic_string();
+                modelObj.AddMember("path", rapidjson::Value(pathObj.c_str(), static_cast<rapidjson::SizeType>(pathObj.length()), allocator).Move(), allocator);
+            }
             modelObj.AddMember("name", rapidjson::Value(model->GetLabel().c_str(), allocator).Move(), allocator);
 
             rapidjson::Value matrixVal;
@@ -1757,14 +1765,35 @@ namespace pe
             const auto &models = d["models"];
             for (const auto &modelVal : models.GetArray())
             {
-                std::filesystem::path modelPath = modelVal["path"].GetString();
-                if (modelPath.is_relative())
-                    modelPath = file.parent_path() / modelPath;
-                modelPath = modelPath.lexically_normal();
-                if (std::filesystem::is_directory(modelPath))
-                    continue;
+                Model *model = nullptr;
 
-                Model *model = Model::Load(modelPath);
+                if (modelVal.HasMember("primitive_type"))
+                {
+                    std::string ptype = modelVal["primitive_type"].GetString();
+                    if (ptype == "cube")
+                        model = Primitives::CreateCube();
+                    else if (ptype == "sphere")
+                        model = Primitives::CreateSphere();
+                    else if (ptype == "plane")
+                        model = Primitives::CreatePlane();
+                    else if (ptype == "cylinder")
+                        model = Primitives::CreateCylinder();
+                    else if (ptype == "cone")
+                        model = Primitives::CreateCone();
+                    else if (ptype == "quad")
+                        model = Primitives::CreateQuad();
+                }
+                else if (modelVal.HasMember("path"))
+                {
+                    std::filesystem::path modelPath = modelVal["path"].GetString();
+                    if (modelPath.is_relative())
+                        modelPath = file.parent_path() / modelPath;
+                    modelPath = modelPath.lexically_normal();
+                    if (std::filesystem::is_directory(modelPath))
+                        continue;
+                    model = Model::Load(modelPath);
+                }
+
                 if (model)
                 {
                     if (modelVal.HasMember("name"))

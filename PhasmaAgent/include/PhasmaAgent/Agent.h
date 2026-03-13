@@ -43,6 +43,7 @@ namespace pagent
         ToolCallBegin,    // Model requested a tool; read event.tool_name, event.tool_call_id
         ToolCallComplete, // Tool arguments fully received; read event.tool_input_json
         ToolResult,       // Tool handler executed; read event.tool_name, event.text (result JSON)
+        Usage,            // Token usage stats; read event.input_tokens, event.output_tokens
         TurnComplete,     // Full agentic loop finished for this Send call
         Error,            // Fatal error; read event.error_message
     };
@@ -84,6 +85,10 @@ namespace pagent
         std::string tool_call_id;    // Matches the model's tool use id
         std::string tool_input_json; // ToolCallComplete: fully assembled arguments
         std::string error_message;   // Error
+        int input_tokens = 0;       // Usage
+        int output_tokens = 0;      // Usage
+        int cache_read_tokens = 0;  // Usage (Anthropic prompt caching)
+        int cache_creation_tokens = 0; // Usage
     };
 
     // ---------------------------------------------------------------------------

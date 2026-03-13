@@ -185,6 +185,7 @@ namespace pe
 
         Model *model = CreatePrimitiveModel(vertices, indices);
         model->SetLabel("Quad");
+        model->SetPrimitiveType("quad");
         return model;
     }
 
@@ -221,6 +222,7 @@ namespace pe
 
         Model *model = CreatePrimitiveModel(vertices, indices);
         model->SetLabel("Plane");
+        model->SetPrimitiveType("plane");
         return model;
     }
 
@@ -292,6 +294,7 @@ namespace pe
 
         Model *model = CreatePrimitiveModel(vertices, indices);
         model->SetLabel("Cube");
+        model->SetPrimitiveType("cube");
         return model;
     }
 
@@ -345,6 +348,7 @@ namespace pe
 
         Model *model = CreatePrimitiveModel(vertices, indices);
         model->SetLabel("Sphere");
+        model->SetPrimitiveType("sphere");
         return model;
     }
 
@@ -468,6 +472,7 @@ namespace pe
 
         Model *model = CreatePrimitiveModel(vertices, indices);
         model->SetLabel("Cylinder");
+        model->SetPrimitiveType("cylinder");
         return model;
     }
 
@@ -556,6 +561,7 @@ namespace pe
 
         Model *model = CreatePrimitiveModel(vertices, indices);
         model->SetLabel("Cone");
+        model->SetPrimitiveType("cone");
         return model;
     }
 

@@ -189,6 +189,17 @@ namespace pagent
             return false;
         }
 
+        // Usage info (OpenAI includes it in the final chunk, or with stream_options)
+        if (j.contains("usage") && !j["usage"].is_null())
+        {
+            const auto &usage = j["usage"];
+            AgentEvent ev;
+            ev.type = AgentEventType::Usage;
+            ev.input_tokens = usage.value("prompt_tokens", 0);
+            ev.output_tokens = usage.value("completion_tokens", 0);
+            out_events.push_back(std::move(ev));
+        }
+
         const auto &choices = j.value("choices", json::array());
         if (choices.empty())
             return true;

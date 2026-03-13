@@ -91,6 +91,10 @@ namespace pe
             {
                 LightSystem *lightSystem = GetGlobalSystem<LightSystem>();
 
+                if (ImGui::MenuItem("Directional Light"))
+                {
+                    lightSystem->CreateDirectionalLight();
+                }
                 if (ImGui::MenuItem("Point Light"))
                 {
                     lightSystem->CreatePointLight();
@@ -357,6 +361,12 @@ namespace pe
                             s_renameNode = -1;
                             snprintf(s_renameBuf, sizeof(s_renameBuf), "%s", name.c_str());
                             s_openRenamePopup = true;
+                        }
+                        if (ImGui::MenuItem("Delete"))
+                        {
+                            auto &lights = lightSystem->GetDirectionalLights();
+                            lights.erase(lights.begin() + i);
+                            selection.ClearSelection();
                         }
                         ImGui::EndPopup();
                     }

@@ -501,8 +501,7 @@ namespace pe
                                       m->SetLabel(effectiveLabel);
                                       auto &nodes = m->GetNodeInfos();
                                       if (!nodes.empty())
-                                          nodes[0].name = effectiveLabel;
-                                  });
+                                          nodes[0].name = effectiveLabel; });
                                   std::string returnLabel = label.empty() ? stem : label;
                                   return JsonObj({{"status", JsonStr("ok")}, {"label", JsonStr(returnLabel)}});
                               }});
@@ -672,13 +671,17 @@ namespace pe
                                   bool perAxis = (sxv != 0.0f || syv != 0.0f || szv != 0.0f);
                                   if (perAxis)
                                   {
-                                      if (sxv <= 0.0f) sxv = 1.0f;
-                                      if (syv <= 0.0f) syv = 1.0f;
-                                      if (szv <= 0.0f) szv = 1.0f;
+                                      if (sxv <= 0.0f)
+                                          sxv = 1.0f;
+                                      if (syv <= 0.0f)
+                                          syv = 1.0f;
+                                      if (szv <= 0.0f)
+                                          szv = 1.0f;
                                   }
                                   else
                                   {
-                                      if (s <= 0.0f) s = 1.0f;
+                                      if (s <= 0.0f)
+                                          s = 1.0f;
                                       sxv = syv = szv = s;
                                   }
 
@@ -711,8 +714,8 @@ namespace pe
                                       EventSystem::PushEvent(EventType::ModelLoaded, m); });
                                   // Return the label the agent should use to reference this model
                                   std::string returnLabel = userLabel.empty()
-                                      ? type // agent must provide label for reliable targeting
-                                      : userLabel;
+                                                                ? type // agent must provide label for reliable targeting
+                                                                : userLabel;
                                   return JsonObj({{"status", JsonStr("ok")}, {"label", JsonStr(returnLabel)}});
                               }});
 
@@ -785,13 +788,17 @@ namespace pe
                                   bool perAxis = (sx != 0.0f || sy != 0.0f || sz != 0.0f);
                                   if (perAxis)
                                   {
-                                      if (sx <= 0.0f) sx = 1.0f;
-                                      if (sy <= 0.0f) sy = 1.0f;
-                                      if (sz <= 0.0f) sz = 1.0f;
+                                      if (sx <= 0.0f)
+                                          sx = 1.0f;
+                                      if (sy <= 0.0f)
+                                          sy = 1.0f;
+                                      if (sz <= 0.0f)
+                                          sz = 1.0f;
                                   }
                                   else
                                   {
-                                      if (s <= 0.0f) s = 1.0f;
+                                      if (s <= 0.0f)
+                                          s = 1.0f;
                                       sx = sy = sz = s;
                                   }
                                   std::string queryLower = query;
@@ -1609,7 +1616,7 @@ namespace pe
                               }});
 
         m_agent.RegisterTool({.name = "save_scene",
-                              .description = "Saves the current scene to a .json file. "
+                              .description = "Saves the current scene to a .pescene file. "
                                              "If only a filename is given (e.g. 'demo'), it is saved to the Scenes folder inside Assets. "
                                              "A full path overrides the default location.",
                               .properties = {
@@ -1626,7 +1633,7 @@ namespace pe
                                   {
                                       // bare filename — place in Scenes folder
                                       if (fpath.extension().empty())
-                                          fpath.replace_extension(".json");
+                                          fpath.replace_extension(".pescene");
                                       fpath = std::filesystem::path(Path::Assets) / "Scenes" / fpath;
                                   }
                                   std::filesystem::create_directories(fpath.parent_path());
@@ -1640,7 +1647,7 @@ namespace pe
                               }});
 
         m_agent.RegisterTool({.name = "load_scene",
-                              .description = "Loads a scene from a .json file, replacing the current scene. "
+                              .description = "Loads a scene from a .pescene file, replacing the current scene. "
                                              "If only a filename is given (e.g. 'demo'), it is looked up in the Scenes folder inside Assets. "
                                              "A full path overrides the default location.",
                               .properties = {
@@ -1656,7 +1663,7 @@ namespace pe
                                   if (fpath.is_relative() && fpath.parent_path().empty())
                                   {
                                       if (fpath.extension().empty())
-                                          fpath.replace_extension(".json");
+                                          fpath.replace_extension(".pescene");
                                       fpath = std::filesystem::path(Path::Assets) / "Scenes" / fpath;
                                   }
                                   if (!std::filesystem::exists(fpath))
@@ -1725,6 +1732,20 @@ namespace pe
             else
             {
                 ImGui::TextUnformatted(m_modelName.c_str());
+                // Token usage display
+                ImGui::SameLine();
+                ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.5f, 0.5f, 0.5f, 1.0f));
+                {
+                    std::lock_guard lock(m_chatMutex);
+                    char buf[128];
+                    snprintf(buf, sizeof(buf), "| in: %dk  out: %dk  cached: %dk  total: %dk",
+                             m_totalInputTokens / 1000,
+                             m_totalOutputTokens / 1000,
+                             m_totalCacheReadTokens / 1000,
+                             (m_totalInputTokens + m_totalOutputTokens) / 1000);
+                    ImGui::TextUnformatted(buf);
+                }
+                ImGui::PopStyleColor();
             }
         }
         ImGui::Separator();
@@ -1872,7 +1893,16 @@ namespace pe
             m_chat.push_back({ChatMessage::Role::System, "[calling: " + ev.tool_name + "]"});
             m_scrollToBottom = true;
             break;
+        case pagent::AgentEventType::Usage:
+            m_turnInputTokens += ev.input_tokens;
+            m_turnOutputTokens += ev.output_tokens;
+            m_totalInputTokens += ev.input_tokens;
+            m_totalOutputTokens += ev.output_tokens;
+            m_totalCacheReadTokens += ev.cache_read_tokens;
+            break;
         case pagent::AgentEventType::TurnComplete:
+            m_turnInputTokens = 0;
+            m_turnOutputTokens = 0;
             m_isStreaming = false;
             m_streamingText.clear();
             m_streamingThinking.clear();

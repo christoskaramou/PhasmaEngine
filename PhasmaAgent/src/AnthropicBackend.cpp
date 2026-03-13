@@ -253,6 +253,33 @@ namespace pagent
             }
             m_currentToolIndex = -1;
         }
+        else if (type == "message_start")
+        {
+            // Extract usage from the message object
+            if (j.contains("message") && j["message"].contains("usage"))
+            {
+                const auto &usage = j["message"]["usage"];
+                AgentEvent ev;
+                ev.type = AgentEventType::Usage;
+                ev.input_tokens = usage.value("input_tokens", 0);
+                ev.output_tokens = usage.value("output_tokens", 0);
+                ev.cache_read_tokens = usage.value("cache_read_input_tokens", 0);
+                ev.cache_creation_tokens = usage.value("cache_creation_input_tokens", 0);
+                out_events.push_back(std::move(ev));
+            }
+        }
+        else if (type == "message_delta")
+        {
+            // Final usage update with output tokens
+            if (j.contains("usage"))
+            {
+                const auto &usage = j["usage"];
+                AgentEvent ev;
+                ev.type = AgentEventType::Usage;
+                ev.output_tokens = usage.value("output_tokens", 0);
+                out_events.push_back(std::move(ev));
+            }
+        }
         else if (type == "message_stop")
         {
             return false; // stream done

@@ -113,6 +113,9 @@ namespace pe
         const std::string &GetLabel() const { return m_label; }
         const std::filesystem::path &GetFilePath() const { return m_filePath; }
         void SetLabel(const std::string &label) { m_label = label; }
+        const std::string &GetPrimitiveType() const { return m_primitiveType; }
+        void SetPrimitiveType(const std::string &type) { m_primitiveType = type; }
+        bool IsPrimitive() const { return !m_primitiveType.empty(); }
 
         int GetNodeCount() const { return static_cast<int>(m_nodeInfos.size()); }
         int GetNodeMesh(int nodeIndex) const;
@@ -180,6 +183,7 @@ namespace pe
         uint32_t m_meshCount = 0;
 
         std::string m_label;
+        std::string m_primitiveType; // "cube", "sphere", "plane", etc. Empty for file-loaded models.
         std::filesystem::path m_filePath;
 
         bool m_previousMatricesIsDirty = false;
