@@ -1,18 +1,21 @@
--- Main script entry point
--- Define init(), update(), draw(), destroy() to hook into the engine loop
+-- Main entry point: runs all test suites
 
 function init()
-    pe_log("Scripts initialized")
-end
-
-function update()
-    pe_log("Scripts updated")
-end
-
-function draw()
-    pe_log("Scripts drawing")
-end
-
-function destroy()
-    pe_log("Scripts destroyed")
+    run_acceleration_structure_tests()
+    run_buffer_tests()
+    run_command_tests()
+    run_debug_tests()
+    run_descriptor_tests()
+    run_event_tests()
+    run_framebuffer_tests()
+    run_helpers_tests()
+    run_image_tests()
+    run_pipeline_tests()
+    run_queue_tests()
+    run_rhi_tests()
+    run_semaphore_tests()
+    run_shader_tests()
+    run_surface_tests()
+    run_swapchain_tests()
+    run_vertex_tests()
 end

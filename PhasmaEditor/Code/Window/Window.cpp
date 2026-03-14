@@ -12,7 +12,7 @@
 #include "imgui/imgui_impl_sdl2.h"
 
 #if defined(PE_SCRIPTS)
-#include "Script/ScriptManager.h"
+#include "Script/ScriptSystem.h"
 #endif
 
 namespace pe
@@ -131,7 +131,8 @@ namespace pe
 #if defined(PE_SCRIPTS)
                 case EventType::CompileScripts:
                 {
-                    ScriptManager::Reload();
+                    if (auto *ss = GetGlobalSystem<ScriptSystem>())
+                        ss->Reload();
                     break;
                 }
 #endif

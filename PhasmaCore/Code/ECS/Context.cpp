@@ -62,7 +62,6 @@ namespace pe
             system.second->Destroy();
 
         m_systems.clear();
-        m_drawSystems.clear();
     }
 
     void Context::UpdateSystems()
@@ -71,15 +70,6 @@ namespace pe
         {
             if (system.second->IsEnabled())
                 system.second->Update();
-        }
-    }
-
-    void Context::DrawSystems()
-    {
-        for (auto &system : m_drawSystems)
-        {
-            if (system.second->IsEnabled())
-                system.second->Draw();
         }
     }
 
@@ -131,8 +121,4 @@ namespace pe
         Context::Get()->UpdateSystems();
     }
 
-    void DrawGlobalSystems()
-    {
-        Context::Get()->DrawSystems();
-    }
 } // namespace pe

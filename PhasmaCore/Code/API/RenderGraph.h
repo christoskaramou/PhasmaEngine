@@ -55,6 +55,7 @@ namespace pe
         struct Pass
         {
             PassID id;
+            uint32_t order;
             std::string name;
             std::function<bool()> condition;
             IRenderPassComponent *component;
@@ -67,8 +68,8 @@ namespace pe
             std::vector<Image *> outputs;
         };
 
-        void AddPass(PassID id, std::string name, std::function<bool()> condition, IRenderPassComponent *component);
-        void AddPass(PassID id, std::string name, std::function<bool()> condition, PassCallback callback);
+        void AddPass(PassID id, uint32_t order, std::string name, std::function<bool()> condition, IRenderPassComponent *component);
+        void AddPass(PassID id, uint32_t order, std::string name, std::function<bool()> condition, PassCallback callback);
         void Compile();
         void Execute(CommandBuffer *cmd);
         bool ContainsPass(PassID passID) const;

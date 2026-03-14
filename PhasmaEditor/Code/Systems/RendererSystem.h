@@ -46,7 +46,7 @@ namespace pe
     class MotionBlurPass;
     class GridPass;
 
-    class RendererSystem : public IDrawSystem
+    class RendererSystem : public ISystem
     {
     public:
         enum class RenderGraphPassId : uint32_t
@@ -81,7 +81,7 @@ namespace pe
         void Init(CommandBuffer *cmd) override;
         void Update() override;
         void Destroy() override;
-        void Draw() override;
+        void Draw();
         void DrawPlatformWindows();
 
         Scene &GetScene() { return m_scene; }

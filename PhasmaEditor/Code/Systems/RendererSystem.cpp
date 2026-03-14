@@ -291,32 +291,37 @@ namespace pe
             };
         };
 
-        m_renderGraph.AddPass(static_cast<RenderGraph::PassID>(RenderGraphPassId::Shadow), "Shadow", isPassEnabled(RenderGraphPassId::Shadow), m_shadowPass);
-        m_renderGraph.AddPass(static_cast<RenderGraph::PassID>(RenderGraphPassId::Depth), "Depth", isPassEnabled(RenderGraphPassId::Depth), m_depthPass);
-        m_renderGraph.AddPass(static_cast<RenderGraph::PassID>(RenderGraphPassId::GBufferOpaque), "GBufferOpaque", isPassEnabled(RenderGraphPassId::GBufferOpaque), m_gbufferOpaquePass);
-        m_renderGraph.AddPass(static_cast<RenderGraph::PassID>(RenderGraphPassId::SSAO), "SSAO", isPassEnabled(RenderGraphPassId::SSAO), m_ssaoPass);
-        m_renderGraph.AddPass(static_cast<RenderGraph::PassID>(RenderGraphPassId::LightOpaque), "LightOpaque", isPassEnabled(RenderGraphPassId::LightOpaque), m_lightOpaquePass);
-        m_renderGraph.AddPass(static_cast<RenderGraph::PassID>(RenderGraphPassId::GBufferTransparent), "GBufferTransparent", isPassEnabled(RenderGraphPassId::GBufferTransparent), m_gbufferTransparentPass);
-        m_renderGraph.AddPass(static_cast<RenderGraph::PassID>(RenderGraphPassId::LightTransparent), "LightTransparent", isPassEnabled(RenderGraphPassId::LightTransparent), m_lightTransparentPass);
-        m_renderGraph.AddPass(static_cast<RenderGraph::PassID>(RenderGraphPassId::RayTracing), "RayTracing", isPassEnabled(RenderGraphPassId::RayTracing), m_rayTracingPass);
-        m_renderGraph.AddPass(static_cast<RenderGraph::PassID>(RenderGraphPassId::ParticleCompute), "ParticleCompute", isPassEnabled(RenderGraphPassId::ParticleCompute), m_particleComputePass);
-        m_renderGraph.AddPass(static_cast<RenderGraph::PassID>(RenderGraphPassId::SSR), "SSR", isPassEnabled(RenderGraphPassId::SSR), m_ssrPass);
-        m_renderGraph.AddPass(static_cast<RenderGraph::PassID>(RenderGraphPassId::FXAA), "FXAA", isPassEnabled(RenderGraphPassId::FXAA), m_fxaaPass);
-        m_renderGraph.AddPass(static_cast<RenderGraph::PassID>(RenderGraphPassId::Aabbs), "Aabbs", isPassEnabled(RenderGraphPassId::Aabbs), m_aabbsPass);
-        m_renderGraph.AddPass(static_cast<RenderGraph::PassID>(RenderGraphPassId::TAA), "TAA", isPassEnabled(RenderGraphPassId::TAA), m_taaPass);
-        m_renderGraph.AddPass(static_cast<RenderGraph::PassID>(RenderGraphPassId::Sharpen), "Sharpen", isPassEnabled(RenderGraphPassId::Sharpen), m_sharpenPass);
-        m_renderGraph.AddPass(static_cast<RenderGraph::PassID>(RenderGraphPassId::Upsample), "Upsample", isPassEnabled(RenderGraphPassId::Upsample),
+        auto addPass = [&](RenderGraphPassId passId, uint32_t order, const std::string &name, IRenderPassComponent *component)
+        {
+            m_renderGraph.AddPass(static_cast<RenderGraph::PassID>(passId), order, name, isPassEnabled(passId), component);
+        };
+
+        addPass(RenderGraphPassId::Shadow, 100, "Shadow", m_shadowPass);
+        addPass(RenderGraphPassId::Depth, 200, "Depth", m_depthPass);
+        addPass(RenderGraphPassId::GBufferOpaque, 300, "GBufferOpaque", m_gbufferOpaquePass);
+        addPass(RenderGraphPassId::SSAO, 400, "SSAO", m_ssaoPass);
+        addPass(RenderGraphPassId::LightOpaque, 500, "LightOpaque", m_lightOpaquePass);
+        addPass(RenderGraphPassId::GBufferTransparent, 600, "GBufferTransparent", m_gbufferTransparentPass);
+        addPass(RenderGraphPassId::LightTransparent, 700, "LightTransparent", m_lightTransparentPass);
+        addPass(RenderGraphPassId::RayTracing, 800, "RayTracing", m_rayTracingPass);
+        addPass(RenderGraphPassId::ParticleCompute, 900, "ParticleCompute", m_particleComputePass);
+        addPass(RenderGraphPassId::SSR, 1000, "SSR", m_ssrPass);
+        addPass(RenderGraphPassId::FXAA, 1100, "FXAA", m_fxaaPass);
+        addPass(RenderGraphPassId::Aabbs, 1200, "Aabbs", m_aabbsPass);
+        addPass(RenderGraphPassId::TAA, 1300, "TAA", m_taaPass);
+        addPass(RenderGraphPassId::Sharpen, 1400, "Sharpen", m_sharpenPass);
+        m_renderGraph.AddPass(static_cast<RenderGraph::PassID>(RenderGraphPassId::Upsample), 1500, "Upsample", isPassEnabled(RenderGraphPassId::Upsample),
                               [this](CommandBuffer *cmd)
                               { Upsample(cmd, vk::Filter::eLinear); });
-        m_renderGraph.AddPass(static_cast<RenderGraph::PassID>(RenderGraphPassId::Tonemap), "Tonemap", isPassEnabled(RenderGraphPassId::Tonemap), m_tonemapPass);
-        m_renderGraph.AddPass(static_cast<RenderGraph::PassID>(RenderGraphPassId::BloomBF), "BloomBF", isPassEnabled(RenderGraphPassId::BloomBF), m_bloomBrightFilterPass);
-        m_renderGraph.AddPass(static_cast<RenderGraph::PassID>(RenderGraphPassId::BloomH), "BloomH", isPassEnabled(RenderGraphPassId::BloomH), m_bloomGaussianBlurHorizontalPass);
-        m_renderGraph.AddPass(static_cast<RenderGraph::PassID>(RenderGraphPassId::BloomV), "BloomV", isPassEnabled(RenderGraphPassId::BloomV), m_bloomGaussianBlurVerticalPass);
-        m_renderGraph.AddPass(static_cast<RenderGraph::PassID>(RenderGraphPassId::DOF), "DOF", isPassEnabled(RenderGraphPassId::DOF), m_dofPass);
-        m_renderGraph.AddPass(static_cast<RenderGraph::PassID>(RenderGraphPassId::MotionBlur), "MotionBlur", isPassEnabled(RenderGraphPassId::MotionBlur), m_motionBlurPass);
-        m_renderGraph.AddPass(static_cast<RenderGraph::PassID>(RenderGraphPassId::Grid), "Grid", isPassEnabled(RenderGraphPassId::Grid), m_gridPass);
-        m_renderGraph.AddPass(static_cast<RenderGraph::PassID>(RenderGraphPassId::Particle), "Particle", isPassEnabled(RenderGraphPassId::Particle), m_particlePass);
-        m_renderGraph.AddPass(static_cast<RenderGraph::PassID>(RenderGraphPassId::GUI), "GUI", isPassEnabled(RenderGraphPassId::GUI),
+        addPass(RenderGraphPassId::Tonemap, 1600, "Tonemap", m_tonemapPass);
+        addPass(RenderGraphPassId::BloomBF, 1700, "BloomBF", m_bloomBrightFilterPass);
+        addPass(RenderGraphPassId::BloomH, 1800, "BloomH", m_bloomGaussianBlurHorizontalPass);
+        addPass(RenderGraphPassId::BloomV, 1900, "BloomV", m_bloomGaussianBlurVerticalPass);
+        addPass(RenderGraphPassId::DOF, 2000, "DOF", m_dofPass);
+        addPass(RenderGraphPassId::MotionBlur, 2100, "MotionBlur", m_motionBlurPass);
+        addPass(RenderGraphPassId::Grid, 2200, "Grid", m_gridPass);
+        addPass(RenderGraphPassId::Particle, 2300, "Particle", m_particlePass);
+        m_renderGraph.AddPass(static_cast<RenderGraph::PassID>(RenderGraphPassId::GUI), 10000, "GUI", isPassEnabled(RenderGraphPassId::GUI),
                               [this](CommandBuffer *cmd)
                               { m_gui.ExecutePass(cmd); });
         m_renderGraph.Compile();
@@ -510,22 +515,34 @@ namespace pe
 
     Image *RendererSystem::GetRenderTarget(const std::string &name)
     {
-        return m_renderTargets[StringHash(name)];
+        auto it = m_renderTargets.find(StringHash(name));
+        if (it != m_renderTargets.end())
+            return it->second;
+        return nullptr;
     }
 
     Image *RendererSystem::GetRenderTarget(size_t hash)
     {
-        return m_renderTargets[hash];
+        auto it = m_renderTargets.find(hash);
+        if (it != m_renderTargets.end())
+            return it->second;
+        return nullptr;
     }
 
     Image *RendererSystem::GetDepthStencilTarget(const std::string &name)
     {
-        return m_depthStencilTargets[StringHash(name)];
+        auto it = m_depthStencilTargets.find(StringHash(name));
+        if (it != m_depthStencilTargets.end())
+            return it->second;
+        return nullptr;
     }
 
     Image *RendererSystem::GetDepthStencilTarget(size_t hash)
     {
-        return m_depthStencilTargets[hash];
+        auto it = m_depthStencilTargets.find(hash);
+        if (it != m_depthStencilTargets.end())
+            return it->second;
+        return nullptr;
     }
 
     Image *RendererSystem::CreateFSSampledImage(bool useRenderTergetScale)

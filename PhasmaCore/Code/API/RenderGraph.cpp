@@ -96,22 +96,28 @@ namespace pe
         m_outputs.clear();
     }
 
-    void RenderGraph::AddPass(PassID id, std::string name, std::function<bool()> condition, IRenderPassComponent *component)
+    void RenderGraph::AddPass(PassID id, uint32_t order, std::string name, std::function<bool()> condition, IRenderPassComponent *component)
     {
         PE_ERROR_IF(m_passIndex.find(id) != m_passIndex.end(), "RenderGraph::AddPass duplicate pass id: %u", static_cast<unsigned>(id));
-        m_passIndex[id] = m_passes.size();
-        m_passes.push_back({id, std::move(name), std::move(condition), component, nullptr});
+        m_passes.push_back({id, order, std::move(name), std::move(condition), component, nullptr});
     }
 
-    void RenderGraph::AddPass(PassID id, std::string name, std::function<bool()> condition, PassCallback callback)
+    void RenderGraph::AddPass(PassID id, uint32_t order, std::string name, std::function<bool()> condition, PassCallback callback)
     {
         PE_ERROR_IF(m_passIndex.find(id) != m_passIndex.end(), "RenderGraph::AddPass duplicate pass id: %u", static_cast<unsigned>(id));
-        m_passIndex[id] = m_passes.size();
-        m_passes.push_back({id, std::move(name), std::move(condition), nullptr, std::move(callback)});
+        m_passes.push_back({id, order, std::move(name), std::move(condition), nullptr, std::move(callback)});
     }
 
     void RenderGraph::Compile()
     {
+        // Sort passes by order and rebuild index
+        std::sort(m_passes.begin(), m_passes.end(),
+                  [](const Pass &a, const Pass &b)
+                  { return a.order < b.order; });
+        m_passIndex.clear();
+        for (size_t i = 0; i < m_passes.size(); i++)
+            m_passIndex[m_passes[i].id] = i;
+
         m_passIO.assign(m_passes.size(), {});
         m_dependencies.assign(m_passes.size(), {});
 

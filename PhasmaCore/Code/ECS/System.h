@@ -83,10 +83,4 @@ namespace pe
         std::unordered_map<size_t, std::vector<IComponent *>> m_components;
         bool m_enabled;
     };
-
-    class IDrawSystem : public ISystem
-    {
-    public:
-        virtual void Draw() = 0;
-    };
 } // namespace pe

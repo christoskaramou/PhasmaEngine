@@ -14,8 +14,7 @@
 #include "Window/SplashScreen.h"
 #endif
 #if defined(PE_SCRIPTS)
-#include "Script/ScriptManager.h"
-#include "GUI/GUIState.h"
+#include "Script/ScriptSystem.h"
 #endif
 
 namespace pe
@@ -57,7 +56,6 @@ namespace pe
             }
         }
 
-        ScriptManager::Init();
 #endif
         FileWatcher::Start();
         EventSystem::Init();
@@ -81,6 +79,9 @@ namespace pe
         CreateGlobalSystem<LightSystem>()->Init(cmd);
         CreateGlobalSystem<RendererSystem>()->Init(cmd);
         CreateGlobalSystem<PostProcessSystem>()->Init(cmd);
+#if defined(PE_SCRIPTS)
+        CreateGlobalSystem<ScriptSystem>()->Init(nullptr);
+#endif
         Model::GetDefaultResources(cmd);
         cmd->End();
         queue->Submit(1, &cmd, nullptr, nullptr);
@@ -112,9 +113,6 @@ namespace pe
         RHII.Remove();
         Window::Destroy(m_window);
         EventSystem::Destroy();
-#if defined(PE_SCRIPTS)
-        ScriptManager::Destroy();
-#endif
     }
 
     bool App::Frame()
@@ -138,21 +136,13 @@ namespace pe
         if (!m_window->isMinimized())
             UpdateGlobalSystems();
 
-#if defined(PE_SCRIPTS)
-        if (GUIState::s_playMode && !GUIState::s_isPaused)
-            ScriptManager::Update();
-#endif
-
         // Get ImGui render data ready
         ImGui::Render();
         m_frameTimer.CountUpdatesStamp();
 
         if (!m_window->isMinimized())
         {
-            DrawGlobalSystems();
-#if defined(PE_SCRIPTS)
-            ScriptManager::Draw();
-#endif
+            rendererSystem->Draw();
             // Render platform windows (floating ImGui windows) after main rendering
             rendererSystem->DrawPlatformWindows();
         }

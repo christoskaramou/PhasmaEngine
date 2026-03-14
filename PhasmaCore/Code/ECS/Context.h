@@ -27,7 +27,6 @@ namespace pe
         void InitSystems();
         void DestroySystems();
         void UpdateSystems();
-        void DrawSystems();
 
         template <class T, class... Params>
         inline T *CreateSystem(Params &&...params);
@@ -48,7 +47,6 @@ namespace pe
         Entity *m_worldEntity;
 
         std::unordered_map<size_t, std::unique_ptr<ISystem>> m_systems;
-        std::unordered_map<size_t, IDrawSystem *> m_drawSystems;
         std::unordered_map<size_t, std::unique_ptr<Entity>> m_entities;
     };
 
@@ -65,9 +63,6 @@ namespace pe
             system->SetEnabled(true);
             auto *systemPtr = system.get();
             m_systems.emplace(id, std::move(system));
-
-            if constexpr (std::is_base_of_v<IDrawSystem, T>)
-                m_drawSystems[id] = static_cast<IDrawSystem *>(systemPtr);
 
             return systemPtr;
         }
@@ -97,7 +92,6 @@ namespace pe
         if (it != m_systems.end())
         {
             it->second->Destroy();
-            m_drawSystems.erase(typeId);
             m_systems.erase(it);
         }
     }
@@ -137,6 +131,4 @@ namespace pe
     }
 
     void UpdateGlobalSystems();
-
-    void DrawGlobalSystems();
 } // namespace pe
