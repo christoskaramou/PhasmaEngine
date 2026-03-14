@@ -3,6 +3,36 @@
 
 namespace pe
 {
+    // Path sandbox check: ensures a path is under Assets/ after normalization
+    static bool IsUnderAssets(const std::filesystem::path &p)
+    {
+        std::error_code ec;
+        std::string normalized = std::filesystem::weakly_canonical(p, ec).string();
+        if (ec)
+            normalized = p.lexically_normal().string();
+        std::string assetsNorm = std::filesystem::weakly_canonical(Path::Assets, ec).string();
+        if (ec)
+            assetsNorm = std::filesystem::path(Path::Assets).lexically_normal().string();
+        return normalized.find(assetsNorm) == 0;
+    }
+
+    // Resolve a user-supplied path to an absolute path under Assets/.
+    // Handles cases where the user passes "Assets/Objects" (strips redundant "Assets/" prefix)
+    // or just "Objects" (prepends Path::Assets).
+    static std::filesystem::path ResolveAssetsPath(const std::string &path)
+    {
+        std::filesystem::path fpath(path);
+        if (fpath.is_relative())
+        {
+            // Strip leading "Assets/" or "Assets\" to avoid double-nesting
+            std::string p = path;
+            if (p.rfind("Assets/", 0) == 0 || p.rfind("Assets\\", 0) == 0)
+                p = p.substr(7);
+            fpath = std::filesystem::path(Path::Assets) / p;
+        }
+        return fpath;
+    }
+
     // Single-value string-to-enum lookup
     template <typename V>
     static V Lookup(const std::string &s, const std::unordered_map<std::string_view, V> &map, V fallback = {})

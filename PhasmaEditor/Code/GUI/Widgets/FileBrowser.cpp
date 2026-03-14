@@ -262,7 +262,8 @@ namespace pe
                             GUIState::s_modelLoading = true;
                             try
                             {
-                                Model::Load(path);
+                                if (Model *m = Model::Load(path))
+                                    EventSystem::PushEvent(EventType::ModelLoaded, m);
                             }
                             catch (const std::exception &e)
                             {

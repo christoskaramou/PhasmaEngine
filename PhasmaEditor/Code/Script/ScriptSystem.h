@@ -29,6 +29,10 @@ namespace pe
         void Reload();
 
         sol::state &GetLua() { return m_lua; }
+        bool IsInitialized() const { return m_initialized; }
+
+        // Execute Lua code and return captured output + return value
+        std::string ExecuteLua(const std::string &code);
 
         static void AddBindings(LuaBindingFunc func);
 

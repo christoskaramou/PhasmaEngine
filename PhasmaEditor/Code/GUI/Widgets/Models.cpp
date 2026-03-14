@@ -46,7 +46,8 @@ namespace pe
                             {
                                 // Use u8path to properly interpret UTF-8 string as path on Windows
                                 std::filesystem::path filePath(reinterpret_cast<const char8_t *>(fullPath.c_str()));
-                                Model::Load(filePath);
+                                if (Model *m = Model::Load(filePath))
+                                    EventSystem::PushEvent(EventType::ModelLoaded, m);
                             }
                             catch (const std::exception &e)
                             {

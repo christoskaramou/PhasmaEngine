@@ -9,6 +9,7 @@
 #include "API/Command.h"
 #include "API/RHI.h"
 #include "API/Queue.h"
+#include "Script/ScriptSystem.h"
 #include "PhasmaAgent/AgentUtils.h"
 #include "imgui/imgui.h"
 
@@ -52,33 +53,22 @@ namespace pe
             return;
 
         pagent::AgentConfig config;
+        // Derive project root from Assets path (go up from Assets/)
+        std::string projectRoot = std::filesystem::path(Path::Assets).parent_path().parent_path().string();
+        if (!projectRoot.empty() && projectRoot.back() != '/')
+            projectRoot += '/';
+
         config.system_prompt =
             "You are an AI assistant inside PhasmaEditor, a Vulkan 3D engine editor. "
-            "You can build and modify 3D scenes: load/remove models, clone_model, scatter_models, "
-            "create primitives (cube/sphere/plane/cylinder/cone) with position, rotation, and per-axis scale in one call, "
-            "move/scale/rotate existing objects with set_model_transform, manage lights (add_light, set_light, remove_light, get_lights), "
-            "control the camera (set_camera_position, set_camera_rotation, set_camera_fov, focus_camera_on_model, set_camera_dof_focus), "
-            "edit materials (get_materials, set_material_property), "
-            "tweak post-processing (set_render_setting for booleans, set_render_value for floats like bloom_strength/IBL_intensity), "
-            "switch render modes (set_render_mode: raster|hybrid|raytracing), toggle day/night (set_time_of_day), change skybox (set_skybox_hdr), "
-            "read, write, and modify HLSL shaders (list_shaders, read_shader, write_shader — changes auto-trigger hot-reload), "
-            "and save/load scenes (save_scene, load_scene). "
-            "To load a model, use list_models first to find available assets, then call load_model with the full_path from the result. "
-            "IMPORTANT: When creating primitives or loading models, always provide a unique label (e.g. 'floor', 'front_wall', 'ball_1'). "
-            "Prefer setting position/rotation/scale directly in create_primitive rather than calling set_model_transform separately. "
-            "To modify a shader: use read_shader to see its source, then edit_shader with find/replace to make targeted changes (hot-reload happens automatically). Use write_shader only for creating new shader files. "
-            "ALWAYS use your tools to perform actions. NEVER tell the user to do something manually when a tool can do it. "
-            "Do not use emoji or Unicode symbols in responses. Use plain ASCII text only. "
-            "Be concise and chain tool calls to complete multi-step tasks without asking for confirmation. "
-            "You have a persistent workspace at " +
-            Path::Assets + "Agent/ where you can read and write files (read_file, write_file). "
-            "Use this to maintain MEMORY.md (what you learned), TASKS.md (pending work), PROGRESSION.md (progress log), or any other notes. "
-            "On startup, START.md from this workspace is loaded as instructions automatically. "
-            "Always check your workspace files at the start of a conversation to resume previous work if asked. "
-            "Executable directory: " +
-            Path::Executable + " | "
-                               "Assets directory: " +
-            Path::Assets + ".";
+            "You control the editor by executing Lua via execute_lua. "
+            "The full Lua API reference is in your START.md instructions. "
+            "Show the Lua script before calling execute_lua. No emoji/Unicode. ASCII only. Be concise. "
+            "Always use execute_lua. Chain operations in one script. Set unique labels on models/primitives. "
+            "ALWAYS check tool results for errors. If a tool returns an 'error' field, stop and report it. "
+            "Use read_project_file to read C++ source. Workspace: " +
+            Path::Assets + "Agent/ (read_file/write_file). "
+                           "Use request_feature for missing capabilities. Project: " +
+            projectRoot + " | Assets: " + Path::Assets + ".";
         config.log_callback = [](const std::string &msg)
         { PE_INFO("%s", msg.c_str()); };
         config.max_tool_rounds = 20;
@@ -119,6 +109,402 @@ namespace pe
 
     void AgentWidget::RegisterTools()
     {
+        // Derive project root for source file access
+        std::string projectRoot = std::filesystem::path(Path::Assets).parent_path().parent_path().string();
+        if (!projectRoot.empty() && projectRoot.back() != '/')
+            projectRoot += '/';
+
+        // =====================================================================
+        // New Lua-based tool set
+        // =====================================================================
+
+        m_agent->RegisterTool({.name = "execute_lua",
+                               .description = "Executes Lua code in the engine's ScriptSystem. Use this for ALL scene manipulation: "
+                                              "models, camera, lights, materials, settings, shaders, particles, skybox, scene save/load. "
+                                              "The full Lua API is documented in the system prompt. "
+                                              "Use pe_log() to output information. Returns captured output or 'ok' on success.",
+                               .properties = {
+                                   {"code", "Lua code to execute", pagent::SchemaType::String, true},
+                               },
+                               .handler = [this](const std::string &args) -> std::string
+                               {
+                                   std::string code = JsonUnescape(ExtractArgStr(args, "code"));
+                                   if (code.empty())
+                                       return "{\"error\":\"missing code\"}";
+
+                                   std::string result;
+                                   std::mutex mtx;
+                                   std::condition_variable cv;
+                                   bool done = false;
+
+                                   QueueAction([&]()
+                                               {
+                                       auto *ss = GetGlobalSystem<ScriptSystem>();
+                                       if (!ss || !ss->IsInitialized())
+                                           result = "error: ScriptSystem not available";
+                                       else
+                                           result = ss->ExecuteLua(code);
+                                       {
+                                           std::lock_guard lock(mtx);
+                                           done = true;
+                                       }
+                                       cv.notify_one(); });
+
+                                   // Wait for main thread to execute the action
+                                   {
+                                       std::unique_lock lock(mtx);
+                                       if (!cv.wait_for(lock, std::chrono::seconds(10), [&]
+                                                        { return done; }))
+                                           return "{\"error\":\"timeout waiting for Lua execution\"}";
+                                   }
+
+                                   if (result.rfind("error:", 0) == 0)
+                                       return JsonObj({{"error", JsonStr(result)}});
+                                   return JsonObj({{"output", JsonStr(result)}});
+                               }});
+
+        m_agent->RegisterTool({.name = "read_project_file",
+                               .description = "Reads a source file from the project (C++ headers, source, shaders, configs). "
+                                              "Use this to understand engine APIs before writing Lua code. "
+                                              "Path relative to project root or absolute.",
+                               .properties = {
+                                   {"path", "File path relative to project root (e.g. 'PhasmaCore/Code/Base/Path.h') or absolute", pagent::SchemaType::String, true},
+                               },
+                               .handler = [projectRoot](const std::string &args) -> std::string
+                               {
+                                   std::string path = JsonUnescape(ExtractArgStr(args, "path"));
+                                   if (path.empty())
+                                       return "{\"error\":\"missing path\"}";
+
+                                   std::filesystem::path fpath(path);
+                                   if (fpath.is_relative())
+                                       fpath = std::filesystem::path(projectRoot) / fpath;
+
+                                   std::string normalized = fpath.lexically_normal().string();
+                                   std::string rootNorm = std::filesystem::path(projectRoot).lexically_normal().string();
+                                   if (normalized.find(rootNorm) != 0)
+                                       return "{\"error\":\"path outside project directory\"}";
+
+                                   if (!std::filesystem::exists(fpath))
+                                       return JsonObj({{"error", JsonStr("file not found: " + fpath.string())}});
+
+                                   if (std::filesystem::is_directory(fpath))
+                                       return "{\"error\":\"path is a directory, use find_project_file or list_project_dir\"}";
+
+                                   auto size = std::filesystem::file_size(fpath);
+                                   if (size > 100000)
+                                       return JsonObj({{"error", JsonStr("file too large: " + std::to_string(size) + " bytes")}});
+
+                                   std::ifstream file(fpath, std::ios::in);
+                                   if (!file.is_open())
+                                       return JsonObj({{"error", JsonStr("cannot open: " + fpath.string())}});
+
+                                   std::string content((std::istreambuf_iterator<char>(file)),
+                                                       std::istreambuf_iterator<char>());
+
+                                   return JsonObj({{"path", JsonStr(normalized)}, {"content", JsonStr(content)}});
+                               }});
+
+        m_agent->RegisterTool({.name = "find_project_file",
+                               .description = "Recursively searches for files in the project by name substring (case-insensitive). "
+                                              "Use to find C++ headers, source files, shaders, configs, models, etc.",
+                               .properties = {
+                                   {"query", "Filename substring to search for (e.g. 'Camera.h', '.hlsl', 'sponza')", pagent::SchemaType::String, true},
+                                   {"dir", "Subdirectory to search (e.g. 'PhasmaCore/Code'). Defaults to project root.", pagent::SchemaType::String, false},
+                               },
+                               .handler = [projectRoot](const std::string &args) -> std::string
+                               {
+                                   std::string query = JsonUnescape(ExtractArgStr(args, "query"));
+                                   std::string dir = JsonUnescape(ExtractArgStr(args, "dir"));
+                                   if (query.empty())
+                                       return "{\"error\":\"missing query\"}";
+
+                                   std::string searchDir = dir.empty() ? projectRoot : dir;
+                                   std::filesystem::path searchPath(searchDir);
+                                   if (searchPath.is_relative())
+                                       searchPath = std::filesystem::path(projectRoot) / searchPath;
+
+                                   std::string normalized = searchPath.lexically_normal().string();
+                                   std::string rootNorm = std::filesystem::path(projectRoot).lexically_normal().string();
+                                   if (normalized.find(rootNorm) != 0)
+                                       return "{\"error\":\"path outside project directory\"}";
+
+                                   if (!std::filesystem::exists(searchPath))
+                                       return JsonObj({{"error", JsonStr("directory not found: " + searchPath.string())}});
+
+                                   std::string queryLower = query;
+                                   for (auto &c : queryLower)
+                                       c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+
+                                   std::string arr = "[";
+                                   bool first = true;
+                                   int count = 0;
+                                   for (const auto &entry : std::filesystem::recursive_directory_iterator(
+                                            searchPath, std::filesystem::directory_options::skip_permission_denied))
+                                   {
+                                       if (!entry.is_regular_file())
+                                           continue;
+
+                                       // Skip build directories and hidden files
+                                       std::string pathStr = entry.path().string();
+                                       if (pathStr.find("/build/") != std::string::npos ||
+                                           pathStr.find("/.") != std::string::npos)
+                                           continue;
+
+                                       std::string name = entry.path().filename().string();
+                                       std::string nameLower = name;
+                                       for (auto &c : nameLower)
+                                           c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+
+                                       if (nameLower.find(queryLower) == std::string::npos)
+                                           continue;
+
+                                       std::string relPath = std::filesystem::relative(entry.path(), projectRoot).string();
+                                       std::replace(relPath.begin(), relPath.end(), '\\', '/');
+
+                                       if (!first)
+                                           arr += ",";
+                                       arr += JsonStr(relPath);
+                                       first = false;
+                                       if (++count >= 30)
+                                           break;
+                                   }
+                                   arr += "]";
+                                   return JsonObj({{"count", std::to_string(count)}, {"files", arr}});
+                               }});
+
+        m_agent->RegisterTool({.name = "list_project_dir",
+                               .description = "Lists files and subdirectories at a project path. "
+                                              "Use to browse project structure (PhasmaCore/Code/, PhasmaEditor/Code/, etc.).",
+                               .properties = {
+                                   {"path", "Directory path relative to project root (e.g. 'PhasmaEditor/Code/Script')", pagent::SchemaType::String, true},
+                               },
+                               .handler = [projectRoot](const std::string &args) -> std::string
+                               {
+                                   std::string path = JsonUnescape(ExtractArgStr(args, "path"));
+                                   if (path.empty())
+                                       return "{\"error\":\"missing path\"}";
+
+                                   std::filesystem::path dirPath(path);
+                                   if (dirPath.is_relative())
+                                       dirPath = std::filesystem::path(projectRoot) / dirPath;
+
+                                   std::string normalized = dirPath.lexically_normal().string();
+                                   std::string rootNorm = std::filesystem::path(projectRoot).lexically_normal().string();
+                                   if (normalized.find(rootNorm) != 0)
+                                       return "{\"error\":\"path outside project directory\"}";
+
+                                   if (!std::filesystem::exists(dirPath) || !std::filesystem::is_directory(dirPath))
+                                       return JsonObj({{"error", JsonStr("not a directory: " + dirPath.string())}});
+
+                                   std::string files = "[", dirs = "[";
+                                   bool firstF = true, firstD = true;
+                                   for (const auto &entry : std::filesystem::directory_iterator(dirPath))
+                                   {
+                                       std::string name = entry.path().filename().string();
+                                       if (name[0] == '.')
+                                           continue; // skip hidden
+
+                                       if (entry.is_directory())
+                                       {
+                                           if (!firstD)
+                                               dirs += ",";
+                                           dirs += JsonStr(name + "/");
+                                           firstD = false;
+                                       }
+                                       else
+                                       {
+                                           if (!firstF)
+                                               files += ",";
+                                           files += JsonStr(name);
+                                           firstF = false;
+                                       }
+                                   }
+                                   files += "]";
+                                   dirs += "]";
+                                   return JsonObj({{"path", JsonStr(normalized)}, {"files", files}, {"dirs", dirs}});
+                               }});
+
+        const std::string agentWorkspace = Path::Assets + "Agent/";
+
+        m_agent->RegisterTool({.name = "read_file",
+                               .description = "Reads a text file from the agent workspace (Assets/Agent/). "
+                                              "Use this to read START.md, MEMORY.md, TASKS.md, PROGRESSION.md, or any workspace file.",
+                               .properties = {
+                                   {"path", "File path relative to workspace (e.g. 'MEMORY.md') or absolute", pagent::SchemaType::String, true},
+                               },
+                               .handler = [agentWorkspace](const std::string &args) -> std::string
+                               {
+                                   std::string path = JsonUnescape(ExtractArgStr(args, "path"));
+                                   if (path.empty())
+                                       return "{\"error\":\"missing path\"}";
+
+                                   std::filesystem::path fpath(path);
+                                   if (fpath.is_relative())
+                                       fpath = std::filesystem::path(agentWorkspace) / fpath;
+
+                                   if (!IsPathSafe(fpath.string(), agentWorkspace))
+                                       return "{\"error\":\"path outside workspace directory\"}";
+
+                                   if (!std::filesystem::exists(fpath))
+                                       return JsonObj({{"error", JsonStr("file not found: " + fpath.string())}});
+
+                                   std::ifstream file(fpath, std::ios::in);
+                                   if (!file.is_open())
+                                       return JsonObj({{"error", JsonStr("cannot open: " + fpath.string())}});
+
+                                   std::string content((std::istreambuf_iterator<char>(file)),
+                                                       std::istreambuf_iterator<char>());
+
+                                   return JsonObj({{"path", JsonStr(fpath.string())}, {"content", JsonStr(content)}});
+                               }});
+
+        m_agent->RegisterTool({.name = "write_file",
+                               .description = "Writes or appends to a text file in the agent workspace (Assets/Agent/). "
+                                              "Use for MEMORY.md, TASKS.md, PROGRESSION.md, Lua scripts, or any persistent notes. "
+                                              "Creates parent directories automatically.",
+                               .properties = {
+                                   {"path", "File path relative to workspace (e.g. 'MEMORY.md') or absolute", pagent::SchemaType::String, true},
+                                   {"content", "Text content to write", pagent::SchemaType::String, true},
+                                   {"append", "If 'true', append instead of overwriting", pagent::SchemaType::String, false},
+                               },
+                               .handler = [agentWorkspace](const std::string &args) -> std::string
+                               {
+                                   std::string path = JsonUnescape(ExtractArgStr(args, "path"));
+                                   std::string content = JsonUnescape(ExtractArgStr(args, "content"));
+                                   std::string appendMode = ExtractArgStr(args, "append");
+                                   if (path.empty())
+                                       return "{\"error\":\"missing path\"}";
+                                   if (content.empty())
+                                       return "{\"error\":\"missing content\"}";
+
+                                   std::filesystem::path fpath(path);
+                                   if (fpath.is_relative())
+                                       fpath = std::filesystem::path(agentWorkspace) / fpath;
+
+                                   if (!IsPathSafe(fpath.string(), agentWorkspace))
+                                       return "{\"error\":\"path outside workspace directory\"}";
+
+                                   std::filesystem::path parentDir = fpath.parent_path();
+                                   if (!parentDir.empty() && !std::filesystem::exists(parentDir))
+                                   {
+                                       std::error_code ec;
+                                       std::filesystem::create_directories(parentDir, ec);
+                                       if (ec)
+                                           return JsonObj({{"error", JsonStr("cannot create directory: " + ec.message())}});
+                                   }
+
+                                   auto flags = std::ios::out;
+                                   if (appendMode == "true")
+                                       flags |= std::ios::app;
+                                   else
+                                       flags |= std::ios::trunc;
+
+                                   std::ofstream file(fpath, flags);
+                                   if (!file.is_open())
+                                       return JsonObj({{"error", JsonStr("cannot write: " + fpath.string())}});
+                                   file << content;
+                                   file.close();
+
+                                   return JsonObj({{"status", JsonStr("ok")}, {"path", JsonStr(fpath.string())}});
+                               }});
+
+        const std::string requestsPath = Path::Assets + "Agent/REQUESTS.md";
+
+        m_agent->RegisterTool({.name = "request_feature",
+                               .description = "Request a new feature, tool, or Lua binding that is not currently available. "
+                                              "The request will be shown to the user and saved to REQUESTS.md. "
+                                              "Use this when you need a capability that doesn't exist yet.",
+                               .properties = {
+                                   {"title", "Short title for the feature request", pagent::SchemaType::String, true},
+                                   {"description", "Detailed description of what is needed and why", pagent::SchemaType::String, true},
+                               },
+                               .handler = [this, requestsPath](const std::string &args) -> std::string
+                               {
+                                   std::string title = JsonUnescape(ExtractArgStr(args, "title"));
+                                   std::string desc = JsonUnescape(ExtractArgStr(args, "description"));
+                                   if (title.empty())
+                                       return "{\"error\":\"missing title\"}";
+
+                                   std::string msg = "[FEATURE REQUEST] " + title + ": " + desc;
+                                   PE_WARN("%s", msg.c_str());
+
+                                   {
+                                       std::lock_guard lock(m_chatMutex);
+                                       m_chat.push_back({ChatMessage::Role::System, msg, ""});
+                                   }
+
+                                   // Append to REQUESTS.md with blank line separator
+                                   {
+                                       std::filesystem::path parentDir = std::filesystem::path(requestsPath).parent_path();
+                                       if (!std::filesystem::exists(parentDir))
+                                       {
+                                           std::error_code ec;
+                                           std::filesystem::create_directories(parentDir, ec);
+                                       }
+                                       std::ofstream file(requestsPath, std::ios::app);
+                                       if (file.is_open())
+                                           file << "- **" << title << "**: " << desc << "\n\n";
+                                   }
+
+                                   return JsonObj({{"status", JsonStr("request saved to REQUESTS.md")}, {"title", JsonStr(title)}});
+                               }});
+
+        m_agent->RegisterTool({.name = "complete_feature",
+                               .description = "Mark a feature request as completed and remove it from REQUESTS.md. "
+                                              "Use this when a previously requested feature has been implemented.",
+                               .properties = {
+                                   {"title", "Title of the completed feature request to remove", pagent::SchemaType::String, true},
+                               },
+                               .handler = [requestsPath](const std::string &args) -> std::string
+                               {
+                                   std::string title = JsonUnescape(ExtractArgStr(args, "title"));
+                                   if (title.empty())
+                                       return "{\"error\":\"missing title\"}";
+
+                                   if (!std::filesystem::exists(requestsPath))
+                                       return "{\"error\":\"REQUESTS.md not found\"}";
+
+                                   // Read current contents
+                                   std::string content;
+                                   {
+                                       std::ifstream file(requestsPath, std::ios::in);
+                                       if (!file.is_open())
+                                           return "{\"error\":\"cannot open REQUESTS.md\"}";
+                                       content.assign(std::istreambuf_iterator<char>(file),
+                                                      std::istreambuf_iterator<char>());
+                                   }
+
+                                   // Find and remove the matching entry (line starting with "- **title**")
+                                   std::string marker = "- **" + title + "**";
+                                   auto pos = content.find(marker);
+                                   if (pos == std::string::npos)
+                                       return JsonObj({{"error", JsonStr("request not found: " + title)}});
+
+                                   // Find end of this entry (next "- **" or end of file)
+                                   auto entryEnd = content.find("\n- **", pos + marker.size());
+                                   if (entryEnd == std::string::npos)
+                                       entryEnd = content.size();
+                                   else
+                                       entryEnd += 1; // keep the newline before next entry
+
+                                   content.erase(pos, entryEnd - pos);
+
+                                   // Write back
+                                   {
+                                       std::ofstream file(requestsPath, std::ios::out | std::ios::trunc);
+                                       if (!file.is_open())
+                                           return "{\"error\":\"cannot write REQUESTS.md\"}";
+                                       file << content;
+                                   }
+
+                                   return JsonObj({{"status", JsonStr("removed")}, {"title", JsonStr(title)}});
+                               }});
+
+        // =====================================================================
+        // Legacy tools (commented out — functionality now available via execute_lua)
+        // =====================================================================
+        /*
         m_agent->RegisterTool({.name = "list_models",
                                .description = "Lists all available 3D model assets that can be loaded. Returns relative paths under Assets/Objects/. Use this before load_model to find the correct path.",
                                .properties = {
@@ -1083,7 +1469,7 @@ namespace pe
 
                                           for (int i = 0; i < m->GetNodeCount(); ++i)
                                               m->MarkDirty(i);
-                                          
+
                                           r->GetScene().UpdateTextures();
                                           break;
                                       } });
@@ -1545,7 +1931,7 @@ namespace pe
                                       queue->Submit(1, &cmd, nullptr, nullptr);
                                       cmd->Wait();
                                       cmd->Return();
-                                      
+
                                       auto &s = Settings::Get<GlobalSettings>();
                                       s.day = (time == "day"); });
                                    return "{\"status\":\"ok\"}";
@@ -1621,10 +2007,10 @@ namespace pe
                                               float rad = std::sqrt(pe::rand(0.0f, 1.0f)) * radius;
                                               float ox = std::cos(ang) * rad;
                                               float oz = std::sin(ang) * rad;
-                                              
+
                                               float scale = min_scale + pe::rand(0.0f, 1.0f) * (max_scale - min_scale);
                                               float rotY = pe::rand(0.0f, 1.0f) * glm::two_pi<float>();
-                                              
+
                                               mat4 T = glm::translate(mat4(1.0f), vec3(x + ox, y, z + oz));
                                               mat4 R = glm::rotate(mat4(1.0f), rotY, vec3(0.0f, 1.0f, 0.0f));
                                               mat4 S = glm::scale(mat4(1.0f), vec3(scale));
@@ -1786,6 +2172,7 @@ namespace pe
 
                                    return JsonObj({{"status", JsonStr("ok")}, {"path", JsonStr(fpath.string())}});
                                }});
+        */
     }
 
     void AgentWidget::QueueAction(std::function<void()> fn)
@@ -2125,22 +2512,64 @@ namespace pe
 
         ImGui::Separator();
         bool submit = false;
-        // Enter submits; Shift+Enter inserts a newline.
-        // We detect Enter via IsKeyPressed so that pasted newlines don't trigger send.
+        // Enter sends. Shift+Enter inserts a newline. Up/Down for history.
         ImGui::BeginDisabled(busy);
         const float inputWidth = ImGui::GetContentRegionAvail().x - 60.0f;
+
+        struct InputCallbackData
+        {
+            std::vector<std::string> *history;
+            int *historyIndex;
+        };
+        InputCallbackData cbData{&m_inputHistory, &m_historyIndex};
+
+        auto inputCallback = [](ImGuiInputTextCallbackData *data) -> int
+        {
+            auto *cbd = static_cast<InputCallbackData *>(data->UserData);
+            if (data->EventFlag == ImGuiInputTextFlags_CallbackCharFilter)
+            {
+                // Block Enter (newline) unless Shift is held
+                if (data->EventChar == '\n' && !ImGui::GetIO().KeyShift)
+                    return 1;
+            }
+            else if (data->EventFlag == ImGuiInputTextFlags_CallbackHistory)
+            {
+                auto &history = *cbd->history;
+                auto &idx = *cbd->historyIndex;
+                if (history.empty())
+                    return 0;
+
+                if (data->EventKey == ImGuiKey_UpArrow)
+                {
+                    if (idx < 0)
+                        idx = static_cast<int>(history.size()) - 1;
+                    else if (idx > 0)
+                        idx--;
+                }
+                else if (data->EventKey == ImGuiKey_DownArrow)
+                {
+                    if (idx >= 0)
+                    {
+                        idx++;
+                        if (idx >= static_cast<int>(history.size()))
+                            idx = -1;
+                    }
+                }
+
+                data->DeleteChars(0, data->BufTextLen);
+                if (idx >= 0)
+                    data->InsertChars(0, history[idx].c_str());
+            }
+            return 0;
+        };
+
         ImGui::InputTextMultiline("##input", m_inputBuf, sizeof(m_inputBuf),
                                   ImVec2(inputWidth, inputHeight),
-                                  ImGuiInputTextFlags_None);
+                                  ImGuiInputTextFlags_CallbackCharFilter | ImGuiInputTextFlags_CallbackHistory,
+                                  inputCallback, &cbData);
         bool inputActive = ImGui::IsItemActive();
         if (inputActive && ImGui::IsKeyPressed(ImGuiKey_Enter) && !ImGui::GetIO().KeyShift)
-        {
             submit = true;
-            // Remove the newline that was just inserted by the input widget
-            size_t len = std::strlen(m_inputBuf);
-            if (len > 0 && m_inputBuf[len - 1] == '\n')
-                m_inputBuf[len - 1] = '\0';
-        }
         ImGui::EndDisabled();
         ImGui::SameLine();
         if (busy)
@@ -2168,6 +2597,8 @@ namespace pe
     {
         const std::string text(m_inputBuf);
         m_inputBuf[0] = '\0';
+        m_inputHistory.push_back(text);
+        m_historyIndex = -1;
         {
             std::lock_guard lock(m_chatMutex);
             m_chat.push_back({ChatMessage::Role::User, text});
@@ -2220,6 +2651,13 @@ namespace pe
             m_chat.push_back({ChatMessage::Role::System, "[calling: " + ev.tool_name + "]"});
             m_scrollToBottom = true;
             break;
+        case pagent::AgentEventType::ToolCallComplete:
+        {
+            if (!ev.tool_input_json.empty())
+                m_chat.push_back({ChatMessage::Role::System, ev.tool_input_json});
+            m_scrollToBottom = true;
+            break;
+        }
         case pagent::AgentEventType::Usage:
             break; // handled internally by Agent::Impl::Poll()
         case pagent::AgentEventType::TurnComplete:

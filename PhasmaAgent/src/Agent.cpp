@@ -273,11 +273,15 @@ namespace pagent
         try
         {
             auto j = json::parse(responseBody);
-            if (j.contains("data") && j["data"].is_array())
+            // OpenAI uses "data", Gemini uses "models"
+            std::string arrayKey = (j.contains("models") && j["models"].is_array()) ? "models" : "data";
+            if (j.contains(arrayKey) && j[arrayKey].is_array())
             {
-                for (const auto &m : j["data"])
+                for (const auto &m : j[arrayKey])
                 {
                     std::string id = m.value("id", "");
+                    if (id.empty())
+                        id = m.value("name", ""); // Gemini uses "name" instead of "id"
                     if (id.empty())
                         continue;
 

@@ -18,4 +18,17 @@ function init()
     run_surface_tests()
     run_swapchain_tests()
     run_vertex_tests()
+
+    -- Editor-level bindings
+    run_camera_tests()
+    run_engine_tests()
+    run_light_tests()
+    run_material_tests()
+    run_model_tests()
+    run_particle_tests()
+    run_scene_tests()
+    run_settings_tests()
+    run_skybox_tests()
+    run_shader_file_tests()
+    run_filesystem_tests()
 end

@@ -64,5 +64,9 @@ namespace pe
         std::string m_streamingThinking;
         std::mutex m_actionMutex;
         std::vector<std::function<void()>> m_pendingActions;
+
+        // Input history (up/down arrow)
+        std::vector<std::string> m_inputHistory;
+        int m_historyIndex = -1;
     };
 } // namespace pe

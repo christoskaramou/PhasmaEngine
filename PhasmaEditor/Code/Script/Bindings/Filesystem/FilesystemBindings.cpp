@@ -1,0 +1,140 @@
+#if defined(PE_SCRIPTS)
+#include "Script/ScriptSystem.h"
+#include "Script/Bindings/BindingUtils.h"
+
+namespace pe
+{
+    static struct FilesystemBindings
+    {
+        FilesystemBindings()
+        {
+            ScriptSystem::AddBindings([](sol::state &lua)
+                                      {
+                lua["assets_path"] = Path::Assets;
+
+                sol::table fs = lua.create_named_table("fs");
+
+                fs.set_function("find", [&lua](const std::string &query, sol::optional<std::string> root) -> sol::table {
+                    sol::table result = lua.create_table();
+                    if (query.empty()) return result;
+
+                    std::filesystem::path rootDir = root.has_value() ? ResolveAssetsPath(root.value()) : std::filesystem::path(Path::Assets);
+
+                    if (!IsUnderAssets(rootDir))
+                        return result;
+
+                    if (!std::filesystem::exists(rootDir))
+                        return result;
+
+                    std::string queryLower = query;
+                    for (auto &c : queryLower)
+                        c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+
+                    int i = 1;
+                    for (const auto &entry : std::filesystem::recursive_directory_iterator(
+                             rootDir, std::filesystem::directory_options::skip_permission_denied))
+                    {
+                        if (!entry.is_regular_file())
+                            continue;
+
+                        std::string name = entry.path().filename().string();
+                        std::string nameLower = name;
+                        for (auto &c : nameLower)
+                            c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+
+                        if (nameLower.find(queryLower) == std::string::npos)
+                            continue;
+
+                        std::string fullPath = entry.path().string();
+                        std::replace(fullPath.begin(), fullPath.end(), '\\', '/');
+                        result[i++] = fullPath;
+
+                        if (i > 50) break;
+                    }
+                    return result;
+                });
+
+                fs.set_function("list", [&lua](const std::string &path) -> sol::table {
+                    sol::table result = lua.create_table();
+                    if (path.empty()) return result;
+
+                    std::filesystem::path fpath = ResolveAssetsPath(path);
+
+                    if (!IsUnderAssets(fpath))
+                        return result;
+
+                    if (!std::filesystem::exists(fpath) || !std::filesystem::is_directory(fpath))
+                        return result;
+
+                    sol::table files = lua.create_table();
+                    sol::table dirs = lua.create_table();
+                    int fi = 1, di = 1;
+
+                    for (const auto &entry : std::filesystem::directory_iterator(fpath))
+                    {
+                        std::string name = entry.path().filename().string();
+                        if (entry.is_directory())
+                            dirs[di++] = name;
+                        else
+                            files[fi++] = name;
+                    }
+
+                    std::string resolvedPath = fpath.string();
+                    std::replace(resolvedPath.begin(), resolvedPath.end(), '\\', '/');
+                    result["path"] = resolvedPath;
+                    result["files"] = files;
+                    result["dirs"] = dirs;
+                    return result;
+                });
+
+                fs.set_function("read", [](const std::string &path) -> sol::optional<std::string> {
+                    if (path.empty()) return sol::nullopt;
+
+                    std::filesystem::path fpath = ResolveAssetsPath(path);
+
+                    if (!IsUnderAssets(fpath))
+                        return sol::nullopt;
+
+                    if (!std::filesystem::exists(fpath))
+                        return sol::nullopt;
+
+                    std::ifstream file(fpath, std::ios::in);
+                    if (!file.is_open())
+                        return sol::nullopt;
+
+                    return std::string(std::istreambuf_iterator<char>(file),
+                                      std::istreambuf_iterator<char>());
+                });
+
+                fs.set_function("write", [](const std::string &path, const std::string &content, sol::optional<bool> append) -> bool {
+                    if (path.empty() || content.empty()) return false;
+
+                    std::filesystem::path fpath = ResolveAssetsPath(path);
+
+                    if (!IsUnderAssets(fpath))
+                        return false;
+
+                    // Create parent directories if needed
+                    std::filesystem::path parentDir = fpath.parent_path();
+                    if (!parentDir.empty() && !std::filesystem::exists(parentDir))
+                    {
+                        std::error_code ec;
+                        std::filesystem::create_directories(parentDir, ec);
+                        if (ec) return false;
+                    }
+
+                    auto flags = std::ios::out;
+                    if (append.has_value() && append.value())
+                        flags |= std::ios::app;
+                    else
+                        flags |= std::ios::trunc;
+
+                    std::ofstream file(fpath, flags);
+                    if (!file.is_open()) return false;
+                    file << content;
+                    return true;
+                }); });
+        }
+    } s_filesystemBindings;
+} // namespace pe
+#endif

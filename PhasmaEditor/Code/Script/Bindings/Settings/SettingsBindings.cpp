@@ -18,6 +18,11 @@ namespace pe
         {"draw_aabbs", &GlobalSettings::draw_aabbs},
         {"day", &GlobalSettings::day},
         {"frustum_culling", &GlobalSettings::frustum_culling},
+        {"randomize_lights", &GlobalSettings::randomize_lights},
+        {"use_Disney_PBR", &GlobalSettings::use_Disney_PBR},
+        {"freeze_frustum_culling", &GlobalSettings::freeze_frustum_culling},
+        {"aabbs_depth_aware", &GlobalSettings::aabbs_depth_aware},
+        {"dynamic_rendering", &GlobalSettings::dynamic_rendering},
     };
 
     static const std::unordered_map<std::string_view, float GlobalSettings::*> s_floatSettings = {
@@ -33,12 +38,27 @@ namespace pe
         {"time_scale", &GlobalSettings::time_scale},
     };
 
+    static const std::unordered_map<std::string_view, int GlobalSettings::*> s_intSettings = {
+        {"motion_blur_samples", &GlobalSettings::motion_blur_samples},
+    };
+
+    static const std::unordered_map<std::string_view, uint32_t GlobalSettings::*> s_uint32Settings = {
+        {"shadow_map_size", &GlobalSettings::shadow_map_size},
+        {"num_cascades", &GlobalSettings::num_cascades},
+    };
+
+    static const std::unordered_map<std::string_view, RenderMode> s_renderModeMap = {
+        {"raster", RenderMode::Raster},
+        {"hybrid", RenderMode::Hybrid},
+        {"ray_tracing", RenderMode::RayTracing},
+    };
+
     static struct SettingsBindings
     {
         SettingsBindings()
         {
             ScriptSystem::AddBindings([](sol::state &lua)
-                                       {
+                                      {
                 sol::table settings_table = lua.create_named_table("settings");
 
                 settings_table.set_function("get", [&lua](const std::string &name) -> sol::object {
@@ -49,6 +69,12 @@ namespace pe
                     auto fIt = s_floatSettings.find(std::string_view(name));
                     if (fIt != s_floatSettings.end())
                         return sol::make_object(lua, gs.*(fIt->second));
+                    auto uIt = s_uint32Settings.find(std::string_view(name));
+                    if (uIt != s_uint32Settings.end())
+                        return sol::make_object(lua, gs.*(uIt->second));
+                    auto iIt = s_intSettings.find(std::string_view(name));
+                    if (iIt != s_intSettings.end())
+                        return sol::make_object(lua, gs.*(iIt->second));
                     return sol::nil;
                 });
 
@@ -62,10 +88,57 @@ namespace pe
                     }
                     else if (value.is<float>() || value.is<double>())
                     {
-                        auto it = s_floatSettings.find(std::string_view(name));
-                        if (it != s_floatSettings.end())
-                            gs.*(it->second) = value.as<float>();
+                        auto fIt = s_floatSettings.find(std::string_view(name));
+                        if (fIt != s_floatSettings.end())
+                        {
+                            gs.*(fIt->second) = value.as<float>();
+                            return;
+                        }
+                        auto uIt = s_uint32Settings.find(std::string_view(name));
+                        if (uIt != s_uint32Settings.end())
+                        {
+                            gs.*(uIt->second) = static_cast<uint32_t>(value.as<double>());
+                            return;
+                        }
+                        auto iIt = s_intSettings.find(std::string_view(name));
+                        if (iIt != s_intSettings.end())
+                            gs.*(iIt->second) = static_cast<int>(value.as<double>());
                     }
+                });
+
+                settings_table.set_function("get_render_mode", [](void) -> std::string {
+                    auto &gs = Settings::Get<GlobalSettings>();
+                    switch (gs.render_mode)
+                    {
+                    case RenderMode::Raster: return "raster";
+                    case RenderMode::Hybrid: return "hybrid";
+                    case RenderMode::RayTracing: return "ray_tracing";
+                    default: return "hybrid";
+                    }
+                });
+
+                settings_table.set_function("set_render_mode", [](const std::string &mode) {
+                    auto it = s_renderModeMap.find(std::string_view(mode));
+                    if (it != s_renderModeMap.end())
+                        Settings::Get<GlobalSettings>().render_mode = it->second;
+                });
+
+                settings_table.set_function("is_ray_tracing_supported", []() -> bool {
+                    return Settings::Get<GlobalSettings>().ray_tracing_support;
+                });
+
+                settings_table.set_function("get_depth_bias", [&lua]() -> sol::table {
+                    auto &gs = Settings::Get<GlobalSettings>();
+                    sol::table t = lua.create_table();
+                    t[1] = gs.depth_bias[0];
+                    t[2] = gs.depth_bias[1];
+                    t[3] = gs.depth_bias[2];
+                    return t;
+                });
+
+                settings_table.set_function("set_depth_bias", [](float a, float b, float c) {
+                    auto &gs = Settings::Get<GlobalSettings>();
+                    gs.depth_bias = {a, b, c};
                 }); });
         }
     } s_settingsBindings;

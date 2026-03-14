@@ -1647,13 +1647,9 @@ namespace pe
             return;
         }
 
-        // Clear existing scene
-        std::vector<Model *> modelsToRemove;
+        // Clear existing scene via events (processed on main thread)
         for (auto *model : m_models)
-            modelsToRemove.push_back(model);
-
-        for (auto *model : modelsToRemove)
-            RemoveModel(model);
+            EventSystem::PushEvent(EventType::ModelRemoved, model);
 
         auto *lightSystem = GetGlobalSystem<LightSystem>();
         if (lightSystem)
@@ -1880,7 +1876,7 @@ namespace pe
                         }
                     }
 
-                    AddModel(model);
+                    EventSystem::PushEvent(EventType::ModelLoaded, model);
                 }
             }
 

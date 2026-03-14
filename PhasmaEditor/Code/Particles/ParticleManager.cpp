@@ -13,20 +13,7 @@ namespace pe
 
     ParticleManager::~ParticleManager()
     {
-        if (m_particleBuffer)
-        {
-            Buffer::Destroy(m_particleBuffer);
-            m_particleBuffer = nullptr;
-        }
-        if (m_emitterBuffer)
-        {
-            Buffer::Destroy(m_emitterBuffer);
-            m_emitterBuffer = nullptr;
-        }
-        for (auto *img : m_textures)
-            Image::Destroy(img);
-        m_textures.clear();
-        Sampler::Destroy(m_sampler);
+        Destroy();
     }
 
     void ParticleManager::Init()
@@ -247,5 +234,26 @@ namespace pe
 
     void ParticleManager::Destroy()
     {
+        if (m_particleBuffer)
+        {
+            Buffer::Destroy(m_particleBuffer);
+            m_particleBuffer = nullptr;
+        }
+        if (m_emitterBuffer)
+        {
+            Buffer::Destroy(m_emitterBuffer);
+            m_emitterBuffer = nullptr;
+        }
+        for (auto *img : m_textures)
+            Image::Destroy(img);
+        m_textures.clear();
+        m_textureNames.clear();
+        if (m_sampler)
+        {
+            Sampler::Destroy(m_sampler);
+            m_sampler = nullptr;
+        }
+        m_emitters.clear();
+        m_emitterNames.clear();
     }
 } // namespace pe

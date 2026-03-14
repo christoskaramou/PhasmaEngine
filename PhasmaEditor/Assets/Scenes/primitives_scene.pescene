@@ -1,0 +1,2022 @@
+{
+    "settings": {
+        "shadows": true,
+        "shadow_map_size": 2048,
+        "num_cascades": 4,
+        "render_scale": 0.75,
+        "ssao": true,
+        "fxaa": false,
+        "taa": true,
+        "cas_sharpening": true,
+        "cas_sharpness": 0.5,
+        "ssr": false,
+        "tonemapping": false,
+        "dof": false,
+        "dof_focus_scale": 15.0,
+        "dof_blur_range": 5.0,
+        "bloom": false,
+        "bloom_strength": 1.0,
+        "bloom_range": 1.0,
+        "motion_blur": true,
+        "motion_blur_strength": 1.0,
+        "motion_blur_samples": 16,
+        "IBL": true,
+        "IBL_intensity": 0.4,
+        "lights_intensity": 1.0,
+        "day": true,
+        "depth_bias": [
+            0.0,
+            0.0,
+            -6.199999
+        ],
+        "draw_grid": true,
+        "draw_aabbs": false,
+        "render_mode": 1
+    },
+    "models": [
+        {
+            "primitive_type": "sphere",
+            "name": "stickman_head",
+            "matrix": [
+                1.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                1.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                1.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                1.0
+            ],
+            "nodes": [
+                {
+                    "name": "Model_19",
+                    "parent": -1,
+                    "local_matrix": [
+                        1.0,
+                        0.0,
+                        0.0,
+                        0.0,
+                        0.0,
+                        1.0,
+                        0.0,
+                        0.0,
+                        0.0,
+                        0.0,
+                        1.0,
+                        0.0,
+                        0.0,
+                        4.0,
+                        0.0,
+                        1.0
+                    ]
+                }
+            ],
+            "meshes": [
+                {
+                    "render_type": 1,
+                    "texture_mask": 0,
+                    "material_factors": [
+                        [
+                            1.0,
+                            0.8,
+                            0.6,
+                            1.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            1.0,
+                            1.0,
+                            0.5,
+                            1.0,
+                            0.0,
+                            1.0,
+                            0.0,
+                            0.0
+                        ],
+                        [
+                            1.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            1.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            1.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            1.0
+                        ]
+                    ],
+                    "textures": {
+                        "base_color": "../Objects/white.png",
+                        "metallic_roughness": "../Objects/normal.png",
+                        "normal": "../Objects/white.png",
+                        "occlusion": "../Objects/white.png",
+                        "emissive": "../Objects/black.png"
+                    }
+                }
+            ]
+        },
+        {
+            "primitive_type": "cylinder",
+            "name": "stickman_body",
+            "matrix": [
+                1.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                1.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                1.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                1.0
+            ],
+            "nodes": [
+                {
+                    "name": "Model_20",
+                    "parent": -1,
+                    "local_matrix": [
+                        1.0,
+                        0.0,
+                        0.0,
+                        0.0,
+                        0.0,
+                        1.0,
+                        0.0,
+                        0.0,
+                        0.0,
+                        0.0,
+                        1.0,
+                        0.0,
+                        0.0,
+                        2.5,
+                        0.0,
+                        1.0
+                    ]
+                }
+            ],
+            "meshes": [
+                {
+                    "render_type": 1,
+                    "texture_mask": 0,
+                    "material_factors": [
+                        [
+                            0.2,
+                            0.6,
+                            0.8,
+                            1.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            1.0,
+                            1.0,
+                            0.5,
+                            1.0,
+                            0.0,
+                            1.0,
+                            0.0,
+                            0.0
+                        ],
+                        [
+                            1.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            1.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            1.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            1.0
+                        ]
+                    ],
+                    "textures": {
+                        "base_color": "../Objects/white.png",
+                        "metallic_roughness": "../Objects/normal.png",
+                        "normal": "../Objects/white.png",
+                        "occlusion": "../Objects/white.png",
+                        "emissive": "../Objects/black.png"
+                    }
+                }
+            ]
+        },
+        {
+            "primitive_type": "cylinder",
+            "name": "stickman_arm_left",
+            "matrix": [
+                1.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                1.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                1.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                1.0
+            ],
+            "nodes": [
+                {
+                    "name": "Model_21",
+                    "parent": -1,
+                    "local_matrix": [
+                        0.707106,
+                        0.707106,
+                        0.0,
+                        0.0,
+                        -0.707106,
+                        0.707106,
+                        0.0,
+                        0.0,
+                        0.0,
+                        0.0,
+                        1.0,
+                        0.0,
+                        -0.699999,
+                        3.5,
+                        0.0,
+                        1.0
+                    ]
+                }
+            ],
+            "meshes": [
+                {
+                    "render_type": 1,
+                    "texture_mask": 0,
+                    "material_factors": [
+                        [
+                            0.2,
+                            0.6,
+                            0.8,
+                            1.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            1.0,
+                            1.0,
+                            0.5,
+                            1.0,
+                            0.0,
+                            1.0,
+                            0.0,
+                            0.0
+                        ],
+                        [
+                            1.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            1.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            1.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            1.0
+                        ]
+                    ],
+                    "textures": {
+                        "base_color": "../Objects/white.png",
+                        "metallic_roughness": "../Objects/normal.png",
+                        "normal": "../Objects/white.png",
+                        "occlusion": "../Objects/white.png",
+                        "emissive": "../Objects/black.png"
+                    }
+                }
+            ]
+        },
+        {
+            "primitive_type": "cylinder",
+            "name": "stickman_arm_right",
+            "matrix": [
+                1.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                1.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                1.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                1.0
+            ],
+            "nodes": [
+                {
+                    "name": "Model_22",
+                    "parent": -1,
+                    "local_matrix": [
+                        0.707106,
+                        -0.707106,
+                        0.0,
+                        0.0,
+                        0.707106,
+                        0.707106,
+                        0.0,
+                        0.0,
+                        0.0,
+                        0.0,
+                        1.0,
+                        0.0,
+                        0.699999,
+                        3.5,
+                        0.0,
+                        1.0
+                    ]
+                }
+            ],
+            "meshes": [
+                {
+                    "render_type": 1,
+                    "texture_mask": 0,
+                    "material_factors": [
+                        [
+                            0.2,
+                            0.6,
+                            0.8,
+                            1.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            1.0,
+                            1.0,
+                            0.5,
+                            1.0,
+                            0.0,
+                            1.0,
+                            0.0,
+                            0.0
+                        ],
+                        [
+                            1.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            1.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            1.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            1.0
+                        ]
+                    ],
+                    "textures": {
+                        "base_color": "../Objects/white.png",
+                        "metallic_roughness": "../Objects/normal.png",
+                        "normal": "../Objects/white.png",
+                        "occlusion": "../Objects/white.png",
+                        "emissive": "../Objects/black.png"
+                    }
+                }
+            ]
+        },
+        {
+            "primitive_type": "cylinder",
+            "name": "stickman_leg_left",
+            "matrix": [
+                1.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                1.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                1.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                1.0
+            ],
+            "nodes": [
+                {
+                    "name": "Model_23",
+                    "parent": -1,
+                    "local_matrix": [
+                        0.984807,
+                        -0.173648,
+                        0.0,
+                        0.0,
+                        0.173648,
+                        0.984807,
+                        0.0,
+                        0.0,
+                        0.0,
+                        0.0,
+                        1.0,
+                        0.0,
+                        -0.3,
+                        1.0,
+                        0.0,
+                        1.0
+                    ]
+                }
+            ],
+            "meshes": [
+                {
+                    "render_type": 1,
+                    "texture_mask": 0,
+                    "material_factors": [
+                        [
+                            0.4,
+                            0.2,
+                            0.1,
+                            1.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            1.0,
+                            1.0,
+                            0.5,
+                            1.0,
+                            0.0,
+                            1.0,
+                            0.0,
+                            0.0
+                        ],
+                        [
+                            1.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            1.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            1.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            1.0
+                        ]
+                    ],
+                    "textures": {
+                        "base_color": "../Objects/white.png",
+                        "metallic_roughness": "../Objects/normal.png",
+                        "normal": "../Objects/white.png",
+                        "occlusion": "../Objects/white.png",
+                        "emissive": "../Objects/black.png"
+                    }
+                }
+            ]
+        },
+        {
+            "primitive_type": "cylinder",
+            "name": "stickman_leg_right",
+            "matrix": [
+                1.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                1.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                1.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                1.0
+            ],
+            "nodes": [
+                {
+                    "name": "Model_24",
+                    "parent": -1,
+                    "local_matrix": [
+                        0.984807,
+                        0.173648,
+                        0.0,
+                        0.0,
+                        -0.173648,
+                        0.984807,
+                        0.0,
+                        0.0,
+                        0.0,
+                        0.0,
+                        1.0,
+                        0.0,
+                        0.3,
+                        1.0,
+                        0.0,
+                        1.0
+                    ]
+                }
+            ],
+            "meshes": [
+                {
+                    "render_type": 1,
+                    "texture_mask": 0,
+                    "material_factors": [
+                        [
+                            0.4,
+                            0.2,
+                            0.1,
+                            1.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            1.0,
+                            1.0,
+                            0.5,
+                            1.0,
+                            0.0,
+                            1.0,
+                            0.0,
+                            0.0
+                        ],
+                        [
+                            1.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            1.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            1.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            1.0
+                        ]
+                    ],
+                    "textures": {
+                        "base_color": "../Objects/white.png",
+                        "metallic_roughness": "../Objects/normal.png",
+                        "normal": "../Objects/white.png",
+                        "occlusion": "../Objects/white.png",
+                        "emissive": "../Objects/black.png"
+                    }
+                }
+            ]
+        },
+        {
+            "primitive_type": "cylinder",
+            "name": "tree_trunk",
+            "matrix": [
+                1.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                1.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                1.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                1.0
+            ],
+            "nodes": [
+                {
+                    "name": "Model_25",
+                    "parent": -1,
+                    "local_matrix": [
+                        1.0,
+                        0.0,
+                        0.0,
+                        0.0,
+                        0.0,
+                        1.0,
+                        0.0,
+                        0.0,
+                        0.0,
+                        0.0,
+                        1.0,
+                        0.0,
+                        5.0,
+                        2.5,
+                        0.0,
+                        1.0
+                    ]
+                }
+            ],
+            "meshes": [
+                {
+                    "render_type": 1,
+                    "texture_mask": 0,
+                    "material_factors": [
+                        [
+                            0.5,
+                            0.3,
+                            0.1,
+                            1.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            1.0,
+                            1.0,
+                            0.5,
+                            1.0,
+                            0.0,
+                            1.0,
+                            0.0,
+                            0.0
+                        ],
+                        [
+                            1.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            1.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            1.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            1.0
+                        ]
+                    ],
+                    "textures": {
+                        "base_color": "../Objects/white.png",
+                        "metallic_roughness": "../Objects/normal.png",
+                        "normal": "../Objects/white.png",
+                        "occlusion": "../Objects/white.png",
+                        "emissive": "../Objects/black.png"
+                    }
+                }
+            ]
+        },
+        {
+            "primitive_type": "sphere",
+            "name": "tree_leaves",
+            "matrix": [
+                1.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                1.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                1.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                1.0
+            ],
+            "nodes": [
+                {
+                    "name": "Model_26",
+                    "parent": -1,
+                    "local_matrix": [
+                        1.0,
+                        0.0,
+                        0.0,
+                        0.0,
+                        0.0,
+                        1.0,
+                        0.0,
+                        0.0,
+                        0.0,
+                        0.0,
+                        1.0,
+                        0.0,
+                        5.0,
+                        6.0,
+                        0.0,
+                        1.0
+                    ]
+                }
+            ],
+            "meshes": [
+                {
+                    "render_type": 1,
+                    "texture_mask": 0,
+                    "material_factors": [
+                        [
+                            0.2,
+                            0.699999,
+                            0.3,
+                            1.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            1.0,
+                            1.0,
+                            0.5,
+                            1.0,
+                            0.0,
+                            1.0,
+                            0.0,
+                            0.0
+                        ],
+                        [
+                            1.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            1.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            1.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            1.0
+                        ]
+                    ],
+                    "textures": {
+                        "base_color": "../Objects/white.png",
+                        "metallic_roughness": "../Objects/normal.png",
+                        "normal": "../Objects/white.png",
+                        "occlusion": "../Objects/white.png",
+                        "emissive": "../Objects/black.png"
+                    }
+                }
+            ]
+        },
+        {
+            "primitive_type": "cube",
+            "name": "car_body",
+            "matrix": [
+                1.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                1.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                1.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                1.0
+            ],
+            "nodes": [
+                {
+                    "name": "Model_27",
+                    "parent": -1,
+                    "local_matrix": [
+                        1.0,
+                        0.0,
+                        0.0,
+                        0.0,
+                        0.0,
+                        1.0,
+                        0.0,
+                        0.0,
+                        0.0,
+                        0.0,
+                        1.0,
+                        0.0,
+                        -7.0,
+                        1.25,
+                        0.0,
+                        1.0
+                    ]
+                }
+            ],
+            "meshes": [
+                {
+                    "render_type": 1,
+                    "texture_mask": 0,
+                    "material_factors": [
+                        [
+                            0.8,
+                            0.2,
+                            0.2,
+                            1.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            1.0,
+                            1.0,
+                            0.5,
+                            1.0,
+                            0.0,
+                            1.0,
+                            0.0,
+                            0.0
+                        ],
+                        [
+                            1.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            1.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            1.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            1.0
+                        ]
+                    ],
+                    "textures": {
+                        "base_color": "../Objects/white.png",
+                        "metallic_roughness": "../Objects/normal.png",
+                        "normal": "../Objects/white.png",
+                        "occlusion": "../Objects/white.png",
+                        "emissive": "../Objects/black.png"
+                    }
+                }
+            ]
+        },
+        {
+            "primitive_type": "cylinder",
+            "name": "car_wheel_fl",
+            "matrix": [
+                1.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                1.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                1.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                1.0
+            ],
+            "nodes": [
+                {
+                    "name": "Model_28",
+                    "parent": -1,
+                    "local_matrix": [
+                        1.0,
+                        0.0,
+                        0.0,
+                        0.0,
+                        0.0,
+                        0.0,
+                        0.999999,
+                        0.0,
+                        0.0,
+                        -0.999999,
+                        0.0,
+                        0.0,
+                        -8.5,
+                        0.5,
+                        1.1,
+                        1.0
+                    ]
+                }
+            ],
+            "meshes": [
+                {
+                    "render_type": 1,
+                    "texture_mask": 0,
+                    "material_factors": [
+                        [
+                            0.2,
+                            0.2,
+                            0.2,
+                            1.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            1.0,
+                            1.0,
+                            0.5,
+                            1.0,
+                            0.0,
+                            1.0,
+                            0.0,
+                            0.0
+                        ],
+                        [
+                            1.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            1.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            1.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            1.0
+                        ]
+                    ],
+                    "textures": {
+                        "base_color": "../Objects/white.png",
+                        "metallic_roughness": "../Objects/normal.png",
+                        "normal": "../Objects/white.png",
+                        "occlusion": "../Objects/white.png",
+                        "emissive": "../Objects/black.png"
+                    }
+                }
+            ]
+        },
+        {
+            "primitive_type": "cylinder",
+            "name": "car_wheel_fr",
+            "matrix": [
+                1.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                1.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                1.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                1.0
+            ],
+            "nodes": [
+                {
+                    "name": "Model_29",
+                    "parent": -1,
+                    "local_matrix": [
+                        1.0,
+                        0.0,
+                        0.0,
+                        0.0,
+                        0.0,
+                        0.0,
+                        0.999999,
+                        0.0,
+                        0.0,
+                        -0.999999,
+                        0.0,
+                        0.0,
+                        -8.5,
+                        0.5,
+                        -1.1,
+                        1.0
+                    ]
+                }
+            ],
+            "meshes": [
+                {
+                    "render_type": 1,
+                    "texture_mask": 0,
+                    "material_factors": [
+                        [
+                            0.2,
+                            0.2,
+                            0.2,
+                            1.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            1.0,
+                            1.0,
+                            0.5,
+                            1.0,
+                            0.0,
+                            1.0,
+                            0.0,
+                            0.0
+                        ],
+                        [
+                            1.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            1.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            1.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            1.0
+                        ]
+                    ],
+                    "textures": {
+                        "base_color": "../Objects/white.png",
+                        "metallic_roughness": "../Objects/normal.png",
+                        "normal": "../Objects/white.png",
+                        "occlusion": "../Objects/white.png",
+                        "emissive": "../Objects/black.png"
+                    }
+                }
+            ]
+        },
+        {
+            "primitive_type": "cylinder",
+            "name": "car_wheel_bl",
+            "matrix": [
+                1.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                1.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                1.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                1.0
+            ],
+            "nodes": [
+                {
+                    "name": "Model_30",
+                    "parent": -1,
+                    "local_matrix": [
+                        1.0,
+                        0.0,
+                        0.0,
+                        0.0,
+                        0.0,
+                        0.0,
+                        0.999999,
+                        0.0,
+                        0.0,
+                        -0.999999,
+                        0.0,
+                        0.0,
+                        -5.5,
+                        0.5,
+                        1.1,
+                        1.0
+                    ]
+                }
+            ],
+            "meshes": [
+                {
+                    "render_type": 1,
+                    "texture_mask": 0,
+                    "material_factors": [
+                        [
+                            0.2,
+                            0.2,
+                            0.2,
+                            1.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            1.0,
+                            1.0,
+                            0.5,
+                            1.0,
+                            0.0,
+                            1.0,
+                            0.0,
+                            0.0
+                        ],
+                        [
+                            1.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            1.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            1.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            1.0
+                        ]
+                    ],
+                    "textures": {
+                        "base_color": "../Objects/white.png",
+                        "metallic_roughness": "../Objects/normal.png",
+                        "normal": "../Objects/white.png",
+                        "occlusion": "../Objects/white.png",
+                        "emissive": "../Objects/black.png"
+                    }
+                }
+            ]
+        },
+        {
+            "primitive_type": "cylinder",
+            "name": "car_wheel_br",
+            "matrix": [
+                1.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                1.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                1.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                1.0
+            ],
+            "nodes": [
+                {
+                    "name": "Model_31",
+                    "parent": -1,
+                    "local_matrix": [
+                        1.0,
+                        0.0,
+                        0.0,
+                        0.0,
+                        0.0,
+                        0.0,
+                        0.999999,
+                        0.0,
+                        0.0,
+                        -0.999999,
+                        0.0,
+                        0.0,
+                        -5.5,
+                        0.5,
+                        -1.1,
+                        1.0
+                    ]
+                }
+            ],
+            "meshes": [
+                {
+                    "render_type": 1,
+                    "texture_mask": 0,
+                    "material_factors": [
+                        [
+                            0.2,
+                            0.2,
+                            0.2,
+                            1.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            1.0,
+                            1.0,
+                            0.5,
+                            1.0,
+                            0.0,
+                            1.0,
+                            0.0,
+                            0.0
+                        ],
+                        [
+                            1.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            1.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            1.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            1.0
+                        ]
+                    ],
+                    "textures": {
+                        "base_color": "../Objects/white.png",
+                        "metallic_roughness": "../Objects/normal.png",
+                        "normal": "../Objects/white.png",
+                        "occlusion": "../Objects/white.png",
+                        "emissive": "../Objects/black.png"
+                    }
+                }
+            ]
+        },
+        {
+            "primitive_type": "cube",
+            "name": "car_windshield",
+            "matrix": [
+                1.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                1.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                1.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                1.0
+            ],
+            "nodes": [
+                {
+                    "name": "Model_32",
+                    "parent": -1,
+                    "local_matrix": [
+                        1.0,
+                        0.0,
+                        0.0,
+                        0.0,
+                        0.0,
+                        1.0,
+                        0.0,
+                        0.0,
+                        0.0,
+                        0.0,
+                        1.0,
+                        0.0,
+                        -7.8,
+                        2.2,
+                        0.0,
+                        1.0
+                    ]
+                }
+            ],
+            "meshes": [
+                {
+                    "render_type": 1,
+                    "texture_mask": 0,
+                    "material_factors": [
+                        [
+                            0.6,
+                            0.8,
+                            1.0,
+                            0.699999,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            1.0,
+                            1.0,
+                            0.5,
+                            1.0,
+                            0.0,
+                            1.0,
+                            0.0,
+                            0.0
+                        ],
+                        [
+                            1.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            1.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            1.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            1.0
+                        ]
+                    ],
+                    "textures": {
+                        "base_color": "../Objects/white.png",
+                        "metallic_roughness": "../Objects/normal.png",
+                        "normal": "../Objects/white.png",
+                        "occlusion": "../Objects/white.png",
+                        "emissive": "../Objects/black.png"
+                    }
+                }
+            ]
+        },
+        {
+            "primitive_type": "cylinder",
+            "name": "bike_frame_main",
+            "matrix": [
+                1.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                1.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                1.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                1.0
+            ],
+            "nodes": [
+                {
+                    "name": "Model_33",
+                    "parent": -1,
+                    "local_matrix": [
+                        0.866025,
+                        0.5,
+                        0.0,
+                        0.0,
+                        -0.5,
+                        0.866025,
+                        0.0,
+                        0.0,
+                        0.0,
+                        0.0,
+                        1.0,
+                        0.0,
+                        0.0,
+                        1.5,
+                        5.0,
+                        1.0
+                    ]
+                }
+            ],
+            "meshes": [
+                {
+                    "render_type": 1,
+                    "texture_mask": 0,
+                    "material_factors": [
+                        [
+                            0.1,
+                            0.1,
+                            0.1,
+                            1.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            1.0,
+                            1.0,
+                            0.5,
+                            1.0,
+                            0.0,
+                            1.0,
+                            0.0,
+                            0.0
+                        ],
+                        [
+                            1.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            1.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            1.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            1.0
+                        ]
+                    ],
+                    "textures": {
+                        "base_color": "../Objects/white.png",
+                        "metallic_roughness": "../Objects/normal.png",
+                        "normal": "../Objects/white.png",
+                        "occlusion": "../Objects/white.png",
+                        "emissive": "../Objects/black.png"
+                    }
+                }
+            ]
+        },
+        {
+            "primitive_type": "cylinder",
+            "name": "bike_frame_seat_post",
+            "matrix": [
+                1.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                1.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                1.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                1.0
+            ],
+            "nodes": [
+                {
+                    "name": "Model_34",
+                    "parent": -1,
+                    "local_matrix": [
+                        0.5,
+                        -0.866025,
+                        0.0,
+                        0.0,
+                        0.866025,
+                        0.5,
+                        0.0,
+                        0.0,
+                        0.0,
+                        0.0,
+                        1.0,
+                        0.0,
+                        0.5,
+                        2.5,
+                        5.0,
+                        1.0
+                    ]
+                }
+            ],
+            "meshes": [
+                {
+                    "render_type": 1,
+                    "texture_mask": 0,
+                    "material_factors": [
+                        [
+                            0.1,
+                            0.1,
+                            0.1,
+                            1.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            1.0,
+                            1.0,
+                            0.5,
+                            1.0,
+                            0.0,
+                            1.0,
+                            0.0,
+                            0.0
+                        ],
+                        [
+                            1.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            1.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            1.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            1.0
+                        ]
+                    ],
+                    "textures": {
+                        "base_color": "../Objects/white.png",
+                        "metallic_roughness": "../Objects/normal.png",
+                        "normal": "../Objects/white.png",
+                        "occlusion": "../Objects/white.png",
+                        "emissive": "../Objects/black.png"
+                    }
+                }
+            ]
+        },
+        {
+            "primitive_type": "cube",
+            "name": "bike_seat",
+            "matrix": [
+                1.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                1.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                1.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                1.0
+            ],
+            "nodes": [
+                {
+                    "name": "Model_35",
+                    "parent": -1,
+                    "local_matrix": [
+                        1.0,
+                        0.0,
+                        0.0,
+                        0.0,
+                        0.0,
+                        1.0,
+                        0.0,
+                        0.0,
+                        0.0,
+                        0.0,
+                        1.0,
+                        0.0,
+                        0.899999,
+                        3.099999,
+                        5.0,
+                        1.0
+                    ]
+                }
+            ],
+            "meshes": [
+                {
+                    "render_type": 1,
+                    "texture_mask": 0,
+                    "material_factors": [
+                        [
+                            0.3,
+                            0.1,
+                            0.1,
+                            1.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            1.0,
+                            1.0,
+                            0.5,
+                            1.0,
+                            0.0,
+                            1.0,
+                            0.0,
+                            0.0
+                        ],
+                        [
+                            1.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            1.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            1.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            1.0
+                        ]
+                    ],
+                    "textures": {
+                        "base_color": "../Objects/white.png",
+                        "metallic_roughness": "../Objects/normal.png",
+                        "normal": "../Objects/white.png",
+                        "occlusion": "../Objects/white.png",
+                        "emissive": "../Objects/black.png"
+                    }
+                }
+            ]
+        },
+        {
+            "primitive_type": "cylinder",
+            "name": "bike_handle_bar",
+            "matrix": [
+                1.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                1.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                1.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                1.0
+            ],
+            "nodes": [
+                {
+                    "name": "Model_36",
+                    "parent": -1,
+                    "local_matrix": [
+                        1.0,
+                        0.0,
+                        0.0,
+                        0.0,
+                        0.0,
+                        0.0,
+                        0.999999,
+                        0.0,
+                        0.0,
+                        -0.999999,
+                        0.0,
+                        0.0,
+                        -1.2,
+                        2.799999,
+                        5.0,
+                        1.0
+                    ]
+                }
+            ],
+            "meshes": [
+                {
+                    "render_type": 1,
+                    "texture_mask": 0,
+                    "material_factors": [
+                        [
+                            0.1,
+                            0.1,
+                            0.1,
+                            1.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            1.0,
+                            1.0,
+                            0.5,
+                            1.0,
+                            0.0,
+                            1.0,
+                            0.0,
+                            0.0
+                        ],
+                        [
+                            1.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            1.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            1.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            1.0
+                        ]
+                    ],
+                    "textures": {
+                        "base_color": "../Objects/white.png",
+                        "metallic_roughness": "../Objects/normal.png",
+                        "normal": "../Objects/white.png",
+                        "occlusion": "../Objects/white.png",
+                        "emissive": "../Objects/black.png"
+                    }
+                }
+            ]
+        },
+        {
+            "primitive_type": "cylinder",
+            "name": "bike_wheel_front",
+            "matrix": [
+                1.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                1.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                1.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                1.0
+            ],
+            "nodes": [
+                {
+                    "name": "Model_37",
+                    "parent": -1,
+                    "local_matrix": [
+                        0.0,
+                        0.999999,
+                        0.0,
+                        0.0,
+                        -0.999999,
+                        0.0,
+                        0.0,
+                        0.0,
+                        0.0,
+                        0.0,
+                        1.0,
+                        0.0,
+                        -1.5,
+                        1.0,
+                        5.0,
+                        1.0
+                    ]
+                }
+            ],
+            "meshes": [
+                {
+                    "render_type": 1,
+                    "texture_mask": 0,
+                    "material_factors": [
+                        [
+                            0.2,
+                            0.2,
+                            0.2,
+                            1.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            1.0,
+                            1.0,
+                            0.5,
+                            1.0,
+                            0.0,
+                            1.0,
+                            0.0,
+                            0.0
+                        ],
+                        [
+                            1.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            1.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            1.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            1.0
+                        ]
+                    ],
+                    "textures": {
+                        "base_color": "../Objects/white.png",
+                        "metallic_roughness": "../Objects/normal.png",
+                        "normal": "../Objects/white.png",
+                        "occlusion": "../Objects/white.png",
+                        "emissive": "../Objects/black.png"
+                    }
+                }
+            ]
+        },
+        {
+            "primitive_type": "cylinder",
+            "name": "bike_wheel_back",
+            "matrix": [
+                1.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                1.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                1.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                1.0
+            ],
+            "nodes": [
+                {
+                    "name": "Model_38",
+                    "parent": -1,
+                    "local_matrix": [
+                        0.0,
+                        0.999999,
+                        0.0,
+                        0.0,
+                        -0.999999,
+                        0.0,
+                        0.0,
+                        0.0,
+                        0.0,
+                        0.0,
+                        1.0,
+                        0.0,
+                        1.5,
+                        1.0,
+                        5.0,
+                        1.0
+                    ]
+                }
+            ],
+            "meshes": [
+                {
+                    "render_type": 1,
+                    "texture_mask": 0,
+                    "material_factors": [
+                        [
+                            0.2,
+                            0.2,
+                            0.2,
+                            1.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            1.0,
+                            1.0,
+                            0.5,
+                            1.0,
+                            0.0,
+                            1.0,
+                            0.0,
+                            0.0
+                        ],
+                        [
+                            1.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            1.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            1.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            1.0
+                        ]
+                    ],
+                    "textures": {
+                        "base_color": "../Objects/white.png",
+                        "metallic_roughness": "../Objects/normal.png",
+                        "normal": "../Objects/white.png",
+                        "occlusion": "../Objects/white.png",
+                        "emissive": "../Objects/black.png"
+                    }
+                }
+            ]
+        }
+    ],
+    "lights": [
+        {
+            "type": "directional",
+            "color": [
+                1.0,
+                1.0,
+                0.5,
+                0.5
+            ],
+            "position": [
+                0.0,
+                1.0,
+                0.0,
+                0.0
+            ],
+            "rotation": [
+                -0.707723,
+                0.0,
+                0.0,
+                0.706489
+            ],
+            "name": "Directional Light 2"
+        }
+    ],
+    "cameras": [
+        {
+            "name": "Camera_3",
+            "position": [
+                -3.33375,
+                5.359655,
+                3.829978
+            ],
+            "euler": [
+                0.549627,
+                -4.414452,
+                0.0
+            ],
+            "fovx": 1.518436,
+            "near_plane": 0.004999,
+            "far_plane": 3.4028234663852886e38,
+            "speed": 3.5
+        }
+    ],
+    "active_camera": 0
+}

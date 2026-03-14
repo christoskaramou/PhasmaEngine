@@ -47,6 +47,34 @@ namespace pagent
                     out += '\t';
                 else if (next == 'r')
                     out += '\r';
+                else if (next == 'u' && i + 4 < s.size())
+                {
+                    // Handle \uXXXX unicode escapes
+                    std::string hex = s.substr(i + 1, 4);
+                    try
+                    {
+                        unsigned long cp = std::stoul(hex, nullptr, 16);
+                        if (cp < 0x80)
+                            out += static_cast<char>(cp);
+                        else if (cp < 0x800)
+                        {
+                            out += static_cast<char>(0xC0 | (cp >> 6));
+                            out += static_cast<char>(0x80 | (cp & 0x3F));
+                        }
+                        else
+                        {
+                            out += static_cast<char>(0xE0 | (cp >> 12));
+                            out += static_cast<char>(0x80 | ((cp >> 6) & 0x3F));
+                            out += static_cast<char>(0x80 | (cp & 0x3F));
+                        }
+                        i += 4;
+                    }
+                    catch (...)
+                    {
+                        out += '\\';
+                        out += next;
+                    }
+                }
                 else
                 {
                     out += '\\';
@@ -84,10 +112,22 @@ namespace pagent
         pos = args.find('"', pos + needle.size() + 1);
         if (pos == std::string::npos)
             return "";
-        auto end = args.find('"', pos + 1);
-        if (end == std::string::npos)
+        // Walk forward skipping escaped characters to find the real closing quote
+        size_t i = pos + 1;
+        while (i < args.size())
+        {
+            if (args[i] == '\\')
+            {
+                i += 2; // skip escaped char
+                continue;
+            }
+            if (args[i] == '"')
+                break;
+            ++i;
+        }
+        if (i >= args.size())
             return "";
-        return args.substr(pos + 1, end - pos - 1);
+        return args.substr(pos + 1, i - pos - 1);
     }
 
     // extract a JSON number value by key from a flat tool-call args object

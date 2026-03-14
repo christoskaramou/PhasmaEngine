@@ -26,7 +26,7 @@ namespace pe
         m_lua.set_function("pe_warn", [](const std::string &msg)
                            { PE_WARN("[Lua] %s", msg.c_str()); });
         m_lua.set_function("pe_error", [](const std::string &msg)
-                           { PE_ERROR("[Lua] %s", msg.c_str()); });
+                           { Log::Error("[Lua] " + msg); });
 
         // Execute all registered binding functions
         for (auto &fn : GetBindings())
@@ -103,6 +103,64 @@ namespace pe
     {
         static std::vector<LuaBindingFunc> bindings;
         return bindings;
+    }
+
+    std::string ScriptSystem::ExecuteLua(const std::string &code)
+    {
+        if (!m_initialized)
+            return "error: ScriptSystem not initialized";
+
+        // Temporarily redirect pe_log output to capture buffer
+        std::string captured;
+        sol::function originalLog = m_lua["pe_log"];
+
+        m_lua.set_function("pe_log", [&captured](const std::string &msg)
+                           {
+            if (!captured.empty()) captured += "\n";
+            captured += msg; });
+
+        auto result = m_lua.safe_script(code, sol::script_pass_on_error);
+
+        // Restore original pe_log
+        m_lua["pe_log"] = originalLog;
+
+        if (!result.valid())
+        {
+            sol::error err = result;
+            return "error: " + std::string(err.what());
+        }
+
+        // Append return value if any
+        if (result.get_type() != sol::type::none && result.get_type() != sol::type::nil)
+        {
+            std::string retVal;
+            try
+            {
+                sol::object obj = result;
+                if (obj.is<std::string>())
+                    retVal = obj.as<std::string>();
+                else if (obj.is<double>())
+                    retVal = std::to_string(obj.as<double>());
+                else if (obj.is<bool>())
+                    retVal = obj.as<bool>() ? "true" : "false";
+                else
+                    retVal = "(value)";
+            }
+            catch (...)
+            {
+                retVal = "(value)";
+            }
+
+            if (!captured.empty())
+                captured += "\nreturn: " + retVal;
+            else
+                captured = retVal;
+        }
+
+        if (captured.empty())
+            captured = "ok";
+
+        return captured;
     }
 
     void ScriptSystem::LoadScripts()

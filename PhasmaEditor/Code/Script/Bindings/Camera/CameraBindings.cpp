@@ -10,7 +10,7 @@ namespace pe
         CameraBindings()
         {
             ScriptSystem::AddBindings([](sol::state &lua)
-                                       {
+                                      {
                 lua.new_usertype<Camera>("Camera",
                     sol::no_constructor,
                     "get_position", &Camera::GetPosition,
@@ -28,8 +28,20 @@ namespace pe
                     "set_far", &Camera::SetFarPlane,
                     "get_speed", &Camera::GetSpeed,
                     "set_speed", &Camera::SetSpeed,
+                    "get_rotation_speed", &Camera::GetRotationSpeed,
+                    "set_rotation_speed", &Camera::SetRotationSpeed,
                     "get_name", &Camera::GetName,
-                    "set_name", &Camera::SetName);
+                    "set_name", &Camera::SetName,
+                    "get_aspect", &Camera::GetAspect,
+                    "get_view", &Camera::GetView,
+                    "get_projection", &Camera::GetProjection,
+                    "get_view_projection", &Camera::GetViewProjection,
+                    "get_inv_view", &Camera::GetInvView,
+                    "get_inv_projection", &Camera::GetInvProjection,
+                    "get_jitter", &Camera::GetProjJitter,
+                    "set_jitter", &Camera::SetProjJitter,
+                    "get_prev_jitter", &Camera::GetPrevProjJitter,
+                    "set_prev_jitter", &Camera::SetPrevProjJitter);
 
                 lua.set_function("get_camera", []() -> Camera * {
                     auto *r = GetGlobalSystem<RendererSystem>();

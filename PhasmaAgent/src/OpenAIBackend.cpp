@@ -20,8 +20,8 @@ namespace pagent
             json j = {{"role", "assistant"}};
             if (!msg.content.empty())
                 j["content"] = msg.content;
-            else
-                j["content"] = nullptr;
+            else if (msg.tool_calls.empty())
+                j["content"] = "";
 
             if (!msg.tool_calls.empty())
             {

@@ -114,7 +114,6 @@ namespace pe
             return nullptr;
         }
 
-        EventSystem::PushEvent(EventType::ModelLoaded, model);
         PE_INFO("Loaded model: %s", fileStr.c_str());
         return model;
     }
@@ -312,7 +311,8 @@ namespace pe
             if (!rawImg)
                 return ResourceHandle<Image>();
 
-            std::shared_ptr<Image> sharedImage(rawImg, [](Image *img) { Image::Destroy(img); });
+            std::shared_ptr<Image> sharedImage(rawImg, [](Image *img)
+                                               { Image::Destroy(img); });
             ResourceManager::Get().Register<Image>(normalizedStr, sharedImage);
             handle = ResourceHandle<Image>(sharedImage);
         }
