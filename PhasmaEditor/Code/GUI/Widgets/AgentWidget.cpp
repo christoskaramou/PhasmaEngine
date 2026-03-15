@@ -35,7 +35,10 @@ namespace pe
         m_providers = pagent::DiscoverProviders();
         // Add "External" provider (file-based, for Claude Code / Cursor / any AI tool)
         m_providers.push_back({pagent::Provider::Ollama, "External", "", "external"});
-        m_selectedProviderIndex = pagent::GetDefaultProviderIndex(m_providers);
+        // Default to External unless PAGENT_PROVIDER is explicitly set
+        const char *providerEnv = std::getenv("PAGENT_PROVIDER");
+        m_selectedProviderIndex = providerEnv ? pagent::GetDefaultProviderIndex(m_providers)
+                                              : static_cast<int>(m_providers.size()) - 1;
         ConfigureAgent(m_providers[m_selectedProviderIndex].provider);
     }
 
@@ -73,7 +76,8 @@ namespace pe
             "Rules: ASCII only, no emoji. Be very concise. Show Lua before executing. "
             "Chain ALL operations in ONE execute_lua call. Check results for errors. "
             "Set unique labels on created models. Use request_feature for missing capabilities. "
-            "Workspace: " + Path::Assets + "Agent/ | Assets: " + Path::Assets + ".";
+            "Workspace: " +
+            Path::Assets + "Agent/ | Assets: " + Path::Assets + ".";
         config.log_callback = [](const std::string &msg)
         { PE_INFO("%s", msg.c_str()); };
         config.max_tool_rounds = 10;
@@ -2329,9 +2333,7 @@ namespace pe
                 }
                 if (ImGui::IsItemHovered())
                 {
-                    std::string responseFile = std::filesystem::path(m_externalFile).stem().string()
-                                               + "_response"
-                                               + std::filesystem::path(m_externalFile).extension().string();
+                    std::string responseFile = std::filesystem::path(m_externalFile).stem().string() + "_response" + std::filesystem::path(m_externalFile).extension().string();
                     ImGui::SetTooltip(
                         "File-based IPC for external AI tools (Claude Code, Cursor, etc.).\n\n"
                         "How it works:\n"
@@ -2699,7 +2701,8 @@ namespace pe
 
         // Watch response file
         FileWatcher::Add(responsePath, [this](size_t)
-                         { QueueAction([this]() { PollExternalResponse(); }); });
+                         { QueueAction([this]()
+                                       { PollExternalResponse(); }); });
     }
 
     void AgentWidget::PollExternalResponse()
@@ -2751,7 +2754,7 @@ namespace pe
         std::lock_guard lock(m_chatMutex);
         for (const auto &msg : m_chat)
         {
-            const char *role = msg.role == ChatMessage::Role::User      ? "USER"
+            const char *role = msg.role == ChatMessage::Role::User        ? "USER"
                                : msg.role == ChatMessage::Role::Assistant ? "ASSISTANT"
                                                                           : "SYSTEM";
             f << "[" << role << "]\n"

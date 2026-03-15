@@ -2,6 +2,20 @@
 
 On start: read MEMORY.md, TASKS.md. On multi-step tasks: update TASKS.md, PROGRESSION.md, MEMORY.md.
 
+## External AI (File-based IPC)
+
+Default provider. Allows any external AI tool (Claude Code, Cursor, etc.) to communicate with the editor.
+
+**Chat files** (configurable filename in the editor UI):
+- `Assets/Agent/chat_input.txt` - editor writes the user message here
+- `Assets/Agent/chat_input_response.txt` - external tool writes its response here (auto-detected via file watcher)
+- `Assets/Agent/chat_history.txt` - full conversation history (written by editor after each message)
+
+**Script execution** (always at `Assets/Agent/`):
+1. Write Lua code to `command.lua`
+2. Write anything to `command.run` to trigger execution
+3. Read result from `result.txt`
+
 ## Assets Layout
 Objects/ (3D models) | Shaders/ | Skyboxes/ | Particles/ | Scripts/ | Scenes/ | Agent/ | Fonts/ | Icons/
 NO "Models" dir. Use `assets_path` for absolute paths. Use fs.list(".") when unsure.
