@@ -59,20 +59,18 @@ namespace pe
             projectRoot += '/';
 
         config.system_prompt =
-            "You are an AI assistant inside PhasmaEditor, a Vulkan 3D engine editor. "
-            "You control the editor by executing Lua via execute_lua. "
-            "The full Lua API reference is in your START.md instructions. "
-            "Show the Lua script before calling execute_lua. No emoji/Unicode. ASCII only. Be concise. "
-            "Always use execute_lua. Chain operations in one script. Set unique labels on models/primitives. "
-            "ALWAYS check tool results for errors. If a tool returns an 'error' field, stop and report it. "
-            "Use read_project_file to read C++ source. Workspace: " +
-            Path::Assets + "Agent/ (read_file/write_file). "
-                           "Use request_feature for missing capabilities. Project: " +
-            projectRoot + " | Assets: " + Path::Assets + ".";
+            "You are an AI assistant inside PhasmaEditor (Vulkan 3D engine). "
+            "Control the editor via execute_lua. API ref is in START.md. "
+            "Rules: ASCII only, no emoji. Be very concise. Show Lua before executing. "
+            "Chain ALL operations in ONE execute_lua call. Check results for errors. "
+            "Set unique labels on created models. Use request_feature for missing capabilities. "
+            "Workspace: " + Path::Assets + "Agent/ | Assets: " + Path::Assets + ".";
         config.log_callback = [](const std::string &msg)
         { PE_INFO("%s", msg.c_str()); };
-        config.max_tool_rounds = 20;
-        config.max_tool_result_chars = 2000;
+        config.max_tool_rounds = 10;
+        config.max_tool_result_chars = 500;
+        config.max_history_messages = 20;
+        config.summarize_after_messages = 30;
         config.provider = info->provider;
         config.api_key = info->apiKey;
         config.model = info->defaultModel;
@@ -2516,58 +2514,50 @@ namespace pe
         ImGui::BeginDisabled(busy);
         const float inputWidth = ImGui::GetContentRegionAvail().x - 60.0f;
 
-        struct InputCallbackData
-        {
-            std::vector<std::string> *history;
-            int *historyIndex;
-        };
-        InputCallbackData cbData{&m_inputHistory, &m_historyIndex};
-
         auto inputCallback = [](ImGuiInputTextCallbackData *data) -> int
         {
-            auto *cbd = static_cast<InputCallbackData *>(data->UserData);
             if (data->EventFlag == ImGuiInputTextFlags_CallbackCharFilter)
             {
                 // Block Enter (newline) unless Shift is held
                 if (data->EventChar == '\n' && !ImGui::GetIO().KeyShift)
                     return 1;
             }
-            else if (data->EventFlag == ImGuiInputTextFlags_CallbackHistory)
-            {
-                auto &history = *cbd->history;
-                auto &idx = *cbd->historyIndex;
-                if (history.empty())
-                    return 0;
-
-                if (data->EventKey == ImGuiKey_UpArrow)
-                {
-                    if (idx < 0)
-                        idx = static_cast<int>(history.size()) - 1;
-                    else if (idx > 0)
-                        idx--;
-                }
-                else if (data->EventKey == ImGuiKey_DownArrow)
-                {
-                    if (idx >= 0)
-                    {
-                        idx++;
-                        if (idx >= static_cast<int>(history.size()))
-                            idx = -1;
-                    }
-                }
-
-                data->DeleteChars(0, data->BufTextLen);
-                if (idx >= 0)
-                    data->InsertChars(0, history[idx].c_str());
-            }
             return 0;
         };
 
         ImGui::InputTextMultiline("##input", m_inputBuf, sizeof(m_inputBuf),
                                   ImVec2(inputWidth, inputHeight),
-                                  ImGuiInputTextFlags_CallbackCharFilter | ImGuiInputTextFlags_CallbackHistory,
-                                  inputCallback, &cbData);
+                                  ImGuiInputTextFlags_CallbackCharFilter,
+                                  inputCallback, nullptr);
         bool inputActive = ImGui::IsItemActive();
+
+        // Up/Down arrow history (handled outside callback since Multiline + CallbackHistory is not allowed)
+        if (inputActive && !m_inputHistory.empty())
+        {
+            if (ImGui::IsKeyPressed(ImGuiKey_UpArrow))
+            {
+                if (m_historyIndex < 0)
+                    m_historyIndex = static_cast<int>(m_inputHistory.size()) - 1;
+                else if (m_historyIndex > 0)
+                    m_historyIndex--;
+                strncpy(m_inputBuf, m_inputHistory[m_historyIndex].c_str(), sizeof(m_inputBuf) - 1);
+            }
+            else if (ImGui::IsKeyPressed(ImGuiKey_DownArrow))
+            {
+                if (m_historyIndex >= 0)
+                {
+                    m_historyIndex++;
+                    if (m_historyIndex >= static_cast<int>(m_inputHistory.size()))
+                    {
+                        m_historyIndex = -1;
+                        m_inputBuf[0] = '\0';
+                    }
+                    else
+                        strncpy(m_inputBuf, m_inputHistory[m_historyIndex].c_str(), sizeof(m_inputBuf) - 1);
+                }
+            }
+        }
+
         if (inputActive && ImGui::IsKeyPressed(ImGuiKey_Enter) && !ImGui::GetIO().KeyShift)
             submit = true;
         ImGui::EndDisabled();

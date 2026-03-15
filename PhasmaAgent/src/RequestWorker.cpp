@@ -98,6 +98,90 @@ namespace pagent
         }
     }
 
+    void RequestWorker::MaybeSummarize()
+    {
+        if (m_config.summarize_after_messages <= 0)
+            return;
+
+        const size_t count = m_history.EntryCount();
+        if (static_cast<int>(count) <= m_config.summarize_after_messages)
+            return;
+
+        // Keep the most recent half of the threshold as intact messages
+        const size_t keepRecent = static_cast<size_t>(m_config.summarize_after_messages / 2);
+        const auto oldText = m_history.BuildOldMessagesText(keepRecent);
+        if (oldText.empty())
+            return;
+
+        Log("Summarizing conversation (" + std::to_string(count) + " msgs, keeping last " + std::to_string(keepRecent) + ")");
+
+        // Build a minimal summarization request
+        std::vector<NeutralMessage> sumMessages;
+        NeutralMessage userMsg;
+        userMsg.role = NeutralMessage::Role::User;
+        userMsg.content = "Summarize this conversation in 2-3 concise sentences, focusing on what was accomplished and what the user wants:\n\n" + oldText;
+        sumMessages.push_back(std::move(userMsg));
+
+        const std::string body = m_backend->BuildRequestJson(
+            m_config.model, "You are a summarizer. Output only the summary, nothing else.",
+            256, 0.0f, sumMessages, "");
+
+        // Determine host
+        std::string host = m_config.base_url;
+        if (host.empty())
+        {
+            switch (m_config.provider)
+            {
+            case Provider::Anthropic:
+                host = "https://api.anthropic.com";
+                break;
+            case Provider::OpenAI:
+                host = "https://api.openai.com";
+                break;
+            case Provider::Gemini:
+                host = "https://generativelanguage.googleapis.com/v1beta/openai";
+                break;
+            case Provider::Ollama:
+                host = "http://localhost:11434";
+                break;
+            }
+        }
+
+        std::map<std::string, std::string> headers;
+        if (!m_config.api_key.empty())
+        {
+            const auto [authKey, authVal] = m_backend->GetAuthHeader(m_config.api_key);
+            headers[authKey] = authVal;
+        }
+        if (m_config.provider == Provider::Anthropic)
+        {
+            headers["anthropic-version"] = "2023-06-01";
+        }
+
+        std::vector<AgentEvent> events;
+        const auto err = HttpPost(host, m_backend->GetEndpointPath(), headers, body, events);
+
+        if (!err.empty())
+        {
+            Log("Summarization failed: " + err + ", falling back to compaction");
+            return; // Fall back to normal compaction
+        }
+
+        // Extract text from response events
+        std::string summary;
+        for (const auto &ev : events)
+        {
+            if (ev.type == AgentEventType::TextComplete)
+                summary = ev.text;
+        }
+
+        if (!summary.empty())
+        {
+            m_history.ReplaceOldWithSummary(summary, keepRecent);
+            Log("Summarized to: " + std::to_string(summary.size()) + " chars");
+        }
+    }
+
     void RequestWorker::RunAgenticLoop(const std::string &user_message)
     {
         // append the user turn to history.
@@ -107,6 +191,9 @@ namespace pagent
             msg.content = user_message;
             m_history.Append(std::move(msg));
         }
+
+        // Summarize old messages if history is getting large
+        MaybeSummarize();
 
         const int maxRounds = m_config.max_tool_rounds > 0 ? m_config.max_tool_rounds : 10;
 

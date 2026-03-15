@@ -33,6 +33,7 @@ namespace pagent
     private:
         void ThreadFunc();
         void RunAgenticLoop(const std::string &user_message);
+        void MaybeSummarize();
         std::string HttpPost(const std::string &host,
                              const std::string &path,
                              const std::map<std::string, std::string> &headers,

@@ -146,4 +146,70 @@ namespace pagent
         else
             m_entries.insert(m_entries.begin(), {std::move(msg), NowMs()});
     }
+
+    size_t ConversationHistory::EntryCount() const
+    {
+        std::shared_lock lock(m_mutex);
+        return m_entries.size();
+    }
+
+    std::string ConversationHistory::BuildOldMessagesText(size_t keepRecent) const
+    {
+        std::shared_lock lock(m_mutex);
+
+        size_t start = 0;
+        if (!m_entries.empty() && m_entries.front().message.role == NeutralMessage::Role::System)
+            start = 1; // skip system message
+
+        if (m_entries.size() - start <= keepRecent)
+            return {}; // nothing old to summarize
+
+        size_t oldEnd = m_entries.size() - keepRecent;
+        std::string text;
+        for (size_t i = start; i < oldEnd; ++i)
+        {
+            const auto &msg = m_entries[i].message;
+            const char *role = "user";
+            if (msg.role == NeutralMessage::Role::Assistant)
+                role = "assistant";
+            else if (msg.role == NeutralMessage::Role::Tool)
+                role = "tool";
+
+            text += role;
+            text += ": ";
+            if (msg.content.size() > 300)
+                text += msg.content.substr(0, 300) + "...";
+            else
+                text += msg.content;
+            text += "\n";
+
+            // Include tool call names
+            for (const auto &tc : msg.tool_calls)
+                text += "  [called " + tc.name + "]\n";
+        }
+        return text;
+    }
+
+    void ConversationHistory::ReplaceOldWithSummary(const std::string &summary, size_t keepRecent)
+    {
+        std::unique_lock lock(m_mutex);
+
+        size_t start = 0;
+        if (!m_entries.empty() && m_entries.front().message.role == NeutralMessage::Role::System)
+            start = 1;
+
+        if (m_entries.size() - start <= keepRecent)
+            return;
+
+        size_t oldEnd = m_entries.size() - keepRecent;
+
+        // Build the summary message
+        NeutralMessage summaryMsg;
+        summaryMsg.role = NeutralMessage::Role::User;
+        summaryMsg.content = "[Conversation summary: " + summary + "]";
+
+        // Erase old entries and insert summary
+        m_entries.erase(m_entries.begin() + start, m_entries.begin() + oldEnd);
+        m_entries.insert(m_entries.begin() + start, {std::move(summaryMsg), NowMs()});
+    }
 } // namespace pagent

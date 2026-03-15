@@ -234,6 +234,7 @@ namespace pagent
         int max_tool_rounds = 10;         // Hard cap on agentic loop iterations
         int max_history_messages = 40;    // Keep last N messages (0 = unlimited). System message always kept.
         int max_tool_result_chars = 4000; // Truncate tool results beyond this (0 = unlimited)
+        int summarize_after_messages = 0; // Summarize old messages when history exceeds this (0 = disabled)
 
         // Optional: provide your own HTTP transport.
         // When set, httplib and OpenSSL are completely bypassed.

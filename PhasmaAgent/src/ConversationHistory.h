@@ -14,6 +14,11 @@ namespace pagent
         std::vector<HistoryEntry> GetSnapshot() const;
         void Clear();
         void InjectSystem(const std::string &content);
+        size_t EntryCount() const;
+        // Replace all entries before the last keepRecent with a single summary message
+        void ReplaceOldWithSummary(const std::string &summary, size_t keepRecent);
+        // Build a text block from old messages for summarization
+        std::string BuildOldMessagesText(size_t keepRecent) const;
 
     private:
         std::vector<HistoryEntry> m_entries;
