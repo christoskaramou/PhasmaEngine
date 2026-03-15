@@ -73,7 +73,104 @@
                         1.0,
                         0.0,
                         0.0,
-                        4.0,
+                        5.0,
+                        0.0,
+                        1.0
+                    ]
+                }
+            ],
+            "meshes": [
+                {
+                    "render_type": 1,
+                    "texture_mask": 0,
+                    "material_factors": [
+                        [
+                            1.0,
+                            0.8,
+                            0.6,
+                            1.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            1.0,
+                            1.0,
+                            0.5,
+                            1.0,
+                            0.0,
+                            1.0,
+                            0.0,
+                            0.0
+                        ],
+                        [
+                            1.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            1.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            1.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            1.0
+                        ]
+                    ],
+                    "textures": {
+                        "base_color": "../Objects/white.png",
+                        "metallic_roughness": "../Objects/normal.png",
+                        "normal": "../Objects/white.png",
+                        "occlusion": "../Objects/white.png",
+                        "emissive": "../Objects/black.png"
+                    }
+                }
+            ]
+        },
+        {
+            "primitive_type": "cylinder",
+            "name": "stickman_neck",
+            "matrix": [
+                1.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                1.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                1.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                1.0
+            ],
+            "nodes": [
+                {
+                    "name": "Model_25",
+                    "parent": -1,
+                    "local_matrix": [
+                        0.3,
+                        0.0,
+                        0.0,
+                        0.0,
+                        0.0,
+                        0.25,
+                        0.0,
+                        0.0,
+                        0.0,
+                        0.0,
+                        0.3,
+                        0.0,
+                        0.0,
+                        3.75,
                         0.0,
                         1.0
                     ]

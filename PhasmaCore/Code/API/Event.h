@@ -30,8 +30,8 @@ namespace pe
         bool IsSet() const { return m_set; }
 
     private:
-        CommandBuffer *m_cmd;
+        CommandBuffer *m_cmd = nullptr;
         EventSetInfoImage m_infoImage{};
-        bool m_set;
+        bool m_set = false;
     };
 } // namespace pe

@@ -85,7 +85,27 @@ namespace pagent
         // Split into old (compacted) and recent (intact) windows.
         // Recent window: last recentCount messages, always kept intact.
         const size_t recentCount = std::min(total, static_cast<size_t>(maxMessages / 2));
-        const size_t recentStart = m_entries.size() - recentCount;
+        size_t recentStart = m_entries.size() - recentCount;
+
+        // Walk recentStart backward to keep tool-call chains intact.
+        // The OpenAI/Gemini API requires tool result messages to always follow
+        // the assistant message that initiated the tool calls. Splitting a chain
+        // between old (compacted) and recent (intact) windows drops both sides.
+        while (recentStart > start)
+        {
+            if (m_entries[recentStart].message.role == NeutralMessage::Role::Tool)
+            {
+                --recentStart;
+                continue;
+            }
+            if (m_entries[recentStart].message.role == NeutralMessage::Role::Assistant &&
+                !m_entries[recentStart].message.tool_calls.empty())
+            {
+                --recentStart;
+                continue;
+            }
+            break;
+        }
 
         // Old window: everything between start and recentStart, compacted
         for (size_t i = start; i < recentStart; ++i)
@@ -107,16 +127,8 @@ namespace pagent
             out.push_back(msg);
         }
 
-        // Ensure old window doesn't end on an orphaned state.
-        // If the last old message is an assistant, the next (recent) must be user or assistant.
-        // If recent starts with Tool, skip forward to a User message.
-        size_t safeRecent = recentStart;
-        while (safeRecent < m_entries.size() &&
-               m_entries[safeRecent].message.role == NeutralMessage::Role::Tool)
-            ++safeRecent;
-
-        // Recent window: intact
-        for (size_t i = safeRecent; i < m_entries.size(); ++i)
+        // Recent window: intact (tool-call chains are guaranteed complete)
+        for (size_t i = recentStart; i < m_entries.size(); ++i)
             out.push_back(m_entries[i].message);
 
         return out;

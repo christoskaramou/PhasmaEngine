@@ -2,6 +2,7 @@
 
 #if defined(PE_SCRIPTS)
 #include <sol/sol.hpp>
+#include <future>
 
 namespace pe
 {
@@ -9,6 +10,7 @@ namespace pe
 
     class CommandBuffer;
     class Image;
+    class Model;
 
     struct LuaImage
     {
@@ -20,6 +22,12 @@ namespace pe
         Image *Get();
     };
 
+    struct PendingAsyncLoad
+    {
+        std::shared_future<Model *> future;
+        sol::function callback;
+    };
+
     class ScriptSystem : public ISystem
     {
     public:
@@ -27,12 +35,17 @@ namespace pe
         void Update() override;
         void Destroy() override;
         void Reload();
+        void CallInit();
 
         sol::state &GetLua() { return m_lua; }
         bool IsInitialized() const { return m_initialized; }
 
         // Execute Lua code and return captured output + return value
         std::string ExecuteLua(const std::string &code);
+
+        // Async model loading coroutine support
+        void AddPendingAsyncLoad(PendingAsyncLoad load);
+        void ProcessAsyncLoads();
 
         static void AddBindings(LuaBindingFunc func);
 
@@ -42,6 +55,7 @@ namespace pe
 
         sol::state m_lua{};
         std::vector<std::string> m_scriptPaths{};
+        std::vector<PendingAsyncLoad> m_pendingAsyncLoads;
         bool m_initialized = false;
     };
 } // namespace pe

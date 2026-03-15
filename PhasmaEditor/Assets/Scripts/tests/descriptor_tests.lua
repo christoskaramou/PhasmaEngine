@@ -62,10 +62,11 @@ function run_descriptor_tests()
     T.check("create_descriptor (storage)", desc2 ~= nil)
 
     local buf2 = create_buffer(512, "storage", "host_write|mapped", "test_desc_ssbo")
-    desc2:set_buffers(0, {buf, buf2})
+    local buf3 = create_buffer(256, "storage", "host_write|mapped", "test_desc_ssbo2")
+    desc2:set_buffers(0, {buf2, buf3})
     T.check("set_buffers", true)
 
-    desc2:set_buffers(0, {buf}, {0}, {256})
+    desc2:set_buffers(0, {buf2}, {0}, {256})
     T.check("set_buffers (with offsets + ranges)", true)
 
     desc2:update()
@@ -95,6 +96,7 @@ function run_descriptor_tests()
     destroy_descriptor(desc3)
     destroy_buffer(buf)
     destroy_buffer(buf2)
+    destroy_buffer(buf3)
 
     T.summary("Descriptor API Tests")
 end

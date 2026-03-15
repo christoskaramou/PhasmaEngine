@@ -1,6 +1,8 @@
 #if defined(PE_SCRIPTS)
 #include "ScriptSystem.h"
 #include "GUI/GUIState.h"
+#include "Scene/Model.h"
+#include "Systems/RendererSystem.h"
 
 namespace pe
 {
@@ -34,6 +36,11 @@ namespace pe
 
         LoadScripts();
 
+        m_initialized = true;
+    }
+
+    void ScriptSystem::CallInit()
+    {
         sol::protected_function initFn = m_lua["init"];
         if (initFn.valid())
         {
@@ -44,12 +51,55 @@ namespace pe
                 PE_ERROR("Lua init() error: %s", err.what());
             }
         }
+    }
 
-        m_initialized = true;
+    void ScriptSystem::AddPendingAsyncLoad(PendingAsyncLoad load)
+    {
+        m_pendingAsyncLoads.push_back(std::move(load));
+    }
+
+    void ScriptSystem::ProcessAsyncLoads()
+    {
+        for (auto it = m_pendingAsyncLoads.begin(); it != m_pendingAsyncLoads.end();)
+        {
+            if (it->future.wait_for(std::chrono::seconds(0)) != std::future_status::ready)
+            {
+                ++it;
+                continue;
+            }
+
+            Model *model = it->future.get();
+            if (model)
+            {
+                auto *r = GetGlobalSystem<RendererSystem>();
+                if (r)
+                {
+                    r->WaitAllFramesCommands();
+                    r->GetScene().AddModel(model);
+                    r->GetScene().UpdateGeometryBuffers();
+                    model->SetRenderReady(true);
+                }
+            }
+
+            if (it->callback.valid())
+            {
+                auto res = it->callback(model);
+                if (!res.valid())
+                {
+                    sol::error err = res;
+                    PE_ERROR("Lua async callback error: %s", err.what());
+                }
+            }
+
+            it = m_pendingAsyncLoads.erase(it);
+        }
     }
 
     void ScriptSystem::Update()
     {
+        // Process completed async model loads
+        ProcessAsyncLoads();
+
         if (!GUIState::s_playMode || GUIState::s_isPaused)
             return;
 
@@ -83,6 +133,11 @@ namespace pe
             }
         } // destroyFn released before Lua state reset
 
+        // Wait for any pending async loads before destroying Lua state
+        for (auto &load : m_pendingAsyncLoads)
+            load.future.wait();
+        m_pendingAsyncLoads.clear();
+
         m_scriptPaths.clear();
         m_lua = sol::state();
         m_initialized = false;
@@ -92,6 +147,7 @@ namespace pe
     {
         Destroy();
         Init(nullptr);
+        CallInit();
     }
 
     void ScriptSystem::AddBindings(LuaBindingFunc func)

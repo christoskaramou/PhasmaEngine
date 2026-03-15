@@ -110,6 +110,12 @@ namespace pe
         for (uint32_t i = 0; i < RHII.GetSwapchainImageCount(); i++)
             Frame();
 
+#if defined(PE_SCRIPTS)
+        // Call Lua init() after initial frames so all systems are ready
+        if (auto *ss = GetGlobalSystem<ScriptSystem>())
+            ss->CallInit();
+#endif
+
         m_window->Show();
         m_window->Maximize();
         GetGlobalSystem<RendererSystem>()->GetGUI().ApplyStartupLayout();

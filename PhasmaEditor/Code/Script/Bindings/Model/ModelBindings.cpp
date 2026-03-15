@@ -5,22 +5,35 @@
 #include "Scene/Scene.h"
 #include "Systems/RendererSystem.h"
 #include "Camera/Camera.h"
+#include "Base/ThreadPool.h"
 
 namespace pe
 {
-    // Push events for thread-safe model add/remove (handled on main thread during ProcessEvents)
+    // Add/remove models directly so Lua scripts see immediate results.
+    // Safe: Lua runs on the main thread (init/update), same context as Window::ProcessEvents.
     static void AddModelToScene(Model *model)
     {
         if (!model)
             return;
-        EventSystem::PushEvent(EventType::ModelLoaded, model);
+        auto *r = GetGlobalSystem<RendererSystem>();
+        if (!r)
+            return;
+        r->WaitAllFramesCommands();
+        r->GetScene().AddModel(model);
+        r->GetScene().UpdateGeometryBuffers();
+        model->SetRenderReady(true);
     }
 
     static void RemoveModelFromScene(Model *model)
     {
         if (!model)
             return;
-        EventSystem::PushEvent(EventType::ModelRemoved, model);
+        auto *r = GetGlobalSystem<RendererSystem>();
+        if (!r)
+            return;
+        r->WaitAllFramesCommands();
+        r->GetScene().RemoveModel(model);
+        r->GetScene().UpdateGeometryBuffers();
     }
     static Model *CloneSource(Model &source)
     {
@@ -287,12 +300,33 @@ namespace pe
                 lua.set_function("load_model", [](const std::string &path) -> Model * {
                     std::string fullPath = path;
                     if (path.find('/') == std::string::npos && path.find('\\') == std::string::npos)
-                        fullPath = Path::Assets + "Models/" + path;
+                        fullPath = Path::Assets + "Objects/" + path;
 
                     Model *model = Model::Load(fullPath);
                     if (!model) return nullptr;
                     AddModelToScene(model);
                     return model;
+                });
+
+                // load_model_async(path, callback) - full load on background thread,
+                // scene integration + callback on main thread when ready
+                lua.set_function("load_model_async", [](const std::string &path, sol::function callback) {
+                    std::string fullPath = path;
+                    if (path.find('/') == std::string::npos && path.find('\\') == std::string::npos)
+                        fullPath = Path::Assets + "Objects/" + path;
+
+                    auto future = ThreadPool::General.Enqueue([fullPath]() -> Model * {
+                        return Model::Load(fullPath);
+                    });
+
+                    auto *ss = GetGlobalSystem<ScriptSystem>();
+                    if (ss)
+                    {
+                        PendingAsyncLoad load;
+                        load.future = std::move(future);
+                        load.callback = std::move(callback);
+                        ss->AddPendingAsyncLoad(std::move(load));
+                    }
                 });
 
                 lua.set_function("remove_model", [](Model *model) {

@@ -303,15 +303,33 @@ namespace pagent
             // push all streamed events and collect tool calls + full text
             std::string fullText;
             std::vector<AgentEvent> toolCallCompletes;
+            bool hasContent = false;
 
             for (auto &ev : turnEvents)
             {
                 if (ev.type == AgentEventType::TextComplete)
+                {
                     fullText = ev.text;
+                    hasContent = true;
+                }
                 else if (ev.type == AgentEventType::ToolCallComplete)
+                {
                     toolCallCompletes.push_back(ev);
+                    hasContent = true;
+                }
 
                 PushEvent(ev);
+            }
+
+            // If the response had events (e.g. Usage) but no actual content or tool calls,
+            // the model returned an empty response — likely due to malformed conversation history.
+            if (!hasContent && !turnEvents.empty())
+            {
+                AgentEvent ev;
+                ev.type = AgentEventType::Error;
+                ev.error_message = "Model returned no content (received " + std::to_string(turnEvents.size()) + " metadata-only events). This may indicate a malformed request.";
+                PushEvent(std::move(ev));
+                return;
             }
 
             // build and append the assistant turn to history
@@ -451,7 +469,7 @@ namespace pagent
         {
             // plain HTTP — always available (e.g. Ollama on localhost)
             httplib::Client cli(cleanHost);
-            cli.set_read_timeout(30);
+            cli.set_read_timeout(120);
             {
                 std::lock_guard lock(m_clientMutex);
                 m_stopActiveClient = [&cli]
@@ -472,7 +490,7 @@ namespace pagent
         {
 #ifdef CPPHTTPLIB_OPENSSL_SUPPORT
             httplib::SSLClient cli(cleanHost);
-            cli.set_read_timeout(30);
+            cli.set_read_timeout(120);
             {
                 std::lock_guard lock(m_clientMutex);
                 m_stopActiveClient = [&cli]
@@ -494,7 +512,14 @@ namespace pagent
         }
 
         if (errorMsg.empty() && !responseBody.empty())
+        {
             parser.Feed(responseBody.data(), responseBody.size(), out_events);
+
+            // If streaming response produced no events, the response may be a raw JSON error
+            // (e.g. Gemini returns {"error": {...}} without SSE framing)
+            if (out_events.empty())
+                return "Empty response from API: " + responseBody.substr(0, 500);
+        }
 
         return errorMsg;
     }
