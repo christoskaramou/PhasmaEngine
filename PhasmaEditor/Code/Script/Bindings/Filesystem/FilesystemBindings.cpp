@@ -4,6 +4,15 @@
 
 namespace pe
 {
+    // Convert filesystem path to UTF-8 std::string safely on all platforms.
+    // On Windows, path::string() throws if the path contains characters outside
+    // the current ANSI code page; u8string() always works.
+    static std::string pathToUtf8(const std::filesystem::path &p)
+    {
+        auto u8 = p.u8string();
+        return std::string(u8.begin(), u8.end());
+    }
+
     static struct FilesystemBindings
     {
         FilesystemBindings()
@@ -37,7 +46,7 @@ namespace pe
                         if (!entry.is_regular_file())
                             continue;
 
-                        std::string name = entry.path().filename().string();
+                        std::string name = pathToUtf8(entry.path().filename());
                         std::string nameLower = name;
                         for (auto &c : nameLower)
                             c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
@@ -45,7 +54,7 @@ namespace pe
                         if (nameLower.find(queryLower) == std::string::npos)
                             continue;
 
-                        std::string fullPath = entry.path().string();
+                        std::string fullPath = pathToUtf8(entry.path());
                         std::replace(fullPath.begin(), fullPath.end(), '\\', '/');
                         result[i++] = fullPath;
 
@@ -72,14 +81,14 @@ namespace pe
 
                     for (const auto &entry : std::filesystem::directory_iterator(fpath))
                     {
-                        std::string name = entry.path().filename().string();
+                        std::string name = pathToUtf8(entry.path().filename());
                         if (entry.is_directory())
                             dirs[di++] = name;
                         else
                             files[fi++] = name;
                     }
 
-                    std::string resolvedPath = fpath.string();
+                    std::string resolvedPath = pathToUtf8(fpath);
                     std::replace(resolvedPath.begin(), resolvedPath.end(), '\\', '/');
                     result["path"] = resolvedPath;
                     result["files"] = files;

@@ -2189,9 +2189,10 @@ namespace sol {
 		template <class... Args>
 		T& emplace(Args&&... args) noexcept {
 			static_assert(std::is_constructible<T, Args&&...>::value, "T must be constructible with Args");
-
-			*this = nullopt;
-			this->construct(std::forward<Args>(args)...);
+			// NOTE(pe): upstream sol2 bug — optional<T&> has no construct() method.
+			// emplace on a reference optional is not meaningful; deleted to fix Clang build.
+			static_assert(sizeof(T) == 0, "emplace is not supported for optional<T&>");
+			return *m_value;
 		}
 
 		/// Swaps this optional with the other.

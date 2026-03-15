@@ -119,4 +119,18 @@ if(CMAKE_SYSTEM_NAME STREQUAL "Windows")
         COMMAND ${CMAKE_COMMAND} -E copy_if_different "${CMAKE_CURRENT_SOURCE_DIR}/PhasmaCore/DLLs/shaderc_shared.dll" "$<TARGET_FILE_DIR:PhasmaEditor>"
         COMMAND ${CMAKE_COMMAND} -E copy_if_different "${CMAKE_CURRENT_SOURCE_DIR}/PhasmaCore/DLLs/SDL2.dll" "$<TARGET_FILE_DIR:PhasmaEditor>"
         COMMAND ${CMAKE_COMMAND} -E copy_if_different "${CMAKE_CURRENT_SOURCE_DIR}/PhasmaCore/DLLs/assimp-vc143-mt.dll" "$<TARGET_FILE_DIR:PhasmaEditor>")
+
+    # Copy OpenSSL DLLs if available (OPENSSL_FOUND propagated from PhasmaAgent)
+    if(OPENSSL_FOUND)
+        if(NOT OPENSSL_ROOT_DIR AND DEFINED ENV{OPENSSL_ROOT_DIR})
+            set(OPENSSL_ROOT_DIR "$ENV{OPENSSL_ROOT_DIR}")
+        endif()
+        if(OPENSSL_ROOT_DIR)
+            file(GLOB _OPENSSL_DLLS "${OPENSSL_ROOT_DIR}/bin/libssl*.dll" "${OPENSSL_ROOT_DIR}/bin/libcrypto*.dll")
+            foreach(_dll ${_OPENSSL_DLLS})
+                add_custom_command(TARGET PhasmaEditor POST_BUILD
+                    COMMAND ${CMAKE_COMMAND} -E copy_if_different "${_dll}" "$<TARGET_FILE_DIR:PhasmaEditor>")
+            endforeach()
+        endif()
+    endif()
 endif()

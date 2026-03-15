@@ -26,6 +26,7 @@ if(PAGENT_USE_OPENSSL)
         target_link_libraries(PhasmaAgent PRIVATE OpenSSL::SSL OpenSSL::Crypto)
         target_compile_definitions(PhasmaAgent PRIVATE CPPHTTPLIB_OPENSSL_SUPPORT)
         message(STATUS "[PhasmaAgent] OpenSSL ${OPENSSL_VERSION} found — built-in HTTPS enabled")
+        set(OPENSSL_FOUND TRUE PARENT_SCOPE)
     else()
         message(WARNING "[PhasmaAgent] OpenSSL not found — built-in HTTPS disabled.\n"
             "  Install OpenSSL (vcpkg: vcpkg install openssl:x64-windows) or set OPENSSL_ROOT_DIR,\n"
