@@ -86,7 +86,10 @@ namespace pagent
             body["max_completion_tokens"] = max_tokens;
         else
             body["max_tokens"] = max_tokens;
-        body["temperature"] = temperature;
+
+        // Reasoning models (o-series, gpt-5.x) only support temperature=1
+        if (!useMaxCompletionTokens)
+            body["temperature"] = temperature;
         body["stream"] = true;
         body["stream_options"] = {{"include_usage", true}};
 

@@ -288,13 +288,24 @@ namespace pagent
                     // Filter non-chat models for OpenAI/Gemini
                     if (provider == Provider::OpenAI)
                     {
-                        // Only include chat-capable models (gpt-*, o1-*, o3-*, o4-*, chatgpt-*)
+                        // Only include chat-capable models (gpt-*, o1-*, o3-*, o4-*)
                         bool isChat = id.rfind("gpt-", 0) == 0 ||
                                       id.rfind("o1-", 0) == 0 ||
                                       id.rfind("o3-", 0) == 0 ||
-                                      id.rfind("o4-", 0) == 0 ||
-                                      id.rfind("chatgpt-", 0) == 0;
+                                      id.rfind("o4-", 0) == 0;
                         if (!isChat)
+                            continue;
+
+                        // Skip models that don't support /v1/chat/completions
+                        if (id.find("audio") != std::string::npos ||
+                            id.find("search") != std::string::npos ||
+                            id.find("realtime") != std::string::npos ||
+                            id.find("transcribe") != std::string::npos ||
+                            id.find("tts") != std::string::npos ||
+                            id.find("image") != std::string::npos ||
+                            id.find("codex") != std::string::npos ||
+                            id.find("instruct") != std::string::npos ||
+                            id.find("-pro") != std::string::npos)
                             continue;
                     }
                     else if (provider == Provider::Gemini)
