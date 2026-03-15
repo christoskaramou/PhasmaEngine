@@ -77,7 +77,10 @@ namespace pe
         m_splashScreen = SplashScreen::Create(SDL_WINDOW_SHOWN | SDL_WINDOW_BORDERLESS);
 #endif
 
-        uint32_t flags = SDL_WINDOW_HIDDEN | SDL_WINDOW_RESIZABLE | SDL_WINDOW_ALLOW_HIGHDPI | SDL_WINDOW_VULKAN;
+        uint32_t flags = SDL_WINDOW_HIDDEN |
+                         SDL_WINDOW_RESIZABLE |
+                         SDL_WINDOW_ALLOW_HIGHDPI |
+                         SDL_WINDOW_VULKAN;
 
         SDL_DisplayMode dm;
         SDL_GetDesktopDisplayMode(0, &dm);
@@ -103,11 +106,13 @@ namespace pe
 
         queue->WaitIdle();
 
-        // Render some frames so everything is initialized before destroying the splash screen
+        // Render frames so everything is initialized before destroying the splash screen
         for (uint32_t i = 0; i < RHII.GetSwapchainImageCount(); i++)
             Frame();
 
         m_window->Show();
+        m_window->Maximize();
+        GetGlobalSystem<RendererSystem>()->GetGUI().ApplyStartupLayout();
 
 #ifdef NDEBUG
         SplashScreen::Destroy(m_splashScreen);

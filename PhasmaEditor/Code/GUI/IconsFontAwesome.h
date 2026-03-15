@@ -38,3 +38,5 @@
 #define ICON_FA_PLAY "\xef\x81\x8b"             // f04b - play
 #define ICON_FA_PAUSE "\xef\x81\x8c"            // f04c - pause
 #define ICON_FA_STOP "\xef\x81\x8d"             // f04d - stop
+#define ICON_FA_ROTATE_LEFT "\xef\x8b\xaa"      // f2ea - rotate-left (undo)
+#define ICON_FA_ROTATE_RIGHT "\xef\x8b\xb9"     // f2f9 - rotate-right (redo)

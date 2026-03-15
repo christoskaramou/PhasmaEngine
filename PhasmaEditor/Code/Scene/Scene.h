@@ -39,6 +39,8 @@ namespace pe
         void SetActiveCamera(Camera *camera);
         void SaveScene(const std::filesystem::path &file) const;
         void LoadScene(const std::filesystem::path &file);
+        std::string TakeSnapshot() const;
+        void RestoreSnapshot(const std::string &json);
 
         ParticleManager *GetParticleManager() { return m_particleManager; }
         Camera *GetActiveCamera() const { return m_cameras.at(0); }

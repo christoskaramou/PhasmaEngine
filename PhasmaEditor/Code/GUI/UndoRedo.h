@@ -1,0 +1,33 @@
+#pragma once
+
+namespace pe
+{
+    class Scene;
+
+    class UndoRedo
+    {
+    public:
+        static UndoRedo &Instance();
+
+        // Capture current state and compare with the previous idle snapshot.
+        // If different, push the previous snapshot as an undo entry.
+        void CaptureIdleState(Scene &scene);
+
+        void Undo(Scene &scene);
+        void Redo(Scene &scene);
+
+        bool CanUndo() const { return !m_undoStack.empty(); }
+        bool CanRedo() const { return !m_redoStack.empty(); }
+        void Clear();
+
+    private:
+        UndoRedo() = default;
+
+        std::deque<std::string> m_undoStack;
+        std::deque<std::string> m_redoStack;
+        std::string m_idleSnapshot;
+        bool m_hasIdleSnapshot = false;
+
+        static constexpr size_t MAX_HISTORY = 100;
+    };
+} // namespace pe

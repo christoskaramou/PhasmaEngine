@@ -31,6 +31,7 @@
 #include "Widgets/SceneView.h"
 #include "Widgets/AgentWidget.h"
 #include "Widgets/TransformWidget.h"
+#include "UndoRedo.h"
 #include "imgui/imgui_impl_sdl2.h"
 #include "imgui/imgui_impl_vulkan.h"
 
@@ -228,10 +229,9 @@ namespace pe
         m_dockspaceId = static_cast<uint32_t>(dockspaceId);
         ImGui::DockSpace(dockspaceId, ImVec2(0.0f, 0.0f), dockspaceFlags);
 
-        if (!m_dockspaceInitialized || m_requestDockReset)
+        if (m_requestDockReset)
         {
             ResetDockspaceLayout(m_dockspaceId);
-            m_dockspaceInitialized = true;
             m_requestDockReset = false;
         }
 
@@ -302,8 +302,19 @@ namespace pe
 
             if (ImGui::BeginMenu("Edit"))
             {
-                ImGui::MenuItem("Undo", "Ctrl+Z", false, false);
-                ImGui::MenuItem("Redo", "Ctrl+Y", false, false);
+                auto &undoRedo = UndoRedo::Instance();
+                if (ImGui::MenuItem("Undo", "Ctrl+Z", false, undoRedo.CanUndo()))
+                {
+                    RendererSystem *rs = GetGlobalSystem<RendererSystem>();
+                    if (rs)
+                        undoRedo.Undo(rs->GetScene());
+                }
+                if (ImGui::MenuItem("Redo", "Ctrl+Y", false, undoRedo.CanRedo()))
+                {
+                    RendererSystem *rs = GetGlobalSystem<RendererSystem>();
+                    if (rs)
+                        undoRedo.Redo(rs->GetScene());
+                }
                 ImGui::EndMenu();
             }
 
@@ -454,6 +465,8 @@ namespace pe
             }
         }
         Deduplicate(gSettings.model_list);
+
+        m_hasIniFile = std::filesystem::exists("imgui.ini");
 
         ImGui::CreateContext();
         ImGuiIO &io = ImGui::GetIO();
@@ -685,6 +698,16 @@ namespace pe
         queue->WaitIdle();
     }
 
+    void GUI::ApplyStartupLayout()
+    {
+        SDL_PumpEvents();
+
+        if (m_hasIniFile)
+            ImGui::LoadIniSettingsFromDisk("imgui.ini");
+        else
+            m_requestDockReset = true;
+    }
+
     void GUI::ExecutePass(CommandBuffer *cmd)
     {
         if (!m_render || ImGui::GetDrawData()->TotalVtxCount <= 0)
@@ -763,6 +786,28 @@ namespace pe
         if (currentFont)
             ImGui::PushFont(currentFont);
 
+        // Undo/Redo keyboard shortcuts — only when no text input is focused
+        RendererSystem *undoRedoRS = GetGlobalSystem<RendererSystem>();
+        auto &undoRedo = UndoRedo::Instance();
+        {
+            ImGuiIO &io = ImGui::GetIO();
+            if (!io.WantTextInput && io.KeyCtrl)
+            {
+                if (ImGui::IsKeyPressed(ImGuiKey_Z, false) && !io.KeyShift)
+                {
+                    if (undoRedoRS && undoRedo.CanUndo())
+                        undoRedo.Undo(undoRedoRS->GetScene());
+                }
+                if (ImGui::IsKeyPressed(ImGuiKey_Y, false))
+                {
+                    if (undoRedoRS && undoRedo.CanRedo())
+                        undoRedo.Redo(undoRedoRS->GetScene());
+                }
+                if (io.KeyShift && ImGui::IsKeyPressed(ImGuiKey_L, false))
+                    m_requestDockReset = true;
+            }
+        }
+
         Menu();
         DrawExitPopup();
         Toolbar();
@@ -776,6 +821,26 @@ namespace pe
             if (widget->IsOpen())
                 widget->Update();
         }
+
+        // Undo/Redo auto-capture: detect state changes by comparing idle snapshots.
+        // After any activity, keep capturing for a few idle frames to catch
+        // async changes (e.g. ModelLoaded events processed after GUI update).
+        bool anyActive = ImGui::IsAnyItemActive();
+        if (anyActive)
+            m_idleFramesAfterEdit = 0;
+        if (!anyActive && m_wasAnyItemActive)
+            m_needIdleCapture = true; // Activity just ended, start capturing
+        if (!anyActive && m_needIdleCapture && undoRedoRS)
+        {
+            undoRedo.CaptureIdleState(undoRedoRS->GetScene());
+            m_idleFramesAfterEdit++;
+            if (m_idleFramesAfterEdit >= 3)
+            {
+                m_needIdleCapture = false;
+                m_idleFramesAfterEdit = 0;
+            }
+        }
+        m_wasAnyItemActive = anyActive;
 
         if (currentFont)
             ImGui::PopFont();
@@ -816,6 +881,42 @@ namespace pe
         ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(1, 1, 1, 0.1f));
         ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(1, 1, 1, 0.2f));
         ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(0, 0));
+
+        // Undo/Redo buttons (left side)
+        {
+            auto &ur = UndoRedo::Instance();
+            ImGui::SetCursorPos(ImVec2(8.0f, centerY));
+
+            bool canUndo = ur.CanUndo();
+            if (!canUndo)
+                ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.4f, 0.4f, 0.4f, 1.0f));
+            if (ImGui::Button(ICON_FA_ROTATE_LEFT, ImVec2(buttonSize, buttonSize)) && canUndo)
+            {
+                RendererSystem *rs = GetGlobalSystem<RendererSystem>();
+                if (rs)
+                    ur.Undo(rs->GetScene());
+            }
+            if (ImGui::IsItemHovered())
+                ImGui::SetTooltip("Undo (Ctrl+Z)");
+            if (!canUndo)
+                ImGui::PopStyleColor();
+
+            ImGui::SameLine();
+
+            bool canRedo = ur.CanRedo();
+            if (!canRedo)
+                ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.4f, 0.4f, 0.4f, 1.0f));
+            if (ImGui::Button(ICON_FA_ROTATE_RIGHT, ImVec2(buttonSize, buttonSize)) && canRedo)
+            {
+                RendererSystem *rs = GetGlobalSystem<RendererSystem>();
+                if (rs)
+                    ur.Redo(rs->GetScene());
+            }
+            if (ImGui::IsItemHovered())
+                ImGui::SetTooltip("Redo (Ctrl+Y)");
+            if (!canRedo)
+                ImGui::PopStyleColor();
+        }
 
         if (GUIState::s_playMode)
         {

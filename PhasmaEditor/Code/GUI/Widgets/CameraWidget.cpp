@@ -84,7 +84,6 @@ namespace pe
                 camera->SetPosition(pos);
 
             vec3 euler = degrees(camera->GetEuler());
-            // Avoid gimbal lock issues for display if possible, but for now direct mapping
             vec3 oldEuler = euler;
             DrawVec3Control(ICON_FA_SYNC_ALT "  Rotation", euler);
             if (euler != oldEuler)

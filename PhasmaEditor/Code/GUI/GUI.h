@@ -24,6 +24,10 @@ namespace pe
         bool Render() const { return m_render; }
         void ToggleRender() { m_render = !m_render; }
         void TriggerExitConfirmation() { m_showExitConfirmation = true; }
+        void RequestDockReset() { m_requestDockReset = true; }
+
+        // Called after the window is shown to apply the correct layout
+        void ApplyStartupLayout();
 
         // Thread-safe GpuTimer access
         std::vector<GpuTimerSample> PopGpuTimerInfos();
@@ -63,6 +67,12 @@ namespace pe
         uint32_t m_dockspaceId;
         bool m_dockspaceInitialized;
         bool m_requestDockReset;
+        bool m_hasIniFile = false;
+
+        // Undo/Redo state tracking
+        bool m_wasAnyItemActive = false;
+        bool m_needIdleCapture = true;
+        int m_idleFramesAfterEdit = 0;
         std::vector<GpuTimerSample> m_gpuTimerInfos;
         std::mutex m_timerMutex;
 
