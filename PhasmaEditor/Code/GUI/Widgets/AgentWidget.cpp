@@ -47,25 +47,17 @@ namespace pe
         m_isExternalAI = (info->name == "External");
         if (m_isExternalAI)
         {
-            m_modelName = "external";
-            m_availableModels = {"external"};
+            m_modelName = m_externalFile;
+            m_availableModels = {m_externalFile};
             m_selectedModelIndex = 0;
             m_agentConfigured = true;
 
-            // Ensure files exist
+            // Ensure agent directory exists
             std::string agentDir = Path::Assets + "Agent/";
             if (!std::filesystem::exists(agentDir))
                 std::filesystem::create_directories(agentDir);
-            for (const char *f : {"chat_input.txt", "chat_response.txt"})
-            {
-                std::string path = agentDir + f;
-                if (!std::filesystem::exists(path))
-                    std::ofstream(path).close();
-            }
 
-            // Watch response file
-            FileWatcher::Add(agentDir + "chat_response.txt", [this](size_t)
-                             { QueueAction([this]() { PollExternalResponse(); }); });
+            UpdateExternalFileWatch();
             return;
         }
 
@@ -2325,7 +2317,42 @@ namespace pe
                 ImGui::PopItemWidth();
             }
             ImGui::SameLine();
-            // Model selector combo
+            // Model selector / External file input
+            if (m_isExternalAI)
+            {
+                ImGui::PushItemWidth(200.0f);
+                if (ImGui::InputText("##externalfile", m_externalFile, sizeof(m_externalFile),
+                                     ImGuiInputTextFlags_EnterReturnsTrue))
+                {
+                    m_modelName = m_externalFile;
+                    UpdateExternalFileWatch();
+                }
+                if (ImGui::IsItemHovered())
+                {
+                    std::string responseFile = std::filesystem::path(m_externalFile).stem().string()
+                                               + "_response"
+                                               + std::filesystem::path(m_externalFile).extension().string();
+                    ImGui::SetTooltip(
+                        "File-based IPC for external AI tools (Claude Code, Cursor, etc.).\n\n"
+                        "How it works:\n"
+                        "  1. Your message is written to: Assets/Agent/%s\n"
+                        "  2. An external tool reads that file and writes a response to:\n"
+                        "     Assets/Agent/%s\n"
+                        "  3. The response is picked up automatically via file watcher.\n\n"
+                        "You can rename this file to anything you like.\n"
+                        "Press Enter to apply the new name.",
+                        m_externalFile, responseFile.c_str());
+                }
+                ImGui::SameLine();
+                ImGui::TextDisabled("(?)");
+                if (ImGui::IsItemHovered())
+                    ImGui::SetTooltip(
+                        "External AI provider uses file-based communication.\n"
+                        "Set up a script or AI tool to watch the input file\n"
+                        "and write responses to the corresponding response file.");
+                ImGui::PopItemWidth();
+            }
+            else
             {
                 std::string comboLabel = m_isPulling ? (m_modelName + " (downloading...)") : m_modelName;
                 ImGui::PushItemWidth(200.0f);
@@ -2400,7 +2427,7 @@ namespace pe
                                             }
                                             else if (!hasTools)
                                             {
-                                                // Remove from list — model doesn't support tools
+                                                // Remove from list -- model doesn't support tools
                                                 if (i < static_cast<int>(m_availableModels.size()))
                                                 {
                                                     m_availableModels.erase(m_availableModels.begin() + i);
@@ -2435,7 +2462,8 @@ namespace pe
                         pagent::Agent::CancelPull(m_pullCancel);
                 }
                 // Unload button for Ollama (frees GPU memory)
-                else if (m_providers[m_selectedProviderIndex].provider == pagent::Provider::Ollama)
+                else if (m_providers[m_selectedProviderIndex].provider == pagent::Provider::Ollama &&
+                         !m_isExternalAI)
                 {
                     ImGui::SameLine();
                     if (ImGui::SmallButton("Unload"))
@@ -2585,7 +2613,12 @@ namespace pe
             ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.8f, 0.2f, 0.2f, 1.0f));
             ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(0.5f, 0.1f, 0.1f, 1.0f));
             if (ImGui::Button("Stop", ImVec2(55, 0)))
-                m_agent->CancelPending();
+            {
+                if (m_isExternalAI)
+                    m_isStreaming = false;
+                else
+                    m_agent->CancelPending();
+            }
             ImGui::PopStyleColor(3);
         }
         else
@@ -2615,13 +2648,14 @@ namespace pe
         if (m_isExternalAI)
         {
             // Write user message to file for external AI to read
-            std::string inputPath = Path::Assets + "Agent/chat_input.txt";
+            std::string inputPath = Path::Assets + "Agent/" + m_externalFile;
             std::ofstream f(inputPath, std::ios::trunc);
             f << text;
             f.close();
             // Clear previous response
-            std::ofstream(Path::Assets + "Agent/chat_response.txt", std::ios::trunc).close();
+            std::ofstream(GetExternalResponsePath(), std::ios::trunc).close();
             m_isStreaming = true;
+            WriteExternalHistory();
         }
         else
         {
@@ -2630,12 +2664,50 @@ namespace pe
         ImGui::SetKeyboardFocusHere(-1);
     }
 
+    std::string AgentWidget::GetExternalResponsePath() const
+    {
+        std::filesystem::path p(m_externalFile);
+        std::string parent = p.parent_path().string();
+        std::string stem = p.stem().string();
+        std::string ext = p.extension().string();
+        if (ext.empty())
+            ext = ".txt";
+        std::string rel = (parent.empty() ? "" : parent + "/") + stem + "_response" + ext;
+        return Path::Assets + "Agent/" + rel;
+    }
+
+    void AgentWidget::UpdateExternalFileWatch()
+    {
+        std::string agentDir = Path::Assets + "Agent/";
+        std::string responsePath = GetExternalResponsePath();
+
+        // Remove previous watch if path changed
+        if (!m_externalResponsePath.empty() && m_externalResponsePath != responsePath)
+            FileWatcher::Erase(m_externalResponsePath);
+        m_externalResponsePath = responsePath;
+
+        // Ensure parent directories and files exist
+        std::string inputPath = agentDir + m_externalFile;
+        for (const auto &path : {inputPath, responsePath})
+        {
+            auto parent = std::filesystem::path(path).parent_path();
+            if (!std::filesystem::exists(parent))
+                std::filesystem::create_directories(parent);
+            if (!std::filesystem::exists(path))
+                std::ofstream(path).close();
+        }
+
+        // Watch response file
+        FileWatcher::Add(responsePath, [this](size_t)
+                         { QueueAction([this]() { PollExternalResponse(); }); });
+    }
+
     void AgentWidget::PollExternalResponse()
     {
         if (!m_isExternalAI || !m_isStreaming)
             return;
 
-        std::string responsePath = Path::Assets + "Agent/chat_response.txt";
+        const auto &responsePath = m_externalResponsePath;
         if (!std::filesystem::exists(responsePath))
             return;
 
@@ -2663,6 +2735,28 @@ namespace pe
             m_scrollToBottom = true;
         }
         m_isStreaming = false;
+        WriteExternalHistory();
+    }
+
+    void AgentWidget::WriteExternalHistory()
+    {
+        std::string historyPath = std::filesystem::path(Path::Assets + "Agent/" + m_externalFile)
+                                      .parent_path()
+                                      .string() +
+                                  "/chat_history.txt";
+        std::ofstream f(historyPath, std::ios::trunc);
+        if (!f.is_open())
+            return;
+
+        std::lock_guard lock(m_chatMutex);
+        for (const auto &msg : m_chat)
+        {
+            const char *role = msg.role == ChatMessage::Role::User      ? "USER"
+                               : msg.role == ChatMessage::Role::Assistant ? "ASSISTANT"
+                                                                          : "SYSTEM";
+            f << "[" << role << "]\n"
+              << msg.text << "\n\n";
+        }
     }
 
     void AgentWidget::OnAgentEvent(const pagent::AgentEvent &ev)

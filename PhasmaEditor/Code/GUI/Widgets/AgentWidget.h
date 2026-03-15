@@ -71,6 +71,11 @@ namespace pe
 
         // External AI file-based provider (Claude Code, Cursor, etc.)
         bool m_isExternalAI = false;
+        char m_externalFile[256] = "chat_input.txt";
+        std::string m_externalResponsePath;
         void PollExternalResponse();
+        void UpdateExternalFileWatch();
+        void WriteExternalHistory();
+        std::string GetExternalResponsePath() const;
     };
 } // namespace pe
