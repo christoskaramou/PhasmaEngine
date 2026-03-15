@@ -33,6 +33,7 @@ namespace pe
         void UpdateTLASTransformations(CommandBuffer *cmd); // Update instance transforms and rebuild TLAS
         void AddModel(Model *model);
         void RemoveModel(Model *model);
+        void RemoveModels(std::vector<Model *> models);
         Camera *AddCamera();
         void RemoveCamera(Camera *camera);
         void SetActiveCamera(Camera *camera);

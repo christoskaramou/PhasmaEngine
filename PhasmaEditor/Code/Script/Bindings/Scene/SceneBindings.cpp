@@ -5,6 +5,7 @@
 #include "Scene/SelectionManager.h"
 #include "Camera/Camera.h"
 #include "Systems/RendererSystem.h"
+#include "Systems/LightSystem.h"
 
 namespace pe
 {
@@ -24,6 +25,47 @@ namespace pe
                 scene.set_function("load", [](const std::string &name) {
                     auto *r = GetGlobalSystem<RendererSystem>();
                     if (r) r->GetScene().LoadScene(Path::Assets + "Scenes/" + name);
+                });
+
+                scene.set_function("clear", []() {
+                    auto *r = GetGlobalSystem<RendererSystem>();
+                    if (r)
+                    {
+                        std::vector<Model *> models;
+                        for (auto *m : r->GetScene().GetModels())
+                            models.push_back(m);
+                        if (!models.empty())
+                            EventSystem::PushEvent(EventType::ModelsRemoved, std::move(models));
+                    }
+
+                    auto *ls = GetGlobalSystem<LightSystem>();
+                    if (ls)
+                    {
+                        ls->GetPointLights().clear();
+                        ls->GetDirectionalLights().clear();
+                        ls->GetSpotLights().clear();
+                        ls->GetAreaLights().clear();
+                    }
+
+                    SelectionManager::Instance().ClearSelection();
+                });
+
+                scene.set_function("get_entities", [&lua]() -> sol::as_table_t<std::vector<sol::table>> {
+                    std::vector<sol::table> result;
+                    auto *r = GetGlobalSystem<RendererSystem>();
+                    if (r)
+                    {
+                        for (auto *m : r->GetScene().GetModels())
+                        {
+                            sol::table t = lua.create_table();
+                            t["type"] = "model";
+                            t["model"] = sol::make_object(lua, m);
+                            t["label"] = m->GetLabel();
+                            t["is_primitive"] = m->IsPrimitive();
+                            result.push_back(t);
+                        }
+                    }
+                    return sol::as_table(std::move(result));
                 });
 
                 scene.set_function("get_model_count", []() -> int {

@@ -135,6 +135,27 @@ namespace pe
                         ss->Reload();
                     break;
                 }
+                case EventType::RunCommand:
+                {
+                    auto *ss = GetGlobalSystem<ScriptSystem>();
+                    if (!ss || !ss->IsInitialized())
+                        break;
+
+                    std::string code;
+                    {
+                        std::ifstream f(Path::Assets + "Agent/command.lua");
+                        if (f.is_open())
+                            code.assign(std::istreambuf_iterator<char>(f), {});
+                    }
+
+                    if (!code.empty())
+                    {
+                        std::string result = ss->ExecuteLua(code);
+                        std::ofstream out(Path::Assets + "Agent/result.txt", std::ios::trunc);
+                        out << result;
+                    }
+                    break;
+                }
 #endif
                 case EventType::PresentMode:
                 {
@@ -178,6 +199,16 @@ namespace pe
                         break;
                     rendererSystem->WaitAllFramesCommands();
                     rendererSystem->GetScene().RemoveModel(model);
+                    rendererSystem->GetScene().UpdateGeometryBuffers();
+                    break;
+                }
+                case EventType::ModelsRemoved:
+                {
+                    auto models = std::any_cast<std::vector<Model *>>(event.payload);
+                    if (models.empty())
+                        break;
+                    rendererSystem->WaitAllFramesCommands();
+                    rendererSystem->GetScene().RemoveModels(std::move(models));
                     rendererSystem->GetScene().UpdateGeometryBuffers();
                     break;
                 }

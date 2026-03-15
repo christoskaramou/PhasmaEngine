@@ -145,6 +145,12 @@ namespace pe
             delete model;
     }
 
+    void Scene::RemoveModels(std::vector<Model *> models)
+    {
+        for (Model *model : models)
+            RemoveModel(model);
+    }
+
     Camera *Scene::AddCamera()
     {
         Camera *camera = new Camera();

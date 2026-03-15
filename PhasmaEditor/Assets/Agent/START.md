@@ -28,7 +28,7 @@ Model: get/set_position, get/set_scale, get_rotation, set_transform(pos,rot_deg,
 Bools: shadows,ssao,fxaa,taa,ssr,dof,bloom,motion_blur,tonemapping,IBL,cas_sharpening,draw_grid,draw_aabbs,frustum_culling
 Floats: render_scale,cas_sharpness,dof_focus_scale,dof_blur_range,bloom_strength,bloom_range,IBL_intensity,lights_intensity,time_scale
 
-**Scene**: scene.save/load(name), scene.get_model_count(), scene.get/set_active_camera
+**Scene**: scene.save/load(name), scene.clear(), scene.get_model_count(), scene.get_entities()->[{type,model,label,is_primitive}], scene.get/set_active_camera
 **Selection**: selection.get()->{has_selection,model,node_index,type}, select_node(m,i), select_mesh(m,i), clear(), get/set_gizmo('translate'|'rotate'|'scale')
 **Skybox**: skybox.load(path,[time]), skybox.set_time('day'|'night'), skybox.is_day()
 **Engine**: engine.get_metrics()->{fps,delta_ms}, engine.compile_shaders()

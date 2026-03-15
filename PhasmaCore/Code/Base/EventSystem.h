@@ -16,7 +16,9 @@ namespace pe
         DynamicRendering,
         ModelLoaded,
         ModelRemoved,
+        ModelsRemoved,
         SetRenderMode,
+        RunCommand,
     };
 
     // One key type for both core + dynamic events

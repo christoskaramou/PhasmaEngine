@@ -57,6 +57,19 @@ namespace pe
         }
 
 #endif
+        // Watch for external commands (file-based IPC)
+        // Write script to command.lua, then write anything to command.run to trigger execution
+        {
+            std::string agentDir = Path::Assets + "Agent/";
+            if (!std::filesystem::exists(agentDir))
+                std::filesystem::create_directories(agentDir);
+            std::string triggerFile = agentDir + "command.run";
+            if (!std::filesystem::exists(triggerFile))
+                std::ofstream(triggerFile).close();
+            FileWatcher::Add(triggerFile, [](size_t)
+                             { EventSystem::PushEvent(EventType::RunCommand); });
+        }
+
         FileWatcher::Start();
         EventSystem::Init();
 

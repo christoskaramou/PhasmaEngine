@@ -68,5 +68,9 @@ namespace pe
         // Input history (up/down arrow)
         std::vector<std::string> m_inputHistory;
         int m_historyIndex = -1;
+
+        // External AI file-based provider (Claude Code, Cursor, etc.)
+        bool m_isExternalAI = false;
+        void PollExternalResponse();
     };
 } // namespace pe

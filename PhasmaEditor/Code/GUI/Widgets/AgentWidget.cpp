@@ -33,24 +33,41 @@ namespace pe
         Widget::Init(gui);
 
         m_providers = pagent::DiscoverProviders();
+        // Add "External" provider (file-based, for Claude Code / Cursor / any AI tool)
+        m_providers.push_back({pagent::Provider::Ollama, "External", "", "external"});
         m_selectedProviderIndex = pagent::GetDefaultProviderIndex(m_providers);
         ConfigureAgent(m_providers[m_selectedProviderIndex].provider);
     }
 
     void AgentWidget::ConfigureAgent(pagent::Provider provider)
     {
-        // Find the provider info
-        const pagent::ProviderInfo *info = nullptr;
-        for (const auto &p : m_providers)
+        // Find the provider info matching current selection
+        const pagent::ProviderInfo *info = &m_providers[m_selectedProviderIndex];
+
+        m_isExternalAI = (info->name == "External");
+        if (m_isExternalAI)
         {
-            if (p.provider == provider)
+            m_modelName = "external";
+            m_availableModels = {"external"};
+            m_selectedModelIndex = 0;
+            m_agentConfigured = true;
+
+            // Ensure files exist
+            std::string agentDir = Path::Assets + "Agent/";
+            if (!std::filesystem::exists(agentDir))
+                std::filesystem::create_directories(agentDir);
+            for (const char *f : {"chat_input.txt", "chat_response.txt"})
             {
-                info = &p;
-                break;
+                std::string path = agentDir + f;
+                if (!std::filesystem::exists(path))
+                    std::ofstream(path).close();
             }
-        }
-        if (!info)
+
+            // Watch response file
+            FileWatcher::Add(agentDir + "chat_response.txt", [this](size_t)
+                             { QueueAction([this]() { PollExternalResponse(); }); });
             return;
+        }
 
         pagent::AgentConfig config;
         // Derive project root from Assets path (go up from Assets/)
@@ -2270,7 +2287,7 @@ namespace pe
             return;
         }
 
-        const bool busy = m_agent && m_agent->IsBusy();
+        const bool busy = m_isExternalAI ? m_isStreaming : (m_agent && m_agent->IsBusy());
 
         // status bar
         {
@@ -2594,8 +2611,58 @@ namespace pe
             m_chat.push_back({ChatMessage::Role::User, text});
             m_scrollToBottom = true;
         }
-        m_agent->Send(text);
+
+        if (m_isExternalAI)
+        {
+            // Write user message to file for external AI to read
+            std::string inputPath = Path::Assets + "Agent/chat_input.txt";
+            std::ofstream f(inputPath, std::ios::trunc);
+            f << text;
+            f.close();
+            // Clear previous response
+            std::ofstream(Path::Assets + "Agent/chat_response.txt", std::ios::trunc).close();
+            m_isStreaming = true;
+        }
+        else
+        {
+            m_agent->Send(text);
+        }
         ImGui::SetKeyboardFocusHere(-1);
+    }
+
+    void AgentWidget::PollExternalResponse()
+    {
+        if (!m_isExternalAI || !m_isStreaming)
+            return;
+
+        std::string responsePath = Path::Assets + "Agent/chat_response.txt";
+        if (!std::filesystem::exists(responsePath))
+            return;
+
+        // Check if file has content
+        auto fileSize = std::filesystem::file_size(responsePath);
+        if (fileSize == 0)
+            return;
+
+        std::ifstream f(responsePath);
+        if (!f.is_open())
+            return;
+
+        std::string response((std::istreambuf_iterator<char>(f)), {});
+        f.close();
+
+        if (response.empty())
+            return;
+
+        // Clear the response file so we don't re-read it
+        std::ofstream(responsePath, std::ios::trunc).close();
+
+        {
+            std::lock_guard lock(m_chatMutex);
+            m_chat.push_back({ChatMessage::Role::Assistant, response});
+            m_scrollToBottom = true;
+        }
+        m_isStreaming = false;
     }
 
     void AgentWidget::OnAgentEvent(const pagent::AgentEvent &ev)
