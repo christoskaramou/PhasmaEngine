@@ -59,23 +59,35 @@ namespace pe
                     return t;
                 });
 
-                mat.set_function("set", [](Model &model, int meshIndex, const std::string &prop, sol::object value) {
-                    auto *mesh = GetMesh(model, meshIndex);
-                    if (!mesh) return;
-
-                    auto &f = mesh->materialFactors[0];
-                    if (prop == "base_color") f[0] = value.as<vec4>();
-                    else if (prop == "emissive") { vec3 e = value.as<vec3>(); f[1].x = e.x; f[1].y = e.y; f[1].z = e.z; }
-                    else if (prop == "transmission") f[1].w = value.as<float>();
-                    else if (prop == "metallic") f[2].x = value.as<float>();
-                    else if (prop == "roughness") f[2].y = value.as<float>();
-                    else if (prop == "alpha_cutoff") f[2].z = value.as<float>();
-                    else if (prop == "occlusion_strength") f[2].w = value.as<float>();
-                    else if (prop == "normal_scale") f[3].y = value.as<float>();
-                    else return;
-
-                    MarkMeshDirty(model, meshIndex);
-                });
+                mat.set_function("set", sol::overload(
+                    [](Model &model, int meshIndex, const std::string &prop, vec4 value) {
+                        auto *mesh = GetMesh(model, meshIndex);
+                        if (!mesh) return;
+                        auto &f = mesh->materialFactors[0];
+                        if (prop == "base_color") f[0] = value;
+                        MarkMeshDirty(model, meshIndex);
+                    },
+                    [](Model &model, int meshIndex, const std::string &prop, vec3 value) {
+                        auto *mesh = GetMesh(model, meshIndex);
+                        if (!mesh) return;
+                        auto &f = mesh->materialFactors[0];
+                        if (prop == "base_color") { f[0].x = value.x; f[0].y = value.y; f[0].z = value.z; f[0].w = 1.0f; }
+                        else if (prop == "emissive") { f[1].x = value.x; f[1].y = value.y; f[1].z = value.z; }
+                        MarkMeshDirty(model, meshIndex);
+                    },
+                    [](Model &model, int meshIndex, const std::string &prop, float value) {
+                        auto *mesh = GetMesh(model, meshIndex);
+                        if (!mesh) return;
+                        auto &f = mesh->materialFactors[0];
+                        if (prop == "transmission") f[1].w = value;
+                        else if (prop == "metallic") f[2].x = value;
+                        else if (prop == "roughness") f[2].y = value;
+                        else if (prop == "alpha_cutoff") f[2].z = value;
+                        else if (prop == "occlusion_strength") f[2].w = value;
+                        else if (prop == "normal_scale") f[3].y = value;
+                        else return;
+                        MarkMeshDirty(model, meshIndex);
+                    }));
 
                 mat.set_function("get_render_type", [](Model &model, int meshIndex) -> std::string {
                     auto *mesh = GetMesh(model, meshIndex);

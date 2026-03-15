@@ -60,6 +60,16 @@ namespace pe
 
     void ScriptSystem::ProcessAsyncLoads()
     {
+        // First pass: collect all ready models
+        struct CompletedLoad
+        {
+            Model *model;
+            sol::function callback;
+            std::shared_ptr<BatchLoadState> batchState;
+            sol::function batchCallback;
+        };
+        std::vector<CompletedLoad> completed;
+
         for (auto it = m_pendingAsyncLoads.begin(); it != m_pendingAsyncLoads.end();)
         {
             if (it->future.wait_for(std::chrono::seconds(0)) != std::future_status::ready)
@@ -68,22 +78,35 @@ namespace pe
                 continue;
             }
 
-            Model *model = it->future.get();
-            if (model)
+            completed.push_back({it->future.get(), it->callback, it->batchState, it->batchCallback});
+            it = m_pendingAsyncLoads.erase(it);
+        }
+
+        if (completed.empty())
+            return;
+
+        // Add all ready models to scene in one batch
+        auto *r = GetGlobalSystem<RendererSystem>();
+        if (r)
+        {
+            r->WaitAllFramesCommands();
+            for (auto &c : completed)
             {
-                auto *r = GetGlobalSystem<RendererSystem>();
-                if (r)
+                if (c.model)
                 {
-                    r->WaitAllFramesCommands();
-                    r->GetScene().AddModel(model);
-                    r->GetScene().UpdateGeometryBuffers();
-                    model->SetRenderReady(true);
+                    r->GetScene().AddModel(c.model);
+                    c.model->SetRenderReady(true);
                 }
             }
+            r->GetScene().UpdateGeometryBuffers();
+        }
 
-            if (it->callback.valid())
+        // Fire callbacks
+        for (auto &c : completed)
+        {
+            if (c.callback.valid())
             {
-                auto res = it->callback(model);
+                auto res = c.callback(c.model);
                 if (!res.valid())
                 {
                     sol::error err = res;
@@ -91,7 +114,27 @@ namespace pe
                 }
             }
 
-            it = m_pendingAsyncLoads.erase(it);
+            if (c.batchState)
+            {
+                auto &state = c.batchState;
+                if (c.model)
+                    state->models.push_back(c.model);
+                state->completed++;
+
+                if (state->completed == state->total && c.batchCallback.valid())
+                {
+                    sol::table result = m_lua.create_table();
+                    for (size_t i = 0; i < state->models.size(); i++)
+                        result[i + 1] = state->models[i];
+
+                    auto res = c.batchCallback(result);
+                    if (!res.valid())
+                    {
+                        sol::error err = res;
+                        PE_ERROR("Lua batch load callback error: %s", err.what());
+                    }
+                }
+            }
         }
     }
 

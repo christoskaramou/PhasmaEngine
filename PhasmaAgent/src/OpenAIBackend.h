@@ -14,7 +14,7 @@ namespace pagent
                                      const std::vector<NeutralMessage> &messages,
                                      const std::string &tools_schema_json) const override;
         bool ParseStreamEvent(const std::string &event_data, std::vector<AgentEvent> &out_events) override;
-        void ResetStreamState() override;
+        void ResetStreamState() const override;
         std::string BuildToolsJson(const std::vector<ToolDefinition> &tools) const override;
         NeutralMessage FormatToolResult(const std::string &tool_call_id,
                                         const std::string &tool_name,
@@ -30,8 +30,9 @@ namespace pagent
             std::string arguments;
         };
 
-        std::string m_textAccumulator;
-        std::string m_thinkingAccumulator;
-        std::vector<ToolCallAccumulator> m_toolAccumulators;
+        mutable std::string m_textAccumulator;
+        mutable std::string m_thinkingAccumulator;
+        mutable std::string m_thoughtSignature;
+        mutable std::vector<ToolCallAccumulator> m_toolAccumulators;
     };
 } // namespace pagent

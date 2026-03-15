@@ -299,13 +299,32 @@ namespace pagent
                     }
                     else if (provider == Provider::Gemini)
                     {
-                        // Gemini returns "models/gemini-..." — strip prefix, skip non-generative
+                        // Gemini returns "models/gemini-..." — strip prefix
                         const std::string geminiPrefix = "models/";
                         if (id.rfind(geminiPrefix, 0) == 0)
                             id = id.substr(geminiPrefix.size());
+
+                        // Robust filtering: Check capabilities if available
+                        if (m.contains("supportedGenerationMethods") && m["supportedGenerationMethods"].is_array())
+                        {
+                            bool canChat = false;
+                            for (const auto &method : m["supportedGenerationMethods"])
+                            {
+                                if (method.is_string() && method.get<std::string>() == "generateContent")
+                                {
+                                    canChat = true;
+                                    break;
+                                }
+                            }
+                            if (!canChat)
+                                continue;
+                        }
+
+                        // Blacklist specialized models that don't fit the chat interface
                         if (id.find("embedding") != std::string::npos ||
                             id.find("aqa") != std::string::npos ||
-                            id.find("imagen") != std::string::npos)
+                            id.find("imagen") != std::string::npos ||
+                            id.find("veo") != std::string::npos)
                             continue;
                     }
 

@@ -329,6 +329,46 @@ namespace pe
                     }
                 });
 
+                // load_models(paths, [callback]) - load multiple models in parallel on background threads,
+                // scene integration on main thread as each completes, optional callback(models_table) when all done
+                lua.set_function("load_models", [&lua](sol::table paths, sol::optional<sol::function> callback) {
+                    auto *ss = GetGlobalSystem<ScriptSystem>();
+                    if (!ss) return;
+
+                    int count = 0;
+                    for (auto &kv : paths)
+                    {
+                        if (kv.second.is<std::string>())
+                            count++;
+                    }
+                    if (count == 0) return;
+
+                    // Shared state for tracking completion across async loads
+                    auto state = std::make_shared<BatchLoadState>();
+                    state->total = count;
+
+                    for (auto &kv : paths)
+                    {
+                        if (!kv.second.is<std::string>()) continue;
+
+                        std::string path = kv.second.as<std::string>();
+                        std::string fullPath = path;
+                        if (path.find('/') == std::string::npos && path.find('\\') == std::string::npos)
+                            fullPath = Path::Assets + "Objects/" + path;
+
+                        auto future = ThreadPool::General.Enqueue([fullPath]() -> Model * {
+                            return Model::Load(fullPath);
+                        });
+
+                        PendingAsyncLoad load;
+                        load.future = std::move(future);
+                        load.batchState = state;
+                        if (callback.has_value())
+                            load.batchCallback = callback.value();
+                        ss->AddPendingAsyncLoad(std::move(load));
+                    }
+                });
+
                 lua.set_function("remove_model", [](Model *model) {
                     if (!model) return;
                     RemoveModelFromScene(model);

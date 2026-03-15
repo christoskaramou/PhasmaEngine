@@ -19,7 +19,7 @@ namespace pagent
             const std::string &event_data,
             std::vector<AgentEvent> &out_events) override;
 
-        void ResetStreamState() override;
+        void ResetStreamState() const override;
 
         std::string BuildToolsJson(
             const std::vector<ToolDefinition> &tools) const override;
@@ -41,8 +41,8 @@ namespace pagent
             std::string arguments;
         };
 
-        std::string m_textAccumulator;
-        std::vector<ToolAccumulator> m_toolAccumulators;
-        int m_currentToolIndex = -1;
+        mutable std::string m_textAccumulator;
+        mutable std::vector<ToolAccumulator> m_toolAccumulators;
+        mutable int m_currentToolIndex = -1;
     };
 } // namespace pagent

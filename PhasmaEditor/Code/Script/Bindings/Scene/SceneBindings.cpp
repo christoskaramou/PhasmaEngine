@@ -68,6 +68,17 @@ namespace pe
                     return sol::as_table(std::move(result));
                 });
 
+                scene.set_function("get_models", []() -> sol::as_table_t<std::vector<Model *>> {
+                    std::vector<Model *> result;
+                    auto *r = GetGlobalSystem<RendererSystem>();
+                    if (r)
+                    {
+                        for (auto *m : r->GetScene().GetModels())
+                            result.push_back(m);
+                    }
+                    return sol::as_table(std::move(result));
+                });
+
                 scene.set_function("get_model_count", []() -> int {
                     auto *r = GetGlobalSystem<RendererSystem>();
                     return r ? static_cast<int>(r->GetScene().GetModels().size()) : 0;

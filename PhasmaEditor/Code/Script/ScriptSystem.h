@@ -22,10 +22,20 @@ namespace pe
         Image *Get();
     };
 
+    struct BatchLoadState
+    {
+        int total = 0;
+        int completed = 0;
+        std::vector<Model *> models;
+    };
+
     struct PendingAsyncLoad
     {
         std::shared_future<Model *> future;
         sol::function callback;
+        // For batch loading (load_models)
+        std::shared_ptr<BatchLoadState> batchState;
+        sol::function batchCallback;
     };
 
     class ScriptSystem : public ISystem

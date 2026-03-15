@@ -18,24 +18,38 @@ namespace pagent
         case NeutralMessage::Role::Assistant:
         {
             json j = {{"role", "assistant"}};
+            // Omit reasoning_content from outgoing history for Gemini
+            // as it causes "Invalid Argument" in some bridge versions.
+            // The thought_signature in tool_calls is usually sufficient.
+            
             if (!msg.content.empty())
                 j["content"] = msg.content;
-            else if (msg.tool_calls.empty())
-                j["content"] = "";
+            else
+                j["content"] = nullptr; // Gemini usually prefers null for tool-calls-only messages
 
             if (!msg.tool_calls.empty())
             {
                 json tcs = json::array();
                 for (const auto &tc : msg.tool_calls)
                 {
-                    tcs.push_back({
+                    json tc_entry = {
                         {"id", tc.id},
                         {"type", "function"},
                         {"function", {
                                          {"name", tc.name},
                                          {"arguments", tc.arguments_json},
                                      }},
-                    });
+                    };
+                    // Use per-call signature if available, fallback to message-level signature
+                    std::string sig = tc.thought_signature.empty() ? msg.thought_signature : tc.thought_signature;
+                    if (!sig.empty())
+                    {
+                        tc_entry["extra_content"] = {
+                            {"google", {{"thought_signature", sig}}}
+                        };
+                    }
+                        
+                    tcs.push_back(std::move(tc_entry));
                 }
                 j["tool_calls"] = std::move(tcs);
             }
@@ -43,11 +57,7 @@ namespace pagent
         }
 
         case NeutralMessage::Role::Tool:
-            return {
-                {"role", "tool"},
-                {"tool_call_id", msg.tool_call_id},
-                {"content", msg.tool_result_json},
-            };
+            return {{"role", "tool"}, {"tool_call_id", msg.tool_call_id}, {"name", msg.tool_name}, {"content", msg.content}};
 
         default:
             return {};
@@ -70,7 +80,8 @@ namespace pagent
         bool useMaxCompletionTokens = m.rfind("o1-", 0) == 0 ||
                                       m.rfind("o3-", 0) == 0 ||
                                       m.rfind("o4-", 0) == 0 ||
-                                      m.rfind("gpt-5", 0) == 0;
+                                      m.rfind("gpt-5", 0) == 0 ||
+                                      m.find("gemini-3") != std::string::npos;
         if (useMaxCompletionTokens)
             body["max_completion_tokens"] = max_tokens;
         else
@@ -104,6 +115,8 @@ namespace pagent
             {
             }
         }
+
+        ResetStreamState(); // clear any stale accumulators/signatures
 
         return body.dump();
     }
@@ -148,10 +161,11 @@ namespace pagent
         return arr.dump();
     }
 
-    void OpenAIBackend::ResetStreamState()
+    void OpenAIBackend::ResetStreamState() const
     {
         m_textAccumulator.clear();
         m_thinkingAccumulator.clear();
+        m_thoughtSignature.clear();
         m_toolAccumulators.clear();
     }
 
@@ -166,14 +180,30 @@ namespace pagent
                 AgentEvent ev;
                 ev.type = AgentEventType::ThinkingComplete;
                 ev.text = m_thinkingAccumulator;
+                ev.thought_signature = m_thoughtSignature;
                 out_events.push_back(std::move(ev));
                 m_thinkingAccumulator.clear();
+            }
+            if (!m_toolAccumulators.empty())
+            {
+                for (const auto &acc : m_toolAccumulators)
+                {
+                    AgentEvent ev;
+                    ev.type = AgentEventType::ToolCallComplete;
+                    ev.tool_name = acc.name;
+                    ev.tool_call_id = acc.id;
+                    ev.tool_input_json = acc.arguments;
+                    ev.thought_signature = m_thoughtSignature;
+                    out_events.push_back(std::move(ev));
+                }
+                m_toolAccumulators.clear();
             }
             if (!m_textAccumulator.empty())
             {
                 AgentEvent ev;
                 ev.type = AgentEventType::TextComplete;
                 ev.text = m_textAccumulator;
+                ev.thought_signature = m_thoughtSignature;
                 out_events.push_back(std::move(ev));
                 m_textAccumulator.clear();
             }
@@ -220,6 +250,30 @@ namespace pagent
 
         const auto &choice = choices[0];
         const auto &delta = choice.value("delta", json::object());
+
+        // extract thought signature if present (Gemini 3.1)
+        // Check multiple possible locations for the signature
+        auto checkExtra = [&](const json &obj) {
+            if (obj.contains("extra_content") && !obj["extra_content"].is_null()) {
+                const auto &extra = obj["extra_content"];
+                if (extra.contains("google") && extra["google"].is_object()) {
+                    std::string sig = extra["google"].value("thought_signature", "");
+                    if (!sig.empty()) m_thoughtSignature = sig;
+                }
+            }
+        };
+
+        checkExtra(choice);
+        checkExtra(delta);
+
+        if (delta.contains("tool_calls") && delta["tool_calls"].is_array())
+        {
+            for (const auto &tc : delta["tool_calls"])
+            {
+                checkExtra(tc);
+            }
+        }
+
         const auto finish = (choice.contains("finish_reason") && choice["finish_reason"].is_string())
                                 ? choice["finish_reason"].get<std::string>()
                                 : std::string{};
@@ -259,21 +313,29 @@ namespace pagent
 
                 auto &acc = m_toolAccumulators[index];
 
+                if (tc_delta.contains("function"))
+                {
+                    const auto &f = tc_delta["function"];
+                    if (f.contains("name"))
+                    {
+                        const std::string name = f["name"].get<std::string>();
+                        if (!name.empty()) acc.name = name; // Prefer assignment over += for name
+                    }
+                    if (f.contains("arguments"))
+                        acc.arguments += f["arguments"].get<std::string>();
+                }
+
                 if (tc_delta.contains("id"))
                 {
                     acc.id = tc_delta["id"].get<std::string>();
-                    if (tc_delta.contains("function"))
-                        acc.name = tc_delta["function"].value("name", std::string{});
 
                     AgentEvent ev;
                     ev.type = AgentEventType::ToolCallBegin;
-                    ev.tool_name = acc.name;
+                    ev.tool_name = acc.name; 
                     ev.tool_call_id = acc.id;
+                    ev.thought_signature = m_thoughtSignature; // Capture per-call signature
                     out_events.push_back(std::move(ev));
                 }
-
-                if (tc_delta.contains("function"))
-                    acc.arguments += tc_delta["function"].value("arguments", std::string{});
             }
         }
 
@@ -287,25 +349,42 @@ namespace pagent
                 ev.tool_name = acc.name;
                 ev.tool_call_id = acc.id;
                 ev.tool_input_json = acc.arguments;
+                ev.thought_signature = m_thoughtSignature;
                 out_events.push_back(std::move(ev));
             }
             m_toolAccumulators.clear();
         }
-        else if (finish == "stop")
+        else if (finish == "stop" || finish == "end_turn")
         {
             if (!m_thinkingAccumulator.empty())
             {
                 AgentEvent ev;
                 ev.type = AgentEventType::ThinkingComplete;
                 ev.text = m_thinkingAccumulator;
+                ev.thought_signature = m_thoughtSignature;
                 out_events.push_back(std::move(ev));
                 m_thinkingAccumulator.clear();
+            }
+            if (!m_toolAccumulators.empty())
+            {
+                for (const auto &acc : m_toolAccumulators)
+                {
+                    AgentEvent ev;
+                    ev.type = AgentEventType::ToolCallComplete;
+                    ev.tool_name = acc.name;
+                    ev.tool_call_id = acc.id;
+                    ev.tool_input_json = acc.arguments;
+                    ev.thought_signature = m_thoughtSignature;
+                    out_events.push_back(std::move(ev));
+                }
+                m_toolAccumulators.clear();
             }
             if (!m_textAccumulator.empty())
             {
                 AgentEvent ev;
                 ev.type = AgentEventType::TextComplete;
                 ev.text = m_textAccumulator;
+                ev.thought_signature = m_thoughtSignature;
                 out_events.push_back(std::move(ev));
                 m_textAccumulator.clear();
             }
@@ -315,16 +394,17 @@ namespace pagent
         return true;
     }
 
-    NeutralMessage OpenAIBackend::FormatToolResult(
-        const std::string &tool_call_id,
-        const std::string &tool_name,
-        const std::string &result_json) const
+    NeutralMessage OpenAIBackend::FormatToolResult(const std::string &tool_call_id,
+                                                   const std::string &tool_name,
+                                                   const std::string &result_json) const
     {
         NeutralMessage msg;
         msg.role = NeutralMessage::Role::Tool;
         msg.tool_call_id = tool_call_id;
-        msg.tool_result_json = result_json;
-        (void)tool_name;
+        msg.tool_name = tool_name;
+        // Gemini fails if name is empty, provide a fallback if we somehow missed it
+        if (msg.tool_name.empty()) msg.tool_name = "unknown_tool"; 
+        msg.content = result_json;
         return msg;
     }
 

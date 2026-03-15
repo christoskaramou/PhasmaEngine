@@ -87,6 +87,7 @@ namespace pagent
         std::string tool_name;         // ToolCallBegin, ToolCallComplete, ToolResult
         std::string tool_call_id;      // Matches the model's tool use id
         std::string tool_input_json;   // ToolCallComplete: fully assembled arguments
+        std::string thought_signature; // Specific to Gemini 3.1
         std::string error_message;     // Error
         int input_tokens = 0;          // Usage
         int output_tokens = 0;         // Usage
@@ -110,17 +111,21 @@ namespace pagent
 
         Role role = Role::User;
         std::string content;
+        std::string reasoning; // Reasoning/thinking process (e.g. for Gemini 3.1, DeepSeek-R1)
+        std::string thought_signature; // Specific to Gemini 3.1, required to be echoed back
 
         struct ToolCall
         {
             std::string id;
             std::string name;
             std::string arguments_json;
+            std::string thought_signature;
         };
         std::vector<ToolCall> tool_calls; // populated when role == Assistant
 
         // Populated when role == Tool
         std::string tool_call_id;
+        std::string tool_name;
         std::string tool_result_json;
     };
 
@@ -156,7 +161,7 @@ namespace pagent
             std::vector<AgentEvent> &out_events) = 0;
 
         // Reset per-stream mutable state. Called by RequestWorker before each request.
-        virtual void ResetStreamState() = 0;
+        virtual void ResetStreamState() const = 0;
 
         // Build the provider-specific tools array JSON.
         virtual std::string BuildToolsJson(

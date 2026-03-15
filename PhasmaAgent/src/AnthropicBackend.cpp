@@ -117,6 +117,7 @@ namespace pagent
             }
         }
 
+        ResetStreamState();
         return body.dump();
     }
 
@@ -157,7 +158,7 @@ namespace pagent
         return arr.dump();
     }
 
-    void AnthropicBackend::ResetStreamState()
+    void AnthropicBackend::ResetStreamState() const
     {
         m_textAccumulator.clear();
         m_toolAccumulators.clear();

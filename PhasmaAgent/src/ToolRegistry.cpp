@@ -33,7 +33,20 @@ namespace pagent
     std::string ToolRegistry::Dispatch(const std::string &name, const std::string &input_json) const
     {
         std::unique_lock lock(m_mutex);
-        auto it = m_tools.find(name);
+        
+        // fuzzy lookup (handle prefixes like "default_api:" or "google:")
+        std::string searchName = name;
+        auto it = m_tools.find(searchName);
+        if (it == m_tools.end())
+        {
+            auto colonPos = searchName.find(':');
+            if (colonPos != std::string::npos)
+            {
+                searchName = searchName.substr(colonPos + 1);
+                it = m_tools.find(searchName);
+            }
+        }
+
         if (it == m_tools.end())
             return "{\"error\":\"unknown tool: " + name + "\"}";
 

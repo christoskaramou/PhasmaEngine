@@ -80,7 +80,7 @@ namespace pe
             Path::Assets + "Agent/ | Assets: " + Path::Assets + ".";
         config.log_callback = [](const std::string &msg)
         { PE_INFO("%s", msg.c_str()); };
-        config.max_tool_rounds = 10;
+        config.max_tool_rounds = 30;
         config.max_tool_result_chars = 500;
         config.max_history_messages = 20;
         config.summarize_after_messages = 30;

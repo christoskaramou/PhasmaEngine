@@ -4,7 +4,9 @@
 #include "ToolRegistry.h"
 
 #ifdef CPPHTTPLIB_OPENSSL_SUPPORT
+#ifndef CPPHTTPLIB_OPENSSL_SUPPORT
 #define CPPHTTPLIB_OPENSSL_SUPPORT
+#endif
 #endif
 #include <httplib/httplib.h>
 
@@ -263,8 +265,10 @@ namespace pagent
             }
 
             // HTTP POST + stream parse
-            if (m_config.log_callback)
+            if (m_config.log_callback) {
                 m_config.log_callback("[PAgent] POST " + host + path + " ...");
+                m_config.log_callback("[PAgent] Body: " + body);
+            }
             std::vector<AgentEvent> turnEvents;
             const auto errMsg = HttpPost(host, path, headers, body, turnEvents);
             if (m_config.log_callback)
@@ -300,16 +304,33 @@ namespace pagent
                 return;
             }
 
+            if (m_config.log_callback && !errMsg.empty())
+                m_config.log_callback("[PAgent] Response error: " + errMsg);
+
             // push all streamed events and collect tool calls + full text
             std::string fullText;
+            std::string fullReasoning;
+            std::string fullThoughtSignature;
             std::vector<AgentEvent> toolCallCompletes;
             bool hasContent = false;
 
             for (auto &ev : turnEvents)
             {
+                if (!ev.thought_signature.empty())
+                {
+                    fullThoughtSignature = ev.thought_signature;
+                    if (m_config.log_callback)
+                        m_config.log_callback("[PAgent] Found Gemini thought signature: " + fullThoughtSignature.substr(0, 32) + "...");
+                }
+
                 if (ev.type == AgentEventType::TextComplete)
                 {
                     fullText = ev.text;
+                    hasContent = true;
+                }
+                else if (ev.type == AgentEventType::ThinkingComplete)
+                {
+                    fullReasoning = ev.text;
                     hasContent = true;
                 }
                 else if (ev.type == AgentEventType::ToolCallComplete)
@@ -322,13 +343,15 @@ namespace pagent
             }
 
             // If the response had events (e.g. Usage) but no actual content or tool calls,
-            // the model returned an empty response — likely due to malformed conversation history.
+            // push a dummy complete event to satisfy the consumer.
             if (!hasContent && !turnEvents.empty())
             {
                 AgentEvent ev;
-                ev.type = AgentEventType::Error;
-                ev.error_message = "Model returned no content (received " + std::to_string(turnEvents.size()) + " metadata-only events). This may indicate a malformed request.";
+                ev.type = AgentEventType::TextComplete;
+                ev.text = "";
                 PushEvent(std::move(ev));
+                
+                // Don't append empty responses to history as it might confuse certain models
                 return;
             }
 
@@ -337,12 +360,15 @@ namespace pagent
                 NeutralMessage assistantMsg;
                 assistantMsg.role = NeutralMessage::Role::Assistant;
                 assistantMsg.content = fullText;
+                assistantMsg.reasoning = fullReasoning;
+                assistantMsg.thought_signature = fullThoughtSignature;
                 for (const auto &tc : toolCallCompletes)
                 {
                     NeutralMessage::ToolCall call;
                     call.id = tc.tool_call_id;
                     call.name = tc.tool_name;
                     call.arguments_json = tc.tool_input_json;
+                    call.thought_signature = tc.thought_signature; // Per-call signature
                     assistantMsg.tool_calls.push_back(std::move(call));
                 }
                 m_history.Append(std::move(assistantMsg));
