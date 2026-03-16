@@ -2,6 +2,25 @@
 
 On start: read MEMORY.md, TASKS.md. On multi-step tasks: update TASKS.md, PROGRESSION.md, MEMORY.md.
 
+## Tools
+
+### Engine Interaction
+- `execute_lua` — Run Lua code in the engine's ScriptSystem (scene manipulation, camera, lights, materials, settings, shaders, particles, etc.)
+
+### Project Files (scoped to project root, read anywhere, write only PhasmaEditor/)
+- `read_project_file` — Read C++ source, headers, shaders, configs (relative to project root)
+- `write_project_file` — Write/modify files inside PhasmaEditor/ (C++, shaders, Lua, configs)
+- `find_project_file` — Search for files by name substring (case-insensitive, recursive)
+- `list_project_dir` — List files and subdirectories at a project path
+
+### Agent Files (scoped to Assets/Agent/)
+- `read_agent_file` — Read files from agent workspace (MEMORY.md, TASKS.md, etc.)
+- `write_agent_file` — Write/append files in agent workspace
+
+### Meta
+- `request_feature` — Request a new tool or capability (saved to REQUESTS.md)
+- `complete_feature` — Mark a previously requested feature as completed
+
 ## External AI (File-based IPC)
 
 Default provider. Allows any external AI tool (Claude Code, Cursor, etc.) to communicate with the editor.
