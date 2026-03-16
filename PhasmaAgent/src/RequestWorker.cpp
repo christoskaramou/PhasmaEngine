@@ -140,8 +140,8 @@ namespace pagent
             case Provider::OpenAI:
                 host = "https://api.openai.com";
                 break;
-            case Provider::Gemini:
-                host = "https://generativelanguage.googleapis.com/v1beta/openai";
+            case Provider::Google:
+                host = "https://generativelanguage.googleapis.com";
                 break;
             case Provider::Ollama:
                 host = "http://localhost:11434";
@@ -240,8 +240,8 @@ namespace pagent
                 case Provider::OpenAI:
                     host = "https://api.openai.com";
                     break;
-                case Provider::Gemini:
-                    host = "https://generativelanguage.googleapis.com/v1beta/openai";
+                case Provider::Google:
+                    host = "https://generativelanguage.googleapis.com";
                     break;
                 case Provider::Ollama:
                     host = "http://localhost:11434";
@@ -275,7 +275,9 @@ namespace pagent
                 m_config.log_callback("[PAgent] POST done, err='" + errMsg + "', events=" + std::to_string(turnEvents.size()));
 
             // If the model doesn't support tools, retry without them
-            if (!errMsg.empty() && errMsg.find("does not support tools") != std::string::npos)
+            if (!errMsg.empty() && (errMsg.find("does not support tools") != std::string::npos ||
+                                    errMsg.find("not enabled for model") != std::string::npos ||
+                                    errMsg.find("calling is not enabled") != std::string::npos))
             {
                 if (m_config.log_callback)
                     m_config.log_callback("[PAgent] Model does not support tools, retrying without tools");
@@ -317,11 +319,7 @@ namespace pagent
             for (auto &ev : turnEvents)
             {
                 if (!ev.thought_signature.empty())
-                {
                     fullThoughtSignature = ev.thought_signature;
-                    if (m_config.log_callback)
-                        m_config.log_callback("[PAgent] Found Gemini thought signature: " + fullThoughtSignature.substr(0, 32) + "...");
-                }
 
                 if (ev.type == AgentEventType::TextComplete)
                 {

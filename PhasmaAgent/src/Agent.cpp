@@ -5,7 +5,6 @@
 #include <nlohmann/json.hpp>
 #include <algorithm>
 #include <cstdlib>
-#include <fstream>
 #include <set>
 
 namespace pagent
@@ -23,7 +22,7 @@ namespace pagent
         if (openaiKey)
             providers.push_back({Provider::OpenAI, "OpenAI", openaiKey, "gpt-4.1-mini"});
         if (geminiKey)
-            providers.push_back({Provider::Gemini, "Gemini", geminiKey, "gemini-2.5-flash"});
+            providers.push_back({Provider::Google, "Google", geminiKey, "gemini-2.5-flash"});
         providers.push_back({Provider::Ollama, "Ollama", "", "llama3.2"});
 
         return providers;
@@ -44,7 +43,7 @@ namespace pagent
             const auto &p = providers[i];
             if ((providerStr == "anthropic" && p.provider == Provider::Anthropic) ||
                 (providerStr == "openai" && p.provider == Provider::OpenAI) ||
-                (providerStr == "gemini" && p.provider == Provider::Gemini) ||
+                (providerStr == "google" && p.provider == Provider::Google) ||
                 (providerStr == "ollama" && p.provider == Provider::Ollama))
                 return i;
         }
@@ -254,7 +253,7 @@ namespace pagent
             path = "/v1/models";
             headers = {{"Authorization", "Bearer " + api_key}};
             break;
-        case Provider::Gemini:
+        case Provider::Google:
             host = "generativelanguage.googleapis.com";
             path = "/v1beta/models?key=" + api_key;
             break;
@@ -262,7 +261,7 @@ namespace pagent
             return {};
         }
 
-        if (!api_key.empty() && headers.empty() && provider != Provider::Gemini)
+        if (!api_key.empty() && headers.empty() && provider != Provider::Google)
             headers = {{"Authorization", "Bearer " + api_key}};
 
         std::string responseBody = httpGet(host, path, true, headers);
@@ -308,7 +307,7 @@ namespace pagent
                             id.find("-pro") != std::string::npos)
                             continue;
                     }
-                    else if (provider == Provider::Gemini)
+                    else if (provider == Provider::Google)
                     {
                         // Gemini returns "models/gemini-..." — strip prefix
                         const std::string geminiPrefix = "models/";
@@ -331,11 +330,13 @@ namespace pagent
                                 continue;
                         }
 
-                        // Blacklist specialized models that don't fit the chat interface
+                        // Blacklist models that don't support chat or function calling
                         if (id.find("embedding") != std::string::npos ||
                             id.find("aqa") != std::string::npos ||
                             id.find("imagen") != std::string::npos ||
-                            id.find("veo") != std::string::npos)
+                            id.find("veo") != std::string::npos ||
+                            id.find("gemma") != std::string::npos ||
+                            id.find("learnlm") != std::string::npos)
                             continue;
                     }
 
@@ -418,97 +419,4 @@ namespace pagent
             OllamaProcess::UnloadModel(model, base_url);
     }
 
-    // Load pricing JSON once (thread-safe via static init).
-    // Falls back to hardcoded defaults if file not found.
-    static const nlohmann::ordered_json &GetPricingData()
-    {
-        static const nlohmann::ordered_json data = []()
-        {
-            // Try paths relative to common locations
-            for (const char *path : {"pricing.json",
-                                     "PhasmaAgent/pricing.json",
-                                     "../PhasmaAgent/pricing.json",
-                                     "../../PhasmaAgent/pricing.json",
-                                     "../../../PhasmaAgent/pricing.json"})
-            {
-                std::ifstream f(path);
-                if (f.is_open())
-                {
-                    try
-                    {
-                        return nlohmann::ordered_json::parse(f);
-                    }
-                    catch (...)
-                    {
-                    }
-                }
-            }
-            return nlohmann::ordered_json{};
-        }();
-        return data;
-    }
-
-    // Look up pricing for a model from the JSON data.
-    // Checks each key in the provider object — first substring match wins.
-    // Falls back to "default" entry if present, otherwise zeros.
-    struct PricingEntry
-    {
-        float input = 0.0f;
-        float output = 0.0f;
-        float cacheRead = 0.0f;
-        float cacheWrite = 0.0f;
-    };
-
-    static PricingEntry LookupPricing(const nlohmann::ordered_json &data,
-                                      const std::string &providerKey,
-                                      const std::string &model)
-    {
-        PricingEntry p;
-        if (!data.contains(providerKey) || !data[providerKey].is_object())
-            return p;
-
-        const auto &prov = data[providerKey];
-        for (auto &[key, val] : prov.items())
-        {
-            if (model.find(key) != std::string::npos)
-            {
-                p.input = val.value("input", 0.0f);
-                p.output = val.value("output", 0.0f);
-                p.cacheRead = val.value("cache_read", 0.0f);
-                p.cacheWrite = val.value("cache_write", 0.0f);
-                return p;
-            }
-        }
-        return p;
-    }
-
-    float EstimateCostUSD(Provider provider, const std::string &model,
-                          int inputTokens, int outputTokens,
-                          int cacheReadTokens, int cacheWriteTokens)
-    {
-        if (provider == Provider::Ollama)
-            return 0.0f;
-
-        const char *providerKey = nullptr;
-        switch (provider)
-        {
-        case Provider::Anthropic:
-            providerKey = "anthropic";
-            break;
-        case Provider::OpenAI:
-            providerKey = "openai";
-            break;
-        case Provider::Gemini:
-            providerKey = "gemini";
-            break;
-        default:
-            return 0.0f;
-        }
-
-        auto p = LookupPricing(GetPricingData(), providerKey, model);
-
-        return (inputTokens * p.input + outputTokens * p.output +
-                cacheReadTokens * p.cacheRead + cacheWriteTokens * p.cacheWrite) /
-               1000000.0f;
-    }
 } // namespace pagent

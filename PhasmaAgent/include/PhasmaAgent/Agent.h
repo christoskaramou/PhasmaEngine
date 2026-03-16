@@ -23,7 +23,7 @@ namespace pagent
     {
         Anthropic, // Claude models via api.anthropic.com
         OpenAI,    // GPT models via api.openai.com
-        Gemini,    // Google Gemini via OpenAI-compatible endpoint
+        Google,    // Google Gemini via native Gemini API
         Ollama,    // Local Ollama instance (OpenAI-compatible)
     };
 
@@ -194,7 +194,7 @@ namespace pagent
     };
 
     // Discovers available providers from environment variables.
-    // Reads PAGENT_ANTHROPIC_API_KEY, PAGENT_OPENAI_API_KEY, PAGENT_GEMINI_API_KEY.
+    // Reads PAGENT_ANTHROPIC_API_KEY, PAGENT_OPENAI_API_KEY, PAGENT_GEMINI_API_KEY (Google).
     // Ollama is always included (no key needed).
     // Returns them in order; optionally selects one based on PAGENT_PROVIDER env var.
     std::vector<ProviderInfo> DiscoverProviders();
@@ -216,12 +216,6 @@ namespace pagent
         int totalCacheRead = 0;
         int totalCacheWrite = 0;
     };
-
-    // Estimate cost in USD based on provider, model, and token counts.
-    // Uses approximate per-model pricing. Returns 0 for local/free models.
-    float EstimateCostUSD(Provider provider, const std::string &model,
-                          int inputTokens, int outputTokens,
-                          int cacheReadTokens = 0, int cacheWriteTokens = 0);
 
     // ---------------------------------------------------------------------------
     // AgentConfig

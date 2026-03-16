@@ -72,12 +72,15 @@ namespace pe
 
         config.system_prompt =
             "You are an AI assistant inside PhasmaEditor (Vulkan 3D engine). "
-            "Control the editor via execute_lua. API ref is in START.md. "
-            "Rules: ASCII only, no emoji. Be very concise. Show Lua before executing. "
+            "FIRST THING: use read_agent_file to read START.md for your full API reference and rules. "
+            "Control the editor via execute_lua. Be very concise. ASCII only, no emoji. "
             "Chain ALL operations in ONE execute_lua call. Check results for errors. "
+            "To load 3D models: 1) call find_loadable_model tool, 2) execute_lua with: local m, err = load_model('path/from/step1') "
+            "The Lua function is load_model (NOT pe_load_model). Do NOT use fs.find/fs.list for models. "
             "Set unique labels on created models. Use request_feature for missing capabilities. "
             "Workspace: " +
             Path::Assets + "Agent/ | Assets: " + Path::Assets + ".";
+
         config.log_callback = [](const std::string &msg)
         { PE_INFO("%s", msg.c_str()); };
         config.max_tool_rounds = 30;
@@ -98,22 +101,6 @@ namespace pe
                                   { OnAgentEvent(ev); });
 
         RegisterTools();
-
-        // Load START.md instructions if present in the agent workspace
-        {
-            std::string startPath = Path::Assets + "Agent/START.md";
-            if (std::filesystem::exists(startPath))
-            {
-                std::ifstream file(startPath, std::ios::in);
-                if (file.is_open())
-                {
-                    std::string content((std::istreambuf_iterator<char>(file)),
-                                        std::istreambuf_iterator<char>());
-                    if (!content.empty())
-                        m_agent->InjectSystemMessage("Instructions from START.md:\n" + content);
-                }
-            }
-        }
 
         FetchAvailableModels();
     }
@@ -392,6 +379,65 @@ namespace pe
                                    files += "]";
                                    dirs += "]";
                                    return JsonObj({{"path", JsonStr(normalized)}, {"files", files}, {"dirs", dirs}});
+                               }});
+
+        m_agent->RegisterTool({.name = "find_loadable_model",
+                               .description = "Searches for 3D model files (.glb, .gltf, .obj, .fbx) in Assets/Objects/ by name. "
+                                              "Returns paths ready to use with load_model(). "
+                                              "Example: query 'helmet' finds 'DamagedHelmet/glTF-Binary/DamagedHelmet.glb'.",
+                               .properties = {
+                                   {"query", "Model name to search for (e.g. 'helmet', 'avocado', 'sponza')", pagent::SchemaType::String, true},
+                               },
+                               .handler = [](const std::string &args) -> std::string
+                               {
+                                   std::string query = JsonUnescape(ExtractArgStr(args, "query"));
+                                   if (query.empty())
+                                       return "{\"error\":\"missing query\"}";
+
+                                   std::string queryLower = query;
+                                   for (auto &c : queryLower)
+                                       c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+
+                                   std::filesystem::path objectsDir(Path::Assets + "Objects");
+                                   if (!std::filesystem::exists(objectsDir))
+                                       return "{\"error\":\"Objects directory not found\"}";
+
+                                   std::string arr = "[";
+                                   bool first = true;
+                                   int count = 0;
+                                   for (const auto &entry : std::filesystem::recursive_directory_iterator(
+                                            objectsDir, std::filesystem::directory_options::skip_permission_denied))
+                                   {
+                                       if (!entry.is_regular_file())
+                                           continue;
+
+                                       auto u8ext = entry.path().extension().u8string();
+                                       std::string ext(u8ext.begin(), u8ext.end());
+                                       for (auto &c : ext)
+                                           c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+                                       if (ext != ".glb" && ext != ".gltf" && ext != ".obj" && ext != ".fbx")
+                                           continue;
+
+                                       auto u8rel = std::filesystem::relative(entry.path(), Path::Assets + "Objects").u8string();
+                                       std::string relPath(u8rel.begin(), u8rel.end());
+                                       std::replace(relPath.begin(), relPath.end(), '\\', '/');
+
+                                       std::string relLower = relPath;
+                                       for (auto &c : relLower)
+                                           c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+
+                                       if (relLower.find(queryLower) == std::string::npos)
+                                           continue;
+
+                                       if (!first)
+                                           arr += ",";
+                                       arr += JsonStr(relPath);
+                                       first = false;
+                                       if (++count >= 20)
+                                           break;
+                                   }
+                                   arr += "]";
+                                   return JsonObj({{"count", std::to_string(count)}, {"models", arr}});
                                }});
 
         const std::string agentWorkspace = Path::Assets + "Agent/";
@@ -868,26 +914,11 @@ namespace pe
             ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.5f, 0.5f, 0.5f, 1.0f));
             {
                 auto usage = m_agent->GetUsage();
-                auto provider = m_providers[m_selectedProviderIndex].provider;
-                float cost = pagent::EstimateCostUSD(provider, m_modelName,
-                                                     usage.totalInput, usage.totalOutput, usage.totalCacheRead, usage.totalCacheWrite);
                 char buf[256];
-                bool hasTokens = usage.totalInput > 0 || usage.totalOutput > 0;
-                if (cost > 0.001f)
-                    snprintf(buf, sizeof(buf), "tokens [in/out]: turn [%dk/%dk]  total: [%dk/%dk]  cached: [%dk] | cost [~$%.4f]",
-                             usage.turnInput / 1000, usage.turnOutput / 1000,
-                             usage.totalInput / 1000, usage.totalOutput / 1000,
-                             usage.totalCacheRead / 1000, cost);
-                else if (hasTokens && provider != pagent::Provider::Ollama)
-                    snprintf(buf, sizeof(buf), "tokens [in/out]: turn [%dk/%dk]  total: [%dk/%dk]  cached: [%dk] | cost N/A",
-                             usage.turnInput / 1000, usage.turnOutput / 1000,
-                             usage.totalInput / 1000, usage.totalOutput / 1000,
-                             usage.totalCacheRead / 1000);
-                else
-                    snprintf(buf, sizeof(buf), "tokens [in/out]: turn [%dk/%dk]  total: [%dk/%dk]  cached: [%dk]",
-                             usage.turnInput / 1000, usage.turnOutput / 1000,
-                             usage.totalInput / 1000, usage.totalOutput / 1000,
-                             usage.totalCacheRead / 1000);
+                snprintf(buf, sizeof(buf), "tokens [in/out]: turn [%dk/%dk]  total: [%dk/%dk]  cached: [%dk]",
+                         usage.turnInput / 1000, usage.turnOutput / 1000,
+                         usage.totalInput / 1000, usage.totalOutput / 1000,
+                         usage.totalCacheRead / 1000);
                 ImGui::TextUnformatted(buf);
             }
             ImGui::PopStyleColor();

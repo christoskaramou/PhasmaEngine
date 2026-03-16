@@ -14,6 +14,10 @@ namespace pagent
         {
             m_backend = std::make_unique<AnthropicBackend>();
         }
+        else if (m_config.provider == Provider::Google)
+        {
+            m_backend = std::make_unique<GoogleBackend>();
+        }
         else
         {
             m_backend = std::make_unique<OpenAIBackend>();

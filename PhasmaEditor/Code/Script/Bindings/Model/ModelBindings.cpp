@@ -297,22 +297,34 @@ namespace pe
                     return nullptr;
                 });
 
-                lua.set_function("load_model", [](const std::string &path) -> Model * {
+                lua.set_function("load_model", [](const std::string &path) -> std::tuple<Model *, std::string> {
                     std::string fullPath = path;
-                    if (path.find('/') == std::string::npos && path.find('\\') == std::string::npos)
+                    if (!std::filesystem::path(path).is_absolute())
                         fullPath = Path::Assets + "Objects/" + path;
 
+                    if (!std::filesystem::exists(fullPath))
+                    {
+                        std::string err = "load_model: file not found '" + fullPath + "'";
+                        Log::Error(err);
+                        return {nullptr, err};
+                    }
+
                     Model *model = Model::Load(fullPath);
-                    if (!model) return nullptr;
+                    if (!model)
+                    {
+                        std::string err = "load_model: could not parse '" + fullPath + "'";
+                        Log::Error(err);
+                        return {nullptr, err};
+                    }
                     AddModelToScene(model);
-                    return model;
+                    return {model, "loaded"};
                 });
 
                 // load_model_async(path, callback) - full load on background thread,
                 // scene integration + callback on main thread when ready
                 lua.set_function("load_model_async", [](const std::string &path, sol::function callback) {
                     std::string fullPath = path;
-                    if (path.find('/') == std::string::npos && path.find('\\') == std::string::npos)
+                    if (!std::filesystem::path(path).is_absolute())
                         fullPath = Path::Assets + "Objects/" + path;
 
                     auto future = ThreadPool::General.Enqueue([fullPath]() -> Model * {
@@ -353,7 +365,7 @@ namespace pe
 
                         std::string path = kv.second.as<std::string>();
                         std::string fullPath = path;
-                        if (path.find('/') == std::string::npos && path.find('\\') == std::string::npos)
+                        if (!std::filesystem::path(path).is_absolute())
                             fullPath = Path::Assets + "Objects/" + path;
 
                         auto future = ThreadPool::General.Enqueue([fullPath]() -> Model * {

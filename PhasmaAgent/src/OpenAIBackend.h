@@ -32,7 +32,6 @@ namespace pagent
 
         mutable std::string m_textAccumulator;
         mutable std::string m_thinkingAccumulator;
-        mutable std::string m_thoughtSignature;
         mutable std::vector<ToolCallAccumulator> m_toolAccumulators;
     };
 } // namespace pagent

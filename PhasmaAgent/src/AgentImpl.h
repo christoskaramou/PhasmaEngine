@@ -6,6 +6,7 @@
 #include "ToolRegistry.h"
 #include "AnthropicBackend.h"
 #include "OpenAIBackend.h"
+#include "GoogleBackend.h"
 #include "RequestWorker.h"
 #include "OllamaProcess.h"
 #include <mutex>
