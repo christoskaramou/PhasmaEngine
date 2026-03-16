@@ -373,7 +373,7 @@ namespace pe
                                     if (renderer)
                                         renderer->GetScene().UpdateTextures();
                                     m_gui->NotifyChange();
-                                } });
+                                } return true; });
                         }
                     }
                 }

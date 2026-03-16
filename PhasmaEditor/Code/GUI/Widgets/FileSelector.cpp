@@ -9,10 +9,13 @@ namespace pe
         m_open = false;
     }
 
-    void FileSelector::OpenSelection(FileSelectCallback callback, const std::vector<std::string> &allowedExtensions)
+    void FileSelector::OpenSelection(FileSelectCallback callback, const std::vector<std::string> &allowedExtensions, const std::string &defaultPath)
     {
         m_selectionCallback = callback;
         m_allowedExtensions = allowedExtensions;
+
+        if (!defaultPath.empty())
+            m_currentPath = std::filesystem::path(defaultPath);
 
         m_open = true;
 
@@ -71,13 +74,15 @@ namespace pe
                 }
                 else
                 {
+                    bool shouldClose = true;
                     if (m_selectionCallback)
                     {
                         auto pathU8 = path.u8string();
                         std::string pathStr(reinterpret_cast<const char *>(pathU8.c_str()));
-                        m_selectionCallback(pathStr);
+                        shouldClose = m_selectionCallback(pathStr);
                     }
-                    CancelSelection();
+                    if (shouldClose)
+                        CancelSelection();
                 }
             };
 
@@ -138,13 +143,15 @@ namespace pe
                     }
                     else
                     {
+                        bool shouldClose = true;
                         if (m_selectionCallback)
                         {
                             auto pathU8 = selectedPath.u8string();
                             std::string pathStr(reinterpret_cast<const char *>(pathU8.c_str()));
-                            m_selectionCallback(pathStr);
+                            shouldClose = m_selectionCallback(pathStr);
                         }
-                        CancelSelection();
+                        if (shouldClose)
+                            CancelSelection();
                     }
                 }
             }

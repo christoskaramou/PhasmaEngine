@@ -12,8 +12,9 @@ namespace pe
 
         void Update() override;
 
-        using FileSelectCallback = std::function<void(const std::string &)>;
-        void OpenSelection(FileSelectCallback callback, const std::vector<std::string> &allowedExtensions = {});
+        // Return true to close the selector, false to keep it open
+        using FileSelectCallback = std::function<bool(const std::string &)>;
+        void OpenSelection(FileSelectCallback callback, const std::vector<std::string> &allowedExtensions = {}, const std::string &defaultPath = "");
         void CancelSelection();
 
     private:

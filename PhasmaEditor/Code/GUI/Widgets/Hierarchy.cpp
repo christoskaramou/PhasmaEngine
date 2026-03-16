@@ -1,6 +1,7 @@
 #include "Hierarchy.h"
 #include "Camera/Camera.h"
 #include "GUI/GUIState.h"
+#include "GUI/UndoRedo.h"
 #include "GUI/IconsFontAwesome.h"
 #include "Particles/ParticleManager.h"
 #include "Scene/Model.h"
@@ -69,6 +70,10 @@ namespace pe
         auto &models = scene.GetModels();
         auto &selection = SelectionManager::Instance();
 
+        // Helper: save undo snapshot before any destructive action
+        auto recordUndo = [&scene]()
+        { UndoRedo::Instance().RecordSnapshot(scene); };
+
         // Add Button
         float buttonWidth = ImGui::GetContentRegionAvail().x * 0.8f;
         float x = (ImGui::GetContentRegionAvail().x - buttonWidth) * 0.5f;
@@ -76,7 +81,23 @@ namespace pe
         if (ImGui::Button("Add", ImVec2(buttonWidth, 0.f)))
             ImGui::OpenPopup("AddEntityPopup");
 
-        ImGui::Dummy(ImVec2(0.0f, 5.0f));
+        // Scene name
+        {
+            std::string sceneName = scene.GetSceneName();
+            if (scene.IsDirty())
+                sceneName += " *";
+
+            std::string label = std::string(ICON_FA_SITEMAP) + "  " + sceneName;
+            float textWidth = ImGui::CalcTextSize(label.c_str()).x;
+            float availWidth = ImGui::GetContentRegionAvail().x;
+            ImGui::SetCursorPosX(ImGui::GetCursorPosX() + (availWidth - textWidth) * 0.5f);
+            ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.6f, 0.7f, 0.8f, 1.0f));
+            ImGui::TextUnformatted(label.c_str());
+            ImGui::PopStyleColor();
+        }
+
+        ImGui::Separator();
+        ImGui::Dummy(ImVec2(0.0f, 3.0f));
 
         if (ImGui::BeginPopup("AddEntityPopup"))
         {
@@ -279,6 +300,7 @@ namespace pe
                 }
                 if (cameras.size() > 1 && ImGui::MenuItem("Delete"))
                 {
+                    recordUndo();
                     scene.RemoveCamera(camera);
                 }
                 ImGui::EndPopup();
@@ -305,6 +327,7 @@ namespace pe
                 {
                     if (ImGui::MenuItem("Delete All Lights"))
                     {
+                        recordUndo();
                         lightSystem->GetDirectionalLights().clear();
                         lightSystem->GetPointLights().clear();
                         lightSystem->GetSpotLights().clear();
@@ -364,6 +387,7 @@ namespace pe
                         }
                         if (ImGui::MenuItem("Delete"))
                         {
+                            recordUndo();
                             auto &lights = lightSystem->GetDirectionalLights();
                             lights.erase(lights.begin() + i);
                             selection.ClearSelection();
@@ -418,6 +442,7 @@ namespace pe
                         }
                         if (ImGui::MenuItem("Delete"))
                         {
+                            recordUndo();
                             auto &lights = lightSystem->GetPointLights();
                             lights.erase(lights.begin() + i);
                             selection.ClearSelection();
@@ -472,6 +497,7 @@ namespace pe
                         }
                         if (ImGui::MenuItem("Delete"))
                         {
+                            recordUndo();
                             auto &lights = lightSystem->GetSpotLights();
                             lights.erase(lights.begin() + i);
                             selection.ClearSelection();
@@ -526,6 +552,7 @@ namespace pe
                         }
                         if (ImGui::MenuItem("Delete"))
                         {
+                            recordUndo();
                             auto &lights = lightSystem->GetAreaLights();
                             lights.erase(lights.begin() + i);
                             selection.ClearSelection();
@@ -557,7 +584,10 @@ namespace pe
                     if (ImGui::BeginPopupContextItem("EmittersContextMenu"))
                     {
                         if (ImGui::MenuItem("Delete All Emitters"))
+                        {
+                            recordUndo();
                             deleteAllEmitters = true;
+                        }
                         ImGui::EndPopup();
                     }
 
@@ -613,6 +643,7 @@ namespace pe
                                 }
                                 if (ImGui::MenuItem("Delete"))
                                 {
+                                    recordUndo();
                                     emitterToDelete = i;
                                 }
                                 ImGui::EndPopup();
@@ -655,16 +686,47 @@ namespace pe
             if (name.empty())
                 name = "Model_" + std::to_string(id);
 
-            // Add model icon
-            std::string displayName = std::string(ICON_FA_CUBE) + "  " + name;
+            // Use node icon — the model entry acts as the root node
+            std::string displayName = std::string(ICON_FA_VECTOR_SQUARE) + "  " + name;
+
+            // Compute node hierarchy early (model entry merges with root nodes)
+            const auto &nodes = model->GetNodeInfos();
+            int nodeCount = static_cast<int>(nodes.size());
+            std::vector<std::vector<int>> nodeChildren(nodeCount);
+            std::vector<int> roots;
+            for (int i = 0; i < nodeCount; ++i)
+            {
+                if (nodes[i].parent >= 0 && nodes[i].parent < nodeCount)
+                    nodeChildren[nodes[i].parent].push_back(i);
+                else
+                    roots.push_back(i);
+            }
+
+            // Find the node this model entry represents (first root with a mesh, or first root)
+            int modelNodeIdx = -1;
+            for (int r : roots)
+            {
+                if (model->GetNodeMesh(r) >= 0)
+                {
+                    modelNodeIdx = r;
+                    break;
+                }
+            }
+            if (modelNodeIdx < 0 && !roots.empty())
+                modelNodeIdx = roots[0];
 
             ImGuiTreeNodeFlags modelFlags = ImGuiTreeNodeFlags_SpanAvailWidth |
                                             ImGuiTreeNodeFlags_OpenOnArrow |
                                             ImGuiTreeNodeFlags_DefaultOpen |
                                             ImGuiTreeNodeFlags_FramePadding;
 
-            if (selection.GetSelectedModel() == model && selection.GetSelectedNodeIndex() < 0)
+            // Highlight when the model's representative node is selected
+            if (selection.GetSelectedModel() == model &&
+                selection.GetSelectedNodeIndex() == modelNodeIdx &&
+                selection.GetSelectionType() == SelectionType::Node)
+            {
                 modelFlags |= ImGuiTreeNodeFlags_Selected;
+            }
 
             if (m_modelToExpand == model)
             {
@@ -674,18 +736,9 @@ namespace pe
             bool modelOpen = ImGui::TreeNodeEx((void *)(intptr_t)id, modelFlags, "%s", displayName.c_str());
             if ((ImGui::IsItemClicked(ImGuiMouseButton_Left) || ImGui::IsItemClicked(ImGuiMouseButton_Right)) && !ImGui::IsItemToggledOpen())
             {
-                int nodeToSelect = -1;
-                for (int i = 0; i < model->GetNodeCount(); i++)
+                if (modelNodeIdx >= 0)
                 {
-                    if (model->GetNodeMesh(i) >= 0)
-                    {
-                        nodeToSelect = i;
-                        break;
-                    }
-                }
-                if (nodeToSelect >= 0)
-                {
-                    selection.Select(model, nodeToSelect, SelectionType::Node);
+                    selection.Select(model, modelNodeIdx, SelectionType::Node);
                     ImGui::SetWindowFocus("Properties");
                 }
             }
@@ -748,26 +801,98 @@ namespace pe
                 }
                 if (ImGui::MenuItem("Delete"))
                 {
+                    recordUndo();
                     modelsToDelete.push_back(model);
                 }
                 ImGui::EndPopup();
             }
 
+            // Drag & drop target on model entry (acts as root node)
+            if (ImGui::BeginDragDropTarget())
+            {
+                if (const ImGuiPayload *payload = ImGui::AcceptDragDropPayload("HIERARCHY_NODE"))
+                {
+                    HierarchyDragDropPayload data = *(const HierarchyDragDropPayload *)payload->Data;
+                    if (data.modelId == model->GetId() && modelNodeIdx >= 0)
+                    {
+                        model->ReparentNode(data.nodeIndex, modelNodeIdx);
+                    }
+                }
+                ImGui::EndDragDropTarget();
+            }
+
             if (modelOpen)
             {
-                const auto &nodes = model->GetNodeInfos();
-                int nodeCount = static_cast<int>(nodes.size());
+                // Use pre-computed adjacency (nodeChildren, roots)
+                auto &children = nodeChildren;
 
-                // Build adjacency list for efficient traversal
-                std::vector<std::vector<int>> children(nodeCount);
-                std::vector<int> roots;
-                for (int i = 0; i < nodeCount; ++i)
+                // Helper to draw a mesh entry under a node
+                auto DrawMeshEntry = [&](int nodeIndex, int meshIndex)
                 {
-                    if (nodes[i].parent >= 0 && nodes[i].parent < nodeCount)
-                        children[nodes[i].parent].push_back(i);
-                    else
-                        roots.push_back(i);
-                }
+                    const auto &node = nodes[nodeIndex];
+                    uintptr_t meshUniqueId = (id << 16) ^ (nodeIndex + 0x10000);
+                    std::string meshDisplayName = std::string(ICON_FA_SHAPES) + "  Mesh";
+
+                    ImGuiTreeNodeFlags meshFlags = ImGuiTreeNodeFlags_SpanAvailWidth |
+                                                   ImGuiTreeNodeFlags_Leaf |
+                                                   ImGuiTreeNodeFlags_FramePadding;
+
+                    if (selection.GetSelectedModel() == model && selection.GetSelectedNodeIndex() == nodeIndex && selection.GetSelectionType() == SelectionType::Mesh)
+                        meshFlags |= ImGuiTreeNodeFlags_Selected;
+
+                    bool meshOpen = ImGui::TreeNodeEx((void *)meshUniqueId, meshFlags, "%s", meshDisplayName.c_str());
+
+                    if (ImGui::IsItemClicked(ImGuiMouseButton_Left) || ImGui::IsItemClicked(ImGuiMouseButton_Right))
+                    {
+                        selection.Select(model, nodeIndex, SelectionType::Mesh);
+                        ImGui::SetWindowFocus("Properties");
+                    }
+
+                    if (ImGui::IsItemHovered() && ImGui::IsMouseDoubleClicked(0))
+                    {
+                        Camera *camera = scene.GetActiveCamera();
+                        const auto &meshInfos = model->GetMeshInfos();
+                        if (meshIndex >= 0 && meshIndex < static_cast<int>(meshInfos.size()))
+                        {
+                            vec3 min = node.worldBoundingBox.min;
+                            vec3 max = node.worldBoundingBox.max;
+                            vec3 center = (min + max) * 0.5f;
+                            float dist = glm::length(max - min);
+                            vec3 dir = camera->GetFront();
+                            camera->SetPosition(center - dir * glm::max(dist, camera->GetNearPlane()));
+                        }
+                    }
+
+                    if (ImGui::BeginPopupContextItem())
+                    {
+                        if (ImGui::MenuItem("Focus"))
+                        {
+                            selection.Select(model, nodeIndex, SelectionType::Mesh);
+                            Camera *camera = scene.GetActiveCamera();
+                            const auto &meshInfos = model->GetMeshInfos();
+                            if (meshIndex >= 0 && meshIndex < static_cast<int>(meshInfos.size()))
+                            {
+                                vec3 min = node.worldBoundingBox.min;
+                                vec3 max = node.worldBoundingBox.max;
+                                vec3 center = (min + max) * 0.5f;
+                                float dist = glm::length(max - min);
+                                vec3 dir = camera->GetFront();
+                                camera->SetPosition(center - dir * glm::max(dist, camera->GetNearPlane()));
+                                ImGui::SetWindowFocus("Properties");
+                            }
+                        }
+                        if (ImGui::MenuItem("Delete"))
+                        {
+                            recordUndo();
+                            EventSystem::PushEvent(EventType::MeshRemoved,
+                                                   std::make_pair(model, nodeIndex));
+                        }
+                        ImGui::EndPopup();
+                    }
+
+                    if (meshOpen)
+                        ImGui::TreePop();
+                };
 
                 // Recursive draw nodes with icons
                 auto DrawNode = [&](auto &&self, int nodeIndex) -> void
@@ -929,87 +1054,37 @@ namespace pe
                             snprintf(s_renameBuf, sizeof(s_renameBuf), "%s", nodeName.c_str());
                             s_openRenamePopup = true;
                         }
+                        if (ImGui::MenuItem("Delete"))
+                        {
+                            recordUndo();
+                            EventSystem::PushEvent(EventType::NodeRemoved,
+                                                   std::make_pair(model, nodeIndex));
+                        }
                         ImGui::EndPopup();
                     }
 
                     if (nodeOpen)
                     {
-                        // If this node has a mesh, show it as a child
                         if (hasMesh)
-                        {
-                            uintptr_t meshUniqueId = (id << 16) ^ (nodeIndex + 0x10000); // Different ID for mesh
-                            std::string meshDisplayName = std::string(ICON_FA_SHAPES) + "  Mesh";
+                            DrawMeshEntry(nodeIndex, meshIndex);
 
-                            ImGuiTreeNodeFlags meshFlags = ImGuiTreeNodeFlags_SpanAvailWidth |
-                                                           ImGuiTreeNodeFlags_Leaf |
-                                                           ImGuiTreeNodeFlags_FramePadding;
-
-                            // Mesh is selected if node is selected
-                            if (selection.GetSelectedModel() == model && selection.GetSelectedNodeIndex() == nodeIndex && selection.GetSelectionType() == SelectionType::Mesh)
-                                meshFlags |= ImGuiTreeNodeFlags_Selected;
-
-                            bool meshOpen = ImGui::TreeNodeEx((void *)meshUniqueId, meshFlags, "%s", meshDisplayName.c_str());
-
-                            if (ImGui::IsItemClicked(ImGuiMouseButton_Left) || ImGui::IsItemClicked(ImGuiMouseButton_Right))
-                            {
-                                selection.Select(model, nodeIndex, SelectionType::Mesh);
-                                ImGui::SetWindowFocus("Properties");
-                            }
-
-                            if (ImGui::IsItemHovered() && ImGui::IsMouseDoubleClicked(0))
-                            {
-                                Camera *camera = scene.GetActiveCamera();
-                                const auto &meshInfos = model->GetMeshInfos();
-                                if (meshIndex >= 0 && meshIndex < static_cast<int>(meshInfos.size()))
-                                {
-                                    const auto &mesh = meshInfos[meshIndex];
-                                    vec3 min = node.worldBoundingBox.min;
-                                    vec3 max = node.worldBoundingBox.max;
-                                    vec3 center = (min + max) * 0.5f;
-                                    float dist = glm::length(max - min);
-                                    vec3 dir = camera->GetFront();
-                                    camera->SetPosition(center - dir * glm::max(dist, camera->GetNearPlane()));
-                                }
-                            }
-
-                            if (ImGui::BeginPopupContextItem())
-                            {
-                                if (ImGui::MenuItem("Focus"))
-                                {
-                                    selection.Select(model, nodeIndex, SelectionType::Mesh);
-                                    Camera *camera = scene.GetActiveCamera();
-                                    const auto &meshInfos = model->GetMeshInfos();
-                                    if (meshIndex >= 0 && meshIndex < static_cast<int>(meshInfos.size()))
-                                    {
-                                        const auto &mesh = meshInfos[meshIndex];
-                                        vec3 min = node.worldBoundingBox.min;
-                                        vec3 max = node.worldBoundingBox.max;
-                                        vec3 center = (min + max) * 0.5f;
-                                        float dist = glm::length(max - min);
-                                        vec3 dir = camera->GetFront();
-                                        camera->SetPosition(center - dir * glm::max(dist, camera->GetNearPlane()));
-                                        ImGui::SetWindowFocus("Properties");
-                                    }
-                                }
-                                ImGui::EndPopup();
-                            }
-
-                            if (meshOpen)
-                                ImGui::TreePop();
-                        }
-
-                        // Draw child nodes
                         for (int childIndex : children[nodeIndex])
-                        {
                             self(self, childIndex);
-                        }
+
                         ImGui::TreePop();
                     }
                 };
 
+                // Root nodes are merged into the model entry — show their
+                // meshes and children directly, skipping the root node entries
                 for (int rootIndex : roots)
                 {
-                    DrawNode(DrawNode, rootIndex);
+                    int meshIndex = model->GetNodeMesh(rootIndex);
+                    if (meshIndex >= 0)
+                        DrawMeshEntry(rootIndex, meshIndex);
+
+                    for (int childIndex : children[rootIndex])
+                        DrawNode(DrawNode, childIndex);
                 }
 
                 ImGui::TreePop();

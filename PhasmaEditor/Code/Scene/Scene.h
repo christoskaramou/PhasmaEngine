@@ -37,10 +37,17 @@ namespace pe
         Camera *AddCamera();
         void RemoveCamera(Camera *camera);
         void SetActiveCamera(Camera *camera);
-        void SaveScene(const std::filesystem::path &file) const;
+        void SaveScene(const std::filesystem::path &file);
         void LoadScene(const std::filesystem::path &file);
         std::string TakeSnapshot() const;
         void RestoreSnapshot(const std::string &json);
+
+        const std::filesystem::path &GetScenePath() const { return m_scenePath; }
+        void SetScenePath(const std::filesystem::path &path) { m_scenePath = path; }
+        std::string GetSceneName() const;
+        bool IsDirty() const { return m_dirty; }
+        void MarkDirty() { m_dirty = true; }
+        void ClearDirty() { m_dirty = false; }
 
         ParticleManager *GetParticleManager() { return m_particleManager; }
         Camera *GetActiveCamera() const { return m_cameras.at(0); }
@@ -163,5 +170,8 @@ namespace pe
         Sampler *m_defaultSampler = nullptr;
 
         static std::vector<uint32_t> s_aabbIndices;
+
+        std::filesystem::path m_scenePath;
+        bool m_dirty = false;
     };
 } // namespace pe

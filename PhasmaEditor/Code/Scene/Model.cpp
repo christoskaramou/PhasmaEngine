@@ -292,6 +292,102 @@ namespace pe
         return m_nodeToMesh[nodeIndex];
     }
 
+    void Model::RemoveMesh(int nodeIndex)
+    {
+        if (nodeIndex < 0 || nodeIndex >= static_cast<int>(m_nodeToMesh.size()))
+            return;
+
+        int meshIdx = m_nodeToMesh[nodeIndex];
+        if (meshIdx < 0)
+            return;
+
+        // Detach mesh from this node
+        m_nodeToMesh[nodeIndex] = -1;
+
+        // Check if any other node still references this mesh
+        bool meshStillUsed = false;
+        for (int nm : m_nodeToMesh)
+        {
+            if (nm == meshIdx)
+            {
+                meshStillUsed = true;
+                break;
+            }
+        }
+
+        if (!meshStillUsed)
+        {
+            // Build mesh remap (skip the orphaned mesh)
+            std::vector<int> meshRemap(m_meshInfos.size(), -1);
+            int newMeshCount = 0;
+            for (int i = 0; i < static_cast<int>(m_meshInfos.size()); i++)
+            {
+                if (i != meshIdx)
+                    meshRemap[i] = newMeshCount++;
+            }
+
+            // Rebuild flat vertex/index arrays without the orphaned mesh
+            std::vector<Vertex> newVertices;
+            std::vector<PositionUvVertex> newPosUvs;
+            std::vector<uint32_t> newIndices;
+            std::vector<AabbVertex> newAabbVerts;
+
+            uint32_t vOff = 0, iOff = 0;
+            size_t aOff = 0;
+            for (int i = 0; i < static_cast<int>(m_meshInfos.size()); i++)
+            {
+                const MeshInfo &mi = m_meshInfos[i];
+                if (i != meshIdx)
+                {
+                    newVertices.insert(newVertices.end(),
+                                       m_vertices.begin() + vOff, m_vertices.begin() + vOff + mi.verticesCount);
+                    newPosUvs.insert(newPosUvs.end(),
+                                     m_positionUvs.begin() + vOff, m_positionUvs.begin() + vOff + mi.verticesCount);
+                    newIndices.insert(newIndices.end(),
+                                      m_indices.begin() + iOff, m_indices.begin() + iOff + mi.indicesCount);
+                    if (aOff + 8 <= m_aabbVertices.size())
+                        newAabbVerts.insert(newAabbVerts.end(),
+                                            m_aabbVertices.begin() + aOff, m_aabbVertices.begin() + aOff + 8);
+                }
+                vOff += mi.verticesCount;
+                iOff += mi.indicesCount;
+                aOff += 8;
+            }
+
+            m_vertices = std::move(newVertices);
+            m_positionUvs = std::move(newPosUvs);
+            m_indices = std::move(newIndices);
+            m_aabbVertices = std::move(newAabbVerts);
+
+            // Rebuild meshInfos without the orphaned mesh
+            std::vector<MeshInfo> newMeshInfos;
+            newMeshInfos.reserve(m_meshInfos.size() - 1);
+            for (int i = 0; i < static_cast<int>(m_meshInfos.size()); i++)
+            {
+                if (i != meshIdx)
+                    newMeshInfos.push_back(std::move(m_meshInfos[i]));
+            }
+            m_meshInfos = std::move(newMeshInfos);
+
+            // Remap all nodeToMesh references
+            for (int &nm : m_nodeToMesh)
+            {
+                if (nm >= 0 && nm < static_cast<int>(meshRemap.size()))
+                    nm = meshRemap[nm];
+            }
+
+            // Update counts
+            m_meshCount = static_cast<uint32_t>(m_meshInfos.size());
+            m_verticesCount = static_cast<uint32_t>(m_vertices.size());
+            m_indicesCount = static_cast<uint32_t>(m_indices.size());
+        }
+
+        // Mark dirty
+        m_dirtyNodes = true;
+        for (size_t i = 0; i < m_dirtyUniforms.size(); i++)
+            m_dirtyUniforms[i] = true;
+    }
+
     ResourceHandle<Image> Model::LoadTexture(CommandBuffer *cmd, const std::filesystem::path &texturePath)
     {
         if (texturePath.empty())
@@ -325,6 +421,166 @@ namespace pe
         if (it == m_images.end())
             m_images.push_back(handle);
         return handle;
+    }
+
+    bool Model::RemoveNode(int nodeIndex)
+    {
+        if (nodeIndex < 0 || nodeIndex >= static_cast<int>(m_nodeInfos.size()))
+            return false;
+
+        // 1. Collect subtree via BFS
+        std::vector<int> subtree;
+        subtree.push_back(nodeIndex);
+        size_t head = 0;
+        while (head < subtree.size())
+        {
+            for (int child : m_nodeInfos[subtree[head++]].children)
+                subtree.push_back(child);
+        }
+        std::set<int> removedNodes(subtree.begin(), subtree.end());
+
+        // If removing all nodes, the model is empty
+        if (removedNodes.size() == m_nodeInfos.size())
+            return true;
+
+        // 2. Detach from parent
+        int parent = m_nodeInfos[nodeIndex].parent;
+        if (parent >= 0)
+        {
+            auto &siblings = m_nodeInfos[parent].children;
+            siblings.erase(std::remove(siblings.begin(), siblings.end(), nodeIndex), siblings.end());
+        }
+
+        // 3. Find orphaned mesh indices (only referenced by removed nodes)
+        std::set<int> orphanedMeshes;
+        for (int ni : subtree)
+        {
+            int mi = GetNodeMesh(ni);
+            if (mi >= 0)
+                orphanedMeshes.insert(mi);
+        }
+        for (int ni = 0; ni < static_cast<int>(m_nodeInfos.size()); ni++)
+        {
+            if (removedNodes.count(ni))
+                continue;
+            orphanedMeshes.erase(GetNodeMesh(ni));
+        }
+
+        // 4. Build index remaps
+        std::vector<int> meshRemap(m_meshInfos.size(), -1);
+        int newMeshCount = 0;
+        for (int i = 0; i < static_cast<int>(m_meshInfos.size()); i++)
+        {
+            if (!orphanedMeshes.count(i))
+                meshRemap[i] = newMeshCount++;
+        }
+
+        std::vector<int> nodeRemap(m_nodeInfos.size(), -1);
+        int newNodeCount = 0;
+        for (int i = 0; i < static_cast<int>(m_nodeInfos.size()); i++)
+        {
+            if (!removedNodes.count(i))
+                nodeRemap[i] = newNodeCount++;
+        }
+
+        // 5. Rebuild flat vertex/index arrays, skipping orphaned mesh data
+        std::vector<Vertex> newVertices;
+        std::vector<PositionUvVertex> newPosUvs;
+        std::vector<uint32_t> newIndices;
+        std::vector<AabbVertex> newAabbVerts;
+
+        newVertices.reserve(m_vertices.size());
+        newPosUvs.reserve(m_positionUvs.size());
+        newIndices.reserve(m_indices.size());
+        newAabbVerts.reserve(m_aabbVertices.size());
+
+        uint32_t vOff = 0, iOff = 0;
+        size_t aOff = 0;
+        for (int i = 0; i < static_cast<int>(m_meshInfos.size()); i++)
+        {
+            const MeshInfo &mi = m_meshInfos[i];
+            if (!orphanedMeshes.count(i))
+            {
+                newVertices.insert(newVertices.end(),
+                                   m_vertices.begin() + vOff, m_vertices.begin() + vOff + mi.verticesCount);
+                newPosUvs.insert(newPosUvs.end(),
+                                 m_positionUvs.begin() + vOff, m_positionUvs.begin() + vOff + mi.verticesCount);
+                newIndices.insert(newIndices.end(),
+                                  m_indices.begin() + iOff, m_indices.begin() + iOff + mi.indicesCount);
+                if (aOff + 8 <= m_aabbVertices.size())
+                    newAabbVerts.insert(newAabbVerts.end(),
+                                        m_aabbVertices.begin() + aOff, m_aabbVertices.begin() + aOff + 8);
+            }
+            vOff += mi.verticesCount;
+            iOff += mi.indicesCount;
+            aOff += 8;
+        }
+
+        m_vertices = std::move(newVertices);
+        m_positionUvs = std::move(newPosUvs);
+        m_indices = std::move(newIndices);
+        m_aabbVertices = std::move(newAabbVerts);
+
+        // 6. Rebuild meshInfos
+        std::vector<MeshInfo> newMeshInfos;
+        newMeshInfos.reserve(newMeshCount);
+        for (int i = 0; i < static_cast<int>(m_meshInfos.size()); i++)
+        {
+            if (!orphanedMeshes.count(i))
+                newMeshInfos.push_back(std::move(m_meshInfos[i]));
+        }
+        m_meshInfos = std::move(newMeshInfos);
+
+        // 7. Rebuild nodeInfos and nodeToMesh with remapped indices
+        std::vector<NodeInfo> newNodeInfos;
+        std::vector<int> newNodeToMesh;
+        newNodeInfos.reserve(newNodeCount);
+        newNodeToMesh.reserve(newNodeCount);
+
+        for (int i = 0; i < static_cast<int>(m_nodeInfos.size()); i++)
+        {
+            if (removedNodes.count(i))
+                continue;
+
+            NodeInfo ni = std::move(m_nodeInfos[i]);
+            ni.parent = (ni.parent >= 0) ? nodeRemap[ni.parent] : -1;
+
+            std::vector<int> newChildren;
+            for (int c : ni.children)
+            {
+                if (nodeRemap[c] >= 0)
+                    newChildren.push_back(nodeRemap[c]);
+            }
+            ni.children = std::move(newChildren);
+
+            newNodeInfos.push_back(std::move(ni));
+
+            int oldMesh = (i < static_cast<int>(m_nodeToMesh.size())) ? m_nodeToMesh[i] : -1;
+            int newMesh = (oldMesh >= 0 && oldMesh < static_cast<int>(meshRemap.size())) ? meshRemap[oldMesh] : -1;
+            newNodeToMesh.push_back(newMesh);
+        }
+
+        m_nodeInfos = std::move(newNodeInfos);
+        m_nodeToMesh = std::move(newNodeToMesh);
+
+        // 8. Update counts
+        m_meshCount = static_cast<uint32_t>(m_meshInfos.size());
+        m_verticesCount = static_cast<uint32_t>(m_vertices.size());
+        m_indicesCount = static_cast<uint32_t>(m_indices.size());
+
+        // 9. Mark everything dirty
+        m_dirtyNodes = true;
+        m_nodesMoved.clear();
+        for (size_t i = 0; i < m_dirtyUniforms.size(); i++)
+            m_dirtyUniforms[i] = true;
+        for (auto &ni : m_nodeInfos)
+        {
+            ni.dirty = true;
+            for (size_t k = 0; k < ni.dirtyUniforms.size(); k++)
+                ni.dirtyUniforms[k] = true;
+        }
+
+        return false;
     }
 
     void Model::ReparentNode(int nodeIndex, int newParentIndex)

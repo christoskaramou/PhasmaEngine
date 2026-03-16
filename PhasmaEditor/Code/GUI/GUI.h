@@ -50,6 +50,8 @@ namespace pe
         void ShowLoadModelMenuItem();
         void ShowLoadSceneMenuItem();
         void ShowSaveSceneMenuItem();
+        void ShowSaveSceneMenuItem_Action(); // Opens file selector for Save As
+        void OpenLoadSceneDialog();
         void ShowExitMenuItem();
         void DrawExitPopup();
         void Toolbar();
@@ -57,6 +59,12 @@ namespace pe
         void Stop();
 
         bool m_showExitConfirmation = false;
+        bool m_showSaveBeforeLoad = false;
+        void DrawSaveBeforeLoadPopup();
+
+        bool m_showOverwriteConfirmation = false;
+        std::filesystem::path m_pendingSavePath;
+        void DrawOverwriteConfirmationPopup();
 
         void Menu();
         void BuildDockspace();

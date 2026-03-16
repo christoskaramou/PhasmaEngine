@@ -1336,7 +1336,14 @@ namespace pe
         // Update TLAS in-place using eUpdate mode
         m_tlas->UpdateTLAS(cmd, m_meshCount, m_instanceBuffer, m_scratchBuffer->GetDeviceAddress());
     }
-    void Scene::SaveScene(const std::filesystem::path &file) const
+    std::string Scene::GetSceneName() const
+    {
+        if (m_scenePath.empty())
+            return "Untitled";
+        return m_scenePath.filename().string();
+    }
+
+    void Scene::SaveScene(const std::filesystem::path &file)
     {
         rapidjson::Document d;
         d.SetObject();
@@ -1626,9 +1633,15 @@ namespace pe
         if (d.Accept(writer))
         {
             if (ofs.bad())
+            {
                 Log::Error("File stream error while writing to: " + file.string());
+            }
             else
+            {
+                m_scenePath = file;
+                m_dirty = false;
                 Log::Info("Scene saved to: " + file.string());
+            }
         }
         else
         {
@@ -1644,6 +1657,9 @@ namespace pe
             Log::Error("Failed to open scene file: " + file.string());
             return;
         }
+
+        m_scenePath = file;
+        m_dirty = false;
 
         rapidjson::IStreamWrapper isw(ifs);
         rapidjson::Document d;

@@ -17,6 +17,8 @@ namespace pe
         ModelLoaded,
         ModelRemoved,
         ModelsRemoved,
+        NodeRemoved,
+        MeshRemoved,
         SetRenderMode,
         RunCommand,
     };

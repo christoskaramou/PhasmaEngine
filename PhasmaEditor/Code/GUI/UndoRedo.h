@@ -13,6 +13,11 @@ namespace pe
         // If different, push the previous snapshot as an undo entry.
         void CaptureIdleState(Scene &scene);
 
+        // Explicitly save the current scene state as an undo entry.
+        // Call this before destructive actions (delete node/mesh/model/light/etc.)
+        // that bypass the idle-capture mechanism.
+        void RecordSnapshot(Scene &scene);
+
         void Undo(Scene &scene);
         void Redo(Scene &scene);
 

@@ -9,6 +9,9 @@
 #include "API/Swapchain.h"
 #include "GUIState.h"
 #include "Helpers.h"
+#include "Particles/ParticleManager.h"
+#include "Scene/SelectionManager.h"
+#include "Systems/LightSystem.h"
 #include "IconsFontAwesome.h"
 #include "RenderPasses/LightPass.h"
 #include "Scene/Model.h"
@@ -96,7 +99,7 @@ namespace pe
                         }
                         GUIState::s_modelLoading = false;
                     };
-                    ThreadPool::GUI.Enqueue(loadAsync); }, exts);
+                    ThreadPool::GUI.Enqueue(loadAsync); return true; }, exts);
             }
         }
     }
@@ -105,45 +108,164 @@ namespace pe
     {
         if (ImGui::MenuItem("Load Scene...", "Load a scene from JSON"))
         {
-            auto *fs = GetWidget<FileSelector>();
-            if (fs)
+            RendererSystem *rs = GetGlobalSystem<RendererSystem>();
+            if (rs && rs->GetScene().IsDirty())
             {
-                std::vector<std::string> exts = {};
-                fs->OpenSelection([](const std::string &path)
-                                  {
-                    auto loadAsync = [path]()
-                    {
-                        auto* rs = GetGlobalSystem<RendererSystem>();
-                        if (rs)
-                            rs->GetScene().LoadScene(path);
-                    };
-                    ThreadPool::GUI.Enqueue(loadAsync); }, exts);
+                m_showSaveBeforeLoad = true;
             }
+            else
+            {
+                OpenLoadSceneDialog();
+            }
+        }
+    }
+
+    void GUI::OpenLoadSceneDialog()
+    {
+        auto *fs = GetWidget<FileSelector>();
+        if (fs)
+        {
+            std::vector<std::string> exts = {};
+            fs->OpenSelection([](const std::string &path)
+                              {
+                auto loadAsync = [path]()
+                {
+                    auto* rs = GetGlobalSystem<RendererSystem>();
+                    if (rs)
+                        rs->GetScene().LoadScene(path);
+                };
+                ThreadPool::GUI.Enqueue(loadAsync); return true; }, exts);
+        }
+    }
+
+    void GUI::DrawSaveBeforeLoadPopup()
+    {
+        if (m_showSaveBeforeLoad)
+        {
+            ImGui::OpenPopup("Save Scene?");
+            m_showSaveBeforeLoad = false;
+        }
+
+        if (ImGui::BeginPopupModal("Save Scene?", nullptr, ImGuiWindowFlags_AlwaysAutoResize))
+        {
+            ImGui::Text("Current scene has unsaved changes.\nDo you want to save before loading?");
+            ImGui::Dummy(ImVec2(0, 10));
+
+            if (ImGui::Button("Save", ImVec2(80, 0)))
+            {
+                RendererSystem *rs = GetGlobalSystem<RendererSystem>();
+                if (rs)
+                {
+                    Scene &scene = rs->GetScene();
+                    if (!scene.GetScenePath().empty())
+                        scene.SaveScene(scene.GetScenePath());
+                    else
+                        ShowSaveSceneMenuItem_Action();
+                }
+                ImGui::CloseCurrentPopup();
+                OpenLoadSceneDialog();
+            }
+            ImGui::SameLine();
+            if (ImGui::Button("Don't Save", ImVec2(80, 0)))
+            {
+                ImGui::CloseCurrentPopup();
+                OpenLoadSceneDialog();
+            }
+            ImGui::SameLine();
+            if (ImGui::Button("Cancel", ImVec2(80, 0)))
+            {
+                ImGui::CloseCurrentPopup();
+            }
+            ImGui::EndPopup();
         }
     }
 
     void GUI::ShowSaveSceneMenuItem()
     {
-        if (ImGui::MenuItem("Save Scene...", "Save"))
+        if (ImGui::MenuItem("Save Scene...", "Ctrl+S"))
         {
-            auto *fs = GetWidget<FileSelector>();
-            if (fs)
-            {
-                std::vector<std::string> exts = {".pescene"};
-                fs->OpenSelection([](const std::string &path)
-                                  {
-                    auto saveAsync = [path]()
-                    {
-                        std::filesystem::path savePath(path);
-                        if (savePath.extension() != ".pescene")
-                            savePath += ".pescene";
+            RendererSystem *rs = GetGlobalSystem<RendererSystem>();
+            if (rs && !rs->GetScene().GetScenePath().empty())
+                rs->GetScene().SaveScene(rs->GetScene().GetScenePath());
+            else
+                ShowSaveSceneMenuItem_Action();
+        }
+    }
 
-                        auto* rs = GetGlobalSystem<RendererSystem>();
-                        if (rs)
-                            rs->GetScene().SaveScene(savePath);
-                    };
-                    ThreadPool::GUI.Enqueue(saveAsync); }, exts);
+    void GUI::ShowSaveSceneMenuItem_Action()
+    {
+        auto *fs = GetWidget<FileSelector>();
+        if (fs)
+        {
+            std::vector<std::string> exts = {".pescene"};
+            fs->OpenSelection([this](const std::string &path)
+                              {
+                std::filesystem::path savePath(path);
+                if (savePath.extension() != ".pescene")
+                    savePath += ".pescene";
+
+                if (std::filesystem::exists(savePath))
+                {
+                    m_pendingSavePath = savePath;
+                    m_showOverwriteConfirmation = true;
+                    return true; // Close file selector, show overwrite prompt
+                }
+
+                auto saveAsync = [savePath]()
+                {
+                    auto* rs = GetGlobalSystem<RendererSystem>();
+                    if (rs)
+                        rs->GetScene().SaveScene(savePath);
+                };
+                ThreadPool::GUI.Enqueue(saveAsync);
+                return true; }, exts, Path::Assets + "Scenes/");
+        }
+    }
+
+    void GUI::DrawOverwriteConfirmationPopup()
+    {
+        if (!m_showOverwriteConfirmation)
+            return;
+
+        ImVec2 center = ImGui::GetMainViewport()->GetCenter();
+        ImGui::SetNextWindowPos(center, ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
+        ImGui::SetNextWindowFocus();
+
+        bool open = true;
+        if (ImGui::Begin("Overwrite File?", &open, ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoDocking))
+        {
+            std::string filename = m_pendingSavePath.filename().string();
+            ImGui::Text("'%s' already exists.\nDo you want to overwrite it?", filename.c_str());
+            ImGui::Separator();
+
+            if (ImGui::Button("Overwrite", ImVec2(120, 0)))
+            {
+                auto savePath = m_pendingSavePath;
+                auto saveAsync = [savePath]()
+                {
+                    auto *rs = GetGlobalSystem<RendererSystem>();
+                    if (rs)
+                        rs->GetScene().SaveScene(savePath);
+                };
+                ThreadPool::GUI.Enqueue(saveAsync);
+                m_pendingSavePath.clear();
+                m_showOverwriteConfirmation = false;
+                if (auto *fs = GetWidget<FileSelector>())
+                    fs->CancelSelection();
             }
+            ImGui::SameLine();
+            if (ImGui::Button("Cancel", ImVec2(120, 0)))
+            {
+                m_pendingSavePath.clear();
+                m_showOverwriteConfirmation = false;
+            }
+        }
+        ImGui::End();
+
+        if (!open)
+        {
+            m_pendingSavePath.clear();
+            m_showOverwriteConfirmation = false;
         }
     }
 
@@ -295,6 +417,8 @@ namespace pe
                 ShowLoadModelMenuItem();
                 ShowLoadSceneMenuItem();
                 ShowSaveSceneMenuItem();
+                if (ImGui::MenuItem("Save Scene As..."))
+                    ShowSaveSceneMenuItem_Action();
                 ImGui::Separator();
                 ShowExitMenuItem();
                 ImGui::EndMenu();
@@ -805,11 +929,119 @@ namespace pe
                 }
                 if (io.KeyShift && ImGui::IsKeyPressed(ImGuiKey_L, false))
                     m_requestDockReset = true;
+
+                // Ctrl+S — save scene
+                if (ImGui::IsKeyPressed(ImGuiKey_S, false))
+                {
+                    if (undoRedoRS)
+                    {
+                        Scene &scene = undoRedoRS->GetScene();
+                        if (!scene.GetScenePath().empty())
+                        {
+                            scene.SaveScene(scene.GetScenePath());
+                        }
+                        else
+                        {
+                            // No path yet — open "Save As" dialog
+                            ShowSaveSceneMenuItem_Action();
+                        }
+                    }
+                }
+            }
+
+            // Delete key — remove selected entity
+            if (!io.WantTextInput && ImGui::IsKeyPressed(ImGuiKey_Delete, false))
+            {
+                auto &selection = SelectionManager::Instance();
+                if (selection.HasSelection())
+                {
+                    // Record undo snapshot before any destructive action
+                    if (undoRedoRS)
+                        undoRedo.RecordSnapshot(undoRedoRS->GetScene());
+
+                    SelectionType selType = selection.GetSelectionType();
+                    if (selType == SelectionType::Node)
+                    {
+                        Model *model = selection.GetSelectedModel();
+                        int nodeIndex = selection.GetSelectedNodeIndex();
+                        if (model && nodeIndex >= 0)
+                            EventSystem::PushEvent(EventType::NodeRemoved,
+                                                   std::make_pair(model, nodeIndex));
+                    }
+                    else if (selType == SelectionType::Mesh)
+                    {
+                        Model *model = selection.GetSelectedModel();
+                        int nodeIndex = selection.GetSelectedNodeIndex();
+                        if (model && nodeIndex >= 0)
+                            EventSystem::PushEvent(EventType::MeshRemoved,
+                                                   std::make_pair(model, nodeIndex));
+                    }
+                    else if (selType == SelectionType::Camera)
+                    {
+                        RendererSystem *rs = GetGlobalSystem<RendererSystem>();
+                        if (rs)
+                        {
+                            auto &cameras = rs->GetScene().GetCameras();
+                            int idx = selection.GetSelectedNodeIndex();
+                            if (cameras.size() > 1 && idx >= 0 && idx < static_cast<int>(cameras.size()))
+                                rs->GetScene().RemoveCamera(cameras[idx]);
+                        }
+                    }
+                    else if (selType == SelectionType::Light)
+                    {
+                        LightSystem *ls = GetGlobalSystem<LightSystem>();
+                        if (ls)
+                        {
+                            int idx = selection.GetSelectedLightIndex();
+                            LightType lt = selection.GetSelectedLightType();
+                            auto eraseLight = [&](auto &lights)
+                            {
+                                if (idx >= 0 && idx < static_cast<int>(lights.size()))
+                                {
+                                    lights.erase(lights.begin() + idx);
+                                    selection.ClearSelection();
+                                }
+                            };
+
+                            switch (lt)
+                            {
+                            case LightType::Directional: eraseLight(ls->GetDirectionalLights()); break;
+                            case LightType::Point:       eraseLight(ls->GetPointLights()); break;
+                            case LightType::Spot:        eraseLight(ls->GetSpotLights()); break;
+                            case LightType::Area:        eraseLight(ls->GetAreaLights()); break;
+                            }
+                        }
+                    }
+                    else if (selType == SelectionType::Emitter)
+                    {
+                        RendererSystem *rs = GetGlobalSystem<RendererSystem>();
+                        if (rs)
+                        {
+                            ParticleManager *pm = rs->GetScene().GetParticleManager();
+                            if (pm)
+                            {
+                                int idx = selection.GetSelectedEmitterIndex();
+                                auto &emitters = pm->GetEmitters();
+                                auto &names = pm->GetEmitterNames();
+                                if (idx >= 0 && idx < static_cast<int>(emitters.size()))
+                                {
+                                    emitters.erase(emitters.begin() + idx);
+                                    if (idx < static_cast<int>(names.size()))
+                                        names.erase(names.begin() + idx);
+                                    pm->UpdateEmitterBuffer();
+                                    selection.ClearSelection();
+                                }
+                            }
+                        }
+                    }
+                }
             }
         }
 
         Menu();
         DrawExitPopup();
+        DrawSaveBeforeLoadPopup();
+        DrawOverwriteConfirmationPopup();
         Toolbar();
         BuildDockspace();
 

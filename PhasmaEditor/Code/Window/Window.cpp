@@ -202,6 +202,33 @@ namespace pe
                     rendererSystem->GetScene().UpdateGeometryBuffers();
                     break;
                 }
+                case EventType::NodeRemoved:
+                {
+                    auto info = std::any_cast<std::pair<Model *, int>>(event.payload);
+                    Model *model = info.first;
+                    int nodeIndex = info.second;
+                    if (!model)
+                        break;
+                    rendererSystem->WaitAllFramesCommands();
+                    SelectionManager::Instance().ClearSelection();
+                    if (model->RemoveNode(nodeIndex))
+                        rendererSystem->GetScene().RemoveModel(model);
+                    rendererSystem->GetScene().UpdateGeometryBuffers();
+                    break;
+                }
+                case EventType::MeshRemoved:
+                {
+                    auto info = std::any_cast<std::pair<Model *, int>>(event.payload);
+                    Model *model = info.first;
+                    int nodeIndex = info.second;
+                    if (!model)
+                        break;
+                    rendererSystem->WaitAllFramesCommands();
+                    SelectionManager::Instance().ClearSelection();
+                    model->RemoveMesh(nodeIndex);
+                    rendererSystem->GetScene().UpdateGeometryBuffers();
+                    break;
+                }
                 case EventType::ModelsRemoved:
                 {
                     auto models = std::any_cast<std::vector<Model *>>(event.payload);

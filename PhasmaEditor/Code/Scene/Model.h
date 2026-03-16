@@ -79,6 +79,12 @@ namespace pe
         void MarkDirty(int node);
         void UpdateNodeMatrices();
         void ReparentNode(int nodeIndex, int newParentIndex);
+
+        // Removes a node and its subtree. Returns true if the model is now empty (caller should delete it).
+        bool RemoveNode(int nodeIndex);
+
+        // Removes only the mesh from a node, keeping the node and its children intact.
+        void RemoveMesh(int nodeIndex);
         ResourceHandle<Image> LoadTexture(CommandBuffer *cmd, const std::filesystem::path &texturePath);
 
         // Getters

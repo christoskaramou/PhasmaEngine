@@ -20,6 +20,7 @@ namespace pe
         {
             m_undoStack.push_back(std::move(m_idleSnapshot));
             m_redoStack.clear();
+            scene.MarkDirty();
 
             if (m_undoStack.size() > MAX_HISTORY)
                 m_undoStack.pop_front();
@@ -27,6 +28,21 @@ namespace pe
 
         m_idleSnapshot = std::move(current);
         m_hasIdleSnapshot = true;
+    }
+
+    void UndoRedo::RecordSnapshot(Scene &scene)
+    {
+        std::string current = scene.TakeSnapshot();
+
+        m_undoStack.push_back(std::move(current));
+        m_redoStack.clear();
+        scene.MarkDirty();
+
+        if (m_undoStack.size() > MAX_HISTORY)
+            m_undoStack.pop_front();
+
+        // Reset idle state so next capture starts fresh after the action
+        m_hasIdleSnapshot = false;
     }
 
     void UndoRedo::Undo(Scene &scene)
@@ -39,6 +55,7 @@ namespace pe
         std::string snapshot = std::move(m_undoStack.back());
         m_undoStack.pop_back();
         scene.RestoreSnapshot(snapshot);
+        scene.MarkDirty();
 
         m_idleSnapshot = std::move(snapshot);
         m_hasIdleSnapshot = true;
@@ -54,6 +71,7 @@ namespace pe
         std::string snapshot = std::move(m_redoStack.back());
         m_redoStack.pop_back();
         scene.RestoreSnapshot(snapshot);
+        scene.MarkDirty();
 
         m_idleSnapshot = std::move(snapshot);
         m_hasIdleSnapshot = true;

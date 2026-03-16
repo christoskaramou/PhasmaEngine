@@ -172,7 +172,7 @@ namespace pe
                         {
                             pm->GetEmitters()[emitterIdx].textureIndex = newTexIndex;
                             pm->UpdateEmitterBuffer();
-                        } },
+                        } return true; },
                                   {".png", ".jpg", ".jpeg", ".tga"});
             }
         }
