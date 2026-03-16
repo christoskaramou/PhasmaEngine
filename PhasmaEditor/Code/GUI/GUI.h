@@ -25,6 +25,7 @@ namespace pe
         void ToggleRender() { m_render = !m_render; }
         void TriggerExitConfirmation() { m_showExitConfirmation = true; }
         void RequestDockReset() { m_requestDockReset = true; }
+        void NotifyChange() { m_needIdleCapture = true; m_idleFramesAfterEdit = 0; }
 
         // Called after the window is shown to apply the correct layout
         void ApplyStartupLayout();

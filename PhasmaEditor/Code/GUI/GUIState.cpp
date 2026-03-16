@@ -15,6 +15,18 @@ namespace
         if (path.empty())
             return;
 
+        // Only open paths that exist on disk to prevent command injection
+        if (!std::filesystem::exists(path))
+            return;
+
+        // Resolve to a canonical absolute path to prevent path traversal
+        std::error_code ec;
+        auto canonical = std::filesystem::canonical(path, ec);
+        if (ec)
+            return;
+
+        std::string safePath = canonical.string();
+
 #if defined(__APPLE__)
         const char *opener = "open";
 #else
@@ -24,7 +36,7 @@ namespace
         pid_t pid = fork();
         if (pid == 0)
         {
-            execlp(opener, opener, path.c_str(), static_cast<char *>(nullptr));
+            execlp(opener, opener, safePath.c_str(), static_cast<char *>(nullptr));
             _exit(127);
         }
         if (pid > 0)
@@ -64,8 +76,18 @@ namespace pe
         if (absPath.empty())
             return;
 
+        // Only open paths that exist on disk to prevent command injection
+        if (!std::filesystem::exists(absPath))
+            return;
+
+        // Resolve to canonical absolute path to prevent path traversal
+        std::error_code ec;
+        auto canonical = std::filesystem::canonical(absPath, ec);
+        if (ec)
+            return;
+
 #if defined(_WIN32)
-        std::string pathCopy = absPath;
+        std::string pathCopy = canonical.string();
         ThreadPool::GUI.Enqueue([pathCopy]()
                                 {
                                     std::filesystem::path path(reinterpret_cast<const char8_t *>(pathCopy.c_str()));

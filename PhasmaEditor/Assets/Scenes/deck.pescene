@@ -1,0 +1,5126 @@
+{
+    "settings": {
+        "shadows": true,
+        "shadow_map_size": 2048,
+        "num_cascades": 4,
+        "render_scale": 0.75,
+        "ssao": true,
+        "fxaa": false,
+        "taa": true,
+        "cas_sharpening": true,
+        "cas_sharpness": 0.5,
+        "ssr": false,
+        "tonemapping": false,
+        "dof": false,
+        "dof_focus_scale": 15.0,
+        "dof_blur_range": 5.0,
+        "bloom": false,
+        "bloom_strength": 1.0,
+        "bloom_range": 1.0,
+        "motion_blur": true,
+        "motion_blur_strength": 1.0,
+        "motion_blur_samples": 16,
+        "IBL": true,
+        "IBL_intensity": 0.4,
+        "lights_intensity": 1.0,
+        "day": true,
+        "depth_bias": [
+            0.0,
+            0.0,
+            -6.199997
+        ],
+        "draw_grid": true,
+        "draw_aabbs": false,
+        "render_mode": 1
+    },
+    "models": [
+        {
+            "primitive_type": "cube",
+            "name": "Card_1",
+            "matrix": [
+                1.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                1.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                1.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                1.0
+            ],
+            "nodes": [
+                {
+                    "name": "Model_19",
+                    "parent": -1,
+                    "local_matrix": [
+                        0.249997,
+                        0.0,
+                        -0.001088,
+                        0.0,
+                        0.0,
+                        0.002,
+                        0.0,
+                        0.0,
+                        0.001524,
+                        0.0,
+                        0.349996,
+                        0.0,
+                        0.004969,
+                        0.002,
+                        -0.003217,
+                        1.0
+                    ]
+                }
+            ],
+            "meshes": [
+                {
+                    "render_type": 1,
+                    "texture_mask": 0,
+                    "material_factors": [
+                        [
+                            1.0,
+                            1.0,
+                            1.0,
+                            1.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            1.0,
+                            1.0,
+                            0.5,
+                            1.0,
+                            0.0,
+                            1.0,
+                            0.0,
+                            0.0
+                        ],
+                        [
+                            1.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            1.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            1.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            1.0
+                        ]
+                    ],
+                    "textures": {
+                        "base_color": "../Objects/white.png",
+                        "metallic_roughness": "../Objects/normal.png",
+                        "normal": "../Objects/white.png",
+                        "occlusion": "../Objects/white.png",
+                        "emissive": "../Objects/black.png"
+                    }
+                }
+            ]
+        },
+        {
+            "primitive_type": "cube",
+            "name": "Card_2",
+            "matrix": [
+                1.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                1.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                1.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                1.0
+            ],
+            "nodes": [
+                {
+                    "name": "Model_20",
+                    "parent": -1,
+                    "local_matrix": [
+                        0.249997,
+                        0.0,
+                        0.001141,
+                        0.0,
+                        0.0,
+                        0.002,
+                        0.0,
+                        0.0,
+                        -0.001597,
+                        0.0,
+                        0.349996,
+                        0.0,
+                        -0.001024,
+                        0.004,
+                        -0.000905,
+                        1.0
+                    ]
+                }
+            ],
+            "meshes": [
+                {
+                    "render_type": 1,
+                    "texture_mask": 0,
+                    "material_factors": [
+                        [
+                            1.0,
+                            1.0,
+                            1.0,
+                            1.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            1.0,
+                            1.0,
+                            0.5,
+                            1.0,
+                            0.0,
+                            1.0,
+                            0.0,
+                            0.0
+                        ],
+                        [
+                            1.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            1.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            1.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            1.0
+                        ]
+                    ],
+                    "textures": {
+                        "base_color": "../Objects/white.png",
+                        "metallic_roughness": "../Objects/normal.png",
+                        "normal": "../Objects/white.png",
+                        "occlusion": "../Objects/white.png",
+                        "emissive": "../Objects/black.png"
+                    }
+                }
+            ]
+        },
+        {
+            "primitive_type": "cube",
+            "name": "Card_3",
+            "matrix": [
+                1.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                1.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                1.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                1.0
+            ],
+            "nodes": [
+                {
+                    "name": "Model_21",
+                    "parent": -1,
+                    "local_matrix": [
+                        0.249994,
+                        0.0,
+                        0.001664,
+                        0.0,
+                        0.0,
+                        0.002,
+                        0.0,
+                        0.0,
+                        -0.00233,
+                        0.0,
+                        0.349992,
+                        0.0,
+                        0.004277,
+                        0.006,
+                        0.003,
+                        1.0
+                    ]
+                }
+            ],
+            "meshes": [
+                {
+                    "render_type": 1,
+                    "texture_mask": 0,
+                    "material_factors": [
+                        [
+                            1.0,
+                            1.0,
+                            1.0,
+                            1.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            1.0,
+                            1.0,
+                            0.5,
+                            1.0,
+                            0.0,
+                            1.0,
+                            0.0,
+                            0.0
+                        ],
+                        [
+                            1.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            1.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            1.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            1.0
+                        ]
+                    ],
+                    "textures": {
+                        "base_color": "../Objects/white.png",
+                        "metallic_roughness": "../Objects/normal.png",
+                        "normal": "../Objects/white.png",
+                        "occlusion": "../Objects/white.png",
+                        "emissive": "../Objects/black.png"
+                    }
+                }
+            ]
+        },
+        {
+            "primitive_type": "cube",
+            "name": "Card_4",
+            "matrix": [
+                1.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                1.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                1.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                1.0
+            ],
+            "nodes": [
+                {
+                    "name": "Model_22",
+                    "parent": -1,
+                    "local_matrix": [
+                        0.249999,
+                        0.0,
+                        0.000399,
+                        0.0,
+                        0.0,
+                        0.002,
+                        0.0,
+                        0.0,
+                        -0.000558,
+                        0.0,
+                        0.349999,
+                        0.0,
+                        0.000744,
+                        0.008,
+                        0.000837,
+                        1.0
+                    ]
+                }
+            ],
+            "meshes": [
+                {
+                    "render_type": 1,
+                    "texture_mask": 0,
+                    "material_factors": [
+                        [
+                            1.0,
+                            1.0,
+                            1.0,
+                            1.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            1.0,
+                            1.0,
+                            0.5,
+                            1.0,
+                            0.0,
+                            1.0,
+                            0.0,
+                            0.0
+                        ],
+                        [
+                            1.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            1.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            1.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            1.0
+                        ]
+                    ],
+                    "textures": {
+                        "base_color": "../Objects/white.png",
+                        "metallic_roughness": "../Objects/normal.png",
+                        "normal": "../Objects/white.png",
+                        "occlusion": "../Objects/white.png",
+                        "emissive": "../Objects/black.png"
+                    }
+                }
+            ]
+        },
+        {
+            "primitive_type": "cube",
+            "name": "Card_5",
+            "matrix": [
+                1.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                1.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                1.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                1.0
+            ],
+            "nodes": [
+                {
+                    "name": "Model_23",
+                    "parent": -1,
+                    "local_matrix": [
+                        0.249994,
+                        0.0,
+                        0.00166,
+                        0.0,
+                        0.0,
+                        0.002,
+                        0.0,
+                        0.0,
+                        -0.002325,
+                        0.0,
+                        0.349992,
+                        0.0,
+                        0.002695,
+                        0.009999,
+                        0.003302,
+                        1.0
+                    ]
+                }
+            ],
+            "meshes": [
+                {
+                    "render_type": 1,
+                    "texture_mask": 0,
+                    "material_factors": [
+                        [
+                            1.0,
+                            1.0,
+                            1.0,
+                            1.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            1.0,
+                            1.0,
+                            0.5,
+                            1.0,
+                            0.0,
+                            1.0,
+                            0.0,
+                            0.0
+                        ],
+                        [
+                            1.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            1.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            1.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            1.0
+                        ]
+                    ],
+                    "textures": {
+                        "base_color": "../Objects/white.png",
+                        "metallic_roughness": "../Objects/normal.png",
+                        "normal": "../Objects/white.png",
+                        "occlusion": "../Objects/white.png",
+                        "emissive": "../Objects/black.png"
+                    }
+                }
+            ]
+        },
+        {
+            "primitive_type": "cube",
+            "name": "Card_6",
+            "matrix": [
+                1.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                1.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                1.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                1.0
+            ],
+            "nodes": [
+                {
+                    "name": "Model_24",
+                    "parent": -1,
+                    "local_matrix": [
+                        0.249895,
+                        0.0,
+                        -0.00723,
+                        0.0,
+                        0.0,
+                        0.002,
+                        0.0,
+                        0.0,
+                        0.010122,
+                        0.0,
+                        0.349853,
+                        0.0,
+                        0.00099,
+                        0.012,
+                        0.004776,
+                        1.0
+                    ]
+                }
+            ],
+            "meshes": [
+                {
+                    "render_type": 1,
+                    "texture_mask": 0,
+                    "material_factors": [
+                        [
+                            1.0,
+                            1.0,
+                            1.0,
+                            1.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            1.0,
+                            1.0,
+                            0.5,
+                            1.0,
+                            0.0,
+                            1.0,
+                            0.0,
+                            0.0
+                        ],
+                        [
+                            1.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            1.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            1.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            1.0
+                        ]
+                    ],
+                    "textures": {
+                        "base_color": "../Objects/white.png",
+                        "metallic_roughness": "../Objects/normal.png",
+                        "normal": "../Objects/white.png",
+                        "occlusion": "../Objects/white.png",
+                        "emissive": "../Objects/black.png"
+                    }
+                }
+            ]
+        },
+        {
+            "primitive_type": "cube",
+            "name": "Card_7",
+            "matrix": [
+                1.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                1.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                1.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                1.0
+            ],
+            "nodes": [
+                {
+                    "name": "Model_25",
+                    "parent": -1,
+                    "local_matrix": [
+                        0.249875,
+                        0.0,
+                        0.007881,
+                        0.0,
+                        0.0,
+                        0.002,
+                        0.0,
+                        0.0,
+                        -0.011034,
+                        0.0,
+                        0.349826,
+                        0.0,
+                        -0.00201,
+                        0.014,
+                        0.003284,
+                        1.0
+                    ]
+                }
+            ],
+            "meshes": [
+                {
+                    "render_type": 1,
+                    "texture_mask": 0,
+                    "material_factors": [
+                        [
+                            1.0,
+                            1.0,
+                            1.0,
+                            1.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            1.0,
+                            1.0,
+                            0.5,
+                            1.0,
+                            0.0,
+                            1.0,
+                            0.0,
+                            0.0
+                        ],
+                        [
+                            1.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            1.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            1.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            1.0
+                        ]
+                    ],
+                    "textures": {
+                        "base_color": "../Objects/white.png",
+                        "metallic_roughness": "../Objects/normal.png",
+                        "normal": "../Objects/white.png",
+                        "occlusion": "../Objects/white.png",
+                        "emissive": "../Objects/black.png"
+                    }
+                }
+            ]
+        },
+        {
+            "primitive_type": "cube",
+            "name": "Card_8",
+            "matrix": [
+                1.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                1.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                1.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                1.0
+            ],
+            "nodes": [
+                {
+                    "name": "Model_26",
+                    "parent": -1,
+                    "local_matrix": [
+                        0.24987,
+                        0.0,
+                        0.008058,
+                        0.0,
+                        0.0,
+                        0.002,
+                        0.0,
+                        0.0,
+                        -0.011281,
+                        0.0,
+                        0.349818,
+                        0.0,
+                        -0.001529,
+                        0.016,
+                        -0.003594,
+                        1.0
+                    ]
+                }
+            ],
+            "meshes": [
+                {
+                    "render_type": 1,
+                    "texture_mask": 0,
+                    "material_factors": [
+                        [
+                            1.0,
+                            1.0,
+                            1.0,
+                            1.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            1.0,
+                            1.0,
+                            0.5,
+                            1.0,
+                            0.0,
+                            1.0,
+                            0.0,
+                            0.0
+                        ],
+                        [
+                            1.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            1.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            1.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            1.0
+                        ]
+                    ],
+                    "textures": {
+                        "base_color": "../Objects/white.png",
+                        "metallic_roughness": "../Objects/normal.png",
+                        "normal": "../Objects/white.png",
+                        "occlusion": "../Objects/white.png",
+                        "emissive": "../Objects/black.png"
+                    }
+                }
+            ]
+        },
+        {
+            "primitive_type": "cube",
+            "name": "Card_9",
+            "matrix": [
+                1.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                1.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                1.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                1.0
+            ],
+            "nodes": [
+                {
+                    "name": "Model_27",
+                    "parent": -1,
+                    "local_matrix": [
+                        0.249855,
+                        0.0,
+                        0.008485,
+                        0.0,
+                        0.0,
+                        0.002,
+                        0.0,
+                        0.0,
+                        -0.011879,
+                        0.0,
+                        0.349798,
+                        0.0,
+                        0.003837,
+                        0.017999,
+                        0.002611,
+                        1.0
+                    ]
+                }
+            ],
+            "meshes": [
+                {
+                    "render_type": 1,
+                    "texture_mask": 0,
+                    "material_factors": [
+                        [
+                            1.0,
+                            1.0,
+                            1.0,
+                            1.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            1.0,
+                            1.0,
+                            0.5,
+                            1.0,
+                            0.0,
+                            1.0,
+                            0.0,
+                            0.0
+                        ],
+                        [
+                            1.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            1.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            1.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            1.0
+                        ]
+                    ],
+                    "textures": {
+                        "base_color": "../Objects/white.png",
+                        "metallic_roughness": "../Objects/normal.png",
+                        "normal": "../Objects/white.png",
+                        "occlusion": "../Objects/white.png",
+                        "emissive": "../Objects/black.png"
+                    }
+                }
+            ]
+        },
+        {
+            "primitive_type": "cube",
+            "name": "Card_10",
+            "matrix": [
+                1.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                1.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                1.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                1.0
+            ],
+            "nodes": [
+                {
+                    "name": "Model_28",
+                    "parent": -1,
+                    "local_matrix": [
+                        0.249993,
+                        0.0,
+                        -0.001834,
+                        0.0,
+                        0.0,
+                        0.002,
+                        0.0,
+                        0.0,
+                        0.002568,
+                        0.0,
+                        0.34999,
+                        0.0,
+                        0.002334,
+                        0.019999,
+                        -0.004027,
+                        1.0
+                    ]
+                }
+            ],
+            "meshes": [
+                {
+                    "render_type": 1,
+                    "texture_mask": 0,
+                    "material_factors": [
+                        [
+                            1.0,
+                            1.0,
+                            1.0,
+                            1.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            1.0,
+                            1.0,
+                            0.5,
+                            1.0,
+                            0.0,
+                            1.0,
+                            0.0,
+                            0.0
+                        ],
+                        [
+                            1.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            1.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            1.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            1.0
+                        ]
+                    ],
+                    "textures": {
+                        "base_color": "../Objects/white.png",
+                        "metallic_roughness": "../Objects/normal.png",
+                        "normal": "../Objects/white.png",
+                        "occlusion": "../Objects/white.png",
+                        "emissive": "../Objects/black.png"
+                    }
+                }
+            ]
+        },
+        {
+            "primitive_type": "cube",
+            "name": "Card_11",
+            "matrix": [
+                1.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                1.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                1.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                1.0
+            ],
+            "nodes": [
+                {
+                    "name": "Model_29",
+                    "parent": -1,
+                    "local_matrix": [
+                        0.249854,
+                        0.0,
+                        0.008539,
+                        0.0,
+                        0.0,
+                        0.002,
+                        0.0,
+                        0.0,
+                        -0.011955,
+                        0.0,
+                        0.349795,
+                        0.0,
+                        -0.003066,
+                        0.021999,
+                        -0.002172,
+                        1.0
+                    ]
+                }
+            ],
+            "meshes": [
+                {
+                    "render_type": 1,
+                    "texture_mask": 0,
+                    "material_factors": [
+                        [
+                            1.0,
+                            1.0,
+                            1.0,
+                            1.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            1.0,
+                            1.0,
+                            0.5,
+                            1.0,
+                            0.0,
+                            1.0,
+                            0.0,
+                            0.0
+                        ],
+                        [
+                            1.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            1.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            1.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            1.0
+                        ]
+                    ],
+                    "textures": {
+                        "base_color": "../Objects/white.png",
+                        "metallic_roughness": "../Objects/normal.png",
+                        "normal": "../Objects/white.png",
+                        "occlusion": "../Objects/white.png",
+                        "emissive": "../Objects/black.png"
+                    }
+                }
+            ]
+        },
+        {
+            "primitive_type": "cube",
+            "name": "Card_12",
+            "matrix": [
+                1.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                1.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                1.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                1.0
+            ],
+            "nodes": [
+                {
+                    "name": "Model_30",
+                    "parent": -1,
+                    "local_matrix": [
+                        0.249774,
+                        0.0,
+                        0.010624,
+                        0.0,
+                        0.0,
+                        0.002,
+                        0.0,
+                        0.0,
+                        -0.014874,
+                        0.0,
+                        0.349683,
+                        0.0,
+                        -0.000166,
+                        0.024,
+                        -0.004631,
+                        1.0
+                    ]
+                }
+            ],
+            "meshes": [
+                {
+                    "render_type": 1,
+                    "texture_mask": 0,
+                    "material_factors": [
+                        [
+                            1.0,
+                            1.0,
+                            1.0,
+                            1.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            1.0,
+                            1.0,
+                            0.5,
+                            1.0,
+                            0.0,
+                            1.0,
+                            0.0,
+                            0.0
+                        ],
+                        [
+                            1.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            1.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            1.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            1.0
+                        ]
+                    ],
+                    "textures": {
+                        "base_color": "../Objects/white.png",
+                        "metallic_roughness": "../Objects/normal.png",
+                        "normal": "../Objects/white.png",
+                        "occlusion": "../Objects/white.png",
+                        "emissive": "../Objects/black.png"
+                    }
+                }
+            ]
+        },
+        {
+            "primitive_type": "cube",
+            "name": "Card_13",
+            "matrix": [
+                1.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                1.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                1.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                1.0
+            ],
+            "nodes": [
+                {
+                    "name": "Model_31",
+                    "parent": -1,
+                    "local_matrix": [
+                        0.249998,
+                        0.0,
+                        0.00095,
+                        0.0,
+                        0.0,
+                        0.002,
+                        0.0,
+                        0.0,
+                        -0.00133,
+                        0.0,
+                        0.349997,
+                        0.0,
+                        -0.000515,
+                        0.026,
+                        -0.002521,
+                        1.0
+                    ]
+                }
+            ],
+            "meshes": [
+                {
+                    "render_type": 1,
+                    "texture_mask": 0,
+                    "material_factors": [
+                        [
+                            1.0,
+                            1.0,
+                            1.0,
+                            1.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            1.0,
+                            1.0,
+                            0.5,
+                            1.0,
+                            0.0,
+                            1.0,
+                            0.0,
+                            0.0
+                        ],
+                        [
+                            1.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            1.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            1.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            1.0
+                        ]
+                    ],
+                    "textures": {
+                        "base_color": "../Objects/white.png",
+                        "metallic_roughness": "../Objects/normal.png",
+                        "normal": "../Objects/white.png",
+                        "occlusion": "../Objects/white.png",
+                        "emissive": "../Objects/black.png"
+                    }
+                }
+            ]
+        },
+        {
+            "primitive_type": "cube",
+            "name": "Card_14",
+            "matrix": [
+                1.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                1.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                1.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                1.0
+            ],
+            "nodes": [
+                {
+                    "name": "Model_32",
+                    "parent": -1,
+                    "local_matrix": [
+                        0.249983,
+                        0.0,
+                        0.002896,
+                        0.0,
+                        0.0,
+                        0.002,
+                        0.0,
+                        0.0,
+                        -0.004055,
+                        0.0,
+                        0.349976,
+                        0.0,
+                        -0.001064,
+                        0.028,
+                        -0.000203,
+                        1.0
+                    ]
+                }
+            ],
+            "meshes": [
+                {
+                    "render_type": 1,
+                    "texture_mask": 0,
+                    "material_factors": [
+                        [
+                            1.0,
+                            1.0,
+                            1.0,
+                            1.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            1.0,
+                            1.0,
+                            0.5,
+                            1.0,
+                            0.0,
+                            1.0,
+                            0.0,
+                            0.0
+                        ],
+                        [
+                            1.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            1.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            1.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            1.0
+                        ]
+                    ],
+                    "textures": {
+                        "base_color": "../Objects/white.png",
+                        "metallic_roughness": "../Objects/normal.png",
+                        "normal": "../Objects/white.png",
+                        "occlusion": "../Objects/white.png",
+                        "emissive": "../Objects/black.png"
+                    }
+                }
+            ]
+        },
+        {
+            "primitive_type": "cube",
+            "name": "Card_15",
+            "matrix": [
+                1.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                1.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                1.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                1.0
+            ],
+            "nodes": [
+                {
+                    "name": "Model_33",
+                    "parent": -1,
+                    "local_matrix": [
+                        0.249999,
+                        0.0,
+                        0.000451,
+                        0.0,
+                        0.0,
+                        0.002,
+                        0.0,
+                        0.0,
+                        -0.000631,
+                        0.0,
+                        0.349999,
+                        0.0,
+                        -0.001189,
+                        0.029999,
+                        0.001743,
+                        1.0
+                    ]
+                }
+            ],
+            "meshes": [
+                {
+                    "render_type": 1,
+                    "texture_mask": 0,
+                    "material_factors": [
+                        [
+                            1.0,
+                            1.0,
+                            1.0,
+                            1.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            1.0,
+                            1.0,
+                            0.5,
+                            1.0,
+                            0.0,
+                            1.0,
+                            0.0,
+                            0.0
+                        ],
+                        [
+                            1.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            1.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            1.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            1.0
+                        ]
+                    ],
+                    "textures": {
+                        "base_color": "../Objects/white.png",
+                        "metallic_roughness": "../Objects/normal.png",
+                        "normal": "../Objects/white.png",
+                        "occlusion": "../Objects/white.png",
+                        "emissive": "../Objects/black.png"
+                    }
+                }
+            ]
+        },
+        {
+            "primitive_type": "cube",
+            "name": "Card_16",
+            "matrix": [
+                1.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                1.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                1.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                1.0
+            ],
+            "nodes": [
+                {
+                    "name": "Model_34",
+                    "parent": -1,
+                    "local_matrix": [
+                        0.249968,
+                        0.0,
+                        -0.003958,
+                        0.0,
+                        0.0,
+                        0.002,
+                        0.0,
+                        0.0,
+                        0.005541,
+                        0.0,
+                        0.349956,
+                        0.0,
+                        -0.003674,
+                        0.032,
+                        0.000964,
+                        1.0
+                    ]
+                }
+            ],
+            "meshes": [
+                {
+                    "render_type": 1,
+                    "texture_mask": 0,
+                    "material_factors": [
+                        [
+                            1.0,
+                            1.0,
+                            1.0,
+                            1.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            1.0,
+                            1.0,
+                            0.5,
+                            1.0,
+                            0.0,
+                            1.0,
+                            0.0,
+                            0.0
+                        ],
+                        [
+                            1.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            1.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            1.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            1.0
+                        ]
+                    ],
+                    "textures": {
+                        "base_color": "../Objects/white.png",
+                        "metallic_roughness": "../Objects/normal.png",
+                        "normal": "../Objects/white.png",
+                        "occlusion": "../Objects/white.png",
+                        "emissive": "../Objects/black.png"
+                    }
+                }
+            ]
+        },
+        {
+            "primitive_type": "cube",
+            "name": "Card_17",
+            "matrix": [
+                1.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                1.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                1.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                1.0
+            ],
+            "nodes": [
+                {
+                    "name": "Model_35",
+                    "parent": -1,
+                    "local_matrix": [
+                        0.249916,
+                        0.0,
+                        -0.006464,
+                        0.0,
+                        0.0,
+                        0.002,
+                        0.0,
+                        0.0,
+                        0.009049,
+                        0.0,
+                        0.349882,
+                        0.0,
+                        0.002002,
+                        0.034,
+                        0.004737,
+                        1.0
+                    ]
+                }
+            ],
+            "meshes": [
+                {
+                    "render_type": 1,
+                    "texture_mask": 0,
+                    "material_factors": [
+                        [
+                            1.0,
+                            1.0,
+                            1.0,
+                            1.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            1.0,
+                            1.0,
+                            0.5,
+                            1.0,
+                            0.0,
+                            1.0,
+                            0.0,
+                            0.0
+                        ],
+                        [
+                            1.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            1.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            1.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            1.0
+                        ]
+                    ],
+                    "textures": {
+                        "base_color": "../Objects/white.png",
+                        "metallic_roughness": "../Objects/normal.png",
+                        "normal": "../Objects/white.png",
+                        "occlusion": "../Objects/white.png",
+                        "emissive": "../Objects/black.png"
+                    }
+                }
+            ]
+        },
+        {
+            "primitive_type": "cube",
+            "name": "Card_18",
+            "matrix": [
+                1.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                1.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                1.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                1.0
+            ],
+            "nodes": [
+                {
+                    "name": "Model_36",
+                    "parent": -1,
+                    "local_matrix": [
+                        0.249903,
+                        0.0,
+                        0.006947,
+                        0.0,
+                        0.0,
+                        0.002,
+                        0.0,
+                        0.0,
+                        -0.009726,
+                        0.0,
+                        0.349864,
+                        0.0,
+                        0.00081,
+                        0.035999,
+                        -0.003771,
+                        1.0
+                    ]
+                }
+            ],
+            "meshes": [
+                {
+                    "render_type": 1,
+                    "texture_mask": 0,
+                    "material_factors": [
+                        [
+                            1.0,
+                            1.0,
+                            1.0,
+                            1.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            1.0,
+                            1.0,
+                            0.5,
+                            1.0,
+                            0.0,
+                            1.0,
+                            0.0,
+                            0.0
+                        ],
+                        [
+                            1.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            1.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            1.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            1.0
+                        ]
+                    ],
+                    "textures": {
+                        "base_color": "../Objects/white.png",
+                        "metallic_roughness": "../Objects/normal.png",
+                        "normal": "../Objects/white.png",
+                        "occlusion": "../Objects/white.png",
+                        "emissive": "../Objects/black.png"
+                    }
+                }
+            ]
+        },
+        {
+            "primitive_type": "cube",
+            "name": "Card_19",
+            "matrix": [
+                1.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                1.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                1.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                1.0
+            ],
+            "nodes": [
+                {
+                    "name": "Model_37",
+                    "parent": -1,
+                    "local_matrix": [
+                        0.249998,
+                        0.0,
+                        -0.000962,
+                        0.0,
+                        0.0,
+                        0.002,
+                        0.0,
+                        0.0,
+                        0.001347,
+                        0.0,
+                        0.349997,
+                        0.0,
+                        -0.00036,
+                        0.037999,
+                        -0.003565,
+                        1.0
+                    ]
+                }
+            ],
+            "meshes": [
+                {
+                    "render_type": 1,
+                    "texture_mask": 0,
+                    "material_factors": [
+                        [
+                            1.0,
+                            1.0,
+                            1.0,
+                            1.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            1.0,
+                            1.0,
+                            0.5,
+                            1.0,
+                            0.0,
+                            1.0,
+                            0.0,
+                            0.0
+                        ],
+                        [
+                            1.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            1.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            1.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            1.0
+                        ]
+                    ],
+                    "textures": {
+                        "base_color": "../Objects/white.png",
+                        "metallic_roughness": "../Objects/normal.png",
+                        "normal": "../Objects/white.png",
+                        "occlusion": "../Objects/white.png",
+                        "emissive": "../Objects/black.png"
+                    }
+                }
+            ]
+        },
+        {
+            "primitive_type": "cube",
+            "name": "Card_20",
+            "matrix": [
+                1.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                1.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                1.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                1.0
+            ],
+            "nodes": [
+                {
+                    "name": "Model_38",
+                    "parent": -1,
+                    "local_matrix": [
+                        0.249939,
+                        0.0,
+                        0.005502,
+                        0.0,
+                        0.0,
+                        0.002,
+                        0.0,
+                        0.0,
+                        -0.007704,
+                        0.0,
+                        0.349915,
+                        0.0,
+                        -0.002859,
+                        0.039999,
+                        -0.002266,
+                        1.0
+                    ]
+                }
+            ],
+            "meshes": [
+                {
+                    "render_type": 1,
+                    "texture_mask": 0,
+                    "material_factors": [
+                        [
+                            1.0,
+                            1.0,
+                            1.0,
+                            1.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            1.0,
+                            1.0,
+                            0.5,
+                            1.0,
+                            0.0,
+                            1.0,
+                            0.0,
+                            0.0
+                        ],
+                        [
+                            1.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            1.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            1.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            1.0
+                        ]
+                    ],
+                    "textures": {
+                        "base_color": "../Objects/white.png",
+                        "metallic_roughness": "../Objects/normal.png",
+                        "normal": "../Objects/white.png",
+                        "occlusion": "../Objects/white.png",
+                        "emissive": "../Objects/black.png"
+                    }
+                }
+            ]
+        },
+        {
+            "primitive_type": "cube",
+            "name": "Card_21",
+            "matrix": [
+                1.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                1.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                1.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                1.0
+            ],
+            "nodes": [
+                {
+                    "name": "Model_39",
+                    "parent": -1,
+                    "local_matrix": [
+                        0.249889,
+                        0.0,
+                        -0.007425,
+                        0.0,
+                        0.0,
+                        0.002,
+                        0.0,
+                        0.0,
+                        0.010395,
+                        0.0,
+                        0.349845,
+                        0.0,
+                        0.00328,
+                        0.041999,
+                        0.003715,
+                        1.0
+                    ]
+                }
+            ],
+            "meshes": [
+                {
+                    "render_type": 1,
+                    "texture_mask": 0,
+                    "material_factors": [
+                        [
+                            1.0,
+                            1.0,
+                            1.0,
+                            1.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            1.0,
+                            1.0,
+                            0.5,
+                            1.0,
+                            0.0,
+                            1.0,
+                            0.0,
+                            0.0
+                        ],
+                        [
+                            1.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            1.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            1.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            1.0
+                        ]
+                    ],
+                    "textures": {
+                        "base_color": "../Objects/white.png",
+                        "metallic_roughness": "../Objects/normal.png",
+                        "normal": "../Objects/white.png",
+                        "occlusion": "../Objects/white.png",
+                        "emissive": "../Objects/black.png"
+                    }
+                }
+            ]
+        },
+        {
+            "primitive_type": "cube",
+            "name": "Card_22",
+            "matrix": [
+                1.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                1.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                1.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                1.0
+            ],
+            "nodes": [
+                {
+                    "name": "Model_40",
+                    "parent": -1,
+                    "local_matrix": [
+                        0.249961,
+                        0.0,
+                        -0.004359,
+                        0.0,
+                        0.0,
+                        0.002,
+                        0.0,
+                        0.0,
+                        0.006103,
+                        0.0,
+                        0.349946,
+                        0.0,
+                        0.00334,
+                        0.043999,
+                        0.002559,
+                        1.0
+                    ]
+                }
+            ],
+            "meshes": [
+                {
+                    "render_type": 1,
+                    "texture_mask": 0,
+                    "material_factors": [
+                        [
+                            1.0,
+                            1.0,
+                            1.0,
+                            1.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            1.0,
+                            1.0,
+                            0.5,
+                            1.0,
+                            0.0,
+                            1.0,
+                            0.0,
+                            0.0
+                        ],
+                        [
+                            1.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            1.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            1.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            1.0
+                        ]
+                    ],
+                    "textures": {
+                        "base_color": "../Objects/white.png",
+                        "metallic_roughness": "../Objects/normal.png",
+                        "normal": "../Objects/white.png",
+                        "occlusion": "../Objects/white.png",
+                        "emissive": "../Objects/black.png"
+                    }
+                }
+            ]
+        },
+        {
+            "primitive_type": "cube",
+            "name": "Card_23",
+            "matrix": [
+                1.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                1.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                1.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                1.0
+            ],
+            "nodes": [
+                {
+                    "name": "Model_41",
+                    "parent": -1,
+                    "local_matrix": [
+                        0.249997,
+                        0.0,
+                        0.001082,
+                        0.0,
+                        0.0,
+                        0.002,
+                        0.0,
+                        0.0,
+                        -0.001514,
+                        0.0,
+                        0.349996,
+                        0.0,
+                        0.00419,
+                        0.046,
+                        0.002612,
+                        1.0
+                    ]
+                }
+            ],
+            "meshes": [
+                {
+                    "render_type": 1,
+                    "texture_mask": 0,
+                    "material_factors": [
+                        [
+                            1.0,
+                            1.0,
+                            1.0,
+                            1.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            1.0,
+                            1.0,
+                            0.5,
+                            1.0,
+                            0.0,
+                            1.0,
+                            0.0,
+                            0.0
+                        ],
+                        [
+                            1.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            1.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            1.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            1.0
+                        ]
+                    ],
+                    "textures": {
+                        "base_color": "../Objects/white.png",
+                        "metallic_roughness": "../Objects/normal.png",
+                        "normal": "../Objects/white.png",
+                        "occlusion": "../Objects/white.png",
+                        "emissive": "../Objects/black.png"
+                    }
+                }
+            ]
+        },
+        {
+            "primitive_type": "cube",
+            "name": "Card_24",
+            "matrix": [
+                1.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                1.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                1.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                1.0
+            ],
+            "nodes": [
+                {
+                    "name": "Model_42",
+                    "parent": -1,
+                    "local_matrix": [
+                        0.249915,
+                        0.0,
+                        0.006486,
+                        0.0,
+                        0.0,
+                        0.002,
+                        0.0,
+                        0.0,
+                        -0.00908,
+                        0.0,
+                        0.349882,
+                        0.0,
+                        0.0002,
+                        0.048,
+                        0.003196,
+                        1.0
+                    ]
+                }
+            ],
+            "meshes": [
+                {
+                    "render_type": 1,
+                    "texture_mask": 0,
+                    "material_factors": [
+                        [
+                            1.0,
+                            1.0,
+                            1.0,
+                            1.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            1.0,
+                            1.0,
+                            0.5,
+                            1.0,
+                            0.0,
+                            1.0,
+                            0.0,
+                            0.0
+                        ],
+                        [
+                            1.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            1.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            1.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            1.0
+                        ]
+                    ],
+                    "textures": {
+                        "base_color": "../Objects/white.png",
+                        "metallic_roughness": "../Objects/normal.png",
+                        "normal": "../Objects/white.png",
+                        "occlusion": "../Objects/white.png",
+                        "emissive": "../Objects/black.png"
+                    }
+                }
+            ]
+        },
+        {
+            "primitive_type": "cube",
+            "name": "Card_25",
+            "matrix": [
+                1.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                1.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                1.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                1.0
+            ],
+            "nodes": [
+                {
+                    "name": "Model_43",
+                    "parent": -1,
+                    "local_matrix": [
+                        0.249967,
+                        0.0,
+                        0.004046,
+                        0.0,
+                        0.0,
+                        0.002,
+                        0.0,
+                        0.0,
+                        -0.005665,
+                        0.0,
+                        0.349954,
+                        0.0,
+                        0.002293,
+                        0.05,
+                        0.002263,
+                        1.0
+                    ]
+                }
+            ],
+            "meshes": [
+                {
+                    "render_type": 1,
+                    "texture_mask": 0,
+                    "material_factors": [
+                        [
+                            1.0,
+                            1.0,
+                            1.0,
+                            1.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            1.0,
+                            1.0,
+                            0.5,
+                            1.0,
+                            0.0,
+                            1.0,
+                            0.0,
+                            0.0
+                        ],
+                        [
+                            1.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            1.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            1.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            1.0
+                        ]
+                    ],
+                    "textures": {
+                        "base_color": "../Objects/white.png",
+                        "metallic_roughness": "../Objects/normal.png",
+                        "normal": "../Objects/white.png",
+                        "occlusion": "../Objects/white.png",
+                        "emissive": "../Objects/black.png"
+                    }
+                }
+            ]
+        },
+        {
+            "primitive_type": "cube",
+            "name": "Card_26",
+            "matrix": [
+                1.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                1.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                1.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                1.0
+            ],
+            "nodes": [
+                {
+                    "name": "Model_44",
+                    "parent": -1,
+                    "local_matrix": [
+                        0.249904,
+                        0.0,
+                        -0.0069,
+                        0.0,
+                        0.0,
+                        0.002,
+                        0.0,
+                        0.0,
+                        0.00966,
+                        0.0,
+                        0.349866,
+                        0.0,
+                        0.00007,
+                        0.052,
+                        0.000039,
+                        1.0
+                    ]
+                }
+            ],
+            "meshes": [
+                {
+                    "render_type": 1,
+                    "texture_mask": 0,
+                    "material_factors": [
+                        [
+                            1.0,
+                            1.0,
+                            1.0,
+                            1.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            1.0,
+                            1.0,
+                            0.5,
+                            1.0,
+                            0.0,
+                            1.0,
+                            0.0,
+                            0.0
+                        ],
+                        [
+                            1.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            1.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            1.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            1.0
+                        ]
+                    ],
+                    "textures": {
+                        "base_color": "../Objects/white.png",
+                        "metallic_roughness": "../Objects/normal.png",
+                        "normal": "../Objects/white.png",
+                        "occlusion": "../Objects/white.png",
+                        "emissive": "../Objects/black.png"
+                    }
+                }
+            ]
+        },
+        {
+            "primitive_type": "cube",
+            "name": "Card_27",
+            "matrix": [
+                1.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                1.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                1.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                1.0
+            ],
+            "nodes": [
+                {
+                    "name": "Model_45",
+                    "parent": -1,
+                    "local_matrix": [
+                        0.249894,
+                        0.0,
+                        -0.007248,
+                        0.0,
+                        0.0,
+                        0.002,
+                        0.0,
+                        0.0,
+                        0.010147,
+                        0.0,
+                        0.349852,
+                        0.0,
+                        0.004102,
+                        0.054,
+                        -0.002425,
+                        1.0
+                    ]
+                }
+            ],
+            "meshes": [
+                {
+                    "render_type": 1,
+                    "texture_mask": 0,
+                    "material_factors": [
+                        [
+                            1.0,
+                            1.0,
+                            1.0,
+                            1.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            1.0,
+                            1.0,
+                            0.5,
+                            1.0,
+                            0.0,
+                            1.0,
+                            0.0,
+                            0.0
+                        ],
+                        [
+                            1.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            1.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            1.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            1.0
+                        ]
+                    ],
+                    "textures": {
+                        "base_color": "../Objects/white.png",
+                        "metallic_roughness": "../Objects/normal.png",
+                        "normal": "../Objects/white.png",
+                        "occlusion": "../Objects/white.png",
+                        "emissive": "../Objects/black.png"
+                    }
+                }
+            ]
+        },
+        {
+            "primitive_type": "cube",
+            "name": "Card_28",
+            "matrix": [
+                1.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                1.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                1.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                1.0
+            ],
+            "nodes": [
+                {
+                    "name": "Model_46",
+                    "parent": -1,
+                    "local_matrix": [
+                        0.249926,
+                        0.0,
+                        0.006078,
+                        0.0,
+                        0.0,
+                        0.002,
+                        0.0,
+                        0.0,
+                        -0.00851,
+                        0.0,
+                        0.349896,
+                        0.0,
+                        0.004113,
+                        0.056,
+                        0.001058,
+                        1.0
+                    ]
+                }
+            ],
+            "meshes": [
+                {
+                    "render_type": 1,
+                    "texture_mask": 0,
+                    "material_factors": [
+                        [
+                            1.0,
+                            1.0,
+                            1.0,
+                            1.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            1.0,
+                            1.0,
+                            0.5,
+                            1.0,
+                            0.0,
+                            1.0,
+                            0.0,
+                            0.0
+                        ],
+                        [
+                            1.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            1.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            1.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            1.0
+                        ]
+                    ],
+                    "textures": {
+                        "base_color": "../Objects/white.png",
+                        "metallic_roughness": "../Objects/normal.png",
+                        "normal": "../Objects/white.png",
+                        "occlusion": "../Objects/white.png",
+                        "emissive": "../Objects/black.png"
+                    }
+                }
+            ]
+        },
+        {
+            "primitive_type": "cube",
+            "name": "Card_29",
+            "matrix": [
+                1.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                1.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                1.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                1.0
+            ],
+            "nodes": [
+                {
+                    "name": "Model_47",
+                    "parent": -1,
+                    "local_matrix": [
+                        0.249798,
+                        0.0,
+                        -0.010043,
+                        0.0,
+                        0.0,
+                        0.002,
+                        0.0,
+                        0.0,
+                        0.014061,
+                        0.0,
+                        0.349717,
+                        0.0,
+                        0.002546,
+                        0.057999,
+                        0.002632,
+                        1.0
+                    ]
+                }
+            ],
+            "meshes": [
+                {
+                    "render_type": 1,
+                    "texture_mask": 0,
+                    "material_factors": [
+                        [
+                            1.0,
+                            1.0,
+                            1.0,
+                            1.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            1.0,
+                            1.0,
+                            0.5,
+                            1.0,
+                            0.0,
+                            1.0,
+                            0.0,
+                            0.0
+                        ],
+                        [
+                            1.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            1.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            1.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            1.0
+                        ]
+                    ],
+                    "textures": {
+                        "base_color": "../Objects/white.png",
+                        "metallic_roughness": "../Objects/normal.png",
+                        "normal": "../Objects/white.png",
+                        "occlusion": "../Objects/white.png",
+                        "emissive": "../Objects/black.png"
+                    }
+                }
+            ]
+        },
+        {
+            "primitive_type": "cube",
+            "name": "Card_30",
+            "matrix": [
+                1.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                1.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                1.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                1.0
+            ],
+            "nodes": [
+                {
+                    "name": "Model_48",
+                    "parent": -1,
+                    "local_matrix": [
+                        0.249993,
+                        0.0,
+                        -0.001734,
+                        0.0,
+                        0.0,
+                        0.002,
+                        0.0,
+                        0.0,
+                        0.002428,
+                        0.0,
+                        0.349991,
+                        0.0,
+                        -0.00241,
+                        0.059999,
+                        -0.003592,
+                        1.0
+                    ]
+                }
+            ],
+            "meshes": [
+                {
+                    "render_type": 1,
+                    "texture_mask": 0,
+                    "material_factors": [
+                        [
+                            1.0,
+                            1.0,
+                            1.0,
+                            1.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            1.0,
+                            1.0,
+                            0.5,
+                            1.0,
+                            0.0,
+                            1.0,
+                            0.0,
+                            0.0
+                        ],
+                        [
+                            1.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            1.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            1.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            1.0
+                        ]
+                    ],
+                    "textures": {
+                        "base_color": "../Objects/white.png",
+                        "metallic_roughness": "../Objects/normal.png",
+                        "normal": "../Objects/white.png",
+                        "occlusion": "../Objects/white.png",
+                        "emissive": "../Objects/black.png"
+                    }
+                }
+            ]
+        },
+        {
+            "primitive_type": "cube",
+            "name": "Card_31",
+            "matrix": [
+                1.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                1.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                1.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                1.0
+            ],
+            "nodes": [
+                {
+                    "name": "Model_49",
+                    "parent": -1,
+                    "local_matrix": [
+                        0.24997,
+                        0.0,
+                        -0.003844,
+                        0.0,
+                        0.0,
+                        0.002,
+                        0.0,
+                        0.0,
+                        0.005382,
+                        0.0,
+                        0.349958,
+                        0.0,
+                        0.000037,
+                        0.061999,
+                        0.001926,
+                        1.0
+                    ]
+                }
+            ],
+            "meshes": [
+                {
+                    "render_type": 1,
+                    "texture_mask": 0,
+                    "material_factors": [
+                        [
+                            1.0,
+                            1.0,
+                            1.0,
+                            1.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            1.0,
+                            1.0,
+                            0.5,
+                            1.0,
+                            0.0,
+                            1.0,
+                            0.0,
+                            0.0
+                        ],
+                        [
+                            1.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            1.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            1.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            1.0
+                        ]
+                    ],
+                    "textures": {
+                        "base_color": "../Objects/white.png",
+                        "metallic_roughness": "../Objects/normal.png",
+                        "normal": "../Objects/white.png",
+                        "occlusion": "../Objects/white.png",
+                        "emissive": "../Objects/black.png"
+                    }
+                }
+            ]
+        },
+        {
+            "primitive_type": "cube",
+            "name": "Card_32",
+            "matrix": [
+                1.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                1.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                1.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                1.0
+            ],
+            "nodes": [
+                {
+                    "name": "Model_50",
+                    "parent": -1,
+                    "local_matrix": [
+                        0.249985,
+                        0.0,
+                        0.002713,
+                        0.0,
+                        0.0,
+                        0.002,
+                        0.0,
+                        0.0,
+                        -0.003799,
+                        0.0,
+                        0.349979,
+                        0.0,
+                        0.004364,
+                        0.064,
+                        -0.003104,
+                        1.0
+                    ]
+                }
+            ],
+            "meshes": [
+                {
+                    "render_type": 1,
+                    "texture_mask": 0,
+                    "material_factors": [
+                        [
+                            1.0,
+                            1.0,
+                            1.0,
+                            1.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            1.0,
+                            1.0,
+                            0.5,
+                            1.0,
+                            0.0,
+                            1.0,
+                            0.0,
+                            0.0
+                        ],
+                        [
+                            1.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            1.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            1.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            1.0
+                        ]
+                    ],
+                    "textures": {
+                        "base_color": "../Objects/white.png",
+                        "metallic_roughness": "../Objects/normal.png",
+                        "normal": "../Objects/white.png",
+                        "occlusion": "../Objects/white.png",
+                        "emissive": "../Objects/black.png"
+                    }
+                }
+            ]
+        },
+        {
+            "primitive_type": "cube",
+            "name": "Card_33",
+            "matrix": [
+                1.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                1.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                1.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                1.0
+            ],
+            "nodes": [
+                {
+                    "name": "Model_51",
+                    "parent": -1,
+                    "local_matrix": [
+                        0.249999,
+                        0.0,
+                        0.000074,
+                        0.0,
+                        0.0,
+                        0.002,
+                        0.0,
+                        0.0,
+                        -0.000104,
+                        0.0,
+                        0.349999,
+                        0.0,
+                        0.002192,
+                        0.065999,
+                        0.002996,
+                        1.0
+                    ]
+                }
+            ],
+            "meshes": [
+                {
+                    "render_type": 1,
+                    "texture_mask": 0,
+                    "material_factors": [
+                        [
+                            1.0,
+                            1.0,
+                            1.0,
+                            1.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            1.0,
+                            1.0,
+                            0.5,
+                            1.0,
+                            0.0,
+                            1.0,
+                            0.0,
+                            0.0
+                        ],
+                        [
+                            1.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            1.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            1.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            1.0
+                        ]
+                    ],
+                    "textures": {
+                        "base_color": "../Objects/white.png",
+                        "metallic_roughness": "../Objects/normal.png",
+                        "normal": "../Objects/white.png",
+                        "occlusion": "../Objects/white.png",
+                        "emissive": "../Objects/black.png"
+                    }
+                }
+            ]
+        },
+        {
+            "primitive_type": "cube",
+            "name": "Card_34",
+            "matrix": [
+                1.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                1.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                1.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                1.0
+            ],
+            "nodes": [
+                {
+                    "name": "Model_52",
+                    "parent": -1,
+                    "local_matrix": [
+                        0.249876,
+                        0.0,
+                        -0.00787,
+                        0.0,
+                        0.0,
+                        0.002,
+                        0.0,
+                        0.0,
+                        0.011019,
+                        0.0,
+                        0.349826,
+                        0.0,
+                        -0.002795,
+                        0.068,
+                        -0.004565,
+                        1.0
+                    ]
+                }
+            ],
+            "meshes": [
+                {
+                    "render_type": 1,
+                    "texture_mask": 0,
+                    "material_factors": [
+                        [
+                            1.0,
+                            1.0,
+                            1.0,
+                            1.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            1.0,
+                            1.0,
+                            0.5,
+                            1.0,
+                            0.0,
+                            1.0,
+                            0.0,
+                            0.0
+                        ],
+                        [
+                            1.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            1.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            1.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            1.0
+                        ]
+                    ],
+                    "textures": {
+                        "base_color": "../Objects/white.png",
+                        "metallic_roughness": "../Objects/normal.png",
+                        "normal": "../Objects/white.png",
+                        "occlusion": "../Objects/white.png",
+                        "emissive": "../Objects/black.png"
+                    }
+                }
+            ]
+        },
+        {
+            "primitive_type": "cube",
+            "name": "Card_35",
+            "matrix": [
+                1.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                1.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                1.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                1.0
+            ],
+            "nodes": [
+                {
+                    "name": "Model_53",
+                    "parent": -1,
+                    "local_matrix": [
+                        0.249879,
+                        0.0,
+                        -0.007755,
+                        0.0,
+                        0.0,
+                        0.002,
+                        0.0,
+                        0.0,
+                        0.010858,
+                        0.0,
+                        0.349831,
+                        0.0,
+                        0.001171,
+                        0.07,
+                        -0.001504,
+                        1.0
+                    ]
+                }
+            ],
+            "meshes": [
+                {
+                    "render_type": 1,
+                    "texture_mask": 0,
+                    "material_factors": [
+                        [
+                            1.0,
+                            1.0,
+                            1.0,
+                            1.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            1.0,
+                            1.0,
+                            0.5,
+                            1.0,
+                            0.0,
+                            1.0,
+                            0.0,
+                            0.0
+                        ],
+                        [
+                            1.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            1.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            1.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            1.0
+                        ]
+                    ],
+                    "textures": {
+                        "base_color": "../Objects/white.png",
+                        "metallic_roughness": "../Objects/normal.png",
+                        "normal": "../Objects/white.png",
+                        "occlusion": "../Objects/white.png",
+                        "emissive": "../Objects/black.png"
+                    }
+                }
+            ]
+        },
+        {
+            "primitive_type": "cube",
+            "name": "Card_36",
+            "matrix": [
+                1.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                1.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                1.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                1.0
+            ],
+            "nodes": [
+                {
+                    "name": "Model_54",
+                    "parent": -1,
+                    "local_matrix": [
+                        0.249999,
+                        0.0,
+                        -0.000108,
+                        0.0,
+                        0.0,
+                        0.002,
+                        0.0,
+                        0.0,
+                        0.000151,
+                        0.0,
+                        0.349999,
+                        0.0,
+                        0.004891,
+                        0.071999,
+                        -0.00137,
+                        1.0
+                    ]
+                }
+            ],
+            "meshes": [
+                {
+                    "render_type": 1,
+                    "texture_mask": 0,
+                    "material_factors": [
+                        [
+                            1.0,
+                            1.0,
+                            1.0,
+                            1.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            1.0,
+                            1.0,
+                            0.5,
+                            1.0,
+                            0.0,
+                            1.0,
+                            0.0,
+                            0.0
+                        ],
+                        [
+                            1.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            1.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            1.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            1.0
+                        ]
+                    ],
+                    "textures": {
+                        "base_color": "../Objects/white.png",
+                        "metallic_roughness": "../Objects/normal.png",
+                        "normal": "../Objects/white.png",
+                        "occlusion": "../Objects/white.png",
+                        "emissive": "../Objects/black.png"
+                    }
+                }
+            ]
+        },
+        {
+            "primitive_type": "cube",
+            "name": "Card_37",
+            "matrix": [
+                1.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                1.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                1.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                1.0
+            ],
+            "nodes": [
+                {
+                    "name": "Model_55",
+                    "parent": -1,
+                    "local_matrix": [
+                        0.249974,
+                        0.0,
+                        0.003546,
+                        0.0,
+                        0.0,
+                        0.002,
+                        0.0,
+                        0.0,
+                        -0.004964,
+                        0.0,
+                        0.349964,
+                        0.0,
+                        0.001607,
+                        0.074,
+                        -0.000823,
+                        1.0
+                    ]
+                }
+            ],
+            "meshes": [
+                {
+                    "render_type": 1,
+                    "texture_mask": 0,
+                    "material_factors": [
+                        [
+                            1.0,
+                            1.0,
+                            1.0,
+                            1.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            1.0,
+                            1.0,
+                            0.5,
+                            1.0,
+                            0.0,
+                            1.0,
+                            0.0,
+                            0.0
+                        ],
+                        [
+                            1.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            1.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            1.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            1.0
+                        ]
+                    ],
+                    "textures": {
+                        "base_color": "../Objects/white.png",
+                        "metallic_roughness": "../Objects/normal.png",
+                        "normal": "../Objects/white.png",
+                        "occlusion": "../Objects/white.png",
+                        "emissive": "../Objects/black.png"
+                    }
+                }
+            ]
+        },
+        {
+            "primitive_type": "cube",
+            "name": "Card_38",
+            "matrix": [
+                1.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                1.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                1.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                1.0
+            ],
+            "nodes": [
+                {
+                    "name": "Model_56",
+                    "parent": -1,
+                    "local_matrix": [
+                        0.249887,
+                        0.0,
+                        0.007512,
+                        0.0,
+                        0.0,
+                        0.002,
+                        0.0,
+                        0.0,
+                        -0.010517,
+                        0.0,
+                        0.349841,
+                        0.0,
+                        -0.000339,
+                        0.075999,
+                        0.003557,
+                        1.0
+                    ]
+                }
+            ],
+            "meshes": [
+                {
+                    "render_type": 1,
+                    "texture_mask": 0,
+                    "material_factors": [
+                        [
+                            1.0,
+                            1.0,
+                            1.0,
+                            1.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            1.0,
+                            1.0,
+                            0.5,
+                            1.0,
+                            0.0,
+                            1.0,
+                            0.0,
+                            0.0
+                        ],
+                        [
+                            1.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            1.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            1.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            1.0
+                        ]
+                    ],
+                    "textures": {
+                        "base_color": "../Objects/white.png",
+                        "metallic_roughness": "../Objects/normal.png",
+                        "normal": "../Objects/white.png",
+                        "occlusion": "../Objects/white.png",
+                        "emissive": "../Objects/black.png"
+                    }
+                }
+            ]
+        },
+        {
+            "primitive_type": "cube",
+            "name": "Card_39",
+            "matrix": [
+                1.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                1.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                1.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                1.0
+            ],
+            "nodes": [
+                {
+                    "name": "Model_57",
+                    "parent": -1,
+                    "local_matrix": [
+                        0.249923,
+                        0.0,
+                        -0.006189,
+                        0.0,
+                        0.0,
+                        0.002,
+                        0.0,
+                        0.0,
+                        0.008665,
+                        0.0,
+                        0.349892,
+                        0.0,
+                        -0.003037,
+                        0.078,
+                        0.004543,
+                        1.0
+                    ]
+                }
+            ],
+            "meshes": [
+                {
+                    "render_type": 1,
+                    "texture_mask": 0,
+                    "material_factors": [
+                        [
+                            1.0,
+                            1.0,
+                            1.0,
+                            1.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            1.0,
+                            1.0,
+                            0.5,
+                            1.0,
+                            0.0,
+                            1.0,
+                            0.0,
+                            0.0
+                        ],
+                        [
+                            1.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            1.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            1.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            1.0
+                        ]
+                    ],
+                    "textures": {
+                        "base_color": "../Objects/white.png",
+                        "metallic_roughness": "../Objects/normal.png",
+                        "normal": "../Objects/white.png",
+                        "occlusion": "../Objects/white.png",
+                        "emissive": "../Objects/black.png"
+                    }
+                }
+            ]
+        },
+        {
+            "primitive_type": "cube",
+            "name": "Card_40",
+            "matrix": [
+                1.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                1.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                1.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                1.0
+            ],
+            "nodes": [
+                {
+                    "name": "Model_58",
+                    "parent": -1,
+                    "local_matrix": [
+                        0.249838,
+                        0.0,
+                        -0.008996,
+                        0.0,
+                        0.0,
+                        0.002,
+                        0.0,
+                        0.0,
+                        0.012595,
+                        0.0,
+                        0.349773,
+                        0.0,
+                        0.002065,
+                        0.079999,
+                        0.002417,
+                        1.0
+                    ]
+                }
+            ],
+            "meshes": [
+                {
+                    "render_type": 1,
+                    "texture_mask": 0,
+                    "material_factors": [
+                        [
+                            1.0,
+                            1.0,
+                            1.0,
+                            1.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            1.0,
+                            1.0,
+                            0.5,
+                            1.0,
+                            0.0,
+                            1.0,
+                            0.0,
+                            0.0
+                        ],
+                        [
+                            1.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            1.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            1.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            1.0
+                        ]
+                    ],
+                    "textures": {
+                        "base_color": "../Objects/white.png",
+                        "metallic_roughness": "../Objects/normal.png",
+                        "normal": "../Objects/white.png",
+                        "occlusion": "../Objects/white.png",
+                        "emissive": "../Objects/black.png"
+                    }
+                }
+            ]
+        },
+        {
+            "primitive_type": "cube",
+            "name": "Card_41",
+            "matrix": [
+                1.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                1.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                1.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                1.0
+            ],
+            "nodes": [
+                {
+                    "name": "Model_59",
+                    "parent": -1,
+                    "local_matrix": [
+                        0.249877,
+                        0.0,
+                        -0.007824,
+                        0.0,
+                        0.0,
+                        0.002,
+                        0.0,
+                        0.0,
+                        0.010954,
+                        0.0,
+                        0.349828,
+                        0.0,
+                        0.001957,
+                        0.082,
+                        -0.002898,
+                        1.0
+                    ]
+                }
+            ],
+            "meshes": [
+                {
+                    "render_type": 1,
+                    "texture_mask": 0,
+                    "material_factors": [
+                        [
+                            1.0,
+                            1.0,
+                            1.0,
+                            1.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            1.0,
+                            1.0,
+                            0.5,
+                            1.0,
+                            0.0,
+                            1.0,
+                            0.0,
+                            0.0
+                        ],
+                        [
+                            1.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            1.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            1.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            1.0
+                        ]
+                    ],
+                    "textures": {
+                        "base_color": "../Objects/white.png",
+                        "metallic_roughness": "../Objects/normal.png",
+                        "normal": "../Objects/white.png",
+                        "occlusion": "../Objects/white.png",
+                        "emissive": "../Objects/black.png"
+                    }
+                }
+            ]
+        },
+        {
+            "primitive_type": "cube",
+            "name": "Card_42",
+            "matrix": [
+                1.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                1.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                1.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                1.0
+            ],
+            "nodes": [
+                {
+                    "name": "Model_60",
+                    "parent": -1,
+                    "local_matrix": [
+                        0.24984,
+                        0.0,
+                        -0.008923,
+                        0.0,
+                        0.0,
+                        0.002,
+                        0.0,
+                        0.0,
+                        0.012492,
+                        0.0,
+                        0.349776,
+                        0.0,
+                        -0.002079,
+                        0.083999,
+                        0.00249,
+                        1.0
+                    ]
+                }
+            ],
+            "meshes": [
+                {
+                    "render_type": 1,
+                    "texture_mask": 0,
+                    "material_factors": [
+                        [
+                            1.0,
+                            1.0,
+                            1.0,
+                            1.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            1.0,
+                            1.0,
+                            0.5,
+                            1.0,
+                            0.0,
+                            1.0,
+                            0.0,
+                            0.0
+                        ],
+                        [
+                            1.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            1.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            1.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            1.0
+                        ]
+                    ],
+                    "textures": {
+                        "base_color": "../Objects/white.png",
+                        "metallic_roughness": "../Objects/normal.png",
+                        "normal": "../Objects/white.png",
+                        "occlusion": "../Objects/white.png",
+                        "emissive": "../Objects/black.png"
+                    }
+                }
+            ]
+        },
+        {
+            "primitive_type": "cube",
+            "name": "Card_43",
+            "matrix": [
+                1.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                1.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                1.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                1.0
+            ],
+            "nodes": [
+                {
+                    "name": "Model_61",
+                    "parent": -1,
+                    "local_matrix": [
+                        0.249881,
+                        0.0,
+                        0.007687,
+                        0.0,
+                        0.0,
+                        0.002,
+                        0.0,
+                        0.0,
+                        -0.010762,
+                        0.0,
+                        0.349834,
+                        0.0,
+                        -0.003988,
+                        0.086,
+                        -0.000021,
+                        1.0
+                    ]
+                }
+            ],
+            "meshes": [
+                {
+                    "render_type": 1,
+                    "texture_mask": 0,
+                    "material_factors": [
+                        [
+                            1.0,
+                            1.0,
+                            1.0,
+                            1.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            1.0,
+                            1.0,
+                            0.5,
+                            1.0,
+                            0.0,
+                            1.0,
+                            0.0,
+                            0.0
+                        ],
+                        [
+                            1.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            1.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            1.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            1.0
+                        ]
+                    ],
+                    "textures": {
+                        "base_color": "../Objects/white.png",
+                        "metallic_roughness": "../Objects/normal.png",
+                        "normal": "../Objects/white.png",
+                        "occlusion": "../Objects/white.png",
+                        "emissive": "../Objects/black.png"
+                    }
+                }
+            ]
+        },
+        {
+            "primitive_type": "cube",
+            "name": "Card_44",
+            "matrix": [
+                1.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                1.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                1.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                1.0
+            ],
+            "nodes": [
+                {
+                    "name": "Model_62",
+                    "parent": -1,
+                    "local_matrix": [
+                        0.249999,
+                        0.0,
+                        -0.000502,
+                        0.0,
+                        0.0,
+                        0.002,
+                        0.0,
+                        0.0,
+                        0.000704,
+                        0.0,
+                        0.349999,
+                        0.0,
+                        -0.002623,
+                        0.087999,
+                        0.002249,
+                        1.0
+                    ]
+                }
+            ],
+            "meshes": [
+                {
+                    "render_type": 1,
+                    "texture_mask": 0,
+                    "material_factors": [
+                        [
+                            1.0,
+                            1.0,
+                            1.0,
+                            1.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            1.0,
+                            1.0,
+                            0.5,
+                            1.0,
+                            0.0,
+                            1.0,
+                            0.0,
+                            0.0
+                        ],
+                        [
+                            1.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            1.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            1.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            1.0
+                        ]
+                    ],
+                    "textures": {
+                        "base_color": "../Objects/white.png",
+                        "metallic_roughness": "../Objects/normal.png",
+                        "normal": "../Objects/white.png",
+                        "occlusion": "../Objects/white.png",
+                        "emissive": "../Objects/black.png"
+                    }
+                }
+            ]
+        },
+        {
+            "primitive_type": "cube",
+            "name": "Card_45",
+            "matrix": [
+                1.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                1.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                1.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                1.0
+            ],
+            "nodes": [
+                {
+                    "name": "Model_63",
+                    "parent": -1,
+                    "local_matrix": [
+                        0.249962,
+                        0.0,
+                        0.004315,
+                        0.0,
+                        0.0,
+                        0.002,
+                        0.0,
+                        0.0,
+                        -0.006041,
+                        0.0,
+                        0.349947,
+                        0.0,
+                        0.002631,
+                        0.09,
+                        -0.000195,
+                        1.0
+                    ]
+                }
+            ],
+            "meshes": [
+                {
+                    "render_type": 1,
+                    "texture_mask": 0,
+                    "material_factors": [
+                        [
+                            1.0,
+                            1.0,
+                            1.0,
+                            1.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            1.0,
+                            1.0,
+                            0.5,
+                            1.0,
+                            0.0,
+                            1.0,
+                            0.0,
+                            0.0
+                        ],
+                        [
+                            1.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            1.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            1.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            1.0
+                        ]
+                    ],
+                    "textures": {
+                        "base_color": "../Objects/white.png",
+                        "metallic_roughness": "../Objects/normal.png",
+                        "normal": "../Objects/white.png",
+                        "occlusion": "../Objects/white.png",
+                        "emissive": "../Objects/black.png"
+                    }
+                }
+            ]
+        },
+        {
+            "primitive_type": "cube",
+            "name": "Card_46",
+            "matrix": [
+                1.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                1.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                1.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                1.0
+            ],
+            "nodes": [
+                {
+                    "name": "Model_64",
+                    "parent": -1,
+                    "local_matrix": [
+                        0.249926,
+                        0.0,
+                        0.006061,
+                        0.0,
+                        0.0,
+                        0.002,
+                        0.0,
+                        0.0,
+                        -0.008486,
+                        0.0,
+                        0.349897,
+                        0.0,
+                        -0.001164,
+                        0.092,
+                        -0.002318,
+                        1.0
+                    ]
+                }
+            ],
+            "meshes": [
+                {
+                    "render_type": 1,
+                    "texture_mask": 0,
+                    "material_factors": [
+                        [
+                            1.0,
+                            1.0,
+                            1.0,
+                            1.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            1.0,
+                            1.0,
+                            0.5,
+                            1.0,
+                            0.0,
+                            1.0,
+                            0.0,
+                            0.0
+                        ],
+                        [
+                            1.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            1.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            1.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            1.0
+                        ]
+                    ],
+                    "textures": {
+                        "base_color": "../Objects/white.png",
+                        "metallic_roughness": "../Objects/normal.png",
+                        "normal": "../Objects/white.png",
+                        "occlusion": "../Objects/white.png",
+                        "emissive": "../Objects/black.png"
+                    }
+                }
+            ]
+        },
+        {
+            "primitive_type": "cube",
+            "name": "Card_47",
+            "matrix": [
+                1.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                1.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                1.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                1.0
+            ],
+            "nodes": [
+                {
+                    "name": "Model_65",
+                    "parent": -1,
+                    "local_matrix": [
+                        0.249924,
+                        0.0,
+                        -0.006128,
+                        0.0,
+                        0.0,
+                        0.002,
+                        0.0,
+                        0.0,
+                        0.008579,
+                        0.0,
+                        0.349894,
+                        0.0,
+                        0.00219,
+                        0.093999,
+                        -0.004686,
+                        1.0
+                    ]
+                }
+            ],
+            "meshes": [
+                {
+                    "render_type": 1,
+                    "texture_mask": 0,
+                    "material_factors": [
+                        [
+                            1.0,
+                            1.0,
+                            1.0,
+                            1.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            1.0,
+                            1.0,
+                            0.5,
+                            1.0,
+                            0.0,
+                            1.0,
+                            0.0,
+                            0.0
+                        ],
+                        [
+                            1.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            1.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            1.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            1.0
+                        ]
+                    ],
+                    "textures": {
+                        "base_color": "../Objects/white.png",
+                        "metallic_roughness": "../Objects/normal.png",
+                        "normal": "../Objects/white.png",
+                        "occlusion": "../Objects/white.png",
+                        "emissive": "../Objects/black.png"
+                    }
+                }
+            ]
+        },
+        {
+            "primitive_type": "cube",
+            "name": "Card_48",
+            "matrix": [
+                1.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                1.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                1.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                1.0
+            ],
+            "nodes": [
+                {
+                    "name": "Model_66",
+                    "parent": -1,
+                    "local_matrix": [
+                        0.249994,
+                        0.0,
+                        0.001639,
+                        0.0,
+                        0.0,
+                        0.002,
+                        0.0,
+                        0.0,
+                        -0.002295,
+                        0.0,
+                        0.349992,
+                        0.0,
+                        -0.002456,
+                        0.096,
+                        0.004077,
+                        1.0
+                    ]
+                }
+            ],
+            "meshes": [
+                {
+                    "render_type": 1,
+                    "texture_mask": 0,
+                    "material_factors": [
+                        [
+                            1.0,
+                            1.0,
+                            1.0,
+                            1.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            1.0,
+                            1.0,
+                            0.5,
+                            1.0,
+                            0.0,
+                            1.0,
+                            0.0,
+                            0.0
+                        ],
+                        [
+                            1.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            1.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            1.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            1.0
+                        ]
+                    ],
+                    "textures": {
+                        "base_color": "../Objects/white.png",
+                        "metallic_roughness": "../Objects/normal.png",
+                        "normal": "../Objects/white.png",
+                        "occlusion": "../Objects/white.png",
+                        "emissive": "../Objects/black.png"
+                    }
+                }
+            ]
+        },
+        {
+            "primitive_type": "cube",
+            "name": "Card_49",
+            "matrix": [
+                1.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                1.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                1.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                1.0
+            ],
+            "nodes": [
+                {
+                    "name": "Model_67",
+                    "parent": -1,
+                    "local_matrix": [
+                        0.249874,
+                        0.0,
+                        -0.007918,
+                        0.0,
+                        0.0,
+                        0.002,
+                        0.0,
+                        0.0,
+                        0.011086,
+                        0.0,
+                        0.349824,
+                        0.0,
+                        -0.00316,
+                        0.097999,
+                        -0.004679,
+                        1.0
+                    ]
+                }
+            ],
+            "meshes": [
+                {
+                    "render_type": 1,
+                    "texture_mask": 0,
+                    "material_factors": [
+                        [
+                            1.0,
+                            1.0,
+                            1.0,
+                            1.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            1.0,
+                            1.0,
+                            0.5,
+                            1.0,
+                            0.0,
+                            1.0,
+                            0.0,
+                            0.0
+                        ],
+                        [
+                            1.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            1.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            1.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            1.0
+                        ]
+                    ],
+                    "textures": {
+                        "base_color": "../Objects/white.png",
+                        "metallic_roughness": "../Objects/normal.png",
+                        "normal": "../Objects/white.png",
+                        "occlusion": "../Objects/white.png",
+                        "emissive": "../Objects/black.png"
+                    }
+                }
+            ]
+        },
+        {
+            "primitive_type": "cube",
+            "name": "Card_50",
+            "matrix": [
+                1.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                1.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                1.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                1.0
+            ],
+            "nodes": [
+                {
+                    "name": "Model_68",
+                    "parent": -1,
+                    "local_matrix": [
+                        0.249994,
+                        0.0,
+                        -0.001586,
+                        0.0,
+                        0.0,
+                        0.002,
+                        0.0,
+                        0.0,
+                        0.00222,
+                        0.0,
+                        0.349992,
+                        0.0,
+                        0.002394,
+                        0.1,
+                        0.003385,
+                        1.0
+                    ]
+                }
+            ],
+            "meshes": [
+                {
+                    "render_type": 1,
+                    "texture_mask": 0,
+                    "material_factors": [
+                        [
+                            1.0,
+                            1.0,
+                            1.0,
+                            1.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            1.0,
+                            1.0,
+                            0.5,
+                            1.0,
+                            0.0,
+                            1.0,
+                            0.0,
+                            0.0
+                        ],
+                        [
+                            1.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            1.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            1.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            1.0
+                        ]
+                    ],
+                    "textures": {
+                        "base_color": "../Objects/white.png",
+                        "metallic_roughness": "../Objects/normal.png",
+                        "normal": "../Objects/white.png",
+                        "occlusion": "../Objects/white.png",
+                        "emissive": "../Objects/black.png"
+                    }
+                }
+            ]
+        },
+        {
+            "primitive_type": "cube",
+            "name": "Card_51",
+            "matrix": [
+                1.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                1.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                1.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                1.0
+            ],
+            "nodes": [
+                {
+                    "name": "Model_69",
+                    "parent": -1,
+                    "local_matrix": [
+                        0.249943,
+                        0.0,
+                        -0.005313,
+                        0.0,
+                        0.0,
+                        0.002,
+                        0.0,
+                        0.0,
+                        0.007439,
+                        0.0,
+                        0.34992,
+                        0.0,
+                        0.00258,
+                        0.101999,
+                        -0.003617,
+                        1.0
+                    ]
+                }
+            ],
+            "meshes": [
+                {
+                    "render_type": 1,
+                    "texture_mask": 0,
+                    "material_factors": [
+                        [
+                            1.0,
+                            1.0,
+                            1.0,
+                            1.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            1.0,
+                            1.0,
+                            0.5,
+                            1.0,
+                            0.0,
+                            1.0,
+                            0.0,
+                            0.0
+                        ],
+                        [
+                            1.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            1.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            1.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            1.0
+                        ]
+                    ],
+                    "textures": {
+                        "base_color": "../Objects/white.png",
+                        "metallic_roughness": "../Objects/normal.png",
+                        "normal": "../Objects/white.png",
+                        "occlusion": "../Objects/white.png",
+                        "emissive": "../Objects/black.png"
+                    }
+                }
+            ]
+        },
+        {
+            "primitive_type": "cube",
+            "name": "Card_52",
+            "matrix": [
+                1.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                1.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                1.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                1.0
+            ],
+            "nodes": [
+                {
+                    "name": "Model_70",
+                    "parent": -1,
+                    "local_matrix": [
+                        0.249763,
+                        0.0,
+                        -0.010864,
+                        0.0,
+                        0.0,
+                        0.002,
+                        0.0,
+                        0.0,
+                        0.01521,
+                        0.0,
+                        0.349669,
+                        0.0,
+                        -0.001976,
+                        0.104,
+                        -0.000848,
+                        1.0
+                    ]
+                }
+            ],
+            "meshes": [
+                {
+                    "render_type": 1,
+                    "texture_mask": 0,
+                    "material_factors": [
+                        [
+                            1.0,
+                            1.0,
+                            1.0,
+                            1.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            1.0,
+                            1.0,
+                            0.5,
+                            1.0,
+                            0.0,
+                            1.0,
+                            0.0,
+                            0.0
+                        ],
+                        [
+                            1.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            1.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            1.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            1.0
+                        ]
+                    ],
+                    "textures": {
+                        "base_color": "../Objects/white.png",
+                        "metallic_roughness": "../Objects/normal.png",
+                        "normal": "../Objects/white.png",
+                        "occlusion": "../Objects/white.png",
+                        "emissive": "../Objects/black.png"
+                    }
+                }
+            ]
+        }
+    ],
+    "lights": [
+        {
+            "type": "directional",
+            "color": [
+                1.0,
+                1.0,
+                0.5,
+                0.5
+            ],
+            "position": [
+                0.0,
+                1.0,
+                0.0,
+                0.0
+            ],
+            "rotation": [
+                -0.707723,
+                0.0,
+                0.0,
+                0.706489
+            ],
+            "name": "Directional Light 2"
+        }
+    ],
+    "cameras": [
+        {
+            "name": "Camera_3",
+            "position": [
+                0.242225,
+                0.435421,
+                0.687705
+            ],
+            "euler": [
+                0.598479,
+                -2.844092,
+                0.0
+            ],
+            "fovx": 1.518435,
+            "near_plane": 0.004999,
+            "far_plane": 3.4028234663852886e38,
+            "speed": 3.5
+        }
+    ],
+    "active_camera": 0
+}

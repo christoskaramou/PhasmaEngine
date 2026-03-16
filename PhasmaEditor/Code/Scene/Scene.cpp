@@ -2742,6 +2742,9 @@ namespace pe
             m_particleManager->UpdateEmitterBuffer();
         }
 
+        // Update texture descriptors (needed when material texture masks change)
+        UpdateTextures();
+
         // Update render pass descriptor sets (needed when shadows/day settings change)
         LightOpaquePass *lop = GetGlobalComponent<LightOpaquePass>();
         LightTransparentPass *ltp = GetGlobalComponent<LightTransparentPass>();

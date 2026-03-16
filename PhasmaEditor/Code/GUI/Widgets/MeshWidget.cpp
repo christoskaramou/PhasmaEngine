@@ -111,6 +111,7 @@ namespace pe
                 uint32_t a = static_cast<uint32_t>(aabbColor[3] * 255.0f + 0.5f);
                 mesh->aabbColor = (r << 24) | (g << 16) | (b << 8) | a;
                 PropagateMeshChange(mesh, model);
+                m_gui->NotifyChange();
             }
         }
 
@@ -221,6 +222,7 @@ namespace pe
                     RendererSystem *renderer = GetGlobalSystem<RendererSystem>();
                     if (renderer)
                         renderer->GetScene().UpdateTextures();
+                    m_gui->NotifyChange();
                 }
             }
         }
@@ -274,6 +276,7 @@ namespace pe
                         RendererSystem *renderer = GetGlobalSystem<RendererSystem>();
                         if (renderer)
                             renderer->GetScene().UpdateTextures();
+                        m_gui->NotifyChange();
                     }
                 }
 
@@ -335,6 +338,7 @@ namespace pe
                             RendererSystem *renderer = GetGlobalSystem<RendererSystem>();
                             if (renderer)
                                 renderer->GetScene().UpdateTextures();
+                            m_gui->NotifyChange();
                         }
                     }
                     else
@@ -364,10 +368,11 @@ namespace pe
                                     mesh->textureMask |= (1 << i);
                                     model->MarkDirty(0);
                                     PropagateMeshChange(mesh, model);
-                                    
+
                                     RendererSystem *renderer = GetGlobalSystem<RendererSystem>();
                                     if (renderer)
                                         renderer->GetScene().UpdateTextures();
+                                    m_gui->NotifyChange();
                                 } });
                         }
                     }
