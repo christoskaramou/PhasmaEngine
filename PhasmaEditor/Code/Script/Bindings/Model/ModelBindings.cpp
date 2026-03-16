@@ -93,6 +93,8 @@ namespace pe
                     "set_label", &Model::SetLabel,
                     "get_file_path", [](Model &m) { return m.GetFilePath().string(); },
                     "is_primitive", &Model::IsPrimitive,
+                    "is_visible", &Model::IsRenderReady,
+                    "set_visible", &Model::SetRenderReady,
                     "get_primitive_type", &Model::GetPrimitiveType,
                     "get_node_count", &Model::GetNodeCount,
                     "get_mesh_count", &Model::GetMeshCount,
@@ -140,12 +142,27 @@ namespace pe
                         m.GetNodeInfos()[0].localMatrix = T * R * S;
                         m.MarkDirty(0);
                     },
-                    "set_scale", [](Model &m, const vec3 &scale) {
+                    "set_rotation", [](Model &m, const vec3 &rot_deg) {
                         if (m.GetNodeInfos().empty()) return;
                         auto &mat = m.GetNodeInfos()[0].localMatrix;
                         vec3 pos(mat[3]);
-                        mat = glm::translate(mat4(1.0f), pos);
-                        mat = glm::scale(mat, scale);
+                        vec3 s(glm::length(vec3(mat[0])), glm::length(vec3(mat[1])), glm::length(vec3(mat[2])));
+                        mat4 T = glm::translate(mat4(1.0f), pos);
+                        mat4 R = glm::mat4_cast(glm::quat(vec3(glm::radians(rot_deg.x), glm::radians(rot_deg.y), glm::radians(rot_deg.z))));
+                        mat4 S = glm::scale(mat4(1.0f), s);
+                        mat = T * R * S;
+                        m.MarkDirty(0);
+                    },
+                    "set_scale", [](Model &m, const vec3 &newScale) {
+                        if (m.GetNodeInfos().empty()) return;
+                        auto &mat = m.GetNodeInfos()[0].localMatrix;
+                        vec3 pos(mat[3]);
+                        vec3 oldScale(glm::length(vec3(mat[0])), glm::length(vec3(mat[1])), glm::length(vec3(mat[2])));
+                        mat3 rotMat(vec3(mat[0]) / oldScale.x, vec3(mat[1]) / oldScale.y, vec3(mat[2]) / oldScale.z);
+                        mat4 T = glm::translate(mat4(1.0f), pos);
+                        mat4 R = glm::mat4_cast(glm::quat_cast(rotMat));
+                        mat4 S = glm::scale(mat4(1.0f), newScale);
+                        mat = T * R * S;
                         m.MarkDirty(0);
                     },
                     "get_bounding_box", [&lua](Model &m) -> sol::table {
@@ -214,6 +231,31 @@ namespace pe
                         if (node < 0 || node >= static_cast<int>(nodes.size())) return vec3(1.f);
                         auto &mat = nodes[node].localMatrix;
                         return vec3(glm::length(vec3(mat[0])), glm::length(vec3(mat[1])), glm::length(vec3(mat[2])));
+                    },
+                    "set_node_rotation", [](Model &m, int node, const vec3 &rot_deg) {
+                        auto &nodes = m.GetNodeInfos();
+                        if (node < 0 || node >= static_cast<int>(nodes.size())) return;
+                        auto &mat = nodes[node].localMatrix;
+                        vec3 pos(mat[3]);
+                        vec3 s(glm::length(vec3(mat[0])), glm::length(vec3(mat[1])), glm::length(vec3(mat[2])));
+                        mat4 T = glm::translate(mat4(1.0f), pos);
+                        mat4 R = glm::mat4_cast(glm::quat(vec3(glm::radians(rot_deg.x), glm::radians(rot_deg.y), glm::radians(rot_deg.z))));
+                        mat4 S = glm::scale(mat4(1.0f), s);
+                        mat = T * R * S;
+                        m.MarkDirty(node);
+                    },
+                    "set_node_scale", [](Model &m, int node, const vec3 &newScale) {
+                        auto &nodes = m.GetNodeInfos();
+                        if (node < 0 || node >= static_cast<int>(nodes.size())) return;
+                        auto &mat = nodes[node].localMatrix;
+                        vec3 pos(mat[3]);
+                        vec3 oldScale(glm::length(vec3(mat[0])), glm::length(vec3(mat[1])), glm::length(vec3(mat[2])));
+                        mat3 rotMat(vec3(mat[0]) / oldScale.x, vec3(mat[1]) / oldScale.y, vec3(mat[2]) / oldScale.z);
+                        mat4 T = glm::translate(mat4(1.0f), pos);
+                        mat4 R = glm::mat4_cast(glm::quat_cast(rotMat));
+                        mat4 S = glm::scale(mat4(1.0f), newScale);
+                        mat = T * R * S;
+                        m.MarkDirty(node);
                     },
                     "get_node_world_matrix", [](Model &m, int node) -> mat4 {
                         auto &nodes = m.GetNodeInfos();

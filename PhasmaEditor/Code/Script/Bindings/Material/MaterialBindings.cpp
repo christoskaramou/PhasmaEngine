@@ -1,6 +1,7 @@
 #if defined(PE_SCRIPTS)
 #include "Script/ScriptSystem.h"
 #include "Scene/Model.h"
+#include "Scene/Scene.h"
 #include "Systems/RendererSystem.h"
 #include "API/RHI.h"
 #include "API/Queue.h"
@@ -102,6 +103,28 @@ namespace pe
                     }
                 });
 
+                mat.set_function("set_render_type", [](Model &model, int meshIndex, const std::string &type) {
+                    auto *mesh = GetMesh(model, meshIndex);
+                    if (!mesh) return;
+
+                    RenderType rt;
+                    if (type == "opaque") rt = RenderType::Opaque;
+                    else if (type == "alpha_cut") rt = RenderType::AlphaCut;
+                    else if (type == "alpha_blend") rt = RenderType::AlphaBlend;
+                    else if (type == "transmission") rt = RenderType::Transmission;
+                    else return;
+
+                    if (mesh->renderType == rt) return;
+                    mesh->renderType = rt;
+
+                    auto *r = GetGlobalSystem<RendererSystem>();
+                    if (r)
+                    {
+                        r->WaitAllFramesCommands();
+                        r->GetScene().UpdateGeometryBuffers();
+                    }
+                });
+
                 mat.set_function("get_texture_mask", [](Model &model, int meshIndex) -> uint32_t {
                     auto *mesh = GetMesh(model, meshIndex);
                     return mesh ? mesh->textureMask : 0;
@@ -154,6 +177,23 @@ namespace pe
                     if (!mesh->samplers[slot])
                         mesh->samplers[slot] = Model::GetDefaultResources().sampler;
 
+                    MarkMeshDirty(model, meshIndex);
+                    return true;
+                });
+
+                mat.set_function("remove_texture", [](Model &model, int meshIndex, const std::string &type) -> bool {
+                    auto *mesh = GetMesh(model, meshIndex);
+                    if (!mesh) return false;
+
+                    auto it = s_texSlots.find(std::string_view(type));
+                    if (it == s_texSlots.end()) return false;
+                    uint32_t slot = it->second;
+
+                    if (!(mesh->textureMask & (1u << slot))) return false;
+
+                    mesh->images[slot] = {};
+                    mesh->samplers[slot] = nullptr;
+                    mesh->textureMask &= ~(1u << slot);
                     MarkMeshDirty(model, meshIndex);
                     return true;
                 }); });

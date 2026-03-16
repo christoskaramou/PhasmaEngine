@@ -38,6 +38,16 @@ namespace pe
         sol::function batchCallback;
     };
 
+    struct ScriptEntry
+    {
+        std::string path;
+        sol::environment env;
+        sol::function initFn;
+        sol::function updateFn;
+        sol::function updateEditorFn;
+        sol::function destroyFn;
+    };
+
     class ScriptSystem : public ISystem
     {
     public:
@@ -61,12 +71,15 @@ namespace pe
 
     private:
         void LoadScripts();
+        void ScanForNewScripts();
+        void CollectHooks(ScriptEntry &entry);
         static std::vector<LuaBindingFunc> &GetBindings();
 
         sol::state m_lua{};
-        std::vector<std::string> m_scriptPaths{};
+        std::vector<ScriptEntry> m_scripts{};
         std::vector<PendingAsyncLoad> m_pendingAsyncLoads;
         bool m_initialized = false;
+        double m_scanTimer = 0.0;
     };
 } // namespace pe
 #endif

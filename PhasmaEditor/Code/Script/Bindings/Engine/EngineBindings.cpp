@@ -1,5 +1,9 @@
 #if defined(PE_SCRIPTS)
 #include "Script/ScriptSystem.h"
+#include "GUI/GUIState.h"
+#include "GUI/GUI.h"
+#include "Systems/RendererSystem.h"
+#include <imgui.h>
 
 namespace pe
 {
@@ -21,6 +25,45 @@ namespace pe
 
                 engine.set_function("compile_shaders", []() {
                     EventSystem::PushEvent(EventType::CompileShaders);
+                });
+
+                // Play mode
+                engine.set_function("is_play_mode", []() -> bool {
+                    return GUIState::s_playMode;
+                });
+
+                engine.set_function("set_play_mode", [](bool enabled) {
+                    GUIState::s_playMode = enabled;
+                    if (!enabled)
+                        GUIState::s_isPaused = false;
+                });
+
+                // Pause
+                engine.set_function("is_paused", []() -> bool {
+                    return GUIState::s_isPaused;
+                });
+
+                engine.set_function("set_paused", [](bool paused) {
+                    GUIState::s_isPaused = paused;
+                });
+
+                // GUI
+                engine.set_function("toggle_gui", []() {
+                    auto *r = GetGlobalSystem<RendererSystem>();
+                    if (r) r->ToggleGUI();
+                });
+
+                engine.set_function("trigger_exit_confirmation", []() {
+                    auto *r = GetGlobalSystem<RendererSystem>();
+                    if (r) r->GetGUI().TriggerExitConfirmation();
+                });
+
+                engine.set_function("is_popup_open", []() -> bool {
+                    return ImGui::IsPopupOpen("", ImGuiPopupFlags_AnyPopupId);
+                });
+
+                engine.set_function("want_capture_keyboard", []() -> bool {
+                    return ImGui::GetIO().WantCaptureKeyboard;
                 }); });
         }
     } s_engineBindings;

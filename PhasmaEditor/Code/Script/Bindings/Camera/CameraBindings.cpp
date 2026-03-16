@@ -5,6 +5,12 @@
 
 namespace pe
 {
+    static const std::unordered_map<std::string_view, CameraDirection> s_camDirMap = {
+        {"forward", CameraDirection::FORWARD},
+        {"backward", CameraDirection::BACKWARD},
+        {"left", CameraDirection::LEFT},
+        {"right", CameraDirection::RIGHT}};
+
     static struct CameraBindings
     {
         CameraBindings()
@@ -36,12 +42,37 @@ namespace pe
                     "get_view", &Camera::GetView,
                     "get_projection", &Camera::GetProjection,
                     "get_view_projection", &Camera::GetViewProjection,
+                    "get_previous_view_projection", &Camera::GetPreviousViewProjection,
                     "get_inv_view", &Camera::GetInvView,
                     "get_inv_projection", &Camera::GetInvProjection,
+                    "get_inv_view_projection", &Camera::GetInvViewProjection,
                     "get_jitter", &Camera::GetProjJitter,
                     "set_jitter", &Camera::SetProjJitter,
                     "get_prev_jitter", &Camera::GetPrevProjJitter,
-                    "set_prev_jitter", &Camera::SetPrevProjJitter);
+                    "set_prev_jitter", &Camera::SetPrevProjJitter,
+                    "move", [](Camera &c, const std::string &dir, sol::optional<float> speed) {
+                        auto it = s_camDirMap.find(std::string_view(dir));
+                        if (it == s_camDirMap.end()) return;
+                        c.Move(it->second, speed.value_or(c.GetSpeed()));
+                    },
+                    "rotate", [](Camera &c, float xoffset, float yoffset) {
+                        c.Rotate(xoffset, yoffset);
+                    },
+                    "look_at", [](Camera &c, const vec3 &target) {
+                        vec3 dir = glm::normalize(target - c.GetPosition());
+                        float pitch = asin(dir.y);
+                        float yaw = atan2(dir.x, dir.z);
+                        c.SetEuler(vec3(pitch, yaw, 0.0f));
+                    },
+                    "point_in_frustum", [](Camera &c, const vec3 &point, sol::optional<float> radius) -> bool {
+                        return c.PointInFrustum(point, radius.value_or(0.0f));
+                    },
+                    "aabb_in_frustum", [&lua](Camera &c, sol::table aabb) -> bool {
+                        AABB box;
+                        box.min = aabb["min"].get<vec3>();
+                        box.max = aabb["max"].get<vec3>();
+                        return c.AABBInFrustum(box);
+                    });
 
                 lua.set_function("get_camera", []() -> Camera * {
                     auto *r = GetGlobalSystem<RendererSystem>();

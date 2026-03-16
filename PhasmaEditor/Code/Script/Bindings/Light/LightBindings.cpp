@@ -60,6 +60,38 @@ namespace pe
                         v.erase(v.begin() + index);
                 });
 
+                // --- Name-based lookup ---
+                lights_table.set_function("find", [&lua](const std::string &name) -> sol::as_table_t<std::vector<sol::object>> {
+                    std::vector<sol::object> result;
+                    auto *ls = GetGlobalSystem<LightSystem>();
+                    if (!ls) return sol::as_table(std::move(result));
+
+                    std::string q = name;
+                    for (auto &c : q) c = static_cast<char>(std::tolower(c));
+
+                    auto search = [&](auto &lights, const char *type) {
+                        for (size_t i = 0; i < lights.size(); i++)
+                        {
+                            std::string n = lights[i].name;
+                            for (auto &c : n) c = static_cast<char>(std::tolower(c));
+                            if (n.find(q) != std::string::npos)
+                            {
+                                sol::table t = lua.create_table();
+                                t["type"] = type;
+                                t["index"] = static_cast<int>(i);
+                                t["name"] = lights[i].name;
+                                result.push_back(t);
+                            }
+                        }
+                    };
+
+                    search(ls->GetPointLights(), "point");
+                    search(ls->GetDirectionalLights(), "directional");
+                    search(ls->GetSpotLights(), "spot");
+                    search(ls->GetAreaLights(), "area");
+                    return sol::as_table(std::move(result));
+                });
+
                 // --- Point lights ---
                 lights_table.set_function("get_point_lights", [&lua]() -> sol::as_table_t<std::vector<sol::table>> {
                     std::vector<sol::table> result;
@@ -105,6 +137,7 @@ namespace pe
                         t["color"] = vec3(dls[i].color);
                         t["intensity"] = dls[i].color.w;
                         t["position"] = vec3(dls[i].position);
+                        t["rotation"] = vec4(dls[i].rotation);
                         result.push_back(t);
                     }
                     return sol::as_table(std::move(result));
@@ -135,6 +168,7 @@ namespace pe
                         t["intensity"] = sls[i].color.w;
                         t["position"] = vec3(sls[i].position);
                         t["range"] = sls[i].position.w;
+                        t["rotation"] = vec4(sls[i].rotation);
                         t["angle"] = sls[i].params.x;
                         t["falloff"] = sls[i].params.y;
                         result.push_back(t);
@@ -169,6 +203,7 @@ namespace pe
                         t["intensity"] = als[i].color.w;
                         t["position"] = vec3(als[i].position);
                         t["range"] = als[i].position.w;
+                        t["rotation"] = vec4(als[i].rotation);
                         t["width"] = als[i].size.x;
                         t["height"] = als[i].size.y;
                         result.push_back(t);
@@ -185,6 +220,77 @@ namespace pe
                     als[index].color = vec4(color, intensity);
                     als[index].size.x = width;
                     als[index].size.y = height;
+                });
+
+                // --- Individual property setter (all light types) ---
+                lights_table.set_function("set_property", [](const std::string &type, int index, const std::string &prop, sol::object value) {
+                    auto *ls = GetGlobalSystem<LightSystem>();
+                    if (!ls) return;
+
+                    auto applyCommon = [&](auto &light) {
+                        if (prop == "name") { light.name = value.as<std::string>(); return true; }
+                        if (prop == "color") { vec3 c = value.as<vec3>(); light.color = vec4(c, light.color.w); return true; }
+                        if (prop == "intensity") { light.color.w = value.as<float>(); return true; }
+                        if (prop == "position") { vec3 p = value.as<vec3>(); light.position = vec4(p, light.position.w); return true; }
+                        return false;
+                    };
+
+                    if (type == "point")
+                    {
+                        auto &v = ls->GetPointLights();
+                        if (index < 0 || index >= static_cast<int>(v.size())) return;
+                        if (applyCommon(v[index])) return;
+                        if (prop == "radius") v[index].position.w = value.as<float>();
+                    }
+                    else if (type == "directional")
+                    {
+                        auto &v = ls->GetDirectionalLights();
+                        if (index < 0 || index >= static_cast<int>(v.size())) return;
+                        if (applyCommon(v[index])) return;
+                        if (prop == "rotation") v[index].rotation = value.as<vec4>();
+                    }
+                    else if (type == "spot")
+                    {
+                        auto &v = ls->GetSpotLights();
+                        if (index < 0 || index >= static_cast<int>(v.size())) return;
+                        if (applyCommon(v[index])) return;
+                        if (prop == "range") v[index].position.w = value.as<float>();
+                        else if (prop == "rotation") v[index].rotation = value.as<vec4>();
+                        else if (prop == "angle") v[index].params.x = value.as<float>();
+                        else if (prop == "falloff") v[index].params.y = value.as<float>();
+                    }
+                    else if (type == "area")
+                    {
+                        auto &v = ls->GetAreaLights();
+                        if (index < 0 || index >= static_cast<int>(v.size())) return;
+                        if (applyCommon(v[index])) return;
+                        if (prop == "range") v[index].position.w = value.as<float>();
+                        else if (prop == "rotation") v[index].rotation = value.as<vec4>();
+                        else if (prop == "width") v[index].size.x = value.as<float>();
+                        else if (prop == "height") v[index].size.y = value.as<float>();
+                    }
+                });
+
+                // --- Set rotation for directional/spot/area ---
+                lights_table.set_function("set_rotation", [](const std::string &type, int index, const vec4 &rot) {
+                    auto *ls = GetGlobalSystem<LightSystem>();
+                    if (!ls) return;
+
+                    if (type == "directional")
+                    {
+                        auto &v = ls->GetDirectionalLights();
+                        if (index >= 0 && index < static_cast<int>(v.size())) v[index].rotation = rot;
+                    }
+                    else if (type == "spot")
+                    {
+                        auto &v = ls->GetSpotLights();
+                        if (index >= 0 && index < static_cast<int>(v.size())) v[index].rotation = rot;
+                    }
+                    else if (type == "area")
+                    {
+                        auto &v = ls->GetAreaLights();
+                        if (index >= 0 && index < static_cast<int>(v.size())) v[index].rotation = rot;
+                    }
                 });
 
                 // --- Counts ---

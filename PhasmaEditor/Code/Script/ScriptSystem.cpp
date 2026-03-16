@@ -3,6 +3,8 @@
 #include "GUI/GUIState.h"
 #include "Scene/Model.h"
 #include "Systems/RendererSystem.h"
+#include "Base/FileWatcher.h"
+#include "Base/Timer.h"
 
 namespace pe
 {
@@ -30,6 +32,12 @@ namespace pe
         m_lua.set_function("pe_error", [](const std::string &msg)
                            { Log::Error("[Lua] " + msg); });
 
+        // hooks {} keyword — lets scripts register lifecycle hooks from local functions
+        m_lua.set_function("hooks", [](sol::table t, sol::this_environment te)
+                           {
+            sol::environment env = te;
+            env.raw_set("__hooks", t); });
+
         // Execute all registered binding functions
         for (auto &fn : GetBindings())
             fn(m_lua);
@@ -39,16 +47,37 @@ namespace pe
         m_initialized = true;
     }
 
+    void ScriptSystem::CollectHooks(ScriptEntry &entry)
+    {
+        // If the script used hooks{}, read from that table; otherwise fall back to env
+        sol::object hooksObj = entry.env.raw_get<sol::object>("__hooks");
+        bool hasHooksTable = hooksObj.is<sol::table>();
+        sol::table hooksTable = hasHooksTable ? hooksObj.as<sol::table>() : sol::table{};
+
+        auto get = [&](const char *name) -> sol::function
+        {
+            sol::object obj = hasHooksTable ? hooksTable[name] : entry.env[name];
+            return obj.is<sol::function>() ? obj.as<sol::function>() : sol::function{};
+        };
+
+        entry.initFn = get("init");
+        entry.updateFn = get("update");
+        entry.updateEditorFn = get("update_editor");
+        entry.destroyFn = get("destroy");
+    }
+
     void ScriptSystem::CallInit()
     {
-        sol::protected_function initFn = m_lua["init"];
-        if (initFn.valid())
+        for (auto &script : m_scripts)
         {
-            auto result = initFn();
-            if (!result.valid())
+            if (script.initFn.valid())
             {
-                sol::error err = result;
-                PE_ERROR("Lua init() error: %s", err.what());
+                auto result = script.initFn();
+                if (!result.valid())
+                {
+                    sol::error err = result;
+                    PE_ERROR("Lua init() error in '%s': %s", script.path.c_str(), err.what());
+                }
             }
         }
     }
@@ -143,17 +172,37 @@ namespace pe
         // Process completed async model loads
         ProcessAsyncLoads();
 
+        // Periodically scan for new .lua files
+        ScanForNewScripts();
+
+        // update_editor() runs every frame regardless of play mode
+        for (auto &script : m_scripts)
+        {
+            if (script.updateEditorFn.valid())
+            {
+                auto result = script.updateEditorFn();
+                if (!result.valid())
+                {
+                    sol::error err = result;
+                    PE_ERROR("Lua update_editor() error in '%s': %s", script.path.c_str(), err.what());
+                }
+            }
+        }
+
         if (!GUIState::s_playMode || GUIState::s_isPaused)
             return;
 
-        sol::protected_function updateFn = m_lua["update"];
-        if (updateFn.valid())
+        // update() runs only in play mode
+        for (auto &script : m_scripts)
         {
-            auto result = updateFn();
-            if (!result.valid())
+            if (script.updateFn.valid())
             {
-                sol::error err = result;
-                PE_ERROR("Lua update() error: %s", err.what());
+                auto result = script.updateFn();
+                if (!result.valid())
+                {
+                    sol::error err = result;
+                    PE_ERROR("Lua update() error in '%s': %s", script.path.c_str(), err.what());
+                }
             }
         }
     }
@@ -164,24 +213,26 @@ namespace pe
             return;
 
         {
-            sol::protected_function destroyFn = m_lua["destroy"];
-            if (destroyFn.valid())
+            for (auto &script : m_scripts)
             {
-                auto result = destroyFn();
-                if (!result.valid())
+                if (script.destroyFn.valid())
                 {
-                    sol::error err = result;
-                    PE_ERROR("Lua destroy() error: %s", err.what());
+                    auto result = script.destroyFn();
+                    if (!result.valid())
+                    {
+                        sol::error err = result;
+                        PE_ERROR("Lua destroy() error in '%s': %s", script.path.c_str(), err.what());
+                    }
                 }
             }
-        } // destroyFn released before Lua state reset
+        }
 
         // Wait for any pending async loads before destroying Lua state
         for (auto &load : m_pendingAsyncLoads)
             load.future.wait();
         m_pendingAsyncLoads.clear();
 
-        m_scriptPaths.clear();
+        m_scripts.clear();
         m_lua = sol::state();
         m_initialized = false;
     }
@@ -276,7 +327,10 @@ namespace pe
                 std::string filePath = file.path().string();
                 std::replace(filePath.begin(), filePath.end(), '\\', '/');
 
-                auto result = m_lua.safe_script_file(filePath, sol::script_pass_on_error);
+                // Each script gets its own environment that inherits globals
+                sol::environment env(m_lua, sol::create, m_lua.globals());
+
+                auto result = m_lua.safe_script_file(filePath, env, sol::script_pass_on_error);
                 if (!result.valid())
                 {
                     sol::error err = result;
@@ -284,10 +338,83 @@ namespace pe
                     continue;
                 }
 
-                m_scriptPaths.push_back(filePath);
+                // Promote non-hook globals so other scripts can access them
+                // (e.g. main.lua calling run_buffer_tests(), or T table from test_utils)
+                static const std::set<std::string> hookNames = {"init", "update", "update_editor", "destroy"};
+                for (auto &[key, val] : env)
+                {
+                    if (key.is<std::string>())
+                    {
+                        std::string name = key.as<std::string>();
+                        if (hookNames.find(name) == hookNames.end())
+                        {
+                            sol::object existing = m_lua.globals().raw_get<sol::object>(name);
+                            if (existing.valid() && existing.get_type() != sol::type::lua_nil)
+                                PE_WARN("Lua global '%s' redefined by '%s'", name.c_str(), filePath.c_str());
+                            m_lua.globals()[name] = val;
+                        }
+                    }
+                }
+
+                ScriptEntry entry;
+                entry.path = filePath;
+                entry.env = std::move(env);
+                CollectHooks(entry);
+                m_scripts.push_back(std::move(entry));
+
                 PE_INFO("Loaded Lua script: %s", filePath.c_str());
             }
         }
+    }
+
+    void ScriptSystem::ScanForNewScripts()
+    {
+        // Scan every 2 seconds
+        double dt = FrameTimer::Instance().GetDelta();
+        m_scanTimer += dt;
+        if (m_scanTimer < 2.0)
+            return;
+        m_scanTimer = 0.0;
+
+        const std::string scriptsDir = Path::Assets + "Scripts";
+        if (!std::filesystem::exists(scriptsDir))
+            return;
+
+        bool foundNew = false;
+        for (auto &file : std::filesystem::recursive_directory_iterator(scriptsDir))
+        {
+            if (file.path().extension() != ".lua")
+                continue;
+
+            std::string filePath = file.path().string();
+            std::replace(filePath.begin(), filePath.end(), '\\', '/');
+
+            // Check if already tracked
+            bool known = false;
+            for (auto &existing : m_scripts)
+            {
+                if (existing.path == filePath)
+                {
+                    known = true;
+                    break;
+                }
+            }
+
+            if (!known)
+            {
+                // Register with FileWatcher for future change detection
+                FileWatcher::Add(filePath, [](size_t fileEvent)
+                                 {
+                    EventSystem::PushEvent(fileEvent);
+                    EventSystem::PushEvent(EventType::CompileScripts); });
+
+                foundNew = true;
+                PE_INFO("New Lua script detected: %s", filePath.c_str());
+            }
+        }
+
+        if (foundNew)
+            Reload();
     }
 } // namespace pe
 #endif

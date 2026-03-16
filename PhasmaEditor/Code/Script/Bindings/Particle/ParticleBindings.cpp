@@ -210,6 +210,24 @@ namespace pe
                     return t;
                 });
 
+                particles.set_function("find", [](const std::string &name) -> int {
+                    auto *pm = GetPM();
+                    if (!pm) return -1;
+                    auto &names = pm->GetEmitterNames();
+
+                    std::string q = name;
+                    for (auto &c : q) c = static_cast<char>(std::tolower(c));
+
+                    for (size_t i = 0; i < names.size(); i++)
+                    {
+                        std::string n = names[i];
+                        for (auto &c : n) c = static_cast<char>(std::tolower(c));
+                        if (n.find(q) != std::string::npos)
+                            return static_cast<int>(i);
+                    }
+                    return -1;
+                });
+
                 particles.set_function("clear", []() {
                     auto *pm = GetPM();
                     if (!pm) return;
