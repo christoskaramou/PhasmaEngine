@@ -54,7 +54,7 @@ namespace pe
         void RegisterTools();
         void QueueAction(std::function<void()> fn);
         void FlushActions();
-        void FetchAvailableModels();
+        void FetchAvailableModels(bool fetchRemote = false);
         void ConfigureAgent(pagent::Provider provider);
 
         std::optional<pagent::Agent> m_agent;
@@ -67,6 +67,7 @@ namespace pe
         std::vector<bool> m_modelIsLocal;
         int m_selectedModelIndex = 0;
         bool m_isPulling = false;
+        bool m_ollamaModelLoaded = false;
         pagent::Agent::CancelToken m_pullCancel;
         char m_modelFilter[128] = {};
 
@@ -126,10 +127,11 @@ namespace pe
         std::vector<std::string> m_embeddingModels;
         std::vector<bool> m_embeddingModelIsLocal;
         std::shared_ptr<pagent::IEmbeddingProvider> CreateEmbeddingProvider();
-        void UpdateEmbeddingModels();
-        void SaveEmbeddingConfig();
-        void LoadEmbeddingConfig();
+        void UpdateEmbeddingModels(bool fetchRemote = false);
+        void SaveConfig();
+        void LoadConfig();
         std::string GetVectorStorePath() const;
+        bool m_isFetchingEmbeddingModels = false;
         bool m_isPullingEmbedding = false;
         pagent::Agent::CancelToken m_pullEmbeddingCancel;
 

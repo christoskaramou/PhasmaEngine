@@ -35,7 +35,7 @@ namespace pe
     AgentWidget::~AgentWidget()
     {
         *m_alive = false; // signal background threads to stop accessing this
-        SaveEmbeddingConfig();
+        SaveConfig();
         auto storePath = GetVectorStorePath();
         if (m_vectorStore && !storePath.empty())
             m_vectorStore->SaveToFile(storePath);
@@ -51,10 +51,21 @@ namespace pe
         pe::Widget::Init(gui);
         m_agentScriptSystem.InitRestricted(nullptr);
 
-        // Load saved embedding config, or default to Google if key exists
-        LoadEmbeddingConfig();
-        if (!std::filesystem::exists(Path::Assets + "Agent/embedding_config.txt"))
+        m_providers = pagent::DiscoverProviders();
+        // Add "External" provider (file-based, for Claude Code / Cursor / any AI tool)
+        m_providers.push_back({pagent::Provider::Ollama, "External", "", "external"});
+
+        // Restore saved config (provider, model, embedding settings)
+        if (std::filesystem::exists(Path::Assets + "Agent/agent_config.json"))
         {
+            LoadConfig();
+        }
+        else
+        {
+            // First launch defaults
+            const char *providerEnv = std::getenv("PAGENT_PROVIDER");
+            m_selectedProviderIndex = providerEnv ? pagent::GetDefaultProviderIndex(m_providers)
+                                                  : static_cast<int>(m_providers.size()) - 1;
             if (std::getenv("PAGENT_GEMINI_API_KEY"))
             {
                 m_embeddingEnabled = true;
@@ -62,78 +73,66 @@ namespace pe
             }
             UpdateEmbeddingModels();
         }
-
-        m_providers = pagent::DiscoverProviders();
-        // Add "External" provider (file-based, for Claude Code / Cursor / any AI tool)
-        m_providers.push_back({pagent::Provider::Ollama, "External", "", "external"});
-        // Default to External unless PAGENT_PROVIDER is explicitly set
-        const char *providerEnv = std::getenv("PAGENT_PROVIDER");
-        m_selectedProviderIndex = providerEnv ? pagent::GetDefaultProviderIndex(m_providers)
-                                              : static_cast<int>(m_providers.size()) - 1;
         ConfigureAgent(m_providers[m_selectedProviderIndex].provider);
 
-        // Fetch models for all providers in background at startup
-        auto alive = m_alive;
-        for (int pi = 0; pi < static_cast<int>(m_providers.size()); ++pi)
+        // Populate model list for the restored provider
+        FetchAvailableModels();
+
+        // Fetch local models for Ollama at startup (no remote)
+        // Other providers have hardcoded model lists
         {
-            if (m_providers[pi].name == "External")
-                continue;
-            auto prov = m_providers[pi].provider;
-            auto key = m_providers[pi].apiKey;
-            std::thread([this, alive, prov, key, pi]()
-                        {
-                std::vector<pagent::Agent::ModelInfo> modelInfos;
-                int retries = (prov == pagent::Provider::Ollama) ? 5 : 1;
-                for (int attempt = 0; attempt < retries; ++attempt)
-                {
-                    if (!*alive) return;
-                    if (attempt > 0)
-                        std::this_thread::sleep_for(std::chrono::seconds(1));
-                    modelInfos = pagent::Agent::FetchModelInfos(prov, key);
-                    if (!modelInfos.empty()) break;
-                }
-                if (!*alive) return;
-
-                std::vector<std::string> names;
-                std::vector<bool> localFlags;
-                for (auto &mi : modelInfos)
-                {
-                    names.push_back(std::move(mi.name));
-                    localFlags.push_back(mi.local);
-                }
-                if (!*alive) return;
-
-                QueueAction([this, alive, names = std::move(names), localFlags = std::move(localFlags), pi]()
-                {
-                    if (!*alive) return;
-                    m_modelCache[pi] = {names, localFlags};
-                    // If this is the current provider, apply immediately
-                    if (m_selectedProviderIndex == pi)
+            auto aliveRef = m_alive;
+            for (int pi = 0; pi < static_cast<int>(m_providers.size()); ++pi)
+            {
+                if (m_providers[pi].name == "External" || m_providers[pi].provider != pagent::Provider::Ollama)
+                    continue;
+                auto prov = m_providers[pi].provider;
+                auto key = m_providers[pi].apiKey;
+                std::thread([this, aliveRef, prov, key, pi]()
+                            {
+                    std::vector<pagent::Agent::ModelInfo> modelInfos;
+                    for (int attempt = 0; attempt < 5; ++attempt)
                     {
-                        m_isFetchingModels = false;
-                        m_availableModels = m_modelCache[pi].names;
-                        m_modelIsLocal = m_modelCache[pi].local;
-                        m_selectedModelIndex = 0;
-                        if (m_availableModels.empty())
+                        if (!*aliveRef) return;
+                        if (attempt > 0)
+                            std::this_thread::sleep_for(std::chrono::seconds(1));
+                        modelInfos = pagent::Agent::FetchModelInfos(prov, key, "", true);
+                        if (!modelInfos.empty()) break;
+                    }
+                    if (!*aliveRef) return;
+
+                    std::vector<std::string> names;
+                    std::vector<bool> localFlags;
+                    for (auto &mi : modelInfos)
+                    {
+                        names.push_back(std::move(mi.name));
+                        localFlags.push_back(mi.local);
+                    }
+                    if (!*aliveRef) return;
+
+                    QueueAction([this, aliveRef, names = std::move(names), localFlags = std::move(localFlags), pi]()
+                    {
+                        if (!*aliveRef) return;
+                        m_modelCache[pi] = {names, localFlags};
+                        if (m_selectedProviderIndex == pi)
                         {
-                            m_modelName.clear();
-                        }
-                        else
-                        {
+                            m_isFetchingModels = false;
+                            m_availableModels = m_modelCache[pi].names;
+                            m_modelIsLocal = m_modelCache[pi].local;
+                            m_selectedModelIndex = 0;
                             for (int i = 0; i < static_cast<int>(m_availableModels.size()); ++i)
                                 if (m_availableModels[i] == m_modelName) { m_selectedModelIndex = i; break; }
-                            if (m_modelName.empty())
+                            if (m_modelName.empty() && !m_availableModels.empty())
                             {
                                 m_modelName = m_availableModels[0];
                                 if (m_agent)
                                     m_agent->SetModel(m_modelName);
                             }
                         }
-                    }
-                }); })
-                .detach();
+                    }); })
+                    .detach();
+            }
         }
-        m_isFetchingModels = true; // show fetching for current provider until its fetch completes
     }
 
     void AgentWidget::ConfigureAgent(pagent::Provider provider)
@@ -202,7 +201,10 @@ namespace pe
             m_turnsSinceSave = 0;
         }
 
-        m_modelName = config.model;
+        // Use saved model name if set, otherwise use provider default
+        if (m_modelName.empty())
+            m_modelName = config.model;
+        config.model = m_modelName;
         m_selectedModelIndex = 0;
         m_agentConfigured = true;
 
@@ -273,7 +275,7 @@ namespace pe
         return nullptr;
     }
 
-    void AgentWidget::UpdateEmbeddingModels()
+    void AgentWidget::UpdateEmbeddingModels(bool fetchRemote)
     {
         m_embeddingModels.clear();
         m_selectedEmbeddingModel = 0;
@@ -286,16 +288,19 @@ namespace pe
         case 1: // OpenAI
             m_embeddingModels = {"text-embedding-3-small", "text-embedding-3-large"};
             break;
-        case 2: // Ollama — fetch local + remote embedding models
+        case 2: // Ollama — local only by default, Fetch button gets remote too
         {
             m_embeddingModelIsLocal.clear();
+            m_isFetchingEmbeddingModels = true;
             auto alive = m_alive;
-            std::thread([this, alive]()
+            bool localOnly = !fetchRemote;
+            std::thread([this, alive, localOnly]()
                         {
-                auto modelInfos = pagent::Agent::FetchOllamaEmbeddingModels();
+                auto modelInfos = pagent::Agent::FetchOllamaEmbeddingModels("", localOnly);
                 if (!*alive) return;
                 QueueAction([this, alive, modelInfos]()
                 {
+                    m_isFetchingEmbeddingModels = false;
                     if (m_selectedEmbeddingProvider != 2) return;
                     m_embeddingModels.clear();
                     m_embeddingModelIsLocal.clear();
@@ -303,11 +308,6 @@ namespace pe
                     {
                         m_embeddingModels.push_back(mi.name);
                         m_embeddingModelIsLocal.push_back(mi.local);
-                    }
-                    if (m_embeddingModels.empty())
-                    {
-                        m_embeddingModels = {"nomic-embed-text"};
-                        m_embeddingModelIsLocal = {false};
                     }
                     if (m_selectedEmbeddingModel >= static_cast<int>(m_embeddingModels.size()))
                         m_selectedEmbeddingModel = 0;
@@ -320,46 +320,78 @@ namespace pe
         }
     }
 
-    void AgentWidget::SaveEmbeddingConfig()
+    void AgentWidget::SaveConfig()
     {
-        std::string path = Path::Assets + "Agent/embedding_config.txt";
+        std::string path = Path::Assets + "Agent/agent_config.json";
         std::ofstream f(path);
         if (!f)
             return;
-        std::string modelName = (m_selectedEmbeddingModel < static_cast<int>(m_embeddingModels.size()))
-                                    ? m_embeddingModels[m_selectedEmbeddingModel]
-                                    : "";
-        f << (m_embeddingEnabled ? 1 : 0) << "\n"
-          << m_selectedEmbeddingProvider << "\n"
-          << modelName << "\n";
+
+        std::string providerName = (m_selectedProviderIndex < static_cast<int>(m_providers.size()))
+                                       ? m_providers[m_selectedProviderIndex].name
+                                       : "";
+        std::string embModelName = (m_selectedEmbeddingModel < static_cast<int>(m_embeddingModels.size()))
+                                       ? m_embeddingModels[m_selectedEmbeddingModel]
+                                       : "";
+
+        static const char *embProviderNames[] = {"Google", "OpenAI", "Ollama"};
+        std::string embProviderName = embProviderNames[std::clamp(m_selectedEmbeddingProvider, 0, 2)];
+
+        nlohmann::ordered_json j;
+        j["agent"] = nlohmann::ordered_json{{"provider", providerName}, {"model", m_modelName}};
+        j["embeddings"] = nlohmann::ordered_json{{"enabled", m_embeddingEnabled}, {"provider", embProviderName}, {"model", embModelName}};
+
+        f << j.dump(4) << "\n";
     }
 
-    void AgentWidget::LoadEmbeddingConfig()
+    void AgentWidget::LoadConfig()
     {
-        std::string path = Path::Assets + "Agent/embedding_config.txt";
+        std::string path = Path::Assets + "Agent/agent_config.json";
         std::ifstream f(path);
         if (!f)
             return;
 
-        int enabled = 0, provider = 0;
-        std::string modelName;
-        f >> enabled >> provider;
-        std::getline(f, modelName); // consume newline after provider
-        std::getline(f, modelName); // actual model name
-
-        m_embeddingEnabled = (enabled != 0);
-        m_selectedEmbeddingProvider = std::clamp(provider, 0, 2);
-        UpdateEmbeddingModels();
-
-        // Restore model selection by name
-        m_selectedEmbeddingModel = 0;
-        for (int i = 0; i < static_cast<int>(m_embeddingModels.size()); i++)
+        try
         {
-            if (m_embeddingModels[i] == modelName)
+            auto j = nlohmann::json::parse(f);
+
+            // Restore agent provider
+            std::string providerName = j.value("/agent/provider"_json_pointer, std::string{});
+            if (!providerName.empty())
             {
-                m_selectedEmbeddingModel = i;
-                break;
+                for (int i = 0; i < static_cast<int>(m_providers.size()); ++i)
+                {
+                    if (m_providers[i].name == providerName)
+                    {
+                        m_selectedProviderIndex = i;
+                        break;
+                    }
+                }
             }
+
+            std::string modelName = j.value("/agent/model"_json_pointer, std::string{});
+            if (!modelName.empty())
+                m_modelName = modelName;
+
+            // Restore embedding config
+            m_embeddingEnabled = j.value("/embeddings/enabled"_json_pointer, false);
+
+            std::string embProviderName = j.value("/embeddings/provider"_json_pointer, std::string{"Google"});
+            static const std::pair<const char *, int> embProviderMap[] = {{"Google", 0}, {"OpenAI", 1}, {"Ollama", 2}};
+            m_selectedEmbeddingProvider = 0;
+            for (auto &[name, idx] : embProviderMap)
+                if (embProviderName == name) { m_selectedEmbeddingProvider = idx; break; }
+
+            UpdateEmbeddingModels();
+
+            std::string embModelName = j.value("/embeddings/model"_json_pointer, std::string{});
+            m_selectedEmbeddingModel = 0;
+            for (int i = 0; i < static_cast<int>(m_embeddingModels.size()); i++)
+                if (m_embeddingModels[i] == embModelName) { m_selectedEmbeddingModel = i; break; }
+        }
+        catch (...)
+        {
+            // Parsing or access error — keep defaults
         }
     }
 
@@ -505,7 +537,7 @@ namespace pe
                                    if (!IsPathSafe(fpath.string(), editorDir))
                                        return "{\"error\":\"writes only allowed inside PhasmaEditor/\"}";
 
-                                   // TODO: Implement UI confirmation here. 
+                                   // TODO: Implement UI confirmation here.
                                    // For now, we've at least secured the path traversal and restricted to PhasmaEditor/
 
                                    std::filesystem::path parentDir = fpath.parent_path();
@@ -890,7 +922,7 @@ namespace pe
         m_pendingActions.push_back(std::move(fn));
     }
 
-    void AgentWidget::FetchAvailableModels()
+    void AgentWidget::FetchAvailableModels(bool fetchRemote)
     {
         int providerIdx = m_selectedProviderIndex;
 
@@ -925,9 +957,10 @@ namespace pe
 
         m_isFetchingModels = true;
 
-        std::thread([this, alive, provider, apiKey, currentModel, providerIdx]
+        std::thread([this, alive, provider, apiKey, currentModel, providerIdx, fetchRemote]
                     {
             std::vector<pagent::Agent::ModelInfo> modelInfos;
+            bool localOnly = (provider == pagent::Provider::Ollama) && !fetchRemote;
             int retries = (provider == pagent::Provider::Ollama) ? 5 : 1;
             for (int attempt = 0; attempt < retries; ++attempt)
             {
@@ -935,7 +968,7 @@ namespace pe
                     return;
                 if (attempt > 0)
                     std::this_thread::sleep_for(std::chrono::seconds(1));
-                modelInfos = pagent::Agent::FetchModelInfos(provider, apiKey);
+                modelInfos = pagent::Agent::FetchModelInfos(provider, apiKey, "", localOnly);
                 if (!modelInfos.empty())
                     break;
             }
@@ -1062,10 +1095,23 @@ namespace pe
                         {
                             if (i != m_selectedProviderIndex)
                             {
+                                // Unload previous Ollama model when switching providers
+                                if (m_ollamaModelLoaded &&
+                                    m_providers[m_selectedProviderIndex].provider == pagent::Provider::Ollama &&
+                                    !m_modelName.empty())
+                                {
+                                    std::string prev = m_modelName;
+                                    std::thread([prev]()
+                                                { pagent::Agent::UnloadModel(pagent::Provider::Ollama, prev); })
+                                        .detach();
+                                    m_ollamaModelLoaded = false;
+                                }
                                 m_selectedProviderIndex = i;
-                                m_isFetchingModels = false; // allow fetch for new provider
+                                m_modelName.clear(); // let ConfigureAgent use provider default
+                                m_isFetchingModels = false;
                                 ConfigureAgent(m_providers[i].provider);
                                 FetchAvailableModels();
+                                SaveConfig();
                             }
                         }
                         if (selected)
@@ -1112,16 +1158,12 @@ namespace pe
             else
             {
                 std::string comboLabel = m_isPulling                 ? (m_modelName + " (downloading...)")
-                                         : m_isFetchingModels        ? "(fetching...)"
                                          : m_availableModels.empty() ? "None"
                                          : m_modelName.empty()       ? "None"
                                                                      : m_modelName;
                 ImGui::PushItemWidth(200.0f);
                 if (ImGui::BeginCombo("##model", comboLabel.c_str()))
                 {
-                    // Re-fetch models if list is stale (only has the default)
-                    if (m_availableModels.size() <= 1)
-                        FetchAvailableModels();
                     // Filter input at the top of the dropdown
                     ImGui::SetNextItemWidth(-1);
                     ImGui::InputTextWithHint("##modelfilter", "Filter...", m_modelFilter, sizeof(m_modelFilter));
@@ -1159,14 +1201,16 @@ namespace pe
 
                             if (isLocal)
                             {
-                                if (!prevModel.empty() && prevModel != m_modelName &&
+                                if (m_ollamaModelLoaded && !prevModel.empty() && prevModel != m_modelName &&
                                     m_providers[m_selectedProviderIndex].provider == pagent::Provider::Ollama)
                                 {
                                     std::thread([prevModel]()
                                                 { pagent::Agent::UnloadModel(pagent::Provider::Ollama, prevModel); })
                                         .detach();
+                                    m_ollamaModelLoaded = false;
                                 }
                                 m_agent->SetModel(m_modelName);
+                                SaveConfig();
                             }
                             else if (!m_isPulling)
                             {
@@ -1228,6 +1272,7 @@ namespace pe
                                                 m_modelCache[m_selectedProviderIndex] = {m_availableModels, m_modelIsLocal};
                                                 m_agent->SetModel(pullModel);
                                                 m_chat.push_back({ChatMessage::Role::System, "Model ready."});
+                                                SaveConfig();
                                             }
                                             m_scrollToBottom = true;
                                         }); });
@@ -1245,18 +1290,36 @@ namespace pe
                     if (ImGui::SmallButton("Cancel"))
                         pagent::Agent::CancelPull(m_pullCancel);
                 }
-                // Unload button for Ollama (frees GPU memory)
                 else if (m_providers[m_selectedProviderIndex].provider == pagent::Provider::Ollama &&
                          !m_isExternalAI)
                 {
-                    ImGui::SameLine();
-                    if (ImGui::SmallButton("Unload"))
+                    // Unload button — only shown when model is loaded
+                    if (m_ollamaModelLoaded)
                     {
-                        pagent::Agent::UnloadModel(pagent::Provider::Ollama, m_modelName);
-                        std::lock_guard lock(m_chatMutex);
-                        m_chat.push_back({ChatMessage::Role::System, "Model " + m_modelName + " unloaded from GPU."});
-                        m_scrollToBottom = true;
+                        ImGui::SameLine();
+                        if (ImGui::SmallButton("Unload"))
+                        {
+                            pagent::Agent::UnloadModel(pagent::Provider::Ollama, m_modelName);
+                            m_ollamaModelLoaded = false;
+                            std::lock_guard lock(m_chatMutex);
+                            m_chat.push_back({ChatMessage::Role::System, "Model " + m_modelName + " unloaded from GPU."});
+                            m_scrollToBottom = true;
+                        }
                     }
+                    // Fetch button — fetches remote models from ollama.com
+                    ImGui::SameLine();
+                    bool fetching = m_isFetchingModels || m_isFetchingEmbeddingModels;
+                    if (fetching)
+                        ImGui::BeginDisabled();
+                    if (ImGui::SmallButton(fetching ? "Fetching...##agent" : "Fetch##agent"))
+                    {
+                        m_modelCache.erase(m_selectedProviderIndex);
+                        FetchAvailableModels(true);
+                        if (m_embeddingEnabled)
+                            UpdateEmbeddingModels(true);
+                    }
+                    if (fetching)
+                        ImGui::EndDisabled();
                 }
                 ImGui::PopItemWidth();
             }
@@ -1282,7 +1345,7 @@ namespace pe
             {
                 if (m_embeddingEnabled)
                     UpdateEmbeddingModels();
-                SaveEmbeddingConfig();
+                SaveConfig();
                 ConfigureAgent(m_providers[m_selectedProviderIndex].provider);
             }
             if (ImGui::IsItemHovered())
@@ -1316,7 +1379,7 @@ namespace pe
                             m_vectorStore.reset();
                             m_selectedEmbeddingProvider = i;
                             UpdateEmbeddingModels();
-                            SaveEmbeddingConfig();
+                            SaveConfig();
                             ConfigureAgent(m_providers[m_selectedProviderIndex].provider);
                         }
 
@@ -1331,10 +1394,10 @@ namespace pe
                     ImGui::SameLine();
                     ImGui::PushItemWidth(250.0f);
                     std::string embComboLabel;
-                    if (m_embeddingModels.empty())
-                        embComboLabel = "(fetching...)";
-                    else if (m_isPullingEmbedding)
+                    if (m_isPullingEmbedding && m_selectedEmbeddingModel < static_cast<int>(m_embeddingModels.size()))
                         embComboLabel = m_embeddingModels[m_selectedEmbeddingModel] + " (downloading...)";
+                    else if (m_embeddingModels.empty() || m_selectedEmbeddingModel >= static_cast<int>(m_embeddingModels.size()))
+                        embComboLabel = "None";
                     else
                         embComboLabel = m_embeddingModels[m_selectedEmbeddingModel];
                     if (ImGui::BeginCombo("##embmodel", embComboLabel.c_str()))
@@ -1354,7 +1417,7 @@ namespace pe
                                     m_vectorStore->SaveToFile(sp2);
                                 m_vectorStore.reset();
                                 m_selectedEmbeddingModel = i;
-                                SaveEmbeddingConfig();
+                                SaveConfig();
 
                                 // For Ollama, auto-pull if not local
                                 if (m_selectedEmbeddingProvider == 2 && !isLocal && !m_isPullingEmbedding)
@@ -1411,6 +1474,24 @@ namespace pe
                         ImGui::EndCombo();
                     }
                     ImGui::PopItemWidth();
+
+                    // Fetch button for Ollama embedding models
+                    if (m_selectedEmbeddingProvider == 2)
+                    {
+                        ImGui::SameLine();
+                        bool fetching = m_isFetchingEmbeddingModels || m_isFetchingModels;
+                        if (fetching)
+                            ImGui::BeginDisabled();
+                        if (ImGui::SmallButton(fetching ? "Fetching...##emb" : "Fetch##emb"))
+                        {
+                            m_modelCache.erase(m_selectedProviderIndex);
+                            if (m_providers[m_selectedProviderIndex].provider == pagent::Provider::Ollama)
+                                FetchAvailableModels(true);
+                            UpdateEmbeddingModels(true);
+                        }
+                        if (fetching)
+                            ImGui::EndDisabled();
+                    }
                 }
             }
         }
@@ -1613,6 +1694,9 @@ namespace pe
                 m_agent->Send(fullText);
             else
                 m_agent->Send(fullText, attachments);
+
+            if (m_providers[m_selectedProviderIndex].provider == pagent::Provider::Ollama)
+                m_ollamaModelLoaded = true;
         }
         m_pendingImages.clear();
         m_pendingFiles.clear();

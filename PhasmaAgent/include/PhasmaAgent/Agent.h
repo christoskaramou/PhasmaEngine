@@ -361,11 +361,14 @@ namespace pagent
         };
         static std::vector<ModelInfo> FetchModelInfos(Provider provider,
                                                       const std::string &api_key,
-                                                      const std::string &base_url = "");
+                                                      const std::string &base_url = "",
+                                                      bool local_only = false);
 
-        // Fetch Ollama embedding models (local + remote from ollama.com).
-        // Local models have .local=true, remote ones need pulling.
-        static std::vector<ModelInfo> FetchOllamaEmbeddingModels(const std::string &base_url = "");
+        // Fetch Ollama embedding models.
+        // When local_only=true, only lists locally installed models.
+        // When local_only=false, also fetches remote models from ollama.com.
+        static std::vector<ModelInfo> FetchOllamaEmbeddingModels(const std::string &base_url = "",
+                                                                 bool local_only = false);
 
         // Pull/download an Ollama model in the background.
         // progressCb fires with status strings, completeCb fires with success/failure.

@@ -142,7 +142,8 @@ namespace pagent
 
     std::vector<Agent::ModelInfo> Agent::FetchModelInfos(Provider provider,
                                                          const std::string &api_key,
-                                                         const std::string &base_url)
+                                                         const std::string &base_url,
+                                                         bool local_only)
     {
         using json = nlohmann::json;
 
@@ -262,26 +263,29 @@ namespace pagent
             }
 
             // Fetch remote models with vision+tools from ollama.com
-#ifdef CPPHTTPLIB_OPENSSL_SUPPORT
-            std::string libraryHtml = httpGet("ollama.com", "/search?c=vision&c=tools", true, {});
+            if (!local_only)
             {
-                const std::string prefix = "href=\"/library/";
-                size_t pos = 0;
-                while ((pos = libraryHtml.find(prefix, pos)) != std::string::npos)
+#ifdef CPPHTTPLIB_OPENSSL_SUPPORT
+                std::string libraryHtml = httpGet("ollama.com", "/search?c=vision&c=tools", true, {});
                 {
-                    pos += prefix.size();
-                    auto end = libraryHtml.find('"', pos);
-                    if (end == std::string::npos)
-                        break;
-                    std::string name = libraryHtml.substr(pos, end - pos);
-                    if (!name.empty() && localNames.find(name) == localNames.end())
+                    const std::string prefix = "href=\"/library/";
+                    size_t pos = 0;
+                    while ((pos = libraryHtml.find(prefix, pos)) != std::string::npos)
                     {
-                        localNames.insert(name);
-                        models.push_back({name, false});
+                        pos += prefix.size();
+                        auto end = libraryHtml.find('"', pos);
+                        if (end == std::string::npos)
+                            break;
+                        std::string name = libraryHtml.substr(pos, end - pos);
+                        if (!name.empty() && localNames.find(name) == localNames.end())
+                        {
+                            localNames.insert(name);
+                            models.push_back({name, false});
+                        }
                     }
                 }
-            }
 #endif
+            }
 
             std::sort(models.begin(), models.end(), [](const ModelInfo &a, const ModelInfo &b)
                       {
@@ -481,7 +485,7 @@ namespace pagent
         return QueryCapabilities(provider, model, base_url).tools;
     }
 
-    std::vector<Agent::ModelInfo> Agent::FetchOllamaEmbeddingModels(const std::string &base_url)
+    std::vector<Agent::ModelInfo> Agent::FetchOllamaEmbeddingModels(const std::string &base_url, bool local_only)
     {
         using json = nlohmann::json;
         std::string ollamaHost = base_url.empty() ? "http://localhost:11434" : base_url;
@@ -539,30 +543,33 @@ namespace pagent
         }
 
         // Fetch remote embedding models from ollama.com
-#ifdef CPPHTTPLIB_OPENSSL_SUPPORT
-        httplib::SSLClient remoteCli("ollama.com");
-        remoteCli.set_read_timeout(5);
-        auto remoteRes = remoteCli.Get("/search?c=embedding");
-        if (remoteRes && remoteRes->status == 200)
+        if (!local_only)
         {
-            const std::string &html = remoteRes->body;
-            const std::string prefix = "href=\"/library/";
-            size_t pos = 0;
-            while ((pos = html.find(prefix, pos)) != std::string::npos)
+#ifdef CPPHTTPLIB_OPENSSL_SUPPORT
+            httplib::SSLClient remoteCli("ollama.com");
+            remoteCli.set_read_timeout(5);
+            auto remoteRes = remoteCli.Get("/search?c=embedding");
+            if (remoteRes && remoteRes->status == 200)
             {
-                pos += prefix.size();
-                auto end = html.find('"', pos);
-                if (end == std::string::npos)
-                    break;
-                std::string name = html.substr(pos, end - pos);
-                if (!name.empty() && localNames.find(name) == localNames.end())
+                const std::string &html = remoteRes->body;
+                const std::string prefix = "href=\"/library/";
+                size_t pos = 0;
+                while ((pos = html.find(prefix, pos)) != std::string::npos)
                 {
-                    localNames.insert(name);
-                    models.push_back({name, false});
+                    pos += prefix.size();
+                    auto end = html.find('"', pos);
+                    if (end == std::string::npos)
+                        break;
+                    std::string name = html.substr(pos, end - pos);
+                    if (!name.empty() && localNames.find(name) == localNames.end())
+                    {
+                        localNames.insert(name);
+                        models.push_back({name, false});
+                    }
                 }
             }
-        }
 #endif
+        }
 
         std::sort(models.begin(), models.end(), [](const ModelInfo &a, const ModelInfo &b)
                   {
