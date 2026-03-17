@@ -24,6 +24,7 @@ namespace pagent
         void ClearTools();
 
         bool Send(const std::string &user_message);
+        bool Send(const std::string &user_message, const std::vector<ContentPart> &attachments);
         void Poll();
         void SetEventCallback(Agent::EventCallback cb);
 
@@ -35,6 +36,7 @@ namespace pagent
         void SetModel(const std::string &model);
         Provider GetProvider() const { return m_config.provider; }
         TokenUsage GetUsage() const;
+        void SetVectorStore(VectorStore *store);
 
     private:
         AgentConfig m_config;

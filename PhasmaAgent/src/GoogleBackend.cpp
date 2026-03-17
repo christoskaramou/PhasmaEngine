@@ -12,7 +12,24 @@ namespace pagent
         switch (msg.role)
         {
         case NeutralMessage::Role::User:
-            return {{"role", "user"}, {"parts", json::array({{{"text", msg.content}}})}};
+        {
+            json parts = json::array();
+            if (!msg.parts.empty())
+            {
+                for (const auto &part : msg.parts)
+                {
+                    if (part.type == ContentPart::Type::Text)
+                        parts.push_back({{"text", part.data}});
+                    else if (part.type == ContentPart::Type::ImageBase64)
+                        parts.push_back({{"inlineData", {{"mimeType", part.mime_type}, {"data", part.data}}}});
+                }
+            }
+            else
+            {
+                parts.push_back({{"text", msg.content}});
+            }
+            return {{"role", "user"}, {"parts", parts}};
+        }
 
         case NeutralMessage::Role::Assistant:
         {
@@ -23,7 +40,13 @@ namespace pagent
             for (const auto &tc : msg.tool_calls)
             {
                 json args = json::object();
-                try { args = json::parse(tc.arguments_json); } catch (...) {}
+                try
+                {
+                    args = json::parse(tc.arguments_json);
+                }
+                catch (...)
+                {
+                }
                 json part = {{"functionCall", {{"name", tc.name}, {"args", args}}}};
                 if (!tc.thought_signature.empty())
                     part["thoughtSignature"] = tc.thought_signature;
@@ -35,7 +58,12 @@ namespace pagent
         case NeutralMessage::Role::Tool:
         {
             json response = json::object();
-            try { response = json::parse(msg.content); } catch (...) {
+            try
+            {
+                response = json::parse(msg.content);
+            }
+            catch (...)
+            {
                 response = {{"result", msg.content}};
             }
             json part = {{"functionResponse", {{"name", msg.tool_name}, {"response", response}}}};
@@ -115,7 +143,9 @@ namespace pagent
                 if (toolsArr.is_array() && !toolsArr.empty())
                     body["tools"] = toolsArr;
             }
-            catch (...) {}
+            catch (...)
+            {
+            }
         }
 
         ResetStreamState();
@@ -151,10 +181,10 @@ namespace pagent
                 {"name", tool.name},
                 {"description", tool.description},
                 {"parameters", {
-                    {"type", "OBJECT"},
-                    {"properties", properties},
-                    {"required", required},
-                }},
+                                   {"type", "OBJECT"},
+                                   {"properties", properties},
+                                   {"required", required},
+                               }},
             };
             declarations.push_back(std::move(decl));
         }
@@ -180,7 +210,14 @@ namespace pagent
             return true;
 
         json j;
-        try { j = json::parse(event_data); } catch (...) { return true; }
+        try
+        {
+            j = json::parse(event_data);
+        }
+        catch (...)
+        {
+            return true;
+        }
 
         // Error response
         if (j.contains("error"))

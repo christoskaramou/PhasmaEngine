@@ -14,6 +14,7 @@ namespace pagent
     class EventQueue;
     class ConversationHistory;
     class ToolRegistry;
+    class VectorStore;
 
     class RequestWorker
     {
@@ -26,13 +27,15 @@ namespace pagent
         ~RequestWorker();
 
         bool Submit(const std::string &user_message);
+        bool Submit(const std::string &user_message, const std::vector<ContentPart> &attachments);
         bool IsBusy() const { return m_busy.load(std::memory_order_relaxed); }
         void Cancel();
         void SetBackend(IProviderBackend *backend) { m_backend = backend; }
+        void SetVectorStore(VectorStore *store) { m_vectorStore = store; }
 
     private:
         void ThreadFunc();
-        void RunAgenticLoop(const std::string &user_message);
+        void RunAgenticLoop(const std::string &user_message, const std::vector<ContentPart> &attachments = {});
         void MaybeSummarize();
         std::string HttpPost(const std::string &host,
                              const std::string &path,
@@ -52,6 +55,7 @@ namespace pagent
         std::mutex m_mutex;
         std::condition_variable m_cv;
         std::optional<std::string> m_pendingMessage;
+        std::vector<ContentPart> m_pendingAttachments;
         std::atomic<bool> m_busy{false};
         std::atomic<bool> m_cancel{false};
         std::atomic<bool> m_stop{false};
@@ -59,5 +63,7 @@ namespace pagent
         // Set while an HTTP request is in flight so Cancel/destructor can abort it immediately.
         std::function<void()> m_stopActiveClient;
         std::mutex m_clientMutex;
+
+        VectorStore *m_vectorStore = nullptr;
     };
 } // namespace pagent

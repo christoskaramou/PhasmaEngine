@@ -54,6 +54,11 @@ namespace pagent
         return m_worker->Submit(user_message);
     }
 
+    bool Agent::Impl::Send(const std::string &user_message, const std::vector<ContentPart> &attachments)
+    {
+        return m_worker->Submit(user_message, attachments);
+    }
+
     void Agent::Impl::Poll()
     {
         std::vector<AgentEvent> events;
@@ -122,5 +127,10 @@ namespace pagent
         m_config.model = model;
         if (m_config.provider == Provider::Ollama)
             m_ollamaProcess.Start(model);
+    }
+
+    void Agent::Impl::SetVectorStore(VectorStore *store)
+    {
+        m_worker->SetVectorStore(store);
     }
 } // namespace pagent

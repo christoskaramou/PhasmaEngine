@@ -31,12 +31,13 @@ namespace pagent
 
         std::string GetEndpointPath() const override;
         std::pair<std::string, std::string> GetAuthHeader(const std::string &api_key) const override;
+        bool SupportsVision() const override { return true; }
 
     private:
         struct ToolCallAccumulator
         {
             std::string name;
-            std::string arguments; // JSON string
+            std::string arguments;         // JSON string
             std::string thought_signature; // Required by Gemini thinking models
         };
 

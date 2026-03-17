@@ -2,6 +2,8 @@
 #include "EventQueue.h"
 #include "ConversationHistory.h"
 #include "ToolRegistry.h"
+#include "ImageDescriber.h"
+#include "PhasmaAgent/VectorStore.h"
 
 #ifdef CPPHTTPLIB_OPENSSL_SUPPORT
 #ifndef CPPHTTPLIB_OPENSSL_SUPPORT
@@ -47,12 +49,18 @@ namespace pagent
 
     bool RequestWorker::Submit(const std::string &user_message)
     {
+        return Submit(user_message, {});
+    }
+
+    bool RequestWorker::Submit(const std::string &user_message, const std::vector<ContentPart> &attachments)
+    {
         if (m_busy.load(std::memory_order_relaxed))
             return false;
 
         {
             std::lock_guard lock(m_mutex);
             m_pendingMessage = user_message;
+            m_pendingAttachments = attachments;
             m_cancel.store(false, std::memory_order_relaxed);
             m_busy.store(true, std::memory_order_relaxed);
         }
@@ -65,6 +73,7 @@ namespace pagent
         while (true)
         {
             std::string message;
+            std::vector<ContentPart> attachments;
             {
                 std::unique_lock lock(m_mutex);
                 m_cv.wait(lock, [this]
@@ -75,11 +84,12 @@ namespace pagent
 
                 message = std::move(*m_pendingMessage);
                 m_pendingMessage.reset();
+                attachments.swap(m_pendingAttachments);
             }
 
             try
             {
-                RunAgenticLoop(message);
+                RunAgenticLoop(message, attachments);
             }
             catch (const std::exception &ex)
             {
@@ -184,13 +194,21 @@ namespace pagent
         }
     }
 
-    void RequestWorker::RunAgenticLoop(const std::string &user_message)
+    void RequestWorker::RunAgenticLoop(const std::string &user_message, const std::vector<ContentPart> &attachments)
     {
         // append the user turn to history.
         {
             NeutralMessage msg;
             msg.role = NeutralMessage::Role::User;
             msg.content = user_message;
+            if (!attachments.empty())
+            {
+                // Build multimodal parts: text first, then attachments
+                if (!user_message.empty())
+                    msg.parts.push_back({ContentPart::Type::Text, user_message, ""});
+                for (const auto &att : attachments)
+                    msg.parts.push_back(att);
+            }
             m_history.Append(std::move(msg));
         }
 
@@ -211,15 +229,95 @@ namespace pagent
             }
 
             // build request
-            const auto messages = m_history.GetMessages(m_config.max_history_messages);
+            auto messages = m_history.GetMessages(m_config.max_history_messages);
+
+            // If backend doesn't support vision, describe images via Gemini fallback
+            if (!m_backend->SupportsVision() && !m_config.gemini_api_key_for_vision.empty())
+            {
+                for (auto &msg : messages)
+                {
+                    if (msg.parts.empty())
+                        continue;
+                    bool hasImages = false;
+                    for (const auto &p : msg.parts)
+                        if (p.type == ContentPart::Type::ImageBase64)
+                        {
+                            hasImages = true;
+                            break;
+                        }
+                    if (!hasImages)
+                        continue;
+
+                    // Replace image parts with text descriptions
+                    std::vector<ContentPart> newParts;
+                    for (const auto &p : msg.parts)
+                    {
+                        if (p.type == ContentPart::Type::ImageBase64)
+                        {
+                            std::string desc = ImageDescriber::Describe(
+                                p.data, p.mime_type, m_config.gemini_api_key_for_vision,
+                                m_config.custom_http_handler);
+                            newParts.push_back({ContentPart::Type::Text, "[Image: " + desc + "]", ""});
+                        }
+                        else
+                        {
+                            newParts.push_back(p);
+                        }
+                    }
+                    msg.parts = std::move(newParts);
+                }
+            }
+
             const auto toolsSchemaJson = m_toolRegistry.GenerateSchemaJson(*m_backend);
+
+            // RAG: inject relevant context from vector store on the first round
+            std::string systemPrompt = m_config.system_prompt;
+            if (round == 0 && m_vectorStore && m_config.embedding_provider)
+            {
+                // Extract the latest user message text for the query
+                std::string queryText;
+                for (auto it = messages.rbegin(); it != messages.rend(); ++it)
+                {
+                    if (it->role == NeutralMessage::Role::User)
+                    {
+                        queryText = it->content;
+                        break;
+                    }
+                }
+                if (!queryText.empty())
+                {
+                    auto queryVec = m_config.embedding_provider->Embed(queryText);
+                    if (queryVec.empty())
+                        Log("RAG: embedding query failed (empty result)");
+                    if (!queryVec.empty())
+                    {
+                        auto results = m_vectorStore->Search(queryVec, m_config.rag_top_k, m_config.rag_min_score);
+                        if (!results.empty())
+                        {
+                            std::string context = "\n\n[Relevant context from previous interactions:\n";
+                            int totalChars = 0;
+                            for (const auto &r : results)
+                            {
+                                std::string entry = "- " + r.entry->content + "\n";
+                                if (totalChars + static_cast<int>(entry.size()) > m_config.rag_max_context_chars)
+                                    break;
+                                context += entry;
+                                totalChars += static_cast<int>(entry.size());
+                            }
+                            context += "]";
+                            systemPrompt += context;
+                            Log("RAG: injected " + std::to_string(results.size()) + " context entries");
+                        }
+                    }
+                }
+            }
 
             if (m_config.log_callback)
                 m_config.log_callback("[PAgent] Round " + std::to_string(round) + ": " + std::to_string(m_toolRegistry.GetToolCount()) + " tools, " + std::to_string(messages.size()) + " msgs, model='" + m_config.model + "', provider=" + std::to_string(static_cast<int>(m_config.provider)));
 
             const std::string body = m_backend->BuildRequestJson(
                 m_config.model,
-                m_config.system_prompt,
+                systemPrompt,
                 m_config.max_tokens,
                 m_config.temperature,
                 messages,
@@ -265,7 +363,8 @@ namespace pagent
             }
 
             // HTTP POST + stream parse
-            if (m_config.log_callback) {
+            if (m_config.log_callback)
+            {
                 m_config.log_callback("[PAgent] POST " + host + path + " ...");
                 m_config.log_callback("[PAgent] Body: " + body);
             }
@@ -348,7 +447,7 @@ namespace pagent
                 ev.type = AgentEventType::TextComplete;
                 ev.text = "";
                 PushEvent(std::move(ev));
-                
+
                 // Don't append empty responses to history as it might confuse certain models
                 return;
             }
@@ -375,6 +474,23 @@ namespace pagent
             // if no tool calls, the model is done
             if (toolCallCompletes.empty())
             {
+                // Auto-index the assistant response for RAG
+                if (m_vectorStore && m_config.embedding_provider && !fullText.empty())
+                {
+                    auto vec = m_config.embedding_provider->Embed(fullText);
+                    if (vec.empty())
+                        Log("RAG: embedding response for indexing failed (empty result)");
+                    if (!vec.empty())
+                    {
+                        VectorEntry entry;
+                        entry.id = "turn_" + std::to_string(std::chrono::steady_clock::now().time_since_epoch().count());
+                        entry.content = fullText.substr(0, 500); // Cap stored text
+                        entry.metadata = "{\"type\":\"assistant\"}";
+                        entry.embedding = std::move(vec);
+                        m_vectorStore->Add(std::move(entry));
+                    }
+                }
+
                 AgentEvent ev;
                 ev.type = AgentEventType::TurnComplete;
                 PushEvent(std::move(ev));

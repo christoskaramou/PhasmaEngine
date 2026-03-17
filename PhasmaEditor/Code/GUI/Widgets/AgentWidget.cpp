@@ -13,6 +13,17 @@
 #include "PhasmaAgent/AgentUtils.h"
 #include "imgui/imgui.h"
 
+#include "PhasmaAgent/GoogleEmbedding.h"
+#include "PhasmaAgent/OpenAIEmbedding.h"
+#include "PhasmaAgent/OllamaEmbedding.h"
+#include "PhasmaAgent/VectorStore.h"
+
+#include "stb/stb_image.h"
+
+#if defined(PE_WIN32)
+#include <Windows.h>
+#endif
+
 using namespace pagent;
 
 namespace pe
@@ -23,7 +34,13 @@ namespace pe
 
     AgentWidget::~AgentWidget()
     {
+        *m_alive = false; // signal background threads to stop accessing this
+        SaveEmbeddingConfig();
+        auto storePath = GetVectorStorePath();
+        if (m_vectorStore && !storePath.empty())
+            m_vectorStore->SaveToFile(storePath);
         pagent::Agent::CancelPull(m_pullCancel);
+        pagent::Agent::CancelPull(m_pullEmbeddingCancel);
         if (m_agent)
             m_agent->CancelPending();
     }
@@ -31,6 +48,18 @@ namespace pe
     void AgentWidget::Init(GUI *gui)
     {
         Widget::Init(gui);
+
+        // Load saved embedding config, or default to Google if key exists
+        LoadEmbeddingConfig();
+        if (!std::filesystem::exists(Path::Assets + "Agent/embedding_config.txt"))
+        {
+            if (std::getenv("PAGENT_GEMINI_API_KEY"))
+            {
+                m_embeddingEnabled = true;
+                m_selectedEmbeddingProvider = 0; // Google
+            }
+            UpdateEmbeddingModels();
+        }
 
         m_providers = pagent::DiscoverProviders();
         // Add "External" provider (file-based, for Claude Code / Cursor / any AI tool)
@@ -40,6 +69,69 @@ namespace pe
         m_selectedProviderIndex = providerEnv ? pagent::GetDefaultProviderIndex(m_providers)
                                               : static_cast<int>(m_providers.size()) - 1;
         ConfigureAgent(m_providers[m_selectedProviderIndex].provider);
+
+        // Fetch models for all providers in background at startup
+        auto alive = m_alive;
+        for (int pi = 0; pi < static_cast<int>(m_providers.size()); ++pi)
+        {
+            if (m_providers[pi].name == "External")
+                continue;
+            auto prov = m_providers[pi].provider;
+            auto key = m_providers[pi].apiKey;
+            std::thread([this, alive, prov, key, pi]()
+                        {
+                std::vector<pagent::Agent::ModelInfo> modelInfos;
+                int retries = (prov == pagent::Provider::Ollama) ? 5 : 1;
+                for (int attempt = 0; attempt < retries; ++attempt)
+                {
+                    if (!*alive) return;
+                    if (attempt > 0)
+                        std::this_thread::sleep_for(std::chrono::seconds(1));
+                    modelInfos = pagent::Agent::FetchModelInfos(prov, key);
+                    if (!modelInfos.empty()) break;
+                }
+                if (!*alive) return;
+
+                std::vector<std::string> names;
+                std::vector<bool> localFlags;
+                for (auto &mi : modelInfos)
+                {
+                    names.push_back(std::move(mi.name));
+                    localFlags.push_back(mi.local);
+                }
+                if (!*alive) return;
+
+                QueueAction([this, alive, names = std::move(names), localFlags = std::move(localFlags), pi]()
+                {
+                    if (!*alive) return;
+                    m_modelCache[pi] = {names, localFlags};
+                    // If this is the current provider, apply immediately
+                    if (m_selectedProviderIndex == pi)
+                    {
+                        m_isFetchingModels = false;
+                        m_availableModels = m_modelCache[pi].names;
+                        m_modelIsLocal = m_modelCache[pi].local;
+                        m_selectedModelIndex = 0;
+                        if (m_availableModels.empty())
+                        {
+                            m_modelName.clear();
+                        }
+                        else
+                        {
+                            for (int i = 0; i < static_cast<int>(m_availableModels.size()); ++i)
+                                if (m_availableModels[i] == m_modelName) { m_selectedModelIndex = i; break; }
+                            if (m_modelName.empty())
+                            {
+                                m_modelName = m_availableModels[0];
+                                if (m_agent)
+                                    m_agent->SetModel(m_modelName);
+                            }
+                        }
+                    }
+                }); })
+                .detach();
+        }
+        m_isFetchingModels = true; // show fetching for current provider until its fetch completes
     }
 
     void AgentWidget::ConfigureAgent(pagent::Provider provider)
@@ -91,18 +183,197 @@ namespace pe
         config.api_key = info->apiKey;
         config.model = info->defaultModel;
 
+        // Set up Gemini vision fallback key (used when main provider lacks vision)
+        const char *geminiKey = std::getenv("PAGENT_GEMINI_API_KEY");
+        if (geminiKey)
+            config.gemini_api_key_for_vision = geminiKey;
+
+        // Set up embedding provider based on current selection
+        config.embedding_provider = CreateEmbeddingProvider();
+
+        if (config.embedding_provider && !m_vectorStore)
+        {
+            m_vectorStore = std::make_shared<pagent::VectorStore>();
+            auto sp = GetVectorStorePath();
+            if (!sp.empty())
+                m_vectorStore->LoadFromFile(sp);
+            m_turnsSinceSave = 0;
+        }
+
         m_modelName = config.model;
-        m_availableModels = {config.model};
         m_selectedModelIndex = 0;
         m_agentConfigured = true;
+
+        // Use cached models if available, otherwise set default
+        auto cacheIt = m_modelCache.find(m_selectedProviderIndex);
+        if (cacheIt != m_modelCache.end())
+        {
+            m_availableModels = cacheIt->second.names;
+            m_modelIsLocal = cacheIt->second.local;
+            for (int i = 0; i < static_cast<int>(m_availableModels.size()); ++i)
+                if (m_availableModels[i] == m_modelName)
+                {
+                    m_selectedModelIndex = i;
+                    break;
+                }
+        }
+        else
+        {
+            m_availableModels.clear();
+            m_modelIsLocal.clear();
+            if (!m_isFetchingModels && !config.model.empty())
+            {
+                m_availableModels = {config.model};
+                m_modelIsLocal = {provider != pagent::Provider::Ollama};
+            }
+        }
 
         m_agent = pagent::Agent(std::move(config));
         m_agent->SetEventCallback([this](const pagent::AgentEvent &ev)
                                   { OnAgentEvent(ev); });
 
-        RegisterTools();
+        // Connect vector store to the agent's request worker
+        if (m_vectorStore)
+            m_agent->SetVectorStore(m_vectorStore.get());
 
-        FetchAvailableModels();
+        RegisterTools();
+    }
+
+    std::shared_ptr<pagent::IEmbeddingProvider> AgentWidget::CreateEmbeddingProvider()
+    {
+        if (!m_embeddingEnabled || m_embeddingModels.empty())
+            return nullptr;
+
+        const std::string &model = m_embeddingModels[m_selectedEmbeddingModel];
+        const char *geminiKey = std::getenv("PAGENT_GEMINI_API_KEY");
+        const char *openaiKey = std::getenv("PAGENT_OPENAI_API_KEY");
+
+        switch (m_selectedEmbeddingProvider)
+        {
+        case 0: // Google
+            if (geminiKey)
+                return std::make_shared<pagent::GoogleEmbedding>(geminiKey, model);
+            break;
+        case 1: // OpenAI
+        {
+            if (!openaiKey)
+                break;
+            int dims = 1536;
+            if (model.find("large") != std::string::npos)
+                dims = 3072;
+            return std::make_shared<pagent::OpenAIEmbedding>(openaiKey, model, dims);
+        }
+        case 2: // Ollama
+            return std::make_shared<pagent::OllamaEmbedding>(model);
+        default:
+            break;
+        }
+        return nullptr;
+    }
+
+    void AgentWidget::UpdateEmbeddingModels()
+    {
+        m_embeddingModels.clear();
+        m_selectedEmbeddingModel = 0;
+
+        switch (m_selectedEmbeddingProvider)
+        {
+        case 0: // Google
+            m_embeddingModels = {"gemini-embedding-2-preview", "gemini-embedding-001"};
+            break;
+        case 1: // OpenAI
+            m_embeddingModels = {"text-embedding-3-small", "text-embedding-3-large"};
+            break;
+        case 2: // Ollama — fetch local + remote embedding models
+        {
+            m_embeddingModelIsLocal.clear();
+            auto alive = m_alive;
+            std::thread([this, alive]()
+                        {
+                auto modelInfos = pagent::Agent::FetchOllamaEmbeddingModels();
+                if (!*alive) return;
+                QueueAction([this, alive, modelInfos]()
+                {
+                    if (m_selectedEmbeddingProvider != 2) return;
+                    m_embeddingModels.clear();
+                    m_embeddingModelIsLocal.clear();
+                    for (const auto &mi : modelInfos)
+                    {
+                        m_embeddingModels.push_back(mi.name);
+                        m_embeddingModelIsLocal.push_back(mi.local);
+                    }
+                    if (m_embeddingModels.empty())
+                    {
+                        m_embeddingModels = {"nomic-embed-text"};
+                        m_embeddingModelIsLocal = {false};
+                    }
+                    if (m_selectedEmbeddingModel >= static_cast<int>(m_embeddingModels.size()))
+                        m_selectedEmbeddingModel = 0;
+                }); })
+                .detach();
+            break;
+        }
+        default:
+            break;
+        }
+    }
+
+    void AgentWidget::SaveEmbeddingConfig()
+    {
+        std::string path = Path::Assets + "Agent/embedding_config.txt";
+        std::ofstream f(path);
+        if (!f)
+            return;
+        std::string modelName = (m_selectedEmbeddingModel < static_cast<int>(m_embeddingModels.size()))
+                                    ? m_embeddingModels[m_selectedEmbeddingModel]
+                                    : "";
+        f << (m_embeddingEnabled ? 1 : 0) << "\n"
+          << m_selectedEmbeddingProvider << "\n"
+          << modelName << "\n";
+    }
+
+    void AgentWidget::LoadEmbeddingConfig()
+    {
+        std::string path = Path::Assets + "Agent/embedding_config.txt";
+        std::ifstream f(path);
+        if (!f)
+            return;
+
+        int enabled = 0, provider = 0;
+        std::string modelName;
+        f >> enabled >> provider;
+        std::getline(f, modelName); // consume newline after provider
+        std::getline(f, modelName); // actual model name
+
+        m_embeddingEnabled = (enabled != 0);
+        m_selectedEmbeddingProvider = std::clamp(provider, 0, 2);
+        UpdateEmbeddingModels();
+
+        // Restore model selection by name
+        m_selectedEmbeddingModel = 0;
+        for (int i = 0; i < static_cast<int>(m_embeddingModels.size()); i++)
+        {
+            if (m_embeddingModels[i] == modelName)
+            {
+                m_selectedEmbeddingModel = i;
+                break;
+            }
+        }
+    }
+
+    std::string AgentWidget::GetVectorStorePath() const
+    {
+        std::string modelName = (m_selectedEmbeddingModel < static_cast<int>(m_embeddingModels.size()))
+                                    ? m_embeddingModels[m_selectedEmbeddingModel]
+                                    : "";
+        // Don't create files with placeholder names
+        if (modelName.empty() || modelName.find("fetching") != std::string::npos)
+            return {};
+        // Replace characters that are invalid in filenames
+        for (auto &c : modelName)
+            if (c == '/' || c == '\\' || c == ':')
+                c = '_';
+        return Path::Assets + "Agent/vectors_" + modelName + ".json";
     }
 
     void AgentWidget::RegisterTools()
@@ -625,24 +896,56 @@ namespace pe
 
     void AgentWidget::FetchAvailableModels()
     {
-        const auto &info = m_providers[m_selectedProviderIndex];
+        int providerIdx = m_selectedProviderIndex;
+
+        // Use cache if available
+        auto it = m_modelCache.find(providerIdx);
+        if (it != m_modelCache.end())
+        {
+            m_availableModels = it->second.names;
+            m_modelIsLocal = it->second.local;
+            m_isFetchingModels = false;
+            m_selectedModelIndex = 0;
+            for (int i = 0; i < static_cast<int>(m_availableModels.size()); ++i)
+            {
+                if (m_availableModels[i] == m_modelName)
+                {
+                    m_selectedModelIndex = i;
+                    break;
+                }
+            }
+            return;
+        }
+
+        // Already fetching for this provider
+        if (m_isFetchingModels)
+            return;
+
+        const auto &info = m_providers[providerIdx];
         auto provider = info.provider;
         auto apiKey = info.apiKey;
         auto currentModel = m_modelName;
+        auto alive = m_alive;
 
-        std::thread([this, provider, apiKey, currentModel]
+        m_isFetchingModels = true;
+
+        std::thread([this, alive, provider, apiKey, currentModel, providerIdx]
                     {
-            // For Ollama, the server may still be starting — retry a few times
             std::vector<pagent::Agent::ModelInfo> modelInfos;
             int retries = (provider == pagent::Provider::Ollama) ? 5 : 1;
             for (int attempt = 0; attempt < retries; ++attempt)
             {
+                if (!*alive)
+                    return;
                 if (attempt > 0)
                     std::this_thread::sleep_for(std::chrono::seconds(1));
                 modelInfos = pagent::Agent::FetchModelInfos(provider, apiKey);
                 if (!modelInfos.empty())
                     break;
             }
+
+            if (!*alive)
+                return;
 
             std::vector<std::string> names;
             std::vector<bool> localFlags;
@@ -652,24 +955,47 @@ namespace pe
                 localFlags.push_back(mi.local);
             }
 
-            // Ensure current model is in the list
-            if (std::find(names.begin(), names.end(), currentModel) == names.end())
+            if (!currentModel.empty() && std::find(names.begin(), names.end(), currentModel) == names.end())
             {
                 names.insert(names.begin(), currentModel);
-                // For Ollama, if the model wasn't in the list it likely needs downloading
                 localFlags.insert(localFlags.begin(), provider != pagent::Provider::Ollama);
             }
 
-            QueueAction([this, names = std::move(names), localFlags = std::move(localFlags), currentModel]
+            if (!*alive)
+                return;
+
+            QueueAction([this, alive, names = std::move(names), localFlags = std::move(localFlags), currentModel, providerIdx]
                         {
+                if (!*alive)
+                    return;
+                m_isFetchingModels = false;
+                // Cache the results
+                m_modelCache[providerIdx] = {names, localFlags};
+                // Only apply if still on this provider
+                if (m_selectedProviderIndex != providerIdx)
+                    return;
                 m_availableModels = names;
                 m_modelIsLocal = localFlags;
-                for (int i = 0; i < static_cast<int>(m_availableModels.size()); ++i)
+                m_selectedModelIndex = 0;
+                if (m_availableModels.empty())
                 {
-                    if (m_availableModels[i] == currentModel)
+                    m_modelName.clear();
+                }
+                else
+                {
+                    for (int i = 0; i < static_cast<int>(m_availableModels.size()); ++i)
                     {
-                        m_selectedModelIndex = i;
-                        break;
+                        if (m_availableModels[i] == currentModel)
+                        {
+                            m_selectedModelIndex = i;
+                            break;
+                        }
+                    }
+                    if (m_modelName.empty() || std::find(m_availableModels.begin(), m_availableModels.end(), m_modelName) == m_availableModels.end())
+                    {
+                        m_modelName = m_availableModels[m_selectedModelIndex];
+                        if (m_agent)
+                            m_agent->SetModel(m_modelName);
                     }
                 }
             }); })
@@ -741,7 +1067,9 @@ namespace pe
                             if (i != m_selectedProviderIndex)
                             {
                                 m_selectedProviderIndex = i;
+                                m_isFetchingModels = false; // allow fetch for new provider
                                 ConfigureAgent(m_providers[i].provider);
+                                FetchAvailableModels();
                             }
                         }
                         if (selected)
@@ -787,10 +1115,17 @@ namespace pe
             }
             else
             {
-                std::string comboLabel = m_isPulling ? (m_modelName + " (downloading...)") : m_modelName;
+                std::string comboLabel = m_isPulling                 ? (m_modelName + " (downloading...)")
+                                         : m_isFetchingModels        ? "(fetching...)"
+                                         : m_availableModels.empty() ? "None"
+                                         : m_modelName.empty()       ? "None"
+                                                                     : m_modelName;
                 ImGui::PushItemWidth(200.0f);
                 if (ImGui::BeginCombo("##model", comboLabel.c_str()))
                 {
+                    // Re-fetch models if list is stale (only has the default)
+                    if (m_availableModels.size() <= 1)
+                        FetchAvailableModels();
                     // Filter input at the top of the dropdown
                     ImGui::SetNextItemWidth(-1);
                     ImGui::InputTextWithHint("##modelfilter", "Filter...", m_modelFilter, sizeof(m_modelFilter));
@@ -820,12 +1155,21 @@ namespace pe
 
                         if (ImGui::Selectable(displayName.c_str(), selected))
                         {
+                            // Unload previous Ollama model before switching
+                            std::string prevModel = m_modelName;
                             m_selectedModelIndex = i;
                             m_modelName = m_availableModels[i];
                             m_modelFilter[0] = '\0';
 
                             if (isLocal)
                             {
+                                if (!prevModel.empty() && prevModel != m_modelName &&
+                                    m_providers[m_selectedProviderIndex].provider == pagent::Provider::Ollama)
+                                {
+                                    std::thread([prevModel]()
+                                                { pagent::Agent::UnloadModel(pagent::Provider::Ollama, prevModel); })
+                                        .detach();
+                                }
                                 m_agent->SetModel(m_modelName);
                             }
                             else if (!m_isPulling)
@@ -837,19 +1181,25 @@ namespace pe
                                     m_chat.push_back({ChatMessage::Role::System, "Downloading model " + pullModel + "..."});
                                     m_scrollToBottom = true;
                                 }
-                                m_pullCancel = pagent::Agent::PullModel(pullModel, [this](const std::string &status)
-                                                                        { QueueAction([this, status]()
+                                auto aliveRef = m_alive;
+                                m_pullCancel = pagent::Agent::PullModel(pullModel, [this, aliveRef](const std::string &status)
+                                                                        { if (!*aliveRef) return;
+                                                                          QueueAction([this, aliveRef, status]()
                                                                                       {
+                                            if (!*aliveRef) return;
                                             std::lock_guard lock(m_chatMutex);
                                             if (!m_chat.empty() && m_chat.back().role == ChatMessage::Role::System)
                                                 m_chat.back().text = status;
-                                            m_scrollToBottom = true; }); }, [this, i, pullModel](bool success)
+                                            m_scrollToBottom = true; }); }, [this, aliveRef, i, pullModel](bool success)
                                                                         {
+                                        if (!*aliveRef) return;
                                         // Check tool support on background thread before queuing UI update
-                                        bool hasTools = success && pagent::Agent::SupportsTools(
-                                            m_providers[m_selectedProviderIndex].provider, pullModel);
+                                        auto caps = success ? pagent::Agent::QueryCapabilities(
+                                            m_providers[m_selectedProviderIndex].provider, pullModel)
+                                            : pagent::Agent::ModelCaps{false, false};
 
-                                        QueueAction([this, i, pullModel, success, hasTools]()
+                                        if (!*aliveRef) return;
+                                        QueueAction([this, aliveRef, i, pullModel, success, caps]()
                                         {
                                             m_isPulling = false;
                                             m_pullCancel.reset();
@@ -858,9 +1208,9 @@ namespace pe
                                             {
                                                 m_chat.push_back({ChatMessage::Role::System, "Download cancelled."});
                                             }
-                                            else if (!hasTools)
+                                            else if (!caps.vision || !caps.tools)
                                             {
-                                                // Remove from list -- model doesn't support tools
+                                                // Remove from list -- model doesn't support vision+tools
                                                 if (i < static_cast<int>(m_availableModels.size()))
                                                 {
                                                     m_availableModels.erase(m_availableModels.begin() + i);
@@ -868,13 +1218,18 @@ namespace pe
                                                     if (m_selectedModelIndex >= static_cast<int>(m_availableModels.size()))
                                                         m_selectedModelIndex = 0;
                                                 }
+                                                // Update cache after removal
+                                                m_modelCache[m_selectedProviderIndex] = {m_availableModels, m_modelIsLocal};
+                                                std::string reason = !caps.vision ? "vision" : "tool calling";
                                                 m_chat.push_back({ChatMessage::Role::System,
-                                                    pullModel + " does not support tool calling. Removed from list."});
+                                                    pullModel + " does not support " + reason + ". Removed from list."});
                                             }
                                             else
                                             {
                                                 if (i < static_cast<int>(m_modelIsLocal.size()))
                                                     m_modelIsLocal[i] = true;
+                                                // Update cache so model stays local on provider switch
+                                                m_modelCache[m_selectedProviderIndex] = {m_availableModels, m_modelIsLocal};
                                                 m_agent->SetModel(pullModel);
                                                 m_chat.push_back({ChatMessage::Role::System, "Model ready."});
                                             }
@@ -923,12 +1278,154 @@ namespace pe
             }
             ImGui::PopStyleColor();
         }
+
+        // Embedding row (checkbox + provider + model) — right under agent row
+        if (!m_isExternalAI)
+        {
+            if (ImGui::Checkbox("RAG", &m_embeddingEnabled))
+            {
+                if (m_embeddingEnabled)
+                    UpdateEmbeddingModels();
+                SaveEmbeddingConfig();
+                ConfigureAgent(m_providers[m_selectedProviderIndex].provider);
+            }
+            if (ImGui::IsItemHovered())
+                ImGui::SetTooltip("Enable retrieval-augmented generation (RAG).\nEmbeds messages and retrieves relevant past context.");
+
+            if (m_embeddingEnabled)
+            {
+                static const char *embeddingProviders[] = {"Google", "OpenAI", "Ollama"};
+
+                ImGui::SameLine();
+                ImGui::PushItemWidth(100.0f);
+                if (ImGui::BeginCombo("##embprov", embeddingProviders[m_selectedEmbeddingProvider]))
+                {
+                    for (int i = 0; i < 3; i++)
+                    {
+                        bool available = true;
+                        if (i == 0)
+                            available = std::getenv("PAGENT_GEMINI_API_KEY") != nullptr;
+                        if (i == 1)
+                            available = std::getenv("PAGENT_OPENAI_API_KEY") != nullptr;
+
+                        if (!available)
+                            ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.4f, 0.4f, 0.4f, 1.0f));
+
+                        if (ImGui::Selectable(embeddingProviders[i], i == m_selectedEmbeddingProvider, available ? 0 : ImGuiSelectableFlags_Disabled))
+                        {
+                            // Save current vector store before switching
+                            auto sp = GetVectorStorePath();
+                            if (m_vectorStore && !sp.empty())
+                                m_vectorStore->SaveToFile(sp);
+                            m_vectorStore.reset();
+                            m_selectedEmbeddingProvider = i;
+                            UpdateEmbeddingModels();
+                            SaveEmbeddingConfig();
+                            ConfigureAgent(m_providers[m_selectedProviderIndex].provider);
+                        }
+
+                        if (!available)
+                            ImGui::PopStyleColor();
+                    }
+                    ImGui::EndCombo();
+                }
+                ImGui::PopItemWidth();
+
+                {
+                    ImGui::SameLine();
+                    ImGui::PushItemWidth(250.0f);
+                    std::string embComboLabel;
+                    if (m_embeddingModels.empty())
+                        embComboLabel = "(fetching...)";
+                    else if (m_isPullingEmbedding)
+                        embComboLabel = m_embeddingModels[m_selectedEmbeddingModel] + " (downloading...)";
+                    else
+                        embComboLabel = m_embeddingModels[m_selectedEmbeddingModel];
+                    if (ImGui::BeginCombo("##embmodel", embComboLabel.c_str()))
+                    {
+                        for (int i = 0; i < static_cast<int>(m_embeddingModels.size()); i++)
+                        {
+                            bool isLocal = i < static_cast<int>(m_embeddingModelIsLocal.size()) && m_embeddingModelIsLocal[i];
+                            std::string label = m_embeddingModels[i];
+                            if (!isLocal && m_selectedEmbeddingProvider == 2)
+                                label += " (download)";
+
+                            if (ImGui::Selectable(label.c_str(), i == m_selectedEmbeddingModel))
+                            {
+                                // Save current vector store before switching
+                                auto sp2 = GetVectorStorePath();
+                                if (m_vectorStore && !sp2.empty())
+                                    m_vectorStore->SaveToFile(sp2);
+                                m_vectorStore.reset();
+                                m_selectedEmbeddingModel = i;
+                                SaveEmbeddingConfig();
+
+                                // For Ollama, auto-pull if not local
+                                if (m_selectedEmbeddingProvider == 2 && !isLocal && !m_isPullingEmbedding)
+                                {
+                                    std::string pullModel = m_embeddingModels[i];
+                                    auto alive = m_alive;
+                                    m_isPullingEmbedding = true;
+                                    {
+                                        std::lock_guard lock(m_chatMutex);
+                                        m_chat.push_back({ChatMessage::Role::System, "Downloading embedding model " + pullModel + "..."});
+                                        m_scrollToBottom = true;
+                                    }
+                                    m_pullEmbeddingCancel = pagent::Agent::PullModel(pullModel, [this, alive](const std::string &status)
+                                                                                     {
+                                            if (!*alive) return;
+                                            QueueAction([this, alive, status]()
+                                            {
+                                                if (!*alive) return;
+                                                std::lock_guard lock(m_chatMutex);
+                                                if (!m_chat.empty() && m_chat.back().role == ChatMessage::Role::System)
+                                                    m_chat.back().text = status;
+                                                m_scrollToBottom = true;
+                                            }); }, [this, alive, pullModel, i](bool success)
+                                                                                     {
+                                            if (!*alive) return;
+                                            QueueAction([this, alive, success, pullModel, i]()
+                                            {
+                                                m_isPullingEmbedding = false;
+                                                m_pullEmbeddingCancel.reset();
+                                                if (success)
+                                                {
+                                                    if (i < static_cast<int>(m_embeddingModelIsLocal.size()))
+                                                        m_embeddingModelIsLocal[i] = true;
+                                                    ConfigureAgent(m_providers[m_selectedProviderIndex].provider);
+                                                    std::lock_guard lock(m_chatMutex);
+                                                    m_chat.push_back({ChatMessage::Role::System,
+                                                        "Embedding model " + pullModel + " ready."});
+                                                }
+                                                else
+                                                {
+                                                    std::lock_guard lock(m_chatMutex);
+                                                    m_chat.push_back({ChatMessage::Role::System,
+                                                        "Failed to download embedding model " + pullModel + "."});
+                                                }
+                                                m_scrollToBottom = true;
+                                            }); });
+                                }
+                                else
+                                {
+                                    ConfigureAgent(m_providers[m_selectedProviderIndex].provider);
+                                }
+                            }
+                        }
+                        ImGui::EndCombo();
+                    }
+                    ImGui::PopItemWidth();
+                }
+            }
+        }
         ImGui::Separator();
 
         // chat log
         const float statusHeight = ImGui::GetFrameHeightWithSpacing() + ImGui::GetStyle().ItemSpacing.y;
         const float inputHeight = ImGui::GetTextLineHeight() * 3.0f + ImGui::GetStyle().FramePadding.y * 2.0f + 4.0f;
-        ImGui::BeginChild("ChatLog", ImVec2(0, -(inputHeight + statusHeight)), false);
+        const bool hasAttachments = !m_pendingImages.empty() || !m_pendingFiles.empty();
+        const float pendingImgHeight = hasAttachments ? (60.0f + ImGui::GetStyle().ItemSpacing.y) : 0.0f;
+        ImGui::BeginChild("ChatLog", ImVec2(0, -(inputHeight + statusHeight + pendingImgHeight)), false);
         {
             std::lock_guard lock(m_chatMutex);
             for (const auto &msg : m_chat)
@@ -972,6 +1469,24 @@ namespace pe
         ImGui::EndChild();
 
         ImGui::Separator();
+
+        // Ctrl+V image paste (only when not busy and not in external mode)
+#if defined(PE_WIN32)
+        if (!busy && !m_isExternalAI && ImGui::IsWindowFocused(ImGuiFocusedFlags_RootAndChildWindows) &&
+            ImGui::GetIO().KeyCtrl && ImGui::IsKeyPressed(ImGuiKey_V))
+        {
+            // Check if clipboard has an image before consuming the paste
+            UINT cfPng = RegisterClipboardFormatA("PNG");
+            bool hasPng = cfPng && IsClipboardFormatAvailable(cfPng);
+            bool hasDib = IsClipboardFormatAvailable(CF_DIBV5) || IsClipboardFormatAvailable(CF_DIB);
+            bool hasFiles = IsClipboardFormatAvailable(CF_HDROP) != 0;
+            if (hasPng || hasDib || hasFiles)
+                HandlePaste();
+        }
+#endif
+
+        RenderPendingAttachments();
+
         bool submit = false;
         // Enter sends. Shift+Enter inserts a newline. Up/Down for history.
         ImGui::BeginDisabled(busy);
@@ -1053,33 +1568,344 @@ namespace pe
 
     void AgentWidget::SubmitInput()
     {
-        const std::string text(m_inputBuf);
+        std::string text(m_inputBuf);
         m_inputBuf[0] = '\0';
-        m_inputHistory.push_back(text);
         m_historyIndex = -1;
+
+        // Prepend file contents to the message
+        std::string fileContext;
+        for (const auto &pf : m_pendingFiles)
+            fileContext += "--- " + pf.name + " ---\n" + pf.content + "\n\n";
+
+        std::string fullText = fileContext.empty() ? text : fileContext + text;
+
+        m_inputHistory.push_back(text);
+
+        // Build chat message for display
+        ChatMessage chatMsg;
+        chatMsg.role = ChatMessage::Role::User;
+        chatMsg.text = text;
+        for (const auto &img : m_pendingImages)
+            chatMsg.images.push_back({img.imguiDescriptor, img.width, img.height});
+        // Show attached file names
+        for (const auto &pf : m_pendingFiles)
+            chatMsg.text += "\n[Attached: " + pf.name + "]";
+
         {
             std::lock_guard lock(m_chatMutex);
-            m_chat.push_back({ChatMessage::Role::User, text});
+            m_chat.push_back(std::move(chatMsg));
             m_scrollToBottom = true;
         }
 
         if (m_isExternalAI)
         {
-            // Write user message to file for external AI to read
             std::string inputPath = Path::Assets + "Agent/" + m_externalFile;
             std::ofstream f(inputPath, std::ios::trunc);
-            f << text;
+            f << fullText;
             f.close();
-            // Clear previous response
             std::ofstream(GetExternalResponsePath(), std::ios::trunc).close();
             m_isStreaming = true;
             WriteExternalHistory();
         }
         else
         {
-            m_agent->Send(text);
+            std::vector<pagent::ContentPart> attachments;
+            for (const auto &img : m_pendingImages)
+                attachments.push_back({pagent::ContentPart::Type::ImageBase64, img.base64, img.mime_type});
+
+            if (attachments.empty())
+                m_agent->Send(fullText);
+            else
+                m_agent->Send(fullText, attachments);
         }
+        m_pendingImages.clear();
+        m_pendingFiles.clear();
         ImGui::SetKeyboardFocusHere(-1);
+    }
+
+    void AgentWidget::HandlePaste()
+    {
+#if defined(PE_WIN32)
+        if (!OpenClipboard(nullptr))
+            return;
+
+        int w = 0, h = 0;
+        std::string base64;
+        std::string mime_type;
+
+        // Try PNG clipboard format first (browsers, chat apps, image viewers)
+        UINT cfPng = RegisterClipboardFormatA("PNG");
+        HANDLE hPng = cfPng ? GetClipboardData(cfPng) : nullptr;
+        if (hPng)
+        {
+            size_t dataSize = GlobalSize(hPng);
+            const uint8_t *data = static_cast<const uint8_t *>(GlobalLock(hPng));
+            if (data && dataSize > 24)
+            {
+                // Read dimensions from PNG IHDR chunk (bytes 16-23, big-endian)
+                w = (data[16] << 24) | (data[17] << 16) | (data[18] << 8) | data[19];
+                h = (data[20] << 24) | (data[21] << 16) | (data[22] << 8) | data[23];
+                base64 = pagent::Base64Encode(data, dataSize);
+                mime_type = "image/png";
+            }
+            if (data)
+                GlobalUnlock(hPng);
+        }
+
+        // Try CF_HDROP: files copied from Explorer
+        if (base64.empty())
+        {
+            HANDLE hDrop = GetClipboardData(CF_HDROP);
+            if (hDrop)
+            {
+                HDROP drop = static_cast<HDROP>(hDrop);
+                UINT count = DragQueryFileW(drop, 0xFFFFFFFF, nullptr, 0);
+                for (UINT fi = 0; fi < count; fi++)
+                {
+                    wchar_t filePath[MAX_PATH] = {};
+                    DragQueryFileW(drop, fi, filePath, MAX_PATH);
+                    std::filesystem::path fp(filePath);
+
+                    if (!std::filesystem::is_regular_file(fp))
+                        continue;
+                    auto fileSize = std::filesystem::file_size(fp);
+                    if (fileSize == 0 || fileSize > 5 * 1024 * 1024) // skip empty or >5MB
+                        continue;
+
+                    std::string ext = fp.extension().string();
+                    for (auto &c : ext)
+                        c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+
+                    // Image files
+                    bool isImage = (ext == ".png" || ext == ".jpg" || ext == ".jpeg" ||
+                                    ext == ".bmp" || ext == ".tga" || ext == ".gif" || ext == ".webp");
+                    if (isImage)
+                    {
+                        if (ext == ".png")
+                            mime_type = "image/png";
+                        else if (ext == ".jpg" || ext == ".jpeg")
+                            mime_type = "image/jpeg";
+                        else if (ext == ".gif")
+                            mime_type = "image/gif";
+                        else if (ext == ".webp")
+                            mime_type = "image/webp";
+                        else
+                            mime_type = "image/png";
+
+                        std::ifstream file(fp, std::ios::binary | std::ios::ate);
+                        if (!file.is_open())
+                            continue;
+                        size_t fsize = file.tellg();
+                        file.seekg(0);
+                        std::vector<uint8_t> fileData(fsize);
+                        file.read(reinterpret_cast<char *>(fileData.data()), fsize);
+
+                        if (ext == ".png")
+                        {
+                            if (fsize > 24)
+                            {
+                                w = (fileData[16] << 24) | (fileData[17] << 16) | (fileData[18] << 8) | fileData[19];
+                                h = (fileData[20] << 24) | (fileData[21] << 16) | (fileData[22] << 8) | fileData[23];
+                            }
+                            base64 = pagent::Base64Encode(fileData.data(), fileData.size());
+                        }
+                        else if (ext == ".jpg" || ext == ".jpeg")
+                        {
+                            w = 0;
+                            h = 0;
+                            for (size_t i = 0; i + 8 < fsize; i++)
+                            {
+                                if (fileData[i] == 0xFF && (fileData[i + 1] >= 0xC0 && fileData[i + 1] <= 0xC3))
+                                {
+                                    h = (fileData[i + 5] << 8) | fileData[i + 6];
+                                    w = (fileData[i + 7] << 8) | fileData[i + 8];
+                                    break;
+                                }
+                            }
+                            if (w == 0)
+                            {
+                                w = 512;
+                                h = 512;
+                            }
+                            base64 = pagent::Base64Encode(fileData.data(), fileData.size());
+                        }
+                        else
+                        {
+                            int comp = 0;
+                            auto *pixels = stbi_load_from_memory(fileData.data(), static_cast<int>(fsize), &w, &h, &comp, 4);
+                            if (pixels)
+                            {
+                                auto pngData = pagent::EncodeRGBA_PNG(pixels, w, h);
+                                base64 = pagent::Base64Encode(pngData.data(), pngData.size());
+                                mime_type = "image/png";
+                                stbi_image_free(pixels);
+                            }
+                        }
+
+                        if (!base64.empty())
+                        {
+                            PendingImage img;
+                            img.base64 = std::move(base64);
+                            img.mime_type = std::move(mime_type);
+                            img.width = w;
+                            img.height = h;
+                            m_pendingImages.push_back(std::move(img));
+                            base64.clear();
+                        }
+                    }
+                    else
+                    {
+                        // Text/code file — read content (truncate at 20k chars to avoid token limits)
+                        constexpr size_t maxChars = 20000;
+                        std::ifstream file(fp, std::ios::in);
+                        if (!file.is_open())
+                            continue;
+                        std::string content((std::istreambuf_iterator<char>(file)), {});
+                        if (!content.empty())
+                        {
+                            PendingFile pf;
+                            pf.name = fp.filename().string();
+                            if (content.size() > maxChars)
+                            {
+                                content.resize(maxChars);
+                                content += "\n... [truncated at 20k chars]";
+                            }
+                            pf.content = std::move(content);
+                            m_pendingFiles.push_back(std::move(pf));
+                        }
+                    }
+                }
+            }
+        }
+
+        // Fall back to DIB format (screenshots, PrintScreen, paint apps)
+        if (base64.empty())
+        {
+            HANDLE hData = GetClipboardData(CF_DIBV5);
+            if (!hData)
+                hData = GetClipboardData(CF_DIB);
+            if (!hData)
+            {
+                CloseClipboard();
+                return;
+            }
+
+            auto *bmi = static_cast<BITMAPINFOHEADER *>(GlobalLock(hData));
+            if (!bmi || (bmi->biCompression != BI_RGB && bmi->biCompression != BI_BITFIELDS) || bmi->biBitCount < 24)
+            {
+                if (bmi)
+                    GlobalUnlock(hData);
+                CloseClipboard();
+                return;
+            }
+
+            w = bmi->biWidth;
+            h = std::abs(bmi->biHeight);
+            bool topDown = bmi->biHeight < 0;
+            int bpp = bmi->biBitCount / 8;
+            size_t pixelOffset = bmi->biSize;
+            if (bmi->biCompression == BI_BITFIELDS && bmi->biSize == sizeof(BITMAPINFOHEADER))
+                pixelOffset += 3 * sizeof(DWORD);
+            const uint8_t *pixels = reinterpret_cast<const uint8_t *>(bmi) + pixelOffset;
+
+            int srcStride = ((w * bpp + 3) & ~3);
+            std::vector<uint8_t> rgba(w * h * 4);
+            for (int y = 0; y < h; y++)
+            {
+                int srcY = topDown ? y : (h - 1 - y);
+                const uint8_t *srcRow = pixels + srcY * srcStride;
+                uint8_t *dstRow = rgba.data() + y * w * 4;
+                for (int x = 0; x < w; x++)
+                {
+                    dstRow[x * 4 + 0] = srcRow[x * bpp + 2]; // R
+                    dstRow[x * 4 + 1] = srcRow[x * bpp + 1]; // G
+                    dstRow[x * 4 + 2] = srcRow[x * bpp + 0]; // B
+                    dstRow[x * 4 + 3] = (bpp == 4) ? srcRow[x * bpp + 3] : 255;
+                }
+            }
+            GlobalUnlock(hData);
+
+            // Resize if too large (max 1024px on longest side)
+            if (w > 1024 || h > 1024)
+            {
+                float scale = 1024.0f / static_cast<float>(std::max(w, h));
+                int nw = static_cast<int>(w * scale);
+                int nh = static_cast<int>(h * scale);
+                std::vector<uint8_t> resized(nw * nh * 4);
+                for (int dy = 0; dy < nh; dy++)
+                {
+                    int sy = dy * h / nh;
+                    for (int dx = 0; dx < nw; dx++)
+                    {
+                        int sx = dx * w / nw;
+                        std::memcpy(&resized[(dy * nw + dx) * 4], &rgba[(sy * w + sx) * 4], 4);
+                    }
+                }
+                rgba = std::move(resized);
+                w = nw;
+                h = nh;
+            }
+
+            auto pngData = pagent::EncodeRGBA_PNG(rgba.data(), w, h);
+            base64 = pagent::Base64Encode(pngData.data(), pngData.size());
+            mime_type = "image/png";
+        }
+
+        CloseClipboard();
+
+        if (base64.empty())
+            return;
+
+        PendingImage img;
+        img.base64 = std::move(base64);
+        img.mime_type = std::move(mime_type);
+        img.width = w;
+        img.height = h;
+        img.imguiDescriptor = nullptr; // TODO: create Vulkan texture for thumbnail preview
+        m_pendingImages.push_back(std::move(img));
+#endif
+    }
+
+    void AgentWidget::RenderPendingAttachments()
+    {
+        if (m_pendingImages.empty() && m_pendingFiles.empty())
+            return;
+
+        ImGui::PushStyleColor(ImGuiCol_ChildBg, ImVec4(0.15f, 0.15f, 0.2f, 1.0f));
+        ImGui::BeginChild("PendingAttachments", ImVec2(0, 60), true);
+
+        for (size_t i = 0; i < m_pendingImages.size(); i++)
+        {
+            const auto &img = m_pendingImages[i];
+            ImGui::Text("[Image %dx%d]", img.width, img.height);
+            ImGui::SameLine();
+            std::string removeLabel = "X##rmimg" + std::to_string(i);
+            if (ImGui::SmallButton(removeLabel.c_str()))
+            {
+                m_pendingImages.erase(m_pendingImages.begin() + i);
+                i--;
+                continue;
+            }
+            ImGui::SameLine();
+        }
+
+        for (size_t i = 0; i < m_pendingFiles.size(); i++)
+        {
+            const auto &pf = m_pendingFiles[i];
+            ImGui::Text("[%s (%d bytes)]", pf.name.c_str(), static_cast<int>(pf.content.size()));
+            ImGui::SameLine();
+            std::string removeLabel = "X##rmfile" + std::to_string(i);
+            if (ImGui::SmallButton(removeLabel.c_str()))
+            {
+                m_pendingFiles.erase(m_pendingFiles.begin() + i);
+                i--;
+                continue;
+            }
+            ImGui::SameLine();
+        }
+
+        ImGui::EndChild();
+        ImGui::PopStyleColor();
     }
 
     std::string AgentWidget::GetExternalResponsePath() const
@@ -1234,6 +2060,19 @@ namespace pe
             m_isStreaming = false;
             m_streamingText.clear();
             m_streamingThinking.clear();
+            // Save vector store periodically
+            if (m_vectorStore && m_embeddingEnabled)
+            {
+                m_turnsSinceSave++;
+                if (m_turnsSinceSave == 1 || m_turnsSinceSave >= 10)
+                {
+                    auto sp = GetVectorStorePath();
+                    if (!sp.empty())
+                        m_vectorStore->SaveToFile(sp);
+                    if (m_turnsSinceSave >= 10)
+                        m_turnsSinceSave = 0;
+                }
+            }
             break;
         case pagent::AgentEventType::Error:
             m_chat.push_back({ChatMessage::Role::System, "[error: " + ev.error_message + "]"});
@@ -1255,6 +2094,22 @@ namespace pe
             ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.4f, 0.8f, 1.0f, 1.0f));
             ImGui::TextWrapped("[You] %s", msg.text.c_str());
             ImGui::PopStyleColor();
+            // Show attached image indicators
+            for (const auto &img : msg.images)
+            {
+                if (img.imguiDescriptor)
+                {
+                    float maxW = ImGui::GetContentRegionAvail().x * 0.5f;
+                    float scale = std::min(1.0f, maxW / static_cast<float>(img.width));
+                    ImGui::Image(reinterpret_cast<ImTextureID>(img.imguiDescriptor), ImVec2(img.width * scale, img.height * scale));
+                }
+                else
+                {
+                    ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.6f, 0.6f, 0.7f, 1.0f));
+                    ImGui::Text("  [Image %dx%d]", img.width, img.height);
+                    ImGui::PopStyleColor();
+                }
+            }
             break;
         case ChatMessage::Role::Assistant:
             if (!msg.thinking.empty())

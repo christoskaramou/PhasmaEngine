@@ -1,0 +1,70 @@
+#include "PhasmaAgent/GoogleEmbedding.h"
+#include <nlohmann/json.hpp>
+
+#ifdef CPPHTTPLIB_OPENSSL_SUPPORT
+#ifndef CPPHTTPLIB_OPENSSL_SUPPORT
+#define CPPHTTPLIB_OPENSSL_SUPPORT
+#endif
+#endif
+#include <httplib/httplib.h>
+
+namespace pagent
+{
+    using json = nlohmann::json;
+
+    GoogleEmbedding::GoogleEmbedding(std::string api_key, std::string model, int dims)
+        : m_apiKey(std::move(api_key)), m_model(std::move(model)), m_dims(dims)
+    {
+    }
+
+    std::vector<float> GoogleEmbedding::Embed(const std::string &text)
+    {
+        if (text.empty() || m_apiKey.empty())
+            return {};
+
+        json body;
+        body["model"] = "models/" + m_model;
+        body["content"] = {{"parts", json::array({{{"text", text}}})}};
+        body["output_dimensionality"] = m_dims;
+
+        const std::string host = "generativelanguage.googleapis.com";
+        const std::string path = "/v1beta/models/" + m_model + ":embedContent";
+        const std::string bodyStr = body.dump();
+
+        std::string responseBody;
+
+#ifdef CPPHTTPLIB_OPENSSL_SUPPORT
+        httplib::SSLClient cli(host);
+        cli.set_read_timeout(15);
+        httplib::Headers headers = {{"x-goog-api-key", m_apiKey}};
+        auto res = cli.Post(path, headers, bodyStr, "application/json");
+        if (!res)
+        {
+            fprintf(stderr, "[GoogleEmbedding] HTTP request failed (no response)\n");
+            return {};
+        }
+        if (res->status != 200)
+        {
+            fprintf(stderr, "[GoogleEmbedding] HTTP %d: %s\n", res->status, res->body.substr(0, 300).c_str());
+            return {};
+        }
+        responseBody = res->body;
+#else
+        return {};
+#endif
+
+        try
+        {
+            auto resp = json::parse(responseBody);
+            if (resp.contains("embedding") && resp["embedding"].contains("values"))
+            {
+                return resp["embedding"]["values"].get<std::vector<float>>();
+            }
+        }
+        catch (...)
+        {
+        }
+
+        return {};
+    }
+} // namespace pagent

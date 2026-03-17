@@ -23,7 +23,7 @@ namespace pagent
             providers.push_back({Provider::OpenAI, "OpenAI", openaiKey, "gpt-4.1-mini"});
         if (geminiKey)
             providers.push_back({Provider::Google, "Google", geminiKey, "gemini-2.5-flash"});
-        providers.push_back({Provider::Ollama, "Ollama", "", "llama3.2"});
+        providers.push_back({Provider::Ollama, "Ollama", "", ""});
 
         return providers;
     }
@@ -80,6 +80,11 @@ namespace pagent
         return m_impl->Send(user_message);
     }
 
+    bool Agent::Send(const std::string &user_message, const std::vector<ContentPart> &attachments)
+    {
+        return m_impl->Send(user_message, attachments);
+    }
+
     void Agent::Poll()
     {
         m_impl->Poll();
@@ -120,6 +125,11 @@ namespace pagent
         m_impl->SetModel(model);
     }
 
+    void Agent::SetVectorStore(VectorStore *store)
+    {
+        m_impl->SetVectorStore(store);
+    }
+
     TokenUsage Agent::GetUsage() const
     {
         return m_impl->GetUsage();
@@ -136,9 +146,11 @@ namespace pagent
     {
         using json = nlohmann::json;
 
-        // Anthropic has no model listing endpoint
+        // Anthropic has no model listing endpoint — all current models support vision + tools
         if (provider == Provider::Anthropic)
-            return {{"claude-sonnet-4-6", true}, {"claude-opus-4-6", true}, {"claude-haiku-4-5", true}};
+            return {{"claude-sonnet-4-6", true, true, true},
+                    {"claude-opus-4-6", true, true, true},
+                    {"claude-haiku-4-5", true, true, true}};
 
         // Helper: fetch JSON from an HTTP(S) endpoint
         auto httpGet = [](const std::string &host, const std::string &path,
@@ -202,19 +214,56 @@ namespace pagent
             std::vector<ModelInfo> models;
             std::set<std::string> localNames;
 
-            // Fetch locally downloaded models, filter out those without tool support
+            // Fetch locally downloaded models, filter to those with both vision + tools
             std::string localBody = httpGet(ollamaHost, "/api/tags", false, {});
+            httplib::Client cli(ollamaHost);
+            cli.set_read_timeout(3);
             for (auto &[name, size] : parseOllamaModels(localBody))
             {
-                if (!SupportsTools(Provider::Ollama, name, base_url))
+                // Check capabilities using shared connection (avoids per-model reconnect)
+                ModelCaps caps{false, false};
+                std::string showBody = "{\"name\":\"" + name + "\"}";
+                auto showRes = cli.Post("/api/show", showBody, "application/json");
+                if (showRes && showRes->status == 200)
+                {
+                    try
+                    {
+                        auto sj = json::parse(showRes->body);
+                        if (sj.contains("capabilities") && sj["capabilities"].is_array())
+                        {
+                            for (const auto &cap : sj["capabilities"])
+                            {
+                                auto s = cap.get<std::string>();
+                                if (s == "vision")
+                                    caps.vision = true;
+                                if (s == "tools")
+                                    caps.tools = true;
+                            }
+                        }
+                        else
+                        {
+                            caps = {true, true}; // no capabilities field — assume both
+                        }
+                    }
+                    catch (...)
+                    {
+                        caps = {true, true};
+                    }
+                }
+                else
+                {
+                    caps = {true, true}; // can't check — assume both
+                }
+
+                localNames.insert(name); // always track local names to avoid re-showing as "(download)"
+                if (!caps.vision || !caps.tools)
                     continue;
-                models.push_back({name, true});
-                localNames.insert(name);
+                models.push_back({name, true, caps.vision, caps.tools});
             }
 
-            // Fetch all available models from ollama.com/library
+            // Fetch remote models with vision+tools from ollama.com
 #ifdef CPPHTTPLIB_OPENSSL_SUPPORT
-            std::string libraryHtml = httpGet("ollama.com", "/library", true, {});
+            std::string libraryHtml = httpGet("ollama.com", "/search?c=vision&c=tools", true, {});
             {
                 const std::string prefix = "href=\"/library/";
                 size_t pos = 0;
@@ -287,7 +336,7 @@ namespace pagent
                     // Filter non-chat models for OpenAI/Gemini
                     if (provider == Provider::OpenAI)
                     {
-                        // Only include chat-capable models (gpt-*, o1-*, o3-*, o4-*)
+                        // Only include chat-capable models
                         bool isChat = id.rfind("gpt-", 0) == 0 ||
                                       id.rfind("o1-", 0) == 0 ||
                                       id.rfind("o3-", 0) == 0 ||
@@ -295,7 +344,7 @@ namespace pagent
                         if (!isChat)
                             continue;
 
-                        // Skip models that don't support /v1/chat/completions
+                        // Skip non-chat variants
                         if (id.find("audio") != std::string::npos ||
                             id.find("search") != std::string::npos ||
                             id.find("realtime") != std::string::npos ||
@@ -305,6 +354,13 @@ namespace pagent
                             id.find("codex") != std::string::npos ||
                             id.find("instruct") != std::string::npos ||
                             id.find("-pro") != std::string::npos)
+                            continue;
+
+                        // Filter: only models with vision + tools
+                        // o1-* and o3-mini lack vision support
+                        bool noVision = id.rfind("o1-", 0) == 0 ||
+                                        id.find("o3-mini") != std::string::npos;
+                        if (noVision)
                             continue;
                     }
                     else if (provider == Provider::Google)
@@ -376,11 +432,11 @@ namespace pagent
         OllamaProcess::CancelPull(token);
     }
 
-    bool Agent::SupportsTools(Provider provider, const std::string &model,
-                              const std::string &base_url)
+    Agent::ModelCaps Agent::QueryCapabilities(Provider provider, const std::string &model,
+                                              const std::string &base_url)
     {
         if (provider != Provider::Ollama)
-            return true;
+            return {true, true}; // cloud providers: all current models support both
 
         using json = nlohmann::json;
         std::string ollamaHost = base_url.empty() ? "http://localhost:11434" : base_url;
@@ -393,23 +449,125 @@ namespace pagent
         std::string body = "{\"name\":\"" + model + "\"}";
         auto res = cli.Post("/api/show", body, "application/json");
         if (!res || res->status != 200)
-            return true; // assume yes if can't check
+            return {true, true}; // assume yes if can't check
 
+        ModelCaps caps{false, false};
         try
         {
             auto j = json::parse(res->body);
             if (j.contains("capabilities") && j["capabilities"].is_array())
             {
                 for (const auto &cap : j["capabilities"])
-                    if (cap.get<std::string>() == "tools")
-                        return true;
-                return false;
+                {
+                    auto s = cap.get<std::string>();
+                    if (s == "vision")
+                        caps.vision = true;
+                    if (s == "tools")
+                        caps.tools = true;
+                }
+                return caps;
             }
         }
         catch (...)
         {
         }
-        return true;
+        return {true, true}; // no capabilities field — assume both
+    }
+
+    bool Agent::SupportsTools(Provider provider, const std::string &model,
+                              const std::string &base_url)
+    {
+        return QueryCapabilities(provider, model, base_url).tools;
+    }
+
+    std::vector<Agent::ModelInfo> Agent::FetchOllamaEmbeddingModels(const std::string &base_url)
+    {
+        using json = nlohmann::json;
+        std::string ollamaHost = base_url.empty() ? "http://localhost:11434" : base_url;
+        const std::string httpPrefix = "http://";
+        if (ollamaHost.rfind(httpPrefix, 0) == 0)
+            ollamaHost = ollamaHost.substr(httpPrefix.size());
+
+        std::vector<ModelInfo> models;
+        std::set<std::string> localNames;
+
+        // Fetch locally installed embedding models
+        httplib::Client cli(ollamaHost);
+        cli.set_read_timeout(5);
+
+        auto tagsRes = cli.Get("/api/tags");
+        if (tagsRes && tagsRes->status == 200)
+        {
+            try
+            {
+                auto j = json::parse(tagsRes->body);
+                if (j.contains("models") && j["models"].is_array())
+                {
+                    for (const auto &m : j["models"])
+                    {
+                        std::string name = m.value("name", "");
+                        if (name.size() > 7 && name.substr(name.size() - 7) == ":latest")
+                            name = name.substr(0, name.size() - 7);
+                        if (name.empty())
+                            continue;
+
+                        std::string showBody = "{\"name\":\"" + name + "\"}";
+                        auto showRes = cli.Post("/api/show", showBody, "application/json");
+                        if (!showRes || showRes->status != 200)
+                            continue;
+
+                        auto sj = json::parse(showRes->body);
+                        if (sj.contains("capabilities") && sj["capabilities"].is_array())
+                        {
+                            for (const auto &cap : sj["capabilities"])
+                            {
+                                if (cap.get<std::string>() == "embedding")
+                                {
+                                    models.push_back({name, true});
+                                    localNames.insert(name);
+                                    break;
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            catch (...)
+            {
+            }
+        }
+
+        // Fetch remote embedding models from ollama.com
+#ifdef CPPHTTPLIB_OPENSSL_SUPPORT
+        httplib::SSLClient remoteCli("ollama.com");
+        remoteCli.set_read_timeout(5);
+        auto remoteRes = remoteCli.Get("/search?c=embedding");
+        if (remoteRes && remoteRes->status == 200)
+        {
+            const std::string &html = remoteRes->body;
+            const std::string prefix = "href=\"/library/";
+            size_t pos = 0;
+            while ((pos = html.find(prefix, pos)) != std::string::npos)
+            {
+                pos += prefix.size();
+                auto end = html.find('"', pos);
+                if (end == std::string::npos)
+                    break;
+                std::string name = html.substr(pos, end - pos);
+                if (!name.empty() && localNames.find(name) == localNames.end())
+                {
+                    localNames.insert(name);
+                    models.push_back({name, false});
+                }
+            }
+        }
+#endif
+
+        std::sort(models.begin(), models.end(), [](const ModelInfo &a, const ModelInfo &b)
+                  {
+            if (a.local != b.local) return a.local; // local first
+            return a.name < b.name; });
+        return models;
     }
 
     void Agent::UnloadModel(Provider provider, const std::string &model,

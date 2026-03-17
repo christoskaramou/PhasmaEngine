@@ -31,6 +31,7 @@ namespace pagent
 
         std::string GetEndpointPath() const override;
         std::pair<std::string, std::string> GetAuthHeader(const std::string &api_key) const override;
+        bool SupportsVision() const override { return true; }
 
     private:
         // per stream state (reset at start of each request)

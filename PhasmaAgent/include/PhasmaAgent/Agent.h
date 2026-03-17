@@ -14,6 +14,7 @@
 
 namespace pagent
 {
+    class VectorStore;
 
     // ---------------------------------------------------------------------------
     // Enums
@@ -99,6 +100,19 @@ namespace pagent
     // Conversation history (neutral format — no provider-specific types)
     // ---------------------------------------------------------------------------
 
+    // Multimodal content part — text or base64-encoded image
+    struct ContentPart
+    {
+        enum class Type
+        {
+            Text,
+            ImageBase64
+        };
+        Type type = Type::Text;
+        std::string data;      // text content or base64-encoded image bytes
+        std::string mime_type; // e.g. "image/png", "image/jpeg" (for ImageBase64)
+    };
+
     struct NeutralMessage
     {
         enum class Role
@@ -111,8 +125,9 @@ namespace pagent
 
         Role role = Role::User;
         std::string content;
-        std::string reasoning; // Reasoning/thinking process (e.g. for Gemini 3.1, DeepSeek-R1)
-        std::string thought_signature; // Specific to Gemini 3.1, required to be echoed back
+        std::vector<ContentPart> parts; // Multimodal parts. When non-empty, backends use this instead of content.
+        std::string reasoning;          // Reasoning/thinking process (e.g. for Gemini 3.1, DeepSeek-R1)
+        std::string thought_signature;  // Specific to Gemini 3.1, required to be echoed back
 
         struct ToolCall
         {
@@ -179,6 +194,9 @@ namespace pagent
         // Returns {header-name, header-value} for authentication.
         virtual std::pair<std::string, std::string> GetAuthHeader(
             const std::string &api_key) const = 0;
+
+        // Whether this backend supports image content parts natively.
+        virtual bool SupportsVision() const { return false; }
     };
 
     // ---------------------------------------------------------------------------
@@ -218,6 +236,22 @@ namespace pagent
     };
 
     // ---------------------------------------------------------------------------
+    // IEmbeddingProvider — implement to add an embedding model
+    // ---------------------------------------------------------------------------
+
+    class IEmbeddingProvider
+    {
+    public:
+        virtual ~IEmbeddingProvider() = default;
+
+        // Embed a text string. Returns a float vector of size Dimensions().
+        virtual std::vector<float> Embed(const std::string &text) = 0;
+
+        // Number of dimensions in the output embedding.
+        virtual int Dimensions() const = 0;
+    };
+
+    // ---------------------------------------------------------------------------
     // AgentConfig
     // ---------------------------------------------------------------------------
 
@@ -235,6 +269,9 @@ namespace pagent
         int max_tool_result_chars = 4000; // Truncate tool results beyond this (0 = unlimited)
         int summarize_after_messages = 0; // Summarize old messages when history exceeds this (0 = disabled)
 
+        // Gemini API key for vision fallback (image description when main provider lacks vision)
+        std::string gemini_api_key_for_vision;
+
         // Optional: provide your own HTTP transport.
         // When set, httplib and OpenSSL are completely bypassed.
         // Signature: (method, url, headers, body) -> (http_status_code, response_body)
@@ -248,6 +285,14 @@ namespace pagent
 
         // Optional: inject a fully custom backend (overrides provider enum).
         std::shared_ptr<IProviderBackend> custom_backend;
+
+        // Optional: embedding provider for RAG.
+        std::shared_ptr<IEmbeddingProvider> embedding_provider;
+
+        // RAG settings
+        int rag_top_k = 3;
+        float rag_min_score = 0.3f;
+        int rag_max_context_chars = 2000;
 
         // Optional: log callback for internal debug/warning messages.
         std::function<void(const std::string &)> log_callback;
@@ -277,6 +322,7 @@ namespace pagent
         // --- Messaging ---
         // Non-blocking. Returns false if a request is already in-flight.
         bool Send(const std::string &user_message);
+        bool Send(const std::string &user_message, const std::vector<ContentPart> &attachments);
 
         // Call each frame on the main thread.
         // Drains the event queue and fires the stored event callback for each event.
@@ -298,6 +344,7 @@ namespace pagent
         void InjectSystemMessage(const std::string &content); // Inject without sending a request
         void SetModel(const std::string &model);
         Provider GetProvider() const;
+        void SetVectorStore(VectorStore *store);
 
         // Fetch available model names from the provider. Blocking HTTP call.
         // For Anthropic returns a hardcoded list (no listing endpoint).
@@ -308,11 +355,17 @@ namespace pagent
         struct ModelInfo
         {
             std::string name;
-            bool local = true; // false for Ollama cloud/remote models that need pulling
+            bool local = true;          // false for Ollama cloud/remote models that need pulling
+            bool supportsVision = true; // model accepts image input
+            bool supportsTools = true;  // model supports function/tool calling
         };
         static std::vector<ModelInfo> FetchModelInfos(Provider provider,
                                                       const std::string &api_key,
                                                       const std::string &base_url = "");
+
+        // Fetch Ollama embedding models (local + remote from ollama.com).
+        // Local models have .local=true, remote ones need pulling.
+        static std::vector<ModelInfo> FetchOllamaEmbeddingModels(const std::string &base_url = "");
 
         // Pull/download an Ollama model in the background.
         // progressCb fires with status strings, completeCb fires with success/failure.
@@ -325,8 +378,17 @@ namespace pagent
                                      CompleteCallback completeCb);
         static void CancelPull(const CancelToken &token);
 
-        // Check if a local Ollama model supports tool calling.
-        // Blocking HTTP call to /api/show. Returns true for non-Ollama providers.
+        // Query model capabilities (vision, tools) via Ollama /api/show.
+        // For non-Ollama providers, returns {true, true}.
+        struct ModelCaps
+        {
+            bool vision = true;
+            bool tools = true;
+        };
+        static ModelCaps QueryCapabilities(Provider provider, const std::string &model,
+                                           const std::string &base_url = "");
+
+        // Convenience: check if a model supports tool calling.
         static bool SupportsTools(Provider provider, const std::string &model,
                                   const std::string &base_url = "");
 

@@ -11,6 +11,18 @@ namespace pagent
         {
         case NeutralMessage::Role::User:
         {
+            if (!msg.parts.empty())
+            {
+                json content = json::array();
+                for (const auto &part : msg.parts)
+                {
+                    if (part.type == ContentPart::Type::Text)
+                        content.push_back({{"type", "text"}, {"text", part.data}});
+                    else if (part.type == ContentPart::Type::ImageBase64)
+                        content.push_back({{"type", "image"}, {"source", {{"type", "base64"}, {"media_type", part.mime_type}, {"data", part.data}}}});
+                }
+                return {{"role", "user"}, {"content", content}};
+            }
             return {{"role", "user"}, {"content", msg.content}};
         }
         case NeutralMessage::Role::Assistant:

@@ -7,9 +7,23 @@
 #include <mutex>
 #include <functional>
 #include <optional>
+#include <memory>
+
+namespace pagent
+{
+    class VectorStore;
+}
 
 namespace pe
 {
+    // An image attached to a chat message (for display in the UI)
+    struct ChatImage
+    {
+        void *imguiDescriptor = nullptr; // ImTextureID for ImGui::Image
+        int width = 0;
+        int height = 0;
+    };
+
     struct ChatMessage
     {
         enum class Role
@@ -20,7 +34,8 @@ namespace pe
         };
         Role role;
         std::string text;
-        std::string thinking; // reasoning/thinking content (if any)
+        std::string thinking;          // reasoning/thinking content (if any)
+        std::vector<ChatImage> images; // attached images (for display)
     };
 
     class AgentWidget : public Widget
@@ -54,6 +69,14 @@ namespace pe
         pagent::Agent::CancelToken m_pullCancel;
         char m_modelFilter[128] = {};
 
+        // Cached model lists per provider index
+        struct CachedModels
+        {
+            std::vector<std::string> names;
+            std::vector<bool> local;
+        };
+        std::unordered_map<int, CachedModels> m_modelCache;
+
         // Provider management (from PhasmaAgent)
         std::vector<pagent::ProviderInfo> m_providers;
         int m_selectedProviderIndex = 0;
@@ -64,10 +87,50 @@ namespace pe
         std::string m_streamingThinking;
         std::mutex m_actionMutex;
         std::vector<std::function<void()>> m_pendingActions;
+        std::shared_ptr<std::atomic<bool>> m_alive = std::make_shared<std::atomic<bool>>(true);
+        std::atomic<bool> m_isFetchingModels{false};
 
         // Input history (up/down arrow)
         std::vector<std::string> m_inputHistory;
         int m_historyIndex = -1;
+
+        // Image paste support
+        struct PendingImage
+        {
+            std::string base64;              // base64-encoded PNG
+            std::string mime_type;           // "image/png"
+            void *imguiDescriptor = nullptr; // ImTextureID for preview
+            int width = 0;
+            int height = 0;
+        };
+        std::vector<PendingImage> m_pendingImages;
+
+        // File paste support
+        struct PendingFile
+        {
+            std::string name;    // filename
+            std::string content; // file text content
+        };
+        std::vector<PendingFile> m_pendingFiles;
+
+        void HandlePaste();
+        void RenderPendingAttachments();
+
+        // RAG / Embedding
+        std::shared_ptr<pagent::VectorStore> m_vectorStore;
+        int m_turnsSinceSave = 0;
+        bool m_embeddingEnabled = false;
+        int m_selectedEmbeddingProvider = 0; // 0=Google, 1=OpenAI, 2=Ollama
+        int m_selectedEmbeddingModel = 0;
+        std::vector<std::string> m_embeddingModels;
+        std::vector<bool> m_embeddingModelIsLocal;
+        std::shared_ptr<pagent::IEmbeddingProvider> CreateEmbeddingProvider();
+        void UpdateEmbeddingModels();
+        void SaveEmbeddingConfig();
+        void LoadEmbeddingConfig();
+        std::string GetVectorStorePath() const;
+        bool m_isPullingEmbedding = false;
+        pagent::Agent::CancelToken m_pullEmbeddingCancel;
 
         // External AI file-based provider (Claude Code, Cursor, etc.)
         bool m_isExternalAI = false;

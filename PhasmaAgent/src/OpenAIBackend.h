@@ -21,6 +21,7 @@ namespace pagent
                                         const std::string &result_json) const override;
         std::string GetEndpointPath() const override;
         std::pair<std::string, std::string> GetAuthHeader(const std::string &api_key) const override;
+        bool SupportsVision() const override { return true; }
 
     private:
         struct ToolCallAccumulator

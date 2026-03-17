@@ -13,7 +13,21 @@ namespace pagent
             return {{"role", "system"}, {"content", msg.content}};
 
         case NeutralMessage::Role::User:
+        {
+            if (!msg.parts.empty())
+            {
+                json content = json::array();
+                for (const auto &part : msg.parts)
+                {
+                    if (part.type == ContentPart::Type::Text)
+                        content.push_back({{"type", "text"}, {"text", part.data}});
+                    else if (part.type == ContentPart::Type::ImageBase64)
+                        content.push_back({{"type", "image_url"}, {"image_url", {{"url", "data:" + part.mime_type + ";base64," + part.data}}}});
+                }
+                return {{"role", "user"}, {"content", content}};
+            }
             return {{"role", "user"}, {"content", msg.content}};
+        }
 
         case NeutralMessage::Role::Assistant:
         {
@@ -281,7 +295,8 @@ namespace pagent
                     if (f.contains("name"))
                     {
                         const std::string name = f["name"].get<std::string>();
-                        if (!name.empty()) acc.name = name;
+                        if (!name.empty())
+                            acc.name = name;
                     }
                     if (f.contains("arguments"))
                         acc.arguments += f["arguments"].get<std::string>();

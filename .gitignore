@@ -295,3 +295,7 @@ Phasma/log.txt
 Phasma/Assets/ShaderCache/
 imgui.ini
 .cache/
+
+# Agent runtime files (keep START.md only)
+PhasmaEditor/Assets/Agent/*
+!PhasmaEditor/Assets/Agent/START.md
