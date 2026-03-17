@@ -217,6 +217,75 @@ namespace pagent
 
         const int maxRounds = m_config.max_tool_rounds > 0 ? m_config.max_tool_rounds : 10;
 
+        // RAG: compute context once per user message, reuse across all tool rounds
+        std::string ragContext;
+        if (m_vectorStore && m_config.embedding_provider)
+        {
+            std::string queryText;
+            auto messages = m_history.GetMessages(m_config.max_history_messages);
+            for (auto it = messages.rbegin(); it != messages.rend(); ++it)
+            {
+                if (it->role == NeutralMessage::Role::User)
+                {
+                    queryText = it->content;
+                    break;
+                }
+            }
+            if (!queryText.empty())
+            {
+                auto queryVec = m_config.embedding_provider->Embed(queryText);
+                if (queryVec.empty())
+                    Log("RAG: embedding query failed (empty result)");
+                if (!queryVec.empty())
+                {
+                    auto results = m_vectorStore->Search(queryVec, m_config.rag_top_k, m_config.rag_min_score);
+
+                    // Also search codebase store if available
+                    if (m_codebaseStore && m_codebaseStore->Size() > 0)
+                    {
+                        auto codeResults = m_codebaseStore->Search(queryVec, m_config.rag_top_k, m_config.rag_min_score);
+                        results.insert(results.end(), codeResults.begin(), codeResults.end());
+                        std::sort(results.begin(), results.end(),
+                                  [](const auto &a, const auto &b)
+                                  { return a.score > b.score; });
+                        if (static_cast<int>(results.size()) > m_config.rag_top_k)
+                            results.resize(m_config.rag_top_k);
+                    }
+
+                    if (!results.empty())
+                    {
+                        ragContext = "\n\n[Relevant context:\n";
+                        int totalChars = 0;
+                        for (const auto &r : results)
+                        {
+                            std::string entry = "- " + r.entry->content + "\n";
+                            if (totalChars + static_cast<int>(entry.size()) > m_config.rag_max_context_chars)
+                                break;
+                            ragContext += entry;
+                            totalChars += static_cast<int>(entry.size());
+                        }
+                        ragContext += "]";
+                        Log("RAG: injected " + std::to_string(results.size()) + " context entries (chat + codebase)");
+
+                        AgentEvent ragEv;
+                        ragEv.type = AgentEventType::Info;
+                        ragEv.text = "RAG: " + std::to_string(results.size()) + " context entries injected";
+                        PushEvent(std::move(ragEv));
+                    }
+
+                    // Index the user message for future retrieval
+                    VectorEntry userEntry;
+                    userEntry.id = "user_" + std::to_string(std::chrono::steady_clock::now().time_since_epoch().count());
+                    userEntry.content = m_config.rag_max_entry_chars > 0
+                                            ? queryText.substr(0, m_config.rag_max_entry_chars)
+                                            : queryText;
+                    userEntry.metadata = "{\"type\":\"user\"}";
+                    userEntry.embedding = std::move(queryVec);
+                    m_vectorStore->Add(std::move(userEntry));
+                }
+            }
+        }
+
         for (int round = 0; round < maxRounds; ++round)
         {
             if (m_cancel.load(std::memory_order_relaxed))
@@ -270,76 +339,8 @@ namespace pagent
 
             const auto toolsSchemaJson = m_toolRegistry.GenerateSchemaJson(*m_backend);
 
-            // RAG: inject relevant context from vector store on the first round
-            std::string systemPrompt = m_config.system_prompt;
-            if (round == 0 && m_vectorStore && m_config.embedding_provider)
-            {
-                // Extract the latest user message text for the query
-                std::string queryText;
-                for (auto it = messages.rbegin(); it != messages.rend(); ++it)
-                {
-                    if (it->role == NeutralMessage::Role::User)
-                    {
-                        queryText = it->content;
-                        break;
-                    }
-                }
-                if (!queryText.empty())
-                {
-                    auto queryVec = m_config.embedding_provider->Embed(queryText);
-                    if (queryVec.empty())
-                        Log("RAG: embedding query failed (empty result)");
-                    if (!queryVec.empty())
-                    {
-                        auto results = m_vectorStore->Search(queryVec, m_config.rag_top_k, m_config.rag_min_score);
-
-                        // Also search codebase store if available
-                        if (m_codebaseStore && m_codebaseStore->Size() > 0)
-                        {
-                            auto codeResults = m_codebaseStore->Search(queryVec, m_config.rag_top_k, m_config.rag_min_score);
-                            results.insert(results.end(), codeResults.begin(), codeResults.end());
-                            // Sort by score descending and keep top_k
-                            std::sort(results.begin(), results.end(),
-                                      [](const auto &a, const auto &b)
-                                      { return a.score > b.score; });
-                            if (static_cast<int>(results.size()) > m_config.rag_top_k)
-                                results.resize(m_config.rag_top_k);
-                        }
-
-                        if (!results.empty())
-                        {
-                            std::string context = "\n\n[Relevant context:\n";
-                            int totalChars = 0;
-                            for (const auto &r : results)
-                            {
-                                std::string entry = "- " + r.entry->content + "\n";
-                                if (totalChars + static_cast<int>(entry.size()) > m_config.rag_max_context_chars)
-                                    break;
-                                context += entry;
-                                totalChars += static_cast<int>(entry.size());
-                            }
-                            context += "]";
-                            systemPrompt += context;
-                            Log("RAG: injected " + std::to_string(results.size()) + " context entries (chat + codebase)");
-
-                            AgentEvent ragEv;
-                            ragEv.type = AgentEventType::Info;
-                            ragEv.text = "RAG: " + std::to_string(results.size()) + " context entries injected";
-                            PushEvent(std::move(ragEv));
-                        }
-
-                        // Index the user message for future retrieval
-                        VectorEntry userEntry;
-                        userEntry.id = "user_" + std::to_string(std::chrono::steady_clock::now().time_since_epoch().count());
-                        userEntry.content = m_config.rag_max_entry_chars > 0
-                                                ? queryText.substr(0, m_config.rag_max_entry_chars)
-                                                : queryText;
-                        userEntry.metadata = "{\"type\":\"user\"}";
-                        userEntry.embedding = std::move(queryVec);
-                        m_vectorStore->Add(std::move(userEntry));
-                    }
-                }
-            }
+            // Append precomputed RAG context to system prompt for every round
+            std::string systemPrompt = m_config.system_prompt + ragContext;
 
             if (m_config.log_callback)
                 m_config.log_callback("[PAgent] Round " + std::to_string(round) + ": " + std::to_string(m_toolRegistry.GetToolCount()) + " tools, " + std::to_string(messages.size()) + " msgs, model='" + m_config.model + "', provider=" + std::to_string(static_cast<int>(m_config.provider)));

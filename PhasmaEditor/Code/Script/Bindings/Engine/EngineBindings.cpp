@@ -64,6 +64,11 @@ namespace pe
 
                 engine.set_function("want_capture_keyboard", []() -> bool {
                     return ImGui::GetIO().WantCaptureKeyboard;
+                });
+
+                engine.set_function("take_screenshot", [](sol::optional<std::string> filename) {
+                    std::string path = filename.value_or("");
+                    EventSystem::PushEvent(EventType::Screenshot, path);
                 }); });
         }
     } s_engineBindings;

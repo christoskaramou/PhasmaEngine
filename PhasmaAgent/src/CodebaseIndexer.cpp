@@ -155,7 +155,19 @@ namespace pagent
             }
         }
 
+        // Add explicitly included files (bypass all skip rules)
+        for (const auto &f : config.include_files)
+        {
+            std::error_code ec;
+            if (fs::is_regular_file(f, ec))
+            {
+                auto u8 = fs::path(f).u8string();
+                files.emplace_back(u8.begin(), u8.end());
+            }
+        }
+
         std::sort(files.begin(), files.end());
+        files.erase(std::unique(files.begin(), files.end()), files.end());
         return files;
     }
 

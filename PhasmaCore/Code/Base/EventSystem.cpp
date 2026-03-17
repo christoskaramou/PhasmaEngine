@@ -22,6 +22,7 @@ namespace pe
         s_events.try_emplace(EventType::ModelLoaded);
         s_events.try_emplace(EventType::ModelRemoved);
         s_events.try_emplace(EventType::ModelsRemoved);
+        s_events.try_emplace(EventType::Screenshot);
     }
 
     void EventSystem::Destroy() noexcept
@@ -148,6 +149,21 @@ namespace pe
             {
                 out = *it;          // copy out (payload copied)
                 s_queues.erase(it); // targeted consume
+                return true;
+            }
+        }
+        return false;
+    }
+
+    bool EventSystem::PeekAndPop(EventType type, QueuedEvent &out)
+    {
+        std::scoped_lock lock(s_mutex);
+        for (auto it = s_queues.begin(); it != s_queues.end(); ++it)
+        {
+            if (it->key == EventKey{type})
+            {
+                out = *it;
+                s_queues.erase(it);
                 return true;
             }
         }

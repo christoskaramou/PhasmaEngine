@@ -1029,6 +1029,45 @@ namespace pe
         cmd->EndDebugRegion();
     }
 
+    void Image::CopyToBuffer(CommandBuffer *cmd, Buffer *dst)
+    {
+        cmd->BeginDebugRegion("CopyImageToBuffer");
+
+        ImageBarrierInfo barrier{};
+        barrier.image = this;
+        barrier.stageFlags = vk::PipelineStageFlagBits2::eTransfer;
+        barrier.accessMask = vk::AccessFlagBits2::eTransferRead;
+        barrier.layout = vk::ImageLayout::eTransferSrcOptimal;
+        Image::Barrier(cmd, barrier);
+
+        BufferBarrierInfo bufBarrier{};
+        bufBarrier.buffer = dst;
+        bufBarrier.stageMask = vk::PipelineStageFlagBits2::eTransfer;
+        bufBarrier.accessMask = vk::AccessFlagBits2::eTransferWrite;
+        cmd->BufferBarrier(bufBarrier);
+
+        vk::BufferImageCopy2 region{};
+        region.bufferOffset = 0;
+        region.bufferRowLength = 0;
+        region.bufferImageHeight = 0;
+        region.imageSubresource.aspectMask = VulkanHelpers::GetAspectMask(m_createInfo.format);
+        region.imageSubresource.mipLevel = 0;
+        region.imageSubresource.baseArrayLayer = 0;
+        region.imageSubresource.layerCount = 1;
+        region.imageOffset = vk::Offset3D{0, 0, 0};
+        region.imageExtent = m_createInfo.extent;
+
+        vk::CopyImageToBufferInfo2 copyInfo{};
+        copyInfo.srcImage = m_apiHandle;
+        copyInfo.srcImageLayout = vk::ImageLayout::eTransferSrcOptimal;
+        copyInfo.dstBuffer = dst->ApiHandle();
+        copyInfo.regionCount = 1;
+        copyInfo.pRegions = &region;
+
+        cmd->ApiHandle().copyImageToBuffer2(copyInfo);
+        cmd->EndDebugRegion();
+    }
+
     void Image::GenerateMipMaps(CommandBuffer *cmd)
     {
         if (m_mipmapsGenerated || m_createInfo.mipLevels < 2)

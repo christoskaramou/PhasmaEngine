@@ -125,6 +125,7 @@ namespace pe
                                    uint32_t layerCount = 0,
                                    uint32_t mipLevel = 0);
         void CopyImage(Image *src, Image *dst);
+        void CopyImageToBuffer(Image *src, Buffer *dst);
         void GenerateMipMaps(Image *image);
         void SetEvent(Image *image,
                       vk::ImageLayout srcLayout, vk::ImageLayout dstLayout,

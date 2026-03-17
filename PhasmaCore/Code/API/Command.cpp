@@ -838,6 +838,11 @@ namespace pe
         dst->CopyImage(this, src);
     }
 
+    void CommandBuffer::CopyImageToBuffer(Image *src, Buffer *dst)
+    {
+        src->CopyToBuffer(this, dst);
+    }
+
     void CommandBuffer::GenerateMipMaps(Image *image)
     {
         image->GenerateMipMaps(this);

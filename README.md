@@ -1,6 +1,6 @@
 # PhasmaEngine
 
-PhasmaEngine is a Vulkan 3D engine for learning graphics techniques. Runs on Windows and Linux.
+PhasmaEngine is a Vulkan 3D engine for learning graphics techniques. Runs on Windows and Linux
 
 ![Screenshot](PhasmaEditor/Images/ABeautifulGame.png)
 
@@ -41,13 +41,15 @@ PhasmaEngine is a Vulkan 3D engine for learning graphics techniques. Runs on Win
 * ImGui-based editor
 * CPU/GPU metrics
 * Debug console
-* C++ scripting
+* Lua scripting
 * Event system
 
 ### AI Agent (PhasmaAgent)
 * Standalone, provider-agnostic AI agent library (C++20, no engine dependencies)
-* Supports Anthropic, OpenAI, Gemini, and Ollama (local)
-* 35+ tools for scene manipulation, camera control, lighting, materials, shaders, and rendering
+* Supports Anthropic, OpenAI, Gemini, Ollama, and LM Studio (local)
+* Lua scripting API for scene, camera, lights, materials, shaders, particles, and more
+* Codebase RAG indexing with semantic vector search (local or Google/OpenAI embeddings)
+* Screenshot capture — agent can take and view engine screenshots
 * Persistent agent workspace (`Assets/Agent/`) with automatic startup instructions
 * Streaming responses with thinking/reasoning display
 * Agentic tool-use loop with configurable round limits

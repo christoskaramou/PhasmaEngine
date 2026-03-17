@@ -57,6 +57,7 @@ namespace pe
         std::string GetVectorStoreFilePath() const;
         std::string GetCodebaseStorePath() const;
         const std::vector<std::string> &GetIndexDirectories() const { return m_indexDirectories; }
+        const std::vector<std::string> &GetIncludeFiles() const { return m_includeFiles; }
         const std::vector<std::string> &GetSkipDirectories() const { return m_skipDirectories; }
         const std::vector<std::string> &GetSkipFiles() const { return m_skipFiles; }
         const std::vector<std::string> &GetSkipExtensions() const { return m_skipExtensions; }
@@ -131,7 +132,10 @@ namespace pe
         std::vector<PendingFile> m_pendingFiles;
 
         void HandlePaste();
+        int m_lastPasteFrame = -2;
         void RenderPendingAttachments();
+        void *UploadChatImage(const uint8_t *rgba, int width, int height);
+        void HandleScreenshotEvent();
 
         // RAG / Embedding
         std::shared_ptr<pagent::IEmbeddingProvider> m_embeddingProvider;
@@ -151,6 +155,7 @@ namespace pe
         bool m_isFetchingEmbeddingModels = false;
         bool m_isPullingEmbedding = false;
         std::vector<std::string> m_indexDirectories;
+        std::vector<std::string> m_includeFiles;
         std::vector<std::string> m_skipDirectories;
         std::vector<std::string> m_skipFiles;
         std::vector<std::string> m_skipExtensions;
@@ -177,5 +182,15 @@ namespace pe
         std::string GetExternalResponsePath() const;
 
         pe::ScriptSystem m_agentScriptSystem;
+
+        // Tracked GPU images for chat thumbnails (cleaned up on destroy)
+        std::vector<Image *> m_chatGpuImages;
+        std::vector<void *> m_chatImguiDescriptors;
+
+        // Full-size image popup
+        void *m_popupImageDescriptor = nullptr;
+        void *m_prevPopupImageDescriptor = nullptr;
+        int m_popupImageWidth = 0;
+        int m_popupImageHeight = 0;
     };
 } // namespace pe

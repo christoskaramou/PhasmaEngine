@@ -12,6 +12,8 @@
 #include "Script/ScriptSystem.h"
 #include "PhasmaAgent/AgentUtils.h"
 #include "imgui/imgui.h"
+#include "imgui/imgui_impl_vulkan.h"
+#include "API/Image.h"
 
 #include "PhasmaAgent/GoogleEmbedding.h"
 #include "PhasmaAgent/OpenAIEmbedding.h"
@@ -48,6 +50,11 @@ namespace pe
         if (m_agent)
             m_agent->CancelPending();
         m_agentScriptSystem.Destroy();
+
+        for (auto *ds : m_chatImguiDescriptors)
+            ImGui_ImplVulkan_RemoveTexture((VkDescriptorSet)ds);
+        for (auto *img : m_chatGpuImages)
+            Image::Destroy(img);
     }
 
     void AgentWidget::Init(GUI *gui)
@@ -179,6 +186,7 @@ namespace pe
             "To load 3D models: 1) call find_loadable_model tool, 2) execute_lua with: local m, err = load_model('path/from/step1') "
             "The Lua function is load_model (NOT pe_load_model). Do NOT use fs.find/fs.list for models. "
             "Set unique labels on created models. Use request_feature for missing capabilities. "
+            "Screenshots: engine.take_screenshot() or engine.take_screenshot('path.png'). "
             "Workspace: " +
             Path::Assets + "Agent/ | Assets: " + Path::Assets + ".";
 
@@ -374,6 +382,7 @@ namespace pe
             {"model", embModelName},
             {"indexing", nlohmann::ordered_json{
                              {"directories", m_indexDirectories},
+                             {"include_files", m_includeFiles},
                              {"skip_directories", m_skipDirectories},
                              {"skip_files", m_skipFiles},
                              {"skip_extensions", m_skipExtensions},
@@ -441,6 +450,8 @@ namespace pe
                 auto &idx = j["embeddings"]["indexing"];
                 if (idx.contains("directories"))
                     m_indexDirectories = idx["directories"].get<std::vector<std::string>>();
+                if (idx.contains("include_files"))
+                    m_includeFiles = idx["include_files"].get<std::vector<std::string>>();
                 if (idx.contains("skip_directories"))
                     m_skipDirectories = idx["skip_directories"].get<std::vector<std::string>>();
                 if (idx.contains("skip_files"))
@@ -501,15 +512,17 @@ namespace pe
         auto store = m_codebaseStore;
         auto embedding = m_embeddingProvider;
         auto dirs = m_indexDirectories;
+        auto includeFiles = m_includeFiles;
         auto skipDirs = m_skipDirectories;
         auto skipFiles = m_skipFiles;
         auto skipExts = m_skipExtensions;
         auto skipRegex = m_skipRegex;
 
-        std::thread([this, store, embedding, dirs, skipDirs, skipFiles, skipExts, skipRegex]()
+        std::thread([this, store, embedding, dirs, includeFiles, skipDirs, skipFiles, skipExts, skipRegex]()
                     {
             pagent::IndexerConfig config;
             config.directories = dirs;
+            config.include_files = includeFiles;
             config.skip_directories = skipDirs;
             config.skip_files = skipFiles;
             if (!skipExts.empty())
@@ -585,9 +598,12 @@ namespace pe
         m_agent->RegisterTool({.name = "read_project_file",
                                .description = "Reads a source file from the project (C++ headers, source, shaders, configs). "
                                               "Use this to understand engine APIs before writing Lua code. "
-                                              "Path relative to project root or absolute.",
+                                              "Path relative to project root or absolute. "
+                                              "For large files, use offset and max_bytes to read in chunks.",
                                .properties = {
                                    {"path", "File path relative to project root (e.g. 'PhasmaCore/Code/Base/Path.h') or absolute", pagent::SchemaType::String, true},
+                                   {"offset", "Byte offset to start reading from (default 0)", pagent::SchemaType::Integer, false},
+                                   {"max_bytes", "Maximum bytes to read (default 200000). Use with offset to read large files in chunks.", pagent::SchemaType::Integer, false},
                                },
                                .handler = [projectRoot](const std::string &args) -> std::string
                                {
@@ -609,17 +625,41 @@ namespace pe
                                        return "{\"error\":\"path is a directory, use find_project_file or list_project_dir\"}";
 
                                    auto size = std::filesystem::file_size(fpath);
-                                   if (size > 100000)
-                                       return JsonObj({{"error", JsonStr("file too large: " + std::to_string(size) + " bytes")}});
+                                   int64_t offset = ExtractArgInt(args, "offset", 0);
+                                   int64_t maxBytes = ExtractArgInt(args, "max_bytes", 200000);
+                                   if (maxBytes <= 0)
+                                       maxBytes = 200000;
+                                   if (offset < 0)
+                                       offset = 0;
+
+                                   if (offset >= static_cast<int64_t>(size))
+                                       return JsonObj({{"error", JsonStr("offset beyond file size (" + std::to_string(size) + " bytes)")}});
 
                                    std::ifstream file(fpath, std::ios::in);
                                    if (!file.is_open())
                                        return JsonObj({{"error", JsonStr("cannot open: " + fpath.string())}});
 
-                                   std::string content((std::istreambuf_iterator<char>(file)),
-                                                       std::istreambuf_iterator<char>());
+                                   if (offset > 0)
+                                       file.seekg(offset);
 
-                                   return JsonObj({{"path", JsonStr(fpath.string())}, {"content", JsonStr(content)}});
+                                   int64_t bytesToRead = std::min(maxBytes, static_cast<int64_t>(size) - offset);
+                                   std::string content(static_cast<size_t>(bytesToRead), '\0');
+                                   file.read(content.data(), bytesToRead);
+                                   content.resize(static_cast<size_t>(file.gcount()));
+
+                                   bool truncated = (offset + bytesToRead) < static_cast<int64_t>(size);
+
+                                   std::vector<std::pair<std::string, std::string>> fields = {
+                                       {"path", JsonStr(fpath.string())},
+                                       {"content", JsonStr(content)},
+                                       {"size", std::to_string(size)},
+                                   };
+                                   if (offset > 0)
+                                       fields.push_back({"offset", std::to_string(offset)});
+                                   if (truncated)
+                                       fields.push_back({"truncated", "true"});
+
+                                   return JsonObj(fields);
                                }});
 
         m_agent->RegisterTool({.name = "write_project_file",
@@ -1162,6 +1202,26 @@ namespace pe
     void AgentWidget::Update()
     {
         FlushActions(); // deferred engine writes before drawing
+        HandleScreenshotEvent();
+
+        // Deferred GPU upload of pending image thumbnails (must happen outside render pass)
+        for (auto &img : m_pendingImages)
+        {
+            if (!img.imguiDescriptor && !img.base64.empty() && img.width > 0 && img.height > 0)
+            {
+                auto pngBytes = pagent::Base64Decode(img.base64);
+                int tw = 0, th = 0, tc = 0;
+                uint8_t *pixels = stbi_load_from_memory(pngBytes.data(), static_cast<int>(pngBytes.size()), &tw, &th, &tc, 4);
+                if (pixels)
+                {
+                    img.imguiDescriptor = UploadChatImage(pixels, tw, th);
+                    img.width = tw;
+                    img.height = th;
+                    stbi_image_free(pixels);
+                }
+            }
+        }
+
         if (m_agent && m_open)
             m_agent->Poll();
 
@@ -1763,19 +1823,13 @@ namespace pe
         ImGui::Separator();
 
         // Ctrl+V image paste (only when not busy and not in external mode)
-#if defined(PE_WIN32)
         if (!busy && !m_isExternalAI && ImGui::IsWindowFocused(ImGuiFocusedFlags_RootAndChildWindows) &&
-            ImGui::GetIO().KeyCtrl && ImGui::IsKeyPressed(ImGuiKey_V))
+            ImGui::GetIO().KeyCtrl && ImGui::IsKeyPressed(ImGuiKey_V, false) &&
+            ImGui::GetFrameCount() > m_lastPasteFrame + 1)
         {
-            // Check if clipboard has an image before consuming the paste
-            UINT cfPng = RegisterClipboardFormatA("PNG");
-            bool hasPng = cfPng && IsClipboardFormatAvailable(cfPng);
-            bool hasDib = IsClipboardFormatAvailable(CF_DIBV5) || IsClipboardFormatAvailable(CF_DIB);
-            bool hasFiles = IsClipboardFormatAvailable(CF_HDROP) != 0;
-            if (hasPng || hasDib || hasFiles)
-                HandlePaste();
+            m_lastPasteFrame = ImGui::GetFrameCount();
+            HandlePaste();
         }
-#endif
 
         RenderPendingAttachments();
 
@@ -1856,6 +1910,34 @@ namespace pe
             SubmitInput();
 
         ImGui::End();
+
+        // Full-size image preview window
+        if (m_popupImageDescriptor)
+        {
+            float winW = std::clamp(static_cast<float>(m_popupImageWidth) + 16.0f, 100.0f, 1000.0f);
+            float winH = std::clamp(static_cast<float>(m_popupImageHeight) + 40.0f, 100.0f, 1000.0f);
+            ImGuiCond sizeFlag = (m_popupImageDescriptor != m_prevPopupImageDescriptor) ? ImGuiCond_Always : ImGuiCond_Appearing;
+            m_prevPopupImageDescriptor = m_popupImageDescriptor;
+            ImGui::SetNextWindowSize(ImVec2(winW, winH), sizeFlag);
+            ImGui::SetNextWindowFocus();
+            bool open = true;
+            ImGui::Begin("Image Preview", &open, ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoDocking);
+            if (!open)
+            {
+                m_popupImageDescriptor = nullptr;
+                m_prevPopupImageDescriptor = nullptr;
+            }
+            else
+            {
+                ImVec2 avail = ImGui::GetContentRegionAvail();
+                float scaleW = avail.x / static_cast<float>(m_popupImageWidth);
+                float scaleH = avail.y / static_cast<float>(m_popupImageHeight);
+                float scale = std::min(1.0f, std::min(scaleW, scaleH));
+                ImGui::Image(reinterpret_cast<ImTextureID>(m_popupImageDescriptor),
+                             ImVec2(m_popupImageWidth * scale, m_popupImageHeight * scale));
+            }
+            ImGui::End();
+        }
     }
 
     void AgentWidget::SubmitInput()
@@ -1945,6 +2027,18 @@ namespace pe
             }
             if (data)
                 GlobalUnlock(hPng);
+
+            if (!base64.empty())
+            {
+                PendingImage img;
+                img.base64 = std::move(base64);
+                img.mime_type = std::move(mime_type);
+                img.width = w;
+                img.height = h;
+                m_pendingImages.push_back(std::move(img));
+                CloseClipboard();
+                return;
+            }
         }
 
         // Try CF_HDROP: files copied from Explorer
@@ -1960,11 +2054,10 @@ namespace pe
                     wchar_t filePath[MAX_PATH] = {};
                     DragQueryFileW(drop, fi, filePath, MAX_PATH);
                     std::filesystem::path fp(filePath);
-
                     if (!std::filesystem::is_regular_file(fp))
                         continue;
                     auto fileSize = std::filesystem::file_size(fp);
-                    if (fileSize == 0 || fileSize > 5 * 1024 * 1024) // skip empty or >5MB
+                    if (fileSize == 0 || fileSize > 50 * 1024 * 1024) // skip empty or >50MB
                         continue;
 
                     std::string ext = fp.extension().string();
@@ -1995,28 +2088,13 @@ namespace pe
                         std::vector<uint8_t> fileData(fsize);
                         file.read(reinterpret_cast<char *>(fileData.data()), fsize);
 
-                        if (ext == ".png")
+                        // For small PNG/JPEG files, send as-is; for large or other formats, decode+resize+re-encode
+                        bool needsDecode = (ext != ".png" && ext != ".jpg" && ext != ".jpeg") || fsize > 4 * 1024 * 1024;
+                        if (!needsDecode && (ext == ".png" || ext == ".jpg" || ext == ".jpeg"))
                         {
-                            if (fsize > 24)
-                            {
-                                w = (fileData[16] << 24) | (fileData[17] << 16) | (fileData[18] << 8) | fileData[19];
-                                h = (fileData[20] << 24) | (fileData[21] << 16) | (fileData[22] << 8) | fileData[23];
-                            }
-                            base64 = pagent::Base64Encode(fileData.data(), fileData.size());
-                        }
-                        else if (ext == ".jpg" || ext == ".jpeg")
-                        {
-                            w = 0;
-                            h = 0;
-                            for (size_t i = 0; i + 8 < fsize; i++)
-                            {
-                                if (fileData[i] == 0xFF && (fileData[i + 1] >= 0xC0 && fileData[i + 1] <= 0xC3))
-                                {
-                                    h = (fileData[i + 5] << 8) | fileData[i + 6];
-                                    w = (fileData[i + 7] << 8) | fileData[i + 8];
-                                    break;
-                                }
-                            }
+                            // Small PNG/JPEG: use directly, parse dimensions
+                            int comp = 0;
+                            stbi_info_from_memory(fileData.data(), static_cast<int>(fsize), &w, &h, &comp);
                             if (w == 0)
                             {
                                 w = 512;
@@ -2026,14 +2104,40 @@ namespace pe
                         }
                         else
                         {
+                            // Large files or non-PNG/JPEG: decode, resize if needed, re-encode as PNG
                             int comp = 0;
                             auto *pixels = stbi_load_from_memory(fileData.data(), static_cast<int>(fsize), &w, &h, &comp, 4);
                             if (pixels)
                             {
-                                auto pngData = pagent::EncodeRGBA_PNG(pixels, w, h);
-                                base64 = pagent::Base64Encode(pngData.data(), pngData.size());
+                                // Resize if too large (max 1024px on longest side)
+                                if (w > 1024 || h > 1024)
+                                {
+                                    float scale = 1024.0f / static_cast<float>(std::max(w, h));
+                                    int nw = static_cast<int>(w * scale);
+                                    int nh = static_cast<int>(h * scale);
+                                    std::vector<uint8_t> resized(nw * nh * 4);
+                                    for (int dy = 0; dy < nh; dy++)
+                                    {
+                                        int sy = dy * h / nh;
+                                        for (int dx = 0; dx < nw; dx++)
+                                        {
+                                            int sx = dx * w / nw;
+                                            std::memcpy(&resized[(dy * nw + dx) * 4], &pixels[(sy * w + sx) * 4], 4);
+                                        }
+                                    }
+                                    stbi_image_free(pixels);
+                                    auto pngData = pagent::EncodeRGBA_PNG(resized.data(), nw, nh);
+                                    base64 = pagent::Base64Encode(pngData.data(), pngData.size());
+                                    w = nw;
+                                    h = nh;
+                                }
+                                else
+                                {
+                                    auto pngData = pagent::EncodeRGBA_PNG(pixels, w, h);
+                                    base64 = pagent::Base64Encode(pngData.data(), pngData.size());
+                                    stbi_image_free(pixels);
+                                }
                                 mime_type = "image/png";
-                                stbi_image_free(pixels);
                             }
                         }
 
@@ -2156,7 +2260,6 @@ namespace pe
         img.mime_type = std::move(mime_type);
         img.width = w;
         img.height = h;
-        img.imguiDescriptor = nullptr; // TODO: create Vulkan texture for thumbnail preview
         m_pendingImages.push_back(std::move(img));
 #endif
     }
@@ -2166,13 +2269,33 @@ namespace pe
         if (m_pendingImages.empty() && m_pendingFiles.empty())
             return;
 
+        float thumbH = 48.0f;
+        float totalH = thumbH + 12.0f; // padding
         ImGui::PushStyleColor(ImGuiCol_ChildBg, ImVec4(0.15f, 0.15f, 0.2f, 1.0f));
-        ImGui::BeginChild("PendingAttachments", ImVec2(0, 60), true);
+        ImGui::BeginChild("PendingAttachments", ImVec2(0, totalH), true);
 
         for (size_t i = 0; i < m_pendingImages.size(); i++)
         {
             const auto &img = m_pendingImages[i];
-            ImGui::Text("[Image %dx%d]", img.width, img.height);
+            if (img.imguiDescriptor && img.width > 0 && img.height > 0)
+            {
+                float scale = thumbH / static_cast<float>(img.height);
+                ImGui::PushID(static_cast<int>(i));
+                ImGui::ImageButton("##pendimg", reinterpret_cast<ImTextureID>(img.imguiDescriptor), ImVec2(img.width * scale, thumbH));
+                if (ImGui::IsItemHovered())
+                    ImGui::SetTooltip("Click to preview (%dx%d)", img.width, img.height);
+                if (ImGui::IsItemClicked())
+                {
+                    m_popupImageDescriptor = img.imguiDescriptor;
+                    m_popupImageWidth = img.width;
+                    m_popupImageHeight = img.height;
+                }
+                ImGui::PopID();
+            }
+            else
+            {
+                ImGui::Text("[Image %dx%d]", img.width, img.height);
+            }
             ImGui::SameLine();
             std::string removeLabel = "X##rmimg" + std::to_string(i);
             if (ImGui::SmallButton(removeLabel.c_str()))
@@ -2201,6 +2324,82 @@ namespace pe
 
         ImGui::EndChild();
         ImGui::PopStyleColor();
+    }
+
+    void *AgentWidget::UploadChatImage(const uint8_t *rgba, int width, int height)
+    {
+        Queue *queue = RHII.GetMainQueue();
+        CommandBuffer *cmd = queue->AcquireCommandBuffer();
+        cmd->Begin();
+
+        Image *gpuImage = Image::LoadRawFromMemory(cmd, const_cast<uint8_t *>(rgba),
+                                                   static_cast<uint32_t>(width),
+                                                   static_cast<uint32_t>(height),
+                                                   vk::Format::eR8G8B8A8Unorm,
+                                                   "ChatThumbnail");
+
+        cmd->End();
+        queue->Submit(1, &cmd, nullptr, nullptr);
+        cmd->Wait();
+        cmd->Return();
+
+        if (!gpuImage)
+            return nullptr;
+
+        if (!gpuImage->HasSRV())
+            gpuImage->CreateSRV(vk::ImageViewType::e2D);
+
+        if (!gpuImage->GetSampler())
+        {
+            vk::SamplerCreateInfo samplerInfo = Sampler::CreateInfoInit();
+            Sampler *sampler = Sampler::Create(samplerInfo, "ChatThumbnail_sampler");
+            gpuImage->SetSampler(sampler);
+        }
+
+        VkSampler sampler = gpuImage->GetSampler()->ApiHandle();
+        VkImageView view = gpuImage->GetSRV()->ApiHandle();
+        void *descriptor = (void *)ImGui_ImplVulkan_AddTexture(sampler, view, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+
+        m_chatGpuImages.push_back(gpuImage);
+        m_chatImguiDescriptors.push_back(descriptor);
+
+        return descriptor;
+    }
+
+    void AgentWidget::HandleScreenshotEvent()
+    {
+        auto *renderer = GetGlobalSystem<RendererSystem>();
+        if (!renderer)
+            return;
+
+        // Check if a screenshot was just saved (path is set after save)
+        std::string path = renderer->GetScreenshotSavedPath();
+        if (path.empty())
+            return;
+
+        // Load the saved BMP as a thumbnail
+        int tw = 0, th = 0, tc = 0;
+        uint8_t *pixels = stbi_load(path.c_str(), &tw, &th, &tc, 4);
+
+        ChatMessage msg;
+        msg.role = ChatMessage::Role::System;
+        msg.text = "Screenshot saved: " + path;
+
+        if (pixels && tw > 0 && th > 0)
+        {
+            ChatImage chatImg;
+            chatImg.width = tw;
+            chatImg.height = th;
+            chatImg.imguiDescriptor = UploadChatImage(pixels, tw, th);
+            msg.images.push_back(chatImg);
+            stbi_image_free(pixels);
+        }
+
+        {
+            std::lock_guard lock(m_chatMutex);
+            m_chat.push_back(std::move(msg));
+            m_scrollToBottom = true;
+        }
     }
 
     std::string AgentWidget::GetExternalResponsePath() const
@@ -2387,20 +2586,29 @@ namespace pe
 
     void AgentWidget::RenderMessage(const ChatMessage &msg)
     {
-        switch (msg.role)
+        // Helper: render a clickable thumbnail that opens full-size popup on click
+        auto renderImages = [this](const std::vector<ChatImage> &images)
         {
-        case ChatMessage::Role::User:
-            ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.4f, 0.8f, 1.0f, 1.0f));
-            ImGui::TextWrapped("[You] %s", msg.text.c_str());
-            ImGui::PopStyleColor();
-            // Show attached image indicators
-            for (const auto &img : msg.images)
+            for (size_t i = 0; i < images.size(); i++)
             {
+                const auto &img = images[i];
                 if (img.imguiDescriptor)
                 {
-                    float maxW = ImGui::GetContentRegionAvail().x * 0.5f;
-                    float scale = std::min(1.0f, maxW / static_cast<float>(img.width));
-                    ImGui::Image(reinterpret_cast<ImTextureID>(img.imguiDescriptor), ImVec2(img.width * scale, img.height * scale));
+                    // Thumbnail: max 128px height
+                    float thumbH = std::min(128.0f, static_cast<float>(img.height));
+                    float scale = thumbH / static_cast<float>(img.height);
+                    float thumbW = img.width * scale;
+                    ImGui::PushID(static_cast<int>(i));
+                    ImGui::ImageButton("##chatimg", reinterpret_cast<ImTextureID>(img.imguiDescriptor), ImVec2(thumbW, thumbH));
+                    if (ImGui::IsItemHovered())
+                        ImGui::SetTooltip("Click to view full size (%dx%d)", img.width, img.height);
+                    if (ImGui::IsItemClicked())
+                    {
+                        m_popupImageDescriptor = img.imguiDescriptor;
+                        m_popupImageWidth = img.width;
+                        m_popupImageHeight = img.height;
+                    }
+                    ImGui::PopID();
                 }
                 else
                 {
@@ -2409,6 +2617,15 @@ namespace pe
                     ImGui::PopStyleColor();
                 }
             }
+        };
+
+        switch (msg.role)
+        {
+        case ChatMessage::Role::User:
+            ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.4f, 0.8f, 1.0f, 1.0f));
+            ImGui::TextWrapped("[You] %s", msg.text.c_str());
+            ImGui::PopStyleColor();
+            renderImages(msg.images);
             break;
         case ChatMessage::Role::Assistant:
             if (!msg.thinking.empty())
@@ -2430,6 +2647,7 @@ namespace pe
             ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.5f, 0.5f, 0.5f, 1.0f));
             ImGui::TextWrapped("%s", msg.text.c_str());
             ImGui::PopStyleColor();
+            renderImages(msg.images);
             break;
         }
         ImGui::Spacing();

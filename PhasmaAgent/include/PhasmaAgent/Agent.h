@@ -298,7 +298,7 @@ namespace pagent
         std::shared_ptr<IEmbeddingProvider> embedding_provider;
 
         // RAG settings
-        int rag_top_k = 3;
+        int rag_top_k = 6;
         float rag_min_score = 0.3f;
         int rag_max_context_chars = 8000;
         int rag_max_entry_chars = 8000; // Max chars per indexed RAG entry (0 = unlimited)

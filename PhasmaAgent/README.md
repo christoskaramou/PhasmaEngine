@@ -369,4 +369,4 @@ The agent reads `START.md` on initialization. The default instructions tell it t
 - **Tool handlers run on a worker thread** — any engine state mutation must be deferred to the main thread (see deferred queue pattern above).
 - **No streaming progress on tool results** — while the model streams text, tool execution is synchronous; the caller sees a `ToolResult` event only after the handler returns.
 - **Agentic loop has a hard cap** — `AgentConfig::max_tool_rounds` (default 20 in PhasmaEditor) prevents runaway loops. Raise it for tasks that require many sequential tool calls.
-- **No multi-modal input** — image or file attachments are not supported; text only.
+- **Limited multi-modal input** — user-uploaded images/files are not supported. Engine screenshots can be captured via `engine.take_screenshot()` and displayed in the agent chat.

@@ -122,6 +122,14 @@ namespace pe
         void UpdateRenderGraphPassStates();
         void CacheGlobalComponents();
 
+        void SaveScreenshot();
+        std::string GetScreenshotSavedPath()
+        {
+            std::string path = std::move(m_screenshotSavedPath);
+            m_screenshotSavedPath.clear();
+            return path;
+        }
+
     protected:
         void LoadResources(CommandBuffer *cmd);
         CommandBuffer *RecordPasses(uint32_t imageIndex);
@@ -132,6 +140,11 @@ namespace pe
         Image *m_displayRT;
         Image *m_viewportRT;
         Image *m_depthStencil;
+        Image *m_screenshotRT;
+        bool m_screenshotPending = false;
+        std::string m_screenshotPath;
+        std::string m_screenshotSavedPath;
+        Buffer *m_screenshotBuffer = nullptr;
         OrderedMap<size_t, IRenderPassComponent *> m_renderPassComponents{};
         std::unordered_map<size_t, Image *> m_renderTargets{};
         std::unordered_map<size_t, Image *> m_depthStencilTargets{};

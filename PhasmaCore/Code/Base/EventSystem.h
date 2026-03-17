@@ -21,6 +21,7 @@ namespace pe
         MeshRemoved,
         SetRenderMode,
         RunCommand,
+        Screenshot,
     };
 
     // One key type for both core + dynamic events
@@ -85,9 +86,10 @@ namespace pe
         static void ClearPushedEvents() noexcept;
 
         // ---- Runtime (size_t) helpers ----
-        [[nodiscard]] static bool PeekEvent(size_t id, QueuedEvent &out);  // no consume
-        [[nodiscard]] static bool PeekAndPop(size_t id, QueuedEvent &out); // targeted consume
-        static size_t CountPending(size_t id);                             // O(n)
+        [[nodiscard]] static bool PeekEvent(size_t id, QueuedEvent &out);       // no consume
+        [[nodiscard]] static bool PeekAndPop(size_t id, QueuedEvent &out);      // targeted consume
+        [[nodiscard]] static bool PeekAndPop(EventType type, QueuedEvent &out); // targeted consume by EventType
+        static size_t CountPending(size_t id);                                  // O(n)
 
     private:
         inline static std::mutex s_mutex;

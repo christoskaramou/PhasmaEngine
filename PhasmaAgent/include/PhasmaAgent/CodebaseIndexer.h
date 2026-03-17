@@ -13,6 +13,7 @@ namespace pagent
     struct IndexerConfig
     {
         std::vector<std::string> directories;
+        std::vector<std::string> include_files;      // Individual files to index (bypass skip rules)
         std::vector<std::string> skip_directories;   // Directory names to skip during scanning
         std::vector<std::string> skip_files;         // File names to skip (e.g. "package-lock.json")
         std::vector<std::string> extensions;         // Empty = index all text files

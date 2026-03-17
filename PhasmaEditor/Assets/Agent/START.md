@@ -171,6 +171,10 @@ engine.toggle_gui()
 engine.trigger_exit_confirmation()
 engine.is_popup_open() -> bool
 engine.want_capture_keyboard() -> bool  -- true when typing in a UI field
+
+-- Screenshot
+engine.take_screenshot()              -- save screenshot to Screenshots/ folder
+engine.take_screenshot("path.png")    -- save to specific path
 ```
 
 ### Change render settings

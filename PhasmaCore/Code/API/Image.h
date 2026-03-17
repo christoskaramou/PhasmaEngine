@@ -139,6 +139,7 @@ namespace pe
                                    uint32_t layerCount = 0,
                                    uint32_t mipLevel = 0);
         void CopyImage(CommandBuffer *cmd, Image *src);
+        void CopyToBuffer(CommandBuffer *cmd, Buffer *dst);
         void GenerateMipMaps(CommandBuffer *cmd);
         void Blit(CommandBuffer *cmd, Image *src, const vk::ImageBlit &region, vk::Filter filter);
 

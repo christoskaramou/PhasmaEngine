@@ -1,4 +1,6 @@
 #include "RendererSystem.h"
+#include "PhasmaAgent/AgentUtils.h"
+#include "API/Buffer.h"
 #include "API/Command.h"
 #include "API/Framebuffer.h"
 #include "API/Image.h"
@@ -350,6 +352,31 @@ namespace pe
         cmd->Begin();
         m_renderGraph.Execute(cmd);
         BlitToSwapchain(cmd, m_displayRT, imageIndex);
+
+        EventSystem::QueuedEvent screenshotEvt;
+        if (EventSystem::PeekAndPop(EventType::Screenshot, screenshotEvt))
+        {
+            m_screenshotPath = screenshotEvt.payload.has_value()
+                                   ? std::any_cast<std::string>(screenshotEvt.payload)
+                                   : std::string();
+
+            cmd->CopyImage(m_displayRT, m_screenshotRT);
+
+            uint32_t w = m_screenshotRT->GetWidth();
+            uint32_t h = m_screenshotRT->GetHeight();
+            size_t bufferSize = static_cast<size_t>(w) * h * 4;
+
+            Buffer::Destroy(m_screenshotBuffer);
+            m_screenshotBuffer = Buffer::Create(
+                bufferSize,
+                vk::BufferUsageFlagBits2::eTransferDst,
+                VMA_ALLOCATION_CREATE_HOST_ACCESS_RANDOM_BIT,
+                "ScreenshotStaging");
+
+            cmd->CopyImageToBuffer(m_screenshotRT, m_screenshotBuffer);
+            m_screenshotPending = true;
+        }
+
         cmd->End();
 
         return cmd;
@@ -378,11 +405,80 @@ namespace pe
 
             // PRESENT
             queue->Present(swapchain, imageIndex, submitSemaphore);
+
+            if (m_screenshotPending)
+            {
+                frameCmd->Wait();
+                SaveScreenshot();
+                m_screenshotPending = false;
+            }
         }
         catch (vk::OutOfDateKHRError &)
         {
             // Just ignore and try again
         }
+    }
+
+    void RendererSystem::SaveScreenshot()
+    {
+        if (!m_screenshotBuffer)
+            return;
+
+        uint32_t w = m_screenshotRT->GetWidth();
+        uint32_t h = m_screenshotRT->GetHeight();
+
+        m_screenshotBuffer->Map();
+        const uint8_t *pixels = static_cast<const uint8_t *>(m_screenshotBuffer->Data());
+
+        // Generate path
+        std::string path = m_screenshotPath;
+        if (path.empty())
+        {
+            std::string dir = Path::Executable + "Screenshots/";
+            std::filesystem::create_directories(dir);
+
+            auto now = std::chrono::system_clock::now();
+            auto time = std::chrono::system_clock::to_time_t(now);
+            std::tm tm{};
+#if defined(PE_WIN32)
+            localtime_s(&tm, &time);
+#else
+            localtime_r(&time, &tm);
+#endif
+            char buf[64];
+            std::strftime(buf, sizeof(buf), "%Y%m%d_%H%M%S", &tm);
+            path = dir + "screenshot_" + buf + ".png";
+        }
+
+        // Convert BGRA to RGBA for PNG encoding
+        size_t pixelCount = static_cast<size_t>(w) * h;
+        std::vector<uint8_t> rgba(pixelCount * 4);
+        for (size_t i = 0; i < pixelCount; i++)
+        {
+            rgba[i * 4 + 0] = pixels[i * 4 + 2]; // R
+            rgba[i * 4 + 1] = pixels[i * 4 + 1]; // G
+            rgba[i * 4 + 2] = pixels[i * 4 + 0]; // B
+            rgba[i * 4 + 3] = pixels[i * 4 + 3]; // A
+        }
+
+        auto pngData = pagent::EncodeRGBA_PNG(rgba.data(), static_cast<int>(w), static_cast<int>(h));
+
+        std::ofstream file(path, std::ios::binary);
+        if (file.is_open())
+        {
+            file.write(reinterpret_cast<const char *>(pngData.data()), pngData.size());
+            file.close();
+
+            PE_INFO("Screenshot saved: %s", path.c_str());
+            m_screenshotSavedPath = path;
+        }
+        else
+        {
+            PE_ERROR("Failed to save screenshot: %s", path.c_str());
+        }
+
+        m_screenshotBuffer->Unmap();
+        Buffer::Destroy(m_screenshotBuffer);
     }
 
     void RendererSystem::DrawPlatformWindows()
@@ -423,6 +519,8 @@ namespace pe
 
         for (auto &semaphore : m_submitSemaphores)
             Semaphore::Destroy(semaphore);
+
+        Buffer::Destroy(m_screenshotBuffer);
     }
 
     void RendererSystem::Upsample(CommandBuffer *cmd, vk::Filter filter)
@@ -585,6 +683,7 @@ namespace pe
         m_depthStencil = CreateDepthStencilTarget("depthStencil", RHII.GetDepthFormat(), vk::ImageUsageFlagBits::eTransferDst);
         m_viewportRT = CreateRenderTarget("viewport", surfaceFormat, vk::ImageUsageFlagBits::eTransferSrc | vk::ImageUsageFlagBits::eTransferDst);
         m_displayRT = CreateRenderTarget("display", surfaceFormat, vk::ImageUsageFlagBits::eTransferSrc | vk::ImageUsageFlagBits::eTransferDst, false);
+        m_screenshotRT = CreateRenderTarget("screenshot", surfaceFormat, vk::ImageUsageFlagBits::eTransferSrc | vk::ImageUsageFlagBits::eTransferDst, false);
         CreateRenderTarget("normal", vk::Format::eR16G16B16A16Sfloat);
         CreateRenderTarget("albedo", surfaceFormat);
         CreateRenderTarget("srm", surfaceFormat); // Specular Roughness Metallic

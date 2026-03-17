@@ -599,15 +599,17 @@ namespace pe
         auto embedding = aw->GetEmbeddingProviderShared();
         std::string storePath = aw->GetCodebaseStorePath();
 
+        auto includeFiles = aw->GetIncludeFiles();
         auto skipDirs = aw->GetSkipDirectories();
         auto skipFiles = aw->GetSkipFiles();
         auto skipExts = aw->GetSkipExtensions();
         auto skipRegex = aw->GetSkipRegex();
 
-        m_indexThread = std::thread([this, embedding, codebaseStore, storePath, dirs, skipDirs, skipFiles, skipExts, skipRegex]()
+        m_indexThread = std::thread([this, embedding, codebaseStore, storePath, dirs, includeFiles, skipDirs, skipFiles, skipExts, skipRegex]()
                                     {
             pagent::IndexerConfig config;
             config.directories = dirs;
+            config.include_files = includeFiles;
             config.skip_directories = skipDirs;
             config.skip_files = skipFiles;
             if (!skipExts.empty())
