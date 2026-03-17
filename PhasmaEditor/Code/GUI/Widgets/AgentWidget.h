@@ -47,6 +47,21 @@ namespace pe
         void Init(GUI *gui) override;
         void Update() override;
 
+        // Public accessors for codebase indexing
+        pagent::VectorStore *GetVectorStore() const { return m_vectorStore.get(); }
+        pagent::IEmbeddingProvider *GetEmbeddingProvider() const { return m_embeddingProvider.get(); }
+        std::shared_ptr<pagent::VectorStore> GetVectorStoreShared() const { return m_vectorStore; }
+        std::shared_ptr<pagent::VectorStore> GetCodebaseStoreShared() const { return m_codebaseStore; }
+        std::shared_ptr<pagent::IEmbeddingProvider> GetEmbeddingProviderShared() const { return m_embeddingProvider; }
+        bool IsEmbeddingEnabled() const { return m_embeddingEnabled; }
+        std::string GetVectorStoreFilePath() const;
+        std::string GetCodebaseStorePath() const;
+        const std::vector<std::string> &GetIndexDirectories() const { return m_indexDirectories; }
+        const std::vector<std::string> &GetSkipDirectories() const { return m_skipDirectories; }
+        const std::vector<std::string> &GetSkipFiles() const { return m_skipFiles; }
+        const std::vector<std::string> &GetSkipExtensions() const { return m_skipExtensions; }
+        const std::vector<std::string> &GetSkipRegex() const { return m_skipRegex; }
+
     private:
         void SubmitInput();
         void RenderMessage(const ChatMessage &msg);
@@ -119,7 +134,9 @@ namespace pe
         void RenderPendingAttachments();
 
         // RAG / Embedding
-        std::shared_ptr<pagent::VectorStore> m_vectorStore;
+        std::shared_ptr<pagent::IEmbeddingProvider> m_embeddingProvider;
+        std::shared_ptr<pagent::VectorStore> m_vectorStore;   // Chat history vectors
+        std::shared_ptr<pagent::VectorStore> m_codebaseStore; // Codebase index vectors
         int m_turnsSinceSave = 0;
         bool m_embeddingEnabled = false;
         int m_selectedEmbeddingProvider = 0; // 0=Google, 1=OpenAI, 2=Ollama
@@ -133,6 +150,21 @@ namespace pe
         std::string GetVectorStorePath() const;
         bool m_isFetchingEmbeddingModels = false;
         bool m_isPullingEmbedding = false;
+        std::vector<std::string> m_indexDirectories;
+        std::vector<std::string> m_skipDirectories;
+        std::vector<std::string> m_skipFiles;
+        std::vector<std::string> m_skipExtensions;
+        std::vector<std::string> m_skipRegex;
+
+        // Index status tracking
+        std::atomic<bool> m_indexStatusChecking{false};
+        std::atomic<bool> m_indexStatusReady{false};
+        int m_indexStatusOutdated = 0;
+        int m_indexStatusTotal = 0;
+        std::vector<std::string> m_indexStatusFiles; // outdated file list for tooltip
+        bool m_wasIndexing = false;
+        void CheckIndexStatus();
+        std::atomic<bool> m_codebaseLoading{false};
         pagent::Agent::CancelToken m_pullEmbeddingCancel;
 
         // External AI file-based provider (Claude Code, Cursor, etc.)

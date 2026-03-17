@@ -17,6 +17,7 @@
 #include "PhasmaAgent/OpenAIEmbedding.h"
 #include "PhasmaAgent/OllamaEmbedding.h"
 #include "PhasmaAgent/VectorStore.h"
+#include "PhasmaAgent/CodebaseIndexer.h"
 
 #include "stb/stb_image.h"
 
@@ -39,6 +40,9 @@ namespace pe
         auto storePath = GetVectorStorePath();
         if (m_vectorStore && !storePath.empty())
             m_vectorStore->SaveToFile(storePath);
+        auto codebasePath = GetCodebaseStorePath();
+        if (m_codebaseStore && !codebasePath.empty())
+            m_codebaseStore->SaveToBinary(codebasePath);
         pagent::Agent::CancelPull(m_pullCancel);
         pagent::Agent::CancelPull(m_pullEmbeddingCancel);
         if (m_agent)
@@ -73,6 +77,11 @@ namespace pe
             }
             UpdateEmbeddingModels();
         }
+
+        // Default indexing directory: Shaders (always present in assets)
+        if (m_indexDirectories.empty())
+            m_indexDirectories.push_back(Path::Assets + "Shaders");
+
         ConfigureAgent(m_providers[m_selectedProviderIndex].provider);
 
         // Populate model list for the restored provider
@@ -164,8 +173,7 @@ namespace pe
             projectRoot += '/';
 
         config.system_prompt =
-            "You are an AI assistant inside PhasmaEditor (Vulkan 3D engine). "
-            "FIRST THING: use read_agent_file to read START.md for your full API reference and rules. "
+            "You are an AI assistant inside PhasmaEditor (Vulkan 3D engine). " + std::string(m_embeddingEnabled ? "" : "FIRST THING: use read_agent_file to read START.md for your full API reference and rules. ") +
             "Control the editor via execute_lua. Be very concise. ASCII only, no emoji. "
             "Chain ALL operations in ONE execute_lua call. Check results for errors. "
             "To load 3D models: 1) call find_loadable_model tool, 2) execute_lua with: local m, err = load_model('path/from/step1') "
@@ -190,14 +198,33 @@ namespace pe
             config.gemini_api_key_for_vision = geminiKey;
 
         // Set up embedding provider based on current selection
-        config.embedding_provider = CreateEmbeddingProvider();
+        m_embeddingProvider = CreateEmbeddingProvider();
+        config.embedding_provider = m_embeddingProvider;
 
         if (config.embedding_provider && !m_vectorStore)
         {
+            int dims = config.embedding_provider->Dimensions();
             m_vectorStore = std::make_shared<pagent::VectorStore>();
             auto sp = GetVectorStorePath();
             if (!sp.empty())
-                m_vectorStore->LoadFromFile(sp);
+                m_vectorStore->LoadFromFile(sp, dims);
+
+            m_codebaseStore = std::make_shared<pagent::VectorStore>();
+            auto csp = GetCodebaseStorePath();
+            if (!csp.empty())
+            {
+                m_codebaseLoading.store(true);
+                auto store = m_codebaseStore;
+                int d = dims;
+                std::thread([store, csp, d, this]()
+                            {
+                                store->LoadFromBinary(csp, d);
+                                m_codebaseLoading.store(false);
+                                PE_INFO("Codebase store loaded: %zu entries", store->Size());
+                                CheckIndexStatus(); })
+                    .detach();
+            }
+
             m_turnsSinceSave = 0;
         }
 
@@ -236,9 +263,11 @@ namespace pe
         m_agent->SetEventCallback([this](const pagent::AgentEvent &ev)
                                   { OnAgentEvent(ev); });
 
-        // Connect vector store to the agent's request worker
+        // Connect vector stores to the agent's request worker
         if (m_vectorStore)
             m_agent->SetVectorStore(m_vectorStore.get());
+        if (m_codebaseStore)
+            m_agent->SetCodebaseStore(m_codebaseStore.get());
 
         RegisterTools();
     }
@@ -256,7 +285,7 @@ namespace pe
         {
         case 0: // Google
             if (geminiKey)
-                return std::make_shared<pagent::GoogleEmbedding>(geminiKey, model);
+                return std::make_shared<pagent::GoogleEmbedding>(geminiKey, model, 3072);
             break;
         case 1: // OpenAI
         {
@@ -339,7 +368,16 @@ namespace pe
 
         nlohmann::ordered_json j;
         j["agent"] = nlohmann::ordered_json{{"provider", providerName}, {"model", m_modelName}};
-        j["embeddings"] = nlohmann::ordered_json{{"enabled", m_embeddingEnabled}, {"provider", embProviderName}, {"model", embModelName}};
+        j["embeddings"] = nlohmann::ordered_json{
+            {"enabled", m_embeddingEnabled},
+            {"provider", embProviderName},
+            {"model", embModelName},
+            {"indexing", nlohmann::ordered_json{
+                             {"directories", m_indexDirectories},
+                             {"skip_directories", m_skipDirectories},
+                             {"skip_files", m_skipFiles},
+                             {"skip_extensions", m_skipExtensions},
+                             {"skip_regex", m_skipRegex}}}};
 
         f << j.dump(4) << "\n";
     }
@@ -380,14 +418,38 @@ namespace pe
             static const std::pair<const char *, int> embProviderMap[] = {{"Google", 0}, {"OpenAI", 1}, {"Ollama", 2}};
             m_selectedEmbeddingProvider = 0;
             for (auto &[name, idx] : embProviderMap)
-                if (embProviderName == name) { m_selectedEmbeddingProvider = idx; break; }
+                if (embProviderName == name)
+                {
+                    m_selectedEmbeddingProvider = idx;
+                    break;
+                }
 
             UpdateEmbeddingModels();
 
             std::string embModelName = j.value("/embeddings/model"_json_pointer, std::string{});
             m_selectedEmbeddingModel = 0;
             for (int i = 0; i < static_cast<int>(m_embeddingModels.size()); i++)
-                if (m_embeddingModels[i] == embModelName) { m_selectedEmbeddingModel = i; break; }
+                if (m_embeddingModels[i] == embModelName)
+                {
+                    m_selectedEmbeddingModel = i;
+                    break;
+                }
+
+            // Restore indexing config (nested under embeddings)
+            if (j.contains("embeddings") && j["embeddings"].contains("indexing"))
+            {
+                auto &idx = j["embeddings"]["indexing"];
+                if (idx.contains("directories"))
+                    m_indexDirectories = idx["directories"].get<std::vector<std::string>>();
+                if (idx.contains("skip_directories"))
+                    m_skipDirectories = idx["skip_directories"].get<std::vector<std::string>>();
+                if (idx.contains("skip_files"))
+                    m_skipFiles = idx["skip_files"].get<std::vector<std::string>>();
+                if (idx.contains("skip_extensions"))
+                    m_skipExtensions = idx["skip_extensions"].get<std::vector<std::string>>();
+                if (idx.contains("skip_regex"))
+                    m_skipRegex = idx["skip_regex"].get<std::vector<std::string>>();
+            }
         }
         catch (...)
         {
@@ -408,6 +470,61 @@ namespace pe
             if (c == '/' || c == '\\' || c == ':')
                 c = '_';
         return Path::Assets + "Agent/vectors_" + modelName + ".json";
+    }
+
+    std::string AgentWidget::GetVectorStoreFilePath() const
+    {
+        return GetVectorStorePath();
+    }
+
+    std::string AgentWidget::GetCodebaseStorePath() const
+    {
+        std::string modelName = (m_selectedEmbeddingModel < static_cast<int>(m_embeddingModels.size()))
+                                    ? m_embeddingModels[m_selectedEmbeddingModel]
+                                    : "";
+        if (modelName.empty() || modelName.find("fetching") != std::string::npos)
+            return {};
+        for (auto &c : modelName)
+            if (c == '/' || c == '\\' || c == ':')
+                c = '_';
+        return Path::Assets + "Agent/codebase_" + modelName + ".bin";
+    }
+
+    void AgentWidget::CheckIndexStatus()
+    {
+        if (m_indexStatusChecking.load() || !m_codebaseStore || !m_embeddingProvider)
+            return;
+
+        m_indexStatusChecking.store(true);
+        m_indexStatusReady.store(false);
+
+        auto store = m_codebaseStore;
+        auto embedding = m_embeddingProvider;
+        auto dirs = m_indexDirectories;
+        auto skipDirs = m_skipDirectories;
+        auto skipFiles = m_skipFiles;
+        auto skipExts = m_skipExtensions;
+        auto skipRegex = m_skipRegex;
+
+        std::thread([this, store, embedding, dirs, skipDirs, skipFiles, skipExts, skipRegex]()
+                    {
+            pagent::IndexerConfig config;
+            config.directories = dirs;
+            config.skip_directories = skipDirs;
+            config.skip_files = skipFiles;
+            if (!skipExts.empty())
+                config.skip_extensions = skipExts;
+            config.skip_regex = skipRegex;
+
+            pagent::CodebaseIndexer indexer(embedding.get(), store.get());
+            auto status = indexer.CheckStatus(config);
+
+            m_indexStatusTotal = status.totalFiles;
+            m_indexStatusOutdated = status.needsIndexing;
+            m_indexStatusFiles = std::move(status.outdatedFiles);
+            m_indexStatusReady.store(true);
+            m_indexStatusChecking.store(false); })
+            .detach();
     }
 
     void AgentWidget::RegisterTools()
@@ -1341,6 +1458,14 @@ namespace pe
         // Embedding row (checkbox + provider + model) — right under agent row
         if (!m_isExternalAI)
         {
+            bool indexing = m_gui && m_gui->IsIndexing();
+            bool loading = m_codebaseLoading.load();
+            // Re-check index status when indexing finishes
+            if (m_wasIndexing && !indexing)
+                CheckIndexStatus();
+            m_wasIndexing = indexing;
+            if (indexing || loading)
+                ImGui::BeginDisabled();
             if (ImGui::Checkbox("RAG", &m_embeddingEnabled))
             {
                 if (m_embeddingEnabled)
@@ -1377,6 +1502,7 @@ namespace pe
                             if (m_vectorStore && !sp.empty())
                                 m_vectorStore->SaveToFile(sp);
                             m_vectorStore.reset();
+                            m_codebaseStore.reset();
                             m_selectedEmbeddingProvider = i;
                             UpdateEmbeddingModels();
                             SaveConfig();
@@ -1416,6 +1542,7 @@ namespace pe
                                 if (m_vectorStore && !sp2.empty())
                                     m_vectorStore->SaveToFile(sp2);
                                 m_vectorStore.reset();
+                                m_codebaseStore.reset();
                                 m_selectedEmbeddingModel = i;
                                 SaveConfig();
 
@@ -1479,18 +1606,106 @@ namespace pe
                     if (m_selectedEmbeddingProvider == 2)
                     {
                         ImGui::SameLine();
-                        bool fetching = m_isFetchingEmbeddingModels || m_isFetchingModels;
+                        bool fetching = m_isFetchingEmbeddingModels;
                         if (fetching)
                             ImGui::BeginDisabled();
                         if (ImGui::SmallButton(fetching ? "Fetching...##emb" : "Fetch##emb"))
-                        {
-                            m_modelCache.erase(m_selectedProviderIndex);
-                            if (m_providers[m_selectedProviderIndex].provider == pagent::Provider::Ollama)
-                                FetchAvailableModels(true);
                             UpdateEmbeddingModels(true);
-                        }
                         if (fetching)
                             ImGui::EndDisabled();
+                    }
+                }
+            }
+            if (indexing || loading)
+                ImGui::EndDisabled();
+
+            // Index Codebase button (outside disabled block so progress shows during indexing/loading)
+            if (m_embeddingEnabled)
+            {
+                ImGui::SameLine();
+                if (indexing)
+                {
+                    if (ImGui::SmallButton("Stop"))
+                        m_gui->CancelCodebaseIndexing();
+                    ImGui::SameLine();
+                    int p = m_gui->GetIndexProgress();
+                    int t = m_gui->GetIndexTotal();
+                    int activeThreads = m_gui->GetIndexActiveThreads();
+                    int totalThreads = m_gui->GetIndexTotalThreads();
+                    std::string currentFile = m_gui->GetIndexCurrentFile();
+                    std::string label = std::to_string(p) + "/" + std::to_string(t) +
+                                        "  threads " + std::to_string(activeThreads) + "/" + std::to_string(totalThreads);
+                    if (!currentFile.empty())
+                        label += "  " + currentFile;
+                    ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.5f, 0.5f, 0.5f, 1.0f));
+                    ImGui::TextUnformatted(label.c_str());
+                    ImGui::PopStyleColor();
+                }
+                else if (m_codebaseLoading.load())
+                {
+                    ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.5f, 0.5f, 0.5f, 1.0f));
+                    ImGui::TextUnformatted("Loading vectors...");
+                    ImGui::PopStyleColor();
+                }
+                else
+                {
+                    bool canIndex = m_embeddingProvider != nullptr;
+                    if (!canIndex)
+                        ImGui::BeginDisabled();
+                    if (ImGui::SmallButton("Index"))
+                    {
+                        m_gui->StartCodebaseIndexing();
+                        m_indexStatusReady.store(false);
+                    }
+                    if (!canIndex)
+                        ImGui::EndDisabled();
+                    if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
+                        ImGui::SetTooltip("Index codebase for RAG retrieval");
+
+                    ImGui::SameLine();
+                    bool checking = m_indexStatusChecking.load();
+                    if (checking)
+                        ImGui::BeginDisabled();
+                    if (ImGui::SmallButton("Check"))
+                        CheckIndexStatus();
+                    if (checking)
+                        ImGui::EndDisabled();
+
+                    // Show index status
+                    if (m_indexStatusReady.load())
+                    {
+                        ImGui::SameLine();
+                        if (m_indexStatusOutdated > 0)
+                        {
+                            ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 0.8f, 0.2f, 1.0f));
+                            std::string statusText = std::to_string(m_indexStatusOutdated) + "/" +
+                                                     std::to_string(m_indexStatusTotal) + " outdated";
+                            ImGui::TextUnformatted(statusText.c_str());
+                            if (ImGui::IsItemHovered() && !m_indexStatusFiles.empty())
+                            {
+                                std::string tip;
+                                int shown = std::min(static_cast<int>(m_indexStatusFiles.size()), 20);
+                                for (int i = 0; i < shown; ++i)
+                                    tip += m_indexStatusFiles[i] + "\n";
+                                if (static_cast<int>(m_indexStatusFiles.size()) > 20)
+                                    tip += "... and " + std::to_string(m_indexStatusFiles.size() - 20) + " more";
+                                ImGui::SetTooltip("%s", tip.c_str());
+                            }
+                            ImGui::PopStyleColor();
+                        }
+                        else
+                        {
+                            ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.2f, 0.8f, 0.2f, 1.0f));
+                            ImGui::TextUnformatted("up to date");
+                            ImGui::PopStyleColor();
+                        }
+                    }
+                    else if (m_indexStatusChecking.load())
+                    {
+                        ImGui::SameLine();
+                        ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.5f, 0.5f, 0.5f, 1.0f));
+                        ImGui::TextUnformatted("checking...");
+                        ImGui::PopStyleColor();
                     }
                 }
             }
@@ -2159,6 +2374,10 @@ namespace pe
             m_isStreaming = false;
             m_streamingText.clear();
             m_streamingThinking.clear();
+            m_scrollToBottom = true;
+            break;
+        case pagent::AgentEventType::Info:
+            m_chat.push_back({ChatMessage::Role::System, ev.text});
             m_scrollToBottom = true;
             break;
         default:

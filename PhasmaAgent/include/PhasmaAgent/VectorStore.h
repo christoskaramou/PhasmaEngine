@@ -25,10 +25,17 @@ namespace pagent
 
         void Add(VectorEntry entry);
         void Remove(const std::string &id);
+        void RemoveByMetadataType(const std::string &type);
+        void RemoveByFile(const std::string &file);
+        bool HasFileWithTimestamp(const std::string &file, const std::string &timestamp) const;
         std::vector<SearchResult> Search(const std::vector<float> &query, int top_k = 5, float min_score = 0.3f) const;
 
         void SaveToFile(const std::string &path) const;
+        void SaveToBinary(const std::string &path) const;
         void LoadFromFile(const std::string &path);
+        void LoadFromFile(const std::string &path, int expectedDims);
+        void LoadFromBinary(const std::string &path);
+        void LoadFromBinary(const std::string &path, int expectedDims);
 
         size_t Size() const;
         void Clear();

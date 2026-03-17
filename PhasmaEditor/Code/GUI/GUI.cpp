@@ -33,6 +33,7 @@
 #include "Widgets/Properties.h"
 #include "Widgets/SceneView.h"
 #include "Widgets/AgentWidget.h"
+#include "PhasmaAgent/CodebaseIndexer.h"
 #include "Widgets/TransformWidget.h"
 #include "UndoRedo.h"
 #include "imgui/imgui_impl_sdl2.h"
@@ -52,6 +53,9 @@ namespace pe
 
     GUI::~GUI()
     {
+        if (m_indexThread.joinable())
+            m_indexThread.join();
+
         if (GUIState::s_viewportTextureId)
         {
             ImGui_ImplVulkan_RemoveTexture((VkDescriptorSet)GUIState::s_viewportTextureId);
@@ -563,6 +567,109 @@ namespace pe
         }
     }
 
+    void GUI::StartCodebaseIndexing()
+    {
+        auto *aw = GetWidget<AgentWidget>();
+        if (!aw || !aw->GetEmbeddingProvider())
+            return;
+
+        auto codebaseStore = aw->GetCodebaseStoreShared();
+        if (!codebaseStore)
+            return;
+
+        const auto &dirs = aw->GetIndexDirectories();
+        if (dirs.empty())
+        {
+            PE_WARN("No indexing directories configured");
+            return;
+        }
+
+        if (m_indexThread.joinable())
+            m_indexThread.join();
+
+        m_isIndexing.store(true);
+        m_indexCancel.store(false);
+        m_indexProgress.store(0);
+        m_indexTotal.store(0);
+        {
+            std::lock_guard lock(m_indexMutex);
+            m_indexCurrentFile.clear();
+        }
+
+        auto embedding = aw->GetEmbeddingProviderShared();
+        std::string storePath = aw->GetCodebaseStorePath();
+
+        auto skipDirs = aw->GetSkipDirectories();
+        auto skipFiles = aw->GetSkipFiles();
+        auto skipExts = aw->GetSkipExtensions();
+        auto skipRegex = aw->GetSkipRegex();
+
+        m_indexThread = std::thread([this, embedding, codebaseStore, storePath, dirs, skipDirs, skipFiles, skipExts, skipRegex]()
+                                    {
+            pagent::IndexerConfig config;
+            config.directories = dirs;
+            config.skip_directories = skipDirs;
+            config.skip_files = skipFiles;
+            if (!skipExts.empty())
+                config.skip_extensions = skipExts;
+            config.skip_regex = skipRegex;
+
+            PE_INFO("Codebase indexing started (%d directories)", static_cast<int>(config.directories.size()));
+
+            auto saveMtx = std::make_shared<std::mutex>();
+            auto pIndexer = std::make_unique<pagent::CodebaseIndexer>(embedding.get(), codebaseStore.get(),
+                [this, &codebaseStore, &storePath, saveMtx](int done, int total, const std::string &file)
+                {
+                    m_indexProgress.store(done);
+                    m_indexTotal.store(total);
+                    {
+                        std::lock_guard lock(m_indexMutex);
+                        m_indexCurrentFile = file;
+                        if (m_indexerPtr)
+                        {
+                            auto *idx = static_cast<pagent::CodebaseIndexer *>(m_indexerPtr);
+                            m_indexActiveThreads.store(idx->GetActiveThreads());
+                            m_indexTotalThreads = idx->GetTotalThreads();
+                        }
+                    }
+                    if (done % 50 == 0 || done == total)
+                        PE_INFO("Indexing progress: %d/%d  %s", done, total, file.c_str());
+                    // Save after each file — skip if cancelled
+                    if (!storePath.empty() && !m_indexCancel.load())
+                    {
+                        std::lock_guard saveLock(*saveMtx);
+                        codebaseStore->SaveToBinary(storePath);
+                    }
+                });
+
+            // Check cancel flag before each file via the indexer's cancel mechanism
+            {
+                std::lock_guard lock(m_indexMutex);
+                m_indexerPtr = pIndexer.get();
+            }
+
+            int chunks = pIndexer->Index(config);
+
+            {
+                std::lock_guard lock(m_indexMutex);
+                m_indexerPtr = nullptr;
+            }
+
+            if (!storePath.empty() && !m_indexCancel.load())
+                codebaseStore->SaveToBinary(storePath);
+
+            PE_INFO("Codebase indexing %s: %d chunks", m_indexCancel.load() ? "cancelled" : "finished", chunks);
+            m_isIndexing.store(false); });
+    }
+
+    void GUI::CancelCodebaseIndexing()
+    {
+        m_indexCancel.store(true);
+        std::lock_guard lock(m_indexMutex);
+        if (m_indexerPtr)
+            static_cast<pagent::CodebaseIndexer *>(m_indexerPtr)->Cancel();
+    }
+
     void GUI::Init()
     {
         auto &gSettings = Settings::Get<GlobalSettings>();
@@ -1005,10 +1112,18 @@ namespace pe
 
                             switch (lt)
                             {
-                            case LightType::Directional: eraseLight(ls->GetDirectionalLights()); break;
-                            case LightType::Point:       eraseLight(ls->GetPointLights()); break;
-                            case LightType::Spot:        eraseLight(ls->GetSpotLights()); break;
-                            case LightType::Area:        eraseLight(ls->GetAreaLights()); break;
+                            case LightType::Directional:
+                                eraseLight(ls->GetDirectionalLights());
+                                break;
+                            case LightType::Point:
+                                eraseLight(ls->GetPointLights());
+                                break;
+                            case LightType::Spot:
+                                eraseLight(ls->GetSpotLights());
+                                break;
+                            case LightType::Area:
+                                eraseLight(ls->GetAreaLights());
+                                break;
                             }
                         }
                     }

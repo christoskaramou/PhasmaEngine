@@ -50,6 +50,7 @@ namespace pagent
         Usage,            // Token usage stats; read event.input_tokens, event.output_tokens
         TurnComplete,     // Full agentic loop finished for this Send call
         Error,            // Fatal error; read event.error_message
+        Info,             // Informational message; read event.text
     };
 
     // ---------------------------------------------------------------------------
@@ -249,6 +250,13 @@ namespace pagent
 
         // Number of dimensions in the output embedding.
         virtual int Dimensions() const = 0;
+
+        // Cancel support: when set, Embed should return {} immediately
+        void SetCancel(std::atomic<bool> *cancel) { m_cancel = cancel; }
+        bool IsCancelled() const { return m_cancel && m_cancel->load(); }
+
+    protected:
+        std::atomic<bool> *m_cancel = nullptr;
     };
 
     // ---------------------------------------------------------------------------
@@ -292,7 +300,8 @@ namespace pagent
         // RAG settings
         int rag_top_k = 3;
         float rag_min_score = 0.3f;
-        int rag_max_context_chars = 2000;
+        int rag_max_context_chars = 8000;
+        int rag_max_entry_chars = 8000; // Max chars per indexed RAG entry (0 = unlimited)
 
         // Optional: log callback for internal debug/warning messages.
         std::function<void(const std::string &)> log_callback;
@@ -345,6 +354,7 @@ namespace pagent
         void SetModel(const std::string &model);
         Provider GetProvider() const;
         void SetVectorStore(VectorStore *store);
+        void SetCodebaseStore(VectorStore *store);
 
         // Fetch available model names from the provider. Blocking HTTP call.
         // For Anthropic returns a hardcoded list (no listing endpoint).

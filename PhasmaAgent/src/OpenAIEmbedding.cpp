@@ -19,7 +19,7 @@ namespace pagent
 
     std::vector<float> OpenAIEmbedding::Embed(const std::string &text)
     {
-        if (text.empty() || m_apiKey.empty())
+        if (IsCancelled() || text.empty() || m_apiKey.empty())
             return {};
 
         json body;
@@ -28,7 +28,7 @@ namespace pagent
         if (m_model.find("text-embedding-3") != std::string::npos)
             body["dimensions"] = m_dims;
 
-        const std::string bodyStr = body.dump();
+        const std::string bodyStr = body.dump(-1, ' ', false, json::error_handler_t::replace);
         std::string responseBody;
 
 #ifdef CPPHTTPLIB_OPENSSL_SUPPORT

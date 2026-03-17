@@ -13,7 +13,7 @@ namespace pagent
 
     std::vector<float> OllamaEmbedding::Embed(const std::string &text)
     {
-        if (text.empty())
+        if (IsCancelled() || text.empty())
             return {};
 
         json body;
@@ -27,7 +27,7 @@ namespace pagent
 
         httplib::Client cli(host);
         cli.set_read_timeout(30);
-        auto res = cli.Post("/api/embed", body.dump(), "application/json");
+        auto res = cli.Post("/api/embed", body.dump(-1, ' ', false, json::error_handler_t::replace), "application/json");
         if (!res || res->status != 200)
             return {};
 

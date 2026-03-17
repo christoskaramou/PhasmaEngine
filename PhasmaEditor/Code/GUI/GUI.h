@@ -25,7 +25,11 @@ namespace pe
         void ToggleRender() { m_render = !m_render; }
         void TriggerExitConfirmation() { m_showExitConfirmation = true; }
         void RequestDockReset() { m_requestDockReset = true; }
-        void NotifyChange() { m_needIdleCapture = true; m_idleFramesAfterEdit = 0; }
+        void NotifyChange()
+        {
+            m_needIdleCapture = true;
+            m_idleFramesAfterEdit = 0;
+        }
 
         // Called after the window is shown to apply the correct layout
         void ApplyStartupLayout();
@@ -87,5 +91,31 @@ namespace pe
 
         std::vector<std::shared_ptr<Widget>> m_widgets;
         std::vector<std::shared_ptr<Widget>> m_menuWindowWidgets;
+
+        // Codebase indexing state
+        std::atomic<bool> m_isIndexing{false};
+        std::atomic<int> m_indexProgress{0};
+        std::atomic<int> m_indexTotal{0};
+        std::string m_indexCurrentFile;
+        std::mutex m_indexMutex;
+        std::atomic<bool> m_indexCancel{false};
+        std::atomic<int> m_indexActiveThreads{0};
+        int m_indexTotalThreads = 0;
+        void *m_indexerPtr = nullptr; // pagent::CodebaseIndexer*, guarded by m_indexMutex
+        std::thread m_indexThread;
+
+    public:
+        void StartCodebaseIndexing();
+        void CancelCodebaseIndexing();
+        bool IsIndexing() const { return m_isIndexing.load(); }
+        int GetIndexProgress() const { return m_indexProgress.load(); }
+        int GetIndexTotal() const { return m_indexTotal.load(); }
+        int GetIndexActiveThreads() const { return m_indexActiveThreads.load(); }
+        int GetIndexTotalThreads() const { return m_indexTotalThreads; }
+        std::string GetIndexCurrentFile() const
+        {
+            std::lock_guard lock(const_cast<std::mutex &>(m_indexMutex));
+            return m_indexCurrentFile;
+        }
     };
 } // namespace pe

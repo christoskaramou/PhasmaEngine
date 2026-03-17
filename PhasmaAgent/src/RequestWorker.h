@@ -32,6 +32,7 @@ namespace pagent
         void Cancel();
         void SetBackend(IProviderBackend *backend) { m_backend = backend; }
         void SetVectorStore(VectorStore *store) { m_vectorStore = store; }
+        void SetCodebaseStore(VectorStore *store) { m_codebaseStore = store; }
 
     private:
         void ThreadFunc();
@@ -65,5 +66,6 @@ namespace pagent
         std::mutex m_clientMutex;
 
         VectorStore *m_vectorStore = nullptr;
+        VectorStore *m_codebaseStore = nullptr;
     };
 } // namespace pagent

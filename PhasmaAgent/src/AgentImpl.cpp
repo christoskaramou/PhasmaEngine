@@ -133,4 +133,9 @@ namespace pagent
     {
         m_worker->SetVectorStore(store);
     }
+
+    void Agent::Impl::SetCodebaseStore(VectorStore *store)
+    {
+        m_worker->SetCodebaseStore(store);
+    }
 } // namespace pagent

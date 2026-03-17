@@ -19,7 +19,7 @@ namespace pagent
 
     std::vector<float> GoogleEmbedding::Embed(const std::string &text)
     {
-        if (text.empty() || m_apiKey.empty())
+        if (IsCancelled() || text.empty() || m_apiKey.empty())
             return {};
 
         json body;
@@ -29,13 +29,13 @@ namespace pagent
 
         const std::string host = "generativelanguage.googleapis.com";
         const std::string path = "/v1beta/models/" + m_model + ":embedContent";
-        const std::string bodyStr = body.dump();
+        const std::string bodyStr = body.dump(-1, ' ', false, json::error_handler_t::replace);
 
         std::string responseBody;
 
 #ifdef CPPHTTPLIB_OPENSSL_SUPPORT
         httplib::SSLClient cli(host);
-        cli.set_read_timeout(15);
+        cli.set_read_timeout(10);
         httplib::Headers headers = {{"x-goog-api-key", m_apiKey}};
         auto res = cli.Post(path, headers, bodyStr, "application/json");
         if (!res)

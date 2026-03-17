@@ -292,9 +292,23 @@ namespace pagent
                     if (!queryVec.empty())
                     {
                         auto results = m_vectorStore->Search(queryVec, m_config.rag_top_k, m_config.rag_min_score);
+
+                        // Also search codebase store if available
+                        if (m_codebaseStore && m_codebaseStore->Size() > 0)
+                        {
+                            auto codeResults = m_codebaseStore->Search(queryVec, m_config.rag_top_k, m_config.rag_min_score);
+                            results.insert(results.end(), codeResults.begin(), codeResults.end());
+                            // Sort by score descending and keep top_k
+                            std::sort(results.begin(), results.end(),
+                                      [](const auto &a, const auto &b)
+                                      { return a.score > b.score; });
+                            if (static_cast<int>(results.size()) > m_config.rag_top_k)
+                                results.resize(m_config.rag_top_k);
+                        }
+
                         if (!results.empty())
                         {
-                            std::string context = "\n\n[Relevant context from previous interactions:\n";
+                            std::string context = "\n\n[Relevant context:\n";
                             int totalChars = 0;
                             for (const auto &r : results)
                             {
@@ -306,13 +320,20 @@ namespace pagent
                             }
                             context += "]";
                             systemPrompt += context;
-                            Log("RAG: injected " + std::to_string(results.size()) + " context entries");
+                            Log("RAG: injected " + std::to_string(results.size()) + " context entries (chat + codebase)");
+
+                            AgentEvent ragEv;
+                            ragEv.type = AgentEventType::Info;
+                            ragEv.text = "RAG: " + std::to_string(results.size()) + " context entries injected";
+                            PushEvent(std::move(ragEv));
                         }
 
                         // Index the user message for future retrieval
                         VectorEntry userEntry;
                         userEntry.id = "user_" + std::to_string(std::chrono::steady_clock::now().time_since_epoch().count());
-                        userEntry.content = queryText.substr(0, 500);
+                        userEntry.content = m_config.rag_max_entry_chars > 0
+                                                ? queryText.substr(0, m_config.rag_max_entry_chars)
+                                                : queryText;
                         userEntry.metadata = "{\"type\":\"user\"}";
                         userEntry.embedding = std::move(queryVec);
                         m_vectorStore->Add(std::move(userEntry));
@@ -492,7 +513,9 @@ namespace pagent
                     {
                         VectorEntry entry;
                         entry.id = "turn_" + std::to_string(std::chrono::steady_clock::now().time_since_epoch().count());
-                        entry.content = fullText.substr(0, 500); // Cap stored text
+                        entry.content = m_config.rag_max_entry_chars > 0
+                                            ? fullText.substr(0, m_config.rag_max_entry_chars)
+                                            : fullText;
                         entry.metadata = "{\"type\":\"assistant\"}";
                         entry.embedding = std::move(vec);
                         m_vectorStore->Add(std::move(entry));

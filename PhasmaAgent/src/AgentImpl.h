@@ -37,6 +37,7 @@ namespace pagent
         Provider GetProvider() const { return m_config.provider; }
         TokenUsage GetUsage() const;
         void SetVectorStore(VectorStore *store);
+        void SetCodebaseStore(VectorStore *store);
 
     private:
         AgentConfig m_config;

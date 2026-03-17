@@ -130,6 +130,11 @@ namespace pagent
         m_impl->SetVectorStore(store);
     }
 
+    void Agent::SetCodebaseStore(VectorStore *store)
+    {
+        m_impl->SetCodebaseStore(store);
+    }
+
     TokenUsage Agent::GetUsage() const
     {
         return m_impl->GetUsage();
