@@ -2306,6 +2306,9 @@ namespace pe
 
     void *AgentWidget::UploadChatImage(const uint8_t *rgba, int width, int height)
     {
+        static int s_chatImageCounter = 0;
+        std::string name = "ChatThumbnail_" + std::to_string(s_chatImageCounter++);
+
         Queue *queue = RHII.GetMainQueue();
         CommandBuffer *cmd = queue->AcquireCommandBuffer();
         cmd->Begin();
@@ -2314,7 +2317,7 @@ namespace pe
                                                    static_cast<uint32_t>(width),
                                                    static_cast<uint32_t>(height),
                                                    vk::Format::eR8G8B8A8Unorm,
-                                                   "ChatThumbnail");
+                                                   name);
 
         cmd->End();
         queue->Submit(1, &cmd, nullptr, nullptr);
@@ -2330,7 +2333,7 @@ namespace pe
         if (!gpuImage->GetSampler())
         {
             vk::SamplerCreateInfo samplerInfo = Sampler::CreateInfoInit();
-            Sampler *sampler = Sampler::Create(samplerInfo, "ChatThumbnail_sampler");
+            Sampler *sampler = Sampler::Create(samplerInfo, name + "_sampler");
             gpuImage->SetSampler(sampler);
         }
 
@@ -2576,7 +2579,7 @@ namespace pe
                     float thumbH = std::min(128.0f, static_cast<float>(img.height));
                     float scale = thumbH / static_cast<float>(img.height);
                     float thumbW = img.width * scale;
-                    ImGui::PushID(static_cast<int>(i));
+                    ImGui::PushID(img.imguiDescriptor);
                     ImGui::ImageButton("##chatimg", reinterpret_cast<ImTextureID>(img.imguiDescriptor), ImVec2(thumbW, thumbH));
                     if (ImGui::IsItemHovered())
                         ImGui::SetTooltip("Click to view full size (%dx%d)", img.width, img.height);
