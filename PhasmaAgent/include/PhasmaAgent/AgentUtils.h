@@ -7,87 +7,33 @@
 #include <initializer_list>
 #include <utility>
 #include <filesystem>
+#include <algorithm>
+#include <nlohmann/json.hpp>
 
 namespace pagent
 {
     // JSON-encode a string value (produces "...")
     inline std::string JsonStr(const std::string &s)
     {
-        std::string out = "\"";
-        for (char c : s)
-        {
-            if (c == '"')
-                out += "\\\"";
-            else if (c == '\\')
-                out += "\\\\";
-            else if (c == '\n')
-                out += "\\n";
-            else
-                out += c;
-        }
-        return out + '"';
+        nlohmann::json j = s;
+        return j.dump();
     }
 
-    // unescape a JSON string value (handles \\ \/ \" \n \t \r)
+    // unescape a JSON string value (handles \\ \/ \" \n \t \r \uXXXX)
     inline std::string JsonUnescape(const std::string &s)
     {
-        std::string out;
-        out.reserve(s.size());
-        for (size_t i = 0; i < s.size(); ++i)
-        {
-            if (s[i] == '\\' && i + 1 < s.size())
-            {
-                char next = s[++i];
-                if (next == '\\')
-                    out += '\\';
-                else if (next == '/')
-                    out += '/';
-                else if (next == '"')
-                    out += '"';
-                else if (next == 'n')
-                    out += '\n';
-                else if (next == 't')
-                    out += '\t';
-                else if (next == 'r')
-                    out += '\r';
-                else if (next == 'u' && i + 4 < s.size())
-                {
-                    // Handle \uXXXX unicode escapes
-                    std::string hex = s.substr(i + 1, 4);
-                    try
-                    {
-                        unsigned long cp = std::stoul(hex, nullptr, 16);
-                        if (cp < 0x80)
-                            out += static_cast<char>(cp);
-                        else if (cp < 0x800)
-                        {
-                            out += static_cast<char>(0xC0 | (cp >> 6));
-                            out += static_cast<char>(0x80 | (cp & 0x3F));
-                        }
-                        else
-                        {
-                            out += static_cast<char>(0xE0 | (cp >> 12));
-                            out += static_cast<char>(0x80 | ((cp >> 6) & 0x3F));
-                            out += static_cast<char>(0x80 | (cp & 0x3F));
-                        }
-                        i += 4;
-                    }
-                    catch (...)
-                    {
-                        out += '\\';
-                        out += next;
-                    }
-                }
-                else
-                {
-                    out += '\\';
-                    out += next;
-                }
-            }
-            else
-                out += s[i];
+        // nlohmann::json expect a full JSON value. 
+        // If s is just the raw content of a string (without quotes), wrap it.
+        if (s.empty()) return "";
+        
+        std::string wrapped = s;
+        if (wrapped.front() != '"') wrapped = "\"" + wrapped + "\"";
+        
+        try {
+            return nlohmann::json::parse(wrapped).get<std::string>();
+        } catch (...) {
+            return s; // Fallback to raw if parsing fails
         }
-        return out;
     }
 
     // build a flat JSON object from key/value pairs (values are already JSON-encoded)
@@ -105,50 +51,28 @@ namespace pagent
         return out + "}";
     }
 
-    // extract a JSON string value by key from a flat tool-call args object
+    // extract a JSON string value by key from a tool-call args object
     inline std::string ExtractArgStr(const std::string &args, const char *key)
     {
-        std::string needle = std::string("\"") + key + "\"";
-        auto pos = args.find(needle);
-        if (pos == std::string::npos)
-            return "";
-        pos = args.find('"', pos + needle.size() + 1);
-        if (pos == std::string::npos)
-            return "";
-        // Walk forward skipping escaped characters to find the real closing quote
-        size_t i = pos + 1;
-        while (i < args.size())
-        {
-            if (args[i] == '\\')
-            {
-                i += 2; // skip escaped char
-                continue;
-            }
-            if (args[i] == '"')
-                break;
-            ++i;
-        }
-        if (i >= args.size())
-            return "";
-        return args.substr(pos + 1, i - pos - 1);
+        try {
+            auto j = nlohmann::json::parse(args);
+            if (j.contains(key) && j[key].is_string())
+                return j[key].get<std::string>();
+        } catch (...) {}
+        return "";
     }
 
-    // extract a JSON number value by key from a flat tool-call args object
+    // extract a JSON number value by key from a tool-call args object
     inline float ExtractArgNum(const std::string &args, const char *key)
     {
-        std::string needle = std::string("\"") + key + "\":";
-        auto pos = args.find(needle);
-        if (pos == std::string::npos)
-            return 0.0f;
-        try
-        {
-            return std::stof(args.substr(pos + needle.size()));
-        }
-        catch (...)
-        {
-            return 0.0f;
-        }
+        try {
+            auto j = nlohmann::json::parse(args);
+            if (j.contains(key) && j[key].is_number())
+                return j[key].get<float>();
+        } catch (...) {}
+        return 0.0f;
     }
+
     // Base64 encode binary data
     inline std::string Base64Encode(const uint8_t *data, size_t len)
     {
@@ -166,6 +90,36 @@ namespace pagent
             out += table[(n >> 12) & 0x3F];
             out += (i + 1 < len) ? table[(n >> 6) & 0x3F] : '=';
             out += (i + 2 < len) ? table[n & 0x3F] : '=';
+        }
+        return out;
+    }
+
+    // Base64 decode string data
+    inline std::vector<uint8_t> Base64Decode(const std::string &in)
+    {
+        static constexpr int table[] = {
+            -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
+            -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
+            -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, 62, -1, -1, -1, 63,
+            52, 53, 54, 55, 56, 57, 58, 59, 60, 61, -1, -1, -1, -1, -1, -1,
+            -1, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14,
+            15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, -1, -1, -1, -1, -1,
+            -1, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40,
+            41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51, -1, -1, -1, -1, -1};
+
+        std::vector<uint8_t> out;
+        int val = 0, valb = -8;
+        for (uint8_t c : in)
+        {
+            if (c > 127 || table[c] == -1)
+                break;
+            val = (val << 6) + table[c];
+            valb += 6;
+            if (valb >= 0)
+            {
+                out.push_back(static_cast<uint8_t>((val >> valb) & 0xFF));
+                valb -= 8;
+            }
         }
         return out;
     }

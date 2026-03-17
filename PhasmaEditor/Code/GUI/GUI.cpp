@@ -783,7 +783,7 @@ namespace pe
         auto lightWidget = std::make_shared<LightWidget>();
         auto globalWidget = std::make_shared<GlobalWidget>();
         // Console added early to potentially influence tab ordering (Leftmost)
-        m_widgets = {agentWidget,
+        m_widgets = {std::static_pointer_cast<Widget>(agentWidget),
                      console,
                      properties,
                      metrics,
@@ -806,7 +806,7 @@ namespace pe
                     { console->AddLog(type, "%s", msg.c_str()); });
 
         // Populate Menu Vectors
-        m_menuWindowWidgets = {agentWidget,
+        m_menuWindowWidgets = {std::static_pointer_cast<Widget>(agentWidget),
                                console,
                                metrics,
                                properties,

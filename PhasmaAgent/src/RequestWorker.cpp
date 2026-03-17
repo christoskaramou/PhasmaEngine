@@ -308,6 +308,14 @@ namespace pagent
                             systemPrompt += context;
                             Log("RAG: injected " + std::to_string(results.size()) + " context entries");
                         }
+
+                        // Index the user message for future retrieval
+                        VectorEntry userEntry;
+                        userEntry.id = "user_" + std::to_string(std::chrono::steady_clock::now().time_since_epoch().count());
+                        userEntry.content = queryText.substr(0, 500);
+                        userEntry.metadata = "{\"type\":\"user\"}";
+                        userEntry.embedding = std::move(queryVec);
+                        m_vectorStore->Add(std::move(userEntry));
                     }
                 }
             }

@@ -43,11 +43,13 @@ namespace pe
         pagent::Agent::CancelPull(m_pullEmbeddingCancel);
         if (m_agent)
             m_agent->CancelPending();
+        m_agentScriptSystem.Destroy();
     }
 
     void AgentWidget::Init(GUI *gui)
     {
-        Widget::Init(gui);
+        pe::Widget::Init(gui);
+        m_agentScriptSystem.InitRestricted(nullptr);
 
         // Load saved embedding config, or default to Google if key exists
         LoadEmbeddingConfig();
@@ -408,11 +410,10 @@ namespace pe
 
                                    QueueAction([&]()
                                                {
-                                       auto *ss = GetGlobalSystem<ScriptSystem>();
-                                       if (!ss || !ss->IsInitialized())
+                                       if (!m_agentScriptSystem.IsInitialized())
                                            result = "error: ScriptSystem not available";
                                        else
-                                           result = ss->ExecuteLua(code);
+                                           result = m_agentScriptSystem.ExecuteLua(code);
                                        {
                                            std::lock_guard lock(mtx);
                                            done = true;
@@ -449,9 +450,7 @@ namespace pe
                                    if (fpath.is_relative())
                                        fpath = std::filesystem::path(projectRoot) / fpath;
 
-                                   std::string normalized = fpath.lexically_normal().string();
-                                   std::string rootNorm = std::filesystem::path(projectRoot).lexically_normal().string();
-                                   if (normalized.find(rootNorm) != 0)
+                                   if (!IsPathSafe(fpath.string(), projectRoot))
                                        return "{\"error\":\"path outside project directory\"}";
 
                                    if (!std::filesystem::exists(fpath))
@@ -471,7 +470,7 @@ namespace pe
                                    std::string content((std::istreambuf_iterator<char>(file)),
                                                        std::istreambuf_iterator<char>());
 
-                                   return JsonObj({{"path", JsonStr(normalized)}, {"content", JsonStr(content)}});
+                                   return JsonObj({{"path", JsonStr(fpath.string())}, {"content", JsonStr(content)}});
                                }});
 
         m_agent->RegisterTool({.name = "write_project_file",
@@ -498,15 +497,16 @@ namespace pe
                                    if (fpath.is_relative())
                                        fpath = std::filesystem::path(projectRoot) / fpath;
 
-                                   std::string normalized = fpath.lexically_normal().string();
-                                   std::string rootNorm = std::filesystem::path(projectRoot).lexically_normal().string();
-                                   if (normalized.find(rootNorm) != 0)
+                                   if (!IsPathSafe(fpath.string(), projectRoot))
                                        return "{\"error\":\"path outside project directory\"}";
 
                                    // Only allow writing inside PhasmaEditor/
-                                   std::string editorDir = (std::filesystem::path(projectRoot) / "PhasmaEditor").lexically_normal().string();
-                                   if (normalized.find(editorDir) != 0)
+                                   std::string editorDir = (std::filesystem::path(projectRoot) / "PhasmaEditor").string();
+                                   if (!IsPathSafe(fpath.string(), editorDir))
                                        return "{\"error\":\"writes only allowed inside PhasmaEditor/\"}";
+
+                                   // TODO: Implement UI confirmation here. 
+                                   // For now, we've at least secured the path traversal and restricted to PhasmaEditor/
 
                                    std::filesystem::path parentDir = fpath.parent_path();
                                    if (!parentDir.empty() && !std::filesystem::exists(parentDir))
@@ -529,7 +529,7 @@ namespace pe
                                    file << content;
                                    file.close();
 
-                                   return JsonObj({{"status", JsonStr("ok")}, {"path", JsonStr(normalized)}});
+                                   return JsonObj({{"status", JsonStr("ok")}, {"path", JsonStr(fpath.string())}});
                                }});
 
         m_agent->RegisterTool({.name = "find_project_file",
@@ -551,9 +551,7 @@ namespace pe
                                    if (searchPath.is_relative())
                                        searchPath = std::filesystem::path(projectRoot) / searchPath;
 
-                                   std::string normalized = searchPath.lexically_normal().string();
-                                   std::string rootNorm = std::filesystem::path(projectRoot).lexically_normal().string();
-                                   if (normalized.find(rootNorm) != 0)
+                                   if (!IsPathSafe(searchPath.string(), projectRoot))
                                        return "{\"error\":\"path outside project directory\"}";
 
                                    if (!std::filesystem::exists(searchPath))
@@ -616,9 +614,7 @@ namespace pe
                                    if (dirPath.is_relative())
                                        dirPath = std::filesystem::path(projectRoot) / dirPath;
 
-                                   std::string normalized = dirPath.lexically_normal().string();
-                                   std::string rootNorm = std::filesystem::path(projectRoot).lexically_normal().string();
-                                   if (normalized.find(rootNorm) != 0)
+                                   if (!IsPathSafe(dirPath.string(), projectRoot))
                                        return "{\"error\":\"path outside project directory\"}";
 
                                    if (!std::filesystem::exists(dirPath) || !std::filesystem::is_directory(dirPath))
@@ -649,7 +645,7 @@ namespace pe
                                    }
                                    files += "]";
                                    dirs += "]";
-                                   return JsonObj({{"path", JsonStr(normalized)}, {"files", files}, {"dirs", dirs}});
+                                   return JsonObj({{"path", JsonStr(dirPath.string())}, {"files", files}, {"dirs", dirs}});
                                }});
 
         m_agent->RegisterTool({.name = "find_loadable_model",

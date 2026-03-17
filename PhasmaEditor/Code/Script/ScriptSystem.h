@@ -52,6 +52,7 @@ namespace pe
     {
     public:
         void Init(CommandBuffer *cmd) override;
+        void InitRestricted(CommandBuffer *cmd);
         void Update() override;
         void Destroy() override;
         void Reload();
@@ -74,6 +75,7 @@ namespace pe
         void ScanForNewScripts();
         void CollectHooks(ScriptEntry &entry);
         static std::vector<LuaBindingFunc> &GetBindings();
+        void InitInternal(CommandBuffer *cmd, bool restricted);
 
         sol::state m_lua{};
         std::vector<ScriptEntry> m_scripts{};

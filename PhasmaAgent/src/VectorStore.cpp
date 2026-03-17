@@ -83,14 +83,14 @@ namespace pagent
         if (!f.is_open())
             return;
 
-        std::string content((std::istreambuf_iterator<char>(f)),
+        std::string jsonBody((std::istreambuf_iterator<char>(f)),
                             std::istreambuf_iterator<char>());
-        if (content.empty())
+        if (jsonBody.empty())
             return;
 
         try
         {
-            auto arr = json::parse(content);
+            auto arr = json::parse(jsonBody);
             if (!arr.is_array())
                 return;
 
@@ -101,7 +101,9 @@ namespace pagent
             {
                 VectorEntry e;
                 e.id = obj.value("id", "");
+                
                 e.content = obj.value("content", "");
+
                 e.metadata = obj.value("metadata", "");
                 if (obj.contains("embedding") && obj["embedding"].is_array())
                     e.embedding = obj["embedding"].get<std::vector<float>>();

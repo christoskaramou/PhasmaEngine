@@ -15,14 +15,36 @@ namespace pe
 
     void ScriptSystem::Init(CommandBuffer *cmd)
     {
-        m_lua.open_libraries(
-            sol::lib::base,
-            sol::lib::math,
-            sol::lib::string,
-            sol::lib::table,
-            sol::lib::io,
-            sol::lib::os,
-            sol::lib::coroutine);
+        InitInternal(cmd, false);
+    }
+
+    void ScriptSystem::InitRestricted(CommandBuffer *cmd)
+    {
+        InitInternal(cmd, true);
+    }
+
+    void ScriptSystem::InitInternal(CommandBuffer *cmd, bool restricted)
+    {
+        if (restricted)
+        {
+            m_lua.open_libraries(
+                sol::lib::base,
+                sol::lib::math,
+                sol::lib::string,
+                sol::lib::table,
+                sol::lib::coroutine);
+        }
+        else
+        {
+            m_lua.open_libraries(
+                sol::lib::base,
+                sol::lib::math,
+                sol::lib::string,
+                sol::lib::table,
+                sol::lib::io,
+                sol::lib::os,
+                sol::lib::coroutine);
+        }
 
         // Logging
         m_lua.set_function("pe_log", [](const std::string &msg)
@@ -42,7 +64,8 @@ namespace pe
         for (auto &fn : GetBindings())
             fn(m_lua);
 
-        LoadScripts();
+        if (!restricted)
+            LoadScripts();
 
         m_initialized = true;
     }

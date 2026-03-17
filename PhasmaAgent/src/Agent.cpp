@@ -304,13 +304,14 @@ namespace pagent
             break;
         case Provider::Google:
             host = "generativelanguage.googleapis.com";
-            path = "/v1beta/models?key=" + api_key;
+            path = "/v1beta/models";
+            headers = {{"x-goog-api-key", api_key}};
             break;
         default:
             return {};
         }
 
-        if (!api_key.empty() && headers.empty() && provider != Provider::Google)
+        if (!api_key.empty() && headers.empty())
             headers = {{"Authorization", "Bearer " + api_key}};
 
         std::string responseBody = httpGet(host, path, true, headers);

@@ -1,6 +1,7 @@
 #pragma once
 
 #include "GUI/Widget.h"
+#include "Script/ScriptSystem.h"
 #include "PhasmaAgent/Agent.h"
 #include <vector>
 #include <string>
@@ -140,5 +141,7 @@ namespace pe
         void UpdateExternalFileWatch();
         void WriteExternalHistory();
         std::string GetExternalResponsePath() const;
+
+        pe::ScriptSystem m_agentScriptSystem;
     };
 } // namespace pe

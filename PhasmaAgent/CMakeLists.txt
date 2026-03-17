@@ -13,8 +13,8 @@ add_library(PhasmaAgent STATIC ${PAGENT_SOURCES})
 # Private: internal src + vendored single headers
 target_include_directories(PhasmaAgent
     PUBLIC  "${CMAKE_CURRENT_SOURCE_DIR}/include"
+             "${CMAKE_CURRENT_SOURCE_DIR}/third_party"
     PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src"
-    PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/third_party"
 )
 
 # --- OpenSSL (optional — provides built-in HTTPS; not needed if custom_http_handler is used) ---
