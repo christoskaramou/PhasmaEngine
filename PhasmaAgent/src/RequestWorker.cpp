@@ -9,6 +9,46 @@
 
 namespace pagent
 {
+    // Strip non-UTF-8 bytes to avoid json serialization errors (type_error.316)
+    static std::string SanitizeUTF8(const std::string &s)
+    {
+        std::string out;
+        out.reserve(s.size());
+        for (size_t i = 0; i < s.size();)
+        {
+            unsigned char c = static_cast<unsigned char>(s[i]);
+            if (c < 0x80)
+            {
+                out += s[i++];
+                continue;
+            }
+            int len = (c < 0xE0) ? 2 : (c < 0xF0) ? 3
+                                                  : 4;
+            if (i + len > s.size())
+            {
+                i++;
+                continue;
+            }
+            bool ok = true;
+            for (int j = 1; j < len; ++j)
+                if ((static_cast<unsigned char>(s[i + j]) & 0xC0) != 0x80)
+                {
+                    ok = false;
+                    break;
+                }
+            if (ok)
+            {
+                out.append(s, i, len);
+                i += len;
+            }
+            else
+            {
+                i++;
+            }
+        }
+        return out;
+    }
+
     // Resolve the API host from config, with provider-specific defaults
     static std::string ResolveHost(const AgentConfig &config)
     {
@@ -16,10 +56,14 @@ namespace pagent
             return config.base_url;
         switch (config.provider)
         {
-        case Provider::Anthropic: return "https://api.anthropic.com";
-        case Provider::OpenAI:    return "https://api.openai.com";
-        case Provider::Google:    return "https://generativelanguage.googleapis.com";
-        case Provider::Ollama:    return "http://localhost:11434";
+        case Provider::Anthropic:
+            return "https://api.anthropic.com";
+        case Provider::OpenAI:
+            return "https://api.openai.com";
+        case Provider::Google:
+            return "https://generativelanguage.googleapis.com";
+        case Provider::Ollama:
+            return "http://localhost:11434";
         }
         return {};
     }
@@ -254,7 +298,7 @@ namespace pagent
                         int totalChars = 0;
                         for (const auto &r : results)
                         {
-                            std::string entry = "- " + r.entry->content + "\n";
+                            std::string entry = "- " + SanitizeUTF8(r.entry->content) + "\n";
                             if (totalChars + static_cast<int>(entry.size()) > m_config.rag_max_context_chars)
                                 break;
                             ragContext += entry;
@@ -272,9 +316,9 @@ namespace pagent
                     // Index the user message for future retrieval
                     VectorEntry userEntry;
                     userEntry.id = "user_" + std::to_string(std::chrono::steady_clock::now().time_since_epoch().count());
-                    userEntry.content = m_config.rag_max_entry_chars > 0
-                                            ? queryText.substr(0, m_config.rag_max_entry_chars)
-                                            : queryText;
+                    userEntry.content = SanitizeUTF8(m_config.rag_max_entry_chars > 0
+                                                         ? queryText.substr(0, m_config.rag_max_entry_chars)
+                                                         : queryText);
                     userEntry.metadata = "{\"type\":\"user\"}";
                     userEntry.embedding = std::move(queryVec);
                     m_vectorStore->Add(std::move(userEntry));
@@ -336,7 +380,7 @@ namespace pagent
             const auto toolsSchemaJson = m_toolRegistry.GenerateSchemaJson(*m_backend);
 
             // Append precomputed RAG context to system prompt for every round
-            std::string systemPrompt = m_config.system_prompt + ragContext;
+            std::string systemPrompt = SanitizeUTF8(m_config.system_prompt + ragContext);
 
             if (m_config.log_callback)
                 m_config.log_callback("[PAgent] Round " + std::to_string(round) + ": " + std::to_string(m_toolRegistry.GetToolCount()) + " tools, " + std::to_string(messages.size()) + " msgs, model='" + m_config.model + "', provider=" + std::to_string(static_cast<int>(m_config.provider)));
@@ -478,9 +522,9 @@ namespace pagent
                     {
                         VectorEntry entry;
                         entry.id = "turn_" + std::to_string(std::chrono::steady_clock::now().time_since_epoch().count());
-                        entry.content = m_config.rag_max_entry_chars > 0
-                                            ? fullText.substr(0, m_config.rag_max_entry_chars)
-                                            : fullText;
+                        entry.content = SanitizeUTF8(m_config.rag_max_entry_chars > 0
+                                                         ? fullText.substr(0, m_config.rag_max_entry_chars)
+                                                         : fullText);
                         entry.metadata = "{\"type\":\"assistant\"}";
                         entry.embedding = std::move(vec);
                         m_vectorStore->Add(std::move(entry));
@@ -506,7 +550,7 @@ namespace pagent
                 }
 
                 Log("Dispatching tool: " + tc.tool_name);
-                auto resultJson = m_toolRegistry.Dispatch(tc.tool_name, tc.tool_input_json);
+                auto resultJson = SanitizeUTF8(m_toolRegistry.Dispatch(tc.tool_name, tc.tool_input_json));
 
                 // Truncate large tool results to save tokens (skip read-type tools that need full content)
                 if (m_config.max_tool_result_chars > 0 &&

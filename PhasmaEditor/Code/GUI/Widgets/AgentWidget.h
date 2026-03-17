@@ -19,6 +19,12 @@ namespace pe
         int height = 0;
     };
 
+    struct ChatFileAttachment
+    {
+        std::string name;       // filename
+        void *iconDS = nullptr; // ImTextureID for file type icon (borrowed, not owned)
+    };
+
     struct ChatMessage
     {
         enum class Role
@@ -29,8 +35,9 @@ namespace pe
         };
         Role role;
         std::string text;
-        std::string thinking;          // reasoning/thinking content (if any)
-        std::vector<ChatImage> images; // attached images (for display)
+        std::string thinking;                        // reasoning/thinking content (if any)
+        std::vector<ChatImage> images;               // attached images (for display)
+        std::vector<ChatFileAttachment> attachments; // attached files (for display)
     };
 
     class AgentWidget : public Widget
@@ -116,8 +123,9 @@ namespace pe
         // File paste support
         struct PendingFile
         {
-            std::string name;    // filename
-            std::string content; // file text content
+            std::string name;       // filename
+            std::string content;    // file text content
+            void *iconDS = nullptr; // ImTextureID for file type icon (borrowed, not owned)
         };
         std::vector<PendingFile> m_pendingFiles;
 
@@ -177,6 +185,18 @@ namespace pe
         // Tracked GPU images for chat thumbnails (cleaned up on destroy)
         std::vector<Image *> m_chatGpuImages;
         std::vector<void *> m_chatImguiDescriptors;
+
+        // File type icons for pending attachments
+        Image *m_fileIcon = nullptr;
+        void *m_fileIconDS = nullptr;
+        Image *m_txtIcon = nullptr;
+        void *m_txtIconDS = nullptr;
+        Image *m_shaderIcon = nullptr;
+        void *m_shaderIconDS = nullptr;
+        Image *m_modelIcon = nullptr;
+        void *m_modelIconDS = nullptr;
+        Image *m_scriptIcon = nullptr;
+        void *m_scriptIconDS = nullptr;
 
         // Full-size image popup
         void *m_popupImageDescriptor = nullptr;

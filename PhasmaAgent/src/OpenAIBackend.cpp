@@ -121,7 +121,7 @@ namespace pagent
 
         ResetStreamState(); // clear any stale accumulators/signatures
 
-        return body.dump();
+        return body.dump(-1, ' ', false, json::error_handler_t::replace);
     }
 
     std::string OpenAIBackend::BuildToolsJson(const std::vector<ToolDefinition> &tools) const
@@ -161,7 +161,7 @@ namespace pagent
                              }},
             });
         }
-        return arr.dump();
+        return arr.dump(-1, ' ', false, json::error_handler_t::replace);
     }
 
     void OpenAIBackend::ResetStreamState() const

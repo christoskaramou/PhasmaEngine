@@ -1,4 +1,5 @@
 #include "AgentWidget.h"
+#include "FileBrowser.h"
 #include "GUI/GUI.h"
 #include "Systems/RendererSystem.h"
 #include "API/Command.h"
@@ -44,6 +45,61 @@ namespace pe
         return name;
     }
 
+    // Strip non-UTF-8 bytes so JSON serialization doesn't throw
+    static std::string SanitizeUTF8(std::string s)
+    {
+        std::string out;
+        out.reserve(s.size());
+        for (size_t i = 0; i < s.size();)
+        {
+            unsigned char c = static_cast<unsigned char>(s[i]);
+            if (c < 0x80)
+            {
+                out += s[i++];
+                continue;
+            } // ASCII
+            int len = (c < 0xE0) ? 2 : (c < 0xF0) ? 3
+                                                  : 4;
+            if (i + len > s.size())
+            {
+                i++;
+                continue;
+            } // truncated — skip
+            bool ok = true;
+            for (int j = 1; j < len; ++j)
+                if ((static_cast<unsigned char>(s[i + j]) & 0xC0) != 0x80)
+                {
+                    ok = false;
+                    break;
+                }
+            if (ok)
+            {
+                out.append(s, i, len);
+                i += len;
+            }
+            else
+            {
+                i++;
+            } // bad byte — drop
+        }
+        return out;
+    }
+
+    static void *LoadIcon(const std::string &path, Image *&outImage)
+    {
+        Queue *queue = RHII.GetMainQueue();
+        CommandBuffer *cmd = queue->AcquireCommandBuffer();
+        cmd->Begin();
+        outImage = Image::LoadRGBA8(cmd, path);
+        cmd->End();
+        queue->Submit(1, &cmd, nullptr, nullptr);
+        cmd->Wait();
+        cmd->Return();
+        if (outImage && outImage->GetSampler() && outImage->GetSRV())
+            return (void *)ImGui_ImplVulkan_AddTexture(outImage->GetSampler()->ApiHandle(), outImage->GetSRV()->ApiHandle(), VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+        return nullptr;
+    }
+
     // Nearest-neighbor resize RGBA image to fit within maxDim on longest side
     static std::vector<uint8_t> ResizeRGBA(const uint8_t *src, int srcW, int srcH, int &outW, int &outH, int maxDim = 1024)
     {
@@ -86,6 +142,18 @@ namespace pe
             ImGui_ImplVulkan_RemoveTexture((VkDescriptorSet)ds);
         for (auto *img : m_chatGpuImages)
             Image::Destroy(img);
+
+        auto destroyIcon = [](void *ds, Image *img)
+        {
+            if (ds)
+                ImGui_ImplVulkan_RemoveTexture((VkDescriptorSet)ds);
+            Image::Destroy(img);
+        };
+        destroyIcon(m_fileIconDS, m_fileIcon);
+        destroyIcon(m_txtIconDS, m_txtIcon);
+        destroyIcon(m_shaderIconDS, m_shaderIcon);
+        destroyIcon(m_modelIconDS, m_modelIcon);
+        destroyIcon(m_scriptIconDS, m_scriptIcon);
     }
 
     void AgentWidget::Init(GUI *gui)
@@ -119,6 +187,13 @@ namespace pe
         // Default indexing directory: Shaders (always present in assets)
         if (m_indexDirectories.empty())
             m_indexDirectories.push_back(Path::Assets + "Shaders");
+
+        // Load file type icons for pending attachments
+        m_fileIconDS = LoadIcon(Path::Assets + "Icons/file_icon.png", m_fileIcon);
+        m_txtIconDS = LoadIcon(Path::Assets + "Icons/txt_icon.png", m_txtIcon);
+        m_shaderIconDS = LoadIcon(Path::Assets + "Icons/shader_icon.png", m_shaderIcon);
+        m_modelIconDS = LoadIcon(Path::Assets + "Icons/model_icon.png", m_modelIcon);
+        m_scriptIconDS = LoadIcon(Path::Assets + "Icons/script_icon.png", m_scriptIcon);
 
         ConfigureAgent(m_providers[m_selectedProviderIndex].provider);
 
@@ -1964,9 +2039,8 @@ namespace pe
         chatMsg.text = text;
         for (const auto &img : m_pendingImages)
             chatMsg.images.push_back({img.imguiDescriptor, img.width, img.height});
-        // Show attached file names
         for (const auto &pf : m_pendingFiles)
-            chatMsg.text += "\n[Attached: " + pf.name + "]";
+            chatMsg.attachments.push_back({pf.name, pf.iconDS});
 
         {
             std::lock_guard lock(m_chatMutex);
@@ -1998,6 +2072,49 @@ namespace pe
             if (m_providers[m_selectedProviderIndex].provider == pagent::Provider::Ollama)
                 m_ollamaModelLoaded = true;
         }
+        // Save all pasted content to Assets/Temp/
+        if (!m_pendingImages.empty() || !m_pendingFiles.empty())
+        {
+            std::string tempDir = Path::Assets + "Temp/";
+            if (!std::filesystem::exists(tempDir))
+                std::filesystem::create_directories(tempDir);
+
+            auto now = std::chrono::system_clock::now();
+            auto time = std::chrono::system_clock::to_time_t(now);
+            char timeBuf[32];
+            std::strftime(timeBuf, sizeof(timeBuf), "%Y%m%d_%H%M%S", std::localtime(&time));
+
+            for (size_t i = 0; i < m_pendingImages.size(); ++i)
+            {
+                const auto &img = m_pendingImages[i];
+                if (img.base64.empty())
+                    continue;
+                auto bytes = pagent::Base64Decode(img.base64);
+                if (bytes.empty())
+                    continue;
+
+                std::string ext = (img.mime_type == "image/jpeg") ? ".jpg" : ".png";
+                std::string filename = std::string("paste_") + timeBuf;
+                if (m_pendingImages.size() > 1)
+                    filename += "_" + std::to_string(i);
+                filename += ext;
+
+                std::ofstream file(tempDir + filename, std::ios::binary);
+                if (file.is_open())
+                    file.write(reinterpret_cast<const char *>(bytes.data()), bytes.size());
+            }
+
+            for (const auto &pf : m_pendingFiles)
+            {
+                if (pf.content.empty())
+                    continue;
+                std::string filename = std::string("paste_") + timeBuf + "_" + pf.name;
+                std::ofstream file(tempDir + filename, std::ios::out);
+                if (file.is_open())
+                    file << pf.content;
+            }
+        }
+
         m_pendingImages.clear();
         m_pendingFiles.clear();
         ImGui::SetKeyboardFocusHere(-1);
@@ -2144,24 +2261,43 @@ namespace pe
                     }
                     else
                     {
-                        // Text/code file — read content (truncate at 20k chars to avoid token limits)
-                        constexpr size_t maxChars = 20000;
-                        std::ifstream file(fp, std::ios::in);
-                        if (!file.is_open())
-                            continue;
-                        std::string content((std::istreambuf_iterator<char>(file)), {});
-                        if (!content.empty())
+                        PendingFile pf;
+                        pf.name = fp.filename().string();
+
+                        if (FileBrowser::IsModelFile(fp))
                         {
-                            PendingFile pf;
-                            pf.name = fp.filename().string();
+                            // Binary file — don't read content, just reference path
+                            pf.content = "[Model file: " + fp.string() + "]";
+                            pf.iconDS = m_modelIconDS ? m_modelIconDS : m_fileIconDS;
+                        }
+                        else
+                        {
+                            // Text/code file — read and sanitize content
+                            constexpr size_t maxChars = 20000;
+                            std::ifstream file(fp, std::ios::in);
+                            if (!file.is_open())
+                                continue;
+                            std::string content((std::istreambuf_iterator<char>(file)), {});
+                            if (content.empty())
+                                continue;
+                            content = SanitizeUTF8(std::move(content));
                             if (content.size() > maxChars)
                             {
                                 content.resize(maxChars);
                                 content += "\n... [truncated at 20k chars]";
                             }
                             pf.content = std::move(content);
-                            m_pendingFiles.push_back(std::move(pf));
+                            if (FileBrowser::IsShaderFile(fp))
+                                pf.iconDS = m_shaderIconDS ? m_shaderIconDS : m_fileIconDS;
+                            else if (FileBrowser::IsScriptFile(fp))
+                                pf.iconDS = m_scriptIconDS ? m_scriptIconDS : m_fileIconDS;
+                            else if (FileBrowser::IsTextFile(fp))
+                                pf.iconDS = m_txtIconDS ? m_txtIconDS : m_fileIconDS;
+                            else
+                                pf.iconDS = m_fileIconDS;
                         }
+
+                        m_pendingFiles.push_back(std::move(pf));
                     }
                 }
             }
@@ -2288,7 +2424,12 @@ namespace pe
         for (size_t i = 0; i < m_pendingFiles.size(); i++)
         {
             const auto &pf = m_pendingFiles[i];
-            ImGui::Text("[%s (%d bytes)]", pf.name.c_str(), static_cast<int>(pf.content.size()));
+            if (pf.iconDS)
+            {
+                ImGui::Image(reinterpret_cast<ImTextureID>(pf.iconDS), ImVec2(thumbH, thumbH));
+                ImGui::SameLine();
+            }
+            ImGui::Text("%s\n(%d bytes)", pf.name.c_str(), static_cast<int>(pf.content.size()));
             ImGui::SameLine();
             std::string removeLabel = "X##rmfile" + std::to_string(i);
             if (ImGui::SmallButton(removeLabel.c_str()))
@@ -2600,6 +2741,22 @@ namespace pe
             }
         };
 
+        // Helper: render file attachments with icons
+        auto renderAttachments = [](const std::vector<ChatFileAttachment> &attachments)
+        {
+            for (const auto &fa : attachments)
+            {
+                if (fa.iconDS)
+                {
+                    ImGui::Image(reinterpret_cast<ImTextureID>(fa.iconDS), ImVec2(16.0f, 16.0f));
+                    ImGui::SameLine();
+                }
+                ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.7f, 0.85f, 1.0f, 1.0f));
+                ImGui::Text("[Attached: %s]", fa.name.c_str());
+                ImGui::PopStyleColor();
+            }
+        };
+
         switch (msg.role)
         {
         case ChatMessage::Role::User:
@@ -2607,6 +2764,7 @@ namespace pe
             ImGui::TextWrapped("[You] %s", msg.text.c_str());
             ImGui::PopStyleColor();
             renderImages(msg.images);
+            renderAttachments(msg.attachments);
             break;
         case ChatMessage::Role::Assistant:
             if (!msg.thinking.empty())

@@ -25,7 +25,7 @@ namespace pagent
         const std::string model = "gemini-2.5-flash";
         const std::string host = "generativelanguage.googleapis.com";
         const std::string path = "/v1beta/models/" + model + ":generateContent";
-        const std::string bodyStr = body.dump();
+        const std::string bodyStr = body.dump(-1, ' ', false, json::error_handler_t::replace);
 
         std::string responseBody;
 

@@ -297,5 +297,6 @@ imgui.ini
 .cache/
 
 # Agent runtime files (keep START.md only)
+PhasmaEditor/Assets/Temp/
 PhasmaEditor/Assets/Agent/*
 !PhasmaEditor/Assets/Agent/START.md

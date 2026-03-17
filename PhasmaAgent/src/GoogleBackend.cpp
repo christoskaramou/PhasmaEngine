@@ -149,7 +149,7 @@ namespace pagent
         }
 
         ResetStreamState();
-        return body.dump();
+        return body.dump(-1, ' ', false, json::error_handler_t::replace);
     }
 
     std::string GoogleBackend::BuildToolsJson(const std::vector<ToolDefinition> &tools) const
@@ -191,7 +191,7 @@ namespace pagent
 
         json arr = json::array();
         arr.push_back({{"functionDeclarations", declarations}});
-        return arr.dump();
+        return arr.dump(-1, ' ', false, json::error_handler_t::replace);
     }
 
     void GoogleBackend::ResetStreamState() const
