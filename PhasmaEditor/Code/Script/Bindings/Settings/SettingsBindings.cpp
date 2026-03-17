@@ -1,5 +1,8 @@
 #if defined(PE_SCRIPTS)
 #include "Script/ScriptSystem.h"
+#include "RenderPasses/LightPass.h"
+#include "RenderPasses/RayTracingPass.h"
+
 namespace pe
 {
     static const std::unordered_map<std::string_view, bool GlobalSettings::*> s_boolSettings = {
@@ -84,7 +87,18 @@ namespace pe
                     {
                         auto it = s_boolSettings.find(std::string_view(name));
                         if (it != s_boolSettings.end())
+                        {
                             gs.*(it->second) = value.as<bool>();
+                            if (name == "day")
+                            {
+                                if (auto *p = GetGlobalComponent<LightOpaquePass>())
+                                    p->UpdateDescriptorSets();
+                                if (auto *p = GetGlobalComponent<LightTransparentPass>())
+                                    p->UpdateDescriptorSets();
+                                if (auto *p = GetGlobalComponent<RayTracingPass>())
+                                    p->UpdateDescriptorSets();
+                            }
+                        }
                     }
                     else if (value.is<float>() || value.is<double>())
                     {

@@ -2,12 +2,23 @@
 #include "Script/ScriptSystem.h"
 #include "Skybox/Skybox.h"
 #include "Systems/RendererSystem.h"
+#include "RenderPasses/LightPass.h"
+#include "RenderPasses/RayTracingPass.h"
 #include "API/RHI.h"
 #include "API/Queue.h"
 #include "API/Command.h"
 
 namespace pe
 {
+    static void UpdateSkyboxDescriptors()
+    {
+        if (auto *pass = GetGlobalComponent<LightOpaquePass>())
+            pass->UpdateDescriptorSets();
+        if (auto *pass = GetGlobalComponent<LightTransparentPass>())
+            pass->UpdateDescriptorSets();
+        if (auto *pass = GetGlobalComponent<RayTracingPass>())
+            pass->UpdateDescriptorSets();
+    }
     static struct SkyboxBindings
     {
         SkyboxBindings()
@@ -43,10 +54,12 @@ namespace pe
                     cmd->Return();
 
                     Settings::Get<GlobalSettings>().day = (t == "day");
+                    UpdateSkyboxDescriptors();
                 });
 
                 skybox.set_function("set_time", [](const std::string &time) {
                     Settings::Get<GlobalSettings>().day = (time == "day");
+                    UpdateSkyboxDescriptors();
                 });
 
                 skybox.set_function("is_day", []() -> bool {

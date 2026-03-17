@@ -13,6 +13,9 @@ if(MSVC)
     endif()
     set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} /Oi /permissive-")
     set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /Oi /permissive-")
+    # Add /bigobj to avoid MSVC "number of sections exceeded" (C1128) for large translation units
+    set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} /bigobj")
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /bigobj")
 endif()
 
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY_DEBUG "${CMAKE_BINARY_DIR}/Debug")
