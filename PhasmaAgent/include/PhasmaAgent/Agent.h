@@ -228,8 +228,6 @@ namespace pagent
 
     struct TokenUsage
     {
-        int turnInput = 0;
-        int turnOutput = 0;
         int totalInput = 0;
         int totalOutput = 0;
         int totalCacheRead = 0;

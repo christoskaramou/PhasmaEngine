@@ -108,6 +108,8 @@ namespace pe
         // Input history (up/down arrow)
         std::vector<std::string> m_inputHistory;
         int m_historyIndex = -1;
+        std::string m_pendingHistoryText; // applied inside InputText callback on next frame
+        bool m_pendingHistoryUpdate = false;
 
         // Image paste support
         struct PendingImage

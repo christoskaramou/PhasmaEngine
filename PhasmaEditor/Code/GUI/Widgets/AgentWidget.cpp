@@ -614,7 +614,8 @@ namespace pe
         auto skipExts = m_skipExtensions;
         auto skipRegex = m_skipRegex;
 
-        std::thread([this, store, embedding, dirs, includeFiles, skipDirs, skipFiles, skipExts, skipRegex]()
+        auto aliveRef = m_alive;
+        std::thread([this, aliveRef, store, embedding, dirs, includeFiles, skipDirs, skipFiles, skipExts, skipRegex]()
                     {
             pagent::IndexerConfig config;
             config.directories = dirs;
@@ -628,6 +629,8 @@ namespace pe
             pagent::CodebaseIndexer indexer(embedding.get(), store.get());
             auto status = indexer.CheckStatus(config);
 
+            if (!*aliveRef)
+                return;
             m_indexStatusTotal = status.totalFiles;
             m_indexStatusOutdated = status.needsIndexing;
             m_indexStatusFiles = std::move(status.outdatedFiles);
@@ -960,7 +963,8 @@ namespace pe
                                        if (ext != ".glb" && ext != ".gltf" && ext != ".obj" && ext != ".fbx")
                                            continue;
 
-                                       std::string relPath = std::filesystem::relative(entry.path(), Path::Assets + "Objects").string();
+                                       auto u8rel = std::filesystem::relative(entry.path(), Path::Assets + "Objects").u8string();
+                                       std::string relPath(u8rel.begin(), u8rel.end());
                                        std::replace(relPath.begin(), relPath.end(), '\\', '/');
 
                                        std::string relLower = ToLower(relPath);
@@ -1584,8 +1588,7 @@ namespace pe
             {
                 auto usage = m_agent->GetUsage();
                 char buf[256];
-                snprintf(buf, sizeof(buf), "tokens [in/out]: turn [%dk/%dk]  total: [%dk/%dk]  cached: [%dk]",
-                         usage.turnInput / 1000, usage.turnOutput / 1000,
+                snprintf(buf, sizeof(buf), "tokens [in/out]: [%dk/%dk]  cached: [%dk]",
                          usage.totalInput / 1000, usage.totalOutput / 1000,
                          usage.totalCacheRead / 1000);
                 ImGui::TextUnformatted(buf);
@@ -1916,11 +1919,47 @@ namespace pe
         ImGui::BeginDisabled(busy);
         const float inputWidth = ImGui::GetContentRegionAvail().x - 60.0f;
 
+        // Up/Down arrow history — queue text before InputText; apply inside callback
+        if (!m_inputHistory.empty() && !busy)
+        {
+            if (ImGui::IsKeyPressed(ImGuiKey_UpArrow, false))
+            {
+                if (m_historyIndex < 0)
+                    m_historyIndex = static_cast<int>(m_inputHistory.size()) - 1;
+                else if (m_historyIndex > 0)
+                    m_historyIndex--;
+                m_pendingHistoryText = m_inputHistory[m_historyIndex];
+                m_pendingHistoryUpdate = true;
+            }
+            else if (ImGui::IsKeyPressed(ImGuiKey_DownArrow, false))
+            {
+                if (m_historyIndex >= 0)
+                {
+                    m_historyIndex++;
+                    if (m_historyIndex >= static_cast<int>(m_inputHistory.size()))
+                    {
+                        m_historyIndex = -1;
+                        m_pendingHistoryText.clear();
+                    }
+                    else
+                        m_pendingHistoryText = m_inputHistory[m_historyIndex];
+                    m_pendingHistoryUpdate = true;
+                }
+            }
+        }
+
         auto inputCallback = [](ImGuiInputTextCallbackData *data) -> int
         {
-            if (data->EventFlag == ImGuiInputTextFlags_CallbackCharFilter)
+            auto *self = static_cast<AgentWidget *>(data->UserData);
+            if (data->EventFlag == ImGuiInputTextFlags_CallbackAlways && self->m_pendingHistoryUpdate)
             {
-                // Block Enter (newline) unless Shift is held
+                data->DeleteChars(0, data->BufTextLen);
+                if (!self->m_pendingHistoryText.empty())
+                    data->InsertChars(0, self->m_pendingHistoryText.c_str());
+                self->m_pendingHistoryUpdate = false;
+            }
+            else if (data->EventFlag == ImGuiInputTextFlags_CallbackCharFilter)
+            {
                 if (data->EventChar == '\n' && !ImGui::GetIO().KeyShift)
                     return 1;
             }
@@ -1929,36 +1968,9 @@ namespace pe
 
         ImGui::InputTextMultiline("##input", m_inputBuf, sizeof(m_inputBuf),
                                   ImVec2(inputWidth, inputHeight),
-                                  ImGuiInputTextFlags_CallbackCharFilter,
-                                  inputCallback, nullptr);
+                                  ImGuiInputTextFlags_CallbackCharFilter | ImGuiInputTextFlags_CallbackAlways,
+                                  inputCallback, this);
         bool inputActive = ImGui::IsItemActive();
-
-        // Up/Down arrow history (handled outside callback since Multiline + CallbackHistory is not allowed)
-        if (inputActive && !m_inputHistory.empty())
-        {
-            if (ImGui::IsKeyPressed(ImGuiKey_UpArrow))
-            {
-                if (m_historyIndex < 0)
-                    m_historyIndex = static_cast<int>(m_inputHistory.size()) - 1;
-                else if (m_historyIndex > 0)
-                    m_historyIndex--;
-                strncpy(m_inputBuf, m_inputHistory[m_historyIndex].c_str(), sizeof(m_inputBuf) - 1);
-            }
-            else if (ImGui::IsKeyPressed(ImGuiKey_DownArrow))
-            {
-                if (m_historyIndex >= 0)
-                {
-                    m_historyIndex++;
-                    if (m_historyIndex >= static_cast<int>(m_inputHistory.size()))
-                    {
-                        m_historyIndex = -1;
-                        m_inputBuf[0] = '\0';
-                    }
-                    else
-                        strncpy(m_inputBuf, m_inputHistory[m_historyIndex].c_str(), sizeof(m_inputBuf) - 1);
-                }
-            }
-        }
 
         if (inputActive && ImGui::IsKeyPressed(ImGuiKey_Enter) && !ImGui::GetIO().KeyShift)
             submit = true;

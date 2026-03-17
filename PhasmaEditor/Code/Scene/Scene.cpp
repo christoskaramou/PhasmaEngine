@@ -1431,7 +1431,9 @@ namespace pe
             else
             {
                 auto relModelPath = std::filesystem::relative(model->GetFilePath(), file.parent_path());
-                std::string pathObj = relModelPath.generic_string();
+                auto u8rp = relModelPath.u8string();
+                std::string pathObj(u8rp.begin(), u8rp.end());
+                std::replace(pathObj.begin(), pathObj.end(), '\\', '/');
                 modelObj.AddMember("path", rapidjson::Value(pathObj.c_str(), static_cast<rapidjson::SizeType>(pathObj.length()), allocator).Move(), allocator);
             }
             modelObj.AddMember("name", rapidjson::Value(model->GetLabel().c_str(), allocator).Move(), allocator);
@@ -1488,7 +1490,9 @@ namespace pe
                         {
                             // Store texture path relative to the scene file
                             auto relTex = std::filesystem::relative(std::filesystem::path(texName), file.parent_path());
-                            texName = relTex.generic_string();
+                            auto u8tex = relTex.u8string();
+                            texName = std::string(u8tex.begin(), u8tex.end());
+                            std::replace(texName.begin(), texName.end(), '\\', '/');
                             texturesObj.AddMember(rapidjson::Value(methodNames[i], allocator).Move(),
                                                   rapidjson::Value(texName.c_str(), allocator).Move(), allocator);
                         }
@@ -2082,7 +2086,9 @@ namespace pe
             }
             else
             {
-                std::string absPath = model->GetFilePath().generic_string();
+                auto u8p = model->GetFilePath().u8string();
+                std::string absPath(u8p.begin(), u8p.end());
+                std::replace(absPath.begin(), absPath.end(), '\\', '/');
                 modelObj.AddMember("path", rapidjson::Value(absPath.c_str(), static_cast<rapidjson::SizeType>(absPath.length()), allocator).Move(), allocator);
             }
             modelObj.AddMember("name", rapidjson::Value(model->GetLabel().c_str(), allocator).Move(), allocator);
@@ -2396,7 +2402,8 @@ namespace pe
             {
                 if (m->IsPrimitive())
                     return "prim:" + m->GetPrimitiveType();
-                return "file:" + m->GetFilePath().generic_string();
+                auto u8fp = m->GetFilePath().u8string();
+                return "file:" + std::string(u8fp.begin(), u8fp.end());
             };
 
             auto GetSnapshotModelSource = [](const rapidjson::Value &mv) -> std::string

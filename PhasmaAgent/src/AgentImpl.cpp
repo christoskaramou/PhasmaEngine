@@ -74,8 +74,6 @@ namespace pagent
         {
             if (ev.type == AgentEventType::Usage)
             {
-                m_usage.turnInput = ev.input_tokens;
-                m_usage.turnOutput = ev.output_tokens;
                 m_usage.totalInput += ev.input_tokens;
                 m_usage.totalOutput += ev.output_tokens;
                 m_usage.totalCacheRead += ev.cache_read_tokens;

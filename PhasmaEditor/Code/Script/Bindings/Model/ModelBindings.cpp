@@ -9,6 +9,12 @@
 
 namespace pe
 {
+    // Construct a std::filesystem::path from a UTF-8 std::string (avoids system code page conversion on Windows)
+    static std::filesystem::path U8Path(const std::string &utf8)
+    {
+        return std::filesystem::path(std::u8string(utf8.begin(), utf8.end()));
+    }
+
     // Add/remove models directly so Lua scripts see immediate results.
     // Safe: Lua runs on the main thread (init/update), same context as Window::ProcessEvents.
     static void AddModelToScene(Model *model)
@@ -341,17 +347,17 @@ namespace pe
 
                 lua.set_function("load_model", [](const std::string &path) -> std::tuple<Model *, std::string> {
                     std::string fullPath = path;
-                    if (!std::filesystem::path(path).is_absolute())
+                    if (!U8Path(path).is_absolute())
                         fullPath = Path::Assets + "Objects/" + path;
 
-                    if (!std::filesystem::exists(fullPath))
+                    if (!std::filesystem::exists(U8Path(fullPath)))
                     {
                         std::string err = "load_model: file not found '" + fullPath + "'";
                         Log::Error(err);
                         return {nullptr, err};
                     }
 
-                    Model *model = Model::Load(fullPath);
+                    Model *model = Model::Load(U8Path(fullPath));
                     if (!model)
                     {
                         std::string err = "load_model: could not parse '" + fullPath + "'";
@@ -366,11 +372,11 @@ namespace pe
                 // scene integration + callback on main thread when ready
                 lua.set_function("load_model_async", [](const std::string &path, sol::function callback) {
                     std::string fullPath = path;
-                    if (!std::filesystem::path(path).is_absolute())
+                    if (!U8Path(path).is_absolute())
                         fullPath = Path::Assets + "Objects/" + path;
 
                     auto future = ThreadPool::General.Enqueue([fullPath]() -> Model * {
-                        return Model::Load(fullPath);
+                        return Model::Load(U8Path(fullPath));
                     });
 
                     auto *ss = GetGlobalSystem<ScriptSystem>();
