@@ -3,12 +3,6 @@
 #include "GUI/Widget.h"
 #include "Script/ScriptSystem.h"
 #include "PhasmaAgent/Agent.h"
-#include <vector>
-#include <string>
-#include <mutex>
-#include <functional>
-#include <optional>
-#include <memory>
 
 namespace pagent
 {
@@ -48,13 +42,9 @@ namespace pe
         void Update() override;
 
         // Public accessors for codebase indexing
-        pagent::VectorStore *GetVectorStore() const { return m_vectorStore.get(); }
         pagent::IEmbeddingProvider *GetEmbeddingProvider() const { return m_embeddingProvider.get(); }
-        std::shared_ptr<pagent::VectorStore> GetVectorStoreShared() const { return m_vectorStore; }
         std::shared_ptr<pagent::VectorStore> GetCodebaseStoreShared() const { return m_codebaseStore; }
         std::shared_ptr<pagent::IEmbeddingProvider> GetEmbeddingProviderShared() const { return m_embeddingProvider; }
-        bool IsEmbeddingEnabled() const { return m_embeddingEnabled; }
-        std::string GetVectorStoreFilePath() const;
         std::string GetCodebaseStorePath() const;
         const std::vector<std::string> &GetIndexDirectories() const { return m_indexDirectories; }
         const std::vector<std::string> &GetIncludeFiles() const { return m_includeFiles; }
@@ -151,6 +141,7 @@ namespace pe
         void UpdateEmbeddingModels(bool fetchRemote = false);
         void SaveConfig();
         void LoadConfig();
+        std::string GetEmbeddingModelFileBase() const;
         std::string GetVectorStorePath() const;
         bool m_isFetchingEmbeddingModels = false;
         bool m_isPullingEmbedding = false;

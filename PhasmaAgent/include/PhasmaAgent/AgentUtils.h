@@ -42,21 +42,6 @@ namespace pagent
     }
 
     // build a flat JSON object from key/value pairs (values are already JSON-encoded)
-    inline std::string JsonObj(std::initializer_list<std::pair<const char *, std::string>> kv)
-    {
-        std::string out = "{";
-        bool first = true;
-        for (auto &[k, v] : kv)
-        {
-            if (!first)
-                out += ",";
-            out += JsonStr(k) + ":" + v;
-            first = false;
-        }
-        return out + "}";
-    }
-
-    // vector overload for dynamic key/value pairs
     inline std::string JsonObj(const std::vector<std::pair<std::string, std::string>> &kv)
     {
         std::string out = "{";
@@ -71,48 +56,47 @@ namespace pagent
         return out + "}";
     }
 
+    // initializer_list overload for convenience
+    inline std::string JsonObj(std::initializer_list<std::pair<const char *, std::string>> kv)
+    {
+        std::vector<std::pair<std::string, std::string>> vec;
+        vec.reserve(kv.size());
+        for (auto &[k, v] : kv)
+            vec.emplace_back(k, v);
+        return JsonObj(vec);
+    }
+
+    // Parse a tool-call args JSON object once; returns null json on failure
+    inline nlohmann::json ParseArgs(const std::string &args)
+    {
+        try { return nlohmann::json::parse(args); }
+        catch (...) { return {}; }
+    }
+
     // extract a JSON string value by key from a tool-call args object
     inline std::string ExtractArgStr(const std::string &args, const char *key)
     {
-        try
-        {
-            auto j = nlohmann::json::parse(args);
-            if (j.contains(key) && j[key].is_string())
-                return j[key].get<std::string>();
-        }
-        catch (...)
-        {
-        }
+        auto j = ParseArgs(args);
+        if (j.contains(key) && j[key].is_string())
+            return j[key].get<std::string>();
         return "";
     }
 
     // extract a JSON integer value by key from a tool-call args object
     inline int64_t ExtractArgInt(const std::string &args, const char *key, int64_t defaultVal = 0)
     {
-        try
-        {
-            auto j = nlohmann::json::parse(args);
-            if (j.contains(key) && j[key].is_number())
-                return j[key].get<int64_t>();
-        }
-        catch (...)
-        {
-        }
+        auto j = ParseArgs(args);
+        if (j.contains(key) && j[key].is_number())
+            return j[key].get<int64_t>();
         return defaultVal;
     }
 
     // extract a JSON number value by key from a tool-call args object
     inline float ExtractArgNum(const std::string &args, const char *key)
     {
-        try
-        {
-            auto j = nlohmann::json::parse(args);
-            if (j.contains(key) && j[key].is_number())
-                return j[key].get<float>();
-        }
-        catch (...)
-        {
-        }
+        auto j = ParseArgs(args);
+        if (j.contains(key) && j[key].is_number())
+            return j[key].get<float>();
         return 0.0f;
     }
 

@@ -107,17 +107,22 @@ namespace pagent
         return true;
     }
 
+    // Strip http:// prefix from Ollama host URL, defaulting to localhost:11434
+    static std::string ResolveOllamaHost(const std::string &base_url)
+    {
+        std::string host = base_url.empty() ? "http://localhost:11434" : base_url;
+        const std::string httpPrefix = "http://";
+        if (host.rfind(httpPrefix, 0) == 0)
+            host = host.substr(httpPrefix.size());
+        return host;
+    }
+
     void OllamaProcess::UnloadModel(const std::string &model, const std::string &base_url)
     {
         if (!IsValidModelName(model))
             return;
 
-        std::string ollamaHost = base_url.empty() ? "http://localhost:11434" : base_url;
-        const std::string httpPrefix = "http://";
-        if (ollamaHost.rfind(httpPrefix, 0) == 0)
-            ollamaHost = ollamaHost.substr(httpPrefix.size());
-
-        httplib::Client cli(ollamaHost);
+        httplib::Client cli(ResolveOllamaHost(base_url));
         cli.set_read_timeout(5);
         std::string body = "{\"model\":\"" + model + "\",\"keep_alive\":0}";
         cli.Post("/api/generate", body, "application/json");

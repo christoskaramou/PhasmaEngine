@@ -9,6 +9,16 @@
 
 namespace pagent
 {
+    // Strip http:// prefix from Ollama host URL, defaulting to localhost:11434
+    static std::string ResolveOllamaHost(const std::string &base_url)
+    {
+        std::string host = base_url.empty() ? "http://localhost:11434" : base_url;
+        const std::string httpPrefix = "http://";
+        if (host.rfind(httpPrefix, 0) == 0)
+            host = host.substr(httpPrefix.size());
+        return host;
+    }
+
     std::vector<ProviderInfo> DiscoverProviders()
     {
         std::vector<ProviderInfo> providers;
@@ -212,10 +222,7 @@ namespace pagent
         // Ollama: merge local models + remote library
         if (provider == Provider::Ollama)
         {
-            std::string ollamaHost = base_url.empty() ? "http://localhost:11434" : base_url;
-            const std::string httpPrefix = "http://";
-            if (ollamaHost.rfind(httpPrefix, 0) == 0)
-                ollamaHost = ollamaHost.substr(httpPrefix.size());
+            std::string ollamaHost = ResolveOllamaHost(base_url);
 
             std::vector<ModelInfo> models;
             std::set<std::string> localNames;
@@ -419,17 +426,6 @@ namespace pagent
         return models;
     }
 
-    std::vector<std::string> Agent::FetchModels(Provider provider,
-                                                const std::string &api_key,
-                                                const std::string &base_url)
-    {
-        auto infos = FetchModelInfos(provider, api_key, base_url);
-        std::vector<std::string> names;
-        names.reserve(infos.size());
-        for (auto &info : infos)
-            names.push_back(std::move(info.name));
-        return names;
-    }
     Agent::CancelToken Agent::PullModel(const std::string &model,
                                         ProgressCallback progressCb,
                                         CompleteCallback completeCb)
@@ -449,10 +445,7 @@ namespace pagent
             return {true, true}; // cloud providers: all current models support both
 
         using json = nlohmann::json;
-        std::string ollamaHost = base_url.empty() ? "http://localhost:11434" : base_url;
-        const std::string httpPrefix = "http://";
-        if (ollamaHost.rfind(httpPrefix, 0) == 0)
-            ollamaHost = ollamaHost.substr(httpPrefix.size());
+        std::string ollamaHost = ResolveOllamaHost(base_url);
 
         httplib::Client cli(ollamaHost);
         cli.set_read_timeout(3);
@@ -493,10 +486,7 @@ namespace pagent
     std::vector<Agent::ModelInfo> Agent::FetchOllamaEmbeddingModels(const std::string &base_url, bool local_only)
     {
         using json = nlohmann::json;
-        std::string ollamaHost = base_url.empty() ? "http://localhost:11434" : base_url;
-        const std::string httpPrefix = "http://";
-        if (ollamaHost.rfind(httpPrefix, 0) == 0)
-            ollamaHost = ollamaHost.substr(httpPrefix.size());
+        std::string ollamaHost = ResolveOllamaHost(base_url);
 
         std::vector<ModelInfo> models;
         std::set<std::string> localNames;

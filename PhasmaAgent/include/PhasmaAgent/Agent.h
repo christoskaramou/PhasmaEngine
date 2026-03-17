@@ -356,12 +356,6 @@ namespace pagent
         void SetVectorStore(VectorStore *store);
         void SetCodebaseStore(VectorStore *store);
 
-        // Fetch available model names from the provider. Blocking HTTP call.
-        // For Anthropic returns a hardcoded list (no listing endpoint).
-        static std::vector<std::string> FetchModels(Provider provider,
-                                                    const std::string &api_key,
-                                                    const std::string &base_url = "");
-
         struct ModelInfo
         {
             std::string name;

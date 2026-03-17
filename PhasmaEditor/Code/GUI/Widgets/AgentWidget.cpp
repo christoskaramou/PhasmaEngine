@@ -1,15 +1,9 @@
 #include "AgentWidget.h"
 #include "GUI/GUI.h"
-#include "Scene/Model.h"
-#include "Scene/Scene.h"
-#include "Scene/Primitives.h"
 #include "Systems/RendererSystem.h"
-#include "Systems/LightSystem.h"
-#include "Camera/Camera.h"
 #include "API/Command.h"
 #include "API/RHI.h"
 #include "API/Queue.h"
-#include "Script/ScriptSystem.h"
 #include "PhasmaAgent/AgentUtils.h"
 #include "imgui/imgui.h"
 #include "imgui/imgui_impl_vulkan.h"
@@ -31,6 +25,43 @@ using namespace pagent;
 
 namespace pe
 {
+    // --- Local helpers ---
+
+    static std::string ToLower(std::string s)
+    {
+        for (auto &c : s)
+            c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+        return s;
+    }
+
+    // Sanitize a model name for use as a filename component
+    static std::string SanitizeModelName(const std::string &model)
+    {
+        std::string name = model;
+        for (auto &c : name)
+            if (c == '/' || c == '\\' || c == ':')
+                c = '_';
+        return name;
+    }
+
+    // Nearest-neighbor resize RGBA image to fit within maxDim on longest side
+    static std::vector<uint8_t> ResizeRGBA(const uint8_t *src, int srcW, int srcH, int &outW, int &outH, int maxDim = 1024)
+    {
+        float scale = static_cast<float>(maxDim) / static_cast<float>(std::max(srcW, srcH));
+        outW = static_cast<int>(srcW * scale);
+        outH = static_cast<int>(srcH * scale);
+        std::vector<uint8_t> resized(outW * outH * 4);
+        for (int dy = 0; dy < outH; dy++)
+        {
+            int sy = dy * srcH / outH;
+            for (int dx = 0; dx < outW; dx++)
+            {
+                int sx = dx * srcW / outW;
+                std::memcpy(&resized[(dy * outW + dx) * 4], &src[(sy * srcW + sx) * 4], 4);
+            }
+        }
+        return resized;
+    }
     AgentWidget::AgentWidget() : Widget("Agent"), m_agent(pagent::AgentConfig{})
     {
     }
@@ -468,37 +499,27 @@ namespace pe
         }
     }
 
-    std::string AgentWidget::GetVectorStorePath() const
+    // Returns sanitized embedding model name, or empty if not valid for file paths
+    std::string AgentWidget::GetEmbeddingModelFileBase() const
     {
         std::string modelName = (m_selectedEmbeddingModel < static_cast<int>(m_embeddingModels.size()))
                                     ? m_embeddingModels[m_selectedEmbeddingModel]
                                     : "";
-        // Don't create files with placeholder names
         if (modelName.empty() || modelName.find("fetching") != std::string::npos)
             return {};
-        // Replace characters that are invalid in filenames
-        for (auto &c : modelName)
-            if (c == '/' || c == '\\' || c == ':')
-                c = '_';
-        return Path::Assets + "Agent/vectors_" + modelName + ".json";
+        return SanitizeModelName(modelName);
     }
 
-    std::string AgentWidget::GetVectorStoreFilePath() const
+    std::string AgentWidget::GetVectorStorePath() const
     {
-        return GetVectorStorePath();
+        auto base = GetEmbeddingModelFileBase();
+        return base.empty() ? std::string{} : Path::Assets + "Agent/vectors_" + base + ".json";
     }
 
     std::string AgentWidget::GetCodebaseStorePath() const
     {
-        std::string modelName = (m_selectedEmbeddingModel < static_cast<int>(m_embeddingModels.size()))
-                                    ? m_embeddingModels[m_selectedEmbeddingModel]
-                                    : "";
-        if (modelName.empty() || modelName.find("fetching") != std::string::npos)
-            return {};
-        for (auto &c : modelName)
-            if (c == '/' || c == '\\' || c == ':')
-                c = '_';
-        return Path::Assets + "Agent/codebase_" + modelName + ".bin";
+        auto base = GetEmbeddingModelFileBase();
+        return base.empty() ? std::string{} : Path::Assets + "Agent/codebase_" + base + ".bin";
     }
 
     void AgentWidget::CheckIndexStatus()
@@ -746,9 +767,7 @@ namespace pe
                                    if (!std::filesystem::exists(searchPath))
                                        return JsonObj({{"error", JsonStr("directory not found: " + searchPath.string())}});
 
-                                   std::string queryLower = query;
-                                   for (auto &c : queryLower)
-                                       c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+                                   std::string queryLower = ToLower(query);
 
                                    std::string arr = "[";
                                    bool first = true;
@@ -765,10 +784,7 @@ namespace pe
                                            pathStr.find("/.") != std::string::npos)
                                            continue;
 
-                                       std::string name = entry.path().filename().string();
-                                       std::string nameLower = name;
-                                       for (auto &c : nameLower)
-                                           c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+                                       std::string nameLower = ToLower(entry.path().filename().string());
 
                                        if (nameLower.find(queryLower) == std::string::npos)
                                            continue;
@@ -850,9 +866,7 @@ namespace pe
                                    if (query.empty())
                                        return "{\"error\":\"missing query\"}";
 
-                                   std::string queryLower = query;
-                                   for (auto &c : queryLower)
-                                       c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+                                   std::string queryLower = ToLower(query);
 
                                    std::filesystem::path objectsDir(Path::Assets + "Objects");
                                    if (!std::filesystem::exists(objectsDir))
@@ -867,20 +881,14 @@ namespace pe
                                        if (!entry.is_regular_file())
                                            continue;
 
-                                       auto u8ext = entry.path().extension().u8string();
-                                       std::string ext(u8ext.begin(), u8ext.end());
-                                       for (auto &c : ext)
-                                           c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+                                       std::string ext = ToLower(entry.path().extension().string());
                                        if (ext != ".glb" && ext != ".gltf" && ext != ".obj" && ext != ".fbx")
                                            continue;
 
-                                       auto u8rel = std::filesystem::relative(entry.path(), Path::Assets + "Objects").u8string();
-                                       std::string relPath(u8rel.begin(), u8rel.end());
+                                       std::string relPath = std::filesystem::relative(entry.path(), Path::Assets + "Objects").string();
                                        std::replace(relPath.begin(), relPath.end(), '\\', '/');
 
-                                       std::string relLower = relPath;
-                                       for (auto &c : relLower)
-                                           c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+                                       std::string relLower = ToLower(relPath);
 
                                        if (relLower.find(queryLower) == std::string::npos)
                                            continue;
@@ -1345,19 +1353,14 @@ namespace pe
                     ImGui::SetNextItemWidth(-1);
                     ImGui::InputTextWithHint("##modelfilter", "Filter...", m_modelFilter, sizeof(m_modelFilter));
 
-                    std::string filter = m_modelFilter;
-                    for (auto &c : filter)
-                        c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+                    std::string filter = ToLower(m_modelFilter);
 
                     for (int i = 0; i < static_cast<int>(m_availableModels.size()); ++i)
                     {
                         // Apply filter
                         if (!filter.empty())
                         {
-                            std::string nameLower = m_availableModels[i];
-                            for (auto &c : nameLower)
-                                c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
-                            if (nameLower.find(filter) == std::string::npos)
+                            if (ToLower(m_availableModels[i]).find(filter) == std::string::npos)
                                 continue;
                         }
 
@@ -2060,9 +2063,7 @@ namespace pe
                     if (fileSize == 0 || fileSize > 50 * 1024 * 1024) // skip empty or >50MB
                         continue;
 
-                    std::string ext = fp.extension().string();
-                    for (auto &c : ext)
-                        c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+                    std::string ext = ToLower(fp.extension().string());
 
                     // Image files
                     bool isImage = (ext == ".png" || ext == ".jpg" || ext == ".jpeg" ||
@@ -2112,19 +2113,8 @@ namespace pe
                                 // Resize if too large (max 1024px on longest side)
                                 if (w > 1024 || h > 1024)
                                 {
-                                    float scale = 1024.0f / static_cast<float>(std::max(w, h));
-                                    int nw = static_cast<int>(w * scale);
-                                    int nh = static_cast<int>(h * scale);
-                                    std::vector<uint8_t> resized(nw * nh * 4);
-                                    for (int dy = 0; dy < nh; dy++)
-                                    {
-                                        int sy = dy * h / nh;
-                                        for (int dx = 0; dx < nw; dx++)
-                                        {
-                                            int sx = dx * w / nw;
-                                            std::memcpy(&resized[(dy * nw + dx) * 4], &pixels[(sy * w + sx) * 4], 4);
-                                        }
-                                    }
+                                    int nw, nh;
+                                    auto resized = ResizeRGBA(pixels, w, h, nw, nh);
                                     stbi_image_free(pixels);
                                     auto pngData = pagent::EncodeRGBA_PNG(resized.data(), nw, nh);
                                     base64 = pagent::Base64Encode(pngData.data(), pngData.size());
@@ -2227,20 +2217,8 @@ namespace pe
             // Resize if too large (max 1024px on longest side)
             if (w > 1024 || h > 1024)
             {
-                float scale = 1024.0f / static_cast<float>(std::max(w, h));
-                int nw = static_cast<int>(w * scale);
-                int nh = static_cast<int>(h * scale);
-                std::vector<uint8_t> resized(nw * nh * 4);
-                for (int dy = 0; dy < nh; dy++)
-                {
-                    int sy = dy * h / nh;
-                    for (int dx = 0; dx < nw; dx++)
-                    {
-                        int sx = dx * w / nw;
-                        std::memcpy(&resized[(dy * nw + dx) * 4], &rgba[(sy * w + sx) * 4], 4);
-                    }
-                }
-                rgba = std::move(resized);
+                int nw, nh;
+                rgba = ResizeRGBA(rgba.data(), w, h, nw, nh);
                 w = nw;
                 h = nh;
             }

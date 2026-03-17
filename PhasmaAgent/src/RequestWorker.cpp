@@ -5,15 +5,42 @@
 #include "ImageDescriber.h"
 #include "PhasmaAgent/VectorStore.h"
 
-#ifdef CPPHTTPLIB_OPENSSL_SUPPORT
-#ifndef CPPHTTPLIB_OPENSSL_SUPPORT
-#define CPPHTTPLIB_OPENSSL_SUPPORT
-#endif
-#endif
 #include <httplib/httplib.h>
 
 namespace pagent
 {
+    // Resolve the API host from config, with provider-specific defaults
+    static std::string ResolveHost(const AgentConfig &config)
+    {
+        if (!config.base_url.empty())
+            return config.base_url;
+        switch (config.provider)
+        {
+        case Provider::Anthropic: return "https://api.anthropic.com";
+        case Provider::OpenAI:    return "https://api.openai.com";
+        case Provider::Google:    return "https://generativelanguage.googleapis.com";
+        case Provider::Ollama:    return "http://localhost:11434";
+        }
+        return {};
+    }
+
+    // Build auth + provider-specific headers
+    static std::map<std::string, std::string> BuildHeaders(const AgentConfig &config, IProviderBackend *backend)
+    {
+        std::map<std::string, std::string> headers;
+        if (!config.api_key.empty())
+        {
+            const auto [authKey, authVal] = backend->GetAuthHeader(config.api_key);
+            headers[authKey] = authVal;
+        }
+        if (config.provider == Provider::Anthropic)
+        {
+            headers["anthropic-version"] = "2023-06-01";
+            headers["anthropic-beta"] = "prompt-caching-2024-07-31";
+        }
+        return headers;
+    }
+
     RequestWorker::RequestWorker(
         const AgentConfig &config,
         IProviderBackend *backend,
@@ -138,40 +165,9 @@ namespace pagent
             m_config.model, "You are a summarizer. Output only the summary, nothing else.",
             256, 0.0f, sumMessages, "");
 
-        // Determine host
-        std::string host = m_config.base_url;
-        if (host.empty())
-        {
-            switch (m_config.provider)
-            {
-            case Provider::Anthropic:
-                host = "https://api.anthropic.com";
-                break;
-            case Provider::OpenAI:
-                host = "https://api.openai.com";
-                break;
-            case Provider::Google:
-                host = "https://generativelanguage.googleapis.com";
-                break;
-            case Provider::Ollama:
-                host = "http://localhost:11434";
-                break;
-            }
-        }
-
-        std::map<std::string, std::string> headers;
-        if (!m_config.api_key.empty())
-        {
-            const auto [authKey, authVal] = m_backend->GetAuthHeader(m_config.api_key);
-            headers[authKey] = authVal;
-        }
-        if (m_config.provider == Provider::Anthropic)
-        {
-            headers["anthropic-version"] = "2023-06-01";
-        }
-
         std::vector<AgentEvent> events;
-        const auto err = HttpPost(host, m_backend->GetEndpointPath(), headers, body, events);
+        const auto err = HttpPost(ResolveHost(m_config), m_backend->GetEndpointPath(),
+                                  BuildHeaders(m_config, m_backend), body, events);
 
         if (!err.empty())
         {
@@ -356,41 +352,9 @@ namespace pagent
             if (m_config.log_callback)
                 m_config.log_callback("[PAgent] Body size=" + std::to_string(body.size()));
 
-            // determine host/path based on provider
-            std::string host = m_config.base_url;
-            if (host.empty())
-            {
-                switch (m_config.provider)
-                {
-                case Provider::Anthropic:
-                    host = "api.anthropic.com";
-                    break;
-                case Provider::OpenAI:
-                    host = "https://api.openai.com";
-                    break;
-                case Provider::Google:
-                    host = "https://generativelanguage.googleapis.com";
-                    break;
-                case Provider::Ollama:
-                    host = "http://localhost:11434";
-                    break;
-                }
-            }
+            const std::string host = ResolveHost(m_config);
             const std::string path = m_backend->GetEndpointPath();
-
-            // build headers (content-type is set by httplib's Post() 4th arg)
-            std::map<std::string, std::string> headers;
-            if (!m_config.api_key.empty())
-            {
-                const auto [authKey, authVal] = m_backend->GetAuthHeader(m_config.api_key);
-                headers[authKey] = authVal;
-            }
-            // anthropic requires these headers
-            if (m_config.provider == Provider::Anthropic)
-            {
-                headers["anthropic-version"] = "2023-06-01";
-                headers["anthropic-beta"] = "prompt-caching-2024-07-31";
-            }
+            const auto headers = BuildHeaders(m_config, m_backend);
 
             // HTTP POST + stream parse
             if (m_config.log_callback)

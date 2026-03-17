@@ -1,7 +1,6 @@
 #pragma once
 
 #include "PhasmaAgent/Agent.h"
-#include <queue>
 #include <mutex>
 #include <vector>
 
@@ -15,7 +14,7 @@ namespace pagent
         void Clear();
 
     private:
-        std::queue<AgentEvent> m_queue;
+        std::vector<AgentEvent> m_events;
         std::mutex m_mutex;
     };
 } // namespace pagent

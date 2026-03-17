@@ -1,11 +1,6 @@
 #include "ImageDescriber.h"
 #include <nlohmann/json.hpp>
 
-#ifdef CPPHTTPLIB_OPENSSL_SUPPORT
-#ifndef CPPHTTPLIB_OPENSSL_SUPPORT
-#define CPPHTTPLIB_OPENSSL_SUPPORT
-#endif
-#endif
 #include <httplib/httplib.h>
 
 namespace pagent
