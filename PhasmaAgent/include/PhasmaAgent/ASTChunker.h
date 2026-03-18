@@ -19,7 +19,7 @@ namespace pagent
 
         struct Chunk
         {
-            std::string content;         // The chunk text (no file prefix — caller adds it)
+            std::string content;         // The chunk text (no file prefix - caller adds it)
             int startLine = 0;           // 1-based start line
             int endLine = 0;             // 1-based end line (inclusive)
             std::string namespaceName;   // enclosing namespace (e.g. "pe")

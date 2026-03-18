@@ -686,7 +686,7 @@ namespace pe
             if (name.empty())
                 name = "Model_" + std::to_string(id);
 
-            // Use node icon — the model entry acts as the root node
+            // Use node icon - the model entry acts as the root node
             std::string displayName = std::string(ICON_FA_VECTOR_SQUARE) + "  " + name;
 
             // Compute node hierarchy early (model entry merges with root nodes)
@@ -1016,7 +1016,7 @@ namespace pe
                                     }
                                     catch (const std::exception &e)
                                     {
-                                        PE_WARN("Failed to load model: %s", e.what());
+                                        PE_WARN("[Scene] Failed to load model: %s", e.what());
                                     }
                                     GUIState::s_modelLoading = false;
                                 };
@@ -1075,7 +1075,7 @@ namespace pe
                     }
                 };
 
-                // Root nodes are merged into the model entry — show their
+                // Root nodes are merged into the model entry - show their
                 // meshes and children directly, skipping the root node entries
                 for (int rootIndex : roots)
                 {
@@ -1132,7 +1132,7 @@ namespace pe
                         }
                         catch (const std::exception &e)
                         {
-                            PE_WARN("Failed to load model: %s", e.what());
+                            PE_WARN("[Scene] Failed to load model: %s", e.what());
                         }
                         GUIState::s_modelLoading = false;
                     };

@@ -184,7 +184,7 @@ namespace pe
                 path = std::filesystem::path(Path::Assets) / "Particles" / pathInput;
                 if (!std::filesystem::exists(path))
                 {
-                    PE_ERROR("ParticleManager::LoadTexture: File not found: %s", pathInput.c_str());
+                    PE_ERROR("[Particles] LoadTexture: File not found: %s", pathInput.c_str());
                     return 0;
                 }
             }
@@ -222,12 +222,12 @@ namespace pe
             }
             else
             {
-                PE_ERROR("ParticleManager: Failed to load image %s", path.string().c_str());
+                PE_ERROR("[Particles] Failed to load image %s", path.string().c_str());
             }
         }
         else
         {
-            PE_ERROR("ParticleManager: Unsupported extension %s", ext.c_str());
+            PE_ERROR("[Particles] Unsupported extension %s", ext.c_str());
         }
         return 0;
     }

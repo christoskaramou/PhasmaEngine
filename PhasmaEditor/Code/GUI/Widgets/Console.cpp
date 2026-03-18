@@ -7,6 +7,8 @@ namespace pe
     void Console::Clear()
     {
         m_logs.clear();
+        m_warnCount = 0;
+        m_errorCount = 0;
     }
 
     void Console::AddLog(LogType type, const char *fmt, ...)
@@ -20,6 +22,11 @@ namespace pe
         va_end(args);
 
         m_logs.push_back({std::string(buf), type});
+
+        if (type == LogType::Warn)
+            ++m_warnCount;
+        else if (type == LogType::Error)
+            ++m_errorCount;
 
         if (m_autoScroll)
             m_scrollToBottom = true;

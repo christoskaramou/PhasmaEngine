@@ -31,7 +31,7 @@ namespace pagent
         // Pull a model in the background. Calls progressCb with status messages.
         // Calls completeCb(true/false) when done.
         // Thread-safe: spawns its own thread.
-        // Returns a cancel token — set it to true to abort the download.
+        // Returns a cancel token - set it to true to abort the download.
         using ProgressCallback = std::function<void(const std::string &status)>;
         using CompleteCallback = std::function<void(bool success)>;
         using CancelToken = std::shared_ptr<std::atomic<bool>>;

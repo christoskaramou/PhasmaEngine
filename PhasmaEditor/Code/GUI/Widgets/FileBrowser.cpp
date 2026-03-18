@@ -267,7 +267,7 @@ namespace pe
                             }
                             catch (const std::exception &e)
                             {
-                                PE_WARN("Failed to load model: %s", e.what());
+                                PE_WARN("[Scene] Failed to load model: %s", e.what());
                             }
                             GUIState::s_modelLoading = false;
                         };
@@ -321,7 +321,7 @@ namespace pe
             }
             catch (const std::filesystem::filesystem_error &e)
             {
-                PE_ERROR("Error accessing directory: %s", e.what());
+                PE_ERROR("[FileBrowser] Error accessing directory: %s", e.what());
             }
         }
     }

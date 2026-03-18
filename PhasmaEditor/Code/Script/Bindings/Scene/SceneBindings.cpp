@@ -84,7 +84,7 @@ namespace pe
                     return r ? static_cast<int>(r->GetScene().GetModels().size()) : 0;
                 });
 
-                // find_model(label) -> Model* or nil — check before load_model to avoid duplicate loads and redundant events
+                // find_model(label) -> Model* or nil - check before load_model to avoid duplicate loads and redundant events
                 scene.set_function("find_model", [](const std::string &label) -> Model * {
                     auto *r = GetGlobalSystem<RendererSystem>();
                     if (!r) return nullptr;
@@ -165,6 +165,57 @@ namespace pe
 
                 selection.set_function("clear", []() {
                     SelectionManager::Instance().ClearSelection();
+                });
+
+                // Focus the active camera on the currently selected object.
+                selection.set_function("focus", []() {
+                    auto *r = GetGlobalSystem<RendererSystem>();
+                    if (!r) return;
+                    Camera *cam = r->GetScene().GetActiveCamera();
+                    if (!cam) return;
+
+                    auto &sel = SelectionManager::Instance();
+                    vec3 center;
+                    float radius = 1.0f;
+
+                    if (sel.GetSelectionType() == SelectionType::Node ||
+                        sel.GetSelectionType() == SelectionType::Mesh)
+                    {
+                        Model *m = sel.GetSelectedModel();
+                        if (!m) return;
+                        // Union of all node world bounding boxes
+                        AABB bb{vec3(FLT_MAX), vec3(-FLT_MAX)};
+                        for (auto &ni : m->GetNodeInfos())
+                        {
+                            bb.min = glm::min(bb.min, ni.worldBoundingBox.min);
+                            bb.max = glm::max(bb.max, ni.worldBoundingBox.max);
+                        }
+                        center = bb.GetCenter();
+                        radius = glm::length(bb.GetSize()) * 0.5f;
+                    }
+                    else if (sel.GetSelectionType() == SelectionType::Light)
+                    {
+                        auto *ls = GetGlobalSystem<LightSystem>();
+                        if (!ls) return;
+                        int idx = sel.GetSelectedLightIndex();
+                        if (sel.GetSelectedLightType() == LightType::Point)
+                        {
+                            auto &lights = ls->GetPointLights();
+                            if (idx < 0 || idx >= static_cast<int>(lights.size())) return;
+                            center = vec3(lights[idx].position);
+                        }
+                        else
+                        {
+                            auto &lights = ls->GetDirectionalLights();
+                            if (idx < 0 || idx >= static_cast<int>(lights.size())) return;
+                            center = vec3(lights[idx].position);
+                        }
+                    }
+                    else
+                        return;
+
+                    vec3 dir = glm::normalize(cam->GetFront());
+                    cam->SetPosition(center - dir * (radius * 2.0f));
                 });
 
                 selection.set_function("get_gizmo", []() -> std::string {

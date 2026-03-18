@@ -38,8 +38,10 @@
 #include "PhasmaAgent/IncludeGraph.h"
 #include "Widgets/TransformWidget.h"
 #include "UndoRedo.h"
+#include <nlohmann/json.hpp>
 #include "imgui/imgui_impl_sdl2.h"
 #include "imgui/imgui_impl_vulkan.h"
+#include "imgui/imgui_internal.h"
 
 namespace pe
 {
@@ -101,7 +103,7 @@ namespace pe
                         }
                         catch (const std::exception &e)
                         {
-                            PE_WARN("Failed to load model: %s", e.what());
+                            PE_WARN("[Scene] Failed to load model: %s", e.what());
                         }
                         GUIState::s_modelLoading = false;
                     };
@@ -217,14 +219,24 @@ namespace pe
                     return true; // Close file selector, show overwrite prompt
                 }
 
-                auto saveAsync = [savePath]()
+                auto saveAsync = [savePath, exitAfter = m_exitAfterSave]()
                 {
                     auto* rs = GetGlobalSystem<RendererSystem>();
                     if (rs)
+                    {
                         rs->GetScene().SaveScene(savePath);
+                        rs->GetScene().ClearDirty();
+                    }
+                    if (exitAfter)
+                    {
+                        EventSystem::PushEvent(EventType::Quit);
+                    }
                 };
+                m_exitAfterSave = false;
                 ThreadPool::GUI.Enqueue(saveAsync);
-                return true; }, exts, Path::Assets + "Scenes/");
+                return true; }, exts, Path::Assets + "Scenes/",
+                              [this]()
+                              { m_exitAfterSave = false; });
         }
     }
 
@@ -281,33 +293,119 @@ namespace pe
             m_showExitConfirmation = true;
     }
 
+    static constexpr const char *kEditorConfigPath = "Assets/editor_config.json";
+
+    void GUI::SaveEditorConfig()
+    {
+        RendererSystem *rs = GetGlobalSystem<RendererSystem>();
+        if (!rs)
+            return;
+
+        nlohmann::json j;
+        const auto &scenePath = rs->GetScene().GetScenePath();
+        j["last_scene"] = scenePath.empty() ? "" : scenePath.generic_string();
+
+        std::ofstream f(kEditorConfigPath);
+        if (f)
+            f << j.dump(2) << "\n";
+    }
+
+    void GUI::LoadEditorConfig()
+    {
+        std::ifstream f(kEditorConfigPath);
+        if (!f)
+            return;
+
+        nlohmann::json j;
+        try
+        {
+            j = nlohmann::json::parse(f);
+        }
+        catch (...)
+        {
+            return;
+        }
+
+        std::string lastScene = j.value("last_scene", "");
+        if (lastScene.empty() || !std::filesystem::exists(lastScene))
+            return;
+
+        RendererSystem *rs = GetGlobalSystem<RendererSystem>();
+        if (rs)
+            rs->GetScene().LoadScene(lastScene);
+    }
+
     void GUI::DrawExitPopup()
     {
         if (m_showExitConfirmation)
         {
-            ImGui::OpenPopup("Exit Confirmation");
+            ImGui::OpenPopup("Exit##confirm");
             m_showExitConfirmation = false;
         }
 
-        // Center the modal
         ImVec2 center = ImGui::GetMainViewport()->GetCenter();
         ImGui::SetNextWindowPos(center, ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
 
-        if (ImGui::BeginPopupModal("Exit Confirmation", NULL, ImGuiWindowFlags_AlwaysAutoResize))
+        if (ImGui::BeginPopupModal("Exit##confirm", nullptr, ImGuiWindowFlags_AlwaysAutoResize))
         {
-            ImGui::Text("Are you sure you want to exit?\n\n");
-            ImGui::Separator();
+            RendererSystem *rs = GetGlobalSystem<RendererSystem>();
+            const bool dirty = rs && rs->GetScene().IsDirty();
 
-            if (ImGui::Button("OK", ImVec2(120, 0)))
+            if (dirty)
             {
-                EventSystem::PushEvent(EventType::Quit);
-                ImGui::CloseCurrentPopup();
+                ImGui::Text("The scene has unsaved changes.");
+                ImGui::Dummy(ImVec2(0, 4));
+                ImGui::Separator();
+                ImGui::Dummy(ImVec2(0, 4));
+
+                // Save
+                if (ImGui::Button("Save & Exit", ImVec2(110, 0)))
+                {
+                    Scene &scene = rs->GetScene();
+                    if (!scene.GetScenePath().empty())
+                    {
+                        scene.SaveScene(scene.GetScenePath());
+                        scene.ClearDirty();
+                        SaveEditorConfig();
+                        EventSystem::PushEvent(EventType::Quit);
+                    }
+                    else
+                    {
+                        // No path yet — open file selector; quit after save completes
+                        m_exitAfterSave = true;
+                        ShowSaveSceneMenuItem_Action();
+                    }
+                    ImGui::CloseCurrentPopup();
+                }
+                ImGui::SameLine();
+                // Discard
+                if (ImGui::Button("Discard & Exit", ImVec2(110, 0)))
+                {
+                    SaveEditorConfig();
+                    EventSystem::PushEvent(EventType::Quit);
+                    ImGui::CloseCurrentPopup();
+                }
+                ImGui::SameLine();
+                if (ImGui::Button("Cancel", ImVec2(80, 0)))
+                    ImGui::CloseCurrentPopup();
             }
-            ImGui::SetItemDefaultFocus();
-            ImGui::SameLine();
-            if (ImGui::Button("Cancel", ImVec2(120, 0)))
+            else
             {
-                ImGui::CloseCurrentPopup();
+                ImGui::Text("Are you sure you want to exit?");
+                ImGui::Dummy(ImVec2(0, 4));
+                ImGui::Separator();
+                ImGui::Dummy(ImVec2(0, 4));
+
+                if (ImGui::Button("Exit", ImVec2(100, 0)))
+                {
+                    SaveEditorConfig();
+                    EventSystem::PushEvent(EventType::Quit);
+                    ImGui::CloseCurrentPopup();
+                }
+                ImGui::SetItemDefaultFocus();
+                ImGui::SameLine();
+                if (ImGui::Button("Cancel", ImVec2(80, 0)))
+                    ImGui::CloseCurrentPopup();
             }
             ImGui::EndPopup();
         }
@@ -412,6 +510,62 @@ namespace pe
 
         // Make Console the active tab
         ImGui::SetWindowFocus("Console");
+    }
+
+    void GUI::StatusBar()
+    {
+        ImGuiWindowFlags flags = ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_MenuBar;
+        float height = ImGui::GetFrameHeight();
+        if (!ImGui::BeginViewportSideBar("##StatusBar", ImGui::GetMainViewport(), ImGuiDir_Down, height, flags))
+        {
+            ImGui::End();
+            return;
+        }
+        ImGui::BeginMenuBar();
+
+        auto *console = GetWidget<Console>();
+        const int warns = console ? console->GetWarnCount() : 0;
+        const int errors = console ? console->GetErrorCount() : 0;
+
+        // Transparent button style — just coloured text that highlights on hover
+        ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0, 0, 0, 0));
+        ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(1, 1, 1, 0.08f));
+        ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(1, 1, 1, 0.15f));
+        ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(6, 1));
+
+        // Error button
+        {
+            char buf[32];
+            snprintf(buf, sizeof(buf), "x %d##errbtn", errors);
+            ImGui::PushStyleColor(ImGuiCol_Text, errors > 0 ? ImVec4(1.f, 0.35f, 0.35f, 1.f)
+                                                            : ImVec4(0.45f, 0.45f, 0.45f, 1.f));
+            if (ImGui::SmallButton(buf) && console)
+                console->FocusWithFilter("[ERROR]");
+            ImGui::PopStyleColor();
+            if (ImGui::IsItemHovered())
+                ImGui::SetTooltip("Click to filter console for errors");
+        }
+
+        ImGui::SameLine(0, 8);
+
+        // Warning button
+        {
+            char buf[32];
+            snprintf(buf, sizeof(buf), "! %d##warnbtn", warns);
+            ImGui::PushStyleColor(ImGuiCol_Text, warns > 0 ? ImVec4(1.f, 0.85f, 0.1f, 1.f)
+                                                           : ImVec4(0.45f, 0.45f, 0.45f, 1.f));
+            if (ImGui::SmallButton(buf) && console)
+                console->FocusWithFilter("[WARN]");
+            ImGui::PopStyleColor();
+            if (ImGui::IsItemHovered())
+                ImGui::SetTooltip("Click to filter console for warnings");
+        }
+
+        ImGui::PopStyleVar();
+        ImGui::PopStyleColor(3);
+
+        ImGui::EndMenuBar();
+        ImGui::End();
     }
 
     void GUI::Menu()
@@ -584,7 +738,7 @@ namespace pe
         const auto &dirs = aw->GetIndexDirectories();
         if (dirs.empty())
         {
-            PE_WARN("No indexing directories configured");
+            PE_WARN("[Agent] No indexing directories configured");
             return;
         }
 
@@ -640,7 +794,7 @@ namespace pe
                     }
                     if (done % 50 == 0 || done == total)
                         PE_INFO("Indexing progress: %d/%d  %s", done, total, file.c_str());
-                    // Save after each file — skip if cancelled
+                    // Save after each file - skip if cancelled
                     if (!storePath.empty() && !m_indexCancel.load())
                     {
                         std::lock_guard saveLock(*saveMtx);
@@ -969,6 +1123,9 @@ namespace pe
             ImGui::LoadIniSettingsFromDisk("imgui.ini");
         else
             m_requestDockReset = true;
+
+        // Restore the last open scene
+        LoadEditorConfig();
     }
 
     void GUI::ExecutePass(CommandBuffer *cmd)
@@ -1049,7 +1206,7 @@ namespace pe
         if (currentFont)
             ImGui::PushFont(currentFont);
 
-        // Undo/Redo keyboard shortcuts — only when no text input is focused
+        // Undo/Redo keyboard shortcuts - only when no text input is focused
         RendererSystem *undoRedoRS = GetGlobalSystem<RendererSystem>();
         auto &undoRedo = UndoRedo::Instance();
         {
@@ -1069,7 +1226,7 @@ namespace pe
                 if (io.KeyShift && ImGui::IsKeyPressed(ImGuiKey_L, false))
                     m_requestDockReset = true;
 
-                // Ctrl+S — save scene
+                // Ctrl+S - save scene
                 if (ImGui::IsKeyPressed(ImGuiKey_S, false))
                 {
                     if (undoRedoRS)
@@ -1081,14 +1238,14 @@ namespace pe
                         }
                         else
                         {
-                            // No path yet — open "Save As" dialog
+                            // No path yet - open "Save As" dialog
                             ShowSaveSceneMenuItem_Action();
                         }
                     }
                 }
             }
 
-            // Delete key — remove selected entity
+            // Delete key - remove selected entity
             if (!io.WantTextInput && ImGui::IsKeyPressed(ImGuiKey_Delete, false))
             {
                 auto &selection = SelectionManager::Instance();
@@ -1186,6 +1343,7 @@ namespace pe
         }
 
         Menu();
+        StatusBar();
         DrawExitPopup();
         DrawSaveBeforeLoadPopup();
         DrawOverwriteConfirmationPopup();

@@ -108,7 +108,7 @@ namespace pe
 
         static Timer delay;
         static float framerate = 0.001f;
-        
+
         static std::vector<GpuTimerSample> displayedGpuTimerInfos;
         static float displayedGpuTotal = 0.0f;
 
@@ -136,11 +136,11 @@ namespace pe
         const auto ram = RHII.GetSystemAndProcessMemory();
         const auto gpu = RHII.GetGpuMemorySnapshot();
         ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(ImGui::GetStyle().ItemSpacing.x, 2.0f)); // compact Y spacing
-        // 1) RAM — system used (other) / process (Private Bytes) / system total
+        // 1) RAM - system used (other) / process (Private Bytes) / system total
         ui::DrawRamBar("RAM", ram.sysTotal, ram.procPrivateBytes, ram.sysUsed);
-        // 2) GPU (Local/VRAM) — used / budget
+        // 2) GPU (Local/VRAM) - used / budget
         ui::DrawGpuBar("GPU (Local)", gpu.vram.app, gpu.vram.other, std::max<uint64_t>(gpu.vram.budget, 1), ImVec2(-FLT_MIN, 18.0f));
-        // 3) GPU (Host Visible) — used / budget
+        // 3) GPU (Host Visible) - used / budget
         ui::DrawGpuBar("GPU (Host Visible)", gpu.host.app, gpu.host.other, std::max<uint64_t>(gpu.host.budget, 1), ImVec2(-FLT_MIN, 18.0f));
 
         ImGui::PopStyleVar();
@@ -159,7 +159,7 @@ namespace pe
         }
 
 #if PE_DEBUG_MODE
-        auto currentGpuTimerInfos = m_gui->PopGpuTimerInfos(); 
+        auto currentGpuTimerInfos = m_gui->PopGpuTimerInfos();
         if (updateMetrics && !currentGpuTimerInfos.empty())
         {
             displayedGpuTimerInfos = std::move(currentGpuTimerInfos);

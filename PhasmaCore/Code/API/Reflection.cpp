@@ -82,7 +82,7 @@ namespace pe
                 model = spv::ExecutionModelMeshEXT;
                 break;
             default:
-                PE_ERROR("Unsupported shader stage for reflection entry point selection");
+                PE_ERROR("[Shader] Unsupported shader stage for reflection entry point selection");
             }
 
             if (model != spv::ExecutionModelMax)
@@ -315,7 +315,7 @@ namespace pe
             return it->second;
         }
 
-        PE_ERROR("Unsupported attribute type");
+        PE_ERROR("[Shader] Unsupported attribute type");
         return vk::Format::eUndefined;
     }
 

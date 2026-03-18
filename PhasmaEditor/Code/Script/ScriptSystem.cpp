@@ -54,7 +54,7 @@ namespace pe
         m_lua.set_function("pe_error", [](const std::string &msg)
                            { Log::Error("[Lua] " + msg); });
 
-        // hooks {} keyword — lets scripts register lifecycle hooks from local functions
+        // hooks {} keyword - lets scripts register lifecycle hooks from local functions
         m_lua.set_function("hooks", [](sol::table t, sol::this_environment te)
                            {
             sol::environment env = te;
@@ -99,7 +99,7 @@ namespace pe
                 if (!result.valid())
                 {
                     sol::error err = result;
-                    PE_ERROR("Lua init() error in '%s': %s", script.path.c_str(), err.what());
+                    PE_ERROR("[Lua] init() error in '%s': %s", script.path.c_str(), err.what());
                 }
             }
         }
@@ -162,7 +162,7 @@ namespace pe
                 if (!res.valid())
                 {
                     sol::error err = res;
-                    PE_ERROR("Lua async callback error: %s", err.what());
+                    PE_ERROR("[Lua] async callback error: %s", err.what());
                 }
             }
 
@@ -183,7 +183,7 @@ namespace pe
                     if (!res.valid())
                     {
                         sol::error err = res;
-                        PE_ERROR("Lua batch load callback error: %s", err.what());
+                        PE_ERROR("[Lua] batch load callback error: %s", err.what());
                     }
                 }
             }
@@ -207,7 +207,7 @@ namespace pe
                 if (!result.valid())
                 {
                     sol::error err = result;
-                    PE_ERROR("Lua update_editor() error in '%s': %s", script.path.c_str(), err.what());
+                    PE_ERROR("[Lua] update_editor() error in '%s': %s", script.path.c_str(), err.what());
                 }
             }
         }
@@ -224,7 +224,7 @@ namespace pe
                 if (!result.valid())
                 {
                     sol::error err = result;
-                    PE_ERROR("Lua update() error in '%s': %s", script.path.c_str(), err.what());
+                    PE_ERROR("[Lua] update() error in '%s': %s", script.path.c_str(), err.what());
                 }
             }
         }
@@ -244,7 +244,7 @@ namespace pe
                     if (!result.valid())
                     {
                         sol::error err = result;
-                        PE_ERROR("Lua destroy() error in '%s': %s", script.path.c_str(), err.what());
+                        PE_ERROR("[Lua] destroy() error in '%s': %s", script.path.c_str(), err.what());
                     }
                 }
             }
@@ -357,7 +357,7 @@ namespace pe
                 if (!result.valid())
                 {
                     sol::error err = result;
-                    PE_ERROR("Lua script error in '%s': %s", filePath.c_str(), err.what());
+                    PE_ERROR("[Lua] script error in '%s': %s", filePath.c_str(), err.what());
                     continue;
                 }
 
@@ -373,7 +373,7 @@ namespace pe
                         {
                             sol::object existing = m_lua.globals().raw_get<sol::object>(name);
                             if (existing.valid() && existing.get_type() != sol::type::lua_nil)
-                                PE_WARN("Lua global '%s' redefined by '%s'", name.c_str(), filePath.c_str());
+                                PE_WARN("[Lua] global '%s' redefined by '%s'", name.c_str(), filePath.c_str());
                             m_lua.globals()[name] = val;
                         }
                     }

@@ -276,7 +276,7 @@ namespace pe
 
         if (!m_scene || (m_scene->mFlags & AI_SCENE_FLAGS_INCOMPLETE) || !m_scene->mRootNode)
         {
-            PE_WARN("Assimp error: %s", m_importer.GetErrorString());
+            PE_WARN("[Model] Assimp error: %s", m_importer.GetErrorString());
             return false;
         }
 
@@ -355,7 +355,8 @@ namespace pe
 
                     if (rawImg)
                     {
-                        std::shared_ptr<Image> sharedImage(rawImg, [](Image *img) { Image::Destroy(img); });
+                        std::shared_ptr<Image> sharedImage(rawImg, [](Image *img)
+                                                           { Image::Destroy(img); });
                         ResourceManager::Get().Register<Image>(key, sharedImage);
                         m_images.push_back(ResourceHandle<Image>(sharedImage));
                         progress++;
@@ -793,7 +794,7 @@ namespace pe
                 return c;
         }
 
-        PE_WARN("Failed to find texture, using default: %s", pathStr.c_str());
+        PE_WARN("[Model] Failed to find texture, using default: %s", pathStr.c_str());
         return {};
     }
 

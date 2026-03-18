@@ -8,15 +8,15 @@ No engine, ImGui, Vulkan, or SDL dependencies. Drop it into any project.
 - C++20 compiler (MSVC 2022, GCC 12+, Clang 15+)
 - CMake 3.20+
 - One of:
-  - **Anthropic API key** — from `console.anthropic.com`, requires OpenSSL-enabled build for HTTPS
-  - **OpenAI API key** — from `platform.openai.com`
-  - **Google Gemini API key** — from `aistudio.google.com`, uses OpenAI-compatible endpoint
-  - **Ollama** — running locally (`ollama serve`), no key, no HTTPS
-  - **LM Studio** — running locally, no key, no HTTPS
+  - **Anthropic API key** - from `console.anthropic.com`, requires OpenSSL-enabled build for HTTPS
+  - **OpenAI API key** - from `platform.openai.com`
+  - **Google Gemini API key** - from `aistudio.google.com`, uses OpenAI-compatible endpoint
+  - **Ollama** - running locally (`ollama serve`), no key, no HTTPS
+  - **LM Studio** - running locally, no key, no HTTPS
 
 Third-party headers are bundled:
-- `third_party/httplib/httplib.h` — cpp-httplib (single header)
-- `third_party/nlohmann/json.hpp` — nlohmann/json (single header)
+- `third_party/httplib/httplib.h` - cpp-httplib (single header)
+- `third_party/nlohmann/json.hpp` - nlohmann/json (single header)
 
 ## CMake Integration
 
@@ -66,9 +66,9 @@ PhasmaEditor reads these env vars at startup to configure the Agent widget. Set 
 
 | Variable                  | Description                                                        | Default               |
 |---------------------------|--------------------------------------------------------------------|-----------------------|
-| `PAGENT_ANTHROPIC_API_KEY`| API key for Anthropic (from `console.anthropic.com`)               | —                     |
-| `PAGENT_OPENAI_API_KEY`   | API key for OpenAI (from `platform.openai.com`)                    | —                     |
-| `PAGENT_GEMINI_API_KEY`   | API key for Google Gemini (from `aistudio.google.com`)             | —                     |
+| `PAGENT_ANTHROPIC_API_KEY`| API key for Anthropic (from `console.anthropic.com`)               | -                     |
+| `PAGENT_OPENAI_API_KEY`   | API key for OpenAI (from `platform.openai.com`)                    | -                     |
+| `PAGENT_GEMINI_API_KEY`   | API key for Google Gemini (from `aistudio.google.com`)             | -                     |
 | `PAGENT_PROVIDER`         | Which provider to select by default: `anthropic`, `openai`, `gemini`, `ollama`. | first available |
 
 ### Provider discovery logic
@@ -124,14 +124,14 @@ export PAGENT_PROVIDER="anthropic"   # default selection, all available in dropd
 
 | Method | Works | Notes |
 |---|---|---|
-| Anthropic API key | Yes | From `console.anthropic.com` — pay-per-token, free credits on signup |
-| OpenAI API key | Yes | From `platform.openai.com` — pay-per-token |
-| Google Gemini API key | Yes | From `aistudio.google.com` — has a free tier |
-| Ollama (local) | Yes | Free, no key — plain HTTP, runs on your machine |
-| LM Studio (local) | Yes | Free, no key — OpenAI-compatible local server |
+| Anthropic API key | Yes | From `console.anthropic.com` - pay-per-token, free credits on signup |
+| OpenAI API key | Yes | From `platform.openai.com` - pay-per-token |
+| Google Gemini API key | Yes | From `aistudio.google.com` - has a free tier |
+| Ollama (local) | Yes | Free, no key - plain HTTP, runs on your machine |
+| LM Studio (local) | Yes | Free, no key - OpenAI-compatible local server |
 | Claude.ai Pro/Max subscription | No (directly) | Subscriptions are for the web UI and Anthropic's own tools only |
 | Claude Code CLI auth | No | Claude Code is not a server; its OAuth tokens are internal and not reusable |
-| Subscription proxy (OpenClaude, etc.) | Unofficial | Third-party proxies wrap claude.ai — fragile, may violate ToS, can break on updates |
+| Subscription proxy (OpenClaude, etc.) | Unofficial | Third-party proxies wrap claude.ai - fragile, may violate ToS, can break on updates |
 
 ## Providers
 
@@ -204,7 +204,7 @@ Third-party projects that expose a local OpenAI-compatible endpoint backed by yo
 config.provider = pagent::Provider::OpenAI;
 config.base_url = "http://localhost:8080";
 config.model    = "claude-sonnet-4-6";
-// no api_key needed — the proxy handles auth with your subscription
+// no api_key needed - the proxy handles auth with your subscription
 ```
 
 ## Registering Tools
@@ -355,18 +355,18 @@ Integrated inside PhasmaEditor the following tools are registered:
 
 The agent workspace at `Assets/Agent/` provides persistent storage across editor restarts and model switches:
 
-- **`START.md`** — loaded automatically on every agent startup (via `InjectSystemMessage`). Contains instructions the agent follows at the start of each conversation.
-- **`MEMORY.md`** — agent-maintained notes about what it has learned (user preferences, project specifics).
-- **`TASKS.md`** — pending task list the agent can update and resume across sessions.
-- **`PROGRESSION.md`** — progress log for multi-step work.
+- **`START.md`** - loaded automatically on every agent startup (via `InjectSystemMessage`). Contains instructions the agent follows at the start of each conversation.
+- **`MEMORY.md`** - agent-maintained notes about what it has learned (user preferences, project specifics).
+- **`TASKS.md`** - pending task list the agent can update and resume across sessions.
+- **`PROGRESSION.md`** - progress log for multi-step work.
 
 The agent reads `START.md` on initialization. The default instructions tell it to check MEMORY.md and TASKS.md at the start of each conversation to resume previous work.
 
 ## Limitations
 
-- **HTTPS required for Anthropic and Gemini APIs** — cpp-httplib needs to be built with OpenSSL. Ollama and LM Studio work with plain HTTP and need no API key.
-- **Small models are unreliable for tool use** — models under 7b parameters frequently ignore tool schemas or emit JSON code blocks instead of tool calls. Recommended minimum: `qwen3:14b`, `qwen2.5:7b`, or `llama3.1:8b`.
-- **Tool handlers run on a worker thread** — any engine state mutation must be deferred to the main thread (see deferred queue pattern above).
-- **No streaming progress on tool results** — while the model streams text, tool execution is synchronous; the caller sees a `ToolResult` event only after the handler returns.
-- **Agentic loop has a hard cap** — `AgentConfig::max_tool_rounds` (default 20 in PhasmaEditor) prevents runaway loops. Raise it for tasks that require many sequential tool calls.
-- **Limited multi-modal input** — user-uploaded images/files are not supported. Engine screenshots can be captured via `engine.take_screenshot()` and displayed in the agent chat.
+- **HTTPS required for Anthropic and Gemini APIs** - cpp-httplib needs to be built with OpenSSL. Ollama and LM Studio work with plain HTTP and need no API key.
+- **Small models are unreliable for tool use** - models under 7b parameters frequently ignore tool schemas or emit JSON code blocks instead of tool calls. Recommended minimum: `qwen3:14b`, `qwen2.5:7b`, or `llama3.1:8b`.
+- **Tool handlers run on a worker thread** - any engine state mutation must be deferred to the main thread (see deferred queue pattern above).
+- **No streaming progress on tool results** - while the model streams text, tool execution is synchronous; the caller sees a `ToolResult` event only after the handler returns.
+- **Agentic loop has a hard cap** - `AgentConfig::max_tool_rounds` (default 20 in PhasmaEditor) prevents runaway loops. Raise it for tasks that require many sequential tool calls.
+- **Limited multi-modal input** - user-uploaded images/files are not supported. Engine screenshots can be captured via `engine.take_screenshot()` and displayed in the agent chat.

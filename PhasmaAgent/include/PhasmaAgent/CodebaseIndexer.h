@@ -18,13 +18,13 @@ namespace pagent
         std::vector<std::string> skip_directories;   // Directory names to skip during scanning
         std::vector<std::string> skip_files;         // File names to skip (e.g. "package-lock.json")
         std::vector<std::string> extensions;         // Empty = index all text files
-        std::vector<std::string> skip_extensions = { // Binary formats — path-only entry, no content
+        std::vector<std::string> skip_extensions = { // Binary formats - path-only entry, no content
             ".png", ".jpg", ".jpeg", ".bmp", ".tga", ".hdr", ".exr", ".ktx", ".ktx2", ".dds",
             ".obj", ".fbx", ".gltf", ".glb", ".stl", ".ply", ".dae",
             ".ttf", ".otf", ".woff", ".woff2",
             ".wav", ".mp3", ".ogg", ".flac",
             ".zip", ".tar", ".gz", ".7z", ".rar",
-            ".exe", ".dll", ".so", ".dylib", ".lib", ".a", ".o", ".pdb",
+            ".exe", ".dll", ".so", ".dylib", ".lib", ".a", ".o", ".pdb", ".bin",
             ".spv", ".dxo", ".cso"};
         std::vector<std::string> skip_regex; // Regex patterns to skip paths (e.g. ".*\\.generated\\..*")
         int max_chunk_chars = 4000;

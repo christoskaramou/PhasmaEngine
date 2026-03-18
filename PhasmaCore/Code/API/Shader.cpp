@@ -195,7 +195,7 @@ namespace pe
         }
         else
         {
-            PE_ERROR("This state is not used in the current implementation");
+            PE_ERROR("[Shader] This state is not used in the current implementation");
             return {};
         }
     }
@@ -377,7 +377,7 @@ namespace pe
         }
         else
         {
-            PE_ERROR("Invalid shader stage!");
+            PE_ERROR("[Shader] Invalid shader stage!");
         }
 
         shaderc::SpvCompilationResult module = m_compiler.CompileGlslToSpv(
@@ -471,7 +471,7 @@ namespace pe
         }
         else
         {
-            PE_ERROR("Invalid shader stage!");
+            PE_ERROR("[Shader] Invalid shader stage!");
         }
         args.push_back(L"-fspv-preserve-bindings");
         args.push_back(L"-fspv-preserve-interface");

@@ -22,7 +22,7 @@ namespace pe
         m_apiHandle = SDL_CreateWindow("", x, y, w, h, flags);
         if (!m_apiHandle)
         {
-            PE_ERROR("SDL_GetError: %s", SDL_GetError());
+            PE_ERROR("[SDL] %s", SDL_GetError());
             return;
         }
 
@@ -103,7 +103,7 @@ namespace pe
         while (SDL_PollEvent(&sdlEvent))
         {
             if (sdlEvent.type == SDL_QUIT)
-                EventSystem::PushEvent(EventType::Quit);
+                EventSystem::PushEvent(EventType::RequestExit);
 
             ImGui_ImplSDL2_ProcessEvent(&sdlEvent);
 
@@ -121,6 +121,11 @@ namespace pe
                 case EventType::Quit:
                 {
                     return false;
+                }
+                case EventType::RequestExit:
+                {
+                    rendererSystem->GetGUI().TriggerExitConfirmation();
+                    break;
                 }
                 case EventType::CompileShaders:
                 {

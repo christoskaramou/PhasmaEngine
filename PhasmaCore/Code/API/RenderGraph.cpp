@@ -171,7 +171,7 @@ namespace pe
                 auto it = lastWriter.find(img);
                 if (it == lastWriter.end())
                 {
-                    PE_WARN("RenderGraph: pass '%s' reads image '%s' without a prior producer pass", pass.name.c_str(), img->GetName().c_str());
+                    PE_WARN("[RenderGraph] pass '%s' reads image '%s' without a prior producer pass", pass.name.c_str(), img->GetName().c_str());
                     continue;
                 }
 

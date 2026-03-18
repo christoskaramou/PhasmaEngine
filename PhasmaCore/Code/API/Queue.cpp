@@ -115,7 +115,7 @@ namespace pe
 
         auto result = m_apiHandle.submit2(1, &si, nullptr);
         if (result != vk::Result::eSuccess)
-            PE_ERROR("Failed to submit to queue!");
+            PE_ERROR("[Queue] Failed to submit to queue!");
     }
 
     void Queue::Present(Swapchain *swapchain, uint32_t imageIndex, Semaphore *wait)
@@ -133,7 +133,7 @@ namespace pe
         {
             auto result = m_apiHandle.presentKHR(pi);
             if (result != vk::Result::eSuccess && result != vk::Result::eSuboptimalKHR)
-                PE_ERROR("Failed to present swapchain image!");
+                PE_ERROR("[Queue] Failed to present swapchain image!");
         }
         catch (vk::OutOfDateKHRError &)
         {
@@ -141,7 +141,7 @@ namespace pe
         }
         catch (vk::SystemError &e)
         {
-            PE_ERROR("Failed to present swapchain image: %s", e.what());
+            PE_ERROR("[Queue] Failed to present swapchain image: %s", e.what());
         }
     }
 

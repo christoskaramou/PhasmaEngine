@@ -150,7 +150,7 @@ input.is_right_mouse_down() -> bool
 input.is_middle_mouse_down() -> bool
 input.is_mouse_down(button) -> bool  -- 1=left, 2=middle, 3=right
 
--- Relative mouse mode (hides cursor, captures raw deltas — for FPS-style camera)
+-- Relative mouse mode (hides cursor, captures raw deltas - for FPS-style camera)
 input.set_relative_mouse(true)
 input.is_relative_mouse() -> bool
 input.warp_mouse_center()
@@ -250,10 +250,31 @@ fs.read("path")        -> file content
 
 ### Read/write project source files
 ```
-Tool: read_project_file(path="PhasmaEditor/Code/...")
+-- PREFERRED WORKFLOW (surgical, minimal tokens):
+--   1. grep_project("symbol") → get {file, line}
+--   2. read_project_file(path, start_line=N-20, end_line=N+20) → read only what's needed
+
+Tool: read_project_file(path="PhasmaEditor/Code/...", start_line=430, end_line=470)
+-- start_line / end_line are 1-based, inclusive. Omit both to read the whole file.
+-- Response includes: {path, content, start_line, end_line, total_lines}
+
 Tool: write_project_file(path="PhasmaEditor/Code/...", content="...")
 Tool: find_project_file(query="Camera.h")
 Tool: list_project_dir(path="PhasmaEditor/Code/Script")
+```
+
+### Search project source files
+```
+Tool: grep_project(pattern="RenderGraph", path="PhasmaEditor/Code", glob="*.cpp")
+-- Returns: [{file, line, text}, ...]
+
+-- Options:
+--   pattern        (required) literal string or ECMAScript regex
+--   path           (optional) subdirectory to search, default: project root
+--   glob           (optional) file filter e.g. "*.cpp", "*.hlsl", "*.h"
+--   regex          (optional) true to treat pattern as regex, default: false
+--   case_sensitive (optional) default: true
+--   max_results    (optional) default: 50, max: 500
 ```
 
 ## Quick Reference
@@ -368,7 +389,7 @@ can define the same hooks without conflict. Four lifecycle hooks are supported:
 | `update_editor` | Every frame (always, regardless of play mode) |
 | `destroy` | On shutdown or reload |
 
-Register hooks with the `hooks {}` keyword (recommended — keeps everything `local`):
+Register hooks with the `hooks {}` keyword (recommended - keeps everything `local`):
 ```lua
 local function update()
     -- runs every frame in play mode
@@ -387,7 +408,7 @@ end
 Non-hook globals (functions, tables) are shared across scripts. Duplicate names
 trigger a warning: `Lua global 'foo' redefined by 'Scripts/other.lua'`.
 
-### Interactive script example — WASD object control
+### Interactive script example - WASD object control
 ```lua
 local cube = nil
 
@@ -411,7 +432,7 @@ end
 hooks { init = init, update = update }
 ```
 
-### Interactive script example — fly camera
+### Interactive script example - fly camera
 ```lua
 -- WASD + right-click mouse fly camera (runs every frame, not just play mode)
 local skip_next_rotation = false

@@ -2,8 +2,10 @@
 #include "Script/ScriptSystem.h"
 #include "GUI/GUIState.h"
 #include "GUI/GUI.h"
+#include "GUI/Widgets/FileSelector.h"
 #include "Systems/RendererSystem.h"
-#include <imgui.h>
+#include "imgui/imgui.h"
+#include "imgui/imgui_internal.h"
 
 namespace pe
 {
@@ -68,6 +70,28 @@ namespace pe
 
                 engine.set_function("want_capture_keyboard", []() -> bool {
                     return ImGui::GetIO().WantCaptureKeyboard;
+                });
+
+                // Returns the name of the currently focused ImGui window, or "" if none.
+                engine.set_function("get_focused_window", []() -> std::string {
+                    ImGuiWindow *w = ImGui::GetCurrentContext() ? ImGui::GetCurrentContext()->NavWindow : nullptr;
+                    return (w && w->Name) ? std::string(w->Name) : std::string();
+                });
+
+                // Close the file selector (e.g. when ESC pressed while it's focused).
+                engine.set_function("close_file_selector", []() {
+                    auto *r = GetGlobalSystem<RendererSystem>();
+                    if (!r) return;
+                    auto *fs = r->GetGUI().GetWidget<FileSelector>();
+                    if (fs) fs->CancelSelection();
+                });
+
+                // imgui table: thin wrappers for ImGui calls useful in scripts
+                sol::table imgui = lua.create_named_table("imgui");
+
+                // Pass -1 to clear keyboard focus (equivalent to ImGui::SetKeyboardFocusHere(-1))
+                imgui.set_function("set_keyboard_focus_here", [](int offset) {
+                    ImGui::SetKeyboardFocusHere(offset);
                 });
 
                 engine.set_function("take_screenshot", [](sol::optional<std::string> filename) {

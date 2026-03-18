@@ -125,9 +125,19 @@ namespace pagent
         return m_impl->GetHistory();
     }
 
+    void Agent::LoadHistory(const std::vector<HistoryEntry> &entries)
+    {
+        m_impl->LoadHistory(entries);
+    }
+
     void Agent::InjectSystemMessage(const std::string &content)
     {
         m_impl->InjectSystemMessage(content);
+    }
+
+    bool Agent::ForceCompact(size_t keepRecent)
+    {
+        return m_impl->ForceCompact(keepRecent);
     }
 
     void Agent::SetModel(const std::string &model)
@@ -160,6 +170,11 @@ namespace pagent
         m_impl->SetIncludeGraph(graph);
     }
 
+    void Agent::SetEmbeddingProvider(std::shared_ptr<IEmbeddingProvider> provider)
+    {
+        m_impl->SetEmbeddingProvider(std::move(provider));
+    }
+
     TokenUsage Agent::GetUsage() const
     {
         return m_impl->GetUsage();
@@ -177,7 +192,7 @@ namespace pagent
     {
         using json = nlohmann::json;
 
-        // Anthropic has no model listing endpoint — all current models support vision + tools
+        // Anthropic has no model listing endpoint - all current models support vision + tools
         if (provider == Provider::Anthropic)
             return {{"claude-sonnet-4-6", true, true, true},
                     {"claude-opus-4-6", true, true, true},
@@ -270,7 +285,7 @@ namespace pagent
                         }
                         else
                         {
-                            caps = {true, true}; // no capabilities field — assume both
+                            caps = {true, true}; // no capabilities field - assume both
                         }
                     }
                     catch (...)
@@ -280,7 +295,7 @@ namespace pagent
                 }
                 else
                 {
-                    caps = {true, true}; // can't check — assume both
+                    caps = {true, true}; // can't check - assume both
                 }
 
                 localNames.insert(name); // always track local names to avoid re-showing as "(download)"
@@ -397,7 +412,7 @@ namespace pagent
                     }
                     else if (provider == Provider::Google)
                     {
-                        // Gemini returns "models/gemini-..." — strip prefix
+                        // Gemini returns "models/gemini-..." - strip prefix
                         const std::string geminiPrefix = "models/";
                         if (id.rfind(geminiPrefix, 0) == 0)
                             id = id.substr(geminiPrefix.size());
@@ -489,7 +504,7 @@ namespace pagent
         catch (...)
         {
         }
-        return {true, true}; // no capabilities field — assume both
+        return {true, true}; // no capabilities field - assume both
     }
 
     bool Agent::SupportsTools(Provider provider, const std::string &model,

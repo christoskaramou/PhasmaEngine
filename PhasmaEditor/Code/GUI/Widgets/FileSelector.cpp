@@ -9,9 +9,10 @@ namespace pe
         m_open = false;
     }
 
-    void FileSelector::OpenSelection(FileSelectCallback callback, const std::vector<std::string> &allowedExtensions, const std::string &defaultPath)
+    void FileSelector::OpenSelection(FileSelectCallback callback, const std::vector<std::string> &allowedExtensions, const std::string &defaultPath, CancelCallback cancelCallback)
     {
         m_selectionCallback = callback;
+        m_cancelCallback = cancelCallback;
         m_allowedExtensions = allowedExtensions;
 
         if (!defaultPath.empty())
@@ -26,6 +27,11 @@ namespace pe
 
     void FileSelector::CancelSelection()
     {
+        if (m_cancelCallback)
+        {
+            m_cancelCallback();
+            m_cancelCallback = nullptr;
+        }
         m_selectionCallback = nullptr;
         m_allowedExtensions.clear();
         m_open = false;

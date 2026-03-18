@@ -14,6 +14,8 @@ namespace pagent
         std::vector<HistoryEntry> GetSnapshot() const;
         void Clear();
         void InjectSystem(const std::string &content);
+        // Replay a saved history snapshot (used for session restore)
+        void LoadHistory(const std::vector<HistoryEntry> &entries);
         size_t EntryCount() const;
         // Replace all entries before the last keepRecent with a single summary message
         void ReplaceOldWithSummary(const std::string &summary, size_t keepRecent);

@@ -78,7 +78,7 @@ namespace pe
         if (it != m_systems.end())
             return static_cast<T *>(it->second.get());
 
-        PE_ERROR("System not found");
+        PE_ERROR("[ECS] System not found");
         return nullptr;
     }
 

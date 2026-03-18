@@ -14,13 +14,15 @@ namespace pe
 
         // Return true to close the selector, false to keep it open
         using FileSelectCallback = std::function<bool(const std::string &)>;
-        void OpenSelection(FileSelectCallback callback, const std::vector<std::string> &allowedExtensions = {}, const std::string &defaultPath = "");
+        using CancelCallback = std::function<void()>;
+        void OpenSelection(FileSelectCallback callback, const std::vector<std::string> &allowedExtensions = {}, const std::string &defaultPath = "", CancelCallback cancelCallback = {});
         void CancelSelection();
 
     private:
         char m_currentFile[1024]{};
         std::filesystem::path m_prevSelectedEntry;
         FileSelectCallback m_selectionCallback;
+        CancelCallback m_cancelCallback;
         std::vector<std::string> m_allowedExtensions;
     };
 } // namespace pe

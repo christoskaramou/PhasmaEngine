@@ -5,6 +5,7 @@ namespace pe
     enum class EventType : size_t
     {
         Quit,
+        RequestExit,
         Custom,
         SetWindowTitle,
         CompileShaders,

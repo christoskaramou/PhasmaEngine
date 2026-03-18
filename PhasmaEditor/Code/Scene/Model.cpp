@@ -102,7 +102,7 @@ namespace pe
         std::string fileStr(reinterpret_cast<const char *>(fileU8.c_str()));
         if (!std::filesystem::exists(file))
         {
-            PE_WARN("Model file not found: %s", fileStr.c_str());
+            PE_WARN("[Model] File not found: %s", fileStr.c_str());
             return nullptr;
         }
 
@@ -110,7 +110,7 @@ namespace pe
         Model *model = ModelAssimp::Load(file);
         if (!model)
         {
-            PE_WARN("Failed to load model: %s", fileStr.c_str());
+            PE_WARN("[Model] Failed to load: %s", fileStr.c_str());
             return nullptr;
         }
 

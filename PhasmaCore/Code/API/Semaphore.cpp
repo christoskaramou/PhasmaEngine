@@ -46,7 +46,7 @@ namespace pe
             if (result == vk::Result::eTimeout)
                 PE_INFO("Timeout while waiting for timeline semaphore");
             else
-                PE_ERROR("Failed to wait for timeline semaphore!");
+                PE_ERROR("[Semaphore] Failed to wait for timeline semaphore!");
         }
         else
         {

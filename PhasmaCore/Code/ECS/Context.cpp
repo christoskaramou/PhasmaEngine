@@ -83,7 +83,7 @@ namespace pe
         auto [it, inserted] = m_entities.emplace(key, std::move(entity));
         if (!inserted)
         {
-            PE_ERROR("Entity with duplicate id detected");
+            PE_ERROR("[ECS] Entity with duplicate id detected");
             return it->second.get();
         }
 
@@ -104,7 +104,7 @@ namespace pe
 
         if (m_worldEntity == it->second.get())
         {
-            PE_ERROR("Cannot remove the world entity");
+            PE_ERROR("[ECS] Cannot remove the world entity");
             return;
         }
 

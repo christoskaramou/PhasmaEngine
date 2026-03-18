@@ -32,15 +32,18 @@ namespace pagent
         void CancelPending();
         void ClearHistory();
         std::vector<HistoryEntry> GetHistory() const;
+        void LoadHistory(const std::vector<HistoryEntry> &entries);
         void InjectSystemMessage(const std::string &content);
         void SetModel(const std::string &model);
         void SetRepoMap(const std::string &repoMap);
+        bool ForceCompact(size_t keepRecent = 4);
         Provider GetProvider() const { return m_config.provider; }
         TokenUsage GetUsage() const;
         void SetVectorStore(VectorStore *store);
         void SetCodebaseStore(VectorStore *store);
         void SetCodebaseBM25(BM25Index *index);
         void SetIncludeGraph(IncludeGraph *graph);
+        void SetEmbeddingProvider(std::shared_ptr<IEmbeddingProvider> provider);
 
     private:
         AgentConfig m_config;

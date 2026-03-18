@@ -49,7 +49,7 @@ PhasmaEngine is a Vulkan 3D engine for learning graphics techniques. Runs on Win
 * Supports Anthropic, OpenAI, Gemini, Ollama, and LM Studio (local)
 * Lua scripting API for scene, camera, lights, materials, shaders, particles, and more
 * Codebase RAG indexing with semantic vector search (local or Google/OpenAI embeddings)
-* Screenshot capture — agent can take and view engine screenshots
+* Screenshot capture - agent can take and view engine screenshots
 * Persistent agent workspace (`Assets/Agent/`) with automatic startup instructions
 * Streaming responses with thinking/reasoning display
 * Agentic tool-use loop with configurable round limits

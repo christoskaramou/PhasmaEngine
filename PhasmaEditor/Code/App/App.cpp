@@ -25,7 +25,7 @@ namespace pe
         {
             if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_EVENTS) < 0)
             {
-                PE_ERROR("SDL_GetError: %s", SDL_GetError());
+                PE_ERROR("[SDL] %s", SDL_GetError());
                 return;
             }
         }

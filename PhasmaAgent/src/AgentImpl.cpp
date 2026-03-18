@@ -110,6 +110,11 @@ namespace pagent
         return m_history.GetSnapshot();
     }
 
+    void Agent::Impl::LoadHistory(const std::vector<HistoryEntry> &entries)
+    {
+        m_history.LoadHistory(entries);
+    }
+
     void Agent::Impl::InjectSystemMessage(const std::string &content)
     {
         m_history.InjectSystem(content);
@@ -132,6 +137,11 @@ namespace pagent
         m_config.repo_map = repoMap;
     }
 
+    bool Agent::Impl::ForceCompact(size_t keepRecent)
+    {
+        return m_worker->ForceCompact(keepRecent);
+    }
+
     void Agent::Impl::SetVectorStore(VectorStore *store)
     {
         m_worker->SetVectorStore(store);
@@ -150,5 +160,10 @@ namespace pagent
     void Agent::Impl::SetIncludeGraph(IncludeGraph *graph)
     {
         m_worker->SetIncludeGraph(graph);
+    }
+
+    void Agent::Impl::SetEmbeddingProvider(std::shared_ptr<IEmbeddingProvider> provider)
+    {
+        m_config.embedding_provider = std::move(provider);
     }
 } // namespace pagent

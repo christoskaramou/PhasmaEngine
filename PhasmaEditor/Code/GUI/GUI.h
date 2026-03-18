@@ -65,12 +65,16 @@ namespace pe
         bool m_showExitConfirmation = false;
         bool m_showSaveBeforeLoad = false;
         void DrawSaveBeforeLoadPopup();
+        void SaveEditorConfig();
+        void LoadEditorConfig();
 
         bool m_showOverwriteConfirmation = false;
         std::filesystem::path m_pendingSavePath;
+        bool m_exitAfterSave = false; // set when Save & Exit is chosen with no existing path
         void DrawOverwriteConfirmationPopup();
 
         void Menu();
+        void StatusBar();
         void BuildDockspace();
         void ResetDockspaceLayout(uint32_t dockspaceId);
 

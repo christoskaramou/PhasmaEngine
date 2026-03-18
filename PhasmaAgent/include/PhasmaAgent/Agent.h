@@ -7,10 +7,10 @@
 #include <memory>
 #include <atomic>
 
-// PhasmaAgent — standalone, provider-agnostic AI agent library.
+// PhasmaAgent - standalone, provider-agnostic AI agent library.
 // Namespace: pagent
 // No engine, ImGui, Vulkan, or SDL dependencies.
-// Single public header — all internal implementation is hidden via Pimpl.
+// Single public header - all internal implementation is hidden via Pimpl.
 
 namespace pagent
 {
@@ -75,7 +75,7 @@ namespace pagent
 
         // Receives: raw JSON object string of arguments the model provided.
         // Returns:  raw JSON string of the result (e.g. "{\"status\":\"ok\"}").
-        // RUNS ON WORKER THREAD — must be thread-safe.
+        // RUNS ON WORKER THREAD - must be thread-safe.
         // For main-thread-only operations use the deferred std::promise pattern.
         std::function<std::string(const std::string &json_input)> handler;
     };
@@ -100,10 +100,10 @@ namespace pagent
     };
 
     // ---------------------------------------------------------------------------
-    // Conversation history (neutral format — no provider-specific types)
+    // Conversation history (neutral format - no provider-specific types)
     // ---------------------------------------------------------------------------
 
-    // Multimodal content part — text or base64-encoded image
+    // Multimodal content part - text or base64-encoded image
     struct ContentPart
     {
         enum class Type
@@ -154,7 +154,7 @@ namespace pagent
     };
 
     // ---------------------------------------------------------------------------
-    // IProviderBackend — implement to add a new LLM provider
+    // IProviderBackend - implement to add a new LLM provider
     // ---------------------------------------------------------------------------
 
     class IProviderBackend
@@ -237,7 +237,7 @@ namespace pagent
     };
 
     // ---------------------------------------------------------------------------
-    // IEmbeddingProvider — implement to add an embedding model
+    // IEmbeddingProvider - implement to add an embedding model
     // ---------------------------------------------------------------------------
 
     class IEmbeddingProvider
@@ -293,7 +293,7 @@ namespace pagent
         std::string model;    // "claude-sonnet-4-6", "gpt-4o", "llama3", etc.
         std::string base_url; // Override base host, e.g. "http://localhost:11434" for Ollama
         std::string system_prompt;
-        int max_tokens = 4096;
+        int max_tokens = 2048;
         float temperature = 0.7f;
         int max_tool_rounds = 10;         // Hard cap on agentic loop iterations
         int max_history_messages = 40;    // Keep last N messages (0 = unlimited). System message always kept.
@@ -324,9 +324,9 @@ namespace pagent
         std::shared_ptr<IEmbeddingProvider> embedding_provider;
 
         // RAG settings
-        int rag_top_k = 6;
+        int rag_top_k = 3;
         float rag_min_score = 0.1f;
-        int rag_max_context_chars = 24000;
+        int rag_max_context_chars = 10000;
         int rag_max_entry_chars = 8000; // Max chars per indexed RAG entry (0 = unlimited)
 
         // Repo map: compact codebase overview (~1K tokens) prepended to system prompt.
@@ -380,7 +380,12 @@ namespace pagent
         // --- History ---
         void ClearHistory();
         std::vector<HistoryEntry> GetHistory() const;
-        void InjectSystemMessage(const std::string &content); // Inject without sending a request
+        void LoadHistory(const std::vector<HistoryEntry> &entries); // Restore a saved session
+        void InjectSystemMessage(const std::string &content);       // Inject without sending a request
+        // Summarize old history and replace it with a compact summary.
+        // keepRecent: number of most-recent messages to preserve verbatim.
+        // Returns true if summarization succeeded. Only call when !IsBusy().
+        bool ForceCompact(size_t keepRecent = 4);
         void SetModel(const std::string &model);
         void SetRepoMap(const std::string &repoMap);
         Provider GetProvider() const;
@@ -388,6 +393,7 @@ namespace pagent
         void SetCodebaseStore(VectorStore *store);
         void SetCodebaseBM25(BM25Index *index);
         void SetIncludeGraph(IncludeGraph *graph);
+        void SetEmbeddingProvider(std::shared_ptr<IEmbeddingProvider> provider);
 
         struct ModelInfo
         {

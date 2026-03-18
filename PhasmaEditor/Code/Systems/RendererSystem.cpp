@@ -474,7 +474,7 @@ namespace pe
         }
         else
         {
-            PE_ERROR("Failed to save screenshot: %s", path.c_str());
+            PE_ERROR("[Renderer] Failed to save screenshot: %s", path.c_str());
         }
 
         m_screenshotBuffer->Unmap();

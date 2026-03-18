@@ -14,7 +14,7 @@ namespace pe
                 if (bindingInfos[i].binding == binding)
                     return i;
             }
-            PE_WARN("Descriptor: Binding not found");
+            PE_WARN("[Descriptor] Binding not found");
             return -1;
         }
     } // namespace

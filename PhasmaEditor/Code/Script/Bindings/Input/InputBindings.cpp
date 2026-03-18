@@ -67,7 +67,7 @@ namespace pe
                     return (state & SDL_BUTTON(SDL_BUTTON_MIDDLE)) != 0;
                 });
 
-                // Relative mouse mode (hides cursor, captures deltas — needed for FPS-style camera)
+                // Relative mouse mode (hides cursor, captures deltas - needed for FPS-style camera)
                 input.set_function("set_relative_mouse", [](bool enabled) {
                     SDL_SetRelativeMouseMode(enabled ? SDL_TRUE : SDL_FALSE);
                 });

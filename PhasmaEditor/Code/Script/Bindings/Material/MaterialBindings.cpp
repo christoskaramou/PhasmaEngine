@@ -145,7 +145,7 @@ namespace pe
                     auto it = s_texSlots.find(std::string_view(type));
                     if (it == s_texSlots.end())
                     {
-                        PE_WARN("material.set_texture: unknown type '%s'", type.c_str());
+                        PE_WARN("[Lua] material.set_texture: unknown type '%s'", type.c_str());
                         return false;
                     }
                     uint32_t slot = it->second;
@@ -156,7 +156,7 @@ namespace pe
 
                     if (!std::filesystem::exists(fullPath))
                     {
-                        PE_WARN("material.set_texture: file not found: %s", fullPath.c_str());
+                        PE_WARN("[Lua] material.set_texture: file not found: %s", fullPath.c_str());
                         return false;
                     }
 

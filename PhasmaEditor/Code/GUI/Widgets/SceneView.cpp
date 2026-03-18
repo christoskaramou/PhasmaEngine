@@ -558,7 +558,7 @@ namespace pe
                         }
                         catch (const std::exception &e)
                         {
-                            PE_WARN("Failed to load model: %s", e.what());
+                            PE_WARN("[Scene] Failed to load model: %s", e.what());
                         }
                         GUIState::s_modelLoading = false; });
                 }
@@ -658,10 +658,7 @@ namespace pe
         auto &selection = SelectionManager::Instance();
 
         if (intersections.empty())
-        {
-            selection.ClearSelection();
             return;
-        }
 
         // Sort by distance
         std::sort(intersections.begin(), intersections.end(), [](const Intersection &a, const Intersection &b)

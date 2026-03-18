@@ -200,12 +200,36 @@ namespace pagent
                 PushEvent(std::move(ev));
             }
 
-            // Clear Gemini cache name so next Send() doesn't reuse a stale cache
-            if (auto *gb = dynamic_cast<GoogleBackend *>(m_backend))
-                gb->SetCacheName("");
-
             m_busy.store(false, std::memory_order_release);
         }
+    }
+
+    // Builds the summarization request body for a block of old conversation text.
+    // Uses a code-aware prompt that preserves file paths, symbols, and the user's goal.
+    static std::string BuildSummarizationBody(IProviderBackend *backend,
+                                              const AgentConfig &config,
+                                              const std::string &oldText)
+    {
+        constexpr const char *kSystemPrompt =
+            "You are a coding session summarizer. Output only the summary - no preamble, no explanation.";
+
+        constexpr const char *kInstructionPrefix =
+            "Summarize this coding session segment into a dense, bulleted list of facts.\n"
+            "Rules:\n"
+            "- PRESERVE: every file path, class name, function name, variable name, and the user's stated goal.\n"
+            "- PRESERVE: conclusions, decisions made, and any unresolved issues.\n"
+            "- DROP: raw code blocks, raw tool JSON output, pleasantries, and debugging steps that were already resolved.\n"
+            "- FORMAT: one bullet per fact, no sub-bullets, no markdown headers.\n"
+            "- LENGTH: 5-15 bullets maximum.\n\n"
+            "Session segment:\n";
+
+        std::vector<NeutralMessage> msgs;
+        NeutralMessage userMsg;
+        userMsg.role = NeutralMessage::Role::User;
+        userMsg.content = std::string(kInstructionPrefix) + oldText;
+        msgs.push_back(std::move(userMsg));
+
+        return backend->BuildRequestJson(config.model, kSystemPrompt, 512, 0.0f, msgs, "");
     }
 
     void RequestWorker::MaybeSummarize()
@@ -225,16 +249,7 @@ namespace pagent
 
         Log("Summarizing conversation (" + std::to_string(count) + " msgs, keeping last " + std::to_string(keepRecent) + ")");
 
-        // Build a minimal summarization request
-        std::vector<NeutralMessage> sumMessages;
-        NeutralMessage userMsg;
-        userMsg.role = NeutralMessage::Role::User;
-        userMsg.content = "Summarize this conversation in 2-3 concise sentences, focusing on what was accomplished and what the user wants:\n\n" + oldText;
-        sumMessages.push_back(std::move(userMsg));
-
-        const std::string body = m_backend->BuildRequestJson(
-            m_config.model, "You are a summarizer. Output only the summary, nothing else.",
-            256, 0.0f, sumMessages, "");
+        const std::string body = BuildSummarizationBody(m_backend, m_config, oldText);
 
         std::vector<AgentEvent> events;
         const auto err = HttpPost(ResolveHost(m_config), m_backend->GetEndpointPath(),
@@ -259,6 +274,42 @@ namespace pagent
             m_history.ReplaceOldWithSummary(summary, keepRecent);
             Log("Summarized to: " + std::to_string(summary.size()) + " chars");
         }
+    }
+
+    bool RequestWorker::ForceCompact(size_t keepRecent)
+    {
+        const auto oldText = m_history.BuildOldMessagesText(keepRecent);
+        if (oldText.empty())
+            return false;
+
+        Log("ForceCompact: summarizing (" + std::to_string(m_history.EntryCount()) +
+            " msgs, keeping last " + std::to_string(keepRecent) + ")");
+
+        const std::string body = BuildSummarizationBody(m_backend, m_config, oldText);
+
+        std::vector<AgentEvent> events;
+        const auto err = HttpPost(ResolveHost(m_config), m_backend->GetEndpointPath(),
+                                  BuildHeaders(m_config, m_backend), body, events);
+
+        if (!err.empty())
+        {
+            Log("ForceCompact failed: " + err);
+            return false;
+        }
+
+        std::string summary;
+        for (const auto &ev : events)
+        {
+            if (ev.type == AgentEventType::TextComplete)
+                summary = ev.text;
+        }
+
+        if (summary.empty())
+            return false;
+
+        m_history.ReplaceOldWithSummary(summary, keepRecent);
+        Log("ForceCompact done: summary=" + std::to_string(summary.size()) + " chars");
+        return true;
     }
 
     // Strip C/C++ comments and blank lines from code to reduce token count.
@@ -296,7 +347,7 @@ namespace pagent
                 continue;
             }
 
-            // Line comment — but keep "// File:" lines (our chunk header)
+            // Line comment - but keep "// File:" lines (our chunk header)
             if (i + 1 < len && code[i] == '/' && code[i + 1] == '/')
             {
                 // Check if this is a "// File:" header
@@ -323,7 +374,7 @@ namespace pagent
                 continue;
             }
 
-            // String literals — don't strip // inside strings
+            // String literals - don't strip // inside strings
             if (code[i] == '"' || code[i] == '\'')
             {
                 char quote = code[i];
@@ -653,47 +704,60 @@ namespace pagent
             }
         }
 
-        // Build extra context: repo map + RAG
-        std::string extraContext;
+        // Static context (stable for the whole session): repo_map only.
+        // ragContext is dynamic (changes per query) - kept separate and injected per-turn.
+        std::string staticContext;
         if (!m_config.repo_map.empty())
-            extraContext += "\n\n" + m_config.repo_map;
-        if (!ragContext.empty())
-            extraContext += ragContext;
+            staticContext = "\n\n" + m_config.repo_map;
 
-        // Gemini context caching: cache system prompt + tools for the duration of this agentic loop
+        // Gemini context caching: cache system_prompt + repo_map + tools.
+        // Persisted across Submit() calls and only rebuilt when static content changes.
+        // RAG context is intentionally excluded from the cache so it can vary per turn.
         auto *googleBackend = dynamic_cast<GoogleBackend *>(m_backend);
-        std::string geminiCacheName;
         if (googleBackend && m_config.provider == Provider::Google)
         {
             const auto toolsSchemaJson = m_toolRegistry.GenerateSchemaJson(*m_backend);
-            std::string systemPrompt = SanitizeUTF8(m_config.system_prompt + extraContext);
-            std::string cacheBody = googleBackend->BuildCacheRequestJson(
-                activeModel, systemPrompt, toolsSchemaJson, 300);
+            const std::string staticPrompt = SanitizeUTF8(m_config.system_prompt + staticContext);
+            const std::string cacheKey = staticPrompt + toolsSchemaJson;
 
-            const std::string host = ResolveHost(m_config);
-            auto headers = BuildHeaders(m_config, m_backend);
-            headers["Content-Type"] = "application/json";
-
-            auto [status, response] = SimplePost(host, "/v1beta/cachedContents", headers, cacheBody);
-            if (status == 200)
+            if (m_geminiCacheName.empty() || m_geminiCacheKey != cacheKey)
             {
-                try
+                std::string cacheBody = googleBackend->BuildCacheRequestJson(
+                    activeModel, staticPrompt, toolsSchemaJson, 3600); // 1-hour TTL
+
+                const std::string host = ResolveHost(m_config);
+                auto headers = BuildHeaders(m_config, m_backend);
+                headers["Content-Type"] = "application/json";
+
+                auto [status, response] = SimplePost(host, "/v1beta/cachedContents", headers, cacheBody);
+                if (status == 200)
                 {
-                    auto j = nlohmann::json::parse(response);
-                    geminiCacheName = j.value("name", "");
-                    if (!geminiCacheName.empty())
+                    try
                     {
-                        googleBackend->SetCacheName(geminiCacheName);
-                        Log("Gemini cache created: " + geminiCacheName);
+                        auto j = nlohmann::json::parse(response);
+                        m_geminiCacheName = j.value("name", "");
+                        if (!m_geminiCacheName.empty())
+                        {
+                            m_geminiCacheKey = cacheKey;
+                            googleBackend->SetCacheName(m_geminiCacheName);
+                            Log("Gemini cache created: " + m_geminiCacheName);
+                        }
+                    }
+                    catch (...)
+                    {
                     }
                 }
-                catch (...)
+                else
                 {
+                    Log("Gemini cache creation failed (HTTP " + std::to_string(status) + "), proceeding without cache");
+                    m_geminiCacheName.clear();
+                    m_geminiCacheKey.clear();
                 }
             }
             else
             {
-                Log("Gemini cache creation failed (HTTP " + std::to_string(status) + "), proceeding without cache");
+                googleBackend->SetCacheName(m_geminiCacheName);
+                Log("Gemini cache reused: " + m_geminiCacheName);
             }
         }
 
@@ -750,8 +814,28 @@ namespace pagent
 
             const auto toolsSchemaJson = m_toolRegistry.GenerateSchemaJson(*m_backend);
 
-            // Append repo map + RAG context to system prompt for every round
-            std::string systemPrompt = SanitizeUTF8(m_config.system_prompt + extraContext);
+            // When cache is active it provides system_instruction + tools, so the system prompt
+            // passed here is ignored by BuildRequestJson.  When cache is absent, include the
+            // static context (repo_map) as before.  RAG is never baked into the system prompt.
+            std::string systemPrompt = SanitizeUTF8(m_config.system_prompt + staticContext);
+
+            // Inject per-turn RAG context into the messages payload (not into history).
+            // Prepend as a user/model exchange so the model always has fresh retrieval results
+            // without them polluting the persistent conversation history.
+            auto requestMessages = messages;
+            if (!ragContext.empty())
+            {
+                NeutralMessage ragMsg;
+                ragMsg.role = NeutralMessage::Role::User;
+                ragMsg.parts.push_back({ContentPart::Type::Text, "[Relevant codebase context:\n" + ragContext + "\n]", ""});
+
+                NeutralMessage ragAck;
+                ragAck.role = NeutralMessage::Role::Assistant;
+                ragAck.content = "I have the relevant codebase context.";
+
+                requestMessages.insert(requestMessages.begin(), std::move(ragAck));
+                requestMessages.insert(requestMessages.begin(), std::move(ragMsg));
+            }
 
             if (m_config.log_callback)
                 m_config.log_callback("[PAgent] Round " + std::to_string(round) + ": " + std::to_string(m_toolRegistry.GetToolCount()) + " tools, " + std::to_string(messages.size()) + " msgs, model='" + activeModel + "', provider=" + std::to_string(static_cast<int>(m_config.provider)));
@@ -761,7 +845,7 @@ namespace pagent
                 systemPrompt,
                 m_config.max_tokens,
                 m_config.temperature,
-                messages,
+                requestMessages,
                 toolsSchemaJson);
 
             if (m_config.log_callback)
@@ -999,7 +1083,7 @@ namespace pagent
 
         if (!useHttps)
         {
-            // plain HTTP — always available (e.g. Ollama on localhost)
+            // plain HTTP - always available (e.g. Ollama on localhost)
             httplib::Client cli(cleanHost);
             cli.set_read_timeout(120);
             {

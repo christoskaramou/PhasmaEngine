@@ -786,7 +786,7 @@ using DownloadProgress = std::function<bool(size_t current, size_t total)>;
 using UploadProgress = std::function<bool(size_t current, size_t total)>;
 
 // ----------------------------------------------------------------------------
-// httplib::any — type-erased value container (C++11 compatible)
+// httplib::any - type-erased value container (C++11 compatible)
 // On C++17+ builds, thin wrappers around std::any are provided.
 // ----------------------------------------------------------------------------
 
@@ -1279,7 +1279,7 @@ struct Response {
   std::string body;
   std::string location; // Redirect location
 
-  // User-defined context — set by pre-routing/pre-request handlers and read
+  // User-defined context - set by pre-routing/pre-request handlers and read
   // by route handlers to pass arbitrary data (e.g. decoded auth tokens).
   std::map<std::string, any> user_data;
 

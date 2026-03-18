@@ -69,8 +69,14 @@ namespace pagent
     // Parse a tool-call args JSON object once; returns null json on failure
     inline nlohmann::json ParseArgs(const std::string &args)
     {
-        try { return nlohmann::json::parse(args); }
-        catch (...) { return {}; }
+        try
+        {
+            return nlohmann::json::parse(args);
+        }
+        catch (...)
+        {
+            return {};
+        }
     }
 
     // extract a JSON string value by key from a tool-call args object
@@ -152,7 +158,7 @@ namespace pagent
     }
 
     // Encode RGBA pixels as an uncompressed PNG.
-    // Uses deflate stored blocks (no compression) — simple but valid PNG.
+    // Uses deflate stored blocks (no compression) - simple but valid PNG.
     inline std::vector<uint8_t> EncodeRGBA_PNG(const uint8_t *rgba, int w, int h)
     {
         auto crc32 = [](const uint8_t *data, size_t len) -> uint32_t

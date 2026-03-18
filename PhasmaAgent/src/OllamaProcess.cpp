@@ -181,7 +181,7 @@ namespace pagent
                     }
                     else if (s[i] == '\r')
                     {
-                        // Carriage return — ollama uses \r for progress updates
+                        // Carriage return - ollama uses \r for progress updates
                         out.clear();
                     }
                     else if (static_cast<unsigned char>(s[i]) >= 32)
@@ -312,7 +312,7 @@ namespace pagent
                 }
                 else if (n == 0)
                 {
-                    break; // EOF — process done
+                    break; // EOF - process done
                 }
                 else
                 {

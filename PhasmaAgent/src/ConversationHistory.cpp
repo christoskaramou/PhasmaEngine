@@ -55,7 +55,7 @@ namespace pagent
             compacted.content = summary;
         }
 
-        // No tool_calls — they are stripped
+        // No tool_calls - they are stripped
         return compacted;
     }
 
@@ -146,6 +146,12 @@ namespace pagent
         m_entries.clear();
     }
 
+    void ConversationHistory::LoadHistory(const std::vector<HistoryEntry> &entries)
+    {
+        std::unique_lock lock(m_mutex);
+        m_entries = entries;
+    }
+
     void ConversationHistory::InjectSystem(const std::string &content)
     {
         std::unique_lock lock(m_mutex);
@@ -165,6 +171,36 @@ namespace pagent
         return m_entries.size();
     }
 
+    // Compute the boundary between "old" (to be summarized) and "recent" (to keep intact),
+    // walking backward to avoid splitting tool-call chains. Returns oldEnd such that
+    // entries [start, oldEnd) are the old window and [oldEnd, end) is the recent window.
+    // Returns start if there is nothing to summarize (whole history is one chain or too small).
+    static size_t ComputeOldEnd(const std::vector<HistoryEntry> &entries, size_t start, size_t keepRecent)
+    {
+        if (entries.size() - start <= keepRecent)
+            return start; // nothing to summarize
+
+        size_t oldEnd = entries.size() - keepRecent;
+
+        // Walk backward to avoid splitting a tool-call chain at the boundary
+        while (oldEnd > start)
+        {
+            const auto role = entries[oldEnd].message.role;
+            if (role == NeutralMessage::Role::Tool)
+            {
+                --oldEnd;
+                continue;
+            }
+            if (role == NeutralMessage::Role::Assistant && !entries[oldEnd].message.tool_calls.empty())
+            {
+                --oldEnd;
+                continue;
+            }
+            break;
+        }
+        return oldEnd;
+    }
+
     std::string ConversationHistory::BuildOldMessagesText(size_t keepRecent) const
     {
         std::shared_lock lock(m_mutex);
@@ -173,10 +209,9 @@ namespace pagent
         if (!m_entries.empty() && m_entries.front().message.role == NeutralMessage::Role::System)
             start = 1; // skip system message
 
-        if (m_entries.size() - start <= keepRecent)
+        size_t oldEnd = ComputeOldEnd(m_entries, start, keepRecent);
+        if (oldEnd <= start)
             return {}; // nothing old to summarize
-
-        size_t oldEnd = m_entries.size() - keepRecent;
         std::string text;
         for (size_t i = start; i < oldEnd; ++i)
         {
@@ -189,13 +224,19 @@ namespace pagent
 
             text += role;
             text += ": ";
-            if (msg.content.size() > 300)
-                text += msg.content.substr(0, 300) + "...";
+
+            // Prefer tool_result_json for Tool messages, fallback to content
+            const std::string &body = (msg.role == NeutralMessage::Role::Tool && !msg.tool_result_json.empty())
+                                          ? msg.tool_result_json
+                                          : msg.content;
+            constexpr size_t kMaxBody = 400;
+            if (body.size() > kMaxBody)
+                text += body.substr(0, kMaxBody) + "...";
             else
-                text += msg.content;
+                text += body;
             text += "\n";
 
-            // Include tool call names
+            // Include tool call names for assistant messages
             for (const auto &tc : msg.tool_calls)
                 text += "  [called " + tc.name + "]\n";
         }
@@ -210,18 +251,27 @@ namespace pagent
         if (!m_entries.empty() && m_entries.front().message.role == NeutralMessage::Role::System)
             start = 1;
 
-        if (m_entries.size() - start <= keepRecent)
-            return;
+        size_t oldEnd = ComputeOldEnd(m_entries, start, keepRecent);
+        if (oldEnd <= start)
+            return; // Nothing to replace (entire history is one tool-call chain)
 
-        size_t oldEnd = m_entries.size() - keepRecent;
-
-        // Build the summary message
-        NeutralMessage summaryMsg;
-        summaryMsg.role = NeutralMessage::Role::User;
-        summaryMsg.content = "[Conversation summary: " + summary + "]";
-
-        // Erase old entries and insert summary
+        // Erase the old window
         m_entries.erase(m_entries.begin() + start, m_entries.begin() + oldEnd);
-        m_entries.insert(m_entries.begin() + start, {std::move(summaryMsg), NowMs()});
+
+        // Inject the summary. Avoid creating consecutive user messages:
+        // If the first remaining entry is already a User message, prepend the summary
+        // to it so no extra message is inserted. Otherwise insert a new User message.
+        const std::string summaryText = "[Summary of prior context: " + summary + "]";
+        if (m_entries[start].message.role == NeutralMessage::Role::User)
+        {
+            m_entries[start].message.content = summaryText + "\n\n" + m_entries[start].message.content;
+        }
+        else
+        {
+            NeutralMessage summaryMsg;
+            summaryMsg.role = NeutralMessage::Role::User;
+            summaryMsg.content = summaryText;
+            m_entries.insert(m_entries.begin() + start, {std::move(summaryMsg), NowMs()});
+        }
     }
 } // namespace pagent

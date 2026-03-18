@@ -413,10 +413,10 @@ namespace pe
         {
             if (!resources.empty())
             {
-                PE_WARN("Leaked %s: %zu", name, resources.size());
+                PE_WARN("[RHI] Leaked %s: %zu", name, resources.size());
                 for (const auto &res : resources)
                 {
-                    PE_WARN("  Handle: %p", (void *)detail::ToUintPtr(res->ApiHandle()));
+                    PE_WARN("[RHI]   Handle: %p", (void *)detail::ToUintPtr(res->ApiHandle()));
                 }
             }
         };

@@ -157,6 +157,14 @@ namespace pe
         void UpdateEmbeddingModels(bool fetchRemote = false);
         void SaveConfig();
         void LoadConfig();
+
+        // Session persistence
+        void SaveSession();
+        void LoadSession(const std::string &path);
+        void NewSession();
+        std::vector<std::string> ListSessions() const;
+        std::string m_currentSessionPath;
+        bool m_showSessionBrowser = false;
         std::string GetEmbeddingModelFileBase() const;
         bool m_isFetchingEmbeddingModels = false;
         bool m_isPullingEmbedding = false;

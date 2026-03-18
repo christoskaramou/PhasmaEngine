@@ -48,7 +48,7 @@ namespace pagent
         for (const auto &ext : config.extensions)
             extSet.insert(toLower(ext));
 
-        // Build skip sets — normalize paths with forward slashes, lowercase
+        // Build skip sets - normalize paths with forward slashes, lowercase
         std::set<std::string> skipDirs;
         for (auto d : config.skip_directories)
         {
@@ -64,10 +64,6 @@ namespace pagent
         std::set<std::string> skipFiles;
         for (const auto &f : config.skip_files)
             skipFiles.insert(toLower(f));
-
-        std::set<std::string> skipExts;
-        for (const auto &e : config.skip_extensions)
-            skipExts.insert(toLower(e));
 
         // Compile regex patterns
         std::vector<std::regex> skipRegex;
@@ -129,10 +125,6 @@ namespace pagent
 
                 auto u8ext = p.extension().u8string();
                 std::string ext = toLower(std::string(u8ext.begin(), u8ext.end()));
-
-                // Skip by extension (completely skip, not even path-only)
-                if (!skipExts.empty() && skipExts.count(ext))
-                    continue;
 
                 // If whitelist is specified, only include those
                 if (!extSet.empty() && !extSet.count(ext))
@@ -229,7 +221,7 @@ namespace pagent
                 {
                     if (lines[look].find_first_not_of(" \t\r") == std::string::npos)
                     {
-                        // Found a blank line — truncate chunk here
+                        // Found a blank line - truncate chunk here
                         body.clear();
                         for (int i = chunkStart; i <= look; ++i)
                             body += lines[i] + "\n";
@@ -307,7 +299,7 @@ namespace pagent
         auto ftime = fs::last_write_time(fs::path(std::u8string(filePath.begin(), filePath.end())), ec);
         if (ec)
             return "";
-        // Use file_time_type duration directly — we only need consistency, not wall-clock time
+        // Use file_time_type duration directly - we only need consistency, not wall-clock time
         auto ticks = ftime.time_since_epoch().count();
         return std::to_string(ticks);
     }
@@ -442,6 +434,8 @@ namespace pagent
                 const auto &filePath = shared->files[idx];
                 const auto &rel = shared->rels[idx];
                 const auto &ts = shared->timestamps[idx];
+
+                int chunksBeforeFile = shared->totalChunks.load();
 
                 // Extract old entries for this file (preserving embeddings for hash reuse)
                 auto oldEntries = shared->store->ExtractByFile(rel);
@@ -639,6 +633,23 @@ namespace pagent
                     }
                 }
 
+                // If no chunks were added for this file (e.g. embedding failed or binary garbage),
+                // store a tombstone entry so CheckStatus won't keep marking it as outdated.
+                // Use a zero-filled embedding of the correct dimension so SaveToBinary/LoadFromBinary
+                // stay consistent (all entries must have the same embedding size in the binary format).
+                // Zero vectors produce cosine similarity 0.0 → filtered by min_score → invisible to search.
+                if (!shared->cancel.load() && shared->totalChunks.load() == chunksBeforeFile)
+                {
+                    size_t h = std::hash<std::string>{}(rel + ":tombstone");
+                    VectorEntry tombstone;
+                    tombstone.id = "codebase_tombstone_" + std::to_string(h);
+                    tombstone.content = "";
+                    tombstone.metadata = "{\"type\":\"codebase_tombstone\",\"file\":\"" + rel +
+                                         "\",\"last_modified\":\"" + ts + "\"}";
+                    tombstone.embedding.assign(shared->embedding->Dimensions(), 0.0f);
+                    shared->store->Add(std::move(tombstone));
+                }
+
                 int done = shared->filesProcessed.fetch_add(1) + 1;
                 if (!shared->cancel.load() && shared->progressCb)
                     shared->progressCb(done, shared->totalFiles, rel);
@@ -646,7 +657,7 @@ namespace pagent
             shared->activeThreads.fetch_sub(1);
         };
 
-        // Launch worker threads — detach so Cancel returns immediately
+        // Launch worker threads - detach so Cancel returns immediately
         for (int t = 0; t < numThreads; ++t)
             std::thread(workerFn).detach();
 

@@ -66,7 +66,7 @@ namespace pe
             {
                 i++;
                 continue;
-            } // truncated — skip
+            } // truncated - skip
             bool ok = true;
             for (int j = 1; j < len; ++j)
                 if ((static_cast<unsigned char>(s[i + j]) & 0xC0) != 0x80)
@@ -82,7 +82,7 @@ namespace pe
             else
             {
                 i++;
-            } // bad byte — drop
+            } // bad byte - drop
         }
         return out;
     }
@@ -127,6 +127,7 @@ namespace pe
     AgentWidget::~AgentWidget()
     {
         *m_alive = false; // signal background threads to stop accessing this
+        SaveSession();
         SaveConfig();
         auto codebasePath = GetCodebaseStorePath();
         if (m_codebaseStore && !codebasePath.empty())
@@ -198,6 +199,13 @@ namespace pe
 
         // Populate model list for the restored provider
         FetchAvailableModels();
+
+        // Auto-load most recent session if one exists
+        {
+            auto sessions = ListSessions();
+            if (!sessions.empty())
+                LoadSession(sessions.front());
+        }
 
         // Fetch local models for Ollama at startup (no remote)
         // Other providers have hardcoded model lists
@@ -288,8 +296,8 @@ namespace pe
             "You are an AI assistant inside PhasmaEditor (Vulkan 3D engine). " + std::string(m_embeddingEnabled ? "" : "FIRST THING: use read_agent_file to read START.md for your full API reference and rules. ") +
             "Control the editor via execute_lua. Be very concise. ASCII only, no emoji. "
             "Chain ALL operations in ONE execute_lua call. Check results for errors. "
-            "To load 3D models: 1) call find_loadable_model tool, 2) execute_lua with: local m, err = load_model('path/from/step1') "
-            "The Lua function is load_model (NOT pe_load_model). Do NOT use fs.find/fs.list for models. "
+            "To load 3D models: ALWAYS call find_loadable_model tool first (even if you think you know the path), then execute_lua with: local m, err = load_model('path/from/tool') "
+            "The Lua function is load_model (NOT pe_load_model). NEVER guess model paths. Do NOT use fs.find/fs.list for models. "
             "Set unique labels on created models. Use request_feature for missing capabilities. "
             "Screenshots: engine.take_screenshot() or engine.take_screenshot('path.png'). "
             "Workspace: " +
@@ -297,10 +305,10 @@ namespace pe
 
         config.log_callback = [](const std::string &msg)
         { PE_INFO("%s", msg.c_str()); };
-        config.max_tool_rounds = 30;
+        config.max_tool_rounds = 12;
         config.max_tool_result_chars = 500;
         config.max_history_messages = 20;
-        config.summarize_after_messages = 30;
+        config.summarize_after_messages = 8;
         config.provider = info->provider;
         config.api_key = info->apiKey;
         config.model = info->defaultModel;
@@ -440,7 +448,7 @@ namespace pe
         case 3: // Voyage
             m_embeddingModels = {"voyage-code-3", "voyage-3"};
             break;
-        case 2: // Ollama — local only by default, Fetch button gets remote too
+        case 2: // Ollama - local only by default, Fetch button gets remote too
         {
             m_embeddingModelIsLocal.clear();
             m_isFetchingEmbeddingModels = true;
@@ -463,6 +471,53 @@ namespace pe
                     }
                     if (m_selectedEmbeddingModel >= static_cast<int>(m_embeddingModels.size()))
                         m_selectedEmbeddingModel = 0;
+
+                    // Embedding provider wasn't created at ConfigureAgent time (models weren't ready).
+                    // Create it now and inject into the running agent without recreating it.
+                    if (m_embeddingEnabled && !m_embeddingProvider && !m_embeddingModels.empty())
+                    {
+                        m_embeddingProvider = CreateEmbeddingProvider();
+                        if (m_agent.has_value() && m_embeddingProvider)
+                            m_agent->SetEmbeddingProvider(m_embeddingProvider);
+
+                        // Also set up the codebase store (skipped in ConfigureAgent when provider was null).
+                        if (m_embeddingProvider && !m_codebaseStore)
+                        {
+                            int dims = m_embeddingProvider->Dimensions();
+                            m_codebaseStore = std::make_shared<pagent::VectorStore>();
+                            m_codebaseBM25 = std::make_shared<pagent::BM25Index>();
+                            if (m_agent.has_value())
+                            {
+                                m_agent->SetCodebaseStore(m_codebaseStore.get());
+                                m_agent->SetCodebaseBM25(m_codebaseBM25.get());
+                            }
+                            auto csp = GetCodebaseStorePath();
+                            if (!csp.empty())
+                            {
+                                m_codebaseLoading.store(true);
+                                auto store = m_codebaseStore;
+                                auto bm25 = m_codebaseBM25;
+                                std::thread([store, bm25, csp, dims, this]()
+                                {
+                                    store->LoadFromBinary(csp, dims);
+                                    store->ForEachEntry([&bm25](const pagent::VectorEntry &e)
+                                                        { bm25->Add(e.id, e.content); });
+                                    m_codebaseLoading.store(false);
+                                    PE_INFO("Codebase loaded: %zu vector entries, %zu BM25 docs", store->Size(), bm25->Size());
+                                    CheckIndexStatus();
+                                }).detach();
+                            }
+                            else
+                            {
+                                CheckIndexStatus();
+                            }
+                        }
+                    }
+                    // Manual Fetch case: provider already exists, just re-check status.
+                    else if (m_embeddingEnabled && m_embeddingProvider && !m_embeddingModels.empty())
+                    {
+                        CheckIndexStatus();
+                    }
                 }); })
                 .detach();
             break;
@@ -579,7 +634,7 @@ namespace pe
         }
         catch (...)
         {
-            // Parsing or access error — keep defaults
+            // Parsing or access error - keep defaults
         }
     }
 
@@ -712,13 +767,13 @@ namespace pe
 
         m_agent->RegisterTool({.name = "read_project_file",
                                .description = "Reads a source file from the project (C++ headers, source, shaders, configs). "
-                                              "Use this to understand engine APIs before writing Lua code. "
-                                              "Path relative to project root or absolute. "
-                                              "For large files, use offset and max_bytes to read in chunks.",
+                                              "Preferred workflow: use grep_project to find the relevant line number first, "
+                                              "then read only the surrounding lines with start_line/end_line. "
+                                              "Avoid reading whole files - surgical reads of 30-100 lines cost far fewer tokens.",
                                .properties = {
                                    {"path", "File path relative to project root (e.g. 'PhasmaCore/Code/Base/Path.h') or absolute", pagent::SchemaType::String, true},
-                                   {"offset", "Byte offset to start reading from (default 0)", pagent::SchemaType::Integer, false},
-                                   {"max_bytes", "Maximum bytes to read (default 200000). Use with offset to read large files in chunks.", pagent::SchemaType::Integer, false},
+                                   {"start_line", "First line to read, 1-based (default: 1). Use after grep_project to read just the relevant area.", pagent::SchemaType::Integer, false},
+                                   {"end_line", "Last line to read, inclusive (default: read all). Combine with start_line for surgical reads.", pagent::SchemaType::Integer, false},
                                },
                                .handler = [projectRoot](const std::string &args) -> std::string
                                {
@@ -739,42 +794,43 @@ namespace pe
                                    if (std::filesystem::is_directory(fpath))
                                        return "{\"error\":\"path is a directory, use find_project_file or list_project_dir\"}";
 
-                                   auto size = std::filesystem::file_size(fpath);
-                                   int64_t offset = ExtractArgInt(args, "offset", 0);
-                                   int64_t maxBytes = ExtractArgInt(args, "max_bytes", 200000);
-                                   if (maxBytes <= 0)
-                                       maxBytes = 200000;
-                                   if (offset < 0)
-                                       offset = 0;
+                                   int64_t startLine = ExtractArgInt(args, "start_line", 1);
+                                   int64_t endLine = ExtractArgInt(args, "end_line", 0); // 0 = no limit
+                                   if (startLine < 1)
+                                       startLine = 1;
 
-                                   if (offset >= static_cast<int64_t>(size))
-                                       return JsonObj({{"error", JsonStr("offset beyond file size (" + std::to_string(size) + " bytes)")}});
-
-                                   std::ifstream file(fpath, std::ios::in);
+                                   std::ifstream file(fpath);
                                    if (!file.is_open())
                                        return JsonObj({{"error", JsonStr("cannot open: " + fpath.string())}});
 
-                                   if (offset > 0)
-                                       file.seekg(offset);
+                                   std::string content;
+                                   content.reserve(8192);
+                                   std::string line;
+                                   int64_t lineNum = 0;
+                                   int64_t totalLines = 0;
+                                   while (std::getline(file, line))
+                                   {
+                                       ++lineNum;
+                                       ++totalLines;
+                                       if (lineNum < startLine)
+                                           continue;
+                                       if (endLine > 0 && lineNum > endLine)
+                                           break;
+                                       content += line;
+                                       content += '\n';
+                                   }
+                                   // Count remaining lines for total
+                                   while (std::getline(file, line))
+                                       ++totalLines;
 
-                                   int64_t bytesToRead = std::min(maxBytes, static_cast<int64_t>(size) - offset);
-                                   std::string content(static_cast<size_t>(bytesToRead), '\0');
-                                   file.read(content.data(), bytesToRead);
-                                   content.resize(static_cast<size_t>(file.gcount()));
-
-                                   bool truncated = (offset + bytesToRead) < static_cast<int64_t>(size);
-
-                                   std::vector<std::pair<std::string, std::string>> fields = {
-                                       {"path", JsonStr(fpath.string())},
-                                       {"content", JsonStr(content)},
-                                       {"size", std::to_string(size)},
+                                   nlohmann::json result = {
+                                       {"path", std::filesystem::relative(fpath, projectRoot).string()},
+                                       {"content", content},
+                                       {"start_line", startLine},
+                                       {"end_line", endLine > 0 ? std::min(endLine, lineNum) : lineNum},
+                                       {"total_lines", totalLines},
                                    };
-                                   if (offset > 0)
-                                       fields.push_back({"offset", std::to_string(offset)});
-                                   if (truncated)
-                                       fields.push_back({"truncated", "true"});
-
-                                   return JsonObj(fields);
+                                   return result.dump(-1, ' ', false, nlohmann::json::error_handler_t::replace);
                                }});
 
         m_agent->RegisterTool({.name = "write_project_file",
@@ -896,6 +952,188 @@ namespace pe
                                    arr += "]";
                                    return JsonObj({{"count", std::to_string(count)}, {"files", arr}});
                                }});
+
+        m_agent->RegisterTool(
+            {.name = "grep_project",
+             .description =
+                 "Search for a literal string or regex pattern in project source files. "
+                 "Returns matching lines with file path and line number. "
+                 "Use for finding function definitions, usages, class members, shader code, etc. "
+                 "Literal search (default) is fast and sufficient for identifiers. "
+                 "Set regex=true for pattern matching (ECMAScript syntax).",
+             .properties = {
+                 {"pattern", "Text to search for. Literal string by default; ECMAScript regex if regex=true.", pagent::SchemaType::String, true},
+                 {"path", "Subdirectory to search (e.g. 'PhasmaEditor/Code'). Defaults to project root.", pagent::SchemaType::String, false},
+                 {"glob", "File extension filter (e.g. '*.cpp', '*.hlsl', '*.h'). Defaults to all files.", pagent::SchemaType::String, false},
+                 {"regex", "Set to true to treat pattern as an ECMAScript regex. Default: false (literal).", pagent::SchemaType::Boolean, false},
+                 {"case_sensitive", "Case-sensitive match. Default: true.", pagent::SchemaType::Boolean, false},
+                 {"max_results", "Maximum number of matching lines to return. Default: 50.", pagent::SchemaType::Integer, false},
+             },
+             .handler = [projectRoot](const std::string &args) -> std::string
+             {
+                 std::string pattern = JsonUnescape(ExtractArgStr(args, "pattern"));
+                 std::string searchDir = JsonUnescape(ExtractArgStr(args, "path"));
+                 std::string globFilter = JsonUnescape(ExtractArgStr(args, "glob"));
+                 bool useRegex = ExtractArgStr(args, "regex") == "true";
+                 bool caseSens = ExtractArgStr(args, "case_sensitive") != "false"; // default true
+                 int maxResults = static_cast<int>(ExtractArgInt(args, "max_results", 50));
+
+                 if (pattern.empty())
+                     return "{\"error\":\"missing pattern\"}";
+                 if (maxResults <= 0 || maxResults > 500)
+                     maxResults = 50;
+
+                 // Resolve search root
+                 std::filesystem::path searchPath = searchDir.empty()
+                                                        ? std::filesystem::path(projectRoot)
+                                                        : std::filesystem::path(projectRoot) / searchDir;
+                 if (!IsPathSafe(searchPath.string(), projectRoot))
+                     return "{\"error\":\"path outside project directory\"}";
+                 if (!std::filesystem::exists(searchPath))
+                     return JsonObj({{"error", JsonStr("directory not found: " + searchPath.string())}});
+
+                 // Build glob suffix filter (e.g. "*.cpp" -> ".cpp")
+                 std::string extFilter;
+                 if (!globFilter.empty())
+                 {
+                     auto star = globFilter.find('*');
+                     extFilter = (star != std::string::npos) ? globFilter.substr(star + 1) : globFilter;
+                     if (!caseSens)
+                         extFilter = ToLower(extFilter);
+                 }
+
+                 // Compile regex if requested
+                 std::regex rx;
+                 bool regexValid = false;
+                 if (useRegex)
+                 {
+                     try
+                     {
+                         auto flags = std::regex::ECMAScript | std::regex::optimize;
+                         if (!caseSens)
+                             flags |= std::regex::icase;
+                         rx = std::regex(pattern, flags);
+                         regexValid = true;
+                     }
+                     catch (const std::regex_error &e)
+                     {
+                         return JsonObj({{"error", JsonStr(std::string("invalid regex: ") + e.what())}});
+                     }
+                 }
+
+                 // Case-fold literal pattern once
+                 std::string literalLower = caseSens ? pattern : ToLower(pattern);
+
+                 nlohmann::json matchesArray = nlohmann::json::array();
+                 int count = 0;
+
+                 auto processFile = [&](const std::filesystem::path &filePath) -> bool
+                 {
+                     std::ifstream file(filePath, std::ios::binary);
+                     if (!file.is_open())
+                         return true; // continue
+
+                     // Quick binary pre-check on first 1024 bytes - avoids loading a
+                     // 50 MB binary into RAM via getline before we hit a null byte
+                     char buf[1024];
+                     std::streamsize n = (file.read(buf, sizeof(buf)), file.gcount());
+                     if (std::find(buf, buf + n, '\0') != buf + n)
+                         return true; // binary file, skip
+                     file.clear();
+                     file.seekg(0);
+
+                     std::string relPath = std::filesystem::relative(filePath, projectRoot).string();
+                     std::replace(relPath.begin(), relPath.end(), '\\', '/');
+
+                     std::string line;
+                     int lineNum = 0;
+                     bool firstLine = true;
+                     while (std::getline(file, line))
+                     {
+                         ++lineNum;
+
+                         // Strip UTF-8 BOM (EF BB BF) from the very first line
+                         if (firstLine)
+                         {
+                             if (line.size() >= 3 &&
+                                 static_cast<unsigned char>(line[0]) == 0xEF &&
+                                 static_cast<unsigned char>(line[1]) == 0xBB &&
+                                 static_cast<unsigned char>(line[2]) == 0xBF)
+                                 line.erase(0, 3);
+                             firstLine = false;
+                         }
+
+                         // Strip trailing \r (CRLF files)
+                         if (!line.empty() && line.back() == '\r')
+                             line.pop_back();
+
+                         bool matched = false;
+                         if (useRegex && regexValid)
+                         {
+                             matched = std::regex_search(line, rx);
+                         }
+                         else
+                         {
+                             std::string haystack = caseSens ? line : ToLower(line);
+                             matched = haystack.find(literalLower) != std::string::npos;
+                         }
+
+                         if (!matched)
+                             continue;
+
+                         // Trim leading whitespace for readability
+                         std::string trimmed = line;
+                         auto ws = trimmed.find_first_not_of(" \t");
+                         if (ws != std::string::npos)
+                             trimmed = trimmed.substr(ws);
+
+                         matchesArray.push_back({{"file", relPath}, {"line", lineNum}, {"text", trimmed}});
+
+                         if (++count >= maxResults)
+                             return false; // stop
+                     }
+                     return true; // continue
+                 };
+
+                 auto matchesExt = [&](const std::filesystem::path &p) -> bool
+                 {
+                     if (extFilter.empty())
+                         return true;
+                     std::string ext = p.extension().string();
+                     if (!caseSens)
+                         ext = ToLower(ext);
+                     // extFilter may be ".cpp" or "cpp"
+                     if (extFilter[0] == '.')
+                         return ext == extFilter;
+                     return ext == ("." + extFilter);
+                 };
+
+                 // Use the iterator directly so we can call disable_recursion_pending()
+                 // on directories we want to skip entirely (build/, .git/, .vs/, etc.)
+                 // rather than entering them and discarding files one by one.
+                 bool keepGoing = true;
+                 auto it = std::filesystem::recursive_directory_iterator(
+                     searchPath, std::filesystem::directory_options::skip_permission_denied);
+                 auto end = std::filesystem::recursive_directory_iterator();
+                 for (; it != end && keepGoing; ++it)
+                 {
+                     if (it->is_directory())
+                     {
+                         std::string dirName = it->path().filename().string();
+                         if (dirName == "build" || (!dirName.empty() && dirName[0] == '.'))
+                             it.disable_recursion_pending();
+                         continue;
+                     }
+                     if (!it->is_regular_file())
+                         continue;
+                     if (!matchesExt(it->path()))
+                         continue;
+                     keepGoing = processFile(it->path());
+                 }
+
+                 nlohmann::json result = {{"count", count}, {"matches", matchesArray}};
+                 return result.dump(-1, ' ', false, nlohmann::json::error_handler_t::replace);
+             }});
 
         m_agent->RegisterTool({.name = "list_project_dir",
                                .description = "Lists files and subdirectories at a project path. "
@@ -1568,7 +1806,7 @@ namespace pe
                 else if (m_providers[m_selectedProviderIndex].provider == pagent::Provider::Ollama &&
                          !m_isExternalAI)
                 {
-                    // Unload button — only shown when model is loaded
+                    // Unload button - only shown when model is loaded
                     if (m_ollamaModelLoaded)
                     {
                         ImGui::SameLine();
@@ -1581,7 +1819,7 @@ namespace pe
                             m_scrollToBottom = true;
                         }
                     }
-                    // Fetch button — fetches remote models from ollama.com
+                    // Fetch button - fetches remote models from ollama.com
                     ImGui::SameLine();
                     bool fetching = m_isFetchingModels || m_isFetchingEmbeddingModels;
                     if (fetching)
@@ -1610,9 +1848,102 @@ namespace pe
                 ImGui::TextUnformatted(buf);
             }
             ImGui::PopStyleColor();
+
+            // Session controls
+            ImGui::SameLine();
+            if (ImGui::SmallButton("New"))
+                NewSession();
+            if (ImGui::IsItemHovered())
+                ImGui::SetTooltip("Save current session and start a new one");
+            ImGui::SameLine();
+            if (ImGui::SmallButton("Sessions##sessionbtn"))
+                m_showSessionBrowser = !m_showSessionBrowser;
+            if (ImGui::IsItemHovered())
+                ImGui::SetTooltip("Browse and load past sessions");
+            ImGui::SameLine();
+            if (busy)
+                ImGui::BeginDisabled();
+            if (ImGui::SmallButton("Compact"))
+            {
+                auto aliveRef = m_alive;
+                // Snapshot the history count before spawning the thread
+                const size_t histCount = m_agent->GetHistory().size();
+                std::thread([this, aliveRef, histCount]()
+                            {
+                    // Keep last 2 messages (the most recent exchange) verbatim
+                    const bool ok = m_agent->ForceCompact(2);
+                    if (!*aliveRef) return;
+                    QueueAction([this, aliveRef, ok, histCount]()
+                    {
+                        if (!*aliveRef) return;
+                        std::lock_guard lock(m_chatMutex);
+                        std::string msg;
+                        if (ok)
+                            msg = "History compacted.";
+                        else
+                            msg = "Nothing to compact (" + std::to_string(histCount) +
+                                  " messages, need more than 2).";
+                        m_chat.push_back({ChatMessage::Role::System, msg});
+                        m_scrollToBottom = true;
+                    }); })
+                    .detach();
+            }
+            if (busy)
+                ImGui::EndDisabled();
+            if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
+                ImGui::SetTooltip("Summarize old conversation history to reduce token usage.\nKeeps the last 2 messages verbatim.");
         }
 
-        // Embedding row (checkbox + provider + model) — right under agent row
+        // Session browser popup
+        if (m_showSessionBrowser)
+        {
+            ImGui::SetNextWindowSize(ImVec2(480, 320), ImGuiCond_FirstUseEver);
+            if (ImGui::Begin("Sessions##browser", &m_showSessionBrowser))
+            {
+                auto sessions = ListSessions();
+                if (sessions.empty())
+                {
+                    ImGui::TextDisabled("No saved sessions.");
+                }
+                else
+                {
+                    ImGui::TextDisabled("%d session(s) - click to load", static_cast<int>(sessions.size()));
+                    ImGui::Separator();
+                    for (const auto &path : sessions)
+                    {
+                        std::string name = std::filesystem::path(path).stem().string();
+                        bool isCurrent = (path == m_currentSessionPath);
+                        if (isCurrent)
+                            ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.4f, 0.9f, 0.4f, 1.0f));
+                        if (ImGui::Selectable(name.c_str(), isCurrent))
+                        {
+                            if (!isCurrent)
+                            {
+                                SaveSession();
+                                LoadSession(path);
+                                m_showSessionBrowser = false;
+                            }
+                        }
+                        if (isCurrent)
+                            ImGui::PopStyleColor();
+                        ImGui::SameLine(ImGui::GetContentRegionAvail().x - 50.0f);
+                        std::string deleteId = "Del##" + name;
+                        ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.8f, 0.3f, 0.3f, 1.0f));
+                        if (ImGui::SmallButton(deleteId.c_str()))
+                        {
+                            std::error_code ec;
+                            std::filesystem::remove(path, ec);
+                            if (isCurrent)
+                                m_currentSessionPath.clear();
+                        }
+                        ImGui::PopStyleColor();
+                    }
+                }
+            }
+            ImGui::End();
+        }
+
+        // Embedding row (checkbox + provider + model) - right under agent row
         if (!m_isExternalAI)
         {
             bool indexing = m_gui && m_gui->IsIndexing();
@@ -1800,7 +2131,11 @@ namespace pe
                 }
                 else
                 {
-                    bool canIndex = m_embeddingProvider != nullptr;
+                    bool hasModel = m_embeddingProvider != nullptr &&
+                                    !m_embeddingModels.empty() &&
+                                    m_selectedEmbeddingModel < static_cast<int>(m_embeddingModels.size());
+                    bool upToDate = hasModel && m_indexStatusReady.load() && m_indexStatusOutdated == 0;
+                    bool canIndex = hasModel && !upToDate;
                     if (!canIndex)
                         ImGui::BeginDisabled();
                     if (ImGui::SmallButton("Index"))
@@ -1811,15 +2146,21 @@ namespace pe
                     if (!canIndex)
                         ImGui::EndDisabled();
                     if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
-                        ImGui::SetTooltip("Index codebase for RAG retrieval");
+                    {
+                        const char *tip = !hasModel  ? "No embedding model selected"
+                                          : upToDate ? "Index is up to date"
+                                                     : "Index codebase for RAG retrieval";
+                        ImGui::SetTooltip("%s", tip);
+                    }
 
                     ImGui::SameLine();
                     bool checking = m_indexStatusChecking.load();
-                    if (checking)
+                    bool canCheck = hasModel && !checking && !m_isFetchingEmbeddingModels;
+                    if (!canCheck)
                         ImGui::BeginDisabled();
                     if (ImGui::SmallButton("Check"))
                         CheckIndexStatus();
-                    if (checking)
+                    if (!canCheck)
                         ImGui::EndDisabled();
 
                     // Show index status
@@ -1929,7 +2270,7 @@ namespace pe
         ImGui::BeginDisabled(busy);
         const float inputWidth = ImGui::GetContentRegionAvail().x - 60.0f;
 
-        // Up/Down arrow history — queue text before InputText; apply inside callback
+        // Up/Down arrow history - queue text before InputText; apply inside callback
         if (!m_inputHistory.empty() && !busy)
         {
             if (ImGui::IsKeyPressed(ImGuiKey_UpArrow, false))
@@ -2317,13 +2658,13 @@ namespace pe
 
                         if (FileBrowser::IsModelFile(fp))
                         {
-                            // Binary file — don't read content, just reference path
+                            // Binary file - don't read content, just reference path
                             pf.content = "[Model file: " + fp.string() + "]";
                             pf.iconDS = m_modelIconDS ? m_modelIconDS : m_fileIconDS;
                         }
                         else
                         {
-                            // Text/code file — read and sanitize content
+                            // Text/code file - read and sanitize content
                             constexpr size_t maxChars = 20000;
                             std::ifstream file(fp, std::ios::in);
                             if (!file.is_open())
@@ -2671,6 +3012,185 @@ namespace pe
         }
     }
 
+    // -------------------------------------------------------------------------
+    // Session persistence
+    // -------------------------------------------------------------------------
+
+    static std::string SessionsDir()
+    {
+        return Path::Assets + "Agent/sessions/";
+    }
+
+    void AgentWidget::SaveSession()
+    {
+        if (!m_agent)
+            return;
+
+        // Create sessions directory if needed
+        std::filesystem::create_directories(SessionsDir());
+
+        // Generate a filename from the current time if we don't have one yet
+        if (m_currentSessionPath.empty())
+        {
+            // Derive a short title from the first user message
+            std::string title = "session";
+            {
+                std::lock_guard lock(m_chatMutex);
+                for (const auto &msg : m_chat)
+                {
+                    if (msg.role == ChatMessage::Role::User && !msg.text.empty())
+                    {
+                        title = msg.text.substr(0, 40);
+                        // Replace chars that are unsafe in filenames
+                        for (auto &c : title)
+                            if (c == '/' || c == '\\' || c == ':' || c == '*' || c == '?' ||
+                                c == '"' || c == '<' || c == '>' || c == '|' || c == '\n')
+                                c = '_';
+                        break;
+                    }
+                }
+            }
+            // Timestamp prefix for chronological sorting
+            auto now = std::chrono::system_clock::now();
+            auto tt = std::chrono::system_clock::to_time_t(now);
+            std::tm tm{};
+#if defined(_WIN32)
+            localtime_s(&tm, &tt);
+#else
+            localtime_r(&tt, &tm);
+#endif
+            char stamp[32];
+            std::strftime(stamp, sizeof(stamp), "%Y-%m-%d_%H%M%S", &tm);
+            m_currentSessionPath = SessionsDir() + stamp + "_" + title + ".json";
+        }
+
+        nlohmann::json j;
+        j["version"] = 1;
+        j["provider"] = (m_selectedProviderIndex < static_cast<int>(m_providers.size()))
+                            ? m_providers[m_selectedProviderIndex].name
+                            : "";
+        j["model"] = m_modelName;
+
+        nlohmann::json msgs = nlohmann::json::array();
+        {
+            std::lock_guard lock(m_chatMutex);
+            for (const auto &msg : m_chat)
+            {
+                // Skip system messages (status notes, session-restored banners, etc.)
+                // They are UI-only and should not accumulate across restarts.
+                if (msg.role == ChatMessage::Role::System)
+                    continue;
+
+                const char *role = msg.role == ChatMessage::Role::User ? "user" : "assistant";
+                nlohmann::json m;
+                m["role"] = role;
+                m["text"] = msg.text;
+                if (!msg.thinking.empty())
+                    m["thinking"] = msg.thinking;
+                msgs.push_back(std::move(m));
+            }
+        }
+        j["messages"] = std::move(msgs);
+
+        std::ofstream f(m_currentSessionPath);
+        if (f)
+            f << j.dump(2) << "\n";
+    }
+
+    void AgentWidget::LoadSession(const std::string &path)
+    {
+        if (!m_agent)
+            return;
+
+        std::ifstream f(path);
+        if (!f)
+            return;
+
+        nlohmann::json j;
+        try
+        {
+            j = nlohmann::json::parse(f);
+        }
+        catch (...)
+        {
+            return;
+        }
+
+        m_currentSessionPath = path;
+
+        // Restore display chat
+        std::vector<ChatMessage> loaded;
+        std::vector<pagent::HistoryEntry> historyEntries;
+
+        for (const auto &m : j.value("messages", nlohmann::json::array()))
+        {
+            std::string role = m.value("role", "system");
+            std::string text = m.value("text", "");
+            std::string thinking = m.value("thinking", "");
+
+            ChatMessage::Role chatRole = ChatMessage::Role::System;
+            if (role == "user")
+                chatRole = ChatMessage::Role::User;
+            else if (role == "assistant")
+                chatRole = ChatMessage::Role::Assistant;
+
+            loaded.push_back({chatRole, text, thinking});
+
+            // Reconstruct lightweight LLM history from user/assistant turns only
+            if (role == "user" || role == "assistant")
+            {
+                pagent::NeutralMessage nm;
+                nm.role = (role == "user") ? pagent::NeutralMessage::Role::User
+                                           : pagent::NeutralMessage::Role::Assistant;
+                nm.content = text;
+                historyEntries.push_back({std::move(nm), 0});
+            }
+        }
+
+        // Apply to agent
+        m_agent->ClearHistory();
+        m_agent->LoadHistory(historyEntries);
+        m_agent->InjectSystemMessage(
+            "Session restored from a previous editor run. "
+            "The codebase may have changed since this conversation. "
+            "Always verify file contents and line numbers with tools before acting on past assumptions.");
+
+        {
+            std::lock_guard lock(m_chatMutex);
+            m_chat = std::move(loaded);
+            m_chat.push_back({ChatMessage::Role::System,
+                              "[Session restored - code may have changed since last run]"});
+            m_scrollToBottom = true;
+        }
+    }
+
+    void AgentWidget::NewSession()
+    {
+        SaveSession(); // persist current session before clearing
+        m_currentSessionPath.clear();
+        if (m_agent)
+        {
+            m_agent->ClearHistory();
+        }
+        std::lock_guard lock(m_chatMutex);
+        m_chat.clear();
+        m_scrollToBottom = true;
+    }
+
+    std::vector<std::string> AgentWidget::ListSessions() const
+    {
+        std::vector<std::string> sessions;
+        std::error_code ec;
+        for (const auto &entry : std::filesystem::directory_iterator(SessionsDir(), ec))
+        {
+            if (entry.is_regular_file() && entry.path().extension() == ".json")
+                sessions.push_back(entry.path().string());
+        }
+        // Sort newest first (filenames start with timestamp)
+        std::sort(sessions.rbegin(), sessions.rend());
+        return sessions;
+    }
+
     void AgentWidget::OnAgentEvent(const pagent::AgentEvent &ev)
     {
         std::lock_guard lock(m_chatMutex);
@@ -2727,6 +3247,12 @@ namespace pe
             m_isStreaming = false;
             m_streamingText.clear();
             m_streamingThinking.clear();
+            // Auto-save session after every completed turn (mutex already held - defer to next frame)
+            {
+                auto *self = this;
+                QueueAction([self]()
+                            { self->SaveSession(); });
+            }
             break;
         case pagent::AgentEventType::Error:
             m_chat.push_back({ChatMessage::Role::System, "[error: " + ev.error_message + "]"});

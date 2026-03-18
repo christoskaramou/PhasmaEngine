@@ -33,6 +33,9 @@ namespace pagent
         bool Submit(const std::string &user_message, const std::vector<ContentPart> &attachments);
         bool IsBusy() const { return m_busy.load(std::memory_order_relaxed); }
         void Cancel();
+        // Summarize the full history now, keeping only the most recent keepRecent messages intact.
+        // Runs synchronously; only call when IsBusy() == false.
+        bool ForceCompact(size_t keepRecent = 4);
         void SetBackend(IProviderBackend *backend) { m_backend = backend; }
         void SetVectorStore(VectorStore *store) { m_vectorStore = store; }
         void SetCodebaseStore(VectorStore *store) { m_codebaseStore = store; }
@@ -81,5 +84,10 @@ namespace pagent
         VectorStore *m_codebaseStore = nullptr;
         BM25Index *m_codebaseBM25 = nullptr;
         IncludeGraph *m_includeGraph = nullptr;
+
+        // Gemini persistent cache (system prompt + repo_map + tools).
+        // Reused across Submit() calls; rebuilt only when static content changes.
+        std::string m_geminiCacheName;
+        std::string m_geminiCacheKey; // fingerprint of what was cached
     };
 } // namespace pagent

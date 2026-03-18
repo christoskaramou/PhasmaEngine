@@ -9,7 +9,7 @@ namespace pe
         {
             if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_EVENTS) < 0)
             {
-                PE_ERROR("SDL_GetError: %s", SDL_GetError());
+                PE_ERROR("[SDL] %s", SDL_GetError());
                 return;
             }
         }
@@ -17,7 +17,7 @@ namespace pe
         std::string surface_path = Path::Assets + "SplashScreen/splash_screen.jpg";
         if (!std::filesystem::exists(surface_path))
         {
-            PE_ERROR("Splash screen not found: %s", surface_path.c_str());
+            PE_ERROR("[SDL] Splash screen not found: %s", surface_path.c_str());
             return;
         }
         int width, height, nrChannels;

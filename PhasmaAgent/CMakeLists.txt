@@ -19,7 +19,7 @@ FetchContent_Declare(tree_sitter
 )
 FetchContent_MakeAvailable(tree_sitter)
 
-# tree-sitter-cpp grammar (download only — skip its CMake which needs tree-sitter CLI)
+# tree-sitter-cpp grammar (download only - skip its CMake which needs tree-sitter CLI)
 FetchContent_Declare(tree_sitter_cpp
     GIT_REPOSITORY https://github.com/tree-sitter/tree-sitter-cpp.git
     GIT_TAG        v0.23.4
@@ -55,7 +55,7 @@ target_include_directories(PhasmaAgent
 target_include_directories(PhasmaAgent PRIVATE "${tree_sitter_SOURCE_DIR}/lib/include")
 target_link_libraries(PhasmaAgent PRIVATE tree-sitter tree_sitter_cpp_grammar)
 
-# --- OpenSSL (optional — provides built-in HTTPS; not needed if custom_http_handler is used) ---
+# --- OpenSSL (optional - provides built-in HTTPS; not needed if custom_http_handler is used) ---
 option(PAGENT_USE_OPENSSL "Link OpenSSL for built-in HTTPS support" ON)
 
 if(PAGENT_USE_OPENSSL)
@@ -63,15 +63,15 @@ if(PAGENT_USE_OPENSSL)
     if(OpenSSL_FOUND OR OPENSSL_FOUND)
         target_link_libraries(PhasmaAgent PRIVATE OpenSSL::SSL OpenSSL::Crypto)
         target_compile_definitions(PhasmaAgent PRIVATE CPPHTTPLIB_OPENSSL_SUPPORT)
-        message(STATUS "[PhasmaAgent] OpenSSL ${OPENSSL_VERSION} found — built-in HTTPS enabled")
+        message(STATUS "[PhasmaAgent] OpenSSL ${OPENSSL_VERSION} found - built-in HTTPS enabled")
         set(OPENSSL_FOUND TRUE PARENT_SCOPE)
     else()
-        message(WARNING "[PhasmaAgent] OpenSSL not found — built-in HTTPS disabled.\n"
+        message(WARNING "[PhasmaAgent] OpenSSL not found - built-in HTTPS disabled.\n"
             "  Install OpenSSL (vcpkg: vcpkg install openssl:x64-windows) or set OPENSSL_ROOT_DIR,\n"
             "  or provide AgentConfig::custom_http_handler at runtime.")
     endif()
 else()
-    message(STATUS "[PhasmaAgent] PAGENT_USE_OPENSSL=OFF — provide AgentConfig::custom_http_handler at runtime")
+    message(STATUS "[PhasmaAgent] PAGENT_USE_OPENSSL=OFF - provide AgentConfig::custom_http_handler at runtime")
 endif()
 
 # --- Threading ---

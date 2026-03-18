@@ -664,7 +664,7 @@ namespace pe
             }
             else
             {
-                PE_ERROR("CommandBuffer::PushDescriptor: No views or buffers or samplers found!");
+                PE_ERROR("[Command] PushDescriptor: No views or buffers or samplers found!");
             }
         }
 

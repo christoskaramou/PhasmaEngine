@@ -246,7 +246,7 @@ namespace pe
             std::string reason;
             if (!ParseDdsInfo(fileData, dds, reason))
             {
-                PE_WARN("Failed to parse DDS '%s': %s", path.c_str(), reason.c_str());
+                PE_WARN("[Image] Failed to parse DDS '%s': %s", path.c_str(), reason.c_str());
                 return nullptr;
             }
 
@@ -463,7 +463,7 @@ namespace pe
             FileSystem file(path, std::ios::in | std::ios::binary);
             if (!file.IsOpen())
             {
-                PE_ERROR("Failed to open image file: %s", path.c_str());
+                PE_ERROR("[Image] Failed to open image file: %s", path.c_str());
                 return nullptr;
             }
             fileData = file.ReadAllBytes();
@@ -473,7 +473,7 @@ namespace pe
         {
             if (isFloat)
             {
-                PE_WARN("DDS float decode is not supported for '%s'", path.c_str());
+                PE_WARN("[Image] DDS float decode is not supported for '%s'", path.c_str());
                 return nullptr;
             }
             return LoadDdsCompressed(cmd, path, fileData);
@@ -489,7 +489,7 @@ namespace pe
         if (!pixels)
         {
             const char *reason = stbi_failure_reason();
-            PE_WARN("Image decode failed for '%s': %s", path.c_str(), reason ? reason : "unknown");
+            PE_WARN("[Image] Decode failed for '%s': %s", path.c_str(), reason ? reason : "unknown");
             return nullptr;
         }
 
@@ -521,7 +521,7 @@ namespace pe
         if (!pixels)
         {
             const char *reason = stbi_failure_reason();
-            PE_WARN("Embedded image decode failed: %s", reason ? reason : "unknown");
+            PE_WARN("[Image] Embedded image decode failed: %s", reason ? reason : "unknown");
             return nullptr;
         }
 
@@ -601,7 +601,7 @@ namespace pe
             break;
 
         default:
-            PE_ERROR("Unsupported format for LoadRaw");
+            PE_ERROR("[Image] Unsupported format for LoadRaw");
             break;
         }
 

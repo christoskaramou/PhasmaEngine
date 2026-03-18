@@ -37,7 +37,7 @@ namespace pe
 
                     if (!std::filesystem::exists(fullPath))
                     {
-                        PE_WARN("skybox.load: file not found: %s", fullPath.c_str());
+                        PE_WARN("[Lua] skybox.load: file not found: %s", fullPath.c_str());
                         return;
                     }
 

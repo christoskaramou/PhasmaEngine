@@ -74,7 +74,7 @@ function run_queue_tests()
     cmd2:wait()
     cmd2:return_cmd()
 
-    -- CommandPool::Reset — skipped, destructive to engine's internal command buffers
+    -- CommandPool::Reset - skipped, destructive to engine's internal command buffers
 
     T.summary("Queue API Tests")
 end

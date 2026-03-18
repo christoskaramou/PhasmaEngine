@@ -1423,7 +1423,7 @@ namespace pe
 
             rapidjson::Value modelObj(rapidjson::kObjectType);
 
-            // Basic Info — store path relative to the scene file so scenes are portable
+            // Basic Info - store path relative to the scene file so scenes are portable
             if (model->IsPrimitive())
             {
                 modelObj.AddMember("primitive_type", rapidjson::Value(model->GetPrimitiveType().c_str(), allocator).Move(), allocator);
@@ -2071,7 +2071,7 @@ namespace pe
         settings.AddMember("use_Disney_PBR", gSettings.use_Disney_PBR, allocator);
         d.AddMember("settings", settings.Move(), allocator);
 
-        // Models — use absolute paths for in-memory snapshots
+        // Models - use absolute paths for in-memory snapshots
         rapidjson::Value models(rapidjson::kArrayType);
         for (auto *model : m_models)
         {
@@ -2216,7 +2216,7 @@ namespace pe
             d.AddMember("lights", lights.Move(), allocator);
         }
 
-        // Cameras — always skip active camera position/euler (WASD navigation is not undoable)
+        // Cameras - always skip active camera position/euler (WASD navigation is not undoable)
         Camera *activeCamera = m_cameras.empty() ? nullptr : GetActiveCamera();
         rapidjson::Value cameras(rapidjson::kArrayType);
         for (auto *camera : m_cameras)
@@ -2501,7 +2501,7 @@ namespace pe
             }
             else
             {
-                // Slow path: model list changed — remove all and reload
+                // Slow path: model list changed - remove all and reload
                 // This handles add/remove model undo
                 std::vector<Model *> toRemove(currentModels.begin(), currentModels.end());
                 if (!toRemove.empty())
@@ -2622,7 +2622,7 @@ namespace pe
             }
         }
 
-        // 3. Restore lights (clear and recreate — cheap)
+        // 3. Restore lights (clear and recreate - cheap)
         auto *lightSystem = GetGlobalSystem<LightSystem>();
         if (d.HasMember("lights") && lightSystem)
         {
