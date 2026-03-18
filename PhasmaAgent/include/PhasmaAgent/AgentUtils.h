@@ -258,6 +258,53 @@ namespace pagent
         return png;
     }
 
+    // Strip non-UTF-8 bytes to avoid JSON serialization errors (nlohmann type_error.316).
+    // Invalid/truncated multi-byte sequences are dropped silently.
+    inline std::string SanitizeUTF8(const std::string &s)
+    {
+        std::string out;
+        out.reserve(s.size());
+        for (size_t i = 0; i < s.size();)
+        {
+            unsigned char c = static_cast<unsigned char>(s[i]);
+            int len;
+            if (c < 0x80)
+                len = 1;
+            else if ((c & 0xE0) == 0xC0)
+                len = 2;
+            else if ((c & 0xF0) == 0xE0)
+                len = 3;
+            else if ((c & 0xF8) == 0xF0)
+                len = 4;
+            else
+            {
+                ++i;
+                continue; // invalid lead byte — drop
+            }
+
+            if (i + static_cast<size_t>(len) > s.size())
+            {
+                ++i;
+                continue; // truncated sequence — drop
+            }
+
+            bool valid = true;
+            for (int j = 1; j < len; ++j)
+            {
+                if ((static_cast<unsigned char>(s[i + j]) & 0xC0) != 0x80)
+                {
+                    valid = false;
+                    break;
+                }
+            }
+
+            if (valid)
+                out.append(s, i, len);
+            i += valid ? static_cast<size_t>(len) : 1;
+        }
+        return out;
+    }
+
     // Returns true if 'path' resolves to a location under 'allowedRoot'.
     // Rejects path traversal attempts (e.g. "../../etc/passwd").
     // Cross-platform: uses std::filesystem::path iteration, works with both / and \.

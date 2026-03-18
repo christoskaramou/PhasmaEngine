@@ -1,5 +1,7 @@
 #include "PhasmaAgent/CodebaseIndexer.h"
 #include "PhasmaAgent/ASTChunker.h"
+#include "PhasmaAgent/AgentUtils.h"
+#include <nlohmann/json.hpp>
 #include <filesystem>
 #include <fstream>
 #include <thread>
@@ -248,51 +250,6 @@ namespace pagent
         return chunks;
     }
 
-    // Replace invalid UTF-8 bytes with '?' so nlohmann::json doesn't throw
-    static std::string sanitizeUtf8(const std::string &input)
-    {
-        std::string out;
-        out.reserve(input.size());
-        size_t i = 0;
-        while (i < input.size())
-        {
-            unsigned char c = static_cast<unsigned char>(input[i]);
-            int len = 0;
-            if (c < 0x80)
-                len = 1;
-            else if ((c & 0xE0) == 0xC0)
-                len = 2;
-            else if ((c & 0xF0) == 0xE0)
-                len = 3;
-            else if ((c & 0xF8) == 0xF0)
-                len = 4;
-
-            if (len == 0 || i + len > input.size())
-            {
-                out += '?';
-                ++i;
-                continue;
-            }
-
-            bool valid = true;
-            for (int j = 1; j < len; ++j)
-            {
-                if ((static_cast<unsigned char>(input[i + j]) & 0xC0) != 0x80)
-                {
-                    valid = false;
-                    break;
-                }
-            }
-
-            if (valid)
-                out.append(input, i, len);
-            else
-                out += '?';
-            i += valid ? len : 1;
-        }
-        return out;
-    }
-
     static std::string getFileTimestamp(const std::string &filePath)
     {
         std::error_code ec;
@@ -302,6 +259,34 @@ namespace pagent
         // Use file_time_type duration directly - we only need consistency, not wall-clock time
         auto ticks = ftime.time_since_epoch().count();
         return std::to_string(ticks);
+    }
+
+    // Compute the common root prefix for relative path calculation.
+    // Returns a forward-slash-terminated path, or empty if not determinable.
+    static std::string ComputeCommonRoot(const std::vector<std::string> &directories)
+    {
+        if (directories.empty())
+            return {};
+        fs::path root = fs::path(directories[0]).parent_path();
+        std::string commonRoot = root.string();
+        for (auto &ch : commonRoot)
+            if (ch == '\\')
+                ch = '/';
+        if (!commonRoot.empty() && commonRoot.back() != '/')
+            commonRoot += '/';
+        return commonRoot;
+    }
+
+    // Make a path relative to commonRoot, normalizing to forward slashes.
+    static std::string MakeRelative(const std::string &filePath, const std::string &commonRoot)
+    {
+        std::string rel = filePath;
+        for (auto &ch : rel)
+            if (ch == '\\')
+                ch = '/';
+        if (!commonRoot.empty() && rel.find(commonRoot) == 0)
+            rel = rel.substr(commonRoot.size());
+        return rel;
     }
 
     int CodebaseIndexer::Index(const IndexerConfig &config)
@@ -319,18 +304,7 @@ namespace pagent
             return 0;
         }
 
-        // Determine a common root for relative paths
-        std::string commonRoot;
-        if (!config.directories.empty())
-        {
-            fs::path root = fs::path(config.directories[0]).parent_path();
-            commonRoot = root.string();
-            for (auto &ch : commonRoot)
-                if (ch == '\\')
-                    ch = '/';
-            if (!commonRoot.empty() && commonRoot.back() != '/')
-                commonRoot += '/';
-        }
+        std::string commonRoot = ComputeCommonRoot(config.directories);
 
         // Build binary extension set for quick lookup
         std::set<std::string> binaryExts;
@@ -344,12 +318,7 @@ namespace pagent
 
         for (size_t i = 0; i < files.size(); ++i)
         {
-            std::string rel = files[i];
-            for (auto &ch : rel)
-                if (ch == '\\')
-                    ch = '/';
-            if (!commonRoot.empty() && rel.find(commonRoot) == 0)
-                rel = rel.substr(commonRoot.size());
+            std::string rel = MakeRelative(files[i], commonRoot);
 
             std::string ts = getFileTimestamp(files[i]);
 
@@ -457,7 +426,7 @@ namespace pagent
                 if (isBinary)
                 {
                     std::string desc = "File: " + rel;
-                    std::string sanitized = sanitizeUtf8(desc);
+                    std::string sanitized = SanitizeUTF8(desc);
                     size_t contentHash = std::hash<std::string>{}(sanitized);
 
                     // Reuse old embedding if content unchanged
@@ -475,8 +444,7 @@ namespace pagent
                         VectorEntry entry;
                         entry.id = entryId;
                         entry.content = sanitized;
-                        entry.metadata = "{\"type\":\"codebase\",\"file\":\"" + rel +
-                                         "\",\"binary\":true,\"last_modified\":\"" + ts + "\"}";
+                        entry.metadata = nlohmann::json{{"type", "codebase"}, {"file", rel}, {"binary", true}, {"last_modified", ts}}.dump();
                         entry.embedding = std::move(vec);
                         shared->store->Add(std::move(entry));
                         if (shared->bm25)
@@ -530,9 +498,7 @@ namespace pagent
                     };
 
                     // Try AST-aware chunking for C/C++ files
-                    auto extPos2 = rel.rfind('.');
-                    std::string fileExt = extPos2 != std::string::npos ? rel.substr(extPos2) : "";
-                    bool useAST = ASTChunker::IsSupported(fileExt);
+                    bool useAST = ASTChunker::IsSupported(ext);
 
                     if (useAST)
                     {
@@ -547,27 +513,26 @@ namespace pagent
                             auto &ac = astChunks[ci];
                             std::string header = ASTChunker::BuildMetadataHeader(rel, ac);
                             std::string content = header + "\n" + ac.content;
-                            std::string sanitized = sanitizeUtf8(content);
+                            std::string sanitized = SanitizeUTF8(content);
 
-                            // Build metadata JSON with symbol info
-                            std::string symbolsJson;
-                            for (const auto &sym : ac.symbols)
+                            nlohmann::json meta{
+                                {"type", "codebase"},
+                                {"file", rel},
+                                {"lines", std::to_string(ac.startLine) + "-" + std::to_string(ac.endLine)},
+                                {"last_modified", ts}};
+                            if (!ac.namespaceName.empty())
+                                meta["namespace"] = ac.namespaceName;
+                            if (!ac.symbols.empty())
                             {
-                                if (sym.name.empty())
-                                    continue;
-                                if (!symbolsJson.empty())
-                                    symbolsJson += ",";
-                                symbolsJson += "{\"type\":\"" + sym.type + "\",\"name\":\"" + sym.name + "\"}";
+                                auto arr = nlohmann::json::array();
+                                for (const auto &sym : ac.symbols)
+                                    if (!sym.name.empty())
+                                        arr.push_back({{"type", sym.type}, {"name", sym.name}});
+                                if (!arr.empty())
+                                    meta["symbols"] = std::move(arr);
                             }
 
-                            std::string metaJson = "{\"type\":\"codebase\",\"file\":\"" + rel +
-                                                   "\",\"lines\":\"" + std::to_string(ac.startLine) +
-                                                   "-" + std::to_string(ac.endLine) + "\"" +
-                                                   (ac.namespaceName.empty() ? "" : ",\"namespace\":\"" + ac.namespaceName + "\"") +
-                                                   (symbolsJson.empty() ? "" : ",\"symbols\":[" + symbolsJson + "]") +
-                                                   ",\"last_modified\":\"" + ts + "\"}";
-
-                            addChunk(sanitized, ac.startLine, ac.endLine, metaJson);
+                            addChunk(sanitized, ac.startLine, ac.endLine, meta.dump());
                         }
                     }
 
@@ -618,14 +583,10 @@ namespace pagent
 
                             int endLine = lineIdx;
                             std::string content = prefix + std::to_string(endLine) + ")\n" + body;
-                            std::string sanitized = sanitizeUtf8(content);
+                            std::string sanitized = SanitizeUTF8(content);
 
-                            std::string metaJson = "{\"type\":\"codebase\",\"file\":\"" + rel +
-                                                   "\",\"lines\":\"" + std::to_string(chunkStart + 1) +
-                                                   "-" + std::to_string(endLine) +
-                                                   "\",\"last_modified\":\"" + ts + "\"}";
-
-                            addChunk(sanitized, chunkStart + 1, endLine, metaJson);
+                            addChunk(sanitized, chunkStart + 1, endLine,
+                                     nlohmann::json{{"type", "codebase"}, {"file", rel}, {"lines", std::to_string(chunkStart + 1) + "-" + std::to_string(endLine)}, {"last_modified", ts}}.dump());
 
                             if (lineIdx < totalLines && shared->chunkOverlapLines > 0)
                                 lineIdx = std::max(chunkStart + 1, lineIdx - shared->chunkOverlapLines);
@@ -644,8 +605,7 @@ namespace pagent
                     VectorEntry tombstone;
                     tombstone.id = "codebase_tombstone_" + std::to_string(h);
                     tombstone.content = "";
-                    tombstone.metadata = "{\"type\":\"codebase_tombstone\",\"file\":\"" + rel +
-                                         "\",\"last_modified\":\"" + ts + "\"}";
+                    tombstone.metadata = nlohmann::json{{"type", "codebase_tombstone"}, {"file", rel}, {"last_modified", ts}}.dump();
                     tombstone.embedding.assign(shared->embedding->Dimensions(), 0.0f);
                     shared->store->Add(std::move(tombstone));
                 }
@@ -695,27 +655,11 @@ namespace pagent
         if (files.empty())
             return status;
 
-        // Determine common root for relative paths
-        std::string commonRoot;
-        if (!config.directories.empty())
-        {
-            fs::path root = fs::path(config.directories[0]).parent_path();
-            commonRoot = root.string();
-            for (auto &ch : commonRoot)
-                if (ch == '\\')
-                    ch = '/';
-            if (!commonRoot.empty() && commonRoot.back() != '/')
-                commonRoot += '/';
-        }
+        std::string commonRoot = ComputeCommonRoot(config.directories);
 
         for (size_t i = 0; i < files.size(); ++i)
         {
-            std::string rel = files[i];
-            for (auto &ch : rel)
-                if (ch == '\\')
-                    ch = '/';
-            if (!commonRoot.empty() && rel.find(commonRoot) == 0)
-                rel = rel.substr(commonRoot.size());
+            std::string rel = MakeRelative(files[i], commonRoot);
 
             std::string ts = getFileTimestamp(files[i]);
 

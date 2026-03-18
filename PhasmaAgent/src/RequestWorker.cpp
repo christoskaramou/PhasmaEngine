@@ -7,6 +7,7 @@
 #include "PhasmaAgent/VectorStore.h"
 #include "PhasmaAgent/BM25Index.h"
 #include "PhasmaAgent/IncludeGraph.h"
+#include "PhasmaAgent/AgentUtils.h"
 
 #include <httplib/httplib.h>
 #include <nlohmann/json.hpp>
@@ -32,46 +33,6 @@ namespace pagent
         }
         return "HTTP " + std::to_string(status) + ": " + body.substr(0, 200);
     }
-    // Strip non-UTF-8 bytes to avoid json serialization errors (type_error.316)
-    static std::string SanitizeUTF8(const std::string &s)
-    {
-        std::string out;
-        out.reserve(s.size());
-        for (size_t i = 0; i < s.size();)
-        {
-            unsigned char c = static_cast<unsigned char>(s[i]);
-            if (c < 0x80)
-            {
-                out += s[i++];
-                continue;
-            }
-            int len = (c < 0xE0) ? 2 : (c < 0xF0) ? 3
-                                                  : 4;
-            if (i + len > s.size())
-            {
-                i++;
-                continue;
-            }
-            bool ok = true;
-            for (int j = 1; j < len; ++j)
-                if ((static_cast<unsigned char>(s[i + j]) & 0xC0) != 0x80)
-                {
-                    ok = false;
-                    break;
-                }
-            if (ok)
-            {
-                out.append(s, i, len);
-                i += len;
-            }
-            else
-            {
-                i++;
-            }
-        }
-        return out;
-    }
-
     // Resolve the API host from config, with provider-specific defaults
     static std::string ResolveHost(const AgentConfig &config)
     {

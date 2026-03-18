@@ -32,13 +32,18 @@ Include the public header:
 #include "PhasmaAgent/AgentUtils.h"  // optional helpers for tool implementors
 ```
 
+## Documentation
+
+- [Getting Started](docs/GettingStarted.md) — CMake integration, providers, tools, session management, model routing
+- [Embeddings & RAG](docs/Embeddings.md) — indexing a codebase, vector store, BM25, auto-injection into requests
+
 ## Quick Start
 
 ```cpp
 pagent::AgentConfig config;
-config.provider     = pagent::Provider::OpenAI;   // Ollama uses OpenAI-compatible API
-config.base_url     = "http://localhost:11434";    // Ollama default
-config.model        = "qwen3:14b";
+config.provider      = pagent::Provider::OpenAI;  // Ollama uses OpenAI-compatible API
+config.base_url      = "http://localhost:11434";   // Ollama default
+config.model         = "qwen3:14b";
 config.system_prompt = "You are a helpful assistant.";
 config.max_tool_rounds = 10;
 

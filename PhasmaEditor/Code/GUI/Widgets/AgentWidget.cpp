@@ -47,46 +47,6 @@ namespace pe
         return name;
     }
 
-    // Strip non-UTF-8 bytes so JSON serialization doesn't throw
-    static std::string SanitizeUTF8(std::string s)
-    {
-        std::string out;
-        out.reserve(s.size());
-        for (size_t i = 0; i < s.size();)
-        {
-            unsigned char c = static_cast<unsigned char>(s[i]);
-            if (c < 0x80)
-            {
-                out += s[i++];
-                continue;
-            } // ASCII
-            int len = (c < 0xE0) ? 2 : (c < 0xF0) ? 3
-                                                  : 4;
-            if (i + len > s.size())
-            {
-                i++;
-                continue;
-            } // truncated - skip
-            bool ok = true;
-            for (int j = 1; j < len; ++j)
-                if ((static_cast<unsigned char>(s[i + j]) & 0xC0) != 0x80)
-                {
-                    ok = false;
-                    break;
-                }
-            if (ok)
-            {
-                out.append(s, i, len);
-                i += len;
-            }
-            else
-            {
-                i++;
-            } // bad byte - drop
-        }
-        return out;
-    }
-
     static void *LoadIcon(const std::string &path, Image *&outImage)
     {
         Queue *queue = RHII.GetMainQueue();
@@ -322,33 +282,6 @@ namespace pe
         m_embeddingProvider = CreateEmbeddingProvider();
         config.embedding_provider = m_embeddingProvider;
 
-        if (config.embedding_provider && !m_codebaseStore)
-        {
-            int dims = config.embedding_provider->Dimensions();
-            m_codebaseStore = std::make_shared<pagent::VectorStore>();
-            m_codebaseBM25 = std::make_shared<pagent::BM25Index>();
-            auto csp = GetCodebaseStorePath();
-            if (!csp.empty())
-            {
-                m_codebaseLoading.store(true);
-                auto store = m_codebaseStore;
-                auto bm25 = m_codebaseBM25;
-                int d = dims;
-                std::thread([store, bm25, csp, d, this]()
-                            {
-                                store->LoadFromBinary(csp, d);
-
-                                // Build BM25 keyword index from loaded vector store entries
-                                store->ForEachEntry([&bm25](const pagent::VectorEntry &e)
-                                                    { bm25->Add(e.id, e.content); });
-
-                                m_codebaseLoading.store(false);
-                                PE_INFO("Codebase loaded: %zu vector entries, %zu BM25 docs", store->Size(), bm25->Size());
-                                CheckIndexStatus(); })
-                    .detach();
-            }
-        }
-
         // Use saved model name if set, otherwise use provider default
         if (m_modelName.empty())
             m_modelName = config.model;
@@ -384,12 +317,7 @@ namespace pe
         m_agent->SetEventCallback([this](const pagent::AgentEvent &ev)
                                   { OnAgentEvent(ev); });
 
-        // Connect codebase store and BM25 index to the agent's request worker
-        if (m_codebaseStore)
-            m_agent->SetCodebaseStore(m_codebaseStore.get());
-        if (m_codebaseBM25)
-            m_agent->SetCodebaseBM25(m_codebaseBM25.get());
-
+        InitCodebaseStore();
         RegisterTools();
     }
 
@@ -479,39 +407,7 @@ namespace pe
                         m_embeddingProvider = CreateEmbeddingProvider();
                         if (m_agent.has_value() && m_embeddingProvider)
                             m_agent->SetEmbeddingProvider(m_embeddingProvider);
-
-                        // Also set up the codebase store (skipped in ConfigureAgent when provider was null).
-                        if (m_embeddingProvider && !m_codebaseStore)
-                        {
-                            int dims = m_embeddingProvider->Dimensions();
-                            m_codebaseStore = std::make_shared<pagent::VectorStore>();
-                            m_codebaseBM25 = std::make_shared<pagent::BM25Index>();
-                            if (m_agent.has_value())
-                            {
-                                m_agent->SetCodebaseStore(m_codebaseStore.get());
-                                m_agent->SetCodebaseBM25(m_codebaseBM25.get());
-                            }
-                            auto csp = GetCodebaseStorePath();
-                            if (!csp.empty())
-                            {
-                                m_codebaseLoading.store(true);
-                                auto store = m_codebaseStore;
-                                auto bm25 = m_codebaseBM25;
-                                std::thread([store, bm25, csp, dims, this]()
-                                {
-                                    store->LoadFromBinary(csp, dims);
-                                    store->ForEachEntry([&bm25](const pagent::VectorEntry &e)
-                                                        { bm25->Add(e.id, e.content); });
-                                    m_codebaseLoading.store(false);
-                                    PE_INFO("Codebase loaded: %zu vector entries, %zu BM25 docs", store->Size(), bm25->Size());
-                                    CheckIndexStatus();
-                                }).detach();
-                            }
-                            else
-                            {
-                                CheckIndexStatus();
-                            }
-                        }
+                        InitCodebaseStore();
                     }
                     // Manual Fetch case: provider already exists, just re-check status.
                     else if (m_embeddingEnabled && m_embeddingProvider && !m_embeddingModels.empty())
@@ -707,6 +603,41 @@ namespace pe
             m_indexStatusFiles = std::move(status.outdatedFiles);
             m_indexStatusReady.store(true);
             m_indexStatusChecking.store(false); })
+            .detach();
+    }
+
+    void AgentWidget::InitCodebaseStore()
+    {
+        if (m_codebaseStore || !m_embeddingProvider)
+            return;
+
+        m_codebaseStore = std::make_shared<pagent::VectorStore>();
+        m_codebaseBM25 = std::make_shared<pagent::BM25Index>();
+
+        if (m_agent.has_value())
+        {
+            m_agent->SetCodebaseStore(m_codebaseStore.get());
+            m_agent->SetCodebaseBM25(m_codebaseBM25.get());
+        }
+
+        auto csp = GetCodebaseStorePath();
+        if (csp.empty())
+        {
+            CheckIndexStatus();
+            return;
+        }
+
+        m_codebaseLoading.store(true);
+        auto store = m_codebaseStore;
+        auto bm25 = m_codebaseBM25;
+        int dims = m_embeddingProvider->Dimensions();
+        std::thread([store, bm25, csp, dims, this]()
+                    {
+            store->LoadFromBinary(csp, dims);
+            store->ForEachEntry([&bm25](const pagent::VectorEntry &e) { bm25->Add(e.id, e.content); });
+            m_codebaseLoading.store(false);
+            PE_INFO("Codebase loaded: %zu vector entries, %zu BM25 docs", store->Size(), bm25->Size());
+            CheckIndexStatus(); })
             .detach();
     }
 

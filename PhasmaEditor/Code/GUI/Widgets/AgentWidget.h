@@ -183,6 +183,9 @@ namespace pe
         std::vector<std::string> m_indexStatusFiles; // outdated file list for tooltip
         bool m_wasIndexing = false;
         void CheckIndexStatus();
+        // Create codebase store/BM25, load from disk, kick off CheckIndexStatus.
+        // No-op if store already exists or provider is null.
+        void InitCodebaseStore();
         std::atomic<bool> m_codebaseLoading{false};
         pagent::Agent::CancelToken m_pullEmbeddingCancel;
 
