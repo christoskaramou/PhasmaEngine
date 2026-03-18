@@ -274,6 +274,7 @@ namespace pe
 
                 // colorFormats
                 piType["set_color_format"] = [](PassInfo &pi, std::shared_ptr<LuaImage> img) {
+                    if (!img) return;
                     Image *p = img->Get();
                     if (p) pi.colorFormats = {p->GetFormat()};
                 };
@@ -291,6 +292,7 @@ namespace pe
 
                 // depthFormat
                 piType["set_depth_format"] = [](PassInfo &pi, std::shared_ptr<LuaImage> img) {
+                    if (!img) return;
                     Image *p = img->Get();
                     if (p) pi.depthFormat = p->GetFormat();
                 };

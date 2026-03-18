@@ -139,9 +139,7 @@ namespace pe
 
         // RAG / Embedding
         std::shared_ptr<pagent::IEmbeddingProvider> m_embeddingProvider;
-        std::shared_ptr<pagent::VectorStore> m_vectorStore;   // Chat history vectors
         std::shared_ptr<pagent::VectorStore> m_codebaseStore; // Codebase index vectors
-        int m_turnsSinceSave = 0;
         bool m_embeddingEnabled = false;
         int m_selectedEmbeddingProvider = 0; // 0=Google, 1=OpenAI, 2=Ollama
         int m_selectedEmbeddingModel = 0;
@@ -152,7 +150,6 @@ namespace pe
         void SaveConfig();
         void LoadConfig();
         std::string GetEmbeddingModelFileBase() const;
-        std::string GetVectorStorePath() const;
         bool m_isFetchingEmbeddingModels = false;
         bool m_isPullingEmbedding = false;
         std::vector<std::string> m_indexDirectories;

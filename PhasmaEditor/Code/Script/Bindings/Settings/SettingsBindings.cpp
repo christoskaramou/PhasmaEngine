@@ -78,6 +78,7 @@ namespace pe
                     auto iIt = s_intSettings.find(std::string_view(name));
                     if (iIt != s_intSettings.end())
                         return sol::make_object(lua, gs.*(iIt->second));
+                    PE_WARN("[Lua] settings.get: unknown setting '%s'", name.c_str());
                     return sol::nil;
                 });
 

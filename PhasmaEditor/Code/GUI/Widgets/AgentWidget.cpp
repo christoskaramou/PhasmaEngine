@@ -1,5 +1,6 @@
 #include "AgentWidget.h"
 #include "FileBrowser.h"
+#include "Console.h"
 #include "GUI/GUI.h"
 #include "Systems/RendererSystem.h"
 #include "API/Command.h"
@@ -126,9 +127,6 @@ namespace pe
     {
         *m_alive = false; // signal background threads to stop accessing this
         SaveConfig();
-        auto storePath = GetVectorStorePath();
-        if (m_vectorStore && !storePath.empty())
-            m_vectorStore->SaveToFile(storePath);
         auto codebasePath = GetCodebaseStorePath();
         if (m_codebaseStore && !codebasePath.empty())
             m_codebaseStore->SaveToBinary(codebasePath);
@@ -315,14 +313,9 @@ namespace pe
         m_embeddingProvider = CreateEmbeddingProvider();
         config.embedding_provider = m_embeddingProvider;
 
-        if (config.embedding_provider && !m_vectorStore)
+        if (config.embedding_provider && !m_codebaseStore)
         {
             int dims = config.embedding_provider->Dimensions();
-            m_vectorStore = std::make_shared<pagent::VectorStore>();
-            auto sp = GetVectorStorePath();
-            if (!sp.empty())
-                m_vectorStore->LoadFromFile(sp, dims);
-
             m_codebaseStore = std::make_shared<pagent::VectorStore>();
             auto csp = GetCodebaseStorePath();
             if (!csp.empty())
@@ -338,8 +331,6 @@ namespace pe
                                 CheckIndexStatus(); })
                     .detach();
             }
-
-            m_turnsSinceSave = 0;
         }
 
         // Use saved model name if set, otherwise use provider default
@@ -377,9 +368,7 @@ namespace pe
         m_agent->SetEventCallback([this](const pagent::AgentEvent &ev)
                                   { OnAgentEvent(ev); });
 
-        // Connect vector stores to the agent's request worker
-        if (m_vectorStore)
-            m_agent->SetVectorStore(m_vectorStore.get());
+        // Connect codebase store to the agent's request worker
         if (m_codebaseStore)
             m_agent->SetCodebaseStore(m_codebaseStore.get());
 
@@ -583,12 +572,6 @@ namespace pe
         if (modelName.empty() || modelName.find("fetching") != std::string::npos)
             return {};
         return SanitizeModelName(modelName);
-    }
-
-    std::string AgentWidget::GetVectorStorePath() const
-    {
-        auto base = GetEmbeddingModelFileBase();
-        return base.empty() ? std::string{} : Path::Assets + "Agent/vectors_" + base + ".json";
     }
 
     std::string AgentWidget::GetCodebaseStorePath() const
@@ -1638,11 +1621,6 @@ namespace pe
 
                         if (ImGui::Selectable(embeddingProviders[i], i == m_selectedEmbeddingProvider, available ? 0 : ImGuiSelectableFlags_Disabled))
                         {
-                            // Save current vector store before switching
-                            auto sp = GetVectorStorePath();
-                            if (m_vectorStore && !sp.empty())
-                                m_vectorStore->SaveToFile(sp);
-                            m_vectorStore.reset();
                             m_codebaseStore.reset();
                             m_selectedEmbeddingProvider = i;
                             UpdateEmbeddingModels();
@@ -1678,11 +1656,6 @@ namespace pe
 
                             if (ImGui::Selectable(label.c_str(), i == m_selectedEmbeddingModel))
                             {
-                                // Save current vector store before switching
-                                auto sp2 = GetVectorStorePath();
-                                if (m_vectorStore && !sp2.empty())
-                                    m_vectorStore->SaveToFile(sp2);
-                                m_vectorStore.reset();
                                 m_codebaseStore.reset();
                                 m_selectedEmbeddingModel = i;
                                 SaveConfig();
@@ -1998,6 +1971,35 @@ namespace pe
 
         if (submit && m_inputBuf[0] != '\0')
             SubmitInput();
+
+        // Console status bar
+        ImGui::Separator();
+        {
+            const LogEntry *latest = m_gui ? m_gui->GetWidget<Console>()->GetLatestLog() : nullptr;
+            if (latest)
+            {
+                ImVec4 color;
+                switch (latest->type)
+                {
+                case LogType::Warn:
+                    color = ImVec4(1.0f, 1.0f, 0.0f, 1.0f);
+                    break;
+                case LogType::Error:
+                    color = ImVec4(1.0f, 0.3f, 0.3f, 1.0f);
+                    break;
+                default:
+                    color = ImVec4(0.6f, 0.6f, 0.6f, 1.0f);
+                    break;
+                }
+                ImGui::PushStyleColor(ImGuiCol_Text, color);
+                ImGui::TextUnformatted(latest->text.c_str());
+                ImGui::PopStyleColor();
+            }
+            else
+            {
+                ImGui::TextDisabled("No console output");
+            }
+        }
 
         ImGui::End();
 
@@ -2688,19 +2690,6 @@ namespace pe
             m_isStreaming = false;
             m_streamingText.clear();
             m_streamingThinking.clear();
-            // Save vector store periodically
-            if (m_vectorStore && m_embeddingEnabled)
-            {
-                m_turnsSinceSave++;
-                if (m_turnsSinceSave == 1 || m_turnsSinceSave >= 10)
-                {
-                    auto sp = GetVectorStorePath();
-                    if (!sp.empty())
-                        m_vectorStore->SaveToFile(sp);
-                    if (m_turnsSinceSave >= 10)
-                        m_turnsSinceSave = 0;
-                }
-            }
             break;
         case pagent::AgentEventType::Error:
             m_chat.push_back({ChatMessage::Role::System, "[error: " + ev.error_message + "]"});

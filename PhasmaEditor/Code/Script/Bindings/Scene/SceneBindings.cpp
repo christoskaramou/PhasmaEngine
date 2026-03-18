@@ -84,6 +84,16 @@ namespace pe
                     return r ? static_cast<int>(r->GetScene().GetModels().size()) : 0;
                 });
 
+                // find_model(label) -> Model* or nil — check before load_model to avoid duplicate loads and redundant events
+                scene.set_function("find_model", [](const std::string &label) -> Model * {
+                    auto *r = GetGlobalSystem<RendererSystem>();
+                    if (!r) return nullptr;
+                    for (auto *m : r->GetScene().GetModels())
+                        if (m->GetLabel() == label)
+                            return m;
+                    return nullptr;
+                });
+
                 scene.set_function("get_cameras", []() -> sol::as_table_t<std::vector<Camera *>> {
                     std::vector<Camera *> result;
                     auto *r = GetGlobalSystem<RendererSystem>();

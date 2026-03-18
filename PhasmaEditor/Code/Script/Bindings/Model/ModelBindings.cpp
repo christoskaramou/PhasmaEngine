@@ -94,6 +94,7 @@ namespace pe
                                       {
                 lua.new_usertype<Model>("Model",
                     sol::no_constructor,
+                    sol::meta_function::to_string, [](Model &m) { return m.GetLabel(); },
                     "get_id", &Model::GetId,
                     "get_label", &Model::GetLabel,
                     "set_label", &Model::SetLabel,
@@ -365,7 +366,7 @@ namespace pe
                         return {nullptr, err};
                     }
                     AddModelToScene(model);
-                    return {model, "loaded"};
+                    return {model, std::string{}};
                 });
 
                 // load_model_async(path, callback) - full load on background thread,

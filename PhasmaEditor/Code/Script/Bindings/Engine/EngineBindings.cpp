@@ -58,6 +58,10 @@ namespace pe
                     if (r) r->GetGUI().TriggerExitConfirmation();
                 });
 
+                engine.set_function("quit", []() {
+                    EventSystem::PushEvent(EventType::Quit);
+                });
+
                 engine.set_function("is_popup_open", []() -> bool {
                     return ImGui::IsPopupOpen("", ImGuiPopupFlags_AnyPopupId);
                 });

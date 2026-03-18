@@ -6,9 +6,27 @@
 #include "PhasmaAgent/VectorStore.h"
 
 #include <httplib/httplib.h>
+#include <nlohmann/json.hpp>
 
 namespace pagent
 {
+    // Extract a human-readable message from a JSON HTTP error body.
+    // Falls back to the raw body (truncated) if parsing fails.
+    static std::string FormatHttpError(int status, const std::string &body)
+    {
+        try
+        {
+            auto j = nlohmann::json::parse(body);
+            // Standard pattern: {"error": {"message": "..."}}
+            if (j.contains("error") && j["error"].is_object() && j["error"].contains("message"))
+                return "HTTP " + std::to_string(status) + ": " + j["error"]["message"].get<std::string>();
+            // Gemini quota pattern: {"error": {"status": "...", "message": "..."}}
+            if (j.contains("message"))
+                return "HTTP " + std::to_string(status) + ": " + j["message"].get<std::string>();
+        }
+        catch (...) {}
+        return "HTTP " + std::to_string(status) + ": " + body.substr(0, 200);
+    }
     // Strip non-UTF-8 bytes to avoid json serialization errors (type_error.316)
     static std::string SanitizeUTF8(const std::string &s)
     {
@@ -257,9 +275,9 @@ namespace pagent
 
         const int maxRounds = m_config.max_tool_rounds > 0 ? m_config.max_tool_rounds : 10;
 
-        // RAG: compute context once per user message, reuse across all tool rounds
+        // RAG: search codebase store for relevant context
         std::string ragContext;
-        if (m_vectorStore && m_config.embedding_provider)
+        if (m_codebaseStore && m_codebaseStore->Size() > 0 && m_config.embedding_provider)
         {
             std::string queryText;
             auto messages = m_history.GetMessages(m_config.max_history_messages);
@@ -278,19 +296,7 @@ namespace pagent
                     Log("RAG: embedding query failed (empty result)");
                 if (!queryVec.empty())
                 {
-                    auto results = m_vectorStore->Search(queryVec, m_config.rag_top_k, m_config.rag_min_score);
-
-                    // Also search codebase store if available
-                    if (m_codebaseStore && m_codebaseStore->Size() > 0)
-                    {
-                        auto codeResults = m_codebaseStore->Search(queryVec, m_config.rag_top_k, m_config.rag_min_score);
-                        results.insert(results.end(), codeResults.begin(), codeResults.end());
-                        std::sort(results.begin(), results.end(),
-                                  [](const auto &a, const auto &b)
-                                  { return a.score > b.score; });
-                        if (static_cast<int>(results.size()) > m_config.rag_top_k)
-                            results.resize(m_config.rag_top_k);
-                    }
+                    auto results = m_codebaseStore->Search(queryVec, m_config.rag_top_k, m_config.rag_min_score);
 
                     if (!results.empty())
                     {
@@ -305,23 +311,13 @@ namespace pagent
                             totalChars += static_cast<int>(entry.size());
                         }
                         ragContext += "]";
-                        Log("RAG: injected " + std::to_string(results.size()) + " context entries (chat + codebase)");
+                        Log("RAG: injected " + std::to_string(results.size()) + " codebase context entries");
 
                         AgentEvent ragEv;
                         ragEv.type = AgentEventType::Info;
-                        ragEv.text = "RAG: " + std::to_string(results.size()) + " context entries injected";
+                        ragEv.text = "RAG: " + std::to_string(results.size()) + " codebase entries injected";
                         PushEvent(std::move(ragEv));
                     }
-
-                    // Index the user message for future retrieval
-                    VectorEntry userEntry;
-                    userEntry.id = "user_" + std::to_string(std::chrono::steady_clock::now().time_since_epoch().count());
-                    userEntry.content = SanitizeUTF8(m_config.rag_max_entry_chars > 0
-                                                         ? queryText.substr(0, m_config.rag_max_entry_chars)
-                                                         : queryText);
-                    userEntry.metadata = "{\"type\":\"user\"}";
-                    userEntry.embedding = std::move(queryVec);
-                    m_vectorStore->Add(std::move(userEntry));
                 }
             }
         }
@@ -512,25 +508,6 @@ namespace pagent
             // if no tool calls, the model is done
             if (toolCallCompletes.empty())
             {
-                // Auto-index the assistant response for RAG
-                if (m_vectorStore && m_config.embedding_provider && !fullText.empty())
-                {
-                    auto vec = m_config.embedding_provider->Embed(fullText);
-                    if (vec.empty())
-                        Log("RAG: embedding response for indexing failed (empty result)");
-                    if (!vec.empty())
-                    {
-                        VectorEntry entry;
-                        entry.id = "turn_" + std::to_string(std::chrono::steady_clock::now().time_since_epoch().count());
-                        entry.content = SanitizeUTF8(m_config.rag_max_entry_chars > 0
-                                                         ? fullText.substr(0, m_config.rag_max_entry_chars)
-                                                         : fullText);
-                        entry.metadata = "{\"type\":\"assistant\"}";
-                        entry.embedding = std::move(vec);
-                        m_vectorStore->Add(std::move(entry));
-                    }
-                }
-
                 AgentEvent ev;
                 ev.type = AgentEventType::TurnComplete;
                 PushEvent(std::move(ev));
@@ -591,7 +568,7 @@ namespace pagent
         {
             auto [status, response] = m_config.custom_http_handler("POST", host + path, headers, body);
             if (status != 200)
-                return "HTTP error " + std::to_string(status) + ": " + response;
+                return FormatHttpError(status, response);
 
             StreamParser parser(m_backend);
             parser.Reset(m_backend);
@@ -661,7 +638,7 @@ namespace pagent
                 m_stopActiveClient = nullptr;
             }
             if (!res || res->status != 200)
-                errorMsg = res ? ("HTTP " + std::to_string(res->status) + ": " + res->body)
+                errorMsg = res ? FormatHttpError(res->status, res->body)
                                : ("Connection failed: " + httplib::to_string(res.error()));
             else
                 responseBody = std::move(res->body);
@@ -682,7 +659,7 @@ namespace pagent
                 m_stopActiveClient = nullptr;
             }
             if (!res || res->status != 200)
-                errorMsg = res ? ("HTTP " + std::to_string(res->status) + ": " + res->body) : "Connection failed (SSL)";
+                errorMsg = res ? FormatHttpError(res->status, res->body) : "Connection failed (SSL)";
             else
                 responseBody = std::move(res->body);
 #else

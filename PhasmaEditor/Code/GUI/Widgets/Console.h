@@ -14,7 +14,7 @@ namespace pe
     class Console : public Widget
     {
     public:
-        Console() : Widget("Console") 
+        Console() : Widget("Console")
         {
             m_autoScroll = true;
             m_scrollToBottom = false;
@@ -24,6 +24,7 @@ namespace pe
         void Update() override;
         void Clear();
         void AddLog(LogType type, const char *fmt, ...) IM_FMTARGS(3);
+        const LogEntry *GetLatestLog() const { return m_logs.empty() ? nullptr : &m_logs.back(); }
 
     private:
         std::vector<LogEntry> m_logs;
