@@ -23,6 +23,7 @@ namespace pe
         SetRenderMode,
         RunCommand,
         Screenshot,
+        FileDrop,
     };
 
     // One key type for both core + dynamic events

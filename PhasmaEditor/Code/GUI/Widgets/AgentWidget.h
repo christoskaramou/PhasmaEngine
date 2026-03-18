@@ -138,6 +138,7 @@ namespace pe
         std::vector<PendingFile> m_pendingFiles;
 
         void HandlePaste();
+        void ProcessDroppedFiles(const std::vector<std::filesystem::path> &paths);
         int m_lastPasteFrame = -2;
         void RenderPendingAttachments();
         void *UploadChatImage(const uint8_t *rgba, int width, int height);

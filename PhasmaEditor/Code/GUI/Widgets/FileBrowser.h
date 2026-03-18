@@ -107,5 +107,47 @@ namespace pe
         std::vector<FileEntry> m_cache;
         std::filesystem::path m_cachePath; // Path currently cached
         bool m_wasOpen = false;
+        std::filesystem::path m_clipboardPath; // set by Ctrl+C, consumed by Ctrl+V
+
+        // Navigation history (back / forward / up)
+        std::vector<std::filesystem::path> m_navHistory;
+        int m_navHistoryIndex = -1;
+        void NavigateTo(const std::filesystem::path &path);
+
+        std::vector<std::filesystem::path> m_pendingOsDrops;
+        std::mutex m_pendingDropsMutex;
+
+        struct FileCopyState
+        {
+            std::atomic<bool> active{false};
+            std::atomic<float> progress{0.0f};
+            std::atomic<bool> needsRefresh{false};
+            std::string label;
+            std::mutex labelMutex;
+        };
+        std::shared_ptr<FileCopyState> m_copyState = std::make_shared<FileCopyState>();
+
+        void TryStartCopy(const std::vector<std::filesystem::path> &sources);
+        void CopyDroppedFiles(const std::vector<std::filesystem::path> &sources, bool skipExisting = false);
+        void DrawCopyProgress();
+
+        // Context menu / action state
+        std::filesystem::path m_renamingEntry;
+        char m_renameBuffer[256] = {};
+        bool m_renameNeedsFocus = false;
+        bool m_pendingOpenRename = false;
+        bool m_pendingOpenDelete = false;
+        bool m_pendingOpenCopyProgress = false;
+        bool m_pendingOpenOverwritePrompt = false;
+        std::vector<std::filesystem::path> m_pendingCopySources;
+        std::vector<std::string> m_conflictNames;
+
+        void DrawItemContextMenu(const std::function<void(const std::filesystem::path &)> &onOpen);
+        void DrawBackgroundContextMenu();
+        void DrawRenamePopup();
+        void DrawDeleteConfirmPopup();
+        void DrawOverwritePrompt();
+        void OpenInFileManager(const std::filesystem::path &path);
+        void OpenWithSystem(const std::filesystem::path &path);
     };
 } // namespace pe

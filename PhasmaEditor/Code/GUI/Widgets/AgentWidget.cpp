@@ -155,6 +155,13 @@ namespace pe
         m_modelIconDS = LoadIcon(Path::Assets + "Icons/model_icon.png", m_modelIcon);
         m_scriptIconDS = LoadIcon(Path::Assets + "Icons/script_icon.png", m_scriptIcon);
 
+        // Register for OS-level file drop events (drag from Explorer onto the window)
+        EventSystem::RegisterCallback(EventType::FileDrop, [this](const std::any &data)
+                                      {
+            const auto &paths = std::any_cast<const std::vector<std::string> &>(data);
+            std::vector<std::filesystem::path> fsPaths(paths.begin(), paths.end());
+            ProcessDroppedFiles(fsPaths); });
+
         ConfigureAgent(m_providers[m_selectedProviderIndex].provider);
 
         // Populate model list for the restored provider
@@ -2492,137 +2499,16 @@ namespace pe
             {
                 HDROP drop = static_cast<HDROP>(hDrop);
                 UINT count = DragQueryFileW(drop, 0xFFFFFFFF, nullptr, 0);
+                std::vector<std::filesystem::path> paths;
+                paths.reserve(count);
                 for (UINT fi = 0; fi < count; fi++)
                 {
                     wchar_t filePath[MAX_PATH] = {};
                     DragQueryFileW(drop, fi, filePath, MAX_PATH);
-                    std::filesystem::path fp(filePath);
-                    if (!std::filesystem::is_regular_file(fp))
-                        continue;
-                    auto fileSize = std::filesystem::file_size(fp);
-                    if (fileSize == 0 || fileSize > 50 * 1024 * 1024) // skip empty or >50MB
-                        continue;
-
-                    std::string ext = ToLower(fp.extension().string());
-
-                    // Image files
-                    bool isImage = (ext == ".png" || ext == ".jpg" || ext == ".jpeg" ||
-                                    ext == ".bmp" || ext == ".tga" || ext == ".gif" || ext == ".webp");
-                    if (isImage)
-                    {
-                        if (ext == ".png")
-                            mime_type = "image/png";
-                        else if (ext == ".jpg" || ext == ".jpeg")
-                            mime_type = "image/jpeg";
-                        else if (ext == ".gif")
-                            mime_type = "image/gif";
-                        else if (ext == ".webp")
-                            mime_type = "image/webp";
-                        else
-                            mime_type = "image/png";
-
-                        std::ifstream file(fp, std::ios::binary | std::ios::ate);
-                        if (!file.is_open())
-                            continue;
-                        size_t fsize = file.tellg();
-                        file.seekg(0);
-                        std::vector<uint8_t> fileData(fsize);
-                        file.read(reinterpret_cast<char *>(fileData.data()), fsize);
-
-                        // For small PNG/JPEG files, send as-is; for large or other formats, decode+resize+re-encode
-                        bool needsDecode = (ext != ".png" && ext != ".jpg" && ext != ".jpeg") || fsize > 4 * 1024 * 1024;
-                        if (!needsDecode && (ext == ".png" || ext == ".jpg" || ext == ".jpeg"))
-                        {
-                            // Small PNG/JPEG: use directly, parse dimensions
-                            int comp = 0;
-                            stbi_info_from_memory(fileData.data(), static_cast<int>(fsize), &w, &h, &comp);
-                            if (w == 0)
-                            {
-                                w = 512;
-                                h = 512;
-                            }
-                            base64 = pagent::Base64Encode(fileData.data(), fileData.size());
-                        }
-                        else
-                        {
-                            // Large files or non-PNG/JPEG: decode, resize if needed, re-encode as PNG
-                            int comp = 0;
-                            auto *pixels = stbi_load_from_memory(fileData.data(), static_cast<int>(fsize), &w, &h, &comp, 4);
-                            if (pixels)
-                            {
-                                // Resize if too large (max 1024px on longest side)
-                                if (w > 1024 || h > 1024)
-                                {
-                                    int nw, nh;
-                                    auto resized = ResizeRGBA(pixels, w, h, nw, nh);
-                                    stbi_image_free(pixels);
-                                    auto pngData = pagent::EncodeRGBA_PNG(resized.data(), nw, nh);
-                                    base64 = pagent::Base64Encode(pngData.data(), pngData.size());
-                                    w = nw;
-                                    h = nh;
-                                }
-                                else
-                                {
-                                    auto pngData = pagent::EncodeRGBA_PNG(pixels, w, h);
-                                    base64 = pagent::Base64Encode(pngData.data(), pngData.size());
-                                    stbi_image_free(pixels);
-                                }
-                                mime_type = "image/png";
-                            }
-                        }
-
-                        if (!base64.empty())
-                        {
-                            PendingImage img;
-                            img.base64 = std::move(base64);
-                            img.mime_type = std::move(mime_type);
-                            img.width = w;
-                            img.height = h;
-                            m_pendingImages.push_back(std::move(img));
-                            base64.clear();
-                        }
-                    }
-                    else
-                    {
-                        PendingFile pf;
-                        pf.name = fp.filename().string();
-
-                        if (FileBrowser::IsModelFile(fp))
-                        {
-                            // Binary file - don't read content, just reference path
-                            pf.content = "[Model file: " + fp.string() + "]";
-                            pf.iconDS = m_modelIconDS ? m_modelIconDS : m_fileIconDS;
-                        }
-                        else
-                        {
-                            // Text/code file - read and sanitize content
-                            constexpr size_t maxChars = 20000;
-                            std::ifstream file(fp, std::ios::in);
-                            if (!file.is_open())
-                                continue;
-                            std::string content((std::istreambuf_iterator<char>(file)), {});
-                            if (content.empty())
-                                continue;
-                            content = SanitizeUTF8(std::move(content));
-                            if (content.size() > maxChars)
-                            {
-                                content.resize(maxChars);
-                                content += "\n... [truncated at 20k chars]";
-                            }
-                            pf.content = std::move(content);
-                            if (FileBrowser::IsShaderFile(fp))
-                                pf.iconDS = m_shaderIconDS ? m_shaderIconDS : m_fileIconDS;
-                            else if (FileBrowser::IsScriptFile(fp))
-                                pf.iconDS = m_scriptIconDS ? m_scriptIconDS : m_fileIconDS;
-                            else if (FileBrowser::IsTextFile(fp))
-                                pf.iconDS = m_txtIconDS ? m_txtIconDS : m_fileIconDS;
-                            else
-                                pf.iconDS = m_fileIconDS;
-                        }
-
-                        m_pendingFiles.push_back(std::move(pf));
-                    }
+                    paths.emplace_back(filePath);
                 }
+                if (!paths.empty())
+                    ProcessDroppedFiles(paths);
             }
         }
 
@@ -2699,6 +2585,133 @@ namespace pe
         img.height = h;
         m_pendingImages.push_back(std::move(img));
 #endif
+    }
+
+    void AgentWidget::ProcessDroppedFiles(const std::vector<std::filesystem::path> &paths)
+    {
+        for (const auto &fp : paths)
+        {
+            if (!std::filesystem::is_regular_file(fp))
+                continue;
+            auto fileSize = std::filesystem::file_size(fp);
+            if (fileSize == 0 || fileSize > 50 * 1024 * 1024) // skip empty or >50MB
+                continue;
+
+            std::string ext = ToLower(fp.extension().string());
+
+            bool isImage = (ext == ".png" || ext == ".jpg" || ext == ".jpeg" ||
+                            ext == ".bmp" || ext == ".tga" || ext == ".gif" || ext == ".webp");
+            if (isImage)
+            {
+                std::string mime_type;
+                if (ext == ".png")
+                    mime_type = "image/png";
+                else if (ext == ".jpg" || ext == ".jpeg")
+                    mime_type = "image/jpeg";
+                else if (ext == ".gif")
+                    mime_type = "image/gif";
+                else if (ext == ".webp")
+                    mime_type = "image/webp";
+                else
+                    mime_type = "image/png";
+
+                std::ifstream file(fp, std::ios::binary | std::ios::ate);
+                if (!file.is_open())
+                    continue;
+                size_t fsize = static_cast<size_t>(file.tellg());
+                file.seekg(0);
+                std::vector<uint8_t> fileData(fsize);
+                file.read(reinterpret_cast<char *>(fileData.data()), fsize);
+
+                int w = 0, h = 0;
+                std::string base64;
+                bool needsDecode = (ext != ".png" && ext != ".jpg" && ext != ".jpeg") || fsize > 4 * 1024 * 1024;
+                if (!needsDecode)
+                {
+                    int comp = 0;
+                    stbi_info_from_memory(fileData.data(), static_cast<int>(fsize), &w, &h, &comp);
+                    if (w == 0)
+                    {
+                        w = 512;
+                        h = 512;
+                    }
+                    base64 = pagent::Base64Encode(fileData.data(), fileData.size());
+                }
+                else
+                {
+                    int comp = 0;
+                    auto *pixels = stbi_load_from_memory(fileData.data(), static_cast<int>(fsize), &w, &h, &comp, 4);
+                    if (pixels)
+                    {
+                        if (w > 1024 || h > 1024)
+                        {
+                            int nw, nh;
+                            auto resized = ResizeRGBA(pixels, w, h, nw, nh);
+                            stbi_image_free(pixels);
+                            auto pngData = pagent::EncodeRGBA_PNG(resized.data(), nw, nh);
+                            base64 = pagent::Base64Encode(pngData.data(), pngData.size());
+                            w = nw;
+                            h = nh;
+                        }
+                        else
+                        {
+                            auto pngData = pagent::EncodeRGBA_PNG(pixels, w, h);
+                            base64 = pagent::Base64Encode(pngData.data(), pngData.size());
+                            stbi_image_free(pixels);
+                        }
+                        mime_type = "image/png";
+                    }
+                }
+
+                if (!base64.empty())
+                {
+                    PendingImage img;
+                    img.base64 = std::move(base64);
+                    img.mime_type = std::move(mime_type);
+                    img.width = w;
+                    img.height = h;
+                    m_pendingImages.push_back(std::move(img));
+                }
+            }
+            else
+            {
+                PendingFile pf;
+                pf.name = fp.filename().string();
+
+                if (FileBrowser::IsModelFile(fp))
+                {
+                    pf.content = "[Model file: " + fp.string() + "]";
+                    pf.iconDS = m_modelIconDS ? m_modelIconDS : m_fileIconDS;
+                }
+                else
+                {
+                    constexpr size_t maxChars = 20000;
+                    std::ifstream file(fp, std::ios::in);
+                    if (!file.is_open())
+                        continue;
+                    std::string content((std::istreambuf_iterator<char>(file)), {});
+                    if (content.empty())
+                        continue;
+                    content = SanitizeUTF8(std::move(content));
+                    if (content.size() > maxChars)
+                    {
+                        content.resize(maxChars);
+                        content += "\n... [truncated at 20k chars]";
+                    }
+                    pf.content = std::move(content);
+                    if (FileBrowser::IsShaderFile(fp))
+                        pf.iconDS = m_shaderIconDS ? m_shaderIconDS : m_fileIconDS;
+                    else if (FileBrowser::IsScriptFile(fp))
+                        pf.iconDS = m_scriptIconDS ? m_scriptIconDS : m_fileIconDS;
+                    else if (FileBrowser::IsTextFile(fp))
+                        pf.iconDS = m_txtIconDS ? m_txtIconDS : m_fileIconDS;
+                    else
+                        pf.iconDS = m_fileIconDS;
+                }
+
+                m_pendingFiles.push_back(std::move(pf));
+            }
+        }
     }
 
     void AgentWidget::RenderPendingAttachments()

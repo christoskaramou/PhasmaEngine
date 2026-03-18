@@ -23,6 +23,7 @@ namespace pe
         s_events.try_emplace(EventType::ModelRemoved);
         s_events.try_emplace(EventType::ModelsRemoved);
         s_events.try_emplace(EventType::Screenshot);
+        s_events.try_emplace(EventType::FileDrop);
     }
 
     void EventSystem::Destroy() noexcept

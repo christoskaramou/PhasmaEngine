@@ -1,5 +1,6 @@
 #if defined(PE_SCRIPTS)
 #include "Script/ScriptSystem.h"
+#include "GUI/GUIState.h"
 #include <SDL.h>
 
 namespace pe
@@ -60,6 +61,10 @@ namespace pe
                 input.set_function("is_right_mouse_down", []() -> bool {
                     Uint32 state = SDL_GetMouseState(nullptr, nullptr);
                     return (state & SDL_BUTTON(SDL_BUTTON_RIGHT)) != 0;
+                });
+
+                input.set_function("is_viewport_focused", []() -> bool {
+                    return GUIState::s_sceneViewFocused;
                 });
 
                 input.set_function("is_middle_mouse_down", []() -> bool {

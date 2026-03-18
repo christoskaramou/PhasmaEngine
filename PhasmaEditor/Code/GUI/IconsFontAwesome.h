@@ -40,3 +40,6 @@
 #define ICON_FA_STOP "\xef\x81\x8d"             // f04d - stop
 #define ICON_FA_ROTATE_LEFT "\xef\x8b\xaa"      // f2ea - rotate-left (undo)
 #define ICON_FA_ROTATE_RIGHT "\xef\x8b\xb9"     // f2f9 - rotate-right (redo)
+#define ICON_FA_ARROW_LEFT "\xef\x81\xa0"       // f060 - arrow-left (navigate back)
+#define ICON_FA_ARROW_RIGHT "\xef\x81\xa1"      // f061 - arrow-right (navigate forward)
+#define ICON_FA_ARROW_UP "\xef\x81\xa2"         // f062 - arrow-up (navigate to parent)

@@ -100,6 +100,7 @@ namespace pe
         ImGuiIO &io = ImGui::GetIO();
 
         SDL_Event sdlEvent;
+        std::vector<std::string> dropAccum;
         while (SDL_PollEvent(&sdlEvent))
         {
             if (sdlEvent.type == SDL_QUIT)
@@ -109,6 +110,23 @@ namespace pe
 
             if (sdlEvent.type == SDL_WINDOWEVENT && sdlEvent.window.event == SDL_WINDOWEVENT_SIZE_CHANGED)
                 EventSystem::PushEvent(EventType::Resize);
+
+            if (sdlEvent.type == SDL_DROPBEGIN)
+                dropAccum.clear();
+            else if (sdlEvent.type == SDL_DROPFILE)
+            {
+                if (sdlEvent.drop.file)
+                {
+                    dropAccum.emplace_back(sdlEvent.drop.file);
+                    SDL_free(sdlEvent.drop.file);
+                }
+            }
+            else if (sdlEvent.type == SDL_DROPCOMPLETE)
+            {
+                if (!dropAccum.empty())
+                    EventSystem::DispatchEvent(EventType::FileDrop, dropAccum);
+                dropAccum.clear();
+            }
         }
 
         EventSystem::QueuedEvent event;

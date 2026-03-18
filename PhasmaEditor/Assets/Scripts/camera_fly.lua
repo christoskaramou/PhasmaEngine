@@ -11,7 +11,7 @@ local function update_editor()
     local metrics = engine.get_metrics()
     local delta = metrics.delta_ms / 1000.0 -- seconds
 
-    local rmb = input.is_right_mouse_down()
+    local rmb = input.is_right_mouse_down() and input.is_viewport_focused()
 
     -- Mouse look (right-click held)
     if rmb then
