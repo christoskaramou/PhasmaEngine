@@ -7,6 +7,8 @@
 namespace pagent
 {
     class VectorStore;
+    class BM25Index;
+    class IncludeGraph;
 }
 
 namespace pe
@@ -51,8 +53,12 @@ namespace pe
         // Public accessors for codebase indexing
         pagent::IEmbeddingProvider *GetEmbeddingProvider() const { return m_embeddingProvider.get(); }
         std::shared_ptr<pagent::VectorStore> GetCodebaseStoreShared() const { return m_codebaseStore; }
+        std::shared_ptr<pagent::BM25Index> GetCodebaseBM25Shared() const { return m_codebaseBM25; }
+        std::shared_ptr<pagent::IncludeGraph> GetIncludeGraphShared() const { return m_includeGraph; }
+        void SetIncludeGraph(std::shared_ptr<pagent::IncludeGraph> graph);
         std::shared_ptr<pagent::IEmbeddingProvider> GetEmbeddingProviderShared() const { return m_embeddingProvider; }
         std::string GetCodebaseStorePath() const;
+        void SetRepoMap(std::string map);
         const std::vector<std::string> &GetIndexDirectories() const { return m_indexDirectories; }
         const std::vector<std::string> &GetIncludeFiles() const { return m_includeFiles; }
         const std::vector<std::string> &GetSkipDirectories() const { return m_skipDirectories; }
@@ -140,6 +146,8 @@ namespace pe
         // RAG / Embedding
         std::shared_ptr<pagent::IEmbeddingProvider> m_embeddingProvider;
         std::shared_ptr<pagent::VectorStore> m_codebaseStore; // Codebase index vectors
+        std::shared_ptr<pagent::BM25Index> m_codebaseBM25;    // Codebase keyword index
+        std::shared_ptr<pagent::IncludeGraph> m_includeGraph; // Include dependency graph
         bool m_embeddingEnabled = false;
         int m_selectedEmbeddingProvider = 0; // 0=Google, 1=OpenAI, 2=Ollama
         int m_selectedEmbeddingModel = 0;

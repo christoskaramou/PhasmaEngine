@@ -135,6 +135,11 @@ namespace pagent
         m_impl->SetModel(model);
     }
 
+    void Agent::SetRepoMap(const std::string &repoMap)
+    {
+        m_impl->SetRepoMap(repoMap);
+    }
+
     void Agent::SetVectorStore(VectorStore *store)
     {
         m_impl->SetVectorStore(store);
@@ -143,6 +148,16 @@ namespace pagent
     void Agent::SetCodebaseStore(VectorStore *store)
     {
         m_impl->SetCodebaseStore(store);
+    }
+
+    void Agent::SetCodebaseBM25(BM25Index *index)
+    {
+        m_impl->SetCodebaseBM25(index);
+    }
+
+    void Agent::SetIncludeGraph(IncludeGraph *graph)
+    {
+        m_impl->SetIncludeGraph(graph);
     }
 
     TokenUsage Agent::GetUsage() const

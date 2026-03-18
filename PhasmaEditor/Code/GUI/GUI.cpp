@@ -34,6 +34,8 @@
 #include "Widgets/SceneView.h"
 #include "Widgets/AgentWidget.h"
 #include "PhasmaAgent/CodebaseIndexer.h"
+#include "PhasmaAgent/RepoMap.h"
+#include "PhasmaAgent/IncludeGraph.h"
 #include "Widgets/TransformWidget.h"
 #include "UndoRedo.h"
 #include "imgui/imgui_impl_sdl2.h"
@@ -577,6 +579,8 @@ namespace pe
         if (!codebaseStore)
             return;
 
+        auto codebaseBM25 = aw->GetCodebaseBM25Shared();
+
         const auto &dirs = aw->GetIndexDirectories();
         if (dirs.empty())
         {
@@ -605,7 +609,7 @@ namespace pe
         auto skipExts = aw->GetSkipExtensions();
         auto skipRegex = aw->GetSkipRegex();
 
-        m_indexThread = std::thread([this, embedding, codebaseStore, storePath, dirs, includeFiles, skipDirs, skipFiles, skipExts, skipRegex]()
+        m_indexThread = std::thread([this, embedding, codebaseStore, codebaseBM25, storePath, dirs, includeFiles, skipDirs, skipFiles, skipExts, skipRegex]()
                                     {
             pagent::IndexerConfig config;
             config.directories = dirs;
@@ -619,7 +623,7 @@ namespace pe
             PE_INFO("Codebase indexing started (%d directories)", static_cast<int>(config.directories.size()));
 
             auto saveMtx = std::make_shared<std::mutex>();
-            auto pIndexer = std::make_unique<pagent::CodebaseIndexer>(embedding.get(), codebaseStore.get(),
+            auto pIndexer = std::make_unique<pagent::CodebaseIndexer>(embedding.get(), codebaseStore.get(), codebaseBM25.get(),
                 [this, &codebaseStore, &storePath, saveMtx](int done, int total, const std::string &file)
                 {
                     m_indexProgress.store(done);
@@ -659,6 +663,32 @@ namespace pe
 
             if (!storePath.empty() && !m_indexCancel.load())
                 codebaseStore->SaveToBinary(storePath);
+
+            // Generate repo map after indexing
+            if (!m_indexCancel.load())
+            {
+                pagent::RepoMap::Config rmConfig;
+                rmConfig.directories = config.directories;
+                rmConfig.skip_directories = config.skip_directories;
+                rmConfig.skip_files = config.skip_files;
+                rmConfig.skip_extensions = config.skip_extensions;
+                rmConfig.max_chars = 4000;
+                std::string repoMap = pagent::RepoMap::Generate(rmConfig);
+                if (!repoMap.empty())
+                    PE_INFO("Repo map generated: %d chars", static_cast<int>(repoMap.size()));
+
+                // Store on AgentWidget for the agent to pick up
+                auto *agentWidget = GetWidget<AgentWidget>();
+                if (agentWidget)
+                    agentWidget->SetRepoMap(std::move(repoMap));
+
+                // Build include-graph for context expansion
+                auto includeGraph = std::make_shared<pagent::IncludeGraph>();
+                includeGraph->BuildFromDirectories(config.directories, config.skip_directories, config.skip_extensions);
+                PE_INFO("Include graph built: %d files", includeGraph->Size());
+                if (agentWidget)
+                    agentWidget->SetIncludeGraph(includeGraph);
+            }
 
             PE_INFO("Codebase indexing %s: %d chunks", m_indexCancel.load() ? "cancelled" : "finished", chunks);
             m_isIndexing.store(false); });

@@ -2,6 +2,7 @@
 
 #include "PhasmaAgent/Agent.h"
 #include "PhasmaAgent/VectorStore.h"
+#include "PhasmaAgent/BM25Index.h"
 #include <string>
 #include <vector>
 #include <functional>
@@ -40,6 +41,7 @@ namespace pagent
     public:
         CodebaseIndexer(IEmbeddingProvider *embedding,
                         VectorStore *store,
+                        BM25Index *bm25 = nullptr,
                         IndexProgressCallback progressCb = nullptr,
                         std::function<void(const std::string &)> logCb = nullptr);
 
@@ -81,6 +83,7 @@ namespace pagent
 
         IEmbeddingProvider *m_embedding;
         VectorStore *m_store;
+        BM25Index *m_bm25;
         IndexProgressCallback m_progressCb;
         std::function<void(const std::string &)> m_logCb;
         std::atomic<bool> m_cancel{false};

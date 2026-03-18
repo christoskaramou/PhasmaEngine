@@ -15,6 +15,7 @@
 #include "PhasmaAgent/OpenAIEmbedding.h"
 #include "PhasmaAgent/OllamaEmbedding.h"
 #include "PhasmaAgent/VectorStore.h"
+#include "PhasmaAgent/BM25Index.h"
 #include "PhasmaAgent/CodebaseIndexer.h"
 
 #include "stb/stb_image.h"
@@ -317,17 +318,24 @@ namespace pe
         {
             int dims = config.embedding_provider->Dimensions();
             m_codebaseStore = std::make_shared<pagent::VectorStore>();
+            m_codebaseBM25 = std::make_shared<pagent::BM25Index>();
             auto csp = GetCodebaseStorePath();
             if (!csp.empty())
             {
                 m_codebaseLoading.store(true);
                 auto store = m_codebaseStore;
+                auto bm25 = m_codebaseBM25;
                 int d = dims;
-                std::thread([store, csp, d, this]()
+                std::thread([store, bm25, csp, d, this]()
                             {
                                 store->LoadFromBinary(csp, d);
+
+                                // Build BM25 keyword index from loaded vector store entries
+                                store->ForEachEntry([&bm25](const pagent::VectorEntry &e)
+                                                    { bm25->Add(e.id, e.content); });
+
                                 m_codebaseLoading.store(false);
-                                PE_INFO("Codebase store loaded: %zu entries", store->Size());
+                                PE_INFO("Codebase loaded: %zu vector entries, %zu BM25 docs", store->Size(), bm25->Size());
                                 CheckIndexStatus(); })
                     .detach();
             }
@@ -368,9 +376,11 @@ namespace pe
         m_agent->SetEventCallback([this](const pagent::AgentEvent &ev)
                                   { OnAgentEvent(ev); });
 
-        // Connect codebase store to the agent's request worker
+        // Connect codebase store and BM25 index to the agent's request worker
         if (m_codebaseStore)
             m_agent->SetCodebaseStore(m_codebaseStore.get());
+        if (m_codebaseBM25)
+            m_agent->SetCodebaseBM25(m_codebaseBM25.get());
 
         RegisterTools();
     }
@@ -401,6 +411,13 @@ namespace pe
         }
         case 2: // Ollama
             return std::make_shared<pagent::OllamaEmbedding>(model);
+        case 3: // Voyage
+        {
+            const char *voyageKey = std::getenv("PAGENT_VOYAGE_API_KEY");
+            if (!voyageKey)
+                break;
+            return std::make_shared<pagent::OpenAIEmbedding>(voyageKey, model, 1024, "api.voyageai.com", "/v1/embeddings");
+        }
         default:
             break;
         }
@@ -419,6 +436,9 @@ namespace pe
             break;
         case 1: // OpenAI
             m_embeddingModels = {"text-embedding-3-small", "text-embedding-3-large"};
+            break;
+        case 3: // Voyage
+            m_embeddingModels = {"voyage-code-3", "voyage-3"};
             break;
         case 2: // Ollama — local only by default, Fetch button gets remote too
         {
@@ -466,8 +486,8 @@ namespace pe
                                        ? m_embeddingModels[m_selectedEmbeddingModel]
                                        : "";
 
-        static const char *embProviderNames[] = {"Google", "OpenAI", "Ollama"};
-        std::string embProviderName = embProviderNames[std::clamp(m_selectedEmbeddingProvider, 0, 2)];
+        static const char *embProviderNames[] = {"Google", "OpenAI", "Ollama", "Voyage"};
+        std::string embProviderName = embProviderNames[std::clamp(m_selectedEmbeddingProvider, 0, 3)];
 
         nlohmann::ordered_json j;
         j["agent"] = nlohmann::ordered_json{{"provider", providerName}, {"model", m_modelName}};
@@ -519,7 +539,7 @@ namespace pe
             m_embeddingEnabled = j.value("/embeddings/enabled"_json_pointer, false);
 
             std::string embProviderName = j.value("/embeddings/provider"_json_pointer, std::string{"Google"});
-            static const std::pair<const char *, int> embProviderMap[] = {{"Google", 0}, {"OpenAI", 1}, {"Ollama", 2}};
+            static const std::pair<const char *, int> embProviderMap[] = {{"Google", 0}, {"OpenAI", 1}, {"Ollama", 2}, {"Voyage", 3}};
             m_selectedEmbeddingProvider = 0;
             for (auto &[name, idx] : embProviderMap)
                 if (embProviderName == name)
@@ -580,6 +600,19 @@ namespace pe
         return base.empty() ? std::string{} : Path::Assets + "Agent/codebase_" + base + ".bin";
     }
 
+    void AgentWidget::SetRepoMap(std::string map)
+    {
+        if (m_agent.has_value())
+            m_agent->SetRepoMap(map);
+    }
+
+    void AgentWidget::SetIncludeGraph(std::shared_ptr<pagent::IncludeGraph> graph)
+    {
+        m_includeGraph = std::move(graph);
+        if (m_agent.has_value())
+            m_agent->SetIncludeGraph(m_includeGraph.get());
+    }
+
     void AgentWidget::CheckIndexStatus()
     {
         if (m_indexStatusChecking.load() || !m_codebaseStore || !m_embeddingProvider)
@@ -609,7 +642,7 @@ namespace pe
                 config.skip_extensions = skipExts;
             config.skip_regex = skipRegex;
 
-            pagent::CodebaseIndexer indexer(embedding.get(), store.get());
+            pagent::CodebaseIndexer indexer(embedding.get(), store.get(), nullptr);
             auto status = indexer.CheckStatus(config);
 
             if (!*aliveRef)
@@ -1602,19 +1635,21 @@ namespace pe
 
             if (m_embeddingEnabled)
             {
-                static const char *embeddingProviders[] = {"Google", "OpenAI", "Ollama"};
+                static const char *embeddingProviders[] = {"Google", "OpenAI", "Ollama", "Voyage"};
 
                 ImGui::SameLine();
                 ImGui::PushItemWidth(100.0f);
                 if (ImGui::BeginCombo("##embprov", embeddingProviders[m_selectedEmbeddingProvider]))
                 {
-                    for (int i = 0; i < 3; i++)
+                    for (int i = 0; i < 4; i++)
                     {
                         bool available = true;
                         if (i == 0)
                             available = std::getenv("PAGENT_GEMINI_API_KEY") != nullptr;
                         if (i == 1)
                             available = std::getenv("PAGENT_OPENAI_API_KEY") != nullptr;
+                        if (i == 3)
+                            available = std::getenv("PAGENT_VOYAGE_API_KEY") != nullptr;
 
                         if (!available)
                             ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.4f, 0.4f, 0.4f, 1.0f));
@@ -1622,6 +1657,7 @@ namespace pe
                         if (ImGui::Selectable(embeddingProviders[i], i == m_selectedEmbeddingProvider, available ? 0 : ImGuiSelectableFlags_Disabled))
                         {
                             m_codebaseStore.reset();
+                            m_codebaseBM25.reset();
                             m_selectedEmbeddingProvider = i;
                             UpdateEmbeddingModels();
                             SaveConfig();
@@ -1657,6 +1693,7 @@ namespace pe
                             if (ImGui::Selectable(label.c_str(), i == m_selectedEmbeddingModel))
                             {
                                 m_codebaseStore.reset();
+                                m_codebaseBM25.reset();
                                 m_selectedEmbeddingModel = i;
                                 SaveConfig();
 

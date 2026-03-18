@@ -127,6 +127,11 @@ namespace pagent
             m_ollamaProcess.Start(model);
     }
 
+    void Agent::Impl::SetRepoMap(const std::string &repoMap)
+    {
+        m_config.repo_map = repoMap;
+    }
+
     void Agent::Impl::SetVectorStore(VectorStore *store)
     {
         m_worker->SetVectorStore(store);
@@ -135,5 +140,15 @@ namespace pagent
     void Agent::Impl::SetCodebaseStore(VectorStore *store)
     {
         m_worker->SetCodebaseStore(store);
+    }
+
+    void Agent::Impl::SetCodebaseBM25(BM25Index *index)
+    {
+        m_worker->SetCodebaseBM25(index);
+    }
+
+    void Agent::Impl::SetIncludeGraph(IncludeGraph *graph)
+    {
+        m_worker->SetIncludeGraph(graph);
     }
 } // namespace pagent

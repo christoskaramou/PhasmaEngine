@@ -87,9 +87,31 @@ namespace pagent
 
         m_model = model.empty() ? "gemini-2.5-flash" : model;
 
-        // System instruction
-        if (!system_prompt.empty())
-            body["system_instruction"] = {{"parts", json::array({{{"text", system_prompt}}})}};
+        // If we have a cached content, reference it instead of system prompt + tools
+        if (!m_cacheName.empty())
+        {
+            body["cachedContent"] = m_cacheName;
+        }
+        else
+        {
+            // System instruction
+            if (!system_prompt.empty())
+                body["system_instruction"] = {{"parts", json::array({{{"text", system_prompt}}})}};
+
+            // Tools
+            if (!tools_schema_json.empty())
+            {
+                try
+                {
+                    auto toolsArr = json::parse(tools_schema_json);
+                    if (toolsArr.is_array() && !toolsArr.empty())
+                        body["tools"] = toolsArr;
+                }
+                catch (...)
+                {
+                }
+            }
+        }
 
         // Generation config
         json genConfig;
@@ -134,7 +156,23 @@ namespace pagent
         }
         body["contents"] = std::move(contents);
 
-        // Tools
+        ResetStreamState();
+        return body.dump(-1, ' ', false, json::error_handler_t::replace);
+    }
+
+    std::string GoogleBackend::BuildCacheRequestJson(
+        const std::string &model,
+        const std::string &system_prompt,
+        const std::string &tools_schema_json,
+        int ttl_seconds) const
+    {
+        json body;
+        body["model"] = "models/" + (model.empty() ? std::string("gemini-2.5-flash") : model);
+        body["ttl"] = std::to_string(ttl_seconds) + "s";
+
+        if (!system_prompt.empty())
+            body["systemInstruction"] = {{"parts", json::array({{{"text", system_prompt}}})}};
+
         if (!tools_schema_json.empty())
         {
             try
@@ -148,7 +186,9 @@ namespace pagent
             }
         }
 
-        ResetStreamState();
+        // Gemini requires at least one content for caching, add a minimal one
+        body["contents"] = json::array({{{"role", "user"}, {"parts", json::array({{{"text", "."}}})}}});
+
         return body.dump(-1, ' ', false, json::error_handler_t::replace);
     }
 

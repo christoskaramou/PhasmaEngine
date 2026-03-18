@@ -2,6 +2,7 @@
 
 #include <string>
 #include <vector>
+#include <functional>
 #include <shared_mutex>
 
 namespace pagent
@@ -27,6 +28,10 @@ namespace pagent
         void Remove(const std::string &id);
         void RemoveByMetadataType(const std::string &type);
         void RemoveByFile(const std::string &file);
+
+        // Remove and return all entries matching a file. Used for content-hash reuse during re-indexing.
+        std::vector<VectorEntry> ExtractByFile(const std::string &file);
+
         bool HasFileWithTimestamp(const std::string &file, const std::string &timestamp) const;
         std::vector<SearchResult> Search(const std::vector<float> &query, int top_k = 5, float min_score = 0.3f) const;
 
@@ -39,6 +44,9 @@ namespace pagent
 
         size_t Size() const;
         void Clear();
+
+        // Iterate all entries (thread-safe, holds shared lock for the duration)
+        void ForEachEntry(const std::function<void(const VectorEntry &)> &fn) const;
 
     private:
         static float CosineSimilarity(const std::vector<float> &a, const std::vector<float> &b);

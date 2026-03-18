@@ -73,6 +73,29 @@ namespace pagent
             m_entries.end());
     }
 
+    std::vector<VectorEntry> VectorStore::ExtractByFile(const std::string &file)
+    {
+        std::unique_lock lock(m_mutex);
+        std::vector<VectorEntry> extracted;
+        auto it = std::partition(m_entries.begin(), m_entries.end(),
+                                 [&file](const VectorEntry &e)
+                                 {
+                                     try
+                                     {
+                                         auto meta = nlohmann::json::parse(e.metadata);
+                                         return meta.value("file", "") != file;
+                                     }
+                                     catch (...)
+                                     {
+                                         return true;
+                                     }
+                                 });
+        for (auto moveIt = it; moveIt != m_entries.end(); ++moveIt)
+            extracted.push_back(std::move(*moveIt));
+        m_entries.erase(it, m_entries.end());
+        return extracted;
+    }
+
     bool VectorStore::HasFileWithTimestamp(const std::string &file, const std::string &timestamp) const
     {
         std::shared_lock lock(m_mutex);
@@ -281,6 +304,13 @@ namespace pagent
     {
         std::unique_lock lock(m_mutex);
         m_entries.clear();
+    }
+
+    void VectorStore::ForEachEntry(const std::function<void(const VectorEntry &)> &fn) const
+    {
+        std::shared_lock lock(m_mutex);
+        for (const auto &e : m_entries)
+            fn(e);
     }
 
     float VectorStore::CosineSimilarity(const std::vector<float> &a, const std::vector<float> &b)

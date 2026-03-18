@@ -33,6 +33,16 @@ namespace pagent
         std::pair<std::string, std::string> GetAuthHeader(const std::string &api_key) const override;
         bool SupportsVision() const override { return true; }
 
+        // Gemini context caching
+        void SetCacheName(const std::string &name) { m_cacheName = name; }
+        const std::string &GetCacheName() const { return m_cacheName; }
+
+        // Build JSON body for creating a cached content (system prompt + tools)
+        std::string BuildCacheRequestJson(const std::string &model,
+                                          const std::string &system_prompt,
+                                          const std::string &tools_schema_json,
+                                          int ttl_seconds = 300) const;
+
     private:
         struct ToolCallAccumulator
         {
@@ -42,6 +52,7 @@ namespace pagent
         };
 
         mutable std::string m_model;
+        mutable std::string m_cacheName; // Gemini cached content name (e.g. "cachedContents/abc123")
         mutable std::string m_textAccumulator;
         mutable std::string m_thinkingAccumulator;
         mutable std::vector<ToolCallAccumulator> m_toolAccumulators;

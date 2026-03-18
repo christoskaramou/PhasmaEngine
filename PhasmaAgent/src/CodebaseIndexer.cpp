@@ -1,10 +1,12 @@
 #include "PhasmaAgent/CodebaseIndexer.h"
+#include "PhasmaAgent/ASTChunker.h"
 #include <filesystem>
 #include <fstream>
 #include <thread>
 #include <chrono>
 #include <functional>
 #include <set>
+#include <sstream>
 #include <regex>
 
 namespace pagent
@@ -13,9 +15,10 @@ namespace pagent
 
     CodebaseIndexer::CodebaseIndexer(IEmbeddingProvider *embedding,
                                      VectorStore *store,
+                                     BM25Index *bm25,
                                      IndexProgressCallback progressCb,
                                      std::function<void(const std::string &)> logCb)
-        : m_embedding(embedding), m_store(store), m_progressCb(std::move(progressCb)), m_logCb(std::move(logCb))
+        : m_embedding(embedding), m_store(store), m_bm25(bm25), m_progressCb(std::move(progressCb)), m_logCb(std::move(logCb))
     {
     }
 
@@ -404,6 +407,7 @@ namespace pagent
             std::atomic<bool> cancel{false};
             IEmbeddingProvider *embedding = nullptr;
             VectorStore *store = nullptr;
+            BM25Index *bm25 = nullptr;
             IndexProgressCallback progressCb;
             std::function<void(const std::string &)> logCb;
         };
@@ -419,6 +423,7 @@ namespace pagent
         shared->totalFiles = totalFiles;
         shared->embedding = m_embedding;
         shared->store = m_store;
+        shared->bm25 = m_bm25;
         shared->progressCb = m_progressCb;
         shared->logCb = m_logCb;
 
@@ -438,8 +443,18 @@ namespace pagent
                 const auto &rel = shared->rels[idx];
                 const auto &ts = shared->timestamps[idx];
 
-                // Remove old entries for this file (it changed or is new)
-                shared->store->RemoveByFile(rel);
+                // Extract old entries for this file (preserving embeddings for hash reuse)
+                auto oldEntries = shared->store->ExtractByFile(rel);
+                if (shared->bm25)
+                    shared->bm25->RemoveByFile(rel);
+
+                // Build content hash -> old embedding map for reuse
+                std::unordered_map<size_t, std::vector<float>> oldHashToEmbedding;
+                for (auto &old : oldEntries)
+                {
+                    size_t contentHash = std::hash<std::string>{}(old.content);
+                    oldHashToEmbedding[contentHash] = std::move(old.embedding);
+                }
 
                 auto extPos = filePath.rfind('.');
                 std::string ext = extPos != std::string::npos ? toLower(filePath.substr(extPos)) : "";
@@ -448,34 +463,129 @@ namespace pagent
                 if (isBinary)
                 {
                     std::string desc = "File: " + rel;
-                    auto vec = shared->embedding->Embed(desc);
+                    std::string sanitized = sanitizeUtf8(desc);
+                    size_t contentHash = std::hash<std::string>{}(sanitized);
+
+                    // Reuse old embedding if content unchanged
+                    std::vector<float> vec;
+                    auto hashIt = oldHashToEmbedding.find(contentHash);
+                    if (hashIt != oldHashToEmbedding.end())
+                        vec = std::move(hashIt->second);
+                    else
+                        vec = shared->embedding->Embed(sanitized);
+
                     if (!vec.empty())
                     {
                         size_t h = std::hash<std::string>{}(rel);
+                        std::string entryId = "codebase_" + std::to_string(h);
                         VectorEntry entry;
-                        entry.id = "codebase_" + std::to_string(h);
-                        entry.content = desc;
+                        entry.id = entryId;
+                        entry.content = sanitized;
                         entry.metadata = "{\"type\":\"codebase\",\"file\":\"" + rel +
                                          "\",\"binary\":true,\"last_modified\":\"" + ts + "\"}";
                         entry.embedding = std::move(vec);
                         shared->store->Add(std::move(entry));
+                        if (shared->bm25)
+                            shared->bm25->Add(entryId, sanitized);
                         shared->totalChunks.fetch_add(1);
                     }
                 }
                 else
                 {
-                    // Inline chunking — read file and split into chunks
+                    // Read file content
                     std::ifstream f(fs::path(std::u8string(filePath.begin(), filePath.end())));
                     if (!f.is_open())
                         continue;
 
-                    std::vector<std::string> lines;
-                    std::string line;
-                    while (std::getline(f, line))
-                        lines.push_back(line);
+                    std::string source((std::istreambuf_iterator<char>(f)),
+                                       std::istreambuf_iterator<char>());
+                    if (source.empty())
+                        continue;
 
-                    if (!lines.empty())
+                    // Helper lambda: add a chunk to the store, reusing old embedding if hash matches
+                    auto addChunk = [&](const std::string &sanitized, int startLine, int endLine,
+                                        const std::string &metadataJson)
                     {
+                        size_t contentHash = std::hash<std::string>{}(sanitized);
+
+                        std::vector<float> vec;
+                        auto hashIt = oldHashToEmbedding.find(contentHash);
+                        if (hashIt != oldHashToEmbedding.end())
+                            vec = std::move(hashIt->second);
+                        else
+                        {
+                            vec = shared->embedding->Embed(sanitized);
+                            if (shared->delayMs > 0)
+                                std::this_thread::sleep_for(std::chrono::milliseconds(shared->delayMs));
+                        }
+
+                        if (vec.empty())
+                            return;
+
+                        size_t h = std::hash<std::string>{}(rel + ":" + std::to_string(startLine));
+                        std::string entryId = "codebase_" + std::to_string(h);
+                        VectorEntry entry;
+                        entry.id = entryId;
+                        entry.content = sanitized;
+                        entry.metadata = metadataJson;
+                        entry.embedding = std::move(vec);
+                        shared->store->Add(std::move(entry));
+                        if (shared->bm25)
+                            shared->bm25->Add(entryId, sanitized);
+                        shared->totalChunks.fetch_add(1);
+                    };
+
+                    // Try AST-aware chunking for C/C++ files
+                    auto extPos2 = rel.rfind('.');
+                    std::string fileExt = extPos2 != std::string::npos ? rel.substr(extPos2) : "";
+                    bool useAST = ASTChunker::IsSupported(fileExt);
+
+                    if (useAST)
+                    {
+                        auto astChunks = ASTChunker::ChunkCpp(source, shared->maxChunkChars);
+
+                        // Fall back to line-based if AST parse fails
+                        if (astChunks.empty())
+                            useAST = false;
+
+                        for (size_t ci = 0; ci < astChunks.size() && !shared->cancel.load(); ++ci)
+                        {
+                            auto &ac = astChunks[ci];
+                            std::string header = ASTChunker::BuildMetadataHeader(rel, ac);
+                            std::string content = header + "\n" + ac.content;
+                            std::string sanitized = sanitizeUtf8(content);
+
+                            // Build metadata JSON with symbol info
+                            std::string symbolsJson;
+                            for (const auto &sym : ac.symbols)
+                            {
+                                if (sym.name.empty())
+                                    continue;
+                                if (!symbolsJson.empty())
+                                    symbolsJson += ",";
+                                symbolsJson += "{\"type\":\"" + sym.type + "\",\"name\":\"" + sym.name + "\"}";
+                            }
+
+                            std::string metaJson = "{\"type\":\"codebase\",\"file\":\"" + rel +
+                                                   "\",\"lines\":\"" + std::to_string(ac.startLine) +
+                                                   "-" + std::to_string(ac.endLine) + "\"" +
+                                                   (ac.namespaceName.empty() ? "" : ",\"namespace\":\"" + ac.namespaceName + "\"") +
+                                                   (symbolsJson.empty() ? "" : ",\"symbols\":[" + symbolsJson + "]") +
+                                                   ",\"last_modified\":\"" + ts + "\"}";
+
+                            addChunk(sanitized, ac.startLine, ac.endLine, metaJson);
+                        }
+                    }
+
+                    if (!useAST)
+                    {
+                        // Line-based fallback for non-C++ files or AST parse failures
+                        std::vector<std::string> lines;
+                        std::istringstream iss(source);
+                        std::string line;
+                        while (std::getline(iss, line))
+                            lines.push_back(line);
+
                         int lineIdx = 0;
                         const int totalLines = static_cast<int>(lines.size());
 
@@ -516,24 +626,12 @@ namespace pagent
                             std::string content = prefix + std::to_string(endLine) + ")\n" + body;
                             std::string sanitized = sanitizeUtf8(content);
 
-                            auto vec = shared->embedding->Embed(sanitized);
-                            if (vec.empty())
-                                continue;
+                            std::string metaJson = "{\"type\":\"codebase\",\"file\":\"" + rel +
+                                                   "\",\"lines\":\"" + std::to_string(chunkStart + 1) +
+                                                   "-" + std::to_string(endLine) +
+                                                   "\",\"last_modified\":\"" + ts + "\"}";
 
-                            size_t h = std::hash<std::string>{}(rel + ":" + std::to_string(chunkStart + 1));
-                            VectorEntry entry;
-                            entry.id = "codebase_" + std::to_string(h);
-                            entry.content = sanitized;
-                            entry.metadata = "{\"type\":\"codebase\",\"file\":\"" + rel +
-                                             "\",\"lines\":\"" + std::to_string(chunkStart + 1) +
-                                             "-" + std::to_string(endLine) +
-                                             "\",\"last_modified\":\"" + ts + "\"}";
-                            entry.embedding = std::move(vec);
-                            shared->store->Add(std::move(entry));
-                            shared->totalChunks.fetch_add(1);
-
-                            if (shared->delayMs > 0)
-                                std::this_thread::sleep_for(std::chrono::milliseconds(shared->delayMs));
+                            addChunk(sanitized, chunkStart + 1, endLine, metaJson);
 
                             if (lineIdx < totalLines && shared->chunkOverlapLines > 0)
                                 lineIdx = std::max(chunkStart + 1, lineIdx - shared->chunkOverlapLines);

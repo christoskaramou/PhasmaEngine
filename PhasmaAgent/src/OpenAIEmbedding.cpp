@@ -12,8 +12,8 @@ namespace pagent
 {
     using json = nlohmann::json;
 
-    OpenAIEmbedding::OpenAIEmbedding(std::string api_key, std::string model, int dims)
-        : m_apiKey(std::move(api_key)), m_model(std::move(model)), m_dims(dims)
+    OpenAIEmbedding::OpenAIEmbedding(std::string api_key, std::string model, int dims, std::string host, std::string path)
+        : m_apiKey(std::move(api_key)), m_model(std::move(model)), m_dims(dims), m_host(std::move(host)), m_path(std::move(path))
     {
     }
 
@@ -25,6 +25,7 @@ namespace pagent
         json body;
         body["model"] = m_model;
         body["input"] = text;
+        // Only OpenAI text-embedding-3 models support the dimensions parameter
         if (m_model.find("text-embedding-3") != std::string::npos)
             body["dimensions"] = m_dims;
 
@@ -32,10 +33,10 @@ namespace pagent
         std::string responseBody;
 
 #ifdef CPPHTTPLIB_OPENSSL_SUPPORT
-        httplib::SSLClient cli("api.openai.com");
+        httplib::SSLClient cli(m_host);
         cli.set_read_timeout(15);
         httplib::Headers headers = {{"Authorization", "Bearer " + m_apiKey}};
-        auto res = cli.Post("/v1/embeddings", headers, bodyStr, "application/json");
+        auto res = cli.Post(m_path, headers, bodyStr, "application/json");
         if (!res || res->status != 200)
             return {};
         responseBody = res->body;

@@ -34,10 +34,13 @@ namespace pagent
         std::vector<HistoryEntry> GetHistory() const;
         void InjectSystemMessage(const std::string &content);
         void SetModel(const std::string &model);
+        void SetRepoMap(const std::string &repoMap);
         Provider GetProvider() const { return m_config.provider; }
         TokenUsage GetUsage() const;
         void SetVectorStore(VectorStore *store);
         void SetCodebaseStore(VectorStore *store);
+        void SetCodebaseBM25(BM25Index *index);
+        void SetIncludeGraph(IncludeGraph *graph);
 
     private:
         AgentConfig m_config;

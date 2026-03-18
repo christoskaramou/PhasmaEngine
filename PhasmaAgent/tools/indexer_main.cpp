@@ -139,7 +139,7 @@ int main(int argc, char *argv[])
     config.delay_ms_between_chunks = delay;
 
     pagent::CodebaseIndexer indexer(
-        embedding.get(), &store,
+        embedding.get(), &store, nullptr,
         [](int done, int total, const std::string &file)
         {
             std::cout << "[" << done << "/" << total << "] " << file << "\n";
