@@ -295,10 +295,11 @@ namespace pagent
         std::string system_prompt;
         int max_tokens = 2048;
         float temperature = 0.7f;
-        int max_tool_rounds = 10;         // Hard cap on agentic loop iterations
-        int max_history_messages = 40;    // Keep last N messages (0 = unlimited). System message always kept.
-        int max_tool_result_chars = 4000; // Truncate tool results beyond this (0 = unlimited)
-        int summarize_after_messages = 0; // Summarize old messages when history exceeds this (0 = disabled)
+        int max_tool_rounds = 10;               // Hard cap on agentic loop iterations
+        int max_history_messages = 40;          // Keep last N messages (0 = unlimited). System message always kept.
+        int max_tool_result_chars = 4000;       // Truncate tool results beyond this (0 = unlimited)
+        int summarize_tool_result_chars = 8000; // Summarize tool results larger than this instead of truncating (0 = disabled)
+        int summarize_after_messages = 0;       // Summarize old messages when history exceeds this (0 = disabled)
 
         // Model routing: automatically select cheaper/better models based on query complexity
         ModelRouting routing;

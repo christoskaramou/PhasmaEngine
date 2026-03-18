@@ -4,7 +4,7 @@ namespace pe
 {
     class Image;
     class CommandBuffer;
-
+    // Tonemap pass
     class TonemapPass : public IRenderPassComponent
     {
     public:

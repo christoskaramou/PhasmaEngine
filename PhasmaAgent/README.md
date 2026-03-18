@@ -80,9 +80,9 @@ PhasmaEditor reads these env vars at startup to configure the Agent widget. Set 
 
 All providers with a valid API key are discovered and available in the editor's provider dropdown. Ollama is always included (no key needed).
 
-1. If `PAGENT_ANTHROPIC_API_KEY` is set → Anthropic added (default model: `claude-haiku-4-5`)
-2. If `PAGENT_OPENAI_API_KEY` is set → OpenAI added (default model: `gpt-4.1-mini`)
-3. If `PAGENT_GEMINI_API_KEY` is set → Gemini added (default model: `gemini-2.5-flash`)
+1. If `PAGENT_ANTHROPIC_API_KEY` is set -> Anthropic added (default model: `claude-haiku-4-5`)
+2. If `PAGENT_OPENAI_API_KEY` is set -> OpenAI added (default model: `gpt-4.1-mini`)
+3. If `PAGENT_GEMINI_API_KEY` is set -> Gemini added (default model: `gemini-2.5-flash`)
 4. Ollama is always added (default model: `llama3.2`, no key required)
 
 `PAGENT_PROVIDER` selects which provider is active by default. If not set, the first discovered provider is used.
@@ -269,7 +269,7 @@ tool.handler = [this](const std::string &args) -> std::string {
 
 | Function | Description |
 |---|---|
-| `JsonStr(s)` | JSON-encode a string value → `"..."` |
+| `JsonStr(s)` | JSON-encode a string value -> `"..."` |
 | `JsonUnescape(s)` | Decode JSON string escapes (`\\`, `\"`, `\n`, `\t`, `\r`, `\/`) |
 | `JsonObj({pairs})` | Build a flat JSON object from key/value pairs (values pre-encoded) |
 | `ExtractArgStr(args, key)` | Extract a string value from a flat JSON args object |

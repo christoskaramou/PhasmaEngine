@@ -131,7 +131,7 @@ tool.handler = [this](const std::string &args) -> std::string {
 | `ExtractArgStr(args, key)` | Get a string field from the JSON args object |
 | `ExtractArgInt(args, key, default)` | Get an integer field |
 | `ExtractArgNum(args, key)` | Get a float field |
-| `JsonStr(s)` | JSON-encode a string → `"..."` |
+| `JsonStr(s)` | JSON-encode a string -> `"..."` |
 | `JsonUnescape(s)` | Decode JSON string escapes |
 | `JsonObj({pairs})` | Build a flat JSON object from key/value pairs |
 | `SanitizeUTF8(s)` | Strip invalid UTF-8 bytes (safe for JSON serialisation) |

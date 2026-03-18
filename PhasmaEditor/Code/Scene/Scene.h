@@ -37,6 +37,7 @@ namespace pe
         Camera *AddCamera();
         void RemoveCamera(Camera *camera);
         void SetActiveCamera(Camera *camera);
+        void NewScene();
         void SaveScene(const std::filesystem::path &file);
         void LoadScene(const std::filesystem::path &file);
         std::string TakeSnapshot() const;

@@ -188,6 +188,61 @@ namespace pe
         }
     }
 
+    void GUI::NewScene()
+    {
+        RendererSystem *rs = GetGlobalSystem<RendererSystem>();
+        if (!rs)
+            return;
+
+        if (rs->GetScene().IsDirty())
+            m_showSaveBeforeNew = true;
+        else
+            rs->GetScene().NewScene();
+    }
+
+    void GUI::DrawSaveBeforeNewPopup()
+    {
+        if (m_showSaveBeforeNew)
+        {
+            ImGui::OpenPopup("Save Before New?");
+            m_showSaveBeforeNew = false;
+        }
+
+        if (ImGui::BeginPopupModal("Save Before New?", nullptr, ImGuiWindowFlags_AlwaysAutoResize))
+        {
+            ImGui::Text("Current scene has unsaved changes.\nDo you want to save before creating a new scene?");
+            ImGui::Dummy(ImVec2(0, 10));
+
+            if (ImGui::Button("Save", ImVec2(80, 0)))
+            {
+                RendererSystem *rs = GetGlobalSystem<RendererSystem>();
+                if (rs)
+                {
+                    Scene &scene = rs->GetScene();
+                    if (!scene.GetScenePath().empty())
+                        scene.SaveScene(scene.GetScenePath());
+                    else
+                        ShowSaveSceneMenuItem_Action();
+                    scene.NewScene();
+                }
+                ImGui::CloseCurrentPopup();
+            }
+            ImGui::SameLine();
+            if (ImGui::Button("Don't Save", ImVec2(80, 0)))
+            {
+                RendererSystem *rs = GetGlobalSystem<RendererSystem>();
+                if (rs)
+                    rs->GetScene().NewScene();
+                ImGui::CloseCurrentPopup();
+            }
+            ImGui::SameLine();
+            if (ImGui::Button("Cancel", ImVec2(80, 0)))
+                ImGui::CloseCurrentPopup();
+
+            ImGui::EndPopup();
+        }
+    }
+
     void GUI::ShowSaveSceneMenuItem()
     {
         if (ImGui::MenuItem("Save Scene...", "Ctrl+S"))
@@ -327,12 +382,34 @@ namespace pe
         }
 
         std::string lastScene = j.value("last_scene", "");
-        if (lastScene.empty() || !std::filesystem::exists(lastScene))
+        if (lastScene.empty())
             return;
+
+        if (!std::filesystem::exists(lastScene))
+        {
+            Log::Warn("Last scene not found, clearing: " + lastScene);
+            j["last_scene"] = "";
+            std::ofstream fw(kEditorConfigPath);
+            if (fw)
+                fw << j.dump(2) << "\n";
+            return;
+        }
 
         RendererSystem *rs = GetGlobalSystem<RendererSystem>();
         if (rs)
             rs->GetScene().LoadScene(lastScene);
+    }
+
+    void GUI::TriggerExitConfirmation()
+    {
+        RendererSystem *rs = GetGlobalSystem<RendererSystem>();
+        if (rs && rs->GetScene().IsDirty())
+            m_showExitConfirmation = true;
+        else
+        {
+            SaveEditorConfig();
+            EventSystem::PushEvent(EventType::Quit);
+        }
     }
 
     void GUI::DrawExitPopup()
@@ -349,17 +426,14 @@ namespace pe
         if (ImGui::BeginPopupModal("Exit##confirm", nullptr, ImGuiWindowFlags_AlwaysAutoResize))
         {
             RendererSystem *rs = GetGlobalSystem<RendererSystem>();
-            const bool dirty = rs && rs->GetScene().IsDirty();
+            ImGui::Text("The scene has unsaved changes.");
+            ImGui::Dummy(ImVec2(0, 4));
+            ImGui::Separator();
+            ImGui::Dummy(ImVec2(0, 4));
 
-            if (dirty)
+            if (ImGui::Button("Save & Exit", ImVec2(110, 0)))
             {
-                ImGui::Text("The scene has unsaved changes.");
-                ImGui::Dummy(ImVec2(0, 4));
-                ImGui::Separator();
-                ImGui::Dummy(ImVec2(0, 4));
-
-                // Save
-                if (ImGui::Button("Save & Exit", ImVec2(110, 0)))
+                if (rs)
                 {
                     Scene &scene = rs->GetScene();
                     if (!scene.GetScenePath().empty())
@@ -371,42 +445,23 @@ namespace pe
                     }
                     else
                     {
-                        // No path yet — open file selector; quit after save completes
                         m_exitAfterSave = true;
                         ShowSaveSceneMenuItem_Action();
                     }
-                    ImGui::CloseCurrentPopup();
                 }
-                ImGui::SameLine();
-                // Discard
-                if (ImGui::Button("Discard & Exit", ImVec2(110, 0)))
-                {
-                    SaveEditorConfig();
-                    EventSystem::PushEvent(EventType::Quit);
-                    ImGui::CloseCurrentPopup();
-                }
-                ImGui::SameLine();
-                if (ImGui::Button("Cancel", ImVec2(80, 0)))
-                    ImGui::CloseCurrentPopup();
+                ImGui::CloseCurrentPopup();
             }
-            else
+            ImGui::SameLine();
+            if (ImGui::Button("Discard & Exit", ImVec2(110, 0)))
             {
-                ImGui::Text("Are you sure you want to exit?");
-                ImGui::Dummy(ImVec2(0, 4));
-                ImGui::Separator();
-                ImGui::Dummy(ImVec2(0, 4));
-
-                if (ImGui::Button("Exit", ImVec2(100, 0)))
-                {
-                    SaveEditorConfig();
-                    EventSystem::PushEvent(EventType::Quit);
-                    ImGui::CloseCurrentPopup();
-                }
-                ImGui::SetItemDefaultFocus();
-                ImGui::SameLine();
-                if (ImGui::Button("Cancel", ImVec2(80, 0)))
-                    ImGui::CloseCurrentPopup();
+                SaveEditorConfig();
+                EventSystem::PushEvent(EventType::Quit);
+                ImGui::CloseCurrentPopup();
             }
+            ImGui::SameLine();
+            if (ImGui::Button("Cancel", ImVec2(80, 0)))
+                ImGui::CloseCurrentPopup();
+
             ImGui::EndPopup();
         }
     }
@@ -575,6 +630,8 @@ namespace pe
             if (ImGui::BeginMenu("File"))
             {
                 ShowLoadModelMenuItem();
+                if (ImGui::MenuItem("New Scene"))
+                    NewScene();
                 ShowLoadSceneMenuItem();
                 ShowSaveSceneMenuItem();
                 if (ImGui::MenuItem("Save Scene As..."))
@@ -1346,6 +1403,7 @@ namespace pe
         StatusBar();
         DrawExitPopup();
         DrawSaveBeforeLoadPopup();
+        DrawSaveBeforeNewPopup();
         DrawOverwriteConfirmationPopup();
         Toolbar();
         BuildDockspace();
@@ -1486,6 +1544,30 @@ namespace pe
             if (ImGui::Button(ICON_FA_PLAY, ImVec2(buttonSize, buttonSize)))
                 Play();
             ImGui::PopStyleColor();
+        }
+
+        // Scene name + new scene button (right side)
+        {
+            RendererSystem *rs = GetGlobalSystem<RendererSystem>();
+            std::string sceneName = rs ? rs->GetScene().GetSceneName() : "Untitled";
+            bool dirty = rs && rs->GetScene().IsDirty();
+            if (dirty)
+                sceneName += "*";
+
+            float nameWidth = ImGui::CalcTextSize(sceneName.c_str()).x + ImGui::GetStyle().ItemSpacing.x * 2.0f;
+            float rightEdge = ImGui::GetWindowWidth() - 8.0f;
+            float rowY = (toolbarHeight - buttonSize) * 0.5f;
+            float newBtnX = rightEdge - nameWidth - buttonSize - ImGui::GetStyle().ItemSpacing.x;
+
+            ImGui::SetCursorPos(ImVec2(newBtnX, rowY));
+            if (ImGui::Button(ICON_FA_PLUS, ImVec2(buttonSize, buttonSize)))
+                NewScene();
+            if (ImGui::IsItemHovered())
+                ImGui::SetTooltip("New Scene");
+
+            ImGui::SameLine();
+            ImGui::SetCursorPosY((toolbarHeight - ImGui::GetTextLineHeight()) * 0.5f);
+            ImGui::TextUnformatted(sceneName.c_str());
         }
 
         ImGui::PopStyleVar();    // Pop FramePadding

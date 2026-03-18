@@ -24,7 +24,7 @@ namespace pe::ui
 
     inline ImVec4 UsageColor(float frac)
     {
-        // 0..1 → green→yellow→red
+        // 0..1 -> green->yellow->red
         frac = Clamp01(frac);
         ImVec4 g(0.20f, 0.80f, 0.25f, 0.95f);
         ImVec4 y(0.95f, 0.80f, 0.25f, 0.95f);
@@ -34,7 +34,7 @@ namespace pe::ui
                    : ImVec4(y.x + (r.x - y.x) * ((frac - 0.5f) / 0.5f), y.y + (r.y - y.y) * ((frac - 0.5f) / 0.5f), y.z + (r.z - y.z) * ((frac - 0.5f) / 0.5f), 0.95f);
     }
 
-    inline ImVec4 Heat(float f) // 0..1 → green→yellow→red
+    inline ImVec4 Heat(float f) // 0..1 -> green->yellow->red
     {
         f = Clamp01(f);
         ImVec4 g(0.20f, 0.80f, 0.25f, 1.0f), y(0.95f, 0.80f, 0.25f, 1.0f), r(0.85f, 0.25f, 0.25f, 1.0f);

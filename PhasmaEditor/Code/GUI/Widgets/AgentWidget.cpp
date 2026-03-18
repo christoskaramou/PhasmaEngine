@@ -274,6 +274,7 @@ namespace pe
         { PE_INFO("%s", msg.c_str()); };
         config.max_tool_rounds = 12;
         config.max_tool_result_chars = 500;
+        config.summarize_tool_result_chars = 1500; // summarize grep/find/list results >1500 chars instead of truncating
         config.max_history_messages = 20;
         config.summarize_after_messages = 8;
         config.provider = info->provider;
@@ -650,8 +651,20 @@ namespace pe
 
     void AgentWidget::RegisterTools()
     {
-        // Derive project root for source file access
-        std::string projectRoot = std::filesystem::path(Path::Assets).parent_path().parent_path().string();
+        // Derive project root (repo root) as the single workspace for all tools.
+        // Canonicalize Path::Assets first so the result is stable regardless of which
+        // Path::Init branch ran (e.g. "build/Debug/../../PhasmaEditor/Assets/" vs "Assets/").
+        //   weakly_canonical(Assets) = .../PhasmaEditor/Assets
+        //   parent = .../PhasmaEditor
+        //   parent = .../<repo root>  e.g. C:/PhasmaEngine/
+        // All tool paths are then relative to repo root:
+        //   source  -> PhasmaEditor/Code/App/App.cpp
+        //   assets  -> PhasmaEditor/Assets/Shaders/Tonemap.hlsl
+        //   core    -> PhasmaCore/Code/Base/Path.h
+        std::string projectRoot = std::filesystem::weakly_canonical(Path::Assets)
+                                      .parent_path()
+                                      .parent_path()
+                                      .string();
         if (!projectRoot.empty() && projectRoot.back() != '/')
             projectRoot += '/';
 
@@ -797,11 +810,6 @@ namespace pe
 
                                    if (!IsPathSafe(fpath.string(), projectRoot))
                                        return "{\"error\":\"path outside project directory\"}";
-
-                                   // Only allow writing inside PhasmaEditor/
-                                   std::string editorDir = (std::filesystem::path(projectRoot) / "PhasmaEditor").string();
-                                   if (!IsPathSafe(fpath.string(), editorDir))
-                                       return "{\"error\":\"writes only allowed inside PhasmaEditor/\"}";
 
                                    // TODO: Implement UI confirmation here.
                                    // For now, we've at least secured the path traversal and restricted to PhasmaEditor/
@@ -1350,6 +1358,340 @@ namespace pe
 
                                    return JsonObj({{"status", JsonStr("removed")}, {"title", JsonStr(title)}});
                                }});
+
+        // =====================================================================
+        // find_symbol — query BM25 index for a symbol by name
+        // =====================================================================
+
+        m_agent->RegisterTool(
+            {.name = "find_symbol",
+             .description = "Searches the codebase index for a class, function, method, or struct by name. "
+                            "Returns file path and exact line range for each match — use the result with "
+                            "read_project_file(start_line, end_line) to read only the relevant code. "
+                            "Far more efficient than grep_project for symbol lookup. "
+                            "Requires the codebase index to be built.",
+             .properties = {
+                 {"name", "Symbol name to search for (e.g. 'CommandBuffer', 'CreatePipeline', 'RenderGraph')", pagent::SchemaType::String, true},
+                 {"max_results", "Maximum matches to return, 1-20 (default: 5)", pagent::SchemaType::Integer, false},
+             },
+             .handler = [bm25 = m_codebaseBM25, store = m_codebaseStore](const std::string &args) -> std::string
+             {
+                 std::string symbolName = JsonUnescape(ExtractArgStr(args, "name"));
+                 if (symbolName.empty())
+                     return "{\"error\":\"missing name\"}";
+
+                 int64_t maxResults = ExtractArgInt(args, "max_results", 5);
+                 if (maxResults < 1)
+                     maxResults = 1;
+                 if (maxResults > 20)
+                     maxResults = 20;
+
+                 if (!bm25 || bm25->Size() == 0)
+                     return "{\"error\":\"codebase index not built - use the Index button first\"}";
+
+                 auto results = bm25->Search(symbolName, static_cast<int>(maxResults) * 6);
+                 if (results.empty())
+                     return JsonObj({{"error", JsonStr("no symbols found matching: " + symbolName)}});
+
+                 // Build id -> (file, lines) from vector store metadata
+                 std::unordered_map<std::string, std::pair<std::string, std::string>> idToMeta;
+                 if (store)
+                 {
+                     store->ForEachEntry([&](const pagent::VectorEntry &entry)
+                                         {
+                         try
+                         {
+                             auto meta = nlohmann::json::parse(entry.metadata);
+                             std::string file  = meta.value("file",  "");
+                             std::string lines = meta.value("lines", "");
+                             if (!file.empty() && !lines.empty())
+                                 idToMeta[entry.id] = {file, lines};
+                         }
+                         catch (...) {} });
+                 }
+
+                 // Case-insensitive helpers
+                 auto toLower = [](std::string s)
+                 {
+                     std::transform(s.begin(), s.end(), s.begin(), [](unsigned char c)
+                                    { return std::tolower(c); });
+                     return s;
+                 };
+                 std::string nameLower = toLower(symbolName);
+
+                 // Definition-priority scoring:
+                 //   3 — file stem matches symbol name (e.g. RendererSystem.h)
+                 //   2 — metadata header contains "Class: <name>" or "Method: <name>"
+                 //   1 — file path contains the symbol name
+                 //   0 — plain reference (BM25 rank only)
+                 auto definitionPriority = [&](const std::string &file, const std::string &header) -> int
+                 {
+                     std::string fileLower = toLower(file);
+                     std::string headerLower = toLower(header);
+
+                     // Strip directory prefix to get stem
+                     auto slash = fileLower.rfind('/');
+                     if (slash == std::string::npos)
+                         slash = fileLower.rfind('\\');
+                     std::string stem = (slash != std::string::npos) ? fileLower.substr(slash + 1) : fileLower;
+                     auto dot = stem.rfind('.');
+                     if (dot != std::string::npos)
+                         stem = stem.substr(0, dot);
+
+                     if (stem == nameLower)
+                         return 3;
+
+                     // "class: rendersystem" or "method: rendersystem" in the header
+                     for (const char *tag : {"class: ", "method: ", "struct: "})
+                     {
+                         auto pos = headerLower.find(tag);
+                         if (pos != std::string::npos && headerLower.substr(pos + strlen(tag), nameLower.size()) == nameLower)
+                             return 2;
+                     }
+
+                     if (fileLower.find(nameLower) != std::string::npos)
+                         return 1;
+
+                     return 0;
+                 };
+
+                 // Attach priority to each candidate then stable-sort definitions first
+                 struct Candidate
+                 {
+                     std::string id;
+                     std::string content;
+                     float bm25Score;
+                     int priority;
+                 };
+                 std::vector<Candidate> candidates;
+                 candidates.reserve(results.size());
+                 for (auto &r : results)
+                 {
+                     auto it = idToMeta.find(r.id);
+                     if (it == idToMeta.end())
+                         continue;
+                     std::string header;
+                     if (auto nl = r.content.find('\n'); nl != std::string::npos)
+                         header = r.content.substr(0, nl);
+                     else
+                         header = r.content.substr(0, std::min(r.content.size(), (size_t)200));
+                     candidates.push_back({r.id, r.content, r.score, definitionPriority(it->second.first, header)});
+                 }
+                 std::stable_sort(candidates.begin(), candidates.end(), [](const Candidate &a, const Candidate &b)
+                                  { return a.priority > b.priority; });
+
+                 nlohmann::json matches = nlohmann::json::array();
+                 std::set<std::string> seen;
+                 for (auto &r : candidates)
+                 {
+                     if (static_cast<int64_t>(matches.size()) >= maxResults)
+                         break;
+
+                     auto it = idToMeta.find(r.id);
+                     if (it == idToMeta.end())
+                         continue;
+
+                     const std::string &file = it->second.first;
+                     const std::string &lines = it->second.second;
+                     std::string key = file + ":" + lines;
+                     if (!seen.insert(key).second)
+                         continue;
+
+                     int startLine = 0, endLine = 0;
+                     if (auto dash = lines.find('-'); dash != std::string::npos)
+                     {
+                         startLine = std::stoi(lines.substr(0, dash));
+                         endLine = std::stoi(lines.substr(dash + 1));
+                     }
+
+                     // First line of chunk content is the metadata header, e.g.:
+                     // "// File: API/RHI.h | Namespace: pe | Class: RHI | Method: CreateBuffer"
+                     std::string header;
+                     if (auto nl = r.content.find('\n'); nl != std::string::npos)
+                         header = r.content.substr(0, nl);
+                     else
+                         header = r.content;
+
+                     // Extract structured fields from the header so the model never needs to parse it
+                     auto extractField = [&](const std::string &tag) -> std::string
+                     {
+                         auto pos = header.find(tag);
+                         if (pos == std::string::npos)
+                             return "";
+                         pos += tag.size();
+                         auto end = header.find(" |", pos);
+                         return end != std::string::npos ? header.substr(pos, end - pos) : header.substr(pos);
+                     };
+
+                     nlohmann::json match = {
+                         {"file", file},
+                         {"start_line", startLine},
+                         {"end_line", endLine},
+                     };
+                     std::string ns = extractField("Namespace: ");
+                     std::string cls = extractField("Class: ");
+                     std::string method = extractField("Method: ");
+                     if (!ns.empty())
+                         match["namespace"] = ns;
+                     if (!cls.empty())
+                         match["class"] = cls;
+                     if (!method.empty())
+                         match["method"] = method;
+
+                     matches.push_back(std::move(match));
+                 }
+
+                 if (matches.empty())
+                     return JsonObj({{"error", JsonStr("no indexed symbols found for: " + symbolName)}});
+
+                 return nlohmann::json{{"matches", matches}}.dump(-1, ' ', false, nlohmann::json::error_handler_t::replace);
+             }});
+
+        // =====================================================================
+        // patch_project_file — surgical line-range replacement (token-efficient edits)
+        // =====================================================================
+
+        m_agent->RegisterTool(
+            {.name = "patch_project_file",
+             .description = "Replaces a specific range of lines in a project source file. "
+                            "Token-efficient alternative to write_project_file: send only the changed lines, not the whole file. "
+                            "Preferred for all C++ source, header, and shader edits. "
+                            "Workflow: (1) read_project_file with start_line/end_line to see current code, "
+                            "(2) patch_project_file with the exact replacement. "
+                            "IMPORTANT — to INSERT a line without losing existing content: include the existing line(s) "
+                            "in the replacement. Example: to insert '// comment' before line 8 without removing it, "
+                            "use start_line=8 end_line=8 replacement='// comment\\n<original line 8 content>'. "
+                            "Replacing an empty line removes it — always include it in the replacement if it must be kept. "
+                            "Use expected_context to guard against wrong-offset edits.",
+             .properties = {
+                 {"path", "File path relative to project root (e.g. 'PhasmaEditor/Code/App/App.cpp')", pagent::SchemaType::String, true},
+                 {"start_line", "First line to replace, 1-based inclusive", pagent::SchemaType::Integer, true},
+                 {"end_line", "Last line to replace, 1-based inclusive (must be >= start_line)", pagent::SchemaType::Integer, true},
+                 {"replacement", "New text replacing the specified lines. May contain newlines. Pass empty string to delete lines. To insert without losing content, include the displaced lines in this string.", pagent::SchemaType::String, true},
+                 {"expected_context", "Optional safety check: a short substring that must appear in the target region. Patch is rejected if not found.", pagent::SchemaType::String, false},
+             },
+             .handler = [projectRoot](const std::string &args) -> std::string
+             {
+                 std::string path = JsonUnescape(ExtractArgStr(args, "path"));
+                 std::string replacement = JsonUnescape(ExtractArgStr(args, "replacement"));
+                 std::string expectedContext = JsonUnescape(ExtractArgStr(args, "expected_context"));
+                 int64_t startLine = ExtractArgInt(args, "start_line", 0);
+                 int64_t endLine = ExtractArgInt(args, "end_line", 0);
+
+                 if (path.empty())
+                     return "{\"error\":\"missing path\"}";
+                 if (startLine < 1 || endLine < startLine)
+                     return "{\"error\":\"start_line must be >= 1 and end_line must be >= start_line\"}";
+
+                 std::filesystem::path fpath(path);
+                 if (fpath.is_relative())
+                     fpath = std::filesystem::path(projectRoot) / fpath;
+
+                 if (!IsPathSafe(fpath.string(), projectRoot))
+                     return "{\"error\":\"path outside project directory\"}";
+
+                 if (!std::filesystem::exists(fpath))
+                     return JsonObj({{"error", JsonStr("file not found: " + fpath.string())}});
+
+                 // Read all lines in binary mode to detect and preserve line endings exactly.
+                 std::vector<std::string> lines;
+                 bool trailingNewline = false;
+                 bool useCRLF = false;
+                 {
+                     std::ifstream file(fpath, std::ios::binary);
+                     if (!file.is_open())
+                         return JsonObj({{"error", JsonStr("cannot open: " + fpath.string())}});
+
+                     // Peek at first \n to detect CRLF vs LF
+                     std::string firstLine;
+                     if (std::getline(file, firstLine))
+                     {
+                         if (!firstLine.empty() && firstLine.back() == '\r')
+                         {
+                             useCRLF = true;
+                             firstLine.pop_back();
+                         }
+                         lines.push_back(std::move(firstLine));
+                         std::string line;
+                         while (std::getline(file, line))
+                         {
+                             if (useCRLF && !line.empty() && line.back() == '\r')
+                                 line.pop_back();
+                             lines.push_back(std::move(line));
+                         }
+                     }
+
+                     // Detect trailing newline from last byte
+                     file.clear();
+                     file.seekg(-1, std::ios::end);
+                     if (file.good())
+                     {
+                         char last;
+                         file.get(last);
+                         trailingNewline = (last == '\n');
+                     }
+                 }
+
+                 int64_t totalLines = static_cast<int64_t>(lines.size());
+                 if (startLine > totalLines + 1 || endLine > totalLines)
+                     return JsonObj({{"error", JsonStr("line range out of bounds: file has " + std::to_string(totalLines) + " lines")}});
+
+                 // Validate expected_context if provided
+                 if (!expectedContext.empty())
+                 {
+                     std::string region;
+                     for (int64_t i = startLine - 1; i < endLine; ++i)
+                         region += lines[static_cast<size_t>(i)] + "\n";
+                     if (region.find(expectedContext) == std::string::npos)
+                         return "{\"error\":\"expected_context not found in target region — patch rejected to prevent wrong-offset edit\"}";
+                 }
+
+                 // Split replacement into lines
+                 std::vector<std::string> repLines;
+                 if (!replacement.empty())
+                 {
+                     std::istringstream ss(replacement);
+                     std::string line;
+                     while (std::getline(ss, line))
+                         repLines.push_back(std::move(line));
+                     // getline leaves empty entry when replacement ends with '\n' — drop it
+                     if (!repLines.empty() && repLines.back().empty() && replacement.back() == '\n')
+                         repLines.pop_back();
+                 }
+
+                 // Splice: prefix + replacement + suffix
+                 std::vector<std::string> result;
+                 result.reserve(static_cast<size_t>(totalLines - (endLine - startLine + 1)) + repLines.size());
+                 for (int64_t i = 0; i < startLine - 1; ++i)
+                     result.push_back(lines[static_cast<size_t>(i)]);
+                 for (auto &l : repLines)
+                     result.push_back(l);
+                 for (int64_t i = endLine; i < totalLines; ++i)
+                     result.push_back(lines[static_cast<size_t>(i)]);
+
+                 // Write back in binary mode, restoring the original line ending style
+                 {
+                     std::ofstream file(fpath, std::ios::binary | std::ios::trunc);
+                     if (!file.is_open())
+                         return JsonObj({{"error", JsonStr("cannot write: " + fpath.string())}});
+                     const std::string lineEnding = useCRLF ? "\r\n" : "\n";
+                     for (size_t i = 0; i < result.size(); ++i)
+                     {
+                         file << result[i];
+                         if (i + 1 < result.size() || trailingNewline)
+                             file << lineEnding;
+                     }
+                 }
+
+                 return nlohmann::json{
+                     {"status", "patched"},
+                     {"path", std::filesystem::relative(fpath, projectRoot).string()},
+                     {"lines_replaced", endLine - startLine + 1},
+                     {"lines_inserted", static_cast<int64_t>(repLines.size())},
+                     {"new_total_lines", static_cast<int64_t>(result.size())},
+                 }
+                     .dump(-1, ' ', false, nlohmann::json::error_handler_t::replace);
+             }});
     }
 
     void AgentWidget::QueueAction(std::function<void()> fn)

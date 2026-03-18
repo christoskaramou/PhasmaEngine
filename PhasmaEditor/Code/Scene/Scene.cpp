@@ -1653,6 +1653,32 @@ namespace pe
         }
     }
 
+    void Scene::NewScene()
+    {
+        m_scenePath.clear();
+        m_dirty = false;
+
+        for (auto *model : m_models)
+            EventSystem::PushEvent(EventType::ModelRemoved, model);
+
+        auto *lightSystem = GetGlobalSystem<LightSystem>();
+        if (lightSystem)
+        {
+            lightSystem->GetDirectionalLights().clear();
+            lightSystem->GetPointLights().clear();
+            lightSystem->GetSpotLights().clear();
+            lightSystem->GetAreaLights().clear();
+        }
+
+        while (m_cameras.size() > 1)
+        {
+            delete m_cameras.back();
+            m_cameras.pop_back();
+        }
+
+        Log::Info("New scene created.");
+    }
+
     void Scene::LoadScene(const std::filesystem::path &file)
     {
         std::ifstream ifs(file);

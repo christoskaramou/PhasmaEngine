@@ -23,7 +23,7 @@ namespace pe
         void DrawPlatformWindows();
         bool Render() const { return m_render; }
         void ToggleRender() { m_render = !m_render; }
-        void TriggerExitConfirmation() { m_showExitConfirmation = true; }
+        void TriggerExitConfirmation();
         void RequestDockReset() { m_requestDockReset = true; }
         void NotifyChange()
         {
@@ -65,6 +65,9 @@ namespace pe
         bool m_showExitConfirmation = false;
         bool m_showSaveBeforeLoad = false;
         void DrawSaveBeforeLoadPopup();
+        bool m_showSaveBeforeNew = false;
+        void DrawSaveBeforeNewPopup();
+        void NewScene();
         void SaveEditorConfig();
         void LoadEditorConfig();
 

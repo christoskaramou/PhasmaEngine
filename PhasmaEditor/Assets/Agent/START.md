@@ -251,8 +251,8 @@ fs.read("path")        -> file content
 ### Read/write project source files
 ```
 -- PREFERRED WORKFLOW (surgical, minimal tokens):
---   1. grep_project("symbol") → get {file, line}
---   2. read_project_file(path, start_line=N-20, end_line=N+20) → read only what's needed
+--   1. grep_project("symbol") -> get {file, line}
+--   2. read_project_file(path, start_line=N-20, end_line=N+20) -> read only what's needed
 
 Tool: read_project_file(path="PhasmaEditor/Code/...", start_line=430, end_line=470)
 -- start_line / end_line are 1-based, inclusive. Omit both to read the whole file.

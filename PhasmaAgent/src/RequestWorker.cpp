@@ -165,6 +165,57 @@ namespace pagent
         }
     }
 
+    // Tools whose raw output must always reach the model untouched (code content, not lists).
+    static bool ShouldSummarizeTool(const std::string &toolName)
+    {
+        // Never summarize tools that return raw source code — the model needs the actual content.
+        static const std::initializer_list<const char *> kRawContentTools = {
+            "read_project_file",
+            "read_agent_file",
+            "execute_lua",
+            "write_project_file",
+            "patch_project_file",
+        };
+        for (const char *name : kRawContentTools)
+            if (toolName == name)
+                return false;
+        return true;
+    }
+
+    // Builds a summarization request for a single large tool result.
+    static std::string BuildToolSummaryBody(IProviderBackend *backend,
+                                            const AgentConfig &config,
+                                            const std::string &toolName,
+                                            const std::string &toolResult)
+    {
+        constexpr const char *kSystemPrompt =
+            "You are a tool output summarizer for a coding AI agent. Output only the summary — no preamble.";
+
+        const std::string instruction =
+            "Summarize this tool output so a coding AI agent can continue its task without reading the full result.\n"
+            "Rules:\n"
+            "- PRESERVE: every file path, symbol name, function name, line number, and error message.\n"
+            "- PRESERVE: anything the agent needs to decide its next action.\n"
+            "- DROP: repetitive entries, duplicate paths, boilerplate, raw code bodies (keep signatures only).\n"
+            "- FORMAT: dense bullet list or key-value pairs. No markdown headers.\n"
+            "- LENGTH: 5-20 bullets maximum.\n\n"
+            "Tool: " +
+            toolName + "\nFull output (" + std::to_string(toolResult.size()) + " chars):\n" +
+            toolResult.substr(0, 12000); // cap input to the summarizer itself
+
+        std::vector<NeutralMessage> msgs;
+        NeutralMessage userMsg;
+        userMsg.role = NeutralMessage::Role::User;
+        userMsg.content = instruction;
+        msgs.push_back(std::move(userMsg));
+
+        // Use cheap/simple model if routing is configured, otherwise fall back to default
+        const std::string &model = (!config.routing.simple_model.empty() && config.routing.enabled)
+                                       ? config.routing.simple_model
+                                       : config.model;
+        return backend->BuildRequestJson(model, kSystemPrompt, 400, 0.0f, msgs, "");
+    }
+
     // Builds the summarization request body for a block of old conversation text.
     // Uses a code-aware prompt that preserves file paths, symbols, and the user's goal.
     static std::string BuildSummarizationBody(IProviderBackend *backend,
@@ -949,13 +1000,49 @@ namespace pagent
                 Log("Dispatching tool: " + tc.tool_name);
                 auto resultJson = SanitizeUTF8(m_toolRegistry.Dispatch(tc.tool_name, tc.tool_input_json));
 
-                // Truncate large tool results to save tokens (skip read-type tools that need full content)
-                if (m_config.max_tool_result_chars > 0 &&
-                    static_cast<int>(resultJson.size()) > m_config.max_tool_result_chars &&
-                    tc.tool_name.find("read") == std::string::npos)
+                // Large tool results: summarize if eligible, otherwise hard-truncate.
+                const int resultChars = static_cast<int>(resultJson.size());
+                const bool summarizeEligible = ShouldSummarizeTool(tc.tool_name);
+
+                if (m_config.summarize_tool_result_chars > 0 &&
+                    resultChars > m_config.summarize_tool_result_chars &&
+                    summarizeEligible)
                 {
+                    // Summarize via a cheap model call — preserves key facts, drops bulk
+                    Log("Summarizing large tool result for '" + tc.tool_name +
+                        "' (" + std::to_string(resultChars) + " chars)");
+                    const std::string body = BuildToolSummaryBody(m_backend, m_config, tc.tool_name, resultJson);
+                    std::vector<AgentEvent> summaryEvents;
+                    const auto err = HttpPost(ResolveHost(m_config), m_backend->GetEndpointPath(),
+                                              BuildHeaders(m_config, m_backend), body, summaryEvents);
+                    std::string summary;
+                    for (const auto &ev : summaryEvents)
+                        if (ev.type == AgentEventType::TextComplete)
+                            summary = ev.text;
+
+                    if (!err.empty() || summary.empty())
+                    {
+                        // Summarization failed — fall back to hard truncation
+                        Log("Tool summarization failed (" + (err.empty() ? "empty summary" : err) + "), truncating");
+                        resultJson = resultJson.substr(0, m_config.max_tool_result_chars > 0
+                                                              ? m_config.max_tool_result_chars
+                                                              : 4000) +
+                                     "...(truncated, " + std::to_string(resultChars) + " total chars)";
+                    }
+                    else
+                    {
+                        Log("Tool result summarized: " + std::to_string(resultChars) +
+                            " -> " + std::to_string(summary.size()) + " chars");
+                        resultJson = "[Summarized " + tc.tool_name + " result (" +
+                                     std::to_string(resultChars) + " chars -> summary)]\n" + summary;
+                    }
+                }
+                else if (m_config.max_tool_result_chars > 0 &&
+                         resultChars > m_config.max_tool_result_chars)
+                {
+                    // Hard truncate: either raw-content tool, or summarization disabled/below threshold
                     resultJson = resultJson.substr(0, m_config.max_tool_result_chars) +
-                                 "...(truncated, " + std::to_string(resultJson.size()) + " total chars)";
+                                 "...(truncated, " + std::to_string(resultChars) + " total chars)";
                 }
 
                 AgentEvent resultEv;

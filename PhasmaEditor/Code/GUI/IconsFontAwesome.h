@@ -43,3 +43,4 @@
 #define ICON_FA_ARROW_LEFT "\xef\x81\xa0"       // f060 - arrow-left (navigate back)
 #define ICON_FA_ARROW_RIGHT "\xef\x81\xa1"      // f061 - arrow-right (navigate forward)
 #define ICON_FA_ARROW_UP "\xef\x81\xa2"         // f062 - arrow-up (navigate to parent)
+#define ICON_FA_PLUS "\xef\x81\xa7"             // f067 - plus (new scene)

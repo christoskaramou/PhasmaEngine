@@ -598,7 +598,7 @@ namespace pagent
                 // store a tombstone entry so CheckStatus won't keep marking it as outdated.
                 // Use a zero-filled embedding of the correct dimension so SaveToBinary/LoadFromBinary
                 // stay consistent (all entries must have the same embedding size in the binary format).
-                // Zero vectors produce cosine similarity 0.0 → filtered by min_score → invisible to search.
+                // Zero vectors produce cosine similarity 0.0 -> filtered by min_score -> invisible to search.
                 if (!shared->cancel.load() && shared->totalChunks.load() == chunksBeforeFile)
                 {
                     size_t h = std::hash<std::string>{}(rel + ":tombstone");

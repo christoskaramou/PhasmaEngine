@@ -27,7 +27,7 @@ auto embedding = std::make_shared<pagent::GoogleEmbedding>(
 // OpenAI
 auto embedding = std::make_shared<pagent::OpenAIEmbedding>(
     "sk-...", "text-embedding-3-small", 1536);
-// text-embedding-3-large → 3072 dims
+// text-embedding-3-large -> 3072 dims
 
 // Voyage (code-optimised, OpenAI-compatible)
 auto embedding = std::make_shared<pagent::OpenAIEmbedding>(

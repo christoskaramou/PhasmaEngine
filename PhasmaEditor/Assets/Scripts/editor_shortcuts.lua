@@ -15,24 +15,24 @@ local e_was_down = false
 local r_was_down = false
 
 local function handle_escape()
-    -- 1. Popup open (modal) → ImGui closes it natively via Escape, nothing to do
+    -- 1. Popup open (modal) -> ImGui closes it natively via Escape, nothing to do
     if engine.is_popup_open() then return end
 
     local focused = engine.get_focused_window()
 
-    -- 2. File selector focused → close it
+    -- 2. File selector focused -> close it
     if focused == "Select File" then
         engine.close_file_selector()
         return
     end
 
-    -- 3. Agent input focused → defocus (clear ImGui keyboard focus)
+    -- 3. Agent input focused -> defocus (clear ImGui keyboard focus)
     if focused == "Agent" then
         imgui.set_keyboard_focus_here(-1)
         return
     end
 
-    -- 4. Viewport focused → deselect
+    -- 4. Viewport focused -> deselect
     if focused == "Viewport" then
         selection.clear()
         return
