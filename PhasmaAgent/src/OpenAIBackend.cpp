@@ -58,7 +58,35 @@ namespace pagent
         }
 
         case NeutralMessage::Role::Tool:
-            return {{"role", "tool"}, {"tool_call_id", msg.tool_call_id}, {"name", msg.tool_name}, {"content", msg.content}};
+        {
+            // If the tool result contains an image, send it as a content array with both
+            // a text part (metadata) and an image_url part so vision-capable models can see it.
+            try
+            {
+                auto parsed = json::parse(msg.tool_result_json.empty() ? msg.content : msg.tool_result_json);
+                if (parsed.is_object() && parsed.contains("image_base64") &&
+                    parsed["image_base64"].is_string())
+                {
+                    std::string mime = parsed.value("mime_type", "image/png");
+                    std::string b64  = parsed["image_base64"].get<std::string>();
+                    parsed.erase("image_base64");
+
+                    json contentArr = json::array();
+                    contentArr.push_back({{"type", "text"}, {"text", parsed.dump()}});
+                    contentArr.push_back({
+                        {"type", "image_url"},
+                        {"image_url", {{"url", "data:" + mime + ";base64," + b64}}}
+                    });
+                    return {{"role", "tool"}, {"tool_call_id", msg.tool_call_id}, {"name", msg.tool_name}, {"content", contentArr}};
+                }
+            }
+            catch (...)
+            {
+            }
+            // Plain text tool result
+            std::string content = msg.tool_result_json.empty() ? msg.content : msg.tool_result_json;
+            return {{"role", "tool"}, {"tool_call_id", msg.tool_call_id}, {"name", msg.tool_name}, {"content", content}};
+        }
 
         default:
             return {};

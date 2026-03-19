@@ -8,6 +8,7 @@
 #include "API/Queue.h"
 #include "PhasmaAgent/AgentUtils.h"
 #include "imgui/imgui.h"
+#include "imgui/imgui_internal.h"
 #include "imgui/imgui_impl_vulkan.h"
 #include "API/Image.h"
 
@@ -266,7 +267,10 @@ namespace pe
             "To load 3D models: ALWAYS call find_loadable_model tool first (even if you think you know the path), then execute_lua with: local m, err = load_model('path/from/tool') "
             "The Lua function is load_model (NOT pe_load_model). NEVER guess model paths. Do NOT use fs.find/fs.list for models. "
             "Set unique labels on created models. Use request_feature for missing capabilities. "
-            "Screenshots: engine.take_screenshot() or engine.take_screenshot('path.png'). "
+            "Screenshots: take_screenshot tool (returns base64 image for vision). "
+            "UI interaction: when clicking based on a screenshot use u/v (normalized 0.0-1.0, e.g. u=pixel_x/image_width). "
+            "Code converts u/v to real screen pixels automatically. "
+            "tab_bars from query_imgui_windows already have real click_x/click_y — pass those as x/y directly. "
             "Workspace: " +
             Path::Assets + "Agent/ | Assets: " + Path::Assets + ".";
 
@@ -1691,6 +1695,359 @@ namespace pe
                      {"new_total_lines", static_cast<int64_t>(result.size())},
                  }
                      .dump(-1, ' ', false, nlohmann::json::error_handler_t::replace);
+             }});
+
+        // =====================================================================
+        // UI interaction tools
+        // =====================================================================
+
+        m_agent->RegisterTool(
+            {.name = "take_screenshot",
+             .description = "Takes a screenshot of the current editor state and returns it as a base64 PNG image for visual inspection. "
+                            "The image is embedded in the tool result and is visible to vision-capable models. "
+                            "Use this to see the current layout before deciding where to click with inject_mouse_input.",
+             .properties = {},
+             .handler = [this](const std::string &) -> std::string
+             {
+                 auto *renderer = GetGlobalSystem<RendererSystem>();
+                 if (!renderer)
+                     return "{\"error\":\"RendererSystem not available\"}";
+
+                 auto ts = std::chrono::duration_cast<std::chrono::milliseconds>(
+                               std::chrono::steady_clock::now().time_since_epoch())
+                               .count();
+                 std::string screenshotPath = Path::Assets + "Agent/ss_" + std::to_string(ts) + ".png";
+                 std::filesystem::remove(screenshotPath);
+
+                 // Capture mouse position before the screenshot so we can overlay a cursor.
+                 int mouseX = 0, mouseY = 0;
+                 SDL_GetMouseState(&mouseX, &mouseY);
+
+                 EventSystem::PushEvent(EventType::Screenshot, screenshotPath);
+
+                 auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(10);
+                 while (!std::filesystem::exists(screenshotPath))
+                 {
+                     if (std::chrono::steady_clock::now() > deadline)
+                         return "{\"error\":\"screenshot timeout\"}";
+                     std::this_thread::sleep_for(std::chrono::milliseconds(50));
+                 }
+                 std::this_thread::sleep_for(std::chrono::milliseconds(50));
+
+                 int w = 0, h = 0, c = 0;
+                 uint8_t *pixels = stbi_load(screenshotPath.c_str(), &w, &h, &c, 4);
+                 std::filesystem::remove(screenshotPath);
+                 if (!pixels)
+                     return "{\"error\":\"failed to load screenshot\"}";
+
+                 // Draw a crosshair at the current cursor position so the agent can
+                 // see exactly where the mouse is and reason about click targets.
+                 auto drawCursorOverlay = [](uint8_t *px, int imgW, int imgH, int cx, int cy)
+                 {
+                     if (cx < 0 || cy < 0 || cx >= imgW || cy >= imgH)
+                         return;
+                     constexpr int kRadius = 10;
+                     constexpr int kThick = 2;
+                     auto setPixel = [&](int x, int y, uint8_t r, uint8_t g, uint8_t b)
+                     {
+                         if (x < 0 || y < 0 || x >= imgW || y >= imgH)
+                             return;
+                         uint8_t *p = px + (y * imgW + x) * 4;
+                         p[0] = r;
+                         p[1] = g;
+                         p[2] = b;
+                         p[3] = 255;
+                     };
+                     // White crosshair with black outline for visibility on any background
+                     for (int d = -kRadius; d <= kRadius; ++d)
+                     {
+                         for (int t = -kThick; t <= kThick; ++t)
+                         {
+                             setPixel(cx + d, cy + t, 0, 0, 0);
+                             setPixel(cx + t, cy + d, 0, 0, 0);
+                         }
+                     }
+                     for (int d = -kRadius; d <= kRadius; ++d)
+                     {
+                         setPixel(cx + d, cy, 255, 255, 255);
+                         setPixel(cx, cy + d, 255, 255, 255);
+                     }
+                 };
+                 drawCursorOverlay(pixels, w, h, mouseX, mouseY);
+
+                 int rw = w, rh = h;
+                 std::vector<uint8_t> resizedPixels;
+                 const int kMaxDim = 1024; // conservative start — avoids Anthropic's 5 MB base64 limit
+                 if (w > kMaxDim || h > kMaxDim)
+                 {
+                     resizedPixels = ResizeRGBA(pixels, w, h, rw, rh, kMaxDim);
+                     stbi_image_free(pixels);
+                     pixels = nullptr;
+                 }
+
+                 // Encode and shrink further if the PNG still exceeds the provider's limit (5 MB).
+                 constexpr size_t kMaxBytes = 5 * 1024 * 1024;
+                 std::vector<uint8_t> pngData;
+                 for (int attempt = 0; attempt < 4; ++attempt)
+                 {
+                     const uint8_t *src = pixels ? pixels : resizedPixels.data();
+                     pngData = pagent::EncodeRGBA_PNG(src, rw, rh);
+                     if (pngData.empty() || pngData.size() <= kMaxBytes)
+                         break;
+                     // Still too large — scale down by 75% and retry
+                     int nw = rw * 3 / 4, nh = rh * 3 / 4;
+                     resizedPixels = ResizeRGBA(pixels ? pixels : resizedPixels.data(), rw, rh, nw, nh, std::max(nw, nh));
+                     if (pixels)
+                     {
+                         stbi_image_free(pixels);
+                         pixels = nullptr;
+                     }
+                     rw = nw;
+                     rh = nh;
+                 }
+                 if (pixels)
+                     stbi_image_free(pixels);
+
+                 if (pngData.empty())
+                     return "{\"error\":\"failed to encode screenshot as PNG\"}";
+
+                 std::string b64 = pagent::Base64Encode(pngData.data(), pngData.size());
+                 return nlohmann::json{
+                     {"image_base64", b64},
+                     {"mime_type", "image/png"},
+                     {"width", rw},
+                     {"height", rh},
+                     {"cursor_x", mouseX},
+                     {"cursor_y", mouseY},
+                 }
+                     .dump();
+             }});
+
+        m_agent->RegisterTool(
+            {.name = "query_imgui_windows",
+             .description = "Returns all currently visible ImGui panels with their screen positions and sizes, "
+                            "plus 'tab_bars': an array of tab bars each listing every tab with its exact click coordinates. "
+                            "Use tab_bars to find precise pixel coordinates for clicking specific tabs. "
+                            "Use window positions for clicking inside panels.",
+             .properties = {},
+             .handler = [this](const std::string &) -> std::string
+             {
+                 nlohmann::json result;
+                 result["windows"] = nlohmann::json::array();
+                 result["tab_bars"] = nlohmann::json::array();
+                 std::mutex mtx;
+                 std::condition_variable cv;
+                 bool done = false;
+
+                 QueueAction([&]()
+                             {
+                     ImGuiContext *ctx = ImGui::GetCurrentContext();
+                     if (ctx)
+                     {
+                         for (ImGuiWindow *win : ctx->Windows)
+                         {
+                             if (!win->WasActive || win->Size.x <= 0 || win->Size.y <= 0)
+                                 continue;
+                             result["windows"].push_back({
+                                 {"name", win->Name},
+                                 {"x", static_cast<int>(win->Pos.x)},
+                                 {"y", static_cast<int>(win->Pos.y)},
+                                 {"width", static_cast<int>(win->Size.x)},
+                                 {"height", static_cast<int>(win->Size.y)},
+                                 {"collapsed", win->Collapsed},
+                                 {"focused", ctx->NavWindow == win},
+                             });
+                         }
+
+                         // Emit tab bars from dock nodes with per-tab click coordinates.
+                         // Docked tab bars live on ImGuiDockNode::TabBar, not in ctx->TabBars.
+                         auto emitTabBar = [&](ImGuiTabBar *tb)
+                         {
+                             if (!tb || tb->Tabs.Size == 0)
+                                 return;
+                             int barY = static_cast<int>((tb->BarRect.Min.y + tb->BarRect.Max.y) / 2.0f);
+                             nlohmann::json tabsArr = nlohmann::json::array();
+                             for (int t = 0; t < tb->Tabs.Size; ++t)
+                             {
+                                 ImGuiTabItem *tab = &tb->Tabs[t];
+                                 const char *name = ImGui::TabBarGetTabName(tb, tab);
+                                 std::string tabName = name ? name : "";
+                                 if (auto pos = tabName.find("##"); pos != std::string::npos)
+                                     tabName = tabName.substr(0, pos);
+                                 int tabCenterX = static_cast<int>(tb->BarRect.Min.x + tab->Offset + tab->Width / 2.0f);
+                                 tabsArr.push_back({
+                                     {"name", tabName},
+                                     {"click_x", tabCenterX},
+                                     {"click_y", barY},
+                                     {"selected", tab->ID == tb->SelectedTabId},
+                                 });
+                             }
+                             result["tab_bars"].push_back({
+                                 {"bar_x", static_cast<int>(tb->BarRect.Min.x)},
+                                 {"bar_y", static_cast<int>(tb->BarRect.Min.y)},
+                                 {"tabs", tabsArr},
+                             });
+                         };
+
+                         // Walk all dock nodes (ImGuiStorage maps ID -> ImGuiDockNode*)
+                         for (auto &kv : ctx->DockContext.Nodes.Data)
+                         {
+                             auto *node = static_cast<ImGuiDockNode *>(kv.val_p);
+                             if (node)
+                                 emitTabBar(node->TabBar);
+                         }
+                     }
+                     {
+                         std::lock_guard lock(mtx);
+                         done = true;
+                     }
+                     cv.notify_one(); });
+
+                 std::unique_lock lock(mtx);
+                 if (!cv.wait_for(lock, std::chrono::seconds(5), [&]
+                                  { return done; }))
+                     return "{\"error\":\"timeout\"}";
+
+                 return result.dump();
+             }});
+
+        m_agent->RegisterTool(
+            {.name = "inject_mouse_input",
+             .description = "Simulates mouse input to interact with editor UI elements. "
+                            "Actions: 'move', 'click', 'right_click', 'double_click', 'scroll'. "
+                            "Use u/v (normalized 0.0-1.0 fractions of screen width/height) when clicking from a screenshot — "
+                            "the tool converts to real pixel coordinates automatically. "
+                            "Use click_x/click_y from query_imgui_windows tab_bars directly (already real coords, no u/v needed). "
+                            "After clicking call take_screenshot to verify.",
+             .properties = {
+                 {"u", "Normalized horizontal position 0.0 (left) to 1.0 (right) — use when clicking from a screenshot", pagent::SchemaType::Number, false},
+                 {"v", "Normalized vertical position 0.0 (top) to 1.0 (bottom) — use when clicking from a screenshot", pagent::SchemaType::Number, false},
+                 {"x", "Real screen X in pixels — use only for coordinates from query_imgui_windows (tab_bars)", pagent::SchemaType::Integer, false},
+                 {"y", "Real screen Y in pixels — use only for coordinates from query_imgui_windows (tab_bars)", pagent::SchemaType::Integer, false},
+                 {"action", "Action: 'move', 'click', 'right_click', 'double_click', 'scroll'", pagent::SchemaType::String, true},
+                 {"scroll_x", "Horizontal scroll delta for 'scroll' action", pagent::SchemaType::Integer, false},
+                 {"scroll_y", "Vertical scroll delta for 'scroll' action (negative=down)", pagent::SchemaType::Integer, false},
+             },
+             .handler = [this](const std::string &args) -> std::string
+             {
+                 std::string action = ExtractArgStr(args, "action");
+                 if (action.empty())
+                     return "{\"error\":\"missing action\"}";
+
+                 int scrollX = static_cast<int>(ExtractArgInt(args, "scroll_x", 0));
+                 int scrollY = static_cast<int>(ExtractArgInt(args, "scroll_y", 0));
+
+                 // Resolve final pixel coordinates — u/v (normalized) take priority over raw x/y.
+                 int x = -1, y = -1;
+                 float u = ExtractArgNum(args, "u");
+                 float v = ExtractArgNum(args, "v");
+                 if (u > 0.0f || v > 0.0f)
+                 {
+                     int winW = 0, winH = 0;
+                     SDL_GetWindowSize(SDL_GL_GetCurrentWindow(), &winW, &winH);
+                     x = static_cast<int>(u * winW);
+                     y = static_cast<int>(v * winH);
+                 }
+                 else
+                 {
+                     x = static_cast<int>(ExtractArgInt(args, "x", -1));
+                     y = static_cast<int>(ExtractArgInt(args, "y", -1));
+                 }
+
+                 if (x < 0 || y < 0)
+                     return "{\"error\":\"provide u/v (normalized) or x/y (real pixels)\"}";
+
+
+                 std::mutex mtx;
+                 std::condition_variable cv;
+                 bool done = false;
+
+                 std::string tabHit; // name of tab hit, if any
+                 QueueAction([&]()
+                             {
+                     ImGuiContext *ctx = ImGui::GetCurrentContext();
+                     ImGuiIO &io = ImGui::GetIO();
+                     ImVec2 pos{static_cast<float>(x), static_cast<float>(y)};
+
+                     // Warp the OS cursor so the user can see where the agent clicked.
+                     if (SDL_Window *win = SDL_GetMouseFocus() ? SDL_GetMouseFocus() : SDL_GL_GetCurrentWindow())
+                         SDL_WarpMouseInWindow(win, x, y);
+
+                     // For left clicks: check if (x,y) hits a tab in any dock node tab bar.
+                     // If so, call TabBarQueueFocus directly — this is instant and immune to
+                     // the trickle/timing issues that prevent io.AddMouseButtonEvent from
+                     // registering on tab bars rendered before FlushActions() runs.
+                     bool handledByTabBar = false;
+                     if ((action == "click" || action == "double_click") && ctx)
+                     {
+                         for (auto &kv : ctx->DockContext.Nodes.Data)
+                         {
+                             auto *node = static_cast<ImGuiDockNode *>(kv.val_p);
+                             if (!node || !node->TabBar)
+                                 continue;
+                             ImGuiTabBar *tb = node->TabBar;
+                             if (!tb->BarRect.Contains(pos))
+                                 continue;
+                             for (int t = 0; t < tb->Tabs.Size; ++t)
+                             {
+                                 ImGuiTabItem *tab = &tb->Tabs[t];
+                                 ImRect tabRect{
+                                     {tb->BarRect.Min.x + tab->Offset, tb->BarRect.Min.y},
+                                     {tb->BarRect.Min.x + tab->Offset + tab->Width, tb->BarRect.Max.y}};
+                                 if (!tabRect.Contains(pos))
+                                     continue;
+                                 ImGui::TabBarQueueFocus(tb, tab);
+                                 const char *name = ImGui::TabBarGetTabName(tb, tab);
+                                 tabHit = name ? name : "";
+                                 if (auto p = tabHit.find("##"); p != std::string::npos)
+                                     tabHit = tabHit.substr(0, p);
+                                 handledByTabBar = true;
+                                 break;
+                             }
+                             if (handledByTabBar)
+                                 break;
+                         }
+                     }
+
+                     // Fall back to IO injection for non-tab clicks.
+                     // Press and release must land in SEPARATE frames: if both are queued in
+                     // the same FlushActions(), they end up in the same NewFrame() and
+                     // MouseDown ends at false → MouseClicked is never set.
+                     // Solution: push only the press now, then queue the release for next frame.
+                     if (!handledByTabBar)
+                     {
+                         io.AddMousePosEvent(pos.x, pos.y);
+                         if (action == "scroll")
+                         {
+                             io.AddMouseWheelEvent(static_cast<float>(scrollX), static_cast<float>(scrollY));
+                         }
+                         else
+                         {
+                             int btn = (action == "right_click") ? ImGuiMouseButton_Right : ImGuiMouseButton_Left;
+                             io.AddMouseButtonEvent(btn, true); // press this frame
+                             // Release next frame so NewFrame() sees a real click transition
+                             QueueAction([btn]()
+                             {
+                                 ImGui::GetIO().AddMouseButtonEvent(btn, false);
+                             });
+                         }
+                     }
+
+                     {
+                         std::lock_guard lock(mtx);
+                         done = true;
+                     }
+                     cv.notify_one(); });
+
+                 std::unique_lock lock(mtx);
+                 if (!cv.wait_for(lock, std::chrono::seconds(5), [&]
+                                  { return done; }))
+                     return "{\"error\":\"timeout waiting for main thread\"}";
+
+                 nlohmann::json res{{"ok", true}, {"x", x}, {"y", y}, {"action", action}};
+                 if (!tabHit.empty())
+                     res["tab_focused"] = tabHit;
+                 return res.dump();
              }});
     }
 

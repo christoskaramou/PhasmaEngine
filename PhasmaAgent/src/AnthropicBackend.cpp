@@ -53,11 +53,47 @@ namespace pagent
         {
             // tool results go back as a user message containing a tool_result block.
             // Anthropic requires content to be a string or array of content blocks.
+            json toolResultContent;
+
+            // Detect screenshot results: if the JSON contains image_base64, build a
+            // proper image content block so the model can actually see the screenshot.
+            bool builtImageContent = false;
+            try
+            {
+                auto result = json::parse(msg.tool_result_json);
+                if (result.is_object() && result.contains("image_base64") &&
+                    result["image_base64"].is_string())
+                {
+                    std::string desc = "Screenshot captured";
+                    if (result.contains("width") && result.contains("height"))
+                        desc += " (" + std::to_string(result["width"].get<int>()) +
+                                "x" + std::to_string(result["height"].get<int>()) + ")";
+
+                    toolResultContent = json::array();
+                    toolResultContent.push_back({{"type", "text"}, {"text", desc}});
+                    toolResultContent.push_back({
+                        {"type", "image"},
+                        {"source", {
+                                       {"type", "base64"},
+                                       {"media_type", result.value("mime_type", "image/png")},
+                                       {"data", result["image_base64"]},
+                                   }},
+                    });
+                    builtImageContent = true;
+                }
+            }
+            catch (...)
+            {
+            }
+
+            if (!builtImageContent)
+                toolResultContent = msg.tool_result_json;
+
             json content = json::array();
             content.push_back({
                 {"type", "tool_result"},
                 {"tool_use_id", msg.tool_call_id},
-                {"content", msg.tool_result_json},
+                {"content", std::move(toolResultContent)},
             });
             return {{"role", "user"}, {"content", content}};
         }

@@ -19,6 +19,26 @@ namespace pagent
         m_entries.push_back({std::move(msg), NowMs()});
     }
 
+    // Strip image_base64 from all take_screenshot tool results except the most recent one.
+    // Screenshots are only needed once — keeping them in history wastes tokens rapidly.
+    static void StripOldScreenshotImages(std::vector<NeutralMessage> &messages)
+    {
+        bool keptRecent = false;
+        for (int i = static_cast<int>(messages.size()) - 1; i >= 0; --i)
+        {
+            auto &msg = messages[i];
+            if (msg.role != NeutralMessage::Role::Tool || msg.tool_name != "take_screenshot")
+                continue;
+            if (!keptRecent)
+            {
+                keptRecent = true; // most recent screenshot: keep image intact
+                continue;
+            }
+            if (msg.tool_result_json.find("\"image_base64\"") != std::string::npos)
+                msg.tool_result_json = R"({"note":"[screenshot image removed from history to save tokens]"})";
+        }
+    }
+
     // Compact an assistant message from the old window: strip tool_calls, keep text + summary
     static NeutralMessage CompactAssistant(const NeutralMessage &msg)
     {
@@ -79,6 +99,7 @@ namespace pagent
         {
             for (size_t i = start; i < m_entries.size(); ++i)
                 out.push_back(m_entries[i].message);
+            StripOldScreenshotImages(out);
             return out;
         }
 
@@ -131,6 +152,7 @@ namespace pagent
         for (size_t i = recentStart; i < m_entries.size(); ++i)
             out.push_back(m_entries[i].message);
 
+        StripOldScreenshotImages(out);
         return out;
     }
 

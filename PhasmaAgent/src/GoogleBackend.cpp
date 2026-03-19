@@ -58,16 +58,39 @@ namespace pagent
         case NeutralMessage::Role::Tool:
         {
             json response = json::object();
+            json inlineDataPart; // set if the result contains an image
             try
             {
-                response = json::parse(msg.content);
+                auto parsed = json::parse(msg.content);
+                // Detect screenshot results: pull the image out and send it as a
+                // separate inlineData part so Gemini can actually see the pixels.
+                if (parsed.is_object() && parsed.contains("image_base64") &&
+                    parsed["image_base64"].is_string())
+                {
+                    std::string desc = "Screenshot captured";
+                    if (parsed.contains("width") && parsed.contains("height"))
+                        desc += " (" + std::to_string(parsed["width"].get<int>()) +
+                                "x" + std::to_string(parsed["height"].get<int>()) + ")";
+                    response = {{"result", desc}};
+                    inlineDataPart = {{"inlineData", {
+                                                         {"mimeType", parsed.value("mime_type", "image/png")},
+                                                         {"data", parsed["image_base64"]},
+                                                     }}};
+                }
+                else
+                {
+                    response = std::move(parsed);
+                }
             }
             catch (...)
             {
                 response = {{"result", msg.content}};
             }
-            json part = {{"functionResponse", {{"name", msg.tool_name}, {"response", response}}}};
-            return {{"role", "user"}, {"parts", json::array({part})}};
+            json parts = json::array();
+            parts.push_back({{"functionResponse", {{"name", msg.tool_name}, {"response", response}}}});
+            if (!inlineDataPart.is_null())
+                parts.push_back(std::move(inlineDataPart));
+            return {{"role", "user"}, {"parts", std::move(parts)}};
         }
 
         default:

@@ -175,11 +175,18 @@ namespace pagent
             "execute_lua",
             "write_project_file",
             "patch_project_file",
+            "take_screenshot", // image data must arrive intact
         };
         for (const char *name : kRawContentTools)
             if (toolName == name)
                 return false;
         return true;
+    }
+
+    // Returns true for tools whose results must never be size-limited (e.g. image data).
+    static bool ShouldSkipSizeLimiting(const std::string &toolName)
+    {
+        return toolName == "take_screenshot";
     }
 
     // Builds a summarization request for a single large tool result.
@@ -1038,7 +1045,8 @@ namespace pagent
                     }
                 }
                 else if (m_config.max_tool_result_chars > 0 &&
-                         resultChars > m_config.max_tool_result_chars)
+                         resultChars > m_config.max_tool_result_chars &&
+                         !ShouldSkipSizeLimiting(tc.tool_name))
                 {
                     // Hard truncate: either raw-content tool, or summarization disabled/below threshold
                     resultJson = resultJson.substr(0, m_config.max_tool_result_chars) +
