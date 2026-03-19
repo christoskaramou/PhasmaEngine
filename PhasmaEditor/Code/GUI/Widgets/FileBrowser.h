@@ -142,6 +142,7 @@ namespace pe
         std::vector<std::filesystem::path> m_pendingCopySources;
         std::vector<std::string> m_conflictNames;
 
+        void DrawNavBar(bool showViewMode = true);
         void DrawItemContextMenu(const std::function<void(const std::filesystem::path &)> &onOpen);
         void DrawBackgroundContextMenu();
         void DrawRenamePopup();

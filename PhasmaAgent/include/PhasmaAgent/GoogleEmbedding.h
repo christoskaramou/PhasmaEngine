@@ -17,5 +17,6 @@ namespace pagent
         std::string m_apiKey;
         std::string m_model;
         int m_dims;
+        std::atomic<bool> m_failed{false}; // set on auth error to suppress further log spam
     };
 } // namespace pagent

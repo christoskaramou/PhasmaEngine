@@ -2,6 +2,7 @@
 #include "API/Command.h"
 #include "API/Queue.h"
 #include "API/RHI.h"
+#include "GUI/UndoRedo.h"
 #include "Scene/Model.h"
 #include "Systems/LightSystem.h"
 #include "Systems/PostProcessSystem.h"
@@ -115,6 +116,10 @@ namespace pe
         if (auto *ss = GetGlobalSystem<ScriptSystem>())
             ss->CallInit();
 #endif
+
+        // Reset undo/redo after all initialization (scripts, auto-loads, etc.)
+        // so the post-init state is the clean baseline, not the pre-script state.
+        UndoRedo::Instance().Clear();
 
         m_window->Show();
         m_window->Maximize();

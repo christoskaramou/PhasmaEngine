@@ -50,7 +50,22 @@ namespace pe
             return nullptr;
         }
 
+        void StartCodebaseIndexing();
+        void CancelCodebaseIndexing();
+        bool IsIndexing() const { return m_isIndexing.load(); }
+        int GetIndexProgress() const { return m_indexProgress.load(); }
+        int GetIndexTotal() const { return m_indexTotal.load(); }
+        int GetIndexActiveThreads() const { return m_indexActiveThreads.load(); }
+        int GetIndexTotalThreads() const { return m_indexTotalThreads; }
+        std::string GetIndexCurrentFile() const
+        {
+            std::lock_guard lock(const_cast<std::mutex &>(m_indexMutex));
+            return m_indexCurrentFile;
+        }
+
     private:
+        friend class Hierarchy;
+
         void ShowLoadModelMenuItem();
         void ShowLoadSceneMenuItem();
         void ShowSaveSceneMenuItem();
@@ -61,15 +76,15 @@ namespace pe
         void Toolbar();
         void Play();
         void Stop();
+        void NewScene();
+        void SaveEditorConfig();
+        void LoadEditorConfig();
 
         bool m_showExitConfirmation = false;
         bool m_showSaveBeforeLoad = false;
         void DrawSaveBeforeLoadPopup();
         bool m_showSaveBeforeNew = false;
         void DrawSaveBeforeNewPopup();
-        void NewScene();
-        void SaveEditorConfig();
-        void LoadEditorConfig();
 
         bool m_showOverwriteConfirmation = false;
         std::filesystem::path m_pendingSavePath;
@@ -110,19 +125,5 @@ namespace pe
         int m_indexTotalThreads = 0;
         void *m_indexerPtr = nullptr; // pagent::CodebaseIndexer*, guarded by m_indexMutex
         std::thread m_indexThread;
-
-    public:
-        void StartCodebaseIndexing();
-        void CancelCodebaseIndexing();
-        bool IsIndexing() const { return m_isIndexing.load(); }
-        int GetIndexProgress() const { return m_indexProgress.load(); }
-        int GetIndexTotal() const { return m_indexTotal.load(); }
-        int GetIndexActiveThreads() const { return m_indexActiveThreads.load(); }
-        int GetIndexTotalThreads() const { return m_indexTotalThreads; }
-        std::string GetIndexCurrentFile() const
-        {
-            std::lock_guard lock(const_cast<std::mutex &>(m_indexMutex));
-            return m_indexCurrentFile;
-        }
     };
 } // namespace pe

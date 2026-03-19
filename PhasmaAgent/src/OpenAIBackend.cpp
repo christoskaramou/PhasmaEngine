@@ -68,15 +68,13 @@ namespace pagent
                     parsed["image_base64"].is_string())
                 {
                     std::string mime = parsed.value("mime_type", "image/png");
-                    std::string b64  = parsed["image_base64"].get<std::string>();
+                    std::string b64 = parsed["image_base64"].get<std::string>();
                     parsed.erase("image_base64");
 
                     json contentArr = json::array();
                     contentArr.push_back({{"type", "text"}, {"text", parsed.dump()}});
-                    contentArr.push_back({
-                        {"type", "image_url"},
-                        {"image_url", {{"url", "data:" + mime + ";base64," + b64}}}
-                    });
+                    contentArr.push_back({{"type", "image_url"},
+                                          {"image_url", {{"url", "data:" + mime + ";base64," + b64}}}});
                     return {{"role", "tool"}, {"tool_call_id", msg.tool_call_id}, {"name", msg.tool_name}, {"content", contentArr}};
                 }
             }
@@ -317,6 +315,26 @@ namespace pagent
 
                 auto &acc = m_toolAccumulators[index];
 
+                // A new `id` signals the start of a fresh tool call.
+                // If this slot already holds a completed call, emit it before resetting.
+                bool isNewCall = false;
+                if (tc_delta.contains("id"))
+                {
+                    const std::string newId = tc_delta["id"].get<std::string>();
+                    if (!acc.id.empty() && acc.id != newId)
+                    {
+                        AgentEvent complEv;
+                        complEv.type = AgentEventType::ToolCallComplete;
+                        complEv.tool_name = acc.name;
+                        complEv.tool_call_id = acc.id;
+                        complEv.tool_input_json = acc.arguments;
+                        out_events.push_back(std::move(complEv));
+                        acc = {};
+                    }
+                    acc.id = newId;
+                    isNewCall = true;
+                }
+
                 if (tc_delta.contains("function"))
                 {
                     const auto &f = tc_delta["function"];
@@ -330,10 +348,8 @@ namespace pagent
                         acc.arguments += f["arguments"].get<std::string>();
                 }
 
-                if (tc_delta.contains("id"))
+                if (isNewCall)
                 {
-                    acc.id = tc_delta["id"].get<std::string>();
-
                     AgentEvent ev;
                     ev.type = AgentEventType::ToolCallBegin;
                     ev.tool_name = acc.name;

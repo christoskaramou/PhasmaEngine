@@ -494,6 +494,77 @@ namespace pe
 #endif
     }
 
+    void FileBrowser::DrawNavBar(bool showViewMode)
+    {
+        // Thumb mouse buttons for back / forward navigation
+        if (ImGui::IsWindowHovered(ImGuiFocusedFlags_RootAndChildWindows))
+        {
+            if (ImGui::IsMouseClicked(3) && m_navHistoryIndex > 0)
+            {
+                --m_navHistoryIndex;
+                m_currentPath = m_navHistory[m_navHistoryIndex];
+                m_cachePath.clear();
+            }
+            if (ImGui::IsMouseClicked(4) && m_navHistoryIndex < static_cast<int>(m_navHistory.size()) - 1)
+            {
+                ++m_navHistoryIndex;
+                m_currentPath = m_navHistory[m_navHistoryIndex];
+                m_cachePath.clear();
+            }
+        }
+
+        bool canBack = m_navHistoryIndex > 0;
+        bool canForward = m_navHistoryIndex < static_cast<int>(m_navHistory.size()) - 1;
+        bool canUp = m_currentPath.has_parent_path();
+
+        if (!canBack)
+            ImGui::BeginDisabled();
+        if (ImGui::Button(ICON_FA_ARROW_LEFT "##navback"))
+        {
+            --m_navHistoryIndex;
+            m_currentPath = m_navHistory[m_navHistoryIndex];
+            RefreshCache();
+        }
+        if (!canBack)
+            ImGui::EndDisabled();
+
+        ImGui::SameLine();
+
+        if (!canForward)
+            ImGui::BeginDisabled();
+        if (ImGui::Button(ICON_FA_ARROW_RIGHT "##navfwd"))
+        {
+            ++m_navHistoryIndex;
+            m_currentPath = m_navHistory[m_navHistoryIndex];
+            RefreshCache();
+        }
+        if (!canForward)
+            ImGui::EndDisabled();
+
+        ImGui::SameLine();
+
+        if (!canUp)
+            ImGui::BeginDisabled();
+        if (ImGui::Button(ICON_FA_ARROW_UP "##navup"))
+            NavigateTo(m_currentPath.parent_path());
+        if (!canUp)
+            ImGui::EndDisabled();
+
+        ImGui::SameLine();
+        auto currentPathU8 = m_currentPath.u8string();
+        ImGui::Text("%s", reinterpret_cast<const char *>(currentPathU8.c_str()));
+
+        if (showViewMode)
+        {
+            ImGui::SameLine(ImGui::GetWindowWidth() - 120);
+            if (ImGui::Button("List"))
+                m_viewMode = ViewMode::List;
+            ImGui::SameLine();
+            if (ImGui::Button("Grid"))
+                m_viewMode = ViewMode::Grid;
+        }
+    }
+
     void FileBrowser::DrawItemContextMenu(const std::function<void(const std::filesystem::path &)> &onOpen)
     {
         if (!ImGui::BeginPopup("ItemContext##filebrowser"))
@@ -690,23 +761,6 @@ namespace pe
 
             DrawCopyProgress();
 
-            // Thumb mouse buttons for back / forward navigation
-            if (ImGui::IsWindowHovered(ImGuiFocusedFlags_RootAndChildWindows))
-            {
-                if (ImGui::IsMouseClicked(3) && m_navHistoryIndex > 0)
-                {
-                    --m_navHistoryIndex;
-                    m_currentPath = m_navHistory[m_navHistoryIndex];
-                    m_cachePath.clear();
-                }
-                if (ImGui::IsMouseClicked(4) && m_navHistoryIndex < static_cast<int>(m_navHistory.size()) - 1)
-                {
-                    ++m_navHistoryIndex;
-                    m_currentPath = m_navHistory[m_navHistoryIndex];
-                    m_cachePath.clear();
-                }
-            }
-
             // Ctrl+C / Ctrl+V clipboard copy (only when window focused, not while a copy is running)
             if (ImGui::IsWindowFocused(ImGuiFocusedFlags_RootAndChildWindows) && !m_copyState->active)
             {
@@ -719,55 +773,7 @@ namespace pe
                     TryStartCopy({m_clipboardPath});
             }
 
-            // Top Bar: Navigation (back / forward / up)
-            bool canBack = m_navHistoryIndex > 0;
-            bool canForward = m_navHistoryIndex < static_cast<int>(m_navHistory.size()) - 1;
-            bool canUp = m_currentPath.has_parent_path();
-
-            if (!canBack)
-                ImGui::BeginDisabled();
-            if (ImGui::Button(ICON_FA_ARROW_LEFT "##navback"))
-            {
-                --m_navHistoryIndex;
-                m_currentPath = m_navHistory[m_navHistoryIndex];
-                RefreshCache();
-            }
-            if (!canBack)
-                ImGui::EndDisabled();
-
-            ImGui::SameLine();
-
-            if (!canForward)
-                ImGui::BeginDisabled();
-            if (ImGui::Button(ICON_FA_ARROW_RIGHT "##navfwd"))
-            {
-                ++m_navHistoryIndex;
-                m_currentPath = m_navHistory[m_navHistoryIndex];
-                RefreshCache();
-            }
-            if (!canForward)
-                ImGui::EndDisabled();
-
-            ImGui::SameLine();
-
-            if (!canUp)
-                ImGui::BeginDisabled();
-            if (ImGui::Button(ICON_FA_ARROW_UP "##navup"))
-                NavigateTo(m_currentPath.parent_path());
-            if (!canUp)
-                ImGui::EndDisabled();
-
-            ImGui::SameLine();
-            auto currentPathU8 = m_currentPath.u8string();
-            ImGui::Text("%s", reinterpret_cast<const char *>(currentPathU8.c_str()));
-
-            ImGui::SameLine(ImGui::GetWindowWidth() - 120);
-            if (ImGui::Button("List"))
-                m_viewMode = ViewMode::List;
-            ImGui::SameLine();
-            if (ImGui::Button("Grid"))
-                m_viewMode = ViewMode::Grid;
-
+            DrawNavBar(true);
             ImGui::Separator();
 
             auto onNormalActionCaptured = [this](const std::filesystem::path &path)

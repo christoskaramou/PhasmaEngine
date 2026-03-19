@@ -1340,7 +1340,7 @@ namespace pe
     {
         if (m_scenePath.empty())
             return "Untitled";
-        return m_scenePath.filename().string();
+        return m_scenePath.stem().string();
     }
 
     void Scene::SaveScene(const std::filesystem::path &file)

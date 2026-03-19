@@ -16,7 +16,7 @@ namespace pe
         // Camera FOV, near, far, speed are still tracked.
         std::string current = scene.TakeSnapshot();
 
-        if (m_hasIdleSnapshot && current != m_idleSnapshot)
+        if (m_hasIdleSnapshot && m_settleFrames == 0 && current != m_idleSnapshot)
         {
             m_undoStack.push_back(std::move(m_idleSnapshot));
             m_redoStack.clear();
@@ -25,6 +25,9 @@ namespace pe
             if (m_undoStack.size() > MAX_HISTORY)
                 m_undoStack.pop_front();
         }
+
+        if (m_settleFrames > 0)
+            --m_settleFrames;
 
         m_idleSnapshot = std::move(current);
         m_hasIdleSnapshot = true;
@@ -57,8 +60,10 @@ namespace pe
         scene.RestoreSnapshot(snapshot);
         scene.MarkDirty();
 
-        m_idleSnapshot = std::move(snapshot);
-        m_hasIdleSnapshot = true;
+        // Don't fix the idle snapshot here — systems like LightSystem run *after*
+        // RestoreSnapshot and will alter the scene before the next CaptureIdleState.
+        // Clearing hasIdleSnapshot lets the next capture establish a fresh baseline.
+        m_hasIdleSnapshot = false;
     }
 
     void UndoRedo::Redo(Scene &scene)
@@ -73,8 +78,7 @@ namespace pe
         scene.RestoreSnapshot(snapshot);
         scene.MarkDirty();
 
-        m_idleSnapshot = std::move(snapshot);
-        m_hasIdleSnapshot = true;
+        m_hasIdleSnapshot = false;
     }
 
     void UndoRedo::Clear()
@@ -83,5 +87,6 @@ namespace pe
         m_redoStack.clear();
         m_idleSnapshot.clear();
         m_hasIdleSnapshot = false;
+        m_settleFrames = SETTLE_FRAMES;
     }
 } // namespace pe

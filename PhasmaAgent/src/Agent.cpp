@@ -5,6 +5,7 @@
 #include <nlohmann/json.hpp>
 #include <algorithm>
 #include <cstdlib>
+#include <future>
 #include <set>
 
 namespace pagent
@@ -188,7 +189,9 @@ namespace pagent
     std::vector<Agent::ModelInfo> Agent::FetchModelInfos(Provider provider,
                                                          const std::string &api_key,
                                                          const std::string &base_url,
-                                                         bool local_only)
+                                                         bool local_only,
+                                                         bool require_tools,
+                                                         bool require_vision)
     {
         using json = nlohmann::json;
 
@@ -257,23 +260,25 @@ namespace pagent
             std::vector<ModelInfo> models;
             std::set<std::string> localNames;
 
-            // Fetch locally downloaded models, filter to those with both vision + tools
+            // Fetch locally downloaded models
             std::string localBody = httpGet(ollamaHost, "/api/tags", false, {});
-            httplib::Client cli(ollamaHost);
-            cli.set_read_timeout(3);
-            for (auto &[name, size] : parseOllamaModels(localBody))
+            auto localModels = parseOllamaModels(localBody);
+
+            // Query capabilities for all local models in parallel
+            auto queryOneCaps = [&ollamaHost](const std::string &name) -> ModelCaps
             {
-                // Check capabilities using shared connection (avoids per-model reconnect)
-                ModelCaps caps{false, false};
+                httplib::Client cli(ollamaHost);
+                cli.set_read_timeout(5);
                 std::string showBody = "{\"name\":\"" + name + "\"}";
                 auto showRes = cli.Post("/api/show", showBody, "application/json");
                 if (showRes && showRes->status == 200)
                 {
                     try
                     {
-                        auto sj = json::parse(showRes->body);
+                        auto sj = nlohmann::json::parse(showRes->body);
                         if (sj.contains("capabilities") && sj["capabilities"].is_array())
                         {
+                            ModelCaps caps{false, false};
                             for (const auto &cap : sj["capabilities"])
                             {
                                 auto s = cap.get<std::string>();
@@ -282,24 +287,29 @@ namespace pagent
                                 if (s == "tools")
                                     caps.tools = true;
                             }
-                        }
-                        else
-                        {
-                            caps = {true, true}; // no capabilities field - assume both
+                            return caps;
                         }
                     }
                     catch (...)
                     {
-                        caps = {true, true};
                     }
                 }
-                else
-                {
-                    caps = {true, true}; // can't check - assume both
-                }
+                return {true, true}; // can't determine - assume both
+            };
 
-                localNames.insert(name); // always track local names to avoid re-showing as "(download)"
-                if (!caps.vision || !caps.tools)
+            std::vector<std::future<ModelCaps>> futures;
+            futures.reserve(localModels.size());
+            for (auto &[name, size] : localModels)
+                futures.push_back(std::async(std::launch::async, queryOneCaps, name));
+
+            for (size_t i = 0; i < localModels.size(); ++i)
+            {
+                const auto &name = localModels[i].first;
+                ModelCaps caps = futures[i].get();
+                localNames.insert(name);
+                if (require_tools && !caps.tools)
+                    continue;
+                if (require_vision && !caps.vision)
                     continue;
                 models.push_back({name, true, caps.vision, caps.tools});
             }
@@ -308,7 +318,10 @@ namespace pagent
             if (!local_only)
             {
 #ifdef CPPHTTPLIB_OPENSSL_SUPPORT
-                std::string libraryHtml = httpGet("ollama.com", "/search?c=vision&c=tools", true, {});
+                std::string searchQuery = "/search?c=tools";
+                if (require_vision)
+                    searchQuery += "&c=vision";
+                std::string libraryHtml = httpGet("ollama.com", searchQuery, true, {});
                 {
                     const std::string prefix = "href=\"/library/";
                     size_t pos = 0;

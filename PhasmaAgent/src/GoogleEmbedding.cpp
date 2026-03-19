@@ -19,7 +19,7 @@ namespace pagent
 
     std::vector<float> GoogleEmbedding::Embed(const std::string &text)
     {
-        if (IsCancelled() || text.empty() || m_apiKey.empty())
+        if (IsCancelled() || text.empty() || m_apiKey.empty() || m_failed.load())
             return {};
 
         json body;
@@ -45,7 +45,16 @@ namespace pagent
         }
         if (res->status != 200)
         {
-            fprintf(stderr, "[GoogleEmbedding] HTTP %d: %s\n", res->status, res->body.substr(0, 300).c_str());
+            // Auth errors (400/401/403) are permanent — log once and stop retrying
+            if (res->status == 400 || res->status == 401 || res->status == 403)
+            {
+                if (!m_failed.exchange(true))
+                    fprintf(stderr, "[GoogleEmbedding] HTTP %d (auth error, disabling): %s\n", res->status, res->body.substr(0, 300).c_str());
+            }
+            else
+            {
+                fprintf(stderr, "[GoogleEmbedding] HTTP %d: %s\n", res->status, res->body.substr(0, 300).c_str());
+            }
             return {};
         }
         responseBody = res->body;

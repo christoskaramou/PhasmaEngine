@@ -57,6 +57,7 @@ namespace pe
 
     GUI::~GUI()
     {
+        CancelCodebaseIndexing();
         if (m_indexThread.joinable())
             m_indexThread.join();
 
@@ -136,6 +137,7 @@ namespace pe
             std::vector<std::string> exts = {};
             fs->OpenSelection([](const std::string &path)
                               {
+                UndoRedo::Instance().Clear();
                 auto loadAsync = [path]()
                 {
                     auto* rs = GetGlobalSystem<RendererSystem>();
@@ -197,7 +199,10 @@ namespace pe
         if (rs->GetScene().IsDirty())
             m_showSaveBeforeNew = true;
         else
+        {
             rs->GetScene().NewScene();
+            UndoRedo::Instance().Clear();
+        }
     }
 
     void GUI::DrawSaveBeforeNewPopup()
@@ -224,6 +229,7 @@ namespace pe
                     else
                         ShowSaveSceneMenuItem_Action();
                     scene.NewScene();
+                    UndoRedo::Instance().Clear();
                 }
                 ImGui::CloseCurrentPopup();
             }
@@ -233,6 +239,7 @@ namespace pe
                 RendererSystem *rs = GetGlobalSystem<RendererSystem>();
                 if (rs)
                     rs->GetScene().NewScene();
+                UndoRedo::Instance().Clear();
                 ImGui::CloseCurrentPopup();
             }
             ImGui::SameLine();
@@ -260,6 +267,16 @@ namespace pe
         auto *fs = GetWidget<FileSelector>();
         if (fs)
         {
+            // Suggest the current scene name, or "untitled" if none
+            std::string suggestedName = "untitled";
+            if (auto *rs = GetGlobalSystem<RendererSystem>())
+            {
+                const auto &scenePath = rs->GetScene().GetScenePath();
+                if (!scenePath.empty())
+                    suggestedName = scenePath.stem().string();
+            }
+            suggestedName += ".pescene";
+
             std::vector<std::string> exts = {".pescene"};
             fs->OpenSelection([this](const std::string &path)
                               {
@@ -291,7 +308,7 @@ namespace pe
                 ThreadPool::GUI.Enqueue(saveAsync);
                 return true; }, exts, Path::Assets + "Scenes/",
                               [this]()
-                              { m_exitAfterSave = false; });
+                              { m_exitAfterSave = false; }, suggestedName, "Save");
         }
     }
 
@@ -397,7 +414,10 @@ namespace pe
 
         RendererSystem *rs = GetGlobalSystem<RendererSystem>();
         if (rs)
+        {
             rs->GetScene().LoadScene(lastScene);
+            UndoRedo::Instance().Clear();
+        }
     }
 
     void GUI::TriggerExitConfirmation()
@@ -1005,6 +1025,8 @@ namespace pe
 
             // Symbol glyph ranges for fallback font (DejaVu Sans covers these)
             static const ImWchar symbolRanges[] = {
+                0x2000,
+                0x206F, // General Punctuation (' ' " " … – — etc.)
                 0x2190,
                 0x21FF, // Arrows
                 0x2200,
@@ -1546,30 +1568,6 @@ namespace pe
             ImGui::PopStyleColor();
         }
 
-        // Scene name + new scene button (right side)
-        {
-            RendererSystem *rs = GetGlobalSystem<RendererSystem>();
-            std::string sceneName = rs ? rs->GetScene().GetSceneName() : "Untitled";
-            bool dirty = rs && rs->GetScene().IsDirty();
-            if (dirty)
-                sceneName += "*";
-
-            float nameWidth = ImGui::CalcTextSize(sceneName.c_str()).x + ImGui::GetStyle().ItemSpacing.x * 2.0f;
-            float rightEdge = ImGui::GetWindowWidth() - 8.0f;
-            float rowY = (toolbarHeight - buttonSize) * 0.5f;
-            float newBtnX = rightEdge - nameWidth - buttonSize - ImGui::GetStyle().ItemSpacing.x;
-
-            ImGui::SetCursorPos(ImVec2(newBtnX, rowY));
-            if (ImGui::Button(ICON_FA_PLUS, ImVec2(buttonSize, buttonSize)))
-                NewScene();
-            if (ImGui::IsItemHovered())
-                ImGui::SetTooltip("New Scene");
-
-            ImGui::SameLine();
-            ImGui::SetCursorPosY((toolbarHeight - ImGui::GetTextLineHeight()) * 0.5f);
-            ImGui::TextUnformatted(sceneName.c_str());
-        }
-
         ImGui::PopStyleVar();    // Pop FramePadding
         ImGui::PopStyleColor(3); // Pop button colors
         ImGui::End();
@@ -1594,6 +1592,7 @@ namespace pe
             GUIState::s_playMode = false;
             GUIState::s_isPaused = false;
             rs->GetScene().LoadScene("temp_play.pescene");
+            UndoRedo::Instance().Clear();
             if (std::filesystem::exists("temp_play.pescene"))
                 std::filesystem::remove("temp_play.pescene");
         }

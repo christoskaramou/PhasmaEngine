@@ -1,5 +1,6 @@
 #include "Hierarchy.h"
 #include "Camera/Camera.h"
+#include "GUI/GUI.h"
 #include "GUI/GUIState.h"
 #include "GUI/UndoRedo.h"
 #include "GUI/IconsFontAwesome.h"
@@ -81,16 +82,25 @@ namespace pe
         if (ImGui::Button("Add", ImVec2(buttonWidth, 0.f)))
             ImGui::OpenPopup("AddEntityPopup");
 
-        // Scene name
+        // Scene name with new scene button
         {
             std::string sceneName = scene.GetSceneName();
             if (scene.IsDirty())
                 sceneName += " *";
 
             std::string label = std::string(ICON_FA_SITEMAP) + "  " + sceneName;
+            float btnSize = ImGui::GetFrameHeight();
             float textWidth = ImGui::CalcTextSize(label.c_str()).x;
             float availWidth = ImGui::GetContentRegionAvail().x;
-            ImGui::SetCursorPosX(ImGui::GetCursorPosX() + (availWidth - textWidth) * 0.5f);
+            float totalWidth = btnSize + ImGui::GetStyle().ItemSpacing.x + textWidth;
+            ImGui::SetCursorPosX(ImGui::GetCursorPosX() + (availWidth - totalWidth) * 0.5f);
+
+            if (ImGui::Button(ICON_FA_PLUS, ImVec2(btnSize, btnSize)))
+                m_gui->NewScene();
+            if (ImGui::IsItemHovered())
+                ImGui::SetTooltip("New Scene");
+
+            ImGui::SameLine();
             ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.6f, 0.7f, 0.8f, 1.0f));
             ImGui::TextUnformatted(label.c_str());
             ImGui::PopStyleColor();

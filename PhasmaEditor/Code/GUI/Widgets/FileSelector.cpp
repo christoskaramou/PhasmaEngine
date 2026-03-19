@@ -9,14 +9,30 @@ namespace pe
         m_open = false;
     }
 
-    void FileSelector::OpenSelection(FileSelectCallback callback, const std::vector<std::string> &allowedExtensions, const std::string &defaultPath, CancelCallback cancelCallback)
+    void FileSelector::OpenSelection(FileSelectCallback callback, const std::vector<std::string> &allowedExtensions, const std::string &defaultPath, CancelCallback cancelCallback, const std::string &defaultName, const std::string &confirmLabel)
     {
         m_selectionCallback = callback;
         m_cancelCallback = cancelCallback;
         m_allowedExtensions = allowedExtensions;
+        m_confirmLabel = confirmLabel.empty() ? "Select" : confirmLabel;
 
         if (!defaultPath.empty())
-            m_currentPath = std::filesystem::path(defaultPath);
+            NavigateTo(std::filesystem::path(defaultPath));
+
+        memset(m_currentFile, 0, sizeof(m_currentFile));
+        if (!defaultName.empty())
+        {
+#ifdef _WIN32
+            strcpy_s(m_currentFile, defaultName.c_str());
+#else
+            strcpy(m_currentFile, defaultName.c_str());
+#endif
+            // Select only the stem (before the last dot)
+            std::string_view sv(defaultName);
+            auto dot = sv.rfind('.');
+            m_selectStemLen = static_cast<int>(dot != std::string_view::npos ? dot : sv.size());
+            m_focusOnce = true;
+        }
 
         m_open = true;
 
@@ -34,6 +50,7 @@ namespace pe
         }
         m_selectionCallback = nullptr;
         m_allowedExtensions.clear();
+        m_focusOnce = false;
         m_open = false;
     }
 
@@ -57,17 +74,7 @@ namespace pe
                 return;
             }
 
-            // --- Top Bar ---
-            if (ImGui::Button("..") && m_currentPath.has_parent_path())
-            {
-                auto parentU8 = m_currentPath.parent_path().u8string();
-                std::string parent(reinterpret_cast<const char *>(parentU8.c_str()));
-                if (parent.find("PhasmaEngine") != std::string::npos || parent.find("PhasmaEditor") != std::string::npos)
-                    m_currentPath = m_currentPath.parent_path();
-            }
-            ImGui::SameLine();
-            auto currentPathU8 = m_currentPath.u8string();
-            ImGui::Text("%s", reinterpret_cast<const char *>(currentPathU8.c_str()));
+            DrawNavBar(false);
             ImGui::Separator();
 
             // --- Content ---
@@ -76,7 +83,7 @@ namespace pe
             {
                 if (std::filesystem::is_directory(path))
                 {
-                    m_currentPath = path;
+                    NavigateTo(path);
                 }
                 else
                 {
@@ -130,13 +137,33 @@ namespace pe
 
             ImGui::Separator();
 
-            ImGui::InputText("##filename", m_currentFile, sizeof(m_currentFile));
+            if (m_focusOnce)
+            {
+                ImGui::SetKeyboardFocusHere();
+                m_focusOnce = false;
+            }
+
+            auto stemSelectCb = [](ImGuiInputTextCallbackData *d) -> int
+            {
+                auto *self = static_cast<FileSelector *>(d->UserData);
+                if (self->m_selectStemLen >= 0)
+                {
+                    d->SelectionStart = 0;
+                    d->SelectionEnd = self->m_selectStemLen;
+                    self->m_selectStemLen = -1;
+                }
+                return 0;
+            };
+            bool confirm = ImGui::InputText("##filename", m_currentFile, sizeof(m_currentFile),
+                                            ImGuiInputTextFlags_CallbackAlways | ImGuiInputTextFlags_EnterReturnsTrue,
+                                            stemSelectCb, this);
             ImGui::SameLine();
 
             if (ImGui::Button("Cancel"))
                 CancelSelection();
             ImGui::SameLine();
-            if (ImGui::Button("Select"))
+            confirm |= ImGui::Button(m_confirmLabel.c_str());
+            if (confirm)
             {
                 std::string fileStr = m_currentFile;
                 if (!fileStr.empty())
@@ -144,7 +171,7 @@ namespace pe
                     std::filesystem::path selectedPath = m_currentPath / fileStr;
                     if (std::filesystem::is_directory(selectedPath))
                     {
-                        m_currentPath = selectedPath;
+                        NavigateTo(selectedPath);
                         memset(m_currentFile, 0, sizeof(m_currentFile));
                     }
                     else

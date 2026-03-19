@@ -406,7 +406,9 @@ namespace pagent
         static std::vector<ModelInfo> FetchModelInfos(Provider provider,
                                                       const std::string &api_key,
                                                       const std::string &base_url = "",
-                                                      bool local_only = false);
+                                                      bool local_only = false,
+                                                      bool require_tools = true,
+                                                      bool require_vision = false);
 
         // Fetch Ollama embedding models.
         // When local_only=true, only lists locally installed models.

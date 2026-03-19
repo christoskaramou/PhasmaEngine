@@ -32,7 +32,9 @@ namespace pe
         std::deque<std::string> m_redoStack;
         std::string m_idleSnapshot;
         bool m_hasIdleSnapshot = false;
+        int m_settleFrames = 0;
 
         static constexpr size_t MAX_HISTORY = 100;
+        static constexpr int SETTLE_FRAMES = 3;
     };
 } // namespace pe

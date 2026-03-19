@@ -87,6 +87,8 @@ namespace pe
         int m_selectedModelIndex = 0;
         bool m_isPulling = false;
         bool m_ollamaModelLoaded = false;
+        bool m_fetchRequireTools = true;
+        bool m_fetchRequireVision = false;
         pagent::Agent::CancelToken m_pullCancel;
         char m_modelFilter[128] = {};
 
@@ -155,7 +157,7 @@ namespace pe
         std::vector<std::string> m_embeddingModels;
         std::vector<bool> m_embeddingModelIsLocal;
         std::shared_ptr<pagent::IEmbeddingProvider> CreateEmbeddingProvider();
-        void UpdateEmbeddingModels(bool fetchRemote = false);
+        void UpdateEmbeddingModels(bool fetchRemote = false, std::string preferredModel = {});
         void SaveConfig();
         void LoadConfig();
 

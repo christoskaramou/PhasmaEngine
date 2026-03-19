@@ -1,6 +1,5 @@
 #include "AgentWidget.h"
 #include "FileBrowser.h"
-#include "Console.h"
 #include "GUI/GUI.h"
 #include "Systems/RendererSystem.h"
 #include "API/Command.h"
@@ -133,10 +132,22 @@ namespace pe
         }
         else
         {
-            // First launch defaults
+            // First launch defaults — prefer Ollama unless PAGENT_PROVIDER env var says otherwise
             const char *providerEnv = std::getenv("PAGENT_PROVIDER");
-            m_selectedProviderIndex = providerEnv ? pagent::GetDefaultProviderIndex(m_providers)
-                                                  : static_cast<int>(m_providers.size()) - 1;
+            if (providerEnv)
+            {
+                m_selectedProviderIndex = pagent::GetDefaultProviderIndex(m_providers);
+            }
+            else
+            {
+                m_selectedProviderIndex = 0;
+                for (int i = 0; i < static_cast<int>(m_providers.size()); ++i)
+                    if (m_providers[i].provider == pagent::Provider::Ollama && m_providers[i].name != "External")
+                    {
+                        m_selectedProviderIndex = i;
+                        break;
+                    }
+            }
             if (std::getenv("PAGENT_GEMINI_API_KEY"))
             {
                 m_embeddingEnabled = true;
@@ -372,7 +383,7 @@ namespace pe
         return nullptr;
     }
 
-    void AgentWidget::UpdateEmbeddingModels(bool fetchRemote)
+    void AgentWidget::UpdateEmbeddingModels(bool fetchRemote, std::string preferredModel)
     {
         m_embeddingModels.clear();
         m_selectedEmbeddingModel = 0;
@@ -394,11 +405,11 @@ namespace pe
             m_isFetchingEmbeddingModels = true;
             auto alive = m_alive;
             bool localOnly = !fetchRemote;
-            std::thread([this, alive, localOnly]()
+            std::thread([this, alive, localOnly, preferredModel]()
                         {
                 auto modelInfos = pagent::Agent::FetchOllamaEmbeddingModels("", localOnly);
                 if (!*alive) return;
-                QueueAction([this, alive, modelInfos]()
+                QueueAction([this, alive, modelInfos, preferredModel]()
                 {
                     m_isFetchingEmbeddingModels = false;
                     if (m_selectedEmbeddingProvider != 2) return;
@@ -409,8 +420,99 @@ namespace pe
                         m_embeddingModels.push_back(mi.name);
                         m_embeddingModelIsLocal.push_back(mi.local);
                     }
-                    if (m_selectedEmbeddingModel >= static_cast<int>(m_embeddingModels.size()))
-                        m_selectedEmbeddingModel = 0;
+
+                    // Select preferred model (from config), falling back to qwen3-embedding:0.6b,
+                    // then index 0 if neither is installed.
+                    static constexpr const char *kDefaultEmbModel = "qwen3-embedding:0.6b";
+                    auto findModel = [&](const std::string &name) -> int
+                    {
+                        for (int k = 0; k < static_cast<int>(m_embeddingModels.size()); ++k)
+                            if (m_embeddingModels[k] == name)
+                                return k;
+                        return -1;
+                    };
+                    // Case 1: Ollama not running or no embedding models installed
+                    if (m_embeddingModels.empty())
+                    {
+                        if (m_embeddingEnabled)
+                        {
+                            m_embeddingEnabled = false;
+                            SaveConfig();
+                            std::lock_guard lock(m_chatMutex);
+                            m_chat.push_back({ChatMessage::Role::System,
+                                "RAG disabled: Ollama is not running or no embedding models are installed.\n"
+                                "Start Ollama and run: ollama pull " + std::string(kDefaultEmbModel)});
+                            m_scrollToBottom = true;
+                        }
+                        return;
+                    }
+
+                    int idx = preferredModel.empty() ? -1 : findModel(preferredModel);
+                    if (idx < 0)
+                        idx = findModel(kDefaultEmbModel);
+
+                    // Case 2: default model not installed — auto-pull it
+                    if (idx < 0 && m_embeddingEnabled && !m_isPullingEmbedding)
+                    {
+                        // Add qwen3-embedding:0.6b as a remote entry so the pull logic can target it
+                        m_embeddingModels.push_back(kDefaultEmbModel);
+                        m_embeddingModelIsLocal.push_back(false);
+                        idx = static_cast<int>(m_embeddingModels.size()) - 1;
+                        m_selectedEmbeddingModel = idx;
+
+                        std::string pullModel = kDefaultEmbModel;
+                        auto aliveInner = alive;
+                        m_isPullingEmbedding = true;
+                        {
+                            std::lock_guard lock(m_chatMutex);
+                            m_chat.push_back({ChatMessage::Role::System,
+                                "RAG: embedding model not found locally. Downloading " + pullModel + "..."});
+                            m_scrollToBottom = true;
+                        }
+                        m_pullEmbeddingCancel = pagent::Agent::PullModel(pullModel,
+                            [this, aliveInner](const std::string &status)
+                            {
+                                if (!*aliveInner) return;
+                                QueueAction([this, aliveInner, status]()
+                                {
+                                    if (!*aliveInner) return;
+                                    std::lock_guard lock(m_chatMutex);
+                                    if (!m_chat.empty() && m_chat.back().role == ChatMessage::Role::System)
+                                        m_chat.back().text = status;
+                                    m_scrollToBottom = true;
+                                });
+                            },
+                            [this, aliveInner, pullModel](bool success)
+                            {
+                                if (!*aliveInner) return;
+                                QueueAction([this, aliveInner, pullModel, success]()
+                                {
+                                    m_isPullingEmbedding = false;
+                                    m_pullEmbeddingCancel.reset();
+                                    std::lock_guard lock(m_chatMutex);
+                                    if (success)
+                                    {
+                                        // Mark it local and re-init
+                                        for (int k = 0; k < static_cast<int>(m_embeddingModels.size()); ++k)
+                                            if (m_embeddingModels[k] == pullModel)
+                                                m_embeddingModelIsLocal[k] = true;
+                                        ConfigureAgent(m_providers[m_selectedProviderIndex].provider);
+                                        m_chat.push_back({ChatMessage::Role::System, "Embedding model ready."});
+                                    }
+                                    else
+                                    {
+                                        m_embeddingEnabled = false;
+                                        SaveConfig();
+                                        m_chat.push_back({ChatMessage::Role::System,
+                                            "Failed to download " + pullModel + ". RAG disabled."});
+                                    }
+                                    m_scrollToBottom = true;
+                                });
+                            });
+                        return; // provider will be created after successful pull via ConfigureAgent
+                    }
+
+                    m_selectedEmbeddingModel = idx >= 0 ? idx : 0;
 
                     // Embedding provider wasn't created at ConfigureAgent time (models weren't ready).
                     // Create it now and inject into the running agent without recreating it.
@@ -453,7 +555,11 @@ namespace pe
         std::string embProviderName = embProviderNames[std::clamp(m_selectedEmbeddingProvider, 0, 3)];
 
         nlohmann::ordered_json j;
-        j["agent"] = nlohmann::ordered_json{{"provider", providerName}, {"model", m_modelName}};
+        j["agent"] = nlohmann::ordered_json{
+            {"provider", providerName},
+            {"model", m_modelName},
+            {"fetch_require_tools", m_fetchRequireTools},
+            {"fetch_require_vision", m_fetchRequireVision}};
         j["embeddings"] = nlohmann::ordered_json{
             {"enabled", m_embeddingEnabled},
             {"provider", embProviderName},
@@ -469,19 +575,114 @@ namespace pe
         f << j.dump(4) << "\n";
     }
 
+    static void ApplyDefaultIndexingConfig(
+        std::vector<std::string> &dirs,
+        std::vector<std::string> &includeFiles,
+        std::vector<std::string> &skipDirs,
+        std::vector<std::string> &skipFiles,
+        std::vector<std::string> &skipExts,
+        std::vector<std::string> &skipRegex)
+    {
+        // Derive repo root from Assets path:
+        //   Assets = .../PhasmaEditor/Assets/  ->  parent x2 = repo root
+        namespace fs = std::filesystem;
+        const fs::path repoRoot = fs::weakly_canonical(Path::Assets).parent_path().parent_path();
+        auto p = [&](const std::string &rel)
+        { return (repoRoot / rel).string(); };
+
+        auto addIfExists = [&](std::vector<std::string> &vec, const std::string &path)
+        {
+            if (fs::exists(path))
+                vec.push_back(path);
+        };
+
+        addIfExists(dirs, p("PhasmaAgent"));
+        addIfExists(dirs, p("PhasmaCore"));
+        addIfExists(dirs, p("PhasmaEditor"));
+
+        addIfExists(includeFiles, p("PhasmaEditor/Assets/Agent/START.md"));
+
+        addIfExists(skipDirs, p("PhasmaAgent/third_party"));
+        addIfExists(skipDirs, p("PhasmaCore/third_party"));
+        addIfExists(skipDirs, p("PhasmaEditor/third_party"));
+        addIfExists(skipDirs, p("PhasmaEditor/Assets/Agent"));
+        skipFiles = {};
+        skipRegex = {};
+        skipExts = {
+            ".png",
+            ".jpg",
+            ".jpeg",
+            ".bmp",
+            ".tga",
+            ".hdr",
+            ".exr",
+            ".ktx",
+            ".ktx2",
+            ".dds",
+            ".obj",
+            ".fbx",
+            ".gltf",
+            ".glb",
+            ".stl",
+            ".ply",
+            ".dae",
+            ".ttf",
+            ".otf",
+            ".woff",
+            ".woff2",
+            ".wav",
+            ".mp3",
+            ".ogg",
+            ".flac",
+            ".zip",
+            ".tar",
+            ".gz",
+            ".7z",
+            ".rar",
+            ".exe",
+            ".dll",
+            ".so",
+            ".dylib",
+            ".lib",
+            ".a",
+            ".o",
+            ".pdb",
+            ".spv",
+            ".dxo",
+            ".cso",
+        };
+    }
+
     void AgentWidget::LoadConfig()
     {
         std::string path = Path::Assets + "Agent/agent_config.json";
         std::ifstream f(path);
         if (!f)
+        {
+            // No config file — apply full defaults
+            m_embeddingEnabled = true;
+            m_selectedEmbeddingProvider = 2; // Ollama
+            UpdateEmbeddingModels(false, "qwen3-embedding:0.6b");
+            ApplyDefaultIndexingConfig(m_indexDirectories, m_includeFiles,
+                                       m_skipDirectories, m_skipFiles,
+                                       m_skipExtensions, m_skipRegex);
             return;
+        }
 
         try
         {
             auto j = nlohmann::json::parse(f);
 
-            // Restore agent provider
+            // Restore agent provider; default to first Ollama entry when unset
             std::string providerName = j.value("/agent/provider"_json_pointer, std::string{});
+            int defaultIdx = 0;
+            for (int i = 0; i < static_cast<int>(m_providers.size()); ++i)
+                if (m_providers[i].provider == pagent::Provider::Ollama && m_providers[i].name != "External")
+                {
+                    defaultIdx = i;
+                    break;
+                }
+            m_selectedProviderIndex = defaultIdx;
             if (!providerName.empty())
             {
                 for (int i = 0; i < static_cast<int>(m_providers.size()); ++i)
@@ -498,12 +699,15 @@ namespace pe
             if (!modelName.empty())
                 m_modelName = modelName;
 
+            m_fetchRequireTools = j.value("/agent/fetch_require_tools"_json_pointer, true);
+            m_fetchRequireVision = j.value("/agent/fetch_require_vision"_json_pointer, false);
+
             // Restore embedding config
             m_embeddingEnabled = j.value("/embeddings/enabled"_json_pointer, false);
 
-            std::string embProviderName = j.value("/embeddings/provider"_json_pointer, std::string{"Google"});
+            std::string embProviderName = j.value("/embeddings/provider"_json_pointer, std::string{"Ollama"});
             static const std::pair<const char *, int> embProviderMap[] = {{"Google", 0}, {"OpenAI", 1}, {"Ollama", 2}, {"Voyage", 3}};
-            m_selectedEmbeddingProvider = 0;
+            m_selectedEmbeddingProvider = 2; // default Ollama
             for (auto &[name, idx] : embProviderMap)
                 if (embProviderName == name)
                 {
@@ -511,16 +715,8 @@ namespace pe
                     break;
                 }
 
-            UpdateEmbeddingModels();
-
             std::string embModelName = j.value("/embeddings/model"_json_pointer, std::string{});
-            m_selectedEmbeddingModel = 0;
-            for (int i = 0; i < static_cast<int>(m_embeddingModels.size()); i++)
-                if (m_embeddingModels[i] == embModelName)
-                {
-                    m_selectedEmbeddingModel = i;
-                    break;
-                }
+            UpdateEmbeddingModels(false, embModelName); // async for Ollama; callback selects preferred or default
 
             // Restore indexing config (nested under embeddings)
             if (j.contains("embeddings") && j["embeddings"].contains("indexing"))
@@ -539,10 +735,19 @@ namespace pe
                 if (idx.contains("skip_regex"))
                     m_skipRegex = idx["skip_regex"].get<std::vector<std::string>>();
             }
+
+            // Fall back to default indexing dirs if none were configured
+            if (m_indexDirectories.empty())
+                ApplyDefaultIndexingConfig(m_indexDirectories, m_includeFiles,
+                                           m_skipDirectories, m_skipFiles,
+                                           m_skipExtensions, m_skipRegex);
         }
         catch (...)
         {
-            // Parsing or access error - keep defaults
+            // Parsing or access error — apply defaults
+            ApplyDefaultIndexingConfig(m_indexDirectories, m_includeFiles,
+                                       m_skipDirectories, m_skipFiles,
+                                       m_skipExtensions, m_skipRegex);
         }
     }
 
@@ -642,13 +847,33 @@ namespace pe
         m_codebaseLoading.store(true);
         auto store = m_codebaseStore;
         auto bm25 = m_codebaseBM25;
-        int dims = m_embeddingProvider->Dimensions();
-        std::thread([store, bm25, csp, dims, this]()
+        auto alive = m_alive;
+        std::thread([store, bm25, csp, this, alive]()
                     {
-            store->LoadFromBinary(csp, dims);
+            store->LoadFromBinary(csp); // no dim check — filename encodes model name
             store->ForEachEntry([&bm25](const pagent::VectorEntry &e) { bm25->Add(e.id, e.content); });
+            if (!*alive) return;
             m_codebaseLoading.store(false);
             PE_INFO("Codebase loaded: %zu vector entries, %zu BM25 docs", store->Size(), bm25->Size());
+
+            // Auto-index on first run (store is empty and indexing dirs are configured)
+            if (store->Size() == 0 && !m_indexDirectories.empty() && m_gui)
+            {
+                QueueAction([this, alive]()
+                {
+                    if (!*alive) return;
+                    if (!m_gui || m_gui->IsIndexing())
+                        return;
+                    m_gui->StartCodebaseIndexing();
+                    m_indexStatusReady.store(false);
+                    std::lock_guard lock(m_chatMutex);
+                    m_chat.push_back({ChatMessage::Role::System, "RAG: no index found, starting auto-index..."});
+                    m_scrollToBottom = true;
+                });
+                return; // CheckIndexStatus runs automatically via m_wasIndexing when indexing finishes
+            }
+
+            if (!*alive) return;
             CheckIndexStatus(); })
             .detach();
     }
@@ -1957,7 +2182,6 @@ namespace pe
                  if (x < 0 || y < 0)
                      return "{\"error\":\"provide u/v (normalized) or x/y (real pixels)\"}";
 
-
                  std::mutex mtx;
                  std::condition_variable cv;
                  bool done = false;
@@ -2092,7 +2316,10 @@ namespace pe
 
         m_isFetchingModels = true;
 
-        std::thread([this, alive, provider, apiKey, currentModel, providerIdx, fetchRemote]
+        bool requireTools = m_fetchRequireTools;
+        bool requireVision = m_fetchRequireVision;
+
+        std::thread([this, alive, provider, apiKey, currentModel, providerIdx, fetchRemote, requireTools, requireVision]
                     {
             std::vector<pagent::Agent::ModelInfo> modelInfos;
             bool localOnly = (provider == pagent::Provider::Ollama) && !fetchRemote;
@@ -2103,7 +2330,7 @@ namespace pe
                     return;
                 if (attempt > 0)
                     std::this_thread::sleep_for(std::chrono::seconds(1));
-                modelInfos = pagent::Agent::FetchModelInfos(provider, apiKey, "", localOnly);
+                modelInfos = pagent::Agent::FetchModelInfos(provider, apiKey, "", localOnly, requireTools, requireVision);
                 if (!modelInfos.empty())
                     break;
             }
@@ -2470,56 +2697,126 @@ namespace pe
                     }
                     if (fetching)
                         ImGui::EndDisabled();
+                    ImGui::SameLine();
+                    if (ImGui::SmallButton("v##fetchopts"))
+                        ImGui::OpenPopup("FetchOptions");
+                    if (ImGui::IsItemHovered())
+                        ImGui::SetTooltip("Fetch filter options");
+                    if (ImGui::BeginPopup("FetchOptions"))
+                    {
+                        ImGui::TextDisabled("Filter by capability");
+                        ImGui::Separator();
+                        if (ImGui::Checkbox("Require tools", &m_fetchRequireTools))
+                            SaveConfig();
+                        if (ImGui::Checkbox("Require vision", &m_fetchRequireVision))
+                            SaveConfig();
+                        ImGui::EndPopup();
+                    }
                 }
                 ImGui::PopItemWidth();
             }
-            // Token usage display
-            ImGui::SameLine();
-            ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.5f, 0.5f, 0.5f, 1.0f));
+            // Compact token display
+            if (m_agent)
             {
+                ImGui::SameLine();
                 auto usage = m_agent->GetUsage();
-                char buf[256];
-                snprintf(buf, sizeof(buf), "tokens [in/out]: [%dk/%dk]  cached: [%dk]",
-                         usage.totalInput / 1000, usage.totalOutput / 1000,
-                         usage.totalCacheRead / 1000);
+                char buf[64];
+                snprintf(buf, sizeof(buf), "\xe2\x86\x91%dk \xe2\x86\x93%dk",
+                         usage.totalInput / 1000, usage.totalOutput / 1000);
+                ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.5f, 0.5f, 0.5f, 1.0f));
                 ImGui::TextUnformatted(buf);
+                if (ImGui::IsItemHovered())
+                {
+                    char tip[128];
+                    snprintf(tip, sizeof(tip), "In: %dk  Out: %dk  Cached: %dk",
+                             usage.totalInput / 1000, usage.totalOutput / 1000,
+                             usage.totalCacheRead / 1000);
+                    ImGui::SetTooltip("%s", tip);
+                }
+                ImGui::PopStyleColor();
             }
-            ImGui::PopStyleColor();
 
-            // Session controls
+            // RAG colored text indicator
+            if (!m_isExternalAI)
+            {
+                ImGui::SameLine();
+                const bool ragIndexing = m_gui && m_gui->IsIndexing();
+                const bool ragLoading = m_codebaseLoading.load();
+                const bool ragBusy = ragIndexing || ragLoading || m_isPullingEmbedding || m_isFetchingEmbeddingModels;
+                const bool ragFunctional = m_embeddingEnabled && m_embeddingProvider != nullptr;
+                const bool statusReady = m_indexStatusReady.load();
+                const bool partiallyIdx = statusReady && m_indexStatusOutdated > 0 && m_indexStatusOutdated < m_indexStatusTotal;
+                const bool fullyOutdated = statusReady && m_indexStatusOutdated > 0 && m_indexStatusOutdated >= m_indexStatusTotal;
+                const ImVec4 ragColor = !m_embeddingEnabled ? ImVec4(0.4f, 0.4f, 0.4f, 1.0f)  // disabled — gray
+                                        : !ragFunctional    ? ImVec4(0.4f, 0.4f, 0.4f, 1.0f)  // broken — gray
+                                        : ragBusy           ? ImVec4(1.0f, 0.78f, 0.2f, 1.0f) // busy — yellow
+                                        : statusReady && !partiallyIdx && !fullyOutdated
+                                            ? ImVec4(0.31f, 0.86f, 0.39f, 1.0f)          // up to date — green
+                                        : partiallyIdx ? ImVec4(1.0f, 0.55f, 0.1f, 1.0f) // partial — orange
+                                                       : ImVec4(0.7f, 0.7f, 0.2f, 1.0f); // not indexed / unknown — amber
+                ImGui::PushStyleColor(ImGuiCol_Text, ragColor);
+                ImGui::TextUnformatted("RAG");
+                ImGui::PopStyleColor();
+                if (ImGui::IsItemHovered())
+                {
+                    const char *state = !m_embeddingEnabled           ? "disabled"
+                                        : m_isFetchingEmbeddingModels ? "fetching models..."
+                                        : m_isPullingEmbedding        ? "downloading model..."
+                                        : !ragFunctional              ? "unavailable (check Ollama)"
+                                        : ragBusy                     ? "busy..."
+                                        : partiallyIdx                ? "partially indexed"
+                                        : fullyOutdated               ? "not indexed"
+                                        : statusReady                 ? "ready"
+                                                                      : "not indexed";
+                    const std::string embModel = (m_selectedEmbeddingProvider == 2 &&
+                                                  m_selectedEmbeddingModel < static_cast<int>(m_embeddingModels.size()))
+                                                     ? m_embeddingModels[m_selectedEmbeddingModel]
+                                                     : std::string{};
+                    if (embModel.empty())
+                        ImGui::SetTooltip("RAG: %s", state);
+                    else
+                        ImGui::SetTooltip("RAG: %s\n%s", state, embModel.c_str());
+                }
+            }
+
+            // ••• menu button
             ImGui::SameLine();
-            if (ImGui::SmallButton("New"))
+            if (ImGui::SmallButton("..."))
+                ImGui::OpenPopup("AgentMenu");
+        }
+
+        // Track indexing state every frame to auto-check status when done
+        if (!m_isExternalAI)
+        {
+            const bool indexingNow = m_gui && m_gui->IsIndexing();
+            if (m_wasIndexing && !indexingNow)
+                CheckIndexStatus();
+            m_wasIndexing = indexingNow;
+        }
+
+        // ••• popup menu
+        if (ImGui::BeginPopup("AgentMenu"))
+        {
+            if (ImGui::MenuItem("New Session"))
                 NewSession();
-            if (ImGui::IsItemHovered())
-                ImGui::SetTooltip("Save current session and start a new one");
-            ImGui::SameLine();
-            if (ImGui::SmallButton("Sessions##sessionbtn"))
+            if (ImGui::MenuItem("Sessions..."))
                 m_showSessionBrowser = !m_showSessionBrowser;
-            if (ImGui::IsItemHovered())
-                ImGui::SetTooltip("Browse and load past sessions");
-            ImGui::SameLine();
             if (busy)
                 ImGui::BeginDisabled();
-            if (ImGui::SmallButton("Compact"))
+            if (ImGui::MenuItem("Compact"))
             {
                 auto aliveRef = m_alive;
-                // Snapshot the history count before spawning the thread
                 const size_t histCount = m_agent->GetHistory().size();
                 std::thread([this, aliveRef, histCount]()
                             {
-                    // Keep last 2 messages (the most recent exchange) verbatim
                     const bool ok = m_agent->ForceCompact(2);
                     if (!*aliveRef) return;
                     QueueAction([this, aliveRef, ok, histCount]()
                     {
                         if (!*aliveRef) return;
                         std::lock_guard lock(m_chatMutex);
-                        std::string msg;
-                        if (ok)
-                            msg = "History compacted.";
-                        else
-                            msg = "Nothing to compact (" + std::to_string(histCount) +
-                                  " messages, need more than 2).";
+                        std::string msg = ok ? "History compacted."
+                            : "Nothing to compact (" + std::to_string(histCount) + " messages, need more than 2).";
                         m_chat.push_back({ChatMessage::Role::System, msg});
                         m_scrollToBottom = true;
                     }); })
@@ -2527,8 +2824,91 @@ namespace pe
             }
             if (busy)
                 ImGui::EndDisabled();
-            if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
-                ImGui::SetTooltip("Summarize old conversation history to reduce token usage.\nKeeps the last 2 messages verbatim.");
+
+            if (!m_isExternalAI)
+            {
+                const bool indexing = m_gui && m_gui->IsIndexing();
+                const bool loading = m_codebaseLoading.load();
+                ImGui::Separator();
+                if (indexing || loading)
+                    ImGui::BeginDisabled();
+                if (ImGui::MenuItem("RAG", nullptr, &m_embeddingEnabled))
+                {
+                    if (m_embeddingEnabled)
+                    {
+                        m_selectedEmbeddingProvider = 2; // Ollama / nomic-embed-text
+                        UpdateEmbeddingModels();
+                    }
+                    SaveConfig();
+                    ConfigureAgent(m_providers[m_selectedProviderIndex].provider);
+                }
+                if (indexing || loading)
+                    ImGui::EndDisabled();
+
+                if (m_embeddingEnabled)
+                {
+                    ImGui::Separator();
+                    if (indexing)
+                    {
+                        if (ImGui::MenuItem("Stop Indexing"))
+                            m_gui->CancelCodebaseIndexing();
+                        int p = m_gui->GetIndexProgress();
+                        int t = m_gui->GetIndexTotal();
+                        char progBuf[64];
+                        snprintf(progBuf, sizeof(progBuf), "  %d/%d files", p, t);
+                        ImGui::TextDisabled("%s", progBuf);
+                    }
+                    else if (loading)
+                    {
+                        ImGui::TextDisabled("  Loading vectors...");
+                    }
+                    else
+                    {
+                        const bool hasModel = m_embeddingProvider != nullptr &&
+                                              !m_embeddingModels.empty() &&
+                                              m_selectedEmbeddingModel < static_cast<int>(m_embeddingModels.size());
+                        const bool upToDate = hasModel && m_indexStatusReady.load() && m_indexStatusOutdated == 0;
+                        if (!hasModel || upToDate)
+                            ImGui::BeginDisabled();
+                        if (ImGui::MenuItem("Index Codebase"))
+                        {
+                            m_gui->StartCodebaseIndexing();
+                            m_indexStatusReady.store(false);
+                            ImGui::CloseCurrentPopup();
+                        }
+                        if (!hasModel || upToDate)
+                            ImGui::EndDisabled();
+
+                        const bool checking = m_indexStatusChecking.load();
+                        if (!hasModel || checking || m_isFetchingEmbeddingModels)
+                            ImGui::BeginDisabled();
+                        if (ImGui::MenuItem("Check Index"))
+                            CheckIndexStatus();
+                        if (!hasModel || checking || m_isFetchingEmbeddingModels)
+                            ImGui::EndDisabled();
+
+                        if (m_indexStatusReady.load())
+                        {
+                            if (m_indexStatusOutdated > 0)
+                            {
+                                char statusBuf[64];
+                                snprintf(statusBuf, sizeof(statusBuf), "  %d/%d outdated",
+                                         m_indexStatusOutdated, m_indexStatusTotal);
+                                ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 0.8f, 0.2f, 1.0f));
+                                ImGui::TextUnformatted(statusBuf);
+                                ImGui::PopStyleColor();
+                            }
+                            else
+                            {
+                                ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.2f, 0.8f, 0.2f, 1.0f));
+                                ImGui::TextUnformatted("  up to date");
+                                ImGui::PopStyleColor();
+                            }
+                        }
+                    }
+                }
+            }
+            ImGui::EndPopup();
         }
 
         // Session browser popup
@@ -2580,273 +2960,14 @@ namespace pe
             ImGui::End();
         }
 
-        // Embedding row (checkbox + provider + model) - right under agent row
-        if (!m_isExternalAI)
-        {
-            bool indexing = m_gui && m_gui->IsIndexing();
-            bool loading = m_codebaseLoading.load();
-            // Re-check index status when indexing finishes
-            if (m_wasIndexing && !indexing)
-                CheckIndexStatus();
-            m_wasIndexing = indexing;
-            if (indexing || loading)
-                ImGui::BeginDisabled();
-            if (ImGui::Checkbox("RAG", &m_embeddingEnabled))
-            {
-                if (m_embeddingEnabled)
-                    UpdateEmbeddingModels();
-                SaveConfig();
-                ConfigureAgent(m_providers[m_selectedProviderIndex].provider);
-            }
-            if (ImGui::IsItemHovered())
-                ImGui::SetTooltip("Enable retrieval-augmented generation (RAG).\nEmbeds messages and retrieves relevant past context.");
-
-            if (m_embeddingEnabled)
-            {
-                static const char *embeddingProviders[] = {"Google", "OpenAI", "Ollama", "Voyage"};
-
-                ImGui::SameLine();
-                ImGui::PushItemWidth(100.0f);
-                if (ImGui::BeginCombo("##embprov", embeddingProviders[m_selectedEmbeddingProvider]))
-                {
-                    for (int i = 0; i < 4; i++)
-                    {
-                        bool available = true;
-                        if (i == 0)
-                            available = std::getenv("PAGENT_GEMINI_API_KEY") != nullptr;
-                        if (i == 1)
-                            available = std::getenv("PAGENT_OPENAI_API_KEY") != nullptr;
-                        if (i == 3)
-                            available = std::getenv("PAGENT_VOYAGE_API_KEY") != nullptr;
-
-                        if (!available)
-                            ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.4f, 0.4f, 0.4f, 1.0f));
-
-                        if (ImGui::Selectable(embeddingProviders[i], i == m_selectedEmbeddingProvider, available ? 0 : ImGuiSelectableFlags_Disabled))
-                        {
-                            m_codebaseStore.reset();
-                            m_codebaseBM25.reset();
-                            m_selectedEmbeddingProvider = i;
-                            UpdateEmbeddingModels();
-                            SaveConfig();
-                            ConfigureAgent(m_providers[m_selectedProviderIndex].provider);
-                        }
-
-                        if (!available)
-                            ImGui::PopStyleColor();
-                    }
-                    ImGui::EndCombo();
-                }
-                ImGui::PopItemWidth();
-
-                {
-                    ImGui::SameLine();
-                    ImGui::PushItemWidth(250.0f);
-                    std::string embComboLabel;
-                    if (m_isPullingEmbedding && m_selectedEmbeddingModel < static_cast<int>(m_embeddingModels.size()))
-                        embComboLabel = m_embeddingModels[m_selectedEmbeddingModel] + " (downloading...)";
-                    else if (m_embeddingModels.empty() || m_selectedEmbeddingModel >= static_cast<int>(m_embeddingModels.size()))
-                        embComboLabel = "None";
-                    else
-                        embComboLabel = m_embeddingModels[m_selectedEmbeddingModel];
-                    if (ImGui::BeginCombo("##embmodel", embComboLabel.c_str()))
-                    {
-                        for (int i = 0; i < static_cast<int>(m_embeddingModels.size()); i++)
-                        {
-                            bool isLocal = i < static_cast<int>(m_embeddingModelIsLocal.size()) && m_embeddingModelIsLocal[i];
-                            std::string label = m_embeddingModels[i];
-                            if (!isLocal && m_selectedEmbeddingProvider == 2)
-                                label += " (download)";
-
-                            if (ImGui::Selectable(label.c_str(), i == m_selectedEmbeddingModel))
-                            {
-                                m_codebaseStore.reset();
-                                m_codebaseBM25.reset();
-                                m_selectedEmbeddingModel = i;
-                                SaveConfig();
-
-                                // For Ollama, auto-pull if not local
-                                if (m_selectedEmbeddingProvider == 2 && !isLocal && !m_isPullingEmbedding)
-                                {
-                                    std::string pullModel = m_embeddingModels[i];
-                                    auto alive = m_alive;
-                                    m_isPullingEmbedding = true;
-                                    {
-                                        std::lock_guard lock(m_chatMutex);
-                                        m_chat.push_back({ChatMessage::Role::System, "Downloading embedding model " + pullModel + "..."});
-                                        m_scrollToBottom = true;
-                                    }
-                                    m_pullEmbeddingCancel = pagent::Agent::PullModel(pullModel, [this, alive](const std::string &status)
-                                                                                     {
-                                            if (!*alive) return;
-                                            QueueAction([this, alive, status]()
-                                            {
-                                                if (!*alive) return;
-                                                std::lock_guard lock(m_chatMutex);
-                                                if (!m_chat.empty() && m_chat.back().role == ChatMessage::Role::System)
-                                                    m_chat.back().text = status;
-                                                m_scrollToBottom = true;
-                                            }); }, [this, alive, pullModel, i](bool success)
-                                                                                     {
-                                            if (!*alive) return;
-                                            QueueAction([this, alive, success, pullModel, i]()
-                                            {
-                                                m_isPullingEmbedding = false;
-                                                m_pullEmbeddingCancel.reset();
-                                                if (success)
-                                                {
-                                                    if (i < static_cast<int>(m_embeddingModelIsLocal.size()))
-                                                        m_embeddingModelIsLocal[i] = true;
-                                                    ConfigureAgent(m_providers[m_selectedProviderIndex].provider);
-                                                    std::lock_guard lock(m_chatMutex);
-                                                    m_chat.push_back({ChatMessage::Role::System,
-                                                        "Embedding model " + pullModel + " ready."});
-                                                }
-                                                else
-                                                {
-                                                    std::lock_guard lock(m_chatMutex);
-                                                    m_chat.push_back({ChatMessage::Role::System,
-                                                        "Failed to download embedding model " + pullModel + "."});
-                                                }
-                                                m_scrollToBottom = true;
-                                            }); });
-                                }
-                                else
-                                {
-                                    ConfigureAgent(m_providers[m_selectedProviderIndex].provider);
-                                }
-                            }
-                        }
-                        ImGui::EndCombo();
-                    }
-                    ImGui::PopItemWidth();
-
-                    // Fetch button for Ollama embedding models
-                    if (m_selectedEmbeddingProvider == 2)
-                    {
-                        ImGui::SameLine();
-                        bool fetching = m_isFetchingEmbeddingModels;
-                        if (fetching)
-                            ImGui::BeginDisabled();
-                        if (ImGui::SmallButton(fetching ? "Fetching...##emb" : "Fetch##emb"))
-                            UpdateEmbeddingModels(true);
-                        if (fetching)
-                            ImGui::EndDisabled();
-                    }
-                }
-            }
-            if (indexing || loading)
-                ImGui::EndDisabled();
-
-            // Index Codebase button (outside disabled block so progress shows during indexing/loading)
-            if (m_embeddingEnabled)
-            {
-                ImGui::SameLine();
-                if (indexing)
-                {
-                    if (ImGui::SmallButton("Stop"))
-                        m_gui->CancelCodebaseIndexing();
-                    ImGui::SameLine();
-                    int p = m_gui->GetIndexProgress();
-                    int t = m_gui->GetIndexTotal();
-                    int activeThreads = m_gui->GetIndexActiveThreads();
-                    int totalThreads = m_gui->GetIndexTotalThreads();
-                    std::string currentFile = m_gui->GetIndexCurrentFile();
-                    std::string label = std::to_string(p) + "/" + std::to_string(t) +
-                                        "  threads " + std::to_string(activeThreads) + "/" + std::to_string(totalThreads);
-                    if (!currentFile.empty())
-                        label += "  " + currentFile;
-                    ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.5f, 0.5f, 0.5f, 1.0f));
-                    ImGui::TextUnformatted(label.c_str());
-                    ImGui::PopStyleColor();
-                }
-                else if (m_codebaseLoading.load())
-                {
-                    ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.5f, 0.5f, 0.5f, 1.0f));
-                    ImGui::TextUnformatted("Loading vectors...");
-                    ImGui::PopStyleColor();
-                }
-                else
-                {
-                    bool hasModel = m_embeddingProvider != nullptr &&
-                                    !m_embeddingModels.empty() &&
-                                    m_selectedEmbeddingModel < static_cast<int>(m_embeddingModels.size());
-                    bool upToDate = hasModel && m_indexStatusReady.load() && m_indexStatusOutdated == 0;
-                    bool canIndex = hasModel && !upToDate;
-                    if (!canIndex)
-                        ImGui::BeginDisabled();
-                    if (ImGui::SmallButton("Index"))
-                    {
-                        m_gui->StartCodebaseIndexing();
-                        m_indexStatusReady.store(false);
-                    }
-                    if (!canIndex)
-                        ImGui::EndDisabled();
-                    if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
-                    {
-                        const char *tip = !hasModel  ? "No embedding model selected"
-                                          : upToDate ? "Index is up to date"
-                                                     : "Index codebase for RAG retrieval";
-                        ImGui::SetTooltip("%s", tip);
-                    }
-
-                    ImGui::SameLine();
-                    bool checking = m_indexStatusChecking.load();
-                    bool canCheck = hasModel && !checking && !m_isFetchingEmbeddingModels;
-                    if (!canCheck)
-                        ImGui::BeginDisabled();
-                    if (ImGui::SmallButton("Check"))
-                        CheckIndexStatus();
-                    if (!canCheck)
-                        ImGui::EndDisabled();
-
-                    // Show index status
-                    if (m_indexStatusReady.load())
-                    {
-                        ImGui::SameLine();
-                        if (m_indexStatusOutdated > 0)
-                        {
-                            ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 0.8f, 0.2f, 1.0f));
-                            std::string statusText = std::to_string(m_indexStatusOutdated) + "/" +
-                                                     std::to_string(m_indexStatusTotal) + " outdated";
-                            ImGui::TextUnformatted(statusText.c_str());
-                            if (ImGui::IsItemHovered() && !m_indexStatusFiles.empty())
-                            {
-                                std::string tip;
-                                int shown = std::min(static_cast<int>(m_indexStatusFiles.size()), 20);
-                                for (int i = 0; i < shown; ++i)
-                                    tip += m_indexStatusFiles[i] + "\n";
-                                if (static_cast<int>(m_indexStatusFiles.size()) > 20)
-                                    tip += "... and " + std::to_string(m_indexStatusFiles.size() - 20) + " more";
-                                ImGui::SetTooltip("%s", tip.c_str());
-                            }
-                            ImGui::PopStyleColor();
-                        }
-                        else
-                        {
-                            ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.2f, 0.8f, 0.2f, 1.0f));
-                            ImGui::TextUnformatted("up to date");
-                            ImGui::PopStyleColor();
-                        }
-                    }
-                    else if (m_indexStatusChecking.load())
-                    {
-                        ImGui::SameLine();
-                        ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.5f, 0.5f, 0.5f, 1.0f));
-                        ImGui::TextUnformatted("checking...");
-                        ImGui::PopStyleColor();
-                    }
-                }
-            }
-        }
         ImGui::Separator();
 
         // chat log
-        const float statusHeight = ImGui::GetFrameHeightWithSpacing() + ImGui::GetStyle().ItemSpacing.y;
+        const float separatorH = ImGui::GetStyle().ItemSpacing.y + 1.0f;
         const float inputHeight = ImGui::GetTextLineHeight() * 3.0f + ImGui::GetStyle().FramePadding.y * 2.0f + 4.0f;
         const bool hasAttachments = !m_pendingImages.empty() || !m_pendingFiles.empty();
         const float pendingImgHeight = hasAttachments ? (60.0f + ImGui::GetStyle().ItemSpacing.y) : 0.0f;
-        ImGui::BeginChild("ChatLog", ImVec2(0, -(inputHeight + statusHeight + pendingImgHeight)), false);
+        ImGui::BeginChild("ChatLog", ImVec2(0, -(separatorH + inputHeight + pendingImgHeight)), false);
         {
             std::lock_guard lock(m_chatMutex);
             for (const auto &msg : m_chat)
@@ -2883,7 +3004,7 @@ namespace pe
 
             if (m_scrollToBottom)
             {
-                ImGui::SetScrollHereY(1.0f);
+                ImGui::SetScrollY(ImGui::GetScrollMaxY());
                 m_scrollToBottom = false;
             }
         }
@@ -2986,35 +3107,6 @@ namespace pe
 
         if (submit && m_inputBuf[0] != '\0')
             SubmitInput();
-
-        // Console status bar
-        ImGui::Separator();
-        {
-            const LogEntry *latest = m_gui ? m_gui->GetWidget<Console>()->GetLatestLog() : nullptr;
-            if (latest)
-            {
-                ImVec4 color;
-                switch (latest->type)
-                {
-                case LogType::Warn:
-                    color = ImVec4(1.0f, 1.0f, 0.0f, 1.0f);
-                    break;
-                case LogType::Error:
-                    color = ImVec4(1.0f, 0.3f, 0.3f, 1.0f);
-                    break;
-                default:
-                    color = ImVec4(0.6f, 0.6f, 0.6f, 1.0f);
-                    break;
-                }
-                ImGui::PushStyleColor(ImGuiCol_Text, color);
-                ImGui::TextUnformatted(latest->text.c_str());
-                ImGui::PopStyleColor();
-            }
-            else
-            {
-                ImGui::TextDisabled("No console output");
-            }
-        }
 
         ImGui::End();
 

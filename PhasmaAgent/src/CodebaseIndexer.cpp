@@ -422,6 +422,7 @@ namespace pagent
                 auto extPos = filePath.rfind('.');
                 std::string ext = extPos != std::string::npos ? toLower(filePath.substr(extPos)) : "";
                 bool isBinary = shared->binaryExts.count(ext) > 0;
+                bool anyEmbeddingFailed = false;
 
                 if (isBinary)
                 {
@@ -476,13 +477,30 @@ namespace pagent
                             vec = std::move(hashIt->second);
                         else
                         {
-                            vec = shared->embedding->Embed(sanitized);
+                            // Retry up to 3 times with exponential backoff on transient failures
+                            constexpr int kMaxRetries = 3;
+                            for (int attempt = 0; attempt < kMaxRetries && vec.empty(); ++attempt)
+                            {
+                                if (attempt > 0)
+                                    std::this_thread::sleep_for(std::chrono::milliseconds(200 * attempt));
+                                vec = shared->embedding->Embed(sanitized);
+                            }
+                            // If still empty, retry with progressively truncated content
+                            // (handles chunks that exceed the model's context window)
+                            if (vec.empty() && sanitized.size() > 512)
+                            {
+                                for (size_t truncLen = sanitized.size() / 2; truncLen >= 512 && vec.empty(); truncLen /= 2)
+                                    vec = shared->embedding->Embed(sanitized.substr(0, truncLen));
+                            }
                             if (shared->delayMs > 0)
                                 std::this_thread::sleep_for(std::chrono::milliseconds(shared->delayMs));
                         }
 
                         if (vec.empty())
+                        {
+                            anyEmbeddingFailed = true;
                             return;
+                        }
 
                         size_t h = std::hash<std::string>{}(rel + ":" + std::to_string(startLine));
                         std::string entryId = "codebase_" + std::to_string(h);
@@ -594,10 +612,10 @@ namespace pagent
                     }
                 }
 
-                // If no chunks were added for this file (e.g. embedding failed or binary garbage),
-                // store a tombstone entry so CheckStatus won't keep marking it as outdated.
-                // Use a zero-filled embedding of the correct dimension so SaveToBinary/LoadFromBinary
-                // stay consistent (all entries must have the same embedding size in the binary format).
+                // If no chunks were added for this file, store a tombstone so CheckStatus won't keep
+                // marking it as outdated. This covers both genuinely empty/binary files and files that
+                // failed embedding even after retries and truncation (content won't be searchable but
+                // the file is acknowledged so indexing can complete).
                 // Zero vectors produce cosine similarity 0.0 -> filtered by min_score -> invisible to search.
                 if (!shared->cancel.load() && shared->totalChunks.load() == chunksBeforeFile)
                 {
