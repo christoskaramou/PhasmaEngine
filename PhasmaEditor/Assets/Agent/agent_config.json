@@ -1,0 +1,19 @@
+{
+    "agent": {
+        "provider": "",
+        "model": ""
+    },
+    "embeddings": {
+        "enabled": true,
+        "provider": "",
+        "model": "",
+        "indexing": {
+            "directories": [],
+            "include_files": [],
+            "skip_directories": [],
+            "skip_files": [],
+            "skip_extensions": [],
+            "skip_regex": []
+        }
+    }
+}
