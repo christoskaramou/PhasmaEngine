@@ -3,6 +3,8 @@
 #include <fstream>
 #include <algorithm>
 #include <cmath>
+#include <future>
+#include <unordered_map>
 
 namespace pagent
 {
@@ -328,5 +330,68 @@ namespace pagent
 
         float denom = std::sqrt(normA) * std::sqrt(normB);
         return denom > 0.0f ? dot / denom : 0.0f;
+    }
+
+    std::vector<VectorStore::SearchResult> VectorStore::SearchMulti(
+        const std::vector<std::vector<float>> &queries, int top_k, float min_score) const
+    {
+        if (queries.empty())
+            return {};
+
+        // Single query: skip thread overhead
+        if (queries.size() == 1)
+            return Search(queries[0], top_k, min_score);
+
+        // Hold one shared lock for the entire operation so m_entries is stable
+        // and returned pointers remain valid until the caller is done with them.
+        std::shared_lock lock(m_mutex);
+        if (m_entries.empty())
+            return {};
+
+        // Each async task scores all entries against one query embedding.
+        // They read m_entries without locking (parent holds the shared lock).
+        // Returns (entry_index, score) pairs that pass min_score.
+        std::vector<std::future<std::vector<std::pair<size_t, float>>>> futures;
+        futures.reserve(queries.size());
+        for (const auto &q : queries)
+        {
+            futures.push_back(std::async(std::launch::async,
+                                         [this, q_copy = q, min_score]() -> std::vector<std::pair<size_t, float>>
+                                         {
+                                             std::vector<std::pair<size_t, float>> hits;
+                                             for (size_t i = 0; i < m_entries.size(); ++i)
+                                             {
+                                                 float score = CosineSimilarity(q_copy, m_entries[i].embedding);
+                                                 if (score >= min_score)
+                                                     hits.emplace_back(i, score);
+                                             }
+                                             return hits;
+                                         }));
+        }
+
+        // Merge: for each entry index keep the highest score across all queries.
+        std::unordered_map<size_t, float> maxScores;
+        for (auto &f : futures)
+        {
+            for (auto &[idx, score] : f.get())
+            {
+                auto [it, inserted] = maxScores.emplace(idx, score);
+                if (!inserted && score > it->second)
+                    it->second = score;
+            }
+        }
+
+        std::vector<SearchResult> out;
+        out.reserve(maxScores.size());
+        for (auto &[idx, score] : maxScores)
+            out.push_back({&m_entries[idx], score});
+
+        int keep = std::min(static_cast<int>(out.size()), top_k);
+        std::partial_sort(out.begin(), out.begin() + keep, out.end(),
+                          [](const SearchResult &a, const SearchResult &b)
+                          { return a.score > b.score; });
+        out.resize(keep);
+
+        return out;
     }
 } // namespace pagent

@@ -35,6 +35,11 @@ namespace pagent
         bool HasFileWithTimestamp(const std::string &file, const std::string &timestamp) const;
         std::vector<SearchResult> Search(const std::vector<float> &query, int top_k = 5, float min_score = 0.3f) const;
 
+        // Search with multiple embedding queries in parallel. Each entry's score is the
+        // maximum across all queries. Returns top_k unique results sorted by merged score.
+        // Takes a single shared lock for the whole operation so returned pointers are stable.
+        std::vector<SearchResult> SearchMulti(const std::vector<std::vector<float>> &queries, int top_k = 5, float min_score = 0.3f) const;
+
         void SaveToFile(const std::string &path) const;
         void SaveToBinary(const std::string &path) const;
         void LoadFromFile(const std::string &path);

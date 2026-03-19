@@ -301,5 +301,8 @@ PhasmaEditor/Assets/Temp/
 PhasmaEditor/Assets/Agent/*
 !PhasmaEditor/Assets/Agent/START.md
 
+#Agents INSTRUCTIONS.md file
+!/INSTRUCTIONS.md
+
 # User scenes
 PhasmaEditor/Assets/Scenes/

@@ -78,7 +78,7 @@ namespace pe
 
         std::optional<pagent::Agent> m_agent;
         char m_inputBuf[2048] = {};
-        bool m_scrollToBottom = false;
+        int  m_scrollToBottom = 3; // frames remaining to force-scroll; start >0 so first open scrolls down
         bool m_isStreaming = false;
         bool m_agentConfigured = false;
         std::string m_modelName;

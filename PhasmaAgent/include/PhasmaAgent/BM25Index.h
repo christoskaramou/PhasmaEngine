@@ -33,6 +33,11 @@ namespace pagent
         // Search for documents matching the query. Returns top_k results sorted by score.
         std::vector<Result> Search(const std::string &query, int top_k = 10) const;
 
+        // Search with multiple queries in parallel. Each document's score is the maximum
+        // across all queries, so results cover all query angles simultaneously.
+        // Returns top_k unique results sorted by merged score.
+        std::vector<Result> SearchMulti(const std::vector<std::string> &queries, int top_k = 10) const;
+
         size_t Size() const;
         void Clear();
 

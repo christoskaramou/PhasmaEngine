@@ -482,7 +482,7 @@ namespace pe
                             m_chat.push_back({ChatMessage::Role::System,
                                 "RAG disabled: Ollama is not running or no embedding models are installed.\n"
                                 "Start Ollama and run: ollama pull " + std::string(kDefaultEmbModel)});
-                            m_scrollToBottom = true;
+                            m_scrollToBottom = 3;
                         }
                         return;
                     }
@@ -507,7 +507,7 @@ namespace pe
                             std::lock_guard lock(m_chatMutex);
                             m_chat.push_back({ChatMessage::Role::System,
                                 "RAG: embedding model not found locally. Downloading " + pullModel + "..."});
-                            m_scrollToBottom = true;
+                            m_scrollToBottom = 3;
                         }
                         m_pullEmbeddingCancel = pagent::Agent::PullModel(pullModel,
                             [this, aliveInner](const std::string &status)
@@ -519,7 +519,7 @@ namespace pe
                                     std::lock_guard lock(m_chatMutex);
                                     if (!m_chat.empty() && m_chat.back().role == ChatMessage::Role::System)
                                         m_chat.back().text = status;
-                                    m_scrollToBottom = true;
+                                    m_scrollToBottom = 3;
                                 });
                             },
                             [this, aliveInner, pullModel](bool success)
@@ -546,7 +546,7 @@ namespace pe
                                         m_chat.push_back({ChatMessage::Role::System,
                                             "Failed to download " + pullModel + ". RAG disabled."});
                                     }
-                                    m_scrollToBottom = true;
+                                    m_scrollToBottom = 3;
                                 });
                             });
                         return; // provider will be created after successful pull via ConfigureAgent
@@ -908,7 +908,7 @@ namespace pe
                     m_indexStatusReady.store(false);
                     std::lock_guard lock(m_chatMutex);
                     m_chat.push_back({ChatMessage::Role::System, "RAG: no index found, starting auto-index..."});
-                    m_scrollToBottom = true;
+                    m_scrollToBottom = 3;
                 });
                 return; // CheckIndexStatus runs automatically via m_wasIndexing when indexing finishes
             }
@@ -1634,11 +1634,11 @@ namespace pe
 
         m_agent->RegisterTool(
             {.name = "find_symbol",
-             .description = "Searches the codebase index for a class, function, method, or struct by name. "
-                            "Returns file path and exact line range for each match — use the result with "
-                            "read_project_file(start_line, end_line) to read only the relevant code. "
+             .description = "Searches the codebase index for a single class, function, method, or struct by name. "
+                            "Returns file path and exact line range — use with read_project_file(start_line, end_line). "
                             "Far more efficient than grep_project for symbol lookup. "
-                            "Requires the codebase index to be built.",
+                            "Requires the codebase index to be built. "
+                            "Tip: when you need to look up several symbols at once, use search_codebase instead.",
              .properties = {
                  {"name", "Symbol name to search for (e.g. 'CommandBuffer', 'CreatePipeline', 'RenderGraph')", pagent::SchemaType::String, true},
                  {"max_results", "Maximum matches to return, 1-20 (default: 5)", pagent::SchemaType::Integer, false},
@@ -1814,6 +1814,243 @@ namespace pe
                      return JsonObj({{"error", JsonStr("no indexed symbols found for: " + symbolName)}});
 
                  return nlohmann::json{{"matches", matches}}.dump(-1, ' ', false, nlohmann::json::error_handler_t::replace);
+             }});
+
+        // =====================================================================
+        // search_codebase — parallel multi-query BM25 + vector search
+        // =====================================================================
+
+        m_agent->RegisterTool(
+            {.name = "search_codebase",
+             .description = "Search the indexed codebase for multiple symbols or concepts simultaneously. "
+                            "Runs all queries in parallel (BM25 keyword + semantic vector) and merges results. "
+                            "Use this instead of calling find_symbol multiple times — pass all related names "
+                            "in one call to save round-trips. Requires the codebase index to be built. "
+                            "Example: search for 'RenderGraph', 'AddPass', and 'IRenderPass' all at once.",
+             .properties = {
+                 {"queries", "Array of symbol names or concepts to search simultaneously (e.g. [\"RenderGraph\", \"AddPass\"])", pagent::SchemaType::Array, true},
+                 {"max_results", "Maximum total matches to return, 1-30 (default: 10)", pagent::SchemaType::Integer, false},
+             },
+             .handler = [bm25 = m_codebaseBM25, store = m_codebaseStore, embProvider = m_embeddingProvider](const std::string &args) -> std::string
+             {
+                 auto queries = ExtractArgArray(args, "queries");
+                 if (queries.empty())
+                     return "{\"error\":\"missing queries array\"}";
+                 if (queries.size() > 16)
+                     queries.resize(16);
+
+                 int64_t maxResults = ExtractArgInt(args, "max_results", 10);
+                 if (maxResults < 1)
+                     maxResults = 1;
+                 if (maxResults > 30)
+                     maxResults = 30;
+
+                 if (!bm25 || bm25->Size() == 0)
+                     return "{\"error\":\"codebase index not built - use the Index button first\"}";
+
+                 // --- BM25 parallel search across all queries ---
+                 auto bm25Results = bm25->SearchMulti(queries, static_cast<int>(maxResults) * 6);
+
+                 // Build id -> (file, lines) from vector store metadata
+                 std::unordered_map<std::string, std::pair<std::string, std::string>> idToMeta;
+                 if (store)
+                 {
+                     store->ForEachEntry([&](const pagent::VectorEntry &entry)
+                                         {
+                         try
+                         {
+                             auto meta = nlohmann::json::parse(entry.metadata);
+                             std::string file  = meta.value("file",  "");
+                             std::string lines = meta.value("lines", "");
+                             if (!file.empty() && !lines.empty())
+                                 idToMeta[entry.id] = {file, lines};
+                         }
+                         catch (...) {} });
+                 }
+
+                 // --- Optional: semantic vector search ---
+                 // Embed queries sequentially (HTTP calls; provider may not be re-entrant)
+                 // then run SearchMulti in parallel across all embeddings.
+                 std::unordered_map<std::string, float> vectorScores; // id -> best cosine score
+                 if (embProvider && store && store->Size() > 0)
+                 {
+                     std::vector<std::vector<float>> embeddings;
+                     embeddings.reserve(queries.size());
+                     for (const auto &q : queries)
+                     {
+                         auto emb = embProvider->Embed(q);
+                         if (!emb.empty())
+                             embeddings.push_back(std::move(emb));
+                     }
+                     if (!embeddings.empty())
+                     {
+                         auto vecResults = store->SearchMulti(embeddings, static_cast<int>(maxResults) * 4);
+                         for (const auto &r : vecResults)
+                             if (r.entry)
+                                 vectorScores[r.entry->id] = r.score;
+                     }
+                 }
+
+                 // --- Merge BM25 + vector scores ---
+                 // Normalize BM25 to [0,1] against the top result, then blend.
+                 float bm25Max = bm25Results.empty() ? 1.0f : std::max(bm25Results[0].score, 1e-6f);
+
+                 struct ScoredEntry
+                 {
+                     std::string id;
+                     std::string content;
+                     float score;
+                     int priority;
+                 };
+                 std::unordered_map<std::string, ScoredEntry> merged;
+
+                 for (auto &r : bm25Results)
+                 {
+                     float normBm25 = r.score / bm25Max;
+                     float vecScore = 0.0f;
+                     auto vit = vectorScores.find(r.id);
+                     if (vit != vectorScores.end())
+                         vecScore = vit->second;
+
+                     float combined = vectorScores.empty()
+                                          ? normBm25
+                                          : normBm25 * 0.65f + vecScore * 0.35f;
+                     merged[r.id] = {r.id, r.content, combined, 0};
+                 }
+
+                 // Lift vector-only hits that BM25 missed
+                 if (!vectorScores.empty() && store)
+                 {
+                     store->ForEachEntry([&](const pagent::VectorEntry &entry)
+                                         {
+                         if (!vectorScores.count(entry.id)) return;
+                         if (merged.count(entry.id))        return;
+                         merged[entry.id] = {entry.id, entry.content, vectorScores[entry.id] * 0.35f, 0}; });
+                 }
+
+                 // --- Definition-priority re-ranking (same logic as find_symbol) ---
+                 auto toLowerLocal = [](std::string s)
+                 {
+                     std::transform(s.begin(), s.end(), s.begin(),
+                                    [](unsigned char c)
+                                    { return std::tolower(c); });
+                     return s;
+                 };
+
+                 std::vector<std::string> queriesLower;
+                 queriesLower.reserve(queries.size());
+                 for (const auto &q : queries)
+                     queriesLower.push_back(toLowerLocal(q));
+
+                 auto defPriority = [&](const std::string &file, const std::string &header) -> int
+                 {
+                     std::string fileLower = toLowerLocal(file);
+                     std::string headerLower = toLowerLocal(header);
+
+                     auto slash = fileLower.rfind('/');
+                     if (slash == std::string::npos)
+                         slash = fileLower.rfind('\\');
+                     std::string stem = (slash != std::string::npos) ? fileLower.substr(slash + 1) : fileLower;
+                     auto dot = stem.rfind('.');
+                     if (dot != std::string::npos)
+                         stem = stem.substr(0, dot);
+
+                     for (const auto &nameLower : queriesLower)
+                     {
+                         if (stem == nameLower)
+                             return 3;
+                         for (const char *tag : {"class: ", "method: ", "struct: "})
+                         {
+                             auto pos = headerLower.find(tag);
+                             if (pos != std::string::npos &&
+                                 headerLower.substr(pos + strlen(tag), nameLower.size()) == nameLower)
+                                 return 2;
+                         }
+                         if (fileLower.find(nameLower) != std::string::npos)
+                             return 1;
+                     }
+                     return 0;
+                 };
+
+                 std::vector<ScoredEntry> candidates;
+                 candidates.reserve(merged.size());
+                 for (auto &[id, e] : merged)
+                 {
+                     auto it = idToMeta.find(id);
+                     if (it == idToMeta.end())
+                         continue;
+                     std::string header;
+                     if (auto nl = e.content.find('\n'); nl != std::string::npos)
+                         header = e.content.substr(0, nl);
+                     else
+                         header = e.content.substr(0, std::min(e.content.size(), (size_t)200));
+                     e.priority = defPriority(it->second.first, header);
+                     candidates.push_back(std::move(e));
+                 }
+
+                 std::stable_sort(candidates.begin(), candidates.end(),
+                                  [](const ScoredEntry &a, const ScoredEntry &b)
+                                  { return a.priority != b.priority ? a.priority > b.priority : a.score > b.score; });
+
+                 // --- Format output (same structure as find_symbol) ---
+                 nlohmann::json matches = nlohmann::json::array();
+                 std::set<std::string> seen;
+                 for (auto &e : candidates)
+                 {
+                     if (static_cast<int64_t>(matches.size()) >= maxResults)
+                         break;
+
+                     auto it = idToMeta.find(e.id);
+                     if (it == idToMeta.end())
+                         continue;
+
+                     const std::string &file = it->second.first;
+                     const std::string &lines = it->second.second;
+                     std::string key = file + ":" + lines;
+                     if (!seen.insert(key).second)
+                         continue;
+
+                     int startLine = 0, endLine = 0;
+                     if (auto dash = lines.find('-'); dash != std::string::npos)
+                     {
+                         startLine = std::stoi(lines.substr(0, dash));
+                         endLine = std::stoi(lines.substr(dash + 1));
+                     }
+
+                     std::string header;
+                     if (auto nl = e.content.find('\n'); nl != std::string::npos)
+                         header = e.content.substr(0, nl);
+                     else
+                         header = e.content;
+
+                     auto extractField = [&](const std::string &tag) -> std::string
+                     {
+                         auto pos = header.find(tag);
+                         if (pos == std::string::npos)
+                             return "";
+                         pos += tag.size();
+                         auto end = header.find(" |", pos);
+                         return end != std::string::npos ? header.substr(pos, end - pos) : header.substr(pos);
+                     };
+
+                     nlohmann::json match = {{"file", file}, {"start_line", startLine}, {"end_line", endLine}};
+                     std::string ns = extractField("Namespace: ");
+                     std::string cls = extractField("Class: ");
+                     std::string mtd = extractField("Method: ");
+                     if (!ns.empty())
+                         match["namespace"] = ns;
+                     if (!cls.empty())
+                         match["class"] = cls;
+                     if (!mtd.empty())
+                         match["method"] = mtd;
+                     matches.push_back(std::move(match));
+                 }
+
+                 if (matches.empty())
+                     return "{\"error\":\"no indexed symbols found for the given queries\"}";
+
+                 return nlohmann::json{{"matches", matches}, {"queries", queries}}
+                     .dump(-1, ' ', false, nlohmann::json::error_handler_t::replace);
              }});
 
         // =====================================================================
@@ -2638,7 +2875,7 @@ namespace pe
                                 {
                                     std::lock_guard lock(m_chatMutex);
                                     m_chat.push_back({ChatMessage::Role::System, "Downloading model " + pullModel + "..."});
-                                    m_scrollToBottom = true;
+                                    m_scrollToBottom = 3;
                                 }
                                 auto aliveRef = m_alive;
                                 m_pullCancel = pagent::Agent::PullModel(pullModel, [this, aliveRef](const std::string &status)
@@ -2649,7 +2886,7 @@ namespace pe
                                             std::lock_guard lock(m_chatMutex);
                                             if (!m_chat.empty() && m_chat.back().role == ChatMessage::Role::System)
                                                 m_chat.back().text = status;
-                                            m_scrollToBottom = true; }); }, [this, aliveRef, i, pullModel](bool success)
+                                            m_scrollToBottom = 3; }); }, [this, aliveRef, i, pullModel](bool success)
                                                                         {
                                         if (!*aliveRef) return;
                                         // Check tool support on background thread before queuing UI update
@@ -2693,7 +2930,7 @@ namespace pe
                                                 m_chat.push_back({ChatMessage::Role::System, "Model ready."});
                                                 SaveConfig();
                                             }
-                                            m_scrollToBottom = true;
+                                            m_scrollToBottom = 3;
                                         }); });
                             }
                         }
@@ -2731,7 +2968,7 @@ namespace pe
                             m_ollamaModelLoaded = false;
                             std::lock_guard lock(m_chatMutex);
                             m_chat.push_back({ChatMessage::Role::System, "Model " + m_modelName + " unloaded from GPU."});
-                            m_scrollToBottom = true;
+                            m_scrollToBottom = 3;
                         }
                     }
                     // Fetch button - fetches remote models from ollama.com
@@ -2749,7 +2986,7 @@ namespace pe
                     if (fetching)
                         ImGui::EndDisabled();
                     ImGui::SameLine();
-                    if (ImGui::SmallButton("v##fetchopts"))
+                    if (ImGui::SmallButton("\xe2\x96\xbe##fetchopts"))
                         ImGui::OpenPopup("FetchOptions");
                     if (ImGui::IsItemHovered())
                         ImGui::SetTooltip("Fetch filter options");
@@ -2832,7 +3069,7 @@ namespace pe
 
             // ••• menu button
             ImGui::SameLine();
-            if (ImGui::SmallButton("..."))
+            if (ImGui::SmallButton("\xe2\x8b\xaf"))
                 ImGui::OpenPopup("AgentMenu");
         }
 
@@ -2869,7 +3106,7 @@ namespace pe
                         std::string msg = ok ? "History compacted."
                             : "Nothing to compact (" + std::to_string(histCount) + " messages, need more than 2).";
                         m_chat.push_back({ChatMessage::Role::System, msg});
-                        m_scrollToBottom = true;
+                        m_scrollToBottom = 3;
                     }); })
                     .detach();
             }
@@ -3053,10 +3290,10 @@ namespace pe
                 ImGui::PopStyleColor();
             }
 
-            if (m_scrollToBottom)
+            if (m_scrollToBottom > 0)
             {
                 ImGui::SetScrollHereY(1.0f);
-                m_scrollToBottom = false;
+                --m_scrollToBottom;
             }
         }
         ImGui::EndChild();
@@ -3217,7 +3454,7 @@ namespace pe
         {
             std::lock_guard lock(m_chatMutex);
             m_chat.push_back(std::move(chatMsg));
-            m_scrollToBottom = true;
+            m_scrollToBottom = 3;
         }
 
         if (m_isExternalAI)
@@ -3698,7 +3935,7 @@ namespace pe
         {
             std::lock_guard lock(m_chatMutex);
             m_chat.push_back(std::move(msg));
-            m_scrollToBottom = true;
+            m_scrollToBottom = 3;
         }
     }
 
@@ -3771,7 +4008,7 @@ namespace pe
         {
             std::lock_guard lock(m_chatMutex);
             m_chat.push_back({ChatMessage::Role::Assistant, response});
-            m_scrollToBottom = true;
+            m_scrollToBottom = 3;
         }
         m_isStreaming = false;
         WriteExternalHistory();
@@ -3946,7 +4183,7 @@ namespace pe
             m_chat = std::move(loaded);
             m_chat.push_back({ChatMessage::Role::System,
                               "[Session restored - code may have changed since last run]"});
-            m_scrollToBottom = true;
+            m_scrollToBottom = 3;
         }
     }
 
@@ -3960,7 +4197,7 @@ namespace pe
         }
         std::lock_guard lock(m_chatMutex);
         m_chat.clear();
-        m_scrollToBottom = true;
+        m_scrollToBottom = 3;
     }
 
     std::vector<std::string> AgentWidget::ListSessions() const
@@ -3985,16 +4222,16 @@ namespace pe
         case pagent::AgentEventType::ThinkingDelta:
             m_streamingThinking += ev.text;
             m_isStreaming = true;
-            m_scrollToBottom = true;
+            m_scrollToBottom = 3;
             break;
         case pagent::AgentEventType::ThinkingComplete:
             // Thinking is stored and will be attached to the next TextComplete message
-            m_scrollToBottom = true;
+            m_scrollToBottom = 3;
             break;
         case pagent::AgentEventType::TextDelta:
             m_streamingText += ev.text;
             m_isStreaming = true;
-            m_scrollToBottom = true;
+            m_scrollToBottom = 3;
             break;
         case pagent::AgentEventType::TextComplete:
         {
@@ -4007,7 +4244,7 @@ namespace pe
             m_streamingText.clear();
             m_streamingThinking.clear();
             m_isStreaming = false;
-            m_scrollToBottom = true;
+            m_scrollToBottom = 3;
             break;
         }
         case pagent::AgentEventType::ToolCallBegin:
@@ -4018,13 +4255,13 @@ namespace pe
                 m_streamingThinking.clear();
             }
             m_chat.push_back({ChatMessage::Role::System, "[calling: " + ev.tool_name + "]"});
-            m_scrollToBottom = true;
+            m_scrollToBottom = 3;
             break;
         case pagent::AgentEventType::ToolCallComplete:
         {
             if (!ev.tool_input_json.empty())
                 m_chat.push_back({ChatMessage::Role::System, ev.tool_input_json});
-            m_scrollToBottom = true;
+            m_scrollToBottom = 3;
             break;
         }
         case pagent::AgentEventType::Usage:
@@ -4045,11 +4282,11 @@ namespace pe
             m_isStreaming = false;
             m_streamingText.clear();
             m_streamingThinking.clear();
-            m_scrollToBottom = true;
+            m_scrollToBottom = 3;
             break;
         case pagent::AgentEventType::Info:
             m_chat.push_back({ChatMessage::Role::System, ev.text});
-            m_scrollToBottom = true;
+            m_scrollToBottom = 3;
             break;
         default:
             break;

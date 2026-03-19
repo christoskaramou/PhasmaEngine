@@ -97,6 +97,21 @@ namespace pagent
         return defaultVal;
     }
 
+    // extract a JSON string array by key from a tool-call args object
+    inline std::vector<std::string> ExtractArgArray(const std::string &args, const char *key)
+    {
+        auto j = ParseArgs(args);
+        if (!j.contains(key) || !j[key].is_array())
+            return {};
+        std::vector<std::string> result;
+        for (const auto &item : j[key])
+        {
+            if (item.is_string())
+                result.push_back(item.get<std::string>());
+        }
+        return result;
+    }
+
     // extract a JSON number value by key from a tool-call args object
     inline float ExtractArgNum(const std::string &args, const char *key)
     {

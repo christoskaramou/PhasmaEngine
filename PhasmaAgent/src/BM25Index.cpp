@@ -2,6 +2,8 @@
 #include <algorithm>
 #include <cmath>
 #include <cctype>
+#include <future>
+#include <unordered_map>
 
 namespace pagent
 {
@@ -284,5 +286,48 @@ namespace pagent
             results.resize(top_k);
 
         return results;
+    }
+
+    std::vector<BM25Index::Result> BM25Index::SearchMulti(const std::vector<std::string> &queries, int top_k) const
+    {
+        if (queries.empty())
+            return {};
+
+        // Single query: skip thread overhead
+        if (queries.size() == 1)
+            return Search(queries[0], top_k);
+
+        // Launch one async search per query. BM25::Search takes a shared_lock so
+        // multiple concurrent readers are safe.
+        std::vector<std::future<std::vector<Result>>> futures;
+        futures.reserve(queries.size());
+        for (const auto &q : queries)
+            futures.push_back(std::async(std::launch::async, [this, q_copy = q, top_k]()
+                                         { return Search(q_copy, top_k); }));
+
+        // Merge: for each document id keep the highest score across all queries.
+        std::unordered_map<std::string, Result> merged;
+        for (auto &f : futures)
+        {
+            for (auto &r : f.get())
+            {
+                auto [it, inserted] = merged.emplace(r.id, r);
+                if (!inserted && r.score > it->second.score)
+                    it->second.score = r.score;
+            }
+        }
+
+        std::vector<Result> out;
+        out.reserve(merged.size());
+        for (auto &[id, r] : merged)
+            out.push_back(std::move(r));
+
+        int keep = std::min(static_cast<int>(out.size()), top_k);
+        std::partial_sort(out.begin(), out.begin() + keep, out.end(),
+                          [](const Result &a, const Result &b)
+                          { return a.score > b.score; });
+        out.resize(keep);
+
+        return out;
     }
 } // namespace pagent
