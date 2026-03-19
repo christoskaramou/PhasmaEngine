@@ -24,10 +24,11 @@ namespace pagent
 
     enum class Provider
     {
-        Anthropic, // Claude models via api.anthropic.com
-        OpenAI,    // GPT models via api.openai.com
-        Google,    // Google Gemini via native Gemini API
-        Ollama,    // Local Ollama instance (OpenAI-compatible)
+        Anthropic,    // Claude models via api.anthropic.com
+        OpenAI,       // GPT models via api.openai.com
+        Google,       // Google Gemini via AI Studio (generativelanguage.googleapis.com)
+        Ollama,       // Local Ollama instance (OpenAI-compatible)
+        GoogleVertex, // Google Gemini via Vertex AI (uses OAuth2 Bearer token)
     };
 
     enum class SchemaType
@@ -290,8 +291,10 @@ namespace pagent
     {
         Provider provider = Provider::Anthropic;
         std::string api_key;
-        std::string model;    // "claude-sonnet-4-6", "gpt-4o", "llama3", etc.
-        std::string base_url; // Override base host, e.g. "http://localhost:11434" for Ollama
+        std::string model;             // "claude-sonnet-4-6", "gpt-4o", "llama3", etc.
+        std::string base_url;          // Override base host, e.g. "http://localhost:11434" for Ollama
+        std::string vertex_project_id; // Vertex AI project ID (GoogleVertex provider only)
+        std::string vertex_location;   // Vertex AI region, e.g. "us-central1" (GoogleVertex provider only)
         std::string system_prompt;
         int max_tokens = 2048;
         float temperature = 0.7f;

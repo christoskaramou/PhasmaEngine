@@ -36,6 +36,13 @@ namespace pagent
             providers.push_back({Provider::Google, "Google", geminiKey, "gemini-2.5-flash"});
         providers.push_back({Provider::Ollama, "Ollama", "", ""});
 
+        // Vertex AI: enabled when PAGENT_VERTEX_PROJECT_ID and PAGENT_VERTEX_LOCATION are set.
+        // The access token is fetched automatically via gcloud at startup.
+        const char *vertexProject = std::getenv("PAGENT_VERTEX_PROJECT_ID");
+        const char *vertexLocation = std::getenv("PAGENT_VERTEX_LOCATION");
+        if (vertexProject && vertexLocation)
+            providers.push_back({Provider::GoogleVertex, "Google Vertex", "", "gemini-2.5-flash"});
+
         return providers;
     }
 
@@ -55,7 +62,8 @@ namespace pagent
             if ((providerStr == "anthropic" && p.provider == Provider::Anthropic) ||
                 (providerStr == "openai" && p.provider == Provider::OpenAI) ||
                 (providerStr == "google" && p.provider == Provider::Google) ||
-                (providerStr == "ollama" && p.provider == Provider::Ollama))
+                (providerStr == "ollama" && p.provider == Provider::Ollama) ||
+                (providerStr == "googlevertex" && p.provider == Provider::GoogleVertex))
                 return i;
         }
         return 0;
@@ -200,6 +208,14 @@ namespace pagent
             return {{"claude-sonnet-4-6", true, true, true},
                     {"claude-opus-4-6", true, true, true},
                     {"claude-haiku-4-5", true, true, true}};
+
+        // Vertex AI: hardcoded stable Gemini model list (Vertex doesn't expose a public models endpoint)
+        if (provider == Provider::GoogleVertex)
+            return {{"gemini-2.5-flash", true, true, true},
+                    {"gemini-2.5-pro", true, true, true},
+                    {"gemini-2.5-flash-lite", true, true, true},
+                    {"gemini-2.0-flash-001", true, true, true},
+                    {"gemini-2.0-flash-lite-001", true, true, true}};
 
         // Helper: fetch JSON from an HTTP(S) endpoint
         auto httpGet = [](const std::string &host, const std::string &path,

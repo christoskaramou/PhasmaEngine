@@ -416,14 +416,36 @@ namespace pagent
         return msg;
     }
 
+    void GoogleBackend::ConfigureVertex(std::string project_id, std::string location)
+    {
+        m_vertexMode = true;
+        m_vertexProjectId = std::move(project_id);
+        m_vertexLocation = std::move(location);
+    }
+
+    bool GoogleBackend::IsVertexMode() const
+    {
+        return m_vertexMode;
+    }
+
     std::string GoogleBackend::GetEndpointPath() const
     {
+        if (m_vertexMode)
+        {
+            // e.g. /v1/projects/my-project/locations/us-central1/publishers/google/models/gemini-2.5-flash-002:streamGenerateContent?alt=sse
+            return "/v1/projects/" + m_vertexProjectId +
+                   "/locations/" + m_vertexLocation +
+                   "/publishers/google/models/" + m_model +
+                   ":streamGenerateContent?alt=sse";
+        }
         return "/v1beta/models/" + m_model + ":streamGenerateContent?alt=sse";
     }
 
     std::pair<std::string, std::string> GoogleBackend::GetAuthHeader(
         const std::string &api_key) const
     {
+        if (m_vertexMode)
+            return {"Authorization", "Bearer " + api_key};
         return {"x-goog-api-key", api_key};
     }
 } // namespace pagent

@@ -31,6 +31,10 @@ namespace pagent
 
         std::string GetEndpointPath() const override;
         std::pair<std::string, std::string> GetAuthHeader(const std::string &api_key) const override;
+
+        // Configure Vertex AI mode. When set, uses Vertex AI endpoint + Bearer token auth.
+        void ConfigureVertex(std::string project_id, std::string location);
+        bool IsVertexMode() const;
         bool SupportsVision() const override { return true; }
 
         // Gemini context caching
@@ -53,6 +57,9 @@ namespace pagent
 
         mutable std::string m_model;
         mutable std::string m_cacheName; // Gemini cached content name (e.g. "cachedContents/abc123")
+        bool m_vertexMode = false;
+        std::string m_vertexProjectId;
+        std::string m_vertexLocation;
         mutable std::string m_textAccumulator;
         mutable std::string m_thinkingAccumulator;
         mutable std::vector<ToolCallAccumulator> m_toolAccumulators;

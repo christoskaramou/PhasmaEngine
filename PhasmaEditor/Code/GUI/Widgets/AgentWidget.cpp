@@ -30,6 +30,31 @@ namespace pe
 {
     // --- Local helpers ---
 
+    // Runs `gcloud auth print-access-token` and returns the token string, or "" on failure.
+    static std::string FetchGcloudToken()
+    {
+#if defined(PE_WIN32)
+        FILE *pipe = _popen("gcloud auth print-access-token 2>NUL", "r");
+#else
+        FILE *pipe = popen("gcloud auth print-access-token 2>/dev/null", "r");
+#endif
+        if (!pipe)
+            return {};
+        std::string token;
+        char buf[256];
+        while (fgets(buf, sizeof(buf), pipe))
+            token += buf;
+#if defined(PE_WIN32)
+        _pclose(pipe);
+#else
+        pclose(pipe);
+#endif
+        // Strip trailing whitespace/newline
+        while (!token.empty() && (token.back() == '\n' || token.back() == '\r' || token.back() == ' '))
+            token.pop_back();
+        return token;
+    }
+
     static std::string ToLower(std::string s)
     {
         for (auto &c : s)
@@ -295,6 +320,21 @@ namespace pe
         config.provider = info->provider;
         config.api_key = info->apiKey;
         config.model = info->defaultModel;
+
+        // Vertex AI: read project/location from env and fetch an OAuth2 token via gcloud
+        if (info->provider == pagent::Provider::GoogleVertex)
+        {
+            if (const char *proj = std::getenv("PAGENT_VERTEX_PROJECT_ID"))
+                config.vertex_project_id = proj;
+            if (const char *loc = std::getenv("PAGENT_VERTEX_LOCATION"))
+                config.vertex_location = loc;
+            config.api_key = FetchGcloudToken();
+            if (config.api_key.empty())
+                PE_WARN("Google Vertex: could not fetch access token via gcloud. "
+                        "Make sure 'gcloud auth application-default login' has been run.");
+            if (m_modelName.empty())
+                m_modelName = config.model; // default to gemini-2.5-flash-002
+        }
 
         // Set up Gemini vision fallback key (used when main provider lacks vision)
         const char *geminiKey = std::getenv("PAGENT_GEMINI_API_KEY");
@@ -2466,8 +2506,9 @@ namespace pe
             ImGui::SameLine();
             // Provider selector combo
             {
-                ImGui::PushItemWidth(100.0f);
                 const auto &curProvider = m_providers[m_selectedProviderIndex];
+                float providerWidth = ImGui::CalcTextSize(curProvider.name.c_str()).x + ImGui::GetFrameHeight() + ImGui::GetStyle().FramePadding.x * 2.0f;
+                ImGui::PushItemWidth(providerWidth);
                 if (ImGui::BeginCombo("##provider", curProvider.name.c_str()))
                 {
                     for (int i = 0; i < static_cast<int>(m_providers.size()); ++i)
@@ -2543,7 +2584,8 @@ namespace pe
                                          : m_availableModels.empty() ? "None"
                                          : m_modelName.empty()       ? "None"
                                                                      : m_modelName;
-                ImGui::PushItemWidth(200.0f);
+                float modelWidth = ImGui::CalcTextSize(comboLabel.c_str()).x + ImGui::GetFrameHeight() + ImGui::GetStyle().FramePadding.x * 2.0f;
+                ImGui::PushItemWidth(modelWidth);
                 if (ImGui::BeginCombo("##model", comboLabel.c_str()))
                 {
                     // Filter input at the top of the dropdown
@@ -2666,6 +2708,15 @@ namespace pe
                     ImGui::SameLine();
                     if (ImGui::SmallButton("Cancel"))
                         pagent::Agent::CancelPull(m_pullCancel);
+                }
+                else if (m_providers[m_selectedProviderIndex].provider == pagent::Provider::GoogleVertex)
+                {
+                    // Vertex AI tokens expire after ~1 hour — refresh on demand
+                    ImGui::SameLine();
+                    if (ImGui::SmallButton("Refresh Token"))
+                        ConfigureAgent(pagent::Provider::GoogleVertex);
+                    if (ImGui::IsItemHovered())
+                        ImGui::SetTooltip("Re-run 'gcloud auth print-access-token' to get a fresh OAuth2 token.\nTokens expire after ~1 hour.");
                 }
                 else if (m_providers[m_selectedProviderIndex].provider == pagent::Provider::Ollama &&
                          !m_isExternalAI)
@@ -3004,7 +3055,7 @@ namespace pe
 
             if (m_scrollToBottom)
             {
-                ImGui::SetScrollY(ImGui::GetScrollMaxY());
+                ImGui::SetScrollHereY(1.0f);
                 m_scrollToBottom = false;
             }
         }

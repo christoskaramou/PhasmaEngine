@@ -18,6 +18,15 @@ namespace pagent
         {
             m_backend = std::make_unique<GoogleBackend>();
         }
+        else if (m_config.provider == Provider::GoogleVertex)
+        {
+            auto gb = std::make_unique<GoogleBackend>();
+            gb->ConfigureVertex(m_config.vertex_project_id, m_config.vertex_location);
+            // Set base_url so RequestWorker hits the right Vertex AI regional host
+            if (m_config.base_url.empty() && !m_config.vertex_location.empty())
+                m_config.base_url = "https://" + m_config.vertex_location + "-aiplatform.googleapis.com";
+            m_backend = std::move(gb);
+        }
         else
         {
             m_backend = std::make_unique<OpenAIBackend>();

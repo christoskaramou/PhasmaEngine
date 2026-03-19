@@ -463,7 +463,7 @@ namespace pe
             FileSystem file(path, std::ios::in | std::ios::binary);
             if (!file.IsOpen())
             {
-                PE_ERROR("[Image] Failed to open image file: %s", path.c_str());
+                PE_WARN("[Image] Failed to open image file: %s", path.c_str());
                 return nullptr;
             }
             fileData = file.ReadAllBytes();

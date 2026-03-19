@@ -1493,8 +1493,9 @@ namespace pe
                             auto u8tex = relTex.u8string();
                             texName = std::string(u8tex.begin(), u8tex.end());
                             std::replace(texName.begin(), texName.end(), '\\', '/');
-                            texturesObj.AddMember(rapidjson::Value(methodNames[i], allocator).Move(),
-                                                  rapidjson::Value(texName.c_str(), allocator).Move(), allocator);
+                            if (!texName.empty())
+                                texturesObj.AddMember(rapidjson::Value(methodNames[i], allocator).Move(),
+                                                      rapidjson::Value(texName.c_str(), allocator).Move(), allocator);
                         }
                     }
                 }
@@ -1908,7 +1909,7 @@ namespace pe
                                 const char *methodNames[] = {"base_color", "metallic_roughness", "normal", "occlusion", "emissive"};
                                 for (int k = 0; k < 5; k++)
                                 {
-                                    if (texVal.HasMember(methodNames[k]))
+                                    if (texVal.HasMember(methodNames[k]) && texVal[methodNames[k]].GetStringLength() > 0)
                                     {
                                         std::filesystem::path texPath = texVal[methodNames[k]].GetString();
                                         if (texPath.is_relative())
