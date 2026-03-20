@@ -19,15 +19,27 @@ namespace pagent
                 for (const auto &part : msg.parts)
                 {
                     if (part.type == ContentPart::Type::Text)
+                    {
+                        if (part.data.empty())
+                            continue;
                         parts.push_back({{"text", part.data}});
+                    }
                     else if (part.type == ContentPart::Type::ImageBase64)
+                    {
+                        if (part.data.empty() || part.mime_type.empty())
+                            continue;
                         parts.push_back({{"inlineData", {{"mimeType", part.mime_type}, {"data", part.data}}}});
+                    }
                 }
             }
             else
             {
+                if (msg.content.empty())
+                    return {};
                 parts.push_back({{"text", msg.content}});
             }
+            if (parts.empty())
+                return {};
             return {{"role", "user"}, {"parts", parts}};
         }
 
@@ -52,6 +64,8 @@ namespace pagent
                     part["thoughtSignature"] = tc.thought_signature;
                 parts.push_back(std::move(part));
             }
+            if (parts.empty())
+                return {};
             return {{"role", "model"}, {"parts", parts}};
         }
 
@@ -84,7 +98,7 @@ namespace pagent
             }
             catch (...)
             {
-                response = {{"result", msg.content}};
+                response = {{"result", msg.content.empty() ? "{}" : msg.content}};
             }
             json parts = json::array();
             parts.push_back({{"functionResponse", {{"name", msg.tool_name}, {"response", response}}}});
@@ -234,6 +248,8 @@ namespace pagent
                 json p;
                 p["type"] = typeNames[static_cast<int>(prop.type)];
                 p["description"] = prop.description;
+                if (prop.type == SchemaType::Array)
+                    p["items"] = {{"type", typeNames[static_cast<int>(prop.array_item_type)]}};
                 properties[prop.name] = p;
 
                 if (prop.required)

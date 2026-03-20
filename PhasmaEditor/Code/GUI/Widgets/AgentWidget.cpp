@@ -3517,11 +3517,31 @@ namespace pe
         {
             if (busy)
             {
-                // Queue as steering — auto-sent when the current turn completes
+                CommitStreamingNow(); // flush partial response before interrupting
                 m_pendingSteer = m_inputBuf;
-                m_inputBuf[0] = '\0';
-                m_historyIndex = -1;
+                ClearInputField();
                 m_scrollToBottom = 3;
+                if (m_isExternalAI)
+                {
+                    m_isStreaming = false;
+                    FirePendingSteer();
+                }
+                else if (IsAnyCLI())
+                {
+                    m_isStreaming = false;
+                    m_cliCancelled = true;
+                    std::lock_guard lock(m_cliProcessMutex);
+                    if (m_cliProcessId != 0)
+                    {
+#if defined(PE_WIN32)
+                        TerminateJobObject(reinterpret_cast<HANDLE>(m_cliProcessId), 1);
+#else
+                        kill(static_cast<pid_t>(m_cliProcessId), SIGTERM);
+#endif
+                    }
+                }
+                else if (m_agent)
+                    m_agent->CancelAfterCurrentRound();
             }
             else
             {
@@ -3560,19 +3580,57 @@ namespace pe
         }
     }
 
+    void AgentWidget::CommitStreamingNow()
+    {
+        if (m_streamingText.empty() && m_streamingThinking.empty() && m_streamingTools.empty())
+            return;
+        ChatMessage msg;
+        msg.role = ChatMessage::Role::Assistant;
+        msg.text = m_streamingText;
+        msg.thinking = m_streamingThinking;
+        msg.tools = m_streamingTools;
+        {
+            std::lock_guard lock(m_chatMutex);
+            m_chat.push_back(std::move(msg));
+        }
+        m_streamingText.clear();
+        m_streamingThinking.clear();
+        m_streamingTools.clear();
+        m_scrollToBottom = 3;
+    }
+
     void AgentWidget::FirePendingSteer()
     {
         if (m_pendingSteer.empty())
             return;
-        snprintf(m_inputBuf, sizeof(m_inputBuf), "%s", m_pendingSteer.c_str());
+
+        std::string steer = std::move(m_pendingSteer);
         m_pendingSteer.clear();
-        SubmitInput();
+
+        // Always defer queued steering to the next action flush so we never
+        // re-enter SubmitInput while some completion/error path still holds
+        // m_chatMutex.
+        QueueAction([this, steer = std::move(steer)]()
+                    { SubmitInputText(steer); });
+    }
+
+    void AgentWidget::ClearInputField()
+    {
+        m_inputBuf[0] = '\0';
+        m_pendingHistoryText.clear();
+        m_pendingHistoryUpdate = true;
+        m_historyIndex = -1;
     }
 
     void AgentWidget::SubmitInput()
     {
         std::string text(m_inputBuf);
-        m_inputBuf[0] = '\0';
+        ClearInputField();
+        SubmitInputText(text);
+    }
+
+    void AgentWidget::SubmitInputText(const std::string &text)
+    {
         m_historyIndex = -1;
 
         // Prepend file contents to the message
@@ -4574,7 +4632,10 @@ namespace pe
             });
 
         if (m_cliCancelled)
+        {
+            QueueAction([this, alive]() { if (*alive) FirePendingSteer(); });
             return;
+        }
         m_codexHasSession = true;
         if (accText.empty() && !sawToolExecution && !accThinking.empty())
         {
@@ -4588,7 +4649,8 @@ namespace pe
 
         QueueAction([this, alive, accText, accThinking, accTools]()
         {
-            if (!*alive || m_cliCancelled) return;
+            if (!*alive) return;
+            if (m_cliCancelled) { FirePendingSteer(); return; }
             std::lock_guard lock(m_chatMutex);
             ChatMessage chatMsg;
             chatMsg.role = ChatMessage::Role::Assistant;
@@ -4778,7 +4840,10 @@ namespace pe
         std::string raw = LaunchCLIProcess(cmd, promptContent, promptFile, onData);
 
         if (m_cliCancelled)
+        {
+            QueueAction([this, alive]() { if (*alive) FirePendingSteer(); });
             return;
+        }
         m_claudeHasSession = true;
 
         // Fallback: if NDJSON parsing produced nothing, show raw output.
@@ -4960,7 +5025,10 @@ namespace pe
             });
 
         if (m_cliCancelled)
+        {
+            QueueAction([this, alive]() { if (*alive) FirePendingSteer(); });
             return;
+        }
         m_geminiHasSession = true;
         if (accText.empty() && !sawToolUse && accThinking.empty())
             accText = "[Gemini CLI returned an empty response]";
@@ -5581,12 +5649,15 @@ namespace pe
             }
             break;
         case pagent::AgentEventType::Error:
-            m_chat.push_back({ChatMessage::Role::System, "[error: " + ev.error_message + "]"});
+            // Suppress "cancelled" error when it was triggered by a steering interrupt
+            if (m_pendingSteer.empty())
+                m_chat.push_back({ChatMessage::Role::System, "[error: " + ev.error_message + "]"});
             m_isStreaming = false;
             m_streamingText.clear();
             m_streamingThinking.clear();
             m_streamingTools.clear();
             m_scrollToBottom = 3;
+            FirePendingSteer();
             break;
         case pagent::AgentEventType::Info:
             m_chat.push_back({ChatMessage::Role::System, ev.text});

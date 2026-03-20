@@ -109,6 +109,11 @@ namespace pagent
         m_worker->Cancel();
     }
 
+    void Agent::Impl::CancelAfterCurrentRound()
+    {
+        m_worker->CancelAfterCurrentRound();
+    }
+
     void Agent::Impl::ClearHistory()
     {
         m_history.Clear();

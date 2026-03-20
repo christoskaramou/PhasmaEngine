@@ -67,6 +67,7 @@ namespace pagent
         std::string description;
         SchemaType type = SchemaType::String;
         bool required = false;
+        SchemaType array_item_type = SchemaType::String; // used when type == Array
     };
 
     struct ToolDefinition
@@ -382,6 +383,9 @@ namespace pagent
         // --- State ---
         bool IsBusy() const;
         void CancelPending(); // Best-effort; may not abort an in-flight HTTP call immediately
+        // Request cancellation at the next internal round boundary.
+        // Lets the current model/tool round finish, then stops before the next round begins.
+        void CancelAfterCurrentRound();
         TokenUsage GetUsage() const;
 
         // --- History ---

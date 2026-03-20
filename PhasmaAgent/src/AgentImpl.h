@@ -30,6 +30,7 @@ namespace pagent
 
         bool IsBusy() const;
         void CancelPending();
+        void CancelAfterCurrentRound();
         void ClearHistory();
         std::vector<HistoryEntry> GetHistory() const;
         void LoadHistory(const std::vector<HistoryEntry> &entries);

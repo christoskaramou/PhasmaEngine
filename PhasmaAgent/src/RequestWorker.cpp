@@ -97,9 +97,15 @@ namespace pagent
     void RequestWorker::Cancel()
     {
         m_cancel.store(true, std::memory_order_relaxed);
+        m_cancelAfterCurrentRound.store(false, std::memory_order_relaxed);
         std::lock_guard lock(m_clientMutex);
         if (m_stopActiveClient)
             m_stopActiveClient();
+    }
+
+    void RequestWorker::CancelAfterCurrentRound()
+    {
+        m_cancelAfterCurrentRound.store(true, std::memory_order_relaxed);
     }
 
     bool RequestWorker::Submit(const std::string &user_message)
@@ -117,6 +123,7 @@ namespace pagent
             m_pendingMessage = user_message;
             m_pendingAttachments = attachments;
             m_cancel.store(false, std::memory_order_relaxed);
+            m_cancelAfterCurrentRound.store(false, std::memory_order_relaxed);
             m_busy.store(true, std::memory_order_relaxed);
         }
         m_cv.notify_one();
@@ -783,6 +790,15 @@ namespace pagent
         for (int round = 0; round < maxRounds; ++round)
         {
             if (m_cancel.load(std::memory_order_relaxed))
+            {
+                AgentEvent ev;
+                ev.type = AgentEventType::Error;
+                ev.error_message = "cancelled";
+                PushEvent(std::move(ev));
+                return;
+            }
+
+            if (round > 0 && m_cancelAfterCurrentRound.exchange(false, std::memory_order_relaxed))
             {
                 AgentEvent ev;
                 ev.type = AgentEventType::Error;

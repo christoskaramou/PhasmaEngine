@@ -68,7 +68,9 @@ namespace pe
         const std::vector<std::string> &GetSkipRegex() const { return m_skipRegex; }
 
     private:
+        void ClearInputField();
         void SubmitInput();
+        void SubmitInputText(const std::string &text);
         void RenderMessage(const ChatMessage &msg);
         void OnAgentEvent(const pagent::AgentEvent &event);
         void RegisterTools();
@@ -121,7 +123,8 @@ namespace pe
         std::string m_pendingHistoryText; // applied inside InputText callback on next frame
         bool m_pendingHistoryUpdate = false;
         std::string m_pendingSteer; // message queued while agent is busy; auto-sent on TurnComplete
-        void FirePendingSteer();    // call on main thread after any TurnComplete
+        void FirePendingSteer();    // call on main thread after any TurnComplete/Cancel
+        void CommitStreamingNow(); // commit live streaming content as a ChatMessage (main thread only)
 
         // Image paste support
         struct PendingImage

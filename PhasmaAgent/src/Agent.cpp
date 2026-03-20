@@ -146,6 +146,11 @@ namespace pagent
         m_impl->CancelPending();
     }
 
+    void Agent::CancelAfterCurrentRound()
+    {
+        m_impl->CancelAfterCurrentRound();
+    }
+
     void Agent::ClearHistory()
     {
         m_impl->ClearHistory();

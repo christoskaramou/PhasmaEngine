@@ -33,6 +33,7 @@ namespace pagent
         bool Submit(const std::string &user_message, const std::vector<ContentPart> &attachments);
         bool IsBusy() const { return m_busy.load(std::memory_order_relaxed); }
         void Cancel();
+        void CancelAfterCurrentRound();
         // Summarize the full history now, keeping only the most recent keepRecent messages intact.
         // Runs synchronously; only call when IsBusy() == false.
         bool ForceCompact(size_t keepRecent = 4);
@@ -74,6 +75,7 @@ namespace pagent
         std::vector<ContentPart> m_pendingAttachments;
         std::atomic<bool> m_busy{false};
         std::atomic<bool> m_cancel{false};
+        std::atomic<bool> m_cancelAfterCurrentRound{false};
         std::atomic<bool> m_stop{false};
 
         // Set while an HTTP request is in flight so Cancel/destructor can abort it immediately.

@@ -17,12 +17,24 @@ namespace pagent
                 for (const auto &part : msg.parts)
                 {
                     if (part.type == ContentPart::Type::Text)
+                    {
+                        if (part.data.empty())
+                            continue;
                         content.push_back({{"type", "text"}, {"text", part.data}});
+                    }
                     else if (part.type == ContentPart::Type::ImageBase64)
+                    {
+                        if (part.data.empty() || part.mime_type.empty())
+                            continue;
                         content.push_back({{"type", "image"}, {"source", {{"type", "base64"}, {"media_type", part.mime_type}, {"data", part.data}}}});
+                    }
                 }
+                if (content.empty())
+                    return {};
                 return {{"role", "user"}, {"content", content}};
             }
+            if (msg.content.empty())
+                return {};
             return {{"role", "user"}, {"content", msg.content}};
         }
         case NeutralMessage::Role::Assistant:
@@ -47,6 +59,8 @@ namespace pagent
                     {"input", input},
                 });
             }
+            if (content.empty())
+                return {};
             return {{"role", "assistant"}, {"content", content}};
         }
         case NeutralMessage::Role::Tool:
@@ -87,7 +101,12 @@ namespace pagent
             }
 
             if (!builtImageContent)
-                toolResultContent = msg.tool_result_json;
+            {
+                std::string toolContent = msg.tool_result_json.empty() ? msg.content : msg.tool_result_json;
+                if (toolContent.empty())
+                    toolContent = "{}";
+                toolResultContent = std::move(toolContent);
+            }
 
             json content = json::array();
             content.push_back({
@@ -187,6 +206,8 @@ namespace pagent
                 json p;
                 p["type"] = typeNames[static_cast<int>(prop.type)];
                 p["description"] = prop.description;
+                if (prop.type == SchemaType::Array)
+                    p["items"] = {{"type", typeNames[static_cast<int>(prop.array_item_type)]}};
                 properties[prop.name] = p;
 
                 if (prop.required)

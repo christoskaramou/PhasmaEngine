@@ -10,6 +10,8 @@ namespace pagent
         switch (msg.role)
         {
         case NeutralMessage::Role::System:
+            if (msg.content.empty())
+                return {};
             return {{"role", "system"}, {"content", msg.content}};
 
         case NeutralMessage::Role::User:
@@ -20,12 +22,24 @@ namespace pagent
                 for (const auto &part : msg.parts)
                 {
                     if (part.type == ContentPart::Type::Text)
+                    {
+                        if (part.data.empty())
+                            continue;
                         content.push_back({{"type", "text"}, {"text", part.data}});
+                    }
                     else if (part.type == ContentPart::Type::ImageBase64)
+                    {
+                        if (part.data.empty() || part.mime_type.empty())
+                            continue;
                         content.push_back({{"type", "image_url"}, {"image_url", {{"url", "data:" + part.mime_type + ";base64," + part.data}}}});
+                    }
                 }
+                if (content.empty())
+                    return {};
                 return {{"role", "user"}, {"content", content}};
             }
+            if (msg.content.empty())
+                return {};
             return {{"role", "user"}, {"content", msg.content}};
         }
 
@@ -52,6 +66,8 @@ namespace pagent
                 }
                 j["tool_calls"] = std::move(tcs);
             }
+            if (j["content"].get<std::string>().empty() && !j.contains("tool_calls"))
+                return {};
             return j;
         }
 
@@ -81,6 +97,8 @@ namespace pagent
             }
             // Plain text tool result
             std::string content = msg.tool_result_json.empty() ? msg.content : msg.tool_result_json;
+            if (content.empty())
+                content = "{}";
             return {{"role", "tool"}, {"tool_call_id", msg.tool_call_id}, {"name", msg.tool_name}, {"content", content}};
         }
 
@@ -166,6 +184,8 @@ namespace pagent
                 json p;
                 p["type"] = typeNames[static_cast<int>(prop.type)];
                 p["description"] = prop.description;
+                if (prop.type == SchemaType::Array)
+                    p["items"] = {{"type", typeNames[static_cast<int>(prop.array_item_type)]}};
                 properties[prop.name] = p;
 
                 if (prop.required)
