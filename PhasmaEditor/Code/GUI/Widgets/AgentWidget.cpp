@@ -20,12 +20,18 @@
 #include "PhasmaAgent/CodebaseIndexer.h"
 
 #include "stb/stb_image.h"
+#define _SILENCE_CXX17_ITERATOR_BASE_CLASS_DEPRECATION_WARNING
+#include "rapidjson/document.h"
+#include "rapidjson/stringbuffer.h"
+#include "rapidjson/writer.h"
 
 #if defined(PE_WIN32)
 #include <Windows.h>
 #elif defined(PE_LINUX)
 #include <sys/wait.h>
 #include <signal.h>
+#include <fcntl.h>
+#include <unistd.h>
 #endif
 
 using namespace pagent;
@@ -33,6 +39,24 @@ using namespace pagent;
 namespace pe
 {
     // --- Local helpers ---
+
+    static std::filesystem::path GetRepoRootFromAssets()
+    {
+        namespace fs = std::filesystem;
+
+        std::error_code ec;
+        fs::path assetsPath = fs::weakly_canonical(Path::Assets, ec);
+        if (ec)
+        {
+            ec.clear();
+            assetsPath = fs::absolute(Path::Assets, ec);
+        }
+        if (ec || assetsPath.empty())
+            assetsPath = fs::path(Path::Assets).lexically_normal();
+
+        // Path::Assets resolves to .../PhasmaEditor/Assets, so two parents up is the repo root.
+        return assetsPath.parent_path().parent_path();
+    }
 
     // Runs `gcloud auth print-access-token` and returns the token string, or "" on failure.
     static std::string FetchGcloudToken()
@@ -152,9 +176,11 @@ namespace pe
 
         m_providers = pagent::DiscoverProviders();
         // Add "External" provider (file-based, for Claude Code / Cursor / any AI tool)
-        m_providers.push_back({pagent::Provider::Ollama, "External", "", "external"});
-        // Add "Codex CLI" provider — spawns codex exec as a subprocess
-        m_providers.push_back({pagent::Provider::Ollama, "Codex CLI", "", "codex"});
+        m_providers.push_back({pagent::Provider::CLI, "External", "", "external"});
+        // Add CLI providers — each spawns a subprocess
+        m_providers.push_back({pagent::Provider::CLI, "Codex CLI", "", "codex"});
+        m_providers.push_back({pagent::Provider::CLI, "Claude CLI", "", "claude"});
+        m_providers.push_back({pagent::Provider::CLI, "Gemini CLI", "", "gemini"});
 
         // Restore saved config (provider, model, embedding settings)
         if (std::filesystem::exists(Path::Assets + "Agent/agent_config.json"))
@@ -223,7 +249,7 @@ namespace pe
             auto aliveRef = m_alive;
             for (int pi = 0; pi < static_cast<int>(m_providers.size()); ++pi)
             {
-                if (m_providers[pi].name == "External" || m_providers[pi].provider != pagent::Provider::Ollama)
+                if (m_providers[pi].provider != pagent::Provider::Ollama)
                     continue;
                 auto prov = m_providers[pi].provider;
                 auto key = m_providers[pi].apiKey;
@@ -281,12 +307,20 @@ namespace pe
 
         m_isExternalAI = (info->name == "External");
         m_isCodexCLI = (info->name == "Codex CLI");
+        m_isClaudeCLI = (info->name == "Claude CLI");
+        m_isGeminiCLI = (info->name == "Gemini CLI");
 
-        if (m_isCodexCLI)
+        if (IsAnyCLI())
         {
-            if (m_codexModelBuf[0] == '\0')
-                std::strncpy(m_codexModelBuf, "gpt-5.4", sizeof(m_codexModelBuf) - 1);
-            m_modelName = m_codexModelBuf;
+            char *modelBuf = m_isCodexCLI    ? m_codexModelBuf
+                             : m_isClaudeCLI ? m_claudeModelBuf
+                                             : m_geminiModelBuf;
+            const char *defaultModel = m_isCodexCLI    ? "gpt-5.4"
+                                       : m_isClaudeCLI ? "claude-sonnet-4-6"
+                                                       : "";
+            if (modelBuf[0] == '\0' && defaultModel[0] != '\0')
+                std::strncpy(modelBuf, defaultModel, 127);
+            m_modelName = modelBuf;
             m_availableModels = {m_modelName};
             m_selectedModelIndex = 0;
             m_agentConfigured = true;
@@ -311,7 +345,7 @@ namespace pe
 
         pagent::AgentConfig config;
         // Derive project root from Assets path (go up from Assets/)
-        std::string projectRoot = std::filesystem::path(Path::Assets).parent_path().parent_path().string();
+        std::string projectRoot = GetRepoRootFromAssets().string();
         if (!projectRoot.empty() && projectRoot.back() != '/')
             projectRoot += '/';
 
@@ -339,6 +373,7 @@ namespace pe
         config.provider = info->provider;
         config.api_key = info->apiKey;
         config.model = info->defaultModel;
+        config.base_url = info->base_url;
 
         // Vertex AI: read project/location from env and fetch an OAuth2 token via gcloud
         if (info->provider == pagent::Provider::GoogleVertex)
@@ -461,9 +496,17 @@ namespace pe
         case 2: // Ollama - local only by default, Fetch button gets remote too
         {
             m_embeddingModelIsLocal.clear();
+            m_isVerifyingEmbeddingModel = false;
             m_isFetchingEmbeddingModels = true;
             auto alive = m_alive;
             bool localOnly = !fetchRemote;
+            if (localOnly && !preferredModel.empty())
+            {
+                m_embeddingModels = {preferredModel};
+                m_embeddingModelIsLocal = {true}; // optimistic until the local refresh confirms it
+                m_selectedEmbeddingModel = 0;
+                m_isVerifyingEmbeddingModel = true;
+            }
             std::thread([this, alive, localOnly, preferredModel]()
                         {
                 auto modelInfos = pagent::Agent::FetchOllamaEmbeddingModels("", localOnly);
@@ -471,6 +514,7 @@ namespace pe
                 QueueAction([this, alive, modelInfos, preferredModel]()
                 {
                     m_isFetchingEmbeddingModels = false;
+                    m_isVerifyingEmbeddingModel = false;
                     if (m_selectedEmbeddingProvider != 2) return;
                     m_embeddingModels.clear();
                     m_embeddingModelIsLocal.clear();
@@ -644,14 +688,13 @@ namespace pe
     {
         // Derive repo root from Assets path:
         //   Assets = .../PhasmaEditor/Assets/  ->  parent x2 = repo root
-        namespace fs = std::filesystem;
-        const fs::path repoRoot = fs::weakly_canonical(Path::Assets).parent_path().parent_path();
+        const std::filesystem::path repoRoot = GetRepoRootFromAssets();
         auto p = [&](const std::string &rel)
         { return (repoRoot / rel).string(); };
 
         auto addIfExists = [&](std::vector<std::string> &vec, const std::string &path)
         {
-            if (fs::exists(path))
+            if (std::filesystem::exists(path))
                 vec.push_back(path);
         };
 
@@ -736,7 +779,7 @@ namespace pe
             std::string providerName = j.value("/agent/provider"_json_pointer, std::string{});
             int defaultIdx = 0;
             for (int i = 0; i < static_cast<int>(m_providers.size()); ++i)
-                if (m_providers[i].provider == pagent::Provider::Ollama && m_providers[i].name != "External")
+                if (m_providers[i].provider == pagent::Provider::Ollama)
                 {
                     defaultIdx = i;
                     break;
@@ -940,19 +983,13 @@ namespace pe
     void AgentWidget::RegisterTools()
     {
         // Derive project root (repo root) as the single workspace for all tools.
-        // Canonicalize Path::Assets first so the result is stable regardless of which
-        // Path::Init branch ran (e.g. "build/Debug/../../PhasmaEditor/Assets/" vs "Assets/").
-        //   weakly_canonical(Assets) = .../PhasmaEditor/Assets
-        //   parent = .../PhasmaEditor
-        //   parent = .../<repo root>  e.g. C:/PhasmaEngine/
+        // Resolve the repo root from the runtime Assets path so CLI tools and file tools
+        // stay anchored to the real workspace instead of the build output folder.
         // All tool paths are then relative to repo root:
         //   source  -> PhasmaEditor/Code/App/App.cpp
         //   assets  -> PhasmaEditor/Assets/Shaders/Tonemap.hlsl
         //   core    -> PhasmaCore/Code/Base/Path.h
-        std::string projectRoot = std::filesystem::weakly_canonical(Path::Assets)
-                                      .parent_path()
-                                      .parent_path()
-                                      .string();
+        std::string projectRoot = GetRepoRootFromAssets().string();
         if (!projectRoot.empty() && projectRoot.back() != '/')
             projectRoot += '/';
 
@@ -2747,7 +2784,7 @@ namespace pe
             return;
         }
 
-        const bool busy = (m_isExternalAI || m_isCodexCLI) ? m_isStreaming : (m_agent && m_agent->IsBusy());
+        const bool busy = (m_isExternalAI || IsAnyCLI()) ? m_isStreaming : (m_agent && m_agent->IsBusy());
 
         // status bar
         {
@@ -2807,11 +2844,29 @@ namespace pe
                 ImGui::PushItemWidth(120.0f);
                 if (ImGui::InputText("##codexmodel", m_codexModelBuf, sizeof(m_codexModelBuf),
                                      ImGuiInputTextFlags_EnterReturnsTrue))
-                {
                     m_modelName = m_codexModelBuf;
-                }
                 if (ImGui::IsItemHovered())
                     ImGui::SetTooltip("Codex model (e.g. gpt-5.4, gpt-5.4-mini, gpt-5.2)\nPress Enter to apply.");
+                ImGui::PopItemWidth();
+            }
+            else if (m_isClaudeCLI)
+            {
+                ImGui::PushItemWidth(160.0f);
+                if (ImGui::InputText("##claudemodel", m_claudeModelBuf, sizeof(m_claudeModelBuf),
+                                     ImGuiInputTextFlags_EnterReturnsTrue))
+                    m_modelName = m_claudeModelBuf;
+                if (ImGui::IsItemHovered())
+                    ImGui::SetTooltip("Claude model (e.g. claude-sonnet-4-6, claude-opus-4-6)\nPress Enter to apply.");
+                ImGui::PopItemWidth();
+            }
+            else if (m_isGeminiCLI)
+            {
+                ImGui::PushItemWidth(160.0f);
+                if (ImGui::InputText("##geminimodel", m_geminiModelBuf, sizeof(m_geminiModelBuf),
+                                     ImGuiInputTextFlags_EnterReturnsTrue))
+                    m_modelName = m_geminiModelBuf;
+                if (ImGui::IsItemHovered())
+                    ImGui::SetTooltip("Gemini model (e.g. gemini-2.5-pro, gemini-2.5-flash)\nPress Enter to apply.");
                 ImGui::PopItemWidth();
             }
             else if (m_isExternalAI)
@@ -3061,14 +3116,16 @@ namespace pe
                 ImGui::SameLine();
                 const bool ragIndexing = m_gui && m_gui->IsIndexing();
                 const bool ragLoading = m_codebaseLoading.load();
-                const bool ragBusy = ragIndexing || ragLoading || m_isPullingEmbedding || m_isFetchingEmbeddingModels;
+                const bool ragChecking = m_indexStatusChecking.load();
+                const bool ragBusy = ragIndexing || ragLoading || ragChecking || m_isPullingEmbedding || m_isFetchingEmbeddingModels;
                 const bool ragFunctional = m_embeddingEnabled && m_embeddingProvider != nullptr;
                 const bool statusReady = m_indexStatusReady.load();
                 const bool partiallyIdx = statusReady && m_indexStatusOutdated > 0 && m_indexStatusOutdated < m_indexStatusTotal;
                 const bool fullyOutdated = statusReady && m_indexStatusOutdated > 0 && m_indexStatusOutdated >= m_indexStatusTotal;
+                const bool ragUnavailable = m_embeddingEnabled && !ragFunctional && !ragBusy;
                 const ImVec4 ragColor = !m_embeddingEnabled ? ImVec4(0.4f, 0.4f, 0.4f, 1.0f)  // disabled — gray
-                                        : !ragFunctional    ? ImVec4(0.4f, 0.4f, 0.4f, 1.0f)  // broken — gray
                                         : ragBusy           ? ImVec4(1.0f, 0.78f, 0.2f, 1.0f) // busy — yellow
+                                        : ragUnavailable    ? ImVec4(0.95f, 0.35f, 0.35f, 1.0f) // unavailable — red
                                         : statusReady && !partiallyIdx && !fullyOutdated
                                             ? ImVec4(0.31f, 0.86f, 0.39f, 1.0f)          // up to date — green
                                         : partiallyIdx ? ImVec4(1.0f, 0.55f, 0.1f, 1.0f) // partial — orange
@@ -3078,11 +3135,14 @@ namespace pe
                 ImGui::PopStyleColor();
                 if (ImGui::IsItemHovered())
                 {
-                    const char *state = !m_embeddingEnabled           ? "disabled"
-                                        : m_isFetchingEmbeddingModels ? "fetching models..."
-                                        : m_isPullingEmbedding        ? "downloading model..."
-                                        : !ragFunctional              ? "unavailable (check Ollama)"
-                                        : ragBusy                     ? "busy..."
+                    const char *state = !m_embeddingEnabled            ? "disabled"
+                                        : m_isPullingEmbedding         ? "downloading embedding model..."
+                                        : m_isVerifyingEmbeddingModel  ? "verifying configured local embedding model..."
+                                        : m_isFetchingEmbeddingModels  ? "refreshing embedding model list..."
+                                        : ragIndexing                  ? "indexing codebase..."
+                                        : ragLoading                   ? "loading vectors..."
+                                        : ragChecking                  ? "checking index status..."
+                                        : ragUnavailable               ? "embedding model unavailable"
                                         : partiallyIdx                ? "partially indexed"
                                         : fullyOutdated               ? "not indexed"
                                         : statusReady                 ? "ready"
@@ -3199,11 +3259,11 @@ namespace pe
                             ImGui::EndDisabled();
 
                         const bool checking = m_indexStatusChecking.load();
-                        if (!hasModel || checking || m_isFetchingEmbeddingModels)
+                        if (!hasModel || checking || m_isFetchingEmbeddingModels || m_isVerifyingEmbeddingModel)
                             ImGui::BeginDisabled();
                         if (ImGui::MenuItem("Check Index"))
                             CheckIndexStatus();
-                        if (!hasModel || checking || m_isFetchingEmbeddingModels)
+                        if (!hasModel || checking || m_isFetchingEmbeddingModels || m_isVerifyingEmbeddingModel)
                             ImGui::EndDisabled();
 
                         if (m_indexStatusReady.load())
@@ -3294,24 +3354,31 @@ namespace pe
 
             if (m_isStreaming)
             {
-                // Show thinking in a dimmed collapsible section
-                if (!m_streamingThinking.empty())
+                auto renderStreamingSection = [](const char *label, const std::string &content, const ImVec4 &color)
                 {
-                    ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.5f, 0.5f, 0.6f, 1.0f));
-                    if (ImGui::TreeNode("Thinking..."))
+                    if (content.empty())
+                        return;
+
+                    ImGui::PushStyleColor(ImGuiCol_Text, color);
+                    ImGui::SetNextItemOpen(true, ImGuiCond_Always);
+                    if (ImGui::TreeNode(label))
                     {
-                        ImGui::TextWrapped("%s", m_streamingThinking.c_str());
+                        ImGui::TextWrapped("%s", content.c_str());
                         ImGui::TreePop();
                     }
                     ImGui::PopStyleColor();
-                }
+                };
+
+                // Show thinking / tools in dimmed collapsible sections
+                renderStreamingSection("Thinking...", m_streamingThinking, ImVec4(0.5f, 0.5f, 0.6f, 1.0f));
+                renderStreamingSection("Tools...", m_streamingTools, ImVec4(0.62f, 0.58f, 0.52f, 1.0f));
 
                 ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.85f, 0.85f, 0.85f, 1.0f));
                 if (!m_streamingText.empty())
                 {
                     ImGui::TextWrapped("%s", m_streamingText.c_str());
                 }
-                else if (m_streamingThinking.empty())
+                else if (m_streamingThinking.empty() && m_streamingTools.empty())
                 {
                     // animated dots while waiting for first token
                     const int dots = static_cast<int>(ImGui::GetTime() * 2.0) % 4;
@@ -3342,9 +3409,16 @@ namespace pe
 
         RenderPendingAttachments();
 
+        // Steering queue indicator — shown above the input while a message is queued
+        if (!m_pendingSteer.empty())
+        {
+            ImGui::PushStyleColor(ImGuiCol_Text, ImGui::GetStyleColorVec4(ImGuiCol_TextDisabled));
+            ImGui::TextUnformatted(("Queued: \"" + m_pendingSteer + "\"").c_str());
+            ImGui::PopStyleColor();
+        }
+
         bool submit = false;
         // Enter sends. Shift+Enter inserts a newline. Up/Down for history.
-        ImGui::BeginDisabled(busy);
         const float inputWidth = ImGui::GetContentRegionAvail().x - 60.0f;
 
         // Up/Down arrow history - queue text before InputText; apply inside callback
@@ -3402,7 +3476,6 @@ namespace pe
 
         if (inputActive && ImGui::IsKeyPressed(ImGuiKey_Enter) && !ImGui::GetIO().KeyShift)
             submit = true;
-        ImGui::EndDisabled();
         ImGui::SameLine();
         if (busy)
         {
@@ -3411,20 +3484,21 @@ namespace pe
             ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(0.5f, 0.1f, 0.1f, 1.0f));
             if (ImGui::Button("Stop", ImVec2(55, 0)))
             {
+                m_pendingSteer.clear(); // discard any queued steering on manual stop
                 if (m_isExternalAI)
                     m_isStreaming = false;
-                else if (m_isCodexCLI)
+                else if (IsAnyCLI())
                 {
                     m_isStreaming = false;
-                    m_codexCancelled = true;
-                    std::lock_guard lock(m_codexProcessMutex);
-                    if (m_codexProcessId != 0)
+                    m_cliCancelled = true;
+                    std::lock_guard lock(m_cliProcessMutex);
+                    if (m_cliProcessId != 0)
                     {
 #if defined(PE_WIN32)
-                        // m_codexProcessId holds the Job Object handle — kills cmd.exe + codex child
-                        TerminateJobObject(reinterpret_cast<HANDLE>(m_codexProcessId), 1);
+                        // m_cliProcessId holds the Job Object handle — kills cmd.exe + CLI child
+                        TerminateJobObject(reinterpret_cast<HANDLE>(m_cliProcessId), 1);
 #else
-                        kill(static_cast<pid_t>(m_codexProcessId), SIGTERM);
+                        kill(static_cast<pid_t>(m_cliProcessId), SIGTERM);
 #endif
                     }
                 }
@@ -3440,7 +3514,20 @@ namespace pe
         }
 
         if (submit && m_inputBuf[0] != '\0')
-            SubmitInput();
+        {
+            if (busy)
+            {
+                // Queue as steering — auto-sent when the current turn completes
+                m_pendingSteer = m_inputBuf;
+                m_inputBuf[0] = '\0';
+                m_historyIndex = -1;
+                m_scrollToBottom = 3;
+            }
+            else
+            {
+                SubmitInput();
+            }
+        }
 
         ImGui::End();
 
@@ -3471,6 +3558,15 @@ namespace pe
             }
             ImGui::End();
         }
+    }
+
+    void AgentWidget::FirePendingSteer()
+    {
+        if (m_pendingSteer.empty())
+            return;
+        snprintf(m_inputBuf, sizeof(m_inputBuf), "%s", m_pendingSteer.c_str());
+        m_pendingSteer.clear();
+        SubmitInput();
     }
 
     void AgentWidget::SubmitInput()
@@ -3513,9 +3609,9 @@ namespace pe
             m_isStreaming = true;
             WriteExternalHistory();
         }
-        else if (m_isCodexCLI)
+        else if (IsAnyCLI())
         {
-            // Save pending images to Temp/ now so Codex can open them by path
+            // Save pending images to Temp/ so the CLI tool can open them by path
             std::string prompt = fullText;
             if (!m_pendingImages.empty())
             {
@@ -3551,7 +3647,10 @@ namespace pe
             }
             m_isStreaming = true;
             std::thread([this, prompt]()
-                        { RunCodexCLI(prompt); })
+                        {
+                if (m_isCodexCLI)       RunCodexCLI(prompt);
+                else if (m_isClaudeCLI) RunClaudeCLI(prompt);
+                else if (m_isGeminiCLI) RunGeminiCLI(prompt); })
                 .detach();
         }
         else
@@ -4038,14 +4137,8 @@ namespace pe
         return Path::Assets + "Agent/" + rel;
     }
 
-    void AgentWidget::RunCodexCLI(const std::string &prompt)
+    std::string AgentWidget::BuildCLIFullPrompt(const std::string &prompt)
     {
-        m_codexCancelled = false;
-        std::string agentDir = Path::Assets + "Agent/";
-        std::string promptFile = agentDir + "codex_prompt.tmp";
-        std::string outputFile = agentDir + "codex_output.tmp";
-        std::string repoRoot = std::filesystem::path(Path::Assets).parent_path().parent_path().string();
-
         // Build conversation history for context (last ~10 non-system messages, excluding current)
         std::string historyText;
         {
@@ -4062,18 +4155,16 @@ namespace pe
             }
         }
 
-        // RAG: extract relevant file paths to give Codex a head start.
-        // We don't inject chunk content (Codex reads files itself), just the paths.
+        // RAG: inject relevant file paths so the CLI tool has a head start
         std::vector<std::string> ragFiles = BuildRagFilePaths(prompt);
 
-        // Assemble the full prompt written to file
         std::string fullPrompt;
-        if (!m_codexSystemContext.empty())
+        if (!m_cliSystemContext.empty())
         {
             // Inject START.md as background knowledge; clarify it is not a standing instruction to use Lua
             fullPrompt += "[Background reference — use only when the user explicitly asks to perform actions "
                           "in the running editor. Do not mention this block or use these APIs unprompted:\n" +
-                          m_codexSystemContext + "]\n\n";
+                          m_cliSystemContext + "]\n\n";
         }
         if (!ragFiles.empty())
         {
@@ -4085,34 +4176,43 @@ namespace pe
         if (!historyText.empty())
             fullPrompt += "Recent conversation:\n" + historyText + "\n";
         fullPrompt += prompt;
+        return fullPrompt;
+    }
 
-        // Write to temp file so we can redirect it via stdin (avoids shell injection)
+    std::string AgentWidget::LaunchCLIProcess(const std::string &cmd, const std::string &promptContent,
+                                              const std::string &promptFile,
+                                              std::function<void(const char *, size_t)> onData)
+    {
+        const std::string workingDir = GetRepoRootFromAssets().string();
+
+        // Write prompt to file (avoids shell injection)
         {
             std::ofstream f(promptFile, std::ios::trunc);
-            f << fullPrompt;
+            f << promptContent;
         }
 
-        // Sanitize model name — strip anything that could break the shell command
-        std::string model = m_codexModelBuf;
-        for (char &c : model)
-            if (!std::isalnum(static_cast<unsigned char>(c)) && c != '-' && c != '.' && c != '_')
-                c = '_';
-
-        // Build command: codex exec --full-auto -m <model> -C <root> -o <outfile> - < <promptfile>
-        // Each call is a fresh exec; history is embedded in the prompt above.
-        // std::system() on Windows already invokes cmd.exe /c, so no extra wrapper is needed.
-        // Do NOT wrap in cmd /c "..." — the nested quotes would break path quoting.
-        std::string cmd = "codex exec --full-auto";
-        if (!model.empty())
-            cmd += " -m " + model;
-        cmd += " -C \"" + repoRoot + "\"";
-        cmd += " -o \"" + outputFile + "\"";
-        cmd += " - < \"" + promptFile + "\"";
+        // Accumulate all output; also forward each chunk to caller via onData.
+        std::string accumulated;
+        auto feedChunk = [&](const char *buf, size_t n)
+        {
+            accumulated.append(buf, n);
+            if (onData)
+                onData(buf, n);
+        };
 
         int exitCode = -1;
 #if defined(PE_WIN32)
         {
-            // Use a Job Object so TerminateJobObject kills cmd.exe AND the codex child together
+            SECURITY_ATTRIBUTES sa = {};
+            sa.nLength = sizeof(sa);
+            sa.bInheritHandle = TRUE;
+
+            // Pipe: child writes to hWritePipe, parent reads from hReadPipe.
+            HANDLE hReadPipe = nullptr, hWritePipe = nullptr;
+            CreatePipe(&hReadPipe, &hWritePipe, &sa, 0);
+            SetHandleInformation(hReadPipe, HANDLE_FLAG_INHERIT, 0); // parent-side not inherited
+
+            // Job Object so TerminateJobObject kills cmd.exe + CLI child together.
             HANDLE hJob = CreateJobObjectA(nullptr, nullptr);
             if (hJob)
             {
@@ -4120,93 +4220,773 @@ namespace pe
                 jeli.BasicLimitInformation.LimitFlags = JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE;
                 SetInformationJobObject(hJob, JobObjectExtendedLimitInformation, &jeli, sizeof(jeli));
             }
+
+            // NUL handle for stdin — the shell command already contains "< promptFile".
+            HANDLE hNullIn = CreateFileA("NUL", GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_WRITE,
+                                         &sa, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
+
             std::string winCmd = "cmd.exe /c " + cmd;
             STARTUPINFOA si = {};
-            PROCESS_INFORMATION pi = {};
             si.cb = sizeof(si);
-            if (CreateProcessA(nullptr, winCmd.data(), nullptr, nullptr, FALSE,
-                               CREATE_SUSPENDED, nullptr, nullptr, &si, &pi))
+            si.dwFlags = STARTF_USESTDHANDLES;
+            si.hStdInput = hNullIn != INVALID_HANDLE_VALUE ? hNullIn : GetStdHandle(STD_INPUT_HANDLE);
+            si.hStdOutput = hWritePipe;
+            si.hStdError = hWritePipe; // capture stderr too
+            PROCESS_INFORMATION pi = {};
+
+            if (CreateProcessA(nullptr, winCmd.data(), nullptr, nullptr, TRUE,
+                               CREATE_SUSPENDED, nullptr, workingDir.c_str(), &si, &pi))
             {
                 if (hJob)
                     AssignProcessToJobObject(hJob, pi.hProcess);
                 ResumeThread(pi.hThread);
                 CloseHandle(pi.hThread);
                 {
-                    std::lock_guard lock(m_codexProcessMutex);
-                    m_codexProcessId = reinterpret_cast<intptr_t>(hJob ? hJob : pi.hProcess);
+                    std::lock_guard lock(m_cliProcessMutex);
+                    m_cliProcessId = reinterpret_cast<intptr_t>(hJob ? hJob : pi.hProcess);
                 }
-                WaitForSingleObject(pi.hProcess, INFINITE);
+
+                // Close the write end in the parent so ReadFile returns EOF when the child exits.
+                CloseHandle(hWritePipe);
+                hWritePipe = nullptr;
+                if (hNullIn != INVALID_HANDLE_VALUE)
+                    CloseHandle(hNullIn);
+
+                char buf[4096];
+                DWORD bytesRead;
+                while (!m_cliCancelled &&
+                       ReadFile(hReadPipe, buf, sizeof(buf), &bytesRead, nullptr) &&
+                       bytesRead > 0)
                 {
-                    std::lock_guard lock(m_codexProcessMutex);
-                    m_codexProcessId = 0;
+                    feedChunk(buf, bytesRead);
+                }
+
+                WaitForSingleObject(pi.hProcess, 5000);
+                {
+                    std::lock_guard lock(m_cliProcessMutex);
+                    m_cliProcessId = 0;
                 }
                 DWORD dw = 1;
                 GetExitCodeProcess(pi.hProcess, &dw);
                 CloseHandle(pi.hProcess);
                 exitCode = static_cast<int>(dw);
             }
+            else
+            {
+                if (hNullIn != INVALID_HANDLE_VALUE)
+                    CloseHandle(hNullIn);
+            }
+
+            if (hWritePipe)
+                CloseHandle(hWritePipe);
+            if (hReadPipe)
+                CloseHandle(hReadPipe);
             if (hJob)
                 CloseHandle(hJob);
         }
 #else
         {
+            int pipefd[2];
+            pipe(pipefd);
+
             pid_t pid = fork();
             if (pid == 0)
             {
+                // Child: stdin from /dev/null (shell handles "< promptFile" in cmd).
+                int nullFd = open("/dev/null", O_RDONLY);
+                if (nullFd >= 0)
+                {
+                    dup2(nullFd, STDIN_FILENO);
+                    close(nullFd);
+                }
+                dup2(pipefd[1], STDOUT_FILENO);
+                dup2(pipefd[1], STDERR_FILENO);
+                close(pipefd[0]);
+                close(pipefd[1]);
+                if (!workingDir.empty())
+                    chdir(workingDir.c_str());
                 execl("/bin/sh", "sh", "-c", cmd.c_str(), nullptr);
                 _exit(127);
             }
             else if (pid > 0)
             {
+                close(pipefd[1]);
                 {
-                    std::lock_guard lock(m_codexProcessMutex);
-                    m_codexProcessId = static_cast<intptr_t>(pid);
+                    std::lock_guard lock(m_cliProcessMutex);
+                    m_cliProcessId = static_cast<intptr_t>(pid);
                 }
+                char buf[4096];
+                ssize_t n;
+                while (!m_cliCancelled && (n = read(pipefd[0], buf, sizeof(buf))) > 0)
+                    feedChunk(buf, static_cast<size_t>(n));
+
                 int status = 0;
                 waitpid(pid, &status, 0);
                 {
-                    std::lock_guard lock(m_codexProcessMutex);
-                    m_codexProcessId = 0;
+                    std::lock_guard lock(m_cliProcessMutex);
+                    m_cliProcessId = 0;
                 }
+                close(pipefd[0]);
                 exitCode = WIFEXITED(status) ? WEXITSTATUS(status) : 1;
+            }
+            else
+            {
+                close(pipefd[0]);
+                close(pipefd[1]);
             }
         }
 #endif
 
-        // Read response
-        std::string response;
+        // Strip internal reasoning tokens that leak into output (e.g. "<|endoftext|>{...}")
+        auto leakPos = accumulated.find("<|endoftext|>");
+        if (leakPos != std::string::npos)
+            accumulated.erase(leakPos);
+        while (!accumulated.empty() &&
+               (accumulated.back() == '\n' || accumulated.back() == '\r' || accumulated.back() == ' '))
+            accumulated.pop_back();
+
+        if (accumulated.empty() && exitCode != 0)
+            accumulated = "[CLI process failed with exit code " + std::to_string(exitCode) + "]";
+
+        return accumulated;
+    }
+
+    // Strip ANSI/VT escape sequences (color codes, cursor moves, etc.) from CLI output.
+    static std::string StripAnsiCodes(const std::string &s)
+    {
+        std::string out;
+        out.reserve(s.size());
+        for (size_t i = 0; i < s.size();)
         {
-            std::ifstream f(outputFile);
-            if (f)
+            if (s[i] != '\x1b')
             {
-                std::ostringstream ss;
-                ss << f.rdbuf();
-                response = ss.str();
-                // Strip internal reasoning tokens that leak into the output (e.g. "<|endoftext|>{...}")
-                auto leakPos = response.find("<|endoftext|>");
-                if (leakPos != std::string::npos)
-                    response.erase(leakPos);
-                while (!response.empty() && (response.back() == '\n' || response.back() == '\r' || response.back() == ' '))
-                    response.pop_back();
+                out += s[i++];
+                continue;
+            }
+            ++i; // skip ESC
+            if (i >= s.size())
+                break;
+            if (s[i] == '[') // CSI sequence: ESC [ ... <letter>
+            {
+                ++i;
+                while (i < s.size() && s[i] != '\x1b' &&
+                       (s[i] == ';' || s[i] == '?' || (s[i] >= '0' && s[i] <= '9')))
+                    ++i;
+                if (i < s.size() && s[i] != '\x1b')
+                    ++i; // skip final command byte
+            }
+            else if (s[i] == ']') // OSC sequence: ESC ] ... BEL or ESC backslash
+            {
+                ++i;
+                while (i < s.size() && s[i] != '\x07')
+                {
+                    if (s[i] == '\x1b' && i + 1 < s.size() && s[i + 1] == '\\')
+                    {
+                        i += 2;
+                        break;
+                    }
+                    ++i;
+                }
+                if (i < s.size() && s[i] == '\x07')
+                    ++i;
+            }
+            else
+            {
+                ++i; // skip single-char escape (ESC c, ESC =, etc.)
             }
         }
+        return out;
+    }
 
-        if (m_codexCancelled)
-            return;
+    static std::string SanitizeCLIModel(const char *buf)
+    {
+        std::string s = buf;
+        for (char &c : s)
+            if (!std::isalnum(static_cast<unsigned char>(c)) && c != '-' && c != '.' && c != '_')
+                c = '_';
+        return s;
+    }
 
-        if (response.empty())
-            response = exitCode == 0 ? "[Codex returned an empty response]"
-                                     : "[Codex CLI failed with exit code " + std::to_string(exitCode) + "]";
+    bool AgentWidget::HasSavedConversationHistory() const
+    {
+        std::lock_guard lock(m_chatMutex);
+        return std::any_of(m_chat.begin(), m_chat.end(),
+                           [](const ChatMessage &msg)
+                           { return msg.role == ChatMessage::Role::User || msg.role == ChatMessage::Role::Assistant; });
+    }
+
+    void AgentWidget::RunCodexCLI(const std::string &prompt)
+    {
+        m_cliCancelled = false;
+        std::string agentDir = Path::Assets + "Agent/";
+        std::string promptFile = agentDir + "cli_prompt.tmp";
+        std::string repoRoot = GetRepoRootFromAssets().string();
+
+        std::string model = SanitizeCLIModel(m_codexModelBuf);
+        const bool shouldResume = m_codexHasSession || (!m_currentSessionPath.empty() && HasSavedConversationHistory());
+        std::string cmd;
+        if (shouldResume)
+        {
+            // Resume the most recent session — Codex has full context; just send the new prompt.
+            cmd = "codex exec --json resume --last";
+            cmd += " - < \"" + promptFile + "\"";
+        }
+        else
+        {
+            cmd = "codex exec --json --full-auto";
+            if (!model.empty())
+                cmd += " -m " + model;
+            cmd += " -C \"" + repoRoot + "\"";
+            cmd += " - < \"" + promptFile + "\"";
+        }
+
+        // On resume, Codex has full context — just send the bare prompt.
+        // On first run, inject history + system context via BuildCLIFullPrompt.
+        std::string promptContent = shouldResume ? prompt : BuildCLIFullPrompt(prompt);
 
         auto alive = m_alive;
-        QueueAction([this, alive, response]()
+        std::string accText;
+        std::string accThinking;
+        std::string accTools;
+        std::string lineBuffer;
+        bool sawToolExecution = false;
+
+        auto dispatchText = [&](const std::string &t)
+        {
+            accText += t;
+            QueueAction([this, alive, t]()
+            {
+                if (!*alive || m_cliCancelled) return;
+                std::lock_guard lock(m_chatMutex);
+                m_streamingText += t;
+                m_scrollToBottom = 3;
+            });
+        };
+        auto dispatchThinking = [&](const std::string &t)
+        {
+            accThinking += t;
+            QueueAction([this, alive, t]()
+            {
+                if (!*alive || m_cliCancelled) return;
+                std::lock_guard lock(m_chatMutex);
+                m_streamingThinking += t;
+                m_scrollToBottom = 3;
+            });
+        };
+        auto dispatchTools = [&](const std::string &t)
+        {
+            // Strip ANSI codes — tool output (e.g. shell command results) may contain color sequences.
+            std::string clean = StripAnsiCodes(t);
+            accTools += clean;
+            QueueAction([this, alive, clean]()
+            {
+                if (!*alive || m_cliCancelled) return;
+                std::lock_guard lock(m_chatMutex);
+                m_streamingTools += clean;
+                m_scrollToBottom = 3;
+            });
+        };
+
+        std::string raw = LaunchCLIProcess(cmd, promptContent, promptFile,
+            [this, alive, &lineBuffer, &dispatchText, &dispatchThinking, &dispatchTools, &sawToolExecution, &accText, &accThinking, &accTools](const char *buf, size_t n)
+            {
+                lineBuffer.append(buf, n);
+                size_t pos = 0;
+                while ((pos = lineBuffer.find('\n')) != std::string::npos)
+                {
+                    std::string line = lineBuffer.substr(0, pos);
+                    lineBuffer.erase(0, pos + 1);
+                    if (!line.empty() && line.back() == '\r')
+                        line.pop_back();
+                    if (line.empty())
+                        continue;
+                    if (line.front() != '{')
+                        continue; // Ignore warnings / plain-text status lines.
+
+                    rapidjson::Document doc;
+                    doc.Parse(line.c_str(), line.size());
+                    if (doc.HasParseError() || !doc.IsObject() || !doc.HasMember("type") || !doc["type"].IsString())
+                        continue;
+
+                    const std::string type = doc["type"].GetString();
+                    if ((type == "item.started" || type == "item.completed") &&
+                        doc.HasMember("item") && doc["item"].IsObject())
                     {
-            if (!*alive || m_codexCancelled)
-                return;
+                        const auto &item = doc["item"];
+                        if (!item.HasMember("type") || !item["type"].IsString())
+                            continue;
+
+                        const std::string itemType = item["type"].GetString();
+                        if (itemType == "agent_message" && item.HasMember("text") && item["text"].IsString())
+                        {
+                            std::string text = item["text"].GetString();
+                            if (text.empty())
+                                continue;
+
+                            if (sawToolExecution)
+                            {
+                                if (!accText.empty())
+                                    dispatchText("\n\n");
+                                dispatchText(text);
+                            }
+                            else
+                            {
+                                if (!accThinking.empty())
+                                    dispatchThinking("\n\n");
+                                dispatchThinking(text);
+                            }
+                        }
+                        else if (itemType == "command_execution")
+                        {
+                            sawToolExecution = true;
+                            std::string toolInfo;
+                            if (type == "item.started")
+                            {
+                                const std::string command = item.HasMember("command") && item["command"].IsString()
+                                                                ? item["command"].GetString()
+                                                                : "";
+                                toolInfo = "[Tool: Command]";
+                                if (!command.empty())
+                                    toolInfo += "\n" + command;
+                            }
+                            else
+                            {
+                                toolInfo = "[Tool Result]";
+                                if (item.HasMember("aggregated_output") && item["aggregated_output"].IsString())
+                                {
+                                    std::string output = item["aggregated_output"].GetString();
+                                    while (!output.empty() && (output.back() == '\n' || output.back() == '\r'))
+                                        output.pop_back();
+                                    if (!output.empty())
+                                        toolInfo += "\n" + output;
+                                }
+                            }
+
+                            if (!toolInfo.empty())
+                            {
+                                if (!accTools.empty())
+                                    dispatchTools("\n\n");
+                                dispatchTools(toolInfo);
+                            }
+                        }
+                    }
+                }
+            });
+
+        if (m_cliCancelled)
+            return;
+        m_codexHasSession = true;
+        if (accText.empty() && !sawToolExecution && !accThinking.empty())
+        {
+            accText = accThinking;
+            accThinking.clear();
+        }
+        if (accText.empty())
+            accText = raw;
+        if (accText.empty())
+            accText = "[Codex returned an empty response]";
+
+        QueueAction([this, alive, accText, accThinking, accTools]()
+        {
+            if (!*alive || m_cliCancelled) return;
             std::lock_guard lock(m_chatMutex);
-            m_chat.push_back({ChatMessage::Role::Assistant, response});
+            ChatMessage chatMsg;
+            chatMsg.role = ChatMessage::Role::Assistant;
+            chatMsg.text = accText;
+            chatMsg.thinking = accThinking;
+            chatMsg.tools = accTools;
+            m_chat.push_back(std::move(chatMsg));
+            m_streamingText.clear();
+            m_streamingThinking.clear();
+            m_streamingTools.clear();
             m_isStreaming = false;
-            m_scrollToBottom = 3; });
+            m_scrollToBottom = 3;
+            FirePendingSteer();
+        });
+    }
+
+    void AgentWidget::RunClaudeCLI(const std::string &prompt)
+    {
+        m_cliCancelled = false;
+        std::string agentDir = Path::Assets + "Agent/";
+        std::string promptFile = agentDir + "cli_prompt.tmp";
+
+        std::string model = SanitizeCLIModel(m_claudeModelBuf);
+        const bool shouldResume = m_claudeHasSession || (!m_currentSessionPath.empty() && HasSavedConversationHistory());
+        // --print is required for --output-format stream-json to work.
+        // --include-partial-messages adds token-level delta events for live streaming.
+        std::string cmd = "claude --print --verbose --dangerously-skip-permissions"
+                          " --output-format stream-json --include-partial-messages";
+        if (shouldResume)
+            cmd += " --continue"; // resume most recent session; Claude has full context
+        else if (!model.empty())
+            cmd += " --model " + model;
+        cmd += " < \"" + promptFile + "\"";
+
+        auto alive = m_alive;
+
+        // Accumulated final content (for the committed ChatMessage)
+        std::string accText;
+        std::string accThinking;
+        std::string accTools;
+
+        // Line buffer for NDJSON parsing.
+        // With --include-partial-messages we get two event styles:
+        //   content_block_delta: token-level deltas (text_delta, thinking_delta) — used for live display
+        //   assistant (complete):  full content blocks — used only for tool_use (no delta stream)
+        std::string lineBuffer;
+        bool gotDeltas = false; // true once we've received any content_block_delta
+
+        auto dispatchText = [&](const std::string &t)
+        {
+            accText += t;
+            QueueAction([this, alive, t]()
+            {
+                if (!*alive || m_cliCancelled) return;
+                std::lock_guard lock(m_chatMutex);
+                m_streamingText += t;
+                m_scrollToBottom = 3;
+            });
+        };
+        auto dispatchThinking = [&](const std::string &t)
+        {
+            accThinking += t;
+            QueueAction([this, alive, t]()
+            {
+                if (!*alive || m_cliCancelled) return;
+                std::lock_guard lock(m_chatMutex);
+                m_streamingThinking += t;
+                m_scrollToBottom = 3;
+            });
+        };
+        auto dispatchTools = [&](const std::string &t)
+        {
+            accTools += t;
+            QueueAction([this, alive, t]()
+            {
+                if (!*alive || m_cliCancelled) return;
+                std::lock_guard lock(m_chatMutex);
+                m_streamingTools += t;
+                m_scrollToBottom = 3;
+            });
+        };
+
+        auto onData = [&](const char *buf, size_t n)
+        {
+            lineBuffer.append(buf, n);
+            size_t pos;
+            while ((pos = lineBuffer.find('\n')) != std::string::npos)
+            {
+                std::string line = lineBuffer.substr(0, pos);
+                lineBuffer.erase(0, pos + 1);
+                if (!line.empty() && line.back() == '\r')
+                    line.pop_back();
+                if (line.empty())
+                    continue;
+
+                rapidjson::Document doc;
+                doc.Parse(line.c_str(), line.size());
+                if (doc.HasParseError() || !doc.IsObject())
+                    continue;
+                if (!doc.HasMember("type") || !doc["type"].IsString())
+                    continue;
+
+                const std::string type = doc["type"].GetString();
+
+                // --- Token-level streaming deltas (from --include-partial-messages) ---
+                if (type == "content_block_delta" && doc.HasMember("delta") && doc["delta"].IsObject())
+                {
+                    const auto &delta = doc["delta"];
+                    if (!delta.HasMember("type") || !delta["type"].IsString())
+                        continue;
+                    const std::string dtype = delta["type"].GetString();
+                    if (dtype == "text_delta" && delta.HasMember("text") && delta["text"].IsString())
+                    {
+                        gotDeltas = true;
+                        dispatchText(delta["text"].GetString());
+                    }
+                    else if (dtype == "thinking_delta" && delta.HasMember("thinking") && delta["thinking"].IsString())
+                    {
+                        gotDeltas = true;
+                        dispatchThinking(delta["thinking"].GetString());
+                    }
+                }
+                // --- Complete assistant message (tool_use blocks + fallback when no deltas) ---
+                else if (type == "assistant" && doc.HasMember("message"))
+                {
+                    const auto &msg = doc["message"];
+                    if (!msg.IsObject() || !msg.HasMember("content") || !msg["content"].IsArray())
+                        continue;
+
+                    for (const auto &block : msg["content"].GetArray())
+                    {
+                        if (!block.IsObject() || !block.HasMember("type"))
+                            continue;
+                        const std::string btype = block["type"].GetString();
+
+                        if (btype == "tool_use")
+                        {
+                            // Tool calls are not streamed via deltas; always show them.
+                            std::string toolName = block.HasMember("name") && block["name"].IsString()
+                                                       ? block["name"].GetString() : "unknown";
+                            std::string toolInfo = "[Tool: " + toolName + "]";
+                            if (block.HasMember("input") && block["input"].IsObject())
+                            {
+                                rapidjson::StringBuffer sb;
+                                rapidjson::Writer<rapidjson::StringBuffer> writer(sb);
+                                block["input"].Accept(writer);
+                                toolInfo += "\n";
+                                toolInfo += sb.GetString();
+                            }
+                            if (!accTools.empty())
+                                toolInfo = "\n\n" + toolInfo;
+                            dispatchTools(toolInfo);
+                        }
+                        else if (!gotDeltas)
+                        {
+                            // Fallback: no deltas received — use complete blocks for text/thinking.
+                            if (btype == "text" && block.HasMember("text") && block["text"].IsString())
+                            {
+                                if (!accText.empty())
+                                    dispatchText("\n\n");
+                                dispatchText(block["text"].GetString());
+                            }
+                            else if (btype == "thinking" && block.HasMember("thinking") && block["thinking"].IsString())
+                            {
+                                if (!accThinking.empty())
+                                    dispatchThinking("\n\n");
+                                dispatchThinking(block["thinking"].GetString());
+                            }
+                        }
+                    }
+                }
+                // --- Top-level error ---
+                else if (type == "result" && doc.HasMember("is_error") && doc["is_error"].IsBool() &&
+                         doc["is_error"].GetBool())
+                {
+                    if (doc.HasMember("result") && doc["result"].IsString())
+                    {
+                        std::string err = std::string("\n\n[Error] ") + doc["result"].GetString();
+                        dispatchText(err);
+                    }
+                }
+            }
+        };
+
+        // On resume, Claude has full session context — just send the bare prompt.
+        std::string promptContent = shouldResume ? prompt : BuildCLIFullPrompt(prompt);
+        std::string raw = LaunchCLIProcess(cmd, promptContent, promptFile, onData);
+
+        if (m_cliCancelled)
+            return;
+        m_claudeHasSession = true;
+
+        // Fallback: if NDJSON parsing produced nothing, show raw output.
+        if (accText.empty())
+            accText = raw;
+        if (accText.empty())
+            accText = "[Claude CLI returned an empty response]";
+
+        QueueAction([this, alive, accText, accThinking, accTools]()
+        {
+            if (!*alive || m_cliCancelled) return;
+            std::lock_guard lock(m_chatMutex);
+            ChatMessage chatMsg;
+            chatMsg.role = ChatMessage::Role::Assistant;
+            chatMsg.text = accText;
+            chatMsg.thinking = accThinking;
+            chatMsg.tools = accTools;
+            m_chat.push_back(std::move(chatMsg));
+            m_streamingText.clear();
+            m_streamingThinking.clear();
+            m_streamingTools.clear();
+            m_isStreaming = false;
+            m_scrollToBottom = 3;
+            FirePendingSteer();
+        });
+    }
+
+    void AgentWidget::RunGeminiCLI(const std::string &prompt)
+    {
+        m_cliCancelled = false;
+        std::string agentDir = Path::Assets + "Agent/";
+        std::string promptFile = agentDir + "cli_prompt.tmp";
+
+        std::string model = SanitizeCLIModel(m_geminiModelBuf);
+        const bool shouldResume = m_geminiHasSession || (!m_currentSessionPath.empty() && HasSavedConversationHistory());
+        std::string cmd = "gemini -y";
+        if (shouldResume)
+            cmd += " --resume latest";
+        else if (!model.empty())
+            cmd += " -m " + model;
+        cmd += " --output-format stream-json";
+        cmd += " -p \"\"";
+        cmd += " < \"" + promptFile + "\"";
+
+        auto alive = m_alive;
+        std::string promptContent = shouldResume ? prompt : BuildCLIFullPrompt(prompt);
+        std::string accText;
+        std::string accThinking;
+        std::string accTools;
+        std::string lineBuffer;
+        bool gotAssistantDelta = false;
+        bool sawToolUse = false;
+
+        auto dispatchText = [&](const std::string &t)
+        {
+            accText += t;
+            QueueAction([this, alive, t]()
+            {
+                if (!*alive || m_cliCancelled) return;
+                std::lock_guard lock(m_chatMutex);
+                m_streamingText += t;
+                m_scrollToBottom = 3;
+            });
+        };
+        auto dispatchThinking = [&](const std::string &t)
+        {
+            accThinking += t;
+            QueueAction([this, alive, t]()
+            {
+                if (!*alive || m_cliCancelled) return;
+                std::lock_guard lock(m_chatMutex);
+                m_streamingThinking += t;
+                m_scrollToBottom = 3;
+            });
+        };
+        auto dispatchTools = [&](const std::string &t)
+        {
+            std::string clean = StripAnsiCodes(t);
+            accTools += clean;
+            QueueAction([this, alive, clean]()
+            {
+                if (!*alive || m_cliCancelled) return;
+                std::lock_guard lock(m_chatMutex);
+                m_streamingTools += clean;
+                m_scrollToBottom = 3;
+            });
+        };
+
+        LaunchCLIProcess(cmd, promptContent, promptFile,
+            [this, &lineBuffer, &dispatchText, &dispatchThinking, &dispatchTools,
+             &gotAssistantDelta, &accText, &accThinking, &accTools, &sawToolUse](const char *buf, size_t n)
+            {
+                lineBuffer.append(buf, n);
+                size_t pos = 0;
+                while ((pos = lineBuffer.find('\n')) != std::string::npos)
+                {
+                    std::string line = lineBuffer.substr(0, pos);
+                    lineBuffer.erase(0, pos + 1);
+                    if (!line.empty() && line.back() == '\r')
+                        line.pop_back();
+                    if (line.empty() || line.front() != '{')
+                        continue; // Ignore CLI chatter/stderr like AttachConsole failures.
+
+                    rapidjson::Document doc;
+                    doc.Parse(line.c_str(), line.size());
+                    if (doc.HasParseError() || !doc.IsObject() || !doc.HasMember("type") || !doc["type"].IsString())
+                        continue;
+
+                    const std::string type = doc["type"].GetString();
+                    if (type == "message" &&
+                        doc.HasMember("role") && doc["role"].IsString() &&
+                        std::string(doc["role"].GetString()) == "assistant" &&
+                        doc.HasMember("content") && doc["content"].IsString())
+                    {
+                        const std::string content = doc["content"].GetString();
+                        if (content.empty())
+                            continue;
+
+                        const bool isDelta = doc.HasMember("delta") && doc["delta"].IsBool() && doc["delta"].GetBool();
+                        if (isDelta)
+                        {
+                            gotAssistantDelta = true;
+                            if (sawToolUse)
+                                dispatchText(content);
+                            else
+                                dispatchThinking(content);
+                        }
+                        else if (!gotAssistantDelta && accText.empty() && accThinking.empty())
+                        {
+                            if (sawToolUse)
+                                dispatchText(content);
+                            else
+                                dispatchThinking(content);
+                        }
+                    }
+                    else if (type == "tool_use" &&
+                             doc.HasMember("tool_name") && doc["tool_name"].IsString())
+                    {
+                        sawToolUse = true;
+                        std::string toolInfo = std::string("[Tool: ") + doc["tool_name"].GetString() + "]";
+                        if (doc.HasMember("parameters") && doc["parameters"].IsObject())
+                        {
+                            rapidjson::StringBuffer sb;
+                            rapidjson::Writer<rapidjson::StringBuffer> writer(sb);
+                            doc["parameters"].Accept(writer);
+                            toolInfo += "\n";
+                            toolInfo += sb.GetString();
+                        }
+                        if (!accTools.empty())
+                            dispatchTools("\n\n");
+                        dispatchTools(toolInfo);
+                    }
+                    else if (type == "tool_result")
+                    {
+                        sawToolUse = true;
+                        std::string toolInfo = "[Tool Result]";
+                        if (doc.HasMember("status") && doc["status"].IsString())
+                            toolInfo += std::string(" (") + doc["status"].GetString() + ")";
+                        if (doc.HasMember("output") && doc["output"].IsString())
+                        {
+                            std::string output = doc["output"].GetString();
+                            while (!output.empty() && (output.back() == '\n' || output.back() == '\r'))
+                                output.pop_back();
+                            if (!output.empty())
+                                toolInfo += "\n" + output;
+                        }
+                        if (!accTools.empty())
+                            dispatchTools("\n\n");
+                        dispatchTools(toolInfo);
+                    }
+                    else if (type == "result" &&
+                             doc.HasMember("status") && doc["status"].IsString() &&
+                             std::string(doc["status"].GetString()) != "success" &&
+                             accText.empty() && accThinking.empty())
+                    {
+                        dispatchText("[Gemini CLI failed]");
+                    }
+                }
+            });
+
+        if (m_cliCancelled)
+            return;
+        m_geminiHasSession = true;
+        if (accText.empty() && !sawToolUse && accThinking.empty())
+            accText = "[Gemini CLI returned an empty response]";
+        else if (accText.empty() && !sawToolUse && !accThinking.empty())
+        {
+            accText = accThinking;
+            accThinking.clear();
+        }
+
+        QueueAction([this, alive, accText, accThinking, accTools]()
+        {
+            if (!*alive || m_cliCancelled) return;
+            std::lock_guard lock(m_chatMutex);
+            ChatMessage chatMsg;
+            chatMsg.role = ChatMessage::Role::Assistant;
+            chatMsg.text = accText;
+            chatMsg.thinking = accThinking;
+            chatMsg.tools = accTools;
+            m_chat.push_back(std::move(chatMsg));
+            m_streamingText.clear();
+            m_streamingThinking.clear();
+            m_streamingTools.clear();
+            m_isStreaming = false;
+            m_scrollToBottom = 3;
+            FirePendingSteer();
+        });
     }
 
     std::string AgentWidget::BuildRagContext(const std::string &queryText)
@@ -4450,10 +5230,12 @@ namespace pe
         {
             std::lock_guard lock(m_chatMutex);
             m_chat.push_back({ChatMessage::Role::Assistant, response});
+            m_streamingTools.clear();
             m_scrollToBottom = 3;
         }
         m_isStreaming = false;
         WriteExternalHistory();
+        FirePendingSteer();
     }
 
     void AgentWidget::WriteExternalHistory()
@@ -4488,7 +5270,7 @@ namespace pe
 
     void AgentWidget::SaveSession()
     {
-        if (!m_agent)
+        if (!m_agent && !IsAnyCLI() && !m_isExternalAI)
             return;
 
         // Create sessions directory if needed
@@ -4552,6 +5334,8 @@ namespace pe
                 m["text"] = msg.text;
                 if (!msg.thinking.empty())
                     m["thinking"] = msg.thinking;
+                if (!msg.tools.empty())
+                    m["tools"] = msg.tools;
                 msgs.push_back(std::move(m));
             }
         }
@@ -4564,11 +5348,14 @@ namespace pe
 
     void AgentWidget::LoadSession(const std::string &path)
     {
-        if (!m_agent)
+        if (!m_agent && !IsAnyCLI() && !m_isExternalAI)
             return;
 
         // Restoring a saved session — do not inject START.md; context is already in the history
-        m_codexSystemContext.clear();
+        m_cliSystemContext.clear();
+        m_codexHasSession = false;
+        m_claudeHasSession = false;
+        m_geminiHasSession = false;
 
         std::ifstream f(path);
         if (!f)
@@ -4595,6 +5382,7 @@ namespace pe
             std::string role = m.value("role", "system");
             std::string text = m.value("text", "");
             std::string thinking = m.value("thinking", "");
+            std::string tools = m.value("tools", "");
 
             ChatMessage::Role chatRole = ChatMessage::Role::System;
             if (role == "user")
@@ -4602,7 +5390,12 @@ namespace pe
             else if (role == "assistant")
                 chatRole = ChatMessage::Role::Assistant;
 
-            loaded.push_back({chatRole, text, thinking});
+            ChatMessage loadedMsg;
+            loadedMsg.role = chatRole;
+            loadedMsg.text = std::move(text);
+            loadedMsg.thinking = std::move(thinking);
+            loadedMsg.tools = std::move(tools);
+            loaded.push_back(std::move(loadedMsg));
 
             // Reconstruct lightweight LLM history from user/assistant turns only
             if (role == "user" || role == "assistant")
@@ -4616,12 +5409,15 @@ namespace pe
         }
 
         // Apply to agent
-        m_agent->ClearHistory();
-        m_agent->LoadHistory(historyEntries);
-        m_agent->InjectSystemMessage(
-            "Session restored from a previous editor run. "
-            "The codebase may have changed since this conversation. "
-            "Always verify file contents and line numbers with tools before acting on past assumptions.");
+        if (m_agent)
+        {
+            m_agent->ClearHistory();
+            m_agent->LoadHistory(historyEntries);
+            m_agent->InjectSystemMessage(
+                "Session restored from a previous editor run. "
+                "The codebase may have changed since this conversation. "
+                "Always verify file contents and line numbers with tools before acting on past assumptions.");
+        }
 
         {
             std::lock_guard lock(m_chatMutex);
@@ -4630,6 +5426,12 @@ namespace pe
                               "[Session restored - code may have changed since last run]"});
             m_scrollToBottom = 3;
         }
+
+        const std::string savedProvider = j.value("provider", "");
+        const bool hasTurns = !historyEntries.empty();
+        m_codexHasSession = hasTurns && savedProvider == "Codex CLI" && m_isCodexCLI;
+        m_claudeHasSession = hasTurns && savedProvider == "Claude CLI" && m_isClaudeCLI;
+        m_geminiHasSession = hasTurns && savedProvider == "Gemini CLI" && m_isGeminiCLI;
 
         // If the last message was from the user in an external session, we should be waiting for a response.
         if (m_isExternalAI)
@@ -4664,18 +5466,21 @@ namespace pe
             std::filesystem::remove(Path::Assets + "Agent/codex_external_has_session.flag", ec);
             std::filesystem::remove(Path::Assets + "Agent/codex_external_thread.txt", ec);
         }
-        if (m_isCodexCLI)
+        if (IsAnyCLI())
         {
-            // Load START.md so Codex has project context on its first message of this session
-            m_codexSystemContext.clear();
+            // Load START.md so the CLI tool has project context on its first message of this session
+            m_cliSystemContext.clear();
             std::ifstream sf(Path::Assets + "Agent/START.md");
             if (sf)
             {
                 std::ostringstream ss;
                 ss << sf.rdbuf();
-                m_codexSystemContext = ss.str();
+                m_cliSystemContext = ss.str();
             }
         }
+        m_codexHasSession = false;
+        m_claudeHasSession = false;
+        m_geminiHasSession = false;
         std::lock_guard lock(m_chatMutex);
         m_chat.clear();
         m_scrollToBottom = 3;
@@ -4720,42 +5525,59 @@ namespace pe
             msg.role = ChatMessage::Role::Assistant;
             msg.text = ev.text;
             msg.thinking = m_streamingThinking;
-            if (!msg.text.empty() || !msg.thinking.empty())
+            msg.tools = m_streamingTools;
+            if (!msg.text.empty() || !msg.thinking.empty() || !msg.tools.empty())
                 m_chat.push_back(std::move(msg));
             m_streamingText.clear();
             m_streamingThinking.clear();
+            m_streamingTools.clear();
             m_isStreaming = false;
             m_scrollToBottom = 3;
             break;
         }
         case pagent::AgentEventType::ToolCallBegin:
-            // Flush any accumulated thinking before tool calls
-            if (!m_streamingThinking.empty())
-            {
-                m_chat.push_back({ChatMessage::Role::Assistant, "", m_streamingThinking});
-                m_streamingThinking.clear();
-            }
-            m_chat.push_back({ChatMessage::Role::System, "[calling: " + ev.tool_name + "]"});
+            if (!m_streamingTools.empty())
+                m_streamingTools += "\n\n";
+            m_streamingTools += "[Tool: " + ev.tool_name + "]";
+            m_isStreaming = true;
             m_scrollToBottom = 3;
             break;
         case pagent::AgentEventType::ToolCallComplete:
         {
             if (!ev.tool_input_json.empty())
-                m_chat.push_back({ChatMessage::Role::System, ev.tool_input_json});
+            {
+                if (!m_streamingTools.empty())
+                    m_streamingTools += "\n";
+                m_streamingTools += ev.tool_input_json;
+            }
+            m_isStreaming = true;
             m_scrollToBottom = 3;
             break;
         }
         case pagent::AgentEventType::Usage:
             break; // handled internally by Agent::Impl::Poll()
         case pagent::AgentEventType::TurnComplete:
+            if (!m_streamingText.empty() || !m_streamingThinking.empty() || !m_streamingTools.empty())
+            {
+                ChatMessage msg;
+                msg.role = ChatMessage::Role::Assistant;
+                msg.text = m_streamingText;
+                msg.thinking = m_streamingThinking;
+                msg.tools = m_streamingTools;
+                m_chat.push_back(std::move(msg));
+            }
             m_isStreaming = false;
             m_streamingText.clear();
             m_streamingThinking.clear();
+            m_streamingTools.clear();
             // Auto-save session after every completed turn (mutex already held - defer to next frame)
             {
                 auto *self = this;
                 QueueAction([self]()
-                            { self->SaveSession(); });
+                            {
+                                self->SaveSession();
+                                self->FirePendingSteer();
+                            });
             }
             break;
         case pagent::AgentEventType::Error:
@@ -4763,6 +5585,7 @@ namespace pe
             m_isStreaming = false;
             m_streamingText.clear();
             m_streamingThinking.clear();
+            m_streamingTools.clear();
             m_scrollToBottom = 3;
             break;
         case pagent::AgentEventType::Info:
@@ -4835,21 +5658,29 @@ namespace pe
             renderAttachments(msg.attachments);
             break;
         case ChatMessage::Role::Assistant:
-            if (!msg.thinking.empty())
+        {
+            auto renderAssistantSection = [&msg](const char *label, const std::string &content, const ImVec4 &color)
             {
-                ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.5f, 0.5f, 0.6f, 1.0f));
+                if (content.empty())
+                    return;
+
+                ImGui::PushStyleColor(ImGuiCol_Text, color);
                 ImGui::PushID(&msg);
-                if (ImGui::TreeNode("Thinking"))
+                if (ImGui::TreeNode(label))
                 {
-                    ImGui::TextWrapped("%s", msg.thinking.c_str());
+                    ImGui::TextWrapped("%s", content.c_str());
                     ImGui::TreePop();
                 }
                 ImGui::PopID();
                 ImGui::PopStyleColor();
-            }
+            };
+
+            renderAssistantSection("Thinking", msg.thinking, ImVec4(0.5f, 0.5f, 0.6f, 1.0f));
+            renderAssistantSection("Tools", msg.tools, ImVec4(0.62f, 0.58f, 0.52f, 1.0f));
             if (!msg.text.empty())
                 ImGui::TextWrapped("[AI] %s", msg.text.c_str());
             break;
+        }
         case ChatMessage::Role::System:
             ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.5f, 0.5f, 0.5f, 1.0f));
             ImGui::TextWrapped("%s", msg.text.c_str());

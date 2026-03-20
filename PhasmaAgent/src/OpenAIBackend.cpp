@@ -33,10 +33,8 @@ namespace pagent
         {
             json j = {{"role", "assistant"}};
 
-            if (!msg.content.empty())
-                j["content"] = msg.content;
-            else
-                j["content"] = nullptr;
+            // Grok (and some other providers) reject null content — use empty string as fallback
+            j["content"] = msg.content.empty() ? "" : msg.content;
 
             if (!msg.tool_calls.empty())
             {

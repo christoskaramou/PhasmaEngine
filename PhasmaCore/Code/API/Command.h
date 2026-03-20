@@ -149,6 +149,7 @@ namespace pe
         static RenderPass *GetRenderPass(uint32_t count, Attachment *attachments);
         static Framebuffer *GetFramebuffer(RenderPass *renderPass, uint32_t count, Attachment *attachments);
         static Pipeline *GetPipeline(RenderPass *renderPass, PassInfo &info);
+        static void ClearFramebufferCache();
         static void ClearCache();
         inline static auto &GetFramebuffers() { return s_framebuffers; }
 

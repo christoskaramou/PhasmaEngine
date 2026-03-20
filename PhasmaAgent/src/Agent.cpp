@@ -10,6 +10,23 @@
 
 namespace pagent
 {
+    static std::string GetEnvOrEmpty(const char *name)
+    {
+#if defined(_WIN32)
+        char *value = nullptr;
+        size_t len = 0;
+        if (_dupenv_s(&value, &len, name) != 0 || !value)
+            return {};
+
+        std::string result(value);
+        free(value);
+        return result;
+#else
+        const char *value = std::getenv(name);
+        return value ? value : "";
+#endif
+    }
+
     // Strip http:// prefix from Ollama host URL, defaulting to localhost:11434
     static std::string ResolveOllamaHost(const std::string &base_url)
     {
@@ -24,35 +41,38 @@ namespace pagent
     {
         std::vector<ProviderInfo> providers;
 
-        const char *anthropicKey = std::getenv("PAGENT_ANTHROPIC_API_KEY");
-        const char *openaiKey = std::getenv("PAGENT_OPENAI_API_KEY");
-        const char *geminiKey = std::getenv("PAGENT_GEMINI_API_KEY");
+        const std::string anthropicKey = GetEnvOrEmpty("PAGENT_ANTHROPIC_API_KEY");
+        const std::string openaiKey = GetEnvOrEmpty("PAGENT_OPENAI_API_KEY");
+        const std::string geminiKey = GetEnvOrEmpty("PAGENT_GEMINI_API_KEY");
+        const std::string deepseekKey = GetEnvOrEmpty("PAGENT_DEEPSEEK_API_KEY");
+        const std::string grokKey = GetEnvOrEmpty("PAGENT_GROK_API_KEY");
+        const std::string vertexProject = GetEnvOrEmpty("PAGENT_VERTEX_PROJECT_ID");
+        const std::string vertexLocation = GetEnvOrEmpty("PAGENT_VERTEX_LOCATION");
 
-        if (anthropicKey)
+        if (!anthropicKey.empty())
             providers.push_back({Provider::Anthropic, "Anthropic", anthropicKey, "claude-haiku-4-5"});
-        if (openaiKey)
+        if (!openaiKey.empty())
             providers.push_back({Provider::OpenAI, "OpenAI", openaiKey, "gpt-4.1-mini"});
-        if (geminiKey)
+        if (!geminiKey.empty())
             providers.push_back({Provider::Google, "Google", geminiKey, "gemini-2.5-flash"});
-        providers.push_back({Provider::Ollama, "Ollama", "", ""});
-
-        // Vertex AI: enabled when PAGENT_VERTEX_PROJECT_ID and PAGENT_VERTEX_LOCATION are set.
-        // The access token is fetched automatically via gcloud at startup.
-        const char *vertexProject = std::getenv("PAGENT_VERTEX_PROJECT_ID");
-        const char *vertexLocation = std::getenv("PAGENT_VERTEX_LOCATION");
-        if (vertexProject && vertexLocation)
+        if (!deepseekKey.empty())
+            providers.push_back({Provider::OpenAI, "DeepSeek", deepseekKey, "deepseek-chat", "https://api.deepseek.com"});
+        if (!grokKey.empty())
+            providers.push_back({Provider::OpenAI, "Grok", grokKey, "grok-4-1-fast", "https://api.x.ai"});
+        if (!vertexProject.empty() && !vertexLocation.empty())
             providers.push_back({Provider::GoogleVertex, "Google Vertex", "", "gemini-2.5-flash"});
+        providers.push_back({Provider::Ollama, "Ollama", "", ""});
 
         return providers;
     }
 
     int GetDefaultProviderIndex(const std::vector<ProviderInfo> &providers)
     {
-        const char *env = std::getenv("PAGENT_PROVIDER");
-        if (!env)
+        const std::string providerEnv = GetEnvOrEmpty("PAGENT_PROVIDER");
+        if (providerEnv.empty())
             return 0;
 
-        std::string providerStr = env;
+        std::string providerStr = providerEnv;
         for (auto &c : providerStr)
             c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
 
@@ -60,10 +80,12 @@ namespace pagent
         {
             const auto &p = providers[i];
             if ((providerStr == "anthropic" && p.provider == Provider::Anthropic) ||
-                (providerStr == "openai" && p.provider == Provider::OpenAI) ||
+                (providerStr == "openai" && p.provider == Provider::OpenAI && p.name == "OpenAI") ||
                 (providerStr == "google" && p.provider == Provider::Google) ||
                 (providerStr == "ollama" && p.provider == Provider::Ollama) ||
-                (providerStr == "googlevertex" && p.provider == Provider::GoogleVertex))
+                (providerStr == "googlevertex" && p.provider == Provider::GoogleVertex) ||
+                (providerStr == "deepseek" && p.name == "DeepSeek") ||
+                (providerStr == "grok" && p.name == "Grok"))
                 return i;
         }
         return 0;

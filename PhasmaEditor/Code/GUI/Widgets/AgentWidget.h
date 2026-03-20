@@ -38,6 +38,7 @@ namespace pe
         Role role;
         std::string text;
         std::string thinking;                        // reasoning/thinking content (if any)
+        std::string tools;                          // tool calls / tool inputs (if any)
         std::vector<ChatImage> images;               // attached images (for display)
         std::vector<ChatFileAttachment> attachments; // attached files (for display)
     };
@@ -104,10 +105,11 @@ namespace pe
         std::vector<pagent::ProviderInfo> m_providers;
         int m_selectedProviderIndex = 0;
 
-        std::mutex m_chatMutex;
+        mutable std::mutex m_chatMutex;
         std::vector<ChatMessage> m_chat;
         std::string m_streamingText;
         std::string m_streamingThinking;
+        std::string m_streamingTools;
         std::mutex m_actionMutex;
         std::vector<std::function<void()>> m_pendingActions;
         std::shared_ptr<std::atomic<bool>> m_alive = std::make_shared<std::atomic<bool>>(true);
@@ -118,6 +120,8 @@ namespace pe
         int m_historyIndex = -1;
         std::string m_pendingHistoryText; // applied inside InputText callback on next frame
         bool m_pendingHistoryUpdate = false;
+        std::string m_pendingSteer; // message queued while agent is busy; auto-sent on TurnComplete
+        void FirePendingSteer();    // call on main thread after any TurnComplete
 
         // Image paste support
         struct PendingImage
@@ -170,6 +174,7 @@ namespace pe
         bool m_showSessionBrowser = false;
         std::string GetEmbeddingModelFileBase() const;
         bool m_isFetchingEmbeddingModels = false;
+        bool m_isVerifyingEmbeddingModel = false;
         bool m_isPullingEmbedding = false;
         std::vector<std::string> m_indexDirectories;
         std::vector<std::string> m_includeFiles;
@@ -201,14 +206,27 @@ namespace pe
         void WriteExternalHistory();
         std::string GetExternalResponsePath() const;
 
-        // Codex CLI provider — spawns `codex exec` as a subprocess
+        // External CLI providers — spawn subprocesses (Codex, Claude, Gemini)
         bool m_isCodexCLI = false;
+        bool m_isClaudeCLI = false;
+        bool m_isGeminiCLI = false;
+        bool IsAnyCLI() const { return m_isCodexCLI || m_isClaudeCLI || m_isGeminiCLI; }
         char m_codexModelBuf[128] = "gpt-5.4";
-        std::string m_codexSystemContext;          // START.md content injected on NewSession(), cleared on LoadSession()
-        std::atomic<bool> m_codexCancelled{false}; // discard response if stopped before process exits
-        std::mutex m_codexProcessMutex;
-        intptr_t m_codexProcessId = 0; // Windows: HANDLE cast; Linux: pid_t cast
+        char m_claudeModelBuf[128] = "claude-sonnet-4-6";
+        char m_geminiModelBuf[128] = "gemini-2.5-pro";
+        bool m_codexHasSession = false;  // true after first codex exec run; use "resume --last" on next
+        bool m_claudeHasSession = false; // true after first claude run; use "--continue" on next
+        bool m_geminiHasSession = false; // true after first gemini run; use "--resume latest" on next
+        std::string m_cliSystemContext;          // START.md injected on NewSession(), cleared on LoadSession()
+        std::atomic<bool> m_cliCancelled{false}; // shared; only one CLI runs at a time
+        std::mutex m_cliProcessMutex;
+        intptr_t m_cliProcessId = 0; // Windows: Job Object HANDLE; Linux: pid_t cast
         void RunCodexCLI(const std::string &prompt);
+        void RunClaudeCLI(const std::string &prompt);
+        void RunGeminiCLI(const std::string &prompt);
+        std::string BuildCLIFullPrompt(const std::string &prompt);
+        std::string LaunchCLIProcess(const std::string &cmd, const std::string &promptContent, const std::string &promptFile, std::function<void(const char *, size_t)> onData = {});
+        bool HasSavedConversationHistory() const;
         std::string BuildRagContext(const std::string &queryText);
         std::vector<std::string> BuildRagFilePaths(const std::string &queryText);
 

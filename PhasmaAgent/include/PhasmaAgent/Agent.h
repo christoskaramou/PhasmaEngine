@@ -29,6 +29,7 @@ namespace pagent
         Google,       // Google Gemini via AI Studio (generativelanguage.googleapis.com)
         Ollama,       // Local Ollama instance (OpenAI-compatible)
         GoogleVertex, // Google Gemini via Vertex AI (uses OAuth2 Bearer token)
+        CLI,          // External CLI subprocess (Codex, Claude, Gemini CLI, etc.)
     };
 
     enum class SchemaType
@@ -210,13 +211,15 @@ namespace pagent
     struct ProviderInfo
     {
         Provider provider;
-        std::string name; // "Anthropic", "OpenAI", etc.
+        std::string name;         // "Anthropic", "OpenAI", etc.
         std::string apiKey;
         std::string defaultModel;
+        std::string base_url;     // Override base host (empty = provider default)
     };
 
     // Discovers available providers from environment variables.
-    // Reads PAGENT_ANTHROPIC_API_KEY, PAGENT_OPENAI_API_KEY, PAGENT_GEMINI_API_KEY (Google).
+    // Reads PAGENT_ANTHROPIC_API_KEY, PAGENT_OPENAI_API_KEY, PAGENT_GEMINI_API_KEY (Google),
+    //        PAGENT_DEEPSEEK_API_KEY, PAGENT_GROK_API_KEY.
     // Ollama is always included (no key needed).
     // Returns them in order; optionally selects one based on PAGENT_PROVIDER env var.
     std::vector<ProviderInfo> DiscoverProviders();

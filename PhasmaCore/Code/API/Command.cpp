@@ -442,6 +442,15 @@ namespace pe
         }
     }
 
+    void CommandBuffer::ClearFramebufferCache()
+    {
+        for (auto &[hash, framebuffer] : s_framebuffers)
+        {
+            Framebuffer::Destroy(framebuffer);
+        }
+        s_framebuffers.clear();
+    }
+
     void CommandBuffer::ClearCache()
     {
         for (auto &[hash, renderPass] : s_renderPasses)
@@ -450,11 +459,7 @@ namespace pe
         }
         s_renderPasses.clear();
 
-        for (auto &[hash, framebuffer] : s_framebuffers)
-        {
-            Framebuffer::Destroy(framebuffer);
-        }
-        s_framebuffers.clear();
+        ClearFramebufferCache();
 
         for (auto &[hash, pipeline] : s_pipelines)
         {

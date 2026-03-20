@@ -1,6 +1,7 @@
 #if defined(PE_SCRIPTS)
 #include "Script/ScriptSystem.h"
 #include "Script/Bindings/BindingUtils.h"
+#include "API/Command.h"
 #include "API/Image.h"
 
 namespace pe
@@ -410,6 +411,9 @@ namespace pe
                 lua.set_function("destroy_image", [](std::shared_ptr<LuaImage> img) {
                     if (img && img->ptr && img->owned)
                     {
+                        // Lua tests create and destroy many transient images; invalidate cached
+                        // framebuffers so later pointer reuse can't resurrect stale attachments.
+                        CommandBuffer::ClearFramebufferCache();
                         Image::Destroy(img->ptr);
                         img->ptr = nullptr;
                     }
