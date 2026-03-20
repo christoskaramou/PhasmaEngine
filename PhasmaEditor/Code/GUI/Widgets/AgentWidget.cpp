@@ -16,12 +16,16 @@
 #include "PhasmaAgent/OllamaEmbedding.h"
 #include "PhasmaAgent/VectorStore.h"
 #include "PhasmaAgent/BM25Index.h"
+#include "PhasmaAgent/IncludeGraph.h"
 #include "PhasmaAgent/CodebaseIndexer.h"
 
 #include "stb/stb_image.h"
 
 #if defined(PE_WIN32)
 #include <Windows.h>
+#elif defined(PE_LINUX)
+#include <sys/wait.h>
+#include <signal.h>
 #endif
 
 using namespace pagent;
@@ -149,6 +153,8 @@ namespace pe
         m_providers = pagent::DiscoverProviders();
         // Add "External" provider (file-based, for Claude Code / Cursor / any AI tool)
         m_providers.push_back({pagent::Provider::Ollama, "External", "", "external"});
+        // Add "Codex CLI" provider — spawns codex exec as a subprocess
+        m_providers.push_back({pagent::Provider::Ollama, "Codex CLI", "", "codex"});
 
         // Restore saved config (provider, model, embedding settings)
         if (std::filesystem::exists(Path::Assets + "Agent/agent_config.json"))
@@ -274,6 +280,19 @@ namespace pe
         const pagent::ProviderInfo *info = &m_providers[m_selectedProviderIndex];
 
         m_isExternalAI = (info->name == "External");
+        m_isCodexCLI = (info->name == "Codex CLI");
+
+        if (m_isCodexCLI)
+        {
+            if (m_codexModelBuf[0] == '\0')
+                std::strncpy(m_codexModelBuf, "gpt-5.4", sizeof(m_codexModelBuf) - 1);
+            m_modelName = m_codexModelBuf;
+            m_availableModels = {m_modelName};
+            m_selectedModelIndex = 0;
+            m_agentConfigured = true;
+            return;
+        }
+
         if (m_isExternalAI)
         {
             m_modelName = m_externalFile;
@@ -2728,7 +2747,7 @@ namespace pe
             return;
         }
 
-        const bool busy = m_isExternalAI ? m_isStreaming : (m_agent && m_agent->IsBusy());
+        const bool busy = (m_isExternalAI || m_isCodexCLI) ? m_isStreaming : (m_agent && m_agent->IsBusy());
 
         // status bar
         {
@@ -2782,8 +2801,20 @@ namespace pe
                 ImGui::PopItemWidth();
             }
             ImGui::SameLine();
-            // Model selector / External file input
-            if (m_isExternalAI)
+            // Model selector / External file input / Codex model input
+            if (m_isCodexCLI)
+            {
+                ImGui::PushItemWidth(120.0f);
+                if (ImGui::InputText("##codexmodel", m_codexModelBuf, sizeof(m_codexModelBuf),
+                                     ImGuiInputTextFlags_EnterReturnsTrue))
+                {
+                    m_modelName = m_codexModelBuf;
+                }
+                if (ImGui::IsItemHovered())
+                    ImGui::SetTooltip("Codex model (e.g. gpt-5.4, gpt-5.4-mini, gpt-5.2)\nPress Enter to apply.");
+                ImGui::PopItemWidth();
+            }
+            else if (m_isExternalAI)
             {
                 ImGui::PushItemWidth(200.0f);
                 if (ImGui::InputText("##externalfile", m_externalFile, sizeof(m_externalFile),
@@ -3382,6 +3413,21 @@ namespace pe
             {
                 if (m_isExternalAI)
                     m_isStreaming = false;
+                else if (m_isCodexCLI)
+                {
+                    m_isStreaming = false;
+                    m_codexCancelled = true;
+                    std::lock_guard lock(m_codexProcessMutex);
+                    if (m_codexProcessId != 0)
+                    {
+#if defined(PE_WIN32)
+                        // m_codexProcessId holds the Job Object handle — kills cmd.exe + codex child
+                        TerminateJobObject(reinterpret_cast<HANDLE>(m_codexProcessId), 1);
+#else
+                        kill(static_cast<pid_t>(m_codexProcessId), SIGTERM);
+#endif
+                    }
+                }
                 else
                     m_agent->CancelPending();
             }
@@ -3466,6 +3512,47 @@ namespace pe
             std::ofstream(GetExternalResponsePath(), std::ios::trunc).close();
             m_isStreaming = true;
             WriteExternalHistory();
+        }
+        else if (m_isCodexCLI)
+        {
+            // Save pending images to Temp/ now so Codex can open them by path
+            std::string prompt = fullText;
+            if (!m_pendingImages.empty())
+            {
+                std::string tempDir = Path::Assets + "Temp/";
+                if (!std::filesystem::exists(tempDir))
+                    std::filesystem::create_directories(tempDir);
+                auto now = std::chrono::system_clock::now();
+                auto t = std::chrono::system_clock::to_time_t(now);
+                char timeBuf[32];
+                std::strftime(timeBuf, sizeof(timeBuf), "%Y%m%d_%H%M%S", std::localtime(&t));
+
+                prompt += "\n\n[Attached images:";
+                for (size_t i = 0; i < m_pendingImages.size(); ++i)
+                {
+                    const auto &img = m_pendingImages[i];
+                    if (img.base64.empty())
+                        continue;
+                    auto bytes = pagent::Base64Decode(img.base64);
+                    if (bytes.empty())
+                        continue;
+                    std::string ext = (img.mime_type == "image/jpeg") ? ".jpg" : ".png";
+                    std::string filename = std::string("paste_") + timeBuf;
+                    if (m_pendingImages.size() > 1)
+                        filename += "_" + std::to_string(i);
+                    filename += ext;
+                    std::string fullPath = tempDir + filename;
+                    std::ofstream file(fullPath, std::ios::binary);
+                    if (file.is_open())
+                        file.write(reinterpret_cast<const char *>(bytes.data()), bytes.size());
+                    prompt += "\n- " + fullPath;
+                }
+                prompt += "]";
+            }
+            m_isStreaming = true;
+            std::thread([this, prompt]()
+                        { RunCodexCLI(prompt); })
+                .detach();
         }
         else
         {
@@ -3951,6 +4038,361 @@ namespace pe
         return Path::Assets + "Agent/" + rel;
     }
 
+    void AgentWidget::RunCodexCLI(const std::string &prompt)
+    {
+        m_codexCancelled = false;
+        std::string agentDir = Path::Assets + "Agent/";
+        std::string promptFile = agentDir + "codex_prompt.tmp";
+        std::string outputFile = agentDir + "codex_output.tmp";
+        std::string repoRoot = std::filesystem::path(Path::Assets).parent_path().parent_path().string();
+
+        // Build conversation history for context (last ~10 non-system messages, excluding current)
+        std::string historyText;
+        {
+            std::lock_guard lock(m_chatMutex);
+            const int historyLimit = 10;
+            int start = std::max(0, static_cast<int>(m_chat.size()) - historyLimit - 1);
+            for (int i = start; i < static_cast<int>(m_chat.size()) - 1; ++i)
+            {
+                const auto &msg = m_chat[i];
+                if (msg.role == ChatMessage::Role::User)
+                    historyText += "[USER]\n" + msg.text + "\n";
+                else if (msg.role == ChatMessage::Role::Assistant)
+                    historyText += "[ASSISTANT]\n" + msg.text + "\n";
+            }
+        }
+
+        // RAG: extract relevant file paths to give Codex a head start.
+        // We don't inject chunk content (Codex reads files itself), just the paths.
+        std::vector<std::string> ragFiles = BuildRagFilePaths(prompt);
+
+        // Assemble the full prompt written to file
+        std::string fullPrompt;
+        if (!m_codexSystemContext.empty())
+        {
+            // Inject START.md as background knowledge; clarify it is not a standing instruction to use Lua
+            fullPrompt += "[Background reference — use only when the user explicitly asks to perform actions "
+                          "in the running editor. Do not mention this block or use these APIs unprompted:\n" +
+                          m_codexSystemContext + "]\n\n";
+        }
+        if (!ragFiles.empty())
+        {
+            fullPrompt += "[Likely relevant files — start here before searching further:\n";
+            for (const auto &f : ragFiles)
+                fullPrompt += "- " + f + "\n";
+            fullPrompt += "]\n\n";
+        }
+        if (!historyText.empty())
+            fullPrompt += "Recent conversation:\n" + historyText + "\n";
+        fullPrompt += prompt;
+
+        // Write to temp file so we can redirect it via stdin (avoids shell injection)
+        {
+            std::ofstream f(promptFile, std::ios::trunc);
+            f << fullPrompt;
+        }
+
+        // Sanitize model name — strip anything that could break the shell command
+        std::string model = m_codexModelBuf;
+        for (char &c : model)
+            if (!std::isalnum(static_cast<unsigned char>(c)) && c != '-' && c != '.' && c != '_')
+                c = '_';
+
+        // Build command: codex exec --full-auto -m <model> -C <root> -o <outfile> - < <promptfile>
+        // Each call is a fresh exec; history is embedded in the prompt above.
+        // std::system() on Windows already invokes cmd.exe /c, so no extra wrapper is needed.
+        // Do NOT wrap in cmd /c "..." — the nested quotes would break path quoting.
+        std::string cmd = "codex exec --full-auto";
+        if (!model.empty())
+            cmd += " -m " + model;
+        cmd += " -C \"" + repoRoot + "\"";
+        cmd += " -o \"" + outputFile + "\"";
+        cmd += " - < \"" + promptFile + "\"";
+
+        int exitCode = -1;
+#if defined(PE_WIN32)
+        {
+            // Use a Job Object so TerminateJobObject kills cmd.exe AND the codex child together
+            HANDLE hJob = CreateJobObjectA(nullptr, nullptr);
+            if (hJob)
+            {
+                JOBOBJECT_EXTENDED_LIMIT_INFORMATION jeli = {};
+                jeli.BasicLimitInformation.LimitFlags = JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE;
+                SetInformationJobObject(hJob, JobObjectExtendedLimitInformation, &jeli, sizeof(jeli));
+            }
+            std::string winCmd = "cmd.exe /c " + cmd;
+            STARTUPINFOA si = {};
+            PROCESS_INFORMATION pi = {};
+            si.cb = sizeof(si);
+            if (CreateProcessA(nullptr, winCmd.data(), nullptr, nullptr, FALSE,
+                               CREATE_SUSPENDED, nullptr, nullptr, &si, &pi))
+            {
+                if (hJob)
+                    AssignProcessToJobObject(hJob, pi.hProcess);
+                ResumeThread(pi.hThread);
+                CloseHandle(pi.hThread);
+                {
+                    std::lock_guard lock(m_codexProcessMutex);
+                    m_codexProcessId = reinterpret_cast<intptr_t>(hJob ? hJob : pi.hProcess);
+                }
+                WaitForSingleObject(pi.hProcess, INFINITE);
+                {
+                    std::lock_guard lock(m_codexProcessMutex);
+                    m_codexProcessId = 0;
+                }
+                DWORD dw = 1;
+                GetExitCodeProcess(pi.hProcess, &dw);
+                CloseHandle(pi.hProcess);
+                exitCode = static_cast<int>(dw);
+            }
+            if (hJob)
+                CloseHandle(hJob);
+        }
+#else
+        {
+            pid_t pid = fork();
+            if (pid == 0)
+            {
+                execl("/bin/sh", "sh", "-c", cmd.c_str(), nullptr);
+                _exit(127);
+            }
+            else if (pid > 0)
+            {
+                {
+                    std::lock_guard lock(m_codexProcessMutex);
+                    m_codexProcessId = static_cast<intptr_t>(pid);
+                }
+                int status = 0;
+                waitpid(pid, &status, 0);
+                {
+                    std::lock_guard lock(m_codexProcessMutex);
+                    m_codexProcessId = 0;
+                }
+                exitCode = WIFEXITED(status) ? WEXITSTATUS(status) : 1;
+            }
+        }
+#endif
+
+        // Read response
+        std::string response;
+        {
+            std::ifstream f(outputFile);
+            if (f)
+            {
+                std::ostringstream ss;
+                ss << f.rdbuf();
+                response = ss.str();
+                // Strip internal reasoning tokens that leak into the output (e.g. "<|endoftext|>{...}")
+                auto leakPos = response.find("<|endoftext|>");
+                if (leakPos != std::string::npos)
+                    response.erase(leakPos);
+                while (!response.empty() && (response.back() == '\n' || response.back() == '\r' || response.back() == ' '))
+                    response.pop_back();
+            }
+        }
+
+        if (m_codexCancelled)
+            return;
+
+        if (response.empty())
+            response = exitCode == 0 ? "[Codex returned an empty response]"
+                                     : "[Codex CLI failed with exit code " + std::to_string(exitCode) + "]";
+
+        auto alive = m_alive;
+        QueueAction([this, alive, response]()
+                    {
+            if (!*alive || m_codexCancelled)
+                return;
+            std::lock_guard lock(m_chatMutex);
+            m_chat.push_back({ChatMessage::Role::Assistant, response});
+            m_isStreaming = false;
+            m_scrollToBottom = 3; });
+    }
+
+    std::string AgentWidget::BuildRagContext(const std::string &queryText)
+    {
+        bool hasVectorStore = m_codebaseStore && m_codebaseStore->Size() > 0 && m_embeddingProvider;
+        bool hasBM25 = m_codebaseBM25 && m_codebaseBM25->Size() > 0;
+
+        if ((!hasVectorStore && !hasBM25) || queryText.empty())
+            return {};
+
+        const int ragTopK = 5;
+        const int ragMaxContextChars = 10000;
+        const int retrieveK = std::max(ragTopK * 5, 30);
+        const float rrfK = 60.0f;
+
+        struct FusedEntry
+        {
+            std::string content;
+            float score = 0.0f;
+        };
+        std::unordered_map<std::string, FusedEntry> fused;
+
+        if (hasVectorStore)
+        {
+            auto queryVec = m_embeddingProvider->Embed(queryText);
+            if (!queryVec.empty())
+            {
+                auto vecResults = m_codebaseStore->Search(queryVec, retrieveK, 0.1f);
+                for (int rank = 0; rank < static_cast<int>(vecResults.size()); ++rank)
+                {
+                    const auto &r = vecResults[rank];
+                    auto &entry = fused[r.entry->id];
+                    entry.content = r.entry->content;
+                    entry.score += 1.0f / (rrfK + rank + 1);
+                }
+            }
+        }
+
+        if (hasBM25)
+        {
+            auto bm25Results = m_codebaseBM25->Search(queryText, retrieveK);
+            for (int rank = 0; rank < static_cast<int>(bm25Results.size()); ++rank)
+            {
+                const auto &r = bm25Results[rank];
+                auto &entry = fused[r.id];
+                if (entry.content.empty())
+                    entry.content = r.content;
+                entry.score += 1.0f / (rrfK + rank + 1);
+            }
+        }
+
+        if (fused.empty())
+            return {};
+
+        std::vector<std::pair<std::string, FusedEntry>> sorted(fused.begin(), fused.end());
+        std::sort(sorted.begin(), sorted.end(),
+                  [](const auto &a, const auto &b)
+                  { return a.second.score > b.second.score; });
+
+        // Collect primary entries
+        std::vector<std::string> selectedEntries;
+        std::unordered_set<std::string> selectedIds;
+        std::unordered_set<std::string> topFiles;
+
+        for (int i = 0; i < static_cast<int>(sorted.size()) && static_cast<int>(selectedEntries.size()) < ragTopK; ++i)
+        {
+            const std::string &content = sorted[i].second.content;
+            selectedEntries.push_back("- " + pagent::SanitizeUTF8(content) + "\n");
+            selectedIds.insert(sorted[i].first);
+            // Extract file path for include-graph expansion
+            if (content.compare(0, 9, "// File: ") == 0)
+            {
+                auto end = content.find_first_of(" (\n", 9);
+                if (end != std::string::npos)
+                    topFiles.insert(content.substr(9, end - 9));
+            }
+        }
+
+        // Include-graph expansion: add neighbor chunks from related files
+        if (m_includeGraph && m_includeGraph->Size() > 0 && hasVectorStore && !topFiles.empty())
+        {
+            int neighborSlots = std::max(1, ragTopK / 3);
+            std::unordered_set<std::string> neighborFiles;
+            for (const auto &f : topFiles)
+                for (const auto &n : m_includeGraph->GetNeighbors(f))
+                    if (!topFiles.count(n))
+                        neighborFiles.insert(n);
+
+            int added = 0;
+            for (int i = 0; i < static_cast<int>(sorted.size()) && added < neighborSlots; ++i)
+            {
+                if (selectedIds.count(sorted[i].first))
+                    continue;
+                const std::string &content = sorted[i].second.content;
+                if (content.compare(0, 9, "// File: ") != 0)
+                    continue;
+                auto end = content.find_first_of(" (\n", 9);
+                if (end == std::string::npos)
+                    continue;
+                if (!neighborFiles.count(content.substr(9, end - 9)))
+                    continue;
+                selectedEntries.push_back("- " + pagent::SanitizeUTF8(content) + "\n");
+                selectedIds.insert(sorted[i].first);
+                ++added;
+            }
+        }
+
+        // Build final context string with char limit
+        std::string ragContext = "\n[Relevant codebase context:\n";
+        int totalChars = 0;
+        int injected = 0;
+        for (const auto &entry : selectedEntries)
+        {
+            if (totalChars + static_cast<int>(entry.size()) > ragMaxContextChars)
+                break;
+            ragContext += entry;
+            totalChars += static_cast<int>(entry.size());
+            ++injected;
+        }
+        ragContext += "]\n";
+
+        return injected > 0 ? ragContext : std::string{};
+    }
+
+    std::vector<std::string> AgentWidget::BuildRagFilePaths(const std::string &queryText)
+    {
+        bool hasVectorStore = m_codebaseStore && m_codebaseStore->Size() > 0 && m_embeddingProvider;
+        bool hasBM25 = m_codebaseBM25 && m_codebaseBM25->Size() > 0;
+
+        if ((!hasVectorStore && !hasBM25) || queryText.empty())
+            return {};
+
+        const int topK = 5;
+        const int retrieveK = std::max(topK * 5, 30);
+        const float rrfK = 60.0f;
+
+        struct FusedEntry
+        {
+            std::string content;
+            float score = 0.0f;
+        };
+        std::unordered_map<std::string, FusedEntry> fused;
+
+        if (hasVectorStore)
+        {
+            auto queryVec = m_embeddingProvider->Embed(queryText);
+            if (!queryVec.empty())
+                for (int rank = 0; auto &r : m_codebaseStore->Search(queryVec, retrieveK, 0.1f))
+                {
+                    auto &e = fused[r.entry->id];
+                    e.content = r.entry->content;
+                    e.score += 1.0f / (rrfK + rank++ + 1);
+                }
+        }
+        if (hasBM25)
+            for (int rank = 0; auto &r : m_codebaseBM25->Search(queryText, retrieveK))
+            {
+                auto &e = fused[r.id];
+                if (e.content.empty())
+                    e.content = r.content;
+                e.score += 1.0f / (rrfK + rank++ + 1);
+            }
+
+        std::vector<std::pair<std::string, FusedEntry>> sorted(fused.begin(), fused.end());
+        std::sort(sorted.begin(), sorted.end(),
+                  [](const auto &a, const auto &b)
+                  { return a.second.score > b.second.score; });
+
+        // Extract unique file paths from top results (parse "// File: path" prefix)
+        std::vector<std::string> paths;
+        std::unordered_set<std::string> seen;
+        for (int i = 0; i < static_cast<int>(sorted.size()) && static_cast<int>(paths.size()) < topK; ++i)
+        {
+            const auto &content = sorted[i].second.content;
+            if (content.compare(0, 9, "// File: ") != 0)
+                continue;
+            auto end = content.find_first_of(" (\n", 9);
+            if (end == std::string::npos)
+                continue;
+            std::string path = content.substr(9, end - 9);
+            if (seen.insert(path).second)
+                paths.push_back(std::move(path));
+        }
+        return paths;
+    }
+
     void AgentWidget::UpdateExternalFileWatch()
     {
         std::string agentDir = Path::Assets + "Agent/";
@@ -4125,6 +4567,9 @@ namespace pe
         if (!m_agent)
             return;
 
+        // Restoring a saved session — do not inject START.md; context is already in the history
+        m_codexSystemContext.clear();
+
         std::ifstream f(path);
         if (!f)
             return;
@@ -4185,6 +4630,24 @@ namespace pe
                               "[Session restored - code may have changed since last run]"});
             m_scrollToBottom = 3;
         }
+
+        // If the last message was from the user in an external session, we should be waiting for a response.
+        if (m_isExternalAI)
+        {
+            std::lock_guard lock(m_chatMutex);
+            auto lastMsgIt = std::find_if(m_chat.rbegin(), m_chat.rend(),
+                                          [](const ChatMessage &msg)
+                                          { return msg.role != ChatMessage::Role::System; });
+            if (lastMsgIt != m_chat.rend() && lastMsgIt->role == ChatMessage::Role::User)
+            {
+                m_isStreaming = true;
+            }
+        }
+
+        // Pick up any external response that was already written before the watcher was attached.
+        if (m_isExternalAI && m_isStreaming)
+            QueueAction([this]()
+                        { PollExternalResponse(); });
     }
 
     void AgentWidget::NewSession()
@@ -4194,6 +4657,24 @@ namespace pe
         if (m_agent)
         {
             m_agent->ClearHistory();
+        }
+        if (m_isExternalAI)
+        {
+            std::error_code ec;
+            std::filesystem::remove(Path::Assets + "Agent/codex_external_has_session.flag", ec);
+            std::filesystem::remove(Path::Assets + "Agent/codex_external_thread.txt", ec);
+        }
+        if (m_isCodexCLI)
+        {
+            // Load START.md so Codex has project context on its first message of this session
+            m_codexSystemContext.clear();
+            std::ifstream sf(Path::Assets + "Agent/START.md");
+            if (sf)
+            {
+                std::ostringstream ss;
+                ss << sf.rdbuf();
+                m_codexSystemContext = ss.str();
+            }
         }
         std::lock_guard lock(m_chatMutex);
         m_chat.clear();

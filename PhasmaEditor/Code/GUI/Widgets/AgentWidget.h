@@ -78,7 +78,7 @@ namespace pe
 
         std::optional<pagent::Agent> m_agent;
         char m_inputBuf[2048] = {};
-        int  m_scrollToBottom = 3; // frames remaining to force-scroll; start >0 so first open scrolls down
+        int m_scrollToBottom = 3; // frames remaining to force-scroll; start >0 so first open scrolls down
         bool m_isStreaming = false;
         bool m_agentConfigured = false;
         std::string m_modelName;
@@ -200,6 +200,17 @@ namespace pe
         void UpdateExternalFileWatch();
         void WriteExternalHistory();
         std::string GetExternalResponsePath() const;
+
+        // Codex CLI provider — spawns `codex exec` as a subprocess
+        bool m_isCodexCLI = false;
+        char m_codexModelBuf[128] = "gpt-5.4";
+        std::string m_codexSystemContext;          // START.md content injected on NewSession(), cleared on LoadSession()
+        std::atomic<bool> m_codexCancelled{false}; // discard response if stopped before process exits
+        std::mutex m_codexProcessMutex;
+        intptr_t m_codexProcessId = 0; // Windows: HANDLE cast; Linux: pid_t cast
+        void RunCodexCLI(const std::string &prompt);
+        std::string BuildRagContext(const std::string &queryText);
+        std::vector<std::string> BuildRagFilePaths(const std::string &queryText);
 
         pe::ScriptSystem m_agentScriptSystem;
 
