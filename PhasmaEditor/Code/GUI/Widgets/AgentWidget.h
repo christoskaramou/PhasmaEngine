@@ -38,7 +38,7 @@ namespace pe
         Role role;
         std::string text;
         std::string thinking;                        // reasoning/thinking content (if any)
-        std::string tools;                          // tool calls / tool inputs (if any)
+        std::string tools;                           // tool calls / tool inputs (if any)
         std::vector<ChatImage> images;               // attached images (for display)
         std::vector<ChatFileAttachment> attachments; // attached files (for display)
     };
@@ -68,6 +68,9 @@ namespace pe
         const std::vector<std::string> &GetSkipRegex() const { return m_skipRegex; }
 
     private:
+        static std::filesystem::path GetRepoRootFromAssets();
+        static std::string GetEnvOrEmpty(const char *name);
+
         void ClearInputField();
         void SubmitInput();
         void SubmitInputText(const std::string &text);
@@ -124,7 +127,7 @@ namespace pe
         bool m_pendingHistoryUpdate = false;
         std::string m_pendingSteer; // message queued while agent is busy; auto-sent on TurnComplete
         void FirePendingSteer();    // call on main thread after any TurnComplete/Cancel
-        void CommitStreamingNow(); // commit live streaming content as a ChatMessage (main thread only)
+        void CommitStreamingNow();  // commit live streaming content as a ChatMessage (main thread only)
 
         // Image paste support
         struct PendingImage
@@ -217,9 +220,9 @@ namespace pe
         char m_codexModelBuf[128] = "gpt-5.4";
         char m_claudeModelBuf[128] = "claude-sonnet-4-6";
         char m_geminiModelBuf[128] = "gemini-2.5-pro";
-        bool m_codexHasSession = false;  // true after first codex exec run; use "resume --last" on next
-        bool m_claudeHasSession = false; // true after first claude run; use "--continue" on next
-        bool m_geminiHasSession = false; // true after first gemini run; use "--resume latest" on next
+        bool m_codexHasSession = false;          // true after first codex exec run; use "resume --last" on next
+        bool m_claudeHasSession = false;         // true after first claude run; use "--continue" on next
+        bool m_geminiHasSession = false;         // true after first gemini run; use "--resume latest" on next
         std::string m_cliSystemContext;          // START.md injected on NewSession(), cleared on LoadSession()
         std::atomic<bool> m_cliCancelled{false}; // shared; only one CLI runs at a time
         std::mutex m_cliProcessMutex;
