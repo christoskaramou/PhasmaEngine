@@ -198,33 +198,37 @@ namespace pe
         // Periodically scan for new .lua files
         ScanForNewScripts();
 
-        // update_editor() runs every frame regardless of play mode
-        for (auto &script : m_scripts)
+        // update_editor() runs every frame when not in play mode,
+        // so scripts can have live editor functionality without entering play mode
+        if (!GUIState::s_playMode)
         {
-            if (script.updateEditorFn.valid())
+            for (auto &script : m_scripts)
             {
-                auto result = script.updateEditorFn();
-                if (!result.valid())
+                if (script.updateEditorFn.valid())
                 {
-                    sol::error err = result;
-                    PE_ERROR("[Lua] update_editor() error in '%s': %s", script.path.c_str(), err.what());
+                    auto result = script.updateEditorFn();
+                    if (!result.valid())
+                    {
+                        sol::error err = result;
+                        PE_ERROR("[Lua] update_editor() error in '%s': %s", script.path.c_str(), err.what());
+                    }
                 }
             }
         }
 
-        if (!GUIState::s_playMode || GUIState::s_isPaused)
-            return;
-
-        // update() runs only in play mode
-        for (auto &script : m_scripts)
+        if (GUIState::s_playMode && !GUIState::s_isPaused)
         {
-            if (script.updateFn.valid())
+            // update() runs only in play mode
+            for (auto &script : m_scripts)
             {
-                auto result = script.updateFn();
-                if (!result.valid())
+                if (script.updateFn.valid())
                 {
-                    sol::error err = result;
-                    PE_ERROR("[Lua] update() error in '%s': %s", script.path.c_str(), err.what());
+                    auto result = script.updateFn();
+                    if (!result.valid())
+                    {
+                        sol::error err = result;
+                        PE_ERROR("[Lua] update() error in '%s': %s", script.path.c_str(), err.what());
+                    }
                 }
             }
         }

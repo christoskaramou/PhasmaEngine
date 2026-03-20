@@ -12,6 +12,10 @@ local fig8_radius_z = 4.0   -- depth of each lobe
 local fig8_height = 3.0     -- vertical amplitude
 
 local function update()
+    if camera_orbit_container_enabled then
+        return
+    end
+
     local cam = get_camera()
     if not cam then return end
 
@@ -48,5 +52,5 @@ local function update()
 end
 
 hooks {
-    update = update
+    -- update = update
 }

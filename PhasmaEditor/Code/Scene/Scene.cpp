@@ -32,6 +32,29 @@
 
 namespace pe
 {
+    namespace
+    {
+        constexpr float kInfiniteAttenuationDistanceSentinel = -1.0f;
+
+        void EncodeMaterialFactorsForPersistence(RenderType renderType, mat4 &f0, mat4 &f1)
+        {
+            (void)f0;
+
+            if (renderType == RenderType::Transmission && std::isinf(f1[0][1]))
+                f1[0][1] = kInfiniteAttenuationDistanceSentinel;
+        }
+
+        void DecodeMaterialFactorsFromPersistence(RenderType renderType, mat4 &f0, mat4 &f1)
+        {
+            (void)f0;
+
+            // Older scene files serialized +inf attenuation distance as 0.0 via SafeFloat(),
+            // which makes transmission materials attenuate to black when restored.
+            if (renderType == RenderType::Transmission && f1[0][1] <= 0.0f)
+                f1[0][1] = std::numeric_limits<float>::infinity();
+        }
+    } // namespace
+
     std::vector<uint32_t> Scene::s_aabbIndices = {
         0, 1, 1, 2, 2, 3, 3, 0,
         4, 5, 5, 6, 6, 7, 7, 4,
@@ -1470,10 +1493,14 @@ namespace pe
                 meshObj.AddMember("texture_mask", mesh.textureMask, allocator);
 
                 // Material Factors
+                mat4 persistedF0 = mesh.materialFactors[0];
+                mat4 persistedF1 = mesh.materialFactors[1];
+                EncodeMaterialFactorsForPersistence(mesh.renderType, persistedF0, persistedF1);
+
                 rapidjson::Value factorsArr(rapidjson::kArrayType);
                 rapidjson::Value f0, f1;
-                SetMat4(f0, mesh.materialFactors[0]);
-                SetMat4(f1, mesh.materialFactors[1]);
+                SetMat4(f0, persistedF0);
+                SetMat4(f1, persistedF1);
                 factorsArr.PushBack(f0.Move(), allocator);
                 factorsArr.PushBack(f1.Move(), allocator);
                 meshObj.AddMember("material_factors", factorsArr.Move(), allocator);
@@ -1897,6 +1924,7 @@ namespace pe
                             {
                                 mi.materialFactors[0] = ReadMat4(mVal["material_factors"][0]);
                                 mi.materialFactors[1] = ReadMat4(mVal["material_factors"][1]);
+                                DecodeMaterialFactorsFromPersistence(mi.renderType, mi.materialFactors[0], mi.materialFactors[1]);
                             }
 
                             bool hasTextureMask = mVal.HasMember("texture_mask");
@@ -2149,10 +2177,14 @@ namespace pe
                 meshObj.AddMember("render_type", static_cast<int>(mesh.renderType), allocator);
                 meshObj.AddMember("texture_mask", mesh.textureMask, allocator);
 
+                mat4 persistedF0 = mesh.materialFactors[0];
+                mat4 persistedF1 = mesh.materialFactors[1];
+                EncodeMaterialFactorsForPersistence(mesh.renderType, persistedF0, persistedF1);
+
                 rapidjson::Value factorsArr(rapidjson::kArrayType);
                 rapidjson::Value f0, f1;
-                SetMat4(f0, mesh.materialFactors[0]);
-                SetMat4(f1, mesh.materialFactors[1]);
+                SetMat4(f0, persistedF0);
+                SetMat4(f1, persistedF1);
                 factorsArr.PushBack(f0.Move(), allocator);
                 factorsArr.PushBack(f1.Move(), allocator);
                 meshObj.AddMember("material_factors", factorsArr.Move(), allocator);
@@ -2517,6 +2549,7 @@ namespace pe
                             {
                                 mesh.materialFactors[0] = ReadMat4(mVal["material_factors"][0]);
                                 mesh.materialFactors[1] = ReadMat4(mVal["material_factors"][1]);
+                                DecodeMaterialFactorsFromPersistence(mesh.renderType, mesh.materialFactors[0], mesh.materialFactors[1]);
                             }
                         }
                     }
@@ -2615,6 +2648,7 @@ namespace pe
                                 {
                                     mesh.materialFactors[0] = ReadMat4(mVal["material_factors"][0]);
                                     mesh.materialFactors[1] = ReadMat4(mVal["material_factors"][1]);
+                                    DecodeMaterialFactorsFromPersistence(mesh.renderType, mesh.materialFactors[0], mesh.materialFactors[1]);
                                 }
 
                                 if (mVal.HasMember("textures"))

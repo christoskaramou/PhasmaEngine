@@ -78,7 +78,7 @@ namespace pe
 
         m_directionalLights.resize(1);
         auto &gSettings = Settings::Get<GlobalSettings>();
-        m_directionalLights[0].color = {.9765f, .8431f, .9098f, 7.0f};
+        m_directionalLights[0].color = {.9765f, .8431f, .9098f, 5.0f};
         m_directionalLights[0].position = {0.0f, 10.0f, 0.0f, 2.0f};
         quat q_dir = quat(radians(vec3(-90.1f, 0.f, 0.f)));
         m_directionalLights[0].rotation = {q_dir.x, q_dir.y, q_dir.z, q_dir.w};
