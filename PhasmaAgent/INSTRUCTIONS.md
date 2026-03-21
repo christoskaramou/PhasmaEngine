@@ -25,7 +25,12 @@ PhasmaAgent/
 │   ├── RepoMap.h           # Compact codebase overview for system prompt (~1K tokens)
 │   ├── OpenAIEmbedding.h   # OpenAI text-embedding-* provider
 │   ├── GoogleEmbedding.h   # Gemini embedding provider
-│   └── OllamaEmbedding.h  # Local Ollama embedding provider
+│   ├── OllamaEmbedding.h   # Local Ollama embedding provider
+│   ├── CodebaseContext.h   # Owns VectorStore + BM25Index + IncludeGraph + async status checks
+│   ├── EmbeddingUtils.h    # CreateEmbeddingProvider(kind, model, key) factory
+│   ├── RagUtils.h          # Hybrid BM25 + vector retrieval helpers
+│   ├── ProviderUtils.h     # Environment variable reading helpers
+│   └── OllamaModelUtils.h  # Ollama model pull/unload helpers
 └── src/
     ├── Agent.cpp           # Agent::Send, Poll, ForceCompact, provider factory
     ├── AgentImpl.h/.cpp    # Pimpl implementation
@@ -47,7 +52,12 @@ PhasmaAgent/
     ├── ImageDescriber.cpp          # Vision fallback via Gemini
     ├── OpenAIEmbedding.cpp
     ├── GoogleEmbedding.cpp
-    └── OllamaEmbedding.cpp
+    ├── OllamaEmbedding.cpp
+    ├── CodebaseContext.cpp
+    ├── EmbeddingUtils.cpp
+    ├── RagUtils.cpp
+    ├── ProviderUtils.cpp
+    └── OllamaModelUtils.cpp
 ```
 
 ---
@@ -138,16 +148,19 @@ agent.InjectSystemMessage("...");       // inject without sending a request
 ### Codebase Indexing
 
 ```cpp
-auto store  = std::make_shared<pagent::VectorStore>();
-auto bm25   = std::make_shared<pagent::BM25Index>();
-auto graph  = std::make_shared<pagent::IncludeGraph>();
+auto store = std::make_shared<pagent::VectorStore>();
+auto bm25  = std::make_shared<pagent::BM25Index>();
 
-pagent::CodebaseIndexer indexer;
-indexer.Index({"PhasmaCore/Code", "PhasmaEditor/Code"}, store.get(), bm25.get(), graph.get(), embProvider.get());
+pagent::CodebaseIndexer indexer(embProvider.get(), store.get(), bm25.get(),
+    [](int done, int total, const std::string &file) { /* progress */ });
+
+pagent::IndexerConfig cfg;
+cfg.directories = {"PhasmaCore/Code", "PhasmaEditor/Code"};
+// Index() blocks — call from a background thread
+std::thread([&] { indexer.Index(cfg); }).detach();
 
 agent.SetCodebaseStore(store.get());
 agent.SetCodebaseBM25(bm25.get());
-agent.SetIncludeGraph(graph.get());
 ```
 
 ---
@@ -281,9 +294,10 @@ Configure via `AgentConfig::routing`. Empty string in `simple_model`/`complex_mo
 | `PAGENT_ANTHROPIC_API_KEY` | Anthropic / Claude API key |
 | `PAGENT_OPENAI_API_KEY` | OpenAI API key |
 | `PAGENT_GEMINI_API_KEY` | Google Gemini API key |
-| `PAGENT_PROVIDER` | Default provider name (`anthropic`, `openai`, `google`, `ollama`) |
+| `PAGENT_VOYAGE_API_KEY` | Voyage AI embeddings API key |
 
-Discovered automatically by `pagent::DiscoverProviders()`.
+These variables are consumed by whatever host application configures `pagent::Agent`.
+Provider selection and model choice belong to the host application (PhasmaEditor uses `agent_config.json`).
 
 ---
 

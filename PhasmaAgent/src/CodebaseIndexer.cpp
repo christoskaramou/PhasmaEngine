@@ -388,8 +388,9 @@ namespace pagent
         shared->progressCb = m_progressCb;
         shared->logCb = m_logCb;
 
-        // Link our cancel flag to embedding provider and shared state
-        m_embedding->SetCancel(&shared->cancel);
+        // Link our cancel flag to embedding provider and shared state when embeddings are available.
+        if (m_embedding)
+            m_embedding->SetCancel(&shared->cancel);
 
         auto workerFn = [shared]()
         {
@@ -432,11 +433,19 @@ namespace pagent
 
                     // Reuse old embedding if content unchanged
                     std::vector<float> vec;
-                    auto hashIt = oldHashToEmbedding.find(contentHash);
-                    if (hashIt != oldHashToEmbedding.end())
-                        vec = std::move(hashIt->second);
+                    if (shared->embedding)
+                    {
+                        auto hashIt = oldHashToEmbedding.find(contentHash);
+                        if (hashIt != oldHashToEmbedding.end())
+                            vec = std::move(hashIt->second);
+                        else
+                            vec = shared->embedding->Embed(sanitized);
+                    }
                     else
-                        vec = shared->embedding->Embed(sanitized);
+                    {
+                        // Use the same dimension as real embeddings so SaveToBinary writes a consistent header.
+                        vec.assign(shared->embedding ? shared->embedding->Dimensions() : 1, 0.0f);
+                    }
 
                     if (!vec.empty())
                     {
@@ -472,28 +481,35 @@ namespace pagent
                         size_t contentHash = std::hash<std::string>{}(sanitized);
 
                         std::vector<float> vec;
-                        auto hashIt = oldHashToEmbedding.find(contentHash);
-                        if (hashIt != oldHashToEmbedding.end())
-                            vec = std::move(hashIt->second);
+                        if (!shared->embedding)
+                        {
+                            vec = {0.0f};
+                        }
                         else
                         {
-                            // Retry up to 3 times with exponential backoff on transient failures
-                            constexpr int kMaxRetries = 3;
-                            for (int attempt = 0; attempt < kMaxRetries && vec.empty(); ++attempt)
+                            auto hashIt = oldHashToEmbedding.find(contentHash);
+                            if (hashIt != oldHashToEmbedding.end())
+                                vec = std::move(hashIt->second);
+                            else
                             {
-                                if (attempt > 0)
-                                    std::this_thread::sleep_for(std::chrono::milliseconds(200 * attempt));
-                                vec = shared->embedding->Embed(sanitized);
+                                // Retry up to 3 times with exponential backoff on transient failures
+                                constexpr int kMaxRetries = 3;
+                                for (int attempt = 0; attempt < kMaxRetries && vec.empty(); ++attempt)
+                                {
+                                    if (attempt > 0)
+                                        std::this_thread::sleep_for(std::chrono::milliseconds(200 * attempt));
+                                    vec = shared->embedding->Embed(sanitized);
+                                }
+                                // If still empty, retry with progressively truncated content
+                                // (handles chunks that exceed the model's context window)
+                                if (vec.empty() && sanitized.size() > 512)
+                                {
+                                    for (size_t truncLen = sanitized.size() / 2; truncLen >= 512 && vec.empty(); truncLen /= 2)
+                                        vec = shared->embedding->Embed(sanitized.substr(0, truncLen));
+                                }
+                                if (shared->delayMs > 0)
+                                    std::this_thread::sleep_for(std::chrono::milliseconds(shared->delayMs));
                             }
-                            // If still empty, retry with progressively truncated content
-                            // (handles chunks that exceed the model's context window)
-                            if (vec.empty() && sanitized.size() > 512)
-                            {
-                                for (size_t truncLen = sanitized.size() / 2; truncLen >= 512 && vec.empty(); truncLen /= 2)
-                                    vec = shared->embedding->Embed(sanitized.substr(0, truncLen));
-                            }
-                            if (shared->delayMs > 0)
-                                std::this_thread::sleep_for(std::chrono::milliseconds(shared->delayMs));
                         }
 
                         if (vec.empty())
@@ -624,7 +640,7 @@ namespace pagent
                     tombstone.id = "codebase_tombstone_" + std::to_string(h);
                     tombstone.content = "";
                     tombstone.metadata = nlohmann::json{{"type", "codebase_tombstone"}, {"file", rel}, {"last_modified", ts}}.dump();
-                    tombstone.embedding.assign(shared->embedding->Dimensions(), 0.0f);
+                    tombstone.embedding.assign(shared->embedding ? shared->embedding->Dimensions() : 1, 0.0f);
                     shared->store->Add(std::move(tombstone));
                 }
 
@@ -652,10 +668,17 @@ namespace pagent
         if (m_cancel.load())
             shared->cancel.store(true);
 
+        // Workers do fetch_add then progressCb then activeThreads.fetch_sub — wait for
+        // all threads to finish their callbacks before returning, so callers can safely
+        // release shared resources (e.g. VectorStore) after Index() returns.
+        while (shared->activeThreads.load() > 0)
+            std::this_thread::sleep_for(std::chrono::milliseconds(5));
+
         m_activeThreads.store(0);
 
         // Clear cancel pointer so the embedding provider is usable for RAG queries
-        m_embedding->SetCancel(nullptr);
+        if (m_embedding)
+            m_embedding->SetCancel(nullptr);
 
         if (m_logCb)
             m_logCb("Indexing " + std::string(m_cancel.load() ? "cancelled" : "complete") + ": " +

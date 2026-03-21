@@ -75,7 +75,7 @@ namespace pagent
         ConversationHistory &history,
         ToolRegistry &toolRegistry,
         EventQueue &eventQueue)
-        : m_config(config), m_backend(backend), m_history(history), m_toolRegistry(toolRegistry), m_eventQueue(eventQueue)
+        : m_configRef(config), m_activeConfig(config), m_backend(backend), m_history(history), m_toolRegistry(toolRegistry), m_eventQueue(eventQueue)
     {
         m_thread = std::thread([this]
                                { ThreadFunc(); });
@@ -120,6 +120,7 @@ namespace pagent
 
         {
             std::lock_guard lock(m_mutex);
+            m_activeConfig = m_configRef; // snapshot config so worker never races with main-thread setters
             m_pendingMessage = user_message;
             m_pendingAttachments = attachments;
             m_cancel.store(false, std::memory_order_relaxed);
@@ -260,26 +261,26 @@ namespace pagent
 
     void RequestWorker::MaybeSummarize()
     {
-        if (m_config.summarize_after_messages <= 0)
+        if (m_activeConfig.summarize_after_messages <= 0)
             return;
 
         const size_t count = m_history.EntryCount();
-        if (static_cast<int>(count) <= m_config.summarize_after_messages)
+        if (static_cast<int>(count) <= m_activeConfig.summarize_after_messages)
             return;
 
         // Keep the most recent half of the threshold as intact messages
-        const size_t keepRecent = static_cast<size_t>(m_config.summarize_after_messages / 2);
+        const size_t keepRecent = static_cast<size_t>(m_activeConfig.summarize_after_messages / 2);
         const auto oldText = m_history.BuildOldMessagesText(keepRecent);
         if (oldText.empty())
             return;
 
         Log("Summarizing conversation (" + std::to_string(count) + " msgs, keeping last " + std::to_string(keepRecent) + ")");
 
-        const std::string body = BuildSummarizationBody(m_backend, m_config, oldText);
+        const std::string body = BuildSummarizationBody(m_backend, m_activeConfig, oldText);
 
         std::vector<AgentEvent> events;
-        const auto err = HttpPost(ResolveHost(m_config), m_backend->GetEndpointPath(),
-                                  BuildHeaders(m_config, m_backend), body, events);
+        const auto err = HttpPost(ResolveHost(m_activeConfig), m_backend->GetEndpointPath(),
+                                  BuildHeaders(m_activeConfig, m_backend), body, events);
 
         if (!err.empty())
         {
@@ -311,11 +312,11 @@ namespace pagent
         Log("ForceCompact: summarizing (" + std::to_string(m_history.EntryCount()) +
             " msgs, keeping last " + std::to_string(keepRecent) + ")");
 
-        const std::string body = BuildSummarizationBody(m_backend, m_config, oldText);
+        const std::string body = BuildSummarizationBody(m_backend, m_activeConfig, oldText);
 
         std::vector<AgentEvent> events;
-        const auto err = HttpPost(ResolveHost(m_config), m_backend->GetEndpointPath(),
-                                  BuildHeaders(m_config, m_backend), body, events);
+        const auto err = HttpPost(ResolveHost(m_activeConfig), m_backend->GetEndpointPath(),
+                                  BuildHeaders(m_activeConfig, m_backend), body, events);
 
         if (!err.empty())
         {
@@ -491,18 +492,18 @@ namespace pagent
         // Summarize old messages if history is getting large
         MaybeSummarize();
 
-        const int maxRounds = m_config.max_tool_rounds > 0 ? m_config.max_tool_rounds : 10;
+        const int maxRounds = m_activeConfig.max_tool_rounds > 0 ? m_activeConfig.max_tool_rounds : 10;
 
         // RAG: hybrid search (vector + BM25) with Reciprocal Rank Fusion
         std::string ragContext;
         {
-            bool hasVectorStore = m_codebaseStore && m_codebaseStore->Size() > 0 && m_config.embedding_provider;
+            bool hasVectorStore = m_codebaseStore && m_codebaseStore->Size() > 0 && m_activeConfig.embedding_provider;
             bool hasBM25 = m_codebaseBM25 && m_codebaseBM25->Size() > 0;
 
             if (hasVectorStore || hasBM25)
             {
                 std::string queryText;
-                auto messages = m_history.GetMessages(m_config.max_history_messages);
+                auto messages = m_history.GetMessages(m_activeConfig.max_history_messages);
                 for (auto it = messages.rbegin(); it != messages.rend(); ++it)
                 {
                     if (it->role == NeutralMessage::Role::User)
@@ -515,7 +516,7 @@ namespace pagent
                 if (!queryText.empty())
                 {
                     // Retrieve broader candidate pools, fuse later
-                    const int retrieveK = std::max(m_config.rag_top_k * 5, 30);
+                    const int retrieveK = std::max(m_activeConfig.rag_top_k * 5, 30);
                     const float rrfK = 60.0f; // RRF constant
 
                     // Collect scores per content string: id -> {content, rrf_score}
@@ -529,12 +530,12 @@ namespace pagent
                     // Vector search
                     if (hasVectorStore)
                     {
-                        auto queryVec = m_config.embedding_provider->Embed(queryText);
+                        auto queryVec = m_activeConfig.embedding_provider->Embed(queryText);
                         if (queryVec.empty())
                             Log("RAG: embedding query failed (empty result)");
                         else
                         {
-                            auto vecResults = m_codebaseStore->Search(queryVec, retrieveK, m_config.rag_min_score);
+                            auto vecResults = m_codebaseStore->Search(queryVec, retrieveK, m_activeConfig.rag_min_score);
                             for (int rank = 0; rank < static_cast<int>(vecResults.size()); ++rank)
                             {
                                 const auto &r = vecResults[rank];
@@ -617,7 +618,7 @@ namespace pagent
                     }
 
                     // Take top_k and build context
-                    int count = std::min(m_config.rag_top_k, static_cast<int>(sorted.size()));
+                    int count = std::min(m_activeConfig.rag_top_k, static_cast<int>(sorted.size()));
                     if (count > 0)
                     {
                         // Collect primary results
@@ -692,7 +693,7 @@ namespace pagent
                         int injected = 0;
                         for (const auto &entry : selectedEntries)
                         {
-                            if (totalChars + static_cast<int>(entry.size()) > m_config.rag_max_context_chars)
+                            if (totalChars + static_cast<int>(entry.size()) > m_activeConfig.rag_max_context_chars)
                                 break;
                             ragContext += entry;
                             totalChars += static_cast<int>(entry.size());
@@ -713,37 +714,37 @@ namespace pagent
         }
 
         // Model routing: select model based on query complexity
-        std::string activeModel = m_config.model;
-        if (m_config.routing.enabled)
+        std::string activeModel = m_activeConfig.model;
+        if (m_activeConfig.routing.enabled)
         {
             auto complexity = ClassifyQuery(user_message);
-            if (complexity == QueryComplexity::Simple && !m_config.routing.simple_model.empty())
-                activeModel = m_config.routing.simple_model;
-            else if (complexity == QueryComplexity::Complex && !m_config.routing.complex_model.empty())
-                activeModel = m_config.routing.complex_model;
+            if (complexity == QueryComplexity::Simple && !m_activeConfig.routing.simple_model.empty())
+                activeModel = m_activeConfig.routing.simple_model;
+            else if (complexity == QueryComplexity::Complex && !m_activeConfig.routing.complex_model.empty())
+                activeModel = m_activeConfig.routing.complex_model;
 
-            if (m_config.log_callback)
+            if (m_activeConfig.log_callback)
             {
                 const char *tier = complexity == QueryComplexity::Simple ? "simple" : complexity == QueryComplexity::Complex ? "complex"
                                                                                                                              : "medium";
-                m_config.log_callback("[PAgent] Model routing: " + std::string(tier) + " -> " + activeModel);
+                m_activeConfig.log_callback("[PAgent] Model routing: " + std::string(tier) + " -> " + activeModel);
             }
         }
 
         // Static context (stable for the whole session): repo_map only.
         // ragContext is dynamic (changes per query) - kept separate and injected per-turn.
         std::string staticContext;
-        if (!m_config.repo_map.empty())
-            staticContext = "\n\n" + m_config.repo_map;
+        if (!m_activeConfig.repo_map.empty())
+            staticContext = "\n\n" + m_activeConfig.repo_map;
 
         // Gemini context caching: cache system_prompt + repo_map + tools.
         // Persisted across Submit() calls and only rebuilt when static content changes.
         // RAG context is intentionally excluded from the cache so it can vary per turn.
         auto *googleBackend = dynamic_cast<GoogleBackend *>(m_backend);
-        if (googleBackend && m_config.provider == Provider::Google)
+        if (googleBackend && m_activeConfig.provider == Provider::Google)
         {
             const auto toolsSchemaJson = m_toolRegistry.GenerateSchemaJson(*m_backend);
-            const std::string staticPrompt = SanitizeUTF8(m_config.system_prompt + staticContext);
+            const std::string staticPrompt = SanitizeUTF8(m_activeConfig.system_prompt + staticContext);
             const std::string cacheKey = staticPrompt + toolsSchemaJson;
 
             if (m_geminiCacheName.empty() || m_geminiCacheKey != cacheKey)
@@ -751,8 +752,8 @@ namespace pagent
                 std::string cacheBody = googleBackend->BuildCacheRequestJson(
                     activeModel, staticPrompt, toolsSchemaJson, 3600); // 1-hour TTL
 
-                const std::string host = ResolveHost(m_config);
-                auto headers = BuildHeaders(m_config, m_backend);
+                const std::string host = ResolveHost(m_activeConfig);
+                auto headers = BuildHeaders(m_activeConfig, m_backend);
                 headers["Content-Type"] = "application/json";
 
                 auto [status, response] = SimplePost(host, "/v1beta/cachedContents", headers, cacheBody);
@@ -808,10 +809,10 @@ namespace pagent
             }
 
             // build request
-            auto messages = m_history.GetMessages(m_config.max_history_messages);
+            auto messages = m_history.GetMessages(m_activeConfig.max_history_messages);
 
             // If backend doesn't support vision, describe images via Gemini fallback
-            if (!m_backend->SupportsVision() && !m_config.gemini_api_key_for_vision.empty())
+            if (!m_backend->SupportsVision() && !m_activeConfig.gemini_api_key_for_vision.empty())
             {
                 for (auto &msg : messages)
                 {
@@ -834,8 +835,8 @@ namespace pagent
                         if (p.type == ContentPart::Type::ImageBase64)
                         {
                             std::string desc = ImageDescriber::Describe(
-                                p.data, p.mime_type, m_config.gemini_api_key_for_vision,
-                                m_config.custom_http_handler);
+                                p.data, p.mime_type, m_activeConfig.gemini_api_key_for_vision,
+                                m_activeConfig.custom_http_handler);
                             newParts.push_back({ContentPart::Type::Text, "[Image: " + desc + "]", ""});
                         }
                         else
@@ -852,7 +853,7 @@ namespace pagent
             // When cache is active it provides system_instruction + tools, so the system prompt
             // passed here is ignored by BuildRequestJson.  When cache is absent, include the
             // static context (repo_map) as before.  RAG is never baked into the system prompt.
-            std::string systemPrompt = SanitizeUTF8(m_config.system_prompt + staticContext);
+            std::string systemPrompt = SanitizeUTF8(m_activeConfig.system_prompt + staticContext);
 
             // Inject per-turn RAG context into the messages payload (not into history).
             // Prepend as a user/model exchange so the model always has fresh retrieval results
@@ -872,46 +873,46 @@ namespace pagent
                 requestMessages.insert(requestMessages.begin(), std::move(ragMsg));
             }
 
-            if (m_config.log_callback)
-                m_config.log_callback("[PAgent] Round " + std::to_string(round) + ": " + std::to_string(m_toolRegistry.GetToolCount()) + " tools, " + std::to_string(messages.size()) + " msgs, model='" + activeModel + "', provider=" + std::to_string(static_cast<int>(m_config.provider)));
+            if (m_activeConfig.log_callback)
+                m_activeConfig.log_callback("[PAgent] Round " + std::to_string(round) + ": " + std::to_string(m_toolRegistry.GetToolCount()) + " tools, " + std::to_string(messages.size()) + " msgs, model='" + activeModel + "', provider=" + std::to_string(static_cast<int>(m_activeConfig.provider)));
 
             const std::string body = m_backend->BuildRequestJson(
                 activeModel,
                 systemPrompt,
-                m_config.max_tokens,
-                m_config.temperature,
+                m_activeConfig.max_tokens,
+                m_activeConfig.temperature,
                 requestMessages,
                 toolsSchemaJson);
 
-            if (m_config.log_callback)
-                m_config.log_callback("[PAgent] Body size=" + std::to_string(body.size()));
+            if (m_activeConfig.log_callback)
+                m_activeConfig.log_callback("[PAgent] Body size=" + std::to_string(body.size()));
 
-            const std::string host = ResolveHost(m_config);
+            const std::string host = ResolveHost(m_activeConfig);
             const std::string path = m_backend->GetEndpointPath();
-            const auto headers = BuildHeaders(m_config, m_backend);
+            const auto headers = BuildHeaders(m_activeConfig, m_backend);
 
             // HTTP POST + stream parse
-            if (m_config.log_callback)
+            if (m_activeConfig.log_callback)
             {
-                m_config.log_callback("[PAgent] POST " + host + path + " ...");
-                m_config.log_callback("[PAgent] Body: " + body);
+                m_activeConfig.log_callback("[PAgent] POST " + host + path + " ...");
+                m_activeConfig.log_callback("[PAgent] Body: " + body);
             }
             std::vector<AgentEvent> turnEvents;
             const auto errMsg = HttpPost(host, path, headers, body, turnEvents);
-            if (m_config.log_callback)
-                m_config.log_callback("[PAgent] POST done, err='" + errMsg + "', events=" + std::to_string(turnEvents.size()));
+            if (m_activeConfig.log_callback)
+                m_activeConfig.log_callback("[PAgent] POST done, err='" + errMsg + "', events=" + std::to_string(turnEvents.size()));
 
             // If the model doesn't support tools, retry without them
             if (!errMsg.empty() && (errMsg.find("does not support tools") != std::string::npos ||
                                     errMsg.find("not enabled for model") != std::string::npos ||
                                     errMsg.find("calling is not enabled") != std::string::npos))
             {
-                if (m_config.log_callback)
-                    m_config.log_callback("[PAgent] Model does not support tools, retrying without tools");
+                if (m_activeConfig.log_callback)
+                    m_activeConfig.log_callback("[PAgent] Model does not support tools, retrying without tools");
 
                 const std::string bodyNoTools = m_backend->BuildRequestJson(
-                    activeModel, m_config.system_prompt, m_config.max_tokens,
-                    m_config.temperature, messages, "");
+                    activeModel, m_activeConfig.system_prompt, m_activeConfig.max_tokens,
+                    m_activeConfig.temperature, messages, "");
 
                 turnEvents.clear();
                 const auto retryErr = HttpPost(host, path, headers, bodyNoTools, turnEvents);
@@ -933,8 +934,8 @@ namespace pagent
                 return;
             }
 
-            if (m_config.log_callback && !errMsg.empty())
-                m_config.log_callback("[PAgent] Response error: " + errMsg);
+            if (m_activeConfig.log_callback && !errMsg.empty())
+                m_activeConfig.log_callback("[PAgent] Response error: " + errMsg);
 
             // push all streamed events and collect tool calls + full text
             std::string fullText;
@@ -1027,17 +1028,17 @@ namespace pagent
                 const int resultChars = static_cast<int>(resultJson.size());
                 const bool summarizeEligible = ShouldSummarizeTool(tc.tool_name);
 
-                if (m_config.summarize_tool_result_chars > 0 &&
-                    resultChars > m_config.summarize_tool_result_chars &&
+                if (m_activeConfig.summarize_tool_result_chars > 0 &&
+                    resultChars > m_activeConfig.summarize_tool_result_chars &&
                     summarizeEligible)
                 {
                     // Summarize via a cheap model call — preserves key facts, drops bulk
                     Log("Summarizing large tool result for '" + tc.tool_name +
                         "' (" + std::to_string(resultChars) + " chars)");
-                    const std::string body = BuildToolSummaryBody(m_backend, m_config, tc.tool_name, resultJson);
+                    const std::string body = BuildToolSummaryBody(m_backend, m_activeConfig, tc.tool_name, resultJson);
                     std::vector<AgentEvent> summaryEvents;
-                    const auto err = HttpPost(ResolveHost(m_config), m_backend->GetEndpointPath(),
-                                              BuildHeaders(m_config, m_backend), body, summaryEvents);
+                    const auto err = HttpPost(ResolveHost(m_activeConfig), m_backend->GetEndpointPath(),
+                                              BuildHeaders(m_activeConfig, m_backend), body, summaryEvents);
                     std::string summary;
                     for (const auto &ev : summaryEvents)
                         if (ev.type == AgentEventType::TextComplete)
@@ -1047,8 +1048,8 @@ namespace pagent
                     {
                         // Summarization failed — fall back to hard truncation
                         Log("Tool summarization failed (" + (err.empty() ? "empty summary" : err) + "), truncating");
-                        resultJson = resultJson.substr(0, m_config.max_tool_result_chars > 0
-                                                              ? m_config.max_tool_result_chars
+                        resultJson = resultJson.substr(0, m_activeConfig.max_tool_result_chars > 0
+                                                              ? m_activeConfig.max_tool_result_chars
                                                               : 4000) +
                                      "...(truncated, " + std::to_string(resultChars) + " total chars)";
                     }
@@ -1060,12 +1061,12 @@ namespace pagent
                                      std::to_string(resultChars) + " chars -> summary)]\n" + summary;
                     }
                 }
-                else if (m_config.max_tool_result_chars > 0 &&
-                         resultChars > m_config.max_tool_result_chars &&
+                else if (m_activeConfig.max_tool_result_chars > 0 &&
+                         resultChars > m_activeConfig.max_tool_result_chars &&
                          !ShouldSkipSizeLimiting(tc.tool_name))
                 {
                     // Hard truncate: either raw-content tool, or summarization disabled/below threshold
-                    resultJson = resultJson.substr(0, m_config.max_tool_result_chars) +
+                    resultJson = resultJson.substr(0, m_activeConfig.max_tool_result_chars) +
                                  "...(truncated, " + std::to_string(resultChars) + " total chars)";
                 }
 
@@ -1095,9 +1096,9 @@ namespace pagent
         std::vector<AgentEvent> &out_events)
     {
         // use custom_http_handler if provided
-        if (m_config.custom_http_handler)
+        if (m_activeConfig.custom_http_handler)
         {
-            auto [status, response] = m_config.custom_http_handler("POST", host + path, headers, body);
+            auto [status, response] = m_activeConfig.custom_http_handler("POST", host + path, headers, body);
             if (status != 200)
                 return FormatHttpError(status, response);
 
@@ -1119,7 +1120,7 @@ namespace pagent
             cleanHost = cleanHost.substr(httpPrefix.size());
             useHttps = false;
         }
-        else if (!m_config.base_url.empty())
+        else if (!m_activeConfig.base_url.empty())
         {
             useHttps = false;
         }
@@ -1219,8 +1220,8 @@ namespace pagent
 
     void RequestWorker::Log(const std::string &msg) const
     {
-        if (m_config.log_callback)
-            m_config.log_callback("[PhasmaAgent] " + msg);
+        if (m_activeConfig.log_callback)
+            m_activeConfig.log_callback("[PhasmaAgent] " + msg);
     }
 
     std::pair<int, std::string> RequestWorker::SimplePost(
@@ -1229,8 +1230,8 @@ namespace pagent
         const std::map<std::string, std::string> &headers,
         const std::string &body)
     {
-        if (m_config.custom_http_handler)
-            return m_config.custom_http_handler("POST", host + path, headers, body);
+        if (m_activeConfig.custom_http_handler)
+            return m_activeConfig.custom_http_handler("POST", host + path, headers, body);
 
         std::string cleanHost = host;
         bool useHttps = true;

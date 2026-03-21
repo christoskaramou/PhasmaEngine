@@ -29,7 +29,6 @@ namespace pagent
         Google,       // Google Gemini via AI Studio (generativelanguage.googleapis.com)
         Ollama,       // Local Ollama instance (OpenAI-compatible)
         GoogleVertex, // Google Gemini via Vertex AI (uses OAuth2 Bearer token)
-        CLI,          // External CLI subprocess (Codex, Claude, Gemini CLI, etc.)
     };
 
     enum class SchemaType
@@ -204,30 +203,6 @@ namespace pagent
         // Whether this backend supports image content parts natively.
         virtual bool SupportsVision() const { return false; }
     };
-
-    // ---------------------------------------------------------------------------
-    // Provider discovery
-    // ---------------------------------------------------------------------------
-
-    struct ProviderInfo
-    {
-        Provider provider;
-        std::string name;         // "Anthropic", "OpenAI", etc.
-        std::string apiKey;
-        std::string defaultModel;
-        std::string base_url;     // Override base host (empty = provider default)
-    };
-
-    // Discovers available providers from environment variables.
-    // Reads PAGENT_ANTHROPIC_API_KEY, PAGENT_OPENAI_API_KEY, PAGENT_GEMINI_API_KEY (Google),
-    //        PAGENT_DEEPSEEK_API_KEY, PAGENT_GROK_API_KEY.
-    // Ollama is always included (no key needed).
-    // Returns them in order; optionally selects one based on PAGENT_PROVIDER env var.
-    std::vector<ProviderInfo> DiscoverProviders();
-
-    // Returns the index into the DiscoverProviders() result matching PAGENT_PROVIDER,
-    // or 0 if not set.
-    int GetDefaultProviderIndex(const std::vector<ProviderInfo> &providers);
 
     // ---------------------------------------------------------------------------
     // Token usage
@@ -405,55 +380,6 @@ namespace pagent
         void SetCodebaseBM25(BM25Index *index);
         void SetIncludeGraph(IncludeGraph *graph);
         void SetEmbeddingProvider(std::shared_ptr<IEmbeddingProvider> provider);
-
-        struct ModelInfo
-        {
-            std::string name;
-            bool local = true;          // false for Ollama cloud/remote models that need pulling
-            bool supportsVision = true; // model accepts image input
-            bool supportsTools = true;  // model supports function/tool calling
-        };
-        static std::vector<ModelInfo> FetchModelInfos(Provider provider,
-                                                      const std::string &api_key,
-                                                      const std::string &base_url = "",
-                                                      bool local_only = false,
-                                                      bool require_tools = true,
-                                                      bool require_vision = false);
-
-        // Fetch Ollama embedding models.
-        // When local_only=true, only lists locally installed models.
-        // When local_only=false, also fetches remote models from ollama.com.
-        static std::vector<ModelInfo> FetchOllamaEmbeddingModels(const std::string &base_url = "",
-                                                                 bool local_only = false);
-
-        // Pull/download an Ollama model in the background.
-        // progressCb fires with status strings, completeCb fires with success/failure.
-        // Returns a cancel token; call CancelPull() to abort.
-        using ProgressCallback = std::function<void(const std::string &status)>;
-        using CompleteCallback = std::function<void(bool success)>;
-        using CancelToken = std::shared_ptr<std::atomic<bool>>;
-        static CancelToken PullModel(const std::string &model,
-                                     ProgressCallback progressCb,
-                                     CompleteCallback completeCb);
-        static void CancelPull(const CancelToken &token);
-
-        // Query model capabilities (vision, tools) via Ollama /api/show.
-        // For non-Ollama providers, returns {true, true}.
-        struct ModelCaps
-        {
-            bool vision = true;
-            bool tools = true;
-        };
-        static ModelCaps QueryCapabilities(Provider provider, const std::string &model,
-                                           const std::string &base_url = "");
-
-        // Convenience: check if a model supports tool calling.
-        static bool SupportsTools(Provider provider, const std::string &model,
-                                  const std::string &base_url = "");
-
-        // Unload an Ollama model from GPU memory. No-op for other providers.
-        static void UnloadModel(Provider provider, const std::string &model,
-                                const std::string &base_url = "");
 
     private:
         struct Impl;

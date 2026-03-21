@@ -1,6 +1,7 @@
 #if defined(PE_SCRIPTS)
 #include "Script/ScriptSystem.h"
 #include "GUI/GUIState.h"
+#include "API/RHI.h"
 #include <SDL.h>
 
 namespace pe
@@ -83,7 +84,7 @@ namespace pe
 
                 // Warp mouse to center of window (useful when exiting relative mode)
                 input.set_function("warp_mouse_center", []() {
-                    SDL_Window *window = SDL_GL_GetCurrentWindow();
+                    SDL_Window *window = RHII.GetWindow();
                     if (window)
                     {
                         int w, h;

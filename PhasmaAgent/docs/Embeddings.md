@@ -38,13 +38,6 @@ auto embedding = std::make_shared<pagent::OllamaEmbedding>("nomic-embed-text");
 // or: qwen3-embedding, mxbai-embed-large, etc.
 ```
 
-List available Ollama embedding models:
-
-```cpp
-auto models = pagent::Agent::FetchOllamaEmbeddingModels("", /*local_only=*/true);
-// models[i].name, models[i].local
-```
-
 ### Custom provider
 
 Implement `IEmbeddingProvider` for any other service — two methods:

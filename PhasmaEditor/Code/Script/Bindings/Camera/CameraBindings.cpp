@@ -60,7 +60,7 @@ namespace pe
                     },
                     "look_at", [](Camera &c, const vec3 &target) {
                         vec3 dir = glm::normalize(target - c.GetPosition());
-                        float pitch = asin(dir.y);
+                        float pitch = -asin(dir.y);
                         float yaw = atan2(dir.x, dir.z);
                         c.SetEuler(vec3(pitch, yaw, 0.0f));
                     },

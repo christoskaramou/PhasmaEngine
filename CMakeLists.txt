@@ -84,6 +84,7 @@ target_precompile_headers(PhasmaEditor REUSE_FROM PhasmaCore)
 # PhasmaEditor include directories
 target_include_directories(PhasmaEditor PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/PhasmaEditor")
 target_include_directories(PhasmaEditor PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/PhasmaEditor/Code")
+target_include_directories(PhasmaEditor PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/PhasmaAgent/third_party")
 target_include_directories(PhasmaEditor PRIVATE "${PE_EDITOR_THIRD_PARTY_DIR}")
 target_include_directories(PhasmaEditor PRIVATE "${PE_EDITOR_THIRD_PARTY_DIR}/imgui")
 target_include_directories(PhasmaEditor PRIVATE "${PE_EDITOR_THIRD_PARTY_DIR}/sol2")

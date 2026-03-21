@@ -62,7 +62,8 @@ namespace pagent
                                                const std::map<std::string, std::string> &headers,
                                                const std::string &body);
 
-        const AgentConfig &m_config;
+        const AgentConfig &m_configRef; // owned by AgentImpl; read only at Submit() time
+        AgentConfig m_activeConfig;     // snapshot taken at Submit() — worker reads this
         IProviderBackend *m_backend;
         ConversationHistory &m_history;
         ToolRegistry &m_toolRegistry;

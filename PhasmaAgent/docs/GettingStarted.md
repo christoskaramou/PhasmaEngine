@@ -43,16 +43,17 @@ pagent::Agent agent(config);
 | Ollama (local) | `Provider::OpenAI` | `http://localhost:11434` | *(none)* |
 | LM Studio | `Provider::OpenAI` | `http://localhost:1234` | *(none)* |
 
-Auto-discover from environment variables:
+Read provider credentials from environment variables in your host app:
 
 ```cpp
-auto providers = pagent::DiscoverProviders();
-int idx        = pagent::GetDefaultProviderIndex(providers);
-// providers[idx].provider, .apiKey, .defaultModel
+pagent::AgentConfig config;
+config.provider = pagent::Provider::Anthropic;
+config.api_key = std::getenv("PAGENT_ANTHROPIC_API_KEY");
+config.model = "claude-sonnet-4-6";
 ```
 
-Environment variables read: `PAGENT_ANTHROPIC_API_KEY`, `PAGENT_OPENAI_API_KEY`,
-`PAGENT_GEMINI_API_KEY`, `PAGENT_PROVIDER` (`anthropic` / `openai` / `gemini` / `ollama`).
+Environment variables for API keys: `PAGENT_ANTHROPIC_API_KEY`, `PAGENT_OPENAI_API_KEY`,
+`PAGENT_GEMINI_API_KEY`, `PAGENT_VOYAGE_API_KEY`. Provider selection is left to the host application.
 
 ## 4. Set the event callback
 
@@ -150,29 +151,7 @@ while (agent.IsBusy())
 
 `Poll()` is non-blocking and safe to call every frame even when idle.
 
-## 7. Model management (Ollama)
-
-```cpp
-// List locally installed models (vision + tools only)
-auto models = pagent::Agent::FetchModelInfos(pagent::Provider::Ollama, "", "", /*local_only=*/true);
-
-// Pull a model in the background
-auto token = pagent::Agent::PullModel("qwen3.5:cloud",
-    [](const std::string &status) { printf("%s\n", status.c_str()); },
-    [](bool ok) { printf(ok ? "done\n" : "failed\n"); });
-
-// Cancel the pull
-pagent::Agent::CancelPull(token);
-
-// Check capabilities
-auto caps = pagent::Agent::QueryCapabilities(pagent::Provider::Ollama, "qwen3.5");
-// caps.vision, caps.tools
-
-// Free GPU memory
-pagent::Agent::UnloadModel(pagent::Provider::Ollama, "nemotron-3-super:latest");
-```
-
-## 8. Session management
+## 7. Session management
 
 ```cpp
 // Save

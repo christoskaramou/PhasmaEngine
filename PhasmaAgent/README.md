@@ -67,63 +67,47 @@ while (agent.IsBusy())
 
 ## Environment Variables (PhasmaEditor)
 
-PhasmaEditor reads these env vars at startup to configure the Agent widget. Set them before launching the editor.
+PhasmaEditor reads these env vars at startup to configure the embedding provider for the MCP codebase index. Set them before launching the editor.
 
-| Variable                  | Description                                                        | Default               |
-|---------------------------|--------------------------------------------------------------------|-----------------------|
-| `PAGENT_ANTHROPIC_API_KEY`| API key for Anthropic (from `console.anthropic.com`)               | -                     |
-| `PAGENT_OPENAI_API_KEY`   | API key for OpenAI (from `platform.openai.com`)                    | -                     |
-| `PAGENT_GEMINI_API_KEY`   | API key for Google Gemini (from `aistudio.google.com`)             | -                     |
-| `PAGENT_PROVIDER`         | Which provider to select by default: `anthropic`, `openai`, `gemini`, `ollama`. | first available |
+| Variable                  | Description                                                        |
+|---------------------------|--------------------------------------------------------------------|
+| `PAGENT_ANTHROPIC_API_KEY`| API key for Anthropic (from `console.anthropic.com`)               |
+| `PAGENT_OPENAI_API_KEY`   | API key for OpenAI (from `platform.openai.com`)                    |
+| `PAGENT_GEMINI_API_KEY`   | API key for Google Gemini (from `aistudio.google.com`)             |
+| `PAGENT_VOYAGE_API_KEY`   | API key for Voyage AI embeddings (from `dash.voyageai.com`)        |
 
-### Provider discovery logic
+The embedding provider and model are configured at runtime via **Connection → RAG → Embedding** in the editor menu, or persisted in `Assets/Agent/agent_config.json`.
 
-All providers with a valid API key are discovered and available in the editor's provider dropdown. Ollama is always included (no key needed).
+## MCP Server
 
-1. If `PAGENT_ANTHROPIC_API_KEY` is set -> Anthropic added (default model: `claude-haiku-4-5`)
-2. If `PAGENT_OPENAI_API_KEY` is set -> OpenAI added (default model: `gpt-4.1-mini`)
-3. If `PAGENT_GEMINI_API_KEY` is set -> Gemini added (default model: `gemini-2.5-flash`)
-4. Ollama is always added (default model: `llama3.2`, no key required)
+PhasmaEditor runs an in-process MCP (Model Context Protocol) HTTP server at `http://127.0.0.1:8765/mcp`.
+External AI clients (Claude Code, Claude Desktop, Codex) connect to it and get access to editor tools.
 
-`PAGENT_PROVIDER` selects which provider is active by default. If not set, the first discovered provider is used.
-
-### Examples
-
-**Ollama (local, no key needed):**
-```bash
-export PAGENT_PROVIDER="ollama"
-# Ollama is always available, default model: llama3.2
-# Ollama runs automatically when needed (can also be stopped manually to remove GPU memory stress) 
+**Claude Code** — add `.claude/settings.json` at the repo root:
+```json
+{
+  "mcpServers": {
+    "phasmaeditor": {
+      "type": "http",
+      "url": "http://127.0.0.1:8765/mcp"
+    }
+  }
+}
 ```
 
-**Anthropic:**
-```bash
-export PAGENT_ANTHROPIC_API_KEY="sk-ant-..."
-export PAGENT_PROVIDER="anthropic"
-# default model: claude-haiku-4-5
+**Claude Desktop** — requires `mcp-remote` bridge (Claude Desktop only supports stdio):
+```json
+"phasmaeditor": {
+  "command": "npx",
+  "args": ["-y", "mcp-remote", "http://127.0.0.1:8765/mcp"]
+}
 ```
 
-**OpenAI:**
-```bash
-export PAGENT_OPENAI_API_KEY="sk-..."
-export PAGENT_PROVIDER="openai"
-# default model: gpt-4.1-mini
-```
+Toggle the server from **Connection → MCP Server** in the editor menu bar.
+The **Connection → RAG** submenu controls the codebase index (Enable, Index, Check, embedding provider).
+The status bar shows **MCP** (green = running, grey = off) and **RAG** (color-coded by index state).
 
-**Gemini:**
-```bash
-export PAGENT_GEMINI_API_KEY="AIza..."
-export PAGENT_PROVIDER="gemini"
-# default model: gemini-2.5-flash
-```
-
-**Multiple providers (switch in editor UI):**
-```bash
-export PAGENT_ANTHROPIC_API_KEY="sk-ant-..."
-export PAGENT_OPENAI_API_KEY="sk-..."
-export PAGENT_GEMINI_API_KEY="AIza..."
-export PAGENT_PROVIDER="anthropic"   # default selection, all available in dropdown
-```
+---
 
 ## Authentication
 
@@ -374,4 +358,4 @@ The agent reads `START.md` on initialization. The default instructions tell it t
 - **Tool handlers run on a worker thread** - any engine state mutation must be deferred to the main thread (see deferred queue pattern above).
 - **No streaming progress on tool results** - while the model streams text, tool execution is synchronous; the caller sees a `ToolResult` event only after the handler returns.
 - **Agentic loop has a hard cap** - `AgentConfig::max_tool_rounds` (default 20 in PhasmaEditor) prevents runaway loops. Raise it for tasks that require many sequential tool calls.
-- **Limited multi-modal input** - user-uploaded images/files are not supported. Engine screenshots can be captured via `engine.take_screenshot()` and displayed in the agent chat.
+- **Limited multi-modal input** - user-uploaded images/files are not supported. Engine screenshots can be captured via the `take_screenshot` MCP tool and returned as base64 PNG to the connected AI client.

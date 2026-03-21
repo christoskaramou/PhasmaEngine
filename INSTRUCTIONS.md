@@ -51,7 +51,8 @@ PhasmaEngine/
 │   │   ├── Systems/          # RendererSystem, LightSystem, CameraSystem, ScriptManager...
 │   │   ├── RenderPasses/     # GBuffer, Depth, Shadow, Light, Bloom, TAA, SSAO, SSR, DOF...
 │   │   ├── Scene/            # Scene, Model, Geometry, PhysicsHelper
-│   │   ├── GUI/              # ImGui wrapper + all editor widgets
+│   │   ├── GUI/              # ImGui wrapper, editor widgets, MCP/tool bridge
+│   │   │   └── Agent/        # EditorToolServer (MCP HTTP), EditorToolRuntime, EditorToolCatalog
 │   │   └── Script/           # Lua binding layer
 │   └── Assets/
 │       ├── Shaders/          # HLSL sources compiled to SPIR-V
@@ -179,7 +180,10 @@ Namespace: `pagent`.
 | `VectorStore` | `VectorStore.h` | Embedding vector store; cosine similarity; thread-safe |
 | `IncludeGraph` | `IncludeGraph.h` | C++ include dependency graph for context expansion |
 | `CodebaseIndexer` | `CodebaseIndexer.h` | Indexes source files into BM25 + VectorStore |
+| `CodebaseContext` | `CodebaseContext.h` | Owns VectorStore + BM25Index + async status checks; used by GUI |
 | `RepoMap` | `RepoMap.h` | Compact codebase overview (~1K tokens) for system prompt |
+| `EmbeddingUtils` | `EmbeddingUtils.h` | Factory: `CreateEmbeddingProvider(kind, model, key)` |
+| `RagUtils` | `RagUtils.h` | Hybrid BM25 + vector retrieval helpers |
 
 ### Search APIs
 
@@ -238,7 +242,7 @@ edit → search → build → fix
 3. **build** — compile and get structured error output
 4. **fix** — use build errors to correct the edit and loop
 
-### Registered Tools (AgentWidget.cpp)
+### Registered Tools (EditorToolCatalog.cpp)
 
 | Tool | Purpose |
 |---|---|
@@ -257,6 +261,9 @@ edit → search → build → fix
 | `take_screenshot` | Capture editor state as base64 PNG |
 | `query_imgui_windows` | Get visible ImGui panels with positions |
 | `inject_mouse_input` | Simulate mouse input in the editor |
+| `get_codebase_index_status` | Report RAG index state: has_index, is_indexing, progress, embeddings configured |
+| `rebuild_codebase_index` | Start or restart the codebase BM25+vector index (`full_rebuild` param) |
+| `cancel_codebase_index` | Cancel an in-progress indexing job |
 
 ---
 

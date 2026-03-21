@@ -42,9 +42,13 @@ PhasmaEditor/Code/
 │   ├── Geometry.h/.cpp            # Unified GPU vertex/index buffers + indirect draw
 │   └── PhysicsHelper.h/.cpp       # Creates Jolt shapes from node AABBs
 ├── GUI/
-│   ├── GUI.h/.cpp                 # ImGui frame begin/end, widget orchestration
+│   ├── GUI.h/.cpp                 # ImGui frame begin/end, widget orchestration, MCP codebase ownership
+│   ├── Agent/
+│   │   ├── EditorToolServer.h/.cpp      # In-process MCP HTTP server (port 8765, JSON-RPC 2.0)
+│   │   ├── EditorToolRuntime.h/.cpp     # Main-thread-safe editor action bridge (QueueAction)
+│   │   ├── EditorToolCatalog.h/.cpp     # All editor/MCP tool definitions
+│   │   └── EditorToolSchemaUtils.h/.cpp # JSON schema helpers for tool definitions
 │   └── Widgets/
-│       ├── AgentWidget.h/.cpp     # AI agent chat UI + all tool registrations
 │       ├── SceneWidget.h/.cpp     # Scene hierarchy panel
 │       ├── PropertiesWidget.h/.cpp# Node inspector (transform, material, physics)
 │       ├── FileBrowser.h/.cpp     # Asset browser
@@ -115,34 +119,38 @@ for (auto& node : model->GetNodes())
 
 ---
 
-## AgentWidget — Tool Registration
+## Editor MCP Tool Registration
 
-All agent tools are registered in `AgentWidget::RegisterTools()` (around line 921).
+All editor/MCP tools are defined in `EditorToolCatalog.cpp` and served to external AI clients
+(Claude Code, Claude Desktop, Codex) via `EditorToolServer` at `http://127.0.0.1:8765/mcp`.
+
 The `projectRoot` variable is the canonical repo root — all file paths are relative to it.
 
 Tool handler contract:
-- Runs on the **worker thread** — must be thread-safe
+- Runs on the **httplib worker thread** — must be thread-safe
 - Receives raw JSON args string
 - Returns raw JSON result string
 - Use helpers from `PhasmaAgent/include/PhasmaAgent/AgentUtils.h`:
   `ExtractArgStr`, `ExtractArgInt`, `ExtractArgArray`, `JsonStr`, `JsonObj`, `IsPathSafe`
+- **Main-thread-only operations** (ImGui reads, scene mutation) must use `gui->QueueMainThreadAction(fn)` — never access GUI or engine state directly from the handler
 
 Example:
 ```cpp
-m_agent->RegisterTool({
-    .name = "my_tool",
-    .description = "...",
-    .properties = {
-        {"path", "File path relative to project root", pagent::SchemaType::String, true},
-    },
-    .handler = [projectRoot](const std::string& args) -> std::string {
-        std::string path = JsonUnescape(ExtractArgStr(args, "path"));
-        if (!IsPathSafe(path, projectRoot))
-            return "{\"error\":\"path outside project\"}";
-        // ...
-        return nlohmann::json{{"result", "ok"}}.dump();
-    }
-});
+pagent::ToolDefinition tool;
+tool.name        = "my_tool";
+tool.description = "...";
+tool.properties  = {
+    {"path", "File path relative to project root", pagent::SchemaType::String, true},
+};
+tool.handler = [projectRoot](const std::string& args) -> std::string {
+    std::string path = pagent::JsonUnescape(pagent::ExtractArgStr(args, "path"));
+    if (!pagent::IsPathSafe(path, projectRoot))
+        return "{\"error\":\"path outside project\"}";
+    // ...
+    return nlohmann::json{{"result", "ok"}}.dump();
+};
+// Add to tools vector in the appropriate Append*Tools function:
+tools.push_back(std::move(tool));
 ```
 
 ---
