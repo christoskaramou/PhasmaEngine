@@ -306,3 +306,6 @@ PhasmaEditor/Assets/Agent/*
 
 # User scenes
 PhasmaEditor/Assets/Scenes/
+
+#clang-format
+!.clang-format

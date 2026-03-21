@@ -141,11 +141,11 @@ namespace pe
                 ImGui::EndMenu();
             }
 
-            if (ImGui::MenuItem("Node"))
+            if (ImGui::MenuItem("Empty Node"))
             {
                 Model *model = new Model();
                 NodeInfo nodeInfo{};
-                nodeInfo.name = "Node";
+                nodeInfo.name = "Empty Node";
                 nodeInfo.localMatrix = mat4(1.0f);
                 model->GetNodeInfos().push_back(nodeInfo);
                 EventSystem::PushEvent(EventType::ModelLoaded, model);
@@ -1064,6 +1064,93 @@ namespace pe
                             snprintf(s_renameBuf, sizeof(s_renameBuf), "%s", nodeName.c_str());
                             s_openRenamePopup = true;
                         }
+                        if (ImGui::BeginMenu("Add"))
+                        {
+                            if (ImGui::MenuItem("Camera"))
+                            {
+                                Camera *camera = scene.AddCamera();
+                            }
+
+                            if (ImGui::BeginMenu("Light"))
+                            {
+                                LightSystem *lightSystem = GetGlobalSystem<LightSystem>();
+                                if (ImGui::MenuItem("Directional Light"))
+                                    lightSystem->CreateDirectionalLight();
+                                if (ImGui::MenuItem("Point Light"))
+                                    lightSystem->CreatePointLight();
+                                if (ImGui::MenuItem("Spot Light"))
+                                    lightSystem->CreateSpotLight();
+                                if (ImGui::MenuItem("Area Light"))
+                                    lightSystem->CreateAreaLight();
+                                ImGui::EndMenu();
+                            }
+
+                            if (ImGui::MenuItem("Empty Node"))
+                            {
+                                NodeInfo newNode{};
+                                newNode.name = "Empty Node";
+                                newNode.parent = nodeIndex;
+                                newNode.localMatrix = mat4(1.0f);
+                                model->GetNodeInfos().push_back(newNode);
+                                int const newNodeIndex = static_cast<int>(model->GetNodeInfos().size() - 1);
+                                model->GetNodeInfos()[nodeIndex].children.push_back(newNodeIndex);
+                                model->MarkDirty(newNodeIndex);
+                                selection.Select(model, newNodeIndex, SelectionType::Node);
+                            }
+
+                            if (ImGui::BeginMenu("Mesh"))
+                            {
+                                auto AddPrimitive = [&](Model *m)
+                                {
+                                    EventSystem::PushEvent(EventType::ModelLoaded, m);
+                                    selection.Select(m, 0, SelectionType::Node);
+                                };
+                                if (ImGui::MenuItem("Plane"))
+                                    AddPrimitive(Primitives::CreatePlane());
+                                if (ImGui::MenuItem("Cube"))
+                                    AddPrimitive(Primitives::CreateCube());
+                                if (ImGui::MenuItem("Sphere"))
+                                    AddPrimitive(Primitives::CreateSphere());
+                                if (ImGui::MenuItem("Cylinder"))
+                                    AddPrimitive(Primitives::CreateCylinder());
+                                if (ImGui::MenuItem("Cone"))
+                                    AddPrimitive(Primitives::CreateCone());
+                                if (ImGui::MenuItem("Quad"))
+                                    AddPrimitive(Primitives::CreateQuad());
+                                ImGui::EndMenu();
+                            }
+
+                            if (ImGui::MenuItem("Particle Emitter"))
+                            {
+                                ParticleManager *pm = scene.GetParticleManager();
+                                if (pm)
+                                {
+                                    auto &emitters = pm->GetEmitters();
+                                    auto &names = pm->GetEmitterNames();
+                                    Camera *activeCamera = scene.GetActiveCamera();
+                                    vec3 spawnPos = activeCamera ? (activeCamera->GetPosition() + activeCamera->GetFront() * 5.0f) : vec3(0.0f);
+
+                                    ParticleEmitter newEmitter{};
+                                    newEmitter.position = vec4(spawnPos, 1.0f);
+                                    newEmitter.velocity = vec4(0.0f, 5.0f, 0.0f, 0.0f);
+                                    newEmitter.colorStart = vec4(1.0f, 1.0f, 1.0f, 1.0f);
+                                    newEmitter.colorEnd = vec4(0.0f, 0.0f, 0.0f, 0.0f);
+                                    newEmitter.sizeLife = vec4(0.05f, 0.15f, 1.0f, 2.0f);
+                                    newEmitter.physics = vec4(50.0f, 0.5f, 1.0f, 0.1f);
+                                    newEmitter.gravity = vec4(0.0f, -9.8f, 0.0f, 0.0f);
+                                    newEmitter.animation = vec4(1.0f, 1.0f, 1.0f, 0.0f);
+                                    newEmitter.textureIndex = 0;
+                                    newEmitter.count = 100;
+
+                                    emitters.push_back(newEmitter);
+                                    names.push_back("Emitter " + std::to_string(emitters.size() - 1));
+                                    pm->UpdateEmitterBuffer();
+                                    selection.SelectEmitter(static_cast<int>(emitters.size() - 1));
+                                }
+                            }
+                            ImGui::EndMenu();
+                        }
+
                         if (ImGui::MenuItem("Delete"))
                         {
                             recordUndo();
@@ -1149,6 +1236,19 @@ namespace pe
                     ThreadPool::GUI.Enqueue(loadTask);
                 }
             }
+
+            if (const ImGuiPayload *payload = ImGui::AcceptDragDropPayload("HIERARCHY_NODE"))
+            {
+                HierarchyDragDropPayload data = *(const HierarchyDragDropPayload *)payload->Data;
+                for (auto m : models)
+                {
+                    if (m && m->GetId() == data.modelId)
+                    {
+                        m->ReparentNode(data.nodeIndex, -1);
+                        break;
+                    }
+                }
+            }
             ImGui::EndDragDropTarget();
         }
 
@@ -1217,6 +1317,61 @@ namespace pe
         for (auto model : modelsToDelete)
         {
             EventSystem::PushEvent(EventType::ModelRemoved, model);
+        }
+
+        if (ImGui::BeginPopupContextWindow("HierarchyBgContext", ImGuiPopupFlags_MouseButtonRight | ImGuiPopupFlags_NoOpenOverItems))
+        {
+            if (ImGui::BeginMenu("Add"))
+            {
+                if (ImGui::MenuItem("Camera"))
+                    scene.AddCamera();
+
+                if (ImGui::BeginMenu("Light"))
+                {
+                    LightSystem *ls = GetGlobalSystem<LightSystem>();
+                    if (ImGui::MenuItem("Directional Light"))
+                        ls->CreateDirectionalLight();
+                    if (ImGui::MenuItem("Point Light"))
+                        ls->CreatePointLight();
+                    if (ImGui::MenuItem("Spot Light"))
+                        ls->CreateSpotLight();
+                    if (ImGui::MenuItem("Area Light"))
+                        ls->CreateAreaLight();
+                    ImGui::EndMenu();
+                }
+
+                if (ImGui::MenuItem("Empty Node"))
+                {
+                    Model *model = new Model();
+                    NodeInfo nodeInfo{};
+                    nodeInfo.name = "Empty Node";
+                    nodeInfo.localMatrix = mat4(1.0f);
+                    model->GetNodeInfos().push_back(nodeInfo);
+                    EventSystem::PushEvent(EventType::ModelLoaded, model);
+                    selection.Select(model, 0, SelectionType::Node);
+                }
+
+                if (ImGui::BeginMenu("Mesh"))
+                {
+                    auto AddPrim = [&](Model *m)
+                    { EventSystem::PushEvent(EventType::ModelLoaded, m); selection.Select(m, 0, SelectionType::Node); };
+                    if (ImGui::MenuItem("Plane"))
+                        AddPrim(Primitives::CreatePlane());
+                    if (ImGui::MenuItem("Cube"))
+                        AddPrim(Primitives::CreateCube());
+                    if (ImGui::MenuItem("Sphere"))
+                        AddPrim(Primitives::CreateSphere());
+                    if (ImGui::MenuItem("Cylinder"))
+                        AddPrim(Primitives::CreateCylinder());
+                    if (ImGui::MenuItem("Cone"))
+                        AddPrim(Primitives::CreateCone());
+                    if (ImGui::MenuItem("Quad"))
+                        AddPrim(Primitives::CreateQuad());
+                    ImGui::EndMenu();
+                }
+                ImGui::EndMenu();
+            }
+            ImGui::EndPopup();
         }
 
         ImGui::End();

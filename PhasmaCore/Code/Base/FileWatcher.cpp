@@ -7,10 +7,11 @@ namespace pe
         PE_ERROR_IF(file.empty() || callback == nullptr, "FileWatcher: Invalid parameters");
         PE_ERROR_IF(!std::filesystem::exists(file), "FileWatcher: File does not exist");
 
-        std::string filePath = file;
-        std::replace(filePath.begin(), filePath.end(), '\\', '/');
+        std::error_code ec;
+        std::string filePath = std::filesystem::weakly_canonical(file, ec).generic_string();
 
         StringHash hash(filePath);
+        PE_INFO("[FW] Add -> file='%s' | filePath='%s' | hash=%llu", file.c_str(), filePath.c_str(), static_cast<unsigned long long>(hash));
         if (FileWatcher::Get(hash))
             return;
 
@@ -30,12 +31,14 @@ namespace pe
 
     const FileWatcher *FileWatcher::Get(const std::string &file)
     {
-        return FileWatcher::Get(StringHash(file));
+        std::error_code ec;
+        return FileWatcher::Get(StringHash(std::filesystem::weakly_canonical(file, ec).generic_string()));
     }
 
     void FileWatcher::Erase(const std::string &file)
     {
-        FileWatcher::Erase(StringHash(file));
+        std::error_code ec;
+        FileWatcher::Erase(StringHash(std::filesystem::weakly_canonical(file, ec).generic_string()));
     }
 
     void FileWatcher::Erase(size_t hash)

@@ -217,9 +217,10 @@ namespace pe
         : m_shaderStage{shaderStage},
           m_entryName{entryName}
     {
-        std::string path = spirvPath;
-        std::replace(path.begin(), path.end(), '\\', '/');
+        std::error_code ec;
+        std::string path = std::filesystem::weakly_canonical(spirvPath, ec).generic_string();
         m_pathID = StringHash(path);
+        PE_INFO("[Shader] Init(spirv) -> source='%s' | path='%s' | hash=%llu", spirvPath.c_str(), path.c_str(), static_cast<unsigned long long>(m_pathID));
 
         // Read spirv file
         {
@@ -243,10 +244,12 @@ namespace pe
           m_type{type},
           m_entryName{entryName}
     {
-        std::string path = sourcePath;
-        std::replace(path.begin(), path.end(), '\\', '/');
-        PE_ERROR_IF(!FileWatcher::Get(path), "Shader file does not exist");
+        std::error_code ec;
+        std::string path = std::filesystem::weakly_canonical(sourcePath, ec).generic_string();
+        
+        PE_ERROR_IF(!FileWatcher::Get(path), "Shader file does not exist in FileWatcher!");
         m_pathID = StringHash(path);
+        PE_INFO("[Shader] Init(hlsl) -> source='%s' | path='%s' | hash=%llu", sourcePath.c_str(), path.c_str(), static_cast<unsigned long long>(m_pathID));
 
         Hash definesHash;
         for (const Define &def : m_globalDefines)
