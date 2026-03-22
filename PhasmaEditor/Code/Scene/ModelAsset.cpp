@@ -1,8 +1,8 @@
-#include "Scene/Model.h"
+#include "Scene/ModelAsset.h"
 #include "API/Buffer.h"
 #include "API/Image.h"
 #include "API/RHI.h"
-#include "Scene/ModelAssimp.h"
+#include "Scene/ModelAssetAssimp.h"
 #include "Scene/Scene.h"
 #include "Systems/RendererSystem.h"
 
@@ -43,18 +43,18 @@ namespace pe
         return out;
     }
 
-    Model::Model() : m_id{ID::NextID()}
+    ModelAsset::ModelAsset() : m_id{ID::NextID()}
     {
         m_dirtyUniforms.resize(RHII.GetSwapchainImageCount(), false);
         m_label = "Model_" + std::to_string(m_id);
     }
 
-    Model::~Model()
+    ModelAsset::~ModelAsset()
     {
         Unload();
     }
 
-    void Model::Unload()
+    void ModelAsset::Unload()
     {
         for (auto sampler : m_samplers)
         {
@@ -69,7 +69,7 @@ namespace pe
         m_images.clear();
     }
 
-    void Model::AddImage(Image *image, bool owned)
+    void ModelAsset::AddImage(Image *image, bool owned)
     {
         if (!image)
             return;
@@ -84,7 +84,7 @@ namespace pe
             m_images.push_back(ResourceHandle<Image>::FromRaw(image));
     }
 
-    void Model::AddSampler(Sampler *sampler, bool owned)
+    void ModelAsset::AddSampler(Sampler *sampler, bool owned)
     {
         if (!sampler)
             return;
@@ -96,21 +96,21 @@ namespace pe
             m_sharedSamplers.insert(sampler);
     }
 
-    Model *Model::Load(const std::filesystem::path &file)
+    ModelAsset *ModelAsset::Load(const std::filesystem::path &file)
     {
         auto fileU8 = file.u8string();
         std::string fileStr(reinterpret_cast<const char *>(fileU8.c_str()));
         if (!std::filesystem::exists(file))
         {
-            PE_WARN("[Model] File not found: %s", fileStr.c_str());
+            PE_WARN("[ModelAsset] File not found: %s", fileStr.c_str());
             return nullptr;
         }
 
         // For now we route everything through Assimp (it supports many formats).
-        Model *model = ModelAssimp::Load(file);
+        ModelAsset *model = ModelAssetAssimp::Load(file);
         if (!model)
         {
-            PE_WARN("[Model] Failed to load: %s", fileStr.c_str());
+            PE_WARN("[ModelAsset] Failed to load: %s", fileStr.c_str());
             return nullptr;
         }
 
@@ -118,7 +118,7 @@ namespace pe
         return model;
     }
 
-    void Model::DefaultResources::EnsureCreated(CommandBuffer *cmd)
+    void ModelAsset::DefaultResources::EnsureCreated(CommandBuffer *cmd)
     {
         if (!black)
             black = Image::LoadRGBA8(cmd, Path::Assets + "Objects/black.png");
@@ -134,25 +134,25 @@ namespace pe
         }
     }
 
-    Model::DefaultResources &Model::GetDefaultResources(CommandBuffer *cmd)
+    ModelAsset::DefaultResources &ModelAsset::GetDefaultResources(CommandBuffer *cmd)
     {
         DefaultResources &defaults = Defaults();
         defaults.EnsureCreated(cmd);
         return defaults;
     }
 
-    const Model::DefaultResources &Model::GetDefaultResources()
+    const ModelAsset::DefaultResources &ModelAsset::GetDefaultResources()
     {
         return Defaults();
     }
 
-    Model::DefaultResources &Model::Defaults()
+    ModelAsset::DefaultResources &ModelAsset::Defaults()
     {
         static DefaultResources defaults;
         return defaults;
     }
 
-    void Model::ResetResources(CommandBuffer *cmd)
+    void ModelAsset::ResetResources(CommandBuffer *cmd)
     {
         m_images.clear();
         m_samplers.clear();
@@ -165,7 +165,7 @@ namespace pe
         AddSampler(defaults.sampler, false);
     }
 
-    void Model::DestroyDefaults()
+    void ModelAsset::DestroyDefaults()
     {
         DefaultResources &defaults = Defaults();
 
@@ -194,7 +194,20 @@ namespace pe
         }
     }
 
-    void Model::UpdateNodeMatrices()
+    void ModelAsset::SetMatrix(const mat4 &matrix, bool markDirty)
+    {
+        m_matrix = matrix;
+        if (markDirty)
+        {
+            for (int i = 0; i < GetNodeCount(); i++)
+            {
+                if (m_nodeInfos[i].parent < 0)
+                    MarkDirty(i);
+            }
+        }
+    }
+
+    void ModelAsset::UpdateNodeMatrices()
     {
         if (!m_dirtyNodes && !m_previousMatricesIsDirty)
             return;
@@ -206,33 +219,33 @@ namespace pe
         m_dirtyNodes = false;
     }
 
-    void Model::UpdateNodeMatrix(int node)
+    void ModelAsset::UpdateNodeMatrix(int node)
     {
         if (node < 0 || node >= static_cast<int>(m_nodeInfos.size()))
             return;
 
-        NodeInfo &nodeInfo = m_nodeInfos[node];
+        const NodeInfo &nodeInfo = m_nodeInfos[node];
+        NodeRuntimeInfo &runtime = m_nodeRuntimeInfos[node];
 
         // keep previous (for motion vectors, etc.)
         bool previousMatrixChanged = false;
-        if (nodeInfo.ubo.previousWorldMatrix != nodeInfo.ubo.worldMatrix)
+        if (runtime.gpuData.previousWorldMatrix != runtime.gpuData.worldMatrix)
         {
-            nodeInfo.ubo.previousWorldMatrix = nodeInfo.ubo.worldMatrix;
+            runtime.gpuData.previousWorldMatrix = runtime.gpuData.worldMatrix;
             previousMatrixChanged = true;
         }
 
-        if (!nodeInfo.dirty && !previousMatrixChanged)
+        if (!runtime.dirty && !previousMatrixChanged)
             return;
 
         int parent = nodeInfo.parent;
         if (parent >= 0)
         {
-            // Parent is already updated
-            nodeInfo.ubo.worldMatrix = m_nodeInfos[parent].ubo.worldMatrix * nodeInfo.localMatrix;
+            runtime.gpuData.worldMatrix = m_nodeRuntimeInfos[parent].gpuData.worldMatrix * nodeInfo.localMatrix;
         }
         else
         {
-            nodeInfo.ubo.worldMatrix = m_matrix * nodeInfo.localMatrix;
+            runtime.gpuData.worldMatrix = m_matrix * nodeInfo.localMatrix;
         }
 
         // update mesh world AABB if node owns a mesh
@@ -240,43 +253,39 @@ namespace pe
         if (mesh >= 0 && mesh < static_cast<int>(m_meshInfos.size()))
         {
             const MeshInfo &meshInfo = m_meshInfos[mesh];
-            nodeInfo.worldBoundingBox = TransformAabb(meshInfo.boundingBox, nodeInfo.ubo.worldMatrix);
+            runtime.worldBoundingBox = TransformAabb(meshInfo.boundingBox, runtime.gpuData.worldMatrix);
         }
 
-        nodeInfo.dirty = false;
+        runtime.dirty = false;
         m_nodesMoved.push_back(node);
 
         for (uint32_t i = 0; i < RHII.GetSwapchainImageCount(); i++)
         {
-            nodeInfo.dirtyUniforms[i] = true;
+            runtime.dirtyUniforms[i] = true;
             m_dirtyUniforms[i] = true;
         }
     }
 
-    void Model::MarkDirty(int node)
+    void ModelAsset::MarkDirty(int node)
     {
         if (node < 0 || node >= static_cast<int>(m_nodeInfos.size()))
             return;
 
-        // Use cached children list
         std::vector<int> toProcess;
         toProcess.reserve(64);
         toProcess.push_back(node);
 
-        // BFS traversal
         size_t head = 0;
         while (head < toProcess.size())
         {
             int currentCtx = toProcess[head++];
-            NodeInfo &ni = m_nodeInfos[currentCtx];
+            NodeRuntimeInfo &ri = m_nodeRuntimeInfos[currentCtx];
 
-            // Mark dirty
-            ni.dirty = true;
-            for (size_t k = 0; k < ni.dirtyUniforms.size(); k++)
-                ni.dirtyUniforms[k] = true;
+            ri.dirty = true;
+            for (size_t k = 0; k < ri.dirtyUniforms.size(); k++)
+                ri.dirtyUniforms[k] = true;
 
-            // Enqueue children
-            for (int child : ni.children)
+            for (int child : m_nodeInfos[currentCtx].children)
                 toProcess.push_back(child);
         }
 
@@ -285,14 +294,14 @@ namespace pe
             m_dirtyUniforms[i] = true;
     }
 
-    int Model::GetNodeMesh(int nodeIndex) const
+    int ModelAsset::GetNodeMesh(int nodeIndex) const
     {
         if (nodeIndex < 0 || nodeIndex >= static_cast<int>(m_nodeToMesh.size()))
             return -1;
         return m_nodeToMesh[nodeIndex];
     }
 
-    void Model::RemoveMesh(int nodeIndex)
+    void ModelAsset::RemoveMesh(int nodeIndex)
     {
         if (nodeIndex < 0 || nodeIndex >= static_cast<int>(m_nodeToMesh.size()))
             return;
@@ -359,15 +368,22 @@ namespace pe
             m_indices = std::move(newIndices);
             m_aabbVertices = std::move(newAabbVerts);
 
-            // Rebuild meshInfos without the orphaned mesh
+            // Rebuild meshInfos and meshRuntimeInfos without the orphaned mesh
             std::vector<MeshInfo> newMeshInfos;
+            std::vector<MeshRuntimeInfo> newMeshRuntimeInfos;
             newMeshInfos.reserve(m_meshInfos.size() - 1);
+            newMeshRuntimeInfos.reserve(m_meshRuntimeInfos.size() > 0 ? m_meshRuntimeInfos.size() - 1 : 0);
             for (int i = 0; i < static_cast<int>(m_meshInfos.size()); i++)
             {
                 if (i != meshIdx)
+                {
                     newMeshInfos.push_back(std::move(m_meshInfos[i]));
+                    if (i < static_cast<int>(m_meshRuntimeInfos.size()))
+                        newMeshRuntimeInfos.push_back(std::move(m_meshRuntimeInfos[i]));
+                }
             }
             m_meshInfos = std::move(newMeshInfos);
+            m_meshRuntimeInfos = std::move(newMeshRuntimeInfos);
 
             // Remap all nodeToMesh references
             for (int &nm : m_nodeToMesh)
@@ -388,7 +404,7 @@ namespace pe
             m_dirtyUniforms[i] = true;
     }
 
-    ResourceHandle<Image> Model::LoadTexture(CommandBuffer *cmd, const std::filesystem::path &texturePath)
+    ResourceHandle<Image> ModelAsset::LoadTexture(CommandBuffer *cmd, const std::filesystem::path &texturePath)
     {
         if (texturePath.empty())
             return ResourceHandle<Image>();
@@ -423,7 +439,7 @@ namespace pe
         return handle;
     }
 
-    bool Model::RemoveNode(int nodeIndex)
+    bool ModelAsset::RemoveNode(int nodeIndex)
     {
         if (nodeIndex < 0 || nodeIndex >= static_cast<int>(m_nodeInfos.size()))
             return false;
@@ -521,20 +537,31 @@ namespace pe
         m_indices = std::move(newIndices);
         m_aabbVertices = std::move(newAabbVerts);
 
-        // 6. Rebuild meshInfos
+        // 6. Rebuild meshInfos and meshRuntimeInfos
         std::vector<MeshInfo> newMeshInfos;
+        std::vector<MeshRuntimeInfo> newMeshRuntimeInfos;
         newMeshInfos.reserve(newMeshCount);
+        newMeshRuntimeInfos.reserve(newMeshCount);
         for (int i = 0; i < static_cast<int>(m_meshInfos.size()); i++)
         {
             if (!orphanedMeshes.count(i))
+            {
                 newMeshInfos.push_back(std::move(m_meshInfos[i]));
+                if (i < static_cast<int>(m_meshRuntimeInfos.size()))
+                    newMeshRuntimeInfos.push_back(std::move(m_meshRuntimeInfos[i]));
+                else
+                    newMeshRuntimeInfos.push_back(MeshRuntimeInfo{});
+            }
         }
         m_meshInfos = std::move(newMeshInfos);
+        m_meshRuntimeInfos = std::move(newMeshRuntimeInfos);
 
-        // 7. Rebuild nodeInfos and nodeToMesh with remapped indices
+        // 7. Rebuild nodeInfos, nodeRuntimeInfos, and nodeToMesh with remapped indices
         std::vector<NodeInfo> newNodeInfos;
+        std::vector<NodeRuntimeInfo> newNodeRuntimeInfos;
         std::vector<int> newNodeToMesh;
         newNodeInfos.reserve(newNodeCount);
+        newNodeRuntimeInfos.reserve(newNodeCount);
         newNodeToMesh.reserve(newNodeCount);
 
         for (int i = 0; i < static_cast<int>(m_nodeInfos.size()); i++)
@@ -555,12 +582,18 @@ namespace pe
 
             newNodeInfos.push_back(std::move(ni));
 
+            if (i < static_cast<int>(m_nodeRuntimeInfos.size()))
+                newNodeRuntimeInfos.push_back(std::move(m_nodeRuntimeInfos[i]));
+            else
+                newNodeRuntimeInfos.push_back(NodeRuntimeInfo{});
+
             int oldMesh = (i < static_cast<int>(m_nodeToMesh.size())) ? m_nodeToMesh[i] : -1;
             int newMesh = (oldMesh >= 0 && oldMesh < static_cast<int>(meshRemap.size())) ? meshRemap[oldMesh] : -1;
             newNodeToMesh.push_back(newMesh);
         }
 
         m_nodeInfos = std::move(newNodeInfos);
+        m_nodeRuntimeInfos = std::move(newNodeRuntimeInfos);
         m_nodeToMesh = std::move(newNodeToMesh);
 
         // 8. Update counts
@@ -573,17 +606,17 @@ namespace pe
         m_nodesMoved.clear();
         for (size_t i = 0; i < m_dirtyUniforms.size(); i++)
             m_dirtyUniforms[i] = true;
-        for (auto &ni : m_nodeInfos)
+        for (auto &ri : m_nodeRuntimeInfos)
         {
-            ni.dirty = true;
-            for (size_t k = 0; k < ni.dirtyUniforms.size(); k++)
-                ni.dirtyUniforms[k] = true;
+            ri.dirty = true;
+            for (size_t k = 0; k < ri.dirtyUniforms.size(); k++)
+                ri.dirtyUniforms[k] = true;
         }
 
         return false;
     }
 
-    void Model::ReparentNode(int nodeIndex, int newParentIndex)
+    void ModelAsset::ReparentNode(int nodeIndex, int newParentIndex)
     {
         PE_INFO("ReparentNode: Request to move node %d to parent %d", nodeIndex, newParentIndex);
 
@@ -629,7 +662,7 @@ namespace pe
         }
 
         // Cache current world matrix to preserve transform
-        mat4 currentWorldMatrix = node.ubo.worldMatrix;
+        mat4 currentWorldMatrix = m_nodeRuntimeInfos[nodeIndex].gpuData.worldMatrix;
 
         // Remove from old parent
         if (oldParentIndex >= 0)
@@ -648,11 +681,310 @@ namespace pe
         node.parent = newParentIndex;
 
         // Calculate new local matrix to preserve world transform
-        mat4 newParentWorldMatrix = (newParentIndex >= 0) ? m_nodeInfos[newParentIndex].ubo.worldMatrix : m_matrix;
+        mat4 newParentWorldMatrix = (newParentIndex >= 0) ? m_nodeRuntimeInfos[newParentIndex].gpuData.worldMatrix : m_matrix;
         node.localMatrix = inverse(newParentWorldMatrix) * currentWorldMatrix;
 
         // Update flags
         MarkDirty(nodeIndex);
         UpdateNodeMatrices();
+    }
+
+    int ModelAsset::CreateNode(const std::string &name, int parentIndex, const mat4 &localMatrix, int meshIndex)
+    {
+        const int idx = static_cast<int>(m_nodeInfos.size());
+
+        NodeInfo ni{};
+        ni.name = name;
+        ni.parent = parentIndex;
+        ni.localMatrix = localMatrix;
+        m_nodeInfos.push_back(std::move(ni));
+
+        NodeRuntimeInfo ri{};
+        ri.dirty = true;
+        ri.dirtyUniforms.resize(RHII.GetSwapchainImageCount(), false);
+        m_nodeRuntimeInfos.push_back(std::move(ri));
+
+        if (m_nodeToMesh.size() <= static_cast<size_t>(idx))
+            m_nodeToMesh.resize(static_cast<size_t>(idx) + 1, -1);
+        m_nodeToMesh[idx] = meshIndex;
+
+        if (parentIndex >= 0 && parentIndex < static_cast<int>(m_nodeInfos.size()))
+            m_nodeInfos[parentIndex].children.push_back(idx);
+
+        MarkDirty(idx);
+        return idx;
+    }
+
+    int ModelAsset::GetRootNodeIndex() const
+    {
+        for (int i = 0; i < static_cast<int>(m_nodeInfos.size()); i++)
+        {
+            if (m_nodeInfos[i].parent < 0)
+                return i;
+        }
+        return -1;
+    }
+
+    void ModelAsset::SetNodeName(int nodeIndex, const std::string &name)
+    {
+        if (nodeIndex >= 0 && nodeIndex < static_cast<int>(m_nodeInfos.size()))
+            m_nodeInfos[nodeIndex].name = name;
+    }
+
+    const std::string &ModelAsset::GetNodeName(int nodeIndex) const
+    {
+        static const std::string empty;
+        if (nodeIndex < 0 || nodeIndex >= static_cast<int>(m_nodeInfos.size()))
+            return empty;
+        return m_nodeInfos[nodeIndex].name;
+    }
+
+    NodeInfo *ModelAsset::GetNodeInfo(int nodeIndex)
+    {
+        if (nodeIndex < 0 || nodeIndex >= static_cast<int>(m_nodeInfos.size()))
+            return nullptr;
+        return &m_nodeInfos[nodeIndex];
+    }
+
+    const NodeInfo *ModelAsset::GetNodeInfo(int nodeIndex) const
+    {
+        if (nodeIndex < 0 || nodeIndex >= static_cast<int>(m_nodeInfos.size()))
+            return nullptr;
+        return &m_nodeInfos[nodeIndex];
+    }
+
+    const ModelAsset::NodeGpuData *ModelAsset::GetNodeGpuData(int nodeIndex) const
+    {
+        if (nodeIndex < 0 || nodeIndex >= static_cast<int>(m_nodeRuntimeInfos.size()))
+            return nullptr;
+        return &m_nodeRuntimeInfos[nodeIndex].gpuData;
+    }
+
+    void ModelAsset::SyncNodeGpuDataFromMesh(int nodeIndex)
+    {
+        int mesh = GetNodeMesh(nodeIndex);
+        if (mesh < 0 || mesh >= static_cast<int>(m_meshInfos.size()))
+            return;
+        if (nodeIndex < 0 || nodeIndex >= static_cast<int>(m_nodeRuntimeInfos.size()))
+            return;
+        m_nodeRuntimeInfos[nodeIndex].gpuData.materialFactors[0] = m_meshInfos[mesh].materialFactors[0];
+        m_nodeRuntimeInfos[nodeIndex].gpuData.materialFactors[1] = m_meshInfos[mesh].materialFactors[1];
+    }
+
+    const mat4 &ModelAsset::GetNodeLocalMatrix(int nodeIndex) const
+    {
+        static const mat4 identity(1.f);
+        if (nodeIndex < 0 || nodeIndex >= static_cast<int>(m_nodeInfos.size()))
+            return identity;
+        return m_nodeInfos[nodeIndex].localMatrix;
+    }
+
+    void ModelAsset::SetNodeLocalMatrix(int nodeIndex, const mat4 &localMatrix, bool markDirty)
+    {
+        if (nodeIndex < 0 || nodeIndex >= static_cast<int>(m_nodeInfos.size()))
+            return;
+        m_nodeInfos[nodeIndex].localMatrix = localMatrix;
+        if (markDirty)
+            MarkDirty(nodeIndex);
+    }
+
+    const mat4 &ModelAsset::GetNodeWorldMatrix(int nodeIndex) const
+    {
+        static const mat4 identity(1.f);
+        if (nodeIndex < 0 || nodeIndex >= static_cast<int>(m_nodeRuntimeInfos.size()))
+            return identity;
+        return m_nodeRuntimeInfos[nodeIndex].gpuData.worldMatrix;
+    }
+
+    int ModelAsset::GetNodeParentIndex(int nodeIndex) const
+    {
+        if (nodeIndex < 0 || nodeIndex >= static_cast<int>(m_nodeInfos.size()))
+            return -1;
+        return m_nodeInfos[nodeIndex].parent;
+    }
+
+    void ModelAsset::SetNodeParentIndex(int nodeIndex, int parentIndex)
+    {
+        if (nodeIndex < 0 || nodeIndex >= static_cast<int>(m_nodeInfos.size()))
+            return;
+        m_nodeInfos[nodeIndex].parent = parentIndex;
+    }
+
+    const std::vector<int> &ModelAsset::GetNodeChildren(int nodeIndex) const
+    {
+        static const std::vector<int> empty;
+        if (nodeIndex < 0 || nodeIndex >= static_cast<int>(m_nodeInfos.size()))
+            return empty;
+        return m_nodeInfos[nodeIndex].children;
+    }
+
+    void ModelAsset::RebuildNodeChildrenFromParents()
+    {
+        for (auto &ni : m_nodeInfos)
+            ni.children.clear();
+
+        for (int i = 0; i < static_cast<int>(m_nodeInfos.size()); i++)
+        {
+            int p = m_nodeInfos[i].parent;
+            if (p >= 0 && p < static_cast<int>(m_nodeInfos.size()))
+                m_nodeInfos[p].children.push_back(i);
+        }
+    }
+
+    const AABB &ModelAsset::GetNodeWorldBoundingBox(int nodeIndex) const
+    {
+        static const AABB empty{};
+        if (nodeIndex < 0 || nodeIndex >= static_cast<int>(m_nodeRuntimeInfos.size()))
+            return empty;
+        return m_nodeRuntimeInfos[nodeIndex].worldBoundingBox;
+    }
+
+    MeshInfo *ModelAsset::GetMeshInfo(int meshIndex)
+    {
+        if (meshIndex < 0 || meshIndex >= static_cast<int>(m_meshInfos.size()))
+            return nullptr;
+        return &m_meshInfos[meshIndex];
+    }
+
+    const MeshInfo *ModelAsset::GetMeshInfo(int meshIndex) const
+    {
+        if (meshIndex < 0 || meshIndex >= static_cast<int>(m_meshInfos.size()))
+            return nullptr;
+        return &m_meshInfos[meshIndex];
+    }
+
+    size_t ModelAsset::GetNodeDataOffset(int nodeIndex) const
+    {
+        if (nodeIndex < 0 || nodeIndex >= static_cast<int>(m_nodeRuntimeInfos.size()))
+            return static_cast<size_t>(-1);
+        return m_nodeRuntimeInfos[nodeIndex].dataOffset;
+    }
+
+    void ModelAsset::SetNodeDataOffset(int nodeIndex, size_t offset)
+    {
+        if (nodeIndex >= 0 && nodeIndex < static_cast<int>(m_nodeRuntimeInfos.size()))
+            m_nodeRuntimeInfos[nodeIndex].dataOffset = offset;
+    }
+
+    uint32_t ModelAsset::GetNodeIndirectIndex(int nodeIndex) const
+    {
+        if (nodeIndex < 0 || nodeIndex >= static_cast<int>(m_nodeRuntimeInfos.size()))
+            return 0;
+        return m_nodeRuntimeInfos[nodeIndex].indirectIndex;
+    }
+
+    void ModelAsset::SetNodeIndirectIndex(int nodeIndex, uint32_t index)
+    {
+        if (nodeIndex >= 0 && nodeIndex < static_cast<int>(m_nodeRuntimeInfos.size()))
+            m_nodeRuntimeInfos[nodeIndex].indirectIndex = index;
+    }
+
+    int ModelAsset::GetNodeInstanceIndex(int nodeIndex) const
+    {
+        if (nodeIndex < 0 || nodeIndex >= static_cast<int>(m_nodeRuntimeInfos.size()))
+            return -1;
+        return m_nodeRuntimeInfos[nodeIndex].instanceIndex;
+    }
+
+    void ModelAsset::SetNodeInstanceIndex(int nodeIndex, int instanceIndex)
+    {
+        if (nodeIndex >= 0 && nodeIndex < static_cast<int>(m_nodeRuntimeInfos.size()))
+            m_nodeRuntimeInfos[nodeIndex].instanceIndex = instanceIndex;
+    }
+
+    bool ModelAsset::IsNodeDirty(int nodeIndex) const
+    {
+        if (nodeIndex < 0 || nodeIndex >= static_cast<int>(m_nodeRuntimeInfos.size()))
+            return false;
+        return m_nodeRuntimeInfos[nodeIndex].dirty;
+    }
+
+    void ModelAsset::SetNodeDirty(int nodeIndex, bool dirty)
+    {
+        if (nodeIndex >= 0 && nodeIndex < static_cast<int>(m_nodeRuntimeInfos.size()))
+            m_nodeRuntimeInfos[nodeIndex].dirty = dirty;
+    }
+
+    void ModelAsset::MarkNodeUniformsDirty(int nodeIndex)
+    {
+        if (nodeIndex < 0 || nodeIndex >= static_cast<int>(m_nodeRuntimeInfos.size()))
+            return;
+        for (size_t i = 0; i < m_nodeRuntimeInfos[nodeIndex].dirtyUniforms.size(); i++)
+            m_nodeRuntimeInfos[nodeIndex].dirtyUniforms[i] = true;
+    }
+
+    bool ModelAsset::IsNodeUniformDirty(int nodeIndex, uint32_t frameIndex) const
+    {
+        if (nodeIndex < 0 || nodeIndex >= static_cast<int>(m_nodeRuntimeInfos.size()))
+            return false;
+        if (frameIndex >= m_nodeRuntimeInfos[nodeIndex].dirtyUniforms.size())
+            return false;
+        return m_nodeRuntimeInfos[nodeIndex].dirtyUniforms[frameIndex];
+    }
+
+    void ModelAsset::SetNodeUniformDirty(int nodeIndex, uint32_t frameIndex, bool dirty)
+    {
+        if (nodeIndex < 0 || nodeIndex >= static_cast<int>(m_nodeRuntimeInfos.size()))
+            return;
+        if (frameIndex >= m_nodeRuntimeInfos[nodeIndex].dirtyUniforms.size())
+            return;
+        m_nodeRuntimeInfos[nodeIndex].dirtyUniforms[frameIndex] = dirty;
+    }
+
+    uint32_t ModelAsset::GetMeshImageViewIndex(int meshIndex, int slot) const
+    {
+        if (meshIndex < 0 || meshIndex >= static_cast<int>(m_meshRuntimeInfos.size()))
+            return 0xFFFFFFFF;
+        if (slot < 0 || slot >= 5)
+            return 0xFFFFFFFF;
+        return m_meshRuntimeInfos[meshIndex].imageViewIndices[slot];
+    }
+
+    void ModelAsset::SetMeshImageViewIndex(int meshIndex, int slot, uint32_t imageViewIndex)
+    {
+        if (meshIndex < 0 || meshIndex >= static_cast<int>(m_meshRuntimeInfos.size()))
+            return;
+        if (slot < 0 || slot >= 5)
+            return;
+        m_meshRuntimeInfos[meshIndex].imageViewIndices[slot] = imageViewIndex;
+    }
+
+    void ModelAsset::MarkAllUniformsDirty()
+    {
+        for (size_t i = 0; i < m_dirtyUniforms.size(); i++)
+            m_dirtyUniforms[i] = true;
+        for (auto &ri : m_nodeRuntimeInfos)
+        {
+            for (size_t k = 0; k < ri.dirtyUniforms.size(); k++)
+                ri.dirtyUniforms[k] = true;
+        }
+    }
+
+    bool ModelAsset::IsUniformDirty(uint32_t frameIndex) const
+    {
+        if (frameIndex >= m_dirtyUniforms.size())
+            return false;
+        return m_dirtyUniforms[frameIndex];
+    }
+
+    void ModelAsset::SetUniformDirty(uint32_t frameIndex, bool dirty)
+    {
+        if (frameIndex < m_dirtyUniforms.size())
+            m_dirtyUniforms[frameIndex] = dirty;
+    }
+
+    void ModelAsset::ResetRuntimeState()
+    {
+        m_nodeRuntimeInfos.resize(m_nodeInfos.size());
+        m_meshRuntimeInfos.resize(m_meshInfos.size());
+
+        for (auto &ri : m_nodeRuntimeInfos)
+        {
+            ri = NodeRuntimeInfo{};
+            ri.dirtyUniforms.resize(RHII.GetSwapchainImageCount(), false);
+        }
+
+        for (auto &mi : m_meshRuntimeInfos)
+            mi = MeshRuntimeInfo{};
     }
 } // namespace pe

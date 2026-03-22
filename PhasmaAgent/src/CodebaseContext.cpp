@@ -95,10 +95,14 @@ namespace pagent
                     {
             if (!storePath.empty())
                 store->LoadFromBinary(storePath);
-            store->ForEachEntry([&bm25](const VectorEntry &entry)
+
+            std::vector<std::pair<std::string, std::string>> documents;
+            documents.reserve(store->Size());
+            store->ForEachEntry([&documents](const VectorEntry &entry)
             {
-                bm25->Add(entry.id, entry.content);
+                documents.emplace_back(entry.id, entry.content);
             });
+            bm25->Rebuild(documents);
 
             if (!*alive)
                 return;

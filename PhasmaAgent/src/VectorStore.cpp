@@ -116,6 +116,31 @@ namespace pagent
         return false;
     }
 
+    std::unordered_map<std::string, std::string> VectorStore::BuildFileTimestampMap() const
+    {
+        std::unordered_map<std::string, std::string> timestamps;
+
+        std::shared_lock lock(m_mutex);
+        timestamps.reserve(m_entries.size());
+
+        for (const auto &e : m_entries)
+        {
+            try
+            {
+                auto meta = json::parse(e.metadata);
+                const std::string file = meta.value("file", "");
+                const std::string timestamp = meta.value("last_modified", "");
+                if (!file.empty() && !timestamp.empty())
+                    timestamps[file] = timestamp;
+            }
+            catch (...)
+            {
+            }
+        }
+
+        return timestamps;
+    }
+
     std::vector<VectorStore::SearchResult> VectorStore::Search(
         const std::vector<float> &query, int top_k, float min_score) const
     {
@@ -213,7 +238,10 @@ namespace pagent
     static constexpr uint32_t BINARY_MAGIC = 0x56535442; // "VSTB"
     static constexpr uint32_t BINARY_VERSION = 1;
 
-    static void writeU32(std::ofstream &f, uint32_t v) { f.write(reinterpret_cast<const char *>(&v), 4); }
+    static void writeU32(std::ofstream &f, uint32_t v)
+    {
+        f.write(reinterpret_cast<const char *>(&v), 4);
+    }
     static void writeStr(std::ofstream &f, const std::string &s)
     {
         writeU32(f, static_cast<uint32_t>(s.size()));

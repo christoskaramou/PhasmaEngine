@@ -3,7 +3,7 @@
 #include "API/Queue.h"
 #include "API/RHI.h"
 #include "GUI/UndoRedo.h"
-#include "Scene/Model.h"
+#include "Scene/ModelAsset.h"
 #include "Script/ScriptSystem.h"
 #include "Systems/LightSystem.h"
 #include "Systems/PostProcessSystem.h"
@@ -53,7 +53,6 @@ namespace pe
             }
         }
 
-
         // Watch for external commands (file-based IPC)
         // Write script to command.lua, then write anything to command.run to trigger execution
         {
@@ -93,7 +92,7 @@ namespace pe
         CreateGlobalSystem<RendererSystem>()->Init(cmd);
         CreateGlobalSystem<PostProcessSystem>()->Init(cmd);
         CreateGlobalSystem<ScriptSystem>()->Init(nullptr);
-        Model::GetDefaultResources(cmd);
+        ModelAsset::GetDefaultResources(cmd);
         cmd->End();
         queue->Submit(1, &cmd, nullptr, nullptr);
         cmd->Wait();
@@ -128,7 +127,7 @@ namespace pe
         FileWatcher::Stop();
         FileWatcher::Clear();
         DestroyGlobalSystems();
-        Model::DestroyDefaults();
+        ModelAsset::DestroyDefaults();
         Context::Remove();
         RHII.Destroy();
         RHII.Remove();

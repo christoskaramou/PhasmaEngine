@@ -7,41 +7,6 @@ Every `.cpp` here automatically gets `PhasmaCore/pch/PhasmaPch.h` as a precompil
 
 ---
 
-## Directory Map
-
-```
-PhasmaCore/Code/
-├── API/
-│   ├── RHI.h / RHI.cpp          # RHII singleton — Vulkan instance, device, queues, VMA
-│   ├── Buffer.h/.cpp             # GPU buffer wrapper (VMA)
-│   ├── Image.h/.cpp              # GPU image + view wrapper (VMA)
-│   ├── Sampler.h/.cpp            # Vulkan sampler wrapper
-│   ├── Command.h/.cpp            # CommandBuffer recording API
-│   ├── Queue.h/.cpp              # Queue submit / present
-│   ├── Pipeline.h/.cpp           # Graphics / compute pipeline state
-│   ├── Vertex.h                  # 88-byte vertex struct + FillVertex* helpers
-│   ├── Shader.h/.cpp             # SPIR-V shader module wrapper
-│   └── Descriptor.h/.cpp         # Descriptor set layout + pool management
-├── ECS/
-│   ├── Context.h/.cpp            # Global system registry + entity factory
-│   ├── System.h                  # ISystem / IDrawSystem base classes
-│   ├── Component.h               # IComponent + IRenderPassComponent
-│   ├── EventSystem.h/.cpp        # Pub-sub event bus (std::any payloads)
-│   └── OrderedMap.h              # Deterministic-iteration map
-├── Base/
-│   ├── Path.h/.cpp               # Path::Assets
-│   ├── Log.h/.cpp                # PE_INFO / PE_WARN / PE_ERROR macros
-│   ├── FileWatcher.h/.cpp        # File change detection → EventSystem
-│   └── Timer.h                   # FrameTimer, high-resolution timing
-└── Physics/
-    ├── PhysicsSystem.h/.cpp      # Jolt Physics integration (ISystem)
-    ├── PhysicsBodyComponent.h/.cpp
-    ├── PhysicsLayers.h           # Object layers + broadphase mapping
-    └── PhysicsUtils.h            # GLM ↔ Jolt coordinate conversion
-```
-
----
-
 ## RHII — Vulkan Core
 
 `RHII` is the global Vulkan interface. Access it anywhere via the `RHII` macro.

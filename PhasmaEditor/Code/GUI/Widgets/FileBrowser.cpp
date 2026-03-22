@@ -7,7 +7,7 @@
 #include "GUI/GUIState.h"
 #include "GUI/Helpers.h"
 #include "GUI/IconsFontAwesome.h"
-#include "Scene/Model.h"
+#include "Scene/ModelAsset.h"
 #include "imgui/imgui_impl_vulkan.h"
 
 namespace pe
@@ -786,7 +786,7 @@ namespace pe
                 {
                     AssetPreviewType type = AssetPreviewType::None;
                     if (IsModelFile(path))
-                        type = AssetPreviewType::Model;
+                        type = AssetPreviewType::ModelAsset;
                     else if (IsScriptFile(path))
                         type = AssetPreviewType::Script;
                     else if (IsShaderFile(path))
@@ -801,14 +801,14 @@ namespace pe
                         GUIState::UpdateAssetPreview(type, filenameStr, pathStr);
                     }
 
-                    if (type == AssetPreviewType::Model && !GUIState::s_modelLoading)
+                    if (type == AssetPreviewType::ModelAsset && !GUIState::s_modelLoading)
                     {
                         auto loadAsync = [path]()
                         {
                             GUIState::s_modelLoading = true;
                             try
                             {
-                                if (Model *m = Model::Load(path))
+                                if (ModelAsset *m = ModelAsset::Load(path))
                                     EventSystem::PushEvent(EventType::ModelLoaded, m);
                             }
                             catch (const std::exception &e)

@@ -1,15 +1,21 @@
 // Primitives.cpp
 #include "Scene/Primitives.h"
 #include "API/RHI.h"
-#include "Scene/Model.h"
+#include "Scene/ModelAsset.h"
 #include "API/Image.h"
 
 namespace pe
 {
     static const float PI = 3.14159265359f;
 
-    static inline glm::vec3 VPos(const Vertex &v) { return {v.position[0], v.position[1], v.position[2]}; }
-    static inline glm::vec3 VNor(const Vertex &v) { return {v.normals[0], v.normals[1], v.normals[2]}; }
+    static inline glm::vec3 VPos(const Vertex &v)
+    {
+        return {v.position[0], v.position[1], v.position[2]};
+    }
+    static inline glm::vec3 VNor(const Vertex &v)
+    {
+        return {v.normals[0], v.normals[1], v.normals[2]};
+    }
 
     // Your current raster state: FrontFace = CW, CullMode = Front => CW is culled, CCW is visible.
     // So we enforce *CCW* winding for all primitive triangles.
@@ -49,9 +55,9 @@ namespace pe
         }
     }
 
-    Model *Primitives::CreatePrimitiveModel(const std::vector<Vertex> &vertices, const std::vector<uint32_t> &indices)
+    ModelAsset *Primitives::CreatePrimitiveModel(const std::vector<Vertex> &vertices, const std::vector<uint32_t> &indices)
     {
-        Model *model = new Model();
+        ModelAsset *model = new ModelAsset();
 
         // Data
         model->m_vertices = vertices;
@@ -110,7 +116,7 @@ namespace pe
         meshInfo.renderType = RenderType::Opaque;
 
         // Default Material
-        auto &defaults = Model::GetDefaultResources();
+        auto &defaults = ModelAsset::GetDefaultResources();
         meshInfo.images[0] = ResourceHandle<Image>::FromRaw(defaults.white);  // BaseColor
         meshInfo.images[1] = ResourceHandle<Image>::FromRaw(defaults.normal); // Normal
         meshInfo.images[2] = ResourceHandle<Image>::FromRaw(defaults.white);  // MetallicRoughness
@@ -136,23 +142,15 @@ namespace pe
 
         model->m_meshInfos.push_back(meshInfo);
 
-        // NodeInfo
-        NodeInfo nodeInfo{};
-        nodeInfo.name = model->GetLabel();
-        nodeInfo.worldBoundingBox = aabb;
-        nodeInfo.localMatrix = mat4(1.0f);
-        nodeInfo.dirty = true;
-        nodeInfo.dirtyUniforms.resize(RHII.GetSwapchainImageCount(), true);
-
-        model->m_nodeInfos.push_back(nodeInfo);
-        model->m_nodeToMesh.push_back(0); // Node 0 -> Mesh 0
-        model->m_nodesMoved.push_back(0);
+        const int nodeIndex = model->CreateNode(model->GetLabel(), -1, mat4(1.0f), 0);
+        if (nodeIndex >= 0)
+            model->UpdateNodeMatrices();
 
         model->SetRenderReady(true);
         return model;
     }
 
-    Model *Primitives::CreateQuad(float width, float height)
+    ModelAsset *Primitives::CreateQuad(float width, float height)
     {
         float w = width * 0.5f;
         float h = height * 0.5f;
@@ -183,13 +181,14 @@ namespace pe
         // CCW when viewed from +Z (visible with your CullFront+FrontFace=CW setup)
         std::vector<uint32_t> indices = {0, 1, 2, 0, 2, 3};
 
-        Model *model = CreatePrimitiveModel(vertices, indices);
+        ModelAsset *model = CreatePrimitiveModel(vertices, indices);
         model->SetLabel("Quad");
         model->SetPrimitiveType("quad");
+        model->SetNodeName(model->GetRootNodeIndex(), "Quad");
         return model;
     }
 
-    Model *Primitives::CreatePlane(float width, float depth)
+    ModelAsset *Primitives::CreatePlane(float width, float depth)
     {
         float w = width * 0.5f;
         float d = depth * 0.5f;
@@ -220,13 +219,14 @@ namespace pe
         // CCW when viewed from +Y
         std::vector<uint32_t> indices = {0, 1, 2, 0, 2, 3};
 
-        Model *model = CreatePrimitiveModel(vertices, indices);
+        ModelAsset *model = CreatePrimitiveModel(vertices, indices);
         model->SetLabel("Plane");
         model->SetPrimitiveType("plane");
+        model->SetNodeName(model->GetRootNodeIndex(), "Plane");
         return model;
     }
 
-    Model *Primitives::CreateCube(float size)
+    ModelAsset *Primitives::CreateCube(float size)
     {
         float s = size * 0.5f;
 
@@ -292,13 +292,14 @@ namespace pe
         // -X (Left)
         AddFace({-s, +s, -s}, {-s, -s, -s}, {-s, -s, +s}, {-s, +s, +s}, {-1, 0, 0});
 
-        Model *model = CreatePrimitiveModel(vertices, indices);
+        ModelAsset *model = CreatePrimitiveModel(vertices, indices);
         model->SetLabel("Cube");
         model->SetPrimitiveType("cube");
+        model->SetNodeName(model->GetRootNodeIndex(), "Cube");
         return model;
     }
 
-    Model *Primitives::CreateSphere(float radius, int slices, int stacks)
+    ModelAsset *Primitives::CreateSphere(float radius, int slices, int stacks)
     {
         std::vector<Vertex> vertices;
         std::vector<uint32_t> indices;
@@ -346,13 +347,14 @@ namespace pe
             }
         }
 
-        Model *model = CreatePrimitiveModel(vertices, indices);
+        ModelAsset *model = CreatePrimitiveModel(vertices, indices);
         model->SetLabel("Sphere");
         model->SetPrimitiveType("sphere");
+        model->SetNodeName(model->GetRootNodeIndex(), "Sphere");
         return model;
     }
 
-    Model *Primitives::CreateCylinder(float radius, float height, int slices)
+    ModelAsset *Primitives::CreateCylinder(float radius, float height, int slices)
     {
         std::vector<Vertex> vertices;
         std::vector<uint32_t> indices;
@@ -470,13 +472,14 @@ namespace pe
             indices.push_back(bottomRingStart + i);
         }
 
-        Model *model = CreatePrimitiveModel(vertices, indices);
+        ModelAsset *model = CreatePrimitiveModel(vertices, indices);
         model->SetLabel("Cylinder");
         model->SetPrimitiveType("cylinder");
+        model->SetNodeName(model->GetRootNodeIndex(), "Cylinder");
         return model;
     }
 
-    Model *Primitives::CreateCone(float radius, float height, int slices)
+    ModelAsset *Primitives::CreateCone(float radius, float height, int slices)
     {
         std::vector<Vertex> vertices;
         std::vector<uint32_t> indices;
@@ -559,9 +562,10 @@ namespace pe
             indices.push_back(baseRingStart + i);
         }
 
-        Model *model = CreatePrimitiveModel(vertices, indices);
+        ModelAsset *model = CreatePrimitiveModel(vertices, indices);
         model->SetLabel("Cone");
         model->SetPrimitiveType("cone");
+        model->SetNodeName(model->GetRootNodeIndex(), "Cone");
         return model;
     }
 

@@ -7,7 +7,7 @@ namespace pe
     enum class AssetPreviewType
     {
         None,
-        Model,
+        ModelAsset,
         Script,
         Shader
     };

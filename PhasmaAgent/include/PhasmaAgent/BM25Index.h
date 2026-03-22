@@ -3,6 +3,7 @@
 #include <string>
 #include <vector>
 #include <unordered_map>
+#include <utility>
 #include <shared_mutex>
 
 namespace pagent
@@ -23,6 +24,9 @@ namespace pagent
 
         // Add a document. id must be unique; content is tokenized and indexed.
         void Add(const std::string &id, const std::string &content);
+
+        // Rebuild the whole index from a document list in one pass.
+        void Rebuild(const std::vector<std::pair<std::string, std::string>> &documents);
 
         // Remove a document by id.
         void Remove(const std::string &id);

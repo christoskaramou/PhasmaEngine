@@ -1,4 +1,4 @@
-#include "Scene/ModelAssimp.h"
+#include "Scene/ModelAssetAssimp.h"
 #include "API/Command.h"
 #include "API/Image.h"
 #include "API/Queue.h"
@@ -195,20 +195,20 @@ namespace pe
         };
     } // namespace
 
-    ModelAssimp::ModelAssimp() = default;
+    ModelAssetAssimp::ModelAssetAssimp() = default;
 
-    Model *ModelAssimp::Load(const std::filesystem::path &file)
+    ModelAsset *ModelAssetAssimp::Load(const std::filesystem::path &file)
     {
         auto fileU8 = file.u8string();
         std::string fileStr(reinterpret_cast<const char *>(fileU8.c_str()));
         if (!std::filesystem::exists(file))
         {
-            PE_INFO("Model file not found: %s", fileStr.c_str());
+            PE_INFO("ModelAsset file not found: %s", fileStr.c_str());
             return nullptr;
         }
 
-        ModelAssimp *modelAssimp = new ModelAssimp();
-        ModelAssimp &model = *modelAssimp;
+        ModelAssetAssimp *modelAssimp = new ModelAssetAssimp();
+        ModelAssetAssimp &model = *modelAssimp;
         auto labelU8 = file.filename().u8string();
         model.SetLabel(std::string(reinterpret_cast<const char *>(labelU8.c_str())));
 
@@ -244,7 +244,7 @@ namespace pe
         return modelAssimp;
     }
 
-    bool ModelAssimp::LoadFile(const std::filesystem::path &file)
+    bool ModelAssetAssimp::LoadFile(const std::filesystem::path &file)
     {
         m_importer.SetProgressHandler(new CustomAssimpProgressHandler());
         m_filePath = file;
@@ -276,14 +276,14 @@ namespace pe
 
         if (!m_scene || (m_scene->mFlags & AI_SCENE_FLAGS_INCOMPLETE) || !m_scene->mRootNode)
         {
-            PE_WARN("[Model] Assimp error: %s", m_importer.GetErrorString());
+            PE_WARN("[ModelAsset] Assimp error: %s", m_importer.GetErrorString());
             return false;
         }
 
         return true;
     }
 
-    void ModelAssimp::UploadImages(CommandBuffer *cmd)
+    void ModelAssetAssimp::UploadImages(CommandBuffer *cmd)
     {
         auto &gSettings = Settings::Get<GlobalSettings>();
         auto &progress = gSettings.loading.current;
@@ -375,7 +375,7 @@ namespace pe
         // NOTE: defaults already added via ResetResources()
     }
 
-    void ModelAssimp::BuildMeshes()
+    void ModelAssetAssimp::BuildMeshes()
     {
         const auto &defaults = GetDefaultResources();
 
@@ -388,6 +388,7 @@ namespace pe
 
         m_meshInfos.clear();
         m_meshInfos.resize(m_scene->mNumMeshes);
+        m_meshRuntimeInfos.assign(m_meshInfos.size(), MeshRuntimeInfo{});
 
         size_t estimatedVertices = 0;
         size_t estimatedIndices = 0;
@@ -646,7 +647,7 @@ namespace pe
         }
     }
 
-    void ModelAssimp::SetupNodes()
+    void ModelAssetAssimp::SetupNodes()
     {
         auto &gSettings = Settings::Get<GlobalSettings>();
         auto &progress = gSettings.loading.current;
@@ -675,28 +676,12 @@ namespace pe
         progress = static_cast<uint32_t>(m_nodeInfos.size());
     }
 
-    void ModelAssimp::ProcessNode(const aiNode *node, int parentIndex)
+    void ModelAssetAssimp::ProcessNode(const aiNode *node, int parentIndex)
     {
         auto pushNode = [&](const aiNode *srcNode, int parent, const mat4 &local, int meshIdx) -> int
         {
-            const int idx = static_cast<int>(m_nodeInfos.size());
-            m_nodeInfos.push_back(NodeInfo{});
-
-            NodeInfo &ni = m_nodeInfos.back();
-            ni.name = (srcNode && srcNode->mName.length > 0) ? srcNode->mName.C_Str() : ("Node " + std::to_string(idx));
-            ni.parent = parent;
-            ni.localMatrix = local;
-            if (parent >= 0)
-                m_nodeInfos[parent].children.push_back(idx);
-
-            ni.dirty = true;
-            ni.dirtyUniforms.resize(RHII.GetSwapchainImageCount(), false);
-
-            if (m_nodeToMesh.size() <= static_cast<size_t>(idx))
-                m_nodeToMesh.resize(static_cast<size_t>(idx) + 1, -1);
-
-            m_nodeToMesh[idx] = meshIdx;
-            return idx;
+            const std::string nodeName = (srcNode && srcNode->mName.length > 0) ? srcNode->mName.C_Str() : ("Node " + std::to_string(m_nodeInfos.size()));
+            return CreateNode(nodeName, parent, local, meshIdx);
         };
 
         const mat4 local = AiToGlmMat4(node->mTransformation);
@@ -704,7 +689,9 @@ namespace pe
         // this node is the transform carrier
         const int transformNodeIdx = pushNode(node, parentIndex, local, -1);
 
-        // attach meshes (glTF-like: 1 mesh per node; extra meshes become siblings sharing the same transform)
+        // The imported source node is the transform carrier.
+        // Extra meshes stay under that node with identity local transform so all source meshes
+        // keep moving together if the node is edited or reparented later.
         if (node->mNumMeshes > 0)
         {
             bool firstAssigned = false;
@@ -726,7 +713,7 @@ namespace pe
                 }
                 else
                 {
-                    pushNode(node, parentIndex, local, meshIdx);
+                    pushNode(node, transformNodeIdx, mat4(1.f), meshIdx);
                 }
             }
         }
@@ -736,7 +723,7 @@ namespace pe
             ProcessNode(node->mChildren[i], transformNodeIdx);
     }
 
-    std::filesystem::path ModelAssimp::GetTexturePath(const aiMaterial *material, aiTextureType type, int index) const
+    std::filesystem::path ModelAssetAssimp::GetTexturePath(const aiMaterial *material, aiTextureType type, int index) const
     {
         aiString path;
         if (material->GetTexture(type, index, &path) != AI_SUCCESS || path.length == 0)
@@ -794,12 +781,12 @@ namespace pe
                 return c;
         }
 
-        PE_WARN("[Model] Failed to find texture, using default: %s", pathStr.c_str());
+        PE_WARN("[ModelAsset] Failed to find texture, using default: %s", pathStr.c_str());
         return {};
     }
 
-    void ModelAssimp::AssignTexture(MeshInfo &meshInfo, TextureType type, aiMaterial *material,
-                                    std::initializer_list<aiTextureType> textureTypes)
+    void ModelAssetAssimp::AssignTexture(MeshInfo &meshInfo, TextureType type, aiMaterial *material,
+                                         std::initializer_list<aiTextureType> textureTypes)
     {
         for (aiTextureType aiType : textureTypes)
         {
@@ -817,7 +804,7 @@ namespace pe
         }
     }
 
-    void ModelAssimp::ComputeMaterialData(MeshInfo &meshInfo, aiMaterial *material) const
+    void ModelAssetAssimp::ComputeMaterialData(MeshInfo &meshInfo, aiMaterial *material) const
     {
         mat4 factors[2] = {mat4(1.f), mat4(1.f)};
 
@@ -947,7 +934,7 @@ namespace pe
         meshInfo.materialFactors[1] = factors[1];
     }
 
-    RenderType ModelAssimp::DetermineRenderType(aiMaterial *material) const
+    RenderType ModelAssetAssimp::DetermineRenderType(aiMaterial *material) const
     {
         aiString alphaMode;
         if (material->Get(AI_MATKEY_GLTF_ALPHAMODE, alphaMode) == AI_SUCCESS)

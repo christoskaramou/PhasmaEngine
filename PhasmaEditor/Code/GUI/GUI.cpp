@@ -17,7 +17,7 @@
 #include "Systems/LightSystem.h"
 #include "IconsFontAwesome.h"
 #include "RenderPasses/LightPass.h"
-#include "Scene/Model.h"
+#include "Scene/ModelAsset.h"
 #include "Scene/Scene.h"
 #include "Systems/RendererSystem.h"
 #include "Widgets/AssetInfo.h"
@@ -49,6 +49,93 @@ namespace pe
 {
     namespace
     {
+        void WriteAgentConfigFile(const std::string &path, const nlohmann::json &j)
+        {
+            std::filesystem::create_directories(std::filesystem::path(path).parent_path());
+
+            auto appendRemainingKeys = [](nlohmann::ordered_json &dst,
+                                          const nlohmann::json &src,
+                                          const std::vector<std::string> &knownKeys)
+            {
+                for (auto it = src.begin(); it != src.end(); ++it)
+                {
+                    if (std::find(knownKeys.begin(), knownKeys.end(), it.key()) != knownKeys.end())
+                        continue;
+                    dst[it.key()] = it.value();
+                }
+            };
+
+            nlohmann::ordered_json ordered = nlohmann::ordered_json::object();
+            if (j.is_object())
+            {
+                if (j.contains("mcp"))
+                    ordered["mcp"] = j["mcp"];
+
+                if (j.contains("embeddings") && j["embeddings"].is_object())
+                {
+                    nlohmann::ordered_json embeddings = nlohmann::ordered_json::object();
+                    const auto &srcEmbeddings = j["embeddings"];
+
+                    if (srcEmbeddings.contains("enabled"))
+                        embeddings["enabled"] = srcEmbeddings["enabled"];
+
+                    if (srcEmbeddings.contains("provider"))
+                        embeddings["provider"] = srcEmbeddings["provider"];
+                    if (srcEmbeddings.contains("model"))
+                        embeddings["model"] = srcEmbeddings["model"];
+
+                    if (srcEmbeddings.contains("indexing") && srcEmbeddings["indexing"].is_object())
+                    {
+                        nlohmann::ordered_json indexing = nlohmann::ordered_json::object();
+                        const auto &srcIndexing = srcEmbeddings["indexing"];
+
+                        if (srcIndexing.contains("directories"))
+                            indexing["directories"] = srcIndexing["directories"];
+                        if (srcIndexing.contains("include_files"))
+                            indexing["include_files"] = srcIndexing["include_files"];
+                        if (srcIndexing.contains("skip_directories"))
+                            indexing["skip_directories"] = srcIndexing["skip_directories"];
+                        if (srcIndexing.contains("skip_extensions"))
+                            indexing["skip_extensions"] = srcIndexing["skip_extensions"];
+                        if (srcIndexing.contains("skip_files"))
+                            indexing["skip_files"] = srcIndexing["skip_files"];
+                        if (srcIndexing.contains("skip_regex"))
+                            indexing["skip_regex"] = srcIndexing["skip_regex"];
+
+                        appendRemainingKeys(indexing, srcIndexing,
+                                            {"directories", "include_files", "skip_directories", "skip_extensions", "skip_files", "skip_regex"});
+                        embeddings["indexing"] = std::move(indexing);
+                    }
+                    else if (srcEmbeddings.contains("indexing"))
+                    {
+                        embeddings["indexing"] = srcEmbeddings["indexing"];
+                    }
+
+                    appendRemainingKeys(embeddings, srcEmbeddings, {"enabled", "provider", "model", "indexing"});
+                    ordered["embeddings"] = std::move(embeddings);
+                }
+                else if (j.contains("embeddings"))
+                {
+                    ordered["embeddings"] = j["embeddings"];
+                }
+
+                for (auto it = j.begin(); it != j.end(); ++it)
+                {
+                    if (it.key() == "mcp" || it.key() == "embeddings")
+                        continue;
+                    ordered[it.key()] = it.value();
+                }
+            }
+            else
+            {
+                ordered = j;
+            }
+
+            std::ofstream out(path);
+            if (out)
+                out << ordered.dump(2) << "\n";
+        }
+
         std::string BuildEditorCodebaseStorePath()
         {
             return Path::Assets + "Agent/codebase_mcp.bin";
@@ -122,6 +209,66 @@ namespace pe
                 ".cso",
             };
         }
+
+        nlohmann::json BuildDefaultAgentConfig(const std::filesystem::path &repoRoot)
+        {
+            pagent::CodebaseIndexingConfig config;
+            ApplyDefaultCodebaseIndexingConfig(repoRoot, config);
+
+            return nlohmann::json{
+                {"mcp", false},
+                {"embeddings",
+                 {
+                     {"enabled", true},
+                     {"provider", ""},
+                     {"model", ""},
+                     {"indexing",
+                      {
+                          {"directories", config.directories},
+                          {"include_files", config.include_files},
+                          {"skip_directories", config.skip_directories},
+                          {"skip_files", config.skip_files},
+                          {"skip_extensions", config.skip_extensions},
+                          {"skip_regex", config.skip_regex},
+                      }},
+                 }},
+            };
+        }
+
+        bool MergeJsonDefaults(nlohmann::json &target, const nlohmann::json &defaults)
+        {
+            bool changed = false;
+
+            if (!defaults.is_object())
+                return changed;
+
+            if (!target.is_object())
+            {
+                target = defaults;
+                return true;
+            }
+
+            for (auto it = defaults.begin(); it != defaults.end(); ++it)
+            {
+                const std::string key = it.key();
+                const auto &defaultValue = it.value();
+
+                if (!target.contains(key))
+                {
+                    target[key] = defaultValue;
+                    changed = true;
+                    continue;
+                }
+
+                if (defaultValue.is_object() && target[key].is_object())
+                {
+                    if (MergeJsonDefaults(target[key], defaultValue))
+                        changed = true;
+                }
+            }
+
+            return changed;
+        }
     } // namespace
 
     GUI::GUI()
@@ -171,6 +318,22 @@ namespace pe
         return m_ragRequestedEnabled && IsMcpServerRunning();
     }
 
+    void GUI::EnsureCodebaseStoreLoaded()
+    {
+        if (m_codebaseStoreLoadRequested || m_codebaseStorePath.empty() || !std::filesystem::exists(m_codebaseStorePath))
+            return;
+
+        m_codebaseStoreLoadRequested = true;
+        m_codebase.LoadStoreAsync(
+            m_codebaseStorePath,
+            m_codebaseAlive,
+            [this]()
+            {
+                QueueMainThreadAction([this]()
+                                      { CheckRagStatus(); });
+            });
+    }
+
     void GUI::SetMcpServerEnabled(bool enabled)
     {
         const bool running = IsMcpServerRunning();
@@ -180,11 +343,13 @@ namespace pe
         if (enabled)
         {
             m_editorToolServer->Start();
+            EnsureCodebaseStoreLoaded();
             if (m_ragRequestedEnabled)
                 CheckRagStatus();
             return;
         }
 
+        CancelCodebaseIndexing();
         m_editorToolServer->Stop();
     }
 
@@ -196,6 +361,7 @@ namespace pe
 
     void GUI::DisableRag()
     {
+        CancelCodebaseIndexing();
         m_ragRequestedEnabled = false;
     }
 
@@ -230,7 +396,7 @@ namespace pe
 
     void GUI::ShowLoadModelMenuItem()
     {
-        if (ImGui::MenuItem("Load Model...", "Choose Model"))
+        if (ImGui::MenuItem("Load ModelAsset...", "Choose ModelAsset"))
         {
             if (GUIState::s_modelLoading)
                 return;
@@ -249,7 +415,7 @@ namespace pe
                         GUIState::s_modelLoading = true;
                         try
                         {
-                            if (Model *m = Model::Load(path))
+                            if (ModelAsset *m = ModelAsset::Load(path))
                                 EventSystem::PushEvent(EventType::ModelLoaded, m);
                         }
                         catch (const std::exception &e)
@@ -535,10 +701,21 @@ namespace pe
     void GUI::LoadAgentConfig()
     {
         const std::string configPath = Path::Assets + "Agent/agent_config.json";
+        const auto repoRoot = GetEditorRepoRootFromAssets();
+        const nlohmann::json defaultConfig = BuildDefaultAgentConfig(repoRoot);
+
+        m_mcpStartEnabled = false;
+        m_ragRequestedEnabled = true;
+        m_embeddingProviderKind = -1;
+        m_embeddingModel.clear();
+        m_codebase.SetEmbeddingProvider(nullptr);
+
         std::ifstream f(configPath);
         if (!f)
         {
-            ApplyDefaultCodebaseIndexingConfig(GetEditorRepoRootFromAssets(), m_codebase.MutableIndexingConfig());
+            WriteAgentConfigFile(configPath, defaultConfig);
+            PE_INFO("[MCP] Created default agent_config.json");
+            ApplyDefaultCodebaseIndexingConfig(repoRoot, m_codebase.MutableIndexingConfig());
             return;
         }
 
@@ -549,14 +726,22 @@ namespace pe
         }
         catch (...)
         {
-            PE_WARN("[RAG] Failed to parse agent_config.json — using defaults");
-            ApplyDefaultCodebaseIndexingConfig(GetEditorRepoRootFromAssets(), m_codebase.MutableIndexingConfig());
+            PE_WARN("[RAG] Failed to parse agent_config.json — leaving file unchanged and using defaults for this run");
+            ApplyDefaultCodebaseIndexingConfig(repoRoot, m_codebase.MutableIndexingConfig());
             return;
         }
 
+        if (MergeJsonDefaults(j, defaultConfig))
+        {
+            WriteAgentConfigFile(configPath, j);
+            PE_INFO("[MCP] Filled missing defaults in agent_config.json");
+        }
+
+        m_mcpStartEnabled = j.value("mcp", false);
+
         if (!j.contains("embeddings") || !j["embeddings"].is_object())
         {
-            ApplyDefaultCodebaseIndexingConfig(GetEditorRepoRootFromAssets(), m_codebase.MutableIndexingConfig());
+            ApplyDefaultCodebaseIndexingConfig(repoRoot, m_codebase.MutableIndexingConfig());
             return;
         }
 
@@ -565,7 +750,7 @@ namespace pe
 
         // Indexing config — always start from defaults so a partial JSON doesn't leave skip lists empty
         auto &config = m_codebase.MutableIndexingConfig();
-        ApplyDefaultCodebaseIndexingConfig(GetEditorRepoRootFromAssets(), config);
+        ApplyDefaultCodebaseIndexingConfig(repoRoot, config);
         if (emb.contains("indexing") && emb["indexing"].is_object())
         {
             const auto &idx = emb["indexing"];
@@ -625,6 +810,7 @@ namespace pe
         }
 
         m_codebase.MarkStatusDirty();
+        PE_INFO("[MCP] Startup: %s", m_mcpStartEnabled ? "enabled" : "disabled");
         PE_INFO("[RAG] Config loaded from agent_config.json");
     }
 
@@ -1254,6 +1440,12 @@ namespace pe
 
     void GUI::StartCodebaseIndexing(bool fullRebuild)
     {
+        if (!IsRagEnabled())
+        {
+            PE_WARN("[RAG] Indexing skipped because MCP/RAG is disabled");
+            return;
+        }
+
         const auto &indexingConfig = m_codebase.GetIndexingConfig();
         const auto &dirs = indexingConfig.directories;
         if (dirs.empty())
@@ -1605,19 +1797,12 @@ namespace pe
         m_editorToolServer = std::make_unique<EditorToolServer>(m_editorToolRuntime.get(), this);
         m_codebaseStorePath = BuildEditorCodebaseStorePath();
         LoadAgentConfig();
-        if (std::filesystem::exists(m_codebaseStorePath))
+        if (m_mcpStartEnabled)
         {
-            m_codebase.LoadStoreAsync(
-                m_codebaseStorePath,
-                m_codebaseAlive,
-                [this]()
-                {
-                    QueueMainThreadAction([this]()
-                                          { CheckRagStatus(); });
-                });
+            EnsureCodebaseStoreLoaded();
+            m_editorToolServer->Start();
+            CheckRagStatus();
         }
-        m_editorToolServer->Start();
-        CheckRagStatus();
 
         auto properties = std::make_shared<Properties>();
         auto metrics = std::make_shared<Metrics>();
@@ -1829,7 +2014,7 @@ namespace pe
                     SelectionType selType = selection.GetSelectionType();
                     if (selType == SelectionType::Node)
                     {
-                        Model *model = selection.GetSelectedModel();
+                        ModelAsset *model = selection.GetSelectedModel();
                         int nodeIndex = selection.GetSelectedNodeIndex();
                         if (model && nodeIndex >= 0)
                             EventSystem::PushEvent(EventType::NodeRemoved,
@@ -1837,7 +2022,7 @@ namespace pe
                     }
                     else if (selType == SelectionType::Mesh)
                     {
-                        Model *model = selection.GetSelectedModel();
+                        ModelAsset *model = selection.GetSelectedModel();
                         int nodeIndex = selection.GetSelectedNodeIndex();
                         if (model && nodeIndex >= 0)
                             EventSystem::PushEvent(EventType::MeshRemoved,

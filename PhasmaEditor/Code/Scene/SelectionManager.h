@@ -2,7 +2,7 @@
 
 namespace pe
 {
-    class Model;
+    class ModelAsset;
     struct NodeInfo;
 
     enum class GizmoOperation
@@ -34,13 +34,13 @@ namespace pe
     public:
         static SelectionManager &Instance();
 
-        void Select(Model *model, int nodeIndex, SelectionType type = SelectionType::Node);
+        void Select(ModelAsset *model, int nodeIndex, SelectionType type = SelectionType::Node);
         void Select(LightType type, int index);
         void SelectEmitter(int index);
         void ClearSelection();
 
         bool HasSelection() const;
-        Model *GetSelectedModel() const;
+        ModelAsset *GetSelectedModel() const;
         int GetSelectedNodeIndex() const;
         SelectionType GetSelectionType() const;
         NodeInfo *GetSelectedNodeInfo();
@@ -56,7 +56,7 @@ namespace pe
     private:
         SelectionManager() = default;
 
-        Model *m_selectedModel = nullptr;
+        ModelAsset *m_selectedModel = nullptr;
         int m_selectedNodeIndex = -1;
 
         LightType m_selectedLightType = LightType::Directional;

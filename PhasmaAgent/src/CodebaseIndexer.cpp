@@ -10,6 +10,7 @@
 #include <set>
 #include <sstream>
 #include <regex>
+#include <unordered_map>
 
 namespace pagent
 {
@@ -315,6 +316,7 @@ namespace pagent
         std::vector<std::string> filesToIndex;
         std::vector<std::string> relToIndex;
         std::vector<std::string> tsToIndex;
+        const auto knownTimestamps = m_store ? m_store->BuildFileTimestampMap() : std::unordered_map<std::string, std::string>{};
 
         for (size_t i = 0; i < files.size(); ++i)
         {
@@ -323,7 +325,8 @@ namespace pagent
             std::string ts = getFileTimestamp(files[i]);
 
             // Skip files that already exist in the store with the same timestamp
-            if (!ts.empty() && m_store->HasFileWithTimestamp(rel, ts))
+            auto knownIt = knownTimestamps.find(rel);
+            if (!ts.empty() && knownIt != knownTimestamps.end() && knownIt->second == ts)
                 continue;
 
             filesToIndex.push_back(files[i]);
@@ -697,6 +700,7 @@ namespace pagent
             return status;
 
         std::string commonRoot = ComputeCommonRoot(config.directories);
+        const auto knownTimestamps = m_store ? m_store->BuildFileTimestampMap() : std::unordered_map<std::string, std::string>{};
 
         for (size_t i = 0; i < files.size(); ++i)
         {
@@ -704,7 +708,8 @@ namespace pagent
 
             std::string ts = getFileTimestamp(files[i]);
 
-            if (!ts.empty() && m_store->HasFileWithTimestamp(rel, ts))
+            auto knownIt = knownTimestamps.find(rel);
+            if (!ts.empty() && knownIt != knownTimestamps.end() && knownIt->second == ts)
             {
                 status.upToDate++;
             }

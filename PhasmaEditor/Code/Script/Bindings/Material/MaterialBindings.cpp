@@ -1,5 +1,5 @@
 #include "Script/ScriptSystem.h"
-#include "Scene/Model.h"
+#include "Scene/ModelAsset.h"
 #include "Scene/Scene.h"
 #include "Systems/RendererSystem.h"
 #include "API/RHI.h"
@@ -17,15 +17,12 @@ namespace pe
     static const std::unordered_map<std::string_view, uint32_t> s_texSlots = {
         {"base_color", 0}, {"metallic_roughness", 1}, {"normal", 2}, {"occlusion", 3}, {"emissive", 4}};
 
-    static MeshInfo *GetMesh(Model &m, int index)
+    static MeshInfo *GetMesh(ModelAsset &m, int index)
     {
-        auto &meshes = m.GetMeshInfos();
-        if (index < 0 || index >= static_cast<int>(meshes.size()))
-            return nullptr;
-        return &meshes[index];
+        return m.GetMeshInfo(index);
     }
 
-    static void MarkMeshDirty(Model &m, int meshIndex)
+    static void MarkMeshDirty(ModelAsset &m, int meshIndex)
     {
         int nodeCount = m.GetNodeCount();
         for (int i = 0; i < nodeCount; i++)
@@ -43,7 +40,7 @@ namespace pe
                                       {
                 sol::table mat = lua.create_named_table("material");
 
-                mat.set_function("get", [&lua](Model &model, int meshIndex) -> sol::object {
+                mat.set_function("get", [&lua](ModelAsset &model, int meshIndex) -> sol::object {
                     auto *mesh = GetMesh(model, meshIndex);
                     if (!mesh) return sol::nil;
 
@@ -60,14 +57,14 @@ namespace pe
                 });
 
                 mat.set_function("set", sol::overload(
-                    [](Model &model, int meshIndex, const std::string &prop, vec4 value) {
+                    [](ModelAsset &model, int meshIndex, const std::string &prop, vec4 value) {
                         auto *mesh = GetMesh(model, meshIndex);
                         if (!mesh) return;
                         auto &f = mesh->materialFactors[0];
                         if (prop == "base_color") f[0] = value;
                         MarkMeshDirty(model, meshIndex);
                     },
-                    [](Model &model, int meshIndex, const std::string &prop, vec3 value) {
+                    [](ModelAsset &model, int meshIndex, const std::string &prop, vec3 value) {
                         auto *mesh = GetMesh(model, meshIndex);
                         if (!mesh) return;
                         auto &f = mesh->materialFactors[0];
@@ -75,7 +72,7 @@ namespace pe
                         else if (prop == "emissive") { f[1].x = value.x; f[1].y = value.y; f[1].z = value.z; }
                         MarkMeshDirty(model, meshIndex);
                     },
-                    [](Model &model, int meshIndex, const std::string &prop, float value) {
+                    [](ModelAsset &model, int meshIndex, const std::string &prop, float value) {
                         auto *mesh = GetMesh(model, meshIndex);
                         if (!mesh) return;
                         auto &f = mesh->materialFactors[0];
@@ -89,7 +86,7 @@ namespace pe
                         MarkMeshDirty(model, meshIndex);
                     }));
 
-                mat.set_function("get_render_type", [](Model &model, int meshIndex) -> std::string {
+                mat.set_function("get_render_type", [](ModelAsset &model, int meshIndex) -> std::string {
                     auto *mesh = GetMesh(model, meshIndex);
                     if (!mesh) return "";
                     switch (mesh->renderType)
@@ -102,7 +99,7 @@ namespace pe
                     }
                 });
 
-                mat.set_function("set_render_type", [](Model &model, int meshIndex, const std::string &type) {
+                mat.set_function("set_render_type", [](ModelAsset &model, int meshIndex, const std::string &type) {
                     auto *mesh = GetMesh(model, meshIndex);
                     if (!mesh) return;
 
@@ -124,12 +121,12 @@ namespace pe
                     }
                 });
 
-                mat.set_function("get_texture_mask", [](Model &model, int meshIndex) -> uint32_t {
+                mat.set_function("get_texture_mask", [](ModelAsset &model, int meshIndex) -> uint32_t {
                     auto *mesh = GetMesh(model, meshIndex);
                     return mesh ? mesh->textureMask : 0;
                 });
 
-                mat.set_function("has_texture", [](Model &model, int meshIndex, const std::string &type) -> bool {
+                mat.set_function("has_texture", [](ModelAsset &model, int meshIndex, const std::string &type) -> bool {
                     auto *mesh = GetMesh(model, meshIndex);
                     if (!mesh) return false;
                     auto it = s_texSlots.find(std::string_view(type));
@@ -137,7 +134,7 @@ namespace pe
                     return (mesh->textureMask & (1u << it->second)) != 0;
                 });
 
-                mat.set_function("set_texture", [](Model &model, int meshIndex, const std::string &type, const std::string &path) -> bool {
+                mat.set_function("set_texture", [](ModelAsset &model, int meshIndex, const std::string &type, const std::string &path) -> bool {
                     auto *mesh = GetMesh(model, meshIndex);
                     if (!mesh) return false;
 
@@ -174,13 +171,13 @@ namespace pe
                     mesh->textureMask |= (1u << slot);
 
                     if (!mesh->samplers[slot])
-                        mesh->samplers[slot] = Model::GetDefaultResources().sampler;
+                        mesh->samplers[slot] = ModelAsset::GetDefaultResources().sampler;
 
                     MarkMeshDirty(model, meshIndex);
                     return true;
                 });
 
-                mat.set_function("remove_texture", [](Model &model, int meshIndex, const std::string &type) -> bool {
+                mat.set_function("remove_texture", [](ModelAsset &model, int meshIndex, const std::string &type) -> bool {
                     auto *mesh = GetMesh(model, meshIndex);
                     if (!mesh) return false;
 

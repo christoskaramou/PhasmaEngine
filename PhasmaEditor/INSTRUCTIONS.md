@@ -8,68 +8,6 @@ Every `.cpp` here gets `PhasmaCore/pch/PhasmaPch.h` as a precompiled header.
 
 ---
 
-## Directory Map
-
-```
-PhasmaEditor/Code/
-├── App/
-│   └── App.cpp                    # Boot: SDL2 → watchers → window → systems → main loop
-├── Systems/
-│   ├── RendererSystem.h/.cpp      # Coordinates render targets, render graph, frame sync
-│   ├── LightSystem.h/.cpp         # Directional + point lights, cascaded shadow maps
-│   ├── CameraSystem.h/.cpp        # Camera entity, view/proj, frustum culling
-│   └── ScriptManager.h/.cpp       # Lua script watcher + execution
-├── RenderPasses/
-│   ├── GBufferPass.h/.cpp         # Deferred GBuffer: albedo, normal, roughness/metallic
-│   ├── DepthPass.h/.cpp           # Pre-Z depth pass
-│   ├── ShadowPass.h/.cpp          # Cascaded shadow map generation
-│   ├── LightPass.h/.cpp           # Deferred lighting accumulation
-│   ├── BloomPass.h/.cpp           # Threshold + Gaussian blur bloom
-│   ├── TAAPass.h/.cpp             # Temporal anti-aliasing
-│   ├── SSAOPass.h/.cpp            # Screen-space ambient occlusion
-│   ├── SSRPass.h/.cpp             # Screen-space reflections
-│   ├── DOFPass.h/.cpp             # Depth of field (bokeh)
-│   ├── MotionBlurPass.h/.cpp
-│   ├── FXAAPass.h/.cpp
-│   ├── SharpenPass.h/.cpp         # RCAS sharpening
-│   ├── TonemapPass.h/.cpp         # HDR → LDR (ACES / Reinhard)
-│   ├── GridPass.h/.cpp            # Editor infinite grid
-│   ├── AABBPass.h/.cpp            # Debug AABB visualization
-│   └── ParticlePass.h/.cpp
-├── Scene/
-│   ├── Scene.h/.cpp               # Owns Geometry, manages models, scene save/load
-│   ├── Model.h/.cpp               # Assimp model loading, node hierarchy
-│   ├── Geometry.h/.cpp            # Unified GPU vertex/index buffers + indirect draw
-│   └── PhysicsHelper.h/.cpp       # Creates Jolt shapes from node AABBs
-├── GUI/
-│   ├── GUI.h/.cpp                 # ImGui frame begin/end, widget orchestration, MCP codebase ownership
-│   ├── Agent/
-│   │   ├── EditorToolServer.h/.cpp      # In-process MCP HTTP server (port 8765, JSON-RPC 2.0)
-│   │   ├── EditorToolRuntime.h/.cpp     # Main-thread-safe editor action bridge (QueueAction)
-│   │   ├── EditorToolCatalog.h/.cpp     # All editor/MCP tool definitions
-│   │   └── EditorToolSchemaUtils.h/.cpp # JSON schema helpers for tool definitions
-│   └── Widgets/
-│       ├── SceneWidget.h/.cpp     # Scene hierarchy panel
-│       ├── PropertiesWidget.h/.cpp# Node inspector (transform, material, physics)
-│       ├── FileBrowser.h/.cpp     # Asset browser
-│       ├── PhysicsWidget.h/.cpp   # Physics body inspector section
-│       └── ...\
-└── Script/
-    └── (Lua binding files)
-
-PhasmaEditor/Assets/
-├── Shaders/
-│   ├── Common/                    # Shared HLSL headers (lighting, PBR, etc.)
-│   └── *.hlsl                     # Per-pass vertex + pixel + compute shaders
-├── Objects/                       # 3D model files
-└── Agent/                         # In-engine agent workspace
-    ├── START.md                   # Agent session instructions
-    ├── MEMORY.md                  # Persistent agent notes
-    └── TASKS.md                   # Agent task list
-```
-
----
-
 ## Render Pass Implementation Pattern
 
 ```cpp
@@ -100,22 +38,27 @@ m_renderGraph->AddPass("MyPass", [this]{ return m_myPassEnabled; }, &m_myPass);
 
 ---
 
-## Scene / Model Workflow
+## Scene / ModelAsset Workflow
 
 ```cpp
 // Load a model
-auto* model = new Model();
-model->Load("Assets/Objects/MyModel.glb");
+ModelAsset* model = ModelAsset::Load("Assets/Objects/MyModel.glb");
 Scene::AddModel(model);
 Scene::UpdateGeometryBuffers();  // rebuilds unified GPU buffers
 
-// Access nodes
-for (auto& node : model->GetNodes())
-{
-    auto aabb = node.GetWorldAABB();
-    // node.localMatrix, node.worldMatrix, node.name, node.meshIndex...
-}
+// Access nodes through const API
+int root = model->GetRootNodeIndex();
+mat4 world = model->GetNodeWorldMatrix(root);
+AABB bounds = model->GetNodeWorldBoundingBox(root);
+const std::string& name = model->GetNodeName(root);
+
+// Mutate through explicit setters
+model->SetNodeLocalMatrix(root, newMatrix);
 ```
+
+**Data separation**: `NodeInfo` holds logical data (parent, children, localMatrix, name).
+`NodeRuntimeInfo` holds GPU/renderer state (worldMatrix, dirtyFlags, boundingBox, dataOffset).
+`MeshInfo` holds geometry/material data. `MeshRuntimeInfo` holds image view indices.
 
 ---
 

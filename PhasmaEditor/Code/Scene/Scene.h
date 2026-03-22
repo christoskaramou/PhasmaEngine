@@ -8,12 +8,12 @@ namespace pe
     class CommandBuffer;
     class Image;
     class ImageView;
-    class Model;
+    class ModelAsset;
     class Sampler;
 
     struct DrawInfo
     {
-        Model *model;
+        ModelAsset *model;
         int node;
         float distance;
     };
@@ -31,9 +31,9 @@ namespace pe
         void UpdateTextures();
         void UploadBuffers(CommandBuffer *cmd);
         void UpdateTLASTransformations(CommandBuffer *cmd); // Update instance transforms and rebuild TLAS
-        void AddModel(Model *model);
-        void RemoveModel(Model *model);
-        void RemoveModels(std::vector<Model *> models);
+        void AddModel(ModelAsset *model);
+        void RemoveModel(ModelAsset *model);
+        void RemoveModels(std::vector<ModelAsset *> models);
         Camera *AddCamera();
         void RemoveCamera(Camera *camera);
         void SetActiveCamera(Camera *camera);
@@ -54,8 +54,8 @@ namespace pe
         Camera *GetActiveCamera() const { return m_cameras.at(0); }
         Camera *GetCamera(int index) const { return m_cameras.at(index); }
         const std::vector<Camera *> &GetCameras() const { return m_cameras; }
-        OrderedMap<size_t, Model *> &GetModels() { return m_models; }
-        const OrderedMap<size_t, Model *> &GetModels() const { return m_models; }
+        OrderedMap<size_t, ModelAsset *> &GetModels() { return m_models; }
+        const OrderedMap<size_t, ModelAsset *> &GetModels() const { return m_models; }
 
         bool HasOpaqueDrawInfo() const { return !m_drawInfosOpaque.empty() || !m_drawInfosAlphaCut.empty(); }
         bool HasAlphaDrawInfo() const { return !m_drawInfosAlphaBlend.empty() || !m_drawInfosTransmission.empty(); }
@@ -94,7 +94,7 @@ namespace pe
         };
 
         void UpdateGeometry();
-        DrawBatch CullNodeBatch(Model &model, int beginNode, int endNode, const Camera *camera, bool frustumCulling) const;
+        DrawBatch CullNodeBatch(ModelAsset &model, int beginNode, int endNode, const Camera *camera, bool frustumCulling) const;
         void UpdateUniformData();
         void UpdateIndirectData();
         void ClearDrawInfos(bool reserveMax);
@@ -120,7 +120,7 @@ namespace pe
 
         PerFrameData m_frameData{};
         std::vector<Camera *> m_cameras;
-        OrderedMap<size_t, Model *> m_models;
+        OrderedMap<size_t, ModelAsset *> m_models;
 
         ParticleManager *m_particleManager = nullptr;
 

@@ -5,7 +5,7 @@
 #include "GUI/UndoRedo.h"
 #include "GUI/IconsFontAwesome.h"
 #include "Particles/ParticleManager.h"
-#include "Scene/Model.h"
+#include "Scene/ModelAsset.h"
 #include "Scene/Primitives.h"
 #include "Scene/Scene.h"
 #include "Scene/SelectionManager.h"
@@ -143,53 +143,50 @@ namespace pe
 
             if (ImGui::MenuItem("Empty Node"))
             {
-                Model *model = new Model();
-                NodeInfo nodeInfo{};
-                nodeInfo.name = "Empty Node";
-                nodeInfo.localMatrix = mat4(1.0f);
-                model->GetNodeInfos().push_back(nodeInfo);
+                ModelAsset *model = new ModelAsset();
+                int const nodeIndex = model->CreateNode("Empty Node");
                 EventSystem::PushEvent(EventType::ModelLoaded, model);
                 // Select the new node (index 0)
-                selection.Select(model, 0, SelectionType::Node);
+                selection.Select(model, nodeIndex, SelectionType::Node);
             }
 
             if (ImGui::BeginMenu("Mesh"))
             {
                 if (ImGui::MenuItem("Plane"))
                 {
-                    Model *model = Primitives::CreatePlane();
+                    ModelAsset *model = Primitives::CreatePlane();
                     EventSystem::PushEvent(EventType::ModelLoaded, model);
-                    selection.Select(model, 0, SelectionType::Node);
+                    selection.Select(model, model->GetRootNodeIndex(), SelectionType::Node);
                 }
                 if (ImGui::MenuItem("Cube"))
                 {
-                    Model *model = Primitives::CreateCube();
+                    ModelAsset *model = Primitives::CreateCube();
                     EventSystem::PushEvent(EventType::ModelLoaded, model);
-                    selection.Select(model, 0, SelectionType::Node);
+                    selection.Select(model, model->GetRootNodeIndex(), SelectionType::Node);
                 }
                 if (ImGui::MenuItem("Sphere"))
                 {
-                    Model *model = Primitives::CreateSphere();
+                    ModelAsset *model = Primitives::CreateSphere();
                     EventSystem::PushEvent(EventType::ModelLoaded, model);
-                    selection.Select(model, 0, SelectionType::Node);
+                    selection.Select(model, model->GetRootNodeIndex(), SelectionType::Node);
                 }
                 if (ImGui::MenuItem("Cylinder"))
                 {
-                    Model *model = Primitives::CreateCylinder();
+                    ModelAsset *model = Primitives::CreateCylinder();
                     EventSystem::PushEvent(EventType::ModelLoaded, model);
-                    selection.Select(model, 0, SelectionType::Node);
+                    selection.Select(model, model->GetRootNodeIndex(), SelectionType::Node);
                 }
                 if (ImGui::MenuItem("Cone"))
                 {
-                    Model *model = Primitives::CreateCone();
+                    ModelAsset *model = Primitives::CreateCone();
                     EventSystem::PushEvent(EventType::ModelLoaded, model);
-                    selection.Select(model, 0, SelectionType::Node);
+                    selection.Select(model, model->GetRootNodeIndex(), SelectionType::Node);
                 }
                 if (ImGui::MenuItem("Quad"))
                 {
-                    Model *model = Primitives::CreateQuad();
+                    ModelAsset *model = Primitives::CreateQuad();
                     EventSystem::PushEvent(EventType::ModelLoaded, model);
-                    selection.Select(model, 0, SelectionType::Node);
+                    selection.Select(model, model->GetRootNodeIndex(), SelectionType::Node);
                 }
                 ImGui::EndMenu();
             }
@@ -228,17 +225,17 @@ namespace pe
             ImGui::EndPopup();
         }
 
-        static Model *s_renameModel = nullptr;
+        static ModelAsset *s_renameModel = nullptr;
         static Camera *s_renameCamera = nullptr;
         static LightType s_renameLightType = (LightType)-1;
         static int s_renameLightIndex = -1;
         static int s_renameNode = -1;
         static char s_renameBuf[128] = "";
         static bool s_openRenamePopup = false;
-        std::vector<Model *> modelsToDelete;
+        std::vector<ModelAsset *> modelsToDelete;
 
         // Check for selection change
-        Model *currentSelectedModel = selection.GetSelectedModel();
+        ModelAsset *currentSelectedModel = selection.GetSelectedModel();
         int currentSelectedNodeIndex = selection.GetSelectedNodeIndex();
 
         if (currentSelectedModel != m_lastSelectedModel || currentSelectedNodeIndex != m_lastSelectedNodeIndex)
@@ -253,11 +250,11 @@ namespace pe
                 m_scrollToSelection = true;
 
                 // Trace parents up to root
-                int p = currentSelectedModel->GetNodeInfos()[currentSelectedNodeIndex].parent;
+                int p = currentSelectedModel->GetNodeParentIndex(currentSelectedNodeIndex);
                 while (p >= 0)
                 {
                     m_nodesToExpand.insert(p);
-                    p = currentSelectedModel->GetNodeInfos()[p].parent;
+                    p = currentSelectedModel->GetNodeParentIndex(p);
                 }
             }
         }
@@ -700,14 +697,14 @@ namespace pe
             std::string displayName = std::string(ICON_FA_VECTOR_SQUARE) + "  " + name;
 
             // Compute node hierarchy early (model entry merges with root nodes)
-            const auto &nodes = model->GetNodeInfos();
-            int nodeCount = static_cast<int>(nodes.size());
+            int nodeCount = model->GetNodeCount();
             std::vector<std::vector<int>> nodeChildren(nodeCount);
             std::vector<int> roots;
             for (int i = 0; i < nodeCount; ++i)
             {
-                if (nodes[i].parent >= 0 && nodes[i].parent < nodeCount)
-                    nodeChildren[nodes[i].parent].push_back(i);
+                int parentIndex = model->GetNodeParentIndex(i);
+                if (parentIndex >= 0 && parentIndex < nodeCount)
+                    nodeChildren[parentIndex].push_back(i);
                 else
                     roots.push_back(i);
             }
@@ -757,10 +754,11 @@ namespace pe
                 Camera *camera = scene.GetActiveCamera();
                 vec3 min = vec3(FLT_MAX);
                 vec3 max = vec3(-FLT_MAX);
-                for (const auto &node : model->GetNodeInfos())
+                for (int i = 0; i < model->GetNodeCount(); i++)
                 {
-                    min = glm::min(min, node.worldBoundingBox.min);
-                    max = glm::max(max, node.worldBoundingBox.max);
+                    const AABB &bounds = model->GetNodeWorldBoundingBox(i);
+                    min = glm::min(min, bounds.min);
+                    max = glm::max(max, bounds.max);
                 }
                 if (min.x != FLT_MAX)
                 {
@@ -781,9 +779,9 @@ namespace pe
                     int nodeToSelect = -1;
                     for (int i = 0; i < model->GetNodeCount(); i++)
                     {
-                        const auto &node = model->GetNodeInfos()[i];
-                        min = glm::min(min, node.worldBoundingBox.min);
-                        max = glm::max(max, node.worldBoundingBox.max);
+                        const AABB &bounds = model->GetNodeWorldBoundingBox(i);
+                        min = glm::min(min, bounds.min);
+                        max = glm::max(max, bounds.max);
                         if (nodeToSelect < 0 && model->GetNodeMesh(i) >= 0)
                             nodeToSelect = i;
                     }
@@ -839,7 +837,10 @@ namespace pe
                 // Helper to draw a mesh entry under a node
                 auto DrawMeshEntry = [&](int nodeIndex, int meshIndex)
                 {
-                    const auto &node = nodes[nodeIndex];
+                    const NodeInfo *node = model->GetNodeInfo(nodeIndex);
+                    if (!node)
+                        return;
+
                     uintptr_t meshUniqueId = (id << 16) ^ (nodeIndex + 0x10000);
                     std::string meshDisplayName = std::string(ICON_FA_SHAPES) + "  Mesh";
 
@@ -861,11 +862,11 @@ namespace pe
                     if (ImGui::IsItemHovered() && ImGui::IsMouseDoubleClicked(0))
                     {
                         Camera *camera = scene.GetActiveCamera();
-                        const auto &meshInfos = model->GetMeshInfos();
-                        if (meshIndex >= 0 && meshIndex < static_cast<int>(meshInfos.size()))
+                        if (model->GetMeshInfo(meshIndex))
                         {
-                            vec3 min = node.worldBoundingBox.min;
-                            vec3 max = node.worldBoundingBox.max;
+                            const AABB &bounds = model->GetNodeWorldBoundingBox(nodeIndex);
+                            vec3 min = bounds.min;
+                            vec3 max = bounds.max;
                             vec3 center = (min + max) * 0.5f;
                             float dist = glm::length(max - min);
                             vec3 dir = camera->GetFront();
@@ -879,11 +880,11 @@ namespace pe
                         {
                             selection.Select(model, nodeIndex, SelectionType::Mesh);
                             Camera *camera = scene.GetActiveCamera();
-                            const auto &meshInfos = model->GetMeshInfos();
-                            if (meshIndex >= 0 && meshIndex < static_cast<int>(meshInfos.size()))
+                            if (model->GetMeshInfo(meshIndex))
                             {
-                                vec3 min = node.worldBoundingBox.min;
-                                vec3 max = node.worldBoundingBox.max;
+                                const AABB &bounds = model->GetNodeWorldBoundingBox(nodeIndex);
+                                vec3 min = bounds.min;
+                                vec3 max = bounds.max;
                                 vec3 center = (min + max) * 0.5f;
                                 float dist = glm::length(max - min);
                                 vec3 dir = camera->GetFront();
@@ -907,7 +908,10 @@ namespace pe
                 // Recursive draw nodes with icons
                 auto DrawNode = [&](auto &&self, int nodeIndex) -> void
                 {
-                    const auto &node = nodes[nodeIndex];
+                    const NodeInfo *node = model->GetNodeInfo(nodeIndex);
+                    if (!node)
+                        return;
+
                     bool hasChildren = !children[nodeIndex].empty();
                     int meshIndex = model->GetNodeMesh(nodeIndex);
                     bool hasMesh = meshIndex >= 0;
@@ -926,7 +930,7 @@ namespace pe
 
                     // Choose icon based on node type
                     const char *icon;
-                    std::string nodeName = node.name;
+                    std::string nodeName = node->name;
 
                     // Simple heuristic for node type (can be extended)
                     std::string lowerName = nodeName;
@@ -1021,7 +1025,7 @@ namespace pe
                                     GUIState::s_modelLoading = true;
                                     try
                                     {
-                                        if (Model *m = Model::Load(path))
+                                        if (ModelAsset *m = ModelAsset::Load(path))
                                             EventSystem::PushEvent(EventType::ModelLoaded, m);
                                     }
                                     catch (const std::exception &e)
@@ -1039,8 +1043,9 @@ namespace pe
                     if (ImGui::IsItemHovered() && ImGui::IsMouseDoubleClicked(0))
                     {
                         Camera *camera = scene.GetActiveCamera();
-                        vec3 center = (node.worldBoundingBox.min + node.worldBoundingBox.max) * 0.5f;
-                        float dist = glm::length(node.worldBoundingBox.max - node.worldBoundingBox.min);
+                        const AABB &bounds = model->GetNodeWorldBoundingBox(nodeIndex);
+                        vec3 center = (bounds.min + bounds.max) * 0.5f;
+                        float dist = glm::length(bounds.max - bounds.min);
                         vec3 dir = camera->GetFront();
                         camera->SetPosition(center - dir * glm::max(dist, camera->GetNearPlane()));
                     }
@@ -1051,8 +1056,9 @@ namespace pe
                         {
                             selection.Select(model, nodeIndex, SelectionType::Node);
                             Camera *camera = scene.GetActiveCamera();
-                            vec3 center = (node.worldBoundingBox.min + node.worldBoundingBox.max) * 0.5f;
-                            float dist = glm::length(node.worldBoundingBox.max - node.worldBoundingBox.min);
+                            const AABB &bounds = model->GetNodeWorldBoundingBox(nodeIndex);
+                            vec3 center = (bounds.min + bounds.max) * 0.5f;
+                            float dist = glm::length(bounds.max - bounds.min);
                             vec3 dir = camera->GetFront();
                             camera->SetPosition(center - dir * glm::max(dist, camera->GetNearPlane()));
                             ImGui::SetWindowFocus("Properties");
@@ -1087,23 +1093,17 @@ namespace pe
 
                             if (ImGui::MenuItem("Empty Node"))
                             {
-                                NodeInfo newNode{};
-                                newNode.name = "Empty Node";
-                                newNode.parent = nodeIndex;
-                                newNode.localMatrix = mat4(1.0f);
-                                model->GetNodeInfos().push_back(newNode);
-                                int const newNodeIndex = static_cast<int>(model->GetNodeInfos().size() - 1);
-                                model->GetNodeInfos()[nodeIndex].children.push_back(newNodeIndex);
+                                int const newNodeIndex = model->CreateNode("Empty Node", nodeIndex);
                                 model->MarkDirty(newNodeIndex);
                                 selection.Select(model, newNodeIndex, SelectionType::Node);
                             }
 
                             if (ImGui::BeginMenu("Mesh"))
                             {
-                                auto AddPrimitive = [&](Model *m)
+                                auto AddPrimitive = [&](ModelAsset *m)
                                 {
                                     EventSystem::PushEvent(EventType::ModelLoaded, m);
-                                    selection.Select(m, 0, SelectionType::Node);
+                                    selection.Select(m, m->GetRootNodeIndex(), SelectionType::Node);
                                 };
                                 if (ImGui::MenuItem("Plane"))
                                     AddPrimitive(Primitives::CreatePlane());
@@ -1224,7 +1224,7 @@ namespace pe
                         GUIState::s_modelLoading = true;
                         try
                         {
-                            if (Model *m = Model::Load(path))
+                            if (ModelAsset *m = ModelAsset::Load(path))
                                 EventSystem::PushEvent(EventType::ModelLoaded, m);
                         }
                         catch (const std::exception &e)
@@ -1281,11 +1281,7 @@ namespace pe
                     if (s_renameNode == -1)
                         s_renameModel->SetLabel(newName);
                     else
-                    {
-                        auto &infos = s_renameModel->GetNodeInfos();
-                        if (s_renameNode >= 0 && s_renameNode < static_cast<int>(infos.size()))
-                            infos[s_renameNode].name = newName;
-                    }
+                        s_renameModel->SetNodeName(s_renameNode, newName);
                 }
                 else if (s_renameCamera)
                 {
@@ -1342,19 +1338,16 @@ namespace pe
 
                 if (ImGui::MenuItem("Empty Node"))
                 {
-                    Model *model = new Model();
-                    NodeInfo nodeInfo{};
-                    nodeInfo.name = "Empty Node";
-                    nodeInfo.localMatrix = mat4(1.0f);
-                    model->GetNodeInfos().push_back(nodeInfo);
+                    ModelAsset *model = new ModelAsset();
+                    int const nodeIndex = model->CreateNode("Empty Node");
                     EventSystem::PushEvent(EventType::ModelLoaded, model);
-                    selection.Select(model, 0, SelectionType::Node);
+                    selection.Select(model, nodeIndex, SelectionType::Node);
                 }
 
                 if (ImGui::BeginMenu("Mesh"))
                 {
-                    auto AddPrim = [&](Model *m)
-                    { EventSystem::PushEvent(EventType::ModelLoaded, m); selection.Select(m, 0, SelectionType::Node); };
+                    auto AddPrim = [&](ModelAsset *m)
+                    { EventSystem::PushEvent(EventType::ModelLoaded, m); selection.Select(m, m->GetRootNodeIndex(), SelectionType::Node); };
                     if (ImGui::MenuItem("Plane"))
                         AddPrim(Primitives::CreatePlane());
                     if (ImGui::MenuItem("Cube"))

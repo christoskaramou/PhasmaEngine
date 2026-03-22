@@ -1,6 +1,6 @@
 #pragma once
 
-#include "Scene/Model.h"
+#include "Scene/ModelAsset.h"
 #include <assimp/Importer.hpp>
 #include <assimp/postprocess.h>
 #include <assimp/scene.h>
@@ -9,13 +9,13 @@ namespace pe
 {
     class CommandBuffer;
 
-    class ModelAssimp : public Model
+    class ModelAssetAssimp : public ModelAsset
     {
     public:
-        static Model *Load(const std::filesystem::path &file);
+        static ModelAsset *Load(const std::filesystem::path &file);
 
-        ModelAssimp();
-        ~ModelAssimp() override = default;
+        ModelAssetAssimp();
+        ~ModelAssetAssimp() override = default;
 
     private:
         bool LoadFile(const std::filesystem::path &file);

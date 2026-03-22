@@ -1,7 +1,7 @@
 #include "Models.h"
 #include "GUI/GUIState.h"
 #include "GUI/Helpers.h"
-#include "Scene/Model.h"
+#include "Scene/ModelAsset.h"
 
 namespace pe
 {
@@ -32,11 +32,11 @@ namespace pe
                 if (!modelFilter.PassFilter(entry.c_str()))
                     continue;
 
-                const bool selected = (GUIState::s_assetPreview.type == AssetPreviewType::Model && GUIState::s_assetPreview.label == entry);
+                const bool selected = (GUIState::s_assetPreview.type == AssetPreviewType::ModelAsset && GUIState::s_assetPreview.label == entry);
                 if (ImGui::Selectable(entry.c_str(), selected, selectFlags))
                 {
                     std::string fullPath = Path::Assets + "Objects/" + entry;
-                    GUIState::UpdateAssetPreview(AssetPreviewType::Model, entry, fullPath);
+                    GUIState::UpdateAssetPreview(AssetPreviewType::ModelAsset, entry, fullPath);
                     if (ImGui::IsMouseDoubleClicked(0) && !GUIState::s_modelLoading)
                     {
                         auto loadTask = [fullPath]()
@@ -46,7 +46,7 @@ namespace pe
                             {
                                 // Use u8path to properly interpret UTF-8 string as path on Windows
                                 std::filesystem::path filePath(reinterpret_cast<const char8_t *>(fullPath.c_str()));
-                                if (Model *m = Model::Load(filePath))
+                                if (ModelAsset *m = ModelAsset::Load(filePath))
                                     EventSystem::PushEvent(EventType::ModelLoaded, m);
                             }
                             catch (const std::exception &e)

@@ -33,39 +33,6 @@ There is no automated test suite — testing is manual via the editor.
 
 ---
 
-## Repository Layout
-
-```
-PhasmaEngine/
-├── PhasmaCore/               # Static library — Vulkan/SDL2 abstraction, ECS, base utilities
-│   ├── Code/
-│   │   ├── API/              # RHI, Buffer, Image, Sampler, Command, Queue, Vertex, Pipeline...
-│   │   ├── ECS/              # ISystem, IComponent, Context, EventSystem, OrderedMap
-│   │   └── Base/             # Path, Log, FileWatcher, utility headers
-│   ├── pch/
-│   │   └── PhasmaPch.h       # Precompiled header — included in every .cpp via CMake PCH
-│   └── CMakeLists.txt
-├── PhasmaEditor/             # Executable — editor app (Windows/Linux)
-│   ├── Code/
-│   │   ├── App/              # App.cpp — boot sequence and main loop
-│   │   ├── Systems/          # RendererSystem, LightSystem, CameraSystem, ScriptManager...
-│   │   ├── RenderPasses/     # GBuffer, Depth, Shadow, Light, Bloom, TAA, SSAO, SSR, DOF...
-│   │   ├── Scene/            # Scene, Model, Geometry, PhysicsHelper
-│   │   ├── GUI/              # ImGui wrapper, editor widgets, MCP/tool bridge
-│   │   │   └── Agent/        # EditorToolServer (MCP HTTP), EditorToolRuntime, EditorToolCatalog
-│   │   └── Script/           # Lua binding layer
-│   └── Assets/
-│       ├── Shaders/          # HLSL sources compiled to SPIR-V
-│       ├── Objects/          # 3D models (.glb, .gltf, .fbx, .obj)
-│       └── Agent/            # In-engine agent workspace (MEMORY.md, TASKS.md, Lua scripts)
-├── PhasmaAgent/              # Standalone AI agent library (no engine/Vulkan/ImGui deps)
-│   ├── include/PhasmaAgent/  # Public headers: Agent.h, BM25Index.h, VectorStore.h...
-│   └── src/                  # Provider backends, RequestWorker, indexing, embeddings
-└── AI_CHANGELOG.md           # ← READ THIS FIRST — running log of AI-assisted changes
-```
-
----
-
 ## Architecture
 
 ### CMake Targets
@@ -151,7 +118,8 @@ Bloom, TAA, SSAO, SSR, DOF, MotionBlur, FXAA, Sharpen (RCAS), Tonemap, Grid, AAB
 
 ## Model Loading
 
-All model loading routes through **Assimp** (`Scene/Model.cpp`).
+All model loading routes through **Assimp** (`Scene/ModelAssetAssimp.cpp`).
+`ModelAsset` is the base asset class; `ModelAssetAssimp` is the Assimp-based loader.
 
 ```cpp
 Scene::AddModel(model)           // registers model

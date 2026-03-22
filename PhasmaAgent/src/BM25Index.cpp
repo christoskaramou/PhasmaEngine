@@ -144,6 +144,39 @@ namespace pagent
         RebuildStats();
     }
 
+    void BM25Index::Rebuild(const std::vector<std::pair<std::string, std::string>> &documents)
+    {
+        std::vector<Document> docs;
+        docs.reserve(documents.size());
+
+        std::unordered_map<std::string, int> docFreq;
+        double totalDocLen = 0.0;
+
+        for (const auto &[id, content] : documents)
+        {
+            auto tokens = Tokenize(content);
+
+            Document doc;
+            doc.id = id;
+            doc.content = content;
+            doc.totalTerms = static_cast<int>(tokens.size());
+
+            for (const auto &tok : tokens)
+                doc.termFreqs[tok]++;
+
+            for (const auto &[term, _] : doc.termFreqs)
+                docFreq[term]++;
+
+            totalDocLen += static_cast<double>(doc.totalTerms);
+            docs.push_back(std::move(doc));
+        }
+
+        std::unique_lock lock(m_mutex);
+        m_docs = std::move(docs);
+        m_docFreq = std::move(docFreq);
+        m_avgDocLen = m_docs.empty() ? 0.0 : (totalDocLen / static_cast<double>(m_docs.size()));
+    }
+
     void BM25Index::Remove(const std::string &id)
     {
         std::unique_lock lock(m_mutex);

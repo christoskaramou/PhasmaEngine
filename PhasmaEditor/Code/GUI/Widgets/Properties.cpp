@@ -6,7 +6,7 @@
 #include "MeshWidget.h"
 #include "Particles.h"
 #include "Particles/ParticleManager.h"
-#include "Scene/Model.h"
+#include "Scene/ModelAsset.h"
 #include "Scene/Scene.h"
 #include "Scene/SelectionManager.h"
 #include "Systems/LightSystem.h"
@@ -51,7 +51,7 @@ namespace pe
             if (!w)
                 return;
 
-            Model *model = sel.GetSelectedModel();
+            ModelAsset *model = sel.GetSelectedModel();
             if (!model)
                 return;
 
@@ -60,11 +60,11 @@ namespace pe
             if (meshIndex < 0)
                 return;
 
-            auto &meshInfos = model->GetMeshInfos();
-            if (meshIndex >= (int)meshInfos.size())
+            MeshInfo *meshInfo = model->GetMeshInfo(meshIndex);
+            if (!meshInfo)
                 return;
 
-            w->DrawEmbed(&meshInfos[meshIndex], model);
+            w->DrawEmbed(meshInfo, model);
         };
 
         auto drawCamera = [&]()

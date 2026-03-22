@@ -4,7 +4,7 @@
 #include "API/RHI.h"
 #include "Camera/Camera.h"
 #include "GUI/GUIState.h"
-#include "Scene/Model.h"
+#include "Scene/ModelAsset.h"
 #include "Scene/Scene.h"
 #include "Scene/SelectionManager.h"
 #include "Systems/PostProcessSystem.h"
@@ -206,7 +206,7 @@ namespace pe
                 }
                 case EventType::ModelLoaded:
                 {
-                    Model *model = std::any_cast<Model *>(event.payload);
+                    ModelAsset *model = std::any_cast<ModelAsset *>(event.payload);
                     if (!model)
                         break;
                     rendererSystem->WaitAllFramesCommands();
@@ -217,7 +217,7 @@ namespace pe
                 }
                 case EventType::ModelRemoved:
                 {
-                    Model *model = std::any_cast<Model *>(event.payload);
+                    ModelAsset *model = std::any_cast<ModelAsset *>(event.payload);
                     if (!model)
                         break;
                     rendererSystem->WaitAllFramesCommands();
@@ -227,8 +227,8 @@ namespace pe
                 }
                 case EventType::NodeRemoved:
                 {
-                    auto info = std::any_cast<std::pair<Model *, int>>(event.payload);
-                    Model *model = info.first;
+                    auto info = std::any_cast<std::pair<ModelAsset *, int>>(event.payload);
+                    ModelAsset *model = info.first;
                     int nodeIndex = info.second;
                     if (!model)
                         break;
@@ -241,8 +241,8 @@ namespace pe
                 }
                 case EventType::MeshRemoved:
                 {
-                    auto info = std::any_cast<std::pair<Model *, int>>(event.payload);
-                    Model *model = info.first;
+                    auto info = std::any_cast<std::pair<ModelAsset *, int>>(event.payload);
+                    ModelAsset *model = info.first;
                     int nodeIndex = info.second;
                     if (!model)
                         break;
@@ -254,7 +254,7 @@ namespace pe
                 }
                 case EventType::ModelsRemoved:
                 {
-                    auto models = std::any_cast<std::vector<Model *>>(event.payload);
+                    auto models = std::any_cast<std::vector<ModelAsset *>>(event.payload);
                     if (models.empty())
                         break;
                     rendererSystem->WaitAllFramesCommands();

@@ -1,5 +1,5 @@
 #include "SelectionManager.h"
-#include "Model.h"
+#include "ModelAsset.h"
 
 namespace pe
 {
@@ -9,7 +9,7 @@ namespace pe
         return instance;
     }
 
-    void SelectionManager::Select(Model *model, int nodeIndex, SelectionType type)
+    void SelectionManager::Select(ModelAsset *model, int nodeIndex, SelectionType type)
     {
         m_selectedModel = model;
         m_selectedNodeIndex = nodeIndex;
@@ -53,7 +53,7 @@ namespace pe
         return m_selectedModel || m_selectedLightIndex != -1 || m_selectedEmitterIndex != -1 || m_selectionType == SelectionType::Camera;
     }
 
-    Model *SelectionManager::GetSelectedModel() const
+    ModelAsset *SelectionManager::GetSelectedModel() const
     {
         return m_selectedModel;
     }
@@ -88,11 +88,7 @@ namespace pe
         if (!HasSelection())
             return nullptr;
 
-        auto &nodeInfos = m_selectedModel->GetNodeInfos();
-        if (m_selectedNodeIndex < 0 || m_selectedNodeIndex >= static_cast<int>(nodeInfos.size()))
-            return nullptr;
-
-        return &nodeInfos[m_selectedNodeIndex];
+        return m_selectedModel ? const_cast<NodeInfo *>(m_selectedModel->GetNodeInfo(m_selectedNodeIndex)) : nullptr;
     }
 
     const NodeInfo *SelectionManager::GetSelectedNodeInfo() const
@@ -100,11 +96,7 @@ namespace pe
         if (!HasSelection())
             return nullptr;
 
-        const auto &nodeInfos = m_selectedModel->GetNodeInfos();
-        if (m_selectedNodeIndex < 0 || m_selectedNodeIndex >= static_cast<int>(nodeInfos.size()))
-            return nullptr;
-
-        return &nodeInfos[m_selectedNodeIndex];
+        return m_selectedModel ? m_selectedModel->GetNodeInfo(m_selectedNodeIndex) : nullptr;
     }
 
     GizmoOperation SelectionManager::GetGizmoOperation() const

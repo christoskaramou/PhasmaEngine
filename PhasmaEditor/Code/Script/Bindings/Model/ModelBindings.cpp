@@ -1,5 +1,5 @@
 #include "Script/ScriptSystem.h"
-#include "Scene/Model.h"
+#include "Scene/ModelAsset.h"
 #include "Scene/Primitives.h"
 #include "Scene/Scene.h"
 #include "Systems/RendererSystem.h"
@@ -16,7 +16,7 @@ namespace pe
 
     // Add/remove models directly so Lua scripts see immediate results.
     // Safe: Lua runs on the main thread (init/update), same context as Window::ProcessEvents.
-    static void AddModelToScene(Model *model)
+    static void AddModelToScene(ModelAsset *model)
     {
         if (!model)
             return;
@@ -29,7 +29,7 @@ namespace pe
         model->SetRenderReady(true);
     }
 
-    static void RemoveModelFromScene(Model *model)
+    static void RemoveModelFromScene(ModelAsset *model)
     {
         if (!model)
             return;
@@ -40,7 +40,7 @@ namespace pe
         r->GetScene().RemoveModel(model);
         r->GetScene().UpdateGeometryBuffers();
     }
-    static Model *CloneSource(Model &source)
+    static ModelAsset *CloneSource(ModelAsset &source)
     {
         if (source.IsPrimitive())
         {
@@ -62,24 +62,25 @@ namespace pe
         std::string path = source.GetFilePath().string();
         if (path.empty())
             return nullptr;
-        return Model::Load(path);
+        return ModelAsset::Load(path);
     }
 
-    static AABB ComputeWorldBB(Model &m)
+    static AABB ComputeWorldBB(ModelAsset &m)
     {
         AABB bb;
         bool first = true;
-        for (auto &n : m.GetNodeInfos())
+        for (int i = 0; i < m.GetNodeCount(); i++)
         {
+            const AABB &wbb = m.GetNodeWorldBoundingBox(i);
             if (first)
             {
-                bb = n.worldBoundingBox;
+                bb = wbb;
                 first = false;
             }
             else
             {
-                bb.min = glm::min(bb.min, n.worldBoundingBox.min);
-                bb.max = glm::max(bb.max, n.worldBoundingBox.max);
+                bb.min = glm::min(bb.min, wbb.min);
+                bb.max = glm::max(bb.max, wbb.max);
             }
         }
         return bb;
@@ -91,42 +92,46 @@ namespace pe
         {
             ScriptSystem::AddBindings([](sol::state &lua)
                                       {
-                lua.new_usertype<Model>("Model",
+                lua.new_usertype<ModelAsset>("Model",
                     sol::no_constructor,
-                    sol::meta_function::to_string, [](Model &m) { return m.GetLabel(); },
-                    "get_id", &Model::GetId,
-                    "get_label", &Model::GetLabel,
-                    "set_label", &Model::SetLabel,
-                    "get_file_path", [](Model &m) { return m.GetFilePath().string(); },
-                    "is_primitive", &Model::IsPrimitive,
-                    "is_visible", &Model::IsRenderReady,
-                    "set_visible", &Model::SetRenderReady,
-                    "get_primitive_type", &Model::GetPrimitiveType,
-                    "get_node_count", &Model::GetNodeCount,
-                    "get_mesh_count", &Model::GetMeshCount,
-                    "get_vertex_count", &Model::GetVerticesCount,
-                    "get_index_count", &Model::GetIndicesCount,
-                    "get_position", [](Model &m) -> vec3 {
-                        if (m.GetNodeInfos().empty()) return vec3(0.f);
-                        return vec3(m.GetNodeInfos()[0].localMatrix[3]);
+                    sol::meta_function::to_string, [](ModelAsset &m) { return m.GetLabel(); },
+                    "get_id", &ModelAsset::GetId,
+                    "get_label", &ModelAsset::GetLabel,
+                    "set_label", &ModelAsset::SetLabel,
+                    "get_file_path", [](ModelAsset &m) { return m.GetFilePath().string(); },
+                    "is_primitive", &ModelAsset::IsPrimitive,
+                    "is_visible", &ModelAsset::IsRenderReady,
+                    "set_visible", &ModelAsset::SetRenderReady,
+                    "get_primitive_type", &ModelAsset::GetPrimitiveType,
+                    "get_node_count", &ModelAsset::GetNodeCount,
+                    "get_mesh_count", &ModelAsset::GetMeshCount,
+                    "get_vertex_count", &ModelAsset::GetVerticesCount,
+                    "get_index_count", &ModelAsset::GetIndicesCount,
+                    "get_position", [](ModelAsset &m) -> vec3 {
+                        int root = m.GetRootNodeIndex();
+                        if (root < 0) return vec3(0.f);
+                        return vec3(m.GetNodeLocalMatrix(root)[3]);
                     },
-                    "set_position", [](Model &m, const vec3 &pos) {
-                        if (m.GetNodeInfos().empty()) return;
-                        auto &mat = m.GetNodeInfos()[0].localMatrix;
+                    "set_position", [](ModelAsset &m, const vec3 &pos) {
+                        int root = m.GetRootNodeIndex();
+                        if (root < 0) return;
+                        mat4 mat = m.GetNodeLocalMatrix(root);
                         mat[3] = vec4(pos, 1.0f);
-                        m.MarkDirty(0);
+                        m.SetNodeLocalMatrix(root, mat);
                     },
-                    "get_scale", [](Model &m) -> vec3 {
-                        if (m.GetNodeInfos().empty()) return vec3(1.f);
-                        auto &mat = m.GetNodeInfos()[0].localMatrix;
+                    "get_scale", [](ModelAsset &m) -> vec3 {
+                        int root = m.GetRootNodeIndex();
+                        if (root < 0) return vec3(1.f);
+                        const mat4 &mat = m.GetNodeLocalMatrix(root);
                         return vec3(
                             glm::length(vec3(mat[0])),
                             glm::length(vec3(mat[1])),
                             glm::length(vec3(mat[2])));
                     },
-                    "get_rotation", [](Model &m) -> vec3 {
-                        if (m.GetNodeInfos().empty()) return vec3(0.f);
-                        auto &mat = m.GetNodeInfos()[0].localMatrix;
+                    "get_rotation", [](ModelAsset &m) -> vec3 {
+                        int root = m.GetRootNodeIndex();
+                        if (root < 0) return vec3(0.f);
+                        const mat4 &mat = m.GetNodeLocalMatrix(root);
                         vec3 scale(
                             glm::length(vec3(mat[0])),
                             glm::length(vec3(mat[1])),
@@ -137,41 +142,41 @@ namespace pe
                             vec3(mat[2]) / scale.z);
                         return glm::degrees(glm::eulerAngles(glm::quat_cast(rotMat)));
                     },
-                    "set_transform", [](Model &m, const vec3 &pos, const vec3 &rot_deg, const vec3 &scale) {
-                        if (m.GetNodeInfos().empty()) return;
+                    "set_transform", [](ModelAsset &m, const vec3 &pos, const vec3 &rot_deg, const vec3 &scale) {
+                        int root = m.GetRootNodeIndex();
+                        if (root < 0) return;
                         mat4 T = glm::translate(mat4(1.0f), pos);
                         mat4 R = glm::mat4_cast(glm::quat(vec3(
                             glm::radians(rot_deg.x),
                             glm::radians(rot_deg.y),
                             glm::radians(rot_deg.z))));
                         mat4 S = glm::scale(mat4(1.0f), scale);
-                        m.GetNodeInfos()[0].localMatrix = T * R * S;
-                        m.MarkDirty(0);
+                        m.SetNodeLocalMatrix(root, T * R * S);
                     },
-                    "set_rotation", [](Model &m, const vec3 &rot_deg) {
-                        if (m.GetNodeInfos().empty()) return;
-                        auto &mat = m.GetNodeInfos()[0].localMatrix;
+                    "set_rotation", [](ModelAsset &m, const vec3 &rot_deg) {
+                        int root = m.GetRootNodeIndex();
+                        if (root < 0) return;
+                        const mat4 &mat = m.GetNodeLocalMatrix(root);
                         vec3 pos(mat[3]);
                         vec3 s(glm::length(vec3(mat[0])), glm::length(vec3(mat[1])), glm::length(vec3(mat[2])));
                         mat4 T = glm::translate(mat4(1.0f), pos);
                         mat4 R = glm::mat4_cast(glm::quat(vec3(glm::radians(rot_deg.x), glm::radians(rot_deg.y), glm::radians(rot_deg.z))));
                         mat4 S = glm::scale(mat4(1.0f), s);
-                        mat = T * R * S;
-                        m.MarkDirty(0);
+                        m.SetNodeLocalMatrix(root, T * R * S);
                     },
-                    "set_scale", [](Model &m, const vec3 &newScale) {
-                        if (m.GetNodeInfos().empty()) return;
-                        auto &mat = m.GetNodeInfos()[0].localMatrix;
+                    "set_scale", [](ModelAsset &m, const vec3 &newScale) {
+                        int root = m.GetRootNodeIndex();
+                        if (root < 0) return;
+                        const mat4 &mat = m.GetNodeLocalMatrix(root);
                         vec3 pos(mat[3]);
                         vec3 oldScale(glm::length(vec3(mat[0])), glm::length(vec3(mat[1])), glm::length(vec3(mat[2])));
                         mat3 rotMat(vec3(mat[0]) / oldScale.x, vec3(mat[1]) / oldScale.y, vec3(mat[2]) / oldScale.z);
                         mat4 T = glm::translate(mat4(1.0f), pos);
                         mat4 R = glm::mat4_cast(glm::quat_cast(rotMat));
                         mat4 S = glm::scale(mat4(1.0f), newScale);
-                        mat = T * R * S;
-                        m.MarkDirty(0);
+                        m.SetNodeLocalMatrix(root, T * R * S);
                     },
-                    "get_bounding_box", [&lua](Model &m) -> sol::table {
+                    "get_bounding_box", [&lua](ModelAsset &m) -> sol::table {
                         AABB bb = ComputeWorldBB(m);
                         sol::table t = lua.create_table();
                         t["min"] = bb.min;
@@ -180,114 +185,84 @@ namespace pe
                         t["size"] = bb.GetSize();
                         return t;
                     },
-                    "get_node_mesh", &Model::GetNodeMesh,
-                    "get_node_name", [](Model &m, int node) -> std::string {
-                        auto &nodes = m.GetNodeInfos();
-                        if (node < 0 || node >= static_cast<int>(nodes.size())) return "";
-                        return nodes[node].name;
+                    "get_node_mesh", &ModelAsset::GetNodeMesh,
+                    "get_node_name", [](ModelAsset &m, int node) -> std::string {
+                        return m.GetNodeName(node);
                     },
-                    "get_node_position", [](Model &m, int node) -> vec3 {
-                        auto &nodes = m.GetNodeInfos();
-                        if (node < 0 || node >= static_cast<int>(nodes.size())) return vec3(0.f);
-                        return vec3(nodes[node].localMatrix[3]);
+                    "get_node_position", [](ModelAsset &m, int node) -> vec3 {
+                        return vec3(m.GetNodeLocalMatrix(node)[3]);
                     },
-                    "set_node_position", [](Model &m, int node, const vec3 &pos) {
-                        auto &nodes = m.GetNodeInfos();
-                        if (node < 0 || node >= static_cast<int>(nodes.size())) return;
-                        nodes[node].localMatrix[3] = vec4(pos, 1.0f);
-                        m.MarkDirty(node);
+                    "set_node_position", [](ModelAsset &m, int node, const vec3 &pos) {
+                        mat4 mat = m.GetNodeLocalMatrix(node);
+                        mat[3] = vec4(pos, 1.0f);
+                        m.SetNodeLocalMatrix(node, mat);
                     },
-                    "set_node_transform", [](Model &m, int node, const vec3 &pos, const vec3 &rot_deg, const vec3 &scale) {
-                        auto &nodes = m.GetNodeInfos();
-                        if (node < 0 || node >= static_cast<int>(nodes.size())) return;
+                    "set_node_transform", [](ModelAsset &m, int node, const vec3 &pos, const vec3 &rot_deg, const vec3 &scale) {
                         mat4 T = glm::translate(mat4(1.0f), pos);
                         mat4 R = glm::mat4_cast(glm::quat(vec3(
                             glm::radians(rot_deg.x),
                             glm::radians(rot_deg.y),
                             glm::radians(rot_deg.z))));
                         mat4 S = glm::scale(mat4(1.0f), scale);
-                        nodes[node].localMatrix = T * R * S;
-                        m.MarkDirty(node);
+                        m.SetNodeLocalMatrix(node, T * R * S);
                     },
-                    "get_node_world_position", [](Model &m, int node) -> vec3 {
-                        auto &nodes = m.GetNodeInfos();
-                        if (node < 0 || node >= static_cast<int>(nodes.size())) return vec3(0.f);
-                        return vec3(nodes[node].ubo.worldMatrix[3]);
+                    "get_node_world_position", [](ModelAsset &m, int node) -> vec3 {
+                        return vec3(m.GetNodeWorldMatrix(node)[3]);
                     },
-                    "get_node_parent", [](Model &m, int node) -> int {
-                        auto &nodes = m.GetNodeInfos();
-                        if (node < 0 || node >= static_cast<int>(nodes.size())) return -1;
-                        return nodes[node].parent;
+                    "get_node_parent", [](ModelAsset &m, int node) -> int {
+                        return m.GetNodeParentIndex(node);
                     },
-                    "get_node_children", [](Model &m, int node) -> sol::as_table_t<std::vector<int>> {
-                        auto &nodes = m.GetNodeInfos();
-                        if (node < 0 || node >= static_cast<int>(nodes.size())) return sol::as_table(std::vector<int>{});
-                        return sol::as_table(std::vector<int>(nodes[node].children.begin(), nodes[node].children.end()));
+                    "get_node_children", [](ModelAsset &m, int node) -> sol::as_table_t<std::vector<int>> {
+                        return sol::as_table(std::vector<int>(m.GetNodeChildren(node).begin(), m.GetNodeChildren(node).end()));
                     },
-                    "get_node_rotation", [](Model &m, int node) -> vec3 {
-                        auto &nodes = m.GetNodeInfos();
-                        if (node < 0 || node >= static_cast<int>(nodes.size())) return vec3(0.f);
-                        auto &mat = nodes[node].localMatrix;
+                    "get_node_rotation", [](ModelAsset &m, int node) -> vec3 {
+                        const mat4 &mat = m.GetNodeLocalMatrix(node);
                         vec3 scale(glm::length(vec3(mat[0])), glm::length(vec3(mat[1])), glm::length(vec3(mat[2])));
                         mat3 rotMat(vec3(mat[0]) / scale.x, vec3(mat[1]) / scale.y, vec3(mat[2]) / scale.z);
                         return glm::degrees(glm::eulerAngles(glm::quat_cast(rotMat)));
                     },
-                    "get_node_scale", [](Model &m, int node) -> vec3 {
-                        auto &nodes = m.GetNodeInfos();
-                        if (node < 0 || node >= static_cast<int>(nodes.size())) return vec3(1.f);
-                        auto &mat = nodes[node].localMatrix;
+                    "get_node_scale", [](ModelAsset &m, int node) -> vec3 {
+                        const mat4 &mat = m.GetNodeLocalMatrix(node);
                         return vec3(glm::length(vec3(mat[0])), glm::length(vec3(mat[1])), glm::length(vec3(mat[2])));
                     },
-                    "set_node_rotation", [](Model &m, int node, const vec3 &rot_deg) {
-                        auto &nodes = m.GetNodeInfos();
-                        if (node < 0 || node >= static_cast<int>(nodes.size())) return;
-                        auto &mat = nodes[node].localMatrix;
+                    "set_node_rotation", [](ModelAsset &m, int node, const vec3 &rot_deg) {
+                        const mat4 &mat = m.GetNodeLocalMatrix(node);
                         vec3 pos(mat[3]);
                         vec3 s(glm::length(vec3(mat[0])), glm::length(vec3(mat[1])), glm::length(vec3(mat[2])));
                         mat4 T = glm::translate(mat4(1.0f), pos);
                         mat4 R = glm::mat4_cast(glm::quat(vec3(glm::radians(rot_deg.x), glm::radians(rot_deg.y), glm::radians(rot_deg.z))));
                         mat4 S = glm::scale(mat4(1.0f), s);
-                        mat = T * R * S;
-                        m.MarkDirty(node);
+                        m.SetNodeLocalMatrix(node, T * R * S);
                     },
-                    "set_node_scale", [](Model &m, int node, const vec3 &newScale) {
-                        auto &nodes = m.GetNodeInfos();
-                        if (node < 0 || node >= static_cast<int>(nodes.size())) return;
-                        auto &mat = nodes[node].localMatrix;
+                    "set_node_scale", [](ModelAsset &m, int node, const vec3 &newScale) {
+                        const mat4 &mat = m.GetNodeLocalMatrix(node);
                         vec3 pos(mat[3]);
                         vec3 oldScale(glm::length(vec3(mat[0])), glm::length(vec3(mat[1])), glm::length(vec3(mat[2])));
                         mat3 rotMat(vec3(mat[0]) / oldScale.x, vec3(mat[1]) / oldScale.y, vec3(mat[2]) / oldScale.z);
                         mat4 T = glm::translate(mat4(1.0f), pos);
                         mat4 R = glm::mat4_cast(glm::quat_cast(rotMat));
                         mat4 S = glm::scale(mat4(1.0f), newScale);
-                        mat = T * R * S;
-                        m.MarkDirty(node);
+                        m.SetNodeLocalMatrix(node, T * R * S);
                     },
-                    "get_node_world_matrix", [](Model &m, int node) -> mat4 {
-                        auto &nodes = m.GetNodeInfos();
-                        if (node < 0 || node >= static_cast<int>(nodes.size())) return mat4(1.f);
-                        return nodes[node].ubo.worldMatrix;
+                    "get_node_world_matrix", [](ModelAsset &m, int node) -> mat4 {
+                        return m.GetNodeWorldMatrix(node);
                     },
-                    "get_node_local_matrix", [](Model &m, int node) -> mat4 {
-                        auto &nodes = m.GetNodeInfos();
-                        if (node < 0 || node >= static_cast<int>(nodes.size())) return mat4(1.f);
-                        return nodes[node].localMatrix;
+                    "get_node_local_matrix", [](ModelAsset &m, int node) -> mat4 {
+                        return m.GetNodeLocalMatrix(node);
                     },
-                    "get_node_bounding_box", [&lua](Model &m, int node) -> sol::table {
+                    "get_node_bounding_box", [&lua](ModelAsset &m, int node) -> sol::table {
                         sol::table t = lua.create_table();
-                        auto &nodes = m.GetNodeInfos();
-                        if (node < 0 || node >= static_cast<int>(nodes.size())) return t;
-                        auto &bb = nodes[node].worldBoundingBox;
+                        const AABB &bb = m.GetNodeWorldBoundingBox(node);
                         t["min"] = bb.min;
                         t["max"] = bb.max;
                         t["center"] = bb.GetCenter();
                         t["size"] = bb.GetSize();
                         return t;
                     },
-                    "reparent_node", [](Model &m, int node, int newParent) {
+                    "reparent_node", [](ModelAsset &m, int node, int newParent) {
                         m.ReparentNode(node, newParent);
                     },
-                    "get_mesh_info", [&lua](Model &m, int meshIdx) -> sol::table {
+                    "get_mesh_info", [&lua](ModelAsset &m, int meshIdx) -> sol::table {
                         sol::table t = lua.create_table();
                         auto &meshes = m.GetMeshInfos();
                         if (meshIdx < 0 || meshIdx >= static_cast<int>(meshes.size())) return t;
@@ -314,8 +289,8 @@ namespace pe
                         return t;
                     });
 
-                lua.set_function("get_models", []() -> sol::as_table_t<std::vector<Model *>> {
-                    std::vector<Model *> result;
+                lua.set_function("get_models", []() -> sol::as_table_t<std::vector<ModelAsset *>> {
+                    std::vector<ModelAsset *> result;
                     auto *r = GetGlobalSystem<RendererSystem>();
                     if (r)
                     {
@@ -325,7 +300,7 @@ namespace pe
                     return sol::as_table(std::move(result));
                 });
 
-                lua.set_function("find_model", [](const std::string &query) -> Model * {
+                lua.set_function("find_model", [](const std::string &query) -> ModelAsset * {
                     auto *r = GetGlobalSystem<RendererSystem>();
                     if (!r) return nullptr;
 
@@ -345,7 +320,7 @@ namespace pe
                     return nullptr;
                 });
 
-                lua.set_function("load_model", [](const std::string &path) -> std::tuple<Model *, std::string> {
+                lua.set_function("load_model", [](const std::string &path) -> std::tuple<ModelAsset *, std::string> {
                     std::string fullPath = path;
                     if (!U8Path(path).is_absolute())
                         fullPath = Path::Assets + "Objects/" + path;
@@ -357,7 +332,7 @@ namespace pe
                         return {nullptr, err};
                     }
 
-                    Model *model = Model::Load(U8Path(fullPath));
+                    ModelAsset *model = ModelAsset::Load(U8Path(fullPath));
                     if (!model)
                     {
                         std::string err = "load_model: could not parse '" + fullPath + "'";
@@ -375,8 +350,8 @@ namespace pe
                     if (!U8Path(path).is_absolute())
                         fullPath = Path::Assets + "Objects/" + path;
 
-                    auto future = ThreadPool::General.Enqueue([fullPath]() -> Model * {
-                        return Model::Load(U8Path(fullPath));
+                    auto future = ThreadPool::General.Enqueue([fullPath]() -> ModelAsset * {
+                        return ModelAsset::Load(U8Path(fullPath));
                     });
 
                     auto *ss = GetGlobalSystem<ScriptSystem>();
@@ -416,8 +391,8 @@ namespace pe
                         if (!std::filesystem::path(path).is_absolute())
                             fullPath = Path::Assets + "Objects/" + path;
 
-                        auto future = ThreadPool::General.Enqueue([fullPath]() -> Model * {
-                            return Model::Load(fullPath);
+                        auto future = ThreadPool::General.Enqueue([fullPath]() -> ModelAsset * {
+                            return ModelAsset::Load(fullPath);
                         });
 
                         PendingAsyncLoad load;
@@ -429,29 +404,29 @@ namespace pe
                     }
                 });
 
-                lua.set_function("remove_model", [](Model *model) {
+                lua.set_function("remove_model", [](ModelAsset *model) {
                     if (!model) return;
                     RemoveModelFromScene(model);
                 });
 
-                lua.set_function("clone_model", [](Model &source, sol::optional<float> x, sol::optional<float> y, sol::optional<float> z) -> Model * {
-                    Model *m = CloneSource(source);
+                lua.set_function("clone_model", [](ModelAsset &source, sol::optional<float> x, sol::optional<float> y, sol::optional<float> z) -> ModelAsset * {
+                    ModelAsset *m = CloneSource(source);
                     if (!m) return nullptr;
 
-                    if (!m->GetNodeInfos().empty())
+                    int root = m->GetRootNodeIndex();
+                    if (root >= 0)
                     {
                         mat4 T = glm::translate(mat4(1.0f), vec3(x.value_or(0.f), y.value_or(0.f), z.value_or(0.f)));
-                        m->GetNodeInfos()[0].localMatrix = T;
-                        m->MarkDirty(0);
+                        m->SetNodeLocalMatrix(root, T);
                     }
                     AddModelToScene(m);
                     return m;
                 });
 
-                lua.set_function("scatter_models", [](Model &source, int count, float radius,
+                lua.set_function("scatter_models", [](ModelAsset &source, int count, float radius,
                                                       sol::optional<float> cx, sol::optional<float> cy, sol::optional<float> cz,
-                                                      sol::optional<float> minScale, sol::optional<float> maxScale) -> sol::as_table_t<std::vector<Model *>> {
-                    std::vector<Model *> result;
+                                                      sol::optional<float> minScale, sol::optional<float> maxScale) -> sol::as_table_t<std::vector<ModelAsset *>> {
+                    std::vector<ModelAsset *> result;
                     if (count <= 0) return sol::as_table(std::move(result));
 
                     float centerX = cx.value_or(0.f);
@@ -462,7 +437,7 @@ namespace pe
 
                     for (int i = 0; i < count; i++)
                     {
-                        Model *m = CloneSource(source);
+                        ModelAsset *m = CloneSource(source);
                         if (!m) continue;
 
                         float angle = static_cast<float>(std::rand()) / RAND_MAX * glm::two_pi<float>();
@@ -477,18 +452,16 @@ namespace pe
                         mat4 R = glm::rotate(mat4(1.0f), glm::radians(rotY), vec3(0, 1, 0));
                         mat4 S = glm::scale(mat4(1.0f), vec3(s));
 
-                        if (!m->GetNodeInfos().empty())
-                        {
-                            m->GetNodeInfos()[0].localMatrix = T * R * S;
-                            m->MarkDirty(0);
-                        }
+                        int root = m->GetRootNodeIndex();
+                        if (root >= 0)
+                            m->SetNodeLocalMatrix(root, T * R * S);
                         AddModelToScene(m);
                         result.push_back(m);
                     }
                     return sol::as_table(std::move(result));
                 });
 
-                lua.set_function("focus_camera_on", [](Model &model, sol::optional<float> distMult) {
+                lua.set_function("focus_camera_on", [](ModelAsset &model, sol::optional<float> distMult) {
                     auto *r = GetGlobalSystem<RendererSystem>();
                     if (!r) return;
                     auto *cam = r->GetScene().GetActiveCamera();
@@ -503,33 +476,33 @@ namespace pe
                 });
 
                 sol::table prim = lua.create_named_table("primitives");
-                prim.set_function("cube", [](sol::optional<float> size) -> Model * {
-                    Model *m = Primitives::CreateCube(size.value_or(1.0f));
+                prim.set_function("cube", [](sol::optional<float> size) -> ModelAsset * {
+                    ModelAsset *m = Primitives::CreateCube(size.value_or(1.0f));
                     AddModelToScene(m);
                     return m;
                 });
-                prim.set_function("sphere", [](sol::optional<float> radius) -> Model * {
-                    Model *m = Primitives::CreateSphere(radius.value_or(1.0f));
+                prim.set_function("sphere", [](sol::optional<float> radius) -> ModelAsset * {
+                    ModelAsset *m = Primitives::CreateSphere(radius.value_or(1.0f));
                     AddModelToScene(m);
                     return m;
                 });
-                prim.set_function("plane", [](sol::optional<float> width, sol::optional<float> depth) -> Model * {
-                    Model *m = Primitives::CreatePlane(width.value_or(10.0f), depth.value_or(10.0f));
+                prim.set_function("plane", [](sol::optional<float> width, sol::optional<float> depth) -> ModelAsset * {
+                    ModelAsset *m = Primitives::CreatePlane(width.value_or(10.0f), depth.value_or(10.0f));
                     AddModelToScene(m);
                     return m;
                 });
-                prim.set_function("cylinder", [](sol::optional<float> radius, sol::optional<float> height) -> Model * {
-                    Model *m = Primitives::CreateCylinder(radius.value_or(1.0f), height.value_or(2.0f));
+                prim.set_function("cylinder", [](sol::optional<float> radius, sol::optional<float> height) -> ModelAsset * {
+                    ModelAsset *m = Primitives::CreateCylinder(radius.value_or(1.0f), height.value_or(2.0f));
                     AddModelToScene(m);
                     return m;
                 });
-                prim.set_function("cone", [](sol::optional<float> radius, sol::optional<float> height) -> Model * {
-                    Model *m = Primitives::CreateCone(radius.value_or(1.0f), height.value_or(2.0f));
+                prim.set_function("cone", [](sol::optional<float> radius, sol::optional<float> height) -> ModelAsset * {
+                    ModelAsset *m = Primitives::CreateCone(radius.value_or(1.0f), height.value_or(2.0f));
                     AddModelToScene(m);
                     return m;
                 });
-                prim.set_function("quad", [](sol::optional<float> width, sol::optional<float> height) -> Model * {
-                    Model *m = Primitives::CreateQuad(width.value_or(1.0f), height.value_or(1.0f));
+                prim.set_function("quad", [](sol::optional<float> width, sol::optional<float> height) -> ModelAsset * {
+                    ModelAsset *m = Primitives::CreateQuad(width.value_or(1.0f), height.value_or(1.0f));
                     AddModelToScene(m);
                     return m;
                 }); });

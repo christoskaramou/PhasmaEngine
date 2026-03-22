@@ -3,6 +3,7 @@
 #include <string>
 #include <vector>
 #include <functional>
+#include <unordered_map>
 #include <shared_mutex>
 
 namespace pagent
@@ -33,6 +34,7 @@ namespace pagent
         std::vector<VectorEntry> ExtractByFile(const std::string &file);
 
         bool HasFileWithTimestamp(const std::string &file, const std::string &timestamp) const;
+        std::unordered_map<std::string, std::string> BuildFileTimestampMap() const;
         std::vector<SearchResult> Search(const std::vector<float> &query, int top_k = 5, float min_score = 0.3f) const;
 
         // Search with multiple embedding queries in parallel. Each entry's score is the

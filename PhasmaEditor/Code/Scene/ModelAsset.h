@@ -12,10 +12,8 @@ namespace pe
 
     struct MeshInfo
     {
-        const size_t dataSize = sizeof(mat4) * 4;     // transform, previous transform, material factors (2x)
         uint32_t vertexOffset = 0, verticesCount = 0; // offset and count in used vertex buffer
         uint32_t indexOffset = 0, indicesCount = 0;   // offset and count in used index buffer
-        uint32_t indirectIndex = 0;                   // index of the indirect command of the mesh in the indirect buffer
         uint32_t positionsOffset = 0;
         size_t aabbVertexOffset = 0;
         uint32_t aabbColor = 0;
@@ -27,55 +25,39 @@ namespace pe
         uint32_t textureMask = 0;
 
         mat4 materialFactors[2] = {mat4(1.f), mat4(1.f)};
-
-    private:
-        friend class Scene;
-
-        // indices in the image views array in shader
-        // 0 = Base Color
-        // 1 = Metallic Roughness
-        // 2 = Normal
-        // 3 = Occlusion
-        // 4 = Emissive
-        uint32_t viewsIndex[5] = {0, 0, 0, 0, 0}; // Updated in Scene::UpdateImageViews
     };
 
     struct NodeInfo
     {
-        AABB worldBoundingBox;
         int parent = -1;
         std::vector<int> children;
         mat4 localMatrix;
-        size_t dataOffset = static_cast<size_t>(-1);
-        uint32_t indirectIndex = 0;
 
-        struct UBO
+        std::string name;
+    };
+
+    class ModelAsset : public Resource
+    {
+    public:
+        struct NodeGpuData
         {
             mat4 worldMatrix = mat4(1.f);
             mat4 previousWorldMatrix = mat4(1.f);
             mat4 materialFactors[2] = {mat4(1.f), mat4(1.f)};
-        } ubo;
+        };
 
-        bool dirty = false;
-        std::vector<bool> dirtyUniforms;
-        std::string name;
-        int instanceIndex = -1; // Cache for TLAS update
-    };
-
-    class Model : public Resource
-    {
-    public:
-        Model();
-        virtual ~Model();
+        ModelAsset();
+        virtual ~ModelAsset();
 
         virtual void Load() override {}
         virtual void Unload() override;
 
         // Factory method to load models based on file extension
-        static Model *Load(const std::filesystem::path &file);
+        static ModelAsset *Load(const std::filesystem::path &file);
         static void DestroyDefaults();
 
         // Common interface methods
+        int CreateNode(const std::string &name, int parentIndex = -1, const mat4 &localMatrix = mat4(1.f), int meshIndex = -1);
         void MarkDirty(int node);
         void UpdateNodeMatrices();
         void ReparentNode(int nodeIndex, int newParentIndex);
@@ -102,19 +84,24 @@ namespace pe
 
         const std::vector<MeshInfo> &GetMeshInfos() const { return m_meshInfos; }
         const std::vector<NodeInfo> &GetNodeInfos() const { return m_nodeInfos; }
-        std::vector<MeshInfo> &GetMeshInfos() { return m_meshInfos; }
-        std::vector<NodeInfo> &GetNodeInfos() { return m_nodeInfos; }
 
         mat4 &GetMatrix() { return m_matrix; }
-        bool &GetDirtyNodes() { return m_dirtyNodes; }
-        bool IsMoved() { return !m_nodesMoved.empty(); }
-        std::vector<int> &GetNodesMoved() { return m_nodesMoved; }
-        void ClearNodesMoved() { m_nodesMoved.clear(); }
-        std::vector<bool> &GetDirtyUniforms() { return m_dirtyUniforms; }
+        const mat4 &GetMatrix() const { return m_matrix; }
+        void SetMatrix(const mat4 &matrix, bool markDirty = true);
+        bool HasDirtyNodes() const { return m_dirtyNodes; }
+        void SetDirtyNodes(bool dirty) { m_dirtyNodes = dirty; }
+        bool HasMovedNodes() const { return !m_nodesMoved.empty(); }
+        const std::vector<int> &GetMovedNodes() const { return m_nodesMoved; }
+        void ClearMovedNodes() { m_nodesMoved.clear(); }
+        void MarkAllUniformsDirty();
+        bool IsUniformDirty(uint32_t frameIndex) const;
+        void SetUniformDirty(uint32_t frameIndex, bool dirty);
 
         uint32_t GetVerticesCount() const { return m_verticesCount; }
         uint32_t GetIndicesCount() const { return m_indicesCount; }
         uint32_t GetMeshCount() const { return m_meshCount; }
+        int GetRootNodeIndex() const;
+        static constexpr size_t GetNodeGpuDataSize() { return sizeof(NodeGpuData); }
 
         const std::string &GetLabel() const { return m_label; }
         const std::filesystem::path &GetFilePath() const { return m_filePath; }
@@ -122,9 +109,39 @@ namespace pe
         const std::string &GetPrimitiveType() const { return m_primitiveType; }
         void SetPrimitiveType(const std::string &type) { m_primitiveType = type; }
         bool IsPrimitive() const { return !m_primitiveType.empty(); }
+        void SetNodeName(int nodeIndex, const std::string &name);
+        const std::string &GetNodeName(int nodeIndex) const;
+        NodeInfo *GetNodeInfo(int nodeIndex);
+        const NodeInfo *GetNodeInfo(int nodeIndex) const;
+        const NodeGpuData *GetNodeGpuData(int nodeIndex) const;
+        void SyncNodeGpuDataFromMesh(int nodeIndex);
+        const mat4 &GetNodeLocalMatrix(int nodeIndex) const;
+        void SetNodeLocalMatrix(int nodeIndex, const mat4 &localMatrix, bool markDirty = true);
+        const mat4 &GetNodeWorldMatrix(int nodeIndex) const;
+        int GetNodeParentIndex(int nodeIndex) const;
+        void SetNodeParentIndex(int nodeIndex, int parentIndex);
+        const std::vector<int> &GetNodeChildren(int nodeIndex) const;
+        void RebuildNodeChildrenFromParents();
+        const AABB &GetNodeWorldBoundingBox(int nodeIndex) const;
 
         int GetNodeCount() const { return static_cast<int>(m_nodeInfos.size()); }
+        int GetMeshInfoCount() const { return static_cast<int>(m_meshInfos.size()); }
+        MeshInfo *GetMeshInfo(int meshIndex);
+        const MeshInfo *GetMeshInfo(int meshIndex) const;
         int GetNodeMesh(int nodeIndex) const;
+        size_t GetNodeDataOffset(int nodeIndex) const;
+        void SetNodeDataOffset(int nodeIndex, size_t offset);
+        uint32_t GetNodeIndirectIndex(int nodeIndex) const;
+        void SetNodeIndirectIndex(int nodeIndex, uint32_t index);
+        int GetNodeInstanceIndex(int nodeIndex) const;
+        void SetNodeInstanceIndex(int nodeIndex, int instanceIndex);
+        bool IsNodeDirty(int nodeIndex) const;
+        void SetNodeDirty(int nodeIndex, bool dirty);
+        void MarkNodeUniformsDirty(int nodeIndex);
+        bool IsNodeUniformDirty(int nodeIndex, uint32_t frameIndex) const;
+        void SetNodeUniformDirty(int nodeIndex, uint32_t frameIndex, bool dirty);
+        uint32_t GetMeshImageViewIndex(int meshIndex, int slot) const;
+        void SetMeshImageViewIndex(int meshIndex, int slot, uint32_t imageViewIndex);
 
         struct DefaultResources
         {
@@ -142,23 +159,35 @@ namespace pe
 
     protected:
         friend class Scene;
-        friend class DepthPass;
-        friend class GbufferOpaquePass;
-        friend class GbufferTransparentPass;
-        friend class ShadowPass;
-        friend class AabbsPass;
         friend class Primitives;
 
         virtual void UpdateNodeMatrix(int node);
         static constexpr uint32_t TextureBit(TextureType type) { return 1u << static_cast<uint32_t>(type); }
 
         void ResetResources(CommandBuffer *cmd);
+        void ResetRuntimeState();
 
         // Resource ownership helpers:
-        // - owned resources are destroyed in ~Model()
+        // - owned resources are destroyed in ~ModelAsset()
         // - shared resources are NOT destroyed (e.g. default textures/sampler)
         void AddImage(Image *image, bool owned);
         void AddSampler(Sampler *sampler, bool owned);
+
+        struct MeshRuntimeInfo
+        {
+            uint32_t imageViewIndices[5] = {0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF};
+        };
+
+        struct NodeRuntimeInfo
+        {
+            size_t dataOffset = static_cast<size_t>(-1);
+            uint32_t indirectIndex = 0;
+            int instanceIndex = -1;
+            AABB worldBoundingBox;
+            NodeGpuData gpuData;
+            bool dirty = false;
+            std::vector<bool> dirtyUniforms;
+        };
 
         std::atomic_bool m_render = false;
         size_t m_id;
@@ -169,7 +198,9 @@ namespace pe
         std::unordered_set<Sampler *> m_sharedSamplers{};
 
         std::vector<MeshInfo> m_meshInfos{};
+        std::vector<MeshRuntimeInfo> m_meshRuntimeInfos{};
         std::vector<NodeInfo> m_nodeInfos{};
+        std::vector<NodeRuntimeInfo> m_nodeRuntimeInfos{};
         std::vector<int> m_nodeToMesh{};
 
         std::vector<Vertex> m_vertices;

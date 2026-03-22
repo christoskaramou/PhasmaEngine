@@ -102,6 +102,7 @@ namespace pe
         void SaveEditorConfig();
         void LoadEditorConfig();
         void LoadAgentConfig();
+        void EnsureCodebaseStoreLoaded();
 
         std::atomic<bool> m_ragRequestedEnabled{true};
         int m_embeddingProviderKind = -1; // -1 = none, matches pagent::EmbeddingProviderKind
@@ -147,6 +148,8 @@ namespace pe
         std::shared_ptr<std::atomic<bool>> m_codebaseAlive = std::make_shared<std::atomic<bool>>(true);
         pagent::CodebaseContext m_codebase;
         std::string m_codebaseStorePath;
+        bool m_codebaseStoreLoadRequested = false;
+        bool m_mcpStartEnabled = false;
 
         // Codebase indexing state
         std::atomic<bool> m_isIndexing{false};

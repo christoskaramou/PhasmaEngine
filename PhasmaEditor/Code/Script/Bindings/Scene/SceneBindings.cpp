@@ -1,6 +1,6 @@
 #include "Script/ScriptSystem.h"
 #include "Scene/Scene.h"
-#include "Scene/Model.h"
+#include "Scene/ModelAsset.h"
 #include "Scene/SelectionManager.h"
 #include "Camera/Camera.h"
 #include "Systems/RendererSystem.h"
@@ -30,7 +30,7 @@ namespace pe
                     auto *r = GetGlobalSystem<RendererSystem>();
                     if (r)
                     {
-                        std::vector<Model *> models;
+                        std::vector<ModelAsset *> models;
                         for (auto *m : r->GetScene().GetModels())
                             models.push_back(m);
                         if (!models.empty())
@@ -67,8 +67,8 @@ namespace pe
                     return sol::as_table(std::move(result));
                 });
 
-                scene.set_function("get_models", []() -> sol::as_table_t<std::vector<Model *>> {
-                    std::vector<Model *> result;
+                scene.set_function("get_models", []() -> sol::as_table_t<std::vector<ModelAsset *>> {
+                    std::vector<ModelAsset *> result;
                     auto *r = GetGlobalSystem<RendererSystem>();
                     if (r)
                     {
@@ -83,8 +83,8 @@ namespace pe
                     return r ? static_cast<int>(r->GetScene().GetModels().size()) : 0;
                 });
 
-                // find_model(label) -> Model* or nil - check before load_model to avoid duplicate loads and redundant events
-                scene.set_function("find_model", [](const std::string &label) -> Model * {
+                // find_model(label) -> ModelAsset* or nil - check before load_model to avoid duplicate loads and redundant events
+                scene.set_function("find_model", [](const std::string &label) -> ModelAsset * {
                     auto *r = GetGlobalSystem<RendererSystem>();
                     if (!r) return nullptr;
                     for (auto *m : r->GetScene().GetModels())
@@ -133,7 +133,7 @@ namespace pe
                     auto &sel = SelectionManager::Instance();
                     sol::table t = lua.create_table();
                     t["has_selection"] = sel.HasSelection();
-                    Model *m = sel.GetSelectedModel();
+                    ModelAsset *m = sel.GetSelectedModel();
                     if (m)
                         t["model"] = sol::make_object(lua, m);
                     else
@@ -152,12 +152,12 @@ namespace pe
                     return t;
                 });
 
-                selection.set_function("select_node", [](Model *model, int nodeIndex) {
+                selection.set_function("select_node", [](ModelAsset *model, int nodeIndex) {
                     if (!model) return;
                     SelectionManager::Instance().Select(model, nodeIndex, SelectionType::Node);
                 });
 
-                selection.set_function("select_mesh", [](Model *model, int nodeIndex) {
+                selection.set_function("select_mesh", [](ModelAsset *model, int nodeIndex) {
                     if (!model) return;
                     SelectionManager::Instance().Select(model, nodeIndex, SelectionType::Mesh);
                 });
@@ -180,14 +180,15 @@ namespace pe
                     if (sel.GetSelectionType() == SelectionType::Node ||
                         sel.GetSelectionType() == SelectionType::Mesh)
                     {
-                        Model *m = sel.GetSelectedModel();
+                        ModelAsset *m = sel.GetSelectedModel();
                         if (!m) return;
                         // Union of all node world bounding boxes
                         AABB bb{vec3(FLT_MAX), vec3(-FLT_MAX)};
-                        for (auto &ni : m->GetNodeInfos())
+                        for (int i = 0; i < m->GetNodeCount(); i++)
                         {
-                            bb.min = glm::min(bb.min, ni.worldBoundingBox.min);
-                            bb.max = glm::max(bb.max, ni.worldBoundingBox.max);
+                            const AABB &nodeBb = m->GetNodeWorldBoundingBox(i);
+                            bb.min = glm::min(bb.min, nodeBb.min);
+                            bb.max = glm::max(bb.max, nodeBb.max);
                         }
                         center = bb.GetCenter();
                         radius = glm::length(bb.GetSize()) * 0.5f;

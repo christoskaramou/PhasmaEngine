@@ -7,7 +7,7 @@
 #include "GUI/GUIState.h"
 #include "GUI/IconsFontAwesome.h"
 #include "Particles/ParticleManager.h"
-#include "Scene/Model.h"
+#include "Scene/ModelAsset.h"
 #include "Scene/Scene.h"
 #include "Scene/SelectionManager.h"
 #include "Systems/LightSystem.h"
@@ -188,8 +188,13 @@ namespace pe
                 ctx.nodeInfo = selection.GetSelectedNodeInfo();
                 if (ctx.nodeInfo)
                 {
-                    ctx.matrix = ctx.nodeInfo->ubo.worldMatrix;
-                    ctx.valid = true;
+                    ModelAsset *selectedModel = selection.GetSelectedModel();
+                    const int selectedNodeIndex = selection.GetSelectedNodeIndex();
+                    if (selectedModel && selectedNodeIndex >= 0)
+                    {
+                        ctx.matrix = selectedModel->GetNodeWorldMatrix(selectedNodeIndex);
+                        ctx.valid = true;
+                    }
                 }
             }
             else if (selection.GetSelectionType() == SelectionType::Light)
@@ -418,7 +423,7 @@ namespace pe
                 if (ctx.nodeInfo)
                 {
                     auto &selection = SelectionManager::Instance();
-                    Model *model = selection.GetSelectedModel();
+                    ModelAsset *model = selection.GetSelectedModel();
                     if (!model)
                         return;
 
@@ -429,18 +434,15 @@ namespace pe
                                 return;
 
                     int selectedNodeIndex = selection.GetSelectedNodeIndex();
-                    auto &nodeInfos = model->GetNodeInfos();
-
                     int parentIdx = ctx.nodeInfo->parent;
-                    glm::mat4 parentWorldMatrix = (parentIdx >= 0) ? nodeInfos[parentIdx].ubo.worldMatrix : model->GetMatrix();
+                    glm::mat4 parentWorldMatrix = (parentIdx >= 0) ? model->GetNodeWorldMatrix(parentIdx) : model->GetMatrix();
 
                     // Guard against singular matrix
                     float det = glm::determinant(parentWorldMatrix);
                     if (std::abs(det) < 1e-6f)
                         return;
 
-                    ctx.nodeInfo->localMatrix = glm::inverse(parentWorldMatrix) * newMatrix;
-                    model->MarkDirty(selectedNodeIndex);
+                    model->SetNodeLocalMatrix(selectedNodeIndex, glm::inverse(parentWorldMatrix) * newMatrix);
                 }
             }
         }
@@ -553,7 +555,7 @@ namespace pe
                         GUIState::s_modelLoading = true;
                         try
                         {
-                            if (Model *m = Model::Load(path))
+                            if (ModelAsset *m = ModelAsset::Load(path))
                                 EventSystem::PushEvent(EventType::ModelLoaded, m);
                         }
                         catch (const std::exception &e)
@@ -606,7 +608,7 @@ namespace pe
         struct Intersection
         {
             float t;
-            Model *model;
+            ModelAsset *model;
             int nodeIndex;
         };
         std::vector<Intersection> intersections;
@@ -617,14 +619,12 @@ namespace pe
             if (!model || !model->IsRenderReady())
                 continue;
 
-            const auto &nodeInfos = model->GetNodeInfos();
-            for (int i = 0; i < static_cast<int>(nodeInfos.size()); i++)
+            for (int i = 0; i < model->GetNodeCount(); i++)
             {
                 if (model->GetNodeMesh(i) < 0)
                     continue;
 
-                const NodeInfo &nodeInfo = nodeInfos[i];
-                const AABB &aabb = nodeInfo.worldBoundingBox;
+                const AABB &aabb = model->GetNodeWorldBoundingBox(i);
 
                 vec3 minBound = aabb.min;
                 vec3 maxBound = aabb.max;
@@ -669,7 +669,7 @@ namespace pe
         // Cyclic selection logic
         if (selection.HasSelection() && selection.GetSelectionType() == SelectionType::Node)
         {
-            Model *currentModel = selection.GetSelectedModel();
+            ModelAsset *currentModel = selection.GetSelectedModel();
             int currentNodeIndex = selection.GetSelectedNodeIndex();
 
             for (int i = 0; i < static_cast<int>(intersections.size()); i++)
@@ -708,8 +708,8 @@ namespace pe
         ImGuizmo::SetDrawlist(ImGui::GetWindowDrawList());
         ImGuizmo::SetRect(imageMin.x, imageMin.y, imageSize.x, imageSize.y);
 
-        // Disable interaction if Right Mouse Button is held down
-        const bool isRightClick = ImGui::IsMouseDown(ImGuiMouseButton_Right);
+        // Disable interaction if Right Mouse Button is held down inside this window
+        const bool isRightClick = ImGui::IsMouseDown(ImGuiMouseButton_Right) && ImGui::IsWindowFocused();
         ImGuizmo::Enable(!isRightClick);
 
         // --- Build matrices for ImGuizmo in RH space ---

@@ -3,19 +3,19 @@
 
 namespace pe
 {
-    class Model;
+    class ModelAsset;
 
     class Primitives
     {
     public:
-        static Model *CreatePlane(float width = 10.0f, float depth = 10.0f);
-        static Model *CreateCube(float size = 1.0f);
-        static Model *CreateSphere(float radius = 1.0f, int slices = 32, int stacks = 32);
-        static Model *CreateCylinder(float radius = 1.0f, float height = 2.0f, int slices = 32);
-        static Model *CreateCone(float radius = 1.0f, float height = 2.0f, int slices = 32);
-        static Model *CreateQuad(float width = 1.0f, float height = 1.0f); // Screen facing
+        static ModelAsset *CreatePlane(float width = 10.0f, float depth = 10.0f);
+        static ModelAsset *CreateCube(float size = 1.0f);
+        static ModelAsset *CreateSphere(float radius = 1.0f, int slices = 32, int stacks = 32);
+        static ModelAsset *CreateCylinder(float radius = 1.0f, float height = 2.0f, int slices = 32);
+        static ModelAsset *CreateCone(float radius = 1.0f, float height = 2.0f, int slices = 32);
+        static ModelAsset *CreateQuad(float width = 1.0f, float height = 1.0f); // Screen facing
 
     private:
-        static Model *CreatePrimitiveModel(const std::vector<Vertex> &vertices, const std::vector<uint32_t> &indices);
+        static ModelAsset *CreatePrimitiveModel(const std::vector<Vertex> &vertices, const std::vector<uint32_t> &indices);
     };
 } // namespace pe

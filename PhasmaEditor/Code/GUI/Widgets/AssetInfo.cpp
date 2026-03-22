@@ -1,7 +1,7 @@
 #include "AssetInfo.h"
 #include "GUI/GUIState.h"
 #include "GUI/Helpers.h"
-#include "Scene/Model.h"
+#include "Scene/ModelAsset.h"
 
 namespace pe
 {
@@ -9,8 +9,8 @@ namespace pe
     {
         switch (type)
         {
-        case AssetPreviewType::Model:
-            return "Model";
+        case AssetPreviewType::ModelAsset:
+            return "ModelAsset";
         case AssetPreviewType::Script:
             return "Script";
         case AssetPreviewType::Shader:
@@ -54,14 +54,14 @@ namespace pe
                     GUIState::OpenExternalPath(folder);
             }
 
-            if (GUIState::s_assetPreview.type == AssetPreviewType::Model)
+            if (GUIState::s_assetPreview.type == AssetPreviewType::ModelAsset)
             {
                 ImGui::SameLine();
                 const bool canLoad = !GUIState::s_modelLoading;
                 if (!canLoad)
                     ImGui::BeginDisabled();
 
-                if (ImGui::Button("Load Model"))
+                if (ImGui::Button("Load ModelAsset"))
                 {
                     // Use u8path to properly interpret UTF-8 string as path on Windows
                     std::filesystem::path path(reinterpret_cast<const char8_t *>(GUIState::s_assetPreview.fullPath.c_str()));
@@ -70,7 +70,7 @@ namespace pe
                         GUIState::s_modelLoading = true;
                         try
                         {
-                            if (Model *m = Model::Load(path))
+                            if (ModelAsset *m = ModelAsset::Load(path))
                                 EventSystem::PushEvent(EventType::ModelLoaded, m);
                         }
                         catch (const std::exception &e)

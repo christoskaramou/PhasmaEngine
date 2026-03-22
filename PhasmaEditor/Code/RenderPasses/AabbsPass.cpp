@@ -6,7 +6,7 @@
 #include "API/RHI.h"
 #include "API/Shader.h"
 #include "Camera/Camera.h"
-#include "Scene/Model.h"
+#include "Scene/ModelAsset.h"
 #include "Scene/Scene.h"
 #include "ShadowPass.h"
 #include "Systems/RendererSystem.h"
@@ -84,21 +84,24 @@ namespace pe
         {
             for (auto &drawInfo : drawInfos)
             {
-                Model &model = *drawInfo.model;
+                ModelAsset &model = *drawInfo.model;
 
                 int node = drawInfo.node;
                 int mesh = model.GetNodeMesh(node);
                 if (mesh < 0)
                     continue;
 
-                NodeInfo &nodeInfo = model.GetNodeInfos()[node];
-                MeshInfo &meshInfo = model.GetMeshInfos()[mesh];
-                constants.meshIndex = GetUboDataOffset(nodeInfo.dataOffset);
-                constants.color = meshInfo.aabbColor;
+                NodeInfo *nodeInfo = model.GetNodeInfo(node);
+                MeshInfo *meshInfo = model.GetMeshInfo(mesh);
+                if (!nodeInfo || !meshInfo)
+                    continue;
+
+                constants.meshIndex = GetUboDataOffset(model.GetNodeDataOffset(node));
+                constants.color = meshInfo->aabbColor;
 
                 cmd->SetConstants(constants);
                 cmd->PushConstants();
-                cmd->DrawIndexed(24, 1, 0, static_cast<int>(meshInfo.aabbVertexOffset), 0);
+                cmd->DrawIndexed(24, 1, 0, static_cast<int>(meshInfo->aabbVertexOffset), 0);
             }
         };
 

@@ -10,58 +10,6 @@ Namespace: `pagent`. Headers: `PhasmaAgent/include/PhasmaAgent/`.
 
 ---
 
-## Directory Map
-
-```
-PhasmaAgent/
-├── include/PhasmaAgent/
-│   ├── Agent.h             # Public API — Agent, AgentConfig, ToolDefinition, events, providers
-│   ├── AgentUtils.h        # Inline helpers: ExtractArgStr/Int/Array, JsonStr/Obj, IsPathSafe, Base64
-│   ├── BM25Index.h         # Keyword search index (camelCase + snake_case tokenization)
-│   ├── VectorStore.h       # Embedding vector store (cosine similarity)
-│   ├── IncludeGraph.h      # C++ include dependency graph
-│   ├── ASTChunker.h        # C++ source → logical code chunks for indexing
-│   ├── CodebaseIndexer.h   # Indexes source dirs into BM25 + VectorStore
-│   ├── RepoMap.h           # Compact codebase overview for system prompt (~1K tokens)
-│   ├── OpenAIEmbedding.h   # OpenAI text-embedding-* provider
-│   ├── GoogleEmbedding.h   # Gemini embedding provider
-│   ├── OllamaEmbedding.h   # Local Ollama embedding provider
-│   ├── CodebaseContext.h   # Owns VectorStore + BM25Index + IncludeGraph + async status checks
-│   ├── EmbeddingUtils.h    # CreateEmbeddingProvider(kind, model, key) factory
-│   ├── RagUtils.h          # Hybrid BM25 + vector retrieval helpers
-│   ├── ProviderUtils.h     # Environment variable reading helpers
-│   └── OllamaModelUtils.h  # Ollama model pull/unload helpers
-└── src/
-    ├── Agent.cpp           # Agent::Send, Poll, ForceCompact, provider factory
-    ├── AgentImpl.h/.cpp    # Pimpl implementation
-    ├── RequestWorker.h/.cpp# Background thread: HTTP request + SSE stream + tool loop
-    ├── ConversationHistory.h/.cpp  # History management, trim, compact
-    ├── AnthropicBackend.h/.cpp     # Claude API (SSE streaming)
-    ├── OpenAIBackend.h/.cpp        # OpenAI / Ollama compatible API
-    ├── GoogleBackend.h/.cpp        # Gemini API (SSE streaming)
-    ├── StreamParser.h/.cpp         # SSE event parsing
-    ├── ToolRegistry.h/.cpp         # Tool registration + dispatch
-    ├── EventQueue.h/.cpp           # Thread-safe event queue (worker → main thread)
-    ├── BM25Index.cpp               # BM25 + SearchMulti (parallel)
-    ├── VectorStore.cpp             # CosineSimilarity + SearchMulti (parallel)
-    ├── ASTChunker.cpp              # Heuristic C++ chunking
-    ├── CodebaseIndexer.cpp         # Directory walker + indexer
-    ├── IncludeGraph.cpp
-    ├── RepoMap.cpp
-    ├── ModelRouter.cpp             # QueryComplexity classification
-    ├── ImageDescriber.cpp          # Vision fallback via Gemini
-    ├── OpenAIEmbedding.cpp
-    ├── GoogleEmbedding.cpp
-    ├── OllamaEmbedding.cpp
-    ├── CodebaseContext.cpp
-    ├── EmbeddingUtils.cpp
-    ├── RagUtils.cpp
-    ├── ProviderUtils.cpp
-    └── OllamaModelUtils.cpp
-```
-
----
-
 ## Public API Overview
 
 ### Creating an Agent

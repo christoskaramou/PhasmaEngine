@@ -9,7 +9,7 @@ namespace pe
 
     class CommandBuffer;
     class Image;
-    class Model;
+    class ModelAsset;
 
     struct LuaImage
     {
@@ -25,12 +25,12 @@ namespace pe
     {
         int total = 0;
         int completed = 0;
-        std::vector<Model *> models;
+        std::vector<ModelAsset *> models;
     };
 
     struct PendingAsyncLoad
     {
-        std::shared_future<Model *> future;
+        std::shared_future<ModelAsset *> future;
         sol::function callback;
         // For batch loading (load_models)
         std::shared_ptr<BatchLoadState> batchState;

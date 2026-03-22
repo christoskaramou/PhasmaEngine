@@ -1,6 +1,6 @@
 #include "TransformWidget.h"
 #include "GUI/IconsFontAwesome.h"
-#include "Scene/Model.h"
+#include "Scene/ModelAsset.h"
 #include "Scene/SelectionManager.h"
 #include "TransformWidget.h"
 #include "glm/gtx/matrix_decompose.hpp"
@@ -56,7 +56,14 @@ namespace pe
         memcpy(buffer, node->name.c_str(), std::min(node->name.length(), sizeof(buffer) - 1));
         if (ImGui::InputText("Name", buffer, 256))
         {
-            node->name = buffer;
+            auto &selection = SelectionManager::Instance();
+            ModelAsset *model = selection.GetSelectedModel();
+            const int nodeIndex = selection.GetSelectedNodeIndex();
+
+            if (model && nodeIndex >= 0)
+                model->SetNodeName(nodeIndex, buffer);
+            else
+                node->name = buffer;
         }
 
         if (ImGui::BeginTable("NodeInfoTypes", 2, ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg))
@@ -73,37 +80,17 @@ namespace pe
             ImGui::TableSetColumnIndex(1);
             ImGui::Text("%zu", node->children.size());
 
-            ImGui::TableNextRow();
-            ImGui::TableSetColumnIndex(0);
-            ImGui::Text("Data Offset");
-            ImGui::TableSetColumnIndex(1);
-            ImGui::Text("%zu", node->dataOffset);
-
-            ImGui::TableNextRow();
-            ImGui::TableSetColumnIndex(0);
-            ImGui::Text("Indirect Index");
-            ImGui::TableSetColumnIndex(1);
-            ImGui::Text("%u", node->indirectIndex);
-
-            ImGui::TableNextRow();
-            ImGui::TableSetColumnIndex(0);
-            ImGui::Text("Instance Index");
-            ImGui::TableSetColumnIndex(1);
-            ImGui::Text("%d", node->instanceIndex);
-
-            ImGui::TableNextRow();
-            ImGui::TableSetColumnIndex(0);
-            ImGui::Text("Is Dirty");
-            ImGui::TableSetColumnIndex(1);
-            ImGui::Text("%s", node->dirty ? "true" : "false");
-
             ImGui::EndTable();
         }
 
         if (ImGui::CollapsingHeader("World AABB"))
         {
-            ImGui::LabelText("Min", "(%.2f, %.2f, %.2f)", node->worldBoundingBox.min.x, node->worldBoundingBox.min.y, node->worldBoundingBox.min.z);
-            ImGui::LabelText("Max", "(%.2f, %.2f, %.2f)", node->worldBoundingBox.max.x, node->worldBoundingBox.max.y, node->worldBoundingBox.max.z);
+            auto &selection = SelectionManager::Instance();
+            const ModelAsset *selectedModel = selection.GetSelectedModel();
+            const int selectedNodeIndex = selection.GetSelectedNodeIndex();
+            const AABB &worldBounds = (selectedModel && selectedNodeIndex >= 0) ? selectedModel->GetNodeWorldBoundingBox(selectedNodeIndex) : AABB{};
+            ImGui::LabelText("Min", "(%.2f, %.2f, %.2f)", worldBounds.min.x, worldBounds.min.y, worldBounds.min.z);
+            ImGui::LabelText("Max", "(%.2f, %.2f, %.2f)", worldBounds.max.x, worldBounds.max.y, worldBounds.max.z);
         }
     }
 
@@ -169,14 +156,17 @@ namespace pe
         {
             float matrix[16];
             ImGuizmo::RecomposeMatrixFromComponents(t, value_ptr(eulerDeg), s, matrix);
-            node->localMatrix = make_mat4(matrix);
 
             auto &selection = SelectionManager::Instance();
-            Model *model = selection.GetSelectedModel();
+            ModelAsset *model = selection.GetSelectedModel();
             if (model)
             {
                 const int nodeIndex = selection.GetSelectedNodeIndex();
-                model->MarkDirty(nodeIndex);
+                model->SetNodeLocalMatrix(nodeIndex, make_mat4(matrix));
+            }
+            else
+            {
+                node->localMatrix = make_mat4(matrix);
             }
         }
     }
@@ -260,7 +250,7 @@ namespace pe
     void TransformWidget::ApplyLocalTransform(NodeInfo *nodeInfo, const vec3 &pos, const quat &rot, const vec3 &scl)
     {
         auto &selection = SelectionManager::Instance();
-        Model *model = selection.GetSelectedModel();
+        ModelAsset *model = selection.GetSelectedModel();
         if (!model)
             return;
 
@@ -276,9 +266,9 @@ namespace pe
         mat4 translationMat = translate(mat4(1.0f), pos);
         mat4 rotationMat = mat4(rot);
         mat4 scaleMat = scale(mat4(1.0f), scl);
-        nodeInfo->localMatrix = translationMat * rotationMat * scaleMat;
+        const mat4 localMatrix = translationMat * rotationMat * scaleMat;
 
         const int nodeIndex = selection.GetSelectedNodeIndex();
-        model->MarkDirty(nodeIndex);
+        model->SetNodeLocalMatrix(nodeIndex, localMatrix);
     }
 } // namespace pe

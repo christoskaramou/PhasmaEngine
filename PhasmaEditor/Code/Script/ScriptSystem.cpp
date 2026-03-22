@@ -1,6 +1,6 @@
 #include "ScriptSystem.h"
 #include "GUI/GUIState.h"
-#include "Scene/Model.h"
+#include "Scene/ModelAsset.h"
 #include "Systems/RendererSystem.h"
 #include "Base/FileWatcher.h"
 #include "Base/Timer.h"
@@ -114,7 +114,7 @@ namespace pe
         // First pass: collect all ready models
         struct CompletedLoad
         {
-            Model *model;
+            ModelAsset *model;
             sol::function callback;
             std::shared_ptr<BatchLoadState> batchState;
             sol::function batchCallback;

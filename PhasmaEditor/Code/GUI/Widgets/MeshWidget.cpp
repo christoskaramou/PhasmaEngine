@@ -5,7 +5,7 @@
 #include "API/RHI.h"
 #include "FileSelector.h"
 #include "GUI/GUI.h"
-#include "Scene/Model.h"
+#include "Scene/ModelAsset.h"
 #include "Scene/SelectionManager.h"
 #include "Systems/RendererSystem.h"
 #include "imgui/imgui.h"
@@ -30,7 +30,7 @@ namespace pe
     {
     }
 
-    void MeshWidget::DrawEmbed(MeshInfo *mesh, Model *model)
+    void MeshWidget::DrawEmbed(MeshInfo *mesh, ModelAsset *model)
     {
         if (!mesh || !model)
             return;
@@ -43,7 +43,7 @@ namespace pe
             ImGui::TableSetColumnIndex(0);
             ImGui::Text("Data Size");
             ImGui::TableSetColumnIndex(1);
-            ImGui::Text("%zu", mesh->dataSize);
+            ImGui::Text("%zu", ModelAsset::GetNodeGpuDataSize());
 
             ImGui::TableNextRow();
             ImGui::TableSetColumnIndex(0);
@@ -68,12 +68,6 @@ namespace pe
             ImGui::Text("Indices Count");
             ImGui::TableSetColumnIndex(1);
             ImGui::Text("%u", mesh->indicesCount);
-
-            ImGui::TableNextRow();
-            ImGui::TableSetColumnIndex(0);
-            ImGui::Text("Indirect Index");
-            ImGui::TableSetColumnIndex(1);
-            ImGui::Text("%u", mesh->indirectIndex);
 
             ImGui::TableNextRow();
             ImGui::TableSetColumnIndex(0);
@@ -119,7 +113,7 @@ namespace pe
         DrawTextureInfo(mesh, model);
     }
 
-    void MeshWidget::DrawMaterialInfo(MeshInfo *mesh, Model *model)
+    void MeshWidget::DrawMaterialInfo(MeshInfo *mesh, ModelAsset *model)
     {
         if (ImGui::CollapsingHeader("Material", ImGuiTreeNodeFlags_DefaultOpen))
         {
@@ -228,7 +222,7 @@ namespace pe
         }
     }
 
-    void MeshWidget::DrawTextureInfo(MeshInfo *mesh, Model *model)
+    void MeshWidget::DrawTextureInfo(MeshInfo *mesh, ModelAsset *model)
     {
         if (ImGui::CollapsingHeader("Textures", ImGuiTreeNodeFlags_DefaultOpen))
         {
@@ -405,14 +399,13 @@ namespace pe
 
         return m_textureDescriptors[image];
     }
-    void MeshWidget::PropagateMeshChange(MeshInfo *mesh, Model *model)
+    void MeshWidget::PropagateMeshChange(MeshInfo *mesh, ModelAsset *model)
     {
-        const auto &meshInfos = model->GetMeshInfos();
         int meshIndex = -1;
 
-        for (int i = 0; i < static_cast<int>(meshInfos.size()); i++)
+        for (int i = 0; i < model->GetMeshInfoCount(); i++)
         {
-            if (&meshInfos[i] == mesh)
+            if (model->GetMeshInfo(i) == mesh)
             {
                 meshIndex = i;
                 break;
