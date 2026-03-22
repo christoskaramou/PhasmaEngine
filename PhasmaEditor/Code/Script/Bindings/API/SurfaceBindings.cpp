@@ -1,4 +1,3 @@
-#if defined(PE_SCRIPTS)
 #include "Script/ScriptSystem.h"
 #include "Script/Bindings/BindingUtils.h"
 #include "API/Surface.h"
@@ -69,4 +68,3 @@ namespace pe
         }
     } s_surfaceBindings;
 } // namespace pe
-#endif

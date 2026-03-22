@@ -1,8 +1,6 @@
-#if defined(PE_SCRIPTS)
 #include "Script/ScriptSystem.h"
 #include "GUI/GUIState.h"
 #include "API/RHI.h"
-#include <SDL.h>
 
 namespace pe
 {
@@ -95,4 +93,3 @@ namespace pe
         }
     } s_inputBindings;
 } // namespace pe
-#endif

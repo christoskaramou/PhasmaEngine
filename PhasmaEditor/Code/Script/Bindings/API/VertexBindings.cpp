@@ -1,4 +1,3 @@
-#if defined(PE_SCRIPTS)
 #include "Script/ScriptSystem.h"
 #include "API/Vertex.h"
 
@@ -108,4 +107,3 @@ namespace pe
         }
     } s_vertexBindings;
 } // namespace pe
-#endif

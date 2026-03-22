@@ -1,4 +1,3 @@
-#if defined(PE_SCRIPTS)
 #pragma once
 
 namespace pe
@@ -123,4 +122,3 @@ namespace pe
         }
     }
 } // namespace pe
-#endif

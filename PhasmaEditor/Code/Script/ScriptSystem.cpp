@@ -1,4 +1,3 @@
-#if defined(PE_SCRIPTS)
 #include "ScriptSystem.h"
 #include "GUI/GUIState.h"
 #include "Scene/Model.h"
@@ -444,4 +443,3 @@ namespace pe
             Reload();
     }
 } // namespace pe
-#endif

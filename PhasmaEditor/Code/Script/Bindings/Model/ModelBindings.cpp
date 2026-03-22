@@ -1,4 +1,3 @@
-#if defined(PE_SCRIPTS)
 #include "Script/ScriptSystem.h"
 #include "Scene/Model.h"
 #include "Scene/Primitives.h"
@@ -537,4 +536,3 @@ namespace pe
         }
     } s_modelBindings;
 } // namespace pe
-#endif

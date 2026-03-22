@@ -11,9 +11,7 @@
 #include "Systems/RendererSystem.h"
 #include "imgui/imgui_impl_sdl2.h"
 
-#if defined(PE_SCRIPTS)
 #include "Script/ScriptSystem.h"
-#endif
 
 namespace pe
 {
@@ -155,7 +153,6 @@ namespace pe
                     postProcessSystem->PollShaders(hash);
                     break;
                 }
-#if defined(PE_SCRIPTS)
                 case EventType::CompileScripts:
                 {
                     if (auto *ss = GetGlobalSystem<ScriptSystem>())
@@ -183,7 +180,6 @@ namespace pe
                     }
                     break;
                 }
-#endif
                 case EventType::PresentMode:
                 {
                     GlobalSettings &gSettings = Settings::Get<GlobalSettings>();

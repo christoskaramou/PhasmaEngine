@@ -1,4 +1,3 @@
-#if defined(PE_SCRIPTS)
 #include "Script/ScriptSystem.h"
 #include "Particles/ParticleManager.h"
 #include "Scene/Scene.h"
@@ -238,4 +237,3 @@ namespace pe
         }
     } s_particleBindings;
 } // namespace pe
-#endif

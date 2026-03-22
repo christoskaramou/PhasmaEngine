@@ -18,7 +18,7 @@ PhasmaEditor/Code/
 │   ├── RendererSystem.h/.cpp      # Coordinates render targets, render graph, frame sync
 │   ├── LightSystem.h/.cpp         # Directional + point lights, cascaded shadow maps
 │   ├── CameraSystem.h/.cpp        # Camera entity, view/proj, frustum culling
-│   └── ScriptManager.h/.cpp       # Lua script watcher + execution (PE_SCRIPTS)
+│   └── ScriptManager.h/.cpp       # Lua script watcher + execution
 ├── RenderPasses/
 │   ├── GBufferPass.h/.cpp         # Deferred GBuffer: albedo, normal, roughness/metallic
 │   ├── DepthPass.h/.cpp           # Pre-Z depth pass
@@ -176,9 +176,7 @@ Hot-reload: edit any `.hlsl` file while the editor runs → FileWatcher triggers
 
 ## GUI Rules (ImGui)
 
-- All ImGui code must be inside `#if !defined(PE_ANDROID)` ... `#endif`
-- ImGui is linked only for PhasmaEditor, not PhasmaCore or PhasmaAndroid
-- Do not call ImGui from any file that is also compiled into PhasmaAndroid
+- ImGui is linked only for PhasmaEditor, not PhasmaCore or PhasmaAgent
 
 ---
 

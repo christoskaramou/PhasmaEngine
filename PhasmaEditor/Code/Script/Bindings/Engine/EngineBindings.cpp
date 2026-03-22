@@ -1,4 +1,3 @@
-#if defined(PE_SCRIPTS)
 #include "Script/ScriptSystem.h"
 #include "GUI/GUIState.h"
 #include "GUI/GUI.h"
@@ -101,4 +100,3 @@ namespace pe
         }
     } s_engineBindings;
 } // namespace pe
-#endif

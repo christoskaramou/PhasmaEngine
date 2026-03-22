@@ -1,4 +1,3 @@
-#if defined(PE_SCRIPTS)
 #include "Script/ScriptSystem.h"
 #include "RenderPasses/LightPass.h"
 #include "RenderPasses/RayTracingPass.h"
@@ -158,4 +157,3 @@ namespace pe
         }
     } s_settingsBindings;
 } // namespace pe
-#endif

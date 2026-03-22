@@ -1,4 +1,3 @@
-#if defined(PE_SCRIPTS)
 #include "Script/ScriptSystem.h"
 #include "API/Debug.h"
 #include "API/Buffer.h"
@@ -75,4 +74,3 @@ namespace pe
         }
     } s_debugBindings;
 } // namespace pe
-#endif

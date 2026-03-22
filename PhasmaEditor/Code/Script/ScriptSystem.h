@@ -1,6 +1,5 @@
 #pragma once
 
-#if defined(PE_SCRIPTS)
 #include <sol/sol.hpp>
 #include <future>
 
@@ -84,4 +83,3 @@ namespace pe
         double m_scanTimer = 0.0;
     };
 } // namespace pe
-#endif

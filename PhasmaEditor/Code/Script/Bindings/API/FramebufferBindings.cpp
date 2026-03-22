@@ -1,4 +1,3 @@
-#if defined(PE_SCRIPTS)
 #include "Script/ScriptSystem.h"
 #include "API/Framebuffer.h"
 
@@ -21,4 +20,3 @@ namespace pe
         }
     } s_framebufferBindings;
 } // namespace pe
-#endif

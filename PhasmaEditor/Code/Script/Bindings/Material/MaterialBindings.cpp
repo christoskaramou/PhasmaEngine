@@ -1,4 +1,3 @@
-#if defined(PE_SCRIPTS)
 #include "Script/ScriptSystem.h"
 #include "Scene/Model.h"
 #include "Scene/Scene.h"
@@ -200,4 +199,3 @@ namespace pe
         }
     } s_materialBindings;
 } // namespace pe
-#endif

@@ -1,5 +1,5 @@
-#if defined(PE_SCRIPTS)
 #include "Script/ScriptSystem.h"
+
 namespace pe
 {
     static struct MathBindings
@@ -194,4 +194,3 @@ namespace pe
         }
     } s_mathBindings;
 } // namespace pe
-#endif

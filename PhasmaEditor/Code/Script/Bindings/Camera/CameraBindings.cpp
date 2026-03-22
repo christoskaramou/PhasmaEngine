@@ -1,4 +1,3 @@
-#if defined(PE_SCRIPTS)
 #include "Script/ScriptSystem.h"
 #include "Camera/Camera.h"
 #include "Systems/RendererSystem.h"
@@ -81,4 +80,3 @@ namespace pe
         }
     } s_cameraBindings;
 } // namespace pe
-#endif

@@ -4,6 +4,7 @@
 #include "API/RHI.h"
 #include "GUI/UndoRedo.h"
 #include "Scene/Model.h"
+#include "Script/ScriptSystem.h"
 #include "Systems/LightSystem.h"
 #include "Systems/PostProcessSystem.h"
 #include "Systems/RendererSystem.h"
@@ -13,9 +14,6 @@
 #include "imgui/imgui_impl_vulkan.h"
 #ifdef NDEBUG
 #include "Window/SplashScreen.h"
-#endif
-#if defined(PE_SCRIPTS)
-#include "Script/ScriptSystem.h"
 #endif
 
 namespace pe
@@ -41,7 +39,6 @@ namespace pe
                 FileWatcher::Add(file.path().string(), shaderCallback);
         }
 
-#if defined(PE_SCRIPTS)
         auto scriptCallback = [](size_t fileEvent)
         {
             EventSystem::PushEvent(fileEvent);
@@ -56,7 +53,7 @@ namespace pe
             }
         }
 
-#endif
+
         // Watch for external commands (file-based IPC)
         // Write script to command.lua, then write anything to command.run to trigger execution
         {
@@ -95,9 +92,7 @@ namespace pe
         CreateGlobalSystem<LightSystem>()->Init(cmd);
         CreateGlobalSystem<RendererSystem>()->Init(cmd);
         CreateGlobalSystem<PostProcessSystem>()->Init(cmd);
-#if defined(PE_SCRIPTS)
         CreateGlobalSystem<ScriptSystem>()->Init(nullptr);
-#endif
         Model::GetDefaultResources(cmd);
         cmd->End();
         queue->Submit(1, &cmd, nullptr, nullptr);
@@ -110,11 +105,9 @@ namespace pe
         for (uint32_t i = 0; i < RHII.GetSwapchainImageCount(); i++)
             Frame();
 
-#if defined(PE_SCRIPTS)
         // Call Lua init() after initial frames so all systems are ready
         if (auto *ss = GetGlobalSystem<ScriptSystem>())
             ss->CallInit();
-#endif
 
         // Reset undo/redo after all initialization (scripts, auto-loads, etc.)
         // so the post-init state is the clean baseline, not the pre-script state.

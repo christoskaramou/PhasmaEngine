@@ -1,4 +1,3 @@
-#if defined(PE_SCRIPTS)
 #include "Script/ScriptSystem.h"
 #include "Script/Bindings/BindingUtils.h"
 #include "API/Helpers.h"
@@ -97,4 +96,3 @@ namespace pe
         }
     } s_helpersBindings;
 } // namespace pe
-#endif

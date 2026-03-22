@@ -1,4 +1,3 @@
-#if defined(PE_SCRIPTS)
 #include "Script/ScriptSystem.h"
 #include "Scene/Scene.h"
 #include "Scene/Model.h"
@@ -248,4 +247,3 @@ namespace pe
         }
     } s_sceneBindings;
 } // namespace pe
-#endif

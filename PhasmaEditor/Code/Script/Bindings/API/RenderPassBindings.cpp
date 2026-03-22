@@ -1,4 +1,3 @@
-#if defined(PE_SCRIPTS)
 #include "Script/ScriptSystem.h"
 #include "API/RenderPass.h"
 
@@ -19,4 +18,3 @@ namespace pe
         }
     } s_renderPassBindings;
 } // namespace pe
-#endif

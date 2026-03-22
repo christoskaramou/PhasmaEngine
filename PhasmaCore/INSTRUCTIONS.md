@@ -29,7 +29,7 @@ PhasmaCore/Code/
 │   ├── EventSystem.h/.cpp        # Pub-sub event bus (std::any payloads)
 │   └── OrderedMap.h              # Deterministic-iteration map
 ├── Base/
-│   ├── Path.h/.cpp               # Path::Assets, Path::InitForAndroid()
+│   ├── Path.h/.cpp               # Path::Assets
 │   ├── Log.h/.cpp                # PE_INFO / PE_WARN / PE_ERROR macros
 │   ├── FileWatcher.h/.cpp        # File change detection → EventSystem
 │   └── Timer.h                   # FrameTimer, high-resolution timing

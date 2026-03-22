@@ -98,7 +98,7 @@ target_link_libraries(PhasmaEditor PRIVATE
     meshoptimizer
     Lua
 )
-target_compile_definitions(PhasmaEditor PRIVATE RAPIDJSON_HAS_STDSTRING=1 RAPIDJSON_NOMEMBERITERATORCLASS PE_SCRIPTS)
+target_compile_definitions(PhasmaEditor PRIVATE RAPIDJSON_HAS_STDSTRING=1 RAPIDJSON_NOMEMBERITERATORCLASS)
 
 # target_compile_options(PhasmaEditor PRIVATE -fsanitize=address)
 # target_link_options(PhasmaEditor PRIVATE -fsanitize=address)

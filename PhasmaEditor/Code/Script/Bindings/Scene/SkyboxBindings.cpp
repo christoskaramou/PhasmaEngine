@@ -1,4 +1,3 @@
-#if defined(PE_SCRIPTS)
 #include "Script/ScriptSystem.h"
 #include "Skybox/Skybox.h"
 #include "Systems/RendererSystem.h"
@@ -68,4 +67,3 @@ namespace pe
         }
     } s_skyboxBindings;
 } // namespace pe
-#endif

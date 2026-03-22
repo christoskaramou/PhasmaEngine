@@ -61,7 +61,6 @@ PhasmaEngine/
 ├── PhasmaAgent/              # Standalone AI agent library (no engine/Vulkan/ImGui deps)
 │   ├── include/PhasmaAgent/  # Public headers: Agent.h, BM25Index.h, VectorStore.h...
 │   └── src/                  # Provider backends, RequestWorker, indexing, embeddings
-├── PhasmaAndroid/            # Android shared lib — reuses PhasmaEditor, no GUI/App
 └── AI_CHANGELOG.md           # ← READ THIS FIRST — running log of AI-assisted changes
 ```
 
@@ -76,7 +75,6 @@ PhasmaEngine/
 | `PhasmaCore` | static lib | Engine core — Vulkan, ECS, base utilities |
 | `PhasmaEditor` | executable | Desktop editor (Windows/Linux) |
 | `PhasmaAgent` | static lib | Standalone AI agent (no engine deps) |
-| `PhasmaAndroid` | shared lib | Android renderer (no GUI/ImGui) |
 
 ### Key Singletons
 
@@ -339,19 +337,11 @@ Add explicit includes to all files under `PhasmaAgent/src/`.
 |---|---|
 | `PE_WIN32` | Windows |
 | `PE_LINUX` | Linux |
-| `PE_ANDROID` | Android (also sets `PE_LINUX`; uses SDL2 FetchContent; no DXC/shaderc; no GUI) |
 | `PE_DEBUG` | Debug build |
 | `PE_RELEASE` | Release build |
 | `PE_RELWITHDEBINFO` | RelWithDebInfo |
 | `PE_MINSIZEREL` | MinSizeRel |
 | `PE_TRACK_RESOURCES` | Always defined |
-
-### Android Specifics
-- SDL2 via FetchContent — headers at `SDL.h` (not `SDL2/SDL.h`)
-- SPIRV-Cross via FetchContent for shader reflection
-- Shaders must be pre-compiled SPIR-V (no DXC/shaderc at runtime)
-- GUI/ImGui excluded — guard with `#if !defined(PE_ANDROID)`
-- PhasmaAndroid globs PhasmaEditor sources, excluding `GUI/` and `App/`
 
 ---
 
@@ -362,8 +352,8 @@ Add explicit includes to all files under `PhasmaAgent/src/`.
 | Assimp | v6.0.4 | PhasmaEditor — model loading |
 | MeshOptimizer | v0.22 | PhasmaEditor — mesh optimization |
 | Jolt Physics | v5.2.0 | PhasmaCore — physics simulation |
-| SDL2 | release-2.30.9 | PhasmaCore (Android), PhasmaEditor |
-| SPIRV-Cross | sdk-1.3.296.0 | PhasmaCore (Android) |
+| SDL2 | release-2.30.9 | PhasmaCore, PhasmaEditor |
+| SPIRV-Cross | sdk-1.3.296.0 | PhasmaCore |
 | nlohmann/json | (pinned) | PhasmaAgent |
 | cpp-httplib | v0.28.0 | PhasmaAgent — HTTP client |
 
@@ -383,5 +373,3 @@ Add explicit includes to all files under `PhasmaAgent/src/`.
 - Adding `#include <std-header>` in `.cpp` under `PhasmaCore/` or `PhasmaEditor/` (PCH conflict)
 - Using raw Vulkan allocations instead of the `Buffer`/`Image`/`Sampler` wrappers
 - Adding binary library files manually instead of using FetchContent
-- Forgetting `#if !defined(PE_ANDROID)` guards around ImGui/GUI code
-- Including `dxcapi.h` or `shaderc` headers on Android

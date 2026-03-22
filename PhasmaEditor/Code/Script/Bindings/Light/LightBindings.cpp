@@ -1,4 +1,3 @@
-#if defined(PE_SCRIPTS)
 #include "Script/ScriptSystem.h"
 #include "Systems/LightSystem.h"
 
@@ -307,4 +306,3 @@ namespace pe
         }
     } s_lightBindings;
 } // namespace pe
-#endif

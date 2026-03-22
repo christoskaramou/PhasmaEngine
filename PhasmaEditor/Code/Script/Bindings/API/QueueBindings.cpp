@@ -1,4 +1,3 @@
-#if defined(PE_SCRIPTS)
 #include "Script/ScriptSystem.h"
 #include "API/Command.h"
 #include "API/Queue.h"
@@ -78,4 +77,3 @@ namespace pe
         }
     } s_queueBindings;
 } // namespace pe
-#endif

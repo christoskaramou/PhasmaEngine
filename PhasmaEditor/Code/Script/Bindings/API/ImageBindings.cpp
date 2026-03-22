@@ -1,4 +1,3 @@
-#if defined(PE_SCRIPTS)
 #include "Script/ScriptSystem.h"
 #include "Script/Bindings/BindingUtils.h"
 #include "API/Command.h"
@@ -421,4 +420,3 @@ namespace pe
         }
     } s_imageBindings;
 } // namespace pe
-#endif

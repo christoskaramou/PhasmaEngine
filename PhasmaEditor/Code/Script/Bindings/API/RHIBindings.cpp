@@ -1,4 +1,3 @@
-#if defined(PE_SCRIPTS)
 #include "Script/ScriptSystem.h"
 #include "API/Descriptor.h"
 #include "API/Queue.h"
@@ -169,4 +168,3 @@ namespace pe
         }
     } s_rhiBindings;
 } // namespace pe
-#endif

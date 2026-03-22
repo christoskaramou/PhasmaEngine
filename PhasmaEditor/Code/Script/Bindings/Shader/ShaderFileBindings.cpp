@@ -1,4 +1,3 @@
-#if defined(PE_SCRIPTS)
 #include "Script/ScriptSystem.h"
 #include "Script/Bindings/BindingUtils.h"
 
@@ -130,4 +129,3 @@ namespace pe
         }
     } s_shaderFileBindings;
 } // namespace pe
-#endif

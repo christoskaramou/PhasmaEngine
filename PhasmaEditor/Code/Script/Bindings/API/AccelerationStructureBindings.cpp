@@ -1,4 +1,3 @@
-#if defined(PE_SCRIPTS)
 #include "Script/ScriptSystem.h"
 #include "Script/Bindings/BindingUtils.h"
 #include "API/AccelerationStructure.h"
@@ -65,4 +64,3 @@ namespace pe
         }
     } s_accelerationStructureBindings;
 } // namespace pe
-#endif

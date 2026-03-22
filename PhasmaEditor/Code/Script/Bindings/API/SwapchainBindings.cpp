@@ -1,4 +1,3 @@
-#if defined(PE_SCRIPTS)
 #include "Script/ScriptSystem.h"
 #include "API/Image.h"
 #include "API/Semaphore.h"
@@ -27,4 +26,3 @@ namespace pe
         }
     } s_swapchainBindings;
 } // namespace pe
-#endif

@@ -1,7 +1,6 @@
 #include "Loading.h"
 #include "GUI/GUIState.h"
 #include "imgui/imgui.h"
-#include <SDL2/SDL.h>
 
 namespace pe
 {
