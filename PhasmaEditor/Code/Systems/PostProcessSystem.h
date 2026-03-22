@@ -10,7 +10,7 @@ namespace pe
         void Destroy() override;
 
         void Resize(uint32_t width, uint32_t height);
-        void PollShaders();
+        void PollShaders(std::optional<size_t> hash = std::nullopt);
 
         template <class T>
         T *GetEffect()

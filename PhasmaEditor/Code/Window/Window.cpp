@@ -147,8 +147,12 @@ namespace pe
                 }
                 case EventType::CompileShaders:
                 {
-                    rendererSystem->PollShaders();
-                    postProcessSystem->PollShaders();
+                    std::optional<size_t> hash = std::nullopt;
+                    if (event.payload.has_value() && event.payload.type() == typeid(size_t))
+                        hash = std::any_cast<size_t>(event.payload);
+
+                    rendererSystem->PollShaders(hash);
+                    postProcessSystem->PollShaders(hash);
                     break;
                 }
 #if defined(PE_SCRIPTS)

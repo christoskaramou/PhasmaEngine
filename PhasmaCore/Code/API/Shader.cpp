@@ -246,7 +246,7 @@ namespace pe
     {
         std::error_code ec;
         std::string path = std::filesystem::weakly_canonical(sourcePath, ec).generic_string();
-        
+
         PE_ERROR_IF(!FileWatcher::Get(path), "Shader file does not exist in FileWatcher!");
         m_pathID = StringHash(path);
         PE_INFO("[Shader] Init(hlsl) -> source='%s' | path='%s' | hash=%llu", sourcePath.c_str(), path.c_str(), static_cast<unsigned long long>(m_pathID));

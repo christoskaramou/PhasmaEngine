@@ -33,8 +33,7 @@ namespace pe
 
         auto shaderCallback = [](size_t fileEvent)
         {
-            EventSystem::PushEvent(fileEvent);
-            EventSystem::PushEvent(EventType::CompileShaders);
+            EventSystem::PushEvent(EventType::CompileShaders, fileEvent);
         };
         if (std::filesystem::exists(Path::Assets + "Shaders"))
         {

@@ -122,8 +122,7 @@ namespace pe
                     std::replace(resolvedPath.begin(), resolvedPath.end(), '\\', '/');
 
                     FileWatcher::Add(resolvedPath, [](size_t fileEvent) {
-                        EventSystem::PushEvent(fileEvent);
-                        EventSystem::PushEvent(EventType::CompileShaders);
+                        EventSystem::PushEvent(EventType::CompileShaders, fileEvent);
                     });
                     EventSystem::PushEvent(EventType::CompileShaders);
                     return true;

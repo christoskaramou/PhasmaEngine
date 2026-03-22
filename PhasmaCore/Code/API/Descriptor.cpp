@@ -14,7 +14,7 @@ namespace pe
                 if (bindingInfos[i].binding == binding)
                     return i;
             }
-            PE_WARN("[Descriptor] Binding not found");
+            PE_WARN("[Descriptor] Binding %u not found", binding);
             return -1;
         }
     } // namespace
@@ -193,6 +193,16 @@ namespace pe
         if (bindingIndex == -1)
             return;
 
+        const auto type = m_bindingInfos[bindingIndex].type;
+        if (type != vk::DescriptorType::eSampledImage &&
+            type != vk::DescriptorType::eStorageImage &&
+            type != vk::DescriptorType::eCombinedImageSampler &&
+            type != vk::DescriptorType::eInputAttachment)
+        {
+            PE_WARN("[Descriptor] Type mismatch: Binding %u is not an image type!", binding);
+            return;
+        }
+
         DescriptorUpdateInfo info{};
         info.binding = binding;
         info.views = views;
@@ -214,6 +224,16 @@ namespace pe
         if (bindingIndex == -1)
             return;
 
+        const auto type = m_bindingInfos[bindingIndex].type;
+        if (type != vk::DescriptorType::eUniformBuffer &&
+            type != vk::DescriptorType::eStorageBuffer &&
+            type != vk::DescriptorType::eUniformBufferDynamic &&
+            type != vk::DescriptorType::eStorageBufferDynamic)
+        {
+            PE_WARN("[Descriptor] Type mismatch: Binding %u is not a buffer type!", binding);
+            return;
+        }
+
         DescriptorUpdateInfo info{};
         info.binding = binding;
         info.buffers = buffers;
@@ -233,6 +253,13 @@ namespace pe
         if (bindingIndex == -1)
             return;
 
+        const auto type = m_bindingInfos[bindingIndex].type;
+        if (type != vk::DescriptorType::eSampler && type != vk::DescriptorType::eCombinedImageSampler)
+        {
+            PE_WARN("[Descriptor] Type mismatch: Binding %u is not a sampler type!", binding);
+            return;
+        }
+
         DescriptorUpdateInfo info{};
         info.binding = binding;
         info.samplers = samplers;
@@ -249,6 +276,13 @@ namespace pe
         int32_t bindingIndex = GetBindingIndex(binding, m_bindingInfos);
         if (bindingIndex == -1)
             return;
+
+        const auto type = m_bindingInfos[bindingIndex].type;
+        if (type != vk::DescriptorType::eAccelerationStructureKHR)
+        {
+            PE_WARN("[Descriptor] Type mismatch: Binding %u is not an acceleration structure type!", binding);
+            return;
+        }
 
         DescriptorUpdateInfo info{};
         info.binding = binding;

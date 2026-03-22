@@ -101,7 +101,7 @@ namespace pe
             renderPassComponent->Resize(width, height);
     }
 
-    void PostProcessSystem::PollShaders()
+    void PostProcessSystem::PollShaders(std::optional<size_t> hash)
     {
         RHII.WaitDeviceIdle();
 
@@ -109,21 +109,49 @@ namespace pe
         {
             std::shared_ptr<PassInfo> info = rc->GetPassInfo();
 
-            // PollEvent simply catches a pushed event from FileWatcher
-            EventSystem::QueuedEvent event;
-            if ((info->pCompShader && EventSystem::PeekEvent(static_cast<size_t>(info->pCompShader->GetPathID()), event)) ||
-                (info->pVertShader && EventSystem::PeekEvent(static_cast<size_t>(info->pVertShader->GetPathID()), event)) ||
-                (info->pFragShader && EventSystem::PeekEvent(static_cast<size_t>(info->pFragShader->GetPathID()), event)))
+            bool match = false;
+            if (!hash.has_value())
             {
-                Shader::Destroy(info->pCompShader);
-                Shader::Destroy(info->pVertShader);
-                Shader::Destroy(info->pFragShader);
+                match = true;
+            }
+            else
+            {
+                if (info->pCompShader && info->pCompShader->GetPathID() == hash.value())
+                    match = true;
+                if (info->pVertShader && info->pVertShader->GetPathID() == hash.value())
+                    match = true;
+                if (info->pFragShader && info->pFragShader->GetPathID() == hash.value())
+                    match = true;
+            }
 
-                info->pCompShader = nullptr;
-                info->pVertShader = nullptr;
-                info->pFragShader = nullptr;
+            if (match)
+            {
+                auto oldComp = info->pCompShader;
+                auto oldVert = info->pVertShader;
+                auto oldFrag = info->pFragShader;
 
-                rc->UpdatePassInfo();
+                try
+                {
+                    rc->UpdatePassInfo();
+                    rc->UpdateDescriptorSets();
+
+                    Shader::Destroy(oldComp);
+                    Shader::Destroy(oldVert);
+                    Shader::Destroy(oldFrag);
+                }
+                catch (const std::exception &e)
+                {
+                    if (info->pCompShader != oldComp)
+                        Shader::Destroy(info->pCompShader);
+                    if (info->pVertShader != oldVert)
+                        Shader::Destroy(info->pVertShader);
+                    if (info->pFragShader != oldFrag)
+                        Shader::Destroy(info->pFragShader);
+
+                    info->pCompShader = oldComp;
+                    info->pVertShader = oldVert;
+                    info->pFragShader = oldFrag;
+                }
             }
         }
     }

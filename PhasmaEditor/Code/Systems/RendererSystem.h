@@ -115,7 +115,7 @@ namespace pe
         Image *CreateFSSampledImage(bool useRenderTergetScale = true);
         void Resize(uint32_t width, uint32_t height);
         void BlitToSwapchain(CommandBuffer *cmd, Image *renderedImage, uint32_t imageIndex);
-        void PollShaders();
+        void PollShaders(std::optional<size_t> hash = std::nullopt);
         void WaitPreviousFrameCommands();
         void WaitAllFramesCommands();
         void BuildRenderGraph();
