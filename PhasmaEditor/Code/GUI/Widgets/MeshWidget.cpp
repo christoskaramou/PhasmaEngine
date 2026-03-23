@@ -5,7 +5,8 @@
 #include "API/RHI.h"
 #include "FileSelector.h"
 #include "GUI/GUI.h"
-#include "Scene/ModelAsset.h"
+#include "Scene/Scene.h"
+#include "Scene/SceneNode.h"
 #include "Scene/SelectionManager.h"
 #include "Systems/RendererSystem.h"
 #include "imgui/imgui.h"
@@ -30,9 +31,9 @@ namespace pe
     {
     }
 
-    void MeshWidget::DrawEmbed(MeshInfo *mesh, ModelAsset *model)
+    void MeshWidget::DrawEmbed(Mesh *mesh, NodeId *node)
     {
-        if (!mesh || !model)
+        if (!mesh || !node)
             return;
 
         ImGui::Text("Mesh Data & Offsets");
@@ -43,7 +44,7 @@ namespace pe
             ImGui::TableSetColumnIndex(0);
             ImGui::Text("Data Size");
             ImGui::TableSetColumnIndex(1);
-            ImGui::Text("%zu", ModelAsset::GetNodeGpuDataSize());
+            ImGui::Text("%zu", sizeof(NodeGpuData));
 
             ImGui::TableNextRow();
             ImGui::TableSetColumnIndex(0);
@@ -55,7 +56,7 @@ namespace pe
             ImGui::TableSetColumnIndex(0);
             ImGui::Text("Vertices Count");
             ImGui::TableSetColumnIndex(1);
-            ImGui::Text("%u", mesh->verticesCount);
+            ImGui::Text("%u", mesh->vertexCount);
 
             ImGui::TableNextRow();
             ImGui::TableSetColumnIndex(0);
@@ -67,7 +68,7 @@ namespace pe
             ImGui::TableSetColumnIndex(0);
             ImGui::Text("Indices Count");
             ImGui::TableSetColumnIndex(1);
-            ImGui::Text("%u", mesh->indicesCount);
+            ImGui::Text("%u", mesh->indexCount);
 
             ImGui::TableNextRow();
             ImGui::TableSetColumnIndex(0);
@@ -104,16 +105,16 @@ namespace pe
                 uint32_t b = static_cast<uint32_t>(aabbColor[2] * 255.0f + 0.5f);
                 uint32_t a = static_cast<uint32_t>(aabbColor[3] * 255.0f + 0.5f);
                 mesh->aabbColor = (r << 24) | (g << 16) | (b << 8) | a;
-                PropagateMeshChange(mesh, model);
+                PropagateMeshChange(node);
                 m_gui->NotifyChange();
             }
         }
 
-        DrawMaterialInfo(mesh, model);
-        DrawTextureInfo(mesh, model);
+        DrawMaterialInfo(mesh, node);
+        DrawTextureInfo(mesh, node);
     }
 
-    void MeshWidget::DrawMaterialInfo(MeshInfo *mesh, ModelAsset *model)
+    void MeshWidget::DrawMaterialInfo(Mesh *mesh, NodeId *node)
     {
         if (ImGui::CollapsingHeader("Material", ImGuiTreeNodeFlags_DefaultOpen))
         {
@@ -212,7 +213,7 @@ namespace pe
 
                 if (changed)
                 {
-                    PropagateMeshChange(mesh, model);
+                    PropagateMeshChange(node);
                     RendererSystem *renderer = GetGlobalSystem<RendererSystem>();
                     if (renderer)
                         renderer->GetScene().UpdateTextures();
@@ -222,7 +223,7 @@ namespace pe
         }
     }
 
-    void MeshWidget::DrawTextureInfo(MeshInfo *mesh, ModelAsset *model)
+    void MeshWidget::DrawTextureInfo(Mesh *mesh, NodeId *node)
     {
         if (ImGui::CollapsingHeader("Textures", ImGuiTreeNodeFlags_DefaultOpen))
         {
@@ -264,8 +265,7 @@ namespace pe
 
                     if (changed)
                     {
-                        model->MarkDirty(0);
-                        PropagateMeshChange(mesh, model);
+                        PropagateMeshChange(node);
 
                         RendererSystem *renderer = GetGlobalSystem<RendererSystem>();
                         if (renderer)
@@ -326,8 +326,7 @@ namespace pe
                         {
                             mesh->images[i] = ResourceHandle<Image>();
                             mesh->textureMask &= ~(1 << i);
-                            model->MarkDirty(0);
-                            PropagateMeshChange(mesh, model);
+                            PropagateMeshChange(node);
 
                             RendererSystem *renderer = GetGlobalSystem<RendererSystem>();
                             if (renderer)
@@ -344,13 +343,30 @@ namespace pe
                     {
                         if (auto *fs = m_gui->GetWidget<FileSelector>())
                         {
-                            fs->OpenSelection([this, mesh, model, i](const std::string &path)
+                            fs->OpenSelection([this, mesh, node, i](const std::string &path)
                                               {
                                 Queue *queue = RHII.GetMainQueue();
                                 CommandBuffer *cmd = queue->AcquireCommandBuffer();
                                 cmd->Begin();
-                                
-                                ResourceHandle<Image> newImg = model->LoadTexture(cmd, path);
+
+                                // Load texture via ResourceManager
+                                std::error_code ec;
+                                std::filesystem::path normalized = std::filesystem::weakly_canonical(std::filesystem::path(path), ec);
+                                if (ec) normalized = path;
+                                std::string normalizedStr(reinterpret_cast<const char *>(normalized.u8string().c_str()));
+
+                                ResourceHandle<Image> newImg = ResourceManager::Get().Find<Image>(normalizedStr);
+                                if (!newImg)
+                                {
+                                    Image *rawImg = Image::LoadRGBA8(cmd, normalizedStr);
+                                    if (rawImg)
+                                    {
+                                        std::shared_ptr<Image> sharedImage(rawImg, [](Image *img) { Image::Destroy(img); });
+                                        ResourceManager::Get().Register<Image>(normalizedStr, sharedImage);
+                                        newImg = ResourceHandle<Image>(sharedImage);
+                                    }
+                                }
+
                                 cmd->End();
                                 queue->Submit(1, &cmd, nullptr, nullptr);
                                 cmd->Wait();
@@ -360,8 +376,7 @@ namespace pe
                                 {
                                     mesh->images[i] = newImg;
                                     mesh->textureMask |= (1 << i);
-                                    model->MarkDirty(0);
-                                    PropagateMeshChange(mesh, model);
+                                    PropagateMeshChange(node);
 
                                     RendererSystem *renderer = GetGlobalSystem<RendererSystem>();
                                     if (renderer)
@@ -399,29 +414,10 @@ namespace pe
 
         return m_textureDescriptors[image];
     }
-    void MeshWidget::PropagateMeshChange(MeshInfo *mesh, ModelAsset *model)
+
+    void MeshWidget::PropagateMeshChange(NodeId *node)
     {
-        int meshIndex = -1;
-
-        for (int i = 0; i < model->GetMeshInfoCount(); i++)
-        {
-            if (model->GetMeshInfo(i) == mesh)
-            {
-                meshIndex = i;
-                break;
-            }
-        }
-
-        if (meshIndex < 0)
-            return;
-
-        int nodeCount = model->GetNodeCount();
-        for (int i = 0; i < nodeCount; i++)
-        {
-            if (model->GetNodeMesh(i) == meshIndex)
-            {
-                model->MarkDirty(i);
-            }
-        }
+        Scene &scene = GetGlobalSystem<RendererSystem>()->GetScene();
+        scene.MarkNodeDirty(node);
     }
 } // namespace pe

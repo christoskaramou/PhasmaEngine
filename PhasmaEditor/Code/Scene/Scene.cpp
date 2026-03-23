@@ -83,6 +83,14 @@ namespace pe
 
     Scene::~Scene()
     {
+        // Free all NodeId allocations
+        for (NodeId *id : m_nodeIds)
+            delete id;
+        m_nodeIds.clear();
+        for (NodeId *id : m_freeNodeIds)
+            delete id;
+        m_freeNodeIds.clear();
+
         for (auto *model : m_models)
             delete model;
         m_models.clear();
@@ -156,17 +164,155 @@ namespace pe
         queue->ReturnCommandBuffer(cmd);
     }
 
+    std::vector<int> Scene::AddModelGeometry(ModelAsset *model, int sourceIndex)
+    {
+        const uint32_t vertexBase = static_cast<uint32_t>(m_vertexStore.size());
+        const uint32_t indexBase = static_cast<uint32_t>(m_indexStore.size());
+        const uint32_t posUvBase = static_cast<uint32_t>(m_positionUvStore.size());
+        const size_t aabbBase = m_aabbVertexStore.size();
+
+        // Bulk copy geometry data
+        const auto &srcVerts = model->GetVertices();
+        const auto &srcPosUvs = model->GetPositionUvs();
+        const auto &srcAabbs = model->GetAabbVertices();
+        const auto &srcIndices = model->GetIndices();
+
+        m_vertexStore.insert(m_vertexStore.end(), srcVerts.begin(), srcVerts.end());
+        m_positionUvStore.insert(m_positionUvStore.end(), srcPosUvs.begin(), srcPosUvs.end());
+        m_aabbVertexStore.insert(m_aabbVertexStore.end(), srcAabbs.begin(), srcAabbs.end());
+        m_indexStore.insert(m_indexStore.end(), srcIndices.begin(), srcIndices.end());
+
+        for (const auto &img : model->GetImages())
+            m_imageStore.push_back(img);
+        for (auto *samp : model->GetSamplers())
+            m_samplerStore.push_back(samp);
+
+        // Create scene meshes from ModelAsset meshes
+        std::vector<int> meshMap(model->GetMeshInfoCount(), -1);
+        for (int i = 0; i < model->GetMeshInfoCount(); i++)
+        {
+            const MeshInfo *mi = model->GetMeshInfo(i);
+            if (!mi)
+                continue;
+
+            Mesh mesh{};
+            mesh.vertexOffset = mi->vertexOffset + vertexBase;
+            mesh.vertexCount = mi->verticesCount;
+            mesh.indexOffset = mi->indexOffset + indexBase;
+            mesh.indexCount = mi->indicesCount;
+            mesh.positionsOffset = mi->vertexOffset + posUvBase;
+            mesh.aabbVertexOffset = mi->aabbVertexOffset + aabbBase;
+            mesh.aabbColor = mi->aabbColor;
+            mesh.boundingBox = mi->boundingBox;
+            mesh.renderType = mi->renderType;
+            mesh.textureMask = mi->textureMask;
+            for (int k = 0; k < 5; k++)
+            {
+                mesh.images[k] = mi->images[k];
+                mesh.samplers[k] = mi->samplers[k];
+            }
+            mesh.materialFactors[0] = mi->materialFactors[0];
+            mesh.materialFactors[1] = mi->materialFactors[1];
+
+            int sceneMeshIdx = AddMesh(std::move(mesh));
+            meshMap[i] = sceneMeshIdx;
+
+            // Track source for save/load
+            if (sceneMeshIdx >= 0)
+            {
+                if (static_cast<int>(m_meshSourceInfos.size()) <= sceneMeshIdx)
+                    m_meshSourceInfos.resize(sceneMeshIdx + 1);
+                m_meshSourceInfos[sceneMeshIdx] = {sourceIndex, i};
+            }
+        }
+
+        return meshMap;
+    }
+
     void Scene::AddModel(ModelAsset *model)
     {
         m_models.insert(model->GetId(), model);
+
+        // Register source
+        int sourceIndex = static_cast<int>(m_sources.size());
+        SceneSource source;
+        source.filePath = model->GetFilePath();
+        source.primitiveType = model->GetPrimitiveType();
+        m_sources.push_back(std::move(source));
+
+        // Copy geometry and create meshes
+        std::vector<int> meshMap = AddModelGeometry(model, sourceIndex);
+
+        // Create nodes matching ModelAsset's node hierarchy — two-pass to handle
+        // out-of-order parent indices (parent index > child index is valid in Assimp output).
+        const mat4 &modelMatrix = model->GetMatrix();
+        std::vector<NodeId *> nodeMap(model->GetNodeCount(), nullptr);
+
+        // Pass 1 — create all nodes as roots with local matrices and mesh refs
+        for (int i = 0; i < model->GetNodeCount(); i++)
+        {
+            const NodeInfo *ni = model->GetNodeInfo(i);
+            if (!ni)
+                continue;
+
+            NodeId *node = CreateNode(ni->name, nullptr);
+            SetLocalMatrix(node, ni->localMatrix, false);
+
+            int meshIdx = model->GetNodeMesh(i);
+            if (meshIdx >= 0 && meshIdx < static_cast<int>(meshMap.size()) && meshMap[meshIdx] >= 0)
+                SetMeshRef(node, meshMap[meshIdx]);
+
+            nodeMap[i] = node;
+        }
+
+        // Pass 2 — wire up parent–child relationships; bake model matrix into true roots
+        std::vector<NodeId *> roots;
+        for (int i = 0; i < model->GetNodeCount(); i++)
+        {
+            if (!nodeMap[i])
+                continue;
+            const NodeInfo *ni = model->GetNodeInfo(i);
+            if (ni->parent >= 0 && ni->parent < static_cast<int>(nodeMap.size()) && nodeMap[ni->parent])
+            {
+                ReparentNode(nodeMap[i], nodeMap[ni->parent]);
+            }
+            else
+            {
+                // True root — bake model matrix into local transform
+                SetLocalMatrix(nodeMap[i], modelMatrix * ni->localMatrix, false);
+                roots.push_back(nodeMap[i]);
+            }
+        }
+        m_modelRootNodes[model->GetId()] = std::move(roots);
+
+        // Mark all new nodes dirty for initial transform computation
+        for (NodeId *node : nodeMap)
+        {
+            if (node)
+                MarkNodeDirty(node);
+        }
+
+        UpdateNodeMatrices();
     }
 
     void Scene::RemoveModel(ModelAsset *model)
     {
-        if (SelectionManager::Instance().GetSelectedModel() == model)
-            SelectionManager::Instance().ClearSelection();
+        size_t modelId = model->GetId();
 
-        if (m_models.erase(model->GetId()))
+        // Delete SoA subtrees rooted at this model's root nodes
+        auto rootIt = m_modelRootNodes.find(modelId);
+        if (rootIt != m_modelRootNodes.end())
+        {
+            for (NodeId *root : rootIt->second)
+            {
+                // Skip nodes already deleted (sentinel from DeleteNode)
+                if (root && root->index != UINT32_MAX)
+                    DeleteNode(root);
+            }
+            m_modelRootNodes.erase(rootIt);
+        }
+
+        if (m_models.erase(modelId))
             delete model;
     }
 
@@ -195,7 +341,7 @@ namespace pe
             if (SelectionManager::Instance().GetSelectionType() == SelectionType::Camera)
             {
                 int index = static_cast<int>(std::distance(m_cameras.begin(), it));
-                if (SelectionManager::Instance().GetSelectedNodeIndex() == index)
+                if (SelectionManager::Instance().GetSelectedCameraIndex() == index)
                     SelectionManager::Instance().ClearSelection();
             }
 
@@ -219,32 +365,7 @@ namespace pe
 
     void Scene::UploadBuffers(CommandBuffer *cmd)
     {
-        // Reset offsets relative to the model
-        for (auto &modelPtr : m_models)
-        {
-            ModelAsset &model = *modelPtr;
-            uint32_t currentVertexOffset = 0;
-            uint32_t currentIndexOffset = 0;
-            uint32_t currentPositionsOffset = 0;
-            size_t currentAabbVertexOffset = 0;
-
-            for (int meshIndex = 0; meshIndex < model.GetMeshInfoCount(); meshIndex++)
-            {
-                MeshInfo *meshInfo = model.GetMeshInfo(meshIndex);
-                if (!meshInfo)
-                    continue;
-
-                meshInfo->vertexOffset = currentVertexOffset;
-                meshInfo->indexOffset = currentIndexOffset;
-                meshInfo->positionsOffset = currentPositionsOffset;
-                meshInfo->aabbVertexOffset = currentAabbVertexOffset;
-
-                currentVertexOffset += meshInfo->verticesCount;
-                currentIndexOffset += meshInfo->indicesCount;
-                currentPositionsOffset += meshInfo->verticesCount;
-                currentAabbVertexOffset += 8;
-            }
-        }
+        // Mesh offsets are already set by AssimpLoader/AddModel — no per-model fixup needed
 
         DestroyBuffers();
         CreateGeometryBuffer();
@@ -261,34 +382,22 @@ namespace pe
 
     void Scene::CreateGeometryBuffer()
     {
+        // Count drawable meshes (nodes with valid mesh refs and non-zero indices)
         m_meshCount = 0;
-        m_indicesCount = 0;
-        m_verticesCount = 0;
-        m_positionsCount = 0;
-        m_aabbVerticesCount = 0;
-
-        for (auto &modelPtr : m_models)
+        for (uint32_t i = 0; i < GetNodeCount(); i++)
         {
-            ModelAsset &model = *modelPtr;
-            m_indicesCount += static_cast<uint32_t>(model.GetIndices().size());
-            m_verticesCount += static_cast<uint32_t>(model.GetVertices().size());
-            m_positionsCount += static_cast<uint32_t>(model.GetPositionUvs().size());
-            m_aabbVerticesCount += static_cast<uint32_t>(model.GetAabbVertices().size());
-
-            const int nodeCount = model.GetNodeCount();
-            for (int i = 0; i < nodeCount; i++)
-            {
-                int meshIndex = model.GetNodeMesh(i);
-                const MeshInfo *meshInfo = model.GetMeshInfo(meshIndex);
-                if (!meshInfo)
-                    continue;
-
-                if (meshInfo->indicesCount == 0)
-                    continue;
-
-                m_meshCount++;
-            }
+            int meshIdx = m_meshRefs[i];
+            if (meshIdx < 0)
+                continue;
+            if (m_meshes[meshIdx].indexCount == 0)
+                continue;
+            m_meshCount++;
         }
+
+        m_indicesCount = static_cast<uint32_t>(m_indexStore.size());
+        m_verticesCount = static_cast<uint32_t>(m_vertexStore.size());
+        m_positionsCount = static_cast<uint32_t>(m_positionUvStore.size());
+        m_aabbVerticesCount = static_cast<uint32_t>(m_aabbVertexStore.size());
 
         m_aabbIndicesOffset = m_indicesCount * sizeof(uint32_t);
         m_verticesOffset = m_aabbIndicesOffset + s_aabbIndices.size() * sizeof(uint32_t);
@@ -304,28 +413,11 @@ namespace pe
 
     void Scene::CopyIndices(CommandBuffer *cmd)
     {
-        uint32_t currentIndicesCount = 0;
-
-        for (auto &modelPtr : m_models)
-        {
-            ModelAsset &model = *modelPtr;
-            const auto &indices = model.GetIndices();
-            cmd->CopyBufferStaged(m_buffer, const_cast<uint32_t *>(indices.data()), sizeof(uint32_t) * indices.size(), currentIndicesCount * sizeof(uint32_t));
-
-            for (int meshIndex = 0; meshIndex < model.GetMeshInfoCount(); meshIndex++)
-            {
-                MeshInfo *meshInfo = model.GetMeshInfo(meshIndex);
-                if (!meshInfo)
-                    continue;
-
-                meshInfo->indexOffset += currentIndicesCount;
-            }
-
-            currentIndicesCount += static_cast<uint32_t>(indices.size());
-        }
-
+        // Single contiguous copy from Scene's index store
         if (m_indicesCount > 0)
         {
+            cmd->CopyBufferStaged(m_buffer, m_indexStore.data(), m_indicesCount * sizeof(uint32_t), 0);
+
             BufferBarrierInfo indexBarrierInfo{};
             indexBarrierInfo.buffer = m_buffer;
             indexBarrierInfo.stageMask = vk::PipelineStageFlagBits2::eVertexInput;
@@ -359,28 +451,12 @@ namespace pe
         progress = 0;
         gSettings.loading.SetName("Uploading to GPU");
 
-        uint32_t currentVerticesCount = 0;
-        for (auto &modelPtr : m_models)
-        {
-            ModelAsset &model = *modelPtr;
-            const auto &vertices = model.GetVertices();
-            const uint32_t vertexCount = static_cast<uint32_t>(vertices.size());
-            cmd->CopyBufferStaged(m_buffer, const_cast<Vertex *>(vertices.data()), sizeof(Vertex) * vertexCount, m_verticesOffset + currentVerticesCount * sizeof(Vertex));
-            for (int meshIndex = 0; meshIndex < model.GetMeshInfoCount(); meshIndex++)
-            {
-                MeshInfo *meshInfo = model.GetMeshInfo(meshIndex);
-                if (!meshInfo)
-                    continue;
-
-                meshInfo->vertexOffset += currentVerticesCount;
-            }
-            currentVerticesCount += vertexCount;
-
-            progress += vertexCount;
-        }
-
+        // Single contiguous copy for each vertex type
         if (m_verticesCount > 0)
         {
+            cmd->CopyBufferStaged(m_buffer, m_vertexStore.data(), m_verticesCount * sizeof(Vertex), m_verticesOffset);
+            progress += m_verticesCount;
+
             BufferBarrierInfo vertexBarrierInfo{};
             vertexBarrierInfo.buffer = m_buffer;
             vertexBarrierInfo.stageMask = vk::PipelineStageFlagBits2::eVertexInput;
@@ -390,27 +466,11 @@ namespace pe
             cmd->BufferBarrier(vertexBarrierInfo);
         }
 
-        uint32_t currentPositionsCount = 0;
-        for (auto &modelPtr : m_models)
-        {
-            ModelAsset &model = *modelPtr;
-            const auto &positionUvs = model.GetPositionUvs();
-            const uint32_t positionCount = static_cast<uint32_t>(positionUvs.size());
-            cmd->CopyBufferStaged(m_buffer, const_cast<PositionUvVertex *>(positionUvs.data()), positionCount * sizeof(PositionUvVertex), m_positionsOffset + currentPositionsCount * sizeof(PositionUvVertex));
-            for (int meshIndex = 0; meshIndex < model.GetMeshInfoCount(); meshIndex++)
-            {
-                MeshInfo *meshInfo = model.GetMeshInfo(meshIndex);
-                if (!meshInfo)
-                    continue;
-
-                meshInfo->positionsOffset += currentPositionsCount;
-            }
-            currentPositionsCount += positionCount;
-            progress += positionCount;
-        }
-
         if (m_positionsCount > 0)
         {
+            cmd->CopyBufferStaged(m_buffer, m_positionUvStore.data(), m_positionsCount * sizeof(PositionUvVertex), m_positionsOffset);
+            progress += m_positionsCount;
+
             BufferBarrierInfo posVertexBarrierInfo{};
             posVertexBarrierInfo.buffer = m_buffer;
             posVertexBarrierInfo.stageMask = vk::PipelineStageFlagBits2::eVertexInput;
@@ -420,27 +480,11 @@ namespace pe
             cmd->BufferBarrier(posVertexBarrierInfo);
         }
 
-        size_t currentAabbVertexCount = 0;
-        for (auto &modelPtr : m_models)
-        {
-            ModelAsset &model = *modelPtr;
-            const auto &aabbVertices = model.GetAabbVertices();
-            const size_t aabbVertexCount = aabbVertices.size();
-            cmd->CopyBufferStaged(m_buffer, const_cast<AabbVertex *>(aabbVertices.data()), aabbVertexCount * sizeof(AabbVertex), m_aabbVerticesOffset + currentAabbVertexCount * sizeof(AabbVertex));
-            for (int meshIndex = 0; meshIndex < model.GetMeshInfoCount(); meshIndex++)
-            {
-                MeshInfo *meshInfo = model.GetMeshInfo(meshIndex);
-                if (!meshInfo)
-                    continue;
-
-                meshInfo->aabbVertexOffset += currentAabbVertexCount;
-            }
-            currentAabbVertexCount += aabbVertexCount;
-            progress += static_cast<uint32_t>(aabbVertexCount);
-        }
-
         if (m_aabbVerticesCount > 0)
         {
+            cmd->CopyBufferStaged(m_buffer, m_aabbVertexStore.data(), m_aabbVerticesCount * sizeof(AabbVertex), m_aabbVerticesOffset);
+            progress += m_aabbVerticesCount;
+
             BufferBarrierInfo aabbVertexBarrierInfo{};
             aabbVertexBarrierInfo.buffer = m_buffer;
             aabbVertexBarrierInfo.stageMask = vk::PipelineStageFlagBits2::eVertexInput;
@@ -455,21 +499,15 @@ namespace pe
     {
         size_t storageSize = sizeof(PerFrameData);
         storageSize += RHII.AlignStorageAs(m_meshCount * sizeof(uint32_t), 64);
-        for (auto &modelPtr : m_models)
+
+        for (uint32_t i = 0; i < GetNodeCount(); i++)
         {
-            ModelAsset &model = *modelPtr;
-            const int nodeCount = model.GetNodeCount();
-            for (int nodeIndex = 0; nodeIndex < nodeCount; nodeIndex++)
-            {
-                int meshIndex = model.GetNodeMesh(nodeIndex);
-                if (!model.GetMeshInfo(meshIndex))
-                    continue;
+            int meshIdx = m_meshRefs[i];
+            if (meshIdx < 0 || m_meshes[meshIdx].indexCount == 0)
+                continue;
 
-                model.SetNodeDataOffset(nodeIndex, storageSize);
-
-                storageSize += ModelAsset::GetNodeGpuDataSize();
-                storageSize += sizeof(mat4) * 2; // material data (factors)
-            }
+            m_nodeRuntime[i].dataOffset = storageSize;
+            storageSize += sizeof(NodeGpuData);
         }
 
         uint32_t i = 0;
@@ -485,8 +523,11 @@ namespace pe
 
     void Scene::MarkUniformsDirty()
     {
-        for (auto &modelPtr : m_models)
-            modelPtr->MarkAllUniformsDirty();
+        for (uint32_t i = 0; i < GetNodeCount(); i++)
+        {
+            for (size_t f = 0; f < m_nodeRuntime[i].dirtyUniforms.size(); f++)
+                m_nodeRuntime[i].dirtyUniforms[f] = true;
+        }
     }
 
     void Scene::CreateIndirectBuffers(CommandBuffer *cmd)
@@ -494,29 +535,28 @@ namespace pe
         uint32_t indirectCount = 0;
         m_indirectCommands.clear();
         m_indirectCommands.reserve(m_meshCount);
-        for (auto &modelPtr : m_models)
+
+        for (uint32_t i = 0; i < GetNodeCount(); i++)
         {
-            ModelAsset &model = *modelPtr;
-            const int nodeCount = model.GetNodeCount();
-            for (int nodeIndex = 0; nodeIndex < nodeCount; nodeIndex++)
-            {
-                int meshIndex = model.GetNodeMesh(nodeIndex);
-                MeshInfo *meshInfo = model.GetMeshInfo(meshIndex);
-                if (!meshInfo)
-                    continue;
+            int meshIdx = m_meshRefs[i];
+            if (meshIdx < 0)
+                continue;
 
-                model.SetNodeIndirectIndex(nodeIndex, indirectCount);
+            const Mesh &mesh = m_meshes[meshIdx];
+            if (mesh.indexCount == 0)
+                continue;
 
-                vk::DrawIndexedIndirectCommand indirectCommand{};
-                indirectCommand.indexCount = meshInfo->indicesCount;
-                indirectCommand.instanceCount = 1;
-                indirectCommand.firstIndex = meshInfo->indexOffset;
-                indirectCommand.vertexOffset = meshInfo->vertexOffset;
-                indirectCommand.firstInstance = indirectCount;
-                m_indirectCommands.push_back(indirectCommand);
+            m_nodeRuntime[i].indirectIndex = indirectCount;
 
-                indirectCount++;
-            }
+            vk::DrawIndexedIndirectCommand indirectCommand{};
+            indirectCommand.indexCount = mesh.indexCount;
+            indirectCommand.instanceCount = 1;
+            indirectCommand.firstIndex = mesh.indexOffset;
+            indirectCommand.vertexOffset = mesh.vertexOffset;
+            indirectCommand.firstInstance = indirectCount;
+            m_indirectCommands.push_back(indirectCommand);
+
+            indirectCount++;
         }
 
         PE_ERROR_IF(indirectCount != m_meshCount, "Scene::UploadBuffers: Indirect count mismatch!");
@@ -552,45 +592,39 @@ namespace pe
 
     void Scene::UpdateImageViews()
     {
-        size_t totalImageCount = 0;
-        for (auto &modelPtr : m_models)
-            totalImageCount += modelPtr->GetImages().size();
-
         m_imageViews.clear();
-        m_imageViews.reserve(totalImageCount);
+        m_imageViews.reserve(m_imageStore.size());
+
         const auto &defaults = ModelAsset::GetDefaultResources();
         OrderedMap<Image *, uint32_t> imagesMap{};
-        for (auto &modelPtr : m_models)
+
+        // Build unique image view list from Scene's image store
+        for (const ResourceHandle<Image> &image : m_imageStore)
         {
-            ModelAsset &model = *modelPtr;
-
-            for (const ResourceHandle<Image> &image : model.GetImages())
+            auto insertResult = imagesMap.insert(image.get(), static_cast<uint32_t>(m_imageViews.size()));
+            if (insertResult.first)
             {
-                auto insertResult = imagesMap.insert(image.get(), static_cast<uint32_t>(m_imageViews.size()));
-                if (insertResult.first)
-                {
-                    ImageView *srv = image->GetSRV();
-                    PE_ERROR_IF(!srv, "UpdateImageViews: image '%s' has no SRV", image->GetName().c_str());
-                    m_imageViews.push_back(srv ? srv : defaults.white->GetSRV());
-                }
+                ImageView *srv = image->GetSRV();
+                PE_ERROR_IF(!srv, "UpdateImageViews: image '%s' has no SRV", image->GetName().c_str());
+                m_imageViews.push_back(srv ? srv : defaults.white->GetSRV());
             }
+        }
 
-            for (int meshIndex = 0; meshIndex < model.GetMeshInfoCount(); meshIndex++)
+        // Map each mesh's texture slots to image view indices
+        for (int meshIndex = 0; meshIndex < static_cast<int>(m_meshes.size()); meshIndex++)
+        {
+            const Mesh &mesh = m_meshes[meshIndex];
+            MeshRuntime &rt = m_meshRuntimes[meshIndex];
+
+            for (int k = 0; k < 5; k++)
             {
-                const MeshInfo *meshInfo = model.GetMeshInfo(meshIndex);
-                if (!meshInfo)
-                    continue;
+                Image *image = mesh.images[k].get();
+                bool isDefault = (image == defaults.black || image == defaults.white || image == defaults.normal);
 
-                for (int k = 0; k < 5; k++)
-                {
-                    Image *image = meshInfo->images[k].get();
-                    bool isDefault = (image == defaults.black || image == defaults.white || image == defaults.normal);
-
-                    if (image && !isDefault)
-                        model.SetMeshImageViewIndex(meshIndex, k, imagesMap[image]);
-                    else
-                        model.SetMeshImageViewIndex(meshIndex, k, 0xFFFFFFFF);
-                }
+                if (image && !isDefault)
+                    rt.imageViewIndices[k] = imagesMap[image];
+                else
+                    rt.imageViewIndices[k] = 0xFFFFFFFF;
             }
         }
 
@@ -608,62 +642,62 @@ namespace pe
 
         size_t offset = 0;
         m_meshConstants->Map();
-        for (auto &modelPtr : m_models)
+        for (uint32_t i = 0; i < GetNodeCount(); i++)
         {
-            ModelAsset &model = *modelPtr;
-            const int nodeCount = model.GetNodeCount();
-            for (int nodeIndex = 0; nodeIndex < nodeCount; nodeIndex++)
-            {
-                int meshIndex = model.GetNodeMesh(nodeIndex);
-                MeshInfo *meshInfo = model.GetMeshInfo(meshIndex);
-                if (!meshInfo)
-                    continue;
+            int meshIdx = m_meshRefs[i];
+            if (meshIdx < 0)
+                continue;
 
-                Mesh_Constants constants{};
-                constants.alphaCut = (meshInfo->renderType == RenderType::AlphaCut) ? meshInfo->materialFactors[0][2][2] : 0.0f;
-                constants.meshDataOffset = static_cast<uint32_t>(model.GetNodeDataOffset(nodeIndex));
-                constants.textureMask = meshInfo->textureMask;
-                for (int k = 0; k < 5; k++)
-                    constants.meshImageIndex[k] = model.GetMeshImageViewIndex(meshIndex, k);
+            const Mesh &mesh = m_meshes[meshIdx];
+            if (mesh.indexCount == 0)
+                continue;
 
-                BufferRange range{};
-                range.data = &constants;
-                range.offset = offset;
-                range.size = sizeof(Mesh_Constants);
-                m_meshConstants->Copy(1, &range, true);
+            const MeshRuntime &meshRt = m_meshRuntimes[meshIdx];
 
-                offset += sizeof(Mesh_Constants);
-            }
+            Mesh_Constants constants{};
+            constants.alphaCut = (mesh.renderType == RenderType::AlphaCut) ? mesh.materialFactors[0][2][2] : 0.0f;
+            constants.meshDataOffset = static_cast<uint32_t>(m_nodeRuntime[i].dataOffset);
+            constants.textureMask = mesh.textureMask;
+            for (int k = 0; k < 5; k++)
+                constants.meshImageIndex[k] = meshRt.imageViewIndices[k];
+
+            BufferRange range{};
+            range.data = &constants;
+            range.offset = offset;
+            range.size = sizeof(Mesh_Constants);
+            m_meshConstants->Copy(1, &range, true);
+
+            offset += sizeof(Mesh_Constants);
         }
         m_meshConstants->Flush();
         m_meshConstants->Unmap();
     }
 
-    Scene::DrawBatch Scene::CullNodeBatch(ModelAsset &model, int beginNode, int endNode, const Camera *camera, bool frustumCulling) const
+    Scene::DrawBatch Scene::CullNodeBatch(uint32_t beginNode, uint32_t endNode, const Camera *camera, bool frustumCulling) const
     {
         DrawBatch batch{};
         if (!camera)
             return batch;
 
         const vec3 cameraPosition = camera->GetPosition();
-        const int batchNodeCount = std::max(1, endNode - beginNode);
+        const int batchNodeCount = std::max(1, static_cast<int>(endNode - beginNode));
         const int secondaryEstimated = std::max(1, batchNodeCount / 8);
         batch.opaque.reserve(batchNodeCount);
         batch.alphaCut.reserve(secondaryEstimated);
         batch.alphaBlend.reserve(secondaryEstimated);
         batch.transmission.reserve(secondaryEstimated);
 
-        for (int node = beginNode; node < endNode; node++)
+        for (uint32_t i = beginNode; i < endNode; i++)
         {
-            int mesh = model.GetNodeMesh(node);
-            if (mesh < 0)
+            int meshIdx = m_meshRefs[i];
+            if (meshIdx < 0)
                 continue;
 
-            MeshInfo *meshInfo = model.GetMeshInfo(mesh);
-            if (!meshInfo)
+            const Mesh &mesh = m_meshes[meshIdx];
+            if (mesh.indexCount == 0)
                 continue;
 
-            const AABB &worldBounds = model.GetNodeWorldBoundingBox(node);
+            const AABB &worldBounds = m_nodeRuntime[i].worldAABB;
 
             bool cull = frustumCulling ? !camera->AABBInFrustum(worldBounds) : false;
             if (cull)
@@ -672,19 +706,19 @@ namespace pe
             vec3 center = worldBounds.GetCenter();
             float distance = distance2(cameraPosition, center);
 
-            switch (meshInfo->renderType)
+            switch (mesh.renderType)
             {
             case RenderType::Opaque:
-                batch.opaque.push_back(DrawInfo{&model, node, distance});
+                batch.opaque.push_back(DrawInfo{m_nodeIds[i], distance});
                 break;
             case RenderType::AlphaCut:
-                batch.alphaCut.push_back(DrawInfo{&model, node, distance});
+                batch.alphaCut.push_back(DrawInfo{m_nodeIds[i], distance});
                 break;
             case RenderType::AlphaBlend:
-                batch.alphaBlend.push_back(DrawInfo{&model, node, distance});
+                batch.alphaBlend.push_back(DrawInfo{m_nodeIds[i], distance});
                 break;
             case RenderType::Transmission:
-                batch.transmission.push_back(DrawInfo{&model, node, distance});
+                batch.transmission.push_back(DrawInfo{m_nodeIds[i], distance});
                 break;
             }
         }
@@ -707,66 +741,48 @@ namespace pe
         range.offset = 0;
         m_storages[frame]->Copy(1, &range, true);
 
+        // Collect visible indirect IDs from draw infos
         m_visibleIndirectIds.clear();
         m_visibleIndirectIds.reserve(m_drawInfosOpaque.size() + m_drawInfosAlphaCut.size() + m_drawInfosAlphaBlend.size() + m_drawInfosTransmission.size());
         for (auto &drawInfo : m_drawInfosOpaque)
-        {
-            auto &model = *drawInfo.model;
-            m_visibleIndirectIds.push_back(model.GetNodeIndirectIndex(drawInfo.node));
-        }
+            m_visibleIndirectIds.push_back(m_nodeRuntime[drawInfo.node->index].indirectIndex);
         for (auto &drawInfo : m_drawInfosAlphaCut)
-        {
-            auto &model = *drawInfo.model;
-            m_visibleIndirectIds.push_back(model.GetNodeIndirectIndex(drawInfo.node));
-        }
+            m_visibleIndirectIds.push_back(m_nodeRuntime[drawInfo.node->index].indirectIndex);
         for (auto &drawInfo : m_drawInfosTransmission)
-        {
-            auto &model = *drawInfo.model;
-            m_visibleIndirectIds.push_back(model.GetNodeIndirectIndex(drawInfo.node));
-        }
+            m_visibleIndirectIds.push_back(m_nodeRuntime[drawInfo.node->index].indirectIndex);
         for (auto &drawInfo : m_drawInfosAlphaBlend)
-        {
-            auto &model = *drawInfo.model;
-            m_visibleIndirectIds.push_back(model.GetNodeIndirectIndex(drawInfo.node));
-        }
+            m_visibleIndirectIds.push_back(m_nodeRuntime[drawInfo.node->index].indirectIndex);
+
         range.data = m_visibleIndirectIds.data();
         range.size = m_visibleIndirectIds.size() * sizeof(uint32_t);
         range.offset = sizeof(PerFrameData);
         m_storages[frame]->Copy(1, &range, true);
 
-        for (auto &modelPtr : m_models)
+        // Upload per-node GPU data for dirty uniforms
+        for (uint32_t i = 0; i < GetNodeCount(); i++)
         {
-            ModelAsset &model = *modelPtr;
-            if (!model.IsUniformDirty(frame))
+            NodeRuntime &rt = m_nodeRuntime[i];
+            if (!rt.dirtyUniforms[frame])
                 continue;
 
-            for (int node = 0; node < model.GetNodeCount(); node++)
-            {
-                if (!model.IsNodeUniformDirty(node, frame))
-                    continue;
+            rt.dirtyUniforms[frame] = false; // clear regardless of mesh presence
 
-                int mesh = model.GetNodeMesh(node);
-                if (mesh < 0)
-                    continue;
+            int meshIdx = m_meshRefs[i];
+            if (meshIdx < 0)
+                continue;
 
-                const MeshInfo *meshInfo = model.GetMeshInfo(mesh);
-                if (!meshInfo)
-                    continue;
+            const Mesh &mesh = m_meshes[meshIdx];
+            if (mesh.indexCount == 0)
+                continue;
 
-                model.SyncNodeGpuDataFromMesh(node);
-                const ModelAsset::NodeGpuData *nodeGpuData = model.GetNodeGpuData(node);
-                if (!nodeGpuData)
-                    continue;
+            // Sync material factors from mesh to GPU data
+            rt.gpuData.materialFactors[0] = mesh.materialFactors[0];
+            rt.gpuData.materialFactors[1] = mesh.materialFactors[1];
 
-                range.data = const_cast<ModelAsset::NodeGpuData *>(nodeGpuData);
-                range.size = ModelAsset::GetNodeGpuDataSize();
-                range.offset = model.GetNodeDataOffset(node);
-                m_storages[frame]->Copy(1, &range, true);
-
-                model.SetNodeUniformDirty(node, frame, false);
-            }
-
-            model.SetUniformDirty(frame, false);
+            range.data = &rt.gpuData;
+            range.size = sizeof(NodeGpuData);
+            range.offset = rt.dataOffset;
+            m_storages[frame]->Copy(1, &range, true);
         }
     }
 
@@ -775,65 +791,26 @@ namespace pe
         uint32_t frame = RHII.GetFrameIndex();
 
         uint32_t firstInstance = 0;
-        for (auto &drawInfo : m_drawInfosOpaque)
+        auto EmitIndirect = [&](const std::vector<DrawInfo> &drawInfos)
         {
-            auto &model = *drawInfo.model;
-            auto &indirectCommand = m_indirectCommands[model.GetNodeIndirectIndex(drawInfo.node)];
-            indirectCommand.firstInstance = firstInstance;
+            for (auto &drawInfo : drawInfos)
+            {
+                auto &indirectCommand = m_indirectCommands[m_nodeRuntime[drawInfo.node->index].indirectIndex];
+                indirectCommand.firstInstance = firstInstance;
 
-            BufferRange range{};
-            range.data = &indirectCommand;
-            range.size = sizeof(vk::DrawIndexedIndirectCommand);
-            range.offset = firstInstance * sizeof(vk::DrawIndexedIndirectCommand);
-            m_indirects[frame]->Copy(1, &range, true);
+                BufferRange range{};
+                range.data = &indirectCommand;
+                range.size = sizeof(vk::DrawIndexedIndirectCommand);
+                range.offset = firstInstance * sizeof(vk::DrawIndexedIndirectCommand);
+                m_indirects[frame]->Copy(1, &range, true);
 
-            firstInstance++;
-        }
-
-        for (auto &drawInfo : m_drawInfosAlphaCut)
-        {
-            auto &model = *drawInfo.model;
-            auto &indirectCommand = m_indirectCommands[model.GetNodeIndirectIndex(drawInfo.node)];
-            indirectCommand.firstInstance = firstInstance;
-
-            BufferRange range{};
-            range.data = &indirectCommand;
-            range.size = sizeof(vk::DrawIndexedIndirectCommand);
-            range.offset = firstInstance * sizeof(vk::DrawIndexedIndirectCommand);
-            m_indirects[frame]->Copy(1, &range, true);
-
-            firstInstance++;
-        }
-
-        for (auto &drawInfo : m_drawInfosTransmission)
-        {
-            auto &model = *drawInfo.model;
-            auto &indirectCommand = m_indirectCommands[model.GetNodeIndirectIndex(drawInfo.node)];
-            indirectCommand.firstInstance = firstInstance;
-
-            BufferRange range{};
-            range.data = &indirectCommand;
-            range.size = sizeof(vk::DrawIndexedIndirectCommand);
-            range.offset = firstInstance * sizeof(vk::DrawIndexedIndirectCommand);
-            m_indirects[frame]->Copy(1, &range, true);
-
-            firstInstance++;
-        }
-
-        for (auto &drawInfo : m_drawInfosAlphaBlend)
-        {
-            auto &model = *drawInfo.model;
-            auto &indirectCommand = m_indirectCommands[model.GetNodeIndirectIndex(drawInfo.node)];
-            indirectCommand.firstInstance = firstInstance;
-
-            BufferRange range{};
-            range.data = &indirectCommand;
-            range.size = sizeof(vk::DrawIndexedIndirectCommand);
-            range.offset = firstInstance * sizeof(vk::DrawIndexedIndirectCommand);
-            m_indirects[frame]->Copy(1, &range, true);
-
-            firstInstance++;
-        }
+                firstInstance++;
+            }
+        };
+        EmitIndirect(m_drawInfosOpaque);
+        EmitIndirect(m_drawInfosAlphaCut);
+        EmitIndirect(m_drawInfosTransmission);
+        EmitIndirect(m_drawInfosAlphaBlend);
     }
 
     void Scene::UpdateGeometry()
@@ -846,26 +823,42 @@ namespace pe
             m_hasDrawInfosReservation = true;
         }
 
+        // Catch up previousWorldMatrix for motion vectors (runs every frame,
+        // matching old ModelAsset::UpdateNodeMatrix behaviour).
+        // Must happen BEFORE UpdateNodeMatrices so that prev holds last frame's
+        // world matrix while world gets updated to the current frame's value.
+        for (NodeId *node : m_nodesMoved)
+        {
+            if (node->index >= m_nodeIds.size() || m_nodeIds[node->index] != node)
+                continue; // Safety check for deleted/recycled nodes
+
+            NodeRuntime &rt = m_nodeRuntime[node->index];
+            if (rt.gpuData.previousWorldMatrix != rt.gpuData.worldMatrix)
+            {
+                rt.gpuData.previousWorldMatrix = rt.gpuData.worldMatrix;
+                for (size_t f = 0; f < rt.dirtyUniforms.size(); f++)
+                    rt.dirtyUniforms[f] = true;
+            }
+        }
+
+        // Clear the list of last frame's moved nodes now that we've caught them up.
+        // This gives us a clean slate for the current frame's UpdateNodeMatrices() calls.
+        m_nodesMoved.clear();
+
+        UpdateNodeMatrices();
+
         Camera *camera = m_cameras.empty() ? nullptr : m_cameras[0];
         bool frustumCulling = Settings::Get<GlobalSettings>().frustum_culling;
-        static constexpr int kCullBatchSize = 128;
+        static constexpr uint32_t kCullBatchSize = 128;
 
+        const uint32_t nodeCount = GetNodeCount();
         std::vector<std::shared_future<DrawBatch>> futures;
-        futures.reserve((m_meshCount + static_cast<uint32_t>(kCullBatchSize) - 1u) / static_cast<uint32_t>(kCullBatchSize) + static_cast<uint32_t>(m_models.size()));
-        for (auto &modelPtr : m_models)
+        futures.reserve((nodeCount + kCullBatchSize - 1u) / kCullBatchSize);
+
+        for (uint32_t beginNode = 0; beginNode < nodeCount; beginNode += kCullBatchSize)
         {
-            ModelAsset &model = *modelPtr;
-            if (!model.IsRenderReady())
-                continue;
-
-            model.UpdateNodeMatrices();
-
-            const int nodeCount = model.GetNodeCount();
-            for (int beginNode = 0; beginNode < nodeCount; beginNode += kCullBatchSize)
-            {
-                const int endNode = std::min(beginNode + kCullBatchSize, nodeCount);
-                futures.push_back(ThreadPool::Update.Enqueue(&Scene::CullNodeBatch, this, std::ref(model), beginNode, endNode, camera, frustumCulling));
-            }
+            const uint32_t endNode = std::min(beginNode + kCullBatchSize, nodeCount);
+            futures.push_back(ThreadPool::Update.Enqueue(&Scene::CullNodeBatch, this, beginNode, endNode, camera, frustumCulling));
         }
 
         for (auto &future : futures)
@@ -911,37 +904,30 @@ namespace pe
             uint32_t maxAlphaBlend = 0;
             uint32_t maxTransmission = 0;
 
-            for (auto &modelPtr : m_models)
+            for (uint32_t i = 0; i < GetNodeCount(); i++)
             {
-                ModelAsset &model = *modelPtr;
-                if (!model.IsRenderReady())
+                int meshIdx = m_meshRefs[i];
+                if (meshIdx < 0)
                     continue;
 
-                for (int node = 0; node < model.GetNodeCount(); node++)
+                const Mesh &mesh = m_meshes[meshIdx];
+                if (mesh.indexCount == 0)
+                    continue;
+
+                switch (mesh.renderType)
                 {
-                    int mesh = model.GetNodeMesh(node);
-                    if (mesh < 0)
-                        continue;
-
-                    const MeshInfo *meshInfo = model.GetMeshInfo(mesh);
-                    if (!meshInfo)
-                        continue;
-
-                    switch (meshInfo->renderType)
-                    {
-                    case RenderType::Opaque:
-                        maxOpaque++;
-                        break;
-                    case RenderType::AlphaCut:
-                        maxAlphaCut++;
-                        break;
-                    case RenderType::AlphaBlend:
-                        maxAlphaBlend++;
-                        break;
-                    case RenderType::Transmission:
-                        maxTransmission++;
-                        break;
-                    }
+                case RenderType::Opaque:
+                    maxOpaque++;
+                    break;
+                case RenderType::AlphaCut:
+                    maxAlphaCut++;
+                    break;
+                case RenderType::AlphaBlend:
+                    maxAlphaBlend++;
+                    break;
+                case RenderType::Transmission:
+                    maxTransmission++;
+                    break;
                 }
             }
 
@@ -1006,10 +992,9 @@ namespace pe
         RHII.AddToDeletionQueue([b = m_scratchBuffer]()
                                 { Buffer* buf = b; Buffer::Destroy(buf); });
 
-        if (!GetBuffer()) // No geometry
+        if (!GetBuffer())
             return;
 
-        // Barrier for vertex/index buffer uploads
         vk::MemoryBarrier2 barrier{};
         barrier.srcStageMask = vk::PipelineStageFlagBits2::eTransfer;
         barrier.srcAccessMask = vk::AccessFlagBits2::eTransferWrite;
@@ -1019,7 +1004,7 @@ namespace pe
 
         vk::DeviceAddress bufferAddress = GetBuffer()->GetDeviceAddress();
 
-        // --- Pass 1: Calculate sizes for BLAS ---
+        // --- Pass 1: Calculate sizes for BLAS (one per unique mesh) ---
         vk::DeviceSize totalBlasSize = 0;
         vk::DeviceSize maxScratchSize = 0;
 
@@ -1028,126 +1013,89 @@ namespace pe
             vk::AccelerationStructureGeometryKHR geometry;
             vk::AccelerationStructureBuildRangeInfoKHR range;
             vk::AccelerationStructureBuildSizesInfoKHR sizeInfo;
-            ModelAsset *model;
-            size_t meshIndex;
+            int meshIndex;
             AccelerationStructure *createdBlas = nullptr;
         };
         std::vector<BlasBuildReq> buildReqs;
-        buildReqs.reserve(m_meshCount);
+        buildReqs.reserve(m_meshes.size());
 
         static constexpr vk::BuildAccelerationStructureFlagsKHR kBlasFlags = vk::BuildAccelerationStructureFlagBitsKHR::ePreferFastTrace;
 
-        // Iterate models/meshes
-        for (auto model : m_models)
+        for (int meshIndex = 0; meshIndex < static_cast<int>(m_meshes.size()); meshIndex++)
         {
-            for (int meshIndex = 0; meshIndex < model->GetMeshInfoCount(); meshIndex++)
+            const Mesh &mesh = m_meshes[meshIndex];
+            if (mesh.indexCount == 0)
+                continue;
+
+            vk::AccelerationStructureGeometryKHR geometry{};
+            geometry.geometryType = vk::GeometryTypeKHR::eTriangles;
+            geometry.geometry.triangles.vertexFormat = vk::Format::eR32G32B32Sfloat;
+            geometry.geometry.triangles.vertexData.deviceAddress = bufferAddress + m_verticesOffset + mesh.vertexOffset * sizeof(Vertex);
+            geometry.geometry.triangles.vertexStride = sizeof(Vertex);
+            geometry.geometry.triangles.maxVertex = mesh.vertexCount ? mesh.vertexCount - 1 : 0;
+            geometry.geometry.triangles.indexType = vk::IndexType::eUint32;
+            geometry.geometry.triangles.indexData.deviceAddress = bufferAddress + mesh.indexOffset * sizeof(uint32_t);
+            if (mesh.renderType == RenderType::AlphaCut ||
+                mesh.renderType == RenderType::AlphaBlend ||
+                mesh.renderType == RenderType::Transmission)
             {
-                const MeshInfo *meshInfo = model->GetMeshInfo(meshIndex);
-                if (!meshInfo || meshInfo->indicesCount == 0)
-                    continue;
-
-                vk::AccelerationStructureGeometryKHR geometry{};
-                geometry.geometryType = vk::GeometryTypeKHR::eTriangles;
-                geometry.geometry.triangles.vertexFormat = vk::Format::eR32G32B32Sfloat;
-                geometry.geometry.triangles.vertexData.deviceAddress = bufferAddress + m_verticesOffset + meshInfo->vertexOffset * sizeof(Vertex);
-                geometry.geometry.triangles.vertexStride = sizeof(Vertex);
-                geometry.geometry.triangles.maxVertex = meshInfo->verticesCount ? meshInfo->verticesCount - 1 : 0;
-                geometry.geometry.triangles.indexType = vk::IndexType::eUint32;
-                geometry.geometry.triangles.indexData.deviceAddress = bufferAddress + meshInfo->indexOffset * sizeof(uint32_t);
-                if (meshInfo->renderType == RenderType::AlphaCut ||
-                    meshInfo->renderType == RenderType::AlphaBlend ||
-                    meshInfo->renderType == RenderType::Transmission)
-                {
-                    geometry.flags = vk::GeometryFlagBitsKHR::eNoDuplicateAnyHitInvocation;
-                }
-                else
-                {
-                    geometry.flags = vk::GeometryFlagBitsKHR::eOpaque;
-                }
-
-                vk::AccelerationStructureBuildRangeInfoKHR range{};
-                range.primitiveCount = meshInfo->indicesCount / 3;
-                range.primitiveOffset = 0;
-                range.firstVertex = 0;
-                range.transformOffset = 0;
-
-                auto sizeInfo = AccelerationStructure::GetBuildSizes(
-                    {geometry},
-                    {range.primitiveCount},
-                    vk::AccelerationStructureTypeKHR::eBottomLevel,
-                    kBlasFlags,
-                    vk::AccelerationStructureBuildTypeKHR::eDevice);
-
-                // Align up
-                totalBlasSize = RHII.Align(totalBlasSize + sizeInfo.accelerationStructureSize, 256);
-                maxScratchSize = std::max(maxScratchSize, sizeInfo.buildScratchSize);
-
-                buildReqs.push_back({geometry, range, sizeInfo, model, static_cast<size_t>(meshIndex)});
+                geometry.flags = vk::GeometryFlagBitsKHR::eNoDuplicateAnyHitInvocation;
             }
+            else
+            {
+                geometry.flags = vk::GeometryFlagBitsKHR::eOpaque;
+            }
+
+            vk::AccelerationStructureBuildRangeInfoKHR rangeInfo{};
+            rangeInfo.primitiveCount = mesh.indexCount / 3;
+            rangeInfo.primitiveOffset = 0;
+            rangeInfo.firstVertex = 0;
+            rangeInfo.transformOffset = 0;
+
+            auto sizeInfo = AccelerationStructure::GetBuildSizes(
+                {geometry},
+                {rangeInfo.primitiveCount},
+                vk::AccelerationStructureTypeKHR::eBottomLevel,
+                kBlasFlags,
+                vk::AccelerationStructureBuildTypeKHR::eDevice);
+
+            totalBlasSize = RHII.Align(totalBlasSize + sizeInfo.accelerationStructureSize, 256);
+            maxScratchSize = std::max(maxScratchSize, sizeInfo.buildScratchSize);
+
+            buildReqs.push_back({geometry, rangeInfo, sizeInfo, meshIndex});
         }
 
+        // Collect instances (one per node with a mesh)
         struct InstanceReq
         {
             AccelerationStructure *blas;
-            ModelAsset *model;
             int meshIndex;
-            int nodeIndex; // Added for caching
+            uint32_t nodeIndex;
             mat4 transform;
         };
         std::vector<InstanceReq> instanceReqs;
-        instanceReqs.reserve(m_meshCount); // Approximate or better
+        instanceReqs.reserve(m_meshCount);
 
-        struct BlasKey
+        for (uint32_t i = 0; i < GetNodeCount(); i++)
         {
-            ModelAsset *model;
-            size_t meshIndex;
+            int meshIdx = m_meshRefs[i];
+            if (meshIdx < 0)
+                continue;
+            if (m_meshes[meshIdx].indexCount == 0)
+                continue;
 
-            bool operator==(const BlasKey &other) const
-            {
-                return model == other.model && meshIndex == other.meshIndex;
-            }
-        };
-        struct BlasKeyHash
-        {
-            size_t operator()(const BlasKey &key) const noexcept
-            {
-                size_t h1 = std::hash<ModelAsset *>{}(key.model);
-                size_t h2 = std::hash<size_t>{}(key.meshIndex);
-                return h1 ^ (h2 + 0x9e3779b9 + (h1 << 6) + (h1 >> 2));
-            }
-        };
-        std::unordered_map<BlasKey, AccelerationStructure *, BlasKeyHash> blasByModelMesh;
-        blasByModelMesh.reserve(m_meshCount);
-
-        for (auto model : m_models)
-        {
-            for (int i = 0; i < model->GetNodeCount(); i++)
-            {
-                int meshIndex = model->GetNodeMesh(i);
-                if (meshIndex < 0)
-                    continue;
-
-                // Check if valid mesh (must match BLAS build logic)
-                const MeshInfo *meshInfo = model->GetMeshInfo(meshIndex);
-                if (!meshInfo || meshInfo->indicesCount == 0)
-                    continue;
-
-                instanceReqs.push_back({nullptr, model, meshIndex, i, model->GetNodeWorldMatrix(i)});
-            }
+            instanceReqs.push_back({nullptr, meshIdx, i, m_nodeRuntime[i].gpuData.worldMatrix});
         }
 
         PE_ERROR_IF(instanceReqs.size() != m_meshCount, "BuildAccelerationStructures instanceCount mismatch!");
 
         static constexpr vk::BuildAccelerationStructureFlagsKHR kTlasFlags = vk::BuildAccelerationStructureFlagBitsKHR::ePreferFastTrace;
 
-        // Query TLAS scratch
         vk::AccelerationStructureGeometryKHR tlasGeom{};
         tlasGeom.geometryType = vk::GeometryTypeKHR::eInstances;
-
         vk::AccelerationStructureGeometryInstancesDataKHR instData{};
         instData.arrayOfPointers = VK_FALSE;
         instData.data.deviceAddress = 0;
-
         tlasGeom.geometry.instances = instData;
 
         auto tlasSizes = AccelerationStructure::GetBuildSizes(
@@ -1171,28 +1119,27 @@ namespace pe
         vk::PhysicalDeviceProperties2 props{};
         props.pNext = &asProps;
         RHII.GetGpu().getProperties2(&props);
-        auto align = asProps.minAccelerationStructureScratchOffsetAlignment;
+        auto scratchAlign = asProps.minAccelerationStructureScratchOffsetAlignment;
         m_scratchBuffer = Buffer::Create(
-            RHII.Align(maxScratchSize, align),
+            RHII.Align(maxScratchSize, scratchAlign),
             vk::BufferUsageFlagBits2::eStorageBuffer | vk::BufferUsageFlagBits2::eShaderDeviceAddress,
             VMA_ALLOCATION_CREATE_DEDICATED_MEMORY_BIT,
             "AS_Scratch_Buffer");
 
         // --- Pass 2: Build BLAS ---
         vk::DeviceSize currentOffset = 0;
+        std::unordered_map<int, AccelerationStructure *> blasByMesh;
+        blasByMesh.reserve(buildReqs.size());
 
-        for (size_t i = 0; i < buildReqs.size(); i++)
+        for (auto &req : buildReqs)
         {
-            auto &req = buildReqs[i];
-
-            // Re-align offset for this AS
             currentOffset = RHII.Align(currentOffset, 256);
 
-            std::string name = req.model ? ("BLAS_" + req.model->GetLabel() + "_" + std::to_string(req.meshIndex)) : "BLAS_Dummy";
+            std::string name = "BLAS_mesh" + std::to_string(req.meshIndex);
             req.createdBlas = new AccelerationStructure(name, m_blasMergedBuffer, currentOffset);
             req.createdBlas->BuildBLAS(cmd, {req.geometry}, {req.range}, {req.range.primitiveCount}, kBlasFlags, m_scratchBuffer->GetDeviceAddress());
             m_blases.push_back(req.createdBlas);
-            blasByModelMesh[{req.model, req.meshIndex}] = req.createdBlas;
+            blasByMesh[req.meshIndex] = req.createdBlas;
 
             currentOffset += req.sizeInfo.accelerationStructureSize;
         }
@@ -1202,10 +1149,9 @@ namespace pe
         matchedInstances.reserve(instanceReqs.size());
         for (auto &req : instanceReqs)
         {
-            auto found = blasByModelMesh.find({req.model, static_cast<size_t>(req.meshIndex)});
-            if (found == blasByModelMesh.end())
+            auto found = blasByMesh.find(req.meshIndex);
+            if (found == blasByMesh.end())
                 continue;
-
             req.blas = found->second;
             matchedInstances.push_back(req);
         }
@@ -1240,10 +1186,10 @@ namespace pe
             transformMatrix.matrix[2][2] = t[2][2];
             transformMatrix.matrix[2][3] = t[3][2];
 
-            const MeshInfo *meshInfo = req.model ? req.model->GetMeshInfo(req.meshIndex) : nullptr;
-            bool isTransparent = meshInfo && (meshInfo->renderType == RenderType::AlphaBlend ||
-                                              meshInfo->renderType == RenderType::Transmission ||
-                                              meshInfo->renderType == RenderType::AlphaCut);
+            const Mesh &mesh = m_meshes[req.meshIndex];
+            bool isTransparent = (mesh.renderType == RenderType::AlphaBlend ||
+                                  mesh.renderType == RenderType::Transmission ||
+                                  mesh.renderType == RenderType::AlphaCut);
 
             gpuInstances[i].transform = transformMatrix;
             gpuInstances[i].instanceCustomIndex = static_cast<uint32_t>(i);
@@ -1252,9 +1198,7 @@ namespace pe
             gpuInstances[i].flags = static_cast<VkGeometryInstanceFlagBitsKHR>(vk::GeometryInstanceFlagBitsKHR::eTriangleFacingCullDisable);
             gpuInstances[i].accelerationStructureReference = req.blas->GetDeviceAddress();
 
-            // Cache instance index
-            if (req.model)
-                req.model->SetNodeInstanceIndex(req.nodeIndex, static_cast<int>(i));
+            m_nodeRuntime[req.nodeIndex].instanceIndex = static_cast<int>(i);
         }
         m_instanceBuffer->Flush();
         m_instanceBuffer->Unmap();
@@ -1263,14 +1207,14 @@ namespace pe
         m_tlas = AccelerationStructure::Create("TLAS", nullptr, 0);
         m_tlas->BuildTLAS(cmd, m_meshCount, m_instanceBuffer, kTlasFlags, m_scratchBuffer->GetDeviceAddress());
 
-        // --- Create MeshInfoGPU Buffer (Corresponds to Instances) ---
+        // --- Create MeshInfoGPU Buffer ---
         struct MeshInfoGPU
         {
             uint32_t indexOffset;
             uint32_t vertexOffset;
             uint32_t positionsOffset;
-            uint32_t renderType; // 1: Opaque, 2: AlphaCut, 3: AlphaBlend, 4: Transmission
-            int32_t textures[5]; // BaseColor, Normal, Metallic, Occlusion, Emissive
+            uint32_t renderType;
+            int32_t textures[5];
         };
 
         Buffer::Destroy(m_meshInfoBuffer);
@@ -1287,34 +1231,16 @@ namespace pe
         {
             auto &req = instanceReqs[i];
             auto &meshInfoGPU = meshInfosGPU[i];
-            if (req.model)
-            {
-                const MeshInfo *meshInfo = req.model->GetMeshInfo(req.meshIndex);
-                if (!meshInfo)
-                {
-                    meshInfoGPU.indexOffset = 0;
-                    meshInfoGPU.vertexOffset = 0;
-                    meshInfoGPU.renderType = 0;
-                    for (int k = 0; k < 5; k++)
-                        meshInfoGPU.textures[k] = -1;
-                    continue;
-                }
 
-                meshInfoGPU.indexOffset = meshInfo->indexOffset * 4;
-                meshInfoGPU.vertexOffset = static_cast<uint32_t>(m_verticesOffset) + meshInfo->vertexOffset * sizeof(Vertex);
-                meshInfoGPU.renderType = static_cast<uint32_t>(meshInfo->renderType);
+            const Mesh &mesh = m_meshes[req.meshIndex];
+            const MeshRuntime &meshRt = m_meshRuntimes[req.meshIndex];
 
-                for (int k = 0; k < 5; k++)
-                    meshInfoGPU.textures[k] = req.model->GetMeshImageViewIndex(req.meshIndex, k);
-            }
-            else
-            {
-                meshInfoGPU.indexOffset = 0;
-                meshInfoGPU.vertexOffset = 0;
-                meshInfoGPU.renderType = 0;
-                for (int k = 0; k < 5; k++)
-                    meshInfoGPU.textures[k] = -1;
-            }
+            meshInfoGPU.indexOffset = mesh.indexOffset * 4;
+            meshInfoGPU.vertexOffset = static_cast<uint32_t>(m_verticesOffset) + mesh.vertexOffset * sizeof(Vertex);
+            meshInfoGPU.renderType = static_cast<uint32_t>(mesh.renderType);
+
+            for (int k = 0; k < 5; k++)
+                meshInfoGPU.textures[k] = static_cast<int32_t>(meshRt.imageViewIndices[k]);
         }
         m_meshInfoBuffer->Flush();
         m_meshInfoBuffer->Unmap();
@@ -1325,63 +1251,41 @@ namespace pe
         if (!m_tlas || !m_instanceBuffer)
             return;
 
-        // Check if any model has dirty transforms
-        bool needsUpdate = false;
-        for (auto &modelPtr : m_models)
-        {
-            if (modelPtr->HasMovedNodes())
-            {
-                needsUpdate = true;
-                break;
-            }
-        }
-
-        if (!needsUpdate)
+        if (m_nodesMoved.empty())
             return;
 
         m_instanceBuffer->Map();
         auto *gpuInstances = (vk::AccelerationStructureInstanceKHR *)m_instanceBuffer->Data();
-        int updatedCount = 0;
 
-        for (auto &modelPtr : m_models)
+        for (NodeId *node : m_nodesMoved)
         {
-            ModelAsset &model = *modelPtr;
-            if (!model.HasMovedNodes())
+            const NodeRuntime &rt = m_nodeRuntime[node->index];
+            int instanceIndex = rt.instanceIndex;
+            if (instanceIndex < 0)
                 continue;
 
-            const auto &nodesMoved = model.GetMovedNodes();
-            for (int i : nodesMoved)
-            {
-                int instanceIndex = model.GetNodeInstanceIndex(i);
+            const mat4 &t = rt.gpuData.worldMatrix;
 
-                if (instanceIndex < 0)
-                    continue;
+            vk::TransformMatrixKHR transformMatrix;
+            transformMatrix.matrix[0][0] = t[0][0];
+            transformMatrix.matrix[0][1] = t[1][0];
+            transformMatrix.matrix[0][2] = t[2][0];
+            transformMatrix.matrix[0][3] = t[3][0];
+            transformMatrix.matrix[1][0] = t[0][1];
+            transformMatrix.matrix[1][1] = t[1][1];
+            transformMatrix.matrix[1][2] = t[2][1];
+            transformMatrix.matrix[1][3] = t[3][1];
+            transformMatrix.matrix[2][0] = t[0][2];
+            transformMatrix.matrix[2][1] = t[1][2];
+            transformMatrix.matrix[2][2] = t[2][2];
+            transformMatrix.matrix[2][3] = t[3][2];
 
-                const mat4 &t = model.GetNodeWorldMatrix(i);
-
-                vk::TransformMatrixKHR transformMatrix;
-                transformMatrix.matrix[0][0] = t[0][0];
-                transformMatrix.matrix[0][1] = t[1][0];
-                transformMatrix.matrix[0][2] = t[2][0];
-                transformMatrix.matrix[0][3] = t[3][0];
-                transformMatrix.matrix[1][0] = t[0][1];
-                transformMatrix.matrix[1][1] = t[1][1];
-                transformMatrix.matrix[1][2] = t[2][1];
-                transformMatrix.matrix[1][3] = t[3][1];
-                transformMatrix.matrix[2][0] = t[0][2];
-                transformMatrix.matrix[2][1] = t[1][2];
-                transformMatrix.matrix[2][2] = t[2][2];
-                transformMatrix.matrix[2][3] = t[3][2];
-
-                gpuInstances[instanceIndex].transform = transformMatrix;
-                updatedCount++;
-            }
-            model.ClearMovedNodes(); // Clear the list for this frame
+            gpuInstances[instanceIndex].transform = transformMatrix;
         }
+
         m_instanceBuffer->Flush();
         m_instanceBuffer->Unmap();
 
-        // Update TLAS in-place using eUpdate mode
         m_tlas->UpdateTLAS(cmd, m_meshCount, m_instanceBuffer, m_scratchBuffer->GetDeviceAddress());
     }
     std::string Scene::GetSceneName() const
@@ -1462,107 +1366,149 @@ namespace pe
 
         d.AddMember("settings", settings.Move(), allocator);
 
-        // Models
-        rapidjson::Value models(rapidjson::kArrayType);
-        for (auto *model : m_models)
+        // Build live mesh/source remaps to exclude geometry orphaned by RemoveModel.
+        // A mesh is live if at least one active node references it.
+        // A source is live if at least one live mesh references it.
+        std::vector<int> meshRemap(m_meshes.size(), -1);
+        std::vector<int> srcRemap(m_sources.size(), -1);
         {
-            if (!model)
-                continue;
-
-            rapidjson::Value modelObj(rapidjson::kObjectType);
-
-            // Basic Info - store path relative to the scene file so scenes are portable
-            if (model->IsPrimitive())
+            std::vector<bool> liveMesh(m_meshes.size(), false);
+            for (uint32_t ni = 0; ni < GetNodeCount(); ni++)
             {
-                modelObj.AddMember("primitive_type", rapidjson::Value(model->GetPrimitiveType().c_str(), allocator).Move(), allocator);
+                int mr = m_meshRefs[ni];
+                if (mr >= 0 && mr < static_cast<int>(m_meshes.size()))
+                    liveMesh[mr] = true;
+            }
+            int newMeshIdx = 0;
+            for (int mi = 0; mi < static_cast<int>(m_meshes.size()); mi++)
+                if (liveMesh[mi])
+                    meshRemap[mi] = newMeshIdx++;
+
+            std::vector<bool> liveSrc(m_sources.size(), false);
+            for (int mi = 0; mi < static_cast<int>(m_meshes.size()); mi++)
+            {
+                if (meshRemap[mi] < 0)
+                    continue;
+                if (mi < static_cast<int>(m_meshSourceInfos.size()))
+                {
+                    int si = m_meshSourceInfos[mi].sourceIndex;
+                    if (si >= 0 && si < static_cast<int>(m_sources.size()))
+                        liveSrc[si] = true;
+                }
+            }
+            int newSrcIdx = 0;
+            for (int si = 0; si < static_cast<int>(m_sources.size()); si++)
+                if (liveSrc[si])
+                    srcRemap[si] = newSrcIdx++;
+        }
+
+        // Sources — geometry origins for reload (live only)
+        rapidjson::Value sourcesArr(rapidjson::kArrayType);
+        for (int si = 0; si < static_cast<int>(m_sources.size()); si++)
+        {
+            if (srcRemap[si] < 0)
+                continue;
+            const auto &src = m_sources[si];
+            rapidjson::Value srcObj(rapidjson::kObjectType);
+            if (!src.primitiveType.empty())
+            {
+                srcObj.AddMember("primitive_type", rapidjson::Value(src.primitiveType.c_str(), allocator).Move(), allocator);
             }
             else
             {
-                auto relModelPath = std::filesystem::relative(model->GetFilePath(), file.parent_path());
-                auto u8rp = relModelPath.u8string();
-                std::string pathObj(u8rp.begin(), u8rp.end());
-                std::replace(pathObj.begin(), pathObj.end(), '\\', '/');
-                modelObj.AddMember("path", rapidjson::Value(pathObj.c_str(), static_cast<rapidjson::SizeType>(pathObj.length()), allocator).Move(), allocator);
+                auto relPath = std::filesystem::relative(src.filePath, file.parent_path());
+                auto u8rp = relPath.u8string();
+                std::string pathStr(u8rp.begin(), u8rp.end());
+                std::replace(pathStr.begin(), pathStr.end(), '\\', '/');
+                srcObj.AddMember("path", rapidjson::Value(pathStr.c_str(), static_cast<rapidjson::SizeType>(pathStr.length()), allocator).Move(), allocator);
             }
-            modelObj.AddMember("name", rapidjson::Value(model->GetLabel().c_str(), allocator).Move(), allocator);
-
-            rapidjson::Value matrixVal;
-            SetMat4(matrixVal, model->GetMatrix());
-            modelObj.AddMember("matrix", matrixVal.Move(), allocator);
-
-            // Nodes (Hierarchy & Transforms)
-            rapidjson::Value nodesArr(rapidjson::kArrayType);
-            for (int ni = 0; ni < model->GetNodeCount(); ni++)
-            {
-                const NodeInfo *node = model->GetNodeInfo(ni);
-                if (!node)
-                    continue;
-
-                rapidjson::Value nodeObj(rapidjson::kObjectType);
-                nodeObj.AddMember("name", rapidjson::Value(node->name.c_str(), allocator).Move(), allocator);
-                nodeObj.AddMember("parent", node->parent, allocator);
-
-                rapidjson::Value localMat;
-                SetMat4(localMat, node->localMatrix);
-                nodeObj.AddMember("local_matrix", localMat.Move(), allocator);
-
-                nodesArr.PushBack(nodeObj.Move(), allocator);
-            }
-            modelObj.AddMember("nodes", nodesArr.Move(), allocator);
-
-            // Meshes (Materials & Textures)
-            rapidjson::Value meshesArr(rapidjson::kArrayType);
-            for (int meshIndex = 0; meshIndex < model->GetMeshInfoCount(); meshIndex++)
-            {
-                const MeshInfo *mesh = model->GetMeshInfo(meshIndex);
-                if (!mesh)
-                    continue;
-
-                rapidjson::Value meshObj(rapidjson::kObjectType);
-                meshObj.AddMember("render_type", static_cast<int>(mesh->renderType), allocator);
-                meshObj.AddMember("texture_mask", mesh->textureMask, allocator);
-
-                // Material Factors
-                mat4 persistedF0 = mesh->materialFactors[0];
-                mat4 persistedF1 = mesh->materialFactors[1];
-                EncodeMaterialFactorsForPersistence(mesh->renderType, persistedF0, persistedF1);
-
-                rapidjson::Value factorsArr(rapidjson::kArrayType);
-                rapidjson::Value f0, f1;
-                SetMat4(f0, persistedF0);
-                SetMat4(f1, persistedF1);
-                factorsArr.PushBack(f0.Move(), allocator);
-                factorsArr.PushBack(f1.Move(), allocator);
-                meshObj.AddMember("material_factors", factorsArr.Move(), allocator);
-
-                // Textures (Save paths if not default)
-                rapidjson::Value texturesObj(rapidjson::kObjectType);
-                const char *methodNames[] = {"base_color", "metallic_roughness", "normal", "occlusion", "emissive"};
-                for (int i = 0; i < 5; i++)
-                {
-                    if (mesh->images[i] && !mesh->images[i]->GetName().empty())
-                    {
-                        std::string texName = mesh->images[i]->GetName();
-                        if (!texName.empty())
-                        {
-                            // Store texture path relative to the scene file
-                            auto relTex = std::filesystem::relative(std::filesystem::path(texName), file.parent_path());
-                            auto u8tex = relTex.u8string();
-                            texName = std::string(u8tex.begin(), u8tex.end());
-                            std::replace(texName.begin(), texName.end(), '\\', '/');
-                            if (!texName.empty())
-                                texturesObj.AddMember(rapidjson::Value(methodNames[i], allocator).Move(),
-                                                      rapidjson::Value(texName.c_str(), allocator).Move(), allocator);
-                        }
-                    }
-                }
-                meshObj.AddMember("textures", texturesObj.Move(), allocator);
-                meshesArr.PushBack(meshObj.Move(), allocator);
-            }
-            modelObj.AddMember("meshes", meshesArr.Move(), allocator);
-            models.PushBack(modelObj.Move(), allocator);
+            sourcesArr.PushBack(srcObj.Move(), allocator);
         }
-        d.AddMember("models", models.Move(), allocator);
+        d.AddMember("sources", sourcesArr.Move(), allocator);
+
+        // Meshes — flat array of live meshes only, with remapped source references
+        rapidjson::Value meshesArr(rapidjson::kArrayType);
+        for (int mi = 0; mi < static_cast<int>(m_meshes.size()); mi++)
+        {
+            if (meshRemap[mi] < 0)
+                continue;
+            const Mesh &mesh = m_meshes[mi];
+
+            rapidjson::Value meshObj(rapidjson::kObjectType);
+
+            // Source reference (for geometry reload)
+            if (mi < static_cast<int>(m_meshSourceInfos.size()))
+            {
+                int rawSrc = m_meshSourceInfos[mi].sourceIndex;
+                int remappedSrc = (rawSrc >= 0 && rawSrc < static_cast<int>(srcRemap.size())) ? srcRemap[rawSrc] : -1;
+                meshObj.AddMember("source", remappedSrc, allocator);
+                meshObj.AddMember("source_mesh", m_meshSourceInfos[mi].sourceMeshIndex, allocator);
+            }
+
+            meshObj.AddMember("render_type", static_cast<int>(mesh.renderType), allocator);
+            meshObj.AddMember("texture_mask", mesh.textureMask, allocator);
+
+            mat4 persistedF0 = mesh.materialFactors[0];
+            mat4 persistedF1 = mesh.materialFactors[1];
+            EncodeMaterialFactorsForPersistence(mesh.renderType, persistedF0, persistedF1);
+
+            rapidjson::Value factorsArr(rapidjson::kArrayType);
+            rapidjson::Value f0, f1;
+            SetMat4(f0, persistedF0);
+            SetMat4(f1, persistedF1);
+            factorsArr.PushBack(f0.Move(), allocator);
+            factorsArr.PushBack(f1.Move(), allocator);
+            meshObj.AddMember("material_factors", factorsArr.Move(), allocator);
+
+            rapidjson::Value texturesObj(rapidjson::kObjectType);
+            const char *texSlotNames[] = {"base_color", "metallic_roughness", "normal", "occlusion", "emissive"};
+            const auto &defaults = ModelAsset::GetDefaultResources();
+            for (int i = 0; i < 5; i++)
+            {
+                Image *img = mesh.images[i].get();
+                if (img && !img->GetName().empty() &&
+                    img != defaults.black && img != defaults.white && img != defaults.normal)
+                {
+                    std::string texName = img->GetName();
+                    auto relTex = std::filesystem::relative(std::filesystem::path(texName), file.parent_path());
+                    auto u8tex = relTex.u8string();
+                    texName = std::string(u8tex.begin(), u8tex.end());
+                    std::replace(texName.begin(), texName.end(), '\\', '/');
+                    if (!texName.empty())
+                        texturesObj.AddMember(rapidjson::Value(texSlotNames[i], allocator).Move(),
+                                              rapidjson::Value(texName.c_str(), allocator).Move(), allocator);
+                }
+            }
+            meshObj.AddMember("textures", texturesObj.Move(), allocator);
+            meshesArr.PushBack(meshObj.Move(), allocator);
+        }
+        d.AddMember("meshes", meshesArr.Move(), allocator);
+
+        // Nodes — flat array of all SoA nodes with global parent indices
+        rapidjson::Value nodesArr(rapidjson::kArrayType);
+        for (uint32_t ni = 0; ni < GetNodeCount(); ni++)
+        {
+            const NodeId *node = m_nodeIds[ni];
+
+            rapidjson::Value nodeObj(rapidjson::kObjectType);
+            nodeObj.AddMember("name", rapidjson::Value(m_nodeNames[ni].c_str(), allocator).Move(), allocator);
+
+            NodeId *parentNode = m_nodeParents[ni];
+            int parentIdx = parentNode ? static_cast<int>(parentNode->index) : -1;
+            nodeObj.AddMember("parent", parentIdx, allocator);
+
+            rapidjson::Value localMat;
+            SetMat4(localMat, m_localMatrices[ni]);
+            nodeObj.AddMember("local_matrix", localMat.Move(), allocator);
+
+            int meshRef = m_meshRefs[ni];
+            int remappedMesh = (meshRef >= 0 && meshRef < static_cast<int>(meshRemap.size())) ? meshRemap[meshRef] : -1;
+            if (remappedMesh >= 0)
+                nodeObj.AddMember("mesh", remappedMesh, allocator);
+
+            nodesArr.PushBack(nodeObj.Move(), allocator);
+        }
+        d.AddMember("nodes", nodesArr.Move(), allocator);
 
         // Lights
         auto *lightSystem = GetGlobalSystem<LightSystem>();
@@ -1716,8 +1662,41 @@ namespace pe
         m_scenePath.clear();
         m_dirty = false;
 
+        SelectionManager::Instance().ClearSelection();
+
+        m_sources.clear();
+        m_meshSourceInfos.clear();
+        m_modelRootNodes.clear();
+
+        // Free all NodeId allocations and clear SoA stores
+        for (NodeId *id : m_nodeIds)
+            delete id;
+        for (NodeId *id : m_freeNodeIds)
+            delete id;
+        m_nodeIds.clear();
+        m_freeNodeIds.clear();
+        m_nodeNames.clear();
+        m_localMatrices.clear();
+        m_nodeParents.clear();
+        m_nodeChildren.clear();
+        m_componentFlags.clear();
+        m_meshRefs.clear();
+        m_nodeRuntime.clear();
+        m_nodesMoved.clear();
+        m_nodesDirty = false;
+
+        m_meshes.clear();
+        m_meshRuntimes.clear();
+        m_vertexStore.clear();
+        m_positionUvStore.clear();
+        m_aabbVertexStore.clear();
+        m_indexStore.clear();
+        m_imageStore.clear();
+        m_samplerStore.clear();
+
         for (auto *model : m_models)
-            EventSystem::PushEvent(EventType::ModelRemoved, model);
+            delete model;
+        m_models.clear();
 
         auto *lightSystem = GetGlobalSystem<LightSystem>();
         if (lightSystem)
@@ -1734,34 +1713,152 @@ namespace pe
             m_cameras.pop_back();
         }
 
+        UpdateGeometryBuffers();
+
         Log::Info("New scene created.");
     }
 
-    void Scene::LoadScene(const std::filesystem::path &file)
+    Scene::ScenePreload::~ScenePreload()
     {
+        for (auto *m : models)
+            delete m;
+    }
+
+    Scene::ScenePreload Scene::PreloadScene(const std::filesystem::path &file)
+    {
+        ScenePreload result;
+        result.filePath = file;
+
         std::ifstream ifs(file);
         if (!ifs.is_open())
         {
             Log::Error("Failed to open scene file: " + file.string());
-            return;
+            return result;
         }
+        result.jsonText = std::string(std::istreambuf_iterator<char>(ifs),
+                                      std::istreambuf_iterator<char>());
 
-        m_scenePath = file;
-        m_dirty = false;
-
-        rapidjson::IStreamWrapper isw(ifs);
         rapidjson::Document d;
-        d.ParseStream(isw);
-
+        d.Parse(result.jsonText.c_str());
         if (d.HasParseError())
         {
             Log::Error("Failed to parse scene file: " + file.string());
-            return;
+            return result;
         }
 
-        // Clear existing scene via events (processed on main thread)
+        auto loadPrimitive = [](const std::string &ptype) -> ModelAsset *
+        {
+            if (ptype == "cube")     return Primitives::CreateCube();
+            if (ptype == "sphere")   return Primitives::CreateSphere();
+            if (ptype == "plane")    return Primitives::CreatePlane();
+            if (ptype == "cylinder") return Primitives::CreateCylinder();
+            if (ptype == "cone")     return Primitives::CreateCone();
+            if (ptype == "quad")     return Primitives::CreateQuad();
+            return nullptr;
+        };
+
+        if (d.HasMember("sources"))
+        {
+            const auto &sourcesVal = d["sources"];
+            result.models.resize(sourcesVal.Size(), nullptr);
+            for (rapidjson::SizeType si = 0; si < sourcesVal.Size(); si++)
+            {
+                const auto &sv = sourcesVal[si];
+                ModelAsset *model = nullptr;
+                if (sv.HasMember("primitive_type"))
+                {
+                    model = loadPrimitive(sv["primitive_type"].GetString());
+                }
+                else if (sv.HasMember("path"))
+                {
+                    std::filesystem::path modelPath = sv["path"].GetString();
+                    if (modelPath.is_relative())
+                        modelPath = file.parent_path() / modelPath;
+                    modelPath = modelPath.lexically_normal();
+                    if (!std::filesystem::is_directory(modelPath))
+                        model = ModelAsset::Load(modelPath);
+                }
+                result.models[si] = model;
+            }
+        }
+        else if (d.HasMember("models"))
+        {
+            const auto &modelsVal = d["models"];
+            result.models.resize(modelsVal.Size(), nullptr);
+            for (rapidjson::SizeType i = 0; i < modelsVal.Size(); i++)
+            {
+                const auto &modelVal = modelsVal[i];
+                ModelAsset *model = nullptr;
+                if (modelVal.HasMember("primitive_type"))
+                {
+                    model = loadPrimitive(modelVal["primitive_type"].GetString());
+                }
+                else if (modelVal.HasMember("path"))
+                {
+                    std::filesystem::path modelPath = modelVal["path"].GetString();
+                    if (modelPath.is_relative())
+                        modelPath = file.parent_path() / modelPath;
+                    modelPath = modelPath.lexically_normal();
+                    if (std::filesystem::is_directory(modelPath))
+                        continue;
+                    model = ModelAsset::Load(modelPath);
+                }
+                result.models[i] = model;
+            }
+        }
+
+        result.valid = true;
+        return result;
+    }
+
+    void Scene::LoadSceneApply(ScenePreload preload)
+    {
+        if (!preload.valid)
+            return;
+
+        m_scenePath = preload.filePath;
+        m_dirty = false;
+
+        rapidjson::Document d;
+        d.Parse(preload.jsonText.c_str());
+        if (d.HasParseError())
+            return;
+
+        // Clear existing scene: free SoA data, delete models, clear geometry stores
+        SelectionManager::Instance().ClearSelection();
+
+        m_sources.clear();
+        m_meshSourceInfos.clear();
+        m_modelRootNodes.clear();
+
+        for (NodeId *id : m_nodeIds)
+            delete id;
+        for (NodeId *id : m_freeNodeIds)
+            delete id;
+        m_nodeIds.clear();
+        m_freeNodeIds.clear();
+        m_nodeNames.clear();
+        m_localMatrices.clear();
+        m_nodeParents.clear();
+        m_nodeChildren.clear();
+        m_componentFlags.clear();
+        m_meshRefs.clear();
+        m_nodeRuntime.clear();
+        m_nodesMoved.clear();
+        m_nodesDirty = false;
+
+        m_meshes.clear();
+        m_meshRuntimes.clear();
+        m_vertexStore.clear();
+        m_positionUvStore.clear();
+        m_aabbVertexStore.clear();
+        m_indexStore.clear();
+        m_imageStore.clear();
+        m_samplerStore.clear();
+
         for (auto *model : m_models)
-            EventSystem::PushEvent(EventType::ModelRemoved, model);
+            delete model;
+        m_models.clear();
 
         auto *lightSystem = GetGlobalSystem<LightSystem>();
         if (lightSystem)
@@ -1864,43 +1961,177 @@ namespace pe
             return m;
         };
 
-        if (d.HasMember("models"))
+        if (d.HasMember("sources"))
         {
+            // --- New flat format ---
+            Queue *queue = RHII.GetMainQueue();
+            CommandBuffer *cmd = queue->AcquireCommandBuffer();
+            cmd->Begin();
+
+            // 1. Load sources and copy geometry
+            const auto &sourcesVal = d["sources"];
+            std::vector<ModelAsset *> loadedModels(sourcesVal.Size(), nullptr);
+            std::vector<std::vector<int>> sourceMeshMaps(sourcesVal.Size());
+
+            for (rapidjson::SizeType si = 0; si < sourcesVal.Size(); si++)
+            {
+                ModelAsset *model = si < preload.models.size() ? preload.models[si] : nullptr;
+                if (si < preload.models.size())
+                    preload.models[si] = nullptr; // take ownership
+
+                if (model)
+                {
+                    int sourceIndex = static_cast<int>(m_sources.size());
+                    SceneSource source;
+                    source.filePath = model->GetFilePath();
+                    source.primitiveType = model->GetPrimitiveType();
+                    m_sources.push_back(std::move(source));
+
+                    sourceMeshMaps[si] = AddModelGeometry(model, sourceIndex);
+                    m_models.insert(model->GetId(), model);
+                    loadedModels[si] = model;
+                }
+            }
+
+            // 2. Apply mesh overrides from JSON
+            if (d.HasMember("meshes"))
+            {
+                const auto &meshesVal = d["meshes"];
+                for (rapidjson::SizeType mi = 0; mi < meshesVal.Size(); mi++)
+                {
+                    const auto &mVal = meshesVal[mi];
+
+                    // Resolve scene mesh index via source reference
+                    int sceneMeshIdx = -1;
+                    if (mVal.HasMember("source") && mVal.HasMember("source_mesh"))
+                    {
+                        int srcIdx = mVal["source"].GetInt();
+                        int srcMesh = mVal["source_mesh"].GetInt();
+                        if (srcIdx >= 0 && srcIdx < static_cast<int>(sourceMeshMaps.size()) &&
+                            srcMesh >= 0 && srcMesh < static_cast<int>(sourceMeshMaps[srcIdx].size()))
+                        {
+                            sceneMeshIdx = sourceMeshMaps[srcIdx][srcMesh];
+                        }
+                    }
+                    if (sceneMeshIdx < 0 || sceneMeshIdx >= static_cast<int>(m_meshes.size()))
+                        continue;
+
+                    Mesh &mesh = m_meshes[sceneMeshIdx];
+                    if (mVal.HasMember("render_type"))
+                        mesh.renderType = static_cast<RenderType>(mVal["render_type"].GetInt());
+                    if (mVal.HasMember("texture_mask"))
+                    {
+                        uint32_t savedMask = mVal["texture_mask"].GetUint();
+                        // Only override if the saved mask is non-zero, or if the model had no textures.
+                        // This guards against corrupted scene files that saved texture_mask as 0.
+                        if (savedMask != 0 || mesh.textureMask == 0)
+                            mesh.textureMask = savedMask;
+                    }
+                    if (mVal.HasMember("material_factors"))
+                    {
+                        mesh.materialFactors[0] = ReadMat4(mVal["material_factors"][0]);
+                        mesh.materialFactors[1] = ReadMat4(mVal["material_factors"][1]);
+                        DecodeMaterialFactorsFromPersistence(mesh.renderType, mesh.materialFactors[0], mesh.materialFactors[1]);
+                    }
+
+                    if (mVal.HasMember("textures"))
+                    {
+                        const auto &texVal = mVal["textures"];
+                        const char *texSlotNames[] = {"base_color", "metallic_roughness", "normal", "occlusion", "emissive"};
+                        for (int k = 0; k < 5; k++)
+                        {
+                            if (texVal.HasMember(texSlotNames[k]) && texVal[texSlotNames[k]].GetStringLength() > 0)
+                            {
+                                std::filesystem::path texPath = texVal[texSlotNames[k]].GetString();
+                                if (texPath.is_relative())
+                                    texPath = (preload.filePath.parent_path() / texPath).lexically_normal();
+                                if (std::filesystem::exists(texPath))
+                                {
+                                    // Find source model for texture loading
+                                    int srcIdx = m_meshSourceInfos[sceneMeshIdx].sourceIndex;
+                                    ModelAsset *srcModel = (srcIdx >= 0 && srcIdx < static_cast<int>(loadedModels.size()))
+                                                               ? loadedModels[srcIdx]
+                                                               : nullptr;
+                                    if (srcModel)
+                                    {
+                                        ResourceHandle<Image> img = srcModel->LoadTexture(cmd, texPath);
+                                        if (img)
+                                            mesh.images[k] = img;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            // 3. Create flat node hierarchy from JSON (two-pass: create, then reparent)
+            if (d.HasMember("nodes"))
+            {
+                const auto &nodesVal = d["nodes"];
+                std::vector<NodeId *> nodeMap(nodesVal.Size(), nullptr);
+
+                // Pass 1: create all nodes as roots
+                for (rapidjson::SizeType ni = 0; ni < nodesVal.Size(); ni++)
+                {
+                    const auto &nv = nodesVal[ni];
+                    std::string name = nv.HasMember("name") ? nv["name"].GetString() : "";
+                    NodeId *node = CreateNode(name);
+
+                    if (nv.HasMember("local_matrix"))
+                        SetLocalMatrix(node, ReadMat4(nv["local_matrix"]), false);
+                    if (nv.HasMember("mesh"))
+                    {
+                        int meshIdx = nv["mesh"].GetInt();
+                        if (meshIdx >= 0 && meshIdx < static_cast<int>(m_meshes.size()))
+                            SetMeshRef(node, meshIdx);
+                    }
+
+                    nodeMap[ni] = node;
+                }
+
+                // Pass 2: set parents
+                for (rapidjson::SizeType ni = 0; ni < nodesVal.Size(); ni++)
+                {
+                    const auto &nv = nodesVal[ni];
+                    if (nv.HasMember("parent"))
+                    {
+                        int parentIdx = nv["parent"].GetInt();
+                        if (parentIdx >= 0 && parentIdx < static_cast<int>(nodeMap.size()) && nodeMap[parentIdx])
+                            ReparentNode(nodeMap[ni], nodeMap[parentIdx]);
+                    }
+                }
+
+                // Mark all nodes dirty
+                for (NodeId *node : nodeMap)
+                {
+                    if (node)
+                        MarkNodeDirty(node);
+                }
+                UpdateNodeMatrices();
+            }
+
+            UploadBuffers(cmd);
+
+            cmd->End();
+            queue->Submit(1, &cmd, nullptr, nullptr);
+            cmd->Wait();
+            queue->ReturnCommandBuffer(cmd);
+        }
+        else if (d.HasMember("models"))
+        {
+            // --- Legacy per-model format ---
             Queue *queue = RHII.GetMainQueue();
             CommandBuffer *cmd = queue->AcquireCommandBuffer();
             cmd->Begin();
 
             const auto &models = d["models"];
-            for (const auto &modelVal : models.GetArray())
+            for (rapidjson::SizeType i = 0; i < models.Size(); i++)
             {
-                ModelAsset *model = nullptr;
-
-                if (modelVal.HasMember("primitive_type"))
-                {
-                    std::string ptype = modelVal["primitive_type"].GetString();
-                    if (ptype == "cube")
-                        model = Primitives::CreateCube();
-                    else if (ptype == "sphere")
-                        model = Primitives::CreateSphere();
-                    else if (ptype == "plane")
-                        model = Primitives::CreatePlane();
-                    else if (ptype == "cylinder")
-                        model = Primitives::CreateCylinder();
-                    else if (ptype == "cone")
-                        model = Primitives::CreateCone();
-                    else if (ptype == "quad")
-                        model = Primitives::CreateQuad();
-                }
-                else if (modelVal.HasMember("path"))
-                {
-                    std::filesystem::path modelPath = modelVal["path"].GetString();
-                    if (modelPath.is_relative())
-                        modelPath = file.parent_path() / modelPath;
-                    modelPath = modelPath.lexically_normal();
-                    if (std::filesystem::is_directory(modelPath))
-                        continue;
-                    model = ModelAsset::Load(modelPath);
-                }
+                const auto &modelVal = models[i];
+                ModelAsset *model = i < preload.models.size() ? preload.models[i] : nullptr;
+                if (i < preload.models.size())
+                    preload.models[i] = nullptr; // take ownership
 
                 if (model)
                 {
@@ -1909,7 +2140,6 @@ namespace pe
                     if (modelVal.HasMember("matrix"))
                         model->SetMatrix(ReadMat4(modelVal["matrix"]), false);
 
-                    // Nodes
                     if (modelVal.HasMember("nodes"))
                     {
                         const auto &nodesVal = modelVal["nodes"];
@@ -1929,7 +2159,6 @@ namespace pe
                         model->UpdateNodeMatrices();
                     }
 
-                    // Meshes
                     if (modelVal.HasMember("meshes"))
                     {
                         const auto &meshesVal = modelVal["meshes"];
@@ -1963,14 +2192,13 @@ namespace pe
                                     {
                                         std::filesystem::path texPath = texVal[methodNames[k]].GetString();
                                         if (texPath.is_relative())
-                                            texPath = (file.parent_path() / texPath).lexically_normal();
+                                            texPath = (preload.filePath.parent_path() / texPath).lexically_normal();
                                         if (std::filesystem::exists(texPath))
                                         {
                                             ResourceHandle<Image> img = model->LoadTexture(cmd, texPath);
                                             if (img)
                                             {
                                                 mi->images[k] = img;
-                                                // Only auto-enable mask if no mask was present in JSON
                                                 if (!hasTextureMask)
                                                     mi->textureMask |= (1 << k);
                                             }
@@ -2078,7 +2306,12 @@ namespace pe
             }
         }
 
-        Log::Info("Scene loaded from: " + file.string());
+        Log::Info("Scene loaded from: " + preload.filePath.string());
+    }
+
+    void Scene::LoadScene(const std::filesystem::path &file)
+    {
+        LoadSceneApply(PreloadScene(file));
     }
 
     std::string Scene::TakeSnapshot() const
@@ -2148,92 +2381,137 @@ namespace pe
         settings.AddMember("use_Disney_PBR", gSettings.use_Disney_PBR, allocator);
         d.AddMember("settings", settings.Move(), allocator);
 
-        // Models - use absolute paths for in-memory snapshots
-        rapidjson::Value models(rapidjson::kArrayType);
-        for (auto *model : m_models)
+        // Build live mesh/source remaps to exclude geometry orphaned by RemoveModel.
+        std::vector<int> meshRemap(m_meshes.size(), -1);
+        std::vector<int> srcRemap(m_sources.size(), -1);
         {
-            if (!model)
-                continue;
-
-            rapidjson::Value modelObj(rapidjson::kObjectType);
-
-            if (model->IsPrimitive())
+            std::vector<bool> liveMesh(m_meshes.size(), false);
+            for (uint32_t ni = 0; ni < GetNodeCount(); ni++)
             {
-                modelObj.AddMember("primitive_type", rapidjson::Value(model->GetPrimitiveType().c_str(), allocator).Move(), allocator);
+                int mr = m_meshRefs[ni];
+                if (mr >= 0 && mr < static_cast<int>(m_meshes.size()))
+                    liveMesh[mr] = true;
+            }
+            int newMeshIdx = 0;
+            for (int mi = 0; mi < static_cast<int>(m_meshes.size()); mi++)
+                if (liveMesh[mi])
+                    meshRemap[mi] = newMeshIdx++;
+
+            std::vector<bool> liveSrc(m_sources.size(), false);
+            for (int mi = 0; mi < static_cast<int>(m_meshes.size()); mi++)
+            {
+                if (meshRemap[mi] < 0)
+                    continue;
+                if (mi < static_cast<int>(m_meshSourceInfos.size()))
+                {
+                    int si = m_meshSourceInfos[mi].sourceIndex;
+                    if (si >= 0 && si < static_cast<int>(m_sources.size()))
+                        liveSrc[si] = true;
+                }
+            }
+            int newSrcIdx = 0;
+            for (int si = 0; si < static_cast<int>(m_sources.size()); si++)
+                if (liveSrc[si])
+                    srcRemap[si] = newSrcIdx++;
+        }
+
+        // Sources (absolute paths for snapshots, live only)
+        rapidjson::Value sourcesArr(rapidjson::kArrayType);
+        for (int si = 0; si < static_cast<int>(m_sources.size()); si++)
+        {
+            if (srcRemap[si] < 0)
+                continue;
+            const auto &src = m_sources[si];
+            rapidjson::Value srcObj(rapidjson::kObjectType);
+            if (!src.primitiveType.empty())
+            {
+                srcObj.AddMember("primitive_type", rapidjson::Value(src.primitiveType.c_str(), allocator).Move(), allocator);
             }
             else
             {
-                auto u8p = model->GetFilePath().u8string();
+                auto u8p = src.filePath.u8string();
                 std::string absPath(u8p.begin(), u8p.end());
                 std::replace(absPath.begin(), absPath.end(), '\\', '/');
-                modelObj.AddMember("path", rapidjson::Value(absPath.c_str(), static_cast<rapidjson::SizeType>(absPath.length()), allocator).Move(), allocator);
+                srcObj.AddMember("path", rapidjson::Value(absPath.c_str(), static_cast<rapidjson::SizeType>(absPath.length()), allocator).Move(), allocator);
             }
-            modelObj.AddMember("name", rapidjson::Value(model->GetLabel().c_str(), allocator).Move(), allocator);
-
-            rapidjson::Value matrixVal;
-            SetMat4(matrixVal, model->GetMatrix());
-            modelObj.AddMember("matrix", matrixVal.Move(), allocator);
-
-            // Nodes
-            rapidjson::Value nodesArr(rapidjson::kArrayType);
-            for (int ni = 0; ni < model->GetNodeCount(); ni++)
-            {
-                const NodeInfo *node = model->GetNodeInfo(ni);
-                if (!node)
-                    continue;
-
-                rapidjson::Value nodeObj(rapidjson::kObjectType);
-                nodeObj.AddMember("name", rapidjson::Value(node->name.c_str(), allocator).Move(), allocator);
-                nodeObj.AddMember("parent", node->parent, allocator);
-                rapidjson::Value localMat;
-                SetMat4(localMat, node->localMatrix);
-                nodeObj.AddMember("local_matrix", localMat.Move(), allocator);
-                nodesArr.PushBack(nodeObj.Move(), allocator);
-            }
-            modelObj.AddMember("nodes", nodesArr.Move(), allocator);
-
-            // Meshes
-            rapidjson::Value meshesArr(rapidjson::kArrayType);
-            for (int meshIndex = 0; meshIndex < model->GetMeshInfoCount(); meshIndex++)
-            {
-                const MeshInfo *mesh = model->GetMeshInfo(meshIndex);
-                if (!mesh)
-                    continue;
-
-                rapidjson::Value meshObj(rapidjson::kObjectType);
-                meshObj.AddMember("render_type", static_cast<int>(mesh->renderType), allocator);
-                meshObj.AddMember("texture_mask", mesh->textureMask, allocator);
-
-                mat4 persistedF0 = mesh->materialFactors[0];
-                mat4 persistedF1 = mesh->materialFactors[1];
-                EncodeMaterialFactorsForPersistence(mesh->renderType, persistedF0, persistedF1);
-
-                rapidjson::Value factorsArr(rapidjson::kArrayType);
-                rapidjson::Value f0, f1;
-                SetMat4(f0, persistedF0);
-                SetMat4(f1, persistedF1);
-                factorsArr.PushBack(f0.Move(), allocator);
-                factorsArr.PushBack(f1.Move(), allocator);
-                meshObj.AddMember("material_factors", factorsArr.Move(), allocator);
-
-                rapidjson::Value texturesObj(rapidjson::kObjectType);
-                const char *texNames[] = {"base_color", "metallic_roughness", "normal", "occlusion", "emissive"};
-                for (int i = 0; i < 5; i++)
-                {
-                    if (mesh->images[i] && !mesh->images[i]->GetName().empty())
-                    {
-                        std::string texName = mesh->images[i]->GetName();
-                        texturesObj.AddMember(rapidjson::Value(texNames[i], allocator).Move(),
-                                              rapidjson::Value(texName.c_str(), allocator).Move(), allocator);
-                    }
-                }
-                meshObj.AddMember("textures", texturesObj.Move(), allocator);
-                meshesArr.PushBack(meshObj.Move(), allocator);
-            }
-            modelObj.AddMember("meshes", meshesArr.Move(), allocator);
-            models.PushBack(modelObj.Move(), allocator);
+            sourcesArr.PushBack(srcObj.Move(), allocator);
         }
-        d.AddMember("models", models.Move(), allocator);
+        d.AddMember("sources", sourcesArr.Move(), allocator);
+
+        // Meshes — flat array of live meshes only, with remapped source references
+        rapidjson::Value meshesArr(rapidjson::kArrayType);
+        for (int mi = 0; mi < static_cast<int>(m_meshes.size()); mi++)
+        {
+            if (meshRemap[mi] < 0)
+                continue;
+            const Mesh &mesh = m_meshes[mi];
+            rapidjson::Value meshObj(rapidjson::kObjectType);
+
+            if (mi < static_cast<int>(m_meshSourceInfos.size()))
+            {
+                int rawSrc = m_meshSourceInfos[mi].sourceIndex;
+                int remappedSrc = (rawSrc >= 0 && rawSrc < static_cast<int>(srcRemap.size())) ? srcRemap[rawSrc] : -1;
+                meshObj.AddMember("source", remappedSrc, allocator);
+                meshObj.AddMember("source_mesh", m_meshSourceInfos[mi].sourceMeshIndex, allocator);
+            }
+
+            meshObj.AddMember("render_type", static_cast<int>(mesh.renderType), allocator);
+            meshObj.AddMember("texture_mask", mesh.textureMask, allocator);
+
+            mat4 persistedF0 = mesh.materialFactors[0];
+            mat4 persistedF1 = mesh.materialFactors[1];
+            EncodeMaterialFactorsForPersistence(mesh.renderType, persistedF0, persistedF1);
+
+            rapidjson::Value factorsArr(rapidjson::kArrayType);
+            rapidjson::Value f0, f1;
+            SetMat4(f0, persistedF0);
+            SetMat4(f1, persistedF1);
+            factorsArr.PushBack(f0.Move(), allocator);
+            factorsArr.PushBack(f1.Move(), allocator);
+            meshObj.AddMember("material_factors", factorsArr.Move(), allocator);
+
+            rapidjson::Value texturesObj(rapidjson::kObjectType);
+            const char *texSlotNames[] = {"base_color", "metallic_roughness", "normal", "occlusion", "emissive"};
+            const auto &defaults = ModelAsset::GetDefaultResources();
+            for (int i = 0; i < 5; i++)
+            {
+                Image *img = mesh.images[i].get();
+                if (img && !img->GetName().empty() &&
+                    img != defaults.black && img != defaults.white && img != defaults.normal)
+                {
+                    std::string texName = img->GetName();
+                    texturesObj.AddMember(rapidjson::Value(texSlotNames[i], allocator).Move(),
+                                          rapidjson::Value(texName.c_str(), allocator).Move(), allocator);
+                }
+            }
+            meshObj.AddMember("textures", texturesObj.Move(), allocator);
+            meshesArr.PushBack(meshObj.Move(), allocator);
+        }
+        d.AddMember("meshes", meshesArr.Move(), allocator);
+
+        // Nodes — flat array with global parent indices
+        rapidjson::Value nodesArr(rapidjson::kArrayType);
+        for (uint32_t ni = 0; ni < GetNodeCount(); ni++)
+        {
+            rapidjson::Value nodeObj(rapidjson::kObjectType);
+            nodeObj.AddMember("name", rapidjson::Value(m_nodeNames[ni].c_str(), allocator).Move(), allocator);
+
+            NodeId *parentNode = m_nodeParents[ni];
+            int parentIdx = parentNode ? static_cast<int>(parentNode->index) : -1;
+            nodeObj.AddMember("parent", parentIdx, allocator);
+
+            rapidjson::Value localMat;
+            SetMat4(localMat, m_localMatrices[ni]);
+            nodeObj.AddMember("local_matrix", localMat.Move(), allocator);
+
+            int meshRef = m_meshRefs[ni];
+            int remappedMesh = (meshRef >= 0 && meshRef < static_cast<int>(meshRemap.size())) ? meshRemap[meshRef] : -1;
+            if (remappedMesh >= 0)
+                nodeObj.AddMember("mesh", remappedMesh, allocator);
+
+            nodesArr.PushBack(nodeObj.Move(), allocator);
+        }
+        d.AddMember("nodes", nodesArr.Move(), allocator);
 
         // Lights
         auto *lightSystem = GetGlobalSystem<LightSystem>();
@@ -2475,130 +2753,118 @@ namespace pe
             MarkUniformsDirty();
         }
 
-        // 2. Restore models (diff-based)
-        if (d.HasMember("models"))
+        // 2. Restore scene graph (flat format from TakeSnapshot)
+        if (d.HasMember("sources") && d.HasMember("nodes"))
         {
-            const auto &snapshotModels = d["models"];
+            const auto &snapshotSources = d["sources"];
+            const auto &snapshotNodes = d["nodes"];
+            uint32_t snapshotNodeCount = snapshotNodes.Size();
+            uint32_t snapshotMeshCount = d.HasMember("meshes") ? d["meshes"].Size() : 0;
 
-            // Build current model list (ordered)
-            std::vector<ModelAsset *> currentModels(m_models.begin(), m_models.end());
-
-            // Match models by index + source identity
-            auto GetModelSource = [](ModelAsset *m) -> std::string
+            // Check if geometry is unchanged (same sources in same order, same counts)
+            bool sourcesMatch = (snapshotSources.Size() == static_cast<rapidjson::SizeType>(m_sources.size()));
+            if (sourcesMatch)
             {
-                if (m->IsPrimitive())
-                    return "prim:" + m->GetPrimitiveType();
-                auto u8fp = m->GetFilePath().u8string();
-                return "file:" + std::string(u8fp.begin(), u8fp.end());
-            };
-
-            auto GetSnapshotModelSource = [](const rapidjson::Value &mv) -> std::string
-            {
-                if (mv.HasMember("primitive_type"))
-                    return "prim:" + std::string(mv["primitive_type"].GetString());
-                if (mv.HasMember("path"))
-                    return "file:" + std::string(mv["path"].GetString());
-                return "";
-            };
-
-            size_t snapshotCount = snapshotModels.Size();
-            size_t currentCount = currentModels.size();
-
-            // Check if models match (same count, same sources in order)
-            bool modelsMatch = (snapshotCount == currentCount);
-            if (modelsMatch)
-            {
-                for (size_t i = 0; i < snapshotCount; i++)
+                auto GetSourceId = [](const SceneSource &s) -> std::string
                 {
-                    if (GetModelSource(currentModels[i]) != GetSnapshotModelSource(snapshotModels[i]))
+                    if (!s.primitiveType.empty())
+                        return "prim:" + s.primitiveType;
+                    auto u8 = s.filePath.u8string();
+                    return "file:" + std::string(u8.begin(), u8.end());
+                };
+                auto GetSnapshotSourceId = [](const rapidjson::Value &sv) -> std::string
+                {
+                    if (sv.HasMember("primitive_type"))
+                        return "prim:" + std::string(sv["primitive_type"].GetString());
+                    if (sv.HasMember("path"))
+                        return "file:" + std::string(sv["path"].GetString());
+                    return "";
+                };
+                for (rapidjson::SizeType i = 0; i < snapshotSources.Size(); i++)
+                {
+                    if (GetSourceId(m_sources[i]) != GetSnapshotSourceId(snapshotSources[i]))
                     {
-                        modelsMatch = false;
+                        sourcesMatch = false;
                         break;
                     }
                 }
             }
 
-            if (modelsMatch)
+            bool geometryMatch = sourcesMatch &&
+                                 snapshotNodeCount == GetNodeCount() &&
+                                 snapshotMeshCount == static_cast<uint32_t>(m_meshes.size());
+
+            if (geometryMatch)
             {
-                // Fast path: update existing models in-place (no geometry reload)
-                for (size_t i = 0; i < snapshotCount; i++)
+                // Fast path: update SoA in-place (no geometry reload)
+                // Update nodes
+                for (uint32_t ni = 0; ni < snapshotNodeCount; ni++)
                 {
-                    const auto &mv = snapshotModels[i];
-                    ModelAsset *model = currentModels[i];
+                    const auto &nv = snapshotNodes[ni];
+                    NodeId *node = m_nodeIds[ni];
 
-                    if (mv.HasMember("name"))
-                        model->SetLabel(mv["name"].GetString());
-                    if (mv.HasMember("matrix"))
-                        model->SetMatrix(ReadMat4(mv["matrix"]), false);
-
-                    // Nodes
-                    if (mv.HasMember("nodes"))
+                    if (nv.HasMember("name"))
+                        SetNodeName(node, nv["name"].GetString());
+                    if (nv.HasMember("parent"))
                     {
-                        const auto &nodesVal = mv["nodes"];
-                        for (rapidjson::SizeType ni = 0; ni < nodesVal.Size() && ni < static_cast<rapidjson::SizeType>(model->GetNodeCount()); ni++)
-                        {
-                            const auto &nv = nodesVal[ni];
-                            if (nv.HasMember("name"))
-                                model->SetNodeName(static_cast<int>(ni), nv["name"].GetString());
-                            if (nv.HasMember("parent"))
-                                model->SetNodeParentIndex(static_cast<int>(ni), nv["parent"].GetInt());
-                            if (nv.HasMember("local_matrix"))
-                                model->SetNodeLocalMatrix(static_cast<int>(ni), ReadMat4(nv["local_matrix"]), false);
-                        }
-                        model->RebuildNodeChildrenFromParents();
-                        model->SetDirtyNodes(true);
-                        model->UpdateNodeMatrices();
+                        int parentIdx = nv["parent"].GetInt();
+                        NodeId *newParent = (parentIdx >= 0 && parentIdx < static_cast<int>(snapshotNodeCount))
+                                                ? m_nodeIds[parentIdx]
+                                                : nullptr;
+                        if (GetParent(node) != newParent)
+                            ReparentNode(node, newParent);
                     }
-
-                    // Meshes (materials only, no texture reload for fast path)
-                    if (mv.HasMember("meshes"))
-                    {
-                        const auto &meshesVal = mv["meshes"];
-                        for (rapidjson::SizeType mi = 0; mi < meshesVal.Size(); mi++)
-                        {
-                            MeshInfo *mesh = model->GetMeshInfo(static_cast<int>(mi));
-                            if (!mesh)
-                                break;
-
-                            const auto &mVal = meshesVal[mi];
-                            if (mVal.HasMember("render_type"))
-                                mesh->renderType = static_cast<RenderType>(mVal["render_type"].GetInt());
-                            if (mVal.HasMember("texture_mask"))
-                                mesh->textureMask = mVal["texture_mask"].GetUint();
-                            if (mVal.HasMember("material_factors"))
-                            {
-                                mesh->materialFactors[0] = ReadMat4(mVal["material_factors"][0]);
-                                mesh->materialFactors[1] = ReadMat4(mVal["material_factors"][1]);
-                                DecodeMaterialFactorsFromPersistence(mesh->renderType, mesh->materialFactors[0], mesh->materialFactors[1]);
-                            }
-                        }
-                    }
-
-                    // Mark all nodes dirty so uniforms get updated
-                    for (int ni = 0; ni < model->GetNodeCount(); ni++)
-                        model->MarkDirty(ni);
+                    if (nv.HasMember("local_matrix"))
+                        SetLocalMatrix(node, ReadMat4(nv["local_matrix"]));
                 }
+
+                // Update meshes (materials only)
+                if (d.HasMember("meshes"))
+                {
+                    const auto &meshesVal = d["meshes"];
+                    for (rapidjson::SizeType mi = 0; mi < meshesVal.Size() && mi < static_cast<rapidjson::SizeType>(m_meshes.size()); mi++)
+                    {
+                        const auto &mVal = meshesVal[mi];
+                        Mesh &mesh = m_meshes[mi];
+
+                        if (mVal.HasMember("render_type"))
+                            mesh.renderType = static_cast<RenderType>(mVal["render_type"].GetInt());
+                        if (mVal.HasMember("texture_mask"))
+                            mesh.textureMask = mVal["texture_mask"].GetUint();
+                        if (mVal.HasMember("material_factors"))
+                        {
+                            mesh.materialFactors[0] = ReadMat4(mVal["material_factors"][0]);
+                            mesh.materialFactors[1] = ReadMat4(mVal["material_factors"][1]);
+                            DecodeMaterialFactorsFromPersistence(mesh.renderType, mesh.materialFactors[0], mesh.materialFactors[1]);
+                        }
+                    }
+                }
+
+                // Mark all nodes dirty
+                for (uint32_t ni = 0; ni < GetNodeCount(); ni++)
+                    MarkNodeDirty(m_nodeIds[ni]);
             }
             else
             {
-                // Slow path: model list changed - remove all and reload
-                // This handles add/remove model undo
-                std::vector<ModelAsset *> toRemove(currentModels.begin(), currentModels.end());
+                // Slow path: geometry changed — clear everything and reload via LoadScene-style path
+                std::vector<ModelAsset *> toRemove(m_models.begin(), m_models.end());
                 if (!toRemove.empty())
                     EventSystem::PushEvent(EventType::ModelsRemoved, std::move(toRemove));
 
+                // Reload sources
                 Queue *queue = RHII.GetMainQueue();
                 CommandBuffer *cmd = queue->AcquireCommandBuffer();
                 cmd->Begin();
 
-                for (rapidjson::SizeType i = 0; i < snapshotCount; i++)
+                std::vector<std::vector<int>> sourceMeshMaps(snapshotSources.Size());
+                for (rapidjson::SizeType si = 0; si < snapshotSources.Size(); si++)
                 {
-                    const auto &mv = snapshotModels[i];
+                    const auto &sv = snapshotSources[si];
                     ModelAsset *model = nullptr;
 
-                    if (mv.HasMember("primitive_type"))
+                    if (sv.HasMember("primitive_type"))
                     {
-                        std::string ptype = mv["primitive_type"].GetString();
+                        std::string ptype = sv["primitive_type"].GetString();
                         if (ptype == "cube")
                             model = Primitives::CreateCube();
                         else if (ptype == "sphere")
@@ -2612,83 +2878,92 @@ namespace pe
                         else if (ptype == "quad")
                             model = Primitives::CreateQuad();
                     }
-                    else if (mv.HasMember("path"))
+                    else if (sv.HasMember("path"))
                     {
-                        std::filesystem::path modelPath = mv["path"].GetString();
+                        std::filesystem::path modelPath = sv["path"].GetString();
                         if (!std::filesystem::is_directory(modelPath))
                             model = ModelAsset::Load(modelPath);
                     }
 
                     if (model)
                     {
-                        if (mv.HasMember("name"))
-                            model->SetLabel(mv["name"].GetString());
-                        if (mv.HasMember("matrix"))
-                            model->SetMatrix(ReadMat4(mv["matrix"]), false);
+                        int sourceIndex = static_cast<int>(m_sources.size());
+                        SceneSource source;
+                        source.filePath = model->GetFilePath();
+                        source.primitiveType = model->GetPrimitiveType();
+                        m_sources.push_back(std::move(source));
 
-                        if (mv.HasMember("nodes"))
-                        {
-                            const auto &nodesVal = mv["nodes"];
-                            for (rapidjson::SizeType ni = 0; ni < nodesVal.Size() && ni < static_cast<rapidjson::SizeType>(model->GetNodeCount()); ni++)
-                            {
-                                const auto &nv = nodesVal[ni];
-                                if (nv.HasMember("name"))
-                                    model->SetNodeName(static_cast<int>(ni), nv["name"].GetString());
-                                if (nv.HasMember("parent"))
-                                    model->SetNodeParentIndex(static_cast<int>(ni), nv["parent"].GetInt());
-                                if (nv.HasMember("local_matrix"))
-                                    model->SetNodeLocalMatrix(static_cast<int>(ni), ReadMat4(nv["local_matrix"]), false);
-                            }
-                            model->RebuildNodeChildrenFromParents();
-                            model->SetDirtyNodes(true);
-                            model->UpdateNodeMatrices();
-                        }
-
-                        if (mv.HasMember("meshes"))
-                        {
-                            const auto &meshesVal = mv["meshes"];
-                            for (rapidjson::SizeType mi = 0; mi < meshesVal.Size(); mi++)
-                            {
-                                MeshInfo *mesh = model->GetMeshInfo(static_cast<int>(mi));
-                                if (!mesh)
-                                    break;
-
-                                const auto &mVal = meshesVal[mi];
-                                if (mVal.HasMember("render_type"))
-                                    mesh->renderType = static_cast<RenderType>(mVal["render_type"].GetInt());
-                                if (mVal.HasMember("texture_mask"))
-                                    mesh->textureMask = mVal["texture_mask"].GetUint();
-                                if (mVal.HasMember("material_factors"))
-                                {
-                                    mesh->materialFactors[0] = ReadMat4(mVal["material_factors"][0]);
-                                    mesh->materialFactors[1] = ReadMat4(mVal["material_factors"][1]);
-                                    DecodeMaterialFactorsFromPersistence(mesh->renderType, mesh->materialFactors[0], mesh->materialFactors[1]);
-                                }
-
-                                if (mVal.HasMember("textures"))
-                                {
-                                    const auto &texVal = mVal["textures"];
-                                    const char *texNames[] = {"base_color", "metallic_roughness", "normal", "occlusion", "emissive"};
-                                    for (int k = 0; k < 5; k++)
-                                    {
-                                        if (texVal.HasMember(texNames[k]))
-                                        {
-                                            std::filesystem::path texPath = texVal[texNames[k]].GetString();
-                                            if (std::filesystem::exists(texPath))
-                                            {
-                                                ResourceHandle<Image> img = model->LoadTexture(cmd, texPath);
-                                                if (img)
-                                                    mesh->images[k] = img;
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-                        }
-
-                        EventSystem::PushEvent(EventType::ModelLoaded, model);
+                        sourceMeshMaps[si] = AddModelGeometry(model, sourceIndex);
+                        m_models.insert(model->GetId(), model);
                     }
                 }
+
+                // Apply mesh overrides
+                if (d.HasMember("meshes"))
+                {
+                    const auto &meshesVal = d["meshes"];
+                    for (rapidjson::SizeType mi = 0; mi < meshesVal.Size(); mi++)
+                    {
+                        const auto &mVal = meshesVal[mi];
+                        int sceneMeshIdx = -1;
+                        if (mVal.HasMember("source") && mVal.HasMember("source_mesh"))
+                        {
+                            int srcIdx = mVal["source"].GetInt();
+                            int srcMesh = mVal["source_mesh"].GetInt();
+                            if (srcIdx >= 0 && srcIdx < static_cast<int>(sourceMeshMaps.size()) &&
+                                srcMesh >= 0 && srcMesh < static_cast<int>(sourceMeshMaps[srcIdx].size()))
+                                sceneMeshIdx = sourceMeshMaps[srcIdx][srcMesh];
+                        }
+                        if (sceneMeshIdx < 0 || sceneMeshIdx >= static_cast<int>(m_meshes.size()))
+                            continue;
+
+                        Mesh &mesh = m_meshes[sceneMeshIdx];
+                        if (mVal.HasMember("render_type"))
+                            mesh.renderType = static_cast<RenderType>(mVal["render_type"].GetInt());
+                        if (mVal.HasMember("texture_mask"))
+                            mesh.textureMask = mVal["texture_mask"].GetUint();
+                        if (mVal.HasMember("material_factors"))
+                        {
+                            mesh.materialFactors[0] = ReadMat4(mVal["material_factors"][0]);
+                            mesh.materialFactors[1] = ReadMat4(mVal["material_factors"][1]);
+                            DecodeMaterialFactorsFromPersistence(mesh.renderType, mesh.materialFactors[0], mesh.materialFactors[1]);
+                        }
+                    }
+                }
+
+                // Create nodes from flat array (two-pass)
+                std::vector<NodeId *> nodeMap(snapshotNodeCount, nullptr);
+                for (uint32_t ni = 0; ni < snapshotNodeCount; ni++)
+                {
+                    const auto &nv = snapshotNodes[ni];
+                    std::string name = nv.HasMember("name") ? nv["name"].GetString() : "";
+                    NodeId *node = CreateNode(name);
+                    if (nv.HasMember("local_matrix"))
+                        SetLocalMatrix(node, ReadMat4(nv["local_matrix"]), false);
+                    if (nv.HasMember("mesh"))
+                    {
+                        int meshIdx = nv["mesh"].GetInt();
+                        if (meshIdx >= 0 && meshIdx < static_cast<int>(m_meshes.size()))
+                            SetMeshRef(node, meshIdx);
+                    }
+                    nodeMap[ni] = node;
+                }
+                for (uint32_t ni = 0; ni < snapshotNodeCount; ni++)
+                {
+                    const auto &nv = snapshotNodes[ni];
+                    if (nv.HasMember("parent"))
+                    {
+                        int parentIdx = nv["parent"].GetInt();
+                        if (parentIdx >= 0 && parentIdx < static_cast<int>(nodeMap.size()) && nodeMap[parentIdx])
+                            ReparentNode(nodeMap[ni], nodeMap[parentIdx]);
+                    }
+                }
+                for (NodeId *node : nodeMap)
+                {
+                    if (node)
+                        MarkNodeDirty(node);
+                }
+                UpdateNodeMatrices();
 
                 cmd->End();
                 queue->Submit(1, &cmd, nullptr, nullptr);

@@ -122,6 +122,7 @@ namespace pe
         void UpdateRenderGraphPassStates();
         void CacheGlobalComponents();
 
+        void ResetTAAHistory();
         void SaveScreenshot();
         std::string GetScreenshotSavedPath()
         {

@@ -102,7 +102,7 @@ namespace pagent
             {
                 documents.emplace_back(entry.id, entry.content);
             });
-            bm25->Rebuild(documents);
+            bm25->Rebuild(std::move(documents));
 
             if (!*alive)
                 return;

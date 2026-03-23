@@ -1,5 +1,4 @@
 #include "SelectionManager.h"
-#include "ModelAsset.h"
 
 namespace pe
 {
@@ -9,32 +8,42 @@ namespace pe
         return instance;
     }
 
-    void SelectionManager::Select(ModelAsset *model, int nodeIndex, SelectionType type)
+    void SelectionManager::Select(NodeId *node, SelectionType type)
     {
-        m_selectedModel = model;
-        m_selectedNodeIndex = nodeIndex;
+        m_selectedNode = node;
         m_selectionType = type;
 
         m_selectedLightIndex = -1;
         m_selectedEmitterIndex = -1;
+        m_selectedCameraIndex = -1;
     }
 
     void SelectionManager::Select(LightType type, int index)
     {
-        m_selectedModel = nullptr;
-        m_selectedNodeIndex = -1;
+        m_selectedNode = nullptr;
         m_selectedEmitterIndex = -1;
+        m_selectedCameraIndex = -1;
 
         m_selectedLightType = type;
         m_selectedLightIndex = index;
         m_selectionType = SelectionType::Light;
     }
 
+    void SelectionManager::SelectCamera(int index)
+    {
+        m_selectedNode = nullptr;
+        m_selectedLightIndex = -1;
+        m_selectedEmitterIndex = -1;
+
+        m_selectedCameraIndex = index;
+        m_selectionType = SelectionType::Camera;
+    }
+
     void SelectionManager::SelectEmitter(int index)
     {
-        m_selectedModel = nullptr;
-        m_selectedNodeIndex = -1;
+        m_selectedNode = nullptr;
         m_selectedLightIndex = -1;
+        m_selectedCameraIndex = -1;
 
         m_selectedEmitterIndex = index;
         m_selectionType = SelectionType::Emitter;
@@ -42,25 +51,20 @@ namespace pe
 
     void SelectionManager::ClearSelection()
     {
-        m_selectedModel = nullptr;
-        m_selectedNodeIndex = -1;
+        m_selectedNode = nullptr;
         m_selectedLightIndex = -1;
         m_selectedEmitterIndex = -1;
+        m_selectedCameraIndex = -1;
     }
 
     bool SelectionManager::HasSelection() const
     {
-        return m_selectedModel || m_selectedLightIndex != -1 || m_selectedEmitterIndex != -1 || m_selectionType == SelectionType::Camera;
+        return m_selectedNode || m_selectedLightIndex != -1 || m_selectedEmitterIndex != -1 || m_selectedCameraIndex != -1;
     }
 
-    ModelAsset *SelectionManager::GetSelectedModel() const
+    NodeId *SelectionManager::GetSelectedNode() const
     {
-        return m_selectedModel;
-    }
-
-    int SelectionManager::GetSelectedNodeIndex() const
-    {
-        return m_selectedNodeIndex;
+        return m_selectedNode;
     }
 
     SelectionType SelectionManager::GetSelectionType() const
@@ -83,20 +87,9 @@ namespace pe
         return m_selectedEmitterIndex;
     }
 
-    NodeInfo *SelectionManager::GetSelectedNodeInfo()
+    int SelectionManager::GetSelectedCameraIndex() const
     {
-        if (!HasSelection())
-            return nullptr;
-
-        return m_selectedModel ? const_cast<NodeInfo *>(m_selectedModel->GetNodeInfo(m_selectedNodeIndex)) : nullptr;
-    }
-
-    const NodeInfo *SelectionManager::GetSelectedNodeInfo() const
-    {
-        if (!HasSelection())
-            return nullptr;
-
-        return m_selectedModel ? m_selectedModel->GetNodeInfo(m_selectedNodeIndex) : nullptr;
+        return m_selectedCameraIndex;
     }
 
     GizmoOperation SelectionManager::GetGizmoOperation() const

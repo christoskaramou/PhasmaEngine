@@ -144,7 +144,7 @@ namespace pagent
         RebuildStats();
     }
 
-    void BM25Index::Rebuild(const std::vector<std::pair<std::string, std::string>> &documents)
+    void BM25Index::Rebuild(std::vector<std::pair<std::string, std::string>> documents)
     {
         std::vector<Document> docs;
         docs.reserve(documents.size());
@@ -152,13 +152,13 @@ namespace pagent
         std::unordered_map<std::string, int> docFreq;
         double totalDocLen = 0.0;
 
-        for (const auto &[id, content] : documents)
+        for (auto &[id, content] : documents)
         {
             auto tokens = Tokenize(content);
 
             Document doc;
-            doc.id = id;
-            doc.content = content;
+            doc.id = std::move(id);
+            doc.content = std::move(content);
             doc.totalTerms = static_cast<int>(tokens.size());
 
             for (const auto &tok : tokens)

@@ -24,6 +24,7 @@ namespace pe
         void GenerateJitter();
         const vec2 &GetProjectionJitter() const { return m_projectionJitter; }
         Image *GetResolvedImage() { return m_taaResolved; }
+        void RequestHistoryReset() { m_resetHistory = true; }
 
     private:
         Image *m_viewportRT;
@@ -39,5 +40,6 @@ namespace pe
         int m_jitterPhaseCount;
         int m_jitterIndex;
         bool m_casSharpeningEnabled{false};
+        bool m_resetHistory{false};
     };
 } // namespace pe

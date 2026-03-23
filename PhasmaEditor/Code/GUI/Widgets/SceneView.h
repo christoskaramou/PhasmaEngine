@@ -18,6 +18,5 @@ namespace pe
         void DrawLightGizmos(const ImVec2 &imageMin, const ImVec2 &imageSize);
         void DrawCameraGizmos(const ImVec2 &imageMin, const ImVec2 &imageSize);
         bool DrawGizmoIcon(const vec3 &pos, const char *icon, const mat4 &viewProj, const ImVec2 &imageMin, const ImVec2 &imageSize, bool isSelected, const char *id);
-        void ApplyTransformToNode(class NodeInfo *nodeInfo, const mat4 &newWorldMatrix);
     };
 } // namespace pe

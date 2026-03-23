@@ -223,33 +223,7 @@ namespace pe
                     rendererSystem->WaitAllFramesCommands();
                     rendererSystem->GetScene().RemoveModel(model);
                     rendererSystem->GetScene().UpdateGeometryBuffers();
-                    break;
-                }
-                case EventType::NodeRemoved:
-                {
-                    auto info = std::any_cast<std::pair<ModelAsset *, int>>(event.payload);
-                    ModelAsset *model = info.first;
-                    int nodeIndex = info.second;
-                    if (!model)
-                        break;
-                    rendererSystem->WaitAllFramesCommands();
-                    SelectionManager::Instance().ClearSelection();
-                    if (model->RemoveNode(nodeIndex))
-                        rendererSystem->GetScene().RemoveModel(model);
-                    rendererSystem->GetScene().UpdateGeometryBuffers();
-                    break;
-                }
-                case EventType::MeshRemoved:
-                {
-                    auto info = std::any_cast<std::pair<ModelAsset *, int>>(event.payload);
-                    ModelAsset *model = info.first;
-                    int nodeIndex = info.second;
-                    if (!model)
-                        break;
-                    rendererSystem->WaitAllFramesCommands();
-                    SelectionManager::Instance().ClearSelection();
-                    model->RemoveMesh(nodeIndex);
-                    rendererSystem->GetScene().UpdateGeometryBuffers();
+                    rendererSystem->ResetTAAHistory();
                     break;
                 }
                 case EventType::ModelsRemoved:
@@ -260,6 +234,14 @@ namespace pe
                     rendererSystem->WaitAllFramesCommands();
                     rendererSystem->GetScene().RemoveModels(std::move(models));
                     rendererSystem->GetScene().UpdateGeometryBuffers();
+                    rendererSystem->ResetTAAHistory();
+                    break;
+                }
+                case EventType::NodeRemoved:
+                {
+                    rendererSystem->WaitAllFramesCommands();
+                    rendererSystem->GetScene().UpdateGeometryBuffers();
+                    rendererSystem->ResetTAAHistory();
                     break;
                 }
                 case EventType::SetRenderMode:

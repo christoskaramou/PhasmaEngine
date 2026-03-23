@@ -1,6 +1,7 @@
 #include "Script/ScriptSystem.h"
 #include "Scene/Scene.h"
 #include "Scene/ModelAsset.h"
+#include "Scene/SceneNode.h"
 #include "Scene/SelectionManager.h"
 #include "Camera/Camera.h"
 #include "Systems/RendererSystem.h"
@@ -133,12 +134,11 @@ namespace pe
                     auto &sel = SelectionManager::Instance();
                     sol::table t = lua.create_table();
                     t["has_selection"] = sel.HasSelection();
-                    ModelAsset *m = sel.GetSelectedModel();
-                    if (m)
-                        t["model"] = sol::make_object(lua, m);
+                    NodeId *node = sel.GetSelectedNode();
+                    if (node)
+                        t["node_index"] = node->index;
                     else
-                        t["model"] = sol::nil;
-                    t["node_index"] = sel.GetSelectedNodeIndex();
+                        t["node_index"] = sol::nil;
                     const char *typeStr = "none";
                     switch (sel.GetSelectionType())
                     {
@@ -152,14 +152,20 @@ namespace pe
                     return t;
                 });
 
-                selection.set_function("select_node", [](ModelAsset *model, int nodeIndex) {
-                    if (!model) return;
-                    SelectionManager::Instance().Select(model, nodeIndex, SelectionType::Node);
+                selection.set_function("select_node", [](int nodeIndex) {
+                    auto *r = GetGlobalSystem<RendererSystem>();
+                    if (!r) return;
+                    Scene &scene = r->GetScene();
+                    if (nodeIndex < 0 || nodeIndex >= static_cast<int>(scene.GetNodeCount())) return;
+                    SelectionManager::Instance().Select(scene.GetNodeId(nodeIndex), SelectionType::Node);
                 });
 
-                selection.set_function("select_mesh", [](ModelAsset *model, int nodeIndex) {
-                    if (!model) return;
-                    SelectionManager::Instance().Select(model, nodeIndex, SelectionType::Mesh);
+                selection.set_function("select_mesh", [](int nodeIndex) {
+                    auto *r = GetGlobalSystem<RendererSystem>();
+                    if (!r) return;
+                    Scene &scene = r->GetScene();
+                    if (nodeIndex < 0 || nodeIndex >= static_cast<int>(scene.GetNodeCount())) return;
+                    SelectionManager::Instance().Select(scene.GetNodeId(nodeIndex), SelectionType::Mesh);
                 });
 
                 selection.set_function("clear", []() {
@@ -180,16 +186,9 @@ namespace pe
                     if (sel.GetSelectionType() == SelectionType::Node ||
                         sel.GetSelectionType() == SelectionType::Mesh)
                     {
-                        ModelAsset *m = sel.GetSelectedModel();
-                        if (!m) return;
-                        // Union of all node world bounding boxes
-                        AABB bb{vec3(FLT_MAX), vec3(-FLT_MAX)};
-                        for (int i = 0; i < m->GetNodeCount(); i++)
-                        {
-                            const AABB &nodeBb = m->GetNodeWorldBoundingBox(i);
-                            bb.min = glm::min(bb.min, nodeBb.min);
-                            bb.max = glm::max(bb.max, nodeBb.max);
-                        }
+                        NodeId *node = sel.GetSelectedNode();
+                        if (!node) return;
+                        const AABB &bb = r->GetScene().GetWorldAABB(node);
                         center = bb.GetCenter();
                         radius = glm::length(bb.GetSize()) * 0.5f;
                     }

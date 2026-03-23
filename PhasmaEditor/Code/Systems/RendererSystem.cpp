@@ -265,6 +265,12 @@ namespace pe
         RHII.GetStagingManager()->RemoveUnused();
     }
 
+    void RendererSystem::ResetTAAHistory()
+    {
+        if (m_taaPass)
+            m_taaPass->RequestHistoryReset();
+    }
+
     void RendererSystem::WaitAllFramesCommands()
     {
         for (auto &frameCmd : m_cmds)

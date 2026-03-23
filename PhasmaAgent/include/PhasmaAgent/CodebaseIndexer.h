@@ -29,8 +29,8 @@ namespace pagent
         std::vector<std::string> skip_regex; // Regex patterns to skip paths (e.g. ".*\\.generated\\..*")
         int max_chunk_chars = 4000;
         int chunk_overlap_lines = 3;
-        int num_threads = 0;              // Parallel embedding threads (0 = auto: cores - 4, min 2)
-        int delay_ms_between_chunks = 50; // Rate-limit delay between embedding API calls
+        int num_threads = 0;             // Parallel embedding threads (0 = use provider's RecommendedConcurrency)
+        int delay_ms_between_chunks = 0; // Rate-limit delay per file batch (set to 50+ for cloud APIs)
     };
 
     // Progress callback: (filesProcessed, totalFiles, currentFile)

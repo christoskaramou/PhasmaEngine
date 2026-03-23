@@ -26,7 +26,8 @@ namespace pagent
         void Add(const std::string &id, const std::string &content);
 
         // Rebuild the whole index from a document list in one pass.
-        void Rebuild(const std::vector<std::pair<std::string, std::string>> &documents);
+        // Takes ownership of the vector so callers can std::move to avoid copies.
+        void Rebuild(std::vector<std::pair<std::string, std::string>> documents);
 
         // Remove a document by id.
         void Remove(const std::string &id);

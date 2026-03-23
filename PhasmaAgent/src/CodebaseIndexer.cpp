@@ -345,10 +345,7 @@ namespace pagent
 
         int numThreads = config.num_threads;
         if (numThreads <= 0)
-        {
-            int cores = static_cast<int>(std::thread::hardware_concurrency());
-            numThreads = std::max(2, cores - 4);
-        }
+            numThreads = m_embedding ? m_embedding->RecommendedConcurrency() : 1;
 
         m_totalThreads = numThreads;
         m_activeThreads.store(0);
@@ -426,44 +423,42 @@ namespace pagent
                 auto extPos = filePath.rfind('.');
                 std::string ext = extPos != std::string::npos ? toLower(filePath.substr(extPos)) : "";
                 bool isBinary = shared->binaryExts.count(ext) > 0;
+                // PendingChunk: a fully-prepared chunk waiting for an embedding vector.
+                struct PendingChunk
+                {
+                    std::string sanitized;
+                    std::string metadataJson;
+                    std::string entryId;
+                    int startLine = 0;
+                    int endLine = 0;
+                    std::vector<float> embedding; // pre-filled if reused from cache
+                };
+
+                std::vector<PendingChunk> pending;
                 bool anyEmbeddingFailed = false;
 
                 if (isBinary)
                 {
                     std::string desc = "File: " + rel;
-                    std::string sanitized = SanitizeUTF8(desc);
-                    size_t contentHash = std::hash<std::string>{}(sanitized);
+                    PendingChunk pc;
+                    pc.sanitized = SanitizeUTF8(desc);
+                    pc.metadataJson = nlohmann::json{{"type", "codebase"}, {"file", rel}, {"binary", true}, {"last_modified", ts}}.dump();
+                    size_t h = std::hash<std::string>{}(rel);
+                    pc.entryId = "codebase_" + std::to_string(h);
 
-                    // Reuse old embedding if content unchanged
-                    std::vector<float> vec;
                     if (shared->embedding)
                     {
+                        size_t contentHash = std::hash<std::string>{}(pc.sanitized);
                         auto hashIt = oldHashToEmbedding.find(contentHash);
                         if (hashIt != oldHashToEmbedding.end())
-                            vec = std::move(hashIt->second);
-                        else
-                            vec = shared->embedding->Embed(sanitized);
+                            pc.embedding = std::move(hashIt->second);
+                        // else: left empty, will be batch-embedded below
                     }
                     else
                     {
-                        // Use the same dimension as real embeddings so SaveToBinary writes a consistent header.
-                        vec.assign(shared->embedding ? shared->embedding->Dimensions() : 1, 0.0f);
+                        pc.embedding.assign(1, 0.0f);
                     }
-
-                    if (!vec.empty())
-                    {
-                        size_t h = std::hash<std::string>{}(rel);
-                        std::string entryId = "codebase_" + std::to_string(h);
-                        VectorEntry entry;
-                        entry.id = entryId;
-                        entry.content = sanitized;
-                        entry.metadata = nlohmann::json{{"type", "codebase"}, {"file", rel}, {"binary", true}, {"last_modified", ts}}.dump();
-                        entry.embedding = std::move(vec);
-                        shared->store->Add(std::move(entry));
-                        if (shared->bm25)
-                            shared->bm25->Add(entryId, sanitized);
-                        shared->totalChunks.fetch_add(1);
-                    }
+                    pending.push_back(std::move(pc));
                 }
                 else
                 {
@@ -477,61 +472,30 @@ namespace pagent
                     if (source.empty())
                         continue;
 
-                    // Helper lambda: add a chunk to the store, reusing old embedding if hash matches
-                    auto addChunk = [&](const std::string &sanitized, int startLine, int endLine,
-                                        const std::string &metadataJson)
+                    // Helper: build a PendingChunk, reusing cached embedding when content is unchanged.
+                    auto makeChunk = [&](const std::string &sanitized, int startLine, int endLine,
+                                         const std::string &metadataJson) -> PendingChunk
                     {
-                        size_t contentHash = std::hash<std::string>{}(sanitized);
+                        PendingChunk pc;
+                        pc.sanitized = sanitized;
+                        pc.metadataJson = metadataJson;
+                        pc.startLine = startLine;
+                        pc.endLine = endLine;
+                        size_t h = std::hash<std::string>{}(rel + ":" + std::to_string(startLine));
+                        pc.entryId = "codebase_" + std::to_string(h);
 
-                        std::vector<float> vec;
                         if (!shared->embedding)
                         {
-                            vec = {0.0f};
+                            pc.embedding = {0.0f};
                         }
                         else
                         {
+                            size_t contentHash = std::hash<std::string>{}(sanitized);
                             auto hashIt = oldHashToEmbedding.find(contentHash);
                             if (hashIt != oldHashToEmbedding.end())
-                                vec = std::move(hashIt->second);
-                            else
-                            {
-                                // Retry up to 3 times with exponential backoff on transient failures
-                                constexpr int kMaxRetries = 3;
-                                for (int attempt = 0; attempt < kMaxRetries && vec.empty(); ++attempt)
-                                {
-                                    if (attempt > 0)
-                                        std::this_thread::sleep_for(std::chrono::milliseconds(200 * attempt));
-                                    vec = shared->embedding->Embed(sanitized);
-                                }
-                                // If still empty, retry with progressively truncated content
-                                // (handles chunks that exceed the model's context window)
-                                if (vec.empty() && sanitized.size() > 512)
-                                {
-                                    for (size_t truncLen = sanitized.size() / 2; truncLen >= 512 && vec.empty(); truncLen /= 2)
-                                        vec = shared->embedding->Embed(sanitized.substr(0, truncLen));
-                                }
-                                if (shared->delayMs > 0)
-                                    std::this_thread::sleep_for(std::chrono::milliseconds(shared->delayMs));
-                            }
+                                pc.embedding = std::move(hashIt->second); // reuse
                         }
-
-                        if (vec.empty())
-                        {
-                            anyEmbeddingFailed = true;
-                            return;
-                        }
-
-                        size_t h = std::hash<std::string>{}(rel + ":" + std::to_string(startLine));
-                        std::string entryId = "codebase_" + std::to_string(h);
-                        VectorEntry entry;
-                        entry.id = entryId;
-                        entry.content = sanitized;
-                        entry.metadata = metadataJson;
-                        entry.embedding = std::move(vec);
-                        shared->store->Add(std::move(entry));
-                        if (shared->bm25)
-                            shared->bm25->Add(entryId, sanitized);
-                        shared->totalChunks.fetch_add(1);
+                        return pc;
                     };
 
                     // Try AST-aware chunking for C/C++ files
@@ -540,8 +504,6 @@ namespace pagent
                     if (useAST)
                     {
                         auto astChunks = ASTChunker::ChunkCpp(source, shared->maxChunkChars);
-
-                        // Fall back to line-based if AST parse fails
                         if (astChunks.empty())
                             useAST = false;
 
@@ -549,8 +511,7 @@ namespace pagent
                         {
                             auto &ac = astChunks[ci];
                             std::string header = ASTChunker::BuildMetadataHeader(rel, ac);
-                            std::string content = header + "\n" + ac.content;
-                            std::string sanitized = SanitizeUTF8(content);
+                            std::string sanitized = SanitizeUTF8(header + "\n" + ac.content);
 
                             nlohmann::json meta{
                                 {"type", "codebase"},
@@ -568,14 +529,12 @@ namespace pagent
                                 if (!arr.empty())
                                     meta["symbols"] = std::move(arr);
                             }
-
-                            addChunk(sanitized, ac.startLine, ac.endLine, meta.dump());
+                            pending.push_back(makeChunk(sanitized, ac.startLine, ac.endLine, meta.dump()));
                         }
                     }
 
                     if (!useAST)
                     {
-                        // Line-based fallback for non-C++ files or AST parse failures
                         std::vector<std::string> lines;
                         std::istringstream iss(source);
                         std::string line;
@@ -619,16 +578,91 @@ namespace pagent
                             }
 
                             int endLine = lineIdx;
-                            std::string content = prefix + std::to_string(endLine) + ")\n" + body;
-                            std::string sanitized = SanitizeUTF8(content);
-
-                            addChunk(sanitized, chunkStart + 1, endLine,
-                                     nlohmann::json{{"type", "codebase"}, {"file", rel}, {"lines", std::to_string(chunkStart + 1) + "-" + std::to_string(endLine)}, {"last_modified", ts}}.dump());
+                            std::string sanitized = SanitizeUTF8(prefix + std::to_string(endLine) + ")\n" + body);
+                            pending.push_back(makeChunk(sanitized, chunkStart + 1, endLine,
+                                nlohmann::json{{"type", "codebase"}, {"file", rel},
+                                    {"lines", std::to_string(chunkStart + 1) + "-" + std::to_string(endLine)},
+                                    {"last_modified", ts}}.dump()));
 
                             if (lineIdx < totalLines && shared->chunkOverlapLines > 0)
                                 lineIdx = std::max(chunkStart + 1, lineIdx - shared->chunkOverlapLines);
                         }
                     }
+                }
+
+                // --- Batch-embed all chunks that don't have a cached embedding ---
+                if (shared->embedding && !shared->cancel.load())
+                {
+                    // Collect texts needing new embeddings and their indices into pending[]
+                    std::vector<std::string> toEmbed;
+                    std::vector<size_t> toEmbedIdx;
+                    for (size_t i = 0; i < pending.size(); ++i)
+                    {
+                        if (pending[i].embedding.empty())
+                        {
+                            toEmbed.push_back(pending[i].sanitized);
+                            toEmbedIdx.push_back(i);
+                        }
+                    }
+
+                    if (!toEmbed.empty())
+                    {
+                        // One HTTP request for the whole file
+                        constexpr int kMaxRetries = 3;
+                        std::vector<std::vector<float>> batchResult;
+                        for (int attempt = 0; attempt < kMaxRetries && batchResult.empty() && !shared->cancel.load(); ++attempt)
+                        {
+                            if (attempt > 0)
+                                std::this_thread::sleep_for(std::chrono::milliseconds(200 * attempt));
+                            batchResult = shared->embedding->EmbedBatch(toEmbed);
+                        }
+
+                        // If full batch failed, try each chunk individually with truncation fallback
+                        if (batchResult.empty())
+                        {
+                            batchResult.resize(toEmbed.size());
+                            for (size_t i = 0; i < toEmbed.size() && !shared->cancel.load(); ++i)
+                            {
+                                auto &text = toEmbed[i];
+                                for (int attempt = 0; attempt < kMaxRetries && batchResult[i].empty(); ++attempt)
+                                {
+                                    if (attempt > 0)
+                                        std::this_thread::sleep_for(std::chrono::milliseconds(200 * attempt));
+                                    batchResult[i] = shared->embedding->Embed(text);
+                                }
+                                if (batchResult[i].empty() && text.size() > 512)
+                                {
+                                    for (size_t tl = text.size() / 2; tl >= 512 && batchResult[i].empty(); tl /= 2)
+                                        batchResult[i] = shared->embedding->Embed(text.substr(0, tl));
+                                }
+                            }
+                        }
+
+                        for (size_t i = 0; i < toEmbedIdx.size(); ++i)
+                            pending[toEmbedIdx[i]].embedding = std::move(batchResult[i]);
+
+                        if (shared->delayMs > 0)
+                            std::this_thread::sleep_for(std::chrono::milliseconds(shared->delayMs));
+                    }
+                }
+
+                // --- Commit all chunks to the store ---
+                for (auto &pc : pending)
+                {
+                    if (pc.embedding.empty())
+                    {
+                        anyEmbeddingFailed = true;
+                        continue;
+                    }
+                    VectorEntry entry;
+                    entry.id = pc.entryId;
+                    entry.content = pc.sanitized;
+                    entry.metadata = pc.metadataJson;
+                    entry.embedding = std::move(pc.embedding);
+                    if (shared->bm25)
+                        shared->bm25->Add(entry.id, entry.content);
+                    shared->store->Add(std::move(entry));
+                    shared->totalChunks.fetch_add(1);
                 }
 
                 // If no chunks were added for this file, store a tombstone so CheckStatus won't keep

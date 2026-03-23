@@ -8,40 +8,7 @@
 
 namespace pe
 {
-    static inline AABB TransformAabb(const AABB &local, const mat4 &m)
-    {
-        // Correct AABB transform (works with rotation/scale):
-        // transform 8 corners and rebuild min/max.
-        const vec3 &mn = local.min;
-        const vec3 &mx = local.max;
 
-        const vec3 corners[8] = {
-            {mn.x, mn.y, mn.z},
-            {mx.x, mn.y, mn.z},
-            {mx.x, mx.y, mn.z},
-            {mn.x, mx.y, mn.z},
-            {mn.x, mn.y, mx.z},
-            {mx.x, mn.y, mx.z},
-            {mx.x, mx.y, mx.z},
-            {mn.x, mx.y, mx.z},
-        };
-
-        vec3 outMin(std::numeric_limits<float>::max());
-        vec3 outMax(-std::numeric_limits<float>::max());
-
-        for (const vec3 &c : corners)
-        {
-            vec4 t = m * vec4(c, 1.f);
-            vec3 p(t.x, t.y, t.z);
-            outMin = min(outMin, p);
-            outMax = max(outMax, p);
-        }
-
-        AABB out{};
-        out.min = outMin;
-        out.max = outMax;
-        return out;
-    }
 
     ModelAsset::ModelAsset() : m_id{ID::NextID()}
     {

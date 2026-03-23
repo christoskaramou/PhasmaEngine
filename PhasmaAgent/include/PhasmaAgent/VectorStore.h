@@ -11,9 +11,12 @@ namespace pagent
     struct VectorEntry
     {
         std::string id;
-        std::string content;  // Original text that was embedded
-        std::string metadata; // JSON string with source info
+        std::string content;       // Original text that was embedded
+        std::string metadata;      // JSON string with source info
         std::vector<float> embedding;
+        // Cached fields parsed from metadata — not serialized, populated on Add/Load
+        std::string file;
+        std::string last_modified;
     };
 
     class VectorStore
@@ -57,8 +60,12 @@ namespace pagent
 
     private:
         static float CosineSimilarity(const std::vector<float> &a, const std::vector<float> &b);
+        static void ParseMetadataCache(VectorEntry &e);
+        void RebuildIdIndex();
+        void RemoveAt(size_t idx); // swap-and-pop, updates m_idIndex
 
         std::vector<VectorEntry> m_entries;
+        std::unordered_map<std::string, size_t> m_idIndex; // id -> index into m_entries
         mutable std::shared_mutex m_mutex;
     };
 } // namespace pagent

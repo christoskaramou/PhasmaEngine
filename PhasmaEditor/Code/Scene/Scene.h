@@ -1,8 +1,12 @@
 #pragma once
 
+#include "API/Vertex.h"
+#include "Scene/SceneNode.h"
+
 namespace pe
 {
     class AccelerationStructure;
+    class AssimpLoader;
     class Buffer;
     class Camera;
     class CommandBuffer;
@@ -13,8 +17,7 @@ namespace pe
 
     struct DrawInfo
     {
-        ModelAsset *model;
-        int node;
+        NodeId *node;
         float distance;
     };
 
@@ -22,6 +25,8 @@ namespace pe
 
     class Scene
     {
+        friend class AssimpLoader;
+
     public:
         Scene();
         ~Scene();
@@ -40,6 +45,27 @@ namespace pe
         void NewScene();
         void SaveScene(const std::filesystem::path &file);
         void LoadScene(const std::filesystem::path &file);
+
+        // Two-phase async loading.
+        // Phase 1 — safe on any thread, no scene mutation: parses JSON + loads ModelAssets from disk.
+        struct ScenePreload
+        {
+            std::filesystem::path filePath;
+            std::string           jsonText;
+            std::vector<ModelAsset *> models; // pre-loaded in source/model order; may contain nulls
+            bool                  valid = false;
+
+            ScenePreload() = default;
+            ScenePreload(const ScenePreload &) = delete;
+            ScenePreload &operator=(const ScenePreload &) = delete;
+            ScenePreload(ScenePreload &&) = default;
+            ScenePreload &operator=(ScenePreload &&) = default;
+            ~ScenePreload();
+        };
+        static ScenePreload PreloadScene(const std::filesystem::path &file);
+        // Phase 2 — must run on the main render thread after WaitAllFramesCommands():
+        // clears old scene and applies the pre-loaded content.
+        void LoadSceneApply(ScenePreload preload);
         std::string TakeSnapshot() const;
         void RestoreSnapshot(const std::string &json);
 
@@ -84,6 +110,64 @@ namespace pe
         Sampler *GetDefaultSampler() const;
         static const std::vector<uint32_t> &GetAabbIndices() { return s_aabbIndices; }
 
+        // --- Node Graph (SoA) ---
+        NodeId *CreateNode(const std::string &name, NodeId *parent = nullptr);
+        void DeleteNode(NodeId *node);
+        void ReparentNode(NodeId *node, NodeId *newParent);
+
+        // Node accessors (all indexed via NodeId::index)
+#ifdef PE_DEBUG
+        void ValidateNodeId(const NodeId *node) const
+        {
+            PE_ERROR_IF(!node, "ValidateNodeId: null NodeId");
+            PE_ERROR_IF(node->index >= m_nodeIds.size(), "ValidateNodeId: index %u out of range (size %zu)", node->index, m_nodeIds.size());
+            PE_ERROR_IF(m_nodeIds[node->index] != node, "ValidateNodeId: stale NodeId (recycled or corrupted)");
+        }
+#else
+        void ValidateNodeId(const NodeId *) const {}
+#endif
+
+        const std::string &GetNodeName(const NodeId *node) const { ValidateNodeId(node); return m_nodeNames[node->index]; }
+        void SetNodeName(NodeId *node, const std::string &name) { ValidateNodeId(node); m_nodeNames[node->index] = name; }
+
+        const mat4 &GetLocalMatrix(const NodeId *node) const { return m_localMatrices[node->index]; }
+        void SetLocalMatrix(NodeId *node, const mat4 &m, bool markDirty = true);
+
+        const mat4 &GetWorldMatrix(const NodeId *node) const { return m_nodeRuntime[node->index].gpuData.worldMatrix; }
+        const AABB &GetWorldAABB(const NodeId *node) const { return m_nodeRuntime[node->index].worldAABB; }
+
+        NodeId *GetParent(const NodeId *node) const { return m_nodeParents[node->index]; }
+        const std::vector<NodeId *> &GetChildren(const NodeId *node) const { return m_nodeChildren[node->index]; }
+
+        uint32_t GetComponentFlags(const NodeId *node) const { return m_componentFlags[node->index]; }
+        int GetMeshRef(const NodeId *node) const { return m_meshRefs[node->index]; }
+        void SetMeshRef(NodeId *node, int meshIndex);
+
+        NodeRuntime &GetNodeRuntime(const NodeId *node) { return m_nodeRuntime[node->index]; }
+        const NodeRuntime &GetNodeRuntime(const NodeId *node) const { return m_nodeRuntime[node->index]; }
+
+        uint32_t GetNodeCount() const { return static_cast<uint32_t>(m_nodeIds.size()); }
+        NodeId *GetNodeId(uint32_t index) { return m_nodeIds[index]; }
+        const NodeId *GetNodeId(uint32_t index) const { return m_nodeIds[index]; }
+
+        // Mesh store
+        const std::vector<Mesh> &GetMeshes() const { return m_meshes; }
+        Mesh &GetMesh(int index) { return m_meshes[index]; }
+        const Mesh &GetMesh(int index) const { return m_meshes[index]; }
+        MeshRuntime &GetMeshRuntime(int index) { return m_meshRuntimes[index]; }
+        int AddMesh(Mesh &&mesh);
+
+        // Data stores
+        std::vector<Vertex> &GetVertexStore() { return m_vertexStore; }
+        std::vector<PositionUvVertex> &GetPositionUvStore() { return m_positionUvStore; }
+        std::vector<AabbVertex> &GetAabbVertexStore() { return m_aabbVertexStore; }
+        std::vector<uint32_t> &GetIndexStore() { return m_indexStore; }
+        std::vector<ResourceHandle<Image>> &GetImageStore() { return m_imageStore; }
+        std::vector<Sampler *> &GetSamplerStore() { return m_samplerStore; }
+
+        void UpdateNodeMatrices();
+        void MarkNodeDirty(NodeId *node);
+
     private:
         struct DrawBatch
         {
@@ -94,7 +178,7 @@ namespace pe
         };
 
         void UpdateGeometry();
-        DrawBatch CullNodeBatch(ModelAsset &model, int beginNode, int endNode, const Camera *camera, bool frustumCulling) const;
+        DrawBatch CullNodeBatch(uint32_t beginNode, uint32_t endNode, const Camera *camera, bool frustumCulling) const;
         void UpdateUniformData();
         void UpdateIndirectData();
         void ClearDrawInfos(bool reserveMax);
@@ -172,7 +256,58 @@ namespace pe
 
         static std::vector<uint32_t> s_aabbIndices;
 
+        // Scene source: tracks where geometry came from (for save/load)
+        struct SceneSource
+        {
+            std::filesystem::path filePath;
+            std::string primitiveType; // non-empty for primitives
+        };
+
+        // Per-mesh source tracking (parallel to m_meshes)
+        struct MeshSourceInfo
+        {
+            int sourceIndex = -1;     // index into m_sources
+            int sourceMeshIndex = -1; // mesh index within the original file
+        };
+
+        // Copies geometry (vertices, indices, images, meshes) from ModelAsset into Scene stores.
+        // Does NOT create nodes. Returns meshMap (source mesh → scene mesh).
+        std::vector<int> AddModelGeometry(ModelAsset *model, int sourceIndex);
+
+        std::vector<SceneSource>    m_sources;
+        std::vector<MeshSourceInfo> m_meshSourceInfos; // parallel to m_meshes
+        std::unordered_map<size_t, std::vector<NodeId *>> m_modelRootNodes; // model ID → root nodes for cleanup
+
         std::filesystem::path m_scenePath;
         bool m_dirty = false;
+
+        // --- Node Graph SoA Storage ---
+        void SwapAndPopNode(uint32_t index);
+        void UpdateNodeMatrix(NodeId *node);
+
+        std::vector<NodeId *>              m_nodeIds;        // stable identity per node
+        std::vector<std::string>           m_nodeNames;
+        std::vector<mat4>                  m_localMatrices;
+        std::vector<NodeId *>              m_nodeParents;    // nullptr = root
+        std::vector<std::vector<NodeId *>> m_nodeChildren;
+        std::vector<uint32_t>              m_componentFlags;
+        std::vector<int>                   m_meshRefs;       // -1 = empty node
+        std::vector<NodeRuntime>           m_nodeRuntime;    // GPU hot-path data
+        std::vector<NodeId *>              m_freeNodeIds;    // recycled NodeId pointers
+
+        // Mesh store (lightweight descriptors referencing data stores)
+        std::vector<Mesh>                  m_meshes;
+        std::vector<MeshRuntime>           m_meshRuntimes;
+
+        // Data stores (the actual heavy data)
+        std::vector<Vertex>                m_vertexStore;
+        std::vector<PositionUvVertex>      m_positionUvStore;
+        std::vector<AabbVertex>            m_aabbVertexStore;
+        std::vector<uint32_t>              m_indexStore;
+        std::vector<ResourceHandle<Image>> m_imageStore;
+        std::vector<Sampler *>             m_samplerStore;
+
+        bool m_nodesDirty = false;
+        std::vector<NodeId *>              m_nodesMoved;
     };
 } // namespace pe

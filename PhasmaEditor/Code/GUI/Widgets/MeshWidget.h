@@ -3,8 +3,8 @@
 
 namespace pe
 {
-    class ModelAsset;
-    class MeshInfo;
+    struct Mesh;
+    struct NodeId;
 
     class MeshWidget : public Widget
     {
@@ -13,12 +13,12 @@ namespace pe
         ~MeshWidget();
 
         void Update() override;
-        void DrawEmbed(MeshInfo *mesh, ModelAsset *model);
+        void DrawEmbed(Mesh *mesh, NodeId *node);
 
     private:
-        void DrawMaterialInfo(MeshInfo *mesh, ModelAsset *model);
-        void DrawTextureInfo(MeshInfo *mesh, ModelAsset *model);
-        void PropagateMeshChange(MeshInfo *mesh, ModelAsset *model);
+        void DrawMaterialInfo(Mesh *mesh, NodeId *node);
+        void DrawTextureInfo(Mesh *mesh, NodeId *node);
+        void PropagateMeshChange(NodeId *node);
         void *GetDescriptor(Image *image);
 
         std::unordered_map<Image *, void *> m_textureDescriptors;

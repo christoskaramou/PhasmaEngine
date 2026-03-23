@@ -228,8 +228,23 @@ namespace pagent
         // Embed a text string. Returns a float vector of size Dimensions().
         virtual std::vector<float> Embed(const std::string &text) = 0;
 
+        // Embed multiple texts in one call. Default implementation calls Embed per item;
+        // override to use a provider's native batch API.
+        virtual std::vector<std::vector<float>> EmbedBatch(const std::vector<std::string> &texts)
+        {
+            std::vector<std::vector<float>> results;
+            results.reserve(texts.size());
+            for (const auto &t : texts)
+                results.push_back(Embed(t));
+            return results;
+        }
+
         // Number of dimensions in the output embedding.
         virtual int Dimensions() const = 0;
+
+        // Suggested number of parallel indexing threads for this provider.
+        // Local providers (e.g. Ollama) should return 1; cloud APIs can return more.
+        virtual int RecommendedConcurrency() const { return 4; }
 
         // Cancel support: when set, Embed should return {} immediately
         void SetCancel(std::atomic<bool> *cancel) { m_cancel = cancel; }

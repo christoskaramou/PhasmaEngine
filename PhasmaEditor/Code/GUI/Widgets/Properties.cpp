@@ -6,8 +6,8 @@
 #include "MeshWidget.h"
 #include "Particles.h"
 #include "Particles/ParticleManager.h"
-#include "Scene/ModelAsset.h"
 #include "Scene/Scene.h"
+#include "Scene/SceneNode.h"
 #include "Scene/SelectionManager.h"
 #include "Systems/LightSystem.h"
 #include "Systems/RendererSystem.h"
@@ -39,10 +39,12 @@ namespace pe
             return;
         }
 
+        Scene &scene = GetGlobalSystem<RendererSystem>()->GetScene();
+
         auto drawNode = [&]()
         {
             if (auto *w = m_gui->GetWidget<TransformWidget>())
-                w->DrawEmbed(sel.GetSelectedNodeInfo());
+                w->DrawEmbed(sel.GetSelectedNode());
         };
 
         auto drawMesh = [&]()
@@ -51,20 +53,16 @@ namespace pe
             if (!w)
                 return;
 
-            ModelAsset *model = sel.GetSelectedModel();
-            if (!model)
+            NodeId *node = sel.GetSelectedNode();
+            if (!node)
                 return;
 
-            const int nodeIndex = sel.GetSelectedNodeIndex();
-            const int meshIndex = model->GetNodeMesh(nodeIndex);
+            int meshIndex = scene.GetMeshRef(node);
             if (meshIndex < 0)
                 return;
 
-            MeshInfo *meshInfo = model->GetMeshInfo(meshIndex);
-            if (!meshInfo)
-                return;
-
-            w->DrawEmbed(meshInfo, model);
+            Mesh &mesh = scene.GetMesh(meshIndex);
+            w->DrawEmbed(&mesh, node);
         };
 
         auto drawCamera = [&]()
@@ -73,8 +71,8 @@ namespace pe
             if (!w)
                 return;
 
-            const int index = sel.GetSelectedNodeIndex();
-            auto &cameras = GetGlobalSystem<RendererSystem>()->GetScene().GetCameras();
+            const int index = sel.GetSelectedCameraIndex();
+            auto &cameras = scene.GetCameras();
             if (index < 0 || index >= (int)cameras.size())
                 return;
 

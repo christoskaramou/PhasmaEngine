@@ -10,91 +10,113 @@ namespace pagent
 {
     using json = nlohmann::json;
 
+    // Parse "file" and "last_modified" from metadata JSON once and cache them on the entry.
+    void VectorStore::ParseMetadataCache(VectorEntry &e)
+    {
+        if (e.metadata.empty())
+            return;
+        try
+        {
+            auto meta = json::parse(e.metadata);
+            e.file = meta.value("file", "");
+            e.last_modified = meta.value("last_modified", "");
+        }
+        catch (...)
+        {
+        }
+    }
+
+    void VectorStore::RebuildIdIndex()
+    {
+        m_idIndex.clear();
+        m_idIndex.reserve(m_entries.size());
+        for (size_t i = 0; i < m_entries.size(); ++i)
+            m_idIndex[m_entries[i].id] = i;
+    }
+
+    // Swap-and-pop removal — O(1), keeps m_idIndex consistent.
+    void VectorStore::RemoveAt(size_t idx)
+    {
+        const size_t last = m_entries.size() - 1;
+        m_idIndex.erase(m_entries[idx].id);
+        if (idx != last)
+        {
+            m_entries[idx] = std::move(m_entries[last]);
+            m_idIndex[m_entries[idx].id] = idx;
+        }
+        m_entries.pop_back();
+    }
+
     void VectorStore::Add(VectorEntry entry)
     {
+        ParseMetadataCache(entry);
         std::unique_lock lock(m_mutex);
-        // Replace if same id exists
-        for (auto &e : m_entries)
+        auto it = m_idIndex.find(entry.id);
+        if (it != m_idIndex.end())
         {
-            if (e.id == entry.id)
-            {
-                e = std::move(entry);
-                return;
-            }
+            m_entries[it->second] = std::move(entry);
+            return;
         }
+        m_idIndex[entry.id] = m_entries.size();
         m_entries.push_back(std::move(entry));
     }
 
     void VectorStore::Remove(const std::string &id)
     {
         std::unique_lock lock(m_mutex);
-        m_entries.erase(
-            std::remove_if(m_entries.begin(), m_entries.end(),
-                           [&id](const VectorEntry &e)
-                           { return e.id == id; }),
-            m_entries.end());
+        auto it = m_idIndex.find(id);
+        if (it == m_idIndex.end())
+            return;
+        RemoveAt(it->second);
     }
 
     void VectorStore::RemoveByMetadataType(const std::string &type)
     {
         std::unique_lock lock(m_mutex);
-        m_entries.erase(
-            std::remove_if(m_entries.begin(), m_entries.end(),
-                           [&type](const VectorEntry &e)
-                           {
-                               try
-                               {
-                                   auto meta = json::parse(e.metadata);
-                                   return meta.value("type", "") == type;
-                               }
-                               catch (...)
-                               {
-                                   return false;
-                               }
-                           }),
-            m_entries.end());
+        // Collect indices in reverse so RemoveAt doesn't shift unvisited entries
+        std::vector<size_t> toRemove;
+        for (size_t i = 0; i < m_entries.size(); ++i)
+        {
+            try
+            {
+                auto meta = json::parse(m_entries[i].metadata);
+                if (meta.value("type", "") == type)
+                    toRemove.push_back(i);
+            }
+            catch (...)
+            {
+            }
+        }
+        for (auto it = toRemove.rbegin(); it != toRemove.rend(); ++it)
+            RemoveAt(*it);
     }
 
     void VectorStore::RemoveByFile(const std::string &file)
     {
         std::unique_lock lock(m_mutex);
-        m_entries.erase(
-            std::remove_if(m_entries.begin(), m_entries.end(),
-                           [&file](const VectorEntry &e)
-                           {
-                               try
-                               {
-                                   auto meta = json::parse(e.metadata);
-                                   return meta.value("file", "") == file;
-                               }
-                               catch (...)
-                               {
-                                   return false;
-                               }
-                           }),
-            m_entries.end());
+        std::vector<size_t> toRemove;
+        for (size_t i = 0; i < m_entries.size(); ++i)
+            if (m_entries[i].file == file)
+                toRemove.push_back(i);
+        for (auto it = toRemove.rbegin(); it != toRemove.rend(); ++it)
+            RemoveAt(*it);
     }
 
     std::vector<VectorEntry> VectorStore::ExtractByFile(const std::string &file)
     {
         std::unique_lock lock(m_mutex);
         std::vector<VectorEntry> extracted;
-        auto it = std::partition(m_entries.begin(), m_entries.end(),
-                                 [&file](const VectorEntry &e)
-                                 {
-                                     try
-                                     {
-                                         auto meta = nlohmann::json::parse(e.metadata);
-                                         return meta.value("file", "") != file;
-                                     }
-                                     catch (...)
-                                     {
-                                         return true;
-                                     }
-                                 });
-        for (auto moveIt = it; moveIt != m_entries.end(); ++moveIt)
-            extracted.push_back(std::move(*moveIt));
-        m_entries.erase(it, m_entries.end());
+        // Collect matching indices in reverse so swap-and-pop is safe
+        std::vector<size_t> toRemove;
+        for (size_t i = 0; i < m_entries.size(); ++i)
+            if (m_entries[i].file == file)
+                toRemove.push_back(i);
+        extracted.reserve(toRemove.size());
+        for (auto it = toRemove.rbegin(); it != toRemove.rend(); ++it)
+        {
+            extracted.push_back(std::move(m_entries[*it]));
+            RemoveAt(*it);
+        }
         return extracted;
     }
 
@@ -102,42 +124,19 @@ namespace pagent
     {
         std::shared_lock lock(m_mutex);
         for (const auto &e : m_entries)
-        {
-            try
-            {
-                auto meta = json::parse(e.metadata);
-                if (meta.value("file", "") == file && meta.value("last_modified", "") == timestamp)
-                    return true;
-            }
-            catch (...)
-            {
-            }
-        }
+            if (e.file == file && e.last_modified == timestamp)
+                return true;
         return false;
     }
 
     std::unordered_map<std::string, std::string> VectorStore::BuildFileTimestampMap() const
     {
-        std::unordered_map<std::string, std::string> timestamps;
-
         std::shared_lock lock(m_mutex);
+        std::unordered_map<std::string, std::string> timestamps;
         timestamps.reserve(m_entries.size());
-
         for (const auto &e : m_entries)
-        {
-            try
-            {
-                auto meta = json::parse(e.metadata);
-                const std::string file = meta.value("file", "");
-                const std::string timestamp = meta.value("last_modified", "");
-                if (!file.empty() && !timestamp.empty())
-                    timestamps[file] = timestamp;
-            }
-            catch (...)
-            {
-            }
-        }
-
+            if (!e.file.empty() && !e.last_modified.empty())
+                timestamps[e.file] = e.last_modified;
         return timestamps;
     }
 
@@ -207,9 +206,9 @@ namespace pagent
             if (!arr.is_array())
                 return;
 
-            std::unique_lock lock(m_mutex);
-            m_entries.clear();
-            m_entries.reserve(arr.size());
+            // Build locally — all parsing and metadata caching outside the lock
+            std::vector<VectorEntry> entries;
+            entries.reserve(arr.size());
             for (const auto &obj : arr)
             {
                 VectorEntry e;
@@ -218,15 +217,23 @@ namespace pagent
                 e.metadata = obj.value("metadata", "");
                 if (obj.contains("embedding") && obj["embedding"].is_array())
                     e.embedding = obj["embedding"].get<std::vector<float>>();
-                m_entries.push_back(std::move(e));
+                ParseMetadataCache(e);
+                entries.push_back(std::move(e));
             }
 
-            // Dimension mismatch: clear incompatible vectors
-            if (expectedDims > 0 && !m_entries.empty() &&
-                static_cast<int>(m_entries[0].embedding.size()) != expectedDims)
-            {
-                m_entries.clear();
-            }
+            // Dimension mismatch: discard
+            if (expectedDims > 0 && !entries.empty() &&
+                static_cast<int>(entries[0].embedding.size()) != expectedDims)
+                return;
+
+            std::unordered_map<std::string, size_t> idIndex;
+            idIndex.reserve(entries.size());
+            for (size_t i = 0; i < entries.size(); ++i)
+                idIndex[entries[i].id] = i;
+
+            std::unique_lock lock(m_mutex);
+            m_entries = std::move(entries);
+            m_idIndex = std::move(idIndex);
         }
         catch (...)
         {
@@ -308,10 +315,9 @@ namespace pagent
         if (expectedDims > 0 && dims != static_cast<uint32_t>(expectedDims))
             return;
 
-        std::unique_lock lock(m_mutex);
-        m_entries.clear();
-        m_entries.reserve(count);
-
+        // Build locally — all I/O and metadata parsing outside the lock
+        std::vector<VectorEntry> entries;
+        entries.reserve(count);
         for (uint32_t i = 0; i < count && f.good(); ++i)
         {
             VectorEntry e;
@@ -320,8 +326,18 @@ namespace pagent
             e.metadata = readStr(f);
             e.embedding.resize(dims);
             f.read(reinterpret_cast<char *>(e.embedding.data()), dims * sizeof(float));
-            m_entries.push_back(std::move(e));
+            ParseMetadataCache(e);
+            entries.push_back(std::move(e));
         }
+
+        std::unordered_map<std::string, size_t> idIndex;
+        idIndex.reserve(entries.size());
+        for (size_t i = 0; i < entries.size(); ++i)
+            idIndex[entries[i].id] = i;
+
+        std::unique_lock lock(m_mutex);
+        m_entries = std::move(entries);
+        m_idIndex = std::move(idIndex);
     }
 
     size_t VectorStore::Size() const
@@ -334,6 +350,7 @@ namespace pagent
     {
         std::unique_lock lock(m_mutex);
         m_entries.clear();
+        m_idIndex.clear();
     }
 
     void VectorStore::ForEachEntry(const std::function<void(const VectorEntry &)> &fn) const

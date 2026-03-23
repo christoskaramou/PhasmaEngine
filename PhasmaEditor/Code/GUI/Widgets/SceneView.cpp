@@ -9,6 +9,7 @@
 #include "Particles/ParticleManager.h"
 #include "Scene/ModelAsset.h"
 #include "Scene/Scene.h"
+#include "Scene/SceneNode.h"
 #include "Scene/SelectionManager.h"
 #include "Systems/LightSystem.h"
 #include "Systems/RendererSystem.h"
@@ -172,7 +173,7 @@ namespace pe
             int lightIndex = -1;
             int cameraIndex = -1;
             int emitterIndex = -1;
-            NodeInfo *nodeInfo = nullptr;
+            NodeId *node = nullptr;
         };
 
         static SelectionContext GetSelectionContext()
@@ -185,16 +186,12 @@ namespace pe
 
             if (selection.GetSelectionType() == SelectionType::Node)
             {
-                ctx.nodeInfo = selection.GetSelectedNodeInfo();
-                if (ctx.nodeInfo)
+                ctx.node = selection.GetSelectedNode();
+                if (ctx.node)
                 {
-                    ModelAsset *selectedModel = selection.GetSelectedModel();
-                    const int selectedNodeIndex = selection.GetSelectedNodeIndex();
-                    if (selectedModel && selectedNodeIndex >= 0)
-                    {
-                        ctx.matrix = selectedModel->GetNodeWorldMatrix(selectedNodeIndex);
-                        ctx.valid = true;
-                    }
+                    Scene &scene = GetGlobalSystem<RendererSystem>()->GetScene();
+                    ctx.matrix = scene.GetWorldMatrix(ctx.node);
+                    ctx.valid = true;
                 }
             }
             else if (selection.GetSelectionType() == SelectionType::Light)
@@ -239,7 +236,7 @@ namespace pe
             }
             else if (selection.GetSelectionType() == SelectionType::Camera)
             {
-                ctx.cameraIndex = selection.GetSelectedNodeIndex();
+                ctx.cameraIndex = selection.GetSelectedCameraIndex();
                 auto cameras = GetGlobalSystem<RendererSystem>()->GetScene().GetCameras();
                 if (ctx.cameraIndex >= 0 && ctx.cameraIndex < (int)cameras.size())
                 {
@@ -418,32 +415,24 @@ namespace pe
                     }
                 }
             }
-            else if (ctx.nodeInfo)
+            else if (ctx.node)
             {
-                if (ctx.nodeInfo)
-                {
-                    auto &selection = SelectionManager::Instance();
-                    ModelAsset *model = selection.GetSelectedModel();
-                    if (!model)
-                        return;
+                // Guard against NaN
+                for (int i = 0; i < 4; ++i)
+                    for (int j = 0; j < 4; ++j)
+                        if (std::isnan(newMatrix[i][j]) || std::isinf(newMatrix[i][j]))
+                            return;
 
-                    // Guard against NaN
-                    for (int i = 0; i < 4; ++i)
-                        for (int j = 0; j < 4; ++j)
-                            if (std::isnan(newMatrix[i][j]) || std::isinf(newMatrix[i][j]))
-                                return;
+                Scene &scene = GetGlobalSystem<RendererSystem>()->GetScene();
+                NodeId *parent = scene.GetParent(ctx.node);
+                glm::mat4 parentWorldMatrix = parent ? scene.GetWorldMatrix(parent) : glm::mat4(1.0f);
 
-                    int selectedNodeIndex = selection.GetSelectedNodeIndex();
-                    int parentIdx = ctx.nodeInfo->parent;
-                    glm::mat4 parentWorldMatrix = (parentIdx >= 0) ? model->GetNodeWorldMatrix(parentIdx) : model->GetMatrix();
+                // Guard against singular matrix
+                float det = glm::determinant(parentWorldMatrix);
+                if (std::abs(det) < 1e-6f)
+                    return;
 
-                    // Guard against singular matrix
-                    float det = glm::determinant(parentWorldMatrix);
-                    if (std::abs(det) < 1e-6f)
-                        return;
-
-                    model->SetNodeLocalMatrix(selectedNodeIndex, glm::inverse(parentWorldMatrix) * newMatrix);
-                }
+                scene.SetLocalMatrix(ctx.node, glm::inverse(parentWorldMatrix) * newMatrix);
             }
         }
     } // namespace GizmoUtils
@@ -608,50 +597,44 @@ namespace pe
         struct Intersection
         {
             float t;
-            ModelAsset *model;
-            int nodeIndex;
+            NodeId *node;
         };
         std::vector<Intersection> intersections;
 
-        auto &models = scene.GetModels();
-        for (auto model : models)
+        uint32_t nodeCount = scene.GetNodeCount();
+        for (uint32_t i = 0; i < nodeCount; i++)
         {
-            if (!model || !model->IsRenderReady())
+            NodeId *node = scene.GetNodeId(i);
+            if (scene.GetMeshRef(node) < 0)
                 continue;
 
-            for (int i = 0; i < model->GetNodeCount(); i++)
+            const AABB &aabb = scene.GetWorldAABB(node);
+
+            vec3 minBound = aabb.min;
+            vec3 maxBound = aabb.max;
+
+            // Check if camera is inside the AABB
+            if (camPos.x >= minBound.x && camPos.x <= maxBound.x &&
+                camPos.y >= minBound.y && camPos.y <= maxBound.y &&
+                camPos.z >= minBound.z && camPos.z <= maxBound.z)
             {
-                if (model->GetNodeMesh(i) < 0)
-                    continue;
+                continue;
+            }
 
-                const AABB &aabb = model->GetNodeWorldBoundingBox(i);
+            vec3 invDir = 1.0f / rayDir;
+            vec3 t1 = (minBound - rayOrigin) * invDir;
+            vec3 t2 = (maxBound - rayOrigin) * invDir;
 
-                vec3 minBound = aabb.min;
-                vec3 maxBound = aabb.max;
+            vec3 tMin = min(t1, t2);
+            vec3 tMax = max(t1, t2);
 
-                // Check if camera is inside the AABB
-                if (camPos.x >= minBound.x && camPos.x <= maxBound.x &&
-                    camPos.y >= minBound.y && camPos.y <= maxBound.y &&
-                    camPos.z >= minBound.z && camPos.z <= maxBound.z)
-                {
-                    continue;
-                }
+            float tNear = max(max(tMin.x, tMin.y), tMin.z);
+            float tFar = min(min(tMax.x, tMax.y), tMax.z);
 
-                vec3 invDir = 1.0f / rayDir;
-                vec3 t1 = (minBound - rayOrigin) * invDir;
-                vec3 t2 = (maxBound - rayOrigin) * invDir;
-
-                vec3 tMin = min(t1, t2);
-                vec3 tMax = max(t1, t2);
-
-                float tNear = max(max(tMin.x, tMin.y), tMin.z);
-                float tFar = min(min(tMax.x, tMax.y), tMax.z);
-
-                if (tNear <= tFar && tFar >= 0.0f)
-                {
-                    float t = tNear >= 0.0f ? tNear : tFar;
-                    intersections.push_back({t, model, i});
-                }
+            if (tNear <= tFar && tFar >= 0.0f)
+            {
+                float t = tNear >= 0.0f ? tNear : tFar;
+                intersections.push_back({t, node});
             }
         }
 
@@ -669,12 +652,11 @@ namespace pe
         // Cyclic selection logic
         if (selection.HasSelection() && selection.GetSelectionType() == SelectionType::Node)
         {
-            ModelAsset *currentModel = selection.GetSelectedModel();
-            int currentNodeIndex = selection.GetSelectedNodeIndex();
+            NodeId *currentNode = selection.GetSelectedNode();
 
             for (int i = 0; i < static_cast<int>(intersections.size()); i++)
             {
-                if (intersections[i].model == currentModel && intersections[i].nodeIndex == currentNodeIndex)
+                if (intersections[i].node == currentNode)
                 {
                     selectIndex = (i + 1) % intersections.size();
                     break;
@@ -682,7 +664,7 @@ namespace pe
             }
         }
 
-        selection.Select(intersections[selectIndex].model, intersections[selectIndex].nodeIndex);
+        selection.Select(intersections[selectIndex].node);
     }
 
     vec3 GetDirectionFromRotation(const vec4 &rotation)
@@ -1093,12 +1075,12 @@ namespace pe
 
             vec3 pos = camera->GetPosition();
             bool isSelected = selection.GetSelectionType() == SelectionType::Camera &&
-                              selection.GetSelectedNodeIndex() == i;
+                              selection.GetSelectedCameraIndex() == i;
 
             std::string iconId = "##CameraIcon" + std::to_string(i);
             if (DrawGizmoIcon(pos, ICON_FA_VIDEO, viewProj, imageMin, imageSize, isSelected, iconId.c_str()))
             {
-                selection.Select(nullptr, i, SelectionType::Camera);
+                selection.SelectCamera(i);
             }
 
             if (isSelected)

@@ -1,8 +1,8 @@
 #include "TransformWidget.h"
 #include "GUI/IconsFontAwesome.h"
-#include "Scene/ModelAsset.h"
+#include "Scene/Scene.h"
 #include "Scene/SelectionManager.h"
-#include "TransformWidget.h"
+#include "Systems/RendererSystem.h"
 #include "glm/gtx/matrix_decompose.hpp"
 #include "imgui/ImGuizmo.h"
 #include "imgui/imgui.h"
@@ -27,11 +27,11 @@ namespace pe
     {
     }
 
-    void TransformWidget::DrawEmbed(NodeInfo *nodeInfo)
+    void TransformWidget::DrawEmbed(NodeId *node)
     {
         if (ImGui::CollapsingHeader("Node Info", ImGuiTreeNodeFlags_DefaultOpen))
         {
-            DrawNodeInfo(nodeInfo);
+            DrawNodeInfo(node);
         }
 
         ImGui::Separator();
@@ -40,55 +40,52 @@ namespace pe
         {
             DrawGizmoModeButtons();
             ImGui::Text("Local Transform");
-            DrawPositionEditor(nodeInfo);
-            DrawRotationEditor(nodeInfo);
-            DrawScaleEditor(nodeInfo);
+            DrawPositionEditor(node);
+            DrawRotationEditor(node);
+            DrawScaleEditor(node);
         }
     }
 
-    void TransformWidget::DrawNodeInfo(NodeInfo *node)
+    void TransformWidget::DrawNodeInfo(NodeId *node)
     {
         if (!node)
             return;
 
+        Scene &scene = GetGlobalSystem<RendererSystem>()->GetScene();
+
         char buffer[256];
         memset(buffer, 0, 256);
-        memcpy(buffer, node->name.c_str(), std::min(node->name.length(), sizeof(buffer) - 1));
+        const std::string &nodeName = scene.GetNodeName(node);
+        memcpy(buffer, nodeName.c_str(), std::min(nodeName.length(), sizeof(buffer) - 1));
         if (ImGui::InputText("Name", buffer, 256))
         {
-            auto &selection = SelectionManager::Instance();
-            ModelAsset *model = selection.GetSelectedModel();
-            const int nodeIndex = selection.GetSelectedNodeIndex();
-
-            if (model && nodeIndex >= 0)
-                model->SetNodeName(nodeIndex, buffer);
-            else
-                node->name = buffer;
+            scene.SetNodeName(node, buffer);
         }
 
         if (ImGui::BeginTable("NodeInfoTypes", 2, ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg))
         {
             ImGui::TableNextRow();
             ImGui::TableSetColumnIndex(0);
-            ImGui::Text("Parent Index");
+            ImGui::Text("Parent");
             ImGui::TableSetColumnIndex(1);
-            ImGui::Text("%d", node->parent);
+            NodeId *parent = scene.GetParent(node);
+            if (parent)
+                ImGui::Text("%s", scene.GetNodeName(parent).c_str());
+            else
+                ImGui::Text("(root)");
 
             ImGui::TableNextRow();
             ImGui::TableSetColumnIndex(0);
             ImGui::Text("Children Count");
             ImGui::TableSetColumnIndex(1);
-            ImGui::Text("%zu", node->children.size());
+            ImGui::Text("%zu", scene.GetChildren(node).size());
 
             ImGui::EndTable();
         }
 
         if (ImGui::CollapsingHeader("World AABB"))
         {
-            auto &selection = SelectionManager::Instance();
-            const ModelAsset *selectedModel = selection.GetSelectedModel();
-            const int selectedNodeIndex = selection.GetSelectedNodeIndex();
-            const AABB &worldBounds = (selectedModel && selectedNodeIndex >= 0) ? selectedModel->GetNodeWorldBoundingBox(selectedNodeIndex) : AABB{};
+            const AABB &worldBounds = scene.GetWorldAABB(node);
             ImGui::LabelText("Min", "(%.2f, %.2f, %.2f)", worldBounds.min.x, worldBounds.min.y, worldBounds.min.z);
             ImGui::LabelText("Max", "(%.2f, %.2f, %.2f)", worldBounds.max.x, worldBounds.max.y, worldBounds.max.z);
         }
@@ -128,13 +125,15 @@ namespace pe
             ImGui::PopStyleColor();
     }
 
-    void TransformWidget::DrawPositionEditor(NodeInfo *node)
+    void TransformWidget::DrawPositionEditor(NodeId *node)
     {
-        // Decompose LOCAL matrix (relative to parent)
+        Scene &scene = GetGlobalSystem<RendererSystem>()->GetScene();
+        const mat4 &localMatrix = scene.GetLocalMatrix(node);
+
         vec3 position, scl, skew;
         quat rotation;
         vec4 perspective;
-        decompose(node->localMatrix, scl, rotation, position, skew, perspective);
+        decompose(localMatrix, scl, rotation, position, skew, perspective);
 
         vec3 oldPos = position;
         DrawVec3Control(TransformType::Position, position);
@@ -144,10 +143,13 @@ namespace pe
         }
     }
 
-    void TransformWidget::DrawRotationEditor(NodeInfo *node)
+    void TransformWidget::DrawRotationEditor(NodeId *node)
     {
+        Scene &scene = GetGlobalSystem<RendererSystem>()->GetScene();
+        const mat4 &localMatrix = scene.GetLocalMatrix(node);
+
         float t[3], r[3], s[3];
-        ImGuizmo::DecomposeMatrixToComponents(value_ptr(node->localMatrix), t, r, s);
+        ImGuizmo::DecomposeMatrixToComponents(value_ptr(localMatrix), t, r, s);
         vec3 eulerDeg = vec3(r[0], r[1], r[2]);
         vec3 oldRot = eulerDeg;
 
@@ -156,27 +158,19 @@ namespace pe
         {
             float matrix[16];
             ImGuizmo::RecomposeMatrixFromComponents(t, value_ptr(eulerDeg), s, matrix);
-
-            auto &selection = SelectionManager::Instance();
-            ModelAsset *model = selection.GetSelectedModel();
-            if (model)
-            {
-                const int nodeIndex = selection.GetSelectedNodeIndex();
-                model->SetNodeLocalMatrix(nodeIndex, make_mat4(matrix));
-            }
-            else
-            {
-                node->localMatrix = make_mat4(matrix);
-            }
+            scene.SetLocalMatrix(node, make_mat4(matrix));
         }
     }
 
-    void TransformWidget::DrawScaleEditor(NodeInfo *node)
+    void TransformWidget::DrawScaleEditor(NodeId *node)
     {
+        Scene &scene = GetGlobalSystem<RendererSystem>()->GetScene();
+        const mat4 &localMatrix = scene.GetLocalMatrix(node);
+
         vec3 position, scl, skew;
         quat rotation;
         vec4 perspective;
-        decompose(node->localMatrix, scl, rotation, position, skew, perspective);
+        decompose(localMatrix, scl, rotation, position, skew, perspective);
 
         vec3 eulerDeg = degrees(eulerAngles(rotation));
         vec3 oldScale = scl;
@@ -247,11 +241,9 @@ namespace pe
         ImGui::PopID();
     }
 
-    void TransformWidget::ApplyLocalTransform(NodeInfo *nodeInfo, const vec3 &pos, const quat &rot, const vec3 &scl)
+    void TransformWidget::ApplyLocalTransform(NodeId *node, const vec3 &pos, const quat &rot, const vec3 &scl)
     {
-        auto &selection = SelectionManager::Instance();
-        ModelAsset *model = selection.GetSelectedModel();
-        if (!model)
+        if (!node)
             return;
 
         // Guard against NaN
@@ -268,7 +260,7 @@ namespace pe
         mat4 scaleMat = scale(mat4(1.0f), scl);
         const mat4 localMatrix = translationMat * rotationMat * scaleMat;
 
-        const int nodeIndex = selection.GetSelectedNodeIndex();
-        model->SetNodeLocalMatrix(nodeIndex, localMatrix);
+        Scene &scene = GetGlobalSystem<RendererSystem>()->GetScene();
+        scene.SetLocalMatrix(node, localMatrix);
     }
 } // namespace pe

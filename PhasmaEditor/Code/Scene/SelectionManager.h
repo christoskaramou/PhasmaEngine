@@ -2,8 +2,7 @@
 
 namespace pe
 {
-    class ModelAsset;
-    struct NodeInfo;
+    struct NodeId;
 
     enum class GizmoOperation
     {
@@ -34,21 +33,20 @@ namespace pe
     public:
         static SelectionManager &Instance();
 
-        void Select(ModelAsset *model, int nodeIndex, SelectionType type = SelectionType::Node);
+        void Select(NodeId *node, SelectionType type = SelectionType::Node);
         void Select(LightType type, int index);
+        void SelectCamera(int index);
         void SelectEmitter(int index);
         void ClearSelection();
 
         bool HasSelection() const;
-        ModelAsset *GetSelectedModel() const;
-        int GetSelectedNodeIndex() const;
+        NodeId *GetSelectedNode() const;
         SelectionType GetSelectionType() const;
-        NodeInfo *GetSelectedNodeInfo();
-        const NodeInfo *GetSelectedNodeInfo() const;
 
         LightType GetSelectedLightType() const;
         int GetSelectedLightIndex() const;
         int GetSelectedEmitterIndex() const;
+        int GetSelectedCameraIndex() const;
 
         GizmoOperation GetGizmoOperation() const;
         void SetGizmoOperation(GizmoOperation op);
@@ -56,13 +54,13 @@ namespace pe
     private:
         SelectionManager() = default;
 
-        ModelAsset *m_selectedModel = nullptr;
-        int m_selectedNodeIndex = -1;
+        NodeId *m_selectedNode = nullptr;
 
         LightType m_selectedLightType = LightType::Directional;
         int m_selectedLightIndex = -1;
 
         int m_selectedEmitterIndex = -1;
+        int m_selectedCameraIndex = -1;
         SelectionType m_selectionType = SelectionType::Node;
         GizmoOperation m_gizmoOperation = GizmoOperation::Translate;
     };

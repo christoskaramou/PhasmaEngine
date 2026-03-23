@@ -3,7 +3,7 @@
 
 namespace pe
 {
-    class ModelAsset;
+    struct NodeId;
 
     class Hierarchy : public Widget
     {
@@ -12,12 +12,11 @@ namespace pe
         void Update() override;
 
     private:
-        ModelAsset *m_lastSelectedModel = nullptr;
-        int m_lastSelectedNodeIndex = -1;
+        NodeId *m_lastSelectedNode = nullptr;
 
         // For auto-expansion
-        ModelAsset *m_modelToExpand = nullptr;
-        std::unordered_set<int> m_nodesToExpand;
+        NodeId *m_nodeToExpand = nullptr;
+        std::unordered_set<NodeId *> m_nodesToExpand;
         bool m_scrollToSelection = false;
     };
 } // namespace pe

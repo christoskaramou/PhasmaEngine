@@ -6,7 +6,6 @@
 #include "API/RHI.h"
 #include "API/Shader.h"
 #include "Camera/Camera.h"
-#include "Scene/ModelAsset.h"
 #include "Scene/Scene.h"
 #include "ShadowPass.h"
 #include "Systems/RendererSystem.h"
@@ -84,24 +83,20 @@ namespace pe
         {
             for (auto &drawInfo : drawInfos)
             {
-                ModelAsset &model = *drawInfo.model;
-
-                int node = drawInfo.node;
-                int mesh = model.GetNodeMesh(node);
-                if (mesh < 0)
+                const uint32_t idx = drawInfo.node->index;
+                int meshIdx = m_scene->GetMeshRef(drawInfo.node);
+                if (meshIdx < 0)
                     continue;
 
-                NodeInfo *nodeInfo = model.GetNodeInfo(node);
-                MeshInfo *meshInfo = model.GetMeshInfo(mesh);
-                if (!nodeInfo || !meshInfo)
-                    continue;
+                const Mesh &mesh = m_scene->GetMesh(meshIdx);
+                const NodeRuntime &rt = m_scene->GetNodeRuntime(drawInfo.node);
 
-                constants.meshIndex = GetUboDataOffset(model.GetNodeDataOffset(node));
-                constants.color = meshInfo->aabbColor;
+                constants.meshIndex = GetUboDataOffset(rt.dataOffset);
+                constants.color = mesh.aabbColor;
 
                 cmd->SetConstants(constants);
                 cmd->PushConstants();
-                cmd->DrawIndexed(24, 1, 0, static_cast<int>(meshInfo->aabbVertexOffset), 0);
+                cmd->DrawIndexed(24, 1, 0, static_cast<int>(mesh.aabbVertexOffset), 0);
             }
         };
 

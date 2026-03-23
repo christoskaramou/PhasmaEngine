@@ -159,6 +159,22 @@ namespace pe
 
         cmd->BeginDebugRegion("TAA");
 
+        // If requested (e.g. after model deletion), clear history so stale
+        // shadows / objects don't ghost through temporal accumulation.
+        if (m_resetHistory)
+        {
+            m_resetHistory = false;
+            cmd->ClearColors({m_historyImage});
+            // ClearColors leaves the image in eTransferDstOptimal; transition
+            // back to shader-read so the TAA compute shader can sample it.
+            ImageBarrierInfo shaderRead{};
+            shaderRead.image = m_historyImage;
+            shaderRead.layout = vk::ImageLayout::eShaderReadOnlyOptimal;
+            shaderRead.stageFlags = vk::PipelineStageFlagBits2::eComputeShader;
+            shaderRead.accessMask = vk::AccessFlagBits2::eShaderSampledRead;
+            cmd->ImageBarrier(shaderRead);
+        }
+
         // Bind Pipeline & Descriptors
         // Note: BindPipeline auto-binds descriptors if set true (default).
         cmd->BindPipeline(*m_passInfo);

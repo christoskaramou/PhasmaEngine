@@ -451,16 +451,23 @@ namespace pe
         if (fs)
         {
             std::vector<std::string> exts = {};
-            fs->OpenSelection([](const std::string &path)
+            fs->OpenSelection([this](const std::string &path)
                               {
                 UndoRedo::Instance().Clear();
-                auto loadAsync = [path]()
+                ThreadPool::GUI.Enqueue([this, path]()
                 {
-                    auto* rs = GetGlobalSystem<RendererSystem>();
-                    if (rs)
-                        rs->GetScene().LoadScene(path);
-                };
-                ThreadPool::GUI.Enqueue(loadAsync); return true; }, exts);
+                    auto preload = std::make_shared<Scene::ScenePreload>(Scene::PreloadScene(path));
+                    QueueMainThreadAction([preload]()
+                    {
+                        auto *rs = GetGlobalSystem<RendererSystem>();
+                        if (rs && preload->valid)
+                        {
+                            rs->WaitAllFramesCommands();
+                            rs->GetScene().LoadSceneApply(std::move(*preload));
+                        }
+                    });
+                });
+                return true; }, exts);
         }
     }
 
@@ -2012,21 +2019,19 @@ namespace pe
                         undoRedo.RecordSnapshot(undoRedoRS->GetScene());
 
                     SelectionType selType = selection.GetSelectionType();
-                    if (selType == SelectionType::Node)
+                    if (selType == SelectionType::Node || selType == SelectionType::Mesh)
                     {
-                        ModelAsset *model = selection.GetSelectedModel();
-                        int nodeIndex = selection.GetSelectedNodeIndex();
-                        if (model && nodeIndex >= 0)
-                            EventSystem::PushEvent(EventType::NodeRemoved,
-                                                   std::make_pair(model, nodeIndex));
-                    }
-                    else if (selType == SelectionType::Mesh)
-                    {
-                        ModelAsset *model = selection.GetSelectedModel();
-                        int nodeIndex = selection.GetSelectedNodeIndex();
-                        if (model && nodeIndex >= 0)
-                            EventSystem::PushEvent(EventType::MeshRemoved,
-                                                   std::make_pair(model, nodeIndex));
+                        NodeId *node = selection.GetSelectedNode();
+                        if (node)
+                        {
+                            RendererSystem *rs = GetGlobalSystem<RendererSystem>();
+                            if (rs)
+                            {
+                                selection.ClearSelection();
+                                rs->GetScene().DeleteNode(node);
+                                EventSystem::PushEvent(EventType::NodeRemoved);
+                            }
+                        }
                     }
                     else if (selType == SelectionType::Camera)
                     {
@@ -2034,7 +2039,7 @@ namespace pe
                         if (rs)
                         {
                             auto &cameras = rs->GetScene().GetCameras();
-                            int idx = selection.GetSelectedNodeIndex();
+                            int idx = selection.GetSelectedCameraIndex();
                             if (cameras.size() > 1 && idx >= 0 && idx < static_cast<int>(cameras.size()))
                                 rs->GetScene().RemoveCamera(cameras[idx]);
                         }

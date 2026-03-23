@@ -8,6 +8,7 @@
 #include "Scene/ModelAsset.h"
 #include "Scene/Primitives.h"
 #include "Scene/Scene.h"
+#include "Scene/SceneNode.h"
 #include "Scene/SelectionManager.h"
 #include "Systems/LightSystem.h"
 #include "Systems/RendererSystem.h"
@@ -32,8 +33,7 @@ namespace pe
 
     struct HierarchyDragDropPayload
     {
-        size_t modelId;
-        int nodeIndex;
+        NodeId *node;
     };
 
     Hierarchy::Hierarchy() : Widget("Hierarchy")
@@ -68,7 +68,6 @@ namespace pe
         ImGui::Begin("Hierarchy", &m_open);
 
         Scene &scene = GetGlobalSystem<RendererSystem>()->GetScene();
-        auto &models = scene.GetModels();
         auto &selection = SelectionManager::Instance();
 
         // Helper: save undo snapshot before any destructive action
@@ -113,9 +112,7 @@ namespace pe
         {
             if (ImGui::MenuItem("Camera"))
             {
-                Camera *camera = scene.AddCamera();
-                // Select new camera
-                // selection.Select(nullptr, -1, SelectionType::Camera); // Need logic to select specific camera index if multiples were supported in UI
+                scene.AddCamera();
             }
 
             if (ImGui::BeginMenu("Light"))
@@ -123,71 +120,42 @@ namespace pe
                 LightSystem *lightSystem = GetGlobalSystem<LightSystem>();
 
                 if (ImGui::MenuItem("Directional Light"))
-                {
                     lightSystem->CreateDirectionalLight();
-                }
                 if (ImGui::MenuItem("Point Light"))
-                {
                     lightSystem->CreatePointLight();
-                }
                 if (ImGui::MenuItem("Spot Light"))
-                {
                     lightSystem->CreateSpotLight();
-                }
                 if (ImGui::MenuItem("Area Light"))
-                {
                     lightSystem->CreateAreaLight();
-                }
                 ImGui::EndMenu();
             }
 
             if (ImGui::MenuItem("Empty Node"))
             {
-                ModelAsset *model = new ModelAsset();
-                int const nodeIndex = model->CreateNode("Empty Node");
-                EventSystem::PushEvent(EventType::ModelLoaded, model);
-                // Select the new node (index 0)
-                selection.Select(model, nodeIndex, SelectionType::Node);
+                NodeId *node = scene.CreateNode("Empty Node");
+                selection.Select(node, SelectionType::Node);
             }
 
             if (ImGui::BeginMenu("Mesh"))
             {
+                auto AddPrimitive = [&](ModelAsset *m)
+                {
+                    EventSystem::PushEvent(EventType::ModelLoaded, m);
+                    // After model is added to scene, select its first root node
+                    // The event handler will call AddModel which creates NodeIds
+                };
                 if (ImGui::MenuItem("Plane"))
-                {
-                    ModelAsset *model = Primitives::CreatePlane();
-                    EventSystem::PushEvent(EventType::ModelLoaded, model);
-                    selection.Select(model, model->GetRootNodeIndex(), SelectionType::Node);
-                }
+                    AddPrimitive(Primitives::CreatePlane());
                 if (ImGui::MenuItem("Cube"))
-                {
-                    ModelAsset *model = Primitives::CreateCube();
-                    EventSystem::PushEvent(EventType::ModelLoaded, model);
-                    selection.Select(model, model->GetRootNodeIndex(), SelectionType::Node);
-                }
+                    AddPrimitive(Primitives::CreateCube());
                 if (ImGui::MenuItem("Sphere"))
-                {
-                    ModelAsset *model = Primitives::CreateSphere();
-                    EventSystem::PushEvent(EventType::ModelLoaded, model);
-                    selection.Select(model, model->GetRootNodeIndex(), SelectionType::Node);
-                }
+                    AddPrimitive(Primitives::CreateSphere());
                 if (ImGui::MenuItem("Cylinder"))
-                {
-                    ModelAsset *model = Primitives::CreateCylinder();
-                    EventSystem::PushEvent(EventType::ModelLoaded, model);
-                    selection.Select(model, model->GetRootNodeIndex(), SelectionType::Node);
-                }
+                    AddPrimitive(Primitives::CreateCylinder());
                 if (ImGui::MenuItem("Cone"))
-                {
-                    ModelAsset *model = Primitives::CreateCone();
-                    EventSystem::PushEvent(EventType::ModelLoaded, model);
-                    selection.Select(model, model->GetRootNodeIndex(), SelectionType::Node);
-                }
+                    AddPrimitive(Primitives::CreateCone());
                 if (ImGui::MenuItem("Quad"))
-                {
-                    ModelAsset *model = Primitives::CreateQuad();
-                    EventSystem::PushEvent(EventType::ModelLoaded, model);
-                    selection.Select(model, model->GetRootNodeIndex(), SelectionType::Node);
-                }
+                    AddPrimitive(Primitives::CreateQuad());
                 ImGui::EndMenu();
             }
 
@@ -225,36 +193,33 @@ namespace pe
             ImGui::EndPopup();
         }
 
-        static ModelAsset *s_renameModel = nullptr;
+        static NodeId *s_renameNode = nullptr;
         static Camera *s_renameCamera = nullptr;
         static LightType s_renameLightType = (LightType)-1;
         static int s_renameLightIndex = -1;
-        static int s_renameNode = -1;
+        static int s_renameEmitterIndex = -1;
         static char s_renameBuf[128] = "";
         static bool s_openRenamePopup = false;
-        std::vector<ModelAsset *> modelsToDelete;
+        std::vector<NodeId *> nodesToDelete;
 
-        // Check for selection change
-        ModelAsset *currentSelectedModel = selection.GetSelectedModel();
-        int currentSelectedNodeIndex = selection.GetSelectedNodeIndex();
-
-        if (currentSelectedModel != m_lastSelectedModel || currentSelectedNodeIndex != m_lastSelectedNodeIndex)
+        // Check for selection change (auto-expand)
+        NodeId *currentSelectedNode = selection.GetSelectedNode();
+        if (currentSelectedNode != m_lastSelectedNode)
         {
-            m_lastSelectedModel = currentSelectedModel;
-            m_lastSelectedNodeIndex = currentSelectedNodeIndex;
+            m_lastSelectedNode = currentSelectedNode;
 
-            if (currentSelectedModel && currentSelectedNodeIndex >= 0)
+            if (currentSelectedNode)
             {
-                m_modelToExpand = currentSelectedModel;
+                m_nodeToExpand = currentSelectedNode;
                 m_nodesToExpand.clear();
                 m_scrollToSelection = true;
 
                 // Trace parents up to root
-                int p = currentSelectedModel->GetNodeParentIndex(currentSelectedNodeIndex);
-                while (p >= 0)
+                NodeId *p = scene.GetParent(currentSelectedNode);
+                while (p)
                 {
                     m_nodesToExpand.insert(p);
-                    p = currentSelectedModel->GetNodeParentIndex(p);
+                    p = scene.GetParent(p);
                 }
             }
         }
@@ -268,7 +233,7 @@ namespace pe
                                              ImGuiTreeNodeFlags_Leaf |
                                              ImGuiTreeNodeFlags_FramePadding;
 
-            if (selection.GetSelectionType() == SelectionType::Camera && selection.GetSelectedNodeIndex() == i)
+            if (selection.GetSelectionType() == SelectionType::Camera && selection.GetSelectedCameraIndex() == i)
                 cameraFlags |= ImGuiTreeNodeFlags_Selected;
 
             std::string cameraLabel = camera->GetName();
@@ -278,7 +243,7 @@ namespace pe
             bool cameraOpen = ImGui::TreeNodeEx((void *)camera, cameraFlags, "%s  %s", ICON_FA_VIDEO, cameraLabel.c_str());
             if (ImGui::IsItemClicked(ImGuiMouseButton_Left) || ImGui::IsItemClicked(ImGuiMouseButton_Right))
             {
-                selection.Select(nullptr, i, SelectionType::Camera);
+                selection.SelectCamera(i);
                 ImGui::SetWindowFocus("Properties");
             }
 
@@ -290,7 +255,7 @@ namespace pe
                 }
                 if (i > 0 && ImGui::MenuItem("Focus"))
                 {
-                    selection.Select(nullptr, i, SelectionType::Camera);
+                    selection.SelectCamera(i);
                     Camera *activeCamera = scene.GetActiveCamera();
                     vec3 center = camera->GetPosition();
                     vec3 dir = activeCamera->GetFront();
@@ -299,9 +264,9 @@ namespace pe
                 }
                 if (ImGui::MenuItem("Rename"))
                 {
-                    s_renameModel = nullptr;
+                    s_renameNode = nullptr;
                     s_renameCamera = camera;
-                    s_renameNode = -1;
+                    s_renameEmitterIndex = -1;
                     snprintf(s_renameBuf, sizeof(s_renameBuf), "%s", camera->GetName().c_str());
                     s_openRenamePopup = true;
                 }
@@ -384,11 +349,11 @@ namespace pe
                         }
                         if (ImGui::MenuItem("Rename"))
                         {
-                            s_renameModel = nullptr;
+                            s_renameNode = nullptr;
                             s_renameCamera = nullptr;
                             s_renameLightType = LightType::Directional;
                             s_renameLightIndex = i;
-                            s_renameNode = -1;
+                            s_renameEmitterIndex = -1;
                             snprintf(s_renameBuf, sizeof(s_renameBuf), "%s", name.c_str());
                             s_openRenamePopup = true;
                         }
@@ -439,11 +404,11 @@ namespace pe
                         }
                         if (ImGui::MenuItem("Rename"))
                         {
-                            s_renameModel = nullptr;
+                            s_renameNode = nullptr;
                             s_renameCamera = nullptr;
                             s_renameLightType = LightType::Point;
                             s_renameLightIndex = i;
-                            s_renameNode = -1;
+                            s_renameEmitterIndex = -1;
                             snprintf(s_renameBuf, sizeof(s_renameBuf), "%s", name.c_str());
                             s_openRenamePopup = true;
                         }
@@ -494,11 +459,11 @@ namespace pe
                         }
                         if (ImGui::MenuItem("Rename"))
                         {
-                            s_renameModel = nullptr;
+                            s_renameNode = nullptr;
                             s_renameCamera = nullptr;
                             s_renameLightType = LightType::Spot;
                             s_renameLightIndex = i;
-                            s_renameNode = -1;
+                            s_renameEmitterIndex = -1;
                             snprintf(s_renameBuf, sizeof(s_renameBuf), "%s", name.c_str());
                             s_openRenamePopup = true;
                         }
@@ -549,11 +514,11 @@ namespace pe
                         }
                         if (ImGui::MenuItem("Rename"))
                         {
-                            s_renameModel = nullptr;
+                            s_renameNode = nullptr;
                             s_renameCamera = nullptr;
                             s_renameLightType = LightType::Area;
                             s_renameLightIndex = i;
-                            s_renameNode = -1;
+                            s_renameEmitterIndex = -1;
                             snprintf(s_renameBuf, sizeof(s_renameBuf), "%s", name.c_str());
                             s_openRenamePopup = true;
                         }
@@ -640,11 +605,11 @@ namespace pe
                                 }
                                 if (ImGui::MenuItem("Rename"))
                                 {
-                                    s_renameModel = nullptr;
+                                    s_renameNode = nullptr;
                                     s_renameCamera = nullptr;
                                     s_renameLightType = (LightType)-1;
                                     s_renameLightIndex = -1;
-                                    s_renameNode = -(i + 100); // negative sentinel for emitter rename
+                                    s_renameEmitterIndex = i;
                                     snprintf(s_renameBuf, sizeof(s_renameBuf), "%s", emitterName.c_str());
                                     s_openRenamePopup = true;
                                 }
@@ -683,515 +648,309 @@ namespace pe
             }
         }
 
-        for (auto model : models)
+        // --- Scene Nodes ---
+        // Draw mesh entry under a node
+        auto DrawMeshEntry = [&](NodeId *node, int meshIndex)
         {
-            if (!model)
-                continue;
+            uintptr_t meshUniqueId = reinterpret_cast<uintptr_t>(node) ^ 0x10000;
+            std::string meshDisplayName = std::string(ICON_FA_SHAPES) + "  Mesh";
 
-            size_t id = model->GetId();
-            std::string name = model->GetLabel();
-            if (name.empty())
-                name = "Model_" + std::to_string(id);
+            ImGuiTreeNodeFlags meshFlags = ImGuiTreeNodeFlags_SpanAvailWidth |
+                                           ImGuiTreeNodeFlags_Leaf |
+                                           ImGuiTreeNodeFlags_FramePadding;
 
-            // Use node icon - the model entry acts as the root node
-            std::string displayName = std::string(ICON_FA_VECTOR_SQUARE) + "  " + name;
+            if (selection.GetSelectedNode() == node && selection.GetSelectionType() == SelectionType::Mesh)
+                meshFlags |= ImGuiTreeNodeFlags_Selected;
 
-            // Compute node hierarchy early (model entry merges with root nodes)
-            int nodeCount = model->GetNodeCount();
-            std::vector<std::vector<int>> nodeChildren(nodeCount);
-            std::vector<int> roots;
-            for (int i = 0; i < nodeCount; ++i)
+            bool meshOpen = ImGui::TreeNodeEx((void *)meshUniqueId, meshFlags, "%s", meshDisplayName.c_str());
+
+            if (ImGui::IsItemClicked(ImGuiMouseButton_Left) || ImGui::IsItemClicked(ImGuiMouseButton_Right))
             {
-                int parentIndex = model->GetNodeParentIndex(i);
-                if (parentIndex >= 0 && parentIndex < nodeCount)
-                    nodeChildren[parentIndex].push_back(i);
-                else
-                    roots.push_back(i);
+                selection.Select(node, SelectionType::Mesh);
+                ImGui::SetWindowFocus("Properties");
             }
 
-            // Find the node this model entry represents (first root with a mesh, or first root)
-            int modelNodeIdx = -1;
-            for (int r : roots)
-            {
-                if (model->GetNodeMesh(r) >= 0)
-                {
-                    modelNodeIdx = r;
-                    break;
-                }
-            }
-            if (modelNodeIdx < 0 && !roots.empty())
-                modelNodeIdx = roots[0];
-
-            ImGuiTreeNodeFlags modelFlags = ImGuiTreeNodeFlags_SpanAvailWidth |
-                                            ImGuiTreeNodeFlags_OpenOnArrow |
-                                            ImGuiTreeNodeFlags_DefaultOpen |
-                                            ImGuiTreeNodeFlags_FramePadding;
-
-            // Highlight when the model's representative node is selected
-            if (selection.GetSelectedModel() == model &&
-                selection.GetSelectedNodeIndex() == modelNodeIdx &&
-                selection.GetSelectionType() == SelectionType::Node)
-            {
-                modelFlags |= ImGuiTreeNodeFlags_Selected;
-            }
-
-            if (m_modelToExpand == model)
-            {
-                ImGui::SetNextItemOpen(true);
-            }
-
-            bool modelOpen = ImGui::TreeNodeEx((void *)(intptr_t)id, modelFlags, "%s", displayName.c_str());
-            if ((ImGui::IsItemClicked(ImGuiMouseButton_Left) || ImGui::IsItemClicked(ImGuiMouseButton_Right)) && !ImGui::IsItemToggledOpen())
-            {
-                if (modelNodeIdx >= 0)
-                {
-                    selection.Select(model, modelNodeIdx, SelectionType::Node);
-                    ImGui::SetWindowFocus("Properties");
-                }
-            }
             if (ImGui::IsItemHovered() && ImGui::IsMouseDoubleClicked(0))
             {
                 Camera *camera = scene.GetActiveCamera();
-                vec3 min = vec3(FLT_MAX);
-                vec3 max = vec3(-FLT_MAX);
-                for (int i = 0; i < model->GetNodeCount(); i++)
-                {
-                    const AABB &bounds = model->GetNodeWorldBoundingBox(i);
-                    min = glm::min(min, bounds.min);
-                    max = glm::max(max, bounds.max);
-                }
-                if (min.x != FLT_MAX)
-                {
-                    vec3 center = (min + max) * 0.5f;
-                    float dist = glm::length(max - min);
-                    vec3 dir = camera->GetFront();
-                    camera->SetPosition(center - dir * glm::max(dist, camera->GetNearPlane()));
-                }
+                const AABB &bounds = scene.GetWorldAABB(node);
+                vec3 center = (bounds.min + bounds.max) * 0.5f;
+                float dist = glm::length(bounds.max - bounds.min);
+                vec3 dir = camera->GetFront();
+                camera->SetPosition(center - dir * glm::max(dist, camera->GetNearPlane()));
             }
 
             if (ImGui::BeginPopupContextItem())
             {
                 if (ImGui::MenuItem("Focus"))
                 {
+                    selection.Select(node, SelectionType::Mesh);
                     Camera *camera = scene.GetActiveCamera();
-                    vec3 min = vec3(FLT_MAX);
-                    vec3 max = vec3(-FLT_MAX);
-                    int nodeToSelect = -1;
-                    for (int i = 0; i < model->GetNodeCount(); i++)
-                    {
-                        const AABB &bounds = model->GetNodeWorldBoundingBox(i);
-                        min = glm::min(min, bounds.min);
-                        max = glm::max(max, bounds.max);
-                        if (nodeToSelect < 0 && model->GetNodeMesh(i) >= 0)
-                            nodeToSelect = i;
-                    }
-
-                    if (nodeToSelect >= 0)
-                    {
-                        selection.Select(model, nodeToSelect, SelectionType::Node);
-                    }
-
-                    if (min.x != FLT_MAX)
-                    {
-                        vec3 center = (min + max) * 0.5f;
-                        float dist = glm::length(max - min);
-                        vec3 dir = camera->GetFront();
-                        camera->SetPosition(center - dir * glm::max(dist, camera->GetNearPlane()));
-                        ImGui::SetWindowFocus("Properties");
-                    }
-                }
-                if (ImGui::MenuItem("Rename"))
-                {
-                    s_renameModel = model;
-                    s_renameNode = -1;
-                    snprintf(s_renameBuf, sizeof(s_renameBuf), "%s", name.c_str());
-                    s_openRenamePopup = true;
-                }
-                if (ImGui::MenuItem("Delete"))
-                {
-                    recordUndo();
-                    modelsToDelete.push_back(model);
+                    const AABB &bounds = scene.GetWorldAABB(node);
+                    vec3 center = (bounds.min + bounds.max) * 0.5f;
+                    float dist = glm::length(bounds.max - bounds.min);
+                    vec3 dir = camera->GetFront();
+                    camera->SetPosition(center - dir * glm::max(dist, camera->GetNearPlane()));
+                    ImGui::SetWindowFocus("Properties");
                 }
                 ImGui::EndPopup();
             }
 
-            // Drag & drop target on model entry (acts as root node)
+            if (meshOpen)
+                ImGui::TreePop();
+        };
+
+        // Recursive draw node
+        auto DrawNode = [&](auto &&self, NodeId *node) -> void
+        {
+            const std::string &nodeName = scene.GetNodeName(node);
+            auto &children = scene.GetChildren(node);
+            bool hasChildren = !children.empty();
+            int meshIndex = scene.GetMeshRef(node);
+            bool hasMesh = meshIndex >= 0;
+
+            // Auto-expand parents
+            if (m_nodesToExpand.find(node) != m_nodesToExpand.end())
+            {
+                ImGui::SetNextItemOpen(true);
+            }
+
+            bool isLeaf = !hasChildren && !hasMesh;
+
+            uintptr_t uniqueId = reinterpret_cast<uintptr_t>(node);
+
+            // Choose icon
+            const char *icon;
+            std::string lowerName = nodeName;
+            std::transform(lowerName.begin(), lowerName.end(), lowerName.begin(), ::tolower);
+
+            if (lowerName.find("camera") != std::string::npos || lowerName.find("cam") != std::string::npos)
+                icon = ICON_FA_VIDEO;
+            else if (lowerName.find("light") != std::string::npos || lowerName.find("lamp") != std::string::npos)
+                icon = ICON_FA_LIGHTBULB;
+            else
+                icon = ICON_FA_VECTOR_SQUARE;
+
+            std::string displayNodeName = std::string(icon) + "  " + nodeName;
+
+            ImGuiTreeNodeFlags nodeFlags = ImGuiTreeNodeFlags_SpanAvailWidth |
+                                           ImGuiTreeNodeFlags_OpenOnArrow |
+                                           ImGuiTreeNodeFlags_FramePadding;
+            if (isLeaf)
+                nodeFlags |= ImGuiTreeNodeFlags_Leaf;
+
+            // Highlight if selected
+            if (selection.GetSelectedNode() == node && selection.GetSelectionType() == SelectionType::Node)
+            {
+                nodeFlags |= ImGuiTreeNodeFlags_Selected;
+                if (m_scrollToSelection && m_nodeToExpand == node)
+                {
+                    m_scrollToSelection = false;
+                    m_nodeToExpand = nullptr;
+                    m_nodesToExpand.clear();
+                }
+            }
+
+            bool nodeOpen = ImGui::TreeNodeEx((void *)uniqueId, nodeFlags, "%s", displayNodeName.c_str());
+
+            // Drag & Drop Source
+            if (ImGui::BeginDragDropSource())
+            {
+                HierarchyDragDropPayload payload;
+                payload.node = node;
+                ImGui::SetDragDropPayload("HIERARCHY_NODE", &payload, sizeof(HierarchyDragDropPayload));
+                ImGui::Text("%s", nodeName.c_str());
+                ImGui::EndDragDropSource();
+            }
+
+            if ((ImGui::IsItemClicked(ImGuiMouseButton_Left) || ImGui::IsItemClicked(ImGuiMouseButton_Right)) && !ImGui::IsItemToggledOpen())
+            {
+                selection.Select(node, SelectionType::Node);
+                ImGui::SetWindowFocus("Properties");
+            }
+
+            // Drag & Drop Target
             if (ImGui::BeginDragDropTarget())
             {
                 if (const ImGuiPayload *payload = ImGui::AcceptDragDropPayload("HIERARCHY_NODE"))
                 {
                     HierarchyDragDropPayload data = *(const HierarchyDragDropPayload *)payload->Data;
-                    if (data.modelId == model->GetId() && modelNodeIdx >= 0)
+                    scene.ReparentNode(data.node, node);
+                }
+
+                if (const ImGuiPayload *payload = ImGui::AcceptDragDropPayload("CONTENT_BROWSER_ITEM"))
+                {
+                    const char *pathStr = (const char *)payload->Data;
+                    std::filesystem::path path(pathStr);
+
+                    std::string ext = path.extension().string();
+                    std::transform(ext.begin(), ext.end(), ext.begin(), ::tolower);
+                    bool isModel = (ext == ".gltf" || ext == ".glb" || ext == ".obj" || ext == ".fbx");
+
+                    if (isModel && !GUIState::s_modelLoading)
                     {
-                        model->ReparentNode(data.nodeIndex, modelNodeIdx);
+                        auto loadTask = [path]()
+                        {
+                            GUIState::s_modelLoading = true;
+                            try
+                            {
+                                if (ModelAsset *m = ModelAsset::Load(path))
+                                    EventSystem::PushEvent(EventType::ModelLoaded, m);
+                            }
+                            catch (const std::exception &e)
+                            {
+                                PE_WARN("[Scene] Failed to load model: %s", e.what());
+                            }
+                            GUIState::s_modelLoading = false;
+                        };
+                        ThreadPool::GUI.Enqueue(loadTask);
                     }
                 }
                 ImGui::EndDragDropTarget();
             }
 
-            if (modelOpen)
+            if (ImGui::IsItemHovered() && ImGui::IsMouseDoubleClicked(0))
             {
-                // Use pre-computed adjacency (nodeChildren, roots)
-                auto &children = nodeChildren;
+                Camera *camera = scene.GetActiveCamera();
+                const AABB &bounds = scene.GetWorldAABB(node);
+                vec3 center = (bounds.min + bounds.max) * 0.5f;
+                float dist = glm::length(bounds.max - bounds.min);
+                vec3 dir = camera->GetFront();
+                camera->SetPosition(center - dir * glm::max(dist, camera->GetNearPlane()));
+            }
 
-                // Helper to draw a mesh entry under a node
-                auto DrawMeshEntry = [&](int nodeIndex, int meshIndex)
+            if (ImGui::BeginPopupContextItem())
+            {
+                if (ImGui::MenuItem("Focus"))
                 {
-                    const NodeInfo *node = model->GetNodeInfo(nodeIndex);
-                    if (!node)
-                        return;
-
-                    uintptr_t meshUniqueId = (id << 16) ^ (nodeIndex + 0x10000);
-                    std::string meshDisplayName = std::string(ICON_FA_SHAPES) + "  Mesh";
-
-                    ImGuiTreeNodeFlags meshFlags = ImGuiTreeNodeFlags_SpanAvailWidth |
-                                                   ImGuiTreeNodeFlags_Leaf |
-                                                   ImGuiTreeNodeFlags_FramePadding;
-
-                    if (selection.GetSelectedModel() == model && selection.GetSelectedNodeIndex() == nodeIndex && selection.GetSelectionType() == SelectionType::Mesh)
-                        meshFlags |= ImGuiTreeNodeFlags_Selected;
-
-                    bool meshOpen = ImGui::TreeNodeEx((void *)meshUniqueId, meshFlags, "%s", meshDisplayName.c_str());
-
-                    if (ImGui::IsItemClicked(ImGuiMouseButton_Left) || ImGui::IsItemClicked(ImGuiMouseButton_Right))
-                    {
-                        selection.Select(model, nodeIndex, SelectionType::Mesh);
-                        ImGui::SetWindowFocus("Properties");
-                    }
-
-                    if (ImGui::IsItemHovered() && ImGui::IsMouseDoubleClicked(0))
-                    {
-                        Camera *camera = scene.GetActiveCamera();
-                        if (model->GetMeshInfo(meshIndex))
-                        {
-                            const AABB &bounds = model->GetNodeWorldBoundingBox(nodeIndex);
-                            vec3 min = bounds.min;
-                            vec3 max = bounds.max;
-                            vec3 center = (min + max) * 0.5f;
-                            float dist = glm::length(max - min);
-                            vec3 dir = camera->GetFront();
-                            camera->SetPosition(center - dir * glm::max(dist, camera->GetNearPlane()));
-                        }
-                    }
-
-                    if (ImGui::BeginPopupContextItem())
-                    {
-                        if (ImGui::MenuItem("Focus"))
-                        {
-                            selection.Select(model, nodeIndex, SelectionType::Mesh);
-                            Camera *camera = scene.GetActiveCamera();
-                            if (model->GetMeshInfo(meshIndex))
-                            {
-                                const AABB &bounds = model->GetNodeWorldBoundingBox(nodeIndex);
-                                vec3 min = bounds.min;
-                                vec3 max = bounds.max;
-                                vec3 center = (min + max) * 0.5f;
-                                float dist = glm::length(max - min);
-                                vec3 dir = camera->GetFront();
-                                camera->SetPosition(center - dir * glm::max(dist, camera->GetNearPlane()));
-                                ImGui::SetWindowFocus("Properties");
-                            }
-                        }
-                        if (ImGui::MenuItem("Delete"))
-                        {
-                            recordUndo();
-                            EventSystem::PushEvent(EventType::MeshRemoved,
-                                                   std::make_pair(model, nodeIndex));
-                        }
-                        ImGui::EndPopup();
-                    }
-
-                    if (meshOpen)
-                        ImGui::TreePop();
-                };
-
-                // Recursive draw nodes with icons
-                auto DrawNode = [&](auto &&self, int nodeIndex) -> void
-                {
-                    const NodeInfo *node = model->GetNodeInfo(nodeIndex);
-                    if (!node)
-                        return;
-
-                    bool hasChildren = !children[nodeIndex].empty();
-                    int meshIndex = model->GetNodeMesh(nodeIndex);
-                    bool hasMesh = meshIndex >= 0;
-
-                    // Auto-expand parents
-                    if (m_modelToExpand == model && m_nodesToExpand.find(nodeIndex) != m_nodesToExpand.end())
-                    {
-                        ImGui::SetNextItemOpen(true);
-                    }
-
-                    // Node is a leaf only if it has no children AND no mesh to show
-                    bool isLeaf = !hasChildren && !hasMesh;
-
-                    // Use a unique ID mixing model ID and node Index to avoid conflicts
-                    uintptr_t uniqueId = (id << 16) ^ nodeIndex;
-
-                    // Choose icon based on node type
-                    const char *icon;
-                    std::string nodeName = node->name;
-
-                    // Simple heuristic for node type (can be extended)
-                    std::string lowerName = nodeName;
-                    std::transform(lowerName.begin(), lowerName.end(), lowerName.begin(), ::tolower);
-
-                    if (lowerName.find("camera") != std::string::npos || lowerName.find("cam") != std::string::npos)
-                    {
-                        icon = ICON_FA_VIDEO;
-                        // Special handling for Camera selection
-                        if (ImGui::IsItemClicked() && !ImGui::IsItemToggledOpen())
-                        {
-                            selection.Select(model, nodeIndex, SelectionType::Camera);
-                            ImGui::SetWindowFocus("Properties");
-                        }
-                    }
-                    else if (lowerName.find("light") != std::string::npos || lowerName.find("lamp") != std::string::npos)
-                    {
-                        icon = ICON_FA_LIGHTBULB;
-                    }
-                    else
-                    {
-                        icon = ICON_FA_VECTOR_SQUARE; // Node icon
-                    }
-
-                    std::string displayNodeName = std::string(icon) + "  " + nodeName;
-
-                    ImGuiTreeNodeFlags nodeFlags = ImGuiTreeNodeFlags_SpanAvailWidth |
-                                                   ImGuiTreeNodeFlags_OpenOnArrow |
-                                                   ImGuiTreeNodeFlags_FramePadding;
-                    if (isLeaf)
-                        nodeFlags |= ImGuiTreeNodeFlags_Leaf;
-
-                    // Highlight if selected (when node itself is selected, not its mesh)
-                    if (selection.GetSelectedModel() == model && selection.GetSelectedNodeIndex() == nodeIndex && selection.GetSelectionType() == SelectionType::Node)
-                    {
-                        nodeFlags |= ImGuiTreeNodeFlags_Selected;
-                        if (m_scrollToSelection && m_modelToExpand == model)
-                        {
-                            // ImGui::SetScrollHereY(); // User requested to disable centering scroll
-                            m_scrollToSelection = false;
-                            m_modelToExpand = nullptr;
-                            m_nodesToExpand.clear();
-                        }
-                    }
-
-                    bool nodeOpen = ImGui::TreeNodeEx((void *)uniqueId, nodeFlags, "%s", displayNodeName.c_str());
-
-                    // Drag & Drop Source
-                    if (ImGui::BeginDragDropSource())
-                    {
-                        HierarchyDragDropPayload payload;
-                        payload.modelId = model->GetId();
-                        payload.nodeIndex = nodeIndex;
-                        ImGui::SetDragDropPayload("HIERARCHY_NODE", &payload, sizeof(HierarchyDragDropPayload));
-                        ImGui::Text("%s", nodeName.c_str());
-                        ImGui::EndDragDropSource();
-                    }
-
-                    if ((ImGui::IsItemClicked(ImGuiMouseButton_Left) || ImGui::IsItemClicked(ImGuiMouseButton_Right)) && !ImGui::IsItemToggledOpen())
-                    {
-                        selection.Select(model, nodeIndex, SelectionType::Node);
-                        ImGui::SetWindowFocus("Properties");
-                    }
-
-                    // Drag & Drop Target
-                    if (ImGui::BeginDragDropTarget())
-                    {
-                        if (const ImGuiPayload *payload = ImGui::AcceptDragDropPayload("HIERARCHY_NODE"))
-                        {
-                            HierarchyDragDropPayload data = *(const HierarchyDragDropPayload *)payload->Data;
-                            if (data.modelId == model->GetId())
-                            {
-                                PE_INFO("Hierarchy: Dropped node %d onto node %d", data.nodeIndex, nodeIndex);
-                                model->ReparentNode(data.nodeIndex, nodeIndex);
-                            }
-                        }
-
-                        if (const ImGuiPayload *payload = ImGui::AcceptDragDropPayload("CONTENT_BROWSER_ITEM"))
-                        {
-                            const char *pathStr = (const char *)payload->Data;
-                            std::filesystem::path path(pathStr);
-
-                            // Check extension (simplified check)
-                            std::string ext = path.extension().string();
-                            std::transform(ext.begin(), ext.end(), ext.begin(), ::tolower);
-                            bool isModel = (ext == ".gltf" || ext == ".glb" || ext == ".obj" || ext == ".fbx");
-
-                            if (isModel && !GUIState::s_modelLoading)
-                            {
-                                auto loadTask = [path]()
-                                {
-                                    GUIState::s_modelLoading = true;
-                                    try
-                                    {
-                                        if (ModelAsset *m = ModelAsset::Load(path))
-                                            EventSystem::PushEvent(EventType::ModelLoaded, m);
-                                    }
-                                    catch (const std::exception &e)
-                                    {
-                                        PE_WARN("[Scene] Failed to load model: %s", e.what());
-                                    }
-                                    GUIState::s_modelLoading = false;
-                                };
-                                ThreadPool::GUI.Enqueue(loadTask);
-                            }
-                        }
-                        ImGui::EndDragDropTarget();
-                    }
-
-                    if (ImGui::IsItemHovered() && ImGui::IsMouseDoubleClicked(0))
-                    {
-                        Camera *camera = scene.GetActiveCamera();
-                        const AABB &bounds = model->GetNodeWorldBoundingBox(nodeIndex);
-                        vec3 center = (bounds.min + bounds.max) * 0.5f;
-                        float dist = glm::length(bounds.max - bounds.min);
-                        vec3 dir = camera->GetFront();
-                        camera->SetPosition(center - dir * glm::max(dist, camera->GetNearPlane()));
-                    }
-
-                    if (ImGui::BeginPopupContextItem())
-                    {
-                        if (ImGui::MenuItem("Focus"))
-                        {
-                            selection.Select(model, nodeIndex, SelectionType::Node);
-                            Camera *camera = scene.GetActiveCamera();
-                            const AABB &bounds = model->GetNodeWorldBoundingBox(nodeIndex);
-                            vec3 center = (bounds.min + bounds.max) * 0.5f;
-                            float dist = glm::length(bounds.max - bounds.min);
-                            vec3 dir = camera->GetFront();
-                            camera->SetPosition(center - dir * glm::max(dist, camera->GetNearPlane()));
-                            ImGui::SetWindowFocus("Properties");
-                        }
-                        if (ImGui::MenuItem("Rename"))
-                        {
-                            s_renameModel = model;
-                            s_renameNode = nodeIndex;
-                            snprintf(s_renameBuf, sizeof(s_renameBuf), "%s", nodeName.c_str());
-                            s_openRenamePopup = true;
-                        }
-                        if (ImGui::BeginMenu("Add"))
-                        {
-                            if (ImGui::MenuItem("Camera"))
-                            {
-                                Camera *camera = scene.AddCamera();
-                            }
-
-                            if (ImGui::BeginMenu("Light"))
-                            {
-                                LightSystem *lightSystem = GetGlobalSystem<LightSystem>();
-                                if (ImGui::MenuItem("Directional Light"))
-                                    lightSystem->CreateDirectionalLight();
-                                if (ImGui::MenuItem("Point Light"))
-                                    lightSystem->CreatePointLight();
-                                if (ImGui::MenuItem("Spot Light"))
-                                    lightSystem->CreateSpotLight();
-                                if (ImGui::MenuItem("Area Light"))
-                                    lightSystem->CreateAreaLight();
-                                ImGui::EndMenu();
-                            }
-
-                            if (ImGui::MenuItem("Empty Node"))
-                            {
-                                int const newNodeIndex = model->CreateNode("Empty Node", nodeIndex);
-                                model->MarkDirty(newNodeIndex);
-                                selection.Select(model, newNodeIndex, SelectionType::Node);
-                            }
-
-                            if (ImGui::BeginMenu("Mesh"))
-                            {
-                                auto AddPrimitive = [&](ModelAsset *m)
-                                {
-                                    EventSystem::PushEvent(EventType::ModelLoaded, m);
-                                    selection.Select(m, m->GetRootNodeIndex(), SelectionType::Node);
-                                };
-                                if (ImGui::MenuItem("Plane"))
-                                    AddPrimitive(Primitives::CreatePlane());
-                                if (ImGui::MenuItem("Cube"))
-                                    AddPrimitive(Primitives::CreateCube());
-                                if (ImGui::MenuItem("Sphere"))
-                                    AddPrimitive(Primitives::CreateSphere());
-                                if (ImGui::MenuItem("Cylinder"))
-                                    AddPrimitive(Primitives::CreateCylinder());
-                                if (ImGui::MenuItem("Cone"))
-                                    AddPrimitive(Primitives::CreateCone());
-                                if (ImGui::MenuItem("Quad"))
-                                    AddPrimitive(Primitives::CreateQuad());
-                                ImGui::EndMenu();
-                            }
-
-                            if (ImGui::MenuItem("Particle Emitter"))
-                            {
-                                ParticleManager *pm = scene.GetParticleManager();
-                                if (pm)
-                                {
-                                    auto &emitters = pm->GetEmitters();
-                                    auto &names = pm->GetEmitterNames();
-                                    Camera *activeCamera = scene.GetActiveCamera();
-                                    vec3 spawnPos = activeCamera ? (activeCamera->GetPosition() + activeCamera->GetFront() * 5.0f) : vec3(0.0f);
-
-                                    ParticleEmitter newEmitter{};
-                                    newEmitter.position = vec4(spawnPos, 1.0f);
-                                    newEmitter.velocity = vec4(0.0f, 5.0f, 0.0f, 0.0f);
-                                    newEmitter.colorStart = vec4(1.0f, 1.0f, 1.0f, 1.0f);
-                                    newEmitter.colorEnd = vec4(0.0f, 0.0f, 0.0f, 0.0f);
-                                    newEmitter.sizeLife = vec4(0.05f, 0.15f, 1.0f, 2.0f);
-                                    newEmitter.physics = vec4(50.0f, 0.5f, 1.0f, 0.1f);
-                                    newEmitter.gravity = vec4(0.0f, -9.8f, 0.0f, 0.0f);
-                                    newEmitter.animation = vec4(1.0f, 1.0f, 1.0f, 0.0f);
-                                    newEmitter.textureIndex = 0;
-                                    newEmitter.count = 100;
-
-                                    emitters.push_back(newEmitter);
-                                    names.push_back("Emitter " + std::to_string(emitters.size() - 1));
-                                    pm->UpdateEmitterBuffer();
-                                    selection.SelectEmitter(static_cast<int>(emitters.size() - 1));
-                                }
-                            }
-                            ImGui::EndMenu();
-                        }
-
-                        if (ImGui::MenuItem("Delete"))
-                        {
-                            recordUndo();
-                            EventSystem::PushEvent(EventType::NodeRemoved,
-                                                   std::make_pair(model, nodeIndex));
-                        }
-                        ImGui::EndPopup();
-                    }
-
-                    if (nodeOpen)
-                    {
-                        if (hasMesh)
-                            DrawMeshEntry(nodeIndex, meshIndex);
-
-                        for (int childIndex : children[nodeIndex])
-                            self(self, childIndex);
-
-                        ImGui::TreePop();
-                    }
-                };
-
-                // Root nodes are merged into the model entry - show their
-                // meshes and children directly, skipping the root node entries
-                for (int rootIndex : roots)
-                {
-                    int meshIndex = model->GetNodeMesh(rootIndex);
-                    if (meshIndex >= 0)
-                        DrawMeshEntry(rootIndex, meshIndex);
-
-                    for (int childIndex : children[rootIndex])
-                        DrawNode(DrawNode, childIndex);
+                    selection.Select(node, SelectionType::Node);
+                    Camera *camera = scene.GetActiveCamera();
+                    const AABB &bounds = scene.GetWorldAABB(node);
+                    vec3 center = (bounds.min + bounds.max) * 0.5f;
+                    float dist = glm::length(bounds.max - bounds.min);
+                    vec3 dir = camera->GetFront();
+                    camera->SetPosition(center - dir * glm::max(dist, camera->GetNearPlane()));
+                    ImGui::SetWindowFocus("Properties");
                 }
+                if (ImGui::MenuItem("Rename"))
+                {
+                    s_renameNode = node;
+                    s_renameCamera = nullptr;
+                    s_renameEmitterIndex = -1;
+                    snprintf(s_renameBuf, sizeof(s_renameBuf), "%s", nodeName.c_str());
+                    s_openRenamePopup = true;
+                }
+                if (ImGui::BeginMenu("Add"))
+                {
+                    if (ImGui::MenuItem("Camera"))
+                        scene.AddCamera();
+
+                    if (ImGui::BeginMenu("Light"))
+                    {
+                        LightSystem *lightSystem = GetGlobalSystem<LightSystem>();
+                        if (ImGui::MenuItem("Directional Light"))
+                            lightSystem->CreateDirectionalLight();
+                        if (ImGui::MenuItem("Point Light"))
+                            lightSystem->CreatePointLight();
+                        if (ImGui::MenuItem("Spot Light"))
+                            lightSystem->CreateSpotLight();
+                        if (ImGui::MenuItem("Area Light"))
+                            lightSystem->CreateAreaLight();
+                        ImGui::EndMenu();
+                    }
+
+                    if (ImGui::MenuItem("Empty Node"))
+                    {
+                        NodeId *newNode = scene.CreateNode("Empty Node", node);
+                        scene.MarkNodeDirty(newNode);
+                        selection.Select(newNode, SelectionType::Node);
+                    }
+
+                    if (ImGui::BeginMenu("Mesh"))
+                    {
+                        auto AddPrimitive = [&](ModelAsset *m)
+                        {
+                            EventSystem::PushEvent(EventType::ModelLoaded, m);
+                        };
+                        if (ImGui::MenuItem("Plane"))
+                            AddPrimitive(Primitives::CreatePlane());
+                        if (ImGui::MenuItem("Cube"))
+                            AddPrimitive(Primitives::CreateCube());
+                        if (ImGui::MenuItem("Sphere"))
+                            AddPrimitive(Primitives::CreateSphere());
+                        if (ImGui::MenuItem("Cylinder"))
+                            AddPrimitive(Primitives::CreateCylinder());
+                        if (ImGui::MenuItem("Cone"))
+                            AddPrimitive(Primitives::CreateCone());
+                        if (ImGui::MenuItem("Quad"))
+                            AddPrimitive(Primitives::CreateQuad());
+                        ImGui::EndMenu();
+                    }
+
+                    if (ImGui::MenuItem("Particle Emitter"))
+                    {
+                        ParticleManager *pm = scene.GetParticleManager();
+                        if (pm)
+                        {
+                            auto &emitters = pm->GetEmitters();
+                            auto &names = pm->GetEmitterNames();
+                            Camera *activeCamera = scene.GetActiveCamera();
+                            vec3 spawnPos = activeCamera ? (activeCamera->GetPosition() + activeCamera->GetFront() * 5.0f) : vec3(0.0f);
+
+                            ParticleEmitter newEmitter{};
+                            newEmitter.position = vec4(spawnPos, 1.0f);
+                            newEmitter.velocity = vec4(0.0f, 5.0f, 0.0f, 0.0f);
+                            newEmitter.colorStart = vec4(1.0f, 1.0f, 1.0f, 1.0f);
+                            newEmitter.colorEnd = vec4(0.0f, 0.0f, 0.0f, 0.0f);
+                            newEmitter.sizeLife = vec4(0.05f, 0.15f, 1.0f, 2.0f);
+                            newEmitter.physics = vec4(50.0f, 0.5f, 1.0f, 0.1f);
+                            newEmitter.gravity = vec4(0.0f, -9.8f, 0.0f, 0.0f);
+                            newEmitter.animation = vec4(1.0f, 1.0f, 1.0f, 0.0f);
+                            newEmitter.textureIndex = 0;
+                            newEmitter.count = 100;
+
+                            emitters.push_back(newEmitter);
+                            names.push_back("Emitter " + std::to_string(emitters.size() - 1));
+                            pm->UpdateEmitterBuffer();
+                            selection.SelectEmitter(static_cast<int>(emitters.size() - 1));
+                        }
+                    }
+                    ImGui::EndMenu();
+                }
+
+                if (ImGui::MenuItem("Delete"))
+                {
+                    recordUndo();
+                    nodesToDelete.push_back(node);
+                }
+                ImGui::EndPopup();
+            }
+
+            if (nodeOpen)
+            {
+                if (hasMesh)
+                    DrawMeshEntry(node, meshIndex);
+
+                for (NodeId *child : children)
+                    self(self, child);
 
                 ImGui::TreePop();
             }
+        };
+
+        // Draw all root nodes (nodes without parents)
+        uint32_t nodeCount = scene.GetNodeCount();
+        for (uint32_t i = 0; i < nodeCount; i++)
+        {
+            NodeId *node = scene.GetNodeId(i);
+            if (!scene.GetParent(node))
+                DrawNode(DrawNode, node);
         }
 
         // Fill remaining space with dummy to allow dropping in empty area
         ImVec2 available = ImGui::GetContentRegionAvail();
         if (available.y < 50.0f)
-            available.y = 50.0f; // Minimum drop area
+            available.y = 50.0f;
         ImGui::Dummy(available);
 
         // Window-wide Drop Target for loading models from FileBrowser
@@ -1202,7 +961,6 @@ namespace pe
                 const char *pathStr = (const char *)payload->Data;
                 std::filesystem::path path(pathStr);
 
-                // Check extension
                 std::string ext = path.extension().string();
                 std::transform(ext.begin(), ext.end(), ext.begin(), ::tolower);
 
@@ -1240,14 +998,7 @@ namespace pe
             if (const ImGuiPayload *payload = ImGui::AcceptDragDropPayload("HIERARCHY_NODE"))
             {
                 HierarchyDragDropPayload data = *(const HierarchyDragDropPayload *)payload->Data;
-                for (auto m : models)
-                {
-                    if (m && m->GetId() == data.modelId)
-                    {
-                        m->ReparentNode(data.nodeIndex, -1);
-                        break;
-                    }
-                }
+                scene.ReparentNode(data.node, nullptr);
             }
             ImGui::EndDragDropTarget();
         }
@@ -1263,25 +1014,19 @@ namespace pe
             ImGui::InputText("Name", s_renameBuf, IM_ARRAYSIZE(s_renameBuf));
             if (ImGui::Button("OK", ImVec2(120, 0)))
             {
-                if (s_renameNode <= -100)
+                if (s_renameEmitterIndex >= 0)
                 {
-                    // Emitter rename (sentinel: -(index + 100))
-                    int emitterIdx = -(s_renameNode + 100);
                     ParticleManager *pm = scene.GetParticleManager();
                     if (pm)
                     {
                         auto &emNames = pm->GetEmitterNames();
-                        if (emitterIdx >= 0 && emitterIdx < static_cast<int>(emNames.size()))
-                            emNames[emitterIdx] = s_renameBuf;
+                        if (s_renameEmitterIndex < static_cast<int>(emNames.size()))
+                            emNames[s_renameEmitterIndex] = s_renameBuf;
                     }
                 }
-                else if (s_renameModel)
+                else if (s_renameNode)
                 {
-                    std::string newName = s_renameBuf;
-                    if (s_renameNode == -1)
-                        s_renameModel->SetLabel(newName);
-                    else
-                        s_renameModel->SetNodeName(s_renameNode, newName);
+                    scene.SetNodeName(s_renameNode, s_renameBuf);
                 }
                 else if (s_renameCamera)
                 {
@@ -1300,6 +1045,7 @@ namespace pe
                         lightSystem->GetAreaLights()[s_renameLightIndex].name = s_renameBuf;
                 }
                 s_renameLightIndex = -1;
+                s_renameEmitterIndex = -1;
                 ImGui::CloseCurrentPopup();
             }
             ImGui::SameLine();
@@ -1310,10 +1056,15 @@ namespace pe
             ImGui::EndPopup();
         }
 
-        for (auto model : modelsToDelete)
+        // Delete deferred nodes
+        for (NodeId *node : nodesToDelete)
         {
-            EventSystem::PushEvent(EventType::ModelRemoved, model);
+            if (selection.GetSelectedNode() == node)
+                selection.ClearSelection();
+            scene.DeleteNode(node);
         }
+        if (!nodesToDelete.empty())
+            EventSystem::PushEvent(EventType::NodeRemoved);
 
         if (ImGui::BeginPopupContextWindow("HierarchyBgContext", ImGuiPopupFlags_MouseButtonRight | ImGuiPopupFlags_NoOpenOverItems))
         {
@@ -1338,16 +1089,14 @@ namespace pe
 
                 if (ImGui::MenuItem("Empty Node"))
                 {
-                    ModelAsset *model = new ModelAsset();
-                    int const nodeIndex = model->CreateNode("Empty Node");
-                    EventSystem::PushEvent(EventType::ModelLoaded, model);
-                    selection.Select(model, nodeIndex, SelectionType::Node);
+                    NodeId *node = scene.CreateNode("Empty Node");
+                    selection.Select(node, SelectionType::Node);
                 }
 
                 if (ImGui::BeginMenu("Mesh"))
                 {
                     auto AddPrim = [&](ModelAsset *m)
-                    { EventSystem::PushEvent(EventType::ModelLoaded, m); selection.Select(m, m->GetRootNodeIndex(), SelectionType::Node); };
+                    { EventSystem::PushEvent(EventType::ModelLoaded, m); };
                     if (ImGui::MenuItem("Plane"))
                         AddPrim(Primitives::CreatePlane());
                     if (ImGui::MenuItem("Cube"))
