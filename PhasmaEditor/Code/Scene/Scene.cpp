@@ -2853,9 +2853,40 @@ namespace pe
             else
             {
                 // Slow path: geometry changed — clear everything and reload via LoadScene-style path
-                std::vector<ModelAsset *> toRemove(m_models.begin(), m_models.end());
-                if (!toRemove.empty())
-                    EventSystem::PushEvent(EventType::ModelsRemoved, std::move(toRemove));
+
+                // Clear old scene data synchronously (mirrors LoadSceneApply)
+                for (NodeId *id : m_nodeIds)
+                    delete id;
+                for (NodeId *id : m_freeNodeIds)
+                    delete id;
+                m_nodeIds.clear();
+                m_freeNodeIds.clear();
+                m_nodeNames.clear();
+                m_localMatrices.clear();
+                m_nodeParents.clear();
+                m_nodeChildren.clear();
+                m_componentFlags.clear();
+                m_meshRefs.clear();
+                m_nodeRuntime.clear();
+                m_nodesMoved.clear();
+                m_nodesDirty = false;
+
+                m_meshes.clear();
+                m_meshRuntimes.clear();
+                m_vertexStore.clear();
+                m_positionUvStore.clear();
+                m_aabbVertexStore.clear();
+                m_indexStore.clear();
+                m_imageStore.clear();
+                m_samplerStore.clear();
+
+                m_sources.clear();
+                m_meshSourceInfos.clear();
+                m_modelRootNodes.clear();
+
+                for (auto *model : m_models)
+                    delete model;
+                m_models.clear();
 
                 // Reload sources
                 Queue *queue = RHII.GetMainQueue();
@@ -2970,6 +3001,8 @@ namespace pe
                         MarkNodeDirty(node);
                 }
                 UpdateNodeMatrices();
+
+                UploadBuffers(cmd);
 
                 cmd->End();
                 queue->Submit(1, &cmd, nullptr, nullptr);

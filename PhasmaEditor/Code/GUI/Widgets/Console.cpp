@@ -130,7 +130,7 @@ namespace pe
         ImGui::PopStyleVar();
 
         if (m_scrollToBottom && m_autoScroll)
-            ImGui::SetScrollY(ImGui::GetScrollMaxY());
+            ImGui::SetScrollHereY(1.0f);
         m_scrollToBottom = false;
 
         ImGui::EndChild();
