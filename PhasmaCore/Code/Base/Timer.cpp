@@ -47,7 +47,7 @@ namespace pe
     {
         m_delta = std::chrono::high_resolution_clock::now() - m_start;
     }
-    
+
     void FrameTimer::Tick()
     {
         auto now = std::chrono::high_resolution_clock::now();

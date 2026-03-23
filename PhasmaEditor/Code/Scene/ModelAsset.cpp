@@ -9,7 +9,6 @@
 namespace pe
 {
 
-
     ModelAsset::ModelAsset() : m_id{ID::NextID()}
     {
         m_dirtyUniforms.resize(RHII.GetSwapchainImageCount(), false);

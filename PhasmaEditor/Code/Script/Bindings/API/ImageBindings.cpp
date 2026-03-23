@@ -84,8 +84,14 @@ namespace pe
         {"memory_write", vk::AccessFlagBits2::eMemoryWrite},
     };
 
-    static vk::Format ToImageFormat(const std::string &s) { return Lookup(s, s_imageFormatMap, vk::Format::eR8G8B8A8Unorm); }
-    static vk::ImageUsageFlags ToImageUsage(const std::string &s) { return LookupFlags<vk::ImageUsageFlags>(s, s_imageUsageMap); }
+    static vk::Format ToImageFormat(const std::string &s)
+    {
+        return Lookup(s, s_imageFormatMap, vk::Format::eR8G8B8A8Unorm);
+    }
+    static vk::ImageUsageFlags ToImageUsage(const std::string &s)
+    {
+        return LookupFlags<vk::ImageUsageFlags>(s, s_imageUsageMap);
+    }
 
     // Reverse lookup: vk::Format -> string
     static std::string FormatToString(vk::Format fmt)

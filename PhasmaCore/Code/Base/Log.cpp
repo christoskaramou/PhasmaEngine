@@ -4,9 +4,9 @@ namespace pe
 {
     std::vector<Log::Callback> Log::s_callbacks;
     std::vector<std::pair<std::string, LogType>> Log::s_earlyLogs;
-    FILE* Log::s_file = nullptr;
+    FILE *Log::s_file = nullptr;
 
-    std::mutex& GetLogMutex()
+    std::mutex &GetLogMutex()
     {
         static std::mutex mutex;
         return mutex;
@@ -32,25 +32,34 @@ namespace pe
         s_callbacks.push_back(cb);
 
         // Replay early logs to this new callback
-        for (const auto& log : s_earlyLogs)
+        for (const auto &log : s_earlyLogs)
         {
             cb(log.first, log.second);
         }
     }
 
-    void Log::Dispatch(const std::string& msg, LogType type)
+    void Log::Dispatch(const std::string &msg, LogType type)
     {
         std::lock_guard<std::mutex> lock(GetLogMutex());
-        
+
         std::string prefix = "";
-        std::string colorCodeCout = ""; 
+        std::string colorCodeCout = "";
         std::string resetCodeCout = "\033[0m";
 
-        switch(type)
+        switch (type)
         {
-            case LogType::Info: prefix = "[INFO] "; colorCodeCout = "\033[0m";    break; // White/Default
-            case LogType::Warn: prefix = "[WARN] "; colorCodeCout = "\033[33m";   break; // Yellow
-            case LogType::Error: prefix = "[ERROR] "; colorCodeCout = "\033[31m"; break; // Red
+        case LogType::Info:
+            prefix = "[INFO] ";
+            colorCodeCout = "\033[0m";
+            break; // White/Default
+        case LogType::Warn:
+            prefix = "[WARN] ";
+            colorCodeCout = "\033[33m";
+            break; // Yellow
+        case LogType::Error:
+            prefix = "[ERROR] ";
+            colorCodeCout = "\033[31m";
+            break; // Red
         }
 
         std::string finalMsg = prefix + msg;
@@ -73,11 +82,11 @@ namespace pe
 #else
             s_file = fopen(logPath.c_str(), "a");
 #endif
-             if (s_file)
-             {
-                 fprintf(s_file, "%s\n", finalMsg.c_str());
-                 fflush(s_file);
-             }
+            if (s_file)
+            {
+                fprintf(s_file, "%s\n", finalMsg.c_str());
+                fflush(s_file);
+            }
         }
 
         // Callbacks (e.g. ImGui Console)
@@ -87,25 +96,25 @@ namespace pe
         }
         else
         {
-            for (const auto& cb : s_callbacks)
+            for (const auto &cb : s_callbacks)
             {
                 cb(finalMsg, type); // Pass raw message and type, let widget suffix/prefix/color
             }
         }
     }
 
-    void Log::Info(const std::string& msg)
+    void Log::Info(const std::string &msg)
     {
         Dispatch(msg, LogType::Info);
     }
 
-    void Log::Warn(const std::string& msg)
+    void Log::Warn(const std::string &msg)
     {
         Dispatch(msg, LogType::Warn);
     }
 
-    void Log::Error(const std::string& msg)
+    void Log::Error(const std::string &msg)
     {
         Dispatch(msg, LogType::Error);
     }
-}
+} // namespace pe

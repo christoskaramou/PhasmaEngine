@@ -1748,12 +1748,18 @@ namespace pe
 
         auto loadPrimitive = [](const std::string &ptype) -> ModelAsset *
         {
-            if (ptype == "cube")     return Primitives::CreateCube();
-            if (ptype == "sphere")   return Primitives::CreateSphere();
-            if (ptype == "plane")    return Primitives::CreatePlane();
-            if (ptype == "cylinder") return Primitives::CreateCylinder();
-            if (ptype == "cone")     return Primitives::CreateCone();
-            if (ptype == "quad")     return Primitives::CreateQuad();
+            if (ptype == "cube")
+                return Primitives::CreateCube();
+            if (ptype == "sphere")
+                return Primitives::CreateSphere();
+            if (ptype == "plane")
+                return Primitives::CreatePlane();
+            if (ptype == "cylinder")
+                return Primitives::CreateCylinder();
+            if (ptype == "cone")
+                return Primitives::CreateCone();
+            if (ptype == "quad")
+                return Primitives::CreateQuad();
             return nullptr;
         };
 

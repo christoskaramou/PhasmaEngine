@@ -67,16 +67,43 @@ namespace pe
         Type m_value;
     };
 
-#define DEFINE_FLAGS_OPERATORS(Enum)                                                              \
-    inline Flags<Enum> operator|(Enum a, Enum b) { return Flags<Enum>(a) | b; }                   \
-    inline Flags<Enum> operator&(Enum a, Enum b) { return Flags<Enum>(a) & b; }                   \
-    inline Flags<Enum> operator^(Enum a, Enum b) { return Flags<Enum>(a) ^ b; }                   \
-    inline Flags<Enum> operator<<(Enum a, unsigned int shift) { return Flags<Enum>(a) << shift; } \
-    inline Flags<Enum> operator>>(Enum a, unsigned int shift) { return Flags<Enum>(a) >> shift; } \
-    inline Flags<Enum> operator|(Enum a, const Flags<Enum> &b) { return Flags<Enum>(a) | b; }     \
-    inline Flags<Enum> operator&(Enum a, const Flags<Enum> &b) { return Flags<Enum>(a) & b; }     \
-    inline Flags<Enum> operator^(Enum a, const Flags<Enum> &b) { return Flags<Enum>(a) ^ b; }     \
-    inline Flags<Enum> operator~(Enum a) { return ~Flags<Enum>(a); }
+#define DEFINE_FLAGS_OPERATORS(Enum)                           \
+    inline Flags<Enum> operator|(Enum a, Enum b)               \
+    {                                                          \
+        return Flags<Enum>(a) | b;                             \
+    }                                                          \
+    inline Flags<Enum> operator&(Enum a, Enum b)               \
+    {                                                          \
+        return Flags<Enum>(a) & b;                             \
+    }                                                          \
+    inline Flags<Enum> operator^(Enum a, Enum b)               \
+    {                                                          \
+        return Flags<Enum>(a) ^ b;                             \
+    }                                                          \
+    inline Flags<Enum> operator<<(Enum a, unsigned int shift)  \
+    {                                                          \
+        return Flags<Enum>(a) << shift;                        \
+    }                                                          \
+    inline Flags<Enum> operator>>(Enum a, unsigned int shift)  \
+    {                                                          \
+        return Flags<Enum>(a) >> shift;                        \
+    }                                                          \
+    inline Flags<Enum> operator|(Enum a, const Flags<Enum> &b) \
+    {                                                          \
+        return Flags<Enum>(a) | b;                             \
+    }                                                          \
+    inline Flags<Enum> operator&(Enum a, const Flags<Enum> &b) \
+    {                                                          \
+        return Flags<Enum>(a) & b;                             \
+    }                                                          \
+    inline Flags<Enum> operator^(Enum a, const Flags<Enum> &b) \
+    {                                                          \
+        return Flags<Enum>(a) ^ b;                             \
+    }                                                          \
+    inline Flags<Enum> operator~(Enum a)                       \
+    {                                                          \
+        return ~Flags<Enum>(a);                                \
+    }
 
     template <class U, size_t N>
     U GetFlags(uint64_t flags, const U (&translator)[N])

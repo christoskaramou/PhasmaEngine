@@ -580,9 +580,7 @@ namespace pagent
                             int endLine = lineIdx;
                             std::string sanitized = SanitizeUTF8(prefix + std::to_string(endLine) + ")\n" + body);
                             pending.push_back(makeChunk(sanitized, chunkStart + 1, endLine,
-                                nlohmann::json{{"type", "codebase"}, {"file", rel},
-                                    {"lines", std::to_string(chunkStart + 1) + "-" + std::to_string(endLine)},
-                                    {"last_modified", ts}}.dump()));
+                                                        nlohmann::json{{"type", "codebase"}, {"file", rel}, {"lines", std::to_string(chunkStart + 1) + "-" + std::to_string(endLine)}, {"last_modified", ts}}.dump()));
 
                             if (lineIdx < totalLines && shared->chunkOverlapLines > 0)
                                 lineIdx = std::max(chunkStart + 1, lineIdx - shared->chunkOverlapLines);

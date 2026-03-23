@@ -6,8 +6,9 @@ namespace pe
     {
         MathBindings()
         {
-            ScriptSystem::AddBindings([](sol::state &lua)
-                                       {
+            ScriptSystem::AddBindings(
+                [](sol::state &lua)
+                {
                 // vec2 type
                 lua.new_usertype<vec2>("_vec2_type", sol::no_constructor,
                     "x", sol::property([](const vec2 &v) { return v.x; }, [](vec2 &v, float val) { v.x = val; }),

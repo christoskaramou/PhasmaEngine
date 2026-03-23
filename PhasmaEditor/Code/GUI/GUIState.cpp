@@ -46,7 +46,7 @@ namespace
         }
     }
 #endif
-}
+} // namespace
 
 namespace pe
 {

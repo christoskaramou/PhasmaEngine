@@ -16,11 +16,11 @@ namespace pe
     // Component presence flags — editor reads these to know which panels to show
     enum ComponentFlags : uint32_t
     {
-        Component_None     = 0,
-        Component_Mesh     = 1 << 0,
-        Component_Light    = 1 << 1,
-        Component_Physics  = 1 << 2,
-        Component_Camera   = 1 << 3,
+        Component_None = 0,
+        Component_Mesh = 1 << 0,
+        Component_Light = 1 << 1,
+        Component_Physics = 1 << 2,
+        Component_Camera = 1 << 3,
     };
 
     // Lightweight mesh descriptor — references into Scene's data stores
@@ -48,7 +48,10 @@ namespace pe
     };
 
     // Utility: bit mask for texture slots
-    inline constexpr uint32_t TextureBit(TextureType type) { return 1u << static_cast<uint32_t>(type); }
+    inline constexpr uint32_t TextureBit(TextureType type)
+    {
+        return 1u << static_cast<uint32_t>(type);
+    }
 
     // GPU-side data uploaded per node
     struct NodeGpuData
@@ -82,10 +85,14 @@ namespace pe
         const vec3 &mx = local.max;
 
         const vec3 corners[8] = {
-            {mn.x, mn.y, mn.z}, {mx.x, mn.y, mn.z},
-            {mx.x, mx.y, mn.z}, {mn.x, mx.y, mn.z},
-            {mn.x, mn.y, mx.z}, {mx.x, mn.y, mx.z},
-            {mx.x, mx.y, mx.z}, {mn.x, mx.y, mx.z},
+            {mn.x, mn.y, mn.z},
+            {mx.x, mn.y, mn.z},
+            {mx.x, mx.y, mn.z},
+            {mn.x, mx.y, mn.z},
+            {mn.x, mn.y, mx.z},
+            {mx.x, mn.y, mx.z},
+            {mx.x, mx.y, mx.z},
+            {mn.x, mx.y, mx.z},
         };
 
         vec3 outMin(std::numeric_limits<float>::max());

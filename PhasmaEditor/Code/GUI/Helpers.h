@@ -6,8 +6,14 @@
 namespace pe::ui
 {
     // ---------- small helpers ----------
-    inline ImU32 U32(const ImVec4 &c) { return ImGui::GetColorU32(c); }
-    inline float Clamp01(float x) { return x < 0.f ? 0.f : (x > 1.f ? 1.f : x); }
+    inline ImU32 U32(const ImVec4 &c)
+    {
+        return ImGui::GetColorU32(c);
+    }
+    inline float Clamp01(float x)
+    {
+        return x < 0.f ? 0.f : (x > 1.f ? 1.f : x);
+    }
 
     inline std::string FormatBytes(uint64_t b)
     {

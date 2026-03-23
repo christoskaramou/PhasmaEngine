@@ -11,8 +11,8 @@ namespace pagent
     struct VectorEntry
     {
         std::string id;
-        std::string content;       // Original text that was embedded
-        std::string metadata;      // JSON string with source info
+        std::string content;  // Original text that was embedded
+        std::string metadata; // JSON string with source info
         std::vector<float> embedding;
         // Cached fields parsed from metadata — not serialized, populated on Add/Load
         std::string file;

@@ -839,7 +839,10 @@ namespace pe
         m_device.waitIdle();
     }
 
-    uint32_t RHI::GetSwapchainImageCount() { return m_swapchain->GetImageCount(); }
+    uint32_t RHI::GetSwapchainImageCount()
+    {
+        return m_swapchain->GetImageCount();
+    }
 
     SystemProcMem RHI::GetSystemAndProcessMemory()
     {
@@ -1117,10 +1120,22 @@ namespace pe
         }
     }
 
-    uint32_t RHI::GetWidth() const { return m_surface->GetActualExtent().width; }
-    uint32_t RHI::GetHeight() const { return m_surface->GetActualExtent().height; }
-    float RHI::GetWidthf() const { return static_cast<float>(GetWidth()); }
-    float RHI::GetHeightf() const { return static_cast<float>(GetHeight()); }
+    uint32_t RHI::GetWidth() const
+    {
+        return m_surface->GetActualExtent().width;
+    }
+    uint32_t RHI::GetHeight() const
+    {
+        return m_surface->GetActualExtent().height;
+    }
+    float RHI::GetWidthf() const
+    {
+        return static_cast<float>(GetWidth());
+    }
+    float RHI::GetHeightf() const
+    {
+        return static_cast<float>(GetHeight());
+    }
     void DeletionQueue::Push(std::function<void()> &&deletor)
     {
         std::lock_guard<std::mutex> lock(mutex);

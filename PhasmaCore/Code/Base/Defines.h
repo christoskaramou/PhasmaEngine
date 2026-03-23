@@ -141,7 +141,8 @@ namespace pe
     do                                                                     \
     {                                                                      \
         pe::PeErrorImpl(__func__, __FILE__, __LINE__, fmt, ##__VA_ARGS__); \
-    } while (0)
+    }                                                                      \
+    while (0)
 
 #define PE_ERROR_IF(condition, fmt, ...)                                       \
     do                                                                         \
@@ -150,14 +151,16 @@ namespace pe
         {                                                                      \
             pe::PeErrorImpl(__func__, __FILE__, __LINE__, fmt, ##__VA_ARGS__); \
         }                                                                      \
-    } while (0)
+    }                                                                          \
+    while (0)
 
 #define PE_CHECK(condition)                                 \
     do                                                      \
     {                                                       \
         int res = (condition);                              \
         pe::PeCheckImpl(res, __func__, __FILE__, __LINE__); \
-    } while (0)
+    }                                                       \
+    while (0)
 
 #define PE_ASSERT(condition, fmt, ...)                                         \
     do                                                                         \
@@ -166,16 +169,19 @@ namespace pe
         {                                                                      \
             pe::PeErrorImpl(__func__, __FILE__, __LINE__, fmt, ##__VA_ARGS__); \
         }                                                                      \
-    } while (0)
+    }                                                                          \
+    while (0)
 
 #define PE_INFO(fmt, ...)                   \
     do                                      \
     {                                       \
         pe::PeInfoImpl(fmt, ##__VA_ARGS__); \
-    } while (0)
+    }                                       \
+    while (0)
 
 #define PE_WARN(fmt, ...)                   \
     do                                      \
     {                                       \
         pe::PeWarnImpl(fmt, ##__VA_ARGS__); \
-    } while (0)
+    }                                       \
+    while (0)

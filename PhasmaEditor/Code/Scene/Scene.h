@@ -51,9 +51,9 @@ namespace pe
         struct ScenePreload
         {
             std::filesystem::path filePath;
-            std::string           jsonText;
+            std::string jsonText;
             std::vector<ModelAsset *> models; // pre-loaded in source/model order; may contain nulls
-            bool                  valid = false;
+            bool valid = false;
 
             ScenePreload() = default;
             ScenePreload(const ScenePreload &) = delete;
@@ -127,8 +127,16 @@ namespace pe
         void ValidateNodeId(const NodeId *) const {}
 #endif
 
-        const std::string &GetNodeName(const NodeId *node) const { ValidateNodeId(node); return m_nodeNames[node->index]; }
-        void SetNodeName(NodeId *node, const std::string &name) { ValidateNodeId(node); m_nodeNames[node->index] = name; }
+        const std::string &GetNodeName(const NodeId *node) const
+        {
+            ValidateNodeId(node);
+            return m_nodeNames[node->index];
+        }
+        void SetNodeName(NodeId *node, const std::string &name)
+        {
+            ValidateNodeId(node);
+            m_nodeNames[node->index] = name;
+        }
 
         const mat4 &GetLocalMatrix(const NodeId *node) const { return m_localMatrices[node->index]; }
         void SetLocalMatrix(NodeId *node, const mat4 &m, bool markDirty = true);
@@ -274,8 +282,8 @@ namespace pe
         // Does NOT create nodes. Returns meshMap (source mesh → scene mesh).
         std::vector<int> AddModelGeometry(ModelAsset *model, int sourceIndex);
 
-        std::vector<SceneSource>    m_sources;
-        std::vector<MeshSourceInfo> m_meshSourceInfos; // parallel to m_meshes
+        std::vector<SceneSource> m_sources;
+        std::vector<MeshSourceInfo> m_meshSourceInfos;                      // parallel to m_meshes
         std::unordered_map<size_t, std::vector<NodeId *>> m_modelRootNodes; // model ID → root nodes for cleanup
 
         std::filesystem::path m_scenePath;
@@ -285,29 +293,29 @@ namespace pe
         void SwapAndPopNode(uint32_t index);
         void UpdateNodeMatrix(NodeId *node);
 
-        std::vector<NodeId *>              m_nodeIds;        // stable identity per node
-        std::vector<std::string>           m_nodeNames;
-        std::vector<mat4>                  m_localMatrices;
-        std::vector<NodeId *>              m_nodeParents;    // nullptr = root
+        std::vector<NodeId *> m_nodeIds; // stable identity per node
+        std::vector<std::string> m_nodeNames;
+        std::vector<mat4> m_localMatrices;
+        std::vector<NodeId *> m_nodeParents; // nullptr = root
         std::vector<std::vector<NodeId *>> m_nodeChildren;
-        std::vector<uint32_t>              m_componentFlags;
-        std::vector<int>                   m_meshRefs;       // -1 = empty node
-        std::vector<NodeRuntime>           m_nodeRuntime;    // GPU hot-path data
-        std::vector<NodeId *>              m_freeNodeIds;    // recycled NodeId pointers
+        std::vector<uint32_t> m_componentFlags;
+        std::vector<int> m_meshRefs;            // -1 = empty node
+        std::vector<NodeRuntime> m_nodeRuntime; // GPU hot-path data
+        std::vector<NodeId *> m_freeNodeIds;    // recycled NodeId pointers
 
         // Mesh store (lightweight descriptors referencing data stores)
-        std::vector<Mesh>                  m_meshes;
-        std::vector<MeshRuntime>           m_meshRuntimes;
+        std::vector<Mesh> m_meshes;
+        std::vector<MeshRuntime> m_meshRuntimes;
 
         // Data stores (the actual heavy data)
-        std::vector<Vertex>                m_vertexStore;
-        std::vector<PositionUvVertex>      m_positionUvStore;
-        std::vector<AabbVertex>            m_aabbVertexStore;
-        std::vector<uint32_t>              m_indexStore;
+        std::vector<Vertex> m_vertexStore;
+        std::vector<PositionUvVertex> m_positionUvStore;
+        std::vector<AabbVertex> m_aabbVertexStore;
+        std::vector<uint32_t> m_indexStore;
         std::vector<ResourceHandle<Image>> m_imageStore;
-        std::vector<Sampler *>             m_samplerStore;
+        std::vector<Sampler *> m_samplerStore;
 
         bool m_nodesDirty = false;
-        std::vector<NodeId *>              m_nodesMoved;
+        std::vector<NodeId *> m_nodesMoved;
     };
 } // namespace pe

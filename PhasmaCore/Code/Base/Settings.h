@@ -31,7 +31,7 @@ namespace pe
             std::lock_guard<std::mutex> lock(nameMutex);
             name = newName;
         }
-        
+
         [[nodiscard]] std::string GetName() const
         {
             std::lock_guard<std::mutex> lock(nameMutex);

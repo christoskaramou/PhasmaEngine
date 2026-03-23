@@ -120,10 +120,17 @@ namespace pe
                 std::ios_base::seekdir dir = std::ios_base::beg;
                 switch (pOrigin)
                 {
-                case aiOrigin_SET: dir = std::ios_base::beg; break;
-                case aiOrigin_CUR: dir = std::ios_base::cur; break;
-                case aiOrigin_END: dir = std::ios_base::end; break;
-                default: break;
+                case aiOrigin_SET:
+                    dir = std::ios_base::beg;
+                    break;
+                case aiOrigin_CUR:
+                    dir = std::ios_base::cur;
+                    break;
+                case aiOrigin_END:
+                    dir = std::ios_base::end;
+                    break;
+                default:
+                    break;
                 }
                 m_stream.seekg(pOffset, dir);
                 return m_stream.fail() ? aiReturn_FAILURE : aiReturn_SUCCESS;
@@ -261,12 +268,19 @@ namespace pe
         ModelAsset::GetDefaultResources(cmd);
 
         const std::initializer_list<aiTextureType> preloadTypes = {
-            aiTextureType_BASE_COLOR, aiTextureType_DIFFUSE,
-            aiTextureType_NORMALS, aiTextureType_NORMAL_CAMERA, aiTextureType_HEIGHT,
-            aiTextureType_UNKNOWN, aiTextureType_SPECULAR,
-            aiTextureType_LIGHTMAP, aiTextureType_AMBIENT_OCCLUSION,
-            aiTextureType_EMISSIVE, aiTextureType_EMISSION_COLOR,
-            aiTextureType_METALNESS, aiTextureType_DIFFUSE_ROUGHNESS,
+            aiTextureType_BASE_COLOR,
+            aiTextureType_DIFFUSE,
+            aiTextureType_NORMALS,
+            aiTextureType_NORMAL_CAMERA,
+            aiTextureType_HEIGHT,
+            aiTextureType_UNKNOWN,
+            aiTextureType_SPECULAR,
+            aiTextureType_LIGHTMAP,
+            aiTextureType_AMBIENT_OCCLUSION,
+            aiTextureType_EMISSIVE,
+            aiTextureType_EMISSION_COLOR,
+            aiTextureType_METALNESS,
+            aiTextureType_DIFFUSE_ROUGHNESS,
         };
 
         std::unordered_set<std::string> uniqueTexKeys;
@@ -307,7 +321,8 @@ namespace pe
 
                     if (rawImg)
                     {
-                        std::shared_ptr<Image> sharedImage(rawImg, [](Image *img) { Image::Destroy(img); });
+                        std::shared_ptr<Image> sharedImage(rawImg, [](Image *img)
+                                                           { Image::Destroy(img); });
                         ResourceManager::Get().Register<Image>(key, sharedImage);
                         m_scene.m_imageStore.push_back(ResourceHandle<Image>(sharedImage));
                         progress++;
@@ -471,8 +486,17 @@ namespace pe
                 progress++;
 
                 vec3 pos(p.x, p.y, p.z);
-                if (!bbInit) { bbMin = pos; bbMax = pos; bbInit = true; }
-                else { bbMin = min(bbMin, pos); bbMax = max(bbMax, pos); }
+                if (!bbInit)
+                {
+                    bbMin = pos;
+                    bbMax = pos;
+                    bbInit = true;
+                }
+                else
+                {
+                    bbMin = min(bbMin, pos);
+                    bbMax = max(bbMax, pos);
+                }
             }
 
             if (bbInit)
@@ -546,10 +570,14 @@ namespace pe
             const vec3 &mn = mesh.boundingBox.min;
             const vec3 &mx = mesh.boundingBox.max;
             AabbVertex corners[8] = {
-                {mn.x, mn.y, mn.z}, {mx.x, mn.y, mn.z},
-                {mx.x, mx.y, mn.z}, {mn.x, mx.y, mn.z},
-                {mn.x, mn.y, mx.z}, {mx.x, mn.y, mx.z},
-                {mx.x, mx.y, mx.z}, {mn.x, mx.y, mx.z},
+                {mn.x, mn.y, mn.z},
+                {mx.x, mn.y, mn.z},
+                {mx.x, mx.y, mn.z},
+                {mn.x, mx.y, mn.z},
+                {mn.x, mn.y, mx.z},
+                {mx.x, mn.y, mx.z},
+                {mx.x, mx.y, mx.z},
+                {mn.x, mx.y, mx.z},
             };
             for (const auto &c : corners)
                 aabbVerts.push_back(c);
@@ -792,12 +820,18 @@ namespace pe
         float ior = 1.5f;
         material->Get(AI_MATKEY_REFRACTI, ior);
 
-        factors[0][0][0] = baseColor.r; factors[0][0][1] = baseColor.g;
-        factors[0][0][2] = baseColor.b; factors[0][0][3] = baseColor.a;
-        factors[0][1][0] = emissive.r;  factors[0][1][1] = emissive.g;
-        factors[0][1][2] = emissive.b;  factors[0][1][3] = transmissionFactor;
-        factors[0][2][0] = metallic;    factors[0][2][1] = roughness;
-        factors[0][2][2] = alphaCutoff; factors[0][2][3] = occlusionStrength;
+        factors[0][0][0] = baseColor.r;
+        factors[0][0][1] = baseColor.g;
+        factors[0][0][2] = baseColor.b;
+        factors[0][0][3] = baseColor.a;
+        factors[0][1][0] = emissive.r;
+        factors[0][1][1] = emissive.g;
+        factors[0][1][2] = emissive.b;
+        factors[0][1][3] = transmissionFactor;
+        factors[0][2][0] = metallic;
+        factors[0][2][1] = roughness;
+        factors[0][2][2] = alphaCutoff;
+        factors[0][2][3] = occlusionStrength;
         factors[0][3][1] = normalScale;
 
         factors[1][0][0] = thicknessFactor;
@@ -818,7 +852,8 @@ namespace pe
         {
             std::string mode(alphaMode.C_Str());
             std::transform(mode.begin(), mode.end(), mode.begin(),
-                           [](unsigned char c) { return static_cast<char>(std::toupper(c)); });
+                           [](unsigned char c)
+                           { return static_cast<char>(std::toupper(c)); });
 
             if (mode == "BLEND")
                 return RenderType::AlphaBlend;

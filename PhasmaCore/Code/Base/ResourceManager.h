@@ -17,13 +17,13 @@ namespace pe
             return ResourceHandle<T>(std::shared_ptr<T>(ptr, [](T *) {}));
         }
 
-        T* get() const { return m_ptr.get(); }
-        T* operator->() const { return m_ptr.get(); }
-        T& operator*() const { return *m_ptr; }
+        T *get() const { return m_ptr.get(); }
+        T *operator->() const { return m_ptr.get(); }
+        T &operator*() const { return *m_ptr; }
         explicit operator bool() const { return m_ptr != nullptr; }
 
-        bool operator==(const ResourceHandle<T>& other) const { return m_ptr == other.m_ptr; }
-        bool operator!=(const ResourceHandle<T>& other) const { return m_ptr != other.m_ptr; }
+        bool operator==(const ResourceHandle<T> &other) const { return m_ptr == other.m_ptr; }
+        bool operator!=(const ResourceHandle<T> &other) const { return m_ptr != other.m_ptr; }
 
         std::shared_ptr<T> GetShared() const { return m_ptr; }
 
@@ -34,19 +34,19 @@ namespace pe
     class ResourceManager
     {
     public:
-        static ResourceManager& Get()
+        static ResourceManager &Get()
         {
             static ResourceManager instance;
             return instance;
         }
 
         template <typename T, typename... Args>
-        ResourceHandle<T> Load(const std::string& id, Args&&... args)
+        ResourceHandle<T> Load(const std::string &id, Args &&...args)
         {
             std::lock_guard<std::mutex> lock(m_mutex);
             auto typeIdx = std::type_index(typeid(T));
 
-            auto& cache = m_resources[typeIdx];
+            auto &cache = m_resources[typeIdx];
             auto it = cache.find(id);
 
             if (it != cache.end())
@@ -69,7 +69,7 @@ namespace pe
         }
 
         template <typename T>
-        ResourceHandle<T> Find(const std::string& id)
+        ResourceHandle<T> Find(const std::string &id)
         {
             std::lock_guard<std::mutex> lock(m_mutex);
             auto typeIdx = std::type_index(typeid(T));
@@ -77,7 +77,7 @@ namespace pe
             if (typeIt == m_resources.end())
                 return ResourceHandle<T>();
 
-            auto& cache = typeIt->second;
+            auto &cache = typeIt->second;
             auto it = cache.find(id);
             if (it == cache.end())
                 return ResourceHandle<T>();
@@ -90,7 +90,7 @@ namespace pe
         }
 
         template <typename T>
-        void Register(const std::string& id, std::shared_ptr<T> resource)
+        void Register(const std::string &id, std::shared_ptr<T> resource)
         {
             std::lock_guard<std::mutex> lock(m_mutex);
             auto typeIdx = std::type_index(typeid(T));
@@ -101,9 +101,9 @@ namespace pe
         void GarbageCollect()
         {
             std::lock_guard<std::mutex> lock(m_mutex);
-            for (auto& typePair : m_resources)
+            for (auto &typePair : m_resources)
             {
-                for (auto it = typePair.second.begin(); it != typePair.second.end(); )
+                for (auto it = typePair.second.begin(); it != typePair.second.end();)
                 {
                     if (it->second.expired())
                     {
@@ -120,8 +120,8 @@ namespace pe
     private:
         ResourceManager() = default;
         ~ResourceManager() = default;
-        ResourceManager(const ResourceManager&) = delete;
-        ResourceManager& operator=(const ResourceManager&) = delete;
+        ResourceManager(const ResourceManager &) = delete;
+        ResourceManager &operator=(const ResourceManager &) = delete;
 
         std::mutex m_mutex;
         // Type Index -> (string id -> weak_ptr<Resource>)

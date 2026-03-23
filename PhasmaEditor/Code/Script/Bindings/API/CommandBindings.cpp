@@ -80,10 +80,22 @@ namespace pe
         {"depth_stencil", vk::ImageAspectFlagBits::eDepth | vk::ImageAspectFlagBits::eStencil},
     };
 
-    static vk::ImageLayout ToImageLayout(const std::string &s) { return Lookup(s, s_imageLayoutMap, vk::ImageLayout::eUndefined); }
-    static vk::PipelineStageFlags2 ToPipelineStage(const std::string &s) { return Lookup(s, s_pipelineStageMap); }
-    static vk::AccessFlags2 ToAccessFlags(const std::string &s) { return Lookup(s, s_accessFlagsMap); }
-    static vk::ImageAspectFlags ToAspectMask(const std::string &s) { return Lookup(s, s_aspectMaskMap, vk::ImageAspectFlags(vk::ImageAspectFlagBits::eColor)); }
+    static vk::ImageLayout ToImageLayout(const std::string &s)
+    {
+        return Lookup(s, s_imageLayoutMap, vk::ImageLayout::eUndefined);
+    }
+    static vk::PipelineStageFlags2 ToPipelineStage(const std::string &s)
+    {
+        return Lookup(s, s_pipelineStageMap);
+    }
+    static vk::AccessFlags2 ToAccessFlags(const std::string &s)
+    {
+        return Lookup(s, s_accessFlagsMap);
+    }
+    static vk::ImageAspectFlags ToAspectMask(const std::string &s)
+    {
+        return Lookup(s, s_aspectMaskMap, vk::ImageAspectFlags(vk::ImageAspectFlagBits::eColor));
+    }
 
     static struct CommandBindings
     {

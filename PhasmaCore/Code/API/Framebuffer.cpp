@@ -3,7 +3,6 @@
 #include "API/RHI.h"
 #include "API/RenderPass.h"
 
-
 namespace pe
 {
     Framebuffer::Framebuffer(uint32_t width,
