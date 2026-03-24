@@ -293,7 +293,6 @@ namespace pe
                         ui::DrawHierarchyCell(info.name.c_str(), static_cast<int>(info.depth), rel);
 
                         ImGui::TableSetColumnIndex(1);
-                        ImGui::AlignTextToFramePadding();
                         ImGui::TextColored(ui::Heat(rel), "%.3f", info.timeMs);
 
                         ImGui::TableSetColumnIndex(2);

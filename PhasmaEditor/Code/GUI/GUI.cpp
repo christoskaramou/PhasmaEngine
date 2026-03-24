@@ -30,7 +30,6 @@
 #include "Widgets/LightWidget.h"
 #include "Widgets/Loading.h"
 #include "Widgets/MeshWidget.h"
-#include "Widgets/Metrics.h"
 #include "Widgets/ProfilerWidget.h"
 #include "Widgets/Models.h"
 #include "Widgets/Particles.h"
@@ -827,8 +826,8 @@ namespace pe
         // Central node is now dockMainId - dock the Viewport there
         ImGui::DockBuilderDockWindow("Viewport", dockMainId);
 
-        // Left - Metrics, Models, Hierarchy
-        ImGui::DockBuilderDockWindow("Metrics", dockLeft);
+        // Left - Profiler, Models, Hierarchy
+        ImGui::DockBuilderDockWindow("Profiler", dockLeft);
         ImGui::DockBuilderDockWindow("Models", dockLeft);
         ImGui::DockBuilderDockWindow("Hierarchy", dockLeft);
 
@@ -1415,7 +1414,6 @@ namespace pe
             m_editorToolServer->Start();
 
         auto properties = std::make_shared<Properties>();
-        auto metrics = std::make_shared<Metrics>();
         auto profiler = std::make_shared<ProfilerWidget>();
         auto models = std::make_shared<Models>();
         auto assetInfo = std::make_shared<AssetInfo>();
@@ -1434,7 +1432,6 @@ namespace pe
         // Console added early to potentially influence tab ordering (Leftmost)
         m_widgets = {console,
                      properties,
-                     metrics,
                      profiler,
                      models,
                      assetInfo,
@@ -1456,7 +1453,6 @@ namespace pe
 
         // Populate Menu Vectors
         m_menuWindowWidgets = {console,
-                               metrics,
                                profiler,
                                properties,
                                models,
