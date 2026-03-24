@@ -91,8 +91,11 @@ namespace pe
 
     void Scene::Update()
     {
-        for (auto *camera : m_cameras)
-            camera->Update();
+        {
+            PE_PROFILE_SCOPE("Camera Update");
+            for (auto *camera : m_cameras)
+                camera->Update();
+        }
 
         UpdateGeometry();
     }
@@ -492,35 +495,49 @@ namespace pe
         // This gives us a clean slate for the current frame's UpdateNodeMatrices() calls.
         m_nodesMoved.clear();
 
-        UpdateNodeMatrices();
-
-        Camera *camera = m_cameras.empty() ? nullptr : m_cameras[0];
-        bool frustumCulling = Settings::Get<GlobalSettings>().frustum_culling;
-        static constexpr uint32_t kCullBatchSize = 128;
-
-        const uint32_t nodeCount = GetNodeCount();
-        std::vector<std::shared_future<DrawBatch>> futures;
-        futures.reserve((nodeCount + kCullBatchSize - 1u) / kCullBatchSize);
-
-        for (uint32_t beginNode = 0; beginNode < nodeCount; beginNode += kCullBatchSize)
         {
-            const uint32_t endNode = std::min(beginNode + kCullBatchSize, nodeCount);
-            futures.push_back(ThreadPool::Update.Enqueue(&Scene::CullNodeBatch, this, beginNode, endNode, camera, frustumCulling));
+            PE_PROFILE_SCOPE("Update Node Matrices");
+            UpdateNodeMatrices();
         }
 
-        for (auto &future : futures)
         {
-            const DrawBatch &batch = future.get();
-            m_drawInfosOpaque.insert(m_drawInfosOpaque.end(), batch.opaque.begin(), batch.opaque.end());
-            m_drawInfosAlphaCut.insert(m_drawInfosAlphaCut.end(), batch.alphaCut.begin(), batch.alphaCut.end());
-            m_drawInfosAlphaBlend.insert(m_drawInfosAlphaBlend.end(), batch.alphaBlend.begin(), batch.alphaBlend.end());
-            m_drawInfosTransmission.insert(m_drawInfosTransmission.end(), batch.transmission.begin(), batch.transmission.end());
+            PE_PROFILE_SCOPE("Frustum Culling");
+
+            Camera *camera = m_cameras.empty() ? nullptr : m_cameras[0];
+            bool frustumCulling = Settings::Get<GlobalSettings>().frustum_culling;
+            static constexpr uint32_t kCullBatchSize = 128;
+
+            const uint32_t nodeCount = GetNodeCount();
+            std::vector<std::shared_future<DrawBatch>> futures;
+            futures.reserve((nodeCount + kCullBatchSize - 1u) / kCullBatchSize);
+
+            for (uint32_t beginNode = 0; beginNode < nodeCount; beginNode += kCullBatchSize)
+            {
+                const uint32_t endNode = std::min(beginNode + kCullBatchSize, nodeCount);
+                futures.push_back(ThreadPool::Update.Enqueue(&Scene::CullNodeBatch, this, beginNode, endNode, camera, frustumCulling));
+            }
+
+            for (auto &future : futures)
+            {
+                const DrawBatch &batch = future.get();
+                m_drawInfosOpaque.insert(m_drawInfosOpaque.end(), batch.opaque.begin(), batch.opaque.end());
+                m_drawInfosAlphaCut.insert(m_drawInfosAlphaCut.end(), batch.alphaCut.begin(), batch.alphaCut.end());
+                m_drawInfosAlphaBlend.insert(m_drawInfosAlphaBlend.end(), batch.alphaBlend.begin(), batch.alphaBlend.end());
+                m_drawInfosTransmission.insert(m_drawInfosTransmission.end(), batch.transmission.begin(), batch.transmission.end());
+            }
         }
 
-        SortDrawInfos();
-        UpdateUniformData();
+        {
+            PE_PROFILE_SCOPE("Sort Draw Infos");
+            SortDrawInfos();
+        }
+        {
+            PE_PROFILE_SCOPE("Update Uniforms");
+            UpdateUniformData();
+        }
         if (HasDrawInfo())
         {
+            PE_PROFILE_SCOPE("Update Indirect");
             UpdateIndirectData();
         }
     }

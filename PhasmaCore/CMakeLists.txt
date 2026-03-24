@@ -125,6 +125,12 @@ list(APPEND LIB_FILES
 )
 target_link_libraries(PhasmaCore PUBLIC ${LIB_FILES})
 
+# Tracy profiler (linked when PE_TRACY is set in the root CMakeLists.txt)
+if(TARGET TracyClient)
+    target_link_libraries(PhasmaCore PUBLIC TracyClient)
+    target_compile_definitions(PhasmaCore PUBLIC PE_TRACY TRACY_VK_USE_SYMBOL_TABLE)
+endif()
+
 # Copy headers into the corresponding folder in PhasmaCore/include/
 file(COPY ${CMAKE_CURRENT_SOURCE_DIR}/Code/
     DESTINATION ${CMAKE_CURRENT_BINARY_DIR}/Include/

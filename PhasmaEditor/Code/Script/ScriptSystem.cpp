@@ -191,6 +191,7 @@ namespace pe
 
     void ScriptSystem::Update()
     {
+        PE_PROFILE_SCOPE("Script System");
         // Process completed async model loads
         ProcessAsyncLoads();
 

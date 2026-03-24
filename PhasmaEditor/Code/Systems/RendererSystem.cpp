@@ -1,4 +1,7 @@
 #include "RendererSystem.h"
+#ifdef PE_TRACY
+#include <tracy/TracyVulkan.hpp>
+#endif
 #include "PhasmaAgent/AgentUtils.h"
 #include "API/Buffer.h"
 #include "API/Command.h"
@@ -150,12 +153,21 @@ namespace pe
     void RendererSystem::Update()
     {
         // GUI
-        m_gui.Update();
+        {
+            PE_PROFILE_SCOPE("GUI");
+            m_gui.Update();
+        }
 
         // Scene
-        m_scene.Update();
+        {
+            PE_PROFILE_SCOPE("Scene");
+            m_scene.Update();
+        }
 
-        UpdateRenderGraphPassStates();
+        {
+            PE_PROFILE_SCOPE("Render Graph Pass States");
+            UpdateRenderGraphPassStates();
+        }
 
         const auto isPassEnabled = [&](RenderGraphPassId passId) -> bool
         {
@@ -196,19 +208,22 @@ namespace pe
         };
 
         // Render Components
-        std::vector<std::shared_future<void>> futures;
-        futures.reserve(m_renderPassComponents.size());
-        for (auto &rc : m_renderPassComponents)
         {
-            if (!shouldUpdate(rc))
-                continue;
+            PE_PROFILE_SCOPE("Render Pass Updates");
+            std::vector<std::shared_future<void>> futures;
+            futures.reserve(m_renderPassComponents.size());
+            for (auto &rc : m_renderPassComponents)
+            {
+                if (!shouldUpdate(rc))
+                    continue;
 
-            futures.push_back(ThreadPool::Update.Enqueue([rc]()
-                                                         { rc->Update(); }));
+                futures.push_back(ThreadPool::Update.Enqueue([rc]()
+                                                             { rc->Update(); }));
+            }
+
+            for (auto &future : futures)
+                future.wait();
         }
-
-        for (auto &future : futures)
-            future.wait();
     }
 
     void RendererSystem::UpdateRenderGraphPassStates()
@@ -256,13 +271,20 @@ namespace pe
         auto &frameCmd = m_cmds[frame];
         if (frameCmd)
         {
+            PE_PROFILE_SCOPE("Cmd Wait");
             frameCmd->Wait();
             frameCmd->Return();
             frameCmd = nullptr;
         }
 
-        RHII.FlushDeletionQueue(frame);
-        RHII.GetStagingManager()->RemoveUnused();
+        {
+            PE_PROFILE_SCOPE("Flush Deletion Queue");
+            RHII.FlushDeletionQueue(frame);
+        }
+        {
+            PE_PROFILE_SCOPE("Staging Cleanup");
+            RHII.GetStagingManager()->RemoveUnused();
+        }
     }
 
     void RendererSystem::ResetTAAHistory()
@@ -356,8 +378,14 @@ namespace pe
         setScene(m_aabbsPass);
 
         cmd->Begin();
-        m_renderGraph.Execute(cmd);
-        BlitToSwapchain(cmd, m_displayRT, imageIndex);
+        {
+            PE_PROFILE_SCOPE("Render Graph Execute");
+            m_renderGraph.Execute(cmd);
+        }
+        {
+            PE_PROFILE_SCOPE("Blit To Swapchain");
+            BlitToSwapchain(cmd, m_displayRT, imageIndex);
+        }
 
         EventSystem::QueuedEvent screenshotEvt;
         if (EventSystem::PeekAndPop(EventType::Screenshot, screenshotEvt))
@@ -383,6 +411,10 @@ namespace pe
             m_screenshotPending = true;
         }
 
+#ifdef PE_TRACY
+        TracyVkCollect(RHII.GetTracyVkCtx(), static_cast<VkCommandBuffer>(cmd->ApiHandle()));
+#endif
+
         cmd->End();
 
         return cmd;
@@ -394,23 +426,31 @@ namespace pe
         {
             uint32_t frame = RHII.GetFrameIndex();
 
-            // acquire the image
             Semaphore *acquireSemaphore = m_acquireSemaphores[frame];
-
             Swapchain *swapchain = RHII.GetSwapchain();
-            uint32_t imageIndex = swapchain->AquireNextImage(acquireSemaphore);
+            uint32_t imageIndex;
+            {
+                PE_PROFILE_SCOPE("Acquire Image");
+                imageIndex = swapchain->AquireNextImage(acquireSemaphore);
+            }
 
-            // RECORD COMMANDS
             auto &frameCmd = m_cmds[frame];
-            frameCmd = RecordPasses(imageIndex);
+            {
+                PE_PROFILE_SCOPE("Record Passes");
+                frameCmd = RecordPasses(imageIndex);
+            }
 
-            // SUBMIT TO QUEUE
             Semaphore *submitSemaphore = m_submitSemaphores[imageIndex];
             Queue *queue = RHII.GetMainQueue();
-            queue->Submit(1, &frameCmd, acquireSemaphore, submitSemaphore);
+            {
+                PE_PROFILE_SCOPE("Queue Submit");
+                queue->Submit(1, &frameCmd, acquireSemaphore, submitSemaphore);
+            }
 
-            // PRESENT
-            queue->Present(swapchain, imageIndex, submitSemaphore);
+            {
+                PE_PROFILE_SCOPE("Present");
+                queue->Present(swapchain, imageIndex, submitSemaphore);
+            }
 
             if (m_screenshotPending)
             {

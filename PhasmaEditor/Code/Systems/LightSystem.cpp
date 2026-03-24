@@ -89,6 +89,7 @@ namespace pe
 
     void LightSystem::Update()
     {
+        PE_PROFILE_SCOPE("Light System");
         auto &gSettings = Settings::Get<GlobalSettings>();
 
         if (gSettings.randomize_lights)

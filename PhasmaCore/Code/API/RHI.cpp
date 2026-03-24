@@ -1,4 +1,7 @@
 #include "API/RHI.h"
+#ifdef PE_TRACY
+#include <tracy/TracyVulkan.hpp>
+#endif
 #include "API/Buffer.h"
 #include "API/Command.h"
 #include "API/Descriptor.h"
@@ -367,11 +370,36 @@ namespace pe
         for (auto &queue : m_deletionQueues)
             queue = new DeletionQueue();
         m_stagingManager = new StagingManager();
+
+#ifdef PE_TRACY
+        {
+            CommandBuffer *cmd = m_mainQueue->AcquireCommandBuffer();
+            auto &d = VULKAN_HPP_DEFAULT_DISPATCHER;
+            m_tracyVkCtx = TracyVkContext(
+                static_cast<VkInstance>(m_instance),
+                static_cast<VkPhysicalDevice>(m_gpu),
+                static_cast<VkDevice>(m_device),
+                static_cast<VkQueue>(m_mainQueue->ApiHandle()),
+                static_cast<VkCommandBuffer>(cmd->ApiHandle()),
+                d.vkGetInstanceProcAddr,
+                d.vkGetDeviceProcAddr);
+            TracyVkContextName(m_tracyVkCtx, "Main Queue", 10);
+            cmd->Return();
+        }
+#endif
     }
 
     void RHI::Destroy()
     {
         WaitDeviceIdle();
+
+#ifdef PE_TRACY
+        if (m_tracyVkCtx)
+        {
+            TracyVkDestroy(m_tracyVkCtx);
+            m_tracyVkCtx = nullptr;
+        }
+#endif
 
         for (auto &queue : m_deletionQueues)
         {

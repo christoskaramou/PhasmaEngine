@@ -2,6 +2,9 @@
 #include "API/Command.h"
 #include "API/Queue.h"
 #include "API/RHI.h"
+#ifdef PE_TRACY
+#include <tracy/TracyVulkan.hpp>
+#endif
 #include "RenderDoc/renderdoc_app.h"
 
 #define PE_RENDER_DOC 0
@@ -411,6 +414,16 @@ namespace pe
         timerInfo.depth = cmd->m_gpuTimerIdsStack.size();
         cmd->m_gpuTimerIdsStack.push(cmd->m_gpuTimerInfosCount);
         cmd->m_gpuTimerInfosCount++;
+
+#ifdef PE_TRACY
+        auto *scope = new tracy::VkCtxScope(
+            RHII.GetTracyVkCtx(),
+            __LINE__, __FILE__, strlen(__FILE__),
+            __FUNCTION__, strlen(__FUNCTION__),
+            name.c_str(), name.size(),
+            static_cast<VkCommandBuffer>(cmd->ApiHandle()), true);
+        cmd->m_tracyGpuScopes.push_back(scope);
+#endif
     }
 
     void Debug::InsertCmdLabel(CommandBuffer *cmd, const std::string &name)
@@ -439,6 +452,14 @@ namespace pe
 
         cmd->m_gpuTimerInfos[cmd->m_gpuTimerIdsStack.top()].timer->End();
         cmd->m_gpuTimerIdsStack.pop();
+
+#ifdef PE_TRACY
+        if (!cmd->m_tracyGpuScopes.empty())
+        {
+            delete cmd->m_tracyGpuScopes.back();
+            cmd->m_tracyGpuScopes.pop_back();
+        }
+#endif
     }
 #endif
 } // namespace pe

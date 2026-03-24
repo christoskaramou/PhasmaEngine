@@ -2,6 +2,10 @@
 
 #undef MemoryBarrier
 
+#ifdef PE_TRACY
+namespace tracy { class VkCtxScope; }
+#endif
+
 namespace pe
 {
     class RenderPass;
@@ -198,6 +202,9 @@ namespace pe
         uint32_t m_gpuTimerInfosCount = 0;
         std::vector<GpuTimerInfo> m_gpuTimerInfos{};
         std::stack<size_t> m_gpuTimerIdsStack{};
+#ifdef PE_TRACY
+        std::vector<tracy::VkCtxScope *> m_tracyGpuScopes;
+#endif
 #endif
     };
 } // namespace pe

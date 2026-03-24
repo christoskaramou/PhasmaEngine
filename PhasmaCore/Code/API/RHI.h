@@ -1,5 +1,10 @@
 #pragma once
 
+#ifdef PE_TRACY
+namespace tracy { class VkCtx; }
+using TracyVkCtx = tracy::VkCtx *;
+#endif
+
 namespace pe
 {
     class CommandPool;
@@ -121,6 +126,10 @@ namespace pe
         float GetWidthf() const;
         float GetHeightf() const;
 
+#ifdef PE_TRACY
+        TracyVkCtx GetTracyVkCtx() { return m_tracyVkCtx; }
+#endif
+
     private:
         RHI() = default;
 
@@ -145,6 +154,10 @@ namespace pe
         uint64_t m_minStorageBufferOffsetAlignment;
         uint32_t m_maxPushConstantsSize;
         uint32_t m_maxDrawIndirectCount;
+
+#ifdef PE_TRACY
+        TracyVkCtx m_tracyVkCtx = nullptr;
+#endif
     };
 
     inline RHI &RHII = *RHI::Get();

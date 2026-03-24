@@ -39,6 +39,7 @@ namespace pe
 
     void PostProcessSystem::Update()
     {
+        PE_PROFILE_SCOPE("Post Process System");
         const auto &gSettings = Settings::Get<GlobalSettings>();
 
         auto *bbfp = GetEffect<BloomBrightFilterPass>();

@@ -304,8 +304,8 @@ PhasmaEditor/Assets/Agent/*
 #Agents INSTRUCTIONS.md file
 !/INSTRUCTIONS.md
 
-# User scenes
-PhasmaEditor/Assets/Scenes/
+# User scenes (keep folder, ignore scene files)
+PhasmaEditor/Assets/Scenes/*.pescene
 
 #clang-format
 !.clang-format

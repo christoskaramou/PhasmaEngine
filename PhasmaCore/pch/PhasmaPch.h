@@ -81,6 +81,7 @@
 #include "Base/ThreadPool.h"
 #include "Base/Delegate.h"
 #include "Base/Timer.h"
+#include "Base/Profiler.h"
 #include "Base/FileSystem.h"
 #include "Base/FileWatcher.h"
 #include "Base/EventSystem.h"

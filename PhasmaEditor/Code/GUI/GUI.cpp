@@ -31,6 +31,7 @@
 #include "Widgets/Loading.h"
 #include "Widgets/MeshWidget.h"
 #include "Widgets/Metrics.h"
+#include "Widgets/ProfilerWidget.h"
 #include "Widgets/Models.h"
 #include "Widgets/Particles.h"
 #include "Widgets/Properties.h"
@@ -1813,6 +1814,7 @@ namespace pe
 
         auto properties = std::make_shared<Properties>();
         auto metrics = std::make_shared<Metrics>();
+        auto profiler = std::make_shared<ProfilerWidget>();
         auto models = std::make_shared<Models>();
         auto assetInfo = std::make_shared<AssetInfo>();
         auto sceneView = std::make_shared<SceneView>();
@@ -1831,6 +1833,7 @@ namespace pe
         m_widgets = {console,
                      properties,
                      metrics,
+                     profiler,
                      models,
                      assetInfo,
                      sceneView,
@@ -1852,6 +1855,7 @@ namespace pe
         // Populate Menu Vectors
         m_menuWindowWidgets = {console,
                                metrics,
+                               profiler,
                                properties,
                                models,
                                assetInfo,
@@ -2103,22 +2107,28 @@ namespace pe
             }
         }
 
-        Menu();
-        StatusBar();
-        DrawExitPopup();
-        DrawSaveBeforeLoadPopup();
-        DrawSaveBeforeNewPopup();
-        DrawOverwriteConfirmationPopup();
-        Toolbar();
-        BuildDockspace();
+        {
+            PE_PROFILE_SCOPE("Menu & Dockspace");
+            Menu();
+            StatusBar();
+            DrawExitPopup();
+            DrawSaveBeforeLoadPopup();
+            DrawSaveBeforeNewPopup();
+            DrawOverwriteConfirmationPopup();
+            Toolbar();
+            BuildDockspace();
+        }
 
         if (m_show_demo_window)
             ImGui::ShowDemoWindow(&m_show_demo_window);
 
-        for (auto &widget : m_widgets)
         {
-            if (widget->IsOpen())
-                widget->Update();
+            PE_PROFILE_SCOPE("Widgets");
+            for (auto &widget : m_widgets)
+            {
+                if (widget->IsOpen())
+                    widget->Update();
+            }
         }
 
         // Undo/Redo auto-capture: detect state changes by comparing idle snapshots.

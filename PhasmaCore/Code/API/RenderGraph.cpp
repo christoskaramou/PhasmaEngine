@@ -188,6 +188,13 @@ namespace pe
         if (!pass.condition())
             return;
 
+        // RAII scopes: both our profiler and Tracy end automatically on early returns
+        CpuProfileScope peScope(pass.name.c_str());
+#ifdef PE_TRACY
+        ZoneScoped;
+        ZoneName(pass.name.c_str(), pass.name.size());
+#endif
+
         if (pass.callback)
         {
             pass.callback(cmd);

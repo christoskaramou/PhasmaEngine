@@ -137,24 +137,38 @@ namespace pe
 
     bool App::Frame()
     {
+        Profiler::BeginFrame();
+
         RHII.NextFrame();
 
         m_frameTimer.Tick();
 
         auto rendererSystem = GetGlobalSystem<RendererSystem>();
-        rendererSystem->WaitPreviousFrameCommands();
+        {
+            PE_PROFILE_SCOPE("Wait Frame Commands");
+            rendererSystem->WaitPreviousFrameCommands();
+        }
 
         // Start ImGui frame
-        ImGui_ImplSDL2_NewFrame();
-        ImGui_ImplVulkan_NewFrame();
-        ImGui::NewFrame();
-        ImGuizmo::BeginFrame();
+        {
+            PE_PROFILE_SCOPE("ImGui New Frame");
+            ImGui_ImplSDL2_NewFrame();
+            ImGui_ImplVulkan_NewFrame();
+            ImGui::NewFrame();
+            ImGuizmo::BeginFrame();
+        }
 
-        if (!m_window->ProcessEvents())
-            return false;
+        {
+            PE_PROFILE_SCOPE("Process Events");
+            if (!m_window->ProcessEvents())
+                return false;
+        }
 
         if (!m_window->isMinimized())
+        {
+            PE_PROFILE_SCOPE("Update Systems");
             UpdateGlobalSystems();
+        }
 
         // Get ImGui render data ready
         ImGui::Render();
@@ -162,12 +176,20 @@ namespace pe
 
         if (!m_window->isMinimized())
         {
-            rendererSystem->Draw();
-            // Render platform windows (floating ImGui windows) after main rendering
-            rendererSystem->DrawPlatformWindows();
+            {
+                PE_PROFILE_SCOPE("Draw");
+                rendererSystem->Draw();
+            }
+            {
+                PE_PROFILE_SCOPE("ImGui Draw Platform Windows");
+                rendererSystem->DrawPlatformWindows();
+            }
         }
 
         m_frameTimer.CountCpuTotalStamp();
+
+        Profiler::EndFrame();
+        PE_FRAME_MARK;
 
         return true;
     }
