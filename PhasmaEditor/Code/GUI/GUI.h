@@ -36,18 +36,10 @@ namespace pe
         }
         void QueueMainThreadAction(std::function<void()> fn);
         EditorToolRuntime *GetEditorToolRuntime() const { return m_editorToolRuntime.get(); }
-        bool IsRagEnabled() const;
-        bool IsRagRequested() const { return m_ragRequestedEnabled; }
         bool IsMcpServerRunning() const;
         pagent::CodebaseIndexStatus GetCodebaseStatus() const { return m_codebase.GetStatus(); }
-        std::shared_ptr<pagent::VectorStore> GetCodebaseStoreShared() const { return m_codebase.GetCodebaseStoreShared(); }
         std::shared_ptr<pagent::BM25Index> GetCodebaseBM25Shared() const { return m_codebase.GetCodebaseBM25Shared(); }
-        std::shared_ptr<pagent::IEmbeddingProvider> GetEmbeddingProviderShared() const { return m_codebase.GetEmbeddingProviderShared(); }
-        pagent::IEmbeddingProvider *GetEmbeddingProvider() const { return m_codebase.GetEmbeddingProvider(); }
         void SetMcpServerEnabled(bool enabled);
-        void EnableRag();
-        void DisableRag();
-        void CheckRagStatus();
 
         // Called after the window is shown to apply the correct layout
         void ApplyStartupLayout();
@@ -73,12 +65,9 @@ namespace pe
         void CancelCodebaseIndexing();
         bool HasCodebaseIndex() const;
         size_t GetCodebaseEntryCount() const;
-        const std::string &GetCodebaseStorePath() const { return m_codebaseStorePath; }
         bool IsIndexing() const { return m_isIndexing.load(); }
         int GetIndexProgress() const { return m_indexProgress.load(); }
         int GetIndexTotal() const { return m_indexTotal.load(); }
-        int GetIndexActiveThreads() const { return m_indexActiveThreads.load(); }
-        int GetIndexTotalThreads() const { return m_indexTotalThreads; }
         std::string GetIndexCurrentFile() const
         {
             std::lock_guard lock(m_indexMutex);
@@ -102,11 +91,7 @@ namespace pe
         void SaveEditorConfig();
         void LoadEditorConfig();
         void LoadAgentConfig();
-        void EnsureCodebaseStoreLoaded();
 
-        std::atomic<bool> m_ragRequestedEnabled{true};
-        int m_embeddingProviderKind = -1; // -1 = none, matches pagent::EmbeddingProviderKind
-        std::string m_embeddingModel;
         bool m_showExitConfirmation = false;
         bool m_showSaveBeforeLoad = false;
         void DrawSaveBeforeLoadPopup();
@@ -147,8 +132,6 @@ namespace pe
         std::unique_ptr<EditorToolServer> m_editorToolServer;
         std::shared_ptr<std::atomic<bool>> m_codebaseAlive = std::make_shared<std::atomic<bool>>(true);
         pagent::CodebaseContext m_codebase;
-        std::string m_codebaseStorePath;
-        bool m_codebaseStoreLoadRequested = false;
         bool m_mcpStartEnabled = false;
 
         // Codebase indexing state
@@ -158,8 +141,6 @@ namespace pe
         std::string m_indexCurrentFile;
         mutable std::mutex m_indexMutex;
         std::atomic<bool> m_indexCancel{false};
-        std::atomic<int> m_indexActiveThreads{0};
-        std::atomic<int> m_indexTotalThreads{0};
         void *m_indexerPtr = nullptr; // pagent::CodebaseIndexer*, guarded by m_indexMutex
         std::thread m_indexThread;
     };

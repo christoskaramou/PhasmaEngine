@@ -84,12 +84,3 @@ if(WIN32)
     target_compile_definitions(PhasmaAgent PRIVATE WIN32_LEAN_AND_MEAN NOMINMAX)
 endif()
 
-# --- Optional CLI indexer tool ---
-option(PAGENT_BUILD_INDEXER_CLI "Build codebase indexer CLI tool" OFF)
-if(PAGENT_BUILD_INDEXER_CLI)
-    add_executable(PhasmaIndexer "${CMAKE_CURRENT_SOURCE_DIR}/tools/indexer_main.cpp")
-    target_link_libraries(PhasmaIndexer PRIVATE PhasmaAgent)
-    if(WIN32)
-        target_compile_definitions(PhasmaIndexer PRIVATE WIN32_LEAN_AND_MEAN NOMINMAX)
-    endif()
-endif()

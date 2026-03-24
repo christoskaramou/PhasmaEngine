@@ -98,31 +98,6 @@ namespace pagent
         m_impl->SetRepoMap(repoMap);
     }
 
-    void Agent::SetVectorStore(VectorStore *store)
-    {
-        m_impl->SetVectorStore(store);
-    }
-
-    void Agent::SetCodebaseStore(VectorStore *store)
-    {
-        m_impl->SetCodebaseStore(store);
-    }
-
-    void Agent::SetCodebaseBM25(BM25Index *index)
-    {
-        m_impl->SetCodebaseBM25(index);
-    }
-
-    void Agent::SetIncludeGraph(IncludeGraph *graph)
-    {
-        m_impl->SetIncludeGraph(graph);
-    }
-
-    void Agent::SetEmbeddingProvider(std::shared_ptr<IEmbeddingProvider> provider)
-    {
-        m_impl->SetEmbeddingProvider(std::move(provider));
-    }
-
     TokenUsage Agent::GetUsage() const
     {
         return m_impl->GetUsage();

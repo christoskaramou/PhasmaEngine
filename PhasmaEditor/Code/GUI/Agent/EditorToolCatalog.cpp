@@ -4,7 +4,6 @@
 #include "Base/Path.h"
 #include "PhasmaAgent/AgentUtils.h"
 #include "PhasmaAgent/BM25Index.h"
-#include "PhasmaAgent/VectorStore.h"
 
 using namespace pagent;
 
@@ -53,9 +52,7 @@ namespace pe
         static void AppendWorkspaceTools(std::vector<pagent::ToolDefinition> &tools, EditorToolRuntime *runtime, const std::function<void(const std::string &)> &onFeatureRequest);
         static void AppendCodebaseManagementTools(std::vector<pagent::ToolDefinition> &tools, GUI *gui);
         static void AppendCodebaseTools(std::vector<pagent::ToolDefinition> &tools,
-                                        const std::shared_ptr<pagent::BM25Index> &codebaseBM25,
-                                        const std::shared_ptr<pagent::VectorStore> &codebaseStore,
-                                        const std::shared_ptr<pagent::IEmbeddingProvider> &embeddingProvider);
+                                        const std::shared_ptr<pagent::BM25Index> &codebaseBM25);
         static void AppendVisualTools(std::vector<pagent::ToolDefinition> &tools, EditorToolRuntime *runtime);
     } // namespace
 
@@ -87,7 +84,7 @@ namespace pe
         AppendProjectFileTools(tools, projectRoot);
         AppendWorkspaceTools(tools, context.runtime, context.onFeatureRequest);
         AppendCodebaseManagementTools(tools, context.gui);
-        AppendCodebaseTools(tools, context.codebaseBM25, context.codebaseStore, context.embeddingProvider);
+        AppendCodebaseTools(tools, context.codebaseBM25);
         AppendVisualTools(tools, context.runtime);
         return tools;
     }
@@ -770,9 +767,7 @@ namespace pe
         }
 
         void AppendCodebaseTools(std::vector<pagent::ToolDefinition> &tools,
-                                 const std::shared_ptr<pagent::BM25Index> &codebaseBM25,
-                                 const std::shared_ptr<pagent::VectorStore> &codebaseStore,
-                                 const std::shared_ptr<pagent::IEmbeddingProvider> &embeddingProvider)
+                                 const std::shared_ptr<pagent::BM25Index> &codebaseBM25)
         {
             tools.push_back({.name = "find_symbol",
                              .description = "Searches the codebase index for a single class, function, method, or struct by name. "
@@ -784,7 +779,7 @@ namespace pe
                                  {"name", "Symbol name to search for (e.g. 'CommandBuffer', 'CreatePipeline', 'RenderGraph')", pagent::SchemaType::String, true},
                                  {"max_results", "Maximum matches to return, 1-20 (default: 5)", pagent::SchemaType::Integer, false},
                              },
-                             .handler = [codebaseBM25, codebaseStore](const std::string &args) -> std::string
+                             .handler = [codebaseBM25](const std::string &args) -> std::string
                              {
                                  std::string symbolName = JsonUnescape(ExtractArgStr(args, "name"));
                                  if (symbolName.empty())
@@ -803,23 +798,24 @@ namespace pe
                                  if (results.empty())
                                      return JsonObj({{"error", JsonStr("no symbols found matching: " + symbolName)}});
 
-                                 std::unordered_map<std::string, std::pair<std::string, std::string>> idToMeta;
-                                 if (codebaseStore)
+                                 // Parse file/lines from chunk header: "// File: path (lines X-Y) | ..."
+                                 auto parseHeader = [](const std::string &content, std::string &file, std::string &lines)
                                  {
-                                     codebaseStore->ForEachEntry([&](const pagent::VectorEntry &entry)
-                                                                 {
-                                                                     try
-                                                                     {
-                                                                         auto meta = nlohmann::json::parse(entry.metadata);
-                                                                         std::string file = meta.value("file", "");
-                                                                         std::string lines = meta.value("lines", "");
-                                                                         if (!file.empty() && !lines.empty())
-                                                                             idToMeta[entry.id] = {file, lines};
-                                                                     }
-                                                                     catch (...)
-                                                                     {
-                                                                     } });
-                                 }
+                                     constexpr std::string_view prefix = "// File: ";
+                                     if (content.compare(0, prefix.size(), prefix) != 0)
+                                         return false;
+                                     auto start = prefix.size();
+                                     auto paren = content.find(" (lines ", start);
+                                     if (paren == std::string::npos)
+                                         return false;
+                                     file = content.substr(start, paren - start);
+                                     auto linesStart = paren + 8; // len(" (lines ")
+                                     auto linesEnd = content.find(')', linesStart);
+                                     if (linesEnd == std::string::npos)
+                                         return false;
+                                     lines = content.substr(linesStart, linesEnd - linesStart);
+                                     return true;
+                                 };
 
                                  const std::string nameLower = ToLower(symbolName);
                                  auto definitionPriority = [&](const std::string &file, const std::string &header) -> int
@@ -833,7 +829,6 @@ namespace pe
                                      auto dot = stem.rfind('.');
                                      if (dot != std::string::npos)
                                          stem = stem.substr(0, dot);
-
                                      if (stem == nameLower)
                                          return 3;
                                      for (const char *tag : {"class: ", "method: ", "struct: "})
@@ -849,9 +844,9 @@ namespace pe
 
                                  struct Candidate
                                  {
-                                     std::string id;
                                      std::string content;
-                                     float bm25Score;
+                                     std::string file;
+                                     std::string lines;
                                      int priority;
                                  };
 
@@ -859,15 +854,15 @@ namespace pe
                                  candidates.reserve(results.size());
                                  for (auto &result : results)
                                  {
-                                     auto it = idToMeta.find(result.id);
-                                     if (it == idToMeta.end())
+                                     std::string file, lines;
+                                     if (!parseHeader(result.content, file, lines))
                                          continue;
                                      std::string header;
                                      if (auto nl = result.content.find('\n'); nl != std::string::npos)
                                          header = result.content.substr(0, nl);
                                      else
                                          header = result.content.substr(0, std::min(result.content.size(), static_cast<size_t>(200)));
-                                     candidates.push_back({result.id, result.content, result.score, definitionPriority(it->second.first, header)});
+                                     candidates.push_back({result.content, file, lines, definitionPriority(file, header)});
                                  }
 
                                  std::stable_sort(candidates.begin(), candidates.end(), [](const Candidate &a, const Candidate &b)
@@ -880,24 +875,18 @@ namespace pe
                                      if (static_cast<int64_t>(matches.size()) >= maxResults)
                                          break;
 
-                                     auto it = idToMeta.find(candidate.id);
-                                     if (it == idToMeta.end())
-                                         continue;
-
-                                     const std::string &file = it->second.first;
-                                     const std::string &lines = it->second.second;
-                                     const std::string key = file + ":" + lines;
+                                     const std::string key = candidate.file + ":" + candidate.lines;
                                      if (!seen.insert(key).second)
                                          continue;
 
                                      int startLine = 0;
                                      int endLine = 0;
-                                     if (auto dash = lines.find('-'); dash != std::string::npos)
+                                     if (auto dash = candidate.lines.find('-'); dash != std::string::npos)
                                      {
                                          try
                                          {
-                                             startLine = std::stoi(lines.substr(0, dash));
-                                             endLine = std::stoi(lines.substr(dash + 1));
+                                             startLine = std::stoi(candidate.lines.substr(0, dash));
+                                             endLine = std::stoi(candidate.lines.substr(dash + 1));
                                          }
                                          catch (...)
                                          {
@@ -920,7 +909,7 @@ namespace pe
                                          return end != std::string::npos ? header.substr(pos, end - pos) : header.substr(pos);
                                      };
 
-                                     nlohmann::json match = {{"file", file}, {"start_line", startLine}, {"end_line", endLine}};
+                                     nlohmann::json match = {{"file", candidate.file}, {"start_line", startLine}, {"end_line", endLine}};
                                      const std::string ns = extractField("Namespace: ");
                                      const std::string cls = extractField("Class: ");
                                      const std::string method = extractField("Method: ");
@@ -940,7 +929,6 @@ namespace pe
 
             tools.push_back({.name = "search_codebase",
                              .description = "Search the indexed codebase for multiple symbols or concepts simultaneously. "
-                                            "Runs all queries in parallel (BM25 keyword + semantic vector) and merges results. "
                                             "Use this instead of calling find_symbol multiple times — pass all related names "
                                             "in one call to save round-trips. Requires the codebase index to be built. "
                                             "Example: search for 'RenderGraph', 'AddPass', and 'IRenderPass' all at once.",
@@ -948,7 +936,7 @@ namespace pe
                                  {"queries", "Array of symbol names or concepts to search simultaneously (e.g. [\"RenderGraph\", \"AddPass\"])", pagent::SchemaType::Array, true, pagent::SchemaType::String},
                                  {"max_results", "Maximum total matches to return, 1-30 (default: 10)", pagent::SchemaType::Integer, false},
                              },
-                             .handler = [codebaseBM25, codebaseStore, embeddingProvider](const std::string &args) -> std::string
+                             .handler = [codebaseBM25](const std::string &args) -> std::string
                              {
                                  auto queries = ExtractArgArray(args, "queries");
                                  if (queries.empty())
@@ -967,75 +955,24 @@ namespace pe
 
                                  auto bm25Results = codebaseBM25->SearchMulti(queries, static_cast<int>(maxResults) * 6);
 
-                                 std::unordered_map<std::string, std::pair<std::string, std::string>> idToMeta;
-                                 if (codebaseStore)
+                                 // Parse file/lines from chunk header: "// File: path (lines X-Y) | ..."
+                                 auto parseHeader = [](const std::string &content, std::string &file, std::string &lines)
                                  {
-                                     codebaseStore->ForEachEntry([&](const pagent::VectorEntry &entry)
-                                                                 {
-                                                                     try
-                                                                     {
-                                                                         auto meta = nlohmann::json::parse(entry.metadata);
-                                                                         std::string file = meta.value("file", "");
-                                                                         std::string lines = meta.value("lines", "");
-                                                                         if (!file.empty() && !lines.empty())
-                                                                             idToMeta[entry.id] = {file, lines};
-                                                                     }
-                                                                     catch (...)
-                                                                     {
-                                                                     } });
-                                 }
-
-                                 std::unordered_map<std::string, float> vectorScores;
-                                 if (embeddingProvider && codebaseStore && codebaseStore->Size() > 0)
-                                 {
-                                     std::vector<std::vector<float>> embeddings;
-                                     embeddings.reserve(queries.size());
-                                     for (const auto &query : queries)
-                                     {
-                                         auto embedding = embeddingProvider->Embed(query);
-                                         if (!embedding.empty())
-                                             embeddings.push_back(std::move(embedding));
-                                     }
-                                     if (!embeddings.empty())
-                                     {
-                                         auto vectorResults = codebaseStore->SearchMulti(embeddings, static_cast<int>(maxResults) * 4);
-                                         for (const auto &result : vectorResults)
-                                             if (result.entry)
-                                                 vectorScores[result.entry->id] = result.score;
-                                     }
-                                 }
-
-                                 const float bm25Max = bm25Results.empty() ? 1.0f : std::max(bm25Results[0].score, 1e-6f);
-
-                                 struct ScoredEntry
-                                 {
-                                     std::string id;
-                                     std::string content;
-                                     float score;
-                                     int priority;
+                                     constexpr std::string_view prefix = "// File: ";
+                                     if (content.compare(0, prefix.size(), prefix) != 0)
+                                         return false;
+                                     auto start = prefix.size();
+                                     auto paren = content.find(" (lines ", start);
+                                     if (paren == std::string::npos)
+                                         return false;
+                                     file = content.substr(start, paren - start);
+                                     auto linesStart = paren + 8;
+                                     auto linesEnd = content.find(')', linesStart);
+                                     if (linesEnd == std::string::npos)
+                                         return false;
+                                     lines = content.substr(linesStart, linesEnd - linesStart);
+                                     return true;
                                  };
-
-                                 std::unordered_map<std::string, ScoredEntry> merged;
-                                 for (auto &result : bm25Results)
-                                 {
-                                     float vecScore = 0.0f;
-                                     auto vecIt = vectorScores.find(result.id);
-                                     if (vecIt != vectorScores.end())
-                                         vecScore = vecIt->second;
-
-                                     const float normalizedBm25 = result.score / bm25Max;
-                                     const float combined = vectorScores.empty() ? normalizedBm25 : normalizedBm25 * 0.65f + vecScore * 0.35f;
-                                     merged[result.id] = {result.id, result.content, combined, 0};
-                                 }
-
-                                 if (!vectorScores.empty() && codebaseStore)
-                                 {
-                                     codebaseStore->ForEachEntry([&](const pagent::VectorEntry &entry)
-                                                                 {
-                                                                     if (!vectorScores.count(entry.id) || merged.count(entry.id))
-                                                                         return;
-                                                                     merged[entry.id] = {entry.id, entry.content, vectorScores[entry.id] * 0.35f, 0}; });
-                                 }
 
                                  std::vector<std::string> queriesLower;
                                  queriesLower.reserve(queries.size());
@@ -1053,7 +990,6 @@ namespace pe
                                      auto dot = stem.rfind('.');
                                      if (dot != std::string::npos)
                                          stem = stem.substr(0, dot);
-
                                      for (const auto &queryLower : queriesLower)
                                      {
                                          if (stem == queryLower)
@@ -1071,20 +1007,28 @@ namespace pe
                                      return 0;
                                  };
 
-                                 std::vector<ScoredEntry> candidates;
-                                 candidates.reserve(merged.size());
-                                 for (auto &[id, entry] : merged)
+                                 struct ScoredEntry
                                  {
-                                     auto it = idToMeta.find(id);
-                                     if (it == idToMeta.end())
+                                     std::string content;
+                                     std::string file;
+                                     std::string lines;
+                                     float score;
+                                     int priority;
+                                 };
+
+                                 std::vector<ScoredEntry> candidates;
+                                 candidates.reserve(bm25Results.size());
+                                 for (auto &result : bm25Results)
+                                 {
+                                     std::string file, lines;
+                                     if (!parseHeader(result.content, file, lines))
                                          continue;
                                      std::string header;
-                                     if (auto nl = entry.content.find('\n'); nl != std::string::npos)
-                                         header = entry.content.substr(0, nl);
+                                     if (auto nl = result.content.find('\n'); nl != std::string::npos)
+                                         header = result.content.substr(0, nl);
                                      else
-                                         header = entry.content.substr(0, std::min(entry.content.size(), static_cast<size_t>(200)));
-                                     entry.priority = definitionPriority(it->second.first, header);
-                                     candidates.push_back(std::move(entry));
+                                         header = result.content.substr(0, std::min(result.content.size(), static_cast<size_t>(200)));
+                                     candidates.push_back({result.content, file, lines, result.score, definitionPriority(file, header)});
                                  }
 
                                  std::stable_sort(candidates.begin(), candidates.end(),
@@ -1098,24 +1042,18 @@ namespace pe
                                      if (static_cast<int64_t>(matches.size()) >= maxResults)
                                          break;
 
-                                     auto it = idToMeta.find(candidate.id);
-                                     if (it == idToMeta.end())
-                                         continue;
-
-                                     const std::string &file = it->second.first;
-                                     const std::string &lines = it->second.second;
-                                     const std::string key = file + ":" + lines;
+                                     const std::string key = candidate.file + ":" + candidate.lines;
                                      if (!seen.insert(key).second)
                                          continue;
 
                                      int startLine = 0;
                                      int endLine = 0;
-                                     if (auto dash = lines.find('-'); dash != std::string::npos)
+                                     if (auto dash = candidate.lines.find('-'); dash != std::string::npos)
                                      {
                                          try
                                          {
-                                             startLine = std::stoi(lines.substr(0, dash));
-                                             endLine = std::stoi(lines.substr(dash + 1));
+                                             startLine = std::stoi(candidate.lines.substr(0, dash));
+                                             endLine = std::stoi(candidate.lines.substr(dash + 1));
                                          }
                                          catch (...)
                                          {
@@ -1138,7 +1076,7 @@ namespace pe
                                          return end != std::string::npos ? header.substr(pos, end - pos) : header.substr(pos);
                                      };
 
-                                     nlohmann::json match = {{"file", file}, {"start_line", startLine}, {"end_line", endLine}};
+                                     nlohmann::json match = {{"file", candidate.file}, {"start_line", startLine}, {"end_line", endLine}};
                                      const std::string ns = extractField("Namespace: ");
                                      const std::string cls = extractField("Class: ");
                                      const std::string method = extractField("Method: ");
@@ -1161,9 +1099,9 @@ namespace pe
         void AppendCodebaseManagementTools(std::vector<pagent::ToolDefinition> &tools, GUI *gui)
         {
             tools.push_back({.name = "get_codebase_index_status",
-                             .description = "Returns the current editor codebase-index status for MCP/RAG use. "
-                                            "Includes whether an index exists, whether indexing is running, current file progress, "
-                                            "store path, and whether embeddings are configured. Use this before rebuilding or searching.",
+                             .description = "Returns the current editor codebase-index status. "
+                                            "Includes whether an index exists, whether indexing is running, and current file progress. "
+                                            "Use this before rebuilding or searching.",
                              .properties = {},
                              .handler = [gui](const std::string &) -> std::string
                              {
@@ -1172,30 +1110,19 @@ namespace pe
 
                                  const auto status = gui->GetCodebaseStatus();
                                  return DumpJson(nlohmann::json{
-                                     {"rag_requested", gui->IsRagRequested()},
-                                     {"rag_enabled", gui->IsRagEnabled()},
                                      {"has_index", gui->HasCodebaseIndex()},
                                      {"is_indexing", gui->IsIndexing()},
+                                     {"index_ready", status.ready},
                                      {"progress", gui->GetIndexProgress()},
                                      {"total", gui->GetIndexTotal()},
-                                     {"active_threads", gui->GetIndexActiveThreads()},
-                                     {"total_threads", gui->GetIndexTotalThreads()},
                                      {"current_file", gui->GetIndexCurrentFile()},
                                      {"entry_count", gui->GetCodebaseEntryCount()},
-                                     {"store_path", gui->GetCodebaseStorePath()},
-                                     {"has_embeddings", gui->GetEmbeddingProvider() != nullptr},
-                                     {"loading_saved_index", status.loading},
-                                     {"checking_status", status.checking},
-                                     {"status_ready", status.ready},
-                                     {"outdated_files", status.outdated},
-                                     {"checked_files", status.total},
                                  });
                              }});
 
             tools.push_back({.name = "rebuild_codebase_index",
-                             .description = "Starts or restarts the editor codebase index used by MCP search tools. "
-                                            "Set full_rebuild=true to clear the existing index first. "
-                                            "When no embedding provider is configured, the editor still builds a BM25-only index so code search keeps working.",
+                             .description = "Starts or restarts the editor codebase BM25 index used by find_symbol and search_codebase. "
+                                            "Set full_rebuild=true to clear the existing index first.",
                              .properties = {
                                  {"full_rebuild", "When true, clears the current index before indexing. Default: true.", pagent::SchemaType::Boolean, false},
                              },
@@ -1207,14 +1134,11 @@ namespace pe
                                      return "{\"status\":\"already_running\"}";
 
                                  const bool fullRebuild = ExtractBoolArg(args, "full_rebuild", true);
-                                 const bool hasEmbeddings = gui->GetEmbeddingProvider() != nullptr;
-                                 // StartCodebaseIndexing touches non-atomic GUI state — dispatch to main thread.
                                  gui->QueueMainThreadAction([gui, fullRebuild]()
                                                             { gui->StartCodebaseIndexing(fullRebuild); });
                                  return DumpJson(nlohmann::json{
                                      {"status", "started"},
                                      {"full_rebuild", fullRebuild},
-                                     {"has_embeddings", hasEmbeddings},
                                  });
                              }});
 

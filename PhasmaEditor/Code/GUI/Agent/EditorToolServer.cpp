@@ -72,12 +72,8 @@ namespace pe
             context.gui = gui;
             context.runtime = runtime;
 
-            if (gui && gui->IsRagEnabled())
-            {
-                context.codebaseStore = gui->GetCodebaseStoreShared();
+            if (gui)
                 context.codebaseBM25 = gui->GetCodebaseBM25Shared();
-                context.embeddingProvider = gui->GetEmbeddingProviderShared();
-            }
 
             return context;
         }

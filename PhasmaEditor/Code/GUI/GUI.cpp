@@ -37,7 +37,6 @@
 #include "Widgets/Properties.h"
 #include "Widgets/SceneView.h"
 #include "PhasmaAgent/CodebaseIndexer.h"
-#include "PhasmaAgent/EmbeddingUtils.h"
 #include "Widgets/TransformWidget.h"
 #include "UndoRedo.h"
 #include "Script/ScriptSystem.h"
@@ -54,75 +53,16 @@ namespace pe
         {
             std::filesystem::create_directories(std::filesystem::path(path).parent_path());
 
-            auto appendRemainingKeys = [](nlohmann::ordered_json &dst,
-                                          const nlohmann::json &src,
-                                          const std::vector<std::string> &knownKeys)
-            {
-                for (auto it = src.begin(); it != src.end(); ++it)
-                {
-                    if (std::find(knownKeys.begin(), knownKeys.end(), it.key()) != knownKeys.end())
-                        continue;
-                    dst[it.key()] = it.value();
-                }
-            };
-
             nlohmann::ordered_json ordered = nlohmann::ordered_json::object();
             if (j.is_object())
             {
                 if (j.contains("mcp"))
                     ordered["mcp"] = j["mcp"];
-
-                if (j.contains("embeddings") && j["embeddings"].is_object())
-                {
-                    nlohmann::ordered_json embeddings = nlohmann::ordered_json::object();
-                    const auto &srcEmbeddings = j["embeddings"];
-
-                    if (srcEmbeddings.contains("enabled"))
-                        embeddings["enabled"] = srcEmbeddings["enabled"];
-
-                    if (srcEmbeddings.contains("provider"))
-                        embeddings["provider"] = srcEmbeddings["provider"];
-                    if (srcEmbeddings.contains("model"))
-                        embeddings["model"] = srcEmbeddings["model"];
-
-                    if (srcEmbeddings.contains("indexing") && srcEmbeddings["indexing"].is_object())
-                    {
-                        nlohmann::ordered_json indexing = nlohmann::ordered_json::object();
-                        const auto &srcIndexing = srcEmbeddings["indexing"];
-
-                        if (srcIndexing.contains("directories"))
-                            indexing["directories"] = srcIndexing["directories"];
-                        if (srcIndexing.contains("include_files"))
-                            indexing["include_files"] = srcIndexing["include_files"];
-                        if (srcIndexing.contains("skip_directories"))
-                            indexing["skip_directories"] = srcIndexing["skip_directories"];
-                        if (srcIndexing.contains("skip_extensions"))
-                            indexing["skip_extensions"] = srcIndexing["skip_extensions"];
-                        if (srcIndexing.contains("skip_files"))
-                            indexing["skip_files"] = srcIndexing["skip_files"];
-                        if (srcIndexing.contains("skip_regex"))
-                            indexing["skip_regex"] = srcIndexing["skip_regex"];
-
-                        appendRemainingKeys(indexing, srcIndexing,
-                                            {"directories", "include_files", "skip_directories", "skip_extensions", "skip_files", "skip_regex"});
-                        embeddings["indexing"] = std::move(indexing);
-                    }
-                    else if (srcEmbeddings.contains("indexing"))
-                    {
-                        embeddings["indexing"] = srcEmbeddings["indexing"];
-                    }
-
-                    appendRemainingKeys(embeddings, srcEmbeddings, {"enabled", "provider", "model", "indexing"});
-                    ordered["embeddings"] = std::move(embeddings);
-                }
-                else if (j.contains("embeddings"))
-                {
-                    ordered["embeddings"] = j["embeddings"];
-                }
-
+                if (j.contains("indexing"))
+                    ordered["indexing"] = j["indexing"];
                 for (auto it = j.begin(); it != j.end(); ++it)
                 {
-                    if (it.key() == "mcp" || it.key() == "embeddings")
+                    if (it.key() == "mcp" || it.key() == "indexing")
                         continue;
                     ordered[it.key()] = it.value();
                 }
@@ -135,11 +75,6 @@ namespace pe
             std::ofstream out(path);
             if (out)
                 out << ordered.dump(2) << "\n";
-        }
-
-        std::string BuildEditorCodebaseStorePath()
-        {
-            return Path::Assets + "Agent/codebase_mcp.bin";
         }
 
         void ApplyDefaultCodebaseIndexingConfig(const std::filesystem::path &repoRoot,
@@ -218,20 +153,14 @@ namespace pe
 
             return nlohmann::json{
                 {"mcp", false},
-                {"embeddings",
+                {"indexing",
                  {
-                     {"enabled", true},
-                     {"provider", ""},
-                     {"model", ""},
-                     {"indexing",
-                      {
-                          {"directories", config.directories},
-                          {"include_files", config.include_files},
-                          {"skip_directories", config.skip_directories},
-                          {"skip_files", config.skip_files},
-                          {"skip_extensions", config.skip_extensions},
-                          {"skip_regex", config.skip_regex},
-                      }},
+                     {"directories", config.directories},
+                     {"include_files", config.include_files},
+                     {"skip_directories", config.skip_directories},
+                     {"skip_files", config.skip_files},
+                     {"skip_extensions", config.skip_extensions},
+                     {"skip_regex", config.skip_regex},
                  }},
             };
         }
@@ -314,27 +243,6 @@ namespace pe
         return m_editorToolServer && m_editorToolServer->IsRunning();
     }
 
-    bool GUI::IsRagEnabled() const
-    {
-        return m_ragRequestedEnabled && IsMcpServerRunning();
-    }
-
-    void GUI::EnsureCodebaseStoreLoaded()
-    {
-        if (m_codebaseStoreLoadRequested || m_codebaseStorePath.empty() || !std::filesystem::exists(m_codebaseStorePath))
-            return;
-
-        m_codebaseStoreLoadRequested = true;
-        m_codebase.LoadStoreAsync(
-            m_codebaseStorePath,
-            m_codebaseAlive,
-            [this]()
-            {
-                QueueMainThreadAction([this]()
-                                      { CheckRagStatus(); });
-            });
-    }
-
     void GUI::SetMcpServerEnabled(bool enabled)
     {
         const bool running = IsMcpServerRunning();
@@ -344,47 +252,11 @@ namespace pe
         if (enabled)
         {
             m_editorToolServer->Start();
-            EnsureCodebaseStoreLoaded();
-            if (m_ragRequestedEnabled)
-                CheckRagStatus();
             return;
         }
 
         CancelCodebaseIndexing();
         m_editorToolServer->Stop();
-    }
-
-    void GUI::EnableRag()
-    {
-        m_ragRequestedEnabled = true;
-        CheckRagStatus();
-    }
-
-    void GUI::DisableRag()
-    {
-        CancelCodebaseIndexing();
-        m_ragRequestedEnabled = false;
-    }
-
-    void GUI::CheckRagStatus()
-    {
-        if (!IsRagEnabled())
-            return;
-
-        m_codebase.EnsureStores();
-
-        const auto status = m_codebase.GetStatus();
-        if (status.loading)
-        {
-            PE_INFO("[RAG] Check deferred until the saved index finishes loading");
-            return;
-        }
-        if (status.checking)
-            return; // CheckStatusAsync would no-op anyway; skip the redundant log
-
-        m_codebase.MarkStatusDirty();
-        m_codebase.CheckStatusAsync(m_codebaseAlive);
-        PE_INFO("[RAG] Check started");
     }
 
     static std::atomic_bool s_modelLoading = false;
@@ -713,10 +585,6 @@ namespace pe
         const nlohmann::json defaultConfig = BuildDefaultAgentConfig(repoRoot);
 
         m_mcpStartEnabled = false;
-        m_ragRequestedEnabled = true;
-        m_embeddingProviderKind = -1;
-        m_embeddingModel.clear();
-        m_codebase.SetEmbeddingProvider(nullptr);
 
         std::ifstream f(configPath);
         if (!f)
@@ -734,7 +602,7 @@ namespace pe
         }
         catch (...)
         {
-            PE_WARN("[RAG] Failed to parse agent_config.json — leaving file unchanged and using defaults for this run");
+            PE_WARN("[Agent] Failed to parse agent_config.json — leaving file unchanged and using defaults for this run");
             ApplyDefaultCodebaseIndexingConfig(repoRoot, m_codebase.MutableIndexingConfig());
             return;
         }
@@ -747,21 +615,12 @@ namespace pe
 
         m_mcpStartEnabled = j.value("mcp", false);
 
-        if (!j.contains("embeddings") || !j["embeddings"].is_object())
-        {
-            ApplyDefaultCodebaseIndexingConfig(repoRoot, m_codebase.MutableIndexingConfig());
-            return;
-        }
-
-        const auto &emb = j["embeddings"];
-        m_ragRequestedEnabled = emb.value("enabled", true);
-
         // Indexing config — always start from defaults so a partial JSON doesn't leave skip lists empty
         auto &config = m_codebase.MutableIndexingConfig();
         ApplyDefaultCodebaseIndexingConfig(repoRoot, config);
-        if (emb.contains("indexing") && emb["indexing"].is_object())
+        if (j.contains("indexing") && j["indexing"].is_object())
         {
-            const auto &idx = emb["indexing"];
+            const auto &idx = j["indexing"];
 
             const auto loadStrings = [&](const char *key, std::vector<std::string> &vec)
             {
@@ -782,44 +641,7 @@ namespace pe
             loadStrings("skip_regex", config.skip_regex);
         }
 
-        // Embedding provider
-        const std::string providerStr = emb.value("provider", "");
-        const std::string model = emb.value("model", "");
-        if (!providerStr.empty() && !model.empty())
-        {
-            pagent::EmbeddingProviderKind kind;
-            if (providerStr == "Ollama")
-                kind = pagent::EmbeddingProviderKind::Ollama;
-            else if (providerStr == "Google" || providerStr == "Gemini")
-                kind = pagent::EmbeddingProviderKind::Google;
-            else if (providerStr == "OpenAI")
-                kind = pagent::EmbeddingProviderKind::OpenAI;
-            else if (providerStr == "Voyage")
-                kind = pagent::EmbeddingProviderKind::Voyage;
-            else
-            {
-                PE_WARN("[RAG] Unknown embedding provider '%s'", providerStr.c_str());
-                return;
-            }
-
-            m_embeddingProviderKind = static_cast<int>(kind);
-            m_embeddingModel = model;
-
-            auto provider = pagent::CreateEmbeddingProvider(kind, model);
-            if (provider)
-            {
-                m_codebase.SetEmbeddingProvider(std::move(provider));
-                PE_INFO("[RAG] Embedding: %s / %s", providerStr.c_str(), model.c_str());
-            }
-            else
-            {
-                PE_WARN("[RAG] Could not create '%s' provider — check API key env var", providerStr.c_str());
-            }
-        }
-
-        m_codebase.MarkStatusDirty();
         PE_INFO("[MCP] Startup: %s", m_mcpStartEnabled ? "enabled" : "disabled");
-        PE_INFO("[RAG] Config loaded from agent_config.json");
     }
 
     void GUI::LoadEditorConfig()
@@ -1075,98 +897,21 @@ namespace pe
                 ImGui::SetTooltip("Click to filter console for warnings");
         }
 
-        // MCP + RAG status buttons — right-aligned
+        // MCP status button — right-aligned
         {
             const bool mcpRunning = IsMcpServerRunning();
-            const bool ragEnabled = IsRagEnabled();
-            const auto ragStatus = GetCodebaseStatus();
-
             const float pad = ImGui::GetStyle().FramePadding.x * 2.0f;
             const float mcpW = ImGui::CalcTextSize("MCP").x + pad;
-            const float ragW = ImGui::CalcTextSize("RAG").x + pad;
-            ImGui::SetCursorPosX(ImGui::GetContentRegionMax().x - mcpW - 4.0f - ragW);
+            ImGui::SetCursorPosX(ImGui::GetContentRegionMax().x - mcpW);
 
-            // MCP button
-            {
-                const ImVec4 mcpColor = mcpRunning ? ImVec4(0.20f, 0.75f, 0.20f, 1.f)
-                                                   : ImVec4(0.45f, 0.45f, 0.45f, 1.f);
-                ImGui::PushStyleColor(ImGuiCol_Text, mcpColor);
-                if (ImGui::SmallButton("MCP"))
-                    SetMcpServerEnabled(!mcpRunning);
-                ImGui::PopStyleColor();
-                if (ImGui::IsItemHovered())
-                    ImGui::SetTooltip(mcpRunning ? "MCP server: ready" : "MCP server: off");
-            }
-
-            ImGui::SameLine(0, 4);
-
-            // RAG button — color reflects actual index state; click only toggles when MCP is on
-            {
-                ImVec4 ragColor;
-                const char *ragTooltip;
-                if (!mcpRunning)
-                {
-                    ragColor = ImVec4(0.45f, 0.45f, 0.45f, 1.f);
-                    ragTooltip = m_ragRequestedEnabled ? "RAG: waiting for MCP" : "RAG: disabled";
-                }
-                else if (!ragEnabled)
-                {
-                    ragColor = ImVec4(0.45f, 0.45f, 0.45f, 1.f);
-                    ragTooltip = "RAG: disabled";
-                }
-                else if (ragStatus.loading)
-                {
-                    ragColor = ImVec4(0.70f, 0.70f, 0.20f, 1.f);
-                    ragTooltip = "RAG: loading saved index";
-                }
-                else if (ragStatus.checking)
-                {
-                    ragColor = ImVec4(0.80f, 0.80f, 0.20f, 1.f);
-                    ragTooltip = "RAG: checking";
-                }
-                else if (m_isIndexing.load())
-                {
-                    const int prog = m_indexProgress.load();
-                    const int total = m_indexTotal.load();
-                    if (prog == 0 || total == 0)
-                    {
-                        ragColor = ImVec4(0.85f, 0.65f, 0.10f, 1.f);
-                        ragTooltip = "RAG: fetching";
-                    }
-                    else
-                    {
-                        ragColor = ImVec4(0.70f, 0.80f, 0.15f, 1.f);
-                        ragTooltip = "RAG: indexing";
-                    }
-                }
-                else if (ragStatus.ready && ragStatus.outdated > 0)
-                {
-                    ragColor = ImVec4(0.85f, 0.65f, 0.10f, 1.f);
-                    ragTooltip = "RAG: index needs refresh";
-                }
-                else if (HasCodebaseIndex())
-                {
-                    ragColor = ImVec4(0.20f, 0.75f, 0.20f, 1.f);
-                    ragTooltip = "RAG: indexed";
-                }
-                else
-                {
-                    ragColor = ImVec4(0.20f, 0.45f, 0.20f, 1.f);
-                    ragTooltip = "RAG: enabled";
-                }
-
-                ImGui::PushStyleColor(ImGuiCol_Text, ragColor);
-                if (ImGui::SmallButton("RAG") && mcpRunning)
-                {
-                    if (ragEnabled)
-                        DisableRag();
-                    else
-                        EnableRag();
-                }
-                ImGui::PopStyleColor();
-                if (ImGui::IsItemHovered())
-                    ImGui::SetTooltip("%s", ragTooltip);
-            }
+            const ImVec4 mcpColor = mcpRunning ? ImVec4(0.20f, 0.75f, 0.20f, 1.f)
+                                               : ImVec4(0.45f, 0.45f, 0.45f, 1.f);
+            ImGui::PushStyleColor(ImGuiCol_Text, mcpColor);
+            if (ImGui::SmallButton("MCP"))
+                SetMcpServerEnabled(!mcpRunning);
+            ImGui::PopStyleColor();
+            if (ImGui::IsItemHovered())
+                ImGui::SetTooltip(mcpRunning ? "MCP server: ready" : "MCP server: off");
         }
 
         ImGui::PopStyleVar();
@@ -1224,106 +969,8 @@ namespace pe
                 const bool mcpRunning = IsMcpServerRunning();
                 if (ImGui::MenuItem("MCP Server", nullptr, mcpRunning))
                     SetMcpServerEnabled(!mcpRunning);
-
-                if (ImGui::BeginMenu("RAG"))
-                {
-                    if (ImGui::MenuItem("Enable", nullptr, m_ragRequestedEnabled))
-                    {
-                        if (m_ragRequestedEnabled)
-                            DisableRag();
-                        else
-                            EnableRag();
-                    }
-
-                    ImGui::BeginDisabled(!IsRagEnabled());
-                    if (ImGui::MenuItem("Index"))
-                        StartCodebaseIndexing();
-                    if (ImGui::MenuItem("Check"))
-                        CheckRagStatus();
-                    ImGui::EndDisabled();
-
-                    ImGui::Separator();
-
-                    if (ImGui::BeginMenu("Embedding"))
-                    {
-                        // Helper: select provider+model and apply
-                        const auto selectEmbedding = [this](int kind, const std::string &model)
-                        {
-                            m_embeddingProviderKind = kind;
-                            m_embeddingModel = model;
-                            if (kind == -1)
-                            {
-                                m_codebase.SetEmbeddingProvider(nullptr);
-                                PE_INFO("[RAG] Embedding disabled — BM25 only");
-                            }
-                            else
-                            {
-                                auto provider = pagent::CreateEmbeddingProvider(
-                                    static_cast<pagent::EmbeddingProviderKind>(kind), model);
-                                if (provider)
-                                {
-                                    m_codebase.SetEmbeddingProvider(std::move(provider));
-                                    PE_INFO("[RAG] Embedding set: %s (%s) — re-index to apply", model.c_str(),
-                                            kind == (int)pagent::EmbeddingProviderKind::Ollama   ? "Ollama"
-                                            : kind == (int)pagent::EmbeddingProviderKind::Google ? "Google"
-                                            : kind == (int)pagent::EmbeddingProviderKind::OpenAI ? "OpenAI"
-                                                                                                 : "Voyage");
-                                }
-                                else
-                                {
-                                    PE_WARN("[RAG] Failed to create embedding provider — check API key env var");
-                                }
-                            }
-
-                            m_codebase.MarkStatusDirty();
-                            if (IsRagEnabled())
-                                CheckRagStatus();
-                        };
-
-                        // None
-                        if (ImGui::MenuItem("None", nullptr, m_embeddingProviderKind == -1))
-                            selectEmbedding(-1, "");
-                        ImGui::Separator();
-
-                        // Provider submenu helper
-                        const auto providerMenu = [&](const char *label, pagent::EmbeddingProviderKind kind,
-                                                      bool hasKey, const char *keyHint)
-                        {
-                            const int k = static_cast<int>(kind);
-                            const bool active = m_embeddingProviderKind == k;
-                            ImGui::BeginDisabled(!hasKey);
-                            if (ImGui::BeginMenu(label))
-                            {
-                                const auto models = pagent::GetKnownEmbeddingModels(kind);
-                                if (models.empty())
-                                {
-                                    const std::string def = pagent::GetDefaultEmbeddingModelName(kind);
-                                    if (ImGui::MenuItem(def.c_str(), nullptr, active && m_embeddingModel == def))
-                                        selectEmbedding(k, def);
-                                }
-                                else
-                                {
-                                    for (const auto &m : models)
-                                        if (ImGui::MenuItem(m.c_str(), nullptr, active && m_embeddingModel == m))
-                                            selectEmbedding(k, m);
-                                }
-                                ImGui::EndMenu();
-                            }
-                            ImGui::EndDisabled();
-                            if (!hasKey && ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
-                                ImGui::SetTooltip("Set %s", keyHint);
-                        };
-
-                        providerMenu("Ollama", pagent::EmbeddingProviderKind::Ollama, true, "");
-                        providerMenu("Google", pagent::EmbeddingProviderKind::Google, std::getenv("PAGENT_GEMINI_API_KEY"), "PAGENT_GEMINI_API_KEY");
-                        providerMenu("OpenAI", pagent::EmbeddingProviderKind::OpenAI, std::getenv("PAGENT_OPENAI_API_KEY"), "PAGENT_OPENAI_API_KEY");
-                        providerMenu("Voyage", pagent::EmbeddingProviderKind::Voyage, std::getenv("PAGENT_VOYAGE_API_KEY"), "PAGENT_VOYAGE_API_KEY");
-
-                        ImGui::EndMenu();
-                    }
-
-                    ImGui::EndMenu();
-                }
+                if (ImGui::MenuItem("Index Codebase"))
+                    StartCodebaseIndexing();
                 ImGui::EndMenu();
             }
 
@@ -1448,12 +1095,6 @@ namespace pe
 
     void GUI::StartCodebaseIndexing(bool fullRebuild)
     {
-        if (!IsRagEnabled())
-        {
-            PE_WARN("[RAG] Indexing skipped because MCP/RAG is disabled");
-            return;
-        }
-
         const auto &indexingConfig = m_codebase.GetIndexingConfig();
         const auto &dirs = indexingConfig.directories;
         if (dirs.empty())
@@ -1468,15 +1109,12 @@ namespace pe
         }
 
         m_codebase.EnsureStores();
-        auto codebaseStore = m_codebase.GetCodebaseStoreShared();
         auto codebaseBM25 = m_codebase.GetCodebaseBM25Shared();
-        const bool hasEmbeddingProvider = m_codebase.GetEmbeddingProvider() != nullptr;
-        const bool mustResetForBm25Only = !hasEmbeddingProvider;
 
         if (m_indexThread.joinable())
             m_indexThread.join();
 
-        m_codebase.MarkStatusDirty();
+        m_codebase.SetIndexing(true);
         m_isIndexing.store(true);
         m_indexCancel.store(false);
         m_indexProgress.store(0);
@@ -1486,13 +1124,8 @@ namespace pe
             m_indexCurrentFile.clear();
         }
 
-        auto embedding = m_codebase.GetEmbeddingProviderShared();
-        std::string storePath = m_codebaseStorePath;
-        if (fullRebuild || mustResetForBm25Only)
-        {
-            codebaseStore->Clear();
+        if (fullRebuild)
             codebaseBM25->Clear();
-        }
 
         auto includeFiles = indexingConfig.include_files;
         auto skipDirs = indexingConfig.skip_directories;
@@ -1500,7 +1133,7 @@ namespace pe
         auto skipExts = indexingConfig.skip_extensions;
         auto skipRegex = indexingConfig.skip_regex;
 
-        m_indexThread = std::thread([this, embedding, codebaseStore, codebaseBM25, storePath, dirs, includeFiles, skipDirs, skipFiles, skipExts, skipRegex]()
+        m_indexThread = std::thread([this, codebaseBM25, dirs, includeFiles, skipDirs, skipFiles, skipExts, skipRegex]()
                                     {
             pagent::IndexerConfig config;
             config.directories = dirs;
@@ -1511,35 +1144,21 @@ namespace pe
                 config.skip_extensions = skipExts;
             config.skip_regex = skipRegex;
 
-            PE_INFO("[RAG] Indexing started (%d directories, embeddings=%s)", static_cast<int>(config.directories.size()), embedding ? "on" : "off");
+            PE_INFO("[Agent] Indexing started (%d directories)", static_cast<int>(config.directories.size()));
 
-            auto saveMtx = std::make_shared<std::mutex>();
-            auto pIndexer = std::make_unique<pagent::CodebaseIndexer>(embedding.get(), codebaseStore.get(), codebaseBM25.get(),
-                [this, &codebaseStore, &storePath, saveMtx](int done, int total, const std::string &file)
+            auto pIndexer = std::make_unique<pagent::CodebaseIndexer>(codebaseBM25.get(),
+                [this](int done, int total, const std::string &file)
                 {
                     m_indexProgress.store(done);
                     m_indexTotal.store(total);
                     {
                         std::lock_guard lock(m_indexMutex);
                         m_indexCurrentFile = file;
-                        if (m_indexerPtr)
-                        {
-                            auto *idx = static_cast<pagent::CodebaseIndexer *>(m_indexerPtr);
-                            m_indexActiveThreads.store(idx->GetActiveThreads());
-                            m_indexTotalThreads = idx->GetTotalThreads();
-                        }
                     }
                     if (done % 50 == 0 || done == total)
-                        PE_INFO("[RAG] %d/%d  %s", done, total, file.c_str());
-                    // Save after each file - skip if cancelled
-                    if (!storePath.empty() && !m_indexCancel.load())
-                    {
-                        std::lock_guard saveLock(*saveMtx);
-                        codebaseStore->SaveToBinary(storePath);
-                    }
+                        PE_INFO("[Agent] %d/%d  %s", done, total, file.c_str());
                 });
 
-            // Check cancel flag before each file via the indexer's cancel mechanism
             {
                 std::lock_guard lock(m_indexMutex);
                 m_indexerPtr = pIndexer.get();
@@ -1552,18 +1171,14 @@ namespace pe
                 m_indexerPtr = nullptr;
             }
 
-            if (!storePath.empty() && !m_indexCancel.load())
-                codebaseStore->SaveToBinary(storePath);
-
-            PE_INFO("[RAG] Indexing %s: %d chunks", m_indexCancel.load() ? "cancelled" : "finished", chunks);
-            m_isIndexing.store(false);
-            QueueMainThreadAction([this]() { if (IsRagEnabled()) CheckRagStatus(); }); });
+            PE_INFO("[Agent] Indexing %s: %d chunks", m_indexCancel.load() ? "cancelled" : "finished", chunks);
+            m_codebase.SetIndexing(false);
+            m_isIndexing.store(false); });
     }
 
     void GUI::CancelCodebaseIndexing()
     {
         m_indexCancel.store(true);
-        m_codebase.MarkStatusDirty();
         std::lock_guard lock(m_indexMutex);
         if (m_indexerPtr)
             static_cast<pagent::CodebaseIndexer *>(m_indexerPtr)->Cancel();
@@ -1572,21 +1187,13 @@ namespace pe
     bool GUI::HasCodebaseIndex() const
     {
         auto bm25 = m_codebase.GetCodebaseBM25Shared();
-        if (bm25 && bm25->Size() > 0)
-            return true;
-
-        auto store = m_codebase.GetCodebaseStoreShared();
-        return store && store->Size() > 0;
+        return bm25 && bm25->Size() > 0;
     }
 
     size_t GUI::GetCodebaseEntryCount() const
     {
         auto bm25 = m_codebase.GetCodebaseBM25Shared();
-        if (bm25)
-            return bm25->Size();
-
-        auto store = m_codebase.GetCodebaseStoreShared();
-        return store ? store->Size() : 0;
+        return bm25 ? bm25->Size() : 0;
     }
 
     void GUI::Init()
@@ -1803,14 +1410,9 @@ namespace pe
             },
             RHII.GetWindow());
         m_editorToolServer = std::make_unique<EditorToolServer>(m_editorToolRuntime.get(), this);
-        m_codebaseStorePath = BuildEditorCodebaseStorePath();
         LoadAgentConfig();
         if (m_mcpStartEnabled)
-        {
-            EnsureCodebaseStoreLoaded();
             m_editorToolServer->Start();
-            CheckRagStatus();
-        }
 
         auto properties = std::make_shared<Properties>();
         auto metrics = std::make_shared<Metrics>();

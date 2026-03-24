@@ -156,28 +156,4 @@ namespace pagent
         return m_worker->ForceCompact(keepRecent);
     }
 
-    void Agent::Impl::SetVectorStore(VectorStore *store)
-    {
-        m_worker->SetVectorStore(store);
-    }
-
-    void Agent::Impl::SetCodebaseStore(VectorStore *store)
-    {
-        m_worker->SetCodebaseStore(store);
-    }
-
-    void Agent::Impl::SetCodebaseBM25(BM25Index *index)
-    {
-        m_worker->SetCodebaseBM25(index);
-    }
-
-    void Agent::Impl::SetIncludeGraph(IncludeGraph *graph)
-    {
-        m_worker->SetIncludeGraph(graph);
-    }
-
-    void Agent::Impl::SetEmbeddingProvider(std::shared_ptr<IEmbeddingProvider> provider)
-    {
-        m_config.embedding_provider = std::move(provider);
-    }
 } // namespace pagent

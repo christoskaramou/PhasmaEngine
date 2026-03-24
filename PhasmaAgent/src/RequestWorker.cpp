@@ -4,9 +4,6 @@
 #include "ToolRegistry.h"
 #include "ImageDescriber.h"
 #include "GoogleBackend.h"
-#include "PhasmaAgent/VectorStore.h"
-#include "PhasmaAgent/BM25Index.h"
-#include "PhasmaAgent/IncludeGraph.h"
 #include "PhasmaAgent/AgentUtils.h"
 
 #include <httplib/httplib.h>
@@ -339,138 +336,6 @@ namespace pagent
         return true;
     }
 
-    // Strip C/C++ comments and blank lines from code to reduce token count.
-    // Keeps the "// File:" header line intact since it provides context.
-    std::string RequestWorker::StripCommentsAndBlanks(const std::string &code)
-    {
-        std::string result;
-        result.reserve(code.size());
-
-        bool inBlockComment = false;
-        size_t i = 0;
-        const size_t len = code.size();
-
-        while (i < len)
-        {
-            if (inBlockComment)
-            {
-                if (i + 1 < len && code[i] == '*' && code[i + 1] == '/')
-                {
-                    inBlockComment = false;
-                    i += 2;
-                }
-                else
-                {
-                    ++i;
-                }
-                continue;
-            }
-
-            // Block comment start
-            if (i + 1 < len && code[i] == '/' && code[i + 1] == '*')
-            {
-                inBlockComment = true;
-                i += 2;
-                continue;
-            }
-
-            // Line comment - but keep "// File:" lines (our chunk header)
-            if (i + 1 < len && code[i] == '/' && code[i + 1] == '/')
-            {
-                // Check if this is a "// File:" header
-                bool isHeader = (i + 8 < len) &&
-                                code[i + 2] == ' ' && code[i + 3] == 'F' &&
-                                code[i + 4] == 'i' && code[i + 5] == 'l' &&
-                                code[i + 6] == 'e' && code[i + 7] == ':';
-                if (isHeader)
-                {
-                    // Keep the whole line
-                    while (i < len && code[i] != '\n')
-                        result += code[i++];
-                    if (i < len)
-                        result += code[i++]; // newline
-                }
-                else
-                {
-                    // Skip the comment line
-                    while (i < len && code[i] != '\n')
-                        ++i;
-                    if (i < len)
-                        ++i; // skip newline
-                }
-                continue;
-            }
-
-            // String literals - don't strip // inside strings
-            if (code[i] == '"' || code[i] == '\'')
-            {
-                char quote = code[i];
-                result += code[i++];
-                while (i < len && code[i] != quote)
-                {
-                    if (code[i] == '\\' && i + 1 < len)
-                    {
-                        result += code[i++];
-                        result += code[i++];
-                    }
-                    else
-                    {
-                        result += code[i++];
-                    }
-                }
-                if (i < len)
-                    result += code[i++]; // closing quote
-                continue;
-            }
-
-            result += code[i++];
-        }
-
-        // Remove consecutive blank lines (keep at most one)
-        std::string cleaned;
-        cleaned.reserve(result.size());
-        bool lastWasBlank = false;
-
-        size_t pos = 0;
-        while (pos < result.size())
-        {
-            // Find end of line
-            size_t eol = result.find('\n', pos);
-            if (eol == std::string::npos)
-                eol = result.size();
-
-            std::string_view line(result.data() + pos, eol - pos);
-
-            // Check if line is blank (only whitespace)
-            bool isBlank = true;
-            for (char c : line)
-            {
-                if (c != ' ' && c != '\t' && c != '\r')
-                {
-                    isBlank = false;
-                    break;
-                }
-            }
-
-            if (isBlank)
-            {
-                if (!lastWasBlank)
-                    cleaned += '\n';
-                lastWasBlank = true;
-            }
-            else
-            {
-                cleaned.append(result, pos, eol - pos);
-                cleaned += '\n';
-                lastWasBlank = false;
-            }
-
-            pos = eol + 1;
-        }
-
-        return cleaned;
-    }
-
     void RequestWorker::RunAgenticLoop(const std::string &user_message, const std::vector<ContentPart> &attachments)
     {
         // append the user turn to history.
@@ -494,225 +359,6 @@ namespace pagent
 
         const int maxRounds = m_activeConfig.max_tool_rounds > 0 ? m_activeConfig.max_tool_rounds : 10;
 
-        // RAG: hybrid search (vector + BM25) with Reciprocal Rank Fusion
-        std::string ragContext;
-        {
-            bool hasVectorStore = m_codebaseStore && m_codebaseStore->Size() > 0 && m_activeConfig.embedding_provider;
-            bool hasBM25 = m_codebaseBM25 && m_codebaseBM25->Size() > 0;
-
-            if (hasVectorStore || hasBM25)
-            {
-                std::string queryText;
-                auto messages = m_history.GetMessages(m_activeConfig.max_history_messages);
-                for (auto it = messages.rbegin(); it != messages.rend(); ++it)
-                {
-                    if (it->role == NeutralMessage::Role::User)
-                    {
-                        queryText = it->content;
-                        break;
-                    }
-                }
-
-                if (!queryText.empty())
-                {
-                    // Retrieve broader candidate pools, fuse later
-                    const int retrieveK = std::max(m_activeConfig.rag_top_k * 5, 30);
-                    const float rrfK = 60.0f; // RRF constant
-
-                    // Collect scores per content string: id -> {content, rrf_score}
-                    struct FusedEntry
-                    {
-                        std::string content;
-                        float score = 0.0f;
-                    };
-                    std::unordered_map<std::string, FusedEntry> fused;
-
-                    // Vector search
-                    if (hasVectorStore)
-                    {
-                        auto queryVec = m_activeConfig.embedding_provider->Embed(queryText);
-                        if (queryVec.empty())
-                            Log("RAG: embedding query failed (empty result)");
-                        else
-                        {
-                            auto vecResults = m_codebaseStore->Search(queryVec, retrieveK, m_activeConfig.rag_min_score);
-                            for (int rank = 0; rank < static_cast<int>(vecResults.size()); ++rank)
-                            {
-                                const auto &r = vecResults[rank];
-                                auto &entry = fused[r.entry->id];
-                                entry.content = r.entry->content;
-                                entry.score += 1.0f / (rrfK + rank + 1);
-                            }
-                        }
-                    }
-
-                    // BM25 keyword search
-                    if (hasBM25)
-                    {
-                        auto bm25Results = m_codebaseBM25->Search(queryText, retrieveK);
-                        for (int rank = 0; rank < static_cast<int>(bm25Results.size()); ++rank)
-                        {
-                            const auto &r = bm25Results[rank];
-                            auto &entry = fused[r.id];
-                            if (entry.content.empty())
-                                entry.content = r.content;
-                            entry.score += 1.0f / (rrfK + rank + 1);
-                        }
-                    }
-
-                    // Sort fused results by RRF score
-                    std::vector<std::pair<std::string, FusedEntry>> sorted(fused.begin(), fused.end());
-                    std::sort(sorted.begin(), sorted.end(),
-                              [](const auto &a, const auto &b)
-                              { return a.second.score > b.second.score; });
-
-                    // Re-rank: boost entries that contain query terms or symbol names
-                    {
-                        // Tokenize query into lowercase terms
-                        std::vector<std::string> queryTerms;
-                        {
-                            std::string term;
-                            for (char c : queryText)
-                            {
-                                if (std::isalnum(static_cast<unsigned char>(c)) || c == '_')
-                                    term += static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
-                                else if (!term.empty())
-                                {
-                                    if (term.size() >= 3) // skip short words
-                                        queryTerms.push_back(std::move(term));
-                                    term.clear();
-                                }
-                            }
-                            if (term.size() >= 3)
-                                queryTerms.push_back(std::move(term));
-                        }
-
-                        if (!queryTerms.empty())
-                        {
-                            for (auto &[id, entry] : sorted)
-                            {
-                                // Build lowercase content for matching
-                                std::string lower;
-                                lower.resize(entry.content.size());
-                                std::transform(entry.content.begin(), entry.content.end(), lower.begin(),
-                                               [](unsigned char c)
-                                               { return static_cast<char>(std::tolower(c)); });
-
-                                int termHits = 0;
-                                for (const auto &t : queryTerms)
-                                {
-                                    if (lower.find(t) != std::string::npos)
-                                        ++termHits;
-                                }
-
-                                // Boost: fraction of query terms found in the chunk
-                                float termBoost = static_cast<float>(termHits) / static_cast<float>(queryTerms.size());
-                                entry.score += termBoost * 0.01f; // small boost to preserve RRF ordering mostly
-                            }
-
-                            // Re-sort after boosting
-                            std::sort(sorted.begin(), sorted.end(),
-                                      [](const auto &a, const auto &b)
-                                      { return a.second.score > b.second.score; });
-                        }
-                    }
-
-                    // Take top_k and build context
-                    int count = std::min(m_activeConfig.rag_top_k, static_cast<int>(sorted.size()));
-                    if (count > 0)
-                    {
-                        // Collect primary results
-                        std::vector<std::string> selectedEntries;
-                        std::unordered_set<std::string> selectedIds;
-
-                        for (int i = 0; i < static_cast<int>(sorted.size()) && static_cast<int>(selectedEntries.size()) < count; ++i)
-                        {
-                            std::string cleaned = StripCommentsAndBlanks(sorted[i].second.content);
-                            selectedEntries.push_back("- " + SanitizeUTF8(cleaned) + "\n");
-                            selectedIds.insert(sorted[i].first);
-                        }
-
-                        // Include-graph expansion: add neighbor chunks from related files
-                        int neighborSlots = std::max(1, count / 3); // reserve ~1/3 of slots for neighbors
-                        if (m_includeGraph && m_includeGraph->Size() > 0 && hasVectorStore)
-                        {
-                            // Extract file paths from top results (parse "// File: path" prefix)
-                            std::unordered_set<std::string> topFiles;
-                            for (int i = 0; i < count && i < static_cast<int>(sorted.size()); ++i)
-                            {
-                                const auto &content = sorted[i].second.content;
-                                if (content.compare(0, 9, "// File: ") == 0)
-                                {
-                                    auto endPos = content.find_first_of(" (\n", 9);
-                                    if (endPos != std::string::npos)
-                                        topFiles.insert(content.substr(9, endPos - 9));
-                                }
-                            }
-
-                            // Get neighbor files
-                            std::unordered_set<std::string> neighborFiles;
-                            for (const auto &f : topFiles)
-                            {
-                                auto neighbors = m_includeGraph->GetNeighbors(f);
-                                for (const auto &n : neighbors)
-                                    if (!topFiles.count(n))
-                                        neighborFiles.insert(n);
-                            }
-
-                            // Find best candidates from neighbor files among remaining sorted results
-                            if (!neighborFiles.empty())
-                            {
-                                int added = 0;
-                                for (int i = 0; i < static_cast<int>(sorted.size()) && added < neighborSlots; ++i)
-                                {
-                                    if (selectedIds.count(sorted[i].first))
-                                        continue;
-                                    const auto &content = sorted[i].second.content;
-                                    if (content.compare(0, 9, "// File: ") != 0)
-                                        continue;
-                                    auto endPos = content.find_first_of(" (\n", 9);
-                                    if (endPos == std::string::npos)
-                                        continue;
-                                    std::string file = content.substr(9, endPos - 9);
-                                    if (!neighborFiles.count(file))
-                                        continue;
-
-                                    std::string cleaned = StripCommentsAndBlanks(content);
-                                    selectedEntries.push_back("- " + SanitizeUTF8(cleaned) + "\n");
-                                    selectedIds.insert(sorted[i].first);
-                                    ++added;
-                                }
-                                if (added > 0)
-                                    Log("RAG: added " + std::to_string(added) + " neighbor chunks via include-graph");
-                            }
-                        }
-
-                        // Build final context string with char limit
-                        ragContext = "\n\n[Relevant context:\n";
-                        int totalChars = 0;
-                        int injected = 0;
-                        for (const auto &entry : selectedEntries)
-                        {
-                            if (totalChars + static_cast<int>(entry.size()) > m_activeConfig.rag_max_context_chars)
-                                break;
-                            ragContext += entry;
-                            totalChars += static_cast<int>(entry.size());
-                            ++injected;
-                        }
-                        ragContext += "]";
-
-                        std::string searchType = (hasVectorStore && hasBM25) ? "hybrid" : (hasVectorStore ? "vector" : "bm25");
-                        Log("RAG: injected " + std::to_string(injected) + " entries (" + searchType + " search, " + std::to_string(fused.size()) + " candidates)");
-
-                        AgentEvent ragEv;
-                        ragEv.type = AgentEventType::Info;
-                        ragEv.text = "RAG: " + std::to_string(injected) + " entries (" + searchType + ")";
-                        PushEvent(std::move(ragEv));
-                    }
-                }
-            }
-        }
-
         // Model routing: select model based on query complexity
         std::string activeModel = m_activeConfig.model;
         if (m_activeConfig.routing.enabled)
@@ -732,14 +378,12 @@ namespace pagent
         }
 
         // Static context (stable for the whole session): repo_map only.
-        // ragContext is dynamic (changes per query) - kept separate and injected per-turn.
         std::string staticContext;
         if (!m_activeConfig.repo_map.empty())
             staticContext = "\n\n" + m_activeConfig.repo_map;
 
         // Gemini context caching: cache system_prompt + repo_map + tools.
         // Persisted across Submit() calls and only rebuilt when static content changes.
-        // RAG context is intentionally excluded from the cache so it can vary per turn.
         auto *googleBackend = dynamic_cast<GoogleBackend *>(m_backend);
         if (googleBackend && m_activeConfig.provider == Provider::Google)
         {
@@ -852,26 +496,8 @@ namespace pagent
 
             // When cache is active it provides system_instruction + tools, so the system prompt
             // passed here is ignored by BuildRequestJson.  When cache is absent, include the
-            // static context (repo_map) as before.  RAG is never baked into the system prompt.
+            // static context (repo_map) as before.
             std::string systemPrompt = SanitizeUTF8(m_activeConfig.system_prompt + staticContext);
-
-            // Inject per-turn RAG context into the messages payload (not into history).
-            // Prepend as a user/model exchange so the model always has fresh retrieval results
-            // without them polluting the persistent conversation history.
-            auto requestMessages = messages;
-            if (!ragContext.empty())
-            {
-                NeutralMessage ragMsg;
-                ragMsg.role = NeutralMessage::Role::User;
-                ragMsg.parts.push_back({ContentPart::Type::Text, "[Relevant codebase context:\n" + ragContext + "\n]", ""});
-
-                NeutralMessage ragAck;
-                ragAck.role = NeutralMessage::Role::Assistant;
-                ragAck.content = "I have the relevant codebase context.";
-
-                requestMessages.insert(requestMessages.begin(), std::move(ragAck));
-                requestMessages.insert(requestMessages.begin(), std::move(ragMsg));
-            }
 
             if (m_activeConfig.log_callback)
                 m_activeConfig.log_callback("[PAgent] Round " + std::to_string(round) + ": " + std::to_string(m_toolRegistry.GetToolCount()) + " tools, " + std::to_string(messages.size()) + " msgs, model='" + activeModel + "', provider=" + std::to_string(static_cast<int>(m_activeConfig.provider)));
@@ -881,7 +507,7 @@ namespace pagent
                 systemPrompt,
                 m_activeConfig.max_tokens,
                 m_activeConfig.temperature,
-                requestMessages,
+                messages,
                 toolsSchemaJson);
 
             if (m_activeConfig.log_callback)

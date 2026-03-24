@@ -43,39 +43,6 @@ namespace pe
             m_storageBuffers[i]->Unmap();
         }
 
-        // m_pointLights.resize(5);
-        // for (int i = 0; i < 5; i++)
-        // {
-        //     PointLightEditor &point = m_pointLights[i];
-        //     point.color = vec4(rand(0.f, 1.f), rand(0.f, 1.f), rand(0.f, 1.f), 1.0f);              // .w = intensity
-        //     point.position = vec4(rand(-10.5f, 10.5f), rand(.7f, 6.7f), rand(-4.5f, 4.5f), 10.0f); // .w = radius
-        //     point.name = "Point Light " + std::to_string(ID::NextID());
-        // }
-
-        // m_spotLights.resize(5);
-        // for (int i = 0; i < 5; i++)
-        // {
-        //     quat q = quat(radians(vec3(rand(-90.f, 90.f), rand(-180.f, 180.f), 0.0f)));
-        //     SpotLightEditor &spot = m_spotLights[i];
-        //     spot.color = vec4(rand(0.f, 1.f), rand(0.f, 1.f), rand(0.f, 1.f), 1.0f);              // .w = intensity
-        //     spot.position = vec4(rand(-10.5f, 10.5f), rand(.7f, 6.7f), rand(-4.5f, 4.5f), 10.0f); // .w = range
-        //     spot.rotation = vec4(q.x, q.y, q.z, q.w);                                             // quaternion
-        //     spot.params = vec4(15.0f, 5.0f, 0.0f, 0.0f);                                          // .x = angle, .y = falloff
-        //     spot.name = "Spot Light " + std::to_string(ID::NextID());
-        // }
-
-        // m_areaLights.resize(5);
-        // for (int i = 0; i < 5; i++)
-        // {
-        //     quat q = quat(radians(vec3(rand(-90.f, 90.f), rand(-180.f, 180.f), 0.0f)));
-        //     AreaLightEditor &area = m_areaLights[i];
-        //     area.color = vec4(rand(0.f, 1.f), rand(0.f, 1.f), rand(0.f, 1.f), 1.0f);              // .w = intensity
-        //     area.position = vec4(rand(-10.5f, 10.5f), rand(.7f, 6.7f), rand(-4.5f, 4.5f), 20.0f); // .w = range
-        //     area.rotation = vec4(q.x, q.y, q.z, q.w);                                             // quaternion
-        //     area.size = vec4(2.0f, 2.0f, 0.0f, 0.0f);                                             // .x = width, .y = height
-        //     area.name = "Area Light " + std::to_string(ID::NextID());
-        // }
-
         m_directionalLights.resize(1);
         auto &gSettings = Settings::Get<GlobalSettings>();
         m_directionalLights[0].color = {.9765f, .8431f, .9098f, 5.0f};
@@ -136,13 +103,12 @@ namespace pe
         size_t sizeSpot = m_spotLightsPOD.size() * sizeof(SpotLight);
         size_t sizeArea = m_areaLightsPOD.size() * sizeof(AreaLight);
 
-        // Align offsets to 16 bytes (float4) for safety in HLSL ByteAddressBuffer
-        // Although ByteAddressBuffer is naturally 4-byte aligned, structured load works best with alignment
-
+        auto align16 = [](uint32_t v)
+        { return (v + 15u) & ~15u; };
         uint32_t offsetDirectional = 0;
-        uint32_t offsetPoint = offsetDirectional + static_cast<uint32_t>(sizeDirectional);
-        uint32_t offsetSpot = offsetPoint + static_cast<uint32_t>(sizePoint);
-        uint32_t offsetArea = offsetSpot + static_cast<uint32_t>(sizeSpot);
+        uint32_t offsetPoint = offsetDirectional + align16(static_cast<uint32_t>(sizeDirectional));
+        uint32_t offsetSpot = offsetPoint + align16(static_cast<uint32_t>(sizePoint));
+        uint32_t offsetArea = offsetSpot + align16(static_cast<uint32_t>(sizeSpot));
         uint32_t totalSize = offsetArea + static_cast<uint32_t>(sizeArea);
 
         int frameIndex = RHII.GetFrameIndex();

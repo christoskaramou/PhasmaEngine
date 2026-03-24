@@ -230,7 +230,7 @@ namespace pagent
 
             std::array<char, 256> buf;
             DWORD bytesRead;
-            std::string line;
+            std::string pending;
             while (ReadFile(readPipe, buf.data(), static_cast<DWORD>(buf.size() - 1), &bytesRead, nullptr) && bytesRead > 0)
             {
                 if (cancel->load())
@@ -239,12 +239,33 @@ namespace pagent
                     break;
                 }
                 buf[bytesRead] = '\0';
-                line = buf.data();
-                while (!line.empty() && (line.back() == '\n' || line.back() == '\r'))
-                    line.pop_back();
-                line = stripAnsi(line);
-                if (!line.empty() && progressCb)
-                    progressCb(line);
+                pending += buf.data();
+                // Emit complete lines, splitting on \r, \n, or \r\n so that ollama's
+                // carriage-return-based progress updates are delivered in real time.
+                size_t start = 0;
+                for (size_t i = 0; i < pending.size(); ++i)
+                {
+                    if (pending[i] == '\r' || pending[i] == '\n')
+                    {
+                        std::string line = pending.substr(start, i - start);
+                        if (pending[i] == '\r' && i + 1 < pending.size() && pending[i + 1] == '\n')
+                            ++i; // treat \r\n as one separator
+                        line = stripAnsi(line);
+                        if (!line.empty() && progressCb)
+                            progressCb(line);
+                        start = i + 1;
+                    }
+                }
+                pending.erase(0, start);
+            }
+            // Flush any remaining partial line
+            if (!pending.empty())
+            {
+                while (!pending.empty() && (pending.back() == '\n' || pending.back() == '\r'))
+                    pending.pop_back();
+                pending = stripAnsi(pending);
+                if (!pending.empty() && progressCb)
+                    progressCb(pending);
             }
             WaitForSingleObject(pi.hProcess, 5000);
             DWORD exitCode = 1;
@@ -288,7 +309,7 @@ namespace pagent
             fcntl(pipefd[0], F_SETFL, fcntl(pipefd[0], F_GETFL) | O_NONBLOCK);
 
             std::array<char, 256> buf;
-            std::string line;
+            std::string pending;
             bool cancelled = false;
             while (!cancelled)
             {
@@ -303,12 +324,23 @@ namespace pagent
                 if (n > 0)
                 {
                     buf[n] = '\0';
-                    line = buf.data();
-                    while (!line.empty() && (line.back() == '\n' || line.back() == '\r'))
-                        line.pop_back();
-                    line = stripAnsi(line);
-                    if (!line.empty() && progressCb)
-                        progressCb(line);
+                    pending += buf.data();
+                    // Emit complete lines, splitting on \r, \n, or \r\n
+                    size_t start = 0;
+                    for (size_t i = 0; i < pending.size(); ++i)
+                    {
+                        if (pending[i] == '\r' || pending[i] == '\n')
+                        {
+                            std::string line = pending.substr(start, i - start);
+                            if (pending[i] == '\r' && i + 1 < pending.size() && pending[i + 1] == '\n')
+                                ++i;
+                            line = stripAnsi(line);
+                            if (!line.empty() && progressCb)
+                                progressCb(line);
+                            start = i + 1;
+                        }
+                    }
+                    pending.erase(0, start);
                 }
                 else if (n == 0)
                 {
@@ -319,6 +351,13 @@ namespace pagent
                     // EAGAIN: no data yet, sleep briefly
                     std::this_thread::sleep_for(std::chrono::milliseconds(100));
                 }
+            }
+            // Flush any remaining partial line
+            if (!pending.empty())
+            {
+                pending = stripAnsi(pending);
+                if (!pending.empty() && progressCb)
+                    progressCb(pending);
             }
             close(pipefd[0]);
 

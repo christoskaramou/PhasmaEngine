@@ -1,7 +1,6 @@
 #pragma once
 
 #include "PhasmaAgent/Agent.h"
-#include "PhasmaAgent/BM25Index.h"
 #include "StreamParser.h"
 #include <thread>
 #include <mutex>
@@ -15,9 +14,6 @@ namespace pagent
     class EventQueue;
     class ConversationHistory;
     class ToolRegistry;
-    class VectorStore;
-    class BM25Index;
-    class IncludeGraph;
 
     class RequestWorker
     {
@@ -38,10 +34,6 @@ namespace pagent
         // Runs synchronously; only call when IsBusy() == false.
         bool ForceCompact(size_t keepRecent = 4);
         void SetBackend(IProviderBackend *backend) { m_backend = backend; }
-        void SetVectorStore(VectorStore *store) { m_vectorStore = store; }
-        void SetCodebaseStore(VectorStore *store) { m_codebaseStore = store; }
-        void SetCodebaseBM25(BM25Index *index) { m_codebaseBM25 = index; }
-        void SetIncludeGraph(IncludeGraph *graph) { m_includeGraph = graph; }
 
     private:
         void ThreadFunc();
@@ -54,7 +46,6 @@ namespace pagent
                              std::vector<AgentEvent> &out_events);
         void PushEvent(AgentEvent ev);
         void Log(const std::string &msg) const;
-        static std::string StripCommentsAndBlanks(const std::string &code);
 
         // Non-streaming HTTP POST. Returns {status_code, response_body}.
         std::pair<int, std::string> SimplePost(const std::string &host,
@@ -82,11 +73,6 @@ namespace pagent
         // Set while an HTTP request is in flight so Cancel/destructor can abort it immediately.
         std::function<void()> m_stopActiveClient;
         std::mutex m_clientMutex;
-
-        VectorStore *m_vectorStore = nullptr;
-        VectorStore *m_codebaseStore = nullptr;
-        BM25Index *m_codebaseBM25 = nullptr;
-        IncludeGraph *m_includeGraph = nullptr;
 
         // Gemini persistent cache (system prompt + repo_map + tools).
         // Reused across Submit() calls; rebuilt only when static content changes.
