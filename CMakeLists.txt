@@ -27,7 +27,7 @@ set(PE_LIBS_DIR "${CMAKE_CURRENT_SOURCE_DIR}/PhasmaCore/Libs")
 set(PE_THIRD_PARTY_DIR "${CMAKE_CURRENT_SOURCE_DIR}/PhasmaCore/third_party")
 
 # --- Tracy Profiler ---
-option(PE_TRACY "Enable Tracy profiler integration" ON)
+option(PE_TRACY "Enable Tracy profiler integration" OFF)
 if(PE_TRACY)
     set(TRACY_ENABLE ON CACHE BOOL "" FORCE)
     set(TRACY_ON_DEMAND ON CACHE BOOL "" FORCE)
