@@ -60,7 +60,7 @@ local function update_editor()
     if not rmb then
         -- Ctrl+T: trigger GPU capture
         if ctrl_down and t_down and not t_was_down then
-            debug.trigger_capture()
+            debug_utils.trigger_capture()
         end
 
         -- Ctrl+G: toggle GUI

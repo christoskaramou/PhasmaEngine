@@ -1099,9 +1099,10 @@ namespace pe
         void AppendCodebaseManagementTools(std::vector<pagent::ToolDefinition> &tools, GUI *gui)
         {
             tools.push_back({.name = "get_codebase_index_status",
-                             .description = "Returns the current editor codebase-index status. "
-                                            "Includes whether an index exists, whether indexing is running, and current file progress. "
-                                            "Use this before rebuilding or searching.",
+                             .description = "Returns the status of the BM25 codebase index used by find_symbol and search_codebase. "
+                                            "Call this first if you are unsure whether the index is ready. "
+                                            "Indexing is asynchronous — poll this after rebuild_codebase_index until index_ready is true. "
+                                            "Key fields: has_index, index_ready, is_indexing, entry_count, progress/total, current_file.",
                              .properties = {},
                              .handler = [gui](const std::string &) -> std::string
                              {
@@ -1121,8 +1122,10 @@ namespace pe
                              }});
 
             tools.push_back({.name = "rebuild_codebase_index",
-                             .description = "Starts or restarts the editor codebase BM25 index used by find_symbol and search_codebase. "
-                                            "Set full_rebuild=true to clear the existing index first.",
+                             .description = "Builds or rebuilds the BM25 codebase index required by find_symbol and search_codebase. "
+                                            "Indexing runs asynchronously in the background — use get_codebase_index_status to poll for completion. "
+                                            "Use full_rebuild=true (default) to clear stale data before indexing. "
+                                            "Call this when get_codebase_index_status reports has_index=false or the index is clearly out of date.",
                              .properties = {
                                  {"full_rebuild", "When true, clears the current index before indexing. Default: true.", pagent::SchemaType::Boolean, false},
                              },
@@ -1143,7 +1146,8 @@ namespace pe
                              }});
 
             tools.push_back({.name = "cancel_codebase_index",
-                             .description = "Cancels an in-progress editor codebase indexing job.",
+                             .description = "Cancels a running rebuild_codebase_index job. "
+                                            "Only call this if indexing is confirmed running via get_codebase_index_status and you need to abort it.",
                              .properties = {},
                              .handler = [gui](const std::string &) -> std::string
                              {
@@ -1158,6 +1162,18 @@ namespace pe
 
         void AppendVisualTools(std::vector<pagent::ToolDefinition> &tools, EditorToolRuntime *runtime)
         {
+            tools.push_back({.name = "profiler_snapshot",
+                             .description = "Takes a snapshot of the current profiler data (Overview, CPU, GPU) and saves it as a JSON file "
+                                            "to Assets/Profiler/profiler_snapshot_<datetime>.json. "
+                                            "Returns the saved file path. "
+                                            "Use this to capture frame timings, memory usage, GPU pass breakdown, and CPU scope timings.",
+                             .properties = {},
+                             .handler = [runtime](const std::string &) -> std::string
+                             {
+                                 return runtime ? runtime->TakeProfilerSnapshot()
+                                                : "{\"error\":\"EditorToolRuntime not available\"}";
+                             }});
+
             tools.push_back({.name = "take_screenshot",
                              .description = "Takes a screenshot of the current editor state and returns it as a base64 PNG image for visual inspection. "
                                             "The image is embedded in the tool result and is visible to vision-capable models. "

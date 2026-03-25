@@ -15,7 +15,7 @@ namespace pe
         virtual void Update() {}
         virtual void Draw(CommandBuffer *cmd) {}
 
-        bool IsOpen() { return m_open; }
+        virtual bool IsOpen() { return m_open; }
         bool *GetOpen() { return &m_open; }
 
         void SetName(const std::string &name) { m_name = name; }

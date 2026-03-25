@@ -7,7 +7,7 @@
 #endif
 #include "RenderDoc/renderdoc_app.h"
 
-#define PE_RENDER_DOC 0
+#define PE_RENDER_DOC 1
 
 #if defined(WIN32) && PE_RENDER_DOC == 1
 #include <Windows.h>
@@ -148,6 +148,8 @@ namespace pe
 
             capture_api->SetCaptureOptionU32(eRENDERDOC_Option_DebugOutputMute, 0);
             capture_api->MaskOverlayBits(eRENDERDOC_Overlay_None, eRENDERDOC_Overlay_None);
+            capture_api->SetCaptureKeys(nullptr, 0);  // disable all hotkey captures — only explicit API calls allowed
+            capture_api->EndFrameCapture(NULL, NULL); // discard any auto-capture queued by injection
         }
 #elif defined(__linux__)
         std::string renderdoc_path = TryGetRenderDocPath();
@@ -164,6 +166,8 @@ namespace pe
 
             capture_api->SetCaptureOptionU32(eRENDERDOC_Option_DebugOutputMute, 0);
             capture_api->MaskOverlayBits(eRENDERDOC_Overlay_None, eRENDERDOC_Overlay_None);
+            capture_api->SetCaptureKeys(nullptr, 0);  // disable all hotkey captures — only explicit API calls allowed
+            capture_api->EndFrameCapture(NULL, NULL); // discard any auto-capture queued by injection
         }
 #endif
 #endif
@@ -202,6 +206,18 @@ namespace pe
             else
                 capture_api->LaunchReplayUI(true, "");
         }
+    }
+
+    uint32_t Debug::GetNumCaptures()
+    {
+        if (capture_api)
+            return capture_api->GetNumCaptures();
+        return 0;
+    }
+
+    bool Debug::IsCaptureApiAvailable()
+    {
+        return capture_api != nullptr;
     }
 
     PFN_vkCreateDebugUtilsMessengerEXT vkCreateDebugUtilsMessengerEXT = VK_NULL_HANDLE;

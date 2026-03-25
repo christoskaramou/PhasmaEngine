@@ -145,4 +145,10 @@ namespace pe
 
         return static_cast<float>(m_queries[1] - m_queries[0]) * m_timestampPeriod * 1e-6f; // ms
     }
+
+    double GpuTimer::GetStartTimeMs() const
+    {
+        // m_queries[0] is valid after GetTime() has been called successfully.
+        return static_cast<double>(m_queries[0]) * static_cast<double>(m_timestampPeriod) * 1e-6;
+    }
 } // namespace pe

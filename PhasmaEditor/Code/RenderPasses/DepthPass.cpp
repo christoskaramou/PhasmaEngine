@@ -73,7 +73,8 @@ namespace pe
 
     void DepthPass::UpdateDescriptorSets()
     {
-        // depth pass descriptor sets are updated with Scene::Update
+        // Force geometry-dependent descriptor rebind on next Update()
+        m_lastGeometryVersion = ~0ull;
     }
 
     void DepthPass::ExecutePass(CommandBuffer *cmd)

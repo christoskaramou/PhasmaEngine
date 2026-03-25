@@ -77,6 +77,7 @@ namespace pe
         std::string name;
         size_t depth = 0;
         float timeMs = 0.0f;
+        float startOffsetMs = 0.0f; // offset from frame start in ms (for timeline display)
     };
 
     class CommandBuffer;
@@ -89,6 +90,7 @@ namespace pe
         void Start(CommandBuffer *cmd);
         void End();
         float GetTime();
+        double GetStartTimeMs() const; // absolute start timestamp in ms (valid after GetTime())
         CommandBuffer *GetCommandBuffer() const { return m_cmd; }
 
     private:

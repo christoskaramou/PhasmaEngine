@@ -911,6 +911,29 @@ namespace pe
         }
 
 #if PE_DEBUG_MODE
+        // Pass 1: fetch all GPU timer results and find the frame-start timestamp.
+        struct RawResult
+        {
+            float timeMs;
+            double startMs;
+        };
+        std::vector<RawResult> rawResults;
+        rawResults.reserve(m_gpuTimerInfosCount);
+        double minStartMs = std::numeric_limits<double>::max();
+
+        for (uint32_t i = 0; i < m_gpuTimerInfosCount; ++i)
+        {
+            const auto &info = m_gpuTimerInfos[i];
+            float timeMs = info.timer ? info.timer->GetTime() : 0.0f;
+            double startMs = (info.timer && timeMs > 0.0f) ? info.timer->GetStartTimeMs() : 0.0;
+            rawResults.push_back({timeMs, startMs});
+            if (startMs > 0.0 && startMs < minStartMs)
+                minStartMs = startMs;
+        }
+        if (minStartMs == std::numeric_limits<double>::max())
+            minStartMs = 0.0;
+
+        // Pass 2: build samples with relative start offsets.
         std::vector<GpuTimerSample> samples;
         samples.reserve(m_gpuTimerInfosCount);
         for (uint32_t i = 0; i < m_gpuTimerInfosCount; ++i)
@@ -919,7 +942,8 @@ namespace pe
             GpuTimerSample sample{};
             sample.name = info.name;
             sample.depth = info.depth;
-            sample.timeMs = info.timer ? info.timer->GetTime() : 0.0f;
+            sample.timeMs = rawResults[i].timeMs;
+            sample.startOffsetMs = static_cast<float>(rawResults[i].startMs - minStartMs);
             samples.emplace_back(std::move(sample));
         }
 

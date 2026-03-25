@@ -826,8 +826,7 @@ namespace pe
         // Central node is now dockMainId - dock the Viewport there
         ImGui::DockBuilderDockWindow("Viewport", dockMainId);
 
-        // Left - Profiler, Models, Hierarchy
-        ImGui::DockBuilderDockWindow("Profiler", dockLeft);
+        // Left - Models, Hierarchy (Profiler is floating)
         ImGui::DockBuilderDockWindow("Models", dockLeft);
         ImGui::DockBuilderDockWindow("Hierarchy", dockLeft);
 
@@ -953,13 +952,6 @@ namespace pe
                     if (rs)
                         undoRedo.Redo(rs->GetScene());
                 }
-                ImGui::EndMenu();
-            }
-
-            if (ImGui::BeginMenu("Assets"))
-            {
-                if (ImGui::MenuItem("Recompile Shaders", "Ctrl+Shift+R"))
-                    EventSystem::PushEvent(EventType::CompileShaders);
                 ImGui::EndMenu();
             }
 

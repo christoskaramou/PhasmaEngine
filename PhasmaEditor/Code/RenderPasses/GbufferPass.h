@@ -31,7 +31,7 @@ namespace pe
         void Init() override;
         void UpdatePassInfo() override;
         void CreateUniforms(CommandBuffer *cmd) override {};
-        void UpdateDescriptorSets() override {};
+        void UpdateDescriptorSets() override { m_lastGeometryVersion = ~0ull; }
         void Update() override;
         void ExecutePass(CommandBuffer *cmd) override;
         void Resize(uint32_t width, uint32_t height) override;
@@ -64,7 +64,7 @@ namespace pe
         void Init() override;
         void UpdatePassInfo() override;
         void CreateUniforms(CommandBuffer *cmd) override {};
-        void UpdateDescriptorSets() override {};
+        void UpdateDescriptorSets() override { m_lastGeometryVersion = ~0ull; }
         void Update() override;
         void ExecutePass(CommandBuffer *cmd) override;
         void Resize(uint32_t width, uint32_t height) override;

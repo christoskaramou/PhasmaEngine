@@ -34,6 +34,8 @@ namespace pe
         static void StartFrameCapture();
         static void EndFrameCapture();
         static void TriggerCapture();
+        static uint32_t GetNumCaptures();
+        static bool IsCaptureApiAvailable();
 
     private:
         friend class CommandBuffer;
@@ -64,6 +66,8 @@ namespace pe
         static void StartFrameCapture() {}
         static void EndFrameCapture() {}
         static void TriggerCapture() {}
+        static uint32_t GetNumCaptures() { return 0; }
+        static bool IsCaptureApiAvailable() { return false; }
 
     private:
         friend class CommandBuffer;

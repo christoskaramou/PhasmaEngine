@@ -20,6 +20,7 @@ namespace pe
         std::string ReadAgentFile(const std::string &path) const;
         std::string WriteAgentFile(const std::string &path, const std::string &content, bool append) const;
         std::string TakeScreenshot() const;
+        std::string TakeProfilerSnapshot() const;
         std::string QueryImGuiWindows() const;
         std::string InjectMouseInput(const std::string &args) const;
 

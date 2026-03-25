@@ -269,6 +269,10 @@ namespace pe
 
     void Pipeline::CreateComputePipeline()
     {
+        m_info.m_pushConstantStages.clear();
+        m_info.m_pushConstantOffsets.clear();
+        m_info.m_pushConstantSizes.clear();
+
         vk::ShaderModuleCreateInfo csmci{};
         csmci.codeSize = m_info.pCompShader->BytesCount();
         csmci.pCode = m_info.pCompShader->GetSpriv();
@@ -317,6 +321,10 @@ namespace pe
 
     void Pipeline::CreateGraphicsPipeline(RenderPass *renderPass)
     {
+        m_info.m_pushConstantStages.clear();
+        m_info.m_pushConstantOffsets.clear();
+        m_info.m_pushConstantSizes.clear();
+
         vk::GraphicsPipelineCreateInfo pipeinfo{};
 
         // Shader stages
@@ -557,6 +565,10 @@ namespace pe
 
     void Pipeline::CreateRayTracingPipeline()
     {
+        m_info.m_pushConstantStages.clear();
+        m_info.m_pushConstantOffsets.clear();
+        m_info.m_pushConstantSizes.clear();
+
         std::vector<vk::PipelineShaderStageCreateInfo> stages;
         std::vector<vk::RayTracingShaderGroupCreateInfoKHR> groups;
 

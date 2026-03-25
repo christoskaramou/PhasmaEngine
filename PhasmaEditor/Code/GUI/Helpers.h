@@ -190,10 +190,7 @@ namespace pe::ui
         float x0 = p0.x + depth * indent_step + indent_step * 0.5f;
         float cy = (p0.y + p1.y) * 0.5f;
 
-        dl->AddCircleFilled(ImVec2(x0, cy), bullet_r, U32(Heat(rel)), 16);
-        dl->AddCircle(ImVec2(x0, cy), bullet_r, IM_COL32(0, 0, 0, 120), 16, 1.f);
-
-        ImVec2 tp = ImVec2(x0 + bullet_r + 6.f, p0.y);
+        ImVec2 tp = ImVec2(x0, p0.y);
         dl->AddText(tp, U32(ImGui::GetStyle().Colors[ImGuiCol_Text]), name);
 
         ImGui::Dummy(ImVec2(0, ImGui::GetTextLineHeightWithSpacing()));

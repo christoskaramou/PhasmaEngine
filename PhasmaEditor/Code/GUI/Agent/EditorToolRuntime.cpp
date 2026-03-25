@@ -1,4 +1,5 @@
 #include "GUI/Agent/EditorToolRuntime.h"
+#include "GUI/Widgets/ProfilerWidget.h"
 #include "Systems/RendererSystem.h"
 #include "PhasmaAgent/AgentUtils.h"
 #include "imgui/imgui.h"
@@ -565,5 +566,45 @@ namespace pe
         if (!state->tabHit.empty())
             res["tab_focused"] = state->tabHit;
         return res.dump();
+    }
+
+    std::string EditorToolRuntime::TakeProfilerSnapshot() const
+    {
+        struct State
+        {
+            std::mutex mtx;
+            std::condition_variable cv;
+            bool done = false;
+            std::string result;
+        };
+        auto state = std::make_shared<State>();
+
+        QueueAction([state]()
+                    {
+            auto *renderer = GetGlobalSystem<RendererSystem>();
+            auto *profiler = renderer ? renderer->GetGUI().GetWidget<ProfilerWidget>() : nullptr;
+            if (!profiler)
+                state->result = "{\"error\":\"ProfilerWidget not available\"}";
+            else
+            {
+                const std::string path = profiler->TakeSnapshot();
+                if (path.empty())
+                    state->result = "{\"error\":\"snapshot failed\"}";
+                else
+                    state->result = JsonObj({{"path", JsonStr(path)}});
+            }
+            {
+                std::lock_guard lock(state->mtx);
+                state->done = true;
+            }
+            state->cv.notify_one(); });
+
+        {
+            std::unique_lock lock(state->mtx);
+            if (!state->cv.wait_for(lock, std::chrono::seconds(5), [&state]
+                                    { return state->done; }))
+                return "{\"error\":\"timeout waiting for profiler snapshot\"}";
+        }
+        return state->result;
     }
 } // namespace pe

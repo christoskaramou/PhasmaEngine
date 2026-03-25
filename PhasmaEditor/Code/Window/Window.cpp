@@ -1,4 +1,5 @@
 #include "Window.h"
+#include "API/Command.h"
 #include "API/Image.h"
 #include "API/Queue.h"
 #include "API/RHI.h"
@@ -151,6 +152,7 @@ namespace pe
 
                     rendererSystem->PollShaders(hash);
                     postProcessSystem->PollShaders(hash);
+                    CommandBuffer::ClearCache(); // force fresh pipeline rebuild with new shaders
                     break;
                 }
                 case EventType::CompileScripts:
