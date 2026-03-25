@@ -1,6 +1,7 @@
 #include "Script/ScriptSystem.h"
 #include "GUI/GUIState.h"
 #include "GUI/GUI.h"
+#include "GUI/Widgets/Console.h"
 #include "GUI/Widgets/FileSelector.h"
 #include "Systems/RendererSystem.h"
 #include "imgui/imgui.h"
@@ -96,6 +97,37 @@ namespace pe
                 engine.set_function("take_screenshot", [](sol::optional<std::string> filename) {
                     std::string path = filename.value_or("");
                     EventSystem::PushEvent(EventType::Screenshot, path);
+                });
+
+                // Returns recent console log entries as a Lua array of {level, text} tables.
+                // Optional count (default 100) limits how many recent entries to return.
+                // Optional level filters by "info", "warn", or "error".
+                engine.set_function("get_console_log", [&lua](sol::optional<int> count, sol::optional<std::string> level) -> sol::table {
+                    sol::table result = lua.create_table();
+                    auto *r = GetGlobalSystem<RendererSystem>();
+                    if (!r) return result;
+                    auto *console = r->GetGUI().GetWidget<Console>();
+                    if (!console) return result;
+
+                    const auto &logs = console->GetLogs();
+                    int n = count.value_or(100);
+                    std::string lvl = level.value_or("all");
+                    int start = std::max(0, (int)logs.size() - n);
+                    int idx = 1;
+                    for (int i = start; i < (int)logs.size(); ++i)
+                    {
+                        const auto &e = logs[i];
+                        std::string typeStr = e.type == LogType::Warn  ? "warn"
+                                           : e.type == LogType::Error ? "error"
+                                                                      : "info";
+                        if (lvl != "all" && typeStr != lvl)
+                            continue;
+                        sol::table entry = lua.create_table();
+                        entry["level"] = typeStr;
+                        entry["text"]  = e.text;
+                        result[idx++]  = entry;
+                    }
+                    return result;
                 }); });
         }
     } s_engineBindings;

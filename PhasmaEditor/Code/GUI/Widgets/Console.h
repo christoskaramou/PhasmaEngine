@@ -25,6 +25,7 @@ namespace pe
         void Clear();
         void AddLog(LogType type, const char *fmt, ...) IM_FMTARGS(3);
         const LogEntry *GetLatestLog() const { return m_logs.empty() ? nullptr : &m_logs.back(); }
+        const std::vector<LogEntry> &GetLogs() const { return m_logs; }
         int GetWarnCount() const { return m_warnCount; }
         int GetErrorCount() const { return m_errorCount; }
         void FocusWithFilter(const char *filter)

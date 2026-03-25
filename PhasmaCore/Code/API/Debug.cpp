@@ -184,23 +184,19 @@ namespace pe
 #endif
     }
 
-    void Debug::StartFrameCapture()
-    {
-        if (capture_api)
-            capture_api->StartFrameCapture(NULL, NULL);
-    }
-
-    void Debug::EndFrameCapture()
-    {
-        if (capture_api)
-            capture_api->EndFrameCapture(NULL, NULL);
-    }
-
-    void Debug::TriggerCapture()
+    void Debug::TriggerMultiFrameCapture(uint32_t numFrames)
     {
         if (capture_api)
         {
-            capture_api->TriggerCapture();
+            capture_api->TriggerMultiFrameCapture(numFrames);
+            ShowOrLaunchReplayUI();
+        }
+    }
+
+    void Debug::ShowOrLaunchReplayUI()
+    {
+        if (capture_api)
+        {
             if (capture_api->IsTargetControlConnected())
                 capture_api->ShowReplayUI();
             else

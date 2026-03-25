@@ -88,6 +88,7 @@ namespace pe
 
         // Capture flow
         bool m_waitingForCapture = false;
+        int m_captureFrameCount = 1;
         uint32_t m_captureCountBefore = 0;
 
         // Update interval

@@ -1,6 +1,7 @@
 #include "GUI/Agent/EditorToolCatalog.h"
 #include "GUI/Agent/EditorToolRuntime.h"
 #include "GUI/GUI.h"
+#include "GUI/Widgets/Console.h"
 #include "Base/Path.h"
 #include "PhasmaAgent/AgentUtils.h"
 #include "PhasmaAgent/BM25Index.h"
@@ -53,7 +54,7 @@ namespace pe
         static void AppendCodebaseManagementTools(std::vector<pagent::ToolDefinition> &tools, GUI *gui);
         static void AppendCodebaseTools(std::vector<pagent::ToolDefinition> &tools,
                                         const std::shared_ptr<pagent::BM25Index> &codebaseBM25);
-        static void AppendVisualTools(std::vector<pagent::ToolDefinition> &tools, EditorToolRuntime *runtime);
+        static void AppendVisualTools(std::vector<pagent::ToolDefinition> &tools, EditorToolRuntime *runtime, GUI *gui);
     } // namespace
 
     std::filesystem::path GetEditorRepoRootFromAssets()
@@ -85,7 +86,7 @@ namespace pe
         AppendWorkspaceTools(tools, context.runtime, context.onFeatureRequest);
         AppendCodebaseManagementTools(tools, context.gui);
         AppendCodebaseTools(tools, context.codebaseBM25);
-        AppendVisualTools(tools, context.runtime);
+        AppendVisualTools(tools, context.runtime, context.gui);
         return tools;
     }
 
@@ -1160,7 +1161,7 @@ namespace pe
                              }});
         }
 
-        void AppendVisualTools(std::vector<pagent::ToolDefinition> &tools, EditorToolRuntime *runtime)
+        void AppendVisualTools(std::vector<pagent::ToolDefinition> &tools, EditorToolRuntime *runtime, GUI *gui)
         {
             tools.push_back({.name = "profiler_snapshot",
                              .description = "Takes a snapshot of the current profiler data (Overview, CPU, GPU) and saves it as a JSON file "
@@ -1217,6 +1218,49 @@ namespace pe
                              {
                                  return runtime ? runtime->InjectMouseInput(args)
                                                 : "{\"error\":\"EditorToolRuntime not available\"}";
+                             }});
+
+            tools.push_back({.name = "get_console_log",
+                             .description = "Returns recent log entries from the editor console (Info, Warn, Error). "
+                                            "Use 'count' to limit how many recent entries to return (default 100). "
+                                            "Use 'level' to filter by severity: 'info', 'warn', 'error', or 'all' (default).",
+                             .properties = {
+                                 {"count", "Maximum number of recent entries to return (default 100)", pagent::SchemaType::Integer, false},
+                                 {"level", "Filter by severity: 'info', 'warn', 'error', or 'all' (default)", pagent::SchemaType::String, false},
+                             },
+                             .handler = [gui](const std::string &args) -> std::string
+                             {
+                                 if (!gui)
+                                     return DumpJson({{"error", "GUI not available"}});
+                                 Console *console = gui->GetWidget<Console>();
+                                 if (!console)
+                                     return DumpJson({{"error", "Console not available"}});
+
+                                 nlohmann::json j = nlohmann::json::parse(args, nullptr, false);
+                                 int count = 100;
+                                 std::string level = "all";
+                                 if (j.is_object())
+                                 {
+                                     if (j.contains("count") && j["count"].is_number_integer())
+                                         count = j["count"].get<int>();
+                                     if (j.contains("level") && j["level"].is_string())
+                                         level = j["level"].get<std::string>();
+                                 }
+
+                                 const auto &logs = console->GetLogs();
+                                 nlohmann::json entries = nlohmann::json::array();
+                                 int start = std::max(0, (int)logs.size() - count);
+                                 for (int i = start; i < (int)logs.size(); ++i)
+                                 {
+                                     const auto &e = logs[i];
+                                     std::string typeStr = e.type == LogType::Warn    ? "warn"
+                                                           : e.type == LogType::Error ? "error"
+                                                                                      : "info";
+                                     if (level != "all" && typeStr != level)
+                                         continue;
+                                     entries.push_back({{"level", typeStr}, {"text", e.text}});
+                                 }
+                                 return DumpJson({{"entries", entries}, {"total", (int)logs.size()}});
                              }});
         }
     } // namespace

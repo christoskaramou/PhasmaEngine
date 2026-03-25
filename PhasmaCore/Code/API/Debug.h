@@ -31,10 +31,9 @@ namespace pe
         }
         static void InitCaptureApi();
         static void DestroyCaptureApi();
-        static void StartFrameCapture();
-        static void EndFrameCapture();
-        static void TriggerCapture();
-        static uint32_t GetNumCaptures();
+        static void TriggerMultiFrameCapture(uint32_t numFrames);
+        static void ShowOrLaunchReplayUI();
+        static uint32_t GetNumCaptures(); // returns the total number of RenderDoc captures saved to disk since the app started
         static bool IsCaptureApiAvailable();
 
     private:
@@ -63,9 +62,8 @@ namespace pe
         static void DestroyCaptureApi() {}
         template <class HANDLE>
         static void SetObjectName(const HANDLE &handle, const std::string &name) {}
-        static void StartFrameCapture() {}
-        static void EndFrameCapture() {}
-        static void TriggerCapture() {}
+        static void TriggerMultiFrameCapture(uint32_t) {}
+        static void ShowOrLaunchReplayUI() {}
         static uint32_t GetNumCaptures() { return 0; }
         static bool IsCaptureApiAvailable() { return false; }
 

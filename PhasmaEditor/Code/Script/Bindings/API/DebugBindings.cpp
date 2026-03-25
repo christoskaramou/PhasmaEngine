@@ -68,9 +68,9 @@ namespace pe
                 // Frame capture (RenderDoc / GPU debugger)
                 debug.set_function("init_capture_api", []() { Debug::InitCaptureApi(); });
                 debug.set_function("destroy_capture_api", []() { Debug::DestroyCaptureApi(); });
-                debug.set_function("start_frame_capture", []() { Debug::StartFrameCapture(); });
-                debug.set_function("end_frame_capture", []() { Debug::EndFrameCapture(); });
-                debug.set_function("trigger_capture", []() { Debug::TriggerCapture(); }); });
+                debug.set_function("trigger_capture", [](sol::optional<uint32_t> n) {
+                    Debug::TriggerMultiFrameCapture(n.value_or(1));
+                }); });
         }
     } s_debugBindings;
 } // namespace pe

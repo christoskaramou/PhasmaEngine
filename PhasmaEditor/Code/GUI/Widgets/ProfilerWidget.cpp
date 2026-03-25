@@ -1303,7 +1303,7 @@ namespace pe
     void ProfilerWidget::DrawCaptureTab()
     {
         ImGui::TextWrapped(
-            "Trigger a GPU frame capture using RenderDoc.\n"
+            "Capture one or more consecutive GPU frames using RenderDoc.\n"
             "RenderDoc must be installed for this to work.\n"
             "After capture the RenderDoc UI will open automatically.");
 
@@ -1318,24 +1318,17 @@ namespace pe
 
         ImGui::BeginDisabled(!rdocAvailable);
 
-        if (ImGui::Button("Trigger RenderDoc Capture", {-1, 40.f}))
+        ImGui::SetNextItemWidth(120.f);
+        ImGui::InputInt("Frames##captureN", &m_captureFrameCount);
+        m_captureFrameCount = std::max(1, m_captureFrameCount);
+        ImGui::SameLine();
+        if (ImGui::Button("Capture", {-1, 0.f}))
         {
             m_captureCountBefore = Debug::GetNumCaptures();
             m_open = false;
             m_waitingForCapture = true;
-            Debug::TriggerCapture();
+            Debug::TriggerMultiFrameCapture(static_cast<uint32_t>(m_captureFrameCount));
         }
-
-        ImGui::Spacing();
-        ImGui::Separator();
-        ImGui::Spacing();
-
-        ImGui::TextDisabled("Manual capture range:");
-        if (ImGui::Button("Start Frame Capture"))
-            Debug::StartFrameCapture();
-        ImGui::SameLine();
-        if (ImGui::Button("End Frame Capture"))
-            Debug::EndFrameCapture();
 
         ImGui::EndDisabled();
 #else
