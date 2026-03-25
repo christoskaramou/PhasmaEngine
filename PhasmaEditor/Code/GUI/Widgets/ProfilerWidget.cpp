@@ -6,6 +6,8 @@
 #include "Base/Path.h"
 #include "GUI/GUI.h"
 #include "GUI/Helpers.h"
+#include "Systems/RendererSystem.h"
+#include "imgui/imgui_impl_vulkan.h"
 
 namespace pe
 {
@@ -27,11 +29,11 @@ namespace pe
         ImGui::Dummy({0, rowH});
     }
 
-    // ─── GPU timing table (shared between Overview and GPU tab) ─────────────────
+    // ─── GPU timing table ────────────────────────────────────────────────────────
 
-    static void DrawGpuTimingTable(const std::vector<GpuTimerSample> &samples,
-                                   float totalMs, const char *filter,
-                                   int &selectedPass)
+    void ProfilerWidget::DrawGpuTimingTable(const std::vector<GpuTimerSample> &samples,
+                                            float totalMs, const char *filter,
+                                            int &selectedPass)
     {
         if (samples.empty())
         {
@@ -83,6 +85,15 @@ namespace pe
                                       {0, rowH}))
                     selectedPass = selected ? -1 : i;
 
+                if (ImGui::IsItemHovered())
+                {
+                    ImGui::BeginTooltip();
+                    ImGui::Text("%s", s.name.c_str());
+                    ImGui::TextColored(ui::Heat(rel), "%.3f ms  (%.1f%%)", s.timeMs, rel * 100.f);
+                    DrawPassImageTooltip(s.name);
+                    ImGui::EndTooltip();
+                }
+
                 ImGui::SameLine();
                 ui::DrawHierarchyCell(s.name.c_str(), static_cast<int>(s.depth) - 1, rel);
                 ImGui::PopID();
@@ -94,6 +105,176 @@ namespace pe
                 CenteredTinyBar(rel);
             }
             ImGui::EndTable();
+        }
+    }
+
+    // ─── Destructor ──────────────────────────────────────────────────────────────
+
+    ProfilerWidget::~ProfilerWidget()
+    {
+        for (auto &[img, ds] : m_rtDescriptorCache)
+            ImGui_ImplVulkan_RemoveTexture((VkDescriptorSet)ds);
+    }
+
+    // ─── RT descriptor cache for hover previews ──────────────────────────────────
+
+    void *ProfilerWidget::GetRTDescriptor(Image *image)
+    {
+        if (!image || !image->HasSRV() || !image->GetSampler())
+            return nullptr;
+
+        auto it = m_rtDescriptorCache.find(image);
+        if (it != m_rtDescriptorCache.end())
+            return it->second;
+
+        void *ds = (void *)ImGui_ImplVulkan_AddTexture(
+            image->GetSampler()->ApiHandle(),
+            image->GetSRV()->ApiHandle(),
+            VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+
+        m_rtDescriptorCache[image] = ds;
+        return ds;
+    }
+
+    void ProfilerWidget::DrawPassImageTooltip(const std::string &passName)
+    {
+        struct PassMapping
+        {
+            const char *pattern;
+            const char *colorRTs[8]; // null-terminated color RT names (via GetRenderTarget)
+            const char *depthRTs[3]; // null-terminated depth RT names (via GetDepthStencilTarget)
+        };
+
+        // Map GPU timer name substrings → render target names.
+        // Pass names come from BeginPass("Foo") → "Foo_pass", or BeginDebugRegion("Bar") → "Bar".
+        static const PassMapping kTable[] = {
+            {"GbufferOpaque", {"normal", "albedo", "srm", "emissive", "velocity", "viewport", "transparency", nullptr}, {"depthStencil", nullptr}},
+            {"GbufferTransparent", {"normal", "albedo", "srm", "emissive", "velocity", "viewport", "transparency", nullptr}, {"depthStencil", nullptr}},
+            {"DepthPass", {nullptr}, {"depthStencil", nullptr}},
+            {"LightOpaque", {"viewport", nullptr}, {nullptr}},
+            {"LightTransparent", {"viewport", nullptr}, {nullptr}},
+            {"SSAOPass", {"ssao", nullptr}, {nullptr}},
+            {"SSR", {"ssr", nullptr}, {nullptr}},
+            {"FXAA", {"viewport", nullptr}, {nullptr}},
+            {"TAA", {"viewport", nullptr}, {nullptr}},
+            {"RCAS", {"display", nullptr}, {nullptr}},
+            {"Tonemap", {"display", nullptr}, {nullptr}},
+            {"BrightFilter", {"brightFilter", nullptr}, {nullptr}},
+            {"BlurHorizontal", {"gaussianBlurHorizontal", nullptr}, {nullptr}},
+            {"BlurVertical", {"gaussianBlurVertical", nullptr}, {nullptr}},
+            {"DOF", {"viewport", nullptr}, {nullptr}},
+            {"MotionBlur", {"viewport", nullptr}, {nullptr}},
+            {"GridPass", {"viewport", nullptr}, {nullptr}},
+            {"ParticlePass", {"viewport", nullptr}, {nullptr}},
+            {"AabbsPass", {"viewport", nullptr}, {nullptr}},
+            {"RayTracing", {"viewport", nullptr}, {nullptr}},
+            {"ShadowPass", {nullptr}, {"depthStencil", nullptr}},
+            {"Cascade", {nullptr}, {"depthStencil", nullptr}},
+        };
+
+        const PassMapping *match = nullptr;
+        for (const auto &entry : kTable)
+        {
+            if (passName.find(entry.pattern) != std::string::npos)
+            {
+                match = &entry;
+                break;
+            }
+        }
+        if (!match || (!match->colorRTs[0] && !match->depthRTs[0]))
+            return;
+
+        RendererSystem *rs = GetGlobalSystem<RendererSystem>();
+        if (!rs)
+            return;
+
+        // If render targets were recreated (resize), the old Image* pointers in the
+        // cache are dangling. Detect this by comparing the viewport RT pointer.
+        {
+            Image *viewportRT = rs->GetRenderTarget("viewport");
+            if (viewportRT != m_viewportRTSnapshot && !m_rtDescriptorCache.empty())
+            {
+                for (auto &[img, ds] : m_rtDescriptorCache)
+                    ImGui_ImplVulkan_RemoveTexture((VkDescriptorSet)ds);
+                m_rtDescriptorCache.clear();
+            }
+            m_viewportRTSnapshot = viewportRT;
+        }
+
+        struct ThumbEntry
+        {
+            void *ds; // null for depth placeholders
+            const char *name;
+            float aspect;
+            bool isDepth;
+        };
+        std::vector<ThumbEntry> thumbs;
+
+        for (int k = 0; k < 8 && match->colorRTs[k]; ++k)
+        {
+            Image *image = rs->GetRenderTarget(match->colorRTs[k]);
+            if (!image)
+                continue;
+            void *ds = GetRTDescriptor(image);
+            if (!ds)
+                continue;
+            float aspect = image->GetHeight() > 0 ? image->GetWidth_f() / image->GetHeight_f() : 1.f;
+            thumbs.push_back({ds, match->colorRTs[k], aspect, false});
+        }
+
+        for (int k = 0; k < 3 && match->depthRTs[k]; ++k)
+        {
+            Image *image = rs->GetDepthStencilTarget(match->depthRTs[k]);
+            if (!image)
+                continue;
+            float aspect = image->GetHeight() > 0 ? image->GetWidth_f() / image->GetHeight_f() : 1.f;
+            thumbs.push_back({nullptr, match->depthRTs[k], aspect, true});
+        }
+
+        if (thumbs.empty())
+            return;
+
+        ImGui::Separator();
+
+        const float thumbH = 80.f;
+        ImDrawList *dl = ImGui::GetWindowDrawList();
+
+        for (int k = 0; k < (int)thumbs.size(); ++k)
+        {
+            if (k > 0)
+                ImGui::SameLine(0.f, 6.f);
+            const float thumbW = std::max(thumbH * thumbs[k].aspect, 40.f);
+            ImGui::BeginGroup();
+
+            if (thumbs[k].isDepth)
+            {
+                // Placeholder for depth images: hatched dark rect with centered label.
+                ImVec2 p0 = ImGui::GetCursorScreenPos();
+                ImVec2 p1 = {p0.x + thumbW, p0.y + thumbH};
+                dl->AddRectFilled(p0, p1, IM_COL32(30, 30, 35, 255));
+                // diagonal hatch lines
+                const float step = 10.f;
+                for (float t = -thumbH; t < thumbW + thumbH; t += step)
+                {
+                    ImVec2 a = {p0.x + t, p0.y};
+                    ImVec2 b = {p0.x + t + thumbH, p1.y};
+                    dl->AddLine(a, b, IM_COL32(55, 55, 65, 200), 1.f);
+                }
+                dl->AddRect(p0, p1, IM_COL32(90, 90, 100, 200));
+                // "DEPTH" label centered
+                const char *label = "DEPTH";
+                ImVec2 ts = ImGui::CalcTextSize(label);
+                dl->AddText({p0.x + (thumbW - ts.x) * 0.5f, p0.y + (thumbH - ts.y) * 0.5f},
+                            IM_COL32(160, 160, 170, 255), label);
+                ImGui::Dummy(ImVec2(thumbW, thumbH));
+            }
+            else
+            {
+                ImGui::Image((ImTextureID)(intptr_t)thumbs[k].ds, ImVec2(thumbW, thumbH));
+            }
+
+            ImGui::TextDisabled("%s", thumbs[k].name);
+            ImGui::EndGroup();
         }
     }
 
@@ -608,6 +789,7 @@ namespace pe
                 ImGui::Text("%s", s.name.c_str());
                 ImGui::Text("Start: %.3f ms  Duration: %.3f ms", s.startOffsetMs, s.timeMs);
                 ImGui::Text("GPU share: %.1f%%", rel * 100.f);
+                DrawPassImageTooltip(s.name);
                 ImGui::EndTooltip();
             }
             if (ImGui::IsItemClicked())

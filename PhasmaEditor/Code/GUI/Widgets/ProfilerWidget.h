@@ -5,10 +5,13 @@
 
 namespace pe
 {
+    class Image;
+
     class ProfilerWidget : public Widget
     {
     public:
         ProfilerWidget() : Widget("Profiler") { m_open = false; }
+        ~ProfilerWidget();
         bool IsOpen() override { return m_open || m_waitingForCapture; }
         void Update() override;
         std::string TakeSnapshot();
@@ -17,6 +20,8 @@ namespace pe
         // Tab draw helpers
         void DrawOverviewTab();
         void DrawGpuTab();
+        void DrawGpuTimingTable(const std::vector<GpuTimerSample> &samples,
+                                float totalMs, const char *filter, int &selectedPass);
         void DrawTimelineTab();
         void DrawCpuTab();
         void DrawCpuTimelineView();
@@ -27,6 +32,10 @@ namespace pe
         void LoadShaderFile(const std::string &path);
         void SaveAndRecompile();
         void ScanShaderFiles();
+
+        // Render target preview helpers
+        void DrawPassImageTooltip(const std::string &passName);
+        void *GetRTDescriptor(Image *image);
 
         // All display data — replaced atomically each tick; frozen when paused
         struct ProfilerData
@@ -84,5 +93,9 @@ namespace pe
         // Update interval
         Timer m_delay;
         bool m_firstFrame = true;
+
+        // RT descriptor cache for hover image previews (Image* → VkDescriptorSet as void*)
+        std::unordered_map<Image *, void *> m_rtDescriptorCache;
+        Image *m_viewportRTSnapshot = nullptr; // detect render-target recreation on resize
     };
 } // namespace pe
