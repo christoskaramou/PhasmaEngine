@@ -57,6 +57,7 @@ namespace pe
     bool GUIState::s_sceneViewFloating = false;
     bool GUIState::s_sceneViewRedockQueued = false;
     bool GUIState::s_sceneViewFocused = false;
+    bool GUIState::s_hierarchyFocused = false;
     Image *GUIState::s_sceneViewImage = nullptr;
     bool GUIState::s_useTransformGizmo = true;
     bool GUIState::s_useLightGizmos = true;

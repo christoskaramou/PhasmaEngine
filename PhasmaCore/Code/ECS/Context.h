@@ -130,5 +130,12 @@ namespace pe
         return Context::Get()->GetSystem<T>();
     }
 
+    template <class T>
+    inline bool HasGlobalSystem()
+    {
+        const auto &systems = Context::Get()->GetSystems();
+        return systems.find(ID::GetTypeID<T>()) != systems.end();
+    }
+
     void UpdateGlobalSystems();
 } // namespace pe

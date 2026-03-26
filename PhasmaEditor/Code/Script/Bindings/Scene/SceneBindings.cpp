@@ -5,7 +5,6 @@
 #include "Scene/SelectionManager.h"
 #include "Camera/Camera.h"
 #include "Systems/RendererSystem.h"
-#include "Systems/LightSystem.h"
 
 namespace pe
 {
@@ -38,13 +37,12 @@ namespace pe
                             EventSystem::PushEvent(EventType::ModelsRemoved, std::move(models));
                     }
 
-                    auto *ls = GetGlobalSystem<LightSystem>();
-                    if (ls)
+                    if (r)
                     {
-                        ls->GetPointLights().clear();
-                        ls->GetDirectionalLights().clear();
-                        ls->GetSpotLights().clear();
-                        ls->GetAreaLights().clear();
+                        r->GetScene().GetPointLights().clear();
+                        r->GetScene().GetDirectionalLights().clear();
+                        r->GetScene().GetSpotLights().clear();
+                        r->GetScene().GetAreaLights().clear();
                     }
 
                     SelectionManager::Instance().ClearSelection();
@@ -194,18 +192,17 @@ namespace pe
                     }
                     else if (sel.GetSelectionType() == SelectionType::Light)
                     {
-                        auto *ls = GetGlobalSystem<LightSystem>();
-                        if (!ls) return;
+                        auto &scene = r->GetScene();
                         int idx = sel.GetSelectedLightIndex();
                         if (sel.GetSelectedLightType() == LightType::Point)
                         {
-                            auto &lights = ls->GetPointLights();
+                            auto &lights = scene.GetPointLights();
                             if (idx < 0 || idx >= static_cast<int>(lights.size())) return;
                             center = vec3(lights[idx].position);
                         }
                         else
                         {
-                            auto &lights = ls->GetDirectionalLights();
+                            auto &lights = scene.GetDirectionalLights();
                             if (idx < 0 || idx >= static_cast<int>(lights.size())) return;
                             center = vec3(lights[idx].position);
                         }

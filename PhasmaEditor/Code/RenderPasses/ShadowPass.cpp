@@ -9,7 +9,6 @@
 #include "Camera/Camera.h"
 #include "GbufferPass.h"
 #include "Scene/Scene.h"
-#include "Systems/LightSystem.h"
 #include "Systems/RendererSystem.h"
 
 namespace pe
@@ -202,8 +201,7 @@ namespace pe
             vec3 maxExtents = vec3(radius);
             vec3 minExtents = -maxExtents;
 
-            LightSystem *ls = GetGlobalSystem<LightSystem>();
-            auto &dirLights = ls->GetDirectionalLights();
+            auto &dirLights = GetGlobalSystem<RendererSystem>()->GetScene().GetDirectionalLights();
             vec3 lightDir = vec3(0, -1, 0); // Default
             if (!dirLights.empty())
             {

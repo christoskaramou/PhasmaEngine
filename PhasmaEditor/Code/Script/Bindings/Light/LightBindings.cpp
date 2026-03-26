@@ -1,5 +1,5 @@
 #include "Script/ScriptSystem.h"
-#include "Systems/LightSystem.h"
+#include "Systems/RendererSystem.h"
 
 namespace pe
 {
@@ -13,48 +13,40 @@ namespace pe
 
                 // --- Creation ---
                 lights_table.set_function("add_point", []() {
-                    auto *ls = GetGlobalSystem<LightSystem>();
-                    if (ls) ls->CreatePointLight();
+                    GetGlobalSystem<RendererSystem>()->GetScene().CreatePointLight();
                 });
                 lights_table.set_function("add_directional", []() {
-                    auto *ls = GetGlobalSystem<LightSystem>();
-                    if (ls) ls->CreateDirectionalLight();
+                    GetGlobalSystem<RendererSystem>()->GetScene().CreateDirectionalLight();
                 });
                 lights_table.set_function("add_spot", []() {
-                    auto *ls = GetGlobalSystem<LightSystem>();
-                    if (ls) ls->CreateSpotLight();
+                    GetGlobalSystem<RendererSystem>()->GetScene().CreateSpotLight();
                 });
                 lights_table.set_function("add_area", []() {
-                    auto *ls = GetGlobalSystem<LightSystem>();
-                    if (ls) ls->CreateAreaLight();
+                    GetGlobalSystem<RendererSystem>()->GetScene().CreateAreaLight();
                 });
 
                 // --- Removal ---
                 lights_table.set_function("remove_point", [](int index) {
-                    auto *ls = GetGlobalSystem<LightSystem>();
-                    if (!ls) return;
-                    auto &v = ls->GetPointLights();
+                    auto &scene = GetGlobalSystem<RendererSystem>()->GetScene();
+                    auto &v = scene.GetPointLights();
                     if (index >= 0 && index < static_cast<int>(v.size()))
                         v.erase(v.begin() + index);
                 });
                 lights_table.set_function("remove_directional", [](int index) {
-                    auto *ls = GetGlobalSystem<LightSystem>();
-                    if (!ls) return;
-                    auto &v = ls->GetDirectionalLights();
+                    auto &scene = GetGlobalSystem<RendererSystem>()->GetScene();
+                    auto &v = scene.GetDirectionalLights();
                     if (index >= 0 && index < static_cast<int>(v.size()))
                         v.erase(v.begin() + index);
                 });
                 lights_table.set_function("remove_spot", [](int index) {
-                    auto *ls = GetGlobalSystem<LightSystem>();
-                    if (!ls) return;
-                    auto &v = ls->GetSpotLights();
+                    auto &scene = GetGlobalSystem<RendererSystem>()->GetScene();
+                    auto &v = scene.GetSpotLights();
                     if (index >= 0 && index < static_cast<int>(v.size()))
                         v.erase(v.begin() + index);
                 });
                 lights_table.set_function("remove_area", [](int index) {
-                    auto *ls = GetGlobalSystem<LightSystem>();
-                    if (!ls) return;
-                    auto &v = ls->GetAreaLights();
+                    auto &scene = GetGlobalSystem<RendererSystem>()->GetScene();
+                    auto &v = scene.GetAreaLights();
                     if (index >= 0 && index < static_cast<int>(v.size()))
                         v.erase(v.begin() + index);
                 });
@@ -62,8 +54,7 @@ namespace pe
                 // --- Name-based lookup ---
                 lights_table.set_function("find", [&lua](const std::string &name) -> sol::as_table_t<std::vector<sol::object>> {
                     std::vector<sol::object> result;
-                    auto *ls = GetGlobalSystem<LightSystem>();
-                    if (!ls) return sol::as_table(std::move(result));
+                    auto &scene = GetGlobalSystem<RendererSystem>()->GetScene();
 
                     std::string q = name;
                     for (auto &c : q) c = static_cast<char>(std::tolower(c));
@@ -84,20 +75,17 @@ namespace pe
                         }
                     };
 
-                    search(ls->GetPointLights(), "point");
-                    search(ls->GetDirectionalLights(), "directional");
-                    search(ls->GetSpotLights(), "spot");
-                    search(ls->GetAreaLights(), "area");
+                    search(scene.GetPointLights(), "point");
+                    search(scene.GetDirectionalLights(), "directional");
+                    search(scene.GetSpotLights(), "spot");
+                    search(scene.GetAreaLights(), "area");
                     return sol::as_table(std::move(result));
                 });
 
                 // --- Point lights ---
                 lights_table.set_function("get_point_lights", [&lua]() -> sol::as_table_t<std::vector<sol::table>> {
                     std::vector<sol::table> result;
-                    auto *ls = GetGlobalSystem<LightSystem>();
-                    if (!ls) return sol::as_table(std::move(result));
-
-                    auto &pls = ls->GetPointLights();
+                    auto &pls = GetGlobalSystem<RendererSystem>()->GetScene().GetPointLights();
                     for (size_t i = 0; i < pls.size(); i++)
                     {
                         sol::table t = lua.create_table();
@@ -113,9 +101,7 @@ namespace pe
                 });
 
                 lights_table.set_function("set_point_light", [](int index, const vec3 &pos, const vec3 &color, float intensity, float radius) {
-                    auto *ls = GetGlobalSystem<LightSystem>();
-                    if (!ls) return;
-                    auto &pls = ls->GetPointLights();
+                    auto &pls = GetGlobalSystem<RendererSystem>()->GetScene().GetPointLights();
                     if (index < 0 || index >= static_cast<int>(pls.size())) return;
                     pls[index].position = vec4(pos, radius);
                     pls[index].color = vec4(color, intensity);
@@ -124,10 +110,7 @@ namespace pe
                 // --- Directional lights ---
                 lights_table.set_function("get_directional_lights", [&lua]() -> sol::as_table_t<std::vector<sol::table>> {
                     std::vector<sol::table> result;
-                    auto *ls = GetGlobalSystem<LightSystem>();
-                    if (!ls) return sol::as_table(std::move(result));
-
-                    auto &dls = ls->GetDirectionalLights();
+                    auto &dls = GetGlobalSystem<RendererSystem>()->GetScene().GetDirectionalLights();
                     for (size_t i = 0; i < dls.size(); i++)
                     {
                         sol::table t = lua.create_table();
@@ -143,9 +126,7 @@ namespace pe
                 });
 
                 lights_table.set_function("set_directional_light", [](int index, const vec3 &pos, const vec3 &color, float intensity) {
-                    auto *ls = GetGlobalSystem<LightSystem>();
-                    if (!ls) return;
-                    auto &dls = ls->GetDirectionalLights();
+                    auto &dls = GetGlobalSystem<RendererSystem>()->GetScene().GetDirectionalLights();
                     if (index < 0 || index >= static_cast<int>(dls.size())) return;
                     dls[index].position = vec4(pos, 0.0f);
                     dls[index].color = vec4(color, intensity);
@@ -154,10 +135,7 @@ namespace pe
                 // --- Spot lights ---
                 lights_table.set_function("get_spot_lights", [&lua]() -> sol::as_table_t<std::vector<sol::table>> {
                     std::vector<sol::table> result;
-                    auto *ls = GetGlobalSystem<LightSystem>();
-                    if (!ls) return sol::as_table(std::move(result));
-
-                    auto &sls = ls->GetSpotLights();
+                    auto &sls = GetGlobalSystem<RendererSystem>()->GetScene().GetSpotLights();
                     for (size_t i = 0; i < sls.size(); i++)
                     {
                         sol::table t = lua.create_table();
@@ -176,9 +154,7 @@ namespace pe
                 });
 
                 lights_table.set_function("set_spot_light", [](int index, const vec3 &pos, const vec3 &color, float intensity, float range, float angle, float falloff) {
-                    auto *ls = GetGlobalSystem<LightSystem>();
-                    if (!ls) return;
-                    auto &sls = ls->GetSpotLights();
+                    auto &sls = GetGlobalSystem<RendererSystem>()->GetScene().GetSpotLights();
                     if (index < 0 || index >= static_cast<int>(sls.size())) return;
                     sls[index].position = vec4(pos, range);
                     sls[index].color = vec4(color, intensity);
@@ -189,10 +165,7 @@ namespace pe
                 // --- Area lights ---
                 lights_table.set_function("get_area_lights", [&lua]() -> sol::as_table_t<std::vector<sol::table>> {
                     std::vector<sol::table> result;
-                    auto *ls = GetGlobalSystem<LightSystem>();
-                    if (!ls) return sol::as_table(std::move(result));
-
-                    auto &als = ls->GetAreaLights();
+                    auto &als = GetGlobalSystem<RendererSystem>()->GetScene().GetAreaLights();
                     for (size_t i = 0; i < als.size(); i++)
                     {
                         sol::table t = lua.create_table();
@@ -211,9 +184,7 @@ namespace pe
                 });
 
                 lights_table.set_function("set_area_light", [](int index, const vec3 &pos, const vec3 &color, float intensity, float range, float width, float height) {
-                    auto *ls = GetGlobalSystem<LightSystem>();
-                    if (!ls) return;
-                    auto &als = ls->GetAreaLights();
+                    auto &als = GetGlobalSystem<RendererSystem>()->GetScene().GetAreaLights();
                     if (index < 0 || index >= static_cast<int>(als.size())) return;
                     als[index].position = vec4(pos, range);
                     als[index].color = vec4(color, intensity);
@@ -223,8 +194,7 @@ namespace pe
 
                 // --- Individual property setter (all light types) ---
                 lights_table.set_function("set_property", [](const std::string &type, int index, const std::string &prop, sol::object value) {
-                    auto *ls = GetGlobalSystem<LightSystem>();
-                    if (!ls) return;
+                    auto &scene = GetGlobalSystem<RendererSystem>()->GetScene();
 
                     auto applyCommon = [&](auto &light) {
                         if (prop == "name") { light.name = value.as<std::string>(); return true; }
@@ -236,21 +206,21 @@ namespace pe
 
                     if (type == "point")
                     {
-                        auto &v = ls->GetPointLights();
+                        auto &v = scene.GetPointLights();
                         if (index < 0 || index >= static_cast<int>(v.size())) return;
                         if (applyCommon(v[index])) return;
                         if (prop == "radius") v[index].position.w = value.as<float>();
                     }
                     else if (type == "directional")
                     {
-                        auto &v = ls->GetDirectionalLights();
+                        auto &v = scene.GetDirectionalLights();
                         if (index < 0 || index >= static_cast<int>(v.size())) return;
                         if (applyCommon(v[index])) return;
                         if (prop == "rotation") v[index].rotation = value.as<vec4>();
                     }
                     else if (type == "spot")
                     {
-                        auto &v = ls->GetSpotLights();
+                        auto &v = scene.GetSpotLights();
                         if (index < 0 || index >= static_cast<int>(v.size())) return;
                         if (applyCommon(v[index])) return;
                         if (prop == "range") v[index].position.w = value.as<float>();
@@ -260,7 +230,7 @@ namespace pe
                     }
                     else if (type == "area")
                     {
-                        auto &v = ls->GetAreaLights();
+                        auto &v = scene.GetAreaLights();
                         if (index < 0 || index >= static_cast<int>(v.size())) return;
                         if (applyCommon(v[index])) return;
                         if (prop == "range") v[index].position.w = value.as<float>();
@@ -272,22 +242,21 @@ namespace pe
 
                 // --- Set rotation for directional/spot/area ---
                 lights_table.set_function("set_rotation", [](const std::string &type, int index, const vec4 &rot) {
-                    auto *ls = GetGlobalSystem<LightSystem>();
-                    if (!ls) return;
+                    auto &scene = GetGlobalSystem<RendererSystem>()->GetScene();
 
                     if (type == "directional")
                     {
-                        auto &v = ls->GetDirectionalLights();
+                        auto &v = scene.GetDirectionalLights();
                         if (index >= 0 && index < static_cast<int>(v.size())) v[index].rotation = rot;
                     }
                     else if (type == "spot")
                     {
-                        auto &v = ls->GetSpotLights();
+                        auto &v = scene.GetSpotLights();
                         if (index >= 0 && index < static_cast<int>(v.size())) v[index].rotation = rot;
                     }
                     else if (type == "area")
                     {
-                        auto &v = ls->GetAreaLights();
+                        auto &v = scene.GetAreaLights();
                         if (index >= 0 && index < static_cast<int>(v.size())) v[index].rotation = rot;
                     }
                 });
@@ -295,12 +264,11 @@ namespace pe
                 // --- Counts ---
                 lights_table.set_function("get_counts", [&lua]() -> sol::table {
                     sol::table t = lua.create_table();
-                    auto *ls = GetGlobalSystem<LightSystem>();
-                    if (!ls) return t;
-                    t["point"] = ls->GetPointLights().size();
-                    t["directional"] = ls->GetDirectionalLights().size();
-                    t["spot"] = ls->GetSpotLights().size();
-                    t["area"] = ls->GetAreaLights().size();
+                    auto &scene = GetGlobalSystem<RendererSystem>()->GetScene();
+                    t["point"] = scene.GetPointLights().size();
+                    t["directional"] = scene.GetDirectionalLights().size();
+                    t["spot"] = scene.GetSpotLights().size();
+                    t["area"] = scene.GetAreaLights().size();
                     return t;
                 }); });
         }

@@ -9,7 +9,6 @@
 #include "API/Shader.h"
 #include "Camera/Camera.h"
 #include "ShadowPass.h"
-#include "Systems/LightSystem.h"
 #include "Systems/RendererSystem.h"
 
 namespace pe
@@ -86,9 +85,9 @@ namespace pe
                                    ? GetGlobalSystem<RendererSystem>()->GetSkyBoxDay()
                                    : GetGlobalSystem<RendererSystem>()->GetSkyBoxNight();
 
+        Scene &scene = GetGlobalSystem<RendererSystem>()->GetScene();
         for (uint32_t i = 0; i < RHII.GetSwapchainImageCount(); i++)
         {
-            auto *lightSystem = GetGlobalSystem<LightSystem>();
             auto *ibl_brdf_lut = GetGlobalSystem<RendererSystem>()->GetIBL_LUT();
             auto &sets = m_passInfo->GetDescriptors(i);
 
@@ -97,13 +96,13 @@ namespace pe
             DSet->SetImageView(1, m_normalRT->GetSRV(), m_normalRT->GetSampler());
             DSet->SetImageView(2, m_albedoRT->GetSRV(), m_albedoRT->GetSampler());
             DSet->SetImageView(3, m_srmRT->GetSRV(), m_srmRT->GetSampler());
-            DSet->SetBuffer(4, lightSystem->GetUniform(i));
+            DSet->SetBuffer(4, scene.GetLightUniform(i));
             DSet->SetImageView(5, m_ssaoRT->GetSRV(), m_ssaoRT->GetSampler());
             DSet->SetImageView(6, m_emissiveRT->GetSRV(), m_emissiveRT->GetSampler());
             DSet->SetBuffer(7, m_uniforms[i]);
             DSet->SetImageView(8, m_transparencyRT->GetSRV(), m_transparencyRT->GetSampler());
             DSet->SetImageView(9, ibl_brdf_lut->GetSRV(), ibl_brdf_lut->GetSampler());
-            DSet->SetBuffer(10, lightSystem->GetStorage(i));
+            DSet->SetBuffer(10, scene.GetLightStorage(i));
             DSet->Update();
 
             auto *DSetShadows = sets[1];
@@ -169,14 +168,14 @@ namespace pe
         uint32_t shadowmapCascades = Settings::Get<GlobalSettings>().num_cascades;
         ShadowPass &shadows = *GetGlobalComponent<ShadowPass>();
 
-        auto *ls = GetGlobalSystem<LightSystem>();
-        cmd->SetConstantAt(0, (uint32_t)ls->GetPointLights().size()); // num point lights
-        cmd->SetConstantAt(1, (uint32_t)ls->GetSpotLights().size());  // num spot lights
-        cmd->SetConstantAt(2, (uint32_t)ls->GetAreaLights().size());  // num area lights
-        cmd->SetConstantAt(3, 0u);                                    // padding
-        cmd->SetConstantAt(4, m_viewportRT->GetWidth_f());            // framebuffer width
-        cmd->SetConstantAt(5, m_viewportRT->GetHeight_f());           // framebuffer height
-        cmd->SetConstantAt(6, 0u);                                    // is transparent pass
+        Scene &scene = GetGlobalSystem<RendererSystem>()->GetScene();
+        cmd->SetConstantAt(0, (uint32_t)scene.GetPointLights().size()); // num point lights
+        cmd->SetConstantAt(1, (uint32_t)scene.GetSpotLights().size());  // num spot lights
+        cmd->SetConstantAt(2, (uint32_t)scene.GetAreaLights().size());  // num area lights
+        cmd->SetConstantAt(3, 0u);                                      // padding
+        cmd->SetConstantAt(4, m_viewportRT->GetWidth_f());              // framebuffer width
+        cmd->SetConstantAt(5, m_viewportRT->GetHeight_f());             // framebuffer height
+        cmd->SetConstantAt(6, 0u);                                      // is transparent pass
         for (uint32_t i = 0; i < shadowmapCascades; i++)
             cmd->SetConstantAt(i + 7, shadows.m_viewZ[i]); // shadowmap cascade distances
 
@@ -281,14 +280,14 @@ namespace pe
             DSet->SetImageView(1, m_normalRT->GetSRV(), m_normalRT->GetSampler());
             DSet->SetImageView(2, m_albedoRT->GetSRV(), m_albedoRT->GetSampler());
             DSet->SetImageView(3, m_srmRT->GetSRV(), m_srmRT->GetSampler());
-            DSet->SetBuffer(4, GetGlobalSystem<LightSystem>()->GetUniform(i));
+            DSet->SetBuffer(4, GetGlobalSystem<RendererSystem>()->GetScene().GetLightUniform(i));
             DSet->SetImageView(5, m_ssaoRT->GetSRV(), m_ssaoRT->GetSampler());
             DSet->SetImageView(6, m_emissiveRT->GetSRV(), m_emissiveRT->GetSampler());
             DSet->SetBuffer(7, m_uniforms[i]);
             DSet->SetImageView(8, m_transparencyRT->GetSRV(), m_transparencyRT->GetSampler());
             auto *ibl_brdf_lut = GetGlobalSystem<RendererSystem>()->GetIBL_LUT();
             DSet->SetImageView(9, ibl_brdf_lut->GetSRV(), ibl_brdf_lut->GetSampler());
-            DSet->SetBuffer(10, GetGlobalSystem<LightSystem>()->GetStorage(i));
+            DSet->SetBuffer(10, GetGlobalSystem<RendererSystem>()->GetScene().GetLightStorage(i));
             DSet->Update();
 
             auto *DSetShadows = sets[1];
@@ -350,14 +349,14 @@ namespace pe
         uint32_t shadowmapCascades = Settings::Get<GlobalSettings>().num_cascades;
         ShadowPass &shadows = *GetGlobalComponent<ShadowPass>();
 
-        auto *ls = GetGlobalSystem<LightSystem>();
-        cmd->SetConstantAt(0, (uint32_t)ls->GetPointLights().size()); // num point lights
-        cmd->SetConstantAt(1, (uint32_t)ls->GetSpotLights().size());  // num spot lights
-        cmd->SetConstantAt(2, (uint32_t)ls->GetAreaLights().size());  // num area lights
-        cmd->SetConstantAt(3, 0u);                                    // padding
-        cmd->SetConstantAt(4, m_viewportRT->GetWidth_f());            // framebuffer width
-        cmd->SetConstantAt(5, m_viewportRT->GetHeight_f());           // framebuffer height
-        cmd->SetConstantAt(6, 1u);                                    // transparent pass
+        Scene &scene = GetGlobalSystem<RendererSystem>()->GetScene();
+        cmd->SetConstantAt(0, (uint32_t)scene.GetPointLights().size()); // num point lights
+        cmd->SetConstantAt(1, (uint32_t)scene.GetSpotLights().size());  // num spot lights
+        cmd->SetConstantAt(2, (uint32_t)scene.GetAreaLights().size());  // num area lights
+        cmd->SetConstantAt(3, 0u);                                      // padding
+        cmd->SetConstantAt(4, m_viewportRT->GetWidth_f());              // framebuffer width
+        cmd->SetConstantAt(5, m_viewportRT->GetHeight_f());             // framebuffer height
+        cmd->SetConstantAt(6, 1u);                                      // transparent pass
         for (uint32_t i = 0; i < shadowmapCascades; i++)
             cmd->SetConstantAt(i + 7, shadows.m_viewZ[i]); // shadowmap cascade distances
 

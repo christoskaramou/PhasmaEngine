@@ -2,6 +2,8 @@
 
 namespace pe
 {
+    struct NodeId;
+
     class Camera : public IComponent
     {
     public:
@@ -67,8 +69,12 @@ namespace pe
         inline const std::string &GetName() const { return m_name; }
         inline void SetName(const std::string &name) { m_name = name; }
 
+        inline NodeId *GetNodeId() const { return m_nodeId; }
+        inline void SetNodeId(NodeId *node) { m_nodeId = node; }
+
     private:
         std::string m_name;
+        NodeId *m_nodeId = nullptr;
         mat4 m_view, m_previousView;
         mat4 m_projection, m_previousProjection, m_projectionNoJitter;
         mat4 m_viewProjection, m_previousViewProjection;

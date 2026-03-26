@@ -246,6 +246,17 @@ namespace pe
                     rendererSystem->ResetTAAHistory();
                     break;
                 }
+                case EventType::PrimitiveAttachedToNode:
+                {
+                    auto req = std::any_cast<Scene::PrimitiveAttachRequest>(event.payload);
+                    if (req.node && req.model)
+                    {
+                        rendererSystem->WaitAllFramesCommands();
+                        rendererSystem->GetScene().AttachPrimitiveToNode(req.node, req.model);
+                        rendererSystem->GetScene().UpdateGeometryBuffers();
+                    }
+                    break;
+                }
                 case EventType::SetRenderMode:
                 {
                     rendererSystem->WaitAllFramesCommands();

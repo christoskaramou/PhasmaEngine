@@ -21,6 +21,7 @@ namespace pe
         Component_Light = 1 << 1,
         Component_Physics = 1 << 2,
         Component_Camera = 1 << 3,
+        Component_Script = 1 << 4,
     };
 
     // Lightweight mesh descriptor — references into Scene's data stores

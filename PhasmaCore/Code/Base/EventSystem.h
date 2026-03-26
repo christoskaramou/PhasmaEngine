@@ -20,6 +20,7 @@ namespace pe
         ModelsRemoved,
         NodeRemoved,
         MeshRemoved,
+        PrimitiveAttachedToNode,
         SetRenderMode,
         RunCommand,
         Screenshot,

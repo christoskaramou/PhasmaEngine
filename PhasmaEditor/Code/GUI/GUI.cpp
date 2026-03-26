@@ -14,7 +14,6 @@
 #include "Helpers.h"
 #include "Particles/ParticleManager.h"
 #include "Scene/SelectionManager.h"
-#include "Systems/LightSystem.h"
 #include "IconsFontAwesome.h"
 #include "RenderPasses/LightPass.h"
 #include "Scene/ModelAsset.h"
@@ -35,6 +34,7 @@
 #include "Widgets/Particles.h"
 #include "Widgets/Properties.h"
 #include "Widgets/SceneView.h"
+#include "Widgets/ScriptEditor.h"
 #include "PhasmaAgent/CodebaseIndexer.h"
 #include "Widgets/TransformWidget.h"
 #include "UndoRedo.h"
@@ -1421,6 +1421,7 @@ namespace pe
         auto meshWidget = std::make_shared<MeshWidget>();
         auto lightWidget = std::make_shared<LightWidget>();
         auto globalWidget = std::make_shared<GlobalWidget>();
+        auto scriptEditor = std::make_shared<ScriptEditor>();
         // Console added early to potentially influence tab ordering (Leftmost)
         m_widgets = {console,
                      properties,
@@ -1437,7 +1438,8 @@ namespace pe
                      transformWidget,
                      meshWidget,
                      lightWidget,
-                     globalWidget};
+                     globalWidget,
+                     scriptEditor};
 
         // Initialize Core Logging and attach Console
         Log::Attach([console](const std::string &msg, LogType type)
@@ -1452,7 +1454,8 @@ namespace pe
                                fileBrowser,
                                hierarchy,
                                particles,
-                               globalWidget};
+                               globalWidget,
+                               scriptEditor};
         for (auto &widget : m_widgets)
             widget->Init(this);
 
@@ -1570,12 +1573,13 @@ namespace pe
             ImGuiIO &io = ImGui::GetIO();
             if (!io.WantTextInput && io.KeyCtrl)
             {
-                if (ImGui::IsKeyPressed(ImGuiKey_Z, false) && !io.KeyShift)
+                bool undoRedoAllowed = GUIState::s_sceneViewFocused || GUIState::s_hierarchyFocused;
+                if (undoRedoAllowed && ImGui::IsKeyPressed(ImGuiKey_Z, false) && !io.KeyShift)
                 {
                     if (undoRedoRS && undoRedo.CanUndo())
                         undoRedo.Undo(undoRedoRS->GetScene());
                 }
-                if (ImGui::IsKeyPressed(ImGuiKey_Y, false))
+                if (undoRedoAllowed && ImGui::IsKeyPressed(ImGuiKey_Y, false))
                 {
                     if (undoRedoRS && undoRedo.CanRedo())
                         undoRedo.Redo(undoRedoRS->GetScene());
@@ -1621,53 +1625,29 @@ namespace pe
                             RendererSystem *rs = GetGlobalSystem<RendererSystem>();
                             if (rs)
                             {
-                                selection.ClearSelection();
-                                rs->GetScene().DeleteNode(node);
-                                EventSystem::PushEvent(EventType::NodeRemoved);
-                            }
-                        }
-                    }
-                    else if (selType == SelectionType::Camera)
-                    {
-                        RendererSystem *rs = GetGlobalSystem<RendererSystem>();
-                        if (rs)
-                        {
-                            auto &cameras = rs->GetScene().GetCameras();
-                            int idx = selection.GetSelectedCameraIndex();
-                            if (cameras.size() > 1 && idx >= 0 && idx < static_cast<int>(cameras.size()))
-                                rs->GetScene().RemoveCamera(cameras[idx]);
-                        }
-                    }
-                    else if (selType == SelectionType::Light)
-                    {
-                        LightSystem *ls = GetGlobalSystem<LightSystem>();
-                        if (ls)
-                        {
-                            int idx = selection.GetSelectedLightIndex();
-                            LightType lt = selection.GetSelectedLightType();
-                            auto eraseLight = [&](auto &lights)
-                            {
-                                if (idx >= 0 && idx < static_cast<int>(lights.size()))
+                                Scene &scene = rs->GetScene();
+                                uint32_t nodeFlags = scene.GetComponentFlags(node);
+                                if (nodeFlags & Component_Camera)
                                 {
-                                    lights.erase(lights.begin() + idx);
-                                    selection.ClearSelection();
+                                    Camera *cam = scene.GetCameraForNode(node);
+                                    if (cam && scene.GetCameras().size() > 1)
+                                        scene.RemoveCamera(cam);
                                 }
-                            };
-
-                            switch (lt)
-                            {
-                            case LightType::Directional:
-                                eraseLight(ls->GetDirectionalLights());
-                                break;
-                            case LightType::Point:
-                                eraseLight(ls->GetPointLights());
-                                break;
-                            case LightType::Spot:
-                                eraseLight(ls->GetSpotLights());
-                                break;
-                            case LightType::Area:
-                                eraseLight(ls->GetAreaLights());
-                                break;
+                                else if (nodeFlags & Component_Light)
+                                {
+                                    auto [lt, idx] = scene.GetLightForNode(node);
+                                    if (idx >= 0)
+                                    {
+                                        scene.RemoveLight(lt, idx);
+                                        selection.ClearSelection();
+                                    }
+                                }
+                                else
+                                {
+                                    selection.ClearSelection();
+                                    scene.DeleteNode(node);
+                                    EventSystem::PushEvent(EventType::NodeRemoved);
+                                }
                             }
                         }
                     }

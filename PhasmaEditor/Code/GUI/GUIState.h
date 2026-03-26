@@ -40,6 +40,7 @@ namespace pe
         static bool s_sceneViewFloating;
         static bool s_sceneViewRedockQueued;
         static bool s_sceneViewFocused;
+        static bool s_hierarchyFocused;
         static Image *s_sceneViewImage;
         static bool s_useTransformGizmo;
         static bool s_useLightGizmos;

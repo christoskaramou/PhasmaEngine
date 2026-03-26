@@ -5,13 +5,12 @@
 
 namespace pe
 {
-    struct LightsUBO;
-    class LightSystem;
+    class Scene;
 
     class LightWidget : public Widget
     {
     public:
         LightWidget();
-        void DrawEmbed(LightSystem *ls, LightType type, int index);
+        void DrawEmbed(Scene *scene, LightType type, int index);
     };
 } // namespace pe

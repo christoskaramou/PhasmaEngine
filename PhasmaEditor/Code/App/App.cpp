@@ -5,7 +5,6 @@
 #include "GUI/UndoRedo.h"
 #include "Scene/ModelAsset.h"
 #include "Script/ScriptSystem.h"
-#include "Systems/LightSystem.h"
 #include "Systems/PostProcessSystem.h"
 #include "Systems/RendererSystem.h"
 #include "Window/Window.h"
@@ -88,7 +87,6 @@ namespace pe
         CommandBuffer *cmd = queue->AcquireCommandBuffer();
 
         cmd->Begin();
-        CreateGlobalSystem<LightSystem>()->Init(cmd);
         CreateGlobalSystem<RendererSystem>()->Init(cmd);
         CreateGlobalSystem<PostProcessSystem>()->Init(cmd);
         CreateGlobalSystem<ScriptSystem>()->Init(nullptr);

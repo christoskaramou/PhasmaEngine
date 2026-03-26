@@ -2,6 +2,7 @@
 
 #include "API/Vertex.h"
 #include "Scene/SceneNode.h"
+#include "Scene/SelectionManager.h"
 
 namespace pe
 {
@@ -14,6 +15,73 @@ namespace pe
     class ImageView;
     class ModelAsset;
     class Sampler;
+
+    // --- Light POD structs (GPU layout) ---
+    struct DirectionalLight
+    {
+        vec4 color; // .w = intensity
+        vec4 position;
+        vec4 rotation; // quaternion
+    };
+
+    struct PointLight
+    {
+        vec4 color;    // .w = intensity
+        vec4 position; // .w = radius
+    };
+
+    struct SpotLight
+    {
+        vec4 color;    // .w = intensity
+        vec4 position; // .w = range
+        vec4 rotation; // quaternion
+        vec4 params;   // .x = angle, .y = falloff
+    };
+
+    struct AreaLight
+    {
+        vec4 color;    // .w = intensity
+        vec4 position; // .w = range
+        vec4 rotation; // quaternion
+        vec4 size;     // .x = width, .y = height
+    };
+
+    // --- Light editor structs (GPU data + scene metadata) ---
+    struct DirectionalLightEditor : public DirectionalLight
+    {
+        std::string name;
+        NodeId *nodeId = nullptr;
+    };
+
+    struct PointLightEditor : public PointLight
+    {
+        std::string name;
+        NodeId *nodeId = nullptr;
+    };
+
+    struct SpotLightEditor : public SpotLight
+    {
+        std::string name;
+        NodeId *nodeId = nullptr;
+    };
+
+    struct AreaLightEditor : public AreaLight
+    {
+        std::string name;
+        NodeId *nodeId = nullptr;
+    };
+
+    struct LightsUBO
+    {
+        uint32_t numDirectionalLights;
+        uint32_t numPointLights;
+        uint32_t numSpotLights;
+        uint32_t numAreaLights;
+        uint32_t offsetDirectionalLights;
+        uint32_t offsetPointLights;
+        uint32_t offsetSpotLights;
+        uint32_t offsetAreaLights;
+    };
 
     struct DrawInfo
     {
@@ -28,6 +96,12 @@ namespace pe
         friend class AssimpLoader;
 
     public:
+        // Payload for PrimitiveAttachedToNode event
+        struct PrimitiveAttachRequest
+        {
+            NodeId *node;
+            ModelAsset *model;
+        };
         // --- Lifecycle ---
         Scene();
         ~Scene();
@@ -40,9 +114,15 @@ namespace pe
         void AddModel(ModelAsset *model);
         void RemoveModel(ModelAsset *model);
         void RemoveModels(std::vector<ModelAsset *> models);
-        Camera *AddCamera();
+        Camera *AddCamera(NodeId *parent = nullptr);
         void RemoveCamera(Camera *camera);
         void SetActiveCamera(Camera *camera);
+        void CreateDirectionalLight(NodeId *parent = nullptr);
+        void CreatePointLight(NodeId *parent = nullptr);
+        void CreateSpotLight(NodeId *parent = nullptr);
+        void CreateAreaLight(NodeId *parent = nullptr);
+        void RemoveLight(LightType type, int index);
+        std::pair<LightType, int> GetLightForNode(const NodeId *node) const;
         void NewScene();
         void SaveScene(const std::filesystem::path &file);
         void LoadScene(const std::filesystem::path &file);
@@ -73,6 +153,8 @@ namespace pe
         void ReparentNode(NodeId *node, NodeId *newParent);
         void SetLocalMatrix(NodeId *node, const mat4 &m, bool markDirty = true);
         void SetMeshRef(NodeId *node, int meshIndex);
+        void SetNodeScript(NodeId *node, const std::string &path);
+        void AttachPrimitiveToNode(NodeId *node, ModelAsset *primitiveModel);
         void SetNodeName(NodeId *node, const std::string &name)
         {
             ValidateNodeId(node);
@@ -105,6 +187,13 @@ namespace pe
         Camera *GetActiveCamera() const { return m_cameras.at(0); }
         Camera *GetCamera(int index) const { return m_cameras.at(index); }
         const std::vector<Camera *> &GetCameras() const { return m_cameras; }
+        Camera *GetCameraForNode(const NodeId *node) const;
+
+        inline void AddComponentFlag(NodeId *node, uint32_t flag)
+        {
+            ValidateNodeId(node);
+            m_componentFlags[node->index] |= flag;
+        }
         OrderedMap<size_t, ModelAsset *> &GetModels() { return m_models; }
         const OrderedMap<size_t, ModelAsset *> &GetModels() const { return m_models; }
 
@@ -118,6 +207,12 @@ namespace pe
         Buffer *GetIndirect(uint32_t frame) { return m_indirects[frame]; }
         Buffer *GetIndirectAll() { return m_indirectAll; }
         Buffer *GetBuffer() { return m_buffer; }
+        Buffer *GetLightUniform(uint32_t frame) { return m_lightUniforms[frame]; }
+        Buffer *GetLightStorage(uint32_t frame) { return m_lightStorageBuffers[frame]; }
+        std::vector<DirectionalLightEditor> &GetDirectionalLights() { return m_directionalLights; }
+        std::vector<PointLightEditor> &GetPointLights() { return m_pointLights; }
+        std::vector<SpotLightEditor> &GetSpotLights() { return m_spotLights; }
+        std::vector<AreaLightEditor> &GetAreaLights() { return m_areaLights; }
         AccelerationStructure *GetTLAS() { return m_tlas; }
         Buffer *GetInstanceBuffer() { return m_instanceBuffer; }
         Buffer *GetMeshInfoBuffer() { return m_meshInfoBuffer; }
@@ -148,6 +243,7 @@ namespace pe
         const std::vector<NodeId *> &GetChildren(const NodeId *node) const { return m_nodeChildren[node->index]; }
         uint32_t GetComponentFlags(const NodeId *node) const { return m_componentFlags[node->index]; }
         int GetMeshRef(const NodeId *node) const { return m_meshRefs[node->index]; }
+        const std::string &GetNodeScriptPath(const NodeId *node) const { return m_nodeScriptPaths[node->index]; }
         NodeRuntime &GetNodeRuntime(const NodeId *node) { return m_nodeRuntime[node->index]; }
         const NodeRuntime &GetNodeRuntime(const NodeId *node) const { return m_nodeRuntime[node->index]; }
         uint32_t GetNodeCount() const { return static_cast<uint32_t>(m_nodeIds.size()); }
@@ -206,6 +302,10 @@ namespace pe
         };
 
         // --- Private functions ---
+        void InitLightBuffers();
+        void DestroyLightBuffers();
+        void UpdateLights();
+        NodeId *CreateLightNode(const std::string &name, const mat4 &localMatrix, NodeId *parent);
         void UpdateGeometry();
         DrawBatch CullNodeBatch(uint32_t beginNode, uint32_t endNode, const Camera *camera, bool frustumCulling) const;
         void UpdateUniformData();
@@ -298,6 +398,7 @@ namespace pe
         std::vector<std::vector<NodeId *>> m_nodeChildren;
         std::vector<uint32_t> m_componentFlags;
         std::vector<int> m_meshRefs;
+        std::vector<std::string> m_nodeScriptPaths;
         std::vector<NodeRuntime> m_nodeRuntime;
         std::vector<NodeId *> m_freeNodeIds;
 
@@ -315,5 +416,19 @@ namespace pe
 
         bool m_nodesDirty = false;
         std::vector<NodeId *> m_nodesMoved;
+
+        // --- Light data ---
+        LightsUBO m_lightsUBO{};
+        std::vector<Buffer *> m_lightUniforms;
+        std::vector<Buffer *> m_lightStorageBuffers;
+        std::vector<DirectionalLightEditor> m_directionalLights;
+        std::vector<PointLightEditor> m_pointLights;
+        std::vector<SpotLightEditor> m_spotLights;
+        std::vector<AreaLightEditor> m_areaLights;
+        // Reused scratch buffers for GPU upload (avoids per-frame allocations)
+        std::vector<DirectionalLight> m_directionalLightsPOD;
+        std::vector<PointLight> m_pointLightsPOD;
+        std::vector<SpotLight> m_spotLightsPOD;
+        std::vector<AreaLight> m_areaLightsPOD;
     };
 } // namespace pe

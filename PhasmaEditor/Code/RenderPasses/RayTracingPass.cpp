@@ -9,7 +9,6 @@
 #include "API/Shader.h"
 #include "Camera/Camera.h"
 #include "Scene/Scene.h"
-#include "Systems/LightSystem.h"
 #include "Systems/RendererSystem.h"
 
 namespace pe
@@ -92,12 +91,11 @@ namespace pe
             // Set 1
             if (descriptors.size() > 1 && descriptors[1])
             {
-                LightSystem *ls = GetGlobalSystem<LightSystem>();
-
+                Scene &scene = GetGlobalSystem<RendererSystem>()->GetScene();
                 auto *desc = descriptors[1];
-                desc->SetBuffer(0, ls->GetUniform(i));
+                desc->SetBuffer(0, scene.GetLightUniform(i));
                 desc->SetBuffer(1, m_uniforms[i]);
-                desc->SetBuffer(2, ls->GetStorage(i));
+                desc->SetBuffer(2, scene.GetLightStorage(i));
                 desc->Update();
             }
         }
@@ -184,10 +182,10 @@ namespace pe
 
         cmd->BeginDebugRegion("RayTracingPass");
         cmd->BindPipeline(*m_passInfo);
-        auto *ls = GetGlobalSystem<LightSystem>();
-        cmd->SetConstantAt(0, (uint32_t)ls->GetPointLights().size());
-        cmd->SetConstantAt(1, (uint32_t)ls->GetSpotLights().size());
-        cmd->SetConstantAt(2, (uint32_t)ls->GetAreaLights().size());
+        Scene &scene = GetGlobalSystem<RendererSystem>()->GetScene();
+        cmd->SetConstantAt(0, (uint32_t)scene.GetPointLights().size());
+        cmd->SetConstantAt(1, (uint32_t)scene.GetSpotLights().size());
+        cmd->SetConstantAt(2, (uint32_t)scene.GetAreaLights().size());
         cmd->PushConstants();
         cmd->TraceRays(m_display->GetWidth(), m_display->GetHeight(), 1);
         cmd->EndDebugRegion();

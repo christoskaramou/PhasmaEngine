@@ -27,6 +27,6 @@ namespace pe
         };
         void DrawGizmoModeButtons();
         void DrawVec3Control(TransformType type, vec3 &values, float resetValue = 0.0f, float columnWidth = 100.0f);
-        void ApplyLocalTransform(NodeId *node, const vec3 &pos, const quat &rot, const vec3 &scl);
+        void ApplyLocalTransform(NodeId *node, const float t[3], const float r[3], const float s[3]);
     };
 } // namespace pe

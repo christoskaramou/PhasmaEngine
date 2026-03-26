@@ -11,7 +11,6 @@
 #include "Particles/ParticleManager.h"
 #include "RenderPasses/LightPass.h"
 #include "RenderPasses/RayTracingPass.h"
-#include "Systems/LightSystem.h"
 
 #define _SILENCE_CXX17_ITERATOR_BASE_CLASS_DEPRECATION_WARNING
 #include "rapidjson/document.h"
@@ -246,7 +245,7 @@ namespace pe
         rapidjson::Value nodesArr(rapidjson::kArrayType);
         for (uint32_t ni = 0; ni < GetNodeCount(); ni++)
         {
-            const NodeId *node = m_nodeIds[ni];
+            NodeId *node = m_nodeIds[ni];
 
             rapidjson::Value nodeObj(rapidjson::kObjectType);
             nodeObj.AddMember("name", rapidjson::Value(m_nodeNames[ni].c_str(), allocator).Move(), allocator);
@@ -264,18 +263,86 @@ namespace pe
             if (remappedMesh >= 0)
                 nodeObj.AddMember("mesh", remappedMesh, allocator);
 
+            if (!m_nodeScriptPaths[ni].empty())
+                nodeObj.AddMember("script", rapidjson::Value(m_nodeScriptPaths[ni].c_str(), allocator).Move(), allocator);
+
+            uint32_t flags = m_componentFlags[ni];
+            if (flags)
+                nodeObj.AddMember("component_flags", flags, allocator);
+
+            if ((flags & Component_Camera) && !m_cameras.empty())
+            {
+                Camera *cam = GetCameraForNode(node);
+                if (cam)
+                {
+                    rapidjson::Value camObj(rapidjson::kObjectType);
+                    camObj.AddMember("fovx", cam->Fovx(), allocator);
+                    camObj.AddMember("near_plane", cam->GetNearPlane(), allocator);
+                    camObj.AddMember("far_plane", cam->GetFarPlane(), allocator);
+                    camObj.AddMember("speed", cam->GetSpeed(), allocator);
+                    nodeObj.AddMember("camera", camObj.Move(), allocator);
+                }
+            }
+
+            if (flags & Component_Light)
+            {
+                auto [ltype, lidx] = GetLightForNode(node);
+                if (lidx >= 0)
+                {
+                    rapidjson::Value lObj(rapidjson::kObjectType);
+                    if (ltype == LightType::Directional)
+                    {
+                        const DirectionalLight &l = m_directionalLights[lidx];
+                        lObj.AddMember("type", "directional", allocator);
+                        rapidjson::Value color;
+                        SetVec4(color, l.color);
+                        lObj.AddMember("color", color.Move(), allocator);
+                    }
+                    else if (ltype == LightType::Point)
+                    {
+                        const PointLight &l = m_pointLights[lidx];
+                        lObj.AddMember("type", "point", allocator);
+                        rapidjson::Value color;
+                        SetVec4(color, l.color);
+                        lObj.AddMember("color", color.Move(), allocator);
+                        lObj.AddMember("radius", l.position.w, allocator);
+                    }
+                    else if (ltype == LightType::Spot)
+                    {
+                        const SpotLight &l = m_spotLights[lidx];
+                        lObj.AddMember("type", "spot", allocator);
+                        rapidjson::Value color, params;
+                        SetVec4(color, l.color);
+                        SetVec4(params, l.params);
+                        lObj.AddMember("color", color.Move(), allocator);
+                        lObj.AddMember("range", l.position.w, allocator);
+                        lObj.AddMember("params", params.Move(), allocator);
+                    }
+                    else if (ltype == LightType::Area)
+                    {
+                        const AreaLight &l = m_areaLights[lidx];
+                        lObj.AddMember("type", "area", allocator);
+                        rapidjson::Value color, size;
+                        SetVec4(color, l.color);
+                        SetVec4(size, l.size);
+                        lObj.AddMember("color", color.Move(), allocator);
+                        lObj.AddMember("range", l.position.w, allocator);
+                        lObj.AddMember("size", size.Move(), allocator);
+                    }
+                    nodeObj.AddMember("light", lObj.Move(), allocator);
+                }
+            }
+
             nodesArr.PushBack(nodeObj.Move(), allocator);
         }
         d.AddMember("nodes", nodesArr.Move(), allocator);
 
-        // Lights
-        auto *lightSystem = GetGlobalSystem<LightSystem>();
-        if (lightSystem)
+        // Lights (kept for backward compatibility with older readers)
         {
             rapidjson::Value lights(rapidjson::kArrayType);
 
             // Directional
-            for (const auto &l : lightSystem->GetDirectionalLights())
+            for (const auto &l : m_directionalLights)
             {
                 rapidjson::Value lObj(rapidjson::kObjectType);
                 lObj.AddMember("type", "directional", allocator); // type identifier
@@ -293,7 +360,7 @@ namespace pe
             }
 
             // Point
-            for (const auto &l : lightSystem->GetPointLights())
+            for (const auto &l : m_pointLights)
             {
                 rapidjson::Value lObj(rapidjson::kObjectType);
                 lObj.AddMember("type", "point", allocator);
@@ -309,7 +376,7 @@ namespace pe
             }
 
             // Spot
-            for (const auto &l : lightSystem->GetSpotLights())
+            for (const auto &l : m_spotLights)
             {
                 rapidjson::Value lObj(rapidjson::kObjectType);
                 lObj.AddMember("type", "spot", allocator);
@@ -329,7 +396,7 @@ namespace pe
             }
 
             // Area
-            for (const auto &l : lightSystem->GetAreaLights())
+            for (const auto &l : m_areaLights)
             {
                 rapidjson::Value lObj(rapidjson::kObjectType);
                 lObj.AddMember("type", "area", allocator);
@@ -351,7 +418,7 @@ namespace pe
             d.AddMember("lights", lights.Move(), allocator);
         }
 
-        // Cameras
+        // Cameras (kept for backward compatibility with older readers)
         rapidjson::Value cameras(rapidjson::kArrayType);
         for (auto *camera : m_cameras)
         {
@@ -370,6 +437,9 @@ namespace pe
             camObj.AddMember("near_plane", camera->GetNearPlane(), allocator);
             camObj.AddMember("far_plane", camera->GetFarPlane(), allocator);
             camObj.AddMember("speed", camera->GetSpeed(), allocator);
+            NodeId *camNode = camera->GetNodeId();
+            if (camNode)
+                camObj.AddMember("node_index", static_cast<int>(camNode->index), allocator);
             cameras.PushBack(camObj.Move(), allocator);
         }
         d.AddMember("cameras", cameras.Move(), allocator);
@@ -426,6 +496,21 @@ namespace pe
         m_meshSourceInfos.clear();
         m_modelRootNodes.clear();
 
+        // Null out camera nodeIds before freeing node memory
+        for (auto *cam : m_cameras)
+            if (cam)
+                cam->SetNodeId(nullptr);
+
+        // Null out light nodeIds before freeing node memory
+        for (auto &l : m_directionalLights)
+            l.nodeId = nullptr;
+        for (auto &l : m_pointLights)
+            l.nodeId = nullptr;
+        for (auto &l : m_spotLights)
+            l.nodeId = nullptr;
+        for (auto &l : m_areaLights)
+            l.nodeId = nullptr;
+
         // Free all NodeId allocations and clear SoA stores
         for (NodeId *id : m_nodeIds)
             delete id;
@@ -439,6 +524,7 @@ namespace pe
         m_nodeChildren.clear();
         m_componentFlags.clear();
         m_meshRefs.clear();
+        m_nodeScriptPaths.clear();
         m_nodeRuntime.clear();
         m_nodesMoved.clear();
         m_nodesDirty = false;
@@ -456,19 +542,23 @@ namespace pe
             delete model;
         m_models.clear();
 
-        auto *lightSystem = GetGlobalSystem<LightSystem>();
-        if (lightSystem)
-        {
-            lightSystem->GetDirectionalLights().clear();
-            lightSystem->GetPointLights().clear();
-            lightSystem->GetSpotLights().clear();
-            lightSystem->GetAreaLights().clear();
-        }
+        m_directionalLights.clear();
+        m_pointLights.clear();
+        m_spotLights.clear();
+        m_areaLights.clear();
 
         while (m_cameras.size() > 1)
         {
             delete m_cameras.back();
             m_cameras.pop_back();
+        }
+
+        // Recreate scene node for the remaining camera
+        if (!m_cameras.empty() && m_cameras[0])
+        {
+            NodeId *camNode = CreateNode(m_cameras[0]->GetName());
+            AddComponentFlag(camNode, Component_Camera);
+            m_cameras[0]->SetNodeId(camNode);
         }
 
         UpdateGeometryBuffers();
@@ -595,6 +685,21 @@ namespace pe
         m_meshSourceInfos.clear();
         m_modelRootNodes.clear();
 
+        // Null out camera nodeIds before freeing node memory
+        for (auto *cam : m_cameras)
+            if (cam)
+                cam->SetNodeId(nullptr);
+
+        // Null out light nodeIds before freeing node memory
+        for (auto &l : m_directionalLights)
+            l.nodeId = nullptr;
+        for (auto &l : m_pointLights)
+            l.nodeId = nullptr;
+        for (auto &l : m_spotLights)
+            l.nodeId = nullptr;
+        for (auto &l : m_areaLights)
+            l.nodeId = nullptr;
+
         for (NodeId *id : m_nodeIds)
             delete id;
         for (NodeId *id : m_freeNodeIds)
@@ -607,6 +712,7 @@ namespace pe
         m_nodeChildren.clear();
         m_componentFlags.clear();
         m_meshRefs.clear();
+        m_nodeScriptPaths.clear();
         m_nodeRuntime.clear();
         m_nodesMoved.clear();
         m_nodesDirty = false;
@@ -624,14 +730,10 @@ namespace pe
             delete model;
         m_models.clear();
 
-        auto *lightSystem = GetGlobalSystem<LightSystem>();
-        if (lightSystem)
-        {
-            lightSystem->GetDirectionalLights().clear();
-            lightSystem->GetPointLights().clear();
-            lightSystem->GetSpotLights().clear();
-            lightSystem->GetAreaLights().clear();
-        }
+        m_directionalLights.clear();
+        m_pointLights.clear();
+        m_spotLights.clear();
+        m_areaLights.clear();
 
         // Reuse first camera, remove others
         while (m_cameras.size() > 1)
@@ -724,6 +826,9 @@ namespace pe
                 p[i] = arr[i].GetFloat();
             return m;
         };
+
+        bool hadEmbeddedCameras = false;
+        bool hadEmbeddedLights = false;
 
         if (d.HasMember("sources"))
         {
@@ -850,6 +955,8 @@ namespace pe
                         if (meshIdx >= 0 && meshIdx < static_cast<int>(m_meshes.size()))
                             SetMeshRef(node, meshIdx);
                     }
+                    if (nv.HasMember("script"))
+                        SetNodeScript(node, nv["script"].GetString());
 
                     nodeMap[ni] = node;
                 }
@@ -863,6 +970,94 @@ namespace pe
                         int parentIdx = nv["parent"].GetInt();
                         if (parentIdx >= 0 && parentIdx < static_cast<int>(nodeMap.size()) && nodeMap[parentIdx])
                             ReparentNode(nodeMap[ni], nodeMap[parentIdx]);
+                    }
+                }
+
+                // Pass 3: set component flags and wire up cameras/lights from embedded node data
+                for (rapidjson::SizeType ni = 0; ni < nodesVal.Size(); ni++)
+                {
+                    const auto &nv = nodesVal[ni];
+                    NodeId *node = nodeMap[ni];
+                    if (!node)
+                        continue;
+
+                    uint32_t flags = nv.HasMember("component_flags") ? nv["component_flags"].GetUint() : 0;
+                    if (flags)
+                        AddComponentFlag(node, flags);
+
+                    if ((flags & Component_Camera) && nv.HasMember("camera"))
+                    {
+                        const auto &cv = nv["camera"];
+                        Camera *cam = nullptr;
+                        if (!m_cameras.empty() && !m_cameras[0]->GetNodeId())
+                        {
+                            cam = m_cameras[0];
+                        }
+                        else
+                        {
+                            cam = new Camera();
+                            cam->SetName(nv.HasMember("name") ? nv["name"].GetString() : ("Camera_" + std::to_string(ID::NextID())));
+                            m_cameras.push_back(cam);
+                        }
+                        if (cv.HasMember("fovx"))
+                            cam->SetFovx(cv["fovx"].GetFloat());
+                        if (cv.HasMember("near_plane"))
+                            cam->SetNearPlane(cv["near_plane"].GetFloat());
+                        if (cv.HasMember("far_plane"))
+                            cam->SetFarPlane(cv["far_plane"].GetFloat());
+                        if (cv.HasMember("speed"))
+                            cam->SetSpeed(cv["speed"].GetFloat());
+                        cam->SetNodeId(node);
+                        // Restore position/euler from node local matrix
+                        const mat4 &lm = GetLocalMatrix(node);
+                        cam->SetPosition(vec3(lm[3]));
+                        cam->SetEuler(glm::eulerAngles(quat_cast(mat3(lm))));
+                        hadEmbeddedCameras = true;
+                    }
+
+                    if ((flags & Component_Light) && nv.HasMember("light"))
+                    {
+                        const auto &lv = nv["light"];
+                        std::string ltype = lv.HasMember("type") ? lv["type"].GetString() : "";
+                        std::string lname = nv.HasMember("name") ? nv["name"].GetString() : "";
+                        if (ltype == "directional")
+                        {
+                            DirectionalLightEditor l{};
+                            l.color = lv.HasMember("color") ? ReadVec4(lv["color"]) : vec4(1.f);
+                            l.name = lname.empty() ? ("Directional Light " + std::to_string(ID::NextID())) : lname;
+                            l.nodeId = node;
+                            m_directionalLights.push_back(l);
+                        }
+                        else if (ltype == "point")
+                        {
+                            PointLightEditor l{};
+                            l.color = lv.HasMember("color") ? ReadVec4(lv["color"]) : vec4(1.f);
+                            l.position.w = lv.HasMember("radius") ? lv["radius"].GetFloat() : 10.f;
+                            l.name = lname.empty() ? ("Point Light " + std::to_string(ID::NextID())) : lname;
+                            l.nodeId = node;
+                            m_pointLights.push_back(l);
+                        }
+                        else if (ltype == "spot")
+                        {
+                            SpotLightEditor l{};
+                            l.color = lv.HasMember("color") ? ReadVec4(lv["color"]) : vec4(1.f);
+                            l.position.w = lv.HasMember("range") ? lv["range"].GetFloat() : 10.f;
+                            l.params = lv.HasMember("params") ? ReadVec4(lv["params"]) : vec4(15.f, 5.f, 0.f, 0.f);
+                            l.name = lname.empty() ? ("Spot Light " + std::to_string(ID::NextID())) : lname;
+                            l.nodeId = node;
+                            m_spotLights.push_back(l);
+                        }
+                        else if (ltype == "area")
+                        {
+                            AreaLightEditor l{};
+                            l.color = lv.HasMember("color") ? ReadVec4(lv["color"]) : vec4(1.f);
+                            l.position.w = lv.HasMember("range") ? lv["range"].GetFloat() : 10.f;
+                            l.size = lv.HasMember("size") ? ReadVec4(lv["size"]) : vec4(2.f, 2.f, 0.f, 0.f);
+                            l.name = lname.empty() ? ("Area Light " + std::to_string(ID::NextID())) : lname;
+                            l.nodeId = node;
+                            m_areaLights.push_back(l);
+                        }
+                        hadEmbeddedLights = true;
                     }
                 }
 
@@ -983,7 +1178,7 @@ namespace pe
             queue->ReturnCommandBuffer(cmd);
         }
 
-        if (d.HasMember("lights") && lightSystem)
+        if (!hadEmbeddedLights && d.HasMember("lights"))
         {
             const auto &lights = d["lights"];
             for (const auto &lVal : lights.GetArray())
@@ -997,7 +1192,7 @@ namespace pe
                     if (lVal.HasMember("rotation"))
                         l.rotation = ReadVec4(lVal["rotation"]);
                     l.name = lVal.HasMember("name") ? lVal["name"].GetString() : "Directional Light " + std::to_string(ID::NextID());
-                    lightSystem->GetDirectionalLights().push_back(l);
+                    m_directionalLights.push_back(l);
                 }
                 else if (type == "point")
                 {
@@ -1005,7 +1200,7 @@ namespace pe
                     l.color = ReadVec4(lVal["color"]);
                     l.position = ReadVec4(lVal["position"]);
                     l.name = lVal.HasMember("name") ? lVal["name"].GetString() : "Point Light " + std::to_string(ID::NextID());
-                    lightSystem->GetPointLights().push_back(l);
+                    m_pointLights.push_back(l);
                 }
                 else if (type == "spot")
                 {
@@ -1015,7 +1210,7 @@ namespace pe
                     l.rotation = ReadVec4(lVal["rotation"]);
                     l.params = ReadVec4(lVal["params"]);
                     l.name = lVal.HasMember("name") ? lVal["name"].GetString() : "Spot Light " + std::to_string(ID::NextID());
-                    lightSystem->GetSpotLights().push_back(l);
+                    m_spotLights.push_back(l);
                 }
                 else if (type == "area")
                 {
@@ -1025,12 +1220,12 @@ namespace pe
                     l.rotation = ReadVec4(lVal["rotation"]);
                     l.size = ReadVec4(lVal["size"]);
                     l.name = lVal.HasMember("name") ? lVal["name"].GetString() : "Area Light " + std::to_string(ID::NextID());
-                    lightSystem->GetAreaLights().push_back(l);
+                    m_areaLights.push_back(l);
                 }
             }
         }
 
-        if (d.HasMember("cameras"))
+        if (!hadEmbeddedCameras && d.HasMember("cameras"))
         {
             const auto &cams = d["cameras"];
             for (rapidjson::SizeType i = 0; i < cams.Size(); ++i)
@@ -1040,9 +1235,7 @@ namespace pe
                     cam = m_cameras[i];
                 else
                 {
-                    cam = new Camera();
-                    cam->SetName("Camera_" + std::to_string(ID::NextID()));
-                    m_cameras.push_back(cam);
+                    cam = AddCamera();
                 }
 
                 const auto &cVal = cams[i];
@@ -1061,13 +1254,13 @@ namespace pe
                 if (cVal.HasMember("speed"))
                     cam->SetSpeed(cVal["speed"].GetFloat());
             }
+        }
 
-            if (d.HasMember("active_camera"))
-            {
-                uint32_t activeIndex = d["active_camera"].GetUint();
-                if (activeIndex < m_cameras.size())
-                    SetActiveCamera(m_cameras[activeIndex]);
-            }
+        if (d.HasMember("active_camera"))
+        {
+            uint32_t activeIndex = d["active_camera"].GetUint();
+            if (activeIndex < m_cameras.size())
+                SetActiveCamera(m_cameras[activeIndex]);
         }
 
         Log::Info("Scene loaded from: " + preload.filePath.string());
@@ -1106,44 +1299,6 @@ namespace pe
             for (int i = 0; i < 16; i++)
                 arr.PushBack(SafeFloat(p[i]), allocator);
         };
-
-        // Settings
-        rapidjson::Value settings(rapidjson::kObjectType);
-        auto &gSettings = Settings::Get<GlobalSettings>();
-        settings.AddMember("shadows", gSettings.shadows, allocator);
-        settings.AddMember("shadow_map_size", gSettings.shadow_map_size, allocator);
-        settings.AddMember("num_cascades", gSettings.num_cascades, allocator);
-        settings.AddMember("render_scale", gSettings.render_scale, allocator);
-        settings.AddMember("ssao", gSettings.ssao, allocator);
-        settings.AddMember("fxaa", gSettings.fxaa, allocator);
-        settings.AddMember("taa", gSettings.taa, allocator);
-        settings.AddMember("cas_sharpening", gSettings.cas_sharpening, allocator);
-        settings.AddMember("cas_sharpness", gSettings.cas_sharpness, allocator);
-        settings.AddMember("ssr", gSettings.ssr, allocator);
-        settings.AddMember("tonemapping", gSettings.tonemapping, allocator);
-        settings.AddMember("dof", gSettings.dof, allocator);
-        settings.AddMember("dof_focus_scale", gSettings.dof_focus_scale, allocator);
-        settings.AddMember("dof_blur_range", gSettings.dof_blur_range, allocator);
-        settings.AddMember("bloom", gSettings.bloom, allocator);
-        settings.AddMember("bloom_strength", gSettings.bloom_strength, allocator);
-        settings.AddMember("bloom_range", gSettings.bloom_range, allocator);
-        settings.AddMember("motion_blur", gSettings.motion_blur, allocator);
-        settings.AddMember("motion_blur_strength", gSettings.motion_blur_strength, allocator);
-        settings.AddMember("motion_blur_samples", gSettings.motion_blur_samples, allocator);
-        settings.AddMember("IBL", gSettings.IBL, allocator);
-        settings.AddMember("IBL_intensity", gSettings.IBL_intensity, allocator);
-        settings.AddMember("lights_intensity", gSettings.lights_intensity, allocator);
-        settings.AddMember("day", gSettings.day, allocator);
-        rapidjson::Value depthBias(rapidjson::kArrayType);
-        depthBias.PushBack(gSettings.depth_bias[0], allocator);
-        depthBias.PushBack(gSettings.depth_bias[1], allocator);
-        depthBias.PushBack(gSettings.depth_bias[2], allocator);
-        settings.AddMember("depth_bias", depthBias.Move(), allocator);
-        settings.AddMember("draw_grid", gSettings.draw_grid, allocator);
-        settings.AddMember("draw_aabbs", gSettings.draw_aabbs, allocator);
-        settings.AddMember("render_mode", static_cast<int>(gSettings.render_mode), allocator);
-        settings.AddMember("use_Disney_PBR", gSettings.use_Disney_PBR, allocator);
-        d.AddMember("settings", settings.Move(), allocator);
 
         // Build live mesh/source remaps to exclude geometry orphaned by RemoveModel.
         std::vector<int> meshRemap(m_meshes.size(), -1);
@@ -1257,6 +1412,7 @@ namespace pe
         rapidjson::Value nodesArr(rapidjson::kArrayType);
         for (uint32_t ni = 0; ni < GetNodeCount(); ni++)
         {
+            NodeId *node = m_nodeIds[ni];
             rapidjson::Value nodeObj(rapidjson::kObjectType);
             nodeObj.AddMember("name", rapidjson::Value(m_nodeNames[ni].c_str(), allocator).Move(), allocator);
 
@@ -1273,17 +1429,83 @@ namespace pe
             if (remappedMesh >= 0)
                 nodeObj.AddMember("mesh", remappedMesh, allocator);
 
+            if (!m_nodeScriptPaths[ni].empty())
+                nodeObj.AddMember("script", rapidjson::Value(m_nodeScriptPaths[ni].c_str(), allocator).Move(), allocator);
+
+            uint32_t flags = m_componentFlags[ni];
+            if (flags)
+                nodeObj.AddMember("component_flags", flags, allocator);
+
+            if ((flags & Component_Camera))
+            {
+                Camera *cam = GetCameraForNode(node);
+                if (cam)
+                {
+                    rapidjson::Value camObj(rapidjson::kObjectType);
+                    camObj.AddMember("fovx", cam->Fovx(), allocator);
+                    camObj.AddMember("near_plane", cam->GetNearPlane(), allocator);
+                    camObj.AddMember("far_plane", cam->GetFarPlane(), allocator);
+                    camObj.AddMember("speed", cam->GetSpeed(), allocator);
+                    nodeObj.AddMember("camera", camObj.Move(), allocator);
+                }
+            }
+
+            if (flags & Component_Light)
+            {
+                auto [ltype, lidx] = GetLightForNode(node);
+                if (lidx >= 0)
+                {
+                    rapidjson::Value lObj(rapidjson::kObjectType);
+                    if (ltype == LightType::Directional)
+                    {
+                        const DirectionalLight &l = m_directionalLights[lidx];
+                        lObj.AddMember("type", "directional", allocator);
+                        rapidjson::Value color;
+                        SetVec4(color, l.color);
+                        lObj.AddMember("color", color.Move(), allocator);
+                    }
+                    else if (ltype == LightType::Point)
+                    {
+                        const PointLight &l = m_pointLights[lidx];
+                        lObj.AddMember("type", "point", allocator);
+                        rapidjson::Value color;
+                        SetVec4(color, l.color);
+                        lObj.AddMember("color", color.Move(), allocator);
+                        lObj.AddMember("radius", l.position.w, allocator);
+                    }
+                    else if (ltype == LightType::Spot)
+                    {
+                        const SpotLight &l = m_spotLights[lidx];
+                        lObj.AddMember("type", "spot", allocator);
+                        rapidjson::Value color, params;
+                        SetVec4(color, l.color);
+                        SetVec4(params, l.params);
+                        lObj.AddMember("color", color.Move(), allocator);
+                        lObj.AddMember("range", l.position.w, allocator);
+                        lObj.AddMember("params", params.Move(), allocator);
+                    }
+                    else if (ltype == LightType::Area)
+                    {
+                        const AreaLight &l = m_areaLights[lidx];
+                        lObj.AddMember("type", "area", allocator);
+                        rapidjson::Value color, size;
+                        SetVec4(color, l.color);
+                        SetVec4(size, l.size);
+                        lObj.AddMember("color", color.Move(), allocator);
+                        lObj.AddMember("range", l.position.w, allocator);
+                        lObj.AddMember("size", size.Move(), allocator);
+                    }
+                    nodeObj.AddMember("light", lObj.Move(), allocator);
+                }
+            }
+
             nodesArr.PushBack(nodeObj.Move(), allocator);
         }
         d.AddMember("nodes", nodesArr.Move(), allocator);
-
-        // Lights
-        auto *lightSystem = GetGlobalSystem<LightSystem>();
-        if (lightSystem)
         {
             rapidjson::Value lights(rapidjson::kArrayType);
 
-            for (const auto &l : lightSystem->GetDirectionalLights())
+            for (const auto &l : m_directionalLights)
             {
                 rapidjson::Value lObj(rapidjson::kObjectType);
                 lObj.AddMember("type", "directional", allocator);
@@ -1297,7 +1519,7 @@ namespace pe
                 lObj.AddMember("name", rapidjson::Value(l.name.c_str(), allocator).Move(), allocator);
                 lights.PushBack(lObj.Move(), allocator);
             }
-            for (const auto &l : lightSystem->GetPointLights())
+            for (const auto &l : m_pointLights)
             {
                 rapidjson::Value lObj(rapidjson::kObjectType);
                 lObj.AddMember("type", "point", allocator);
@@ -1309,7 +1531,7 @@ namespace pe
                 lObj.AddMember("name", rapidjson::Value(l.name.c_str(), allocator).Move(), allocator);
                 lights.PushBack(lObj.Move(), allocator);
             }
-            for (const auto &l : lightSystem->GetSpotLights())
+            for (const auto &l : m_spotLights)
             {
                 rapidjson::Value lObj(rapidjson::kObjectType);
                 lObj.AddMember("type", "spot", allocator);
@@ -1325,7 +1547,7 @@ namespace pe
                 lObj.AddMember("name", rapidjson::Value(l.name.c_str(), allocator).Move(), allocator);
                 lights.PushBack(lObj.Move(), allocator);
             }
-            for (const auto &l : lightSystem->GetAreaLights())
+            for (const auto &l : m_areaLights)
             {
                 rapidjson::Value lObj(rapidjson::kObjectType);
                 lObj.AddMember("type", "area", allocator);
@@ -1446,78 +1668,9 @@ namespace pe
             return m;
         };
 
-        // 1. Restore settings (cheap, always overwrite)
-        if (d.HasMember("settings"))
-        {
-            const auto &s = d["settings"];
-            auto &g = Settings::Get<GlobalSettings>();
-            if (s.HasMember("shadows"))
-                g.shadows = s["shadows"].GetBool();
-            if (s.HasMember("shadow_map_size"))
-                g.shadow_map_size = s["shadow_map_size"].GetUint();
-            if (s.HasMember("num_cascades"))
-                g.num_cascades = s["num_cascades"].GetUint();
-            if (s.HasMember("render_scale"))
-                g.render_scale = s["render_scale"].GetFloat();
-            if (s.HasMember("ssao"))
-                g.ssao = s["ssao"].GetBool();
-            if (s.HasMember("fxaa"))
-                g.fxaa = s["fxaa"].GetBool();
-            if (s.HasMember("taa"))
-                g.taa = s["taa"].GetBool();
-            if (s.HasMember("cas_sharpening"))
-                g.cas_sharpening = s["cas_sharpening"].GetBool();
-            if (s.HasMember("cas_sharpness"))
-                g.cas_sharpness = s["cas_sharpness"].GetFloat();
-            if (s.HasMember("ssr"))
-                g.ssr = s["ssr"].GetBool();
-            if (s.HasMember("tonemapping"))
-                g.tonemapping = s["tonemapping"].GetBool();
-            if (s.HasMember("dof"))
-                g.dof = s["dof"].GetBool();
-            if (s.HasMember("dof_focus_scale"))
-                g.dof_focus_scale = s["dof_focus_scale"].GetFloat();
-            if (s.HasMember("dof_blur_range"))
-                g.dof_blur_range = s["dof_blur_range"].GetFloat();
-            if (s.HasMember("bloom"))
-                g.bloom = s["bloom"].GetBool();
-            if (s.HasMember("bloom_strength"))
-                g.bloom_strength = s["bloom_strength"].GetFloat();
-            if (s.HasMember("bloom_range"))
-                g.bloom_range = s["bloom_range"].GetFloat();
-            if (s.HasMember("motion_blur"))
-                g.motion_blur = s["motion_blur"].GetBool();
-            if (s.HasMember("motion_blur_strength"))
-                g.motion_blur_strength = s["motion_blur_strength"].GetFloat();
-            if (s.HasMember("motion_blur_samples"))
-                g.motion_blur_samples = s["motion_blur_samples"].GetInt();
-            if (s.HasMember("IBL"))
-                g.IBL = s["IBL"].GetBool();
-            if (s.HasMember("IBL_intensity"))
-                g.IBL_intensity = s["IBL_intensity"].GetFloat();
-            if (s.HasMember("lights_intensity"))
-                g.lights_intensity = s["lights_intensity"].GetFloat();
-            if (s.HasMember("day"))
-                g.day = s["day"].GetBool();
-            if (s.HasMember("depth_bias"))
-            {
-                g.depth_bias[0] = s["depth_bias"][0].GetFloat();
-                g.depth_bias[1] = s["depth_bias"][1].GetFloat();
-                g.depth_bias[2] = s["depth_bias"][2].GetFloat();
-            }
-            if (s.HasMember("draw_grid"))
-                g.draw_grid = s["draw_grid"].GetBool();
-            if (s.HasMember("draw_aabbs"))
-                g.draw_aabbs = s["draw_aabbs"].GetBool();
-            if (s.HasMember("render_mode"))
-                g.render_mode = static_cast<RenderMode>(s["render_mode"].GetInt());
-            if (s.HasMember("use_Disney_PBR"))
-                g.use_Disney_PBR = s["use_Disney_PBR"].GetBool();
-
-            MarkUniformsDirty();
-        }
-
-        // 2. Restore scene graph (flat format from TakeSnapshot)
+        bool hadEmbeddedCamerasSnap = false;
+        bool hadEmbeddedLightsSnap = false;
+        // Restore scene graph (flat format from TakeSnapshot)
         if (d.HasMember("sources") && d.HasMember("nodes"))
         {
             const auto &snapshotSources = d["sources"];
@@ -1561,6 +1714,24 @@ namespace pe
             if (geometryMatch)
             {
                 // Fast path: update SoA in-place (no geometry reload)
+
+                // Null out camera/light nodeIds before re-wiring
+                for (auto *cam : m_cameras)
+                    if (cam)
+                        cam->SetNodeId(nullptr);
+                for (auto &l : m_directionalLights)
+                    l.nodeId = nullptr;
+                for (auto &l : m_pointLights)
+                    l.nodeId = nullptr;
+                for (auto &l : m_spotLights)
+                    l.nodeId = nullptr;
+                for (auto &l : m_areaLights)
+                    l.nodeId = nullptr;
+                m_directionalLights.clear();
+                m_pointLights.clear();
+                m_spotLights.clear();
+                m_areaLights.clear();
+
                 // Update nodes
                 for (uint32_t ni = 0; ni < snapshotNodeCount; ni++)
                 {
@@ -1580,6 +1751,13 @@ namespace pe
                     }
                     if (nv.HasMember("local_matrix"))
                         SetLocalMatrix(node, ReadMat4(nv["local_matrix"]));
+
+                    uint32_t flags = nv.HasMember("component_flags") ? nv["component_flags"].GetUint() : 0;
+                    if (flags)
+                    {
+                        m_componentFlags[ni] = 0;
+                        AddComponentFlag(node, flags);
+                    }
                 }
 
                 // Update meshes (materials only)
@@ -1604,6 +1782,82 @@ namespace pe
                     }
                 }
 
+                // Pass 3: re-wire cameras/lights from embedded node data
+                for (uint32_t ni = 0; ni < snapshotNodeCount; ni++)
+                {
+                    const auto &nv = snapshotNodes[ni];
+                    NodeId *node = m_nodeIds[ni];
+                    uint32_t flags = nv.HasMember("component_flags") ? nv["component_flags"].GetUint() : 0;
+
+                    if ((flags & Component_Camera) && nv.HasMember("camera"))
+                    {
+                        Camera *cam = (ni < m_cameras.size()) ? m_cameras[ni] : nullptr;
+                        if (!cam)
+                        {
+                            // Find first camera without nodeId
+                            for (auto *c : m_cameras)
+                                if (c && !c->GetNodeId())
+                                {
+                                    cam = c;
+                                    break;
+                                }
+                        }
+                        if (cam)
+                        {
+                            cam->SetNodeId(node);
+                            const mat4 &lm = GetLocalMatrix(node);
+                            cam->SetPosition(vec3(lm[3]));
+                            cam->SetEuler(glm::eulerAngles(quat_cast(mat3(lm))));
+                            hadEmbeddedCamerasSnap = true;
+                        }
+                    }
+
+                    if ((flags & Component_Light) && nv.HasMember("light"))
+                    {
+                        const auto &lv = nv["light"];
+                        std::string ltype = lv.HasMember("type") ? lv["type"].GetString() : "";
+                        std::string lname = nv.HasMember("name") ? nv["name"].GetString() : "";
+                        if (ltype == "directional")
+                        {
+                            DirectionalLightEditor l{};
+                            l.color = lv.HasMember("color") ? ReadVec4(lv["color"]) : vec4(1.f);
+                            l.name = lname;
+                            l.nodeId = node;
+                            m_directionalLights.push_back(l);
+                        }
+                        else if (ltype == "point")
+                        {
+                            PointLightEditor l{};
+                            l.color = lv.HasMember("color") ? ReadVec4(lv["color"]) : vec4(1.f);
+                            l.position.w = lv.HasMember("radius") ? lv["radius"].GetFloat() : 10.f;
+                            l.name = lname;
+                            l.nodeId = node;
+                            m_pointLights.push_back(l);
+                        }
+                        else if (ltype == "spot")
+                        {
+                            SpotLightEditor l{};
+                            l.color = lv.HasMember("color") ? ReadVec4(lv["color"]) : vec4(1.f);
+                            l.position.w = lv.HasMember("range") ? lv["range"].GetFloat() : 10.f;
+                            l.params = lv.HasMember("params") ? ReadVec4(lv["params"]) : vec4(15.f, 5.f, 0.f, 0.f);
+                            l.name = lname;
+                            l.nodeId = node;
+                            m_spotLights.push_back(l);
+                        }
+                        else if (ltype == "area")
+                        {
+                            AreaLightEditor l{};
+                            l.color = lv.HasMember("color") ? ReadVec4(lv["color"]) : vec4(1.f);
+                            l.position.w = lv.HasMember("range") ? lv["range"].GetFloat() : 10.f;
+                            l.size = lv.HasMember("size") ? ReadVec4(lv["size"]) : vec4(2.f, 2.f, 0.f, 0.f);
+                            l.name = lname;
+                            l.nodeId = node;
+                            m_areaLights.push_back(l);
+                        }
+                        hadEmbeddedLightsSnap = true;
+                    }
+                }
+
                 // Mark all nodes dirty
                 for (uint32_t ni = 0; ni < GetNodeCount(); ni++)
                     MarkNodeDirty(m_nodeIds[ni]);
@@ -1611,6 +1865,19 @@ namespace pe
             else
             {
                 // Slow path: geometry changed — clear everything and reload via LoadScene-style path
+
+                // Null out camera/light nodeIds before freeing node memory
+                for (auto *cam : m_cameras)
+                    if (cam)
+                        cam->SetNodeId(nullptr);
+                for (auto &l : m_directionalLights)
+                    l.nodeId = nullptr;
+                for (auto &l : m_pointLights)
+                    l.nodeId = nullptr;
+                for (auto &l : m_spotLights)
+                    l.nodeId = nullptr;
+                for (auto &l : m_areaLights)
+                    l.nodeId = nullptr;
 
                 // Clear old scene data synchronously (mirrors LoadSceneApply)
                 for (NodeId *id : m_nodeIds)
@@ -1625,6 +1892,7 @@ namespace pe
                 m_nodeChildren.clear();
                 m_componentFlags.clear();
                 m_meshRefs.clear();
+                m_nodeScriptPaths.clear();
                 m_nodeRuntime.clear();
                 m_nodesMoved.clear();
                 m_nodesDirty = false;
@@ -1741,6 +2009,8 @@ namespace pe
                         if (meshIdx >= 0 && meshIdx < static_cast<int>(m_meshes.size()))
                             SetMeshRef(node, meshIdx);
                     }
+                    if (nv.HasMember("script"))
+                        SetNodeScript(node, nv["script"].GetString());
                     nodeMap[ni] = node;
                 }
                 for (uint32_t ni = 0; ni < snapshotNodeCount; ni++)
@@ -1760,6 +2030,96 @@ namespace pe
                 }
                 UpdateNodeMatrices();
 
+                // Pass 3: wire up cameras/lights from embedded node data
+                m_directionalLights.clear();
+                m_pointLights.clear();
+                m_spotLights.clear();
+                m_areaLights.clear();
+                for (uint32_t ni = 0; ni < snapshotNodeCount; ni++)
+                {
+                    const auto &nv = snapshotNodes[ni];
+                    NodeId *node = nodeMap[ni];
+                    if (!node)
+                        continue;
+                    uint32_t flags = nv.HasMember("component_flags") ? nv["component_flags"].GetUint() : 0;
+                    if (flags)
+                        AddComponentFlag(node, flags);
+
+                    if ((flags & Component_Camera) && nv.HasMember("camera"))
+                    {
+                        Camera *cam = nullptr;
+                        for (auto *c : m_cameras)
+                            if (c && !c->GetNodeId())
+                            {
+                                cam = c;
+                                break;
+                            }
+                        if (!cam)
+                        {
+                            cam = new Camera();
+                            m_cameras.push_back(cam);
+                        }
+                        const auto &cv = nv["camera"];
+                        if (cv.HasMember("fovx"))
+                            cam->SetFovx(cv["fovx"].GetFloat());
+                        if (cv.HasMember("near_plane"))
+                            cam->SetNearPlane(cv["near_plane"].GetFloat());
+                        if (cv.HasMember("far_plane"))
+                            cam->SetFarPlane(cv["far_plane"].GetFloat());
+                        if (cv.HasMember("speed"))
+                            cam->SetSpeed(cv["speed"].GetFloat());
+                        cam->SetNodeId(node);
+                        const mat4 &lm = GetLocalMatrix(node);
+                        cam->SetPosition(vec3(lm[3]));
+                        cam->SetEuler(glm::eulerAngles(quat_cast(mat3(lm))));
+                        hadEmbeddedCamerasSnap = true;
+                    }
+                    if ((flags & Component_Light) && nv.HasMember("light"))
+                    {
+                        const auto &lv = nv["light"];
+                        std::string ltype = lv.HasMember("type") ? lv["type"].GetString() : "";
+                        std::string lname = nv.HasMember("name") ? nv["name"].GetString() : "";
+                        if (ltype == "directional")
+                        {
+                            DirectionalLightEditor l{};
+                            l.color = lv.HasMember("color") ? ReadVec4(lv["color"]) : vec4(1.f);
+                            l.name = lname;
+                            l.nodeId = node;
+                            m_directionalLights.push_back(l);
+                        }
+                        else if (ltype == "point")
+                        {
+                            PointLightEditor l{};
+                            l.color = lv.HasMember("color") ? ReadVec4(lv["color"]) : vec4(1.f);
+                            l.position.w = lv.HasMember("radius") ? lv["radius"].GetFloat() : 10.f;
+                            l.name = lname;
+                            l.nodeId = node;
+                            m_pointLights.push_back(l);
+                        }
+                        else if (ltype == "spot")
+                        {
+                            SpotLightEditor l{};
+                            l.color = lv.HasMember("color") ? ReadVec4(lv["color"]) : vec4(1.f);
+                            l.position.w = lv.HasMember("range") ? lv["range"].GetFloat() : 10.f;
+                            l.params = lv.HasMember("params") ? ReadVec4(lv["params"]) : vec4(15.f, 5.f, 0.f, 0.f);
+                            l.name = lname;
+                            l.nodeId = node;
+                            m_spotLights.push_back(l);
+                        }
+                        else if (ltype == "area")
+                        {
+                            AreaLightEditor l{};
+                            l.color = lv.HasMember("color") ? ReadVec4(lv["color"]) : vec4(1.f);
+                            l.position.w = lv.HasMember("range") ? lv["range"].GetFloat() : 10.f;
+                            l.size = lv.HasMember("size") ? ReadVec4(lv["size"]) : vec4(2.f, 2.f, 0.f, 0.f);
+                            l.name = lname;
+                            l.nodeId = node;
+                            m_areaLights.push_back(l);
+                        }
+                        hadEmbeddedLightsSnap = true;
+                    }
+                }
+
                 UploadBuffers(cmd);
 
                 cmd->End();
@@ -1770,13 +2130,12 @@ namespace pe
         }
 
         // 3. Restore lights (clear and recreate - cheap)
-        auto *lightSystem = GetGlobalSystem<LightSystem>();
-        if (d.HasMember("lights") && lightSystem)
+        if (!hadEmbeddedLightsSnap && d.HasMember("lights"))
         {
-            lightSystem->GetDirectionalLights().clear();
-            lightSystem->GetPointLights().clear();
-            lightSystem->GetSpotLights().clear();
-            lightSystem->GetAreaLights().clear();
+            m_directionalLights.clear();
+            m_pointLights.clear();
+            m_spotLights.clear();
+            m_areaLights.clear();
 
             const auto &lights = d["lights"];
             for (const auto &lVal : lights.GetArray())
@@ -1790,7 +2149,7 @@ namespace pe
                     if (lVal.HasMember("rotation"))
                         l.rotation = ReadVec4(lVal["rotation"]);
                     l.name = lVal.HasMember("name") ? lVal["name"].GetString() : "Directional Light " + std::to_string(ID::NextID());
-                    lightSystem->GetDirectionalLights().push_back(l);
+                    m_directionalLights.push_back(l);
                 }
                 else if (type == "point")
                 {
@@ -1798,7 +2157,7 @@ namespace pe
                     l.color = ReadVec4(lVal["color"]);
                     l.position = ReadVec4(lVal["position"]);
                     l.name = lVal.HasMember("name") ? lVal["name"].GetString() : "Point Light " + std::to_string(ID::NextID());
-                    lightSystem->GetPointLights().push_back(l);
+                    m_pointLights.push_back(l);
                 }
                 else if (type == "spot")
                 {
@@ -1808,7 +2167,7 @@ namespace pe
                     l.rotation = ReadVec4(lVal["rotation"]);
                     l.params = ReadVec4(lVal["params"]);
                     l.name = lVal.HasMember("name") ? lVal["name"].GetString() : "Spot Light " + std::to_string(ID::NextID());
-                    lightSystem->GetSpotLights().push_back(l);
+                    m_spotLights.push_back(l);
                 }
                 else if (type == "area")
                 {
@@ -1818,13 +2177,13 @@ namespace pe
                     l.rotation = ReadVec4(lVal["rotation"]);
                     l.size = ReadVec4(lVal["size"]);
                     l.name = lVal.HasMember("name") ? lVal["name"].GetString() : "Area Light " + std::to_string(ID::NextID());
-                    lightSystem->GetAreaLights().push_back(l);
+                    m_areaLights.push_back(l);
                 }
             }
         }
 
-        // 4. Restore cameras
-        if (d.HasMember("cameras"))
+        // 4. Restore cameras (skipped if cameras were loaded from embedded node data)
+        if (!hadEmbeddedCamerasSnap && d.HasMember("cameras"))
         {
             const auto &cams = d["cameras"];
             for (rapidjson::SizeType i = 0; i < cams.Size(); i++)

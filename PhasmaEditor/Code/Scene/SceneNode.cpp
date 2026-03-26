@@ -1,4 +1,5 @@
 #include "Scene/Scene.h"
+#include "Scene/ModelAsset.h"
 #include "API/RHI.h"
 
 namespace pe
@@ -27,6 +28,7 @@ namespace pe
         m_nodeChildren.emplace_back();
         m_componentFlags.push_back(Component_None);
         m_meshRefs.push_back(-1);
+        m_nodeScriptPaths.push_back("");
 
         NodeRuntime runtime{};
         runtime.dirty = true;
@@ -88,6 +90,7 @@ namespace pe
             std::swap(m_nodeChildren[index], m_nodeChildren[last]);
             std::swap(m_componentFlags[index], m_componentFlags[last]);
             std::swap(m_meshRefs[index], m_meshRefs[last]);
+            std::swap(m_nodeScriptPaths[index], m_nodeScriptPaths[last]);
             std::swap(m_nodeRuntime[index], m_nodeRuntime[last]);
 
             // Update the swapped node's identity — the one place
@@ -102,6 +105,7 @@ namespace pe
         m_nodeChildren.pop_back();
         m_componentFlags.pop_back();
         m_meshRefs.pop_back();
+        m_nodeScriptPaths.pop_back();
         m_nodeRuntime.pop_back();
     }
 
@@ -153,6 +157,33 @@ namespace pe
             m_componentFlags[idx] |= Component_Mesh;
         else
             m_componentFlags[idx] &= ~Component_Mesh;
+    }
+
+    void Scene::SetNodeScript(NodeId *node, const std::string &path)
+    {
+        const uint32_t idx = node->index;
+        m_nodeScriptPaths[idx] = path;
+
+        if (!path.empty())
+            m_componentFlags[idx] |= Component_Script;
+        else
+            m_componentFlags[idx] &= ~Component_Script;
+    }
+
+    void Scene::AttachPrimitiveToNode(NodeId *node, ModelAsset *primitiveModel)
+    {
+        int sourceIndex = static_cast<int>(m_sources.size());
+        SceneSource source;
+        source.filePath = primitiveModel->GetFilePath();
+        source.primitiveType = primitiveModel->GetPrimitiveType();
+        m_sources.push_back(std::move(source));
+
+        std::vector<int> meshMap = AddModelGeometry(primitiveModel, sourceIndex);
+        if (!meshMap.empty() && meshMap[0] >= 0)
+            SetMeshRef(node, meshMap[0]);
+
+        MarkNodeDirty(node);
+        delete primitiveModel;
     }
 
     int Scene::AddMesh(Mesh &&mesh)

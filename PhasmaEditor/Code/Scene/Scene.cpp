@@ -23,6 +23,9 @@ namespace pe
 
         Camera *camera = new Camera();
         camera->SetName("Camera_" + std::to_string(ID::NextID()));
+        NodeId *camNode = CreateNode(camera->GetName());
+        AddComponentFlag(camNode, Component_Camera);
+        camera->SetNodeId(camNode);
         m_cameras.push_back(camera);
 
         uint32_t swapchainImageCount = RHII.GetSwapchainImageCount();
@@ -31,6 +34,8 @@ namespace pe
 
         m_particleManager = new ParticleManager();
         m_particleManager->Init(); // disable until it is done
+
+        InitLightBuffers();
     }
 
     Sampler *Scene::GetDefaultSampler() const
@@ -57,6 +62,7 @@ namespace pe
         m_cameras.clear();
 
         DestroyBuffers();
+        DestroyLightBuffers();
 
         if (m_particleManager)
         {
@@ -89,15 +95,36 @@ namespace pe
                                 { Buffer* buf = b; Buffer::Destroy(buf); });
     }
 
+    Camera *Scene::GetCameraForNode(const NodeId *node) const
+    {
+        for (Camera *cam : m_cameras)
+            if (cam->GetNodeId() == node)
+                return cam;
+        return nullptr;
+    }
+
     void Scene::Update()
     {
         {
             PE_PROFILE_SCOPE("Camera Update");
             for (auto *camera : m_cameras)
+            {
                 camera->Update();
+
+                // Sync camera transform to its scene node so gizmos and hierarchy reflect it
+                NodeId *camNode = camera->GetNodeId();
+                if (camNode)
+                {
+                    const vec3 &pos = camera->GetPosition();
+                    const vec3 &euler = camera->GetEuler();
+                    mat4 localMat = glm::translate(mat4(1.f), pos) * mat4_cast(quat(euler));
+                    SetLocalMatrix(camNode, localMat);
+                }
+            }
         }
 
         UpdateGeometry();
+        UpdateLights();
     }
 
     void Scene::UpdateGeometryBuffers()
@@ -282,10 +309,13 @@ namespace pe
             RemoveModel(model);
     }
 
-    Camera *Scene::AddCamera()
+    Camera *Scene::AddCamera(NodeId *parent)
     {
         Camera *camera = new Camera();
         camera->SetName("Camera_" + std::to_string(ID::NextID()));
+        NodeId *camNode = CreateNode(camera->GetName(), parent);
+        AddComponentFlag(camNode, Component_Camera);
+        camera->SetNodeId(camNode);
         m_cameras.push_back(camera);
         return camera;
     }
@@ -298,12 +328,11 @@ namespace pe
         auto it = std::find(m_cameras.begin(), m_cameras.end(), camera);
         if (it != m_cameras.end())
         {
-            if (SelectionManager::Instance().GetSelectionType() == SelectionType::Camera)
-            {
-                int index = static_cast<int>(std::distance(m_cameras.begin(), it));
-                if (SelectionManager::Instance().GetSelectedCameraIndex() == index)
-                    SelectionManager::Instance().ClearSelection();
-            }
+            SelectionManager::Instance().ClearSelection();
+
+            NodeId *camNode = camera->GetNodeId();
+            if (camNode)
+                DeleteNode(camNode);
 
             delete *it;
             m_cameras.erase(it);

@@ -1,9 +1,9 @@
 #include "TransformWidget.h"
+#include "Camera/Camera.h"
 #include "GUI/IconsFontAwesome.h"
 #include "Scene/Scene.h"
 #include "Scene/SelectionManager.h"
 #include "Systems/RendererSystem.h"
-#include "glm/gtx/matrix_decompose.hpp"
 #include "imgui/ImGuizmo.h"
 #include "imgui/imgui.h"
 #include "imgui/imgui_internal.h"
@@ -83,11 +83,15 @@ namespace pe
             ImGui::EndTable();
         }
 
-        if (ImGui::CollapsingHeader("World AABB"))
+        uint32_t nodeFlags = scene.GetComponentFlags(node);
+        if (!(nodeFlags & (Component_Camera | Component_Light)))
         {
-            const AABB &worldBounds = scene.GetWorldAABB(node);
-            ImGui::LabelText("Min", "(%.2f, %.2f, %.2f)", worldBounds.min.x, worldBounds.min.y, worldBounds.min.z);
-            ImGui::LabelText("Max", "(%.2f, %.2f, %.2f)", worldBounds.max.x, worldBounds.max.y, worldBounds.max.z);
+            if (ImGui::CollapsingHeader("World AABB"))
+            {
+                const AABB &worldBounds = scene.GetWorldAABB(node);
+                ImGui::LabelText("Min", "(%.2f, %.2f, %.2f)", worldBounds.min.x, worldBounds.min.y, worldBounds.min.z);
+                ImGui::LabelText("Max", "(%.2f, %.2f, %.2f)", worldBounds.max.x, worldBounds.max.y, worldBounds.max.z);
+            }
         }
     }
 
@@ -128,26 +132,59 @@ namespace pe
     void TransformWidget::DrawPositionEditor(NodeId *node)
     {
         Scene &scene = GetGlobalSystem<RendererSystem>()->GetScene();
-        const mat4 &localMatrix = scene.GetLocalMatrix(node);
 
-        vec3 position, scl, skew;
-        quat rotation;
-        vec4 perspective;
-        decompose(localMatrix, scl, rotation, position, skew, perspective);
-
-        vec3 oldPos = position;
-        DrawVec3Control(TransformType::Position, position);
-        if (position != oldPos)
+        // For camera nodes, read/write directly from the camera's internal state
+        // to avoid the node-matrix round-trip (Scene::Update overwrites the node
+        // matrix each frame from camera state, so editing the matrix is unstable).
+        if (scene.GetComponentFlags(node) & Component_Camera)
         {
-            ApplyLocalTransform(node, position, rotation, scl);
+            if (Camera *cam = scene.GetCameraForNode(node))
+            {
+                vec3 pos = cam->GetPosition();
+                vec3 oldPos = pos;
+                DrawVec3Control(TransformType::Position, pos);
+                if (pos != oldPos)
+                    cam->SetPosition(pos);
+            }
+            return;
+        }
+
+        const mat4 &localMatrix = scene.GetLocalMatrix(node);
+        float t[3], r[3], s[3];
+        ImGuizmo::DecomposeMatrixToComponents(value_ptr(localMatrix), t, r, s);
+        vec3 pos = vec3(t[0], t[1], t[2]);
+        vec3 oldPos = pos;
+
+        DrawVec3Control(TransformType::Position, pos);
+        if (pos != oldPos)
+        {
+            float nt[3] = {pos.x, pos.y, pos.z};
+            ApplyLocalTransform(node, nt, r, s);
         }
     }
 
     void TransformWidget::DrawRotationEditor(NodeId *node)
     {
         Scene &scene = GetGlobalSystem<RendererSystem>()->GetScene();
-        const mat4 &localMatrix = scene.GetLocalMatrix(node);
 
+        // For camera nodes, read/write directly from camera's euler.
+        // Camera::Rotate() negates xoffset for yaw (y = -xoffset * speed),
+        // so Y is negated in display so that dragging right = camera looks right.
+        if (scene.GetComponentFlags(node) & Component_Camera)
+        {
+            if (Camera *cam = scene.GetCameraForNode(node))
+            {
+                const vec3 &euler = cam->GetEuler();
+                vec3 eulerDeg = vec3(degrees(euler.x), -degrees(euler.y), degrees(euler.z));
+                vec3 oldRot = eulerDeg;
+                DrawVec3Control(TransformType::Rotation, eulerDeg);
+                if (glm::any(glm::notEqual(eulerDeg, oldRot, 0.001f)))
+                    cam->SetEuler(radians(vec3(eulerDeg.x, -eulerDeg.y, eulerDeg.z)));
+            }
+            return;
+        }
+
+        const mat4 &localMatrix = scene.GetLocalMatrix(node);
         float t[3], r[3], s[3];
         ImGuizmo::DecomposeMatrixToComponents(value_ptr(localMatrix), t, r, s);
         vec3 eulerDeg = vec3(r[0], r[1], r[2]);
@@ -156,30 +193,30 @@ namespace pe
         DrawVec3Control(TransformType::Rotation, eulerDeg);
         if (glm::any(glm::notEqual(eulerDeg, oldRot, 0.001f)))
         {
-            float matrix[16];
-            ImGuizmo::RecomposeMatrixFromComponents(t, value_ptr(eulerDeg), s, matrix);
-            scene.SetLocalMatrix(node, make_mat4(matrix));
+            float nr[3] = {eulerDeg.x, eulerDeg.y, eulerDeg.z};
+            ApplyLocalTransform(node, t, nr, s);
         }
     }
 
     void TransformWidget::DrawScaleEditor(NodeId *node)
     {
         Scene &scene = GetGlobalSystem<RendererSystem>()->GetScene();
+
+        // Cameras and lights don't support scaling
+        if (scene.GetComponentFlags(node) & (Component_Camera | Component_Light))
+            return;
+
         const mat4 &localMatrix = scene.GetLocalMatrix(node);
-
-        vec3 position, scl, skew;
-        quat rotation;
-        vec4 perspective;
-        decompose(localMatrix, scl, rotation, position, skew, perspective);
-
-        vec3 eulerDeg = degrees(eulerAngles(rotation));
+        float t[3], r[3], s[3];
+        ImGuizmo::DecomposeMatrixToComponents(value_ptr(localMatrix), t, r, s);
+        vec3 scl = vec3(s[0], s[1], s[2]);
         vec3 oldScale = scl;
 
         DrawVec3Control(TransformType::Scale, scl, 1.0f);
         if (scl != oldScale)
         {
-            scl = max(scl, vec3(0.001f));
-            ApplyLocalTransform(node, position, rotation, scl);
+            float ns[3] = {std::max(scl.x, 0.001f), std::max(scl.y, 0.001f), std::max(scl.z, 0.001f)};
+            ApplyLocalTransform(node, t, r, ns);
         }
     }
 
@@ -241,26 +278,15 @@ namespace pe
         ImGui::PopID();
     }
 
-    void TransformWidget::ApplyLocalTransform(NodeId *node, const vec3 &pos, const quat &rot, const vec3 &scl)
+    void TransformWidget::ApplyLocalTransform(NodeId *node, const float t[3], const float r[3], const float s[3])
     {
         if (!node)
             return;
 
-        // Guard against NaN
-        if (glm::any(glm::isnan(pos)) || glm::any(glm::isinf(pos)))
-            return;
-        if (glm::any(glm::isnan(rot)) || glm::any(glm::isinf(rot)))
-            return;
-        if (glm::any(glm::isnan(scl)) || glm::any(glm::isinf(scl)))
-            return;
-
-        // Directly set localMatrix from TRS
-        mat4 translationMat = translate(mat4(1.0f), pos);
-        mat4 rotationMat = mat4(rot);
-        mat4 scaleMat = scale(mat4(1.0f), scl);
-        const mat4 localMatrix = translationMat * rotationMat * scaleMat;
+        float matrix[16];
+        ImGuizmo::RecomposeMatrixFromComponents(t, r, s, matrix);
 
         Scene &scene = GetGlobalSystem<RendererSystem>()->GetScene();
-        scene.SetLocalMatrix(node, localMatrix);
+        scene.SetLocalMatrix(node, make_mat4(matrix));
     }
 } // namespace pe

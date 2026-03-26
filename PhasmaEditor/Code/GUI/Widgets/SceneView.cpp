@@ -11,7 +11,6 @@
 #include "Scene/Scene.h"
 #include "Scene/SceneNode.h"
 #include "Scene/SelectionManager.h"
-#include "Systems/LightSystem.h"
 #include "Systems/RendererSystem.h"
 #include "imgui/ImGuizmo.h"
 #include "imgui/imgui_impl_vulkan.h"
@@ -200,38 +199,35 @@ namespace pe
                 ctx.lightIndex = selection.GetSelectedLightIndex();
                 ctx.useLight = true;
 
-                LightSystem *ls = GetGlobalSystem<LightSystem>();
-                if (ls)
+                Scene &scene = GetGlobalSystem<RendererSystem>()->GetScene();
+                if (ctx.lightType == LightType::Point && ctx.lightIndex >= 0 && ctx.lightIndex < (int)scene.GetPointLights().size())
                 {
-                    if (ctx.lightType == LightType::Point && ctx.lightIndex >= 0 && ctx.lightIndex < (int)ls->GetPointLights().size())
-                    {
-                        ctx.matrix = glm::translate(glm::mat4(1.0f), glm::vec3(ls->GetPointLights()[ctx.lightIndex].position));
-                        ctx.valid = true;
-                    }
-                    else if (ctx.lightType == LightType::Spot && ctx.lightIndex >= 0 && ctx.lightIndex < (int)ls->GetSpotLights().size())
-                    {
-                        const auto &spot = ls->GetSpotLights()[ctx.lightIndex];
-                        glm::vec3 start = glm::vec3(spot.position);
-                        glm::quat rot = glm::quat(spot.rotation.w, spot.rotation.x, spot.rotation.y, spot.rotation.z);
-                        ctx.matrix = glm::translate(glm::mat4(1.0f), start) * glm::mat4_cast(rot);
-                        ctx.valid = true;
-                    }
-                    else if (ctx.lightType == LightType::Directional && ctx.lightIndex >= 0 && ctx.lightIndex < (int)ls->GetDirectionalLights().size())
-                    {
-                        const auto &dirLight = ls->GetDirectionalLights()[ctx.lightIndex];
-                        glm::vec3 pos = glm::vec3(dirLight.position);
-                        glm::quat rot = glm::quat(dirLight.rotation.w, dirLight.rotation.x, dirLight.rotation.y, dirLight.rotation.z);
-                        ctx.matrix = glm::translate(glm::mat4(1.0f), pos) * glm::mat4_cast(rot);
-                        ctx.valid = true;
-                    }
-                    else if (ctx.lightType == LightType::Area && ctx.lightIndex >= 0 && ctx.lightIndex < (int)ls->GetAreaLights().size())
-                    {
-                        const auto &area = ls->GetAreaLights()[ctx.lightIndex];
-                        glm::vec3 start = glm::vec3(area.position);
-                        glm::quat rot = glm::quat(area.rotation.w, area.rotation.x, area.rotation.y, area.rotation.z);
-                        ctx.matrix = glm::translate(glm::mat4(1.0f), start) * glm::mat4_cast(rot);
-                        ctx.valid = true;
-                    }
+                    ctx.matrix = glm::translate(glm::mat4(1.0f), glm::vec3(scene.GetPointLights()[ctx.lightIndex].position));
+                    ctx.valid = true;
+                }
+                else if (ctx.lightType == LightType::Spot && ctx.lightIndex >= 0 && ctx.lightIndex < (int)scene.GetSpotLights().size())
+                {
+                    const auto &spot = scene.GetSpotLights()[ctx.lightIndex];
+                    glm::vec3 start = glm::vec3(spot.position);
+                    glm::quat rot = glm::quat(spot.rotation.w, spot.rotation.x, spot.rotation.y, spot.rotation.z);
+                    ctx.matrix = glm::translate(glm::mat4(1.0f), start) * glm::mat4_cast(rot);
+                    ctx.valid = true;
+                }
+                else if (ctx.lightType == LightType::Directional && ctx.lightIndex >= 0 && ctx.lightIndex < (int)scene.GetDirectionalLights().size())
+                {
+                    const auto &dirLight = scene.GetDirectionalLights()[ctx.lightIndex];
+                    glm::vec3 pos = glm::vec3(dirLight.position);
+                    glm::quat rot = glm::quat(dirLight.rotation.w, dirLight.rotation.x, dirLight.rotation.y, dirLight.rotation.z);
+                    ctx.matrix = glm::translate(glm::mat4(1.0f), pos) * glm::mat4_cast(rot);
+                    ctx.valid = true;
+                }
+                else if (ctx.lightType == LightType::Area && ctx.lightIndex >= 0 && ctx.lightIndex < (int)scene.GetAreaLights().size())
+                {
+                    const auto &area = scene.GetAreaLights()[ctx.lightIndex];
+                    glm::vec3 start = glm::vec3(area.position);
+                    glm::quat rot = glm::quat(area.rotation.w, area.rotation.x, area.rotation.y, area.rotation.z);
+                    ctx.matrix = glm::translate(glm::mat4(1.0f), start) * glm::mat4_cast(rot);
+                    ctx.valid = true;
                 }
             }
             else if (selection.GetSelectionType() == SelectionType::Camera)
@@ -349,29 +345,27 @@ namespace pe
 
             if (ctx.useLight)
             {
-                LightSystem *ls = GetGlobalSystem<LightSystem>();
-                if (!ls)
-                    return;
+                Scene &scene = GetGlobalSystem<RendererSystem>()->GetScene();
 
                 if (ctx.lightType == LightType::Point)
                 {
-                    ls->GetPointLights()[ctx.lightIndex].position = glm::vec4(pos, ls->GetPointLights()[ctx.lightIndex].position.w);
+                    scene.GetPointLights()[ctx.lightIndex].position = glm::vec4(pos, scene.GetPointLights()[ctx.lightIndex].position.w);
                 }
                 else if (ctx.lightType == LightType::Spot)
                 {
-                    auto &spot = ls->GetSpotLights()[ctx.lightIndex];
+                    auto &spot = scene.GetSpotLights()[ctx.lightIndex];
                     spot.position = glm::vec4(pos, spot.position.w);
                     spot.rotation = glm::vec4(rot.x, rot.y, rot.z, rot.w);
                 }
-                else if (ctx.lightType == LightType::Directional && ctx.lightIndex >= 0 && ctx.lightIndex < (int)ls->GetDirectionalLights().size())
+                else if (ctx.lightType == LightType::Directional && ctx.lightIndex >= 0 && ctx.lightIndex < (int)scene.GetDirectionalLights().size())
                 {
-                    auto &dirLight = ls->GetDirectionalLights()[ctx.lightIndex];
+                    auto &dirLight = scene.GetDirectionalLights()[ctx.lightIndex];
                     dirLight.position = glm::vec4(pos, dirLight.position.w);
                     dirLight.rotation = glm::vec4(rot.x, rot.y, rot.z, rot.w);
                 }
                 else if (ctx.lightType == LightType::Area)
                 {
-                    auto &area = ls->GetAreaLights()[ctx.lightIndex];
+                    auto &area = scene.GetAreaLights()[ctx.lightIndex];
                     area.position = glm::vec4(pos, area.position.w);
                     area.rotation = glm::vec4(rot.x, rot.y, rot.z, rot.w);
                 }
@@ -432,7 +426,19 @@ namespace pe
                 if (std::abs(det) < 1e-6f)
                     return;
 
-                scene.SetLocalMatrix(ctx.node, glm::inverse(parentWorldMatrix) * newMatrix);
+                mat4 localMatrix = glm::inverse(parentWorldMatrix) * newMatrix;
+                scene.SetLocalMatrix(ctx.node, localMatrix);
+
+                // If this node is a camera, sync position/euler so Scene::Update doesn't overwrite
+                if (scene.GetComponentFlags(ctx.node) & Component_Camera)
+                {
+                    Camera *cam = scene.GetCameraForNode(ctx.node);
+                    if (cam)
+                    {
+                        cam->SetPosition(vec3(localMatrix[3]));
+                        cam->SetEuler(glm::eulerAngles(quat_cast(mat3(localMatrix))));
+                    }
+                }
             }
         }
     } // namespace GizmoUtils
@@ -825,8 +831,6 @@ namespace pe
         if (!camera)
             return;
 
-        LightSystem *ls = GetGlobalSystem<LightSystem>();
-
         mat4 view = camera->GetView();
         mat4 proj = camera->GetProjectionNoJitter();
         mat4 viewProj = proj * view;
@@ -834,14 +838,25 @@ namespace pe
         // --- Helper for updating gizmo icon and selection ---
         auto checkGizmoIcon = [&](const vec3 &pos, const char *icon, LightType type, int index)
         {
+            NodeId *lightNode = nullptr;
+            if (type == LightType::Point && index < (int)scene.GetPointLights().size())
+                lightNode = scene.GetPointLights()[index].nodeId;
+            else if (type == LightType::Spot && index < (int)scene.GetSpotLights().size())
+                lightNode = scene.GetSpotLights()[index].nodeId;
+            else if (type == LightType::Directional && index < (int)scene.GetDirectionalLights().size())
+                lightNode = scene.GetDirectionalLights()[index].nodeId;
+            else if (type == LightType::Area && index < (int)scene.GetAreaLights().size())
+                lightNode = scene.GetAreaLights()[index].nodeId;
+
             std::string id = "##LightIcon" + std::to_string((int)type) + "_" + std::to_string(index);
-            bool isSelected = SelectionManager::Instance().GetSelectedLightType() == type &&
-                              SelectionManager::Instance().GetSelectedLightIndex() == index &&
-                              SelectionManager::Instance().GetSelectionType() == SelectionType::Light;
+            auto &sel = SelectionManager::Instance();
+            bool isSelected = lightNode && sel.GetSelectionType() == SelectionType::Node &&
+                              sel.GetSelectedNode() == lightNode;
 
             if (DrawGizmoIcon(pos, icon, viewProj, imageMin, imageSize, isSelected, id.c_str()))
             {
-                SelectionManager::Instance().Select(type, index);
+                if (lightNode)
+                    sel.Select(lightNode, SelectionType::Node);
             }
             return isSelected;
         };
@@ -853,7 +868,7 @@ namespace pe
 
             if (type == LightType::Point)
             {
-                float radius = ls->GetPointLights()[index].position.w;
+                float radius = scene.GetPointLights()[index].position.w;
                 if (radius > 0.0f)
                 {
                     GizmoUtils::DrawRing(pos, radius, vec3(1, 0, 0), viewProj, imageMin, imageSize, gizmoColor);
@@ -863,12 +878,12 @@ namespace pe
             }
             else if (type == LightType::Spot)
             {
-                float range = ls->GetSpotLights()[index].position.w;
-                float innerAngle = ls->GetSpotLights()[index].params.x;
-                float falloff = ls->GetSpotLights()[index].params.y;
+                float range = scene.GetSpotLights()[index].position.w;
+                float innerAngle = scene.GetSpotLights()[index].params.x;
+                float falloff = scene.GetSpotLights()[index].params.y;
                 float outerAngle = innerAngle + falloff;
 
-                vec3 dir = GetSpotDirection(ls->GetSpotLights()[index].rotation);
+                vec3 dir = GetSpotDirection(scene.GetSpotLights()[index].rotation);
                 vec3 baseCenter = pos + dir * range;
 
                 float innerRadius = range * tan(glm::radians(innerAngle));
@@ -928,9 +943,9 @@ namespace pe
             }
             else if (type == LightType::Area)
             {
-                float width = ls->GetAreaLights()[index].size.x;
-                float height = ls->GetAreaLights()[index].size.y;
-                vec3 dir = GetDirectionFromRotation(ls->GetAreaLights()[index].rotation);
+                float width = scene.GetAreaLights()[index].size.x;
+                float height = scene.GetAreaLights()[index].size.y;
+                vec3 dir = GetDirectionFromRotation(scene.GetAreaLights()[index].rotation);
 
                 vec3 right = glm::normalize(glm::cross(dir, vec3(0, 1, 0)));
                 if (glm::length(right) < 0.001f)
@@ -970,7 +985,7 @@ namespace pe
                 }
 
                 // Direction Line
-                float range = ls->GetAreaLights()[index].position.w;
+                float range = scene.GetAreaLights()[index].position.w;
                 vec3 end = center + dir * range;
                 vec4 clipP1 = viewProj * vec4(center, 1.0f);
                 vec4 clipP2 = viewProj * vec4(end, 1.0f);
@@ -990,7 +1005,7 @@ namespace pe
             }
             else if (type == LightType::Directional)
             {
-                const auto &dirLight = ls->GetDirectionalLights()[index];
+                const auto &dirLight = scene.GetDirectionalLights()[index];
                 glm::quat rot = glm::quat(dirLight.rotation.w, dirLight.rotation.x, dirLight.rotation.y, dirLight.rotation.z);
                 vec3 dir = glm::normalize(rot * vec3(0, 0, -1));
                 vec3 center = pos;
@@ -1019,31 +1034,31 @@ namespace pe
         };
 
         // Point Lights
-        for (int i = 0; i < (int)ls->GetPointLights().size(); i++)
+        for (int i = 0; i < (int)scene.GetPointLights().size(); i++)
         {
-            if (checkGizmoIcon(vec3(ls->GetPointLights()[i].position), ICON_FA_LIGHTBULB, LightType::Point, i))
-                drawLightVisuals(vec3(ls->GetPointLights()[i].position), LightType::Point, i);
+            if (checkGizmoIcon(vec3(scene.GetPointLights()[i].position), ICON_FA_LIGHTBULB, LightType::Point, i))
+                drawLightVisuals(vec3(scene.GetPointLights()[i].position), LightType::Point, i);
         }
 
         // Spot Lights
-        for (int i = 0; i < (int)ls->GetSpotLights().size(); i++)
+        for (int i = 0; i < (int)scene.GetSpotLights().size(); i++)
         {
-            if (checkGizmoIcon(vec3(ls->GetSpotLights()[i].position), ICON_FA_LIGHTBULB, LightType::Spot, i))
-                drawLightVisuals(vec3(ls->GetSpotLights()[i].position), LightType::Spot, i);
+            if (checkGizmoIcon(vec3(scene.GetSpotLights()[i].position), ICON_FA_LIGHTBULB, LightType::Spot, i))
+                drawLightVisuals(vec3(scene.GetSpotLights()[i].position), LightType::Spot, i);
         }
 
         // Directional Lights
-        for (int i = 0; i < (int)ls->GetDirectionalLights().size(); i++)
+        for (int i = 0; i < (int)scene.GetDirectionalLights().size(); i++)
         {
-            if (checkGizmoIcon(vec3(ls->GetDirectionalLights()[i].position), ICON_FA_SUN, LightType::Directional, i))
-                drawLightVisuals(vec3(ls->GetDirectionalLights()[i].position), LightType::Directional, i);
+            if (checkGizmoIcon(vec3(scene.GetDirectionalLights()[i].position), ICON_FA_SUN, LightType::Directional, i))
+                drawLightVisuals(vec3(scene.GetDirectionalLights()[i].position), LightType::Directional, i);
         }
 
         // Area Lights
-        for (int i = 0; i < (int)ls->GetAreaLights().size(); i++)
+        for (int i = 0; i < (int)scene.GetAreaLights().size(); i++)
         {
-            if (checkGizmoIcon(vec3(ls->GetAreaLights()[i].position), ICON_FA_LIGHTBULB, LightType::Area, i))
-                drawLightVisuals(vec3(ls->GetAreaLights()[i].position), LightType::Area, i);
+            if (checkGizmoIcon(vec3(scene.GetAreaLights()[i].position), ICON_FA_LIGHTBULB, LightType::Area, i))
+                drawLightVisuals(vec3(scene.GetAreaLights()[i].position), LightType::Area, i);
         }
     }
 
@@ -1071,16 +1086,17 @@ namespace pe
                 continue; // Hide gizmo for the main active camera
 
             Camera *camera = cameras[i];
-            // if (camera == activeCamera) continue; // Should we draw active camera icon? User said "icon in viewport"
+            NodeId *camNode = camera->GetNodeId();
 
             vec3 pos = camera->GetPosition();
-            bool isSelected = selection.GetSelectionType() == SelectionType::Camera &&
-                              selection.GetSelectedCameraIndex() == i;
+            bool isSelected = camNode && selection.GetSelectionType() == SelectionType::Node &&
+                              selection.GetSelectedNode() == camNode;
 
             std::string iconId = "##CameraIcon" + std::to_string(i);
             if (DrawGizmoIcon(pos, ICON_FA_VIDEO, viewProj, imageMin, imageSize, isSelected, iconId.c_str()))
             {
-                selection.SelectCamera(i);
+                if (camNode)
+                    selection.Select(camNode, SelectionType::Node);
             }
 
             if (isSelected)
