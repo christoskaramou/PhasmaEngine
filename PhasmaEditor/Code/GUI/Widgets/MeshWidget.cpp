@@ -5,6 +5,7 @@
 #include "API/RHI.h"
 #include "FileSelector.h"
 #include "GUI/GUI.h"
+#include "Scene/MaterialAsset.h"
 #include "Scene/Scene.h"
 #include "Scene/SceneNode.h"
 #include "Scene/SelectionManager.h"
@@ -111,13 +112,75 @@ namespace pe
         }
 
         DrawMaterialInfo(mesh, node);
-        DrawTextureInfo(mesh, node);
     }
 
     void MeshWidget::DrawMaterialInfo(Mesh *mesh, NodeId *node)
     {
         if (ImGui::CollapsingHeader("Material", ImGuiTreeNodeFlags_DefaultOpen))
         {
+            // Drag .mat file onto this button or anywhere in the section to apply it
+            static char s_matSaveName[128] = "";
+            static bool s_openSavePopup = false;
+
+            if (ImGui::Button("Save Material..."))
+            {
+                std::snprintf(s_matSaveName, sizeof(s_matSaveName), "material");
+                s_openSavePopup = true;
+            }
+
+            if (ImGui::BeginDragDropTarget())
+            {
+                if (const ImGuiPayload *p = ImGui::AcceptDragDropPayload("CONTENT_BROWSER_ITEM"))
+                {
+                    std::filesystem::path matPath((const char *)p->Data);
+                    if (matPath.extension() == ".mat")
+                    {
+                        RendererSystem *renderer = GetGlobalSystem<RendererSystem>();
+                        if (renderer)
+                        {
+                            renderer->WaitAllFramesCommands();
+                            if (MaterialAsset::Load(*mesh, matPath))
+                            {
+                                PropagateMeshChange(node);
+                                renderer->GetScene().UpdateTextures();
+                                m_gui->NotifyChange();
+                            }
+                        }
+                    }
+                }
+                ImGui::EndDragDropTarget();
+            }
+
+            if (s_openSavePopup)
+            {
+                ImGui::OpenPopup("##SaveMaterial");
+                s_openSavePopup = false;
+            }
+
+            if (ImGui::BeginPopup("##SaveMaterial"))
+            {
+                ImGui::Text("Save to Assets/Materials/");
+                ImGui::SetNextItemWidth(200.f);
+                ImGui::InputText("##matname", s_matSaveName, sizeof(s_matSaveName));
+                ImGui::SameLine();
+                ImGui::Text(".mat");
+
+                if (ImGui::Button("Save") && s_matSaveName[0] != '\0')
+                {
+                    std::filesystem::path savePath =
+                        std::filesystem::path(Path::Assets) / "Materials" / (std::string(s_matSaveName) + ".mat");
+                    MaterialAsset::Save(*mesh, savePath);
+                    ImGui::CloseCurrentPopup();
+                }
+                ImGui::SameLine();
+                if (ImGui::Button("Cancel"))
+                    ImGui::CloseCurrentPopup();
+
+                ImGui::EndPopup();
+            }
+
+            ImGui::Separator();
+
             if (ImGui::BeginTable("MaterialTable", 2, ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg | ImGuiTableFlags_SizingStretchProp))
             {
                 ImGui::TableSetupColumn("Property", ImGuiTableColumnFlags_WidthFixed, 120.f);
@@ -220,12 +283,13 @@ namespace pe
                     m_gui->NotifyChange();
                 }
             }
+
+            DrawTextureInfo(mesh, node);
         }
     }
 
     void MeshWidget::DrawTextureInfo(Mesh *mesh, NodeId *node)
     {
-        if (ImGui::CollapsingHeader("Textures", ImGuiTreeNodeFlags_DefaultOpen))
         {
             if (ImGui::BeginTable("TextureTable", 2, ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg | ImGuiTableFlags_SizingStretchProp))
             {

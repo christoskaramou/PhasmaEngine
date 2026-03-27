@@ -144,7 +144,7 @@ namespace pe
     } // namespace
 
     std::unordered_set<std::string> FileBrowser::s_textExtensions = {
-        ".json", ".md", ".txt", ".xml"};
+        ".json", ".mat", ".md", ".txt", ".xml"};
     std::unordered_set<std::string> FileBrowser::s_shaderExtensions = {
         ".comp", ".frag", ".glsl", ".hlsl", ".vert"};
     std::unordered_set<std::string> FileBrowser::s_scriptExtensions = {

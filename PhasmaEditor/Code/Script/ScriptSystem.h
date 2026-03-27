@@ -37,6 +37,13 @@ namespace pe
         sol::function batchCallback;
     };
 
+    struct ExposedVar
+    {
+        enum class Type { Number, Bool, String };
+        std::string name;
+        Type type;
+    };
+
     struct ScriptEntry
     {
         std::string path;
@@ -45,6 +52,7 @@ namespace pe
         sol::function updateFn;
         sol::function updateEditorFn;
         sol::function destroyFn;
+        std::vector<ExposedVar> exposedVars;
     };
 
     class ScriptSystem : public ISystem
@@ -67,12 +75,16 @@ namespace pe
         void AddPendingAsyncLoad(PendingAsyncLoad load);
         void ProcessAsyncLoads();
 
+        // Returns the ScriptEntry whose path matches, or nullptr if not found
+        ScriptEntry *FindScript(const std::string &path);
+
         static void AddBindings(LuaBindingFunc func);
 
     private:
         void LoadScripts();
         void ScanForNewScripts();
         void CollectHooks(ScriptEntry &entry);
+        void CollectExposedVars(ScriptEntry &entry);
         static std::vector<LuaBindingFunc> &GetBindings();
         void InitInternal(CommandBuffer *cmd, bool restricted);
 

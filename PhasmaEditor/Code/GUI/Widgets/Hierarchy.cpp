@@ -23,7 +23,7 @@ namespace pe
         // Unity dark theme colors
         const ImVec4 WindowBg = ImVec4(0.22f, 0.22f, 0.22f, 1.0f);
         const ImVec4 HeaderBg = ImVec4(0.18f, 0.18f, 0.18f, 1.0f);
-        const ImVec4 HeaderHovered = ImVec4(0.26f, 0.26f, 0.26f, 1.0f);
+        const ImVec4 HeaderHovered = ImVec4(0.17f, 0.36f, 0.53f, 1.0f);
         const ImVec4 HeaderActive = ImVec4(0.26f, 0.59f, 0.98f, 0.8f);
         const ImVec4 SelectionBg = ImVec4(0.17f, 0.36f, 0.53f, 1.0f);
         const ImVec4 SelectionBgUnfocused = ImVec4(0.30f, 0.30f, 0.30f, 1.0f);
@@ -437,8 +437,9 @@ namespace pe
 
                 bool nodeOpen = ImGui::TreeNodeEx((void *)uniqueId, nodeFlags, "%s", displayNodeName.c_str());
 
-                // Drag & Drop Source
-                if (ImGui::BeginDragDropSource())
+                // Drag & Drop Source — SourceAllowNullID lets the drag initiate
+                // from the tree node label even when OpenOnArrow is set
+                if (ImGui::BeginDragDropSource(ImGuiDragDropFlags_SourceAllowNullID))
                 {
                     HierarchyDragDropPayload payload;
                     payload.node = node;
@@ -448,10 +449,15 @@ namespace pe
                 }
 
                 if ((ImGui::IsItemClicked(ImGuiMouseButton_Left) || ImGui::IsItemClicked(ImGuiMouseButton_Right)) && !ImGui::IsItemToggledOpen())
-                {
                     selection.Select(node, SelectionType::Node);
+
+                // Focus Properties on release only — calling SetWindowFocus on press clears
+                // g.ActiveId via FocusWindow→ClearActiveID, which breaks BeginDragDropSource.
+                if (ImGui::IsItemHovered() &&
+                    ImGui::IsMouseReleased(ImGuiMouseButton_Left) &&
+                    !ImGui::IsMouseDragging(ImGuiMouseButton_Left) &&
+                    !ImGui::IsItemToggledOpen())
                     ImGui::SetWindowFocus("Properties");
-                }
 
                 // Drag & Drop Target
                 if (ImGui::BeginDragDropTarget())
@@ -473,13 +479,14 @@ namespace pe
 
                         if (isModel && !GUIState::s_modelLoading)
                         {
-                            auto loadTask = [path]()
+                            auto loadTask = [path, node]()
                             {
                                 GUIState::s_modelLoading = true;
                                 try
                                 {
                                     if (ModelAsset *m = ModelAsset::Load(path))
-                                        EventSystem::PushEvent(EventType::ModelLoaded, m);
+                                        EventSystem::PushEvent(EventType::ModelLoadedForNode,
+                                                               Scene::ModelLoadForNodeRequest{node, m});
                                 }
                                 catch (const std::exception &e)
                                 {
@@ -489,6 +496,9 @@ namespace pe
                             };
                             ThreadPool::GUI.Enqueue(loadTask);
                         }
+
+                        if (ext == ".lua")
+                            scene.SetNodeScript(node, path.string());
                     }
                     ImGui::EndDragDropTarget();
                 }

@@ -2,6 +2,14 @@
 -- Replaces C++ camera movement (Window::SmoothMouseRotation + WASD handling)
 -- Uses update_editor() so it runs every frame, not just in play mode
 
+-- Variables declared here are editable from the Properties panel when this
+-- script is attached to a node. The returned table is live: changes made in
+-- the editor are immediately visible to the functions below.
+local props = exposed {
+    speed_multiplier = 1.0,
+    invert_y = false,
+}
+
 local skip_next_rotation = false
 
 local function update_editor()
@@ -23,7 +31,8 @@ local function update_editor()
         local mouse = input.get_mouse_delta()
 
         if not skip_next_rotation then
-            cam:rotate(mouse.x, mouse.y)
+            local my = props.invert_y and -mouse.y or mouse.y
+            cam:rotate(mouse.x, my)
         else
             skip_next_rotation = false
         end
@@ -35,7 +44,7 @@ local function update_editor()
 
     -- WASD movement (only while right-click held)
     if rmb then
-        local speed = cam:get_speed() * delta
+        local speed = cam:get_speed() * delta * props.speed_multiplier
 
         -- Diagonal normalization
         local fwd = input.is_key_down("W") or input.is_key_down("S")

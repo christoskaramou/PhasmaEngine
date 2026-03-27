@@ -11,6 +11,7 @@
 #include "Scene/Scene.h"
 #include "Scene/SceneNode.h"
 #include "Scene/SelectionManager.h"
+#include "Script/ScriptSystem.h"
 #include "ScriptEditor.h"
 #include "Systems/RendererSystem.h"
 #include "TransformWidget.h"
@@ -79,6 +80,55 @@ namespace pe
             ImGui::SameLine();
             if (ImGui::SmallButton("Remove##Script"))
                 scene.SetNodeScript(node, "");
+
+            // Show exposed variables if the script has any
+            ScriptSystem *ss = GetGlobalSystem<ScriptSystem>();
+            if (!ss)
+                return;
+
+            ScriptEntry *entry = ss->FindScript(scriptPath);
+            if (!entry || entry->exposedVars.empty())
+                return;
+
+            ImGui::Dummy(ImVec2(0.f, 4.f));
+            ImGui::SeparatorText("Exposed Variables");
+
+            sol::object exposedObj = entry->env.raw_get<sol::object>("__exposed");
+            if (!exposedObj.is<sol::table>())
+                return;
+            sol::table exposed = exposedObj.as<sol::table>();
+
+            for (auto &var : entry->exposedVars)
+            {
+                ImGui::PushID(var.name.c_str());
+                switch (var.type)
+                {
+                case ExposedVar::Type::Number:
+                {
+                    float val = static_cast<float>(exposed.get<double>(var.name));
+                    if (ImGui::DragFloat(var.name.c_str(), &val, 0.1f))
+                        exposed[var.name] = static_cast<double>(val);
+                    break;
+                }
+                case ExposedVar::Type::Bool:
+                {
+                    bool val = exposed.get<bool>(var.name);
+                    if (ImGui::Checkbox(var.name.c_str(), &val))
+                        exposed[var.name] = val;
+                    break;
+                }
+                case ExposedVar::Type::String:
+                {
+                    std::string val = exposed.get<std::string>(var.name);
+                    char buf[256];
+                    std::snprintf(buf, sizeof(buf), "%s", val.c_str());
+                    if (ImGui::InputText(var.name.c_str(), buf, sizeof(buf)))
+                        exposed[var.name] = std::string(buf);
+                    break;
+                }
+                }
+                ImGui::PopID();
+            }
         };
 
         auto drawCamera = [&]()
@@ -191,6 +241,10 @@ namespace pe
             }
         };
 
+        // Set when the selected node can receive a .lua script drop;
+        // consumed after the switch to place the whole-window drop target.
+        NodeId *scriptDropNode = nullptr;
+
         switch (sel.GetSelectionType())
         {
         case SelectionType::Node:
@@ -200,6 +254,8 @@ namespace pe
                 break;
 
             uint32_t flags = scene.GetComponentFlags(node);
+            if (!(flags & (Component_Camera | Component_Light)))
+                scriptDropNode = node;
 
             // Transform is always shown
             drawTransform();
@@ -224,7 +280,19 @@ namespace pe
             if (flags & Component_Script)
             {
                 ImGui::Separator();
-                if (ImGui::CollapsingHeader("Script Component", ImGuiTreeNodeFlags_DefaultOpen))
+                bool open = ImGui::CollapsingHeader("Script Component", ImGuiTreeNodeFlags_DefaultOpen);
+                // Drop a .lua file on the header to replace the current script
+                if (ImGui::BeginDragDropTarget())
+                {
+                    if (const ImGuiPayload *p = ImGui::AcceptDragDropPayload("CONTENT_BROWSER_ITEM"))
+                    {
+                        std::string path((const char *)p->Data, p->DataSize - 1);
+                        if (std::filesystem::path(path).extension() == ".lua")
+                            scene.SetNodeScript(node, path);
+                    }
+                    ImGui::EndDragDropTarget();
+                }
+                if (open)
                     drawScriptComponent(node);
             }
 
@@ -281,6 +349,38 @@ namespace pe
             break;
         default:
             break;
+        }
+
+        // Whole-window .lua script drop target (active whenever a node that can
+        // hold a script is selected, regardless of what's under the cursor)
+        if (scriptDropNode)
+        {
+            // Draw a green border while a .lua file is being dragged
+            const ImGuiPayload *drag = ImGui::GetDragDropPayload();
+            if (drag && strcmp(drag->DataType, "CONTENT_BROWSER_ITEM") == 0 && drag->DataSize > 1)
+            {
+                std::string dragPath((const char *)drag->Data, drag->DataSize - 1);
+                if (std::filesystem::path(dragPath).extension() == ".lua")
+                {
+                    ImVec2 p0 = ImGui::GetWindowPos();
+                    ImVec2 p1(p0.x + ImGui::GetWindowSize().x, p0.y + ImGui::GetWindowSize().y);
+                    ImGui::GetWindowDrawList()->AddRect(p0, p1, IM_COL32(80, 190, 80, 220), 4.f, 0, 2.f);
+                }
+            }
+
+            ImRect winRect(ImGui::GetWindowPos(),
+                           ImVec2(ImGui::GetWindowPos().x + ImGui::GetWindowSize().x,
+                                  ImGui::GetWindowPos().y + ImGui::GetWindowSize().y));
+            if (ImGui::BeginDragDropTargetCustom(winRect, ImGui::GetID("##script_drop")))
+            {
+                if (const ImGuiPayload *p = ImGui::AcceptDragDropPayload("CONTENT_BROWSER_ITEM"))
+                {
+                    std::string path((const char *)p->Data, p->DataSize - 1);
+                    if (std::filesystem::path(path).extension() == ".lua")
+                        scene.SetNodeScript(scriptDropNode, path);
+                }
+                ImGui::EndDragDropTarget();
+            }
         }
 
         ImGui::End();

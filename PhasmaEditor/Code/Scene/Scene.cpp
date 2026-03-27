@@ -282,6 +282,20 @@ namespace pe
         UpdateNodeMatrices();
     }
 
+    const std::vector<NodeId *> &Scene::GetModelRootNodes(ModelAsset *model) const
+    {
+        auto it = m_modelRootNodes.find(model->GetId());
+        if (it != m_modelRootNodes.end())
+            return it->second;
+        return EmptyRootNodes();
+    }
+
+    const std::vector<NodeId *> &Scene::EmptyRootNodes()
+    {
+        static const std::vector<NodeId *> empty;
+        return empty;
+    }
+
     void Scene::RemoveModel(ModelAsset *model)
     {
         size_t modelId = model->GetId();

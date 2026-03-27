@@ -59,6 +59,16 @@ namespace pe
             sol::environment env = te;
             env.raw_set("__hooks", t); });
 
+        // exposed {} keyword - declares variables to show in the editor's Properties panel.
+        // Returns the same table so scripts can hold a live reference:
+        //   local props = exposed { speed = 5.0, enabled = true }
+        //   -- props.speed always reflects the current editor value
+        m_lua.set_function("exposed", [](sol::table t, sol::this_environment te) -> sol::table
+                           {
+            sol::environment env = te;
+            env.raw_set("__exposed", t);
+            return t; });
+
         // Execute all registered binding functions
         for (auto &fn : GetBindings())
             fn(m_lua);
@@ -86,6 +96,68 @@ namespace pe
         entry.updateFn = get("update");
         entry.updateEditorFn = get("update_editor");
         entry.destroyFn = get("destroy");
+    }
+
+    void ScriptSystem::CollectExposedVars(ScriptEntry &entry)
+    {
+        entry.exposedVars.clear();
+
+        sol::object exposedObj = entry.env.raw_get<sol::object>("__exposed");
+        if (!exposedObj.is<sol::table>())
+            return;
+
+        sol::table t = exposedObj.as<sol::table>();
+        for (auto &[k, v] : t)
+        {
+            if (!k.is<std::string>())
+                continue;
+
+            ExposedVar var;
+            var.name = k.as<std::string>();
+
+            // Check bool before number: in sol2 booleans also satisfy is<double>()
+            if (v.is<bool>())
+                var.type = ExposedVar::Type::Bool;
+            else if (v.is<double>())
+                var.type = ExposedVar::Type::Number;
+            else if (v.is<std::string>())
+                var.type = ExposedVar::Type::String;
+            else
+                continue; // skip unsupported types
+
+            entry.exposedVars.push_back(std::move(var));
+        }
+    }
+
+    static std::string NormalizePath(const std::string &path)
+    {
+        // Resolve '..' and normalize separators so paths stored by LoadScripts
+        // (which may include '..') match paths returned by the FileSelector.
+        try
+        {
+            auto canonical = std::filesystem::weakly_canonical(path);
+            std::string s = canonical.string();
+            std::replace(s.begin(), s.end(), '\\', '/');
+            return s;
+        }
+        catch (...)
+        {
+            std::string s = path;
+            std::replace(s.begin(), s.end(), '\\', '/');
+            return s;
+        }
+    }
+
+    ScriptEntry *ScriptSystem::FindScript(const std::string &path)
+    {
+        // entry.path was already normalized by LoadScripts; only normalize the input
+        std::string normalized = NormalizePath(path);
+        for (auto &entry : m_scripts)
+        {
+            if (entry.path == normalized)
+                return &entry;
+        }
+        return nullptr;
     }
 
     void ScriptSystem::CallInit()
@@ -351,8 +423,9 @@ namespace pe
         {
             if (file.path().extension() == ".lua")
             {
-                std::string filePath = file.path().string();
-                std::replace(filePath.begin(), filePath.end(), '\\', '/');
+                // Store canonical path so FindScript can match regardless of whether
+                // Path::Assets contains '..' segments vs FileSelector canonical paths
+                std::string filePath = NormalizePath(file.path().string());
 
                 // Each script gets its own environment that inherits globals
                 sol::environment env(m_lua, sol::create, m_lua.globals());
@@ -387,6 +460,7 @@ namespace pe
                 entry.path = filePath;
                 entry.env = std::move(env);
                 CollectHooks(entry);
+                CollectExposedVars(entry);
                 m_scripts.push_back(std::move(entry));
 
                 PE_INFO("Loaded Lua script: %s", filePath.c_str());
@@ -413,8 +487,7 @@ namespace pe
             if (file.path().extension() != ".lua")
                 continue;
 
-            std::string filePath = file.path().string();
-            std::replace(filePath.begin(), filePath.end(), '\\', '/');
+            std::string filePath = NormalizePath(file.path().string());
 
             // Check if already tracked
             bool known = false;

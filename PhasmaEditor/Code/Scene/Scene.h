@@ -102,6 +102,13 @@ namespace pe
             NodeId *node;
             ModelAsset *model;
         };
+
+        // Payload for ModelLoadedForNode event — load model and parent its roots under node
+        struct ModelLoadForNodeRequest
+        {
+            NodeId *parentNode;
+            ModelAsset *model;
+        };
         // --- Lifecycle ---
         Scene();
         ~Scene();
@@ -112,6 +119,9 @@ namespace pe
         void UploadBuffers(CommandBuffer *cmd);
         void UpdateTLASTransformations(CommandBuffer *cmd);
         void AddModel(ModelAsset *model);
+        // Returns the root nodes created by the last AddModel call for the given model.
+        const std::vector<NodeId *> &GetModelRootNodes(ModelAsset *model) const;
+        static const std::vector<NodeId *> &EmptyRootNodes();
         void RemoveModel(ModelAsset *model);
         void RemoveModels(std::vector<ModelAsset *> models);
         Camera *AddCamera(NodeId *parent = nullptr);

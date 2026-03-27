@@ -217,6 +217,24 @@ namespace pe
                     model->SetRenderReady(true);
                     break;
                 }
+                case EventType::ModelLoadedForNode:
+                {
+                    auto req = std::any_cast<Scene::ModelLoadForNodeRequest>(event.payload);
+                    if (!req.model)
+                        break;
+                    rendererSystem->WaitAllFramesCommands();
+                    Scene &scene = rendererSystem->GetScene();
+                    scene.AddModel(req.model);
+                    // Reparent all model root nodes under the target node
+                    if (req.parentNode)
+                    {
+                        for (NodeId *root : scene.GetModelRootNodes(req.model))
+                            scene.ReparentNode(root, req.parentNode);
+                    }
+                    scene.UpdateGeometryBuffers();
+                    req.model->SetRenderReady(true);
+                    break;
+                }
                 case EventType::ModelRemoved:
                 {
                     ModelAsset *model = std::any_cast<ModelAsset *>(event.payload);
