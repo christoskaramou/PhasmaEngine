@@ -77,9 +77,18 @@ struct PushConstants_RayTracing
 struct Mesh_Constants
 {
     float alphaCut;
+    float baseColorAlpha;
     uint meshDataOffset;
     uint textureMask;
+    uint materialId;
     int meshImageIndex[5];
+};
+
+struct MaterialGpuData
+{
+    float4 baseColorFactor;
+    float4 emissiveTransmission;  // .xyz = emissive, .w = transmissionFactor
+    float4 pbrParams;             // .x = metallic, .y = roughness, .z = alphaCutoff, .w = occlusionStrength
 };
 
 // -----------------------------------------
@@ -136,9 +145,6 @@ struct VS_OUTPUT_Gbuffer
     float3 normal               : NORMAL;
     float4 tangent              : TEXCOORD4;
     float4 color                : COLOR;
-    float4 baseColorFactor      : TEXCOORD1;
-    float3 emissiveFactor       : TEXCOORD2;
-    float4 metRoughAlphacutOcl  : TEXCOORD3;
     float4 positionCS           : POSITION0;
     float4 prevPositionCS       : POSITION1;
     float4 positionWS           : POSITION2;
@@ -160,9 +166,6 @@ struct PS_INPUT_Gbuffer
     float3 normal               : NORMAL;
     float4 tangent              : TEXCOORD4;
     float4 color                : COLOR;
-    float4 baseColorFactor      : TEXCOORD1;
-    float3 emissiveFactor       : TEXCOORD2;
-    float4 metRoughAlphacutOcl  : TEXCOORD3;
     float4 positionCS           : POSITION0;
     float4 prevPositionCS       : POSITION1;
     float4 positionWS           : POSITION2;

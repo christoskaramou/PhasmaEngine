@@ -1,4 +1,5 @@
 #include "Scene/AssimpLoader.h"
+#include "Scene/Material.h"
 #include "Scene/Scene.h"
 #include "API/Command.h"
 #include "API/Image.h"
@@ -379,6 +380,9 @@ namespace pe
         auto &aabbVerts = m_scene.m_aabbVertexStore;
         auto &indices = m_scene.m_indexStore;
 
+        // Material deduplication: share Material* across meshes with the same aiMaterialIndex
+        std::unordered_map<unsigned int, Material *> materialByIndex;
+
         for (unsigned int i = 0; i < m_aiScene->mNumMeshes; i++)
         {
             const aiMesh *aiMesh = m_aiScene->mMeshes[i];
@@ -388,27 +392,44 @@ namespace pe
             aiMaterial *material = m_aiScene->mMaterials[aiMesh->mMaterialIndex];
 
             Mesh mesh{};
-            mesh.renderType = DetermineRenderType(material);
+            RenderType rt = DetermineRenderType(material);
+            mesh.renderType = rt;
 
-            // Default textures
-            mesh.images[static_cast<int>(TextureType::BaseColor)] = ResourceHandle<Image>::FromRaw(defaults.white);
-            mesh.images[static_cast<int>(TextureType::MetallicRoughness)] = ResourceHandle<Image>::FromRaw(defaults.black);
-            mesh.images[static_cast<int>(TextureType::Normal)] = ResourceHandle<Image>::FromRaw(defaults.normal);
-            mesh.images[static_cast<int>(TextureType::Occlusion)] = ResourceHandle<Image>::FromRaw(defaults.white);
-            mesh.images[static_cast<int>(TextureType::Emissive)] = ResourceHandle<Image>::FromRaw(defaults.black);
+            // Reuse existing Material if we already created one for this aiMaterialIndex
+            auto it = materialByIndex.find(aiMesh->mMaterialIndex);
+            if (it != materialByIndex.end())
+            {
+                mesh.material = it->second;
+            }
+            else
+            {
+                auto mat = std::make_unique<Material>();
+                mat->renderType = rt;
+                mat->textures[static_cast<int>(TextureType::BaseColor)] = ResourceHandle<Image>::FromRaw(defaults.white);
+                mat->textures[static_cast<int>(TextureType::MetallicRoughness)] = ResourceHandle<Image>::FromRaw(defaults.black);
+                mat->textures[static_cast<int>(TextureType::Normal)] = ResourceHandle<Image>::FromRaw(defaults.normal);
+                mat->textures[static_cast<int>(TextureType::Occlusion)] = ResourceHandle<Image>::FromRaw(defaults.white);
+                mat->textures[static_cast<int>(TextureType::Emissive)] = ResourceHandle<Image>::FromRaw(defaults.black);
+                for (auto &s : mat->samplers)
+                    s = defaults.sampler;
+                mat->textureMask = 0;
 
-            for (auto &s : mesh.samplers)
-                s = defaults.sampler;
+                int twoSided = 0;
+                material->Get(AI_MATKEY_TWOSIDED, twoSided);
+                mat->doubleSided = twoSided != 0;
 
-            mesh.textureMask = 0;
+                AssignTexture(*mat, TextureType::BaseColor, material, {aiTextureType_BASE_COLOR, aiTextureType_DIFFUSE});
+                AssignTexture(*mat, TextureType::MetallicRoughness, material, {aiTextureType_UNKNOWN, aiTextureType_DIFFUSE_ROUGHNESS, aiTextureType_SPECULAR, aiTextureType_METALNESS});
+                AssignTexture(*mat, TextureType::Normal, material, {aiTextureType_NORMAL_CAMERA, aiTextureType_NORMALS, aiTextureType_HEIGHT});
+                AssignTexture(*mat, TextureType::Occlusion, material, {aiTextureType_AMBIENT_OCCLUSION, aiTextureType_LIGHTMAP});
+                AssignTexture(*mat, TextureType::Emissive, material, {aiTextureType_EMISSION_COLOR, aiTextureType_EMISSIVE});
 
-            AssignTexture(mesh, TextureType::BaseColor, material, {aiTextureType_BASE_COLOR, aiTextureType_DIFFUSE});
-            AssignTexture(mesh, TextureType::MetallicRoughness, material, {aiTextureType_UNKNOWN, aiTextureType_DIFFUSE_ROUGHNESS, aiTextureType_SPECULAR, aiTextureType_METALNESS});
-            AssignTexture(mesh, TextureType::Normal, material, {aiTextureType_NORMAL_CAMERA, aiTextureType_NORMALS, aiTextureType_HEIGHT});
-            AssignTexture(mesh, TextureType::Occlusion, material, {aiTextureType_AMBIENT_OCCLUSION, aiTextureType_LIGHTMAP});
-            AssignTexture(mesh, TextureType::Emissive, material, {aiTextureType_EMISSION_COLOR, aiTextureType_EMISSIVE});
+                ComputeMaterialData(*mat, material);
 
-            ComputeMaterialData(mesh, material);
+                mesh.material = mat.get();
+                materialByIndex[aiMesh->mMaterialIndex] = mat.get();
+                m_scene.m_ownedMaterials.push_back(std::move(mat));
+            }
 
             // Geometry
             const aiVector3D *positions = aiMesh->mVertices;
@@ -708,7 +729,7 @@ namespace pe
         return {};
     }
 
-    void AssimpLoader::AssignTexture(Mesh &mesh, TextureType type, aiMaterial *material,
+    void AssimpLoader::AssignTexture(Material &mat, TextureType type, aiMaterial *material,
                                      std::initializer_list<aiTextureType> textureTypes)
     {
         for (aiTextureType aiType : textureTypes)
@@ -720,26 +741,20 @@ namespace pe
             ResourceHandle<Image> loaded = ResourceManager::Get().Find<Image>(texPath.string());
             if (loaded)
             {
-                mesh.images[static_cast<int>(type)] = loaded;
-                mesh.textureMask |= TextureBit(type);
+                mat.textures[static_cast<int>(type)] = loaded;
+                mat.textureMask |= TextureBit(type);
                 return;
             }
         }
     }
 
-    void AssimpLoader::ComputeMaterialData(Mesh &mesh, aiMaterial *material) const
+    void AssimpLoader::ComputeMaterialData(Material &mat, aiMaterial *material) const
     {
-        mat4 factors[2] = {mat4(1.f), mat4(1.f)};
-
         if (!material)
-        {
-            mesh.materialFactors[0] = factors[0];
-            mesh.materialFactors[1] = factors[1];
             return;
-        }
 
-        const bool hasNormalMap = (mesh.textureMask & TextureBit(TextureType::Normal)) != 0;
-        const bool hasOcclusionMap = (mesh.textureMask & TextureBit(TextureType::Occlusion)) != 0;
+        const bool hasNormalMap = (mat.textureMask & TextureBit(TextureType::Normal)) != 0;
+        const bool hasOcclusionMap = (mat.textureMask & TextureBit(TextureType::Occlusion)) != 0;
 
         aiColor4D baseColor(1.f, 1.f, 1.f, 1.f);
         aiColor3D diffuseColor(1.f, 1.f, 1.f);
@@ -820,29 +835,22 @@ namespace pe
         float ior = 1.5f;
         material->Get(AI_MATKEY_REFRACTI, ior);
 
-        factors[0][0][0] = baseColor.r;
-        factors[0][0][1] = baseColor.g;
-        factors[0][0][2] = baseColor.b;
-        factors[0][0][3] = baseColor.a;
-        factors[0][1][0] = emissive.r;
-        factors[0][1][1] = emissive.g;
-        factors[0][1][2] = emissive.b;
-        factors[0][1][3] = transmissionFactor;
-        factors[0][2][0] = metallic;
-        factors[0][2][1] = roughness;
-        factors[0][2][2] = alphaCutoff;
-        factors[0][2][3] = occlusionStrength;
-        factors[0][3][1] = normalScale;
+        aiString aiName;
+        if (material->Get(AI_MATKEY_NAME, aiName) == AI_SUCCESS)
+            mat.name = aiName.C_Str();
 
-        factors[1][0][0] = thicknessFactor;
-        factors[1][0][1] = attenuationDistance;
-        factors[1][0][2] = ior;
-        factors[1][1][0] = attenuationColor.r;
-        factors[1][1][1] = attenuationColor.g;
-        factors[1][1][2] = attenuationColor.b;
-
-        mesh.materialFactors[0] = factors[0];
-        mesh.materialFactors[1] = factors[1];
+        mat.baseColorFactor = vec4(baseColor.r, baseColor.g, baseColor.b, baseColor.a);
+        mat.emissiveFactor = vec3(emissive.r, emissive.g, emissive.b);
+        mat.metallic = metallic;
+        mat.roughness = roughness;
+        mat.alphaCutoff = alphaCutoff;
+        mat.occlusionStrength = occlusionStrength;
+        mat.normalScale = normalScale;
+        mat.transmissionFactor = transmissionFactor;
+        mat.thicknessFactor = thicknessFactor;
+        mat.attenuationDistance = attenuationDistance;
+        mat.ior = ior;
+        mat.attenuationColor = vec3(attenuationColor.r, attenuationColor.g, attenuationColor.b);
     }
 
     RenderType AssimpLoader::DetermineRenderType(aiMaterial *material) const

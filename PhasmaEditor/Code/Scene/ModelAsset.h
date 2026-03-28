@@ -6,6 +6,7 @@ namespace pe
     class Buffer;
     struct Vertex;
     struct AabbVertex;
+    class Material;
     class Sampler;
     class CommandBuffer;
     class Image;
@@ -20,11 +21,8 @@ namespace pe
         AABB boundingBox;
         RenderType renderType;
 
-        ResourceHandle<Image> images[5];
-        Sampler *samplers[5]{nullptr};
-        uint32_t textureMask = 0;
-
-        mat4 materialFactors[2] = {mat4(1.f), mat4(1.f)};
+        // First-class material reference (shared across meshes with same material)
+        Material *material = nullptr;
     };
 
     struct NodeInfo
@@ -43,7 +41,6 @@ namespace pe
         {
             mat4 worldMatrix = mat4(1.f);
             mat4 previousWorldMatrix = mat4(1.f);
-            mat4 materialFactors[2] = {mat4(1.f), mat4(1.f)};
         };
 
         ModelAsset();
@@ -65,14 +62,10 @@ namespace pe
         // Removes a node and its subtree. Returns true if the model is now empty (caller should delete it).
         bool RemoveNode(int nodeIndex);
 
-        // Removes only the mesh from a node, keeping the node and its children intact.
-        void RemoveMesh(int nodeIndex);
         ResourceHandle<Image> LoadTexture(CommandBuffer *cmd, const std::filesystem::path &texturePath);
 
         // Getters
         size_t GetId() const { return m_id; }
-        void SetRenderReady(bool ready) { m_render = ready; }
-        bool IsRenderReady() const { return m_render; }
 
         const std::vector<Vertex> &GetVertices() const { return m_vertices; }
         const std::vector<PositionUvVertex> &GetPositionUvs() const { return m_positionUvs; }
@@ -93,7 +86,6 @@ namespace pe
         bool HasMovedNodes() const { return !m_nodesMoved.empty(); }
         const std::vector<int> &GetMovedNodes() const { return m_nodesMoved; }
         void ClearMovedNodes() { m_nodesMoved.clear(); }
-        void MarkAllUniformsDirty();
         bool IsUniformDirty(uint32_t frameIndex) const;
         void SetUniformDirty(uint32_t frameIndex, bool dirty);
 
@@ -113,14 +105,10 @@ namespace pe
         const std::string &GetNodeName(int nodeIndex) const;
         NodeInfo *GetNodeInfo(int nodeIndex);
         const NodeInfo *GetNodeInfo(int nodeIndex) const;
-        const NodeGpuData *GetNodeGpuData(int nodeIndex) const;
-        void SyncNodeGpuDataFromMesh(int nodeIndex);
         const mat4 &GetNodeLocalMatrix(int nodeIndex) const;
         void SetNodeLocalMatrix(int nodeIndex, const mat4 &localMatrix, bool markDirty = true);
-        const mat4 &GetNodeWorldMatrix(int nodeIndex) const;
         int GetNodeParentIndex(int nodeIndex) const;
         void SetNodeParentIndex(int nodeIndex, int parentIndex);
-        const std::vector<int> &GetNodeChildren(int nodeIndex) const;
         void RebuildNodeChildrenFromParents();
         const AABB &GetNodeWorldBoundingBox(int nodeIndex) const;
 
@@ -129,19 +117,6 @@ namespace pe
         MeshInfo *GetMeshInfo(int meshIndex);
         const MeshInfo *GetMeshInfo(int meshIndex) const;
         int GetNodeMesh(int nodeIndex) const;
-        size_t GetNodeDataOffset(int nodeIndex) const;
-        void SetNodeDataOffset(int nodeIndex, size_t offset);
-        uint32_t GetNodeIndirectIndex(int nodeIndex) const;
-        void SetNodeIndirectIndex(int nodeIndex, uint32_t index);
-        int GetNodeInstanceIndex(int nodeIndex) const;
-        void SetNodeInstanceIndex(int nodeIndex, int instanceIndex);
-        bool IsNodeDirty(int nodeIndex) const;
-        void SetNodeDirty(int nodeIndex, bool dirty);
-        void MarkNodeUniformsDirty(int nodeIndex);
-        bool IsNodeUniformDirty(int nodeIndex, uint32_t frameIndex) const;
-        void SetNodeUniformDirty(int nodeIndex, uint32_t frameIndex, bool dirty);
-        uint32_t GetMeshImageViewIndex(int meshIndex, int slot) const;
-        void SetMeshImageViewIndex(int meshIndex, int slot, uint32_t imageViewIndex);
 
         struct DefaultResources
         {
@@ -165,7 +140,6 @@ namespace pe
         static constexpr uint32_t TextureBit(TextureType type) { return 1u << static_cast<uint32_t>(type); }
 
         void ResetResources(CommandBuffer *cmd);
-        void ResetRuntimeState();
 
         // Resource ownership helpers:
         // - owned resources are destroyed in ~ModelAsset()
@@ -189,7 +163,6 @@ namespace pe
             std::vector<bool> dirtyUniforms;
         };
 
-        std::atomic_bool m_render = false;
         size_t m_id;
 
         std::vector<ResourceHandle<Image>> m_images{};
@@ -199,6 +172,9 @@ namespace pe
 
         std::vector<MeshInfo> m_meshInfos{};
         std::vector<MeshRuntimeInfo> m_meshRuntimeInfos{};
+
+        // Owned materials created during import (shared across meshes via MeshInfo::material pointer)
+        std::vector<std::unique_ptr<Material>> m_materials{};
         std::vector<NodeInfo> m_nodeInfos{};
         std::vector<NodeRuntimeInfo> m_nodeRuntimeInfos{};
         std::vector<int> m_nodeToMesh{};

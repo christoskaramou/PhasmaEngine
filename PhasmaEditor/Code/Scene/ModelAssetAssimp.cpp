@@ -1,4 +1,5 @@
 #include "Scene/ModelAssetAssimp.h"
+#include "Scene/Material.h"
 #include "API/Command.h"
 #include "API/Image.h"
 #include "API/Queue.h"
@@ -199,6 +200,15 @@ namespace pe
 
     ModelAsset *ModelAssetAssimp::Load(const std::filesystem::path &file)
     {
+        // Full synchronous load (CPU + GPU on calling thread)
+        ModelAsset *model = LoadCpuOnly(file);
+        if (model)
+            static_cast<ModelAssetAssimp *>(model)->UploadGpu();
+        return model;
+    }
+
+    ModelAsset *ModelAssetAssimp::LoadCpuOnly(const std::filesystem::path &file)
+    {
         auto fileU8 = file.u8string();
         std::string fileStr(reinterpret_cast<const char *>(fileU8.c_str()));
         if (!std::filesystem::exists(file))
@@ -221,27 +231,32 @@ namespace pe
             return nullptr;
         }
 
+        // Only Assimp file parsing on background thread.
+        // All GPU work + mesh building deferred to UploadGpu() on main thread.
+
+        return modelAssimp;
+    }
+
+    void ModelAssetAssimp::UploadGpu()
+    {
         Queue *queue = RHII.GetMainQueue();
         CommandBuffer *cmd = queue->AcquireCommandBuffer();
-
         cmd->Begin();
 
-        // 1) textures (and defaults)
-        model.UploadImages(cmd);
+        // 1) textures (registers in ResourceManager)
+        UploadImages(cmd);
 
-        // 2) materials + geometry + aabbs (single coherent pass)
-        model.BuildMeshes();
+        // 2) materials + geometry + aabbs (reads texture handles from ResourceManager)
+        BuildMeshes();
 
         // 3) nodes
-        model.SetupNodes();
-        model.UpdateNodeMatrices();
+        SetupNodes();
+        UpdateNodeMatrices();
 
         cmd->End();
         queue->Submit(1, &cmd, nullptr, nullptr);
         cmd->Wait();
         cmd->Return();
-
-        return modelAssimp;
     }
 
     bool ModelAssetAssimp::LoadFile(const std::filesystem::path &file)
@@ -413,6 +428,9 @@ namespace pe
         m_indices.reserve(estimatedIndices);
         m_aabbVertices.reserve(static_cast<size_t>(m_meshCount) * 8);
 
+        // Material deduplication: share Material* across meshes with the same aiMaterialIndex
+        std::unordered_map<unsigned int, Material *> materialByIndex;
+
         // pass 2: build per mesh
         for (unsigned int i = 0; i < m_scene->mNumMeshes; i++)
         {
@@ -422,32 +440,45 @@ namespace pe
 
             aiMaterial *material = m_scene->mMaterials[mesh->mMaterialIndex];
 
-            int twoSided = 0;
-            material->Get(AI_MATKEY_TWOSIDED, twoSided);
-
             MeshInfo &mi = m_meshInfos[i];
-            mi.renderType = DetermineRenderType(material);
+            RenderType rt = DetermineRenderType(material);
+            mi.renderType = rt;
 
-            // defaults
-            mi.images[static_cast<int>(TextureType::BaseColor)] = ResourceHandle<Image>::FromRaw(defaults.white);
-            mi.images[static_cast<int>(TextureType::MetallicRoughness)] = ResourceHandle<Image>::FromRaw(defaults.black);
-            mi.images[static_cast<int>(TextureType::Normal)] = ResourceHandle<Image>::FromRaw(defaults.normal);
-            mi.images[static_cast<int>(TextureType::Occlusion)] = ResourceHandle<Image>::FromRaw(defaults.white);
-            mi.images[static_cast<int>(TextureType::Emissive)] = ResourceHandle<Image>::FromRaw(defaults.black);
+            // Reuse existing Material if we already created one for this aiMaterialIndex
+            auto it = materialByIndex.find(mesh->mMaterialIndex);
+            if (it != materialByIndex.end())
+            {
+                mi.material = it->second;
+            }
+            else
+            {
+                int twoSided = 0;
+                material->Get(AI_MATKEY_TWOSIDED, twoSided);
 
-            for (auto &s : mi.samplers)
-                s = defaults.sampler;
+                auto mat = std::make_unique<Material>();
+                mat->renderType = rt;
+                mat->textures[static_cast<int>(TextureType::BaseColor)] = ResourceHandle<Image>::FromRaw(defaults.white);
+                mat->textures[static_cast<int>(TextureType::MetallicRoughness)] = ResourceHandle<Image>::FromRaw(defaults.black);
+                mat->textures[static_cast<int>(TextureType::Normal)] = ResourceHandle<Image>::FromRaw(defaults.normal);
+                mat->textures[static_cast<int>(TextureType::Occlusion)] = ResourceHandle<Image>::FromRaw(defaults.white);
+                mat->textures[static_cast<int>(TextureType::Emissive)] = ResourceHandle<Image>::FromRaw(defaults.black);
+                for (auto &s : mat->samplers)
+                    s = defaults.sampler;
+                mat->textureMask = 0;
+                mat->doubleSided = twoSided != 0;
 
-            mi.textureMask = 0;
+                AssignTexture(*mat, TextureType::BaseColor, material, {aiTextureType_BASE_COLOR, aiTextureType_DIFFUSE});
+                AssignTexture(*mat, TextureType::MetallicRoughness, material, {aiTextureType_UNKNOWN, aiTextureType_DIFFUSE_ROUGHNESS, aiTextureType_SPECULAR, aiTextureType_METALNESS});
+                AssignTexture(*mat, TextureType::Normal, material, {aiTextureType_NORMAL_CAMERA, aiTextureType_NORMALS, aiTextureType_HEIGHT});
+                AssignTexture(*mat, TextureType::Occlusion, material, {aiTextureType_AMBIENT_OCCLUSION, aiTextureType_LIGHTMAP});
+                AssignTexture(*mat, TextureType::Emissive, material, {aiTextureType_EMISSION_COLOR, aiTextureType_EMISSIVE});
 
-            // assign textures (from cache loaded in UploadImages)
-            AssignTexture(mi, TextureType::BaseColor, material, {aiTextureType_BASE_COLOR, aiTextureType_DIFFUSE});
-            AssignTexture(mi, TextureType::MetallicRoughness, material, {aiTextureType_UNKNOWN, aiTextureType_DIFFUSE_ROUGHNESS, aiTextureType_SPECULAR, aiTextureType_METALNESS});
-            AssignTexture(mi, TextureType::Normal, material, {aiTextureType_NORMAL_CAMERA, aiTextureType_NORMALS, aiTextureType_HEIGHT});
-            AssignTexture(mi, TextureType::Occlusion, material, {aiTextureType_AMBIENT_OCCLUSION, aiTextureType_LIGHTMAP});
-            AssignTexture(mi, TextureType::Emissive, material, {aiTextureType_EMISSION_COLOR, aiTextureType_EMISSIVE});
+                ComputeMaterialData(*mat, material);
 
-            ComputeMaterialData(mi, material);
+                mi.material = mat.get();
+                materialByIndex[mesh->mMaterialIndex] = mat.get();
+                m_materials.push_back(std::move(mat));
+            }
 
             // geometry
             const aiVector3D *positions = mesh->mVertices;
@@ -785,7 +816,7 @@ namespace pe
         return {};
     }
 
-    void ModelAssetAssimp::AssignTexture(MeshInfo &meshInfo, TextureType type, aiMaterial *material,
+    void ModelAssetAssimp::AssignTexture(Material &mat, TextureType type, aiMaterial *material,
                                          std::initializer_list<aiTextureType> textureTypes)
     {
         for (aiTextureType aiType : textureTypes)
@@ -797,27 +828,20 @@ namespace pe
             ResourceHandle<Image> loaded = ResourceManager::Get().Find<Image>(texPath.string());
             if (loaded)
             {
-                meshInfo.images[static_cast<int>(type)] = loaded;
-                meshInfo.textureMask |= TextureBit(type);
+                mat.textures[static_cast<int>(type)] = loaded;
+                mat.textureMask |= TextureBit(type);
                 return;
             }
         }
     }
 
-    void ModelAssetAssimp::ComputeMaterialData(MeshInfo &meshInfo, aiMaterial *material) const
+    void ModelAssetAssimp::ComputeMaterialData(Material &mat, aiMaterial *material) const
     {
-        mat4 factors[2] = {mat4(1.f), mat4(1.f)};
-
         if (!material)
-        {
-            meshInfo.materialFactors[0] = factors[0];
-            meshInfo.materialFactors[1] = factors[1];
-
             return;
-        }
 
-        const bool hasNormalMap = (meshInfo.textureMask & TextureBit(TextureType::Normal)) != 0;
-        const bool hasOcclusionMap = (meshInfo.textureMask & TextureBit(TextureType::Occlusion)) != 0;
+        const bool hasNormalMap = (mat.textureMask & TextureBit(TextureType::Normal)) != 0;
+        const bool hasOcclusionMap = (mat.textureMask & TextureBit(TextureType::Occlusion)) != 0;
 
         aiColor4D baseColor(1.f, 1.f, 1.f, 1.f);
         aiColor3D diffuseColor(1.f, 1.f, 1.f);
@@ -898,40 +922,22 @@ namespace pe
         float ior = 1.5f;
         material->Get(AI_MATKEY_REFRACTI, ior);
 
-        // packing to shader expectations:
-        // row0: baseColor rgba
-        // row1: emissive rgb, transmissionFactor
-        // row2: metallic, roughness, alphaCutoff, occlusionStrength
-        // row3: (unused), normalScale, (unused), (unused)
-        // row4: thicknessFactor, attenuationDistance, IOR, (unused)
-        // row5: attenuationColor rgb, (unused)
+        aiString aiName;
+        if (material->Get(AI_MATKEY_NAME, aiName) == AI_SUCCESS)
+            mat.name = aiName.C_Str();
 
-        factors[0][0][0] = baseColor.r;
-        factors[0][0][1] = baseColor.g;
-        factors[0][0][2] = baseColor.b;
-        factors[0][0][3] = baseColor.a;
-        factors[0][1][0] = emissive.r;
-        factors[0][1][1] = emissive.g;
-        factors[0][1][2] = emissive.b;
-        factors[0][1][3] = transmissionFactor;
-
-        factors[0][2][0] = metallic;
-        factors[0][2][1] = roughness;
-        factors[0][2][2] = alphaCutoff;
-        factors[0][2][3] = occlusionStrength;
-
-        factors[0][3][1] = normalScale;
-
-        factors[1][0][0] = thicknessFactor;
-        factors[1][0][1] = attenuationDistance;
-        factors[1][0][2] = ior;
-
-        factors[1][1][0] = attenuationColor.r;
-        factors[1][1][1] = attenuationColor.g;
-        factors[1][1][2] = attenuationColor.b;
-
-        meshInfo.materialFactors[0] = factors[0];
-        meshInfo.materialFactors[1] = factors[1];
+        mat.baseColorFactor = vec4(baseColor.r, baseColor.g, baseColor.b, baseColor.a);
+        mat.emissiveFactor = vec3(emissive.r, emissive.g, emissive.b);
+        mat.metallic = metallic;
+        mat.roughness = roughness;
+        mat.alphaCutoff = alphaCutoff;
+        mat.occlusionStrength = occlusionStrength;
+        mat.normalScale = normalScale;
+        mat.transmissionFactor = transmissionFactor;
+        mat.thicknessFactor = thicknessFactor;
+        mat.attenuationDistance = attenuationDistance;
+        mat.ior = ior;
+        mat.attenuationColor = vec3(attenuationColor.r, attenuationColor.g, attenuationColor.b);
     }
 
     RenderType ModelAssetAssimp::DetermineRenderType(aiMaterial *material) const

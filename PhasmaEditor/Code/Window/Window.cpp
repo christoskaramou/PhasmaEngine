@@ -214,7 +214,6 @@ namespace pe
                     rendererSystem->WaitAllFramesCommands();
                     rendererSystem->GetScene().AddModel(model);
                     rendererSystem->GetScene().UpdateGeometryBuffers();
-                    model->SetRenderReady(true);
                     break;
                 }
                 case EventType::ModelLoadedForNode:
@@ -232,7 +231,6 @@ namespace pe
                             scene.ReparentNode(root, req.parentNode);
                     }
                     scene.UpdateGeometryBuffers();
-                    req.model->SetRenderReady(true);
                     break;
                 }
                 case EventType::ModelRemoved:

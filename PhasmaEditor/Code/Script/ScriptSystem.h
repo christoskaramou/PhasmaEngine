@@ -2,6 +2,8 @@
 
 #include <sol/sol.hpp>
 #include <future>
+#include "Scene/SceneNodeHandle.h"
+#include "Scene/Scene.h"
 
 namespace pe
 {
@@ -25,7 +27,7 @@ namespace pe
     {
         int total = 0;
         int completed = 0;
-        std::vector<ModelAsset *> models;
+        std::vector<SceneNodeHandle> models;
     };
 
     struct PendingAsyncLoad
@@ -35,11 +37,24 @@ namespace pe
         // For batch loading (load_models)
         std::shared_ptr<BatchLoadState> batchState;
         sol::function batchCallback;
+        uint32_t sceneGeneration = 0;
+    };
+
+    struct PendingSceneLoad
+    {
+        std::shared_future<Scene::ScenePreload *> future;
+        sol::function callback;
+        uint32_t sceneGeneration = 0;
     };
 
     struct ExposedVar
     {
-        enum class Type { Number, Bool, String };
+        enum class Type
+        {
+            Number,
+            Bool,
+            String
+        };
         std::string name;
         Type type;
     };
@@ -75,6 +90,9 @@ namespace pe
         void AddPendingAsyncLoad(PendingAsyncLoad load);
         void ProcessAsyncLoads();
 
+        // Async scene loading support
+        void AddPendingSceneLoad(PendingSceneLoad load);
+
         // Returns the ScriptEntry whose path matches, or nullptr if not found
         ScriptEntry *FindScript(const std::string &path);
 
@@ -88,9 +106,12 @@ namespace pe
         static std::vector<LuaBindingFunc> &GetBindings();
         void InitInternal(CommandBuffer *cmd, bool restricted);
 
+        void ProcessSceneLoads();
+
         sol::state m_lua{};
         std::vector<ScriptEntry> m_scripts{};
         std::vector<PendingAsyncLoad> m_pendingAsyncLoads;
+        std::vector<PendingSceneLoad> m_pendingSceneLoads;
         bool m_initialized = false;
         double m_scanTimer = 0.0;
     };

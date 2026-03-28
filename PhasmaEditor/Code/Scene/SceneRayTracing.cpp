@@ -115,6 +115,8 @@ namespace pe
                 continue;
             if (m_meshes[meshIdx].indexCount == 0)
                 continue;
+            if (m_componentFlags[i] & Component_GpuPending)
+                continue;
 
             instanceReqs.push_back({nullptr, meshIdx, i, m_nodeRuntime[i].gpuData.worldMatrix});
         }

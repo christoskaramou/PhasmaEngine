@@ -85,6 +85,7 @@ namespace pe
                 auto *ibl_brdf_lut = rs->GetIBL_LUT();
                 desc->SetImageView(9, ibl_brdf_lut->GetSRV());
                 desc->SetImageView(10, rs->GetDepthStencilRT()->GetSRV());
+                desc->SetBuffer(11, scene.GetMaterialTable());
                 desc->Update();
             }
 
@@ -149,8 +150,11 @@ namespace pe
                     if (rtSets.size() > 0 && rtSets[0])
                     {
                         Descriptor *rtSet0 = rtSets[0];
+                        rtSet0->SetBuffer(2, scene.GetUniforms(i));
+                        rtSet0->SetBuffer(3, scene.GetMeshConstants());
                         rtSet0->SetSampler(4, scene.GetDefaultSampler());
                         rtSet0->SetImageViews(5, scene.GetImageViews());
+                        rtSet0->SetBuffer(11, scene.GetMaterialTable());
                         rtSet0->Update();
                     }
                 }

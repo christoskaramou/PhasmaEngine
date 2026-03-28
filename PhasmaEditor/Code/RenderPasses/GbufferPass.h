@@ -5,6 +5,7 @@ namespace pe
     class Image;
     class Buffer;
     class CommandBuffer;
+    class PassInfo;
     class Scene;
 
     struct PushConstants_GBuffer
@@ -20,8 +21,10 @@ namespace pe
     struct Mesh_Constants
     {
         float alphaCut;
+        float baseColorAlpha;
         uint32_t meshDataOffset;
         uint32_t textureMask;
+        uint32_t materialId;
         uint32_t meshImageIndex[5];
     };
 
@@ -43,6 +46,8 @@ namespace pe
 
     private:
         void PassBarriers(CommandBuffer *cmd);
+
+        std::shared_ptr<PassInfo> m_passInfoDS; // double-sided variant (cullMode=eNone)
 
         Image *m_ibl_brdf_lut;
         Image *m_normalRT;

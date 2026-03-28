@@ -6,6 +6,7 @@
 [[vk::binding(0, 1)]] StructuredBuffer<Mesh_Constants> constants;
 [[vk::binding(1, 1)]] SamplerState material_sampler;
 [[vk::binding(2, 1)]] Texture2D textures[];
+[[vk::binding(3, 1)]] StructuredBuffer<MaterialGpuData> materialTable;
 
 float4 SampleArray(float2 uv, uint index)
 {
@@ -25,14 +26,15 @@ PS_OUTPUT_Gbuffer mainPS(PS_INPUT_Gbuffer input)
     PS_OUTPUT_Gbuffer output;
 
     const uint id = input.id;
-    
+    const MaterialGpuData mat = materialTable[constants[id].materialId];
+
     float2 uv = input.uv;
     uint textureMask = constants[id].textureMask;
 
     float4 sampledBaseColor = HasTexture(textureMask, TEX_BASE_COLOR_BIT) ? GetBaseColor(id, uv) : float4(1.0f, 1.0f, 1.0f, 1.0f);
-    float4 combinedColor    = sampledBaseColor * input.color * input.baseColorFactor;
+    float4 combinedColor    = sampledBaseColor * input.color * mat.baseColorFactor;
 
-    if (combinedColor.a < input.metRoughAlphacutOcl.z)
+    if (combinedColor.a < mat.pbrParams.z)
         discard;
 
     float3 N = normalize(input.normal);
@@ -47,8 +49,8 @@ PS_OUTPUT_Gbuffer mainPS(PS_INPUT_Gbuffer input)
         normalWS = normalize(mul(tangentNormal * 2.0 - 1.0, TBN));
     }
 
-    float metallic = input.metRoughAlphacutOcl.x;
-    float roughness = input.metRoughAlphacutOcl.y;
+    float metallic = mat.pbrParams.x;
+    float roughness = mat.pbrParams.y;
     if (HasTexture(textureMask, TEX_METAL_ROUGH_BIT))
     {
         float3 mrSample = GetMetallicRoughness(id, uv).xyz;
@@ -62,13 +64,13 @@ PS_OUTPUT_Gbuffer mainPS(PS_INPUT_Gbuffer input)
     if (HasTexture(textureMask, TEX_OCCLUSION_BIT))
     {
         float occlusionSample = GetOcclusion(id, uv).r;
-        occlusion = lerp(1.0f, occlusionSample, input.metRoughAlphacutOcl.w);
+        occlusion = lerp(1.0f, occlusionSample, mat.pbrParams.w);
     }
 
-    float3 emissive = float3(0.0f, 0.0f, 0.0f);
+    float3 emissive = mat.emissiveTransmission.xyz;
     if (HasTexture(textureMask, TEX_EMISSIVE_BIT))
     {
-        emissive = GetEmissive(id, uv).xyz * input.emissiveFactor;
+        emissive *= GetEmissive(id, uv).xyz;
     }
 
     output.normal = normalWS * 0.5f + 0.5f;

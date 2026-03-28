@@ -1,4 +1,5 @@
 #include "Scene/ModelAsset.h"
+#include "Scene/Material.h"
 #include "API/Buffer.h"
 #include "API/Image.h"
 #include "API/RHI.h"
@@ -265,109 +266,6 @@ namespace pe
         if (nodeIndex < 0 || nodeIndex >= static_cast<int>(m_nodeToMesh.size()))
             return -1;
         return m_nodeToMesh[nodeIndex];
-    }
-
-    void ModelAsset::RemoveMesh(int nodeIndex)
-    {
-        if (nodeIndex < 0 || nodeIndex >= static_cast<int>(m_nodeToMesh.size()))
-            return;
-
-        int meshIdx = m_nodeToMesh[nodeIndex];
-        if (meshIdx < 0)
-            return;
-
-        // Detach mesh from this node
-        m_nodeToMesh[nodeIndex] = -1;
-
-        // Check if any other node still references this mesh
-        bool meshStillUsed = false;
-        for (int nm : m_nodeToMesh)
-        {
-            if (nm == meshIdx)
-            {
-                meshStillUsed = true;
-                break;
-            }
-        }
-
-        if (!meshStillUsed)
-        {
-            // Build mesh remap (skip the orphaned mesh)
-            std::vector<int> meshRemap(m_meshInfos.size(), -1);
-            int newMeshCount = 0;
-            for (int i = 0; i < static_cast<int>(m_meshInfos.size()); i++)
-            {
-                if (i != meshIdx)
-                    meshRemap[i] = newMeshCount++;
-            }
-
-            // Rebuild flat vertex/index arrays without the orphaned mesh
-            std::vector<Vertex> newVertices;
-            std::vector<PositionUvVertex> newPosUvs;
-            std::vector<uint32_t> newIndices;
-            std::vector<AabbVertex> newAabbVerts;
-
-            uint32_t vOff = 0, iOff = 0;
-            size_t aOff = 0;
-            for (int i = 0; i < static_cast<int>(m_meshInfos.size()); i++)
-            {
-                const MeshInfo &mi = m_meshInfos[i];
-                if (i != meshIdx)
-                {
-                    newVertices.insert(newVertices.end(),
-                                       m_vertices.begin() + vOff, m_vertices.begin() + vOff + mi.verticesCount);
-                    newPosUvs.insert(newPosUvs.end(),
-                                     m_positionUvs.begin() + vOff, m_positionUvs.begin() + vOff + mi.verticesCount);
-                    newIndices.insert(newIndices.end(),
-                                      m_indices.begin() + iOff, m_indices.begin() + iOff + mi.indicesCount);
-                    if (aOff + 8 <= m_aabbVertices.size())
-                        newAabbVerts.insert(newAabbVerts.end(),
-                                            m_aabbVertices.begin() + aOff, m_aabbVertices.begin() + aOff + 8);
-                }
-                vOff += mi.verticesCount;
-                iOff += mi.indicesCount;
-                aOff += 8;
-            }
-
-            m_vertices = std::move(newVertices);
-            m_positionUvs = std::move(newPosUvs);
-            m_indices = std::move(newIndices);
-            m_aabbVertices = std::move(newAabbVerts);
-
-            // Rebuild meshInfos and meshRuntimeInfos without the orphaned mesh
-            std::vector<MeshInfo> newMeshInfos;
-            std::vector<MeshRuntimeInfo> newMeshRuntimeInfos;
-            newMeshInfos.reserve(m_meshInfos.size() - 1);
-            newMeshRuntimeInfos.reserve(m_meshRuntimeInfos.size() > 0 ? m_meshRuntimeInfos.size() - 1 : 0);
-            for (int i = 0; i < static_cast<int>(m_meshInfos.size()); i++)
-            {
-                if (i != meshIdx)
-                {
-                    newMeshInfos.push_back(std::move(m_meshInfos[i]));
-                    if (i < static_cast<int>(m_meshRuntimeInfos.size()))
-                        newMeshRuntimeInfos.push_back(std::move(m_meshRuntimeInfos[i]));
-                }
-            }
-            m_meshInfos = std::move(newMeshInfos);
-            m_meshRuntimeInfos = std::move(newMeshRuntimeInfos);
-
-            // Remap all nodeToMesh references
-            for (int &nm : m_nodeToMesh)
-            {
-                if (nm >= 0 && nm < static_cast<int>(meshRemap.size()))
-                    nm = meshRemap[nm];
-            }
-
-            // Update counts
-            m_meshCount = static_cast<uint32_t>(m_meshInfos.size());
-            m_verticesCount = static_cast<uint32_t>(m_vertices.size());
-            m_indicesCount = static_cast<uint32_t>(m_indices.size());
-        }
-
-        // Mark dirty
-        m_dirtyNodes = true;
-        for (size_t i = 0; i < m_dirtyUniforms.size(); i++)
-            m_dirtyUniforms[i] = true;
     }
 
     ResourceHandle<Image> ModelAsset::LoadTexture(CommandBuffer *cmd, const std::filesystem::path &texturePath)
@@ -719,24 +617,6 @@ namespace pe
         return &m_nodeInfos[nodeIndex];
     }
 
-    const ModelAsset::NodeGpuData *ModelAsset::GetNodeGpuData(int nodeIndex) const
-    {
-        if (nodeIndex < 0 || nodeIndex >= static_cast<int>(m_nodeRuntimeInfos.size()))
-            return nullptr;
-        return &m_nodeRuntimeInfos[nodeIndex].gpuData;
-    }
-
-    void ModelAsset::SyncNodeGpuDataFromMesh(int nodeIndex)
-    {
-        int mesh = GetNodeMesh(nodeIndex);
-        if (mesh < 0 || mesh >= static_cast<int>(m_meshInfos.size()))
-            return;
-        if (nodeIndex < 0 || nodeIndex >= static_cast<int>(m_nodeRuntimeInfos.size()))
-            return;
-        m_nodeRuntimeInfos[nodeIndex].gpuData.materialFactors[0] = m_meshInfos[mesh].materialFactors[0];
-        m_nodeRuntimeInfos[nodeIndex].gpuData.materialFactors[1] = m_meshInfos[mesh].materialFactors[1];
-    }
-
     const mat4 &ModelAsset::GetNodeLocalMatrix(int nodeIndex) const
     {
         static const mat4 identity(1.f);
@@ -754,14 +634,6 @@ namespace pe
             MarkDirty(nodeIndex);
     }
 
-    const mat4 &ModelAsset::GetNodeWorldMatrix(int nodeIndex) const
-    {
-        static const mat4 identity(1.f);
-        if (nodeIndex < 0 || nodeIndex >= static_cast<int>(m_nodeRuntimeInfos.size()))
-            return identity;
-        return m_nodeRuntimeInfos[nodeIndex].gpuData.worldMatrix;
-    }
-
     int ModelAsset::GetNodeParentIndex(int nodeIndex) const
     {
         if (nodeIndex < 0 || nodeIndex >= static_cast<int>(m_nodeInfos.size()))
@@ -774,14 +646,6 @@ namespace pe
         if (nodeIndex < 0 || nodeIndex >= static_cast<int>(m_nodeInfos.size()))
             return;
         m_nodeInfos[nodeIndex].parent = parentIndex;
-    }
-
-    const std::vector<int> &ModelAsset::GetNodeChildren(int nodeIndex) const
-    {
-        static const std::vector<int> empty;
-        if (nodeIndex < 0 || nodeIndex >= static_cast<int>(m_nodeInfos.size()))
-            return empty;
-        return m_nodeInfos[nodeIndex].children;
     }
 
     void ModelAsset::RebuildNodeChildrenFromParents()
@@ -819,113 +683,6 @@ namespace pe
         return &m_meshInfos[meshIndex];
     }
 
-    size_t ModelAsset::GetNodeDataOffset(int nodeIndex) const
-    {
-        if (nodeIndex < 0 || nodeIndex >= static_cast<int>(m_nodeRuntimeInfos.size()))
-            return static_cast<size_t>(-1);
-        return m_nodeRuntimeInfos[nodeIndex].dataOffset;
-    }
-
-    void ModelAsset::SetNodeDataOffset(int nodeIndex, size_t offset)
-    {
-        if (nodeIndex >= 0 && nodeIndex < static_cast<int>(m_nodeRuntimeInfos.size()))
-            m_nodeRuntimeInfos[nodeIndex].dataOffset = offset;
-    }
-
-    uint32_t ModelAsset::GetNodeIndirectIndex(int nodeIndex) const
-    {
-        if (nodeIndex < 0 || nodeIndex >= static_cast<int>(m_nodeRuntimeInfos.size()))
-            return 0;
-        return m_nodeRuntimeInfos[nodeIndex].indirectIndex;
-    }
-
-    void ModelAsset::SetNodeIndirectIndex(int nodeIndex, uint32_t index)
-    {
-        if (nodeIndex >= 0 && nodeIndex < static_cast<int>(m_nodeRuntimeInfos.size()))
-            m_nodeRuntimeInfos[nodeIndex].indirectIndex = index;
-    }
-
-    int ModelAsset::GetNodeInstanceIndex(int nodeIndex) const
-    {
-        if (nodeIndex < 0 || nodeIndex >= static_cast<int>(m_nodeRuntimeInfos.size()))
-            return -1;
-        return m_nodeRuntimeInfos[nodeIndex].instanceIndex;
-    }
-
-    void ModelAsset::SetNodeInstanceIndex(int nodeIndex, int instanceIndex)
-    {
-        if (nodeIndex >= 0 && nodeIndex < static_cast<int>(m_nodeRuntimeInfos.size()))
-            m_nodeRuntimeInfos[nodeIndex].instanceIndex = instanceIndex;
-    }
-
-    bool ModelAsset::IsNodeDirty(int nodeIndex) const
-    {
-        if (nodeIndex < 0 || nodeIndex >= static_cast<int>(m_nodeRuntimeInfos.size()))
-            return false;
-        return m_nodeRuntimeInfos[nodeIndex].dirty;
-    }
-
-    void ModelAsset::SetNodeDirty(int nodeIndex, bool dirty)
-    {
-        if (nodeIndex >= 0 && nodeIndex < static_cast<int>(m_nodeRuntimeInfos.size()))
-            m_nodeRuntimeInfos[nodeIndex].dirty = dirty;
-    }
-
-    void ModelAsset::MarkNodeUniformsDirty(int nodeIndex)
-    {
-        if (nodeIndex < 0 || nodeIndex >= static_cast<int>(m_nodeRuntimeInfos.size()))
-            return;
-        for (size_t i = 0; i < m_nodeRuntimeInfos[nodeIndex].dirtyUniforms.size(); i++)
-            m_nodeRuntimeInfos[nodeIndex].dirtyUniforms[i] = true;
-    }
-
-    bool ModelAsset::IsNodeUniformDirty(int nodeIndex, uint32_t frameIndex) const
-    {
-        if (nodeIndex < 0 || nodeIndex >= static_cast<int>(m_nodeRuntimeInfos.size()))
-            return false;
-        if (frameIndex >= m_nodeRuntimeInfos[nodeIndex].dirtyUniforms.size())
-            return false;
-        return m_nodeRuntimeInfos[nodeIndex].dirtyUniforms[frameIndex];
-    }
-
-    void ModelAsset::SetNodeUniformDirty(int nodeIndex, uint32_t frameIndex, bool dirty)
-    {
-        if (nodeIndex < 0 || nodeIndex >= static_cast<int>(m_nodeRuntimeInfos.size()))
-            return;
-        if (frameIndex >= m_nodeRuntimeInfos[nodeIndex].dirtyUniforms.size())
-            return;
-        m_nodeRuntimeInfos[nodeIndex].dirtyUniforms[frameIndex] = dirty;
-    }
-
-    uint32_t ModelAsset::GetMeshImageViewIndex(int meshIndex, int slot) const
-    {
-        if (meshIndex < 0 || meshIndex >= static_cast<int>(m_meshRuntimeInfos.size()))
-            return 0xFFFFFFFF;
-        if (slot < 0 || slot >= 5)
-            return 0xFFFFFFFF;
-        return m_meshRuntimeInfos[meshIndex].imageViewIndices[slot];
-    }
-
-    void ModelAsset::SetMeshImageViewIndex(int meshIndex, int slot, uint32_t imageViewIndex)
-    {
-        if (meshIndex < 0 || meshIndex >= static_cast<int>(m_meshRuntimeInfos.size()))
-            return;
-        if (slot < 0 || slot >= 5)
-            return;
-        m_meshRuntimeInfos[meshIndex].imageViewIndices[slot] = imageViewIndex;
-    }
-
-    void ModelAsset::MarkAllUniformsDirty()
-    {
-        for (size_t i = 0; i < m_dirtyUniforms.size(); i++)
-            m_dirtyUniforms[i] = true;
-        for (auto &ri : m_nodeRuntimeInfos)
-        {
-            for (size_t k = 0; k < ri.dirtyUniforms.size(); k++)
-                ri.dirtyUniforms[k] = true;
-        }
-    }
-
     bool ModelAsset::IsUniformDirty(uint32_t frameIndex) const
     {
         if (frameIndex >= m_dirtyUniforms.size())
@@ -939,18 +696,4 @@ namespace pe
             m_dirtyUniforms[frameIndex] = dirty;
     }
 
-    void ModelAsset::ResetRuntimeState()
-    {
-        m_nodeRuntimeInfos.resize(m_nodeInfos.size());
-        m_meshRuntimeInfos.resize(m_meshInfos.size());
-
-        for (auto &ri : m_nodeRuntimeInfos)
-        {
-            ri = NodeRuntimeInfo{};
-            ri.dirtyUniforms.resize(RHII.GetSwapchainImageCount(), false);
-        }
-
-        for (auto &mi : m_meshRuntimeInfos)
-            mi = MeshRuntimeInfo{};
-    }
 } // namespace pe

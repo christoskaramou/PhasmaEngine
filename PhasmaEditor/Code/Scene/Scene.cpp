@@ -1,4 +1,5 @@
 #include "Scene/Scene.h"
+#include "Scene/Material.h"
 #include "Scene/ModelAsset.h"
 #include "Scene/SelectionManager.h"
 #include "API/AccelerationStructure.h"
@@ -144,11 +145,46 @@ namespace pe
         CommandBuffer *cmd = queue->AcquireCommandBuffer();
         cmd->Begin();
         UpdateImageViews();
+        CreateMaterialTable();
         CreateMeshConstants(cmd);
         cmd->End();
         queue->Submit(1, &cmd, nullptr, nullptr);
         cmd->Wait();
         queue->ReturnCommandBuffer(cmd);
+    }
+
+    MaterialInstance *Scene::CreateMaterialInstance(Mesh &mesh)
+    {
+        if (!mesh.material)
+            return nullptr;
+
+        if (mesh.materialInstance)
+            return mesh.materialInstance;
+
+        auto inst = std::make_unique<MaterialInstance>(mesh.material);
+        MaterialInstance *ptr = inst.get();
+        mesh.materialInstance = ptr;
+        m_ownedMaterialInstances.push_back(std::move(inst));
+        return ptr;
+    }
+
+    void Scene::DestroyMaterialInstance(Mesh &mesh)
+    {
+        if (!mesh.materialInstance)
+            return;
+
+        auto it = std::find_if(m_ownedMaterialInstances.begin(), m_ownedMaterialInstances.end(),
+                               [&](const std::unique_ptr<MaterialInstance> &p)
+                               { return p.get() == mesh.materialInstance; });
+
+        if (it != m_ownedMaterialInstances.end())
+        {
+            // Swap-and-pop for O(1) removal
+            std::swap(*it, m_ownedMaterialInstances.back());
+            m_ownedMaterialInstances.pop_back();
+        }
+
+        mesh.materialInstance = nullptr;
     }
 
     std::vector<int> Scene::AddModelGeometry(ModelAsset *model, int sourceIndex)
@@ -192,14 +228,7 @@ namespace pe
             mesh.aabbColor = mi->aabbColor;
             mesh.boundingBox = mi->boundingBox;
             mesh.renderType = mi->renderType;
-            mesh.textureMask = mi->textureMask;
-            for (int k = 0; k < 5; k++)
-            {
-                mesh.images[k] = mi->images[k];
-                mesh.samplers[k] = mi->samplers[k];
-            }
-            mesh.materialFactors[0] = mi->materialFactors[0];
-            mesh.materialFactors[1] = mi->materialFactors[1];
+            mesh.material = mi->material;
 
             int sceneMeshIdx = AddMesh(std::move(mesh));
             meshMap[i] = sceneMeshIdx;
@@ -280,6 +309,71 @@ namespace pe
         }
 
         UpdateNodeMatrices();
+    }
+
+    SceneNodeHandle Scene::AddModelDeferred(ModelAsset *model)
+    {
+        m_models.insert(model->GetId(), model);
+
+        int sourceIndex = static_cast<int>(m_sources.size());
+        SceneSource source;
+        source.filePath = model->GetFilePath();
+        source.primitiveType = model->GetPrimitiveType();
+        m_sources.push_back(std::move(source));
+
+        std::vector<int> meshMap = AddModelGeometry(model, sourceIndex);
+
+        const mat4 &modelMatrix = model->GetMatrix();
+        std::vector<NodeId *> nodeMap(model->GetNodeCount(), nullptr);
+
+        for (int i = 0; i < model->GetNodeCount(); i++)
+        {
+            const NodeInfo *ni = model->GetNodeInfo(i);
+            if (!ni)
+                continue;
+            NodeId *node = CreateNode(ni->name, nullptr);
+            SetLocalMatrix(node, ni->localMatrix, false);
+            int meshIdx = model->GetNodeMesh(i);
+            if (meshIdx >= 0 && meshIdx < static_cast<int>(meshMap.size()) && meshMap[meshIdx] >= 0)
+                SetMeshRef(node, meshMap[meshIdx]);
+            m_componentFlags[node->index] |= Component_GpuPending;
+            nodeMap[i] = node;
+        }
+
+        std::vector<NodeId *> roots;
+        for (int i = 0; i < model->GetNodeCount(); i++)
+        {
+            if (!nodeMap[i])
+                continue;
+            const NodeInfo *ni = model->GetNodeInfo(i);
+            if (ni->parent >= 0 && ni->parent < static_cast<int>(nodeMap.size()) && nodeMap[ni->parent])
+                ReparentNode(nodeMap[i], nodeMap[ni->parent]);
+            else
+            {
+                SetLocalMatrix(nodeMap[i], modelMatrix * ni->localMatrix, false);
+                roots.push_back(nodeMap[i]);
+            }
+        }
+        m_modelRootNodes[model->GetId()] = std::move(roots);
+
+        for (NodeId *node : nodeMap)
+            if (node)
+                MarkNodeDirty(node);
+        UpdateNodeMatrices();
+
+        m_geometryDirty = true;
+
+        // Return handle to first root, or wrap multi-root in synthetic parent
+        const auto &finalRoots = m_modelRootNodes[model->GetId()];
+        if (finalRoots.size() == 1)
+            return MakeHandle(finalRoots[0]);
+
+        // Multi-root: create synthetic parent
+        NodeId *synth = CreateNode(model->GetLabel().empty() ? "Model" : model->GetLabel());
+        m_componentFlags[synth->index] |= Component_GpuPending;
+        for (NodeId *root : finalRoots)
+            ReparentNode(root, synth);
+        return MakeHandle(synth);
     }
 
     const std::vector<NodeId *> &Scene::GetModelRootNodes(ModelAsset *model) const
@@ -385,6 +479,8 @@ namespace pe
             int meshIdx = m_meshRefs[i];
             if (meshIdx < 0)
                 continue;
+            if (m_componentFlags[i] & Component_GpuPending)
+                continue;
 
             const Mesh &mesh = m_meshes[meshIdx];
             if (mesh.indexCount == 0)
@@ -399,19 +495,20 @@ namespace pe
             vec3 center = worldBounds.GetCenter();
             float distance = distance2(cameraPosition, center);
 
+            bool doubleSided = mesh.material && mesh.material->doubleSided;
             switch (mesh.renderType)
             {
             case RenderType::Opaque:
-                batch.opaque.push_back(DrawInfo{m_nodeIds[i], distance});
+                batch.opaque.push_back(DrawInfo{m_nodeIds[i], distance, doubleSided});
                 break;
             case RenderType::AlphaCut:
-                batch.alphaCut.push_back(DrawInfo{m_nodeIds[i], distance});
+                batch.alphaCut.push_back(DrawInfo{m_nodeIds[i], distance, doubleSided});
                 break;
             case RenderType::AlphaBlend:
-                batch.alphaBlend.push_back(DrawInfo{m_nodeIds[i], distance});
+                batch.alphaBlend.push_back(DrawInfo{m_nodeIds[i], distance, doubleSided});
                 break;
             case RenderType::Transmission:
-                batch.transmission.push_back(DrawInfo{m_nodeIds[i], distance});
+                batch.transmission.push_back(DrawInfo{m_nodeIds[i], distance, doubleSided});
                 break;
             }
         }
@@ -434,13 +531,22 @@ namespace pe
         range.offset = 0;
         m_storages[frame]->Copy(1, &range, true);
 
-        // Collect visible indirect IDs from draw infos
+        // Collect visible indirect IDs from draw infos.
+        // Order: opaque_SS | alphaCut_SS | opaque_DS | alphaCut_DS | transmission | alphaBlend
         m_visibleIndirectIds.clear();
         m_visibleIndirectIds.reserve(m_drawInfosOpaque.size() + m_drawInfosAlphaCut.size() + m_drawInfosAlphaBlend.size() + m_drawInfosTransmission.size());
-        for (auto &drawInfo : m_drawInfosOpaque)
-            m_visibleIndirectIds.push_back(m_nodeRuntime[drawInfo.node->index].indirectIndex);
-        for (auto &drawInfo : m_drawInfosAlphaCut)
-            m_visibleIndirectIds.push_back(m_nodeRuntime[drawInfo.node->index].indirectIndex);
+        // single-sided opaque
+        for (uint32_t k = 0; k < m_opaqueSingleSidedCount; k++)
+            m_visibleIndirectIds.push_back(m_nodeRuntime[m_drawInfosOpaque[k].node->index].indirectIndex);
+        // single-sided alphaCut
+        for (uint32_t k = 0; k < m_alphaCutSingleSidedCount; k++)
+            m_visibleIndirectIds.push_back(m_nodeRuntime[m_drawInfosAlphaCut[k].node->index].indirectIndex);
+        // double-sided opaque
+        for (uint32_t k = m_opaqueSingleSidedCount; k < static_cast<uint32_t>(m_drawInfosOpaque.size()); k++)
+            m_visibleIndirectIds.push_back(m_nodeRuntime[m_drawInfosOpaque[k].node->index].indirectIndex);
+        // double-sided alphaCut
+        for (uint32_t k = m_alphaCutSingleSidedCount; k < static_cast<uint32_t>(m_drawInfosAlphaCut.size()); k++)
+            m_visibleIndirectIds.push_back(m_nodeRuntime[m_drawInfosAlphaCut[k].node->index].indirectIndex);
         for (auto &drawInfo : m_drawInfosTransmission)
             m_visibleIndirectIds.push_back(m_nodeRuntime[drawInfo.node->index].indirectIndex);
         for (auto &drawInfo : m_drawInfosAlphaBlend)
@@ -458,6 +564,10 @@ namespace pe
             if (!rt.dirtyUniforms[frame])
                 continue;
 
+            // Skip nodes pending GPU upload — their storage offsets aren't assigned yet
+            if (m_componentFlags[i] & Component_GpuPending)
+                continue;
+
             rt.dirtyUniforms[frame] = false; // clear regardless of mesh presence
 
             int meshIdx = m_meshRefs[i];
@@ -467,10 +577,6 @@ namespace pe
             const Mesh &mesh = m_meshes[meshIdx];
             if (mesh.indexCount == 0)
                 continue;
-
-            // Sync material factors from mesh to GPU data
-            rt.gpuData.materialFactors[0] = mesh.materialFactors[0];
-            rt.gpuData.materialFactors[1] = mesh.materialFactors[1];
 
             range.data = &rt.gpuData;
             range.size = sizeof(NodeGpuData);
@@ -500,8 +606,27 @@ namespace pe
                 firstInstance++;
             }
         };
-        EmitIndirect(m_drawInfosOpaque);
-        EmitIndirect(m_drawInfosAlphaCut);
+        // Order: opaque_SS | alphaCut_SS | opaque_DS | alphaCut_DS | transmission | alphaBlend
+        auto EmitIndirectRange = [&](const std::vector<DrawInfo> &drawInfos, uint32_t begin, uint32_t end)
+        {
+            for (uint32_t k = begin; k < end; k++)
+            {
+                auto &indirectCommand = m_indirectCommands[m_nodeRuntime[drawInfos[k].node->index].indirectIndex];
+                indirectCommand.firstInstance = firstInstance;
+
+                BufferRange range{};
+                range.data = &indirectCommand;
+                range.size = sizeof(vk::DrawIndexedIndirectCommand);
+                range.offset = firstInstance * sizeof(vk::DrawIndexedIndirectCommand);
+                m_indirects[frame]->Copy(1, &range, true);
+
+                firstInstance++;
+            }
+        };
+        EmitIndirectRange(m_drawInfosOpaque, 0, m_opaqueSingleSidedCount);
+        EmitIndirectRange(m_drawInfosAlphaCut, 0, m_alphaCutSingleSidedCount);
+        EmitIndirectRange(m_drawInfosOpaque, m_opaqueSingleSidedCount, static_cast<uint32_t>(m_drawInfosOpaque.size()));
+        EmitIndirectRange(m_drawInfosAlphaCut, m_alphaCutSingleSidedCount, static_cast<uint32_t>(m_drawInfosAlphaCut.size()));
         EmitIndirect(m_drawInfosTransmission);
         EmitIndirect(m_drawInfosAlphaBlend);
     }
@@ -587,10 +712,30 @@ namespace pe
 
     void Scene::SortDrawInfos()
     {
-        std::sort(m_drawInfosOpaque.begin(), m_drawInfosOpaque.end(), [](const DrawInfo &a, const DrawInfo &b)
-                  { return a.distance < b.distance; });
-        std::sort(m_drawInfosAlphaCut.begin(), m_drawInfosAlphaCut.end(), [](const DrawInfo &a, const DrawInfo &b)
-                  { return a.distance < b.distance; });
+        auto partitionDS = [](std::vector<DrawInfo> &list) -> uint32_t
+        {
+            auto mid = std::stable_partition(list.begin(), list.end(), [](const DrawInfo &d)
+                                             { return !d.doubleSided; });
+            return static_cast<uint32_t>(mid - list.begin());
+        };
+        auto sortRange = [](std::vector<DrawInfo>::iterator begin, std::vector<DrawInfo>::iterator end, bool frontToBack)
+        {
+            if (frontToBack)
+                std::sort(begin, end, [](const DrawInfo &a, const DrawInfo &b)
+                          { return a.distance < b.distance; });
+            else
+                std::sort(begin, end, [](const DrawInfo &a, const DrawInfo &b)
+                          { return a.distance > b.distance; });
+        };
+
+        m_opaqueSingleSidedCount = partitionDS(m_drawInfosOpaque);
+        sortRange(m_drawInfosOpaque.begin(), m_drawInfosOpaque.begin() + m_opaqueSingleSidedCount, true);
+        sortRange(m_drawInfosOpaque.begin() + m_opaqueSingleSidedCount, m_drawInfosOpaque.end(), true);
+
+        m_alphaCutSingleSidedCount = partitionDS(m_drawInfosAlphaCut);
+        sortRange(m_drawInfosAlphaCut.begin(), m_drawInfosAlphaCut.begin() + m_alphaCutSingleSidedCount, true);
+        sortRange(m_drawInfosAlphaCut.begin() + m_alphaCutSingleSidedCount, m_drawInfosAlphaCut.end(), true);
+
         std::sort(m_drawInfosAlphaBlend.begin(), m_drawInfosAlphaBlend.end(), [](const DrawInfo &a, const DrawInfo &b)
                   { return a.distance > b.distance; });
         std::sort(m_drawInfosTransmission.begin(), m_drawInfosTransmission.end(), [](const DrawInfo &a, const DrawInfo &b)
@@ -603,6 +748,8 @@ namespace pe
         m_drawInfosAlphaCut.clear();
         m_drawInfosAlphaBlend.clear();
         m_drawInfosTransmission.clear();
+        m_opaqueSingleSidedCount = 0;
+        m_alphaCutSingleSidedCount = 0;
 
         if (reserveMax)
         {
@@ -642,6 +789,39 @@ namespace pe
             m_drawInfosAlphaCut.reserve(maxAlphaCut);
             m_drawInfosAlphaBlend.reserve(maxAlphaBlend);
             m_drawInfosTransmission.reserve(maxTransmission);
+        }
+    }
+
+    void Scene::FlushPendingGpuWork()
+    {
+        if (!m_geometryDirty && !m_materialDirty && !m_texturesDirty)
+            return;
+
+        if (m_geometryDirty)
+        {
+            // Clear GpuPending flag BEFORE upload so these nodes are included
+            for (uint32_t i = 0; i < GetNodeCount(); i++)
+                m_componentFlags[i] &= ~Component_GpuPending;
+
+            UpdateGeometryBuffers();
+
+            m_geometryDirty = false;
+            // Geometry rebuild includes material table and image views
+            m_materialDirty = false;
+            m_texturesDirty = false;
+        }
+        else
+        {
+            if (m_texturesDirty)
+            {
+                UpdateTextures();
+                m_texturesDirty = false;
+            }
+            if (m_materialDirty)
+            {
+                UpdateDirtyMaterials();
+                m_materialDirty = false;
+            }
         }
     }
 } // namespace pe

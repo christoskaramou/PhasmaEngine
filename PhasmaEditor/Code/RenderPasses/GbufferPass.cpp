@@ -39,6 +39,8 @@ namespace pe
         m_attachments[6].image = m_depthStencilRT;
         m_attachments[6].loadOp = vk::AttachmentLoadOp::eLoad;
 
+        if (!m_passInfoDS)
+            m_passInfoDS = std::make_shared<PassInfo>();
         m_scene = nullptr;
     }
 
@@ -73,6 +75,20 @@ namespace pe
         m_passInfo->depthTestEnable = true;
         m_passInfo->depthWriteEnable = false;
         m_passInfo->Update();
+
+        m_passInfoDS->name = "gbuffer_opaque_ds_pipeline";
+        m_passInfoDS->pVertShader = Shader::Create(Path::Assets + "Shaders/Gbuffer/GBufferVS.hlsl", vk::ShaderStageFlagBits::eVertex, "mainVS", std::vector<Define>{}, ShaderCodeType::HLSL);
+        m_passInfoDS->pFragShader = Shader::Create(Path::Assets + "Shaders/Gbuffer/GBufferPS.hlsl", vk::ShaderStageFlagBits::eFragment, "mainPS", std::vector<Define>{}, ShaderCodeType::HLSL);
+        m_passInfoDS->dynamicStates = m_passInfo->dynamicStates;
+        m_passInfoDS->cullMode = vk::CullModeFlagBits::eNone;
+        m_passInfoDS->blendEnable = false;
+        m_passInfoDS->colorBlendAttachments = m_passInfo->colorBlendAttachments;
+        m_passInfoDS->colorFormats = colorformats;
+        m_passInfoDS->depthFormat = depthFormat;
+        m_passInfoDS->depthCompareOp = vk::CompareOp::eEqual;
+        m_passInfoDS->depthTestEnable = true;
+        m_passInfoDS->depthWriteEnable = false;
+        m_passInfoDS->Update();
     }
 
     void GbufferOpaquePass::Update()
@@ -93,6 +109,7 @@ namespace pe
                 setTextures->SetBuffer(0, scene.GetMeshConstants());
                 setTextures->SetSampler(1, scene.GetDefaultSampler());
                 setTextures->SetImageViews(2, scene.GetImageViews());
+                setTextures->SetBuffer(3, scene.GetMaterialTable());
                 setTextures->Update();
             }
         }
@@ -133,18 +150,33 @@ namespace pe
                 pushConstants.passType = 0u;
 
                 uint32_t frame = RHII.GetFrameIndex();
-                size_t offset = 0;
-                uint32_t count = static_cast<uint32_t>(m_scene->GetDrawInfosOpaque().size() + m_scene->GetDrawInfosAlphaCut().size());
+                uint32_t ssCounts = m_scene->GetOpaqueSingleSidedCount() + m_scene->GetAlphaCutSingleSidedCount();
+                uint32_t totalOpaque = static_cast<uint32_t>(m_scene->GetDrawInfosOpaque().size());
+                uint32_t totalAlphaCut = static_cast<uint32_t>(m_scene->GetDrawInfosAlphaCut().size());
+                uint32_t dsCounts = (totalOpaque - m_scene->GetOpaqueSingleSidedCount()) + (totalAlphaCut - m_scene->GetAlphaCutSingleSidedCount());
 
                 cmd->BeginPass(7, m_attachments.data(), "GbufferOpaquePass");
                 cmd->BindIndexBuffer(m_scene->GetBuffer(), 0);
                 cmd->BindVertexBuffer(m_scene->GetBuffer(), m_scene->GetVerticesOffset());
                 cmd->SetViewport(0.f, 0.f, m_depthStencilRT->GetWidth_f(), m_depthStencilRT->GetHeight_f());
                 cmd->SetScissor(0, 0, m_depthStencilRT->GetWidth(), m_depthStencilRT->GetHeight());
+
+                // Always bind m_passInfo first — this sets up descriptors and push constants.
+                // m_passInfoDS shares the same descriptors via bindDescriptors=false.
                 cmd->BindPipeline(*m_passInfo);
                 cmd->SetConstants(pushConstants);
                 cmd->PushConstants();
-                cmd->DrawIndexedIndirect(m_scene->GetIndirect(frame), offset, count);
+
+                if (ssCounts > 0)
+                    cmd->DrawIndexedIndirect(m_scene->GetIndirect(frame), 0, ssCounts);
+
+                if (dsCounts > 0)
+                {
+                    size_t dsOffset = ssCounts * sizeof(vk::DrawIndexedIndirectCommand);
+                    cmd->BindPipeline(*m_passInfoDS, false);
+                    cmd->DrawIndexedIndirect(m_scene->GetIndirect(frame), dsOffset, dsCounts);
+                }
+
                 cmd->EndPass();
             }
         }
@@ -253,6 +285,7 @@ namespace pe
                 setTextures->SetBuffer(0, scene.GetMeshConstants());
                 setTextures->SetSampler(1, scene.GetDefaultSampler());
                 setTextures->SetImageViews(2, scene.GetImageViews());
+                setTextures->SetBuffer(3, scene.GetMaterialTable());
                 setTextures->Update();
             }
         }

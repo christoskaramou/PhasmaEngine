@@ -164,6 +164,11 @@ namespace pe
             m_scene.Update();
         }
 
+        // Flush any deferred GPU work (primitive batching, async load completion)
+        if (m_scene.IsGeometryDirty())
+            WaitAllFramesCommands();
+        m_scene.FlushPendingGpuWork();
+
         {
             PE_PROFILE_SCOPE("Render Graph Pass States");
             UpdateRenderGraphPassStates();

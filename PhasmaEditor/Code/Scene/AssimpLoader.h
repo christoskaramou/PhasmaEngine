@@ -8,6 +8,7 @@
 namespace pe
 {
     class CommandBuffer;
+    class Material;
     class Scene;
 
     // Loads a 3D model file via Assimp and pushes data directly into Scene's stores.
@@ -27,10 +28,10 @@ namespace pe
         void ProcessNode(const aiNode *node, NodeId *parent);
 
         std::filesystem::path GetTexturePath(const aiMaterial *material, aiTextureType type, int index = 0) const;
-        void AssignTexture(Mesh &mesh, TextureType type, aiMaterial *material,
+        void AssignTexture(Material &mat, TextureType type, aiMaterial *material,
                            std::initializer_list<aiTextureType> textureTypes);
         RenderType DetermineRenderType(aiMaterial *material) const;
-        void ComputeMaterialData(Mesh &mesh, aiMaterial *material) const;
+        void ComputeMaterialData(Material &mat, aiMaterial *material) const;
 
         Scene &m_scene;
         Assimp::Importer m_importer;

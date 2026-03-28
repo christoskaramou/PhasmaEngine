@@ -1,10 +1,12 @@
 #include "Script/ScriptSystem.h"
 #include "Scene/Scene.h"
-#include "Scene/ModelAsset.h"
 #include "Scene/SceneNode.h"
+#include "Scene/SceneNodeHandle.h"
 #include "Scene/SelectionManager.h"
 #include "Camera/Camera.h"
 #include "Systems/RendererSystem.h"
+#include "GUI/GUIState.h"
+#include "Base/ThreadPool.h"
 
 namespace pe
 {
@@ -23,56 +25,72 @@ namespace pe
 
                 scene.set_function("load", [](const std::string &name) {
                     auto *r = GetGlobalSystem<RendererSystem>();
-                    if (r) r->GetScene().LoadScene(Path::Assets + "Scenes/" + name);
+                    if (!r) return;
+                    r->WaitAllFramesCommands();
+                    r->GetScene().LoadScene(Path::Assets + "Scenes/" + name);
+                });
+
+                scene.set_function("load_async", [](const std::string &name, sol::function callback) {
+                    auto *r = GetGlobalSystem<RendererSystem>();
+                    if (!r) return;
+
+                    // Clear scene immediately on main thread
+                    r->WaitAllFramesCommands();
+                    r->GetScene().NewScene();
+
+                    GUIState::s_modelLoading = true;
+
+                    std::string fullPath = Path::Assets + "Scenes/" + name;
+                    uint32_t gen = r->GetScene().GetGeneration();
+
+                    auto future = ThreadPool::General.Enqueue([fullPath]() -> Scene::ScenePreload * {
+                        return new Scene::ScenePreload(Scene::PreloadScene(fullPath));
+                    });
+
+                    auto *ss = GetGlobalSystem<ScriptSystem>();
+                    if (ss)
+                    {
+                        PendingSceneLoad load;
+                        load.future = std::move(future);
+                        load.callback = std::move(callback);
+                        load.sceneGeneration = gen;
+                        ss->AddPendingSceneLoad(std::move(load));
+                    }
                 });
 
                 scene.set_function("clear", []() {
                     auto *r = GetGlobalSystem<RendererSystem>();
-                    if (r)
-                    {
-                        std::vector<ModelAsset *> models;
-                        for (auto *m : r->GetScene().GetModels())
-                            models.push_back(m);
-                        if (!models.empty())
-                            EventSystem::PushEvent(EventType::ModelsRemoved, std::move(models));
-                    }
+                    if (!r)
+                        return;
 
-                    if (r)
-                    {
-                        r->GetScene().GetPointLights().clear();
-                        r->GetScene().GetDirectionalLights().clear();
-                        r->GetScene().GetSpotLights().clear();
-                        r->GetScene().GetAreaLights().clear();
-                    }
+                    // Wait for in-flight GPU work before tearing down the scene.
+                    r->WaitAllFramesCommands();
 
-                    SelectionManager::Instance().ClearSelection();
+                    // Use NewScene for a complete, ordered cleanup — it nulls
+                    // camera/light nodeIds before freeing nodes, clears all
+                    // geometry stores, and rebuilds GPU buffers synchronously.
+                    r->GetScene().NewScene();
                 });
 
                 scene.set_function("get_entities", [&lua]() -> sol::as_table_t<std::vector<sol::table>> {
                     std::vector<sol::table> result;
                     auto *r = GetGlobalSystem<RendererSystem>();
-                    if (r)
-                    {
-                        for (auto *m : r->GetScene().GetModels())
-                        {
-                            sol::table t = lua.create_table();
-                            t["type"] = "model";
-                            t["model"] = sol::make_object(lua, m);
-                            t["label"] = m->GetLabel();
-                            t["is_primitive"] = m->IsPrimitive();
-                            result.push_back(t);
-                        }
-                    }
-                    return sol::as_table(std::move(result));
-                });
+                    if (!r) return sol::as_table(std::move(result));
 
-                scene.set_function("get_models", []() -> sol::as_table_t<std::vector<ModelAsset *>> {
-                    std::vector<ModelAsset *> result;
-                    auto *r = GetGlobalSystem<RendererSystem>();
-                    if (r)
+                    Scene &sc = r->GetScene();
+                    for (uint32_t i = 0; i < sc.GetNodeCount(); i++)
                     {
-                        for (auto *m : r->GetScene().GetModels())
-                            result.push_back(m);
+                        NodeId *node = sc.GetNodeId(i);
+                        if (sc.GetParent(node)) continue;
+                        uint32_t flags = sc.GetComponentFlags(node);
+                        if ((flags & Component_Camera) && !(flags & Component_Mesh)) continue;
+                        if ((flags & Component_Light) && !(flags & Component_Mesh)) continue;
+
+                        sol::table t = lua.create_table();
+                        t["node"] = sc.MakeHandle(node);
+                        t["label"] = sc.GetNodeName(node);
+                        t["type"] = "node";
+                        result.push_back(t);
                     }
                     return sol::as_table(std::move(result));
                 });
@@ -82,14 +100,17 @@ namespace pe
                     return r ? static_cast<int>(r->GetScene().GetModels().size()) : 0;
                 });
 
-                // find_model(label) -> ModelAsset* or nil - check before load_model to avoid duplicate loads and redundant events
-                scene.set_function("find_model", [](const std::string &label) -> ModelAsset * {
+                scene.set_function("find_model", [&lua](const std::string &label) -> sol::object {
                     auto *r = GetGlobalSystem<RendererSystem>();
-                    if (!r) return nullptr;
-                    for (auto *m : r->GetScene().GetModels())
-                        if (m->GetLabel() == label)
-                            return m;
-                    return nullptr;
+                    if (!r) return sol::make_object(lua, sol::nil);
+                    Scene &sc = r->GetScene();
+                    for (uint32_t i = 0; i < sc.GetNodeCount(); i++)
+                    {
+                        NodeId *node = sc.GetNodeId(i);
+                        if (sc.GetNodeName(node) == label)
+                            return sol::make_object(lua, sc.MakeHandle(node));
+                    }
+                    return sol::make_object(lua, sol::nil);
                 });
 
                 scene.set_function("get_cameras", []() -> sol::as_table_t<std::vector<Camera *>> {
@@ -235,11 +256,6 @@ namespace pe
                 lua.set_function("save_scene", [](const std::string &name) {
                     auto *r = GetGlobalSystem<RendererSystem>();
                     if (r) r->GetScene().SaveScene(Path::Assets + "Scenes/" + name);
-                });
-
-                lua.set_function("load_scene", [](const std::string &name) {
-                    auto *r = GetGlobalSystem<RendererSystem>();
-                    if (r) r->GetScene().LoadScene(Path::Assets + "Scenes/" + name);
                 }); });
         }
     } s_sceneBindings;

@@ -1,4 +1,5 @@
 #include "Scene/Scene.h"
+#include "Scene/Material.h"
 #include "Scene/ModelAsset.h"
 #include "API/RHI.h"
 
@@ -57,6 +58,15 @@ namespace pe
 
         // Re-read index after child deletions (swap-and-pop may have moved this node)
         const uint32_t idx = node->index;
+
+        // Null out material pointers on the mesh so stale entries in m_meshes
+        // don't dereference freed Materials after the owning model is deleted.
+        int meshRef = m_meshRefs[idx];
+        if (meshRef >= 0 && meshRef < static_cast<int>(m_meshes.size()))
+        {
+            m_meshes[meshRef].material = nullptr;
+            m_meshes[meshRef].materialInstance = nullptr;
+        }
 
         // Remove from parent's children list
         NodeId *parent = m_nodeParents[idx];
@@ -181,6 +191,11 @@ namespace pe
         std::vector<int> meshMap = AddModelGeometry(primitiveModel, sourceIndex);
         if (!meshMap.empty() && meshMap[0] >= 0)
             SetMeshRef(node, meshMap[0]);
+
+        // Transfer material ownership from the temporary ModelAsset to the scene
+        // before deleting it — mesh.material holds a raw pointer into these.
+        for (auto &mat : primitiveModel->m_materials)
+            m_ownedMaterials.push_back(std::move(mat));
 
         MarkNodeDirty(node);
         delete primitiveModel;

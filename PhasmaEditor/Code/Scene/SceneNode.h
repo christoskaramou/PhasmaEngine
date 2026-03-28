@@ -3,6 +3,8 @@
 namespace pe
 {
     class Image;
+    class Material;
+    class MaterialInstance;
     class Sampler;
 
     // Stable node identity — heap allocated, never moves.
@@ -22,6 +24,7 @@ namespace pe
         Component_Physics = 1 << 2,
         Component_Camera = 1 << 3,
         Component_Script = 1 << 4,
+        Component_GpuPending = 1 << 5, // Node geometry not yet uploaded to GPU
     };
 
     // Lightweight mesh descriptor — references into Scene's data stores
@@ -38,14 +41,10 @@ namespace pe
         AABB boundingBox;
 
         RenderType renderType;
-        uint32_t textureMask = 0;
 
-        // Refs into Scene's image/sampler stores
-        ResourceHandle<Image> images[5];
-        Sampler *samplers[5]{nullptr};
-
-        // Material data
-        mat4 materialFactors[2] = {mat4(1.f), mat4(1.f)};
+        // First-class material reference
+        Material *material = nullptr;
+        MaterialInstance *materialInstance = nullptr;
     };
 
     // Utility: bit mask for texture slots
@@ -54,12 +53,12 @@ namespace pe
         return 1u << static_cast<uint32_t>(type);
     }
 
-    // GPU-side data uploaded per node
+    // GPU-side data uploaded per node (world + previous world matrices only;
+    // material data lives in the material table StructuredBuffer).
     struct NodeGpuData
     {
         mat4 worldMatrix = mat4(1.f);
         mat4 previousWorldMatrix = mat4(1.f);
-        mat4 materialFactors[2] = {mat4(1.f), mat4(1.f)};
     };
 
     // Per-node renderer runtime state (hot path, separate from logical data)
@@ -74,10 +73,11 @@ namespace pe
         std::vector<bool> dirtyUniforms;
     };
 
-    // Image view indices for GPU descriptor binding (per mesh)
+    // Image view indices and material GPU index (per mesh)
     struct MeshRuntime
     {
         uint32_t imageViewIndices[5] = {0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF};
+        uint32_t materialGpuIndex = 0;
     };
     // Transform an AABB by a matrix (8-corner method)
     inline AABB TransformAabb(const AABB &local, const mat4 &m)

@@ -1,6 +1,7 @@
 // Primitives.cpp
 #include "Scene/Primitives.h"
 #include "API/RHI.h"
+#include "Scene/Material.h"
 #include "Scene/ModelAsset.h"
 #include "API/Image.h"
 
@@ -117,28 +118,22 @@ namespace pe
 
         // Default Material
         auto &defaults = ModelAsset::GetDefaultResources();
-        meshInfo.images[0] = ResourceHandle<Image>::FromRaw(defaults.white);  // BaseColor
-        meshInfo.images[1] = ResourceHandle<Image>::FromRaw(defaults.normal); // Normal
-        meshInfo.images[2] = ResourceHandle<Image>::FromRaw(defaults.white);  // MetallicRoughness
-        meshInfo.images[3] = ResourceHandle<Image>::FromRaw(defaults.white);  // Occlusion
-        meshInfo.images[4] = ResourceHandle<Image>::FromRaw(defaults.black);  // Emissive
-
-        meshInfo.samplers[0] = defaults.sampler;
-        meshInfo.samplers[1] = defaults.sampler;
-        meshInfo.samplers[2] = defaults.sampler;
-        meshInfo.samplers[3] = defaults.sampler;
-        meshInfo.samplers[4] = defaults.sampler;
-
-        meshInfo.textureMask = 0;
-
-        // Row 0: Base Color (RGBA)
-        meshInfo.materialFactors[0][0] = vec4(1.0f, 1.0f, 1.0f, 1.0f);
-        // Row 1: Emissive (RGB) + Transmission (A)
-        meshInfo.materialFactors[0][1] = vec4(0.0f, 0.0f, 0.0f, 0.0f);
-        // Row 2: Metallic, Roughness, AlphaCutoff, OcclusionStrength
-        meshInfo.materialFactors[0][2] = vec4(1.0f, 1.0f, 0.5f, 1.0f);
-        // Row 3: Unused, NormalScale, Unused, Unused
-        meshInfo.materialFactors[0][3] = vec4(0.0f, 1.0f, 0.0f, 0.0f);
+        auto mat = std::make_unique<Material>();
+        mat->name = "Default";
+        mat->textures[static_cast<int>(TextureType::BaseColor)] = ResourceHandle<Image>::FromRaw(defaults.white);
+        mat->textures[static_cast<int>(TextureType::Normal)] = ResourceHandle<Image>::FromRaw(defaults.normal);
+        mat->textures[static_cast<int>(TextureType::MetallicRoughness)] = ResourceHandle<Image>::FromRaw(defaults.white);
+        mat->textures[static_cast<int>(TextureType::Occlusion)] = ResourceHandle<Image>::FromRaw(defaults.white);
+        mat->textures[static_cast<int>(TextureType::Emissive)] = ResourceHandle<Image>::FromRaw(defaults.black);
+        for (auto &s : mat->samplers)
+            s = defaults.sampler;
+        mat->textureMask = 0;
+        // PBR defaults: white base color, metallic=0, roughness=1, occlusionStrength=1
+        mat->metallic = 0.f;
+        mat->roughness = 1.f;
+        mat->occlusionStrength = 1.f;
+        meshInfo.material = mat.get();
+        model->m_materials.push_back(std::move(mat));
 
         model->m_meshInfos.push_back(meshInfo);
 
@@ -146,7 +141,6 @@ namespace pe
         if (nodeIndex >= 0)
             model->UpdateNodeMatrices();
 
-        model->SetRenderReady(true);
         return model;
     }
 

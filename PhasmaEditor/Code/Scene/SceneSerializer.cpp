@@ -1,4 +1,5 @@
 #include "Scene/Scene.h"
+#include "Scene/Material.h"
 #include "Scene/ModelAsset.h"
 #include "Scene/Primitives.h"
 #include "Scene/SelectionManager.h"
@@ -203,26 +204,43 @@ namespace pe
             }
 
             meshObj.AddMember("render_type", static_cast<int>(mesh.renderType), allocator);
-            meshObj.AddMember("texture_mask", mesh.textureMask, allocator);
 
-            mat4 persistedF0 = mesh.materialFactors[0];
-            mat4 persistedF1 = mesh.materialFactors[1];
-            EncodeMaterialFactorsForPersistence(mesh.renderType, persistedF0, persistedF1);
+            // Resolve material for saving: use instance overrides if present
+            Material resolvedMat;
+            const Material *saveMat = nullptr;
+            if (mesh.materialInstance)
+            {
+                resolvedMat = mesh.materialInstance->Resolve();
+                saveMat = &resolvedMat;
+                meshObj.AddMember("instanced", true, allocator);
+            }
+            else if (mesh.material)
+            {
+                saveMat = mesh.material;
+            }
 
-            rapidjson::Value factorsArr(rapidjson::kArrayType);
-            rapidjson::Value f0, f1;
-            SetMat4(f0, persistedF0);
-            SetMat4(f1, persistedF1);
-            factorsArr.PushBack(f0.Move(), allocator);
-            factorsArr.PushBack(f1.Move(), allocator);
-            meshObj.AddMember("material_factors", factorsArr.Move(), allocator);
+            meshObj.AddMember("texture_mask", saveMat ? saveMat->textureMask : 0u, allocator);
+
+            {
+                mat4 factors[2] = {mat4(1.f), mat4(1.f)};
+                if (saveMat)
+                    saveMat->PackLegacyFactors(factors);
+                EncodeMaterialFactorsForPersistence(mesh.renderType, factors[0], factors[1]);
+                rapidjson::Value factorsArr(rapidjson::kArrayType);
+                rapidjson::Value f0, f1;
+                SetMat4(f0, factors[0]);
+                SetMat4(f1, factors[1]);
+                factorsArr.PushBack(f0.Move(), allocator);
+                factorsArr.PushBack(f1.Move(), allocator);
+                meshObj.AddMember("material_factors", factorsArr.Move(), allocator);
+            }
 
             rapidjson::Value texturesObj(rapidjson::kObjectType);
             const char *texSlotNames[] = {"base_color", "metallic_roughness", "normal", "occlusion", "emissive"};
             const auto &defaults = ModelAsset::GetDefaultResources();
             for (int i = 0; i < 5; i++)
             {
-                Image *img = mesh.images[i].get();
+                Image *img = saveMat ? saveMat->textures[i].get() : nullptr;
                 if (img && !img->GetName().empty() &&
                     img != defaults.black && img != defaults.white && img != defaults.normal)
                 {
@@ -487,6 +505,7 @@ namespace pe
 
     void Scene::NewScene()
     {
+        m_generation++;
         m_scenePath.clear();
         m_dirty = false;
 
@@ -531,6 +550,8 @@ namespace pe
 
         m_meshes.clear();
         m_meshRuntimes.clear();
+        m_ownedMaterialInstances.clear();
+        m_ownedMaterials.clear();
         m_vertexStore.clear();
         m_positionUvStore.clear();
         m_aabbVertexStore.clear();
@@ -611,6 +632,17 @@ namespace pe
             return nullptr;
         };
 
+        // Set progress for Loading widget
+        auto &loading = Settings::Get<GlobalSettings>().loading;
+        uint32_t modelCount = 0;
+        if (d.HasMember("sources"))
+            modelCount = d["sources"].Size();
+        else if (d.HasMember("models"))
+            modelCount = d["models"].Size();
+        loading.total.store(modelCount, std::memory_order_relaxed);
+        loading.current.store(0, std::memory_order_relaxed);
+        loading.SetName("Loading scene models");
+
         if (d.HasMember("sources"))
         {
             const auto &sourcesVal = d["sources"];
@@ -633,6 +665,7 @@ namespace pe
                         model = ModelAsset::Load(modelPath);
                 }
                 result.models[si] = model;
+                loading.current.fetch_add(1, std::memory_order_relaxed);
             }
         }
         else if (d.HasMember("models"))
@@ -658,6 +691,7 @@ namespace pe
                     model = ModelAsset::Load(modelPath);
                 }
                 result.models[i] = model;
+                loading.current.fetch_add(1, std::memory_order_relaxed);
             }
         }
 
@@ -670,6 +704,7 @@ namespace pe
         if (!preload.valid)
             return;
 
+        m_generation++;
         m_scenePath = preload.filePath;
         m_dirty = false;
 
@@ -719,6 +754,8 @@ namespace pe
 
         m_meshes.clear();
         m_meshRuntimes.clear();
+        m_ownedMaterialInstances.clear();
+        m_ownedMaterials.clear();
         m_vertexStore.clear();
         m_positionUvStore.clear();
         m_aabbVertexStore.clear();
@@ -866,6 +903,8 @@ namespace pe
             if (d.HasMember("meshes"))
             {
                 const auto &meshesVal = d["meshes"];
+                std::unordered_set<Material *> loadedSharedMaterials;
+
                 for (rapidjson::SizeType mi = 0; mi < meshesVal.Size(); mi++)
                 {
                     const auto &mVal = meshesVal[mi];
@@ -888,48 +927,74 @@ namespace pe
                     Mesh &mesh = m_meshes[sceneMeshIdx];
                     if (mVal.HasMember("render_type"))
                         mesh.renderType = static_cast<RenderType>(mVal["render_type"].GetInt());
-                    if (mVal.HasMember("texture_mask"))
-                    {
-                        uint32_t savedMask = mVal["texture_mask"].GetUint();
-                        // Only override if the saved mask is non-zero, or if the model had no textures.
-                        // This guards against corrupted scene files that saved texture_mask as 0.
-                        if (savedMask != 0 || mesh.textureMask == 0)
-                            mesh.textureMask = savedMask;
-                    }
-                    if (mVal.HasMember("material_factors"))
-                    {
-                        mesh.materialFactors[0] = ReadMat4(mVal["material_factors"][0]);
-                        mesh.materialFactors[1] = ReadMat4(mVal["material_factors"][1]);
-                        DecodeMaterialFactorsFromPersistence(mesh.renderType, mesh.materialFactors[0], mesh.materialFactors[1]);
-                    }
 
-                    if (mVal.HasMember("textures"))
+                    bool isInstanced = mVal.HasMember("instanced") && mVal["instanced"].GetBool();
+
+                    // For instanced meshes: load into a temp Material, then create a MaterialInstance with diffs.
+                    // For shared meshes: only load into the Material on the first occurrence.
+                    Material *target = mesh.material;
+                    Material tempMat;
+                    if (isInstanced && target)
+                        tempMat = *target; // start from parent as base
+
+                    Material *loadTarget = isInstanced ? &tempMat : target;
+                    bool skipShared = !isInstanced && target && loadedSharedMaterials.count(target) > 0;
+
+                    if (loadTarget && !skipShared)
                     {
-                        const auto &texVal = mVal["textures"];
-                        const char *texSlotNames[] = {"base_color", "metallic_roughness", "normal", "occlusion", "emissive"};
-                        for (int k = 0; k < 5; k++)
+                        if (mVal.HasMember("texture_mask"))
                         {
-                            if (texVal.HasMember(texSlotNames[k]) && texVal[texSlotNames[k]].GetStringLength() > 0)
+                            uint32_t savedMask = mVal["texture_mask"].GetUint();
+                            if (savedMask != 0 || loadTarget->textureMask == 0)
+                                loadTarget->textureMask = savedMask;
+                        }
+                        if (mVal.HasMember("material_factors"))
+                        {
+                            mat4 factors[2];
+                            factors[0] = ReadMat4(mVal["material_factors"][0]);
+                            factors[1] = ReadMat4(mVal["material_factors"][1]);
+                            DecodeMaterialFactorsFromPersistence(mesh.renderType, factors[0], factors[1]);
+                            loadTarget->UnpackLegacyFactors(factors, loadTarget->textureMask);
+                        }
+
+                        if (mVal.HasMember("textures"))
+                        {
+                            const auto &texVal = mVal["textures"];
+                            const char *texSlotNames[] = {"base_color", "metallic_roughness", "normal", "occlusion", "emissive"};
+                            for (int k = 0; k < 5; k++)
                             {
-                                std::filesystem::path texPath = texVal[texSlotNames[k]].GetString();
-                                if (texPath.is_relative())
-                                    texPath = (preload.filePath.parent_path() / texPath).lexically_normal();
-                                if (std::filesystem::exists(texPath))
+                                if (texVal.HasMember(texSlotNames[k]) && texVal[texSlotNames[k]].GetStringLength() > 0)
                                 {
-                                    // Find source model for texture loading
-                                    int srcIdx = m_meshSourceInfos[sceneMeshIdx].sourceIndex;
-                                    ModelAsset *srcModel = (srcIdx >= 0 && srcIdx < static_cast<int>(loadedModels.size()))
-                                                               ? loadedModels[srcIdx]
-                                                               : nullptr;
-                                    if (srcModel)
+                                    std::filesystem::path texPath = texVal[texSlotNames[k]].GetString();
+                                    if (texPath.is_relative())
+                                        texPath = (preload.filePath.parent_path() / texPath).lexically_normal();
+                                    if (std::filesystem::exists(texPath))
                                     {
-                                        ResourceHandle<Image> img = srcModel->LoadTexture(cmd, texPath);
-                                        if (img)
-                                            mesh.images[k] = img;
+                                        int srcIdx = m_meshSourceInfos[sceneMeshIdx].sourceIndex;
+                                        ModelAsset *srcModel = (srcIdx >= 0 && srcIdx < static_cast<int>(loadedModels.size()))
+                                                                   ? loadedModels[srcIdx]
+                                                                   : nullptr;
+                                        if (srcModel)
+                                        {
+                                            ResourceHandle<Image> img = srcModel->LoadTexture(cmd, texPath);
+                                            if (img)
+                                                loadTarget->textures[k] = img;
+                                        }
                                     }
                                 }
                             }
                         }
+
+                        if (!isInstanced && target)
+                            loadedSharedMaterials.insert(target);
+                    }
+
+                    // Create MaterialInstance if this mesh was saved as instanced
+                    if (isInstanced && target)
+                    {
+                        MaterialInstance *inst = CreateMaterialInstance(mesh);
+                        if (inst)
+                            inst->ApplyDiffFromResolved(tempMat);
                     }
                 }
             }
@@ -1121,6 +1186,8 @@ namespace pe
                     if (modelVal.HasMember("meshes"))
                     {
                         const auto &meshesVal = modelVal["meshes"];
+                        std::unordered_set<Material *> loadedModelMaterials;
+
                         for (rapidjson::SizeType i = 0; i < meshesVal.Size(); i++)
                         {
                             MeshInfo *mi = model->GetMeshInfo(static_cast<int>(i));
@@ -1130,16 +1197,23 @@ namespace pe
                             const auto &mVal = meshesVal[i];
                             if (mVal.HasMember("render_type"))
                                 mi->renderType = static_cast<RenderType>(mVal["render_type"].GetInt());
-                            if (mVal.HasMember("material_factors"))
+
+                            // Skip material data for shared materials already loaded
+                            if (mi->material && loadedModelMaterials.count(mi->material) > 0)
+                                continue;
+
+                            if (mVal.HasMember("material_factors") && mi->material)
                             {
-                                mi->materialFactors[0] = ReadMat4(mVal["material_factors"][0]);
-                                mi->materialFactors[1] = ReadMat4(mVal["material_factors"][1]);
-                                DecodeMaterialFactorsFromPersistence(mi->renderType, mi->materialFactors[0], mi->materialFactors[1]);
+                                mat4 factors[2];
+                                factors[0] = ReadMat4(mVal["material_factors"][0]);
+                                factors[1] = ReadMat4(mVal["material_factors"][1]);
+                                DecodeMaterialFactorsFromPersistence(mi->renderType, factors[0], factors[1]);
+                                mi->material->UnpackLegacyFactors(factors, mi->material->textureMask);
                             }
 
                             bool hasTextureMask = mVal.HasMember("texture_mask");
-                            if (hasTextureMask)
-                                mi->textureMask = mVal["texture_mask"].GetUint();
+                            if (hasTextureMask && mi->material)
+                                mi->material->textureMask = mVal["texture_mask"].GetUint();
 
                             if (mVal.HasMember("textures"))
                             {
@@ -1155,16 +1229,19 @@ namespace pe
                                         if (std::filesystem::exists(texPath))
                                         {
                                             ResourceHandle<Image> img = model->LoadTexture(cmd, texPath);
-                                            if (img)
+                                            if (img && mi->material)
                                             {
-                                                mi->images[k] = img;
+                                                mi->material->textures[k] = img;
                                                 if (!hasTextureMask)
-                                                    mi->textureMask |= (1 << k);
+                                                    mi->material->textureMask |= (1 << k);
                                             }
                                         }
                                     }
                                 }
                             }
+
+                            if (mi->material)
+                                loadedModelMaterials.insert(mi->material);
                         }
                     }
 
@@ -1375,26 +1452,43 @@ namespace pe
             }
 
             meshObj.AddMember("render_type", static_cast<int>(mesh.renderType), allocator);
-            meshObj.AddMember("texture_mask", mesh.textureMask, allocator);
 
-            mat4 persistedF0 = mesh.materialFactors[0];
-            mat4 persistedF1 = mesh.materialFactors[1];
-            EncodeMaterialFactorsForPersistence(mesh.renderType, persistedF0, persistedF1);
+            // Resolve material for saving: use instance overrides if present
+            Material resolvedMat;
+            const Material *saveMat = nullptr;
+            if (mesh.materialInstance)
+            {
+                resolvedMat = mesh.materialInstance->Resolve();
+                saveMat = &resolvedMat;
+                meshObj.AddMember("instanced", true, allocator);
+            }
+            else if (mesh.material)
+            {
+                saveMat = mesh.material;
+            }
 
-            rapidjson::Value factorsArr(rapidjson::kArrayType);
-            rapidjson::Value f0, f1;
-            SetMat4(f0, persistedF0);
-            SetMat4(f1, persistedF1);
-            factorsArr.PushBack(f0.Move(), allocator);
-            factorsArr.PushBack(f1.Move(), allocator);
-            meshObj.AddMember("material_factors", factorsArr.Move(), allocator);
+            meshObj.AddMember("texture_mask", saveMat ? saveMat->textureMask : 0u, allocator);
+
+            {
+                mat4 factors[2] = {mat4(1.f), mat4(1.f)};
+                if (saveMat)
+                    saveMat->PackLegacyFactors(factors);
+                EncodeMaterialFactorsForPersistence(mesh.renderType, factors[0], factors[1]);
+                rapidjson::Value factorsArr(rapidjson::kArrayType);
+                rapidjson::Value f0, f1;
+                SetMat4(f0, factors[0]);
+                SetMat4(f1, factors[1]);
+                factorsArr.PushBack(f0.Move(), allocator);
+                factorsArr.PushBack(f1.Move(), allocator);
+                meshObj.AddMember("material_factors", factorsArr.Move(), allocator);
+            }
 
             rapidjson::Value texturesObj(rapidjson::kObjectType);
             const char *texSlotNames[] = {"base_color", "metallic_roughness", "normal", "occlusion", "emissive"};
             const auto &defaults = ModelAsset::GetDefaultResources();
             for (int i = 0; i < 5; i++)
             {
-                Image *img = mesh.images[i].get();
+                Image *img = saveMat ? saveMat->textures[i].get() : nullptr;
                 if (img && !img->GetName().empty() &&
                     img != defaults.black && img != defaults.white && img != defaults.normal)
                 {
@@ -1763,7 +1857,14 @@ namespace pe
                 // Update meshes (materials only)
                 if (d.HasMember("meshes"))
                 {
+                    // Clear all existing instances before restoring
+                    for (auto &m : m_meshes)
+                        m.materialInstance = nullptr;
+                    m_ownedMaterialInstances.clear();
+
                     const auto &meshesVal = d["meshes"];
+                    std::unordered_set<Material *> loadedSharedMaterials;
+
                     for (rapidjson::SizeType mi = 0; mi < meshesVal.Size() && mi < static_cast<rapidjson::SizeType>(m_meshes.size()); mi++)
                     {
                         const auto &mVal = meshesVal[mi];
@@ -1771,13 +1872,38 @@ namespace pe
 
                         if (mVal.HasMember("render_type"))
                             mesh.renderType = static_cast<RenderType>(mVal["render_type"].GetInt());
-                        if (mVal.HasMember("texture_mask"))
-                            mesh.textureMask = mVal["texture_mask"].GetUint();
-                        if (mVal.HasMember("material_factors"))
+
+                        bool isInstanced = mVal.HasMember("instanced") && mVal["instanced"].GetBool();
+                        Material *target = mesh.material;
+                        Material tempMat;
+                        if (isInstanced && target)
+                            tempMat = *target;
+
+                        Material *loadTarget = isInstanced ? &tempMat : target;
+                        bool skipShared = !isInstanced && target && loadedSharedMaterials.count(target) > 0;
+
+                        if (loadTarget && !skipShared)
                         {
-                            mesh.materialFactors[0] = ReadMat4(mVal["material_factors"][0]);
-                            mesh.materialFactors[1] = ReadMat4(mVal["material_factors"][1]);
-                            DecodeMaterialFactorsFromPersistence(mesh.renderType, mesh.materialFactors[0], mesh.materialFactors[1]);
+                            if (mVal.HasMember("texture_mask"))
+                                loadTarget->textureMask = mVal["texture_mask"].GetUint();
+                            if (mVal.HasMember("material_factors"))
+                            {
+                                mat4 factors[2];
+                                factors[0] = ReadMat4(mVal["material_factors"][0]);
+                                factors[1] = ReadMat4(mVal["material_factors"][1]);
+                                DecodeMaterialFactorsFromPersistence(mesh.renderType, factors[0], factors[1]);
+                                loadTarget->UnpackLegacyFactors(factors, loadTarget->textureMask);
+                            }
+
+                            if (!isInstanced && target)
+                                loadedSharedMaterials.insert(target);
+                        }
+
+                        if (isInstanced && target)
+                        {
+                            MaterialInstance *inst = CreateMaterialInstance(mesh);
+                            if (inst)
+                                inst->ApplyDiffFromResolved(tempMat);
                         }
                     }
                 }
@@ -1899,6 +2025,8 @@ namespace pe
 
                 m_meshes.clear();
                 m_meshRuntimes.clear();
+                m_ownedMaterialInstances.clear();
+                m_ownedMaterials.clear();
                 m_vertexStore.clear();
                 m_positionUvStore.clear();
                 m_aabbVertexStore.clear();
@@ -1965,6 +2093,8 @@ namespace pe
                 if (d.HasMember("meshes"))
                 {
                     const auto &meshesVal = d["meshes"];
+                    std::unordered_set<Material *> loadedSharedMaterials;
+
                     for (rapidjson::SizeType mi = 0; mi < meshesVal.Size(); mi++)
                     {
                         const auto &mVal = meshesVal[mi];
@@ -1983,13 +2113,38 @@ namespace pe
                         Mesh &mesh = m_meshes[sceneMeshIdx];
                         if (mVal.HasMember("render_type"))
                             mesh.renderType = static_cast<RenderType>(mVal["render_type"].GetInt());
-                        if (mVal.HasMember("texture_mask"))
-                            mesh.textureMask = mVal["texture_mask"].GetUint();
-                        if (mVal.HasMember("material_factors"))
+
+                        bool isInstanced = mVal.HasMember("instanced") && mVal["instanced"].GetBool();
+                        Material *target = mesh.material;
+                        Material tempMat;
+                        if (isInstanced && target)
+                            tempMat = *target;
+
+                        Material *loadTarget = isInstanced ? &tempMat : target;
+                        bool skipShared = !isInstanced && target && loadedSharedMaterials.count(target) > 0;
+
+                        if (loadTarget && !skipShared)
                         {
-                            mesh.materialFactors[0] = ReadMat4(mVal["material_factors"][0]);
-                            mesh.materialFactors[1] = ReadMat4(mVal["material_factors"][1]);
-                            DecodeMaterialFactorsFromPersistence(mesh.renderType, mesh.materialFactors[0], mesh.materialFactors[1]);
+                            if (mVal.HasMember("texture_mask"))
+                                loadTarget->textureMask = mVal["texture_mask"].GetUint();
+                            if (mVal.HasMember("material_factors"))
+                            {
+                                mat4 factors[2];
+                                factors[0] = ReadMat4(mVal["material_factors"][0]);
+                                factors[1] = ReadMat4(mVal["material_factors"][1]);
+                                DecodeMaterialFactorsFromPersistence(mesh.renderType, factors[0], factors[1]);
+                                loadTarget->UnpackLegacyFactors(factors, loadTarget->textureMask);
+                            }
+
+                            if (!isInstanced && target)
+                                loadedSharedMaterials.insert(target);
+                        }
+
+                        if (isInstanced && target)
+                        {
+                            MaterialInstance *inst = CreateMaterialInstance(mesh);
+                            if (inst)
+                                inst->ApplyDiffFromResolved(tempMat);
                         }
                     }
                 }

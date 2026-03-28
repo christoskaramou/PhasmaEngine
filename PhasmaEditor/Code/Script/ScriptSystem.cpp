@@ -1,6 +1,9 @@
 #include "ScriptSystem.h"
 #include "GUI/GUIState.h"
 #include "Scene/ModelAsset.h"
+#include "Scene/ModelAssetAssimp.h"
+#include "Scene/Scene.h"
+#include "Scene/SceneNodeHandle.h"
 #include "Systems/RendererSystem.h"
 #include "Base/FileWatcher.h"
 #include "Base/Timer.h"
@@ -181,15 +184,21 @@ namespace pe
         m_pendingAsyncLoads.push_back(std::move(load));
     }
 
+    void ScriptSystem::AddPendingSceneLoad(PendingSceneLoad load)
+    {
+        m_pendingSceneLoads.push_back(std::move(load));
+    }
+
     void ScriptSystem::ProcessAsyncLoads()
     {
-        // First pass: collect all ready models
         struct CompletedLoad
         {
             ModelAsset *model;
+            SceneNodeHandle handle;
             sol::function callback;
             std::shared_ptr<BatchLoadState> batchState;
             sol::function batchCallback;
+            uint32_t sceneGeneration;
         };
         std::vector<CompletedLoad> completed;
 
@@ -201,35 +210,56 @@ namespace pe
                 continue;
             }
 
-            completed.push_back({it->future.get(), it->callback, it->batchState, it->batchCallback});
+            CompletedLoad c;
+            c.model = it->future.get();
+            c.callback = it->callback;
+            c.batchState = it->batchState;
+            c.batchCallback = it->batchCallback;
+            c.sceneGeneration = it->sceneGeneration;
+            completed.push_back(std::move(c));
             it = m_pendingAsyncLoads.erase(it);
         }
 
         if (completed.empty())
             return;
 
-        // Add all ready models to scene in one batch
         auto *r = GetGlobalSystem<RendererSystem>();
-        if (r)
+        if (!r)
+            return;
+
+        Scene &scene = r->GetScene();
+
+        for (auto &c : completed)
         {
-            r->WaitAllFramesCommands();
-            for (auto &c : completed)
+            if (!c.model)
+                continue;
+
+            // Discard if scene changed since request
+            if (c.sceneGeneration != scene.GetGeneration())
             {
-                if (c.model)
-                {
-                    r->GetScene().AddModel(c.model);
-                    c.model->SetRenderReady(true);
-                }
+                delete c.model;
+                c.model = nullptr;
+                continue;
             }
-            r->GetScene().UpdateGeometryBuffers();
+
+            // GPU upload on main thread (textures were only decoded on the background thread)
+            if (auto *assimp = dynamic_cast<ModelAssetAssimp *>(c.model))
+                assimp->UploadGpu();
+
+            c.handle = scene.AddModelDeferred(c.model);
         }
 
-        // Fire callbacks
+        // Callbacks
         for (auto &c : completed)
         {
             if (c.callback.valid())
             {
-                auto res = c.callback(c.model);
+                sol::protected_function_result res;
+                if (c.model)
+                    res = c.callback(c.handle, sol::nil);
+                else
+                    res = c.callback(sol::nil, std::string("load failed or scene changed"));
+
                 if (!res.valid())
                 {
                     sol::error err = res;
@@ -239,18 +269,14 @@ namespace pe
 
             if (c.batchState)
             {
-                auto &state = c.batchState;
-                if (c.model)
-                    state->models.push_back(c.model);
-                state->completed++;
+                if (c.handle.nodeId)
+                    c.batchState->models.push_back(c.handle);
+                c.batchState->completed++;
 
-                if (state->completed == state->total && c.batchCallback.valid())
+                if (c.batchState->completed == c.batchState->total && c.batchCallback.valid())
                 {
-                    sol::table result = m_lua.create_table();
-                    for (size_t i = 0; i < state->models.size(); i++)
-                        result[i + 1] = state->models[i];
-
-                    auto res = c.batchCallback(result);
+                    // Pass the models vector directly — sol::as_table wraps it with proper usertype info
+                    auto res = c.batchCallback(sol::as_table(c.batchState->models));
                     if (!res.valid())
                     {
                         sol::error err = res;
@@ -259,6 +285,64 @@ namespace pe
                 }
             }
         }
+
+        if (m_pendingAsyncLoads.empty())
+            GUIState::s_modelLoading = false;
+    }
+
+    void ScriptSystem::ProcessSceneLoads()
+    {
+        if (m_pendingSceneLoads.empty())
+            return;
+
+        auto *r = GetGlobalSystem<RendererSystem>();
+        if (!r)
+            return;
+
+        for (auto it = m_pendingSceneLoads.begin(); it != m_pendingSceneLoads.end();)
+        {
+            if (it->future.wait_for(std::chrono::seconds(0)) != std::future_status::ready)
+            {
+                ++it;
+                continue;
+            }
+
+            std::unique_ptr<Scene::ScenePreload> preload(it->future.get());
+            Scene &scene = r->GetScene();
+
+            if (it->sceneGeneration != scene.GetGeneration())
+            {
+                // Scene changed since request — discard
+                if (it->callback.valid())
+                {
+                    auto res = it->callback(std::string("scene changed during load"));
+                    if (!res.valid())
+                    {
+                        sol::error err = res;
+                        PE_ERROR("[Lua] scene load callback error: %s", err.what());
+                    }
+                }
+                it = m_pendingSceneLoads.erase(it);
+                continue;
+            }
+
+            r->WaitAllFramesCommands();
+            scene.LoadSceneApply(std::move(*preload));
+
+            GUIState::s_modelLoading = false;
+
+            if (it->callback.valid())
+            {
+                auto res = it->callback(sol::nil); // nil = no error
+                if (!res.valid())
+                {
+                    sol::error err = res;
+                    PE_ERROR("[Lua] scene load callback error: %s", err.what());
+                }
+            }
+
+            it = m_pendingSceneLoads.erase(it);
+        }
     }
 
     void ScriptSystem::Update()
@@ -266,6 +350,8 @@ namespace pe
         PE_PROFILE_SCOPE("Script System");
         // Process completed async model loads
         ProcessAsyncLoads();
+        // Process completed async scene loads
+        ProcessSceneLoads();
 
         // Periodically scan for new .lua files
         ScanForNewScripts();
@@ -330,6 +416,17 @@ namespace pe
         for (auto &load : m_pendingAsyncLoads)
             load.future.wait();
         m_pendingAsyncLoads.clear();
+
+        // Wait for any pending async scene loads
+        for (auto &load : m_pendingSceneLoads)
+        {
+            if (load.future.valid())
+            {
+                Scene::ScenePreload *p = load.future.get();
+                delete p;
+            }
+        }
+        m_pendingSceneLoads.clear();
 
         m_scripts.clear();
         m_lua = sol::state();

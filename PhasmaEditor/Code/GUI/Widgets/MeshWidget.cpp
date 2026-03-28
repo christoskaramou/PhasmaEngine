@@ -5,6 +5,7 @@
 #include "API/RHI.h"
 #include "FileSelector.h"
 #include "GUI/GUI.h"
+#include "Scene/Material.h"
 #include "Scene/MaterialAsset.h"
 #include "Scene/Scene.h"
 #include "Scene/SceneNode.h"
@@ -118,6 +119,39 @@ namespace pe
     {
         if (ImGui::CollapsingHeader("Material", ImGuiTreeNodeFlags_DefaultOpen))
         {
+            // Show material name if available
+            Material *mat = mesh->material;
+            if (mat && !mat->name.empty())
+            {
+                ImGui::TextDisabled("Material: %s", mat->name.c_str());
+            }
+
+            // Shared / Instanced toggle
+            if (mat)
+            {
+                bool isInstanced = mesh->materialInstance != nullptr;
+                if (ImGui::Checkbox("Instanced", &isInstanced))
+                {
+                    RendererSystem *renderer = GetGlobalSystem<RendererSystem>();
+                    if (renderer)
+                    {
+                        renderer->WaitAllFramesCommands();
+                        Scene &scene = renderer->GetScene();
+                        if (isInstanced)
+                            scene.CreateMaterialInstance(*mesh);
+                        else
+                            scene.DestroyMaterialInstance(*mesh);
+                        scene.UpdateTextures();
+                        m_gui->NotifyChange();
+                    }
+                }
+                ImGui::SameLine();
+                if (isInstanced)
+                    ImGui::TextDisabled("(per-mesh overrides)");
+                else
+                    ImGui::TextDisabled("(shared)");
+            }
+
             // Drag .mat file onto this button or anywhere in the section to apply it
             static char s_matSaveName[128] = "";
             static bool s_openSavePopup = false;
@@ -139,7 +173,7 @@ namespace pe
                         if (renderer)
                         {
                             renderer->WaitAllFramesCommands();
-                            if (MaterialAsset::Load(*mesh, matPath))
+                            if (mat && MaterialIO::LoadMaterial(*mat, matPath))
                             {
                                 PropagateMeshChange(node);
                                 renderer->GetScene().UpdateTextures();
@@ -169,7 +203,10 @@ namespace pe
                 {
                     std::filesystem::path savePath =
                         std::filesystem::path(Path::Assets) / "Materials" / (std::string(s_matSaveName) + ".mat");
-                    MaterialAsset::Save(*mesh, savePath);
+                    if (mat)
+                        MaterialIO::SaveMaterial(*mat, savePath);
+                    else
+                        MaterialIO::Save(*mesh, savePath);
                     ImGui::CloseCurrentPopup();
                 }
                 ImGui::SameLine();
@@ -188,6 +225,14 @@ namespace pe
                 ImGui::TableHeadersRow();
 
                 bool changed = false;
+                MaterialInstance *inst = mesh->materialInstance;
+
+                // Read current values directly — no Material copy (avoids shared_ptr refcount issues)
+                RenderType curRenderType = inst ? inst->GetRenderType() : (mat ? mat->renderType : mesh->renderType);
+                float curAlphaCutoff = inst ? inst->GetAlphaCutoff() : (mat ? mat->alphaCutoff : 0.5f);
+                vec4 curBaseColor = inst ? inst->GetBaseColorFactor() : (mat ? mat->baseColorFactor : vec4(1.f));
+                float curMetallic = inst ? inst->GetMetallic() : (mat ? mat->metallic : 0.f);
+                float curRoughness = inst ? inst->GetRoughness() : (mat ? mat->roughness : 1.f);
 
                 // Render Type
                 ImGui::TableNextRow();
@@ -197,19 +242,24 @@ namespace pe
                 ImGui::TableSetColumnIndex(1);
 
                 const char *renderTypeItems[] = {"Opaque", "AlphaCut", "AlphaBlend", "Transmission"};
-                int currentRenderType = static_cast<int>(mesh->renderType) - 1;
+                int currentRenderType = static_cast<int>(curRenderType) - 1;
                 if (currentRenderType >= 0 && currentRenderType < 4)
                 {
                     ImGui::SetNextItemWidth(-FLT_MIN);
                     if (ImGui::Combo("##RenderType", &currentRenderType, renderTypeItems, IM_ARRAYSIZE(renderTypeItems)))
                     {
-                        mesh->renderType = static_cast<RenderType>(currentRenderType + 1);
+                        RenderType newRT = static_cast<RenderType>(currentRenderType + 1);
+                        if (inst)
+                            inst->SetRenderType(newRT);
+                        else if (mat)
+                            mat->renderType = newRT;
+                        mesh->renderType = newRT;
                         changed = true;
                     }
                 }
                 else
                 {
-                    ImGui::TextColored(ImVec4(1.f, 0.4f, 0.4f, 1.f), "Unknown (%d)", static_cast<int>(mesh->renderType));
+                    ImGui::TextColored(ImVec4(1.f, 0.4f, 0.4f, 1.f), "Unknown (%d)", static_cast<int>(curRenderType));
                 }
 
                 // Alpha Cutoff
@@ -220,10 +270,13 @@ namespace pe
                 ImGui::TableSetColumnIndex(1);
 
                 ImGui::SetNextItemWidth(-FLT_MIN);
-                float alphaCutoff = mesh->materialFactors[0][2].z;
+                float alphaCutoff = curAlphaCutoff;
                 if (ImGui::SliderFloat("##AlphaCutoff", &alphaCutoff, 0.0f, 1.0f, "%.3f"))
                 {
-                    mesh->materialFactors[0][2].z = alphaCutoff;
+                    if (inst)
+                        inst->SetAlphaCutoff(alphaCutoff);
+                    else if (mat)
+                        mat->alphaCutoff = alphaCutoff;
                     changed = true;
                 }
 
@@ -234,16 +287,19 @@ namespace pe
                 ImGui::Text("Base Color");
                 ImGui::TableSetColumnIndex(1);
 
-                vec4 baseColorFactor = mesh->materialFactors[0][0];
+                vec4 baseColorFactor = curBaseColor;
                 ImGui::SetNextItemWidth(-FLT_MIN);
                 if (ImGui::ColorEdit4("##BaseColor", &baseColorFactor.x, ImGuiColorEditFlags_NoInputs | ImGuiColorEditFlags_AlphaPreviewHalf))
                 {
-                    mesh->materialFactors[0][0] = baseColorFactor;
+                    if (inst)
+                        inst->SetBaseColorFactor(baseColorFactor);
+                    else if (mat)
+                        mat->baseColorFactor = baseColorFactor;
                     changed = true;
                 }
 
                 // Metallic
-                float metallic = mesh->materialFactors[0][2].x;
+                float metallic = curMetallic;
                 ImGui::TableNextRow();
                 ImGui::TableSetColumnIndex(0);
                 ImGui::AlignTextToFramePadding();
@@ -253,12 +309,15 @@ namespace pe
                 ImGui::SetNextItemWidth(-FLT_MIN);
                 if (ImGui::SliderFloat("##Metallic", &metallic, 0.0f, 1.0f, "%.3f"))
                 {
-                    mesh->materialFactors[0][2].x = metallic;
+                    if (inst)
+                        inst->SetMetallic(metallic);
+                    else if (mat)
+                        mat->metallic = metallic;
                     changed = true;
                 }
 
                 // Roughness
-                float roughness = mesh->materialFactors[0][2].y;
+                float roughness = curRoughness;
                 ImGui::TableNextRow();
                 ImGui::TableSetColumnIndex(0);
                 ImGui::AlignTextToFramePadding();
@@ -268,7 +327,10 @@ namespace pe
                 ImGui::SetNextItemWidth(-FLT_MIN);
                 if (ImGui::SliderFloat("##Roughness", &roughness, 0.0f, 1.0f, "%.3f"))
                 {
-                    mesh->materialFactors[0][2].y = roughness;
+                    if (inst)
+                        inst->SetRoughness(roughness);
+                    else if (mat)
+                        mat->roughness = roughness;
                     changed = true;
                 }
 
@@ -276,10 +338,17 @@ namespace pe
 
                 if (changed)
                 {
+                    if (mat && !inst)
+                        mat->dirty = true;
                     PropagateMeshChange(node);
                     RendererSystem *renderer = GetGlobalSystem<RendererSystem>();
                     if (renderer)
-                        renderer->GetScene().UpdateTextures();
+                    {
+                        if (inst)
+                            renderer->GetScene().UpdateTextures(); // instance needs full rebuild for its own GPU entry
+                        else
+                            renderer->GetScene().UpdateDirtyMaterials();
+                    }
                     m_gui->NotifyChange();
                 }
             }
@@ -290,6 +359,8 @@ namespace pe
 
     void MeshWidget::DrawTextureInfo(Mesh *mesh, NodeId *node)
     {
+        Material *mat = mesh->material;
+        MaterialInstance *inst = mesh->materialInstance;
         {
             if (ImGui::BeginTable("TextureTable", 2, ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg | ImGuiTableFlags_SizingStretchProp))
             {
@@ -311,13 +382,20 @@ namespace pe
 
                     for (int i = 0; i < 5; i++)
                     {
-                        bool active = (mesh->textureMask & (1 << i)) != 0;
+                        uint32_t mask = inst ? inst->GetTextureMask() : (mat ? mat->textureMask : 0u);
+                        bool active = (mask & (1 << i)) != 0;
                         if (ImGui::Selectable(labels[i], &active, ImGuiSelectableFlags_None, ImVec2(24, 0)))
                         {
+                            uint32_t newMask = mask;
                             if (active)
-                                mesh->textureMask |= (1 << i);
+                                newMask |= (1 << i);
                             else
-                                mesh->textureMask &= ~(1 << i);
+                                newMask &= ~(1 << i);
+
+                            if (inst)
+                                inst->SetTextureMask(newMask);
+                            else if (mat)
+                                mat->textureMask = newMask;
                             changed = true;
                         }
                         if (ImGui::IsItemHovered())
@@ -325,7 +403,7 @@ namespace pe
 
                         ImGui::SameLine();
                     }
-                    ImGui::Text(" (0x%X)", mesh->textureMask);
+                    ImGui::Text(" (0x%X)", inst ? inst->GetTextureMask() : (mat ? mat->textureMask : 0u));
 
                     if (changed)
                     {
@@ -348,7 +426,11 @@ namespace pe
                     ImGui::Text("%s", textureNames[i]);
 
                     ImGui::TableSetColumnIndex(1);
-                    Image *img = mesh->images[i].get();
+                    Image *img = nullptr;
+                    if (inst)
+                        img = inst->GetTexture(i);
+                    else if (mat)
+                        img = mat->textures[i].get();
                     std::string id = "##tex" + std::to_string(i);
 
                     // Thumbnail / Button
@@ -388,8 +470,17 @@ namespace pe
                     {
                         if (ImGui::Button(("Clear" + id).c_str()))
                         {
-                            mesh->images[i] = ResourceHandle<Image>();
-                            mesh->textureMask &= ~(1 << i);
+                            if (inst)
+                            {
+                                inst->SetTexture(static_cast<TextureType>(i), ResourceHandle<Image>());
+                                uint32_t newMask = inst->GetTextureMask() & ~(1 << i);
+                                inst->SetTextureMask(newMask);
+                            }
+                            else if (mat)
+                            {
+                                mat->textures[i] = ResourceHandle<Image>();
+                                mat->textureMask &= ~(1 << i);
+                            }
                             PropagateMeshChange(node);
 
                             RendererSystem *renderer = GetGlobalSystem<RendererSystem>();
@@ -438,8 +529,17 @@ namespace pe
 
                                 if (newImg)
                                 {
-                                    mesh->images[i] = newImg;
-                                    mesh->textureMask |= (1 << i);
+                                    if (mesh->materialInstance)
+                                    {
+                                        mesh->materialInstance->SetTexture(static_cast<TextureType>(i), newImg);
+                                        uint32_t newMask = mesh->materialInstance->GetTextureMask() | (1 << i);
+                                        mesh->materialInstance->SetTextureMask(newMask);
+                                    }
+                                    else if (mesh->material)
+                                    {
+                                        mesh->material->textures[i] = newImg;
+                                        mesh->material->textureMask |= (1 << i);
+                                    }
                                     PropagateMeshChange(node);
 
                                     RendererSystem *renderer = GetGlobalSystem<RendererSystem>();
@@ -464,11 +564,17 @@ namespace pe
                 image->CreateSRV(vk::ImageViewType::e2D);
             }
 
+            if (!image->GetSRV())
+                return nullptr;
+
             if (!image->GetSampler())
             {
                 vk::SamplerCreateInfo info = Sampler::CreateInfoInit();
                 image->SetSampler(Sampler::Create(info));
             }
+
+            if (!image->GetSampler())
+                return nullptr;
 
             m_textureDescriptors[image] = (void *)ImGui_ImplVulkan_AddTexture(
                 image->GetSampler()->ApiHandle(),

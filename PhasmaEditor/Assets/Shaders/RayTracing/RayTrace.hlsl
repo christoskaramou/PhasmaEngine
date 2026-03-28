@@ -57,6 +57,7 @@ struct Vertex
 [[vk::binding(8, 0)]] TextureCube skybox;
 [[vk::binding(9, 0)]] Texture2D LutIBL;
 [[vk::binding(10, 0)]] Texture2D<float> depthBuffer;
+[[vk::binding(11, 0)]] StructuredBuffer<MaterialGpuData> materialTable;
 
 // Set 1
 [[vk::binding(0, 1)]] cbuffer LightSystemUBO
@@ -165,11 +166,10 @@ float4x4 GetMeshMatrix(uint id)               { return LoadMatrix(constants[id].
 float4x4 GetMeshPreviousMatrix(uint id)       { return LoadMatrix(constants[id].meshDataOffset + MATRIX_SIZE); }
 float4x4 GetJointMatrix(uint id, uint index)  { return LoadMatrix(constants[id].meshDataOffset + MESH_DATA_SIZE + index * MATRIX_SIZE); }
 
-// Factors
-uint GetMeshConstantsOffset(uint id)   { return constants[id].meshDataOffset + MESH_DATA_SIZE; }
-float4 GetBaseColorFactor(uint id)     { const uint offset = GetMeshConstantsOffset(id); return asfloat(data.Load4(offset + 0)); }
-float3 GetEmissiveFactor(uint id)      { const uint offset = GetMeshConstantsOffset(id); return asfloat(data.Load3(offset + 16)); }
-float4 GetMetRoughAlphacutOcl(uint id) { const uint offset = GetMeshConstantsOffset(id); return asfloat(data.Load4(offset + 32)); }
+// Factors — read from material table (Phase 2: StructuredBuffer<MaterialGpuData>)
+float4 GetBaseColorFactor(uint id)     { return materialTable[constants[id].materialId].baseColorFactor; }
+float3 GetEmissiveFactor(uint id)      { return materialTable[constants[id].materialId].emissiveTransmission.xyz; }
+float4 GetMetRoughAlphacutOcl(uint id) { return materialTable[constants[id].materialId].pbrParams; }
 
 // Textures - Passing defaults matching PBR expectations
 float4 GetBaseColor(uint id, float2 uv)          { return SampleArray(uv, constants[id].meshImageIndex[0]); }
@@ -717,10 +717,10 @@ void closesthit(inout HitPayload payload, in BuiltInTriangleIntersectionAttribut
         occlusion = lerp(1.0f, occlusionSample, metRoughAlphacutOcl.w);
     }
 
-    float3 emissive = float3(0.0f, 0.0f, 0.0f);
+    float3 emissive = GetEmissiveFactor(id);
     if (HasTexture(textureMask, TEX_EMISSIVE_BIT))
     {
-        emissive = GetEmissive(id, uv).xyz * GetEmissiveFactor(id);
+        emissive *= GetEmissive(id, uv).xyz;
     }
 
     // 3. Normal Mapping
@@ -792,11 +792,12 @@ void closesthit(inout HitPayload payload, in BuiltInTriangleIntersectionAttribut
     lighting += emissive;
 
     // Transmission & Volume
-    float transmissionFactor = asfloat(data.Load(GetMeshConstantsOffset(id) + 28));  // Offset 28 (row1 .w)
-    float thicknessFactor = asfloat(data.Load(GetMeshConstantsOffset(id) + 64));     // Offset 64 (row4 .x)
-    float attenuationDistance = asfloat(data.Load(GetMeshConstantsOffset(id) + 68)); // Offset 68 (row4 .y)
-    float ior = asfloat(data.Load(GetMeshConstantsOffset(id) + 72));                 // Offset 72 (row4 .z)
-    float3 attenuationColor = asfloat(data.Load3(GetMeshConstantsOffset(id) + 80));  // Offset 80 (row5 .xyz)
+    // transmissionFactor lives in the material table; volume params not yet in Phase 2 table (stubbed)
+    float transmissionFactor = materialTable[constants[id].materialId].emissiveTransmission.w;
+    float thicknessFactor = 0.0f;
+    float attenuationDistance = 1e9f;
+    float ior = 1.5f;
+    float3 attenuationColor = float3(1.0f, 1.0f, 1.0f);
 
     // Check material type from RenderType enum (1: Opaque, 2: AlphaCut, 3: AlphaBlend, 4: Transmission)
     uint renderType = meshInfos[id].renderType;

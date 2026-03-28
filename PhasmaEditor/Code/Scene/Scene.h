@@ -2,6 +2,7 @@
 
 #include "API/Vertex.h"
 #include "Scene/SceneNode.h"
+#include "Scene/SceneNodeHandle.h"
 #include "Scene/SelectionManager.h"
 
 namespace pe
@@ -13,6 +14,8 @@ namespace pe
     class CommandBuffer;
     class Image;
     class ImageView;
+    class Material;
+    class MaterialInstance;
     class ModelAsset;
     class Sampler;
 
@@ -87,6 +90,7 @@ namespace pe
     {
         NodeId *node;
         float distance;
+        bool doubleSided = false;
     };
 
     class ParticleManager;
@@ -116,9 +120,13 @@ namespace pe
         void Update();
         void UpdateGeometryBuffers();
         void UpdateTextures();
+        void UpdateDirtyMaterials();                          // incremental GPU update for scalar/texture property changes
+        MaterialInstance *CreateMaterialInstance(Mesh &mesh); // creates instance from mesh's shared material
+        void DestroyMaterialInstance(Mesh &mesh);             // removes instance, reverts to shared material
         void UploadBuffers(CommandBuffer *cmd);
         void UpdateTLASTransformations(CommandBuffer *cmd);
         void AddModel(ModelAsset *model);
+        SceneNodeHandle AddModelDeferred(ModelAsset *model);
         // Returns the root nodes created by the last AddModel call for the given model.
         const std::vector<NodeId *> &GetModelRootNodes(ModelAsset *model) const;
         static const std::vector<NodeId *> &EmptyRootNodes();
@@ -213,6 +221,17 @@ namespace pe
 
         uint64_t GetGeometryVersion() const { return m_geometryVersion; }
 
+        uint32_t GetGeneration() const { return m_generation; }
+        SceneNodeHandle MakeHandle(NodeId *node) const
+        {
+            return SceneNodeHandle(node, m_generation);
+        }
+        bool IsGeometryDirty() const { return m_geometryDirty; }
+        void SetGeometryDirty() { m_geometryDirty = true; }
+        void SetMaterialDirty() { m_materialDirty = true; }
+        void SetTexturesDirty() { m_texturesDirty = true; }
+        void FlushPendingGpuWork();
+
         Buffer *GetUniforms(uint32_t frame) { return m_storages[frame]; }
         Buffer *GetIndirect(uint32_t frame) { return m_indirects[frame]; }
         Buffer *GetIndirectAll() { return m_indirectAll; }
@@ -234,9 +253,12 @@ namespace pe
         const std::vector<DrawInfo> &GetDrawInfosAlphaCut() const { return m_drawInfosAlphaCut; }
         const std::vector<DrawInfo> &GetDrawInfosAlphaBlend() const { return m_drawInfosAlphaBlend; }
         const std::vector<DrawInfo> &GetDrawInfosTransmission() const { return m_drawInfosTransmission; }
+        uint32_t GetOpaqueSingleSidedCount() const { return m_opaqueSingleSidedCount; }
+        uint32_t GetAlphaCutSingleSidedCount() const { return m_alphaCutSingleSidedCount; }
         const std::vector<ImageView *> &GetImageViews() const { return m_imageViews; }
         uint32_t GetMeshCount() const { return m_meshCount; }
         Buffer *GetMeshConstants() { return m_meshConstants; }
+        Buffer *GetMaterialTable() { return m_materialTable; }
         Sampler *GetDefaultSampler() const;
         static const std::vector<uint32_t> &GetAabbIndices() { return s_aabbIndices; }
 
@@ -332,6 +354,7 @@ namespace pe
         void MarkUniformsDirty();
         void CreateIndirectBuffers(CommandBuffer *cmd);
         void UpdateImageViews();
+        void CreateMaterialTable();
         void CreateMeshConstants(CommandBuffer *cmd);
 
         // Ray tracing (SceneRayTracing.cpp)
@@ -375,6 +398,9 @@ namespace pe
         std::vector<DrawInfo> m_drawInfosAlphaCut;
         std::vector<DrawInfo> m_drawInfosAlphaBlend;
         std::vector<DrawInfo> m_drawInfosTransmission;
+        // Within opaque/alphaCut lists: [0, SS_count) = single-sided; [SS_count, end) = double-sided
+        uint32_t m_opaqueSingleSidedCount = 0;
+        uint32_t m_alphaCutSingleSidedCount = 0;
         std::vector<vk::DrawIndexedIndirectCommand> m_indirectCommands;
         std::vector<uint32_t> m_visibleIndirectIds;
         uint64_t m_drawInfosReservedForGeometryVersion = 0;
@@ -388,6 +414,7 @@ namespace pe
         Buffer *m_scratchBuffer = nullptr;
         Buffer *m_meshInfoBuffer = nullptr;
         Buffer *m_meshConstants = nullptr;
+        Buffer *m_materialTable = nullptr;
         Sampler *m_defaultSampler = nullptr;
 
         static std::vector<uint32_t> s_aabbIndices;
@@ -416,6 +443,12 @@ namespace pe
         std::vector<Mesh> m_meshes;
         std::vector<MeshRuntime> m_meshRuntimes;
 
+        // Owned materials (from AssimpLoader or scene-level material creation)
+        std::vector<std::unique_ptr<Material>> m_ownedMaterials;
+
+        // Owned material instances (created by editor when marking a mesh as "Instanced")
+        std::vector<std::unique_ptr<MaterialInstance>> m_ownedMaterialInstances;
+
         // Data stores
         std::vector<Vertex> m_vertexStore;
         std::vector<PositionUvVertex> m_positionUvStore;
@@ -426,6 +459,11 @@ namespace pe
 
         bool m_nodesDirty = false;
         std::vector<NodeId *> m_nodesMoved;
+
+        uint32_t m_generation = 0;    // Incremented on NewScene/LoadSceneApply
+        bool m_geometryDirty = false; // Pending geometry GPU upload
+        bool m_materialDirty = false; // Pending material table update
+        bool m_texturesDirty = false; // Pending image view update
 
         // --- Light data ---
         LightsUBO m_lightsUBO{};
@@ -441,4 +479,16 @@ namespace pe
         std::vector<SpotLight> m_spotLightsPOD;
         std::vector<AreaLight> m_areaLightsPOD;
     };
+
+    inline bool SceneNodeHandle::IsValid(const Scene &scene) const
+    {
+        return nodeId && nodeId->index != UINT32_MAX && generation == scene.GetGeneration();
+    }
+
+    inline bool SceneNodeHandle::IsReady(const Scene &scene) const
+    {
+        if (!IsValid(scene))
+            return false;
+        return !(scene.GetComponentFlags(nodeId) & Component_GpuPending);
+    }
 } // namespace pe

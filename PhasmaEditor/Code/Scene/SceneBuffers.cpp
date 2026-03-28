@@ -1,4 +1,5 @@
 #include "Scene/Scene.h"
+#include "Scene/Material.h"
 #include "Scene/ModelAsset.h"
 #include "API/Buffer.h"
 #include "API/Command.h"
@@ -21,6 +22,7 @@ namespace pe
         MarkUniformsDirty();
         CreateIndirectBuffers(cmd);
         UpdateImageViews();
+        CreateMaterialTable();
         CreateMeshConstants(cmd);
         if (Settings::Get<GlobalSettings>().ray_tracing_support)
             BuildAccelerationStructures(cmd);
@@ -34,6 +36,8 @@ namespace pe
         {
             int meshIdx = m_meshRefs[i];
             if (meshIdx < 0)
+                continue;
+            if (m_componentFlags[i] & Component_GpuPending)
                 continue;
             if (m_meshes[meshIdx].indexCount == 0)
                 continue;
@@ -151,6 +155,8 @@ namespace pe
             int meshIdx = m_meshRefs[i];
             if (meshIdx < 0 || m_meshes[meshIdx].indexCount == 0)
                 continue;
+            if (m_componentFlags[i] & Component_GpuPending)
+                continue;
 
             m_nodeRuntime[i].dataOffset = storageSize;
             storageSize += sizeof(NodeGpuData);
@@ -190,6 +196,8 @@ namespace pe
 
             const Mesh &mesh = m_meshes[meshIdx];
             if (mesh.indexCount == 0)
+                continue;
+            if (m_componentFlags[i] & Component_GpuPending)
                 continue;
 
             m_nodeRuntime[i].indirectIndex = indirectCount;
@@ -256,25 +264,158 @@ namespace pe
             }
         }
 
-        // Map each mesh's texture slots to image view indices
-        for (int meshIndex = 0; meshIndex < static_cast<int>(m_meshes.size()); meshIndex++)
+        // Map each active mesh's texture slots to image view indices.
+        // Only iterate meshes referenced by live nodes to avoid stale entries
+        // left behind by deleted models (m_meshes is append-only).
+        for (uint32_t ni = 0; ni < GetNodeCount(); ni++)
         {
+            int meshIndex = m_meshRefs[ni];
+            if (meshIndex < 0 || meshIndex >= static_cast<int>(m_meshes.size()))
+                continue;
+
             const Mesh &mesh = m_meshes[meshIndex];
             MeshRuntime &rt = m_meshRuntimes[meshIndex];
 
             for (int k = 0; k < 5; k++)
             {
-                Image *image = mesh.images[k].get();
+                Image *image = nullptr;
+                if (mesh.materialInstance)
+                    image = mesh.materialInstance->GetTexture(k);
+                else if (mesh.material)
+                    image = mesh.material->textures[k].get();
                 bool isDefault = (image == defaults.black || image == defaults.white || image == defaults.normal);
 
                 if (image && !isDefault)
+                {
+                    // Ensure instance texture overrides are in the image view list
+                    auto insertResult = imagesMap.insert(image, static_cast<uint32_t>(m_imageViews.size()));
+                    if (insertResult.first)
+                    {
+                        ImageView *srv = image->GetSRV();
+                        PE_ERROR_IF(!srv, "UpdateImageViews: image '%s' has no SRV", image->GetName().c_str());
+                        m_imageViews.push_back(srv ? srv : defaults.white->GetSRV());
+                    }
                     rt.imageViewIndices[k] = imagesMap[image];
+                }
                 else
+                {
                     rt.imageViewIndices[k] = 0xFFFFFFFF;
+                }
             }
         }
 
         m_geometryVersion++;
+    }
+
+    void Scene::CreateMaterialTable()
+    {
+        Buffer::Destroy(m_materialTable);
+
+        // Assign GPU indices to materials and build the table data.
+        // Materials with an existing Material* share indices; legacy meshes get individual entries.
+        std::vector<MaterialGpuData> tableData;
+
+        // Reset GPU indices on all materials (owned by Scene and by each ModelAsset)
+        for (auto &mat : m_ownedMaterials)
+            mat->gpuIndex = 0xFFFFFFFF;
+        for (auto *model : m_models)
+        {
+            for (auto &mat : model->m_materials)
+                mat->gpuIndex = 0xFFFFFFFF;
+        }
+
+        for (uint32_t i = 0; i < GetNodeCount(); i++)
+        {
+            int meshIdx = m_meshRefs[i];
+            if (meshIdx < 0)
+                continue;
+
+            Mesh &mesh = m_meshes[meshIdx];
+            if (mesh.indexCount == 0)
+                continue;
+
+            MeshRuntime &meshRt = m_meshRuntimes[meshIdx];
+
+            if (mesh.materialInstance)
+            {
+                // Instanced materials always get their own GPU table entry (no full Material copy)
+                meshRt.materialGpuIndex = static_cast<uint32_t>(tableData.size());
+                tableData.push_back(mesh.materialInstance->BuildGpuData());
+            }
+            else if (mesh.material)
+            {
+                // Shared materials dedup by pointer identity
+                if (mesh.material->gpuIndex == 0xFFFFFFFF)
+                {
+                    mesh.material->gpuIndex = static_cast<uint32_t>(tableData.size());
+                    tableData.push_back(mesh.material->BuildGpuData());
+                }
+                meshRt.materialGpuIndex = mesh.material->gpuIndex;
+            }
+        }
+
+        if (tableData.empty())
+        {
+            // Always have at least one entry (default material) to avoid zero-size buffer
+            MaterialGpuData defaultMat{};
+            defaultMat.baseColorFactor = vec4(1.f);
+            defaultMat.emissiveTransmission = vec4(0.f);
+            defaultMat.pbrParams = vec4(0.f, 1.f, 0.5f, 1.f);
+            tableData.push_back(defaultMat);
+        }
+
+        m_materialTable = Buffer::Create(
+            tableData.size() * sizeof(MaterialGpuData),
+            vk::BufferUsageFlagBits2::eStorageBuffer | vk::BufferUsageFlagBits2::eTransferDst,
+            VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT,
+            "Scene_materialTable");
+
+        m_materialTable->Map();
+        BufferRange range{};
+        range.data = tableData.data();
+        range.offset = 0;
+        range.size = tableData.size() * sizeof(MaterialGpuData);
+        m_materialTable->Copy(1, &range, true);
+        m_materialTable->Flush();
+        m_materialTable->Unmap();
+    }
+
+    void Scene::UpdateDirtyMaterials()
+    {
+        if (!m_materialTable)
+            return;
+
+        bool anyDirty = false;
+
+        // Check all owned materials (Scene + ModelAssets)
+        auto updateIfDirty = [&](Material *mat)
+        {
+            if (!mat->dirty || mat->gpuIndex == 0xFFFFFFFF)
+                return;
+
+            MaterialGpuData data = mat->BuildGpuData();
+
+            m_materialTable->Map();
+            BufferRange range{};
+            range.data = &data;
+            range.offset = mat->gpuIndex * sizeof(MaterialGpuData);
+            range.size = sizeof(MaterialGpuData);
+            m_materialTable->Copy(1, &range, true);
+            m_materialTable->Flush();
+            m_materialTable->Unmap();
+
+            mat->dirty = false;
+            anyDirty = true;
+        };
+
+        for (auto &mat : m_ownedMaterials)
+            updateIfDirty(mat.get());
+        for (auto *model : m_models)
+            for (auto &mat : model->m_materials)
+                updateIfDirty(mat.get());
+
+        if (anyDirty)
+            m_geometryVersion++;
     }
 
     void Scene::CreateMeshConstants(CommandBuffer *cmd)
@@ -297,13 +438,34 @@ namespace pe
             const Mesh &mesh = m_meshes[meshIdx];
             if (mesh.indexCount == 0)
                 continue;
+            if (m_componentFlags[i] & Component_GpuPending)
+                continue;
 
             const MeshRuntime &meshRt = m_meshRuntimes[meshIdx];
 
+            float alphaCut = 0.0f;
+            float baseColorAlpha = 1.0f;
+            uint32_t texMask = 0u;
+            if (mesh.materialInstance)
+            {
+                alphaCut = (mesh.renderType == RenderType::AlphaCut) ? mesh.materialInstance->GetAlphaCutoff() : 0.0f;
+                baseColorAlpha = mesh.materialInstance->GetBaseColorFactor().a;
+                texMask = mesh.materialInstance->GetTextureMask();
+            }
+            else if (mesh.material)
+            {
+                const Material *mat = mesh.material;
+                alphaCut = (mesh.renderType == RenderType::AlphaCut) ? mat->alphaCutoff : 0.0f;
+                baseColorAlpha = mat->baseColorFactor.a;
+                texMask = mat->textureMask;
+            }
+
             Mesh_Constants constants{};
-            constants.alphaCut = (mesh.renderType == RenderType::AlphaCut) ? mesh.materialFactors[0][2][2] : 0.0f;
+            constants.alphaCut = alphaCut;
+            constants.baseColorAlpha = baseColorAlpha;
             constants.meshDataOffset = static_cast<uint32_t>(m_nodeRuntime[i].dataOffset);
-            constants.textureMask = mesh.textureMask;
+            constants.textureMask = texMask;
+            constants.materialId = meshRt.materialGpuIndex;
             for (int k = 0; k < 5; k++)
                 constants.meshImageIndex[k] = meshRt.imageViewIndices[k];
 
@@ -353,6 +515,13 @@ namespace pe
             RHII.AddToDeletionQueue([b = m_indirectAll]()
                                     { Buffer* buf = b; Buffer::Destroy(buf); });
             m_indirectAll = nullptr;
+        }
+
+        if (m_materialTable)
+        {
+            RHII.AddToDeletionQueue([b = m_materialTable]()
+                                    { Buffer* buf = b; Buffer::Destroy(buf); });
+            m_materialTable = nullptr;
         }
     }
 } // namespace pe

@@ -5,8 +5,7 @@
 // PerFrameData                 -> 4 * sizeof(mat4)
 // Constant Buffer indices      -> num of draw calls * sizeof(uint)
 // for (num of draw calls)
-//      MeshData               -> sizeof(mat4) * 2
-//      MeshConstants          -> sizeof(mat4)
+//      NodeGpuData            -> sizeof(mat4) * 2  [worldMatrix, prevWorldMatrix]
 // --- ByteAddressBuffer data ---
 
 [[vk::push_constant]] PushConstants_GBuffer pc;
@@ -24,12 +23,12 @@ uint GetConstantBufferID(uint instanceID)
 float4x4 LoadMatrix(uint offset)
 {
     float4x4 result;
-    
+
     result[0] = asfloat(data.Load4(offset + 0 * 16));
     result[1] = asfloat(data.Load4(offset + 1 * 16));
     result[2] = asfloat(data.Load4(offset + 2 * 16));
     result[3] = asfloat(data.Load4(offset + 3 * 16));
-    
+
     return result;
 }
 
@@ -39,12 +38,6 @@ float4x4 GetPreviousViewProjection()          { return LoadMatrix(64); }
 float4x4 GetMeshMatrix(uint id)               { return LoadMatrix(constants[id].meshDataOffset); }
 float4x4 GetMeshPreviousMatrix(uint id)       { return LoadMatrix(constants[id].meshDataOffset + MATRIX_SIZE); }
 float4x4 GetJointMatrix(uint id, uint index)  { return LoadMatrix(constants[id].meshDataOffset + MESH_DATA_SIZE + index * MATRIX_SIZE); }
-
-// Factors
-uint GetMeshConstantsOffset(uint id)   { return constants[id].meshDataOffset + MESH_DATA_SIZE; }
-float4 GetBaseColorFactor(uint id)     { const uint offset = GetMeshConstantsOffset(id); return asfloat(data.Load4(offset + 0)); }
-float3 GetEmissiveFactor(uint id)      { const uint offset = GetMeshConstantsOffset(id); return asfloat(data.Load3(offset + 16)); }
-float4 GetMetRoughAlphacutOcl(uint id) { const uint offset = GetMeshConstantsOffset(id); return asfloat(data.Load4(offset + 32)); }
 
 VS_OUTPUT_Gbuffer mainVS(VS_INPUT_Gbuffer input)
 {
@@ -80,11 +73,6 @@ VS_OUTPUT_Gbuffer mainVS(VS_INPUT_Gbuffer input)
 
     // Color
     output.color = input.color;
-
-    // Factors
-    output.baseColorFactor      = GetBaseColorFactor(id);
-    output.emissiveFactor       = GetEmissiveFactor(id);
-    output.metRoughAlphacutOcl  = GetMetRoughAlphacutOcl(id);
 
     return output;
 }

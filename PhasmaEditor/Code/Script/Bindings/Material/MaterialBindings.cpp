@@ -1,35 +1,18 @@
 #include "Script/ScriptSystem.h"
-#include "Scene/ModelAsset.h"
+#include "Scene/Material.h"
 #include "Scene/Scene.h"
+#include "Scene/SceneNodeHandle.h"
 #include "Systems/RendererSystem.h"
-#include "API/RHI.h"
-#include "API/Queue.h"
-#include "API/Command.h"
 
 namespace pe
 {
-    // materialFactors[0] layout (mat4):
-    // Row 0: Base Color (RGBA)
-    // Row 1: Emissive (RGB) + Transmission (A)
-    // Row 2: Metallic (x), Roughness (y), AlphaCutoff (z), OcclusionStrength (w)
-    // Row 3: Unused (x), NormalScale (y), Unused (z), Unused (w)
-
     static const std::unordered_map<std::string_view, uint32_t> s_texSlots = {
         {"base_color", 0}, {"metallic_roughness", 1}, {"normal", 2}, {"occlusion", 3}, {"emissive", 4}};
 
-    static MeshInfo *GetMesh(ModelAsset &m, int index)
+    static Scene *GetScene()
     {
-        return m.GetMeshInfo(index);
-    }
-
-    static void MarkMeshDirty(ModelAsset &m, int meshIndex)
-    {
-        int nodeCount = m.GetNodeCount();
-        for (int i = 0; i < nodeCount; i++)
-        {
-            if (m.GetNodeMesh(i) == meshIndex)
-                m.MarkDirty(i);
-        }
+        auto *r = GetGlobalSystem<RendererSystem>();
+        return r ? &r->GetScene() : nullptr;
     }
 
     static struct MaterialBindings
@@ -40,68 +23,92 @@ namespace pe
                                       {
                 sol::table mat = lua.create_named_table("material");
 
-                mat.set_function("get", [&lua](ModelAsset &model, int meshIndex) -> sol::object {
-                    auto *mesh = GetMesh(model, meshIndex);
-                    if (!mesh) return sol::nil;
+                mat.set_function("get", [&lua](SceneNodeHandle &h) -> sol::object {
+                    Scene *s = GetScene();
+                    if (!s || !h.IsValid(*s)) return sol::make_object(lua, sol::nil);
+
+                    int meshIdx = s->GetMeshRef(h.nodeId);
+                    if (meshIdx < 0) return sol::make_object(lua, sol::nil);
+
+                    const Mesh &mesh = s->GetMeshes()[meshIdx];
+                    if (!mesh.material) return sol::make_object(lua, sol::nil);
+                    const Material &m = *mesh.material;
 
                     sol::table t = lua.create_table();
-                    t["base_color"] = vec4(mesh->materialFactors[0][0]);
-                    t["emissive"] = vec3(mesh->materialFactors[0][1]);
-                    t["transmission"] = mesh->materialFactors[0][1].w;
-                    t["metallic"] = mesh->materialFactors[0][2].x;
-                    t["roughness"] = mesh->materialFactors[0][2].y;
-                    t["alpha_cutoff"] = mesh->materialFactors[0][2].z;
-                    t["occlusion_strength"] = mesh->materialFactors[0][2].w;
-                    t["normal_scale"] = mesh->materialFactors[0][3].y;
-                    return t;
+                    t["base_color"] = m.baseColorFactor;
+                    t["emissive"] = m.emissiveFactor;
+                    t["transmission"] = m.transmissionFactor;
+                    t["metallic"] = m.metallic;
+                    t["roughness"] = m.roughness;
+                    t["alpha_cutoff"] = m.alphaCutoff;
+                    t["occlusion_strength"] = m.occlusionStrength;
+                    t["normal_scale"] = m.normalScale;
+                    return sol::make_object(lua, t);
                 });
 
                 mat.set_function("set", sol::overload(
-                    [](ModelAsset &model, int meshIndex, const std::string &prop, vec4 value) {
-                        auto *mesh = GetMesh(model, meshIndex);
-                        if (!mesh) return;
-                        auto &f = mesh->materialFactors[0];
-                        if (prop == "base_color") f[0] = value;
-                        MarkMeshDirty(model, meshIndex);
+                    [](SceneNodeHandle &h, const std::string &prop, vec4 value) {
+                        Scene *s = GetScene();
+                        if (!s || !h.IsValid(*s)) return;
+                        int meshIdx = s->GetMeshRef(h.nodeId);
+                        if (meshIdx < 0) return;
+                        Mesh &mesh = s->GetMesh(meshIdx);
+                        if (!mesh.material) return;
+                        if (prop == "base_color") mesh.material->baseColorFactor = value;
+                        mesh.material->dirty = true;
+                        s->MarkNodeDirty(h.nodeId);
                     },
-                    [](ModelAsset &model, int meshIndex, const std::string &prop, vec3 value) {
-                        auto *mesh = GetMesh(model, meshIndex);
-                        if (!mesh) return;
-                        auto &f = mesh->materialFactors[0];
-                        if (prop == "base_color") { f[0].x = value.x; f[0].y = value.y; f[0].z = value.z; f[0].w = 1.0f; }
-                        else if (prop == "emissive") { f[1].x = value.x; f[1].y = value.y; f[1].z = value.z; }
-                        MarkMeshDirty(model, meshIndex);
+                    [](SceneNodeHandle &h, const std::string &prop, vec3 value) {
+                        Scene *s = GetScene();
+                        if (!s || !h.IsValid(*s)) return;
+                        int meshIdx = s->GetMeshRef(h.nodeId);
+                        if (meshIdx < 0) return;
+                        Mesh &mesh = s->GetMesh(meshIdx);
+                        if (!mesh.material) return;
+                        if (prop == "base_color") mesh.material->baseColorFactor = vec4(value, 1.f);
+                        else if (prop == "emissive") mesh.material->emissiveFactor = value;
+                        mesh.material->dirty = true;
+                        s->MarkNodeDirty(h.nodeId);
                     },
-                    [](ModelAsset &model, int meshIndex, const std::string &prop, float value) {
-                        auto *mesh = GetMesh(model, meshIndex);
-                        if (!mesh) return;
-                        auto &f = mesh->materialFactors[0];
-                        if (prop == "transmission") f[1].w = value;
-                        else if (prop == "metallic") f[2].x = value;
-                        else if (prop == "roughness") f[2].y = value;
-                        else if (prop == "alpha_cutoff") f[2].z = value;
-                        else if (prop == "occlusion_strength") f[2].w = value;
-                        else if (prop == "normal_scale") f[3].y = value;
+                    [](SceneNodeHandle &h, const std::string &prop, float value) {
+                        Scene *s = GetScene();
+                        if (!s || !h.IsValid(*s)) return;
+                        int meshIdx = s->GetMeshRef(h.nodeId);
+                        if (meshIdx < 0) return;
+                        Mesh &mesh = s->GetMesh(meshIdx);
+                        if (!mesh.material) return;
+                        Material &m = *mesh.material;
+                        if (prop == "transmission") m.transmissionFactor = value;
+                        else if (prop == "metallic") m.metallic = value;
+                        else if (prop == "roughness") m.roughness = value;
+                        else if (prop == "alpha_cutoff") m.alphaCutoff = value;
+                        else if (prop == "occlusion_strength") m.occlusionStrength = value;
+                        else if (prop == "normal_scale") m.normalScale = value;
                         else return;
-                        MarkMeshDirty(model, meshIndex);
+                        m.dirty = true;
+                        s->MarkNodeDirty(h.nodeId);
                     }));
 
-                mat.set_function("get_render_type", [](ModelAsset &model, int meshIndex) -> std::string {
-                    auto *mesh = GetMesh(model, meshIndex);
-                    if (!mesh) return "";
-                    switch (mesh->renderType)
+                mat.set_function("get_render_type", [](SceneNodeHandle &h) -> std::string {
+                    Scene *s = GetScene();
+                    if (!s || !h.IsValid(*s)) return "opaque";
+                    int meshIdx = s->GetMeshRef(h.nodeId);
+                    if (meshIdx < 0) return "opaque";
+                    switch (s->GetMeshes()[meshIdx].renderType)
                     {
                     case RenderType::Opaque: return "opaque";
                     case RenderType::AlphaCut: return "alpha_cut";
                     case RenderType::AlphaBlend: return "alpha_blend";
                     case RenderType::Transmission: return "transmission";
-                    default: return "";
+                    default: return "opaque";
                     }
                 });
 
-                mat.set_function("set_render_type", [](ModelAsset &model, int meshIndex, const std::string &type) {
-                    auto *mesh = GetMesh(model, meshIndex);
-                    if (!mesh) return;
+                mat.set_function("set_render_type", [](SceneNodeHandle &h, const std::string &type) {
+                    Scene *s = GetScene();
+                    if (!s || !h.IsValid(*s)) return;
+                    int meshIdx = s->GetMeshRef(h.nodeId);
+                    if (meshIdx < 0) return;
 
                     RenderType rt;
                     if (type == "opaque") rt = RenderType::Opaque;
@@ -110,88 +117,43 @@ namespace pe
                     else if (type == "transmission") rt = RenderType::Transmission;
                     else return;
 
-                    if (mesh->renderType == rt) return;
-                    mesh->renderType = rt;
-
-                    auto *r = GetGlobalSystem<RendererSystem>();
-                    if (r)
-                    {
-                        r->WaitAllFramesCommands();
-                        r->GetScene().UpdateGeometryBuffers();
-                    }
+                    Mesh &mesh = s->GetMesh(meshIdx);
+                    if (mesh.renderType == rt) return;
+                    mesh.renderType = rt;
+                    s->SetGeometryDirty();
                 });
 
-                mat.set_function("get_texture_mask", [](ModelAsset &model, int meshIndex) -> uint32_t {
-                    auto *mesh = GetMesh(model, meshIndex);
-                    return mesh ? mesh->textureMask : 0;
+                mat.set_function("get_texture_mask", [](SceneNodeHandle &h) -> uint32_t {
+                    Scene *s = GetScene();
+                    if (!s || !h.IsValid(*s)) return 0u;
+                    int meshIdx = s->GetMeshRef(h.nodeId);
+                    if (meshIdx < 0) return 0u;
+                    const Mesh &mesh = s->GetMeshes()[meshIdx];
+                    return mesh.material ? mesh.material->textureMask : 0u;
                 });
 
-                mat.set_function("has_texture", [](ModelAsset &model, int meshIndex, const std::string &type) -> bool {
-                    auto *mesh = GetMesh(model, meshIndex);
-                    if (!mesh) return false;
+                mat.set_function("has_texture", [](SceneNodeHandle &h, const std::string &type) -> bool {
+                    Scene *s = GetScene();
+                    if (!s || !h.IsValid(*s)) return false;
+                    int meshIdx = s->GetMeshRef(h.nodeId);
+                    if (meshIdx < 0) return false;
+                    const Mesh &mesh = s->GetMeshes()[meshIdx];
+                    if (!mesh.material) return false;
                     auto it = s_texSlots.find(std::string_view(type));
                     if (it == s_texSlots.end()) return false;
-                    return (mesh->textureMask & (1u << it->second)) != 0;
+                    return (mesh.material->textureMask & (1u << it->second)) != 0;
                 });
 
-                mat.set_function("set_texture", [](ModelAsset &model, int meshIndex, const std::string &type, const std::string &path) -> bool {
-                    auto *mesh = GetMesh(model, meshIndex);
-                    if (!mesh) return false;
-
-                    auto it = s_texSlots.find(std::string_view(type));
-                    if (it == s_texSlots.end())
-                    {
-                        PE_WARN("[Lua] material.set_texture: unknown type '%s'", type.c_str());
-                        return false;
-                    }
-                    uint32_t slot = it->second;
-
-                    std::string fullPath = path;
-                    if (path.find('/') == std::string::npos && path.find('\\') == std::string::npos)
-                        fullPath = Path::Assets + "Textures/" + path;
-
-                    if (!std::filesystem::exists(fullPath))
-                    {
-                        PE_WARN("[Lua] material.set_texture: file not found: %s", fullPath.c_str());
-                        return false;
-                    }
-
-                    Queue *queue = RHII.GetMainQueue();
-                    CommandBuffer *cmd = queue->AcquireCommandBuffer();
-                    cmd->Begin();
-                    ResourceHandle<Image> handle = model.LoadTexture(cmd, fullPath);
-                    cmd->End();
-                    queue->Submit(1, &cmd, nullptr, nullptr);
-                    cmd->Wait();
-                    cmd->Return();
-
-                    if (!handle) return false;
-
-                    mesh->images[slot] = handle;
-                    mesh->textureMask |= (1u << slot);
-
-                    if (!mesh->samplers[slot])
-                        mesh->samplers[slot] = ModelAsset::GetDefaultResources().sampler;
-
-                    MarkMeshDirty(model, meshIndex);
-                    return true;
+                // set_texture and remove_texture require scene-level texture loading;
+                // kept as stubs that return false until scene-level LoadTexture is implemented.
+                mat.set_function("set_texture", [](SceneNodeHandle &, const std::string &, const std::string &) -> bool {
+                    PE_WARN("[Lua] material.set_texture: not yet implemented for SceneNode API");
+                    return false;
                 });
 
-                mat.set_function("remove_texture", [](ModelAsset &model, int meshIndex, const std::string &type) -> bool {
-                    auto *mesh = GetMesh(model, meshIndex);
-                    if (!mesh) return false;
-
-                    auto it = s_texSlots.find(std::string_view(type));
-                    if (it == s_texSlots.end()) return false;
-                    uint32_t slot = it->second;
-
-                    if (!(mesh->textureMask & (1u << slot))) return false;
-
-                    mesh->images[slot] = {};
-                    mesh->samplers[slot] = nullptr;
-                    mesh->textureMask &= ~(1u << slot);
-                    MarkMeshDirty(model, meshIndex);
-                    return true;
+                mat.set_function("remove_texture", [](SceneNodeHandle &, const std::string &) -> bool {
+                    PE_WARN("[Lua] material.remove_texture: not yet implemented for SceneNode API");
+                    return false;
                 }); });
         }
     } s_materialBindings;
