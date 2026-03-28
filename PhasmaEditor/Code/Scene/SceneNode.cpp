@@ -1,6 +1,7 @@
 #include "Scene/Scene.h"
 #include "Scene/Material.h"
 #include "Scene/ModelAsset.h"
+#include "Camera/Camera.h"
 #include "API/RHI.h"
 
 namespace pe
@@ -66,6 +67,44 @@ namespace pe
         {
             m_meshes[meshRef].material = nullptr;
             m_meshes[meshRef].materialInstance = nullptr;
+        }
+
+        // Remove component entries so they don't persist with dangling nodeIds
+        uint32_t compFlags = m_componentFlags[idx];
+        if (compFlags & Component_Light)
+        {
+            auto [lt, lightIdx] = GetLightForNode(node);
+            if (lightIdx >= 0)
+            {
+                switch (lt)
+                {
+                case LightType::Directional:
+                    m_directionalLights.erase(m_directionalLights.begin() + lightIdx);
+                    break;
+                case LightType::Point:
+                    m_pointLights.erase(m_pointLights.begin() + lightIdx);
+                    break;
+                case LightType::Spot:
+                    m_spotLights.erase(m_spotLights.begin() + lightIdx);
+                    break;
+                case LightType::Area:
+                    m_areaLights.erase(m_areaLights.begin() + lightIdx);
+                    break;
+                }
+            }
+        }
+        if (compFlags & Component_Camera)
+        {
+            Camera *cam = GetCameraForNode(node);
+            if (cam)
+            {
+                auto it = std::find(m_cameras.begin(), m_cameras.end(), cam);
+                if (it != m_cameras.end())
+                {
+                    delete *it;
+                    m_cameras.erase(it);
+                }
+            }
         }
 
         // Remove from parent's children list

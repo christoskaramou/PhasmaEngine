@@ -185,7 +185,8 @@ namespace pe
                 });
 
                 // GetCurrentInfo
-                imageType["get_current_info"] = [&lua](LuaImage &img, sol::optional<uint32_t> layer, sol::optional<uint32_t> mip) -> sol::table {
+                imageType["get_current_info"] = [](LuaImage &img, sol::optional<uint32_t> layer, sol::optional<uint32_t> mip, sol::this_state ts) -> sol::table {
+                    sol::state_view lua(ts);
                     Image *p = img.Get();
                     sol::table t = lua.create_table();
                     if (!p) return t;

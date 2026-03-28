@@ -38,7 +38,6 @@
 #include "PhasmaAgent/CodebaseIndexer.h"
 #include "Widgets/TransformWidget.h"
 #include "UndoRedo.h"
-#include "Script/ScriptSystem.h"
 #include <nlohmann/json.hpp>
 #include "imgui/imgui_impl_sdl2.h"
 #include "imgui/imgui_impl_vulkan.h"
@@ -226,10 +225,7 @@ namespace pe
         m_menuWindowWidgets.clear();
         m_widgets.clear();
         m_editorToolServer.reset();
-        if (m_agentScriptSystem)
-            m_agentScriptSystem->Destroy();
         m_editorToolRuntime.reset();
-        m_agentScriptSystem.reset();
 
         Image::Destroy(GUIState::s_sceneViewImage);
         ImGui_ImplVulkan_Shutdown();
@@ -1391,10 +1387,7 @@ namespace pe
 
         EventSystem::RegisterCallback(EventType::AfterCommandWait, std::move(AddGpuTimerInfo));
 
-        m_agentScriptSystem = std::make_unique<ScriptSystem>();
-        m_agentScriptSystem->InitRestricted(nullptr);
         m_editorToolRuntime = std::make_unique<EditorToolRuntime>(
-            m_agentScriptSystem.get(),
             [this](std::function<void()> fn)
             {
                 QueueMainThreadAction(std::move(fn));
@@ -1627,22 +1620,13 @@ namespace pe
                             {
                                 Scene &scene = rs->GetScene();
                                 uint32_t nodeFlags = scene.GetComponentFlags(node);
+                                bool canDelete = true;
                                 if (nodeFlags & Component_Camera)
                                 {
                                     Camera *cam = scene.GetCameraForNode(node);
-                                    if (cam && scene.GetCameras().size() > 1)
-                                        scene.RemoveCamera(cam);
+                                    canDelete = cam && scene.GetCameras().size() > 1;
                                 }
-                                else if (nodeFlags & Component_Light)
-                                {
-                                    auto [lt, idx] = scene.GetLightForNode(node);
-                                    if (idx >= 0)
-                                    {
-                                        scene.RemoveLight(lt, idx);
-                                        selection.ClearSelection();
-                                    }
-                                }
-                                else
+                                if (canDelete)
                                 {
                                     selection.ClearSelection();
                                     scene.DeleteNode(node);

@@ -13,7 +13,6 @@ namespace pe
     class EditorToolRuntime;
     class Queue;
     class Image;
-    class ScriptSystem;
 
     class GUI
     {
@@ -127,7 +126,6 @@ namespace pe
         std::vector<std::shared_ptr<Widget>> m_menuWindowWidgets;
         std::mutex m_mainThreadActionMutex;
         std::vector<std::function<void()>> m_pendingMainThreadActions;
-        std::unique_ptr<ScriptSystem> m_agentScriptSystem;
         std::unique_ptr<EditorToolRuntime> m_editorToolRuntime;
         std::unique_ptr<EditorToolServer> m_editorToolServer;
         std::shared_ptr<std::atomic<bool>> m_codebaseAlive = std::make_shared<std::atomic<bool>>(true);

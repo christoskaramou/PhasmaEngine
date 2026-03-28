@@ -67,7 +67,8 @@ namespace pe
 
                 // load_models(paths, [callback]) - load multiple models in parallel on background threads,
                 // scene integration on main thread as each completes, optional callback(models_table) when all done
-                lua.set_function("load_models", [&lua](sol::table paths, sol::optional<sol::function> callback) {
+                lua.set_function("load_models", [](sol::table paths, sol::optional<sol::function> callback, sol::this_state ts) {
+                    sol::state_view lua(ts);
                     auto *ss = GetGlobalSystem<ScriptSystem>();
                     auto *r = GetGlobalSystem<RendererSystem>();
                     if (!ss || !r) return;

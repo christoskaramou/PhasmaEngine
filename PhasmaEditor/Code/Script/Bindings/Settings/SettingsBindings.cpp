@@ -63,7 +63,8 @@ namespace pe
                                       {
                 sol::table settings_table = lua.create_named_table("settings");
 
-                settings_table.set_function("get", [&lua](const std::string &name) -> sol::object {
+                settings_table.set_function("get", [](const std::string &name, sol::this_state ts) -> sol::object {
+                    sol::state_view lua(ts);
                     auto &gs = Settings::Get<GlobalSettings>();
                     auto bIt = s_boolSettings.find(std::string_view(name));
                     if (bIt != s_boolSettings.end())
@@ -141,7 +142,8 @@ namespace pe
                     return Settings::Get<GlobalSettings>().ray_tracing_support;
                 });
 
-                settings_table.set_function("get_depth_bias", [&lua]() -> sol::table {
+                settings_table.set_function("get_depth_bias", [](sol::this_state ts) -> sol::table {
+                    sol::state_view lua(ts);
                     auto &gs = Settings::Get<GlobalSettings>();
                     sol::table t = lua.create_table();
                     t[1] = gs.depth_bias[0];

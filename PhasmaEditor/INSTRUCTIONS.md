@@ -125,7 +125,13 @@ Hot-reload: edit any `.hlsl` file while the editor runs → FileWatcher triggers
 
 ## Lua Scripting
 
-Scene manipulation from the AI agent or script files goes through Lua:
+Scene manipulation from the AI agent or script files goes through Lua.
+All Lua bindings are registered in `Script/Bindings/` files and executed via `ScriptSystem::ExecuteLua()`.
+
+### File-Level Scripts
+
+Scripts placed in `Assets/Scripts/` are loaded as file-level scripts with shared global state.
+Non-hook globals are promoted so other scripts can access them (e.g. utility libraries).
 
 ```lua
 -- Load a model
@@ -144,4 +150,83 @@ save_scene("MyScene")
 load_scene("MyScene")
 ```
 
-All Lua bindings are registered in `Script/` files and executed via `ScriptSystem::ExecuteLua()`.
+### Per-Node Scripts (Component_Script)
+
+When a `.lua` script is attached to a scene node (via `Component_Script`), it runs in an
+**isolated `sol::environment`** — no shared state with other nodes, even if they reference the
+same `.lua` file. Node-attached scripts are excluded from the file-level loading path entirely.
+
+Each per-node instance gets these variables injected automatically (refreshed every frame):
+
+| Variable | Type | Description |
+|---|---|---|
+| `self` | `SceneNodeHandle` | The node itself — `get_name()`, `set_name()`, `get_parent()`, `get_children()`, etc. |
+| `transform` | `SceneNodeHandle` | Same handle — `get_position()`, `set_position()`, `get_rotation()`, `set_rotation()`, `get_scale()`, `set_scale()`, `set_transform()` |
+| `mesh` | table or nil | `{ index, vertex_count, index_count, bounding_box }` if the node has `Component_Mesh`, else `nil` |
+| `camera` | `Camera*` or nil | Camera userdata if the node has `Component_Camera`, else `nil` |
+
+Lifecycle hooks are declared with `hooks{}`:
+
+```lua
+hooks {
+    init = function()
+        pe_log("Node: " .. self:get_name())
+    end,
+    update = function()
+        local pos = transform:get_position()
+        pos.y = pos.y + 0.01
+        transform:set_position(pos)
+    end,
+    update_editor = function()
+        -- Runs every frame even outside play mode
+    end,
+    destroy = function()
+        pe_log("Cleaning up")
+    end
+}
+```
+
+Exposed variables create editor-editable properties in the Properties panel:
+
+```lua
+local props = exposed {
+    speed = 5.0,
+    enabled = true,
+    label = "hello"
+}
+-- props.speed always reflects the current editor value
+```
+
+### Cross-Script Communication
+
+Per-node scripts are fully isolated, but `exposed{}` variables act as a public interface.
+Other scripts can access them via `get_exposed()` on any `SceneNodeHandle`, which returns
+the actual `__exposed` table (a live reference, not a copy):
+
+```lua
+-- Player node script
+local props = exposed { health = 100, name = "Player1" }
+
+-- Enemy node script (reads/writes player's exposed vars directly)
+hooks {
+    update = function()
+        local player = scene_find("Player")
+        if player and player:is_valid() then
+            local vars = player:get_exposed()  -- live reference to Player's exposed table
+            if vars and vars.health < 50 then
+                vars.health = vars.health + 10 -- directly modifies Player's value
+            end
+        end
+    end
+}
+```
+
+Only variables declared via `exposed{}` are accessible. Local variables remain private.
+`get_exposed()` returns `nil` if the node has no script or no `exposed{}` declaration.
+
+### Key Implementation Details
+
+- `ScriptSystem::ReconcileNodeInstances()` — creates/destroys per-node instances as nodes gain/lose `Component_Script`
+- `ScriptSystem::RefreshNodeInstanceBindings()` — updates `self`/`transform`/`mesh`/`camera` each frame
+- `ScriptSystem::FindNodeInstance(node)` — looks up the instance for a specific node (used by Properties panel and `get_script_var`/`set_script_var`)
+- Node scripts use `SceneNodeHandle` (generation-counted) for safe references across scene reloads

@@ -22,7 +22,8 @@ namespace pe
 
                 sol::table fs = lua.create_named_table("fs");
 
-                fs.set_function("find", [&lua](const std::string &query, sol::optional<std::string> root) -> sol::table {
+                fs.set_function("find", [](const std::string &query, sol::optional<std::string> root, sol::this_state ts) -> sol::table {
+                    sol::state_view lua(ts);
                     sol::table result = lua.create_table();
                     if (query.empty()) return result;
 
@@ -62,7 +63,8 @@ namespace pe
                     return result;
                 });
 
-                fs.set_function("list", [&lua](const std::string &path) -> sol::table {
+                fs.set_function("list", [](const std::string &path, sol::this_state ts) -> sol::table {
+                    sol::state_view lua(ts);
                     sol::table result = lua.create_table();
                     if (path.empty()) return result;
 

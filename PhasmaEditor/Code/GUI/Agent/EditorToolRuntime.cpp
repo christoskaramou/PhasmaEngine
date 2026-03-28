@@ -1,5 +1,6 @@
 #include "GUI/Agent/EditorToolRuntime.h"
 #include "GUI/Widgets/ProfilerWidget.h"
+#include "Script/ScriptSystem.h"
 #include "Systems/RendererSystem.h"
 #include "PhasmaAgent/AgentUtils.h"
 #include "imgui/imgui.h"
@@ -44,8 +45,8 @@ namespace pe
         }
     } // namespace
 
-    EditorToolRuntime::EditorToolRuntime(ScriptSystem *scriptSystem, QueueActionFn queueAction, void *sdlWindow)
-        : m_scriptSystem(scriptSystem), m_queueAction(std::move(queueAction)), m_sdlWindow(sdlWindow)
+    EditorToolRuntime::EditorToolRuntime(QueueActionFn queueAction, void *sdlWindow)
+        : m_queueAction(std::move(queueAction)), m_sdlWindow(sdlWindow)
     {
     }
 
@@ -71,12 +72,13 @@ namespace pe
         };
         auto state = std::make_shared<State>();
 
-        QueueAction([this, state, code]()
+        QueueAction([state, code]()
                     {
-            if (!m_scriptSystem || !m_scriptSystem->IsInitialized())
+            auto *ss = GetGlobalSystem<ScriptSystem>();
+            if (!ss || !ss->IsInitialized())
                 state->result = "error: ScriptSystem not available";
             else
-                state->result = m_scriptSystem->ExecuteLua(code);
+                state->result = ss->ExecuteLua(code);
             {
                 std::lock_guard lock(state->mtx);
                 state->done = true;

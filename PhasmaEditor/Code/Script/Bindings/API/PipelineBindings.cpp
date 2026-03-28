@@ -243,7 +243,8 @@ namespace pe
                 };
 
                 // dynamicStates
-                piType["get_dynamic_states"] = [&lua](PassInfo &pi) -> sol::table {
+                piType["get_dynamic_states"] = [](PassInfo &pi, sol::this_state ts) -> sol::table {
+                    sol::state_view lua(ts);
                     sol::table t = lua.create_table();
                     for (size_t i = 0; i < pi.dynamicStates.size(); i++)
                     {
@@ -315,7 +316,8 @@ namespace pe
                 piType["set_stencil_test"] = [](PassInfo &pi, bool e) { pi.stencilTestEnable = e; };
 
                 // stencilFailOp, stencilPassOp, stencilDepthFailOp, stencilCompareOp
-                piType["get_stencil_ops"] = [&lua](PassInfo &pi) -> sol::table {
+                piType["get_stencil_ops"] = [](PassInfo &pi, sol::this_state ts) -> sol::table {
+                    sol::state_view lua(ts);
                     sol::table t = lua.create_table();
                     t["fail"] = StencilOpToString(pi.stencilFailOp);
                     t["pass"] = StencilOpToString(pi.stencilPassOp);
@@ -331,7 +333,8 @@ namespace pe
                 };
 
                 // stencilCompareMask, stencilWriteMask, stencilReference
-                piType["get_stencil_masks"] = [&lua](PassInfo &pi) -> sol::table {
+                piType["get_stencil_masks"] = [](PassInfo &pi, sol::this_state ts) -> sol::table {
+                    sol::state_view lua(ts);
                     sol::table t = lua.create_table();
                     t["compare_mask"] = pi.stencilCompareMask;
                     t["write_mask"] = pi.stencilWriteMask;

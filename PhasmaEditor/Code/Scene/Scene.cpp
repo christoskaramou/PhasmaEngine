@@ -438,12 +438,10 @@ namespace pe
         {
             SelectionManager::Instance().ClearSelection();
 
+            // DeleteNode handles camera vector cleanup (delete + erase) via Component_Camera check
             NodeId *camNode = camera->GetNodeId();
             if (camNode)
                 DeleteNode(camNode);
-
-            delete *it;
-            m_cameras.erase(it);
         }
     }
 

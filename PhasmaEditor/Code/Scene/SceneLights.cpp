@@ -264,30 +264,33 @@ namespace pe
 
     void Scene::RemoveLight(LightType type, int index)
     {
-        auto eraseLight = [&](auto &vec)
+        auto getNodeId = [&](auto &vec) -> NodeId *
         {
             if (index < 0 || index >= static_cast<int>(vec.size()))
-                return;
-            if (vec[index].nodeId)
-                DeleteNode(vec[index].nodeId);
-            vec.erase(vec.begin() + index);
+                return nullptr;
+            return vec[index].nodeId;
         };
 
+        NodeId *nodeId = nullptr;
         switch (type)
         {
         case LightType::Directional:
-            eraseLight(m_directionalLights);
+            nodeId = getNodeId(m_directionalLights);
             break;
         case LightType::Point:
-            eraseLight(m_pointLights);
+            nodeId = getNodeId(m_pointLights);
             break;
         case LightType::Spot:
-            eraseLight(m_spotLights);
+            nodeId = getNodeId(m_spotLights);
             break;
         case LightType::Area:
-            eraseLight(m_areaLights);
+            nodeId = getNodeId(m_areaLights);
             break;
         }
+
+        // DeleteNode handles light vector cleanup via Component_Light check
+        if (nodeId)
+            DeleteNode(nodeId);
     }
 
     std::pair<LightType, int> Scene::GetLightForNode(const NodeId *node) const

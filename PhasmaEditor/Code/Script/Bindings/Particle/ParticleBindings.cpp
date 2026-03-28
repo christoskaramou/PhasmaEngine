@@ -100,7 +100,8 @@ namespace pe
                     pm->UpdateEmitterBuffer();
                 });
 
-                particles.set_function("get_emitter", [&lua](int index) -> sol::object {
+                particles.set_function("get_emitter", [](int index, sol::this_state ts) -> sol::object {
+                    sol::state_view lua(ts);
                     auto *pm = GetPM();
                     if (!pm) return sol::nil;
                     auto &emitters = pm->GetEmitters();
@@ -199,7 +200,8 @@ namespace pe
                     return static_cast<int>(pm->LoadTexture(path));
                 });
 
-                particles.set_function("get_texture_names", [&lua]() -> sol::table {
+                particles.set_function("get_texture_names", [](sol::this_state ts) -> sol::table {
+                    sol::state_view lua(ts);
                     auto *pm = GetPM();
                     sol::table t = lua.create_table();
                     if (!pm) return t;

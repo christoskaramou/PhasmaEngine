@@ -86,7 +86,8 @@ namespace pe
                 };
 
                 // get_data(count, "type", offset) - read array of same-typed values from mapped buffer
-                bufType["get_data"] = [&lua](Buffer &buf, size_t count, const std::string &type, sol::optional<size_t> srcOffset) -> sol::table {
+                bufType["get_data"] = [](Buffer &buf, size_t count, const std::string &type, sol::optional<size_t> srcOffset, sol::this_state ts) -> sol::table {
+                    sol::state_view lua(ts);
                     sol::table result = lua.create_table();
                     auto it = s_packTypeMap.find(std::string_view(type));
                     if (it == s_packTypeMap.end() || !buf.Data()) return result;
@@ -120,7 +121,8 @@ namespace pe
                 // Properties
                 bufType["size"] = sol::property(&Buffer::Size);
                 bufType["device_address"] = sol::property(&Buffer::GetDeviceAddress);
-                bufType["get_track_info"] = [&lua](Buffer &buf) -> sol::table {
+                bufType["get_track_info"] = [](Buffer &buf, sol::this_state ts) -> sol::table {
+                    sol::state_view lua(ts);
                     auto &info = buf.GetTrackInfo();
                     sol::table t = lua.create_table();
                     t["queue_family_index"] = info.queueFamilyIndex;

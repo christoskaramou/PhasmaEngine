@@ -166,6 +166,9 @@ namespace pe
         {
             PE_PROFILE_SCOPE("Update Systems");
             UpdateGlobalSystems();
+
+            if (auto *ss = GetGlobalSystem<ScriptSystem>())
+                ss->Update();
         }
 
         // Get ImGui render data ready

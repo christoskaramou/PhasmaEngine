@@ -52,7 +52,8 @@ namespace pe
                 });
 
                 // --- Name-based lookup ---
-                lights_table.set_function("find", [&lua](const std::string &name) -> sol::as_table_t<std::vector<sol::object>> {
+                lights_table.set_function("find", [](const std::string &name, sol::this_state ts) -> sol::as_table_t<std::vector<sol::object>> {
+                    sol::state_view lua(ts);
                     std::vector<sol::object> result;
                     auto &scene = GetGlobalSystem<RendererSystem>()->GetScene();
 
@@ -83,7 +84,8 @@ namespace pe
                 });
 
                 // --- Point lights ---
-                lights_table.set_function("get_point_lights", [&lua]() -> sol::as_table_t<std::vector<sol::table>> {
+                lights_table.set_function("get_point_lights", [](sol::this_state ts) -> sol::as_table_t<std::vector<sol::table>> {
+                    sol::state_view lua(ts);
                     std::vector<sol::table> result;
                     auto &pls = GetGlobalSystem<RendererSystem>()->GetScene().GetPointLights();
                     for (size_t i = 0; i < pls.size(); i++)
@@ -108,7 +110,8 @@ namespace pe
                 });
 
                 // --- Directional lights ---
-                lights_table.set_function("get_directional_lights", [&lua]() -> sol::as_table_t<std::vector<sol::table>> {
+                lights_table.set_function("get_directional_lights", [](sol::this_state ts) -> sol::as_table_t<std::vector<sol::table>> {
+                    sol::state_view lua(ts);
                     std::vector<sol::table> result;
                     auto &dls = GetGlobalSystem<RendererSystem>()->GetScene().GetDirectionalLights();
                     for (size_t i = 0; i < dls.size(); i++)
@@ -133,7 +136,8 @@ namespace pe
                 });
 
                 // --- Spot lights ---
-                lights_table.set_function("get_spot_lights", [&lua]() -> sol::as_table_t<std::vector<sol::table>> {
+                lights_table.set_function("get_spot_lights", [](sol::this_state ts) -> sol::as_table_t<std::vector<sol::table>> {
+                    sol::state_view lua(ts);
                     std::vector<sol::table> result;
                     auto &sls = GetGlobalSystem<RendererSystem>()->GetScene().GetSpotLights();
                     for (size_t i = 0; i < sls.size(); i++)
@@ -163,7 +167,8 @@ namespace pe
                 });
 
                 // --- Area lights ---
-                lights_table.set_function("get_area_lights", [&lua]() -> sol::as_table_t<std::vector<sol::table>> {
+                lights_table.set_function("get_area_lights", [](sol::this_state ts) -> sol::as_table_t<std::vector<sol::table>> {
+                    sol::state_view lua(ts);
                     std::vector<sol::table> result;
                     auto &als = GetGlobalSystem<RendererSystem>()->GetScene().GetAreaLights();
                     for (size_t i = 0; i < als.size(); i++)
@@ -262,7 +267,8 @@ namespace pe
                 });
 
                 // --- Counts ---
-                lights_table.set_function("get_counts", [&lua]() -> sol::table {
+                lights_table.set_function("get_counts", [](sol::this_state ts) -> sol::table {
+                    sol::state_view lua(ts);
                     sol::table t = lua.create_table();
                     auto &scene = GetGlobalSystem<RendererSystem>()->GetScene();
                     t["point"] = scene.GetPointLights().size();

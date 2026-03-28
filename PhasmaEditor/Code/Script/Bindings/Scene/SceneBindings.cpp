@@ -72,7 +72,8 @@ namespace pe
                     r->GetScene().NewScene();
                 });
 
-                scene.set_function("get_entities", [&lua]() -> sol::as_table_t<std::vector<sol::table>> {
+                scene.set_function("get_entities", [](sol::this_state ts) -> sol::as_table_t<std::vector<sol::table>> {
+                    sol::state_view lua(ts);
                     std::vector<sol::table> result;
                     auto *r = GetGlobalSystem<RendererSystem>();
                     if (!r) return sol::as_table(std::move(result));
@@ -100,7 +101,8 @@ namespace pe
                     return r ? static_cast<int>(r->GetScene().GetModels().size()) : 0;
                 });
 
-                scene.set_function("find_model", [&lua](const std::string &label) -> sol::object {
+                scene.set_function("find_model", [](const std::string &label, sol::this_state ts) -> sol::object {
+                    sol::state_view lua(ts);
                     auto *r = GetGlobalSystem<RendererSystem>();
                     if (!r) return sol::make_object(lua, sol::nil);
                     Scene &sc = r->GetScene();
@@ -149,7 +151,8 @@ namespace pe
                 // Selection
                 sol::table selection = lua.create_named_table("selection");
 
-                selection.set_function("get", [&lua]() -> sol::table {
+                selection.set_function("get", [](sol::this_state ts) -> sol::table {
+                    sol::state_view lua(ts);
                     auto &sel = SelectionManager::Instance();
                     sol::table t = lua.create_table();
                     t["has_selection"] = sel.HasSelection();

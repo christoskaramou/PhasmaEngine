@@ -1,4 +1,5 @@
 #include "ScriptSystem.h"
+#include "Camera/Camera.h"
 #include "GUI/GUIState.h"
 #include "Scene/ModelAsset.h"
 #include "Scene/ModelAssetAssimp.h"
@@ -10,6 +11,56 @@
 
 namespace pe
 {
+    static std::string NormalizePath(const std::string &path)
+    {
+        try
+        {
+            auto canonical = std::filesystem::weakly_canonical(path);
+            std::string s = canonical.string();
+            std::replace(s.begin(), s.end(), '\\', '/');
+            return s;
+        }
+        catch (...)
+        {
+            std::string s = path;
+            std::replace(s.begin(), s.end(), '\\', '/');
+            return s;
+        }
+    }
+
+    static bool HasNodeInstanceForPath(const std::vector<NodeScriptInstance> &instances, const std::string &path)
+    {
+        for (const auto &inst : instances)
+        {
+            if (inst.path == path)
+                return true;
+        }
+        return false;
+    }
+
+    static sol::object MakeMeshBindingObject(sol::state_view lua, Scene &scene, NodeId *node)
+    {
+        int meshRef = scene.GetMeshRef(node);
+        if (meshRef < 0)
+            return sol::make_object(lua, sol::nil);
+
+        const auto &meshes = scene.GetMeshes();
+        if (meshRef >= static_cast<int>(meshes.size()))
+            return sol::make_object(lua, sol::nil);
+
+        const auto &mesh = meshes[meshRef];
+        sol::table table = lua.create_table();
+        table["index"] = meshRef;
+        table["vertex_count"] = mesh.vertexCount;
+        table["index_count"] = mesh.indexCount;
+        table["bounding_box"] = lua.create_table_with(
+            "min", mesh.boundingBox.min,
+            "max", mesh.boundingBox.max,
+            "center", mesh.boundingBox.GetCenter(),
+            "size", mesh.boundingBox.GetSize());
+        return sol::make_object(lua, table);
+    }
+
     Image *LuaImage::Get()
     {
         return ptr;
@@ -17,36 +68,14 @@ namespace pe
 
     void ScriptSystem::Init(CommandBuffer *cmd)
     {
-        InitInternal(cmd, false);
-    }
-
-    void ScriptSystem::InitRestricted(CommandBuffer *cmd)
-    {
-        InitInternal(cmd, true);
-    }
-
-    void ScriptSystem::InitInternal(CommandBuffer *cmd, bool restricted)
-    {
-        if (restricted)
-        {
-            m_lua.open_libraries(
-                sol::lib::base,
-                sol::lib::math,
-                sol::lib::string,
-                sol::lib::table,
-                sol::lib::coroutine);
-        }
-        else
-        {
-            m_lua.open_libraries(
-                sol::lib::base,
-                sol::lib::math,
-                sol::lib::string,
-                sol::lib::table,
-                sol::lib::io,
-                sol::lib::os,
-                sol::lib::coroutine);
-        }
+        m_lua.open_libraries(
+            sol::lib::base,
+            sol::lib::math,
+            sol::lib::string,
+            sol::lib::table,
+            sol::lib::io,
+            sol::lib::os,
+            sol::lib::coroutine);
 
         // Logging
         m_lua.set_function("pe_log", [](const std::string &msg)
@@ -60,7 +89,13 @@ namespace pe
         m_lua.set_function("hooks", [](sol::table t, sol::this_environment te)
                            {
             sol::environment env = te;
-            env.raw_set("__hooks", t); });
+            // Use raw Lua C API to avoid sol2 string interning issues
+            lua_State *L = env.lua_state();
+            env.push(L);
+            lua_pushliteral(L, "__hooks");
+            t.push(L);
+            lua_rawset(L, -3);
+            lua_pop(L, 1); });
 
         // exposed {} keyword - declares variables to show in the editor's Properties panel.
         // Returns the same table so scripts can hold a live reference:
@@ -69,23 +104,42 @@ namespace pe
         m_lua.set_function("exposed", [](sol::table t, sol::this_environment te) -> sol::table
                            {
             sol::environment env = te;
-            env.raw_set("__exposed", t);
+            // Use raw Lua C API to set "__exposed" with a properly interned string key.
+            // sol2's raw_set creates non-interned string keys in Lua 5.4, causing
+            // lua_rawget with lua_pushliteral to fail on the same key.
+            lua_State *L = env.lua_state();
+            env.push(L);
+            lua_pushliteral(L, "__exposed");
+            t.push(L);
+            lua_rawset(L, -3);
+            lua_pop(L, 1);
             return t; });
 
         // Execute all registered binding functions
         for (auto &fn : GetBindings())
             fn(m_lua);
 
-        if (!restricted)
-            LoadScripts();
+        LoadScripts();
 
         m_initialized = true;
+    }
+
+    // Helper: fetch a named key from a Lua table using raw C API to avoid sol2 string interning issues
+    static sol::object RawGetLiteral(lua_State *L, sol::table &tbl, const char *key)
+    {
+        tbl.push(L);
+        lua_pushstring(L, key);
+        lua_rawget(L, -2);
+        sol::object result = sol::stack::pop<sol::object>(L);
+        lua_pop(L, 1); // pop table
+        return result;
     }
 
     void ScriptSystem::CollectHooks(ScriptEntry &entry)
     {
         // If the script used hooks{}, read from that table; otherwise fall back to env
-        sol::object hooksObj = entry.env.raw_get<sol::object>("__hooks");
+        lua_State *L = m_lua.lua_state();
+        sol::object hooksObj = RawGetLiteral(L, entry.env, "__hooks");
         bool hasHooksTable = hooksObj.is<sol::table>();
         sol::table hooksTable = hasHooksTable ? hooksObj.as<sol::table>() : sol::table{};
 
@@ -105,7 +159,7 @@ namespace pe
     {
         entry.exposedVars.clear();
 
-        sol::object exposedObj = entry.env.raw_get<sol::object>("__exposed");
+        sol::object exposedObj = RawGetLiteral(m_lua.lua_state(), entry.env, "__exposed");
         if (!exposedObj.is<sol::table>())
             return;
 
@@ -132,42 +186,257 @@ namespace pe
         }
     }
 
-    static std::string NormalizePath(const std::string &path)
+    void ScriptSystem::CollectHooks(NodeScriptInstance &inst)
     {
-        // Resolve '..' and normalize separators so paths stored by LoadScripts
-        // (which may include '..') match paths returned by the FileSelector.
-        try
+        lua_State *L = m_lua.lua_state();
+        sol::object hooksObj = RawGetLiteral(L, inst.env, "__hooks");
+        bool hasHooksTable = hooksObj.is<sol::table>();
+        sol::table hooksTable = hasHooksTable ? hooksObj.as<sol::table>() : sol::table{};
+
+        auto get = [&](const char *name) -> sol::function
         {
-            auto canonical = std::filesystem::weakly_canonical(path);
-            std::string s = canonical.string();
-            std::replace(s.begin(), s.end(), '\\', '/');
-            return s;
+            sol::object obj = hasHooksTable ? hooksTable[name] : inst.env[name];
+            return obj.is<sol::function>() ? obj.as<sol::function>() : sol::function{};
+        };
+
+        inst.initFn = get("init");
+        inst.updateFn = get("update");
+        inst.updateEditorFn = get("update_editor");
+        inst.destroyFn = get("destroy");
+    }
+
+    void ScriptSystem::CollectExposedVars(NodeScriptInstance &inst)
+    {
+        inst.exposedVars.clear();
+
+        // Release old registry reference
+        if (inst.exposedRef != LUA_NOREF)
+        {
+            luaL_unref(m_lua.lua_state(), LUA_REGISTRYINDEX, inst.exposedRef);
+            inst.exposedRef = LUA_NOREF;
         }
-        catch (...)
+
+        // Retrieve __exposed table via raw Lua C API to avoid sol2 string issues
+        lua_State *L = m_lua.lua_state();
+        inst.env.push(L);
+        lua_pushliteral(L, "__exposed");
+        lua_rawget(L, -2);
+        if (!lua_istable(L, -1))
         {
-            std::string s = path;
-            std::replace(s.begin(), s.end(), '\\', '/');
-            return s;
+            // Fallback: iterate env keys to handle sol2 string interning mismatches
+            lua_pop(L, 1); // pop nil result
+            bool found = false;
+            lua_pushnil(L);
+            while (lua_next(L, -2) != 0)
+            {
+                if (lua_type(L, -2) == LUA_TSTRING)
+                {
+                    const char *k = lua_tostring(L, -2);
+                    if (k && strcmp(k, "__exposed") == 0)
+                    {
+                        found = true;
+                        inst.exposedRef = luaL_ref(L, LUA_REGISTRYINDEX);
+                        lua_pop(L, 1); // pop key
+                        break;
+                    }
+                }
+                lua_pop(L, 1);
+            }
+            if (!found)
+            {
+                lua_pop(L, 1); // pop env
+                return;
+            }
+            lua_pop(L, 1); // pop env
+        }
+        else
+        {
+            // Store a registry reference to the exposed table
+            inst.exposedRef = luaL_ref(L, LUA_REGISTRYINDEX);
+            lua_pop(L, 1); // pop environment
+        }
+
+        // Now iterate the table for metadata
+        lua_rawgeti(L, LUA_REGISTRYINDEX, inst.exposedRef);
+        sol::table t(L, -1);
+        lua_pop(L, 1);
+        for (auto &[k, v] : t)
+        {
+            if (!k.is<std::string>())
+                continue;
+
+            ExposedVar var;
+            var.name = k.as<std::string>();
+
+            if (v.is<bool>())
+                var.type = ExposedVar::Type::Bool;
+            else if (v.is<double>())
+                var.type = ExposedVar::Type::Number;
+            else if (v.is<std::string>())
+                var.type = ExposedVar::Type::String;
+            else
+                continue;
+
+            inst.exposedVars.push_back(std::move(var));
         }
     }
 
-    ScriptEntry *ScriptSystem::FindScript(const std::string &path)
+    NodeScriptInstance ScriptSystem::CreateNodeInstance(NodeId *node, const std::string &path)
     {
-        // entry.path was already normalized by LoadScripts; only normalize the input
-        std::string normalized = NormalizePath(path);
-        for (auto &entry : m_scripts)
+        auto *r = GetGlobalSystem<RendererSystem>();
+        Scene &scene = r->GetScene();
+
+        NodeScriptInstance inst;
+        inst.handle = scene.MakeHandle(node);
+        inst.path = NormalizePath(path);
+
+        // Fresh environment inheriting globals (bindings, pe_log, etc.)
+        inst.env = sol::environment(m_lua, sol::create, m_lua.globals());
+
+        // Inject node-local component references before the script runs so top-level
+        // code can use them immediately without touching shared global state.
+        RefreshNodeInstanceBindings(inst);
+
+        // Execute the script file in this instance's private environment
+        auto result = m_lua.safe_script_file(inst.path, inst.env, sol::script_pass_on_error);
+        if (!result.valid())
         {
-            if (entry.path == normalized)
-                return &entry;
+            sol::error err = result;
+            PE_ERROR("[Lua] node script error in '%s': %s", inst.path.c_str(), err.what());
+        }
+
+        CollectHooks(inst);
+        CollectExposedVars(inst);
+        return inst;
+    }
+
+    void ScriptSystem::RefreshNodeInstanceBindings(NodeScriptInstance &inst)
+    {
+        auto *r = GetGlobalSystem<RendererSystem>();
+        if (!r)
+            return;
+
+        Scene &scene = r->GetScene();
+        if (!inst.handle.IsValid(scene))
+        {
+            inst.env["self"] = sol::lua_nil;
+            inst.env["transform"] = sol::lua_nil;
+            inst.env["mesh"] = sol::lua_nil;
+            inst.env["camera"] = sol::lua_nil;
+            return;
+        }
+
+        NodeId *node = inst.handle.nodeId;
+        inst.env["self"] = inst.handle;
+        inst.env["transform"] = inst.handle;
+        inst.env["mesh"] = MakeMeshBindingObject(m_lua, scene, node);
+
+        Camera *camera = nullptr;
+        if (scene.GetComponentFlags(node) & Component_Camera)
+            camera = scene.GetCameraForNode(node);
+        inst.env["camera"] = camera;
+    }
+
+    void ScriptSystem::InitializeNodeInstance(NodeScriptInstance &inst)
+    {
+        if (inst.initCalled)
+            return;
+
+        inst.initCalled = true;
+        if (!inst.initFn.valid())
+            return;
+
+        auto res = inst.initFn();
+        if (!res.valid())
+        {
+            sol::error err = res;
+            PE_ERROR("[Lua] init() error in node script '%s': %s", inst.path.c_str(), err.what());
+        }
+    }
+
+    void ScriptSystem::ReconcileNodeInstances()
+    {
+        auto *r = GetGlobalSystem<RendererSystem>();
+        if (!r)
+            return;
+
+        Scene &scene = r->GetScene();
+        uint32_t nodeCount = scene.GetNodeCount();
+
+        // Remove instances whose handle is stale (scene reloaded / node deleted / script changed)
+        for (auto it = m_nodeInstances.begin(); it != m_nodeInstances.end();)
+        {
+            bool valid = false;
+            if (it->handle.IsValid(scene))
+            {
+                uint32_t flags = scene.GetComponentFlags(it->handle.nodeId);
+                if (flags & Component_Script)
+                {
+                    const std::string &currentPath = scene.GetNodeScriptPath(it->handle.nodeId);
+                    if (NormalizePath(currentPath) == it->path)
+                        valid = true;
+                }
+            }
+
+            if (!valid)
+            {
+                if (it->initCalled && it->destroyFn.valid())
+                {
+                    auto res = it->destroyFn();
+                    if (!res.valid())
+                    {
+                        sol::error err = res;
+                        PE_ERROR("[Lua] destroy() error in node script '%s': %s", it->path.c_str(), err.what());
+                    }
+                }
+                PE_INFO("[ScriptSystem] Removing stale node instance '%s'", it->path.c_str());
+                if (it->exposedRef != LUA_NOREF)
+                    luaL_unref(m_lua.lua_state(), LUA_REGISTRYINDEX, it->exposedRef);
+                it = m_nodeInstances.erase(it);
+            }
+            else
+            {
+                ++it;
+            }
+        }
+
+        // Create instances for nodes that have a script but no instance yet
+        for (uint32_t i = 0; i < nodeCount; i++)
+        {
+            NodeId *node = scene.GetNodeId(i);
+            uint32_t flags = scene.GetComponentFlags(node);
+            if (!(flags & Component_Script))
+                continue;
+
+            const std::string &scriptPath = scene.GetNodeScriptPath(node);
+            if (scriptPath.empty())
+                continue;
+
+            // Check if already instantiated
+            if (FindNodeInstance(node))
+                continue;
+
+            m_nodeInstances.push_back(CreateNodeInstance(node, scriptPath));
+        }
+    }
+
+    NodeScriptInstance *ScriptSystem::FindNodeInstance(const NodeId *node)
+    {
+        for (auto &inst : m_nodeInstances)
+        {
+            if (inst.handle.nodeId == node)
+                return &inst;
         }
         return nullptr;
     }
 
     void ScriptSystem::CallInit()
     {
+        ReconcileNodeInstances();
+
         for (auto &script : m_scripts)
         {
-            if (script.initFn.valid())
+            if (script.initFn.valid() && !HasNodeInstanceForPath(m_nodeInstances, script.path))
             {
                 auto result = script.initFn();
                 if (!result.valid())
@@ -177,6 +446,9 @@ namespace pe
                 }
             }
         }
+
+        for (auto &inst : m_nodeInstances)
+            InitializeNodeInstance(inst);
     }
 
     void ScriptSystem::AddPendingAsyncLoad(PendingAsyncLoad load)
@@ -348,6 +620,7 @@ namespace pe
     void ScriptSystem::Update()
     {
         PE_PROFILE_SCOPE("Script System");
+
         // Process completed async model loads
         ProcessAsyncLoads();
         // Process completed async scene loads
@@ -356,19 +629,47 @@ namespace pe
         // Periodically scan for new .lua files
         ScanForNewScripts();
 
+        // Reconcile per-node script instances with the scene
+        ReconcileNodeInstances();
+
+        for (auto &inst : m_nodeInstances)
+        {
+            RefreshNodeInstanceBindings(inst);
+            InitializeNodeInstance(inst);
+        }
+
+        // Skip file-level hooks for scripts that have per-node instances
+        // (those hooks run per-node instead)
+        auto isNodeScript = [this](const ScriptEntry &s) -> bool
+        {
+            return HasNodeInstanceForPath(m_nodeInstances, s.path);
+        };
+
         // update_editor() runs every frame when not in play mode,
         // so scripts can have live editor functionality without entering play mode
         if (!GUIState::s_playMode)
         {
             for (auto &script : m_scripts)
             {
-                if (script.updateEditorFn.valid())
+                if (script.updateEditorFn.valid() && !isNodeScript(script))
                 {
                     auto result = script.updateEditorFn();
                     if (!result.valid())
                     {
                         sol::error err = result;
                         PE_ERROR("[Lua] update_editor() error in '%s': %s", script.path.c_str(), err.what());
+                    }
+                }
+            }
+            for (auto &inst : m_nodeInstances)
+            {
+                if (inst.updateEditorFn.valid())
+                {
+                    auto result = inst.updateEditorFn();
+                    if (!result.valid())
+                    {
+                        sol::error err = result;
+                        PE_ERROR("[Lua] update_editor() error in node script '%s': %s", inst.path.c_str(), err.what());
                     }
                 }
             }
@@ -379,13 +680,25 @@ namespace pe
             // update() runs only in play mode
             for (auto &script : m_scripts)
             {
-                if (script.updateFn.valid())
+                if (script.updateFn.valid() && !isNodeScript(script))
                 {
                     auto result = script.updateFn();
                     if (!result.valid())
                     {
                         sol::error err = result;
                         PE_ERROR("[Lua] update() error in '%s': %s", script.path.c_str(), err.what());
+                    }
+                }
+            }
+            for (auto &inst : m_nodeInstances)
+            {
+                if (inst.updateFn.valid())
+                {
+                    auto result = inst.updateFn();
+                    if (!result.valid())
+                    {
+                        sol::error err = result;
+                        PE_ERROR("[Lua] update() error in node script '%s': %s", inst.path.c_str(), err.what());
                     }
                 }
             }
@@ -397,20 +710,37 @@ namespace pe
         if (!m_initialized)
             return;
 
+        for (auto &script : m_scripts)
         {
-            for (auto &script : m_scripts)
+            if (script.destroyFn.valid() && !HasNodeInstanceForPath(m_nodeInstances, script.path))
             {
-                if (script.destroyFn.valid())
+                auto result = script.destroyFn();
+                if (!result.valid())
                 {
-                    auto result = script.destroyFn();
-                    if (!result.valid())
-                    {
-                        sol::error err = result;
-                        PE_ERROR("[Lua] destroy() error in '%s': %s", script.path.c_str(), err.what());
-                    }
+                    sol::error err = result;
+                    PE_ERROR("[Lua] destroy() error in '%s': %s", script.path.c_str(), err.what());
                 }
             }
         }
+
+        for (auto &inst : m_nodeInstances)
+        {
+            if (inst.initCalled && inst.destroyFn.valid())
+            {
+                auto result = inst.destroyFn();
+                if (!result.valid())
+                {
+                    sol::error err = result;
+                    PE_ERROR("[Lua] destroy() error in node script '%s': %s", inst.path.c_str(), err.what());
+                }
+            }
+        }
+        for (auto &inst : m_nodeInstances)
+        {
+            if (inst.exposedRef != LUA_NOREF)
+                luaL_unref(m_lua.lua_state(), LUA_REGISTRYINDEX, inst.exposedRef);
+        }
+        m_nodeInstances.clear();
 
         // Wait for any pending async loads before destroying Lua state
         for (auto &load : m_pendingAsyncLoads)
@@ -516,13 +846,37 @@ namespace pe
         if (!std::filesystem::exists(scriptsDir))
             return;
 
+        // Collect normalized paths of scripts attached to scene nodes so we can
+        // skip loading them as shared file-level scripts.  Per-node scripts are
+        // loaded in their own isolated environment by CreateNodeInstance instead.
+        std::set<std::string> nodeScriptPaths;
+        if (auto *r = GetGlobalSystem<RendererSystem>())
+        {
+            Scene &scene = r->GetScene();
+            uint32_t nodeCount = scene.GetNodeCount();
+            for (uint32_t i = 0; i < nodeCount; i++)
+            {
+                NodeId *node = scene.GetNodeId(i);
+                if (scene.GetComponentFlags(node) & Component_Script)
+                {
+                    const std::string &sp = scene.GetNodeScriptPath(node);
+                    if (!sp.empty())
+                        nodeScriptPaths.insert(NormalizePath(sp));
+                }
+            }
+        }
+
         for (auto &file : std::filesystem::recursive_directory_iterator(scriptsDir))
         {
             if (file.path().extension() == ".lua")
             {
-                // Store canonical path so FindScript can match regardless of whether
-                // Path::Assets contains '..' segments vs FileSelector canonical paths
+                // Store canonical paths so per-node script bindings can compare scene paths
+                // against watcher/file-selector paths without separator or ".." mismatches.
                 std::string filePath = NormalizePath(file.path().string());
+
+                // Skip scripts that are attached to nodes — they are loaded per-node
+                if (nodeScriptPaths.count(filePath))
+                    continue;
 
                 // Each script gets its own environment that inherits globals
                 sol::environment env(m_lua, sol::create, m_lua.globals());
@@ -586,7 +940,7 @@ namespace pe
 
             std::string filePath = NormalizePath(file.path().string());
 
-            // Check if already tracked
+            // Check if already tracked (either as a file-level script or a per-node instance)
             bool known = false;
             for (auto &existing : m_scripts)
             {
@@ -596,6 +950,8 @@ namespace pe
                     break;
                 }
             }
+            if (!known)
+                known = HasNodeInstanceForPath(m_nodeInstances, filePath);
 
             if (!known)
             {

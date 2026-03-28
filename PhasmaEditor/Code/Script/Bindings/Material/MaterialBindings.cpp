@@ -23,7 +23,8 @@ namespace pe
                                       {
                 sol::table mat = lua.create_named_table("material");
 
-                mat.set_function("get", [&lua](SceneNodeHandle &h) -> sol::object {
+                mat.set_function("get", [](SceneNodeHandle &h, sol::this_state ts) -> sol::object {
+                    sol::state_view lua(ts);
                     Scene *s = GetScene();
                     if (!s || !h.IsValid(*s)) return sol::make_object(lua, sol::nil);
 

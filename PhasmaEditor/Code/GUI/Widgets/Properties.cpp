@@ -81,24 +81,26 @@ namespace pe
             if (ImGui::SmallButton("Remove##Script"))
                 scene.SetNodeScript(node, "");
 
-            // Show exposed variables if the script has any
+            // Show exposed variables from the per-node script instance
             ScriptSystem *ss = GetGlobalSystem<ScriptSystem>();
             if (!ss)
                 return;
 
-            ScriptEntry *entry = ss->FindScript(scriptPath);
-            if (!entry || entry->exposedVars.empty())
+            NodeScriptInstance *inst = ss->FindNodeInstance(node);
+            if (!inst || inst->exposedVars.empty())
                 return;
 
             ImGui::Dummy(ImVec2(0.f, 4.f));
             ImGui::SeparatorText("Exposed Variables");
 
-            sol::object exposedObj = entry->env.raw_get<sol::object>("__exposed");
-            if (!exposedObj.is<sol::table>())
+            if (inst->exposedRef == LUA_NOREF)
                 return;
-            sol::table exposed = exposedObj.as<sol::table>();
+            lua_State *L = ss->GetLua().lua_state();
+            lua_rawgeti(L, LUA_REGISTRYINDEX, inst->exposedRef);
+            sol::table exposed(L, -1);
+            lua_pop(L, 1);
 
-            for (auto &var : entry->exposedVars)
+            for (auto &var : inst->exposedVars)
             {
                 ImGui::PushID(var.name.c_str());
                 switch (var.type)

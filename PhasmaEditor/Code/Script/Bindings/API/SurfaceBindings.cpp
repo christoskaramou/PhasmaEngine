@@ -58,7 +58,8 @@ namespace pe
                 };
 
                 // GetSupportedPresentModes
-                surfType["get_supported_present_modes"] = [&lua](Surface &s) -> sol::table {
+                surfType["get_supported_present_modes"] = [](Surface &s, sol::this_state ts) -> sol::table {
+                    sol::state_view lua(ts);
                     auto modes = s.GetSupportedPresentModes();
                     sol::table t = lua.create_table();
                     for (size_t i = 0; i < modes.size(); i++)

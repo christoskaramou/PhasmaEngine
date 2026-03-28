@@ -29,7 +29,8 @@ namespace pe
                 });
 
                 // Mouse state
-                input.set_function("get_mouse_position", [&lua]() -> sol::table {
+                input.set_function("get_mouse_position", [](sol::this_state ts) -> sol::table {
+                    sol::state_view lua(ts);
                     int x, y;
                     SDL_GetMouseState(&x, &y);
                     sol::table t = lua.create_table();
@@ -38,7 +39,8 @@ namespace pe
                     return t;
                 });
 
-                input.set_function("get_mouse_delta", [&lua]() -> sol::table {
+                input.set_function("get_mouse_delta", [](sol::this_state ts) -> sol::table {
+                    sol::state_view lua(ts);
                     int dx, dy;
                     SDL_GetRelativeMouseState(&dx, &dy);
                     sol::table t = lua.create_table();

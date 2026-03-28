@@ -17,7 +17,8 @@ namespace pe
                                       {
                 sol::table engine = lua.create_named_table("engine");
 
-                engine.set_function("get_metrics", [&lua]() -> sol::table {
+                engine.set_function("get_metrics", [](sol::this_state ts) -> sol::table {
+                    sol::state_view lua(ts);
                     sol::table t = lua.create_table();
                     double dt = FrameTimer::Instance().GetDelta();
                     t["fps"] = dt > 0.0 ? 1.0 / dt : 0.0;
@@ -102,7 +103,8 @@ namespace pe
                 // Returns recent console log entries as a Lua array of {level, text} tables.
                 // Optional count (default 100) limits how many recent entries to return.
                 // Optional level filters by "info", "warn", or "error".
-                engine.set_function("get_console_log", [&lua](sol::optional<int> count, sol::optional<std::string> level) -> sol::table {
+                engine.set_function("get_console_log", [](sol::optional<int> count, sol::optional<std::string> level, sol::this_state ts) -> sol::table {
+                    sol::state_view lua(ts);
                     sol::table result = lua.create_table();
                     auto *r = GetGlobalSystem<RendererSystem>();
                     if (!r) return result;

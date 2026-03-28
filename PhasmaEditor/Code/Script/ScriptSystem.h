@@ -70,11 +70,26 @@ namespace pe
         std::vector<ExposedVar> exposedVars;
     };
 
+    // Per-node script instance — each node with Component_Script gets its own
+    // isolated environment even if two nodes reference the same .lua file.
+    struct NodeScriptInstance
+    {
+        SceneNodeHandle handle;
+        std::string path;
+        sol::environment env;
+        sol::function initFn;
+        sol::function updateFn;
+        sol::function updateEditorFn;
+        sol::function destroyFn;
+        std::vector<ExposedVar> exposedVars;
+        int exposedRef = LUA_NOREF; // Lua registry ref to __exposed table
+        bool initCalled = false;
+    };
+
     class ScriptSystem : public ISystem
     {
     public:
         void Init(CommandBuffer *cmd) override;
-        void InitRestricted(CommandBuffer *cmd);
         void Update() override;
         void Destroy() override;
         void Reload();
@@ -93,8 +108,8 @@ namespace pe
         // Async scene loading support
         void AddPendingSceneLoad(PendingSceneLoad load);
 
-        // Returns the ScriptEntry whose path matches, or nullptr if not found
-        ScriptEntry *FindScript(const std::string &path);
+        // Per-node instance lookup — returns the instance for a specific node, or nullptr
+        NodeScriptInstance *FindNodeInstance(const NodeId *node);
 
         static void AddBindings(LuaBindingFunc func);
 
@@ -103,13 +118,21 @@ namespace pe
         void ScanForNewScripts();
         void CollectHooks(ScriptEntry &entry);
         void CollectExposedVars(ScriptEntry &entry);
+        void CollectHooks(NodeScriptInstance &inst);
+        void CollectExposedVars(NodeScriptInstance &inst);
         static std::vector<LuaBindingFunc> &GetBindings();
-        void InitInternal(CommandBuffer *cmd, bool restricted);
 
         void ProcessSceneLoads();
 
+        // Per-node script instance management
+        void ReconcileNodeInstances();
+        NodeScriptInstance CreateNodeInstance(NodeId *node, const std::string &path);
+        void RefreshNodeInstanceBindings(NodeScriptInstance &inst);
+        void InitializeNodeInstance(NodeScriptInstance &inst);
+
         sol::state m_lua{};
         std::vector<ScriptEntry> m_scripts{};
+        std::vector<NodeScriptInstance> m_nodeInstances{};
         std::vector<PendingAsyncLoad> m_pendingAsyncLoads;
         std::vector<PendingSceneLoad> m_pendingSceneLoads;
         bool m_initialized = false;

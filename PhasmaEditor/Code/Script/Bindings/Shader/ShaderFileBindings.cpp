@@ -11,7 +11,8 @@ namespace pe
                                       {
                 sol::table shaders = lua.create_named_table("shaders");
 
-                shaders.set_function("list", [&lua]() -> sol::table {
+                shaders.set_function("list", [](sol::this_state ts) -> sol::table {
+                    sol::state_view lua(ts);
                     sol::table result = lua.create_table();
                     std::string shadersDir = Path::Assets + "Shaders";
                     if (!std::filesystem::exists(shadersDir))

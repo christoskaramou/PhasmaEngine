@@ -66,7 +66,8 @@ namespace pe
                     "point_in_frustum", [](Camera &c, const vec3 &point, sol::optional<float> radius) -> bool {
                         return c.PointInFrustum(point, radius.value_or(0.0f));
                     },
-                    "aabb_in_frustum", [&lua](Camera &c, sol::table aabb) -> bool {
+                    "aabb_in_frustum", [](Camera &c, sol::table aabb, sol::this_state ts) -> bool {
+                        sol::state_view lua(ts);
                         AABB box;
                         box.min = aabb["min"].get<vec3>();
                         box.max = aabb["max"].get<vec3>();

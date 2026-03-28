@@ -72,7 +72,8 @@ namespace pe
                 shaderType["get_path_id"] = sol::property(&Shader::GetPathID);
 
                 // GetLocalDefines
-                shaderType["get_local_defines"] = [&lua](Shader &s) -> sol::table {
+                shaderType["get_local_defines"] = [](Shader &s, sol::this_state ts) -> sol::table {
+                    sol::state_view lua(ts);
                     sol::table t = lua.create_table();
                     auto &defines = s.GetLocalDefines();
                     for (size_t i = 0; i < defines.size(); i++)

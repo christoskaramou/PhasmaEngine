@@ -2,6 +2,7 @@
 #include "Scene/Scene.h"
 #include "Scene/SceneNode.h"
 #include "Scene/SceneNodeHandle.h"
+#include "Camera/Camera.h"
 #include "Systems/RendererSystem.h"
 
 namespace pe
@@ -116,7 +117,8 @@ namespace pe
                     s->SetLocalMatrix(h.nodeId, T * R * S);
                 });
 
-                ut.set_function("get_parent", [&lua](SceneNodeHandle &h) -> sol::object {
+                ut.set_function("get_parent", [](SceneNodeHandle &h, sol::this_state ts) -> sol::object {
+                    sol::state_view lua(ts);
                     Scene *s = GetScene();
                     if (!s || !h.IsValid(*s)) return sol::make_object(lua, sol::nil);
                     NodeId *parent = s->GetParent(h.nodeId);
@@ -141,7 +143,40 @@ namespace pe
                     return s->GetMeshRef(h.nodeId);
                 });
 
-                ut.set_function("get_bounding_box", [&lua](SceneNodeHandle &h) -> sol::object {
+                ut.set_function("get_mesh_info", [](SceneNodeHandle &h, sol::this_state ts) -> sol::object {
+                    sol::state_view lua(ts);
+                    Scene *s = GetScene();
+                    if (!s || !h.IsValid(*s)) return sol::make_object(lua, sol::nil);
+                    int meshRef = s->GetMeshRef(h.nodeId);
+                    if (meshRef < 0) return sol::make_object(lua, sol::nil);
+                    const auto &meshes = s->GetMeshes();
+                    if (meshRef >= static_cast<int>(meshes.size())) return sol::make_object(lua, sol::nil);
+                    const auto &mesh = meshes[meshRef];
+                    sol::table t = lua.create_table();
+                    t["index"] = meshRef;
+                    t["vertex_count"] = mesh.vertexCount;
+                    t["index_count"] = mesh.indexCount;
+                    t["bounding_box"] = lua.create_table_with(
+                        "min", mesh.boundingBox.min,
+                        "max", mesh.boundingBox.max,
+                        "center", mesh.boundingBox.GetCenter(),
+                        "size", mesh.boundingBox.GetSize());
+                    return sol::make_object(lua, t);
+                });
+
+                ut.set_function("get_camera", [](SceneNodeHandle &h, sol::this_state ts) -> sol::object {
+                    sol::state_view lua(ts);
+                    Scene *s = GetScene();
+                    if (!s || !h.IsValid(*s)) return sol::make_object(lua, sol::nil);
+                    if (!(s->GetComponentFlags(h.nodeId) & Component_Camera))
+                        return sol::make_object(lua, sol::nil);
+                    Camera *cam = s->GetCameraForNode(h.nodeId);
+                    if (!cam) return sol::make_object(lua, sol::nil);
+                    return sol::make_object(lua, cam);
+                });
+
+                ut.set_function("get_bounding_box", [](SceneNodeHandle &h, sol::this_state ts) -> sol::object {
+                    sol::state_view lua(ts);
                     Scene *s = GetScene();
                     if (!s || !h.IsValid(*s)) return sol::make_object(lua, sol::nil);
                     const AABB &bb = s->GetWorldAABB(h.nodeId);
@@ -151,6 +186,39 @@ namespace pe
                     t["center"] = bb.GetCenter();
                     t["size"] = bb.GetSize();
                     return sol::make_object(lua, t);
+                });
+
+                ut.set_function("set_script", [](SceneNodeHandle &h, const std::string &path) {
+                    Scene *s = GetScene();
+                    if (!s || !h.IsValid(*s)) return;
+                    s->SetNodeScript(h.nodeId, path);
+                });
+
+                ut.set_function("get_script", [](SceneNodeHandle &h) -> std::string {
+                    Scene *s = GetScene();
+                    if (!s || !h.IsValid(*s)) return "";
+                    return s->GetNodeScriptPath(h.nodeId);
+                });
+
+                ut.set_function("get_exposed", [](SceneNodeHandle &h, sol::this_state ts) -> std::optional<sol::table> {
+                    lua_State *L = ts;
+                    Scene *s = GetScene();
+                    ScriptSystem *ss = s ? GetGlobalSystem<ScriptSystem>() : nullptr;
+                    NodeScriptInstance *inst = (ss && h.IsValid(*s)) ? ss->FindNodeInstance(h.nodeId) : nullptr;
+
+                    if (!inst || inst->exposedRef == LUA_NOREF)
+                        return std::nullopt;
+
+                    lua_rawgeti(L, LUA_REGISTRYINDEX, inst->exposedRef);
+                    if (!lua_istable(L, -1))
+                    {
+                        lua_pop(L, 1);
+                        return std::nullopt;
+                    }
+
+                    sol::table result(L, -1);
+                    lua_pop(L, 1);
+                    return result;
                 }); });
         }
     } s_sceneNodeBindings;

@@ -108,7 +108,8 @@ namespace pe
                 rhi.set_function("get_swapchain_image_count", []() -> uint32_t { return RHII.GetSwapchainImageCount(); });
 
                 // GetSystemAndProcessMemory
-                rhi.set_function("get_system_memory", [&lua]() -> sol::table {
+                rhi.set_function("get_system_memory", [](sol::this_state ts) -> sol::table {
+                    sol::state_view lua(ts);
                     auto snap = RHII.GetSystemAndProcessMemory();
                     sol::table t = lua.create_table();
                     t["sys_total"] = snap.sysTotal;
@@ -121,7 +122,8 @@ namespace pe
                 });
 
                 // GetGpuMemorySnapshot
-                rhi.set_function("get_gpu_memory", [&lua]() -> sol::table {
+                rhi.set_function("get_gpu_memory", [](sol::this_state ts) -> sol::table {
+                    sol::state_view lua(ts);
                     auto snap = RHII.GetGpuMemorySnapshot();
                     sol::table t = lua.create_table();
                     sol::table vram = lua.create_table();

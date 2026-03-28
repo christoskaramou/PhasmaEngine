@@ -192,7 +192,8 @@ namespace pe
                     return static_cast<uint32_t>(static_cast<VkShaderStageFlags>(d.GetStage()));
                 };
                 // GetBoundResources
-                descType["get_bound_resources"] = [&lua](Descriptor &d) -> sol::table {
+                descType["get_bound_resources"] = [](Descriptor &d, sol::this_state ts) -> sol::table {
+                    sol::state_view lua(ts);
                     sol::table t = lua.create_table();
                     auto &resources = d.GetBoundResources();
                     for (size_t i = 0; i < resources.size(); i++)
@@ -207,7 +208,8 @@ namespace pe
                     return t;
                 };
                 // GetBindingInfos
-                descType["get_binding_infos"] = [&lua](Descriptor &d) -> sol::table {
+                descType["get_binding_infos"] = [](Descriptor &d, sol::this_state ts) -> sol::table {
+                    sol::state_view lua(ts);
                     sol::table t = lua.create_table();
                     auto &infos = d.GetBindingInfos();
                     for (size_t i = 0; i < infos.size(); i++)

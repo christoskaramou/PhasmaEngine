@@ -648,16 +648,7 @@ namespace pe
                         {
                             Camera *cam = scene.GetCameraForNode(node);
                             if (cam && scene.GetCameras().size() > 1)
-                                scene.RemoveCamera(cam);
-                        }
-                        else if (nodeCompFlags & Component_Light)
-                        {
-                            auto [lt, idx] = scene.GetLightForNode(node);
-                            if (idx >= 0)
-                            {
-                                scene.RemoveLight(lt, idx);
-                                selection.ClearSelection();
-                            }
+                                nodesToDelete.push_back(node);
                         }
                         else
                         {
