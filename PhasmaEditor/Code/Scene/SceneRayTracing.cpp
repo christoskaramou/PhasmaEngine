@@ -24,7 +24,19 @@ namespace pe
         RHII.AddToDeletionQueue([b = m_scratchBuffer]()
                                 { Buffer* buf = b; Buffer::Destroy(buf); });
 
+        // Null out member pointers immediately after queuing — any early return below
+        // must not leave dangling pointers that UpdateTLASTransformations could dereference
+        // once the deletion queue fires.
+        m_tlas = nullptr;
+        m_instanceBuffer = nullptr;
+        m_blasMergedBuffer = nullptr;
+        m_scratchBuffer = nullptr;
+
         if (!GetBuffer())
+            return;
+
+        // No drawable meshes — nothing to ray-trace.
+        if (m_meshCount == 0)
             return;
 
         vk::MemoryBarrier2 barrier{};
@@ -132,14 +144,20 @@ namespace pe
         instData.data.deviceAddress = 0;
         tlasGeom.geometry.instances = instData;
 
+        // Must include eAllowUpdate here — BuildTLAS adds it when building,
+        // and buildScratchSize is larger when eAllowUpdate is set.
+        // Querying without it produces a scratch size that is too small, causing
+        // a GPU page fault (reported as VK_ERROR_DEVICE_LOST on the next submit).
         auto tlasSizes = AccelerationStructure::GetBuildSizes(
             {tlasGeom},
             {m_meshCount},
             vk::AccelerationStructureTypeKHR::eTopLevel,
-            kTlasFlags,
+            kTlasFlags | vk::BuildAccelerationStructureFlagBitsKHR::eAllowUpdate,
             vk::AccelerationStructureBuildTypeKHR::eDevice);
 
-        maxScratchSize = std::max(maxScratchSize, tlasSizes.buildScratchSize);
+        // Include both build and update scratch: UpdateTLAS needs updateScratchSize bytes,
+        // which can exceed buildScratchSize on some hardware (notably at high instance counts).
+        maxScratchSize = std::max(maxScratchSize, std::max(tlasSizes.buildScratchSize, tlasSizes.updateScratchSize));
 
         // --- Allocation ---
         m_blasMergedBuffer = Buffer::Create(
@@ -178,18 +196,10 @@ namespace pe
             currentOffset += req.sizeInfo.accelerationStructureSize;
         }
 
-        // --- Match Instances to BLAS ---
-        std::vector<InstanceReq> matchedInstances;
-        matchedInstances.reserve(instanceReqs.size());
+        // Assign each instance its BLAS — every meshIndex is guaranteed to be in
+        // blasByMesh since both were built from the same indexCount > 0 condition.
         for (auto &req : instanceReqs)
-        {
-            auto found = blasByMesh.find(req.meshIndex);
-            if (found == blasByMesh.end())
-                continue;
-            req.blas = found->second;
-            matchedInstances.push_back(req);
-        }
-        instanceReqs.swap(matchedInstances);
+            req.blas = blasByMesh.at(req.meshIndex);
 
         // --- Create Instance Buffer ---
         m_instanceBuffer = Buffer::Create(
@@ -282,7 +292,7 @@ namespace pe
 
     void Scene::UpdateTLASTransformations(CommandBuffer *cmd)
     {
-        if (!m_tlas || !m_instanceBuffer)
+        if (!m_tlas || !m_instanceBuffer || !m_scratchBuffer)
             return;
 
         if (m_nodesMoved.empty())
