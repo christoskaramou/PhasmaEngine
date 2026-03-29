@@ -94,6 +94,74 @@ namespace pe
         if (!m_server)
             return;
 
+        // OAuth 2.0 Authorization Server Metadata (RFC 8414)
+        // Claude Code discovers this endpoint on every session to check if auth is required.
+        // Returning a valid token_endpoint lets CC obtain a persistent long-lived token
+        // so it stops prompting "Needs Auth" on every launch.
+        m_server->Get("/.well-known/oauth-authorization-server", [this](const httplib::Request &, httplib::Response &res)
+                      {
+            const std::string base = "http://127.0.0.1:" + std::to_string(m_port);
+            res.set_content(DumpJson(nlohmann::json{
+                {"issuer", base},
+                {"authorization_endpoint", base + "/oauth/authorize"},
+                {"token_endpoint", base + "/oauth/token"},
+                {"registration_endpoint", base + "/oauth/register"},
+                {"token_endpoint_auth_methods_supported", nlohmann::json::array({"none"})},
+                {"grant_types_supported", nlohmann::json::array({"authorization_code", "client_credentials"})},
+                {"response_types_supported", nlohmann::json::array({"code", "token"})},
+                {"code_challenge_methods_supported", nlohmann::json::array({"S256", "plain"})},
+            }), "application/json"); });
+
+        // Authorization endpoint — immediately redirects with a static code (no user interaction needed locally).
+        m_server->Get("/oauth/authorize", [](const httplib::Request &req, httplib::Response &res)
+                      {
+            const std::string redirectUri = req.get_param_value("redirect_uri");
+            const std::string state       = req.get_param_value("state");
+            if (redirectUri.empty())
+            {
+                res.status = 400;
+                res.set_content(DumpJson(nlohmann::json{{"error", "missing redirect_uri"}}), "application/json");
+                return;
+            }
+            std::string location = redirectUri + (redirectUri.find('?') == std::string::npos ? "?" : "&");
+            location += "code=phasmaeditor-local-auth-code";
+            if (!state.empty())
+                location += "&state=" + state;
+            res.status = 302;
+            res.set_header("Location", location); });
+
+        // Dynamic client registration (RFC 7591) — required by Claude Code.
+        // Returns a static client_id; no secret needed for public clients.
+        m_server->Post("/oauth/register", [](const httplib::Request &req, httplib::Response &res)
+                       {
+            nlohmann::json regBody;
+            try { regBody = nlohmann::json::parse(req.body.empty() ? "{}" : req.body); }
+            catch (...) { regBody = nlohmann::json::object(); }
+
+            // Echo back redirect_uris if provided, otherwise use a localhost fallback
+            nlohmann::json redirectUris = regBody.contains("redirect_uris") && regBody["redirect_uris"].is_array()
+                                              ? regBody["redirect_uris"]
+                                              : nlohmann::json::array({"http://127.0.0.1/callback"});
+
+            res.status = 201;
+            res.set_content(DumpJson(nlohmann::json{
+                {"client_id", "phasmaeditor-local-client"},
+                {"client_secret", ""},
+                {"redirect_uris", redirectUris},
+                {"token_endpoint_auth_method", "none"},
+                {"grant_types", nlohmann::json::array({"client_credentials"})},
+            }), "application/json"); });
+
+        // Returns a static bearer token valid for ~10 years.
+        // Claude Code stores this and will not re-authenticate until it expires.
+        m_server->Post("/oauth/token", [](const httplib::Request &, httplib::Response &res)
+                       { res.set_content(DumpJson(nlohmann::json{
+                                             {"access_token", "phasmaeditor-local-static-token"},
+                                             {"token_type", "Bearer"},
+                                             {"expires_in", 315360000},
+                                         }),
+                                         "application/json"); });
+
         m_server->Get("/mcp", [](const httplib::Request &, httplib::Response &res)
                       {
             res.status = 405;

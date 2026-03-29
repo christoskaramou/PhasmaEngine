@@ -62,7 +62,62 @@ model->SetNodeLocalMatrix(root, newMatrix);
 
 ---
 
-## Editor MCP Tool Registration
+## Editor MCP Server
+
+The MCP server runs at `http://127.0.0.1:8765` (localhost only, no external access).
+
+### OAuth (required by Claude Code and MCP-spec-compliant clients)
+
+Claude Code enforces OAuth for `"type": "http"` MCP servers. The editor implements minimal stub
+OAuth endpoints that return a static 10-year token — no real authentication, just enough to satisfy
+the spec:
+
+| Endpoint | Purpose |
+|---|---|
+| `GET /.well-known/oauth-authorization-server` | RFC 8414 metadata discovery |
+| `POST /oauth/register` | RFC 7591 dynamic client registration |
+| `GET /oauth/authorize` | Auth code flow — immediate redirect with static code |
+| `POST /oauth/token` | Returns static bearer token, `expires_in: 315360000` |
+
+On first connect, the client completes the flow automatically (no browser/user interaction needed)
+and stores the token. Subsequent sessions connect without prompting.
+
+These endpoints are implemented in `EditorToolServer::ConfigureRoutes()`.
+
+### Connecting from Claude Code (Windows)
+
+MCP tools are injected at **session start only**. Start the editor before starting a Claude Code
+session, then `mcp__phasmaeditor__*` tools are available immediately. If the editor starts after
+the session, use `/mcp` to connect — then start a **new session** for the tools to appear.
+
+### Connecting from Codex (WSL)
+
+Codex runs inside WSL2, which has its own network namespace — `127.0.0.1` inside WSL does **not**
+reach the Windows-side server. Do **not** work around this with manual HTTP calls or `powershell.exe`
+wrangling. Instead, set up native MCP tool injection once:
+
+**Step 1 — enable WSL mirrored networking** (one-time, requires WSL 2.0+ / Windows 11 22H2+):
+
+Create or edit `C:\Users\Christos\.wslconfig`:
+```ini
+[wsl2]
+networkingMode=mirrored
+```
+Then restart WSL: `wsl --shutdown`. After this, `127.0.0.1` inside WSL resolves to the Windows
+loopback, so the editor is reachable at `http://127.0.0.1:8765/mcp`.
+
+**Step 2 — add MCP config to Codex** (one-time):
+
+Add to `~/.codex/config.toml` inside WSL:
+```toml
+[mcp_servers.phasmaeditor]
+url = "http://127.0.0.1:8765/mcp"
+```
+
+After both steps, start the editor, then start a Codex session — `mcp__phasmaeditor__*` tools
+are injected natively at session start, identical to how Claude Code connects.
+
+### Tool Registration
 
 All editor/MCP tools are defined in `EditorToolCatalog.cpp` and served to external AI clients
 (Claude Code, Claude Desktop, Codex) via `EditorToolServer` at `http://127.0.0.1:8765/mcp`.
