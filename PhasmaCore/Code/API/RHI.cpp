@@ -27,6 +27,8 @@ VULKAN_HPP_DEFAULT_DISPATCH_LOADER_DYNAMIC_STORAGE
 
 namespace pe
 {
+    RHI &RHII = *RHI::Get();
+
     static inline uint32_t VkVendorID(const vk::PhysicalDevice &gpu)
     {
         return gpu.getProperties().vendorID; // 0x10DE NVIDIA, 0x1002 AMD, 0x8086 Intel
@@ -80,6 +82,7 @@ namespace pe
             return so != nullptr;
         }
 #else
+        void *L(const char *) { return nullptr; }
         bool Load() { return false; }
 #endif
         int (*nvmlInit_v2)() = nullptr;

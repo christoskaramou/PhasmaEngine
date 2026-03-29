@@ -7,7 +7,7 @@ namespace pe
     class Shader;
     class Buffer;
 
-    struct PipelineColorBlendAttachmentState
+    struct PE_API PipelineColorBlendAttachmentState
     {
         static vk::PipelineColorBlendAttachmentState Default;
         static vk::PipelineColorBlendAttachmentState AdditiveColor;

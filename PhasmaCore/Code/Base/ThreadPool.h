@@ -2,7 +2,7 @@
 
 namespace pe
 {
-    class ThreadPool
+    class PE_API ThreadPool
     {
     public:
         explicit ThreadPool(size_t threads);

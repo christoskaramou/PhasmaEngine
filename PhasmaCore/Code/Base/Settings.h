@@ -1,5 +1,7 @@
 #pragma once
 
+#include "Base/PhasmaExport.h"
+
 namespace pe
 {
     struct Settings
@@ -93,4 +95,7 @@ namespace pe
         bool use_Disney_PBR = true;
         vk::PresentModeKHR preferred_present_mode = vk::PresentModeKHR::eMailbox;
     };
+
+    // Suppress per-TU instantiation — PhasmaCore.dll provides the one canonical instance.
+    extern template PE_API GlobalSettings &Settings::Get<GlobalSettings>();
 } // namespace pe

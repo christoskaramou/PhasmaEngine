@@ -792,12 +792,11 @@ void closesthit(inout HitPayload payload, in BuiltInTriangleIntersectionAttribut
     lighting += emissive;
 
     // Transmission & Volume
-    // transmissionFactor lives in the material table; volume params not yet in Phase 2 table (stubbed)
     float transmissionFactor = materialTable[constants[id].materialId].emissiveTransmission.w;
-    float thicknessFactor = 0.0f;
-    float attenuationDistance = 1e9f;
-    float ior = 1.5f;
-    float3 attenuationColor = float3(1.0f, 1.0f, 1.0f);
+    float thicknessFactor = materialTable[constants[id].materialId].transmissionVolume.x;
+    float attenuationDistance = materialTable[constants[id].materialId].transmissionVolume.y;
+    float ior = materialTable[constants[id].materialId].transmissionVolume.z;
+    float3 attenuationColor = materialTable[constants[id].materialId].attenuationColor.xyz;
 
     // Check material type from RenderType enum (1: Opaque, 2: AlphaCut, 3: AlphaBlend, 4: Transmission)
     uint renderType = meshInfos[id].renderType;

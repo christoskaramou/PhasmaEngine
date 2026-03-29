@@ -15,7 +15,7 @@ namespace pe
         public:
             Constructor()
             {
-#ifdef WIN32
+#if defined(PE_WIN32)
                 char str[MAX_PATH];
                 GetModuleFileNameA(nullptr, str, MAX_PATH);
                 Executable = std::filesystem::path(str).remove_filename().string();

@@ -32,7 +32,7 @@ namespace pe
         {
             m_open = true;
             m_scrollToBottom = true;
-            strncpy_s(m_filter.InputBuf, IM_ARRAYSIZE(m_filter.InputBuf), filter, _TRUNCATE);
+            std::snprintf(m_filter.InputBuf, IM_ARRAYSIZE(m_filter.InputBuf), "%s", filter ? filter : "");
             m_filter.Build();
             ImGui::SetWindowFocus(m_name.c_str());
         }

@@ -302,7 +302,8 @@ namespace pe
         if (!result.valid())
         {
             sol::error err = result;
-            PE_ERROR("[Lua] node script error in '%s': %s", inst.path.c_str(), err.what());
+            PE_WARN("[Lua] node script error in '%s': %s", inst.path.c_str(), err.what());
+            return inst; // no hooks/vars to collect from a failed script
         }
 
         CollectHooks(inst);

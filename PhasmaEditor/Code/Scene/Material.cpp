@@ -155,6 +155,8 @@ namespace pe
         data.baseColorFactor = baseColorFactor;
         data.emissiveTransmission = vec4(emissiveFactor, transmissionFactor);
         data.pbrParams = vec4(metallic, roughness, alphaCutoff, occlusionStrength);
+        data.transmissionVolume = vec4(thicknessFactor, attenuationDistance, ior, 0.f);
+        data.attenuationColor = vec4(attenuationColor, 0.f);
         return data;
     }
 
@@ -279,6 +281,8 @@ namespace pe
         data.baseColorFactor = GetBaseColorFactor();
         data.emissiveTransmission = vec4(GetEmissiveFactor(), m_parent->transmissionFactor);
         data.pbrParams = vec4(GetMetallic(), GetRoughness(), GetAlphaCutoff(), GetOcclusionStrength());
+        data.transmissionVolume = vec4(m_parent->thicknessFactor, m_parent->attenuationDistance, m_parent->ior, 0.f);
+        data.attenuationColor = vec4(m_parent->attenuationColor, 0.f);
         return data;
     }
 

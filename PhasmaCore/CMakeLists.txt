@@ -22,8 +22,7 @@ elseif(CMAKE_SYSTEM_NAME STREQUAL "Windows")
         _CONSOLE
     )
 else()
-    error("Unsupported operating system")
-    message(STATUS "Detected operating system: ${CMAKE_SYSTEM_NAME}")
+    message(FATAL_ERROR "Unsupported operating system: ${CMAKE_SYSTEM_NAME}")
 endif()
 
 set(PE_DEFS ${PE_DEFS} PE_TRACK_RESOURCES)
@@ -45,12 +44,21 @@ file(GLOB_RECURSE ECS_SOURCES CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/Cod
 file(GLOB_RECURSE API_SOURCES CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/Code/API/*.cpp")
 file(GLOB_RECURSE VMA_SOURCES CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/third_party/vma/*.cpp")
 
-# Add PhasmaCore static library
-add_library(PhasmaCore STATIC
+# Build PhasmaCore as a shared library for runtime loading from PhasmaEditor.
+add_library(PhasmaCore SHARED
         ${BASE_SOURCES}
         ${ECS_SOURCES}
         ${API_SOURCES}
         ${VMA_SOURCES}
+)
+set_target_properties(PhasmaCore PROPERTIES POSITION_INDEPENDENT_CODE ON)
+if(CMAKE_SYSTEM_NAME STREQUAL "Windows")
+    set_target_properties(PhasmaCore PROPERTIES WINDOWS_EXPORT_ALL_SYMBOLS ON)
+endif()
+target_compile_definitions(PhasmaCore PRIVATE
+    PE_PHASMACORE_EXPORTS
+    VULKAN_HPP_STORAGE_SHARED
+    VULKAN_HPP_STORAGE_SHARED_EXPORT
 )
 
 if (CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
@@ -99,6 +107,7 @@ set(COMPILE_DEFS
     $<$<CONFIG:Release>:NDEBUG PE_RELEASE>
     $<$<CONFIG:MinSizeRel>:NDEBUG PE_MINSIZEREL>
     $<$<CONFIG:RelWithDebInfo>:NDEBUG PE_RELWITHDEBINFO>
+    VULKAN_HPP_STORAGE_SHARED
     ${PE_DEFS}
 )
 target_compile_definitions(PhasmaCore PUBLIC ${COMPILE_DEFS})
@@ -116,11 +125,11 @@ else()
         spirv-cross-core
     )
 endif()
-list(APPEND LIB_FILES 
+list(APPEND LIB_FILES
     shaderc_shared
     dxcompiler
-    SDL2main
     SDL2
+    SDL2main
     vulkan
 )
 target_link_libraries(PhasmaCore PUBLIC ${LIB_FILES})

@@ -1,4 +1,9 @@
 #pragma once
+#include "Base/PhasmaExport.h"
+
+#if defined(PE_LINUX)
+#include <cxxabi.h>
+#endif
 
 namespace pe
 {
@@ -71,16 +76,9 @@ namespace pe
         }
     } // namespace ID
 
-#ifdef __linux__
-#include <cstdlib>
-#include <cxxabi.h>
-#include <memory>
-
-#endif
-
     inline std::string Demangle(const char *name)
     {
-#ifdef __linux__
+#if defined(PE_LINUX)
         int status = -1;
         std::unique_ptr<char, void (*)(void *)> res{
             abi::__cxa_demangle(name, NULL, NULL, &status),

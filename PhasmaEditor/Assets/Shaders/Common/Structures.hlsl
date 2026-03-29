@@ -89,6 +89,8 @@ struct MaterialGpuData
     float4 baseColorFactor;
     float4 emissiveTransmission;  // .xyz = emissive, .w = transmissionFactor
     float4 pbrParams;             // .x = metallic, .y = roughness, .z = alphaCutoff, .w = occlusionStrength
+    float4 transmissionVolume;    // .x = thicknessFactor, .y = attenuationDistance, .z = ior, .w = unused
+    float4 attenuationColor;      // .xyz = attenuationColor, .w = unused
 };
 
 // -----------------------------------------

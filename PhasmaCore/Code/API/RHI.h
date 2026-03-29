@@ -1,7 +1,10 @@
 #pragma once
 
 #ifdef PE_TRACY
-namespace tracy { class VkCtx; }
+namespace tracy
+{
+    class VkCtx;
+}
 using TracyVkCtx = tracy::VkCtx *;
 #endif
 
@@ -160,5 +163,5 @@ namespace pe
 #endif
     };
 
-    inline RHI &RHII = *RHI::Get();
+    extern PE_API RHI &RHII;
 } // namespace pe

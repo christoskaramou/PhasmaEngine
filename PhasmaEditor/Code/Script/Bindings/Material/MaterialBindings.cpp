@@ -44,6 +44,9 @@ namespace pe
                     t["alpha_cutoff"] = m.alphaCutoff;
                     t["occlusion_strength"] = m.occlusionStrength;
                     t["normal_scale"] = m.normalScale;
+                    t["ior"] = m.ior;
+                    t["thickness_factor"] = m.thicknessFactor;
+                    t["attenuation_distance"] = m.attenuationDistance;
                     return sol::make_object(lua, t);
                 });
 
@@ -57,6 +60,7 @@ namespace pe
                         if (!mesh.material) return;
                         if (prop == "base_color") mesh.material->baseColorFactor = value;
                         mesh.material->dirty = true;
+                        s->SetMaterialDirty();
                         s->MarkNodeDirty(h.nodeId);
                     },
                     [](SceneNodeHandle &h, const std::string &prop, vec3 value) {
@@ -69,6 +73,7 @@ namespace pe
                         if (prop == "base_color") mesh.material->baseColorFactor = vec4(value, 1.f);
                         else if (prop == "emissive") mesh.material->emissiveFactor = value;
                         mesh.material->dirty = true;
+                        s->SetMaterialDirty();
                         s->MarkNodeDirty(h.nodeId);
                     },
                     [](SceneNodeHandle &h, const std::string &prop, float value) {
@@ -85,8 +90,12 @@ namespace pe
                         else if (prop == "alpha_cutoff") m.alphaCutoff = value;
                         else if (prop == "occlusion_strength") m.occlusionStrength = value;
                         else if (prop == "normal_scale") m.normalScale = value;
+                        else if (prop == "ior") m.ior = value;
+                        else if (prop == "thickness_factor") m.thicknessFactor = value;
+                        else if (prop == "attenuation_distance") m.attenuationDistance = value;
                         else return;
                         m.dirty = true;
+                        s->SetMaterialDirty();
                         s->MarkNodeDirty(h.nodeId);
                     }));
 

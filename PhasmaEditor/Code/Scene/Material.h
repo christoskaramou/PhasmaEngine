@@ -14,6 +14,8 @@ namespace pe
         vec4 baseColorFactor;      // rgba
         vec4 emissiveTransmission; // xyz = emissive, w = transmissionFactor
         vec4 pbrParams;            // x = metallic, y = roughness, z = alphaCutoff, w = occlusionStrength
+        vec4 transmissionVolume;   // x = thicknessFactor, y = attenuationDistance, z = ior, w = unused
+        vec4 attenuationColor;     // xyz = attenuationColor, w = unused
     };
 
     // Identifies which VS/PS shaders a material uses per render pass.

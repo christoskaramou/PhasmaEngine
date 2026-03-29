@@ -1,6 +1,7 @@
 #include "PhasmaAgent/ASTChunker.h"
 #include <tree_sitter/api.h>
 #include <algorithm>
+#include <cstring>
 #include <set>
 #include <string>
 

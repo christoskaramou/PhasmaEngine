@@ -8,7 +8,7 @@
 
 namespace pe
 {
-    vk::PipelineColorBlendAttachmentState PipelineColorBlendAttachmentState::Default = vk::PipelineColorBlendAttachmentState(
+    PE_API vk::PipelineColorBlendAttachmentState PipelineColorBlendAttachmentState::Default = vk::PipelineColorBlendAttachmentState(
         /*.blendEnable            =*/VK_TRUE,
         /*.srcColorBlendFactor    =*/vk::BlendFactor::eSrcAlpha,
         /*.dstColorBlendFactor    =*/vk::BlendFactor::eOneMinusSrcAlpha,
@@ -18,7 +18,7 @@ namespace pe
         /*.alphaBlendOp           =*/vk::BlendOp::eAdd,
         /*.colorWriteMask         =*/vk::ColorComponentFlagBits::eR | vk::ColorComponentFlagBits::eG | vk::ColorComponentFlagBits::eB | vk::ColorComponentFlagBits::eA);
 
-    vk::PipelineColorBlendAttachmentState PipelineColorBlendAttachmentState::AdditiveColor = vk::PipelineColorBlendAttachmentState(
+    PE_API vk::PipelineColorBlendAttachmentState PipelineColorBlendAttachmentState::AdditiveColor = vk::PipelineColorBlendAttachmentState(
         /*.blendEnable            =*/VK_TRUE,
         /*.srcColorBlendFactor    =*/vk::BlendFactor::eOne,
         /*.dstColorBlendFactor    =*/vk::BlendFactor::eOne,
@@ -28,7 +28,7 @@ namespace pe
         /*.alphaBlendOp           =*/vk::BlendOp::eAdd,
         /*.colorWriteMask         =*/vk::ColorComponentFlagBits::eR | vk::ColorComponentFlagBits::eG | vk::ColorComponentFlagBits::eB | vk::ColorComponentFlagBits::eA);
 
-    vk::PipelineColorBlendAttachmentState PipelineColorBlendAttachmentState::TransparencyBlend = vk::PipelineColorBlendAttachmentState(
+    PE_API vk::PipelineColorBlendAttachmentState PipelineColorBlendAttachmentState::TransparencyBlend = vk::PipelineColorBlendAttachmentState(
         /*.blendEnable            =*/VK_TRUE,
         /*.srcColorBlendFactor    =*/vk::BlendFactor::eOne,
         /*.dstColorBlendFactor    =*/vk::BlendFactor::eOneMinusSrcColor,
@@ -38,7 +38,7 @@ namespace pe
         /*.alphaBlendOp           =*/vk::BlendOp::eAdd,
         /*.colorWriteMask         =*/vk::ColorComponentFlagBits::eR);
 
-    vk::PipelineColorBlendAttachmentState PipelineColorBlendAttachmentState::ParticlesBlend = vk::PipelineColorBlendAttachmentState(
+    PE_API vk::PipelineColorBlendAttachmentState PipelineColorBlendAttachmentState::ParticlesBlend = vk::PipelineColorBlendAttachmentState(
         /*.blendEnable            =*/VK_TRUE,
         /*.srcColorBlendFactor    =*/vk::BlendFactor::eOne,
         /*.dstColorBlendFactor    =*/vk::BlendFactor::eOneMinusSrcColor,

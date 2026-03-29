@@ -47,10 +47,10 @@ namespace pe
     }
 
     static const size_t N = ClampThreads(std::thread::hardware_concurrency());
-    ThreadPool ThreadPool::General(N);
-    ThreadPool ThreadPool::Update(N);
-    ThreadPool ThreadPool::Render(N);
-    ThreadPool ThreadPool::FW(1);
-    ThreadPool ThreadPool::GUI(N);
-    std::thread::id ThreadPool::MainThreadID = std::this_thread::get_id();
+    PE_API ThreadPool ThreadPool::General(N);
+    PE_API ThreadPool ThreadPool::Update(N);
+    PE_API ThreadPool ThreadPool::Render(N);
+    PE_API ThreadPool ThreadPool::FW(1);
+    PE_API ThreadPool ThreadPool::GUI(N);
+    PE_API std::thread::id ThreadPool::MainThreadID = std::this_thread::get_id();
 } // namespace pe
