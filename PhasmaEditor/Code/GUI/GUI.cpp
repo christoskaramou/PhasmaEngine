@@ -1566,13 +1566,12 @@ namespace pe
             ImGuiIO &io = ImGui::GetIO();
             if (!io.WantTextInput && io.KeyCtrl)
             {
-                bool undoRedoAllowed = GUIState::s_sceneViewFocused || GUIState::s_hierarchyFocused;
-                if (undoRedoAllowed && ImGui::IsKeyPressed(ImGuiKey_Z, false) && !io.KeyShift)
+                if (ImGui::IsKeyPressed(ImGuiKey_Z, false) && !io.KeyShift)
                 {
                     if (undoRedoRS && undoRedo.CanUndo())
                         undoRedo.Undo(undoRedoRS->GetScene());
                 }
-                if (undoRedoAllowed && ImGui::IsKeyPressed(ImGuiKey_Y, false))
+                if (ImGui::IsKeyPressed(ImGuiKey_Y, false))
                 {
                     if (undoRedoRS && undoRedo.CanRedo())
                         undoRedo.Redo(undoRedoRS->GetScene());

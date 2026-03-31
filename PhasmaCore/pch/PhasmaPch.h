@@ -68,6 +68,13 @@
 #include <sys/stat.h>
 #include <sys/sysinfo.h>
 #include <unistd.h>
+// Undefine X11 macros that conflict with third-party libraries (httplib, etc.)
+#ifdef Complex
+#undef Complex
+#endif
+#ifdef Success
+#undef Success
+#endif
 #endif
 
 #include "Base/Log.h"
