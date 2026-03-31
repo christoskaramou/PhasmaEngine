@@ -121,8 +121,7 @@ namespace pe
         uint32_t cascades = Settings::Get<GlobalSettings>().num_cascades;
         m_cascades.resize(cascades);
 
-        std::vector<float> cascadeSplits;
-        cascadeSplits.resize(cascades);
+        float cascadeSplits[8];
 
         float nearClip = camera->GetNearPlane();
         float farClip = 100.0f;

@@ -3,7 +3,10 @@
 #undef MemoryBarrier
 
 #ifdef PE_TRACY
-namespace tracy { class VkCtxScope; }
+namespace tracy
+{
+    class VkCtxScope;
+}
 #endif
 
 namespace pe

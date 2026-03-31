@@ -339,7 +339,7 @@ namespace pe
         void UpdateLights();
         NodeId *CreateLightNode(const std::string &name, const mat4 &localMatrix, NodeId *parent);
         void UpdateGeometry();
-        DrawBatch CullNodeBatch(uint32_t beginNode, uint32_t endNode, const Camera *camera, bool frustumCulling) const;
+        void CullNodeBatch(uint32_t beginNode, uint32_t endNode, const Camera *camera, bool frustumCulling, DrawBatch &out) const;
         void UpdateUniformData();
         void UpdateIndirectData();
         void ClearDrawInfos(bool reserveMax);
@@ -405,6 +405,7 @@ namespace pe
         std::vector<uint32_t> m_visibleIndirectIds;
         uint64_t m_drawInfosReservedForGeometryVersion = 0;
         bool m_hasDrawInfosReservation = false;
+        std::vector<DrawBatch> m_cullBatches;
 
         // Ray tracing
         std::vector<AccelerationStructure *> m_blases;

@@ -18,6 +18,13 @@ namespace pe
 
         auto &gSettings = Settings::Get<GlobalSettings>();
         static float rtScale = gSettings.render_scale;
+        static float lastCommittedScale = gSettings.render_scale;
+        // Sync slider when render_scale was changed externally (e.g. scene load)
+        if (gSettings.render_scale != lastCommittedScale)
+        {
+            rtScale = gSettings.render_scale;
+            lastCommittedScale = gSettings.render_scale;
+        }
 
         // Use the helper we moved to Helpers.h
         static bool sized = false;
@@ -38,13 +45,14 @@ namespace pe
         if (ImGui::Button("Apply"))
         {
             gSettings.render_scale = std::clamp(rtScale, 0.1f, 4.0f);
+            lastCommittedScale = gSettings.render_scale;
             RHII.WaitDeviceIdle();
             EventSystem::PushEvent(EventType::Resize);
         }
         ImGui::Separator();
 
         ImGui::Text("Present Mode");
-        static vk::PresentModeKHR currentPresentMode = RHII.GetSurface()->GetPresentMode();
+        vk::PresentModeKHR currentPresentMode = RHII.GetSurface()->GetPresentMode();
 
         if (ImGui::BeginCombo("##present_mode", RHII.PresentModeToString(currentPresentMode)))
         {

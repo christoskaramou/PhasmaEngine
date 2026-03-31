@@ -458,19 +458,23 @@ namespace pe
         }
     }
 
-    Scene::DrawBatch Scene::CullNodeBatch(uint32_t beginNode, uint32_t endNode, const Camera *camera, bool frustumCulling) const
+    void Scene::CullNodeBatch(uint32_t beginNode, uint32_t endNode, const Camera *camera, bool frustumCulling, DrawBatch &out) const
     {
-        DrawBatch batch{};
+        out.opaque.clear();
+        out.alphaCut.clear();
+        out.alphaBlend.clear();
+        out.transmission.clear();
+
         if (!camera)
-            return batch;
+            return;
 
         const vec3 cameraPosition = camera->GetPosition();
         const int batchNodeCount = std::max(1, static_cast<int>(endNode - beginNode));
         const int secondaryEstimated = std::max(1, batchNodeCount / 8);
-        batch.opaque.reserve(batchNodeCount);
-        batch.alphaCut.reserve(secondaryEstimated);
-        batch.alphaBlend.reserve(secondaryEstimated);
-        batch.transmission.reserve(secondaryEstimated);
+        out.opaque.reserve(batchNodeCount);
+        out.alphaCut.reserve(secondaryEstimated);
+        out.alphaBlend.reserve(secondaryEstimated);
+        out.transmission.reserve(secondaryEstimated);
 
         for (uint32_t i = beginNode; i < endNode; i++)
         {
@@ -497,21 +501,19 @@ namespace pe
             switch (mesh.renderType)
             {
             case RenderType::Opaque:
-                batch.opaque.push_back(DrawInfo{m_nodeIds[i], distance, doubleSided});
+                out.opaque.push_back(DrawInfo{m_nodeIds[i], distance, doubleSided});
                 break;
             case RenderType::AlphaCut:
-                batch.alphaCut.push_back(DrawInfo{m_nodeIds[i], distance, doubleSided});
+                out.alphaCut.push_back(DrawInfo{m_nodeIds[i], distance, doubleSided});
                 break;
             case RenderType::AlphaBlend:
-                batch.alphaBlend.push_back(DrawInfo{m_nodeIds[i], distance, doubleSided});
+                out.alphaBlend.push_back(DrawInfo{m_nodeIds[i], distance, doubleSided});
                 break;
             case RenderType::Transmission:
-                batch.transmission.push_back(DrawInfo{m_nodeIds[i], distance, doubleSided});
+                out.transmission.push_back(DrawInfo{m_nodeIds[i], distance, doubleSided});
                 break;
             }
         }
-
-        return batch;
     }
 
     void Scene::UpdateUniformData()
@@ -674,18 +676,29 @@ namespace pe
             static constexpr uint32_t kCullBatchSize = 128;
 
             const uint32_t nodeCount = GetNodeCount();
-            std::vector<std::shared_future<DrawBatch>> futures;
-            futures.reserve((nodeCount + kCullBatchSize - 1u) / kCullBatchSize);
+            const uint32_t numBatches = (nodeCount + kCullBatchSize - 1u) / kCullBatchSize;
+            m_cullBatches.resize(numBatches);
 
-            for (uint32_t beginNode = 0; beginNode < nodeCount; beginNode += kCullBatchSize)
+            std::vector<std::shared_future<void>> futures;
+            futures.reserve(numBatches);
+
+            for (uint32_t batchIdx = 0; batchIdx < numBatches; batchIdx++)
             {
+                const uint32_t beginNode = batchIdx * kCullBatchSize;
                 const uint32_t endNode = std::min(beginNode + kCullBatchSize, nodeCount);
-                futures.push_back(ThreadPool::Update.Enqueue(&Scene::CullNodeBatch, this, beginNode, endNode, camera, frustumCulling));
+                DrawBatch &batchRef = m_cullBatches[batchIdx];
+                futures.push_back(ThreadPool::Update.Enqueue(
+                    [this, beginNode, endNode, camera, frustumCulling, &batchRef]()
+                    {
+                        CullNodeBatch(beginNode, endNode, camera, frustumCulling, batchRef);
+                    }));
             }
 
             for (auto &future : futures)
+                future.get();
+
+            for (const DrawBatch &batch : m_cullBatches)
             {
-                const DrawBatch &batch = future.get();
                 m_drawInfosOpaque.insert(m_drawInfosOpaque.end(), batch.opaque.begin(), batch.opaque.end());
                 m_drawInfosAlphaCut.insert(m_drawInfosAlphaCut.end(), batch.alphaCut.begin(), batch.alphaCut.end());
                 m_drawInfosAlphaBlend.insert(m_drawInfosAlphaBlend.end(), batch.alphaBlend.begin(), batch.alphaBlend.end());

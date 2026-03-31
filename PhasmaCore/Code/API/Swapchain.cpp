@@ -11,18 +11,37 @@ namespace pe
     {
         auto capabilities = RHII.GetGpu().getSurfaceCapabilitiesKHR(surface->ApiHandle());
 
-        const Rect2Du &actualExtent = surface->GetActualExtent();
-        m_extent.x = actualExtent.x;
-        m_extent.y = actualExtent.y;
-        m_extent.width = actualExtent.width;
-        m_extent.height = actualExtent.height;
+        // Per Vulkan spec: use currentExtent when it is defined (not UINT32_MAX).
+        // Only clamp to [min,max] when the surface lets us choose freely (Wayland etc.).
+        vk::Extent2D chosenExtent;
+        if (capabilities.currentExtent.width != UINT32_MAX)
+        {
+            chosenExtent = capabilities.currentExtent;
+        }
+        else
+        {
+            const Rect2Du &actualExtent = surface->GetActualExtent();
+            chosenExtent.width = std::clamp(actualExtent.width,
+                                            capabilities.minImageExtent.width,
+                                            capabilities.maxImageExtent.width);
+            chosenExtent.height = std::clamp(actualExtent.height,
+                                             capabilities.minImageExtent.height,
+                                             capabilities.maxImageExtent.height);
+        }
+
+        // Keep surface and swapchain extents in sync.
+        surface->SetActualExtent({0, 0, chosenExtent.width, chosenExtent.height});
+        m_extent.x = 0;
+        m_extent.y = 0;
+        m_extent.width = chosenExtent.width;
+        m_extent.height = chosenExtent.height;
 
         vk::SwapchainCreateInfoKHR swapchainCreateInfo{};
         swapchainCreateInfo.surface = surface->ApiHandle();
         swapchainCreateInfo.minImageCount = capabilities.minImageCount + 1;
         swapchainCreateInfo.imageFormat = surface->GetFormat();
         swapchainCreateInfo.imageColorSpace = surface->GetColorSpace();
-        swapchainCreateInfo.imageExtent = vk::Extent2D{m_extent.width, m_extent.height};
+        swapchainCreateInfo.imageExtent = chosenExtent;
         swapchainCreateInfo.imageArrayLayers = 1;
         swapchainCreateInfo.imageUsage = vk::ImageUsageFlagBits::eColorAttachment | vk::ImageUsageFlagBits::eTransferDst;
         swapchainCreateInfo.preTransform = capabilities.currentTransform;
@@ -44,8 +63,8 @@ namespace pe
             m_images[i]->m_name = "Swapchain_image_" + std::to_string(i);
             m_images[i]->m_createInfo = Image::CreateInfoInit();
             m_images[i]->m_createInfo.format = surface->GetFormat();
-            m_images[i]->m_createInfo.extent.width = actualExtent.width;
-            m_images[i]->m_createInfo.extent.height = actualExtent.height;
+            m_images[i]->m_createInfo.extent.width = chosenExtent.width;
+            m_images[i]->m_createInfo.extent.height = chosenExtent.height;
             m_images[i]->m_trackInfos.resize(1);
             ImageTrackInfo info{};
             info.image = m_images[i];

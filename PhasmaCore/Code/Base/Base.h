@@ -1,5 +1,6 @@
 #pragma once
 #include "Base/PhasmaExport.h"
+#include "Base/PeTracker.h"
 
 #if defined(PE_LINUX)
 #include <cxxabi.h>
@@ -264,12 +265,9 @@ namespace pe
             T *ptr = new T(std::forward<Params>(params)...);
 
 #if defined(PE_TRACK_RESOURCES)
-            {
-                std::lock_guard<std::mutex> lock(s_mutex);
-                s_handles.push_back(ptr);
-                void *handle = (void *)detail::ToUintPtr(ptr->ApiHandle());
-                PE_INFO("Object %s created (Handle: %p)", Demangle(typeid(API_HANDLE).name()).c_str(), handle);
-            }
+            PeTracker::Track(typeid(T), (void *)ptr);
+            void *handle = (void *)detail::ToUintPtr(ptr->ApiHandle());
+            PE_INFO("Object %s created (Handle: %p)", Demangle(typeid(API_HANDLE).name()).c_str(), handle);
 #endif
 
             return ptr;
@@ -288,11 +286,8 @@ namespace pe
                 delete ptr; // should call ~T() destructor
 
 #if defined(PE_TRACK_RESOURCES)
-                {
-                    std::lock_guard<std::mutex> lock(s_mutex);
-                    std::erase(s_handles, ptr);
-                    PE_INFO("Object %s destroyed (Handle: %p)", Demangle(typeid(API_HANDLE).name()).c_str(), handle);
-                }
+                PeTracker::Untrack(typeid(T), (void *)ptr);
+                PE_INFO("Object %s destroyed (Handle: %p)", Demangle(typeid(API_HANDLE).name()).c_str(), handle);
 #endif
             }
 
@@ -306,8 +301,12 @@ namespace pe
 #if defined(PE_TRACK_RESOURCES)
         static std::vector<T *> GetHandles()
         {
-            std::lock_guard<std::mutex> lock(s_mutex);
-            return {s_handles.begin(), s_handles.end()};
+            auto ptrs = PeTracker::GetHandles(typeid(T));
+            std::vector<T *> result;
+            result.reserve(ptrs.size());
+            for (void *p : ptrs)
+                result.push_back(static_cast<T *>(p));
+            return result;
         }
 #endif
 
@@ -316,11 +315,5 @@ namespace pe
         PeHandle(const API_HANDLE &apiHandle) : m_apiHandle{apiHandle} {}
 
         API_HANDLE m_apiHandle;
-
-#if defined(PE_TRACK_RESOURCES)
-    private:
-        inline static std::deque<T *> s_handles{};
-        inline static std::mutex s_mutex{};
-#endif
     };
 } // namespace pe
