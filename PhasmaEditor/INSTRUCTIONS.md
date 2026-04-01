@@ -98,7 +98,7 @@ wrangling. Instead, set up native MCP tool injection once:
 
 **Step 1 — enable WSL mirrored networking** (one-time, requires WSL 2.0+ / Windows 11 22H2+):
 
-Create or edit `C:\Users\Christos\.wslconfig`:
+Create or edit `C:\Users\<USERNAME>\.wslconfig`:
 ```ini
 [wsl2]
 networkingMode=mirrored
