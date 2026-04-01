@@ -25,7 +25,8 @@ namespace pe
         Component_Physics = 1 << 2,
         Component_Camera = 1 << 3,
         Component_Script = 1 << 4,
-        Component_GpuPending = 1 << 5, // Node geometry not yet uploaded to GPU
+        Component_Audio = 1 << 5,
+        Component_GpuPending = 1 << 6, // Node geometry not yet uploaded to GPU
     };
 
     // Lightweight mesh descriptor — references into Scene's data stores

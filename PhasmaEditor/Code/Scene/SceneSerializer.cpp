@@ -16,6 +16,10 @@
 #include "Physics/PhysicsTypes.h"
 #include "Systems/PhysicsSystem.h"
 #endif
+#ifdef PE_AUDIO
+#include "Audio/AudioTypes.h"
+#include "Systems/AudioSystem.h"
+#endif
 
 #define _SILENCE_CXX17_ITERATOR_BASE_CLASS_DEPRECATION_WARNING
 #include "rapidjson/document.h"
@@ -382,6 +386,29 @@ namespace pe
                         phys.AddMember("capsule_half_height", desc->capsuleHalfHeight, allocator);
                         phys.AddMember("capsule_radius", desc->capsuleRadius, allocator);
                         nodeObj.AddMember("physics", phys.Move(), allocator);
+                    }
+                }
+            }
+#endif
+
+#ifdef PE_AUDIO
+            if (flags & Component_Audio)
+            {
+                if (auto *as = GetGlobalSystem<AudioSystem>())
+                {
+                    const AudioSourceDesc *desc = as->GetSourceDesc(node);
+                    if (desc)
+                    {
+                        rapidjson::Value aud(rapidjson::kObjectType);
+                        aud.AddMember("file", rapidjson::Value(desc->filePath.c_str(), allocator).Move(), allocator);
+                        aud.AddMember("volume", desc->volume, allocator);
+                        aud.AddMember("pitch", desc->pitch, allocator);
+                        aud.AddMember("min_distance", desc->minDistance, allocator);
+                        aud.AddMember("max_distance", desc->maxDistance, allocator);
+                        aud.AddMember("loop", desc->loop, allocator);
+                        aud.AddMember("spatial", desc->spatial, allocator);
+                        aud.AddMember("autoplay", desc->autoplay, allocator);
+                        nodeObj.AddMember("audio", aud.Move(), allocator);
                     }
                 }
             }
@@ -757,6 +784,10 @@ namespace pe
                 ps->StopSimulation();
             ps->ClearAllBodies();
         }
+#endif
+#ifdef PE_AUDIO
+        if (auto *as = GetGlobalSystem<AudioSystem>())
+            as->ClearAllSources();
 #endif
 
         // Clear existing scene: free SoA data, delete models, clear geometry stores
@@ -1215,6 +1246,37 @@ namespace pe
                         if (pv.HasMember("capsule_radius"))
                             desc.capsuleRadius = pv["capsule_radius"].GetFloat();
                         ps->AddBody(*this, node, desc);
+                    }
+                }
+#endif
+#ifdef PE_AUDIO
+                if (auto *as = GetGlobalSystem<AudioSystem>())
+                {
+                    for (rapidjson::SizeType ni = 0; ni < nodesVal.Size(); ni++)
+                    {
+                        const auto &nv = nodesVal[ni];
+                        NodeId *node = nodeMap[ni];
+                        if (!node || !nv.HasMember("audio"))
+                            continue;
+                        const auto &av = nv["audio"];
+                        AudioSourceDesc desc;
+                        if (av.HasMember("file"))
+                            desc.filePath = av["file"].GetString();
+                        if (av.HasMember("volume"))
+                            desc.volume = av["volume"].GetFloat();
+                        if (av.HasMember("pitch"))
+                            desc.pitch = av["pitch"].GetFloat();
+                        if (av.HasMember("min_distance"))
+                            desc.minDistance = av["min_distance"].GetFloat();
+                        if (av.HasMember("max_distance"))
+                            desc.maxDistance = av["max_distance"].GetFloat();
+                        if (av.HasMember("loop"))
+                            desc.loop = av["loop"].GetBool();
+                        if (av.HasMember("spatial"))
+                            desc.spatial = av["spatial"].GetBool();
+                        if (av.HasMember("autoplay"))
+                            desc.autoplay = av["autoplay"].GetBool();
+                        as->AddSource(*this, node, desc);
                     }
                 }
 #endif
@@ -1716,6 +1778,29 @@ namespace pe
             }
 #endif
 
+#ifdef PE_AUDIO
+            if (flags & Component_Audio)
+            {
+                if (auto *as = GetGlobalSystem<AudioSystem>())
+                {
+                    const AudioSourceDesc *desc = as->GetSourceDesc(node);
+                    if (desc)
+                    {
+                        rapidjson::Value aud(rapidjson::kObjectType);
+                        aud.AddMember("file", rapidjson::Value(desc->filePath.c_str(), allocator).Move(), allocator);
+                        aud.AddMember("volume", desc->volume, allocator);
+                        aud.AddMember("pitch", desc->pitch, allocator);
+                        aud.AddMember("min_distance", desc->minDistance, allocator);
+                        aud.AddMember("max_distance", desc->maxDistance, allocator);
+                        aud.AddMember("loop", desc->loop, allocator);
+                        aud.AddMember("spatial", desc->spatial, allocator);
+                        aud.AddMember("autoplay", desc->autoplay, allocator);
+                        nodeObj.AddMember("audio", aud.Move(), allocator);
+                    }
+                }
+            }
+#endif
+
             nodesArr.PushBack(nodeObj.Move(), allocator);
         }
         d.AddMember("nodes", nodesArr.Move(), allocator);
@@ -2203,6 +2288,45 @@ namespace pe
                     }
                 }
 #endif
+#ifdef PE_AUDIO
+                if (auto *as = GetGlobalSystem<AudioSystem>())
+                {
+                    for (uint32_t ni = 0; ni < snapshotNodeCount; ni++)
+                    {
+                        const auto &nv = snapshotNodes[ni];
+                        NodeId *node = m_nodeIds[ni];
+                        if (nv.HasMember("audio"))
+                        {
+                            const auto &av = nv["audio"];
+                            AudioSourceDesc desc;
+                            if (av.HasMember("file"))
+                                desc.filePath = av["file"].GetString();
+                            if (av.HasMember("volume"))
+                                desc.volume = av["volume"].GetFloat();
+                            if (av.HasMember("pitch"))
+                                desc.pitch = av["pitch"].GetFloat();
+                            if (av.HasMember("min_distance"))
+                                desc.minDistance = av["min_distance"].GetFloat();
+                            if (av.HasMember("max_distance"))
+                                desc.maxDistance = av["max_distance"].GetFloat();
+                            if (av.HasMember("loop"))
+                                desc.loop = av["loop"].GetBool();
+                            if (av.HasMember("spatial"))
+                                desc.spatial = av["spatial"].GetBool();
+                            if (av.HasMember("autoplay"))
+                                desc.autoplay = av["autoplay"].GetBool();
+                            if (!as->HasSource(node))
+                                as->AddSource(*this, node, desc);
+                            else if (auto *existing = as->GetSourceDesc(node))
+                                *existing = desc;
+                        }
+                        else if (as->HasSource(node))
+                        {
+                            as->RemoveSource(node);
+                        }
+                    }
+                }
+#endif
 
                 // Mark all nodes dirty
                 for (uint32_t ni = 0; ni < GetNodeCount(); ni++)
@@ -2228,6 +2352,10 @@ namespace pe
 #ifdef PE_PHYSICS
                 if (auto *ps = GetGlobalSystem<PhysicsSystem>())
                     ps->ClearAllBodies();
+#endif
+#ifdef PE_AUDIO
+                if (auto *as = GetGlobalSystem<AudioSystem>())
+                    as->ClearAllSources();
 #endif
 
                 // Clear old scene data synchronously (mirrors LoadSceneApply)
@@ -2539,6 +2667,37 @@ namespace pe
                                 desc.capsuleRadius = pv["capsule_radius"].GetFloat();
                             ps->AddBody(*this, node, desc);
                         }
+                    }
+                }
+#endif
+#ifdef PE_AUDIO
+                if (auto *as = GetGlobalSystem<AudioSystem>())
+                {
+                    for (uint32_t ni = 0; ni < snapshotNodeCount; ni++)
+                    {
+                        const auto &nv = snapshotNodes[ni];
+                        NodeId *node = nodeMap[ni];
+                        if (!node || !nv.HasMember("audio"))
+                            continue;
+                        const auto &av = nv["audio"];
+                        AudioSourceDesc desc;
+                        if (av.HasMember("file"))
+                            desc.filePath = av["file"].GetString();
+                        if (av.HasMember("volume"))
+                            desc.volume = av["volume"].GetFloat();
+                        if (av.HasMember("pitch"))
+                            desc.pitch = av["pitch"].GetFloat();
+                        if (av.HasMember("min_distance"))
+                            desc.minDistance = av["min_distance"].GetFloat();
+                        if (av.HasMember("max_distance"))
+                            desc.maxDistance = av["max_distance"].GetFloat();
+                        if (av.HasMember("loop"))
+                            desc.loop = av["loop"].GetBool();
+                        if (av.HasMember("spatial"))
+                            desc.spatial = av["spatial"].GetBool();
+                        if (av.HasMember("autoplay"))
+                            desc.autoplay = av["autoplay"].GetBool();
+                        as->AddSource(*this, node, desc);
                     }
                 }
 #endif

@@ -10,6 +10,9 @@
 #ifdef PE_PHYSICS
 #include "Systems/PhysicsSystem.h"
 #endif
+#ifdef PE_AUDIO
+#include "Systems/AudioSystem.h"
+#endif
 #include "Window/Window.h"
 #include "imgui/ImGuizmo.h"
 #include "imgui/imgui_impl_sdl2.h"
@@ -95,6 +98,9 @@ namespace pe
         CreateGlobalSystem<ScriptSystem>()->Init(nullptr);
 #ifdef PE_PHYSICS
         CreateGlobalSystem<PhysicsSystem>()->Init(nullptr);
+#endif
+#ifdef PE_AUDIO
+        CreateGlobalSystem<AudioSystem>()->Init(nullptr);
 #endif
         ModelAsset::GetDefaultResources(cmd);
         cmd->End();

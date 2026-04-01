@@ -20,6 +20,11 @@
 #include "Physics/PhysicsTypes.h"
 #include "Systems/PhysicsSystem.h"
 #endif
+#ifdef PE_AUDIO
+#include "AudioWidget.h"
+#include "Audio/AudioTypes.h"
+#include "Systems/AudioSystem.h"
+#endif
 
 namespace pe
 {
@@ -248,6 +253,20 @@ namespace pe
                 }
 #endif
 
+#ifdef PE_AUDIO
+                if (!(flags & Component_Audio))
+                {
+                    if (ImGui::MenuItem("Audio Source"))
+                    {
+                        if (auto *as = GetGlobalSystem<AudioSystem>())
+                        {
+                            AudioSourceDesc desc;
+                            as->AddSource(scene, node, desc);
+                        }
+                    }
+                }
+#endif
+
                 if (!(flags & Component_Script))
                 {
                     if (ImGui::BeginMenu("Lua Script"))
@@ -280,6 +299,9 @@ namespace pe
         // Set when the selected node can receive a .lua script drop;
         // consumed after the switch to place the whole-window drop target.
         NodeId *scriptDropNode = nullptr;
+#ifdef PE_AUDIO
+        NodeId *audioDropNode = nullptr;
+#endif
 
         switch (sel.GetSelectionType())
         {
@@ -292,6 +314,9 @@ namespace pe
             uint32_t flags = scene.GetComponentFlags(node);
             if (!(flags & (Component_Camera | Component_Light)))
                 scriptDropNode = node;
+#ifdef PE_AUDIO
+            audioDropNode = node;
+#endif
 
             // Transform is always shown
             drawTransform();
@@ -371,6 +396,21 @@ namespace pe
             }
 #endif
 
+#ifdef PE_AUDIO
+            // Audio component
+            if (flags & Component_Audio)
+            {
+                ImGui::Separator();
+                if (ImGui::CollapsingHeader("Audio Source", ImGuiTreeNodeFlags_DefaultOpen))
+                {
+                    ImGui::Indent(8.f);
+                    if (auto *w = m_gui->GetWidget<AudioWidget>())
+                        w->DrawEmbed(node, &scene);
+                    ImGui::Unindent(8.f);
+                }
+            }
+#endif
+
             if (!(flags & (Component_Camera | Component_Light)))
                 drawAddComponentButton(node);
             break;
@@ -433,6 +473,64 @@ namespace pe
                 ImGui::EndDragDropTarget();
             }
         }
+
+#ifdef PE_AUDIO
+        // Whole-window audio file drop target — drop .wav/.mp3/.flac/.ogg onto
+        // any selected node to create or update an audio source component
+        if (audioDropNode)
+        {
+            static const char *audioExts[] = {".wav", ".mp3", ".flac", ".ogg"};
+            auto isAudioFile = [&](const std::string &p)
+            {
+                std::string ext = std::filesystem::path(p).extension().string();
+                std::transform(ext.begin(), ext.end(), ext.begin(), ::tolower);
+                for (auto *e : audioExts)
+                    if (ext == e)
+                        return true;
+                return false;
+            };
+
+            const ImGuiPayload *drag = ImGui::GetDragDropPayload();
+            if (drag && strcmp(drag->DataType, "CONTENT_BROWSER_ITEM") == 0 && drag->DataSize > 1)
+            {
+                std::string dragPath((const char *)drag->Data, drag->DataSize - 1);
+                if (isAudioFile(dragPath))
+                {
+                    ImVec2 p0 = ImGui::GetWindowPos();
+                    ImVec2 p1(p0.x + ImGui::GetWindowSize().x, p0.y + ImGui::GetWindowSize().y);
+                    ImGui::GetWindowDrawList()->AddRect(p0, p1, IM_COL32(80, 140, 230, 220), 4.f, 0, 2.f);
+                }
+            }
+
+            ImRect winRect(ImGui::GetWindowPos(),
+                           ImVec2(ImGui::GetWindowPos().x + ImGui::GetWindowSize().x,
+                                  ImGui::GetWindowPos().y + ImGui::GetWindowSize().y));
+            if (ImGui::BeginDragDropTargetCustom(winRect, ImGui::GetID("##audio_drop")))
+            {
+                if (const ImGuiPayload *p = ImGui::AcceptDragDropPayload("CONTENT_BROWSER_ITEM"))
+                {
+                    std::string path((const char *)p->Data, p->DataSize - 1);
+                    if (isAudioFile(path))
+                    {
+                        if (auto *as = GetGlobalSystem<AudioSystem>())
+                        {
+                            if (!as->HasSource(audioDropNode))
+                            {
+                                AudioSourceDesc desc;
+                                desc.filePath = path;
+                                as->AddSource(scene, audioDropNode, desc);
+                            }
+                            else if (auto *desc = as->GetSourceDesc(audioDropNode))
+                            {
+                                desc->filePath = path;
+                            }
+                        }
+                    }
+                }
+                ImGui::EndDragDropTarget();
+            }
+        }
+#endif
 
         ImGui::End();
     }

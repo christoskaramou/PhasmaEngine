@@ -6,6 +6,9 @@
 #ifdef PE_PHYSICS
 #include "Systems/PhysicsSystem.h"
 #endif
+#ifdef PE_AUDIO
+#include "Systems/AudioSystem.h"
+#endif
 
 namespace pe
 {
@@ -115,6 +118,13 @@ namespace pe
         {
             if (auto *ps = GetGlobalSystem<PhysicsSystem>())
                 ps->RemoveBody(node);
+        }
+#endif
+#ifdef PE_AUDIO
+        if (compFlags & Component_Audio)
+        {
+            if (auto *as = GetGlobalSystem<AudioSystem>())
+                as->RemoveSource(node);
         }
 #endif
 

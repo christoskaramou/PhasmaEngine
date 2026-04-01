@@ -41,6 +41,10 @@
 #include "Widgets/PhysicsWidget.h"
 #include "Systems/PhysicsSystem.h"
 #endif
+#ifdef PE_AUDIO
+#include "Widgets/AudioWidget.h"
+#include "Systems/AudioSystem.h"
+#endif
 #include "UndoRedo.h"
 #include <nlohmann/json.hpp>
 #include "imgui/imgui_impl_sdl2.h"
@@ -1422,26 +1426,33 @@ namespace pe
 #ifdef PE_PHYSICS
         auto physicsWidget = std::make_shared<PhysicsWidget>();
 #endif
+#ifdef PE_AUDIO
+        auto audioWidget = std::make_shared<AudioWidget>();
+#endif
         // Console added early to potentially influence tab ordering (Leftmost)
-        m_widgets = {console,
-                     properties,
-                     profiler,
-                     models,
-                     assetInfo,
-                     sceneView,
-                     loading,
-                     fileBrowser,
-                     fileSelector,
-                     hierarchy,
-                     particles,
-                     cameraWidget,
-                     transformWidget,
-                     meshWidget,
-                     lightWidget,
-                     globalWidget,
-                     scriptEditor,
+        m_widgets = {
+            console,
+            properties,
+            profiler,
+            models,
+            assetInfo,
+            sceneView,
+            loading,
+            fileBrowser,
+            fileSelector,
+            hierarchy,
+            particles,
+            cameraWidget,
+            transformWidget,
+            meshWidget,
+            lightWidget,
+            globalWidget,
+            scriptEditor,
 #ifdef PE_PHYSICS
-                     physicsWidget,
+            physicsWidget,
+#endif
+#ifdef PE_AUDIO
+            audioWidget,
 #endif
         };
 
@@ -1841,6 +1852,10 @@ namespace pe
             if (auto *ps = GetGlobalSystem<PhysicsSystem>())
                 ps->StartSimulation(rs->GetScene());
 #endif
+#ifdef PE_AUDIO
+            if (auto *as = GetGlobalSystem<AudioSystem>())
+                as->StartPlayMode(rs->GetScene());
+#endif
         }
     }
 
@@ -1849,6 +1864,10 @@ namespace pe
         RendererSystem *rs = GetGlobalSystem<RendererSystem>();
         if (rs)
         {
+#ifdef PE_AUDIO
+            if (auto *as = GetGlobalSystem<AudioSystem>())
+                as->StopPlayMode();
+#endif
 #ifdef PE_PHYSICS
             if (auto *ps = GetGlobalSystem<PhysicsSystem>())
                 ps->StopSimulation();
