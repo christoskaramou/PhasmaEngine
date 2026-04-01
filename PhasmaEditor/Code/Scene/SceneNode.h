@@ -13,6 +13,7 @@ namespace pe
     struct NodeId
     {
         uint32_t index; // current position in Scene's SoA arrays
+        uint32_t revision = 0; // incremented whenever this NodeId is recycled for a new logical node
     };
 
     // Component presence flags — editor reads these to know which panels to show

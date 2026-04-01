@@ -158,16 +158,18 @@ namespace pe
             m_gui.Update();
         }
 
-        // Scene
+        // Flush any deferred GPU work (primitive batching, async load completion)
+        // MUST happen before Scene::Update() so that rebuilt buffers exist
+        // before UpdateUniformData/UpdateIndirectData populate them.
+        if (m_scene.IsGeometryDirty())
+            WaitAllFramesCommands();
+        m_scene.FlushPendingGpuWork();
+
+        // Scene (populates uniforms/indirects into the current buffers)
         {
             PE_PROFILE_SCOPE("Scene");
             m_scene.Update();
         }
-
-        // Flush any deferred GPU work (primitive batching, async load completion)
-        if (m_scene.IsGeometryDirty())
-            WaitAllFramesCommands();
-        m_scene.FlushPendingGpuWork();
 
         {
             PE_PROFILE_SCOPE("Render Graph Pass States");

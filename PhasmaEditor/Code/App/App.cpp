@@ -7,6 +7,9 @@
 #include "Script/ScriptSystem.h"
 #include "Systems/PostProcessSystem.h"
 #include "Systems/RendererSystem.h"
+#ifdef PE_PHYSICS
+#include "Systems/PhysicsSystem.h"
+#endif
 #include "Window/Window.h"
 #include "imgui/ImGuizmo.h"
 #include "imgui/imgui_impl_sdl2.h"
@@ -90,6 +93,9 @@ namespace pe
         CreateGlobalSystem<RendererSystem>()->Init(cmd);
         CreateGlobalSystem<PostProcessSystem>()->Init(cmd);
         CreateGlobalSystem<ScriptSystem>()->Init(nullptr);
+#ifdef PE_PHYSICS
+        CreateGlobalSystem<PhysicsSystem>()->Init(nullptr);
+#endif
         ModelAsset::GetDefaultResources(cmd);
         cmd->End();
         queue->Submit(1, &cmd, nullptr, nullptr);

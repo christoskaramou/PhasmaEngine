@@ -37,6 +37,10 @@
 #include "Widgets/ScriptEditor.h"
 #include "PhasmaAgent/CodebaseIndexer.h"
 #include "Widgets/TransformWidget.h"
+#ifdef PE_PHYSICS
+#include "Widgets/PhysicsWidget.h"
+#include "Systems/PhysicsSystem.h"
+#endif
 #include "UndoRedo.h"
 #include <nlohmann/json.hpp>
 #include "imgui/imgui_impl_sdl2.h"
@@ -1415,6 +1419,9 @@ namespace pe
         auto lightWidget = std::make_shared<LightWidget>();
         auto globalWidget = std::make_shared<GlobalWidget>();
         auto scriptEditor = std::make_shared<ScriptEditor>();
+#ifdef PE_PHYSICS
+        auto physicsWidget = std::make_shared<PhysicsWidget>();
+#endif
         // Console added early to potentially influence tab ordering (Leftmost)
         m_widgets = {console,
                      properties,
@@ -1432,7 +1439,11 @@ namespace pe
                      meshWidget,
                      lightWidget,
                      globalWidget,
-                     scriptEditor};
+                     scriptEditor,
+#ifdef PE_PHYSICS
+                     physicsWidget,
+#endif
+        };
 
         // Initialize Core Logging and attach Console
         Log::Attach([console](const std::string &msg, LogType type)
@@ -1826,6 +1837,10 @@ namespace pe
             rs->GetScene().SaveScene("temp_play.pescene");
             GUIState::s_playMode = true;
             GUIState::s_isPaused = false;
+#ifdef PE_PHYSICS
+            if (auto *ps = GetGlobalSystem<PhysicsSystem>())
+                ps->StartSimulation(rs->GetScene());
+#endif
         }
     }
 
@@ -1834,6 +1849,10 @@ namespace pe
         RendererSystem *rs = GetGlobalSystem<RendererSystem>();
         if (rs)
         {
+#ifdef PE_PHYSICS
+            if (auto *ps = GetGlobalSystem<PhysicsSystem>())
+                ps->StopSimulation();
+#endif
             GUIState::s_playMode = false;
             GUIState::s_isPaused = false;
             rs->GetScene().LoadScene("temp_play.pescene");

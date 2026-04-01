@@ -425,7 +425,7 @@ namespace pe
     {
         for (auto &inst : m_nodeInstances)
         {
-            if (inst.handle.nodeId == node)
+            if (inst.handle.nodeId == node && node && inst.handle.nodeRevision == node->revision)
                 return &inst;
         }
         return nullptr;

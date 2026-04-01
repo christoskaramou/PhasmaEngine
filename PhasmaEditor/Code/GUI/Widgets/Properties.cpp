@@ -15,6 +15,11 @@
 #include "ScriptEditor.h"
 #include "Systems/RendererSystem.h"
 #include "TransformWidget.h"
+#ifdef PE_PHYSICS
+#include "PhysicsWidget.h"
+#include "Physics/PhysicsTypes.h"
+#include "Systems/PhysicsSystem.h"
+#endif
 
 namespace pe
 {
@@ -97,6 +102,12 @@ namespace pe
                 return;
             lua_State *L = ss->GetLua().lua_state();
             lua_rawgeti(L, LUA_REGISTRYINDEX, inst->exposedRef);
+            if (!lua_istable(L, -1))
+            {
+                PE_WARN("[Properties] Invalid exposed table ref for node script '%s'", scriptPath.c_str());
+                lua_pop(L, 1);
+                return;
+            }
             sol::table exposed(L, -1);
             lua_pop(L, 1);
 
@@ -107,21 +118,30 @@ namespace pe
                 {
                 case ExposedVar::Type::Number:
                 {
-                    float val = static_cast<float>(exposed.get<double>(var.name));
+                    sol::optional<double> opt = exposed[var.name];
+                    if (!opt)
+                        break;
+                    float val = static_cast<float>(*opt);
                     if (ImGui::DragFloat(var.name.c_str(), &val, 0.1f))
                         exposed[var.name] = static_cast<double>(val);
                     break;
                 }
                 case ExposedVar::Type::Bool:
                 {
-                    bool val = exposed.get<bool>(var.name);
+                    sol::optional<bool> opt = exposed[var.name];
+                    if (!opt)
+                        break;
+                    bool val = *opt;
                     if (ImGui::Checkbox(var.name.c_str(), &val))
                         exposed[var.name] = val;
                     break;
                 }
                 case ExposedVar::Type::String:
                 {
-                    std::string val = exposed.get<std::string>(var.name);
+                    sol::optional<std::string> opt = exposed[var.name];
+                    if (!opt)
+                        break;
+                    std::string val = *opt;
                     char buf[256];
                     std::snprintf(buf, sizeof(buf), "%s", val.c_str());
                     if (ImGui::InputText(var.name.c_str(), buf, sizeof(buf)))
@@ -213,6 +233,20 @@ namespace pe
                         ImGui::EndMenu();
                     }
                 }
+
+#ifdef PE_PHYSICS
+                if (!(flags & Component_Physics))
+                {
+                    if (ImGui::MenuItem("Physics Body"))
+                    {
+                        if (auto *ps = GetGlobalSystem<PhysicsSystem>())
+                        {
+                            PhysicsBodyDesc desc;
+                            ps->AddBody(scene, node, desc);
+                        }
+                    }
+                }
+#endif
 
                 if (!(flags & Component_Script))
                 {
@@ -321,6 +355,21 @@ namespace pe
                         w->DrawEmbed(&scene, lt, idx);
                 }
             }
+
+#ifdef PE_PHYSICS
+            // Physics component
+            if (flags & Component_Physics)
+            {
+                ImGui::Separator();
+                if (ImGui::CollapsingHeader("Physics Component", ImGuiTreeNodeFlags_DefaultOpen))
+                {
+                    ImGui::Indent(8.f);
+                    if (auto *w = m_gui->GetWidget<PhysicsWidget>())
+                        w->DrawEmbed(node, &scene);
+                    ImGui::Unindent(8.f);
+                }
+            }
+#endif
 
             if (!(flags & (Component_Camera | Component_Light)))
                 drawAddComponentButton(node);

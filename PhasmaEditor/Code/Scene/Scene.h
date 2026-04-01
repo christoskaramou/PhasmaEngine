@@ -212,6 +212,12 @@ namespace pe
             ValidateNodeId(node);
             m_componentFlags[node->index] |= flag;
         }
+
+        inline void RemoveComponentFlag(NodeId *node, uint32_t flag)
+        {
+            ValidateNodeId(node);
+            m_componentFlags[node->index] &= ~flag;
+        }
         OrderedMap<size_t, ModelAsset *> &GetModels() { return m_models; }
         const OrderedMap<size_t, ModelAsset *> &GetModels() const { return m_models; }
 
@@ -224,7 +230,7 @@ namespace pe
         uint32_t GetGeneration() const { return m_generation; }
         SceneNodeHandle MakeHandle(NodeId *node) const
         {
-            return SceneNodeHandle(node, m_generation);
+            return SceneNodeHandle(node, m_generation, node ? node->revision : 0);
         }
         bool IsGeometryDirty() const { return m_geometryDirty; }
         void SetGeometryDirty() { m_geometryDirty = true; }
@@ -483,7 +489,11 @@ namespace pe
 
     inline bool SceneNodeHandle::IsValid(const Scene &scene) const
     {
-        return nodeId && nodeId->index != UINT32_MAX && generation == scene.GetGeneration();
+        if (!nodeId || generation != scene.GetGeneration() || nodeRevision != nodeId->revision)
+            return false;
+        if (nodeId->index == UINT32_MAX || nodeId->index >= scene.GetNodeCount())
+            return false;
+        return scene.GetNodeId(nodeId->index) == nodeId;
     }
 
     inline bool SceneNodeHandle::IsReady(const Scene &scene) const

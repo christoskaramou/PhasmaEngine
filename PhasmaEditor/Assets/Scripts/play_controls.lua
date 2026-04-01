@@ -5,8 +5,6 @@ local escape_was_down = false
 local space_was_down = false
 
 local function update()
-    if not engine.is_play_mode() then return end
-
     local escape_down = input.is_key_down("Escape")
     local space_down = input.is_key_down("Space")
 
@@ -25,5 +23,6 @@ local function update()
 end
 
 hooks {
-    update = update
+    update = update,
+    update_editor = update
 }

@@ -34,6 +34,29 @@ if(PE_TRACY)
     add_subdirectory("${PE_THIRD_PARTY_DIR}/tracy")
 endif()
 
+# --- Jolt Physics ---
+option(PE_PHYSICS "Enable Jolt Physics integration" ON)
+if(PE_PHYSICS)
+    include(FetchContent)
+    set(BUILD_SHARED_LIBS_SAVED "${BUILD_SHARED_LIBS}")
+    set(BUILD_SHARED_LIBS OFF CACHE BOOL "" FORCE)
+
+    set(DOUBLE_PRECISION OFF CACHE BOOL "" FORCE)
+    set(GENERATE_DEBUG_SYMBOLS ON CACHE BOOL "" FORCE)
+    set(CROSS_PLATFORM_DETERMINISTIC OFF CACHE BOOL "" FORCE)
+    set(INTERPROCEDURAL_OPTIMIZATION OFF CACHE BOOL "" FORCE)
+    set(OBJECT_LAYER_BITS 16 CACHE STRING "" FORCE)
+    set(ENABLE_ALL_WARNINGS OFF CACHE BOOL "" FORCE)
+
+    FetchContent_Declare(JoltPhysics
+        GIT_REPOSITORY https://github.com/jrouwe/JoltPhysics.git
+        GIT_TAG        v5.2.0
+        SOURCE_SUBDIR  Build
+    )
+    FetchContent_MakeAvailable(JoltPhysics)
+    set(BUILD_SHARED_LIBS "${BUILD_SHARED_LIBS_SAVED}" CACHE BOOL "" FORCE)
+endif()
+
 # --- Prebuilt Assimp (shared) ---
 message(STATUS "[Phasma] Using prebuilt Assimp ...")
 add_library(assimp SHARED IMPORTED GLOBAL)
@@ -106,6 +129,10 @@ target_link_libraries(PhasmaEditor PRIVATE
     meshoptimizer
     Lua
 )
+if(PE_PHYSICS AND TARGET Jolt)
+    target_link_libraries(PhasmaEditor PRIVATE Jolt)
+    target_compile_definitions(PhasmaEditor PRIVATE PE_PHYSICS)
+endif()
 target_compile_definitions(PhasmaEditor PRIVATE RAPIDJSON_HAS_STDSTRING=1 RAPIDJSON_NOMEMBERITERATORCLASS)
 if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
     set_target_properties(PhasmaEditor PROPERTIES

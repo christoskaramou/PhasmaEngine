@@ -12,6 +12,10 @@
 #include "Particles/ParticleManager.h"
 #include "RenderPasses/LightPass.h"
 #include "RenderPasses/RayTracingPass.h"
+#ifdef PE_PHYSICS
+#include "Physics/PhysicsTypes.h"
+#include "Systems/PhysicsSystem.h"
+#endif
 
 #define _SILENCE_CXX17_ITERATOR_BASE_CLASS_DEPRECATION_WARNING
 #include "rapidjson/document.h"
@@ -299,6 +303,10 @@ namespace pe
                     camObj.AddMember("near_plane", cam->GetNearPlane(), allocator);
                     camObj.AddMember("far_plane", cam->GetFarPlane(), allocator);
                     camObj.AddMember("speed", cam->GetSpeed(), allocator);
+                    // Save euler directly to avoid gimbal-flip on restore
+                    rapidjson::Value eul;
+                    SetVec3(eul, cam->GetEuler());
+                    camObj.AddMember("euler", eul.Move(), allocator);
                     nodeObj.AddMember("camera", camObj.Move(), allocator);
                 }
             }
@@ -351,6 +359,33 @@ namespace pe
                     nodeObj.AddMember("light", lObj.Move(), allocator);
                 }
             }
+
+#ifdef PE_PHYSICS
+            if (flags & Component_Physics)
+            {
+                if (auto *ps = GetGlobalSystem<PhysicsSystem>())
+                {
+                    const PhysicsBodyDesc *desc = ps->GetBodyDesc(node);
+                    if (desc)
+                    {
+                        rapidjson::Value phys(rapidjson::kObjectType);
+                        phys.AddMember("body_type", static_cast<int>(desc->bodyType), allocator);
+                        phys.AddMember("shape_type", static_cast<int>(desc->shapeType), allocator);
+                        phys.AddMember("mass", desc->mass, allocator);
+                        phys.AddMember("friction", desc->friction, allocator);
+                        phys.AddMember("restitution", desc->restitution, allocator);
+                        phys.AddMember("auto_fit", desc->autoFitShape, allocator);
+                        rapidjson::Value he;
+                        SetVec3(he, desc->boxHalfExtents);
+                        phys.AddMember("box_half_extents", he.Move(), allocator);
+                        phys.AddMember("sphere_radius", desc->sphereRadius, allocator);
+                        phys.AddMember("capsule_half_height", desc->capsuleHalfHeight, allocator);
+                        phys.AddMember("capsule_radius", desc->capsuleRadius, allocator);
+                        nodeObj.AddMember("physics", phys.Move(), allocator);
+                    }
+                }
+            }
+#endif
 
             nodesArr.PushBack(nodeObj.Move(), allocator);
         }
@@ -713,6 +748,16 @@ namespace pe
         d.Parse(preload.jsonText.c_str());
         if (d.HasParseError())
             return;
+
+#ifdef PE_PHYSICS
+        // Clear all physics bodies before freeing node memory
+        if (auto *ps = GetGlobalSystem<PhysicsSystem>())
+        {
+            if (ps->IsSimulating())
+                ps->StopSimulation();
+            ps->ClearAllBodies();
+        }
+#endif
 
         // Clear existing scene: free SoA data, delete models, clear geometry stores
         SelectionManager::Instance().ClearSelection();
@@ -1082,10 +1127,12 @@ namespace pe
                         if (cv.HasMember("speed"))
                             cam->SetSpeed(cv["speed"].GetFloat());
                         cam->SetNodeId(node);
-                        // Restore position/euler from node local matrix
                         const mat4 &lm = GetLocalMatrix(node);
                         cam->SetPosition(vec3(lm[3]));
-                        cam->SetEuler(glm::eulerAngles(quat_cast(mat3(lm))));
+                        if (cv.HasMember("euler"))
+                            cam->SetEuler(ReadVec3(cv["euler"]));
+                        else
+                            cam->SetEuler(glm::eulerAngles(quat_cast(mat3(lm))));
                         hadEmbeddedCameras = true;
                     }
 
@@ -1134,6 +1181,43 @@ namespace pe
                         hadEmbeddedLights = true;
                     }
                 }
+
+#ifdef PE_PHYSICS
+                // Restore physics bodies from embedded node data
+                if (auto *ps = GetGlobalSystem<PhysicsSystem>())
+                {
+                    for (rapidjson::SizeType ni = 0; ni < nodesVal.Size(); ni++)
+                    {
+                        const auto &nv = nodesVal[ni];
+                        NodeId *node = nodeMap[ni];
+                        if (!node || !nv.HasMember("physics"))
+                            continue;
+                        const auto &pv = nv["physics"];
+                        PhysicsBodyDesc desc;
+                        if (pv.HasMember("body_type"))
+                            desc.bodyType = static_cast<PhysicsBodyType>(pv["body_type"].GetInt());
+                        if (pv.HasMember("shape_type"))
+                            desc.shapeType = static_cast<PhysicsShapeType>(pv["shape_type"].GetInt());
+                        if (pv.HasMember("mass"))
+                            desc.mass = pv["mass"].GetFloat();
+                        if (pv.HasMember("friction"))
+                            desc.friction = pv["friction"].GetFloat();
+                        if (pv.HasMember("restitution"))
+                            desc.restitution = pv["restitution"].GetFloat();
+                        if (pv.HasMember("auto_fit"))
+                            desc.autoFitShape = pv["auto_fit"].GetBool();
+                        if (pv.HasMember("box_half_extents"))
+                            desc.boxHalfExtents = ReadVec3(pv["box_half_extents"]);
+                        if (pv.HasMember("sphere_radius"))
+                            desc.sphereRadius = pv["sphere_radius"].GetFloat();
+                        if (pv.HasMember("capsule_half_height"))
+                            desc.capsuleHalfHeight = pv["capsule_half_height"].GetFloat();
+                        if (pv.HasMember("capsule_radius"))
+                            desc.capsuleRadius = pv["capsule_radius"].GetFloat();
+                        ps->AddBody(*this, node, desc);
+                    }
+                }
+#endif
 
                 // Mark all nodes dirty
                 for (NodeId *node : nodeMap)
@@ -1549,6 +1633,9 @@ namespace pe
                     camObj.AddMember("near_plane", cam->GetNearPlane(), allocator);
                     camObj.AddMember("far_plane", cam->GetFarPlane(), allocator);
                     camObj.AddMember("speed", cam->GetSpeed(), allocator);
+                    rapidjson::Value eul;
+                    SetVec3(eul, cam->GetEuler());
+                    camObj.AddMember("euler", eul.Move(), allocator);
                     nodeObj.AddMember("camera", camObj.Move(), allocator);
                 }
             }
@@ -1601,6 +1688,33 @@ namespace pe
                     nodeObj.AddMember("light", lObj.Move(), allocator);
                 }
             }
+
+#ifdef PE_PHYSICS
+            if (flags & Component_Physics)
+            {
+                if (auto *ps = GetGlobalSystem<PhysicsSystem>())
+                {
+                    const PhysicsBodyDesc *desc = ps->GetBodyDesc(node);
+                    if (desc)
+                    {
+                        rapidjson::Value phys(rapidjson::kObjectType);
+                        phys.AddMember("body_type", static_cast<int>(desc->bodyType), allocator);
+                        phys.AddMember("shape_type", static_cast<int>(desc->shapeType), allocator);
+                        phys.AddMember("mass", desc->mass, allocator);
+                        phys.AddMember("friction", desc->friction, allocator);
+                        phys.AddMember("restitution", desc->restitution, allocator);
+                        phys.AddMember("auto_fit", desc->autoFitShape, allocator);
+                        rapidjson::Value he;
+                        SetVec3(he, desc->boxHalfExtents);
+                        phys.AddMember("box_half_extents", he.Move(), allocator);
+                        phys.AddMember("sphere_radius", desc->sphereRadius, allocator);
+                        phys.AddMember("capsule_half_height", desc->capsuleHalfHeight, allocator);
+                        phys.AddMember("capsule_radius", desc->capsuleRadius, allocator);
+                        nodeObj.AddMember("physics", phys.Move(), allocator);
+                    }
+                }
+            }
+#endif
 
             nodesArr.PushBack(nodeObj.Move(), allocator);
         }
@@ -1980,9 +2094,21 @@ namespace pe
                         if (cam)
                         {
                             cam->SetNodeId(node);
+                            const auto &cv = nv["camera"];
+                            if (cv.HasMember("fovx"))
+                                cam->SetFovx(cv["fovx"].GetFloat());
+                            if (cv.HasMember("near_plane"))
+                                cam->SetNearPlane(cv["near_plane"].GetFloat());
+                            if (cv.HasMember("far_plane"))
+                                cam->SetFarPlane(cv["far_plane"].GetFloat());
+                            if (cv.HasMember("speed"))
+                                cam->SetSpeed(cv["speed"].GetFloat());
                             const mat4 &lm = GetLocalMatrix(node);
                             cam->SetPosition(vec3(lm[3]));
-                            cam->SetEuler(glm::eulerAngles(quat_cast(mat3(lm))));
+                            if (cv.HasMember("euler"))
+                                cam->SetEuler(ReadVec3(cv["euler"]));
+                            else
+                                cam->SetEuler(glm::eulerAngles(quat_cast(mat3(lm))));
                             hadEmbeddedCamerasSnap = true;
                         }
                     }
@@ -2033,6 +2159,51 @@ namespace pe
                     }
                 }
 
+#ifdef PE_PHYSICS
+                // Restore physics bodies from embedded node data
+                if (auto *ps = GetGlobalSystem<PhysicsSystem>())
+                {
+                    for (uint32_t ni = 0; ni < snapshotNodeCount; ni++)
+                    {
+                        const auto &nv = snapshotNodes[ni];
+                        NodeId *node = m_nodeIds[ni];
+                        if (nv.HasMember("physics"))
+                        {
+                            const auto &pv = nv["physics"];
+                            PhysicsBodyDesc desc;
+                            if (pv.HasMember("body_type"))
+                                desc.bodyType = static_cast<PhysicsBodyType>(pv["body_type"].GetInt());
+                            if (pv.HasMember("shape_type"))
+                                desc.shapeType = static_cast<PhysicsShapeType>(pv["shape_type"].GetInt());
+                            if (pv.HasMember("mass"))
+                                desc.mass = pv["mass"].GetFloat();
+                            if (pv.HasMember("friction"))
+                                desc.friction = pv["friction"].GetFloat();
+                            if (pv.HasMember("restitution"))
+                                desc.restitution = pv["restitution"].GetFloat();
+                            if (pv.HasMember("auto_fit"))
+                                desc.autoFitShape = pv["auto_fit"].GetBool();
+                            if (pv.HasMember("box_half_extents"))
+                                desc.boxHalfExtents = ReadVec3(pv["box_half_extents"]);
+                            if (pv.HasMember("sphere_radius"))
+                                desc.sphereRadius = pv["sphere_radius"].GetFloat();
+                            if (pv.HasMember("capsule_half_height"))
+                                desc.capsuleHalfHeight = pv["capsule_half_height"].GetFloat();
+                            if (pv.HasMember("capsule_radius"))
+                                desc.capsuleRadius = pv["capsule_radius"].GetFloat();
+                            if (!ps->HasBody(node))
+                                ps->AddBody(*this, node, desc);
+                            else if (auto *existing = ps->GetBodyDesc(node))
+                                *existing = desc;
+                        }
+                        else if (ps->HasBody(node))
+                        {
+                            ps->RemoveBody(node);
+                        }
+                    }
+                }
+#endif
+
                 // Mark all nodes dirty
                 for (uint32_t ni = 0; ni < GetNodeCount(); ni++)
                     MarkNodeDirty(m_nodeIds[ni]);
@@ -2053,6 +2224,11 @@ namespace pe
                     l.nodeId = nullptr;
                 for (auto &l : m_areaLights)
                     l.nodeId = nullptr;
+
+#ifdef PE_PHYSICS
+                if (auto *ps = GetGlobalSystem<PhysicsSystem>())
+                    ps->ClearAllBodies();
+#endif
 
                 // Clear old scene data synchronously (mirrors LoadSceneApply)
                 for (NodeId *id : m_nodeIds)
@@ -2275,7 +2451,10 @@ namespace pe
                         cam->SetNodeId(node);
                         const mat4 &lm = GetLocalMatrix(node);
                         cam->SetPosition(vec3(lm[3]));
-                        cam->SetEuler(glm::eulerAngles(quat_cast(mat3(lm))));
+                        if (cv.HasMember("euler"))
+                            cam->SetEuler(ReadVec3(cv["euler"]));
+                        else
+                            cam->SetEuler(glm::eulerAngles(quat_cast(mat3(lm))));
                         hadEmbeddedCamerasSnap = true;
                     }
                     if ((flags & Component_Light) && nv.HasMember("light"))
@@ -2323,6 +2502,46 @@ namespace pe
                         hadEmbeddedLightsSnap = true;
                     }
                 }
+
+#ifdef PE_PHYSICS
+                // Restore physics bodies from embedded node data (slow path)
+                if (auto *ps = GetGlobalSystem<PhysicsSystem>())
+                {
+                    for (uint32_t ni = 0; ni < snapshotNodeCount; ni++)
+                    {
+                        const auto &nv = snapshotNodes[ni];
+                        NodeId *node = nodeMap[ni];
+                        if (!node)
+                            continue;
+                        if (nv.HasMember("physics"))
+                        {
+                            const auto &pv = nv["physics"];
+                            PhysicsBodyDesc desc;
+                            if (pv.HasMember("body_type"))
+                                desc.bodyType = static_cast<PhysicsBodyType>(pv["body_type"].GetInt());
+                            if (pv.HasMember("shape_type"))
+                                desc.shapeType = static_cast<PhysicsShapeType>(pv["shape_type"].GetInt());
+                            if (pv.HasMember("mass"))
+                                desc.mass = pv["mass"].GetFloat();
+                            if (pv.HasMember("friction"))
+                                desc.friction = pv["friction"].GetFloat();
+                            if (pv.HasMember("restitution"))
+                                desc.restitution = pv["restitution"].GetFloat();
+                            if (pv.HasMember("auto_fit"))
+                                desc.autoFitShape = pv["auto_fit"].GetBool();
+                            if (pv.HasMember("box_half_extents"))
+                                desc.boxHalfExtents = ReadVec3(pv["box_half_extents"]);
+                            if (pv.HasMember("sphere_radius"))
+                                desc.sphereRadius = pv["sphere_radius"].GetFloat();
+                            if (pv.HasMember("capsule_half_height"))
+                                desc.capsuleHalfHeight = pv["capsule_half_height"].GetFloat();
+                            if (pv.HasMember("capsule_radius"))
+                                desc.capsuleRadius = pv["capsule_radius"].GetFloat();
+                            ps->AddBody(*this, node, desc);
+                        }
+                    }
+                }
+#endif
 
                 UploadBuffers(cmd);
 

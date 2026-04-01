@@ -3,6 +3,9 @@
 #include "Scene/ModelAsset.h"
 #include "Camera/Camera.h"
 #include "API/RHI.h"
+#ifdef PE_PHYSICS
+#include "Systems/PhysicsSystem.h"
+#endif
 
 namespace pe
 {
@@ -22,6 +25,7 @@ namespace pe
 
         const uint32_t index = static_cast<uint32_t>(m_nodeIds.size());
         id->index = index;
+        id->revision++;
 
         m_nodeIds.push_back(id);
         m_nodeNames.push_back(name);
@@ -106,6 +110,13 @@ namespace pe
                 }
             }
         }
+#ifdef PE_PHYSICS
+        if (compFlags & Component_Physics)
+        {
+            if (auto *ps = GetGlobalSystem<PhysicsSystem>())
+                ps->RemoveBody(node);
+        }
+#endif
 
         // Remove from parent's children list
         NodeId *parent = m_nodeParents[idx];

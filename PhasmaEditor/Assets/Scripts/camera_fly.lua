@@ -61,5 +61,6 @@ local function update_editor()
 end
 
 hooks {
-    update_editor = update_editor
+    update_editor = update_editor,
+    update = update_editor
 }

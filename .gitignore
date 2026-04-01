@@ -309,3 +309,4 @@ PhasmaEditor/Assets/Scenes/*.pescene
 
 #clang-format
 !.clang-format
+PhasmaEditor/Assets/Agent/agent_config.json
