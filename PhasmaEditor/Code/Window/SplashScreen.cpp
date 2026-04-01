@@ -54,11 +54,12 @@ namespace pe
 
     SplashScreen::~SplashScreen()
     {
-        if (m_apiHandle)
-            SDL_DestroyWindow(m_apiHandle);
-        if (m_renderer)
-            SDL_DestroyRenderer(m_renderer);
+        // Destroy in reverse creation order: texture → renderer → window
         if (m_texture)
             SDL_DestroyTexture(m_texture);
+        if (m_renderer)
+            SDL_DestroyRenderer(m_renderer);
+        if (m_apiHandle)
+            SDL_DestroyWindow(m_apiHandle);
     }
 } // namespace pe

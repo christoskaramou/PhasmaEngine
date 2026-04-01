@@ -92,6 +92,7 @@ namespace pe
             return m_objectToBroadPhase[layer];
         }
 
+#if defined(JPH_EXTERNAL_PROFILE) || defined(JPH_PROFILE_ENABLED)
         const char *GetBroadPhaseLayerName(JPH::BroadPhaseLayer layer) const override
         {
             switch ((JPH::BroadPhaseLayer::Type)layer)
@@ -104,6 +105,7 @@ namespace pe
                 return "UNKNOWN";
             }
         }
+#endif
 
     private:
         JPH::BroadPhaseLayer m_objectToBroadPhase[Layers::NUM_LAYERS];
