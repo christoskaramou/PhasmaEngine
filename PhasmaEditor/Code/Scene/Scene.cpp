@@ -622,17 +622,22 @@ namespace pe
             int jointCount = m_skeleton.GetBoneCount();
             if (jointCount > 0)
             {
+                static thread_local std::vector<mat4> uploadMatrices;
+                if (static_cast<int>(uploadMatrices.size()) < jointCount)
+                    uploadMatrices.resize(jointCount);
+
                 if (!rt.jointMatrices.empty() && static_cast<int>(rt.jointMatrices.size()) == jointCount)
                 {
-                    range.data = rt.jointMatrices.data();
+                    mat4 invWorld = glm::inverse(rt.gpuData.worldMatrix);
+                    for (int j = 0; j < jointCount; j++)
+                        uploadMatrices[j] = invWorld * rt.jointMatrices[j];
                 }
                 else
                 {
-                    static thread_local std::vector<mat4> identityMatrices;
-                    if (static_cast<int>(identityMatrices.size()) < jointCount)
-                        identityMatrices.assign(jointCount, mat4(1.f));
-                    range.data = identityMatrices.data();
+                    for (int j = 0; j < jointCount; j++)
+                        uploadMatrices[j] = mat4(1.f);
                 }
+                range.data = uploadMatrices.data();
                 range.size = jointCount * sizeof(mat4);
                 range.offset = rt.dataOffset + sizeof(NodeGpuData);
                 m_storages[frame]->Copy(1, &range, true);
