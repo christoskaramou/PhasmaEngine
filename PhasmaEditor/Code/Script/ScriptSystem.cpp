@@ -879,6 +879,9 @@ namespace pe
                 if (nodeScriptPaths.count(filePath))
                     continue;
 
+                if (filePath.find("/tests/") != std::string::npos || filePath.find("\\tests\\") != std::string::npos)
+                    continue;
+
                 // Each script gets its own environment that inherits globals
                 sol::environment env(m_lua, sol::create, m_lua.globals());
 
@@ -898,13 +901,14 @@ namespace pe
                     if (key.is<std::string>())
                     {
                         std::string name = key.as<std::string>();
-                        if (hookNames.find(name) == hookNames.end())
-                        {
-                            sol::object existing = m_lua.globals().raw_get<sol::object>(name);
-                            if (existing.valid() && existing.get_type() != sol::type::lua_nil)
-                                PE_WARN("[Lua] global '%s' redefined by '%s'", name.c_str(), filePath.c_str());
-                            m_lua.globals()[name] = val;
-                        }
+                        if (hookNames.find(name) != hookNames.end())
+                            continue;
+                        if (name.size() >= 2 && name[0] == '_' && name[1] == '_')
+                            continue;
+                        sol::object existing = m_lua.globals().raw_get<sol::object>(name);
+                        if (existing.valid() && existing.get_type() != sol::type::lua_nil)
+                            PE_WARN("[Lua] global '%s' redefined by '%s'", name.c_str(), filePath.c_str());
+                        m_lua.globals()[name] = val;
                     }
                 }
 

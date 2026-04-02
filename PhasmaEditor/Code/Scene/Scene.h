@@ -1,5 +1,6 @@
 #pragma once
 
+#include "Animation/AnimationTypes.h"
 #include "API/Vertex.h"
 #include "Scene/SceneNode.h"
 #include "Scene/SceneNodeHandle.h"
@@ -203,6 +204,8 @@ namespace pe
 
         ParticleManager *GetParticleManager() { return m_particleManager; }
         Camera *GetActiveCamera() const { return m_cameras.at(0); }
+        const Skeleton &GetSkeleton() const { return m_skeleton; }
+        const std::vector<AnimationClip> &GetAnimationClips() const { return m_animationClips; }
         Camera *GetCamera(int index) const { return m_cameras.at(index); }
         const std::vector<Camera *> &GetCameras() const { return m_cameras; }
         Camera *GetCameraForNode(const NodeId *node) const;
@@ -324,6 +327,8 @@ namespace pe
         {
             std::filesystem::path filePath;
             std::string primitiveType;
+            vec4 primitiveParams = vec4(0.f);
+            uint32_t primitiveParamCount = 0;
         };
 
         struct MeshSourceInfo
@@ -420,6 +425,7 @@ namespace pe
         Buffer *m_blasMergedBuffer = nullptr;
         Buffer *m_scratchBuffer = nullptr;
         Buffer *m_meshInfoBuffer = nullptr;
+        uint32_t m_rtInstanceCount = 0;
         Buffer *m_meshConstants = nullptr;
         Buffer *m_materialTable = nullptr;
         Sampler *m_defaultSampler = nullptr;
@@ -430,6 +436,10 @@ namespace pe
         std::vector<SceneSource> m_sources;
         std::vector<MeshSourceInfo> m_meshSourceInfos;
         std::unordered_map<size_t, std::vector<NodeId *>> m_modelRootNodes;
+
+        bool m_autoplayAnimations = true;
+        Skeleton m_skeleton;
+        std::vector<AnimationClip> m_animationClips;
 
         std::filesystem::path m_scenePath;
         bool m_dirty = false;

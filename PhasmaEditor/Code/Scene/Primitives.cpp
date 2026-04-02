@@ -67,15 +67,37 @@ namespace pe
         // Enforce CCW visibility with your current pipeline state.
         ForceWindingCCW(model->m_vertices, model->m_indices);
 
+        for (auto &v : model->m_vertices)
+        {
+            v.joints[0] = 0;
+            v.joints[1] = 0;
+            v.joints[2] = 0;
+            v.joints[3] = 0;
+            v.weights[0] = 1.f;
+            v.weights[1] = 0.f;
+            v.weights[2] = 0.f;
+            v.weights[3] = 0.f;
+        }
+
         // PositionUvs
         model->m_positionUvs.resize(model->m_vertices.size());
         for (size_t i = 0; i < model->m_vertices.size(); i++)
         {
-            model->m_positionUvs[i].position[0] = model->m_vertices[i].position[0];
-            model->m_positionUvs[i].position[1] = model->m_vertices[i].position[1];
-            model->m_positionUvs[i].position[2] = model->m_vertices[i].position[2];
-            model->m_positionUvs[i].uv[0] = model->m_vertices[i].uv[0];
-            model->m_positionUvs[i].uv[1] = model->m_vertices[i].uv[1];
+            auto &pv = model->m_positionUvs[i];
+            const auto &sv = model->m_vertices[i];
+            pv.position[0] = sv.position[0];
+            pv.position[1] = sv.position[1];
+            pv.position[2] = sv.position[2];
+            pv.uv[0] = sv.uv[0];
+            pv.uv[1] = sv.uv[1];
+            pv.joints[0] = 0;
+            pv.joints[1] = 0;
+            pv.joints[2] = 0;
+            pv.joints[3] = 0;
+            pv.weights[0] = 1.f;
+            pv.weights[1] = 0.f;
+            pv.weights[2] = 0.f;
+            pv.weights[3] = 0.f;
         }
 
         // AABB
@@ -178,6 +200,7 @@ namespace pe
         ModelAsset *model = CreatePrimitiveModel(vertices, indices);
         model->SetLabel("Quad");
         model->SetPrimitiveType("quad");
+        model->SetPrimitiveParams(vec4(width, height, 0.f, 0.f), 2);
         model->SetNodeName(model->GetRootNodeIndex(), "Quad");
         return model;
     }
@@ -216,6 +239,7 @@ namespace pe
         ModelAsset *model = CreatePrimitiveModel(vertices, indices);
         model->SetLabel("Plane");
         model->SetPrimitiveType("plane");
+        model->SetPrimitiveParams(vec4(width, depth, 0.f, 0.f), 2);
         model->SetNodeName(model->GetRootNodeIndex(), "Plane");
         return model;
     }
@@ -289,6 +313,7 @@ namespace pe
         ModelAsset *model = CreatePrimitiveModel(vertices, indices);
         model->SetLabel("Cube");
         model->SetPrimitiveType("cube");
+        model->SetPrimitiveParams(vec4(size, 0.f, 0.f, 0.f), 1);
         model->SetNodeName(model->GetRootNodeIndex(), "Cube");
         return model;
     }
@@ -344,6 +369,7 @@ namespace pe
         ModelAsset *model = CreatePrimitiveModel(vertices, indices);
         model->SetLabel("Sphere");
         model->SetPrimitiveType("sphere");
+        model->SetPrimitiveParams(vec4(radius, 0.f, 0.f, 0.f), 1);
         model->SetNodeName(model->GetRootNodeIndex(), "Sphere");
         return model;
     }
@@ -469,6 +495,7 @@ namespace pe
         ModelAsset *model = CreatePrimitiveModel(vertices, indices);
         model->SetLabel("Cylinder");
         model->SetPrimitiveType("cylinder");
+        model->SetPrimitiveParams(vec4(radius, height, 0.f, 0.f), 2);
         model->SetNodeName(model->GetRootNodeIndex(), "Cylinder");
         return model;
     }
@@ -559,6 +586,7 @@ namespace pe
         ModelAsset *model = CreatePrimitiveModel(vertices, indices);
         model->SetLabel("Cone");
         model->SetPrimitiveType("cone");
+        model->SetPrimitiveParams(vec4(radius, height, 0.f, 0.f), 2);
         model->SetNodeName(model->GetRootNodeIndex(), "Cone");
         return model;
     }

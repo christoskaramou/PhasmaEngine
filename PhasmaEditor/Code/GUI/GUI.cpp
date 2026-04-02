@@ -45,6 +45,7 @@
 #include "Widgets/AudioWidget.h"
 #include "Systems/AudioSystem.h"
 #endif
+#include "Systems/AnimationSystem.h"
 #include "UndoRedo.h"
 #include <nlohmann/json.hpp>
 #include "imgui/imgui_impl_sdl2.h"
@@ -1845,7 +1846,8 @@ namespace pe
         RendererSystem *rs = GetGlobalSystem<RendererSystem>();
         if (rs)
         {
-            rs->GetScene().SaveScene("temp_play.pescene");
+            rs->WaitAllFramesCommands();
+            m_playModeSnapshot = rs->GetScene().TakeSnapshot();
             GUIState::s_playMode = true;
             GUIState::s_isPaused = false;
 #ifdef PE_PHYSICS
@@ -1874,10 +1876,16 @@ namespace pe
 #endif
             GUIState::s_playMode = false;
             GUIState::s_isPaused = false;
-            rs->GetScene().LoadScene("temp_play.pescene");
+            if (!m_playModeSnapshot.empty())
+            {
+                rs->WaitAllFramesCommands();
+                rs->GetScene().RestoreSnapshot(m_playModeSnapshot);
+                m_playModeSnapshot.clear();
+            }
+            // Clear animation state AFTER restore so we don't dereference stale nodes
+            if (auto *animSys = GetGlobalSystem<AnimationSystem>())
+                animSys->ClearAllAnimations();
             UndoRedo::Instance().Clear();
-            if (std::filesystem::exists("temp_play.pescene"))
-                std::filesystem::remove("temp_play.pescene");
         }
     }
 } // namespace pe

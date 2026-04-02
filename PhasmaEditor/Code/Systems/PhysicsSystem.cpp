@@ -58,6 +58,13 @@ namespace pe
         constexpr uint32_t kMaxBodyPairs = 65536;
         constexpr uint32_t kMaxContactConstraints = 65536;
         constexpr size_t kTempAllocatorBytes = 64 * 1024 * 1024;
+
+        constexpr size_t kInvalidBodyIndex = static_cast<size_t>(-1);
+
+        bool MatchesNode(const PhysicsNodeState &state, const NodeId *node)
+        {
+            return node && state.nodeId == node && state.nodeRevision == node->revision;
+        }
     } // namespace
 
     // --- Jolt layer definitions ---
@@ -239,13 +246,27 @@ namespace pe
     {
         PE_PROFILE_SCOPE("Physics Add Body");
 
-        if (m_nodeToIndex.count(node))
+        auto existingIt = m_nodeToIndex.find(node);
+        if (existingIt != m_nodeToIndex.end())
+        {
+            const size_t existingIdx = existingIt->second;
+            if (existingIdx < m_bodies.size() && MatchesNode(m_bodies[existingIdx], node))
+                return;
+
+            // Stale mapping for a recycled node pointer; rebuild from live scene before adding.
+            PruneInvalidBodies(scene);
+            if (m_nodeToIndex.count(node))
+                return;
+        }
+
+        if (!node)
             return;
 
         scene.AddComponentFlag(node, Component_Physics);
 
         PhysicsNodeState state;
         state.nodeId = node;
+        state.nodeRevision = node->revision;
         state.desc = desc;
 
         // Auto-fit shape from mesh AABB if requested
@@ -280,6 +301,12 @@ namespace pe
         if (it == m_nodeToIndex.end())
             return;
 
+        if (it->second >= m_bodies.size() || !MatchesNode(m_bodies[it->second], node))
+        {
+            m_nodeToIndex.erase(it);
+            return;
+        }
+
         if (auto *rs = GetGlobalSystem<RendererSystem>())
             rs->GetScene().RemoveComponentFlag(node, Component_Physics);
 
@@ -301,18 +328,23 @@ namespace pe
     PhysicsBodyDesc *PhysicsSystem::GetBodyDesc(NodeId *node)
     {
         auto it = m_nodeToIndex.find(node);
-        return (it != m_nodeToIndex.end()) ? &m_bodies[it->second].desc : nullptr;
+        if (it == m_nodeToIndex.end() || it->second >= m_bodies.size() || !MatchesNode(m_bodies[it->second], node))
+            return nullptr;
+        return &m_bodies[it->second].desc;
     }
 
     const PhysicsBodyDesc *PhysicsSystem::GetBodyDesc(const NodeId *node) const
     {
         auto it = m_nodeToIndex.find(node);
-        return (it != m_nodeToIndex.end()) ? &m_bodies[it->second].desc : nullptr;
+        if (it == m_nodeToIndex.end() || it->second >= m_bodies.size() || !MatchesNode(m_bodies[it->second], node))
+            return nullptr;
+        return &m_bodies[it->second].desc;
     }
 
     bool PhysicsSystem::HasBody(const NodeId *node) const
     {
-        return m_nodeToIndex.count(node) > 0;
+        auto it = m_nodeToIndex.find(node);
+        return it != m_nodeToIndex.end() && it->second < m_bodies.size() && MatchesNode(m_bodies[it->second], node);
     }
 
     void PhysicsSystem::ClearAllBodies()
@@ -448,6 +480,8 @@ namespace pe
         if (m_simulating)
             return;
 
+        PruneInvalidBodies(scene);
+
         m_simulating = true;
         m_accumulator = 0.0f;
 
@@ -496,14 +530,87 @@ namespace pe
 
     // --- Internal helpers ---
 
+    void PhysicsSystem::PruneInvalidBodies(const Scene &scene)
+    {
+        PE_PROFILE_SCOPE("Physics Prune Invalid Bodies");
+
+        if (m_bodies.empty())
+        {
+            m_nodeToIndex.clear();
+            return;
+        }
+
+        std::unordered_map<const NodeId *, uint32_t> liveNodes;
+        liveNodes.reserve(scene.GetNodeCount());
+        for (uint32_t i = 0; i < scene.GetNodeCount(); ++i)
+        {
+            const NodeId *node = scene.GetNodeId(i);
+            liveNodes.emplace(node, node ? node->revision : 0);
+        }
+
+        std::vector<PhysicsNodeState> kept;
+        kept.reserve(m_bodies.size());
+        for (auto &state : m_bodies)
+        {
+            bool keep = false;
+            auto liveIt = liveNodes.find(state.nodeId);
+            if (liveIt != liveNodes.end() && liveIt->second == state.nodeRevision)
+            {
+                const NodeId *node = state.nodeId;
+                keep = (scene.GetComponentFlags(node) & Component_Physics) != 0;
+            }
+
+            if (keep)
+            {
+                kept.push_back(std::move(state));
+            }
+            else if (state.inWorld)
+            {
+                DestroyJoltBody(state);
+            }
+        }
+
+        m_bodies = std::move(kept);
+        m_nodeToIndex.clear();
+        for (size_t i = 0; i < m_bodies.size(); ++i)
+            m_nodeToIndex[m_bodies[i].nodeId] = i;
+    }
+
     void PhysicsSystem::CreateJoltBody(PhysicsNodeState &state, Scene &scene)
     {
         if (state.inWorld || !m_joltSystem)
             return;
 
         const PhysicsBodyDesc &desc = state.desc;
+        size_t bodyIndex = kInvalidBodyIndex;
+        auto it = m_nodeToIndex.find(state.nodeId);
+        if (it != m_nodeToIndex.end())
+            bodyIndex = it->second;
+        if (bodyIndex == kInvalidBodyIndex || bodyIndex >= m_bodies.size())
+        {
+            state.inWorld = false;
+            state.joltBodyIdRaw = 0xFFFFFFFF;
+            return;
+        }
 
-        // Get world transform early — needed for both shape scaling and body placement
+        const NodeId *liveNode = nullptr;
+        for (uint32_t i = 0; i < scene.GetNodeCount(); ++i)
+        {
+            const NodeId *candidate = scene.GetNodeId(i);
+            if (candidate == state.nodeId)
+            {
+                liveNode = candidate;
+                break;
+            }
+        }
+        if (!liveNode || liveNode->revision != state.nodeRevision || !(scene.GetComponentFlags(liveNode) & Component_Physics))
+        {
+            state.inWorld = false;
+            state.joltBodyIdRaw = 0xFFFFFFFF;
+            return;
+        }
+
+        // Get world transform early — needed for both shape scaling and body placement.
         mat4 world = scene.GetWorldMatrix(state.nodeId);
 
         // Extract world scale to apply to shape dimensions

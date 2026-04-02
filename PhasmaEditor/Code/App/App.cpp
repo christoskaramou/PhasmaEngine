@@ -13,6 +13,7 @@
 #ifdef PE_AUDIO
 #include "Systems/AudioSystem.h"
 #endif
+#include "Systems/AnimationSystem.h"
 #include "Window/Window.h"
 #include "imgui/ImGuizmo.h"
 #include "imgui/imgui_impl_sdl2.h"
@@ -95,13 +96,17 @@ namespace pe
         cmd->Begin();
         CreateGlobalSystem<RendererSystem>()->Init(cmd);
         CreateGlobalSystem<PostProcessSystem>()->Init(cmd);
-        CreateGlobalSystem<ScriptSystem>()->Init(nullptr);
 #ifdef PE_PHYSICS
         CreateGlobalSystem<PhysicsSystem>()->Init(nullptr);
 #endif
 #ifdef PE_AUDIO
         CreateGlobalSystem<AudioSystem>()->Init(nullptr);
 #endif
+        CreateGlobalSystem<AnimationSystem>()->Init(nullptr);
+
+        // ScriptSystem is initialized last because it can call other systems in Init()
+        CreateGlobalSystem<ScriptSystem>()->Init(nullptr);
+
         ModelAsset::GetDefaultResources(cmd);
         cmd->End();
         queue->Submit(1, &cmd, nullptr, nullptr);

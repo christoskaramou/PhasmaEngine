@@ -1,5 +1,6 @@
 #pragma once
 #include "API/Vertex.h"
+#include "Animation/AnimationTypes.h"
 
 namespace pe
 {
@@ -23,6 +24,7 @@ namespace pe
 
         // First-class material reference (shared across meshes with same material)
         Material *material = nullptr;
+        bool skinned = false;
     };
 
     struct NodeInfo
@@ -100,6 +102,13 @@ namespace pe
         void SetLabel(const std::string &label) { m_label = label; }
         const std::string &GetPrimitiveType() const { return m_primitiveType; }
         void SetPrimitiveType(const std::string &type) { m_primitiveType = type; }
+        const vec4 &GetPrimitiveParams() const { return m_primitiveParams; }
+        uint32_t GetPrimitiveParamCount() const { return m_primitiveParamCount; }
+        void SetPrimitiveParams(const vec4 &params, uint32_t count)
+        {
+            m_primitiveParams = params;
+            m_primitiveParamCount = count;
+        }
         bool IsPrimitive() const { return !m_primitiveType.empty(); }
         void SetNodeName(int nodeIndex, const std::string &name);
         const std::string &GetNodeName(int nodeIndex) const;
@@ -197,8 +206,20 @@ namespace pe
 
         std::string m_label;
         std::string m_primitiveType; // "cube", "sphere", "plane", etc. Empty for file-loaded models.
+        vec4 m_primitiveParams = vec4(0.f);
+        uint32_t m_primitiveParamCount = 0;
         std::filesystem::path m_filePath;
 
         bool m_previousMatricesIsDirty = false;
+
+        Skeleton m_skeleton;
+        std::vector<AnimationClip> m_animations;
+
+    public:
+        bool HasAnimations() const { return !m_animations.empty(); }
+        bool HasSkeleton() const { return !m_skeleton.bones.empty(); }
+        const Skeleton &GetSkeleton() const { return m_skeleton; }
+        const std::vector<AnimationClip> &GetAnimations() const { return m_animations; }
+        int GetJointCount() const { return m_skeleton.GetBoneCount(); }
     };
 } // namespace pe

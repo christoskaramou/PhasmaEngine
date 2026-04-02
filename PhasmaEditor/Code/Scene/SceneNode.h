@@ -47,6 +47,8 @@ namespace pe
         // First-class material reference
         Material *material = nullptr;
         MaterialInstance *materialInstance = nullptr;
+
+        bool skinned = false;
     };
 
     // Utility: bit mask for texture slots
@@ -73,6 +75,8 @@ namespace pe
         NodeGpuData gpuData;
         bool dirty = false;
         std::vector<bool> dirtyUniforms;
+
+        std::vector<mat4> jointMatrices;
     };
 
     // Image view indices and material GPU index (per mesh)

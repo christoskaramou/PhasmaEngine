@@ -141,5 +141,6 @@ namespace pe
         std::atomic<bool> m_indexCancel{false};
         void *m_indexerPtr = nullptr; // pagent::CodebaseIndexer*, guarded by m_indexMutex
         std::thread m_indexThread;
+        std::string m_playModeSnapshot;
     };
 } // namespace pe

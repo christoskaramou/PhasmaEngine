@@ -144,7 +144,7 @@ namespace pe
             if (m_scene->HasOpaqueDrawInfo())
             {
                 PushConstants_GBuffer pushConstants{};
-                pushConstants.jointsCount = 0u;
+                pushConstants.jointsCount = static_cast<uint32_t>(m_scene->GetSkeleton().GetBoneCount());
                 pushConstants.projJitter = camera->GetProjJitter();
                 pushConstants.prevProjJitter = camera->GetPrevProjJitter();
                 pushConstants.passType = 0u;
@@ -313,7 +313,7 @@ namespace pe
         if (m_scene->HasAlphaDrawInfo())
         {
             PushConstants_GBuffer pushConstants{};
-            pushConstants.jointsCount = 0u;
+            pushConstants.jointsCount = static_cast<uint32_t>(m_scene->GetSkeleton().GetBoneCount());
             pushConstants.projJitter = camera->GetProjJitter();
             pushConstants.prevProjJitter = camera->GetPrevProjJitter();
             pushConstants.passType = 1u;

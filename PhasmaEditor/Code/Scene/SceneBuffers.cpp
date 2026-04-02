@@ -159,7 +159,9 @@ namespace pe
                 continue;
 
             m_nodeRuntime[i].dataOffset = storageSize;
-            storageSize += sizeof(NodeGpuData);
+            int jointCount = m_skeleton.GetBoneCount();
+            size_t nodeDataSize = sizeof(NodeGpuData) + jointCount * sizeof(mat4);
+            storageSize += nodeDataSize;
         }
 
         uint32_t i = 0;

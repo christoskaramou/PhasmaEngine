@@ -236,7 +236,7 @@ namespace pe
         else
         {
             PushConstants_Shadows pushConstants{};
-            pushConstants.jointsCount = 0u;
+            pushConstants.jointsCount = static_cast<uint32_t>(m_scene->GetSkeleton().GetBoneCount());
 
             uint32_t cascades = Settings::Get<GlobalSettings>().num_cascades;
             for (uint32_t i = 0; i < cascades; i++)

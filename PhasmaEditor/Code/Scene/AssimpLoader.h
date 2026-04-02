@@ -25,6 +25,7 @@ namespace pe
         void UploadImages(CommandBuffer *cmd);
         void BuildMeshes();
         void SetupNodes();
+        void ExtractAnimations();
         void ProcessNode(const aiNode *node, NodeId *parent);
 
         std::filesystem::path GetTexturePath(const aiMaterial *material, aiTextureType type, int index = 0) const;

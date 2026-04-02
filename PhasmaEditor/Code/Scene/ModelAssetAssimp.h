@@ -29,6 +29,7 @@ namespace pe
         void UploadImages(CommandBuffer *cmd);
         void BuildMeshes(); // materials + geometry + aabbs (single coherent build)
         void SetupNodes();
+        void ExtractAnimations();
 
         // helpers
         void ProcessNode(const aiNode *node, int parentIndex);

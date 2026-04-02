@@ -2,6 +2,7 @@
 #include "Scene/Material.h"
 #include "Scene/ModelAsset.h"
 #include "Scene/SelectionManager.h"
+#include "Systems/AnimationSystem.h"
 #include "API/AccelerationStructure.h"
 #include "API/Buffer.h"
 #include "API/Command.h"
@@ -229,6 +230,7 @@ namespace pe
             mesh.boundingBox = mi->boundingBox;
             mesh.renderType = mi->renderType;
             mesh.material = mi->material;
+            mesh.skinned = mi->skinned;
 
             int sceneMeshIdx = AddMesh(std::move(mesh));
             meshMap[i] = sceneMeshIdx;
@@ -249,11 +251,19 @@ namespace pe
     {
         m_models.insert(model->GetId(), model);
 
+        if (model->HasSkeleton() && m_skeleton.bones.empty())
+        {
+            m_skeleton = model->GetSkeleton();
+            m_animationClips = model->GetAnimations();
+        }
+
         // Register source
         int sourceIndex = static_cast<int>(m_sources.size());
         SceneSource source;
         source.filePath = model->GetFilePath();
         source.primitiveType = model->GetPrimitiveType();
+        source.primitiveParams = model->GetPrimitiveParams();
+        source.primitiveParamCount = model->GetPrimitiveParamCount();
         m_sources.push_back(std::move(source));
 
         // Copy geometry and create meshes
@@ -309,16 +319,36 @@ namespace pe
         }
 
         UpdateNodeMatrices();
+
+        if (m_autoplayAnimations && model->HasAnimations() && !m_animationClips.empty())
+        {
+            if (auto *animSys = GetGlobalSystem<AnimationSystem>())
+            {
+                for (NodeId *node : nodeMap)
+                {
+                    if (node && GetMeshRef(node) >= 0)
+                        animSys->PlayAnimation(*this, node, 0, true);
+                }
+            }
+        }
     }
 
     SceneNodeHandle Scene::AddModelDeferred(ModelAsset *model)
     {
         m_models.insert(model->GetId(), model);
 
+        if (model->HasSkeleton() && m_skeleton.bones.empty())
+        {
+            m_skeleton = model->GetSkeleton();
+            m_animationClips = model->GetAnimations();
+        }
+
         int sourceIndex = static_cast<int>(m_sources.size());
         SceneSource source;
         source.filePath = model->GetFilePath();
         source.primitiveType = model->GetPrimitiveType();
+        source.primitiveParams = model->GetPrimitiveParams();
+        source.primitiveParamCount = model->GetPrimitiveParamCount();
         m_sources.push_back(std::move(source));
 
         std::vector<int> meshMap = AddModelGeometry(model, sourceIndex);
@@ -476,6 +506,9 @@ namespace pe
         out.alphaBlend.reserve(secondaryEstimated);
         out.transmission.reserve(secondaryEstimated);
 
+        const bool skipSkinnedForRT = m_skeleton.GetBoneCount() > 0 &&
+                                      Settings::Get<GlobalSettings>().render_mode == RenderMode::RayTracing;
+
         for (uint32_t i = beginNode; i < endNode; i++)
         {
             int meshIdx = m_meshRefs[i];
@@ -486,6 +519,9 @@ namespace pe
 
             const Mesh &mesh = m_meshes[meshIdx];
             if (mesh.indexCount == 0)
+                continue;
+
+            if (skipSkinnedForRT && mesh.skinned)
                 continue;
 
             const AABB &worldBounds = m_nodeRuntime[i].worldAABB;
@@ -582,6 +618,25 @@ namespace pe
             range.size = sizeof(NodeGpuData);
             range.offset = rt.dataOffset;
             m_storages[frame]->Copy(1, &range, true);
+
+            int jointCount = m_skeleton.GetBoneCount();
+            if (jointCount > 0)
+            {
+                if (!rt.jointMatrices.empty() && static_cast<int>(rt.jointMatrices.size()) == jointCount)
+                {
+                    range.data = rt.jointMatrices.data();
+                }
+                else
+                {
+                    static thread_local std::vector<mat4> identityMatrices;
+                    if (static_cast<int>(identityMatrices.size()) < jointCount)
+                        identityMatrices.assign(jointCount, mat4(1.f));
+                    range.data = identityMatrices.data();
+                }
+                range.size = jointCount * sizeof(mat4);
+                range.offset = rt.dataOffset + sizeof(NodeGpuData);
+                m_storages[frame]->Copy(1, &range, true);
+            }
         }
     }
 

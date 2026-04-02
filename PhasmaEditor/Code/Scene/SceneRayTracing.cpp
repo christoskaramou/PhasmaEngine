@@ -65,10 +65,14 @@ namespace pe
 
         static constexpr vk::BuildAccelerationStructureFlagsKHR kBlasFlags = vk::BuildAccelerationStructureFlagBitsKHR::ePreferFastTrace;
 
+        bool hasSkeleton = m_skeleton.GetBoneCount() > 0;
+
         for (int meshIndex = 0; meshIndex < static_cast<int>(m_meshes.size()); meshIndex++)
         {
             const Mesh &mesh = m_meshes[meshIndex];
             if (mesh.indexCount == 0)
+                continue;
+            if (hasSkeleton && mesh.skinned)
                 continue;
 
             vk::AccelerationStructureGeometryKHR geometry{};
@@ -129,11 +133,13 @@ namespace pe
                 continue;
             if (m_componentFlags[i] & Component_GpuPending)
                 continue;
+            if (hasSkeleton && m_meshes[meshIdx].skinned)
+                continue;
 
             instanceReqs.push_back({nullptr, meshIdx, i, m_nodeRuntime[i].gpuData.worldMatrix});
         }
 
-        PE_ERROR_IF(instanceReqs.size() != m_meshCount, "BuildAccelerationStructures instanceCount mismatch!");
+        m_rtInstanceCount = static_cast<uint32_t>(instanceReqs.size());
 
         static constexpr vk::BuildAccelerationStructureFlagsKHR kTlasFlags = vk::BuildAccelerationStructureFlagBitsKHR::ePreferFastTrace;
 
@@ -150,7 +156,7 @@ namespace pe
         // a GPU page fault (reported as VK_ERROR_DEVICE_LOST on the next submit).
         auto tlasSizes = AccelerationStructure::GetBuildSizes(
             {tlasGeom},
-            {m_meshCount},
+            {m_rtInstanceCount},
             vk::AccelerationStructureTypeKHR::eTopLevel,
             kTlasFlags | vk::BuildAccelerationStructureFlagBitsKHR::eAllowUpdate,
             vk::AccelerationStructureBuildTypeKHR::eDevice);
@@ -201,9 +207,12 @@ namespace pe
         for (auto &req : instanceReqs)
             req.blas = blasByMesh.at(req.meshIndex);
 
+        for (auto &rt : m_nodeRuntime)
+            rt.instanceIndex = -1;
+
         // --- Create Instance Buffer ---
         m_instanceBuffer = Buffer::Create(
-            std::max((size_t)1, (size_t)m_meshCount) * sizeof(vk::AccelerationStructureInstanceKHR),
+            std::max((size_t)1, (size_t)m_rtInstanceCount) * sizeof(vk::AccelerationStructureInstanceKHR),
             vk::BufferUsageFlagBits2::eAccelerationStructureBuildInputReadOnlyKHR | vk::BufferUsageFlagBits2::eShaderDeviceAddress | vk::BufferUsageFlagBits2::eTransferDst,
             VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT,
             "TLAS_Instance_Buffer");
@@ -249,7 +258,7 @@ namespace pe
 
         // --- TLAS Build ---
         m_tlas = AccelerationStructure::Create("TLAS", nullptr, 0);
-        m_tlas->BuildTLAS(cmd, m_meshCount, m_instanceBuffer, kTlasFlags, m_scratchBuffer->GetDeviceAddress());
+        m_tlas->BuildTLAS(cmd, m_rtInstanceCount, m_instanceBuffer, kTlasFlags, m_scratchBuffer->GetDeviceAddress());
 
         // --- Create MeshInfoGPU Buffer ---
         struct MeshInfoGPU
@@ -263,7 +272,7 @@ namespace pe
 
         Buffer::Destroy(m_meshInfoBuffer);
         m_meshInfoBuffer = Buffer::Create(
-            std::max((size_t)1, (size_t)m_meshCount) * sizeof(MeshInfoGPU),
+            std::max((size_t)1, (size_t)m_rtInstanceCount) * sizeof(MeshInfoGPU),
             vk::BufferUsageFlagBits2::eStorageBuffer | vk::BufferUsageFlagBits2::eTransferDst,
             VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT,
             "MeshInfo_Buffer");
@@ -305,7 +314,7 @@ namespace pe
         {
             const NodeRuntime &rt = m_nodeRuntime[node->index];
             int instanceIndex = rt.instanceIndex;
-            if (instanceIndex < 0)
+            if (instanceIndex < 0 || instanceIndex >= static_cast<int>(m_rtInstanceCount))
                 continue;
 
             const mat4 &t = rt.gpuData.worldMatrix;
@@ -330,6 +339,6 @@ namespace pe
         m_instanceBuffer->Flush();
         m_instanceBuffer->Unmap();
 
-        m_tlas->UpdateTLAS(cmd, m_meshCount, m_instanceBuffer, m_scratchBuffer->GetDeviceAddress());
+        m_tlas->UpdateTLAS(cmd, m_rtInstanceCount, m_instanceBuffer, m_scratchBuffer->GetDeviceAddress());
     }
 } // namespace pe

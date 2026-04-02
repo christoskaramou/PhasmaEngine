@@ -88,7 +88,7 @@ namespace pe
         else
         {
             PushConstants_DepthPass pushConstants{};
-            pushConstants.jointsCount = 0u;
+            pushConstants.jointsCount = static_cast<uint32_t>(m_scene->GetSkeleton().GetBoneCount());
 
             uint32_t frame = RHII.GetFrameIndex();
             size_t offset = 0;

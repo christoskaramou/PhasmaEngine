@@ -1,4 +1,5 @@
 #include "Scene/AssimpLoader.h"
+#include "Animation/AnimationImporter.h"
 #include "Scene/Material.h"
 #include "Scene/Scene.h"
 #include "API/Command.h"
@@ -214,6 +215,7 @@ namespace pe
         loader.UploadImages(cmd);
         loader.BuildMeshes();
         loader.SetupNodes();
+        loader.ExtractAnimations();
 
         cmd->End();
         queue->Submit(1, &cmd, nullptr, nullptr);
@@ -499,8 +501,8 @@ namespace pe
                     FillVertexTangent(vertex, 1.0f, 0.0f, 0.0f, 1.0f);
                 }
 
-                FillVertexJointsWeights(vertex, 0, 0, 0, 0, 0.f, 0.f, 0.f, 0.f);
-                FillVertexJointsWeights(posUv, 0, 0, 0, 0, 0.f, 0.f, 0.f, 0.f);
+                FillVertexJointsWeights(vertex, 0, 0, 0, 0, 1.f, 0.f, 0.f, 0.f);
+                FillVertexJointsWeights(posUv, 0, 0, 0, 0, 1.f, 0.f, 0.f, 0.f);
 
                 meshVertices.push_back(vertex);
                 meshPosUvs.push_back(posUv);
@@ -525,6 +527,11 @@ namespace pe
                 mesh.boundingBox.min = bbMin;
                 mesh.boundingBox.max = bbMax;
             }
+
+            // Extract bone weights from aiMesh
+            AnimationImporter::ExtractBoneWeights(aiMesh, m_scene.m_skeleton, meshVertices, meshPosUvs);
+            if (aiMesh->mNumBones > 0)
+                mesh.skinned = true;
 
             // Indices
             std::vector<unsigned int> meshIndices;
@@ -877,5 +884,14 @@ namespace pe
             return RenderType::Transmission;
 
         return RenderType::Opaque;
+    }
+
+    void AssimpLoader::ExtractAnimations()
+    {
+        if (!m_aiScene)
+            return;
+
+        AnimationImporter::ResolveBoneParents(m_aiScene, m_scene.m_skeleton);
+        AnimationImporter::ExtractAnimationClips(m_aiScene, m_scene.m_skeleton, m_scene.m_animationClips);
     }
 } // namespace pe

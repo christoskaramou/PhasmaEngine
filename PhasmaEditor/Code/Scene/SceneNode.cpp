@@ -9,6 +9,7 @@
 #ifdef PE_AUDIO
 #include "Systems/AudioSystem.h"
 #endif
+#include "Systems/AnimationSystem.h"
 
 namespace pe
 {
@@ -127,6 +128,8 @@ namespace pe
                 as->RemoveSource(node);
         }
 #endif
+        if (auto *animSys = GetGlobalSystem<AnimationSystem>())
+            animSys->RemoveAnimation(node);
 
         // Remove from parent's children list
         NodeId *parent = m_nodeParents[idx];
@@ -246,6 +249,8 @@ namespace pe
         SceneSource source;
         source.filePath = primitiveModel->GetFilePath();
         source.primitiveType = primitiveModel->GetPrimitiveType();
+        source.primitiveParams = primitiveModel->GetPrimitiveParams();
+        source.primitiveParamCount = primitiveModel->GetPrimitiveParamCount();
         m_sources.push_back(std::move(source));
 
         std::vector<int> meshMap = AddModelGeometry(primitiveModel, sourceIndex);

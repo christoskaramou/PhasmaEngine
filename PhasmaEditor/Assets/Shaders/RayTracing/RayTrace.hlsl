@@ -142,12 +142,12 @@ uint GetConstantBufferID(uint instanceID)
 float4x4 LoadMatrix(uint offset)
 {
     float4x4 result;
-    
+
     result[0] = asfloat(data.Load4(offset + 0 * 16));
     result[1] = asfloat(data.Load4(offset + 1 * 16));
     result[2] = asfloat(data.Load4(offset + 2 * 16));
     result[3] = asfloat(data.Load4(offset + 3 * 16));
-    
+
     return result;
 }
 
@@ -191,13 +191,34 @@ Vertex GetVertex(uint meshId, uint vertexIndex)
 {
     uint vertexOffset = meshInfos[meshId].vertexOffset;
     uint offset = vertexOffset + vertexIndex * 96;
-    
+
     Vertex v;
     v.position = asfloat(geometry.Load3(offset + 0));
     v.uv = asfloat(geometry.Load2(offset + 12));
     v.normal = asfloat(geometry.Load3(offset + 20));
     v.tangent = asfloat(geometry.Load4(offset + 32));
     v.color = asfloat(geometry.Load4(offset + 48));
+    v.joints = geometry.Load4(offset + 64);
+    v.weights = asfloat(geometry.Load4(offset + 80));
+
+    return v;
+}
+
+// Apply skeletal skinning to a vertex using joint matrices from the storage buffer.
+// The meshId is used to look up per-node joint matrices via GetJointMatrix.
+Vertex SkinVertex(Vertex v, uint meshId)
+{
+    float weightSum = v.weights.x + v.weights.y + v.weights.z + v.weights.w;
+    if (weightSum < 0.001f)
+        return v; // Not skinned
+
+    float4x4 boneTransform = mul(GetJointMatrix(meshId, v.joints.x), v.weights.x)
+                            + mul(GetJointMatrix(meshId, v.joints.y), v.weights.y)
+                            + mul(GetJointMatrix(meshId, v.joints.z), v.weights.z)
+                            + mul(GetJointMatrix(meshId, v.joints.w), v.weights.w);
+
+    v.position = mul(boneTransform, float4(v.position, 1.0f)).xyz;
+    v.normal = normalize(mul((float3x3)boneTransform, v.normal));
 
     return v;
 }
@@ -236,7 +257,7 @@ float TraceShadowRay(float3 origin, float3 dir, float dist)
 {
     if (cb_shadows == 0)
         return 1.0;
-    
+
     RayDesc ray;
     ray.Origin    = origin;
     ray.Direction = dir;
@@ -260,7 +281,7 @@ float TraceShadowRay(float3 origin, float3 dir, float dist)
 
     if (shadowPayload.t != -1.0)
         return 0.0;
-        
+
     return shadowPayload.radiance.x; // Assumes monochromatic for now or use .rgb in DirectLight
 }
 
@@ -274,21 +295,21 @@ float3 RT_DirectLight(DirectionalLight light, float3 worldPos, float3 materialNo
     float NoL_raw = dot(materialNormal, L);
     float NoL_clamped = clamp(NoL_raw, 0.001, 1.0);
     float HoV = clamp(dot(H, V), 0.001, 1.0);
-    
+
     float intensity = light.color.w;
 
     float3 specularFresnel = Fresnel(F0, HoV);
-    
+
     float NoL_sat = saturate(NoL_raw);
-    
+
     float3 specRef;
     if (cb_use_Disney_PBR)
         specRef = light.color.rgb * intensity * NoL_sat * shadow * CookTorranceSpecular_Disney(materialNormal, H, NoL_clamped, NoV_clamped, specularFresnel, roughness);
     else
         specRef = light.color.rgb * intensity * NoL_sat * shadow * CookTorranceSpecular_GSchlick(materialNormal, H, NoL_clamped, NoV_clamped, specularFresnel, roughness);
-    
+
     specRef *= energyCompensation;
-    
+
     float3 diffRef;
     if (cb_use_Disney_PBR)
     {
@@ -300,9 +321,9 @@ float3 RT_DirectLight(DirectionalLight light, float3 worldPos, float3 materialNo
     {
         diffRef = light.color.rgb * intensity * NoL_sat * shadow * (1.0 - specularFresnel) * (albedo / PI);
     }
-    
+
     float3 diffuseLight = diffRef * (1.0 - metallic) * occlusion;
-    
+
     return diffuseLight + specRef;
 }
 
@@ -313,15 +334,15 @@ float3 RT_ComputePointLight(int index, float3 worldPos, float3 materialNormal, f
     float3 lightDirFull = worldPos - lightPos;
     float dist = length(lightDirFull);
     float range = light.position.w; // radius is .w
-    
+
     if (dist > range) return 0.0;
-    
+
     float3 L = normalize(-lightDirFull);
     float3 H = normalize(V + L);
-    
+
     float attenuation = 1.0 - (dist / range);
     attenuation *= attenuation; // Quadratic
-    
+
     // Shadow
     float shadow = TraceShadowRay(worldPos, L, dist);
 
@@ -329,13 +350,13 @@ float3 RT_ComputePointLight(int index, float3 worldPos, float3 materialNormal, f
     float NoL_raw = dot(materialNormal, L);
     float NoL_clamped = clamp(NoL_raw, 0.001, 1.0);
     float HoV = clamp(dot(H, V), 0.001, 1.0);
-    
+
     float intensity = light.color.w * cb_lightsIntensity;
 
     float3 specularFresnel = Fresnel(F0, HoV);
-    
+
     float NoL_sat = saturate(NoL_raw);
-    
+
     float3 specRef;
     if (cb_use_Disney_PBR)
         specRef = light.color.rgb * intensity * attenuation * NoL_sat * shadow * CookTorranceSpecular_Disney(materialNormal, H, NoL_clamped, NoV_clamped, specularFresnel, roughness);
@@ -355,9 +376,9 @@ float3 RT_ComputePointLight(int index, float3 worldPos, float3 materialNormal, f
     {
         diffRef = light.color.rgb * intensity * attenuation * NoL_sat * shadow * (1.0 - specularFresnel) * (albedo / PI);
     }
-    
+
     float3 diffuseLight = diffRef * (1.0 - metallic) * occlusion;
-    
+
     return diffuseLight + specRef;
 }
 
@@ -368,48 +389,48 @@ float3 RT_ComputeSpotLight(int index, float3 worldPos, float3 materialNormal, fl
     float3 lightDirFull = worldPos - lightPos;
     float dist = length(lightDirFull);
     float range = light.position.w; // range is .w
-    
+
     if (dist > range) return 0.0;
-    
+
     // Convert to Direction Vector using Quaternion
     float3 spotDir = normalize(RotateVectorByQuat(float3(0, 0, -1), light.rotation));
     float3 L = normalize(-lightDirFull);
     float theta = dot(-L, spotDir);
-    
+
     float cutoffCos = cos(radians(light.params.x)); // angle is params.x
     float outerCutoffCos = cos(radians(light.params.x + light.params.y)); // falloff is params.y
-    
+
     if (theta < outerCutoffCos) return 0.0;
-    
+
     float spotIntensity = smoothstep(outerCutoffCos, cutoffCos, theta);
-    
+
     float attenuation = 1.0 - (dist / range);
     attenuation *= attenuation;
     attenuation = max(0.0, attenuation);
-    
+
     // Shadow
     float shadow = TraceShadowRay(worldPos, L, dist);
-    
+
     float intensity = light.color.w * cb_lightsIntensity; // intensity is .w
-    
+
     // PBR calc
     float3 H = normalize(V + L);
     float NoV_clamped = clamp(dot(materialNormal, V), 0.001, 1.0);
     float NoL_raw = dot(materialNormal, L);
     float NoL_clamped = clamp(NoL_raw, 0.001, 1.0);
     float HoV = clamp(dot(H, V), 0.001, 1.0);
-    
+
     float3 specularFresnel = Fresnel(F0, HoV);
     float NoL_sat = saturate(NoL_raw);
-    
+
     float3 specRef;
     if (cb_use_Disney_PBR)
         specRef = light.color.rgb * intensity * attenuation * spotIntensity * NoL_sat * shadow * CookTorranceSpecular_Disney(materialNormal, H, NoL_clamped, NoV_clamped, specularFresnel, roughness);
     else
         specRef = light.color.rgb * intensity * attenuation * spotIntensity * NoL_sat * shadow * CookTorranceSpecular_GSchlick(materialNormal, H, NoL_clamped, NoV_clamped, specularFresnel, roughness);
-        
+
     specRef *= energyCompensation;
-    
+
     float3 diffRef;
     if (cb_use_Disney_PBR)
     {
@@ -421,9 +442,9 @@ float3 RT_ComputeSpotLight(int index, float3 worldPos, float3 materialNormal, fl
     {
         diffRef = light.color.rgb * intensity * attenuation * spotIntensity * NoL_sat * shadow * (1.0 - specularFresnel) * (albedo / PI);
     }
-    
+
     float3 diffuseLight = diffRef * (1.0 - metallic) * occlusion;
-    
+
     return diffuseLight + specRef;
 }
 
@@ -476,10 +497,10 @@ float3 RT_ComputeAreaLight(int index, float3 worldPos, float3 materialNormal, fl
             float3 localP = intersectP - lightPos;
             float u_spec = dot(localP, lightRight);
             float v_spec = dot(localP, lightUp);
-            
+
             u_spec = clamp(u_spec, -width * 0.5, width * 0.5);
             v_spec = clamp(v_spec, -height * 0.5, height * 0.5);
-            
+
             targetPoint = lightPos + lightRight * u_spec + lightUp * v_spec;
         }
     }
@@ -488,20 +509,20 @@ float3 RT_ComputeAreaLight(int index, float3 worldPos, float3 materialNormal, fl
     float3 L_vec = targetPoint - worldPos;
     float distToTarget = length(L_vec);
     float3 L = normalize(L_vec);
-    
+
     // Attenuation
     // Use closestDist for range falloff to maintain shape
     float lightDistRatio = closestDist / range;
     float attenuation = (1.0 - lightDistRatio * lightDistRatio);
     attenuation = max(0.0, attenuation);
     attenuation *= attenuation;
-    
+
     // Use distToTarget for inverse square to keep intensity correct at distance
     attenuation /= (distToTarget * distToTarget + 1.0);
 
     float lightOutputCos = dot(-L, lightForward);
     if (lightOutputCos <= 0.0) return 0.0;
-    
+
     // Shadow (using L to target point)
     float shadow = TraceShadowRay(worldPos, L, distToTarget);
 
@@ -509,20 +530,20 @@ float3 RT_ComputeAreaLight(int index, float3 worldPos, float3 materialNormal, fl
 
     // Standard PBR ...
     float3 H = normalize(V + L);
-    
+
     float NoV = clamp(dot(N, V), 0.001, 1.0);
     float NoL = clamp(dot(N, L), 0.001, 1.0);
     float HoV = clamp(dot(H, V), 0.001, 1.0);
 
     float3 specularFresnel  = Fresnel(F0, HoV);
-    
+
     float3 specRef;
     if (cb_use_Disney_PBR)
         specRef = NoL * shadow * CookTorranceSpecular_Disney(N, H, NoL, NoV, specularFresnel, roughness);
     else
         specRef = NoL * shadow * CookTorranceSpecular_GSchlick(N, H, NoL, NoV, specularFresnel, roughness);
     specRef *= energyCompensation;
-    
+
     float3 diffRef;
     if (cb_use_Disney_PBR)
     {
@@ -534,7 +555,7 @@ float3 RT_ComputeAreaLight(int index, float3 worldPos, float3 materialNormal, fl
     {
         diffRef = NoL * shadow * (1.0 - specularFresnel) * (albedo / PI);
     }
-    
+
     float3 reflectedLight   = specRef;
     float3 diffuseLight     = diffRef * (1.0 - metallic) * occlusion;
 
@@ -570,7 +591,7 @@ void raygeneration()
 
     // Read depth from raster
     float opaqueDepth = depthBuffer.Load(int3(launchIndex.xy, 0)).r;
-    
+
     // Calculate distance to surface
     float4 pViewOpaque = mul(float4(ndc.x, ndc.y, opaqueDepth, 1.0), invProjection);
     pViewOpaque.xyz /= pViewOpaque.w;
@@ -582,7 +603,7 @@ void raygeneration()
     // 2 = RayTracing
     uint mask = 0x80;                  // Default: Transparent only
     float tMax = opaqueDist - 0.00001; // Default: Limited by depth
-    
+
     if (cb_renderMode == 2)
     {
         mask = 0xFF;            // Trace all geometry
@@ -634,14 +655,14 @@ void anyhit(inout HitPayload payload, in BuiltInTriangleIntersectionAttributes a
     uint primitiveId = PrimitiveIndex();
 
     uint textureMask = constants[id].textureMask;
-    
+
     if (!HasTexture(textureMask, TEX_BASE_COLOR_BIT))
         return;
 
     uint3 indices = GetIndices(id, primitiveId);
-    Vertex v0 = GetVertex(id, indices.x);
-    Vertex v1 = GetVertex(id, indices.y);
-    Vertex v2 = GetVertex(id, indices.z);
+    Vertex v0 = SkinVertex(GetVertex(id, indices.x), id);
+    Vertex v1 = SkinVertex(GetVertex(id, indices.y), id);
+    Vertex v2 = SkinVertex(GetVertex(id, indices.z), id);
 
     float3 barycentricCoords = float3(1.0f - attr.barycentrics.x - attr.barycentrics.y, attr.barycentrics.x, attr.barycentrics.y);
     float2 uv = v0.uv * barycentricCoords.x + v1.uv * barycentricCoords.y + v2.uv * barycentricCoords.z;
@@ -665,10 +686,10 @@ void closesthit(inout HitPayload payload, in BuiltInTriangleIntersectionAttribut
     uint primitiveId = PrimitiveIndex();
     uint3 indices = GetIndices(id, primitiveId);
 
-    // Interpolate vertex attributes
-    Vertex v0 = GetVertex(id, indices.x);
-    Vertex v1 = GetVertex(id, indices.y);
-    Vertex v2 = GetVertex(id, indices.z);
+    // Interpolate vertex attributes (apply skinning if weighted)
+    Vertex v0 = SkinVertex(GetVertex(id, indices.x), id);
+    Vertex v1 = SkinVertex(GetVertex(id, indices.y), id);
+    Vertex v2 = SkinVertex(GetVertex(id, indices.z), id);
 
     float3 barycentricCoords = float3(1.0f - attr.barycentrics.x - attr.barycentrics.y, attr.barycentrics.x, attr.barycentrics.y);
 
@@ -676,7 +697,7 @@ void closesthit(inout HitPayload payload, in BuiltInTriangleIntersectionAttribut
     float3 normalObj = v0.normal * barycentricCoords.x + v1.normal * barycentricCoords.y + v2.normal * barycentricCoords.z;
     float4 tangentObj = v0.tangent * barycentricCoords.x + v1.tangent * barycentricCoords.y + v2.tangent * barycentricCoords.z;
     float4 color = v0.color * barycentricCoords.x + v1.color * barycentricCoords.y + v2.color * barycentricCoords.z;
-    
+
     // World Space conversion
     float3x4 objToWorld = ObjectToWorld3x4();
     float3x3 worldRotation3x3 = remove_scale3x3((float3x3)objToWorld);
@@ -685,10 +706,10 @@ void closesthit(inout HitPayload payload, in BuiltInTriangleIntersectionAttribut
 
     // Tangent Space
     float3 tangentWorld = normalize(mul(worldRotation3x3, tangentObj.xyz));
-    
+
     // GBuffer Logic Adaptation
     uint textureMask = constants[id].textureMask;
-    
+
     // 1. Base Color
     float4 baseColorFactor = GetBaseColorFactor(id);
     float4 combinedColor = color * baseColorFactor;
@@ -729,7 +750,7 @@ void closesthit(inout HitPayload payload, in BuiltInTriangleIntersectionAttribut
     {
         float3 tangentNormalSample = GetNormal(id, uv).xyz;
         tangentWorld = normalize(tangentWorld - dot(tangentWorld, normalWorld) * normalWorld);
-        float3 bitangentWorld = cross(normalWorld, tangentWorld) * tangentObj.w; 
+        float3 bitangentWorld = cross(normalWorld, tangentWorld) * tangentObj.w;
         float3x3 TBN = float3x3(tangentWorld, bitangentWorld, normalWorld);
         N = normalize(mul(tangentNormalSample * 2.0 - 1.0, TBN));
     }
@@ -738,15 +759,15 @@ void closesthit(inout HitPayload payload, in BuiltInTriangleIntersectionAttribut
     float3 V = normalize(-WorldRayDirection());
     float3 F0 = float3(0.04, 0.04, 0.04);
     F0 = lerp(F0, combinedColor.rgb, metallic);
-    
+
     // Energy Compensation
-    float NdV = clamp(dot(N, V), 0.001, 1.0); 
+    float NdV = clamp(dot(N, V), 0.001, 1.0);
     float2 envBRDF = LutIBL.SampleLevel(material_sampler, float2(NdV, roughness), 0).xy;
     float E = envBRDF.x + envBRDF.y;
     float3 energyCompensation = 1.0 + F0 * (1.0 / max(E, 0.001) - 1.0);
 
     float3 lighting = 0.0.xxx;
-    
+
     // IBL
     lighting += ComputeIBL(N, V, combinedColor.rgb, metallic, roughness, F0, envBRDF) * cb_iblIntensity;
     lighting *= occlusion;
@@ -760,10 +781,10 @@ void closesthit(inout HitPayload payload, in BuiltInTriangleIntersectionAttribut
     for (uint i = 0; i < cb_numDirectionalLights; i++)
     {
         // Only shadowing the first one for now as per previous logic (or optimize shadow tracing)
-        float s = (i == 0) ? sunShadow : 1.0; 
+        float s = (i == 0) ? sunShadow : 1.0;
         lighting += RT_DirectLight(LoadDirectionalLight(i), positionWorld, N, V, combinedColor.rgb, metallic, roughness, F0, occlusion, s, energyCompensation);
     }
-    
+
     // Point Lights
     for (uint i = 0; i < cb_numPointLights; i++)
     {
@@ -810,18 +831,18 @@ void closesthit(inout HitPayload payload, in BuiltInTriangleIntersectionAttribut
         ray.Origin = positionWorld;
         ray.TMin   = 0.01;
         ray.TMax   = 10000.0;
-        
+
         float3 nextDir = WorldRayDirection();
-        
+
         if (isTransmissive)
         {
             float r = 1.0 / ior;
             if (dot(WorldRayDirection(), N) > 0.0)
             {
-                r = ior / 1.0; 
+                r = ior / 1.0;
                 N = -N;
             }
-            
+
             float3 refracted = refract(WorldRayDirection(), N, r);
             if (length(refracted) > 0.0)
                 nextDir = normalize(refracted);
@@ -850,7 +871,7 @@ void closesthit(inout HitPayload payload, in BuiltInTriangleIntersectionAttribut
             ray,
             transPayload
         );
-        
+
         float3 transColor = transPayload.radiance;
 
         // volume attenuation (Beer's Law)
@@ -858,18 +879,18 @@ void closesthit(inout HitPayload payload, in BuiltInTriangleIntersectionAttribut
         {
              transColor *= combinedColor.rgb;
              float dist = transPayload.t;
-             
+
              if (thicknessFactor > 0.0)
                  dist = thicknessFactor;
-             
-             if (dist > 0.0 && attenuationDistance < 10000.0) 
+
+             if (dist > 0.0 && attenuationDistance < 10000.0)
              {
                  float3 density = -log(attenuationColor) / attenuationDistance;
                  float3 transmission = exp(-density * dist);
                  transColor *= transmission;
              }
         }
-        
+
         if (isTransmissive)
              lighting = lerp(lighting, transColor, transmissionFactor);
         else

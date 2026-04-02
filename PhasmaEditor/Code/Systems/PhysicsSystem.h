@@ -23,6 +23,7 @@ namespace pe
     struct PhysicsNodeState
     {
         NodeId *nodeId = nullptr;
+        uint32_t nodeRevision = 0;
         PhysicsBodyDesc desc;
         uint32_t joltBodyIdRaw = 0xFFFFFFFF; // JPH::BodyID raw value
         bool inWorld = false;
@@ -71,6 +72,7 @@ namespace pe
         bool IsSimulating() const { return m_simulating; }
 
     private:
+        void PruneInvalidBodies(const Scene &scene);
         void CreateJoltBody(PhysicsNodeState &state, Scene &scene);
         void DestroyJoltBody(PhysicsNodeState &state);
         void SyncTransformsFromJolt(Scene &scene);

@@ -20,6 +20,7 @@
 #include "Audio/AudioTypes.h"
 #include "Systems/AudioSystem.h"
 #endif
+#include "Systems/AnimationSystem.h"
 
 #define _SILENCE_CXX17_ITERATOR_BASE_CLASS_DEPRECATION_WARNING
 #include "rapidjson/document.h"
@@ -51,6 +52,61 @@ namespace pe
             // which makes transmission materials attenuate to black when restored.
             if (renderType == RenderType::Transmission && f1[0][1] <= 0.0f)
                 f1[0][1] = std::numeric_limits<float>::infinity();
+        }
+
+        ModelAsset *CreatePrimitiveModelFromSource(const std::string &ptype, const vec4 &params, uint32_t paramCount)
+        {
+            if (ptype == "cube")
+                return Primitives::CreateCube(paramCount >= 1 ? params.x : 1.0f);
+            if (ptype == "sphere")
+                return Primitives::CreateSphere(paramCount >= 1 ? params.x : 1.0f);
+            if (ptype == "plane")
+                return Primitives::CreatePlane(paramCount >= 1 ? params.x : 10.0f, paramCount >= 2 ? params.y : 10.0f);
+            if (ptype == "cylinder")
+                return Primitives::CreateCylinder(paramCount >= 1 ? params.x : 1.0f, paramCount >= 2 ? params.y : 2.0f);
+            if (ptype == "cone")
+                return Primitives::CreateCone(paramCount >= 1 ? params.x : 1.0f, paramCount >= 2 ? params.y : 2.0f);
+            if (ptype == "quad")
+                return Primitives::CreateQuad(paramCount >= 1 ? params.x : 1.0f, paramCount >= 2 ? params.y : 1.0f);
+            return nullptr;
+        }
+
+        vec4 ReadPrimitiveParams(const rapidjson::Value &srcVal, uint32_t &outCount)
+        {
+            vec4 params(0.f);
+            outCount = 0;
+            if (!srcVal.HasMember("primitive_params") || !srcVal["primitive_params"].IsArray())
+                return params;
+
+            const auto &arr = srcVal["primitive_params"];
+            outCount = std::min<uint32_t>(static_cast<uint32_t>(arr.Size()), 4u);
+            for (uint32_t i = 0; i < outCount; ++i)
+                params[i] = arr[i].GetFloat();
+            return params;
+        }
+
+        void WritePrimitiveParams(rapidjson::Value &dstObj, const vec4 &params, uint32_t count, rapidjson::Document::AllocatorType &allocator)
+        {
+            if (count == 0)
+                return;
+
+            rapidjson::Value arr(rapidjson::kArrayType);
+            for (uint32_t i = 0; i < count && i < 4; ++i)
+                arr.PushBack(params[i], allocator);
+            dstObj.AddMember("primitive_params", arr.Move(), allocator);
+        }
+
+        std::string MakePrimitiveSourceId(const std::string &ptype, const vec4 &params, uint32_t count)
+        {
+            std::string id = "prim:" + ptype;
+            for (uint32_t i = 0; i < count && i < 4; ++i)
+            {
+                char buf[32];
+                std::snprintf(buf, sizeof(buf), "%.6f", params[i]);
+                id += ":";
+                id += buf;
+            }
+            return id;
         }
     } // namespace
 
@@ -180,6 +236,7 @@ namespace pe
             if (!src.primitiveType.empty())
             {
                 srcObj.AddMember("primitive_type", rapidjson::Value(src.primitiveType.c_str(), allocator).Move(), allocator);
+                WritePrimitiveParams(srcObj, src.primitiveParams, src.primitiveParamCount, allocator);
             }
             else
             {
@@ -572,11 +629,25 @@ namespace pe
         m_scenePath.clear();
         m_dirty = false;
 
+#ifdef PE_PHYSICS
+        if (auto *ps = GetGlobalSystem<PhysicsSystem>())
+        {
+            if (ps->IsSimulating())
+                ps->StopSimulation();
+            ps->ClearAllBodies();
+        }
+#endif
+
         SelectionManager::Instance().ClearSelection();
+
+        if (auto *animSys = GetGlobalSystem<AnimationSystem>())
+            animSys->ClearAllAnimations();
 
         m_sources.clear();
         m_meshSourceInfos.clear();
         m_modelRootNodes.clear();
+        m_skeleton = Skeleton();
+        m_animationClips.clear();
 
         // Null out camera nodeIds before freeing node memory
         for (auto *cam : m_cameras)
@@ -678,23 +749,6 @@ namespace pe
             return result;
         }
 
-        auto loadPrimitive = [](const std::string &ptype) -> ModelAsset *
-        {
-            if (ptype == "cube")
-                return Primitives::CreateCube();
-            if (ptype == "sphere")
-                return Primitives::CreateSphere();
-            if (ptype == "plane")
-                return Primitives::CreatePlane();
-            if (ptype == "cylinder")
-                return Primitives::CreateCylinder();
-            if (ptype == "cone")
-                return Primitives::CreateCone();
-            if (ptype == "quad")
-                return Primitives::CreateQuad();
-            return nullptr;
-        };
-
         // Set progress for Loading widget
         auto &loading = Settings::Get<GlobalSettings>().loading;
         uint32_t modelCount = 0;
@@ -716,7 +770,9 @@ namespace pe
                 ModelAsset *model = nullptr;
                 if (sv.HasMember("primitive_type"))
                 {
-                    model = loadPrimitive(sv["primitive_type"].GetString());
+                    uint32_t paramCount = 0;
+                    vec4 params = ReadPrimitiveParams(sv, paramCount);
+                    model = CreatePrimitiveModelFromSource(sv["primitive_type"].GetString(), params, paramCount);
                 }
                 else if (sv.HasMember("path"))
                 {
@@ -741,7 +797,9 @@ namespace pe
                 ModelAsset *model = nullptr;
                 if (modelVal.HasMember("primitive_type"))
                 {
-                    model = loadPrimitive(modelVal["primitive_type"].GetString());
+                    uint32_t paramCount = 0;
+                    vec4 params = ReadPrimitiveParams(modelVal, paramCount);
+                    model = CreatePrimitiveModelFromSource(modelVal["primitive_type"].GetString(), params, paramCount);
                 }
                 else if (modelVal.HasMember("path"))
                 {
@@ -771,10 +829,15 @@ namespace pe
         m_scenePath = preload.filePath;
         m_dirty = false;
 
+        m_autoplayAnimations = false;
+
         rapidjson::Document d;
         d.Parse(preload.jsonText.c_str());
         if (d.HasParseError())
+        {
+            m_autoplayAnimations = true;
             return;
+        }
 
 #ifdef PE_PHYSICS
         // Clear all physics bodies before freeing node memory
@@ -789,6 +852,8 @@ namespace pe
         if (auto *as = GetGlobalSystem<AudioSystem>())
             as->ClearAllSources();
 #endif
+        if (auto *animSys = GetGlobalSystem<AnimationSystem>())
+            animSys->ClearAllAnimations();
 
         // Clear existing scene: free SoA data, delete models, clear geometry stores
         SelectionManager::Instance().ClearSelection();
@@ -796,6 +861,8 @@ namespace pe
         m_sources.clear();
         m_meshSourceInfos.clear();
         m_modelRootNodes.clear();
+        m_skeleton = Skeleton();
+        m_animationClips.clear();
 
         // Null out camera nodeIds before freeing node memory
         for (auto *cam : m_cameras)
@@ -976,11 +1043,19 @@ namespace pe
                     SceneSource source;
                     source.filePath = model->GetFilePath();
                     source.primitiveType = model->GetPrimitiveType();
+                    source.primitiveParams = model->GetPrimitiveParams();
+                    source.primitiveParamCount = model->GetPrimitiveParamCount();
                     m_sources.push_back(std::move(source));
 
                     sourceMeshMaps[si] = AddModelGeometry(model, sourceIndex);
                     m_models.insert(model->GetId(), model);
                     loadedModels[si] = model;
+
+                    if (model->HasSkeleton() && m_skeleton.bones.empty())
+                    {
+                        m_skeleton = model->GetSkeleton();
+                        m_animationClips = model->GetAnimations();
+                    }
                 }
             }
 
@@ -1400,6 +1475,12 @@ namespace pe
                         }
                     }
 
+                    if (model->HasSkeleton() && m_skeleton.bones.empty())
+                    {
+                        m_skeleton = model->GetSkeleton();
+                        m_animationClips = model->GetAnimations();
+                    }
+
                     EventSystem::PushEvent(EventType::ModelLoaded, model);
                 }
             }
@@ -1495,6 +1576,21 @@ namespace pe
                 SetActiveCamera(m_cameras[activeIndex]);
         }
 
+        m_autoplayAnimations = true;
+
+        if (!m_animationClips.empty())
+        {
+            if (auto *animSys = GetGlobalSystem<AnimationSystem>())
+            {
+                for (uint32_t ni = 0; ni < GetNodeCount(); ni++)
+                {
+                    NodeId *node = m_nodeIds[ni];
+                    if (GetMeshRef(node) >= 0)
+                        animSys->PlayAnimation(*this, node, 0, true);
+                }
+            }
+        }
+
         Log::Info("Scene loaded from: " + preload.filePath.string());
     }
 
@@ -1577,6 +1673,7 @@ namespace pe
             if (!src.primitiveType.empty())
             {
                 srcObj.AddMember("primitive_type", rapidjson::Value(src.primitiveType.c_str(), allocator).Move(), allocator);
+                WritePrimitiveParams(srcObj, src.primitiveParams, src.primitiveParamCount, allocator);
             }
             else
             {
@@ -2027,14 +2124,18 @@ namespace pe
                 auto GetSourceId = [](const SceneSource &s) -> std::string
                 {
                     if (!s.primitiveType.empty())
-                        return "prim:" + s.primitiveType;
+                        return MakePrimitiveSourceId(s.primitiveType, s.primitiveParams, s.primitiveParamCount);
                     auto u8 = s.filePath.u8string();
                     return "file:" + std::string(u8.begin(), u8.end());
                 };
                 auto GetSnapshotSourceId = [](const rapidjson::Value &sv) -> std::string
                 {
                     if (sv.HasMember("primitive_type"))
-                        return "prim:" + std::string(sv["primitive_type"].GetString());
+                    {
+                        uint32_t paramCount = 0;
+                        vec4 params = ReadPrimitiveParams(sv, paramCount);
+                        return MakePrimitiveSourceId(sv["primitive_type"].GetString(), params, paramCount);
+                    }
                     if (sv.HasMember("path"))
                         return "file:" + std::string(sv["path"].GetString());
                     return "";
@@ -2357,6 +2458,8 @@ namespace pe
                 if (auto *as = GetGlobalSystem<AudioSystem>())
                     as->ClearAllSources();
 #endif
+                if (auto *animSys = GetGlobalSystem<AnimationSystem>())
+                    animSys->ClearAllAnimations();
 
                 // Clear old scene data synchronously (mirrors LoadSceneApply)
                 for (NodeId *id : m_nodeIds)
@@ -2390,6 +2493,8 @@ namespace pe
                 m_sources.clear();
                 m_meshSourceInfos.clear();
                 m_modelRootNodes.clear();
+                m_skeleton = Skeleton();
+                m_animationClips.clear();
 
                 for (auto *model : m_models)
                     delete model;
@@ -2408,19 +2513,9 @@ namespace pe
 
                     if (sv.HasMember("primitive_type"))
                     {
-                        std::string ptype = sv["primitive_type"].GetString();
-                        if (ptype == "cube")
-                            model = Primitives::CreateCube();
-                        else if (ptype == "sphere")
-                            model = Primitives::CreateSphere();
-                        else if (ptype == "plane")
-                            model = Primitives::CreatePlane();
-                        else if (ptype == "cylinder")
-                            model = Primitives::CreateCylinder();
-                        else if (ptype == "cone")
-                            model = Primitives::CreateCone();
-                        else if (ptype == "quad")
-                            model = Primitives::CreateQuad();
+                        uint32_t paramCount = 0;
+                        vec4 params = ReadPrimitiveParams(sv, paramCount);
+                        model = CreatePrimitiveModelFromSource(sv["primitive_type"].GetString(), params, paramCount);
                     }
                     else if (sv.HasMember("path"))
                     {
@@ -2435,10 +2530,18 @@ namespace pe
                         SceneSource source;
                         source.filePath = model->GetFilePath();
                         source.primitiveType = model->GetPrimitiveType();
+                        source.primitiveParams = model->GetPrimitiveParams();
+                        source.primitiveParamCount = model->GetPrimitiveParamCount();
                         m_sources.push_back(std::move(source));
 
                         sourceMeshMaps[si] = AddModelGeometry(model, sourceIndex);
                         m_models.insert(model->GetId(), model);
+
+                        if (model->HasSkeleton() && m_skeleton.bones.empty())
+                        {
+                            m_skeleton = model->GetSkeleton();
+                            m_animationClips = model->GetAnimations();
+                        }
                     }
                 }
 
