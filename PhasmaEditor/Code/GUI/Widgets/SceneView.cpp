@@ -189,6 +189,12 @@ namespace pe
                 if (ctx.node)
                 {
                     Scene &scene = GetGlobalSystem<RendererSystem>()->GetScene();
+                    if (!scene.IsNodeAlive(ctx.node))
+                    {
+                        selection.ClearSelection();
+                        ctx.node = nullptr;
+                        return ctx;
+                    }
                     ctx.matrix = scene.GetWorldMatrix(ctx.node);
                     ctx.valid = true;
                 }

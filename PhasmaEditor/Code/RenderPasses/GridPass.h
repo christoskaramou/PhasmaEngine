@@ -21,8 +21,6 @@ namespace pe
         void SetScene(Scene *scene) { m_scene = scene; }
 
     private:
-        friend class Scene;
-
         Image *m_viewportRT;
         Image *m_depthRT;
         Scene *m_scene = nullptr;

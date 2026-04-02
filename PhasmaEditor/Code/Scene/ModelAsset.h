@@ -4,7 +4,6 @@
 
 namespace pe
 {
-    class Buffer;
     struct Vertex;
     struct AabbVertex;
     class Material;
@@ -39,12 +38,6 @@ namespace pe
     class ModelAsset : public Resource
     {
     public:
-        struct NodeGpuData
-        {
-            mat4 worldMatrix = mat4(1.f);
-            mat4 previousWorldMatrix = mat4(1.f);
-        };
-
         ModelAsset();
         virtual ~ModelAsset();
 
@@ -57,8 +50,6 @@ namespace pe
 
         // Common interface methods
         int CreateNode(const std::string &name, int parentIndex = -1, const mat4 &localMatrix = mat4(1.f), int meshIndex = -1);
-        void MarkDirty(int node);
-        void UpdateNodeMatrices();
         void ReparentNode(int nodeIndex, int newParentIndex);
 
         // Removes a node and its subtree. Returns true if the model is now empty (caller should delete it).
@@ -76,26 +67,20 @@ namespace pe
 
         const std::vector<ResourceHandle<Image>> &GetImages() const { return m_images; }
         const std::vector<Sampler *> &GetSamplers() const { return m_samplers; }
+        std::vector<std::unique_ptr<Material>> &GetOwnedMaterials() { return m_materials; }
+        const std::vector<std::unique_ptr<Material>> &GetOwnedMaterials() const { return m_materials; }
 
         const std::vector<MeshInfo> &GetMeshInfos() const { return m_meshInfos; }
         const std::vector<NodeInfo> &GetNodeInfos() const { return m_nodeInfos; }
 
         mat4 &GetMatrix() { return m_matrix; }
         const mat4 &GetMatrix() const { return m_matrix; }
-        void SetMatrix(const mat4 &matrix, bool markDirty = true);
-        bool HasDirtyNodes() const { return m_dirtyNodes; }
-        void SetDirtyNodes(bool dirty) { m_dirtyNodes = dirty; }
-        bool HasMovedNodes() const { return !m_nodesMoved.empty(); }
-        const std::vector<int> &GetMovedNodes() const { return m_nodesMoved; }
-        void ClearMovedNodes() { m_nodesMoved.clear(); }
-        bool IsUniformDirty(uint32_t frameIndex) const;
-        void SetUniformDirty(uint32_t frameIndex, bool dirty);
+        void SetMatrix(const mat4 &matrix) { m_matrix = matrix; }
 
         uint32_t GetVerticesCount() const { return m_verticesCount; }
         uint32_t GetIndicesCount() const { return m_indicesCount; }
         uint32_t GetMeshCount() const { return m_meshCount; }
         int GetRootNodeIndex() const;
-        static constexpr size_t GetNodeGpuDataSize() { return sizeof(NodeGpuData); }
 
         const std::string &GetLabel() const { return m_label; }
         const std::filesystem::path &GetFilePath() const { return m_filePath; }
@@ -115,11 +100,11 @@ namespace pe
         NodeInfo *GetNodeInfo(int nodeIndex);
         const NodeInfo *GetNodeInfo(int nodeIndex) const;
         const mat4 &GetNodeLocalMatrix(int nodeIndex) const;
-        void SetNodeLocalMatrix(int nodeIndex, const mat4 &localMatrix, bool markDirty = true);
+        void SetNodeLocalMatrix(int nodeIndex, const mat4 &localMatrix);
         int GetNodeParentIndex(int nodeIndex) const;
         void SetNodeParentIndex(int nodeIndex, int parentIndex);
         void RebuildNodeChildrenFromParents();
-        const AABB &GetNodeWorldBoundingBox(int nodeIndex) const;
+        AABB GetNodeWorldBoundingBox(int nodeIndex) const;
 
         int GetNodeCount() const { return static_cast<int>(m_nodeInfos.size()); }
         int GetMeshInfoCount() const { return static_cast<int>(m_meshInfos.size()); }
@@ -151,8 +136,8 @@ namespace pe
         friend class Scene;
         friend class Primitives;
 
-        virtual void UpdateNodeMatrix(int node);
         static constexpr uint32_t TextureBit(TextureType type) { return 1u << static_cast<uint32_t>(type); }
+        mat4 ComputeNodeWorldMatrix(int nodeIndex) const;
 
         void ResetResources(CommandBuffer *cmd);
 
@@ -162,22 +147,6 @@ namespace pe
         void AddImage(Image *image, bool owned);
         void AddSampler(Sampler *sampler, bool owned);
 
-        struct MeshRuntimeInfo
-        {
-            uint32_t imageViewIndices[5] = {0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF};
-        };
-
-        struct NodeRuntimeInfo
-        {
-            size_t dataOffset = static_cast<size_t>(-1);
-            uint32_t indirectIndex = 0;
-            int instanceIndex = -1;
-            AABB worldBoundingBox;
-            NodeGpuData gpuData;
-            bool dirty = false;
-            std::vector<bool> dirtyUniforms;
-        };
-
         size_t m_id;
 
         std::vector<ResourceHandle<Image>> m_images{};
@@ -186,12 +155,10 @@ namespace pe
         std::unordered_set<Sampler *> m_sharedSamplers{};
 
         std::vector<MeshInfo> m_meshInfos{};
-        std::vector<MeshRuntimeInfo> m_meshRuntimeInfos{};
 
         // Owned materials created during import (shared across meshes via MeshInfo::material pointer)
         std::vector<std::unique_ptr<Material>> m_materials{};
         std::vector<NodeInfo> m_nodeInfos{};
-        std::vector<NodeRuntimeInfo> m_nodeRuntimeInfos{};
         std::vector<int> m_nodeToMesh{};
 
         std::vector<Vertex> m_vertices;
@@ -200,11 +167,6 @@ namespace pe
         std::vector<uint32_t> m_indices;
 
         mat4 m_matrix = mat4(1.f);
-
-        // Dirty flags are used to update nodes and uniform buffers, they are important
-        bool m_dirtyNodes = false;
-        std::vector<int> m_nodesMoved; // Stores indices of nodes moved this frame
-        std::vector<bool> m_dirtyUniforms;
 
         uint32_t m_verticesCount = 0;
         uint32_t m_indicesCount = 0;
@@ -215,8 +177,6 @@ namespace pe
         vec4 m_primitiveParams = vec4(0.f);
         uint32_t m_primitiveParamCount = 0;
         std::filesystem::path m_filePath;
-
-        bool m_previousMatricesIsDirty = false;
 
         Skeleton m_skeleton;
         std::vector<AnimationClip> m_animations;

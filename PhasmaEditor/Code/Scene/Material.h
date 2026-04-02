@@ -115,6 +115,12 @@ namespace pe
         void SetAlphaCutoff(float v);
         void SetEmissiveFactor(const vec3 &v);
         void SetOcclusionStrength(float v);
+        void SetNormalScale(float v);
+        void SetTransmissionFactor(float v);
+        void SetThicknessFactor(float v);
+        void SetAttenuationDistance(float v);
+        void SetIor(float v);
+        void SetAttenuationColor(const vec3 &v);
         void SetRenderType(RenderType type);
         void SetTexture(TextureType slot, ResourceHandle<Image> img);
         void SetTextureMask(uint32_t mask);
@@ -133,6 +139,12 @@ namespace pe
         float GetRoughness() const { return m_roughnessOverride.value_or(m_parent->roughness); }
         vec3 GetEmissiveFactor() const { return m_emissiveOverride.value_or(m_parent->emissiveFactor); }
         float GetOcclusionStrength() const { return m_occlusionStrengthOverride.value_or(m_parent->occlusionStrength); }
+        float GetNormalScale() const { return m_normalScaleOverride.value_or(m_parent->normalScale); }
+        float GetTransmissionFactor() const { return m_transmissionFactorOverride.value_or(m_parent->transmissionFactor); }
+        float GetThicknessFactor() const { return m_thicknessFactorOverride.value_or(m_parent->thicknessFactor); }
+        float GetAttenuationDistance() const { return m_attenuationDistanceOverride.value_or(m_parent->attenuationDistance); }
+        float GetIor() const { return m_iorOverride.value_or(m_parent->ior); }
+        vec3 GetAttenuationColor() const { return m_attenuationColorOverride.value_or(m_parent->attenuationColor); }
         uint32_t GetTextureMask() const { return m_textureMaskOverride.value_or(m_parent->textureMask); }
 
         // Build GPU data without a full Material copy
@@ -161,6 +173,12 @@ namespace pe
         std::optional<float> m_alphaCutoffOverride;
         std::optional<vec3> m_emissiveOverride;
         std::optional<float> m_occlusionStrengthOverride;
+        std::optional<float> m_normalScaleOverride;
+        std::optional<float> m_transmissionFactorOverride;
+        std::optional<float> m_thicknessFactorOverride;
+        std::optional<float> m_attenuationDistanceOverride;
+        std::optional<float> m_iorOverride;
+        std::optional<vec3> m_attenuationColorOverride;
         std::optional<RenderType> m_renderTypeOverride;
         std::optional<uint32_t> m_textureMaskOverride;
 

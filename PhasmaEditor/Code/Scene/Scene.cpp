@@ -78,6 +78,9 @@ namespace pe
 
     Scene::~Scene()
     {
+        // Destroy ECS entities before freeing NodeId memory
+        DestroyAllNodeEntities();
+
         // Free all NodeId allocations
         for (NodeId *id : m_nodeIds)
             delete id;

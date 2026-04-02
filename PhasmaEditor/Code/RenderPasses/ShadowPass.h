@@ -32,7 +32,6 @@ namespace pe
         void ClearDepths(CommandBuffer *cmd);
 
     private:
-        friend class Scene;
         friend class LightOpaquePass;
         friend class LightTransparentPass;
 

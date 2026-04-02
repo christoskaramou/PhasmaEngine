@@ -191,6 +191,30 @@ namespace pe
     {
         m_occlusionStrengthOverride = v;
     }
+    void MaterialInstance::SetNormalScale(float v)
+    {
+        m_normalScaleOverride = v;
+    }
+    void MaterialInstance::SetTransmissionFactor(float v)
+    {
+        m_transmissionFactorOverride = v;
+    }
+    void MaterialInstance::SetThicknessFactor(float v)
+    {
+        m_thicknessFactorOverride = v;
+    }
+    void MaterialInstance::SetAttenuationDistance(float v)
+    {
+        m_attenuationDistanceOverride = v;
+    }
+    void MaterialInstance::SetIor(float v)
+    {
+        m_iorOverride = v;
+    }
+    void MaterialInstance::SetAttenuationColor(const vec3 &v)
+    {
+        m_attenuationColorOverride = v;
+    }
     void MaterialInstance::SetRenderType(RenderType type)
     {
         m_renderTypeOverride = type;
@@ -233,6 +257,8 @@ namespace pe
     {
         if (m_baseColorOverride || m_metallicOverride || m_roughnessOverride ||
             m_alphaCutoffOverride || m_emissiveOverride || m_occlusionStrengthOverride ||
+            m_normalScaleOverride || m_transmissionFactorOverride || m_thicknessFactorOverride ||
+            m_attenuationDistanceOverride || m_iorOverride || m_attenuationColorOverride ||
             m_renderTypeOverride || m_textureMaskOverride)
             return true;
 
@@ -261,6 +287,18 @@ namespace pe
             resolved.emissiveFactor = *m_emissiveOverride;
         if (m_occlusionStrengthOverride)
             resolved.occlusionStrength = *m_occlusionStrengthOverride;
+        if (m_normalScaleOverride)
+            resolved.normalScale = *m_normalScaleOverride;
+        if (m_transmissionFactorOverride)
+            resolved.transmissionFactor = *m_transmissionFactorOverride;
+        if (m_thicknessFactorOverride)
+            resolved.thicknessFactor = *m_thicknessFactorOverride;
+        if (m_attenuationDistanceOverride)
+            resolved.attenuationDistance = *m_attenuationDistanceOverride;
+        if (m_iorOverride)
+            resolved.ior = *m_iorOverride;
+        if (m_attenuationColorOverride)
+            resolved.attenuationColor = *m_attenuationColorOverride;
         if (m_renderTypeOverride)
             resolved.renderType = *m_renderTypeOverride;
         if (m_textureMaskOverride)
@@ -279,10 +317,10 @@ namespace pe
     {
         MaterialGpuData data{};
         data.baseColorFactor = GetBaseColorFactor();
-        data.emissiveTransmission = vec4(GetEmissiveFactor(), m_parent->transmissionFactor);
+        data.emissiveTransmission = vec4(GetEmissiveFactor(), GetTransmissionFactor());
         data.pbrParams = vec4(GetMetallic(), GetRoughness(), GetAlphaCutoff(), GetOcclusionStrength());
-        data.transmissionVolume = vec4(m_parent->thicknessFactor, m_parent->attenuationDistance, m_parent->ior, 0.f);
-        data.attenuationColor = vec4(m_parent->attenuationColor, 0.f);
+        data.transmissionVolume = vec4(GetThicknessFactor(), GetAttenuationDistance(), GetIor(), 0.f);
+        data.attenuationColor = vec4(GetAttenuationColor(), 0.f);
         return data;
     }
 
@@ -309,6 +347,18 @@ namespace pe
             SetEmissiveFactor(resolved.emissiveFactor);
         if (resolved.occlusionStrength != m_parent->occlusionStrength)
             SetOcclusionStrength(resolved.occlusionStrength);
+        if (resolved.normalScale != m_parent->normalScale)
+            SetNormalScale(resolved.normalScale);
+        if (resolved.transmissionFactor != m_parent->transmissionFactor)
+            SetTransmissionFactor(resolved.transmissionFactor);
+        if (resolved.thicknessFactor != m_parent->thicknessFactor)
+            SetThicknessFactor(resolved.thicknessFactor);
+        if (resolved.attenuationDistance != m_parent->attenuationDistance)
+            SetAttenuationDistance(resolved.attenuationDistance);
+        if (resolved.ior != m_parent->ior)
+            SetIor(resolved.ior);
+        if (resolved.attenuationColor != m_parent->attenuationColor)
+            SetAttenuationColor(resolved.attenuationColor);
         if (resolved.renderType != m_parent->renderType)
             SetRenderType(resolved.renderType);
         if (resolved.textureMask != m_parent->textureMask)

@@ -34,7 +34,7 @@ namespace pe
         void SetSpeed(NodeId *node, float speed);
         bool IsPlaying(const NodeId *node) const;
         int GetCurrentClip(const NodeId *node) const;
-        float GetCurrentTime(const NodeId *node) const;
+        float GetPlaybackTime(const NodeId *node) const;
 
         void ClearAllAnimations();
 

@@ -159,9 +159,7 @@ namespace pe
 
         model->m_meshInfos.push_back(meshInfo);
 
-        const int nodeIndex = model->CreateNode(model->GetLabel(), -1, mat4(1.0f), 0);
-        if (nodeIndex >= 0)
-            model->UpdateNodeMatrices();
+        model->CreateNode(model->GetLabel(), -1, mat4(1.0f), 0);
 
         return model;
     }

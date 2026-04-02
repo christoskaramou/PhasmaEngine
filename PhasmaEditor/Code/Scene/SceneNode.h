@@ -2,6 +2,7 @@
 
 namespace pe
 {
+    class Entity;
     class Image;
     class Material;
     class MaterialInstance;
@@ -12,8 +13,9 @@ namespace pe
     // On swap-and-pop deletion, only NodeId::index is updated.
     struct NodeId
     {
-        uint32_t index; // current position in Scene's SoA arrays
-        uint32_t revision = 0; // incremented whenever this NodeId is recycled for a new logical node
+        Entity *entity = nullptr; // ECS entity backing this node (owned by Context)
+        uint32_t index;           // current position in Scene's dense arrays
+        uint32_t revision = 0;    // incremented whenever this NodeId is recycled for a new logical node
     };
 
     // Component presence flags — editor reads these to know which panels to show

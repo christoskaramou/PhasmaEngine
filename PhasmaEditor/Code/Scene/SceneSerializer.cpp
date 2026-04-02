@@ -339,6 +339,7 @@ namespace pe
                 }
 
                 meshObj.AddMember("texture_mask", saveMat ? saveMat->textureMask : 0u, allocator);
+                meshObj.AddMember("double_sided", saveMat ? saveMat->doubleSided : false, allocator);
 
                 mat4 factors[2] = {mat4(1.f), mat4(1.f)};
                 if (saveMat)
@@ -403,7 +404,7 @@ namespace pe
                 if (!scene.m_nodeScriptPaths[ni].empty())
                     nodeObj.AddMember("script", MakeStringValue(scene.m_nodeScriptPaths[ni]), allocator);
 
-                uint32_t flags = scene.m_componentFlags[ni];
+                uint32_t flags = scene.m_componentFlags[ni] & ~Component_GpuPending;
                 if (flags)
                     nodeObj.AddMember("component_flags", flags, allocator);
 
@@ -804,6 +805,9 @@ namespace pe
         for (auto &l : m_areaLights)
             l.nodeId = nullptr;
 
+        // Destroy ECS entities before freeing NodeId memory
+        DestroyAllNodeEntities();
+
         // Free all NodeId allocations and clear SoA stores
         for (NodeId *id : m_nodeIds)
             delete id;
@@ -1018,6 +1022,9 @@ namespace pe
         for (auto &l : m_areaLights)
             l.nodeId = nullptr;
 
+        // Destroy ECS entities before freeing NodeId memory
+        DestroyAllNodeEntities();
+
         for (NodeId *id : m_nodeIds)
             delete id;
         for (NodeId *id : m_freeNodeIds)
@@ -1194,9 +1201,11 @@ namespace pe
             }
 
             // 2. Apply mesh overrides from JSON
+            std::vector<int> savedMeshToSceneMesh;
             if (d.HasMember("meshes"))
             {
                 const auto &meshesVal = d["meshes"];
+                savedMeshToSceneMesh.assign(meshesVal.Size(), -1);
                 std::unordered_set<Material *> loadedSharedMaterials;
 
                 for (rapidjson::SizeType mi = 0; mi < meshesVal.Size(); mi++)
@@ -1218,6 +1227,8 @@ namespace pe
                     if (sceneMeshIdx < 0 || sceneMeshIdx >= static_cast<int>(m_meshes.size()))
                         continue;
 
+                    savedMeshToSceneMesh[mi] = sceneMeshIdx;
+
                     Mesh &mesh = m_meshes[sceneMeshIdx];
                     if (mVal.HasMember("render_type"))
                         mesh.renderType = static_cast<RenderType>(mVal["render_type"].GetInt());
@@ -1236,6 +1247,9 @@ namespace pe
 
                     if (loadTarget && !skipShared)
                     {
+                        loadTarget->renderType = mesh.renderType;
+                        if (mVal.HasMember("double_sided"))
+                            loadTarget->doubleSided = mVal["double_sided"].GetBool();
                         if (mVal.HasMember("texture_mask"))
                         {
                             uint32_t savedMask = mVal["texture_mask"].GetUint();
@@ -1310,9 +1324,12 @@ namespace pe
                         SetLocalMatrix(node, ReadMat4(nv["local_matrix"]), false);
                     if (nv.HasMember("mesh"))
                     {
-                        int meshIdx = nv["mesh"].GetInt();
-                        if (meshIdx >= 0 && meshIdx < static_cast<int>(m_meshes.size()))
-                            SetMeshRef(node, meshIdx);
+                        int savedMeshIdx = nv["mesh"].GetInt();
+                        int sceneMeshIdx = (savedMeshIdx >= 0 && savedMeshIdx < static_cast<int>(savedMeshToSceneMesh.size()))
+                                               ? savedMeshToSceneMesh[savedMeshIdx]
+                                               : -1;
+                        if (sceneMeshIdx >= 0 && sceneMeshIdx < static_cast<int>(m_meshes.size()))
+                            SetMeshRef(node, sceneMeshIdx);
                     }
                     if (nv.HasMember("script"))
                         SetNodeScript(node, nv["script"].GetString());
@@ -1341,8 +1358,9 @@ namespace pe
                         continue;
 
                     uint32_t flags = nv.HasMember("component_flags") ? nv["component_flags"].GetUint() : 0;
-                    if (flags)
-                        AddComponentFlag(node, flags);
+                    uint32_t restoreFlags = flags & ~(Component_Mesh | Component_Script | Component_GpuPending);
+                    if (restoreFlags)
+                        AddComponentFlag(node, restoreFlags);
 
                     if ((flags & Component_Camera) && nv.HasMember("camera"))
                     {
@@ -1526,7 +1544,7 @@ namespace pe
                     if (modelVal.HasMember("name"))
                         model->SetLabel(modelVal["name"].GetString());
                     if (modelVal.HasMember("matrix"))
-                        model->SetMatrix(ReadMat4(modelVal["matrix"]), false);
+                        model->SetMatrix(ReadMat4(modelVal["matrix"]));
 
                     if (modelVal.HasMember("nodes"))
                     {
@@ -1539,12 +1557,10 @@ namespace pe
                             if (nVal.HasMember("parent"))
                                 model->SetNodeParentIndex(static_cast<int>(i), nVal["parent"].GetInt());
                             if (nVal.HasMember("local_matrix"))
-                                model->SetNodeLocalMatrix(static_cast<int>(i), ReadMat4(nVal["local_matrix"]), false);
+                                model->SetNodeLocalMatrix(static_cast<int>(i), ReadMat4(nVal["local_matrix"]));
                         }
 
                         model->RebuildNodeChildrenFromParents();
-                        model->SetDirtyNodes(true);
-                        model->UpdateNodeMatrices();
                     }
 
                     if (modelVal.HasMember("meshes"))
@@ -1857,13 +1873,28 @@ namespace pe
                     }
                     if (nv.HasMember("local_matrix"))
                         SetLocalMatrix(node, ReadMat4(nv["local_matrix"]));
+                    if (nv.HasMember("mesh"))
+                    {
+                        int meshIdx = nv["mesh"].GetInt();
+                        if (meshIdx >= 0 && meshIdx < static_cast<int>(m_meshes.size()))
+                            SetMeshRef(node, meshIdx);
+                        else
+                            SetMeshRef(node, -1);
+                    }
+                    else
+                    {
+                        SetMeshRef(node, -1);
+                    }
+                    if (nv.HasMember("script"))
+                        SetNodeScript(node, nv["script"].GetString());
+                    else
+                        SetNodeScript(node, "");
 
                     uint32_t flags = nv.HasMember("component_flags") ? nv["component_flags"].GetUint() : 0;
-                    if (flags)
-                    {
-                        m_componentFlags[ni] = 0;
-                        AddComponentFlag(node, flags);
-                    }
+                    m_componentFlags[ni] &= (Component_Mesh | Component_Script);
+                    uint32_t restoreFlags = flags & ~(Component_Mesh | Component_Script | Component_GpuPending);
+                    if (restoreFlags)
+                        AddComponentFlag(node, restoreFlags);
                 }
 
                 // Update meshes (materials only)
@@ -1896,6 +1927,9 @@ namespace pe
 
                         if (loadTarget && !skipShared)
                         {
+                            loadTarget->renderType = mesh.renderType;
+                            if (mVal.HasMember("double_sided"))
+                                loadTarget->doubleSided = mVal["double_sided"].GetBool();
                             if (mVal.HasMember("texture_mask"))
                                 loadTarget->textureMask = mVal["texture_mask"].GetUint();
                             if (mVal.HasMember("material_factors"))
@@ -2099,6 +2133,7 @@ namespace pe
             else
             {
                 // Slow path: geometry changed — clear everything and reload via LoadScene-style path
+                SelectionManager::Instance().ClearSelection();
 
                 // Null out camera/light nodeIds before freeing node memory
                 for (auto *cam : m_cameras)
@@ -2125,6 +2160,7 @@ namespace pe
                     animSys->ClearAllAnimations();
 
                 // Clear old scene data synchronously (mirrors LoadSceneApply)
+                DestroyAllNodeEntities();
                 for (NodeId *id : m_nodeIds)
                     delete id;
                 for (NodeId *id : m_freeNodeIds)
@@ -2200,9 +2236,11 @@ namespace pe
                 }
 
                 // Apply mesh overrides
+                std::vector<int> savedMeshToSceneMesh;
                 if (d.HasMember("meshes"))
                 {
                     const auto &meshesVal = d["meshes"];
+                    savedMeshToSceneMesh.assign(meshesVal.Size(), -1);
                     std::unordered_set<Material *> loadedSharedMaterials;
 
                     for (rapidjson::SizeType mi = 0; mi < meshesVal.Size(); mi++)
@@ -2220,6 +2258,8 @@ namespace pe
                         if (sceneMeshIdx < 0 || sceneMeshIdx >= static_cast<int>(m_meshes.size()))
                             continue;
 
+                        savedMeshToSceneMesh[mi] = sceneMeshIdx;
+
                         Mesh &mesh = m_meshes[sceneMeshIdx];
                         if (mVal.HasMember("render_type"))
                             mesh.renderType = static_cast<RenderType>(mVal["render_type"].GetInt());
@@ -2235,6 +2275,9 @@ namespace pe
 
                         if (loadTarget && !skipShared)
                         {
+                            loadTarget->renderType = mesh.renderType;
+                            if (mVal.HasMember("double_sided"))
+                                loadTarget->doubleSided = mVal["double_sided"].GetBool();
                             if (mVal.HasMember("texture_mask"))
                                 loadTarget->textureMask = mVal["texture_mask"].GetUint();
                             if (mVal.HasMember("material_factors"))
@@ -2270,9 +2313,12 @@ namespace pe
                         SetLocalMatrix(node, ReadMat4(nv["local_matrix"]), false);
                     if (nv.HasMember("mesh"))
                     {
-                        int meshIdx = nv["mesh"].GetInt();
-                        if (meshIdx >= 0 && meshIdx < static_cast<int>(m_meshes.size()))
-                            SetMeshRef(node, meshIdx);
+                        int savedMeshIdx = nv["mesh"].GetInt();
+                        int sceneMeshIdx = (savedMeshIdx >= 0 && savedMeshIdx < static_cast<int>(savedMeshToSceneMesh.size()))
+                                               ? savedMeshToSceneMesh[savedMeshIdx]
+                                               : -1;
+                        if (sceneMeshIdx >= 0 && sceneMeshIdx < static_cast<int>(m_meshes.size()))
+                            SetMeshRef(node, sceneMeshIdx);
                     }
                     if (nv.HasMember("script"))
                         SetNodeScript(node, nv["script"].GetString());
@@ -2307,8 +2353,9 @@ namespace pe
                     if (!node)
                         continue;
                     uint32_t flags = nv.HasMember("component_flags") ? nv["component_flags"].GetUint() : 0;
-                    if (flags)
-                        AddComponentFlag(node, flags);
+                    uint32_t restoreFlags = flags & ~(Component_Mesh | Component_Script | Component_GpuPending);
+                    if (restoreFlags)
+                        AddComponentFlag(node, restoreFlags);
 
                     if ((flags & Component_Camera) && nv.HasMember("camera"))
                     {

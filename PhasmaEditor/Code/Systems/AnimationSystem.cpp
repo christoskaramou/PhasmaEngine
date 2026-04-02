@@ -161,7 +161,7 @@ namespace pe
         return (it != m_nodeToIndex.end()) ? m_states[it->second].clipIndex : -1;
     }
 
-    float AnimationSystem::GetCurrentTime(const NodeId *node) const
+    float AnimationSystem::GetPlaybackTime(const NodeId *node) const
     {
         auto it = m_nodeToIndex.find(node);
         return (it != m_nodeToIndex.end()) ? m_states[it->second].time : 0.0f;

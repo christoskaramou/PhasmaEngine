@@ -322,7 +322,7 @@ namespace pe
             mat->gpuIndex = 0xFFFFFFFF;
         for (auto *model : m_models)
         {
-            for (auto &mat : model->m_materials)
+            for (auto &mat : model->GetOwnedMaterials())
                 mat->gpuIndex = 0xFFFFFFFF;
         }
 
@@ -413,7 +413,7 @@ namespace pe
         for (auto &mat : m_ownedMaterials)
             updateIfDirty(mat.get());
         for (auto *model : m_models)
-            for (auto &mat : model->m_materials)
+            for (auto &mat : model->GetOwnedMaterials())
                 updateIfDirty(mat.get());
 
         if (anyDirty)

@@ -49,6 +49,29 @@ namespace pe
         if (parent)
             m_nodeChildren[parent->index].push_back(id);
 
+        // --- ECS dual-write: create entity and attach node components ---
+        Entity *entity = Context::Get()->CreateEntity();
+        id->entity = entity;
+
+        auto *nameComp = entity->CreateComponent<NodeNameComponent>();
+        nameComp->name = name;
+
+        auto *hierarchyComp = entity->CreateComponent<NodeHierarchyComponent>();
+        hierarchyComp->parent = parent;
+        if (parent && parent->entity)
+        {
+            auto *parentHierarchy = parent->entity->GetComponent<NodeHierarchyComponent>();
+            if (parentHierarchy)
+                parentHierarchy->children.push_back(id);
+        }
+
+        auto *transformComp = entity->CreateComponent<NodeTransformComponent>();
+        auto *meshRefsComp = entity->CreateComponent<NodeMeshRefsComponent>();
+        auto *scriptComp = entity->CreateComponent<NodeScriptComponent>();
+
+        m_nodeComponentCache.push_back({nameComp, hierarchyComp, transformComp, meshRefsComp, scriptComp});
+        // --- end ECS dual-write ---
+
         m_nodesDirty = true;
 
         return id;
@@ -70,11 +93,24 @@ namespace pe
 
         // Null out material pointers on the mesh so stale entries in m_meshes
         // don't dereference freed Materials after the owning model is deleted.
+        // Only null if no other node still references this mesh.
         int meshRef = m_meshRefs[idx];
         if (meshRef >= 0 && meshRef < static_cast<int>(m_meshes.size()))
         {
-            m_meshes[meshRef].material = nullptr;
-            m_meshes[meshRef].materialInstance = nullptr;
+            bool otherRef = false;
+            for (uint32_t i = 0; i < static_cast<uint32_t>(m_nodeIds.size()); i++)
+            {
+                if (i != idx && m_meshRefs[i] == meshRef)
+                {
+                    otherRef = true;
+                    break;
+                }
+            }
+            if (!otherRef)
+            {
+                m_meshes[meshRef].material = nullptr;
+                m_meshes[meshRef].materialInstance = nullptr;
+            }
         }
 
         // Remove component entries so they don't persist with dangling nodeIds
@@ -139,6 +175,23 @@ namespace pe
             siblings.erase(std::remove(siblings.begin(), siblings.end(), node), siblings.end());
         }
 
+        // --- ECS dual-write: clean up hierarchy component and destroy entity ---
+        if (node->entity)
+        {
+            if (parent && parent->entity)
+            {
+                auto *parentHierarchy = parent->entity->GetComponent<NodeHierarchyComponent>();
+                if (parentHierarchy)
+                {
+                    auto &ch = parentHierarchy->children;
+                    ch.erase(std::remove(ch.begin(), ch.end(), node), ch.end());
+                }
+            }
+            Context::Get()->RemoveEntity(node->entity->GetID());
+            node->entity = nullptr;
+        }
+        // --- end ECS dual-write ---
+
         // Swap-and-pop
         SwapAndPopNode(idx);
 
@@ -165,6 +218,7 @@ namespace pe
             std::swap(m_meshRefs[index], m_meshRefs[last]);
             std::swap(m_nodeScriptPaths[index], m_nodeScriptPaths[last]);
             std::swap(m_nodeRuntime[index], m_nodeRuntime[last]);
+            std::swap(m_nodeComponentCache[index], m_nodeComponentCache[last]);
 
             // Update the swapped node's identity — the one place
             m_nodeIds[index]->index = index;
@@ -180,6 +234,7 @@ namespace pe
         m_meshRefs.pop_back();
         m_nodeScriptPaths.pop_back();
         m_nodeRuntime.pop_back();
+        m_nodeComponentCache.pop_back();
     }
 
     void Scene::ReparentNode(NodeId *node, NodeId *newParent)
@@ -211,12 +266,38 @@ namespace pe
         if (newParent)
             m_nodeChildren[newParent->index].push_back(node);
 
+        // --- ECS dual-write: update hierarchy components ---
+        if (oldParent && oldParent->entity)
+        {
+            auto *oldHierarchy = oldParent->entity->GetComponent<NodeHierarchyComponent>();
+            if (oldHierarchy)
+            {
+                auto &ch = oldHierarchy->children;
+                ch.erase(std::remove(ch.begin(), ch.end(), node), ch.end());
+            }
+        }
+        if (node->entity)
+        {
+            auto *hierarchy = node->entity->GetComponent<NodeHierarchyComponent>();
+            if (hierarchy)
+                hierarchy->parent = newParent;
+        }
+        if (newParent && newParent->entity)
+        {
+            auto *newHierarchy = newParent->entity->GetComponent<NodeHierarchyComponent>();
+            if (newHierarchy)
+                newHierarchy->children.push_back(node);
+        }
+        // --- end ECS dual-write ---
+
         MarkNodeDirty(node);
     }
 
     void Scene::SetLocalMatrix(NodeId *node, const mat4 &m, bool markDirty)
     {
         m_localMatrices[node->index] = m;
+        if (auto *comp = m_nodeComponentCache[node->index].transform)
+            comp->localMatrix = m;
         if (markDirty)
             MarkNodeDirty(node);
     }
@@ -230,6 +311,13 @@ namespace pe
             m_componentFlags[idx] |= Component_Mesh;
         else
             m_componentFlags[idx] &= ~Component_Mesh;
+
+        if (auto *comp = m_nodeComponentCache[idx].meshRefs)
+        {
+            comp->meshRefs.clear();
+            if (meshIndex >= 0)
+                comp->meshRefs.push_back(meshIndex);
+        }
     }
 
     void Scene::SetNodeScript(NodeId *node, const std::string &path)
@@ -241,6 +329,9 @@ namespace pe
             m_componentFlags[idx] |= Component_Script;
         else
             m_componentFlags[idx] &= ~Component_Script;
+
+        if (auto *comp = m_nodeComponentCache[idx].script)
+            comp->path = path;
     }
 
     void Scene::AttachPrimitiveToNode(NodeId *node, ModelAsset *primitiveModel)
@@ -259,7 +350,7 @@ namespace pe
 
         // Transfer material ownership from the temporary ModelAsset to the scene
         // before deleting it — mesh.material holds a raw pointer into these.
-        for (auto &mat : primitiveModel->m_materials)
+        for (auto &mat : primitiveModel->GetOwnedMaterials())
             m_ownedMaterials.push_back(std::move(mat));
 
         MarkNodeDirty(node);
@@ -357,5 +448,23 @@ namespace pe
         }
 
         m_nodesDirty = false;
+    }
+    void Scene::DestroyAllNodeEntities()
+    {
+        Context *ctx = Context::Get();
+        for (NodeId *id : m_nodeIds)
+        {
+            if (id && id->entity)
+            {
+                ctx->RemoveEntity(id->entity->GetID());
+                id->entity = nullptr;
+            }
+        }
+        for (NodeId *id : m_freeNodeIds)
+        {
+            if (id)
+                id->entity = nullptr;
+        }
+        m_nodeComponentCache.clear();
     }
 } // namespace pe

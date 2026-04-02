@@ -253,7 +253,6 @@ namespace pe
         // 3) nodes
         SetupNodes();
         ExtractAnimations();
-        UpdateNodeMatrices();
 
         cmd->End();
         queue->Submit(1, &cmd, nullptr, nullptr);
@@ -405,7 +404,6 @@ namespace pe
 
         m_meshInfos.clear();
         m_meshInfos.resize(m_scene->mNumMeshes);
-        m_meshRuntimeInfos.assign(m_meshInfos.size(), MeshRuntimeInfo{});
 
         size_t estimatedVertices = 0;
         size_t estimatedIndices = 0;
@@ -698,7 +696,6 @@ namespace pe
         CountNodesRecursive(m_scene->mRootNode, nodeCount);
         total = nodeCount;
 
-        m_dirtyNodes = true;
         m_nodeInfos.clear();
         m_nodeToMesh.clear();
 

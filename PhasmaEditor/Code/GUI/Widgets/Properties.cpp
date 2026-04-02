@@ -53,6 +53,14 @@ namespace pe
         }
 
         Scene &scene = GetGlobalSystem<RendererSystem>()->GetScene();
+        if ((sel.GetSelectionType() == SelectionType::Node || sel.GetSelectionType() == SelectionType::Mesh) &&
+            !scene.IsNodeAlive(sel.GetSelectedNode()))
+        {
+            sel.ClearSelection();
+            ImGui::TextDisabled("No object selected");
+            ImGui::End();
+            return;
+        }
 
         auto drawTransform = [&]()
         {

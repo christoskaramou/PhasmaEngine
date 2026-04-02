@@ -48,7 +48,7 @@ Scene::UpdateGeometryBuffers();  // rebuilds unified GPU buffers
 
 // Access nodes through const API
 int root = model->GetRootNodeIndex();
-mat4 world = model->GetNodeWorldMatrix(root);
+mat4 world = model->GetMatrix() * model->GetNodeLocalMatrix(root);
 AABB bounds = model->GetNodeWorldBoundingBox(root);
 const std::string& name = model->GetNodeName(root);
 
@@ -56,9 +56,9 @@ const std::string& name = model->GetNodeName(root);
 model->SetNodeLocalMatrix(root, newMatrix);
 ```
 
-**Data separation**: `NodeInfo` holds logical data (parent, children, localMatrix, name).
-`NodeRuntimeInfo` holds GPU/renderer state (worldMatrix, dirtyFlags, boundingBox, dataOffset).
-`MeshInfo` holds geometry/material data. `MeshRuntimeInfo` holds image view indices.
+**Data separation**: `ModelAsset` is asset data only. `NodeInfo` holds logical hierarchy data
+(parent, children, localMatrix, name), `MeshInfo` holds imported geometry/material metadata,
+and scene/runtime GPU state lives in `Scene` SoA storage rather than on the asset.
 
 ---
 

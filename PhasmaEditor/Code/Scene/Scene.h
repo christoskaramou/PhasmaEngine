@@ -2,6 +2,7 @@
 
 #include "Animation/AnimationTypes.h"
 #include "API/Vertex.h"
+#include "Scene/NodeComponents.h"
 #include "Scene/SceneNode.h"
 #include "Scene/SceneNodeHandle.h"
 #include "Scene/SelectionManager.h"
@@ -178,6 +179,8 @@ namespace pe
         {
             ValidateNodeId(node);
             m_nodeNames[node->index] = name;
+            if (auto *comp = m_nodeComponentCache[node->index].name)
+                comp->name = name;
         }
         void UpdateNodeMatrices();
         void MarkNodeDirty(NodeId *node);
@@ -193,6 +196,13 @@ namespace pe
 #else
         void ValidateNodeId(const NodeId *) const {}
 #endif
+
+        bool IsNodeAlive(const NodeId *node) const
+        {
+            return node &&
+                   node->index < m_nodeIds.size() &&
+                   m_nodeIds[node->index] == node;
+        }
 
         // --- Accessors ---
         const std::filesystem::path &GetScenePath() const { return m_scenePath; }
@@ -271,6 +281,26 @@ namespace pe
         Buffer *GetMaterialTable() { return m_materialTable; }
         Sampler *GetDefaultSampler() const;
         static const std::vector<uint32_t> &GetAabbIndices() { return s_aabbIndices; }
+
+        // ECS entity access
+        Entity *GetNodeEntity(const NodeId *node) const
+        {
+            ValidateNodeId(node);
+            return node->entity;
+        }
+
+        template <class T>
+        T *GetNodeComponent(const NodeId *node)
+        {
+            ValidateNodeId(node);
+            return node->entity ? node->entity->GetComponent<T>() : nullptr;
+        }
+
+        const NodeComponentCache &GetNodeCache(const NodeId *node) const
+        {
+            ValidateNodeId(node);
+            return m_nodeComponentCache[node->index];
+        }
 
         // Node accessors (all indexed via NodeId::index)
         const std::string &GetNodeName(const NodeId *node) const
@@ -375,6 +405,7 @@ namespace pe
         // Node graph internals (SceneNode.cpp)
         void SwapAndPopNode(uint32_t index);
         void UpdateNodeMatrix(NodeId *node);
+        void DestroyAllNodeEntities();
 
         // Model geometry
         std::vector<int> AddModelGeometry(ModelAsset *model, int sourceIndex);
@@ -445,6 +476,7 @@ namespace pe
         bool m_dirty = false;
 
         // Node Graph SoA Storage
+        std::vector<NodeComponentCache> m_nodeComponentCache;
         std::vector<NodeId *> m_nodeIds;
         std::vector<std::string> m_nodeNames;
         std::vector<mat4> m_localMatrices;
