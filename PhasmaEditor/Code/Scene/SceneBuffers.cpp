@@ -34,7 +34,7 @@ namespace pe
         m_meshCount = 0;
         for (uint32_t i = 0; i < GetNodeCount(); i++)
         {
-            int meshIdx = m_meshRefs[i];
+            int meshIdx = MeshRefAt(i);
             if (meshIdx < 0)
                 continue;
             if (m_componentFlags[i] & Component_GpuPending)
@@ -152,7 +152,7 @@ namespace pe
 
         for (uint32_t i = 0; i < GetNodeCount(); i++)
         {
-            int meshIdx = m_meshRefs[i];
+            int meshIdx = MeshRefAt(i);
             if (meshIdx < 0 || m_meshes[meshIdx].indexCount == 0)
                 continue;
             if (m_componentFlags[i] & Component_GpuPending)
@@ -192,7 +192,7 @@ namespace pe
 
         for (uint32_t i = 0; i < GetNodeCount(); i++)
         {
-            int meshIdx = m_meshRefs[i];
+            int meshIdx = MeshRefAt(i);
             if (meshIdx < 0)
                 continue;
 
@@ -271,7 +271,7 @@ namespace pe
         // left behind by deleted models (m_meshes is append-only).
         for (uint32_t ni = 0; ni < GetNodeCount(); ni++)
         {
-            int meshIndex = m_meshRefs[ni];
+            int meshIndex = MeshRefAt(ni);
             if (meshIndex < 0 || meshIndex >= static_cast<int>(m_meshes.size()))
                 continue;
 
@@ -328,7 +328,7 @@ namespace pe
 
         for (uint32_t i = 0; i < GetNodeCount(); i++)
         {
-            int meshIdx = m_meshRefs[i];
+            int meshIdx = MeshRefAt(i);
             if (meshIdx < 0)
                 continue;
 
@@ -433,7 +433,7 @@ namespace pe
         m_meshConstants->Map();
         for (uint32_t i = 0; i < GetNodeCount(); i++)
         {
-            int meshIdx = m_meshRefs[i];
+            int meshIdx = MeshRefAt(i);
             if (meshIdx < 0)
                 continue;
 

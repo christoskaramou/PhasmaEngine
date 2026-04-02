@@ -199,7 +199,7 @@ namespace pe
             std::vector<bool> liveMesh(scene.m_meshes.size(), false);
             for (uint32_t ni = 0; ni < scene.GetNodeCount(); ni++)
             {
-                int meshRef = scene.m_meshRefs[ni];
+                int meshRef = scene.MeshRefAt(ni);
                 if (meshRef >= 0 && meshRef < static_cast<int>(scene.m_meshes.size()))
                     liveMesh[meshRef] = true;
             }
@@ -386,23 +386,24 @@ namespace pe
             {
                 NodeId *node = scene.m_nodeIds[ni];
                 rapidjson::Value nodeObj(rapidjson::kObjectType);
-                nodeObj.AddMember("name", MakeStringValue(scene.m_nodeNames[ni]), allocator);
+                const auto &cache = scene.m_nodeComponentCache[ni];
+                nodeObj.AddMember("name", MakeStringValue(cache.name->name), allocator);
 
-                NodeId *parentNode = scene.m_nodeParents[ni];
+                NodeId *parentNode = cache.hierarchy->parent;
                 int parentIdx = parentNode ? static_cast<int>(parentNode->index) : -1;
                 nodeObj.AddMember("parent", parentIdx, allocator);
 
                 rapidjson::Value localMat;
-                SetMat4(localMat, scene.m_localMatrices[ni]);
+                SetMat4(localMat, cache.transform->localMatrix);
                 nodeObj.AddMember("local_matrix", localMat.Move(), allocator);
 
-                int meshRef = scene.m_meshRefs[ni];
+                int meshRef = scene.MeshRefAt(ni);
                 int remappedMesh = (meshRef >= 0 && meshRef < static_cast<int>(meshRemap.size())) ? meshRemap[meshRef] : -1;
                 if (remappedMesh >= 0)
                     nodeObj.AddMember("mesh", remappedMesh, allocator);
 
-                if (!scene.m_nodeScriptPaths[ni].empty())
-                    nodeObj.AddMember("script", MakeStringValue(scene.m_nodeScriptPaths[ni]), allocator);
+                if (!cache.script->path.empty())
+                    nodeObj.AddMember("script", MakeStringValue(cache.script->path), allocator);
 
                 uint32_t flags = scene.m_componentFlags[ni] & ~Component_GpuPending;
                 if (flags)
@@ -815,13 +816,7 @@ namespace pe
             delete id;
         m_nodeIds.clear();
         m_freeNodeIds.clear();
-        m_nodeNames.clear();
-        m_localMatrices.clear();
-        m_nodeParents.clear();
-        m_nodeChildren.clear();
         m_componentFlags.clear();
-        m_meshRefs.clear();
-        m_nodeScriptPaths.clear();
         m_nodeRuntime.clear();
         m_nodesMoved.clear();
         m_nodesDirty = false;
@@ -1031,13 +1026,7 @@ namespace pe
             delete id;
         m_nodeIds.clear();
         m_freeNodeIds.clear();
-        m_nodeNames.clear();
-        m_localMatrices.clear();
-        m_nodeParents.clear();
-        m_nodeChildren.clear();
         m_componentFlags.clear();
-        m_meshRefs.clear();
-        m_nodeScriptPaths.clear();
         m_nodeRuntime.clear();
         m_nodesMoved.clear();
         m_nodesDirty = false;
@@ -2167,13 +2156,7 @@ namespace pe
                     delete id;
                 m_nodeIds.clear();
                 m_freeNodeIds.clear();
-                m_nodeNames.clear();
-                m_localMatrices.clear();
-                m_nodeParents.clear();
-                m_nodeChildren.clear();
                 m_componentFlags.clear();
-                m_meshRefs.clear();
-                m_nodeScriptPaths.clear();
                 m_nodeRuntime.clear();
                 m_nodesMoved.clear();
                 m_nodesDirty = false;

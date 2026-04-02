@@ -178,9 +178,7 @@ namespace pe
         void SetNodeName(NodeId *node, const std::string &name)
         {
             ValidateNodeId(node);
-            m_nodeNames[node->index] = name;
-            if (auto *comp = m_nodeComponentCache[node->index].name)
-                comp->name = name;
+            m_nodeComponentCache[node->index].name->name = name;
         }
         void UpdateNodeMatrices();
         void MarkNodeDirty(NodeId *node);
@@ -302,20 +300,24 @@ namespace pe
             return m_nodeComponentCache[node->index];
         }
 
-        // Node accessors (all indexed via NodeId::index)
+        // Node accessors (all indexed via NodeId::index, reading from ECS cache)
         const std::string &GetNodeName(const NodeId *node) const
         {
             ValidateNodeId(node);
-            return m_nodeNames[node->index];
+            return m_nodeComponentCache[node->index].name->name;
         }
-        const mat4 &GetLocalMatrix(const NodeId *node) const { return m_localMatrices[node->index]; }
+        const mat4 &GetLocalMatrix(const NodeId *node) const { return m_nodeComponentCache[node->index].transform->localMatrix; }
         const mat4 &GetWorldMatrix(const NodeId *node) const { return m_nodeRuntime[node->index].gpuData.worldMatrix; }
         const AABB &GetWorldAABB(const NodeId *node) const { return m_nodeRuntime[node->index].worldAABB; }
-        NodeId *GetParent(const NodeId *node) const { return m_nodeParents[node->index]; }
-        const std::vector<NodeId *> &GetChildren(const NodeId *node) const { return m_nodeChildren[node->index]; }
+        NodeId *GetParent(const NodeId *node) const { return m_nodeComponentCache[node->index].hierarchy->parent; }
+        const std::vector<NodeId *> &GetChildren(const NodeId *node) const { return m_nodeComponentCache[node->index].hierarchy->children; }
         uint32_t GetComponentFlags(const NodeId *node) const { return m_componentFlags[node->index]; }
-        int GetMeshRef(const NodeId *node) const { return m_meshRefs[node->index]; }
-        const std::string &GetNodeScriptPath(const NodeId *node) const { return m_nodeScriptPaths[node->index]; }
+        int GetMeshRef(const NodeId *node) const
+        {
+            const auto &refs = m_nodeComponentCache[node->index].meshRefs->meshRefs;
+            return refs.empty() ? -1 : refs[0];
+        }
+        const std::string &GetNodeScriptPath(const NodeId *node) const { return m_nodeComponentCache[node->index].script->path; }
         NodeRuntime &GetNodeRuntime(const NodeId *node) { return m_nodeRuntime[node->index]; }
         const NodeRuntime &GetNodeRuntime(const NodeId *node) const { return m_nodeRuntime[node->index]; }
         uint32_t GetNodeCount() const { return static_cast<uint32_t>(m_nodeIds.size()); }
@@ -475,18 +477,19 @@ namespace pe
         std::filesystem::path m_scenePath;
         bool m_dirty = false;
 
-        // Node Graph SoA Storage
-        std::vector<NodeComponentCache> m_nodeComponentCache;
+        // Node Graph Storage
+        std::vector<NodeComponentCache> m_nodeComponentCache; // dense cache indexed by NodeId::index
         std::vector<NodeId *> m_nodeIds;
-        std::vector<std::string> m_nodeNames;
-        std::vector<mat4> m_localMatrices;
-        std::vector<NodeId *> m_nodeParents;
-        std::vector<std::vector<NodeId *>> m_nodeChildren;
-        std::vector<uint32_t> m_componentFlags;
-        std::vector<int> m_meshRefs;
-        std::vector<std::string> m_nodeScriptPaths;
-        std::vector<NodeRuntime> m_nodeRuntime;
+        std::vector<uint32_t> m_componentFlags;   // stays until Phase 4 (camera/light/physics/audio ECS migration)
+        std::vector<NodeRuntime> m_nodeRuntime;    // stays until Phase 3 (runtime state ECS migration)
         std::vector<NodeId *> m_freeNodeIds;
+
+        // Hot-path helper: first mesh ref for a node by dense index (avoids verbose cache access)
+        int MeshRefAt(uint32_t index) const
+        {
+            const auto &refs = m_nodeComponentCache[index].meshRefs->meshRefs;
+            return refs.empty() ? -1 : refs[0];
+        }
 
         // Mesh store
         std::vector<Mesh> m_meshes;

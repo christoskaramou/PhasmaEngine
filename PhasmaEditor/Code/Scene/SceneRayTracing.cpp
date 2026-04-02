@@ -126,7 +126,7 @@ namespace pe
 
         for (uint32_t i = 0; i < GetNodeCount(); i++)
         {
-            int meshIdx = m_meshRefs[i];
+            int meshIdx = MeshRefAt(i);
             if (meshIdx < 0)
                 continue;
             if (m_meshes[meshIdx].indexCount == 0)

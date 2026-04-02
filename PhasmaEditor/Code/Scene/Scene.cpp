@@ -534,7 +534,7 @@ namespace pe
 
         for (uint32_t i = beginNode; i < endNode; i++)
         {
-            int meshIdx = m_meshRefs[i];
+            int meshIdx = MeshRefAt(i);
             if (meshIdx < 0)
                 continue;
             if (m_componentFlags[i] & Component_GpuPending)
@@ -629,7 +629,7 @@ namespace pe
 
             rt.dirtyUniforms[frame] = false; // clear regardless of mesh presence
 
-            int meshIdx = m_meshRefs[i];
+            int meshIdx = MeshRefAt(i);
             if (meshIdx < 0)
                 continue;
 
@@ -854,7 +854,7 @@ namespace pe
 
             for (uint32_t i = 0; i < GetNodeCount(); i++)
             {
-                int meshIdx = m_meshRefs[i];
+                int meshIdx = MeshRefAt(i);
                 if (meshIdx < 0)
                     continue;
 

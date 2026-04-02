@@ -32,24 +32,14 @@ namespace pe
         id->revision++;
 
         m_nodeIds.push_back(id);
-        m_nodeNames.push_back(name);
-        m_localMatrices.push_back(mat4(1.f));
-        m_nodeParents.push_back(parent);
-        m_nodeChildren.emplace_back();
         m_componentFlags.push_back(Component_None);
-        m_meshRefs.push_back(-1);
-        m_nodeScriptPaths.push_back("");
 
         NodeRuntime runtime{};
         runtime.dirty = true;
         runtime.dirtyUniforms.resize(RHII.GetSwapchainImageCount(), false);
         m_nodeRuntime.push_back(std::move(runtime));
 
-        // Add to parent's children
-        if (parent)
-            m_nodeChildren[parent->index].push_back(id);
-
-        // --- ECS dual-write: create entity and attach node components ---
+        // Create ECS entity and attach node components
         Entity *entity = Context::Get()->CreateEntity();
         id->entity = entity;
 
@@ -58,11 +48,9 @@ namespace pe
 
         auto *hierarchyComp = entity->CreateComponent<NodeHierarchyComponent>();
         hierarchyComp->parent = parent;
-        if (parent && parent->entity)
+        if (parent)
         {
-            auto *parentHierarchy = parent->entity->GetComponent<NodeHierarchyComponent>();
-            if (parentHierarchy)
-                parentHierarchy->children.push_back(id);
+            m_nodeComponentCache[parent->index].hierarchy->children.push_back(id);
         }
 
         auto *transformComp = entity->CreateComponent<NodeTransformComponent>();
@@ -70,7 +58,6 @@ namespace pe
         auto *scriptComp = entity->CreateComponent<NodeScriptComponent>();
 
         m_nodeComponentCache.push_back({nameComp, hierarchyComp, transformComp, meshRefsComp, scriptComp});
-        // --- end ECS dual-write ---
 
         m_nodesDirty = true;
 
@@ -84,7 +71,7 @@ namespace pe
 
         // Recursively delete children first (collect to avoid modifying while iterating)
         // Use node->index live — it may change during child deletions due to swap-and-pop
-        std::vector<NodeId *> childrenCopy = m_nodeChildren[node->index];
+        std::vector<NodeId *> childrenCopy = m_nodeComponentCache[node->index].hierarchy->children;
         for (NodeId *child : childrenCopy)
             DeleteNode(child);
 
@@ -94,13 +81,13 @@ namespace pe
         // Null out material pointers on the mesh so stale entries in m_meshes
         // don't dereference freed Materials after the owning model is deleted.
         // Only null if no other node still references this mesh.
-        int meshRef = m_meshRefs[idx];
+        int meshRef = MeshRefAt(idx);
         if (meshRef >= 0 && meshRef < static_cast<int>(m_meshes.size()))
         {
             bool otherRef = false;
             for (uint32_t i = 0; i < static_cast<uint32_t>(m_nodeIds.size()); i++)
             {
-                if (i != idx && m_meshRefs[i] == meshRef)
+                if (i != idx && MeshRefAt(i) == meshRef)
                 {
                     otherRef = true;
                     break;
@@ -167,30 +154,20 @@ namespace pe
         if (auto *animSys = GetGlobalSystem<AnimationSystem>())
             animSys->RemoveAnimation(node);
 
-        // Remove from parent's children list
-        NodeId *parent = m_nodeParents[idx];
+        // Remove from parent's children list (ECS hierarchy)
+        NodeId *parent = m_nodeComponentCache[idx].hierarchy->parent;
         if (parent)
         {
-            auto &siblings = m_nodeChildren[parent->index];
+            auto &siblings = m_nodeComponentCache[parent->index].hierarchy->children;
             siblings.erase(std::remove(siblings.begin(), siblings.end(), node), siblings.end());
         }
 
-        // --- ECS dual-write: clean up hierarchy component and destroy entity ---
+        // Destroy ECS entity
         if (node->entity)
         {
-            if (parent && parent->entity)
-            {
-                auto *parentHierarchy = parent->entity->GetComponent<NodeHierarchyComponent>();
-                if (parentHierarchy)
-                {
-                    auto &ch = parentHierarchy->children;
-                    ch.erase(std::remove(ch.begin(), ch.end(), node), ch.end());
-                }
-            }
             Context::Get()->RemoveEntity(node->entity->GetID());
             node->entity = nullptr;
         }
-        // --- end ECS dual-write ---
 
         // Swap-and-pop
         SwapAndPopNode(idx);
@@ -208,33 +185,19 @@ namespace pe
 
         if (index != last)
         {
-            // Swap all SoA arrays
             std::swap(m_nodeIds[index], m_nodeIds[last]);
-            std::swap(m_nodeNames[index], m_nodeNames[last]);
-            std::swap(m_localMatrices[index], m_localMatrices[last]);
-            std::swap(m_nodeParents[index], m_nodeParents[last]);
-            std::swap(m_nodeChildren[index], m_nodeChildren[last]);
-            std::swap(m_componentFlags[index], m_componentFlags[last]);
-            std::swap(m_meshRefs[index], m_meshRefs[last]);
-            std::swap(m_nodeScriptPaths[index], m_nodeScriptPaths[last]);
-            std::swap(m_nodeRuntime[index], m_nodeRuntime[last]);
             std::swap(m_nodeComponentCache[index], m_nodeComponentCache[last]);
+            std::swap(m_componentFlags[index], m_componentFlags[last]);
+            std::swap(m_nodeRuntime[index], m_nodeRuntime[last]);
 
             // Update the swapped node's identity — the one place
             m_nodeIds[index]->index = index;
         }
 
-        // Pop the last element from all arrays
         m_nodeIds.pop_back();
-        m_nodeNames.pop_back();
-        m_localMatrices.pop_back();
-        m_nodeParents.pop_back();
-        m_nodeChildren.pop_back();
-        m_componentFlags.pop_back();
-        m_meshRefs.pop_back();
-        m_nodeScriptPaths.pop_back();
-        m_nodeRuntime.pop_back();
         m_nodeComponentCache.pop_back();
+        m_componentFlags.pop_back();
+        m_nodeRuntime.pop_back();
     }
 
     void Scene::ReparentNode(NodeId *node, NodeId *newParent)
@@ -243,7 +206,7 @@ namespace pe
             return;
 
         // Prevent reparenting to own descendant
-        for (NodeId *p = newParent; p; p = m_nodeParents[p->index])
+        for (NodeId *p = newParent; p; p = m_nodeComponentCache[p->index].hierarchy->parent)
         {
             if (p == node)
                 return;
@@ -252,52 +215,26 @@ namespace pe
         const uint32_t idx = node->index;
 
         // Remove from old parent's children
-        NodeId *oldParent = m_nodeParents[idx];
+        NodeId *oldParent = m_nodeComponentCache[idx].hierarchy->parent;
         if (oldParent)
         {
-            auto &siblings = m_nodeChildren[oldParent->index];
+            auto &siblings = m_nodeComponentCache[oldParent->index].hierarchy->children;
             siblings.erase(std::remove(siblings.begin(), siblings.end(), node), siblings.end());
         }
 
         // Set new parent
-        m_nodeParents[idx] = newParent;
+        m_nodeComponentCache[idx].hierarchy->parent = newParent;
 
         // Add to new parent's children
         if (newParent)
-            m_nodeChildren[newParent->index].push_back(node);
-
-        // --- ECS dual-write: update hierarchy components ---
-        if (oldParent && oldParent->entity)
-        {
-            auto *oldHierarchy = oldParent->entity->GetComponent<NodeHierarchyComponent>();
-            if (oldHierarchy)
-            {
-                auto &ch = oldHierarchy->children;
-                ch.erase(std::remove(ch.begin(), ch.end(), node), ch.end());
-            }
-        }
-        if (node->entity)
-        {
-            auto *hierarchy = node->entity->GetComponent<NodeHierarchyComponent>();
-            if (hierarchy)
-                hierarchy->parent = newParent;
-        }
-        if (newParent && newParent->entity)
-        {
-            auto *newHierarchy = newParent->entity->GetComponent<NodeHierarchyComponent>();
-            if (newHierarchy)
-                newHierarchy->children.push_back(node);
-        }
-        // --- end ECS dual-write ---
+            m_nodeComponentCache[newParent->index].hierarchy->children.push_back(node);
 
         MarkNodeDirty(node);
     }
 
     void Scene::SetLocalMatrix(NodeId *node, const mat4 &m, bool markDirty)
     {
-        m_localMatrices[node->index] = m;
-        if (auto *comp = m_nodeComponentCache[node->index].transform)
-            comp->localMatrix = m;
+        m_nodeComponentCache[node->index].transform->localMatrix = m;
         if (markDirty)
             MarkNodeDirty(node);
     }
@@ -305,33 +242,27 @@ namespace pe
     void Scene::SetMeshRef(NodeId *node, int meshIndex)
     {
         const uint32_t idx = node->index;
-        m_meshRefs[idx] = meshIndex;
 
         if (meshIndex >= 0)
             m_componentFlags[idx] |= Component_Mesh;
         else
             m_componentFlags[idx] &= ~Component_Mesh;
 
-        if (auto *comp = m_nodeComponentCache[idx].meshRefs)
-        {
-            comp->meshRefs.clear();
-            if (meshIndex >= 0)
-                comp->meshRefs.push_back(meshIndex);
-        }
+        auto &refs = m_nodeComponentCache[idx].meshRefs->meshRefs;
+        refs.clear();
+        if (meshIndex >= 0)
+            refs.push_back(meshIndex);
     }
 
     void Scene::SetNodeScript(NodeId *node, const std::string &path)
     {
         const uint32_t idx = node->index;
-        m_nodeScriptPaths[idx] = path;
+        m_nodeComponentCache[idx].script->path = path;
 
         if (!path.empty())
             m_componentFlags[idx] |= Component_Script;
         else
             m_componentFlags[idx] &= ~Component_Script;
-
-        if (auto *comp = m_nodeComponentCache[idx].script)
-            comp->path = path;
     }
 
     void Scene::AttachPrimitiveToNode(NodeId *node, ModelAsset *primitiveModel)
@@ -385,7 +316,7 @@ namespace pe
         m_nodesDirty = true;
 
         // Mark all children dirty recursively
-        for (NodeId *child : m_nodeChildren[idx])
+        for (NodeId *child : m_nodeComponentCache[idx].hierarchy->children)
             MarkNodeDirty(child);
     }
 
@@ -397,19 +328,20 @@ namespace pe
         if (!rt.dirty)
             return;
 
-        NodeId *parent = m_nodeParents[idx];
+        NodeId *parent = m_nodeComponentCache[idx].hierarchy->parent;
+        const mat4 &localMatrix = m_nodeComponentCache[idx].transform->localMatrix;
         const mat4 prevWorld = rt.gpuData.worldMatrix;
         if (parent)
-            rt.gpuData.worldMatrix = m_nodeRuntime[parent->index].gpuData.worldMatrix * m_localMatrices[idx];
+            rt.gpuData.worldMatrix = m_nodeRuntime[parent->index].gpuData.worldMatrix * localMatrix;
         else
-            rt.gpuData.worldMatrix = m_localMatrices[idx];
+            rt.gpuData.worldMatrix = localMatrix;
 
         // On first compute, seed previousWorldMatrix so shaders see zero motion on spawn
         if (prevWorld == mat4(1.f) && rt.gpuData.previousWorldMatrix == mat4(1.f))
             rt.gpuData.previousWorldMatrix = rt.gpuData.worldMatrix;
 
         // Update world AABB from mesh bounding box
-        const int meshIdx = m_meshRefs[idx];
+        const int meshIdx = MeshRefAt(idx);
         if (meshIdx >= 0)
         {
             const AABB &localAABB = m_meshes[meshIdx].boundingBox;
@@ -425,7 +357,7 @@ namespace pe
         m_nodesMoved.push_back(node);
 
         // Recurse into children
-        for (NodeId *child : m_nodeChildren[idx])
+        for (NodeId *child : m_nodeComponentCache[idx].hierarchy->children)
             UpdateNodeMatrix(child);
     }
 
@@ -441,7 +373,7 @@ namespace pe
         {
             if (!m_nodeRuntime[i].dirty)
                 continue;
-            NodeId *parent = m_nodeParents[i];
+            NodeId *parent = m_nodeComponentCache[i].hierarchy->parent;
             if (parent && m_nodeRuntime[parent->index].dirty)
                 continue; // parent will recurse here
             UpdateNodeMatrix(m_nodeIds[i]);
@@ -449,6 +381,7 @@ namespace pe
 
         m_nodesDirty = false;
     }
+
     void Scene::DestroyAllNodeEntities()
     {
         Context *ctx = Context::Get();
