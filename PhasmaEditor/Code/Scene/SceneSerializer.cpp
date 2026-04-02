@@ -405,7 +405,7 @@ namespace pe
                 if (!cache.script->path.empty())
                     nodeObj.AddMember("script", MakeStringValue(cache.script->path), allocator);
 
-                uint32_t flags = scene.m_componentFlags[ni] & ~Component_GpuPending;
+                uint32_t flags = scene.GetComponentFlags(scene.m_nodeIds[ni]) & ~Component_GpuPending;
                 if (flags)
                     nodeObj.AddMember("component_flags", flags, allocator);
 
@@ -816,7 +816,7 @@ namespace pe
             delete id;
         m_nodeIds.clear();
         m_freeNodeIds.clear();
-        m_componentFlags.clear();
+
         m_nodeRuntime.clear();
         m_nodesMoved.clear();
         m_nodesDirty = false;
@@ -853,6 +853,7 @@ namespace pe
         {
             NodeId *camNode = CreateNode(m_cameras[0]->GetName());
             AddComponentFlag(camNode, Component_Camera);
+            m_nodeComponentCache[camNode->index].camera->camera = m_cameras[0];
             m_cameras[0]->SetNodeId(camNode);
         }
 
@@ -1026,7 +1027,7 @@ namespace pe
             delete id;
         m_nodeIds.clear();
         m_freeNodeIds.clear();
-        m_componentFlags.clear();
+
         m_nodeRuntime.clear();
         m_nodesMoved.clear();
         m_nodesDirty = false;
@@ -1374,6 +1375,8 @@ namespace pe
                         if (cv.HasMember("speed"))
                             cam->SetSpeed(cv["speed"].GetFloat());
                         cam->SetNodeId(node);
+                        if (m_nodeComponentCache[node->index].camera)
+                            m_nodeComponentCache[node->index].camera->camera = cam;
                         const mat4 &lm = GetLocalMatrix(node);
                         cam->SetPosition(vec3(lm[3]));
                         if (cv.HasMember("euler"))
@@ -1880,7 +1883,8 @@ namespace pe
                         SetNodeScript(node, "");
 
                     uint32_t flags = nv.HasMember("component_flags") ? nv["component_flags"].GetUint() : 0;
-                    m_componentFlags[ni] &= (Component_Mesh | Component_Script);
+                    // Clear subsystem tags before restoring — Mesh/Script are already set by SetMeshRef/SetNodeScript above
+                    RemoveComponentFlag(node, Component_Camera | Component_Light | Component_Physics | Component_Audio);
                     uint32_t restoreFlags = flags & ~(Component_Mesh | Component_Script | Component_GpuPending);
                     if (restoreFlags)
                         AddComponentFlag(node, restoreFlags);
@@ -1966,6 +1970,10 @@ namespace pe
                         if (cam)
                         {
                             cam->SetNodeId(node);
+                            // Ensure camera tag exists and store pointer
+                            if (!m_nodeComponentCache[node->index].camera)
+                                AddComponentFlag(node, Component_Camera);
+                            m_nodeComponentCache[node->index].camera->camera = cam;
                             const auto &cv = nv["camera"];
                             if (cv.HasMember("fovx"))
                                 cam->SetFovx(cv["fovx"].GetFloat());
@@ -2156,7 +2164,7 @@ namespace pe
                     delete id;
                 m_nodeIds.clear();
                 m_freeNodeIds.clear();
-                m_componentFlags.clear();
+
                 m_nodeRuntime.clear();
                 m_nodesMoved.clear();
                 m_nodesDirty = false;
@@ -2364,6 +2372,8 @@ namespace pe
                         if (cv.HasMember("speed"))
                             cam->SetSpeed(cv["speed"].GetFloat());
                         cam->SetNodeId(node);
+                        if (m_nodeComponentCache[node->index].camera)
+                            m_nodeComponentCache[node->index].camera->camera = cam;
                         const mat4 &lm = GetLocalMatrix(node);
                         cam->SetPosition(vec3(lm[3]));
                         if (cv.HasMember("euler"))

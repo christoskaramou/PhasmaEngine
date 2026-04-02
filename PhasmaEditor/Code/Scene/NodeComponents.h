@@ -3,8 +3,9 @@
 namespace pe
 {
     struct NodeId;
+    class Camera;
 
-    // --- ECS node components (Phase 1: dual-written alongside SoA; source of truth after Phase 2) ---
+    // --- ECS node components ---
 
     class NodeNameComponent : public IComponent
     {
@@ -39,6 +40,26 @@ namespace pe
         std::string path;
     };
 
+    // --- Subsystem tag/link components ---
+
+    class NodeCameraTag : public IComponent
+    {
+    public:
+        Camera *camera = nullptr;
+    };
+
+    class NodeLightTag : public IComponent
+    {
+    };
+
+    class NodePhysicsTag : public IComponent
+    {
+    };
+
+    class NodeAudioTag : public IComponent
+    {
+    };
+
     // Fast indexed access to node components — avoids per-frame GetComponent<T>() hashing.
     // Rebuilt on node creation/deletion; slots indexed by NodeId::index.
     struct NodeComponentCache
@@ -48,5 +69,9 @@ namespace pe
         NodeTransformComponent *transform = nullptr;
         NodeMeshRefsComponent *meshRefs = nullptr;
         NodeScriptComponent *script = nullptr;
+        NodeCameraTag *camera = nullptr;
+        NodeLightTag *light = nullptr;
+        NodePhysicsTag *physics = nullptr;
+        NodeAudioTag *audio = nullptr;
     };
 } // namespace pe

@@ -76,6 +76,7 @@ namespace pe
         AABB worldAABB;
         NodeGpuData gpuData;
         bool dirty = false;
+        bool gpuPending = false; // node geometry not yet uploaded to GPU
         std::vector<bool> dirtyUniforms;
 
         std::vector<mat4> jointMatrices;

@@ -58,6 +58,7 @@ namespace pe
         camera->SetName("Camera_" + std::to_string(ID::NextID()));
         NodeId *camNode = CreateNode(camera->GetName());
         AddComponentFlag(camNode, Component_Camera);
+        m_nodeComponentCache[camNode->index].camera->camera = camera;
         camera->SetNodeId(camNode);
         m_cameras.push_back(camera);
 
@@ -133,10 +134,10 @@ namespace pe
 
     Camera *Scene::GetCameraForNode(const NodeId *node) const
     {
-        for (Camera *cam : m_cameras)
-            if (cam->GetNodeId() == node)
-                return cam;
-        return nullptr;
+        if (!node || node->index >= m_nodeComponentCache.size())
+            return nullptr;
+        const auto *tag = m_nodeComponentCache[node->index].camera;
+        return tag ? tag->camera : nullptr;
     }
 
     void Scene::Update()
@@ -387,7 +388,7 @@ namespace pe
             int meshIdx = model->GetNodeMesh(i);
             if (meshIdx >= 0 && meshIdx < static_cast<int>(meshMap.size()) && meshMap[meshIdx] >= 0)
                 SetMeshRef(node, meshMap[meshIdx]);
-            m_componentFlags[node->index] |= Component_GpuPending;
+            m_nodeRuntime[node->index].gpuPending = true;
             nodeMap[i] = node;
         }
 
@@ -421,7 +422,7 @@ namespace pe
 
         // Multi-root: create synthetic parent
         NodeId *synth = CreateNode(model->GetLabel().empty() ? "Model" : model->GetLabel());
-        m_componentFlags[synth->index] |= Component_GpuPending;
+        m_nodeRuntime[synth->index].gpuPending = true;
         for (NodeId *root : finalRoots)
             ReparentNode(root, synth);
         return MakeHandle(synth);
@@ -476,6 +477,7 @@ namespace pe
         camera->SetName("Camera_" + std::to_string(ID::NextID()));
         NodeId *camNode = CreateNode(camera->GetName(), parent);
         AddComponentFlag(camNode, Component_Camera);
+        m_nodeComponentCache[camNode->index].camera->camera = camera;
         camera->SetNodeId(camNode);
         m_cameras.push_back(camera);
         return camera;
@@ -537,7 +539,7 @@ namespace pe
             int meshIdx = MeshRefAt(i);
             if (meshIdx < 0)
                 continue;
-            if (m_componentFlags[i] & Component_GpuPending)
+            if (m_nodeRuntime[i].gpuPending)
                 continue;
 
             const Mesh &mesh = m_meshes[meshIdx];
@@ -624,7 +626,7 @@ namespace pe
                 continue;
 
             // Skip nodes pending GPU upload — their storage offsets aren't assigned yet
-            if (m_componentFlags[i] & Component_GpuPending)
+            if (m_nodeRuntime[i].gpuPending)
                 continue;
 
             rt.dirtyUniforms[frame] = false; // clear regardless of mesh presence
@@ -895,7 +897,7 @@ namespace pe
         {
             // Clear GpuPending flag BEFORE upload so these nodes are included
             for (uint32_t i = 0; i < GetNodeCount(); i++)
-                m_componentFlags[i] &= ~Component_GpuPending;
+                m_nodeRuntime[i].gpuPending = false;
 
             UpdateGeometryBuffers();
 

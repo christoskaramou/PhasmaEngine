@@ -131,7 +131,7 @@ namespace pe
                 continue;
             if (m_meshes[meshIdx].indexCount == 0)
                 continue;
-            if (m_componentFlags[i] & Component_GpuPending)
+            if (m_nodeRuntime[i].gpuPending)
                 continue;
             if (hasSkeleton && m_meshes[meshIdx].skinned)
                 continue;

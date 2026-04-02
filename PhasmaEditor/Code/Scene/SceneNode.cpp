@@ -13,6 +13,58 @@
 
 namespace pe
 {
+    // --- Component flag management (ECS-backed) ---
+
+    void Scene::AddComponentFlag(NodeId *node, uint32_t flag)
+    {
+        ValidateNodeId(node);
+        auto &c = m_nodeComponentCache[node->index];
+        Entity *entity = node->entity;
+        if (!entity)
+            return;
+
+        if ((flag & Component_Camera) && !c.camera)
+            c.camera = entity->CreateComponent<NodeCameraTag>();
+        if ((flag & Component_Light) && !c.light)
+            c.light = entity->CreateComponent<NodeLightTag>();
+        if ((flag & Component_Physics) && !c.physics)
+            c.physics = entity->CreateComponent<NodePhysicsTag>();
+        if ((flag & Component_Audio) && !c.audio)
+            c.audio = entity->CreateComponent<NodeAudioTag>();
+    }
+
+    void Scene::RemoveComponentFlag(NodeId *node, uint32_t flag)
+    {
+        ValidateNodeId(node);
+        auto &c = m_nodeComponentCache[node->index];
+        Entity *entity = node->entity;
+        if (!entity)
+            return;
+
+        if ((flag & Component_Camera) && c.camera)
+        {
+            entity->RemoveComponent<NodeCameraTag>();
+            c.camera = nullptr;
+        }
+        if ((flag & Component_Light) && c.light)
+        {
+            entity->RemoveComponent<NodeLightTag>();
+            c.light = nullptr;
+        }
+        if ((flag & Component_Physics) && c.physics)
+        {
+            entity->RemoveComponent<NodePhysicsTag>();
+            c.physics = nullptr;
+        }
+        if ((flag & Component_Audio) && c.audio)
+        {
+            entity->RemoveComponent<NodeAudioTag>();
+            c.audio = nullptr;
+        }
+    }
+
+    // --- Node lifecycle ---
+
     NodeId *Scene::CreateNode(const std::string &name, NodeId *parent)
     {
         // Reuse a recycled NodeId or allocate a new one
@@ -32,7 +84,6 @@ namespace pe
         id->revision++;
 
         m_nodeIds.push_back(id);
-        m_componentFlags.push_back(Component_None);
 
         NodeRuntime runtime{};
         runtime.dirty = true;
@@ -57,7 +108,8 @@ namespace pe
         auto *meshRefsComp = entity->CreateComponent<NodeMeshRefsComponent>();
         auto *scriptComp = entity->CreateComponent<NodeScriptComponent>();
 
-        m_nodeComponentCache.push_back({nameComp, hierarchyComp, transformComp, meshRefsComp, scriptComp});
+        m_nodeComponentCache.push_back({nameComp, hierarchyComp, transformComp, meshRefsComp, scriptComp,
+                                        nullptr, nullptr, nullptr, nullptr});
 
         m_nodesDirty = true;
 
@@ -77,6 +129,7 @@ namespace pe
 
         // Re-read index after child deletions (swap-and-pop may have moved this node)
         const uint32_t idx = node->index;
+        const auto &cache = m_nodeComponentCache[idx];
 
         // Null out material pointers on the mesh so stale entries in m_meshes
         // don't dereference freed Materials after the owning model is deleted.
@@ -101,8 +154,7 @@ namespace pe
         }
 
         // Remove component entries so they don't persist with dangling nodeIds
-        uint32_t compFlags = m_componentFlags[idx];
-        if (compFlags & Component_Light)
+        if (cache.light)
         {
             auto [lt, lightIdx] = GetLightForNode(node);
             if (lightIdx >= 0)
@@ -124,9 +176,9 @@ namespace pe
                 }
             }
         }
-        if (compFlags & Component_Camera)
+        if (cache.camera)
         {
-            Camera *cam = GetCameraForNode(node);
+            Camera *cam = cache.camera->camera;
             if (cam)
             {
                 auto it = std::find(m_cameras.begin(), m_cameras.end(), cam);
@@ -138,14 +190,14 @@ namespace pe
             }
         }
 #ifdef PE_PHYSICS
-        if (compFlags & Component_Physics)
+        if (cache.physics)
         {
             if (auto *ps = GetGlobalSystem<PhysicsSystem>())
                 ps->RemoveBody(node);
         }
 #endif
 #ifdef PE_AUDIO
-        if (compFlags & Component_Audio)
+        if (cache.audio)
         {
             if (auto *as = GetGlobalSystem<AudioSystem>())
                 as->RemoveSource(node);
@@ -155,7 +207,7 @@ namespace pe
             animSys->RemoveAnimation(node);
 
         // Remove from parent's children list (ECS hierarchy)
-        NodeId *parent = m_nodeComponentCache[idx].hierarchy->parent;
+        NodeId *parent = cache.hierarchy->parent;
         if (parent)
         {
             auto &siblings = m_nodeComponentCache[parent->index].hierarchy->children;
@@ -187,7 +239,6 @@ namespace pe
         {
             std::swap(m_nodeIds[index], m_nodeIds[last]);
             std::swap(m_nodeComponentCache[index], m_nodeComponentCache[last]);
-            std::swap(m_componentFlags[index], m_componentFlags[last]);
             std::swap(m_nodeRuntime[index], m_nodeRuntime[last]);
 
             // Update the swapped node's identity — the one place
@@ -196,9 +247,10 @@ namespace pe
 
         m_nodeIds.pop_back();
         m_nodeComponentCache.pop_back();
-        m_componentFlags.pop_back();
         m_nodeRuntime.pop_back();
     }
+
+    // --- Node operations ---
 
     void Scene::ReparentNode(NodeId *node, NodeId *newParent)
     {
@@ -241,14 +293,7 @@ namespace pe
 
     void Scene::SetMeshRef(NodeId *node, int meshIndex)
     {
-        const uint32_t idx = node->index;
-
-        if (meshIndex >= 0)
-            m_componentFlags[idx] |= Component_Mesh;
-        else
-            m_componentFlags[idx] &= ~Component_Mesh;
-
-        auto &refs = m_nodeComponentCache[idx].meshRefs->meshRefs;
+        auto &refs = m_nodeComponentCache[node->index].meshRefs->meshRefs;
         refs.clear();
         if (meshIndex >= 0)
             refs.push_back(meshIndex);
@@ -256,13 +301,7 @@ namespace pe
 
     void Scene::SetNodeScript(NodeId *node, const std::string &path)
     {
-        const uint32_t idx = node->index;
-        m_nodeComponentCache[idx].script->path = path;
-
-        if (!path.empty())
-            m_componentFlags[idx] |= Component_Script;
-        else
-            m_componentFlags[idx] &= ~Component_Script;
+        m_nodeComponentCache[node->index].script->path = path;
     }
 
     void Scene::AttachPrimitiveToNode(NodeId *node, ModelAsset *primitiveModel)
@@ -295,6 +334,8 @@ namespace pe
         m_meshRuntimes.emplace_back();
         return index;
     }
+
+    // --- Dirty tracking and matrix updates ---
 
     void Scene::MarkNodeDirty(NodeId *node)
     {

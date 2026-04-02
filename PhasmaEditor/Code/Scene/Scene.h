@@ -219,17 +219,8 @@ namespace pe
         const std::vector<Camera *> &GetCameras() const { return m_cameras; }
         Camera *GetCameraForNode(const NodeId *node) const;
 
-        inline void AddComponentFlag(NodeId *node, uint32_t flag)
-        {
-            ValidateNodeId(node);
-            m_componentFlags[node->index] |= flag;
-        }
-
-        inline void RemoveComponentFlag(NodeId *node, uint32_t flag)
-        {
-            ValidateNodeId(node);
-            m_componentFlags[node->index] &= ~flag;
-        }
+        void AddComponentFlag(NodeId *node, uint32_t flag);
+        void RemoveComponentFlag(NodeId *node, uint32_t flag);
         OrderedMap<size_t, ModelAsset *> &GetModels() { return m_models; }
         const OrderedMap<size_t, ModelAsset *> &GetModels() const { return m_models; }
 
@@ -311,7 +302,27 @@ namespace pe
         const AABB &GetWorldAABB(const NodeId *node) const { return m_nodeRuntime[node->index].worldAABB; }
         NodeId *GetParent(const NodeId *node) const { return m_nodeComponentCache[node->index].hierarchy->parent; }
         const std::vector<NodeId *> &GetChildren(const NodeId *node) const { return m_nodeComponentCache[node->index].hierarchy->children; }
-        uint32_t GetComponentFlags(const NodeId *node) const { return m_componentFlags[node->index]; }
+        uint32_t GetComponentFlags(const NodeId *node) const
+        {
+            const uint32_t idx = node->index;
+            const auto &c = m_nodeComponentCache[idx];
+            uint32_t flags = 0;
+            if (!c.meshRefs->meshRefs.empty())
+                flags |= Component_Mesh;
+            if (c.camera)
+                flags |= Component_Camera;
+            if (c.light)
+                flags |= Component_Light;
+            if (c.physics)
+                flags |= Component_Physics;
+            if (!c.script->path.empty())
+                flags |= Component_Script;
+            if (c.audio)
+                flags |= Component_Audio;
+            if (m_nodeRuntime[idx].gpuPending)
+                flags |= Component_GpuPending;
+            return flags;
+        }
         int GetMeshRef(const NodeId *node) const
         {
             const auto &refs = m_nodeComponentCache[node->index].meshRefs->meshRefs;
@@ -480,16 +491,17 @@ namespace pe
         // Node Graph Storage
         std::vector<NodeComponentCache> m_nodeComponentCache; // dense cache indexed by NodeId::index
         std::vector<NodeId *> m_nodeIds;
-        std::vector<uint32_t> m_componentFlags;   // stays until Phase 4 (camera/light/physics/audio ECS migration)
-        std::vector<NodeRuntime> m_nodeRuntime;    // stays until Phase 3 (runtime state ECS migration)
+        std::vector<NodeRuntime> m_nodeRuntime;
         std::vector<NodeId *> m_freeNodeIds;
 
-        // Hot-path helper: first mesh ref for a node by dense index (avoids verbose cache access)
+        // Hot-path helpers for dense indexed access (avoids verbose cache access)
         int MeshRefAt(uint32_t index) const
         {
             const auto &refs = m_nodeComponentCache[index].meshRefs->meshRefs;
             return refs.empty() ? -1 : refs[0];
         }
+
+        bool IsGpuPending(uint32_t index) const { return m_nodeRuntime[index].gpuPending; }
 
         // Mesh store
         std::vector<Mesh> m_meshes;

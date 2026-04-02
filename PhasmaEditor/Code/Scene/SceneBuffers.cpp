@@ -37,7 +37,7 @@ namespace pe
             int meshIdx = MeshRefAt(i);
             if (meshIdx < 0)
                 continue;
-            if (m_componentFlags[i] & Component_GpuPending)
+            if (m_nodeRuntime[i].gpuPending)
                 continue;
             if (m_meshes[meshIdx].indexCount == 0)
                 continue;
@@ -155,7 +155,7 @@ namespace pe
             int meshIdx = MeshRefAt(i);
             if (meshIdx < 0 || m_meshes[meshIdx].indexCount == 0)
                 continue;
-            if (m_componentFlags[i] & Component_GpuPending)
+            if (m_nodeRuntime[i].gpuPending)
                 continue;
 
             m_nodeRuntime[i].dataOffset = storageSize;
@@ -199,7 +199,7 @@ namespace pe
             const Mesh &mesh = m_meshes[meshIdx];
             if (mesh.indexCount == 0)
                 continue;
-            if (m_componentFlags[i] & Component_GpuPending)
+            if (m_nodeRuntime[i].gpuPending)
                 continue;
 
             m_nodeRuntime[i].indirectIndex = indirectCount;
@@ -440,7 +440,7 @@ namespace pe
             const Mesh &mesh = m_meshes[meshIdx];
             if (mesh.indexCount == 0)
                 continue;
-            if (m_componentFlags[i] & Component_GpuPending)
+            if (m_nodeRuntime[i].gpuPending)
                 continue;
 
             const MeshRuntime &meshRt = m_meshRuntimes[meshIdx];
