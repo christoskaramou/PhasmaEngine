@@ -12,7 +12,7 @@ namespace pe
 {
     void Scene::UploadBuffers(CommandBuffer *cmd)
     {
-        // Mesh offsets are already set by AssimpLoader/AddModel — no per-model fixup needed
+        // Mesh offsets are already set by model import/AddModel — no per-model fixup needed
 
         DestroyBuffers();
         CreateGeometryBuffer();
@@ -159,7 +159,7 @@ namespace pe
                 continue;
 
             m_nodeRuntime[i].dataOffset = storageSize;
-            int jointCount = m_skeleton.GetBoneCount();
+            int jointCount = GetSkeleton().GetBoneCount();
             size_t nodeDataSize = sizeof(NodeGpuData) + jointCount * sizeof(mat4);
             storageSize += nodeDataSize;
         }

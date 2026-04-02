@@ -2,6 +2,8 @@
 #include "Script/Bindings/BindingUtils.h"
 #include "API/Command.h"
 #include "API/Image.h"
+#include "API/Queue.h"
+#include "API/RHI.h"
 
 namespace pe
 {
@@ -417,8 +419,10 @@ namespace pe
                 lua.set_function("destroy_image", [](std::shared_ptr<LuaImage> img) {
                     if (img && img->ptr && img->owned)
                     {
-                        // Lua tests create and destroy many transient images; invalidate cached
-                        // framebuffers so later pointer reuse can't resurrect stale attachments.
+                        // Lua tests create transient images that may have been used to build
+                        // cached framebuffers on the main queue
+                        if (auto *queue = RHII.GetMainQueue())
+                            queue->WaitIdle();
                         CommandBuffer::ClearFramebufferCache();
                         Image::Destroy(img->ptr);
                         img->ptr = nullptr;

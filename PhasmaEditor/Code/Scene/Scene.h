@@ -9,7 +9,6 @@
 namespace pe
 {
     class AccelerationStructure;
-    class AssimpLoader;
     class Buffer;
     class Camera;
     class CommandBuffer;
@@ -19,6 +18,7 @@ namespace pe
     class MaterialInstance;
     class ModelAsset;
     class Sampler;
+    struct SceneSerializationHelper;
 
     // --- Light POD structs (GPU layout) ---
     struct DirectionalLight
@@ -98,7 +98,7 @@ namespace pe
 
     class Scene
     {
-        friend class AssimpLoader;
+        friend struct SceneSerializationHelper;
 
     public:
         // Payload for PrimitiveAttachedToNode event
@@ -204,8 +204,9 @@ namespace pe
 
         ParticleManager *GetParticleManager() { return m_particleManager; }
         Camera *GetActiveCamera() const { return m_cameras.at(0); }
-        const Skeleton &GetSkeleton() const { return m_skeleton; }
-        const std::vector<AnimationClip> &GetAnimationClips() const { return m_animationClips; }
+        const Skeleton &GetSkeleton() const;
+        const std::vector<AnimationClip> &GetAnimationClips() const;
+        ModelAsset *FindSkeletonModel() const;
         Camera *GetCamera(int index) const { return m_cameras.at(index); }
         const std::vector<Camera *> &GetCameras() const { return m_cameras; }
         Camera *GetCameraForNode(const NodeId *node) const;
@@ -438,8 +439,7 @@ namespace pe
         std::unordered_map<size_t, std::vector<NodeId *>> m_modelRootNodes;
 
         bool m_autoplayAnimations = true;
-        Skeleton m_skeleton;
-        std::vector<AnimationClip> m_animationClips;
+        mutable ModelAsset *m_skeletonModel = nullptr;
 
         std::filesystem::path m_scenePath;
         bool m_dirty = false;
@@ -460,7 +460,7 @@ namespace pe
         std::vector<Mesh> m_meshes;
         std::vector<MeshRuntime> m_meshRuntimes;
 
-        // Owned materials (from AssimpLoader or scene-level material creation)
+        // Owned materials (from imported models or scene-level material creation)
         std::vector<std::unique_ptr<Material>> m_ownedMaterials;
 
         // Owned material instances (created by editor when marking a mesh as "Instanced")

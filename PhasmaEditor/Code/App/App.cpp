@@ -54,7 +54,7 @@ namespace pe
         {
             for (auto &file : std::filesystem::recursive_directory_iterator(Path::Assets + "Scripts"))
             {
-                if (file.path().extension() == ".lua")
+                if (file.path().extension() == ".lua" && !ScriptSystem::IsTestScriptPath(file.path().string()))
                     FileWatcher::Add(file.path().string(), scriptCallback);
             }
         }

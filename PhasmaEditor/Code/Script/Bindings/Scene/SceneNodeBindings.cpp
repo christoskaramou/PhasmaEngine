@@ -200,6 +200,12 @@ namespace pe
                     return s->GetNodeScriptPath(h.nodeId);
                 });
 
+                ut.set_function("remove", [](SceneNodeHandle &h) {
+                    Scene *s = GetScene();
+                    if (!s || !h.IsValid(*s)) return;
+                    s->DeleteNode(h.nodeId);
+                });
+
                 ut.set_function("get_exposed", [](SceneNodeHandle &h, sol::this_state ts) -> std::optional<sol::table> {
                     lua_State *L = ts;
                     Scene *s = GetScene();

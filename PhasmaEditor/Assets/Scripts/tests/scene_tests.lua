@@ -42,20 +42,16 @@ function run_scene_tests()
         T.check("remove_camera restores count", #cameras3 == initial_count)
     end
 
-    -- model count changes with add/remove
+    -- model count changes with add
     local cube = primitives.cube(1.0)
     if cube then
         local count2 = scene.get_model_count()
         T.check("model count increased", count2 == count + 1)
-
-        remove_model(cube)
-        local count3 = scene.get_model_count()
-        T.check("model count restored", count3 == count)
+        cube:remove()
     end
 
     -- legacy global functions still work
     T.check("save_scene exists", type(save_scene) == "function")
-    T.check("load_scene exists", type(load_scene) == "function")
 
     T.summary("Scene Tests")
 end

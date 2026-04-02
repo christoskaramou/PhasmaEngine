@@ -19,6 +19,37 @@ namespace pe
         4, 5, 5, 6, 6, 7, 7, 4,
         0, 4, 1, 5, 2, 6, 3, 7};
 
+    ModelAsset *Scene::FindSkeletonModel() const
+    {
+        if (m_skeletonModel && m_skeletonModel->HasSkeleton())
+            return m_skeletonModel;
+
+        for (auto *model : m_models)
+        {
+            if (model->HasSkeleton())
+            {
+                m_skeletonModel = model;
+                return model;
+            }
+        }
+        m_skeletonModel = nullptr;
+        return nullptr;
+    }
+
+    const Skeleton &Scene::GetSkeleton() const
+    {
+        static const Skeleton empty;
+        ModelAsset *model = FindSkeletonModel();
+        return model ? model->GetSkeleton() : empty;
+    }
+
+    const std::vector<AnimationClip> &Scene::GetAnimationClips() const
+    {
+        static const std::vector<AnimationClip> empty;
+        ModelAsset *model = FindSkeletonModel();
+        return (model && model->HasAnimations()) ? model->GetAnimations() : empty;
+    }
+
     Scene::Scene()
     {
         m_defaultSampler = Sampler::Create(Sampler::CreateInfoInit(), "defaultSampler");
@@ -251,13 +282,6 @@ namespace pe
     {
         m_models.insert(model->GetId(), model);
 
-        if (model->HasSkeleton() && m_skeleton.bones.empty())
-        {
-            m_skeleton = model->GetSkeleton();
-            m_animationClips = model->GetAnimations();
-        }
-
-        // Register source
         int sourceIndex = static_cast<int>(m_sources.size());
         SceneSource source;
         source.filePath = model->GetFilePath();
@@ -320,7 +344,7 @@ namespace pe
 
         UpdateNodeMatrices();
 
-        if (m_autoplayAnimations && model->HasAnimations() && !m_animationClips.empty())
+        if (m_autoplayAnimations && model->HasAnimations())
         {
             if (auto *animSys = GetGlobalSystem<AnimationSystem>())
             {
@@ -336,12 +360,6 @@ namespace pe
     SceneNodeHandle Scene::AddModelDeferred(ModelAsset *model)
     {
         m_models.insert(model->GetId(), model);
-
-        if (model->HasSkeleton() && m_skeleton.bones.empty())
-        {
-            m_skeleton = model->GetSkeleton();
-            m_animationClips = model->GetAnimations();
-        }
 
         int sourceIndex = static_cast<int>(m_sources.size());
         SceneSource source;
@@ -437,6 +455,8 @@ namespace pe
             m_modelRootNodes.erase(rootIt);
         }
 
+        if (m_skeletonModel == model)
+            m_skeletonModel = nullptr;
         if (m_models.erase(modelId))
             delete model;
     }
@@ -506,7 +526,7 @@ namespace pe
         out.alphaBlend.reserve(secondaryEstimated);
         out.transmission.reserve(secondaryEstimated);
 
-        const bool skipSkinnedForRT = m_skeleton.GetBoneCount() > 0 &&
+        const bool skipSkinnedForRT = GetSkeleton().GetBoneCount() > 0 &&
                                       Settings::Get<GlobalSettings>().render_mode == RenderMode::RayTracing;
 
         for (uint32_t i = beginNode; i < endNode; i++)
@@ -619,7 +639,7 @@ namespace pe
             range.offset = rt.dataOffset;
             m_storages[frame]->Copy(1, &range, true);
 
-            int jointCount = m_skeleton.GetBoneCount();
+            int jointCount = GetSkeleton().GetBoneCount();
             if (jointCount > 0)
             {
                 static thread_local std::vector<mat4> uploadMatrices;

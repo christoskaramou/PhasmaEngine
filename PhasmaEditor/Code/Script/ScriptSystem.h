@@ -94,9 +94,12 @@ namespace pe
         void Destroy() override;
         void Reload();
         void CallInit();
+        std::vector<std::string> GetTestScriptPaths() const;
+        std::string RunScriptTests(const std::vector<std::string> &paths);
 
         sol::state &GetLua() { return m_lua; }
         bool IsInitialized() const { return m_initialized; }
+        static bool IsTestScriptPath(const std::string &path);
 
         // Execute Lua code and return captured output + return value
         std::string ExecuteLua(const std::string &code);

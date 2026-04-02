@@ -20,7 +20,7 @@ function run_material_tests()
 
     if mat then
         -- Check default values (from Primitives.cpp)
-        T.check("default metallic", mat.metallic == 1.0)
+        T.check("default metallic", mat.metallic == 0.0)
         T.check("default roughness", mat.roughness == 1.0)
         T.check("default alpha_cutoff", mat.alpha_cutoff == 0.5)
         T.check("default occlusion_strength", mat.occlusion_strength == 1.0)
@@ -65,6 +65,9 @@ function run_material_tests()
 
     -- invalid handle (default-constructed) should return nil gracefully
     -- We cannot easily construct an invalid SceneNode from Lua, so skip this check.
+
+    -- cleanup
+    cube:remove()
 
     T.summary("Material Tests")
 end

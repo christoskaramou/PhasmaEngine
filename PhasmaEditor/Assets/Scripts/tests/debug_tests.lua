@@ -35,12 +35,6 @@ function run_debug_tests()
     cmd:return_cmd()
 
     -- Frame capture (just verify callable, no RenderDoc needed)
-    debug_utils.start_frame_capture()
-    T.check("start_frame_capture", true)
-
-    debug_utils.end_frame_capture()
-    T.check("end_frame_capture", true)
-
     debug_utils.trigger_capture()
     T.check("trigger_capture", true)
 

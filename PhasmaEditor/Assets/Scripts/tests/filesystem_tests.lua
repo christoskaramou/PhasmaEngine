@@ -27,7 +27,7 @@ function run_filesystem_tests()
     T.check("list bad path returns empty", type(bad) == "table" and bad.files == nil)
 
     -- read file
-    local content = fs.read(assets_path .. "Scripts/main.lua")
+    local content = fs.read(assets_path .. "Scripts/material_tweaker.lua")
     T.check("read returns string", type(content) == "string")
     T.check("read non-empty", content ~= nil and #content > 0)
 

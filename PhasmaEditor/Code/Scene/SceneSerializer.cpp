@@ -110,6 +110,608 @@ namespace pe
         }
     } // namespace
 
+    struct SceneSerializationHelper
+    {
+        enum class LegacyCameraMode
+        {
+            SaveFile,
+            Snapshot
+        };
+
+        const Scene &scene;
+        rapidjson::Document &document;
+        rapidjson::Document::AllocatorType &allocator;
+        std::vector<int> meshRemap;
+        std::vector<int> srcRemap;
+
+        SceneSerializationHelper(const Scene &scene, rapidjson::Document &document)
+            : scene(scene), document(document), allocator(document.GetAllocator()),
+              meshRemap(scene.m_meshes.size(), -1), srcRemap(scene.m_sources.size(), -1)
+        {
+        }
+
+        static float SafeFloat(float f)
+        {
+            return std::isnan(f) || std::isinf(f) ? 0.0f : f;
+        }
+
+        void SetVec3(rapidjson::Value &arr, const vec3 &v) const
+        {
+            arr.SetArray();
+            arr.PushBack(SafeFloat(v.x), allocator).PushBack(SafeFloat(v.y), allocator).PushBack(SafeFloat(v.z), allocator);
+        }
+
+        void SetVec4(rapidjson::Value &arr, const vec4 &v) const
+        {
+            arr.SetArray();
+            arr.PushBack(SafeFloat(v.x), allocator).PushBack(SafeFloat(v.y), allocator).PushBack(SafeFloat(v.z), allocator).PushBack(SafeFloat(v.w), allocator);
+        }
+
+        void SetMat4(rapidjson::Value &arr, const mat4 &m) const
+        {
+            arr.SetArray();
+            const float *p = value_ptr(m);
+            for (int i = 0; i < 16; i++)
+                arr.PushBack(SafeFloat(p[i]), allocator);
+        }
+
+        rapidjson::Value MakeStringValue(const std::string &value) const
+        {
+            rapidjson::Value stringValue;
+            stringValue.SetString(value.c_str(), static_cast<rapidjson::SizeType>(value.length()), allocator);
+            return stringValue;
+        }
+
+        static std::string NormalizeSeparators(std::string value)
+        {
+            std::replace(value.begin(), value.end(), '\\', '/');
+            return value;
+        }
+
+        static std::string PathToUtf8String(const std::filesystem::path &path)
+        {
+            auto u8 = path.u8string();
+            return std::string(u8.begin(), u8.end());
+        }
+
+        std::string SerializePath(const std::filesystem::path &path, const std::filesystem::path *relativeToDir) const
+        {
+            if (relativeToDir)
+                return NormalizeSeparators(PathToUtf8String(std::filesystem::relative(path, *relativeToDir)));
+
+            return NormalizeSeparators(PathToUtf8String(path));
+        }
+
+        std::string SerializeTexturePath(const std::string &path, const std::filesystem::path *relativeToDir) const
+        {
+            if (path.empty())
+                return {};
+
+            std::filesystem::path texturePath(path);
+            if (relativeToDir)
+                return SerializePath(texturePath, relativeToDir);
+
+            return NormalizeSeparators(path);
+        }
+
+        void BuildLiveGeometryRemap()
+        {
+            std::vector<bool> liveMesh(scene.m_meshes.size(), false);
+            for (uint32_t ni = 0; ni < scene.GetNodeCount(); ni++)
+            {
+                int meshRef = scene.m_meshRefs[ni];
+                if (meshRef >= 0 && meshRef < static_cast<int>(scene.m_meshes.size()))
+                    liveMesh[meshRef] = true;
+            }
+
+            int newMeshIdx = 0;
+            for (int mi = 0; mi < static_cast<int>(scene.m_meshes.size()); mi++)
+            {
+                if (liveMesh[mi])
+                    meshRemap[mi] = newMeshIdx++;
+            }
+
+            std::vector<bool> liveSrc(scene.m_sources.size(), false);
+            for (int mi = 0; mi < static_cast<int>(scene.m_meshes.size()); mi++)
+            {
+                if (meshRemap[mi] < 0)
+                    continue;
+
+                if (mi < static_cast<int>(scene.m_meshSourceInfos.size()))
+                {
+                    int sourceIndex = scene.m_meshSourceInfos[mi].sourceIndex;
+                    if (sourceIndex >= 0 && sourceIndex < static_cast<int>(scene.m_sources.size()))
+                        liveSrc[sourceIndex] = true;
+                }
+            }
+
+            int newSrcIdx = 0;
+            for (int si = 0; si < static_cast<int>(scene.m_sources.size()); si++)
+            {
+                if (liveSrc[si])
+                    srcRemap[si] = newSrcIdx++;
+            }
+        }
+
+        void AddSettings()
+        {
+            rapidjson::Value settings(rapidjson::kObjectType);
+            auto &gSettings = Settings::Get<GlobalSettings>();
+            settings.AddMember("shadows", gSettings.shadows, allocator);
+            settings.AddMember("shadow_map_size", gSettings.shadow_map_size, allocator);
+            settings.AddMember("num_cascades", gSettings.num_cascades, allocator);
+            settings.AddMember("render_scale", gSettings.render_scale, allocator);
+            settings.AddMember("ssao", gSettings.ssao, allocator);
+            settings.AddMember("fxaa", gSettings.fxaa, allocator);
+            settings.AddMember("taa", gSettings.taa, allocator);
+            settings.AddMember("cas_sharpening", gSettings.cas_sharpening, allocator);
+            settings.AddMember("cas_sharpness", gSettings.cas_sharpness, allocator);
+            settings.AddMember("ssr", gSettings.ssr, allocator);
+            settings.AddMember("tonemapping", gSettings.tonemapping, allocator);
+            settings.AddMember("dof", gSettings.dof, allocator);
+            settings.AddMember("dof_focus_scale", gSettings.dof_focus_scale, allocator);
+            settings.AddMember("dof_blur_range", gSettings.dof_blur_range, allocator);
+            settings.AddMember("bloom", gSettings.bloom, allocator);
+            settings.AddMember("bloom_strength", gSettings.bloom_strength, allocator);
+            settings.AddMember("bloom_range", gSettings.bloom_range, allocator);
+            settings.AddMember("motion_blur", gSettings.motion_blur, allocator);
+            settings.AddMember("motion_blur_strength", gSettings.motion_blur_strength, allocator);
+            settings.AddMember("motion_blur_samples", gSettings.motion_blur_samples, allocator);
+            settings.AddMember("IBL", gSettings.IBL, allocator);
+            settings.AddMember("IBL_intensity", gSettings.IBL_intensity, allocator);
+            settings.AddMember("lights_intensity", gSettings.lights_intensity, allocator);
+            settings.AddMember("day", gSettings.day, allocator);
+
+            rapidjson::Value depthBias(rapidjson::kArrayType);
+            depthBias.PushBack(gSettings.depth_bias[0], allocator);
+            depthBias.PushBack(gSettings.depth_bias[1], allocator);
+            depthBias.PushBack(gSettings.depth_bias[2], allocator);
+            settings.AddMember("depth_bias", depthBias.Move(), allocator);
+
+            settings.AddMember("draw_grid", gSettings.draw_grid, allocator);
+            settings.AddMember("draw_aabbs", gSettings.draw_aabbs, allocator);
+            settings.AddMember("render_mode", static_cast<int>(gSettings.render_mode), allocator);
+            settings.AddMember("present_mode", static_cast<int>(gSettings.preferred_present_mode), allocator);
+
+            document.AddMember("settings", settings.Move(), allocator);
+        }
+
+        void AddSources(const std::filesystem::path *relativeToDir)
+        {
+            rapidjson::Value sourcesArr(rapidjson::kArrayType);
+            for (int si = 0; si < static_cast<int>(scene.m_sources.size()); si++)
+            {
+                if (srcRemap[si] < 0)
+                    continue;
+
+                const auto &src = scene.m_sources[si];
+                rapidjson::Value srcObj(rapidjson::kObjectType);
+                if (!src.primitiveType.empty())
+                {
+                    srcObj.AddMember("primitive_type", MakeStringValue(src.primitiveType), allocator);
+                    WritePrimitiveParams(srcObj, src.primitiveParams, src.primitiveParamCount, allocator);
+                }
+                else
+                {
+                    srcObj.AddMember("path", MakeStringValue(SerializePath(src.filePath, relativeToDir)), allocator);
+                }
+                sourcesArr.PushBack(srcObj.Move(), allocator);
+            }
+
+            document.AddMember("sources", sourcesArr.Move(), allocator);
+        }
+
+        void AddMeshes(const std::filesystem::path *relativeToDir)
+        {
+            rapidjson::Value meshesArr(rapidjson::kArrayType);
+            const char *texSlotNames[] = {"base_color", "metallic_roughness", "normal", "occlusion", "emissive"};
+            const auto &defaults = ModelAsset::GetDefaultResources();
+
+            for (int mi = 0; mi < static_cast<int>(scene.m_meshes.size()); mi++)
+            {
+                if (meshRemap[mi] < 0)
+                    continue;
+
+                const Mesh &mesh = scene.m_meshes[mi];
+                rapidjson::Value meshObj(rapidjson::kObjectType);
+
+                if (mi < static_cast<int>(scene.m_meshSourceInfos.size()))
+                {
+                    int rawSrc = scene.m_meshSourceInfos[mi].sourceIndex;
+                    int remappedSrc = (rawSrc >= 0 && rawSrc < static_cast<int>(srcRemap.size())) ? srcRemap[rawSrc] : -1;
+                    meshObj.AddMember("source", remappedSrc, allocator);
+                    meshObj.AddMember("source_mesh", scene.m_meshSourceInfos[mi].sourceMeshIndex, allocator);
+                }
+
+                meshObj.AddMember("render_type", static_cast<int>(mesh.renderType), allocator);
+
+                Material resolvedMat;
+                const Material *saveMat = nullptr;
+                if (mesh.materialInstance)
+                {
+                    resolvedMat = mesh.materialInstance->Resolve();
+                    saveMat = &resolvedMat;
+                    meshObj.AddMember("instanced", true, allocator);
+                }
+                else if (mesh.material)
+                {
+                    saveMat = mesh.material;
+                }
+
+                meshObj.AddMember("texture_mask", saveMat ? saveMat->textureMask : 0u, allocator);
+
+                mat4 factors[2] = {mat4(1.f), mat4(1.f)};
+                if (saveMat)
+                    saveMat->PackLegacyFactors(factors);
+                EncodeMaterialFactorsForPersistence(mesh.renderType, factors[0], factors[1]);
+
+                rapidjson::Value factorsArr(rapidjson::kArrayType);
+                rapidjson::Value f0;
+                rapidjson::Value f1;
+                SetMat4(f0, factors[0]);
+                SetMat4(f1, factors[1]);
+                factorsArr.PushBack(f0.Move(), allocator);
+                factorsArr.PushBack(f1.Move(), allocator);
+                meshObj.AddMember("material_factors", factorsArr.Move(), allocator);
+
+                rapidjson::Value texturesObj(rapidjson::kObjectType);
+                for (int i = 0; i < 5; i++)
+                {
+                    Image *img = saveMat ? saveMat->textures[i].get() : nullptr;
+                    if (img && !img->GetName().empty() &&
+                        img != defaults.black && img != defaults.white && img != defaults.normal)
+                    {
+                        const std::string texName = SerializeTexturePath(img->GetName(), relativeToDir);
+                        if (!texName.empty())
+                        {
+                            texturesObj.AddMember(
+                                rapidjson::Value(texSlotNames[i], allocator).Move(),
+                                MakeStringValue(texName),
+                                allocator);
+                        }
+                    }
+                }
+                meshObj.AddMember("textures", texturesObj.Move(), allocator);
+                meshesArr.PushBack(meshObj.Move(), allocator);
+            }
+
+            document.AddMember("meshes", meshesArr.Move(), allocator);
+        }
+
+        void AddNodes()
+        {
+            rapidjson::Value nodesArr(rapidjson::kArrayType);
+            for (uint32_t ni = 0; ni < scene.GetNodeCount(); ni++)
+            {
+                NodeId *node = scene.m_nodeIds[ni];
+                rapidjson::Value nodeObj(rapidjson::kObjectType);
+                nodeObj.AddMember("name", MakeStringValue(scene.m_nodeNames[ni]), allocator);
+
+                NodeId *parentNode = scene.m_nodeParents[ni];
+                int parentIdx = parentNode ? static_cast<int>(parentNode->index) : -1;
+                nodeObj.AddMember("parent", parentIdx, allocator);
+
+                rapidjson::Value localMat;
+                SetMat4(localMat, scene.m_localMatrices[ni]);
+                nodeObj.AddMember("local_matrix", localMat.Move(), allocator);
+
+                int meshRef = scene.m_meshRefs[ni];
+                int remappedMesh = (meshRef >= 0 && meshRef < static_cast<int>(meshRemap.size())) ? meshRemap[meshRef] : -1;
+                if (remappedMesh >= 0)
+                    nodeObj.AddMember("mesh", remappedMesh, allocator);
+
+                if (!scene.m_nodeScriptPaths[ni].empty())
+                    nodeObj.AddMember("script", MakeStringValue(scene.m_nodeScriptPaths[ni]), allocator);
+
+                uint32_t flags = scene.m_componentFlags[ni];
+                if (flags)
+                    nodeObj.AddMember("component_flags", flags, allocator);
+
+                if ((flags & Component_Camera) && !scene.m_cameras.empty())
+                {
+                    Camera *cam = scene.GetCameraForNode(node);
+                    if (cam)
+                    {
+                        rapidjson::Value camObj(rapidjson::kObjectType);
+                        camObj.AddMember("fovx", cam->Fovx(), allocator);
+                        camObj.AddMember("near_plane", cam->GetNearPlane(), allocator);
+                        camObj.AddMember("far_plane", cam->GetFarPlane(), allocator);
+                        camObj.AddMember("speed", cam->GetSpeed(), allocator);
+                        rapidjson::Value eul;
+                        SetVec3(eul, cam->GetEuler());
+                        camObj.AddMember("euler", eul.Move(), allocator);
+                        nodeObj.AddMember("camera", camObj.Move(), allocator);
+                    }
+                }
+
+                if (flags & Component_Light)
+                {
+                    auto [lightType, lightIndex] = scene.GetLightForNode(node);
+                    if (lightIndex >= 0)
+                    {
+                        rapidjson::Value lightObj(rapidjson::kObjectType);
+                        if (lightType == LightType::Directional)
+                        {
+                            const DirectionalLight &light = scene.m_directionalLights[lightIndex];
+                            lightObj.AddMember("type", "directional", allocator);
+                            rapidjson::Value color;
+                            SetVec4(color, light.color);
+                            lightObj.AddMember("color", color.Move(), allocator);
+                        }
+                        else if (lightType == LightType::Point)
+                        {
+                            const PointLight &light = scene.m_pointLights[lightIndex];
+                            lightObj.AddMember("type", "point", allocator);
+                            rapidjson::Value color;
+                            SetVec4(color, light.color);
+                            lightObj.AddMember("color", color.Move(), allocator);
+                            lightObj.AddMember("radius", light.position.w, allocator);
+                        }
+                        else if (lightType == LightType::Spot)
+                        {
+                            const SpotLight &light = scene.m_spotLights[lightIndex];
+                            lightObj.AddMember("type", "spot", allocator);
+                            rapidjson::Value color;
+                            rapidjson::Value params;
+                            SetVec4(color, light.color);
+                            SetVec4(params, light.params);
+                            lightObj.AddMember("color", color.Move(), allocator);
+                            lightObj.AddMember("range", light.position.w, allocator);
+                            lightObj.AddMember("params", params.Move(), allocator);
+                        }
+                        else if (lightType == LightType::Area)
+                        {
+                            const AreaLight &light = scene.m_areaLights[lightIndex];
+                            lightObj.AddMember("type", "area", allocator);
+                            rapidjson::Value color;
+                            rapidjson::Value size;
+                            SetVec4(color, light.color);
+                            SetVec4(size, light.size);
+                            lightObj.AddMember("color", color.Move(), allocator);
+                            lightObj.AddMember("range", light.position.w, allocator);
+                            lightObj.AddMember("size", size.Move(), allocator);
+                        }
+                        nodeObj.AddMember("light", lightObj.Move(), allocator);
+                    }
+                }
+
+#ifdef PE_PHYSICS
+                if (flags & Component_Physics)
+                {
+                    if (auto *ps = GetGlobalSystem<PhysicsSystem>())
+                    {
+                        const PhysicsBodyDesc *desc = ps->GetBodyDesc(node);
+                        if (desc)
+                        {
+                            rapidjson::Value phys(rapidjson::kObjectType);
+                            phys.AddMember("body_type", static_cast<int>(desc->bodyType), allocator);
+                            phys.AddMember("shape_type", static_cast<int>(desc->shapeType), allocator);
+                            phys.AddMember("mass", desc->mass, allocator);
+                            phys.AddMember("friction", desc->friction, allocator);
+                            phys.AddMember("restitution", desc->restitution, allocator);
+                            phys.AddMember("auto_fit", desc->autoFitShape, allocator);
+                            rapidjson::Value halfExtents;
+                            SetVec3(halfExtents, desc->boxHalfExtents);
+                            phys.AddMember("box_half_extents", halfExtents.Move(), allocator);
+                            phys.AddMember("sphere_radius", desc->sphereRadius, allocator);
+                            phys.AddMember("capsule_half_height", desc->capsuleHalfHeight, allocator);
+                            phys.AddMember("capsule_radius", desc->capsuleRadius, allocator);
+                            nodeObj.AddMember("physics", phys.Move(), allocator);
+                        }
+                    }
+                }
+#endif
+
+#ifdef PE_AUDIO
+                if (flags & Component_Audio)
+                {
+                    if (auto *as = GetGlobalSystem<AudioSystem>())
+                    {
+                        const AudioSourceDesc *desc = as->GetSourceDesc(node);
+                        if (desc)
+                        {
+                            rapidjson::Value audio(rapidjson::kObjectType);
+                            audio.AddMember("file", MakeStringValue(desc->filePath), allocator);
+                            audio.AddMember("volume", desc->volume, allocator);
+                            audio.AddMember("pitch", desc->pitch, allocator);
+                            audio.AddMember("min_distance", desc->minDistance, allocator);
+                            audio.AddMember("max_distance", desc->maxDistance, allocator);
+                            audio.AddMember("loop", desc->loop, allocator);
+                            audio.AddMember("spatial", desc->spatial, allocator);
+                            audio.AddMember("autoplay", desc->autoplay, allocator);
+                            nodeObj.AddMember("audio", audio.Move(), allocator);
+                        }
+                    }
+                }
+#endif
+
+                nodesArr.PushBack(nodeObj.Move(), allocator);
+            }
+
+            document.AddMember("nodes", nodesArr.Move(), allocator);
+        }
+
+        void AddLegacyLights()
+        {
+            rapidjson::Value lights(rapidjson::kArrayType);
+
+            for (const auto &light : scene.m_directionalLights)
+            {
+                rapidjson::Value lightObj(rapidjson::kObjectType);
+                lightObj.AddMember("type", "directional", allocator);
+                rapidjson::Value color;
+                rapidjson::Value pos;
+                rapidjson::Value rot;
+                SetVec4(color, light.color);
+                SetVec4(pos, light.position);
+                SetVec4(rot, light.rotation);
+                lightObj.AddMember("color", color.Move(), allocator);
+                lightObj.AddMember("position", pos.Move(), allocator);
+                lightObj.AddMember("rotation", rot.Move(), allocator);
+                lightObj.AddMember("name", MakeStringValue(light.name), allocator);
+                lights.PushBack(lightObj.Move(), allocator);
+            }
+
+            for (const auto &light : scene.m_pointLights)
+            {
+                rapidjson::Value lightObj(rapidjson::kObjectType);
+                lightObj.AddMember("type", "point", allocator);
+                rapidjson::Value color;
+                rapidjson::Value pos;
+                SetVec4(color, light.color);
+                SetVec4(pos, light.position);
+                lightObj.AddMember("color", color.Move(), allocator);
+                lightObj.AddMember("position", pos.Move(), allocator);
+                lightObj.AddMember("name", MakeStringValue(light.name), allocator);
+                lights.PushBack(lightObj.Move(), allocator);
+            }
+
+            for (const auto &light : scene.m_spotLights)
+            {
+                rapidjson::Value lightObj(rapidjson::kObjectType);
+                lightObj.AddMember("type", "spot", allocator);
+                rapidjson::Value color;
+                rapidjson::Value pos;
+                rapidjson::Value rot;
+                rapidjson::Value params;
+                SetVec4(color, light.color);
+                SetVec4(pos, light.position);
+                SetVec4(rot, light.rotation);
+                SetVec4(params, light.params);
+                lightObj.AddMember("color", color.Move(), allocator);
+                lightObj.AddMember("position", pos.Move(), allocator);
+                lightObj.AddMember("rotation", rot.Move(), allocator);
+                lightObj.AddMember("params", params.Move(), allocator);
+                lightObj.AddMember("name", MakeStringValue(light.name), allocator);
+                lights.PushBack(lightObj.Move(), allocator);
+            }
+
+            for (const auto &light : scene.m_areaLights)
+            {
+                rapidjson::Value lightObj(rapidjson::kObjectType);
+                lightObj.AddMember("type", "area", allocator);
+                rapidjson::Value color;
+                rapidjson::Value pos;
+                rapidjson::Value rot;
+                rapidjson::Value size;
+                SetVec4(color, light.color);
+                SetVec4(pos, light.position);
+                SetVec4(rot, light.rotation);
+                SetVec4(size, light.size);
+                lightObj.AddMember("color", color.Move(), allocator);
+                lightObj.AddMember("position", pos.Move(), allocator);
+                lightObj.AddMember("rotation", rot.Move(), allocator);
+                lightObj.AddMember("size", size.Move(), allocator);
+                lightObj.AddMember("name", MakeStringValue(light.name), allocator);
+                lights.PushBack(lightObj.Move(), allocator);
+            }
+
+            document.AddMember("lights", lights.Move(), allocator);
+        }
+
+        void AddLegacyCameras(LegacyCameraMode mode)
+        {
+            rapidjson::Value cameras(rapidjson::kArrayType);
+            Camera *activeCamera = (mode == LegacyCameraMode::Snapshot && !scene.m_cameras.empty()) ? scene.GetActiveCamera() : nullptr;
+
+            for (auto *camera : scene.m_cameras)
+            {
+                if (!camera)
+                    continue;
+
+                rapidjson::Value camObj(rapidjson::kObjectType);
+                camObj.AddMember("name", MakeStringValue(camera->GetName()), allocator);
+
+                if (mode == LegacyCameraMode::SaveFile || camera != activeCamera)
+                {
+                    rapidjson::Value pos;
+                    rapidjson::Value eul;
+                    SetVec3(pos, camera->GetPosition());
+                    SetVec3(eul, camera->GetEuler());
+                    camObj.AddMember("position", pos.Move(), allocator);
+                    camObj.AddMember("euler", eul.Move(), allocator);
+                }
+
+                camObj.AddMember("fovx", camera->Fovx(), allocator);
+                camObj.AddMember("near_plane", camera->GetNearPlane(), allocator);
+                camObj.AddMember("far_plane", camera->GetFarPlane(), allocator);
+                camObj.AddMember("speed", camera->GetSpeed(), allocator);
+
+                if (mode == LegacyCameraMode::SaveFile)
+                {
+                    NodeId *camNode = camera->GetNodeId();
+                    if (camNode)
+                        camObj.AddMember("node_index", static_cast<int>(camNode->index), allocator);
+                }
+
+                cameras.PushBack(camObj.Move(), allocator);
+            }
+
+            document.AddMember("cameras", cameras.Move(), allocator);
+        }
+
+        void AddActiveCamera()
+        {
+            for (int i = 0; i < static_cast<int>(scene.m_cameras.size()); i++)
+            {
+                if (scene.m_cameras[i] == scene.GetActiveCamera())
+                {
+                    document.AddMember("active_camera", i, allocator);
+                    break;
+                }
+            }
+        }
+
+        void AddEmitters()
+        {
+            if (!scene.m_particleManager)
+                return;
+
+            rapidjson::Value emitters(rapidjson::kArrayType);
+            const auto &emitterList = scene.m_particleManager->GetEmitters();
+            const auto &emitterNames = scene.m_particleManager->GetEmitterNames();
+            for (size_t i = 0; i < emitterList.size(); i++)
+            {
+                const auto &emitter = emitterList[i];
+                rapidjson::Value emitterObj(rapidjson::kObjectType);
+
+                std::string name = (i < emitterNames.size()) ? emitterNames[i] : ("Emitter " + std::to_string(i));
+                emitterObj.AddMember("name", MakeStringValue(name), allocator);
+
+                rapidjson::Value pos;
+                rapidjson::Value vel;
+                rapidjson::Value colorStart;
+                rapidjson::Value colorEnd;
+                rapidjson::Value sizeLife;
+                rapidjson::Value physics;
+                rapidjson::Value gravity;
+                rapidjson::Value animation;
+                SetVec4(pos, emitter.position);
+                SetVec4(vel, emitter.velocity);
+                SetVec4(colorStart, emitter.colorStart);
+                SetVec4(colorEnd, emitter.colorEnd);
+                SetVec4(sizeLife, emitter.sizeLife);
+                SetVec4(physics, emitter.physics);
+                SetVec4(gravity, emitter.gravity);
+                SetVec4(animation, emitter.animation);
+                emitterObj.AddMember("position", pos.Move(), allocator);
+                emitterObj.AddMember("velocity", vel.Move(), allocator);
+                emitterObj.AddMember("color_start", colorStart.Move(), allocator);
+                emitterObj.AddMember("color_end", colorEnd.Move(), allocator);
+                emitterObj.AddMember("size_life", sizeLife.Move(), allocator);
+                emitterObj.AddMember("physics", physics.Move(), allocator);
+                emitterObj.AddMember("gravity", gravity.Move(), allocator);
+                emitterObj.AddMember("animation", animation.Move(), allocator);
+                emitterObj.AddMember("texture_index", emitter.textureIndex, allocator);
+                emitterObj.AddMember("count", emitter.count, allocator);
+                emitterObj.AddMember("orientation", emitter.orientation, allocator);
+                emitters.PushBack(emitterObj.Move(), allocator);
+            }
+
+            document.AddMember("emitters", emitters.Move(), allocator);
+        }
+    };
+
     std::string Scene::GetSceneName() const
     {
         if (m_scenePath.empty())
@@ -121,476 +723,16 @@ namespace pe
     {
         rapidjson::Document d;
         d.SetObject();
-        auto &allocator = d.GetAllocator();
-
-        auto SafeFloat = [](float f)
-        {
-            return std::isnan(f) || std::isinf(f) ? 0.0f : f;
-        };
-
-        auto SetVec3 = [&](rapidjson::Value &arr, const vec3 &v)
-        {
-            arr.SetArray();
-            arr.PushBack(SafeFloat(v.x), allocator).PushBack(SafeFloat(v.y), allocator).PushBack(SafeFloat(v.z), allocator);
-        };
-
-        auto SetVec4 = [&](rapidjson::Value &arr, const vec4 &v)
-        {
-            arr.SetArray();
-            arr.PushBack(SafeFloat(v.x), allocator).PushBack(SafeFloat(v.y), allocator).PushBack(SafeFloat(v.z), allocator).PushBack(SafeFloat(v.w), allocator);
-        };
-
-        auto SetMat4 = [&](rapidjson::Value &arr, const mat4 &m)
-        {
-            arr.SetArray();
-            const float *p = value_ptr(m);
-            for (int i = 0; i < 16; i++)
-                arr.PushBack(SafeFloat(p[i]), allocator);
-        };
-
-        // Global Settings
-        rapidjson::Value settings(rapidjson::kObjectType);
-        auto &gSettings = Settings::Get<GlobalSettings>();
-        settings.AddMember("shadows", gSettings.shadows, allocator);
-        settings.AddMember("shadow_map_size", gSettings.shadow_map_size, allocator);
-        settings.AddMember("num_cascades", gSettings.num_cascades, allocator);
-        settings.AddMember("render_scale", gSettings.render_scale, allocator);
-        settings.AddMember("ssao", gSettings.ssao, allocator);
-        settings.AddMember("fxaa", gSettings.fxaa, allocator);
-        settings.AddMember("taa", gSettings.taa, allocator);
-        settings.AddMember("cas_sharpening", gSettings.cas_sharpening, allocator);
-        settings.AddMember("cas_sharpness", gSettings.cas_sharpness, allocator);
-        settings.AddMember("ssr", gSettings.ssr, allocator);
-        settings.AddMember("tonemapping", gSettings.tonemapping, allocator);
-        settings.AddMember("dof", gSettings.dof, allocator);
-        settings.AddMember("dof_focus_scale", gSettings.dof_focus_scale, allocator);
-        settings.AddMember("dof_blur_range", gSettings.dof_blur_range, allocator);
-        settings.AddMember("bloom", gSettings.bloom, allocator);
-        settings.AddMember("bloom_strength", gSettings.bloom_strength, allocator);
-        settings.AddMember("bloom_range", gSettings.bloom_range, allocator);
-        settings.AddMember("motion_blur", gSettings.motion_blur, allocator);
-        settings.AddMember("motion_blur_strength", gSettings.motion_blur_strength, allocator);
-        settings.AddMember("motion_blur_samples", gSettings.motion_blur_samples, allocator);
-        settings.AddMember("IBL", gSettings.IBL, allocator);
-        settings.AddMember("IBL_intensity", gSettings.IBL_intensity, allocator);
-        settings.AddMember("lights_intensity", gSettings.lights_intensity, allocator);
-        settings.AddMember("day", gSettings.day, allocator);
-
-        rapidjson::Value depthBias(rapidjson::kArrayType);
-        depthBias.PushBack(gSettings.depth_bias[0], allocator);
-        depthBias.PushBack(gSettings.depth_bias[1], allocator);
-        depthBias.PushBack(gSettings.depth_bias[2], allocator);
-        settings.AddMember("depth_bias", depthBias.Move(), allocator);
-
-        settings.AddMember("draw_grid", gSettings.draw_grid, allocator);
-        settings.AddMember("draw_aabbs", gSettings.draw_aabbs, allocator);
-        settings.AddMember("render_mode", static_cast<int>(gSettings.render_mode), allocator);
-        settings.AddMember("present_mode", static_cast<int>(gSettings.preferred_present_mode), allocator);
-
-        d.AddMember("settings", settings.Move(), allocator);
-
-        // Build live mesh/source remaps to exclude geometry orphaned by RemoveModel.
-        // A mesh is live if at least one active node references it.
-        // A source is live if at least one live mesh references it.
-        std::vector<int> meshRemap(m_meshes.size(), -1);
-        std::vector<int> srcRemap(m_sources.size(), -1);
-        {
-            std::vector<bool> liveMesh(m_meshes.size(), false);
-            for (uint32_t ni = 0; ni < GetNodeCount(); ni++)
-            {
-                int mr = m_meshRefs[ni];
-                if (mr >= 0 && mr < static_cast<int>(m_meshes.size()))
-                    liveMesh[mr] = true;
-            }
-            int newMeshIdx = 0;
-            for (int mi = 0; mi < static_cast<int>(m_meshes.size()); mi++)
-                if (liveMesh[mi])
-                    meshRemap[mi] = newMeshIdx++;
-
-            std::vector<bool> liveSrc(m_sources.size(), false);
-            for (int mi = 0; mi < static_cast<int>(m_meshes.size()); mi++)
-            {
-                if (meshRemap[mi] < 0)
-                    continue;
-                if (mi < static_cast<int>(m_meshSourceInfos.size()))
-                {
-                    int si = m_meshSourceInfos[mi].sourceIndex;
-                    if (si >= 0 && si < static_cast<int>(m_sources.size()))
-                        liveSrc[si] = true;
-                }
-            }
-            int newSrcIdx = 0;
-            for (int si = 0; si < static_cast<int>(m_sources.size()); si++)
-                if (liveSrc[si])
-                    srcRemap[si] = newSrcIdx++;
-        }
-
-        // Sources — geometry origins for reload (live only)
-        rapidjson::Value sourcesArr(rapidjson::kArrayType);
-        for (int si = 0; si < static_cast<int>(m_sources.size()); si++)
-        {
-            if (srcRemap[si] < 0)
-                continue;
-            const auto &src = m_sources[si];
-            rapidjson::Value srcObj(rapidjson::kObjectType);
-            if (!src.primitiveType.empty())
-            {
-                srcObj.AddMember("primitive_type", rapidjson::Value(src.primitiveType.c_str(), allocator).Move(), allocator);
-                WritePrimitiveParams(srcObj, src.primitiveParams, src.primitiveParamCount, allocator);
-            }
-            else
-            {
-                auto relPath = std::filesystem::relative(src.filePath, file.parent_path());
-                auto u8rp = relPath.u8string();
-                std::string pathStr(u8rp.begin(), u8rp.end());
-                std::replace(pathStr.begin(), pathStr.end(), '\\', '/');
-                srcObj.AddMember("path", rapidjson::Value(pathStr.c_str(), static_cast<rapidjson::SizeType>(pathStr.length()), allocator).Move(), allocator);
-            }
-            sourcesArr.PushBack(srcObj.Move(), allocator);
-        }
-        d.AddMember("sources", sourcesArr.Move(), allocator);
-
-        // Meshes — flat array of live meshes only, with remapped source references
-        rapidjson::Value meshesArr(rapidjson::kArrayType);
-        for (int mi = 0; mi < static_cast<int>(m_meshes.size()); mi++)
-        {
-            if (meshRemap[mi] < 0)
-                continue;
-            const Mesh &mesh = m_meshes[mi];
-
-            rapidjson::Value meshObj(rapidjson::kObjectType);
-
-            // Source reference (for geometry reload)
-            if (mi < static_cast<int>(m_meshSourceInfos.size()))
-            {
-                int rawSrc = m_meshSourceInfos[mi].sourceIndex;
-                int remappedSrc = (rawSrc >= 0 && rawSrc < static_cast<int>(srcRemap.size())) ? srcRemap[rawSrc] : -1;
-                meshObj.AddMember("source", remappedSrc, allocator);
-                meshObj.AddMember("source_mesh", m_meshSourceInfos[mi].sourceMeshIndex, allocator);
-            }
-
-            meshObj.AddMember("render_type", static_cast<int>(mesh.renderType), allocator);
-
-            // Resolve material for saving: use instance overrides if present
-            Material resolvedMat;
-            const Material *saveMat = nullptr;
-            if (mesh.materialInstance)
-            {
-                resolvedMat = mesh.materialInstance->Resolve();
-                saveMat = &resolvedMat;
-                meshObj.AddMember("instanced", true, allocator);
-            }
-            else if (mesh.material)
-            {
-                saveMat = mesh.material;
-            }
-
-            meshObj.AddMember("texture_mask", saveMat ? saveMat->textureMask : 0u, allocator);
-
-            {
-                mat4 factors[2] = {mat4(1.f), mat4(1.f)};
-                if (saveMat)
-                    saveMat->PackLegacyFactors(factors);
-                EncodeMaterialFactorsForPersistence(mesh.renderType, factors[0], factors[1]);
-                rapidjson::Value factorsArr(rapidjson::kArrayType);
-                rapidjson::Value f0, f1;
-                SetMat4(f0, factors[0]);
-                SetMat4(f1, factors[1]);
-                factorsArr.PushBack(f0.Move(), allocator);
-                factorsArr.PushBack(f1.Move(), allocator);
-                meshObj.AddMember("material_factors", factorsArr.Move(), allocator);
-            }
-
-            rapidjson::Value texturesObj(rapidjson::kObjectType);
-            const char *texSlotNames[] = {"base_color", "metallic_roughness", "normal", "occlusion", "emissive"};
-            const auto &defaults = ModelAsset::GetDefaultResources();
-            for (int i = 0; i < 5; i++)
-            {
-                Image *img = saveMat ? saveMat->textures[i].get() : nullptr;
-                if (img && !img->GetName().empty() &&
-                    img != defaults.black && img != defaults.white && img != defaults.normal)
-                {
-                    std::string texName = img->GetName();
-                    auto relTex = std::filesystem::relative(std::filesystem::path(texName), file.parent_path());
-                    auto u8tex = relTex.u8string();
-                    texName = std::string(u8tex.begin(), u8tex.end());
-                    std::replace(texName.begin(), texName.end(), '\\', '/');
-                    if (!texName.empty())
-                        texturesObj.AddMember(rapidjson::Value(texSlotNames[i], allocator).Move(),
-                                              rapidjson::Value(texName.c_str(), allocator).Move(), allocator);
-                }
-            }
-            meshObj.AddMember("textures", texturesObj.Move(), allocator);
-            meshesArr.PushBack(meshObj.Move(), allocator);
-        }
-        d.AddMember("meshes", meshesArr.Move(), allocator);
-
-        // Nodes — flat array of all SoA nodes with global parent indices
-        rapidjson::Value nodesArr(rapidjson::kArrayType);
-        for (uint32_t ni = 0; ni < GetNodeCount(); ni++)
-        {
-            NodeId *node = m_nodeIds[ni];
-
-            rapidjson::Value nodeObj(rapidjson::kObjectType);
-            nodeObj.AddMember("name", rapidjson::Value(m_nodeNames[ni].c_str(), allocator).Move(), allocator);
-
-            NodeId *parentNode = m_nodeParents[ni];
-            int parentIdx = parentNode ? static_cast<int>(parentNode->index) : -1;
-            nodeObj.AddMember("parent", parentIdx, allocator);
-
-            rapidjson::Value localMat;
-            SetMat4(localMat, m_localMatrices[ni]);
-            nodeObj.AddMember("local_matrix", localMat.Move(), allocator);
-
-            int meshRef = m_meshRefs[ni];
-            int remappedMesh = (meshRef >= 0 && meshRef < static_cast<int>(meshRemap.size())) ? meshRemap[meshRef] : -1;
-            if (remappedMesh >= 0)
-                nodeObj.AddMember("mesh", remappedMesh, allocator);
-
-            if (!m_nodeScriptPaths[ni].empty())
-                nodeObj.AddMember("script", rapidjson::Value(m_nodeScriptPaths[ni].c_str(), allocator).Move(), allocator);
-
-            uint32_t flags = m_componentFlags[ni];
-            if (flags)
-                nodeObj.AddMember("component_flags", flags, allocator);
-
-            if ((flags & Component_Camera) && !m_cameras.empty())
-            {
-                Camera *cam = GetCameraForNode(node);
-                if (cam)
-                {
-                    rapidjson::Value camObj(rapidjson::kObjectType);
-                    camObj.AddMember("fovx", cam->Fovx(), allocator);
-                    camObj.AddMember("near_plane", cam->GetNearPlane(), allocator);
-                    camObj.AddMember("far_plane", cam->GetFarPlane(), allocator);
-                    camObj.AddMember("speed", cam->GetSpeed(), allocator);
-                    // Save euler directly to avoid gimbal-flip on restore
-                    rapidjson::Value eul;
-                    SetVec3(eul, cam->GetEuler());
-                    camObj.AddMember("euler", eul.Move(), allocator);
-                    nodeObj.AddMember("camera", camObj.Move(), allocator);
-                }
-            }
-
-            if (flags & Component_Light)
-            {
-                auto [ltype, lidx] = GetLightForNode(node);
-                if (lidx >= 0)
-                {
-                    rapidjson::Value lObj(rapidjson::kObjectType);
-                    if (ltype == LightType::Directional)
-                    {
-                        const DirectionalLight &l = m_directionalLights[lidx];
-                        lObj.AddMember("type", "directional", allocator);
-                        rapidjson::Value color;
-                        SetVec4(color, l.color);
-                        lObj.AddMember("color", color.Move(), allocator);
-                    }
-                    else if (ltype == LightType::Point)
-                    {
-                        const PointLight &l = m_pointLights[lidx];
-                        lObj.AddMember("type", "point", allocator);
-                        rapidjson::Value color;
-                        SetVec4(color, l.color);
-                        lObj.AddMember("color", color.Move(), allocator);
-                        lObj.AddMember("radius", l.position.w, allocator);
-                    }
-                    else if (ltype == LightType::Spot)
-                    {
-                        const SpotLight &l = m_spotLights[lidx];
-                        lObj.AddMember("type", "spot", allocator);
-                        rapidjson::Value color, params;
-                        SetVec4(color, l.color);
-                        SetVec4(params, l.params);
-                        lObj.AddMember("color", color.Move(), allocator);
-                        lObj.AddMember("range", l.position.w, allocator);
-                        lObj.AddMember("params", params.Move(), allocator);
-                    }
-                    else if (ltype == LightType::Area)
-                    {
-                        const AreaLight &l = m_areaLights[lidx];
-                        lObj.AddMember("type", "area", allocator);
-                        rapidjson::Value color, size;
-                        SetVec4(color, l.color);
-                        SetVec4(size, l.size);
-                        lObj.AddMember("color", color.Move(), allocator);
-                        lObj.AddMember("range", l.position.w, allocator);
-                        lObj.AddMember("size", size.Move(), allocator);
-                    }
-                    nodeObj.AddMember("light", lObj.Move(), allocator);
-                }
-            }
-
-#ifdef PE_PHYSICS
-            if (flags & Component_Physics)
-            {
-                if (auto *ps = GetGlobalSystem<PhysicsSystem>())
-                {
-                    const PhysicsBodyDesc *desc = ps->GetBodyDesc(node);
-                    if (desc)
-                    {
-                        rapidjson::Value phys(rapidjson::kObjectType);
-                        phys.AddMember("body_type", static_cast<int>(desc->bodyType), allocator);
-                        phys.AddMember("shape_type", static_cast<int>(desc->shapeType), allocator);
-                        phys.AddMember("mass", desc->mass, allocator);
-                        phys.AddMember("friction", desc->friction, allocator);
-                        phys.AddMember("restitution", desc->restitution, allocator);
-                        phys.AddMember("auto_fit", desc->autoFitShape, allocator);
-                        rapidjson::Value he;
-                        SetVec3(he, desc->boxHalfExtents);
-                        phys.AddMember("box_half_extents", he.Move(), allocator);
-                        phys.AddMember("sphere_radius", desc->sphereRadius, allocator);
-                        phys.AddMember("capsule_half_height", desc->capsuleHalfHeight, allocator);
-                        phys.AddMember("capsule_radius", desc->capsuleRadius, allocator);
-                        nodeObj.AddMember("physics", phys.Move(), allocator);
-                    }
-                }
-            }
-#endif
-
-#ifdef PE_AUDIO
-            if (flags & Component_Audio)
-            {
-                if (auto *as = GetGlobalSystem<AudioSystem>())
-                {
-                    const AudioSourceDesc *desc = as->GetSourceDesc(node);
-                    if (desc)
-                    {
-                        rapidjson::Value aud(rapidjson::kObjectType);
-                        aud.AddMember("file", rapidjson::Value(desc->filePath.c_str(), allocator).Move(), allocator);
-                        aud.AddMember("volume", desc->volume, allocator);
-                        aud.AddMember("pitch", desc->pitch, allocator);
-                        aud.AddMember("min_distance", desc->minDistance, allocator);
-                        aud.AddMember("max_distance", desc->maxDistance, allocator);
-                        aud.AddMember("loop", desc->loop, allocator);
-                        aud.AddMember("spatial", desc->spatial, allocator);
-                        aud.AddMember("autoplay", desc->autoplay, allocator);
-                        nodeObj.AddMember("audio", aud.Move(), allocator);
-                    }
-                }
-            }
-#endif
-
-            nodesArr.PushBack(nodeObj.Move(), allocator);
-        }
-        d.AddMember("nodes", nodesArr.Move(), allocator);
-
-        // Lights (kept for backward compatibility with older readers)
-        {
-            rapidjson::Value lights(rapidjson::kArrayType);
-
-            // Directional
-            for (const auto &l : m_directionalLights)
-            {
-                rapidjson::Value lObj(rapidjson::kObjectType);
-                lObj.AddMember("type", "directional", allocator); // type identifier
-
-                rapidjson::Value color, pos, rot;
-                SetVec4(color, l.color);
-                SetVec4(pos, l.position);
-                SetVec4(rot, l.rotation);
-
-                lObj.AddMember("color", color.Move(), allocator);
-                lObj.AddMember("position", pos.Move(), allocator);
-                lObj.AddMember("rotation", rot.Move(), allocator);
-                lObj.AddMember("name", rapidjson::Value(l.name.c_str(), allocator).Move(), allocator);
-                lights.PushBack(lObj.Move(), allocator);
-            }
-
-            // Point
-            for (const auto &l : m_pointLights)
-            {
-                rapidjson::Value lObj(rapidjson::kObjectType);
-                lObj.AddMember("type", "point", allocator);
-
-                rapidjson::Value color, pos;
-                SetVec4(color, l.color);
-                SetVec4(pos, l.position);
-
-                lObj.AddMember("color", color.Move(), allocator);
-                lObj.AddMember("position", pos.Move(), allocator); // .w is radius
-                lObj.AddMember("name", rapidjson::Value(l.name.c_str(), allocator).Move(), allocator);
-                lights.PushBack(lObj.Move(), allocator);
-            }
-
-            // Spot
-            for (const auto &l : m_spotLights)
-            {
-                rapidjson::Value lObj(rapidjson::kObjectType);
-                lObj.AddMember("type", "spot", allocator);
-
-                rapidjson::Value color, pos, rot, params;
-                SetVec4(color, l.color);
-                SetVec4(pos, l.position);
-                SetVec4(rot, l.rotation);
-                SetVec4(params, l.params);
-
-                lObj.AddMember("color", color.Move(), allocator);
-                lObj.AddMember("position", pos.Move(), allocator); // .w is range
-                lObj.AddMember("rotation", rot.Move(), allocator);
-                lObj.AddMember("params", params.Move(), allocator); // angle, falloff
-                lObj.AddMember("name", rapidjson::Value(l.name.c_str(), allocator).Move(), allocator);
-                lights.PushBack(lObj.Move(), allocator);
-            }
-
-            // Area
-            for (const auto &l : m_areaLights)
-            {
-                rapidjson::Value lObj(rapidjson::kObjectType);
-                lObj.AddMember("type", "area", allocator);
-
-                rapidjson::Value color, pos, rot, size;
-                SetVec4(color, l.color);
-                SetVec4(pos, l.position);
-                SetVec4(rot, l.rotation);
-                SetVec4(size, l.size);
-
-                lObj.AddMember("color", color.Move(), allocator);
-                lObj.AddMember("position", pos.Move(), allocator); // .w is range
-                lObj.AddMember("rotation", rot.Move(), allocator);
-                lObj.AddMember("size", size.Move(), allocator);
-                lObj.AddMember("name", rapidjson::Value(l.name.c_str(), allocator).Move(), allocator);
-                lights.PushBack(lObj.Move(), allocator);
-            }
-
-            d.AddMember("lights", lights.Move(), allocator);
-        }
-
-        // Cameras (kept for backward compatibility with older readers)
-        rapidjson::Value cameras(rapidjson::kArrayType);
-        for (auto *camera : m_cameras)
-        {
-            if (!camera)
-                continue;
-            rapidjson::Value camObj(rapidjson::kObjectType);
-            camObj.AddMember("name", rapidjson::Value(camera->GetName().c_str(), allocator).Move(), allocator);
-
-            rapidjson::Value pos, eul;
-            SetVec3(pos, camera->GetPosition());
-            SetVec3(eul, camera->GetEuler());
-
-            camObj.AddMember("position", pos.Move(), allocator);
-            camObj.AddMember("euler", eul.Move(), allocator);
-            camObj.AddMember("fovx", camera->Fovx(), allocator);
-            camObj.AddMember("near_plane", camera->GetNearPlane(), allocator);
-            camObj.AddMember("far_plane", camera->GetFarPlane(), allocator);
-            camObj.AddMember("speed", camera->GetSpeed(), allocator);
-            NodeId *camNode = camera->GetNodeId();
-            if (camNode)
-                camObj.AddMember("node_index", static_cast<int>(camNode->index), allocator);
-            cameras.PushBack(camObj.Move(), allocator);
-        }
-        d.AddMember("cameras", cameras.Move(), allocator);
-
-        // Active Camera
-        for (int i = 0; i < m_cameras.size(); i++)
-        {
-            if (m_cameras[i] == GetActiveCamera())
-            {
-                d.AddMember("active_camera", i, allocator);
-                break;
-            }
-        }
+        const std::filesystem::path sceneDir = file.parent_path();
+        SceneSerializationHelper serializer(*this, d);
+        serializer.AddSettings();
+        serializer.BuildLiveGeometryRemap();
+        serializer.AddSources(&sceneDir);
+        serializer.AddMeshes(&sceneDir);
+        serializer.AddNodes();
+        serializer.AddLegacyLights();
+        serializer.AddLegacyCameras(SceneSerializationHelper::LegacyCameraMode::SaveFile);
+        serializer.AddActiveCamera();
 
         // Write to file
         std::ofstream ofs(file);
@@ -646,8 +788,6 @@ namespace pe
         m_sources.clear();
         m_meshSourceInfos.clear();
         m_modelRootNodes.clear();
-        m_skeleton = Skeleton();
-        m_animationClips.clear();
 
         // Null out camera nodeIds before freeing node memory
         for (auto *cam : m_cameras)
@@ -693,6 +833,7 @@ namespace pe
         m_imageStore.clear();
         m_samplerStore.clear();
 
+        m_skeletonModel = nullptr;
         for (auto *model : m_models)
             delete model;
         m_models.clear();
@@ -861,8 +1002,6 @@ namespace pe
         m_sources.clear();
         m_meshSourceInfos.clear();
         m_modelRootNodes.clear();
-        m_skeleton = Skeleton();
-        m_animationClips.clear();
 
         // Null out camera nodeIds before freeing node memory
         for (auto *cam : m_cameras)
@@ -907,6 +1046,7 @@ namespace pe
         m_imageStore.clear();
         m_samplerStore.clear();
 
+        m_skeletonModel = nullptr;
         for (auto *model : m_models)
             delete model;
         m_models.clear();
@@ -1050,12 +1190,6 @@ namespace pe
                     sourceMeshMaps[si] = AddModelGeometry(model, sourceIndex);
                     m_models.insert(model->GetId(), model);
                     loadedModels[si] = model;
-
-                    if (model->HasSkeleton() && m_skeleton.bones.empty())
-                    {
-                        m_skeleton = model->GetSkeleton();
-                        m_animationClips = model->GetAnimations();
-                    }
                 }
             }
 
@@ -1475,12 +1609,6 @@ namespace pe
                         }
                     }
 
-                    if (model->HasSkeleton() && m_skeleton.bones.empty())
-                    {
-                        m_skeleton = model->GetSkeleton();
-                        m_animationClips = model->GetAnimations();
-                    }
-
                     EventSystem::PushEvent(EventType::ModelLoaded, model);
                 }
             }
@@ -1578,7 +1706,7 @@ namespace pe
 
         m_autoplayAnimations = true;
 
-        if (!m_animationClips.empty())
+        if (!GetAnimationClips().empty())
         {
             if (auto *animSys = GetGlobalSystem<AnimationSystem>())
             {
@@ -1603,481 +1731,16 @@ namespace pe
     {
         rapidjson::Document d;
         d.SetObject();
-        auto &allocator = d.GetAllocator();
-
-        auto SafeFloat = [](float f)
-        { return std::isnan(f) || std::isinf(f) ? 0.0f : f; };
-
-        auto SetVec3 = [&](rapidjson::Value &arr, const vec3 &v)
-        {
-            arr.SetArray();
-            arr.PushBack(SafeFloat(v.x), allocator).PushBack(SafeFloat(v.y), allocator).PushBack(SafeFloat(v.z), allocator);
-        };
-
-        auto SetVec4 = [&](rapidjson::Value &arr, const vec4 &v)
-        {
-            arr.SetArray();
-            arr.PushBack(SafeFloat(v.x), allocator).PushBack(SafeFloat(v.y), allocator).PushBack(SafeFloat(v.z), allocator).PushBack(SafeFloat(v.w), allocator);
-        };
-
-        auto SetMat4 = [&](rapidjson::Value &arr, const mat4 &m)
-        {
-            arr.SetArray();
-            const float *p = value_ptr(m);
-            for (int i = 0; i < 16; i++)
-                arr.PushBack(SafeFloat(p[i]), allocator);
-        };
-
-        // Build live mesh/source remaps to exclude geometry orphaned by RemoveModel.
-        std::vector<int> meshRemap(m_meshes.size(), -1);
-        std::vector<int> srcRemap(m_sources.size(), -1);
-        {
-            std::vector<bool> liveMesh(m_meshes.size(), false);
-            for (uint32_t ni = 0; ni < GetNodeCount(); ni++)
-            {
-                int mr = m_meshRefs[ni];
-                if (mr >= 0 && mr < static_cast<int>(m_meshes.size()))
-                    liveMesh[mr] = true;
-            }
-            int newMeshIdx = 0;
-            for (int mi = 0; mi < static_cast<int>(m_meshes.size()); mi++)
-                if (liveMesh[mi])
-                    meshRemap[mi] = newMeshIdx++;
-
-            std::vector<bool> liveSrc(m_sources.size(), false);
-            for (int mi = 0; mi < static_cast<int>(m_meshes.size()); mi++)
-            {
-                if (meshRemap[mi] < 0)
-                    continue;
-                if (mi < static_cast<int>(m_meshSourceInfos.size()))
-                {
-                    int si = m_meshSourceInfos[mi].sourceIndex;
-                    if (si >= 0 && si < static_cast<int>(m_sources.size()))
-                        liveSrc[si] = true;
-                }
-            }
-            int newSrcIdx = 0;
-            for (int si = 0; si < static_cast<int>(m_sources.size()); si++)
-                if (liveSrc[si])
-                    srcRemap[si] = newSrcIdx++;
-        }
-
-        // Sources (absolute paths for snapshots, live only)
-        rapidjson::Value sourcesArr(rapidjson::kArrayType);
-        for (int si = 0; si < static_cast<int>(m_sources.size()); si++)
-        {
-            if (srcRemap[si] < 0)
-                continue;
-            const auto &src = m_sources[si];
-            rapidjson::Value srcObj(rapidjson::kObjectType);
-            if (!src.primitiveType.empty())
-            {
-                srcObj.AddMember("primitive_type", rapidjson::Value(src.primitiveType.c_str(), allocator).Move(), allocator);
-                WritePrimitiveParams(srcObj, src.primitiveParams, src.primitiveParamCount, allocator);
-            }
-            else
-            {
-                auto u8p = src.filePath.u8string();
-                std::string absPath(u8p.begin(), u8p.end());
-                std::replace(absPath.begin(), absPath.end(), '\\', '/');
-                srcObj.AddMember("path", rapidjson::Value(absPath.c_str(), static_cast<rapidjson::SizeType>(absPath.length()), allocator).Move(), allocator);
-            }
-            sourcesArr.PushBack(srcObj.Move(), allocator);
-        }
-        d.AddMember("sources", sourcesArr.Move(), allocator);
-
-        // Meshes — flat array of live meshes only, with remapped source references
-        rapidjson::Value meshesArr(rapidjson::kArrayType);
-        for (int mi = 0; mi < static_cast<int>(m_meshes.size()); mi++)
-        {
-            if (meshRemap[mi] < 0)
-                continue;
-            const Mesh &mesh = m_meshes[mi];
-            rapidjson::Value meshObj(rapidjson::kObjectType);
-
-            if (mi < static_cast<int>(m_meshSourceInfos.size()))
-            {
-                int rawSrc = m_meshSourceInfos[mi].sourceIndex;
-                int remappedSrc = (rawSrc >= 0 && rawSrc < static_cast<int>(srcRemap.size())) ? srcRemap[rawSrc] : -1;
-                meshObj.AddMember("source", remappedSrc, allocator);
-                meshObj.AddMember("source_mesh", m_meshSourceInfos[mi].sourceMeshIndex, allocator);
-            }
-
-            meshObj.AddMember("render_type", static_cast<int>(mesh.renderType), allocator);
-
-            // Resolve material for saving: use instance overrides if present
-            Material resolvedMat;
-            const Material *saveMat = nullptr;
-            if (mesh.materialInstance)
-            {
-                resolvedMat = mesh.materialInstance->Resolve();
-                saveMat = &resolvedMat;
-                meshObj.AddMember("instanced", true, allocator);
-            }
-            else if (mesh.material)
-            {
-                saveMat = mesh.material;
-            }
-
-            meshObj.AddMember("texture_mask", saveMat ? saveMat->textureMask : 0u, allocator);
-
-            {
-                mat4 factors[2] = {mat4(1.f), mat4(1.f)};
-                if (saveMat)
-                    saveMat->PackLegacyFactors(factors);
-                EncodeMaterialFactorsForPersistence(mesh.renderType, factors[0], factors[1]);
-                rapidjson::Value factorsArr(rapidjson::kArrayType);
-                rapidjson::Value f0, f1;
-                SetMat4(f0, factors[0]);
-                SetMat4(f1, factors[1]);
-                factorsArr.PushBack(f0.Move(), allocator);
-                factorsArr.PushBack(f1.Move(), allocator);
-                meshObj.AddMember("material_factors", factorsArr.Move(), allocator);
-            }
-
-            rapidjson::Value texturesObj(rapidjson::kObjectType);
-            const char *texSlotNames[] = {"base_color", "metallic_roughness", "normal", "occlusion", "emissive"};
-            const auto &defaults = ModelAsset::GetDefaultResources();
-            for (int i = 0; i < 5; i++)
-            {
-                Image *img = saveMat ? saveMat->textures[i].get() : nullptr;
-                if (img && !img->GetName().empty() &&
-                    img != defaults.black && img != defaults.white && img != defaults.normal)
-                {
-                    std::string texName = img->GetName();
-                    texturesObj.AddMember(rapidjson::Value(texSlotNames[i], allocator).Move(),
-                                          rapidjson::Value(texName.c_str(), allocator).Move(), allocator);
-                }
-            }
-            meshObj.AddMember("textures", texturesObj.Move(), allocator);
-            meshesArr.PushBack(meshObj.Move(), allocator);
-        }
-        d.AddMember("meshes", meshesArr.Move(), allocator);
-
-        // Nodes — flat array with global parent indices
-        rapidjson::Value nodesArr(rapidjson::kArrayType);
-        for (uint32_t ni = 0; ni < GetNodeCount(); ni++)
-        {
-            NodeId *node = m_nodeIds[ni];
-            rapidjson::Value nodeObj(rapidjson::kObjectType);
-            nodeObj.AddMember("name", rapidjson::Value(m_nodeNames[ni].c_str(), allocator).Move(), allocator);
-
-            NodeId *parentNode = m_nodeParents[ni];
-            int parentIdx = parentNode ? static_cast<int>(parentNode->index) : -1;
-            nodeObj.AddMember("parent", parentIdx, allocator);
-
-            rapidjson::Value localMat;
-            SetMat4(localMat, m_localMatrices[ni]);
-            nodeObj.AddMember("local_matrix", localMat.Move(), allocator);
-
-            int meshRef = m_meshRefs[ni];
-            int remappedMesh = (meshRef >= 0 && meshRef < static_cast<int>(meshRemap.size())) ? meshRemap[meshRef] : -1;
-            if (remappedMesh >= 0)
-                nodeObj.AddMember("mesh", remappedMesh, allocator);
-
-            if (!m_nodeScriptPaths[ni].empty())
-                nodeObj.AddMember("script", rapidjson::Value(m_nodeScriptPaths[ni].c_str(), allocator).Move(), allocator);
-
-            uint32_t flags = m_componentFlags[ni];
-            if (flags)
-                nodeObj.AddMember("component_flags", flags, allocator);
-
-            if ((flags & Component_Camera))
-            {
-                Camera *cam = GetCameraForNode(node);
-                if (cam)
-                {
-                    rapidjson::Value camObj(rapidjson::kObjectType);
-                    camObj.AddMember("fovx", cam->Fovx(), allocator);
-                    camObj.AddMember("near_plane", cam->GetNearPlane(), allocator);
-                    camObj.AddMember("far_plane", cam->GetFarPlane(), allocator);
-                    camObj.AddMember("speed", cam->GetSpeed(), allocator);
-                    rapidjson::Value eul;
-                    SetVec3(eul, cam->GetEuler());
-                    camObj.AddMember("euler", eul.Move(), allocator);
-                    nodeObj.AddMember("camera", camObj.Move(), allocator);
-                }
-            }
-
-            if (flags & Component_Light)
-            {
-                auto [ltype, lidx] = GetLightForNode(node);
-                if (lidx >= 0)
-                {
-                    rapidjson::Value lObj(rapidjson::kObjectType);
-                    if (ltype == LightType::Directional)
-                    {
-                        const DirectionalLight &l = m_directionalLights[lidx];
-                        lObj.AddMember("type", "directional", allocator);
-                        rapidjson::Value color;
-                        SetVec4(color, l.color);
-                        lObj.AddMember("color", color.Move(), allocator);
-                    }
-                    else if (ltype == LightType::Point)
-                    {
-                        const PointLight &l = m_pointLights[lidx];
-                        lObj.AddMember("type", "point", allocator);
-                        rapidjson::Value color;
-                        SetVec4(color, l.color);
-                        lObj.AddMember("color", color.Move(), allocator);
-                        lObj.AddMember("radius", l.position.w, allocator);
-                    }
-                    else if (ltype == LightType::Spot)
-                    {
-                        const SpotLight &l = m_spotLights[lidx];
-                        lObj.AddMember("type", "spot", allocator);
-                        rapidjson::Value color, params;
-                        SetVec4(color, l.color);
-                        SetVec4(params, l.params);
-                        lObj.AddMember("color", color.Move(), allocator);
-                        lObj.AddMember("range", l.position.w, allocator);
-                        lObj.AddMember("params", params.Move(), allocator);
-                    }
-                    else if (ltype == LightType::Area)
-                    {
-                        const AreaLight &l = m_areaLights[lidx];
-                        lObj.AddMember("type", "area", allocator);
-                        rapidjson::Value color, size;
-                        SetVec4(color, l.color);
-                        SetVec4(size, l.size);
-                        lObj.AddMember("color", color.Move(), allocator);
-                        lObj.AddMember("range", l.position.w, allocator);
-                        lObj.AddMember("size", size.Move(), allocator);
-                    }
-                    nodeObj.AddMember("light", lObj.Move(), allocator);
-                }
-            }
-
-#ifdef PE_PHYSICS
-            if (flags & Component_Physics)
-            {
-                if (auto *ps = GetGlobalSystem<PhysicsSystem>())
-                {
-                    const PhysicsBodyDesc *desc = ps->GetBodyDesc(node);
-                    if (desc)
-                    {
-                        rapidjson::Value phys(rapidjson::kObjectType);
-                        phys.AddMember("body_type", static_cast<int>(desc->bodyType), allocator);
-                        phys.AddMember("shape_type", static_cast<int>(desc->shapeType), allocator);
-                        phys.AddMember("mass", desc->mass, allocator);
-                        phys.AddMember("friction", desc->friction, allocator);
-                        phys.AddMember("restitution", desc->restitution, allocator);
-                        phys.AddMember("auto_fit", desc->autoFitShape, allocator);
-                        rapidjson::Value he;
-                        SetVec3(he, desc->boxHalfExtents);
-                        phys.AddMember("box_half_extents", he.Move(), allocator);
-                        phys.AddMember("sphere_radius", desc->sphereRadius, allocator);
-                        phys.AddMember("capsule_half_height", desc->capsuleHalfHeight, allocator);
-                        phys.AddMember("capsule_radius", desc->capsuleRadius, allocator);
-                        nodeObj.AddMember("physics", phys.Move(), allocator);
-                    }
-                }
-            }
-#endif
-
-#ifdef PE_AUDIO
-            if (flags & Component_Audio)
-            {
-                if (auto *as = GetGlobalSystem<AudioSystem>())
-                {
-                    const AudioSourceDesc *desc = as->GetSourceDesc(node);
-                    if (desc)
-                    {
-                        rapidjson::Value aud(rapidjson::kObjectType);
-                        aud.AddMember("file", rapidjson::Value(desc->filePath.c_str(), allocator).Move(), allocator);
-                        aud.AddMember("volume", desc->volume, allocator);
-                        aud.AddMember("pitch", desc->pitch, allocator);
-                        aud.AddMember("min_distance", desc->minDistance, allocator);
-                        aud.AddMember("max_distance", desc->maxDistance, allocator);
-                        aud.AddMember("loop", desc->loop, allocator);
-                        aud.AddMember("spatial", desc->spatial, allocator);
-                        aud.AddMember("autoplay", desc->autoplay, allocator);
-                        nodeObj.AddMember("audio", aud.Move(), allocator);
-                    }
-                }
-            }
-#endif
-
-            nodesArr.PushBack(nodeObj.Move(), allocator);
-        }
-        d.AddMember("nodes", nodesArr.Move(), allocator);
-        {
-            rapidjson::Value lights(rapidjson::kArrayType);
-
-            for (const auto &l : m_directionalLights)
-            {
-                rapidjson::Value lObj(rapidjson::kObjectType);
-                lObj.AddMember("type", "directional", allocator);
-                rapidjson::Value color, pos, rot;
-                SetVec4(color, l.color);
-                SetVec4(pos, l.position);
-                SetVec4(rot, l.rotation);
-                lObj.AddMember("color", color.Move(), allocator);
-                lObj.AddMember("position", pos.Move(), allocator);
-                lObj.AddMember("rotation", rot.Move(), allocator);
-                lObj.AddMember("name", rapidjson::Value(l.name.c_str(), allocator).Move(), allocator);
-                lights.PushBack(lObj.Move(), allocator);
-            }
-            for (const auto &l : m_pointLights)
-            {
-                rapidjson::Value lObj(rapidjson::kObjectType);
-                lObj.AddMember("type", "point", allocator);
-                rapidjson::Value color, pos;
-                SetVec4(color, l.color);
-                SetVec4(pos, l.position);
-                lObj.AddMember("color", color.Move(), allocator);
-                lObj.AddMember("position", pos.Move(), allocator);
-                lObj.AddMember("name", rapidjson::Value(l.name.c_str(), allocator).Move(), allocator);
-                lights.PushBack(lObj.Move(), allocator);
-            }
-            for (const auto &l : m_spotLights)
-            {
-                rapidjson::Value lObj(rapidjson::kObjectType);
-                lObj.AddMember("type", "spot", allocator);
-                rapidjson::Value color, pos, rot, params;
-                SetVec4(color, l.color);
-                SetVec4(pos, l.position);
-                SetVec4(rot, l.rotation);
-                SetVec4(params, l.params);
-                lObj.AddMember("color", color.Move(), allocator);
-                lObj.AddMember("position", pos.Move(), allocator);
-                lObj.AddMember("rotation", rot.Move(), allocator);
-                lObj.AddMember("params", params.Move(), allocator);
-                lObj.AddMember("name", rapidjson::Value(l.name.c_str(), allocator).Move(), allocator);
-                lights.PushBack(lObj.Move(), allocator);
-            }
-            for (const auto &l : m_areaLights)
-            {
-                rapidjson::Value lObj(rapidjson::kObjectType);
-                lObj.AddMember("type", "area", allocator);
-                rapidjson::Value color, pos, rot, size;
-                SetVec4(color, l.color);
-                SetVec4(pos, l.position);
-                SetVec4(rot, l.rotation);
-                SetVec4(size, l.size);
-                lObj.AddMember("color", color.Move(), allocator);
-                lObj.AddMember("position", pos.Move(), allocator);
-                lObj.AddMember("rotation", rot.Move(), allocator);
-                lObj.AddMember("size", size.Move(), allocator);
-                lObj.AddMember("name", rapidjson::Value(l.name.c_str(), allocator).Move(), allocator);
-                lights.PushBack(lObj.Move(), allocator);
-            }
-            d.AddMember("lights", lights.Move(), allocator);
-        }
-
-        // Cameras - always skip active camera position/euler (WASD navigation is not undoable)
-        Camera *activeCamera = m_cameras.empty() ? nullptr : GetActiveCamera();
-        rapidjson::Value cameras(rapidjson::kArrayType);
-        for (auto *camera : m_cameras)
-        {
-            if (!camera)
-                continue;
-            rapidjson::Value camObj(rapidjson::kObjectType);
-            camObj.AddMember("name", rapidjson::Value(camera->GetName().c_str(), allocator).Move(), allocator);
-            if (camera != activeCamera)
-            {
-                rapidjson::Value pos, eul;
-                SetVec3(pos, camera->GetPosition());
-                SetVec3(eul, camera->GetEuler());
-                camObj.AddMember("position", pos.Move(), allocator);
-                camObj.AddMember("euler", eul.Move(), allocator);
-            }
-            camObj.AddMember("fovx", camera->Fovx(), allocator);
-            camObj.AddMember("near_plane", camera->GetNearPlane(), allocator);
-            camObj.AddMember("far_plane", camera->GetFarPlane(), allocator);
-            camObj.AddMember("speed", camera->GetSpeed(), allocator);
-            cameras.PushBack(camObj.Move(), allocator);
-        }
-        d.AddMember("cameras", cameras.Move(), allocator);
-
-        for (int i = 0; i < static_cast<int>(m_cameras.size()); i++)
-        {
-            if (m_cameras[i] == GetActiveCamera())
-            {
-                d.AddMember("active_camera", i, allocator);
-                break;
-            }
-        }
-
-        // Particle Emitters
-        if (m_particleManager)
-        {
-            rapidjson::Value emitters(rapidjson::kArrayType);
-            const auto &emitterList = m_particleManager->GetEmitters();
-            const auto &emitterNames = m_particleManager->GetEmitterNames();
-            for (size_t i = 0; i < emitterList.size(); i++)
-            {
-                const auto &e = emitterList[i];
-                rapidjson::Value eObj(rapidjson::kObjectType);
-
-                std::string name = (i < emitterNames.size()) ? emitterNames[i] : ("Emitter " + std::to_string(i));
-                eObj.AddMember("name", rapidjson::Value(name.c_str(), allocator).Move(), allocator);
-
-                rapidjson::Value pos, vel, cs, ce, sl, ph, gr, an;
-                SetVec4(pos, e.position);
-                SetVec4(vel, e.velocity);
-                SetVec4(cs, e.colorStart);
-                SetVec4(ce, e.colorEnd);
-                SetVec4(sl, e.sizeLife);
-                SetVec4(ph, e.physics);
-                SetVec4(gr, e.gravity);
-                SetVec4(an, e.animation);
-                eObj.AddMember("position", pos.Move(), allocator);
-                eObj.AddMember("velocity", vel.Move(), allocator);
-                eObj.AddMember("color_start", cs.Move(), allocator);
-                eObj.AddMember("color_end", ce.Move(), allocator);
-                eObj.AddMember("size_life", sl.Move(), allocator);
-                eObj.AddMember("physics", ph.Move(), allocator);
-                eObj.AddMember("gravity", gr.Move(), allocator);
-                eObj.AddMember("animation", an.Move(), allocator);
-                eObj.AddMember("texture_index", e.textureIndex, allocator);
-                eObj.AddMember("count", e.count, allocator);
-                eObj.AddMember("orientation", e.orientation, allocator);
-
-                emitters.PushBack(eObj.Move(), allocator);
-            }
-            d.AddMember("emitters", emitters.Move(), allocator);
-        }
-
-        // Settings
-        {
-            rapidjson::Value settings(rapidjson::kObjectType);
-            auto &gSettings = Settings::Get<GlobalSettings>();
-            settings.AddMember("shadows", gSettings.shadows, allocator);
-            settings.AddMember("shadow_map_size", gSettings.shadow_map_size, allocator);
-            settings.AddMember("num_cascades", gSettings.num_cascades, allocator);
-            settings.AddMember("render_scale", gSettings.render_scale, allocator);
-            settings.AddMember("ssao", gSettings.ssao, allocator);
-            settings.AddMember("fxaa", gSettings.fxaa, allocator);
-            settings.AddMember("taa", gSettings.taa, allocator);
-            settings.AddMember("cas_sharpening", gSettings.cas_sharpening, allocator);
-            settings.AddMember("cas_sharpness", gSettings.cas_sharpness, allocator);
-            settings.AddMember("ssr", gSettings.ssr, allocator);
-            settings.AddMember("tonemapping", gSettings.tonemapping, allocator);
-            settings.AddMember("dof", gSettings.dof, allocator);
-            settings.AddMember("dof_focus_scale", gSettings.dof_focus_scale, allocator);
-            settings.AddMember("dof_blur_range", gSettings.dof_blur_range, allocator);
-            settings.AddMember("bloom", gSettings.bloom, allocator);
-            settings.AddMember("bloom_strength", gSettings.bloom_strength, allocator);
-            settings.AddMember("bloom_range", gSettings.bloom_range, allocator);
-            settings.AddMember("motion_blur", gSettings.motion_blur, allocator);
-            settings.AddMember("motion_blur_strength", gSettings.motion_blur_strength, allocator);
-            settings.AddMember("motion_blur_samples", gSettings.motion_blur_samples, allocator);
-            settings.AddMember("IBL", gSettings.IBL, allocator);
-            settings.AddMember("IBL_intensity", gSettings.IBL_intensity, allocator);
-            settings.AddMember("lights_intensity", gSettings.lights_intensity, allocator);
-            settings.AddMember("day", gSettings.day, allocator);
-            rapidjson::Value depthBias(rapidjson::kArrayType);
-            depthBias.PushBack(gSettings.depth_bias[0], allocator)
-                .PushBack(gSettings.depth_bias[1], allocator)
-                .PushBack(gSettings.depth_bias[2], allocator);
-            settings.AddMember("depth_bias", depthBias.Move(), allocator);
-            settings.AddMember("draw_grid", gSettings.draw_grid, allocator);
-            settings.AddMember("draw_aabbs", gSettings.draw_aabbs, allocator);
-            settings.AddMember("render_mode", static_cast<int>(gSettings.render_mode), allocator);
-            settings.AddMember("present_mode", static_cast<int>(gSettings.preferred_present_mode), allocator);
-            d.AddMember("settings", settings.Move(), allocator);
-        }
+        SceneSerializationHelper serializer(*this, d);
+        serializer.BuildLiveGeometryRemap();
+        serializer.AddSources(nullptr);
+        serializer.AddMeshes(nullptr);
+        serializer.AddNodes();
+        serializer.AddLegacyLights();
+        serializer.AddLegacyCameras(SceneSerializationHelper::LegacyCameraMode::Snapshot);
+        serializer.AddActiveCamera();
+        serializer.AddEmitters();
+        serializer.AddSettings();
 
         // Compact JSON for minimal memory usage
         rapidjson::StringBuffer sb;
@@ -2493,9 +2156,6 @@ namespace pe
                 m_sources.clear();
                 m_meshSourceInfos.clear();
                 m_modelRootNodes.clear();
-                m_skeleton = Skeleton();
-                m_animationClips.clear();
-
                 for (auto *model : m_models)
                     delete model;
                 m_models.clear();
@@ -2536,12 +2196,6 @@ namespace pe
 
                         sourceMeshMaps[si] = AddModelGeometry(model, sourceIndex);
                         m_models.insert(model->GetId(), model);
-
-                        if (model->HasSkeleton() && m_skeleton.bones.empty())
-                        {
-                            m_skeleton = model->GetSkeleton();
-                            m_animationClips = model->GetAnimations();
-                        }
                     }
                 }
 

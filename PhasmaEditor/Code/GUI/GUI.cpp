@@ -13,6 +13,7 @@
 #include "GUIState.h"
 #include "Helpers.h"
 #include "Particles/ParticleManager.h"
+#include "Script/ScriptSystem.h"
 #include "Scene/SelectionManager.h"
 #include "IconsFontAwesome.h"
 #include "RenderPasses/LightPass.h"
@@ -56,6 +57,28 @@ namespace pe
 {
     namespace
     {
+        bool IsScriptTestFailureLine(const std::string &line)
+        {
+            return line.find("[FAIL]") != std::string::npos ||
+                   line.find("FAIL:") != std::string::npos ||
+                   line.find("[ERROR]") != std::string::npos ||
+                   line.rfind("error:", 0) == 0;
+        }
+
+        bool IsScriptTestWarningLine(const std::string &line)
+        {
+            return line.find("[WARN]") != std::string::npos;
+        }
+
+        std::string StripScriptTestSeverityPrefix(const std::string &line)
+        {
+            if (line.rfind("[ERROR] ", 0) == 0)
+                return line.substr(8);
+            if (line.rfind("[WARN] ", 0) == 0)
+                return line.substr(7);
+            return line;
+        }
+
         void WriteAgentConfigFile(const std::string &path, const nlohmann::json &j)
         {
             std::filesystem::create_directories(std::filesystem::path(path).parent_path());
@@ -563,6 +586,82 @@ namespace pe
     {
         if (ImGui::MenuItem("Exit", "Exit"))
             m_showExitConfirmation = true;
+    }
+
+    void GUI::RunScriptTests(const std::vector<std::string> &paths, const std::string &label)
+    {
+        if (paths.empty())
+        {
+            PE_WARN("[LuaTests] No script tests available for '%s'", label.c_str());
+            return;
+        }
+
+        auto *scriptSystem = GetGlobalSystem<ScriptSystem>();
+        if (!scriptSystem)
+        {
+            Log::Error("[LuaTests] ScriptSystem is unavailable");
+            return;
+        }
+
+        const std::string result = scriptSystem->RunScriptTests(paths);
+        size_t lineStart = 0;
+        while (lineStart <= result.size())
+        {
+            size_t lineEnd = result.find('\n', lineStart);
+            std::string line = result.substr(lineStart, lineEnd == std::string::npos ? std::string::npos : lineEnd - lineStart);
+            if (!line.empty())
+            {
+                if (IsScriptTestFailureLine(line))
+                    Log::Error("[LuaTests] " + StripScriptTestSeverityPrefix(line));
+                else if (IsScriptTestWarningLine(line))
+                    PE_WARN("[LuaTests] %s", StripScriptTestSeverityPrefix(line).c_str());
+                else
+                    PE_INFO("[LuaTests] %s", line.c_str());
+            }
+
+            if (lineEnd == std::string::npos)
+                break;
+            lineStart = lineEnd + 1;
+        }
+
+        if (auto *console = GetWidget<Console>())
+            console->FocusWithFilter("[LuaTests]");
+    }
+
+    void GUI::ShowRunScriptTestsMenu()
+    {
+        if (!ImGui::BeginMenu("Run Script Tests"))
+            return;
+
+        auto *scriptSystem = GetGlobalSystem<ScriptSystem>();
+        if (!scriptSystem)
+        {
+            ImGui::MenuItem("Script System Unavailable", nullptr, false, false);
+            ImGui::EndMenu();
+            return;
+        }
+
+        const std::vector<std::string> tests = scriptSystem->GetTestScriptPaths();
+        if (ImGui::MenuItem("Run All", nullptr, false, !tests.empty()))
+            RunScriptTests(tests, "all script tests");
+
+        ImGui::Separator();
+
+        if (tests.empty())
+        {
+            ImGui::MenuItem("No Test Scripts Found", nullptr, false, false);
+            ImGui::EndMenu();
+            return;
+        }
+
+        for (const auto &testPath : tests)
+        {
+            const std::string label = std::filesystem::path(testPath).stem().string();
+            if (ImGui::MenuItem(label.c_str()))
+                RunScriptTests({testPath}, label);
+        }
+
+        ImGui::EndMenu();
     }
 
     static constexpr const char *kEditorConfigPath = "Assets/editor_config.json";
@@ -1077,6 +1176,8 @@ namespace pe
 
             if (ImGui::BeginMenu("Help"))
             {
+                ShowRunScriptTestsMenu();
+                ImGui::Separator();
                 ImGui::MenuItem("Dear ImGui Demo", nullptr, &m_show_demo_window);
                 ImGui::EndMenu();
             }

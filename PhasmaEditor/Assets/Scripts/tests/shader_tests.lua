@@ -26,8 +26,8 @@ function run_shader_tests()
     -- get_bytes_count (should be size * 4)
     T.check("get_bytes_count (vs)", vs.get_bytes_count == vs.get_size * 4)
 
-    -- get_path_id
-    T.check("get_path_id (vs)", vs.get_path_id ~= nil)
+    -- get_path_id (returned as string)
+    T.check("get_path_id (vs)", type(vs.get_path_id) == "string" and #vs.get_path_id > 0)
 
     -- get_local_defines
     local defines = vs:get_local_defines()

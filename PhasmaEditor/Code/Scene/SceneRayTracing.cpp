@@ -65,7 +65,7 @@ namespace pe
 
         static constexpr vk::BuildAccelerationStructureFlagsKHR kBlasFlags = vk::BuildAccelerationStructureFlagBitsKHR::ePreferFastTrace;
 
-        bool hasSkeleton = m_skeleton.GetBoneCount() > 0;
+        bool hasSkeleton = GetSkeleton().GetBoneCount() > 0;
 
         for (int meshIndex = 0; meshIndex < static_cast<int>(m_meshes.size()); meshIndex++)
         {

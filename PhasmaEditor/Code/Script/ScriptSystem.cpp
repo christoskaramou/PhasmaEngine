@@ -38,6 +38,16 @@ namespace pe
         return false;
     }
 
+    static bool IsSupportTestScriptPath(const std::string &path)
+    {
+        return path.ends_with("/tests/test_utils.lua");
+    }
+
+    static std::string MakeTestRunnerName(const std::string &path)
+    {
+        return "run_" + std::filesystem::path(path).stem().string();
+    }
+
     static sol::object MakeMeshBindingObject(sol::state_view lua, Scene &scene, NodeId *node)
     {
         int meshRef = scene.GetMeshRef(node);
@@ -840,6 +850,135 @@ namespace pe
         return captured;
     }
 
+    bool ScriptSystem::IsTestScriptPath(const std::string &path)
+    {
+        const std::string normalized = NormalizePath(path);
+        return normalized.find("/tests/") != std::string::npos || normalized.find("\\tests\\") != std::string::npos;
+    }
+
+    std::vector<std::string> ScriptSystem::GetTestScriptPaths() const
+    {
+        std::vector<std::string> paths;
+        const std::filesystem::path testsDir = std::filesystem::path(Path::Assets) / "Scripts" / "tests";
+        if (!std::filesystem::exists(testsDir))
+            return paths;
+
+        for (const auto &file : std::filesystem::recursive_directory_iterator(testsDir))
+        {
+            if (file.path().extension() != ".lua")
+                continue;
+
+            const std::string filePath = NormalizePath(file.path().string());
+            if (IsSupportTestScriptPath(filePath))
+                continue;
+
+            paths.push_back(filePath);
+        }
+
+        std::sort(paths.begin(), paths.end());
+        return paths;
+    }
+
+    std::string ScriptSystem::RunScriptTests(const std::vector<std::string> &paths)
+    {
+        if (!m_initialized)
+            return "error: ScriptSystem not initialized";
+        if (paths.empty())
+            return "No script tests found.";
+
+        std::vector<std::string> normalizedPaths;
+        normalizedPaths.reserve(paths.size());
+        for (const auto &path : paths)
+        {
+            if (path.empty())
+                continue;
+
+            const std::string normalizedPath = NormalizePath(path);
+            if (!std::filesystem::exists(normalizedPath))
+                return "error: missing test script: " + normalizedPath;
+
+            normalizedPaths.push_back(normalizedPath);
+        }
+
+        if (normalizedPaths.empty())
+            return "No script tests found.";
+
+        std::sort(normalizedPaths.begin(), normalizedPaths.end());
+        normalizedPaths.erase(std::unique(normalizedPaths.begin(), normalizedPaths.end()), normalizedPaths.end());
+
+        std::string captured;
+        auto appendLine = [&captured](const std::string &line)
+        {
+            if (line.empty())
+                return;
+            if (!captured.empty())
+                captured += "\n";
+            captured += line;
+        };
+
+        sol::function originalLog = m_lua["pe_log"];
+        sol::function originalWarn = m_lua["pe_warn"];
+        sol::function originalError = m_lua["pe_error"];
+
+        m_lua.set_function("pe_log", [&appendLine](const std::string &msg)
+                           { appendLine(msg); });
+        m_lua.set_function("pe_warn", [&appendLine](const std::string &msg)
+                           { appendLine("[WARN] " + msg); });
+        m_lua.set_function("pe_error", [&appendLine](const std::string &msg)
+                           { appendLine("[ERROR] " + msg); });
+
+        const auto restoreLogging = [&]()
+        {
+            m_lua["pe_log"] = originalLog;
+            m_lua["pe_warn"] = originalWarn;
+            m_lua["pe_error"] = originalError;
+        };
+
+        sol::environment env(m_lua, sol::create, m_lua.globals());
+
+        const std::string supportPath = NormalizePath((std::filesystem::path(Path::Assets) / "Scripts" / "tests" / "test_utils.lua").string());
+        if (std::filesystem::exists(supportPath))
+        {
+            auto supportResult = m_lua.safe_script_file(supportPath, env, sol::script_pass_on_error);
+            if (!supportResult.valid())
+            {
+                sol::error err = supportResult;
+                restoreLogging();
+                return "error: test_utils.lua: " + std::string(err.what());
+            }
+        }
+
+        for (const auto &filePath : normalizedPaths)
+        {
+            auto loadResult = m_lua.safe_script_file(filePath, env, sol::script_pass_on_error);
+            if (!loadResult.valid())
+            {
+                sol::error err = loadResult;
+                appendLine("error: " + filePath + ": " + std::string(err.what()));
+                continue;
+            }
+
+            const std::string runnerName = MakeTestRunnerName(filePath);
+            sol::object runnerObj = env[runnerName];
+            if (!runnerObj.is<sol::function>())
+                continue;
+
+            auto runnerResult = runnerObj.as<sol::function>()();
+            if (!runnerResult.valid())
+            {
+                sol::error err = runnerResult;
+                appendLine("error: " + runnerName + "(): " + std::string(err.what()));
+            }
+        }
+
+        restoreLogging();
+
+        if (captured.empty())
+            captured = "ok";
+
+        return captured;
+    }
+
     void ScriptSystem::LoadScripts()
     {
         const std::string scriptsDir = Path::Assets + "Scripts";
@@ -879,7 +1018,7 @@ namespace pe
                 if (nodeScriptPaths.count(filePath))
                     continue;
 
-                if (filePath.find("/tests/") != std::string::npos || filePath.find("\\tests\\") != std::string::npos)
+                if (IsTestScriptPath(filePath))
                     continue;
 
                 // Each script gets its own environment that inherits globals
@@ -944,6 +1083,8 @@ namespace pe
                 continue;
 
             std::string filePath = NormalizePath(file.path().string());
+            if (IsTestScriptPath(filePath))
+                continue;
 
             // Check if already tracked (either as a file-level script or a per-node instance)
             bool known = false;

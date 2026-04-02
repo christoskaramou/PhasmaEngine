@@ -82,6 +82,8 @@ namespace pe
         void ShowSaveSceneMenuItem_Action(); // Opens file selector for Save As
         void OpenLoadSceneDialog();
         void ShowExitMenuItem();
+        void ShowRunScriptTestsMenu();
+        void RunScriptTests(const std::vector<std::string> &paths, const std::string &label);
         void DrawExitPopup();
         void Toolbar();
         void Play();

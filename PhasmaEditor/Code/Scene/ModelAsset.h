@@ -127,6 +127,12 @@ namespace pe
         const MeshInfo *GetMeshInfo(int meshIndex) const;
         int GetNodeMesh(int nodeIndex) const;
 
+        bool HasAnimations() const { return !m_animations.empty(); }
+        bool HasSkeleton() const { return !m_skeleton.bones.empty(); }
+        const Skeleton &GetSkeleton() const { return m_skeleton; }
+        const std::vector<AnimationClip> &GetAnimations() const { return m_animations; }
+        int GetJointCount() const { return m_skeleton.GetBoneCount(); }
+
         struct DefaultResources
         {
             Image *black = nullptr;
@@ -214,12 +220,5 @@ namespace pe
 
         Skeleton m_skeleton;
         std::vector<AnimationClip> m_animations;
-
-    public:
-        bool HasAnimations() const { return !m_animations.empty(); }
-        bool HasSkeleton() const { return !m_skeleton.bones.empty(); }
-        const Skeleton &GetSkeleton() const { return m_skeleton; }
-        const std::vector<AnimationClip> &GetAnimations() const { return m_animations; }
-        int GetJointCount() const { return m_skeleton.GetBoneCount(); }
     };
 } // namespace pe

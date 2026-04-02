@@ -60,6 +60,6 @@ local function init()
 end
 
 hooks {
-    init           = init,
-    update_editor  = apply,
+    -- init           = init,
+    -- update_editor  = apply,
 }

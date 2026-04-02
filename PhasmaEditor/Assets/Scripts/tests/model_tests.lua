@@ -7,10 +7,7 @@ function run_model_tests()
     -- primitives.quad
     local q = primitives.quad()
     T.check("primitives.quad", q ~= nil)
-    if q then
-        T.check("quad is_primitive", q:is_primitive())
-        remove_model(q)
-    end
+    if q then q:remove() end
 
     -- get_scale / get_rotation defaults
     local cube = primitives.cube(1.0)
@@ -44,51 +41,35 @@ function run_model_tests()
     T.check("bounding_box has center", bb.center ~= nil)
     T.check("bounding_box has size", bb.size ~= nil)
 
-    -- clone_model
-    local clone = clone_model(cube, 16, 0, 0)
-    T.check("clone_model", clone ~= nil)
-    if clone then
-        local cpos = clone:get_position()
-        T.check("clone position", cpos.x == 16.0)
-        remove_model(clone)
+    -- is_valid
+    T.check("is_valid", cube:is_valid())
+
+    -- get/set name
+    cube:set_name("test_cube")
+    T.check("set/get name", cube:get_name() == "test_cube")
+
+    -- get_mesh_index
+    local mi = cube:get_mesh_index()
+    T.check("get_mesh_index returns int", type(mi) == "number")
+
+    -- get_mesh_info
+    local info = cube:get_mesh_info()
+    T.check("get_mesh_info", info ~= nil)
+    if info then
+        T.check("mesh_info has vertex_count", type(info.vertex_count) == "number")
+        T.check("mesh_info has index_count", type(info.index_count) == "number")
     end
 
-    -- scatter_models
-    local scattered = scatter_models(cube, 3, 4.0, 0, 0, 0, 1.0, 1.0)
-    T.check("scatter_models returns table", type(scattered) == "table")
-    T.check("scatter_models count", #scattered == 3)
-    for _, m in ipairs(scattered) do
-        remove_model(m)
-    end
+    -- get_children
+    local children = cube:get_children()
+    T.check("get_children returns table", type(children) == "table")
 
-    -- focus_camera_on
-    focus_camera_on(cube)
-    T.check("focus_camera_on runs", true)
-
-    -- per-node access
-    local nc = cube:get_node_count()
-    T.check("node count > 0", nc > 0)
-
-    if nc > 0 then
-        local nname = cube:get_node_name(0)
-        T.check("get_node_name", type(nname) == "string")
-
-        local npos = cube:get_node_position(0)
-        T.check("get_node_position", npos ~= nil)
-
-        local wpos = cube:get_node_world_position(0)
-        T.check("get_node_world_position", wpos ~= nil)
-
-        cube:set_node_position(0, vec3(4, 0, 0))
-        local npos2 = cube:get_node_position(0)
-        T.check("set_node_position", npos2.x == 4.0)
-
-        local nm = cube:get_node_mesh(0)
-        T.check("get_node_mesh returns int", type(nm) == "number")
-    end
+    -- scene.get_model_count
+    local count = scene.get_model_count()
+    T.check("scene.get_model_count > 0", count > 0)
 
     -- cleanup
-    remove_model(cube)
+    cube:remove()
 
     T.summary("Model Tests")
 end
