@@ -2,6 +2,7 @@
 #include "Scene/Scene.h"
 #include "Scene/SceneNode.h"
 #include "Scene/SceneNodeHandle.h"
+#include "Scene/Primitives.h"
 #include "Scene/SelectionManager.h"
 #include "Camera/Camera.h"
 #include "Systems/RendererSystem.h"
@@ -164,6 +165,25 @@ namespace pe
                     Scene &sc = r->GetScene();
                     if (h.IsValid(sc))
                         sc.DeleteNode(h.nodeId);
+                });
+
+                scene.set_function("attach_primitive", [](SceneNodeHandle h, const std::string &type) {
+                    auto *r = GetGlobalSystem<RendererSystem>();
+                    if (!r) return;
+                    Scene &sc = r->GetScene();
+                    if (!h.IsValid(sc)) return;
+                    ModelAsset *model = nullptr;
+                    if (type == "plane") model = Primitives::CreatePlane();
+                    else if (type == "cube") model = Primitives::CreateCube();
+                    else if (type == "sphere") model = Primitives::CreateSphere();
+                    else if (type == "cylinder") model = Primitives::CreateCylinder();
+                    else if (type == "cone") model = Primitives::CreateCone();
+                    else if (type == "quad") model = Primitives::CreateQuad();
+                    if (model)
+                    {
+                        sc.AttachPrimitiveToNode(h.nodeId, model);
+                        sc.SetGeometryDirty();
+                    }
                 });
 
                 scene.set_function("add_directional_light", []() {

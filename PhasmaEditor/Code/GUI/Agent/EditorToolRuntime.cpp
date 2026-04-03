@@ -1,5 +1,8 @@
 #include "GUI/Agent/EditorToolRuntime.h"
 #include "GUI/Widgets/ProfilerWidget.h"
+#include "Scene/Scene.h"
+#include "Scene/Material.h"
+#include "Scene/Primitives.h"
 #include "Script/ScriptSystem.h"
 #include "Systems/RendererSystem.h"
 #include "PhasmaAgent/AgentUtils.h"
@@ -95,6 +98,551 @@ namespace pe
         if (state->result.rfind("error:", 0) == 0)
             return JsonObj({{"error", JsonStr(state->result)}});
         return JsonObj({{"output", JsonStr(state->result)}});
+    }
+
+    // Encode a stable node ID: "node:<index>:<revision>"
+    static std::string MakeNodeId(NodeId *node)
+    {
+        return "node:" + std::to_string(node->index) + ":" + std::to_string(node->revision);
+    }
+
+    static bool StrictParseInt(const std::string &s, size_t begin, size_t end, int &out)
+    {
+        if (begin >= end || end > s.size())
+            return false;
+        for (size_t i = begin; i < end; i++)
+            if (!std::isdigit(static_cast<unsigned char>(s[i])) && !(i == begin && s[i] == '-'))
+                return false;
+        try { out = std::stoi(s.substr(begin, end - begin)); return true; }
+        catch (...) { return false; }
+    }
+
+    static bool StrictParseUint(const std::string &s, size_t begin, size_t end, uint32_t &out)
+    {
+        int v = 0;
+        if (!StrictParseInt(s, begin, end, v) || v < 0)
+            return false;
+        out = static_cast<uint32_t>(v);
+        return true;
+    }
+
+    static NodeId *ResolveNode(Scene &scene, const std::string &nodeId, std::string &outError)
+    {
+        // Stable ID: "node:<index>:<revision>" — strict parse, revision-checked
+        if (nodeId.rfind("node:", 0) == 0)
+        {
+            size_t firstColon = 4;
+            size_t secondColon = nodeId.find(':', firstColon + 1);
+            if (secondColon == std::string::npos)
+            {
+                outError = "malformed node id (expected node:index:revision)";
+                return nullptr;
+            }
+            int idx = 0;
+            uint32_t rev = 0;
+            if (!StrictParseInt(nodeId, firstColon + 1, secondColon, idx) ||
+                !StrictParseUint(nodeId, secondColon + 1, nodeId.size(), rev))
+            {
+                outError = "malformed node id (non-numeric fields)";
+                return nullptr;
+            }
+            if (idx < 0 || idx >= static_cast<int>(scene.GetNodeCount()))
+            {
+                outError = "stale node id (index out of range)";
+                return nullptr;
+            }
+            NodeId *node = scene.GetNodeId(idx);
+            if (node->revision != rev)
+            {
+                outError = "stale node id (revision mismatch)";
+                return nullptr;
+            }
+            return node;
+        }
+
+        // Name-based lookup: fail if ambiguous
+        NodeId *found = nullptr;
+        int matchCount = 0;
+        for (uint32_t i = 0; i < scene.GetNodeCount(); i++)
+        {
+            NodeId *n = scene.GetNodeId(i);
+            if (scene.GetNodeName(n) == nodeId)
+            {
+                found = n;
+                matchCount++;
+                if (matchCount > 1)
+                    break;
+            }
+        }
+        if (matchCount == 0)
+        {
+            outError = "node not found: " + nodeId;
+            return nullptr;
+        }
+        if (matchCount > 1)
+        {
+            outError = "ambiguous node name (found " + std::to_string(matchCount) + " matches): " + nodeId;
+            return nullptr;
+        }
+        return found;
+    }
+
+    static std::string JsonEscape(const std::string &s)
+    {
+        std::string out;
+        out.reserve(s.size() + 8);
+        for (char c : s)
+        {
+            switch (c)
+            {
+            case '"': out += "\\\""; break;
+            case '\\': out += "\\\\"; break;
+            case '\n': out += "\\n"; break;
+            case '\r': out += "\\r"; break;
+            case '\t': out += "\\t"; break;
+            default: out += c; break;
+            }
+        }
+        return out;
+    }
+
+    std::string EditorToolRuntime::CreateNode(const std::string &name, const std::string &parent) const
+    {
+        struct State
+        {
+            std::mutex mtx;
+            std::condition_variable cv;
+            bool done = false;
+            std::string result;
+        };
+        auto state = std::make_shared<State>();
+
+        QueueAction([state, name, parent]()
+                    {
+            auto *r = GetGlobalSystem<RendererSystem>();
+            if (!r) { state->result = R"({"error":"renderer not available"})"; }
+            else
+            {
+                Scene &sc = r->GetScene();
+                NodeId *parentNode = nullptr;
+                if (!parent.empty())
+                {
+                    std::string err;
+                    parentNode = ResolveNode(sc, parent, err);
+                    if (!parentNode)
+                    {
+                        state->result = JsonObj({{"error", JsonStr(err)}});
+                        std::lock_guard lock(state->mtx);
+                        state->done = true;
+                        state->cv.notify_one();
+                        return;
+                    }
+                }
+                NodeId *node = sc.CreateNode(name, parentNode);
+                sc.MarkDirty();
+                state->result = JsonObj({
+                    {"name", JsonStr(sc.GetNodeName(node))},
+                    {"index", std::to_string(node->index)},
+                    {"id", JsonStr(MakeNodeId(node))}
+                });
+            }
+            {
+                std::lock_guard lock(state->mtx);
+                state->done = true;
+            }
+            state->cv.notify_one(); });
+
+        std::unique_lock lock(state->mtx);
+        if (!state->cv.wait_for(lock, std::chrono::seconds(10), [&] { return state->done; }))
+            return R"({"error":"timeout"})";
+        return state->result;
+    }
+
+    std::string EditorToolRuntime::SetNodeTransform(const std::string &nodeId, const float *pos, const float *rot, const float *scale) const
+    {
+        // Copy values (caller may free)
+        float p[3] = {}, r[3] = {}, s[3] = {};
+        bool hasPos = pos != nullptr, hasRot = rot != nullptr, hasScale = scale != nullptr;
+        if (hasPos) { p[0] = pos[0]; p[1] = pos[1]; p[2] = pos[2]; }
+        if (hasRot) { r[0] = rot[0]; r[1] = rot[1]; r[2] = rot[2]; }
+        if (hasScale) { s[0] = scale[0]; s[1] = scale[1]; s[2] = scale[2]; }
+
+        struct State
+        {
+            std::mutex mtx;
+            std::condition_variable cv;
+            bool done = false;
+            std::string result;
+        };
+        auto state = std::make_shared<State>();
+
+        QueueAction([state, nodeId, p, r, s, hasPos, hasRot, hasScale]()
+                    {
+            auto *renderer = GetGlobalSystem<RendererSystem>();
+            if (!renderer) { state->result = R"({"error":"renderer not available"})"; }
+            else
+            {
+                Scene &sc = renderer->GetScene();
+                std::string err;
+                NodeId *node = ResolveNode(sc, nodeId, err);
+                if (!node) { state->result = JsonObj({{"error", JsonStr(err)}}); }
+                else
+                {
+                    mat4 local = sc.GetLocalMatrix(node);
+
+                    // Position-only: modify translation column in-place (no decomposition)
+                    if (hasPos && !hasRot && !hasScale)
+                    {
+                        local[3] = vec4(p[0], p[1], p[2], local[3].w);
+                        sc.SetLocalMatrix(node, local);
+                    }
+                    else
+                    {
+                        // Full TRS recomposition — guard against zero-length axes
+                        vec3 curScale(length(vec3(local[0])), length(vec3(local[1])), length(vec3(local[2])));
+                        float sx = curScale.x > 1e-6f ? curScale.x : 1.0f;
+                        float sy = curScale.y > 1e-6f ? curScale.y : 1.0f;
+                        float sz = curScale.z > 1e-6f ? curScale.z : 1.0f;
+                        mat3 rotMat(vec3(local[0]) / sx, vec3(local[1]) / sy, vec3(local[2]) / sz);
+
+                        vec3 newPos = hasPos ? vec3(p[0], p[1], p[2]) : vec3(local[3]);
+                        vec3 newRot = hasRot ? vec3(glm::radians(r[0]), glm::radians(r[1]), glm::radians(r[2])) : glm::eulerAngles(quat_cast(rotMat));
+                        vec3 newScale = hasScale ? vec3(s[0], s[1], s[2]) : curScale;
+
+                        mat4 newLocal = glm::translate(mat4(1.f), newPos) * mat4_cast(quat(newRot)) * glm::scale(mat4(1.f), newScale);
+                        sc.SetLocalMatrix(node, newLocal);
+                    }
+                    sc.MarkDirty();
+                    state->result = R"({"ok":true})";
+                }
+            }
+            {
+                std::lock_guard lock(state->mtx);
+                state->done = true;
+            }
+            state->cv.notify_one(); });
+
+        std::unique_lock lock(state->mtx);
+        if (!state->cv.wait_for(lock, std::chrono::seconds(10), [&] { return state->done; }))
+            return R"({"error":"timeout"})";
+        return state->result;
+    }
+
+    std::string EditorToolRuntime::AddMeshToNode(const std::string &nodeId, const std::string &primitive) const
+    {
+        // Validate primitive type upfront
+        static const std::unordered_set<std::string> validPrims = {"plane", "cube", "sphere", "cylinder", "cone", "quad"};
+        if (validPrims.find(primitive) == validPrims.end())
+            return R"({"error":"unknown primitive type. Valid: plane, cube, sphere, cylinder, cone, quad"})";
+
+        struct State
+        {
+            std::mutex mtx;
+            std::condition_variable cv;
+            bool done = false;
+            std::string result;
+        };
+        auto state = std::make_shared<State>();
+
+        QueueAction([state, nodeId, primitive]()
+                    {
+            auto *renderer = GetGlobalSystem<RendererSystem>();
+            if (!renderer) { state->result = R"({"error":"renderer not available"})"; }
+            else
+            {
+                Scene &sc = renderer->GetScene();
+                std::string err;
+                NodeId *node = ResolveNode(sc, nodeId, err);
+                if (!node) { state->result = JsonObj({{"error", JsonStr(err)}}); }
+                else
+                {
+                    ModelAsset *model = nullptr;
+                    if (primitive == "plane") model = Primitives::CreatePlane();
+                    else if (primitive == "cube") model = Primitives::CreateCube();
+                    else if (primitive == "sphere") model = Primitives::CreateSphere();
+                    else if (primitive == "cylinder") model = Primitives::CreateCylinder();
+                    else if (primitive == "cone") model = Primitives::CreateCone();
+                    else if (primitive == "quad") model = Primitives::CreateQuad();
+
+                    if (model)
+                    {
+                        sc.AttachPrimitiveToNode(node, model);
+                        sc.SetGeometryDirty();
+                        int meshCount = static_cast<int>(sc.GetNodeCache(node).meshRefs->meshRefs.size());
+                        state->result = JsonObj({{"ok", "true"}, {"mesh_count", std::to_string(meshCount)}});
+                    }
+                    else
+                    {
+                        state->result = R"({"error":"failed to create primitive"})";
+                    }
+                }
+            }
+            {
+                std::lock_guard lock(state->mtx);
+                state->done = true;
+            }
+            state->cv.notify_one(); });
+
+        std::unique_lock lock(state->mtx);
+        if (!state->cv.wait_for(lock, std::chrono::seconds(10), [&] { return state->done; }))
+            return R"({"error":"timeout"})";
+        return state->result;
+    }
+
+    std::string EditorToolRuntime::SetNodeMaterial(const std::string &nodeId, int slot, const std::string &propsJson) const
+    {
+        struct State
+        {
+            std::mutex mtx;
+            std::condition_variable cv;
+            bool done = false;
+            std::string result;
+        };
+        auto state = std::make_shared<State>();
+        auto props = nlohmann::json::parse(propsJson, nullptr, false);
+        if (props.is_discarded())
+            return R"({"error":"invalid properties JSON"})";
+
+        QueueAction([state, nodeId, slot, props]()
+                    {
+            auto *renderer = GetGlobalSystem<RendererSystem>();
+            if (!renderer) { state->result = R"({"error":"renderer not available"})"; }
+            else
+            {
+                Scene &sc = renderer->GetScene();
+                std::string err;
+                NodeId *node = ResolveNode(sc, nodeId, err);
+                if (!node) { state->result = JsonObj({{"error", JsonStr(err)}}); }
+                else
+                {
+                    const auto &refs = sc.GetNodeCache(node).meshRefs->meshRefs;
+                    if (slot < 0 || slot >= static_cast<int>(refs.size()))
+                    {
+                        state->result = R"({"error":"mesh slot out of range"})";
+                    }
+                    else
+                    {
+                        int meshIdx = refs[slot];
+                        if (meshIdx < 0)
+                        {
+                            state->result = R"({"error":"no mesh at slot"})";
+                        }
+                        else
+                        {
+                            Mesh &mesh = sc.GetMesh(meshIdx);
+                            if (!mesh.material)
+                            {
+                                state->result = R"({"error":"no material on mesh"})";
+                            }
+                            else
+                            {
+                                // Auto-create MaterialInstance for per-mesh edits if shared
+                                MaterialInstance *inst = mesh.materialInstance;
+                                if (!inst)
+                                    inst = sc.CreateMaterialInstance(mesh);
+
+                                bool renderTypeChanged = false;
+                                if (inst)
+                                {
+                                    // Validate and apply base_color
+                                    if (props.contains("base_color") && props["base_color"].is_array() && props["base_color"].size() >= 3)
+                                    {
+                                        auto &c = props["base_color"];
+                                        try
+                                        {
+                                            if (!c[0].is_number() || !c[1].is_number() || !c[2].is_number())
+                                                throw std::exception();
+                                            float a = c.size() >= 4 && c[3].is_number() ? c[3].get<float>() : 1.0f;
+                                            inst->SetBaseColorFactor(vec4(c[0].get<float>(), c[1].get<float>(), c[2].get<float>(), a));
+                                        }
+                                        catch (...)
+                                        {
+                                            state->result = R"({"error":"invalid base_color array: must contain 3-4 numbers"})";
+                                            return;
+                                        }
+                                    }
+                                    // Validate and apply metallic
+                                    if (props.contains("metallic"))
+                                    {
+                                        try
+                                        {
+                                            if (!props["metallic"].is_number())
+                                                throw std::exception();
+                                            inst->SetMetallic(props["metallic"].get<float>());
+                                        }
+                                        catch (...)
+                                        {
+                                            state->result = R"({"error":"invalid metallic: must be a number"})";
+                                            return;
+                                        }
+                                    }
+                                    // Validate and apply roughness
+                                    if (props.contains("roughness"))
+                                    {
+                                        try
+                                        {
+                                            if (!props["roughness"].is_number())
+                                                throw std::exception();
+                                            inst->SetRoughness(props["roughness"].get<float>());
+                                        }
+                                        catch (...)
+                                        {
+                                            state->result = R"({"error":"invalid roughness: must be a number"})";
+                                            return;
+                                        }
+                                    }
+                                    // Validate and apply transmission
+                                    if (props.contains("transmission"))
+                                    {
+                                        try
+                                        {
+                                            if (!props["transmission"].is_number())
+                                                throw std::exception();
+                                            inst->SetTransmissionFactor(props["transmission"].get<float>());
+                                        }
+                                        catch (...)
+                                        {
+                                            state->result = R"({"error":"invalid transmission: must be a number"})";
+                                            return;
+                                        }
+                                    }
+                                    if (props.contains("render_type"))
+                                    {
+                                        std::string rt = props["render_type"].get<std::string>();
+                                        RenderType newRT = mesh.renderType;
+                                        if (rt == "opaque") newRT = RenderType::Opaque;
+                                        else if (rt == "alpha_cut") newRT = RenderType::AlphaCut;
+                                        else if (rt == "alpha_blend") newRT = RenderType::AlphaBlend;
+                                        else if (rt == "transmission") newRT = RenderType::Transmission;
+                                        if (newRT != mesh.renderType)
+                                        {
+                                            inst->SetRenderType(newRT);
+                                            mesh.renderType = newRT;
+                                            renderTypeChanged = true;
+                                        }
+                                    }
+                                }
+
+                                if (renderTypeChanged)
+                                    sc.SetGeometryDirty();
+                                sc.SetTexturesDirty();
+                                sc.MarkNodeDirty(node);
+                                state->result = R"({"ok":true})";
+                            }
+                        }
+                    }
+                }
+            }
+            {
+                std::lock_guard lock(state->mtx);
+                state->done = true;
+            }
+            state->cv.notify_one(); });
+
+        std::unique_lock lock(state->mtx);
+        if (!state->cv.wait_for(lock, std::chrono::seconds(10), [&] { return state->done; }))
+            return R"({"error":"timeout"})";
+        return state->result;
+    }
+
+    std::string EditorToolRuntime::AddLight(const std::string &type) const
+    {
+        static const std::unordered_set<std::string> valid = {"directional", "point", "spot", "area"};
+        if (valid.find(type) == valid.end())
+            return R"({"error":"unknown light type. Valid: directional, point, spot, area"})";
+
+        struct State
+        {
+            std::mutex mtx;
+            std::condition_variable cv;
+            bool done = false;
+            std::string result;
+        };
+        auto state = std::make_shared<State>();
+
+        QueueAction([state, type]()
+                    {
+            auto *r = GetGlobalSystem<RendererSystem>();
+            if (!r) { state->result = R"({"error":"renderer not available"})"; }
+            else
+            {
+                Scene &sc = r->GetScene();
+                if (type == "directional") sc.CreateDirectionalLight();
+                else if (type == "point") sc.CreatePointLight();
+                else if (type == "spot") sc.CreateSpotLight();
+                else if (type == "area") sc.CreateAreaLight();
+                state->result = JsonObj({{"ok", "true"}, {"type", JsonStr(type)}});
+            }
+            {
+                std::lock_guard lock(state->mtx);
+                state->done = true;
+            }
+            state->cv.notify_one(); });
+
+        std::unique_lock lock(state->mtx);
+        if (!state->cv.wait_for(lock, std::chrono::seconds(10), [&] { return state->done; }))
+            return R"({"error":"timeout"})";
+        return state->result;
+    }
+
+    std::string EditorToolRuntime::QueryScene() const
+    {
+        struct State
+        {
+            std::mutex mtx;
+            std::condition_variable cv;
+            bool done = false;
+            std::string result;
+        };
+        auto state = std::make_shared<State>();
+
+        QueueAction([state]()
+                    {
+            auto *r = GetGlobalSystem<RendererSystem>();
+            if (!r) { state->result = R"({"error":"renderer not available"})"; }
+            else
+            {
+                Scene &sc = r->GetScene();
+                nlohmann::json result;
+                result["cameras"] = static_cast<int>(sc.GetCameras().size());
+                result["total_nodes"] = sc.GetNodeCount();
+
+                nlohmann::json nodes = nlohmann::json::array();
+                std::function<void(NodeId *, int)> walk = [&](NodeId *node, int depth)
+                {
+                    const auto &cache = sc.GetNodeCache(node);
+                    nlohmann::json n;
+                    n["name"] = cache.name->name;
+                    n["depth"] = depth;
+                    n["index"] = node->index;
+                    n["id"] = MakeNodeId(node);
+                    n["mesh_count"] = static_cast<int>(cache.meshRefs->meshRefs.size());
+                    n["children"] = static_cast<int>(cache.hierarchy->children.size());
+                    nodes.push_back(n);
+                    for (NodeId *child : cache.hierarchy->children)
+                        walk(child, depth + 1);
+                };
+
+                // Walk root nodes (no parent)
+                for (uint32_t i = 0; i < sc.GetNodeCount(); i++)
+                {
+                    NodeId *n = sc.GetNodeId(i);
+                    if (!sc.GetParent(n))
+                        walk(n, 0);
+                }
+                result["nodes"] = nodes;
+                state->result = result.dump();
+            }
+            {
+                std::lock_guard lock(state->mtx);
+                state->done = true;
+            }
+            state->cv.notify_one(); });
+
+        std::unique_lock lock(state->mtx);
+        if (!state->cv.wait_for(lock, std::chrono::seconds(10), [&] { return state->done; }))
+            return R"({"error":"timeout"})";
+        return state->result;
     }
 
     std::string EditorToolRuntime::FindLoadableModel(const std::string &query) const

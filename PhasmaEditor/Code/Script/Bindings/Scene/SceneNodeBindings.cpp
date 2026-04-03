@@ -137,32 +137,62 @@ namespace pe
                     return sol::as_table(std::move(result));
                 });
 
-                ut.set_function("get_mesh_index", [](SceneNodeHandle &h) -> int {
+                ut.set_function("get_mesh_index", sol::overload(
+                    [](SceneNodeHandle &h) -> int {
+                        Scene *s = GetScene();
+                        if (!s || !h.IsValid(*s)) return -1;
+                        return s->GetMeshRef(h.nodeId);
+                    },
+                    [](SceneNodeHandle &h, int slot) -> int {
+                        Scene *s = GetScene();
+                        if (!s || !h.IsValid(*s)) return -1;
+                        const auto &refs = s->GetNodeCache(h.nodeId).meshRefs->meshRefs;
+                        if (slot < 0 || slot >= static_cast<int>(refs.size())) return -1;
+                        return refs[slot];
+                    }));
+
+                ut.set_function("get_mesh_count", [](SceneNodeHandle &h) -> int {
                     Scene *s = GetScene();
-                    if (!s || !h.IsValid(*s)) return -1;
-                    return s->GetMeshRef(h.nodeId);
+                    if (!s || !h.IsValid(*s)) return 0;
+                    return static_cast<int>(s->GetNodeCache(h.nodeId).meshRefs->meshRefs.size());
                 });
 
-                ut.set_function("get_mesh_info", [](SceneNodeHandle &h, sol::this_state ts) -> sol::object {
-                    sol::state_view lua(ts);
-                    Scene *s = GetScene();
-                    if (!s || !h.IsValid(*s)) return sol::make_object(lua, sol::nil);
-                    int meshRef = s->GetMeshRef(h.nodeId);
-                    if (meshRef < 0) return sol::make_object(lua, sol::nil);
-                    const auto &meshes = s->GetMeshes();
-                    if (meshRef >= static_cast<int>(meshes.size())) return sol::make_object(lua, sol::nil);
-                    const auto &mesh = meshes[meshRef];
-                    sol::table t = lua.create_table();
-                    t["index"] = meshRef;
-                    t["vertex_count"] = mesh.vertexCount;
-                    t["index_count"] = mesh.indexCount;
-                    t["bounding_box"] = lua.create_table_with(
-                        "min", mesh.boundingBox.min,
-                        "max", mesh.boundingBox.max,
-                        "center", mesh.boundingBox.GetCenter(),
-                        "size", mesh.boundingBox.GetSize());
-                    return sol::make_object(lua, t);
-                });
+                ut.set_function("get_mesh_info", sol::overload(
+                    [](SceneNodeHandle &h, sol::this_state ts) -> sol::object {
+                        sol::state_view lua(ts);
+                        Scene *s = GetScene();
+                        if (!s || !h.IsValid(*s)) return sol::make_object(lua, sol::nil);
+                        int meshRef = s->GetMeshRef(h.nodeId);
+                        if (meshRef < 0) return sol::make_object(lua, sol::nil);
+                        const auto &mesh = s->GetMeshes()[meshRef];
+                        sol::table t = lua.create_table();
+                        t["index"] = meshRef;
+                        t["vertex_count"] = mesh.vertexCount;
+                        t["index_count"] = mesh.indexCount;
+                        t["bounding_box"] = lua.create_table_with(
+                            "min", mesh.boundingBox.min, "max", mesh.boundingBox.max,
+                            "center", mesh.boundingBox.GetCenter(), "size", mesh.boundingBox.GetSize());
+                        return sol::make_object(lua, t);
+                    },
+                    [](SceneNodeHandle &h, int slot, sol::this_state ts) -> sol::object {
+                        sol::state_view lua(ts);
+                        Scene *s = GetScene();
+                        if (!s || !h.IsValid(*s)) return sol::make_object(lua, sol::nil);
+                        const auto &refs = s->GetNodeCache(h.nodeId).meshRefs->meshRefs;
+                        if (slot < 0 || slot >= static_cast<int>(refs.size())) return sol::make_object(lua, sol::nil);
+                        int meshRef = refs[slot];
+                        if (meshRef < 0) return sol::make_object(lua, sol::nil);
+                        const auto &mesh = s->GetMeshes()[meshRef];
+                        sol::table t = lua.create_table();
+                        t["index"] = meshRef;
+                        t["slot"] = slot;
+                        t["vertex_count"] = mesh.vertexCount;
+                        t["index_count"] = mesh.indexCount;
+                        t["bounding_box"] = lua.create_table_with(
+                            "min", mesh.boundingBox.min, "max", mesh.boundingBox.max,
+                            "center", mesh.boundingBox.GetCenter(), "size", mesh.boundingBox.GetSize());
+                        return sol::make_object(lua, t);
+                    }));
 
                 ut.set_function("get_camera", [](SceneNodeHandle &h, sol::this_state ts) -> sol::object {
                     sol::state_view lua(ts);

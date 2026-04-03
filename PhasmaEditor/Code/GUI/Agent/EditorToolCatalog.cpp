@@ -629,6 +629,110 @@ namespace pe
                                                 : "{\"error\":\"EditorToolRuntime not available\"}";
                              }});
 
+            // --- High-level scene authoring tools (C++ implementations, no Lua) ---
+
+            tools.push_back({.name = "create_node",
+                             .description = "Creates an empty scene node. Returns stable id (use in other tools). "
+                                            "Parent can be a name or stable id (node:index:revision).",
+                             .properties = {
+                                 {"name", "Node name", pagent::SchemaType::String, true},
+                                 {"parent", "Parent node name or id (omit for root)", pagent::SchemaType::String, false},
+                             },
+                             .handler = [runtime](const std::string &args) -> std::string
+                             {
+                                 auto json = ParseArgs(args);
+                                 return runtime->CreateNode(json.value("name", "Node"), json.value("parent", ""));
+                             }});
+
+            tools.push_back({.name = "set_node_transform",
+                             .description = "Sets position, rotation (degrees), and/or scale on a node. "
+                                            "Node can be a name or stable id (node:index:revision).",
+                             .properties = {
+                                 {"node", "Node name or id", pagent::SchemaType::String, true},
+                                 {"position", "Position as [x,y,z]", pagent::SchemaType::Array, false, pagent::SchemaType::Number},
+                                 {"rotation", "Rotation in degrees as [x,y,z]", pagent::SchemaType::Array, false, pagent::SchemaType::Number},
+                                 {"scale", "Scale as [x,y,z]", pagent::SchemaType::Array, false, pagent::SchemaType::Number},
+                             },
+                             .handler = [runtime](const std::string &args) -> std::string
+                             {
+                                 auto json = ParseArgs(args);
+                                 std::string node = json.value("node", "");
+                                 if (node.empty())
+                                     return R"({"error":"node required"})";
+                                 float pos[3], rot[3], scale[3];
+                                 float *pPos = nullptr, *pRot = nullptr, *pScale = nullptr;
+                                 auto readVec3 = [](const nlohmann::json &arr, float out[3]) -> bool {
+                                     if (!arr.is_array() || arr.size() != 3) return false;
+                                     out[0] = arr[0].get<float>(); out[1] = arr[1].get<float>(); out[2] = arr[2].get<float>();
+                                     return true;
+                                 };
+                                 if (json.contains("position") && readVec3(json["position"], pos)) pPos = pos;
+                                 if (json.contains("rotation") && readVec3(json["rotation"], rot)) pRot = rot;
+                                 if (json.contains("scale") && readVec3(json["scale"], scale)) pScale = scale;
+                                 return runtime->SetNodeTransform(node, pPos, pRot, pScale);
+                             }});
+
+            tools.push_back({.name = "add_mesh_to_node",
+                             .description = "Attaches a primitive mesh to a node (synchronous). "
+                                            "Node can be a name or stable id (node:index:revision). "
+                                            "Valid primitives: cube, sphere, plane, cylinder, cone, quad.",
+                             .properties = {
+                                 {"node", "Node name or id", pagent::SchemaType::String, true},
+                                 {"primitive", "Primitive type", pagent::SchemaType::String, true},
+                             },
+                             .handler = [runtime](const std::string &args) -> std::string
+                             {
+                                 auto json = ParseArgs(args);
+                                 return runtime->AddMeshToNode(json.value("node", ""), json.value("primitive", ""));
+                             }});
+
+            tools.push_back({.name = "set_node_material",
+                             .description = "Sets material properties on a node's mesh. "
+                                            "Node can be a name or stable id (node:index:revision).",
+                             .properties = {
+                                 {"node", "Node name or id", pagent::SchemaType::String, true},
+                                 {"slot", "Mesh slot index (default 0)", pagent::SchemaType::Integer, false},
+                                 {"base_color", "Base color as [r,g,b,a] (0-1)", pagent::SchemaType::Array, false, pagent::SchemaType::Number},
+                                 {"metallic", "Metallic factor (0-1)", pagent::SchemaType::Number, false},
+                                 {"roughness", "Roughness factor (0-1)", pagent::SchemaType::Number, false},
+                                 {"transmission", "Transmission factor (0-1)", pagent::SchemaType::Number, false},
+                                 {"render_type", "Render type: opaque, alpha_cut, alpha_blend, transmission", pagent::SchemaType::String, false},
+                             },
+                             .handler = [runtime](const std::string &args) -> std::string
+                             {
+                                 auto json = ParseArgs(args);
+                                 std::string node = json.value("node", "");
+                                 if (node.empty())
+                                     return R"({"error":"node required"})";
+                                 int slot = json.value("slot", 0);
+                                 // Build props sub-object for the runtime
+                                 nlohmann::json props;
+                                 for (auto &key : {"base_color", "metallic", "roughness", "transmission", "render_type"})
+                                     if (json.contains(key)) props[key] = json[key];
+                                 return runtime->SetNodeMaterial(node, slot, props.dump());
+                             }});
+
+            tools.push_back({.name = "add_light",
+                             .description = "Adds a light to the scene (synchronous). "
+                                            "Valid types: directional, point, spot, area.",
+                             .properties = {
+                                 {"type", "Light type", pagent::SchemaType::String, true},
+                             },
+                             .handler = [runtime](const std::string &args) -> std::string
+                             {
+                                 auto json = ParseArgs(args);
+                                 return runtime->AddLight(json.value("type", ""));
+                             }});
+
+            tools.push_back({.name = "query_scene",
+                             .description = "Returns scene tree with stable node ids, mesh counts, cameras. "
+                                            "Use the id field in other tools to address nodes unambiguously.",
+                             .properties = {},
+                             .handler = [runtime](const std::string &) -> std::string
+                             {
+                                 return runtime->QueryScene();
+                             }});
+
             tools.push_back({.name = "find_loadable_model",
                              .description = "Searches for 3D model files (.glb, .gltf, .obj, .fbx) in Assets/Objects/ by name. "
                                             "Returns paths ready to use with load_model(). "

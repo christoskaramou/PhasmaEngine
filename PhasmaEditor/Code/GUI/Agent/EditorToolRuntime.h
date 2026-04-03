@@ -11,6 +11,12 @@ namespace pe
         EditorToolRuntime(QueueActionFn queueAction, void *sdlWindow = nullptr);
 
         std::string ExecuteLua(const std::string &code) const;
+        std::string CreateNode(const std::string &name, const std::string &parent) const;
+        std::string SetNodeTransform(const std::string &nodeId, const float *pos, const float *rot, const float *scale) const;
+        std::string AddMeshToNode(const std::string &nodeId, const std::string &primitive) const;
+        std::string SetNodeMaterial(const std::string &nodeId, int slot, const std::string &propsJson) const;
+        std::string AddLight(const std::string &type) const;
+        std::string QueryScene() const;
         std::string FindLoadableModel(const std::string &query) const;
         std::string ReadAgentFile(const std::string &path) const;
         std::string WriteAgentFile(const std::string &path, const std::string &content, bool append) const;

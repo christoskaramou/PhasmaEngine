@@ -225,6 +225,7 @@ namespace pe
         }
 
         SwapAndPopNode(idx);
+        node->revision++;  // Invalidate all old IDs pointing to this deleted node
         node->index = UINT32_MAX;
         m_freeNodeIds.push_back(node);
 
@@ -241,8 +242,9 @@ namespace pe
             std::swap(m_nodeComponentCache[index], m_nodeComponentCache[last]);
             std::swap(m_nodeRuntime[index], m_nodeRuntime[last]);
 
-            // Update the swapped node's identity — the one place
+            // Update the swapped node's identity and bump revision to invalidate old IDs
             m_nodeIds[index]->index = index;
+            m_nodeIds[index]->revision++;
         }
 
         m_nodeIds.pop_back();
