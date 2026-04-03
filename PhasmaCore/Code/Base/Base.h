@@ -56,27 +56,27 @@ namespace pe
             constexpr std::string_view type_name() noexcept
             {
 #if defined(__clang__)
-                constexpr std::string_view sig    = __PRETTY_FUNCTION__;
+                constexpr std::string_view sig = __PRETTY_FUNCTION__;
                 constexpr std::string_view prefix = "T = ";
-                constexpr size_t           start  = sig.find(prefix) + prefix.size();
-                constexpr size_t           end    = sig.rfind(']');
+                constexpr size_t start = sig.find(prefix) + prefix.size();
+                constexpr size_t end = sig.rfind(']');
                 static_assert(sig.find(prefix) != std::string_view::npos,
                               "type_name: clang __PRETTY_FUNCTION__ format unrecognized");
                 return sig.substr(start, end - start);
 #elif defined(__GNUC__)
-                constexpr std::string_view sig      = __PRETTY_FUNCTION__;
-                constexpr std::string_view prefix   = "T = ";
-                constexpr size_t           start    = sig.find(prefix) + prefix.size();
-                constexpr size_t           end_semi = sig.find(';', start);
-                constexpr size_t           end_brkt = sig.find(']', start);
-                constexpr size_t           end      = (end_semi < end_brkt) ? end_semi : end_brkt;
+                constexpr std::string_view sig = __PRETTY_FUNCTION__;
+                constexpr std::string_view prefix = "T = ";
+                constexpr size_t start = sig.find(prefix) + prefix.size();
+                constexpr size_t end_semi = sig.find(';', start);
+                constexpr size_t end_brkt = sig.find(']', start);
+                constexpr size_t end = (end_semi < end_brkt) ? end_semi : end_brkt;
                 static_assert(sig.find(prefix) != std::string_view::npos,
                               "type_name: gcc __PRETTY_FUNCTION__ format unrecognized");
                 return sig.substr(start, end - start);
 #elif defined(_MSC_VER)
-                constexpr std::string_view sig   = __FUNCSIG__;
-                constexpr size_t           start = sig.find('<') + 1;
-                constexpr size_t           end   = sig.rfind('>');
+                constexpr std::string_view sig = __FUNCSIG__;
+                constexpr size_t start = sig.find('<') + 1;
+                constexpr size_t end = sig.rfind('>');
                 constexpr std::string_view inner = sig.substr(start, end - start);
                 // Strip elaborated-type specifiers so hash matches GCC/Clang for the same type
                 for (std::string_view pfx : {"struct ", "class ", "enum "})
