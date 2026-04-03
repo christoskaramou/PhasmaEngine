@@ -347,7 +347,7 @@ namespace pe
 
         std::vector<int> meshMap = AddModelGeometry(primitiveModel, sourceIndex);
         if (!meshMap.empty() && meshMap[0] >= 0)
-            SetMeshRef(node, meshMap[0]);
+            AddMeshRef(node, meshMap[0]);
 
         // Transfer material ownership from the temporary ModelAsset to the scene
         // before deleting it — mesh.material holds a raw pointer into these.

@@ -68,22 +68,77 @@ namespace pe
                 w->DrawEmbed(sel.GetSelectedNode());
         };
 
+        auto attachPrimitive = [&](NodeId *node, ModelAsset *model)
+        {
+            EventSystem::PushEvent(EventType::PrimitiveAttachedToNode, Scene::PrimitiveAttachRequest{node, model});
+        };
+
         auto drawMeshComponent = [&](NodeId *node)
         {
             auto *w = m_gui->GetWidget<MeshWidget>();
             if (!w)
                 return;
 
-            int meshIndex = scene.GetMeshRef(node);
-            if (meshIndex < 0)
-                return;
+            const auto &refs = scene.GetNodeCache(node).meshRefs->meshRefs;
+            int removeIdx = -1;
+            for (int slot = 0; slot < static_cast<int>(refs.size()); slot++)
+            {
+                int meshIndex = refs[slot];
+                if (meshIndex < 0)
+                    continue;
 
-            Mesh &mesh = scene.GetMesh(meshIndex);
-            w->DrawEmbed(&mesh, node);
+                Mesh &mesh = scene.GetMesh(meshIndex);
+
+                if (refs.size() > 1)
+                {
+                    ImGui::PushID(slot);
+                    bool open = ImGui::CollapsingHeader(
+                        ("Mesh " + std::to_string(slot)).c_str(),
+                        ImGuiTreeNodeFlags_DefaultOpen);
+                    if (open)
+                    {
+                        w->DrawEmbed(&mesh, node);
+                        if (ImGui::SmallButton("Remove"))
+                            removeIdx = meshIndex;
+                    }
+                    ImGui::PopID();
+                }
+                else
+                {
+                    w->DrawEmbed(&mesh, node);
+                }
+            }
 
             ImGui::Dummy(ImVec2(0.f, 2.f));
-            if (ImGui::SmallButton("Remove Mesh Component"))
-                scene.SetMeshRef(node, -1);
+
+            if (refs.size() == 1)
+            {
+                if (ImGui::SmallButton("Remove Mesh Component"))
+                    scene.SetMeshRef(node, -1);
+            }
+
+            if (ImGui::SmallButton("+ Add Mesh"))
+                ImGui::OpenPopup("AddMeshPopup");
+
+            if (ImGui::BeginPopup("AddMeshPopup"))
+            {
+                if (ImGui::MenuItem("Plane"))
+                    attachPrimitive(node, Primitives::CreatePlane());
+                if (ImGui::MenuItem("Cube"))
+                    attachPrimitive(node, Primitives::CreateCube());
+                if (ImGui::MenuItem("Sphere"))
+                    attachPrimitive(node, Primitives::CreateSphere());
+                if (ImGui::MenuItem("Cylinder"))
+                    attachPrimitive(node, Primitives::CreateCylinder());
+                if (ImGui::MenuItem("Cone"))
+                    attachPrimitive(node, Primitives::CreateCone());
+                if (ImGui::MenuItem("Quad"))
+                    attachPrimitive(node, Primitives::CreateQuad());
+                ImGui::EndPopup();
+            }
+
+            if (removeIdx >= 0)
+                scene.RemoveMeshRef(node, removeIdx);
         };
 
         auto drawScriptComponent = [&](NodeId *node)
@@ -206,10 +261,6 @@ namespace pe
             w->DrawEmbed(pm, sel.GetSelectedEmitterIndex());
         };
 
-        auto attachPrimitive = [&](NodeId *node, ModelAsset *model)
-        {
-            EventSystem::PushEvent(EventType::PrimitiveAttachedToNode, Scene::PrimitiveAttachRequest{node, model});
-        };
 
         auto drawAddComponentButton = [&](NodeId *node)
         {
