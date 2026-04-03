@@ -342,6 +342,22 @@ namespace pe
 #endif
     }
 
+    void Debug::Destroy()
+    {
+        DestroyDebugMessenger();
+        s_instance = nullptr;
+        s_debugMessenger = nullptr;
+        vkCreateDebugUtilsMessengerEXT = nullptr;
+        vkDestroyDebugUtilsMessengerEXT = nullptr;
+        vkSetDebugUtilsObjectNameEXT = nullptr;
+        vkQueueBeginDebugUtilsLabelEXT = nullptr;
+        vkQueueInsertDebugUtilsLabelEXT = nullptr;
+        vkQueueEndDebugUtilsLabelEXT = nullptr;
+        vkCmdBeginDebugUtilsLabelEXT = nullptr;
+        vkCmdEndDebugUtilsLabelEXT = nullptr;
+        vkCmdInsertDebugUtilsLabelEXT = nullptr;
+    }
+
     void Debug::SetObjectName(const VkDebugUtilsObjectNameInfoEXT &info)
     {
         if (!vkSetDebugUtilsObjectNameEXT)

@@ -19,6 +19,7 @@ namespace pe
         static void Warn(const std::string &msg);
         static void Error(const std::string &msg);
         static void Attach(Callback cb);
+        static void ClearCallbacks();
 
     private:
         static void Dispatch(const std::string &msg, LogType type);

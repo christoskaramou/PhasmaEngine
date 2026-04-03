@@ -1,7 +1,9 @@
 #include "Code/App/App.h"
 #include "API/Command.h"
+#include "API/Debug.h"
 #include "API/Queue.h"
 #include "API/RHI.h"
+#include "Base/Log.h"
 #include "GUI/UndoRedo.h"
 #include "Scene/ModelAsset.h"
 #include "Script/ScriptSystem.h"
@@ -144,8 +146,9 @@ namespace pe
         DestroyGlobalSystems();
         ModelAsset::DestroyDefaults();
         Context::Remove();
+        Log::ClearCallbacks();
+        Debug::Destroy();
         RHII.Destroy();
-        RHII.Remove();
         Window::Destroy(m_window);
         EventSystem::Destroy();
     }

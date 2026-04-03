@@ -117,4 +117,10 @@ namespace pe
     {
         Dispatch(msg, LogType::Error);
     }
+
+    void Log::ClearCallbacks()
+    {
+        std::lock_guard<std::mutex> lock(GetLogMutex());
+        s_callbacks.clear();
+    }
 } // namespace pe

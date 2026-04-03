@@ -13,6 +13,7 @@ namespace pe
         static void Init(vk::Instance instance);
         static void CreateDebugMessenger();
         static void DestroyDebugMessenger();
+        static void Destroy();
         template <class HANDLE>
         static void SetObjectName(HANDLE handle, const std::string &name)
         {
@@ -58,6 +59,7 @@ namespace pe
         static void Init(vk::Instance instance) {}
         static void CreateDebugMessenger() {}
         static void DestroyDebugMessenger() {}
+        static void Destroy() {}
         static void InitCaptureApi() {}
         static void DestroyCaptureApi() {}
         template <class HANDLE>
