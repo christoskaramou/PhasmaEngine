@@ -11,6 +11,9 @@ namespace pe
         template <class F, class... Args>
         auto Enqueue(F &&fn, Args &&...args) -> std::shared_future<std::invoke_result_t<F, Args...>>;
 
+        // Wait until all tasks are done and no workers are active
+        void WaitIdle();
+
         static ThreadPool General;
         static ThreadPool Update;
         static ThreadPool Render;
@@ -25,7 +28,9 @@ namespace pe
 
         std::mutex m_queue_mutex;
         std::condition_variable m_condition;
+        std::condition_variable m_idle;
         bool m_stop{false};
+        size_t m_activeWorkers{0};
     };
 
     template <class F, class... Args>

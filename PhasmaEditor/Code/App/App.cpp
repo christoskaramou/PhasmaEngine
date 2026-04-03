@@ -141,7 +141,9 @@ namespace pe
     App::~App()
     {
         PE_INFO("Application exiting");
-        FileWatcher::Stop();
+        FileWatcher::StopAndJoin();
+        ThreadPool::GUI.WaitIdle();
+        ThreadPool::General.WaitIdle();
         FileWatcher::Clear();
         DestroyGlobalSystems();
         ModelAsset::DestroyDefaults();

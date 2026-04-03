@@ -24,10 +24,17 @@ namespace pe
                     });
                     if (m_stop && m_tasks.empty())
                         return;
+                    ++m_activeWorkers;
                     task = std::move(m_tasks.front());
                     m_tasks.pop_front();
                 }
                 (*task)();
+                {
+                    std::unique_lock<std::mutex> lock(m_queue_mutex);
+                    --m_activeWorkers;
+                    if (m_tasks.empty() && m_activeWorkers == 0)
+                        m_idle.notify_all();
+                }
             } });
         }
     }
@@ -44,6 +51,12 @@ namespace pe
             if (t.joinable())
                 t.join();
         }
+    }
+
+    void ThreadPool::WaitIdle()
+    {
+        std::unique_lock<std::mutex> lock(m_queue_mutex);
+        m_idle.wait(lock, [this] { return m_tasks.empty() && m_activeWorkers == 0; });
     }
 
     static const size_t N = ClampThreads(std::thread::hardware_concurrency());

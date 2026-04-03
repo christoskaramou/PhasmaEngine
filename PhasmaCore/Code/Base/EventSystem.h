@@ -52,6 +52,7 @@ namespace pe
     {
     public:
         using Func = Delegate<const std::any &>::FunctionType;
+        using CallbackToken = Delegate<const std::any &>::Token;
 
         struct QueuedEvent
         {
@@ -70,6 +71,10 @@ namespace pe
         static void DispatchEvent(EventKey key, const std::any &data);
         static void ClearEvents() noexcept;
 
+        // Token-based callback registration (for unregister later)
+        [[nodiscard]] static CallbackToken RegisterCallbackWithToken(EventKey key, Func &&func);
+        static void UnregisterCallback(EventKey key, CallbackToken token);
+
         // Convenience overloads
         static inline void RegisterEvent(EventType type) { RegisterEvent(EventKey{type}); }
         static inline void RegisterEvent(size_t id) { RegisterEvent(EventKey{id}); }
@@ -77,6 +82,10 @@ namespace pe
         static inline void UnregisterEvent(size_t id) { UnregisterEvent(EventKey{id}); }
         static inline void RegisterCallback(EventType type, Func &&f) { RegisterCallback(EventKey{type}, std::move(f)); }
         static inline void RegisterCallback(size_t id, Func &&f) { RegisterCallback(EventKey{id}, std::move(f)); }
+        static inline CallbackToken RegisterCallbackWithToken(EventType type, Func &&f) { return RegisterCallbackWithToken(EventKey{type}, std::move(f)); }
+        static inline CallbackToken RegisterCallbackWithToken(size_t id, Func &&f) { return RegisterCallbackWithToken(EventKey{id}, std::move(f)); }
+        static inline void UnregisterCallback(EventType type, CallbackToken token) { UnregisterCallback(EventKey{type}, token); }
+        static inline void UnregisterCallback(size_t id, CallbackToken token) { UnregisterCallback(EventKey{id}, token); }
         static inline void DispatchEvent(EventType type, const std::any &d) { DispatchEvent(EventKey{type}, d); }
         static inline void DispatchEvent(size_t id, const std::any &d) { DispatchEvent(EventKey{id}, d); }
 

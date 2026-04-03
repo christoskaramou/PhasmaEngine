@@ -166,6 +166,7 @@ namespace pe
 
     FileBrowser::~FileBrowser()
     {
+        EventSystem::UnregisterCallback(EventType::FileDrop, m_fileDropToken);
         Image::Destroy(m_folderIcon);
         Image::Destroy(m_fileIcon);
         Image::Destroy(m_txtIcon);
@@ -205,7 +206,7 @@ namespace pe
         cmd->Wait();
         cmd->Return();
 
-        EventSystem::RegisterCallback(EventType::FileDrop, [this](const std::any &data)
+        m_fileDropToken = EventSystem::RegisterCallbackWithToken(EventType::FileDrop, [this](const std::any &data)
                                       {
             const auto &paths = std::any_cast<const std::vector<std::string> &>(data);
             std::lock_guard lock(m_pendingDropsMutex);

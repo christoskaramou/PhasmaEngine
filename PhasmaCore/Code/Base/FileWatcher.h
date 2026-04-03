@@ -16,6 +16,7 @@ namespace pe
         static void Clear();
         static void Start(double interval = 1.0);
         inline static void Stop() { s_running = false; }
+        static void StopAndJoin();
         inline static bool IsRunning() { return s_running; }
 
         void Watch();

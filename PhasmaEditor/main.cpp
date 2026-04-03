@@ -1,5 +1,6 @@
 #include "Base/Log.h"
 #include "Base/EventSystem.h"
+#include "Base/ThreadPool.h"
 
 #if defined(PE_LINUX)
 #include <dlfcn.h>
@@ -94,6 +95,7 @@ int main(int argc, char *argv[])
         if (pe::EventSystem::PeekAndPop(pe::EventType::ReloadModule, ev))
         {
             mod.destroy();
+            pe::ThreadPool::FW.WaitIdle();
             UnloadModule(mod);
             mod = LoadModule();
             if (!mod.lib)

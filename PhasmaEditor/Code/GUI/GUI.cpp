@@ -243,6 +243,7 @@ namespace pe
 
     GUI::~GUI()
     {
+        EventSystem::UnregisterCallback(EventType::AfterCommandWait, m_afterCommandWaitToken);
         *m_codebaseAlive = false;
         CancelCodebaseIndexing();
         if (m_indexThread.joinable())
@@ -1498,7 +1499,7 @@ namespace pe
             }
         };
 
-        EventSystem::RegisterCallback(EventType::AfterCommandWait, std::move(AddGpuTimerInfo));
+        m_afterCommandWaitToken = EventSystem::RegisterCallbackWithToken(EventType::AfterCommandWait, std::move(AddGpuTimerInfo));
 
         m_editorToolRuntime = std::make_unique<EditorToolRuntime>(
             [this](std::function<void()> fn)

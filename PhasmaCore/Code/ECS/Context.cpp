@@ -25,6 +25,7 @@ namespace pe
         if (!instance)
             return;
 
+        instance->DestroySystems();
         instance.reset();
     }
 

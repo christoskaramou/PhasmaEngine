@@ -99,6 +99,12 @@ namespace pe
         ThreadPool::FW.Enqueue(callback);
     }
 
+    void FileWatcher::StopAndJoin()
+    {
+        s_running = false;
+        ThreadPool::FW.WaitIdle();
+    }
+
     FileWatcher::FileWatcher(const std::string &file, Func &&callback)
         : m_hash{StringHash{file}}, m_file{file}, m_time{GetFileTime()}, m_callback{callback} {}
 

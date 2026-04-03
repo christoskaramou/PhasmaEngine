@@ -62,6 +62,26 @@ namespace pe
             it->second += std::move(func);
     }
 
+    EventSystem::CallbackToken EventSystem::RegisterCallbackWithToken(EventKey key, Func &&func)
+    {
+        std::scoped_lock lock(s_mutex);
+        auto it = s_events.find(key);
+        PE_ERROR_IF(it == s_events.end(), "Event not registered!");
+        if (it == s_events.end())
+            return 0;
+        return it->second.AddWithToken(std::move(func));
+    }
+
+    void EventSystem::UnregisterCallback(EventKey key, CallbackToken token)
+    {
+        if (token == 0)
+            return;
+        std::scoped_lock lock(s_mutex);
+        auto it = s_events.find(key);
+        if (it != s_events.end())
+            it->second.Remove(token);
+    }
+
     void EventSystem::DispatchEvent(EventKey key, const std::any &data)
     {
         // Copy delegate under lock, then invoke outside to avoid deadlocks/re-entrancy

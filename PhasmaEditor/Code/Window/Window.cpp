@@ -30,11 +30,12 @@ namespace pe
             SDL_SetWindowTitle(m_apiHandle, std::any_cast<std::string>(title).c_str());
         };
 
-        EventSystem::RegisterCallback(EventType::SetWindowTitle, setTitle);
+        m_setTitleToken = EventSystem::RegisterCallbackWithToken(EventType::SetWindowTitle, setTitle);
     }
 
     Window::~Window()
     {
+        EventSystem::UnregisterCallback(EventType::SetWindowTitle, m_setTitleToken);
         SDL_DestroyWindow(m_apiHandle);
         SDL_Quit();
     }

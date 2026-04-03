@@ -20,5 +20,8 @@ namespace pe
         void Hide();
         void Minimize();
         void Maximize();
+
+    private:
+        EventSystem::CallbackToken m_setTitleToken{0};
     };
 } // namespace pe
