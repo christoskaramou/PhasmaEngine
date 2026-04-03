@@ -269,15 +269,32 @@ namespace pe
         state.nodeRevision = node->revision;
         state.desc = desc;
 
-        // Auto-fit shape from mesh AABB if requested
+        // Auto-fit shape from union of all mesh AABBs
         if (desc.autoFitShape)
         {
             PE_PROFILE_SCOPE("Physics Auto Fit Shape");
-            int meshRef = scene.GetMeshRef(node);
-            if (meshRef >= 0)
+            const auto &refs = scene.GetNodeCache(node).meshRefs->meshRefs;
+            AABB combined;
+            bool init = false;
+            for (int meshRef : refs)
             {
-                const Mesh &mesh = scene.GetMesh(meshRef);
-                vec3 size = mesh.boundingBox.GetSize();
+                if (meshRef < 0)
+                    continue;
+                const AABB &bb = scene.GetMesh(meshRef).boundingBox;
+                if (!init)
+                {
+                    combined = bb;
+                    init = true;
+                }
+                else
+                {
+                    combined.min = min(combined.min, bb.min);
+                    combined.max = max(combined.max, bb.max);
+                }
+            }
+            if (init)
+            {
+                vec3 size = combined.GetSize();
                 state.desc.boxHalfExtents = size * 0.5f;
                 state.desc.sphereRadius = std::max({size.x, size.y, size.z}) * 0.5f;
                 state.desc.capsuleRadius = std::max(size.x, size.z) * 0.5f;
@@ -646,30 +663,30 @@ namespace pe
         }
         case PhysicsShapeType::ConvexHull:
         {
-            // Build convex hull from mesh vertices
-            int meshRef = scene.GetMeshRef(state.nodeId);
-            if (meshRef >= 0)
+            const auto &refs = scene.GetNodeCache(state.nodeId).meshRefs->meshRefs;
+            const auto &vertexStore = scene.GetVertexStore();
+            JPH::Array<JPH::Vec3> points;
+            for (int meshRef : refs)
             {
+                if (meshRef < 0)
+                    continue;
                 const Mesh &mesh = scene.GetMesh(meshRef);
-                const auto &vertexStore = scene.GetVertexStore();
-                JPH::Array<JPH::Vec3> points;
-                points.reserve(mesh.vertexCount);
+                points.reserve(points.size() + mesh.vertexCount);
                 for (uint32_t i = 0; i < mesh.vertexCount && (mesh.vertexOffset + i) < vertexStore.size(); i++)
                 {
                     const auto &v = vertexStore[mesh.vertexOffset + i];
-                    // Apply node scale to vertices so the collider matches the rendered mesh
                     points.push_back(JPH::Vec3(
                         v.position[0] * worldScale.x,
                         v.position[1] * worldScale.y,
                         v.position[2] * worldScale.z));
                 }
-                if (!points.empty())
-                {
-                    JPH::ConvexHullShapeSettings settings(points.data(), static_cast<int>(points.size()));
-                    auto result = settings.Create();
-                    if (result.IsValid())
-                        shape = result.Get();
-                }
+            }
+            if (!points.empty())
+            {
+                JPH::ConvexHullShapeSettings settings(points.data(), static_cast<int>(points.size()));
+                auto result = settings.Create();
+                if (result.IsValid())
+                    shape = result.Get();
             }
             // Fallback to box if convex hull failed
             if (!shape)

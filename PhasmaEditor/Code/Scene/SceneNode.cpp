@@ -13,8 +13,6 @@
 
 namespace pe
 {
-    // --- Component flag management (ECS-backed) ---
-
     void Scene::AddComponentFlag(NodeId *node, uint32_t flag)
     {
         ValidateNodeId(node);
@@ -63,8 +61,6 @@ namespace pe
         }
     }
 
-    // --- Node lifecycle ---
-
     NodeId *Scene::CreateNode(const std::string &name, NodeId *parent)
     {
         // Reuse a recycled NodeId or allocate a new one
@@ -90,7 +86,6 @@ namespace pe
         runtime.dirtyUniforms.resize(RHII.GetSwapchainImageCount(), false);
         m_nodeRuntime.push_back(std::move(runtime));
 
-        // Create ECS entity and attach node components
         Entity *entity = Context::Get()->CreateEntity();
         id->entity = entity;
 
@@ -131,25 +126,35 @@ namespace pe
         const uint32_t idx = node->index;
         const auto &cache = m_nodeComponentCache[idx];
 
-        // Null out material pointers on the mesh so stale entries in m_meshes
+        // Null out material pointers on meshes so stale entries in m_meshes
         // don't dereference freed Materials after the owning model is deleted.
-        // Only null if no other node still references this mesh.
-        int meshRef = MeshRefAt(idx);
-        if (meshRef >= 0 && meshRef < static_cast<int>(m_meshes.size()))
+        // Only null if no other node still references each mesh.
+        for (int meshRef : cache.meshRefs->meshRefs)
         {
+            if (meshRef < 0 || meshRef >= static_cast<int>(m_meshes.size()))
+                continue;
+
             bool otherRef = false;
             for (uint32_t i = 0; i < static_cast<uint32_t>(m_nodeIds.size()); i++)
             {
-                if (i != idx && MeshRefAt(i) == meshRef)
+                if (i == idx)
+                    continue;
+                for (int mr : m_nodeComponentCache[i].meshRefs->meshRefs)
                 {
-                    otherRef = true;
-                    break;
+                    if (mr == meshRef)
+                    {
+                        otherRef = true;
+                        break;
+                    }
                 }
+                if (otherRef)
+                    break;
             }
             if (!otherRef)
             {
                 m_meshes[meshRef].material = nullptr;
                 m_meshes[meshRef].materialInstance = nullptr;
+                m_meshes[meshRef].live = false;
             }
         }
 
@@ -206,7 +211,6 @@ namespace pe
         if (auto *animSys = GetGlobalSystem<AnimationSystem>())
             animSys->RemoveAnimation(node);
 
-        // Remove from parent's children list (ECS hierarchy)
         NodeId *parent = cache.hierarchy->parent;
         if (parent)
         {
@@ -214,17 +218,13 @@ namespace pe
             siblings.erase(std::remove(siblings.begin(), siblings.end(), node), siblings.end());
         }
 
-        // Destroy ECS entity
         if (node->entity)
         {
             Context::Get()->RemoveEntity(node->entity->GetID());
             node->entity = nullptr;
         }
 
-        // Swap-and-pop
         SwapAndPopNode(idx);
-
-        // Recycle the NodeId (set sentinel to catch use-after-free)
         node->index = UINT32_MAX;
         m_freeNodeIds.push_back(node);
 
@@ -250,7 +250,6 @@ namespace pe
         m_nodeRuntime.pop_back();
     }
 
-    // --- Node operations ---
 
     void Scene::ReparentNode(NodeId *node, NodeId *newParent)
     {
@@ -291,12 +290,44 @@ namespace pe
             MarkNodeDirty(node);
     }
 
+    bool Scene::IsValidMeshIndex(int meshIndex) const
+    {
+        return meshIndex >= 0 && meshIndex < static_cast<int>(m_meshes.size()) && m_meshes[meshIndex].live;
+    }
+
     void Scene::SetMeshRef(NodeId *node, int meshIndex)
     {
         auto &refs = m_nodeComponentCache[node->index].meshRefs->meshRefs;
+        bool changed = !refs.empty() || meshIndex >= 0;
         refs.clear();
-        if (meshIndex >= 0)
+        if (IsValidMeshIndex(meshIndex))
             refs.push_back(meshIndex);
+        if (changed)
+        {
+            m_geometryDirty = true;
+            MarkNodeDirty(node);
+        }
+    }
+
+    void Scene::AddMeshRef(NodeId *node, int meshIndex)
+    {
+        if (!IsValidMeshIndex(meshIndex))
+            return;
+        m_nodeComponentCache[node->index].meshRefs->meshRefs.push_back(meshIndex);
+        m_geometryDirty = true;
+        MarkNodeDirty(node);
+    }
+
+    void Scene::RemoveMeshRef(NodeId *node, int meshIndex)
+    {
+        auto &refs = m_nodeComponentCache[node->index].meshRefs->meshRefs;
+        auto it = std::remove(refs.begin(), refs.end(), meshIndex);
+        if (it != refs.end())
+        {
+            refs.erase(it, refs.end());
+            m_geometryDirty = true;
+            MarkNodeDirty(node);
+        }
     }
 
     void Scene::SetNodeScript(NodeId *node, const std::string &path)
@@ -335,7 +366,6 @@ namespace pe
         return index;
     }
 
-    // --- Dirty tracking and matrix updates ---
 
     void Scene::MarkNodeDirty(NodeId *node)
     {
@@ -381,12 +411,24 @@ namespace pe
         if (prevWorld == mat4(1.f) && rt.gpuData.previousWorldMatrix == mat4(1.f))
             rt.gpuData.previousWorldMatrix = rt.gpuData.worldMatrix;
 
-        // Update world AABB from mesh bounding box
-        const int meshIdx = MeshRefAt(idx);
-        if (meshIdx >= 0)
+        // Update world AABB — union of all mesh bounding boxes
+        const auto &refs = m_nodeComponentCache[idx].meshRefs->meshRefs;
+        bool aabbInit = false;
+        for (int meshIdx : refs)
         {
-            const AABB &localAABB = m_meshes[meshIdx].boundingBox;
-            rt.worldAABB = TransformAabb(localAABB, rt.gpuData.worldMatrix);
+            if (meshIdx < 0)
+                continue;
+            AABB meshAABB = TransformAabb(m_meshes[meshIdx].boundingBox, rt.gpuData.worldMatrix);
+            if (!aabbInit)
+            {
+                rt.worldAABB = meshAABB;
+                aabbInit = true;
+            }
+            else
+            {
+                rt.worldAABB.min = min(rt.worldAABB.min, meshAABB.min);
+                rt.worldAABB.max = max(rt.worldAABB.max, meshAABB.max);
+            }
         }
 
         rt.dirty = false;

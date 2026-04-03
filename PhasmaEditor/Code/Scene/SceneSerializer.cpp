@@ -199,9 +199,11 @@ namespace pe
             std::vector<bool> liveMesh(scene.m_meshes.size(), false);
             for (uint32_t ni = 0; ni < scene.GetNodeCount(); ni++)
             {
-                int meshRef = scene.MeshRefAt(ni);
-                if (meshRef >= 0 && meshRef < static_cast<int>(scene.m_meshes.size()))
-                    liveMesh[meshRef] = true;
+                for (int meshRef : scene.m_nodeComponentCache[ni].meshRefs->meshRefs)
+                {
+                    if (meshRef >= 0 && meshRef < static_cast<int>(scene.m_meshes.size()))
+                        liveMesh[meshRef] = true;
+                }
             }
 
             int newMeshIdx = 0;
@@ -397,10 +399,26 @@ namespace pe
                 SetMat4(localMat, cache.transform->localMatrix);
                 nodeObj.AddMember("local_matrix", localMat.Move(), allocator);
 
-                int meshRef = scene.MeshRefAt(ni);
-                int remappedMesh = (meshRef >= 0 && meshRef < static_cast<int>(meshRemap.size())) ? meshRemap[meshRef] : -1;
-                if (remappedMesh >= 0)
-                    nodeObj.AddMember("mesh", remappedMesh, allocator);
+                // Mesh refs (single as "mesh" for compat, multi as "mesh_refs")
+                const auto &meshRefsList = cache.meshRefs->meshRefs;
+                if (meshRefsList.size() == 1)
+                {
+                    int remapped = (meshRefsList[0] >= 0 && meshRefsList[0] < static_cast<int>(meshRemap.size())) ? meshRemap[meshRefsList[0]] : -1;
+                    if (remapped >= 0)
+                        nodeObj.AddMember("mesh", remapped, allocator);
+                }
+                else if (meshRefsList.size() > 1)
+                {
+                    rapidjson::Value meshArr(rapidjson::kArrayType);
+                    for (int mr : meshRefsList)
+                    {
+                        int remapped = (mr >= 0 && mr < static_cast<int>(meshRemap.size())) ? meshRemap[mr] : -1;
+                        if (remapped >= 0)
+                            meshArr.PushBack(remapped, allocator);
+                    }
+                    if (!meshArr.Empty())
+                        nodeObj.AddMember("mesh_refs", meshArr.Move(), allocator);
+                }
 
                 if (!cache.script->path.empty())
                     nodeObj.AddMember("script", MakeStringValue(cache.script->path), allocator);
@@ -806,7 +824,6 @@ namespace pe
         for (auto &l : m_areaLights)
             l.nodeId = nullptr;
 
-        // Destroy ECS entities before freeing NodeId memory
         DestroyAllNodeEntities();
 
         // Free all NodeId allocations and clear SoA stores
@@ -1018,7 +1035,6 @@ namespace pe
         for (auto &l : m_areaLights)
             l.nodeId = nullptr;
 
-        // Destroy ECS entities before freeing NodeId memory
         DestroyAllNodeEntities();
 
         for (NodeId *id : m_nodeIds)
@@ -1312,7 +1328,20 @@ namespace pe
 
                     if (nv.HasMember("local_matrix"))
                         SetLocalMatrix(node, ReadMat4(nv["local_matrix"]), false);
-                    if (nv.HasMember("mesh"))
+                    if (nv.HasMember("mesh_refs"))
+                    {
+                        const auto &arr = nv["mesh_refs"];
+                        for (rapidjson::SizeType mi = 0; mi < arr.Size(); mi++)
+                        {
+                            int savedIdx = arr[mi].GetInt();
+                            int sceneIdx = (savedIdx >= 0 && savedIdx < static_cast<int>(savedMeshToSceneMesh.size()))
+                                               ? savedMeshToSceneMesh[savedIdx]
+                                               : -1;
+                            if (sceneIdx >= 0 && sceneIdx < static_cast<int>(m_meshes.size()))
+                                AddMeshRef(node, sceneIdx);
+                        }
+                    }
+                    else if (nv.HasMember("mesh"))
                     {
                         int savedMeshIdx = nv["mesh"].GetInt();
                         int sceneMeshIdx = (savedMeshIdx >= 0 && savedMeshIdx < static_cast<int>(savedMeshToSceneMesh.size()))
@@ -1865,17 +1894,22 @@ namespace pe
                     }
                     if (nv.HasMember("local_matrix"))
                         SetLocalMatrix(node, ReadMat4(nv["local_matrix"]));
-                    if (nv.HasMember("mesh"))
+                    SetMeshRef(node, -1);
+                    if (nv.HasMember("mesh_refs"))
+                    {
+                        const auto &arr = nv["mesh_refs"];
+                        for (rapidjson::SizeType mi = 0; mi < arr.Size(); mi++)
+                        {
+                            int meshIdx = arr[mi].GetInt();
+                            if (meshIdx >= 0 && meshIdx < static_cast<int>(m_meshes.size()))
+                                AddMeshRef(node, meshIdx);
+                        }
+                    }
+                    else if (nv.HasMember("mesh"))
                     {
                         int meshIdx = nv["mesh"].GetInt();
                         if (meshIdx >= 0 && meshIdx < static_cast<int>(m_meshes.size()))
                             SetMeshRef(node, meshIdx);
-                        else
-                            SetMeshRef(node, -1);
-                    }
-                    else
-                    {
-                        SetMeshRef(node, -1);
                     }
                     if (nv.HasMember("script"))
                         SetNodeScript(node, nv["script"].GetString());
@@ -2302,7 +2336,20 @@ namespace pe
                     NodeId *node = CreateNode(name);
                     if (nv.HasMember("local_matrix"))
                         SetLocalMatrix(node, ReadMat4(nv["local_matrix"]), false);
-                    if (nv.HasMember("mesh"))
+                    if (nv.HasMember("mesh_refs"))
+                    {
+                        const auto &arr = nv["mesh_refs"];
+                        for (rapidjson::SizeType mi = 0; mi < arr.Size(); mi++)
+                        {
+                            int savedIdx = arr[mi].GetInt();
+                            int sceneIdx = (savedIdx >= 0 && savedIdx < static_cast<int>(savedMeshToSceneMesh.size()))
+                                               ? savedMeshToSceneMesh[savedIdx]
+                                               : -1;
+                            if (sceneIdx >= 0 && sceneIdx < static_cast<int>(m_meshes.size()))
+                                AddMeshRef(node, sceneIdx);
+                        }
+                    }
+                    else if (nv.HasMember("mesh"))
                     {
                         int savedMeshIdx = nv["mesh"].GetInt();
                         int sceneMeshIdx = (savedMeshIdx >= 0 && savedMeshIdx < static_cast<int>(savedMeshToSceneMesh.size()))

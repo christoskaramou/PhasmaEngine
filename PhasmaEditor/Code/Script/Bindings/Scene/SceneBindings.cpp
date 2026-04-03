@@ -148,6 +148,56 @@ namespace pe
                     if (r) r->GetScene().SetActiveCamera(camera);
                 });
 
+                scene.set_function("add_empty_node", [](sol::optional<std::string> name, sol::this_state ts) -> sol::object {
+                    sol::state_view lua(ts);
+                    auto *r = GetGlobalSystem<RendererSystem>();
+                    if (!r) return sol::make_object(lua, sol::nil);
+                    Scene &sc = r->GetScene();
+                    std::string nodeName = name.value_or("Node_" + std::to_string(ID::NextID()));
+                    NodeId *node = sc.CreateNode(nodeName);
+                    return sol::make_object(lua, sc.MakeHandle(node));
+                });
+
+                scene.set_function("delete_node", [](SceneNodeHandle h) {
+                    auto *r = GetGlobalSystem<RendererSystem>();
+                    if (!r) return;
+                    Scene &sc = r->GetScene();
+                    if (h.IsValid(sc))
+                        sc.DeleteNode(h.nodeId);
+                });
+
+                scene.set_function("add_directional_light", []() {
+                    auto *r = GetGlobalSystem<RendererSystem>();
+                    if (r) r->GetScene().CreateDirectionalLight();
+                });
+
+                scene.set_function("add_point_light", []() {
+                    auto *r = GetGlobalSystem<RendererSystem>();
+                    if (r) r->GetScene().CreatePointLight();
+                });
+
+                scene.set_function("add_spot_light", []() {
+                    auto *r = GetGlobalSystem<RendererSystem>();
+                    if (r) r->GetScene().CreateSpotLight();
+                });
+
+                scene.set_function("add_area_light", []() {
+                    auto *r = GetGlobalSystem<RendererSystem>();
+                    if (r) r->GetScene().CreateAreaLight();
+                });
+
+                scene.set_function("remove_light", [](const std::string &type, int index) {
+                    auto *r = GetGlobalSystem<RendererSystem>();
+                    if (!r) return;
+                    LightType lt;
+                    if (type == "directional") lt = LightType::Directional;
+                    else if (type == "point") lt = LightType::Point;
+                    else if (type == "spot") lt = LightType::Spot;
+                    else if (type == "area") lt = LightType::Area;
+                    else { PE_WARN("remove_light: unknown type '%s'", type.c_str()); return; }
+                    r->GetScene().RemoveLight(lt, index);
+                });
+
                 // Selection
                 sol::table selection = lua.create_named_table("selection");
 

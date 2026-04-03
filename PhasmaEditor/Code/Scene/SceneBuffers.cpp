@@ -30,18 +30,17 @@ namespace pe
 
     void Scene::CreateGeometryBuffer()
     {
-        // Count drawable meshes (nodes with valid mesh refs and non-zero indices)
+        // Count drawable mesh refs across all nodes
         m_meshCount = 0;
         for (uint32_t i = 0; i < GetNodeCount(); i++)
         {
-            int meshIdx = MeshRefAt(i);
-            if (meshIdx < 0)
-                continue;
             if (m_nodeRuntime[i].gpuPending)
                 continue;
-            if (m_meshes[meshIdx].indexCount == 0)
-                continue;
-            m_meshCount++;
+            for (int meshIdx : m_nodeComponentCache[i].meshRefs->meshRefs)
+            {
+                if (meshIdx >= 0 && m_meshes[meshIdx].indexCount > 0)
+                    m_meshCount++;
+            }
         }
 
         m_indicesCount = static_cast<uint32_t>(m_indexStore.size());
@@ -152,10 +151,19 @@ namespace pe
 
         for (uint32_t i = 0; i < GetNodeCount(); i++)
         {
-            int meshIdx = MeshRefAt(i);
-            if (meshIdx < 0 || m_meshes[meshIdx].indexCount == 0)
-                continue;
             if (m_nodeRuntime[i].gpuPending)
+                continue;
+
+            bool hasDrawable = false;
+            for (int mr : m_nodeComponentCache[i].meshRefs->meshRefs)
+            {
+                if (mr >= 0 && m_meshes[mr].indexCount > 0)
+                {
+                    hasDrawable = true;
+                    break;
+                }
+            }
+            if (!hasDrawable)
                 continue;
 
             m_nodeRuntime[i].dataOffset = storageSize;
@@ -192,27 +200,34 @@ namespace pe
 
         for (uint32_t i = 0; i < GetNodeCount(); i++)
         {
-            int meshIdx = MeshRefAt(i);
-            if (meshIdx < 0)
-                continue;
-
-            const Mesh &mesh = m_meshes[meshIdx];
-            if (mesh.indexCount == 0)
-                continue;
             if (m_nodeRuntime[i].gpuPending)
                 continue;
 
-            m_nodeRuntime[i].indirectIndex = indirectCount;
+            const auto &refs = m_nodeComponentCache[i].meshRefs->meshRefs;
+            m_nodeRuntime[i].meshRefIndirect.resize(refs.size());
 
-            vk::DrawIndexedIndirectCommand indirectCommand{};
-            indirectCommand.indexCount = mesh.indexCount;
-            indirectCommand.instanceCount = 1;
-            indirectCommand.firstIndex = mesh.indexOffset;
-            indirectCommand.vertexOffset = mesh.vertexOffset;
-            indirectCommand.firstInstance = indirectCount;
-            m_indirectCommands.push_back(indirectCommand);
+            for (uint32_t slot = 0; slot < static_cast<uint32_t>(refs.size()); slot++)
+            {
+                int meshIdx = refs[slot];
+                if (meshIdx < 0)
+                    continue;
 
-            indirectCount++;
+                const Mesh &mesh = m_meshes[meshIdx];
+                if (mesh.indexCount == 0)
+                    continue;
+
+                m_nodeRuntime[i].meshRefIndirect[slot] = indirectCount;
+
+                vk::DrawIndexedIndirectCommand indirectCommand{};
+                indirectCommand.indexCount = mesh.indexCount;
+                indirectCommand.instanceCount = 1;
+                indirectCommand.firstIndex = mesh.indexOffset;
+                indirectCommand.vertexOffset = mesh.vertexOffset;
+                indirectCommand.firstInstance = indirectCount;
+                m_indirectCommands.push_back(indirectCommand);
+
+                indirectCount++;
+            }
         }
 
         PE_ERROR_IF(indirectCount != m_meshCount, "Scene::UploadBuffers: Indirect count mismatch!");
@@ -271,37 +286,39 @@ namespace pe
         // left behind by deleted models (m_meshes is append-only).
         for (uint32_t ni = 0; ni < GetNodeCount(); ni++)
         {
-            int meshIndex = MeshRefAt(ni);
-            if (meshIndex < 0 || meshIndex >= static_cast<int>(m_meshes.size()))
-                continue;
-
-            const Mesh &mesh = m_meshes[meshIndex];
-            MeshRuntime &rt = m_meshRuntimes[meshIndex];
-
-            for (int k = 0; k < 5; k++)
+            for (int meshIndex : m_nodeComponentCache[ni].meshRefs->meshRefs)
             {
-                Image *image = nullptr;
-                if (mesh.materialInstance)
-                    image = mesh.materialInstance->GetTexture(k);
-                else if (mesh.material)
-                    image = mesh.material->textures[k].get();
-                bool isDefault = (image == defaults.black || image == defaults.white || image == defaults.normal);
+                if (meshIndex < 0 || meshIndex >= static_cast<int>(m_meshes.size()))
+                    continue;
 
-                if (image && !isDefault)
+                const Mesh &mesh = m_meshes[meshIndex];
+                MeshRuntime &rt = m_meshRuntimes[meshIndex];
+
+                for (int k = 0; k < 5; k++)
                 {
-                    // Ensure instance texture overrides are in the image view list
-                    auto insertResult = imagesMap.insert(image, static_cast<uint32_t>(m_imageViews.size()));
-                    if (insertResult.first)
+                    Image *image = nullptr;
+                    if (mesh.materialInstance)
+                        image = mesh.materialInstance->GetTexture(k);
+                    else if (mesh.material)
+                        image = mesh.material->textures[k].get();
+                    bool isDefault = (image == defaults.black || image == defaults.white || image == defaults.normal);
+
+                    if (image && !isDefault)
                     {
-                        ImageView *srv = image->GetSRV();
-                        PE_ERROR_IF(!srv, "UpdateImageViews: image '%s' has no SRV", image->GetName().c_str());
-                        m_imageViews.push_back(srv ? srv : defaults.white->GetSRV());
+                        // Ensure instance texture overrides are in the image view list
+                        auto insertResult = imagesMap.insert(image, static_cast<uint32_t>(m_imageViews.size()));
+                        if (insertResult.first)
+                        {
+                            ImageView *srv = image->GetSRV();
+                            PE_ERROR_IF(!srv, "UpdateImageViews: image '%s' has no SRV", image->GetName().c_str());
+                            m_imageViews.push_back(srv ? srv : defaults.white->GetSRV());
+                        }
+                        rt.imageViewIndices[k] = imagesMap[image];
                     }
-                    rt.imageViewIndices[k] = imagesMap[image];
-                }
-                else
-                {
-                    rt.imageViewIndices[k] = 0xFFFFFFFF;
+                    else
+                    {
+                        rt.imageViewIndices[k] = 0xFFFFFFFF;
+                    }
                 }
             }
         }
@@ -328,31 +345,31 @@ namespace pe
 
         for (uint32_t i = 0; i < GetNodeCount(); i++)
         {
-            int meshIdx = MeshRefAt(i);
-            if (meshIdx < 0)
-                continue;
-
-            Mesh &mesh = m_meshes[meshIdx];
-            if (mesh.indexCount == 0)
-                continue;
-
-            MeshRuntime &meshRt = m_meshRuntimes[meshIdx];
-
-            if (mesh.materialInstance)
+            for (int meshIdx : m_nodeComponentCache[i].meshRefs->meshRefs)
             {
-                // Instanced materials always get their own GPU table entry (no full Material copy)
-                meshRt.materialGpuIndex = static_cast<uint32_t>(tableData.size());
-                tableData.push_back(mesh.materialInstance->BuildGpuData());
-            }
-            else if (mesh.material)
-            {
-                // Shared materials dedup by pointer identity
-                if (mesh.material->gpuIndex == 0xFFFFFFFF)
+                if (meshIdx < 0)
+                    continue;
+
+                Mesh &mesh = m_meshes[meshIdx];
+                if (mesh.indexCount == 0)
+                    continue;
+
+                MeshRuntime &meshRt = m_meshRuntimes[meshIdx];
+
+                if (mesh.materialInstance)
                 {
-                    mesh.material->gpuIndex = static_cast<uint32_t>(tableData.size());
-                    tableData.push_back(mesh.material->BuildGpuData());
+                    meshRt.materialGpuIndex = static_cast<uint32_t>(tableData.size());
+                    tableData.push_back(mesh.materialInstance->BuildGpuData());
                 }
-                meshRt.materialGpuIndex = mesh.material->gpuIndex;
+                else if (mesh.material)
+                {
+                    if (mesh.material->gpuIndex == 0xFFFFFFFF)
+                    {
+                        mesh.material->gpuIndex = static_cast<uint32_t>(tableData.size());
+                        tableData.push_back(mesh.material->BuildGpuData());
+                    }
+                    meshRt.materialGpuIndex = mesh.material->gpuIndex;
+                }
             }
         }
 
@@ -433,51 +450,54 @@ namespace pe
         m_meshConstants->Map();
         for (uint32_t i = 0; i < GetNodeCount(); i++)
         {
-            int meshIdx = MeshRefAt(i);
-            if (meshIdx < 0)
-                continue;
-
-            const Mesh &mesh = m_meshes[meshIdx];
-            if (mesh.indexCount == 0)
-                continue;
             if (m_nodeRuntime[i].gpuPending)
                 continue;
 
-            const MeshRuntime &meshRt = m_meshRuntimes[meshIdx];
-
-            float alphaCut = 0.0f;
-            float baseColorAlpha = 1.0f;
-            uint32_t texMask = 0u;
-            if (mesh.materialInstance)
+            for (int meshIdx : m_nodeComponentCache[i].meshRefs->meshRefs)
             {
-                alphaCut = (mesh.renderType == RenderType::AlphaCut) ? mesh.materialInstance->GetAlphaCutoff() : 0.0f;
-                baseColorAlpha = mesh.materialInstance->GetBaseColorFactor().a;
-                texMask = mesh.materialInstance->GetTextureMask();
+                if (meshIdx < 0)
+                    continue;
+
+                const Mesh &mesh = m_meshes[meshIdx];
+                if (mesh.indexCount == 0)
+                    continue;
+
+                const MeshRuntime &meshRt = m_meshRuntimes[meshIdx];
+
+                float alphaCut = 0.0f;
+                float baseColorAlpha = 1.0f;
+                uint32_t texMask = 0u;
+                if (mesh.materialInstance)
+                {
+                    alphaCut = (mesh.renderType == RenderType::AlphaCut) ? mesh.materialInstance->GetAlphaCutoff() : 0.0f;
+                    baseColorAlpha = mesh.materialInstance->GetBaseColorFactor().a;
+                    texMask = mesh.materialInstance->GetTextureMask();
+                }
+                else if (mesh.material)
+                {
+                    const Material *mat = mesh.material;
+                    alphaCut = (mesh.renderType == RenderType::AlphaCut) ? mat->alphaCutoff : 0.0f;
+                    baseColorAlpha = mat->baseColorFactor.a;
+                    texMask = mat->textureMask;
+                }
+
+                Mesh_Constants constants{};
+                constants.alphaCut = alphaCut;
+                constants.baseColorAlpha = baseColorAlpha;
+                constants.meshDataOffset = static_cast<uint32_t>(m_nodeRuntime[i].dataOffset);
+                constants.textureMask = texMask;
+                constants.materialId = meshRt.materialGpuIndex;
+                for (int k = 0; k < 5; k++)
+                    constants.meshImageIndex[k] = meshRt.imageViewIndices[k];
+
+                BufferRange range{};
+                range.data = &constants;
+                range.offset = offset;
+                range.size = sizeof(Mesh_Constants);
+                m_meshConstants->Copy(1, &range, true);
+
+                offset += sizeof(Mesh_Constants);
             }
-            else if (mesh.material)
-            {
-                const Material *mat = mesh.material;
-                alphaCut = (mesh.renderType == RenderType::AlphaCut) ? mat->alphaCutoff : 0.0f;
-                baseColorAlpha = mat->baseColorFactor.a;
-                texMask = mat->textureMask;
-            }
-
-            Mesh_Constants constants{};
-            constants.alphaCut = alphaCut;
-            constants.baseColorAlpha = baseColorAlpha;
-            constants.meshDataOffset = static_cast<uint32_t>(m_nodeRuntime[i].dataOffset);
-            constants.textureMask = texMask;
-            constants.materialId = meshRt.materialGpuIndex;
-            for (int k = 0; k < 5; k++)
-                constants.meshImageIndex[k] = meshRt.imageViewIndices[k];
-
-            BufferRange range{};
-            range.data = &constants;
-            range.offset = offset;
-            range.size = sizeof(Mesh_Constants);
-            m_meshConstants->Copy(1, &range, true);
-
-            offset += sizeof(Mesh_Constants);
         }
         m_meshConstants->Flush();
         m_meshConstants->Unmap();

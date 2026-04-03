@@ -1,4 +1,13 @@
 cmake_minimum_required(VERSION 3.10)
+
+if(POLICY CMP0091)
+    cmake_policy(SET CMP0091 NEW)
+endif()
+
+# Keep all MSVC targets, including fetched subprojects like Jolt, on the DLL CRT (/MD, /MDd)
+# so they match the rest of the editor build and imported Windows dependencies.
+set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>DLL")
+
 project(PhasmaEditor C CXX)
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -47,11 +56,13 @@ if(PE_PHYSICS)
     set(INTERPROCEDURAL_OPTIMIZATION OFF CACHE BOOL "" FORCE)
     set(OBJECT_LAYER_BITS 16 CACHE STRING "" FORCE)
     set(ENABLE_ALL_WARNINGS OFF CACHE BOOL "" FORCE)
+    set(USE_STATIC_MSVC_RUNTIME_LIBRARY OFF CACHE BOOL "" FORCE)
 
     FetchContent_Declare(JoltPhysics
         GIT_REPOSITORY https://github.com/jrouwe/JoltPhysics.git
         GIT_TAG        v5.2.0
         SOURCE_SUBDIR  Build
+        GIT_PROGRESS   TRUE
     )
     FetchContent_MakeAvailable(JoltPhysics)
     set(BUILD_SHARED_LIBS "${BUILD_SHARED_LIBS_SAVED}" CACHE BOOL "" FORCE)

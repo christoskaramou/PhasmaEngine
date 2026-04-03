@@ -79,7 +79,6 @@ namespace pe
 
     Scene::~Scene()
     {
-        // Destroy ECS entities before freeing NodeId memory
         DestroyAllNodeEntities();
 
         // Free all NodeId allocations
@@ -536,43 +535,48 @@ namespace pe
 
         for (uint32_t i = beginNode; i < endNode; i++)
         {
-            int meshIdx = MeshRefAt(i);
-            if (meshIdx < 0)
-                continue;
             if (m_nodeRuntime[i].gpuPending)
                 continue;
 
-            const Mesh &mesh = m_meshes[meshIdx];
-            if (mesh.indexCount == 0)
-                continue;
-
-            if (skipSkinnedForRT && mesh.skinned)
-                continue;
-
             const AABB &worldBounds = m_nodeRuntime[i].worldAABB;
-
             bool cull = frustumCulling ? !camera->AABBInFrustum(worldBounds) : false;
             if (cull)
                 continue;
 
-            vec3 center = worldBounds.GetCenter();
-            float distance = distance2(cameraPosition, center);
-
-            bool doubleSided = mesh.material && mesh.material->doubleSided;
-            switch (mesh.renderType)
+            const auto &refs = m_nodeComponentCache[i].meshRefs->meshRefs;
+            for (uint32_t slot = 0; slot < static_cast<uint32_t>(refs.size()); slot++)
             {
-            case RenderType::Opaque:
-                out.opaque.push_back(DrawInfo{m_nodeIds[i], distance, doubleSided});
-                break;
-            case RenderType::AlphaCut:
-                out.alphaCut.push_back(DrawInfo{m_nodeIds[i], distance, doubleSided});
-                break;
-            case RenderType::AlphaBlend:
-                out.alphaBlend.push_back(DrawInfo{m_nodeIds[i], distance, doubleSided});
-                break;
-            case RenderType::Transmission:
-                out.transmission.push_back(DrawInfo{m_nodeIds[i], distance, doubleSided});
-                break;
+                int meshIdx = refs[slot];
+                if (meshIdx < 0)
+                    continue;
+
+                const Mesh &mesh = m_meshes[meshIdx];
+                if (mesh.indexCount == 0)
+                    continue;
+
+                if (skipSkinnedForRT && mesh.skinned)
+                    continue;
+
+                AABB meshWorldAABB = TransformAabb(mesh.boundingBox, m_nodeRuntime[i].gpuData.worldMatrix);
+                float dist = distance2(cameraPosition, meshWorldAABB.GetCenter());
+
+                bool doubleSided = mesh.material && mesh.material->doubleSided;
+                DrawInfo di{m_nodeIds[i], meshIdx, slot, dist, doubleSided};
+                switch (mesh.renderType)
+                {
+                case RenderType::Opaque:
+                    out.opaque.push_back(di);
+                    break;
+                case RenderType::AlphaCut:
+                    out.alphaCut.push_back(di);
+                    break;
+                case RenderType::AlphaBlend:
+                    out.alphaBlend.push_back(di);
+                    break;
+                case RenderType::Transmission:
+                    out.transmission.push_back(di);
+                    break;
+                }
             }
         }
     }
@@ -596,22 +600,28 @@ namespace pe
         // Order: opaque_SS | alphaCut_SS | opaque_DS | alphaCut_DS | transmission | alphaBlend
         m_visibleIndirectIds.clear();
         m_visibleIndirectIds.reserve(m_drawInfosOpaque.size() + m_drawInfosAlphaCut.size() + m_drawInfosAlphaBlend.size() + m_drawInfosTransmission.size());
+        auto PushIndirectId = [this](const DrawInfo &di)
+        {
+            const auto &indirect = m_nodeRuntime[di.node->index].meshRefIndirect;
+            if (di.meshSlot < static_cast<uint32_t>(indirect.size()))
+                m_visibleIndirectIds.push_back(indirect[di.meshSlot]);
+        };
         // single-sided opaque
         for (uint32_t k = 0; k < m_opaqueSingleSidedCount; k++)
-            m_visibleIndirectIds.push_back(m_nodeRuntime[m_drawInfosOpaque[k].node->index].indirectIndex);
+            PushIndirectId(m_drawInfosOpaque[k]);
         // single-sided alphaCut
         for (uint32_t k = 0; k < m_alphaCutSingleSidedCount; k++)
-            m_visibleIndirectIds.push_back(m_nodeRuntime[m_drawInfosAlphaCut[k].node->index].indirectIndex);
+            PushIndirectId(m_drawInfosAlphaCut[k]);
         // double-sided opaque
         for (uint32_t k = m_opaqueSingleSidedCount; k < static_cast<uint32_t>(m_drawInfosOpaque.size()); k++)
-            m_visibleIndirectIds.push_back(m_nodeRuntime[m_drawInfosOpaque[k].node->index].indirectIndex);
+            PushIndirectId(m_drawInfosOpaque[k]);
         // double-sided alphaCut
         for (uint32_t k = m_alphaCutSingleSidedCount; k < static_cast<uint32_t>(m_drawInfosAlphaCut.size()); k++)
-            m_visibleIndirectIds.push_back(m_nodeRuntime[m_drawInfosAlphaCut[k].node->index].indirectIndex);
+            PushIndirectId(m_drawInfosAlphaCut[k]);
         for (auto &drawInfo : m_drawInfosTransmission)
-            m_visibleIndirectIds.push_back(m_nodeRuntime[drawInfo.node->index].indirectIndex);
+            PushIndirectId(drawInfo);
         for (auto &drawInfo : m_drawInfosAlphaBlend)
-            m_visibleIndirectIds.push_back(m_nodeRuntime[drawInfo.node->index].indirectIndex);
+            PushIndirectId(drawInfo);
 
         range.data = m_visibleIndirectIds.data();
         range.size = m_visibleIndirectIds.size() * sizeof(uint32_t);
@@ -631,12 +641,21 @@ namespace pe
 
             rt.dirtyUniforms[frame] = false; // clear regardless of mesh presence
 
-            int meshIdx = MeshRefAt(i);
-            if (meshIdx < 0)
+            const auto &refs = m_nodeComponentCache[i].meshRefs->meshRefs;
+            if (refs.empty())
                 continue;
 
-            const Mesh &mesh = m_meshes[meshIdx];
-            if (mesh.indexCount == 0)
+            // Check that at least one mesh ref is drawable
+            bool hasDrawable = false;
+            for (int mr : refs)
+            {
+                if (mr >= 0 && m_meshes[mr].indexCount > 0)
+                {
+                    hasDrawable = true;
+                    break;
+                }
+            }
+            if (!hasDrawable)
                 continue;
 
             range.data = &rt.gpuData;
@@ -675,15 +694,24 @@ namespace pe
         uint32_t frame = RHII.GetFrameIndex();
 
         uint32_t firstInstance = 0;
+        auto GetIndirectCmd = [this](const DrawInfo &di) -> vk::DrawIndexedIndirectCommand *
+        {
+            const auto &indirect = m_nodeRuntime[di.node->index].meshRefIndirect;
+            if (di.meshSlot >= static_cast<uint32_t>(indirect.size()))
+                return nullptr;
+            return &m_indirectCommands[indirect[di.meshSlot]];
+        };
         auto EmitIndirect = [&](const std::vector<DrawInfo> &drawInfos)
         {
             for (auto &drawInfo : drawInfos)
             {
-                auto &indirectCommand = m_indirectCommands[m_nodeRuntime[drawInfo.node->index].indirectIndex];
-                indirectCommand.firstInstance = firstInstance;
+                auto *indirectCommand = GetIndirectCmd(drawInfo);
+                if (!indirectCommand)
+                    continue;
+                indirectCommand->firstInstance = firstInstance;
 
                 BufferRange range{};
-                range.data = &indirectCommand;
+                range.data = indirectCommand;
                 range.size = sizeof(vk::DrawIndexedIndirectCommand);
                 range.offset = firstInstance * sizeof(vk::DrawIndexedIndirectCommand);
                 m_indirects[frame]->Copy(1, &range, true);
@@ -696,11 +724,13 @@ namespace pe
         {
             for (uint32_t k = begin; k < end; k++)
             {
-                auto &indirectCommand = m_indirectCommands[m_nodeRuntime[drawInfos[k].node->index].indirectIndex];
-                indirectCommand.firstInstance = firstInstance;
+                auto *indirectCommand = GetIndirectCmd(drawInfos[k]);
+                if (!indirectCommand)
+                    continue;
+                indirectCommand->firstInstance = firstInstance;
 
                 BufferRange range{};
-                range.data = &indirectCommand;
+                range.data = indirectCommand;
                 range.size = sizeof(vk::DrawIndexedIndirectCommand);
                 range.offset = firstInstance * sizeof(vk::DrawIndexedIndirectCommand);
                 m_indirects[frame]->Copy(1, &range, true);
@@ -856,28 +886,30 @@ namespace pe
 
             for (uint32_t i = 0; i < GetNodeCount(); i++)
             {
-                int meshIdx = MeshRefAt(i);
-                if (meshIdx < 0)
-                    continue;
-
-                const Mesh &mesh = m_meshes[meshIdx];
-                if (mesh.indexCount == 0)
-                    continue;
-
-                switch (mesh.renderType)
+                for (int meshIdx : m_nodeComponentCache[i].meshRefs->meshRefs)
                 {
-                case RenderType::Opaque:
-                    maxOpaque++;
-                    break;
-                case RenderType::AlphaCut:
-                    maxAlphaCut++;
-                    break;
-                case RenderType::AlphaBlend:
-                    maxAlphaBlend++;
-                    break;
-                case RenderType::Transmission:
-                    maxTransmission++;
-                    break;
+                    if (meshIdx < 0)
+                        continue;
+
+                    const Mesh &mesh = m_meshes[meshIdx];
+                    if (mesh.indexCount == 0)
+                        continue;
+
+                    switch (mesh.renderType)
+                    {
+                    case RenderType::Opaque:
+                        maxOpaque++;
+                        break;
+                    case RenderType::AlphaCut:
+                        maxAlphaCut++;
+                        break;
+                    case RenderType::AlphaBlend:
+                        maxAlphaBlend++;
+                        break;
+                    case RenderType::Transmission:
+                        maxTransmission++;
+                        break;
+                    }
                 }
             }
 

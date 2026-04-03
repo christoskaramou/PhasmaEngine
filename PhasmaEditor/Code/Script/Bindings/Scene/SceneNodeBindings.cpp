@@ -206,6 +206,50 @@ namespace pe
                     s->DeleteNode(h.nodeId);
                 });
 
+                ut.set_function("set_parent", [](SceneNodeHandle &h, sol::object parentObj) {
+                    Scene *s = GetScene();
+                    if (!s || !h.IsValid(*s)) return;
+                    NodeId *newParent = nullptr;
+                    if (parentObj.is<SceneNodeHandle>())
+                    {
+                        SceneNodeHandle ph = parentObj.as<SceneNodeHandle>();
+                        if (ph.IsValid(*s))
+                            newParent = ph.nodeId;
+                    }
+                    s->ReparentNode(h.nodeId, newParent);
+                });
+
+                ut.set_function("get_mesh_refs", [](SceneNodeHandle &h) -> sol::as_table_t<std::vector<int>> {
+                    std::vector<int> result;
+                    Scene *s = GetScene();
+                    if (s && h.IsValid(*s))
+                    {
+                        const auto &cache = s->GetNodeCache(h.nodeId);
+                        result = cache.meshRefs->meshRefs;
+                    }
+                    return sol::as_table(std::move(result));
+                });
+
+                ut.set_function("set_mesh_ref", [](SceneNodeHandle &h, int meshIndex) {
+                    Scene *s = GetScene();
+                    if (!s || !h.IsValid(*s)) return;
+                    if (meshIndex >= 0 && !s->IsValidMeshIndex(meshIndex)) return;
+                    s->SetMeshRef(h.nodeId, meshIndex);
+                });
+
+                ut.set_function("add_mesh_ref", [](SceneNodeHandle &h, int meshIndex) {
+                    Scene *s = GetScene();
+                    if (!s || !h.IsValid(*s)) return;
+                    if (!s->IsValidMeshIndex(meshIndex)) return;
+                    s->AddMeshRef(h.nodeId, meshIndex);
+                });
+
+                ut.set_function("remove_mesh_ref", [](SceneNodeHandle &h, int meshIndex) {
+                    Scene *s = GetScene();
+                    if (!s || !h.IsValid(*s)) return;
+                    s->RemoveMeshRef(h.nodeId, meshIndex);
+                });
+
                 ut.set_function("get_exposed", [](SceneNodeHandle &h, sol::this_state ts) -> std::optional<sol::table> {
                     lua_State *L = ts;
                     Scene *s = GetScene();

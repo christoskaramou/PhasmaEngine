@@ -119,6 +119,7 @@ namespace pe
             AccelerationStructure *blas;
             int meshIndex;
             uint32_t nodeIndex;
+            uint32_t meshSlot;
             mat4 transform;
         };
         std::vector<InstanceReq> instanceReqs;
@@ -126,17 +127,22 @@ namespace pe
 
         for (uint32_t i = 0; i < GetNodeCount(); i++)
         {
-            int meshIdx = MeshRefAt(i);
-            if (meshIdx < 0)
-                continue;
-            if (m_meshes[meshIdx].indexCount == 0)
-                continue;
             if (m_nodeRuntime[i].gpuPending)
                 continue;
-            if (hasSkeleton && m_meshes[meshIdx].skinned)
-                continue;
 
-            instanceReqs.push_back({nullptr, meshIdx, i, m_nodeRuntime[i].gpuData.worldMatrix});
+            const auto &refs = m_nodeComponentCache[i].meshRefs->meshRefs;
+            for (uint32_t slot = 0; slot < static_cast<uint32_t>(refs.size()); slot++)
+            {
+                int meshIdx = refs[slot];
+                if (meshIdx < 0)
+                    continue;
+                if (m_meshes[meshIdx].indexCount == 0)
+                    continue;
+                if (hasSkeleton && m_meshes[meshIdx].skinned)
+                    continue;
+
+                instanceReqs.push_back({nullptr, meshIdx, i, slot, m_nodeRuntime[i].gpuData.worldMatrix});
+            }
         }
 
         m_rtInstanceCount = static_cast<uint32_t>(instanceReqs.size());
@@ -207,8 +213,12 @@ namespace pe
         for (auto &req : instanceReqs)
             req.blas = blasByMesh.at(req.meshIndex);
 
-        for (auto &rt : m_nodeRuntime)
-            rt.instanceIndex = -1;
+        for (uint32_t i = 0; i < GetNodeCount(); i++)
+        {
+            auto &rt = m_nodeRuntime[i];
+            const auto &refs = m_nodeComponentCache[i].meshRefs->meshRefs;
+            rt.rtInstanceIndices.assign(refs.size(), -1);
+        }
 
         // --- Create Instance Buffer ---
         m_instanceBuffer = Buffer::Create(
@@ -251,7 +261,7 @@ namespace pe
             gpuInstances[i].flags = static_cast<VkGeometryInstanceFlagBitsKHR>(vk::GeometryInstanceFlagBitsKHR::eTriangleFacingCullDisable);
             gpuInstances[i].accelerationStructureReference = req.blas->GetDeviceAddress();
 
-            m_nodeRuntime[req.nodeIndex].instanceIndex = static_cast<int>(i);
+            m_nodeRuntime[req.nodeIndex].rtInstanceIndices[req.meshSlot] = static_cast<int>(i);
         }
         m_instanceBuffer->Flush();
         m_instanceBuffer->Unmap();
@@ -313,10 +323,6 @@ namespace pe
         for (NodeId *node : m_nodesMoved)
         {
             const NodeRuntime &rt = m_nodeRuntime[node->index];
-            int instanceIndex = rt.instanceIndex;
-            if (instanceIndex < 0 || instanceIndex >= static_cast<int>(m_rtInstanceCount))
-                continue;
-
             const mat4 &t = rt.gpuData.worldMatrix;
 
             vk::TransformMatrixKHR transformMatrix;
@@ -333,7 +339,11 @@ namespace pe
             transformMatrix.matrix[2][2] = t[2][2];
             transformMatrix.matrix[2][3] = t[3][2];
 
-            gpuInstances[instanceIndex].transform = transformMatrix;
+            for (int instanceIndex : rt.rtInstanceIndices)
+            {
+                if (instanceIndex >= 0 && instanceIndex < static_cast<int>(m_rtInstanceCount))
+                    gpuInstances[instanceIndex].transform = transformMatrix;
+            }
         }
 
         m_instanceBuffer->Flush();

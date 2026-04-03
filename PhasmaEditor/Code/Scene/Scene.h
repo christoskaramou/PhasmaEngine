@@ -91,6 +91,8 @@ namespace pe
     struct DrawInfo
     {
         NodeId *node;
+        int meshIndex = -1;    // index into scene m_meshes
+        uint32_t meshSlot = 0; // position within node's meshRefs (for meshRefIndirect lookup)
         float distance;
         bool doubleSided = false;
     };
@@ -167,12 +169,15 @@ namespace pe
         std::string TakeSnapshot() const;
         void RestoreSnapshot(const std::string &json);
 
-        // --- Node Graph (SoA) ---
+        // --- Node Graph ---
         NodeId *CreateNode(const std::string &name, NodeId *parent = nullptr);
         void DeleteNode(NodeId *node);
         void ReparentNode(NodeId *node, NodeId *newParent);
         void SetLocalMatrix(NodeId *node, const mat4 &m, bool markDirty = true);
-        void SetMeshRef(NodeId *node, int meshIndex);
+        bool IsValidMeshIndex(int meshIndex) const;
+        void SetMeshRef(NodeId *node, int meshIndex);    // single mesh (clears others)
+        void AddMeshRef(NodeId *node, int meshIndex);    // append mesh ref
+        void RemoveMeshRef(NodeId *node, int meshIndex); // remove specific mesh ref
         void SetNodeScript(NodeId *node, const std::string &path);
         void AttachPrimitiveToNode(NodeId *node, ModelAsset *primitiveModel);
         void SetNodeName(NodeId *node, const std::string &name)
@@ -271,7 +276,6 @@ namespace pe
         Sampler *GetDefaultSampler() const;
         static const std::vector<uint32_t> &GetAabbIndices() { return s_aabbIndices; }
 
-        // ECS entity access
         Entity *GetNodeEntity(const NodeId *node) const
         {
             ValidateNodeId(node);
@@ -291,7 +295,7 @@ namespace pe
             return m_nodeComponentCache[node->index];
         }
 
-        // Node accessors (all indexed via NodeId::index, reading from ECS cache)
+        // Node accessors
         const std::string &GetNodeName(const NodeId *node) const
         {
             ValidateNodeId(node);
@@ -489,12 +493,12 @@ namespace pe
         bool m_dirty = false;
 
         // Node Graph Storage
-        std::vector<NodeComponentCache> m_nodeComponentCache; // dense cache indexed by NodeId::index
+        std::vector<NodeComponentCache> m_nodeComponentCache;
         std::vector<NodeId *> m_nodeIds;
         std::vector<NodeRuntime> m_nodeRuntime;
         std::vector<NodeId *> m_freeNodeIds;
 
-        // Hot-path helpers for dense indexed access (avoids verbose cache access)
+        // Indexed access helpers
         int MeshRefAt(uint32_t index) const
         {
             const auto &refs = m_nodeComponentCache[index].meshRefs->meshRefs;

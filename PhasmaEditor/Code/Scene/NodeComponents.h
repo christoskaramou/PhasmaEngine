@@ -5,8 +5,6 @@ namespace pe
     struct NodeId;
     class Camera;
 
-    // --- ECS node components ---
-
     class NodeNameComponent : public IComponent
     {
     public:
@@ -26,8 +24,6 @@ namespace pe
         mat4 localMatrix = mat4(1.f);
     };
 
-    // Vector-backed from day one to enable future 0..N meshes per node.
-    // Current code treats slot 0 as "the mesh" (empty = no mesh).
     class NodeMeshRefsComponent : public IComponent
     {
     public:
@@ -39,8 +35,6 @@ namespace pe
     public:
         std::string path;
     };
-
-    // --- Subsystem tag/link components ---
 
     class NodeCameraTag : public IComponent
     {
@@ -60,8 +54,6 @@ namespace pe
     {
     };
 
-    // Fast indexed access to node components — avoids per-frame GetComponent<T>() hashing.
-    // Rebuilt on node creation/deletion; slots indexed by NodeId::index.
     struct NodeComponentCache
     {
         NodeNameComponent *name = nullptr;

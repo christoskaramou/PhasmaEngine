@@ -84,7 +84,7 @@ namespace pe
             for (auto &drawInfo : drawInfos)
             {
                 const uint32_t idx = drawInfo.node->index;
-                int meshIdx = m_scene->GetMeshRef(drawInfo.node);
+                int meshIdx = drawInfo.meshIndex;
                 if (meshIdx < 0)
                     continue;
 

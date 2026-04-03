@@ -529,7 +529,7 @@ namespace pe
                     if (nodeCompFlags & Component_Camera)
                     {
                         Camera *thisCam = scene.GetCameraForNode(node);
-                        if (thisCam && thisCam != scene.GetActiveCamera() && ImGui::MenuItem("Make Main"))
+                        if (thisCam && thisCam != scene.GetActiveCamera() && ImGui::MenuItem("Set as Active Camera"))
                             scene.SetActiveCamera(thisCam);
                     }
                     if (ImGui::MenuItem("Rename"))

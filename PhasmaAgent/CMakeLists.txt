@@ -16,7 +16,9 @@ FetchContent_Declare(tree_sitter
     GIT_REPOSITORY https://github.com/tree-sitter/tree-sitter.git
     GIT_TAG        v0.24.7
     SOURCE_SUBDIR  lib
+    GIT_PROGRESS   TRUE
 )
+message(STATUS "[PhasmaAgent] Fetching tree-sitter v0.24.7")
 FetchContent_MakeAvailable(tree_sitter)
 
 # tree-sitter-cpp grammar (download only - skip its CMake which needs tree-sitter CLI)
@@ -24,7 +26,9 @@ FetchContent_Declare(tree_sitter_cpp
     GIT_REPOSITORY https://github.com/tree-sitter/tree-sitter-cpp.git
     GIT_TAG        v0.23.4
     SOURCE_SUBDIR  _skip_cmake
+    GIT_PROGRESS   TRUE
 )
+message(STATUS "[PhasmaAgent] Fetching tree-sitter-cpp v0.23.4")
 FetchContent_MakeAvailable(tree_sitter_cpp)
 
 add_library(tree_sitter_cpp_grammar STATIC

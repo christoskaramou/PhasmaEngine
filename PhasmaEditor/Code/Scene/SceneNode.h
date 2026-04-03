@@ -13,9 +13,9 @@ namespace pe
     // On swap-and-pop deletion, only NodeId::index is updated.
     struct NodeId
     {
-        Entity *entity = nullptr; // ECS entity backing this node (owned by Context)
-        uint32_t index;           // current position in Scene's dense arrays
-        uint32_t revision = 0;    // incremented whenever this NodeId is recycled for a new logical node
+        Entity *entity = nullptr;
+        uint32_t index;
+        uint32_t revision = 0;
     };
 
     // Component presence flags — editor reads these to know which panels to show
@@ -51,6 +51,7 @@ namespace pe
         MaterialInstance *materialInstance = nullptr;
 
         bool skinned = false;
+        bool live = true;
     };
 
     // Utility: bit mask for texture slots
@@ -67,16 +68,15 @@ namespace pe
         mat4 previousWorldMatrix = mat4(1.f);
     };
 
-    // Per-node renderer runtime state (hot path, separate from logical data)
     struct NodeRuntime
     {
         size_t dataOffset = static_cast<size_t>(-1);
-        uint32_t indirectIndex = 0;
-        int instanceIndex = -1;
+        std::vector<uint32_t> meshRefIndirect; // parallel to meshRefs
+        std::vector<int> rtInstanceIndices;     // parallel to meshRefs
         AABB worldAABB;
         NodeGpuData gpuData;
         bool dirty = false;
-        bool gpuPending = false; // node geometry not yet uploaded to GPU
+        bool gpuPending = false;
         std::vector<bool> dirtyUniforms;
 
         std::vector<mat4> jointMatrices;
