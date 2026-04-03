@@ -36,6 +36,7 @@
 #include <stack>
 #include <stdexcept>
 #include <string>
+#include <string_view>
 #include <thread>
 #include <tuple>
 #include <type_traits>
@@ -62,6 +63,7 @@
 #include <psapi.h>
 #include <windows.h>
 #elif defined(PE_LINUX)
+#include <cxxabi.h>
 #include <dlfcn.h>
 #include <fcntl.h>
 #include <sys/types.h>

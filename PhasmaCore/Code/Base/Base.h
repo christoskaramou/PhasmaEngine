@@ -2,10 +2,6 @@
 #include "Base/PhasmaExport.h"
 #include "Base/PeTracker.h"
 
-#if defined(PE_LINUX)
-#include <cxxabi.h>
-#endif
-
 namespace pe
 {
     namespace detail
@@ -41,12 +37,58 @@ namespace pe
             return id.fetch_add(1, std::memory_order_relaxed);
         }
 
-        // Compile time type id
-        template <class T>
-        struct TypeIDHelper
+        namespace detail
         {
-            static constexpr char value{};
-        };
+            // FNV-1a 64-bit hash — DLL-stable type ID computation
+            constexpr uint64_t fnv1a_64(std::string_view sv) noexcept
+            {
+                uint64_t hash = 14695981039346656037ULL; // FNV offset basis
+                for (unsigned char c : sv)
+                {
+                    hash ^= c;
+                    hash *= 1099511628211ULL; // FNV prime
+                }
+                return hash;
+            }
+
+            // Extract type name from compiler intrinsic — works across DLL boundaries
+            template <typename T>
+            constexpr std::string_view type_name() noexcept
+            {
+#if defined(__clang__)
+                constexpr std::string_view sig    = __PRETTY_FUNCTION__;
+                constexpr std::string_view prefix = "T = ";
+                constexpr size_t           start  = sig.find(prefix) + prefix.size();
+                constexpr size_t           end    = sig.rfind(']');
+                static_assert(sig.find(prefix) != std::string_view::npos,
+                              "type_name: clang __PRETTY_FUNCTION__ format unrecognized");
+                return sig.substr(start, end - start);
+#elif defined(__GNUC__)
+                constexpr std::string_view sig      = __PRETTY_FUNCTION__;
+                constexpr std::string_view prefix   = "T = ";
+                constexpr size_t           start    = sig.find(prefix) + prefix.size();
+                constexpr size_t           end_semi = sig.find(';', start);
+                constexpr size_t           end_brkt = sig.find(']', start);
+                constexpr size_t           end      = (end_semi < end_brkt) ? end_semi : end_brkt;
+                static_assert(sig.find(prefix) != std::string_view::npos,
+                              "type_name: gcc __PRETTY_FUNCTION__ format unrecognized");
+                return sig.substr(start, end - start);
+#elif defined(_MSC_VER)
+                constexpr std::string_view sig   = __FUNCSIG__;
+                constexpr size_t           start = sig.find('<') + 1;
+                constexpr size_t           end   = sig.rfind('>');
+                constexpr std::string_view inner = sig.substr(start, end - start);
+                // Strip elaborated-type specifiers so hash matches GCC/Clang for the same type
+                for (std::string_view pfx : {"struct ", "class ", "enum "})
+                    if (inner.size() >= pfx.size() && inner.substr(0, pfx.size()) == pfx)
+                        return inner.substr(pfx.size());
+                return inner;
+#else
+                static_assert(sizeof(T) == 0, "GetTypeID: unsupported compiler");
+                return {};
+#endif
+            }
+        } // namespace detail
 
         template <class T>
         struct remove_all_pointers_and_references
@@ -63,18 +105,21 @@ namespace pe
         using remove_all_pointers_and_references_t = typename remove_all_pointers_and_references<T>::type;
 
         template <class T>
-        constexpr size_t GetTypeID()
+        constexpr size_t GetTypeID() noexcept
         {
-            static_assert(sizeof(size_t) >= sizeof(void *), "size_t is too small to hold a pointer");
             using CleanType = remove_all_pointers_and_references_t<T>;
-            return reinterpret_cast<size_t>(&TypeIDHelper<CleanType>::value);
+            return static_cast<size_t>(detail::fnv1a_64(detail::type_name<CleanType>()));
         }
 
         template <class T>
-        constexpr size_t GetTypeID(T &&)
+        constexpr size_t GetTypeID(T &&) noexcept
         {
             return GetTypeID<std::remove_reference_t<T>>();
         }
+
+        // Compile-time sanity checks — zero cost, catch regressions immediately
+        static_assert(GetTypeID<int>() != GetTypeID<float>(), "TypeID: int/float collision");
+        static_assert(GetTypeID<int *>() == GetTypeID<int>(), "TypeID: pointer strip broken");
     } // namespace ID
 
     inline std::string Demangle(const char *name)
