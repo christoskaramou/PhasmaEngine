@@ -1037,6 +1037,9 @@ namespace pe
                 if (ImGui::MenuItem("Save Scene As..."))
                     ShowSaveSceneMenuItem_Action();
                 ImGui::Separator();
+                if (ImGui::MenuItem("Reload Module"))
+                    EventSystem::PushEvent(EventType::ReloadModule);
+                ImGui::Separator();
                 ShowExitMenuItem();
                 ImGui::EndMenu();
             }

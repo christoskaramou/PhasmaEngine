@@ -57,6 +57,7 @@ if(PE_PHYSICS)
     set(OBJECT_LAYER_BITS 16 CACHE STRING "" FORCE)
     set(ENABLE_ALL_WARNINGS OFF CACHE BOOL "" FORCE)
     set(USE_STATIC_MSVC_RUNTIME_LIBRARY OFF CACHE BOOL "" FORCE)
+    set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 
     FetchContent_Declare(JoltPhysics
         GIT_REPOSITORY https://github.com/jrouwe/JoltPhysics.git
@@ -66,6 +67,33 @@ if(PE_PHYSICS)
     )
     FetchContent_MakeAvailable(JoltPhysics)
     set(BUILD_SHARED_LIBS "${BUILD_SHARED_LIBS_SAVED}" CACHE BOOL "" FORCE)
+endif()
+
+# --- MeshOptimizer (built from source with -fPIC) ---
+include(FetchContent)
+FetchContent_Declare(meshoptimizer
+    GIT_REPOSITORY https://github.com/zeux/meshoptimizer.git
+    GIT_TAG        v0.21
+    GIT_PROGRESS   TRUE
+)
+FetchContent_GetProperties(meshoptimizer)
+if(NOT meshoptimizer_POPULATED)
+    FetchContent_Populate(meshoptimizer)
+    # Create a simple CMakeLists.txt for meshoptimizer since it doesn't have one
+    file(WRITE "${meshoptimizer_SOURCE_DIR}/CMakeLists.txt" "
+cmake_minimum_required(VERSION 3.10)
+project(meshoptimizer CXX)
+file(GLOB SOURCES \"src/*.cpp\")
+add_library(meshoptimizer STATIC \${SOURCES})
+target_include_directories(meshoptimizer PUBLIC \"\${CMAKE_CURRENT_SOURCE_DIR}\")
+set_target_properties(meshoptimizer PROPERTIES POSITION_INDEPENDENT_CODE ON)
+if(MSVC)
+    target_compile_options(meshoptimizer PRIVATE /W0)
+else()
+    target_compile_options(meshoptimizer PRIVATE -w)
+endif()
+")
+    add_subdirectory(${meshoptimizer_SOURCE_DIR} ${meshoptimizer_BINARY_DIR} EXCLUDE_FROM_ALL)
 endif()
 
 # --- Prebuilt Assimp (shared) ---
@@ -82,26 +110,13 @@ else()
     )
 endif()
 
-# --- Prebuilt MeshOptimizer (static) ---
-message(STATUS "[Phasma] Using prebuilt MeshOptimizer ...")
-add_library(meshoptimizer STATIC IMPORTED GLOBAL)
-if(CMAKE_SYSTEM_NAME STREQUAL "Windows")
-    set_target_properties(meshoptimizer PROPERTIES
-        IMPORTED_LOCATION "${PE_LIBS_DIR}/meshoptimizer/meshoptimizer.lib"
-    )
-else()
-    set_target_properties(meshoptimizer PROPERTIES
-        IMPORTED_LOCATION "${PE_LIBS_DIR}/meshoptimizer/libmeshoptimizer.a"
-    )
-endif()
-
 # Add PhasmaCore subdirectory
 add_subdirectory(PhasmaCore)
 
 # Add PhasmaAgent subdirectory
 add_subdirectory(PhasmaAgent)
 
-# PhasmaEditor executable
+# === PhasmaEditorModule + thin launcher ===
 file(GLOB_RECURSE CODE_SRC_FILES CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/PhasmaEditor/Code/*.cpp")
 set(PE_EDITOR_THIRD_PARTY_DIR "${CMAKE_CURRENT_SOURCE_DIR}/PhasmaEditor/third_party")
 
@@ -118,22 +133,40 @@ file(GLOB_RECURSE CACAO_SRC_FILES CONFIGURE_DEPENDS "${PE_EDITOR_THIRD_PARTY_DIR
 file(GLOB_RECURSE ASSET_FILES CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/PhasmaEditor/Assets/*")
 list(FILTER ASSET_FILES EXCLUDE REGEX "\\.obj$")
 set_source_files_properties(${ASSET_FILES} PROPERTIES VS_TOOL_OVERRIDE "None")
-add_executable(PhasmaEditor ${CODE_SRC_FILES} ${IMGUI_SRC_FILES} ${CACAO_SRC_FILES} ${ASSET_FILES} ${CMAKE_CURRENT_SOURCE_DIR}/PhasmaEditor/main.cpp)
 
-# PhasmaEditor precompiled headers
-target_precompile_headers(PhasmaEditor PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/PhasmaCore/pch/PhasmaPch.h")
+# PhasmaEditorModule (SHARED) — all editor code lives in DLL
+add_library(PhasmaEditorModule SHARED
+    ${CODE_SRC_FILES}
+    ${IMGUI_SRC_FILES}
+    ${CACAO_SRC_FILES}
+    "${CMAKE_CURRENT_SOURCE_DIR}/PhasmaEditor/Code/App/EditorModule.cpp"
+)
+set_target_properties(PhasmaEditorModule PROPERTIES POSITION_INDEPENDENT_CODE ON)
+if(CMAKE_SYSTEM_NAME STREQUAL "Windows")
+    set_target_properties(PhasmaEditorModule PROPERTIES WINDOWS_EXPORT_ALL_SYMBOLS OFF)
+endif()
 
-# PhasmaEditor include directories
-target_include_directories(PhasmaEditor PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/PhasmaEditor")
-target_include_directories(PhasmaEditor PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/PhasmaEditor/Code")
-target_include_directories(PhasmaEditor PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/PhasmaAgent/third_party")
-target_include_directories(PhasmaEditor PRIVATE "${PE_EDITOR_THIRD_PARTY_DIR}")
-target_include_directories(PhasmaEditor PRIVATE "${PE_EDITOR_THIRD_PARTY_DIR}/imgui")
-target_include_directories(PhasmaEditor PRIVATE "${PE_EDITOR_THIRD_PARTY_DIR}/sol2")
+target_compile_definitions(PhasmaEditorModule PRIVATE
+    PE_EDITOR_MODULE_EXPORTS
+    RAPIDJSON_HAS_STDSTRING=1
+    RAPIDJSON_NOMEMBERITERATORCLASS
+)
+if(PE_PHYSICS AND TARGET Jolt)
+    target_compile_definitions(PhasmaEditorModule PRIVATE PE_PHYSICS)
+endif()
 
-# PhasmaEditor link directories
-# Libraries
-target_link_libraries(PhasmaEditor PRIVATE
+target_precompile_headers(PhasmaEditorModule PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/PhasmaCore/pch/PhasmaPch.h")
+
+target_include_directories(PhasmaEditorModule PRIVATE
+    "${CMAKE_CURRENT_SOURCE_DIR}/PhasmaEditor"
+    "${CMAKE_CURRENT_SOURCE_DIR}/PhasmaEditor/Code"
+    "${CMAKE_CURRENT_SOURCE_DIR}/PhasmaAgent/third_party"
+    "${PE_EDITOR_THIRD_PARTY_DIR}"
+    "${PE_EDITOR_THIRD_PARTY_DIR}/imgui"
+    "${PE_EDITOR_THIRD_PARTY_DIR}/sol2"
+)
+
+target_link_libraries(PhasmaEditorModule PRIVATE
     PhasmaCore
     PhasmaAgent
     assimp
@@ -141,24 +174,42 @@ target_link_libraries(PhasmaEditor PRIVATE
     Lua
 )
 if(PE_PHYSICS AND TARGET Jolt)
-    target_link_libraries(PhasmaEditor PRIVATE Jolt)
-    target_compile_definitions(PhasmaEditor PRIVATE PE_PHYSICS)
+    target_link_libraries(PhasmaEditorModule PRIVATE Jolt)
 endif()
+
 option(PE_AUDIO "Enable miniaudio integration" ON)
 if(PE_AUDIO)
-    target_include_directories(PhasmaEditor PRIVATE "${PE_EDITOR_THIRD_PARTY_DIR}/miniaudio")
-    target_compile_definitions(PhasmaEditor PRIVATE PE_AUDIO)
+    target_include_directories(PhasmaEditorModule PRIVATE "${PE_EDITOR_THIRD_PARTY_DIR}/miniaudio")
+    target_compile_definitions(PhasmaEditorModule PRIVATE PE_AUDIO)
 endif()
-target_compile_definitions(PhasmaEditor PRIVATE RAPIDJSON_HAS_STDSTRING=1 RAPIDJSON_NOMEMBERITERATORCLASS)
+
 if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
+    set_target_properties(PhasmaEditorModule PROPERTIES
+        BUILD_RPATH "$ORIGIN"
+        INSTALL_RPATH "$ORIGIN"
+    )
+endif()
+
+# PhasmaEditor (thin launcher EXE)
+add_executable(PhasmaEditor "${CMAKE_CURRENT_SOURCE_DIR}/PhasmaEditor/main.cpp")
+
+target_precompile_headers(PhasmaEditor PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/PhasmaCore/pch/PhasmaPch.h")
+
+target_include_directories(PhasmaEditor PRIVATE
+    "${CMAKE_CURRENT_SOURCE_DIR}/PhasmaEditor"
+    "${CMAKE_CURRENT_SOURCE_DIR}/PhasmaEditor/Code"
+)
+
+target_link_libraries(PhasmaEditor PRIVATE PhasmaCore)
+if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
+    target_link_libraries(PhasmaEditor PRIVATE dl)
     set_target_properties(PhasmaEditor PROPERTIES
         BUILD_RPATH "$ORIGIN"
         INSTALL_RPATH "$ORIGIN"
     )
 endif()
 
-# target_compile_options(PhasmaEditor PRIVATE -fsanitize=address)
-# target_link_options(PhasmaEditor PRIVATE -fsanitize=address)
+add_dependencies(PhasmaEditor PhasmaEditorModule)
 
 # Copy assets to build directory (re-runs when assets change)
 set(ASSETS_COPY_STAMP "${CMAKE_CURRENT_BINARY_DIR}/AssetsCopy.stamp")
@@ -173,10 +224,11 @@ add_custom_command(
 add_custom_target(PhasmaEditorAssets ALL DEPENDS "${ASSETS_COPY_STAMP}")
 add_dependencies(PhasmaEditor PhasmaEditorAssets)
 
-# Copy shader compilers for windows
+# Copy DLLs for Windows
 if(CMAKE_SYSTEM_NAME STREQUAL "Windows")
     add_custom_command(TARGET PhasmaEditor POST_BUILD
         COMMAND ${CMAKE_COMMAND} -E copy_if_different "$<TARGET_FILE:PhasmaCore>" "$<TARGET_FILE_DIR:PhasmaEditor>"
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different "$<TARGET_FILE:PhasmaEditorModule>" "$<TARGET_FILE_DIR:PhasmaEditor>"
         COMMAND ${CMAKE_COMMAND} -E copy_if_different "${CMAKE_CURRENT_SOURCE_DIR}/PhasmaCore/DLLs/dxcompiler.dll" "$<TARGET_FILE_DIR:PhasmaEditor>"
         COMMAND ${CMAKE_COMMAND} -E copy_if_different "${CMAKE_CURRENT_SOURCE_DIR}/PhasmaCore/DLLs/shaderc_shared.dll" "$<TARGET_FILE_DIR:PhasmaEditor>"
         COMMAND ${CMAKE_COMMAND} -E copy_if_different "${CMAKE_CURRENT_SOURCE_DIR}/PhasmaCore/DLLs/SDL2.dll" "$<TARGET_FILE_DIR:PhasmaEditor>"
@@ -186,5 +238,6 @@ if(CMAKE_SYSTEM_NAME STREQUAL "Windows")
 else()
     add_custom_command(TARGET PhasmaEditor POST_BUILD
         COMMAND ${CMAKE_COMMAND} -E copy_if_different "$<TARGET_FILE:PhasmaCore>" "$<TARGET_FILE_DIR:PhasmaEditor>"
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different "$<TARGET_FILE:PhasmaEditorModule>" "$<TARGET_FILE_DIR:PhasmaEditor>"
     )
 endif()

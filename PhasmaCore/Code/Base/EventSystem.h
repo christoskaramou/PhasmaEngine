@@ -26,6 +26,7 @@ namespace pe
         RunCommand,
         Screenshot,
         FileDrop,
+        ReloadModule,
     };
 
     // One key type for both core + dynamic events

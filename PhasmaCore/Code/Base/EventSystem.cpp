@@ -26,6 +26,7 @@ namespace pe
         s_events.try_emplace(EventType::PrimitiveAttachedToNode);
         s_events.try_emplace(EventType::Screenshot);
         s_events.try_emplace(EventType::FileDrop);
+        s_events.try_emplace(EventType::ReloadModule);
     }
 
     void EventSystem::Destroy() noexcept
