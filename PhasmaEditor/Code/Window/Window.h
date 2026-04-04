@@ -8,7 +8,10 @@ namespace pe
     {
     public:
         Window(int x, int y, int w, int h, uint32_t flags);
+        Window(SDL_Window *existing); // non-owning adopt
         ~Window();
+
+        static Window *Adopt(SDL_Window *existing) { return new Window(existing); }
 
         void SmoothMouseRotation(Camera *camera, uint32_t triggerButton);
         bool ProcessEvents();
@@ -23,5 +26,6 @@ namespace pe
 
     private:
         EventSystem::CallbackToken m_setTitleToken{0};
+        bool m_owned = true;
     };
 } // namespace pe

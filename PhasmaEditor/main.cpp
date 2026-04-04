@@ -1,6 +1,7 @@
 #include "Base/Log.h"
 #include "Base/EventSystem.h"
 #include "Base/ThreadPool.h"
+#include "API/RHI.h"
 
 #if defined(PE_LINUX)
 #include <dlfcn.h>
@@ -97,9 +98,34 @@ int main(int argc, char *argv[])
 {
     pe::Log::Init();
 
+    // SDL and Vulkan device live here — they survive module reloads.
+    if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_EVENTS) < 0)
+    {
+        PE_ERROR("[SDL] %s", SDL_GetError());
+        return 1;
+    }
+
+    SDL_DisplayMode dm;
+    SDL_GetDesktopDisplayMode(0, &dm);
+    uint32_t windowFlags = SDL_WINDOW_HIDDEN | SDL_WINDOW_RESIZABLE | SDL_WINDOW_ALLOW_HIGHDPI | SDL_WINDOW_VULKAN;
+    SDL_Window *sdlWindow = SDL_CreateWindow("PhasmaEditor", 100, 100, dm.w - 100, dm.h - 100, windowFlags);
+    if (!sdlWindow)
+    {
+        PE_ERROR("[SDL] %s", SDL_GetError());
+        SDL_Quit();
+        return 1;
+    }
+
+    pe::RHII.Init(sdlWindow);
+
     ModuleHandle mod = LoadModule();
     if (!mod.lib)
+    {
+        pe::RHII.Destroy();
+        SDL_DestroyWindow(sdlWindow);
+        SDL_Quit();
         return 1;
+    }
 
     while (true)
     {
@@ -126,5 +152,9 @@ int main(int argc, char *argv[])
     }
 
     UnloadModule(mod);
+
+    pe::RHII.Destroy();
+    SDL_DestroyWindow(sdlWindow);
+    SDL_Quit();
     return 0;
 }

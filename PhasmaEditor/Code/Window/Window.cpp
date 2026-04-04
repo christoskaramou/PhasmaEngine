@@ -16,7 +16,7 @@
 
 namespace pe
 {
-    Window::Window(int x, int y, int w, int h, uint32_t flags)
+    Window::Window(int x, int y, int w, int h, uint32_t flags) : m_owned(true)
     {
         m_apiHandle = SDL_CreateWindow("", x, y, w, h, flags);
         if (!m_apiHandle)
@@ -33,11 +33,26 @@ namespace pe
         m_setTitleToken = EventSystem::RegisterCallbackWithToken(EventType::SetWindowTitle, setTitle);
     }
 
+    Window::Window(SDL_Window *existing) : m_owned(false)
+    {
+        m_apiHandle = existing;
+
+        auto setTitle = [this](const std::any &title)
+        {
+            SDL_SetWindowTitle(m_apiHandle, std::any_cast<std::string>(title).c_str());
+        };
+
+        m_setTitleToken = EventSystem::RegisterCallbackWithToken(EventType::SetWindowTitle, setTitle);
+    }
+
     Window::~Window()
     {
         EventSystem::UnregisterCallback(EventType::SetWindowTitle, m_setTitleToken);
-        SDL_DestroyWindow(m_apiHandle);
-        SDL_Quit();
+        if (m_owned)
+        {
+            SDL_DestroyWindow(m_apiHandle);
+            SDL_Quit();
+        }
     }
 
     inline bool IsButtonDown(int *x, int *y, uint32_t button)

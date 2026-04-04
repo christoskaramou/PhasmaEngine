@@ -30,15 +30,6 @@ namespace pe
 {
     App::App() : m_frameTimer(FrameTimer::Instance())
     {
-        if (!SDL_WasInit(SDL_INIT_VIDEO | SDL_INIT_EVENTS))
-        {
-            if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_EVENTS) < 0)
-            {
-                PE_ERROR("[SDL] %s", SDL_GetError());
-                return;
-            }
-        }
-
         auto shaderCallback = [](size_t fileEvent)
         {
             EventSystem::PushEvent(EventType::CompileShaders, fileEvent);
@@ -79,20 +70,15 @@ namespace pe
         FileWatcher::Start();
         EventSystem::Init();
 
+        // On hot-reload reload_state.json already exists — skip splash screen.
+        const bool isHotReload = std::filesystem::exists(Path::Executable + "reload_state.json");
 #ifdef NDEBUG
-        m_splashScreen = SplashScreen::Create(SDL_WINDOW_SHOWN | SDL_WINDOW_BORDERLESS);
+        if (!isHotReload)
+            m_splashScreen = SplashScreen::Create(SDL_WINDOW_SHOWN | SDL_WINDOW_BORDERLESS);
 #endif
 
-        uint32_t flags = SDL_WINDOW_HIDDEN |
-                         SDL_WINDOW_RESIZABLE |
-                         SDL_WINDOW_ALLOW_HIGHDPI |
-                         SDL_WINDOW_VULKAN;
-
-        SDL_DisplayMode dm;
-        SDL_GetDesktopDisplayMode(0, &dm);
-        m_window = Window::Create(100, 100, dm.w - 100, dm.h - 100, flags);
-
-        RHII.Init(m_window->ApiHandle());
+        // Adopt the SDL window that was created by the launcher.
+        m_window = Window::Adopt(RHII.GetWindow());
 
         Queue *queue = RHII.GetMainQueue();
         CommandBuffer *cmd = queue->AcquireCommandBuffer();
@@ -193,7 +179,9 @@ namespace pe
     App::~App()
     {
         std::string flagPath = Path::Executable + "reload.flag";
-        if (std::filesystem::exists(flagPath))
+        const bool isReload = std::filesystem::exists(flagPath);
+
+        if (isReload)
         {
             if (auto *rs = GetGlobalSystem<RendererSystem>())
             {
@@ -205,6 +193,8 @@ namespace pe
                 std::ofstream(Path::Executable + "reload_state.json") << root.dump();
             }
             std::filesystem::remove(flagPath);
+
+            RHII.WaitDeviceIdle();
         }
 
         PE_INFO("Application exiting");
@@ -216,10 +206,51 @@ namespace pe
         ModelAsset::DestroyDefaults();
         Context::Remove();
         Log::ClearCallbacks();
-        Debug::Destroy();
-        RHII.Destroy();
+
+        // Flush deletion queues and pipeline caches while this DLL is still loaded.
+        // main.cpp calls RHII::Destroy() after FreeLibrary — lambdas and cached
+        // handles must not outlive this module's code.
+        RHII.WaitDeviceIdle();
+        for (uint32_t i = 0; i < RHII.GetSwapchainImageCount(); i++)
+            RHII.FlushDeletionQueue(i);
+        CommandBuffer::ClearCache();
+
         Window::Destroy(m_window);
         EventSystem::Destroy();
+    }
+
+    void App::RenderReloadFrame()
+    {
+        auto *rendererSystem = GetGlobalSystem<RendererSystem>();
+        if (!rendererSystem)
+            return;
+
+        // The last normal Frame() submitted GPU work that may still be in-flight.
+        // Drain everything before touching the same semaphores/images again.
+        rendererSystem->WaitAllFramesCommands();
+
+        RHII.NextFrame();
+        rendererSystem->WaitPreviousFrameCommands();
+
+        ImGui_ImplSDL2_NewFrame();
+        ImGui_ImplVulkan_NewFrame();
+        ImGui::NewFrame();
+        ImGuizmo::BeginFrame();
+
+        // Centered "Reloading..." overlay drawn on top of the frozen scene.
+        const ImGuiIO &io = ImGui::GetIO();
+        ImGui::SetNextWindowPos(ImVec2(io.DisplaySize.x * 0.5f, io.DisplaySize.y * 0.5f),
+                                ImGuiCond_Always, ImVec2(0.5f, 0.5f));
+        ImGui::SetNextWindowBgAlpha(0.7f);
+        ImGui::Begin("##reload_overlay", nullptr,
+                     ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_AlwaysAutoResize |
+                         ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoMove |
+                         ImGuiWindowFlags_NoNav);
+        ImGui::Text("Reloading...");
+        ImGui::End();
+
+        ImGui::Render();
+        rendererSystem->Draw();
     }
 
     bool App::Frame()
