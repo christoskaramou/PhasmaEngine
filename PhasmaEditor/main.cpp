@@ -94,6 +94,7 @@ int main(int argc, char *argv[])
         pe::EventSystem::QueuedEvent ev;
         if (pe::EventSystem::PeekAndPop(pe::EventType::ReloadModule, ev))
         {
+            std::ofstream(pe::Path::Executable + "reload.flag").close();
             mod.destroy();
             pe::ThreadPool::FW.WaitIdle();
             UnloadModule(mod);

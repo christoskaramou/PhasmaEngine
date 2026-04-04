@@ -25,11 +25,10 @@ namespace pe
         Scene &scene = rs->GetScene();
         const Skeleton &skeleton = scene.GetSkeleton();
         const auto &clips = scene.GetAnimationClips();
+        float dt = static_cast<float>(FrameTimer::Instance().GetDelta());
 
         if (skeleton.bones.empty() || clips.empty() || m_states.empty())
             return;
-
-        float dt = static_cast<float>(FrameTimer::Instance().GetDelta());
 
         for (auto &state : m_states)
         {
@@ -38,6 +37,7 @@ namespace pe
 
             if (!state.nodeId || state.nodeId->revision != state.nodeRevision)
             {
+                PE_INFO("[Animation] Update invalidated state: node=%p storedRevision=%u", static_cast<void *>(state.nodeId), state.nodeRevision);
                 state.playing = false;
                 continue;
             }
@@ -72,11 +72,29 @@ namespace pe
     void AnimationSystem::PlayAnimation(Scene &scene, NodeId *node, int clipIndex, bool loop)
     {
         if (!node)
+        {
+            PE_INFO("[Animation] PlayAnimation rejected: null node clipIndex=%d", clipIndex);
             return;
+        }
 
         const auto &clips = scene.GetAnimationClips();
         if (clipIndex < 0 || clipIndex >= static_cast<int>(clips.size()))
+        {
+            PE_INFO("[Animation] PlayAnimation rejected: node='%s' clipIndex=%d clips=%zu",
+                    scene.GetNodeName(node).c_str(), clipIndex, clips.size());
             return;
+        }
+
+        const Skeleton &skeleton = scene.GetSkeleton();
+        const char *clipName = clips[clipIndex].name.empty() ? "<unnamed>" : clips[clipIndex].name.c_str();
+        PE_INFO("[Animation] PlayAnimation node='%s' clipIndex=%d clip='%s' loop=%d skinned=%d bones=%zu clips=%zu",
+                scene.GetNodeName(node).c_str(),
+                clipIndex,
+                clipName,
+                loop ? 1 : 0,
+                scene.NodeHasSkinnedMesh(node) ? 1 : 0,
+                skeleton.bones.size(),
+                clips.size());
 
         auto it = m_nodeToIndex.find(node);
         if (it == m_nodeToIndex.end())
@@ -169,6 +187,8 @@ namespace pe
 
     void AnimationSystem::ClearAllAnimations()
     {
+        PE_INFO("[Animation] ClearAllAnimations: states=%zu", m_states.size());
+
         if (auto *rs = GetGlobalSystem<RendererSystem>())
         {
             Scene &scene = rs->GetScene();

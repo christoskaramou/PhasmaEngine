@@ -32,7 +32,7 @@ namespace pe
                 return model;
             }
         }
-        m_skeletonModel = nullptr;
+        ResetSkeletonCache();
         return nullptr;
     }
 
@@ -40,7 +40,10 @@ namespace pe
     {
         static const Skeleton empty;
         ModelAsset *model = FindSkeletonModel();
-        return model ? model->GetSkeleton() : empty;
+        if (!model)
+            return empty;
+
+        return model->GetSkeleton();
     }
 
     const std::vector<AnimationClip> &Scene::GetAnimationClips() const
@@ -48,6 +51,24 @@ namespace pe
         static const std::vector<AnimationClip> empty;
         ModelAsset *model = FindSkeletonModel();
         return (model && model->HasAnimations()) ? model->GetAnimations() : empty;
+    }
+
+    void Scene::ResetSkeletonCache() const
+    {
+        m_skeletonModel = nullptr;
+    }
+
+    bool Scene::NodeHasSkinnedMesh(const NodeId *node) const
+    {
+        ValidateNodeId(node);
+
+        const auto &refs = m_nodeComponentCache[node->index].meshRefs->meshRefs;
+        for (int meshRef : refs)
+        {
+            if (meshRef >= 0 && meshRef < static_cast<int>(m_meshes.size()) && m_meshes[meshRef].skinned)
+                return true;
+        }
+        return false;
     }
 
     Scene::Scene()
@@ -353,7 +374,7 @@ namespace pe
             {
                 for (NodeId *node : nodeMap)
                 {
-                    if (node && GetMeshRef(node) >= 0)
+                    if (node && NodeHasSkinnedMesh(node))
                         animSys->PlayAnimation(*this, node, 0, true);
                 }
             }
@@ -459,7 +480,7 @@ namespace pe
         }
 
         if (m_skeletonModel == model)
-            m_skeletonModel = nullptr;
+            ResetSkeletonCache();
         if (m_models.erase(modelId))
             delete model;
     }

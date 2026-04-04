@@ -65,6 +65,10 @@ namespace pe
                     EventSystem::PushEvent(EventType::Quit);
                 });
 
+                engine.set_function("reload_module", []() {
+                    EventSystem::PushEvent(EventType::ReloadModule);
+                });
+
                 engine.set_function("is_popup_open", []() -> bool {
                     return ImGui::IsPopupOpen("", ImGuiPopupFlags_AnyPopupId);
                 });

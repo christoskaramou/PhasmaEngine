@@ -220,6 +220,8 @@ namespace pe
         const Skeleton &GetSkeleton() const;
         const std::vector<AnimationClip> &GetAnimationClips() const;
         ModelAsset *FindSkeletonModel() const;
+        void ResetSkeletonCache() const;
+        bool NodeHasSkinnedMesh(const NodeId *node) const;
         Camera *GetCamera(int index) const { return m_cameras.at(index); }
         const std::vector<Camera *> &GetCameras() const { return m_cameras; }
         Camera *GetCameraForNode(const NodeId *node) const;

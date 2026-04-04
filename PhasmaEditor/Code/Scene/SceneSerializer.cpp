@@ -108,6 +108,19 @@ namespace pe
             }
             return id;
         }
+
+        int CountSkinnedAnimationNodes(const Scene &scene)
+        {
+            int count = 0;
+            for (uint32_t ni = 0; ni < scene.GetNodeCount(); ++ni)
+            {
+                const NodeId *node = scene.GetNodeId(ni);
+                if (node && scene.NodeHasSkinnedMesh(node))
+                    ++count;
+            }
+
+            return count;
+        }
     } // namespace
 
     struct SceneSerializationHelper
@@ -849,7 +862,7 @@ namespace pe
         m_imageStore.clear();
         m_samplerStore.clear();
 
-        m_skeletonModel = nullptr;
+        ResetSkeletonCache();
         for (auto *model : m_models)
             delete model;
         m_models.clear();
@@ -1059,7 +1072,7 @@ namespace pe
         m_imageStore.clear();
         m_samplerStore.clear();
 
-        m_skeletonModel = nullptr;
+        ResetSkeletonCache();
         for (auto *model : m_models)
             delete model;
         m_models.clear();
@@ -1750,7 +1763,7 @@ namespace pe
                 for (uint32_t ni = 0; ni < GetNodeCount(); ni++)
                 {
                     NodeId *node = m_nodeIds[ni];
-                    if (GetMeshRef(node) >= 0)
+                    if (NodeHasSkinnedMesh(node))
                         animSys->PlayAnimation(*this, node, 0, true);
                 }
             }
@@ -1794,6 +1807,9 @@ namespace pe
         if (d.HasParseError())
             return;
 
+        PE_INFO("[Scene] RestoreSnapshot begin: bytes=%zu currentNodes=%u currentMeshes=%zu currentSources=%zu",
+                json.size(), GetNodeCount(), m_meshes.size(), m_sources.size());
+
         auto ReadVec3 = [](const rapidjson::Value &arr)
         { return vec3(arr[0].GetFloat(), arr[1].GetFloat(), arr[2].GetFloat()); };
         auto ReadVec4 = [](const rapidjson::Value &arr)
@@ -1809,6 +1825,9 @@ namespace pe
 
         bool hadEmbeddedCamerasSnap = false;
         bool hadEmbeddedLightsSnap = false;
+        bool replayDefaultAnimations = false;
+        bool geometryMatch = false;
+        int replayedAnimationNodes = 0;
         // Restore scene graph (flat format from TakeSnapshot)
         if (d.HasMember("sources") && d.HasMember("nodes"))
         {
@@ -1850,9 +1869,18 @@ namespace pe
                 }
             }
 
-            bool geometryMatch = sourcesMatch &&
-                                 snapshotNodeCount == GetNodeCount() &&
-                                 snapshotMeshCount == static_cast<uint32_t>(m_meshes.size());
+            geometryMatch = sourcesMatch &&
+                            snapshotNodeCount == GetNodeCount() &&
+                            snapshotMeshCount == static_cast<uint32_t>(m_meshes.size());
+
+            PE_INFO("[Scene] RestoreSnapshot path: geometryMatch=%d snapshotNodes=%u snapshotMeshes=%u snapshotSources=%u currentNodes=%u currentMeshes=%zu currentSources=%zu",
+                    geometryMatch ? 1 : 0,
+                    snapshotNodeCount,
+                    snapshotMeshCount,
+                    static_cast<uint32_t>(snapshotSources.Size()),
+                    GetNodeCount(),
+                    m_meshes.size(),
+                    m_sources.size());
 
             if (geometryMatch)
             {
@@ -2163,6 +2191,8 @@ namespace pe
             }
             else
             {
+                replayDefaultAnimations = true;
+
                 // Slow path: geometry changed — clear everything and reload via LoadScene-style path
                 SelectionManager::Instance().ClearSelection();
 
@@ -2217,6 +2247,7 @@ namespace pe
                 m_sources.clear();
                 m_meshSourceInfos.clear();
                 m_modelRootNodes.clear();
+                ResetSkeletonCache();
                 for (auto *model : m_models)
                     delete model;
                 m_models.clear();
@@ -2778,5 +2809,32 @@ namespace pe
             ltp->UpdateDescriptorSets();
         if (rtp)
             rtp->UpdateDescriptorSets();
+
+        if (replayDefaultAnimations && !GetAnimationClips().empty())
+        {
+            if (auto *animSys = GetGlobalSystem<AnimationSystem>())
+            {
+                for (uint32_t ni = 0; ni < GetNodeCount(); ni++)
+                {
+                    NodeId *node = m_nodeIds[ni];
+                    if (NodeHasSkinnedMesh(node))
+                    {
+                        animSys->PlayAnimation(*this, node, 0, true);
+                        ++replayedAnimationNodes;
+                    }
+                }
+            }
+        }
+
+        const Skeleton &restoredSkeleton = GetSkeleton();
+        const auto &restoredClips = GetAnimationClips();
+        PE_INFO("[Scene] RestoreSnapshot end: geometryMatch=%d nodes=%u meshes=%zu skinnedNodes=%d bones=%zu clips=%zu replayed=%d",
+                geometryMatch ? 1 : 0,
+                GetNodeCount(),
+                m_meshes.size(),
+                CountSkinnedAnimationNodes(*this),
+                restoredSkeleton.bones.size(),
+                restoredClips.size(),
+                replayedAnimationNodes);
     }
 } // namespace pe

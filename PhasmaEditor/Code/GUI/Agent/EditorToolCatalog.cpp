@@ -629,6 +629,16 @@ namespace pe
                                                 : "{\"error\":\"EditorToolRuntime not available\"}";
                              }});
 
+            tools.push_back({.name = "reload_module",
+                             .description = "Triggers hot-reload of the PhasmaEditor module (equivalent to File > Reload Module). "
+                                            "Saves scene state and reloads DLL. Use this to test hot-reload workflows.",
+                             .properties = {},
+                             .handler = [runtime](const std::string &args) -> std::string
+                             {
+                                 return runtime ? runtime->ReloadModule()
+                                                : "{\"error\":\"EditorToolRuntime not available\"}";
+                             }});
+
             // --- High-level scene authoring tools (C++ implementations, no Lua) ---
 
             tools.push_back({.name = "create_node",
@@ -661,14 +671,21 @@ namespace pe
                                      return R"({"error":"node required"})";
                                  float pos[3], rot[3], scale[3];
                                  float *pPos = nullptr, *pRot = nullptr, *pScale = nullptr;
-                                 auto readVec3 = [](const nlohmann::json &arr, float out[3]) -> bool {
-                                     if (!arr.is_array() || arr.size() != 3) return false;
-                                     out[0] = arr[0].get<float>(); out[1] = arr[1].get<float>(); out[2] = arr[2].get<float>();
+                                 auto readVec3 = [](const nlohmann::json &arr, float out[3]) -> bool
+                                 {
+                                     if (!arr.is_array() || arr.size() != 3)
+                                         return false;
+                                     out[0] = arr[0].get<float>();
+                                     out[1] = arr[1].get<float>();
+                                     out[2] = arr[2].get<float>();
                                      return true;
                                  };
-                                 if (json.contains("position") && readVec3(json["position"], pos)) pPos = pos;
-                                 if (json.contains("rotation") && readVec3(json["rotation"], rot)) pRot = rot;
-                                 if (json.contains("scale") && readVec3(json["scale"], scale)) pScale = scale;
+                                 if (json.contains("position") && readVec3(json["position"], pos))
+                                     pPos = pos;
+                                 if (json.contains("rotation") && readVec3(json["rotation"], rot))
+                                     pRot = rot;
+                                 if (json.contains("scale") && readVec3(json["scale"], scale))
+                                     pScale = scale;
                                  return runtime->SetNodeTransform(node, pPos, pRot, pScale);
                              }});
 
@@ -708,7 +725,8 @@ namespace pe
                                  // Build props sub-object for the runtime
                                  nlohmann::json props;
                                  for (auto &key : {"base_color", "metallic", "roughness", "transmission", "render_type"})
-                                     if (json.contains(key)) props[key] = json[key];
+                                     if (json.contains(key))
+                                         props[key] = json[key];
                                  return runtime->SetNodeMaterial(node, slot, props.dump());
                              }});
 

@@ -113,8 +113,15 @@ namespace pe
         for (size_t i = begin; i < end; i++)
             if (!std::isdigit(static_cast<unsigned char>(s[i])) && !(i == begin && s[i] == '-'))
                 return false;
-        try { out = std::stoi(s.substr(begin, end - begin)); return true; }
-        catch (...) { return false; }
+        try
+        {
+            out = std::stoi(s.substr(begin, end - begin));
+            return true;
+        }
+        catch (...)
+        {
+            return false;
+        }
     }
 
     static bool StrictParseUint(const std::string &s, size_t begin, size_t end, uint32_t &out)
@@ -195,12 +202,24 @@ namespace pe
         {
             switch (c)
             {
-            case '"': out += "\\\""; break;
-            case '\\': out += "\\\\"; break;
-            case '\n': out += "\\n"; break;
-            case '\r': out += "\\r"; break;
-            case '\t': out += "\\t"; break;
-            default: out += c; break;
+            case '"':
+                out += "\\\"";
+                break;
+            case '\\':
+                out += "\\\\";
+                break;
+            case '\n':
+                out += "\\n";
+                break;
+            case '\r':
+                out += "\\r";
+                break;
+            case '\t':
+                out += "\\t";
+                break;
+            default:
+                out += c;
+                break;
             }
         }
         return out;
@@ -253,7 +272,8 @@ namespace pe
             state->cv.notify_one(); });
 
         std::unique_lock lock(state->mtx);
-        if (!state->cv.wait_for(lock, std::chrono::seconds(10), [&] { return state->done; }))
+        if (!state->cv.wait_for(lock, std::chrono::seconds(10), [&]
+                                { return state->done; }))
             return R"({"error":"timeout"})";
         return state->result;
     }
@@ -263,9 +283,24 @@ namespace pe
         // Copy values (caller may free)
         float p[3] = {}, r[3] = {}, s[3] = {};
         bool hasPos = pos != nullptr, hasRot = rot != nullptr, hasScale = scale != nullptr;
-        if (hasPos) { p[0] = pos[0]; p[1] = pos[1]; p[2] = pos[2]; }
-        if (hasRot) { r[0] = rot[0]; r[1] = rot[1]; r[2] = rot[2]; }
-        if (hasScale) { s[0] = scale[0]; s[1] = scale[1]; s[2] = scale[2]; }
+        if (hasPos)
+        {
+            p[0] = pos[0];
+            p[1] = pos[1];
+            p[2] = pos[2];
+        }
+        if (hasRot)
+        {
+            r[0] = rot[0];
+            r[1] = rot[1];
+            r[2] = rot[2];
+        }
+        if (hasScale)
+        {
+            s[0] = scale[0];
+            s[1] = scale[1];
+            s[2] = scale[2];
+        }
 
         struct State
         {
@@ -323,7 +358,8 @@ namespace pe
             state->cv.notify_one(); });
 
         std::unique_lock lock(state->mtx);
-        if (!state->cv.wait_for(lock, std::chrono::seconds(10), [&] { return state->done; }))
+        if (!state->cv.wait_for(lock, std::chrono::seconds(10), [&]
+                                { return state->done; }))
             return R"({"error":"timeout"})";
         return state->result;
     }
@@ -384,7 +420,8 @@ namespace pe
             state->cv.notify_one(); });
 
         std::unique_lock lock(state->mtx);
-        if (!state->cv.wait_for(lock, std::chrono::seconds(10), [&] { return state->done; }))
+        if (!state->cv.wait_for(lock, std::chrono::seconds(10), [&]
+                                { return state->done; }))
             return R"({"error":"timeout"})";
         return state->result;
     }
@@ -540,7 +577,8 @@ namespace pe
             state->cv.notify_one(); });
 
         std::unique_lock lock(state->mtx);
-        if (!state->cv.wait_for(lock, std::chrono::seconds(10), [&] { return state->done; }))
+        if (!state->cv.wait_for(lock, std::chrono::seconds(10), [&]
+                                { return state->done; }))
             return R"({"error":"timeout"})";
         return state->result;
     }
@@ -580,7 +618,8 @@ namespace pe
             state->cv.notify_one(); });
 
         std::unique_lock lock(state->mtx);
-        if (!state->cv.wait_for(lock, std::chrono::seconds(10), [&] { return state->done; }))
+        if (!state->cv.wait_for(lock, std::chrono::seconds(10), [&]
+                                { return state->done; }))
             return R"({"error":"timeout"})";
         return state->result;
     }
@@ -640,7 +679,8 @@ namespace pe
             state->cv.notify_one(); });
 
         std::unique_lock lock(state->mtx);
-        if (!state->cv.wait_for(lock, std::chrono::seconds(10), [&] { return state->done; }))
+        if (!state->cv.wait_for(lock, std::chrono::seconds(10), [&]
+                                { return state->done; }))
             return R"({"error":"timeout"})";
         return state->result;
     }
@@ -1156,5 +1196,12 @@ namespace pe
                 return "{\"error\":\"timeout waiting for profiler snapshot\"}";
         }
         return state->result;
+    }
+
+    std::string EditorToolRuntime::ReloadModule() const
+    {
+        QueueAction([]()
+                    { EventSystem::PushEvent(EventType::ReloadModule); });
+        return "{\"ok\":true}";
     }
 } // namespace pe

@@ -192,10 +192,10 @@ namespace pe
 
         Scene &scene = rs->GetScene();
         float dt = 0.0f;
+        const float rawDt = static_cast<float>(FrameTimer::Instance().GetDelta());
         {
             PE_PROFILE_SCOPE("Physics Frame Budget");
-            dt = static_cast<float>(FrameTimer::Instance().GetDelta());
-            dt = std::min(dt, FIXED_TIMESTEP * MAX_STEPS_PER_FRAME);
+            dt = std::min(rawDt, FIXED_TIMESTEP * MAX_STEPS_PER_FRAME);
             m_accumulator += dt;
         }
 
@@ -497,6 +497,7 @@ namespace pe
         if (m_simulating)
             return;
 
+        PE_INFO("[Physics] StartSimulation: registeredBodies=%zu", m_bodies.size());
         PruneInvalidBodies(scene);
 
         m_simulating = true;
@@ -525,6 +526,8 @@ namespace pe
 
         if (!m_simulating)
             return;
+
+        PE_INFO("[Physics] StopSimulation: registeredBodies=%zu", m_bodies.size());
 
         // Remove all Jolt bodies from the world
         {
@@ -622,6 +625,7 @@ namespace pe
         }
         if (!liveNode || liveNode->revision != state.nodeRevision || !(scene.GetComponentFlags(liveNode) & Component_Physics))
         {
+            PE_INFO("[Physics] CreateJoltBody skipped: stale node=%p storedRevision=%u", static_cast<void *>(state.nodeId), state.nodeRevision);
             state.inWorld = false;
             state.joltBodyIdRaw = 0xFFFFFFFF;
             return;
@@ -757,6 +761,11 @@ namespace pe
 
         state.joltBodyIdRaw = bodyId.GetIndexAndSequenceNumber();
         state.inWorld = true;
+        PE_INFO("[Physics] CreateJoltBody node='%s' bodyType=%d shapeType=%d bodyId=%u",
+                scene.GetNodeName(state.nodeId).c_str(),
+                static_cast<int>(desc.bodyType),
+                static_cast<int>(desc.shapeType),
+                state.joltBodyIdRaw);
     }
 
     void PhysicsSystem::DestroyJoltBody(PhysicsNodeState &state)

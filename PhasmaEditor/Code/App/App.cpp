@@ -121,17 +121,44 @@ namespace pe
         for (uint32_t i = 0; i < RHII.GetSwapchainImageCount(); i++)
             Frame();
 
-        // Call Lua init() after initial frames so all systems are ready
-        if (auto *ss = GetGlobalSystem<ScriptSystem>())
-            ss->CallInit();
+        std::string snapPath = Path::Executable + "reload_state.json";
+        std::string hotReloadSnapshot;
+        const bool hasHotReloadSnapshot = std::filesystem::exists(snapPath);
+        if (hasHotReloadSnapshot)
+        {
+            std::ifstream f(snapPath);
+            hotReloadSnapshot.assign(std::istreambuf_iterator<char>(f), std::istreambuf_iterator<char>());
+        }
 
-        // Reset undo/redo after all initialization (scripts, auto-loads, etc.)
-        // so the post-init state is the clean baseline, not the pre-script state.
-        UndoRedo::Instance().Clear();
+        // Call Lua init() after initial frames. For hot-reload we defer this until after
+        // startup scene loading and snapshot restore so init runs against the current scene.
+        if (!hasHotReloadSnapshot)
+            if (auto *ss = GetGlobalSystem<ScriptSystem>())
+                ss->CallInit();
 
         m_window->Show();
         m_window->Maximize();
         GetGlobalSystem<RendererSystem>()->GetGUI().ApplyStartupLayout();
+
+        if (hasHotReloadSnapshot)
+        {
+            if (!hotReloadSnapshot.empty())
+            {
+                if (auto *rs = GetGlobalSystem<RendererSystem>())
+                {
+                    PE_INFO("[HotReload] Restoring snapshot after startup scene load");
+                    rs->GetScene().RestoreSnapshot(hotReloadSnapshot);
+                }
+            }
+            std::filesystem::remove(snapPath);
+
+            if (auto *ss = GetGlobalSystem<ScriptSystem>())
+                ss->CallInit();
+        }
+
+        // Reset undo/redo after all initialization (scripts, auto-loads, hot-reload restore, etc.)
+        // so the final post-startup state is the clean baseline.
+        UndoRedo::Instance().Clear();
 
 #ifdef NDEBUG
         SplashScreen::Destroy(m_splashScreen);
@@ -140,6 +167,17 @@ namespace pe
 
     App::~App()
     {
+        std::string flagPath = Path::Executable + "reload.flag";
+        if (std::filesystem::exists(flagPath))
+        {
+            if (auto *rs = GetGlobalSystem<RendererSystem>())
+            {
+                std::string snap = rs->GetScene().TakeSnapshot();
+                std::ofstream(Path::Executable + "reload_state.json") << snap;
+            }
+            std::filesystem::remove(flagPath);
+        }
+
         PE_INFO("Application exiting");
         FileWatcher::StopAndJoin();
         ThreadPool::GUI.WaitIdle();

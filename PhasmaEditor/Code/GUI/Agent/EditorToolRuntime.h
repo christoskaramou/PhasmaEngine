@@ -24,6 +24,7 @@ namespace pe
         std::string TakeProfilerSnapshot() const;
         std::string QueryImGuiWindows() const;
         std::string InjectMouseInput(const std::string &args) const;
+        std::string ReloadModule() const;
 
     private:
         void QueueAction(std::function<void()> fn) const;
