@@ -43,11 +43,7 @@ namespace pe
         double GetCpuTotal() const { return m_cpuTotalStamp; }
         double GetDelta() const;
 
-        static FrameTimer &Instance()
-        {
-            static FrameTimer frame_timer;
-            return frame_timer;
-        }
+        static FrameTimer &Instance();
 
         FrameTimer(FrameTimer const &) = delete;            // copy constructor
         FrameTimer(FrameTimer &&) noexcept = delete;        // move constructor

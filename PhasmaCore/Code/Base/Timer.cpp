@@ -34,6 +34,12 @@ namespace pe
         m_system_delay = static_cast<size_t>(NANO(timer.Count())) - delay.count();
     }
 
+    FrameTimer &FrameTimer::Instance()
+    {
+        static FrameTimer frame_timer;
+        return frame_timer;
+    }
+
     FrameTimer::FrameTimer()
         : Timer(),
           m_updatesStamp{0.0},

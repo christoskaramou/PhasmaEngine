@@ -19,13 +19,25 @@ namespace
         void *lib = nullptr;
         TickFunc tick = nullptr;
         DestroyFunc destroy = nullptr;
+        std::string loadedPath;
     };
 
     ModuleHandle LoadModule()
     {
         ModuleHandle m;
 #if defined(PE_LINUX)
-        m.lib = dlopen(k_moduleName, RTLD_NOW | RTLD_LOCAL);
+        static int s_gen = 0;
+        char versioned[256];
+        std::snprintf(versioned, sizeof(versioned), "libPhasmaEditorModule_%04d.so", s_gen++);
+        std::error_code ec;
+        std::filesystem::copy_file(k_moduleName, versioned, std::filesystem::copy_options::overwrite_existing, ec);
+        if (ec)
+        {
+            PE_ERROR("copy_file failed: %s", ec.message().c_str());
+            return m;
+        }
+        m.loadedPath = versioned;
+        m.lib = dlopen(m.loadedPath.c_str(), RTLD_NOW | RTLD_LOCAL);
         if (!m.lib)
         {
             PE_ERROR("dlopen failed: %s", dlerror());
@@ -38,6 +50,7 @@ namespace
         char versioned[256];
         std::snprintf(versioned, sizeof(versioned), "PhasmaEditorModule_%04d.dll", s_gen++);
         CopyFileA(k_moduleName, versioned, FALSE);
+        m.loadedPath = versioned;
         m.lib = static_cast<void *>(::LoadLibraryA(versioned));
         if (!m.lib)
         {
@@ -71,6 +84,11 @@ namespace
 #elif defined(PE_WIN32)
         ::FreeLibrary(static_cast<HMODULE>(m.lib));
 #endif
+        if (!m.loadedPath.empty())
+        {
+            std::error_code ec;
+            std::filesystem::remove(m.loadedPath, ec);
+        }
         m = {};
     }
 } // namespace
