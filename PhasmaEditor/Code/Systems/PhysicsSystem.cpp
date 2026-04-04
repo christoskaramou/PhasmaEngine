@@ -65,6 +65,18 @@ namespace pe
         {
             return node && state.nodeId == node && state.nodeRevision == node->revision;
         }
+
+        bool MatricesNearEqual(const mat4 &a, const mat4 &b, float epsilon = 1e-5f)
+        {
+            const float *pa = value_ptr(a);
+            const float *pb = value_ptr(b);
+            for (int i = 0; i < 16; ++i)
+            {
+                if (std::abs(pa[i] - pb[i]) > epsilon)
+                    return false;
+            }
+            return true;
+        }
     } // namespace
 
     // --- Jolt layer definitions ---
@@ -302,6 +314,16 @@ namespace pe
             }
         }
 
+        // Cache the node's authored scale once so SyncTransformsFromJolt avoids
+        // three glm::length calls per active body per frame.
+        {
+            const mat4 &local = scene.GetLocalMatrix(node);
+            state.authoredScale = vec3(
+                glm::length(vec3(local[0])),
+                glm::length(vec3(local[1])),
+                glm::length(vec3(local[2])));
+        }
+
         size_t idx = m_bodies.size();
         m_bodies.push_back(std::move(state));
         m_nodeToIndex[node] = idx;
@@ -330,7 +352,12 @@ namespace pe
         size_t idx = it->second;
 
         if (m_bodies[idx].inWorld)
-            DestroyJoltBody(m_bodies[idx]);
+            DestroyJoltBody(m_bodies[idx], true);
+        else if (m_bodies[idx].cachedShape)
+        {
+            m_bodies[idx].cachedShape->Release();
+            m_bodies[idx].cachedShape = nullptr;
+        }
 
         // Swap-and-pop
         if (idx < m_bodies.size() - 1)
@@ -371,10 +398,49 @@ namespace pe
         for (auto &state : m_bodies)
         {
             if (state.inWorld)
-                DestroyJoltBody(state);
+            {
+                DestroyJoltBody(state, true);
+            }
+            else if (state.cachedShape)
+            {
+                state.cachedShape->Release();
+                state.cachedShape = nullptr;
+            }
         }
         m_bodies.clear();
         m_nodeToIndex.clear();
+    }
+
+    void PhysicsSystem::InvalidateShapeCache(NodeId *node)
+    {
+        auto it = m_nodeToIndex.find(node);
+        if (it == m_nodeToIndex.end() || it->second >= m_bodies.size() || !MatchesNode(m_bodies[it->second], node))
+            return;
+        PhysicsNodeState &state = m_bodies[it->second];
+        if (!state.inWorld && state.cachedShape)
+        {
+            state.cachedShape->Release();
+            state.cachedShape = nullptr;
+        }
+    }
+
+    void PhysicsSystem::NotifyScaleChanged(Scene &scene, NodeId *node)
+    {
+        auto it = m_nodeToIndex.find(node);
+        if (it == m_nodeToIndex.end() || it->second >= m_bodies.size() || !MatchesNode(m_bodies[it->second], node))
+            return;
+        PhysicsNodeState &state = m_bodies[it->second];
+        const mat4 &local = scene.GetLocalMatrix(node);
+        state.authoredScale = vec3(
+            glm::length(vec3(local[0])),
+            glm::length(vec3(local[1])),
+            glm::length(vec3(local[2])));
+        // Shape dimensions are baked with world scale — must rebuild on next play.
+        if (!state.inWorld && state.cachedShape)
+        {
+            state.cachedShape->Release();
+            state.cachedShape = nullptr;
+        }
     }
 
     // --- Runtime velocity/force API ---
@@ -461,26 +527,17 @@ namespace pe
         if (!m_joltSystem->GetNarrowPhaseQuery().CastRay(ray, hit))
             return false;
 
-        // Find the node that owns this body
         JPH::BodyID hitBodyId = hit.mBodyID;
-        outResult.node = nullptr;
-        for (const auto &state : m_bodies)
-        {
-            if (state.inWorld && state.joltBodyIdRaw == hitBodyId.GetIndexAndSequenceNumber())
-            {
-                outResult.node = state.nodeId;
-                break;
-            }
-        }
-
         JPH::Vec3 hitPos = ray.GetPointOnRay(hit.mFraction);
         outResult.hitPoint = vec3(hitPos.GetX(), hitPos.GetY(), hitPos.GetZ());
         outResult.fraction = hit.mFraction;
+        outResult.node = nullptr;
 
-        // Get surface normal
+        // Single lock: resolve node (via user data) and surface normal together
         JPH::BodyLockRead lock(m_joltSystem->GetBodyLockInterface(), hitBodyId);
         if (lock.Succeeded())
         {
+            outResult.node = reinterpret_cast<NodeId *>(lock.GetBody().GetUserData());
             JPH::Vec3 normal = lock.GetBody().GetWorldSpaceSurfaceNormal(hit.mSubShapeID2, hitPos);
             outResult.hitNormal = vec3(normal.GetX(), normal.GetY(), normal.GetZ());
         }
@@ -529,20 +586,16 @@ namespace pe
 
         PE_INFO("[Physics] StopSimulation: registeredBodies=%zu", m_bodies.size());
 
-        // Remove all Jolt bodies from the world
+        // Remove Jolt runtime bodies but keep descriptors and cached shapes
+        // so the next StartSimulation can reuse them without rebuilding.
         {
             PE_PROFILE_SCOPE("Physics Destroy Runtime Bodies");
             for (auto &state : m_bodies)
             {
                 if (state.inWorld)
-                    DestroyJoltBody(state);
+                    DestroyJoltBody(state, false); // keep cachedShape
             }
         }
-
-        // Clear all state — scene reload (LoadScene) will re-add bodies
-        // with fresh NodeId pointers via deserialization
-        m_bodies.clear();
-        m_nodeToIndex.clear();
 
         m_simulating = false;
         m_accumulator = 0.0f;
@@ -584,9 +637,15 @@ namespace pe
             {
                 kept.push_back(std::move(state));
             }
-            else if (state.inWorld)
+            else
             {
-                DestroyJoltBody(state);
+                if (state.inWorld)
+                    DestroyJoltBody(state, true);
+                else if (state.cachedShape)
+                {
+                    state.cachedShape->Release();
+                    state.cachedShape = nullptr;
+                }
             }
         }
 
@@ -613,19 +672,10 @@ namespace pe
             return;
         }
 
-        const NodeId *liveNode = nullptr;
-        for (uint32_t i = 0; i < scene.GetNodeCount(); ++i)
+        if (!scene.IsNodeAlive(state.nodeId) ||
+            state.nodeId->revision != state.nodeRevision ||
+            !(scene.GetComponentFlags(state.nodeId) & Component_Physics))
         {
-            const NodeId *candidate = scene.GetNodeId(i);
-            if (candidate == state.nodeId)
-            {
-                liveNode = candidate;
-                break;
-            }
-        }
-        if (!liveNode || liveNode->revision != state.nodeRevision || !(scene.GetComponentFlags(liveNode) & Component_Physics))
-        {
-            PE_INFO("[Physics] CreateJoltBody skipped: stale node=%p storedRevision=%u", static_cast<void *>(state.nodeId), state.nodeRevision);
             state.inWorld = false;
             state.joltBodyIdRaw = 0xFFFFFFFF;
             return;
@@ -640,66 +690,97 @@ namespace pe
             glm::length(vec3(world[1])),
             glm::length(vec3(world[2])));
 
-        // Create shape (dimensions scaled by node's world transform)
+        // Reuse cached shape from a previous play session if available
         JPH::RefConst<JPH::Shape> shape;
-        constexpr float minHE = 0.06f; // must exceed Jolt's default convex radius (0.05)
-        switch (desc.shapeType)
+        if (state.cachedShape)
         {
-        case PhysicsShapeType::Box:
-        {
-            vec3 he = glm::max(desc.boxHalfExtents * worldScale, vec3(minHE));
-            shape = new JPH::BoxShape(JPH::Vec3(he.x, he.y, he.z));
-            break;
+            shape = state.cachedShape;
         }
-        case PhysicsShapeType::Sphere:
+        else
         {
-            float maxScale = std::max({worldScale.x, worldScale.y, worldScale.z});
-            float r = std::max(desc.sphereRadius * maxScale, minHE);
-            shape = new JPH::SphereShape(r);
-            break;
-        }
-        case PhysicsShapeType::Capsule:
-        {
-            float hh = std::max(desc.capsuleHalfHeight * worldScale.y, minHE);
-            float r = std::max(desc.capsuleRadius * std::max(worldScale.x, worldScale.z), minHE);
-            shape = new JPH::CapsuleShape(hh, r);
-            break;
-        }
-        case PhysicsShapeType::ConvexHull:
-        {
-            const auto &refs = scene.GetNodeCache(state.nodeId).meshRefs->meshRefs;
-            const auto &vertexStore = scene.GetVertexStore();
-            JPH::Array<JPH::Vec3> points;
-            for (int meshRef : refs)
+            constexpr float minHE = 0.06f; // must exceed Jolt's default convex radius (0.05)
+            switch (desc.shapeType)
             {
-                if (meshRef < 0)
-                    continue;
-                const Mesh &mesh = scene.GetMesh(meshRef);
-                points.reserve(points.size() + mesh.vertexCount);
-                for (uint32_t i = 0; i < mesh.vertexCount && (mesh.vertexOffset + i) < vertexStore.size(); i++)
-                {
-                    const auto &v = vertexStore[mesh.vertexOffset + i];
-                    points.push_back(JPH::Vec3(
-                        v.position[0] * worldScale.x,
-                        v.position[1] * worldScale.y,
-                        v.position[2] * worldScale.z));
-                }
-            }
-            if (!points.empty())
-            {
-                JPH::ConvexHullShapeSettings settings(points.data(), static_cast<int>(points.size()));
-                auto result = settings.Create();
-                if (result.IsValid())
-                    shape = result.Get();
-            }
-            // Fallback to box if convex hull failed
-            if (!shape)
+            case PhysicsShapeType::Box:
             {
                 vec3 he = glm::max(desc.boxHalfExtents * worldScale, vec3(minHE));
                 shape = new JPH::BoxShape(JPH::Vec3(he.x, he.y, he.z));
+                break;
             }
-            break;
-        }
+            case PhysicsShapeType::Sphere:
+            {
+                float maxScale = std::max({worldScale.x, worldScale.y, worldScale.z});
+                float r = std::max(desc.sphereRadius * maxScale, minHE);
+                shape = new JPH::SphereShape(r);
+                break;
+            }
+            case PhysicsShapeType::Capsule:
+            {
+                float hh = std::max(desc.capsuleHalfHeight * worldScale.y, minHE);
+                float r = std::max(desc.capsuleRadius * std::max(worldScale.x, worldScale.z), minHE);
+                shape = new JPH::CapsuleShape(hh, r);
+                break;
+            }
+            case PhysicsShapeType::ConvexHull:
+            {
+                const auto &refs = scene.GetNodeCache(state.nodeId).meshRefs->meshRefs;
+                const auto &vertexStore = scene.GetVertexStore();
+                JPH::Array<JPH::Vec3> points;
+                for (int meshRef : refs)
+                {
+                    if (meshRef < 0)
+                        continue;
+                    const Mesh &mesh = scene.GetMesh(meshRef);
+                    points.reserve(points.size() + mesh.vertexCount);
+                    for (uint32_t i = 0; i < mesh.vertexCount && (mesh.vertexOffset + i) < vertexStore.size(); i++)
+                    {
+                        const auto &v = vertexStore[mesh.vertexOffset + i];
+                        points.push_back(JPH::Vec3(
+                            v.position[0] * worldScale.x,
+                            v.position[1] * worldScale.y,
+                            v.position[2] * worldScale.z));
+                    }
+                }
+                if (!points.empty())
+                {
+                    // Deduplicate vertices before passing to Jolt — high-poly meshes
+                    // can have thousands of duplicates that make convex hull O(n²) or worse.
+                    auto cmp = [](const JPH::Vec3 &a, const JPH::Vec3 &b)
+                    {
+                        if (a.GetX() != b.GetX())
+                            return a.GetX() < b.GetX();
+                        if (a.GetY() != b.GetY())
+                            return a.GetY() < b.GetY();
+                        return a.GetZ() < b.GetZ();
+                    };
+                    std::sort(points.begin(), points.end(), cmp);
+                    points.erase(std::unique(points.begin(), points.end(),
+                                             [](const JPH::Vec3 &a, const JPH::Vec3 &b)
+                                             {
+                                                 return a.GetX() == b.GetX() && a.GetY() == b.GetY() &&
+                                                        a.GetZ() == b.GetZ();
+                                             }),
+                                 points.end());
+
+                    JPH::ConvexHullShapeSettings settings(points.data(), static_cast<int>(points.size()));
+                    auto result = settings.Create();
+                    if (result.IsValid())
+                        shape = result.Get();
+                }
+                // Fallback to box if convex hull failed
+                if (!shape)
+                {
+                    vec3 he = glm::max(desc.boxHalfExtents * worldScale, vec3(minHE));
+                    shape = new JPH::BoxShape(JPH::Vec3(he.x, he.y, he.z));
+                }
+                break;
+            }
+            }
+
+            // Store for reuse on next play toggle
+            state.cachedShape = shape.GetPtr();
+            if (state.cachedShape)
+                state.cachedShape->AddRef();
         }
 
         // Strip scale before extracting rotation
@@ -761,14 +842,9 @@ namespace pe
 
         state.joltBodyIdRaw = bodyId.GetIndexAndSequenceNumber();
         state.inWorld = true;
-        PE_INFO("[Physics] CreateJoltBody node='%s' bodyType=%d shapeType=%d bodyId=%u",
-                scene.GetNodeName(state.nodeId).c_str(),
-                static_cast<int>(desc.bodyType),
-                static_cast<int>(desc.shapeType),
-                state.joltBodyIdRaw);
     }
 
-    void PhysicsSystem::DestroyJoltBody(PhysicsNodeState &state)
+    void PhysicsSystem::DestroyJoltBody(PhysicsNodeState &state, bool releaseShape)
     {
         if (!state.inWorld || !m_joltSystem)
             return;
@@ -780,6 +856,12 @@ namespace pe
 
         state.inWorld = false;
         state.joltBodyIdRaw = 0xFFFFFFFF;
+
+        if (releaseShape && state.cachedShape)
+        {
+            state.cachedShape->Release();
+            state.cachedShape = nullptr;
+        }
     }
 
     void PhysicsSystem::SyncTransformsFromJolt(Scene &scene)
@@ -787,6 +869,12 @@ namespace pe
         PE_PROFILE_SCOPE("Physics Sync Body Transforms");
 
         JPH::BodyInterface &bi = m_joltSystem->GetBodyInterface();
+        std::unordered_map<const NodeId *, mat4> updatedWorldMatrices;
+        updatedWorldMatrices.reserve(m_bodies.size());
+        std::unordered_map<const NodeId *, mat4> parentInverseCache;
+        parentInverseCache.reserve(m_bodies.size());
+        std::vector<NodeId *> changedNodes;
+        changedNodes.reserve(m_bodies.size());
 
         for (auto &state : m_bodies)
         {
@@ -794,33 +882,67 @@ namespace pe
                 continue;
 
             JPH::BodyID bodyId(state.joltBodyIdRaw);
-            JPH::RVec3 joltPos = bi.GetPosition(bodyId);
-            JPH::Quat joltRot = bi.GetRotation(bodyId);
+            if (state.desc.bodyType == PhysicsBodyType::Dynamic && !bi.IsActive(bodyId))
+                continue;
+
+            JPH::RVec3 joltPos;
+            JPH::Quat joltRot;
+            bi.GetPositionAndRotation(bodyId, joltPos, joltRot);
 
             vec3 pos(joltPos.GetX(), joltPos.GetY(), joltPos.GetZ());
             quat rot(joltRot.GetW(), joltRot.GetX(), joltRot.GetY(), joltRot.GetZ());
 
-            // Preserve the authored scale from the current local matrix
+            // Use cached authored scale — avoids 3x glm::length per body per frame
             const mat4 &oldLocal = scene.GetLocalMatrix(state.nodeId);
-            vec3 localScale(
-                glm::length(vec3(oldLocal[0])),
-                glm::length(vec3(oldLocal[1])),
-                glm::length(vec3(oldLocal[2])));
 
             // Build world matrix from physics (translation * rotation * scale)
-            mat4 worldMat = glm::translate(mat4(1.f), pos) * glm::mat4_cast(rot) * glm::scale(mat4(1.f), localScale);
+            mat4 worldMat = glm::translate(mat4(1.f), pos) * glm::mat4_cast(rot) * glm::scale(mat4(1.f), state.authoredScale);
+            updatedWorldMatrices[state.nodeId] = worldMat;
 
             NodeId *parent = scene.GetParent(state.nodeId);
+            mat4 newLocal;
             if (parent)
             {
-                mat4 parentWorld = scene.GetWorldMatrix(parent);
-                mat4 parentInv = glm::inverse(parentWorld);
-                scene.SetLocalMatrix(state.nodeId, parentInv * worldMat);
+                auto parentInvIt = parentInverseCache.find(parent);
+                if (parentInvIt == parentInverseCache.end())
+                {
+                    const mat4 &parentWorld = [&]() -> const mat4 &
+                    {
+                        auto updatedIt = updatedWorldMatrices.find(parent);
+                        if (updatedIt != updatedWorldMatrices.end())
+                            return updatedIt->second;
+                        return scene.GetWorldMatrix(parent);
+                    }();
+
+                    parentInvIt = parentInverseCache.emplace(parent, glm::inverse(parentWorld)).first;
+                }
+                newLocal = parentInvIt->second * worldMat;
             }
             else
             {
-                scene.SetLocalMatrix(state.nodeId, worldMat);
+                newLocal = worldMat;
             }
+
+            if (!MatricesNearEqual(newLocal, oldLocal))
+            {
+                scene.SetLocalMatrix(state.nodeId, newLocal, false);
+                changedNodes.push_back(state.nodeId);
+            }
+        }
+
+        if (changedNodes.empty())
+            return;
+
+        std::unordered_set<const NodeId *> changedSet;
+        changedSet.reserve(changedNodes.size());
+        for (NodeId *node : changedNodes)
+            changedSet.insert(node);
+
+        for (NodeId *node : changedNodes)
+        {
+            NodeId *parent = scene.GetParent(node);
+            if (!parent || changedSet.count(parent) == 0)
+                scene.MarkNodeDirty(node);
         }
     }
 } // namespace pe

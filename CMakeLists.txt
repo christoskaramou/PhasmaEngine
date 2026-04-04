@@ -71,6 +71,14 @@ if(PE_PHYSICS)
     )
     FetchContent_MakeAvailable(JoltPhysics)
     set(BUILD_SHARED_LIBS "${BUILD_SHARED_LIBS_SAVED}" CACHE BOOL "" FORCE)
+
+    if(TARGET Jolt)
+        if(MSVC)
+            target_compile_options(Jolt PRIVATE $<$<CONFIG:Debug>:/O2 /Ob2>)
+        else()
+            target_compile_options(Jolt PRIVATE $<$<CONFIG:Debug>:-O2>)
+        endif()
+    endif()
 endif()
 
 # --- MeshOptimizer (built from source with -fPIC) ---
@@ -148,6 +156,12 @@ add_library(PhasmaEditorModule SHARED
 set_target_properties(PhasmaEditorModule PROPERTIES POSITION_INDEPENDENT_CODE ON)
 if(CMAKE_SYSTEM_NAME STREQUAL "Windows")
     set_target_properties(PhasmaEditorModule PROPERTIES WINDOWS_EXPORT_ALL_SYMBOLS OFF)
+endif()
+
+if(MSVC)
+    target_compile_options(PhasmaEditorModule PRIVATE $<$<CONFIG:Debug>:/O1>)
+else()
+    target_compile_options(PhasmaEditorModule PRIVATE $<$<CONFIG:Debug>:-O1>)
 endif()
 
 target_compile_definitions(PhasmaEditorModule PRIVATE

@@ -25,7 +25,9 @@ namespace pe
         NodeId *nodeId = nullptr;
         uint32_t nodeRevision = 0;
         PhysicsBodyDesc desc;
-        uint32_t joltBodyIdRaw = 0xFFFFFFFF; // JPH::BodyID raw value
+        vec3 authoredScale = vec3(1.f);          // cached at AddBody, avoids per-frame glm::length extraction
+        const JPH::Shape *cachedShape = nullptr; // ref-counted manually in .cpp; reused across play toggles
+        uint32_t joltBodyIdRaw = 0xFFFFFFFF;     // JPH::BodyID raw value
         bool inWorld = false;
     };
 
@@ -53,6 +55,8 @@ namespace pe
         const PhysicsBodyDesc *GetBodyDesc(const NodeId *node) const;
         bool HasBody(const NodeId *node) const;
         void ClearAllBodies();
+        void InvalidateShapeCache(NodeId *node);
+        void NotifyScaleChanged(Scene &scene, NodeId *node);
 
         // Runtime API (during simulation)
         void SetLinearVelocity(NodeId *node, const vec3 &vel);
@@ -74,7 +78,7 @@ namespace pe
     private:
         void PruneInvalidBodies(const Scene &scene);
         void CreateJoltBody(PhysicsNodeState &state, Scene &scene);
-        void DestroyJoltBody(PhysicsNodeState &state);
+        void DestroyJoltBody(PhysicsNodeState &state, bool releaseShape = true);
         void SyncTransformsFromJolt(Scene &scene);
 
         std::unordered_map<const NodeId *, size_t> m_nodeToIndex;

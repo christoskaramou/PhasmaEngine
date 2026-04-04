@@ -25,6 +25,8 @@ namespace pe
         void DrawTimelineTab();
         void DrawCpuTab();
         void DrawCpuTimelineView();
+        void DrawCpuTimingTableWithStats(const std::vector<Profiler::Entry> &entries,
+                                         float scopeTotal, const char *filter);
         void DrawShadersTab();
         void DrawCaptureTab();
 
@@ -36,6 +38,50 @@ namespace pe
         // Render target preview helpers
         void DrawPassImageTooltip(const std::string &passName);
         void *GetRTDescriptor(Image *image);
+
+        // Rolling min/cur/max/avg over the last N samples (10 s at 250 ms refresh = 40 samples)
+        static constexpr int kStatWindow = 40;
+        struct ScopeStats
+        {
+            std::deque<float> samples; // ring of up to kStatWindow values
+            float minMs = FLT_MAX;
+            float maxMs = 0.f;
+            float avgMs = 0.f;
+
+            void Push(float v)
+            {
+                samples.push_back(v);
+                if ((int)samples.size() > kStatWindow)
+                    samples.pop_front();
+                // Recompute from window — O(N) but N=40, negligible
+                minMs = FLT_MAX;
+                maxMs = 0.f;
+                float sum = 0.f;
+                for (float s : samples)
+                {
+                    if (s < minMs) minMs = s;
+                    if (s > maxMs) maxMs = s;
+                    sum += s;
+                }
+                avgMs = sum / static_cast<float>(samples.size());
+            }
+
+            void Reset()
+            {
+                samples.clear();
+                minMs = FLT_MAX;
+                maxMs = 0.f;
+                avgMs = 0.f;
+            }
+        };
+        std::unordered_map<std::string, ScopeStats> m_cpuStats;
+        std::unordered_map<std::string, ScopeStats> m_gpuStats;
+
+        void ResetStats()
+        {
+            for (auto &[k, v] : m_cpuStats) v.Reset();
+            for (auto &[k, v] : m_gpuStats) v.Reset();
+        }
 
         // All display data — replaced atomically each tick; frozen when paused
         struct ProfilerData

@@ -77,7 +77,8 @@ namespace pe
         NodeGpuData gpuData;
         bool dirty = false;
         bool gpuPending = false;
-        std::vector<bool> dirtyUniforms;
+        bool hasUniformData = false; // cached: node has at least one drawable mesh
+        uint8_t dirtyUniforms = 0;  // bitmask per swapchain frame (max 8); replaces vector<bool>
 
         std::vector<mat4> jointMatrices;
     };

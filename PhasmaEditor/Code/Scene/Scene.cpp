@@ -649,65 +649,71 @@ namespace pe
         range.offset = sizeof(PerFrameData);
         m_storages[frame]->Copy(1, &range, true);
 
-        // Upload per-node GPU data for dirty uniforms
+        // Batch all dirty node GPU data uploads into a single Copy call.
+        // rt.gpuData lives inside m_nodeRuntime (stable address) — safe to take pointer.
+        // Joint matrices are computed into a pre-reserved scratch buffer so data()
+        // never moves while jointRanges pointers are being accumulated.
+        static thread_local std::vector<BufferRange> nodeRanges;
+        static thread_local std::vector<BufferRange> jointRanges;
+        static thread_local std::vector<mat4> allJointMatrices;
+        nodeRanges.clear();
+        jointRanges.clear();
+        allJointMatrices.clear();
+
+        int jointCount = GetSkeleton().GetBoneCount();
+        if (jointCount > 0)
+            allJointMatrices.reserve(GetNodeCount() * static_cast<uint32_t>(jointCount));
+
         for (uint32_t i = 0; i < GetNodeCount(); i++)
         {
             NodeRuntime &rt = m_nodeRuntime[i];
-            if (!rt.dirtyUniforms[frame])
+            if (!(rt.dirtyUniforms & (1u << frame)))
                 continue;
 
             // Skip nodes pending GPU upload — their storage offsets aren't assigned yet
-            if (m_nodeRuntime[i].gpuPending)
+            if (rt.gpuPending)
                 continue;
 
-            rt.dirtyUniforms[frame] = false; // clear regardless of mesh presence
+            rt.dirtyUniforms &= ~(1u << frame);
 
-            const auto &refs = m_nodeComponentCache[i].meshRefs->meshRefs;
-            if (refs.empty())
+            if (!rt.hasUniformData)
                 continue;
 
-            // Check that at least one mesh ref is drawable
-            bool hasDrawable = false;
-            for (int mr : refs)
-            {
-                if (mr >= 0 && m_meshes[mr].indexCount > 0)
-                {
-                    hasDrawable = true;
-                    break;
-                }
-            }
-            if (!hasDrawable)
-                continue;
+            BufferRange r{};
+            r.data = &rt.gpuData;
+            r.size = sizeof(NodeGpuData);
+            r.offset = rt.dataOffset;
+            nodeRanges.push_back(r);
 
-            range.data = &rt.gpuData;
-            range.size = sizeof(NodeGpuData);
-            range.offset = rt.dataOffset;
-            m_storages[frame]->Copy(1, &range, true);
-
-            int jointCount = GetSkeleton().GetBoneCount();
             if (jointCount > 0)
             {
-                static thread_local std::vector<mat4> uploadMatrices;
-                if (static_cast<int>(uploadMatrices.size()) < jointCount)
-                    uploadMatrices.resize(jointCount);
-
+                size_t base = allJointMatrices.size();
+                allJointMatrices.resize(base + static_cast<size_t>(jointCount));
                 if (!rt.jointMatrices.empty() && static_cast<int>(rt.jointMatrices.size()) == jointCount)
                 {
                     mat4 invWorld = glm::inverse(rt.gpuData.worldMatrix);
                     for (int j = 0; j < jointCount; j++)
-                        uploadMatrices[j] = invWorld * rt.jointMatrices[j];
+                        allJointMatrices[base + j] = invWorld * rt.jointMatrices[j];
                 }
                 else
                 {
                     for (int j = 0; j < jointCount; j++)
-                        uploadMatrices[j] = mat4(1.f);
+                        allJointMatrices[base + j] = mat4(1.f);
                 }
-                range.data = uploadMatrices.data();
-                range.size = jointCount * sizeof(mat4);
-                range.offset = rt.dataOffset + sizeof(NodeGpuData);
-                m_storages[frame]->Copy(1, &range, true);
+
+                BufferRange jr{};
+                jr.data = allJointMatrices.data() + base;
+                jr.size = static_cast<size_t>(jointCount) * sizeof(mat4);
+                jr.offset = rt.dataOffset + sizeof(NodeGpuData);
+                jointRanges.push_back(jr);
             }
         }
+
+        if (!nodeRanges.empty())
+            m_storages[frame]->Copy(static_cast<uint32_t>(nodeRanges.size()), nodeRanges.data(), true);
+
+        if (!jointRanges.empty())
+            m_storages[frame]->Copy(static_cast<uint32_t>(jointRanges.size()), jointRanges.data(), true);
     }
 
     void Scene::UpdateIndirectData()
@@ -790,8 +796,7 @@ namespace pe
             if (rt.gpuData.previousWorldMatrix != rt.gpuData.worldMatrix)
             {
                 rt.gpuData.previousWorldMatrix = rt.gpuData.worldMatrix;
-                for (size_t f = 0; f < rt.dirtyUniforms.size(); f++)
-                    rt.dirtyUniforms[f] = true;
+                rt.dirtyUniforms = 0xFF;
             }
         }
 

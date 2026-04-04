@@ -47,11 +47,14 @@ namespace pe
             ImGuiTableFlags_NoSavedSettings | ImGuiTableFlags_ScrollY;
 
         const float rowH = ImGui::GetTextLineHeightWithSpacing() + 2.f;
-        if (ImGui::BeginTable("##gpu_timing", 3, flags, {-FLT_MIN, ImGui::GetContentRegionAvail().y}))
+        if (ImGui::BeginTable("##gpu_timing", 6, flags, {-FLT_MIN, ImGui::GetContentRegionAvail().y}))
         {
-            ImGui::TableSetupColumn("Pass", ImGuiTableColumnFlags_WidthStretch, 0.65f);
-            ImGui::TableSetupColumn("ms", ImGuiTableColumnFlags_WidthFixed, 70.f);
-            ImGui::TableSetupColumn("rel", ImGuiTableColumnFlags_WidthStretch, 0.35f);
+            ImGui::TableSetupColumn("Pass", ImGuiTableColumnFlags_WidthStretch, 0.40f);
+            ImGui::TableSetupColumn("min",  ImGuiTableColumnFlags_WidthFixed,   52.f);
+            ImGui::TableSetupColumn("cur",  ImGuiTableColumnFlags_WidthFixed,   52.f);
+            ImGui::TableSetupColumn("max",  ImGuiTableColumnFlags_WidthFixed,   52.f);
+            ImGui::TableSetupColumn("avg",  ImGuiTableColumnFlags_WidthFixed,   52.f);
+            ImGui::TableSetupColumn("rel",  ImGuiTableColumnFlags_WidthStretch, 0.20f);
             ImGui::TableHeadersRow();
 
             for (int i = 0; i < (int)samples.size(); ++i)
@@ -76,6 +79,9 @@ namespace pe
                 float rel = totalMs > 0.f ? s.timeMs / totalMs : 0.f;
                 bool selected = (selectedPass == i);
 
+                auto statsIt = m_gpuStats.find(s.name);
+                const ScopeStats *st = (statsIt != m_gpuStats.end()) ? &statsIt->second : nullptr;
+
                 ImGui::TableNextRow();
                 ImGui::TableSetColumnIndex(0);
                 ImGui::PushID(i);
@@ -90,6 +96,11 @@ namespace pe
                     ImGui::BeginTooltip();
                     ImGui::Text("%s", s.name.c_str());
                     ImGui::TextColored(ui::Heat(rel), "%.3f ms  (%.1f%%)", s.timeMs, rel * 100.f);
+                    if (st)
+                    {
+                        ImGui::TextDisabled("min %.3f  avg %.3f  max %.3f",
+                                            st->minMs, st->avgMs, st->maxMs);
+                    }
                     DrawPassImageTooltip(s.name);
                     ImGui::EndTooltip();
                 }
@@ -99,9 +110,15 @@ namespace pe
                 ImGui::PopID();
 
                 ImGui::TableSetColumnIndex(1);
-                ImGui::TextColored(ui::Heat(rel), "%.3f", s.timeMs);
-
+                ImGui::TextDisabled(st ? "%.3f" : "--", st ? st->minMs : 0.f);
                 ImGui::TableSetColumnIndex(2);
+                ImGui::TextColored(ui::Heat(rel), "%.3f", s.timeMs);
+                ImGui::TableSetColumnIndex(3);
+                if (st) ImGui::TextColored(ui::Heat(st->maxMs / totalMs), "%.3f", st->maxMs);
+                else    ImGui::TextDisabled("--");
+                ImGui::TableSetColumnIndex(4);
+                ImGui::TextDisabled(st ? "%.3f" : "--", st ? st->avgMs : 0.f);
+                ImGui::TableSetColumnIndex(5);
                 CenteredTinyBar(rel);
             }
             ImGui::EndTable();
@@ -440,15 +457,21 @@ namespace pe
 
                 d.cpuEntries = Profiler::GetEntries();
                 for (const auto &e : d.cpuEntries)
+                {
                     if (e.depth == 0)
                         d.cpuScopeTotal += e.timeMs;
+                    m_cpuStats[e.name].Push(e.timeMs);
+                }
 
                 if (!latestGpuData.empty())
                 {
                     d.gpuSamples = std::move(latestGpuData);
                     for (const auto &s : d.gpuSamples)
+                    {
                         if (s.depth == 0)
                             d.gpuTotal += s.timeMs;
+                        m_gpuStats[s.name].Push(s.timeMs);
+                    }
                 }
 
                 m_data = std::move(d);
@@ -462,15 +485,22 @@ namespace pe
             return;
         }
 
-        // Header line: stats + Snapshot right-aligned
+        // Header line: stats + Reset/Snapshot right-aligned
         ImGui::Text("%.1f FPS  |  CPU %.3f ms  |  GPU %.3f ms",
                     m_data.fps, m_data.frameMs, m_data.gpuTotal);
         ImGui::SameLine();
         {
-            const float btnW = ImGui::CalcTextSize("Snapshot").x + ImGui::GetStyle().FramePadding.x * 2.f;
+            const float pad = ImGui::GetStyle().FramePadding.x * 2.f;
+            const float resetW = ImGui::CalcTextSize("Reset").x + pad;
+            const float snapW = ImGui::CalcTextSize("Snapshot").x + pad;
+            const float spacing = ImGui::GetStyle().ItemSpacing.x;
+            const float totalW = resetW + spacing + snapW;
             const float avail = ImGui::GetContentRegionAvail().x;
-            if (avail > btnW)
-                ImGui::SetCursorPosX(ImGui::GetCursorPosX() + avail - btnW);
+            if (avail > totalW)
+                ImGui::SetCursorPosX(ImGui::GetCursorPosX() + avail - totalW);
+            if (ImGui::SmallButton("Reset"))
+                ResetStats();
+            ImGui::SameLine();
             if (ImGui::SmallButton("Snapshot"))
                 TakeSnapshot();
         }
@@ -584,9 +614,22 @@ namespace pe
         for (size_t i = 0; i < m_data.gpuSamples.size(); ++i)
         {
             const auto &s = m_data.gpuSamples[i];
-            fprintf(f, "      {\"name\": \"%s\", \"depth\": %u, \"time_ms\": %.3f, \"start_offset_ms\": %.3f}%s\n",
-                    s.name.c_str(), (unsigned)s.depth, s.timeMs, s.startOffsetMs,
-                    (i + 1 < m_data.gpuSamples.size()) ? "," : "");
+            auto it = m_gpuStats.find(s.name);
+            if (it != m_gpuStats.end() && !it->second.samples.empty())
+            {
+                const auto &st = it->second;
+                fprintf(f, "      {\"name\": \"%s\", \"depth\": %u, \"min_ms\": %.3f, \"cur_ms\": %.3f, \"max_ms\": %.3f, \"avg_ms\": %.3f, \"start_offset_ms\": %.3f}%s\n",
+                        s.name.c_str(), (unsigned)s.depth,
+                        st.minMs, s.timeMs, st.maxMs, st.avgMs,
+                        s.startOffsetMs,
+                        (i + 1 < m_data.gpuSamples.size()) ? "," : "");
+            }
+            else
+            {
+                fprintf(f, "      {\"name\": \"%s\", \"depth\": %u, \"cur_ms\": %.3f, \"start_offset_ms\": %.3f}%s\n",
+                        s.name.c_str(), (unsigned)s.depth, s.timeMs, s.startOffsetMs,
+                        (i + 1 < m_data.gpuSamples.size()) ? "," : "");
+            }
         }
         fprintf(f, "    ]\n");
         fprintf(f, "  },\n");
@@ -598,9 +641,21 @@ namespace pe
         for (size_t i = 0; i < m_data.cpuEntries.size(); ++i)
         {
             const auto &e = m_data.cpuEntries[i];
-            fprintf(f, "      {\"name\": \"%s\", \"depth\": %u, \"time_ms\": %.3f}%s\n",
-                    e.name, e.depth, e.timeMs,
-                    (i + 1 < m_data.cpuEntries.size()) ? "," : "");
+            auto it = m_cpuStats.find(e.name);
+            if (it != m_cpuStats.end() && !it->second.samples.empty())
+            {
+                const auto &st = it->second;
+                fprintf(f, "      {\"name\": \"%s\", \"depth\": %u, \"min_ms\": %.3f, \"cur_ms\": %.3f, \"max_ms\": %.3f, \"avg_ms\": %.3f}%s\n",
+                        e.name, e.depth,
+                        st.minMs, e.timeMs, st.maxMs, st.avgMs,
+                        (i + 1 < m_data.cpuEntries.size()) ? "," : "");
+            }
+            else
+            {
+                fprintf(f, "      {\"name\": \"%s\", \"depth\": %u, \"cur_ms\": %.3f}%s\n",
+                        e.name, e.depth, e.timeMs,
+                        (i + 1 < m_data.cpuEntries.size()) ? "," : "");
+            }
         }
         fprintf(f, "    ]\n");
         fprintf(f, "  }\n");
@@ -845,6 +900,133 @@ namespace pe
         }
     }
 
+    // ─── CPU timing table with stats ────────────────────────────────────────────
+
+    void ProfilerWidget::DrawCpuTimingTableWithStats(const std::vector<Profiler::Entry> &entries,
+                                                      float scopeTotal, const char *filter)
+    {
+        if (entries.empty())
+        {
+            ImGui::TextDisabled("No CPU scopes. Add PE_PROFILE_SCOPE() to instrument code.");
+            return;
+        }
+        if (scopeTotal <= 0.f)
+            scopeTotal = 1.f;
+
+        ImGuiTableFlags flags =
+            ImGuiTableFlags_BordersInnerV | ImGuiTableFlags_RowBg |
+            ImGuiTableFlags_Resizable | ImGuiTableFlags_SizingStretchProp |
+            ImGuiTableFlags_NoSavedSettings | ImGuiTableFlags_ScrollY;
+
+        const bool filtering = filter[0] != '\0';
+
+        if (ImGui::BeginTable("##cpu_stats", 6, flags, {-FLT_MIN, ImGui::GetContentRegionAvail().y}))
+        {
+            ImGui::TableSetupColumn("Scope", ImGuiTableColumnFlags_WidthStretch, 0.45f);
+            ImGui::TableSetupColumn("min",   ImGuiTableColumnFlags_WidthFixed,   52.f);
+            ImGui::TableSetupColumn("cur",   ImGuiTableColumnFlags_WidthFixed,   52.f);
+            ImGui::TableSetupColumn("max",   ImGuiTableColumnFlags_WidthFixed,   52.f);
+            ImGui::TableSetupColumn("avg",   ImGuiTableColumnFlags_WidthFixed,   52.f);
+            ImGui::TableSetupColumn("rel",   ImGuiTableColumnFlags_WidthStretch, 0.25f);
+            ImGui::TableHeadersRow();
+
+            int skipDepth = INT_MAX;
+            int openTree = 0;
+
+            for (size_t i = 0; i < entries.size(); ++i)
+            {
+                const auto &e = entries[i];
+                int depth = static_cast<int>(e.depth);
+                float rel = e.timeMs / scopeTotal;
+
+                auto statsIt = m_cpuStats.find(e.name);
+                const ScopeStats *st = (statsIt != m_cpuStats.end()) ? &statsIt->second : nullptr;
+
+                if (filtering)
+                {
+                    std::string_view hay(e.name), needle(filter);
+                    bool found = std::search(hay.begin(), hay.end(),
+                                             needle.begin(), needle.end(),
+                                             [](unsigned char a, unsigned char b)
+                                             { return std::tolower(a) == std::tolower(b); }) != hay.end();
+                    if (!found)
+                        continue;
+
+                    ImGui::TableNextRow();
+                    ImGui::TableSetColumnIndex(0);
+                    ImGui::PushID(static_cast<int>(i));
+                    ImGui::TreeNodeEx(e.name, ImGuiTreeNodeFlags_Leaf |
+                                                  ImGuiTreeNodeFlags_NoTreePushOnOpen |
+                                                  ImGuiTreeNodeFlags_SpanFullWidth);
+                    ImGui::TableSetColumnIndex(1);
+                    ImGui::TextDisabled(st ? "%.3f" : "--", st ? st->minMs : 0.f);
+                    ImGui::TableSetColumnIndex(2);
+                    ImGui::TextColored(ui::Heat(rel), "%.3f", e.timeMs);
+                    ImGui::TableSetColumnIndex(3);
+                    if (st) ImGui::TextColored(ui::Heat(st->maxMs / scopeTotal), "%.3f", st->maxMs);
+                    else    ImGui::TextDisabled("--");
+                    ImGui::TableSetColumnIndex(4);
+                    ImGui::TextDisabled(st ? "%.3f" : "--", st ? st->avgMs : 0.f);
+                    ImGui::TableSetColumnIndex(5);
+                    CenteredTinyBar(rel);
+                    ImGui::PopID();
+                    continue;
+                }
+
+                if (depth > skipDepth)
+                    continue;
+                skipDepth = INT_MAX;
+
+                while (openTree > depth)
+                {
+                    ImGui::TreePop();
+                    openTree--;
+                }
+
+                bool hasChildren = (i + 1 < entries.size() && entries[i + 1].depth > e.depth);
+
+                ImGui::TableNextRow();
+                ImGui::TableSetColumnIndex(0);
+                ImGui::PushID(static_cast<int>(i));
+
+                ImGuiTreeNodeFlags nodeFlags = ImGuiTreeNodeFlags_SpanFullWidth;
+                if (hasChildren)
+                    nodeFlags |= ImGuiTreeNodeFlags_DefaultOpen;
+                else
+                    nodeFlags |= ImGuiTreeNodeFlags_Leaf | ImGuiTreeNodeFlags_NoTreePushOnOpen;
+
+                bool open = ImGui::TreeNodeEx(e.name, nodeFlags);
+
+                ImGui::TableSetColumnIndex(1);
+                ImGui::TextDisabled(st ? "%.3f" : "--", st ? st->minMs : 0.f);
+                ImGui::TableSetColumnIndex(2);
+                ImGui::TextColored(ui::Heat(rel), "%.3f", e.timeMs);
+                ImGui::TableSetColumnIndex(3);
+                if (st) ImGui::TextColored(ui::Heat(st->maxMs / scopeTotal), "%.3f", st->maxMs);
+                else    ImGui::TextDisabled("--");
+                ImGui::TableSetColumnIndex(4);
+                ImGui::TextDisabled(st ? "%.3f" : "--", st ? st->avgMs : 0.f);
+                ImGui::TableSetColumnIndex(5);
+                CenteredTinyBar(rel);
+                ImGui::PopID();
+
+                if (hasChildren)
+                {
+                    if (open)
+                        openTree++;
+                    else
+                        skipDepth = depth;
+                }
+            }
+            while (openTree > 0)
+            {
+                ImGui::TreePop();
+                openTree--;
+            }
+            ImGui::EndTable();
+        }
+    }
+
     // ─── CPU Tab ─────────────────────────────────────────────────────────────────
 
     void ProfilerWidget::DrawCpuTab()
@@ -868,7 +1050,7 @@ namespace pe
         {
             ImGui::TextDisabled("Scopes: %.3f ms  (update: %.3f ms  draw: %.3f ms)",
                                 m_data.frameMs, m_data.cpuUpdateMs, m_data.cpuDrawMs);
-            DrawCpuTimingTable(m_data.cpuEntries, m_data.cpuScopeTotal, m_cpuFilter);
+            DrawCpuTimingTableWithStats(m_data.cpuEntries, m_data.cpuScopeTotal, m_cpuFilter);
         }
         else
         {

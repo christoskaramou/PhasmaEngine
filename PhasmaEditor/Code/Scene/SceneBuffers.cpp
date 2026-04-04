@@ -151,6 +151,8 @@ namespace pe
 
         for (uint32_t i = 0; i < GetNodeCount(); i++)
         {
+            m_nodeRuntime[i].hasUniformData = false; // reset; set true below if drawable
+
             if (m_nodeRuntime[i].gpuPending)
                 continue;
 
@@ -166,6 +168,7 @@ namespace pe
             if (!hasDrawable)
                 continue;
 
+            m_nodeRuntime[i].hasUniformData = true;
             m_nodeRuntime[i].dataOffset = storageSize;
             int jointCount = GetSkeleton().GetBoneCount();
             size_t nodeDataSize = sizeof(NodeGpuData) + jointCount * sizeof(mat4);
@@ -186,10 +189,7 @@ namespace pe
     void Scene::MarkUniformsDirty()
     {
         for (uint32_t i = 0; i < GetNodeCount(); i++)
-        {
-            for (size_t f = 0; f < m_nodeRuntime[i].dirtyUniforms.size(); f++)
-                m_nodeRuntime[i].dirtyUniforms[f] = true;
-        }
+            m_nodeRuntime[i].dirtyUniforms = 0xFF;
     }
 
     void Scene::CreateIndirectBuffers(CommandBuffer *cmd)

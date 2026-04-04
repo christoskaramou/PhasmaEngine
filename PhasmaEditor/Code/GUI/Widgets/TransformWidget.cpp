@@ -7,6 +7,9 @@
 #include "imgui/ImGuizmo.h"
 #include "imgui/imgui.h"
 #include "imgui/imgui_internal.h"
+#ifdef PE_PHYSICS
+#include "Systems/PhysicsSystem.h"
+#endif
 
 namespace pe
 {
@@ -217,6 +220,10 @@ namespace pe
         {
             float ns[3] = {std::max(scl.x, 0.001f), std::max(scl.y, 0.001f), std::max(scl.z, 0.001f)};
             ApplyLocalTransform(node, t, r, ns);
+#ifdef PE_PHYSICS
+            if (auto *ps = GetGlobalSystem<PhysicsSystem>())
+                ps->NotifyScaleChanged(scene, node);
+#endif
         }
     }
 

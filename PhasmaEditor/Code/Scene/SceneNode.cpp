@@ -83,7 +83,6 @@ namespace pe
 
         NodeRuntime runtime{};
         runtime.dirty = true;
-        runtime.dirtyUniforms.resize(RHII.GetSwapchainImageCount(), false);
         m_nodeRuntime.push_back(std::move(runtime));
 
         Entity *entity = Context::Get()->CreateEntity();
@@ -304,6 +303,8 @@ namespace pe
         refs.clear();
         if (IsValidMeshIndex(meshIndex))
             refs.push_back(meshIndex);
+        m_nodeRuntime[node->index].hasUniformData =
+            IsValidMeshIndex(meshIndex) && m_meshes[meshIndex].indexCount > 0;
         if (changed)
         {
             m_geometryDirty = true;
@@ -316,6 +317,8 @@ namespace pe
         if (!IsValidMeshIndex(meshIndex))
             return;
         m_nodeComponentCache[node->index].meshRefs->meshRefs.push_back(meshIndex);
+        if (m_meshes[meshIndex].indexCount > 0)
+            m_nodeRuntime[node->index].hasUniformData = true;
         m_geometryDirty = true;
         MarkNodeDirty(node);
     }
@@ -327,6 +330,11 @@ namespace pe
         if (it != refs.end())
         {
             refs.erase(it, refs.end());
+            // Recompute drawable flag after removal
+            bool hasDrawable = false;
+            for (int mr : refs)
+                if (mr >= 0 && m_meshes[mr].indexCount > 0) { hasDrawable = true; break; }
+            m_nodeRuntime[node->index].hasUniformData = hasDrawable;
             m_geometryDirty = true;
             MarkNodeDirty(node);
         }
@@ -379,8 +387,7 @@ namespace pe
 
         // Always mark uniforms dirty so material changes are caught even
         // if the node was already dirty (e.g., material edit on a moved node).
-        for (size_t i = 0; i < rt.dirtyUniforms.size(); i++)
-            rt.dirtyUniforms[i] = true;
+        rt.dirtyUniforms = 0xFF;
 
         if (rt.dirty)
             return;
@@ -436,8 +443,7 @@ namespace pe
         rt.dirty = false;
 
         // Mark uniforms dirty for all frames
-        for (size_t i = 0; i < rt.dirtyUniforms.size(); i++)
-            rt.dirtyUniforms[i] = true;
+        rt.dirtyUniforms = 0xFF;
 
         m_nodesMoved.push_back(node);
 

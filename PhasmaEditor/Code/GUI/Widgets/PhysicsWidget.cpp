@@ -27,31 +27,38 @@ namespace pe
         if (ImGui::Combo("Body Type", &bodyType, bodyTypeNames, IM_ARRAYSIZE(bodyTypeNames)))
             desc->bodyType = static_cast<PhysicsBodyType>(bodyType);
 
+        bool shapeChanged = false;
         int shapeType = static_cast<int>(desc->shapeType);
         if (ImGui::Combo("Shape Type", &shapeType, shapeTypeNames, IM_ARRAYSIZE(shapeTypeNames)))
+        {
             desc->shapeType = static_cast<PhysicsShapeType>(shapeType);
+            shapeChanged = true;
+        }
 
-        ImGui::Checkbox("Auto Fit Shape", &desc->autoFitShape);
+        shapeChanged |= ImGui::Checkbox("Auto Fit Shape", &desc->autoFitShape);
 
         if (!desc->autoFitShape)
         {
             switch (desc->shapeType)
             {
             case PhysicsShapeType::Box:
-                ImGui::DragFloat3("Half Extents", &desc->boxHalfExtents.x, 0.01f, 0.001f, 100.0f);
+                shapeChanged |= ImGui::DragFloat3("Half Extents", &desc->boxHalfExtents.x, 0.01f, 0.001f, 100.0f);
                 break;
             case PhysicsShapeType::Sphere:
-                ImGui::DragFloat("Radius", &desc->sphereRadius, 0.01f, 0.001f, 100.0f);
+                shapeChanged |= ImGui::DragFloat("Radius", &desc->sphereRadius, 0.01f, 0.001f, 100.0f);
                 break;
             case PhysicsShapeType::Capsule:
-                ImGui::DragFloat("Half Height", &desc->capsuleHalfHeight, 0.01f, 0.001f, 100.0f);
-                ImGui::DragFloat("Capsule Radius", &desc->capsuleRadius, 0.01f, 0.001f, 100.0f);
+                shapeChanged |= ImGui::DragFloat("Half Height", &desc->capsuleHalfHeight, 0.01f, 0.001f, 100.0f);
+                shapeChanged |= ImGui::DragFloat("Capsule Radius", &desc->capsuleRadius, 0.01f, 0.001f, 100.0f);
                 break;
             case PhysicsShapeType::ConvexHull:
                 ImGui::TextDisabled("Generated from mesh geometry");
                 break;
             }
         }
+
+        if (shapeChanged)
+            ps->InvalidateShapeCache(node);
 
         if (desc->bodyType != PhysicsBodyType::Static)
             ImGui::DragFloat("Mass", &desc->mass, 0.1f, 0.001f, 10000.0f);

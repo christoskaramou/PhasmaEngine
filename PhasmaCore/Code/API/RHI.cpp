@@ -498,15 +498,15 @@ namespace pe
         PE_ERROR_IF(!SDL_Vulkan_GetInstanceExtensions(window, &extCount, instanceExtensions.data()), SDL_GetError());
         // =============================================
 
+        // === Debugging (debug_utils always enabled — needed for GPU timers in profiler) ===
+        if (RHII.IsInstanceExtensionValid("VK_EXT_debug_utils"))
+            instanceExtensions.push_back("VK_EXT_debug_utils");
+        // =============================================
+
 #if !defined(PE_RELEASE) && !defined(PE_MINSIZEREL)
         // === Layers ==================================
         if (RHII.IsInstanceLayerValid("VK_LAYER_KHRONOS_validation"))
             instanceLayers.push_back("VK_LAYER_KHRONOS_validation");
-        // =============================================
-
-        // === Debugging ===============================
-        if (RHII.IsInstanceExtensionValid("VK_EXT_debug_utils"))
-            instanceExtensions.push_back("VK_EXT_debug_utils");
         // =============================================
 
         const VkBool32 setting_true = true;

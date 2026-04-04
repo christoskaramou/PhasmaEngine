@@ -64,8 +64,10 @@ target_compile_definitions(PhasmaCore PRIVATE
 if (CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
     # MS-style declspec/anonymous unions etc., without changing core language types
     target_compile_options(PhasmaCore PUBLIC -fms-extensions)
+    target_compile_options(PhasmaCore PRIVATE $<$<CONFIG:Debug>:-O1>)
 elseif (CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
     target_compile_options(PhasmaCore PUBLIC -fms-extensions)
+    target_compile_options(PhasmaCore PRIVATE $<$<CONFIG:Debug>:-O1>)
 endif()
 
 # Precompiled headers
