@@ -24,6 +24,8 @@
 #include "Window/SplashScreen.h"
 #endif
 
+#include <nlohmann/json.hpp>
+
 namespace pe
 {
     App::App() : m_frameTimer(FrameTimer::Instance())
@@ -129,31 +131,54 @@ namespace pe
             std::ifstream f(snapPath);
             hotReloadSnapshot.assign(std::istreambuf_iterator<char>(f), std::istreambuf_iterator<char>());
         }
+        const bool shouldRestoreHotReloadSnapshot = hasHotReloadSnapshot && !hotReloadSnapshot.empty();
 
         // Call Lua init() after initial frames. For hot-reload we defer this until after
         // startup scene loading and snapshot restore so init runs against the current scene.
-        if (!hasHotReloadSnapshot)
+        if (!shouldRestoreHotReloadSnapshot)
             if (auto *ss = GetGlobalSystem<ScriptSystem>())
                 ss->CallInit();
+
+        // Restore scene before showing the window so the user never sees the
+        // default/auto-loaded scene. One extra frame is rendered with the restored
+        // state so the swapchain image is correct when Show() makes it visible.
+        if (shouldRestoreHotReloadSnapshot)
+        {
+            if (auto *rs = GetGlobalSystem<RendererSystem>())
+            {
+                PE_INFO("[HotReload] Restoring snapshot");
+                nlohmann::json root = nlohmann::json::parse(hotReloadSnapshot, nullptr, false);
+                if (!root.is_discarded() && root.contains("scene") && root["scene"].is_string())
+                {
+                    rs->GetScene().RestoreSnapshot(root["scene"].get<std::string>());
+                    if (root.contains("scene_path") && root["scene_path"].is_string())
+                        rs->GetScene().SetScenePath(root["scene_path"].get<std::string>());
+                    if (root.contains("ui") && root["ui"].is_string())
+                        rs->GetGUI().RestoreUISnapshot(root["ui"].get<std::string>());
+                }
+                else
+                {
+                    // Old format: raw scene JSON without wrapper
+                    rs->GetScene().RestoreSnapshot(hotReloadSnapshot);
+                }
+                // No Frame() here — calling it would flush the event queue and could
+                // trigger script/scene events (e.g. ball_pit loading) before Run() starts.
+            }
+        }
 
         m_window->Show();
         m_window->Maximize();
-        GetGlobalSystem<RendererSystem>()->GetGUI().ApplyStartupLayout();
+        GetGlobalSystem<RendererSystem>()->GetGUI().ApplyStartupLayout(!shouldRestoreHotReloadSnapshot);
 
         if (hasHotReloadSnapshot)
         {
-            if (!hotReloadSnapshot.empty())
-            {
-                if (auto *rs = GetGlobalSystem<RendererSystem>())
-                {
-                    PE_INFO("[HotReload] Restoring snapshot after startup scene load");
-                    rs->GetScene().RestoreSnapshot(hotReloadSnapshot);
-                }
-            }
             std::filesystem::remove(snapPath);
 
-            if (auto *ss = GetGlobalSystem<ScriptSystem>())
-                ss->CallInit();
+            if (shouldRestoreHotReloadSnapshot)
+            {
+                if (auto *ss = GetGlobalSystem<ScriptSystem>())
+                    ss->CallInit(ScriptSystem::InitScope::ActiveNodeScriptsOnly);
+            }
         }
 
         // Reset undo/redo after all initialization (scripts, auto-loads, hot-reload restore, etc.)
@@ -172,8 +197,12 @@ namespace pe
         {
             if (auto *rs = GetGlobalSystem<RendererSystem>())
             {
-                std::string snap = rs->GetScene().TakeSnapshot();
-                std::ofstream(Path::Executable + "reload_state.json") << snap;
+                nlohmann::json root;
+                root["scene"] = rs->GetScene().TakeSnapshot();
+                const auto &scenePath = rs->GetScene().GetScenePath();
+                root["scene_path"] = scenePath.empty() ? "" : scenePath.generic_string();
+                root["ui"] = rs->GetGUI().TakeUISnapshot();
+                std::ofstream(Path::Executable + "reload_state.json") << root.dump();
             }
             std::filesystem::remove(flagPath);
         }

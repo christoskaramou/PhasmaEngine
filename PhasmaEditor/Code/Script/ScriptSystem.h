@@ -89,11 +89,17 @@ namespace pe
     class ScriptSystem : public ISystem
     {
     public:
+        enum class InitScope
+        {
+            AllScripts,
+            ActiveNodeScriptsOnly
+        };
+
         void Init(CommandBuffer *cmd) override;
         void Update() override;
         void Destroy() override;
         void Reload();
-        void CallInit();
+        void CallInit(InitScope scope = InitScope::AllScripts);
         std::vector<std::string> GetTestScriptPaths() const;
         std::string RunScriptTests(const std::vector<std::string> &paths);
 

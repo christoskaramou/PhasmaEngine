@@ -266,6 +266,30 @@ namespace pe
         ImGui::DestroyContext();
     }
 
+    std::string GUI::TakeUISnapshot() const
+    {
+        nlohmann::json ui;
+        for (const auto &w : m_menuWindowWidgets)
+            ui[w->GetName()] = *w->GetOpen();
+        return ui.dump();
+    }
+
+    void GUI::RestoreUISnapshot(const std::string &jsonStr)
+    {
+        nlohmann::json ui = nlohmann::json::parse(jsonStr, nullptr, false);
+        if (ui.is_discarded())
+        {
+            PE_WARN("[HotReload] Failed to parse UI snapshot — skipping widget restore");
+            return;
+        }
+        for (auto &w : m_widgets)
+        {
+            auto it = ui.find(w->GetName());
+            if (it != ui.end() && it->is_boolean())
+                *w->GetOpen() = it->get<bool>();
+        }
+    }
+
     bool GUI::IsMcpServerRunning() const
     {
         return m_editorToolServer && m_editorToolServer->IsRunning();
@@ -1583,7 +1607,7 @@ namespace pe
         queue->WaitIdle();
     }
 
-    void GUI::ApplyStartupLayout()
+    void GUI::ApplyStartupLayout(bool restoreLastScene)
     {
         SDL_PumpEvents();
 
@@ -1592,8 +1616,12 @@ namespace pe
         else
             m_requestDockReset = true;
 
-        // Restore the last open scene
-        LoadEditorConfig();
+        if (restoreLastScene)
+        {
+            // Normal startup restores the last open scene. Hot-reload startup already
+            // restored a live snapshot and must not overwrite it from editor_config.json.
+            LoadEditorConfig();
+        }
     }
 
     void GUI::ExecutePass(CommandBuffer *cmd)

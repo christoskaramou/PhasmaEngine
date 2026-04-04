@@ -441,19 +441,22 @@ namespace pe
         return nullptr;
     }
 
-    void ScriptSystem::CallInit()
+    void ScriptSystem::CallInit(InitScope scope)
     {
         ReconcileNodeInstances();
 
-        for (auto &script : m_scripts)
+        if (scope == InitScope::AllScripts)
         {
-            if (script.initFn.valid() && !HasNodeInstanceForPath(m_nodeInstances, script.path))
+            for (auto &script : m_scripts)
             {
-                auto result = script.initFn();
-                if (!result.valid())
+                if (script.initFn.valid() && !HasNodeInstanceForPath(m_nodeInstances, script.path))
                 {
-                    sol::error err = result;
-                    PE_ERROR("[Lua] init() error in '%s': %s", script.path.c_str(), err.what());
+                    auto result = script.initFn();
+                    if (!result.valid())
+                    {
+                        sol::error err = result;
+                        PE_ERROR("[Lua] init() error in '%s': %s", script.path.c_str(), err.what());
+                    }
                 }
             }
         }

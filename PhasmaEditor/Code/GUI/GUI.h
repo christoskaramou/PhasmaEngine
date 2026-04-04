@@ -41,7 +41,11 @@ namespace pe
         void SetMcpServerEnabled(bool enabled);
 
         // Called after the window is shown to apply the correct layout
-        void ApplyStartupLayout();
+        void ApplyStartupLayout(bool restoreLastScene = true);
+
+        // Hot-reload UI state persistence
+        std::string TakeUISnapshot() const;
+        void RestoreUISnapshot(const std::string &jsonStr);
 
         // Thread-safe GpuTimer access
         std::vector<GpuTimerSample> PopGpuTimerInfos();
