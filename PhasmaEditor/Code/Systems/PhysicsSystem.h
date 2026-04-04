@@ -84,6 +84,12 @@ namespace pe
         std::unordered_map<const NodeId *, size_t> m_nodeToIndex;
         std::vector<PhysicsNodeState> m_bodies;
 
+        // Persistent scratch — reused every frame to avoid per-frame heap alloc/dealloc
+        std::unordered_map<const NodeId *, mat4> m_syncWorldMats;
+        std::unordered_map<const NodeId *, mat4> m_syncParentInv;
+        std::vector<NodeId *> m_syncChanged;
+        std::unordered_set<const NodeId *> m_syncChangedSet;
+
         // Jolt subsystems (raw pointers — created in Init, destroyed in Destroy)
         JPH::TempAllocatorImpl *m_tempAllocator = nullptr;
         JPH::JobSystemThreadPool *m_jobSystem = nullptr;
@@ -92,8 +98,8 @@ namespace pe
         bool m_simulating = false;
         float m_accumulator = 0.0f;
 
-        static constexpr float FIXED_TIMESTEP = 1.0f / 60.0f;
-        static constexpr int MAX_STEPS_PER_FRAME = 4;
+        static constexpr float FIXED_TIMESTEP = 1.0f / 30.0f;
+        static constexpr int MAX_STEPS_PER_FRAME = 2;
     };
 } // namespace pe
 

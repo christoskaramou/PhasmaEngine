@@ -188,6 +188,13 @@ namespace pe
 
         m_joltSystem->SetGravity(JPH::Vec3(0.0f, -9.81f, 0.0f));
 
+        // Reduce solver iterations for large-body-count scenes — trades a small
+        // amount of contact precision for ~30% cheaper physics steps.
+        JPH::PhysicsSettings ps;
+        ps.mNumVelocitySteps = 4; // default 10
+        ps.mNumPositionSteps = 1; // default 2
+        m_joltSystem->SetPhysicsSettings(ps);
+
         SetEnabled(true);
     }
 
@@ -868,13 +875,11 @@ namespace pe
     {
         PE_PROFILE_SCOPE("Physics Sync Body Transforms");
 
+        m_syncWorldMats.clear();
+        m_syncParentInv.clear();
+        m_syncChanged.clear();
+
         JPH::BodyInterface &bi = m_joltSystem->GetBodyInterface();
-        std::unordered_map<const NodeId *, mat4> updatedWorldMatrices;
-        updatedWorldMatrices.reserve(m_bodies.size());
-        std::unordered_map<const NodeId *, mat4> parentInverseCache;
-        parentInverseCache.reserve(m_bodies.size());
-        std::vector<NodeId *> changedNodes;
-        changedNodes.reserve(m_bodies.size());
 
         for (auto &state : m_bodies)
         {
@@ -896,25 +901,26 @@ namespace pe
             const mat4 &oldLocal = scene.GetLocalMatrix(state.nodeId);
 
             // Build world matrix from physics (translation * rotation * scale)
-            mat4 worldMat = glm::translate(mat4(1.f), pos) * glm::mat4_cast(rot) * glm::scale(mat4(1.f), state.authoredScale);
-            updatedWorldMatrices[state.nodeId] = worldMat;
+            mat4 worldMat = glm::translate(mat4(1.f), pos) * glm::mat4_cast(rot) *
+                            glm::scale(mat4(1.f), state.authoredScale);
+            m_syncWorldMats[state.nodeId] = worldMat;
 
             NodeId *parent = scene.GetParent(state.nodeId);
             mat4 newLocal;
             if (parent)
             {
-                auto parentInvIt = parentInverseCache.find(parent);
-                if (parentInvIt == parentInverseCache.end())
+                auto parentInvIt = m_syncParentInv.find(parent);
+                if (parentInvIt == m_syncParentInv.end())
                 {
                     const mat4 &parentWorld = [&]() -> const mat4 &
                     {
-                        auto updatedIt = updatedWorldMatrices.find(parent);
-                        if (updatedIt != updatedWorldMatrices.end())
+                        auto updatedIt = m_syncWorldMats.find(parent);
+                        if (updatedIt != m_syncWorldMats.end())
                             return updatedIt->second;
                         return scene.GetWorldMatrix(parent);
                     }();
 
-                    parentInvIt = parentInverseCache.emplace(parent, glm::inverse(parentWorld)).first;
+                    parentInvIt = m_syncParentInv.emplace(parent, glm::inverse(parentWorld)).first;
                 }
                 newLocal = parentInvIt->second * worldMat;
             }
@@ -926,22 +932,21 @@ namespace pe
             if (!MatricesNearEqual(newLocal, oldLocal))
             {
                 scene.SetLocalMatrix(state.nodeId, newLocal, false);
-                changedNodes.push_back(state.nodeId);
+                m_syncChanged.push_back(state.nodeId);
             }
         }
 
-        if (changedNodes.empty())
+        if (m_syncChanged.empty())
             return;
 
-        std::unordered_set<const NodeId *> changedSet;
-        changedSet.reserve(changedNodes.size());
-        for (NodeId *node : changedNodes)
-            changedSet.insert(node);
+        m_syncChangedSet.clear();
+        for (NodeId *node : m_syncChanged)
+            m_syncChangedSet.insert(node);
 
-        for (NodeId *node : changedNodes)
+        for (NodeId *node : m_syncChanged)
         {
             NodeId *parent = scene.GetParent(node);
-            if (!parent || changedSet.count(parent) == 0)
+            if (!parent || m_syncChangedSet.count(parent) == 0)
                 scene.MarkNodeDirty(node);
         }
     }

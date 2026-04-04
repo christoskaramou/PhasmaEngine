@@ -36,6 +36,11 @@ namespace pe
         friend class LightTransparentPass;
 
         void CalculateCascades(Camera *camera);
+        void EnsureShadowIndirectCapacity(uint32_t meshCount, uint32_t cascades);
+        void BuildShadowIndirects(uint32_t frame);
+        void DestroyShadowIndirects();
+        static std::array<vec4, 6> ExtractFrustumPlanes(const mat4 &vp);
+        static bool AABBInFrustum(const AABB &aabb, const std::array<vec4, 6> &planes);
 
         std::vector<Buffer *> m_uniforms;
         std::vector<mat4> m_cascades;
@@ -43,5 +48,12 @@ namespace pe
         std::vector<Image *> m_textures{};
         Sampler *m_sampler;
         Scene *m_scene = nullptr;
+
+        // Per-cascade shadow culling
+        std::vector<std::array<vec4, 6>> m_cascadePlanes;                            // [cascade]
+        std::vector<std::vector<Buffer *>> m_shadowIndirects;                        // [cascade][frame]
+        std::vector<uint32_t> m_shadowIndirectCounts;                                // [cascade], current frame
+        std::vector<std::vector<vk::DrawIndexedIndirectCommand>> m_shadowCmdScratch; // [cascade] CPU scratch
+        uint32_t m_shadowIndirectCapacity = 0;                                       // allocated command slots
     };
 } // namespace pe

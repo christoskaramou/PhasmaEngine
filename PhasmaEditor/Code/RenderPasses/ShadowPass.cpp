@@ -120,6 +120,7 @@ namespace pe
     {
         uint32_t cascades = Settings::Get<GlobalSettings>().num_cascades;
         m_cascades.resize(cascades);
+        m_cascadePlanes.resize(cascades);
 
         float cascadeSplits[8];
 
@@ -212,6 +213,7 @@ namespace pe
 
             // Store split distance and matrix in cascade
             m_cascades[i] = lightOrthoMatrix * lightViewMatrix;
+            m_cascadePlanes[i] = ExtractFrustumPlanes(m_cascades[i]);
             m_viewZ[i] = (camera->GetNearPlane() + splitDist * clipRange) * 1.5f;
 
             lastSplitDist = cascadeSplits[i];
@@ -235,6 +237,9 @@ namespace pe
         }
         else
         {
+            uint32_t frame = RHII.GetFrameIndex();
+            BuildShadowIndirects(frame);
+
             PushConstants_Shadows pushConstants{};
             pushConstants.jointsCount = static_cast<uint32_t>(m_scene->GetSkeleton().GetBoneCount());
 
@@ -255,7 +260,8 @@ namespace pe
                 cmd->BindVertexBuffer(m_scene->GetBuffer(), m_scene->GetPositionsOffset());
                 cmd->SetConstants(pushConstants);
                 cmd->PushConstants();
-                cmd->DrawIndexedIndirect(m_scene->GetIndirectAll(), 0, m_scene->GetMeshCount());
+                if (!m_shadowIndirects.empty() && m_shadowIndirectCounts[i] > 0)
+                    cmd->DrawIndexedIndirect(m_shadowIndirects[i][frame], 0, m_shadowIndirectCounts[i]);
                 cmd->EndPass();
             }
         }
@@ -270,8 +276,149 @@ namespace pe
         // PE_ERROR("Not implemented");
     }
 
+    std::array<vec4, 6> ShadowPass::ExtractFrustumPlanes(const mat4 &M)
+    {
+        // Gribb/Hartmann: extract rows from column-major GLM matrix, then combine.
+        // For Vulkan depth [0, 1]:  near = row2, far = row3 - row2.
+        vec4 row0 = {M[0][0], M[1][0], M[2][0], M[3][0]};
+        vec4 row1 = {M[0][1], M[1][1], M[2][1], M[3][1]};
+        vec4 row2 = {M[0][2], M[1][2], M[2][2], M[3][2]};
+        vec4 row3 = {M[0][3], M[1][3], M[2][3], M[3][3]};
+
+        std::array<vec4, 6> planes;
+        planes[0] = row3 + row0; // left
+        planes[1] = row3 - row0; // right
+        planes[2] = row3 + row1; // bottom
+        planes[3] = row3 - row1; // top
+        planes[4] = row2;        // near
+        planes[5] = row3 - row2; // far
+
+        for (auto &p : planes)
+        {
+            float len = glm::length(vec3(p));
+            if (len > 1e-6f)
+                p /= len;
+        }
+        return planes;
+    }
+
+    bool ShadowPass::AABBInFrustum(const AABB &aabb, const std::array<vec4, 6> &planes)
+    {
+        for (const vec4 &p : planes)
+        {
+            // Positive vertex: component-wise pick the corner most along the plane normal.
+            vec3 pv;
+            pv.x = (p.x >= 0.f) ? aabb.max.x : aabb.min.x;
+            pv.y = (p.y >= 0.f) ? aabb.max.y : aabb.min.y;
+            pv.z = (p.z >= 0.f) ? aabb.max.z : aabb.min.z;
+            if (glm::dot(vec3(p), pv) + p.w < 0.f)
+                return false;
+        }
+        return true;
+    }
+
+    void ShadowPass::EnsureShadowIndirectCapacity(uint32_t meshCount, uint32_t cascades)
+    {
+        uint32_t frameCount = static_cast<uint32_t>(RHII.GetSwapchainImageCount());
+
+        if (m_shadowIndirects.empty())
+        {
+            m_shadowIndirects.resize(cascades);
+            m_shadowCmdScratch.resize(cascades);
+            m_shadowIndirectCounts.resize(cascades, 0);
+            for (uint32_t c = 0; c < cascades; c++)
+                m_shadowIndirects[c].resize(frameCount, nullptr);
+        }
+
+        if (meshCount <= m_shadowIndirectCapacity)
+            return;
+
+        m_shadowIndirectCapacity = meshCount;
+        size_t byteSize = meshCount * sizeof(vk::DrawIndexedIndirectCommand);
+        for (uint32_t c = 0; c < cascades; c++)
+        {
+            for (uint32_t f = 0; f < frameCount; f++)
+            {
+                Buffer::Destroy(m_shadowIndirects[c][f]);
+                m_shadowIndirects[c][f] = Buffer::Create(
+                    byteSize,
+                    vk::BufferUsageFlagBits2::eIndirectBuffer,
+                    VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT,
+                    "ShadowIndirect_c" + std::to_string(c) + "_f" + std::to_string(f));
+                m_shadowIndirects[c][f]->Map();
+            }
+            m_shadowCmdScratch[c].reserve(meshCount);
+        }
+    }
+
+    void ShadowPass::BuildShadowIndirects(uint32_t frame)
+    {
+        const uint32_t cascades = static_cast<uint32_t>(m_cascadePlanes.size());
+        if (cascades == 0)
+            return;
+
+        const auto &allCmds = m_scene->GetIndirectCommands();
+        const uint32_t meshCount = static_cast<uint32_t>(allCmds.size());
+        if (meshCount == 0)
+            return;
+
+        EnsureShadowIndirectCapacity(meshCount, cascades);
+
+        const auto &opaque = m_scene->GetDrawInfosOpaque();
+        const auto &alphaCut = m_scene->GetDrawInfosAlphaCut();
+
+        for (uint32_t c = 0; c < cascades; c++)
+        {
+            const std::array<vec4, 6> &planes = m_cascadePlanes[c];
+            auto &scratch = m_shadowCmdScratch[c];
+            scratch.clear();
+
+            auto testAndAdd = [&](const DrawInfo &di)
+            {
+                const AABB &aabb = m_scene->GetWorldAABB(di.node);
+                if (aabb.min.x > aabb.max.x)
+                    return; // degenerate (not yet uploaded)
+                if (!AABBInFrustum(aabb, planes))
+                    return;
+                const NodeRuntime &rt = m_scene->GetNodeRuntime(di.node);
+                if (di.meshSlot >= static_cast<uint32_t>(rt.meshRefIndirect.size()))
+                    return;
+                uint32_t cmdIdx = rt.meshRefIndirect[di.meshSlot];
+                if (cmdIdx < meshCount)
+                    scratch.push_back(allCmds[cmdIdx]);
+            };
+
+            for (const auto &di : opaque)
+                testAndAdd(di);
+            for (const auto &di : alphaCut)
+                testAndAdd(di);
+
+            m_shadowIndirectCounts[c] = static_cast<uint32_t>(scratch.size());
+            if (!scratch.empty())
+            {
+                Buffer *buf = m_shadowIndirects[c][frame];
+                std::memcpy(buf->Data(), scratch.data(),
+                            scratch.size() * sizeof(vk::DrawIndexedIndirectCommand));
+                buf->Flush();
+            }
+        }
+    }
+
+    void ShadowPass::DestroyShadowIndirects()
+    {
+        for (auto &frameBuffers : m_shadowIndirects)
+            for (auto *buf : frameBuffers)
+                Buffer::Destroy(buf);
+        m_shadowIndirects.clear();
+        m_shadowCmdScratch.clear();
+        m_shadowIndirectCounts.clear();
+        m_shadowIndirectCapacity = 0;
+    }
+
     void ShadowPass::Destroy()
     {
+        DestroyShadowIndirects();
+
         for (auto &texture : m_textures)
             Image::Destroy(texture);
 

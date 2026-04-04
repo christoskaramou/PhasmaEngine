@@ -277,6 +277,7 @@ namespace pe
         Buffer *GetMaterialTable() { return m_materialTable; }
         Sampler *GetDefaultSampler() const;
         static const std::vector<uint32_t> &GetAabbIndices() { return s_aabbIndices; }
+        const std::vector<vk::DrawIndexedIndirectCommand> &GetIndirectCommands() const { return m_indirectCommands; }
 
         Entity *GetNodeEntity(const NodeId *node) const
         {
