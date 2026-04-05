@@ -11,6 +11,7 @@
 #include "Scene/Scene.h"
 #include "Scene/SceneNode.h"
 #include "Scene/SelectionManager.h"
+#include "Script/ScriptSystem.h"
 #include "ScriptEditor.h"
 #include "Systems/RendererSystem.h"
 #include "imgui/imgui.h"
@@ -415,7 +416,19 @@ namespace pe
                     if (thisCam && thisCam == scene.GetActiveCamera())
                         displayName += " (Main)";
                 }
+
+                // Look up script error for this node
+                std::string scriptError;
+                if (nodeCompFlags & Component_Script)
+                {
+                    if (auto *ss = GetGlobalSystem<ScriptSystem>())
+                        if (auto *inst = ss->FindNodeInstance(node))
+                            scriptError = inst->lastError;
+                }
+
                 std::string displayNodeName = std::string(icon) + "  " + displayName;
+                if (!scriptError.empty())
+                    displayNodeName += "  " ICON_FA_TRIANGLE_EXCLAMATION;
 
                 ImGuiTreeNodeFlags nodeFlags = ImGuiTreeNodeFlags_SpanAvailWidth |
                                                ImGuiTreeNodeFlags_OpenOnArrow |
@@ -436,6 +449,9 @@ namespace pe
                 }
 
                 bool nodeOpen = ImGui::TreeNodeEx((void *)uniqueId, nodeFlags, "%s", displayNodeName.c_str());
+
+                if (!scriptError.empty() && ImGui::IsItemHovered(ImGuiHoveredFlags_DelayShort))
+                    ImGui::SetTooltip("Script error:\n%s", scriptError.c_str());
 
                 // Drag & Drop Source — SourceAllowNullID lets the drag initiate
                 // from the tree node label even when OpenOnArrow is set

@@ -312,8 +312,13 @@ namespace pe
         if (!result.valid())
         {
             sol::error err = result;
-            PE_WARN("[Lua] node script error in '%s': %s", inst.path.c_str(), err.what());
+            Log::Error(PeFormat("[Lua] node script error in '%s': %s", inst.path.c_str(), err.what()));
+            inst.lastError = err.what();
             return inst; // no hooks/vars to collect from a failed script
+        }
+        else
+        {
+            inst.lastError.clear();
         }
 
         CollectHooks(inst);
@@ -361,7 +366,8 @@ namespace pe
         if (!res.valid())
         {
             sol::error err = res;
-            PE_ERROR("[Lua] init() error in node script '%s': %s", inst.path.c_str(), err.what());
+            Log::Error(PeFormat("[Lua] init() error in node script '%s': %s", inst.path.c_str(), err.what()));
+            inst.lastError = err.what();
         }
     }
 
@@ -397,7 +403,8 @@ namespace pe
                     if (!res.valid())
                     {
                         sol::error err = res;
-                        PE_ERROR("[Lua] destroy() error in node script '%s': %s", it->path.c_str(), err.what());
+                        Log::Error(PeFormat("[Lua] destroy() error in node script '%s': %s", it->path.c_str(), err.what()));
+                        it->lastError = err.what();
                     }
                 }
                 PE_INFO("[ScriptSystem] Removing stale node instance '%s'", it->path.c_str());
@@ -455,7 +462,7 @@ namespace pe
                     if (!result.valid())
                     {
                         sol::error err = result;
-                        PE_ERROR("[Lua] init() error in '%s': %s", script.path.c_str(), err.what());
+                        Log::Error(PeFormat("[Lua] init() error in '%s': %s", script.path.c_str(), err.what()));
                     }
                 }
             }
@@ -549,7 +556,7 @@ namespace pe
                 if (!res.valid())
                 {
                     sol::error err = res;
-                    PE_ERROR("[Lua] async callback error: %s", err.what());
+                    Log::Error(PeFormat("[Lua] async callback error: %s", err.what()));
                 }
             }
 
@@ -566,7 +573,7 @@ namespace pe
                     if (!res.valid())
                     {
                         sol::error err = res;
-                        PE_ERROR("[Lua] batch load callback error: %s", err.what());
+                        Log::Error(PeFormat("[Lua] batch load callback error: %s", err.what()));
                     }
                 }
             }
@@ -605,7 +612,7 @@ namespace pe
                     if (!res.valid())
                     {
                         sol::error err = res;
-                        PE_ERROR("[Lua] scene load callback error: %s", err.what());
+                        Log::Error(PeFormat("[Lua] scene load callback error: %s", err.what()));
                     }
                 }
                 it = m_pendingSceneLoads.erase(it);
@@ -623,7 +630,7 @@ namespace pe
                 if (!res.valid())
                 {
                     sol::error err = res;
-                    PE_ERROR("[Lua] scene load callback error: %s", err.what());
+                    Log::Error(PeFormat("[Lua] scene load callback error: %s", err.what()));
                 }
             }
 
@@ -671,7 +678,7 @@ namespace pe
                     if (!result.valid())
                     {
                         sol::error err = result;
-                        PE_ERROR("[Lua] update_editor() error in '%s': %s", script.path.c_str(), err.what());
+                        Log::Error(PeFormat("[Lua] update_editor() error in '%s': %s", script.path.c_str(), err.what()));
                     }
                 }
             }
@@ -683,7 +690,8 @@ namespace pe
                     if (!result.valid())
                     {
                         sol::error err = result;
-                        PE_ERROR("[Lua] update_editor() error in node script '%s': %s", inst.path.c_str(), err.what());
+                        Log::Error(PeFormat("[Lua] update_editor() error in node script '%s': %s", inst.path.c_str(), err.what()));
+                        inst.lastError = err.what();
                     }
                 }
             }
@@ -700,7 +708,7 @@ namespace pe
                     if (!result.valid())
                     {
                         sol::error err = result;
-                        PE_ERROR("[Lua] update() error in '%s': %s", script.path.c_str(), err.what());
+                        Log::Error(PeFormat("[Lua] update() error in '%s': %s", script.path.c_str(), err.what()));
                     }
                 }
             }
@@ -712,7 +720,8 @@ namespace pe
                     if (!result.valid())
                     {
                         sol::error err = result;
-                        PE_ERROR("[Lua] update() error in node script '%s': %s", inst.path.c_str(), err.what());
+                        Log::Error(PeFormat("[Lua] update() error in node script '%s': %s", inst.path.c_str(), err.what()));
+                        inst.lastError = err.what();
                     }
                 }
             }
@@ -732,7 +741,7 @@ namespace pe
                 if (!result.valid())
                 {
                     sol::error err = result;
-                    PE_ERROR("[Lua] destroy() error in '%s': %s", script.path.c_str(), err.what());
+                    Log::Error(PeFormat("[Lua] destroy() error in '%s': %s", script.path.c_str(), err.what()));
                 }
             }
         }
@@ -745,7 +754,8 @@ namespace pe
                 if (!result.valid())
                 {
                     sol::error err = result;
-                    PE_ERROR("[Lua] destroy() error in node script '%s': %s", inst.path.c_str(), err.what());
+                    Log::Error(PeFormat("[Lua] destroy() error in node script '%s': %s", inst.path.c_str(), err.what()));
+                    inst.lastError = err.what();
                 }
             }
         }
@@ -1031,7 +1041,7 @@ namespace pe
                 if (!result.valid())
                 {
                     sol::error err = result;
-                    PE_ERROR("[Lua] script error in '%s': %s", filePath.c_str(), err.what());
+                    Log::Error(PeFormat("[Lua] script error in '%s': %s", filePath.c_str(), err.what()));
                     continue;
                 }
 

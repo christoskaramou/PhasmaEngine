@@ -84,6 +84,7 @@ namespace pe
         std::vector<ExposedVar> exposedVars;
         int exposedRef = LUA_NOREF; // Lua registry ref to __exposed table
         bool initCalled = false;
+        std::string lastError; // non-empty when the script has an active error
     };
 
     class ScriptSystem : public ISystem

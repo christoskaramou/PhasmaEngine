@@ -3,6 +3,7 @@
 #include "FileSelector.h"
 #include "GUI/GUI.h"
 #include "GUI/Helpers.h"
+#include "GUI/IconsFontAwesome.h"
 #include "LightWidget.h"
 #include "MeshWidget.h"
 #include "Particles.h"
@@ -143,6 +144,17 @@ namespace pe
 
         auto drawScriptComponent = [&](NodeId *node)
         {
+            ScriptSystem *ss = GetGlobalSystem<ScriptSystem>();
+            NodeScriptInstance *inst = ss ? ss->FindNodeInstance(node) : nullptr;
+
+            if (inst && !inst->lastError.empty())
+            {
+                ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.f, 0.4f, 0.4f, 1.f));
+                ImGui::TextWrapped(ICON_FA_TRIANGLE_EXCLAMATION "  %s", inst->lastError.c_str());
+                ImGui::PopStyleColor();
+                ImGui::Spacing();
+            }
+
             const std::string &scriptPath = scene.GetNodeScriptPath(node);
             ImGui::TextWrapped("%s", scriptPath.c_str());
             if (ImGui::SmallButton("Edit Script"))
@@ -155,11 +167,9 @@ namespace pe
                 scene.SetNodeScript(node, "");
 
             // Show exposed variables from the per-node script instance
-            ScriptSystem *ss = GetGlobalSystem<ScriptSystem>();
             if (!ss)
                 return;
 
-            NodeScriptInstance *inst = ss->FindNodeInstance(node);
             if (!inst || inst->exposedVars.empty())
                 return;
 
@@ -260,7 +270,6 @@ namespace pe
 
             w->DrawEmbed(pm, sel.GetSelectedEmitterIndex());
         };
-
 
         auto drawAddComponentButton = [&](NodeId *node)
         {
