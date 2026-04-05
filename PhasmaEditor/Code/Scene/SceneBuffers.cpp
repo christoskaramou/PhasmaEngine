@@ -24,8 +24,7 @@ namespace pe
         UpdateImageViews();
         CreateMaterialTable();
         CreateMeshConstants(cmd);
-        if (Settings::Get<GlobalSettings>().ray_tracing_support)
-            BuildAccelerationStructures(cmd);
+        // RT acceleration structures are rebuilt in FlushPendingGpuWork via m_blasDirty
     }
 
     void Scene::CreateGeometryBuffer()
@@ -545,5 +544,56 @@ namespace pe
                                     { Buffer* buf = b; Buffer::Destroy(buf); });
             m_materialTable = nullptr;
         }
+    }
+    void Scene::RebuildRasterInstances(CommandBuffer *cmd)
+    {
+        // Drain all in-flight frames before destroying buffers that may still be bound
+        RHII.WaitDeviceIdle();
+
+        // Release old per-frame storage/indirect buffers before recreating them
+        for (auto &storage : m_storages)
+        {
+            if (storage)
+            {
+                RHII.AddToDeletionQueue([b = storage]()
+                                        { Buffer *buf = b; Buffer::Destroy(buf); });
+                storage = nullptr;
+            }
+        }
+        for (auto &indirect : m_indirects)
+        {
+            if (indirect)
+            {
+                RHII.AddToDeletionQueue([b = indirect]()
+                                        { Buffer *buf = b; Buffer::Destroy(buf); });
+                indirect = nullptr;
+            }
+        }
+        if (m_indirectAll)
+        {
+            RHII.AddToDeletionQueue([b = m_indirectAll]()
+                                    { Buffer *buf = b; Buffer::Destroy(buf); });
+            m_indirectAll = nullptr;
+        }
+
+        // Recalculate m_meshCount from current node mesh refs (no geometry buffer rebuild)
+        m_meshCount = 0;
+        for (uint32_t i = 0; i < GetNodeCount(); i++)
+        {
+            if (m_nodeRuntime[i].gpuPending)
+                continue;
+            for (int meshIdx : m_nodeComponentCache[i].meshRefs->meshRefs)
+            {
+                if (meshIdx >= 0 && m_meshes[meshIdx].indexCount > 0)
+                    m_meshCount++;
+            }
+        }
+
+        CreateStorageBuffers();
+        MarkUniformsDirty();
+        CreateIndirectBuffers(cmd);
+        UpdateImageViews();
+        CreateMaterialTable();
+        CreateMeshConstants(cmd);
     }
 } // namespace pe

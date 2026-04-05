@@ -1762,7 +1762,7 @@ namespace pe
                 {
                     // Record undo snapshot before any destructive action
                     if (undoRedoRS)
-                        undoRedo.RecordSnapshot(undoRedoRS->GetScene());
+                        undoRedo.RecordSnapshot(undoRedoRS->GetScene(), "Deleted Node");
 
                     SelectionType selType = selection.GetSelectionType();
                     if (selType == SelectionType::Node || selType == SelectionType::Mesh)
@@ -1903,37 +1903,111 @@ namespace pe
         // Undo/Redo buttons (left side)
         {
             auto &ur = UndoRedo::Instance();
+            RendererSystem *undoRS = GetGlobalSystem<RendererSystem>();
             ImGui::SetCursorPos(ImVec2(8.0f, centerY));
 
+            // --- Undo button ---
             bool canUndo = ur.CanUndo();
             if (!canUndo)
                 ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.4f, 0.4f, 0.4f, 1.0f));
             if (ImGui::Button(ICON_FA_ROTATE_LEFT, ImVec2(buttonSize, buttonSize)) && canUndo)
             {
-                RendererSystem *rs = GetGlobalSystem<RendererSystem>();
-                if (rs)
-                    ur.Undo(rs->GetScene());
+                if (undoRS)
+                    ur.Undo(undoRS->GetScene());
             }
             if (ImGui::IsItemHovered())
                 ImGui::SetTooltip("Undo (Ctrl+Z)");
             if (!canUndo)
                 ImGui::PopStyleColor();
 
+            // Undo history arrow
+            ImGui::SameLine(0, 1);
+            if (!canUndo)
+                ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.4f, 0.4f, 0.4f, 1.0f));
+            if (ImGui::ArrowButton("##undoArrow", ImGuiDir_Down) && canUndo)
+                ImGui::OpenPopup("##UndoHistory");
+            if (!canUndo)
+                ImGui::PopStyleColor();
+
+            if (ImGui::BeginPopup("##UndoHistory"))
+            {
+                const auto &undoStack = ur.GetUndoStack();
+                if (ImGui::BeginChild("##UndoScroll", ImVec2(220, 200), false))
+                {
+                    size_t n = undoStack.size();
+                    for (size_t i = 0; i < n; i++)
+                    {
+                        // index 0 = most recent (back of deque)
+                        const auto &entry = undoStack[n - 1 - i];
+                        bool isNext = (i == 0);
+                        std::string label = std::to_string(i + 1) + ". " + entry.label;
+                        if (isNext)
+                            ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.4f, 0.8f, 1.0f, 1.0f));
+                        if (ImGui::Selectable(label.c_str()))
+                        {
+                            if (undoRS)
+                                ur.UndoTo(undoRS->GetScene(), i + 1);
+                            ImGui::CloseCurrentPopup();
+                        }
+                        if (isNext)
+                            ImGui::PopStyleColor();
+                    }
+                }
+                ImGui::EndChild();
+                ImGui::EndPopup();
+            }
+
             ImGui::SameLine();
 
+            // --- Redo button ---
             bool canRedo = ur.CanRedo();
             if (!canRedo)
                 ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.4f, 0.4f, 0.4f, 1.0f));
             if (ImGui::Button(ICON_FA_ROTATE_RIGHT, ImVec2(buttonSize, buttonSize)) && canRedo)
             {
-                RendererSystem *rs = GetGlobalSystem<RendererSystem>();
-                if (rs)
-                    ur.Redo(rs->GetScene());
+                if (undoRS)
+                    ur.Redo(undoRS->GetScene());
             }
             if (ImGui::IsItemHovered())
                 ImGui::SetTooltip("Redo (Ctrl+Y)");
             if (!canRedo)
                 ImGui::PopStyleColor();
+
+            // Redo history arrow
+            ImGui::SameLine(0, 1);
+            if (!canRedo)
+                ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.4f, 0.4f, 0.4f, 1.0f));
+            if (ImGui::ArrowButton("##redoArrow", ImGuiDir_Down) && canRedo)
+                ImGui::OpenPopup("##RedoHistory");
+            if (!canRedo)
+                ImGui::PopStyleColor();
+
+            if (ImGui::BeginPopup("##RedoHistory"))
+            {
+                const auto &redoStack = ur.GetRedoStack();
+                if (ImGui::BeginChild("##RedoScroll", ImVec2(220, 200), false))
+                {
+                    size_t n = redoStack.size();
+                    for (size_t i = 0; i < n; i++)
+                    {
+                        const auto &entry = redoStack[n - 1 - i];
+                        bool isNext = (i == 0);
+                        std::string label = std::to_string(i + 1) + ". " + entry.label;
+                        if (isNext)
+                            ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.4f, 0.8f, 1.0f, 1.0f));
+                        if (ImGui::Selectable(label.c_str()))
+                        {
+                            if (undoRS)
+                                ur.RedoTo(undoRS->GetScene(), i + 1);
+                            ImGui::CloseCurrentPopup();
+                        }
+                        if (isNext)
+                            ImGui::PopStyleColor();
+                    }
+                }
+                ImGui::EndChild();
+                ImGui::EndPopup();
+            }
         }
 
         if (GUIState::s_playMode)

@@ -224,7 +224,7 @@ namespace pe
         }
 
         SwapAndPopNode(idx);
-        node->revision++;  // Invalidate all old IDs pointing to this deleted node
+        node->revision++; // Invalidate all old IDs pointing to this deleted node
         node->index = UINT32_MAX;
         m_freeNodeIds.push_back(node);
 
@@ -250,7 +250,6 @@ namespace pe
         m_nodeComponentCache.pop_back();
         m_nodeRuntime.pop_back();
     }
-
 
     void Scene::ReparentNode(NodeId *node, NodeId *newParent)
     {
@@ -307,7 +306,8 @@ namespace pe
             IsValidMeshIndex(meshIndex) && m_meshes[meshIndex].indexCount > 0;
         if (changed)
         {
-            m_geometryDirty = true;
+            m_instancesDirty = true;
+            m_tlasDirty = true;
             MarkNodeDirty(node);
         }
     }
@@ -319,7 +319,8 @@ namespace pe
         m_nodeComponentCache[node->index].meshRefs->meshRefs.push_back(meshIndex);
         if (m_meshes[meshIndex].indexCount > 0)
             m_nodeRuntime[node->index].hasUniformData = true;
-        m_geometryDirty = true;
+        m_instancesDirty = true;
+        m_tlasDirty = true;
         MarkNodeDirty(node);
     }
 
@@ -333,9 +334,14 @@ namespace pe
             // Recompute drawable flag after removal
             bool hasDrawable = false;
             for (int mr : refs)
-                if (mr >= 0 && m_meshes[mr].indexCount > 0) { hasDrawable = true; break; }
+                if (mr >= 0 && m_meshes[mr].indexCount > 0)
+                {
+                    hasDrawable = true;
+                    break;
+                }
             m_nodeRuntime[node->index].hasUniformData = hasDrawable;
-            m_geometryDirty = true;
+            m_instancesDirty = true;
+            m_tlasDirty = true;
             MarkNodeDirty(node);
         }
     }
@@ -375,7 +381,6 @@ namespace pe
         m_meshRuntimes.emplace_back();
         return index;
     }
-
 
     void Scene::MarkNodeDirty(NodeId *node)
     {

@@ -123,6 +123,7 @@ namespace pe
 
         void Update();
         void UpdateGeometryBuffers();
+        void UpdateRasterInstances(); // creates cmd, calls RebuildRasterInstances, submits
         void UpdateTextures();
         void UpdateDirtyMaterials();                          // incremental GPU update for scalar/texture property changes
         MaterialInstance *CreateMaterialInstance(Mesh &mesh); // creates instance from mesh's shared material
@@ -418,9 +419,13 @@ namespace pe
         void UpdateImageViews();
         void CreateMaterialTable();
         void CreateMeshConstants(CommandBuffer *cmd);
+        void RebuildRasterInstances(CommandBuffer *cmd); // rebuild instance data without geometry buffer
 
         // Ray tracing (SceneRayTracing.cpp)
-        void BuildAccelerationStructures(CommandBuffer *cmd);
+        void BuildAccelerationStructures(CommandBuffer *cmd); // full BLAS+TLAS rebuild
+        void BuildAllBLASes(CommandBuffer *cmd);              // only BLAS build, populates m_blasByMesh
+        void BuildTLASFromInstances(CommandBuffer *cmd);      // only TLAS build, uses m_blasByMesh
+        void RebuildTLASOnly();                               // creates cmd, rebuilds TLAS, submits
 
         // Node graph internals (SceneNode.cpp)
         void SwapAndPopNode(uint32_t index);
@@ -472,6 +477,7 @@ namespace pe
 
         // Ray tracing
         std::vector<AccelerationStructure *> m_blases;
+        std::unordered_map<int, AccelerationStructure *> m_blasByMesh; // keyed by mesh index, persistent across TLAS-only rebuilds
         AccelerationStructure *m_tlas = nullptr;
         Buffer *m_instanceBuffer = nullptr;
         Buffer *m_blasMergedBuffer = nullptr;
@@ -531,10 +537,15 @@ namespace pe
         bool m_nodesDirty = false;
         std::vector<NodeId *> m_nodesMoved;
 
-        uint32_t m_generation = 0;    // Incremented on NewScene/LoadSceneApply
-        bool m_geometryDirty = false; // Pending geometry GPU upload
-        bool m_materialDirty = false; // Pending material table update
-        bool m_texturesDirty = false; // Pending image view update
+        uint32_t m_generation = 0;     // Incremented on NewScene/LoadSceneApply
+        bool m_geometryDirty = false;  // Pending full geometry GPU upload (new mesh data)
+        bool m_instancesDirty = false; // Pending raster instance data rebuild (mesh refs changed, no new geometry)
+        bool m_materialDirty = false;  // Pending material table update
+        bool m_texturesDirty = false;  // Pending image view update
+
+        // RT dirty flags (independent of raster geometry)
+        bool m_blasDirty = false; // BLAS rebuild needed (geometry buffer was recreated)
+        bool m_tlasDirty = false; // TLAS rebuild needed (instance set changed)
 
         // --- Light data ---
         LightsUBO m_lightsUBO{};

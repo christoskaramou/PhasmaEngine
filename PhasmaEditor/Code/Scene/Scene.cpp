@@ -137,6 +137,7 @@ namespace pe
             RHII.AddToDeletionQueue([blas]()
                                     { AccelerationStructure* b = blas; AccelerationStructure::Destroy(b); });
         m_blases.clear();
+        m_blasByMesh.clear();
 
         RHII.AddToDeletionQueue([t = m_tlas]()
                                 { AccelerationStructure* as = t; AccelerationStructure::Destroy(as); });
@@ -189,6 +190,17 @@ namespace pe
         CommandBuffer *cmd = RHII.GetMainQueue()->AcquireCommandBuffer();
         cmd->Begin();
         UploadBuffers(cmd);
+        cmd->End();
+        RHII.GetMainQueue()->Submit(1, &cmd, nullptr, nullptr);
+        cmd->Wait();
+        cmd->Return();
+    }
+
+    void Scene::UpdateRasterInstances()
+    {
+        CommandBuffer *cmd = RHII.GetMainQueue()->AcquireCommandBuffer();
+        cmd->Begin();
+        RebuildRasterInstances(cmd);
         cmd->End();
         RHII.GetMainQueue()->Submit(1, &cmd, nullptr, nullptr);
         cmd->Wait();
@@ -948,7 +960,10 @@ namespace pe
 
     void Scene::FlushPendingGpuWork()
     {
-        if (!m_geometryDirty && !m_materialDirty && !m_texturesDirty)
+        const bool rtSupport = Settings::Get<GlobalSettings>().ray_tracing_support;
+        const bool anyDirty = m_geometryDirty || m_instancesDirty || m_materialDirty ||
+                              m_texturesDirty || m_blasDirty || m_tlasDirty;
+        if (!anyDirty)
             return;
 
         if (m_geometryDirty)
@@ -960,9 +975,33 @@ namespace pe
             UpdateGeometryBuffers();
 
             m_geometryDirty = false;
+            m_instancesDirty = false;
             // Geometry rebuild includes material table and image views
             m_materialDirty = false;
             m_texturesDirty = false;
+            // Geometry buffer was recreated — all existing BLAS handles are invalid
+            if (rtSupport)
+                m_blasDirty = true;
+        }
+        else if (m_instancesDirty)
+        {
+            // Mesh refs changed but geometry data is unchanged — rebuild raster instance data only
+            for (uint32_t i = 0; i < GetNodeCount(); i++)
+                m_nodeRuntime[i].gpuPending = false;
+
+            UpdateRasterInstances();
+
+            m_instancesDirty = false;
+            if (m_texturesDirty)
+            {
+                UpdateTextures();
+                m_texturesDirty = false;
+            }
+            if (m_materialDirty)
+            {
+                UpdateDirtyMaterials();
+                m_materialDirty = false;
+            }
         }
         else
         {
@@ -975,6 +1014,30 @@ namespace pe
             {
                 UpdateDirtyMaterials();
                 m_materialDirty = false;
+            }
+        }
+
+        // RT flush — independent of raster path
+        if (rtSupport)
+        {
+            if (m_blasDirty)
+            {
+                // Full BLAS + TLAS rebuild (geometry buffer changed)
+                CommandBuffer *cmd = RHII.GetMainQueue()->AcquireCommandBuffer();
+                cmd->Begin();
+                BuildAccelerationStructures(cmd);
+                cmd->End();
+                RHII.GetMainQueue()->Submit(1, &cmd, nullptr, nullptr);
+                cmd->Wait();
+                cmd->Return();
+                m_blasDirty = false;
+                m_tlasDirty = false;
+            }
+            else if (m_tlasDirty)
+            {
+                // Instance set changed — rebuild TLAS only, reuse existing BLAS handles
+                RebuildTLASOnly();
+                m_tlasDirty = false;
             }
         }
     }

@@ -74,7 +74,7 @@ namespace pe
 
         // Helper: save undo snapshot before any destructive action
         auto recordUndo = [&scene]()
-        { UndoRedo::Instance().RecordSnapshot(scene); };
+        { UndoRedo::Instance().RecordSnapshot(scene, "Deleted Node"); };
 
         // Add Button
         float buttonWidth = ImGui::GetContentRegionAvail().x * 0.8f;
