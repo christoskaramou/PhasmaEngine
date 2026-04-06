@@ -99,6 +99,220 @@ namespace pe
         }
     }
 
+    static vk::CullModeFlags ParseCullMode(const std::string &s)
+    {
+        if (s == "front")
+            return vk::CullModeFlagBits::eFront;
+        if (s == "back")
+            return vk::CullModeFlagBits::eBack;
+        if (s == "none")
+            return vk::CullModeFlagBits::eNone;
+        if (s == "frontAndBack")
+            return vk::CullModeFlagBits::eFrontAndBack;
+        return vk::CullModeFlagBits::eFront;
+    }
+
+    static vk::CompareOp ParseCompareOp(const std::string &s)
+    {
+        if (s == "less")
+            return vk::CompareOp::eLess;
+        if (s == "equal")
+            return vk::CompareOp::eEqual;
+        if (s == "lessOrEqual")
+            return vk::CompareOp::eLessOrEqual;
+        if (s == "greater")
+            return vk::CompareOp::eGreater;
+        if (s == "greaterOrEqual")
+            return vk::CompareOp::eGreaterOrEqual;
+        if (s == "always")
+            return vk::CompareOp::eAlways;
+        if (s == "never")
+            return vk::CompareOp::eNever;
+        if (s == "notEqual")
+            return vk::CompareOp::eNotEqual;
+        return vk::CompareOp::eLessOrEqual;
+    }
+
+    static vk::PrimitiveTopology ParseTopology(const std::string &s)
+    {
+        if (s == "triangleList")
+            return vk::PrimitiveTopology::eTriangleList;
+        if (s == "lineList")
+            return vk::PrimitiveTopology::eLineList;
+        if (s == "lineStrip")
+            return vk::PrimitiveTopology::eLineStrip;
+        if (s == "pointList")
+            return vk::PrimitiveTopology::ePointList;
+        if (s == "triangleStrip")
+            return vk::PrimitiveTopology::eTriangleStrip;
+        if (s == "triangleFan")
+            return vk::PrimitiveTopology::eTriangleFan;
+        return vk::PrimitiveTopology::eTriangleList;
+    }
+
+    static vk::PolygonMode ParsePolygonMode(const std::string &s)
+    {
+        if (s == "fill")
+            return vk::PolygonMode::eFill;
+        if (s == "line")
+            return vk::PolygonMode::eLine;
+        if (s == "point")
+            return vk::PolygonMode::ePoint;
+        return vk::PolygonMode::eFill;
+    }
+
+    static vk::StencilOp ParseStencilOp(const std::string &s)
+    {
+        if (s == "keep")
+            return vk::StencilOp::eKeep;
+        if (s == "zero")
+            return vk::StencilOp::eZero;
+        if (s == "replace")
+            return vk::StencilOp::eReplace;
+        if (s == "incrementAndClamp")
+            return vk::StencilOp::eIncrementAndClamp;
+        if (s == "decrementAndClamp")
+            return vk::StencilOp::eDecrementAndClamp;
+        if (s == "invert")
+            return vk::StencilOp::eInvert;
+        if (s == "incrementAndWrap")
+            return vk::StencilOp::eIncrementAndWrap;
+        if (s == "decrementAndWrap")
+            return vk::StencilOp::eDecrementAndWrap;
+        return vk::StencilOp::eKeep;
+    }
+
+    static vk::PipelineColorBlendAttachmentState ParseBlendAttachment(const std::string &s)
+    {
+        if (s == "additive")
+            return PipelineColorBlendAttachmentState::AdditiveColor;
+        if (s == "transparency")
+            return PipelineColorBlendAttachmentState::TransparencyBlend;
+        if (s == "particles")
+            return PipelineColorBlendAttachmentState::ParticlesBlend;
+        return PipelineColorBlendAttachmentState::Default;
+    }
+
+    static vk::DynamicState ParseDynamicState(const std::string &s)
+    {
+        if (s == "viewport")
+            return vk::DynamicState::eViewport;
+        if (s == "scissor")
+            return vk::DynamicState::eScissor;
+        if (s == "lineWidth")
+            return vk::DynamicState::eLineWidth;
+        if (s == "depthBias")
+            return vk::DynamicState::eDepthBias;
+        if (s == "blendConstants")
+            return vk::DynamicState::eBlendConstants;
+        if (s == "stencilCompareMask")
+            return vk::DynamicState::eStencilCompareMask;
+        if (s == "stencilWriteMask")
+            return vk::DynamicState::eStencilWriteMask;
+        if (s == "stencilReference")
+            return vk::DynamicState::eStencilReference;
+        return vk::DynamicState::eViewport;
+    }
+
+    static vk::Format ParseFormat(const std::string &s)
+    {
+        if (s == "r8g8b8a8Unorm")
+            return vk::Format::eR8G8B8A8Unorm;
+        if (s == "r8g8b8a8Srgb")
+            return vk::Format::eR8G8B8A8Srgb;
+        if (s == "b8g8r8a8Unorm")
+            return vk::Format::eB8G8R8A8Unorm;
+        if (s == "r16g16b16a16Sfloat")
+            return vk::Format::eR16G16B16A16Sfloat;
+        if (s == "r16g16Sfloat")
+            return vk::Format::eR16G16Sfloat;
+        if (s == "r32g32b32a32Sfloat")
+            return vk::Format::eR32G32B32A32Sfloat;
+        if (s == "r32Sfloat")
+            return vk::Format::eR32Sfloat;
+        if (s == "r8Unorm")
+            return vk::Format::eR8Unorm;
+        if (s == "d32Sfloat")
+            return vk::Format::eD32Sfloat;
+        if (s == "d24UnormS8Uint")
+            return vk::Format::eD24UnormS8Uint;
+        if (s == "d32SfloatS8Uint")
+            return vk::Format::eD32SfloatS8Uint;
+        return vk::Format::eUndefined;
+    }
+
+    void PassInfo::Apply(const PassVariant &variant)
+    {
+        if (!variant.vertexShader.empty())
+        {
+            pVertShader = Shader::Create(
+                Path::Assets + variant.vertexShader,
+                vk::ShaderStageFlagBits::eVertex,
+                "mainVS",
+                std::vector<Define>{},
+                ShaderCodeType::HLSL);
+        }
+        if (!variant.fragmentShader.empty())
+        {
+            pFragShader = Shader::Create(
+                Path::Assets + variant.fragmentShader,
+                vk::ShaderStageFlagBits::eFragment,
+                "mainPS",
+                std::vector<Define>{},
+                ShaderCodeType::HLSL);
+        }
+
+        if (!variant.cullMode.empty())
+            cullMode = ParseCullMode(variant.cullMode);
+        if (!variant.depthCompareOp.empty())
+            depthCompareOp = ParseCompareOp(variant.depthCompareOp);
+        depthWriteEnable = variant.depthWriteEnable;
+        depthTestEnable = variant.depthTestEnable;
+        blendEnable = variant.blendEnable;
+
+        if (!variant.topology.empty())
+            topology = ParseTopology(variant.topology);
+        if (!variant.polygonMode.empty())
+            polygonMode = ParsePolygonMode(variant.polygonMode);
+        lineWidth = variant.lineWidth;
+
+        stencilTestEnable = variant.stencilTestEnable;
+        if (!variant.stencilFailOp.empty())
+            stencilFailOp = ParseStencilOp(variant.stencilFailOp);
+        if (!variant.stencilPassOp.empty())
+            stencilPassOp = ParseStencilOp(variant.stencilPassOp);
+        if (!variant.stencilDepthFailOp.empty())
+            stencilDepthFailOp = ParseStencilOp(variant.stencilDepthFailOp);
+        if (!variant.stencilCompareOp.empty())
+            stencilCompareOp = ParseCompareOp(variant.stencilCompareOp);
+        stencilCompareMask = variant.stencilCompareMask;
+        stencilWriteMask = variant.stencilWriteMask;
+        stencilReference = variant.stencilReference;
+
+        if (!variant.colorBlendAttachments.empty())
+        {
+            colorBlendAttachments.clear();
+            for (const auto &att : variant.colorBlendAttachments)
+                colorBlendAttachments.push_back(ParseBlendAttachment(att));
+        }
+
+        if (!variant.dynamicStates.empty())
+        {
+            dynamicStates.clear();
+            for (const auto &ds : variant.dynamicStates)
+                dynamicStates.push_back(ParseDynamicState(ds));
+        }
+
+        if (!variant.colorFormats.empty())
+        {
+            colorFormats.clear();
+            for (const auto &cf : variant.colorFormats)
+                colorFormats.push_back(ParseFormat(cf));
+        }
+        if (!variant.depthFormat.empty())
+            depthFormat = ParseFormat(variant.depthFormat);
+    }
+
     void PassInfo::Update()
     {
         ReflectDescriptors();

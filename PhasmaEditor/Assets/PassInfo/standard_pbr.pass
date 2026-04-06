@@ -25,6 +25,17 @@
     "depthCompareOp": "lessOrEqual",
     "dynamicStates": ["viewport", "scissor"]
   },
+  "transparent": {
+    "vertexShader": "Shaders/Gbuffer/GBufferVS.hlsl",
+    "fragmentShader": "Shaders/Gbuffer/GBufferPS.hlsl",
+    "cullMode": "front",
+    "depthWriteEnable": true,
+    "depthTestEnable": true,
+    "depthCompareOp": "lessOrEqual",
+    "blendEnable": true,
+    "dynamicStates": ["viewport", "scissor"],
+    "colorBlendAttachments": ["default", "default", "default", "default", "default", "transparency"]
+  },
   "shadowCaster": {
     "vertexShader": "Shaders/Shadows/ShadowsVS.hlsl",
     "cullMode": "front",

@@ -15,6 +15,41 @@ namespace pe
         static vk::PipelineColorBlendAttachmentState ParticlesBlend;
     };
 
+    struct PassVariant
+    {
+        std::string vertexShader;
+        std::string fragmentShader;
+
+        std::string cullMode;
+        std::string depthCompareOp;
+        bool depthWriteEnable = true;
+        bool depthTestEnable = true;
+        bool blendEnable = false;
+
+        std::string topology;
+        std::string polygonMode;
+        float lineWidth = 1.0f;
+
+        bool stencilTestEnable = false;
+        std::string stencilFailOp;
+        std::string stencilPassOp;
+        std::string stencilDepthFailOp;
+        std::string stencilCompareOp;
+        uint32_t stencilCompareMask = 0xFFu;
+        uint32_t stencilWriteMask = 0xFFu;
+        uint32_t stencilReference = 0u;
+
+        std::vector<std::string> colorBlendAttachments;
+        std::vector<std::string> dynamicStates;
+        std::vector<std::string> colorFormats;
+        std::string depthFormat;
+
+        std::string materialBufferName;
+        std::string materialAnnotation;
+
+        bool HasShaders() const { return !vertexShader.empty() || !fragmentShader.empty(); }
+    };
+
     struct HitGroup
     {
         Shader *closestHit = nullptr;
@@ -36,6 +71,7 @@ namespace pe
         PassInfo();
         ~PassInfo();
 
+        void Apply(const PassVariant &variant);
         void Update();
         const std::vector<Descriptor *> &GetDescriptors(uint32_t frame) const { return m_descriptorsPF[frame]; }
 

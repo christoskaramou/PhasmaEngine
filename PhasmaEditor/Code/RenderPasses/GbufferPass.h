@@ -6,6 +6,7 @@ namespace pe
     class Buffer;
     class CommandBuffer;
     class PassInfo;
+    class PassInfoAsset;
     class Scene;
 
     struct PushConstants_GBuffer
@@ -51,6 +52,7 @@ namespace pe
 
         std::shared_ptr<PassInfo> m_passInfoDS; // double-sided variant (cullMode=eNone)
 
+        ResourceHandle<PassInfoAsset> m_passAsset;
         Image *m_ibl_brdf_lut;
         Image *m_normalRT;
         Image *m_albedoRT;
@@ -84,6 +86,7 @@ namespace pe
     private:
         void PassBarriers(CommandBuffer *cmd);
 
+        ResourceHandle<PassInfoAsset> m_passAsset;
         Image *m_ibl_brdf_lut;
         Image *m_normalRT;
         Image *m_albedoRT;
