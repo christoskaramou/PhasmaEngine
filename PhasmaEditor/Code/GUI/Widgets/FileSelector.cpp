@@ -23,9 +23,10 @@ namespace pe
         if (!defaultName.empty())
         {
 #ifdef _WIN32
-            strcpy_s(m_currentFile, defaultName.c_str());
+            strncpy_s(m_currentFile, defaultName.c_str(), sizeof(m_currentFile) - 1);
 #else
-            strcpy(m_currentFile, defaultName.c_str());
+            strncpy(m_currentFile, defaultName.c_str(), sizeof(m_currentFile) - 1);
+            m_currentFile[sizeof(m_currentFile) - 1] = '\0';
 #endif
             // Select only the stem (before the last dot)
             std::string_view sv(defaultName);
@@ -127,9 +128,10 @@ namespace pe
                     if (filename.length() < sizeof(m_currentFile))
                     {
 #ifdef _WIN32
-                        strcpy_s(m_currentFile, reinterpret_cast<const char *>(filename.c_str()));
+                        strncpy_s(m_currentFile, reinterpret_cast<const char *>(filename.c_str()), sizeof(m_currentFile) - 1);
 #else
-                        strcpy(m_currentFile, reinterpret_cast<const char *>(filename.c_str()));
+                        strncpy(m_currentFile, reinterpret_cast<const char *>(filename.c_str()), sizeof(m_currentFile) - 1);
+                        m_currentFile[sizeof(m_currentFile) - 1] = '\0';
 #endif
                     }
                 }
