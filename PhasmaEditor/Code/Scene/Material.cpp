@@ -424,9 +424,10 @@ namespace pe
     }
 
     std::vector<uint8_t> MaterialInstance::BuildByteAddressData(
-        const std::vector<StructMemberInfo> &layout) const
+        const std::vector<StructMemberInfo> &layout,
+        const std::vector<MaterialTextureSlot> &textureSlots) const
     {
-        std::vector<uint8_t> buffer = m_parent->BuildByteAddressData(layout);
+        std::vector<uint8_t> buffer = m_parent->BuildByteAddressData(layout, textureSlots);
         if (buffer.empty())
             return buffer;
 
@@ -441,15 +442,14 @@ namespace pe
     }
 
     std::vector<uint8_t> Material::BuildByteAddressData(
-        const std::vector<StructMemberInfo> &layout) const
+        const std::vector<StructMemberInfo> &layout,
+        const std::vector<MaterialTextureSlot> &textureSlots) const
     {
         if (layout.empty())
             return {};
 
-        // Compute total size from last member
         const auto &last = layout.back();
         uint32_t totalSize = last.offset + last.size;
-        // Align to 4 bytes (ByteAddressBuffer requirement)
         totalSize = (totalSize + 3u) & ~3u;
 
         std::vector<uint8_t> buffer(totalSize, 0);
@@ -461,6 +461,17 @@ namespace pe
             {
                 WriteParamValue(buffer, member.offset, it->second);
             }
+        }
+
+        // Write named texture bindless indices
+        for (const auto &slot : textureSlots)
+        {
+            if (slot.byteOffset == 0xFFFFFFFF)
+                continue;
+            auto it = namedTextureIndices.find(slot.bindingName);
+            uint32_t idx = (it != namedTextureIndices.end()) ? it->second : 0xFFFFFFFF;
+            if (slot.byteOffset + sizeof(uint32_t) <= buffer.size())
+                memcpy(buffer.data() + slot.byteOffset, &idx, sizeof(uint32_t));
         }
 
         return buffer;

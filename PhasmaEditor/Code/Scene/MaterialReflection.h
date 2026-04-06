@@ -12,6 +12,7 @@ namespace pe
         int set = -1;
         int binding = -1;
         MaterialWidgetHint hint = MaterialWidgetHint::Auto;
+        uint32_t byteOffset = 0xFFFFFFFF; // offset of the uint index field in the material struct
     };
 
     struct MaterialFieldDesc

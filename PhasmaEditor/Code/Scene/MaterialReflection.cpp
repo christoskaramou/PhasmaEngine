@@ -121,6 +121,43 @@ namespace pe
             }
         }
 
+        // Scan for pe_tex_ prefixed separate images (bindless texture slots)
+        for (const auto &[shader, refl] : stages)
+        {
+            spirv_cross::Compiler compiler{shader->GetSpriv(), shader->Size()};
+            auto resources = compiler.get_shader_resources();
+
+            for (const auto &img : resources.separate_images)
+            {
+                std::string name = compiler.get_name(img.id);
+                if (name.empty())
+                    name = compiler.get_fallback_name(img.id);
+                if (!name.starts_with("pe_tex_"))
+                    continue;
+
+                uint32_t descSet = compiler.get_decoration(img.id, spv::DecorationDescriptorSet);
+                uint32_t descBinding = compiler.get_decoration(img.id, spv::DecorationBinding);
+
+                MaterialTextureSlot slot;
+                slot.bindingName = name;
+                slot.set = static_cast<int>(descSet);
+                slot.binding = static_cast<int>(descBinding);
+
+                // Find matching uint index field in reflected struct (name + "_idx")
+                std::string idxFieldName = name + "_idx";
+                for (const auto &field : layout.fields)
+                {
+                    if (field.name == idxFieldName && field.baseType == spirv_cross::SPIRType::UInt)
+                    {
+                        slot.byteOffset = field.offset;
+                        break;
+                    }
+                }
+
+                layout.textureSlots.push_back(slot);
+            }
+        }
+
         layout.valid = !layout.fields.empty() || !layout.textureSlots.empty();
         return layout;
     }

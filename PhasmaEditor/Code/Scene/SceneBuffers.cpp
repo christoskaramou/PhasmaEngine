@@ -321,6 +321,36 @@ namespace pe
                         rt.imageViewIndices[k] = 0xFFFFFFFF;
                     }
                 }
+
+                // Named textures for shader-driven materials
+                Material *mat = nullptr;
+                if (mesh.materialInstance)
+                    mat = mesh.materialInstance->GetParent();
+                else
+                    mat = mesh.material;
+
+                if (mat)
+                {
+                    mat->namedTextureIndices.clear();
+                    for (const auto &[name, imgHandle] : mat->namedTextures)
+                    {
+                        Image *image = imgHandle.get();
+                        if (!image)
+                        {
+                            mat->namedTextureIndices[name] = 0xFFFFFFFF;
+                            continue;
+                        }
+
+                        auto insertResult = imagesMap.insert(image, static_cast<uint32_t>(m_imageViews.size()));
+                        if (insertResult.first)
+                        {
+                            ImageView *srv = image->GetSRV();
+                            PE_ERROR_IF(!srv, "UpdateImageViews: named texture '%s' has no SRV", name.c_str());
+                            m_imageViews.push_back(srv ? srv : defaults.white->GetSRV());
+                        }
+                        mat->namedTextureIndices[name] = imagesMap[image];
+                    }
+                }
             }
         }
 
@@ -442,6 +472,8 @@ namespace pe
                 }
                 const MaterialLayout &layout = cacheIt->second;
 
+                mat->cachedLayout = layout;
+
                 if (!layout.valid || layout.structMembers.empty())
                     continue;
 
@@ -451,9 +483,9 @@ namespace pe
 
                 std::vector<uint8_t> byteData;
                 if (mesh.materialInstance)
-                    byteData = mesh.materialInstance->BuildByteAddressData(layout.structMembers);
+                    byteData = mesh.materialInstance->BuildByteAddressData(layout.structMembers, layout.textureSlots);
                 else
-                    byteData = mat->BuildByteAddressData(layout.structMembers);
+                    byteData = mat->BuildByteAddressData(layout.structMembers, layout.textureSlots);
 
                 if (byteData.empty())
                     continue;
@@ -524,6 +556,51 @@ namespace pe
         for (auto *model : m_models)
             for (auto &mat : model->GetOwnedMaterials())
                 updateIfDirty(mat.get());
+
+        // --- ByteAddressBuffer incremental update for shader-driven materials ---
+        struct ByteDirtyEntry
+        {
+            Material *mat;
+            std::vector<uint8_t> data;
+        };
+        std::vector<ByteDirtyEntry> byteDirtyEntries;
+
+        auto collectByteIfDirty = [&](Material *mat)
+        {
+            if (!mat->dirty || !mat->passInfoAsset || mat->gpuByteOffset == 0xFFFFFFFF)
+                return;
+            if (!mat->cachedLayout.valid || mat->cachedLayout.structMembers.empty())
+                return;
+
+            std::vector<uint8_t> byteData = mat->BuildByteAddressData(mat->cachedLayout.structMembers, mat->cachedLayout.textureSlots);
+            if (byteData.empty())
+                return;
+
+            byteDirtyEntries.push_back({mat, std::move(byteData)});
+        };
+
+        for (auto &mat : m_ownedMaterials)
+            collectByteIfDirty(mat.get());
+        for (auto *model : m_models)
+            for (auto &mat : model->GetOwnedMaterials())
+                collectByteIfDirty(mat.get());
+
+        if (!byteDirtyEntries.empty() && m_materialByteBuffer)
+        {
+            m_materialByteBuffer->Map();
+            for (const auto &entry : byteDirtyEntries)
+            {
+                BufferRange br{};
+                br.data = const_cast<uint8_t *>(entry.data.data());
+                br.offset = entry.mat->gpuByteOffset;
+                br.size = entry.data.size();
+                m_materialByteBuffer->Copy(1, &br, true);
+                entry.mat->dirty = false;
+            }
+            m_materialByteBuffer->Flush();
+            m_materialByteBuffer->Unmap();
+            anyDirty = true;
+        }
 
         if (anyDirty)
             m_geometryVersion++;

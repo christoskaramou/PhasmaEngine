@@ -30,6 +30,7 @@ namespace pe
         {
             m_cachedLayout = ReflectMaterialLayout(*mat.passInfoAsset);
             m_cachedPassInfoId = passId;
+            mat.cachedLayout = m_cachedLayout;
         }
 
         if (!m_cachedLayout.valid)

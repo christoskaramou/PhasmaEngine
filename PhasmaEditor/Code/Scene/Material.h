@@ -1,6 +1,7 @@
 #pragma once
 
 #include "Base/ResourceManager.h"
+#include "Scene/MaterialReflection.h"
 
 namespace pe
 {
@@ -127,14 +128,22 @@ namespace pe
         // Texture assignments by binding name (e.g. "pe_tex_baseColor")
         std::unordered_map<std::string, ResourceHandle<Image>> namedTextures;
 
+        // Bindless image view indices for named textures (populated by UpdateImageViews)
+        std::unordered_map<std::string, uint32_t> namedTextureIndices;
+
         // Build raw byte buffer for ByteAddressBuffer upload.
-        std::vector<uint8_t> BuildByteAddressData(const std::vector<StructMemberInfo> &layout) const;
+        std::vector<uint8_t> BuildByteAddressData(
+            const std::vector<StructMemberInfo> &layout,
+            const std::vector<MaterialTextureSlot> &textureSlots = {}) const;
 
         // Total byte size of this material's GPU data (from reflected struct size)
         uint32_t gpuByteSize = 0;
 
         // Byte offset in the scene's ByteAddressBuffer (assigned by scene)
         uint32_t gpuByteOffset = 0xFFFFFFFF;
+
+        // Cached reflected layout — populated by CreateMaterialTable or MaterialEditorWidget
+        MaterialLayout cachedLayout;
     };
 
     // Per-mesh overrides of a shared parent Material.
@@ -213,7 +222,9 @@ namespace pe
         void ClearNamedTexture(const std::string &name);
         Image *GetNamedTexture(const std::string &name) const;
 
-        std::vector<uint8_t> BuildByteAddressData(const std::vector<StructMemberInfo> &layout) const;
+        std::vector<uint8_t> BuildByteAddressData(
+            const std::vector<StructMemberInfo> &layout,
+            const std::vector<MaterialTextureSlot> &textureSlots = {}) const;
 
     private:
         Material *m_parent;
