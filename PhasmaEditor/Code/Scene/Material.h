@@ -226,6 +226,22 @@ namespace pe
             const std::vector<StructMemberInfo> &layout,
             const std::vector<MaterialTextureSlot> &textureSlots = {}) const;
 
+        // Check if any named texture overrides exist
+        bool HasNamedTextureOverrides() const { return !m_namedTextureOverrides.empty(); }
+
+        // Access named texture overrides (for UpdateImageViews)
+        const std::unordered_map<std::string, ResourceHandle<Image>> &GetNamedTextureOverrides() const { return m_namedTextureOverrides; }
+
+        // GPU byte offset in the scene's ByteAddressBuffer (per-instance, separate from parent)
+        uint32_t gpuByteOffset = 0xFFFFFFFF;
+        uint32_t gpuByteSize = 0;
+
+        // Dirty flag for incremental GPU updates
+        bool dirty = false;
+
+        // Bindless image view indices for instance texture overrides (populated by UpdateImageViews)
+        std::unordered_map<std::string, uint32_t> namedTextureIndices;
+
     private:
         Material *m_parent;
 

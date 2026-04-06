@@ -431,11 +431,22 @@ namespace pe
         if (buffer.empty())
             return buffer;
 
+        // Override scalar params
         for (const auto &member : layout)
         {
             auto it = m_paramOverrides.find(member.name);
             if (it != m_paramOverrides.end())
                 WriteParamValue(buffer, member.offset, it->second);
+        }
+
+        // Override named texture bindless indices from instance's namedTextureIndices
+        for (const auto &slot : textureSlots)
+        {
+            if (slot.byteOffset == 0xFFFFFFFF)
+                continue;
+            auto it = namedTextureIndices.find(slot.bindingName);
+            if (it != namedTextureIndices.end() && slot.byteOffset + sizeof(uint32_t) <= buffer.size())
+                memcpy(buffer.data() + slot.byteOffset, &it->second, sizeof(uint32_t));
         }
 
         return buffer;

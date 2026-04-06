@@ -22,6 +22,8 @@ namespace pe
         bool DrawPassInfoSelector(Material &mat);
         bool DrawReflectedParams(Material &mat, const MaterialLayout &layout);
         bool DrawReflectedTextures(Material &mat, const MaterialLayout &layout);
+        bool DrawInstanceParams(MaterialInstance &inst, const MaterialLayout &layout);
+        bool DrawInstanceTextures(MaterialInstance &inst, const MaterialLayout &layout);
         bool DrawField(const MaterialFieldDesc &field, MaterialParamValue &value);
 
         // Cached layout — invalidated when PassInfoAsset changes

@@ -14,8 +14,6 @@ namespace pe
 {
     void Scene::UploadBuffers(CommandBuffer *cmd)
     {
-        // Mesh offsets are already set by model import/AddModel — no per-model fixup needed
-
         DestroyBuffers();
         CreateGeometryBuffer();
         CopyIndices(cmd);
@@ -26,12 +24,10 @@ namespace pe
         UpdateImageViews();
         CreateMaterialTable();
         CreateMeshConstants(cmd);
-        // RT acceleration structures are rebuilt in FlushPendingGpuWork via m_blasDirty
     }
 
     void Scene::CreateGeometryBuffer()
     {
-        // Count drawable mesh refs across all nodes
         m_meshCount = 0;
         for (uint32_t i = 0; i < GetNodeCount(); i++)
         {
@@ -63,7 +59,6 @@ namespace pe
 
     void Scene::CopyIndices(CommandBuffer *cmd)
     {
-        // Single contiguous copy from Scene's index store
         if (m_indicesCount > 0)
         {
             cmd->CopyBufferStaged(m_buffer, m_indexStore.data(), m_indicesCount * sizeof(uint32_t), 0);
@@ -101,7 +96,6 @@ namespace pe
         progress = 0;
         gSettings.loading.SetName("Uploading to GPU");
 
-        // Single contiguous copy for each vertex type
         if (m_verticesCount > 0)
         {
             cmd->CopyBufferStaged(m_buffer, m_vertexStore.data(), m_verticesCount * sizeof(Vertex), m_verticesOffset);
@@ -152,7 +146,7 @@ namespace pe
 
         for (uint32_t i = 0; i < GetNodeCount(); i++)
         {
-            m_nodeRuntime[i].hasUniformData = false; // reset; set true below if drawable
+            m_nodeRuntime[i].hasUniformData = false;
 
             if (m_nodeRuntime[i].gpuPending)
                 continue;
@@ -270,7 +264,6 @@ namespace pe
         const auto &defaults = ModelAsset::GetDefaultResources();
         OrderedMap<Image *, uint32_t> imagesMap{};
 
-        // Build unique image view list from Scene's image store
         for (const ResourceHandle<Image> &image : m_imageStore)
         {
             auto insertResult = imagesMap.insert(image.get(), static_cast<uint32_t>(m_imageViews.size()));
@@ -282,9 +275,6 @@ namespace pe
             }
         }
 
-        // Map each active mesh's texture slots to image view indices.
-        // Only iterate meshes referenced by live nodes to avoid stale entries
-        // left behind by deleted models (m_meshes is append-only).
         for (uint32_t ni = 0; ni < GetNodeCount(); ni++)
         {
             for (int meshIndex : m_nodeComponentCache[ni].meshRefs->meshRefs)
@@ -306,7 +296,6 @@ namespace pe
 
                     if (image && !isDefault)
                     {
-                        // Ensure instance texture overrides are in the image view list
                         auto insertResult = imagesMap.insert(image, static_cast<uint32_t>(m_imageViews.size()));
                         if (insertResult.first)
                         {
@@ -322,13 +311,7 @@ namespace pe
                     }
                 }
 
-                // Named textures for shader-driven materials
-                Material *mat = nullptr;
-                if (mesh.materialInstance)
-                    mat = mesh.materialInstance->GetParent();
-                else
-                    mat = mesh.material;
-
+                Material *mat = mesh.material;
                 if (mat)
                 {
                     mat->namedTextureIndices.clear();
@@ -350,6 +333,30 @@ namespace pe
                         }
                         mat->namedTextureIndices[name] = imagesMap[image];
                     }
+
+                    MaterialInstance *inst = mesh.materialInstance;
+                    if (inst)
+                    {
+                        inst->namedTextureIndices = mat->namedTextureIndices;
+                        for (const auto &[name, imgHandle] : inst->GetNamedTextureOverrides())
+                        {
+                            Image *image = imgHandle.get();
+                            if (!image)
+                            {
+                                inst->namedTextureIndices[name] = 0xFFFFFFFF;
+                                continue;
+                            }
+
+                            auto insertResult = imagesMap.insert(image, static_cast<uint32_t>(m_imageViews.size()));
+                            if (insertResult.first)
+                            {
+                                ImageView *srv = image->GetSRV();
+                                PE_ERROR_IF(!srv, "UpdateImageViews: instance named texture '%s' has no SRV", name.c_str());
+                                m_imageViews.push_back(srv ? srv : defaults.white->GetSRV());
+                            }
+                            inst->namedTextureIndices[name] = imagesMap[image];
+                        }
+                    }
                 }
             }
         }
@@ -361,11 +368,8 @@ namespace pe
     {
         Buffer::Destroy(m_materialTable);
 
-        // Assign GPU indices to materials and build the table data.
-        // Materials with an existing Material* share indices; legacy meshes get individual entries.
         std::vector<MaterialGpuData> tableData;
 
-        // Reset GPU indices on all materials (owned by Scene and by each ModelAsset)
         for (auto &mat : m_ownedMaterials)
         {
             mat->gpuIndex = 0xFFFFFFFF;
@@ -412,7 +416,6 @@ namespace pe
 
         if (tableData.empty())
         {
-            // Always have at least one entry (default material) to avoid zero-size buffer
             MaterialGpuData defaultMat{};
             defaultMat.baseColorFactor = vec4(1.f);
             defaultMat.emissiveTransmission = vec4(0.f);
@@ -435,22 +438,28 @@ namespace pe
         m_materialTable->Flush();
         m_materialTable->Unmap();
 
-        // --- ByteAddressBuffer for shader-driven materials ---
         Buffer::Destroy(m_materialByteBuffer);
         m_materialByteBuffer = nullptr;
         m_materialByteBufferUsed = 0;
 
-        // First pass: reflect layouts and compute total byte size needed
-        struct ByteMaterialEntry
+        struct ByteEntry
         {
-            Material *mat;
+            uint32_t *offsetDst;
+            uint32_t *sizeDst;
             std::vector<uint8_t> data;
         };
-        std::vector<ByteMaterialEntry> byteEntries;
+        std::vector<ByteEntry> byteEntries;
         uint32_t totalBytes = 0;
 
-        // Cache reflected layouts per PassInfoAsset to avoid redundant reflection
         std::unordered_map<std::string, MaterialLayout> layoutCache;
+
+        for (uint32_t i = 0; i < GetNodeCount(); i++)
+            for (int meshIdx : m_nodeComponentCache[i].meshRefs->meshRefs)
+                if (meshIdx >= 0 && m_meshes[meshIdx].materialInstance)
+                {
+                    m_meshes[meshIdx].materialInstance->gpuByteOffset = 0xFFFFFFFF;
+                    m_meshes[meshIdx].materialInstance->gpuByteSize = 0;
+                }
 
         for (uint32_t i = 0; i < GetNodeCount(); i++)
         {
@@ -477,23 +486,35 @@ namespace pe
                 if (!layout.valid || layout.structMembers.empty())
                     continue;
 
-                // Skip if already assigned (shared materials)
-                if (mat->gpuByteOffset != 0xFFFFFFFF)
-                    continue;
-
-                std::vector<uint8_t> byteData;
                 if (mesh.materialInstance)
-                    byteData = mesh.materialInstance->BuildByteAddressData(layout.structMembers, layout.textureSlots);
+                {
+                    MaterialInstance *inst = mesh.materialInstance;
+                    if (inst->gpuByteOffset != 0xFFFFFFFF)
+                        continue;
+
+                    std::vector<uint8_t> byteData = inst->BuildByteAddressData(layout.structMembers, layout.textureSlots);
+                    if (byteData.empty())
+                        continue;
+
+                    inst->gpuByteSize = static_cast<uint32_t>(byteData.size());
+                    inst->gpuByteOffset = totalBytes;
+                    totalBytes += (static_cast<uint32_t>(byteData.size()) + 3u) & ~3u;
+                    byteEntries.push_back({&inst->gpuByteOffset, &inst->gpuByteSize, std::move(byteData)});
+                }
                 else
-                    byteData = mat->BuildByteAddressData(layout.structMembers, layout.textureSlots);
+                {
+                    if (mat->gpuByteOffset != 0xFFFFFFFF)
+                        continue;
 
-                if (byteData.empty())
-                    continue;
+                    std::vector<uint8_t> byteData = mat->BuildByteAddressData(layout.structMembers, layout.textureSlots);
+                    if (byteData.empty())
+                        continue;
 
-                mat->gpuByteSize = static_cast<uint32_t>(byteData.size());
-                mat->gpuByteOffset = totalBytes;
-                totalBytes += (static_cast<uint32_t>(byteData.size()) + 3u) & ~3u;
-                byteEntries.push_back({mat, std::move(byteData)});
+                    mat->gpuByteSize = static_cast<uint32_t>(byteData.size());
+                    mat->gpuByteOffset = totalBytes;
+                    totalBytes += (static_cast<uint32_t>(byteData.size()) + 3u) & ~3u;
+                    byteEntries.push_back({&mat->gpuByteOffset, &mat->gpuByteSize, std::move(byteData)});
+                }
             }
         }
 
@@ -513,7 +534,7 @@ namespace pe
             {
                 BufferRange br{};
                 br.data = const_cast<uint8_t *>(entry.data.data());
-                br.offset = entry.mat->gpuByteOffset;
+                br.offset = *entry.offsetDst;
                 br.size = entry.data.size();
                 m_materialByteBuffer->Copy(1, &br, true);
             }
@@ -530,7 +551,6 @@ namespace pe
 
         bool anyDirty = false;
 
-        // Check all owned materials (Scene + ModelAssets)
         auto updateIfDirty = [&](Material *mat)
         {
             if (!mat->dirty || mat->gpuIndex == 0xFFFFFFFF)
@@ -557,10 +577,10 @@ namespace pe
             for (auto &mat : model->GetOwnedMaterials())
                 updateIfDirty(mat.get());
 
-        // --- ByteAddressBuffer incremental update for shader-driven materials ---
         struct ByteDirtyEntry
         {
-            Material *mat;
+            uint32_t offset;
+            bool *dirtyFlag;
             std::vector<uint8_t> data;
         };
         std::vector<ByteDirtyEntry> byteDirtyEntries;
@@ -576,7 +596,7 @@ namespace pe
             if (byteData.empty())
                 return;
 
-            byteDirtyEntries.push_back({mat, std::move(byteData)});
+            byteDirtyEntries.push_back({mat->gpuByteOffset, &mat->dirty, std::move(byteData)});
         };
 
         for (auto &mat : m_ownedMaterials)
@@ -585,17 +605,41 @@ namespace pe
             for (auto &mat : model->GetOwnedMaterials())
                 collectByteIfDirty(mat.get());
 
+        for (uint32_t ni = 0; ni < GetNodeCount(); ni++)
+        {
+            for (int meshIdx : m_nodeComponentCache[ni].meshRefs->meshRefs)
+            {
+                if (meshIdx < 0)
+                    continue;
+                Mesh &mesh = m_meshes[meshIdx];
+                MaterialInstance *inst = mesh.materialInstance;
+                if (!inst || !inst->dirty || inst->gpuByteOffset == 0xFFFFFFFF)
+                    continue;
+
+                Material *parent = inst->GetParent();
+                if (!parent || !parent->cachedLayout.valid || parent->cachedLayout.structMembers.empty())
+                    continue;
+
+                std::vector<uint8_t> byteData = inst->BuildByteAddressData(
+                    parent->cachedLayout.structMembers, parent->cachedLayout.textureSlots);
+                if (byteData.empty())
+                    continue;
+
+                byteDirtyEntries.push_back({inst->gpuByteOffset, &inst->dirty, std::move(byteData)});
+            }
+        }
+
         if (!byteDirtyEntries.empty() && m_materialByteBuffer)
         {
             m_materialByteBuffer->Map();
-            for (const auto &entry : byteDirtyEntries)
+            for (auto &entry : byteDirtyEntries)
             {
                 BufferRange br{};
                 br.data = const_cast<uint8_t *>(entry.data.data());
-                br.offset = entry.mat->gpuByteOffset;
+                br.offset = entry.offset;
                 br.size = entry.data.size();
                 m_materialByteBuffer->Copy(1, &br, true);
-                entry.mat->dirty = false;
+                *entry.dirtyFlag = false;
             }
             m_materialByteBuffer->Flush();
             m_materialByteBuffer->Unmap();
@@ -658,9 +702,12 @@ namespace pe
                 constants.materialId = meshRt.materialGpuIndex;
                 for (int k = 0; k < 5; k++)
                     constants.meshImageIndex[k] = meshRt.imageViewIndices[k];
-                constants.materialByteOffset = (mesh.material && mesh.material->gpuByteOffset != 0xFFFFFFFF)
-                                                   ? mesh.material->gpuByteOffset
-                                                   : 0xFFFFFFFF;
+                if (mesh.materialInstance && mesh.materialInstance->gpuByteOffset != 0xFFFFFFFF)
+                    constants.materialByteOffset = mesh.materialInstance->gpuByteOffset;
+                else if (mesh.material && mesh.material->gpuByteOffset != 0xFFFFFFFF)
+                    constants.materialByteOffset = mesh.material->gpuByteOffset;
+                else
+                    constants.materialByteOffset = 0xFFFFFFFF;
                 constants.pad0 = 0;
 
                 BufferRange range{};
@@ -729,10 +776,8 @@ namespace pe
     }
     void Scene::RebuildRasterInstances(CommandBuffer *cmd)
     {
-        // Drain all in-flight frames before destroying buffers that may still be bound
         RHII.WaitDeviceIdle();
 
-        // Release old per-frame storage/indirect buffers before recreating them
         for (auto &storage : m_storages)
         {
             if (storage)
@@ -758,7 +803,6 @@ namespace pe
             m_indirectAll = nullptr;
         }
 
-        // Recalculate m_meshCount from current node mesh refs (no geometry buffer rebuild)
         m_meshCount = 0;
         for (uint32_t i = 0; i < GetNodeCount(); i++)
         {
