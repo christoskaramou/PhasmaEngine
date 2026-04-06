@@ -194,6 +194,7 @@ namespace pe
         RHII.GetMainQueue()->Submit(1, &cmd, nullptr, nullptr);
         cmd->Wait();
         cmd->Return();
+        // m_blasDirty is set inside UploadBuffers() when rtSupport is true
     }
 
     void Scene::UpdateRasterInstances()
@@ -979,9 +980,7 @@ namespace pe
             // Geometry rebuild includes material table and image views
             m_materialDirty = false;
             m_texturesDirty = false;
-            // Geometry buffer was recreated — all existing BLAS handles are invalid
-            if (rtSupport)
-                m_blasDirty = true;
+            // m_blasDirty is set inside UpdateGeometryBuffers() when rtSupport is true
         }
         else if (m_instancesDirty)
         {

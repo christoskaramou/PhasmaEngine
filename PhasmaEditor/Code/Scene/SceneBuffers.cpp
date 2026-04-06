@@ -24,6 +24,11 @@ namespace pe
         UpdateImageViews();
         CreateMaterialTable();
         CreateMeshConstants(cmd);
+
+        // Geometry buffer was recreated — existing BLAS handles are invalid.
+        // Mark dirty so FlushPendingGpuWork rebuilds acceleration structures.
+        if (Settings::Get<GlobalSettings>().ray_tracing_support)
+            m_blasDirty = true;
     }
 
     void Scene::CreateGeometryBuffer()

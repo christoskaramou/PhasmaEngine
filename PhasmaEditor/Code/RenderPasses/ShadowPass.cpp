@@ -364,8 +364,11 @@ namespace pe
 
         EnsureShadowIndirectCapacity(meshCount, cascades);
 
-        const auto &opaque = m_scene->GetDrawInfosOpaque();
-        const auto &alphaCut = m_scene->GetDrawInfosAlphaCut();
+        // Iterate ALL nodes instead of camera-culled draw infos.
+        // Shadow casters outside the camera frustum must still be rendered
+        // into shadow maps — otherwise shadows disappear when casters are
+        // culled by the camera but still visible via the light's projection.
+        const uint32_t nodeCount = m_scene->GetNodeCount();
 
         for (uint32_t c = 0; c < cascades; c++)
         {
@@ -373,25 +376,29 @@ namespace pe
             auto &scratch = m_shadowCmdScratch[c];
             scratch.clear();
 
-            auto testAndAdd = [&](const DrawInfo &di)
+            for (uint32_t n = 0; n < nodeCount; n++)
             {
-                const AABB &aabb = m_scene->GetWorldAABB(di.node);
-                if (aabb.min.x > aabb.max.x)
-                    return; // degenerate (not yet uploaded)
-                if (!AABBInFrustum(aabb, planes))
-                    return;
-                const NodeRuntime &rt = m_scene->GetNodeRuntime(di.node);
-                if (di.meshSlot >= static_cast<uint32_t>(rt.meshRefIndirect.size()))
-                    return;
-                uint32_t cmdIdx = rt.meshRefIndirect[di.meshSlot];
-                if (cmdIdx < meshCount)
-                    scratch.push_back(allCmds[cmdIdx]);
-            };
+                NodeId *node = m_scene->GetNodeId(n);
+                const NodeRuntime &rt = m_scene->GetNodeRuntime(node);
+                if (!rt.hasUniformData)
+                    continue;
 
-            for (const auto &di : opaque)
-                testAndAdd(di);
-            for (const auto &di : alphaCut)
-                testAndAdd(di);
+                const AABB &aabb = rt.worldAABB;
+                if (aabb.min.x > aabb.max.x)
+                    continue; // degenerate (not yet uploaded)
+                if (!AABBInFrustum(aabb, planes))
+                    continue;
+
+                const auto &refs = m_scene->GetMeshRefs(node);
+                for (uint32_t slot = 0; slot < static_cast<uint32_t>(refs.size()); slot++)
+                {
+                    if (slot >= static_cast<uint32_t>(rt.meshRefIndirect.size()))
+                        break;
+                    uint32_t cmdIdx = rt.meshRefIndirect[slot];
+                    if (cmdIdx < meshCount)
+                        scratch.push_back(allCmds[cmdIdx]);
+                }
+            }
 
             m_shadowIndirectCounts[c] = static_cast<uint32_t>(scratch.size());
             if (!scratch.empty())

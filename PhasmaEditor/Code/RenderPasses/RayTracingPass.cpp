@@ -172,6 +172,16 @@ namespace pe
         builder.ReadRayTracing(depth);
     }
 
+    void RayTracingPass::DeclareOutputs(RGBuilder &builder)
+    {
+        if (!m_scene || !m_scene->GetTLAS())
+            return;
+
+        builder.OutputCustom(m_display, vk::ImageLayout::eGeneral,
+                             vk::PipelineStageFlagBits2::eRayTracingShaderKHR,
+                             vk::AccessFlagBits2::eShaderWrite);
+    }
+
     void RayTracingPass::ExecutePass(CommandBuffer *cmd)
     {
         if (!m_scene)

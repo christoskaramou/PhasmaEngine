@@ -337,6 +337,10 @@ namespace pe
             const auto &refs = m_nodeComponentCache[node->index].meshRefs->meshRefs;
             return refs.empty() ? -1 : refs[0];
         }
+        const std::vector<int> &GetMeshRefs(const NodeId *node) const
+        {
+            return m_nodeComponentCache[node->index].meshRefs->meshRefs;
+        }
         const std::string &GetNodeScriptPath(const NodeId *node) const { return m_nodeComponentCache[node->index].script->path; }
         NodeRuntime &GetNodeRuntime(const NodeId *node) { return m_nodeRuntime[node->index]; }
         const NodeRuntime &GetNodeRuntime(const NodeId *node) const { return m_nodeRuntime[node->index]; }

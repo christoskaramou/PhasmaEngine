@@ -313,7 +313,8 @@ namespace pe
             int32_t textures[5];
         };
 
-        Buffer::Destroy(m_meshInfoBuffer);
+        RHII.AddToDeletionQueue([b = m_meshInfoBuffer]()
+                                { Buffer *buf = b; Buffer::Destroy(buf); });
         m_meshInfoBuffer = Buffer::Create(
             std::max((size_t)1, (size_t)m_rtInstanceCount) * sizeof(MeshInfoGPU),
             vk::BufferUsageFlagBits2::eStorageBuffer | vk::BufferUsageFlagBits2::eTransferDst,

@@ -6,6 +6,10 @@ Subdirectory `INSTRUCTIONS.md` files add layer-specific detail that cascades on 
 **Always read `AI_CHANGELOG.md` before starting work** — it tracks every recent AI-assisted change
 and is the fastest way to understand current state without digging through git history.
 
+After reading `AI_CHANGELOG.md`, consult `docs/wiki/index.md` when you need compact architecture,
+testing, or pitfall summaries. The wiki is a maintained synthesis layer; the source of truth remains
+the codebase plus the canonical instruction files.
+
 ---
 
 ## Build Commands
