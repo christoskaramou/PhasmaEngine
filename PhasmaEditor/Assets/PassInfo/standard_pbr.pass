@@ -1,0 +1,36 @@
+{
+  "name": "standard_pbr",
+  "version": 1,
+  "surface": {
+    "vertexShader": "Shaders/Gbuffer/GBufferVS.hlsl",
+    "fragmentShader": "Shaders/Gbuffer/GBufferPS.hlsl",
+    "cullMode": "front",
+    "depthWriteEnable": false,
+    "depthTestEnable": true,
+    "depthCompareOp": "equal",
+    "blendEnable": false,
+    "dynamicStates": ["viewport", "scissor"],
+    "colorBlendAttachments": ["default", "default", "default", "default", "default", "default"],
+    "materialBinding": {
+      "bufferName": "materialTable",
+      "annotation": "pe_material;color4:baseColorFactor;range01:metallic;range01:roughness;range01:alphaCutoff;range01:normalScale;color3:emissiveFactor;range01:transmissionFactor"
+    }
+  },
+  "depthOnly": {
+    "vertexShader": "Shaders/Depth/DepthVS.hlsl",
+    "fragmentShader": "Shaders/Depth/DepthPS.hlsl",
+    "cullMode": "front",
+    "depthWriteEnable": true,
+    "depthTestEnable": true,
+    "depthCompareOp": "lessOrEqual",
+    "dynamicStates": ["viewport", "scissor"]
+  },
+  "shadowCaster": {
+    "vertexShader": "Shaders/Shadows/ShadowsVS.hlsl",
+    "cullMode": "front",
+    "depthWriteEnable": true,
+    "depthTestEnable": true,
+    "depthCompareOp": "lessOrEqual",
+    "dynamicStates": ["viewport", "scissor"]
+  }
+}

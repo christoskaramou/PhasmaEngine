@@ -1,5 +1,6 @@
 #pragma once
 #include "GUI/Widget.h"
+#include "GUI/Widgets/MaterialEditorWidget.h"
 
 namespace pe
 {
@@ -22,5 +23,6 @@ namespace pe
         void *GetDescriptor(Image *image);
 
         std::unordered_map<Image *, void *> m_textureDescriptors;
+        MaterialEditorWidget m_materialEditor;
     };
 } // namespace pe

@@ -119,6 +119,14 @@ namespace pe
     {
         if (ImGui::CollapsingHeader("Material", ImGuiTreeNodeFlags_DefaultOpen))
         {
+            // If material has a PassInfoAsset, use the reflection-driven editor
+            if (mesh->material && mesh->material->passInfoAsset)
+            {
+                if (m_materialEditor.Draw(mesh, node, GetGlobalSystem<RendererSystem>()->GetScene()))
+                    PropagateMeshChange(node);
+                return;
+            }
+
             // Show material name if available
             Material *mat = mesh->material;
             if (mat && !mat->name.empty())

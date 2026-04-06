@@ -1,6 +1,8 @@
 #include "Scene/Scene.h"
 #include "Scene/Material.h"
+#include "Scene/MaterialReflection.h"
 #include "Scene/ModelAsset.h"
+#include "Scene/PassInfoAsset.h"
 #include "API/Buffer.h"
 #include "API/Command.h"
 #include "API/Image.h"
@@ -335,11 +337,17 @@ namespace pe
 
         // Reset GPU indices on all materials (owned by Scene and by each ModelAsset)
         for (auto &mat : m_ownedMaterials)
+        {
             mat->gpuIndex = 0xFFFFFFFF;
+            mat->gpuByteOffset = 0xFFFFFFFF;
+        }
         for (auto *model : m_models)
         {
             for (auto &mat : model->GetOwnedMaterials())
+            {
                 mat->gpuIndex = 0xFFFFFFFF;
+                mat->gpuByteOffset = 0xFFFFFFFF;
+            }
         }
 
         for (uint32_t i = 0; i < GetNodeCount(); i++)
@@ -396,6 +404,91 @@ namespace pe
         m_materialTable->Copy(1, &range, true);
         m_materialTable->Flush();
         m_materialTable->Unmap();
+
+        // --- ByteAddressBuffer for shader-driven materials ---
+        Buffer::Destroy(m_materialByteBuffer);
+        m_materialByteBuffer = nullptr;
+        m_materialByteBufferUsed = 0;
+
+        // First pass: reflect layouts and compute total byte size needed
+        struct ByteMaterialEntry
+        {
+            Material *mat;
+            std::vector<uint8_t> data;
+        };
+        std::vector<ByteMaterialEntry> byteEntries;
+        uint32_t totalBytes = 0;
+
+        // Cache reflected layouts per PassInfoAsset to avoid redundant reflection
+        std::unordered_map<std::string, MaterialLayout> layoutCache;
+
+        for (uint32_t i = 0; i < GetNodeCount(); i++)
+        {
+            for (int meshIdx : m_nodeComponentCache[i].meshRefs->meshRefs)
+            {
+                if (meshIdx < 0)
+                    continue;
+                Mesh &mesh = m_meshes[meshIdx];
+                if (mesh.indexCount == 0 || !mesh.material || !mesh.material->passInfoAsset)
+                    continue;
+
+                Material *mat = mesh.material;
+                std::string passId = mat->passInfoAsset->GetResourceId();
+
+                auto cacheIt = layoutCache.find(passId);
+                if (cacheIt == layoutCache.end())
+                {
+                    cacheIt = layoutCache.emplace(passId, ReflectMaterialLayout(*mat->passInfoAsset)).first;
+                }
+                const MaterialLayout &layout = cacheIt->second;
+
+                if (!layout.valid || layout.structMembers.empty())
+                    continue;
+
+                // Skip if already assigned (shared materials)
+                if (mat->gpuByteOffset != 0xFFFFFFFF)
+                    continue;
+
+                std::vector<uint8_t> byteData;
+                if (mesh.materialInstance)
+                    byteData = mesh.materialInstance->BuildByteAddressData(layout.structMembers);
+                else
+                    byteData = mat->BuildByteAddressData(layout.structMembers);
+
+                if (byteData.empty())
+                    continue;
+
+                mat->gpuByteSize = static_cast<uint32_t>(byteData.size());
+                mat->gpuByteOffset = totalBytes;
+                totalBytes += (static_cast<uint32_t>(byteData.size()) + 3u) & ~3u;
+                byteEntries.push_back({mat, std::move(byteData)});
+            }
+        }
+
+        if (totalBytes == 0)
+            totalBytes = 4;
+
+        m_materialByteBuffer = Buffer::Create(
+            totalBytes,
+            vk::BufferUsageFlagBits2::eStorageBuffer | vk::BufferUsageFlagBits2::eTransferDst,
+            VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT,
+            "Scene_materialByteBuffer");
+
+        if (!byteEntries.empty())
+        {
+            m_materialByteBuffer->Map();
+            for (const auto &entry : byteEntries)
+            {
+                BufferRange br{};
+                br.data = const_cast<uint8_t *>(entry.data.data());
+                br.offset = entry.mat->gpuByteOffset;
+                br.size = entry.data.size();
+                m_materialByteBuffer->Copy(1, &br, true);
+            }
+            m_materialByteBuffer->Flush();
+            m_materialByteBuffer->Unmap();
+        }
+        m_materialByteBufferUsed = totalBytes;
     }
 
     void Scene::UpdateDirtyMaterials()
@@ -488,6 +581,10 @@ namespace pe
                 constants.materialId = meshRt.materialGpuIndex;
                 for (int k = 0; k < 5; k++)
                     constants.meshImageIndex[k] = meshRt.imageViewIndices[k];
+                constants.materialByteOffset = (mesh.material && mesh.material->gpuByteOffset != 0xFFFFFFFF)
+                                                   ? mesh.material->gpuByteOffset
+                                                   : 0xFFFFFFFF;
+                constants.pad0 = 0;
 
                 BufferRange range{};
                 range.data = &constants;
@@ -543,6 +640,14 @@ namespace pe
             RHII.AddToDeletionQueue([b = m_materialTable]()
                                     { Buffer* buf = b; Buffer::Destroy(buf); });
             m_materialTable = nullptr;
+        }
+
+        if (m_materialByteBuffer)
+        {
+            RHII.AddToDeletionQueue([b = m_materialByteBuffer]()
+                                    { Buffer* buf = b; Buffer::Destroy(buf); });
+            m_materialByteBuffer = nullptr;
+            m_materialByteBufferUsed = 0;
         }
     }
     void Scene::RebuildRasterInstances(CommandBuffer *cmd)

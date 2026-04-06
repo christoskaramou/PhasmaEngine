@@ -7,6 +7,18 @@
 [[vk::binding(1, 1)]] SamplerState material_sampler;
 [[vk::binding(2, 1)]] Texture2D textures[];
 [[vk::binding(3, 1)]] StructuredBuffer<MaterialGpuData> materialTable;
+[[vk::binding(4, 1)]] ByteAddressBuffer materialBytes;
+
+MaterialGpuData LoadMaterialFromBytes(uint byteOffset)
+{
+    MaterialGpuData m;
+    m.baseColorFactor      = asfloat(materialBytes.Load4(byteOffset));
+    m.emissiveTransmission = asfloat(materialBytes.Load4(byteOffset + 16));
+    m.pbrParams            = asfloat(materialBytes.Load4(byteOffset + 32));
+    m.transmissionVolume   = asfloat(materialBytes.Load4(byteOffset + 48));
+    m.attenuationColor     = asfloat(materialBytes.Load4(byteOffset + 64));
+    return m;
+}
 
 float4 SampleArray(float2 uv, uint index)
 {
@@ -26,7 +38,12 @@ PS_OUTPUT_Gbuffer mainPS(PS_INPUT_Gbuffer input)
     PS_OUTPUT_Gbuffer output;
 
     const uint id = input.id;
-    const MaterialGpuData mat = materialTable[constants[id].materialId];
+    const uint byteOff = constants[id].materialByteOffset;
+    MaterialGpuData mat;
+    if (byteOff != 0xFFFFFFFF)
+        mat = LoadMaterialFromBytes(byteOff);
+    else
+        mat = materialTable[constants[id].materialId];
 
     float2 uv = input.uv;
     uint textureMask = constants[id].textureMask;

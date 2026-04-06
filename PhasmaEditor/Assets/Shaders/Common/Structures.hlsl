@@ -45,15 +45,15 @@ struct PushConstants_Bloom_Combine
 };
 
 #ifdef SHADOWMAP_CASCADES
-    struct PushConstants_Lighting
-    {
-        uint num_point_lights;
-        uint num_spot_lights;
-        uint num_area_lights;
-        float2 framebufferSize;
-        uint passType;
-        float max_cascade_dist[SHADOWMAP_CASCADES];
-    };
+struct PushConstants_Lighting
+{
+    uint num_point_lights;
+    uint num_spot_lights;
+    uint num_area_lights;
+    float2 framebufferSize;
+    uint passType;
+    float max_cascade_dist[SHADOWMAP_CASCADES];
+};
 #endif
 
 struct PushConstants_GBuffer
@@ -82,15 +82,17 @@ struct Mesh_Constants
     uint textureMask;
     uint materialId;
     int meshImageIndex[5];
+    uint materialByteOffset; // byte offset into ByteAddressBuffer (0xFFFFFFFF = use legacy materialId)
+    uint pad0;               // align to 16 bytes
 };
 
 struct MaterialGpuData
 {
     float4 baseColorFactor;
-    float4 emissiveTransmission;  // .xyz = emissive, .w = transmissionFactor
-    float4 pbrParams;             // .x = metallic, .y = roughness, .z = alphaCutoff, .w = occlusionStrength
-    float4 transmissionVolume;    // .x = thicknessFactor, .y = attenuationDistance, .z = ior, .w = unused
-    float4 attenuationColor;      // .xyz = attenuationColor, .w = unused
+    float4 emissiveTransmission; // .xyz = emissive, .w = transmissionFactor
+    float4 pbrParams;            // .x = metallic, .y = roughness, .z = alphaCutoff, .w = occlusionStrength
+    float4 transmissionVolume;   // .x = thicknessFactor, .y = attenuationDistance, .z = ior, .w = unused
+    float4 attenuationColor;     // .xyz = attenuationColor, .w = unused
 };
 
 // -----------------------------------------
@@ -103,55 +105,55 @@ struct VS_INPUT_Position
 
 struct VS_INPUT_Depth
 {
-    float3 position             : POSITION;
-    float2 uv                   : TEXCOORD0;
-    uint4 joints                : BLENDINDICES;
-    float4 weights              : BLENDWEIGHT;
-    uint id                     : SV_InstanceID;
+    float3 position : POSITION;
+    float2 uv : TEXCOORD0;
+    uint4 joints : BLENDINDICES;
+    float4 weights : BLENDWEIGHT;
+    uint id : SV_InstanceID;
 };
 
 struct VS_INPUT_Gbuffer
 {
-    float3 position             : POSITION;
-    float2 texCoord             : TEXCOORD;
-    float3 normal               : NORMAL;
-    float4 tangent              : TANGENT;
-    float4 color                : COLOR;
-    uint4 joints                : BLENDINDICES;
-    float4 weights              : BLENDWEIGHT;
-    uint id                     : SV_InstanceID;
+    float3 position : POSITION;
+    float2 texCoord : TEXCOORD;
+    float3 normal : NORMAL;
+    float4 tangent : TANGENT;
+    float4 color : COLOR;
+    uint4 joints : BLENDINDICES;
+    float4 weights : BLENDWEIGHT;
+    uint id : SV_InstanceID;
 };
 
 struct VS_OUTPUT_Position
 {
-    float4 position             : SV_POSITION;
+    float4 position : SV_POSITION;
 };
 
 struct VS_OUTPUT_Position_Uv
 {
-    float2 uv                   : TEXCOORD0;
-    float4 position             : SV_POSITION;
+    float2 uv : TEXCOORD0;
+    float4 position : SV_POSITION;
 };
 
 struct VS_OUTPUT_Position_Uv_ID
 {
-    float2 uv                   : TEXCOORD0;
-    float alphaFactor           : TEXCOORD1;
-    float4 position             : SV_POSITION;
-    uint id                     : SV_InstanceID;
+    float2 uv : TEXCOORD0;
+    float alphaFactor : TEXCOORD1;
+    float4 position : SV_POSITION;
+    uint id : SV_InstanceID;
 };
 
 struct VS_OUTPUT_Gbuffer
 {
-    float2 uv                   : TEXCOORD0;
-    float3 normal               : NORMAL;
-    float4 tangent              : TEXCOORD4;
-    float4 color                : COLOR;
-    float4 positionCS           : POSITION0;
-    float4 prevPositionCS       : POSITION1;
-    float4 positionWS           : POSITION2;
-    float4 position             : SV_POSITION;
-    uint id                     : SV_InstanceID;
+    float2 uv : TEXCOORD0;
+    float3 normal : NORMAL;
+    float4 tangent : TEXCOORD4;
+    float4 color : COLOR;
+    float4 positionCS : POSITION0;
+    float4 prevPositionCS : POSITION1;
+    float4 positionWS : POSITION2;
+    float4 position : SV_POSITION;
+    uint id : SV_InstanceID;
 };
 
 struct VS_OUTPUT_AABB
@@ -164,53 +166,53 @@ struct VS_OUTPUT_AABB
 // ------------- Pixel structs -------------
 struct PS_INPUT_Gbuffer
 {
-    float2 uv                   : TEXCOORD0;
-    float3 normal               : NORMAL;
-    float4 tangent              : TEXCOORD4;
-    float4 color                : COLOR;
-    float4 positionCS           : POSITION0;
-    float4 prevPositionCS       : POSITION1;
-    float4 positionWS           : POSITION2;
-    uint id                     : SV_InstanceID;
+    float2 uv : TEXCOORD0;
+    float3 normal : NORMAL;
+    float4 tangent : TEXCOORD4;
+    float4 color : COLOR;
+    float4 positionCS : POSITION0;
+    float4 prevPositionCS : POSITION1;
+    float4 positionWS : POSITION2;
+    uint id : SV_InstanceID;
 };
 
 struct PS_INPUT_Position_Uv
 {
-    float2 uv                   : TEXCOORD0;
-    float4 position             : SV_POSITION;
+    float2 uv : TEXCOORD0;
+    float4 position : SV_POSITION;
 };
 
 struct PS_INPUT_Position_Uv_ID
 {
-    float2 uv                   : TEXCOORD0;
-    float alphaFactor           : TEXCOORD1;
-    float4 position             : SV_POSITION;
-    uint id                     : SV_InstanceID;
+    float2 uv : TEXCOORD0;
+    float alphaFactor : TEXCOORD1;
+    float4 position : SV_POSITION;
+    uint id : SV_InstanceID;
 };
 
 struct PS_INPUT_UV
 {
-    float2 uv                   : TEXCOORD0;
+    float2 uv : TEXCOORD0;
 };
 
 struct PS_INPUT_Color
 {
-    float4 color                : COLOR;
+    float4 color : COLOR;
 };
 
 struct PS_OUTPUT_Gbuffer
 {
-    float3 normal               : SV_TARGET0;
-    float4 albedo               : SV_TARGET1;
-    float4 metRough             : SV_TARGET2;
-    float2 velocity             : SV_TARGET3;
-    float4 emissive             : SV_TARGET4;
-    float transparency          : SV_TARGET5;
+    float3 normal : SV_TARGET0;
+    float4 albedo : SV_TARGET1;
+    float4 metRough : SV_TARGET2;
+    float2 velocity : SV_TARGET3;
+    float4 emissive : SV_TARGET4;
+    float transparency : SV_TARGET5;
 };
 
 struct PS_OUTPUT_Color
 {
-    float4 color                : SV_Target0;
+    float4 color : SV_Target0;
 };
 // -----------------------------------------
 
@@ -254,18 +256,18 @@ struct Particle
 
 struct ParticleEmitter
 {
-    float4 position;      // xyz: position
-    float4 velocity;      // xyz: base velocity direction
-    float4 colorStart;    // rgba: start color
-    float4 colorEnd;      // rgba: end color
-    float4 sizeLife;      // x: sizeStart, y: sizeEnd, z: lifeMin, w: lifeMax
-    float4 physics;       // x: spawnRate, y: spawnRadius, z: noiseStrength, w: drag
-    float4 gravity;       // xyz: gravity vector
-    float4 animation;     // x: rows, y: cols, z: speed (multi), w: unused
+    float4 position;   // xyz: position
+    float4 velocity;   // xyz: base velocity direction
+    float4 colorStart; // rgba: start color
+    float4 colorEnd;   // rgba: end color
+    float4 sizeLife;   // x: sizeStart, y: sizeEnd, z: lifeMin, w: lifeMax
+    float4 physics;    // x: spawnRate, y: spawnRadius, z: noiseStrength, w: drag
+    float4 gravity;    // xyz: gravity vector
+    float4 animation;  // x: rows, y: cols, z: speed (multi), w: unused
     uint textureIndex;
     uint count;
     uint offset;
-    uint orientation;     // 0: Billboard, 1: Horizontal, 2: Vertical, 3: Velocity
+    uint orientation; // 0: Billboard, 1: Horizontal, 2: Vertical, 3: Velocity
 };
 
 // -----------------------------------------

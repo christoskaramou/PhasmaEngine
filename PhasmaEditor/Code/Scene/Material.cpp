@@ -1,4 +1,5 @@
 #include "Material.h"
+#include "API/Reflection.h"
 
 namespace pe
 {
@@ -369,6 +370,100 @@ namespace pe
             if (resolved.textures[i].get() != m_parent->textures[i].get())
                 SetTexture(static_cast<TextureType>(i), resolved.textures[i]);
         }
+    }
+
+    void MaterialInstance::SetParam(const std::string &name, const MaterialParamValue &value)
+    {
+        m_paramOverrides[name] = value;
+    }
+
+    void MaterialInstance::ClearParam(const std::string &name)
+    {
+        m_paramOverrides.erase(name);
+    }
+
+    bool MaterialInstance::HasParamOverride(const std::string &name) const
+    {
+        return m_paramOverrides.contains(name);
+    }
+
+    MaterialParamValue MaterialInstance::GetParam(const std::string &name) const
+    {
+        auto it = m_paramOverrides.find(name);
+        if (it != m_paramOverrides.end())
+            return it->second;
+
+        auto pit = m_parent->params.find(name);
+        if (pit != m_parent->params.end())
+            return pit->second;
+
+        return float(0.f);
+    }
+
+    void MaterialInstance::SetNamedTexture(const std::string &name, ResourceHandle<Image> img)
+    {
+        m_namedTextureOverrides[name] = img;
+    }
+
+    void MaterialInstance::ClearNamedTexture(const std::string &name)
+    {
+        m_namedTextureOverrides.erase(name);
+    }
+
+    Image *MaterialInstance::GetNamedTexture(const std::string &name) const
+    {
+        auto it = m_namedTextureOverrides.find(name);
+        if (it != m_namedTextureOverrides.end() && it->second)
+            return it->second.get();
+
+        auto pit = m_parent->namedTextures.find(name);
+        if (pit != m_parent->namedTextures.end() && pit->second)
+            return pit->second.get();
+
+        return nullptr;
+    }
+
+    std::vector<uint8_t> MaterialInstance::BuildByteAddressData(
+        const std::vector<StructMemberInfo> &layout) const
+    {
+        std::vector<uint8_t> buffer = m_parent->BuildByteAddressData(layout);
+        if (buffer.empty())
+            return buffer;
+
+        for (const auto &member : layout)
+        {
+            auto it = m_paramOverrides.find(member.name);
+            if (it != m_paramOverrides.end())
+                WriteParamValue(buffer, member.offset, it->second);
+        }
+
+        return buffer;
+    }
+
+    std::vector<uint8_t> Material::BuildByteAddressData(
+        const std::vector<StructMemberInfo> &layout) const
+    {
+        if (layout.empty())
+            return {};
+
+        // Compute total size from last member
+        const auto &last = layout.back();
+        uint32_t totalSize = last.offset + last.size;
+        // Align to 4 bytes (ByteAddressBuffer requirement)
+        totalSize = (totalSize + 3u) & ~3u;
+
+        std::vector<uint8_t> buffer(totalSize, 0);
+
+        for (const auto &member : layout)
+        {
+            auto it = params.find(member.name);
+            if (it != params.end())
+            {
+                WriteParamValue(buffer, member.offset, it->second);
+            }
+        }
+
+        return buffer;
     }
 
 } // namespace pe

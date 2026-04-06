@@ -89,9 +89,7 @@ namespace pe
                 compiler.set_entry_point(shader->GetEntryName(), model);
         }
 
-        auto active = compiler.get_active_interface_variables();
         spirv_cross::ShaderResources resources = compiler.get_shader_resources();
-        compiler.set_enabled_interface_variables(std::move(active));
         auto specConstants = compiler.get_specialization_constants();
 
         // Specialization constants
@@ -138,6 +136,7 @@ namespace pe
         {
             CombinedImageSamplerDesc desc{};
             desc.name = GetResourceName(compiler, resource.id);
+
             desc.typeInfo = compiler.get_type(resource.type_id);
             desc.set = compiler.get_decoration(resource.id, spv::DecorationDescriptorSet);
             desc.binding = compiler.get_decoration(resource.id, spv::DecorationBinding);
@@ -150,6 +149,7 @@ namespace pe
         {
             SamplerDesc desc{};
             desc.name = GetResourceName(compiler, resource.id);
+
             desc.typeInfo = compiler.get_type(resource.type_id);
             desc.set = compiler.get_decoration(resource.id, spv::DecorationDescriptorSet);
             desc.binding = compiler.get_decoration(resource.id, spv::DecorationBinding);
@@ -162,6 +162,7 @@ namespace pe
         {
             ImageDesc desc{};
             desc.name = GetResourceName(compiler, resource.id);
+
             desc.typeInfo = compiler.get_type(resource.type_id);
             desc.set = compiler.get_decoration(resource.id, spv::DecorationDescriptorSet);
             desc.binding = compiler.get_decoration(resource.id, spv::DecorationBinding);
@@ -174,6 +175,7 @@ namespace pe
         {
             ImageDesc desc{};
             desc.name = GetResourceName(compiler, resource.id);
+
             desc.typeInfo = compiler.get_type(resource.type_id);
             desc.set = compiler.get_decoration(resource.id, spv::DecorationDescriptorSet);
             desc.binding = compiler.get_decoration(resource.id, spv::DecorationBinding);
@@ -186,6 +188,7 @@ namespace pe
         {
             BufferDesc desc{};
             desc.name = GetResourceName(compiler, resource.id);
+
             desc.typeInfo = compiler.get_type(resource.type_id);
             desc.set = compiler.get_decoration(resource.id, spv::DecorationDescriptorSet);
             desc.binding = compiler.get_decoration(resource.id, spv::DecorationBinding);
@@ -199,6 +202,7 @@ namespace pe
         {
             BufferDesc desc{};
             desc.name = GetResourceName(compiler, resource.id);
+
             desc.typeInfo = compiler.get_type(resource.type_id);
             desc.set = compiler.get_decoration(resource.id, spv::DecorationDescriptorSet);
             desc.binding = compiler.get_decoration(resource.id, spv::DecorationBinding);
@@ -212,6 +216,7 @@ namespace pe
         {
             AccelerationStructureDesc desc{};
             desc.name = GetResourceName(compiler, resource.id);
+
             desc.typeInfo = compiler.get_type(resource.type_id);
             desc.set = compiler.get_decoration(resource.id, spv::DecorationDescriptorSet);
             desc.binding = compiler.get_decoration(resource.id, spv::DecorationBinding);
@@ -227,6 +232,24 @@ namespace pe
             m_pushConstants.structName = compiler.get_name(m_pushConstants.typeInfo.self);
             m_pushConstants.size = compiler.get_declared_struct_size(m_pushConstants.typeInfo);
         }
+    }
+
+    std::vector<StructMemberInfo> Reflection::ReflectStructMembers(
+        const spirv_cross::Compiler &compiler,
+        const spirv_cross::SPIRType &structType)
+    {
+        std::vector<StructMemberInfo> members;
+        uint32_t memberCount = static_cast<uint32_t>(structType.member_types.size());
+        for (uint32_t i = 0; i < memberCount; i++)
+        {
+            StructMemberInfo info;
+            info.name = compiler.get_member_name(structType.self, i);
+            info.typeInfo = compiler.get_type(structType.member_types[i]);
+            info.offset = compiler.type_struct_member_offset(structType, i);
+            info.size = static_cast<uint32_t>(compiler.get_declared_struct_member_size(structType, i));
+            members.push_back(info);
+        }
+        return members;
     }
 
     static const std::unordered_map<spirv_cross::SPIRType::BaseType, size_t> s_typeSizeMap = {

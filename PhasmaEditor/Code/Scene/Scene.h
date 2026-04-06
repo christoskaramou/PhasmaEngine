@@ -276,6 +276,7 @@ namespace pe
         uint32_t GetMeshCount() const { return m_meshCount; }
         Buffer *GetMeshConstants() { return m_meshConstants; }
         Buffer *GetMaterialTable() { return m_materialTable; }
+        Buffer *GetMaterialByteBuffer() { return m_materialByteBuffer; }
         Sampler *GetDefaultSampler() const;
         static const std::vector<uint32_t> &GetAabbIndices() { return s_aabbIndices; }
         const std::vector<vk::DrawIndexedIndirectCommand> &GetIndirectCommands() const { return m_indirectCommands; }
@@ -486,6 +487,8 @@ namespace pe
         uint32_t m_rtInstanceCount = 0;
         Buffer *m_meshConstants = nullptr;
         Buffer *m_materialTable = nullptr;
+        Buffer *m_materialByteBuffer = nullptr; // ByteAddressBuffer for shader-driven materials
+        uint32_t m_materialByteBufferUsed = 0;  // current byte offset (append-only)
         Sampler *m_defaultSampler = nullptr;
 
         static std::vector<uint32_t> s_aabbIndices;

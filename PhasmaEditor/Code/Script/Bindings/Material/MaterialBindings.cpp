@@ -17,9 +17,11 @@ namespace pe
 
     static int ResolveMeshIdx(Scene *s, const SceneNodeHandle &h, int slot = 0)
     {
-        if (!s || !h.IsValid(*s)) return -1;
+        if (!s || !h.IsValid(*s))
+            return -1;
         const auto &refs = s->GetNodeCache(h.nodeId).meshRefs->meshRefs;
-        if (slot < 0 || slot >= static_cast<int>(refs.size())) return -1;
+        if (slot < 0 || slot >= static_cast<int>(refs.size()))
+            return -1;
         return refs[slot];
     }
 

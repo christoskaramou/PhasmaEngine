@@ -1,5 +1,6 @@
 #pragma once
 #include "spirv_cross/spirv_common.hpp"
+#include "spirv_cross/spirv_cross.hpp"
 
 namespace pe
 {
@@ -7,6 +8,14 @@ namespace pe
     {
         std::string name;
         spirv_cross::SPIRType typeInfo = spirv_cross::SPIRType(spv::Op::OpNop);
+    };
+
+    struct StructMemberInfo
+    {
+        std::string name;
+        spirv_cross::SPIRType typeInfo = spirv_cross::SPIRType(spv::Op::OpNop);
+        uint32_t offset = 0;
+        uint32_t size = 0;
     };
 
     struct SpecializationConstantDesc : public BaseDesc
@@ -73,6 +82,17 @@ namespace pe
         std::vector<vk::VertexInputAttributeDescription> GetVertexAttributes();
         std::vector<Descriptor *> GetDescriptors();
         const PushConstantDesc &GetPushConstantDesc() { return m_pushConstants; }
+
+        const std::vector<BufferDesc> &GetStorageBuffers() const { return m_storageBuffers; }
+        const std::vector<BufferDesc> &GetUniformBuffers() const { return m_uniformBuffers; }
+        const std::vector<ImageDesc> &GetImages() const { return m_images; }
+        const std::vector<ImageDesc> &GetStorageImages() const { return m_storageImages; }
+        const std::vector<SamplerDesc> &GetSamplers() const { return m_samplers; }
+        const std::vector<CombinedImageSamplerDesc> &GetCombinedImageSamplers() const { return m_combinedImageSamplers; }
+
+        static std::vector<StructMemberInfo> ReflectStructMembers(
+            const spirv_cross::Compiler &compiler,
+            const spirv_cross::SPIRType &structType);
 
     private:
         std::vector<SpecializationConstantDesc> m_specializationConstants{};

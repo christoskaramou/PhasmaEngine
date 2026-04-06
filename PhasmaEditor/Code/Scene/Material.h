@@ -6,6 +6,8 @@ namespace pe
 {
     class Image;
     class Sampler;
+    class PassInfoAsset;
+    struct StructMemberInfo;
 
     // GPU-side material data — uploaded to a StructuredBuffer for shader access.
     // Must match the HLSL MaterialGpuData struct in Structures.hlsl exactly.
@@ -31,6 +33,25 @@ namespace pe
         std::string depthVS;
         std::string depthPS;
     };
+
+    // Variant type for shader-driven material parameters
+    using MaterialParamValue = std::variant<float, vec2, vec3, vec4, int32_t, uint32_t>;
+
+    // Get byte size of a MaterialParamValue
+    inline uint32_t GetParamValueSize(const MaterialParamValue &v)
+    {
+        return std::visit([](const auto &val) -> uint32_t
+                          { return sizeof(val); },
+                          v);
+    }
+
+    // Write a MaterialParamValue into a byte buffer at the given offset
+    inline void WriteParamValue(std::vector<uint8_t> &buffer, uint32_t offset, const MaterialParamValue &v)
+    {
+        std::visit([&](const auto &val)
+                   { memcpy(buffer.data() + offset, &val, sizeof(val)); },
+                   v);
+    }
 
     // First-class material asset. Stores named PBR parameters and texture slots.
     // Multiple meshes can reference the same Material for sharing.
@@ -96,6 +117,24 @@ namespace pe
 
         // Shader override — nullptr means StandardPBR (pass uses its default VS/PS).
         ShaderAsset *shaderAsset = nullptr;
+
+        // --- Shader-driven material (used when passInfoAsset is set) ---
+        ResourceHandle<PassInfoAsset> passInfoAsset; // replaces shaderAsset for new materials
+
+        // Key-value parameter storage — keys match reflected struct member names
+        std::unordered_map<std::string, MaterialParamValue> params;
+
+        // Texture assignments by binding name (e.g. "pe_tex_baseColor")
+        std::unordered_map<std::string, ResourceHandle<Image>> namedTextures;
+
+        // Build raw byte buffer for ByteAddressBuffer upload.
+        std::vector<uint8_t> BuildByteAddressData(const std::vector<StructMemberInfo> &layout) const;
+
+        // Total byte size of this material's GPU data (from reflected struct size)
+        uint32_t gpuByteSize = 0;
+
+        // Byte offset in the scene's ByteAddressBuffer (assigned by scene)
+        uint32_t gpuByteOffset = 0xFFFFFFFF;
     };
 
     // Per-mesh overrides of a shared parent Material.
@@ -164,6 +203,18 @@ namespace pe
         // The result is a temporary — caller should not store it long-term.
         Material Resolve() const;
 
+        // --- Key-value param overrides (for shader-driven materials) ---
+        void SetParam(const std::string &name, const MaterialParamValue &value);
+        void ClearParam(const std::string &name);
+        bool HasParamOverride(const std::string &name) const;
+        MaterialParamValue GetParam(const std::string &name) const;
+
+        void SetNamedTexture(const std::string &name, ResourceHandle<Image> img);
+        void ClearNamedTexture(const std::string &name);
+        Image *GetNamedTexture(const std::string &name) const;
+
+        std::vector<uint8_t> BuildByteAddressData(const std::vector<StructMemberInfo> &layout) const;
+
     private:
         Material *m_parent;
 
@@ -184,5 +235,9 @@ namespace pe
 
         ResourceHandle<Image> m_textureOverrides[5];
         bool m_hasTextureOverride[5] = {};
+
+        // Key-value overrides (for shader-driven materials)
+        std::unordered_map<std::string, MaterialParamValue> m_paramOverrides;
+        std::unordered_map<std::string, ResourceHandle<Image>> m_namedTextureOverrides;
     };
 } // namespace pe
