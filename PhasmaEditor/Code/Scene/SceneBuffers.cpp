@@ -204,7 +204,7 @@ namespace pe
                 continue;
 
             const auto &refs = m_nodeComponentCache[i].meshRefs->meshRefs;
-            m_nodeRuntime[i].meshRefIndirect.resize(refs.size());
+            m_nodeRuntime[i].meshRefIndirect.assign(refs.size(), UINT32_MAX);
 
             for (uint32_t slot = 0; slot < static_cast<uint32_t>(refs.size()); slot++)
             {

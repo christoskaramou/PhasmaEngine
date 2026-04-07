@@ -237,9 +237,6 @@ namespace pe
         }
         else
         {
-            uint32_t frame = RHII.GetFrameIndex();
-            BuildShadowIndirects(frame);
-
             PushConstants_Shadows pushConstants{};
             pushConstants.jointsCount = static_cast<uint32_t>(m_scene->GetSkeleton().GetBoneCount());
 
@@ -260,8 +257,7 @@ namespace pe
                 cmd->BindVertexBuffer(m_scene->GetBuffer(), m_scene->GetPositionsOffset());
                 cmd->SetConstants(pushConstants);
                 cmd->PushConstants();
-                if (!m_shadowIndirects.empty() && m_shadowIndirectCounts[i] > 0)
-                    cmd->DrawIndexedIndirect(m_shadowIndirects[i][frame], 0, m_shadowIndirectCounts[i]);
+                cmd->DrawIndexedIndirect(m_scene->GetIndirectAll(), 0, m_scene->GetMeshCount());
                 cmd->EndPass();
             }
         }
@@ -364,48 +360,41 @@ namespace pe
 
         EnsureShadowIndirectCapacity(meshCount, cascades);
 
-        // Iterate ALL nodes instead of camera-culled draw infos.
-        // Shadow casters outside the camera frustum must still be rendered
-        // into shadow maps — otherwise shadows disappear when casters are
-        // culled by the camera but still visible via the light's projection.
-        const uint32_t nodeCount = m_scene->GetNodeCount();
+        // Build a single command list from ALL nodes (not camera-culled draw infos)
+        // so that off-screen shadow casters still render into the shadow maps.
+        std::vector<vk::DrawIndexedIndirectCommand> allValidCmds;
+        allValidCmds.reserve(meshCount);
 
+        const uint32_t nodeCount = m_scene->GetNodeCount();
+        for (uint32_t n = 0; n < nodeCount; n++)
+        {
+            NodeId *node = m_scene->GetNodeId(n);
+            const NodeRuntime &rt = m_scene->GetNodeRuntime(node);
+            if (!rt.hasUniformData)
+                continue;
+
+            const auto &refs = m_scene->GetMeshRefs(node);
+            for (uint32_t slot = 0; slot < static_cast<uint32_t>(refs.size()); slot++)
+            {
+                if (slot >= static_cast<uint32_t>(rt.meshRefIndirect.size()))
+                    break;
+                uint32_t cmdIdx = rt.meshRefIndirect[slot];
+                if (cmdIdx != UINT32_MAX && cmdIdx < meshCount)
+                    allValidCmds.push_back(allCmds[cmdIdx]);
+            }
+        }
+
+        // Write the same command list into every cascade.
+        // TODO: re-add per-cascade frustum culling once the plane extraction
+        //       is verified with the current left-handed reversed-Z ortho setup.
         for (uint32_t c = 0; c < cascades; c++)
         {
-            const std::array<vec4, 6> &planes = m_cascadePlanes[c];
-            auto &scratch = m_shadowCmdScratch[c];
-            scratch.clear();
-
-            for (uint32_t n = 0; n < nodeCount; n++)
-            {
-                NodeId *node = m_scene->GetNodeId(n);
-                const NodeRuntime &rt = m_scene->GetNodeRuntime(node);
-                if (!rt.hasUniformData)
-                    continue;
-
-                const AABB &aabb = rt.worldAABB;
-                if (aabb.min.x > aabb.max.x)
-                    continue; // degenerate (not yet uploaded)
-                if (!AABBInFrustum(aabb, planes))
-                    continue;
-
-                const auto &refs = m_scene->GetMeshRefs(node);
-                for (uint32_t slot = 0; slot < static_cast<uint32_t>(refs.size()); slot++)
-                {
-                    if (slot >= static_cast<uint32_t>(rt.meshRefIndirect.size()))
-                        break;
-                    uint32_t cmdIdx = rt.meshRefIndirect[slot];
-                    if (cmdIdx < meshCount)
-                        scratch.push_back(allCmds[cmdIdx]);
-                }
-            }
-
-            m_shadowIndirectCounts[c] = static_cast<uint32_t>(scratch.size());
-            if (!scratch.empty())
+            m_shadowIndirectCounts[c] = static_cast<uint32_t>(allValidCmds.size());
+            if (!allValidCmds.empty())
             {
                 Buffer *buf = m_shadowIndirects[c][frame];
-                std::memcpy(buf->Data(), scratch.data(),
-                            scratch.size() * sizeof(vk::DrawIndexedIndirectCommand));
+                std::memcpy(buf->Data(), allValidCmds.data(),
+                            allValidCmds.size() * sizeof(vk::DrawIndexedIndirectCommand));
                 buf->Flush();
             }
         }
