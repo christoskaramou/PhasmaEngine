@@ -166,7 +166,7 @@ float4x4 GetMeshMatrix(uint id)               { return LoadMatrix(constants[id].
 float4x4 GetMeshPreviousMatrix(uint id)       { return LoadMatrix(constants[id].meshDataOffset + MATRIX_SIZE); }
 float4x4 GetJointMatrix(uint id, uint index)  { return LoadMatrix(constants[id].meshDataOffset + MESH_DATA_SIZE + index * MATRIX_SIZE); }
 
-// Factors — read from material table (Phase 2: StructuredBuffer<MaterialGpuData>)
+// Factors — read from material table (StructuredBuffer<MaterialGpuData>)
 float4 GetBaseColorFactor(uint id)     { return materialTable[constants[id].materialId].baseColorFactor; }
 float3 GetEmissiveFactor(uint id)      { return materialTable[constants[id].materialId].emissiveTransmission.xyz; }
 float4 GetMetRoughAlphacutOcl(uint id) { return materialTable[constants[id].materialId].pbrParams; }
@@ -208,6 +208,9 @@ Vertex GetVertex(uint meshId, uint vertexIndex)
 // The meshId is used to look up per-node joint matrices via GetJointMatrix.
 Vertex SkinVertex(Vertex v, uint meshId)
 {
+    if (pc.jointsCount == 0)
+        return v; // No skeleton in scene
+
     float weightSum = v.weights.x + v.weights.y + v.weights.z + v.weights.w;
     if (weightSum < 0.001f)
         return v; // Not skinned
@@ -287,6 +290,8 @@ float TraceShadowRay(float3 origin, float3 dir, float dist)
 
 float3 RT_DirectLight(DirectionalLight light, float3 worldPos, float3 materialNormal, float3 V, float3 albedo, float metallic, float roughness, float3 F0, float occlusion, float shadow, float3 energyCompensation)
 {
+    roughness = max(roughness, 0.04);
+
     float3 lightDir = RotateVectorByQuat(float3(0, 0, -1), light.rotation); // Ray direction (from light)
     float3 L        = normalize(-lightDir); // To-light vector for PBR
     float3 H        = normalize(V + L);
@@ -329,6 +334,8 @@ float3 RT_DirectLight(DirectionalLight light, float3 worldPos, float3 materialNo
 
 float3 RT_ComputePointLight(int index, float3 worldPos, float3 materialNormal, float3 V, float3 albedo, float metallic, float roughness, float3 F0, float occlusion, float3 energyCompensation)
 {
+    roughness = max(roughness, 0.04);
+
     PointLight light = LoadPointLight(index);
     float3 lightPos = light.position.xyz; // .xyz
     float3 lightDirFull = worldPos - lightPos;
@@ -384,6 +391,8 @@ float3 RT_ComputePointLight(int index, float3 worldPos, float3 materialNormal, f
 
 float3 RT_ComputeSpotLight(int index, float3 worldPos, float3 materialNormal, float3 V, float3 albedo, float metallic, float roughness, float3 F0, float occlusion, float3 energyCompensation)
 {
+    roughness = max(roughness, 0.04);
+
     SpotLight light = LoadSpotLight(index);
     float3 lightPos = light.position.xyz; // .xyz
     float3 lightDirFull = worldPos - lightPos;
@@ -450,6 +459,8 @@ float3 RT_ComputeSpotLight(int index, float3 worldPos, float3 materialNormal, fl
 
 float3 RT_ComputeAreaLight(int index, float3 worldPos, float3 materialNormal, float3 V, float3 albedo, float metallic, float roughness, float3 F0, float occlusion, float3 energyCompensation)
 {
+    roughness = max(roughness, 0.04);
+
     AreaLight light = LoadAreaLight(index);
     float3 lightPos = light.position.xyz;
     float  range    = light.position.w;

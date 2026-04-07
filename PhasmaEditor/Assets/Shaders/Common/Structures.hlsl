@@ -71,7 +71,7 @@ struct PushConstants_RayTracing
     uint num_point_lights;
     uint num_spot_lights;
     uint num_area_lights;
-    float pad;
+    uint jointsCount;
 };
 
 struct Mesh_Constants

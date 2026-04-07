@@ -123,8 +123,9 @@ namespace pe
 
     void Buffer::Flush(size_t size, size_t offset) const
     {
-        if (!size || !m_data)
+        if (!m_data)
             return;
+        size = size ? size : m_size;
         PE_ERROR_IF(offset + size > m_size, "Buffer::Flush: range overflow");
         PE_CHECK(vmaFlushAllocation(RHII.GetAllocator(), m_allocation, offset, size));
     }

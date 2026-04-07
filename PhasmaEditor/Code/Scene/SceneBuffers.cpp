@@ -440,7 +440,7 @@ namespace pe
         range.offset = 0;
         range.size = tableData.size() * sizeof(MaterialGpuData);
         m_materialTable->Copy(1, &range, true);
-        m_materialTable->Flush();
+        m_materialTable->Flush(range.size, 0);
         m_materialTable->Unmap();
 
         Buffer::Destroy(m_materialByteBuffer);
@@ -569,7 +569,7 @@ namespace pe
             range.offset = mat->gpuIndex * sizeof(MaterialGpuData);
             range.size = sizeof(MaterialGpuData);
             m_materialTable->Copy(1, &range, true);
-            m_materialTable->Flush();
+            m_materialTable->Flush(range.size, range.offset);
             m_materialTable->Unmap();
 
             mat->dirty = false;
@@ -646,7 +646,7 @@ namespace pe
                 m_materialByteBuffer->Copy(1, &br, true);
                 *entry.dirtyFlag = false;
             }
-            m_materialByteBuffer->Flush();
+            m_materialByteBuffer->Flush(m_materialByteBufferUsed, 0);
             m_materialByteBuffer->Unmap();
             anyDirty = true;
         }
@@ -724,7 +724,7 @@ namespace pe
                 offset += sizeof(Mesh_Constants);
             }
         }
-        m_meshConstants->Flush();
+        m_meshConstants->Flush(offset, 0);
         m_meshConstants->Unmap();
     }
 

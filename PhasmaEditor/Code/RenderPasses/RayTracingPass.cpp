@@ -152,7 +152,7 @@ namespace pe
                         Descriptor *rtSet0 = rtSets[0];
                         rtSet0->SetBuffer(2, scene.GetUniforms(i));
                         rtSet0->SetBuffer(3, scene.GetMeshConstants());
-                        rtSet0->SetSampler(4, scene.GetDefaultSampler());
+                        rtSet0->SetSampler(4, m_display->GetSampler());
                         rtSet0->SetImageViews(5, scene.GetImageViews());
                         rtSet0->SetBuffer(11, scene.GetMaterialTable());
                         rtSet0->Update();
@@ -200,6 +200,7 @@ namespace pe
         cmd->SetConstantAt(0, (uint32_t)scene.GetPointLights().size());
         cmd->SetConstantAt(1, (uint32_t)scene.GetSpotLights().size());
         cmd->SetConstantAt(2, (uint32_t)scene.GetAreaLights().size());
+        cmd->SetConstantAt(3, (uint32_t)scene.GetSkeleton().GetBoneCount());
         cmd->PushConstants();
         cmd->TraceRays(m_display->GetWidth(), m_display->GetHeight(), 1);
         cmd->EndDebugRegion();

@@ -73,7 +73,7 @@ namespace pe
             v.joints[1] = 0;
             v.joints[2] = 0;
             v.joints[3] = 0;
-            v.weights[0] = 1.f;
+            v.weights[0] = 0.f;
             v.weights[1] = 0.f;
             v.weights[2] = 0.f;
             v.weights[3] = 0.f;
@@ -94,7 +94,7 @@ namespace pe
             pv.joints[1] = 0;
             pv.joints[2] = 0;
             pv.joints[3] = 0;
-            pv.weights[0] = 1.f;
+            pv.weights[0] = 0.f;
             pv.weights[1] = 0.f;
             pv.weights[2] = 0.f;
             pv.weights[3] = 0.f;
