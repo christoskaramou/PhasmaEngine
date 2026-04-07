@@ -6,18 +6,6 @@
 
 namespace pe
 {
-    static MaterialWidgetHint InferWidgetFromType(spirv_cross::SPIRType::BaseType baseType, uint32_t vecSize)
-    {
-        if (baseType == spirv_cross::SPIRType::Float)
-        {
-            if (vecSize == 4)
-                return MaterialWidgetHint::Color4;
-            if (vecSize == 1)
-                return MaterialWidgetHint::Range01;
-        }
-        return MaterialWidgetHint::Auto;
-    }
-
     MaterialLayout ReflectMaterialLayout(const PassInfoAsset &passInfo)
     {
         MaterialLayout layout;
@@ -56,7 +44,11 @@ namespace pe
                 stages.push_back({fs, &fs->GetReflection()});
         }
 
-        auto reflectBufferStruct = [&](Shader *shader, const std::string &bufferName, const MaterialAnnotation &ann)
+        // Reflect the raw SPIR-V struct to get member offsets
+        std::vector<StructMemberInfo> rawMembers;
+        uint32_t rawTotalSize = 0;
+
+        auto reflectRawStruct = [&](Shader *shader, const std::string &bufferName)
         {
             spirv_cross::Compiler compiler{shader->GetSpriv(), shader->Size()};
             auto resources = compiler.get_shader_resources();
@@ -79,33 +71,9 @@ namespace pe
                         structType = &memberType;
                 }
 
-                layout.structMembers = Reflection::ReflectStructMembers(compiler, *structType);
-                for (const auto &member : layout.structMembers)
-                {
-                    MaterialFieldDesc field;
-                    field.name = member.name;
-                    field.baseType = member.typeInfo.basetype;
-                    field.vecSize = member.typeInfo.vecsize;
-                    field.offset = member.offset;
-                    field.size = member.size;
-
-                    field.hint = InferWidgetFromType(field.baseType, field.vecSize);
-                    for (const auto &fh : ann.fieldHints)
-                    {
-                        if (fh.fieldName == field.name)
-                        {
-                            field.hint = fh.widget;
-                            field.rangeMin = fh.rangeMin;
-                            field.rangeMax = fh.rangeMax;
-                            break;
-                        }
-                    }
-
-                    layout.fields.push_back(field);
-                }
-
-                layout.totalByteSize = static_cast<uint32_t>(compiler.get_declared_struct_size(*structType));
-                layout.totalByteSize = (layout.totalByteSize + 3u) & ~3u;
+                rawMembers = Reflection::ReflectStructMembers(compiler, *structType);
+                rawTotalSize = static_cast<uint32_t>(compiler.get_declared_struct_size(*structType));
+                rawTotalSize = (rawTotalSize + 3u) & ~3u;
                 return true;
             }
             return false;
@@ -113,12 +81,116 @@ namespace pe
 
         if (!surface->materialBufferName.empty())
         {
-            MaterialAnnotation ann = ParseMaterialAnnotation(surface->materialAnnotation);
             for (const auto &[shader, refl] : stages)
             {
-                if (reflectBufferStruct(shader, surface->materialBufferName, ann))
+                if (reflectRawStruct(shader, surface->materialBufferName))
                     break;
             }
+        }
+
+        if (rawMembers.empty())
+            return layout;
+
+        // Parse annotation
+        MaterialAnnotation ann = ParseMaterialAnnotation(surface->materialAnnotation);
+
+        // Build a lookup of raw struct members by name
+        std::unordered_map<std::string, const StructMemberInfo *> memberByName;
+        for (const auto &m : rawMembers)
+            memberByName[m.name] = &m;
+
+        if (!ann.fieldHints.empty())
+        {
+            // Annotation-driven: expand packed vec4s into individual named fields
+            for (const auto &fh : ann.fieldHints)
+            {
+                // Determine which struct member this maps to
+                const std::string &memberName = fh.structMember.empty() ? fh.fieldName : fh.structMember;
+                auto it = memberByName.find(memberName);
+                if (it == memberByName.end())
+                    continue;
+
+                const StructMemberInfo &raw = *it->second;
+
+                MaterialFieldDesc field;
+                field.name = fh.fieldName;
+                field.hint = fh.widget;
+                field.rangeMin = fh.rangeMin;
+                field.rangeMax = fh.rangeMax;
+
+                // Create expanded StructMemberInfo for BuildByteAddressData
+                StructMemberInfo expanded;
+                expanded.name = fh.fieldName;
+
+                if (fh.component >= 0)
+                {
+                    // Single component of a vec (e.g., pbrParams.x)
+                    field.baseType = raw.typeInfo.basetype;
+                    field.vecSize = 1;
+                    field.offset = raw.offset + fh.component * 4;
+                    field.size = 4;
+
+                    expanded.typeInfo = raw.typeInfo;
+                    expanded.typeInfo.vecsize = 1;
+                    expanded.typeInfo.columns = 1;
+                    expanded.offset = field.offset;
+                    expanded.size = 4;
+                }
+                else if (fh.component == -2)
+                {
+                    // .xyz / .rgb — first 3 components of a vec4
+                    field.baseType = raw.typeInfo.basetype;
+                    field.vecSize = 3;
+                    field.offset = raw.offset;
+                    field.size = 12;
+
+                    expanded.typeInfo = raw.typeInfo;
+                    expanded.typeInfo.vecsize = 3;
+                    expanded.typeInfo.columns = 1;
+                    expanded.offset = field.offset;
+                    expanded.size = 12;
+                }
+                else
+                {
+                    // Whole member (e.g., baseColorFactor = baseColorFactor)
+                    field.baseType = raw.typeInfo.basetype;
+                    field.vecSize = raw.typeInfo.vecsize;
+                    field.offset = raw.offset;
+                    field.size = raw.size;
+
+                    expanded = raw;
+                    expanded.name = fh.fieldName;
+                }
+
+                layout.fields.push_back(field);
+                layout.structMembers.push_back(expanded);
+            }
+            layout.totalByteSize = rawTotalSize;
+        }
+        else
+        {
+            // No annotation: fall back to raw struct members
+            layout.structMembers = rawMembers;
+            for (const auto &member : rawMembers)
+            {
+                MaterialFieldDesc field;
+                field.name = member.name;
+                field.baseType = member.typeInfo.basetype;
+                field.vecSize = member.typeInfo.vecsize;
+                field.offset = member.offset;
+                field.size = member.size;
+
+                if (field.baseType == spirv_cross::SPIRType::Float)
+                {
+                    if (field.vecSize == 4)
+                        field.hint = MaterialWidgetHint::Color4;
+                    else if (field.vecSize == 1)
+                        field.hint = MaterialWidgetHint::Range01;
+                }
+
+                layout.fields.push_back(field);
+            }
+            layout.totalByteSize = rawTotalSize;
         }
 
         // Scan for pe_tex_ prefixed separate images (bindless texture slots)

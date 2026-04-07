@@ -3,6 +3,7 @@
 #include "API/RHI.h"
 #include "Scene/Material.h"
 #include "Scene/ModelAsset.h"
+#include "Scene/PassInfoAsset.h"
 #include "API/Image.h"
 
 namespace pe
@@ -154,6 +155,10 @@ namespace pe
         mat->metallic = 0.f;
         mat->roughness = 1.f;
         mat->occlusionStrength = 1.f;
+        if (!mat->passInfoAsset)
+            mat->passInfoAsset = ResourceManager::Get().Load<PassInfoAsset>(Path::Assets + "PassInfo/standard_pbr.pass");
+        mat->SyncParamsFromLegacy();
+
         meshInfo.material = mat.get();
         model->m_materials.push_back(std::move(mat));
 

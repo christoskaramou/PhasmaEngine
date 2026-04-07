@@ -1,5 +1,6 @@
 #include "Material.h"
 #include "API/Reflection.h"
+#include "Scene/PassInfoAsset.h"
 
 namespace pe
 {
@@ -72,6 +73,10 @@ namespace pe
         attenuationColor.b = factors[1][1][2];
 
         textureMask = mask;
+
+        if (!passInfoAsset)
+            passInfoAsset = ResourceManager::Get().Load<PassInfoAsset>(Path::Assets + "PassInfo/standard_pbr.pass");
+        SyncParamsFromLegacy();
     }
 
     size_t Material::ComputeHash() const
@@ -148,6 +153,64 @@ namespace pe
         }
 
         return true;
+    }
+
+    void Material::SyncParamsFromLegacy()
+    {
+        params["baseColorFactor"] = baseColorFactor;
+        params["emissiveFactor"] = emissiveFactor;
+        params["transmissionFactor"] = transmissionFactor;
+        params["metallic"] = metallic;
+        params["roughness"] = roughness;
+        params["alphaCutoff"] = alphaCutoff;
+        params["occlusionStrength"] = occlusionStrength;
+        params["thicknessFactor"] = thicknessFactor;
+        params["attenuationDistance"] = attenuationDistance;
+        params["ior"] = ior;
+        params["attenuationColor"] = attenuationColor;
+    }
+
+    void Material::SyncLegacyFromParams()
+    {
+        auto getFloat = [&](const std::string &name, float fallback) -> float
+        {
+            auto it = params.find(name);
+            if (it == params.end())
+                return fallback;
+            if (auto *f = std::get_if<float>(&it->second))
+                return *f;
+            return fallback;
+        };
+        auto getVec3 = [&](const std::string &name, const vec3 &fallback) -> vec3
+        {
+            auto it = params.find(name);
+            if (it == params.end())
+                return fallback;
+            if (auto *v = std::get_if<vec3>(&it->second))
+                return *v;
+            return fallback;
+        };
+        auto getVec4 = [&](const std::string &name, const vec4 &fallback) -> vec4
+        {
+            auto it = params.find(name);
+            if (it == params.end())
+                return fallback;
+            if (auto *v = std::get_if<vec4>(&it->second))
+                return *v;
+            return fallback;
+        };
+
+        baseColorFactor = getVec4("baseColorFactor", baseColorFactor);
+        emissiveFactor = getVec3("emissiveFactor", emissiveFactor);
+        transmissionFactor = getFloat("transmissionFactor", transmissionFactor);
+        metallic = getFloat("metallic", metallic);
+        roughness = getFloat("roughness", roughness);
+        alphaCutoff = getFloat("alphaCutoff", alphaCutoff);
+        occlusionStrength = getFloat("occlusionStrength", occlusionStrength);
+        thicknessFactor = getFloat("thicknessFactor", thicknessFactor);
+        attenuationDistance = getFloat("attenuationDistance", attenuationDistance);
+        ior = getFloat("ior", ior);
+        attenuationColor = getVec3("attenuationColor", attenuationColor);
     }
 
     MaterialGpuData Material::BuildGpuData() const
@@ -425,9 +488,10 @@ namespace pe
 
     std::vector<uint8_t> MaterialInstance::BuildByteAddressData(
         const std::vector<StructMemberInfo> &layout,
-        const std::vector<MaterialTextureSlot> &textureSlots) const
+        const std::vector<MaterialTextureSlot> &textureSlots,
+        uint32_t totalByteSize) const
     {
-        std::vector<uint8_t> buffer = m_parent->BuildByteAddressData(layout, textureSlots);
+        std::vector<uint8_t> buffer = m_parent->BuildByteAddressData(layout, textureSlots, totalByteSize);
         if (buffer.empty())
             return buffer;
 
@@ -454,13 +518,18 @@ namespace pe
 
     std::vector<uint8_t> Material::BuildByteAddressData(
         const std::vector<StructMemberInfo> &layout,
-        const std::vector<MaterialTextureSlot> &textureSlots) const
+        const std::vector<MaterialTextureSlot> &textureSlots,
+        uint32_t totalByteSize) const
     {
         if (layout.empty())
             return {};
 
-        const auto &last = layout.back();
-        uint32_t totalSize = last.offset + last.size;
+        uint32_t totalSize = totalByteSize;
+        if (totalSize == 0)
+        {
+            for (const auto &member : layout)
+                totalSize = std::max(totalSize, member.offset + member.size);
+        }
         totalSize = (totalSize + 3u) & ~3u;
 
         std::vector<uint8_t> buffer(totalSize, 0);

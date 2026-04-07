@@ -32,7 +32,9 @@ namespace pe
         MaterialInstance *inst = mesh->materialInstance;
         bool modified = false;
 
-        // Show "Instance" vs "Base" label
+        // Show material name and "Instance" vs "Base" label
+        if (!mat.name.empty())
+            ImGui::TextDisabled("Material: %s", mat.name.c_str());
         if (inst)
             ImGui::TextColored(ImVec4(0.4f, 0.8f, 1.f, 1.f), "Editing: Instance");
         else
@@ -95,6 +97,7 @@ namespace pe
                     if (texOverride)
                         mat.namedTextures[slot.bindingName] = ResourceManager::Get().Load<Image>(texOverride->GetResourceId());
                 }
+                mat.SyncLegacyFromParams();
                 mat.dirty = true;
                 modified = true;
             }
@@ -114,9 +117,14 @@ namespace pe
         if (modified)
         {
             if (inst)
+            {
                 inst->dirty = true;
+            }
             else
+            {
+                mat.SyncLegacyFromParams();
                 mat.dirty = true;
+            }
         }
 
         return modified;
@@ -218,6 +226,7 @@ namespace pe
                     {
                         parent->params[field.name] = inst.GetParam(field.name);
                         inst.ClearParam(field.name);
+                        parent->SyncLegacyFromParams();
                         parent->dirty = true;
                         modified = true;
                     }

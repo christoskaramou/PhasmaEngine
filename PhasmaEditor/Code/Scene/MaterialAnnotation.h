@@ -19,6 +19,8 @@ namespace pe
         MaterialWidgetHint widget = MaterialWidgetHint::Auto;
         float rangeMin = 0.f;
         float rangeMax = 1.f;
+        std::string structMember; // e.g. "pbrParams"
+        int component = -1;       // swizzle index: 0=x,1=y,2=z,3=w; -1 = whole member
     };
 
     enum class MaterialAnnotationType
@@ -63,6 +65,42 @@ namespace pe
         else
             return result;
 
+        auto parseMapping = [](std::string &name)
+            -> std::pair<std::string, int>
+        {
+            // Parse "fieldName=structMember.x" -> extracts structMember + component, strips from name
+            size_t eq = name.find('=');
+            if (eq == std::string::npos)
+                return {"", -1};
+
+            std::string mapping = name.substr(eq + 1);
+            name = name.substr(0, eq);
+
+            std::string member = mapping;
+            int comp = -1;
+            size_t dot = mapping.rfind('.');
+            if (dot != std::string::npos && dot + 1 < mapping.size())
+            {
+                char c = mapping[dot + 1];
+                if (c == 'x' || c == 'r')
+                    comp = 0;
+                else if (c == 'y' || c == 'g')
+                    comp = 1;
+                else if (c == 'z' || c == 'b')
+                    comp = 2;
+                else if (c == 'w' || c == 'a')
+                    comp = 3;
+                if (comp >= 0)
+                    member = mapping.substr(0, dot);
+
+                // Check for multi-component swizzle like ".xyz"
+                std::string swiz = mapping.substr(dot + 1);
+                if (swiz == "xyz" || swiz == "rgb")
+                    comp = -2; // special: first 3 components
+            }
+            return {member, comp};
+        };
+
         for (size_t i = 1; i < tokens.size(); i++)
         {
             const std::string &tok = tokens[i];
@@ -91,7 +129,11 @@ namespace pe
                 size_t colon2 = rest.find(':');
                 if (colon2 != std::string::npos)
                 {
-                    fh.fieldName = rest.substr(0, colon2);
+                    std::string nameAndMapping = rest.substr(0, colon2);
+                    auto [member, comp] = parseMapping(nameAndMapping);
+                    fh.fieldName = nameAndMapping;
+                    fh.structMember = member;
+                    fh.component = comp;
                     std::string minmax = rest.substr(colon2 + 1);
                     size_t colon3 = minmax.find(':');
                     if (colon3 != std::string::npos)
@@ -99,9 +141,15 @@ namespace pe
                         fh.rangeMin = std::stof(minmax.substr(0, colon3));
                         fh.rangeMax = std::stof(minmax.substr(colon3 + 1));
                     }
+                    result.fieldHints.push_back(fh);
                     continue;
                 }
             }
+
+            // Parse "fieldName=structMember.component" mapping
+            auto [member, comp] = parseMapping(rest);
+            fh.structMember = member;
+            fh.component = comp;
 
             if (fh.fieldName.empty())
                 fh.fieldName = rest;

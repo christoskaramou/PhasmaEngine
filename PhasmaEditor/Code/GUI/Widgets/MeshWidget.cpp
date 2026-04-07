@@ -123,7 +123,12 @@ namespace pe
             if (mesh->material && mesh->material->passInfoAsset)
             {
                 if (m_materialEditor.Draw(mesh, node, GetGlobalSystem<RendererSystem>()->GetScene()))
+                {
                     PropagateMeshChange(node);
+                    GetGlobalSystem<RendererSystem>()->GetScene().UpdateDirtyMaterials();
+                    m_gui->NotifyChange();
+                }
+                DrawTextureInfo(mesh, node);
                 return;
             }
 
@@ -392,6 +397,12 @@ namespace pe
                     {
                         uint32_t mask = inst ? inst->GetTextureMask() : (mat ? mat->textureMask : 0u);
                         bool active = (mask & (1 << i)) != 0;
+                        bool wasActive = active;
+                        if (wasActive)
+                        {
+                            ImGui::PushStyleColor(ImGuiCol_Header, ImVec4(0.25f, 0.55f, 0.85f, 0.8f));
+                            ImGui::PushStyleColor(ImGuiCol_HeaderHovered, ImVec4(0.30f, 0.60f, 0.90f, 0.9f));
+                        }
                         if (ImGui::Selectable(labels[i], &active, ImGuiSelectableFlags_None, ImVec2(24, 0)))
                         {
                             uint32_t newMask = mask;
@@ -406,6 +417,8 @@ namespace pe
                                 mat->textureMask = newMask;
                             changed = true;
                         }
+                        if (wasActive)
+                            ImGui::PopStyleColor(2);
                         if (ImGui::IsItemHovered())
                             ImGui::SetTooltip("%s", fullNames[i]);
 

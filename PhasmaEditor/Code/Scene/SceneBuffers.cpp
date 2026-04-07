@@ -497,7 +497,7 @@ namespace pe
                     if (inst->gpuByteOffset != 0xFFFFFFFF)
                         continue;
 
-                    std::vector<uint8_t> byteData = inst->BuildByteAddressData(layout.structMembers, layout.textureSlots);
+                    std::vector<uint8_t> byteData = inst->BuildByteAddressData(layout.structMembers, layout.textureSlots, layout.totalByteSize);
                     if (byteData.empty())
                         continue;
 
@@ -511,7 +511,7 @@ namespace pe
                     if (mat->gpuByteOffset != 0xFFFFFFFF)
                         continue;
 
-                    std::vector<uint8_t> byteData = mat->BuildByteAddressData(layout.structMembers, layout.textureSlots);
+                    std::vector<uint8_t> byteData = mat->BuildByteAddressData(layout.structMembers, layout.textureSlots, layout.totalByteSize);
                     if (byteData.empty())
                         continue;
 
@@ -572,7 +572,7 @@ namespace pe
             m_materialTable->Flush(range.size, range.offset);
             m_materialTable->Unmap();
 
-            mat->dirty = false;
+            // Don't clear dirty here — collectByteIfDirty still needs it
             anyDirty = true;
         };
 
@@ -592,14 +592,25 @@ namespace pe
 
         auto collectByteIfDirty = [&](Material *mat)
         {
-            if (!mat->dirty || !mat->passInfoAsset || mat->gpuByteOffset == 0xFFFFFFFF)
-                return;
-            if (!mat->cachedLayout.valid || mat->cachedLayout.structMembers.empty())
+            if (!mat->dirty)
                 return;
 
-            std::vector<uint8_t> byteData = mat->BuildByteAddressData(mat->cachedLayout.structMembers, mat->cachedLayout.textureSlots);
-            if (byteData.empty())
+            // Materials without ByteAddressBuffer path: just clear the dirty flag
+            // (materialTable was already updated above)
+            if (!mat->passInfoAsset || mat->gpuByteOffset == 0xFFFFFFFF ||
+                !mat->cachedLayout.valid || mat->cachedLayout.structMembers.empty())
+            {
+                mat->dirty = false;
                 return;
+            }
+
+            std::vector<uint8_t> byteData = mat->BuildByteAddressData(
+                mat->cachedLayout.structMembers, mat->cachedLayout.textureSlots, mat->cachedLayout.totalByteSize);
+            if (byteData.empty())
+            {
+                mat->dirty = false;
+                return;
+            }
 
             byteDirtyEntries.push_back({mat->gpuByteOffset, &mat->dirty, std::move(byteData)});
         };
@@ -626,7 +637,7 @@ namespace pe
                     continue;
 
                 std::vector<uint8_t> byteData = inst->BuildByteAddressData(
-                    parent->cachedLayout.structMembers, parent->cachedLayout.textureSlots);
+                    parent->cachedLayout.structMembers, parent->cachedLayout.textureSlots, parent->cachedLayout.totalByteSize);
                 if (byteData.empty())
                     continue;
 

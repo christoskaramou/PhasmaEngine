@@ -1,6 +1,7 @@
 #include "Scene/ModelAssetAssimp.h"
 #include "Animation/AnimationImporter.h"
 #include "Scene/Material.h"
+#include "Scene/PassInfoAsset.h"
 #include "API/Command.h"
 #include "API/Image.h"
 #include "API/Queue.h"
@@ -474,6 +475,10 @@ namespace pe
                 AssignTexture(*mat, TextureType::Emissive, material, {aiTextureType_EMISSION_COLOR, aiTextureType_EMISSIVE});
 
                 ComputeMaterialData(*mat, material);
+
+                if (!mat->passInfoAsset)
+                    mat->passInfoAsset = ResourceManager::Get().Load<PassInfoAsset>(Path::Assets + "PassInfo/standard_pbr.pass");
+                mat->SyncParamsFromLegacy();
 
                 mi.material = mat.get();
                 materialByIndex[mesh->mMaterialIndex] = mat.get();

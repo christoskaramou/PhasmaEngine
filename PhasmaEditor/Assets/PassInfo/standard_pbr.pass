@@ -13,7 +13,7 @@
     "colorBlendAttachments": ["default", "default", "default", "default", "default", "default"],
     "materialBinding": {
       "bufferName": "materialTable",
-      "annotation": "pe_material;color4:baseColorFactor;range01:metallic;range01:roughness;range01:alphaCutoff;range01:normalScale;color3:emissiveFactor;range01:transmissionFactor"
+      "annotation": "pe_material;color4:baseColorFactor=baseColorFactor;color3:emissiveFactor=emissiveTransmission.xyz;range01:transmissionFactor=emissiveTransmission.w;range01:metallic=pbrParams.x;range01:roughness=pbrParams.y;range01:alphaCutoff=pbrParams.z;range01:occlusionStrength=pbrParams.w;range01:thicknessFactor=transmissionVolume.x;range:attenuationDistance=transmissionVolume.y:0:1000;range:ior=transmissionVolume.z:1:3;color3:attenuationColor=attenuationColor.xyz"
     }
   },
   "depthOnly": {

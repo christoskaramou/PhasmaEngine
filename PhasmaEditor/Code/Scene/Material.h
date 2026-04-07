@@ -131,10 +131,20 @@ namespace pe
         // Bindless image view indices for named textures (populated by UpdateImageViews)
         std::unordered_map<std::string, uint32_t> namedTextureIndices;
 
+        // Populate params map from legacy PBR fields.
+        // Call after loading a material to bridge legacy fields to the shader-driven system.
+        void SyncParamsFromLegacy();
+
+        // Write params map back to legacy PBR fields.
+        // Call after the material editor changes params so legacy consumers stay in sync.
+        void SyncLegacyFromParams();
+
         // Build raw byte buffer for ByteAddressBuffer upload.
+        // totalByteSize: if non-zero, overrides the computed buffer size (use raw struct size).
         std::vector<uint8_t> BuildByteAddressData(
             const std::vector<StructMemberInfo> &layout,
-            const std::vector<MaterialTextureSlot> &textureSlots = {}) const;
+            const std::vector<MaterialTextureSlot> &textureSlots = {},
+            uint32_t totalByteSize = 0) const;
 
         // Total byte size of this material's GPU data (from reflected struct size)
         uint32_t gpuByteSize = 0;
@@ -224,7 +234,8 @@ namespace pe
 
         std::vector<uint8_t> BuildByteAddressData(
             const std::vector<StructMemberInfo> &layout,
-            const std::vector<MaterialTextureSlot> &textureSlots = {}) const;
+            const std::vector<MaterialTextureSlot> &textureSlots = {},
+            uint32_t totalByteSize = 0) const;
 
         // Check if any named texture overrides exist
         bool HasNamedTextureOverrides() const { return !m_namedTextureOverrides.empty(); }
