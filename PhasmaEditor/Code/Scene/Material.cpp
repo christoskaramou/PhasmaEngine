@@ -162,7 +162,7 @@ namespace pe
         params["transmissionFactor"] = transmissionFactor;
         params["metallic"] = metallic;
         params["roughness"] = roughness;
-        params["alphaCutoff"] = alphaCutoff;
+        params["alphaCutoff"] = (renderType == RenderType::AlphaCut) ? alphaCutoff : 0.0f;
         params["occlusionStrength"] = occlusionStrength;
         params["thicknessFactor"] = thicknessFactor;
         params["attenuationDistance"] = attenuationDistance;
@@ -218,7 +218,8 @@ namespace pe
         MaterialGpuData data{};
         data.baseColorFactor = baseColorFactor;
         data.emissiveTransmission = vec4(emissiveFactor, transmissionFactor);
-        data.pbrParams = vec4(metallic, roughness, alphaCutoff, occlusionStrength);
+        float effectiveAlphaCutoff = (renderType == RenderType::AlphaCut) ? alphaCutoff : 0.0f;
+        data.pbrParams = vec4(metallic, roughness, effectiveAlphaCutoff, occlusionStrength);
         data.transmissionVolume = vec4(thicknessFactor, attenuationDistance, ior, 0.f);
         data.attenuationColor = vec4(attenuationColor, 0.f);
         return data;
@@ -382,7 +383,8 @@ namespace pe
         MaterialGpuData data{};
         data.baseColorFactor = GetBaseColorFactor();
         data.emissiveTransmission = vec4(GetEmissiveFactor(), GetTransmissionFactor());
-        data.pbrParams = vec4(GetMetallic(), GetRoughness(), GetAlphaCutoff(), GetOcclusionStrength());
+        float effectiveAlphaCutoff = (GetRenderType() == RenderType::AlphaCut) ? GetAlphaCutoff() : 0.0f;
+        data.pbrParams = vec4(GetMetallic(), GetRoughness(), effectiveAlphaCutoff, GetOcclusionStrength());
         data.transmissionVolume = vec4(GetThicknessFactor(), GetAttenuationDistance(), GetIor(), 0.f);
         data.attenuationColor = vec4(GetAttenuationColor(), 0.f);
         return data;
