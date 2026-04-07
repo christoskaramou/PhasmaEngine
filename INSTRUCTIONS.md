@@ -10,6 +10,12 @@ After reading `AI_CHANGELOG.md`, consult `docs/wiki/index.md` when you need comp
 testing, or pitfall summaries. The wiki is a maintained synthesis layer; the source of truth remains
 the codebase plus the canonical instruction files.
 
+**Wiki maintenance:** The wiki must stay in sync with the codebase. Before finishing any session where you
+changed code that a wiki page describes, check whether the relevant wiki pages need updating and update them.
+When you add or edit wiki pages, run `bash docs/wiki/tools/lint.sh` from the repo root to verify structural
+health (index coverage, broken links, Sources sections). Use `bash docs/wiki/tools/search.sh "query"` to
+search wiki content. Update `docs/wiki/index.md` and `docs/wiki/log.md` when pages are added or renamed.
+
 ---
 
 ## Build Commands
