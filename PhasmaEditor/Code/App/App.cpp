@@ -251,6 +251,7 @@ namespace pe
 
         ImGui::Render();
         rendererSystem->Draw();
+        rendererSystem->WaitAllFramesCommands();
     }
 
     bool App::Frame()

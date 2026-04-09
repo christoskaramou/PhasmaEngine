@@ -11,6 +11,7 @@ static constexpr const char *k_moduleName = "PhasmaEditorModule.dll";
 #endif
 
 using TickFunc = bool (*)();
+using RenderReloadFunc = void (*)();
 using DestroyFunc = void (*)();
 
 namespace
@@ -19,6 +20,7 @@ namespace
     {
         void *lib = nullptr;
         TickFunc tick = nullptr;
+        RenderReloadFunc renderReload = nullptr;
         DestroyFunc destroy = nullptr;
         std::string loadedPath;
     };
@@ -45,6 +47,7 @@ namespace
             return m;
         }
         m.tick = reinterpret_cast<TickFunc>(dlsym(m.lib, "TickEditorModule"));
+        m.renderReload = reinterpret_cast<RenderReloadFunc>(dlsym(m.lib, "RenderReloadFrameEditorModule"));
         m.destroy = reinterpret_cast<DestroyFunc>(dlsym(m.lib, "DestroyEditorModule"));
 #elif defined(PE_WIN32)
         static int s_gen = 0;
@@ -60,10 +63,12 @@ namespace
         }
         m.tick =
             reinterpret_cast<TickFunc>(::GetProcAddress(static_cast<HMODULE>(m.lib), "TickEditorModule"));
+        m.renderReload =
+            reinterpret_cast<RenderReloadFunc>(::GetProcAddress(static_cast<HMODULE>(m.lib), "RenderReloadFrameEditorModule"));
         m.destroy =
             reinterpret_cast<DestroyFunc>(::GetProcAddress(static_cast<HMODULE>(m.lib), "DestroyEditorModule"));
 #endif
-        if (!m.tick || !m.destroy)
+        if (!m.tick || !m.renderReload || !m.destroy)
         {
             PE_ERROR("Failed to resolve module entry points");
 #if defined(PE_LINUX)
@@ -138,6 +143,7 @@ int main(int argc, char *argv[])
         pe::EventSystem::QueuedEvent ev;
         if (pe::EventSystem::PeekAndPop(pe::EventType::ReloadModule, ev))
         {
+            mod.renderReload(); // drain in-flight frames and show "Reloading..." overlay
             std::ofstream(pe::Path::Executable + "reload.flag").close();
             mod.destroy();
             pe::ThreadPool::FW.WaitIdle();

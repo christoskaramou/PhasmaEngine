@@ -14,10 +14,9 @@ namespace pe
 
         bool Frame();
         void Run();
-
-    private:
         void RenderReloadFrame();
 
+    private:
         Window *m_window = nullptr;
         FrameTimer &m_frameTimer;
         SplashScreen *m_splashScreen = nullptr;

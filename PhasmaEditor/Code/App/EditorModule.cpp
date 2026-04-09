@@ -15,6 +15,12 @@ extern "C"
         return g_app->Frame();
     }
 
+    PE_EDITOR_MODULE_API void RenderReloadFrameEditorModule()
+    {
+        if (g_app)
+            g_app->RenderReloadFrame();
+    }
+
     PE_EDITOR_MODULE_API void DestroyEditorModule()
     {
         delete g_app;
