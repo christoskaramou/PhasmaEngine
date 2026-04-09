@@ -15,6 +15,11 @@ namespace pe
     {
         std::vector<BoneInfo> bones;
         std::unordered_map<std::string, int> boneNameToIndex;
+        // The transform baked into root bones' intermediatePrefix (e.g. glTF root node
+        // rotation).  Used to strip that transform from joint matrices before upload so
+        // the shader's worldMatrix can apply it instead, allowing user transforms to
+        // affect skinned meshes.
+        mat4 rootTransform = mat4(1.f);
 
         int GetBoneIndex(const std::string &name) const
         {

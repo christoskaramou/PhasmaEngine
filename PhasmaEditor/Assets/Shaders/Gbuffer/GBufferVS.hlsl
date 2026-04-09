@@ -43,12 +43,16 @@ VS_OUTPUT_Gbuffer mainVS(VS_INPUT_Gbuffer input)
     output.id = id;
 
     float4x4 boneTransform = identity_mat;
-    if (pc.jointsCount) // TODO: fix this when we have a proper joint count
+    if (pc.jointsCount)
     {
-        boneTransform = mul(GetJointMatrix(id, input.joints[0]), input.weights[0]) +
-                        mul(GetJointMatrix(id, input.joints[1]), input.weights[1]) +
-                        mul(GetJointMatrix(id, input.joints[2]), input.weights[2]) +
-                        mul(GetJointMatrix(id, input.joints[3]), input.weights[3]);
+        float weightSum = input.weights[0] + input.weights[1] + input.weights[2] + input.weights[3];
+        if (weightSum > 0.0)
+        {
+            boneTransform = mul(GetJointMatrix(id, input.joints[0]), input.weights[0]) +
+                            mul(GetJointMatrix(id, input.joints[1]), input.weights[1]) +
+                            mul(GetJointMatrix(id, input.joints[2]), input.weights[2]) +
+                            mul(GetJointMatrix(id, input.joints[3]), input.weights[3]);
+        }
     }
 
     // World space and clip space positions

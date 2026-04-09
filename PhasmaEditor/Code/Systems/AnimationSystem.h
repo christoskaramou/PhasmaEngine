@@ -36,6 +36,18 @@ namespace pe
         int GetCurrentClip(const NodeId *node) const;
         float GetPlaybackTime(const NodeId *node) const;
 
+        // Timeline scrubbing: sets time in ticks, evaluates pose immediately, pauses playback.
+        void SetPlaybackTime(Scene &scene, NodeId *node, float timeTicks);
+
+        // Pause/resume without resetting time.
+        void SetPaused(NodeId *node, bool paused);
+
+        // Change loop flag without resetting time.
+        void SetLoop(NodeId *node, bool loop);
+
+        // Read-only access to animation state for UI. Returns nullptr if node has no state.
+        const AnimationNodeState *GetAnimationState(const NodeId *node) const;
+
         void ClearAllAnimations();
 
     private:

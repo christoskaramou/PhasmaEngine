@@ -127,6 +127,13 @@ namespace pe
                 skeleton.bones[i].intermediatePrefix = intermediatePrefix;
                 skeleton.bones[i].localBindTransform = intermediatePrefix * toMat4(boneNode->mTransformation);
                 skeleton.bones[i].parentIndex = parentBone;
+
+                // The first root bone's intermediatePrefix captures the glTF root node
+                // transform (e.g. Z-up → Y-up rotation).  Store it so the upload code
+                // can strip it from joint matrices and let the shader's worldMatrix
+                // apply it instead.
+                if (parentBone < 0 && skeleton.rootTransform == mat4(1.f))
+                    skeleton.rootTransform = intermediatePrefix;
             }
         }
 

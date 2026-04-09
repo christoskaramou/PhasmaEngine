@@ -37,6 +37,7 @@
 #include "Widgets/SceneView.h"
 #include "Widgets/ScriptEditor.h"
 #include "Widgets/ShaderEditor.h"
+#include "Widgets/AnimationTimeline.h"
 #include "PhasmaAgent/CodebaseIndexer.h"
 #include "Widgets/TransformWidget.h"
 #ifdef PE_PHYSICS
@@ -1572,6 +1573,7 @@ namespace pe
         auto globalWidget = std::make_shared<GlobalWidget>();
         auto scriptEditor = std::make_shared<ScriptEditor>();
         auto shaderEditor = std::make_shared<ShaderEditor>();
+        auto animTimeline = std::make_shared<AnimationTimeline>();
 #ifdef PE_PHYSICS
         auto physicsWidget = std::make_shared<PhysicsWidget>();
 #endif
@@ -1598,6 +1600,7 @@ namespace pe
             globalWidget,
             scriptEditor,
             shaderEditor,
+            animTimeline,
 #ifdef PE_PHYSICS
             physicsWidget,
 #endif
@@ -1621,7 +1624,8 @@ namespace pe
                                particles,
                                globalWidget,
                                scriptEditor,
-                               shaderEditor};
+                               shaderEditor,
+                               animTimeline};
         for (auto &widget : m_widgets)
             widget->Init(this);
 
@@ -1678,13 +1682,6 @@ namespace pe
             cmd->ImageBarrier(sceneViewBarrier);
         }
 
-        ImageBarrierInfo barrierInfo{};
-        barrierInfo.image = displayRT;
-        barrierInfo.layout = vk::ImageLayout::eAttachmentOptimal;
-        barrierInfo.stageFlags = vk::PipelineStageFlagBits2::eColorAttachmentOutput;
-        barrierInfo.accessMask = vk::AccessFlagBits2::eColorAttachmentWrite;
-
-        cmd->ImageBarrier(barrierInfo);
         cmd->BeginPass(1, m_attachment.get(), "GUI", true);
         ImGui_ImplVulkan_RenderDrawData(ImGui::GetDrawData(), cmd->ApiHandle());
         cmd->EndPass();

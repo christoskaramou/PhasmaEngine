@@ -116,6 +116,7 @@ namespace pe
         bool HasSkeleton() const { return !m_skeleton.bones.empty(); }
         const Skeleton &GetSkeleton() const { return m_skeleton; }
         const std::vector<AnimationClip> &GetAnimations() const { return m_animations; }
+        std::vector<AnimationClip> &GetMutableAnimations() { return m_animations; }
         int GetJointCount() const { return m_skeleton.GetBoneCount(); }
 
         struct DefaultResources

@@ -1211,6 +1211,7 @@ namespace pe
                     source.primitiveType = model->GetPrimitiveType();
                     source.primitiveParams = model->GetPrimitiveParams();
                     source.primitiveParamCount = model->GetPrimitiveParamCount();
+                    source.modelId = model->GetId();
                     m_sources.push_back(std::move(source));
 
                     sourceMeshMaps[si] = AddModelGeometry(model, sourceIndex);
@@ -2284,6 +2285,7 @@ namespace pe
                         source.primitiveType = model->GetPrimitiveType();
                         source.primitiveParams = model->GetPrimitiveParams();
                         source.primitiveParamCount = model->GetPrimitiveParamCount();
+                        source.modelId = model->GetId();
                         m_sources.push_back(std::move(source));
 
                         sourceMeshMaps[si] = AddModelGeometry(model, sourceIndex);

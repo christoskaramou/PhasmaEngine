@@ -14,11 +14,11 @@ namespace pe
                                  float time,
                                  std::vector<mat4> &outMatrices);
 
-    private:
         static vec3 InterpolatePosition(const std::vector<PositionKey> &keys, float time);
         static quat InterpolateRotation(const std::vector<RotationKey> &keys, float time);
         static vec3 InterpolateScale(const std::vector<ScaleKey> &keys, float time);
 
+    private:
         template <typename T>
         static int FindKeyIndex(const std::vector<AnimationKey<T>> &keys, float time);
     };

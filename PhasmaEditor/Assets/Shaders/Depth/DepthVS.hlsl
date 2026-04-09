@@ -42,10 +42,14 @@ VS_OUTPUT_Position_Uv_ID mainVS(VS_INPUT_Depth input)
     float4x4 jointTransform = identity_mat;
     if (pc.jointsCount > 0)
     {
-        jointTransform = mul(GetJointMatrix(id, input.joints[0]), input.weights[0]) +
-                         mul(GetJointMatrix(id, input.joints[1]), input.weights[1]) +
-                         mul(GetJointMatrix(id, input.joints[2]), input.weights[2]) +
-                         mul(GetJointMatrix(id, input.joints[3]), input.weights[3]);
+        float weightSum = input.weights[0] + input.weights[1] + input.weights[2] + input.weights[3];
+        if (weightSum > 0.0)
+        {
+            jointTransform = mul(GetJointMatrix(id, input.joints[0]), input.weights[0]) +
+                             mul(GetJointMatrix(id, input.joints[1]), input.weights[1]) +
+                             mul(GetJointMatrix(id, input.joints[2]), input.weights[2]) +
+                             mul(GetJointMatrix(id, input.joints[3]), input.weights[3]);
+        }
     }
 
     float4x4 combinedMatrix = mul(jointTransform, GetMeshMatrix(id));

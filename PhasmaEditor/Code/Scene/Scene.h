@@ -232,6 +232,9 @@ namespace pe
         OrderedMap<size_t, ModelAsset *> &GetModels() { return m_models; }
         const OrderedMap<size_t, ModelAsset *> &GetModels() const { return m_models; }
 
+        // Returns the ModelAsset that provided this node's meshes, or nullptr.
+        ModelAsset *GetModelForNode(const NodeId *node) const;
+
         uint64_t GetGeometryVersion() const { return m_geometryVersion; }
 
         uint32_t GetGeneration() const { return m_generation; }
@@ -386,6 +389,7 @@ namespace pe
             std::string primitiveType;
             vec4 primitiveParams = vec4(0.f);
             uint32_t primitiveParamCount = 0;
+            size_t modelId = 0;
         };
 
         struct MeshSourceInfo

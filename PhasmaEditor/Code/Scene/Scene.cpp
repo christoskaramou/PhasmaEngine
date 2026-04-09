@@ -22,6 +22,27 @@ namespace pe
         4, 5, 5, 6, 6, 7, 7, 4,
         0, 4, 1, 5, 2, 6, 3, 7};
 
+    ModelAsset *Scene::GetModelForNode(const NodeId *node) const
+    {
+        if (!IsNodeAlive(node))
+            return nullptr;
+
+        const auto &refs = m_nodeComponentCache[node->index].meshRefs->meshRefs;
+        if (refs.empty())
+            return nullptr;
+
+        int meshIdx = refs[0];
+        if (meshIdx < 0 || meshIdx >= (int)m_meshSourceInfos.size())
+            return nullptr;
+
+        int srcIdx = m_meshSourceInfos[meshIdx].sourceIndex;
+        if (srcIdx < 0 || srcIdx >= (int)m_sources.size())
+            return nullptr;
+
+        auto it = m_models.find(m_sources[srcIdx].modelId);
+        return it != m_models.end() ? *it : nullptr;
+    }
+
     ModelAsset *Scene::FindSkeletonModel() const
     {
         if (m_skeletonModel && m_skeletonModel->HasSkeleton())
@@ -327,6 +348,7 @@ namespace pe
         source.primitiveType = model->GetPrimitiveType();
         source.primitiveParams = model->GetPrimitiveParams();
         source.primitiveParamCount = model->GetPrimitiveParamCount();
+        source.modelId = model->GetId();
         m_sources.push_back(std::move(source));
 
         // Copy geometry and create meshes
@@ -406,6 +428,7 @@ namespace pe
         source.primitiveType = model->GetPrimitiveType();
         source.primitiveParams = model->GetPrimitiveParams();
         source.primitiveParamCount = model->GetPrimitiveParamCount();
+        source.modelId = model->GetId();
         m_sources.push_back(std::move(source));
 
         std::vector<int> meshMap = AddModelGeometry(model, sourceIndex);
@@ -581,6 +604,8 @@ namespace pe
         if (jointCount > 0)
             allJointMatrices.reserve(GetNodeCount() * static_cast<uint32_t>(jointCount));
 
+        const mat4 invRoot = jointCount > 0 ? glm::inverse(GetSkeleton().rootTransform) : mat4(1.f);
+
         for (uint32_t i = 0; i < GetNodeCount(); i++)
         {
             NodeRuntime &rt = m_nodeRuntime[i];
@@ -608,9 +633,22 @@ namespace pe
                 allJointMatrices.resize(base + static_cast<size_t>(jointCount));
                 if (!rt.jointMatrices.empty() && static_cast<int>(rt.jointMatrices.size()) == jointCount)
                 {
-                    mat4 invWorld = glm::inverse(rt.gpuData.worldMatrix);
+                    // Joint matrices from EvaluatePose include the skeleton hierarchy transforms
+                    // (via intermediatePrefix) which bake in the glTF root node rotation.
+                    // The shader does: boneTransform * worldMatrix, and the worldMatrix also
+                    // contains that root rotation, causing it to be double-applied.
+                    //
+                    // Fix: strip the baked-in root transform from joint matrices so the
+                    // shader's worldMatrix applies it instead.  This preserves correct
+                    // skeleton orientation while allowing user transforms (move/rotate/scale)
+                    // to affect skinned meshes.
+                    //
+                    // Math: uploadedJoint = inv(rootTransform) * skeletonPose
+                    // Shader: inv(rootTransform) * skeletonPose * worldMatrix
+                    //       = inv(R) * R * animatedPose * R * userTransform
+                    //       = animatedPose * R * userTransform   (correct: R once, userTransform once)
                     for (int j = 0; j < jointCount; j++)
-                        allJointMatrices[base + j] = invWorld * rt.jointMatrices[j];
+                        allJointMatrices[base + j] = invRoot * rt.jointMatrices[j];
                 }
                 else
                 {

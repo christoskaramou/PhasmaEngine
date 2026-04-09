@@ -185,6 +185,54 @@ namespace pe
         return (it != m_nodeToIndex.end()) ? m_states[it->second].time : 0.0f;
     }
 
+    void AnimationSystem::SetPlaybackTime(Scene &scene, NodeId *node, float timeTicks)
+    {
+        auto it = m_nodeToIndex.find(node);
+        if (it == m_nodeToIndex.end())
+            return;
+
+        auto &state = m_states[it->second];
+        const auto &clips = scene.GetAnimationClips();
+        if (state.clipIndex < 0 || state.clipIndex >= static_cast<int>(clips.size()))
+            return;
+
+        const AnimationClip &clip = clips[state.clipIndex];
+        state.time = std::clamp(timeTicks, 0.f, clip.duration);
+        state.playing = false; // pause during scrub
+
+        const Skeleton &skeleton = scene.GetSkeleton();
+        if (!skeleton.bones.empty())
+        {
+            NodeRuntime &rt = scene.GetNodeRuntime(state.nodeId);
+            AnimationEvaluator::EvaluatePose(clip, skeleton, state.time, rt.jointMatrices);
+            scene.MarkNodeDirty(state.nodeId);
+        }
+    }
+
+    void AnimationSystem::SetPaused(NodeId *node, bool paused)
+    {
+        auto it = m_nodeToIndex.find(node);
+        if (it == m_nodeToIndex.end())
+            return;
+        m_states[it->second].playing = !paused;
+    }
+
+    void AnimationSystem::SetLoop(NodeId *node, bool loop)
+    {
+        auto it = m_nodeToIndex.find(node);
+        if (it == m_nodeToIndex.end())
+            return;
+        m_states[it->second].loop = loop;
+    }
+
+    const AnimationNodeState *AnimationSystem::GetAnimationState(const NodeId *node) const
+    {
+        auto it = m_nodeToIndex.find(node);
+        if (it == m_nodeToIndex.end())
+            return nullptr;
+        return &m_states[it->second];
+    }
+
     void AnimationSystem::ClearAllAnimations()
     {
         PE_INFO("[Animation] ClearAllAnimations: states=%zu", m_states.size());

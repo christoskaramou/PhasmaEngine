@@ -72,13 +72,13 @@ namespace pe
     {
         size_t dataOffset = static_cast<size_t>(-1);
         std::vector<uint32_t> meshRefIndirect; // parallel to meshRefs
-        std::vector<int> rtInstanceIndices;     // parallel to meshRefs
+        std::vector<int> rtInstanceIndices;    // parallel to meshRefs
         AABB worldAABB;
         NodeGpuData gpuData;
         bool dirty = false;
         bool gpuPending = false;
         bool hasUniformData = false; // cached: node has at least one drawable mesh
-        uint8_t dirtyUniforms = 0;  // bitmask per swapchain frame (max 8); replaces vector<bool>
+        uint8_t dirtyUniforms = 0;   // bitmask per swapchain frame (max 8); replaces vector<bool>
 
         std::vector<mat4> jointMatrices;
     };
