@@ -233,6 +233,13 @@ public:
 	void SetTabSize(int aValue);
 	inline int GetTabSize() const { return mTabSize; }
 
+	// Ghost-text support: expose layout metrics for overlay rendering
+	float GetTextStart() const { return mTextStart; }
+	ImVec2 GetCharAdvance() const { return mCharAdvance; }
+	float GetTextDistanceToLineStart(const Coordinates& aFrom) const { return TextDistanceToLineStart(aFrom); }
+	ImVec2 GetContentScreenPos() const { return mContentScreenPos; }
+	ImVec2 GetContentScroll() const { return mContentScroll; }
+
 	void InsertText(const std::string& aValue);
 	void InsertText(const char* aValue);
 
@@ -381,6 +388,8 @@ private:
 	Breakpoints mBreakpoints;
 	ErrorMarkers mErrorMarkers;
 	ImVec2 mCharAdvance;
+	ImVec2 mContentScreenPos; // cached from Render() for ghost-text overlay
+	ImVec2 mContentScroll;    // cached scroll from Render()
 	Coordinates mInteractiveStart, mInteractiveEnd;
 	std::string mLineBuffer;
 	uint64_t mStartTime;

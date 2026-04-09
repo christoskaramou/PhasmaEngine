@@ -880,6 +880,10 @@ void TextEditor::Render()
 	auto scrollX = ImGui::GetScrollX();
 	auto scrollY = ImGui::GetScrollY();
 
+	// Cache for external ghost-text overlay
+	mContentScreenPos = cursorScreenPos;
+	mContentScroll = ImVec2(scrollX, scrollY);
+
 	auto lineNo = (int)floor(scrollY / mCharAdvance.y);
 	auto globalLineMax = (int)mLines.size();
 	auto lineMax = std::max(0, std::min((int)mLines.size() - 1, lineNo + (int)floor((scrollY + contentSize.y) / mCharAdvance.y)));

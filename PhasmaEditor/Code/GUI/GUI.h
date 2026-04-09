@@ -1,5 +1,6 @@
 #pragma once
 #include "PhasmaAgent/CodebaseContext.h"
+#include "GUI/AI/AICompletionService.h"
 #include "Widget.h"
 
 struct ImGuiStyle;
@@ -150,5 +151,6 @@ namespace pe
         std::string m_playModeSnapshot;
 
         EventSystem::CallbackToken m_afterCommandWaitToken{0};
+        AICompletionService m_completionService;
     };
 } // namespace pe

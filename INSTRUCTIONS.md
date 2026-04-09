@@ -502,6 +502,65 @@ Per-node Lua scripts are isolated: each `Component_Script` node gets its own `so
 
 ---
 
+## AI Autocomplete
+
+On-demand AI completions in three editor surfaces, powered by `AICompletionService` (backed by `pagent::Agent`).
+
+### Configuration
+
+`PhasmaEditor/Assets/Agent/agent_config.json` — `"completion"` block:
+
+```json
+"completion": {
+  "provider": "Anthropic",
+  "api_key": "",
+  "model": "claude-haiku-4-5-20251001",
+  "base_url": ""
+}
+```
+
+- `provider`: `"Anthropic"` | `"OpenAI"` | `"Google"` | `"Ollama"` | `"GoogleVertex"`
+- Empty `api_key` with a key-required provider silently disables all completions.
+- Ollama or any provider with `base_url` set does not require an API key.
+
+### Script Editor (Lua)
+
+- **Ctrl+Space**: triggers completion. Grabs ~50 lines around cursor, injects `<cursor>` marker, sends to the Lua agent.
+- Ghost text renders inline at cursor (gray overlay via `ImGui::GetForegroundDrawList`).
+- **Tab**: inserts ghost text at saved cursor position.
+- **Esc** or any keystroke: dismisses.
+- Editor is set read-only while waiting; restored on callback (success or error).
+- Switching scripts (`OpenScript`/`OpenNewScript`) cancels in-flight requests.
+
+### Shader Editor (HLSL)
+
+- Standalone widget extracted from ProfilerWidget (`Window > Shader Editor`).
+- Same Ctrl+Space/Tab/Esc flow as ScriptEditor, using the HLSL agent.
+- Switching shader files cancels pending requests.
+
+### Transform Widget (Properties)
+
+- Hover a position or scale field for 500ms to trigger a property suggestion.
+- Tooltip shows `"AI: x,y,z (Enter to apply)"`.
+- Enter applies the parsed value via `ApplyLocalTransform`.
+- Mouse leaving the field discards the suggestion.
+
+### Architecture
+
+`AICompletionService` (owned by `GUI`) holds three stateless `pagent::Agent` slots (Lua, HLSL, Property). Each request bumps a generation counter; stale callbacks are ignored. `Poll()` is called each frame from `GUI::Update()`. System prompts include PhasmaEngine-specific API (e.g. `transform:set_position(vec3(...))`, `engine.get_metrics().delta_ms`, hooks take no arguments).
+
+### Files
+
+| File | Role |
+|------|------|
+| `PhasmaEditor/Code/GUI/AI/AICompletionService.h/.cpp` | Service: 3 agents, Poll, BuildContext |
+| `PhasmaEditor/Code/GUI/Widgets/ShaderEditor.h/.cpp` | Extracted from ProfilerWidget |
+| `PhasmaEditor/Code/GUI/Widgets/ScriptEditor.h/.cpp` | Ghost text + Ctrl+Space |
+| `PhasmaEditor/Code/GUI/Widgets/TransformWidget.h/.cpp` | Hover tooltip suggestions |
+| `PhasmaEditor/third_party/imgui/TextEditor.h/.cpp` | Added GetTextStart/GetCharAdvance/GetContentScreenPos accessors |
+
+---
+
 ## Known Pitfalls
 
 ### SafeFloat destroys infinity

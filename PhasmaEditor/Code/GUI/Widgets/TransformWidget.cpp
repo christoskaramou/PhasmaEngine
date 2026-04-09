@@ -26,6 +26,63 @@ namespace pe
         Widget::Init(gui);
     }
 
+    bool TransformWidget::TryAISuggestion(const std::string &fieldId,
+                                          const std::string &nodeType,
+                                          const std::string &fieldName,
+                                          const std::string &currentValue,
+                                          std::string &outAccepted)
+    {
+        if (!m_completion || !m_completion->IsEnabled())
+            return false;
+
+        if (ImGui::IsItemHovered())
+        {
+            if (m_hoverFieldId != fieldId)
+            {
+                m_hoverFieldId = fieldId;
+                m_hoverStart = std::chrono::steady_clock::now();
+                if (m_suggestionFieldId != fieldId)
+                    m_pendingSuggestion.clear();
+            }
+            else
+            {
+                auto elapsed = std::chrono::steady_clock::now() - m_hoverStart;
+                if (!m_aiRequestInFlight && m_pendingSuggestion.empty() &&
+                    elapsed >= std::chrono::milliseconds(500))
+                {
+                    m_aiRequestInFlight = true;
+                    m_completion->RequestPropertySuggestion(
+                        nodeType, fieldName, currentValue,
+                        [this, fid = fieldId](std::string suggestion)
+                        {
+                            m_pendingSuggestion = std::move(suggestion);
+                            m_suggestionFieldId = fid;
+                            m_aiRequestInFlight = false;
+                        });
+                }
+            }
+
+            if (!m_pendingSuggestion.empty() && m_suggestionFieldId == fieldId)
+            {
+                ImGui::SetTooltip("AI: %s  (Enter to apply)", m_pendingSuggestion.c_str());
+                if (ImGui::IsKeyPressed(ImGuiKey_Enter, false))
+                {
+                    outAccepted = m_pendingSuggestion;
+                    m_pendingSuggestion.clear();
+                    m_suggestionFieldId.clear();
+                    return true;
+                }
+            }
+        }
+        else if (m_hoverFieldId == fieldId)
+        {
+            m_hoverFieldId.clear();
+            m_pendingSuggestion.clear();
+            m_suggestionFieldId.clear();
+        }
+        return false;
+    }
+
     void TransformWidget::Update()
     {
     }
@@ -164,6 +221,18 @@ namespace pe
             float nt[3] = {pos.x, pos.y, pos.z};
             ApplyLocalTransform(node, nt, r, s);
         }
+
+        std::string accepted;
+        std::string posStr = std::to_string(pos.x) + "," + std::to_string(pos.y) + "," + std::to_string(pos.z);
+        if (TryAISuggestion("Transform::pos", "Transform", "position", posStr, accepted))
+        {
+            float x = pos.x, y = pos.y, z = pos.z;
+            if (sscanf(accepted.c_str(), "%f,%f,%f", &x, &y, &z) >= 1)
+            {
+                float nt[3] = {x, y, z};
+                ApplyLocalTransform(node, nt, r, s);
+            }
+        }
     }
 
     void TransformWidget::DrawRotationEditor(NodeId *node)
@@ -224,6 +293,22 @@ namespace pe
             if (auto *ps = GetGlobalSystem<PhysicsSystem>())
                 ps->NotifyScaleChanged(scene, node);
 #endif
+        }
+
+        std::string accepted;
+        std::string sclStr = std::to_string(scl.x) + "," + std::to_string(scl.y) + "," + std::to_string(scl.z);
+        if (TryAISuggestion("Transform::scale", "Transform", "scale", sclStr, accepted))
+        {
+            float x = scl.x, y = scl.y, z = scl.z;
+            if (sscanf(accepted.c_str(), "%f,%f,%f", &x, &y, &z) >= 1)
+            {
+                float ns[3] = {std::max(x, 0.001f), std::max(y, 0.001f), std::max(z, 0.001f)};
+                ApplyLocalTransform(node, t, r, ns);
+#ifdef PE_PHYSICS
+                if (auto *ps = GetGlobalSystem<PhysicsSystem>())
+                    ps->NotifyScaleChanged(scene, node);
+#endif
+            }
         }
     }
 

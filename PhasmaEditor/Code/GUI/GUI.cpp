@@ -36,6 +36,7 @@
 #include "Widgets/Properties.h"
 #include "Widgets/SceneView.h"
 #include "Widgets/ScriptEditor.h"
+#include "Widgets/ShaderEditor.h"
 #include "PhasmaAgent/CodebaseIndexer.h"
 #include "Widgets/TransformWidget.h"
 #ifdef PE_PHYSICS
@@ -183,6 +184,13 @@ namespace pe
 
             return nlohmann::json{
                 {"mcp", false},
+                {"completion",
+                 {
+                     {"provider", "Anthropic"},
+                     {"api_key", ""},
+                     {"model", "claude-haiku-4-5-20251001"},
+                     {"base_url", ""},
+                 }},
                 {"indexing",
                  {
                      {"directories", config.directories},
@@ -767,6 +775,16 @@ namespace pe
             loadStrings("skip_files", config.skip_files);
             loadStrings("skip_extensions", config.skip_extensions);
             loadStrings("skip_regex", config.skip_regex);
+        }
+
+        if (j.contains("completion") && j["completion"].is_object())
+        {
+            const auto &comp = j["completion"];
+            m_completionService.Init(
+                comp.value("provider", "Anthropic"),
+                comp.value("api_key", ""),
+                comp.value("model", "claude-haiku-4-5-20251001"),
+                comp.value("base_url", ""));
         }
 
         PE_INFO("[MCP] Startup: %s", m_mcpStartEnabled ? "enabled" : "disabled");
@@ -1553,6 +1571,7 @@ namespace pe
         auto lightWidget = std::make_shared<LightWidget>();
         auto globalWidget = std::make_shared<GlobalWidget>();
         auto scriptEditor = std::make_shared<ScriptEditor>();
+        auto shaderEditor = std::make_shared<ShaderEditor>();
 #ifdef PE_PHYSICS
         auto physicsWidget = std::make_shared<PhysicsWidget>();
 #endif
@@ -1578,6 +1597,7 @@ namespace pe
             lightWidget,
             globalWidget,
             scriptEditor,
+            shaderEditor,
 #ifdef PE_PHYSICS
             physicsWidget,
 #endif
@@ -1600,9 +1620,17 @@ namespace pe
                                hierarchy,
                                particles,
                                globalWidget,
-                               scriptEditor};
+                               scriptEditor,
+                               shaderEditor};
         for (auto &widget : m_widgets)
             widget->Init(this);
+
+        if (auto *se = GetWidget<ScriptEditor>())
+            se->SetCompletionService(&m_completionService);
+        if (auto *she = GetWidget<ShaderEditor>())
+            she->SetCompletionService(&m_completionService);
+        if (auto *tw = GetWidget<TransformWidget>())
+            tw->SetCompletionService(&m_completionService);
 
         queue->WaitIdle();
     }
@@ -1682,6 +1710,8 @@ namespace pe
             for (auto &fn : mainThreadActions)
                 fn();
         }
+
+        m_completionService.Poll();
 
         if (!m_render)
             return;

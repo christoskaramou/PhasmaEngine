@@ -1,7 +1,6 @@
 #pragma once
 #include "GUI/Widget.h"
 #include "API/RHI.h"
-#include "TextEditor.h"
 
 namespace pe
 {
@@ -27,13 +26,7 @@ namespace pe
         void DrawCpuTimelineView();
         void DrawCpuTimingTableWithStats(const std::vector<Profiler::Entry> &entries,
                                          float scopeTotal, const char *filter);
-        void DrawShadersTab();
         void DrawCaptureTab();
-
-        // Shader editor helpers
-        void LoadShaderFile(const std::string &path);
-        void SaveAndRecompile();
-        void ScanShaderFiles();
 
         // Render target preview helpers
         void DrawPassImageTooltip(const std::string &passName);
@@ -59,8 +52,10 @@ namespace pe
                 float sum = 0.f;
                 for (float s : samples)
                 {
-                    if (s < minMs) minMs = s;
-                    if (s > maxMs) maxMs = s;
+                    if (s < minMs)
+                        minMs = s;
+                    if (s > maxMs)
+                        maxMs = s;
                     sum += s;
                 }
                 avgMs = sum / static_cast<float>(samples.size());
@@ -79,8 +74,10 @@ namespace pe
 
         void ResetStats()
         {
-            for (auto &[k, v] : m_cpuStats) v.Reset();
-            for (auto &[k, v] : m_gpuStats) v.Reset();
+            for (auto &[k, v] : m_cpuStats)
+                v.Reset();
+            for (auto &[k, v] : m_gpuStats)
+                v.Reset();
         }
 
         // All display data — replaced atomically each tick; frozen when paused
@@ -113,19 +110,6 @@ namespace pe
         float m_cpuTimelineZoom = 1.0f;
         float m_cpuTimelineZoomV = 1.0f;
         int m_selectedCpuScope = -1;
-
-        // Shader viewer / editor
-        std::vector<std::string> m_shaderFiles;    // absolute paths
-        std::vector<std::string> m_shaderRelPaths; // display paths (relative)
-        int m_selectedShader = -1;
-        std::string m_shaderOriginalSource;
-        TextEditor m_editor;
-        bool m_shaderModified = false;
-        char m_shaderSearchFilter[128] = {};
-        int m_editorPalette = 4;     // 0=Dark, 1=Light, 2=Retro, 3=Soft, 4=VSCode
-        int m_editorFontSizeIdx = 1; // 0=S, 1=M, 2=L, 3=XL
-        float m_editorFontScale = 1.0f;
-        bool m_shaderFilesScanned = false;
 
         // Timeline
         float m_timelineZoom = 1.0f;

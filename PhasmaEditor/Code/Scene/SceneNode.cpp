@@ -348,7 +348,18 @@ namespace pe
 
     void Scene::SetNodeScript(NodeId *node, const std::string &path)
     {
-        m_nodeComponentCache[node->index].script->path = path;
+        if (!node || node->index >= (int)m_nodeComponentCache.size())
+        {
+            PE_WARN("[Scene] SetNodeScript: invalid node index %d", node ? node->index : -1);
+            return;
+        }
+        auto &cache = m_nodeComponentCache[node->index];
+        if (!cache.script)
+        {
+            PE_WARN("[Scene] SetNodeScript: node %d has no script component", node->index);
+            return;
+        }
+        cache.script->path = path;
     }
 
     void Scene::AttachPrimitiveToNode(NodeId *node, ModelAsset *primitiveModel)

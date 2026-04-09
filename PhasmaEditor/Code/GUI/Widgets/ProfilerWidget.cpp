@@ -50,11 +50,11 @@ namespace pe
         if (ImGui::BeginTable("##gpu_timing", 6, flags, {-FLT_MIN, ImGui::GetContentRegionAvail().y}))
         {
             ImGui::TableSetupColumn("Pass", ImGuiTableColumnFlags_WidthStretch, 0.40f);
-            ImGui::TableSetupColumn("min",  ImGuiTableColumnFlags_WidthFixed,   52.f);
-            ImGui::TableSetupColumn("cur",  ImGuiTableColumnFlags_WidthFixed,   52.f);
-            ImGui::TableSetupColumn("max",  ImGuiTableColumnFlags_WidthFixed,   52.f);
-            ImGui::TableSetupColumn("avg",  ImGuiTableColumnFlags_WidthFixed,   52.f);
-            ImGui::TableSetupColumn("rel",  ImGuiTableColumnFlags_WidthStretch, 0.20f);
+            ImGui::TableSetupColumn("min", ImGuiTableColumnFlags_WidthFixed, 52.f);
+            ImGui::TableSetupColumn("cur", ImGuiTableColumnFlags_WidthFixed, 52.f);
+            ImGui::TableSetupColumn("max", ImGuiTableColumnFlags_WidthFixed, 52.f);
+            ImGui::TableSetupColumn("avg", ImGuiTableColumnFlags_WidthFixed, 52.f);
+            ImGui::TableSetupColumn("rel", ImGuiTableColumnFlags_WidthStretch, 0.20f);
             ImGui::TableHeadersRow();
 
             for (int i = 0; i < (int)samples.size(); ++i)
@@ -114,8 +114,10 @@ namespace pe
                 ImGui::TableSetColumnIndex(2);
                 ImGui::TextColored(ui::Heat(rel), "%.3f", s.timeMs);
                 ImGui::TableSetColumnIndex(3);
-                if (st) ImGui::TextColored(ui::Heat(st->maxMs / totalMs), "%.3f", st->maxMs);
-                else    ImGui::TextDisabled("--");
+                if (st)
+                    ImGui::TextColored(ui::Heat(st->maxMs / totalMs), "%.3f", st->maxMs);
+                else
+                    ImGui::TextDisabled("--");
                 ImGui::TableSetColumnIndex(4);
                 ImGui::TextDisabled(st ? "%.3f" : "--", st ? st->avgMs : 0.f);
                 ImGui::TableSetColumnIndex(5);
@@ -538,11 +540,6 @@ namespace pe
                 DrawGpuTab();
                 ImGui::EndTabItem();
             }
-            if (ImGui::BeginTabItem("Shaders"))
-            {
-                DrawShadersTab();
-                ImGui::EndTabItem();
-            }
             if (ImGui::BeginTabItem("Capture"))
             {
                 DrawCaptureTab();
@@ -903,7 +900,7 @@ namespace pe
     // ─── CPU timing table with stats ────────────────────────────────────────────
 
     void ProfilerWidget::DrawCpuTimingTableWithStats(const std::vector<Profiler::Entry> &entries,
-                                                      float scopeTotal, const char *filter)
+                                                     float scopeTotal, const char *filter)
     {
         if (entries.empty())
         {
@@ -923,11 +920,11 @@ namespace pe
         if (ImGui::BeginTable("##cpu_stats", 6, flags, {-FLT_MIN, ImGui::GetContentRegionAvail().y}))
         {
             ImGui::TableSetupColumn("Scope", ImGuiTableColumnFlags_WidthStretch, 0.45f);
-            ImGui::TableSetupColumn("min",   ImGuiTableColumnFlags_WidthFixed,   52.f);
-            ImGui::TableSetupColumn("cur",   ImGuiTableColumnFlags_WidthFixed,   52.f);
-            ImGui::TableSetupColumn("max",   ImGuiTableColumnFlags_WidthFixed,   52.f);
-            ImGui::TableSetupColumn("avg",   ImGuiTableColumnFlags_WidthFixed,   52.f);
-            ImGui::TableSetupColumn("rel",   ImGuiTableColumnFlags_WidthStretch, 0.25f);
+            ImGui::TableSetupColumn("min", ImGuiTableColumnFlags_WidthFixed, 52.f);
+            ImGui::TableSetupColumn("cur", ImGuiTableColumnFlags_WidthFixed, 52.f);
+            ImGui::TableSetupColumn("max", ImGuiTableColumnFlags_WidthFixed, 52.f);
+            ImGui::TableSetupColumn("avg", ImGuiTableColumnFlags_WidthFixed, 52.f);
+            ImGui::TableSetupColumn("rel", ImGuiTableColumnFlags_WidthStretch, 0.25f);
             ImGui::TableHeadersRow();
 
             int skipDepth = INT_MAX;
@@ -963,8 +960,10 @@ namespace pe
                     ImGui::TableSetColumnIndex(2);
                     ImGui::TextColored(ui::Heat(rel), "%.3f", e.timeMs);
                     ImGui::TableSetColumnIndex(3);
-                    if (st) ImGui::TextColored(ui::Heat(st->maxMs / scopeTotal), "%.3f", st->maxMs);
-                    else    ImGui::TextDisabled("--");
+                    if (st)
+                        ImGui::TextColored(ui::Heat(st->maxMs / scopeTotal), "%.3f", st->maxMs);
+                    else
+                        ImGui::TextDisabled("--");
                     ImGui::TableSetColumnIndex(4);
                     ImGui::TextDisabled(st ? "%.3f" : "--", st ? st->avgMs : 0.f);
                     ImGui::TableSetColumnIndex(5);
@@ -1002,8 +1001,10 @@ namespace pe
                 ImGui::TableSetColumnIndex(2);
                 ImGui::TextColored(ui::Heat(rel), "%.3f", e.timeMs);
                 ImGui::TableSetColumnIndex(3);
-                if (st) ImGui::TextColored(ui::Heat(st->maxMs / scopeTotal), "%.3f", st->maxMs);
-                else    ImGui::TextDisabled("--");
+                if (st)
+                    ImGui::TextColored(ui::Heat(st->maxMs / scopeTotal), "%.3f", st->maxMs);
+                else
+                    ImGui::TextDisabled("--");
                 ImGui::TableSetColumnIndex(4);
                 ImGui::TextDisabled(st ? "%.3f" : "--", st ? st->avgMs : 0.f);
                 ImGui::TableSetColumnIndex(5);
@@ -1225,259 +1226,6 @@ namespace pe
             ImGui::Text("Duration: %.3f ms   CPU share: %.1f%%",
                         sel.timeMs, m_data.cpuScopeTotal > 0.f ? sel.timeMs / m_data.cpuScopeTotal * 100.f : 0.f);
         }
-    }
-
-    // ─── Shaders Tab ─────────────────────────────────────────────────────────────
-
-    void ProfilerWidget::ScanShaderFiles()
-    {
-        m_shaderFiles.clear();
-        m_shaderRelPaths.clear();
-
-        const std::string shaderDir = Path::Assets + "Shaders/";
-        if (!std::filesystem::exists(shaderDir))
-            return;
-
-        for (auto &entry : std::filesystem::recursive_directory_iterator(shaderDir))
-        {
-            if (!entry.is_regular_file())
-                continue;
-            const auto &p = entry.path();
-            if (p.extension() != ".hlsl" && p.extension() != ".glsl" && p.extension() != ".h")
-                continue;
-
-            m_shaderFiles.push_back(p.string());
-            // Make a relative display path
-            std::string rel = p.string();
-            if (rel.size() > shaderDir.size())
-                rel = rel.substr(shaderDir.size());
-            std::replace(rel.begin(), rel.end(), '\\', '/');
-            m_shaderRelPaths.push_back(rel);
-        }
-        m_shaderFilesScanned = true;
-    }
-
-    void ProfilerWidget::LoadShaderFile(const std::string &path)
-    {
-        std::ifstream f(path, std::ios::binary);
-        if (!f.is_open())
-            return;
-
-        std::string source((std::istreambuf_iterator<char>(f)),
-                           std::istreambuf_iterator<char>());
-        m_shaderOriginalSource = source;
-        m_shaderModified = false;
-
-        auto ext = std::filesystem::path(path).extension().string();
-        if (ext == ".glsl")
-            m_editor.SetLanguageDefinition(TextEditor::LanguageDefinition::GLSL());
-        else
-            m_editor.SetLanguageDefinition(TextEditor::LanguageDefinition::HLSL());
-
-        m_editor.SetText(source);
-    }
-
-    void ProfilerWidget::SaveAndRecompile()
-    {
-        if (m_selectedShader < 0 || m_selectedShader >= (int)m_shaderFiles.size())
-            return;
-
-        const std::string &path = m_shaderFiles[m_selectedShader];
-        std::ofstream f(path, std::ios::binary | std::ios::trunc);
-        if (!f.is_open())
-        {
-            PE_WARN("ProfilerWidget: cannot write shader '%s'", path.c_str());
-            return;
-        }
-        std::string src = m_editor.GetText();
-        f << src;
-        f.close();
-
-        m_shaderOriginalSource = src;
-        m_shaderModified = false;
-
-        EventSystem::PushEvent(EventType::CompileShaders);
-    }
-
-    void ProfilerWidget::DrawShadersTab()
-    {
-        // Catppuccin Mocha — IM_COL32 format is 0xAABBGGRR
-        static const TextEditor::Palette soft = {{
-            0xFFF4D6CD, // Default          lavender
-            0xFFF7A6CB, // Keyword          mauve
-            0xFF87B3FA, // Number           peach
-            0xFFA1E3A6, // String           green
-            0xFFEBDC89, // CharLiteral      sky
-            0xFFDEC2BA, // Punctuation      subtext
-            0xFFEBDC89, // Preprocessor     sky
-            0xFFF4D6CD, // Identifier       lavender
-            0xFFAFE2F9, // KnownIdentifier  yellow
-            0xFFFAB489, // PreprocIdentifier blue
-            0xFF86706C, // Comment          overlay0
-            0xFF705B58, // MultiLineComment  surface2
-            0xFF2E1E1E, // Background       base
-            0xFFE7C2F5, // Cursor           pink
-            0x40443231, // Selection        surface0
-            0x80A88BF3, // ErrorMarker      red
-            0xFF87B3FA, // Breakpoint       peach
-            0xFF86706C, // LineNumber       overlay0
-            0x40251818, // CurrentLineFill
-            0x20251818, // CurrentLineFillInactive
-            0x605A4745, // CurrentLineEdge
-        }};
-
-        // VS Code
-        static const TextEditor::Palette vscode = {{
-            0xFFded9d6, // Default          #d6d9de
-            0xFFcc9c56, // Keyword          #569ccc
-            0xFFa7cdb4, // Number           #b4cda7
-            0xFF5485ce, // String           #ce8554
-            0xFF5485ce, // CharLiteral      #ce8554
-            0xFFb1d4c9, // Punctuation      #c9d4b1
-            0xFFb686c5, // Preprocessor     #c586b6
-            0xFFfedc9c, // Identifier       #9cdcfe
-            0xFFaadcdc, // KnownIdentifier  #dcdcaa
-            0xFFcc6e2a, // PreprocIdentifier #2a6ecc
-            0xFF55996a, // Comment          #6a9955
-            0xFF55996a, // MultiLineComment  #6a9955
-            0xFF1f1f1f, // Background       #1f1f1f
-            0xFFadafae, // Cursor           #aeafad
-            0x40784f26, // Selection        #264f78
-            0x804745c7, // ErrorMarker      #c74547
-            0xFF0014e5, // Breakpoint       #e51400
-            0xFF747664, // LineNumber       #647674
-            0x401f1f1f, // CurrentLineFill  #1f1f1f
-            0x201f1f1f, // CurrentLineFillInactive #1f1f1f
-            0x601f1f1f, // CurrentLineEdge  #1f1f1f
-        }};
-
-        if (!m_shaderFilesScanned)
-        {
-            ScanShaderFiles();
-            // Apply initial palette (VSCode by default)
-            static bool paletteInit = false;
-            if (!paletteInit)
-            {
-                paletteInit = true;
-                m_editor.SetPalette(vscode);
-                m_editor.SetShowWhitespaces(false);
-            }
-        }
-
-        // Recompile button
-        if (m_shaderModified)
-        {
-            ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.2f, 0.6f, 0.2f, 1.f));
-            if (ImGui::Button("Save & Recompile", {-1, 0}))
-                SaveAndRecompile();
-            ImGui::PopStyleColor();
-        }
-        else
-        {
-            if (ImGui::Button("Recompile All Shaders", {-1, 0}))
-                EventSystem::PushEvent(EventType::CompileShaders);
-        }
-
-        // Toolbar: search + palette + font-size + rescan
-        ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x - 270.f);
-        ImGui::InputTextWithHint("##shsearch", "filter shaders...", m_shaderSearchFilter, IM_ARRAYSIZE(m_shaderSearchFilter));
-
-        ImGui::SameLine();
-        static const char *paletteNames[] = {"Dark", "Light", "Retro", "Soft", "VSCode"};
-        ImGui::SetNextItemWidth(100.f);
-        if (ImGui::Combo("##palette", &m_editorPalette, paletteNames, 5))
-        {
-            if (m_editorPalette == 0)
-                m_editor.SetPalette(TextEditor::GetDarkPalette());
-            else if (m_editorPalette == 1)
-                m_editor.SetPalette(TextEditor::GetLightPalette());
-            else if (m_editorPalette == 2)
-                m_editor.SetPalette(TextEditor::GetRetroBluePalette());
-            else if (m_editorPalette == 3)
-                m_editor.SetPalette(soft);
-            else
-                m_editor.SetPalette(vscode);
-        }
-
-        ImGui::SameLine();
-        static const char *sizeNames[] = {"S", "M", "L", "XL"};
-        static const float sizeScales[] = {0.85f, 1.0f, 1.25f, 1.5f};
-        ImGui::SetNextItemWidth(55.f);
-        if (ImGui::Combo("##fontsize", &m_editorFontSizeIdx, sizeNames, 4))
-            m_editorFontScale = sizeScales[m_editorFontSizeIdx];
-
-        ImGui::SameLine();
-        if (ImGui::SmallButton("Rescan"))
-        {
-            m_shaderFilesScanned = false;
-            m_selectedShader = -1;
-            m_editor.SetText("");
-            m_shaderModified = false;
-        }
-
-        ImGui::Separator();
-
-        // Split: left = file list, right = source editor
-        float listW = 200.f;
-        float editorW = ImGui::GetContentRegionAvail().x - listW - 8.f;
-        float availH = ImGui::GetContentRegionAvail().y;
-
-        // Left panel: shader file list
-        ImGui::BeginChild("##shader_list", {listW, availH}, true);
-        for (int i = 0; i < (int)m_shaderRelPaths.size(); ++i)
-        {
-            if (m_shaderSearchFilter[0] != '\0')
-            {
-                std::string_view hay(m_shaderRelPaths[i]), needle(m_shaderSearchFilter);
-                bool found = std::search(hay.begin(), hay.end(),
-                                         needle.begin(), needle.end(),
-                                         [](unsigned char a, unsigned char b)
-                                         { return std::tolower(a) == std::tolower(b); }) != hay.end();
-                if (!found)
-                    continue;
-            }
-
-            bool selected = (m_selectedShader == i);
-            if (ImGui::Selectable(m_shaderRelPaths[i].c_str(), selected))
-            {
-                if (m_selectedShader != i)
-                {
-                    m_selectedShader = i;
-                    LoadShaderFile(m_shaderFiles[i]);
-                }
-            }
-        }
-        ImGui::EndChild();
-
-        ImGui::SameLine();
-
-        // Right panel: source editor
-        ImGui::BeginChild("##shader_editor", {editorW, availH}, false);
-
-        // Ctrl+scroll to zoom font size
-        if (ImGui::IsWindowHovered() && ImGui::GetIO().KeyCtrl)
-        {
-            float wheel = ImGui::GetIO().MouseWheel;
-            if (wheel != 0.f)
-                m_editorFontScale = std::clamp(m_editorFontScale + wheel * 0.05f, 0.5f, 2.0f);
-        }
-        ImGui::SetWindowFontScale(m_editorFontScale);
-
-        if (m_selectedShader >= 0)
-        {
-            m_editor.Render("##src", {-1, availH});
-            if (m_editor.IsTextChanged())
-                m_shaderModified = (m_editor.GetText() != m_shaderOriginalSource);
-
-            if (m_shaderModified && ImGui::IsWindowFocused(ImGuiFocusedFlags_ChildWindows) &&
-                ImGui::GetIO().KeyCtrl && ImGui::IsKeyPressed(ImGuiKey_S, false))
-                SaveAndRecompile();
-        }
-        else
-        {
-            ImGui::TextDisabled("Select a shader file to view and edit its source.");
-        }
-        ImGui::EndChild();
     }
 
     // ─── Capture Tab ─────────────────────────────────────────────────────────────
