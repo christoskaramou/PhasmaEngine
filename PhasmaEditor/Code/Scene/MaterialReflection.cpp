@@ -20,6 +20,15 @@ namespace pe
             const Reflection *refl;
         };
         std::vector<ShaderRefl> stages;
+        auto destroyStages = [&]()
+        {
+            for (auto &[shader, refl] : stages)
+            {
+                (void)refl;
+                Shader::Destroy(shader);
+            }
+            stages.clear();
+        };
 
         if (!surface->vertexShader.empty())
         {
@@ -89,7 +98,10 @@ namespace pe
         }
 
         if (rawMembers.empty())
+        {
+            destroyStages();
             return layout;
+        }
 
         // Parse annotation
         MaterialAnnotation ann = ParseMaterialAnnotation(surface->materialAnnotation);
@@ -231,6 +243,7 @@ namespace pe
         }
 
         layout.valid = !layout.fields.empty() || !layout.textureSlots.empty();
+        destroyStages();
         return layout;
     }
 } // namespace pe

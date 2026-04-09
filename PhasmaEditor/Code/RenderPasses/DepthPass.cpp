@@ -56,7 +56,7 @@ namespace pe
             }
         }
 
-        if (scene.HasOpaqueDrawInfo())
+        if (scene.GetMeshCount() > 0)
         {
             const auto &sets = m_passInfo->GetDescriptors(frame);
             Descriptor *setUniforms = sets[0];
@@ -81,7 +81,7 @@ namespace pe
     {
         PE_ERROR_IF(m_scene == nullptr, "Scene was not set");
 
-        if (!m_scene->HasOpaqueDrawInfo())
+        if (m_scene->GetMeshCount() == 0)
         {
             ClearDepthStencil(cmd);
         }
@@ -91,8 +91,6 @@ namespace pe
             pushConstants.jointsCount = static_cast<uint32_t>(m_scene->GetSkeleton().GetBoneCount());
 
             uint32_t frame = RHII.GetFrameIndex();
-            size_t offset = 0;
-            uint32_t count = static_cast<uint32_t>(m_scene->GetDrawInfosOpaque().size() + m_scene->GetDrawInfosAlphaCut().size());
 
             cmd->BeginPass(1, m_attachments.data(), "DepthPass");
             cmd->SetViewport(0.f, 0.f, m_depthStencil->GetWidth_f(), m_depthStencil->GetHeight_f());
@@ -102,7 +100,10 @@ namespace pe
             cmd->BindVertexBuffer(m_scene->GetBuffer(), m_scene->GetPositionsOffset());
             cmd->SetConstants(pushConstants);
             cmd->PushConstants();
-            cmd->DrawIndexedIndirect(m_scene->GetIndirect(frame), offset, count);
+            cmd->DrawIndexedIndirectCount(m_scene->GetIndirectOpaqueSS(frame), 0, m_scene->GetCullingCountersBuffer(frame), 0 * sizeof(uint32_t), m_scene->GetMeshCount());
+            cmd->DrawIndexedIndirectCount(m_scene->GetIndirectAlphaCutSS(frame), 0, m_scene->GetCullingCountersBuffer(frame), 1 * sizeof(uint32_t), m_scene->GetMeshCount());
+            cmd->DrawIndexedIndirectCount(m_scene->GetIndirectOpaqueDS(frame), 0, m_scene->GetCullingCountersBuffer(frame), 5 * sizeof(uint32_t), m_scene->GetMeshCount());
+            cmd->DrawIndexedIndirectCount(m_scene->GetIndirectAlphaCutDS(frame), 0, m_scene->GetCullingCountersBuffer(frame), 6 * sizeof(uint32_t), m_scene->GetMeshCount());
             cmd->EndPass();
         }
 

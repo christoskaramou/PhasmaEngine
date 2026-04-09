@@ -23,6 +23,7 @@ namespace pe
 
     class GpuTimer;
     class Semaphore;
+    class CullingPass;
     class ShadowPass;
     class DepthPass;
     class GbufferOpaquePass;
@@ -51,7 +52,8 @@ namespace pe
     public:
         enum class RenderGraphPassId : uint32_t
         {
-            Shadow = 0,
+            Culling = 0,
+            Shadow,
             Depth,
             GBufferOpaque,
             SSAO,
@@ -157,6 +159,7 @@ namespace pe
         std::array<bool, static_cast<size_t>(RenderGraphPassId::Count)> m_renderGraphPassEnabled{};
 
         // Cached global component pointers (set by CacheGlobalComponents)
+        CullingPass *m_cullingPass = nullptr;
         ShadowPass *m_shadowPass = nullptr;
         DepthPass *m_depthPass = nullptr;
         GbufferOpaquePass *m_gbufferOpaquePass = nullptr;

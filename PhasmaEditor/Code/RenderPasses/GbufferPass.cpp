@@ -69,12 +69,32 @@ namespace pe
         m_passInfo->depthFormat = depthFormat;
         m_passInfo->Update();
 
+        Shader *oldDSVert = m_passInfoDS->pVertShader;
+        Shader *oldDSFrag = m_passInfoDS->pFragShader;
         m_passInfoDS->name = "gbuffer_opaque_ds_pipeline";
-        m_passInfoDS->Apply(*surface);
-        m_passInfoDS->cullMode = vk::CullModeFlagBits::eNone;
-        m_passInfoDS->colorFormats = colorformats;
-        m_passInfoDS->depthFormat = depthFormat;
-        m_passInfoDS->Update();
+        try
+        {
+            m_passInfoDS->Apply(*surface);
+            m_passInfoDS->cullMode = vk::CullModeFlagBits::eNone;
+            m_passInfoDS->colorFormats = colorformats;
+            m_passInfoDS->depthFormat = depthFormat;
+            m_passInfoDS->Update();
+
+            if (oldDSVert != m_passInfoDS->pVertShader)
+                Shader::Destroy(oldDSVert);
+            if (oldDSFrag != m_passInfoDS->pFragShader)
+                Shader::Destroy(oldDSFrag);
+        }
+        catch (...)
+        {
+            if (m_passInfoDS->pVertShader != oldDSVert)
+                Shader::Destroy(m_passInfoDS->pVertShader);
+            if (m_passInfoDS->pFragShader != oldDSFrag)
+                Shader::Destroy(m_passInfoDS->pFragShader);
+            m_passInfoDS->pVertShader = oldDSVert;
+            m_passInfoDS->pFragShader = oldDSFrag;
+            throw;
+        }
     }
 
     void GbufferOpaquePass::Update()
@@ -101,7 +121,7 @@ namespace pe
             }
         }
 
-        if (scene.HasOpaqueDrawInfo())
+        if (scene.GetMeshCount() > 0)
         {
             const auto &sets = m_passInfo->GetDescriptors(frame);
             Descriptor *setUniforms = sets[0];
@@ -121,51 +141,38 @@ namespace pe
 
         Camera *camera = GetGlobalSystem<RendererSystem>()->GetScene().GetActiveCamera();
 
-        if (!m_scene->HasDrawInfo())
+        if (m_scene->GetMeshCount() == 0)
         {
             // Just clear the render targets
             ClearRenderTargets(cmd);
         }
         else
         {
-            if (m_scene->HasOpaqueDrawInfo())
-            {
-                PushConstants_GBuffer pushConstants{};
-                pushConstants.jointsCount = static_cast<uint32_t>(m_scene->GetSkeleton().GetBoneCount());
-                pushConstants.projJitter = camera->GetProjJitter();
-                pushConstants.prevProjJitter = camera->GetPrevProjJitter();
-                pushConstants.passType = 0u;
+            PushConstants_GBuffer pushConstants{};
+            pushConstants.jointsCount = static_cast<uint32_t>(m_scene->GetSkeleton().GetBoneCount());
+            pushConstants.projJitter = camera->GetProjJitter();
+            pushConstants.prevProjJitter = camera->GetPrevProjJitter();
+            pushConstants.passType = 0u;
 
-                uint32_t frame = RHII.GetFrameIndex();
-                uint32_t ssCounts = m_scene->GetOpaqueSingleSidedCount() + m_scene->GetAlphaCutSingleSidedCount();
-                uint32_t totalOpaque = static_cast<uint32_t>(m_scene->GetDrawInfosOpaque().size());
-                uint32_t totalAlphaCut = static_cast<uint32_t>(m_scene->GetDrawInfosAlphaCut().size());
-                uint32_t dsCounts = (totalOpaque - m_scene->GetOpaqueSingleSidedCount()) + (totalAlphaCut - m_scene->GetAlphaCutSingleSidedCount());
+            uint32_t frame = RHII.GetFrameIndex();
 
-                cmd->BeginPass(7, m_attachments.data(), "GbufferOpaquePass");
-                cmd->BindIndexBuffer(m_scene->GetBuffer(), 0);
-                cmd->BindVertexBuffer(m_scene->GetBuffer(), m_scene->GetVerticesOffset());
-                cmd->SetViewport(0.f, 0.f, m_depthStencilRT->GetWidth_f(), m_depthStencilRT->GetHeight_f());
-                cmd->SetScissor(0, 0, m_depthStencilRT->GetWidth(), m_depthStencilRT->GetHeight());
+            cmd->BeginPass(7, m_attachments.data(), "GbufferOpaquePass");
+            cmd->BindIndexBuffer(m_scene->GetBuffer(), 0);
+            cmd->BindVertexBuffer(m_scene->GetBuffer(), m_scene->GetVerticesOffset());
+            cmd->SetViewport(0.f, 0.f, m_depthStencilRT->GetWidth_f(), m_depthStencilRT->GetHeight_f());
+            cmd->SetScissor(0, 0, m_depthStencilRT->GetWidth(), m_depthStencilRT->GetHeight());
 
-                // Always bind m_passInfo first — this sets up descriptors and push constants.
-                // m_passInfoDS shares the same descriptors via bindDescriptors=false.
-                cmd->BindPipeline(*m_passInfo);
-                cmd->SetConstants(pushConstants);
-                cmd->PushConstants();
+            cmd->BindPipeline(*m_passInfo);
+            cmd->SetConstants(pushConstants);
+            cmd->PushConstants();
+            cmd->DrawIndexedIndirectCount(m_scene->GetIndirectOpaqueSS(frame), 0, m_scene->GetCullingCountersBuffer(frame), 0 * sizeof(uint32_t), m_scene->GetMeshCount());
+            cmd->DrawIndexedIndirectCount(m_scene->GetIndirectAlphaCutSS(frame), 0, m_scene->GetCullingCountersBuffer(frame), 1 * sizeof(uint32_t), m_scene->GetMeshCount());
 
-                if (ssCounts > 0)
-                    cmd->DrawIndexedIndirect(m_scene->GetIndirect(frame), 0, ssCounts);
+            cmd->BindPipeline(*m_passInfoDS, false);
+            cmd->DrawIndexedIndirectCount(m_scene->GetIndirectOpaqueDS(frame), 0, m_scene->GetCullingCountersBuffer(frame), 5 * sizeof(uint32_t), m_scene->GetMeshCount());
+            cmd->DrawIndexedIndirectCount(m_scene->GetIndirectAlphaCutDS(frame), 0, m_scene->GetCullingCountersBuffer(frame), 6 * sizeof(uint32_t), m_scene->GetMeshCount());
 
-                if (dsCounts > 0)
-                {
-                    size_t dsOffset = ssCounts * sizeof(vk::DrawIndexedIndirectCommand);
-                    cmd->BindPipeline(*m_passInfoDS, false);
-                    cmd->DrawIndexedIndirect(m_scene->GetIndirect(frame), dsOffset, dsCounts);
-                }
-
-                cmd->EndPass();
-            }
+            cmd->EndPass();
         }
 
         m_scene = nullptr;
@@ -189,6 +196,12 @@ namespace pe
 
     void GbufferOpaquePass::Destroy()
     {
+        if (!m_passInfoDS)
+            return;
+
+        Shader::Destroy(m_passInfoDS->pVertShader);
+        Shader::Destroy(m_passInfoDS->pFragShader);
+        m_passInfoDS.reset();
     }
 
     void GbufferTransparentPass::Init()
@@ -272,7 +285,7 @@ namespace pe
             }
         }
 
-        if (scene.HasAlphaDrawInfo())
+        if (scene.GetMeshCount() > 0)
         {
             const auto &sets = m_passInfo->GetDescriptors(frame);
             Descriptor *setUniforms = sets[0];
@@ -290,54 +303,43 @@ namespace pe
     {
         PE_ERROR_IF(m_scene == nullptr, "Scene was not set");
 
+        if (m_scene->GetMeshCount() == 0 || !m_scene->HasTransparentMeshes())
+        {
+            m_scene = nullptr;
+            return;
+        }
+
         Camera *camera = GetGlobalSystem<RendererSystem>()->GetScene().GetActiveCamera();
 
-        if (m_scene->HasAlphaDrawInfo())
-        {
-            PushConstants_GBuffer pushConstants{};
-            pushConstants.jointsCount = static_cast<uint32_t>(m_scene->GetSkeleton().GetBoneCount());
-            pushConstants.projJitter = camera->GetProjJitter();
-            pushConstants.prevProjJitter = camera->GetPrevProjJitter();
-            pushConstants.passType = 1u;
-            uint32_t frame = RHII.GetFrameIndex();
+        PushConstants_GBuffer pushConstants{};
+        pushConstants.jointsCount = static_cast<uint32_t>(m_scene->GetSkeleton().GetBoneCount());
+        pushConstants.projJitter = camera->GetProjJitter();
+        pushConstants.prevProjJitter = camera->GetPrevProjJitter();
+        pushConstants.passType = 1u;
+        uint32_t frame = RHII.GetFrameIndex();
 
-            // Alpha Blend
-            if (!m_scene->GetDrawInfosAlphaBlend().empty())
-            {
-                size_t offset = (m_scene->GetDrawInfosOpaque().size() + m_scene->GetDrawInfosAlphaCut().size() + m_scene->GetDrawInfosTransmission().size()) * sizeof(vk::DrawIndexedIndirectCommand);
-                uint32_t count = static_cast<uint32_t>(m_scene->GetDrawInfosAlphaBlend().size());
+        cmd->BeginPass(7, m_attachments.data(), "GbufferTransparentPass_AlphaBlend");
+        cmd->BindIndexBuffer(m_scene->GetBuffer(), 0);
+        cmd->BindVertexBuffer(m_scene->GetBuffer(), m_scene->GetVerticesOffset());
+        cmd->SetViewport(0.f, 0.f, m_depthStencilRT->GetWidth_f(), m_depthStencilRT->GetHeight_f());
+        cmd->SetScissor(0, 0, m_depthStencilRT->GetWidth(), m_depthStencilRT->GetHeight());
+        cmd->BindPipeline(*m_passInfo);
+        cmd->SetConstants(pushConstants);
+        cmd->PushConstants();
+        cmd->DrawIndexedIndirectCount(m_scene->GetIndirectAlphaBlend(frame), 0, m_scene->GetCullingCountersBuffer(frame), 2 * sizeof(uint32_t), m_scene->GetMeshCount());
+        cmd->EndPass();
 
-                cmd->BeginPass(7, m_attachments.data(), "GbufferTransparentPass_AlphaBlend");
-                cmd->BindIndexBuffer(m_scene->GetBuffer(), 0);
-                cmd->BindVertexBuffer(m_scene->GetBuffer(), m_scene->GetVerticesOffset());
-                cmd->SetViewport(0.f, 0.f, m_depthStencilRT->GetWidth_f(), m_depthStencilRT->GetHeight_f());
-                cmd->SetScissor(0, 0, m_depthStencilRT->GetWidth(), m_depthStencilRT->GetHeight());
-                cmd->BindPipeline(*m_passInfo);
-                cmd->SetConstants(pushConstants);
-                cmd->PushConstants();
-                cmd->DrawIndexedIndirect(m_scene->GetIndirect(frame), offset, count);
-                cmd->EndPass();
-            }
-
-            // Transmission
-            if (!m_scene->GetDrawInfosTransmission().empty())
-            {
-                pushConstants.passType = 2u;
-                size_t offset = (m_scene->GetDrawInfosOpaque().size() + m_scene->GetDrawInfosAlphaCut().size()) * sizeof(vk::DrawIndexedIndirectCommand);
-                uint32_t count = static_cast<uint32_t>(m_scene->GetDrawInfosTransmission().size());
-
-                cmd->BeginPass(7, m_attachments.data(), "GbufferTransparentPass_Transmission");
-                cmd->BindIndexBuffer(m_scene->GetBuffer(), 0);
-                cmd->BindVertexBuffer(m_scene->GetBuffer(), m_scene->GetVerticesOffset());
-                cmd->SetViewport(0.f, 0.f, m_depthStencilRT->GetWidth_f(), m_depthStencilRT->GetHeight_f());
-                cmd->SetScissor(0, 0, m_depthStencilRT->GetWidth(), m_depthStencilRT->GetHeight());
-                cmd->BindPipeline(*m_passInfo);
-                cmd->SetConstants(pushConstants);
-                cmd->PushConstants();
-                cmd->DrawIndexedIndirect(m_scene->GetIndirect(frame), offset, count);
-                cmd->EndPass();
-            }
-        }
+        pushConstants.passType = 2u;
+        cmd->BeginPass(7, m_attachments.data(), "GbufferTransparentPass_Transmission");
+        cmd->BindIndexBuffer(m_scene->GetBuffer(), 0);
+        cmd->BindVertexBuffer(m_scene->GetBuffer(), m_scene->GetVerticesOffset());
+        cmd->SetViewport(0.f, 0.f, m_depthStencilRT->GetWidth_f(), m_depthStencilRT->GetHeight_f());
+        cmd->SetScissor(0, 0, m_depthStencilRT->GetWidth(), m_depthStencilRT->GetHeight());
+        cmd->BindPipeline(*m_passInfo);
+        cmd->SetConstants(pushConstants);
+        cmd->PushConstants();
+        cmd->DrawIndexedIndirectCount(m_scene->GetIndirectTransmission(frame), 0, m_scene->GetCullingCountersBuffer(frame), 3 * sizeof(uint32_t), m_scene->GetMeshCount());
+        cmd->EndPass();
 
         m_scene = nullptr;
     }

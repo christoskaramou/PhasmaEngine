@@ -27,8 +27,15 @@ namespace pe
         uint32_t textureMask;
         uint32_t materialId;
         uint32_t meshImageIndex[5];
-        uint32_t materialByteOffset; // byte offset into ByteAddressBuffer (0xFFFFFFFF = use legacy materialId)
-        uint32_t pad0;               // align to 16 bytes
+        uint32_t materialByteOffset;
+        uint32_t editorFlags;
+        uint32_t renderType;
+        float aabbMinX;
+        float aabbMinY;
+        float aabbMinZ;
+        float aabbMaxX;
+        float aabbMaxY;
+        float aabbMaxZ;
     };
 
     class GbufferOpaquePass : public IRenderPassComponent

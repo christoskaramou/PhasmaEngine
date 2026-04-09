@@ -15,8 +15,6 @@
 static const uint MATRIX_SIZE = 64u;
 static const uint MESH_DATA_SIZE = MATRIX_SIZE * 2u;
 
-uint GetConstantBufferID(uint instanceID) { return data.Load(256 + instanceID * 4); }
-
 float4x4 LoadMatrix(uint offset)
 {
     float4x4 result;
@@ -38,7 +36,7 @@ VS_OUTPUT_Position_Uv_ID mainVS(VS_INPUT_Depth input)
 {
     VS_OUTPUT_Position_Uv_ID output;
 
-    const uint id = GetConstantBufferID(input.id);
+    const uint id = input.id;
     output.id = id;
     
     float4x4 jointTransform = identity_mat;

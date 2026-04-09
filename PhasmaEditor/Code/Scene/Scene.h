@@ -232,10 +232,6 @@ namespace pe
         OrderedMap<size_t, ModelAsset *> &GetModels() { return m_models; }
         const OrderedMap<size_t, ModelAsset *> &GetModels() const { return m_models; }
 
-        bool HasOpaqueDrawInfo() const { return !m_drawInfosOpaque.empty() || !m_drawInfosAlphaCut.empty(); }
-        bool HasAlphaDrawInfo() const { return !m_drawInfosAlphaBlend.empty() || !m_drawInfosTransmission.empty(); }
-        bool HasDrawInfo() const { return HasOpaqueDrawInfo() || HasAlphaDrawInfo(); }
-
         uint64_t GetGeometryVersion() const { return m_geometryVersion; }
 
         uint32_t GetGeneration() const { return m_generation; }
@@ -250,8 +246,8 @@ namespace pe
         void FlushPendingGpuWork();
 
         Buffer *GetUniforms(uint32_t frame) { return m_storages[frame]; }
-        Buffer *GetIndirect(uint32_t frame) { return m_indirects[frame]; }
-        Buffer *GetIndirectAll() { return m_indirectAll; }
+
+        void DispatchCulling(CommandBuffer *cmd, PassInfo *passInfo, PassInfo *sortPassInfo);
         Buffer *GetBuffer() { return m_buffer; }
         Buffer *GetLightUniform(uint32_t frame) { return m_lightUniforms[frame]; }
         Buffer *GetLightStorage(uint32_t frame) { return m_lightStorageBuffers[frame]; }
@@ -266,12 +262,17 @@ namespace pe
         size_t GetPositionsOffset() const { return m_positionsOffset; }
         size_t GetAabbVerticesOffset() const { return m_aabbVerticesOffset; }
         size_t GetAabbIndicesOffset() const { return m_aabbIndicesOffset; }
-        const std::vector<DrawInfo> &GetDrawInfosOpaque() const { return m_drawInfosOpaque; }
-        const std::vector<DrawInfo> &GetDrawInfosAlphaCut() const { return m_drawInfosAlphaCut; }
-        const std::vector<DrawInfo> &GetDrawInfosAlphaBlend() const { return m_drawInfosAlphaBlend; }
-        const std::vector<DrawInfo> &GetDrawInfosTransmission() const { return m_drawInfosTransmission; }
-        uint32_t GetOpaqueSingleSidedCount() const { return m_opaqueSingleSidedCount; }
-        uint32_t GetAlphaCutSingleSidedCount() const { return m_alphaCutSingleSidedCount; }
+        Buffer *GetIndirectAll() const { return m_indirectAll; }
+        Buffer *GetCullingCountersBuffer(uint32_t frame) const { return m_cullingCountersBuffers[frame]; }
+        Buffer *GetIndirectOpaqueSS(uint32_t frame) const { return m_indirectOpaqueSS[frame]; }
+        Buffer *GetIndirectAlphaCutSS(uint32_t frame) const { return m_indirectAlphaCutSS[frame]; }
+        Buffer *GetIndirectOpaqueDS(uint32_t frame) const { return m_indirectOpaqueDS[frame]; }
+        Buffer *GetIndirectAlphaCutDS(uint32_t frame) const { return m_indirectAlphaCutDS[frame]; }
+        Buffer *GetIndirectAlphaBlend(uint32_t frame) const { return m_indirectAlphaBlend[frame]; }
+        Buffer *GetIndirectTransmission(uint32_t frame) const { return m_indirectTransmission[frame]; }
+        Buffer *GetIndirectSelected(uint32_t frame) const { return m_indirectSelected[frame]; }
+        bool HasTransparentMeshes() const { return m_hasTransparentMeshes; }
+
         const std::vector<ImageView *> &GetImageViews() const { return m_imageViews; }
         uint32_t GetMeshCount() const { return m_meshCount; }
         Buffer *GetMeshConstants() { return m_meshConstants; }
@@ -279,7 +280,6 @@ namespace pe
         Buffer *GetMaterialByteBuffer() { return m_materialByteBuffer; }
         Sampler *GetDefaultSampler() const;
         static const std::vector<uint32_t> &GetAabbIndices() { return s_aabbIndices; }
-        const std::vector<vk::DrawIndexedIndirectCommand> &GetIndirectCommands() const { return m_indirectCommands; }
 
         Entity *GetNodeEntity(const NodeId *node) const
         {
@@ -407,11 +407,7 @@ namespace pe
         void UpdateLights();
         NodeId *CreateLightNode(const std::string &name, const mat4 &localMatrix, NodeId *parent);
         void UpdateGeometry();
-        void CullNodeBatch(uint32_t beginNode, uint32_t endNode, const Camera *camera, bool frustumCulling, DrawBatch &out) const;
         void UpdateUniformData();
-        void UpdateIndirectData();
-        void ClearDrawInfos(bool reserveMax);
-        void SortDrawInfos();
 
         // Buffer management (SceneBuffers.cpp)
         void DestroyBuffers();
@@ -450,7 +446,16 @@ namespace pe
         // GPU buffers
         Buffer *m_buffer = nullptr;
         std::vector<Buffer *> m_storages;
-        std::vector<Buffer *> m_indirects;
+        std::vector<Buffer *> m_cullingCountersBuffers;
+        std::vector<Buffer *> m_indirectOpaqueSS;
+        std::vector<Buffer *> m_indirectAlphaCutSS;
+        std::vector<Buffer *> m_indirectOpaqueDS;
+        std::vector<Buffer *> m_indirectAlphaCutDS;
+        std::vector<Buffer *> m_indirectAlphaBlend;
+        std::vector<Buffer *> m_indirectTransmission;
+        std::vector<Buffer *> m_indirectSelected;
+        std::vector<Buffer *> m_sortKeysAlphaBlend;
+        std::vector<Buffer *> m_sortKeysTransmission;
         Buffer *m_indirectAll = nullptr;
 
         size_t m_verticesOffset = 0;
@@ -458,6 +463,8 @@ namespace pe
         size_t m_aabbVerticesOffset = 0;
         size_t m_aabbIndicesOffset = 0;
         uint32_t m_meshCount = 0;
+        uint32_t m_indirectCapacity = 1;
+        bool m_hasTransparentMeshes = false;
         uint32_t m_indicesCount = 0;
         uint32_t m_verticesCount = 0;
         uint32_t m_positionsCount = 0;
@@ -465,20 +472,6 @@ namespace pe
 
         std::vector<ImageView *> m_imageViews;
         uint64_t m_geometryVersion = 0;
-
-        // Draw info
-        std::vector<DrawInfo> m_drawInfosOpaque;
-        std::vector<DrawInfo> m_drawInfosAlphaCut;
-        std::vector<DrawInfo> m_drawInfosAlphaBlend;
-        std::vector<DrawInfo> m_drawInfosTransmission;
-        // Within opaque/alphaCut lists: [0, SS_count) = single-sided; [SS_count, end) = double-sided
-        uint32_t m_opaqueSingleSidedCount = 0;
-        uint32_t m_alphaCutSingleSidedCount = 0;
-        std::vector<vk::DrawIndexedIndirectCommand> m_indirectCommands;
-        std::vector<uint32_t> m_visibleIndirectIds;
-        uint64_t m_drawInfosReservedForGeometryVersion = 0;
-        bool m_hasDrawInfosReservation = false;
-        std::vector<DrawBatch> m_cullBatches;
 
         // Ray tracing
         std::vector<AccelerationStructure *> m_blases;

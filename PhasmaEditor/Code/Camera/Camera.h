@@ -31,6 +31,7 @@ namespace pe
         void ExtractFrustum();
         bool PointInFrustum(const vec3 &point, float radius) const;
         bool AABBInFrustum(const AABB &aabb) const;
+        const std::array<Plane, 6> &GetFrustumPlanes() const { return m_frustum; }
         void Destroy() override;
         inline mat4 GetView() const { return m_view; }
         inline mat4 GetProjection() const { return m_projection; }

@@ -147,7 +147,6 @@ namespace pe
     void Scene::CreateStorageBuffers()
     {
         size_t storageSize = sizeof(PerFrameData);
-        storageSize += RHII.AlignStorageAs(m_meshCount * sizeof(uint32_t), 64);
 
         for (uint32_t i = 0; i < GetNodeCount(); i++)
         {
@@ -195,8 +194,8 @@ namespace pe
     void Scene::CreateIndirectBuffers(CommandBuffer *cmd)
     {
         uint32_t indirectCount = 0;
-        m_indirectCommands.clear();
-        m_indirectCommands.reserve(m_meshCount);
+        std::vector<vk::DrawIndexedIndirectCommand> indirectCommands;
+        indirectCommands.reserve(m_meshCount);
 
         for (uint32_t i = 0; i < GetNodeCount(); i++)
         {
@@ -224,7 +223,7 @@ namespace pe
                 indirectCommand.firstIndex = mesh.indexOffset;
                 indirectCommand.vertexOffset = mesh.vertexOffset;
                 indirectCommand.firstInstance = indirectCount;
-                m_indirectCommands.push_back(indirectCommand);
+                indirectCommands.push_back(indirectCommand);
 
                 indirectCount++;
             }
@@ -232,33 +231,77 @@ namespace pe
 
         PE_ERROR_IF(indirectCount != m_meshCount, "Scene::UploadBuffers: Indirect count mismatch!");
 
+        m_indirectCapacity = 1;
+        while (m_indirectCapacity < std::max(1u, indirectCount))
+            m_indirectCapacity <<= 1;
+
+        const uint32_t indirectBufferCount = std::max(1u, indirectCount);
         m_indirectAll = Buffer::Create(
-            indirectCount * sizeof(vk::DrawIndexedIndirectCommand),
-            vk::BufferUsageFlagBits2::eIndirectBuffer | vk::BufferUsageFlagBits2::eTransferDst,
+            indirectBufferCount * sizeof(vk::DrawIndexedIndirectCommand),
+            vk::BufferUsageFlagBits2::eIndirectBuffer | vk::BufferUsageFlagBits2::eStorageBuffer | vk::BufferUsageFlagBits2::eTransferDst,
             VMA_ALLOCATION_CREATE_DEDICATED_MEMORY_BIT,
             "indirect_Geometry_buffer_all");
-        cmd->CopyBufferStaged(m_indirectAll, m_indirectCommands.data(), m_indirectCommands.size() * sizeof(vk::DrawIndexedIndirectCommand), 0);
+        if (indirectCount > 0)
+            cmd->CopyBufferStaged(m_indirectAll, indirectCommands.data(), indirectCommands.size() * sizeof(vk::DrawIndexedIndirectCommand), 0);
 
         if (indirectCount > 0)
         {
             BufferBarrierInfo indirectBarrierInfo{};
             indirectBarrierInfo.buffer = m_indirectAll;
-            indirectBarrierInfo.stageMask = vk::PipelineStageFlagBits2::eDrawIndirect;
-            indirectBarrierInfo.accessMask = vk::AccessFlagBits2::eIndirectCommandRead;
+            indirectBarrierInfo.stageMask = vk::PipelineStageFlagBits2::eDrawIndirect | vk::PipelineStageFlagBits2::eComputeShader;
+            indirectBarrierInfo.accessMask = vk::AccessFlagBits2::eIndirectCommandRead | vk::AccessFlagBits2::eShaderRead;
             indirectBarrierInfo.size = indirectCount * sizeof(vk::DrawIndexedIndirectCommand);
             indirectBarrierInfo.offset = 0;
             cmd->BufferBarrier(indirectBarrierInfo);
         }
 
-        uint32_t i = 0;
-        for (auto &indirect : m_indirects)
+        auto createFilteredIndirect = [&](const std::string &name)
         {
-            indirect = Buffer::Create(
-                indirectCount * sizeof(vk::DrawIndexedIndirectCommand),
-                vk::BufferUsageFlagBits2::eIndirectBuffer | vk::BufferUsageFlagBits2::eTransferDst,
-                VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT | VMA_ALLOCATION_CREATE_MAPPED_BIT,
-                "indirect_Geometry_buffer_" + std::to_string(i++));
+            std::vector<Buffer *> vec(RHII.GetSwapchainImageCount());
+            for (uint32_t i = 0; i < vec.size(); ++i)
+            {
+                vec[i] = Buffer::Create(
+                    m_indirectCapacity * sizeof(vk::DrawIndexedIndirectCommand),
+                    vk::BufferUsageFlagBits2::eIndirectBuffer | vk::BufferUsageFlagBits2::eStorageBuffer | vk::BufferUsageFlagBits2::eTransferDst,
+                    VMA_ALLOCATION_CREATE_DEDICATED_MEMORY_BIT,
+                    name + std::to_string(i));
+            }
+            return vec;
+        };
+
+        m_cullingCountersBuffers.resize(RHII.GetSwapchainImageCount());
+        for (uint32_t i = 0; i < m_cullingCountersBuffers.size(); ++i)
+        {
+            m_cullingCountersBuffers[i] = Buffer::Create(
+                7 * sizeof(uint32_t),
+                vk::BufferUsageFlagBits2::eStorageBuffer | vk::BufferUsageFlagBits2::eIndirectBuffer | vk::BufferUsageFlagBits2::eTransferDst,
+                VMA_ALLOCATION_CREATE_DEDICATED_MEMORY_BIT,
+                "culling_counters_" + std::to_string(i));
         }
+
+        m_indirectOpaqueSS = createFilteredIndirect("indirect_OpaqueSS_");
+        m_indirectAlphaCutSS = createFilteredIndirect("indirect_AlphaCutSS_");
+        m_indirectOpaqueDS = createFilteredIndirect("indirect_OpaqueDS_");
+        m_indirectAlphaCutDS = createFilteredIndirect("indirect_AlphaCutDS_");
+        m_indirectAlphaBlend = createFilteredIndirect("indirect_AlphaBlend_");
+        m_indirectTransmission = createFilteredIndirect("indirect_Transmission_");
+        m_indirectSelected = createFilteredIndirect("indirect_Selected_");
+
+        auto createSortKeyBuffer = [&](const std::string &name)
+        {
+            std::vector<Buffer *> vec(RHII.GetSwapchainImageCount());
+            for (uint32_t i = 0; i < vec.size(); ++i)
+            {
+                vec[i] = Buffer::Create(
+                    m_indirectCapacity * sizeof(float),
+                    vk::BufferUsageFlagBits2::eStorageBuffer | vk::BufferUsageFlagBits2::eTransferDst,
+                    VMA_ALLOCATION_CREATE_DEDICATED_MEMORY_BIT,
+                    name + std::to_string(i));
+            }
+            return vec;
+        };
+        m_sortKeysAlphaBlend = createSortKeyBuffer("sortKeys_AlphaBlend_");
+        m_sortKeysTransmission = createSortKeyBuffer("sortKeys_Transmission_");
     }
 
     void Scene::UpdateImageViews()
@@ -676,6 +719,7 @@ namespace pe
             "Scene_meshConstants");
 
         size_t offset = 0;
+        m_hasTransparentMeshes = false;
         m_meshConstants->Map();
         for (uint32_t i = 0; i < GetNodeCount(); i++)
         {
@@ -690,6 +734,9 @@ namespace pe
                 const Mesh &mesh = m_meshes[meshIdx];
                 if (mesh.indexCount == 0)
                     continue;
+
+                if (mesh.renderType == RenderType::AlphaBlend || mesh.renderType == RenderType::Transmission)
+                    m_hasTransparentMeshes = true;
 
                 const MeshRuntime &meshRt = m_meshRuntimes[meshIdx];
 
@@ -724,7 +771,22 @@ namespace pe
                     constants.materialByteOffset = mesh.material->gpuByteOffset;
                 else
                     constants.materialByteOffset = 0xFFFFFFFF;
-                constants.pad0 = 0;
+
+                uint32_t flags = 0;
+                if (SelectionManager::Instance().GetSelectedNode() == m_nodeIds[i])
+                    flags |= 1u;
+                bool isDoubleSided = mesh.material && mesh.material->doubleSided;
+                if (isDoubleSided)
+                    flags |= 2u;
+                constants.editorFlags = flags;
+                constants.renderType = static_cast<uint32_t>(mesh.renderType);
+
+                constants.aabbMinX = mesh.boundingBox.min.x;
+                constants.aabbMinY = mesh.boundingBox.min.y;
+                constants.aabbMinZ = mesh.boundingBox.min.z;
+                constants.aabbMaxX = mesh.boundingBox.max.x;
+                constants.aabbMaxY = mesh.boundingBox.max.y;
+                constants.aabbMaxZ = mesh.boundingBox.max.z;
 
                 BufferRange range{};
                 range.data = &constants;
@@ -758,15 +820,29 @@ namespace pe
             }
         }
 
-        for (auto &indirect : m_indirects)
+        auto destroyBufferVec = [](std::vector<Buffer *> &vec)
         {
-            if (indirect)
+            for (auto &buf : vec)
             {
-                RHII.AddToDeletionQueue([b = indirect]()
-                                        { Buffer* buf = b; Buffer::Destroy(buf); });
-                indirect = nullptr;
+                if (buf)
+                {
+                    RHII.AddToDeletionQueue([b = buf]()
+                                            { Buffer *fb = b; Buffer::Destroy(fb); });
+                    buf = nullptr;
+                }
             }
-        }
+        };
+
+        destroyBufferVec(m_cullingCountersBuffers);
+        destroyBufferVec(m_indirectOpaqueSS);
+        destroyBufferVec(m_indirectAlphaCutSS);
+        destroyBufferVec(m_indirectOpaqueDS);
+        destroyBufferVec(m_indirectAlphaCutDS);
+        destroyBufferVec(m_indirectAlphaBlend);
+        destroyBufferVec(m_indirectTransmission);
+        destroyBufferVec(m_indirectSelected);
+        destroyBufferVec(m_sortKeysAlphaBlend);
+        destroyBufferVec(m_sortKeysTransmission);
 
         if (m_indirectAll)
         {
@@ -803,15 +879,29 @@ namespace pe
                 storage = nullptr;
             }
         }
-        for (auto &indirect : m_indirects)
+        auto destroyBufferVecEager = [](std::vector<Buffer *> &vec)
         {
-            if (indirect)
+            for (auto &buf : vec)
             {
-                RHII.AddToDeletionQueue([b = indirect]()
-                                        { Buffer *buf = b; Buffer::Destroy(buf); });
-                indirect = nullptr;
+                if (buf)
+                {
+                    RHII.AddToDeletionQueue([b = buf]()
+                                            { Buffer *fb = b; Buffer::Destroy(fb); });
+                    buf = nullptr;
+                }
             }
-        }
+        };
+
+        destroyBufferVecEager(m_cullingCountersBuffers);
+        destroyBufferVecEager(m_indirectOpaqueSS);
+        destroyBufferVecEager(m_indirectAlphaCutSS);
+        destroyBufferVecEager(m_indirectOpaqueDS);
+        destroyBufferVecEager(m_indirectAlphaCutDS);
+        destroyBufferVecEager(m_indirectAlphaBlend);
+        destroyBufferVecEager(m_indirectTransmission);
+        destroyBufferVecEager(m_indirectSelected);
+        destroyBufferVecEager(m_sortKeysAlphaBlend);
+        destroyBufferVecEager(m_sortKeysTransmission);
         if (m_indirectAll)
         {
             RHII.AddToDeletionQueue([b = m_indirectAll]()

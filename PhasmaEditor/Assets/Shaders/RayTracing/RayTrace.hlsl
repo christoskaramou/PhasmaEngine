@@ -134,10 +134,6 @@ static const uint MATRIX_SIZE = 64u;
 static const uint MESH_DATA_SIZE = MATRIX_SIZE * 2u;
 
 // Utilities
-uint GetConstantBufferID(uint instanceID)
-{
-    return data.Load(256 + instanceID * 4);
-}
 
 float4x4 LoadMatrix(uint offset)
 {

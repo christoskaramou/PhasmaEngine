@@ -15,6 +15,7 @@
 #include "API/Surface.h"
 #include "API/Swapchain.h"
 #include "RenderPasses/AabbsPass.h"
+#include "RenderPasses/CullingPass.h"
 #include "RenderPasses/BloomPass.h"
 #include "RenderPasses/DOFPass.h"
 #include "RenderPasses/DepthPass.h"
@@ -70,6 +71,7 @@ namespace pe
         LoadResources(cmd);
 
         // Create render components
+        m_renderPassComponents[ID::GetTypeID<CullingPass>()] = CreateGlobalComponent<CullingPass>();
         m_renderPassComponents[ID::GetTypeID<ShadowPass>()] = CreateGlobalComponent<ShadowPass>();
         m_renderPassComponents[ID::GetTypeID<DepthPass>()] = CreateGlobalComponent<DepthPass>();
         m_renderPassComponents[ID::GetTypeID<GbufferOpaquePass>()] = CreateGlobalComponent<GbufferOpaquePass>();
@@ -126,6 +128,7 @@ namespace pe
     {
         Entity *world = Context::Get()->GetWorldEntity();
 
+        m_cullingPass = world->GetComponent<CullingPass>();
         m_shadowPass = world->GetComponent<ShadowPass>();
         m_depthPass = world->GetComponent<DepthPass>();
         m_gbufferOpaquePass = world->GetComponent<GbufferOpaquePass>();
@@ -245,6 +248,7 @@ namespace pe
         const bool needDepth = renderRaster || needVelocity || gs.dof || gs.motion_blur || gs.draw_aabbs || gs.draw_grid;
         const bool needGBuffer = renderRaster || needVelocity || renderSSR || renderSSAO;
 
+        m_renderGraphPassEnabled[static_cast<size_t>(RenderGraphPassId::Culling)] = true;
         m_renderGraphPassEnabled[static_cast<size_t>(RenderGraphPassId::Shadow)] = gs.shadows && renderRaster;
         m_renderGraphPassEnabled[static_cast<size_t>(RenderGraphPassId::Depth)] = needDepth;
         m_renderGraphPassEnabled[static_cast<size_t>(RenderGraphPassId::GBufferOpaque)] = needGBuffer;
@@ -333,6 +337,7 @@ namespace pe
             m_renderGraph.AddPass(static_cast<RenderGraph::PassID>(passId), order, name, isPassEnabled(passId), component);
         };
 
+        addPass(RenderGraphPassId::Culling, 50, "Culling", m_cullingPass);
         addPass(RenderGraphPassId::Shadow, 100, "Shadow", m_shadowPass);
         addPass(RenderGraphPassId::Depth, 200, "Depth", m_depthPass);
         addPass(RenderGraphPassId::GBufferOpaque, 300, "GBufferOpaque", m_gbufferOpaquePass);
@@ -374,6 +379,7 @@ namespace pe
             if (pass)
                 pass->SetScene(&m_scene);
         };
+        setScene(m_cullingPass);
         setScene(m_shadowPass);
         setScene(m_depthPass);
         setScene(m_gbufferOpaquePass);

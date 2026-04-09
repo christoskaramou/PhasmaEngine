@@ -49,7 +49,7 @@ namespace pe
         if (Settings::Get<GlobalSettings>().draw_aabbs)
         {
             Scene &scene = GetGlobalSystem<RendererSystem>()->GetScene();
-            if (scene.HasDrawInfo())
+            if (scene.GetMeshCount() > 0)
             {
                 uint32_t frame = RHII.GetFrameIndex();
                 const auto &sets = m_passInfo->GetDescriptors(frame);
@@ -63,12 +63,11 @@ namespace pe
     void AabbsPass::ExecutePass(CommandBuffer *cmd)
     {
         PE_ERROR_IF(m_scene == nullptr, "Scene was not set");
-        if (!m_scene->HasDrawInfo())
+        if (m_scene->GetMeshCount() == 0)
             return;
 
         auto &gSettings = Settings::Get<GlobalSettings>();
         Camera &camera = *GetGlobalSystem<RendererSystem>()->GetScene().GetActiveCamera();
-        ShadowPass *shadows = GetGlobalComponent<ShadowPass>();
 
         struct PushConstants_AABB
         {
@@ -77,28 +76,6 @@ namespace pe
             uint32_t color;
         } constants{};
         constants.projJitter = camera.GetProjJitter();
-
-        // Lambda to draw from drawInfos
-        auto DrawFromInfos = [&](const auto &drawInfos)
-        {
-            for (auto &drawInfo : drawInfos)
-            {
-                const uint32_t idx = drawInfo.node->index;
-                int meshIdx = drawInfo.meshIndex;
-                if (meshIdx < 0)
-                    continue;
-
-                const Mesh &mesh = m_scene->GetMesh(meshIdx);
-                const NodeRuntime &rt = m_scene->GetNodeRuntime(drawInfo.node);
-
-                constants.meshIndex = GetUboDataOffset(rt.dataOffset);
-                constants.color = mesh.aabbColor;
-
-                cmd->SetConstants(constants);
-                cmd->PushConstants();
-                cmd->DrawIndexed(24, 1, 0, static_cast<int>(mesh.aabbVertexOffset), 0);
-            }
-        };
 
         cmd->BeginDebugRegion("Aabbs");
 
@@ -111,10 +88,34 @@ namespace pe
         cmd->SetDepthTestEnable(gSettings.aabbs_depth_aware);
         cmd->SetDepthWriteEnable(false);
         cmd->BindPipeline(*m_passInfo);
-        DrawFromInfos(m_scene->GetDrawInfosOpaque());
-        DrawFromInfos(m_scene->GetDrawInfosAlphaCut());
-        DrawFromInfos(m_scene->GetDrawInfosAlphaBlend());
-        DrawFromInfos(m_scene->GetDrawInfosTransmission());
+
+        for (uint32_t i = 0; i < m_scene->GetNodeCount(); i++)
+        {
+            NodeId *node = m_scene->GetNodeId(i);
+            const NodeRuntime &rt = m_scene->GetNodeRuntime(node);
+            if (rt.gpuPending)
+                continue;
+
+            const auto &refs = m_scene->GetMeshRefs(node);
+            if (refs.empty())
+                continue;
+
+            for (int meshIdx : refs)
+            {
+                if (meshIdx < 0)
+                    continue;
+
+                const Mesh &mesh = m_scene->GetMesh(meshIdx);
+
+                constants.meshIndex = GetUboDataOffset(rt.dataOffset);
+                constants.color = mesh.aabbColor;
+
+                cmd->SetConstants(constants);
+                cmd->PushConstants();
+                cmd->DrawIndexed(24, 1, 0, static_cast<int>(mesh.aabbVertexOffset), 0);
+            }
+        }
+
         cmd->EndPass();
 
         cmd->EndDebugRegion();

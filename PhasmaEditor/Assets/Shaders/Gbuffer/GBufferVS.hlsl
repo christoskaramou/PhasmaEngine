@@ -15,11 +15,6 @@
 static const uint MATRIX_SIZE = 64u;
 static const uint MESH_DATA_SIZE = MATRIX_SIZE * 2u;
 
-uint GetConstantBufferID(uint instanceID)
-{
-    return data.Load(256 + instanceID * 4);
-}
-
 float4x4 LoadMatrix(uint offset)
 {
     float4x4 result;
@@ -44,7 +39,7 @@ VS_OUTPUT_Gbuffer mainVS(VS_INPUT_Gbuffer input)
     VS_OUTPUT_Gbuffer output;
     output.uv = input.texCoord.xy;
 
-    const uint id = GetConstantBufferID(input.id);
+    const uint id = input.id;
     output.id = id;
 
     float4x4 boneTransform = identity_mat;

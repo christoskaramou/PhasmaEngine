@@ -92,7 +92,7 @@ namespace pe
             m_uniforms[RHII.GetFrameIndex()]->Copy(1, &range, false);
 
             Scene &scene = GetGlobalSystem<RendererSystem>()->GetScene();
-            if (scene.HasOpaqueDrawInfo())
+            if (scene.GetMeshCount() > 0)
             {
                 uint32_t frame = RHII.GetFrameIndex();
                 const auto &sets = m_passInfo->GetDescriptors(frame);
@@ -231,7 +231,7 @@ namespace pe
 
         cmd->BeginDebugRegion("ShadowPass");
 
-        if (!m_scene->HasDrawInfo())
+        if (m_scene->GetMeshCount() == 0)
         {
             ClearDepths(cmd);
         }
@@ -257,6 +257,7 @@ namespace pe
                 cmd->BindVertexBuffer(m_scene->GetBuffer(), m_scene->GetPositionsOffset());
                 cmd->SetConstants(pushConstants);
                 cmd->PushConstants();
+                // TODO: per-cascade light-frustum culling
                 cmd->DrawIndexedIndirect(m_scene->GetIndirectAll(), 0, m_scene->GetMeshCount());
                 cmd->EndPass();
             }
@@ -313,108 +314,8 @@ namespace pe
         return true;
     }
 
-    void ShadowPass::EnsureShadowIndirectCapacity(uint32_t meshCount, uint32_t cascades)
-    {
-        uint32_t frameCount = static_cast<uint32_t>(RHII.GetSwapchainImageCount());
-
-        if (m_shadowIndirects.empty())
-        {
-            m_shadowIndirects.resize(cascades);
-            m_shadowCmdScratch.resize(cascades);
-            m_shadowIndirectCounts.resize(cascades, 0);
-            for (uint32_t c = 0; c < cascades; c++)
-                m_shadowIndirects[c].resize(frameCount, nullptr);
-        }
-
-        if (meshCount <= m_shadowIndirectCapacity)
-            return;
-
-        m_shadowIndirectCapacity = meshCount;
-        size_t byteSize = meshCount * sizeof(vk::DrawIndexedIndirectCommand);
-        for (uint32_t c = 0; c < cascades; c++)
-        {
-            for (uint32_t f = 0; f < frameCount; f++)
-            {
-                Buffer::Destroy(m_shadowIndirects[c][f]);
-                m_shadowIndirects[c][f] = Buffer::Create(
-                    byteSize,
-                    vk::BufferUsageFlagBits2::eIndirectBuffer,
-                    VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT,
-                    "ShadowIndirect_c" + std::to_string(c) + "_f" + std::to_string(f));
-                m_shadowIndirects[c][f]->Map();
-            }
-            m_shadowCmdScratch[c].reserve(meshCount);
-        }
-    }
-
-    void ShadowPass::BuildShadowIndirects(uint32_t frame)
-    {
-        const uint32_t cascades = static_cast<uint32_t>(m_cascadePlanes.size());
-        if (cascades == 0)
-            return;
-
-        const auto &allCmds = m_scene->GetIndirectCommands();
-        const uint32_t meshCount = static_cast<uint32_t>(allCmds.size());
-        if (meshCount == 0)
-            return;
-
-        EnsureShadowIndirectCapacity(meshCount, cascades);
-
-        // Build a single command list from ALL nodes (not camera-culled draw infos)
-        // so that off-screen shadow casters still render into the shadow maps.
-        std::vector<vk::DrawIndexedIndirectCommand> allValidCmds;
-        allValidCmds.reserve(meshCount);
-
-        const uint32_t nodeCount = m_scene->GetNodeCount();
-        for (uint32_t n = 0; n < nodeCount; n++)
-        {
-            NodeId *node = m_scene->GetNodeId(n);
-            const NodeRuntime &rt = m_scene->GetNodeRuntime(node);
-            if (!rt.hasUniformData)
-                continue;
-
-            const auto &refs = m_scene->GetMeshRefs(node);
-            for (uint32_t slot = 0; slot < static_cast<uint32_t>(refs.size()); slot++)
-            {
-                if (slot >= static_cast<uint32_t>(rt.meshRefIndirect.size()))
-                    break;
-                uint32_t cmdIdx = rt.meshRefIndirect[slot];
-                if (cmdIdx != UINT32_MAX && cmdIdx < meshCount)
-                    allValidCmds.push_back(allCmds[cmdIdx]);
-            }
-        }
-
-        // Write the same command list into every cascade.
-        // TODO: re-add per-cascade frustum culling once the plane extraction
-        //       is verified with the current left-handed reversed-Z ortho setup.
-        for (uint32_t c = 0; c < cascades; c++)
-        {
-            m_shadowIndirectCounts[c] = static_cast<uint32_t>(allValidCmds.size());
-            if (!allValidCmds.empty())
-            {
-                Buffer *buf = m_shadowIndirects[c][frame];
-                std::memcpy(buf->Data(), allValidCmds.data(),
-                            allValidCmds.size() * sizeof(vk::DrawIndexedIndirectCommand));
-                buf->Flush();
-            }
-        }
-    }
-
-    void ShadowPass::DestroyShadowIndirects()
-    {
-        for (auto &frameBuffers : m_shadowIndirects)
-            for (auto *buf : frameBuffers)
-                Buffer::Destroy(buf);
-        m_shadowIndirects.clear();
-        m_shadowCmdScratch.clear();
-        m_shadowIndirectCounts.clear();
-        m_shadowIndirectCapacity = 0;
-    }
-
     void ShadowPass::Destroy()
     {
-        DestroyShadowIndirects();
-
         for (auto &texture : m_textures)
             Image::Destroy(texture);
 

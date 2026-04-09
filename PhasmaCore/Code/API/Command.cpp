@@ -765,6 +765,16 @@ namespace pe
         m_apiHandle.drawIndexedIndirect(indirectBuffer->ApiHandle(), offset, drawCount, stride);
     }
 
+    void CommandBuffer::DrawIndexedIndirectCount(Buffer *indirectBuffer, size_t offset, Buffer *countBuffer, size_t countBufferOffset, uint32_t maxDrawCount, uint32_t stride)
+    {
+        m_apiHandle.drawIndexedIndirectCount(indirectBuffer->ApiHandle(), offset, countBuffer->ApiHandle(), countBufferOffset, maxDrawCount, stride);
+    }
+
+    void CommandBuffer::FillBuffer(Buffer *buffer, size_t offset, size_t size, uint32_t data)
+    {
+        m_apiHandle.fillBuffer(buffer->ApiHandle(), offset, size, data);
+    }
+
     void CommandBuffer::TraceRays(uint32_t width, uint32_t height, uint32_t depth)
     {
         PE_ERROR_IF(!m_boundPipeline, "CommandBuffer::TraceRays: No bound pipeline found!");

@@ -82,8 +82,15 @@ struct Mesh_Constants
     uint textureMask;
     uint materialId;
     int meshImageIndex[5];
-    uint materialByteOffset; // byte offset into ByteAddressBuffer (0xFFFFFFFF = use legacy materialId)
-    uint pad0;               // align to 16 bytes
+    uint materialByteOffset;
+    uint editorFlags;
+    uint renderType;
+    float aabbMinX;
+    float aabbMinY;
+    float aabbMinZ;
+    float aabbMaxX;
+    float aabbMaxY;
+    float aabbMaxZ;
 };
 
 struct MaterialGpuData
