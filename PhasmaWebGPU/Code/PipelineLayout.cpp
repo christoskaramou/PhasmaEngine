@@ -1,5 +1,6 @@
 #include "PipelineLayout.h"
 #include "BindGroup.h"
+#include "Device.h"
 #include "Utils.h"
 
 extern "C"
@@ -18,10 +19,22 @@ extern "C"
         if (pl->refCount.fetch_sub(1, std::memory_order_acq_rel) == 1)
         {
             for (auto *bgl : pl->bindGroupLayouts)
-                wgpuBindGroupLayoutRelease(bgl);
-            if (pl->vkLayout != VK_NULL_HANDLE)
-                pe::RHI::Get()->GetDevice().destroyPipelineLayout(pl->vkLayout);
+            {
+                if (bgl)
+                    wgpuBindGroupLayoutRelease(bgl);
+            }
+            if (pl->device && pl->device->rhi)
+            {
+                auto vkDev = pl->device->rhi->GetDevice();
+                if (pl->vkLayout != VK_NULL_HANDLE)
+                    vkDev.destroyPipelineLayout(pl->vkLayout);
+                for (auto emptyLayout : pl->ownedEmptySetLayouts)
+                    vkDev.destroyDescriptorSetLayout(emptyLayout);
+            }
+            WGPUDeviceImpl *dev = pl->device;
             delete pl;
+            if (dev)
+                wgpuDeviceRelease(dev);
         }
     }
 
