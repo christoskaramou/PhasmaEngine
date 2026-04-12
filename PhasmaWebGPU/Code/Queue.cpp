@@ -31,10 +31,12 @@ extern "C"
                               uint64_t bufferOffset, void const *data, size_t size)
     {
         (void)queue;
-        if (!buffer || !buffer->buffer || !data)
+        if (!buffer || !buffer->peBuffer || !data || buffer->destroyed)
+            return;
+        if (!buffer->hostVisible)
             return;
         pe::BufferRange range{const_cast<void *>(data), size, static_cast<size_t>(bufferOffset)};
-        buffer->buffer->Copy(1, &range, false);
+        buffer->peBuffer->Copy(1, &range, false);
     }
 
     void wgpuQueueWriteTexture(WGPUQueue queue,

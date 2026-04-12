@@ -240,11 +240,119 @@ extern "C"
     {
         if (!DeviceCanCreate(device, descriptor, "wgpuDeviceCreateBuffer", true))
             return nullptr;
+
+        const WGPUBufferUsage usage = descriptor->usage;
+        const uint64_t size = descriptor->size;
+        const bool mappedAtCreation = descriptor->mappedAtCreation != WGPU_FALSE;
+
+        auto reportValidation = [&](const char *what) -> WGPUBuffer
+        {
+            std::string msg = std::string("wgpuDeviceCreateBuffer: ") + what;
+            device->reportError(WGPUErrorType_Validation, pwgpu::ToStringView(msg));
+            auto *bad = new WGPUBufferImpl();
+            bad->device = device;
+            wgpuDeviceAddRef(device);
+            bad->usage = usage;
+            bad->size = size;
+            bad->invalid = true;
+            bad->mapState = mappedAtCreation ? WGPUBufferMapState_Mapped : WGPUBufferMapState_Unmapped;
+            if (descriptor->label.data)
+                bad->label = pwgpu::ToString(descriptor->label);
+            return bad;
+        };
+
+        if (usage == WGPUBufferUsage_None)
+            return reportValidation("descriptor.usage must not be 0");
+
+        const WGPUBufferUsage kMapReadAllowed = WGPUBufferUsage_MapRead | WGPUBufferUsage_CopyDst;
+        const WGPUBufferUsage kMapWriteAllowed = WGPUBufferUsage_MapWrite | WGPUBufferUsage_CopySrc;
+        if ((usage & WGPUBufferUsage_MapRead) && ((usage & ~kMapReadAllowed) != 0))
+            return reportValidation("MAP_READ may only combine with COPY_DST");
+        if ((usage & WGPUBufferUsage_MapWrite) && ((usage & ~kMapWriteAllowed) != 0))
+            return reportValidation("MAP_WRITE may only combine with COPY_SRC");
+
+        if (size > device->limits.maxBufferSize)
+            return reportValidation("descriptor.size exceeds device.limits.maxBufferSize");
+
+        if (mappedAtCreation && (size % 4 != 0))
+            return reportValidation("mappedAtCreation requires size to be a multiple of 4");
+
+        vk::BufferUsageFlags2 vkUsage{};
+        if (usage & WGPUBufferUsage_CopySrc)
+            vkUsage |= vk::BufferUsageFlagBits2::eTransferSrc;
+        if (usage & WGPUBufferUsage_CopyDst)
+            vkUsage |= vk::BufferUsageFlagBits2::eTransferDst;
+        if (usage & WGPUBufferUsage_Index)
+            vkUsage |= vk::BufferUsageFlagBits2::eIndexBuffer;
+        if (usage & WGPUBufferUsage_Vertex)
+            vkUsage |= vk::BufferUsageFlagBits2::eVertexBuffer;
+        if (usage & WGPUBufferUsage_Uniform)
+            vkUsage |= vk::BufferUsageFlagBits2::eUniformBuffer;
+        if (usage & WGPUBufferUsage_Storage)
+            vkUsage |= vk::BufferUsageFlagBits2::eStorageBuffer;
+        if (usage & WGPUBufferUsage_Indirect)
+            vkUsage |= vk::BufferUsageFlagBits2::eIndirectBuffer;
+        if (usage & WGPUBufferUsage_QueryResolve)
+            vkUsage |= vk::BufferUsageFlagBits2::eTransferDst;
+        if (usage & WGPUBufferUsage_MapRead)
+            vkUsage |= vk::BufferUsageFlagBits2::eTransferDst;
+        if (usage & WGPUBufferUsage_MapWrite)
+            vkUsage |= vk::BufferUsageFlagBits2::eTransferSrc;
+
+        if (!vkUsage)
+            vkUsage = vk::BufferUsageFlagBits2::eTransferSrc;
+
+        const bool needsHostAccess =
+            (usage & (WGPUBufferUsage_MapRead | WGPUBufferUsage_MapWrite)) != 0 || mappedAtCreation;
+
+        VmaAllocationCreateFlags vmaFlags = 0;
+        if (needsHostAccess)
+        {
+            if (usage & WGPUBufferUsage_MapRead)
+                vmaFlags = VMA_ALLOCATION_CREATE_HOST_ACCESS_RANDOM_BIT | VMA_ALLOCATION_CREATE_MAPPED_BIT;
+            else
+                vmaFlags = VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT | VMA_ALLOCATION_CREATE_MAPPED_BIT;
+        }
+
         auto *buf = new WGPUBufferImpl();
-        buf->usage = static_cast<WGPUBufferUsage>(descriptor->usage);
-        buf->size = descriptor->size;
+        buf->device = device;
+        wgpuDeviceAddRef(device);
+        buf->usage = usage;
+        buf->size = size;
+        buf->hostVisible = needsHostAccess;
         if (descriptor->label.data)
             buf->label = pwgpu::ToString(descriptor->label);
+
+        const std::string peName = buf->label.empty() ? std::string("wgpu_buffer") : buf->label;
+        try
+        {
+            buf->peBuffer = pe::Buffer::Create(size ? size : 1, vkUsage, vmaFlags, peName);
+        }
+        catch (...)
+        {
+            buf->peBuffer = nullptr;
+        }
+
+        if (!buf->peBuffer)
+        {
+            std::string msg = "wgpuDeviceCreateBuffer: backing allocation failed";
+            device->reportError(WGPUErrorType_OutOfMemory, pwgpu::ToStringView(msg));
+            buf->invalid = true;
+            buf->mapState = mappedAtCreation ? WGPUBufferMapState_Mapped : WGPUBufferMapState_Unmapped;
+            return buf;
+        }
+
+        if (needsHostAccess)
+            buf->peBuffer->Map();
+
+        if (mappedAtCreation)
+        {
+            buf->mapState = WGPUBufferMapState_Mapped;
+            buf->mappedOffset = 0;
+            buf->mappedSize = size;
+            buf->mappedMode = WGPUMapMode_Write;
+        }
+
         return buf;
     }
 
