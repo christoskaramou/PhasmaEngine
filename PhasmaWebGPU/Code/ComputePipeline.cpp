@@ -1,6 +1,9 @@
 #include "ComputePipeline.h"
+#include "PipelineLayout.h"
 #include "BindGroup.h"
+#include "Device.h"
 #include "Utils.h"
+#include "API/RHI.h"
 
 extern "C"
 {
@@ -17,21 +20,26 @@ extern "C"
             return;
         if (cp->refCount.fetch_sub(1, std::memory_order_acq_rel) == 1)
         {
-            for (auto *bgl : cp->bindGroupLayouts)
-                wgpuBindGroupLayoutRelease(bgl);
-            if (cp->pipeline)
-                pe::Pipeline::Destroy(cp->pipeline);
-            delete cp->passInfo;
+            if (cp->device && cp->device->rhi && cp->vkPipeline != VK_NULL_HANDLE)
+                cp->device->rhi->GetDevice().destroyPipeline(cp->vkPipeline);
+            if (cp->layout)
+                wgpuPipelineLayoutRelease(cp->layout);
+            WGPUDeviceImpl *dev = cp->device;
             delete cp;
+            if (dev)
+                wgpuDeviceRelease(dev);
         }
     }
 
     WGPUBindGroupLayout wgpuComputePipelineGetBindGroupLayout(WGPUComputePipeline cp, uint32_t groupIndex)
     {
-        if (!cp || groupIndex >= cp->bindGroupLayouts.size())
+        if (!cp || !cp->layout)
             return nullptr;
-        WGPUBindGroupLayout bgl = cp->bindGroupLayouts[groupIndex];
-        wgpuBindGroupLayoutAddRef(bgl);
+        if (groupIndex >= cp->layout->bindGroupLayouts.size())
+            return nullptr;
+        WGPUBindGroupLayout bgl = cp->layout->bindGroupLayouts[groupIndex];
+        if (bgl)
+            wgpuBindGroupLayoutAddRef(bgl);
         return bgl;
     }
 

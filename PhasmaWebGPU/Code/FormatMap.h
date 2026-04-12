@@ -687,4 +687,429 @@ namespace pwgpu
         return flags;
     }
 
+    // ---- Vertex format byte sizes (§10.3.7.1) ----
+
+    inline uint32_t VertexFormatByteSize(WGPUVertexFormat f)
+    {
+        switch (f)
+        {
+        case WGPUVertexFormat_Uint8:
+        case WGPUVertexFormat_Sint8:
+        case WGPUVertexFormat_Unorm8:
+        case WGPUVertexFormat_Snorm8:
+            return 1;
+        case WGPUVertexFormat_Uint8x2:
+        case WGPUVertexFormat_Sint8x2:
+        case WGPUVertexFormat_Unorm8x2:
+        case WGPUVertexFormat_Snorm8x2:
+        case WGPUVertexFormat_Uint16:
+        case WGPUVertexFormat_Sint16:
+        case WGPUVertexFormat_Unorm16:
+        case WGPUVertexFormat_Snorm16:
+        case WGPUVertexFormat_Float16:
+            return 2;
+        case WGPUVertexFormat_Uint8x4:
+        case WGPUVertexFormat_Sint8x4:
+        case WGPUVertexFormat_Unorm8x4:
+        case WGPUVertexFormat_Snorm8x4:
+        case WGPUVertexFormat_Uint16x2:
+        case WGPUVertexFormat_Sint16x2:
+        case WGPUVertexFormat_Unorm16x2:
+        case WGPUVertexFormat_Snorm16x2:
+        case WGPUVertexFormat_Float16x2:
+        case WGPUVertexFormat_Float32:
+        case WGPUVertexFormat_Uint32:
+        case WGPUVertexFormat_Sint32:
+        case WGPUVertexFormat_Unorm10_10_10_2:
+        case WGPUVertexFormat_Unorm8x4BGRA:
+            return 4;
+        case WGPUVertexFormat_Uint16x4:
+        case WGPUVertexFormat_Sint16x4:
+        case WGPUVertexFormat_Unorm16x4:
+        case WGPUVertexFormat_Snorm16x4:
+        case WGPUVertexFormat_Float16x4:
+        case WGPUVertexFormat_Float32x2:
+        case WGPUVertexFormat_Uint32x2:
+        case WGPUVertexFormat_Sint32x2:
+            return 8;
+        case WGPUVertexFormat_Float32x3:
+        case WGPUVertexFormat_Uint32x3:
+        case WGPUVertexFormat_Sint32x3:
+            return 12;
+        case WGPUVertexFormat_Float32x4:
+        case WGPUVertexFormat_Uint32x4:
+        case WGPUVertexFormat_Sint32x4:
+            return 16;
+        default:
+            return 0;
+        }
+    }
+
+    inline VkFormat VertexFormatToVk(WGPUVertexFormat f)
+    {
+        switch (f)
+        {
+        case WGPUVertexFormat_Uint8:
+            return VK_FORMAT_R8_UINT;
+        case WGPUVertexFormat_Uint8x2:
+            return VK_FORMAT_R8G8_UINT;
+        case WGPUVertexFormat_Uint8x4:
+            return VK_FORMAT_R8G8B8A8_UINT;
+        case WGPUVertexFormat_Sint8:
+            return VK_FORMAT_R8_SINT;
+        case WGPUVertexFormat_Sint8x2:
+            return VK_FORMAT_R8G8_SINT;
+        case WGPUVertexFormat_Sint8x4:
+            return VK_FORMAT_R8G8B8A8_SINT;
+        case WGPUVertexFormat_Unorm8:
+            return VK_FORMAT_R8_UNORM;
+        case WGPUVertexFormat_Unorm8x2:
+            return VK_FORMAT_R8G8_UNORM;
+        case WGPUVertexFormat_Unorm8x4:
+            return VK_FORMAT_R8G8B8A8_UNORM;
+        case WGPUVertexFormat_Snorm8:
+            return VK_FORMAT_R8_SNORM;
+        case WGPUVertexFormat_Snorm8x2:
+            return VK_FORMAT_R8G8_SNORM;
+        case WGPUVertexFormat_Snorm8x4:
+            return VK_FORMAT_R8G8B8A8_SNORM;
+        case WGPUVertexFormat_Uint16:
+            return VK_FORMAT_R16_UINT;
+        case WGPUVertexFormat_Uint16x2:
+            return VK_FORMAT_R16G16_UINT;
+        case WGPUVertexFormat_Uint16x4:
+            return VK_FORMAT_R16G16B16A16_UINT;
+        case WGPUVertexFormat_Sint16:
+            return VK_FORMAT_R16_SINT;
+        case WGPUVertexFormat_Sint16x2:
+            return VK_FORMAT_R16G16_SINT;
+        case WGPUVertexFormat_Sint16x4:
+            return VK_FORMAT_R16G16B16A16_SINT;
+        case WGPUVertexFormat_Unorm16:
+            return VK_FORMAT_R16_UNORM;
+        case WGPUVertexFormat_Unorm16x2:
+            return VK_FORMAT_R16G16_UNORM;
+        case WGPUVertexFormat_Unorm16x4:
+            return VK_FORMAT_R16G16B16A16_UNORM;
+        case WGPUVertexFormat_Snorm16:
+            return VK_FORMAT_R16_SNORM;
+        case WGPUVertexFormat_Snorm16x2:
+            return VK_FORMAT_R16G16_SNORM;
+        case WGPUVertexFormat_Snorm16x4:
+            return VK_FORMAT_R16G16B16A16_SNORM;
+        case WGPUVertexFormat_Float16:
+            return VK_FORMAT_R16_SFLOAT;
+        case WGPUVertexFormat_Float16x2:
+            return VK_FORMAT_R16G16_SFLOAT;
+        case WGPUVertexFormat_Float16x4:
+            return VK_FORMAT_R16G16B16A16_SFLOAT;
+        case WGPUVertexFormat_Float32:
+            return VK_FORMAT_R32_SFLOAT;
+        case WGPUVertexFormat_Float32x2:
+            return VK_FORMAT_R32G32_SFLOAT;
+        case WGPUVertexFormat_Float32x3:
+            return VK_FORMAT_R32G32B32_SFLOAT;
+        case WGPUVertexFormat_Float32x4:
+            return VK_FORMAT_R32G32B32A32_SFLOAT;
+        case WGPUVertexFormat_Uint32:
+            return VK_FORMAT_R32_UINT;
+        case WGPUVertexFormat_Uint32x2:
+            return VK_FORMAT_R32G32_UINT;
+        case WGPUVertexFormat_Uint32x3:
+            return VK_FORMAT_R32G32B32_UINT;
+        case WGPUVertexFormat_Uint32x4:
+            return VK_FORMAT_R32G32B32A32_UINT;
+        case WGPUVertexFormat_Sint32:
+            return VK_FORMAT_R32_SINT;
+        case WGPUVertexFormat_Sint32x2:
+            return VK_FORMAT_R32G32_SINT;
+        case WGPUVertexFormat_Sint32x3:
+            return VK_FORMAT_R32G32B32_SINT;
+        case WGPUVertexFormat_Sint32x4:
+            return VK_FORMAT_R32G32B32A32_SINT;
+        case WGPUVertexFormat_Unorm10_10_10_2:
+            return VK_FORMAT_A2B10G10R10_UNORM_PACK32;
+        case WGPUVertexFormat_Unorm8x4BGRA:
+            return VK_FORMAT_B8G8R8A8_UNORM;
+        default:
+            return VK_FORMAT_UNDEFINED;
+        }
+    }
+
+    // ---- Pipeline enum conversions ----
+
+    inline vk::PrimitiveTopology ToVkTopology(WGPUPrimitiveTopology t)
+    {
+        switch (t)
+        {
+        case WGPUPrimitiveTopology_PointList:
+            return vk::PrimitiveTopology::ePointList;
+        case WGPUPrimitiveTopology_LineList:
+            return vk::PrimitiveTopology::eLineList;
+        case WGPUPrimitiveTopology_LineStrip:
+            return vk::PrimitiveTopology::eLineStrip;
+        case WGPUPrimitiveTopology_TriangleStrip:
+            return vk::PrimitiveTopology::eTriangleStrip;
+        case WGPUPrimitiveTopology_TriangleList:
+        default:
+            return vk::PrimitiveTopology::eTriangleList;
+        }
+    }
+
+    inline bool IsStripTopology(WGPUPrimitiveTopology t)
+    {
+        return t == WGPUPrimitiveTopology_LineStrip || t == WGPUPrimitiveTopology_TriangleStrip;
+    }
+
+    inline bool IsLineOrPointTopology(WGPUPrimitiveTopology t)
+    {
+        return t == WGPUPrimitiveTopology_PointList || t == WGPUPrimitiveTopology_LineList || t == WGPUPrimitiveTopology_LineStrip;
+    }
+
+    inline vk::FrontFace ToVkFrontFace(WGPUFrontFace f)
+    {
+        return f == WGPUFrontFace_CW ? vk::FrontFace::eClockwise : vk::FrontFace::eCounterClockwise;
+    }
+
+    inline vk::CullModeFlags ToVkCullMode(WGPUCullMode m)
+    {
+        switch (m)
+        {
+        case WGPUCullMode_Front:
+            return vk::CullModeFlagBits::eFront;
+        case WGPUCullMode_Back:
+            return vk::CullModeFlagBits::eBack;
+        case WGPUCullMode_None:
+        default:
+            return vk::CullModeFlagBits::eNone;
+        }
+    }
+
+    inline vk::CompareOp ToVkCompareOp(WGPUCompareFunction f)
+    {
+        switch (f)
+        {
+        case WGPUCompareFunction_Never:
+            return vk::CompareOp::eNever;
+        case WGPUCompareFunction_Less:
+            return vk::CompareOp::eLess;
+        case WGPUCompareFunction_Equal:
+            return vk::CompareOp::eEqual;
+        case WGPUCompareFunction_LessEqual:
+            return vk::CompareOp::eLessOrEqual;
+        case WGPUCompareFunction_Greater:
+            return vk::CompareOp::eGreater;
+        case WGPUCompareFunction_NotEqual:
+            return vk::CompareOp::eNotEqual;
+        case WGPUCompareFunction_GreaterEqual:
+            return vk::CompareOp::eGreaterOrEqual;
+        case WGPUCompareFunction_Always:
+        default:
+            return vk::CompareOp::eAlways;
+        }
+    }
+
+    inline vk::StencilOp ToVkStencilOp(WGPUStencilOperation op)
+    {
+        switch (op)
+        {
+        case WGPUStencilOperation_Zero:
+            return vk::StencilOp::eZero;
+        case WGPUStencilOperation_Replace:
+            return vk::StencilOp::eReplace;
+        case WGPUStencilOperation_Invert:
+            return vk::StencilOp::eInvert;
+        case WGPUStencilOperation_IncrementClamp:
+            return vk::StencilOp::eIncrementAndClamp;
+        case WGPUStencilOperation_DecrementClamp:
+            return vk::StencilOp::eDecrementAndClamp;
+        case WGPUStencilOperation_IncrementWrap:
+            return vk::StencilOp::eIncrementAndWrap;
+        case WGPUStencilOperation_DecrementWrap:
+            return vk::StencilOp::eDecrementAndWrap;
+        case WGPUStencilOperation_Keep:
+        default:
+            return vk::StencilOp::eKeep;
+        }
+    }
+
+    inline vk::BlendFactor ToVkBlendFactor(WGPUBlendFactor f)
+    {
+        switch (f)
+        {
+        case WGPUBlendFactor_Zero:
+            return vk::BlendFactor::eZero;
+        case WGPUBlendFactor_One:
+            return vk::BlendFactor::eOne;
+        case WGPUBlendFactor_Src:
+            return vk::BlendFactor::eSrcColor;
+        case WGPUBlendFactor_OneMinusSrc:
+            return vk::BlendFactor::eOneMinusSrcColor;
+        case WGPUBlendFactor_SrcAlpha:
+            return vk::BlendFactor::eSrcAlpha;
+        case WGPUBlendFactor_OneMinusSrcAlpha:
+            return vk::BlendFactor::eOneMinusSrcAlpha;
+        case WGPUBlendFactor_Dst:
+            return vk::BlendFactor::eDstColor;
+        case WGPUBlendFactor_OneMinusDst:
+            return vk::BlendFactor::eOneMinusDstColor;
+        case WGPUBlendFactor_DstAlpha:
+            return vk::BlendFactor::eDstAlpha;
+        case WGPUBlendFactor_OneMinusDstAlpha:
+            return vk::BlendFactor::eOneMinusDstAlpha;
+        case WGPUBlendFactor_SrcAlphaSaturated:
+            return vk::BlendFactor::eSrcAlphaSaturate;
+        case WGPUBlendFactor_Constant:
+            return vk::BlendFactor::eConstantColor;
+        case WGPUBlendFactor_OneMinusConstant:
+            return vk::BlendFactor::eOneMinusConstantColor;
+        case WGPUBlendFactor_Src1:
+            return vk::BlendFactor::eSrc1Color;
+        case WGPUBlendFactor_OneMinusSrc1:
+            return vk::BlendFactor::eOneMinusSrc1Color;
+        case WGPUBlendFactor_Src1Alpha:
+            return vk::BlendFactor::eSrc1Alpha;
+        case WGPUBlendFactor_OneMinusSrc1Alpha:
+            return vk::BlendFactor::eOneMinusSrc1Alpha;
+        default:
+            return vk::BlendFactor::eOne;
+        }
+    }
+
+    inline vk::BlendOp ToVkBlendOp(WGPUBlendOperation op)
+    {
+        switch (op)
+        {
+        case WGPUBlendOperation_Add:
+            return vk::BlendOp::eAdd;
+        case WGPUBlendOperation_Subtract:
+            return vk::BlendOp::eSubtract;
+        case WGPUBlendOperation_ReverseSubtract:
+            return vk::BlendOp::eReverseSubtract;
+        case WGPUBlendOperation_Min:
+            return vk::BlendOp::eMin;
+        case WGPUBlendOperation_Max:
+            return vk::BlendOp::eMax;
+        default:
+            return vk::BlendOp::eAdd;
+        }
+    }
+
+    inline vk::SampleCountFlagBits ToVkSampleCount(uint32_t count)
+    {
+        switch (count)
+        {
+        case 4:
+            return vk::SampleCountFlagBits::e4;
+        default:
+            return vk::SampleCountFlagBits::e1;
+        }
+    }
+
+    inline bool IsBlendableFormat(WGPUTextureFormat f)
+    {
+        // Integer formats are not blendable
+        switch (f)
+        {
+        case WGPUTextureFormat_R8Uint:
+        case WGPUTextureFormat_R8Sint:
+        case WGPUTextureFormat_R16Uint:
+        case WGPUTextureFormat_R16Sint:
+        case WGPUTextureFormat_RG8Uint:
+        case WGPUTextureFormat_RG8Sint:
+        case WGPUTextureFormat_R32Uint:
+        case WGPUTextureFormat_R32Sint:
+        case WGPUTextureFormat_RG16Uint:
+        case WGPUTextureFormat_RG16Sint:
+        case WGPUTextureFormat_RGBA8Uint:
+        case WGPUTextureFormat_RGBA8Sint:
+        case WGPUTextureFormat_RGB10A2Uint:
+        case WGPUTextureFormat_RG32Uint:
+        case WGPUTextureFormat_RG32Sint:
+        case WGPUTextureFormat_RGBA16Uint:
+        case WGPUTextureFormat_RGBA16Sint:
+        case WGPUTextureFormat_RGBA32Uint:
+        case WGPUTextureFormat_RGBA32Sint:
+            return false;
+        default:
+            return IsRenderableFormat(f);
+        }
+    }
+
+    inline bool FormatHasAlphaChannel(WGPUTextureFormat f)
+    {
+        switch (f)
+        {
+        case WGPUTextureFormat_RGBA8Unorm:
+        case WGPUTextureFormat_RGBA8UnormSrgb:
+        case WGPUTextureFormat_RGBA8Snorm:
+        case WGPUTextureFormat_RGBA8Uint:
+        case WGPUTextureFormat_RGBA8Sint:
+        case WGPUTextureFormat_BGRA8Unorm:
+        case WGPUTextureFormat_BGRA8UnormSrgb:
+        case WGPUTextureFormat_RGB10A2Uint:
+        case WGPUTextureFormat_RGB10A2Unorm:
+        case WGPUTextureFormat_RGBA16Uint:
+        case WGPUTextureFormat_RGBA16Sint:
+        case WGPUTextureFormat_RGBA16Float:
+        case WGPUTextureFormat_RGBA32Float:
+        case WGPUTextureFormat_RGBA32Uint:
+        case WGPUTextureFormat_RGBA32Sint:
+            return true;
+        default:
+            return false;
+        }
+    }
+
+    inline uint32_t FormatBytesPerSample(WGPUTextureFormat f)
+    {
+        switch (f)
+        {
+        case WGPUTextureFormat_R8Unorm:
+        case WGPUTextureFormat_R8Snorm:
+        case WGPUTextureFormat_R8Uint:
+        case WGPUTextureFormat_R8Sint:
+            return 1;
+        case WGPUTextureFormat_R16Uint:
+        case WGPUTextureFormat_R16Sint:
+        case WGPUTextureFormat_R16Float:
+        case WGPUTextureFormat_RG8Unorm:
+        case WGPUTextureFormat_RG8Snorm:
+        case WGPUTextureFormat_RG8Uint:
+        case WGPUTextureFormat_RG8Sint:
+            return 2;
+        case WGPUTextureFormat_R32Float:
+        case WGPUTextureFormat_R32Uint:
+        case WGPUTextureFormat_R32Sint:
+        case WGPUTextureFormat_RG16Uint:
+        case WGPUTextureFormat_RG16Sint:
+        case WGPUTextureFormat_RG16Float:
+        case WGPUTextureFormat_RGBA8Unorm:
+        case WGPUTextureFormat_RGBA8UnormSrgb:
+        case WGPUTextureFormat_RGBA8Snorm:
+        case WGPUTextureFormat_RGBA8Uint:
+        case WGPUTextureFormat_RGBA8Sint:
+        case WGPUTextureFormat_BGRA8Unorm:
+        case WGPUTextureFormat_BGRA8UnormSrgb:
+        case WGPUTextureFormat_RGB10A2Uint:
+        case WGPUTextureFormat_RGB10A2Unorm:
+        case WGPUTextureFormat_RG11B10Ufloat:
+        case WGPUTextureFormat_RGB9E5Ufloat:
+            return 4;
+        case WGPUTextureFormat_RG32Float:
+        case WGPUTextureFormat_RG32Uint:
+        case WGPUTextureFormat_RG32Sint:
+        case WGPUTextureFormat_RGBA16Uint:
+        case WGPUTextureFormat_RGBA16Sint:
+        case WGPUTextureFormat_RGBA16Float:
+            return 8;
+        case WGPUTextureFormat_RGBA32Float:
+        case WGPUTextureFormat_RGBA32Uint:
+        case WGPUTextureFormat_RGBA32Sint:
+            return 16;
+        default:
+            return 0;
+        }
+    }
+
 } // namespace pwgpu

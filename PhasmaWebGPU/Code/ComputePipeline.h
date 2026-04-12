@@ -1,15 +1,20 @@
 #pragma once
 
 #include <webgpu/webgpu.h>
-#include "API/Pipeline.h"
 
+struct WGPUDeviceImpl;
+struct WGPUPipelineLayoutImpl;
 struct WGPUBindGroupLayoutImpl;
 
 struct WGPUComputePipelineImpl
 {
     std::atomic<uint32_t> refCount{1};
     std::string label;
-    pe::Pipeline *pipeline = nullptr;
-    pe::PassInfo *passInfo = nullptr;
-    std::vector<WGPUBindGroupLayoutImpl *> bindGroupLayouts;
+    WGPUDeviceImpl *device = nullptr;
+    bool invalid = false;
+
+    VkPipeline vkPipeline = VK_NULL_HANDLE;
+    WGPUPipelineLayoutImpl *layout = nullptr;
+
+    std::string entryPoint;
 };
