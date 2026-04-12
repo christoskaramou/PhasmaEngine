@@ -96,8 +96,11 @@ extern "C"
     {
         if (!features)
             return;
-        features->featureCount = 0;
-        features->features = nullptr;
+        static const WGPUInstanceFeatureName s_instanceFeatures[] = {
+            WGPUInstanceFeatureName_ShaderSourceSPIRV,
+        };
+        features->featureCount = 1;
+        features->features = s_instanceFeatures;
     }
 
     WGPUStatus wgpuGetInstanceLimits(WGPUInstanceLimits *limits)
@@ -111,7 +114,9 @@ extern "C"
 
     WGPUBool wgpuHasInstanceFeature(WGPUInstanceFeatureName feature)
     {
-        (void)feature;
+        // We support SPIR-V shader sources natively (Vulkan backend)
+        if (feature == WGPUInstanceFeatureName_ShaderSourceSPIRV)
+            return WGPU_TRUE;
         return WGPU_FALSE;
     }
 

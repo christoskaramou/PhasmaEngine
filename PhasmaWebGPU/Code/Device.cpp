@@ -1604,9 +1604,88 @@ extern "C"
     {
         if (!DeviceCanCreate(device, descriptor, "wgpuDeviceCreateShaderModule", true))
             return nullptr;
+
         auto *sm = new WGPUShaderModuleImpl();
+        sm->device = device;
+        device->refCount.fetch_add(1, std::memory_order_relaxed);
         if (descriptor->label.data)
             sm->label = pwgpu::ToString(descriptor->label);
+
+        auto *spirvDesc = pwgpu::FindChained<WGPUShaderSourceSPIRV>(
+            descriptor->nextInChain, WGPUSType_ShaderSourceSPIRV);
+        auto *wgslDesc = pwgpu::FindChained<WGPUShaderSourceWGSL>(
+            descriptor->nextInChain, WGPUSType_ShaderSourceWGSL);
+
+        if (!spirvDesc && !wgslDesc)
+        {
+            device->reportError(WGPUErrorType_Validation,
+                                pwgpu::ToStringView("wgpuDeviceCreateShaderModule: "
+                                                    "descriptor chain must contain WGPUShaderSourceSPIRV "
+                                                    "or WGPUShaderSourceWGSL"));
+            sm->invalid = true;
+            WGPUCompilationMessageStorage msg;
+            msg.type = WGPUCompilationMessageType_Error;
+            msg.message = "No shader source provided in descriptor chain";
+            sm->compilationMessages.push_back(std::move(msg));
+            return sm;
+        }
+
+        if (spirvDesc && wgslDesc)
+        {
+            device->reportError(WGPUErrorType_Validation,
+                                pwgpu::ToStringView("wgpuDeviceCreateShaderModule: "
+                                                    "descriptor chain contains both SPIR-V and WGSL sources; "
+                                                    "exactly one is required"));
+            sm->invalid = true;
+            WGPUCompilationMessageStorage msg;
+            msg.type = WGPUCompilationMessageType_Error;
+            msg.message = "Both SPIR-V and WGSL sources provided; exactly one required";
+            sm->compilationMessages.push_back(std::move(msg));
+            return sm;
+        }
+
+        if (wgslDesc)
+        {
+            device->reportError(WGPUErrorType_Validation,
+                                pwgpu::ToStringView("wgpuDeviceCreateShaderModule: "
+                                                    "WGSL shader source is not supported; "
+                                                    "use WGPUShaderSourceSPIRV instead"));
+            sm->invalid = true;
+            WGPUCompilationMessageStorage msg;
+            msg.type = WGPUCompilationMessageType_Error;
+            msg.message = "WGSL shader source is not supported by this implementation";
+            sm->compilationMessages.push_back(std::move(msg));
+            return sm;
+        }
+
+        if (!spirvDesc->code || spirvDesc->codeSize == 0)
+        {
+            device->reportError(WGPUErrorType_Validation,
+                                pwgpu::ToStringView("wgpuDeviceCreateShaderModule: "
+                                                    "SPIR-V code is null or empty"));
+            sm->invalid = true;
+            WGPUCompilationMessageStorage msg;
+            msg.type = WGPUCompilationMessageType_Error;
+            msg.message = "SPIR-V code is null or empty";
+            sm->compilationMessages.push_back(std::move(msg));
+            return sm;
+        }
+
+        if (spirvDesc->codeSize < 5 || spirvDesc->code[0] != 0x07230203u)
+        {
+            device->reportError(WGPUErrorType_Validation,
+                                pwgpu::ToStringView("wgpuDeviceCreateShaderModule: "
+                                                    "invalid SPIR-V: bad magic number or too short"));
+            sm->invalid = true;
+            WGPUCompilationMessageStorage msg;
+            msg.type = WGPUCompilationMessageType_Error;
+            msg.message = "Invalid SPIR-V: bad magic number or module too short";
+            sm->compilationMessages.push_back(std::move(msg));
+            return sm;
+        }
+
+        sm->spirv.assign(spirvDesc->code, spirvDesc->code + spirvDesc->codeSize);
+
         return sm;
     }
 
