@@ -3,11 +3,14 @@
 #include <webgpu/webgpu.h>
 #include "API/Image.h"
 
+struct WGPUDeviceImpl;
+
 struct WGPUTextureImpl
 {
     std::atomic<uint32_t> refCount{1};
     std::string label;
     pe::Image *image = nullptr;
+    WGPUDeviceImpl *device = nullptr;
     WGPUTextureFormat format = WGPUTextureFormat_Undefined;
     WGPUTextureUsage usage = WGPUTextureUsage_None;
     WGPUTextureDimension dimension = WGPUTextureDimension_2D;
@@ -15,7 +18,9 @@ struct WGPUTextureImpl
     WGPUExtent3D size = {1, 1, 1};
     uint32_t mipLevelCount = 1;
     uint32_t sampleCount = 1;
+    std::vector<WGPUTextureFormat> viewFormats;
     bool destroyed = false;
+    bool invalid = false;
     bool isSwapchain = false;
 };
 
@@ -27,9 +32,11 @@ struct WGPUTextureViewImpl
     WGPUTextureImpl *texture = nullptr;
     WGPUTextureFormat format = WGPUTextureFormat_Undefined;
     WGPUTextureViewDimension dimension = WGPUTextureViewDimension_2D;
+    WGPUTextureUsage usage = WGPUTextureUsage_None;
     uint32_t baseMipLevel = 0;
     uint32_t mipLevelCount = 1;
     uint32_t baseArrayLayer = 0;
     uint32_t arrayLayerCount = 1;
     WGPUTextureAspect aspect = WGPUTextureAspect_All;
+    WGPUExtent3D renderExtent = {0, 0, 0};
 };

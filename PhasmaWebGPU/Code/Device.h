@@ -33,6 +33,8 @@ struct WGPUDeviceImpl
 
     std::vector<WGPUFeatureName> features;
     WGPULimits limits{};
+    VkFormat resolvedDepth24Plus = VK_FORMAT_D32_SFLOAT;
+    VkFormat resolvedDepth24PlusStencil8 = VK_FORMAT_D32_SFLOAT_S8_UINT;
 
     std::string adapterVendor;
     std::string adapterArchitecture;

@@ -1,6 +1,7 @@
 #include "Device.h"
 #include "Buffer.h"
 #include "Texture.h"
+#include "FormatMap.h"
 #include "Sampler.h"
 #include "BindGroup.h"
 #include "PipelineLayout.h"
@@ -35,6 +36,15 @@ namespace
             return false;
         }
         return true;
+    }
+    bool DeviceHasFeature(WGPUDeviceImpl *device, WGPUFeatureName feature)
+    {
+        for (auto f : device->features)
+        {
+            if (f == feature)
+                return true;
+        }
+        return false;
     }
 } // namespace
 
@@ -360,41 +370,272 @@ extern "C"
     {
         if (!DeviceCanCreate(device, descriptor, "wgpuDeviceCreateTexture", true))
             return nullptr;
+
+        const WGPUTextureUsage usage = static_cast<WGPUTextureUsage>(descriptor->usage);
+        const WGPUTextureDimension dim = descriptor->dimension;
+        const WGPUTextureFormat fmt = descriptor->format;
+        const uint32_t w = descriptor->size.width;
+        const uint32_t h = descriptor->size.height;
+        const uint32_t d = descriptor->size.depthOrArrayLayers;
+        const uint32_t mips = descriptor->mipLevelCount;
+        const uint32_t samples = descriptor->sampleCount;
+
+        auto makeInvalid = [&](const char *what) -> WGPUTexture
+        {
+            std::string msg = std::string("wgpuDeviceCreateTexture: ") + what;
+            device->reportError(WGPUErrorType_Validation, pwgpu::ToStringView(msg));
+            auto *bad = new WGPUTextureImpl();
+            bad->device = device;
+            wgpuDeviceAddRef(device);
+            bad->format = fmt;
+            bad->usage = usage;
+            bad->dimension = dim;
+            bad->size = descriptor->size;
+            bad->mipLevelCount = mips;
+            bad->sampleCount = samples;
+            bad->invalid = true;
+            if (descriptor->label.data)
+                bad->label = pwgpu::ToString(descriptor->label);
+            return bad;
+        };
+
+        if (usage == WGPUTextureUsage_None)
+            return makeInvalid("usage must not be 0");
+        if (w == 0 || h == 0 || d == 0)
+            return makeInvalid("size width/height/depthOrArrayLayers must be > 0");
+        if (mips == 0)
+            return makeInvalid("mipLevelCount must be > 0");
+        if (samples != 1 && samples != 4)
+            return makeInvalid("sampleCount must be 1 or 4");
+
+        const WGPULimits &lim = device->limits;
+
+        if (dim == WGPUTextureDimension_1D)
+        {
+            if (w > lim.maxTextureDimension1D)
+                return makeInvalid("1D texture width exceeds maxTextureDimension1D");
+            if (h != 1)
+                return makeInvalid("1D texture height must be 1");
+            if (d != 1)
+                return makeInvalid("1D texture depthOrArrayLayers must be 1");
+            if (samples != 1)
+                return makeInvalid("1D texture sampleCount must be 1");
+            if (pwgpu::IsCompressedFormat(fmt) || pwgpu::IsDepthStencilFormat(fmt))
+                return makeInvalid("1D texture cannot use compressed or depth/stencil format");
+        }
+        else if (dim == WGPUTextureDimension_2D)
+        {
+            if (w > lim.maxTextureDimension2D)
+                return makeInvalid("2D texture width exceeds maxTextureDimension2D");
+            if (h > lim.maxTextureDimension2D)
+                return makeInvalid("2D texture height exceeds maxTextureDimension2D");
+            if (d > lim.maxTextureArrayLayers)
+                return makeInvalid("2D texture depthOrArrayLayers exceeds maxTextureArrayLayers");
+        }
+        else if (dim == WGPUTextureDimension_3D)
+        {
+            if (w > lim.maxTextureDimension3D)
+                return makeInvalid("3D texture width exceeds maxTextureDimension3D");
+            if (h > lim.maxTextureDimension3D)
+                return makeInvalid("3D texture height exceeds maxTextureDimension3D");
+            if (d > lim.maxTextureDimension3D)
+                return makeInvalid("3D texture depthOrArrayLayers exceeds maxTextureDimension3D");
+            if (samples != 1)
+                return makeInvalid("3D texture sampleCount must be 1");
+            if (!pwgpu::Supports3DTexture(fmt))
+                return makeInvalid("format does not support 3D textures");
+        }
+
+        uint32_t blockW, blockH;
+        pwgpu::GetTexelBlockSize(fmt, blockW, blockH);
+        if (w % blockW != 0)
+            return makeInvalid("width must be a multiple of texel block width");
+        if (h % blockH != 0)
+            return makeInvalid("height must be a multiple of texel block height");
+
+        if (samples > 1)
+        {
+            if (mips != 1)
+                return makeInvalid("multisampled texture mipLevelCount must be 1");
+            if (d != 1)
+                return makeInvalid("multisampled texture depthOrArrayLayers must be 1");
+            if (usage & WGPUTextureUsage_StorageBinding)
+                return makeInvalid("multisampled texture cannot include STORAGE_BINDING");
+            if (!(usage & WGPUTextureUsage_RenderAttachment))
+                return makeInvalid("multisampled texture must include RENDER_ATTACHMENT");
+            if (!pwgpu::SupportsMultisampling(fmt))
+                return makeInvalid("format does not support multisampling");
+        }
+
+        uint32_t maxMips = pwgpu::MaxMipLevelCount(dim, w, h, d);
+        if (mips > maxMips)
+            return makeInvalid("mipLevelCount exceeds maximum for this size/dimension");
+
+        if (usage & WGPUTextureUsage_RenderAttachment)
+        {
+            if (!pwgpu::IsRenderableFormat(fmt))
+                return makeInvalid("RENDER_ATTACHMENT requires a renderable format");
+            if (dim != WGPUTextureDimension_2D && dim != WGPUTextureDimension_3D)
+                return makeInvalid("RENDER_ATTACHMENT requires dimension 2d or 3d");
+        }
+
+        if (usage & WGPUTextureUsage_StorageBinding)
+        {
+            if (!pwgpu::SupportsStorageBinding(fmt))
+                return makeInvalid("STORAGE_BINDING requires a storage-capable format");
+        }
+
+        if (usage & WGPUTextureUsage_TransientAttachment)
+        {
+            if (usage != (WGPUTextureUsage_TransientAttachment | WGPUTextureUsage_RenderAttachment))
+                return makeInvalid("TRANSIENT_ATTACHMENT must combine only with RENDER_ATTACHMENT");
+            if (dim != WGPUTextureDimension_2D)
+                return makeInvalid("TRANSIENT_ATTACHMENT requires dimension 2d");
+            if (mips != 1)
+                return makeInvalid("TRANSIENT_ATTACHMENT requires mipLevelCount 1");
+            if (d != 1)
+                return makeInvalid("TRANSIENT_ATTACHMENT requires depthOrArrayLayers 1");
+        }
+
+        if (pwgpu::IsBCFormat(fmt) && !DeviceHasFeature(device, WGPUFeatureName_TextureCompressionBC))
+            return makeInvalid("BC format requires TextureCompressionBC feature");
+        if (pwgpu::IsETC2Format(fmt) && !DeviceHasFeature(device, WGPUFeatureName_TextureCompressionETC2))
+            return makeInvalid("ETC2/EAC format requires TextureCompressionETC2 feature");
+        if (pwgpu::IsASTCFormat(fmt) && !DeviceHasFeature(device, WGPUFeatureName_TextureCompressionASTC))
+            return makeInvalid("ASTC format requires TextureCompressionASTC feature");
+
+        if ((usage & WGPUTextureUsage_StorageBinding) && fmt == WGPUTextureFormat_BGRA8Unorm &&
+            !DeviceHasFeature(device, WGPUFeatureName_BGRA8UnormStorage))
+            return makeInvalid("BGRA8Unorm + STORAGE_BINDING requires BGRA8UnormStorage feature");
+
+        if (descriptor->viewFormatCount > 0 && !descriptor->viewFormats)
+            return makeInvalid("viewFormatCount > 0 but viewFormats is null");
+
+        for (size_t i = 0; i < descriptor->viewFormatCount; ++i)
+        {
+            WGPUTextureFormat vf = descriptor->viewFormats[i];
+            if (pwgpu::IsBCFormat(vf) && !DeviceHasFeature(device, WGPUFeatureName_TextureCompressionBC))
+                return makeInvalid("viewFormats BC format requires TextureCompressionBC feature");
+            if (pwgpu::IsETC2Format(vf) && !DeviceHasFeature(device, WGPUFeatureName_TextureCompressionETC2))
+                return makeInvalid("viewFormats ETC2/EAC format requires TextureCompressionETC2 feature");
+            if (pwgpu::IsASTCFormat(vf) && !DeviceHasFeature(device, WGPUFeatureName_TextureCompressionASTC))
+                return makeInvalid("viewFormats ASTC format requires TextureCompressionASTC feature");
+            if (!pwgpu::AreViewFormatCompatible(fmt, vf))
+                return makeInvalid("viewFormats entry is not compatible with texture format");
+        }
+
         auto *tex = new WGPUTextureImpl();
-        tex->format = descriptor->format;
-        tex->usage = static_cast<WGPUTextureUsage>(descriptor->usage);
-        tex->dimension = descriptor->dimension;
+        tex->device = device;
+        wgpuDeviceAddRef(device);
+        tex->format = fmt;
+        tex->usage = usage;
+        tex->dimension = dim;
         tex->size = descriptor->size;
-        tex->mipLevelCount = descriptor->mipLevelCount;
-        tex->sampleCount = descriptor->sampleCount;
+        tex->mipLevelCount = mips;
+        tex->sampleCount = samples;
         if (descriptor->label.data)
             tex->label = pwgpu::ToString(descriptor->label);
 
-        WGPUTextureViewDimension resolved = WGPUTextureViewDimension_Undefined;
+        for (size_t i = 0; i < descriptor->viewFormatCount; ++i)
+            tex->viewFormats.push_back(descriptor->viewFormats[i]);
+
+        WGPUTextureViewDimension tbvd = WGPUTextureViewDimension_Undefined;
         if (auto *ext = pwgpu::FindChained<WGPUTextureBindingViewDimension>(
                 descriptor->nextInChain, WGPUSType_TextureBindingViewDimension))
         {
-            resolved = ext->textureBindingViewDimension;
+            tbvd = ext->textureBindingViewDimension;
         }
-        if (resolved == WGPUTextureViewDimension_Undefined)
+        if (tbvd == WGPUTextureViewDimension_Undefined)
         {
-            switch (descriptor->dimension)
+            switch (dim)
             {
             case WGPUTextureDimension_1D:
-                resolved = WGPUTextureViewDimension_1D;
+                tbvd = WGPUTextureViewDimension_1D;
                 break;
             case WGPUTextureDimension_3D:
-                resolved = WGPUTextureViewDimension_3D;
+                tbvd = WGPUTextureViewDimension_3D;
                 break;
             case WGPUTextureDimension_2D:
             default:
-                resolved = (descriptor->size.depthOrArrayLayers > 1)
-                               ? WGPUTextureViewDimension_2DArray
+                tbvd = (d > 1) ? WGPUTextureViewDimension_2DArray
                                : WGPUTextureViewDimension_2D;
                 break;
             }
         }
-        tex->textureBindingViewDimension = resolved;
+        tex->textureBindingViewDimension = tbvd;
+
+        VkFormat vkFmt = pwgpu::ToVkFormat(fmt);
+        if (fmt == WGPUTextureFormat_Depth24Plus)
+            vkFmt = device->resolvedDepth24Plus;
+        else if (fmt == WGPUTextureFormat_Depth24PlusStencil8)
+            vkFmt = device->resolvedDepth24PlusStencil8;
+
+        vk::ImageCreateInfo ci = pe::Image::CreateInfoInit();
+        ci.format = static_cast<vk::Format>(vkFmt);
+        ci.extent = vk::Extent3D{w, h, (dim == WGPUTextureDimension_3D) ? d : 1u};
+        ci.mipLevels = mips;
+        ci.arrayLayers = (dim == WGPUTextureDimension_2D) ? d : 1u;
+        ci.samples = static_cast<vk::SampleCountFlagBits>(samples);
+
+        switch (dim)
+        {
+        case WGPUTextureDimension_1D:
+            ci.imageType = vk::ImageType::e1D;
+            break;
+        case WGPUTextureDimension_3D:
+            ci.imageType = vk::ImageType::e3D;
+            break;
+        default:
+            ci.imageType = vk::ImageType::e2D;
+            break;
+        }
+
+        vk::ImageUsageFlags vkUsage{};
+        if (usage & WGPUTextureUsage_CopySrc)
+            vkUsage |= vk::ImageUsageFlagBits::eTransferSrc;
+        if (usage & WGPUTextureUsage_CopyDst)
+            vkUsage |= vk::ImageUsageFlagBits::eTransferDst;
+        if (usage & WGPUTextureUsage_TextureBinding)
+            vkUsage |= vk::ImageUsageFlagBits::eSampled;
+        if (usage & WGPUTextureUsage_StorageBinding)
+            vkUsage |= vk::ImageUsageFlagBits::eStorage;
+        if (usage & WGPUTextureUsage_RenderAttachment)
+        {
+            if (pwgpu::IsDepthStencilFormat(fmt))
+                vkUsage |= vk::ImageUsageFlagBits::eDepthStencilAttachment;
+            else
+                vkUsage |= vk::ImageUsageFlagBits::eColorAttachment;
+        }
+        if (usage & WGPUTextureUsage_TransientAttachment)
+            vkUsage |= vk::ImageUsageFlagBits::eTransientAttachment;
+
+        if (!vkUsage)
+            vkUsage = vk::ImageUsageFlagBits::eTransferSrc;
+        ci.usage = vkUsage;
+
+        if (dim == WGPUTextureDimension_2D && w == h && d >= 6 && (d % 6 == 0))
+            ci.flags |= vk::ImageCreateFlagBits::eCubeCompatible;
+        if (descriptor->viewFormatCount > 0 && descriptor->viewFormats)
+            ci.flags |= vk::ImageCreateFlagBits::eMutableFormat;
+
+        const std::string peName = tex->label.empty() ? std::string("wgpu_texture") : tex->label;
+        try
+        {
+            tex->image = pe::Image::Create(ci, peName);
+        }
+        catch (...)
+        {
+            tex->image = nullptr;
+        }
+
+        if (!tex->image)
+        {
+            std::string msg = "wgpuDeviceCreateTexture: backing allocation failed";
+            device->reportError(WGPUErrorType_OutOfMemory, pwgpu::ToStringView(msg));
+            tex->invalid = true;
+            return tex;
+        }
+
         return tex;
     }
 
@@ -402,9 +643,211 @@ extern "C"
     {
         if (!DeviceCanCreate(device, descriptor, "wgpuDeviceCreateSampler", false))
             return nullptr;
+
+        auto makeInvalid = [&](const char *what) -> WGPUSampler
+        {
+            std::string msg = std::string("wgpuDeviceCreateSampler: ") + what;
+            device->reportError(WGPUErrorType_Validation, pwgpu::ToStringView(msg));
+            auto *bad = new WGPUSamplerImpl();
+            bad->invalid = true;
+            wgpuDeviceAddRef(device);
+            bad->device = device;
+            if (descriptor && descriptor->label.data)
+                bad->label = pwgpu::ToString(descriptor->label);
+            return bad;
+        };
+
+        WGPUAddressMode addrU = WGPUAddressMode_ClampToEdge;
+        WGPUAddressMode addrV = WGPUAddressMode_ClampToEdge;
+        WGPUAddressMode addrW = WGPUAddressMode_ClampToEdge;
+        WGPUFilterMode magF = WGPUFilterMode_Nearest;
+        WGPUFilterMode minF = WGPUFilterMode_Nearest;
+        WGPUMipmapFilterMode mipF = WGPUMipmapFilterMode_Nearest;
+        float lodMin = 0.0f;
+        float lodMax = 32.0f;
+        WGPUCompareFunction cmp = WGPUCompareFunction_Undefined;
+        uint16_t maxAniso = 1;
+
+        if (descriptor)
+        {
+            addrU = (descriptor->addressModeU != WGPUAddressMode_Undefined)
+                        ? descriptor->addressModeU
+                        : WGPUAddressMode_ClampToEdge;
+            addrV = (descriptor->addressModeV != WGPUAddressMode_Undefined)
+                        ? descriptor->addressModeV
+                        : WGPUAddressMode_ClampToEdge;
+            addrW = (descriptor->addressModeW != WGPUAddressMode_Undefined)
+                        ? descriptor->addressModeW
+                        : WGPUAddressMode_ClampToEdge;
+            magF = (descriptor->magFilter != WGPUFilterMode_Undefined)
+                       ? descriptor->magFilter
+                       : WGPUFilterMode_Nearest;
+            minF = (descriptor->minFilter != WGPUFilterMode_Undefined)
+                       ? descriptor->minFilter
+                       : WGPUFilterMode_Nearest;
+            mipF = (descriptor->mipmapFilter != WGPUMipmapFilterMode_Undefined)
+                       ? descriptor->mipmapFilter
+                       : WGPUMipmapFilterMode_Nearest;
+            lodMin = descriptor->lodMinClamp;
+            lodMax = descriptor->lodMaxClamp;
+            cmp = descriptor->compare;
+            maxAniso = descriptor->maxAnisotropy;
+        }
+
+        if (std::isnan(lodMin) || std::isinf(lodMin))
+            return makeInvalid("lodMinClamp is non-finite");
+        if (std::isnan(lodMax) || std::isinf(lodMax))
+            return makeInvalid("lodMaxClamp is non-finite");
+        if (lodMin < 0.0f)
+            return makeInvalid("lodMinClamp must be >= 0");
+        if (lodMax < lodMin)
+            return makeInvalid("lodMaxClamp must be >= lodMinClamp");
+        if (maxAniso < 1)
+            return makeInvalid("maxAnisotropy must be >= 1");
+        if (maxAniso > 1)
+        {
+            if (magF != WGPUFilterMode_Linear)
+                return makeInvalid("maxAnisotropy > 1 requires magFilter = linear");
+            if (minF != WGPUFilterMode_Linear)
+                return makeInvalid("maxAnisotropy > 1 requires minFilter = linear");
+            if (mipF != WGPUMipmapFilterMode_Linear)
+                return makeInvalid("maxAnisotropy > 1 requires mipmapFilter = linear");
+        }
+
+        bool isComparison = (cmp != WGPUCompareFunction_Undefined);
+        bool isFiltering = (magF == WGPUFilterMode_Linear ||
+                            minF == WGPUFilterMode_Linear ||
+                            mipF == WGPUMipmapFilterMode_Linear);
+
         auto *smp = new WGPUSamplerImpl();
+        wgpuDeviceAddRef(device);
+        smp->device = device;
+        smp->addressModeU = addrU;
+        smp->addressModeV = addrV;
+        smp->addressModeW = addrW;
+        smp->magFilter = magF;
+        smp->minFilter = minF;
+        smp->mipmapFilter = mipF;
+        smp->lodMinClamp = lodMin;
+        smp->lodMaxClamp = lodMax;
+        smp->compare = cmp;
+        smp->maxAnisotropy = maxAniso;
+        smp->isComparison = isComparison;
+        smp->isFiltering = isFiltering;
         if (descriptor && descriptor->label.data)
             smp->label = pwgpu::ToString(descriptor->label);
+
+        auto toVkAddressMode = [](WGPUAddressMode m) -> vk::SamplerAddressMode
+        {
+            switch (m)
+            {
+            case WGPUAddressMode_Repeat:
+                return vk::SamplerAddressMode::eRepeat;
+            case WGPUAddressMode_MirrorRepeat:
+                return vk::SamplerAddressMode::eMirroredRepeat;
+            case WGPUAddressMode_ClampToEdge:
+            default:
+                return vk::SamplerAddressMode::eClampToEdge;
+            }
+        };
+
+        auto toVkFilter = [](WGPUFilterMode f) -> vk::Filter
+        {
+            return (f == WGPUFilterMode_Linear) ? vk::Filter::eLinear : vk::Filter::eNearest;
+        };
+
+        auto toVkMipMode = [](WGPUMipmapFilterMode f) -> vk::SamplerMipmapMode
+        {
+            return (f == WGPUMipmapFilterMode_Linear) ? vk::SamplerMipmapMode::eLinear
+                                                      : vk::SamplerMipmapMode::eNearest;
+        };
+
+        auto toVkCompareOp = [](WGPUCompareFunction c) -> vk::CompareOp
+        {
+            switch (c)
+            {
+            case WGPUCompareFunction_Never:
+                return vk::CompareOp::eNever;
+            case WGPUCompareFunction_Less:
+                return vk::CompareOp::eLess;
+            case WGPUCompareFunction_Equal:
+                return vk::CompareOp::eEqual;
+            case WGPUCompareFunction_LessEqual:
+                return vk::CompareOp::eLessOrEqual;
+            case WGPUCompareFunction_Greater:
+                return vk::CompareOp::eGreater;
+            case WGPUCompareFunction_NotEqual:
+                return vk::CompareOp::eNotEqual;
+            case WGPUCompareFunction_GreaterEqual:
+                return vk::CompareOp::eGreaterOrEqual;
+            case WGPUCompareFunction_Always:
+                return vk::CompareOp::eAlways;
+            default:
+                return vk::CompareOp::eNever;
+            }
+        };
+
+        if (device->rhi && device->rhi->GetDevice())
+        {
+            vk::SamplerCreateInfo sci{};
+            sci.magFilter = toVkFilter(magF);
+            sci.minFilter = toVkFilter(minF);
+            sci.mipmapMode = toVkMipMode(mipF);
+            sci.addressModeU = toVkAddressMode(addrU);
+            sci.addressModeV = toVkAddressMode(addrV);
+            sci.addressModeW = toVkAddressMode(addrW);
+            sci.mipLodBias = 0.0f;
+            sci.minLod = lodMin;
+            sci.maxLod = lodMax;
+
+            if (maxAniso > 1)
+            {
+                sci.anisotropyEnable = VK_TRUE;
+                float clampedAniso = static_cast<float>(maxAniso);
+                VkPhysicalDeviceProperties gpuProps{};
+                vkGetPhysicalDeviceProperties(device->rhi->GetGpu(), &gpuProps);
+                float hwMax = gpuProps.limits.maxSamplerAnisotropy;
+                if (clampedAniso > hwMax)
+                    clampedAniso = hwMax;
+                sci.maxAnisotropy = clampedAniso;
+            }
+            else
+            {
+                sci.anisotropyEnable = VK_FALSE;
+                sci.maxAnisotropy = 1.0f;
+            }
+
+            if (isComparison)
+            {
+                sci.compareEnable = VK_TRUE;
+                sci.compareOp = toVkCompareOp(cmp);
+            }
+            else
+            {
+                sci.compareEnable = VK_FALSE;
+                sci.compareOp = vk::CompareOp::eNever;
+            }
+
+            sci.borderColor = vk::BorderColor::eFloatTransparentBlack;
+            sci.unnormalizedCoordinates = VK_FALSE;
+
+            const std::string samplerName = smp->label.empty() ? "wgpu_sampler" : smp->label;
+            try
+            {
+                smp->sampler = pe::Sampler::Create(sci, samplerName);
+            }
+            catch (...)
+            {
+                smp->sampler = nullptr;
+            }
+
+            if (!smp->sampler)
+            {
+                device->reportError(WGPUErrorType_Internal,
+                                    pwgpu::ToStringView("wgpuDeviceCreateSampler: native sampler creation failed"));
+            }
+        }
+
         return smp;
     }
 

@@ -299,4 +299,392 @@ namespace pwgpu
         }
     }
 
+    inline bool IsBCFormat(WGPUTextureFormat f)
+    {
+        return f >= WGPUTextureFormat_BC1RGBAUnorm && f <= WGPUTextureFormat_BC7RGBAUnormSrgb;
+    }
+
+    inline bool IsETC2Format(WGPUTextureFormat f)
+    {
+        return f >= WGPUTextureFormat_ETC2RGB8Unorm && f <= WGPUTextureFormat_EACRG11Snorm;
+    }
+
+    inline bool IsASTCFormat(WGPUTextureFormat f)
+    {
+        return f >= WGPUTextureFormat_ASTC4x4Unorm && f <= WGPUTextureFormat_ASTC12x12UnormSrgb;
+    }
+
+    inline bool IsCompressedFormat(WGPUTextureFormat f)
+    {
+        return IsBCFormat(f) || IsETC2Format(f) || IsASTCFormat(f);
+    }
+
+    inline bool IsDepthStencilFormat(WGPUTextureFormat f)
+    {
+        switch (f)
+        {
+        case WGPUTextureFormat_Stencil8:
+        case WGPUTextureFormat_Depth16Unorm:
+        case WGPUTextureFormat_Depth24Plus:
+        case WGPUTextureFormat_Depth24PlusStencil8:
+        case WGPUTextureFormat_Depth32Float:
+        case WGPUTextureFormat_Depth32FloatStencil8:
+            return true;
+        default:
+            return false;
+        }
+    }
+
+    inline bool HasDepthAspect(WGPUTextureFormat f)
+    {
+        switch (f)
+        {
+        case WGPUTextureFormat_Depth16Unorm:
+        case WGPUTextureFormat_Depth24Plus:
+        case WGPUTextureFormat_Depth24PlusStencil8:
+        case WGPUTextureFormat_Depth32Float:
+        case WGPUTextureFormat_Depth32FloatStencil8:
+            return true;
+        default:
+            return false;
+        }
+    }
+
+    inline bool HasStencilAspect(WGPUTextureFormat f)
+    {
+        switch (f)
+        {
+        case WGPUTextureFormat_Stencil8:
+        case WGPUTextureFormat_Depth24PlusStencil8:
+        case WGPUTextureFormat_Depth32FloatStencil8:
+            return true;
+        default:
+            return false;
+        }
+    }
+
+    inline bool IsRenderableFormat(WGPUTextureFormat f)
+    {
+        if (IsDepthStencilFormat(f))
+            return true;
+        if (IsCompressedFormat(f))
+            return false;
+        switch (f)
+        {
+        case WGPUTextureFormat_R8Snorm:
+        case WGPUTextureFormat_RG8Snorm:
+        case WGPUTextureFormat_RGBA8Snorm:
+        case WGPUTextureFormat_RGB9E5Ufloat:
+            return false;
+        default:
+            return f != WGPUTextureFormat_Undefined;
+        }
+    }
+
+    inline bool SupportsMultisampling(WGPUTextureFormat f)
+    {
+        if (IsCompressedFormat(f))
+            return false;
+        switch (f)
+        {
+        case WGPUTextureFormat_R32Float:
+        case WGPUTextureFormat_R32Uint:
+        case WGPUTextureFormat_R32Sint:
+        case WGPUTextureFormat_RG32Float:
+        case WGPUTextureFormat_RG32Uint:
+        case WGPUTextureFormat_RG32Sint:
+        case WGPUTextureFormat_RGBA32Float:
+        case WGPUTextureFormat_RGBA32Uint:
+        case WGPUTextureFormat_RGBA32Sint:
+        case WGPUTextureFormat_RGB9E5Ufloat:
+        case WGPUTextureFormat_R8Snorm:
+        case WGPUTextureFormat_RG8Snorm:
+        case WGPUTextureFormat_RGBA8Snorm:
+            return false;
+        default:
+            return f != WGPUTextureFormat_Undefined;
+        }
+    }
+
+    inline bool SupportsStorageBinding(WGPUTextureFormat f)
+    {
+        switch (f)
+        {
+        case WGPUTextureFormat_RGBA8Unorm:
+        case WGPUTextureFormat_RGBA8Snorm:
+        case WGPUTextureFormat_RGBA8Uint:
+        case WGPUTextureFormat_RGBA8Sint:
+        case WGPUTextureFormat_RGBA16Uint:
+        case WGPUTextureFormat_RGBA16Sint:
+        case WGPUTextureFormat_RGBA16Float:
+        case WGPUTextureFormat_R32Float:
+        case WGPUTextureFormat_R32Uint:
+        case WGPUTextureFormat_R32Sint:
+        case WGPUTextureFormat_RG32Float:
+        case WGPUTextureFormat_RG32Uint:
+        case WGPUTextureFormat_RG32Sint:
+        case WGPUTextureFormat_RGBA32Float:
+        case WGPUTextureFormat_RGBA32Uint:
+        case WGPUTextureFormat_RGBA32Sint:
+        case WGPUTextureFormat_BGRA8Unorm:
+            return true;
+        default:
+            return false;
+        }
+    }
+
+    inline bool Supports3DTexture(WGPUTextureFormat f)
+    {
+        if (IsDepthStencilFormat(f))
+            return false;
+        if (IsCompressedFormat(f))
+            return false;
+        return f != WGPUTextureFormat_Undefined;
+    }
+
+    inline void GetTexelBlockSize(WGPUTextureFormat f, uint32_t &outW, uint32_t &outH)
+    {
+        outW = 1;
+        outH = 1;
+        switch (f)
+        {
+        case WGPUTextureFormat_BC1RGBAUnorm:
+        case WGPUTextureFormat_BC1RGBAUnormSrgb:
+        case WGPUTextureFormat_BC2RGBAUnorm:
+        case WGPUTextureFormat_BC2RGBAUnormSrgb:
+        case WGPUTextureFormat_BC3RGBAUnorm:
+        case WGPUTextureFormat_BC3RGBAUnormSrgb:
+        case WGPUTextureFormat_BC4RUnorm:
+        case WGPUTextureFormat_BC4RSnorm:
+        case WGPUTextureFormat_BC5RGUnorm:
+        case WGPUTextureFormat_BC5RGSnorm:
+        case WGPUTextureFormat_BC6HRGBUfloat:
+        case WGPUTextureFormat_BC6HRGBFloat:
+        case WGPUTextureFormat_BC7RGBAUnorm:
+        case WGPUTextureFormat_BC7RGBAUnormSrgb:
+        case WGPUTextureFormat_ETC2RGB8Unorm:
+        case WGPUTextureFormat_ETC2RGB8UnormSrgb:
+        case WGPUTextureFormat_ETC2RGB8A1Unorm:
+        case WGPUTextureFormat_ETC2RGB8A1UnormSrgb:
+        case WGPUTextureFormat_ETC2RGBA8Unorm:
+        case WGPUTextureFormat_ETC2RGBA8UnormSrgb:
+        case WGPUTextureFormat_EACR11Unorm:
+        case WGPUTextureFormat_EACR11Snorm:
+        case WGPUTextureFormat_EACRG11Unorm:
+        case WGPUTextureFormat_EACRG11Snorm:
+            outW = 4;
+            outH = 4;
+            break;
+        case WGPUTextureFormat_ASTC4x4Unorm:
+        case WGPUTextureFormat_ASTC4x4UnormSrgb:
+            outW = 4;
+            outH = 4;
+            break;
+        case WGPUTextureFormat_ASTC5x4Unorm:
+        case WGPUTextureFormat_ASTC5x4UnormSrgb:
+            outW = 5;
+            outH = 4;
+            break;
+        case WGPUTextureFormat_ASTC5x5Unorm:
+        case WGPUTextureFormat_ASTC5x5UnormSrgb:
+            outW = 5;
+            outH = 5;
+            break;
+        case WGPUTextureFormat_ASTC6x5Unorm:
+        case WGPUTextureFormat_ASTC6x5UnormSrgb:
+            outW = 6;
+            outH = 5;
+            break;
+        case WGPUTextureFormat_ASTC6x6Unorm:
+        case WGPUTextureFormat_ASTC6x6UnormSrgb:
+            outW = 6;
+            outH = 6;
+            break;
+        case WGPUTextureFormat_ASTC8x5Unorm:
+        case WGPUTextureFormat_ASTC8x5UnormSrgb:
+            outW = 8;
+            outH = 5;
+            break;
+        case WGPUTextureFormat_ASTC8x6Unorm:
+        case WGPUTextureFormat_ASTC8x6UnormSrgb:
+            outW = 8;
+            outH = 6;
+            break;
+        case WGPUTextureFormat_ASTC8x8Unorm:
+        case WGPUTextureFormat_ASTC8x8UnormSrgb:
+            outW = 8;
+            outH = 8;
+            break;
+        case WGPUTextureFormat_ASTC10x5Unorm:
+        case WGPUTextureFormat_ASTC10x5UnormSrgb:
+            outW = 10;
+            outH = 5;
+            break;
+        case WGPUTextureFormat_ASTC10x6Unorm:
+        case WGPUTextureFormat_ASTC10x6UnormSrgb:
+            outW = 10;
+            outH = 6;
+            break;
+        case WGPUTextureFormat_ASTC10x8Unorm:
+        case WGPUTextureFormat_ASTC10x8UnormSrgb:
+            outW = 10;
+            outH = 8;
+            break;
+        case WGPUTextureFormat_ASTC10x10Unorm:
+        case WGPUTextureFormat_ASTC10x10UnormSrgb:
+            outW = 10;
+            outH = 10;
+            break;
+        case WGPUTextureFormat_ASTC12x10Unorm:
+        case WGPUTextureFormat_ASTC12x10UnormSrgb:
+            outW = 12;
+            outH = 10;
+            break;
+        case WGPUTextureFormat_ASTC12x12Unorm:
+        case WGPUTextureFormat_ASTC12x12UnormSrgb:
+            outW = 12;
+            outH = 12;
+            break;
+        default:
+            break;
+        }
+    }
+
+    inline uint32_t MaxMipLevelCount(WGPUTextureDimension dim, uint32_t w, uint32_t h, uint32_t d)
+    {
+        if (dim == WGPUTextureDimension_1D)
+            return 1;
+        uint32_t m = (dim == WGPUTextureDimension_3D) ? std::max({w, h, d}) : std::max(w, h);
+        if (m == 0)
+            return 1;
+        uint32_t bits = 0;
+        uint32_t v = m;
+        while (v >>= 1)
+            ++bits;
+        return bits + 1;
+    }
+
+    inline bool AreViewFormatCompatible(WGPUTextureFormat a, WGPUTextureFormat b)
+    {
+        if (a == b)
+            return true;
+        auto stripSrgb = [](WGPUTextureFormat f) -> WGPUTextureFormat
+        {
+            switch (f)
+            {
+            case WGPUTextureFormat_RGBA8UnormSrgb:
+                return WGPUTextureFormat_RGBA8Unorm;
+            case WGPUTextureFormat_BGRA8UnormSrgb:
+                return WGPUTextureFormat_BGRA8Unorm;
+            case WGPUTextureFormat_BC1RGBAUnormSrgb:
+                return WGPUTextureFormat_BC1RGBAUnorm;
+            case WGPUTextureFormat_BC2RGBAUnormSrgb:
+                return WGPUTextureFormat_BC2RGBAUnorm;
+            case WGPUTextureFormat_BC3RGBAUnormSrgb:
+                return WGPUTextureFormat_BC3RGBAUnorm;
+            case WGPUTextureFormat_BC7RGBAUnormSrgb:
+                return WGPUTextureFormat_BC7RGBAUnorm;
+            case WGPUTextureFormat_ETC2RGB8UnormSrgb:
+                return WGPUTextureFormat_ETC2RGB8Unorm;
+            case WGPUTextureFormat_ETC2RGB8A1UnormSrgb:
+                return WGPUTextureFormat_ETC2RGB8A1Unorm;
+            case WGPUTextureFormat_ETC2RGBA8UnormSrgb:
+                return WGPUTextureFormat_ETC2RGBA8Unorm;
+            case WGPUTextureFormat_ASTC4x4UnormSrgb:
+                return WGPUTextureFormat_ASTC4x4Unorm;
+            case WGPUTextureFormat_ASTC5x4UnormSrgb:
+                return WGPUTextureFormat_ASTC5x4Unorm;
+            case WGPUTextureFormat_ASTC5x5UnormSrgb:
+                return WGPUTextureFormat_ASTC5x5Unorm;
+            case WGPUTextureFormat_ASTC6x5UnormSrgb:
+                return WGPUTextureFormat_ASTC6x5Unorm;
+            case WGPUTextureFormat_ASTC6x6UnormSrgb:
+                return WGPUTextureFormat_ASTC6x6Unorm;
+            case WGPUTextureFormat_ASTC8x5UnormSrgb:
+                return WGPUTextureFormat_ASTC8x5Unorm;
+            case WGPUTextureFormat_ASTC8x6UnormSrgb:
+                return WGPUTextureFormat_ASTC8x6Unorm;
+            case WGPUTextureFormat_ASTC8x8UnormSrgb:
+                return WGPUTextureFormat_ASTC8x8Unorm;
+            case WGPUTextureFormat_ASTC10x5UnormSrgb:
+                return WGPUTextureFormat_ASTC10x5Unorm;
+            case WGPUTextureFormat_ASTC10x6UnormSrgb:
+                return WGPUTextureFormat_ASTC10x6Unorm;
+            case WGPUTextureFormat_ASTC10x8UnormSrgb:
+                return WGPUTextureFormat_ASTC10x8Unorm;
+            case WGPUTextureFormat_ASTC10x10UnormSrgb:
+                return WGPUTextureFormat_ASTC10x10Unorm;
+            case WGPUTextureFormat_ASTC12x10UnormSrgb:
+                return WGPUTextureFormat_ASTC12x10Unorm;
+            case WGPUTextureFormat_ASTC12x12UnormSrgb:
+                return WGPUTextureFormat_ASTC12x12Unorm;
+            default:
+                return f;
+            }
+        };
+        return stripSrgb(a) == stripSrgb(b);
+    }
+
+    inline WGPUTextureFormat ResolveAspectFormat(WGPUTextureFormat texFmt, WGPUTextureAspect aspect)
+    {
+        if (aspect == WGPUTextureAspect_All || aspect == WGPUTextureAspect_Undefined)
+            return WGPUTextureFormat_Undefined;
+        if (aspect == WGPUTextureAspect_DepthOnly)
+        {
+            switch (texFmt)
+            {
+            case WGPUTextureFormat_Depth16Unorm:
+                return WGPUTextureFormat_Depth16Unorm;
+            case WGPUTextureFormat_Depth24Plus:
+            case WGPUTextureFormat_Depth24PlusStencil8:
+                return WGPUTextureFormat_Depth24Plus;
+            case WGPUTextureFormat_Depth32Float:
+            case WGPUTextureFormat_Depth32FloatStencil8:
+                return WGPUTextureFormat_Depth32Float;
+            default:
+                return WGPUTextureFormat_Undefined;
+            }
+        }
+        if (aspect == WGPUTextureAspect_StencilOnly)
+        {
+            switch (texFmt)
+            {
+            case WGPUTextureFormat_Stencil8:
+            case WGPUTextureFormat_Depth24PlusStencil8:
+            case WGPUTextureFormat_Depth32FloatStencil8:
+                return WGPUTextureFormat_Stencil8;
+            default:
+                return WGPUTextureFormat_Undefined;
+            }
+        }
+        return WGPUTextureFormat_Undefined;
+    }
+
+    inline bool AspectPresentInFormat(WGPUTextureAspect aspect, WGPUTextureFormat fmt)
+    {
+        if (aspect == WGPUTextureAspect_All || aspect == WGPUTextureAspect_Undefined)
+            return true;
+        if (aspect == WGPUTextureAspect_DepthOnly)
+            return HasDepthAspect(fmt);
+        if (aspect == WGPUTextureAspect_StencilOnly)
+            return HasStencilAspect(fmt);
+        return false;
+    }
+
+    inline vk::ImageAspectFlags ToVkAspect(WGPUTextureAspect aspect, WGPUTextureFormat fmt)
+    {
+        if (aspect == WGPUTextureAspect_DepthOnly)
+            return vk::ImageAspectFlagBits::eDepth;
+        if (aspect == WGPUTextureAspect_StencilOnly)
+            return vk::ImageAspectFlagBits::eStencil;
+        vk::ImageAspectFlags flags{};
+        if (HasDepthAspect(fmt))
+            flags |= vk::ImageAspectFlagBits::eDepth;
+        if (HasStencilAspect(fmt))
+            flags |= vk::ImageAspectFlagBits::eStencil;
+        if (!flags)
+            flags = vk::ImageAspectFlagBits::eColor;
+        return flags;
+    }
+
 } // namespace pwgpu

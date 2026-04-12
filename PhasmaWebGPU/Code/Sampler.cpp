@@ -1,4 +1,5 @@
 #include "Sampler.h"
+#include "Device.h"
 #include "Utils.h"
 
 extern "C"
@@ -18,6 +19,8 @@ extern "C"
         {
             if (sampler->sampler)
                 pe::Sampler::Destroy(sampler->sampler);
+            if (sampler->device)
+                wgpuDeviceRelease(sampler->device);
             delete sampler;
         }
     }

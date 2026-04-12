@@ -28,7 +28,8 @@ namespace
             return a.chainedCaps.shaderFloat16;
         case WGPUFeatureName_DepthClipControl:
             return a.chainedCaps.depthClipEnable;
-        // Format-properties-dependent features deferred until the format pipeline lands.
+        case WGPUFeatureName_BGRA8UnormStorage:
+            return a.bgra8UnormStorage;
         default:
             return false;
         }
@@ -48,6 +49,7 @@ namespace
             WGPUFeatureName_DepthClipControl,
             WGPUFeatureName_DualSourceBlending,
             WGPUFeatureName_ClipDistances,
+            WGPUFeatureName_BGRA8UnormStorage,
         };
         for (WGPUFeatureName f : kCandidates)
         {
@@ -60,6 +62,31 @@ namespace
 
 void pwgpu_PopulateAdapterFeatureCache(WGPUAdapterImpl &a)
 {
+    if (a.gpu)
+    {
+        auto fmtSupportsDepth = [&](VkFormat fmt) -> bool
+        {
+            VkFormatProperties props{};
+            vkGetPhysicalDeviceFormatProperties(a.gpu, fmt, &props);
+            return (props.optimalTilingFeatures & VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT) != 0;
+        };
+
+        if (fmtSupportsDepth(VK_FORMAT_X8_D24_UNORM_PACK32))
+            a.resolvedDepth24Plus = VK_FORMAT_X8_D24_UNORM_PACK32;
+        else
+            a.resolvedDepth24Plus = VK_FORMAT_D32_SFLOAT;
+
+        if (fmtSupportsDepth(VK_FORMAT_D24_UNORM_S8_UINT))
+            a.resolvedDepth24PlusStencil8 = VK_FORMAT_D24_UNORM_S8_UINT;
+        else
+            a.resolvedDepth24PlusStencil8 = VK_FORMAT_D32_SFLOAT_S8_UINT;
+
+        VkFormatProperties bgraProps{};
+        vkGetPhysicalDeviceFormatProperties(a.gpu, VK_FORMAT_B8G8R8A8_UNORM, &bgraProps);
+        a.bgra8UnormStorage =
+            (bgraProps.optimalTilingFeatures & VK_FORMAT_FEATURE_STORAGE_IMAGE_BIT) != 0;
+    }
+
     a.supportedFeatures.clear();
     CollectSupportedFeatures(a, a.supportedFeatures);
 }
@@ -222,6 +249,8 @@ extern "C"
         dev->adapterBackend = adapter->backendType;
         dev->adapterVendorID = adapter->vkProps.vendorID;
         dev->adapterDeviceID = adapter->vkProps.deviceID;
+        dev->resolvedDepth24Plus = adapter->resolvedDepth24Plus;
+        dev->resolvedDepth24PlusStencil8 = adapter->resolvedDepth24PlusStencil8;
 
         if (descriptor)
         {

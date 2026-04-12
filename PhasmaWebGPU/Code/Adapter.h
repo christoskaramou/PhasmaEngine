@@ -24,6 +24,10 @@ struct WGPUAdapterImpl
 
     std::vector<WGPUFeatureName> supportedFeatures;
 
+    VkFormat resolvedDepth24Plus = VK_FORMAT_D32_SFLOAT;
+    VkFormat resolvedDepth24PlusStencil8 = VK_FORMAT_D32_SFLOAT_S8_UINT;
+    bool bgra8UnormStorage = false;
+
     std::string deviceName;
     std::string vendorName;
     std::string architecture;

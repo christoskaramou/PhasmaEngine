@@ -1,4 +1,5 @@
 #include "Texture.h"
+#include "Device.h"
 #include "Utils.h"
 #include "FormatMap.h"
 
@@ -19,6 +20,8 @@ extern "C"
         {
             if (texture->image && !texture->destroyed && !texture->isSwapchain)
                 pe::Image::Destroy(texture->image);
+            if (texture->device)
+                wgpuDeviceRelease(texture->device);
             delete texture;
         }
     }
@@ -40,8 +43,24 @@ extern "C"
         if (!texture)
             return nullptr;
 
-        // Null descriptor and zero-init descriptor must resolve identically (spec §6);
-        // seed sentinels so the resolution algorithm below runs once, uniformly.
+        auto reportValidation = [&](const char *what) -> WGPUTextureView
+        {
+            if (texture->device)
+            {
+                std::string msg = std::string("wgpuTextureCreateView: ") + what;
+                texture->device->reportError(WGPUErrorType_Validation, pwgpu::ToStringView(msg));
+            }
+            auto *bad = new WGPUTextureViewImpl();
+            wgpuTextureAddRef(texture);
+            bad->texture = texture;
+            if (descriptor && descriptor->label.data)
+                bad->label = pwgpu::ToString(descriptor->label);
+            return bad;
+        };
+
+        if (texture->invalid)
+            return reportValidation("texture is invalid");
+
         WGPUTextureViewDescriptor resolved{};
         resolved.format = WGPUTextureFormat_Undefined;
         resolved.dimension = WGPUTextureViewDimension_Undefined;
@@ -54,8 +73,32 @@ extern "C"
         if (descriptor)
             resolved = *descriptor;
 
+        if (resolved.aspect == WGPUTextureAspect_Undefined)
+            resolved.aspect = WGPUTextureAspect_All;
+
         if (resolved.format == WGPUTextureFormat_Undefined)
-            resolved.format = texture->format;
+        {
+            if (resolved.aspect != WGPUTextureAspect_All)
+            {
+                WGPUTextureFormat aspectFmt = pwgpu::ResolveAspectFormat(texture->format, resolved.aspect);
+                resolved.format = (aspectFmt != WGPUTextureFormat_Undefined) ? aspectFmt : texture->format;
+            }
+            else
+            {
+                resolved.format = texture->format;
+            }
+        }
+
+        // Early range checks before resolving defaults to prevent unsigned wraparound.
+        if (resolved.baseMipLevel >= texture->mipLevelCount)
+            return reportValidation("baseMipLevel is out of range");
+
+        const uint32_t textureArrayLayers = (texture->dimension == WGPUTextureDimension_2D)
+                                                ? texture->size.depthOrArrayLayers
+                                                : 1u;
+
+        if (resolved.baseArrayLayer >= textureArrayLayers)
+            return reportValidation("baseArrayLayer is out of range");
 
         if (resolved.mipLevelCount == WGPU_MIP_LEVEL_COUNT_UNDEFINED)
             resolved.mipLevelCount = texture->mipLevelCount - resolved.baseMipLevel;
@@ -83,10 +126,6 @@ extern "C"
 
         if (resolved.arrayLayerCount == WGPU_ARRAY_LAYER_COUNT_UNDEFINED)
         {
-            // Only 2D textures interpret depthOrArrayLayers as layers; 1D/3D are always 1.
-            const uint32_t textureArrayLayers = (texture->dimension == WGPUTextureDimension_2D)
-                                                    ? texture->size.depthOrArrayLayers
-                                                    : 1u;
             switch (resolved.dimension)
             {
             case WGPUTextureViewDimension_1D:
@@ -107,17 +146,114 @@ extern "C"
             }
         }
 
-        if (resolved.aspect == WGPUTextureAspect_Undefined)
-            resolved.aspect = WGPUTextureAspect_All;
-
         if (resolved.usage == WGPUTextureUsage_None)
             resolved.usage = texture->usage;
+
+        if (!pwgpu::AspectPresentInFormat(resolved.aspect, texture->format))
+            return reportValidation("aspect not present in texture format");
+
+        if (resolved.aspect == WGPUTextureAspect_All)
+        {
+            bool fmtOk = (resolved.format == texture->format);
+            if (!fmtOk)
+            {
+                for (auto vf : texture->viewFormats)
+                {
+                    if (vf == resolved.format)
+                    {
+                        fmtOk = true;
+                        break;
+                    }
+                }
+            }
+            if (!fmtOk)
+                return reportValidation("view format must equal texture format or be in viewFormats");
+        }
+        else
+        {
+            WGPUTextureFormat expected = pwgpu::ResolveAspectFormat(texture->format, resolved.aspect);
+            if (expected != WGPUTextureFormat_Undefined && resolved.format != expected)
+                return reportValidation("view format must equal the resolved aspect format");
+        }
+
+        WGPUTextureUsage viewUsage = static_cast<WGPUTextureUsage>(resolved.usage);
+        if ((viewUsage & ~texture->usage) != 0)
+            return reportValidation("view usage must be a subset of texture usage");
+
+        if (viewUsage & WGPUTextureUsage_RenderAttachment)
+        {
+            if (!pwgpu::IsRenderableFormat(resolved.format))
+                return reportValidation("RENDER_ATTACHMENT requires a renderable view format");
+        }
+        if (viewUsage & WGPUTextureUsage_StorageBinding)
+        {
+            if (!pwgpu::SupportsStorageBinding(resolved.format))
+                return reportValidation("STORAGE_BINDING requires a storage-capable view format");
+        }
+
+        if (resolved.mipLevelCount == 0)
+            return reportValidation("mipLevelCount must be > 0");
+        if (uint64_t(resolved.baseMipLevel) + resolved.mipLevelCount > texture->mipLevelCount)
+            return reportValidation("baseMipLevel + mipLevelCount exceeds texture mipLevelCount");
+
+        if (resolved.arrayLayerCount == 0)
+            return reportValidation("arrayLayerCount must be > 0");
+        if (uint64_t(resolved.baseArrayLayer) + resolved.arrayLayerCount > textureArrayLayers)
+            return reportValidation("baseArrayLayer + arrayLayerCount exceeds texture array layers");
+
+        if (texture->sampleCount > 1 && resolved.dimension != WGPUTextureViewDimension_2D)
+            return reportValidation("multisampled texture view dimension must be 2d");
+
+        switch (resolved.dimension)
+        {
+        case WGPUTextureViewDimension_1D:
+            if (texture->dimension != WGPUTextureDimension_1D)
+                return reportValidation("1d view requires 1d texture");
+            if (resolved.arrayLayerCount != 1)
+                return reportValidation("1d view arrayLayerCount must be 1");
+            break;
+        case WGPUTextureViewDimension_2D:
+            if (texture->dimension != WGPUTextureDimension_2D)
+                return reportValidation("2d view requires 2d texture");
+            if (resolved.arrayLayerCount != 1)
+                return reportValidation("2d view arrayLayerCount must be 1");
+            break;
+        case WGPUTextureViewDimension_2DArray:
+            if (texture->dimension != WGPUTextureDimension_2D)
+                return reportValidation("2d-array view requires 2d texture");
+            break;
+        case WGPUTextureViewDimension_Cube:
+            if (texture->dimension != WGPUTextureDimension_2D)
+                return reportValidation("cube view requires 2d texture");
+            if (resolved.arrayLayerCount != 6)
+                return reportValidation("cube view arrayLayerCount must be 6");
+            if (texture->size.width != texture->size.height)
+                return reportValidation("cube view requires square texture");
+            break;
+        case WGPUTextureViewDimension_CubeArray:
+            if (texture->dimension != WGPUTextureDimension_2D)
+                return reportValidation("cube-array view requires 2d texture");
+            if (resolved.arrayLayerCount % 6 != 0)
+                return reportValidation("cube-array view arrayLayerCount must be a multiple of 6");
+            if (texture->size.width != texture->size.height)
+                return reportValidation("cube-array view requires square texture");
+            break;
+        case WGPUTextureViewDimension_3D:
+            if (texture->dimension != WGPUTextureDimension_3D)
+                return reportValidation("3d view requires 3d texture");
+            if (resolved.arrayLayerCount != 1)
+                return reportValidation("3d view arrayLayerCount must be 1");
+            break;
+        default:
+            break;
+        }
 
         auto *view = new WGPUTextureViewImpl();
         wgpuTextureAddRef(texture);
         view->texture = texture;
         view->format = resolved.format;
         view->dimension = resolved.dimension;
+        view->usage = viewUsage;
         view->baseMipLevel = resolved.baseMipLevel;
         view->mipLevelCount = resolved.mipLevelCount;
         view->baseArrayLayer = resolved.baseArrayLayer;
@@ -125,6 +261,76 @@ extern "C"
         view->aspect = resolved.aspect;
         if (descriptor && descriptor->label.data)
             view->label = pwgpu::ToString(descriptor->label);
+
+        if (viewUsage & WGPUTextureUsage_RenderAttachment)
+        {
+            uint32_t mipW = std::max(1u, texture->size.width >> resolved.baseMipLevel);
+            uint32_t mipH = std::max(1u, texture->size.height >> resolved.baseMipLevel);
+            view->renderExtent = {mipW, mipH, 1};
+        }
+
+        if (texture->image)
+        {
+            VkFormat vkFmt;
+            if (resolved.format == texture->format)
+                vkFmt = static_cast<VkFormat>(texture->image->GetFormat());
+            else
+                vkFmt = pwgpu::ToVkFormat(resolved.format);
+            vk::ImageViewType vkViewType = vk::ImageViewType::e2D;
+            switch (resolved.dimension)
+            {
+            case WGPUTextureViewDimension_1D:
+                vkViewType = vk::ImageViewType::e1D;
+                break;
+            case WGPUTextureViewDimension_2D:
+                vkViewType = vk::ImageViewType::e2D;
+                break;
+            case WGPUTextureViewDimension_2DArray:
+                vkViewType = vk::ImageViewType::e2DArray;
+                break;
+            case WGPUTextureViewDimension_Cube:
+                vkViewType = vk::ImageViewType::eCube;
+                break;
+            case WGPUTextureViewDimension_CubeArray:
+                vkViewType = vk::ImageViewType::eCubeArray;
+                break;
+            case WGPUTextureViewDimension_3D:
+                vkViewType = vk::ImageViewType::e3D;
+                break;
+            default:
+                break;
+            }
+
+            vk::ImageViewCreateInfo ivci = pe::ImageView::CreateInfoInit();
+            ivci.image = texture->image->ApiHandle();
+            ivci.viewType = vkViewType;
+            ivci.format = static_cast<vk::Format>(vkFmt);
+            ivci.subresourceRange.aspectMask = pwgpu::ToVkAspect(resolved.aspect, resolved.format);
+            ivci.subresourceRange.baseMipLevel = resolved.baseMipLevel;
+            ivci.subresourceRange.levelCount = resolved.mipLevelCount;
+            ivci.subresourceRange.baseArrayLayer = resolved.baseArrayLayer;
+            ivci.subresourceRange.layerCount = resolved.arrayLayerCount;
+
+            const std::string viewName = view->label.empty()
+                                             ? (texture->label + "_view")
+                                             : view->label;
+            try
+            {
+                view->view = pe::ImageView::Create(texture->image, ivci, viewName);
+            }
+            catch (...)
+            {
+                view->view = nullptr;
+            }
+
+            if (!view->view && texture->device)
+            {
+                texture->device->reportError(
+                    WGPUErrorType_Validation,
+                    pwgpu::ToStringView("wgpuTextureCreateView: native image view creation failed"));
+            }
+        }
+
         return view;
     }
 
@@ -186,6 +392,8 @@ extern "C"
             return;
         if (view->refCount.fetch_sub(1, std::memory_order_acq_rel) == 1)
         {
+            if (view->view)
+                pe::ImageView::Destroy(view->view);
             if (view->texture)
                 wgpuTextureRelease(view->texture);
             delete view;
