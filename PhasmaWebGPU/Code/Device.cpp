@@ -9,6 +9,7 @@
 #include "RenderPipeline.h"
 #include "ComputePipeline.h"
 #include "CommandEncoder.h"
+#include "API/Queue.h"
 #include "RenderBundle.h"
 #include "QuerySet.h"
 #include "WGPULimits.h"
@@ -2666,8 +2667,14 @@ extern "C"
         if (!DeviceCanCreate(device, descriptor, "wgpuDeviceCreateCommandEncoder", false))
             return nullptr;
         auto *enc = new WGPUCommandEncoderImpl();
+        enc->device = device;
         if (descriptor && descriptor->label.data)
             enc->label = pwgpu::ToString(descriptor->label);
+
+        // Acquire a pe::CommandBuffer from the device's queue and begin recording.
+        pe::CommandBuffer *cmd = device->peQueue->AcquireCommandBuffer();
+        cmd->Begin();
+        enc->cmd = cmd;
         return enc;
     }
 
