@@ -1,5 +1,9 @@
 #include "QuerySet.h"
+#include "Device.h"
 #include "Utils.h"
+
+extern "C" void wgpuDeviceAddRef(WGPUDevice);
+extern "C" void wgpuDeviceRelease(WGPUDevice);
 
 extern "C"
 {
@@ -16,8 +20,10 @@ extern "C"
             return;
         if (qs->refCount.fetch_sub(1, std::memory_order_acq_rel) == 1)
         {
-            if (qs->queryPool != VK_NULL_HANDLE)
-                pe::RHI::Get()->GetDevice().destroyQueryPool(qs->queryPool);
+            if (qs->queryPool != VK_NULL_HANDLE && qs->device && qs->device->rhi)
+                qs->device->rhi->GetDevice().destroyQueryPool(qs->queryPool);
+            if (qs->device)
+                wgpuDeviceRelease(qs->device);
             delete qs;
         }
     }

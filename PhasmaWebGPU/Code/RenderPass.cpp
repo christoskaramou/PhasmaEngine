@@ -71,6 +71,8 @@ extern "C"
                 pe::ImageView::Destroy(sv);
             if (rpe->timestampQuerySet)
                 wgpuQuerySetRelease(rpe->timestampQuerySet);
+            if (rpe->occlusionQuerySet)
+                wgpuQuerySetRelease(rpe->occlusionQuerySet);
             delete rpe;
         }
     }
@@ -289,13 +291,60 @@ extern "C"
 
     void wgpuRenderPassEncoderBeginOcclusionQuery(WGPURenderPassEncoder rpe, uint32_t queryIndex)
     {
-        (void)rpe;
-        (void)queryIndex;
+        if (!RenderingActive(rpe, "wgpuRenderPassEncoderBeginOcclusionQuery"))
+            return;
+
+        if (!rpe->occlusionQuerySet)
+        {
+            PE_WARN("[WebGPU] beginOcclusionQuery: no occlusionQuerySet was provided at render pass creation");
+            return;
+        }
+
+        if (queryIndex >= rpe->occlusionQuerySet->count)
+        {
+            PE_WARN("[WebGPU] beginOcclusionQuery: queryIndex %u >= querySet count %u",
+                    queryIndex, rpe->occlusionQuerySet->count);
+            return;
+        }
+
+        for (uint32_t used : rpe->usedOcclusionIndices)
+        {
+            if (used == queryIndex)
+            {
+                PE_WARN("[WebGPU] beginOcclusionQuery: queryIndex %u already used in this pass", queryIndex);
+                return;
+            }
+        }
+
+        if (rpe->occlusionQueryActive)
+        {
+            PE_WARN("[WebGPU] beginOcclusionQuery: an occlusion query is already active");
+            return;
+        }
+
+        rpe->occlusionQueryActive = true;
+        rpe->usedOcclusionIndices.push_back(queryIndex);
+
+        rpe->cmd->ApiHandle().beginQuery(
+            rpe->occlusionQuerySet->queryPool, queryIndex, vk::QueryControlFlags{});
     }
 
     void wgpuRenderPassEncoderEndOcclusionQuery(WGPURenderPassEncoder rpe)
     {
-        (void)rpe;
+        if (!RenderingActive(rpe, "wgpuRenderPassEncoderEndOcclusionQuery"))
+            return;
+
+        if (!rpe->occlusionQueryActive)
+        {
+            PE_WARN("[WebGPU] endOcclusionQuery: no occlusion query is currently active");
+            return;
+        }
+
+        rpe->occlusionQueryActive = false;
+
+        uint32_t lastIndex = rpe->usedOcclusionIndices.back();
+        rpe->cmd->ApiHandle().endQuery(
+            rpe->occlusionQuerySet->queryPool, lastIndex);
     }
 
     namespace
@@ -409,6 +458,14 @@ extern "C"
         if (rpe->debugGroupDepth != 0)
             PE_WARN("[WebGPU] wgpuRenderPassEncoderEnd: %u debug group(s) still open", rpe->debugGroupDepth);
 
+        if (rpe->occlusionQueryActive)
+        {
+            PE_WARN("[WebGPU] wgpuRenderPassEncoderEnd: auto-closing active occlusion query");
+            uint32_t lastIndex = rpe->usedOcclusionIndices.back();
+            rpe->cmd->ApiHandle().endQuery(rpe->occlusionQuerySet->queryPool, lastIndex);
+            rpe->occlusionQueryActive = false;
+        }
+
         if (rpe->renderingActive)
         {
             rpe->cmd->ApiHandle().endRendering();
@@ -449,6 +506,12 @@ extern "C"
             {
                 rpe->parent->retained.querySets.push_back(rpe->timestampQuerySet);
                 rpe->timestampQuerySet = nullptr;
+            }
+
+            if (rpe->occlusionQuerySet)
+            {
+                rpe->parent->retained.querySets.push_back(rpe->occlusionQuerySet);
+                rpe->occlusionQuerySet = nullptr;
             }
 
             rpe->parent->hasOpenPass = false;

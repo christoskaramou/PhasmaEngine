@@ -2808,6 +2808,8 @@ extern "C"
         device->rhi->GetDevice().resetQueryPool(pool, 0, descriptor->count);
 
         auto *qs = new WGPUQuerySetImpl();
+        qs->device = device;
+        wgpuDeviceAddRef(device);
         qs->type = descriptor->type;
         qs->count = descriptor->count;
         qs->queryPool = static_cast<VkQueryPool>(pool);

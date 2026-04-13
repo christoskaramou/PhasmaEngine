@@ -145,7 +145,9 @@ extern "C"
 
     void wgpuSurfaceCapabilitiesFreeMembers(WGPUSurfaceCapabilities surfaceCapabilities)
     {
-        (void)surfaceCapabilities;
+        delete[] surfaceCapabilities.formats;
+        delete[] surfaceCapabilities.presentModes;
+        delete[] surfaceCapabilities.alphaModes;
     }
 
     WGPUBool wgpuInstanceHasWGSLLanguageFeature(WGPUInstance instance, WGPUWGSLLanguageFeatureName feature)

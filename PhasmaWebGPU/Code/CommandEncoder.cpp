@@ -425,6 +425,21 @@ extern "C"
             }
         }
 
+        if (descriptor->occlusionQuerySet)
+        {
+            auto *oqs = descriptor->occlusionQuerySet;
+            if (oqs->destroyed || oqs->queryPool == VK_NULL_HANDLE)
+            {
+                PE_WARN("[WebGPU] beginRenderPass: occlusionQuerySet is destroyed or invalid");
+                return nullptr;
+            }
+            if (oqs->type != WGPUQueryType_Occlusion)
+            {
+                PE_WARN("[WebGPU] beginRenderPass: occlusionQuerySet must be of type Occlusion");
+                return nullptr;
+            }
+        }
+
         if (descriptor->timestampWrites)
         {
             auto *tw = descriptor->timestampWrites;
@@ -482,6 +497,28 @@ extern "C"
         {
             auto &ca = descriptor->colorAttachments[i];
             rpe->colorFormats.push_back(ca.view ? ca.view->format : WGPUTextureFormat_Undefined);
+        }
+
+        if (descriptor->occlusionQuerySet)
+        {
+            rpe->occlusionQuerySet = descriptor->occlusionQuerySet;
+            wgpuQuerySetAddRef(descriptor->occlusionQuerySet);
+
+            bool alreadyReset = false;
+            for (auto *qs : enc->resetOcclusionQuerySets)
+            {
+                if (qs == descriptor->occlusionQuerySet)
+                {
+                    alreadyReset = true;
+                    break;
+                }
+            }
+            if (!alreadyReset)
+            {
+                enc->cmd->ApiHandle().resetQueryPool(
+                    descriptor->occlusionQuerySet->queryPool, 0, descriptor->occlusionQuerySet->count);
+                enc->resetOcclusionQuerySets.push_back(descriptor->occlusionQuerySet);
+            }
         }
 
         if (descriptor->timestampWrites)

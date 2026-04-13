@@ -39,6 +39,10 @@ struct WGPURenderPassEncoderImpl
     uint32_t beginTimestampIndex = UINT32_MAX;
     uint32_t endTimestampIndex = UINT32_MAX;
 
+    WGPUQuerySetImpl *occlusionQuerySet = nullptr;
+    bool occlusionQueryActive = false;
+    std::vector<uint32_t> usedOcclusionIndices;
+
     std::vector<WGPUTextureViewImpl *> retainedViews;
     std::vector<pe::ImageView *> ownedSliceViews;
 

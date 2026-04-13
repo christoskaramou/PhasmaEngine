@@ -45,4 +45,5 @@ struct WGPUCommandEncoderImpl
     bool finished = false;
     bool hasOpenPass = false;
     RetainedResources retained;
+    std::vector<WGPUQuerySetImpl *> resetOcclusionQuerySets;
 };
