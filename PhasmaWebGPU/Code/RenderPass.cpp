@@ -4,6 +4,7 @@
 #include "PipelineLayout.h"
 #include "BindGroup.h"
 #include "Buffer.h"
+#include "Texture.h"
 #include "RenderBundle.h"
 #include "QuerySet.h"
 #include "Device.h"
@@ -13,6 +14,8 @@ extern "C" void wgpuRenderPipelineAddRef(WGPURenderPipeline);
 extern "C" void wgpuRenderPipelineRelease(WGPURenderPipeline);
 extern "C" void wgpuBindGroupAddRef(WGPUBindGroup);
 extern "C" void wgpuBindGroupRelease(WGPUBindGroup);
+extern "C" void wgpuTextureViewRelease(WGPUTextureView);
+extern "C" void wgpuQuerySetRelease(WGPUQuerySet);
 
 namespace
 {
@@ -58,6 +61,12 @@ extern "C"
                 wgpuRenderPipelineRelease(p);
             for (auto *bg : rpe->retainedBindGroups)
                 wgpuBindGroupRelease(bg);
+            for (auto *v : rpe->retainedViews)
+                wgpuTextureViewRelease(v);
+            for (auto *sv : rpe->ownedSliceViews)
+                pe::ImageView::Destroy(sv);
+            if (rpe->timestampQuerySet)
+                wgpuQuerySetRelease(rpe->timestampQuerySet);
             delete rpe;
         }
     }
@@ -346,6 +355,22 @@ extern "C"
         if (rpe->debugGroupDepth != 0)
             PE_WARN("[WebGPU] wgpuRenderPassEncoderEnd: %u debug group(s) still open", rpe->debugGroupDepth);
 
+        // End the Vulkan dynamic rendering pass
+        if (rpe->renderingActive)
+        {
+            rpe->cmd->ApiHandle().endRendering();
+            rpe->renderingActive = false;
+        }
+
+        // Write end-of-pass timestamp
+        if (rpe->timestampQuerySet && rpe->endTimestampIndex != UINT32_MAX &&
+            rpe->endTimestampIndex < rpe->timestampQuerySet->count)
+        {
+            rpe->cmd->ApiHandle().writeTimestamp2(
+                vk::PipelineStageFlagBits2::eAllCommands,
+                rpe->timestampQuerySet->queryPool, rpe->endTimestampIndex);
+        }
+
         if (rpe->parent)
         {
             rpe->parent->retained.renderPipelines.insert(
@@ -357,6 +382,19 @@ extern "C"
                 rpe->parent->retained.bindGroups.end(),
                 rpe->retainedBindGroups.begin(), rpe->retainedBindGroups.end());
             rpe->retainedBindGroups.clear();
+
+            // Transfer retained views to parent encoder
+            rpe->parent->retained.textureViews.insert(
+                rpe->parent->retained.textureViews.end(),
+                rpe->retainedViews.begin(), rpe->retainedViews.end());
+            rpe->retainedViews.clear();
+
+            // Transfer timestamp querySet to parent encoder
+            if (rpe->timestampQuerySet)
+            {
+                rpe->parent->retained.querySets.push_back(rpe->timestampQuerySet);
+                rpe->timestampQuerySet = nullptr;
+            }
 
             rpe->parent->hasOpenPass = false;
         }

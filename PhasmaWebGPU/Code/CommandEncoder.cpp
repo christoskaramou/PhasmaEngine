@@ -18,6 +18,7 @@ extern "C" void wgpuComputePipelineRelease(WGPUComputePipeline);
 extern "C" void wgpuBindGroupRelease(WGPUBindGroup);
 extern "C" void wgpuQuerySetAddRef(WGPUQuerySet);
 extern "C" void wgpuQuerySetRelease(WGPUQuerySet);
+extern "C" void wgpuTextureViewRelease(WGPUTextureView);
 
 void RetainedResources::MergeFrom(RetainedResources &other)
 {
@@ -25,10 +26,12 @@ void RetainedResources::MergeFrom(RetainedResources &other)
     computePipelines.insert(computePipelines.end(), other.computePipelines.begin(), other.computePipelines.end());
     bindGroups.insert(bindGroups.end(), other.bindGroups.begin(), other.bindGroups.end());
     querySets.insert(querySets.end(), other.querySets.begin(), other.querySets.end());
+    textureViews.insert(textureViews.end(), other.textureViews.begin(), other.textureViews.end());
     other.renderPipelines.clear();
     other.computePipelines.clear();
     other.bindGroups.clear();
     other.querySets.clear();
+    other.textureViews.clear();
 }
 
 void RetainedResources::ReleaseAll()
@@ -41,10 +44,13 @@ void RetainedResources::ReleaseAll()
         wgpuBindGroupRelease(bg);
     for (auto *qs : querySets)
         wgpuQuerySetRelease(qs);
+    for (auto *tv : textureViews)
+        wgpuTextureViewRelease(tv);
     renderPipelines.clear();
     computePipelines.clear();
     bindGroups.clear();
     querySets.clear();
+    textureViews.clear();
 }
 
 namespace
@@ -156,15 +162,551 @@ extern "C"
     WGPURenderPassEncoder wgpuCommandEncoderBeginRenderPass(WGPUCommandEncoder enc,
                                                             WGPURenderPassDescriptor const *descriptor)
     {
-        (void)descriptor;
         if (!enc || enc->finished || enc->hasOpenPass)
             return nullptr;
+        if (!descriptor)
+            return nullptr;
+
+        size_t colorCount = descriptor->colorAttachmentCount;
+        uint32_t maxColorAttachments = enc->device ? enc->device->limits.maxColorAttachments : 8;
+        if (colorCount > maxColorAttachments)
+        {
+            PE_WARN("[WebGPU] beginRenderPass: colorAttachmentCount %zu > maxColorAttachments %u",
+                    colorCount, maxColorAttachments);
+            return nullptr;
+        }
+
+        bool hasAnyColorAttachment = false;
+        for (size_t i = 0; i < colorCount; i++)
+        {
+            if (descriptor->colorAttachments[i].view != nullptr)
+            {
+                hasAnyColorAttachment = true;
+                break;
+            }
+        }
+        if (!hasAnyColorAttachment && !descriptor->depthStencilAttachment)
+        {
+            PE_WARN("[WebGPU] beginRenderPass: must have at least one color or depth/stencil attachment");
+            return nullptr;
+        }
+
+        uint32_t attachW = 0, attachH = 0;
+        uint32_t commonSampleCount = 0;
+
+        for (size_t i = 0; i < colorCount; i++)
+        {
+            auto &ca = descriptor->colorAttachments[i];
+            if (!ca.view)
+                continue;
+
+            auto *view = ca.view;
+            if (!view->view || !view->texture || view->texture->invalid || view->texture->destroyed)
+            {
+                PE_WARN("[WebGPU] beginRenderPass: color attachment %zu has invalid view", i);
+                return nullptr;
+            }
+
+            if (pwgpu::IsDepthStencilFormat(view->format) || !pwgpu::IsRenderableFormat(view->format))
+            {
+                PE_WARN("[WebGPU] beginRenderPass: color attachment %zu format is not color-renderable", i);
+                return nullptr;
+            }
+
+            if (!(view->usage & WGPUTextureUsage_RenderAttachment))
+            {
+                PE_WARN("[WebGPU] beginRenderPass: color attachment %zu view missing RENDER_ATTACHMENT usage", i);
+                return nullptr;
+            }
+
+            if (view->mipLevelCount != 1)
+            {
+                PE_WARN("[WebGPU] beginRenderPass: color attachment %zu mipLevelCount must be 1", i);
+                return nullptr;
+            }
+            if (view->arrayLayerCount != 1)
+            {
+                PE_WARN("[WebGPU] beginRenderPass: color attachment %zu arrayLayerCount must be 1", i);
+                return nullptr;
+            }
+
+            if (attachW == 0)
+            {
+                attachW = view->renderExtent.width;
+                attachH = view->renderExtent.height;
+            }
+            else if (view->renderExtent.width != attachW || view->renderExtent.height != attachH)
+            {
+                PE_WARN("[WebGPU] beginRenderPass: color attachment %zu renderExtent mismatch", i);
+                return nullptr;
+            }
+
+            uint32_t sc = view->texture->sampleCount;
+            if (commonSampleCount == 0)
+                commonSampleCount = sc;
+            else if (sc != commonSampleCount)
+            {
+                PE_WARN("[WebGPU] beginRenderPass: color attachment %zu sampleCount mismatch", i);
+                return nullptr;
+            }
+
+            if (view->dimension == WGPUTextureViewDimension_3D)
+            {
+                if (ca.depthSlice == WGPU_DEPTH_SLICE_UNDEFINED)
+                {
+                    PE_WARN("[WebGPU] beginRenderPass: 3D color attachment %zu requires depthSlice", i);
+                    return nullptr;
+                }
+            }
+            else
+            {
+                if (ca.depthSlice != WGPU_DEPTH_SLICE_UNDEFINED)
+                {
+                    PE_WARN("[WebGPU] beginRenderPass: non-3D color attachment %zu must not have depthSlice", i);
+                    return nullptr;
+                }
+            }
+
+            if (ca.resolveTarget)
+            {
+                auto *rt = ca.resolveTarget;
+                if (!rt->view || !rt->texture || rt->texture->invalid || rt->texture->destroyed)
+                {
+                    PE_WARN("[WebGPU] beginRenderPass: color attachment %zu resolveTarget is invalid", i);
+                    return nullptr;
+                }
+                if (view->texture->sampleCount <= 1)
+                {
+                    PE_WARN("[WebGPU] beginRenderPass: resolveTarget on non-MSAA attachment %zu", i);
+                    return nullptr;
+                }
+                if (rt->texture->sampleCount != 1)
+                {
+                    PE_WARN("[WebGPU] beginRenderPass: resolveTarget sampleCount must be 1 at attachment %zu", i);
+                    return nullptr;
+                }
+                if (rt->format != view->format)
+                {
+                    PE_WARN("[WebGPU] beginRenderPass: resolveTarget format mismatch at attachment %zu", i);
+                    return nullptr;
+                }
+                if (rt->renderExtent.width != view->renderExtent.width ||
+                    rt->renderExtent.height != view->renderExtent.height)
+                {
+                    PE_WARN("[WebGPU] beginRenderPass: resolveTarget renderExtent mismatch at attachment %zu", i);
+                    return nullptr;
+                }
+                if (!(rt->usage & WGPUTextureUsage_RenderAttachment))
+                {
+                    PE_WARN("[WebGPU] beginRenderPass: resolveTarget missing RENDER_ATTACHMENT usage at %zu", i);
+                    return nullptr;
+                }
+                if (rt->dimension == WGPUTextureViewDimension_3D)
+                {
+                    PE_WARN("[WebGPU] beginRenderPass: resolveTarget must not be a 3D view at %zu", i);
+                    return nullptr;
+                }
+                if (rt->mipLevelCount != 1 || rt->arrayLayerCount != 1)
+                {
+                    PE_WARN("[WebGPU] beginRenderPass: resolveTarget must be single mip/layer at %zu", i);
+                    return nullptr;
+                }
+            }
+
+            if (ca.loadOp != WGPULoadOp_Clear && ca.loadOp != WGPULoadOp_Load)
+            {
+                PE_WARN("[WebGPU] beginRenderPass: color attachment %zu invalid loadOp", i);
+                return nullptr;
+            }
+            if (ca.storeOp != WGPUStoreOp_Store && ca.storeOp != WGPUStoreOp_Discard)
+            {
+                PE_WARN("[WebGPU] beginRenderPass: color attachment %zu invalid storeOp", i);
+                return nullptr;
+            }
+        }
+
+        auto *dsa = descriptor->depthStencilAttachment;
+        if (dsa)
+        {
+            if (!dsa->view || !dsa->view->view || !dsa->view->texture ||
+                dsa->view->texture->invalid || dsa->view->texture->destroyed)
+            {
+                PE_WARN("[WebGPU] beginRenderPass: depthStencilAttachment view is invalid");
+                return nullptr;
+            }
+
+            auto *dsView = dsa->view;
+            if (!pwgpu::IsDepthStencilFormat(dsView->format))
+            {
+                PE_WARN("[WebGPU] beginRenderPass: depthStencilAttachment format is not depth-stencil");
+                return nullptr;
+            }
+
+            if (!(dsView->usage & WGPUTextureUsage_RenderAttachment))
+            {
+                PE_WARN("[WebGPU] beginRenderPass: depthStencilAttachment missing RENDER_ATTACHMENT usage");
+                return nullptr;
+            }
+
+            if (dsView->mipLevelCount != 1)
+            {
+                PE_WARN("[WebGPU] beginRenderPass: depthStencilAttachment mipLevelCount must be 1");
+                return nullptr;
+            }
+            if (dsView->arrayLayerCount != 1)
+            {
+                PE_WARN("[WebGPU] beginRenderPass: depthStencilAttachment arrayLayerCount must be 1");
+                return nullptr;
+            }
+
+            if (attachW == 0)
+            {
+                attachW = dsView->renderExtent.width;
+                attachH = dsView->renderExtent.height;
+            }
+            else if (dsView->renderExtent.width != attachW || dsView->renderExtent.height != attachH)
+            {
+                PE_WARN("[WebGPU] beginRenderPass: depthStencilAttachment renderExtent mismatch");
+                return nullptr;
+            }
+
+            uint32_t sc = dsView->texture->sampleCount;
+            if (commonSampleCount == 0)
+                commonSampleCount = sc;
+            else if (sc != commonSampleCount)
+            {
+                PE_WARN("[WebGPU] beginRenderPass: depthStencilAttachment sampleCount mismatch");
+                return nullptr;
+            }
+
+            bool hasDepth = pwgpu::HasDepthAspect(dsView->format);
+            bool hasStencil = pwgpu::HasStencilAspect(dsView->format);
+
+            if (hasDepth && !dsa->depthReadOnly)
+            {
+                if (dsa->depthLoadOp != WGPULoadOp_Clear && dsa->depthLoadOp != WGPULoadOp_Load)
+                {
+                    PE_WARN("[WebGPU] beginRenderPass: depthLoadOp must be provided when depth is writable");
+                    return nullptr;
+                }
+                if (dsa->depthStoreOp != WGPUStoreOp_Store && dsa->depthStoreOp != WGPUStoreOp_Discard)
+                {
+                    PE_WARN("[WebGPU] beginRenderPass: depthStoreOp must be provided when depth is writable");
+                    return nullptr;
+                }
+            }
+            if (hasDepth && dsa->depthLoadOp == WGPULoadOp_Clear)
+            {
+                if (dsa->depthClearValue < 0.0f || dsa->depthClearValue > 1.0f)
+                {
+                    PE_WARN("[WebGPU] beginRenderPass: depthClearValue must be in [0, 1]");
+                    return nullptr;
+                }
+            }
+
+            if (hasStencil && !dsa->stencilReadOnly)
+            {
+                if (dsa->stencilLoadOp != WGPULoadOp_Clear && dsa->stencilLoadOp != WGPULoadOp_Load)
+                {
+                    PE_WARN("[WebGPU] beginRenderPass: stencilLoadOp must be provided when stencil is writable");
+                    return nullptr;
+                }
+                if (dsa->stencilStoreOp != WGPUStoreOp_Store && dsa->stencilStoreOp != WGPUStoreOp_Discard)
+                {
+                    PE_WARN("[WebGPU] beginRenderPass: stencilStoreOp must be provided when stencil is writable");
+                    return nullptr;
+                }
+            }
+        }
+
+        if (descriptor->timestampWrites)
+        {
+            auto *tw = descriptor->timestampWrites;
+            if (!tw->querySet || tw->querySet->type != WGPUQueryType_Timestamp ||
+                tw->querySet->queryPool == VK_NULL_HANDLE || tw->querySet->destroyed)
+            {
+                PE_WARN("[WebGPU] beginRenderPass: timestampWrites querySet is invalid");
+                return nullptr;
+            }
+
+            bool hasBegin = (tw->beginningOfPassWriteIndex != WGPU_QUERY_SET_INDEX_UNDEFINED);
+            bool hasEnd = (tw->endOfPassWriteIndex != WGPU_QUERY_SET_INDEX_UNDEFINED);
+
+            if (!hasBegin && !hasEnd)
+            {
+                PE_WARN("[WebGPU] beginRenderPass: timestampWrites must have at least one write index");
+                return nullptr;
+            }
+            if (hasBegin && tw->beginningOfPassWriteIndex >= tw->querySet->count)
+            {
+                PE_WARN("[WebGPU] beginRenderPass: beginningOfPassWriteIndex out of range");
+                return nullptr;
+            }
+            if (hasEnd && tw->endOfPassWriteIndex >= tw->querySet->count)
+            {
+                PE_WARN("[WebGPU] beginRenderPass: endOfPassWriteIndex out of range");
+                return nullptr;
+            }
+            if (hasBegin && hasEnd && tw->beginningOfPassWriteIndex == tw->endOfPassWriteIndex)
+            {
+                PE_WARN("[WebGPU] beginRenderPass: begin and end timestamp indices must differ");
+                return nullptr;
+            }
+        }
+
         auto *rpe = new WGPURenderPassEncoderImpl();
         rpe->cmd = enc->cmd;
         rpe->parent = enc;
         rpe->device = enc->device;
-        if (descriptor && descriptor->label.data)
+        rpe->attachmentWidth = attachW;
+        rpe->attachmentHeight = attachH;
+        if (descriptor->label.data)
             rpe->label = pwgpu::ToString(descriptor->label);
+
+        if (dsa)
+        {
+            rpe->depthReadOnly = dsa->depthReadOnly;
+            rpe->stencilReadOnly = dsa->stencilReadOnly;
+        }
+
+        if (descriptor->timestampWrites)
+        {
+            auto *tw = descriptor->timestampWrites;
+            rpe->timestampQuerySet = tw->querySet;
+            wgpuQuerySetAddRef(tw->querySet);
+
+            if (tw->beginningOfPassWriteIndex < tw->querySet->count)
+            {
+                rpe->beginTimestampIndex = tw->beginningOfPassWriteIndex;
+                enc->cmd->ApiHandle().writeTimestamp2(
+                    vk::PipelineStageFlagBits2::eAllCommands,
+                    tw->querySet->queryPool, tw->beginningOfPassWriteIndex);
+            }
+            if (tw->endOfPassWriteIndex < tw->querySet->count)
+                rpe->endTimestampIndex = tw->endOfPassWriteIndex;
+        }
+
+        std::vector<vk::RenderingAttachmentInfo> colorAttachments;
+        std::vector<pe::ImageBarrierInfo> barriers;
+        colorAttachments.reserve(colorCount);
+
+        for (size_t i = 0; i < colorCount; i++)
+        {
+            auto &ca = descriptor->colorAttachments[i];
+            if (!ca.view)
+            {
+                vk::RenderingAttachmentInfo nullAtt{};
+                nullAtt.imageView = VK_NULL_HANDLE;
+                nullAtt.imageLayout = vk::ImageLayout::eUndefined;
+                nullAtt.loadOp = vk::AttachmentLoadOp::eDontCare;
+                nullAtt.storeOp = vk::AttachmentStoreOp::eDontCare;
+                colorAttachments.push_back(nullAtt);
+                continue;
+            }
+
+            auto *view = ca.view;
+
+            // For 3D views, create a temporary 2D slice view targeting the specific depthSlice.
+            // Vulkan dynamic rendering requires a 2D view; a 3D VkImageView is not valid as a
+            // color attachment. The image must have VK_IMAGE_CREATE_2D_ARRAY_COMPATIBLE_BIT.
+            vk::ImageView attachmentImageView = view->view->ApiHandle();
+            pe::ImageView *sliceView = nullptr;
+            uint32_t barrierBaseLayer = view->baseArrayLayer;
+
+            if (view->dimension == WGPUTextureViewDimension_3D &&
+                ca.depthSlice != WGPU_DEPTH_SLICE_UNDEFINED)
+            {
+                vk::ImageViewCreateInfo sliceIvci = pe::ImageView::CreateInfoInit();
+                sliceIvci.image = view->texture->image->ApiHandle();
+                sliceIvci.viewType = vk::ImageViewType::e2D;
+                sliceIvci.format = static_cast<vk::Format>(pwgpu::ToVkFormat(view->format));
+                sliceIvci.subresourceRange.aspectMask = vk::ImageAspectFlagBits::eColor;
+                sliceIvci.subresourceRange.baseMipLevel = view->baseMipLevel;
+                sliceIvci.subresourceRange.levelCount = 1;
+                sliceIvci.subresourceRange.baseArrayLayer = ca.depthSlice;
+                sliceIvci.subresourceRange.layerCount = 1;
+
+                try
+                {
+                    sliceView = pe::ImageView::Create(view->texture->image, sliceIvci, "wgpu_3d_slice");
+                }
+                catch (...)
+                {
+                    PE_WARN("[WebGPU] beginRenderPass: failed to create 2D slice view for 3D attachment %zu", i);
+                }
+
+                if (sliceView)
+                {
+                    attachmentImageView = sliceView->ApiHandle();
+                    rpe->ownedSliceViews.push_back(sliceView);
+                    barrierBaseLayer = ca.depthSlice;
+                }
+            }
+
+            pe::ImageBarrierInfo barrier{};
+            barrier.image = view->texture->image;
+            barrier.stageFlags = vk::PipelineStageFlagBits2::eColorAttachmentOutput;
+            barrier.accessMask = vk::AccessFlagBits2::eColorAttachmentWrite | vk::AccessFlagBits2::eColorAttachmentRead;
+            barrier.layout = vk::ImageLayout::eColorAttachmentOptimal;
+            barrier.baseMipLevel = view->baseMipLevel;
+            barrier.mipLevels = 1;
+            barrier.baseArrayLayer = barrierBaseLayer;
+            barrier.arrayLayers = 1;
+            barriers.push_back(barrier);
+
+            view->refCount.fetch_add(1, std::memory_order_relaxed);
+            rpe->retainedViews.push_back(view);
+
+            vk::RenderingAttachmentInfo att{};
+            att.imageView = attachmentImageView;
+            att.imageLayout = vk::ImageLayout::eColorAttachmentOptimal;
+            att.loadOp = (ca.loadOp == WGPULoadOp_Clear) ? vk::AttachmentLoadOp::eClear : vk::AttachmentLoadOp::eLoad;
+            att.storeOp = (ca.storeOp == WGPUStoreOp_Store) ? vk::AttachmentStoreOp::eStore : vk::AttachmentStoreOp::eDontCare;
+
+            if (ca.loadOp == WGPULoadOp_Clear)
+            {
+                att.clearValue.color.float32[0] = static_cast<float>(ca.clearValue.r);
+                att.clearValue.color.float32[1] = static_cast<float>(ca.clearValue.g);
+                att.clearValue.color.float32[2] = static_cast<float>(ca.clearValue.b);
+                att.clearValue.color.float32[3] = static_cast<float>(ca.clearValue.a);
+            }
+
+            if (ca.resolveTarget)
+            {
+                auto *rt = ca.resolveTarget;
+
+                pe::ImageBarrierInfo resolveBarrier{};
+                resolveBarrier.image = rt->texture->image;
+                resolveBarrier.stageFlags = vk::PipelineStageFlagBits2::eColorAttachmentOutput;
+                resolveBarrier.accessMask = vk::AccessFlagBits2::eColorAttachmentWrite;
+                resolveBarrier.layout = vk::ImageLayout::eColorAttachmentOptimal;
+                resolveBarrier.baseMipLevel = rt->baseMipLevel;
+                resolveBarrier.mipLevels = 1;
+                resolveBarrier.baseArrayLayer = rt->baseArrayLayer;
+                resolveBarrier.arrayLayers = rt->arrayLayerCount;
+                barriers.push_back(resolveBarrier);
+
+                rt->refCount.fetch_add(1, std::memory_order_relaxed);
+                rpe->retainedViews.push_back(rt);
+
+                att.resolveMode = pwgpu::IsBlendableFormat(view->format)
+                                      ? vk::ResolveModeFlagBits::eAverage
+                                      : vk::ResolveModeFlagBits::eSampleZero;
+                att.resolveImageView = rt->view->ApiHandle();
+                att.resolveImageLayout = vk::ImageLayout::eColorAttachmentOptimal;
+            }
+
+            colorAttachments.push_back(att);
+        }
+
+        vk::RenderingAttachmentInfo depthAtt{};
+        vk::RenderingAttachmentInfo stencilAtt{};
+        bool hasDepthAttachment = false;
+        bool hasStencilAttachment = false;
+        if (dsa)
+        {
+            auto *dsView = dsa->view;
+            bool hasDepth = pwgpu::HasDepthAspect(dsView->format);
+            bool hasStencil = pwgpu::HasStencilAspect(dsView->format);
+
+            vk::ImageLayout dsLayout = (dsa->depthReadOnly && dsa->stencilReadOnly)
+                                           ? vk::ImageLayout::eDepthStencilReadOnlyOptimal
+                                       : (dsa->depthReadOnly && hasStencil)
+                                           ? vk::ImageLayout::eDepthReadOnlyStencilAttachmentOptimal
+                                       : (dsa->stencilReadOnly && hasDepth)
+                                           ? vk::ImageLayout::eDepthAttachmentStencilReadOnlyOptimal
+                                           : vk::ImageLayout::eDepthStencilAttachmentOptimal;
+
+            if (hasDepth && !hasStencil)
+                dsLayout = dsa->depthReadOnly ? vk::ImageLayout::eDepthReadOnlyOptimal
+                                              : vk::ImageLayout::eDepthAttachmentOptimal;
+            else if (hasStencil && !hasDepth)
+                dsLayout = dsa->stencilReadOnly ? vk::ImageLayout::eStencilReadOnlyOptimal
+                                                : vk::ImageLayout::eStencilAttachmentOptimal;
+
+            pe::ImageBarrierInfo dsBarrier{};
+            dsBarrier.image = dsView->texture->image;
+            dsBarrier.stageFlags = vk::PipelineStageFlagBits2::eEarlyFragmentTests | vk::PipelineStageFlagBits2::eLateFragmentTests;
+            dsBarrier.accessMask = vk::AccessFlagBits2::eDepthStencilAttachmentRead;
+            if (!dsa->depthReadOnly)
+                dsBarrier.accessMask |= vk::AccessFlagBits2::eDepthStencilAttachmentWrite;
+            if (!dsa->stencilReadOnly)
+                dsBarrier.accessMask |= vk::AccessFlagBits2::eDepthStencilAttachmentWrite;
+            dsBarrier.layout = dsLayout;
+            dsBarrier.baseMipLevel = dsView->baseMipLevel;
+            dsBarrier.mipLevels = 1;
+            dsBarrier.baseArrayLayer = dsView->baseArrayLayer;
+            dsBarrier.arrayLayers = dsView->arrayLayerCount;
+            barriers.push_back(dsBarrier);
+
+            dsView->refCount.fetch_add(1, std::memory_order_relaxed);
+            rpe->retainedViews.push_back(dsView);
+
+            if (hasDepth)
+            {
+                hasDepthAttachment = true;
+                depthAtt.imageView = dsView->view->ApiHandle();
+                depthAtt.imageLayout = dsLayout;
+
+                if (!dsa->depthReadOnly)
+                {
+                    depthAtt.loadOp = (dsa->depthLoadOp == WGPULoadOp_Clear) ? vk::AttachmentLoadOp::eClear : vk::AttachmentLoadOp::eLoad;
+                    depthAtt.storeOp = (dsa->depthStoreOp == WGPUStoreOp_Store) ? vk::AttachmentStoreOp::eStore : vk::AttachmentStoreOp::eDontCare;
+                }
+                else
+                {
+                    depthAtt.loadOp = vk::AttachmentLoadOp::eLoad;
+                    depthAtt.storeOp = vk::AttachmentStoreOp::eNone;
+                }
+
+                if (dsa->depthLoadOp == WGPULoadOp_Clear)
+                    depthAtt.clearValue.depthStencil.depth = dsa->depthClearValue;
+            }
+
+            if (hasStencil)
+            {
+                hasStencilAttachment = true;
+                stencilAtt.imageView = dsView->view->ApiHandle();
+                stencilAtt.imageLayout = dsLayout;
+
+                if (!dsa->stencilReadOnly)
+                {
+                    stencilAtt.loadOp = (dsa->stencilLoadOp == WGPULoadOp_Clear) ? vk::AttachmentLoadOp::eClear : vk::AttachmentLoadOp::eLoad;
+                    stencilAtt.storeOp = (dsa->stencilStoreOp == WGPUStoreOp_Store) ? vk::AttachmentStoreOp::eStore : vk::AttachmentStoreOp::eDontCare;
+                }
+                else
+                {
+                    stencilAtt.loadOp = vk::AttachmentLoadOp::eLoad;
+                    stencilAtt.storeOp = vk::AttachmentStoreOp::eNone;
+                }
+
+                if (dsa->stencilLoadOp == WGPULoadOp_Clear)
+                    stencilAtt.clearValue.depthStencil.stencil = dsa->stencilClearValue;
+            }
+        }
+
+        if (!barriers.empty())
+            enc->cmd->ImageBarriers(barriers);
+
+        vk::RenderingInfo renderingInfo{};
+        renderingInfo.renderArea = vk::Rect2D{{0, 0}, {attachW, attachH}};
+        renderingInfo.layerCount = 1;
+        renderingInfo.colorAttachmentCount = static_cast<uint32_t>(colorAttachments.size());
+        renderingInfo.pColorAttachments = colorAttachments.data();
+        if (hasDepthAttachment)
+            renderingInfo.pDepthAttachment = &depthAtt;
+        if (hasStencilAttachment)
+            renderingInfo.pStencilAttachment = &stencilAtt;
+
+        enc->cmd->ApiHandle().beginRendering(renderingInfo);
+        rpe->renderingActive = true;
+
+        vk::Viewport defaultVp{0.0f, 0.0f, static_cast<float>(attachW), static_cast<float>(attachH), 0.0f, 1.0f};
+        enc->cmd->ApiHandle().setViewport(0, 1, &defaultVp);
+
+        vk::Rect2D defaultScissor{{0, 0}, {attachW, attachH}};
+        enc->cmd->ApiHandle().setScissor(0, 1, &defaultScissor);
+
         enc->hasOpenPass = true;
         return rpe;
     }

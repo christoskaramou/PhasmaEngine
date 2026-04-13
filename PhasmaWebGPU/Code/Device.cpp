@@ -616,6 +616,8 @@ extern "C"
 
         if (dim == WGPUTextureDimension_2D && w == h && d >= 6 && (d % 6 == 0))
             ci.flags |= vk::ImageCreateFlagBits::eCubeCompatible;
+        if (dim == WGPUTextureDimension_3D && (usage & WGPUTextureUsage_RenderAttachment))
+            ci.flags |= vk::ImageCreateFlagBits::e2DArrayCompatible;
         if (descriptor->viewFormatCount > 0 && descriptor->viewFormats)
             ci.flags |= vk::ImageCreateFlagBits::eMutableFormat;
 

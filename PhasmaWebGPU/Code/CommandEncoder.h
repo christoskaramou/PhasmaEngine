@@ -9,6 +9,7 @@ struct WGPURenderPipelineImpl;
 struct WGPUComputePipelineImpl;
 struct WGPUBindGroupImpl;
 struct WGPUQuerySetImpl;
+struct WGPUTextureViewImpl;
 
 struct RetainedResources
 {
@@ -16,6 +17,7 @@ struct RetainedResources
     std::vector<WGPUComputePipelineImpl *> computePipelines;
     std::vector<WGPUBindGroupImpl *> bindGroups;
     std::vector<WGPUQuerySetImpl *> querySets;
+    std::vector<WGPUTextureViewImpl *> textureViews;
 
     void MergeFrom(RetainedResources &other);
     void ReleaseAll();
