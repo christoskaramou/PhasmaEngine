@@ -177,7 +177,7 @@ extern "C"
             PE_WARN("[WebGPU] dispatchWorkgroupsIndirect: no pipeline set");
             return;
         }
-        if (!buffer || !buffer->peBuffer || buffer->destroyed)
+        if (!buffer || !buffer->peBuffer || buffer->internalState == BufferInternalState::Destroyed)
             return;
         if (!(buffer->usage & WGPUBufferUsage_Indirect))
             return;

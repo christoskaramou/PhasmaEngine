@@ -86,14 +86,15 @@ extern "C"
             {
                 if (!buf)
                     continue;
-                std::lock_guard<std::mutex> lock(buf->mapMutex);
-                if (buf->mapState != WGPUBufferMapState_Unmapped)
+                std::lock_guard<std::mutex> lock(buf->stateMutex);
+                if (buf->internalState != BufferInternalState::Available)
                 {
                     hasUnavailable = true;
                     if (queue->device)
-                        queue->device->reportError(WGPUErrorType_Validation,
-                                                   pwgpu::ToStringView(
-                                                       "Submit with buffer in mapped/pending state"));
+                        queue->device->reportError(
+                            WGPUErrorType_Validation,
+                            pwgpu::ToStringView(
+                                "Submit: buffer [[internal state]] is not 'available'"));
                     break;
                 }
             }
@@ -136,7 +137,11 @@ extern "C"
                               uint64_t bufferOffset, void const *data, size_t size)
     {
         (void)queue;
-        if (!buffer || !buffer->peBuffer || !data || buffer->destroyed)
+        if (!buffer || !data)
+            return;
+        if (buffer->invalid)
+            return;
+        if (buffer->internalState.load(std::memory_order_acquire) != BufferInternalState::Available)
             return;
         if (!(buffer->usage & WGPUBufferUsage_CopyDst))
             return;
@@ -147,16 +152,24 @@ extern "C"
         if (bufferOffset + size > buffer->size)
             return;
 
+        pe::Buffer *backing = nullptr;
+        {
+            std::lock_guard<std::mutex> lock(buffer->stateMutex);
+            if (buffer->internalState != BufferInternalState::Available || !buffer->peBuffer)
+                return;
+            backing = buffer->peBuffer;
+        }
+
         if (buffer->hostVisible)
         {
             pe::BufferRange range{const_cast<void *>(data), size, static_cast<size_t>(bufferOffset)};
-            buffer->peBuffer->Copy(1, &range, false);
+            backing->Copy(1, &range, false);
         }
         else if (queue && queue->peQueue)
         {
             pe::CommandBuffer *cmd = queue->peQueue->AcquireCommandBuffer();
             cmd->Begin();
-            cmd->CopyBufferStaged(buffer->peBuffer, const_cast<void *>(data), size,
+            cmd->CopyBufferStaged(backing, const_cast<void *>(data), size,
                                   static_cast<size_t>(bufferOffset));
             cmd->End();
             queue->peQueue->Submit(1, &cmd, nullptr, nullptr);

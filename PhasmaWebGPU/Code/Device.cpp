@@ -295,6 +295,7 @@ extern "C"
             bad->usage = usage;
             bad->size = size;
             bad->invalid = true;
+            bad->internalState = BufferInternalState::Unavailable;
             bad->mapState = mappedAtCreation ? WGPUBufferMapState_Mapped : WGPUBufferMapState_Unmapped;
             if (descriptor->label.data)
                 bad->label = pwgpu::ToString(descriptor->label);
@@ -378,6 +379,7 @@ extern "C"
             std::string msg = "wgpuDeviceCreateBuffer: backing allocation failed";
             device->reportError(WGPUErrorType_OutOfMemory, pwgpu::ToStringView(msg));
             buf->invalid = true;
+            buf->internalState = BufferInternalState::Unavailable;
             buf->mapState = mappedAtCreation ? WGPUBufferMapState_Mapped : WGPUBufferMapState_Unmapped;
             return buf;
         }
@@ -385,12 +387,23 @@ extern "C"
         if (needsHostAccess)
             buf->peBuffer->Map();
 
+        if (buf->peBuffer->Data() && needsHostAccess)
+        {
+            std::memset(buf->peBuffer->Data(), 0, static_cast<size_t>(size));
+            buf->peBuffer->Flush();
+        }
+
         if (mappedAtCreation)
         {
+            buf->internalState = BufferInternalState::Unavailable;
             buf->mapState = WGPUBufferMapState_Mapped;
             buf->mappedOffset = 0;
             buf->mappedSize = size;
             buf->mappedMode = WGPUMapMode_Write;
+        }
+        else
+        {
+            buf->internalState = BufferInternalState::Available;
         }
 
         return buf;
@@ -1720,7 +1733,6 @@ extern "C"
     }
 
     // ======================================================================
-    // §10 Pipelines — helpers
     // ======================================================================
 
     static WGPUComputePipeline MakeInvalidComputePipeline(WGPUDevice device, const char *label)
@@ -1987,7 +1999,6 @@ extern "C"
     }
 
     // ======================================================================
-    // §10.2 — wgpuDeviceCreateComputePipeline
     // ======================================================================
 
     WGPUComputePipeline wgpuDeviceCreateComputePipeline(WGPUDevice device, WGPUComputePipelineDescriptor const *descriptor)
@@ -2117,7 +2128,6 @@ extern "C"
     }
 
     // ======================================================================
-    // §10.3 — wgpuDeviceCreateRenderPipeline
     // ======================================================================
 
     WGPURenderPipeline wgpuDeviceCreateRenderPipeline(WGPUDevice device, WGPURenderPipelineDescriptor const *descriptor)

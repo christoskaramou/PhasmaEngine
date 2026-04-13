@@ -836,8 +836,10 @@ extern "C"
     {
         if (!EncoderOpen(enc, "wgpuCommandEncoderCopyBufferToBuffer"))
             return;
-        if (!src || !src->peBuffer || src->destroyed ||
-            !dst || !dst->peBuffer || dst->destroyed)
+        if (!src || !src->peBuffer ||
+            src->internalState == BufferInternalState::Destroyed ||
+            !dst || !dst->peBuffer ||
+            dst->internalState == BufferInternalState::Destroyed)
             return;
 
         if (src == dst)
@@ -867,6 +869,13 @@ extern "C"
         if (dstOffset % 4 != 0)
             return;
 
+        vk::MemoryBarrier2 mb{};
+        mb.srcStageMask = vk::PipelineStageFlagBits2::eAllCommands;
+        mb.srcAccessMask = vk::AccessFlagBits2::eMemoryWrite;
+        mb.dstStageMask = vk::PipelineStageFlagBits2::eTransfer;
+        mb.dstAccessMask = vk::AccessFlagBits2::eTransferRead | vk::AccessFlagBits2::eTransferWrite;
+        enc->cmd->MemoryBarrier(mb);
+
         enc->cmd->CopyBuffer(src->peBuffer, dst->peBuffer, static_cast<size_t>(copySize),
                              static_cast<size_t>(srcOffset), static_cast<size_t>(dstOffset));
         enc->retained.usedBuffers.push_back(src);
@@ -882,7 +891,8 @@ extern "C"
     {
         if (!EncoderOpen(enc, "wgpuCommandEncoderClearBuffer"))
             return;
-        if (!buffer || !buffer->peBuffer || buffer->destroyed)
+        if (!buffer || !buffer->peBuffer ||
+            buffer->internalState == BufferInternalState::Destroyed)
             return;
         if (!(buffer->usage & WGPUBufferUsage_CopyDst))
             return;
@@ -915,7 +925,8 @@ extern "C"
     {
         if (!EncoderOpen(enc, "wgpuCommandEncoderCopyBufferToTexture"))
             return;
-        if (!src || !src->buffer || !src->buffer->peBuffer || src->buffer->destroyed)
+        if (!src || !src->buffer || !src->buffer->peBuffer ||
+            src->buffer->internalState == BufferInternalState::Destroyed)
             return;
         if (!dst || !dst->texture || !dst->texture->image || dst->texture->destroyed)
             return;
@@ -990,7 +1001,8 @@ extern "C"
             return;
         if (!src || !src->texture || !src->texture->image || src->texture->destroyed)
             return;
-        if (!dst || !dst->buffer || !dst->buffer->peBuffer || dst->buffer->destroyed)
+        if (!dst || !dst->buffer || !dst->buffer->peBuffer ||
+            dst->buffer->internalState == BufferInternalState::Destroyed)
             return;
         if (!copySize)
             return;
@@ -1150,7 +1162,8 @@ extern "C"
             return;
         if (!querySet || !querySet->queryPool)
             return;
-        if (!dst || !dst->peBuffer || dst->destroyed)
+        if (!dst || !dst->peBuffer ||
+            dst->internalState == BufferInternalState::Destroyed)
             return;
         if (!(dst->usage & WGPUBufferUsage_QueryResolve))
             return;

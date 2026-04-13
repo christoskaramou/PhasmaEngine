@@ -52,7 +52,8 @@ extern "C"
             return;
         if (buffer->refCount.fetch_sub(1, std::memory_order_acq_rel) == 1)
         {
-            if (buffer->peBuffer && !buffer->destroyed)
+            if (buffer->peBuffer &&
+                buffer->internalState != BufferInternalState::Destroyed)
             {
                 if (buffer->hostVisible)
                     buffer->peBuffer->Unmap();
@@ -70,24 +71,17 @@ extern "C"
         if (!buffer)
             return;
 
-        WGPUBufferMapCallbackInfo pendingCallback{};
-        bool hadPending = false;
         {
-            std::lock_guard<std::mutex> lock(buffer->mapMutex);
-            if (buffer->destroyed)
+            std::lock_guard<std::mutex> lock(buffer->stateMutex);
+            if (buffer->internalState == BufferInternalState::Destroyed)
                 return;
-            if (buffer->mapState == WGPUBufferMapState_Pending)
-            {
-                pendingCallback = buffer->pendingCallback;
-                hadPending = true;
-                buffer->pendingCallback = {};
-            }
-            buffer->destroyed = true;
-            buffer->mapState = WGPUBufferMapState_Unmapped;
-            buffer->mappedOffset = 0;
-            buffer->mappedSize = 0;
-            buffer->mappedMode = WGPUMapMode_None;
+            buffer->internalState = BufferInternalState::Destroyed;
+        }
 
+        wgpuBufferUnmap(buffer);
+
+        {
+            std::lock_guard<std::mutex> lock(buffer->stateMutex);
             if (buffer->peBuffer)
             {
                 if (buffer->hostVisible)
@@ -96,9 +90,6 @@ extern "C"
                 buffer->peBuffer = nullptr;
             }
         }
-
-        if (hadPending)
-            FireMapCallback(pendingCallback, WGPUMapAsyncStatus_Aborted, "Buffer destroyed");
     }
 
     uint64_t wgpuBufferGetSize(WGPUBuffer buffer)
@@ -115,7 +106,7 @@ extern "C"
     {
         if (!buffer)
             return WGPUBufferMapState_Unmapped;
-        std::lock_guard<std::mutex> lock(buffer->mapMutex);
+        std::lock_guard<std::mutex> lock(buffer->stateMutex);
         return buffer->mapState;
     }
 
@@ -127,12 +118,10 @@ extern "C"
         const char *errorText = nullptr;
         void *result = nullptr;
         {
-            std::lock_guard<std::mutex> lock(buffer->mapMutex);
+            std::lock_guard<std::mutex> lock(buffer->stateMutex);
             uint64_t rangeSize = 0;
 
-            if (buffer->destroyed)
-                errorText = "getMappedRange on destroyed buffer";
-            else if (buffer->mapState != WGPUBufferMapState_Mapped)
+            if (buffer->mapState != WGPUBufferMapState_Mapped)
                 errorText = "getMappedRange called on an unmapped buffer";
             else if (!ResolveRange(buffer->size, offset, size, rangeSize))
                 errorText = "getMappedRange offset exceeds buffer size";
@@ -168,8 +157,8 @@ extern "C"
         const char *errorText = nullptr;
         WGPUStatus status = WGPUStatus_Error;
         {
-            std::lock_guard<std::mutex> lock(buffer->mapMutex);
-            if (buffer->destroyed || buffer->mapState != WGPUBufferMapState_Mapped || !buffer->peBuffer)
+            std::lock_guard<std::mutex> lock(buffer->stateMutex);
+            if (buffer->mapState != WGPUBufferMapState_Mapped || !buffer->peBuffer)
             { /* status stays Error, no device-scope report needed */
             }
             else if ((buffer->mappedMode & WGPUMapMode_Read) == 0)
@@ -205,8 +194,8 @@ extern "C"
         const char *errorText = nullptr;
         WGPUStatus status = WGPUStatus_Error;
         {
-            std::lock_guard<std::mutex> lock(buffer->mapMutex);
-            if (buffer->destroyed || buffer->mapState != WGPUBufferMapState_Mapped || !buffer->peBuffer)
+            std::lock_guard<std::mutex> lock(buffer->stateMutex);
+            if (buffer->mapState != WGPUBufferMapState_Mapped || !buffer->peBuffer)
             { /* status stays Error, no device-scope report needed */
             }
             else if ((buffer->mappedMode & WGPUMapMode_Write) == 0)
@@ -266,14 +255,14 @@ extern "C"
 
         const char *errorText = nullptr;
         {
-            std::lock_guard<std::mutex> lock(buffer->mapMutex);
+            std::lock_guard<std::mutex> lock(buffer->stateMutex);
 
-            if (buffer->destroyed)
-                errorText = "mapAsync on destroyed buffer";
+            if (buffer->mapState != WGPUBufferMapState_Unmapped)
+                errorText = "mapAsync requires buffer to be unmapped";
             else if (buffer->invalid)
                 errorText = "mapAsync on invalid buffer";
-            else if (buffer->mapState != WGPUBufferMapState_Unmapped)
-                errorText = "mapAsync requires buffer to be unmapped";
+            else if (buffer->internalState != BufferInternalState::Available)
+                errorText = "mapAsync requires internal state 'available'";
             else if (!rangeOk)
                 errorText = "mapAsync offset exceeds buffer size";
             else if ((offset % 8) != 0)
@@ -282,18 +271,22 @@ extern "C"
                 errorText = "mapAsync size must be a multiple of 4";
             else if (offset + rangeSize > buffer->size)
                 errorText = "mapAsync range out of bounds";
-            else if (mode == WGPUMapMode_None || (mode & ~(WGPUMapMode_Read | WGPUMapMode_Write)) != 0)
+            else if (mode == WGPUMapMode_None ||
+                     (mode & ~(WGPUMapMode_Read | WGPUMapMode_Write)) != 0)
                 errorText = "mapAsync mode must be exactly READ or WRITE";
             else if ((mode & WGPUMapMode_Read) && (mode & WGPUMapMode_Write))
                 errorText = "mapAsync mode must not combine READ and WRITE";
-            else if ((mode & WGPUMapMode_Read) && (buffer->usage & WGPUBufferUsage_MapRead) == 0)
+            else if ((mode & WGPUMapMode_Read) &&
+                     (buffer->usage & WGPUBufferUsage_MapRead) == 0)
                 errorText = "mapAsync READ requires MAP_READ usage";
-            else if ((mode & WGPUMapMode_Write) && (buffer->usage & WGPUBufferUsage_MapWrite) == 0)
+            else if ((mode & WGPUMapMode_Write) &&
+                     (buffer->usage & WGPUBufferUsage_MapWrite) == 0)
                 errorText = "mapAsync WRITE requires MAP_WRITE usage";
 
             if (!errorText)
             {
                 buffer->mapState = WGPUBufferMapState_Pending;
+                buffer->internalState = BufferInternalState::Unavailable;
                 buffer->pendingCallback = callbackInfo;
                 buffer->pendingOffset = offset;
                 buffer->pendingSize = rangeSize;
@@ -316,24 +309,27 @@ extern "C"
         WGPUQueueImpl *q = buffer->device ? buffer->device->queue : nullptr;
         uint64_t serial = buffer->lastUsageSerial.load(std::memory_order_acquire);
 
-        // State transitions into Mapped inside the callback, after GPU work completes.
-        return inst->futures.TrackEvent(callbackInfo.mode, [cb, u1, u2, buffer]()
-                                        {
-                                            {
-                                                std::lock_guard<std::mutex> lock(buffer->mapMutex);
-                                                if (buffer->mapState == WGPUBufferMapState_Pending)
-                                                {
-                                                    buffer->mapState = WGPUBufferMapState_Mapped;
-                                                    buffer->mappedOffset = buffer->pendingOffset;
-                                                    buffer->mappedSize = buffer->pendingSize;
-                                                    buffer->mappedMode = buffer->pendingMode;
-                                                    buffer->pendingCallback = {};
-                                                    buffer->pendingOffset = 0;
-                                                    buffer->pendingSize = 0;
-                                                    buffer->pendingMode = WGPUMapMode_None;
-                                                }
-                                            }
-                                            cb(WGPUMapAsyncStatus_Success, {nullptr, 0}, u1, u2); }, q, serial);
+        return inst->futures.TrackEvent(
+            callbackInfo.mode,
+            [cb, u1, u2, buffer]()
+            {
+                {
+                    std::lock_guard<std::mutex> lock(buffer->stateMutex);
+                    if (buffer->mapState == WGPUBufferMapState_Pending)
+                    {
+                        buffer->mapState = WGPUBufferMapState_Mapped;
+                        buffer->mappedOffset = buffer->pendingOffset;
+                        buffer->mappedSize = buffer->pendingSize;
+                        buffer->mappedMode = buffer->pendingMode;
+                        buffer->pendingCallback = {};
+                        buffer->pendingOffset = 0;
+                        buffer->pendingSize = 0;
+                        buffer->pendingMode = WGPUMapMode_None;
+                    }
+                }
+                cb(WGPUMapAsyncStatus_Success, {nullptr, 0}, u1, u2);
+            },
+            q, serial);
     }
 
     void wgpuBufferUnmap(WGPUBuffer buffer)
@@ -345,9 +341,7 @@ extern "C"
         bool hadPending = false;
         bool shouldFlush = false;
         {
-            std::lock_guard<std::mutex> lock(buffer->mapMutex);
-            if (buffer->destroyed)
-                return;
+            std::lock_guard<std::mutex> lock(buffer->stateMutex);
 
             if (buffer->mapState == WGPUBufferMapState_Pending)
             {
@@ -368,9 +362,17 @@ extern "C"
                 buffer->mappedSize = 0;
                 buffer->mappedMode = WGPUMapMode_None;
             }
+            else
+            {
+                return;
+            }
 
             if (shouldFlush)
                 buffer->peBuffer->Flush();
+
+            if (!buffer->invalid &&
+                buffer->internalState != BufferInternalState::Destroyed)
+                buffer->internalState = BufferInternalState::Available;
         }
 
         if (hadPending)

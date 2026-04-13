@@ -223,7 +223,7 @@ extern "C"
     {
         if (!EncoderOpen(rbe, "wgpuRenderBundleEncoderSetVertexBuffer"))
             return;
-        if (!buffer || !buffer->peBuffer || buffer->destroyed)
+        if (!buffer || !buffer->peBuffer || buffer->internalState == BufferInternalState::Destroyed)
             return;
         if (!(buffer->usage & WGPUBufferUsage_Vertex))
             return;
@@ -243,7 +243,7 @@ extern "C"
     {
         if (!EncoderOpen(rbe, "wgpuRenderBundleEncoderSetIndexBuffer"))
             return;
-        if (!buffer || !buffer->peBuffer || buffer->destroyed)
+        if (!buffer || !buffer->peBuffer || buffer->internalState == BufferInternalState::Destroyed)
             return;
         if (!(buffer->usage & WGPUBufferUsage_Index))
             return;
@@ -291,7 +291,7 @@ extern "C"
             return;
         if (!rbe->pipeline)
             return;
-        if (!buffer || !buffer->peBuffer || buffer->destroyed)
+        if (!buffer || !buffer->peBuffer || buffer->internalState == BufferInternalState::Destroyed)
             return;
         if (!(buffer->usage & WGPUBufferUsage_Indirect))
             return;
@@ -315,7 +315,7 @@ extern "C"
             return;
         if (!rbe->pipeline)
             return;
-        if (!buffer || !buffer->peBuffer || buffer->destroyed)
+        if (!buffer || !buffer->peBuffer || buffer->internalState == BufferInternalState::Destroyed)
             return;
         if (!(buffer->usage & WGPUBufferUsage_Indirect))
             return;
