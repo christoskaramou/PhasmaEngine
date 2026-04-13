@@ -19,6 +19,7 @@ extern "C" void wgpuBindGroupRelease(WGPUBindGroup);
 extern "C" void wgpuQuerySetAddRef(WGPUQuerySet);
 extern "C" void wgpuQuerySetRelease(WGPUQuerySet);
 extern "C" void wgpuTextureViewRelease(WGPUTextureView);
+extern "C" void wgpuRenderBundleRelease(WGPURenderBundle);
 
 void RetainedResources::MergeFrom(RetainedResources &other)
 {
@@ -27,11 +28,13 @@ void RetainedResources::MergeFrom(RetainedResources &other)
     bindGroups.insert(bindGroups.end(), other.bindGroups.begin(), other.bindGroups.end());
     querySets.insert(querySets.end(), other.querySets.begin(), other.querySets.end());
     textureViews.insert(textureViews.end(), other.textureViews.begin(), other.textureViews.end());
+    renderBundles.insert(renderBundles.end(), other.renderBundles.begin(), other.renderBundles.end());
     other.renderPipelines.clear();
     other.computePipelines.clear();
     other.bindGroups.clear();
     other.querySets.clear();
     other.textureViews.clear();
+    other.renderBundles.clear();
 }
 
 void RetainedResources::ReleaseAll()
@@ -46,11 +49,14 @@ void RetainedResources::ReleaseAll()
         wgpuQuerySetRelease(qs);
     for (auto *tv : textureViews)
         wgpuTextureViewRelease(tv);
+    for (auto *rb : renderBundles)
+        wgpuRenderBundleRelease(rb);
     renderPipelines.clear();
     computePipelines.clear();
     bindGroups.clear();
     querySets.clear();
     textureViews.clear();
+    renderBundles.clear();
 }
 
 namespace
@@ -467,6 +473,15 @@ extern "C"
         {
             rpe->depthReadOnly = dsa->depthReadOnly;
             rpe->stencilReadOnly = dsa->stencilReadOnly;
+            rpe->depthStencilFormat = dsa->view->format;
+        }
+
+        rpe->sampleCount = commonSampleCount ? commonSampleCount : 1;
+        rpe->colorFormats.reserve(colorCount);
+        for (size_t i = 0; i < colorCount; i++)
+        {
+            auto &ca = descriptor->colorAttachments[i];
+            rpe->colorFormats.push_back(ca.view ? ca.view->format : WGPUTextureFormat_Undefined);
         }
 
         if (descriptor->timestampWrites)

@@ -16,6 +16,8 @@ extern "C" void wgpuBindGroupAddRef(WGPUBindGroup);
 extern "C" void wgpuBindGroupRelease(WGPUBindGroup);
 extern "C" void wgpuTextureViewRelease(WGPUTextureView);
 extern "C" void wgpuQuerySetRelease(WGPUQuerySet);
+extern "C" void wgpuRenderBundleAddRef(WGPURenderBundle);
+extern "C" void wgpuRenderBundleRelease(WGPURenderBundle);
 
 namespace
 {
@@ -61,6 +63,8 @@ extern "C"
                 wgpuRenderPipelineRelease(p);
             for (auto *bg : rpe->retainedBindGroups)
                 wgpuBindGroupRelease(bg);
+            for (auto *rb : rpe->retainedBundles)
+                wgpuRenderBundleRelease(rb);
             for (auto *v : rpe->retainedViews)
                 wgpuTextureViewRelease(v);
             for (auto *sv : rpe->ownedSliceViews)
@@ -71,8 +75,6 @@ extern "C"
         }
     }
 
-    // ---- §17.1 setPipeline (state stored for §14 bind group binding) ----
-
     void wgpuRenderPassEncoderSetPipeline(WGPURenderPassEncoder rpe, WGPURenderPipeline pipeline)
     {
         if (!PassOpen(rpe, "wgpuRenderPassEncoderSetPipeline"))
@@ -81,14 +83,13 @@ extern "C"
             return;
 
         rpe->pipeline = pipeline;
+        rpe->bindingStateInvalidated = false;
 
         wgpuRenderPipelineAddRef(pipeline);
         rpe->retainedPipelines.push_back(pipeline);
 
         rpe->cmd->ApiHandle().bindPipeline(vk::PipelineBindPoint::eGraphics, pipeline->vkPipeline);
     }
-
-    // ---- §14.1 setBindGroup ----
 
     void wgpuRenderPassEncoderSetBindGroup(WGPURenderPassEncoder rpe, uint32_t groupIndex,
                                            WGPUBindGroup group,
@@ -159,8 +160,6 @@ extern "C"
             static_cast<uint32_t>(dynamicOffsetCount), dynamicOffsets);
     }
 
-    // ---- §17 vertex/index buffers ----
-
     void wgpuRenderPassEncoderSetVertexBuffer(WGPURenderPassEncoder rpe, uint32_t slot,
                                               WGPUBuffer buffer, uint64_t offset, uint64_t size)
     {
@@ -190,14 +189,12 @@ extern "C"
         rpe->cmd->ApiHandle().bindIndexBuffer(buffer->peBuffer->ApiHandle(), offset, indexType);
     }
 
-    // ---- §17 draw commands ----
-
     void wgpuRenderPassEncoderDraw(WGPURenderPassEncoder rpe, uint32_t vertexCount,
                                    uint32_t instanceCount, uint32_t firstVertex, uint32_t firstInstance)
     {
         if (!RenderingActive(rpe, "wgpuRenderPassEncoderDraw"))
             return;
-        if (!rpe->pipeline)
+        if (!rpe->pipeline || rpe->bindingStateInvalidated)
             return;
         rpe->cmd->ApiHandle().draw(vertexCount, instanceCount, firstVertex, firstInstance);
     }
@@ -208,7 +205,7 @@ extern "C"
     {
         if (!RenderingActive(rpe, "wgpuRenderPassEncoderDrawIndexed"))
             return;
-        if (!rpe->pipeline)
+        if (!rpe->pipeline || rpe->bindingStateInvalidated)
             return;
         rpe->cmd->ApiHandle().drawIndexed(indexCount, instanceCount, firstIndex, baseVertex, firstInstance);
     }
@@ -217,7 +214,7 @@ extern "C"
     {
         if (!RenderingActive(rpe, "wgpuRenderPassEncoderDrawIndirect"))
             return;
-        if (!rpe->pipeline)
+        if (!rpe->pipeline || rpe->bindingStateInvalidated)
             return;
         if (!buffer || !buffer->peBuffer || buffer->destroyed)
             return;
@@ -235,7 +232,7 @@ extern "C"
     {
         if (!RenderingActive(rpe, "wgpuRenderPassEncoderDrawIndexedIndirect"))
             return;
-        if (!rpe->pipeline)
+        if (!rpe->pipeline || rpe->bindingStateInvalidated)
             return;
         if (!buffer || !buffer->peBuffer || buffer->destroyed)
             return;
@@ -248,8 +245,6 @@ extern "C"
 
         rpe->cmd->ApiHandle().drawIndexedIndirect(buffer->peBuffer->ApiHandle(), offset, 1, sizeof(VkDrawIndexedIndirectCommand));
     }
-
-    // ---- §17 dynamic state ----
 
     void wgpuRenderPassEncoderSetViewport(WGPURenderPassEncoder rpe,
                                           float x, float y, float width, float height,
@@ -292,8 +287,6 @@ extern "C"
         rpe->cmd->ApiHandle().setStencilReference(vk::StencilFaceFlagBits::eFrontAndBack, reference);
     }
 
-    // ---- §17 occlusion queries (stub — full impl in Phase 13) ----
-
     void wgpuRenderPassEncoderBeginOcclusionQuery(WGPURenderPassEncoder rpe, uint32_t queryIndex)
     {
         (void)rpe;
@@ -305,17 +298,80 @@ extern "C"
         (void)rpe;
     }
 
-    // ---- §18 bundles (stub — Phase 11) ----
+    namespace
+    {
+        bool LayoutsEqual(const std::vector<WGPUTextureFormat> &a, WGPUTextureFormat aDsFormat, uint32_t aSc,
+                          const std::vector<WGPUTextureFormat> &b, WGPUTextureFormat bDsFormat, uint32_t bSc)
+        {
+            if (aDsFormat != bDsFormat || aSc != bSc)
+                return false;
+
+            size_t aLen = a.size(), bLen = b.size();
+            while (aLen > 0 && a[aLen - 1] == WGPUTextureFormat_Undefined)
+                --aLen;
+            while (bLen > 0 && b[bLen - 1] == WGPUTextureFormat_Undefined)
+                --bLen;
+            if (aLen != bLen)
+                return false;
+            for (size_t i = 0; i < aLen; i++)
+            {
+                if (a[i] != b[i])
+                    return false;
+            }
+            return true;
+        }
+    } // namespace
 
     void wgpuRenderPassEncoderExecuteBundles(WGPURenderPassEncoder rpe,
                                              size_t bundleCount, WGPURenderBundle const *bundles)
     {
-        (void)rpe;
-        (void)bundleCount;
-        (void)bundles;
-    }
+        if (!RenderingActive(rpe, "wgpuRenderPassEncoderExecuteBundles"))
+            return;
 
-    // ---- §15 Debug markers ----
+        for (size_t i = 0; i < bundleCount; i++)
+        {
+            auto *bundle = bundles[i];
+            if (!bundle || bundle->invalid)
+            {
+                PE_WARN("[WebGPU] executeBundles: bundle %zu is invalid", i);
+                return;
+            }
+
+            if (!LayoutsEqual(rpe->colorFormats, rpe->depthStencilFormat, rpe->sampleCount,
+                              bundle->colorFormats, bundle->depthStencilFormat, bundle->sampleCount))
+            {
+                PE_WARN("[WebGPU] executeBundles: bundle %zu layout does not match render pass layout", i);
+                return;
+            }
+
+            if (rpe->depthReadOnly && !bundle->depthReadOnly)
+            {
+                PE_WARN("[WebGPU] executeBundles: bundle %zu depthReadOnly mismatch", i);
+                return;
+            }
+
+            if (rpe->stencilReadOnly && !bundle->stencilReadOnly)
+            {
+                PE_WARN("[WebGPU] executeBundles: bundle %zu stencilReadOnly mismatch", i);
+                return;
+            }
+        }
+
+        for (size_t i = 0; i < bundleCount; i++)
+        {
+            auto *bundle = bundles[i];
+
+            wgpuRenderBundleAddRef(bundle);
+            rpe->retainedBundles.push_back(bundle);
+
+            vk::CommandBuffer vkCmd = rpe->cmd->ApiHandle();
+            for (auto &command : bundle->commands)
+                command(vkCmd);
+        }
+
+        rpe->pipeline = nullptr;
+        rpe->bindingStateInvalidated = true;
+    }
 
     void wgpuRenderPassEncoderInsertDebugMarker(WGPURenderPassEncoder rpe, WGPUStringView label)
     {
@@ -345,8 +401,6 @@ extern "C"
         rpe->cmd->EndDebugRegion();
     }
 
-    // ---- §17 end ----
-
     void wgpuRenderPassEncoderEnd(WGPURenderPassEncoder rpe)
     {
         if (!rpe || rpe->ended)
@@ -355,14 +409,12 @@ extern "C"
         if (rpe->debugGroupDepth != 0)
             PE_WARN("[WebGPU] wgpuRenderPassEncoderEnd: %u debug group(s) still open", rpe->debugGroupDepth);
 
-        // End the Vulkan dynamic rendering pass
         if (rpe->renderingActive)
         {
             rpe->cmd->ApiHandle().endRendering();
             rpe->renderingActive = false;
         }
 
-        // Write end-of-pass timestamp
         if (rpe->timestampQuerySet && rpe->endTimestampIndex != UINT32_MAX &&
             rpe->endTimestampIndex < rpe->timestampQuerySet->count)
         {
@@ -383,13 +435,16 @@ extern "C"
                 rpe->retainedBindGroups.begin(), rpe->retainedBindGroups.end());
             rpe->retainedBindGroups.clear();
 
-            // Transfer retained views to parent encoder
+            rpe->parent->retained.renderBundles.insert(
+                rpe->parent->retained.renderBundles.end(),
+                rpe->retainedBundles.begin(), rpe->retainedBundles.end());
+            rpe->retainedBundles.clear();
+
             rpe->parent->retained.textureViews.insert(
                 rpe->parent->retained.textureViews.end(),
                 rpe->retainedViews.begin(), rpe->retainedViews.end());
             rpe->retainedViews.clear();
 
-            // Transfer timestamp querySet to parent encoder
             if (rpe->timestampQuerySet)
             {
                 rpe->parent->retained.querySets.push_back(rpe->timestampQuerySet);

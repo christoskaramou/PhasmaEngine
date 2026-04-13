@@ -2684,13 +2684,85 @@ extern "C"
     {
         if (!DeviceCanCreate(device, descriptor, "wgpuDeviceCreateRenderBundleEncoder", true))
             return nullptr;
+
+        auto makeInvalid = [&]()
+        {
+            auto *rbe = new WGPURenderBundleEncoderImpl();
+            rbe->device = device;
+            rbe->invalid = true;
+            device->refCount.fetch_add(1, std::memory_order_relaxed);
+            return rbe;
+        };
+
+        if (descriptor->colorFormatCount > 0 && !descriptor->colorFormats)
+        {
+            PE_WARN("[WebGPU] createRenderBundleEncoder: colorFormatCount > 0 but colorFormats is null");
+            return makeInvalid();
+        }
+
+        if (descriptor->colorFormatCount > device->limits.maxColorAttachments)
+        {
+            PE_WARN("[WebGPU] createRenderBundleEncoder: colorFormatCount %zu > maxColorAttachments %u",
+                    descriptor->colorFormatCount, device->limits.maxColorAttachments);
+            return makeInvalid();
+        }
+
+        bool hasAnyAttachment = false;
+        uint32_t colorBytesPerSample = 0;
+        for (size_t i = 0; i < descriptor->colorFormatCount; ++i)
+        {
+            WGPUTextureFormat cf = descriptor->colorFormats[i];
+            if (cf == WGPUTextureFormat_Undefined)
+                continue;
+            hasAnyAttachment = true;
+
+            if (pwgpu::IsDepthStencilFormat(cf) || !pwgpu::IsRenderableFormat(cf))
+            {
+                PE_WARN("[WebGPU] createRenderBundleEncoder: colorFormats[%zu] is not color-renderable", i);
+                return makeInvalid();
+            }
+
+            colorBytesPerSample += pwgpu::FormatBytesPerSample(cf);
+        }
+
+        if (colorBytesPerSample > device->limits.maxColorAttachmentBytesPerSample)
+        {
+            PE_WARN("[WebGPU] createRenderBundleEncoder: colorAttachmentBytesPerSample %u > limit %u",
+                    colorBytesPerSample, device->limits.maxColorAttachmentBytesPerSample);
+            return makeInvalid();
+        }
+
+        if (descriptor->depthStencilFormat != WGPUTextureFormat_Undefined)
+        {
+            hasAnyAttachment = true;
+            if (!pwgpu::IsDepthStencilFormat(descriptor->depthStencilFormat))
+            {
+                PE_WARN("[WebGPU] createRenderBundleEncoder: depthStencilFormat is not a depth-stencil format");
+                return makeInvalid();
+            }
+        }
+
+        if (!hasAnyAttachment)
+        {
+            PE_WARN("[WebGPU] createRenderBundleEncoder: must have at least one color or depth-stencil attachment");
+            return makeInvalid();
+        }
+
         auto *rbe = new WGPURenderBundleEncoderImpl();
+        rbe->device = device;
+        device->refCount.fetch_add(1, std::memory_order_relaxed);
+
         if (descriptor->label.data)
             rbe->label = pwgpu::ToString(descriptor->label);
-        rbe->sampleCount = descriptor->sampleCount;
+
+        rbe->sampleCount = descriptor->sampleCount ? descriptor->sampleCount : 1;
         rbe->depthStencilFormat = descriptor->depthStencilFormat;
+        rbe->depthReadOnly = descriptor->depthReadOnly;
+        rbe->stencilReadOnly = descriptor->stencilReadOnly;
+
         for (size_t i = 0; i < descriptor->colorFormatCount; ++i)
             rbe->colorFormats.push_back(descriptor->colorFormats[i]);
+
         return rbe;
     }
 

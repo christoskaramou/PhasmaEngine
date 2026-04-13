@@ -7,11 +7,10 @@
 struct WGPUCommandEncoderImpl;
 struct WGPUDeviceImpl;
 struct WGPURenderPipelineImpl;
-
 struct WGPUBindGroupImpl;
-
 struct WGPUTextureViewImpl;
 struct WGPUQuerySetImpl;
+struct WGPURenderBundleImpl;
 
 struct WGPURenderPassEncoderImpl
 {
@@ -25,11 +24,16 @@ struct WGPURenderPassEncoderImpl
     WGPURenderPipelineImpl *pipeline = nullptr;
     uint32_t debugGroupDepth = 0;
     bool renderingActive = false;
+    bool bindingStateInvalidated = false;
 
     uint32_t attachmentWidth = 0;
     uint32_t attachmentHeight = 0;
     bool depthReadOnly = false;
     bool stencilReadOnly = false;
+
+    std::vector<WGPUTextureFormat> colorFormats;
+    WGPUTextureFormat depthStencilFormat = WGPUTextureFormat_Undefined;
+    uint32_t sampleCount = 1;
 
     WGPUQuerySetImpl *timestampQuerySet = nullptr;
     uint32_t beginTimestampIndex = UINT32_MAX;
@@ -40,4 +44,5 @@ struct WGPURenderPassEncoderImpl
 
     std::vector<WGPURenderPipelineImpl *> retainedPipelines;
     std::vector<WGPUBindGroupImpl *> retainedBindGroups;
+    std::vector<WGPURenderBundleImpl *> retainedBundles;
 };
