@@ -46,3 +46,24 @@ if(MSVC)
 else()
     target_compile_options(PhasmaWebGPU PRIVATE -Wall -Wextra -Wno-unused-parameter)
 endif()
+
+# --- Smoke test executable ---
+option(PE_WEBGPU_TESTS "Build PhasmaWebGPU smoke tests" ON)
+if(PE_WEBGPU_TESTS)
+    add_executable(WebGPUSmokeTest "${CMAKE_CURRENT_SOURCE_DIR}/Tests/SmokeTest.cpp")
+    target_link_libraries(WebGPUSmokeTest PRIVATE PhasmaWebGPU)
+    target_precompile_headers(WebGPUSmokeTest REUSE_FROM PhasmaWebGPU)
+    target_include_directories(WebGPUSmokeTest PRIVATE
+        "${CMAKE_CURRENT_SOURCE_DIR}/Code"
+    )
+    set_target_properties(WebGPUSmokeTest PROPERTIES
+        RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin"
+    )
+
+    add_executable(WebGPURenderTest "${CMAKE_CURRENT_SOURCE_DIR}/Tests/RenderTest.cpp")
+    target_link_libraries(WebGPURenderTest PRIVATE PhasmaWebGPU)
+    target_precompile_headers(WebGPURenderTest REUSE_FROM PhasmaWebGPU)
+    target_include_directories(WebGPURenderTest PRIVATE
+        "${CMAKE_CURRENT_SOURCE_DIR}/Code"
+    )
+endif()

@@ -60,7 +60,7 @@ extern "C"
     {
         (void)descriptor;
         auto *inst = new WGPUInstanceImpl();
-        inst->rhi = pe::RHI::Get();
+        inst->rhi = &pe::RHII;
         return inst;
     }
 
@@ -81,7 +81,7 @@ extern "C"
     WGPUSurface wgpuInstanceCreateSurface(WGPUInstance instance, WGPUSurfaceDescriptor const *descriptor)
     {
         // Prefer the instance's own RHI so multi-instance embeddings don't latch onto the global.
-        pe::RHI *rhi = instance ? instance->rhi : pe::RHI::Get();
+        pe::RHI *rhi = instance ? instance->rhi : &pe::RHII;
         if (!rhi)
             return nullptr;
         auto *surf = new WGPUSurfaceImpl();
@@ -208,7 +208,7 @@ extern "C"
             }
         }
 
-        pe::RHI *rhi = instance ? instance->rhi : pe::RHI::Get();
+        pe::RHI *rhi = instance ? instance->rhi : &pe::RHII;
         if (!rhi || !rhi->GetGpu())
         {
             if (callbackInfo.callback)

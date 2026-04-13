@@ -17,12 +17,11 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 message(STATUS "PhasmaEditor = ${CMAKE_CURRENT_SOURCE_DIR}")
 
 if(MSVC)
-    include(ProcessorCount)
-    ProcessorCount(N)
-    if(NOT N EQUAL 0)
-        set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} /MP${N}")
-        set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /MP${N}")
-    endif()
+    # /MP enables multi-threaded compilation *within* each cl.exe invocation.
+    # The build system (Ninja/MSBuild) already launches parallel jobs, so keep
+    # /MP low to avoid N_jobs × N_threads memory explosion with large PCHs.
+    set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} /MP4")
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /MP4")
     set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} /Oi /permissive-")
     set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /Oi /permissive-")
     # Add /bigobj to avoid MSVC "number of sections exceeded" (C1128) for large translation units
