@@ -2696,9 +2696,47 @@ extern "C"
     {
         if (!DeviceCanCreate(device, descriptor, "wgpuDeviceCreateQuerySet", true))
             return nullptr;
+
+        // Validate count > 0
+        if (descriptor->count == 0)
+        {
+            PE_WARN("[WebGPU] wgpuDeviceCreateQuerySet: count must be > 0");
+            return nullptr;
+        }
+
+        // Map WGPUQueryType → VkQueryType
+        vk::QueryType vkType;
+        switch (descriptor->type)
+        {
+        case WGPUQueryType_Occlusion:
+            vkType = vk::QueryType::eOcclusion;
+            break;
+        case WGPUQueryType_Timestamp:
+            vkType = vk::QueryType::eTimestamp;
+            break;
+        default:
+            PE_WARN("[WebGPU] wgpuDeviceCreateQuerySet: unsupported query type %d", static_cast<int>(descriptor->type));
+            return nullptr;
+        }
+
+        vk::QueryPoolCreateInfo ci{};
+        ci.queryType = vkType;
+        ci.queryCount = descriptor->count;
+
+        vk::QueryPool pool = device->rhi->GetDevice().createQueryPool(ci);
+        if (!pool)
+        {
+            PE_WARN("[WebGPU] wgpuDeviceCreateQuerySet: VkQueryPool creation failed");
+            return nullptr;
+        }
+
+        // Reset all queries so they are in a known state
+        device->rhi->GetDevice().resetQueryPool(pool, 0, descriptor->count);
+
         auto *qs = new WGPUQuerySetImpl();
         qs->type = descriptor->type;
         qs->count = descriptor->count;
+        qs->queryPool = static_cast<VkQueryPool>(pool);
         if (descriptor->label.data)
             qs->label = pwgpu::ToString(descriptor->label);
         return qs;

@@ -1,6 +1,9 @@
 #include "CommandEncoder.h"
 #include "RenderPass.h"
 #include "ComputePass.h"
+#include "RenderPipeline.h"
+#include "ComputePipeline.h"
+#include "BindGroup.h"
 #include "Buffer.h"
 #include "Texture.h"
 #include "QuerySet.h"
@@ -9,6 +12,40 @@
 #include "Utils.h"
 #include "API/Image.h"
 #include "API/Buffer.h"
+
+extern "C" void wgpuRenderPipelineRelease(WGPURenderPipeline);
+extern "C" void wgpuComputePipelineRelease(WGPUComputePipeline);
+extern "C" void wgpuBindGroupRelease(WGPUBindGroup);
+extern "C" void wgpuQuerySetAddRef(WGPUQuerySet);
+extern "C" void wgpuQuerySetRelease(WGPUQuerySet);
+
+void RetainedResources::MergeFrom(RetainedResources &other)
+{
+    renderPipelines.insert(renderPipelines.end(), other.renderPipelines.begin(), other.renderPipelines.end());
+    computePipelines.insert(computePipelines.end(), other.computePipelines.begin(), other.computePipelines.end());
+    bindGroups.insert(bindGroups.end(), other.bindGroups.begin(), other.bindGroups.end());
+    querySets.insert(querySets.end(), other.querySets.begin(), other.querySets.end());
+    other.renderPipelines.clear();
+    other.computePipelines.clear();
+    other.bindGroups.clear();
+    other.querySets.clear();
+}
+
+void RetainedResources::ReleaseAll()
+{
+    for (auto *p : renderPipelines)
+        wgpuRenderPipelineRelease(p);
+    for (auto *p : computePipelines)
+        wgpuComputePipelineRelease(p);
+    for (auto *bg : bindGroups)
+        wgpuBindGroupRelease(bg);
+    for (auto *qs : querySets)
+        wgpuQuerySetRelease(qs);
+    renderPipelines.clear();
+    computePipelines.clear();
+    bindGroups.clear();
+    querySets.clear();
+}
 
 namespace
 {
@@ -106,6 +143,7 @@ extern "C"
             return;
         if (enc->refCount.fetch_sub(1, std::memory_order_acq_rel) == 1)
         {
+            enc->retained.ReleaseAll();
             if (enc->cmd)
             {
                 enc->cmd->End();
@@ -124,6 +162,7 @@ extern "C"
         auto *rpe = new WGPURenderPassEncoderImpl();
         rpe->cmd = enc->cmd;
         rpe->parent = enc;
+        rpe->device = enc->device;
         if (descriptor && descriptor->label.data)
             rpe->label = pwgpu::ToString(descriptor->label);
         enc->hasOpenPass = true;
@@ -133,14 +172,37 @@ extern "C"
     WGPUComputePassEncoder wgpuCommandEncoderBeginComputePass(WGPUCommandEncoder enc,
                                                               WGPUComputePassDescriptor const *descriptor)
     {
-        (void)descriptor;
         if (!enc || enc->finished || enc->hasOpenPass)
             return nullptr;
         auto *cpe = new WGPUComputePassEncoderImpl();
         cpe->cmd = enc->cmd;
         cpe->parent = enc;
-        if (descriptor && descriptor->label.data)
-            cpe->label = pwgpu::ToString(descriptor->label);
+        cpe->device = enc->device;
+        if (descriptor)
+        {
+            if (descriptor->label.data)
+                cpe->label = pwgpu::ToString(descriptor->label);
+
+            if (descriptor->timestampWrites)
+            {
+                auto *tw = descriptor->timestampWrites;
+                if (tw->querySet && tw->querySet->type == WGPUQueryType_Timestamp &&
+                    tw->querySet->queryPool != VK_NULL_HANDLE && !tw->querySet->destroyed)
+                {
+                    cpe->timestampQuerySet = tw->querySet;
+                    wgpuQuerySetAddRef(tw->querySet);
+                    if (tw->beginningOfPassWriteIndex < tw->querySet->count)
+                    {
+                        cpe->beginTimestampIndex = tw->beginningOfPassWriteIndex;
+                        enc->cmd->ApiHandle().writeTimestamp2(
+                            vk::PipelineStageFlagBits2::eAllCommands,
+                            tw->querySet->queryPool, tw->beginningOfPassWriteIndex);
+                    }
+                    if (tw->endOfPassWriteIndex < tw->querySet->count)
+                        cpe->endTimestampIndex = tw->endOfPassWriteIndex;
+                }
+            }
+        }
         enc->hasOpenPass = true;
         return cpe;
     }
@@ -161,6 +223,9 @@ extern "C"
         cb->device = enc->device;
         cb->cmd = enc->cmd;
         enc->cmd = nullptr;
+
+        cb->retained.MergeFrom(enc->retained);
+
         if (descriptor && descriptor->label.data)
             cb->label = pwgpu::ToString(descriptor->label);
         return cb;
@@ -493,6 +558,9 @@ extern "C"
         if (dstOffset + queryCount * 8 > dst->size)
             return;
 
+        wgpuQuerySetAddRef(querySet);
+        enc->retained.querySets.push_back(querySet);
+
         enc->cmd->ApiHandle().copyQueryPoolResults(
             querySet->queryPool, firstQuery, queryCount,
             dst->peBuffer->ApiHandle(), dstOffset,
@@ -510,6 +578,9 @@ extern "C"
             return;
         if (queryIndex >= querySet->count)
             return;
+
+        wgpuQuerySetAddRef(querySet);
+        enc->retained.querySets.push_back(querySet);
 
         enc->cmd->ApiHandle().writeTimestamp2(vk::PipelineStageFlagBits2::eAllCommands,
                                               querySet->queryPool, queryIndex);
@@ -558,6 +629,7 @@ extern "C"
             return;
         if (cb->refCount.fetch_sub(1, std::memory_order_acq_rel) == 1)
         {
+            cb->retained.ReleaseAll();
             // If the command buffer was never submitted, return the pe::CommandBuffer
             // to the pool so we don't leak it.
             if (cb->cmd && !cb->submitted)

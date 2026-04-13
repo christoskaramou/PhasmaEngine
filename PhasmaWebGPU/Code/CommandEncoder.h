@@ -5,6 +5,22 @@
 
 struct WGPUDeviceImpl;
 
+struct WGPURenderPipelineImpl;
+struct WGPUComputePipelineImpl;
+struct WGPUBindGroupImpl;
+struct WGPUQuerySetImpl;
+
+struct RetainedResources
+{
+    std::vector<WGPURenderPipelineImpl *> renderPipelines;
+    std::vector<WGPUComputePipelineImpl *> computePipelines;
+    std::vector<WGPUBindGroupImpl *> bindGroups;
+    std::vector<WGPUQuerySetImpl *> querySets;
+
+    void MergeFrom(RetainedResources &other);
+    void ReleaseAll();
+};
+
 struct WGPUCommandBufferImpl
 {
     std::atomic<uint32_t> refCount{1};
@@ -12,6 +28,8 @@ struct WGPUCommandBufferImpl
     WGPUDeviceImpl *device = nullptr;
     pe::CommandBuffer *cmd = nullptr;
     bool submitted = false;
+
+    RetainedResources retained;
 };
 
 struct WGPUCommandEncoderImpl
@@ -21,6 +39,6 @@ struct WGPUCommandEncoderImpl
     WGPUDeviceImpl *device = nullptr;
     pe::CommandBuffer *cmd = nullptr;
     bool finished = false;
-    // Set while a pass is being encoded; blocks Begin*Pass and Finish (spec §13).
     bool hasOpenPass = false;
+    RetainedResources retained;
 };

@@ -27,11 +27,6 @@ extern "C"
         if (!qs || qs->destroyed)
             return;
         qs->destroyed = true;
-        if (qs->queryPool != VK_NULL_HANDLE)
-        {
-            pe::RHI::Get()->GetDevice().destroyQueryPool(qs->queryPool);
-            qs->queryPool = VK_NULL_HANDLE;
-        }
     }
 
     uint32_t wgpuQuerySetGetCount(WGPUQuerySet qs)
