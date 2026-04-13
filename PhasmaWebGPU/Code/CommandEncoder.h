@@ -12,6 +12,8 @@ struct WGPUQuerySetImpl;
 struct WGPUTextureViewImpl;
 struct WGPURenderBundleImpl;
 
+struct WGPUBufferImpl;
+
 struct RetainedResources
 {
     std::vector<WGPURenderPipelineImpl *> renderPipelines;
@@ -20,6 +22,7 @@ struct RetainedResources
     std::vector<WGPUQuerySetImpl *> querySets;
     std::vector<WGPUTextureViewImpl *> textureViews;
     std::vector<WGPURenderBundleImpl *> renderBundles;
+    std::vector<WGPUBufferImpl *> usedBuffers; // buffers touched by this command encoder
 
     void MergeFrom(RetainedResources &other);
     void ReleaseAll();

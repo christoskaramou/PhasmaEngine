@@ -117,6 +117,7 @@ int main(int /*argc*/, char * /*argv*/[])
 
     WGPUAdapter adapter = nullptr;
     WGPURequestAdapterCallbackInfo adapterCb{};
+    adapterCb.mode = WGPUCallbackMode_AllowSpontaneous;
     adapterCb.callback = [](WGPURequestAdapterStatus status, WGPUAdapter a,
                             WGPUStringView msg, void *u1, void *u2)
     {
@@ -155,6 +156,7 @@ int main(int /*argc*/, char * /*argv*/[])
     devDesc.label = {nullptr, WGPU_STRLEN};
 
     WGPURequestDeviceCallbackInfo devCb{};
+    devCb.mode = WGPUCallbackMode_AllowSpontaneous;
     devCb.callback = [](WGPURequestDeviceStatus status, WGPUDevice d,
                         WGPUStringView msg, void *u1, void *u2)
     {
@@ -340,6 +342,7 @@ int main(int /*argc*/, char * /*argv*/[])
 
     bool mapDone = false;
     WGPUBufferMapCallbackInfo mapCb{};
+    mapCb.mode = WGPUCallbackMode_AllowProcessEvents;
     mapCb.callback = [](WGPUMapAsyncStatus status, WGPUStringView msg,
                         void *u1, void *u2)
     {
@@ -348,8 +351,9 @@ int main(int /*argc*/, char * /*argv*/[])
         *static_cast<bool *>(u1) = (status == WGPUMapAsyncStatus_Success);
     };
     mapCb.userdata1 = &mapDone;
-    wgpuBufferMapAsync(readbackBuf, WGPUMapMode_Read, 0, kBufSize, mapCb);
-    wgpuInstanceProcessEvents(instance);
+    WGPUFuture mapFuture = wgpuBufferMapAsync(readbackBuf, WGPUMapMode_Read, 0, kBufSize, mapCb);
+    WGPUFutureWaitInfo waitInfo{mapFuture, WGPU_FALSE};
+    wgpuInstanceWaitAny(instance, 1, &waitInfo, UINT64_MAX);
     CHECK(mapDone, "readback buffer map succeeded");
 
     if (mapDone)
@@ -380,6 +384,7 @@ int main(int /*argc*/, char * /*argv*/[])
 
     printf("\n--- 12. Cleanup ---\n");
 
+    wgpuDeviceDestroy(device);
     wgpuCommandBufferRelease(cmdBuf);
     wgpuComputePassEncoderRelease(computePass);
     wgpuCommandEncoderRelease(encoder);

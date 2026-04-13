@@ -9,6 +9,7 @@
 #include "RenderPipeline.h"
 #include "ComputePipeline.h"
 #include "CommandEncoder.h"
+#include "Instance.h"
 #include "API/Queue.h"
 #include "RenderBundle.h"
 #include "QuerySet.h"
@@ -109,12 +110,19 @@ extern "C"
         {
             if (device->queue)
             {
-                // Clear back-pointer before release so a late wgpuQueueRelease won't dereference us.
+                if (device->queue->peQueue)
+                {
+                    device->queue->peQueue->WaitIdle();
+                    device->queue->RecyclePendingSubmits();
+                }
                 device->queue->device = nullptr;
                 wgpuQueueRelease(device->queue);
                 device->queue = nullptr;
             }
+            WGPUInstance inst = device->instance;
             delete device;
+            if (inst)
+                wgpuInstanceRelease(inst);
         }
     }
 
@@ -123,6 +131,13 @@ extern "C"
         if (!device || device->destroyed)
             return;
         device->destroyed = true;
+
+        if (device->queue && device->queue->peQueue)
+        {
+            device->queue->peQueue->WaitIdle();
+            device->queue->RecyclePendingSubmits();
+        }
+
         if (device->deviceLostCallbackInfo.callback)
         {
             WGPUStringView msg = pwgpu::ToStringView("Device destroyed.");
@@ -210,6 +225,8 @@ extern "C"
 
     WGPUFuture wgpuDevicePopErrorScope(WGPUDevice device, WGPUPopErrorScopeCallbackInfo callbackInfo)
     {
+        WGPUInstanceImpl *inst = device ? device->instance : nullptr;
+
         pwgpu::ErrorScope scope;
         bool haveScope = false;
         if (device)
@@ -224,27 +241,39 @@ extern "C"
         }
         if (!haveScope)
         {
-            if (callbackInfo.callback)
-                callbackInfo.callback(WGPUPopErrorScopeStatus_Error, WGPUErrorType_NoError, {nullptr, 0},
-                                      callbackInfo.userdata1, callbackInfo.userdata2);
-            return WGPUFuture{pwgpu::NextFutureId()};
+            if (!inst || !callbackInfo.callback)
+                return inst ? inst->futures.NextId() : WGPUFuture{0};
+            auto cb = callbackInfo.callback;
+            auto u1 = callbackInfo.userdata1;
+            auto u2 = callbackInfo.userdata2;
+            return inst->futures.TrackEvent(callbackInfo.mode,
+                                            [cb, u1, u2]()
+                                            {
+                                                cb(WGPUPopErrorScopeStatus_Error, WGPUErrorType_NoError, {nullptr, 0}, u1, u2);
+                                            });
         }
-        if (callbackInfo.callback)
-        {
-            WGPUStringView msg = pwgpu::ToStringView(scope.capturedErrorMessage);
-            callbackInfo.callback(WGPUPopErrorScopeStatus_Success,
-                                  scope.hasCapturedError ? scope.capturedErrorType : WGPUErrorType_NoError,
-                                  msg,
-                                  callbackInfo.userdata1,
-                                  callbackInfo.userdata2);
-        }
-        return WGPUFuture{pwgpu::NextFutureId()};
+
+        if (!inst || !callbackInfo.callback)
+            return inst ? inst->futures.NextId() : WGPUFuture{0};
+        auto cb = callbackInfo.callback;
+        auto u1 = callbackInfo.userdata1;
+        auto u2 = callbackInfo.userdata2;
+        WGPUErrorType errType = scope.hasCapturedError ? scope.capturedErrorType : WGPUErrorType_NoError;
+        std::string errMsg = scope.capturedErrorMessage;
+        return inst->futures.TrackEvent(callbackInfo.mode,
+                                        [cb, u1, u2, errType, errMsg]()
+                                        {
+                                            WGPUStringView sv{errMsg.c_str(), errMsg.size()};
+                                            cb(WGPUPopErrorScopeStatus_Success, errType, sv, u1, u2);
+                                        });
     }
 
     WGPUFuture wgpuDeviceGetLostFuture(WGPUDevice device)
     {
-        (void)device;
-        return WGPUFuture{pwgpu::NextFutureId()};
+        if (!device || !device->instance)
+            return WGPUFuture{0};
+        // TODO: track as incomplete future, complete on device loss.
+        return device->instance->futures.NextId();
     }
 
     WGPUBuffer wgpuDeviceCreateBuffer(WGPUDevice device, WGPUBufferDescriptor const *descriptor)
@@ -2073,10 +2102,18 @@ extern "C"
     {
         WGPUComputePipeline cp = wgpuDeviceCreateComputePipeline(device, descriptor);
         bool valid = cp && !cp->invalid;
-        if (callbackInfo.callback)
-            callbackInfo.callback(valid ? WGPUCreatePipelineAsyncStatus_Success : WGPUCreatePipelineAsyncStatus_ValidationError,
-                                  cp, {nullptr, 0}, callbackInfo.userdata1, callbackInfo.userdata2);
-        return WGPUFuture{pwgpu::NextFutureId()};
+        WGPUInstanceImpl *inst = device ? device->instance : nullptr;
+        if (!inst || !callbackInfo.callback)
+            return inst ? inst->futures.NextId() : WGPUFuture{0};
+        auto cb = callbackInfo.callback;
+        auto u1 = callbackInfo.userdata1;
+        auto u2 = callbackInfo.userdata2;
+        auto status = valid ? WGPUCreatePipelineAsyncStatus_Success : WGPUCreatePipelineAsyncStatus_ValidationError;
+        return inst->futures.TrackEvent(callbackInfo.mode,
+                                        [cb, u1, u2, status, cp]()
+                                        {
+                                            cb(status, cp, {nullptr, 0}, u1, u2);
+                                        });
     }
 
     // ======================================================================
@@ -2658,10 +2695,18 @@ extern "C"
     {
         WGPURenderPipeline rp = wgpuDeviceCreateRenderPipeline(device, descriptor);
         bool valid = rp && !rp->invalid;
-        if (callbackInfo.callback)
-            callbackInfo.callback(valid ? WGPUCreatePipelineAsyncStatus_Success : WGPUCreatePipelineAsyncStatus_ValidationError,
-                                  rp, {nullptr, 0}, callbackInfo.userdata1, callbackInfo.userdata2);
-        return WGPUFuture{pwgpu::NextFutureId()};
+        WGPUInstanceImpl *inst = device ? device->instance : nullptr;
+        if (!inst || !callbackInfo.callback)
+            return inst ? inst->futures.NextId() : WGPUFuture{0};
+        auto cb = callbackInfo.callback;
+        auto u1 = callbackInfo.userdata1;
+        auto u2 = callbackInfo.userdata2;
+        auto status = valid ? WGPUCreatePipelineAsyncStatus_Success : WGPUCreatePipelineAsyncStatus_ValidationError;
+        return inst->futures.TrackEvent(callbackInfo.mode,
+                                        [cb, u1, u2, status, rp]()
+                                        {
+                                            cb(status, rp, {nullptr, 0}, u1, u2);
+                                        });
     }
 
     WGPUCommandEncoder wgpuDeviceCreateCommandEncoder(WGPUDevice device, WGPUCommandEncoderDescriptor const *descriptor)

@@ -136,6 +136,7 @@ int main(int /*argc*/, char * /*argv*/[])
     WGPUAdapter adapter = nullptr;
     {
         WGPURequestAdapterCallbackInfo cb{};
+        cb.mode = WGPUCallbackMode_AllowSpontaneous;
         cb.callback = [](WGPURequestAdapterStatus status, WGPUAdapter a,
                          WGPUStringView, void *u1, void *)
         { *static_cast<WGPUAdapter *>(u1) = (status == WGPURequestAdapterStatus_Success) ? a : nullptr; };
@@ -155,6 +156,7 @@ int main(int /*argc*/, char * /*argv*/[])
         WGPUDeviceDescriptor devDesc{};
         devDesc.uncapturedErrorCallbackInfo = errCb;
         WGPURequestDeviceCallbackInfo cb{};
+        cb.mode = WGPUCallbackMode_AllowSpontaneous;
         cb.callback = [](WGPURequestDeviceStatus status, WGPUDevice d,
                          WGPUStringView, void *u1, void *)
         { *static_cast<WGPUDevice *>(u1) = (status == WGPURequestDeviceStatus_Success) ? d : nullptr; };
@@ -393,7 +395,7 @@ int main(int /*argc*/, char * /*argv*/[])
     // Cleanup
 
     printf("\nCleaning up...\n");
-    pe::RHII.WaitDeviceIdle();
+    wgpuDeviceDestroy(device);
 
     wgpuRenderPipelineRelease(renderPipeline);
     wgpuShaderModuleRelease(psModule);

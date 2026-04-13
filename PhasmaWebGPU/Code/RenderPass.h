@@ -49,4 +49,5 @@ struct WGPURenderPassEncoderImpl
     std::vector<WGPURenderPipelineImpl *> retainedPipelines;
     std::vector<WGPUBindGroupImpl *> retainedBindGroups;
     std::vector<WGPURenderBundleImpl *> retainedBundles;
+    std::vector<WGPUBufferImpl *> usedBuffers;
 };

@@ -22,6 +22,10 @@ struct WGPUBufferImpl
     uint64_t size = 0;
     bool hostVisible = false;
 
+    // The queue submission serial at which this buffer was last used by GPU work.
+    // mapAsync waits for this serial (not the queue's global lastSubmissionSerial).
+    std::atomic<uint64_t> lastUsageSerial{0};
+
     // State machine — protected by mapMutex.
     std::mutex mapMutex;
     WGPUBufferMapState mapState = WGPUBufferMapState_Unmapped;

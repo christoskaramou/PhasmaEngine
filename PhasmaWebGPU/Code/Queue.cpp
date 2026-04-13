@@ -3,12 +3,44 @@
 #include "Texture.h"
 #include "CommandEncoder.h"
 #include "FormatMap.h"
+#include "Instance.h"
 #include "Utils.h"
+#include "API/Command.h"
 #include "API/Queue.h"
+#include "API/Semaphore.h"
 #include "API/Image.h"
 #include "API/Buffer.h"
 #include "API/RHI.h"
 #include "API/StagingManager.h"
+
+pe::Semaphore *WGPUQueueImpl::GetSemaphore() const
+{
+    return peQueue ? peQueue->GetSubmissionsSemaphore() : nullptr;
+}
+
+void WGPUQueueImpl::RecyclePendingSubmits()
+{
+    pe::Semaphore *sem = GetSemaphore();
+    if (!sem)
+        return;
+    const uint64_t completedSerial = sem->GetValue();
+
+    std::lock_guard<std::mutex> lock(pendingMutex);
+    auto it = pendingSubmits.begin();
+    while (it != pendingSubmits.end())
+    {
+        if (completedSerial >= it->serial)
+        {
+            it->cmd->Wait();
+            it->cmd->Return();
+            it = pendingSubmits.erase(it);
+        }
+        else
+        {
+            ++it;
+        }
+    }
+}
 
 extern "C"
 {
@@ -36,17 +68,64 @@ extern "C"
         if (!commandCount || !commands)
             return;
 
+        queue->RecyclePendingSubmits();
+
+        std::vector<pe::CommandBuffer *> cmds;
+        std::vector<WGPUCommandBuffer> validCBs;
+        cmds.reserve(commandCount);
+        validCBs.reserve(commandCount);
+
         for (size_t i = 0; i < commandCount; ++i)
         {
             WGPUCommandBuffer cb = commands[i];
             if (!cb || !cb->cmd || cb->submitted)
                 continue;
 
+            bool hasUnavailable = false;
+            for (auto *buf : cb->retained.usedBuffers)
+            {
+                if (!buf)
+                    continue;
+                std::lock_guard<std::mutex> lock(buf->mapMutex);
+                if (buf->mapState != WGPUBufferMapState_Unmapped)
+                {
+                    hasUnavailable = true;
+                    if (queue->device)
+                        queue->device->reportError(WGPUErrorType_Validation,
+                                                   pwgpu::ToStringView(
+                                                       "Submit with buffer in mapped/pending state"));
+                    break;
+                }
+            }
+            if (hasUnavailable)
+                continue;
+
             cb->submitted = true;
-            pe::CommandBuffer *cmd = cb->cmd;
-            queue->peQueue->Submit(1, &cmd, nullptr, nullptr);
-            cmd->Wait();
-            cmd->Return();
+            cmds.push_back(cb->cmd);
+            validCBs.push_back(cb);
+        }
+
+        if (cmds.empty())
+            return;
+
+        queue->peQueue->Submit(static_cast<uint32_t>(cmds.size()), cmds.data(), nullptr, nullptr);
+        const uint64_t serial = queue->peQueue->GetSubmissionCount();
+
+        {
+            std::lock_guard<std::mutex> lock(queue->pendingMutex);
+            for (auto *cmd : cmds)
+                queue->pendingSubmits.push_back({cmd, serial});
+        }
+
+        queue->lastSubmissionSerial.store(serial, std::memory_order_release);
+
+        for (auto *cb : validCBs)
+        {
+            for (auto *buf : cb->retained.usedBuffers)
+            {
+                if (buf)
+                    buf->lastUsageSerial.store(serial, std::memory_order_release);
+            }
             cb->cmd = nullptr;
         }
     }
@@ -77,11 +156,18 @@ extern "C"
         {
             pe::CommandBuffer *cmd = queue->peQueue->AcquireCommandBuffer();
             cmd->Begin();
-            cmd->CopyBufferStaged(buffer->peBuffer, const_cast<void *>(data), size, static_cast<size_t>(bufferOffset));
+            cmd->CopyBufferStaged(buffer->peBuffer, const_cast<void *>(data), size,
+                                  static_cast<size_t>(bufferOffset));
             cmd->End();
             queue->peQueue->Submit(1, &cmd, nullptr, nullptr);
-            cmd->Wait();
-            cmd->Return();
+
+            const uint64_t serial = queue->peQueue->GetSubmissionCount();
+            {
+                std::lock_guard<std::mutex> lock(queue->pendingMutex);
+                queue->pendingSubmits.push_back({cmd, serial});
+            }
+            queue->lastSubmissionSerial.store(serial, std::memory_order_release);
+            buffer->lastUsageSerial.store(serial, std::memory_order_release);
         }
     }
 
@@ -178,16 +264,26 @@ extern "C"
 
         cmd->End();
         queue->peQueue->Submit(1, &cmd, nullptr, nullptr);
-        cmd->Wait();
-        cmd->Return();
+
+        const uint64_t serial = queue->peQueue->GetSubmissionCount();
+        {
+            std::lock_guard<std::mutex> lock(queue->pendingMutex);
+            queue->pendingSubmits.push_back({cmd, serial});
+        }
+        queue->lastSubmissionSerial.store(serial, std::memory_order_release);
     }
 
     WGPUFuture wgpuQueueOnSubmittedWorkDone(WGPUQueue queue, WGPUQueueWorkDoneCallbackInfo callbackInfo)
     {
-        (void)queue;
-        if (callbackInfo.callback)
-            callbackInfo.callback(WGPUQueueWorkDoneStatus_Success, {nullptr, 0}, callbackInfo.userdata1, callbackInfo.userdata2);
-        return WGPUFuture{pwgpu::NextFutureId()};
+        WGPUInstanceImpl *inst = (queue && queue->device) ? queue->device->instance : nullptr;
+        if (!inst || !callbackInfo.callback)
+            return inst ? inst->futures.NextId() : WGPUFuture{0};
+        auto cb = callbackInfo.callback;
+        auto u1 = callbackInfo.userdata1;
+        auto u2 = callbackInfo.userdata2;
+        uint64_t serial = queue->lastSubmissionSerial.load(std::memory_order_acquire);
+        return inst->futures.TrackEvent(callbackInfo.mode, [cb, u1, u2]()
+                                        { cb(WGPUQueueWorkDoneStatus_Success, {nullptr, 0}, u1, u2); }, queue, serial);
     }
 
     void wgpuQueueSetLabel(WGPUQueue queue, WGPUStringView label)

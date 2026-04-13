@@ -27,4 +27,5 @@ struct WGPUComputePassEncoderImpl
 
     std::vector<WGPUComputePipelineImpl *> retainedPipelines;
     std::vector<WGPUBindGroupImpl *> retainedBindGroups;
+    std::vector<WGPUBufferImpl *> usedBuffers;
 };

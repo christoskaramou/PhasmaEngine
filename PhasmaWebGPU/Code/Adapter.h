@@ -10,11 +10,14 @@ struct WGPUAdapterChainedCaps
     bool depthClipEnable = false; // WGPUFeatureName_DepthClipControl
 };
 
+struct WGPUInstanceImpl;
+
 struct WGPUAdapterImpl
 {
     std::atomic<uint32_t> refCount{1};
     std::string label;
 
+    WGPUInstanceImpl *instance = nullptr;
     pe::RHI *rhi = nullptr;
     vk::PhysicalDevice gpu{};
 

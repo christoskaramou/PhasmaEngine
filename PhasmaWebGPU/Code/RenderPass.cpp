@@ -175,6 +175,7 @@ extern "C"
         vk::Buffer vkBuf = buffer->peBuffer->ApiHandle();
         vk::DeviceSize vkOffset = static_cast<vk::DeviceSize>(offset);
         rpe->cmd->ApiHandle().bindVertexBuffers(slot, 1, &vkBuf, &vkOffset);
+        rpe->usedBuffers.push_back(buffer);
     }
 
     void wgpuRenderPassEncoderSetIndexBuffer(WGPURenderPassEncoder rpe, WGPUBuffer buffer,
@@ -189,6 +190,7 @@ extern "C"
 
         vk::IndexType indexType = (format == WGPUIndexFormat_Uint16) ? vk::IndexType::eUint16 : vk::IndexType::eUint32;
         rpe->cmd->ApiHandle().bindIndexBuffer(buffer->peBuffer->ApiHandle(), offset, indexType);
+        rpe->usedBuffers.push_back(buffer);
     }
 
     void wgpuRenderPassEncoderDraw(WGPURenderPassEncoder rpe, uint32_t vertexCount,
@@ -228,6 +230,7 @@ extern "C"
             return;
 
         rpe->cmd->ApiHandle().drawIndirect(buffer->peBuffer->ApiHandle(), offset, 1, sizeof(VkDrawIndirectCommand));
+        rpe->usedBuffers.push_back(buffer);
     }
 
     void wgpuRenderPassEncoderDrawIndexedIndirect(WGPURenderPassEncoder rpe, WGPUBuffer buffer, uint64_t offset)
@@ -246,6 +249,7 @@ extern "C"
             return;
 
         rpe->cmd->ApiHandle().drawIndexedIndirect(buffer->peBuffer->ApiHandle(), offset, 1, sizeof(VkDrawIndexedIndirectCommand));
+        rpe->usedBuffers.push_back(buffer);
     }
 
     void wgpuRenderPassEncoderSetViewport(WGPURenderPassEncoder rpe,
@@ -496,6 +500,11 @@ extern "C"
                 rpe->parent->retained.renderBundles.end(),
                 rpe->retainedBundles.begin(), rpe->retainedBundles.end());
             rpe->retainedBundles.clear();
+
+            rpe->parent->retained.usedBuffers.insert(
+                rpe->parent->retained.usedBuffers.end(),
+                rpe->usedBuffers.begin(), rpe->usedBuffers.end());
+            rpe->usedBuffers.clear();
 
             rpe->parent->retained.textureViews.insert(
                 rpe->parent->retained.textureViews.end(),

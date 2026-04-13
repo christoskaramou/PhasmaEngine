@@ -50,10 +50,4 @@ namespace pwgpu
         return nullptr;
     }
 
-    inline uint64_t NextFutureId()
-    {
-        static std::atomic<uint64_t> s_id{1};
-        return s_id.fetch_add(1, std::memory_order_relaxed);
-    }
-
 } // namespace pwgpu

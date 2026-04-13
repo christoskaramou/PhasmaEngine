@@ -171,57 +171,47 @@ extern "C"
     {
         if (!instance)
             return;
-        std::lock_guard<std::mutex> lock(instance->futuresMutex);
-        for (auto &f : instance->pendingFutures)
-            f.callback();
-        instance->pendingFutures.clear();
+        instance->futures.ProcessEvents();
     }
 
     WGPUFuture wgpuInstanceRequestAdapter(WGPUInstance instance,
                                           WGPURequestAdapterOptions const *options,
                                           WGPURequestAdapterCallbackInfo callbackInfo)
     {
+        // Helper: register an error callback into the instance's future registry.
+        auto trackError = [&](const char *msg) -> WGPUFuture
+        {
+            if (!instance || !callbackInfo.callback)
+                return instance ? instance->futures.NextId() : WGPUFuture{0};
+            auto cb = callbackInfo.callback;
+            auto u1 = callbackInfo.userdata1;
+            auto u2 = callbackInfo.userdata2;
+            std::string captured(msg);
+            return instance->futures.TrackEvent(callbackInfo.mode,
+                                                [cb, u1, u2, captured]()
+                                                {
+                                                    WGPUStringView sv{captured.c_str(), captured.size()};
+                                                    cb(WGPURequestAdapterStatus_Unavailable, nullptr, sv, u1, u2);
+                                                });
+        };
+
         if (options)
         {
             if (options->forceFallbackAdapter)
-            {
-                if (callbackInfo.callback)
-                {
-                    WGPUStringView msg = pwgpu::ToStringView(
-                        "PhasmaWebGPU: no fallback (software) adapter available");
-                    callbackInfo.callback(WGPURequestAdapterStatus_Unavailable, nullptr, msg,
-                                          callbackInfo.userdata1, callbackInfo.userdata2);
-                }
-                return WGPUFuture{pwgpu::NextFutureId()};
-            }
+                return trackError("PhasmaWebGPU: no fallback (software) adapter available");
             if (options->backendType != WGPUBackendType_Undefined &&
                 options->backendType != WGPUBackendType_Vulkan)
-            {
-                if (callbackInfo.callback)
-                {
-                    WGPUStringView msg = pwgpu::ToStringView(
-                        "PhasmaWebGPU: only WGPUBackendType_Vulkan is available on this host");
-                    callbackInfo.callback(WGPURequestAdapterStatus_Unavailable, nullptr, msg,
-                                          callbackInfo.userdata1, callbackInfo.userdata2);
-                }
-                return WGPUFuture{pwgpu::NextFutureId()};
-            }
+                return trackError("PhasmaWebGPU: only WGPUBackendType_Vulkan is available on this host");
         }
 
         pe::RHI *rhi = instance ? instance->rhi : &pe::RHII;
         if (!rhi || !rhi->GetGpu())
-        {
-            if (callbackInfo.callback)
-            {
-                WGPUStringView msg = pwgpu::ToStringView("PhasmaWebGPU: pe::RHI is not initialized");
-                callbackInfo.callback(WGPURequestAdapterStatus_Unavailable, nullptr, msg,
-                                      callbackInfo.userdata1, callbackInfo.userdata2);
-            }
-            return WGPUFuture{pwgpu::NextFutureId()};
-        }
+            return trackError("PhasmaWebGPU: pe::RHI is not initialized");
 
         auto *adapter = new WGPUAdapterImpl();
         adapter->rhi = rhi;
+        adapter->instance = instance;
+        wgpuInstanceAddRef(instance);
         adapter->gpu = rhi->GetGpu();
 
         VkPhysicalDevice vkGpu = static_cast<VkPhysicalDevice>(adapter->gpu);
@@ -258,15 +248,9 @@ extern "C"
         if (!hasBC && !(hasETC2 && hasASTC))
         {
             delete adapter;
-            if (callbackInfo.callback)
-            {
-                WGPUStringView msg = pwgpu::ToStringView(
-                    "PhasmaWebGPU: GPU fails W3C §4.2.1 adapter capability guarantee "
-                    "(needs BC or (ETC2 + ASTC) texture compression)");
-                callbackInfo.callback(WGPURequestAdapterStatus_Unavailable, nullptr, msg,
-                                      callbackInfo.userdata1, callbackInfo.userdata2);
-            }
-            return WGPUFuture{pwgpu::NextFutureId()};
+            return trackError(
+                "PhasmaWebGPU: GPU fails W3C §4.2.1 adapter capability guarantee "
+                "(needs BC or (ETC2 + ASTC) texture compression)");
         }
 
         {
@@ -276,26 +260,23 @@ extern "C"
             if (pwgpu::ValidateAdapterLimits(adapterLim, badField) != WGPUStatus_Success)
             {
                 delete adapter;
-                if (callbackInfo.callback)
-                {
-                    // thread_local: keeps the WGPUStringView backing alive until the
-                    // synchronous callback returns without leaking across threads.
-                    static thread_local std::string msgStr;
-                    msgStr = "PhasmaWebGPU: GPU fails W3C §4.2.1 default-or-better limit '" +
-                             badField + "'";
-                    WGPUStringView msg{msgStr.c_str(), msgStr.size()};
-                    callbackInfo.callback(WGPURequestAdapterStatus_Unavailable, nullptr, msg,
-                                          callbackInfo.userdata1, callbackInfo.userdata2);
-                }
-                return WGPUFuture{pwgpu::NextFutureId()};
+                std::string errMsg = "PhasmaWebGPU: GPU fails W3C §4.2.1 default-or-better limit '" +
+                                     badField + "'";
+                return trackError(errMsg.c_str());
             }
         }
 
-        if (callbackInfo.callback)
-            callbackInfo.callback(WGPURequestAdapterStatus_Success, adapter, {nullptr, 0},
-                                  callbackInfo.userdata1, callbackInfo.userdata2);
+        if (!instance || !callbackInfo.callback)
+            return instance ? instance->futures.NextId() : WGPUFuture{0};
 
-        return WGPUFuture{pwgpu::NextFutureId()};
+        auto cb = callbackInfo.callback;
+        auto u1 = callbackInfo.userdata1;
+        auto u2 = callbackInfo.userdata2;
+        return instance->futures.TrackEvent(callbackInfo.mode,
+                                            [cb, u1, u2, adapter]()
+                                            {
+                                                cb(WGPURequestAdapterStatus_Success, adapter, {nullptr, 0}, u1, u2);
+                                            });
     }
 
     WGPUWaitStatus wgpuInstanceWaitAny(WGPUInstance instance,
@@ -303,11 +284,9 @@ extern "C"
                                        WGPUFutureWaitInfo *futures,
                                        uint64_t timeoutNS)
     {
-        (void)instance;
-        (void)futures;
-        (void)futureCount;
-        (void)timeoutNS;
-        return WGPUWaitStatus_Success;
+        if (!instance)
+            return WGPUWaitStatus_Error;
+        return instance->futures.WaitAny(futureCount, futures, timeoutNS);
     }
 
 } // extern "C"

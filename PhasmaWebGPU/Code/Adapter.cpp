@@ -1,5 +1,6 @@
 #include "Adapter.h"
 #include "Device.h"
+#include "Instance.h"
 #include "WGPULimits.h"
 #include "Utils.h"
 
@@ -105,7 +106,12 @@ extern "C"
         if (!adapter)
             return;
         if (adapter->refCount.fetch_sub(1, std::memory_order_acq_rel) == 1)
+        {
+            WGPUInstance inst = adapter->instance;
             delete adapter;
+            if (inst)
+                wgpuInstanceRelease(inst);
+        }
     }
 
     void wgpuAdapterGetFeatures(WGPUAdapter adapter, WGPUSupportedFeatures *features)
@@ -165,17 +171,27 @@ extern "C"
                                         WGPUDeviceDescriptor const *descriptor,
                                         WGPURequestDeviceCallbackInfo callbackInfo)
     {
-        if (!adapter || adapter->consumed)
+        WGPUInstanceImpl *inst = adapter ? adapter->instance : nullptr;
+
+        // Helper: register an error callback into the instance's future registry.
+        auto trackError = [&](const char *msg) -> WGPUFuture
         {
-            if (callbackInfo.callback)
-            {
-                WGPUStringView msg = pwgpu::ToStringView(
-                    "PhasmaWebGPU: adapter is null, expired, or already consumed by a prior requestDevice");
-                callbackInfo.callback(WGPURequestDeviceStatus_Error, nullptr, msg,
-                                      callbackInfo.userdata1, callbackInfo.userdata2);
-            }
-            return WGPUFuture{pwgpu::NextFutureId()};
-        }
+            if (!inst || !callbackInfo.callback)
+                return inst ? inst->futures.NextId() : WGPUFuture{0};
+            auto cb = callbackInfo.callback;
+            auto u1 = callbackInfo.userdata1;
+            auto u2 = callbackInfo.userdata2;
+            std::string captured(msg);
+            return inst->futures.TrackEvent(callbackInfo.mode,
+                                            [cb, u1, u2, captured]()
+                                            {
+                                                WGPUStringView sv{captured.c_str(), captured.size()};
+                                                cb(WGPURequestDeviceStatus_Error, nullptr, sv, u1, u2);
+                                            });
+        };
+
+        if (!adapter || adapter->consumed)
+            return trackError("PhasmaWebGPU: adapter is null, expired, or already consumed by a prior requestDevice");
 
         if (adapter->supportedFeatures.empty())
             pwgpu_PopulateAdapterFeatureCache(*adapter);
@@ -186,16 +202,7 @@ extern "C"
             {
                 WGPUFeatureName req = descriptor->requiredFeatures[i];
                 if (!AdapterSupportsFeature(*adapter, req))
-                {
-                    if (callbackInfo.callback)
-                    {
-                        WGPUStringView msg = pwgpu::ToStringView(
-                            "PhasmaWebGPU: requiredFeatures contains a feature not supported by this adapter");
-                        callbackInfo.callback(WGPURequestDeviceStatus_Error, nullptr, msg,
-                                              callbackInfo.userdata1, callbackInfo.userdata2);
-                    }
-                    return WGPUFuture{pwgpu::NextFutureId()};
-                }
+                    return trackError("PhasmaWebGPU: requiredFeatures contains a feature not supported by this adapter");
             }
         }
 
@@ -207,20 +214,17 @@ extern "C"
             std::string bad;
             if (pwgpu::ValidateRequestedLimits(adapterLim, *descriptor->requiredLimits, bad) != WGPUStatus_Success)
             {
-                if (callbackInfo.callback)
-                {
-                    std::string what = "PhasmaWebGPU: requiredLimits violation on '" + bad + "'";
-                    WGPUStringView msg = pwgpu::ToStringView(what);
-                    callbackInfo.callback(WGPURequestDeviceStatus_Error, nullptr, msg,
-                                          callbackInfo.userdata1, callbackInfo.userdata2);
-                }
-                return WGPUFuture{pwgpu::NextFutureId()};
+                std::string what = "PhasmaWebGPU: requiredLimits violation on '" + bad + "'";
+                return trackError(what.c_str());
             }
         }
 
         const bool canFulfill = adapter->rhi && adapter->rhi->GetDevice();
 
         auto *dev = new WGPUDeviceImpl();
+        dev->instance = inst;
+        if (inst)
+            wgpuInstanceAddRef(inst);
         dev->rhi = adapter->rhi;
         dev->peQueue = canFulfill ? adapter->rhi->GetMainQueue() : nullptr;
 
@@ -268,6 +272,7 @@ extern "C"
         {
             // Device is born lost: success callback must fire BEFORE the lost
             // callback so the consumer receives its handle before the loss notification.
+            // Born-lost fires immediately regardless of mode — spec requires ordered delivery.
             dev->destroyed = true;
             if (callbackInfo.callback)
                 callbackInfo.callback(WGPURequestDeviceStatus_Success, dev, {nullptr, 0},
@@ -283,18 +288,24 @@ extern "C"
                                                      dev->deviceLostCallbackInfo.userdata1,
                                                      dev->deviceLostCallbackInfo.userdata2);
             }
-            return WGPUFuture{pwgpu::NextFutureId()};
+            return inst->futures.NextId();
         }
 
         dev->queue = new WGPUQueueImpl();
         dev->queue->device = dev;
         dev->queue->peQueue = dev->peQueue;
 
-        if (callbackInfo.callback)
-            callbackInfo.callback(WGPURequestDeviceStatus_Success, dev, {nullptr, 0},
-                                  callbackInfo.userdata1, callbackInfo.userdata2);
+        if (!inst || !callbackInfo.callback)
+            return inst->futures.NextId();
 
-        return WGPUFuture{pwgpu::NextFutureId()};
+        auto cb = callbackInfo.callback;
+        auto u1 = callbackInfo.userdata1;
+        auto u2 = callbackInfo.userdata2;
+        return inst->futures.TrackEvent(callbackInfo.mode,
+                                        [cb, u1, u2, dev]()
+                                        {
+                                            cb(WGPURequestDeviceStatus_Success, dev, {nullptr, 0}, u1, u2);
+                                        });
     }
 
 } // extern "C"

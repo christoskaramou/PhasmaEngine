@@ -187,6 +187,7 @@ extern "C"
             return;
 
         cpe->cmd->ApiHandle().dispatchIndirect(buffer->peBuffer->ApiHandle(), offset);
+        cpe->usedBuffers.push_back(buffer);
     }
 
     // ---- §16.1.3 end ----
@@ -218,6 +219,11 @@ extern "C"
                 cpe->parent->retained.bindGroups.end(),
                 cpe->retainedBindGroups.begin(), cpe->retainedBindGroups.end());
             cpe->retainedBindGroups.clear();
+
+            cpe->parent->retained.usedBuffers.insert(
+                cpe->parent->retained.usedBuffers.end(),
+                cpe->usedBuffers.begin(), cpe->usedBuffers.end());
+            cpe->usedBuffers.clear();
 
             if (cpe->timestampQuerySet)
             {

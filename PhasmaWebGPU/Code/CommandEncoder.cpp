@@ -29,12 +29,14 @@ void RetainedResources::MergeFrom(RetainedResources &other)
     querySets.insert(querySets.end(), other.querySets.begin(), other.querySets.end());
     textureViews.insert(textureViews.end(), other.textureViews.begin(), other.textureViews.end());
     renderBundles.insert(renderBundles.end(), other.renderBundles.begin(), other.renderBundles.end());
+    usedBuffers.insert(usedBuffers.end(), other.usedBuffers.begin(), other.usedBuffers.end());
     other.renderPipelines.clear();
     other.computePipelines.clear();
     other.bindGroups.clear();
     other.querySets.clear();
     other.textureViews.clear();
     other.renderBundles.clear();
+    other.usedBuffers.clear();
 }
 
 void RetainedResources::ReleaseAll()
@@ -867,6 +869,8 @@ extern "C"
 
         enc->cmd->CopyBuffer(src->peBuffer, dst->peBuffer, static_cast<size_t>(copySize),
                              static_cast<size_t>(srcOffset), static_cast<size_t>(dstOffset));
+        enc->retained.usedBuffers.push_back(src);
+        enc->retained.usedBuffers.push_back(dst);
     }
 
     // ---- §11.1 / §13.4 clearBuffer ----
@@ -899,6 +903,7 @@ extern "C"
 
         enc->cmd->FillBuffer(buffer->peBuffer, static_cast<size_t>(offset),
                              static_cast<size_t>(clearSize), 0);
+        enc->retained.usedBuffers.push_back(buffer);
     }
 
     // ---- §11.2 / §13.5 copyBufferToTexture ----
@@ -970,6 +975,8 @@ extern "C"
         copyInfo.pRegions = &region;
 
         enc->cmd->ApiHandle().copyBufferToImage2(copyInfo);
+        if (src->buffer)
+            enc->retained.usedBuffers.push_back(src->buffer);
     }
 
     // ---- §11.2 / §13.5 copyTextureToBuffer ----
@@ -1047,6 +1054,8 @@ extern "C"
         copyInfo.pRegions = &region;
 
         enc->cmd->ApiHandle().copyImageToBuffer2(copyInfo);
+        if (dst->buffer)
+            enc->retained.usedBuffers.push_back(dst->buffer);
     }
 
     // ---- §11.2 / §13.5 copyTextureToTexture ----
@@ -1160,6 +1169,7 @@ extern "C"
             dst->peBuffer->ApiHandle(), dstOffset,
             sizeof(uint64_t), vk::QueryResultFlagBits::e64 | vk::QueryResultFlagBits::eWait);
         enc->cmd->ApiHandle().resetQueryPool(querySet->queryPool, firstQuery, queryCount);
+        enc->retained.usedBuffers.push_back(dst);
     }
 
     // ---- §13.4 writeTimestamp (extension) ----

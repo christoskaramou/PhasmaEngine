@@ -6,6 +6,7 @@
 #include "Utils.h"
 #include "API/Queue.h"
 #include "API/Command.h"
+#include "API/Image.h"
 
 extern "C" void wgpuDeviceAddRef(WGPUDevice);
 extern "C" void wgpuDeviceRelease(WGPUDevice);
@@ -270,7 +271,21 @@ extern "C"
         {
             pe::CommandBuffer *syncCmd = surface->device->peQueue->AcquireCommandBuffer();
             syncCmd->Begin();
+
+            pe::ImageBarrierInfo barrier{};
+            barrier.image = swapImage;
+            barrier.layout = vk::ImageLayout::eColorAttachmentOptimal;
+            barrier.stageFlags = vk::PipelineStageFlagBits2::eColorAttachmentOutput;
+            barrier.accessMask = vk::AccessFlagBits2::eColorAttachmentWrite;
+            barrier.baseMipLevel = 0;
+            barrier.mipLevels = 1;
+            barrier.baseArrayLayer = 0;
+            barrier.arrayLayers = 1;
+            syncCmd->ImageBarrier(barrier);
+
             syncCmd->End();
+            surface->acquireSemaphore->SetStageFlags(
+                vk::PipelineStageFlagBits2::eColorAttachmentOutput);
             surface->device->peQueue->Submit(1, &syncCmd, surface->acquireSemaphore, nullptr);
             syncCmd->Wait();
             syncCmd->Return();
@@ -315,7 +330,34 @@ extern "C"
         }
 
         if (surface->device && surface->device->peQueue && surface->swapchain)
-            surface->device->peQueue->Present(surface->swapchain, surface->currentImageIndex, nullptr);
+        {
+            pe::Image *swapImage =
+                surface->swapchain->GetImage(surface->currentImageIndex);
+            if (swapImage)
+            {
+                pe::CommandBuffer *cmd = surface->device->peQueue->AcquireCommandBuffer();
+                cmd->Begin();
+
+                pe::ImageBarrierInfo barrier{};
+                barrier.image = swapImage;
+                barrier.layout = vk::ImageLayout::ePresentSrcKHR;
+                barrier.stageFlags = vk::PipelineStageFlagBits2::eBottomOfPipe;
+                barrier.accessMask = vk::AccessFlagBits2::eNone;
+                barrier.baseMipLevel = 0;
+                barrier.mipLevels = 1;
+                barrier.baseArrayLayer = 0;
+                barrier.arrayLayers = 1;
+                cmd->ImageBarrier(barrier);
+
+                cmd->End();
+                surface->device->peQueue->Submit(1, &cmd, nullptr, nullptr);
+                cmd->Wait();
+                cmd->Return();
+            }
+
+            surface->device->peQueue->Present(
+                surface->swapchain, surface->currentImageIndex, nullptr);
+        }
 
         wgpuTextureRelease(surface->currentTexture);
         surface->currentTexture = nullptr;

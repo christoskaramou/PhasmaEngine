@@ -1,5 +1,6 @@
 #include "Buffer.h"
 #include "Device.h"
+#include "Instance.h"
 #include "Utils.h"
 
 namespace
@@ -239,13 +240,26 @@ extern "C"
                                   size_t size,
                                   WGPUBufferMapCallbackInfo callbackInfo)
     {
-        const WGPUFuture future{pwgpu::NextFutureId()};
+        WGPUInstanceImpl *inst = (buffer && buffer->device) ? buffer->device->instance : nullptr;
+
+        auto trackMapError = [&](const char *msg) -> WGPUFuture
+        {
+            if (!inst || !callbackInfo.callback)
+                return inst ? inst->futures.NextId() : WGPUFuture{0};
+            auto cb = callbackInfo.callback;
+            auto u1 = callbackInfo.userdata1;
+            auto u2 = callbackInfo.userdata2;
+            std::string captured(msg);
+            return inst->futures.TrackEvent(callbackInfo.mode,
+                                            [cb, u1, u2, captured]()
+                                            {
+                                                WGPUStringView sv{captured.c_str(), captured.size()};
+                                                cb(WGPUMapAsyncStatus_Error, sv, u1, u2);
+                                            });
+        };
 
         if (!buffer)
-        {
-            FireMapCallback(callbackInfo, WGPUMapAsyncStatus_Error, "Null buffer");
-            return future;
-        }
+            return trackMapError("Null buffer");
 
         uint64_t rangeSize = 0;
         const bool rangeOk = ResolveRange(buffer->size, offset, size, rangeSize);
@@ -290,34 +304,36 @@ extern "C"
         if (errorText)
         {
             ReportBufferValidationError(buffer, errorText);
-            FireMapCallback(callbackInfo, WGPUMapAsyncStatus_Error, errorText);
-            return future;
+            return trackMapError(errorText);
         }
 
-        // Complete synchronously — no GPU-side usage tracking yet.
-        WGPUBufferMapCallbackInfo callbackCopy{};
-        bool doSuccess = false;
-        {
-            std::lock_guard<std::mutex> lock(buffer->mapMutex);
-            if (buffer->mapState == WGPUBufferMapState_Pending)
-            {
-                buffer->mapState = WGPUBufferMapState_Mapped;
-                buffer->mappedOffset = buffer->pendingOffset;
-                buffer->mappedSize = buffer->pendingSize;
-                buffer->mappedMode = buffer->pendingMode;
-                callbackCopy = buffer->pendingCallback;
-                buffer->pendingCallback = {};
-                buffer->pendingOffset = 0;
-                buffer->pendingSize = 0;
-                buffer->pendingMode = WGPUMapMode_None;
-                doSuccess = true;
-            }
-        }
+        if (!inst || !callbackInfo.callback)
+            return inst ? inst->futures.NextId() : WGPUFuture{0};
 
-        if (doSuccess)
-            FireMapCallback(callbackCopy, WGPUMapAsyncStatus_Success, nullptr);
+        auto cb = callbackInfo.callback;
+        auto u1 = callbackInfo.userdata1;
+        auto u2 = callbackInfo.userdata2;
+        WGPUQueueImpl *q = buffer->device ? buffer->device->queue : nullptr;
+        uint64_t serial = buffer->lastUsageSerial.load(std::memory_order_acquire);
 
-        return future;
+        // State transitions into Mapped inside the callback, after GPU work completes.
+        return inst->futures.TrackEvent(callbackInfo.mode, [cb, u1, u2, buffer]()
+                                        {
+                                            {
+                                                std::lock_guard<std::mutex> lock(buffer->mapMutex);
+                                                if (buffer->mapState == WGPUBufferMapState_Pending)
+                                                {
+                                                    buffer->mapState = WGPUBufferMapState_Mapped;
+                                                    buffer->mappedOffset = buffer->pendingOffset;
+                                                    buffer->mappedSize = buffer->pendingSize;
+                                                    buffer->mappedMode = buffer->pendingMode;
+                                                    buffer->pendingCallback = {};
+                                                    buffer->pendingOffset = 0;
+                                                    buffer->pendingSize = 0;
+                                                    buffer->pendingMode = WGPUMapMode_None;
+                                                }
+                                            }
+                                            cb(WGPUMapAsyncStatus_Success, {nullptr, 0}, u1, u2); }, q, serial);
     }
 
     void wgpuBufferUnmap(WGPUBuffer buffer)
