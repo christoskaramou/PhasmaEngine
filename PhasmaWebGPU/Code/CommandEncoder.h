@@ -35,6 +35,7 @@ struct WGPUCommandBufferImpl
     WGPUDeviceImpl *device = nullptr;
     pe::CommandBuffer *cmd = nullptr;
     bool submitted = false;
+    bool invalid = false;
 
     RetainedResources retained;
 };
@@ -47,6 +48,7 @@ struct WGPUCommandEncoderImpl
     pe::CommandBuffer *cmd = nullptr;
     bool finished = false;
     bool hasOpenPass = false;
+    bool invalid = false;
     RetainedResources retained;
     std::vector<WGPUQuerySetImpl *> resetOcclusionQuerySets;
 };

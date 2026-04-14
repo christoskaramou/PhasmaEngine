@@ -253,8 +253,6 @@ extern "C"
     {
         WGPUInstanceImpl *inst = (buffer && buffer->device) ? buffer->device->instance : nullptr;
 
-        // Device-timeline errors: defer through ProcessEvents so the JS promise
-        // rejects asynchronously (CTS distinguishes deferred vs early rejection).
         auto trackMapErrorDeferred = [&](const char *msg) -> WGPUFuture
         {
             if (!inst || !callbackInfo.callback)
@@ -266,12 +264,27 @@ extern "C"
             WGPUCallbackMode deferredMode = callbackInfo.mode;
             if (deferredMode == WGPUCallbackMode_AllowSpontaneous)
                 deferredMode = WGPUCallbackMode_AllowProcessEvents;
-            return inst->futures.TrackEvent(deferredMode,
-                                            [cb, u1, u2, captured]()
-                                            {
-                                                WGPUStringView sv{captured.c_str(), captured.size()};
-                                                cb(WGPUMapAsyncStatus_Error, sv, u1, u2);
-                                            });
+            return inst->futures.TrackEvent(
+                deferredMode,
+                [cb, u1, u2, captured, buffer]()
+                {
+                    {
+                        std::lock_guard<std::mutex> lock(buffer->stateMutex);
+                        if (buffer->mapState != WGPUBufferMapState_Pending ||
+                            buffer->pendingCallback.userdata1 != u1)
+                            return;
+                        buffer->mapState = WGPUBufferMapState_Unmapped;
+                        buffer->pendingCallback = {};
+                        buffer->pendingOffset = 0;
+                        buffer->pendingSize = 0;
+                        buffer->pendingMode = WGPUMapMode_None;
+                        if (!buffer->invalid &&
+                            buffer->internalState != BufferInternalState::Destroyed)
+                            buffer->internalState = BufferInternalState::Available;
+                    }
+                    WGPUStringView sv{captured.c_str(), captured.size()};
+                    cb(WGPUMapAsyncStatus_Error, sv, u1, u2);
+                });
         };
 
         auto fireMapErrorNow = [&](const char *msg) -> WGPUFuture
@@ -330,14 +343,14 @@ extern "C"
                     errorText = "mapAsync WRITE requires MAP_WRITE usage";
             }
 
-            if (!errorText)
+            if (!earlyReject)
             {
                 buffer->mapState = WGPUBufferMapState_Pending;
                 buffer->internalState = BufferInternalState::Unavailable;
                 buffer->pendingCallback = callbackInfo;
                 buffer->pendingOffset = offset;
-                buffer->pendingSize = rangeSize;
-                buffer->pendingMode = mode;
+                buffer->pendingSize = errorText ? 0 : rangeSize;
+                buffer->pendingMode = errorText ? WGPUMapMode_None : mode;
             }
         }
 
@@ -375,8 +388,6 @@ extern "C"
                     {
                         return;
                     }
-                    // Pending may belong to a newer mapAsync after this one was
-                    // aborted via unmap/destroy; userdata1 identifies the owner.
                     if (buffer->pendingCallback.userdata1 != u1)
                     {
                         return;

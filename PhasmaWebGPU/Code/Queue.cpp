@@ -81,6 +81,9 @@ extern "C"
             if (!cb || !cb->cmd || cb->submitted)
                 continue;
 
+            if (cb->invalid)
+                continue;
+
             bool hasUnavailable = false;
             for (auto *buf : cb->retained.usedBuffers)
             {
@@ -136,27 +139,68 @@ extern "C"
     void wgpuQueueWriteBuffer(WGPUQueue queue, WGPUBuffer buffer,
                               uint64_t bufferOffset, void const *data, size_t size)
     {
-        (void)queue;
-        if (!buffer || !data)
+        if (!buffer)
             return;
+
+        WGPUDeviceImpl *reportDevice =
+            (queue && queue->device) ? queue->device : buffer->device;
+        auto reportValidation = [&](const char *msg)
+        {
+            if (reportDevice)
+                reportDevice->reportError(WGPUErrorType_Validation,
+                                          pwgpu::ToStringView(std::string("writeBuffer: ") + msg));
+        };
+
+        if (!data && size > 0)
+        {
+            reportValidation("data is null");
+            return;
+        }
         if (buffer->invalid)
+        {
+            reportValidation("buffer is invalid");
             return;
+        }
+        if (queue && buffer->device != queue->device)
+        {
+            reportValidation("buffer belongs to a different device");
+            return;
+        }
         if (buffer->internalState.load(std::memory_order_acquire) != BufferInternalState::Available)
+        {
+            reportValidation("buffer is destroyed or mapped");
             return;
+        }
         if (!(buffer->usage & WGPUBufferUsage_CopyDst))
+        {
+            reportValidation("buffer usage must include COPY_DST");
             return;
+        }
         if (bufferOffset % 4 != 0)
+        {
+            reportValidation("bufferOffset must be multiple of 4");
             return;
+        }
         if (size % 4 != 0)
+        {
+            reportValidation("size must be multiple of 4");
             return;
-        if (bufferOffset + size > buffer->size)
+        }
+        if (bufferOffset > buffer->size || size > buffer->size - bufferOffset)
+        {
+            reportValidation("bufferOffset + size exceeds buffer size");
             return;
+        }
 
         pe::Buffer *backing = nullptr;
         {
             std::lock_guard<std::mutex> lock(buffer->stateMutex);
-            if (buffer->internalState != BufferInternalState::Available || !buffer->peBuffer)
+            if (buffer->internalState != BufferInternalState::Available ||
+                !buffer->peBuffer)
+            {
+                reportValidation("buffer state changed during writeBuffer");
                 return;
+            }
             backing = buffer->peBuffer;
         }
 

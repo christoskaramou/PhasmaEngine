@@ -803,8 +803,6 @@ extern "C"
         return cpe;
     }
 
-    // ---- §12.1.1 finish() → GPUCommandBuffer ----
-
     WGPUCommandBuffer wgpuCommandEncoderFinish(WGPUCommandEncoder enc,
                                                WGPUCommandBufferDescriptor const *descriptor)
     {
@@ -819,15 +817,18 @@ extern "C"
         cb->device = enc->device;
         cb->cmd = enc->cmd;
         enc->cmd = nullptr;
+        cb->invalid = enc->invalid;
 
         cb->retained.MergeFrom(enc->retained);
 
         if (descriptor && descriptor->label.data)
             cb->label = pwgpu::ToString(descriptor->label);
+
+        if (enc->invalid && enc->device)
+            enc->device->reportError(WGPUErrorType_Validation,
+                                     pwgpu::ToStringView("CommandEncoder.finish(): encoder is invalid"));
         return cb;
     }
-
-    // ---- §11.1 / §13.4 copyBufferToBuffer ----
 
     void wgpuCommandEncoderCopyBufferToBuffer(WGPUCommandEncoder enc,
                                               WGPUBuffer src, uint64_t srcOffset,
@@ -836,38 +837,70 @@ extern "C"
     {
         if (!EncoderOpen(enc, "wgpuCommandEncoderCopyBufferToBuffer"))
             return;
-        if (!src || !src->peBuffer ||
-            src->internalState == BufferInternalState::Destroyed ||
-            !dst || !dst->peBuffer ||
-            dst->internalState == BufferInternalState::Destroyed)
-            return;
 
+        auto fail = [&](const char *msg)
+        {
+            (void)msg;
+            enc->invalid = true;
+        };
+
+        if (!src || !dst)
+        {
+            fail("src or dst buffer is null");
+            return;
+        }
+        if (src->invalid || dst->invalid)
+        {
+            fail("src or dst buffer is invalid");
+            return;
+        }
+        if (src->device != enc->device || dst->device != enc->device)
+        {
+            fail("src/dst buffer belongs to a different device");
+            return;
+        }
         if (src == dst)
+        {
+            fail("src and dst must be different buffers");
             return;
+        }
         if (!(src->usage & WGPUBufferUsage_CopySrc))
+        {
+            fail("src usage must include COPY_SRC");
             return;
+        }
         if (!(dst->usage & WGPUBufferUsage_CopyDst))
+        {
+            fail("dst usage must include COPY_DST");
             return;
-
-        if (srcOffset > src->size)
+        }
+        if (srcOffset > src->size || dstOffset > dst->size)
+        {
+            fail("offset exceeds buffer size");
             return;
-        if (dstOffset > dst->size)
-            return;
+        }
 
         uint64_t copySize = size;
         if (copySize == WGPU_WHOLE_SIZE)
             copySize = src->size - srcOffset;
 
-        if (srcOffset + copySize > src->size)
+        if (srcOffset % 4 != 0 || dstOffset % 4 != 0 || copySize % 4 != 0)
+        {
+            fail("offsets and size must be multiples of 4");
             return;
-        if (dstOffset + copySize > dst->size)
+        }
+        if (copySize > src->size - srcOffset ||
+            copySize > dst->size - dstOffset)
+        {
+            fail("copy range out of bounds");
             return;
-        if (copySize % 4 != 0)
+        }
+        if (!src->peBuffer || !dst->peBuffer)
+        {
+            enc->retained.usedBuffers.push_back(src);
+            enc->retained.usedBuffers.push_back(dst);
             return;
-        if (srcOffset % 4 != 0)
-            return;
-        if (dstOffset % 4 != 0)
-            return;
+        }
 
         vk::MemoryBarrier2 mb{};
         mb.srcStageMask = vk::PipelineStageFlagBits2::eAllCommands;
@@ -881,8 +914,6 @@ extern "C"
         enc->retained.usedBuffers.push_back(src);
         enc->retained.usedBuffers.push_back(dst);
     }
-
-    // ---- §11.1 / §13.4 clearBuffer ----
 
     void wgpuCommandEncoderClearBuffer(WGPUCommandEncoder enc,
                                        WGPUBuffer buffer,
@@ -915,8 +946,6 @@ extern "C"
                              static_cast<size_t>(clearSize), 0);
         enc->retained.usedBuffers.push_back(buffer);
     }
-
-    // ---- §11.2 / §13.5 copyBufferToTexture ----
 
     void wgpuCommandEncoderCopyBufferToTexture(WGPUCommandEncoder enc,
                                                WGPUTexelCopyBufferInfo const *src,
@@ -989,8 +1018,6 @@ extern "C"
         if (src->buffer)
             enc->retained.usedBuffers.push_back(src->buffer);
     }
-
-    // ---- §11.2 / §13.5 copyTextureToBuffer ----
 
     void wgpuCommandEncoderCopyTextureToBuffer(WGPUCommandEncoder enc,
                                                WGPUTexelCopyTextureInfo const *src,
@@ -1070,8 +1097,6 @@ extern "C"
             enc->retained.usedBuffers.push_back(dst->buffer);
     }
 
-    // ---- §11.2 / §13.5 copyTextureToTexture ----
-
     void wgpuCommandEncoderCopyTextureToTexture(WGPUCommandEncoder enc,
                                                 WGPUTexelCopyTextureInfo const *src,
                                                 WGPUTexelCopyTextureInfo const *dst,
@@ -1149,8 +1174,6 @@ extern "C"
         enc->cmd->ApiHandle().copyImage2(copyInfo);
     }
 
-    // ---- §13.6 resolveQuerySet ----
-
     void wgpuCommandEncoderResolveQuerySet(WGPUCommandEncoder enc,
                                            WGPUQuerySet querySet,
                                            uint32_t firstQuery,
@@ -1185,8 +1208,6 @@ extern "C"
         enc->retained.usedBuffers.push_back(dst);
     }
 
-    // ---- §13.4 writeTimestamp (extension) ----
-
     void wgpuCommandEncoderWriteTimestamp(WGPUCommandEncoder enc, WGPUQuerySet querySet, uint32_t queryIndex)
     {
         if (!EncoderOpen(enc, "wgpuCommandEncoderWriteTimestamp"))
@@ -1202,8 +1223,6 @@ extern "C"
         enc->cmd->ApiHandle().writeTimestamp2(vk::PipelineStageFlagBits2::eAllCommands,
                                               querySet->queryPool, queryIndex);
     }
-
-    // ---- §15 Debug markers ----
 
     void wgpuCommandEncoderInsertDebugMarker(WGPUCommandEncoder enc, WGPUStringView markerLabel)
     {
@@ -1232,8 +1251,6 @@ extern "C"
             enc->label = pwgpu::ToString(label);
     }
 
-    // ==== WGPUCommandBuffer ====
-
     void wgpuCommandBufferAddRef(WGPUCommandBuffer cb)
     {
         if (cb)
@@ -1247,8 +1264,6 @@ extern "C"
         if (cb->refCount.fetch_sub(1, std::memory_order_acq_rel) == 1)
         {
             cb->retained.ReleaseAll();
-            // If the command buffer was never submitted, return the pe::CommandBuffer
-            // to the pool so we don't leak it.
             if (cb->cmd && !cb->submitted)
                 cb->cmd->Return();
             delete cb;
