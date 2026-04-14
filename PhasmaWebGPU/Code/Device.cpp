@@ -305,6 +305,10 @@ extern "C"
         if (usage == WGPUBufferUsage_None)
             return reportValidation("descriptor.usage must not be 0");
 
+        constexpr uint64_t kValidBufferUsageMask = 0x03FF;
+        if (usage & ~kValidBufferUsageMask)
+            return reportValidation("descriptor.usage contains invalid/reserved flags");
+
         const WGPUBufferUsage kMapReadAllowed = WGPUBufferUsage_MapRead | WGPUBufferUsage_CopyDst;
         const WGPUBufferUsage kMapWriteAllowed = WGPUBufferUsage_MapWrite | WGPUBufferUsage_CopySrc;
         if ((usage & WGPUBufferUsage_MapRead) && ((usage & ~kMapReadAllowed) != 0))

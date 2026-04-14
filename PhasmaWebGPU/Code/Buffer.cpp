@@ -132,10 +132,27 @@ extern "C"
             else if (offset < buffer->mappedOffset ||
                      offset + rangeSize > buffer->mappedOffset + buffer->mappedSize)
                 errorText = "getMappedRange range is outside the mapped region";
-            else if (buffer->peBuffer)
+            else
             {
-                uint8_t *data = static_cast<uint8_t *>(buffer->peBuffer->Data());
-                result = data ? data + offset : nullptr;
+                // Check overlap with previously returned sub-ranges
+                bool overlaps = false;
+                for (const auto &r : buffer->mappedSubRanges)
+                {
+                    if (offset < r.second && offset + rangeSize > r.first)
+                    {
+                        overlaps = true;
+                        break;
+                    }
+                }
+                if (overlaps)
+                    errorText = "getMappedRange overlaps a previously returned range";
+                else if (buffer->peBuffer)
+                {
+                    uint8_t *data = static_cast<uint8_t *>(buffer->peBuffer->Data());
+                    result = data ? data + offset : nullptr;
+                    if (result)
+                        buffer->mappedSubRanges.push_back({offset, offset + rangeSize});
+                }
             }
         }
 
@@ -313,9 +330,29 @@ extern "C"
             callbackInfo.mode,
             [cb, u1, u2, buffer]()
             {
+                WGPUMapAsyncStatus status = WGPUMapAsyncStatus_Error;
+                const char *message = nullptr;
                 {
                     std::lock_guard<std::mutex> lock(buffer->stateMutex);
-                    if (buffer->mapState == WGPUBufferMapState_Pending)
+                    if (buffer->mapState != WGPUBufferMapState_Pending)
+                    {
+                        // mapState was changed (e.g. by unmap or destroy)
+                        // before this event fired — the unmap path already
+                        // delivered an Aborted callback, so skip here.
+                        return;
+                    }
+
+                    if (buffer->internalState == BufferInternalState::Destroyed)
+                    {
+                        buffer->mapState = WGPUBufferMapState_Unmapped;
+                        buffer->pendingCallback = {};
+                        buffer->pendingOffset = 0;
+                        buffer->pendingSize = 0;
+                        buffer->pendingMode = WGPUMapMode_None;
+                        status = WGPUMapAsyncStatus_Aborted;
+                        message = "Buffer was destroyed before map completed";
+                    }
+                    else
                     {
                         buffer->mapState = WGPUBufferMapState_Mapped;
                         buffer->mappedOffset = buffer->pendingOffset;
@@ -325,9 +362,10 @@ extern "C"
                         buffer->pendingOffset = 0;
                         buffer->pendingSize = 0;
                         buffer->pendingMode = WGPUMapMode_None;
+                        status = WGPUMapAsyncStatus_Success;
                     }
                 }
-                cb(WGPUMapAsyncStatus_Success, {nullptr, 0}, u1, u2);
+                cb(status, pwgpu::ToStringView(message), u1, u2);
             },
             q, serial);
     }
@@ -352,6 +390,7 @@ extern "C"
                 buffer->pendingSize = 0;
                 buffer->pendingMode = WGPUMapMode_None;
                 buffer->mapState = WGPUBufferMapState_Unmapped;
+                buffer->mappedSubRanges.clear();
             }
             else if (buffer->mapState == WGPUBufferMapState_Mapped)
             {
@@ -361,6 +400,7 @@ extern "C"
                 buffer->mappedOffset = 0;
                 buffer->mappedSize = 0;
                 buffer->mappedMode = WGPUMapMode_None;
+                buffer->mappedSubRanges.clear();
             }
             else
             {

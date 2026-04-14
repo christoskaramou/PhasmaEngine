@@ -35,6 +35,8 @@ struct WGPUBufferImpl
     uint64_t mappedSize = 0;
     WGPUMapMode mappedMode = WGPUMapMode_None;
 
+    std::vector<std::pair<uint64_t, uint64_t>> mappedSubRanges;
+
     WGPUBufferMapCallbackInfo pendingCallback{};
     uint64_t pendingOffset = 0;
     uint64_t pendingSize = 0;
