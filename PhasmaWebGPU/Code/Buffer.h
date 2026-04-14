@@ -41,4 +41,7 @@ struct WGPUBufferImpl
     uint64_t pendingOffset = 0;
     uint64_t pendingSize = 0;
     WGPUMapMode pendingMode = WGPUMapMode_None;
+
+    // Backs getMappedRange for invalid buffers created with mappedAtCreation=true.
+    std::vector<uint8_t> shadowData;
 };

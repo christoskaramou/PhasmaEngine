@@ -297,6 +297,13 @@ extern "C"
             bad->invalid = true;
             bad->internalState = BufferInternalState::Unavailable;
             bad->mapState = mappedAtCreation ? WGPUBufferMapState_Mapped : WGPUBufferMapState_Unmapped;
+            if (mappedAtCreation && size > 0)
+            {
+                bad->shadowData.assign(static_cast<size_t>(size), 0);
+                bad->mappedOffset = 0;
+                bad->mappedSize = size;
+                bad->mappedMode = WGPUMapMode_Write;
+            }
             if (descriptor->label.data)
                 bad->label = pwgpu::ToString(descriptor->label);
             return bad;
