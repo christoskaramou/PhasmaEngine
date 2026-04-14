@@ -15,4 +15,5 @@ struct WGPUInstanceImpl
     pwgpu::FutureRegistry futures;
 
     pe::RHI *rhi = nullptr;
+    bool ownsRhi = false;
 };

@@ -5,9 +5,66 @@
 #include "Utils.h"
 #include "WGPULimits.h"
 #include "API/RHI.h"
+#include "Base/Log.h"
+#include "Base/EventSystem.h"
+#include <SDL.h>
 
 namespace
 {
+    static std::once_flag s_rhiBootstrapOnce;
+    static SDL_Window *s_standaloneWindow = nullptr;
+    static std::atomic<int> s_standaloneRefCount{0};
+    static bool s_standaloneBootstrapped = false;
+
+    static bool EnsureRhiInitialized()
+    {
+        if (pe::RHII.GetGpu())
+            return true; // Already initialized (e.g. by PhasmaEditor).
+
+        bool ok = false;
+        std::call_once(s_rhiBootstrapOnce, [&ok]()
+                       {
+            pe::Log::Init();
+
+            if (!SDL_WasInit(SDL_INIT_VIDEO))
+            {
+                if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_EVENTS) < 0)
+                    return;
+            }
+
+            uint32_t windowFlags = SDL_WINDOW_HIDDEN | SDL_WINDOW_VULKAN;
+            s_standaloneWindow =
+                SDL_CreateWindow("PhasmaWebGPU", 0, 0, 64, 64, windowFlags);
+            if (!s_standaloneWindow)
+                return;
+
+            pe::EventSystem::Init();
+            pe::RHII.Init(s_standaloneWindow);
+            s_standaloneBootstrapped = true;
+            ok = true; });
+
+        if (!ok && s_standaloneBootstrapped)
+            ok = true;
+
+        return ok;
+    }
+
+    static void ShutdownStandaloneRhi()
+    {
+        if (!s_standaloneBootstrapped)
+            return;
+
+        pe::RHII.WaitDeviceIdle();
+        pe::RHII.Destroy();
+
+        if (s_standaloneWindow)
+        {
+            SDL_DestroyWindow(s_standaloneWindow);
+            s_standaloneWindow = nullptr;
+        }
+        SDL_Quit();
+        s_standaloneBootstrapped = false;
+    }
 
     const char *VendorIdToString(uint32_t vendorID)
     {
@@ -59,8 +116,20 @@ extern "C"
     WGPUInstance wgpuCreateInstance(WGPUInstanceDescriptor const *descriptor)
     {
         (void)descriptor;
+
+        bool bootstrapped = EnsureRhiInitialized();
+        if (!bootstrapped)
+            return nullptr;
+
         auto *inst = new WGPUInstanceImpl();
         inst->rhi = &pe::RHII;
+
+        if (s_standaloneBootstrapped)
+        {
+            inst->ownsRhi = true;
+            s_standaloneRefCount.fetch_add(1, std::memory_order_relaxed);
+        }
+
         return inst;
     }
 
@@ -75,7 +144,15 @@ extern "C"
         if (!instance)
             return;
         if (instance->refCount.fetch_sub(1, std::memory_order_acq_rel) == 1)
+        {
+            bool wasOwner = instance->ownsRhi;
             delete instance;
+
+            if (wasOwner && s_standaloneRefCount.fetch_sub(1, std::memory_order_acq_rel) == 1)
+            {
+                ShutdownStandaloneRhi();
+            }
+        }
     }
 
     WGPUSurface wgpuInstanceCreateSurface(WGPUInstance instance, WGPUSurfaceDescriptor const *descriptor)

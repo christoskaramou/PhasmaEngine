@@ -26,7 +26,16 @@ configure_file(
 
 file(GLOB_RECURSE PWGPU_SOURCES CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/Code/*.cpp")
 
-add_library(PhasmaWebGPU STATIC ${PWGPU_SOURCES})
+option(PE_WEBGPU_SHARED "Build PhasmaWebGPU as a shared library" OFF)
+
+if(PE_WEBGPU_SHARED)
+    add_library(PhasmaWebGPU SHARED ${PWGPU_SOURCES})
+    target_compile_definitions(PhasmaWebGPU
+        PRIVATE PWGPU_BUILDING PWGPU_SHARED_LIBRARY WGPU_SHARED_LIBRARY WGPU_IMPLEMENTATION
+        PUBLIC  PWGPU_SHARED_LIBRARY)
+else()
+    add_library(PhasmaWebGPU STATIC ${PWGPU_SOURCES})
+endif()
 
 set_target_properties(PhasmaWebGPU PROPERTIES POSITION_INDEPENDENT_CODE ON)
 
