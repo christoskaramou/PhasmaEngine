@@ -25,7 +25,7 @@ else()
     message(FATAL_ERROR "Unsupported operating system: ${CMAKE_SYSTEM_NAME}")
 endif()
 
-set(PE_DEFS ${PE_DEFS} PE_TRACK_RESOURCES)
+set(PE_DEFS ${PE_DEFS} PE_TRACK_RESOURCES PE_TRACK_RESOURCES_NOSPAM)
 
 if(MSVC)
     set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} /MP4")

@@ -363,8 +363,10 @@ namespace pe
         if (!vkSetDebugUtilsObjectNameEXT)
             return;
 
+#if !defined(PE_TRACK_RESOURCES_NOSPAM)
         if (info.pObjectName)
             PE_INFO("Name %s set (Handle: %p)", info.pObjectName, info.objectHandle);
+#endif
 
         vkSetDebugUtilsObjectNameEXT(RHII.GetDevice(), &info);
     }
