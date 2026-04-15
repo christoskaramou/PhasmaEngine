@@ -52,4 +52,14 @@ struct WGPUBindGroupImpl
     bool invalid = false;
 
     std::vector<WGPUBindGroupTextureUse> textureUses;
+    std::vector<WGPUBufferImpl *> bufferUses;
+
+    struct DynamicBinding
+    {
+        uint32_t binding = 0;
+        WGPUBufferImpl *buffer = nullptr;
+        uint64_t baseOffset = 0;
+        uint64_t bindingSize = 0;
+    };
+    std::vector<DynamicBinding> dynamicBindings;
 };

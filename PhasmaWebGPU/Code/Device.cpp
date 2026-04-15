@@ -1546,6 +1546,9 @@ extern "C"
                         size = entry.buffer->size - offset;
                     if (entry.buffer->peBuffer)
                         bg->descriptor->SetBuffer(entry.binding, entry.buffer->peBuffer, offset, size);
+                    bg->bufferUses.push_back(entry.buffer);
+                    if (le.buffer.hasDynamicOffset)
+                        bg->dynamicBindings.push_back({entry.binding, entry.buffer, offset, size});
                 }
                 else if (le.sampler.type != WGPUSamplerBindingType_BindingNotUsed && entry.sampler)
                 {
@@ -1573,6 +1576,11 @@ extern "C"
 
             bg->descriptor->Update();
         }
+
+        std::sort(bg->dynamicBindings.begin(), bg->dynamicBindings.end(),
+                  [](const WGPUBindGroupImpl::DynamicBinding &a,
+                     const WGPUBindGroupImpl::DynamicBinding &b)
+                  { return a.binding < b.binding; });
 
         return bg;
     }

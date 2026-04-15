@@ -1,6 +1,8 @@
 #include "Device.h"
 #include "Buffer.h"
 #include "Texture.h"
+#include "BindGroup.h"
+#include "RenderBundle.h"
 #include "CommandEncoder.h"
 #include "FormatMap.h"
 #include "Instance.h"
@@ -161,6 +163,72 @@ extern "C"
                 }
             }
             if (textureDestroyed)
+                continue;
+
+            auto scanBg = [&](WGPUBindGroupImpl *bg) -> bool
+            {
+                if (!bg)
+                    return false;
+                for (auto *buf : bg->bufferUses)
+                {
+                    if (!buf)
+                        continue;
+                    std::lock_guard<std::mutex> lock(buf->stateMutex);
+                    if (buf->internalState != BufferInternalState::Available)
+                    {
+                        if (queue->device)
+                            queue->device->reportError(
+                                WGPUErrorType_Validation,
+                                pwgpu::ToStringView(
+                                    "Submit: bind group references a destroyed buffer"));
+                        return true;
+                    }
+                }
+                for (auto &use : bg->textureUses)
+                {
+                    if (!use.view || !use.view->texture)
+                        continue;
+                    if (use.view->texture->destroyed || use.view->texture->invalid)
+                    {
+                        if (queue->device)
+                            queue->device->reportError(
+                                WGPUErrorType_Validation,
+                                pwgpu::ToStringView(
+                                    "Submit: bind group references a destroyed texture"));
+                        return true;
+                    }
+                }
+                return false;
+            };
+
+            bool bgResourceBad = false;
+            for (auto *bg : cb->retained.bindGroups)
+            {
+                if (scanBg(bg))
+                {
+                    bgResourceBad = true;
+                    break;
+                }
+            }
+            if (!bgResourceBad)
+            {
+                for (auto *rb : cb->retained.renderBundles)
+                {
+                    if (!rb)
+                        continue;
+                    for (auto *bg : rb->retainedBindGroups)
+                    {
+                        if (scanBg(bg))
+                        {
+                            bgResourceBad = true;
+                            break;
+                        }
+                    }
+                    if (bgResourceBad)
+                        break;
+                }
+            }
+            if (bgResourceBad)
                 continue;
 
             cb->submitted = true;

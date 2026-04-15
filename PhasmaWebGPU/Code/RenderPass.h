@@ -56,4 +56,8 @@ struct WGPURenderPassEncoderImpl
 
     pwgpu::UsageScope usageScope;
     bool usageScopeValid = true;
+
+    WGPUBufferImpl *indexBuffer = nullptr;
+    WGPUIndexFormat indexFormat = WGPUIndexFormat_Undefined;
+    uint64_t indexBufferSize = 0;
 };

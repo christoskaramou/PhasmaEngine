@@ -154,7 +154,27 @@ extern "C"
         if (!EncoderOpen(rbe, "wgpuRenderBundleEncoderSetBindGroup"))
             return;
 
-        if (group && !group->invalid)
+        if (rbe->device && groupIndex >= rbe->device->limits.maxBindGroups)
+        {
+            rbe->invalid = true;
+            return;
+        }
+
+        if (group)
+        {
+            if (group->device != rbe->device)
+            {
+                rbe->invalid = true;
+                return;
+            }
+            if (group->invalid)
+            {
+                rbe->invalid = true;
+                return;
+            }
+        }
+
+        if (group)
         {
             for (auto &use : group->textureUses)
             {
@@ -162,15 +182,63 @@ extern "C"
                 if (!rbe->usageScope.AddView(use.view, use.kind, err))
                     rbe->usageScopeValid = false;
             }
+            wgpuBindGroupAddRef(group);
+            rbe->retainedBindGroups.push_back(group);
+        }
+
+        if (group && group->layout)
+        {
+            if (static_cast<uint32_t>(dynamicOffsetCount) != group->layout->dynamicOffsetCount)
+            {
+                rbe->invalid = true;
+                return;
+            }
+            if (dynamicOffsetCount > 0 && !dynamicOffsets)
+            {
+                rbe->invalid = true;
+                return;
+            }
+            if (rbe->device && dynamicOffsetCount > 0 && dynamicOffsets)
+            {
+                std::vector<const WGPUBindGroupLayoutEntryResolved *> dynLayoutEntries;
+                for (auto &e : group->layout->entries)
+                    if (e.buffer.hasDynamicOffset)
+                        dynLayoutEntries.push_back(&e);
+                std::sort(dynLayoutEntries.begin(), dynLayoutEntries.end(),
+                          [](auto *a, auto *b)
+                          { return a->binding < b->binding; });
+                for (uint32_t i = 0; i < dynamicOffsetCount && i < dynLayoutEntries.size() &&
+                                     i < group->dynamicBindings.size();
+                     ++i)
+                {
+                    uint32_t offset = dynamicOffsets[i];
+                    auto &dyn = group->dynamicBindings[i];
+                    bool isUniform = dynLayoutEntries[i]->buffer.type == WGPUBufferBindingType_Uniform;
+                    uint32_t align = isUniform ? rbe->device->limits.minUniformBufferOffsetAlignment
+                                               : rbe->device->limits.minStorageBufferOffsetAlignment;
+                    if (align > 0 && offset % align != 0)
+                    {
+                        rbe->invalid = true;
+                        return;
+                    }
+                    if (dyn.buffer)
+                    {
+                        uint64_t bufSize = dyn.buffer->size;
+                        uint64_t effOffset = dyn.baseOffset + static_cast<uint64_t>(offset);
+                        if (effOffset > bufSize || dyn.bindingSize > bufSize - effOffset)
+                        {
+                            rbe->invalid = true;
+                            return;
+                        }
+                    }
+                }
+            }
         }
 
         if (!rbe->pipeline || !rbe->pipeline->layout)
             return;
 
-        if (rbe->device && groupIndex >= rbe->device->limits.maxBindGroups)
-            return;
-
-        if (!group || group->invalid || !group->descriptor)
+        if (!group || !group->descriptor)
             return;
 
         auto &bgls = rbe->pipeline->layout->bindGroupLayouts;
@@ -181,44 +249,6 @@ extern "C"
             PE_WARN("[WebGPU] renderBundleEncoder setBindGroup: layout mismatch at index %u", groupIndex);
             return;
         }
-
-        if (static_cast<uint32_t>(dynamicOffsetCount) != group->layout->dynamicOffsetCount)
-        {
-            PE_WARN("[WebGPU] renderBundleEncoder setBindGroup: dynamicOffsetCount %zu != expected %u",
-                    dynamicOffsetCount, group->layout->dynamicOffsetCount);
-            return;
-        }
-
-        if (dynamicOffsetCount > 0 && !dynamicOffsets)
-            return;
-
-        if (rbe->device && dynamicOffsetCount > 0 && dynamicOffsets)
-        {
-            uint32_t dynIdx = 0;
-            for (auto &entry : group->layout->entries)
-            {
-                if (entry.buffer.hasDynamicOffset)
-                {
-                    if (dynIdx >= dynamicOffsetCount)
-                        break;
-                    uint32_t offset = dynamicOffsets[dynIdx];
-                    if (entry.buffer.type == WGPUBufferBindingType_Uniform)
-                    {
-                        if (offset % rbe->device->limits.minUniformBufferOffsetAlignment != 0)
-                            return;
-                    }
-                    else
-                    {
-                        if (offset % rbe->device->limits.minStorageBufferOffsetAlignment != 0)
-                            return;
-                    }
-                    dynIdx++;
-                }
-            }
-        }
-
-        wgpuBindGroupAddRef(group);
-        rbe->retainedBindGroups.push_back(group);
 
         VkPipelineLayout vkLayout = rbe->pipeline->layout->vkLayout;
         vk::DescriptorSet ds = group->descriptor->ApiHandle();

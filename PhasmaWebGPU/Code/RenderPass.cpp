@@ -117,7 +117,27 @@ extern "C"
         if (!PassOpen(rpe, "wgpuRenderPassEncoderSetBindGroup"))
             return;
 
-        if (group && !group->invalid)
+        if (rpe->device && groupIndex >= rpe->device->limits.maxBindGroups)
+        {
+            rpe->invalid = true;
+            return;
+        }
+
+        if (group)
+        {
+            if (group->device != rpe->device)
+            {
+                rpe->invalid = true;
+                return;
+            }
+            if (group->invalid)
+            {
+                rpe->invalid = true;
+                return;
+            }
+        }
+
+        if (group)
         {
             for (auto &use : group->textureUses)
             {
@@ -125,15 +145,58 @@ extern "C"
                 if (!rpe->usageScope.AddView(use.view, use.kind, err))
                     rpe->usageScopeValid = false;
             }
+            wgpuBindGroupAddRef(group);
+            rpe->retainedBindGroups.push_back(group);
+        }
+
+        if (group && group->layout)
+        {
+            if (static_cast<uint32_t>(dynamicOffsetCount) != group->layout->dynamicOffsetCount)
+            {
+                rpe->invalid = true;
+                return;
+            }
+            if (rpe->device && dynamicOffsetCount > 0 && dynamicOffsets)
+            {
+                std::vector<const WGPUBindGroupLayoutEntryResolved *> dynLayoutEntries;
+                for (auto &e : group->layout->entries)
+                    if (e.buffer.hasDynamicOffset)
+                        dynLayoutEntries.push_back(&e);
+                std::sort(dynLayoutEntries.begin(), dynLayoutEntries.end(),
+                          [](auto *a, auto *b)
+                          { return a->binding < b->binding; });
+                for (uint32_t i = 0; i < dynamicOffsetCount && i < dynLayoutEntries.size() &&
+                                     i < group->dynamicBindings.size();
+                     ++i)
+                {
+                    uint32_t offset = dynamicOffsets[i];
+                    auto &dyn = group->dynamicBindings[i];
+                    bool isUniform = dynLayoutEntries[i]->buffer.type == WGPUBufferBindingType_Uniform;
+                    uint32_t align = isUniform ? rpe->device->limits.minUniformBufferOffsetAlignment
+                                               : rpe->device->limits.minStorageBufferOffsetAlignment;
+                    if (align > 0 && offset % align != 0)
+                    {
+                        rpe->invalid = true;
+                        return;
+                    }
+                    if (dyn.buffer)
+                    {
+                        uint64_t bufSize = dyn.buffer->size;
+                        uint64_t effOffset = dyn.baseOffset + static_cast<uint64_t>(offset);
+                        if (effOffset > bufSize || dyn.bindingSize > bufSize - effOffset)
+                        {
+                            rpe->invalid = true;
+                            return;
+                        }
+                    }
+                }
+            }
         }
 
         if (!rpe->pipeline || !rpe->pipeline->layout)
             return;
 
-        if (rpe->device && groupIndex >= rpe->device->limits.maxBindGroups)
-            return;
-
-        if (!group || group->invalid || !group->descriptor)
+        if (!group || !group->descriptor)
             return;
 
         auto &bgls = rpe->pipeline->layout->bindGroupLayouts;
@@ -144,41 +207,6 @@ extern "C"
             PE_WARN("[WebGPU] setBindGroup: bind group layout does not match pipeline layout at index %u", groupIndex);
             return;
         }
-
-        if (static_cast<uint32_t>(dynamicOffsetCount) != group->layout->dynamicOffsetCount)
-        {
-            PE_WARN("[WebGPU] setBindGroup: dynamicOffsetCount %zu != expected %u",
-                    dynamicOffsetCount, group->layout->dynamicOffsetCount);
-            return;
-        }
-
-        if (rpe->device && dynamicOffsetCount > 0 && dynamicOffsets)
-        {
-            uint32_t dynIdx = 0;
-            for (auto &entry : group->layout->entries)
-            {
-                if (entry.buffer.hasDynamicOffset)
-                {
-                    if (dynIdx >= dynamicOffsetCount)
-                        break;
-                    uint32_t offset = dynamicOffsets[dynIdx];
-                    if (entry.buffer.type == WGPUBufferBindingType_Uniform)
-                    {
-                        if (offset % rpe->device->limits.minUniformBufferOffsetAlignment != 0)
-                            return;
-                    }
-                    else
-                    {
-                        if (offset % rpe->device->limits.minStorageBufferOffsetAlignment != 0)
-                            return;
-                    }
-                    dynIdx++;
-                }
-            }
-        }
-
-        wgpuBindGroupAddRef(group);
-        rpe->retainedBindGroups.push_back(group);
 
         vk::PipelineLayout vkLayout(rpe->pipeline->layout->vkLayout);
         vk::DescriptorSet ds = group->descriptor->ApiHandle();
@@ -211,10 +239,67 @@ extern "C"
     {
         if (!RenderingActive(rpe, "wgpuRenderPassEncoderSetIndexBuffer"))
             return;
-        if (!buffer || !buffer->peBuffer || buffer->internalState == BufferInternalState::Destroyed)
+        auto fail = [&]()
+        { rpe->invalid = true; };
+        if (!buffer)
+        {
+            fail();
             return;
+        }
+        if (buffer->device != rpe->device)
+        {
+            fail();
+            return;
+        }
+        if (buffer->invalid)
+        {
+            fail();
+            return;
+        }
         if (!(buffer->usage & WGPUBufferUsage_Index))
+        {
+            fail();
             return;
+        }
+        uint32_t indexSize = (format == WGPUIndexFormat_Uint16) ? 2u : 4u;
+        if (offset % indexSize != 0)
+        {
+            fail();
+            return;
+        }
+        uint64_t boundSize = size;
+        if (boundSize == WGPU_WHOLE_SIZE)
+        {
+            if (offset > buffer->size)
+            {
+                fail();
+                return;
+            }
+            boundSize = buffer->size - offset;
+        }
+        else
+        {
+            if (boundSize > buffer->size || offset > buffer->size - boundSize)
+            {
+                fail();
+                return;
+            }
+        }
+        if (boundSize % indexSize != 0)
+        {
+            fail();
+            return;
+        }
+
+        rpe->indexBuffer = buffer;
+        rpe->indexFormat = format;
+        rpe->indexBufferSize = boundSize;
+
+        if (buffer->internalState == BufferInternalState::Destroyed || !buffer->peBuffer)
+        {
+            rpe->usedBuffers.push_back(buffer);
+            return;
+        }
 
         vk::IndexType indexType = (format == WGPUIndexFormat_Uint16) ? vk::IndexType::eUint16 : vk::IndexType::eUint32;
         rpe->cmd->ApiHandle().bindIndexBuffer(buffer->peBuffer->ApiHandle(), offset, indexType);
@@ -237,6 +322,19 @@ extern "C"
     {
         if (!RenderingActive(rpe, "wgpuRenderPassEncoderDrawIndexed"))
             return;
+        if (!rpe->indexBuffer || rpe->indexFormat == WGPUIndexFormat_Undefined)
+        {
+            rpe->invalid = true;
+            return;
+        }
+        uint32_t indexSize = (rpe->indexFormat == WGPUIndexFormat_Uint16) ? 2u : 4u;
+        uint64_t maxIndices = rpe->indexBufferSize / indexSize;
+        uint64_t requiredEnd = static_cast<uint64_t>(firstIndex) + static_cast<uint64_t>(indexCount);
+        if (requiredEnd > maxIndices)
+        {
+            rpe->invalid = true;
+            return;
+        }
         if (!rpe->pipeline || rpe->bindingStateInvalidated)
             return;
         rpe->cmd->ApiHandle().drawIndexed(indexCount, instanceCount, firstIndex, baseVertex, firstInstance);
@@ -415,6 +513,12 @@ extern "C"
             if (!bundle || bundle->invalid)
             {
                 PE_WARN("[WebGPU] executeBundles: bundle %zu is invalid", i);
+                rpe->invalid = true;
+                return;
+            }
+            if (bundle->device != rpe->device)
+            {
+                rpe->invalid = true;
                 return;
             }
 

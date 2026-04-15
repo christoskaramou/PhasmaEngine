@@ -76,8 +76,21 @@ extern "C"
     {
         if (!PassOpen(cpe, "wgpuComputePassEncoderSetPipeline"))
             return;
-        if (!pipeline || pipeline->invalid || pipeline->vkPipeline == VK_NULL_HANDLE)
+        if (!pipeline)
+        {
+            cpe->invalid = true;
             return;
+        }
+        if (pipeline->device != cpe->device)
+        {
+            cpe->invalid = true;
+            return;
+        }
+        if (pipeline->invalid || pipeline->vkPipeline == VK_NULL_HANDLE)
+        {
+            cpe->invalid = true;
+            return;
+        }
 
         cpe->pipeline = pipeline;
 
@@ -96,21 +109,87 @@ extern "C"
         if (!PassOpen(cpe, "wgpuComputePassEncoderSetBindGroup"))
             return;
 
+        if (cpe->device && groupIndex >= cpe->device->limits.maxBindGroups)
+        {
+            cpe->invalid = true;
+            return;
+        }
+
+        if (group)
+        {
+            if (group->device != cpe->device)
+            {
+                cpe->invalid = true;
+                return;
+            }
+            if (group->invalid)
+            {
+                cpe->invalid = true;
+                return;
+            }
+        }
+
         if (cpe->device && groupIndex < cpe->device->limits.maxBindGroups)
         {
             if (cpe->currentBindGroups.size() <= groupIndex)
                 cpe->currentBindGroups.resize(groupIndex + 1, nullptr);
-            cpe->currentBindGroups[groupIndex] = (group && !group->invalid) ? group : nullptr;
+            cpe->currentBindGroups[groupIndex] = group;
+        }
+
+        if (group)
+        {
+            wgpuBindGroupAddRef(group);
+            cpe->retainedBindGroups.push_back(group);
+        }
+
+        if (group && group->layout)
+        {
+            if (static_cast<uint32_t>(dynamicOffsetCount) != group->layout->dynamicOffsetCount)
+            {
+                cpe->invalid = true;
+                return;
+            }
+            if (cpe->device && dynamicOffsetCount > 0 && dynamicOffsets)
+            {
+                std::vector<const WGPUBindGroupLayoutEntryResolved *> dynLayoutEntries;
+                for (auto &e : group->layout->entries)
+                    if (e.buffer.hasDynamicOffset)
+                        dynLayoutEntries.push_back(&e);
+                std::sort(dynLayoutEntries.begin(), dynLayoutEntries.end(),
+                          [](auto *a, auto *b)
+                          { return a->binding < b->binding; });
+                for (uint32_t i = 0; i < dynamicOffsetCount && i < dynLayoutEntries.size() &&
+                                     i < group->dynamicBindings.size();
+                     ++i)
+                {
+                    uint32_t offset = dynamicOffsets[i];
+                    auto &dyn = group->dynamicBindings[i];
+                    bool isUniform = dynLayoutEntries[i]->buffer.type == WGPUBufferBindingType_Uniform;
+                    uint32_t align = isUniform ? cpe->device->limits.minUniformBufferOffsetAlignment
+                                               : cpe->device->limits.minStorageBufferOffsetAlignment;
+                    if (align > 0 && offset % align != 0)
+                    {
+                        cpe->invalid = true;
+                        return;
+                    }
+                    if (dyn.buffer)
+                    {
+                        uint64_t bufSize = dyn.buffer->size;
+                        uint64_t effOffset = dyn.baseOffset + static_cast<uint64_t>(offset);
+                        if (effOffset > bufSize || dyn.bindingSize > bufSize - effOffset)
+                        {
+                            cpe->invalid = true;
+                            return;
+                        }
+                    }
+                }
+            }
         }
 
         if (!cpe->pipeline || !cpe->pipeline->layout)
             return;
 
-        // §14.1: index must be < maxBindGroups
-        if (cpe->device && groupIndex >= cpe->device->limits.maxBindGroups)
-            return;
-
-        if (!group || group->invalid || !group->descriptor)
+        if (!group || !group->descriptor)
             return;
 
         auto &bgls = cpe->pipeline->layout->bindGroupLayouts;
@@ -121,41 +200,6 @@ extern "C"
             PE_WARN("[WebGPU] setBindGroup: bind group layout does not match pipeline layout at index %u", groupIndex);
             return;
         }
-
-        if (static_cast<uint32_t>(dynamicOffsetCount) != group->layout->dynamicOffsetCount)
-        {
-            PE_WARN("[WebGPU] setBindGroup: dynamicOffsetCount %zu != expected %u",
-                    dynamicOffsetCount, group->layout->dynamicOffsetCount);
-            return;
-        }
-
-        if (cpe->device && dynamicOffsetCount > 0 && dynamicOffsets)
-        {
-            uint32_t dynIdx = 0;
-            for (auto &entry : group->layout->entries)
-            {
-                if (entry.buffer.hasDynamicOffset)
-                {
-                    if (dynIdx >= dynamicOffsetCount)
-                        break;
-                    uint32_t offset = dynamicOffsets[dynIdx];
-                    if (entry.buffer.type == WGPUBufferBindingType_Uniform)
-                    {
-                        if (offset % cpe->device->limits.minUniformBufferOffsetAlignment != 0)
-                            return;
-                    }
-                    else
-                    {
-                        if (offset % cpe->device->limits.minStorageBufferOffsetAlignment != 0)
-                            return;
-                    }
-                    dynIdx++;
-                }
-            }
-        }
-
-        wgpuBindGroupAddRef(group);
-        cpe->retainedBindGroups.push_back(group);
 
         vk::PipelineLayout vkLayout(cpe->pipeline->layout->vkLayout);
         vk::DescriptorSet ds = group->descriptor->ApiHandle();
@@ -200,19 +244,22 @@ extern "C"
             return;
         if (!cpe->pipeline)
         {
-            cpe->usageScopeValid = false;
+            cpe->invalid = true;
             PE_WARN("[WebGPU] dispatchWorkgroups: no pipeline set");
             return;
         }
-
-        ValidateDispatchUsageScope(cpe);
 
         if (cpe->device)
         {
             uint32_t limit = cpe->device->limits.maxComputeWorkgroupsPerDimension;
             if (x > limit || y > limit || z > limit)
+            {
+                cpe->invalid = true;
                 return;
+            }
         }
+
+        ValidateDispatchUsageScope(cpe);
 
         cpe->cmd->ApiHandle().dispatch(x, y, z);
     }
@@ -226,13 +273,23 @@ extern "C"
             return;
         if (!cpe->pipeline)
         {
-            cpe->usageScopeValid = false;
+            cpe->invalid = true;
             PE_WARN("[WebGPU] dispatchWorkgroupsIndirect: no pipeline set");
             return;
         }
         auto markInvalid = [&]()
-        { cpe->usageScopeValid = false; };
-        if (!buffer || !buffer->peBuffer || buffer->internalState == BufferInternalState::Destroyed)
+        { cpe->invalid = true; };
+        if (!buffer)
+        {
+            markInvalid();
+            return;
+        }
+        if (buffer->device != cpe->device)
+        {
+            markInvalid();
+            return;
+        }
+        if (buffer->invalid)
         {
             markInvalid();
             return;
@@ -242,14 +299,19 @@ extern "C"
             markInvalid();
             return;
         }
-        if (offset + 12 > buffer->size)
+        if (offset % 4 != 0)
         {
             markInvalid();
             return;
         }
-        if (offset % 4 != 0)
+        if (offset > buffer->size || buffer->size - offset < 12)
         {
             markInvalid();
+            return;
+        }
+        if (buffer->internalState == BufferInternalState::Destroyed || !buffer->peBuffer)
+        {
+            cpe->usedBuffers.push_back(buffer);
             return;
         }
 

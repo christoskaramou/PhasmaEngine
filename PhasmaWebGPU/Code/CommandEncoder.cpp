@@ -1116,25 +1116,68 @@ extern "C"
     {
         if (!EncoderOpen(enc, "wgpuCommandEncoderClearBuffer"))
             return;
-        if (!buffer || !buffer->peBuffer ||
-            buffer->internalState == BufferInternalState::Destroyed)
+        auto fail = [&]()
+        { enc->invalid = true; };
+        if (!buffer)
+        {
+            fail();
             return;
+        }
+        if (buffer->invalid)
+        {
+            fail();
+            return;
+        }
+        if (buffer->device != enc->device)
+        {
+            fail();
+            return;
+        }
         if (!(buffer->usage & WGPUBufferUsage_CopyDst))
+        {
+            fail();
             return;
+        }
 
-        if (offset > buffer->size)
+        if (offset % 4 != 0)
+        {
+            fail();
             return;
+        }
 
         uint64_t clearSize = size;
         if (clearSize == WGPU_WHOLE_SIZE)
+        {
+            if (offset > buffer->size)
+            {
+                fail();
+                return;
+            }
             clearSize = buffer->size - offset;
+        }
 
-        if (offset % 4 != 0)
-            return;
         if (clearSize % 4 != 0)
+        {
+            fail();
             return;
-        if (offset + clearSize > buffer->size)
+        }
+        if (clearSize > buffer->size || offset > buffer->size - clearSize)
+        {
+            fail();
             return;
+        }
+
+        if (buffer->internalState == BufferInternalState::Destroyed || !buffer->peBuffer)
+        {
+            enc->retained.usedBuffers.push_back(buffer);
+            return;
+        }
+
+        if (clearSize == 0)
+        {
+            enc->retained.usedBuffers.push_back(buffer);
+            return;
+        }
 
         enc->cmd->FillBuffer(buffer->peBuffer, static_cast<size_t>(offset),
                              static_cast<size_t>(clearSize), 0);
