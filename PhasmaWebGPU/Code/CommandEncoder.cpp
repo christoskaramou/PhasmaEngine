@@ -30,6 +30,7 @@ void RetainedResources::MergeFrom(RetainedResources &other)
     textureViews.insert(textureViews.end(), other.textureViews.begin(), other.textureViews.end());
     renderBundles.insert(renderBundles.end(), other.renderBundles.begin(), other.renderBundles.end());
     usedBuffers.insert(usedBuffers.end(), other.usedBuffers.begin(), other.usedBuffers.end());
+    usedTextures.insert(usedTextures.end(), other.usedTextures.begin(), other.usedTextures.end());
     other.renderPipelines.clear();
     other.computePipelines.clear();
     other.bindGroups.clear();
@@ -37,6 +38,7 @@ void RetainedResources::MergeFrom(RetainedResources &other)
     other.textureViews.clear();
     other.renderBundles.clear();
     other.usedBuffers.clear();
+    other.usedTextures.clear();
 }
 
 void RetainedResources::ReleaseAll()
@@ -91,9 +93,17 @@ namespace
     {
         if (mipLevel >= tex->mipLevelCount)
             return false;
+        if (tex->sampleCount > 1)
+            return false;
         WGPUExtent3D mip = MipExtent(tex, mipLevel);
         uint32_t blockW, blockH;
         pwgpu::GetTexelBlockSize(tex->format, blockW, blockH);
+        if (pwgpu::HasDepthAspect(tex->format) || pwgpu::HasStencilAspect(tex->format))
+        {
+            if (origin.x != 0 || origin.y != 0 ||
+                copySize.width != mip.width || copySize.height != mip.height)
+                return false;
+        }
         if (origin.x + copySize.width > mip.width)
             return false;
         if (origin.y + copySize.height > mip.height)
@@ -130,15 +140,36 @@ namespace
         uint32_t widthInBlocks = (copySize.width + blockW - 1) / blockW;
         uint32_t heightInBlocks = (copySize.height + blockH - 1) / blockH;
         uint32_t minBytesPerRow = widthInBlocks * footprint;
-        if (bytesPerRow < minBytesPerRow)
-            return false;
         uint32_t copyDepth = copySize.depthOrArrayLayers;
-        if (copyDepth == 0)
+        bool bprProvided = (bytesPerRow != WGPU_COPY_STRIDE_UNDEFINED);
+        bool rpiProvided = (rowsPerImage != WGPU_COPY_STRIDE_UNDEFINED);
+        bool bytesPerRowRequired = (heightInBlocks > 1) || (copyDepth > 1);
+        if (bytesPerRowRequired && !bprProvided)
+            return false;
+        if (bprProvided && bytesPerRow < minBytesPerRow)
+            return false;
+        if (copyDepth > 1 && !rpiProvided)
+            return false;
+        if (rpiProvided && rowsPerImage < heightInBlocks)
+            return false;
+        if (copyDepth == 0 || heightInBlocks == 0)
             return true;
-        uint64_t bytesPerImage = static_cast<uint64_t>(bytesPerRow) * rowsPerImage;
-        uint64_t lastRowBytes = static_cast<uint64_t>(bytesPerRow) * (heightInBlocks - 1) + minBytesPerRow;
+        uint64_t bpr = bprProvided ? bytesPerRow : minBytesPerRow;
+        uint64_t rpi = rpiProvided ? rowsPerImage : heightInBlocks;
+        uint64_t bytesPerImage = bpr * rpi;
+        uint64_t lastRowBytes = bpr * (heightInBlocks - 1) + minBytesPerRow;
         uint64_t required = offset + (copyDepth > 1 ? bytesPerImage * (copyDepth - 1) : 0) + lastRowBytes;
         return required <= bufferSize;
+    }
+
+    bool ValidateCopyOffsetAlignment(uint64_t offset, WGPUTextureFormat fmt, WGPUTextureAspect aspect)
+    {
+        if (pwgpu::HasDepthAspect(fmt) || pwgpu::HasStencilAspect(fmt))
+            return (offset % 4) == 0;
+        uint32_t footprint = pwgpu::TexelBlockCopyFootprint(fmt, aspect);
+        if (footprint == 0)
+            return true;
+        return (offset % footprint) == 0;
     }
 } // namespace
 
@@ -1009,22 +1040,78 @@ extern "C"
     {
         if (!EncoderOpen(enc, "wgpuCommandEncoderCopyBufferToTexture"))
             return;
-        if (!src || !src->buffer || !src->buffer->peBuffer ||
-            src->buffer->internalState == BufferInternalState::Destroyed)
+        auto fail = [&]()
+        { enc->invalid = true; };
+        if (!src || !src->buffer || !copySize || !dst || !dst->texture)
+        {
+            fail();
             return;
-        if (!dst || !dst->texture || !dst->texture->image || dst->texture->destroyed)
+        }
+        if (src->buffer->invalid)
+        {
+            fail();
             return;
-        if (!copySize)
+        }
+        if (dst->texture->invalid)
+        {
+            fail();
             return;
+        }
+        if (src->buffer->device != enc->device || dst->texture->device != enc->device)
+        {
+            fail();
+            return;
+        }
+        if (dst->texture->destroyed || !dst->texture->image ||
+            src->buffer->internalState == BufferInternalState::Destroyed ||
+            !src->buffer->peBuffer)
+        {
+            enc->retained.usedBuffers.push_back(src->buffer);
+            enc->retained.usedTextures.push_back(dst->texture);
+            return;
+        }
         if (!(src->buffer->usage & WGPUBufferUsage_CopySrc))
+        {
+            fail();
             return;
+        }
         if (!(dst->texture->usage & WGPUTextureUsage_CopyDst))
+        {
+            fail();
             return;
+        }
 
-        if (src->layout.bytesPerRow % 256 != 0)
+        {
+            uint32_t bpr = src->layout.bytesPerRow;
+            uint32_t bw, bh;
+            pwgpu::GetTexelBlockSize(dst->texture->format, bw, bh);
+            uint32_t heightInBlocks = (copySize->height + bh - 1) / bh;
+            uint32_t d = copySize->depthOrArrayLayers;
+            bool bprRequired = (heightInBlocks > 1) || (d > 1);
+            if (bpr == WGPU_COPY_STRIDE_UNDEFINED)
+            {
+                if (bprRequired)
+                {
+                    fail();
+                    return;
+                }
+            }
+            else if (bpr % 256 != 0)
+            {
+                fail();
+                return;
+            }
+        }
+        if (!ValidateCopyOffsetAlignment(src->layout.offset, dst->texture->format, dst->aspect))
+        {
+            fail();
             return;
+        }
         if (!ValidateTextureCopyRange(dst->texture, dst->mipLevel, dst->origin, *copySize))
+        {
+            fail();
             return;
+        }
 
         WGPUTextureAspect aspect = dst->aspect;
         vk::ImageAspectFlags vkAspect = AspectForCopy(aspect, dst->texture->format);
@@ -1036,12 +1123,26 @@ extern "C"
         if (!ValidateBufferCopyLayout(src->buffer->size, src->layout.offset,
                                       src->layout.bytesPerRow, src->layout.rowsPerImage,
                                       *copySize, footprint, blockW, blockH))
+        {
+            fail();
             return;
+        }
+
+        if (copySize->width == 0 || copySize->height == 0 || copySize->depthOrArrayLayers == 0)
+        {
+            enc->retained.usedBuffers.push_back(src->buffer);
+            enc->retained.usedTextures.push_back(dst->texture);
+            return;
+        }
 
         vk::BufferImageCopy2 region{};
         region.bufferOffset = src->layout.offset;
-        region.bufferRowLength = (footprint > 0) ? (src->layout.bytesPerRow / footprint) * blockW : 0;
-        region.bufferImageHeight = src->layout.rowsPerImage * blockH;
+        region.bufferRowLength = (footprint > 0 && src->layout.bytesPerRow != WGPU_COPY_STRIDE_UNDEFINED)
+                                     ? (src->layout.bytesPerRow / footprint) * blockW
+                                     : 0;
+        region.bufferImageHeight = (src->layout.rowsPerImage != WGPU_COPY_STRIDE_UNDEFINED)
+                                       ? src->layout.rowsPerImage * blockH
+                                       : 0;
         region.imageSubresource.aspectMask = vkAspect;
         region.imageSubresource.mipLevel = dst->mipLevel;
         region.imageSubresource.baseArrayLayer = (dst->texture->dimension == WGPUTextureDimension_3D) ? 0 : dst->origin.z;
@@ -1072,6 +1173,8 @@ extern "C"
         enc->cmd->ApiHandle().copyBufferToImage2(copyInfo);
         if (src->buffer)
             enc->retained.usedBuffers.push_back(src->buffer);
+        if (dst->texture)
+            enc->retained.usedTextures.push_back(dst->texture);
     }
 
     void wgpuCommandEncoderCopyTextureToBuffer(WGPUCommandEncoder enc,
@@ -1081,23 +1184,79 @@ extern "C"
     {
         if (!EncoderOpen(enc, "wgpuCommandEncoderCopyTextureToBuffer"))
             return;
-        if (!src || !src->texture || !src->texture->image || src->texture->destroyed)
+        auto fail = [&]()
+        { enc->invalid = true; };
+        if (!src || !src->texture || !copySize || !dst || !dst->buffer)
+        {
+            fail();
             return;
-        if (!dst || !dst->buffer || !dst->buffer->peBuffer ||
-            dst->buffer->internalState == BufferInternalState::Destroyed)
+        }
+        if (src->texture->invalid)
+        {
+            fail();
             return;
-        if (!copySize)
+        }
+        if (dst->buffer->invalid)
+        {
+            fail();
             return;
+        }
+        if (src->texture->device != enc->device || dst->buffer->device != enc->device)
+        {
+            fail();
+            return;
+        }
+        if (src->texture->destroyed || !src->texture->image ||
+            dst->buffer->internalState == BufferInternalState::Destroyed ||
+            !dst->buffer->peBuffer)
+        {
+            enc->retained.usedBuffers.push_back(dst->buffer);
+            enc->retained.usedTextures.push_back(src->texture);
+            return;
+        }
         if (!(src->texture->usage & WGPUTextureUsage_CopySrc))
+        {
+            fail();
             return;
+        }
         if (!(dst->buffer->usage & WGPUBufferUsage_CopyDst))
+        {
+            fail();
             return;
+        }
 
-        if (dst->layout.bytesPerRow % 256 != 0)
+        {
+            uint32_t bpr = dst->layout.bytesPerRow;
+            uint32_t bw, bh;
+            pwgpu::GetTexelBlockSize(src->texture->format, bw, bh);
+            uint32_t heightInBlocks = (copySize->height + bh - 1) / bh;
+            uint32_t d = copySize->depthOrArrayLayers;
+            bool bprRequired = (heightInBlocks > 1) || (d > 1);
+            if (bpr == WGPU_COPY_STRIDE_UNDEFINED)
+            {
+                if (bprRequired)
+                {
+                    fail();
+                    return;
+                }
+            }
+            else if (bpr % 256 != 0)
+            {
+                fail();
+                return;
+            }
+        }
+        if (!ValidateCopyOffsetAlignment(dst->layout.offset, src->texture->format, src->aspect))
+        {
+            fail();
             return;
+        }
 
         if (!ValidateTextureCopyRange(src->texture, src->mipLevel, src->origin, *copySize))
+        {
+            fail();
             return;
+        }
 
         vk::ImageAspectFlags vkAspect = AspectForCopy(src->aspect, src->texture->format);
 
@@ -1108,12 +1267,26 @@ extern "C"
         if (!ValidateBufferCopyLayout(dst->buffer->size, dst->layout.offset,
                                       dst->layout.bytesPerRow, dst->layout.rowsPerImage,
                                       *copySize, footprint, blockW, blockH))
+        {
+            fail();
             return;
+        }
+
+        if (copySize->width == 0 || copySize->height == 0 || copySize->depthOrArrayLayers == 0)
+        {
+            enc->retained.usedBuffers.push_back(dst->buffer);
+            enc->retained.usedTextures.push_back(src->texture);
+            return;
+        }
 
         vk::BufferImageCopy2 region{};
         region.bufferOffset = dst->layout.offset;
-        region.bufferRowLength = (footprint > 0) ? (dst->layout.bytesPerRow / footprint) * blockW : 0;
-        region.bufferImageHeight = dst->layout.rowsPerImage * blockH;
+        region.bufferRowLength = (footprint > 0 && dst->layout.bytesPerRow != WGPU_COPY_STRIDE_UNDEFINED)
+                                     ? (dst->layout.bytesPerRow / footprint) * blockW
+                                     : 0;
+        region.bufferImageHeight = (dst->layout.rowsPerImage != WGPU_COPY_STRIDE_UNDEFINED)
+                                       ? dst->layout.rowsPerImage * blockH
+                                       : 0;
         region.imageSubresource.aspectMask = vkAspect;
         region.imageSubresource.mipLevel = src->mipLevel;
         region.imageSubresource.baseArrayLayer = (src->texture->dimension == WGPUTextureDimension_3D) ? 0 : src->origin.z;
@@ -1150,6 +1323,8 @@ extern "C"
         enc->cmd->ApiHandle().copyImageToBuffer2(copyInfo);
         if (dst->buffer)
             enc->retained.usedBuffers.push_back(dst->buffer);
+        if (src->texture)
+            enc->retained.usedTextures.push_back(src->texture);
     }
 
     void wgpuCommandEncoderCopyTextureToTexture(WGPUCommandEncoder enc,
@@ -1159,21 +1334,51 @@ extern "C"
     {
         if (!EncoderOpen(enc, "wgpuCommandEncoderCopyTextureToTexture"))
             return;
-        if (!src || !src->texture || !src->texture->image || src->texture->destroyed)
+        auto fail = [&]()
+        { enc->invalid = true; };
+        if (!src || !src->texture || !dst || !dst->texture || !copySize)
+        {
+            fail();
             return;
-        if (!dst || !dst->texture || !dst->texture->image || dst->texture->destroyed)
+        }
+        if (src->texture->invalid || dst->texture->invalid)
+        {
+            fail();
             return;
-        if (!copySize)
+        }
+        if (src->texture->device != enc->device || dst->texture->device != enc->device)
+        {
+            fail();
             return;
+        }
+        if (src->texture->destroyed || dst->texture->destroyed ||
+            !src->texture->image || !dst->texture->image)
+        {
+            enc->retained.usedTextures.push_back(src->texture);
+            enc->retained.usedTextures.push_back(dst->texture);
+            return;
+        }
         if (!(src->texture->usage & WGPUTextureUsage_CopySrc))
+        {
+            fail();
             return;
+        }
         if (!(dst->texture->usage & WGPUTextureUsage_CopyDst))
+        {
+            fail();
             return;
+        }
 
         if (!ValidateTextureCopyRange(src->texture, src->mipLevel, src->origin, *copySize))
+        {
+            fail();
             return;
+        }
         if (!ValidateTextureCopyRange(dst->texture, dst->mipLevel, dst->origin, *copySize))
+        {
+            fail();
             return;
+        }
 
         vk::ImageAspectFlags srcAspect = AspectForCopy(src->aspect, src->texture->format);
         vk::ImageAspectFlags dstAspect = AspectForCopy(dst->aspect, dst->texture->format);
@@ -1227,6 +1432,10 @@ extern "C"
         copyInfo.pRegions = &region;
 
         enc->cmd->ApiHandle().copyImage2(copyInfo);
+        if (src->texture)
+            enc->retained.usedTextures.push_back(src->texture);
+        if (dst->texture)
+            enc->retained.usedTextures.push_back(dst->texture);
     }
 
     void wgpuCommandEncoderResolveQuerySet(WGPUCommandEncoder enc,

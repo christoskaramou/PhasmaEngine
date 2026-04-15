@@ -133,6 +133,24 @@ extern "C"
             if (textureDestroyed)
                 continue;
 
+            for (auto *tex : cb->retained.usedTextures)
+            {
+                if (!tex)
+                    continue;
+                if (tex->destroyed || tex->invalid)
+                {
+                    textureDestroyed = true;
+                    if (queue->device)
+                        queue->device->reportError(
+                            WGPUErrorType_Validation,
+                            pwgpu::ToStringView(
+                                "Submit: command buffer references a destroyed texture"));
+                    break;
+                }
+            }
+            if (textureDestroyed)
+                continue;
+
             cb->submitted = true;
             cmds.push_back(cb->cmd);
             validCBs.push_back(cb);
@@ -273,12 +291,89 @@ extern "C"
     {
         if (!queue || !queue->peQueue)
             return;
-        if (!destination || !destination->texture || !destination->texture->image || destination->texture->destroyed)
+        auto fail = [&]()
+        {
+            if (queue->device)
+                queue->device->reportError(WGPUErrorType_Validation,
+                                           pwgpu::ToStringView("Queue.writeTexture(): validation failed"));
+        };
+        if (!destination || !destination->texture || !data || !dataSize || !dataLayout || !writeSize)
+        {
+            fail();
             return;
-        if (!data || !dataSize || !dataLayout || !writeSize)
+        }
+        if (!destination->texture->image || destination->texture->destroyed || destination->texture->invalid)
+        {
+            fail();
             return;
+        }
+        if (destination->texture->device != queue->device)
+        {
+            fail();
+            return;
+        }
+        if (destination->mipLevel >= destination->texture->mipLevelCount)
+        {
+            fail();
+            return;
+        }
+        if (destination->texture->sampleCount > 1)
+        {
+            fail();
+            return;
+        }
+        {
+            WGPUTextureImpl *tex = destination->texture;
+            uint32_t mipW = std::max(1u, tex->size.width >> destination->mipLevel);
+            uint32_t mipH = std::max(1u, tex->size.height >> destination->mipLevel);
+            uint32_t mipD = (tex->dimension == WGPUTextureDimension_3D)
+                                ? std::max(1u, tex->size.depthOrArrayLayers >> destination->mipLevel)
+                                : tex->size.depthOrArrayLayers;
+            uint64_t ox = destination->origin.x;
+            uint64_t oy = destination->origin.y;
+            uint64_t oz = destination->origin.z;
+            if (ox + writeSize->width > mipW ||
+                oy + writeSize->height > mipH ||
+                oz + writeSize->depthOrArrayLayers > mipD)
+            {
+                fail();
+                return;
+            }
+            if (pwgpu::HasDepthAspect(tex->format) || pwgpu::HasStencilAspect(tex->format))
+            {
+                if (ox != 0 || oy != 0 ||
+                    writeSize->width != mipW || writeSize->height != mipH)
+                {
+                    fail();
+                    return;
+                }
+            }
+            uint32_t bw, bh;
+            pwgpu::GetTexelBlockSize(tex->format, bw, bh);
+            if (bw > 1 || bh > 1)
+            {
+                if (ox % bw != 0 || oy % bh != 0)
+                {
+                    fail();
+                    return;
+                }
+                if (ox + writeSize->width != mipW && writeSize->width % bw != 0)
+                {
+                    fail();
+                    return;
+                }
+                if (oy + writeSize->height != mipH && writeSize->height % bh != 0)
+                {
+                    fail();
+                    return;
+                }
+            }
+        }
         if (!(destination->texture->usage & WGPUTextureUsage_CopyDst))
+        {
+            fail();
             return;
+        }
 
         pe::Image *image = destination->texture->image;
         WGPUTextureFormat fmt = destination->texture->format;
@@ -288,24 +383,56 @@ extern "C"
         pwgpu::GetTexelBlockSize(fmt, blockW, blockH);
         uint32_t footprint = pwgpu::TexelBlockCopyFootprint(fmt, destination->aspect);
         if (footprint == 0)
+        {
+            fail();
             return;
+        }
 
         {
             uint32_t widthInBlocks = (writeSize->width + blockW - 1) / blockW;
             uint32_t heightInBlocks = (writeSize->height + blockH - 1) / blockH;
             uint32_t minBytesPerRow = widthInBlocks * footprint;
-            if (dataLayout->bytesPerRow < minBytesPerRow)
-                return;
             uint32_t depth = writeSize->depthOrArrayLayers;
-            if (depth > 0)
+            bool bprProvided = (dataLayout->bytesPerRow != WGPU_COPY_STRIDE_UNDEFINED);
+            bool rpiProvided = (dataLayout->rowsPerImage != WGPU_COPY_STRIDE_UNDEFINED);
+            bool bytesPerRowRequired = (heightInBlocks > 1) || (depth > 1);
+            if (bytesPerRowRequired && !bprProvided)
             {
-                uint64_t bytesPerImage = static_cast<uint64_t>(dataLayout->bytesPerRow) * dataLayout->rowsPerImage;
-                uint64_t lastRowBytes = static_cast<uint64_t>(dataLayout->bytesPerRow) * (heightInBlocks - 1) + minBytesPerRow;
+                fail();
+                return;
+            }
+            if (bprProvided && dataLayout->bytesPerRow < minBytesPerRow)
+            {
+                fail();
+                return;
+            }
+            if (depth > 1 && !rpiProvided)
+            {
+                fail();
+                return;
+            }
+            if (rpiProvided && dataLayout->rowsPerImage < heightInBlocks)
+            {
+                fail();
+                return;
+            }
+            if (depth > 0 && heightInBlocks > 0)
+            {
+                uint64_t bpr = bprProvided ? dataLayout->bytesPerRow : minBytesPerRow;
+                uint64_t rpi = rpiProvided ? dataLayout->rowsPerImage : heightInBlocks;
+                uint64_t bytesPerImage = bpr * rpi;
+                uint64_t lastRowBytes = bpr * (heightInBlocks - 1) + minBytesPerRow;
                 uint64_t required = dataLayout->offset + (depth > 1 ? bytesPerImage * (depth - 1) : 0) + lastRowBytes;
                 if (required > dataSize)
+                {
+                    fail();
                     return;
+                }
             }
         }
+
+        if (writeSize->width == 0 || writeSize->height == 0 || writeSize->depthOrArrayLayers == 0)
+            return;
 
         vk::ImageAspectFlags vkAspect = pwgpu::ToVkAspect(destination->aspect, fmt);
 
@@ -329,8 +456,12 @@ extern "C"
 
         vk::BufferImageCopy2 region{};
         region.bufferOffset = dataLayout->offset;
-        region.bufferRowLength = (footprint > 0) ? (dataLayout->bytesPerRow / footprint) * blockW : 0;
-        region.bufferImageHeight = dataLayout->rowsPerImage * blockH;
+        region.bufferRowLength = (footprint > 0 && dataLayout->bytesPerRow != WGPU_COPY_STRIDE_UNDEFINED)
+                                     ? (dataLayout->bytesPerRow / footprint) * blockW
+                                     : 0;
+        region.bufferImageHeight = (dataLayout->rowsPerImage != WGPU_COPY_STRIDE_UNDEFINED)
+                                       ? dataLayout->rowsPerImage * blockH
+                                       : 0;
         region.imageSubresource.aspectMask = vkAspect;
         region.imageSubresource.mipLevel = destination->mipLevel;
         region.imageSubresource.baseArrayLayer = is3D ? 0 : destination->origin.z;
