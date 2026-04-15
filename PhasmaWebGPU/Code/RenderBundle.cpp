@@ -149,6 +149,17 @@ extern "C"
     {
         if (!EncoderOpen(rbe, "wgpuRenderBundleEncoderSetBindGroup"))
             return;
+
+        if (group && !group->invalid)
+        {
+            for (auto &use : group->textureUses)
+            {
+                std::string err;
+                if (!rbe->usageScope.AddView(use.view, use.kind, err))
+                    rbe->usageScopeValid = false;
+            }
+        }
+
         if (!rbe->pipeline || !rbe->pipeline->layout)
             return;
 
@@ -384,6 +395,9 @@ extern "C"
         rb->retainedPipelines = std::move(rbe->retainedPipelines);
         rb->retainedBindGroups = std::move(rbe->retainedBindGroups);
         rb->retainedBuffers = std::move(rbe->retainedBuffers);
+
+        rb->usageScope = std::move(rbe->usageScope);
+        rb->usageScopeValid = rbe->usageScopeValid;
 
         return rb;
     }

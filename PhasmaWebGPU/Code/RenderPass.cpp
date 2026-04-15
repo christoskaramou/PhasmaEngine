@@ -99,6 +99,17 @@ extern "C"
     {
         if (!PassOpen(rpe, "wgpuRenderPassEncoderSetBindGroup"))
             return;
+
+        if (group && !group->invalid)
+        {
+            for (auto &use : group->textureUses)
+            {
+                std::string err;
+                if (!rpe->usageScope.AddView(use.view, use.kind, err))
+                    rpe->usageScopeValid = false;
+            }
+        }
+
         if (!rpe->pipeline || !rpe->pipeline->layout)
             return;
 
@@ -394,19 +405,22 @@ extern "C"
                               bundle->colorFormats, bundle->depthStencilFormat, bundle->sampleCount))
             {
                 PE_WARN("[WebGPU] executeBundles: bundle %zu layout does not match render pass layout", i);
-                return;
+                rpe->usageScopeValid = false;
+                continue;
             }
 
             if (rpe->depthReadOnly && !bundle->depthReadOnly)
             {
                 PE_WARN("[WebGPU] executeBundles: bundle %zu depthReadOnly mismatch", i);
-                return;
+                rpe->usageScopeValid = false;
+                continue;
             }
 
             if (rpe->stencilReadOnly && !bundle->stencilReadOnly)
             {
                 PE_WARN("[WebGPU] executeBundles: bundle %zu stencilReadOnly mismatch", i);
-                return;
+                rpe->usageScopeValid = false;
+                continue;
             }
         }
 
@@ -416,6 +430,12 @@ extern "C"
 
             wgpuRenderBundleAddRef(bundle);
             rpe->retainedBundles.push_back(bundle);
+
+            if (!bundle->usageScopeValid)
+                rpe->usageScopeValid = false;
+            std::string err;
+            if (!rpe->usageScope.MergeFrom(bundle->usageScope, err))
+                rpe->usageScopeValid = false;
 
             vk::CommandBuffer vkCmd = rpe->cmd->ApiHandle();
             for (auto &command : bundle->commands)
@@ -458,6 +478,9 @@ extern "C"
     {
         if (!rpe || rpe->ended)
             return;
+
+        if (!rpe->usageScopeValid && rpe->parent)
+            rpe->parent->invalid = true;
 
         if (rpe->debugGroupDepth != 0)
             PE_WARN("[WebGPU] wgpuRenderPassEncoderEnd: %u debug group(s) still open", rpe->debugGroupDepth);

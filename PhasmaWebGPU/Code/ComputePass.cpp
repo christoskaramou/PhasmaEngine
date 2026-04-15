@@ -78,6 +78,14 @@ extern "C"
     {
         if (!PassOpen(cpe, "wgpuComputePassEncoderSetBindGroup"))
             return;
+
+        if (cpe->device && groupIndex < cpe->device->limits.maxBindGroups)
+        {
+            if (cpe->currentBindGroups.size() <= groupIndex)
+                cpe->currentBindGroups.resize(groupIndex + 1, nullptr);
+            cpe->currentBindGroups[groupIndex] = (group && !group->invalid) ? group : nullptr;
+        }
+
         if (!cpe->pipeline || !cpe->pipeline->layout)
             return;
 
@@ -144,6 +152,30 @@ extern "C"
 
     // ---- §16.1.2 dispatchWorkgroups ----
 
+    static void ValidateDispatchUsageScope(WGPUComputePassEncoder cpe)
+    {
+        if (!cpe->pipeline || !cpe->pipeline->layout)
+            return;
+        const size_t pipelineGroupCount = cpe->pipeline->layout->bindGroupLayouts.size();
+        pwgpu::UsageScope scope;
+        scope.strictWritableDuplicates = true;
+        for (size_t i = 0; i < cpe->currentBindGroups.size() && i < pipelineGroupCount; ++i)
+        {
+            auto *bg = cpe->currentBindGroups[i];
+            if (!bg || bg->invalid)
+                continue;
+            for (auto &use : bg->textureUses)
+            {
+                std::string err;
+                if (!scope.AddView(use.view, use.kind, err))
+                {
+                    cpe->usageScopeValid = false;
+                    return;
+                }
+            }
+        }
+    }
+
     void wgpuComputePassEncoderDispatchWorkgroups(WGPUComputePassEncoder cpe,
                                                   uint32_t x, uint32_t y, uint32_t z)
     {
@@ -151,9 +183,12 @@ extern "C"
             return;
         if (!cpe->pipeline)
         {
+            cpe->usageScopeValid = false;
             PE_WARN("[WebGPU] dispatchWorkgroups: no pipeline set");
             return;
         }
+
+        ValidateDispatchUsageScope(cpe);
 
         if (cpe->device)
         {
@@ -174,17 +209,34 @@ extern "C"
             return;
         if (!cpe->pipeline)
         {
+            cpe->usageScopeValid = false;
             PE_WARN("[WebGPU] dispatchWorkgroupsIndirect: no pipeline set");
             return;
         }
+        auto markInvalid = [&]()
+        { cpe->usageScopeValid = false; };
         if (!buffer || !buffer->peBuffer || buffer->internalState == BufferInternalState::Destroyed)
+        {
+            markInvalid();
             return;
+        }
         if (!(buffer->usage & WGPUBufferUsage_Indirect))
+        {
+            markInvalid();
             return;
+        }
         if (offset + 12 > buffer->size)
+        {
+            markInvalid();
             return;
+        }
         if (offset % 4 != 0)
+        {
+            markInvalid();
             return;
+        }
+
+        ValidateDispatchUsageScope(cpe);
 
         cpe->cmd->ApiHandle().dispatchIndirect(buffer->peBuffer->ApiHandle(), offset);
         cpe->usedBuffers.push_back(buffer);
@@ -196,6 +248,9 @@ extern "C"
     {
         if (!cpe || cpe->ended)
             return;
+
+        if (!cpe->usageScopeValid && cpe->parent)
+            cpe->parent->invalid = true;
 
         if (cpe->debugGroupDepth != 0)
             PE_WARN("[WebGPU] wgpuComputePassEncoderEnd: %u debug group(s) still open", cpe->debugGroupDepth);

@@ -2,8 +2,10 @@
 
 #include <webgpu/webgpu.h>
 #include "API/Descriptor.h"
+#include "UsageTracker.h"
 
 struct WGPUDeviceImpl;
+struct WGPUTextureViewImpl;
 
 struct WGPUBindGroupLayoutEntryResolved
 {
@@ -33,6 +35,12 @@ struct WGPUBindGroupLayoutImpl
     void *exclusivePipeline = nullptr;
 };
 
+struct WGPUBindGroupTextureUse
+{
+    WGPUTextureViewImpl *view = nullptr;
+    pwgpu::SubresourceUsageKind kind = pwgpu::SubresourceUsageKind::None;
+};
+
 struct WGPUBindGroupImpl
 {
     std::atomic<uint32_t> refCount{1};
@@ -42,4 +50,6 @@ struct WGPUBindGroupImpl
     pe::Descriptor *descriptor = nullptr;
     WGPUBindGroupLayoutImpl *layout = nullptr;
     bool invalid = false;
+
+    std::vector<WGPUBindGroupTextureUse> textureUses;
 };

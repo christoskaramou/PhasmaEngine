@@ -24,4 +24,17 @@ struct WGPUShaderModuleImpl
 
     std::vector<uint32_t> spirv;
     std::vector<WGPUCompilationMessageStorage> compilationMessages;
+
+    struct EntryPoint
+    {
+        uint32_t executionModel = 0;
+        std::string name;
+    };
+    std::vector<EntryPoint> entryPoints;
 };
+
+namespace pwgpu
+{
+    bool ParseSpirvEntryPoints(const uint32_t *code, size_t codeSize,
+                               std::vector<WGPUShaderModuleImpl::EntryPoint> &out);
+} // namespace pwgpu

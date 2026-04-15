@@ -75,11 +75,14 @@ void WGPUDeviceImpl::reportError(WGPUErrorType type, WGPUStringView message)
             default:
                 break;
             }
-            if (captures && !scope.hasCapturedError)
+            if (captures)
             {
-                scope.hasCapturedError = true;
-                scope.capturedErrorType = type;
-                scope.capturedErrorMessage = pwgpu::ToString(message);
+                if (!scope.hasCapturedError)
+                {
+                    scope.hasCapturedError = true;
+                    scope.capturedErrorType = type;
+                    scope.capturedErrorMessage = pwgpu::ToString(message);
+                }
                 return;
             }
         }
@@ -1553,11 +1556,18 @@ extern "C"
                 {
                     if (entry.textureView->view)
                         bg->descriptor->SetImageView(entry.binding, entry.textureView->view);
+                    bg->textureUses.push_back({entry.textureView, pwgpu::SubresourceUsageKind::Sampled});
                 }
                 else if (le.storageTexture.access != WGPUStorageTextureAccess_BindingNotUsed && entry.textureView)
                 {
                     if (entry.textureView->view)
                         bg->descriptor->SetImageView(entry.binding, entry.textureView->view);
+                    auto kind = (le.storageTexture.access == WGPUStorageTextureAccess_ReadOnly)
+                                    ? pwgpu::SubresourceUsageKind::ReadOnlyStorage
+                                : (le.storageTexture.access == WGPUStorageTextureAccess_ReadWrite)
+                                    ? pwgpu::SubresourceUsageKind::ReadWriteStorage
+                                    : pwgpu::SubresourceUsageKind::WriteOnlyStorage;
+                    bg->textureUses.push_back({entry.textureView, kind});
                 }
             }
 
@@ -1825,6 +1835,7 @@ extern "C"
         }
 
         sm->spirv.assign(spirvDesc->code, spirvDesc->code + spirvDesc->codeSize);
+        pwgpu::ParseSpirvEntryPoints(sm->spirv.data(), sm->spirv.size(), sm->entryPoints);
 
         return sm;
     }
@@ -2139,11 +2150,58 @@ extern "C"
             return MakeInvalidComputePipeline(device, labelStr);
         }
 
+        // SPIR-V ExecutionModel: GLCompute = 5.
+        constexpr uint32_t kExecCompute = 5;
+        const bool entryPointProvided =
+            descriptor->compute.entryPoint.data && descriptor->compute.entryPoint.length != 0;
+
         std::string entryPointName;
-        if (descriptor->compute.entryPoint.data && descriptor->compute.entryPoint.length != 0)
+        if (entryPointProvided)
+        {
             entryPointName = pwgpu::ToString(descriptor->compute.entryPoint);
+            bool found = false;
+            for (auto &ep : shaderModule->entryPoints)
+            {
+                if (ep.executionModel == kExecCompute && ep.name == entryPointName)
+                {
+                    found = true;
+                    break;
+                }
+            }
+            if (!found)
+            {
+                device->reportError(WGPUErrorType_Validation,
+                                    pwgpu::ToStringView("createComputePipeline: compute.entryPoint "
+                                                        "does not name a compute entry point in the shader module"));
+                return MakeInvalidComputePipeline(device, labelStr);
+            }
+        }
         else
-            entryPointName = "main";
+        {
+            int computeCount = 0;
+            for (auto &ep : shaderModule->entryPoints)
+            {
+                if (ep.executionModel == kExecCompute)
+                {
+                    ++computeCount;
+                    entryPointName = ep.name;
+                }
+            }
+            if (computeCount == 0)
+            {
+                device->reportError(WGPUErrorType_Validation,
+                                    pwgpu::ToStringView("createComputePipeline: shader module "
+                                                        "has no compute entry point"));
+                return MakeInvalidComputePipeline(device, labelStr);
+            }
+            if (computeCount > 1)
+            {
+                device->reportError(WGPUErrorType_Validation,
+                                    pwgpu::ToStringView("createComputePipeline: compute.entryPoint "
+                                                        "omitted but shader module has multiple compute entry points"));
+                return MakeInvalidComputePipeline(device, labelStr);
+            }
+        }
 
         auto vkDev = device->rhi->GetDevice();
 
@@ -2258,11 +2316,58 @@ extern "C"
             return MakeInvalidRenderPipeline(device, labelStr);
         }
 
+        // SPIR-V ExecutionModel: Vertex = 0, Fragment = 4.
+        constexpr uint32_t kExecVertex = 0;
+        constexpr uint32_t kExecFragment = 4;
+
+        auto resolveEntry = [&](WGPUShaderModuleImpl *mod, WGPUStringView ep,
+                                uint32_t execModel, const char *stageTag,
+                                std::string &outName) -> bool
+        {
+            const bool provided = ep.data && ep.length != 0;
+            if (provided)
+            {
+                outName = pwgpu::ToString(ep);
+                for (auto &e : mod->entryPoints)
+                    if (e.executionModel == execModel && e.name == outName)
+                        return true;
+                std::string msg = "createRenderPipeline: ";
+                msg += stageTag;
+                msg += ".entryPoint does not name a matching entry point in the shader module";
+                device->reportError(WGPUErrorType_Validation, pwgpu::ToStringView(msg));
+                return false;
+            }
+            int count = 0;
+            for (auto &e : mod->entryPoints)
+            {
+                if (e.executionModel == execModel)
+                {
+                    ++count;
+                    outName = e.name;
+                }
+            }
+            if (count == 0)
+            {
+                std::string msg = "createRenderPipeline: shader module has no ";
+                msg += stageTag;
+                msg += " entry point";
+                device->reportError(WGPUErrorType_Validation, pwgpu::ToStringView(msg));
+                return false;
+            }
+            if (count > 1)
+            {
+                std::string msg = "createRenderPipeline: ";
+                msg += stageTag;
+                msg += ".entryPoint omitted but shader module has multiple matching entry points";
+                device->reportError(WGPUErrorType_Validation, pwgpu::ToStringView(msg));
+                return false;
+            }
+            return true;
+        };
+
         std::string vertEntry;
-        if (descriptor->vertex.entryPoint.data && descriptor->vertex.entryPoint.length != 0)
-            vertEntry = pwgpu::ToString(descriptor->vertex.entryPoint);
-        else
-            vertEntry = "main";
+        if (!resolveEntry(vertModule, descriptor->vertex.entryPoint, kExecVertex, "vertex", vertEntry))
+            return MakeInvalidRenderPipeline(device, labelStr);
 
         auto primTopology = descriptor->primitive.topology;
         if (primTopology == WGPUPrimitiveTopology(0))
@@ -2320,10 +2425,8 @@ extern "C"
                                     pwgpu::ToStringView("createRenderPipeline: fragment.module is null/invalid/empty"));
                 return MakeInvalidRenderPipeline(device, labelStr);
             }
-            if (descriptor->fragment->entryPoint.data && descriptor->fragment->entryPoint.length != 0)
-                fragEntry = pwgpu::ToString(descriptor->fragment->entryPoint);
-            else
-                fragEntry = "main";
+            if (!resolveEntry(fragModuleSrc, descriptor->fragment->entryPoint, kExecFragment, "fragment", fragEntry))
+                return MakeInvalidRenderPipeline(device, labelStr);
         }
 
         std::vector<vk::PipelineColorBlendAttachmentState> blendAttachments;

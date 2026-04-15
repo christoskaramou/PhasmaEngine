@@ -3,6 +3,7 @@
 #include <webgpu/webgpu.h>
 #include "API/Command.h"
 #include "API/Image.h"
+#include "UsageTracker.h"
 
 struct WGPUCommandEncoderImpl;
 struct WGPUDeviceImpl;
@@ -50,4 +51,7 @@ struct WGPURenderPassEncoderImpl
     std::vector<WGPUBindGroupImpl *> retainedBindGroups;
     std::vector<WGPURenderBundleImpl *> retainedBundles;
     std::vector<WGPUBufferImpl *> usedBuffers;
+
+    pwgpu::UsageScope usageScope;
+    bool usageScopeValid = true;
 };

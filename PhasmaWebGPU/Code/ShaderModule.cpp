@@ -3,6 +3,56 @@
 #include "Instance.h"
 #include "Utils.h"
 
+namespace pwgpu
+{
+    bool ParseSpirvEntryPoints(const uint32_t *code, size_t codeSize,
+                               std::vector<WGPUShaderModuleImpl::EntryPoint> &out)
+    {
+        out.clear();
+        // Header: magic, version, generator, bound, schema (5 words).
+        if (!code || codeSize < 5 || code[0] != 0x07230203u)
+            return false;
+
+        size_t i = 5;
+        while (i < codeSize)
+        {
+            uint32_t word0 = code[i];
+            uint32_t wordCount = word0 >> 16;
+            uint32_t opcode = word0 & 0xFFFFu;
+            if (wordCount == 0 || i + wordCount > codeSize)
+                return false;
+
+            // OpEntryPoint = 15. Layout: word0 | ExecutionModel | EntryId |
+            // Name (null-terminated literal, packed 4 chars/word) | Interface IDs...
+            if (opcode == 15 && wordCount >= 4)
+            {
+                WGPUShaderModuleImpl::EntryPoint ep;
+                ep.executionModel = code[i + 1];
+                // Reconstruct the name from packed words, stopping at NUL.
+                std::string name;
+                for (uint32_t w = i + 3; w < i + wordCount; ++w)
+                {
+                    uint32_t v = code[w];
+                    for (int b = 0; b < 4; ++b)
+                    {
+                        char c = static_cast<char>((v >> (b * 8)) & 0xFFu);
+                        if (c == '\0')
+                        {
+                            w = i + wordCount; // break outer loop
+                            break;
+                        }
+                        name.push_back(c);
+                    }
+                }
+                ep.name = std::move(name);
+                out.push_back(std::move(ep));
+            }
+            i += wordCount;
+        }
+        return true;
+    }
+} // namespace pwgpu
+
 extern "C"
 {
 

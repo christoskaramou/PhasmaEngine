@@ -235,7 +235,7 @@ extern "C"
             if (!(view->usage & WGPUTextureUsage_RenderAttachment))
             {
                 PE_WARN("[WebGPU] beginRenderPass: color attachment %zu view missing RENDER_ATTACHMENT usage", i);
-                return nullptr;
+                enc->invalid = true;
             }
 
             if (view->mipLevelCount != 1)
@@ -416,12 +416,12 @@ extern "C"
                 if (dsa->depthLoadOp != WGPULoadOp_Clear && dsa->depthLoadOp != WGPULoadOp_Load)
                 {
                     PE_WARN("[WebGPU] beginRenderPass: depthLoadOp must be provided when depth is writable");
-                    return nullptr;
+                    enc->invalid = true;
                 }
                 if (dsa->depthStoreOp != WGPUStoreOp_Store && dsa->depthStoreOp != WGPUStoreOp_Discard)
                 {
                     PE_WARN("[WebGPU] beginRenderPass: depthStoreOp must be provided when depth is writable");
-                    return nullptr;
+                    enc->invalid = true;
                 }
             }
             if (hasDepth && dsa->depthLoadOp == WGPULoadOp_Clear)
@@ -438,12 +438,12 @@ extern "C"
                 if (dsa->stencilLoadOp != WGPULoadOp_Clear && dsa->stencilLoadOp != WGPULoadOp_Load)
                 {
                     PE_WARN("[WebGPU] beginRenderPass: stencilLoadOp must be provided when stencil is writable");
-                    return nullptr;
+                    enc->invalid = true;
                 }
                 if (dsa->stencilStoreOp != WGPUStoreOp_Store && dsa->stencilStoreOp != WGPUStoreOp_Discard)
                 {
                     PE_WARN("[WebGPU] beginRenderPass: stencilStoreOp must be provided when stencil is writable");
-                    return nullptr;
+                    enc->invalid = true;
                 }
             }
         }
@@ -632,6 +632,12 @@ extern "C"
             view->refCount.fetch_add(1, std::memory_order_relaxed);
             rpe->retainedViews.push_back(view);
 
+            {
+                std::string err;
+                if (!rpe->usageScope.AddView(view, pwgpu::SubresourceUsageKind::Attachment, err))
+                    rpe->usageScopeValid = false;
+            }
+
             vk::RenderingAttachmentInfo att{};
             att.imageView = attachmentImageView;
             att.imageLayout = vk::ImageLayout::eColorAttachmentOptimal;
@@ -716,6 +722,34 @@ extern "C"
 
             dsView->refCount.fetch_add(1, std::memory_order_relaxed);
             rpe->retainedViews.push_back(dsView);
+
+            {
+                auto addAspect = [&](WGPUTextureAspect aspect, bool readOnly)
+                {
+                    pwgpu::SubresourceKey key{};
+                    key.texture = dsView->texture;
+                    key.aspect = static_cast<uint32_t>(aspect);
+                    auto kind = readOnly ? pwgpu::SubresourceUsageKind::AttachmentReadOnly
+                                         : pwgpu::SubresourceUsageKind::Attachment;
+                    const uint32_t mipEnd = dsView->baseMipLevel + dsView->mipLevelCount;
+                    const uint32_t layerEnd = dsView->baseArrayLayer + dsView->arrayLayerCount;
+                    for (uint32_t m = dsView->baseMipLevel; m < mipEnd; ++m)
+                    {
+                        for (uint32_t l = dsView->baseArrayLayer; l < layerEnd; ++l)
+                        {
+                            key.mip = m;
+                            key.layer = l;
+                            std::string err;
+                            if (!rpe->usageScope.AddSubresource(key, kind, err))
+                                rpe->usageScopeValid = false;
+                        }
+                    }
+                };
+                if (hasDepth)
+                    addAspect(WGPUTextureAspect_DepthOnly, dsa->depthReadOnly);
+                if (hasStencil)
+                    addAspect(WGPUTextureAspect_StencilOnly, dsa->stencilReadOnly);
+            }
 
             if (hasDepth)
             {

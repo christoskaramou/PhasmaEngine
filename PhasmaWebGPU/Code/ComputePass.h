@@ -2,6 +2,7 @@
 
 #include <webgpu/webgpu.h>
 #include "API/Command.h"
+#include "UsageTracker.h"
 
 struct WGPUCommandEncoderImpl;
 struct WGPUDeviceImpl;
@@ -28,4 +29,7 @@ struct WGPUComputePassEncoderImpl
     std::vector<WGPUComputePipelineImpl *> retainedPipelines;
     std::vector<WGPUBindGroupImpl *> retainedBindGroups;
     std::vector<WGPUBufferImpl *> usedBuffers;
+
+    std::vector<WGPUBindGroupImpl *> currentBindGroups;
+    bool usageScopeValid = true;
 };

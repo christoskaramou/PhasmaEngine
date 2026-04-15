@@ -2,6 +2,7 @@
 
 #include <webgpu/webgpu.h>
 #include <functional>
+#include "UsageTracker.h"
 
 struct WGPUDeviceImpl;
 struct WGPURenderPipelineImpl;
@@ -29,6 +30,9 @@ struct WGPURenderBundleImpl
     std::vector<WGPURenderPipelineImpl *> retainedPipelines;
     std::vector<WGPUBindGroupImpl *> retainedBindGroups;
     std::vector<WGPUBufferImpl *> retainedBuffers;
+
+    pwgpu::UsageScope usageScope;
+    bool usageScopeValid = true;
 };
 
 struct WGPURenderBundleEncoderImpl
@@ -54,4 +58,7 @@ struct WGPURenderBundleEncoderImpl
     std::vector<WGPURenderPipelineImpl *> retainedPipelines;
     std::vector<WGPUBindGroupImpl *> retainedBindGroups;
     std::vector<WGPUBufferImpl *> retainedBuffers;
+
+    pwgpu::UsageScope usageScope;
+    bool usageScopeValid = true;
 };
