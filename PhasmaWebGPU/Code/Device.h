@@ -11,6 +11,7 @@ namespace pe
 } // namespace pe
 
 struct WGPUDeviceImpl;
+struct WGPUTextureImpl;
 
 namespace pe
 {
@@ -81,5 +82,14 @@ struct WGPUDeviceImpl
     WGPUDeviceLostCallbackInfo deviceLostCallbackInfo{};
     bool destroyed = false;
 
+    struct PendingTextureDeletion
+    {
+        WGPUTextureImpl *tex;
+        uint64_t serial;
+    };
+    std::vector<PendingTextureDeletion> pendingTextureDeletions;
+    std::mutex pendingTextureDeletionsMutex;
+
     void reportError(WGPUErrorType type, WGPUStringView message);
+    void ReclaimCompletedTextureDeletions();
 };

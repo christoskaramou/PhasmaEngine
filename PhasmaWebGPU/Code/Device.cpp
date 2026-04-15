@@ -1,6 +1,8 @@
 #include "Device.h"
 #include "Buffer.h"
 #include "Texture.h"
+#include "API/Semaphore.h"
+#include "API/Queue.h"
 #include "FormatMap.h"
 #include "Sampler.h"
 #include "BindGroup.h"
@@ -93,6 +95,31 @@ void WGPUDeviceImpl::reportError(WGPUErrorType type, WGPUStringView message)
     }
 }
 
+extern void TeardownTextureGpuResources(WGPUTextureImpl *texture);
+
+void WGPUDeviceImpl::ReclaimCompletedTextureDeletions()
+{
+    if (!queue)
+        return;
+    pe::Semaphore *sem = queue->GetSemaphore();
+    const uint64_t completed = sem ? sem->GetValue() : 0;
+
+    std::lock_guard<std::mutex> lock(pendingTextureDeletionsMutex);
+    auto it = pendingTextureDeletions.begin();
+    while (it != pendingTextureDeletions.end())
+    {
+        if (it->serial <= completed)
+        {
+            TeardownTextureGpuResources(it->tex);
+            it = pendingTextureDeletions.erase(it);
+        }
+        else
+        {
+            ++it;
+        }
+    }
+}
+
 extern "C"
 {
 
@@ -115,6 +142,7 @@ extern "C"
                     device->queue->peQueue->WaitIdle();
                     device->queue->RecyclePendingSubmits();
                 }
+                device->ReclaimCompletedTextureDeletions();
                 device->queue->device = nullptr;
                 wgpuQueueRelease(device->queue);
                 device->queue = nullptr;
@@ -1398,8 +1426,57 @@ extern "C"
                         return makeInvalid("layout requires non-multisampled but texture sampleCount > 1");
                 }
 
-                // sampleType compatibility (simplified — format-to-sampleType mapping).
-                // Full format->sampleType validation is deferred to pipeline creation.
+                {
+                    const WGPUTextureFormat fmt = tv->format;
+                    const WGPUTextureSampleType st = le.texture.sampleType;
+
+                    auto isDepth = pwgpu::IsDepthStencilFormat(fmt) && pwgpu::HasDepthAspect(fmt);
+                    auto isStencilOnly = fmt == WGPUTextureFormat_Stencil8;
+                    auto is32BitFloat = (fmt == WGPUTextureFormat_R32Float ||
+                                         fmt == WGPUTextureFormat_RG32Float ||
+                                         fmt == WGPUTextureFormat_RGBA32Float);
+                    auto isSint = (fmt == WGPUTextureFormat_R8Sint || fmt == WGPUTextureFormat_RG8Sint ||
+                                   fmt == WGPUTextureFormat_RGBA8Sint || fmt == WGPUTextureFormat_R16Sint ||
+                                   fmt == WGPUTextureFormat_RG16Sint || fmt == WGPUTextureFormat_RGBA16Sint ||
+                                   fmt == WGPUTextureFormat_R32Sint || fmt == WGPUTextureFormat_RG32Sint ||
+                                   fmt == WGPUTextureFormat_RGBA32Sint);
+                    auto isUint = (fmt == WGPUTextureFormat_R8Uint || fmt == WGPUTextureFormat_RG8Uint ||
+                                   fmt == WGPUTextureFormat_RGBA8Uint || fmt == WGPUTextureFormat_R16Uint ||
+                                   fmt == WGPUTextureFormat_RG16Uint || fmt == WGPUTextureFormat_RGBA16Uint ||
+                                   fmt == WGPUTextureFormat_R32Uint || fmt == WGPUTextureFormat_RG32Uint ||
+                                   fmt == WGPUTextureFormat_RGBA32Uint || fmt == WGPUTextureFormat_RGB10A2Uint);
+
+                    bool float32Filterable = false;
+                    if (device)
+                    {
+                        for (auto f : device->features)
+                            if (f == WGPUFeatureName_Float32Filterable)
+                            {
+                                float32Filterable = true;
+                                break;
+                            }
+                    }
+
+                    bool ok = false;
+                    if (isDepth)
+                        ok = (st == WGPUTextureSampleType_Depth ||
+                              st == WGPUTextureSampleType_UnfilterableFloat);
+                    else if (isStencilOnly)
+                        ok = (st == WGPUTextureSampleType_Uint);
+                    else if (isSint)
+                        ok = (st == WGPUTextureSampleType_Sint);
+                    else if (isUint)
+                        ok = (st == WGPUTextureSampleType_Uint);
+                    else if (is32BitFloat)
+                        ok = (st == WGPUTextureSampleType_UnfilterableFloat ||
+                              (st == WGPUTextureSampleType_Float && float32Filterable));
+                    else
+                        ok = (st == WGPUTextureSampleType_Float ||
+                              st == WGPUTextureSampleType_UnfilterableFloat);
+
+                    if (!ok)
+                        return makeInvalid("textureView format is not compatible with layout sampleType");
+                }
             }
             else if (le.storageTexture.access != WGPUStorageTextureAccess_BindingNotUsed)
             {

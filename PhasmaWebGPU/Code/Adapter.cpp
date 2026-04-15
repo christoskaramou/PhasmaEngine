@@ -31,6 +31,10 @@ namespace
             return a.chainedCaps.depthClipEnable;
         case WGPUFeatureName_BGRA8UnormStorage:
             return a.bgra8UnormStorage;
+        case WGPUFeatureName_Float32Filterable:
+            return a.float32Filterable;
+        case WGPUFeatureName_RG11B10UfloatRenderable:
+            return a.rg11b10UfloatRenderable;
         default:
             return false;
         }
@@ -51,6 +55,8 @@ namespace
             WGPUFeatureName_DualSourceBlending,
             WGPUFeatureName_ClipDistances,
             WGPUFeatureName_BGRA8UnormStorage,
+            WGPUFeatureName_Float32Filterable,
+            WGPUFeatureName_RG11B10UfloatRenderable,
         };
         for (WGPUFeatureName f : kCandidates)
         {
@@ -86,6 +92,23 @@ void pwgpu_PopulateAdapterFeatureCache(WGPUAdapterImpl &a)
         vkGetPhysicalDeviceFormatProperties(a.gpu, VK_FORMAT_B8G8R8A8_UNORM, &bgraProps);
         a.bgra8UnormStorage =
             (bgraProps.optimalTilingFeatures & VK_FORMAT_FEATURE_STORAGE_IMAGE_BIT) != 0;
+
+        auto supportsLinearFilter = [&](VkFormat fmt) -> bool
+        {
+            VkFormatProperties props{};
+            vkGetPhysicalDeviceFormatProperties(a.gpu, fmt, &props);
+            return (props.optimalTilingFeatures &
+                    VK_FORMAT_FEATURE_SAMPLED_IMAGE_FILTER_LINEAR_BIT) != 0;
+        };
+        a.float32Filterable = supportsLinearFilter(VK_FORMAT_R32_SFLOAT) &&
+                              supportsLinearFilter(VK_FORMAT_R32G32_SFLOAT) &&
+                              supportsLinearFilter(VK_FORMAT_R32G32B32A32_SFLOAT);
+
+        VkFormatProperties rg11Props{};
+        vkGetPhysicalDeviceFormatProperties(a.gpu, VK_FORMAT_B10G11R11_UFLOAT_PACK32, &rg11Props);
+        a.rg11b10UfloatRenderable =
+            (rg11Props.optimalTilingFeatures & VK_FORMAT_FEATURE_COLOR_ATTACHMENT_BIT) &&
+            (rg11Props.optimalTilingFeatures & VK_FORMAT_FEATURE_COLOR_ATTACHMENT_BLEND_BIT);
     }
 
     a.supportedFeatures.clear();

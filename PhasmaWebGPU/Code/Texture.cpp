@@ -2,6 +2,29 @@
 #include "Device.h"
 #include "Utils.h"
 #include "FormatMap.h"
+#include "API/Queue.h"
+#include "API/Semaphore.h"
+
+void TeardownTextureGpuResources(WGPUTextureImpl *texture)
+{
+    {
+        std::lock_guard<std::mutex> lock(texture->childViewsMutex);
+        for (auto *cv : texture->childViews)
+        {
+            if (cv && cv->view)
+            {
+                pe::ImageView::Destroy(cv->view);
+                cv->view = nullptr;
+            }
+        }
+        texture->childViews.clear();
+    }
+    if (texture->image && !texture->isSwapchain)
+    {
+        pe::Image::Destroy(texture->image);
+        texture->image = nullptr;
+    }
+}
 
 extern "C"
 {
@@ -31,10 +54,26 @@ extern "C"
         if (!texture || texture->destroyed)
             return;
         texture->destroyed = true;
-        if (texture->image && !texture->isSwapchain)
+
+        const uint64_t lastUsage = texture->lastUsageSerial.load(std::memory_order_acquire);
+        if (lastUsage == 0 || !texture->device || !texture->device->queue)
         {
-            pe::Image::Destroy(texture->image);
-            texture->image = nullptr;
+            TeardownTextureGpuResources(texture);
+            return;
+        }
+
+        WGPUQueueImpl *queue = texture->device->queue;
+        pe::Semaphore *sem = queue->GetSemaphore();
+        const uint64_t completed = sem ? sem->GetValue() : 0;
+
+        if (lastUsage <= completed)
+        {
+            TeardownTextureGpuResources(texture);
+        }
+        else
+        {
+            std::lock_guard<std::mutex> lock(texture->device->pendingTextureDeletionsMutex);
+            texture->device->pendingTextureDeletions.push_back({texture, lastUsage});
         }
     }
 
@@ -331,6 +370,12 @@ extern "C"
             }
         }
 
+        if (view->view)
+        {
+            std::lock_guard<std::mutex> lock(texture->childViewsMutex);
+            texture->childViews.push_back(view);
+        }
+
         return view;
     }
 
@@ -392,6 +437,12 @@ extern "C"
             return;
         if (view->refCount.fetch_sub(1, std::memory_order_acq_rel) == 1)
         {
+            if (view->texture)
+            {
+                std::lock_guard<std::mutex> lock(view->texture->childViewsMutex);
+                auto &cv = view->texture->childViews;
+                cv.erase(std::remove(cv.begin(), cv.end(), view), cv.end());
+            }
             if (view->view)
                 pe::ImageView::Destroy(view->view);
             if (view->texture)

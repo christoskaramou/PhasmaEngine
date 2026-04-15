@@ -4,6 +4,7 @@
 #include "API/Image.h"
 
 struct WGPUDeviceImpl;
+struct WGPUTextureViewImpl;
 
 struct WGPUTextureImpl
 {
@@ -19,6 +20,9 @@ struct WGPUTextureImpl
     uint32_t mipLevelCount = 1;
     uint32_t sampleCount = 1;
     std::vector<WGPUTextureFormat> viewFormats;
+    std::vector<WGPUTextureViewImpl *> childViews;
+    std::mutex childViewsMutex;
+    std::atomic<uint64_t> lastUsageSerial{0};
     bool destroyed = false;
     bool invalid = false;
     bool isSwapchain = false;

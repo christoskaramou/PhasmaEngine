@@ -209,9 +209,20 @@ extern "C"
                 continue;
 
             auto *view = ca.view;
-            if (!view->view || !view->texture || view->texture->invalid || view->texture->destroyed)
+            if (!view->texture)
             {
-                PE_WARN("[WebGPU] beginRenderPass: color attachment %zu has invalid view", i);
+                enc->invalid = true;
+                return nullptr;
+            }
+            if (view->texture->destroyed)
+            {
+                view->refCount.fetch_add(1, std::memory_order_relaxed);
+                enc->retained.textureViews.push_back(view);
+                return nullptr;
+            }
+            if (!view->view || view->texture->invalid)
+            {
+                enc->invalid = true;
                 return nullptr;
             }
 
@@ -336,10 +347,20 @@ extern "C"
         auto *dsa = descriptor->depthStencilAttachment;
         if (dsa)
         {
-            if (!dsa->view || !dsa->view->view || !dsa->view->texture ||
-                dsa->view->texture->invalid || dsa->view->texture->destroyed)
+            if (!dsa->view || !dsa->view->texture)
             {
-                PE_WARN("[WebGPU] beginRenderPass: depthStencilAttachment view is invalid");
+                enc->invalid = true;
+                return nullptr;
+            }
+            if (dsa->view->texture->destroyed)
+            {
+                dsa->view->refCount.fetch_add(1, std::memory_order_relaxed);
+                enc->retained.textureViews.push_back(dsa->view);
+                return nullptr;
+            }
+            if (!dsa->view->view || dsa->view->texture->invalid)
+            {
+                enc->invalid = true;
                 return nullptr;
             }
 

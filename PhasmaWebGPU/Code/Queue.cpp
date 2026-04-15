@@ -69,6 +69,8 @@ extern "C"
             return;
 
         queue->RecyclePendingSubmits();
+        if (queue->device)
+            queue->device->ReclaimCompletedTextureDeletions();
 
         std::vector<pe::CommandBuffer *> cmds;
         std::vector<WGPUCommandBuffer> validCBs;
@@ -82,7 +84,15 @@ extern "C"
                 continue;
 
             if (cb->invalid)
+            {
+                if (queue->device)
+                {
+                    queue->device->reportError(
+                        WGPUErrorType_Validation,
+                        pwgpu::ToStringView("Submit: command buffer is invalid"));
+                }
                 continue;
+            }
 
             bool hasUnavailable = false;
             for (auto *buf : cb->retained.usedBuffers)
@@ -102,6 +112,25 @@ extern "C"
                 }
             }
             if (hasUnavailable)
+                continue;
+
+            bool textureDestroyed = false;
+            for (auto *tv : cb->retained.textureViews)
+            {
+                if (!tv || !tv->texture)
+                    continue;
+                if (tv->texture->destroyed || tv->texture->invalid)
+                {
+                    textureDestroyed = true;
+                    if (queue->device)
+                        queue->device->reportError(
+                            WGPUErrorType_Validation,
+                            pwgpu::ToStringView(
+                                "Submit: command buffer references a destroyed texture"));
+                    break;
+                }
+            }
+            if (textureDestroyed)
                 continue;
 
             cb->submitted = true;
@@ -129,6 +158,11 @@ extern "C"
             {
                 if (buf)
                     buf->lastUsageSerial.store(serial, std::memory_order_release);
+            }
+            for (auto *tv : cb->retained.textureViews)
+            {
+                if (tv && tv->texture)
+                    tv->texture->lastUsageSerial.store(serial, std::memory_order_release);
             }
             cb->cmd = nullptr;
         }
