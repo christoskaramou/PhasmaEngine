@@ -12,7 +12,8 @@ namespace
         switch (feature)
         {
         case WGPUFeatureName_TextureCompressionBC:
-            return a.vkFeatures.textureCompressionBC != 0;
+            return a.vkFeatures.textureCompressionBC != 0 &&
+                   a.textureCompressionBcFullySupported;
         case WGPUFeatureName_TextureCompressionETC2:
             return a.vkFeatures.textureCompressionETC2 != 0;
         case WGPUFeatureName_TextureCompressionASTC:
@@ -109,6 +110,30 @@ void pwgpu_PopulateAdapterFeatureCache(WGPUAdapterImpl &a)
         a.rg11b10UfloatRenderable =
             (rg11Props.optimalTilingFeatures & VK_FORMAT_FEATURE_COLOR_ATTACHMENT_BIT) &&
             (rg11Props.optimalTilingFeatures & VK_FORMAT_FEATURE_COLOR_ATTACHMENT_BLEND_BIT);
+
+        // W3C spec: texture-compression-bc must support every BC VkFormat; some
+        // Vulkan drivers advertise textureCompressionBC without BC6H/BC7.
+        auto fmtSampled = [&](VkFormat fmt) -> bool
+        {
+            VkFormatProperties props{};
+            vkGetPhysicalDeviceFormatProperties(a.gpu, fmt, &props);
+            return (props.optimalTilingFeatures & VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT) != 0;
+        };
+        a.textureCompressionBcFullySupported =
+            fmtSampled(VK_FORMAT_BC1_RGBA_UNORM_BLOCK) &&
+            fmtSampled(VK_FORMAT_BC1_RGBA_SRGB_BLOCK) &&
+            fmtSampled(VK_FORMAT_BC2_UNORM_BLOCK) &&
+            fmtSampled(VK_FORMAT_BC2_SRGB_BLOCK) &&
+            fmtSampled(VK_FORMAT_BC3_UNORM_BLOCK) &&
+            fmtSampled(VK_FORMAT_BC3_SRGB_BLOCK) &&
+            fmtSampled(VK_FORMAT_BC4_UNORM_BLOCK) &&
+            fmtSampled(VK_FORMAT_BC4_SNORM_BLOCK) &&
+            fmtSampled(VK_FORMAT_BC5_UNORM_BLOCK) &&
+            fmtSampled(VK_FORMAT_BC5_SNORM_BLOCK) &&
+            fmtSampled(VK_FORMAT_BC6H_UFLOAT_BLOCK) &&
+            fmtSampled(VK_FORMAT_BC6H_SFLOAT_BLOCK) &&
+            fmtSampled(VK_FORMAT_BC7_UNORM_BLOCK) &&
+            fmtSampled(VK_FORMAT_BC7_SRGB_BLOCK);
     }
 
     a.supportedFeatures.clear();

@@ -32,6 +32,7 @@ struct WGPUAdapterImpl
     bool bgra8UnormStorage = false;
     bool float32Filterable = false;
     bool rg11b10UfloatRenderable = false;
+    bool textureCompressionBcFullySupported = false;
 
     std::string deviceName;
     std::string vendorName;

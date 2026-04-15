@@ -680,7 +680,11 @@ namespace pe
             }
         }
 
-        m_createInfo.usage |= vk::ImageUsageFlagBits::eTransferSrc;
+        {
+            vk::FormatProperties fProps = RHII.GetGpu().getFormatProperties(info.format);
+            if (fProps.optimalTilingFeatures & vk::FormatFeatureFlagBits::eTransferSrc)
+                m_createInfo.usage |= vk::ImageUsageFlagBits::eTransferSrc;
+        }
 
         VkImageCreateInfo ci = static_cast<VkImageCreateInfo>(m_createInfo);
         VmaAllocationCreateInfo aci{};

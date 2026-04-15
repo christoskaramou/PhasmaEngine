@@ -703,18 +703,27 @@ extern "C"
             ci.flags |= vk::ImageCreateFlagBits::eMutableFormat;
 
         const std::string peName = tex->label.empty() ? std::string("wgpu_texture") : tex->label;
+        std::string createError;
         try
         {
             tex->image = pe::Image::Create(ci, peName);
         }
+        catch (const std::exception &e)
+        {
+            tex->image = nullptr;
+            createError = e.what();
+        }
         catch (...)
         {
             tex->image = nullptr;
+            createError = "unknown exception";
         }
 
         if (!tex->image)
         {
             std::string msg = "wgpuDeviceCreateTexture: backing allocation failed";
+            if (!createError.empty())
+                msg += " (" + createError + ")";
             device->reportError(WGPUErrorType_OutOfMemory, pwgpu::ToStringView(msg));
             tex->invalid = true;
             return tex;

@@ -387,7 +387,6 @@ namespace pwgpu
             return false;
         switch (f)
         {
-        case WGPUTextureFormat_R32Float:
         case WGPUTextureFormat_R32Uint:
         case WGPUTextureFormat_R32Sint:
         case WGPUTextureFormat_RG32Float:
