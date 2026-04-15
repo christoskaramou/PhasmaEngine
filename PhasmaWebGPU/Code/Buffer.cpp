@@ -2,6 +2,8 @@
 #include "Device.h"
 #include "Instance.h"
 #include "Utils.h"
+#include "API/Queue.h"
+#include "API/Semaphore.h"
 
 namespace
 {
@@ -55,6 +57,13 @@ extern "C"
             if (buffer->peBuffer &&
                 buffer->internalState != BufferInternalState::Destroyed)
             {
+                const uint64_t lastUsage = buffer->lastUsageSerial.load(std::memory_order_acquire);
+                if (lastUsage != 0 && buffer->device && buffer->device->queue)
+                {
+                    pe::Semaphore *sem = buffer->device->queue->GetSemaphore();
+                    if (sem && sem->GetValue() < lastUsage)
+                        sem->WaitTimeout(lastUsage, UINT64_MAX);
+                }
                 if (buffer->hostVisible)
                     buffer->peBuffer->Unmap();
                 pe::Buffer::Destroy(buffer->peBuffer);
@@ -84,6 +93,13 @@ extern "C"
             std::lock_guard<std::mutex> lock(buffer->stateMutex);
             if (buffer->peBuffer)
             {
+                const uint64_t lastUsage = buffer->lastUsageSerial.load(std::memory_order_acquire);
+                if (lastUsage != 0 && buffer->device && buffer->device->queue)
+                {
+                    pe::Semaphore *sem = buffer->device->queue->GetSemaphore();
+                    if (sem && sem->GetValue() < lastUsage)
+                        sem->WaitTimeout(lastUsage, UINT64_MAX);
+                }
                 if (buffer->hostVisible)
                     buffer->peBuffer->Unmap();
                 pe::Buffer::Destroy(buffer->peBuffer);

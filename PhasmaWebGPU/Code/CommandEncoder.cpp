@@ -152,14 +152,47 @@ namespace
             return false;
         if (rpiProvided && rowsPerImage < heightInBlocks)
             return false;
-        if (copyDepth == 0 || heightInBlocks == 0)
-            return true;
         uint64_t bpr = bprProvided ? bytesPerRow : minBytesPerRow;
         uint64_t rpi = rpiProvided ? rowsPerImage : heightInBlocks;
         uint64_t bytesPerImage = bpr * rpi;
-        uint64_t lastRowBytes = bpr * (heightInBlocks - 1) + minBytesPerRow;
-        uint64_t required = offset + (copyDepth > 1 ? bytesPerImage * (copyDepth - 1) : 0) + lastRowBytes;
+        uint64_t bytesInLastImage = (heightInBlocks > 0)
+                                        ? bpr * (heightInBlocks - 1) + minBytesPerRow
+                                        : 0;
+        uint64_t requiredBytesInCopy = 0;
+        if (copyDepth > 1)
+            requiredBytesInCopy += bytesPerImage * (copyDepth - 1);
+        if (copyDepth > 0)
+            requiredBytesInCopy += bytesInLastImage;
+        uint64_t required = offset + requiredBytesInCopy;
         return required <= bufferSize;
+    }
+
+    bool IsDSCopyAspectMethodSupported(WGPUTextureFormat fmt, WGPUTextureAspect aspect, bool isT2B)
+    {
+        bool hasD = pwgpu::HasDepthAspect(fmt);
+        bool hasS = pwgpu::HasStencilAspect(fmt);
+        if (!hasD && !hasS)
+            return true;
+        auto all = (aspect == WGPUTextureAspect_All);
+        auto depth = (aspect == WGPUTextureAspect_DepthOnly);
+        auto sten = (aspect == WGPUTextureAspect_StencilOnly);
+        switch (fmt)
+        {
+        case WGPUTextureFormat_Stencil8:
+            return all || sten;
+        case WGPUTextureFormat_Depth16Unorm:
+            return all || depth;
+        case WGPUTextureFormat_Depth32Float:
+            return isT2B && (all || depth);
+        case WGPUTextureFormat_Depth24Plus:
+            return false;
+        case WGPUTextureFormat_Depth24PlusStencil8:
+            return sten;
+        case WGPUTextureFormat_Depth32FloatStencil8:
+            return isT2B ? (depth || sten) : sten;
+        default:
+            return true;
+        }
     }
 
     bool ValidateCopyOffsetAlignment(uint64_t offset, WGPUTextureFormat fmt, WGPUTextureAspect aspect)
@@ -1107,6 +1140,11 @@ extern "C"
             fail();
             return;
         }
+        if (!IsDSCopyAspectMethodSupported(dst->texture->format, dst->aspect, false))
+        {
+            fail();
+            return;
+        }
         if (!ValidateTextureCopyRange(dst->texture, dst->mipLevel, dst->origin, *copySize))
         {
             fail();
@@ -1151,6 +1189,13 @@ extern "C"
                                           (dst->texture->dimension == WGPUTextureDimension_3D) ? static_cast<int32_t>(dst->origin.z) : 0};
         region.imageExtent = vk::Extent3D{copySize->width, copySize->height,
                                           (dst->texture->dimension == WGPUTextureDimension_3D) ? copySize->depthOrArrayLayers : 1};
+
+        vk::MemoryBarrier2 mb{};
+        mb.srcStageMask = vk::PipelineStageFlagBits2::eAllCommands;
+        mb.srcAccessMask = vk::AccessFlagBits2::eMemoryWrite;
+        mb.dstStageMask = vk::PipelineStageFlagBits2::eTransfer;
+        mb.dstAccessMask = vk::AccessFlagBits2::eTransferRead | vk::AccessFlagBits2::eTransferWrite;
+        enc->cmd->MemoryBarrier(mb);
 
         pe::ImageBarrierInfo barrier{};
         barrier.image = dst->texture->image;
@@ -1247,6 +1292,11 @@ extern "C"
             }
         }
         if (!ValidateCopyOffsetAlignment(dst->layout.offset, src->texture->format, src->aspect))
+        {
+            fail();
+            return;
+        }
+        if (!IsDSCopyAspectMethodSupported(src->texture->format, src->aspect, true))
         {
             fail();
             return;

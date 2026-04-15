@@ -42,7 +42,16 @@ extern "C"
         if (texture->refCount.fetch_sub(1, std::memory_order_acq_rel) == 1)
         {
             if (texture->image && !texture->destroyed && !texture->isSwapchain)
+            {
+                const uint64_t lastUsage = texture->lastUsageSerial.load(std::memory_order_acquire);
+                if (lastUsage != 0 && texture->device && texture->device->queue)
+                {
+                    pe::Semaphore *sem = texture->device->queue->GetSemaphore();
+                    if (sem && sem->GetValue() < lastUsage)
+                        sem->WaitTimeout(lastUsage, UINT64_MAX);
+                }
                 pe::Image::Destroy(texture->image);
+            }
             if (texture->device)
                 wgpuDeviceRelease(texture->device);
             delete texture;

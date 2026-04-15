@@ -25,21 +25,25 @@ void WGPUQueueImpl::RecyclePendingSubmits()
         return;
     const uint64_t completedSerial = sem->GetValue();
 
-    std::lock_guard<std::mutex> lock(pendingMutex);
-    auto it = pendingSubmits.begin();
-    while (it != pendingSubmits.end())
     {
-        if (completedSerial >= it->serial)
+        std::lock_guard<std::mutex> lock(pendingMutex);
+        auto it = pendingSubmits.begin();
+        while (it != pendingSubmits.end())
         {
-            it->cmd->Wait();
-            it->cmd->Return();
-            it = pendingSubmits.erase(it);
-        }
-        else
-        {
-            ++it;
+            if (completedSerial >= it->serial)
+            {
+                it->cmd->Wait();
+                it->cmd->Return();
+                it = pendingSubmits.erase(it);
+            }
+            else
+            {
+                ++it;
+            }
         }
     }
+    if (auto *sm = pe::RHII.GetStagingManager())
+        sm->RemoveUnused();
 }
 
 extern "C"
@@ -182,6 +186,11 @@ extern "C"
                 if (tv && tv->texture)
                     tv->texture->lastUsageSerial.store(serial, std::memory_order_release);
             }
+            for (auto *tex : cb->retained.usedTextures)
+            {
+                if (tex)
+                    tex->lastUsageSerial.store(serial, std::memory_order_release);
+            }
             cb->cmd = nullptr;
         }
     }
@@ -193,6 +202,12 @@ extern "C"
     {
         if (!buffer)
             return;
+        if (queue)
+        {
+            queue->RecyclePendingSubmits();
+            if (queue->device)
+                queue->device->ReclaimCompletedTextureDeletions();
+        }
 
         WGPUDeviceImpl *reportDevice =
             (queue && queue->device) ? queue->device : buffer->device;
@@ -280,6 +295,34 @@ extern "C"
         }
     }
 
+    static bool IsDSWriteTextureAspectSupported(WGPUTextureFormat fmt, WGPUTextureAspect aspect)
+    {
+        bool hasD = pwgpu::HasDepthAspect(fmt);
+        bool hasS = pwgpu::HasStencilAspect(fmt);
+        if (!hasD && !hasS)
+            return true;
+        bool all = (aspect == WGPUTextureAspect_All);
+        bool depth = (aspect == WGPUTextureAspect_DepthOnly);
+        bool sten = (aspect == WGPUTextureAspect_StencilOnly);
+        switch (fmt)
+        {
+        case WGPUTextureFormat_Stencil8:
+            return all || sten;
+        case WGPUTextureFormat_Depth16Unorm:
+            return all || depth;
+        case WGPUTextureFormat_Depth32Float:
+            return false;
+        case WGPUTextureFormat_Depth24Plus:
+            return false;
+        case WGPUTextureFormat_Depth24PlusStencil8:
+            return sten;
+        case WGPUTextureFormat_Depth32FloatStencil8:
+            return sten;
+        default:
+            return true;
+        }
+    }
+
     // ---- §19.3 writeTexture (immediate) ----
 
     void wgpuQueueWriteTexture(WGPUQueue queue,
@@ -291,13 +334,16 @@ extern "C"
     {
         if (!queue || !queue->peQueue)
             return;
+        queue->RecyclePendingSubmits();
+        if (queue->device)
+            queue->device->ReclaimCompletedTextureDeletions();
         auto fail = [&]()
         {
             if (queue->device)
                 queue->device->reportError(WGPUErrorType_Validation,
                                            pwgpu::ToStringView("Queue.writeTexture(): validation failed"));
         };
-        if (!destination || !destination->texture || !data || !dataSize || !dataLayout || !writeSize)
+        if (!destination || !destination->texture || !dataLayout || !writeSize)
         {
             fail();
             return;
@@ -318,6 +364,11 @@ extern "C"
             return;
         }
         if (destination->texture->sampleCount > 1)
+        {
+            fail();
+            return;
+        }
+        if (!IsDSWriteTextureAspectSupported(destination->texture->format, destination->aspect))
         {
             fail();
             return;
@@ -416,18 +467,22 @@ extern "C"
                 fail();
                 return;
             }
-            if (depth > 0 && heightInBlocks > 0)
+            uint64_t bpr = bprProvided ? dataLayout->bytesPerRow : minBytesPerRow;
+            uint64_t rpi = rpiProvided ? dataLayout->rowsPerImage : heightInBlocks;
+            uint64_t bytesPerImage = bpr * rpi;
+            uint64_t bytesInLastImage = (heightInBlocks > 0)
+                                            ? bpr * (heightInBlocks - 1) + minBytesPerRow
+                                            : 0;
+            uint64_t requiredBytesInCopy = 0;
+            if (depth > 1)
+                requiredBytesInCopy += bytesPerImage * (depth - 1);
+            if (depth > 0)
+                requiredBytesInCopy += bytesInLastImage;
+            uint64_t required = dataLayout->offset + requiredBytesInCopy;
+            if (required > dataSize)
             {
-                uint64_t bpr = bprProvided ? dataLayout->bytesPerRow : minBytesPerRow;
-                uint64_t rpi = rpiProvided ? dataLayout->rowsPerImage : heightInBlocks;
-                uint64_t bytesPerImage = bpr * rpi;
-                uint64_t lastRowBytes = bpr * (heightInBlocks - 1) + minBytesPerRow;
-                uint64_t required = dataLayout->offset + (depth > 1 ? bytesPerImage * (depth - 1) : 0) + lastRowBytes;
-                if (required > dataSize)
-                {
-                    fail();
-                    return;
-                }
+                fail();
+                return;
             }
         }
 
@@ -493,6 +548,7 @@ extern "C"
             queue->pendingSubmits.push_back({cmd, serial});
         }
         queue->lastSubmissionSerial.store(serial, std::memory_order_release);
+        destination->texture->lastUsageSerial.store(serial, std::memory_order_release);
     }
 
     WGPUFuture wgpuQueueOnSubmittedWorkDone(WGPUQueue queue, WGPUQueueWorkDoneCallbackInfo callbackInfo)

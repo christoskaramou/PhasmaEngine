@@ -18,6 +18,8 @@ namespace pe::VulkanHelpers
     {
         switch (format)
         {
+        case vk::Format::eD16Unorm:
+        case vk::Format::eX8D24UnormPack32:
         case vk::Format::eD32Sfloat:
             return true;
         default:
