@@ -85,7 +85,15 @@ extern "C"
         {
             WGPUCommandBuffer cb = commands[i];
             if (!cb || !cb->cmd || cb->submitted)
+            {
+                if (queue->device)
+                {
+                    queue->device->reportError(
+                        WGPUErrorType_Validation,
+                        pwgpu::ToStringView("Submit: command buffer is null, already submitted, or invalid"));
+                }
                 continue;
+            }
 
             if (cb->invalid)
             {

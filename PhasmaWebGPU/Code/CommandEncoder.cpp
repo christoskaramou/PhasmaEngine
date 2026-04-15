@@ -65,11 +65,27 @@ void RetainedResources::ReleaseAll()
 
 namespace
 {
+    void ReportEncoderValidation(WGPUCommandEncoder enc, const char *msg)
+    {
+        if (enc && enc->device)
+            enc->device->reportError(WGPUErrorType_Validation, pwgpu::ToStringView(msg));
+    }
+
     bool EncoderOpen(WGPUCommandEncoder enc, const char *apiName)
     {
-        if (!enc || enc->finished)
+        if (!enc)
+            return false;
+        if (enc->finished)
         {
-            PE_WARN("[WebGPU] %s: encoder is already finished", apiName);
+            std::string msg = std::string(apiName) + ": encoder is already finished";
+            ReportEncoderValidation(enc, msg.c_str());
+            return false;
+        }
+        if (enc->hasOpenPass)
+        {
+            std::string msg = std::string(apiName) + ": a pass is currently open on this encoder";
+            ReportEncoderValidation(enc, msg.c_str());
+            enc->invalid = true;
             return false;
         }
         return true;
@@ -234,10 +250,33 @@ extern "C"
     WGPURenderPassEncoder wgpuCommandEncoderBeginRenderPass(WGPUCommandEncoder enc,
                                                             WGPURenderPassDescriptor const *descriptor)
     {
-        if (!enc || enc->finished || enc->hasOpenPass)
+        if (!enc)
             return nullptr;
+        if (enc->finished)
+        {
+            ReportEncoderValidation(enc, "beginRenderPass: encoder is already finished");
+            auto *rpe = new WGPURenderPassEncoderImpl();
+            rpe->parent = enc;
+            rpe->device = enc->device;
+            rpe->invalid = true;
+            rpe->wasOpened = false;
+            return rpe;
+        }
+        if (enc->hasOpenPass)
+        {
+            enc->invalid = true;
+            auto *rpe = new WGPURenderPassEncoderImpl();
+            rpe->parent = enc;
+            rpe->device = enc->device;
+            rpe->invalid = true;
+            rpe->wasOpened = false;
+            return rpe;
+        }
         if (!descriptor)
+        {
+            enc->invalid = true;
             return nullptr;
+        }
 
         size_t colorCount = descriptor->colorAttachmentCount;
         uint32_t maxColorAttachments = enc->device ? enc->device->limits.maxColorAttachments : 8;
@@ -260,7 +299,13 @@ extern "C"
         if (!hasAnyColorAttachment && !descriptor->depthStencilAttachment)
         {
             PE_WARN("[WebGPU] beginRenderPass: must have at least one color or depth/stencil attachment");
-            return nullptr;
+            enc->invalid = true;
+            auto *rpe = new WGPURenderPassEncoderImpl();
+            rpe->parent = enc;
+            rpe->device = enc->device;
+            rpe->invalid = true;
+            enc->hasOpenPass = true;
+            return rpe;
         }
 
         uint32_t attachW = 0, attachH = 0;
@@ -887,8 +932,28 @@ extern "C"
     WGPUComputePassEncoder wgpuCommandEncoderBeginComputePass(WGPUCommandEncoder enc,
                                                               WGPUComputePassDescriptor const *descriptor)
     {
-        if (!enc || enc->finished || enc->hasOpenPass)
+        if (!enc)
             return nullptr;
+        if (enc->finished)
+        {
+            ReportEncoderValidation(enc, "beginComputePass: encoder is already finished");
+            auto *cpe = new WGPUComputePassEncoderImpl();
+            cpe->parent = enc;
+            cpe->device = enc->device;
+            cpe->invalid = true;
+            cpe->wasOpened = false;
+            return cpe;
+        }
+        if (enc->hasOpenPass)
+        {
+            enc->invalid = true;
+            auto *cpe = new WGPUComputePassEncoderImpl();
+            cpe->parent = enc;
+            cpe->device = enc->device;
+            cpe->invalid = true;
+            cpe->wasOpened = false;
+            return cpe;
+        }
         auto *cpe = new WGPUComputePassEncoderImpl();
         cpe->cmd = enc->cmd;
         cpe->parent = enc;
@@ -925,8 +990,18 @@ extern "C"
     WGPUCommandBuffer wgpuCommandEncoderFinish(WGPUCommandEncoder enc,
                                                WGPUCommandBufferDescriptor const *descriptor)
     {
-        if (!enc || enc->finished || enc->hasOpenPass)
+        if (!enc)
             return nullptr;
+        if (enc->finished)
+        {
+            ReportEncoderValidation(enc, "CommandEncoder.finish(): encoder is already finished");
+            return nullptr;
+        }
+        if (enc->hasOpenPass)
+        {
+            ReportEncoderValidation(enc, "CommandEncoder.finish(): a pass is still open");
+            enc->invalid = true;
+        }
         enc->finished = true;
 
         if (enc->cmd)

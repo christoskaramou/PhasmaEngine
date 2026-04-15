@@ -17,13 +17,30 @@ extern "C" void wgpuQuerySetRelease(WGPUQuerySet);
 
 namespace
 {
+    void ReportPassValidation(WGPUComputePassEncoder cpe, const char *msg)
+    {
+        if (cpe && cpe->device)
+            cpe->device->reportError(WGPUErrorType_Validation, pwgpu::ToStringView(msg));
+    }
+
     bool PassOpen(WGPUComputePassEncoder cpe, const char *apiName)
     {
-        if (!cpe || cpe->ended)
+        if (!cpe)
+            return false;
+        if (cpe->ended)
         {
-            PE_WARN("[WebGPU] %s: compute pass encoder is already ended", apiName);
+            std::string msg = std::string(apiName) + ": compute pass encoder is already ended";
+            ReportPassValidation(cpe, msg.c_str());
             return false;
         }
+        if (cpe->parent && cpe->parent->finished)
+        {
+            std::string msg = std::string(apiName) + ": parent command encoder is already finished";
+            ReportPassValidation(cpe, msg.c_str());
+            return false;
+        }
+        if (cpe->invalid)
+            return false;
         return true;
     }
 } // namespace
@@ -246,10 +263,29 @@ extern "C"
 
     void wgpuComputePassEncoderEnd(WGPUComputePassEncoder cpe)
     {
-        if (!cpe || cpe->ended)
+        if (!cpe)
             return;
+        if (cpe->ended)
+        {
+            ReportPassValidation(cpe, "ComputePassEncoder.end(): pass is already ended");
+            return;
+        }
+        if (cpe->parent && cpe->parent->finished)
+        {
+            ReportPassValidation(cpe, "ComputePassEncoder.end(): parent command encoder is already finished");
+            cpe->ended = true;
+            return;
+        }
+        if (!cpe->wasOpened)
+        {
+            ReportPassValidation(cpe, "ComputePassEncoder.end(): pass was never opened (invalid begin)");
+            if (cpe->parent)
+                cpe->parent->invalid = true;
+            cpe->ended = true;
+            return;
+        }
 
-        if (!cpe->usageScopeValid && cpe->parent)
+        if ((cpe->invalid || !cpe->usageScopeValid || cpe->debugGroupDepth != 0) && cpe->parent)
             cpe->parent->invalid = true;
 
         if (cpe->debugGroupDepth != 0)
@@ -315,7 +351,7 @@ extern "C"
             return;
         if (cpe->debugGroupDepth == 0)
         {
-            PE_WARN("[WebGPU] popDebugGroup: no matching pushDebugGroup");
+            cpe->invalid = true;
             return;
         }
         cpe->debugGroupDepth--;

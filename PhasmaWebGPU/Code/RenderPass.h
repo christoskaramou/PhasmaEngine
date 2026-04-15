@@ -21,6 +21,8 @@ struct WGPURenderPassEncoderImpl
     WGPUCommandEncoderImpl *parent = nullptr;
     WGPUDeviceImpl *device = nullptr;
     bool ended = false;
+    bool invalid = false;
+    bool wasOpened = true;
 
     WGPURenderPipelineImpl *pipeline = nullptr;
     uint32_t debugGroupDepth = 0;

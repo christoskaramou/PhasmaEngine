@@ -21,13 +21,30 @@ extern "C" void wgpuRenderBundleRelease(WGPURenderBundle);
 
 namespace
 {
+    void ReportPassValidation(WGPURenderPassEncoder rpe, const char *msg)
+    {
+        if (rpe && rpe->device)
+            rpe->device->reportError(WGPUErrorType_Validation, pwgpu::ToStringView(msg));
+    }
+
     bool PassOpen(WGPURenderPassEncoder rpe, const char *apiName)
     {
-        if (!rpe || rpe->ended)
+        if (!rpe)
+            return false;
+        if (rpe->ended)
         {
-            PE_WARN("[WebGPU] %s: render pass encoder is already ended", apiName);
+            std::string msg = std::string(apiName) + ": render pass encoder is already ended";
+            ReportPassValidation(rpe, msg.c_str());
             return false;
         }
+        if (rpe->parent && rpe->parent->finished)
+        {
+            std::string msg = std::string(apiName) + ": parent command encoder is already finished";
+            ReportPassValidation(rpe, msg.c_str());
+            return false;
+        }
+        if (rpe->invalid)
+            return false;
         return true;
     }
 
@@ -467,7 +484,7 @@ extern "C"
             return;
         if (rpe->debugGroupDepth == 0)
         {
-            PE_WARN("[WebGPU] popDebugGroup: no matching pushDebugGroup");
+            rpe->invalid = true;
             return;
         }
         rpe->debugGroupDepth--;
@@ -476,10 +493,29 @@ extern "C"
 
     void wgpuRenderPassEncoderEnd(WGPURenderPassEncoder rpe)
     {
-        if (!rpe || rpe->ended)
+        if (!rpe)
             return;
+        if (rpe->ended)
+        {
+            ReportPassValidation(rpe, "RenderPassEncoder.end(): pass is already ended");
+            return;
+        }
+        if (rpe->parent && rpe->parent->finished)
+        {
+            ReportPassValidation(rpe, "RenderPassEncoder.end(): parent command encoder is already finished");
+            rpe->ended = true;
+            return;
+        }
+        if (!rpe->wasOpened)
+        {
+            ReportPassValidation(rpe, "RenderPassEncoder.end(): pass was never opened (invalid begin)");
+            if (rpe->parent)
+                rpe->parent->invalid = true;
+            rpe->ended = true;
+            return;
+        }
 
-        if (!rpe->usageScopeValid && rpe->parent)
+        if ((rpe->invalid || !rpe->usageScopeValid || rpe->debugGroupDepth != 0 || rpe->occlusionQueryActive) && rpe->parent)
             rpe->parent->invalid = true;
 
         if (rpe->debugGroupDepth != 0)

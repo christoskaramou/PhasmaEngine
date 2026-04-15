@@ -787,7 +787,7 @@ extern "C"
             lodMin = descriptor->lodMinClamp;
             lodMax = descriptor->lodMaxClamp;
             cmp = descriptor->compare;
-            maxAniso = descriptor->maxAnisotropy;
+            maxAniso = descriptor->maxAnisotropy ? descriptor->maxAnisotropy : 1;
         }
 
         if (std::isnan(lodMin) || std::isinf(lodMin))

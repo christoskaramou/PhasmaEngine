@@ -22,7 +22,11 @@ namespace
             return false;
         if (rbe->finished)
         {
-            PE_WARN("[WebGPU] %s: render bundle encoder is already finished", apiName);
+            if (rbe->device)
+            {
+                std::string msg = std::string(apiName) + ": render bundle encoder is already finished";
+                rbe->device->reportError(WGPUErrorType_Validation, pwgpu::ToStringView(msg));
+            }
             return false;
         }
         if (rbe->invalid)
