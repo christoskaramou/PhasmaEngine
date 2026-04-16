@@ -293,6 +293,23 @@ extern "C"
             return rpe;
         };
 
+        // Destroyed-resource error must defer to queue.submit() per spec; parent encoder stays valid.
+        auto makeDeferredPass = [&](WGPUTextureViewImpl *retainView) -> WGPURenderPassEncoder
+        {
+            if (retainView)
+            {
+                retainView->refCount.fetch_add(1, std::memory_order_relaxed);
+                enc->retained.textureViews.push_back(retainView);
+            }
+            auto *rpe = new WGPURenderPassEncoderImpl();
+            rpe->parent = enc;
+            rpe->device = enc->device;
+            rpe->invalid = true;
+            rpe->deferredResourceError = true;
+            enc->hasOpenPass = true;
+            return rpe;
+        };
+
         size_t colorCount = descriptor->colorAttachmentCount;
         uint32_t maxColorAttachments = enc->device ? enc->device->limits.maxColorAttachments : 8;
         if (colorCount > maxColorAttachments)
@@ -353,14 +370,12 @@ extern "C"
                 continue;
 
             auto *view = ca.view;
-            if (!view->texture || !view->view || view->texture->invalid)
+            if (!view->texture || view->texture->invalid)
                 return makeInvalidPass("view has no texture or view is invalid");
             if (view->texture->destroyed)
-            {
-                view->refCount.fetch_add(1, std::memory_order_relaxed);
-                enc->retained.textureViews.push_back(view);
-                return makeInvalidPass("view texture destroyed");
-            }
+                return makeDeferredPass(view);
+            if (!view->view)
+                return makeInvalidPass("view is invalid");
             if (view->texture->device != enc->device)
             {
                 PE_WARN("[WebGPU] View texture device != enc->device");
@@ -406,8 +421,10 @@ extern "C"
                 auto *rt = ca.resolveTarget;
                 if (rt->texture && rt->texture->device != enc->device)
                     enc->invalid = true;
-                if (!rt->view || !rt->texture || rt->texture->invalid || rt->texture->destroyed)
+                if (!rt->view || !rt->texture || rt->texture->invalid)
                     return makeInvalidPass();
+                if (rt->texture->destroyed)
+                    return makeDeferredPass(rt);
                 if (view->texture->sampleCount <= 1 || rt->texture->sampleCount != 1)
                     return makeInvalidPass();
                 if (rt->format != view->format)
@@ -435,11 +452,7 @@ extern "C"
             if (!dsa->view || !dsa->view->texture)
                 return makeInvalidPass();
             if (dsa->view->texture->destroyed)
-            {
-                dsa->view->refCount.fetch_add(1, std::memory_order_relaxed);
-                enc->retained.textureViews.push_back(dsa->view);
-                return makeInvalidPass();
-            }
+                return makeDeferredPass(dsa->view);
             if (!dsa->view->view || dsa->view->texture->invalid)
                 return makeInvalidPass();
 

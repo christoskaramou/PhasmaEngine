@@ -661,8 +661,13 @@ extern "C"
             return;
         }
 
-        if ((rpe->invalid || !rpe->usageScopeValid || rpe->debugGroupDepth != 0 || rpe->occlusionQueryActive) && rpe->parent)
-            rpe->parent->invalid = true;
+        {
+            const bool passInvalidForEncoder =
+                (rpe->invalid && !rpe->deferredResourceError) ||
+                !rpe->usageScopeValid || rpe->debugGroupDepth != 0 || rpe->occlusionQueryActive;
+            if (passInvalidForEncoder && rpe->parent)
+                rpe->parent->invalid = true;
+        }
 
         if (rpe->debugGroupDepth != 0)
             PE_WARN("[WebGPU] wgpuRenderPassEncoderEnd: %u debug group(s) still open", rpe->debugGroupDepth);

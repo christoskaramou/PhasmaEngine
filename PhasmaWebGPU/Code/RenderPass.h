@@ -23,6 +23,8 @@ struct WGPURenderPassEncoderImpl
     bool ended = false;
     bool invalid = false;
     bool wasOpened = true;
+    // Invalid pass whose error must surface at queue.submit(), not finish().
+    bool deferredResourceError = false;
 
     WGPURenderPipelineImpl *pipeline = nullptr;
     uint32_t debugGroupDepth = 0;
