@@ -281,8 +281,9 @@ extern "C"
             return rpe;
         }
 
-        auto makeInvalidPass = [&]() -> WGPURenderPassEncoder
+        auto makeInvalidPass = [&](const char *msg = "unknown") -> WGPURenderPassEncoder
         {
+            PE_WARN("[WebGPU] Invalid Pass: %s", msg);
             enc->invalid = true;
             auto *rpe = new WGPURenderPassEncoderImpl();
             rpe->parent = enc;
@@ -340,7 +341,7 @@ extern "C"
             }
         }
         if (!hasAnyColorAttachment && !descriptor->depthStencilAttachment)
-            return makeInvalidPass();
+            return makeInvalidPass("no attachments provided");
 
         uint32_t attachW = 0, attachH = 0;
         uint32_t commonSampleCount = 0;
@@ -353,21 +354,27 @@ extern "C"
 
             auto *view = ca.view;
             if (!view->texture || !view->view || view->texture->invalid)
-                return makeInvalidPass();
+                return makeInvalidPass("view has no texture or view is invalid");
             if (view->texture->destroyed)
             {
                 view->refCount.fetch_add(1, std::memory_order_relaxed);
                 enc->retained.textureViews.push_back(view);
-                return makeInvalidPass();
+                return makeInvalidPass("view texture destroyed");
             }
             if (view->texture->device != enc->device)
+            {
+                PE_WARN("[WebGPU] View texture device != enc->device");
                 enc->invalid = true;
+            }
             if (pwgpu::IsDepthStencilFormat(view->format) || !pwgpu::IsRenderableFormat(view->format))
-                return makeInvalidPass();
+                return makeInvalidPass("not renderable format");
             if (!(view->usage & WGPUTextureUsage_RenderAttachment))
+            {
+                PE_WARN("[WebGPU] view usage != RenderAttachment");
                 enc->invalid = true;
+            }
             if (view->mipLevelCount != 1 || view->arrayLayerCount != 1)
-                return makeInvalidPass();
+                return makeInvalidPass("mip/layer count != 1");
 
             if (attachW == 0)
             {
@@ -375,7 +382,7 @@ extern "C"
                 attachH = view->renderExtent.height;
             }
             else if (view->renderExtent.width != attachW || view->renderExtent.height != attachH)
-                return makeInvalidPass();
+                return makeInvalidPass("extent mismatch");
 
             uint32_t sc = view->texture->sampleCount;
             if (commonSampleCount == 0)
