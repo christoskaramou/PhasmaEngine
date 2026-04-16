@@ -53,6 +53,10 @@ struct WGPURenderBundleEncoderImpl
     uint32_t debugGroupDepth = 0;
     uint64_t drawCount = 0;
 
+    WGPUBufferImpl *indexBuffer = nullptr;
+    WGPUIndexFormat indexFormat = WGPUIndexFormat_Undefined;
+    uint64_t indexBufferSize = 0;
+
     std::vector<BundleCommand> commands;
 
     std::vector<WGPURenderPipelineImpl *> retainedPipelines;

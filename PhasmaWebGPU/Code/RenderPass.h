@@ -63,5 +63,8 @@ struct WGPURenderPassEncoderImpl
     WGPUIndexFormat indexFormat = WGPUIndexFormat_Undefined;
     uint64_t indexBufferSize = 0;
 
+    uint64_t drawCount = 0;
+    uint64_t maxDrawCount = 50000000;
+
     std::vector<WGPUBindGroupImpl *> currentBindGroups;
 };

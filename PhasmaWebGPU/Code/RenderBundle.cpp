@@ -127,7 +127,15 @@ extern "C"
         if (!EncoderOpen(rbe, "wgpuRenderBundleEncoderSetPipeline"))
             return;
         if (!pipeline || pipeline->invalid || pipeline->vkPipeline == VK_NULL_HANDLE)
+        {
+            rbe->invalid = true;
             return;
+        }
+        if (pipeline->device != rbe->device)
+        {
+            rbe->invalid = true;
+            return;
+        }
 
         if (pipeline->sampleCount != rbe->sampleCount)
         {
@@ -163,6 +171,17 @@ extern "C"
         if (colorMismatch)
         {
             PE_WARN("[WebGPU] renderBundleEncoder setPipeline: pipeline colorFormats mismatch");
+            rbe->invalid = true;
+            return;
+        }
+
+        if (pipeline->writesDepth && rbe->depthReadOnly)
+        {
+            rbe->invalid = true;
+            return;
+        }
+        if (pipeline->writesStencil && rbe->stencilReadOnly)
+        {
             rbe->invalid = true;
             return;
         }
@@ -305,13 +324,50 @@ extern "C"
     {
         if (!EncoderOpen(rbe, "wgpuRenderBundleEncoderSetVertexBuffer"))
             return;
-        if (!buffer || !buffer->peBuffer || buffer->internalState == BufferInternalState::Destroyed)
+
+        if (rbe->device && slot >= rbe->device->limits.maxVertexBuffers)
+        {
+            rbe->invalid = true;
             return;
+        }
+        if (offset % 4u != 0u)
+        {
+            rbe->invalid = true;
+            return;
+        }
+        uint64_t bufferSize = buffer ? buffer->size : 0u;
+        if (size == WGPU_WHOLE_SIZE)
+            size = (offset > bufferSize) ? 0u : (bufferSize - offset);
+        if (offset > bufferSize || size > bufferSize - offset)
+        {
+            rbe->invalid = true;
+            return;
+        }
+
+        if (!buffer)
+            return;
+
+        if (buffer->device != rbe->device || buffer->invalid)
+        {
+            rbe->invalid = true;
+            return;
+        }
+        if (buffer->internalState == BufferInternalState::Destroyed)
+        {
+            rbe->invalid = true;
+            return;
+        }
         if (!(buffer->usage & WGPUBufferUsage_Vertex))
+        {
+            rbe->invalid = true;
             return;
+        }
 
         wgpuBufferAddRef(buffer);
         rbe->retainedBuffers.push_back(buffer);
+
+        if (!buffer->peBuffer)
+            return;
 
         vk::Buffer vkBuf = buffer->peBuffer->ApiHandle();
         vk::DeviceSize vkOffset = static_cast<vk::DeviceSize>(offset);
@@ -325,13 +381,56 @@ extern "C"
     {
         if (!EncoderOpen(rbe, "wgpuRenderBundleEncoderSetIndexBuffer"))
             return;
-        if (!buffer || !buffer->peBuffer || buffer->internalState == BufferInternalState::Destroyed)
+
+        if (!buffer)
+        {
+            rbe->invalid = true;
             return;
+        }
+        if (buffer->device != rbe->device || buffer->invalid)
+        {
+            rbe->invalid = true;
+            return;
+        }
+        if (buffer->internalState == BufferInternalState::Destroyed)
+        {
+            rbe->invalid = true;
+            return;
+        }
         if (!(buffer->usage & WGPUBufferUsage_Index))
+        {
+            rbe->invalid = true;
             return;
+        }
+        if (format != WGPUIndexFormat_Uint16 && format != WGPUIndexFormat_Uint32)
+        {
+            rbe->invalid = true;
+            return;
+        }
+        uint32_t indexSize = (format == WGPUIndexFormat_Uint16) ? 2u : 4u;
+        if (offset % indexSize != 0u)
+        {
+            rbe->invalid = true;
+            return;
+        }
+        uint64_t boundSize = size;
+        if (boundSize == WGPU_WHOLE_SIZE)
+            boundSize = (offset > buffer->size) ? 0u : (buffer->size - offset);
+        if (offset > buffer->size || boundSize > buffer->size - offset)
+        {
+            rbe->invalid = true;
+            return;
+        }
+
+        rbe->indexBuffer = buffer;
+        rbe->indexFormat = format;
+        rbe->indexBufferSize = boundSize;
 
         wgpuBufferAddRef(buffer);
         rbe->retainedBuffers.push_back(buffer);
+
+        if (!buffer->peBuffer)
+            return;
 
         vk::Buffer vkBuf = buffer->peBuffer->ApiHandle();
         vk::IndexType indexType = (format == WGPUIndexFormat_Uint16) ? vk::IndexType::eUint16 : vk::IndexType::eUint32;
@@ -361,6 +460,19 @@ extern "C"
     {
         if (!EncoderOpen(rbe, "wgpuRenderBundleEncoderDrawIndexed"))
             return;
+        if (!rbe->indexBuffer || rbe->indexFormat == WGPUIndexFormat_Undefined)
+        {
+            rbe->invalid = true;
+            return;
+        }
+        uint32_t indexSize = (rbe->indexFormat == WGPUIndexFormat_Uint16) ? 2u : 4u;
+        uint64_t maxIndices = rbe->indexBufferSize / indexSize;
+        uint64_t requiredEnd = static_cast<uint64_t>(firstIndex) + static_cast<uint64_t>(indexCount);
+        if (requiredEnd > maxIndices)
+        {
+            rbe->invalid = true;
+            return;
+        }
         if (!rbe->pipeline)
             return;
         if (!ValidateBindGroupCompat(rbe))
@@ -375,21 +487,49 @@ extern "C"
     {
         if (!EncoderOpen(rbe, "wgpuRenderBundleEncoderDrawIndirect"))
             return;
-        if (!rbe->pipeline)
+
+        if (!buffer)
+        {
+            rbe->invalid = true;
             return;
-        if (!buffer || !buffer->peBuffer || buffer->internalState == BufferInternalState::Destroyed)
+        }
+        if (buffer->device != rbe->device || buffer->invalid)
+        {
+            rbe->invalid = true;
             return;
+        }
+        if (buffer->internalState == BufferInternalState::Destroyed)
+        {
+            rbe->invalid = true;
+            return;
+        }
         if (!(buffer->usage & WGPUBufferUsage_Indirect))
+        {
+            rbe->invalid = true;
             return;
-        if (offset + sizeof(VkDrawIndirectCommand) > buffer->size)
+        }
+        if (offset % 4u != 0u)
+        {
+            rbe->invalid = true;
             return;
-        if (offset % 4 != 0)
+        }
+        constexpr uint64_t kDrawArgsSize = sizeof(VkDrawIndirectCommand);
+        if (offset > buffer->size || kDrawArgsSize > buffer->size - offset)
+        {
+            rbe->invalid = true;
+            return;
+        }
+
+        if (!rbe->pipeline)
             return;
         if (!ValidateBindGroupCompat(rbe))
             return;
 
         wgpuBufferAddRef(buffer);
         rbe->retainedBuffers.push_back(buffer);
+
+        if (!buffer->peBuffer)
+            return;
 
         vk::Buffer vkBuf = buffer->peBuffer->ApiHandle();
         rbe->drawCount++;
@@ -401,21 +541,49 @@ extern "C"
     {
         if (!EncoderOpen(rbe, "wgpuRenderBundleEncoderDrawIndexedIndirect"))
             return;
-        if (!rbe->pipeline)
+
+        if (!buffer)
+        {
+            rbe->invalid = true;
             return;
-        if (!buffer || !buffer->peBuffer || buffer->internalState == BufferInternalState::Destroyed)
+        }
+        if (buffer->device != rbe->device || buffer->invalid)
+        {
+            rbe->invalid = true;
             return;
+        }
+        if (buffer->internalState == BufferInternalState::Destroyed)
+        {
+            rbe->invalid = true;
+            return;
+        }
         if (!(buffer->usage & WGPUBufferUsage_Indirect))
+        {
+            rbe->invalid = true;
             return;
-        if (offset + sizeof(VkDrawIndexedIndirectCommand) > buffer->size)
+        }
+        if (offset % 4u != 0u)
+        {
+            rbe->invalid = true;
             return;
-        if (offset % 4 != 0)
+        }
+        constexpr uint64_t kDrawArgsSize = sizeof(VkDrawIndexedIndirectCommand);
+        if (offset > buffer->size || kDrawArgsSize > buffer->size - offset)
+        {
+            rbe->invalid = true;
+            return;
+        }
+
+        if (!rbe->pipeline)
             return;
         if (!ValidateBindGroupCompat(rbe))
             return;
 
         wgpuBufferAddRef(buffer);
         rbe->retainedBuffers.push_back(buffer);
+
+        if (!buffer->peBuffer)
+            return;
 
         vk::Buffer vkBuf = buffer->peBuffer->ApiHandle();
         rbe->drawCount++;

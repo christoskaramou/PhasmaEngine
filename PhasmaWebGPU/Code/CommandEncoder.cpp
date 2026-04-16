@@ -314,9 +314,6 @@ extern "C"
         uint32_t maxColorAttachments = enc->device ? enc->device->limits.maxColorAttachments : 8;
         if (colorCount > maxColorAttachments)
         {
-            if (enc->device)
-                enc->device->reportError(WGPUErrorType_Validation,
-                                         pwgpu::ToStringView("beginRenderPass: colorAttachmentCount exceeds maxColorAttachments"));
             enc->invalid = true;
             auto *rpe = new WGPURenderPassEncoderImpl();
             rpe->parent = enc;
@@ -337,8 +334,6 @@ extern "C"
             uint32_t bps = pwgpu::ComputeBytesPerSampleFromFormats(fmts.data(), fmts.size());
             if (bps > enc->device->limits.maxColorAttachmentBytesPerSample)
             {
-                enc->device->reportError(WGPUErrorType_Validation,
-                                         pwgpu::ToStringView("beginRenderPass: colorAttachmentBytesPerSample exceeds limit"));
                 enc->invalid = true;
                 auto *rpe = new WGPURenderPassEncoderImpl();
                 rpe->parent = enc;
@@ -409,6 +404,10 @@ extern "C"
             {
                 if (ca.depthSlice == WGPU_DEPTH_SLICE_UNDEFINED)
                     return makeInvalidPass();
+                uint32_t mipDepth =
+                    std::max(view->texture->size.depthOrArrayLayers >> view->baseMipLevel, 1u);
+                if (ca.depthSlice >= mipDepth)
+                    return makeInvalidPass();
             }
             else
             {
@@ -429,6 +428,8 @@ extern "C"
                     return makeInvalidPass();
                 if (rt->format != view->format)
                     return makeInvalidPass();
+                if (!pwgpu::SupportsResolve(view->format))
+                    return makeInvalidPass();
                 if (rt->renderExtent.width != view->renderExtent.width ||
                     rt->renderExtent.height != view->renderExtent.height)
                     return makeInvalidPass();
@@ -444,6 +445,37 @@ extern "C"
                 return makeInvalidPass();
             if (ca.storeOp != WGPUStoreOp_Store && ca.storeOp != WGPUStoreOp_Discard)
                 return makeInvalidPass();
+        }
+
+        // Color attachments must not alias; 3D compares depthSlice, 2D compares layer ranges.
+        for (size_t i = 0; i < colorCount; i++)
+        {
+            auto &a = descriptor->colorAttachments[i];
+            if (!a.view)
+                continue;
+            for (size_t j = i + 1; j < colorCount; j++)
+            {
+                auto &b = descriptor->colorAttachments[j];
+                if (!b.view)
+                    continue;
+                if (a.view->texture != b.view->texture)
+                    continue;
+                if (a.view->baseMipLevel != b.view->baseMipLevel)
+                    continue;
+                if (a.view->dimension == WGPUTextureViewDimension_3D &&
+                    b.view->dimension == WGPUTextureViewDimension_3D)
+                {
+                    if (a.depthSlice == b.depthSlice)
+                        return makeInvalidPass();
+                }
+                else
+                {
+                    uint32_t aEnd = a.view->baseArrayLayer + a.view->arrayLayerCount;
+                    uint32_t bEnd = b.view->baseArrayLayer + b.view->arrayLayerCount;
+                    if (!(aEnd <= b.view->baseArrayLayer || bEnd <= a.view->baseArrayLayer))
+                        return makeInvalidPass();
+                }
+            }
         }
 
         auto *dsa = descriptor->depthStencilAttachment;
@@ -490,8 +522,15 @@ extern "C"
                 if (dsa->depthStoreOp != WGPUStoreOp_Store && dsa->depthStoreOp != WGPUStoreOp_Discard)
                     enc->invalid = true;
             }
+            else
+            {
+                // No depth aspect or read-only: ops must not be provided.
+                if (dsa->depthLoadOp != WGPULoadOp_Undefined || dsa->depthStoreOp != WGPUStoreOp_Undefined)
+                    enc->invalid = true;
+            }
+            // If depthLoadOp==clear, depthClearValue must be in [0,1]. NaN (JS undefined sentinel) fails.
             if (hasDepth && dsa->depthLoadOp == WGPULoadOp_Clear &&
-                (dsa->depthClearValue < 0.0f || dsa->depthClearValue > 1.0f))
+                !(dsa->depthClearValue >= 0.0f && dsa->depthClearValue <= 1.0f))
                 return makeInvalidPass();
 
             if (hasStencil && !dsa->stencilReadOnly)
@@ -499,6 +538,11 @@ extern "C"
                 if (dsa->stencilLoadOp != WGPULoadOp_Clear && dsa->stencilLoadOp != WGPULoadOp_Load)
                     enc->invalid = true;
                 if (dsa->stencilStoreOp != WGPUStoreOp_Store && dsa->stencilStoreOp != WGPUStoreOp_Discard)
+                    enc->invalid = true;
+            }
+            else
+            {
+                if (dsa->stencilLoadOp != WGPULoadOp_Undefined || dsa->stencilStoreOp != WGPUStoreOp_Undefined)
                     enc->invalid = true;
             }
         }
@@ -563,6 +607,15 @@ extern "C"
         {
             auto &ca = descriptor->colorAttachments[i];
             rpe->colorFormats.push_back(ca.view ? ca.view->format : WGPUTextureFormat_Undefined);
+        }
+
+        for (const WGPUChainedStruct *c = descriptor->nextInChain; c; c = c->next)
+        {
+            if (c->sType == WGPUSType_RenderPassMaxDrawCount)
+            {
+                rpe->maxDrawCount = reinterpret_cast<const WGPURenderPassMaxDrawCount *>(c)->maxDrawCount;
+                break;
+            }
         }
 
         if (descriptor->occlusionQuerySet)
@@ -663,7 +716,7 @@ extern "C"
                 {
                     attachmentImageView = sliceView->ApiHandle();
                     rpe->ownedSliceViews.push_back(sliceView);
-                    barrierBaseLayer = ca.depthSlice;
+                    // Vulkan 3D images have arrayLayers=1; barrier stays at layer 0.
                 }
             }
 
@@ -683,8 +736,21 @@ extern "C"
 
             {
                 std::string err;
-                if (!rpe->usageScope.AddView(view, pwgpu::SubresourceUsageKind::Attachment, err))
-                    rpe->usageScopeValid = false;
+                if (view->dimension == WGPUTextureViewDimension_3D)
+                {
+                    pwgpu::SubresourceKey key{};
+                    key.texture = view->texture;
+                    key.aspect = static_cast<uint32_t>(WGPUTextureAspect_All);
+                    key.mip = view->baseMipLevel;
+                    key.layer = ca.depthSlice;
+                    if (!rpe->usageScope.AddSubresource(key, pwgpu::SubresourceUsageKind::Attachment, err))
+                        rpe->usageScopeValid = false;
+                }
+                else
+                {
+                    if (!rpe->usageScope.AddView(view, pwgpu::SubresourceUsageKind::Attachment, err))
+                        rpe->usageScopeValid = false;
+                }
             }
 
             vk::RenderingAttachmentInfo att{};

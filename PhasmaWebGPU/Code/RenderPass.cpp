@@ -89,6 +89,26 @@ namespace
         }
         return true;
     }
+
+    bool LayoutsEqual(const std::vector<WGPUTextureFormat> &a, WGPUTextureFormat aDsFormat, uint32_t aSc,
+                      const std::vector<WGPUTextureFormat> &b, WGPUTextureFormat bDsFormat, uint32_t bSc)
+    {
+        if (aDsFormat != bDsFormat || aSc != bSc)
+            return false;
+        size_t aLen = a.size(), bLen = b.size();
+        while (aLen > 0 && a[aLen - 1] == WGPUTextureFormat_Undefined)
+            --aLen;
+        while (bLen > 0 && b[bLen - 1] == WGPUTextureFormat_Undefined)
+            --bLen;
+        if (aLen != bLen)
+            return false;
+        for (size_t i = 0; i < aLen; i++)
+        {
+            if (a[i] != b[i])
+                return false;
+        }
+        return true;
+    }
 } // namespace
 
 extern "C"
@@ -129,7 +149,34 @@ extern "C"
         if (!PassOpen(rpe, "wgpuRenderPassEncoderSetPipeline"))
             return;
         if (!pipeline || pipeline->invalid || pipeline->vkPipeline == VK_NULL_HANDLE)
+        {
+            rpe->invalid = true;
             return;
+        }
+
+        if (pipeline->device != rpe->device)
+        {
+            rpe->invalid = true;
+            return;
+        }
+        // §17.1.1.4: pipeline's render targets layout must equal the pass's.
+        if (!LayoutsEqual(rpe->colorFormats, rpe->depthStencilFormat, rpe->sampleCount,
+                          pipeline->colorFormats, pipeline->depthStencilFormat, pipeline->sampleCount))
+        {
+            rpe->invalid = true;
+            return;
+        }
+        // Pipeline must not write to a read-only depth/stencil attachment.
+        if (pipeline->writesDepth && rpe->depthReadOnly)
+        {
+            rpe->invalid = true;
+            return;
+        }
+        if (pipeline->writesStencil && rpe->stencilReadOnly)
+        {
+            rpe->invalid = true;
+            return;
+        }
 
         rpe->pipeline = pipeline;
         rpe->bindingStateInvalidated = false;
@@ -257,10 +304,46 @@ extern "C"
     {
         if (!RenderingActive(rpe, "wgpuRenderPassEncoderSetVertexBuffer"))
             return;
-        if (!buffer || !buffer->peBuffer || buffer->internalState == BufferInternalState::Destroyed)
+
+        if (rpe->device && slot >= rpe->device->limits.maxVertexBuffers)
+        {
+            rpe->invalid = true;
             return;
+        }
+        if (offset % 4u != 0u)
+        {
+            rpe->invalid = true;
+            return;
+        }
+        uint64_t bufferSize = buffer ? buffer->size : 0u;
+        if (size == WGPU_WHOLE_SIZE)
+            size = (offset > bufferSize) ? 0u : (bufferSize - offset);
+        if (offset > bufferSize || size > bufferSize - offset)
+        {
+            rpe->invalid = true;
+            return;
+        }
+
+        if (!buffer)
+            return;
+
+        if (buffer->device != rpe->device || buffer->invalid)
+        {
+            rpe->invalid = true;
+            return;
+        }
         if (!(buffer->usage & WGPUBufferUsage_Vertex))
+        {
+            rpe->invalid = true;
             return;
+        }
+
+        // Destroyed buffer defers to queue.submit() per spec.
+        if (buffer->internalState == BufferInternalState::Destroyed || !buffer->peBuffer)
+        {
+            rpe->usedBuffers.push_back(buffer);
+            return;
+        }
 
         vk::Buffer vkBuf = buffer->peBuffer->ApiHandle();
         vk::DeviceSize vkOffset = static_cast<vk::DeviceSize>(offset);
@@ -349,6 +432,7 @@ extern "C"
             return;
         if (!ValidateBindGroupCompat(rpe))
             return;
+        rpe->drawCount++;
         rpe->cmd->ApiHandle().draw(vertexCount, instanceCount, firstVertex, firstInstance);
     }
 
@@ -375,6 +459,7 @@ extern "C"
             return;
         if (!ValidateBindGroupCompat(rpe))
             return;
+        rpe->drawCount++;
         rpe->cmd->ApiHandle().drawIndexed(indexCount, instanceCount, firstIndex, baseVertex, firstInstance);
     }
 
@@ -382,19 +467,45 @@ extern "C"
     {
         if (!RenderingActive(rpe, "wgpuRenderPassEncoderDrawIndirect"))
             return;
-        if (!rpe->pipeline || rpe->bindingStateInvalidated)
+
+        if (!buffer)
+        {
+            rpe->invalid = true;
             return;
-        if (!buffer || !buffer->peBuffer || buffer->internalState == BufferInternalState::Destroyed)
+        }
+        if (buffer->device != rpe->device || buffer->invalid)
+        {
+            rpe->invalid = true;
             return;
+        }
         if (!(buffer->usage & WGPUBufferUsage_Indirect))
+        {
+            rpe->invalid = true;
             return;
-        if (offset + sizeof(VkDrawIndirectCommand) > buffer->size)
+        }
+        if (offset % 4u != 0u)
+        {
+            rpe->invalid = true;
             return;
-        if (offset % 4 != 0)
+        }
+        constexpr uint64_t kDrawArgsSize = sizeof(VkDrawIndirectCommand);
+        if (offset > buffer->size || kDrawArgsSize > buffer->size - offset)
+        {
+            rpe->invalid = true;
+            return;
+        }
+
+        if (!rpe->pipeline || rpe->bindingStateInvalidated)
             return;
         if (!ValidateBindGroupCompat(rpe))
             return;
+        if (buffer->internalState == BufferInternalState::Destroyed || !buffer->peBuffer)
+        {
+            rpe->usedBuffers.push_back(buffer);
+            return;
+        }
 
+        rpe->drawCount++;
         rpe->cmd->ApiHandle().drawIndirect(buffer->peBuffer->ApiHandle(), offset, 1, sizeof(VkDrawIndirectCommand));
         rpe->usedBuffers.push_back(buffer);
     }
@@ -403,19 +514,45 @@ extern "C"
     {
         if (!RenderingActive(rpe, "wgpuRenderPassEncoderDrawIndexedIndirect"))
             return;
-        if (!rpe->pipeline || rpe->bindingStateInvalidated)
+
+        if (!buffer)
+        {
+            rpe->invalid = true;
             return;
-        if (!buffer || !buffer->peBuffer || buffer->internalState == BufferInternalState::Destroyed)
+        }
+        if (buffer->device != rpe->device || buffer->invalid)
+        {
+            rpe->invalid = true;
             return;
+        }
         if (!(buffer->usage & WGPUBufferUsage_Indirect))
+        {
+            rpe->invalid = true;
             return;
-        if (offset + sizeof(VkDrawIndexedIndirectCommand) > buffer->size)
+        }
+        if (offset % 4u != 0u)
+        {
+            rpe->invalid = true;
             return;
-        if (offset % 4 != 0)
+        }
+        constexpr uint64_t kDrawArgsSize = sizeof(VkDrawIndexedIndirectCommand);
+        if (offset > buffer->size || kDrawArgsSize > buffer->size - offset)
+        {
+            rpe->invalid = true;
+            return;
+        }
+
+        if (!rpe->pipeline || rpe->bindingStateInvalidated)
             return;
         if (!ValidateBindGroupCompat(rpe))
             return;
+        if (buffer->internalState == BufferInternalState::Destroyed || !buffer->peBuffer)
+        {
+            rpe->usedBuffers.push_back(buffer);
+            return;
+        }
 
+        rpe->drawCount++;
         rpe->cmd->ApiHandle().drawIndexedIndirect(buffer->peBuffer->ApiHandle(), offset, 1, sizeof(VkDrawIndexedIndirectCommand));
         rpe->usedBuffers.push_back(buffer);
     }
@@ -427,6 +564,20 @@ extern "C"
         if (!RenderingActive(rpe, "wgpuRenderPassEncoderSetViewport"))
             return;
 
+        // §17.2.2: maxViewportRange = maxTextureDimension2D * 2.
+        const float maxDim = rpe->device ? static_cast<float>(rpe->device->limits.maxTextureDimension2D) : 0.0f;
+        const float maxRange = maxDim * 2.0f;
+        if (!(width >= 0.0f && width <= maxDim) || !(height >= 0.0f && height <= maxDim) ||
+            !(x >= -maxRange) || !(y >= -maxRange) ||
+            !(x + width <= maxRange - 1.0f) || !(y + height <= maxRange - 1.0f) ||
+            !(minDepth >= 0.0f && minDepth <= 1.0f) ||
+            !(maxDepth >= 0.0f && maxDepth <= 1.0f) ||
+            !(minDepth <= maxDepth))
+        {
+            rpe->invalid = true;
+            return;
+        }
+
         vk::Viewport vp{x, y, width, height, minDepth, maxDepth};
         rpe->cmd->ApiHandle().setViewport(0, 1, &vp);
     }
@@ -436,6 +587,13 @@ extern "C"
     {
         if (!RenderingActive(rpe, "wgpuRenderPassEncoderSetScissorRect"))
             return;
+
+        if (x > rpe->attachmentWidth || width > rpe->attachmentWidth - x ||
+            y > rpe->attachmentHeight || height > rpe->attachmentHeight - y)
+        {
+            rpe->invalid = true;
+            return;
+        }
 
         vk::Rect2D scissor{{static_cast<int32_t>(x), static_cast<int32_t>(y)}, {width, height}};
         rpe->cmd->ApiHandle().setScissor(0, 1, &scissor);
@@ -519,30 +677,6 @@ extern "C"
             rpe->occlusionQuerySet->queryPool, lastIndex);
     }
 
-    namespace
-    {
-        bool LayoutsEqual(const std::vector<WGPUTextureFormat> &a, WGPUTextureFormat aDsFormat, uint32_t aSc,
-                          const std::vector<WGPUTextureFormat> &b, WGPUTextureFormat bDsFormat, uint32_t bSc)
-        {
-            if (aDsFormat != bDsFormat || aSc != bSc)
-                return false;
-
-            size_t aLen = a.size(), bLen = b.size();
-            while (aLen > 0 && a[aLen - 1] == WGPUTextureFormat_Undefined)
-                --aLen;
-            while (bLen > 0 && b[bLen - 1] == WGPUTextureFormat_Undefined)
-                --bLen;
-            if (aLen != bLen)
-                return false;
-            for (size_t i = 0; i < aLen; i++)
-            {
-                if (a[i] != b[i])
-                    return false;
-            }
-            return true;
-        }
-    } // namespace
-
     void wgpuRenderPassEncoderExecuteBundles(WGPURenderPassEncoder rpe,
                                              size_t bundleCount, WGPURenderBundle const *bundles)
     {
@@ -567,23 +701,20 @@ extern "C"
             if (!LayoutsEqual(rpe->colorFormats, rpe->depthStencilFormat, rpe->sampleCount,
                               bundle->colorFormats, bundle->depthStencilFormat, bundle->sampleCount))
             {
-                PE_WARN("[WebGPU] executeBundles: bundle %zu layout does not match render pass layout", i);
-                rpe->usageScopeValid = false;
-                continue;
+                rpe->invalid = true;
+                return;
             }
 
             if (rpe->depthReadOnly && !bundle->depthReadOnly)
             {
-                PE_WARN("[WebGPU] executeBundles: bundle %zu depthReadOnly mismatch", i);
-                rpe->usageScopeValid = false;
-                continue;
+                rpe->invalid = true;
+                return;
             }
 
             if (rpe->stencilReadOnly && !bundle->stencilReadOnly)
             {
-                PE_WARN("[WebGPU] executeBundles: bundle %zu stencilReadOnly mismatch", i);
-                rpe->usageScopeValid = false;
-                continue;
+                rpe->invalid = true;
+                return;
             }
         }
 
@@ -599,6 +730,8 @@ extern "C"
             std::string err;
             if (!rpe->usageScope.MergeFrom(bundle->usageScope, err))
                 rpe->usageScopeValid = false;
+
+            rpe->drawCount += bundle->drawCount;
 
             vk::CommandBuffer vkCmd = rpe->cmd->ApiHandle();
             for (auto &command : bundle->commands)
@@ -660,6 +793,9 @@ extern "C"
             rpe->ended = true;
             return;
         }
+
+        if (rpe->drawCount > rpe->maxDrawCount)
+            rpe->invalid = true;
 
         {
             const bool passInvalidForEncoder =

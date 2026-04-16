@@ -405,6 +405,32 @@ namespace pwgpu
         }
     }
 
+    inline bool SupportsResolve(WGPUTextureFormat f)
+    {
+        if (!SupportsMultisampling(f))
+            return false;
+        switch (f)
+        {
+        case WGPUTextureFormat_R8Uint:
+        case WGPUTextureFormat_R8Sint:
+        case WGPUTextureFormat_RG8Uint:
+        case WGPUTextureFormat_RG8Sint:
+        case WGPUTextureFormat_RGBA8Uint:
+        case WGPUTextureFormat_RGBA8Sint:
+        case WGPUTextureFormat_R16Uint:
+        case WGPUTextureFormat_R16Sint:
+        case WGPUTextureFormat_RG16Uint:
+        case WGPUTextureFormat_RG16Sint:
+        case WGPUTextureFormat_RGBA16Uint:
+        case WGPUTextureFormat_RGBA16Sint:
+        case WGPUTextureFormat_R32Float:
+        case WGPUTextureFormat_RGB10A2Uint:
+            return false;
+        default:
+            return true;
+        }
+    }
+
     inline bool SupportsStorageBinding(WGPUTextureFormat f)
     {
         switch (f)
