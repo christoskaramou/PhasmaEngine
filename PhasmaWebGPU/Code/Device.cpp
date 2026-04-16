@@ -50,11 +50,121 @@ namespace
         }
         return false;
     }
+
+    bool BindGroupLayoutUsableOnDevice(const WGPUBindGroupLayoutImpl *layout,
+                                       const WGPUDeviceImpl *device)
+    {
+        return layout && !layout->invalid && layout->device == device;
+    }
+
+    bool SamplerUsableOnDevice(const WGPUSamplerImpl *sampler,
+                               const WGPUDeviceImpl *device)
+    {
+        return sampler && !sampler->invalid && sampler->device == device;
+    }
+
+    bool TextureUsableOnDevice(const WGPUTextureImpl *texture,
+                               const WGPUDeviceImpl *device)
+    {
+        return texture &&
+               !texture->invalid &&
+               !texture->destroyed &&
+               texture->device == device;
+    }
+
+    bool TextureViewUsableOnDevice(const WGPUTextureViewImpl *view,
+                                   const WGPUDeviceImpl *device)
+    {
+        return view && TextureUsableOnDevice(view->texture, device);
+    }
+
+    const WGPUExternalTextureBindingEntry *
+    GetExternalTextureBindingEntry(const WGPUBindGroupEntry &entry)
+    {
+        return pwgpu::FindChained<WGPUExternalTextureBindingEntry>(
+            entry.nextInChain, WGPUSType_ExternalTextureBindingEntry);
+    }
+
+    bool IsBindableExternalTextureFormat(WGPUTextureFormat format)
+    {
+        return format == WGPUTextureFormat_RGBA8Unorm ||
+               format == WGPUTextureFormat_BGRA8Unorm ||
+               format == WGPUTextureFormat_RGBA16Float;
+    }
+
+    const char *ValidateExternalTextureBindingResource(
+        WGPUDeviceImpl *device,
+        const WGPUBindGroupEntry &entry,
+        WGPUTextureViewImpl *&resolvedView)
+    {
+        resolvedView = entry.textureView;
+
+        const WGPUExternalTextureBindingEntry *externalEntry =
+            GetExternalTextureBindingEntry(entry);
+        if (externalEntry && externalEntry->externalTexture)
+            return "externalTexture resource objects are not yet implemented";
+
+        if (!resolvedView)
+            return "layout expects externalTexture but entry has no textureView";
+        if (!TextureViewUsableOnDevice(resolvedView, device))
+        {
+            if (!resolvedView->texture)
+                return "externalTexture view has no backing texture";
+            if (resolvedView->texture->device != device)
+                return "externalTexture resource device mismatch";
+            if (resolvedView->texture->destroyed)
+                return "externalTexture resource is destroyed";
+            return "externalTexture resource is invalid";
+        }
+
+        if (!(resolvedView->usage & WGPUTextureUsage_TextureBinding))
+            return "externalTexture view missing TEXTURE_BINDING usage";
+        if (resolvedView->dimension != WGPUTextureViewDimension_2D)
+            return "externalTexture view dimension must be 2d";
+        if (resolvedView->mipLevelCount != 1)
+            return "externalTexture view must have mipLevelCount = 1";
+        if (!IsBindableExternalTextureFormat(resolvedView->format))
+            return "externalTexture view format must be rgba8unorm, bgra8unorm, or rgba16float";
+        if (resolvedView->texture->sampleCount != 1)
+            return "externalTexture texture sampleCount must be 1";
+
+        return nullptr;
+    }
+
+    pe::Sampler *GetOrCreateExternalTextureSampler(WGPUBindGroupImpl *bindGroup,
+                                                   WGPUTextureViewImpl *view)
+    {
+        if (view && view->texture && view->texture->image)
+        {
+            if (pe::Sampler *sampler = view->texture->image->GetSampler())
+                return sampler;
+        }
+
+        vk::SamplerCreateInfo samplerInfo = pe::Sampler::CreateInfoInit();
+        samplerInfo.magFilter = vk::Filter::eNearest;
+        samplerInfo.minFilter = vk::Filter::eNearest;
+        samplerInfo.mipmapMode = vk::SamplerMipmapMode::eNearest;
+        samplerInfo.addressModeU = vk::SamplerAddressMode::eClampToEdge;
+        samplerInfo.addressModeV = vk::SamplerAddressMode::eClampToEdge;
+        samplerInfo.addressModeW = vk::SamplerAddressMode::eClampToEdge;
+        samplerInfo.minLod = 0.0f;
+        samplerInfo.maxLod = 0.0f;
+
+        std::string name = bindGroup && !bindGroup->label.empty()
+                               ? bindGroup->label + "_external_texture_sampler"
+                               : "wgpu_external_texture_sampler";
+        pe::Sampler *sampler = pe::Sampler::Create(samplerInfo, name);
+        if (bindGroup && sampler)
+            bindGroup->ownedSamplers.push_back(sampler);
+        return sampler;
+    }
 } // namespace
 
 void WGPUDeviceImpl::reportError(WGPUErrorType type, WGPUStringView message)
 {
-    // Drop the lock before firing the uncaptured-error callback — it may re-enter device APIs.
+    // After device.destroy(), all errors are suppressed per spec.
+    if (destroyed)
+        return;
     {
         std::lock_guard<std::mutex> lock(errorScopeMutex);
         for (int i = static_cast<int>(errorScopeStack.size()) - 1; i >= 0; --i)
@@ -787,7 +897,7 @@ extern "C"
             lodMin = descriptor->lodMinClamp;
             lodMax = descriptor->lodMaxClamp;
             cmp = descriptor->compare;
-            maxAniso = descriptor->maxAnisotropy ? descriptor->maxAnisotropy : 1;
+            maxAniso = descriptor->maxAnisotropy;
         }
 
         if (std::isnan(lodMin) || std::isinf(lodMin))
@@ -1125,6 +1235,18 @@ extern "C"
                 if (!pwgpu::SupportsStorageBinding(resolved.storageTexture.format))
                     return makeInvalid("storageTexture format does not support storage binding");
 
+                if (resolved.storageTexture.format == WGPUTextureFormat_BGRA8Unorm &&
+                    resolved.storageTexture.access != WGPUStorageTextureAccess_WriteOnly)
+                    return makeInvalid("bgra8unorm storage texture requires write-only access");
+
+                if (resolved.storageTexture.access == WGPUStorageTextureAccess_ReadWrite)
+                {
+                    auto fmt = resolved.storageTexture.format;
+                    if (fmt != WGPUTextureFormat_R32Uint && fmt != WGPUTextureFormat_R32Sint &&
+                        fmt != WGPUTextureFormat_R32Float)
+                        return makeInvalid("storageTexture format does not support read-write access");
+                }
+
                 if ((src.visibility & WGPUShaderStage_Vertex) &&
                     resolved.storageTexture.access != WGPUStorageTextureAccess_ReadOnly)
                     return makeInvalid("VERTEX stage requires storageTexture access = read-only");
@@ -1299,8 +1421,12 @@ extern "C"
             return bg;
         };
 
-        if (!descriptor->layout || descriptor->layout->invalid)
-            return makeInvalid("layout is null or invalid");
+        if (!descriptor->layout)
+            return makeInvalid("layout is null");
+        if (descriptor->layout->invalid)
+            return makeInvalid("layout is invalid");
+        if (descriptor->layout->device != device)
+            return makeInvalid("layout device mismatch");
 
         bg->layout = descriptor->layout;
         wgpuBindGroupLayoutAddRef(bg->layout);
@@ -1338,48 +1464,57 @@ extern "C"
                 if (!hasBuf)
                     return makeInvalid("layout expects buffer but entry has no buffer");
                 WGPUBufferImpl *buf = entry.buffer;
+                if (!buf)
+                    return makeInvalid("buffer resource is null");
                 if (buf->invalid)
                     return makeInvalid("buffer resource is invalid");
+                if (buf->device != device)
+                    return makeInvalid("buffer resource device mismatch");
+                bool bufDestroyed = (buf->internalState.load(std::memory_order_acquire) ==
+                                     BufferInternalState::Destroyed);
 
-                uint64_t offset = entry.offset;
-                uint64_t size = entry.size;
-                if (size == WGPU_WHOLE_SIZE)
+                if (!bufDestroyed)
                 {
-                    if (offset > buf->size)
-                        return makeInvalid("buffer binding offset exceeds buffer size");
-                    size = buf->size - offset;
-                }
+                    uint64_t offset = entry.offset;
+                    uint64_t size = entry.size;
+                    if (size == WGPU_WHOLE_SIZE)
+                    {
+                        if (offset > buf->size)
+                            return makeInvalid("buffer binding offset exceeds buffer size");
+                        size = buf->size - offset;
+                    }
 
-                if (size == 0)
-                    return makeInvalid("buffer binding size is zero");
-                if (offset > buf->size || size > buf->size - offset)
-                    return makeInvalid("buffer binding range exceeds buffer size");
+                    if (size == 0)
+                        return makeInvalid("buffer binding size is zero");
+                    if (offset > buf->size || size > buf->size - offset)
+                        return makeInvalid("buffer binding range exceeds buffer size");
 
-                if (le.buffer.minBindingSize > 0 && size < le.buffer.minBindingSize)
-                    return makeInvalid("buffer binding size < layout minBindingSize");
+                    if (le.buffer.minBindingSize > 0 && size < le.buffer.minBindingSize)
+                        return makeInvalid("buffer binding size < layout minBindingSize");
 
-                const WGPULimits &limits = device->limits;
-                if (le.buffer.type == WGPUBufferBindingType_Uniform)
-                {
-                    if (!(buf->usage & WGPUBufferUsage_Uniform))
-                        return makeInvalid("buffer missing UNIFORM usage for uniform binding");
-                    if (size > limits.maxUniformBufferBindingSize)
-                        return makeInvalid("buffer binding size exceeds maxUniformBufferBindingSize");
-                    if (limits.minUniformBufferOffsetAlignment > 0 &&
-                        (offset % limits.minUniformBufferOffsetAlignment) != 0)
-                        return makeInvalid("buffer binding offset not aligned to minUniformBufferOffsetAlignment");
-                }
-                else // storage or read-only-storage
-                {
-                    if (!(buf->usage & WGPUBufferUsage_Storage))
-                        return makeInvalid("buffer missing STORAGE usage for storage binding");
-                    if (size > limits.maxStorageBufferBindingSize)
-                        return makeInvalid("buffer binding size exceeds maxStorageBufferBindingSize");
-                    if ((size % 4) != 0)
-                        return makeInvalid("storage buffer binding size must be a multiple of 4");
-                    if (limits.minStorageBufferOffsetAlignment > 0 &&
-                        (offset % limits.minStorageBufferOffsetAlignment) != 0)
-                        return makeInvalid("buffer binding offset not aligned to minStorageBufferOffsetAlignment");
+                    const WGPULimits &limits = device->limits;
+                    if (le.buffer.type == WGPUBufferBindingType_Uniform)
+                    {
+                        if (!(buf->usage & WGPUBufferUsage_Uniform))
+                            return makeInvalid("buffer missing UNIFORM usage for uniform binding");
+                        if (size > limits.maxUniformBufferBindingSize)
+                            return makeInvalid("buffer binding size exceeds maxUniformBufferBindingSize");
+                        if (limits.minUniformBufferOffsetAlignment > 0 &&
+                            (offset % limits.minUniformBufferOffsetAlignment) != 0)
+                            return makeInvalid("buffer binding offset not aligned to minUniformBufferOffsetAlignment");
+                    }
+                    else
+                    {
+                        if (!(buf->usage & WGPUBufferUsage_Storage))
+                            return makeInvalid("buffer missing STORAGE usage for storage binding");
+                        if (size > limits.maxStorageBufferBindingSize)
+                            return makeInvalid("buffer binding size exceeds maxStorageBufferBindingSize");
+                        if ((size % 4) != 0)
+                            return makeInvalid("storage buffer binding size must be a multiple of 4");
+                        if (limits.minStorageBufferOffsetAlignment > 0 &&
+                            (offset % limits.minStorageBufferOffsetAlignment) != 0)
+                            return makeInvalid("buffer binding offset not aligned to minStorageBufferOffsetAlignment");
+                    }
                 }
             }
             else if (le.sampler.type != WGPUSamplerBindingType_BindingNotUsed)
@@ -1388,8 +1523,14 @@ extern "C"
                 if (!hasSamp)
                     return makeInvalid("layout expects sampler but entry has no sampler");
                 WGPUSamplerImpl *smp = entry.sampler;
-                if (smp->invalid)
+                if (!SamplerUsableOnDevice(smp, device))
+                {
+                    if (!smp)
+                        return makeInvalid("sampler resource is null");
+                    if (smp->device != device)
+                        return makeInvalid("sampler resource device mismatch");
                     return makeInvalid("sampler resource is invalid");
+                }
 
                 switch (le.sampler.type)
                 {
@@ -1415,8 +1556,12 @@ extern "C"
                 if (!hasTexView)
                     return makeInvalid("layout expects texture but entry has no textureView");
                 WGPUTextureViewImpl *tv = entry.textureView;
-                if (!tv->texture)
-                    return makeInvalid("textureView has no backing texture");
+                if (!tv || !tv->texture)
+                    return makeInvalid("texture resource is null");
+                if (tv->texture->invalid)
+                    return makeInvalid("texture resource is invalid");
+                if (tv->texture->device != device)
+                    return makeInvalid("texture resource device mismatch");
 
                 // viewDimension must match.
                 if (tv->dimension != le.texture.viewDimension)
@@ -1496,6 +1641,12 @@ extern "C"
                 if (!hasTexView)
                     return makeInvalid("layout expects storageTexture but entry has no textureView");
                 WGPUTextureViewImpl *tv = entry.textureView;
+                if (!tv || !tv->texture)
+                    return makeInvalid("storageTexture resource is null");
+                if (tv->texture->invalid)
+                    return makeInvalid("storageTexture resource is invalid");
+                if (tv->texture->device != device)
+                    return makeInvalid("storageTexture resource device mismatch");
 
                 // viewDimension must match.
                 if (tv->dimension != le.storageTexture.viewDimension)
@@ -1515,8 +1666,11 @@ extern "C"
             }
             else if (le.hasExternalTexture)
             {
-                // External texture binding — not supported yet, always invalid.
-                return makeInvalid("external texture bindings are not supported");
+                WGPUTextureViewImpl *tv = nullptr;
+                const char *validationError =
+                    ValidateExternalTextureBindingResource(device, entry, tv);
+                if (validationError)
+                    return makeInvalid(validationError);
             }
         }
 
@@ -1572,6 +1726,18 @@ extern "C"
                                     : pwgpu::SubresourceUsageKind::WriteOnlyStorage;
                     bg->textureUses.push_back({entry.textureView, kind});
                 }
+                else if (le.hasExternalTexture && entry.textureView)
+                {
+                    pe::Sampler *sampler =
+                        GetOrCreateExternalTextureSampler(bg, entry.textureView);
+                    if (entry.textureView->view && sampler)
+                    {
+                        bg->descriptor->SetImageView(
+                            entry.binding, entry.textureView->view, sampler);
+                    }
+                    bg->textureUses.push_back(
+                        {entry.textureView, pwgpu::SubresourceUsageKind::Sampled});
+                }
             }
 
             bg->descriptor->Update();
@@ -1608,6 +1774,10 @@ extern "C"
 
         if (descriptor->bindGroupLayoutCount > limits.maxBindGroups)
             return makeInvalid("bindGroupLayoutCount exceeds maxBindGroups");
+        if ((descriptor->immediateSize % 4) != 0)
+            return makeInvalid("immediateSize must be a multiple of 4");
+        if (descriptor->immediateSize > limits.maxImmediateSize)
+            return makeInvalid("immediateSize exceeds maxImmediateSize");
 
         struct StageCounters
         {
@@ -1629,8 +1799,14 @@ extern "C"
             if (!bglHandle)
                 continue;
 
-            if (bglHandle->invalid)
+            if (!BindGroupLayoutUsableOnDevice(bglHandle, device))
+            {
+                if (!bglHandle)
+                    continue;
+                if (bglHandle->device != device)
+                    return makeInvalid("bind group layout device mismatch");
                 return makeInvalid("one of the bind group layouts is invalid");
+            }
 
             if (bglHandle->exclusivePipeline != nullptr)
                 return makeInvalid("bind group layout has a non-null exclusivePipeline");
@@ -2137,6 +2313,12 @@ extern "C"
                                 pwgpu::ToStringView("createComputePipeline: layout is invalid"));
             return MakeInvalidComputePipeline(device, labelStr);
         }
+        if (pipeLayout->device != device)
+        {
+            device->reportError(WGPUErrorType_Validation,
+                                pwgpu::ToStringView("createComputePipeline: layout device mismatch"));
+            return MakeInvalidComputePipeline(device, labelStr);
+        }
 
         auto *shaderModule = descriptor->compute.module;
         if (!shaderModule)
@@ -2155,6 +2337,12 @@ extern "C"
         {
             device->reportError(WGPUErrorType_Validation,
                                 pwgpu::ToStringView("createComputePipeline: compute.module has no SPIR-V code"));
+            return MakeInvalidComputePipeline(device, labelStr);
+        }
+        if (shaderModule->device != device)
+        {
+            device->reportError(WGPUErrorType_Validation,
+                                pwgpu::ToStringView("createComputePipeline: compute.module device mismatch"));
             return MakeInvalidComputePipeline(device, labelStr);
         }
 
@@ -2315,12 +2503,24 @@ extern "C"
                                 pwgpu::ToStringView("createRenderPipeline: layout is invalid"));
             return MakeInvalidRenderPipeline(device, labelStr);
         }
+        if (pipeLayout->device != device)
+        {
+            device->reportError(WGPUErrorType_Validation,
+                                pwgpu::ToStringView("createRenderPipeline: layout device mismatch"));
+            return MakeInvalidRenderPipeline(device, labelStr);
+        }
 
         auto *vertModule = descriptor->vertex.module;
         if (!vertModule || vertModule->invalid || vertModule->spirv.empty())
         {
             device->reportError(WGPUErrorType_Validation,
                                 pwgpu::ToStringView("createRenderPipeline: vertex.module is null/invalid/empty"));
+            return MakeInvalidRenderPipeline(device, labelStr);
+        }
+        if (vertModule->device != device)
+        {
+            device->reportError(WGPUErrorType_Validation,
+                                pwgpu::ToStringView("createRenderPipeline: vertex.module device mismatch"));
             return MakeInvalidRenderPipeline(device, labelStr);
         }
 
@@ -2433,6 +2633,12 @@ extern "C"
                                     pwgpu::ToStringView("createRenderPipeline: fragment.module is null/invalid/empty"));
                 return MakeInvalidRenderPipeline(device, labelStr);
             }
+            if (fragModuleSrc->device != device)
+            {
+                device->reportError(WGPUErrorType_Validation,
+                                    pwgpu::ToStringView("createRenderPipeline: fragment.module device mismatch"));
+                return MakeInvalidRenderPipeline(device, labelStr);
+            }
             if (!resolveEntry(fragModuleSrc, descriptor->fragment->entryPoint, kExecFragment, "fragment", fragEntry))
                 return MakeInvalidRenderPipeline(device, labelStr);
         }
@@ -2533,7 +2739,6 @@ extern "C"
 
                 blendAttachments.push_back(ba);
                 colorVkFormats.push_back(static_cast<vk::Format>(pwgpu::ToVkFormat(ct.format)));
-                colorAttachmentBytesPerSample += pwgpu::FormatBytesPerSample(ct.format);
             }
 
             if (usesDualSourceBlending && descriptor->fragment->targetCount > 1)
@@ -2541,6 +2746,14 @@ extern "C"
                 device->reportError(WGPUErrorType_Validation,
                                     pwgpu::ToStringView("createRenderPipeline: dual-source blending requires exactly 1 color target"));
                 return MakeInvalidRenderPipeline(device, labelStr);
+            }
+
+            {
+                std::vector<WGPUTextureFormat> fmts;
+                fmts.reserve(descriptor->fragment->targetCount);
+                for (size_t i = 0; i < descriptor->fragment->targetCount; ++i)
+                    fmts.push_back(descriptor->fragment->targets[i].format);
+                colorAttachmentBytesPerSample = pwgpu::ComputeBytesPerSampleFromFormats(fmts.data(), fmts.size());
             }
 
             if (colorAttachmentBytesPerSample > limits.maxColorAttachmentBytesPerSample)
@@ -2948,8 +3161,10 @@ extern "C"
         if (!DeviceCanCreate(device, descriptor, "wgpuDeviceCreateRenderBundleEncoder", true))
             return nullptr;
 
-        auto makeInvalid = [&]()
+        auto makeInvalid = [&](const char *msg)
         {
+            if (msg)
+                device->reportError(WGPUErrorType_Validation, pwgpu::ToStringView(msg));
             auto *rbe = new WGPURenderBundleEncoderImpl();
             rbe->device = device;
             rbe->invalid = true;
@@ -2958,20 +3173,12 @@ extern "C"
         };
 
         if (descriptor->colorFormatCount > 0 && !descriptor->colorFormats)
-        {
-            PE_WARN("[WebGPU] createRenderBundleEncoder: colorFormatCount > 0 but colorFormats is null");
-            return makeInvalid();
-        }
+            return makeInvalid("createRenderBundleEncoder: colorFormatCount > 0 but colorFormats is null");
 
         if (descriptor->colorFormatCount > device->limits.maxColorAttachments)
-        {
-            PE_WARN("[WebGPU] createRenderBundleEncoder: colorFormatCount %zu > maxColorAttachments %u",
-                    descriptor->colorFormatCount, device->limits.maxColorAttachments);
-            return makeInvalid();
-        }
+            return makeInvalid("createRenderBundleEncoder: colorFormatCount > maxColorAttachments");
 
         bool hasAnyAttachment = false;
-        uint32_t colorBytesPerSample = 0;
         for (size_t i = 0; i < descriptor->colorFormatCount; ++i)
         {
             WGPUTextureFormat cf = descriptor->colorFormats[i];
@@ -2980,36 +3187,23 @@ extern "C"
             hasAnyAttachment = true;
 
             if (pwgpu::IsDepthStencilFormat(cf) || !pwgpu::IsRenderableFormat(cf))
-            {
-                PE_WARN("[WebGPU] createRenderBundleEncoder: colorFormats[%zu] is not color-renderable", i);
-                return makeInvalid();
-            }
-
-            colorBytesPerSample += pwgpu::FormatBytesPerSample(cf);
+                return makeInvalid("createRenderBundleEncoder: colorFormats[i] is not color-renderable");
         }
 
+        uint32_t colorBytesPerSample = pwgpu::ComputeBytesPerSampleFromFormats(
+            descriptor->colorFormats, descriptor->colorFormatCount);
         if (colorBytesPerSample > device->limits.maxColorAttachmentBytesPerSample)
-        {
-            PE_WARN("[WebGPU] createRenderBundleEncoder: colorAttachmentBytesPerSample %u > limit %u",
-                    colorBytesPerSample, device->limits.maxColorAttachmentBytesPerSample);
-            return makeInvalid();
-        }
+            return makeInvalid("createRenderBundleEncoder: colorAttachmentBytesPerSample exceeds limit");
 
         if (descriptor->depthStencilFormat != WGPUTextureFormat_Undefined)
         {
             hasAnyAttachment = true;
             if (!pwgpu::IsDepthStencilFormat(descriptor->depthStencilFormat))
-            {
-                PE_WARN("[WebGPU] createRenderBundleEncoder: depthStencilFormat is not a depth-stencil format");
-                return makeInvalid();
-            }
+                return makeInvalid("createRenderBundleEncoder: depthStencilFormat is not a depth-stencil format");
         }
 
         if (!hasAnyAttachment)
-        {
-            PE_WARN("[WebGPU] createRenderBundleEncoder: must have at least one color or depth-stencil attachment");
-            return makeInvalid();
-        }
+            return makeInvalid("createRenderBundleEncoder: must have at least one color or depth-stencil attachment");
 
         auto *rbe = new WGPURenderBundleEncoderImpl();
         rbe->device = device;
@@ -3034,14 +3228,25 @@ extern "C"
         if (!DeviceCanCreate(device, descriptor, "wgpuDeviceCreateQuerySet", true))
             return nullptr;
 
-        // Validate count > 0
-        if (descriptor->count == 0)
+        auto makeInvalid = [&](const char *msg) -> WGPUQuerySet
         {
-            PE_WARN("[WebGPU] wgpuDeviceCreateQuerySet: count must be > 0");
-            return nullptr;
-        }
+            device->reportError(WGPUErrorType_Validation, pwgpu::ToStringView(msg));
+            auto *qs = new WGPUQuerySetImpl();
+            qs->device = device;
+            wgpuDeviceAddRef(device);
+            qs->type = descriptor->type;
+            qs->count = 0;
+            qs->invalid = true;
+            if (descriptor->label.data)
+                qs->label = pwgpu::ToString(descriptor->label);
+            return qs;
+        };
 
-        // Map WGPUQueryType → VkQueryType
+        if (descriptor->count == 0)
+            return makeInvalid("createQuerySet: count must be > 0");
+        if (descriptor->count > 4096)
+            return makeInvalid("createQuerySet: count exceeds maxQueryCount");
+
         vk::QueryType vkType;
         switch (descriptor->type)
         {
@@ -3052,8 +3257,7 @@ extern "C"
             vkType = vk::QueryType::eTimestamp;
             break;
         default:
-            PE_WARN("[WebGPU] wgpuDeviceCreateQuerySet: unsupported query type %d", static_cast<int>(descriptor->type));
-            return nullptr;
+            return makeInvalid("createQuerySet: unsupported query type");
         }
 
         vk::QueryPoolCreateInfo ci{};
@@ -3062,12 +3266,8 @@ extern "C"
 
         vk::QueryPool pool = device->rhi->GetDevice().createQueryPool(ci);
         if (!pool)
-        {
-            PE_WARN("[WebGPU] wgpuDeviceCreateQuerySet: VkQueryPool creation failed");
-            return nullptr;
-        }
+            return makeInvalid("createQuerySet: VkQueryPool creation failed");
 
-        // Reset all queries so they are in a known state
         device->rhi->GetDevice().resetQueryPool(pool, 0, descriptor->count);
 
         auto *qs = new WGPUQuerySetImpl();

@@ -27,6 +27,36 @@ namespace
             rpe->device->reportError(WGPUErrorType_Validation, pwgpu::ToStringView(msg));
     }
 
+    bool ValidateBindGroupCompat(WGPURenderPassEncoder rpe)
+    {
+        if (!rpe || !rpe->pipeline || !rpe->pipeline->layout)
+            return true;
+        auto &bgls = rpe->pipeline->layout->bindGroupLayouts;
+        for (size_t i = 0; i < bgls.size(); ++i)
+        {
+            auto *plBgl = bgls[i];
+            if (!plBgl)
+                continue;
+            if (i >= rpe->currentBindGroups.size())
+            {
+                rpe->invalid = true;
+                return false;
+            }
+            auto *bg = rpe->currentBindGroups[i];
+            if (!bg || bg->invalid || !bg->layout)
+            {
+                rpe->invalid = true;
+                return false;
+            }
+            if (!BglGroupEquivalent(bg->layout, plBgl))
+            {
+                rpe->invalid = true;
+                return false;
+            }
+        }
+        return true;
+    }
+
     bool PassOpen(WGPURenderPassEncoder rpe, const char *apiName)
     {
         if (!rpe)
@@ -149,6 +179,13 @@ extern "C"
             rpe->retainedBindGroups.push_back(group);
         }
 
+        if (rpe->device && groupIndex < rpe->device->limits.maxBindGroups)
+        {
+            if (rpe->currentBindGroups.size() <= groupIndex)
+                rpe->currentBindGroups.resize(groupIndex + 1, nullptr);
+            rpe->currentBindGroups[groupIndex] = group;
+        }
+
         if (group && group->layout)
         {
             if (static_cast<uint32_t>(dynamicOffsetCount) != group->layout->dynamicOffsetCount)
@@ -202,11 +239,8 @@ extern "C"
         auto &bgls = rpe->pipeline->layout->bindGroupLayouts;
         if (groupIndex >= bgls.size() || !bgls[groupIndex])
             return;
-        if (group->layout != bgls[groupIndex])
-        {
-            PE_WARN("[WebGPU] setBindGroup: bind group layout does not match pipeline layout at index %u", groupIndex);
+        if (!BglGroupEquivalent(group->layout, bgls[groupIndex]))
             return;
-        }
 
         vk::PipelineLayout vkLayout(rpe->pipeline->layout->vkLayout);
         vk::DescriptorSet ds = group->descriptor->ApiHandle();
@@ -313,6 +347,8 @@ extern "C"
             return;
         if (!rpe->pipeline || rpe->bindingStateInvalidated)
             return;
+        if (!ValidateBindGroupCompat(rpe))
+            return;
         rpe->cmd->ApiHandle().draw(vertexCount, instanceCount, firstVertex, firstInstance);
     }
 
@@ -337,6 +373,8 @@ extern "C"
         }
         if (!rpe->pipeline || rpe->bindingStateInvalidated)
             return;
+        if (!ValidateBindGroupCompat(rpe))
+            return;
         rpe->cmd->ApiHandle().drawIndexed(indexCount, instanceCount, firstIndex, baseVertex, firstInstance);
     }
 
@@ -353,6 +391,8 @@ extern "C"
         if (offset + sizeof(VkDrawIndirectCommand) > buffer->size)
             return;
         if (offset % 4 != 0)
+            return;
+        if (!ValidateBindGroupCompat(rpe))
             return;
 
         rpe->cmd->ApiHandle().drawIndirect(buffer->peBuffer->ApiHandle(), offset, 1, sizeof(VkDrawIndirectCommand));
@@ -372,6 +412,8 @@ extern "C"
         if (offset + sizeof(VkDrawIndexedIndirectCommand) > buffer->size)
             return;
         if (offset % 4 != 0)
+            return;
+        if (!ValidateBindGroupCompat(rpe))
             return;
 
         rpe->cmd->ApiHandle().drawIndexedIndirect(buffer->peBuffer->ApiHandle(), offset, 1, sizeof(VkDrawIndexedIndirectCommand));

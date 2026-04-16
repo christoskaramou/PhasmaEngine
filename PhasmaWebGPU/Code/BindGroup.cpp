@@ -1,6 +1,80 @@
 #include "BindGroup.h"
 #include "Device.h"
 #include "Utils.h"
+#include "API/Image.h"
+
+bool BglGroupEquivalent(const WGPUBindGroupLayoutImpl *a, const WGPUBindGroupLayoutImpl *b)
+{
+    if (a == b)
+        return true;
+    if (!a || !b)
+        return false;
+    if (a->entries.size() != b->entries.size())
+        return false;
+
+    auto kindOf = [](const WGPUBindGroupLayoutEntryResolved &e) -> int
+    {
+        if (e.buffer.type != WGPUBufferBindingType_BindingNotUsed)
+            return 1;
+        if (e.sampler.type != WGPUSamplerBindingType_BindingNotUsed)
+            return 2;
+        if (e.texture.sampleType != WGPUTextureSampleType_BindingNotUsed)
+            return 3;
+        if (e.storageTexture.access != WGPUStorageTextureAccess_BindingNotUsed)
+            return 4;
+        if (e.hasExternalTexture)
+            return 5;
+        return 0;
+    };
+
+    for (auto &ea : a->entries)
+    {
+        const WGPUBindGroupLayoutEntryResolved *eb = nullptr;
+        for (auto &candidate : b->entries)
+        {
+            if (candidate.binding == ea.binding)
+            {
+                eb = &candidate;
+                break;
+            }
+        }
+        if (!eb)
+            return false;
+        if (ea.visibility != eb->visibility)
+            return false;
+        int ka = kindOf(ea), kb = kindOf(*eb);
+        if (ka != kb)
+            return false;
+        switch (ka)
+        {
+        case 1:
+            if (ea.buffer.type != eb->buffer.type ||
+                ea.buffer.hasDynamicOffset != eb->buffer.hasDynamicOffset ||
+                ea.buffer.minBindingSize != eb->buffer.minBindingSize)
+                return false;
+            break;
+        case 2:
+            if (ea.sampler.type != eb->sampler.type)
+                return false;
+            break;
+        case 3:
+            if (ea.texture.sampleType != eb->texture.sampleType ||
+                ea.texture.viewDimension != eb->texture.viewDimension ||
+                ea.texture.multisampled != eb->texture.multisampled)
+                return false;
+            break;
+        case 4:
+            if (ea.storageTexture.access != eb->storageTexture.access ||
+                ea.storageTexture.format != eb->storageTexture.format ||
+                ea.storageTexture.viewDimension != eb->storageTexture.viewDimension)
+                return false;
+            break;
+        default:
+            break;
+        }
+    }
+    return true;
+}
 
 extern "C"
 {
@@ -46,6 +120,8 @@ extern "C"
         {
             if (bg->layout)
                 wgpuBindGroupLayoutRelease(bg->layout);
+            for (pe::Sampler *sampler : bg->ownedSamplers)
+                pe::Sampler::Destroy(sampler);
             if (bg->descriptor)
                 pe::Descriptor::Destroy(bg->descriptor);
             WGPUDeviceImpl *dev = bg->device;

@@ -1244,4 +1244,79 @@ namespace pwgpu
         }
     }
 
+    struct RenderTargetCost
+    {
+        uint32_t byteCost;
+        uint32_t alignment;
+    };
+
+    inline RenderTargetCost RenderTargetByteCost(WGPUTextureFormat f)
+    {
+        switch (f)
+        {
+        case WGPUTextureFormat_R8Unorm:
+        case WGPUTextureFormat_R8Uint:
+        case WGPUTextureFormat_R8Sint:
+            return {1, 1};
+        case WGPUTextureFormat_R16Uint:
+        case WGPUTextureFormat_R16Sint:
+        case WGPUTextureFormat_R16Float:
+            return {2, 2};
+        case WGPUTextureFormat_RG8Unorm:
+        case WGPUTextureFormat_RG8Uint:
+        case WGPUTextureFormat_RG8Sint:
+            return {2, 1};
+        case WGPUTextureFormat_R32Uint:
+        case WGPUTextureFormat_R32Sint:
+        case WGPUTextureFormat_R32Float:
+            return {4, 4};
+        case WGPUTextureFormat_RG16Uint:
+        case WGPUTextureFormat_RG16Sint:
+        case WGPUTextureFormat_RG16Float:
+            return {4, 2};
+        case WGPUTextureFormat_RGBA8Unorm:
+        case WGPUTextureFormat_RGBA8UnormSrgb:
+        case WGPUTextureFormat_BGRA8Unorm:
+        case WGPUTextureFormat_BGRA8UnormSrgb:
+            return {8, 1};
+        case WGPUTextureFormat_RGBA8Uint:
+        case WGPUTextureFormat_RGBA8Sint:
+            return {4, 1};
+        case WGPUTextureFormat_RGB10A2Uint:
+        case WGPUTextureFormat_RGB10A2Unorm:
+            return {8, 4};
+        case WGPUTextureFormat_RG11B10Ufloat:
+            return {8, 4};
+        case WGPUTextureFormat_RG32Uint:
+        case WGPUTextureFormat_RG32Sint:
+        case WGPUTextureFormat_RG32Float:
+            return {8, 4};
+        case WGPUTextureFormat_RGBA16Uint:
+        case WGPUTextureFormat_RGBA16Sint:
+        case WGPUTextureFormat_RGBA16Float:
+            return {8, 2};
+        case WGPUTextureFormat_RGBA32Uint:
+        case WGPUTextureFormat_RGBA32Sint:
+        case WGPUTextureFormat_RGBA32Float:
+            return {16, 4};
+        default:
+            return {0, 1};
+        }
+    }
+
+    inline uint32_t ComputeBytesPerSampleFromFormats(const WGPUTextureFormat *formats, size_t count)
+    {
+        uint32_t bytes = 0;
+        for (size_t i = 0; i < count; ++i)
+        {
+            if (formats[i] == WGPUTextureFormat_Undefined)
+                continue;
+            auto rc = RenderTargetByteCost(formats[i]);
+            uint32_t align = rc.alignment ? rc.alignment : 1;
+            bytes = ((bytes + align - 1) / align) * align;
+            bytes += rc.byteCost;
+        }
+        return bytes;
+    }
+
 } // namespace pwgpu

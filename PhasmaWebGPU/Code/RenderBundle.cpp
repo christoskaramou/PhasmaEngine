@@ -16,6 +16,36 @@ extern "C" void wgpuBufferRelease(WGPUBuffer);
 
 namespace
 {
+    bool ValidateBindGroupCompat(WGPURenderBundleEncoder rbe)
+    {
+        if (!rbe || !rbe->pipeline || !rbe->pipeline->layout)
+            return true;
+        auto &bgls = rbe->pipeline->layout->bindGroupLayouts;
+        for (size_t i = 0; i < bgls.size(); ++i)
+        {
+            auto *plBgl = bgls[i];
+            if (!plBgl)
+                continue;
+            if (i >= rbe->currentBindGroups.size())
+            {
+                rbe->invalid = true;
+                return false;
+            }
+            auto *bg = rbe->currentBindGroups[i];
+            if (!bg || bg->invalid || !bg->layout)
+            {
+                rbe->invalid = true;
+                return false;
+            }
+            if (!BglGroupEquivalent(bg->layout, plBgl))
+            {
+                rbe->invalid = true;
+                return false;
+            }
+        }
+        return true;
+    }
+
     bool EncoderOpen(WGPURenderBundleEncoder rbe, const char *apiName)
     {
         if (!rbe)
@@ -186,6 +216,13 @@ extern "C"
             rbe->retainedBindGroups.push_back(group);
         }
 
+        if (rbe->device && groupIndex < rbe->device->limits.maxBindGroups)
+        {
+            if (rbe->currentBindGroups.size() <= groupIndex)
+                rbe->currentBindGroups.resize(groupIndex + 1, nullptr);
+            rbe->currentBindGroups[groupIndex] = group;
+        }
+
         if (group && group->layout)
         {
             if (static_cast<uint32_t>(dynamicOffsetCount) != group->layout->dynamicOffsetCount)
@@ -244,7 +281,7 @@ extern "C"
         auto &bgls = rbe->pipeline->layout->bindGroupLayouts;
         if (groupIndex >= bgls.size() || !bgls[groupIndex])
             return;
-        if (group->layout != bgls[groupIndex])
+        if (!BglGroupEquivalent(group->layout, bgls[groupIndex]))
         {
             PE_WARN("[WebGPU] renderBundleEncoder setBindGroup: layout mismatch at index %u", groupIndex);
             return;
@@ -310,6 +347,8 @@ extern "C"
             return;
         if (!rbe->pipeline)
             return;
+        if (!ValidateBindGroupCompat(rbe))
+            return;
 
         rbe->drawCount++;
         rbe->commands.push_back([vertexCount, instanceCount, firstVertex, firstInstance](vk::CommandBuffer cmd)
@@ -323,6 +362,8 @@ extern "C"
         if (!EncoderOpen(rbe, "wgpuRenderBundleEncoderDrawIndexed"))
             return;
         if (!rbe->pipeline)
+            return;
+        if (!ValidateBindGroupCompat(rbe))
             return;
 
         rbe->drawCount++;
@@ -343,6 +384,8 @@ extern "C"
         if (offset + sizeof(VkDrawIndirectCommand) > buffer->size)
             return;
         if (offset % 4 != 0)
+            return;
+        if (!ValidateBindGroupCompat(rbe))
             return;
 
         wgpuBufferAddRef(buffer);
@@ -367,6 +410,8 @@ extern "C"
         if (offset + sizeof(VkDrawIndexedIndirectCommand) > buffer->size)
             return;
         if (offset % 4 != 0)
+            return;
+        if (!ValidateBindGroupCompat(rbe))
             return;
 
         wgpuBufferAddRef(buffer);

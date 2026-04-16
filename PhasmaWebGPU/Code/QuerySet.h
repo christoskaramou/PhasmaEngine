@@ -14,4 +14,5 @@ struct WGPUQuerySetImpl
     WGPUQueryType type = WGPUQueryType_Occlusion;
     uint32_t count = 0;
     bool destroyed = false;
+    bool invalid = false;
 };

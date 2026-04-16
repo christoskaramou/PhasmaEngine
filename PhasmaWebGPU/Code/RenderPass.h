@@ -60,4 +60,6 @@ struct WGPURenderPassEncoderImpl
     WGPUBufferImpl *indexBuffer = nullptr;
     WGPUIndexFormat indexFormat = WGPUIndexFormat_Undefined;
     uint64_t indexBufferSize = 0;
+
+    std::vector<WGPUBindGroupImpl *> currentBindGroups;
 };

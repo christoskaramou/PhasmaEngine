@@ -53,6 +53,7 @@ struct WGPUBindGroupImpl
 
     std::vector<WGPUBindGroupTextureUse> textureUses;
     std::vector<WGPUBufferImpl *> bufferUses;
+    std::vector<pe::Sampler *> ownedSamplers;
 
     struct DynamicBinding
     {
@@ -63,3 +64,5 @@ struct WGPUBindGroupImpl
     };
     std::vector<DynamicBinding> dynamicBindings;
 };
+
+bool BglGroupEquivalent(const WGPUBindGroupLayoutImpl *a, const WGPUBindGroupLayoutImpl *b);

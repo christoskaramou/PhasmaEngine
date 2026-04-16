@@ -195,7 +195,7 @@ extern "C"
         auto &bgls = cpe->pipeline->layout->bindGroupLayouts;
         if (groupIndex >= bgls.size() || !bgls[groupIndex])
             return;
-        if (group->layout != bgls[groupIndex])
+        if (!BglGroupEquivalent(group->layout, bgls[groupIndex]))
         {
             PE_WARN("[WebGPU] setBindGroup: bind group layout does not match pipeline layout at index %u", groupIndex);
             return;
@@ -212,6 +212,36 @@ extern "C"
     }
 
     // ---- §16.1.2 dispatchWorkgroups ----
+
+    static bool ValidateBindGroupCompat(WGPUComputePassEncoder cpe)
+    {
+        if (!cpe || !cpe->pipeline || !cpe->pipeline->layout)
+            return true;
+        auto &bgls = cpe->pipeline->layout->bindGroupLayouts;
+        for (size_t i = 0; i < bgls.size(); ++i)
+        {
+            auto *plBgl = bgls[i];
+            if (!plBgl)
+                continue;
+            if (i >= cpe->currentBindGroups.size())
+            {
+                cpe->invalid = true;
+                return false;
+            }
+            auto *bg = cpe->currentBindGroups[i];
+            if (!bg || bg->invalid || !bg->layout)
+            {
+                cpe->invalid = true;
+                return false;
+            }
+            if (!BglGroupEquivalent(bg->layout, plBgl))
+            {
+                cpe->invalid = true;
+                return false;
+            }
+        }
+        return true;
+    }
 
     static void ValidateDispatchUsageScope(WGPUComputePassEncoder cpe)
     {
@@ -258,6 +288,9 @@ extern "C"
                 return;
             }
         }
+
+        if (!ValidateBindGroupCompat(cpe))
+            return;
 
         ValidateDispatchUsageScope(cpe);
 
@@ -314,6 +347,9 @@ extern "C"
             cpe->usedBuffers.push_back(buffer);
             return;
         }
+
+        if (!ValidateBindGroupCompat(cpe))
+            return;
 
         ValidateDispatchUsageScope(cpe);
 

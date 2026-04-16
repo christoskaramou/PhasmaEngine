@@ -296,6 +296,9 @@ extern "C"
         auto *tex = new WGPUTextureImpl();
         tex->isSwapchain = true;
         tex->image = swapImage;
+        tex->device = surface->device;
+        if (tex->device)
+            wgpuDeviceAddRef(tex->device);
         tex->format = pwgpu::FromVkFormat(static_cast<VkFormat>(surface->surface->GetFormat()));
         tex->usage = static_cast<WGPUTextureUsage>(surface->configuration.usage);
         tex->dimension = WGPUTextureDimension_2D;

@@ -61,4 +61,6 @@ struct WGPURenderBundleEncoderImpl
 
     pwgpu::UsageScope usageScope;
     bool usageScopeValid = true;
+
+    std::vector<WGPUBindGroupImpl *> currentBindGroups;
 };
