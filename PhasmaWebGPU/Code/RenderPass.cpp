@@ -325,7 +325,11 @@ extern "C"
         }
 
         if (!buffer)
+        {
+            if (slot < rpe->boundVertexBuffers.size())
+                rpe->boundVertexBuffers[slot] = {};
             return;
+        }
 
         if (buffer->device != rpe->device || buffer->invalid)
         {
@@ -337,6 +341,11 @@ extern "C"
             rpe->invalid = true;
             return;
         }
+
+        if (rpe->boundVertexBuffers.size() <= slot)
+            rpe->boundVertexBuffers.resize(slot + 1);
+        rpe->boundVertexBuffers[slot].bound = true;
+        rpe->boundVertexBuffers[slot].size = size;
 
         // Destroyed buffer defers to queue.submit() per spec.
         if (buffer->internalState == BufferInternalState::Destroyed || !buffer->peBuffer)
@@ -402,11 +411,6 @@ extern "C"
                 return;
             }
         }
-        if (boundSize % indexSize != 0)
-        {
-            fail();
-            return;
-        }
 
         rpe->indexBuffer = buffer;
         rpe->indexFormat = format;
@@ -432,6 +436,12 @@ extern "C"
             return;
         if (!ValidateBindGroupCompat(rpe))
             return;
+        if (!ValidateDrawVertexState(rpe->pipeline->vertexBufferLayouts, rpe->boundVertexBuffers,
+                                     firstVertex, vertexCount, firstInstance, instanceCount, false))
+        {
+            rpe->invalid = true;
+            return;
+        }
         rpe->drawCount++;
         rpe->cmd->ApiHandle().draw(vertexCount, instanceCount, firstVertex, firstInstance);
     }
@@ -459,6 +469,12 @@ extern "C"
             return;
         if (!ValidateBindGroupCompat(rpe))
             return;
+        if (!ValidateDrawVertexState(rpe->pipeline->vertexBufferLayouts, rpe->boundVertexBuffers,
+                                     0, 0, firstInstance, instanceCount, true))
+        {
+            rpe->invalid = true;
+            return;
+        }
         rpe->drawCount++;
         rpe->cmd->ApiHandle().drawIndexed(indexCount, instanceCount, firstIndex, baseVertex, firstInstance);
     }

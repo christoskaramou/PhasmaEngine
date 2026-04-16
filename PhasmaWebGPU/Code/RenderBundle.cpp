@@ -345,7 +345,11 @@ extern "C"
         }
 
         if (!buffer)
+        {
+            if (slot < rbe->boundVertexBuffers.size())
+                rbe->boundVertexBuffers[slot] = {};
             return;
+        }
 
         if (buffer->device != rbe->device || buffer->invalid)
         {
@@ -362,6 +366,11 @@ extern "C"
             rbe->invalid = true;
             return;
         }
+
+        if (rbe->boundVertexBuffers.size() <= slot)
+            rbe->boundVertexBuffers.resize(slot + 1);
+        rbe->boundVertexBuffers[slot].bound = true;
+        rbe->boundVertexBuffers[slot].size = size;
 
         wgpuBufferAddRef(buffer);
         rbe->retainedBuffers.push_back(buffer);
@@ -448,6 +457,12 @@ extern "C"
             return;
         if (!ValidateBindGroupCompat(rbe))
             return;
+        if (!ValidateDrawVertexState(rbe->pipeline->vertexBufferLayouts, rbe->boundVertexBuffers,
+                                     firstVertex, vertexCount, firstInstance, instanceCount, false))
+        {
+            rbe->invalid = true;
+            return;
+        }
 
         rbe->drawCount++;
         rbe->commands.push_back([vertexCount, instanceCount, firstVertex, firstInstance](vk::CommandBuffer cmd)
@@ -477,6 +492,12 @@ extern "C"
             return;
         if (!ValidateBindGroupCompat(rbe))
             return;
+        if (!ValidateDrawVertexState(rbe->pipeline->vertexBufferLayouts, rbe->boundVertexBuffers,
+                                     0, 0, firstInstance, instanceCount, true))
+        {
+            rbe->invalid = true;
+            return;
+        }
 
         rbe->drawCount++;
         rbe->commands.push_back([indexCount, instanceCount, firstIndex, baseVertex, firstInstance](vk::CommandBuffer cmd)

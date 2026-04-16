@@ -3,11 +3,11 @@
 #include <webgpu/webgpu.h>
 #include "API/Command.h"
 #include "API/Image.h"
+#include "RenderPipeline.h"
 #include "UsageTracker.h"
 
 struct WGPUCommandEncoderImpl;
 struct WGPUDeviceImpl;
-struct WGPURenderPipelineImpl;
 struct WGPUBindGroupImpl;
 struct WGPUTextureViewImpl;
 struct WGPUQuerySetImpl;
@@ -67,4 +67,6 @@ struct WGPURenderPassEncoderImpl
     uint64_t maxDrawCount = 50000000;
 
     std::vector<WGPUBindGroupImpl *> currentBindGroups;
+
+    std::vector<VertexBufferBinding> boundVertexBuffers;
 };

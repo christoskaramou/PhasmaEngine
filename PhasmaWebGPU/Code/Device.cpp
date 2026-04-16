@@ -3075,6 +3075,30 @@ extern "C"
         if (hasFragment)
             rp->fragmentEntryPoint = fragEntry;
 
+        rp->vertexBufferLayouts.resize(descriptor->vertex.bufferCount);
+        for (size_t s = 0; s < descriptor->vertex.bufferCount; ++s)
+        {
+            const auto &vbuf = descriptor->vertex.buffers[s];
+            auto &info = rp->vertexBufferLayouts[s];
+            if (vbuf.attributeCount == 0 && vbuf.arrayStride == 0)
+            {
+                info.used = false;
+                continue;
+            }
+            info.used = true;
+            info.arrayStride = vbuf.arrayStride;
+            info.stepMode = vbuf.stepMode;
+            uint64_t lastStride = 0;
+            for (size_t a = 0; a < vbuf.attributeCount; ++a)
+            {
+                const auto &attr = vbuf.attributes[a];
+                uint64_t end = static_cast<uint64_t>(attr.offset) + pwgpu::VertexFormatByteSize(attr.format);
+                if (end > lastStride)
+                    lastStride = end;
+            }
+            info.lastStride = lastStride;
+        }
+
         if (hasFragment)
         {
             for (size_t i = 0; i < descriptor->fragment->targetCount; ++i)

@@ -2,10 +2,10 @@
 
 #include <webgpu/webgpu.h>
 #include <functional>
+#include "RenderPipeline.h"
 #include "UsageTracker.h"
 
 struct WGPUDeviceImpl;
-struct WGPURenderPipelineImpl;
 struct WGPUBindGroupImpl;
 struct WGPUBufferImpl;
 
@@ -67,4 +67,6 @@ struct WGPURenderBundleEncoderImpl
     bool usageScopeValid = true;
 
     std::vector<WGPUBindGroupImpl *> currentBindGroups;
+
+    std::vector<VertexBufferBinding> boundVertexBuffers;
 };
