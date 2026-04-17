@@ -173,4 +173,22 @@ extern "C"
         sm->reflection.entryPoints.push_back(std::move(ep));
     }
 
+    PWGPU_EXT_EXPORT void pwgpuShaderModuleAddOverride(WGPUShaderModule sm,
+                                                       const char *identifier,
+                                                       const char *name,
+                                                       const char *typeStr,
+                                                       uint32_t hasDefault,
+                                                       uint32_t staticallyUsed)
+    {
+        if (!sm || !identifier)
+            return;
+        WGPUShaderReflectionMeta::Override ov;
+        ov.identifier = identifier;
+        ov.name = name ? name : "";
+        ov.type = typeStr ? typeStr : "";
+        ov.hasDefault = hasDefault != 0;
+        ov.staticallyUsed = staticallyUsed != 0;
+        sm->reflection.overrides.push_back(std::move(ov));
+    }
+
 } // extern "C"

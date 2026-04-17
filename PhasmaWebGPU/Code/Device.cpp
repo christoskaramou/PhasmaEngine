@@ -18,6 +18,7 @@
 #include "QuerySet.h"
 #include "WGPULimits.h"
 #include "Utils.h"
+#include <cmath>
 
 namespace
 {
@@ -42,6 +43,89 @@ namespace
         }
         stage.staticallyUsed = &usedOut;
         stage.comparisonSamplers = &cmpOut;
+    }
+
+    // §10.3.2.3 pipeline-overridable constants validation.
+    std::string ValidateStageConstants(const WGPUShaderModuleImpl *sm,
+                                       const std::string &stageTag,
+                                       size_t constantCount,
+                                       const WGPUConstantEntry *constants)
+    {
+        if (!sm || !sm->reflection.present)
+            return {};
+
+        for (size_t i = 0; i < constantCount; ++i)
+        {
+            const WGPUConstantEntry &c = constants[i];
+            std::string key = pwgpu::ToString(c.key);
+            const WGPUShaderReflectionMeta::Override *found = nullptr;
+            for (const auto &ov : sm->reflection.overrides)
+            {
+                if (ov.identifier == key)
+                {
+                    found = &ov;
+                    break;
+                }
+            }
+            if (!found)
+                return stageTag + ".constants key \"" + key +
+                       "\" does not match any pipeline-overridable constant in the shader module";
+
+            if (!std::isfinite(c.value))
+                return stageTag + ".constants[\"" + key + "\"] value must be finite";
+
+            const std::string &t = found->type;
+            if (t == "i32")
+            {
+                if (c.value < static_cast<double>(INT32_MIN) ||
+                    c.value > static_cast<double>(INT32_MAX) ||
+                    c.value != std::trunc(c.value))
+                    return stageTag + ".constants[\"" + key +
+                           "\"] value not convertible to i32";
+            }
+            else if (t == "u32")
+            {
+                if (c.value < 0.0 ||
+                    c.value > static_cast<double>(UINT32_MAX) ||
+                    c.value != std::trunc(c.value))
+                    return stageTag + ".constants[\"" + key +
+                           "\"] value not convertible to u32";
+            }
+            else if (t == "f32")
+            {
+                constexpr double kF32Max = 3.4028234663852886e+38;
+                if (c.value < -kF32Max || c.value > kF32Max)
+                    return stageTag + ".constants[\"" + key +
+                           "\"] value not convertible to f32";
+            }
+            else if (t == "f16")
+            {
+                constexpr double kF16Max = 65504.0;
+                if (c.value < -kF16Max || c.value > kF16Max)
+                    return stageTag + ".constants[\"" + key +
+                           "\"] value not convertible to f16";
+            }
+        }
+
+        for (const auto &ov : sm->reflection.overrides)
+        {
+            if (!ov.staticallyUsed || ov.hasDefault)
+                continue;
+            bool provided = false;
+            for (size_t i = 0; i < constantCount; ++i)
+            {
+                if (pwgpu::ToString(constants[i].key) == ov.identifier)
+                {
+                    provided = true;
+                    break;
+                }
+            }
+            if (!provided)
+                return stageTag + ".constants is missing required override \"" +
+                       ov.identifier + "\"";
+        }
+
+        return {};
     }
 
     bool DeviceCanCreate(WGPUDeviceImpl *device, const void *descriptor,
@@ -2422,6 +2506,19 @@ extern "C"
             }
         }
 
+        {
+            std::string constErr = ValidateStageConstants(
+                shaderModule, "compute", descriptor->compute.constantCount,
+                descriptor->compute.constants);
+            if (!constErr.empty())
+            {
+                device->reportError(
+                    WGPUErrorType_Validation,
+                    pwgpu::ToStringView("createComputePipeline: " + constErr));
+                return MakeInvalidComputePipeline(device, labelStr);
+            }
+        }
+
         auto vkDev = device->rhi->GetDevice();
 
         if (autoLayout)
@@ -2685,6 +2782,18 @@ extern "C"
         if (!resolveEntry(vertModule, descriptor->vertex.entryPoint, kExecVertex, "vertex", vertEntry))
             return MakeInvalidRenderPipeline(device, labelStr);
 
+        {
+            std::string constErr = ValidateStageConstants(
+                vertModule, "vertex",
+                descriptor->vertex.constantCount, descriptor->vertex.constants);
+            if (!constErr.empty())
+            {
+                device->reportError(WGPUErrorType_Validation,
+                                    pwgpu::ToStringView("createRenderPipeline: " + constErr));
+                return MakeInvalidRenderPipeline(device, labelStr);
+            }
+        }
+
         auto primTopology = descriptor->primitive.topology;
         if (primTopology == WGPUPrimitiveTopology(0))
             primTopology = WGPUPrimitiveTopology_TriangleList;
@@ -2812,6 +2921,18 @@ extern "C"
             }
             if (!resolveEntry(fragModuleSrc, descriptor->fragment->entryPoint, kExecFragment, "fragment", fragEntry))
                 return MakeInvalidRenderPipeline(device, labelStr);
+
+            {
+                std::string constErr = ValidateStageConstants(
+                    fragModuleSrc, "fragment",
+                    descriptor->fragment->constantCount, descriptor->fragment->constants);
+                if (!constErr.empty())
+                {
+                    device->reportError(WGPUErrorType_Validation,
+                                        pwgpu::ToStringView("createRenderPipeline: " + constErr));
+                    return MakeInvalidRenderPipeline(device, labelStr);
+                }
+            }
 
             pwgpu::FragmentOutputBuiltins fragBuiltins;
             {

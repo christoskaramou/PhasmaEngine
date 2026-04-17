@@ -31,8 +31,18 @@ struct WGPUShaderReflectionMeta
         std::string stage;
         std::vector<Binding> staticallyUsed;
     };
+    // identifier = decimal(@id) if present, else name (§10.3.2.3).
+    struct Override
+    {
+        std::string identifier;
+        std::string name;
+        std::string type;
+        bool hasDefault = false;
+        bool staticallyUsed = false;
+    };
     std::vector<EntryPoint> entryPoints;
     std::vector<Binding> comparisonSamplers;
+    std::vector<Override> overrides;
     bool present = false;
 };
 
