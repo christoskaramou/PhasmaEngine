@@ -23,7 +23,7 @@ namespace
         case WGPUFeatureName_TimestampQuery:
             return a.vkProps.limits.timestampComputeAndGraphics != 0;
         case WGPUFeatureName_DualSourceBlending:
-            return a.vkFeatures.dualSrcBlend != 0;
+            return false; // Naga WGSL compiler doesn't support dual-source syntax
         case WGPUFeatureName_ClipDistances:
             return a.vkFeatures.shaderClipDistance != 0;
         case WGPUFeatureName_ShaderF16:

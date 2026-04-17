@@ -33,9 +33,16 @@ extern "C"
 
     WGPUBindGroupLayout wgpuRenderPipelineGetBindGroupLayout(WGPURenderPipeline rp, uint32_t groupIndex)
     {
-        if (!rp || !rp->layout)
+        if (!rp)
             return nullptr;
-        if (groupIndex >= rp->layout->bindGroupLayouts.size())
+        WGPUDeviceImpl *device = rp->device;
+        if (device && groupIndex >= device->limits.maxBindGroups)
+        {
+            device->reportError(WGPUErrorType_Validation,
+                                pwgpu::ToStringView("getBindGroupLayout: index out of bounds"));
+            return nullptr;
+        }
+        if (!rp->layout || groupIndex >= rp->layout->bindGroupLayouts.size())
             return nullptr;
         WGPUBindGroupLayout bgl = rp->layout->bindGroupLayouts[groupIndex];
         if (bgl)

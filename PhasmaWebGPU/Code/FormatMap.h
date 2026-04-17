@@ -467,6 +467,126 @@ namespace pwgpu
         return f != WGPUTextureFormat_Undefined;
     }
 
+    enum class ColorSampleType
+    {
+        Float,
+        Uint,
+        Sint,
+        Unknown
+    };
+
+    inline ColorSampleType GetColorFormatSampleType(WGPUTextureFormat f)
+    {
+        switch (f)
+        {
+        case WGPUTextureFormat_R8Uint:
+        case WGPUTextureFormat_R16Uint:
+        case WGPUTextureFormat_R32Uint:
+        case WGPUTextureFormat_RG8Uint:
+        case WGPUTextureFormat_RG16Uint:
+        case WGPUTextureFormat_RG32Uint:
+        case WGPUTextureFormat_RGBA8Uint:
+        case WGPUTextureFormat_RGBA16Uint:
+        case WGPUTextureFormat_RGBA32Uint:
+            return ColorSampleType::Uint;
+        case WGPUTextureFormat_R8Sint:
+        case WGPUTextureFormat_R16Sint:
+        case WGPUTextureFormat_R32Sint:
+        case WGPUTextureFormat_RG8Sint:
+        case WGPUTextureFormat_RG16Sint:
+        case WGPUTextureFormat_RG32Sint:
+        case WGPUTextureFormat_RGBA8Sint:
+        case WGPUTextureFormat_RGBA16Sint:
+        case WGPUTextureFormat_RGBA32Sint:
+            return ColorSampleType::Sint;
+        case WGPUTextureFormat_R8Unorm:
+        case WGPUTextureFormat_R8Snorm:
+        case WGPUTextureFormat_R16Float:
+        case WGPUTextureFormat_R32Float:
+        case WGPUTextureFormat_RG8Unorm:
+        case WGPUTextureFormat_RG8Snorm:
+        case WGPUTextureFormat_RG16Float:
+        case WGPUTextureFormat_RG32Float:
+        case WGPUTextureFormat_RGBA8Unorm:
+        case WGPUTextureFormat_RGBA8UnormSrgb:
+        case WGPUTextureFormat_RGBA8Snorm:
+        case WGPUTextureFormat_RGBA16Float:
+        case WGPUTextureFormat_RGBA32Float:
+        case WGPUTextureFormat_BGRA8Unorm:
+        case WGPUTextureFormat_BGRA8UnormSrgb:
+        case WGPUTextureFormat_RGB10A2Unorm:
+        case WGPUTextureFormat_RG11B10Ufloat:
+        case WGPUTextureFormat_RGB9E5Ufloat:
+        case WGPUTextureFormat_R16Unorm:
+        case WGPUTextureFormat_RG16Unorm:
+        case WGPUTextureFormat_RGBA16Unorm:
+        case WGPUTextureFormat_R16Snorm:
+        case WGPUTextureFormat_RG16Snorm:
+        case WGPUTextureFormat_RGBA16Snorm:
+            return ColorSampleType::Float;
+        case WGPUTextureFormat_RGB10A2Uint:
+            return ColorSampleType::Uint;
+        default:
+            return ColorSampleType::Unknown;
+        }
+    }
+
+    inline uint32_t GetColorFormatChannelCount(WGPUTextureFormat f)
+    {
+        switch (f)
+        {
+        case WGPUTextureFormat_R8Unorm:
+        case WGPUTextureFormat_R8Snorm:
+        case WGPUTextureFormat_R8Uint:
+        case WGPUTextureFormat_R8Sint:
+        case WGPUTextureFormat_R16Uint:
+        case WGPUTextureFormat_R16Sint:
+        case WGPUTextureFormat_R16Float:
+        case WGPUTextureFormat_R16Unorm:
+        case WGPUTextureFormat_R16Snorm:
+        case WGPUTextureFormat_R32Float:
+        case WGPUTextureFormat_R32Uint:
+        case WGPUTextureFormat_R32Sint:
+            return 1;
+        case WGPUTextureFormat_RG8Unorm:
+        case WGPUTextureFormat_RG8Snorm:
+        case WGPUTextureFormat_RG8Uint:
+        case WGPUTextureFormat_RG8Sint:
+        case WGPUTextureFormat_RG16Uint:
+        case WGPUTextureFormat_RG16Sint:
+        case WGPUTextureFormat_RG16Float:
+        case WGPUTextureFormat_RG16Unorm:
+        case WGPUTextureFormat_RG16Snorm:
+        case WGPUTextureFormat_RG32Float:
+        case WGPUTextureFormat_RG32Uint:
+        case WGPUTextureFormat_RG32Sint:
+            return 2;
+        case WGPUTextureFormat_RG11B10Ufloat:
+        case WGPUTextureFormat_RGB9E5Ufloat:
+            return 3;
+        case WGPUTextureFormat_RGBA8Unorm:
+        case WGPUTextureFormat_RGBA8UnormSrgb:
+        case WGPUTextureFormat_RGBA8Snorm:
+        case WGPUTextureFormat_RGBA8Uint:
+        case WGPUTextureFormat_RGBA8Sint:
+        case WGPUTextureFormat_RGBA16Uint:
+        case WGPUTextureFormat_RGBA16Sint:
+        case WGPUTextureFormat_RGBA16Float:
+        case WGPUTextureFormat_RGBA16Unorm:
+        case WGPUTextureFormat_RGBA16Snorm:
+        case WGPUTextureFormat_RGBA32Float:
+        case WGPUTextureFormat_RGBA32Uint:
+        case WGPUTextureFormat_RGBA32Sint:
+        case WGPUTextureFormat_BGRA8Unorm:
+        case WGPUTextureFormat_BGRA8UnormSrgb:
+        case WGPUTextureFormat_RGB10A2Unorm:
+        case WGPUTextureFormat_RGB10A2Uint:
+            return 4;
+        default:
+            return 0;
+        }
+    }
+
     inline void GetTexelBlockSize(WGPUTextureFormat f, uint32_t &outW, uint32_t &outH)
     {
         outW = 1;
@@ -1188,6 +1308,10 @@ namespace pwgpu
         case WGPUTextureFormat_RGBA16Sint:
         case WGPUTextureFormat_RGBA32Uint:
         case WGPUTextureFormat_RGBA32Sint:
+        // 32-bit float formats require float32-blendable feature (we don't advertise it)
+        case WGPUTextureFormat_R32Float:
+        case WGPUTextureFormat_RG32Float:
+        case WGPUTextureFormat_RGBA32Float:
             return false;
         default:
             return IsRenderableFormat(f);

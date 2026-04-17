@@ -7,6 +7,7 @@
 #include "Sampler.h"
 #include "BindGroup.h"
 #include "PipelineLayout.h"
+#include "Reflect.h"
 #include "ShaderModule.h"
 #include "RenderPipeline.h"
 #include "ComputePipeline.h"
@@ -164,6 +165,8 @@ void WGPUDeviceImpl::reportError(WGPUErrorType type, WGPUStringView message)
 {
     // After device.destroy(), all errors are suppressed per spec.
     if (destroyed)
+        return;
+    if (suppressReportError)
         return;
     {
         std::lock_guard<std::mutex> lock(errorScopeMutex);
@@ -2301,23 +2304,21 @@ extern "C"
         const char *labelStr = descriptor->label.data ? descriptor->label.data : nullptr;
 
         auto *pipeLayout = reinterpret_cast<WGPUPipelineLayoutImpl *>(descriptor->layout);
-        if (!pipeLayout)
+        const bool autoLayout = (pipeLayout == nullptr);
+        if (!autoLayout)
         {
-            device->reportError(WGPUErrorType_Validation,
-                                pwgpu::ToStringView("createComputePipeline: layout is null (auto layout not supported)"));
-            return MakeInvalidComputePipeline(device, labelStr);
-        }
-        if (pipeLayout->invalid)
-        {
-            device->reportError(WGPUErrorType_Validation,
-                                pwgpu::ToStringView("createComputePipeline: layout is invalid"));
-            return MakeInvalidComputePipeline(device, labelStr);
-        }
-        if (pipeLayout->device != device)
-        {
-            device->reportError(WGPUErrorType_Validation,
-                                pwgpu::ToStringView("createComputePipeline: layout device mismatch"));
-            return MakeInvalidComputePipeline(device, labelStr);
+            if (pipeLayout->invalid)
+            {
+                device->reportError(WGPUErrorType_Validation,
+                                    pwgpu::ToStringView("createComputePipeline: layout is invalid"));
+                return MakeInvalidComputePipeline(device, labelStr);
+            }
+            if (pipeLayout->device != device)
+            {
+                device->reportError(WGPUErrorType_Validation,
+                                    pwgpu::ToStringView("createComputePipeline: layout device mismatch"));
+                return MakeInvalidComputePipeline(device, labelStr);
+            }
         }
 
         auto *shaderModule = descriptor->compute.module;
@@ -2401,6 +2402,83 @@ extern "C"
 
         auto vkDev = device->rhi->GetDevice();
 
+        if (autoLayout)
+        {
+            std::vector<pwgpu::AutoLayoutStageInput> stages(1);
+            stages[0].spirv = &shaderModule->spirv;
+            stages[0].entryPoint = entryPointName;
+            stages[0].executionModel = kExecCompute;
+            stages[0].visibility = WGPUShaderStage_Compute;
+            std::string errMsg;
+            pipeLayout = pwgpu::BuildAutoPipelineLayout(device, stages, errMsg);
+            if (!pipeLayout)
+            {
+                std::string full = "createComputePipeline: " + errMsg;
+                device->reportError(WGPUErrorType_Validation, pwgpu::ToStringView(full));
+                return MakeInvalidComputePipeline(device, labelStr);
+            }
+        }
+        else
+        {
+            // Validate layout-shader binding compatibility (visibility, type, presence).
+            std::vector<pwgpu::LayoutCompatStageInput> compatStages(1);
+            compatStages[0].spirv = &shaderModule->spirv;
+            compatStages[0].entryPoint = entryPointName;
+            compatStages[0].executionModel = kExecCompute;
+            compatStages[0].stage = WGPUShaderStage_Compute;
+            std::string compatErr = pwgpu::ValidateExplicitLayoutCompat(pipeLayout, compatStages);
+            if (!compatErr.empty())
+            {
+                device->reportError(WGPUErrorType_Validation,
+                                    pwgpu::ToStringView("createComputePipeline: " + compatErr));
+                return MakeInvalidComputePipeline(device, labelStr);
+            }
+        }
+
+        // Validate workgroup size limits from SPIR-V (§10.3 compute).
+        {
+            pwgpu::ComputeWorkgroupInfo wgInfo{};
+            std::string wgErr;
+            if (pwgpu::GetComputeWorkgroupInfo(shaderModule->spirv, entryPointName, wgInfo, wgErr))
+            {
+                const auto &lim = device->limits;
+                bool wgFail = false;
+                std::string wgFailMsg;
+                if (wgInfo.sizeX > lim.maxComputeWorkgroupSizeX)
+                {
+                    wgFail = true;
+                    wgFailMsg = "createComputePipeline: workgroup_size X exceeds maxComputeWorkgroupSizeX";
+                }
+                else if (wgInfo.sizeY > lim.maxComputeWorkgroupSizeY)
+                {
+                    wgFail = true;
+                    wgFailMsg = "createComputePipeline: workgroup_size Y exceeds maxComputeWorkgroupSizeY";
+                }
+                else if (wgInfo.sizeZ > lim.maxComputeWorkgroupSizeZ)
+                {
+                    wgFail = true;
+                    wgFailMsg = "createComputePipeline: workgroup_size Z exceeds maxComputeWorkgroupSizeZ";
+                }
+                else if ((uint64_t)wgInfo.sizeX * wgInfo.sizeY * wgInfo.sizeZ > lim.maxComputeInvocationsPerWorkgroup)
+                {
+                    wgFail = true;
+                    wgFailMsg = "createComputePipeline: workgroup invocation count exceeds maxComputeInvocationsPerWorkgroup";
+                }
+                else if (wgInfo.workgroupStorageBytes > lim.maxComputeWorkgroupStorageSize)
+                {
+                    wgFail = true;
+                    wgFailMsg = "createComputePipeline: workgroup storage exceeds maxComputeWorkgroupStorageSize";
+                }
+                if (wgFail)
+                {
+                    if (autoLayout)
+                        wgpuPipelineLayoutRelease(pipeLayout);
+                    device->reportError(WGPUErrorType_Validation, pwgpu::ToStringView(wgFailMsg));
+                    return MakeInvalidComputePipeline(device, labelStr);
+                }
+            }
+        }
+
         vk::ShaderModuleCreateInfo smci{};
         smci.codeSize = shaderModule->spirv.size() * sizeof(uint32_t);
         smci.pCode = shaderModule->spirv.data();
@@ -2413,6 +2491,8 @@ extern "C"
         {
             device->reportError(WGPUErrorType_Internal,
                                 pwgpu::ToStringView("createComputePipeline: failed to create VkShaderModule"));
+            if (autoLayout)
+                wgpuPipelineLayoutRelease(pipeLayout);
             return MakeInvalidComputePipeline(device, labelStr);
         }
 
@@ -2453,7 +2533,9 @@ extern "C"
         cp->layout = pipeLayout;
         cp->entryPoint = entryPointName;
         wgpuDeviceAddRef(device);
-        wgpuPipelineLayoutAddRef(pipeLayout);
+        // Auto-built layout already has refCount=1 owned by cp; only AddRef for user-supplied layout.
+        if (!autoLayout)
+            wgpuPipelineLayoutAddRef(pipeLayout);
 
         return cp;
     }
@@ -2462,7 +2544,11 @@ extern "C"
                                                     WGPUComputePipelineDescriptor const *descriptor,
                                                     WGPUCreateComputePipelineAsyncCallbackInfo callbackInfo)
     {
+        if (device)
+            device->suppressReportError = true;
         WGPUComputePipeline cp = wgpuDeviceCreateComputePipeline(device, descriptor);
+        if (device)
+            device->suppressReportError = false;
         bool valid = cp && !cp->invalid;
         WGPUInstanceImpl *inst = device ? device->instance : nullptr;
         if (!inst || !callbackInfo.callback)
@@ -2491,23 +2577,21 @@ extern "C"
         const auto &limits = device->limits;
 
         auto *pipeLayout = reinterpret_cast<WGPUPipelineLayoutImpl *>(descriptor->layout);
-        if (!pipeLayout)
+        const bool autoLayout = (pipeLayout == nullptr);
+        if (!autoLayout)
         {
-            device->reportError(WGPUErrorType_Validation,
-                                pwgpu::ToStringView("createRenderPipeline: layout is null (auto layout not supported)"));
-            return MakeInvalidRenderPipeline(device, labelStr);
-        }
-        if (pipeLayout->invalid)
-        {
-            device->reportError(WGPUErrorType_Validation,
-                                pwgpu::ToStringView("createRenderPipeline: layout is invalid"));
-            return MakeInvalidRenderPipeline(device, labelStr);
-        }
-        if (pipeLayout->device != device)
-        {
-            device->reportError(WGPUErrorType_Validation,
-                                pwgpu::ToStringView("createRenderPipeline: layout device mismatch"));
-            return MakeInvalidRenderPipeline(device, labelStr);
+            if (pipeLayout->invalid)
+            {
+                device->reportError(WGPUErrorType_Validation,
+                                    pwgpu::ToStringView("createRenderPipeline: layout is invalid"));
+                return MakeInvalidRenderPipeline(device, labelStr);
+            }
+            if (pipeLayout->device != device)
+            {
+                device->reportError(WGPUErrorType_Validation,
+                                    pwgpu::ToStringView("createRenderPipeline: layout device mismatch"));
+                return MakeInvalidRenderPipeline(device, labelStr);
+            }
         }
 
         auto *vertModule = descriptor->vertex.module;
@@ -2605,6 +2689,7 @@ extern "C"
 
         uint32_t totalAttributes = 0;
         std::set<uint32_t> usedShaderLocations;
+        std::map<uint32_t, WGPUVertexFormat> locationToFormat;
         for (size_t i = 0; i < descriptor->vertex.bufferCount; ++i)
         {
             const auto &vbuf = descriptor->vertex.buffers[i];
@@ -2613,12 +2698,74 @@ extern "C"
             if (!ValidateVertexBufferLayout(device, vbuf, usedShaderLocations))
                 return MakeInvalidRenderPipeline(device, labelStr);
             totalAttributes += static_cast<uint32_t>(vbuf.attributeCount);
+            for (size_t a = 0; a < vbuf.attributeCount; ++a)
+                locationToFormat[vbuf.attributes[a].shaderLocation] = vbuf.attributes[a].format;
         }
         if (totalAttributes > limits.maxVertexAttributes)
         {
             device->reportError(WGPUErrorType_Validation,
                                 pwgpu::ToStringView("createRenderPipeline: total vertex attributes exceeds maxVertexAttributes"));
             return MakeInvalidRenderPipeline(device, labelStr);
+        }
+
+        // Validate vertex shader inputs against vertex attribute state.
+        {
+            auto vertexFormatBaseType = [](WGPUVertexFormat f) -> pwgpu::ShaderOutputBaseType
+            {
+                switch (f)
+                {
+                case WGPUVertexFormat_Uint8:
+                case WGPUVertexFormat_Uint8x2:
+                case WGPUVertexFormat_Uint8x4:
+                case WGPUVertexFormat_Uint16:
+                case WGPUVertexFormat_Uint16x2:
+                case WGPUVertexFormat_Uint16x4:
+                case WGPUVertexFormat_Uint32:
+                case WGPUVertexFormat_Uint32x2:
+                case WGPUVertexFormat_Uint32x3:
+                case WGPUVertexFormat_Uint32x4:
+                    return pwgpu::ShaderOutputBaseType::Uint;
+                case WGPUVertexFormat_Sint8:
+                case WGPUVertexFormat_Sint8x2:
+                case WGPUVertexFormat_Sint8x4:
+                case WGPUVertexFormat_Sint16:
+                case WGPUVertexFormat_Sint16x2:
+                case WGPUVertexFormat_Sint16x4:
+                case WGPUVertexFormat_Sint32:
+                case WGPUVertexFormat_Sint32x2:
+                case WGPUVertexFormat_Sint32x3:
+                case WGPUVertexFormat_Sint32x4:
+                    return pwgpu::ShaderOutputBaseType::Sint;
+                default:
+                    return pwgpu::ShaderOutputBaseType::Float;
+                }
+            };
+            std::map<uint32_t, pwgpu::VertexInputInfo> vertInputs;
+            std::string reflErr;
+            if (pwgpu::GetVertexInputTypes(vertModule->spirv, vertEntry, vertInputs, reflErr))
+            {
+                for (const auto &[loc, info] : vertInputs)
+                {
+                    auto it = locationToFormat.find(loc);
+                    if (it == locationToFormat.end())
+                    {
+                        device->reportError(
+                            WGPUErrorType_Validation,
+                            pwgpu::ToStringView("createRenderPipeline: vertex shader input location has no "
+                                                "matching vertex attribute in vertex state"));
+                        return MakeInvalidRenderPipeline(device, labelStr);
+                    }
+                    auto fmtType = vertexFormatBaseType(it->second);
+                    if (info.baseType != pwgpu::ShaderOutputBaseType::Unknown && fmtType != info.baseType)
+                    {
+                        device->reportError(
+                            WGPUErrorType_Validation,
+                            pwgpu::ToStringView("createRenderPipeline: vertex attribute format type is "
+                                                "incompatible with shader input type"));
+                        return MakeInvalidRenderPipeline(device, labelStr);
+                    }
+                }
+            }
         }
 
         bool hasFragment = (descriptor->fragment != nullptr);
@@ -2643,6 +2790,180 @@ extern "C"
                 return MakeInvalidRenderPipeline(device, labelStr);
         }
 
+        if (autoLayout)
+        {
+            std::vector<pwgpu::AutoLayoutStageInput> stageInputs;
+            stageInputs.emplace_back();
+            stageInputs.back().spirv = &vertModule->spirv;
+            stageInputs.back().entryPoint = vertEntry;
+            stageInputs.back().executionModel = kExecVertex;
+            stageInputs.back().visibility = WGPUShaderStage_Vertex;
+            if (hasFragment)
+            {
+                stageInputs.emplace_back();
+                stageInputs.back().spirv = &fragModuleSrc->spirv;
+                stageInputs.back().entryPoint = fragEntry;
+                stageInputs.back().executionModel = kExecFragment;
+                stageInputs.back().visibility = WGPUShaderStage_Fragment;
+            }
+            std::string errMsg;
+            pipeLayout = pwgpu::BuildAutoPipelineLayout(device, stageInputs, errMsg);
+            if (!pipeLayout)
+            {
+                std::string full = "createRenderPipeline: " + errMsg;
+                device->reportError(WGPUErrorType_Validation, pwgpu::ToStringView(full));
+                return MakeInvalidRenderPipeline(device, labelStr);
+            }
+        }
+        else
+        {
+            // Validate layout-shader binding compatibility (visibility, type, presence).
+            std::vector<pwgpu::LayoutCompatStageInput> compatStages;
+            compatStages.push_back({&vertModule->spirv, vertEntry, kExecVertex, WGPUShaderStage_Vertex});
+            if (hasFragment)
+                compatStages.push_back(
+                    {&fragModuleSrc->spirv, fragEntry, kExecFragment, WGPUShaderStage_Fragment});
+            std::string compatErr = pwgpu::ValidateExplicitLayoutCompat(pipeLayout, compatStages);
+            if (!compatErr.empty())
+            {
+                device->reportError(WGPUErrorType_Validation,
+                                    pwgpu::ToStringView("createRenderPipeline: " + compatErr));
+                return MakeInvalidRenderPipeline(device, labelStr);
+            }
+        }
+
+        // Validate inter-stage interface: every fragment varying input must be provided
+        // by a vertex varying output with the same location and compatible type.
+        if (hasFragment)
+        {
+            std::map<uint32_t, pwgpu::VaryingInfo> vertVaryingOuts, fragVaryingIns;
+            std::string reflErr;
+            const bool gotVert = pwgpu::GetVaryingInfos(vertModule->spirv, vertEntry, kExecVertex,
+                                                        false, vertVaryingOuts, reflErr);
+            const bool gotFrag = pwgpu::GetVaryingInfos(fragModuleSrc->spirv, fragEntry,
+                                                        kExecFragment, true, fragVaryingIns, reflErr);
+            if (gotVert && gotFrag)
+            {
+                for (const auto &[loc, fragInfo] : fragVaryingIns)
+                {
+                    auto it = vertVaryingOuts.find(loc);
+                    if (it == vertVaryingOuts.end())
+                    {
+                        device->reportError(
+                            WGPUErrorType_Validation,
+                            pwgpu::ToStringView(
+                                "createRenderPipeline: fragment shader input location has no "
+                                "matching vertex shader output at the same location"));
+                        return MakeInvalidRenderPipeline(device, labelStr);
+                    }
+                    const auto &vertInfo = it->second;
+                    if (fragInfo.baseType != pwgpu::ShaderOutputBaseType::Unknown &&
+                        vertInfo.baseType != pwgpu::ShaderOutputBaseType::Unknown &&
+                        fragInfo.baseType != vertInfo.baseType)
+                    {
+                        device->reportError(
+                            WGPUErrorType_Validation,
+                            pwgpu::ToStringView(
+                                "createRenderPipeline: fragment shader input type does not "
+                                "match vertex shader output type at the same location"));
+                        return MakeInvalidRenderPipeline(device, labelStr);
+                    }
+                    if (fragInfo.vecSize != vertInfo.vecSize && fragInfo.vecSize != 0 &&
+                        vertInfo.vecSize != 0)
+                    {
+                        device->reportError(
+                            WGPUErrorType_Validation,
+                            pwgpu::ToStringView(
+                                "createRenderPipeline: fragment shader input component count "
+                                "does not match vertex shader output at the same location"));
+                        return MakeInvalidRenderPipeline(device, labelStr);
+                    }
+                    // Interpolation must match exactly
+                    if (fragInfo.isFlat != vertInfo.isFlat ||
+                        fragInfo.isNoPerspective != vertInfo.isNoPerspective ||
+                        fragInfo.isCentroid != vertInfo.isCentroid ||
+                        fragInfo.isSample != vertInfo.isSample)
+                    {
+                        device->reportError(
+                            WGPUErrorType_Validation,
+                            pwgpu::ToStringView(
+                                "createRenderPipeline: interpolation attributes of fragment "
+                                "shader input do not match vertex shader output at the same "
+                                "location"));
+                        return MakeInvalidRenderPipeline(device, labelStr);
+                    }
+                }
+
+                // maxInterStageShaderVariables limit checks (spec §10.3.1)
+                constexpr uint32_t kMaxInterStageVars = 16;
+
+                // Vertex: each output location must be ≤ maxInterStageShaderVariables - 1
+                for (const auto &[loc, _] : vertVaryingOuts)
+                {
+                    if (loc >= kMaxInterStageVars)
+                    {
+                        device->reportError(
+                            WGPUErrorType_Validation,
+                            pwgpu::ToStringView(
+                                "createRenderPipeline: vertex shader output location exceeds "
+                                "maxInterStageShaderVariables - 1"));
+                        return MakeInvalidRenderPipeline(device, labelStr);
+                    }
+                }
+
+                // Vertex: total user-defined output count ≤ maxInterStageShaderVariables
+                // (point-list topology implicitly uses 1 slot for point_size)
+                uint32_t maxVertOut = kMaxInterStageVars;
+                if (descriptor->primitive.topology == WGPUPrimitiveTopology_PointList)
+                    maxVertOut -= 1;
+                if (vertVaryingOuts.size() > maxVertOut)
+                {
+                    device->reportError(
+                        WGPUErrorType_Validation,
+                        pwgpu::ToStringView(
+                            "createRenderPipeline: vertex shader user-defined output count "
+                            "exceeds maxInterStageShaderVariables"));
+                    return MakeInvalidRenderPipeline(device, labelStr);
+                }
+
+                // Fragment: each input location must be < maxInterStageShaderVariables
+                for (const auto &[loc, _] : fragVaryingIns)
+                {
+                    if (loc >= kMaxInterStageVars)
+                    {
+                        device->reportError(
+                            WGPUErrorType_Validation,
+                            pwgpu::ToStringView(
+                                "createRenderPipeline: fragment shader input location exceeds "
+                                "maxInterStageShaderVariables - 1"));
+                        return MakeInvalidRenderPipeline(device, labelStr);
+                    }
+                }
+
+                // Fragment: user-defined input count ≤ maxInterStageShaderVariables
+                // minus inter-stage builtins (front_facing, sample_index, etc.)
+                uint32_t interStageBuiltinCount = 0;
+                {
+                    std::string bErr;
+                    pwgpu::CountFragmentInterStageBuiltins(fragModuleSrc->spirv, fragEntry,
+                                                           interStageBuiltinCount, bErr);
+                }
+                const uint32_t maxFragIn =
+                    (interStageBuiltinCount < kMaxInterStageVars)
+                        ? kMaxInterStageVars - interStageBuiltinCount
+                        : 0;
+                if (fragVaryingIns.size() > maxFragIn)
+                {
+                    device->reportError(
+                        WGPUErrorType_Validation,
+                        pwgpu::ToStringView(
+                            "createRenderPipeline: fragment shader user-defined input count "
+                            "exceeds maxInterStageShaderVariables"));
+                    return MakeInvalidRenderPipeline(device, labelStr);
+                }
+            }
+        }
+
         std::vector<vk::PipelineColorBlendAttachmentState> blendAttachments;
         std::vector<vk::Format> colorVkFormats;
         uint32_t colorAttachmentBytesPerSample = 0;
@@ -2657,6 +2978,12 @@ extern "C"
                 return MakeInvalidRenderPipeline(device, labelStr);
             }
 
+            std::map<uint32_t, pwgpu::FragmentOutputInfo> fragOutInfos;
+            {
+                std::string reflErr;
+                pwgpu::GetFragmentOutputTypes(fragModuleSrc->spirv, fragEntry, fragOutInfos, reflErr);
+            }
+
             for (size_t i = 0; i < descriptor->fragment->targetCount; ++i)
             {
                 const auto &ct = descriptor->fragment->targets[i];
@@ -2669,11 +2996,73 @@ extern "C"
                     continue;
                 }
 
+                if (pwgpu::IsDepthStencilFormat(ct.format))
+                {
+                    device->reportError(WGPUErrorType_Validation,
+                                        pwgpu::ToStringView("createRenderPipeline: color target format must be a color format, not depth/stencil"));
+                    return MakeInvalidRenderPipeline(device, labelStr);
+                }
+
                 if (!pwgpu::IsRenderableFormat(ct.format))
                 {
                     device->reportError(WGPUErrorType_Validation,
                                         pwgpu::ToStringView("createRenderPipeline: color target format is not renderable"));
                     return MakeInvalidRenderPipeline(device, labelStr);
+                }
+
+                {
+                    auto fmtType = pwgpu::GetColorFormatSampleType(ct.format);
+                    uint32_t fmtChannels = pwgpu::GetColorFormatChannelCount(ct.format);
+                    auto it = fragOutInfos.find(static_cast<uint32_t>(i));
+                    if (it != fragOutInfos.end())
+                    {
+                        const auto &outInfo = it->second;
+                        if (fmtType != pwgpu::ColorSampleType::Unknown &&
+                            outInfo.baseType != pwgpu::ShaderOutputBaseType::Unknown)
+                        {
+                            bool match = false;
+                            switch (fmtType)
+                            {
+                            case pwgpu::ColorSampleType::Float:
+                                match = (outInfo.baseType == pwgpu::ShaderOutputBaseType::Float);
+                                break;
+                            case pwgpu::ColorSampleType::Uint:
+                                match = (outInfo.baseType == pwgpu::ShaderOutputBaseType::Uint);
+                                break;
+                            case pwgpu::ColorSampleType::Sint:
+                                match = (outInfo.baseType == pwgpu::ShaderOutputBaseType::Sint);
+                                break;
+                            default:
+                                match = true;
+                                break;
+                            }
+                            if (!match)
+                            {
+                                device->reportError(
+                                    WGPUErrorType_Validation,
+                                    pwgpu::ToStringView("createRenderPipeline: fragment shader output type "
+                                                        "is incompatible with color target format"));
+                                return MakeInvalidRenderPipeline(device, labelStr);
+                            }
+                        }
+                        if (fmtChannels > 0 && outInfo.vecSize < fmtChannels)
+                        {
+                            device->reportError(
+                                WGPUErrorType_Validation,
+                                pwgpu::ToStringView("createRenderPipeline: fragment shader output has fewer "
+                                                    "components than color target format requires"));
+                            return MakeInvalidRenderPipeline(device, labelStr);
+                        }
+                    }
+                    else if (ct.writeMask != 0)
+                    {
+                        // No shader output at this location — writeMask must be 0
+                        device->reportError(
+                            WGPUErrorType_Validation,
+                            pwgpu::ToStringView("createRenderPipeline: color target has non-zero writeMask "
+                                                "but fragment shader has no output at this location"));
+                        return MakeInvalidRenderPipeline(device, labelStr);
+                    }
                 }
 
                 if (ct.writeMask > 0xF)
@@ -2697,6 +3086,31 @@ extern "C"
                     if (!ValidateBlendComponent(device, ct.blend->color) ||
                         !ValidateBlendComponent(device, ct.blend->alpha))
                         return MakeInvalidRenderPipeline(device, labelStr);
+
+                    auto readsSrcAlpha = [](WGPUBlendFactor f)
+                    {
+                        return f == WGPUBlendFactor_SrcAlpha ||
+                               f == WGPUBlendFactor_OneMinusSrcAlpha ||
+                               f == WGPUBlendFactor_SrcAlphaSaturated;
+                    };
+                    auto colorSrcF = ct.blend->color.srcFactor == WGPUBlendFactor(0)
+                                         ? WGPUBlendFactor_One
+                                         : ct.blend->color.srcFactor;
+                    auto colorDstF = ct.blend->color.dstFactor == WGPUBlendFactor(0)
+                                         ? WGPUBlendFactor_Zero
+                                         : ct.blend->color.dstFactor;
+                    if (readsSrcAlpha(colorSrcF) || readsSrcAlpha(colorDstF))
+                    {
+                        auto outIt = fragOutInfos.find(static_cast<uint32_t>(i));
+                        if (outIt != fragOutInfos.end() && outIt->second.vecSize < 4)
+                        {
+                            device->reportError(
+                                WGPUErrorType_Validation,
+                                pwgpu::ToStringView("createRenderPipeline: color blend factor reads "
+                                                    "src-alpha but fragment output is not vec4"));
+                            return MakeInvalidRenderPipeline(device, labelStr);
+                        }
+                    }
 
                     ba.blendEnable = VK_TRUE;
 
@@ -3139,7 +3553,9 @@ extern "C"
         }
 
         wgpuDeviceAddRef(device);
-        wgpuPipelineLayoutAddRef(pipeLayout);
+        // Auto-built layout already has refCount=1 owned by rp; only AddRef for user-supplied layout.
+        if (!autoLayout)
+            wgpuPipelineLayoutAddRef(pipeLayout);
 
         return rp;
     }
@@ -3148,7 +3564,11 @@ extern "C"
                                                    WGPURenderPipelineDescriptor const *descriptor,
                                                    WGPUCreateRenderPipelineAsyncCallbackInfo callbackInfo)
     {
+        if (device)
+            device->suppressReportError = true;
         WGPURenderPipeline rp = wgpuDeviceCreateRenderPipeline(device, descriptor);
+        if (device)
+            device->suppressReportError = false;
         bool valid = rp && !rp->invalid;
         WGPUInstanceImpl *inst = device ? device->instance : nullptr;
         if (!inst || !callbackInfo.callback)

@@ -9,6 +9,8 @@ bool BglGroupEquivalent(const WGPUBindGroupLayoutImpl *a, const WGPUBindGroupLay
         return true;
     if (!a || !b)
         return false;
+    if (a->exclusivePipeline != nullptr || b->exclusivePipeline != nullptr)
+        return false;
     if (a->entries.size() != b->entries.size())
         return false;
 

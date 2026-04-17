@@ -81,6 +81,7 @@ struct WGPUDeviceImpl
     WGPUUncapturedErrorCallbackInfo uncapturedErrorCallbackInfo{};
     WGPUDeviceLostCallbackInfo deviceLostCallbackInfo{};
     bool destroyed = false;
+    bool suppressReportError = false;
 
     struct PendingTextureDeletion
     {
