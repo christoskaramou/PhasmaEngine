@@ -41,6 +41,22 @@ struct WGPURenderPipelineImpl
     std::vector<VertexBufferLayoutInfo> vertexBufferLayouts;
 };
 
+// Bind-presence without stride arithmetic: indirect draws read counts from a GPU buffer.
+inline bool ValidateDrawBindPresence(const std::vector<VertexBufferLayoutInfo> &layouts,
+                                     const std::vector<VertexBufferBinding> &bindings)
+{
+    for (size_t slot = 0; slot < layouts.size(); ++slot)
+    {
+        const auto &l = layouts[slot];
+        if (!l.used)
+            continue;
+        bool hasBinding = (slot < bindings.size() && bindings[slot].bound);
+        if (!hasBinding)
+            return false;
+    }
+    return true;
+}
+
 inline bool ValidateDrawVertexState(const std::vector<VertexBufferLayoutInfo> &layouts,
                                     const std::vector<VertexBufferBinding> &bindings,
                                     uint32_t firstVertex, uint32_t vertexCount,

@@ -515,6 +515,11 @@ extern "C"
             return;
         if (!ValidateBindGroupCompat(rpe))
             return;
+        if (!ValidateDrawBindPresence(rpe->pipeline->vertexBufferLayouts, rpe->boundVertexBuffers))
+        {
+            rpe->invalid = true;
+            return;
+        }
         if (buffer->internalState == BufferInternalState::Destroyed || !buffer->peBuffer)
         {
             rpe->usedBuffers.push_back(buffer);
@@ -562,6 +567,11 @@ extern "C"
             return;
         if (!ValidateBindGroupCompat(rpe))
             return;
+        if (!ValidateDrawBindPresence(rpe->pipeline->vertexBufferLayouts, rpe->boundVertexBuffers))
+        {
+            rpe->invalid = true;
+            return;
+        }
         if (buffer->internalState == BufferInternalState::Destroyed || !buffer->peBuffer)
         {
             rpe->usedBuffers.push_back(buffer);

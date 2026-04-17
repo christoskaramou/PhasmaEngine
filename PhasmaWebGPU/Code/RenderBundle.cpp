@@ -545,6 +545,11 @@ extern "C"
             return;
         if (!ValidateBindGroupCompat(rbe))
             return;
+        if (!ValidateDrawBindPresence(rbe->pipeline->vertexBufferLayouts, rbe->boundVertexBuffers))
+        {
+            rbe->invalid = true;
+            return;
+        }
 
         wgpuBufferAddRef(buffer);
         rbe->retainedBuffers.push_back(buffer);
@@ -599,6 +604,11 @@ extern "C"
             return;
         if (!ValidateBindGroupCompat(rbe))
             return;
+        if (!ValidateDrawBindPresence(rbe->pipeline->vertexBufferLayouts, rbe->boundVertexBuffers))
+        {
+            rbe->invalid = true;
+            return;
+        }
 
         wgpuBufferAddRef(buffer);
         rbe->retainedBuffers.push_back(buffer);
