@@ -2081,14 +2081,13 @@ extern "C"
     static bool ValidateMultisampleState(WGPUDevice device,
                                          const WGPUMultisampleState &ms)
     {
-        uint32_t count = ms.count ? ms.count : 1;
-        if (count != 1 && count != 4)
+        if (ms.count != 1 && ms.count != 4)
         {
             device->reportError(WGPUErrorType_Validation,
                                 pwgpu::ToStringView("createRenderPipeline: multisample.count must be 1 or 4"));
             return false;
         }
-        if (ms.alphaToCoverageEnabled && count <= 1)
+        if (ms.alphaToCoverageEnabled && ms.count <= 1)
         {
             device->reportError(WGPUErrorType_Validation,
                                 pwgpu::ToStringView("createRenderPipeline: alphaToCoverage requires count > 1"));
@@ -2788,6 +2787,29 @@ extern "C"
             }
             if (!resolveEntry(fragModuleSrc, descriptor->fragment->entryPoint, kExecFragment, "fragment", fragEntry))
                 return MakeInvalidRenderPipeline(device, labelStr);
+
+            pwgpu::FragmentOutputBuiltins fragBuiltins;
+            {
+                std::string bErr;
+                pwgpu::GetFragmentOutputBuiltins(fragModuleSrc->spirv, fragEntry, fragBuiltins, bErr);
+            }
+            if (fragBuiltins.hasFragDepth)
+            {
+                const bool hasDepthAspect =
+                    hasDepthStencil && pwgpu::HasDepthAspect(descriptor->depthStencil->format);
+                if (!hasDepthAspect)
+                {
+                    device->reportError(WGPUErrorType_Validation,
+                                        pwgpu::ToStringView("createRenderPipeline: fragment shader writes @builtin(frag_depth) but depthStencil format lacks a depth aspect"));
+                    return MakeInvalidRenderPipeline(device, labelStr);
+                }
+            }
+            if (fragBuiltins.hasSampleMask && descriptor->multisample.alphaToCoverageEnabled)
+            {
+                device->reportError(WGPUErrorType_Validation,
+                                    pwgpu::ToStringView("createRenderPipeline: fragment shader writes @builtin(sample_mask) with alphaToCoverageEnabled"));
+                return MakeInvalidRenderPipeline(device, labelStr);
+            }
         }
 
         if (autoLayout)

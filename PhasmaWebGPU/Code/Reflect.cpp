@@ -423,47 +423,101 @@ namespace pwgpu
                     {
                         uint32_t set = compiler.get_decoration(r.id, spv::DecorationDescriptorSet);
                         uint32_t binding = compiler.get_decoration(r.id, spv::DecorationBinding);
-                        auto err = checkBinding(set, binding, typeCheck);
+                        auto err = checkBinding(set, binding,
+                                                [&](const WGPUBindGroupLayoutEntryResolved &e)
+                                                { return typeCheck(e, r); });
                         if (!err.empty())
                             return err;
                     }
                     return "";
                 };
 
-                // Unused-member sentinels are `*_BindingNotUsed` (0) from zero-init
-                // and `*_Undefined` (1) from defaulting — both mean "not this kind".
-                auto isUniformBuf = [](const WGPUBindGroupLayoutEntryResolved &e) -> std::string
+                // Compatibility rules per WebGPU spec / CTS utils.ts::doResourcesMatch.
+                auto matchSampleType = [](WGPUTextureSampleType api, WGPUTextureSampleType wgsl)
+                {
+                    if (api == WGPUTextureSampleType_Float ||
+                        api == WGPUTextureSampleType_UnfilterableFloat)
+                        return wgsl == WGPUTextureSampleType_Float ||
+                               wgsl == WGPUTextureSampleType_UnfilterableFloat;
+                    return api == wgsl;
+                };
+                auto matchStorageAccess = [](WGPUStorageTextureAccess api, WGPUStorageTextureAccess wgsl)
+                {
+                    if (api == WGPUStorageTextureAccess_ReadWrite)
+                        return wgsl == WGPUStorageTextureAccess_ReadWrite ||
+                               wgsl == WGPUStorageTextureAccess_WriteOnly;
+                    return api == wgsl;
+                };
+
+                // BindingNotUsed (zero-init) and Undefined (user-default) both mean "not this kind".
+                auto isUniformBuf = [](const WGPUBindGroupLayoutEntryResolved &e,
+                                       const spirv_cross::Resource &) -> std::string
                 {
                     if (e.buffer.type != WGPUBufferBindingType_Uniform)
                         return "binding type mismatch: shader expects uniform buffer";
                     return "";
                 };
-                auto isStorageBuf = [](const WGPUBindGroupLayoutEntryResolved &e) -> std::string
+                auto isStorageBuf = [&](const WGPUBindGroupLayoutEntryResolved &e,
+                                        const spirv_cross::Resource &r) -> std::string
                 {
                     if (e.buffer.type != WGPUBufferBindingType_Storage &&
                         e.buffer.type != WGPUBufferBindingType_ReadOnlyStorage)
                         return "binding type mismatch: shader expects storage buffer";
+                    spirv_cross::Bitset flags = compiler.get_buffer_block_flags(r.id);
+                    bool shaderReadOnly = flags.get(spv::DecorationNonWritable);
+                    bool layoutReadOnly = (e.buffer.type == WGPUBufferBindingType_ReadOnlyStorage);
+                    if (shaderReadOnly != layoutReadOnly)
+                        return "binding type mismatch: storage buffer access (read-only vs read-write) differs between shader and layout";
                     return "";
                 };
-                auto isSampler = [](const WGPUBindGroupLayoutEntryResolved &e) -> std::string
+                auto isSampler = [](const WGPUBindGroupLayoutEntryResolved &e,
+                                    const spirv_cross::Resource &) -> std::string
                 {
                     if (e.sampler.type == WGPUSamplerBindingType_BindingNotUsed ||
                         e.sampler.type == WGPUSamplerBindingType_Undefined)
                         return "binding type mismatch: shader expects sampler, layout has non-sampler";
                     return "";
                 };
-                auto isSampledTex = [](const WGPUBindGroupLayoutEntryResolved &e) -> std::string
+                auto isSampledTex = [&](const WGPUBindGroupLayoutEntryResolved &e,
+                                        const spirv_cross::Resource &r) -> std::string
                 {
                     if (e.texture.sampleType == WGPUTextureSampleType_BindingNotUsed ||
                         e.texture.sampleType == WGPUTextureSampleType_Undefined)
                         return "binding type mismatch: shader expects sampled texture, layout has non-texture";
+                    const auto &t = compiler.get_type(r.type_id);
+                    WGPUTextureSampleType wgslSampleType = SampleTypeFromSpirv(compiler, t);
+                    WGPUTextureViewDimension wgslDim = DimensionFromSpirv(t);
+                    uint32_t wgslMs = t.image.ms ? 1u : 0u;
+                    if (!matchSampleType(e.texture.sampleType, wgslSampleType))
+                        return "binding type mismatch: sampled texture sampleType differs between shader and layout";
+                    if (e.texture.viewDimension != wgslDim)
+                        return "binding type mismatch: sampled texture viewDimension differs between shader and layout";
+                    if (e.texture.multisampled != wgslMs)
+                        return "binding type mismatch: sampled texture multisampled differs between shader and layout";
                     return "";
                 };
-                auto isStorageTex = [](const WGPUBindGroupLayoutEntryResolved &e) -> std::string
+                auto isStorageTex = [&](const WGPUBindGroupLayoutEntryResolved &e,
+                                        const spirv_cross::Resource &r) -> std::string
                 {
                     if (e.storageTexture.access == WGPUStorageTextureAccess_BindingNotUsed ||
                         e.storageTexture.access == WGPUStorageTextureAccess_Undefined)
                         return "binding type mismatch: shader expects storage texture, layout has non-storage-texture";
+                    const auto &t = compiler.get_type(r.type_id);
+                    spirv_cross::Bitset flags = compiler.get_decoration_bitset(r.id);
+                    bool readOnly = flags.get(spv::DecorationNonWritable);
+                    bool writeOnly = flags.get(spv::DecorationNonReadable);
+                    WGPUStorageTextureAccess wgslAccess =
+                        readOnly    ? WGPUStorageTextureAccess_ReadOnly
+                        : writeOnly ? WGPUStorageTextureAccess_WriteOnly
+                                    : WGPUStorageTextureAccess_ReadWrite;
+                    WGPUTextureFormat wgslFormat = StorageFormatFromSpirv(t.image.format);
+                    WGPUTextureViewDimension wgslDim = DimensionFromSpirv(t);
+                    if (!matchStorageAccess(e.storageTexture.access, wgslAccess))
+                        return "binding type mismatch: storage texture access differs between shader and layout";
+                    if (e.storageTexture.format != wgslFormat)
+                        return "binding type mismatch: storage texture format differs between shader and layout";
+                    if (e.storageTexture.viewDimension != wgslDim)
+                        return "binding type mismatch: storage texture viewDimension differs between shader and layout";
                     return "";
                 };
 
@@ -844,6 +898,44 @@ namespace pwgpu
             {
                 if (kInterStageBuiltins.count(bir.builtin))
                     ++outCount;
+            }
+            return true;
+        }
+        catch (const std::exception &e)
+        {
+            errMsg = e.what();
+            return false;
+        }
+        catch (...)
+        {
+            errMsg = "unknown error";
+            return false;
+        }
+    }
+
+    bool GetFragmentOutputBuiltins(const std::vector<uint32_t> &spirv,
+                                   const std::string &entryPoint,
+                                   FragmentOutputBuiltins &out,
+                                   std::string &errMsg)
+    {
+        out = {};
+        if (spirv.empty())
+        {
+            errMsg = "empty SPIR-V";
+            return false;
+        }
+        try
+        {
+            spirv_cross::Compiler compiler{spirv.data(), spirv.size()};
+            if (!entryPoint.empty())
+                compiler.set_entry_point(entryPoint, spv::ExecutionModelFragment);
+            const auto &res = compiler.get_shader_resources();
+            for (const auto &bor : res.builtin_outputs)
+            {
+                if (bor.builtin == spv::BuiltInFragDepth)
+                    out.hasFragDepth = true;
+                else if (bor.builtin == spv::BuiltInSampleMask)
+                    out.hasSampleMask = true;
             }
             return true;
         }

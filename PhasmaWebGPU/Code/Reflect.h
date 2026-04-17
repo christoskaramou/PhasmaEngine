@@ -99,4 +99,14 @@ namespace pwgpu
                                          const std::string &entryPoint,
                                          uint32_t &outCount,
                                          std::string &errMsg);
+
+    struct FragmentOutputBuiltins
+    {
+        bool hasFragDepth = false;
+        bool hasSampleMask = false;
+    };
+    bool GetFragmentOutputBuiltins(const std::vector<uint32_t> &spirv,
+                                   const std::string &entryPoint,
+                                   FragmentOutputBuiltins &out,
+                                   std::string &errMsg);
 } // namespace pwgpu
