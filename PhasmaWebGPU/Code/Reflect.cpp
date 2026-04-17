@@ -379,9 +379,6 @@ namespace pwgpu
                 if (!stageIn.entryPoint.empty())
                     compiler.set_entry_point(stageIn.entryPoint,
                                              static_cast<spv::ExecutionModel>(stageIn.executionModel));
-                // Not filtered by active-interface: Naga lowers `_ = res;` to a no-op
-                // so spirv-cross marks such bindings inactive even though WGSL treats
-                // them as statically used.
                 spirv_cross::ShaderResources res = compiler.get_shader_resources();
 
                 // Look up the BGL entry for (set, binding), check visibility and type.
@@ -423,6 +420,9 @@ namespace pwgpu
                     {
                         uint32_t set = compiler.get_decoration(r.id, spv::DecorationDescriptorSet);
                         uint32_t binding = compiler.get_decoration(r.id, spv::DecorationBinding);
+                        if (stageIn.staticallyUsed &&
+                            stageIn.staticallyUsed->count(BindingKey{set, binding}) == 0)
+                            continue;
                         auto err = checkBinding(set, binding,
                                                 [&](const WGPUBindGroupLayoutEntryResolved &e)
                                                 { return typeCheck(e, r); });
@@ -470,12 +470,21 @@ namespace pwgpu
                         return "binding type mismatch: storage buffer access (read-only vs read-write) differs between shader and layout";
                     return "";
                 };
-                auto isSampler = [](const WGPUBindGroupLayoutEntryResolved &e,
-                                    const spirv_cross::Resource &) -> std::string
+                auto isSampler = [&](const WGPUBindGroupLayoutEntryResolved &e,
+                                     const spirv_cross::Resource &r) -> std::string
                 {
                     if (e.sampler.type == WGPUSamplerBindingType_BindingNotUsed ||
                         e.sampler.type == WGPUSamplerBindingType_Undefined)
                         return "binding type mismatch: shader expects sampler, layout has non-sampler";
+                    if (stageIn.comparisonSamplers)
+                    {
+                        uint32_t set = compiler.get_decoration(r.id, spv::DecorationDescriptorSet);
+                        uint32_t binding = compiler.get_decoration(r.id, spv::DecorationBinding);
+                        bool shaderCmp = stageIn.comparisonSamplers->count(BindingKey{set, binding}) != 0;
+                        bool layoutCmp = (e.sampler.type == WGPUSamplerBindingType_Comparison);
+                        if (shaderCmp != layoutCmp)
+                            return "binding type mismatch: sampler comparison-ness differs between shader and layout";
+                    }
                     return "";
                 };
                 auto isSampledTex = [&](const WGPUBindGroupLayoutEntryResolved &e,

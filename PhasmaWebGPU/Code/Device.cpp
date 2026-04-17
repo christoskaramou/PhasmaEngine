@@ -21,6 +21,29 @@
 
 namespace
 {
+    void AttachReflectionToStage(pwgpu::LayoutCompatStageInput &stage,
+                                 const WGPUShaderModuleImpl *module,
+                                 std::set<pwgpu::BindingKey> &usedOut,
+                                 std::set<pwgpu::BindingKey> &cmpOut,
+                                 const std::string &entryPoint)
+    {
+        if (!module || !module->reflection.present)
+            return;
+        for (const auto &b : module->reflection.comparisonSamplers)
+            cmpOut.insert({b.group, b.binding});
+        for (const auto &ep : module->reflection.entryPoints)
+        {
+            if (ep.name == entryPoint)
+            {
+                for (const auto &b : ep.staticallyUsed)
+                    usedOut.insert({b.group, b.binding});
+                break;
+            }
+        }
+        stage.staticallyUsed = &usedOut;
+        stage.comparisonSamplers = &cmpOut;
+    }
+
     bool DeviceCanCreate(WGPUDeviceImpl *device, const void *descriptor,
                          const char *apiName, bool requireDescriptor)
     {
@@ -2425,6 +2448,8 @@ extern "C"
             compatStages[0].entryPoint = entryPointName;
             compatStages[0].executionModel = kExecCompute;
             compatStages[0].stage = WGPUShaderStage_Compute;
+            std::set<pwgpu::BindingKey> csUsed, csCmp;
+            AttachReflectionToStage(compatStages[0], shaderModule, csUsed, csCmp, entryPointName);
             std::string compatErr = pwgpu::ValidateExplicitLayoutCompat(pipeLayout, compatStages);
             if (!compatErr.empty())
             {
@@ -2845,6 +2870,10 @@ extern "C"
             if (hasFragment)
                 compatStages.push_back(
                     {&fragModuleSrc->spirv, fragEntry, kExecFragment, WGPUShaderStage_Fragment});
+            std::set<pwgpu::BindingKey> vsUsed, vsCmp, fsUsed, fsCmp;
+            AttachReflectionToStage(compatStages[0], vertModule, vsUsed, vsCmp, vertEntry);
+            if (hasFragment)
+                AttachReflectionToStage(compatStages[1], fragModuleSrc, fsUsed, fsCmp, fragEntry);
             std::string compatErr = pwgpu::ValidateExplicitLayoutCompat(pipeLayout, compatStages);
             if (!compatErr.empty())
             {

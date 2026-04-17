@@ -122,4 +122,55 @@ extern "C"
             sm->label = pwgpu::ToString(label);
     }
 
+    // WGSL frontend pushes reflection meta in here via flat (group, binding) pairs.
+
+#if defined(_WIN32)
+#define PWGPU_EXT_EXPORT __declspec(dllexport)
+#else
+#define PWGPU_EXT_EXPORT __attribute__((visibility("default")))
+#endif
+
+    PWGPU_EXT_EXPORT void pwgpuShaderModuleResetReflection(WGPUShaderModule sm)
+    {
+        if (!sm)
+            return;
+        sm->reflection = WGPUShaderReflectionMeta{};
+        sm->reflection.present = true;
+    }
+
+    PWGPU_EXT_EXPORT void pwgpuShaderModuleSetComparisonSamplers(WGPUShaderModule sm,
+                                                                 const uint32_t *pairs,
+                                                                 uint32_t pairCount)
+    {
+        if (!sm)
+            return;
+        sm->reflection.comparisonSamplers.clear();
+        sm->reflection.comparisonSamplers.reserve(pairCount);
+        for (uint32_t i = 0; i < pairCount; ++i)
+        {
+            sm->reflection.comparisonSamplers.push_back(
+                WGPUShaderReflectionMeta::Binding{pairs[2 * i], pairs[2 * i + 1]});
+        }
+    }
+
+    PWGPU_EXT_EXPORT void pwgpuShaderModuleAddEntryPointUsed(WGPUShaderModule sm,
+                                                             const char *name,
+                                                             const char *stage,
+                                                             const uint32_t *pairs,
+                                                             uint32_t pairCount)
+    {
+        if (!sm || !name || !stage)
+            return;
+        WGPUShaderReflectionMeta::EntryPoint ep;
+        ep.name = name;
+        ep.stage = stage;
+        ep.staticallyUsed.reserve(pairCount);
+        for (uint32_t i = 0; i < pairCount; ++i)
+        {
+            ep.staticallyUsed.push_back(
+                WGPUShaderReflectionMeta::Binding{pairs[2 * i], pairs[2 * i + 1]});
+        }
+        sm->reflection.entryPoints.push_back(std::move(ep));
+    }
+
 } // extern "C"

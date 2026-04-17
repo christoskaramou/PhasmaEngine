@@ -15,6 +15,27 @@ struct WGPUCompilationMessageStorage
     uint64_t length = 0;
 };
 
+// Side-channel info the WGSL frontend provides that SPIR-V cannot express:
+// sampler vs sampler_comparison, and statically-used bindings (naga drops
+// phony-assignment references before SPIR-V codegen).
+struct WGPUShaderReflectionMeta
+{
+    struct Binding
+    {
+        uint32_t group = 0;
+        uint32_t binding = 0;
+    };
+    struct EntryPoint
+    {
+        std::string name;
+        std::string stage;
+        std::vector<Binding> staticallyUsed;
+    };
+    std::vector<EntryPoint> entryPoints;
+    std::vector<Binding> comparisonSamplers;
+    bool present = false;
+};
+
 struct WGPUShaderModuleImpl
 {
     std::atomic<uint32_t> refCount{1};
@@ -31,6 +52,8 @@ struct WGPUShaderModuleImpl
         std::string name;
     };
     std::vector<EntryPoint> entryPoints;
+
+    WGPUShaderReflectionMeta reflection;
 };
 
 namespace pwgpu
