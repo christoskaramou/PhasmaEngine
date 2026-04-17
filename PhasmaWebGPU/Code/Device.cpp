@@ -3266,8 +3266,6 @@ extern "C"
             return qs;
         };
 
-        if (descriptor->count == 0)
-            return makeInvalid("createQuerySet: count must be > 0");
         if (descriptor->count > 4096)
             return makeInvalid("createQuerySet: count exceeds maxQueryCount");
 
@@ -3284,15 +3282,19 @@ extern "C"
             return makeInvalid("createQuerySet: unsupported query type");
         }
 
-        vk::QueryPoolCreateInfo ci{};
-        ci.queryType = vkType;
-        ci.queryCount = descriptor->count;
+        vk::QueryPool pool{};
+        if (descriptor->count > 0)
+        {
+            vk::QueryPoolCreateInfo ci{};
+            ci.queryType = vkType;
+            ci.queryCount = descriptor->count;
 
-        vk::QueryPool pool = device->rhi->GetDevice().createQueryPool(ci);
-        if (!pool)
-            return makeInvalid("createQuerySet: VkQueryPool creation failed");
+            pool = device->rhi->GetDevice().createQueryPool(ci);
+            if (!pool)
+                return makeInvalid("createQuerySet: VkQueryPool creation failed");
 
-        device->rhi->GetDevice().resetQueryPool(pool, 0, descriptor->count);
+            device->rhi->GetDevice().resetQueryPool(pool, 0, descriptor->count);
+        }
 
         auto *qs = new WGPUQuerySetImpl();
         qs->device = device;

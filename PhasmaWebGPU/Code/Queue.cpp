@@ -6,6 +6,7 @@
 #include "CommandEncoder.h"
 #include "FormatMap.h"
 #include "Instance.h"
+#include "QuerySet.h"
 #include "Utils.h"
 #include "API/Command.h"
 #include "API/Queue.h"
@@ -229,6 +230,50 @@ extern "C"
                 }
             }
             if (bgResourceBad)
+                continue;
+
+            bool bundleBufferBad = false;
+            for (auto *rb : cb->retained.renderBundles)
+            {
+                if (!rb)
+                    continue;
+                for (auto *buf : rb->retainedBuffers)
+                {
+                    if (!buf)
+                        continue;
+                    std::lock_guard<std::mutex> lock(buf->stateMutex);
+                    if (buf->internalState != BufferInternalState::Available)
+                    {
+                        bundleBufferBad = true;
+                        if (queue->device)
+                            queue->device->reportError(
+                                WGPUErrorType_Validation,
+                                pwgpu::ToStringView(
+                                    "Submit: render bundle references a destroyed buffer"));
+                        break;
+                    }
+                }
+                if (bundleBufferBad)
+                    break;
+            }
+            if (bundleBufferBad)
+                continue;
+
+            bool querySetBad = false;
+            for (auto *qs : cb->retained.querySets)
+            {
+                if (qs && qs->destroyed)
+                {
+                    querySetBad = true;
+                    if (queue->device)
+                        queue->device->reportError(
+                            WGPUErrorType_Validation,
+                            pwgpu::ToStringView(
+                                "Submit: command buffer references a destroyed query set"));
+                    break;
+                }
+            }
+            if (querySetBad)
                 continue;
 
             cb->submitted = true;

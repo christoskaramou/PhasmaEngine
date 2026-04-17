@@ -356,11 +356,6 @@ extern "C"
             rbe->invalid = true;
             return;
         }
-        if (buffer->internalState == BufferInternalState::Destroyed)
-        {
-            rbe->invalid = true;
-            return;
-        }
         if (!(buffer->usage & WGPUBufferUsage_Vertex))
         {
             rbe->invalid = true;
@@ -397,11 +392,6 @@ extern "C"
             return;
         }
         if (buffer->device != rbe->device || buffer->invalid)
-        {
-            rbe->invalid = true;
-            return;
-        }
-        if (buffer->internalState == BufferInternalState::Destroyed)
         {
             rbe->invalid = true;
             return;
@@ -519,11 +509,6 @@ extern "C"
             rbe->invalid = true;
             return;
         }
-        if (buffer->internalState == BufferInternalState::Destroyed)
-        {
-            rbe->invalid = true;
-            return;
-        }
         if (!(buffer->usage & WGPUBufferUsage_Indirect))
         {
             rbe->invalid = true;
@@ -574,11 +559,6 @@ extern "C"
             return;
         }
         if (buffer->device != rbe->device || buffer->invalid)
-        {
-            rbe->invalid = true;
-            return;
-        }
-        if (buffer->internalState == BufferInternalState::Destroyed)
         {
             rbe->invalid = true;
             return;

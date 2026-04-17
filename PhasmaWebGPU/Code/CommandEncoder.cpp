@@ -1738,29 +1738,53 @@ extern "C"
     {
         if (!EncoderOpen(enc, "wgpuCommandEncoderResolveQuerySet"))
             return;
-        if (!querySet || !querySet->queryPool)
+
+        if (!querySet || querySet->invalid || querySet->device != enc->device)
+        {
+            enc->invalid = true;
             return;
-        if (!dst || !dst->peBuffer ||
-            dst->internalState == BufferInternalState::Destroyed)
+        }
+        if (!dst || dst->invalid || dst->device != enc->device)
+        {
+            enc->invalid = true;
             return;
+        }
         if (!(dst->usage & WGPUBufferUsage_QueryResolve))
+        {
+            enc->invalid = true;
             return;
-        if (firstQuery + queryCount > querySet->count)
+        }
+        if (static_cast<uint64_t>(firstQuery) + static_cast<uint64_t>(queryCount) > querySet->count)
+        {
+            enc->invalid = true;
             return;
+        }
         if (dstOffset % 256 != 0)
+        {
+            enc->invalid = true;
             return;
-        if (dstOffset + queryCount * 8 > dst->size)
+        }
+        if (static_cast<uint64_t>(queryCount) * 8 > dst->size ||
+            dstOffset > dst->size - static_cast<uint64_t>(queryCount) * 8)
+        {
+            enc->invalid = true;
             return;
+        }
 
         wgpuQuerySetAddRef(querySet);
         enc->retained.querySets.push_back(querySet);
+        enc->retained.usedBuffers.push_back(dst);
+
+        // Destroyed resources defer to queue.submit() per spec.
+        if (querySet->destroyed || !querySet->queryPool ||
+            dst->internalState == BufferInternalState::Destroyed || !dst->peBuffer)
+            return;
 
         enc->cmd->ApiHandle().copyQueryPoolResults(
             querySet->queryPool, firstQuery, queryCount,
             dst->peBuffer->ApiHandle(), dstOffset,
-            sizeof(uint64_t), vk::QueryResultFlagBits::e64 | vk::QueryResultFlagBits::eWait);
+            sizeof(uint64_t), vk::QueryResultFlagBits::e64);
         enc->cmd->ApiHandle().resetQueryPool(querySet->queryPool, firstQuery, queryCount);
-        enc->retained.usedBuffers.push_back(dst);
     }
 
     void wgpuCommandEncoderWriteTimestamp(WGPUCommandEncoder enc, WGPUQuerySet querySet, uint32_t queryIndex)

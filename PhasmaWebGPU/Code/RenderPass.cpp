@@ -652,37 +652,34 @@ extern "C"
 
         if (!rpe->occlusionQuerySet)
         {
-            PE_WARN("[WebGPU] beginOcclusionQuery: no occlusionQuerySet was provided at render pass creation");
+            rpe->invalid = true;
             return;
         }
-
+        if (rpe->occlusionQueryActive)
+        {
+            rpe->invalid = true;
+            return;
+        }
         if (queryIndex >= rpe->occlusionQuerySet->count)
         {
-            PE_WARN("[WebGPU] beginOcclusionQuery: queryIndex %u >= querySet count %u",
-                    queryIndex, rpe->occlusionQuerySet->count);
+            rpe->invalid = true;
             return;
         }
-
         for (uint32_t used : rpe->usedOcclusionIndices)
         {
             if (used == queryIndex)
             {
-                PE_WARN("[WebGPU] beginOcclusionQuery: queryIndex %u already used in this pass", queryIndex);
+                rpe->invalid = true;
                 return;
             }
-        }
-
-        if (rpe->occlusionQueryActive)
-        {
-            PE_WARN("[WebGPU] beginOcclusionQuery: an occlusion query is already active");
-            return;
         }
 
         rpe->occlusionQueryActive = true;
         rpe->usedOcclusionIndices.push_back(queryIndex);
 
-        rpe->cmd->ApiHandle().beginQuery(
-            rpe->occlusionQuerySet->queryPool, queryIndex, vk::QueryControlFlags{});
+        if (rpe->occlusionQuerySet->queryPool)
+            rpe->cmd->ApiHandle().beginQuery(
+                rpe->occlusionQuerySet->queryPool, queryIndex, vk::QueryControlFlags{});
     }
 
     void wgpuRenderPassEncoderEndOcclusionQuery(WGPURenderPassEncoder rpe)
@@ -692,15 +689,16 @@ extern "C"
 
         if (!rpe->occlusionQueryActive)
         {
-            PE_WARN("[WebGPU] endOcclusionQuery: no occlusion query is currently active");
+            rpe->invalid = true;
             return;
         }
 
         rpe->occlusionQueryActive = false;
 
         uint32_t lastIndex = rpe->usedOcclusionIndices.back();
-        rpe->cmd->ApiHandle().endQuery(
-            rpe->occlusionQuerySet->queryPool, lastIndex);
+        if (rpe->occlusionQuerySet && rpe->occlusionQuerySet->queryPool)
+            rpe->cmd->ApiHandle().endQuery(
+                rpe->occlusionQuerySet->queryPool, lastIndex);
     }
 
     void wgpuRenderPassEncoderExecuteBundles(WGPURenderPassEncoder rpe,
