@@ -1808,21 +1808,45 @@ extern "C"
             dst->internalState == BufferInternalState::Destroyed || !dst->peBuffer)
             return;
 
-        vk::MemoryBarrier2 mb{};
-        mb.srcStageMask = vk::PipelineStageFlagBits2::eAllCommands;
-        mb.srcAccessMask = vk::AccessFlagBits2::eMemoryWrite;
-        mb.dstStageMask = vk::PipelineStageFlagBits2::eCopy;
-        mb.dstAccessMask = vk::AccessFlagBits2::eTransferRead | vk::AccessFlagBits2::eTransferWrite;
+        // eWait on an unbegun query stalls forever; zero-fill the range and eWait-copy
+        // only begun indices so unused slots resolve to 0 per WebGPU §23.6.
+        enc->cmd->ApiHandle().fillBuffer(
+            dst->peBuffer->ApiHandle(), dstOffset,
+            static_cast<uint64_t>(queryCount) * sizeof(uint64_t), 0u);
+
+        vk::MemoryBarrier2 fillToCopy{};
+        fillToCopy.srcStageMask = vk::PipelineStageFlagBits2::eClear;
+        fillToCopy.srcAccessMask = vk::AccessFlagBits2::eTransferWrite;
+        fillToCopy.dstStageMask = vk::PipelineStageFlagBits2::eCopy;
+        fillToCopy.dstAccessMask = vk::AccessFlagBits2::eTransferWrite;
+        vk::MemoryBarrier2 workToCopy{};
+        workToCopy.srcStageMask = vk::PipelineStageFlagBits2::eAllCommands;
+        workToCopy.srcAccessMask = vk::AccessFlagBits2::eMemoryWrite;
+        workToCopy.dstStageMask = vk::PipelineStageFlagBits2::eCopy;
+        workToCopy.dstAccessMask = vk::AccessFlagBits2::eTransferRead | vk::AccessFlagBits2::eTransferWrite;
+        vk::MemoryBarrier2 mbs[2] = {fillToCopy, workToCopy};
         vk::DependencyInfo dep{};
-        dep.memoryBarrierCount = 1;
-        dep.pMemoryBarriers = &mb;
+        dep.memoryBarrierCount = 2;
+        dep.pMemoryBarriers = mbs;
         enc->cmd->ApiHandle().pipelineBarrier2(dep);
 
-        enc->cmd->ApiHandle().copyQueryPoolResults(
-            querySet->queryPool, firstQuery, queryCount,
-            dst->peBuffer->ApiHandle(), dstOffset,
-            sizeof(uint64_t),
-            vk::QueryResultFlagBits::e64 | vk::QueryResultFlagBits::eWait);
+        auto it = enc->occlusionQueriesBegun.find(querySet);
+        if (it != enc->occlusionQueriesBegun.end())
+        {
+            const uint32_t rangeEnd = firstQuery + queryCount;
+            for (uint32_t idx : it->second)
+            {
+                if (idx < firstQuery || idx >= rangeEnd)
+                    continue;
+                const uint64_t slotOffset = dstOffset +
+                                            static_cast<uint64_t>(idx - firstQuery) * sizeof(uint64_t);
+                enc->cmd->ApiHandle().copyQueryPoolResults(
+                    querySet->queryPool, idx, 1,
+                    dst->peBuffer->ApiHandle(), slotOffset,
+                    sizeof(uint64_t),
+                    vk::QueryResultFlagBits::e64 | vk::QueryResultFlagBits::eWait);
+            }
+        }
     }
 
     void wgpuCommandEncoderWriteTimestamp(WGPUCommandEncoder enc, WGPUQuerySet querySet, uint32_t queryIndex)

@@ -54,4 +54,5 @@ struct WGPUCommandEncoderImpl
     uint32_t debugGroupDepth = 0;
     RetainedResources retained;
     std::vector<WGPUQuerySetImpl *> resetOcclusionQuerySets;
+    std::unordered_map<WGPUQuerySetImpl *, std::vector<uint32_t>> occlusionQueriesBegun;
 };

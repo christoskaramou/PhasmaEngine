@@ -729,6 +729,8 @@ extern "C"
 
         rpe->occlusionQueryActive = true;
         rpe->usedOcclusionIndices.push_back(queryIndex);
+        if (rpe->parent)
+            rpe->parent->occlusionQueriesBegun[rpe->occlusionQuerySet].push_back(queryIndex);
 
         if (rpe->occlusionQuerySet->queryPool)
             rpe->cmd->ApiHandle().beginQuery(
