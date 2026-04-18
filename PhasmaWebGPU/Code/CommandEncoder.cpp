@@ -952,6 +952,11 @@ extern "C"
         vk::Rect2D defaultScissor{{0, 0}, {attachW, attachH}};
         enc->cmd->ApiHandle().setScissor(0, 1, &defaultScissor);
 
+        // Vulkan dynamic state persists across begin/endRendering; WebGPU §14 resets at pass start.
+        const float zeroBlend[4] = {0.0f, 0.0f, 0.0f, 0.0f};
+        enc->cmd->ApiHandle().setBlendConstants(zeroBlend);
+        enc->cmd->ApiHandle().setStencilReference(vk::StencilFaceFlagBits::eFrontAndBack, 0);
+
         enc->hasOpenPass = true;
         return rpe;
     }

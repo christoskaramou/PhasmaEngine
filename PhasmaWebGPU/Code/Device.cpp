@@ -968,6 +968,13 @@ extern "C"
 
         if (!vkUsage)
             vkUsage = vk::ImageUsageFlagBits::eTransferSrc;
+
+        // WebGPU §5.2 zero-init on first use; vkCmdClearColor/DepthStencilImage needs eTransferDst
+        // and does not support MSAA images.
+        const bool zeroInitViaClearImage = (samples == 1);
+        if (zeroInitViaClearImage)
+            vkUsage |= vk::ImageUsageFlagBits::eTransferDst;
+
         ci.usage = vkUsage;
 
         if (dim == WGPUTextureDimension_2D && w == h && d >= 6 && (d % 6 == 0))
@@ -1002,6 +1009,65 @@ extern "C"
             device->reportError(WGPUErrorType_OutOfMemory, pwgpu::ToStringView(msg));
             tex->invalid = true;
             return tex;
+        }
+
+        if (zeroInitViaClearImage && device->queue && device->queue->peQueue)
+        {
+            pe::CommandBuffer *cmd = device->queue->peQueue->AcquireCommandBuffer();
+            cmd->Begin();
+
+            pe::ImageBarrierInfo toTransfer{};
+            toTransfer.image = tex->image;
+            toTransfer.layout = vk::ImageLayout::eTransferDstOptimal;
+            toTransfer.stageFlags = vk::PipelineStageFlagBits2::eTransfer;
+            toTransfer.accessMask = vk::AccessFlagBits2::eTransferWrite;
+            toTransfer.baseMipLevel = 0;
+            toTransfer.mipLevels = ci.mipLevels;
+            toTransfer.baseArrayLayer = 0;
+            toTransfer.arrayLayers = ci.arrayLayers;
+            cmd->ImageBarrier(toTransfer);
+
+            vk::ImageSubresourceRange range{};
+            range.baseMipLevel = 0;
+            range.levelCount = ci.mipLevels;
+            range.baseArrayLayer = 0;
+            range.layerCount = ci.arrayLayers;
+
+            if (pwgpu::IsDepthStencilFormat(fmt))
+            {
+                vk::ImageAspectFlags aspect{};
+                if (pwgpu::HasDepthAspect(fmt))
+                    aspect |= vk::ImageAspectFlagBits::eDepth;
+                if (pwgpu::HasStencilAspect(fmt))
+                    aspect |= vk::ImageAspectFlagBits::eStencil;
+                range.aspectMask = aspect;
+                vk::ClearDepthStencilValue dsValue{0.0f, 0u};
+                cmd->ApiHandle().clearDepthStencilImage(tex->image->ApiHandle(),
+                                                        vk::ImageLayout::eTransferDstOptimal,
+                                                        &dsValue, 1, &range);
+            }
+            else
+            {
+                range.aspectMask = vk::ImageAspectFlagBits::eColor;
+                vk::ClearColorValue colorValue{};
+                colorValue.float32[0] = 0.0f;
+                colorValue.float32[1] = 0.0f;
+                colorValue.float32[2] = 0.0f;
+                colorValue.float32[3] = 0.0f;
+                cmd->ApiHandle().clearColorImage(tex->image->ApiHandle(),
+                                                 vk::ImageLayout::eTransferDstOptimal,
+                                                 &colorValue, 1, &range);
+            }
+
+            cmd->End();
+            device->queue->peQueue->Submit(1, &cmd, nullptr, nullptr);
+            const uint64_t serial = device->queue->peQueue->GetSubmissionCount();
+            {
+                std::lock_guard<std::mutex> lock(device->queue->pendingMutex);
+                device->queue->pendingSubmits.push_back({cmd, serial});
+            }
+            device->queue->lastSubmissionSerial.store(serial, std::memory_order_release);
+            tex->lastUsageSerial.store(serial, std::memory_order_release);
         }
 
         return tex;
