@@ -269,6 +269,15 @@ extern "C"
     {
         WGPUInstanceImpl *inst = (buffer && buffer->device) ? buffer->device->instance : nullptr;
 
+        std::shared_ptr<WGPUBufferImpl> bufferLifeGuard;
+        if (buffer)
+        {
+            wgpuBufferAddRef(buffer);
+            bufferLifeGuard = std::shared_ptr<WGPUBufferImpl>(
+                buffer, [](WGPUBufferImpl *b)
+                { wgpuBufferRelease(b); });
+        }
+
         auto trackMapErrorDeferred = [&](const char *msg) -> WGPUFuture
         {
             if (!inst || !callbackInfo.callback)
@@ -282,8 +291,9 @@ extern "C"
                 deferredMode = WGPUCallbackMode_AllowProcessEvents;
             return inst->futures.TrackEvent(
                 deferredMode,
-                [cb, u1, u2, captured, buffer]()
+                [cb, u1, u2, captured, bufferLifeGuard]()
                 {
+                    WGPUBufferImpl *buffer = bufferLifeGuard.get();
                     {
                         std::lock_guard<std::mutex> lock(buffer->stateMutex);
                         if (buffer->mapState != WGPUBufferMapState_Pending ||
@@ -394,8 +404,9 @@ extern "C"
 
         return inst->futures.TrackEvent(
             successMode,
-            [cb, u1, u2, buffer]()
+            [cb, u1, u2, bufferLifeGuard]()
             {
+                WGPUBufferImpl *buffer = bufferLifeGuard.get();
                 WGPUMapAsyncStatus status = WGPUMapAsyncStatus_Error;
                 const char *message = nullptr;
                 {

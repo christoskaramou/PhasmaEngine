@@ -240,6 +240,11 @@ extern "C"
                 rpe->invalid = true;
                 return;
             }
+            if (dynamicOffsetCount > 0 && !dynamicOffsets)
+            {
+                rpe->invalid = true;
+                return;
+            }
             if (rpe->device && dynamicOffsetCount > 0 && dynamicOffsets)
             {
                 std::vector<const WGPUBindGroupLayoutEntryResolved *> dynLayoutEntries;

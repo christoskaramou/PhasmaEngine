@@ -149,6 +149,11 @@ extern "C"
                 cpe->invalid = true;
                 return;
             }
+            if (dynamicOffsetCount > 0 && !dynamicOffsets)
+            {
+                cpe->invalid = true;
+                return;
+            }
             if (cpe->device && dynamicOffsetCount > 0 && dynamicOffsets)
             {
                 std::vector<const WGPUBindGroupLayoutEntryResolved *> dynLayoutEntries;

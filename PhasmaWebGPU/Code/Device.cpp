@@ -327,20 +327,26 @@ void WGPUDeviceImpl::ReclaimCompletedTextureDeletions()
     pe::Semaphore *sem = queue->GetSemaphore();
     const uint64_t completed = sem ? sem->GetValue() : 0;
 
-    std::lock_guard<std::mutex> lock(pendingTextureDeletionsMutex);
-    auto it = pendingTextureDeletions.begin();
-    while (it != pendingTextureDeletions.end())
+    std::vector<WGPUTextureImpl *> releaseAfter;
     {
-        if (it->serial <= completed)
+        std::lock_guard<std::mutex> lock(pendingTextureDeletionsMutex);
+        auto it = pendingTextureDeletions.begin();
+        while (it != pendingTextureDeletions.end())
         {
-            TeardownTextureGpuResources(it->tex);
-            it = pendingTextureDeletions.erase(it);
-        }
-        else
-        {
-            ++it;
+            if (it->serial <= completed)
+            {
+                TeardownTextureGpuResources(it->tex);
+                releaseAfter.push_back(it->tex);
+                it = pendingTextureDeletions.erase(it);
+            }
+            else
+            {
+                ++it;
+            }
         }
     }
+    for (auto *tex : releaseAfter)
+        wgpuTextureRelease(tex);
 }
 
 extern "C"
@@ -462,6 +468,25 @@ extern "C"
     {
         if (device)
             device->label = pwgpu::ToString(label);
+    }
+
+#if defined(_WIN32)
+#define PWGPU_EXT_EXPORT __declspec(dllexport)
+#else
+#define PWGPU_EXT_EXPORT __attribute__((visibility("default")))
+#endif
+
+    PWGPU_EXT_EXPORT void pwgpuDeviceSetUncapturedErrorCallback(
+        WGPUDevice device,
+        WGPUUncapturedErrorCallback callback,
+        void *userdata1,
+        void *userdata2)
+    {
+        if (!device)
+            return;
+        device->uncapturedErrorCallbackInfo.callback = callback;
+        device->uncapturedErrorCallbackInfo.userdata1 = userdata1;
+        device->uncapturedErrorCallbackInfo.userdata2 = userdata2;
     }
 
     void wgpuDevicePushErrorScope(WGPUDevice device, WGPUErrorFilter filter)

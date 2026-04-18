@@ -114,7 +114,8 @@ namespace pwgpu
             case spv::ImageFormatRg32i:
                 return WGPUTextureFormat_RG32Sint;
             default:
-                return WGPUTextureFormat_RGBA8Unorm;
+                // Unmapped SPIR-V format: Undefined forces layout-compat to fail rather than accept rgba8unorm.
+                return WGPUTextureFormat_Undefined;
             }
         }
 
@@ -544,8 +545,13 @@ namespace pwgpu
                 if (!(err = checkList(res.storage_images, isStorageTex)).empty())
                     return err;
             }
+            catch (const std::exception &e)
+            {
+                return std::string("layout-compat validation: SPIR-V reflection threw: ") + e.what();
+            }
             catch (...)
             {
+                return "layout-compat validation: SPIR-V reflection threw an unknown exception";
             }
         }
         return "";

@@ -206,4 +206,52 @@ extern "C"
         sm->reflection.overrides.push_back(std::move(ov));
     }
 
+    PWGPU_EXT_EXPORT uint32_t pwgpuShaderModuleValidateOverrides(WGPUShaderModule sm)
+    {
+        if (!sm || !sm->device)
+            return 0;
+        std::unordered_set<std::string> seenIds;
+        std::unordered_set<std::string> seenNames;
+        for (const auto &ov : sm->reflection.overrides)
+        {
+            bool isNumeric = !ov.identifier.empty() &&
+                             std::all_of(ov.identifier.begin(), ov.identifier.end(),
+                                         [](char c)
+                                         { return c >= '0' && c <= '9'; });
+            if (isNumeric)
+            {
+                if (!seenIds.insert(ov.identifier).second)
+                {
+                    std::string msg = "createShaderModule: duplicate override @id(" +
+                                      ov.identifier + ")";
+                    sm->device->reportError(WGPUErrorType_Validation,
+                                            pwgpu::ToStringView(msg));
+                    sm->invalid = true;
+                    WGPUCompilationMessageStorage cm;
+                    cm.type = WGPUCompilationMessageType_Error;
+                    cm.message = msg;
+                    sm->compilationMessages.push_back(std::move(cm));
+                    return 1;
+                }
+            }
+            if (!ov.name.empty())
+            {
+                if (!seenNames.insert(ov.name).second)
+                {
+                    std::string msg = "createShaderModule: duplicate override name '" +
+                                      ov.name + "'";
+                    sm->device->reportError(WGPUErrorType_Validation,
+                                            pwgpu::ToStringView(msg));
+                    sm->invalid = true;
+                    WGPUCompilationMessageStorage cm;
+                    cm.type = WGPUCompilationMessageType_Error;
+                    cm.message = msg;
+                    sm->compilationMessages.push_back(std::move(cm));
+                    return 1;
+                }
+            }
+        }
+        return 0;
+    }
+
 } // extern "C"

@@ -84,6 +84,9 @@ extern "C"
         cmds.reserve(commandCount);
         validCBs.reserve(commandCount);
 
+        // W3C §19.2: submit() validation is all-or-nothing.
+        bool submitInvalid = false;
+
         for (size_t i = 0; i < commandCount; ++i)
         {
             WGPUCommandBuffer cb = commands[i];
@@ -95,6 +98,7 @@ extern "C"
                         WGPUErrorType_Validation,
                         pwgpu::ToStringView("Submit: command buffer is null, already submitted, or invalid"));
                 }
+                submitInvalid = true;
                 continue;
             }
 
@@ -106,6 +110,7 @@ extern "C"
                         WGPUErrorType_Validation,
                         pwgpu::ToStringView("Submit: command buffer is invalid"));
                 }
+                submitInvalid = true;
                 continue;
             }
 
@@ -127,7 +132,10 @@ extern "C"
                 }
             }
             if (hasUnavailable)
+            {
+                submitInvalid = true;
                 continue;
+            }
 
             bool textureDestroyed = false;
             for (auto *tv : cb->retained.textureViews)
@@ -146,7 +154,10 @@ extern "C"
                 }
             }
             if (textureDestroyed)
+            {
+                submitInvalid = true;
                 continue;
+            }
 
             for (auto *tex : cb->retained.usedTextures)
             {
@@ -164,7 +175,10 @@ extern "C"
                 }
             }
             if (textureDestroyed)
+            {
+                submitInvalid = true;
                 continue;
+            }
 
             auto scanBg = [&](WGPUBindGroupImpl *bg) -> bool
             {
@@ -230,7 +244,10 @@ extern "C"
                 }
             }
             if (bgResourceBad)
+            {
+                submitInvalid = true;
                 continue;
+            }
 
             bool bundleBufferBad = false;
             for (auto *rb : cb->retained.renderBundles)
@@ -257,7 +274,10 @@ extern "C"
                     break;
             }
             if (bundleBufferBad)
+            {
+                submitInvalid = true;
                 continue;
+            }
 
             bool querySetBad = false;
             for (auto *qs : cb->retained.querySets)
@@ -274,15 +294,20 @@ extern "C"
                 }
             }
             if (querySetBad)
+            {
+                submitInvalid = true;
                 continue;
+            }
 
-            cb->submitted = true;
             cmds.push_back(cb->cmd);
             validCBs.push_back(cb);
         }
 
-        if (cmds.empty())
+        if (submitInvalid || cmds.empty())
             return;
+
+        for (auto *cb : validCBs)
+            cb->submitted = true;
 
         queue->peQueue->Submit(static_cast<uint32_t>(cmds.size()), cmds.data(), nullptr, nullptr);
         const uint64_t serial = queue->peQueue->GetSubmissionCount();
