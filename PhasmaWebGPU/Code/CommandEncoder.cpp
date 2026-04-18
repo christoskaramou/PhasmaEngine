@@ -943,7 +943,10 @@ extern "C"
         enc->cmd->ApiHandle().beginRendering(renderingInfo);
         rpe->renderingActive = true;
 
-        vk::Viewport defaultVp{0.0f, 0.0f, static_cast<float>(attachW), static_cast<float>(attachH), 0.0f, 1.0f};
+        // WebGPU y-up to Vulkan y-down via negative-height viewport (VK_KHR_maintenance1).
+        vk::Viewport defaultVp{0.0f, static_cast<float>(attachH),
+                               static_cast<float>(attachW), -static_cast<float>(attachH),
+                               0.0f, 1.0f};
         enc->cmd->ApiHandle().setViewport(0, 1, &defaultVp);
 
         vk::Rect2D defaultScissor{{0, 0}, {attachW, attachH}};
@@ -1813,8 +1816,8 @@ extern "C"
         enc->cmd->ApiHandle().copyQueryPoolResults(
             querySet->queryPool, firstQuery, queryCount,
             dst->peBuffer->ApiHandle(), dstOffset,
-            sizeof(uint64_t), vk::QueryResultFlagBits::e64);
-        enc->cmd->ApiHandle().resetQueryPool(querySet->queryPool, firstQuery, queryCount);
+            sizeof(uint64_t),
+            vk::QueryResultFlagBits::e64 | vk::QueryResultFlagBits::eWait);
     }
 
     void wgpuCommandEncoderWriteTimestamp(WGPUCommandEncoder enc, WGPUQuerySet querySet, uint32_t queryIndex)

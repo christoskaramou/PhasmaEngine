@@ -733,6 +733,7 @@ namespace pe
         deviceFeatures12.shaderSampledImageArrayNonUniformIndexing = true;
         deviceFeatures12.shaderStorageImageArrayNonUniformIndexing = true;
         deviceFeatures12.shaderFloat16 = true;
+        deviceFeatures12.hostQueryReset = true;
         deviceFeatures12.pNext = &deviceFeatures11;
 
         // Vulkan 1.3 features

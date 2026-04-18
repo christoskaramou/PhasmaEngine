@@ -99,11 +99,6 @@ extern "C"
 
         cpe->cmd->ApiHandle().bindPipeline(vk::PipelineBindPoint::eCompute, pipeline->vkPipeline);
 
-        // Replay any bind groups already recorded via setBindGroup before
-        // setPipeline. setBindGroup is a no-op for the actual Vulkan bind
-        // until a pipeline is known (needed for vkCmdBindDescriptorSets's
-        // layout argument). Without this replay, dispatches hit
-        // VUID-vkCmdDispatch-None-08600 (descriptor set 0 not bound).
         if (pipeline->layout)
         {
             auto &bgls = pipeline->layout->bindGroupLayouts;
@@ -271,8 +266,7 @@ extern "C"
         return true;
     }
 
-    static void ValidateDispatchUsageScope(WGPUComputePassEncoder cpe,
-                                           WGPUBuffer indirectBuffer = nullptr)
+    static void ValidateDispatchUsageScope(WGPUComputePassEncoder cpe, WGPUBuffer indirectBuffer = nullptr)
     {
         if (!cpe->pipeline || !cpe->pipeline->layout)
             return;
@@ -282,7 +276,6 @@ extern "C"
         scope.strictWritableDuplicates = true;
         for (size_t i = 0; i < cpe->currentBindGroups.size() && i < pipelineGroupCount; ++i)
         {
-            // §16.1.2: only bind groups in slots used by the pipeline layout contribute.
             if (!bgls[i])
                 continue;
             auto *bg = cpe->currentBindGroups[i];
@@ -347,8 +340,6 @@ extern "C"
 
         cpe->cmd->ApiHandle().dispatch(x, y, z);
     }
-
-    // ---- §16.1.2 dispatchWorkgroupsIndirect ----
 
     void wgpuComputePassEncoderDispatchWorkgroupsIndirect(WGPUComputePassEncoder cpe,
                                                           WGPUBuffer buffer, uint64_t offset)
@@ -476,8 +467,6 @@ extern "C"
 
         cpe->ended = true;
     }
-
-    // ---- §15 Debug markers ----
 
     void wgpuComputePassEncoderInsertDebugMarker(WGPUComputePassEncoder cpe, WGPUStringView label)
     {

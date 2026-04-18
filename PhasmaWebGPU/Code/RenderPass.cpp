@@ -657,7 +657,7 @@ extern "C"
             return;
         }
 
-        vk::Viewport vp{x, y, width, height, minDepth, maxDepth};
+        vk::Viewport vp{x, y + height, width, -height, minDepth, maxDepth};
         rpe->cmd->ApiHandle().setViewport(0, 1, &vp);
     }
 

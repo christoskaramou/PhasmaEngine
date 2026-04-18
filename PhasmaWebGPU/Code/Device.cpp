@@ -3603,7 +3603,9 @@ extern "C"
         rasterState.rasterizerDiscardEnable = (!hasFragment && !hasDepthStencil) ? VK_TRUE : VK_FALSE;
         rasterState.polygonMode = vk::PolygonMode::eFill;
         rasterState.cullMode = pwgpu::ToVkCullMode(cullMode);
-        rasterState.frontFace = pwgpu::ToVkFrontFace(frontFace);
+        rasterState.frontFace = (frontFace == WGPUFrontFace_CW)
+                                    ? vk::FrontFace::eCounterClockwise
+                                    : vk::FrontFace::eClockwise;
         rasterState.lineWidth = 1.0f;
 
         if (hasDepthStencil)
@@ -3623,8 +3625,6 @@ extern "C"
         vk::PipelineMultisampleStateCreateInfo multisampleState{};
         multisampleState.rasterizationSamples = pwgpu::ToVkSampleCount(msCount);
         uint32_t msMask = descriptor->multisample.mask;
-        if (msMask == 0)
-            msMask = 0xFFFFFFFF;
         multisampleState.pSampleMask = &msMask;
         multisampleState.alphaToCoverageEnable = descriptor->multisample.alphaToCoverageEnabled ? VK_TRUE : VK_FALSE;
 
@@ -3674,8 +3674,11 @@ extern "C"
                 return s;
             };
 
-            depthStencilState.front = mapFace(ds.stencilFront, ds.stencilReadMask, ds.stencilWriteMask);
-            depthStencilState.back = mapFace(ds.stencilBack, ds.stencilReadMask, ds.stencilWriteMask);
+            // IDL default 0xFFFFFFFF; auto-gen marshaller zero-fills missing uint32.
+            uint32_t stencilRead = ds.stencilReadMask ? ds.stencilReadMask : 0xFFFFFFFFu;
+            uint32_t stencilWrite = ds.stencilWriteMask ? ds.stencilWriteMask : 0xFFFFFFFFu;
+            depthStencilState.front = mapFace(ds.stencilFront, stencilRead, stencilWrite);
+            depthStencilState.back = mapFace(ds.stencilBack, stencilRead, stencilWrite);
         }
 
         vk::PipelineColorBlendStateCreateInfo colorBlendState{};
