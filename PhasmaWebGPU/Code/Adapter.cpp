@@ -36,6 +36,8 @@ namespace
             return a.float32Filterable;
         case WGPUFeatureName_RG11B10UfloatRenderable:
             return a.rg11b10UfloatRenderable;
+        case WGPUFeatureName_TextureFormatsTier1:
+            return a.textureFormatsTier1;
         default:
             return false;
         }
@@ -58,6 +60,7 @@ namespace
             WGPUFeatureName_BGRA8UnormStorage,
             WGPUFeatureName_Float32Filterable,
             WGPUFeatureName_RG11B10UfloatRenderable,
+            WGPUFeatureName_TextureFormatsTier1,
         };
         for (WGPUFeatureName f : kCandidates)
         {
@@ -110,6 +113,41 @@ void pwgpu_PopulateAdapterFeatureCache(WGPUAdapterImpl &a)
         a.rg11b10UfloatRenderable =
             (rg11Props.optimalTilingFeatures & VK_FORMAT_FEATURE_COLOR_ATTACHMENT_BIT) &&
             (rg11Props.optimalTilingFeatures & VK_FORMAT_FEATURE_COLOR_ATTACHMENT_BLEND_BIT);
+
+        auto fmtStorage = [&](VkFormat fmt) -> bool
+        {
+            VkFormatProperties props{};
+            vkGetPhysicalDeviceFormatProperties(a.gpu, fmt, &props);
+            return (props.optimalTilingFeatures & VK_FORMAT_FEATURE_STORAGE_IMAGE_BIT) != 0;
+        };
+        auto fmtRenderBlend = [&](VkFormat fmt) -> bool
+        {
+            VkFormatProperties props{};
+            vkGetPhysicalDeviceFormatProperties(a.gpu, fmt, &props);
+            return (props.optimalTilingFeatures & VK_FORMAT_FEATURE_COLOR_ATTACHMENT_BIT) &&
+                   (props.optimalTilingFeatures & VK_FORMAT_FEATURE_COLOR_ATTACHMENT_BLEND_BIT);
+        };
+        a.textureFormatsTier1 =
+            fmtStorage(VK_FORMAT_R8_UNORM) && fmtStorage(VK_FORMAT_R8_SNORM) &&
+            fmtStorage(VK_FORMAT_R8_UINT) && fmtStorage(VK_FORMAT_R8_SINT) &&
+            fmtStorage(VK_FORMAT_R8G8_UNORM) && fmtStorage(VK_FORMAT_R8G8_SNORM) &&
+            fmtStorage(VK_FORMAT_R8G8_UINT) && fmtStorage(VK_FORMAT_R8G8_SINT) &&
+            fmtStorage(VK_FORMAT_R16_UINT) && fmtStorage(VK_FORMAT_R16_SINT) &&
+            fmtStorage(VK_FORMAT_R16_SFLOAT) && fmtStorage(VK_FORMAT_R16G16_UINT) &&
+            fmtStorage(VK_FORMAT_R16G16_SINT) && fmtStorage(VK_FORMAT_R16G16_SFLOAT) &&
+            fmtStorage(VK_FORMAT_A2B10G10R10_UINT_PACK32) &&
+            fmtStorage(VK_FORMAT_A2B10G10R10_UNORM_PACK32) &&
+            fmtStorage(VK_FORMAT_B10G11R11_UFLOAT_PACK32) &&
+            fmtRenderBlend(VK_FORMAT_R8_SNORM) && fmtRenderBlend(VK_FORMAT_R8G8_SNORM) &&
+            fmtRenderBlend(VK_FORMAT_R8G8B8A8_SNORM) &&
+            fmtStorage(VK_FORMAT_R16_UNORM) && fmtStorage(VK_FORMAT_R16_SNORM) &&
+            fmtStorage(VK_FORMAT_R16G16_UNORM) && fmtStorage(VK_FORMAT_R16G16_SNORM) &&
+            fmtStorage(VK_FORMAT_R16G16B16A16_UNORM) &&
+            fmtStorage(VK_FORMAT_R16G16B16A16_SNORM) &&
+            fmtRenderBlend(VK_FORMAT_R16_UNORM) && fmtRenderBlend(VK_FORMAT_R16_SNORM) &&
+            fmtRenderBlend(VK_FORMAT_R16G16_UNORM) && fmtRenderBlend(VK_FORMAT_R16G16_SNORM) &&
+            fmtRenderBlend(VK_FORMAT_R16G16B16A16_UNORM) &&
+            fmtRenderBlend(VK_FORMAT_R16G16B16A16_SNORM);
 
         // W3C spec: texture-compression-bc must support every BC VkFormat; some
         // Vulkan drivers advertise textureCompressionBC without BC6H/BC7.

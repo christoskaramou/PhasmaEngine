@@ -23,6 +23,18 @@ namespace pwgpu
             return VK_FORMAT_R16_SINT;
         case WGPUTextureFormat_R16Float:
             return VK_FORMAT_R16_SFLOAT;
+        case WGPUTextureFormat_R16Unorm:
+            return VK_FORMAT_R16_UNORM;
+        case WGPUTextureFormat_R16Snorm:
+            return VK_FORMAT_R16_SNORM;
+        case WGPUTextureFormat_RG16Unorm:
+            return VK_FORMAT_R16G16_UNORM;
+        case WGPUTextureFormat_RG16Snorm:
+            return VK_FORMAT_R16G16_SNORM;
+        case WGPUTextureFormat_RGBA16Unorm:
+            return VK_FORMAT_R16G16B16A16_UNORM;
+        case WGPUTextureFormat_RGBA16Snorm:
+            return VK_FORMAT_R16G16B16A16_SNORM;
         case WGPUTextureFormat_RG8Unorm:
             return VK_FORMAT_R8G8_UNORM;
         case WGPUTextureFormat_RG8Snorm:
@@ -458,6 +470,90 @@ namespace pwgpu
         }
     }
 
+    inline bool IsRenderableFormatTier1(WGPUTextureFormat f)
+    {
+        switch (f)
+        {
+        case WGPUTextureFormat_R8Snorm:
+        case WGPUTextureFormat_RG8Snorm:
+        case WGPUTextureFormat_RGBA8Snorm:
+        case WGPUTextureFormat_R16Unorm:
+        case WGPUTextureFormat_R16Snorm:
+        case WGPUTextureFormat_RG16Unorm:
+        case WGPUTextureFormat_RG16Snorm:
+        case WGPUTextureFormat_RGBA16Unorm:
+        case WGPUTextureFormat_RGBA16Snorm:
+            return true;
+        default:
+            return false;
+        }
+    }
+
+    inline bool SupportsStorageBindingTier1(WGPUTextureFormat f)
+    {
+        switch (f)
+        {
+        case WGPUTextureFormat_R8Unorm:
+        case WGPUTextureFormat_R8Snorm:
+        case WGPUTextureFormat_R8Uint:
+        case WGPUTextureFormat_R8Sint:
+        case WGPUTextureFormat_RG8Unorm:
+        case WGPUTextureFormat_RG8Snorm:
+        case WGPUTextureFormat_RG8Uint:
+        case WGPUTextureFormat_RG8Sint:
+        case WGPUTextureFormat_R16Uint:
+        case WGPUTextureFormat_R16Sint:
+        case WGPUTextureFormat_R16Float:
+        case WGPUTextureFormat_RG16Uint:
+        case WGPUTextureFormat_RG16Sint:
+        case WGPUTextureFormat_RG16Float:
+        case WGPUTextureFormat_RGB10A2Uint:
+        case WGPUTextureFormat_RGB10A2Unorm:
+        case WGPUTextureFormat_RG11B10Ufloat:
+        case WGPUTextureFormat_R16Unorm:
+        case WGPUTextureFormat_R16Snorm:
+        case WGPUTextureFormat_RG16Unorm:
+        case WGPUTextureFormat_RG16Snorm:
+        case WGPUTextureFormat_RGBA16Unorm:
+        case WGPUTextureFormat_RGBA16Snorm:
+            return true;
+        default:
+            return false;
+        }
+    }
+
+    inline bool SupportsMultisamplingTier1(WGPUTextureFormat f)
+    {
+        switch (f)
+        {
+        case WGPUTextureFormat_R8Snorm:
+        case WGPUTextureFormat_RG8Snorm:
+        case WGPUTextureFormat_RGBA8Snorm:
+        case WGPUTextureFormat_R16Unorm:
+        case WGPUTextureFormat_R16Snorm:
+        case WGPUTextureFormat_RG16Unorm:
+        case WGPUTextureFormat_RG16Snorm:
+        case WGPUTextureFormat_RGBA16Unorm:
+        case WGPUTextureFormat_RGBA16Snorm:
+            return true;
+        default:
+            return false;
+        }
+    }
+
+    inline bool SupportsResolveTier1(WGPUTextureFormat f)
+    {
+        switch (f)
+        {
+        case WGPUTextureFormat_R8Snorm:
+        case WGPUTextureFormat_RG8Snorm:
+        case WGPUTextureFormat_RGBA8Snorm:
+            return true;
+        default:
+            return false;
+        }
+    }
+
     inline bool Supports3DTexture(WGPUTextureFormat f)
     {
         if (IsDepthStencilFormat(f))
@@ -708,6 +804,8 @@ namespace pwgpu
         case WGPUTextureFormat_R16Uint:
         case WGPUTextureFormat_R16Sint:
         case WGPUTextureFormat_R16Float:
+        case WGPUTextureFormat_R16Unorm:
+        case WGPUTextureFormat_R16Snorm:
         case WGPUTextureFormat_RG8Unorm:
         case WGPUTextureFormat_RG8Snorm:
         case WGPUTextureFormat_RG8Uint:
@@ -720,6 +818,8 @@ namespace pwgpu
         case WGPUTextureFormat_RG16Uint:
         case WGPUTextureFormat_RG16Sint:
         case WGPUTextureFormat_RG16Float:
+        case WGPUTextureFormat_RG16Unorm:
+        case WGPUTextureFormat_RG16Snorm:
         case WGPUTextureFormat_RGBA8Unorm:
         case WGPUTextureFormat_RGBA8UnormSrgb:
         case WGPUTextureFormat_RGBA8Snorm:
@@ -740,6 +840,8 @@ namespace pwgpu
         case WGPUTextureFormat_RGBA16Uint:
         case WGPUTextureFormat_RGBA16Sint:
         case WGPUTextureFormat_RGBA16Float:
+        case WGPUTextureFormat_RGBA16Unorm:
+        case WGPUTextureFormat_RGBA16Snorm:
         case WGPUTextureFormat_BC1RGBAUnorm:
         case WGPUTextureFormat_BC1RGBAUnormSrgb:
         case WGPUTextureFormat_BC4RUnorm:
@@ -1355,6 +1457,8 @@ namespace pwgpu
         case WGPUTextureFormat_R16Uint:
         case WGPUTextureFormat_R16Sint:
         case WGPUTextureFormat_R16Float:
+        case WGPUTextureFormat_R16Unorm:
+        case WGPUTextureFormat_R16Snorm:
         case WGPUTextureFormat_RG8Unorm:
         case WGPUTextureFormat_RG8Snorm:
         case WGPUTextureFormat_RG8Uint:
@@ -1366,6 +1470,8 @@ namespace pwgpu
         case WGPUTextureFormat_RG16Uint:
         case WGPUTextureFormat_RG16Sint:
         case WGPUTextureFormat_RG16Float:
+        case WGPUTextureFormat_RG16Unorm:
+        case WGPUTextureFormat_RG16Snorm:
         case WGPUTextureFormat_RGBA8Unorm:
         case WGPUTextureFormat_RGBA8UnormSrgb:
         case WGPUTextureFormat_RGBA8Snorm:
@@ -1384,6 +1490,8 @@ namespace pwgpu
         case WGPUTextureFormat_RGBA16Uint:
         case WGPUTextureFormat_RGBA16Sint:
         case WGPUTextureFormat_RGBA16Float:
+        case WGPUTextureFormat_RGBA16Unorm:
+        case WGPUTextureFormat_RGBA16Snorm:
             return 8;
         case WGPUTextureFormat_RGBA32Float:
         case WGPUTextureFormat_RGBA32Uint:

@@ -758,6 +758,8 @@ extern "C"
         if (h % blockH != 0)
             return makeInvalid("height must be a multiple of texel block height");
 
+        const bool tier1 = DeviceHasFeature(device, WGPUFeatureName_TextureFormatsTier1);
+
         if (samples > 1)
         {
             if (mips != 1)
@@ -768,7 +770,8 @@ extern "C"
                 return makeInvalid("multisampled texture cannot include STORAGE_BINDING");
             if (!(usage & WGPUTextureUsage_RenderAttachment))
                 return makeInvalid("multisampled texture must include RENDER_ATTACHMENT");
-            if (!pwgpu::SupportsMultisampling(fmt))
+            if (!pwgpu::SupportsMultisampling(fmt) &&
+                !(tier1 && pwgpu::SupportsMultisamplingTier1(fmt)))
                 return makeInvalid("format does not support multisampling");
         }
 
@@ -778,7 +781,8 @@ extern "C"
 
         if (usage & WGPUTextureUsage_RenderAttachment)
         {
-            if (!pwgpu::IsRenderableFormat(fmt))
+            if (!pwgpu::IsRenderableFormat(fmt) &&
+                !(tier1 && pwgpu::IsRenderableFormatTier1(fmt)))
                 return makeInvalid("RENDER_ATTACHMENT requires a renderable format");
             if (dim != WGPUTextureDimension_2D && dim != WGPUTextureDimension_3D)
                 return makeInvalid("RENDER_ATTACHMENT requires dimension 2d or 3d");
@@ -786,7 +790,8 @@ extern "C"
 
         if (usage & WGPUTextureUsage_StorageBinding)
         {
-            if (!pwgpu::SupportsStorageBinding(fmt))
+            if (!pwgpu::SupportsStorageBinding(fmt) &&
+                !(tier1 && pwgpu::SupportsStorageBindingTier1(fmt)))
                 return makeInvalid("STORAGE_BINDING requires a storage-capable format");
         }
 
@@ -1342,8 +1347,15 @@ extern "C"
                     resolved.storageTexture.viewDimension == WGPUTextureViewDimension_CubeArray)
                     return makeInvalid("storageTexture viewDimension must not be cube or cube-array");
 
-                if (!pwgpu::SupportsStorageBinding(resolved.storageTexture.format))
-                    return makeInvalid("storageTexture format does not support storage binding");
+                {
+                    const bool tier1Bgl =
+                        DeviceHasFeature(device, WGPUFeatureName_TextureFormatsTier1);
+                    if (!pwgpu::SupportsStorageBinding(resolved.storageTexture.format) &&
+                        !(tier1Bgl &&
+                          pwgpu::SupportsStorageBindingTier1(resolved.storageTexture.format)))
+                        return makeInvalid(
+                            "storageTexture format does not support storage binding");
+                }
 
                 if (resolved.storageTexture.format == WGPUTextureFormat_BGRA8Unorm &&
                     resolved.storageTexture.access != WGPUStorageTextureAccess_WriteOnly)
@@ -2455,8 +2467,7 @@ extern "C"
 
         // SPIR-V ExecutionModel: GLCompute = 5.
         constexpr uint32_t kExecCompute = 5;
-        const bool entryPointProvided =
-            descriptor->compute.entryPoint.data && descriptor->compute.entryPoint.length != 0;
+        const bool entryPointProvided = descriptor->compute.entryPoint.data != nullptr;
 
         std::string entryPointName;
         if (entryPointProvided)
@@ -2552,6 +2563,13 @@ extern "C"
             {
                 device->reportError(WGPUErrorType_Validation,
                                     pwgpu::ToStringView("createComputePipeline: " + compatErr));
+                return MakeInvalidComputePipeline(device, labelStr);
+            }
+            std::string pairErr = pwgpu::ValidateTextureSamplerPairs(shaderModule->spirv, pipeLayout);
+            if (!pairErr.empty())
+            {
+                device->reportError(WGPUErrorType_Validation,
+                                    pwgpu::ToStringView("createComputePipeline: " + pairErr));
                 return MakeInvalidComputePipeline(device, labelStr);
             }
         }
@@ -2670,17 +2688,22 @@ extern "C"
         WGPUComputePipeline cp = wgpuDeviceCreateComputePipeline(device, descriptor);
         if (device)
             device->suppressReportError = false;
-        bool valid = cp && !cp->invalid;
+        if (!cp && device && device->destroyed)
+            cp = MakeInvalidComputePipeline(device, descriptor && descriptor->label.data ? descriptor->label.data : nullptr);
         WGPUInstanceImpl *inst = device ? device->instance : nullptr;
         if (!inst || !callbackInfo.callback)
             return inst ? inst->futures.NextId() : WGPUFuture{0};
         auto cb = callbackInfo.callback;
         auto u1 = callbackInfo.userdata1;
         auto u2 = callbackInfo.userdata2;
-        auto status = valid ? WGPUCreatePipelineAsyncStatus_Success : WGPUCreatePipelineAsyncStatus_ValidationError;
         return inst->futures.TrackEvent(callbackInfo.mode,
-                                        [cb, u1, u2, status, cp]()
+                                        [cb, u1, u2, cp, device]()
                                         {
+                                            const bool valid = cp && !cp->invalid;
+                                            const bool lost = device && device->destroyed;
+                                            auto status = (valid || lost)
+                                                              ? WGPUCreatePipelineAsyncStatus_Success
+                                                              : WGPUCreatePipelineAsyncStatus_ValidationError;
                                             cb(status, cp, {nullptr, 0}, u1, u2);
                                         });
     }
@@ -2737,7 +2760,7 @@ extern "C"
                                 uint32_t execModel, const char *stageTag,
                                 std::string &outName) -> bool
         {
-            const bool provided = ep.data && ep.length != 0;
+            const bool provided = ep.data != nullptr;
             if (provided)
             {
                 outName = pwgpu::ToString(ep);
@@ -3002,6 +3025,15 @@ extern "C"
                                     pwgpu::ToStringView("createRenderPipeline: " + compatErr));
                 return MakeInvalidRenderPipeline(device, labelStr);
             }
+            std::string pairErr = pwgpu::ValidateTextureSamplerPairs(vertModule->spirv, pipeLayout);
+            if (pairErr.empty() && hasFragment && fragModuleSrc != vertModule)
+                pairErr = pwgpu::ValidateTextureSamplerPairs(fragModuleSrc->spirv, pipeLayout);
+            if (!pairErr.empty())
+            {
+                device->reportError(WGPUErrorType_Validation,
+                                    pwgpu::ToStringView("createRenderPipeline: " + pairErr));
+                return MakeInvalidRenderPipeline(device, labelStr);
+            }
         }
 
         // Validate inter-stage interface: every fragment varying input must be provided
@@ -3175,11 +3207,18 @@ extern "C"
                     return MakeInvalidRenderPipeline(device, labelStr);
                 }
 
-                if (!pwgpu::IsRenderableFormat(ct.format))
                 {
-                    device->reportError(WGPUErrorType_Validation,
-                                        pwgpu::ToStringView("createRenderPipeline: color target format is not renderable"));
-                    return MakeInvalidRenderPipeline(device, labelStr);
+                    const bool tier1Rp =
+                        DeviceHasFeature(device, WGPUFeatureName_TextureFormatsTier1);
+                    if (!pwgpu::IsRenderableFormat(ct.format) &&
+                        !(tier1Rp && pwgpu::IsRenderableFormatTier1(ct.format)))
+                    {
+                        device->reportError(
+                            WGPUErrorType_Validation,
+                            pwgpu::ToStringView(
+                                "createRenderPipeline: color target format is not renderable"));
+                        return MakeInvalidRenderPipeline(device, labelStr);
+                    }
                 }
 
                 {
@@ -3741,17 +3780,23 @@ extern "C"
         WGPURenderPipeline rp = wgpuDeviceCreateRenderPipeline(device, descriptor);
         if (device)
             device->suppressReportError = false;
-        bool valid = rp && !rp->invalid;
+        if (!rp && device && device->destroyed)
+            rp = MakeInvalidRenderPipeline(device, descriptor && descriptor->label.data ? descriptor->label.data : nullptr);
         WGPUInstanceImpl *inst = device ? device->instance : nullptr;
         if (!inst || !callbackInfo.callback)
             return inst ? inst->futures.NextId() : WGPUFuture{0};
         auto cb = callbackInfo.callback;
         auto u1 = callbackInfo.userdata1;
         auto u2 = callbackInfo.userdata2;
-        auto status = valid ? WGPUCreatePipelineAsyncStatus_Success : WGPUCreatePipelineAsyncStatus_ValidationError;
+
         return inst->futures.TrackEvent(callbackInfo.mode,
-                                        [cb, u1, u2, status, rp]()
+                                        [cb, u1, u2, rp, device]()
                                         {
+                                            const bool valid = rp && !rp->invalid;
+                                            const bool lost = device && device->destroyed;
+                                            auto status = (valid || lost)
+                                                              ? WGPUCreatePipelineAsyncStatus_Success
+                                                              : WGPUCreatePipelineAsyncStatus_ValidationError;
                                             cb(status, rp, {nullptr, 0}, u1, u2);
                                         });
     }
@@ -3802,8 +3847,15 @@ extern "C"
                 continue;
             hasAnyAttachment = true;
 
-            if (pwgpu::IsDepthStencilFormat(cf) || !pwgpu::IsRenderableFormat(cf))
-                return makeInvalid("createRenderBundleEncoder: colorFormats[i] is not color-renderable");
+            {
+                const bool tier1Rbe =
+                    DeviceHasFeature(device, WGPUFeatureName_TextureFormatsTier1);
+                if (pwgpu::IsDepthStencilFormat(cf) ||
+                    (!pwgpu::IsRenderableFormat(cf) &&
+                     !(tier1Rbe && pwgpu::IsRenderableFormatTier1(cf))))
+                    return makeInvalid(
+                        "createRenderBundleEncoder: colorFormats[i] is not color-renderable");
+            }
         }
 
         uint32_t colorBytesPerSample = pwgpu::ComputeBytesPerSampleFromFormats(

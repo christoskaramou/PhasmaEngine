@@ -376,8 +376,16 @@ extern "C"
                 PE_WARN("[WebGPU] View texture device != enc->device");
                 enc->invalid = true;
             }
-            if (pwgpu::IsDepthStencilFormat(view->format) || !pwgpu::IsRenderableFormat(view->format))
-                return makeInvalidPass("not renderable format");
+            {
+                const bool tier1View =
+                    enc->device &&
+                    wgpuDeviceHasFeature(enc->device, WGPUFeatureName_TextureFormatsTier1) ==
+                        WGPU_TRUE;
+                if (pwgpu::IsDepthStencilFormat(view->format) ||
+                    (!pwgpu::IsRenderableFormat(view->format) &&
+                     !(tier1View && pwgpu::IsRenderableFormatTier1(view->format))))
+                    return makeInvalidPass("not renderable format");
+            }
             if (!(view->usage & WGPUTextureUsage_RenderAttachment))
             {
                 PE_WARN("[WebGPU] view usage != RenderAttachment");
@@ -428,8 +436,15 @@ extern "C"
                     return makeInvalidPass();
                 if (rt->format != view->format)
                     return makeInvalidPass();
-                if (!pwgpu::SupportsResolve(view->format))
-                    return makeInvalidPass();
+                {
+                    const bool tier1Rs =
+                        enc->device && wgpuDeviceHasFeature(
+                                           enc->device, WGPUFeatureName_TextureFormatsTier1) ==
+                                           WGPU_TRUE;
+                    if (!pwgpu::SupportsResolve(view->format) &&
+                        !(tier1Rs && pwgpu::SupportsResolveTier1(view->format)))
+                        return makeInvalidPass();
+                }
                 if (rt->renderExtent.width != view->renderExtent.width ||
                     rt->renderExtent.height != view->renderExtent.height)
                     return makeInvalidPass();

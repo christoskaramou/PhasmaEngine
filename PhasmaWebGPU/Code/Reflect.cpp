@@ -551,6 +551,134 @@ namespace pwgpu
         return "";
     }
 
+    std::string ValidateTextureSamplerPairs(const std::vector<uint32_t> &spirv, const WGPUPipelineLayoutImpl *layout)
+    {
+        if (!layout || spirv.size() < 5)
+            return {};
+
+        struct VarBind
+        {
+            uint32_t set = UINT32_MAX;
+            uint32_t binding = UINT32_MAX;
+        };
+        std::map<uint32_t, VarBind> varBinds;
+        // Pointer-producing chains: OpAccessChain result -> base variable id.
+        std::map<uint32_t, uint32_t> chainBase;
+        // OpLoad result -> ultimate variable id (through chains).
+        std::map<uint32_t, uint32_t> loadedVar;
+
+        struct Pair
+        {
+            uint32_t imageVar;
+            uint32_t samplerVar;
+        };
+        std::vector<Pair> pairs;
+
+        const uint32_t *code = spirv.data();
+        const size_t numWords = spirv.size();
+        size_t w = 5;
+        while (w < numWords)
+        {
+            uint32_t first = code[w];
+            uint32_t wc = first >> 16;
+            uint32_t op = first & 0xFFFF;
+            if (wc == 0 || w + wc > numWords)
+                break;
+
+            switch (op)
+            {
+            case spv::OpDecorate:
+                if (wc >= 4)
+                {
+                    uint32_t target = code[w + 1];
+                    uint32_t dec = code[w + 2];
+                    if (dec == spv::DecorationDescriptorSet)
+                        varBinds[target].set = code[w + 3];
+                    else if (dec == spv::DecorationBinding)
+                        varBinds[target].binding = code[w + 3];
+                }
+                break;
+            case spv::OpAccessChain:
+            case spv::OpInBoundsAccessChain:
+                if (wc >= 4)
+                {
+                    uint32_t resultId = code[w + 2];
+                    uint32_t baseId = code[w + 3];
+                    auto it = chainBase.find(baseId);
+                    chainBase[resultId] = (it != chainBase.end()) ? it->second : baseId;
+                }
+                break;
+            case spv::OpLoad:
+                if (wc >= 4)
+                {
+                    uint32_t resultId = code[w + 2];
+                    uint32_t ptrId = code[w + 3];
+                    auto it = chainBase.find(ptrId);
+                    loadedVar[resultId] = (it != chainBase.end()) ? it->second : ptrId;
+                }
+                break;
+            case spv::OpSampledImage:
+                if (wc >= 5)
+                {
+                    uint32_t imgId = code[w + 3];
+                    uint32_t smpId = code[w + 4];
+                    auto ii = loadedVar.find(imgId);
+                    auto si = loadedVar.find(smpId);
+                    if (ii != loadedVar.end() && si != loadedVar.end())
+                        pairs.push_back({ii->second, si->second});
+                }
+                break;
+            default:
+                break;
+            }
+            w += wc;
+        }
+
+        if (pairs.empty())
+            return {};
+
+        auto findEntry = [&](uint32_t set, uint32_t binding) -> const WGPUBindGroupLayoutEntryResolved *
+        {
+            if (set >= layout->bindGroupLayouts.size())
+                return nullptr;
+            const WGPUBindGroupLayoutImpl *bgl = layout->bindGroupLayouts[set];
+            if (!bgl)
+                return nullptr;
+            for (const auto &e : bgl->entries)
+                if (e.binding == binding)
+                    return &e;
+            return nullptr;
+        };
+
+        for (const Pair &p : pairs)
+        {
+            auto iv = varBinds.find(p.imageVar);
+            auto sv = varBinds.find(p.samplerVar);
+            if (iv == varBinds.end() || sv == varBinds.end())
+                continue;
+            if (iv->second.set == UINT32_MAX || sv->second.set == UINT32_MAX)
+                continue;
+
+            const auto *texEntry = findEntry(iv->second.set, iv->second.binding);
+            const auto *smpEntry = findEntry(sv->second.set, sv->second.binding);
+            if (!texEntry || !smpEntry)
+                continue;
+            if (smpEntry->sampler.type != WGPUSamplerBindingType_Filtering)
+                continue;
+            if (texEntry->texture.sampleType == WGPUTextureSampleType_BindingNotUsed ||
+                texEntry->texture.sampleType == WGPUTextureSampleType_Undefined ||
+                texEntry->texture.sampleType == WGPUTextureSampleType_Float)
+                continue;
+
+            return "texture at group " + std::to_string(iv->second.set) +
+                   ", binding " + std::to_string(iv->second.binding) +
+                   " has non-float sampleType and is used with filtering sampler at group " +
+                   std::to_string(sv->second.set) + ", binding " +
+                   std::to_string(sv->second.binding);
+        }
+        return {};
+    }
+
     bool GetUsedDescriptorSets(const std::vector<uint32_t> &spirv,
                                const std::string &entryPoint,
                                uint32_t executionModel,

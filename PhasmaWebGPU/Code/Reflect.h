@@ -28,11 +28,12 @@ namespace pwgpu
         std::string entryPoint;
         uint32_t executionModel = 0;
         WGPUShaderStage stage = WGPUShaderStage_None;
-        // Null = legacy unfiltered behavior; set = WGSL-frontend filter.
         const std::set<BindingKey> *staticallyUsed = nullptr;
         const std::set<BindingKey> *comparisonSamplers = nullptr;
     };
     std::string ValidateExplicitLayoutCompat(const WGPUPipelineLayoutImpl *layout, const std::vector<LayoutCompatStageInput> &stages);
+
+    std::string ValidateTextureSamplerPairs(const std::vector<uint32_t> &spirv, const WGPUPipelineLayoutImpl *layout);
 
     WGPUPipelineLayoutImpl *BuildAutoPipelineLayout(WGPUDeviceImpl *device,
                                                     const std::vector<AutoLayoutStageInput> &stages,

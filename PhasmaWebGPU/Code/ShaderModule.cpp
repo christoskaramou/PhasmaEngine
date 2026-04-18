@@ -136,6 +136,7 @@ extern "C"
             return;
         sm->reflection = WGPUShaderReflectionMeta{};
         sm->reflection.present = true;
+        sm->entryPoints.clear();
     }
 
     PWGPU_EXT_EXPORT void pwgpuShaderModuleSetComparisonSamplers(WGPUShaderModule sm,
@@ -171,6 +172,20 @@ extern "C"
                 WGPUShaderReflectionMeta::Binding{pairs[2 * i], pairs[2 * i + 1]});
         }
         sm->reflection.entryPoints.push_back(std::move(ep));
+
+        // SPIR-V ExecutionModel: Vertex=0, Fragment=4, GLCompute=5.
+        WGPUShaderModuleImpl::EntryPoint modEp;
+        modEp.name = name;
+        std::string stageStr(stage);
+        if (stageStr == "vertex")
+            modEp.executionModel = 0;
+        else if (stageStr == "fragment")
+            modEp.executionModel = 4;
+        else if (stageStr == "compute")
+            modEp.executionModel = 5;
+        else
+            modEp.executionModel = 0;
+        sm->entryPoints.push_back(std::move(modEp));
     }
 
     PWGPU_EXT_EXPORT void pwgpuShaderModuleAddOverride(WGPUShaderModule sm,

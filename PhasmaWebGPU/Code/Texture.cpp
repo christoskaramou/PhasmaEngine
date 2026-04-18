@@ -228,14 +228,19 @@ extern "C"
         if ((viewUsage & ~texture->usage) != 0)
             return reportValidation("view usage must be a subset of texture usage");
 
+        const bool tier1 =
+            texture->device &&
+            wgpuDeviceHasFeature(texture->device, WGPUFeatureName_TextureFormatsTier1) == WGPU_TRUE;
         if (viewUsage & WGPUTextureUsage_RenderAttachment)
         {
-            if (!pwgpu::IsRenderableFormat(resolved.format))
+            if (!pwgpu::IsRenderableFormat(resolved.format) &&
+                !(tier1 && pwgpu::IsRenderableFormatTier1(resolved.format)))
                 return reportValidation("RENDER_ATTACHMENT requires a renderable view format");
         }
         if (viewUsage & WGPUTextureUsage_StorageBinding)
         {
-            if (!pwgpu::SupportsStorageBinding(resolved.format))
+            if (!pwgpu::SupportsStorageBinding(resolved.format) &&
+                !(tier1 && pwgpu::SupportsStorageBindingTier1(resolved.format)))
                 return reportValidation("STORAGE_BINDING requires a storage-capable view format");
         }
 
