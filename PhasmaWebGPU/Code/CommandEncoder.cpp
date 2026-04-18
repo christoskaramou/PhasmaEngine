@@ -640,22 +640,8 @@ extern "C"
         {
             rpe->occlusionQuerySet = descriptor->occlusionQuerySet;
             wgpuQuerySetAddRef(descriptor->occlusionQuerySet);
-
-            bool alreadyReset = false;
-            for (auto *qs : enc->resetOcclusionQuerySets)
-            {
-                if (qs == descriptor->occlusionQuerySet)
-                {
-                    alreadyReset = true;
-                    break;
-                }
-            }
-            if (!alreadyReset)
-            {
-                enc->cmd->ApiHandle().resetQueryPool(
-                    descriptor->occlusionQuerySet->queryPool, 0, descriptor->occlusionQuerySet->count);
-                enc->resetOcclusionQuerySets.push_back(descriptor->occlusionQuerySet);
-            }
+            // Do not reset here: createQuerySet host-resets the pool, and §23.6
+            // requires unmodified slots to retain values across submissions.
         }
 
         if (descriptor->timestampWrites && !enc->invalid)
@@ -1830,22 +1816,18 @@ extern "C"
         dep.pMemoryBarriers = mbs;
         enc->cmd->ApiHandle().pipelineBarrier2(dep);
 
-        auto it = enc->occlusionQueriesBegun.find(querySet);
-        if (it != enc->occlusionQueriesBegun.end())
+        const uint32_t rangeEnd = firstQuery + queryCount;
+        for (uint32_t idx : querySet->beganIndices)
         {
-            const uint32_t rangeEnd = firstQuery + queryCount;
-            for (uint32_t idx : it->second)
-            {
-                if (idx < firstQuery || idx >= rangeEnd)
-                    continue;
-                const uint64_t slotOffset = dstOffset +
-                                            static_cast<uint64_t>(idx - firstQuery) * sizeof(uint64_t);
-                enc->cmd->ApiHandle().copyQueryPoolResults(
-                    querySet->queryPool, idx, 1,
-                    dst->peBuffer->ApiHandle(), slotOffset,
-                    sizeof(uint64_t),
-                    vk::QueryResultFlagBits::e64 | vk::QueryResultFlagBits::eWait);
-            }
+            if (idx < firstQuery || idx >= rangeEnd)
+                continue;
+            const uint64_t slotOffset = dstOffset +
+                                        static_cast<uint64_t>(idx - firstQuery) * sizeof(uint64_t);
+            enc->cmd->ApiHandle().copyQueryPoolResults(
+                querySet->queryPool, idx, 1,
+                dst->peBuffer->ApiHandle(), slotOffset,
+                sizeof(uint64_t),
+                vk::QueryResultFlagBits::e64 | vk::QueryResultFlagBits::eWait);
         }
     }
 

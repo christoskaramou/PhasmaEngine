@@ -15,4 +15,6 @@ struct WGPUQuerySetImpl
     uint32_t count = 0;
     bool destroyed = false;
     bool invalid = false;
+    // eWait on an unbegun slot stalls forever; resolveQuerySet copies only these.
+    std::unordered_set<uint32_t> beganIndices;
 };
