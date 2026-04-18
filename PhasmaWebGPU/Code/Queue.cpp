@@ -84,8 +84,27 @@ extern "C"
         cmds.reserve(commandCount);
         validCBs.reserve(commandCount);
 
-        // W3C §19.2: submit() validation is all-or-nothing.
         bool submitInvalid = false;
+        {
+            std::unordered_set<WGPUCommandBuffer> seen;
+            seen.reserve(commandCount);
+            for (size_t i = 0; i < commandCount; ++i)
+            {
+                WGPUCommandBuffer cb = commands[i];
+                if (!cb)
+                    continue;
+                if (!seen.insert(cb).second)
+                {
+                    if (queue->device)
+                        queue->device->reportError(
+                            WGPUErrorType_Validation,
+                            pwgpu::ToStringView(
+                                "Submit: commandBuffers must be unique (duplicate entry)"));
+                    submitInvalid = true;
+                    break;
+                }
+            }
+        }
 
         for (size_t i = 0; i < commandCount; ++i)
         {
@@ -110,6 +129,16 @@ extern "C"
                         WGPUErrorType_Validation,
                         pwgpu::ToStringView("Submit: command buffer is invalid"));
                 }
+                submitInvalid = true;
+                continue;
+            }
+
+            if (cb->device && queue->device && cb->device != queue->device)
+            {
+                queue->device->reportError(
+                    WGPUErrorType_Validation,
+                    pwgpu::ToStringView(
+                        "Submit: command buffer belongs to a different device"));
                 submitInvalid = true;
                 continue;
             }
@@ -184,8 +213,9 @@ extern "C"
             {
                 if (!bg)
                     return false;
-                for (auto *buf : bg->bufferUses)
+                for (auto &use : bg->bufferUses)
                 {
+                    WGPUBufferImpl *buf = use.buffer;
                     if (!buf)
                         continue;
                     std::lock_guard<std::mutex> lock(buf->stateMutex);
@@ -304,7 +334,14 @@ extern "C"
         }
 
         if (submitInvalid || cmds.empty())
+        {
+            for (size_t i = 0; i < commandCount; ++i)
+            {
+                if (commands[i])
+                    commands[i]->submitted = true;
+            }
             return;
+        }
 
         for (auto *cb : validCBs)
             cb->submitted = true;

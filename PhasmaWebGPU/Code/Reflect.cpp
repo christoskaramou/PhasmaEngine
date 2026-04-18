@@ -89,6 +89,10 @@ namespace pwgpu
                 return WGPUTextureFormat_RGBA8Uint;
             case spv::ImageFormatRgba8i:
                 return WGPUTextureFormat_RGBA8Sint;
+            case spv::ImageFormatRgba16:
+                return WGPUTextureFormat_RGBA16Unorm;
+            case spv::ImageFormatRgba16Snorm:
+                return WGPUTextureFormat_RGBA16Snorm;
             case spv::ImageFormatRgba16f:
                 return WGPUTextureFormat_RGBA16Float;
             case spv::ImageFormatRgba16ui:
@@ -101,20 +105,61 @@ namespace pwgpu
                 return WGPUTextureFormat_RGBA32Uint;
             case spv::ImageFormatRgba32i:
                 return WGPUTextureFormat_RGBA32Sint;
-            case spv::ImageFormatR32f:
-                return WGPUTextureFormat_R32Float;
-            case spv::ImageFormatR32ui:
-                return WGPUTextureFormat_R32Uint;
-            case spv::ImageFormatR32i:
-                return WGPUTextureFormat_R32Sint;
+            case spv::ImageFormatRg8:
+                return WGPUTextureFormat_RG8Unorm;
+            case spv::ImageFormatRg8Snorm:
+                return WGPUTextureFormat_RG8Snorm;
+            case spv::ImageFormatRg8ui:
+                return WGPUTextureFormat_RG8Uint;
+            case spv::ImageFormatRg8i:
+                return WGPUTextureFormat_RG8Sint;
+            case spv::ImageFormatRg16:
+                return WGPUTextureFormat_RG16Unorm;
+            case spv::ImageFormatRg16Snorm:
+                return WGPUTextureFormat_RG16Snorm;
+            case spv::ImageFormatRg16f:
+                return WGPUTextureFormat_RG16Float;
+            case spv::ImageFormatRg16ui:
+                return WGPUTextureFormat_RG16Uint;
+            case spv::ImageFormatRg16i:
+                return WGPUTextureFormat_RG16Sint;
             case spv::ImageFormatRg32f:
                 return WGPUTextureFormat_RG32Float;
             case spv::ImageFormatRg32ui:
                 return WGPUTextureFormat_RG32Uint;
             case spv::ImageFormatRg32i:
                 return WGPUTextureFormat_RG32Sint;
+            case spv::ImageFormatR8:
+                return WGPUTextureFormat_R8Unorm;
+            case spv::ImageFormatR8Snorm:
+                return WGPUTextureFormat_R8Snorm;
+            case spv::ImageFormatR8ui:
+                return WGPUTextureFormat_R8Uint;
+            case spv::ImageFormatR8i:
+                return WGPUTextureFormat_R8Sint;
+            case spv::ImageFormatR16:
+                return WGPUTextureFormat_R16Unorm;
+            case spv::ImageFormatR16Snorm:
+                return WGPUTextureFormat_R16Snorm;
+            case spv::ImageFormatR16f:
+                return WGPUTextureFormat_R16Float;
+            case spv::ImageFormatR16ui:
+                return WGPUTextureFormat_R16Uint;
+            case spv::ImageFormatR16i:
+                return WGPUTextureFormat_R16Sint;
+            case spv::ImageFormatR32f:
+                return WGPUTextureFormat_R32Float;
+            case spv::ImageFormatR32ui:
+                return WGPUTextureFormat_R32Uint;
+            case spv::ImageFormatR32i:
+                return WGPUTextureFormat_R32Sint;
+            case spv::ImageFormatRgb10A2:
+                return WGPUTextureFormat_RGB10A2Unorm;
+            case spv::ImageFormatRgb10a2ui:
+                return WGPUTextureFormat_RGB10A2Uint;
+            case spv::ImageFormatR11fG11fB10f:
+                return WGPUTextureFormat_RG11B10Ufloat;
             default:
-                // Unmapped SPIR-V format: Undefined forces layout-compat to fail rather than accept rgba8unorm.
                 return WGPUTextureFormat_Undefined;
             }
         }

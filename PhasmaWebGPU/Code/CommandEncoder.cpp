@@ -152,6 +152,9 @@ namespace
     {
         if (footprint == 0)
             return false;
+        if (copySize.width == 0 || copySize.height == 0 || copySize.depthOrArrayLayers == 0)
+            return offset <= bufferSize;
+
         uint32_t widthInBlocks = (copySize.width + blockW - 1) / blockW;
         uint32_t heightInBlocks = (copySize.height + blockH - 1) / blockH;
         uint32_t minBytesPerRow = widthInBlocks * footprint;
@@ -1036,8 +1039,7 @@ extern "C"
         return cpe;
     }
 
-    WGPUCommandBuffer wgpuCommandEncoderFinish(WGPUCommandEncoder enc,
-                                               WGPUCommandBufferDescriptor const *descriptor)
+    WGPUCommandBuffer wgpuCommandEncoderFinish(WGPUCommandEncoder enc, WGPUCommandBufferDescriptor const *descriptor)
     {
         if (!enc)
             return nullptr;
@@ -1051,6 +1053,9 @@ extern "C"
             ReportEncoderValidation(enc, "CommandEncoder.finish(): a pass is still open");
             enc->invalid = true;
         }
+        // W3C §17.1: debug group stack must be empty at finish().
+        if (enc->debugGroupDepth != 0)
+            enc->invalid = true;
         enc->finished = true;
 
         if (enc->cmd)
@@ -1795,6 +1800,16 @@ extern "C"
             dst->internalState == BufferInternalState::Destroyed || !dst->peBuffer)
             return;
 
+        vk::MemoryBarrier2 mb{};
+        mb.srcStageMask = vk::PipelineStageFlagBits2::eAllCommands;
+        mb.srcAccessMask = vk::AccessFlagBits2::eMemoryWrite;
+        mb.dstStageMask = vk::PipelineStageFlagBits2::eCopy;
+        mb.dstAccessMask = vk::AccessFlagBits2::eTransferRead | vk::AccessFlagBits2::eTransferWrite;
+        vk::DependencyInfo dep{};
+        dep.memoryBarrierCount = 1;
+        dep.pMemoryBarriers = &mb;
+        enc->cmd->ApiHandle().pipelineBarrier2(dep);
+
         enc->cmd->ApiHandle().copyQueryPoolResults(
             querySet->queryPool, firstQuery, queryCount,
             dst->peBuffer->ApiHandle(), dstOffset,
@@ -1829,6 +1844,7 @@ extern "C"
     {
         if (!EncoderOpen(enc, "wgpuCommandEncoderPushDebugGroup"))
             return;
+        enc->debugGroupDepth++;
         enc->cmd->BeginDebugRegion(pwgpu::ToString(groupLabel));
     }
 
@@ -1836,6 +1852,12 @@ extern "C"
     {
         if (!EncoderOpen(enc, "wgpuCommandEncoderPopDebugGroup"))
             return;
+        if (enc->debugGroupDepth == 0)
+        {
+            enc->invalid = true;
+            return;
+        }
+        enc->debugGroupDepth--;
         enc->cmd->EndDebugRegion();
     }
 

@@ -6,6 +6,7 @@
 
 struct WGPUTextureImpl;
 struct WGPUTextureViewImpl;
+struct WGPUBufferImpl;
 
 namespace pwgpu
 {
@@ -18,6 +19,15 @@ namespace pwgpu
         ReadWriteStorage,
         AttachmentReadOnly,
         Attachment,
+    };
+
+    enum class BufferUsageKind : uint8_t
+    {
+        None = 0,
+        Input = 1 << 0,       // INDEX | VERTEX | INDIRECT
+        Constant = 1 << 1,    // UNIFORM binding
+        StorageRead = 1 << 2, // read-only-storage binding
+        Storage = 1 << 3,     // storage (read_write) binding
     };
 
     struct SubresourceKey
@@ -50,10 +60,16 @@ namespace pwgpu
     {
         bool AddSubresource(const SubresourceKey &k, SubresourceUsageKind kind, std::string &outErr);
         bool AddView(WGPUTextureViewImpl *view, SubresourceUsageKind kind, std::string &outErr);
+        bool AddBuffer(WGPUBufferImpl *buffer, BufferUsageKind kind, std::string &outErr);
         bool MergeFrom(const UsageScope &other, std::string &outErr);
-        void Clear() { map.clear(); }
+        void Clear()
+        {
+            map.clear();
+            bufferMap.clear();
+        }
 
         std::unordered_map<SubresourceKey, SubresourceUsageKind, SubresourceKeyHash> map;
+        std::unordered_map<WGPUBufferImpl *, uint8_t> bufferMap;
         bool strictWritableDuplicates = false;
     };
 

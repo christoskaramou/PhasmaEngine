@@ -98,6 +98,29 @@ extern "C"
         cpe->retainedPipelines.push_back(pipeline);
 
         cpe->cmd->ApiHandle().bindPipeline(vk::PipelineBindPoint::eCompute, pipeline->vkPipeline);
+
+        // Replay any bind groups already recorded via setBindGroup before
+        // setPipeline. setBindGroup is a no-op for the actual Vulkan bind
+        // until a pipeline is known (needed for vkCmdBindDescriptorSets's
+        // layout argument). Without this replay, dispatches hit
+        // VUID-vkCmdDispatch-None-08600 (descriptor set 0 not bound).
+        if (pipeline->layout)
+        {
+            auto &bgls = pipeline->layout->bindGroupLayouts;
+            vk::PipelineLayout vkLayout(pipeline->layout->vkLayout);
+            for (size_t i = 0; i < cpe->currentBindGroups.size() && i < bgls.size(); ++i)
+            {
+                auto *bg = cpe->currentBindGroups[i];
+                if (!bg || !bg->descriptor || !bgls[i])
+                    continue;
+                if (!BglGroupEquivalent(bg->layout, bgls[i]))
+                    continue;
+                vk::DescriptorSet ds = bg->descriptor->ApiHandle();
+                cpe->cmd->ApiHandle().bindDescriptorSets(
+                    vk::PipelineBindPoint::eCompute, vkLayout,
+                    static_cast<uint32_t>(i), 1, &ds, 0, nullptr);
+            }
+        }
     }
 
     // ---- §14.1 setBindGroup ----
@@ -248,15 +271,20 @@ extern "C"
         return true;
     }
 
-    static void ValidateDispatchUsageScope(WGPUComputePassEncoder cpe)
+    static void ValidateDispatchUsageScope(WGPUComputePassEncoder cpe,
+                                           WGPUBuffer indirectBuffer = nullptr)
     {
         if (!cpe->pipeline || !cpe->pipeline->layout)
             return;
-        const size_t pipelineGroupCount = cpe->pipeline->layout->bindGroupLayouts.size();
+        auto &bgls = cpe->pipeline->layout->bindGroupLayouts;
+        const size_t pipelineGroupCount = bgls.size();
         pwgpu::UsageScope scope;
         scope.strictWritableDuplicates = true;
         for (size_t i = 0; i < cpe->currentBindGroups.size() && i < pipelineGroupCount; ++i)
         {
+            // §16.1.2: only bind groups in slots used by the pipeline layout contribute.
+            if (!bgls[i])
+                continue;
             auto *bg = cpe->currentBindGroups[i];
             if (!bg || bg->invalid)
                 continue;
@@ -268,6 +296,24 @@ extern "C"
                     cpe->usageScopeValid = false;
                     return;
                 }
+            }
+            for (auto &use : bg->bufferUses)
+            {
+                std::string err;
+                if (!scope.AddBuffer(use.buffer, use.kind, err))
+                {
+                    cpe->usageScopeValid = false;
+                    return;
+                }
+            }
+        }
+        if (indirectBuffer)
+        {
+            std::string err;
+            if (!scope.AddBuffer(indirectBuffer, pwgpu::BufferUsageKind::Input, err))
+            {
+                cpe->usageScopeValid = false;
+                return;
             }
         }
     }
@@ -356,7 +402,7 @@ extern "C"
         if (!ValidateBindGroupCompat(cpe))
             return;
 
-        ValidateDispatchUsageScope(cpe);
+        ValidateDispatchUsageScope(cpe, buffer);
 
         cpe->cmd->ApiHandle().dispatchIndirect(buffer->peBuffer->ApiHandle(), offset);
         cpe->usedBuffers.push_back(buffer);

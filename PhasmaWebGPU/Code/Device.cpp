@@ -633,6 +633,9 @@ extern "C"
         const bool needsHostAccess =
             (usage & (WGPUBufferUsage_MapRead | WGPUBufferUsage_MapWrite)) != 0 || mappedAtCreation;
 
+        if (!needsHostAccess)
+            vkUsage |= vk::BufferUsageFlagBits2::eTransferDst;
+
         VmaAllocationCreateFlags vmaFlags = 0;
         if (needsHostAccess)
         {
@@ -678,6 +681,25 @@ extern "C"
         {
             std::memset(buf->peBuffer->Data(), 0, static_cast<size_t>(size));
             buf->peBuffer->Flush();
+        }
+        else if (!needsHostAccess && size > 0 && device->queue && device->queue->peQueue)
+        {
+            const uint64_t fillSize = size & ~uint64_t(3);
+            if (fillSize > 0)
+            {
+                pe::CommandBuffer *cmd = device->queue->peQueue->AcquireCommandBuffer();
+                cmd->Begin();
+                cmd->FillBuffer(buf->peBuffer, 0, static_cast<size_t>(fillSize), 0);
+                cmd->End();
+                device->queue->peQueue->Submit(1, &cmd, nullptr, nullptr);
+                const uint64_t serial = device->queue->peQueue->GetSubmissionCount();
+                {
+                    std::lock_guard<std::mutex> lock(device->queue->pendingMutex);
+                    device->queue->pendingSubmits.push_back({cmd, serial});
+                }
+                device->queue->lastSubmissionSerial.store(serial, std::memory_order_release);
+                buf->lastUsageSerial.store(serial, std::memory_order_release);
+            }
         }
 
         if (mappedAtCreation)
@@ -1847,7 +1869,22 @@ extern "C"
                         size = entry.buffer->size - offset;
                     if (entry.buffer->peBuffer)
                         bg->descriptor->SetBuffer(entry.binding, entry.buffer->peBuffer, offset, size);
-                    bg->bufferUses.push_back(entry.buffer);
+                    pwgpu::BufferUsageKind bufKind = pwgpu::BufferUsageKind::None;
+                    switch (le.buffer.type)
+                    {
+                    case WGPUBufferBindingType_Uniform:
+                        bufKind = pwgpu::BufferUsageKind::Constant;
+                        break;
+                    case WGPUBufferBindingType_Storage:
+                        bufKind = pwgpu::BufferUsageKind::Storage;
+                        break;
+                    case WGPUBufferBindingType_ReadOnlyStorage:
+                        bufKind = pwgpu::BufferUsageKind::StorageRead;
+                        break;
+                    default:
+                        break;
+                    }
+                    bg->bufferUses.push_back({entry.buffer, bufKind});
                     if (le.buffer.hasDynamicOffset)
                         bg->dynamicBindings.push_back({entry.binding, entry.buffer, offset, size});
                 }

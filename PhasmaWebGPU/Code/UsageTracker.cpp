@@ -130,12 +130,47 @@ namespace pwgpu
         return true;
     }
 
+    bool UsageScope::AddBuffer(WGPUBufferImpl *buffer, BufferUsageKind kind, std::string &outErr)
+    {
+        if (!buffer || kind == BufferUsageKind::None)
+            return true;
+        const uint8_t bit = static_cast<uint8_t>(kind);
+        auto it = bufferMap.find(buffer);
+        if (it == bufferMap.end())
+        {
+            bufferMap.emplace(buffer, bit);
+            return true;
+        }
+        const uint8_t merged = static_cast<uint8_t>(it->second | bit);
+        constexpr uint8_t kStorage = static_cast<uint8_t>(BufferUsageKind::Storage);
+        constexpr uint8_t kReads = static_cast<uint8_t>(BufferUsageKind::Input) |
+                                   static_cast<uint8_t>(BufferUsageKind::Constant) |
+                                   static_cast<uint8_t>(BufferUsageKind::StorageRead);
+        if ((merged & kStorage) && (merged & kReads))
+        {
+            outErr = "buffer used with incompatible usages in one usage scope: storage + read";
+            return false;
+        }
+        it->second = merged;
+        return true;
+    }
+
     bool UsageScope::MergeFrom(const UsageScope &other, std::string &outErr)
     {
         for (auto &kv : other.map)
         {
             if (!AddSubresource(kv.first, kv.second, outErr))
                 return false;
+        }
+        for (auto &kv : other.bufferMap)
+        {
+            for (uint8_t bit = 1; bit != 0 && bit <= 0x08; bit <<= 1)
+            {
+                if (!(kv.second & bit))
+                    continue;
+                if (!AddBuffer(kv.first, static_cast<BufferUsageKind>(bit), outErr))
+                    return false;
+            }
         }
         return true;
     }

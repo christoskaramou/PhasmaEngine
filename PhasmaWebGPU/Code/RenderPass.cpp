@@ -185,6 +185,24 @@ extern "C"
         rpe->retainedPipelines.push_back(pipeline);
 
         rpe->cmd->ApiHandle().bindPipeline(vk::PipelineBindPoint::eGraphics, pipeline->vkPipeline);
+
+        if (pipeline->layout)
+        {
+            auto &bgls = pipeline->layout->bindGroupLayouts;
+            vk::PipelineLayout vkLayout(pipeline->layout->vkLayout);
+            for (size_t i = 0; i < rpe->currentBindGroups.size() && i < bgls.size(); ++i)
+            {
+                auto *bg = rpe->currentBindGroups[i];
+                if (!bg || !bg->descriptor || !bgls[i])
+                    continue;
+                if (!BglGroupEquivalent(bg->layout, bgls[i]))
+                    continue;
+                vk::DescriptorSet ds = bg->descriptor->ApiHandle();
+                rpe->cmd->ApiHandle().bindDescriptorSets(
+                    vk::PipelineBindPoint::eGraphics, vkLayout,
+                    static_cast<uint32_t>(i), 1, &ds, 0, nullptr);
+            }
+        }
     }
 
     void wgpuRenderPassEncoderSetBindGroup(WGPURenderPassEncoder rpe, uint32_t groupIndex,
@@ -220,6 +238,12 @@ extern "C"
             {
                 std::string err;
                 if (!rpe->usageScope.AddView(use.view, use.kind, err))
+                    rpe->usageScopeValid = false;
+            }
+            for (auto &use : group->bufferUses)
+            {
+                std::string err;
+                if (!rpe->usageScope.AddBuffer(use.buffer, use.kind, err))
                     rpe->usageScopeValid = false;
             }
             wgpuBindGroupAddRef(group);
@@ -352,6 +376,12 @@ extern "C"
         rpe->boundVertexBuffers[slot].bound = true;
         rpe->boundVertexBuffers[slot].size = size;
 
+        {
+            std::string err;
+            if (!rpe->usageScope.AddBuffer(buffer, pwgpu::BufferUsageKind::Input, err))
+                rpe->usageScopeValid = false;
+        }
+
         // Destroyed buffer defers to queue.submit() per spec.
         if (buffer->internalState == BufferInternalState::Destroyed || !buffer->peBuffer)
         {
@@ -420,6 +450,12 @@ extern "C"
         rpe->indexBuffer = buffer;
         rpe->indexFormat = format;
         rpe->indexBufferSize = boundSize;
+
+        {
+            std::string err;
+            if (!rpe->usageScope.AddBuffer(buffer, pwgpu::BufferUsageKind::Input, err))
+                rpe->usageScopeValid = false;
+        }
 
         if (buffer->internalState == BufferInternalState::Destroyed || !buffer->peBuffer)
         {
@@ -516,6 +552,12 @@ extern "C"
             return;
         }
 
+        {
+            std::string err;
+            if (!rpe->usageScope.AddBuffer(buffer, pwgpu::BufferUsageKind::Input, err))
+                rpe->usageScopeValid = false;
+        }
+
         if (!rpe->pipeline || rpe->bindingStateInvalidated)
             return;
         if (!ValidateBindGroupCompat(rpe))
@@ -566,6 +608,12 @@ extern "C"
         {
             rpe->invalid = true;
             return;
+        }
+
+        {
+            std::string err;
+            if (!rpe->usageScope.AddBuffer(buffer, pwgpu::BufferUsageKind::Input, err))
+                rpe->usageScopeValid = false;
         }
 
         if (!rpe->pipeline || rpe->bindingStateInvalidated)

@@ -41,6 +41,12 @@ struct WGPUBindGroupTextureUse
     pwgpu::SubresourceUsageKind kind = pwgpu::SubresourceUsageKind::None;
 };
 
+struct WGPUBindGroupBufferUse
+{
+    WGPUBufferImpl *buffer = nullptr;
+    pwgpu::BufferUsageKind kind = pwgpu::BufferUsageKind::None;
+};
+
 struct WGPUBindGroupImpl
 {
     std::atomic<uint32_t> refCount{1};
@@ -52,7 +58,7 @@ struct WGPUBindGroupImpl
     bool invalid = false;
 
     std::vector<WGPUBindGroupTextureUse> textureUses;
-    std::vector<WGPUBufferImpl *> bufferUses;
+    std::vector<WGPUBindGroupBufferUse> bufferUses;
     std::vector<pe::Sampler *> ownedSamplers;
 
     struct DynamicBinding

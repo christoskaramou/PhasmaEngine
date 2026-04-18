@@ -411,6 +411,13 @@ namespace pwgpu
         case WGPUTextureFormat_R8Snorm:
         case WGPUTextureFormat_RG8Snorm:
         case WGPUTextureFormat_RGBA8Snorm:
+        // Tier1 formats: not multisampleable in base spec (gated by SupportsMultisamplingTier1).
+        case WGPUTextureFormat_R16Unorm:
+        case WGPUTextureFormat_R16Snorm:
+        case WGPUTextureFormat_RG16Unorm:
+        case WGPUTextureFormat_RG16Snorm:
+        case WGPUTextureFormat_RGBA16Unorm:
+        case WGPUTextureFormat_RGBA16Snorm:
             return false;
         default:
             return f != WGPUTextureFormat_Undefined;
@@ -1519,6 +1526,8 @@ namespace pwgpu
         case WGPUTextureFormat_R16Uint:
         case WGPUTextureFormat_R16Sint:
         case WGPUTextureFormat_R16Float:
+        case WGPUTextureFormat_R16Unorm:
+        case WGPUTextureFormat_R16Snorm:
             return {2, 2};
         case WGPUTextureFormat_RG8Unorm:
         case WGPUTextureFormat_RG8Uint:
@@ -1531,6 +1540,8 @@ namespace pwgpu
         case WGPUTextureFormat_RG16Uint:
         case WGPUTextureFormat_RG16Sint:
         case WGPUTextureFormat_RG16Float:
+        case WGPUTextureFormat_RG16Unorm:
+        case WGPUTextureFormat_RG16Snorm:
             return {4, 2};
         case WGPUTextureFormat_RGBA8Unorm:
         case WGPUTextureFormat_RGBA8UnormSrgb:
@@ -1552,6 +1563,8 @@ namespace pwgpu
         case WGPUTextureFormat_RGBA16Uint:
         case WGPUTextureFormat_RGBA16Sint:
         case WGPUTextureFormat_RGBA16Float:
+        case WGPUTextureFormat_RGBA16Unorm:
+        case WGPUTextureFormat_RGBA16Snorm:
             return {8, 2};
         case WGPUTextureFormat_RGBA32Uint:
         case WGPUTextureFormat_RGBA32Sint:

@@ -231,6 +231,12 @@ extern "C"
                 if (!rbe->usageScope.AddView(use.view, use.kind, err))
                     rbe->usageScopeValid = false;
             }
+            for (auto &use : group->bufferUses)
+            {
+                std::string err;
+                if (!rbe->usageScope.AddBuffer(use.buffer, use.kind, err))
+                    rbe->usageScopeValid = false;
+            }
             wgpuBindGroupAddRef(group);
             rbe->retainedBindGroups.push_back(group);
         }
@@ -367,6 +373,12 @@ extern "C"
         rbe->boundVertexBuffers[slot].bound = true;
         rbe->boundVertexBuffers[slot].size = size;
 
+        {
+            std::string err;
+            if (!rbe->usageScope.AddBuffer(buffer, pwgpu::BufferUsageKind::Input, err))
+                rbe->usageScopeValid = false;
+        }
+
         wgpuBufferAddRef(buffer);
         rbe->retainedBuffers.push_back(buffer);
 
@@ -424,6 +436,12 @@ extern "C"
         rbe->indexBuffer = buffer;
         rbe->indexFormat = format;
         rbe->indexBufferSize = boundSize;
+
+        {
+            std::string err;
+            if (!rbe->usageScope.AddBuffer(buffer, pwgpu::BufferUsageKind::Input, err))
+                rbe->usageScopeValid = false;
+        }
 
         wgpuBufferAddRef(buffer);
         rbe->retainedBuffers.push_back(buffer);
@@ -536,6 +554,12 @@ extern "C"
             return;
         }
 
+        {
+            std::string err;
+            if (!rbe->usageScope.AddBuffer(buffer, pwgpu::BufferUsageKind::Input, err))
+                rbe->usageScopeValid = false;
+        }
+
         wgpuBufferAddRef(buffer);
         rbe->retainedBuffers.push_back(buffer);
 
@@ -588,6 +612,12 @@ extern "C"
         {
             rbe->invalid = true;
             return;
+        }
+
+        {
+            std::string err;
+            if (!rbe->usageScope.AddBuffer(buffer, pwgpu::BufferUsageKind::Input, err))
+                rbe->usageScopeValid = false;
         }
 
         wgpuBufferAddRef(buffer);
