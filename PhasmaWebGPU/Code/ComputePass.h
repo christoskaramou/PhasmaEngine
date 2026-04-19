@@ -20,6 +20,8 @@ struct WGPUComputePassEncoderImpl
     bool ended = false;
     bool invalid = false;
     bool wasOpened = true;
+    std::string deferredErrorMessage;
+    bool deferredResourceError = false; // §3.3 destroyed resource — fires at submit
 
     WGPUComputePipelineImpl *pipeline = nullptr;
     uint32_t debugGroupDepth = 0;

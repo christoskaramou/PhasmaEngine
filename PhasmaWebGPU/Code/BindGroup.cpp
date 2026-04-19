@@ -9,7 +9,12 @@ bool BglGroupEquivalent(const WGPUBindGroupLayoutImpl *a, const WGPUBindGroupLay
         return true;
     if (!a || !b)
         return false;
-    if (a->exclusivePipeline != nullptr || b->exclusivePipeline != nullptr)
+    // §10.2.7 default pipeline layout: a BGL synthesized by an `auto`-layout
+    // pipeline is identity-bound to that pipeline. Two such BGLs match iff
+    // they come from the SAME pipeline (then we still require structural
+    // equivalence below). A default BGL is NEVER equivalent to a BGL from a
+    // different pipeline or to an explicit BGL.
+    if (a->exclusivePipeline != b->exclusivePipeline)
         return false;
     if (a->entries.size() != b->entries.size())
         return false;

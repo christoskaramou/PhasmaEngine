@@ -17,10 +17,13 @@ extern "C" void wgpuQuerySetRelease(WGPUQuerySet);
 
 namespace
 {
+    // §13.7: encoder errors fire at finish() (first wins, bubbled by pass.end).
     void ReportPassValidation(WGPUComputePassEncoder cpe, const char *msg)
     {
-        if (cpe && cpe->device)
-            cpe->device->reportError(WGPUErrorType_Validation, pwgpu::ToStringView(msg));
+        if (!cpe)
+            return;
+        if (cpe->deferredErrorMessage.empty())
+            cpe->deferredErrorMessage = msg ? msg : "";
     }
 
     bool PassOpen(WGPUComputePassEncoder cpe, const char *apiName)
@@ -29,14 +32,23 @@ namespace
             return false;
         if (cpe->ended)
         {
-            std::string msg = std::string(apiName) + ": compute pass encoder is already ended";
-            ReportPassValidation(cpe, msg.c_str());
+            // No future end()/finish() will surface a deferred message.
+            if (cpe->device)
+            {
+                std::string msg = std::string(apiName) + ": compute pass encoder is already ended";
+                cpe->device->reportError(WGPUErrorType_Validation,
+                                         pwgpu::ToStringView(msg.c_str()));
+            }
             return false;
         }
         if (cpe->parent && cpe->parent->finished)
         {
-            std::string msg = std::string(apiName) + ": parent command encoder is already finished";
-            ReportPassValidation(cpe, msg.c_str());
+            if (cpe->device)
+            {
+                std::string msg = std::string(apiName) + ": parent command encoder is already finished";
+                cpe->device->reportError(WGPUErrorType_Validation,
+                                         pwgpu::ToStringView(msg.c_str()));
+            }
             return false;
         }
         if (cpe->invalid)
@@ -151,10 +163,19 @@ extern "C"
             }
             if (group->invalid)
             {
-                ReportPassValidation(cpe,
-                                     "wgpuComputePassEncoderSetBindGroup: bindGroup is not valid "
-                                     "to use with this encoder (invalid bindGroup)");
-                cpe->invalid = true;
+                if (group->invalidFromDestroyedResource)
+                {
+                    // §3.3: defer to queue.submit, don't fire at finish.
+                    cpe->deferredResourceError = true;
+                }
+                else
+                {
+                    ReportPassValidation(
+                        cpe,
+                        "wgpuComputePassEncoderSetBindGroup: bindGroup is not valid "
+                        "to use with this encoder (invalid bindGroup)");
+                    cpe->invalid = true;
+                }
                 return;
             }
         }
@@ -285,6 +306,10 @@ extern "C"
         {
             auto *plBgl = bgls[i];
             if (!plBgl)
+                continue;
+            // §10.2.7: empty default/explicit BGLs are treated as "null" and
+            // ignored when checking setBindGroup() compatibility.
+            if (plBgl->entries.empty())
                 continue;
             if (i >= cpe->currentBindGroups.size())
             {
@@ -500,12 +525,18 @@ extern "C"
             return;
         if (cpe->ended)
         {
-            ReportPassValidation(cpe, "ComputePassEncoder.end(): pass is already ended");
+            if (cpe->device)
+                cpe->device->reportError(
+                    WGPUErrorType_Validation,
+                    pwgpu::ToStringView("ComputePassEncoder.end(): pass is already ended"));
             return;
         }
         if (cpe->parent && cpe->parent->finished)
         {
-            ReportPassValidation(cpe, "ComputePassEncoder.end(): parent command encoder is already finished");
+            if (cpe->device)
+                cpe->device->reportError(
+                    WGPUErrorType_Validation,
+                    pwgpu::ToStringView("ComputePassEncoder.end(): parent command encoder is already finished"));
             cpe->ended = true;
             return;
         }
@@ -519,7 +550,14 @@ extern "C"
         }
 
         if ((cpe->invalid || !cpe->usageScopeValid || cpe->debugGroupDepth != 0) && cpe->parent)
+        {
             cpe->parent->invalid = true;
+            if (cpe->parent->deferredErrorMessage.empty() && !cpe->deferredErrorMessage.empty())
+                cpe->parent->deferredErrorMessage = cpe->deferredErrorMessage;
+        }
+        // Submit-time validity propagates regardless of finish-time invalid.
+        if (cpe->deferredResourceError && cpe->parent)
+            cpe->parent->deferredResourceError = true;
 
         if (cpe->debugGroupDepth != 0)
             PE_WARN("[WebGPU] wgpuComputePassEncoderEnd: %u debug group(s) still open", cpe->debugGroupDepth);

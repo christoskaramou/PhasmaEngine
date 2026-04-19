@@ -90,6 +90,10 @@ namespace pe
         m_gpuTimerInfosCount = 0;
         while (!m_gpuTimerIdsStack.empty())
             m_gpuTimerIdsStack.pop();
+        // Cached timers may carry m_inUse=true from an abandoned recording.
+        for (auto &info : m_gpuTimerInfos)
+            if (info.timer)
+                info.timer->ResetState();
 #endif
     }
 

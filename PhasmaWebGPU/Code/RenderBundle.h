@@ -17,6 +17,8 @@ struct WGPURenderBundleImpl
     std::string label;
     WGPUDeviceImpl *device = nullptr;
     bool invalid = false;
+    std::string deferredErrorMessage;
+    bool deferredResourceError = false; // §3.3 destroyed resource — fires at submit
 
     std::vector<WGPUTextureFormat> colorFormats;
     WGPUTextureFormat depthStencilFormat = WGPUTextureFormat_Undefined;
@@ -42,6 +44,8 @@ struct WGPURenderBundleEncoderImpl
     WGPUDeviceImpl *device = nullptr;
     bool invalid = false;
     bool finished = false;
+    std::string deferredErrorMessage;
+    bool deferredResourceError = false;
 
     std::vector<WGPUTextureFormat> colorFormats;
     WGPUTextureFormat depthStencilFormat = WGPUTextureFormat_Undefined;

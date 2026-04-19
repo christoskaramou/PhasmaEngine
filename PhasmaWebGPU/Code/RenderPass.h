@@ -25,6 +25,7 @@ struct WGPURenderPassEncoderImpl
     bool wasOpened = true;
     // Invalid pass whose error must surface at queue.submit(), not finish().
     bool deferredResourceError = false;
+    std::string deferredErrorMessage;
 
     WGPURenderPipelineImpl *pipeline = nullptr;
     uint32_t debugGroupDepth = 0;

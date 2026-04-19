@@ -88,6 +88,12 @@ namespace pe
         float GetTime();
         double GetStartTimeMs() const; // absolute start timestamp in ms (valid after GetTime())
         CommandBuffer *GetCommandBuffer() const { return m_cmd; }
+        // Discard in-flight Start() if the parent command buffer was reset.
+        void ResetState()
+        {
+            m_inUse = false;
+            m_resultsReady = false;
+        }
 
     private:
         uint64_t m_queries[2];

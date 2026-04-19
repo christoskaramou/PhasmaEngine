@@ -115,4 +115,13 @@ namespace pwgpu
                                    const std::string &entryPoint,
                                    FragmentOutputBuiltins &out,
                                    std::string &errMsg);
+
+    // Returns true if the fragment shader declares a @blend_src(1) output
+    // (SPIR-V: an OpVariable in stage_outputs decorated with both
+    //  DecorationLocation 0 and DecorationIndex 1, the WGSL @blend_src(1) lowering).
+    // Used by createRenderPipeline to validate dual-source blend factor usage
+    // (W3C WebGPU §10.3.6 GPUBlendComponent dual-source-blending requirements).
+    bool HasBlendSrc1Output(const std::vector<uint32_t> &spirv,
+                            const std::string &entryPoint,
+                            std::string &errMsg);
 } // namespace pwgpu

@@ -309,38 +309,55 @@ extern "C"
         uint64_t rangeSize = 0;
         const bool rangeOk = ResolveRange(buffer->size, offset, size, rangeSize);
 
-        const char *errorText = nullptr;
+        // Per WebGPU spec §5.2 GPUBuffer.mapAsync content-timeline steps:
+        //   1. If this.mapState is not "unmapped": early-reject path —
+        //      generate a validation error and return a rejected promise
+        //      WITHOUT changing mapState.
+        //   2. Otherwise, set [[pending_map]] to p (mapState becomes
+        //      "pending") synchronously, then issue the device-timeline
+        //      validation steps. Even if validation fails, the spec
+        //      requires mapState to have transitioned to "pending"
+        //      before being reset to "unmapped" via the map failure steps.
+        bool earlyReject = false;
+        const char *earlyRejectMsg = nullptr;
+        const char *validationError = nullptr;
         {
             std::lock_guard<std::mutex> lock(buffer->stateMutex);
 
             if (buffer->mapState != WGPUBufferMapState_Unmapped)
-                errorText = "mapAsync called while a prior map is pending or active";
-            else if (buffer->invalid)
-                errorText = "mapAsync on invalid buffer";
-            else if (buffer->internalState != BufferInternalState::Available)
-                errorText = "mapAsync requires internal state 'available'";
-            else if (!rangeOk)
-                errorText = "mapAsync offset exceeds buffer size";
-            else if ((offset % 8) != 0)
-                errorText = "mapAsync offset must be a multiple of 8";
-            else if ((rangeSize % 4) != 0)
-                errorText = "mapAsync size must be a multiple of 4";
-            else if (offset + rangeSize > buffer->size)
-                errorText = "mapAsync range out of bounds";
-            else if (mode == WGPUMapMode_None ||
-                     (mode & ~(WGPUMapMode_Read | WGPUMapMode_Write)) != 0)
-                errorText = "mapAsync mode must be exactly READ or WRITE";
-            else if ((mode & WGPUMapMode_Read) && (mode & WGPUMapMode_Write))
-                errorText = "mapAsync mode must not combine READ and WRITE";
-            else if ((mode & WGPUMapMode_Read) &&
-                     (buffer->usage & WGPUBufferUsage_MapRead) == 0)
-                errorText = "mapAsync READ requires MAP_READ usage";
-            else if ((mode & WGPUMapMode_Write) &&
-                     (buffer->usage & WGPUBufferUsage_MapWrite) == 0)
-                errorText = "mapAsync WRITE requires MAP_WRITE usage";
-
-            if (!errorText)
             {
+                earlyReject = true;
+                earlyRejectMsg = "mapAsync called while a prior map is pending or active";
+            }
+            else
+            {
+                // Pre-compute validation result so we can decide whether to
+                // schedule a success-path event or an error-path event, but
+                // mapState transitions to Pending now in either case.
+                if (buffer->invalid)
+                    validationError = "mapAsync on invalid buffer";
+                else if (buffer->internalState != BufferInternalState::Available)
+                    validationError = "mapAsync requires internal state 'available'";
+                else if (!rangeOk)
+                    validationError = "mapAsync offset exceeds buffer size";
+                else if ((offset % 8) != 0)
+                    validationError = "mapAsync offset must be a multiple of 8";
+                else if ((rangeSize % 4) != 0)
+                    validationError = "mapAsync size must be a multiple of 4";
+                else if (offset + rangeSize > buffer->size)
+                    validationError = "mapAsync range out of bounds";
+                else if (mode == WGPUMapMode_None ||
+                         (mode & ~(WGPUMapMode_Read | WGPUMapMode_Write)) != 0)
+                    validationError = "mapAsync mode must be exactly READ or WRITE";
+                else if ((mode & WGPUMapMode_Read) && (mode & WGPUMapMode_Write))
+                    validationError = "mapAsync mode must not combine READ and WRITE";
+                else if ((mode & WGPUMapMode_Read) &&
+                         (buffer->usage & WGPUBufferUsage_MapRead) == 0)
+                    validationError = "mapAsync READ requires MAP_READ usage";
+                else if ((mode & WGPUMapMode_Write) &&
+                         (buffer->usage & WGPUBufferUsage_MapWrite) == 0)
+                    validationError = "mapAsync WRITE requires MAP_WRITE usage";
+
                 buffer->mapState = WGPUBufferMapState_Pending;
                 buffer->internalState = BufferInternalState::Unavailable;
                 buffer->pendingCallback = callbackInfo;
@@ -350,10 +367,80 @@ extern "C"
             }
         }
 
-        if (errorText)
+        if (earlyReject)
         {
-            ReportBufferValidationError(buffer, errorText);
-            return trackMapErrorDeferred(errorText);
+            ReportBufferValidationError(buffer, earlyRejectMsg);
+            return trackMapErrorDeferred(earlyRejectMsg);
+        }
+
+        if (validationError)
+        {
+            // Validation failed on the device timeline. Per the spec map
+            // failure steps, transition mapState back to Unmapped, generate
+            // a validation error, and reject the future.
+            ReportBufferValidationError(buffer, validationError);
+
+            if (!inst || !callbackInfo.callback)
+            {
+                std::lock_guard<std::mutex> lock(buffer->stateMutex);
+                if (buffer->mapState == WGPUBufferMapState_Pending)
+                {
+                    buffer->mapState = WGPUBufferMapState_Unmapped;
+                    buffer->pendingCallback = {};
+                    buffer->pendingOffset = 0;
+                    buffer->pendingSize = 0;
+                    buffer->pendingMode = WGPUMapMode_None;
+                    if (buffer->internalState != BufferInternalState::Destroyed)
+                        buffer->internalState = buffer->invalid
+                                                    ? BufferInternalState::Unavailable
+                                                    : BufferInternalState::Available;
+                }
+                return inst ? inst->futures.NextId() : WGPUFuture{0};
+            }
+
+            auto cb = callbackInfo.callback;
+            auto u1 = callbackInfo.userdata1;
+            auto u2 = callbackInfo.userdata2;
+            std::string captured(validationError);
+            WGPUCallbackMode deferredMode = callbackInfo.mode;
+            if (deferredMode == WGPUCallbackMode_AllowSpontaneous)
+                deferredMode = WGPUCallbackMode_AllowProcessEvents;
+            return inst->futures.TrackEvent(
+                deferredMode,
+                [cb, u1, u2, captured, bufferLifeGuard]()
+                {
+                    WGPUBufferImpl *buffer = bufferLifeGuard.get();
+                    bool fireCallback = false;
+                    {
+                        std::lock_guard<std::mutex> lock(buffer->stateMutex);
+                        // Only transition Pending → Unmapped and fire the
+                        // user's callback if this future still owns the
+                        // pending map (userdata1 match). unmap()/destroy()
+                        // may have already cleared the pending state and
+                        // synchronously delivered an Aborted callback —
+                        // firing again here would invoke the JS callback
+                        // twice on the same mapAsync() promise and corrupt
+                        // the binding.
+                        if (buffer->mapState == WGPUBufferMapState_Pending &&
+                            buffer->pendingCallback.userdata1 == u1)
+                        {
+                            buffer->mapState = WGPUBufferMapState_Unmapped;
+                            buffer->pendingCallback = {};
+                            buffer->pendingOffset = 0;
+                            buffer->pendingSize = 0;
+                            buffer->pendingMode = WGPUMapMode_None;
+                            if (buffer->internalState != BufferInternalState::Destroyed)
+                                buffer->internalState =
+                                    buffer->invalid ? BufferInternalState::Unavailable
+                                                    : BufferInternalState::Available;
+                            fireCallback = true;
+                        }
+                    }
+                    if (!fireCallback)
+                        return;
+                    WGPUStringView sv{captured.c_str(), captured.size()};
+                    cb(WGPUMapAsyncStatus_Error, sv, u1, u2);
+                });
         }
 
         if (!inst || !callbackInfo.callback)

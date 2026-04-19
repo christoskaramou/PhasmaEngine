@@ -56,6 +56,7 @@ struct WGPUBindGroupImpl
     pe::Descriptor *descriptor = nullptr;
     WGPUBindGroupLayoutImpl *layout = nullptr;
     bool invalid = false;
+    bool invalidFromDestroyedResource = false; // §3.3 — defer to queue.submit
 
     std::vector<WGPUBindGroupTextureUse> textureUses;
     std::vector<WGPUBindGroupBufferUse> bufferUses;

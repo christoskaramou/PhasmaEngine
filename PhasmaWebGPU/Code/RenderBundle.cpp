@@ -16,10 +16,13 @@ extern "C" void wgpuBufferRelease(WGPUBuffer);
 
 namespace
 {
+    // §22: bundle errors surface at executeBundles → parent finish (first wins).
     void ReportEncoderValidation(WGPURenderBundleEncoder rbe, const char *msg)
     {
-        if (rbe && rbe->device)
-            rbe->device->reportError(WGPUErrorType_Validation, pwgpu::ToStringView(msg));
+        if (!rbe)
+            return;
+        if (rbe->deferredErrorMessage.empty())
+            rbe->deferredErrorMessage = msg ? msg : "";
     }
 
     bool ValidateBindGroupCompat(WGPURenderBundleEncoder rbe)
@@ -252,10 +255,18 @@ extern "C"
             }
             if (group->invalid)
             {
-                ReportEncoderValidation(rbe,
-                                        "wgpuRenderBundleEncoderSetBindGroup: bindGroup is not valid "
-                                        "to use with this encoder (invalid bindGroup)");
-                rbe->invalid = true;
+                if (group->invalidFromDestroyedResource)
+                {
+                    rbe->deferredResourceError = true;
+                }
+                else
+                {
+                    ReportEncoderValidation(
+                        rbe,
+                        "wgpuRenderBundleEncoderSetBindGroup: bindGroup is not valid "
+                        "to use with this encoder (invalid bindGroup)");
+                    rbe->invalid = true;
+                }
                 return;
             }
         }
@@ -806,6 +817,7 @@ extern "C"
                               rbe->debugGroupDepth);
                 ReportEncoderValidation(rbe, buf);
             }
+            rb->deferredErrorMessage = std::move(rbe->deferredErrorMessage);
             return rb;
         }
 
@@ -824,6 +836,9 @@ extern "C"
 
         rb->usageScope = std::move(rbe->usageScope);
         rb->usageScopeValid = rbe->usageScopeValid;
+        // Propagate submit-time validity (W3C §3.3): bundle keeps the flag,
+        // executeBundles will bubble it onto the parent render pass.
+        rb->deferredResourceError = rbe->deferredResourceError;
 
         return rb;
     }

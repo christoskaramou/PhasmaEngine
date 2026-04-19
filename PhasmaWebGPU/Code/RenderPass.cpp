@@ -21,10 +21,13 @@ extern "C" void wgpuRenderBundleRelease(WGPURenderBundle);
 
 namespace
 {
+    // §13.7: encoder errors fire at finish() (first wins, bubbled by pass.end).
     void ReportPassValidation(WGPURenderPassEncoder rpe, const char *msg)
     {
-        if (rpe && rpe->device)
-            rpe->device->reportError(WGPUErrorType_Validation, pwgpu::ToStringView(msg));
+        if (!rpe)
+            return;
+        if (rpe->deferredErrorMessage.empty())
+            rpe->deferredErrorMessage = msg ? msg : "";
     }
 
     bool ValidateBindGroupCompat(WGPURenderPassEncoder rpe)
@@ -36,6 +39,10 @@ namespace
         {
             auto *plBgl = bgls[i];
             if (!plBgl)
+                continue;
+            // §10.2.7: empty default/explicit BGLs are treated as "null" and
+            // ignored when checking setBindGroup() compatibility.
+            if (plBgl->entries.empty())
                 continue;
             if (i >= rpe->currentBindGroups.size())
             {
@@ -81,14 +88,25 @@ namespace
             return false;
         if (rpe->ended)
         {
-            std::string msg = std::string(apiName) + ": render pass encoder is already ended";
-            ReportPassValidation(rpe, msg.c_str());
+            // Pass is already ended → no future end()/finish() will surface a
+            // deferred message. Fire directly so the test's pushErrorScope
+            // wrapping the post-end call captures it.
+            if (rpe->device)
+            {
+                std::string msg = std::string(apiName) + ": render pass encoder is already ended";
+                rpe->device->reportError(WGPUErrorType_Validation,
+                                         pwgpu::ToStringView(msg.c_str()));
+            }
             return false;
         }
         if (rpe->parent && rpe->parent->finished)
         {
-            std::string msg = std::string(apiName) + ": parent command encoder is already finished";
-            ReportPassValidation(rpe, msg.c_str());
+            if (rpe->device)
+            {
+                std::string msg = std::string(apiName) + ": parent command encoder is already finished";
+                rpe->device->reportError(WGPUErrorType_Validation,
+                                         pwgpu::ToStringView(msg.c_str()));
+            }
             return false;
         }
         if (rpe->invalid)
@@ -267,10 +285,19 @@ extern "C"
             }
             if (group->invalid)
             {
-                ReportPassValidation(rpe,
-                                     "wgpuRenderPassEncoderSetBindGroup: bindGroup is not valid "
-                                     "to use with this encoder (invalid bindGroup)");
-                rpe->invalid = true;
+                if (group->invalidFromDestroyedResource)
+                {
+                    // §3.3: defer to queue.submit, don't fire at finish.
+                    rpe->deferredResourceError = true;
+                }
+                else
+                {
+                    ReportPassValidation(
+                        rpe,
+                        "wgpuRenderPassEncoderSetBindGroup: bindGroup is not valid "
+                        "to use with this encoder (invalid bindGroup)");
+                    rpe->invalid = true;
+                }
                 return;
             }
         }
@@ -916,6 +943,9 @@ extern "C"
             auto *bundle = bundles[i];
             if (!bundle || bundle->invalid)
             {
+                if (bundle && !bundle->deferredErrorMessage.empty() &&
+                    rpe->deferredErrorMessage.empty())
+                    rpe->deferredErrorMessage = bundle->deferredErrorMessage;
                 char buf[128];
                 std::snprintf(buf, sizeof(buf),
                               "wgpuRenderPassEncoderExecuteBundles: bundle[%zu] is invalid", i);
@@ -982,6 +1012,8 @@ extern "C"
 
             if (!bundle->usageScopeValid)
                 rpe->usageScopeValid = false;
+            if (bundle->deferredResourceError)
+                rpe->deferredResourceError = true;
             std::string err;
             if (!rpe->usageScope.MergeFrom(bundle->usageScope, err))
                 rpe->usageScopeValid = false;
@@ -1031,12 +1063,20 @@ extern "C"
             return;
         if (rpe->ended)
         {
-            ReportPassValidation(rpe, "RenderPassEncoder.end(): pass is already ended");
+            // No future fire path: pass is already ended.
+            if (rpe->device)
+                rpe->device->reportError(
+                    WGPUErrorType_Validation,
+                    pwgpu::ToStringView("RenderPassEncoder.end(): pass is already ended"));
             return;
         }
         if (rpe->parent && rpe->parent->finished)
         {
-            ReportPassValidation(rpe, "RenderPassEncoder.end(): parent command encoder is already finished");
+            // Parent encoder already finished — its finish() can't surface this.
+            if (rpe->device)
+                rpe->device->reportError(
+                    WGPUErrorType_Validation,
+                    pwgpu::ToStringView("RenderPassEncoder.end(): parent command encoder is already finished"));
             rpe->ended = true;
             return;
         }
@@ -1057,7 +1097,13 @@ extern "C"
                 (rpe->invalid && !rpe->deferredResourceError) ||
                 !rpe->usageScopeValid || rpe->debugGroupDepth != 0 || rpe->occlusionQueryActive;
             if (passInvalidForEncoder && rpe->parent)
+            {
                 rpe->parent->invalid = true;
+                if (rpe->parent->deferredErrorMessage.empty() && !rpe->deferredErrorMessage.empty())
+                    rpe->parent->deferredErrorMessage = rpe->deferredErrorMessage;
+            }
+            if (rpe->deferredResourceError && rpe->parent)
+                rpe->parent->deferredResourceError = true;
         }
 
         if (rpe->debugGroupDepth != 0)

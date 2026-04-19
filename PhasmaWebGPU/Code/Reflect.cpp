@@ -1140,4 +1140,43 @@ namespace pwgpu
             return false;
         }
     }
+
+    bool HasBlendSrc1Output(const std::vector<uint32_t> &spirv,
+                            const std::string &entryPoint,
+                            std::string &errMsg)
+    {
+        if (spirv.empty())
+        {
+            errMsg = "empty SPIR-V";
+            return false;
+        }
+        try
+        {
+            spirv_cross::Compiler compiler{spirv.data(), spirv.size()};
+            if (!entryPoint.empty())
+                compiler.set_entry_point(entryPoint, spv::ExecutionModelFragment);
+            const auto &outputs = compiler.get_shader_resources().stage_outputs;
+            for (const auto &r : outputs)
+            {
+                // WGSL @blend_src(1) lowers to SPIR-V variable with both
+                // Location and Index decorations. Index 1 is the dual-source
+                // second color input.
+                if (!compiler.has_decoration(r.id, spv::DecorationIndex))
+                    continue;
+                if (compiler.get_decoration(r.id, spv::DecorationIndex) == 1u)
+                    return true;
+            }
+            return false;
+        }
+        catch (const std::exception &e)
+        {
+            errMsg = e.what();
+            return false;
+        }
+        catch (...)
+        {
+            errMsg = "unknown error";
+            return false;
+        }
+    }
 } // namespace pwgpu

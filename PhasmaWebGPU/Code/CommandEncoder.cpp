@@ -66,10 +66,13 @@ void RetainedResources::ReleaseAll()
 
 namespace
 {
+    // §13.7: encoder errors fire at finish(), not at the call site (first wins).
     void ReportEncoderValidation(WGPUCommandEncoder enc, const char *msg)
     {
-        if (enc && enc->device)
-            enc->device->reportError(WGPUErrorType_Validation, pwgpu::ToStringView(msg));
+        if (!enc)
+            return;
+        if (enc->deferredErrorMessage.empty())
+            enc->deferredErrorMessage = msg ? msg : "";
     }
 
     bool EncoderOpen(WGPUCommandEncoder enc, const char *apiName)
@@ -78,8 +81,13 @@ namespace
             return false;
         if (enc->finished)
         {
-            std::string msg = std::string(apiName) + ": encoder is already finished";
-            ReportEncoderValidation(enc, msg.c_str());
+            // No future finish() to surface a deferred message — fire directly.
+            if (enc->device)
+            {
+                std::string msg = std::string(apiName) + ": encoder is already finished";
+                enc->device->reportError(WGPUErrorType_Validation,
+                                         pwgpu::ToStringView(msg.c_str()));
+            }
             return false;
         }
         if (enc->hasOpenPass)
@@ -98,6 +106,19 @@ namespace
         uint32_t h = std::max(1u, tex->size.height >> mipLevel);
         uint32_t d = (tex->dimension == WGPUTextureDimension_3D) ? std::max(1u, tex->size.depthOrArrayLayers >> mipLevel) : tex->size.depthOrArrayLayers;
         return {w, h, d};
+    }
+
+    // §3.7.7: virtual extent rounded up to block dims (BC mips < block size still admit a single-block copy).
+    WGPUExtent3D PhysicalMipExtent(const WGPUTextureImpl *tex, uint32_t mipLevel)
+    {
+        WGPUExtent3D virt = MipExtent(tex, mipLevel);
+        uint32_t blockW = 1, blockH = 1;
+        pwgpu::GetTexelBlockSize(tex->format, blockW, blockH);
+        if (blockW > 1)
+            virt.width = ((virt.width + blockW - 1) / blockW) * blockW;
+        if (blockH > 1)
+            virt.height = ((virt.height + blockH - 1) / blockH) * blockH;
+        return virt;
     }
 
     vk::ImageAspectFlags AspectForCopy(WGPUTextureAspect aspect, WGPUTextureFormat fmt)
@@ -126,35 +147,47 @@ namespace
     {
         if (mipLevel >= tex->mipLevelCount)
             return false;
-        WGPUExtent3D mip = MipExtent(tex, mipLevel);
-        uint32_t blockW, blockH;
+        // Bounds check uses the *physical* mip extent (block-aligned for BC
+        // formats) per W3C §3.7.7. Block-alignment of origin and the trailing
+        // edge is then enforced relative to that same physical extent: a copy
+        // ending exactly at the physical edge is allowed even if the trailing
+        // size is not a whole block, because the leftover sliver inside the
+        // last block is still a full block of compressed data.
+        WGPUExtent3D mip = PhysicalMipExtent(tex, mipLevel);
+        uint32_t blockW = 1, blockH = 1;
         pwgpu::GetTexelBlockSize(tex->format, blockW, blockH);
         if (pwgpu::HasDepthAspect(tex->format) || pwgpu::HasStencilAspect(tex->format))
         {
             if (!IsFullMipRegion(tex, mipLevel, origin, copySize))
                 return false;
         }
-        if (origin.x + copySize.width > mip.width)
+        // Promote to uint64 before summing so that pathological inputs (e.g. a
+        // signed -1 reinterpreted as 0xFFFFFFFF, or origin near UINT32_MAX) do
+        // not silently wrap and bypass the bounds check.
+        uint64_t endX = static_cast<uint64_t>(origin.x) + static_cast<uint64_t>(copySize.width);
+        uint64_t endY = static_cast<uint64_t>(origin.y) + static_cast<uint64_t>(copySize.height);
+        uint64_t endZ = static_cast<uint64_t>(origin.z) + static_cast<uint64_t>(copySize.depthOrArrayLayers);
+        if (endX > mip.width)
             return false;
-        if (origin.y + copySize.height > mip.height)
+        if (endY > mip.height)
             return false;
         if (tex->dimension == WGPUTextureDimension_3D)
         {
-            if (origin.z + copySize.depthOrArrayLayers > mip.depthOrArrayLayers)
+            if (endZ > mip.depthOrArrayLayers)
                 return false;
         }
         else
         {
-            if (origin.z + copySize.depthOrArrayLayers > tex->size.depthOrArrayLayers)
+            if (endZ > tex->size.depthOrArrayLayers)
                 return false;
         }
         if (blockW > 1 || blockH > 1)
         {
             if (origin.x % blockW != 0 || origin.y % blockH != 0)
                 return false;
-            if (origin.x + copySize.width != mip.width && copySize.width % blockW != 0)
+            if (endX != mip.width && (copySize.width % blockW) != 0)
                 return false;
-            if (origin.y + copySize.height != mip.height && copySize.height % blockH != 0)
+            if (endY != mip.height && (copySize.height % blockH) != 0)
                 return false;
         }
         return true;
@@ -1204,17 +1237,21 @@ extern "C"
             return nullptr;
         if (enc->finished)
         {
-            ReportEncoderValidation(enc, "CommandEncoder.finish(): encoder is already finished");
+            if (enc->device)
+                enc->device->reportError(WGPUErrorType_Validation,
+                                         pwgpu::ToStringView("CommandEncoder.finish(): encoder is already finished"));
             return nullptr;
         }
         if (enc->hasOpenPass)
         {
-            ReportEncoderValidation(enc, "CommandEncoder.finish(): a pass is still open");
+            if (enc->deferredErrorMessage.empty())
+                enc->deferredErrorMessage = "CommandEncoder.finish(): a pass is still open";
             enc->invalid = true;
         }
         if (enc->debugGroupDepth != 0)
         {
-            ReportEncoderValidation(enc, "CommandEncoder.finish(): debug group stack is not empty");
+            if (enc->deferredErrorMessage.empty())
+                enc->deferredErrorMessage = "CommandEncoder.finish(): debug group stack is not empty";
             enc->invalid = true;
         }
         enc->finished = true;
@@ -1227,6 +1264,7 @@ extern "C"
         cb->cmd = enc->cmd;
         enc->cmd = nullptr;
         cb->invalid = enc->invalid;
+        cb->deferredResourceError = enc->deferredResourceError;
 
         cb->retained.MergeFrom(enc->retained);
 
@@ -1234,8 +1272,12 @@ extern "C"
             cb->label = pwgpu::ToString(descriptor->label);
 
         if (enc->invalid && enc->device)
-            enc->device->reportError(WGPUErrorType_Validation,
-                                     pwgpu::ToStringView("CommandEncoder.finish(): encoder is invalid"));
+        {
+            const std::string &msg = enc->deferredErrorMessage.empty()
+                                         ? std::string("CommandEncoder.finish(): encoder is invalid")
+                                         : enc->deferredErrorMessage;
+            enc->device->reportError(WGPUErrorType_Validation, pwgpu::ToStringView(msg.c_str()));
+        }
         return cb;
     }
 
@@ -1253,6 +1295,8 @@ extern "C"
             ReportEncoderValidation(enc, full.c_str());
             enc->invalid = true;
         };
+        auto deferToSubmit = [&]()
+        { enc->deferredResourceError = true; };
 
         if (!src || !dst)
         {
@@ -1267,7 +1311,8 @@ extern "C"
         if (src->internalState == BufferInternalState::Destroyed ||
             dst->internalState == BufferInternalState::Destroyed)
         {
-            fail("src or dst buffer is destroyed");
+            // Destroyed resources defer to queue.submit() per W3C §3.3.
+            deferToSubmit();
             return;
         }
         if (src->device != enc->device || dst->device != enc->device)
@@ -1344,6 +1389,8 @@ extern "C"
             ReportEncoderValidation(enc, full.c_str());
             enc->invalid = true;
         };
+        auto deferToSubmit = [&]()
+        { enc->deferredResourceError = true; };
         if (!buffer)
         {
             fail("buffer is null");
@@ -1356,7 +1403,8 @@ extern "C"
         }
         if (buffer->internalState == BufferInternalState::Destroyed)
         {
-            fail("buffer is destroyed");
+            // Destroyed resources defer to queue.submit() per W3C §3.3.
+            deferToSubmit();
             return;
         }
         if (buffer->device != enc->device)
@@ -1428,6 +1476,8 @@ extern "C"
             ReportEncoderValidation(enc, full.c_str());
             enc->invalid = true;
         };
+        auto deferToSubmit = [&]()
+        { enc->deferredResourceError = true; };
         if (!src || !src->buffer || !copySize || !dst || !dst->texture)
         {
             fail("null descriptor or missing src/dst");
@@ -1445,12 +1495,14 @@ extern "C"
         }
         if (src->buffer->internalState == BufferInternalState::Destroyed)
         {
-            fail("src buffer is destroyed");
+            // Destroyed resources defer to queue.submit() per W3C §3.3.
+            deferToSubmit();
             return;
         }
         if (dst->texture->destroyed)
         {
-            fail("dst texture is destroyed");
+            // Destroyed resources defer to queue.submit() per W3C §3.3.
+            deferToSubmit();
             return;
         }
         if (src->buffer->device != enc->device || dst->texture->device != enc->device)
@@ -1608,6 +1660,8 @@ extern "C"
             ReportEncoderValidation(enc, full.c_str());
             enc->invalid = true;
         };
+        auto deferToSubmit = [&]()
+        { enc->deferredResourceError = true; };
         if (!src || !src->texture || !copySize || !dst || !dst->buffer)
         {
             fail("null descriptor or missing src/dst");
@@ -1625,12 +1679,14 @@ extern "C"
         }
         if (src->texture->destroyed)
         {
-            fail("src texture is destroyed");
+            // Destroyed resources defer to queue.submit() per W3C §3.3.
+            deferToSubmit();
             return;
         }
         if (dst->buffer->internalState == BufferInternalState::Destroyed)
         {
-            fail("dst buffer is destroyed");
+            // Destroyed resources defer to queue.submit() per W3C §3.3.
+            deferToSubmit();
             return;
         }
         if (src->texture->device != enc->device || dst->buffer->device != enc->device)
@@ -1787,6 +1843,8 @@ extern "C"
             ReportEncoderValidation(enc, full.c_str());
             enc->invalid = true;
         };
+        auto deferToSubmit = [&]()
+        { enc->deferredResourceError = true; };
         if (!src || !src->texture || !dst || !dst->texture || !copySize)
         {
             fail("null descriptor or missing src/dst");
@@ -1799,7 +1857,8 @@ extern "C"
         }
         if (src->texture->destroyed || dst->texture->destroyed)
         {
-            fail("src or dst texture is destroyed");
+            // Destroyed resources defer to queue.submit() per W3C §3.3.
+            deferToSubmit();
             return;
         }
         if (src->texture->device != enc->device || dst->texture->device != enc->device)
@@ -2003,15 +2062,14 @@ extern "C"
         if (!EncoderOpen(enc, "wgpuCommandEncoderResolveQuerySet"))
             return;
 
+        auto deferToSubmit = [&]()
+        { enc->deferredResourceError = true; };
+
+        // Validate "invalid"/null/cross-device on both resources first so that
+        // those validation errors take precedence over destroyed-deferral.
         if (!querySet || querySet->invalid || querySet->device != enc->device)
         {
             ReportEncoderValidation(enc, "resolveQuerySet: querySet is null/invalid/wrong-device");
-            enc->invalid = true;
-            return;
-        }
-        if (querySet->destroyed)
-        {
-            ReportEncoderValidation(enc, "resolveQuerySet: querySet is destroyed");
             enc->invalid = true;
             return;
         }
@@ -2019,6 +2077,13 @@ extern "C"
         {
             ReportEncoderValidation(enc, "resolveQuerySet: destination buffer is null/invalid/wrong-device");
             enc->invalid = true;
+            return;
+        }
+        if (querySet->destroyed ||
+            dst->internalState == BufferInternalState::Destroyed)
+        {
+            // Destroyed resources defer to queue.submit() per W3C §3.3.
+            deferToSubmit();
             return;
         }
         if (!(dst->usage & WGPUBufferUsage_QueryResolve))

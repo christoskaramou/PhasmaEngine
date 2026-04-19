@@ -149,6 +149,18 @@ extern "C"
                 continue;
             }
 
+            // §3.3: bind group references a resource destroyed before submit.
+            if (cb->deferredResourceError)
+            {
+                if (queue->device)
+                    queue->device->reportError(
+                        WGPUErrorType_Validation,
+                        pwgpu::ToStringView(
+                            "Submit: command buffer references a destroyed resource"));
+                submitInvalid = true;
+                continue;
+            }
+
             if (cb->device && queue->device && cb->device != queue->device)
             {
                 queue->device->reportError(

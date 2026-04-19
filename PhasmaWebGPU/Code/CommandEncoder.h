@@ -38,6 +38,7 @@ struct WGPUCommandBufferImpl
     pe::CommandBuffer *cmd = nullptr;
     bool submitted = false;
     bool invalid = false;
+    bool deferredResourceError = false; // §3.3 destroyed resource — fires at submit
 
     RetainedResources retained;
 };
@@ -53,4 +54,6 @@ struct WGPUCommandEncoderImpl
     bool invalid = false;
     uint32_t debugGroupDepth = 0;
     RetainedResources retained;
+    std::string deferredErrorMessage;
+    bool deferredResourceError = false; // §3.3 destroyed resource — fires at submit
 };

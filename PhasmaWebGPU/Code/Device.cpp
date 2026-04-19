@@ -269,7 +269,15 @@ namespace
         std::string name = bindGroup && !bindGroup->label.empty()
                                ? bindGroup->label + "_external_texture_sampler"
                                : "wgpu_external_texture_sampler";
-        pe::Sampler *sampler = pe::Sampler::Create(samplerInfo, name);
+        pe::Sampler *sampler = nullptr;
+        try
+        {
+            sampler = pe::Sampler::Create(samplerInfo, name);
+        }
+        catch (...)
+        {
+            sampler = nullptr;
+        }
         if (bindGroup && sampler)
             bindGroup->ownedSamplers.push_back(sampler);
         return sampler;
@@ -716,6 +724,40 @@ extern "C"
 
         if (size > device->limits.maxBufferSize)
             return reportValidation("descriptor.size exceeds device.limits.maxBufferSize");
+
+        // pe::Buffer::Create asserts on per-usage VK range limits — pre-reject as OOM.
+        if ((usage & WGPUBufferUsage_Uniform) &&
+            size > pe::RHII.GetMaxUniformBufferSize())
+        {
+            std::string msg = "descriptor.size exceeds Vulkan maxUniformBufferRange";
+            std::string full = std::string("wgpuDeviceCreateBuffer: ") + msg;
+            device->reportError(WGPUErrorType_OutOfMemory, pwgpu::ToStringView(full));
+            auto *bad = new WGPUBufferImpl();
+            bad->device = device;
+            wgpuDeviceAddRef(device);
+            bad->usage = usage;
+            bad->size = size;
+            bad->invalid = true;
+            bad->internalState = BufferInternalState::Unavailable;
+            RegisterTrackedBuffer(device, bad);
+            return bad;
+        }
+        if ((usage & WGPUBufferUsage_Storage) &&
+            size > pe::RHII.GetMaxStorageBufferSize())
+        {
+            std::string msg = "descriptor.size exceeds Vulkan maxStorageBufferRange";
+            std::string full = std::string("wgpuDeviceCreateBuffer: ") + msg;
+            device->reportError(WGPUErrorType_OutOfMemory, pwgpu::ToStringView(full));
+            auto *bad = new WGPUBufferImpl();
+            bad->device = device;
+            wgpuDeviceAddRef(device);
+            bad->usage = usage;
+            bad->size = size;
+            bad->invalid = true;
+            bad->internalState = BufferInternalState::Unavailable;
+            RegisterTrackedBuffer(device, bad);
+            return bad;
+        }
 
         if (mappedAtCreation && (size % 4 != 0))
             return reportValidation("mappedAtCreation requires size to be a multiple of 4");
@@ -1882,6 +1924,20 @@ extern "C"
         for (const auto &le : layoutEntries)
             layoutMap[le.binding] = &le;
 
+        // Spec §10.3.2 createBindGroup texture-binding validation: the
+        // texture.textureBindingViewDimension == textureView.dimension check is
+        // gated on `Assert this.[[device]].[[features]] does not contain
+        // "core-features-and-limits"`. In core mode the check must NOT fire.
+        bool hasCoreFeaturesAndLimits = false;
+        for (auto f : device->features)
+        {
+            if (f == WGPUFeatureName_CoreFeaturesAndLimits)
+            {
+                hasCoreFeaturesAndLimits = true;
+                break;
+            }
+        }
+
         std::unordered_set<uint32_t> seenBindings;
         for (size_t i = 0; i < descriptor->entryCount; ++i)
         {
@@ -1918,9 +1974,13 @@ extern "C"
                     return makeInvalid("buffer resource is invalid");
                 if (buf->device != device)
                     return makeInvalid("buffer resource device mismatch");
+                // §3.3: destroyed resources defer to queue.submit().
                 if (buf->internalState.load(std::memory_order_acquire) ==
                     BufferInternalState::Destroyed)
-                    return makeInvalid("buffer resource is destroyed");
+                {
+                    bg->invalidFromDestroyedResource = true;
+                    return makeInvalid(nullptr);
+                }
 
                 {
                     uint64_t offset = entry.offset;
@@ -2008,17 +2068,25 @@ extern "C"
                     return makeInvalid("texture resource is null");
                 if (tv->texture->invalid)
                     return makeInvalid("texture resource is invalid");
+                // §3.3: destroyed defers to queue.submit().
                 if (tv->texture->destroyed)
-                    return makeInvalid("texture resource is destroyed");
+                {
+                    bg->invalidFromDestroyedResource = true;
+                    return makeInvalid(nullptr);
+                }
                 if (tv->texture->device != device)
                     return makeInvalid("texture resource device mismatch");
 
                 if (tv->dimension != le.texture.viewDimension)
                     return makeInvalid("textureView dimension does not match layout");
 
-                // If the texture declares a textureBindingViewDimension, it must
-                // equal the view's dimension (compatibility / non-core feature).
-                if (tv->texture->textureBindingViewDimension !=
+                // Spec §10.3.2: the textureBindingViewDimension equality check
+                // is asserted only when the device does NOT advertise the
+                // "core-features-and-limits" feature (compatibility mode). In
+                // core mode the textureView.dimension may differ from the
+                // texture's defaulted textureBindingViewDimension.
+                if (!hasCoreFeaturesAndLimits &&
+                    tv->texture->textureBindingViewDimension !=
                         WGPUTextureViewDimension_Undefined &&
                     tv->texture->textureBindingViewDimension != tv->dimension)
                     return makeInvalid(
@@ -2101,8 +2169,12 @@ extern "C"
                     return makeInvalid("storageTexture resource is null");
                 if (tv->texture->invalid)
                     return makeInvalid("storageTexture resource is invalid");
+                // §3.3: destroyed defers to queue.submit().
                 if (tv->texture->destroyed)
-                    return makeInvalid("storageTexture resource is destroyed");
+                {
+                    bg->invalidFromDestroyedResource = true;
+                    return makeInvalid(nullptr);
+                }
                 if (tv->texture->device != device)
                     return makeInvalid("storageTexture resource device mismatch");
 
@@ -2130,15 +2202,6 @@ extern "C"
 
         // Compatibility mode (feature "core-features-and-limits" absent):
         // every bound GPUTextureView must cover the full array range of its texture.
-        bool hasCoreFeaturesAndLimits = false;
-        for (auto f : device->features)
-        {
-            if (f == WGPUFeatureName_CoreFeaturesAndLimits)
-            {
-                hasCoreFeaturesAndLimits = true;
-                break;
-            }
-        }
         if (!hasCoreFeaturesAndLimits)
         {
             for (size_t i = 0; i < descriptor->entryCount; ++i)
@@ -2317,11 +2380,15 @@ extern "C"
             if (bglHandle->exclusivePipeline != nullptr)
                 return makeInvalid("bind group layout has a non-null exclusivePipeline");
 
-            if (bglHandle->entries.empty())
-                continue;
-
+            // §10.2.6 getBindGroupLayout must always return a non-null BGL.
+            // Store every supplied BGL (including those with no entries — they
+            // are treated as "null" layouts in compat checks per §10.2.7 but
+            // must still be retrievable via pipeline.getBindGroupLayout(i)).
             pl->bindGroupLayouts[i] = bglHandle;
             wgpuBindGroupLayoutAddRef(bglHandle);
+
+            if (bglHandle->entries.empty())
+                continue;
 
             for (const auto &entry : bglHandle->entries)
             {
@@ -3632,6 +3699,14 @@ extern "C"
                 pwgpu::GetFragmentOutputTypes(fragModuleSrc->spirv, fragEntry, fragOutInfos, reflErr);
             }
 
+            // §10.3.6: dual-source blend factors require the fragment shader to
+            // declare a @blend_src(1) output. Compute once for use across all targets.
+            bool fragHasBlendSrc1 = false;
+            {
+                std::string reflErr;
+                fragHasBlendSrc1 = pwgpu::HasBlendSrc1Output(fragModuleSrc->spirv, fragEntry, reflErr);
+            }
+
             for (size_t i = 0; i < descriptor->fragment->targetCount; ++i)
             {
                 const auto &ct = descriptor->fragment->targets[i];
@@ -3816,8 +3891,26 @@ extern "C"
                         return f == WGPUBlendFactor_Src1 || f == WGPUBlendFactor_OneMinusSrc1 ||
                                f == WGPUBlendFactor_Src1Alpha || f == WGPUBlendFactor_OneMinusSrc1Alpha;
                     };
-                    if (isDualSrc(colorSrc) || isDualSrc(colorDst) || isDualSrc(alphaSrc) || isDualSrc(alphaDst))
+                    const bool blendUsesDualSrc =
+                        isDualSrc(colorSrc) || isDualSrc(colorDst) ||
+                        isDualSrc(alphaSrc) || isDualSrc(alphaDst);
+                    if (blendUsesDualSrc)
+                    {
+                        // §10.3.6: a dual-source blend factor requires the fragment
+                        // shader to declare a @blend_src(1) output. Without it, the
+                        // pipeline must be invalid even if the dual-source-blending
+                        // feature is enabled and the writeMask is 0.
+                        if (!fragHasBlendSrc1)
+                        {
+                            device->reportError(
+                                WGPUErrorType_Validation,
+                                pwgpu::ToStringView(
+                                    "createRenderPipeline: blend factor requires fragment "
+                                    "shader @blend_src(1) output"));
+                            return MakeInvalidRenderPipeline(device, labelStr);
+                        }
                         usesDualSourceBlending = true;
+                    }
                 }
 
                 blendAttachments.push_back(ba);
