@@ -39,17 +39,35 @@ namespace
                 continue;
             if (i >= rpe->currentBindGroups.size())
             {
+                char buf[160];
+                std::snprintf(buf, sizeof(buf),
+                              "render pass: bind group at index %zu required by pipeline "
+                              "layout is not set",
+                              i);
+                ReportPassValidation(rpe, buf);
                 rpe->invalid = true;
                 return false;
             }
             auto *bg = rpe->currentBindGroups[i];
             if (!bg || bg->invalid || !bg->layout)
             {
+                char buf[160];
+                std::snprintf(buf, sizeof(buf),
+                              "render pass: bind group at index %zu required by pipeline "
+                              "layout is null or invalid",
+                              i);
+                ReportPassValidation(rpe, buf);
                 rpe->invalid = true;
                 return false;
             }
             if (!BglGroupEquivalent(bg->layout, plBgl))
             {
+                char buf[160];
+                std::snprintf(buf, sizeof(buf),
+                              "render pass: bind group at index %zu is not group-equivalent "
+                              "with the pipeline layout",
+                              i);
+                ReportPassValidation(rpe, buf);
                 rpe->invalid = true;
                 return false;
             }
@@ -150,30 +168,43 @@ extern "C"
             return;
         if (!pipeline || pipeline->invalid || pipeline->vkPipeline == VK_NULL_HANDLE)
         {
+            ReportPassValidation(rpe,
+                                 "wgpuRenderPassEncoderSetPipeline: pipeline is null or invalid");
             rpe->invalid = true;
             return;
         }
 
         if (pipeline->device != rpe->device)
         {
+            ReportPassValidation(rpe,
+                                 "wgpuRenderPassEncoderSetPipeline: pipeline was created by a "
+                                 "different device than the render pass encoder");
             rpe->invalid = true;
             return;
         }
-        // §17.1.1.4: pipeline's render targets layout must equal the pass's.
         if (!LayoutsEqual(rpe->colorFormats, rpe->depthStencilFormat, rpe->sampleCount,
                           pipeline->colorFormats, pipeline->depthStencilFormat, pipeline->sampleCount))
         {
+            ReportPassValidation(rpe,
+                                 "wgpuRenderPassEncoderSetPipeline: pipeline render targets layout "
+                                 "does not match render pass layout "
+                                 "(colorFormats/depthStencilFormat/sampleCount mismatch)");
             rpe->invalid = true;
             return;
         }
-        // Pipeline must not write to a read-only depth/stencil attachment.
         if (pipeline->writesDepth && rpe->depthReadOnly)
         {
+            ReportPassValidation(rpe,
+                                 "wgpuRenderPassEncoderSetPipeline: pipeline writesDepth is true "
+                                 "but render pass depthReadOnly is true");
             rpe->invalid = true;
             return;
         }
         if (pipeline->writesStencil && rpe->stencilReadOnly)
         {
+            ReportPassValidation(rpe,
+                                 "wgpuRenderPassEncoderSetPipeline: pipeline writesStencil is true "
+                                 "but render pass stencilReadOnly is true");
             rpe->invalid = true;
             return;
         }
@@ -214,6 +245,12 @@ extern "C"
 
         if (rpe->device && groupIndex >= rpe->device->limits.maxBindGroups)
         {
+            char buf[160];
+            std::snprintf(buf, sizeof(buf),
+                          "wgpuRenderPassEncoderSetBindGroup: index (%u) must be < "
+                          "maxBindGroups (%u)",
+                          groupIndex, rpe->device->limits.maxBindGroups);
+            ReportPassValidation(rpe, buf);
             rpe->invalid = true;
             return;
         }
@@ -222,11 +259,17 @@ extern "C"
         {
             if (group->device != rpe->device)
             {
+                ReportPassValidation(rpe,
+                                     "wgpuRenderPassEncoderSetBindGroup: bindGroup is not valid "
+                                     "to use with this encoder (cross-device)");
                 rpe->invalid = true;
                 return;
             }
             if (group->invalid)
             {
+                ReportPassValidation(rpe,
+                                     "wgpuRenderPassEncoderSetBindGroup: bindGroup is not valid "
+                                     "to use with this encoder (invalid bindGroup)");
                 rpe->invalid = true;
                 return;
             }
@@ -364,11 +407,20 @@ extern "C"
 
         if (rpe->device && slot >= rpe->device->limits.maxVertexBuffers)
         {
+            char buf[160];
+            std::snprintf(buf, sizeof(buf),
+                          "wgpuRenderPassEncoderSetVertexBuffer: slot (%u) must be < "
+                          "maxVertexBuffers (%u)",
+                          slot, rpe->device->limits.maxVertexBuffers);
+            ReportPassValidation(rpe, buf);
             rpe->invalid = true;
             return;
         }
         if (offset % 4u != 0u)
         {
+            ReportPassValidation(rpe,
+                                 "wgpuRenderPassEncoderSetVertexBuffer: offset must be a "
+                                 "multiple of 4");
             rpe->invalid = true;
             return;
         }
@@ -377,6 +429,9 @@ extern "C"
             size = (offset > bufferSize) ? 0u : (bufferSize - offset);
         if (offset > bufferSize || size > bufferSize - offset)
         {
+            ReportPassValidation(rpe,
+                                 "wgpuRenderPassEncoderSetVertexBuffer: offset + size "
+                                 "exceeds buffer size");
             rpe->invalid = true;
             return;
         }
@@ -390,11 +445,17 @@ extern "C"
 
         if (buffer->device != rpe->device || buffer->invalid)
         {
+            ReportPassValidation(rpe,
+                                 "wgpuRenderPassEncoderSetVertexBuffer: buffer is not valid "
+                                 "to use with this encoder (cross-device or invalid buffer)");
             rpe->invalid = true;
             return;
         }
         if (!(buffer->usage & WGPUBufferUsage_Vertex))
         {
+            ReportPassValidation(rpe,
+                                 "wgpuRenderPassEncoderSetVertexBuffer: buffer usage must "
+                                 "contain VERTEX");
             rpe->invalid = true;
             return;
         }
@@ -428,51 +489,57 @@ extern "C"
     {
         if (!RenderingActive(rpe, "wgpuRenderPassEncoderSetIndexBuffer"))
             return;
-        auto fail = [&]()
-        { rpe->invalid = true; };
+
         if (!buffer)
         {
-            fail();
+            ReportPassValidation(rpe,
+                                 "wgpuRenderPassEncoderSetIndexBuffer: buffer is null");
+            rpe->invalid = true;
             return;
         }
-        if (buffer->device != rpe->device)
+        if (buffer->device != rpe->device || buffer->invalid)
         {
-            fail();
-            return;
-        }
-        if (buffer->invalid)
-        {
-            fail();
+            ReportPassValidation(rpe,
+                                 "wgpuRenderPassEncoderSetIndexBuffer: buffer is not valid "
+                                 "to use with this encoder (cross-device or invalid buffer)");
+            rpe->invalid = true;
             return;
         }
         if (!(buffer->usage & WGPUBufferUsage_Index))
         {
-            fail();
+            ReportPassValidation(rpe,
+                                 "wgpuRenderPassEncoderSetIndexBuffer: buffer usage must "
+                                 "contain INDEX");
+            rpe->invalid = true;
+            return;
+        }
+        if (format != WGPUIndexFormat_Uint16 && format != WGPUIndexFormat_Uint32)
+        {
+            ReportPassValidation(rpe,
+                                 "wgpuRenderPassEncoderSetIndexBuffer: indexFormat must be "
+                                 "Uint16 or Uint32");
+            rpe->invalid = true;
             return;
         }
         uint32_t indexSize = (format == WGPUIndexFormat_Uint16) ? 2u : 4u;
-        if (offset % indexSize != 0)
+        if (offset % indexSize != 0u)
         {
-            fail();
+            ReportPassValidation(rpe,
+                                 "wgpuRenderPassEncoderSetIndexBuffer: offset must be a "
+                                 "multiple of indexFormat byte size");
+            rpe->invalid = true;
             return;
         }
         uint64_t boundSize = size;
         if (boundSize == WGPU_WHOLE_SIZE)
+            boundSize = (offset > buffer->size) ? 0u : (buffer->size - offset);
+        if (offset > buffer->size || boundSize > buffer->size - offset)
         {
-            if (offset > buffer->size)
-            {
-                fail();
-                return;
-            }
-            boundSize = buffer->size - offset;
-        }
-        else
-        {
-            if (boundSize > buffer->size || offset > buffer->size - boundSize)
-            {
-                fail();
-                return;
-            }
+            ReportPassValidation(rpe,
+                                 "wgpuRenderPassEncoderSetIndexBuffer: offset + size "
+                                 "exceeds buffer size");
+            rpe->invalid = true;
+            return;
         }
 
         rpe->indexBuffer = buffer;
@@ -555,27 +622,54 @@ extern "C"
 
         if (!buffer)
         {
+            ReportPassValidation(rpe,
+                                 "wgpuRenderPassEncoderDrawIndirect: indirectBuffer is null");
             rpe->invalid = true;
             return;
         }
-        if (buffer->device != rpe->device || buffer->invalid)
+        if (buffer->device != rpe->device)
         {
+            ReportPassValidation(rpe,
+                                 "wgpuRenderPassEncoderDrawIndirect: indirectBuffer was created by a "
+                                 "different device than the render pass encoder");
+            rpe->invalid = true;
+            return;
+        }
+        if (buffer->invalid)
+        {
+            ReportPassValidation(rpe,
+                                 "wgpuRenderPassEncoderDrawIndirect: indirectBuffer is invalid");
             rpe->invalid = true;
             return;
         }
         if (!(buffer->usage & WGPUBufferUsage_Indirect))
         {
+            ReportPassValidation(rpe,
+                                 "wgpuRenderPassEncoderDrawIndirect: indirectBuffer.usage does not "
+                                 "contain INDIRECT");
             rpe->invalid = true;
             return;
         }
         if (offset % 4u != 0u)
         {
+            char buf[160];
+            std::snprintf(buf, sizeof(buf),
+                          "wgpuRenderPassEncoderDrawIndirect: indirectOffset (%llu) is not a multiple of 4",
+                          (unsigned long long)offset);
+            ReportPassValidation(rpe, buf);
             rpe->invalid = true;
             return;
         }
         constexpr uint64_t kDrawArgsSize = sizeof(VkDrawIndirectCommand);
         if (offset > buffer->size || kDrawArgsSize > buffer->size - offset)
         {
+            char buf[224];
+            std::snprintf(buf, sizeof(buf),
+                          "wgpuRenderPassEncoderDrawIndirect: indirectOffset (%llu) + "
+                          "sizeof(indirect draw parameters) (%llu) exceeds indirectBuffer.size (%llu)",
+                          (unsigned long long)offset, (unsigned long long)kDrawArgsSize,
+                          (unsigned long long)buffer->size);
+            ReportPassValidation(rpe, buf);
             rpe->invalid = true;
             return;
         }
@@ -613,27 +707,56 @@ extern "C"
 
         if (!buffer)
         {
+            ReportPassValidation(rpe,
+                                 "wgpuRenderPassEncoderDrawIndexedIndirect: indirectBuffer is null");
             rpe->invalid = true;
             return;
         }
-        if (buffer->device != rpe->device || buffer->invalid)
+        if (buffer->device != rpe->device)
         {
+            ReportPassValidation(rpe,
+                                 "wgpuRenderPassEncoderDrawIndexedIndirect: indirectBuffer was created "
+                                 "by a different device than the render pass encoder");
+            rpe->invalid = true;
+            return;
+        }
+        if (buffer->invalid)
+        {
+            ReportPassValidation(rpe,
+                                 "wgpuRenderPassEncoderDrawIndexedIndirect: indirectBuffer is invalid");
             rpe->invalid = true;
             return;
         }
         if (!(buffer->usage & WGPUBufferUsage_Indirect))
         {
+            ReportPassValidation(rpe,
+                                 "wgpuRenderPassEncoderDrawIndexedIndirect: indirectBuffer.usage does "
+                                 "not contain INDIRECT");
             rpe->invalid = true;
             return;
         }
         if (offset % 4u != 0u)
         {
+            char buf[160];
+            std::snprintf(buf, sizeof(buf),
+                          "wgpuRenderPassEncoderDrawIndexedIndirect: indirectOffset (%llu) is not a "
+                          "multiple of 4",
+                          (unsigned long long)offset);
+            ReportPassValidation(rpe, buf);
             rpe->invalid = true;
             return;
         }
         constexpr uint64_t kDrawArgsSize = sizeof(VkDrawIndexedIndirectCommand);
         if (offset > buffer->size || kDrawArgsSize > buffer->size - offset)
         {
+            char buf[224];
+            std::snprintf(buf, sizeof(buf),
+                          "wgpuRenderPassEncoderDrawIndexedIndirect: indirectOffset (%llu) + "
+                          "sizeof(indirect drawIndexed parameters) (%llu) exceeds indirectBuffer.size "
+                          "(%llu)",
+                          (unsigned long long)offset, (unsigned long long)kDrawArgsSize,
+                          (unsigned long long)buffer->size);
+            ReportPassValidation(rpe, buf);
             rpe->invalid = true;
             return;
         }
@@ -746,17 +869,15 @@ extern "C"
             rpe->invalid = true;
             return;
         }
-        for (uint32_t used : rpe->usedOcclusionIndices)
+        if (rpe->usedOcclusionIndices.count(queryIndex) != 0)
         {
-            if (used == queryIndex)
-            {
-                rpe->invalid = true;
-                return;
-            }
+            rpe->invalid = true;
+            return;
         }
 
         rpe->occlusionQueryActive = true;
-        rpe->usedOcclusionIndices.push_back(queryIndex);
+        rpe->activeOcclusionIndex = queryIndex;
+        rpe->usedOcclusionIndices.insert(queryIndex);
         rpe->occlusionQuerySet->beganIndices.insert(queryIndex);
 
         if (rpe->occlusionQuerySet->queryPool)
@@ -777,7 +898,8 @@ extern "C"
 
         rpe->occlusionQueryActive = false;
 
-        uint32_t lastIndex = rpe->usedOcclusionIndices.back();
+        uint32_t lastIndex = rpe->activeOcclusionIndex;
+        rpe->activeOcclusionIndex = UINT32_MAX;
         if (rpe->occlusionQuerySet && rpe->occlusionQuerySet->queryPool)
             rpe->cmd->ApiHandle().endQuery(
                 rpe->occlusionQuerySet->queryPool, lastIndex);
@@ -794,12 +916,21 @@ extern "C"
             auto *bundle = bundles[i];
             if (!bundle || bundle->invalid)
             {
-                PE_WARN("[WebGPU] executeBundles: bundle %zu is invalid", i);
+                char buf[128];
+                std::snprintf(buf, sizeof(buf),
+                              "wgpuRenderPassEncoderExecuteBundles: bundle[%zu] is invalid", i);
+                ReportPassValidation(rpe, buf);
                 rpe->invalid = true;
                 return;
             }
             if (bundle->device != rpe->device)
             {
+                char buf[160];
+                std::snprintf(buf, sizeof(buf),
+                              "wgpuRenderPassEncoderExecuteBundles: bundle[%zu] was created by a "
+                              "different device than the render pass encoder",
+                              i);
+                ReportPassValidation(rpe, buf);
                 rpe->invalid = true;
                 return;
             }
@@ -807,18 +938,36 @@ extern "C"
             if (!LayoutsEqual(rpe->colorFormats, rpe->depthStencilFormat, rpe->sampleCount,
                               bundle->colorFormats, bundle->depthStencilFormat, bundle->sampleCount))
             {
+                char buf[224];
+                std::snprintf(buf, sizeof(buf),
+                              "wgpuRenderPassEncoderExecuteBundles: bundle[%zu] layout does not match "
+                              "render pass layout (colorFormats/depthStencilFormat/sampleCount mismatch)",
+                              i);
+                ReportPassValidation(rpe, buf);
                 rpe->invalid = true;
                 return;
             }
 
             if (rpe->depthReadOnly && !bundle->depthReadOnly)
             {
+                char buf[224];
+                std::snprintf(buf, sizeof(buf),
+                              "wgpuRenderPassEncoderExecuteBundles: bundle[%zu] depthReadOnly is false "
+                              "but render pass depthReadOnly is true",
+                              i);
+                ReportPassValidation(rpe, buf);
                 rpe->invalid = true;
                 return;
             }
 
             if (rpe->stencilReadOnly && !bundle->stencilReadOnly)
             {
+                char buf[224];
+                std::snprintf(buf, sizeof(buf),
+                              "wgpuRenderPassEncoderExecuteBundles: bundle[%zu] stencilReadOnly is false "
+                              "but render pass stencilReadOnly is true",
+                              i);
+                ReportPassValidation(rpe, buf);
                 rpe->invalid = true;
                 return;
             }
@@ -917,9 +1066,10 @@ extern "C"
         if (rpe->occlusionQueryActive)
         {
             PE_WARN("[WebGPU] wgpuRenderPassEncoderEnd: auto-closing active occlusion query");
-            uint32_t lastIndex = rpe->usedOcclusionIndices.back();
+            uint32_t lastIndex = rpe->activeOcclusionIndex;
             rpe->cmd->ApiHandle().endQuery(rpe->occlusionQuerySet->queryPool, lastIndex);
             rpe->occlusionQueryActive = false;
+            rpe->activeOcclusionIndex = UINT32_MAX;
         }
 
         if (rpe->renderingActive)

@@ -46,7 +46,8 @@ struct WGPURenderPassEncoderImpl
 
     WGPUQuerySetImpl *occlusionQuerySet = nullptr;
     bool occlusionQueryActive = false;
-    std::vector<uint32_t> usedOcclusionIndices;
+    uint32_t activeOcclusionIndex = UINT32_MAX;
+    std::unordered_set<uint32_t> usedOcclusionIndices;
 
     std::vector<WGPUTextureViewImpl *> retainedViews;
     std::vector<pe::ImageView *> ownedSliceViews;

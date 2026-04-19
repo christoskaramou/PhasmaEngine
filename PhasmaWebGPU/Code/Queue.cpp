@@ -75,6 +75,16 @@ extern "C"
         if (!commandCount || !commands)
             return;
 
+        // §22 device-lost: operations that send no message back skip their usual steps.
+        // Mark CBs submitted so later release is safe, then no-op silently (no validation).
+        if (queue->device && queue->device->destroyed)
+        {
+            for (size_t i = 0; i < commandCount; ++i)
+                if (commands[i])
+                    commands[i]->submitted = true;
+            return;
+        }
+
         queue->RecyclePendingSubmits();
         if (queue->device)
             queue->device->ReclaimCompletedTextureDeletions();
@@ -109,14 +119,22 @@ extern "C"
         for (size_t i = 0; i < commandCount; ++i)
         {
             WGPUCommandBuffer cb = commands[i];
-            if (!cb || !cb->cmd || cb->submitted)
+            if (!cb)
             {
                 if (queue->device)
-                {
                     queue->device->reportError(
                         WGPUErrorType_Validation,
-                        pwgpu::ToStringView("Submit: command buffer is null, already submitted, or invalid"));
-                }
+                        pwgpu::ToStringView("Submit: command buffer is null"));
+                submitInvalid = true;
+                continue;
+            }
+
+            if (cb->submitted)
+            {
+                if (queue->device)
+                    queue->device->reportError(
+                        WGPUErrorType_Validation,
+                        pwgpu::ToStringView("Submit: command buffer has already been submitted"));
                 submitInvalid = true;
                 continue;
             }
@@ -124,11 +142,9 @@ extern "C"
             if (cb->invalid)
             {
                 if (queue->device)
-                {
                     queue->device->reportError(
                         WGPUErrorType_Validation,
                         pwgpu::ToStringView("Submit: command buffer is invalid"));
-                }
                 submitInvalid = true;
                 continue;
             }
@@ -139,6 +155,16 @@ extern "C"
                     WGPUErrorType_Validation,
                     pwgpu::ToStringView(
                         "Submit: command buffer belongs to a different device"));
+                submitInvalid = true;
+                continue;
+            }
+
+            if (!cb->cmd)
+            {
+                if (queue->device)
+                    queue->device->reportError(
+                        WGPUErrorType_Validation,
+                        pwgpu::ToStringView("Submit: command buffer has no backing command list"));
                 submitInvalid = true;
                 continue;
             }
@@ -416,10 +442,18 @@ extern "C"
             reportValidation("buffer belongs to a different device");
             return;
         }
-        if (buffer->internalState.load(std::memory_order_acquire) != BufferInternalState::Available)
         {
-            reportValidation("buffer is destroyed or mapped");
-            return;
+            BufferInternalState st = buffer->internalState.load(std::memory_order_acquire);
+            if (st == BufferInternalState::Destroyed)
+            {
+                reportValidation("buffer is destroyed");
+                return;
+            }
+            if (st != BufferInternalState::Available)
+            {
+                reportValidation("buffer internal state is not \"available\" (mapped or pending map)");
+                return;
+            }
         }
         if (!(buffer->usage & WGPUBufferUsage_CopyDst))
         {
@@ -520,40 +554,57 @@ extern "C"
         queue->RecyclePendingSubmits();
         if (queue->device)
             queue->device->ReclaimCompletedTextureDeletions();
-        auto fail = [&]()
+        auto fail = [&](const char *msg)
         {
             if (queue->device)
-                queue->device->reportError(WGPUErrorType_Validation,
-                                           pwgpu::ToStringView("Queue.writeTexture(): validation failed"));
+            {
+                std::string full = std::string("writeTexture: ") + msg;
+                queue->device->reportError(WGPUErrorType_Validation, pwgpu::ToStringView(full));
+            }
         };
         if (!destination || !destination->texture || !dataLayout || !writeSize)
         {
-            fail();
+            fail("null descriptor");
             return;
         }
-        if (!destination->texture->image || destination->texture->destroyed || destination->texture->invalid)
+        if (!data && dataSize > 0)
         {
-            fail();
+            fail("data is null but dataSize > 0");
+            return;
+        }
+        if (destination->texture->destroyed)
+        {
+            fail("destination texture is destroyed");
+            return;
+        }
+        if (destination->texture->invalid || !destination->texture->image)
+        {
+            fail("destination texture is invalid");
             return;
         }
         if (destination->texture->device != queue->device)
         {
-            fail();
+            fail("destination texture belongs to a different device");
             return;
         }
         if (destination->mipLevel >= destination->texture->mipLevelCount)
         {
-            fail();
+            fail("mipLevel exceeds texture.mipLevelCount");
             return;
         }
         if (destination->texture->sampleCount > 1)
         {
-            fail();
+            fail("destination texture must be single-sampled");
+            return;
+        }
+        if (!(destination->texture->usage & WGPUTextureUsage_CopyDst))
+        {
+            fail("destination texture usage must include COPY_DST");
             return;
         }
         if (!IsDSWriteTextureAspectSupported(destination->texture->format, destination->aspect))
         {
-            fail();
+            fail("aspect is not valid for writeTexture on this depth/stencil format");
             return;
         }
         {
@@ -570,7 +621,7 @@ extern "C"
                 oy + writeSize->height > mipH ||
                 oz + writeSize->depthOrArrayLayers > mipD)
             {
-                fail();
+                fail("origin+writeSize exceeds mip extent");
                 return;
             }
             if (pwgpu::HasDepthAspect(tex->format) || pwgpu::HasStencilAspect(tex->format))
@@ -578,7 +629,7 @@ extern "C"
                 if (ox != 0 || oy != 0 ||
                     writeSize->width != mipW || writeSize->height != mipH)
                 {
-                    fail();
+                    fail("depth/stencil write must cover the entire mip");
                     return;
                 }
             }
@@ -588,25 +639,20 @@ extern "C"
             {
                 if (ox % bw != 0 || oy % bh != 0)
                 {
-                    fail();
+                    fail("origin is not block-aligned");
                     return;
                 }
                 if (ox + writeSize->width != mipW && writeSize->width % bw != 0)
                 {
-                    fail();
+                    fail("writeSize.width is not block-aligned");
                     return;
                 }
                 if (oy + writeSize->height != mipH && writeSize->height % bh != 0)
                 {
-                    fail();
+                    fail("writeSize.height is not block-aligned");
                     return;
                 }
             }
-        }
-        if (!(destination->texture->usage & WGPUTextureUsage_CopyDst))
-        {
-            fail();
-            return;
         }
 
         pe::Image *image = destination->texture->image;
@@ -618,7 +664,7 @@ extern "C"
         uint32_t footprint = pwgpu::TexelBlockCopyFootprint(fmt, destination->aspect);
         if (footprint == 0)
         {
-            fail();
+            fail("format/aspect combination has no texel copy footprint");
             return;
         }
 
@@ -632,22 +678,22 @@ extern "C"
             bool bytesPerRowRequired = (heightInBlocks > 1) || (depth > 1);
             if (bytesPerRowRequired && !bprProvided)
             {
-                fail();
+                fail("bytesPerRow is required but not provided");
                 return;
             }
             if (bprProvided && dataLayout->bytesPerRow < minBytesPerRow)
             {
-                fail();
+                fail("bytesPerRow is below minimum for writeSize");
                 return;
             }
             if (depth > 1 && !rpiProvided)
             {
-                fail();
+                fail("rowsPerImage is required for multi-layer writes");
                 return;
             }
             if (rpiProvided && dataLayout->rowsPerImage < heightInBlocks)
             {
-                fail();
+                fail("rowsPerImage is below minimum for writeSize");
                 return;
             }
             uint64_t bpr = bprProvided ? dataLayout->bytesPerRow : minBytesPerRow;
@@ -664,7 +710,7 @@ extern "C"
             uint64_t required = dataLayout->offset + requiredBytesInCopy;
             if (required > dataSize)
             {
-                fail();
+                fail("dataSize is smaller than required copy bytes");
                 return;
             }
         }

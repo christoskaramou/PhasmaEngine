@@ -453,6 +453,13 @@ extern "C"
             // callback so the consumer receives its handle before the loss notification.
             // Born-lost fires immediately regardless of mode — spec requires ordered delivery.
             dev->destroyed = true;
+            try
+            {
+                dev->lostPromise.set_value();
+            }
+            catch (const std::future_error &)
+            {
+            }
             if (callbackInfo.callback)
                 callbackInfo.callback(WGPURequestDeviceStatus_Success, dev, {nullptr, 0},
                                       callbackInfo.userdata1, callbackInfo.userdata2);

@@ -2,6 +2,8 @@
 
 #include <webgpu/webgpu.h>
 
+struct WGPUDeviceImpl;
+
 namespace pwgpu
 {
 
@@ -49,5 +51,18 @@ namespace pwgpu
         }
         return nullptr;
     }
+
+    // Validates a descriptor's chained-struct list against an allow-list of sTypes.
+    // For each node whose sType is not in `allowed`, emits a Validation error on
+    // `device` and returns false. Null chains are valid. Returns true only if every
+    // node in the chain carries an allowed sType. `callsite` is included in the
+    // diagnostic to identify the entry point (e.g. "wgpuDeviceCreateShaderModule").
+    // `structName` names the descriptor/struct being validated
+    // (e.g. "WGPUShaderModuleDescriptor"); may be null to omit.
+    bool ValidateChainedStruct(WGPUDeviceImpl *device,
+                               const WGPUChainedStruct *chain,
+                               std::initializer_list<WGPUSType> allowed,
+                               const char *callsite,
+                               const char *structName);
 
 } // namespace pwgpu

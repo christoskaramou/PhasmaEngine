@@ -69,6 +69,11 @@ extern "C"
                 pe::Buffer::Destroy(buffer->peBuffer);
             }
             WGPUDevice dev = buffer->device;
+            if (dev)
+            {
+                std::lock_guard<std::mutex> lock(dev->trackedBuffersMutex);
+                dev->trackedBuffers.erase(buffer);
+            }
             delete buffer;
             if (dev)
                 wgpuDeviceRelease(dev);

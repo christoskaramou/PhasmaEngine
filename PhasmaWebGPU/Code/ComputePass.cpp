@@ -129,6 +129,12 @@ extern "C"
 
         if (cpe->device && groupIndex >= cpe->device->limits.maxBindGroups)
         {
+            char buf[160];
+            std::snprintf(buf, sizeof(buf),
+                          "wgpuComputePassEncoderSetBindGroup: index (%u) must be < "
+                          "maxBindGroups (%u)",
+                          groupIndex, cpe->device->limits.maxBindGroups);
+            ReportPassValidation(cpe, buf);
             cpe->invalid = true;
             return;
         }
@@ -137,11 +143,17 @@ extern "C"
         {
             if (group->device != cpe->device)
             {
+                ReportPassValidation(cpe,
+                                     "wgpuComputePassEncoderSetBindGroup: bindGroup is not valid "
+                                     "to use with this encoder (cross-device)");
                 cpe->invalid = true;
                 return;
             }
             if (group->invalid)
             {
+                ReportPassValidation(cpe,
+                                     "wgpuComputePassEncoderSetBindGroup: bindGroup is not valid "
+                                     "to use with this encoder (invalid bindGroup)");
                 cpe->invalid = true;
                 return;
             }
@@ -276,17 +288,35 @@ extern "C"
                 continue;
             if (i >= cpe->currentBindGroups.size())
             {
+                char buf[160];
+                std::snprintf(buf, sizeof(buf),
+                              "compute pass: bind group at index %zu required by pipeline "
+                              "layout is not set",
+                              i);
+                ReportPassValidation(cpe, buf);
                 cpe->invalid = true;
                 return false;
             }
             auto *bg = cpe->currentBindGroups[i];
             if (!bg || bg->invalid || !bg->layout)
             {
+                char buf[160];
+                std::snprintf(buf, sizeof(buf),
+                              "compute pass: bind group at index %zu required by pipeline "
+                              "layout is null or invalid",
+                              i);
+                ReportPassValidation(cpe, buf);
                 cpe->invalid = true;
                 return false;
             }
             if (!BglGroupEquivalent(bg->layout, plBgl))
             {
+                char buf[160];
+                std::snprintf(buf, sizeof(buf),
+                              "compute pass: bind group at index %zu is not group-equivalent "
+                              "with the pipeline layout",
+                              i);
+                ReportPassValidation(cpe, buf);
                 cpe->invalid = true;
                 return false;
             }
@@ -400,36 +430,51 @@ extern "C"
             PE_WARN("[WebGPU] dispatchWorkgroupsIndirect: no pipeline set");
             return;
         }
-        auto markInvalid = [&]()
-        { cpe->invalid = true; };
         if (!buffer)
         {
-            markInvalid();
+            ReportPassValidation(
+                cpe, "wgpuComputePassEncoderDispatchWorkgroupsIndirect: indirectBuffer is null");
+            cpe->invalid = true;
             return;
         }
         if (buffer->device != cpe->device)
         {
-            markInvalid();
+            ReportPassValidation(cpe,
+                                 "wgpuComputePassEncoderDispatchWorkgroupsIndirect: indirectBuffer "
+                                 "was created by a different device than the compute pass encoder");
+            cpe->invalid = true;
             return;
         }
         if (buffer->invalid)
         {
-            markInvalid();
+            ReportPassValidation(
+                cpe,
+                "wgpuComputePassEncoderDispatchWorkgroupsIndirect: indirectBuffer is invalid");
+            cpe->invalid = true;
             return;
         }
         if (!(buffer->usage & WGPUBufferUsage_Indirect))
         {
-            markInvalid();
+            ReportPassValidation(cpe,
+                                 "wgpuComputePassEncoderDispatchWorkgroupsIndirect: indirectBuffer "
+                                 "usage does not contain INDIRECT");
+            cpe->invalid = true;
             return;
         }
         if (offset % 4 != 0)
         {
-            markInvalid();
+            ReportPassValidation(cpe,
+                                 "wgpuComputePassEncoderDispatchWorkgroupsIndirect: indirectOffset "
+                                 "is not a multiple of 4");
+            cpe->invalid = true;
             return;
         }
         if (offset > buffer->size || buffer->size - offset < 12)
         {
-            markInvalid();
+            ReportPassValidation(cpe,
+                                 "wgpuComputePassEncoderDispatchWorkgroupsIndirect: indirectOffset "
+                                 "+ 12 exceeds indirectBuffer.size");
+            cpe->invalid = true;
             return;
         }
         if (buffer->internalState == BufferInternalState::Destroyed || !buffer->peBuffer)

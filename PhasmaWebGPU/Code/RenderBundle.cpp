@@ -134,25 +134,36 @@ extern "C"
             return;
         if (!pipeline || pipeline->invalid || pipeline->vkPipeline == VK_NULL_HANDLE)
         {
+            ReportEncoderValidation(rbe,
+                                    "wgpuRenderBundleEncoderSetPipeline: pipeline is null or invalid");
             rbe->invalid = true;
             return;
         }
         if (pipeline->device != rbe->device)
         {
+            ReportEncoderValidation(rbe,
+                                    "wgpuRenderBundleEncoderSetPipeline: pipeline was created by a "
+                                    "different device than the render bundle encoder");
             rbe->invalid = true;
             return;
         }
 
         if (pipeline->sampleCount != rbe->sampleCount)
         {
-            PE_WARN("[WebGPU] renderBundleEncoder setPipeline: pipeline sampleCount %u != encoder sampleCount %u",
-                    pipeline->sampleCount, rbe->sampleCount);
+            char buf[192];
+            std::snprintf(buf, sizeof(buf),
+                          "wgpuRenderBundleEncoderSetPipeline: pipeline sampleCount (%u) does not "
+                          "match render bundle encoder sampleCount (%u)",
+                          pipeline->sampleCount, rbe->sampleCount);
+            ReportEncoderValidation(rbe, buf);
             rbe->invalid = true;
             return;
         }
         if (pipeline->depthStencilFormat != rbe->depthStencilFormat)
         {
-            PE_WARN("[WebGPU] renderBundleEncoder setPipeline: pipeline depthStencilFormat mismatch");
+            ReportEncoderValidation(rbe,
+                                    "wgpuRenderBundleEncoderSetPipeline: pipeline depthStencilFormat "
+                                    "does not match render bundle encoder depthStencilFormat");
             rbe->invalid = true;
             return;
         }
@@ -176,18 +187,26 @@ extern "C"
         }
         if (colorMismatch)
         {
-            PE_WARN("[WebGPU] renderBundleEncoder setPipeline: pipeline colorFormats mismatch");
+            ReportEncoderValidation(rbe,
+                                    "wgpuRenderBundleEncoderSetPipeline: pipeline colorFormats do "
+                                    "not match render bundle encoder colorFormats");
             rbe->invalid = true;
             return;
         }
 
         if (pipeline->writesDepth && rbe->depthReadOnly)
         {
+            ReportEncoderValidation(rbe,
+                                    "wgpuRenderBundleEncoderSetPipeline: pipeline writesDepth is "
+                                    "true but render bundle encoder depthReadOnly is true");
             rbe->invalid = true;
             return;
         }
         if (pipeline->writesStencil && rbe->stencilReadOnly)
         {
+            ReportEncoderValidation(rbe,
+                                    "wgpuRenderBundleEncoderSetPipeline: pipeline writesStencil is "
+                                    "true but render bundle encoder stencilReadOnly is true");
             rbe->invalid = true;
             return;
         }
@@ -211,6 +230,12 @@ extern "C"
 
         if (rbe->device && groupIndex >= rbe->device->limits.maxBindGroups)
         {
+            char buf[160];
+            std::snprintf(buf, sizeof(buf),
+                          "wgpuRenderBundleEncoderSetBindGroup: index (%u) must be < "
+                          "maxBindGroups (%u)",
+                          groupIndex, rbe->device->limits.maxBindGroups);
+            ReportEncoderValidation(rbe, buf);
             rbe->invalid = true;
             return;
         }
@@ -219,11 +244,17 @@ extern "C"
         {
             if (group->device != rbe->device)
             {
+                ReportEncoderValidation(rbe,
+                                        "wgpuRenderBundleEncoderSetBindGroup: bindGroup is not valid "
+                                        "to use with this encoder (cross-device)");
                 rbe->invalid = true;
                 return;
             }
             if (group->invalid)
             {
+                ReportEncoderValidation(rbe,
+                                        "wgpuRenderBundleEncoderSetBindGroup: bindGroup is not valid "
+                                        "to use with this encoder (invalid bindGroup)");
                 rbe->invalid = true;
                 return;
             }
@@ -341,10 +372,7 @@ extern "C"
         if (groupIndex >= bgls.size() || !bgls[groupIndex])
             return;
         if (!BglGroupEquivalent(group->layout, bgls[groupIndex]))
-        {
-            PE_WARN("[WebGPU] renderBundleEncoder setBindGroup: layout mismatch at index %u", groupIndex);
             return;
-        }
 
         VkPipelineLayout vkLayout = rbe->pipeline->layout->vkLayout;
         vk::DescriptorSet ds = group->descriptor->ApiHandle();
@@ -367,11 +395,20 @@ extern "C"
 
         if (rbe->device && slot >= rbe->device->limits.maxVertexBuffers)
         {
+            char buf[160];
+            std::snprintf(buf, sizeof(buf),
+                          "wgpuRenderBundleEncoderSetVertexBuffer: slot (%u) must be < "
+                          "maxVertexBuffers (%u)",
+                          slot, rbe->device->limits.maxVertexBuffers);
+            ReportEncoderValidation(rbe, buf);
             rbe->invalid = true;
             return;
         }
         if (offset % 4u != 0u)
         {
+            ReportEncoderValidation(rbe,
+                                    "wgpuRenderBundleEncoderSetVertexBuffer: offset must be a "
+                                    "multiple of 4");
             rbe->invalid = true;
             return;
         }
@@ -380,6 +417,9 @@ extern "C"
             size = (offset > bufferSize) ? 0u : (bufferSize - offset);
         if (offset > bufferSize || size > bufferSize - offset)
         {
+            ReportEncoderValidation(rbe,
+                                    "wgpuRenderBundleEncoderSetVertexBuffer: offset + size "
+                                    "exceeds buffer size");
             rbe->invalid = true;
             return;
         }
@@ -393,11 +433,17 @@ extern "C"
 
         if (buffer->device != rbe->device || buffer->invalid)
         {
+            ReportEncoderValidation(rbe,
+                                    "wgpuRenderBundleEncoderSetVertexBuffer: buffer is not valid "
+                                    "to use with this encoder (cross-device or invalid buffer)");
             rbe->invalid = true;
             return;
         }
         if (!(buffer->usage & WGPUBufferUsage_Vertex))
         {
+            ReportEncoderValidation(rbe,
+                                    "wgpuRenderBundleEncoderSetVertexBuffer: buffer usage must "
+                                    "contain VERTEX");
             rbe->invalid = true;
             return;
         }
@@ -434,27 +480,41 @@ extern "C"
 
         if (!buffer)
         {
+            ReportEncoderValidation(rbe,
+                                    "wgpuRenderBundleEncoderSetIndexBuffer: buffer is null");
             rbe->invalid = true;
             return;
         }
         if (buffer->device != rbe->device || buffer->invalid)
         {
+            ReportEncoderValidation(rbe,
+                                    "wgpuRenderBundleEncoderSetIndexBuffer: buffer is not valid "
+                                    "to use with this encoder (cross-device or invalid buffer)");
             rbe->invalid = true;
             return;
         }
         if (!(buffer->usage & WGPUBufferUsage_Index))
         {
+            ReportEncoderValidation(rbe,
+                                    "wgpuRenderBundleEncoderSetIndexBuffer: buffer usage must "
+                                    "contain INDEX");
             rbe->invalid = true;
             return;
         }
         if (format != WGPUIndexFormat_Uint16 && format != WGPUIndexFormat_Uint32)
         {
+            ReportEncoderValidation(rbe,
+                                    "wgpuRenderBundleEncoderSetIndexBuffer: indexFormat must be "
+                                    "Uint16 or Uint32");
             rbe->invalid = true;
             return;
         }
         uint32_t indexSize = (format == WGPUIndexFormat_Uint16) ? 2u : 4u;
         if (offset % indexSize != 0u)
         {
+            ReportEncoderValidation(rbe,
+                                    "wgpuRenderBundleEncoderSetIndexBuffer: offset must be a "
+                                    "multiple of indexFormat byte size");
             rbe->invalid = true;
             return;
         }
@@ -463,6 +523,9 @@ extern "C"
             boundSize = (offset > buffer->size) ? 0u : (buffer->size - offset);
         if (offset > buffer->size || boundSize > buffer->size - offset)
         {
+            ReportEncoderValidation(rbe,
+                                    "wgpuRenderBundleEncoderSetIndexBuffer: offset + size "
+                                    "exceeds buffer size");
             rbe->invalid = true;
             return;
         }
@@ -553,27 +616,43 @@ extern "C"
 
         if (!buffer)
         {
+            ReportEncoderValidation(rbe,
+                                    "wgpuRenderBundleEncoderDrawIndirect: indirectBuffer is null");
             rbe->invalid = true;
             return;
         }
         if (buffer->device != rbe->device || buffer->invalid)
         {
+            ReportEncoderValidation(rbe,
+                                    "wgpuRenderBundleEncoderDrawIndirect: indirectBuffer is not "
+                                    "valid to use with this encoder (cross-device or invalid "
+                                    "buffer)");
             rbe->invalid = true;
             return;
         }
         if (!(buffer->usage & WGPUBufferUsage_Indirect))
         {
+            ReportEncoderValidation(rbe,
+                                    "wgpuRenderBundleEncoderDrawIndirect: indirectBuffer usage "
+                                    "must contain INDIRECT");
             rbe->invalid = true;
             return;
         }
         if (offset % 4u != 0u)
         {
+            ReportEncoderValidation(rbe,
+                                    "wgpuRenderBundleEncoderDrawIndirect: indirectOffset must be "
+                                    "a multiple of 4");
             rbe->invalid = true;
             return;
         }
         constexpr uint64_t kDrawArgsSize = sizeof(VkDrawIndirectCommand);
         if (offset > buffer->size || kDrawArgsSize > buffer->size - offset)
         {
+            ReportEncoderValidation(rbe,
+                                    "wgpuRenderBundleEncoderDrawIndirect: indirectOffset + "
+                                    "sizeof(indirect draw parameters) exceeds indirectBuffer "
+                                    "size");
             rbe->invalid = true;
             return;
         }
@@ -613,27 +692,44 @@ extern "C"
 
         if (!buffer)
         {
+            ReportEncoderValidation(rbe,
+                                    "wgpuRenderBundleEncoderDrawIndexedIndirect: indirectBuffer "
+                                    "is null");
             rbe->invalid = true;
             return;
         }
         if (buffer->device != rbe->device || buffer->invalid)
         {
+            ReportEncoderValidation(rbe,
+                                    "wgpuRenderBundleEncoderDrawIndexedIndirect: indirectBuffer "
+                                    "is not valid to use with this encoder (cross-device or "
+                                    "invalid buffer)");
             rbe->invalid = true;
             return;
         }
         if (!(buffer->usage & WGPUBufferUsage_Indirect))
         {
+            ReportEncoderValidation(rbe,
+                                    "wgpuRenderBundleEncoderDrawIndexedIndirect: indirectBuffer "
+                                    "usage must contain INDIRECT");
             rbe->invalid = true;
             return;
         }
         if (offset % 4u != 0u)
         {
+            ReportEncoderValidation(rbe,
+                                    "wgpuRenderBundleEncoderDrawIndexedIndirect: indirectOffset "
+                                    "must be a multiple of 4");
             rbe->invalid = true;
             return;
         }
         constexpr uint64_t kDrawArgsSize = sizeof(VkDrawIndexedIndirectCommand);
         if (offset > buffer->size || kDrawArgsSize > buffer->size - offset)
         {
+            ReportEncoderValidation(rbe,
+                                    "wgpuRenderBundleEncoderDrawIndexedIndirect: indirectOffset "
+                                    "+ sizeof(indirect drawIndexed parameters) exceeds "
+                                    "indirectBuffer size");
             rbe->invalid = true;
             return;
         }
@@ -674,7 +770,8 @@ extern "C"
 
         if (rbe->finished)
         {
-            PE_WARN("[WebGPU] wgpuRenderBundleEncoderFinish: encoder already finished");
+            ReportEncoderValidation(
+                rbe, "wgpuRenderBundleEncoderFinish: render bundle encoder is already finished");
             auto *rb = new WGPURenderBundleImpl();
             rb->invalid = true;
             if (rbe->device)
@@ -701,7 +798,14 @@ extern "C"
         {
             rb->invalid = true;
             if (rbe->debugGroupDepth != 0)
-                PE_WARN("[WebGPU] wgpuRenderBundleEncoderFinish: %u debug group(s) still open", rbe->debugGroupDepth);
+            {
+                char buf[160];
+                std::snprintf(buf, sizeof(buf),
+                              "wgpuRenderBundleEncoderFinish: debug group stack is not empty "
+                              "(%u group(s) still open)",
+                              rbe->debugGroupDepth);
+                ReportEncoderValidation(rbe, buf);
+            }
             return rb;
         }
 
@@ -757,7 +861,9 @@ extern "C"
             return;
         if (rbe->debugGroupDepth == 0)
         {
-            PE_WARN("[WebGPU] renderBundleEncoder popDebugGroup: no matching pushDebugGroup");
+            ReportEncoderValidation(
+                rbe, "wgpuRenderBundleEncoderPopDebugGroup: debug group stack is empty");
+            rbe->invalid = true;
             return;
         }
         rbe->debugGroupDepth--;

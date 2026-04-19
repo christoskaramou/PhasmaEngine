@@ -128,6 +128,14 @@ namespace
         return {};
     }
 
+    void RegisterTrackedBuffer(WGPUDeviceImpl *device, WGPUBufferImpl *buffer)
+    {
+        if (!device || !buffer)
+            return;
+        std::lock_guard<std::mutex> lock(device->trackedBuffersMutex);
+        device->trackedBuffers.insert(buffer);
+    }
+
     bool DeviceCanCreate(WGPUDeviceImpl *device, const void *descriptor,
                          const char *apiName, bool requireDescriptor)
     {
@@ -318,6 +326,48 @@ void WGPUDeviceImpl::reportError(WGPUErrorType type, WGPUStringView message)
     }
 }
 
+namespace pwgpu
+{
+    bool ValidateChainedStruct(WGPUDeviceImpl *device,
+                               const WGPUChainedStruct *chain,
+                               std::initializer_list<WGPUSType> allowed,
+                               const char *callsite,
+                               const char *structName)
+    {
+        bool ok = true;
+        for (const WGPUChainedStruct *node = chain; node; node = node->next)
+        {
+            bool nodeAllowed = false;
+            for (WGPUSType s : allowed)
+            {
+                if (node->sType == s)
+                {
+                    nodeAllowed = true;
+                    break;
+                }
+            }
+            if (nodeAllowed)
+                continue;
+            if (device)
+            {
+                std::string msg = std::string("PhasmaWebGPU: ") +
+                                  (callsite ? callsite : "<unknown>") +
+                                  ": unknown or disallowed chained sType ";
+                msg += std::to_string(static_cast<uint32_t>(node->sType));
+                if (structName)
+                {
+                    msg += " on ";
+                    msg += structName;
+                }
+                msg += " (OutStructChainError)";
+                device->reportError(WGPUErrorType_Validation, pwgpu::ToStringView(msg));
+            }
+            ok = false;
+        }
+        return ok;
+    }
+} // namespace pwgpu
+
 extern void TeardownTextureGpuResources(WGPUTextureImpl *texture);
 
 void WGPUDeviceImpl::ReclaimCompletedTextureDeletions()
@@ -393,6 +443,34 @@ extern "C"
         {
             device->queue->peQueue->WaitIdle();
             device->queue->RecyclePendingSubmits();
+        }
+
+        // §7.3: unmap() all GPUBuffers from this device; mark them destroyed.
+        // Snapshot under the lock, then operate outside — wgpuBufferUnmap takes
+        // buffer->stateMutex and release paths may reenter trackedBuffersMutex.
+        std::vector<WGPUBufferImpl *> snapshot;
+        {
+            std::lock_guard<std::mutex> lock(device->trackedBuffersMutex);
+            snapshot.assign(device->trackedBuffers.begin(), device->trackedBuffers.end());
+        }
+        for (auto *buf : snapshot)
+        {
+            if (!buf)
+                continue;
+            wgpuBufferUnmap(buf);
+            {
+                std::lock_guard<std::mutex> lock(buf->stateMutex);
+                buf->internalState = BufferInternalState::Destroyed;
+            }
+        }
+
+        try
+        {
+            device->lostPromise.set_value();
+        }
+        catch (const std::future_error &)
+        {
+            // Already satisfied — ignore.
         }
 
         if (device->deviceLostCallbackInfo.callback)
@@ -548,8 +626,27 @@ extern "C"
     {
         if (!device || !device->instance)
             return WGPUFuture{0};
-        // TODO: track as incomplete future, complete on device loss.
-        return device->instance->futures.NextId();
+
+        const bool alreadyLost = device->destroyed;
+        WGPUDevice devHandle = device;
+        auto cb = device->deviceLostCallbackInfo.callback;
+        auto u1 = device->deviceLostCallbackInfo.userdata1;
+        auto u2 = device->deviceLostCallbackInfo.userdata2;
+
+        auto fire = [devHandle, cb, u1, u2]()
+        {
+            if (!cb)
+                return;
+            WGPUDevice h = devHandle;
+            cb(&h, WGPUDeviceLostReason_Destroyed,
+               pwgpu::ToStringView("Device destroyed."), u1, u2);
+        };
+
+        if (alreadyLost)
+            return device->instance->futures.TrackEvent(WGPUCallbackMode_AllowSpontaneous, fire);
+
+        return device->instance->futures.TrackEvent(WGPUCallbackMode_AllowSpontaneous, fire,
+                                                    device->lostFuture);
     }
 
     WGPUBuffer wgpuDeviceCreateBuffer(WGPUDevice device, WGPUBufferDescriptor const *descriptor)
@@ -563,8 +660,11 @@ extern "C"
 
         auto reportValidation = [&](const char *what) -> WGPUBuffer
         {
-            std::string msg = std::string("wgpuDeviceCreateBuffer: ") + what;
-            device->reportError(WGPUErrorType_Validation, pwgpu::ToStringView(msg));
+            if (what)
+            {
+                std::string msg = std::string("wgpuDeviceCreateBuffer: ") + what;
+                device->reportError(WGPUErrorType_Validation, pwgpu::ToStringView(msg));
+            }
             auto *bad = new WGPUBufferImpl();
             bad->device = device;
             wgpuDeviceAddRef(device);
@@ -582,8 +682,14 @@ extern "C"
             }
             if (descriptor->label.data)
                 bad->label = pwgpu::ToString(descriptor->label);
+            RegisterTrackedBuffer(device, bad);
             return bad;
         };
+
+        if (!pwgpu::ValidateChainedStruct(
+                device, descriptor->nextInChain, {},
+                "wgpuDeviceCreateBuffer", "WGPUBufferDescriptor"))
+            return reportValidation(nullptr);
 
         if (usage == WGPUBufferUsage_None)
             return reportValidation("descriptor.usage must not be 0");
@@ -653,6 +759,7 @@ extern "C"
         buf->hostVisible = needsHostAccess;
         if (descriptor->label.data)
             buf->label = pwgpu::ToString(descriptor->label);
+        RegisterTrackedBuffer(device, buf);
 
         const std::string peName = buf->label.empty() ? std::string("wgpu_buffer") : buf->label;
         try
@@ -734,8 +841,11 @@ extern "C"
 
         auto makeInvalid = [&](const char *what) -> WGPUTexture
         {
-            std::string msg = std::string("wgpuDeviceCreateTexture: ") + what;
-            device->reportError(WGPUErrorType_Validation, pwgpu::ToStringView(msg));
+            if (what)
+            {
+                std::string msg = std::string("wgpuDeviceCreateTexture: ") + what;
+                device->reportError(WGPUErrorType_Validation, pwgpu::ToStringView(msg));
+            }
             auto *bad = new WGPUTextureImpl();
             bad->device = device;
             wgpuDeviceAddRef(device);
@@ -750,6 +860,12 @@ extern "C"
                 bad->label = pwgpu::ToString(descriptor->label);
             return bad;
         };
+
+        if (!pwgpu::ValidateChainedStruct(
+                device, descriptor->nextInChain,
+                {WGPUSType_TextureBindingViewDimension},
+                "wgpuDeviceCreateTexture", "WGPUTextureDescriptor"))
+            return makeInvalid(nullptr);
 
         if (usage == WGPUTextureUsage_None)
             return makeInvalid("usage must not be 0");
@@ -1100,8 +1216,11 @@ extern "C"
 
         auto makeInvalid = [&](const char *what) -> WGPUSampler
         {
-            std::string msg = std::string("wgpuDeviceCreateSampler: ") + what;
-            device->reportError(WGPUErrorType_Validation, pwgpu::ToStringView(msg));
+            if (what)
+            {
+                std::string msg = std::string("wgpuDeviceCreateSampler: ") + what;
+                device->reportError(WGPUErrorType_Validation, pwgpu::ToStringView(msg));
+            }
             auto *bad = new WGPUSamplerImpl();
             bad->invalid = true;
             wgpuDeviceAddRef(device);
@@ -1110,6 +1229,12 @@ extern "C"
                 bad->label = pwgpu::ToString(descriptor->label);
             return bad;
         };
+
+        if (descriptor &&
+            !pwgpu::ValidateChainedStruct(
+                device, descriptor->nextInChain, {},
+                "wgpuDeviceCreateSampler", "WGPUSamplerDescriptor"))
+            return makeInvalid(nullptr);
 
         WGPUAddressMode addrU = WGPUAddressMode_ClampToEdge;
         WGPUAddressMode addrV = WGPUAddressMode_ClampToEdge;
@@ -1320,11 +1445,20 @@ extern "C"
 
         auto makeInvalid = [&](const char *msg) -> WGPUBindGroupLayout
         {
-            std::string what = std::string("PhasmaWebGPU: createBindGroupLayout: ") + msg;
-            device->reportError(WGPUErrorType_Validation, pwgpu::ToStringView(what));
+            if (msg)
+            {
+                std::string what = std::string("PhasmaWebGPU: createBindGroupLayout: ") + msg;
+                device->reportError(WGPUErrorType_Validation, pwgpu::ToStringView(what));
+            }
             bgl->invalid = true;
             return bgl;
         };
+
+        if (!pwgpu::ValidateChainedStruct(
+                device, descriptor->nextInChain, {},
+                "wgpuDeviceCreateBindGroupLayout",
+                "WGPUBindGroupLayoutDescriptor"))
+            return makeInvalid(nullptr);
 
         auto bufferProvided = [](const WGPUBufferBindingLayout &b)
         { return b.type != WGPUBufferBindingType_BindingNotUsed; };
@@ -1366,6 +1500,13 @@ extern "C"
         {
             const WGPUBindGroupLayoutEntry &src = descriptor->entries[i];
 
+            if (!pwgpu::ValidateChainedStruct(
+                    device, src.nextInChain,
+                    {WGPUSType_ExternalTextureBindingLayout},
+                    "wgpuDeviceCreateBindGroupLayout",
+                    "WGPUBindGroupLayoutEntry"))
+                return makeInvalid(nullptr);
+
             if (!seenBindings.insert(src.binding).second)
                 return makeInvalid("duplicate binding index");
             if (src.binding >= limits.maxBindingsPerBindGroup)
@@ -1384,6 +1525,27 @@ extern "C"
             int memberCount = (int)hasBuf + (int)hasSamp + (int)hasTex + (int)hasStorTex + (int)hasExtTex;
             if (memberCount != 1)
                 return makeInvalid("exactly one of buffer/sampler/texture/storageTexture/externalTexture must be provided");
+
+            if (hasBuf && !pwgpu::ValidateChainedStruct(
+                              device, src.buffer.nextInChain, {},
+                              "wgpuDeviceCreateBindGroupLayout",
+                              "WGPUBufferBindingLayout"))
+                return makeInvalid(nullptr);
+            if (hasSamp && !pwgpu::ValidateChainedStruct(
+                               device, src.sampler.nextInChain, {},
+                               "wgpuDeviceCreateBindGroupLayout",
+                               "WGPUSamplerBindingLayout"))
+                return makeInvalid(nullptr);
+            if (hasTex && !pwgpu::ValidateChainedStruct(
+                              device, src.texture.nextInChain, {},
+                              "wgpuDeviceCreateBindGroupLayout",
+                              "WGPUTextureBindingLayout"))
+                return makeInvalid(nullptr);
+            if (hasStorTex && !pwgpu::ValidateChainedStruct(
+                                  device, src.storageTexture.nextInChain, {},
+                                  "wgpuDeviceCreateBindGroupLayout",
+                                  "WGPUStorageTextureBindingLayout"))
+                return makeInvalid(nullptr);
 
             WGPUBindGroupLayoutEntryResolved resolved{};
             resolved.binding = src.binding;
@@ -1678,11 +1840,19 @@ extern "C"
 
         auto makeInvalid = [&](const char *msg) -> WGPUBindGroup
         {
-            std::string what = std::string("PhasmaWebGPU: createBindGroup: ") + msg;
-            device->reportError(WGPUErrorType_Validation, pwgpu::ToStringView(what));
+            if (msg)
+            {
+                std::string what = std::string("PhasmaWebGPU: createBindGroup: ") + msg;
+                device->reportError(WGPUErrorType_Validation, pwgpu::ToStringView(what));
+            }
             bg->invalid = true;
             return bg;
         };
+
+        if (!pwgpu::ValidateChainedStruct(
+                device, descriptor->nextInChain, {},
+                "wgpuDeviceCreateBindGroup", "WGPUBindGroupDescriptor"))
+            return makeInvalid(nullptr);
 
         if (!descriptor->layout)
             return makeInvalid("layout is null");
@@ -1707,6 +1877,12 @@ extern "C"
         for (size_t i = 0; i < descriptor->entryCount; ++i)
         {
             const WGPUBindGroupEntry &entry = descriptor->entries[i];
+
+            if (!pwgpu::ValidateChainedStruct(
+                    device, entry.nextInChain,
+                    {WGPUSType_ExternalTextureBindingEntry},
+                    "wgpuDeviceCreateBindGroup", "WGPUBindGroupEntry"))
+                return makeInvalid(nullptr);
 
             if (!seenBindings.insert(entry.binding).second)
                 return makeInvalid("duplicate entry binding");
@@ -1733,10 +1909,10 @@ extern "C"
                     return makeInvalid("buffer resource is invalid");
                 if (buf->device != device)
                     return makeInvalid("buffer resource device mismatch");
-                bool bufDestroyed = (buf->internalState.load(std::memory_order_acquire) ==
-                                     BufferInternalState::Destroyed);
+                if (buf->internalState.load(std::memory_order_acquire) ==
+                    BufferInternalState::Destroyed)
+                    return makeInvalid("buffer resource is destroyed");
 
-                if (!bufDestroyed)
                 {
                     uint64_t offset = entry.offset;
                     uint64_t size = entry.size;
@@ -1823,18 +1999,26 @@ extern "C"
                     return makeInvalid("texture resource is null");
                 if (tv->texture->invalid)
                     return makeInvalid("texture resource is invalid");
+                if (tv->texture->destroyed)
+                    return makeInvalid("texture resource is destroyed");
                 if (tv->texture->device != device)
                     return makeInvalid("texture resource device mismatch");
 
-                // viewDimension must match.
                 if (tv->dimension != le.texture.viewDimension)
                     return makeInvalid("textureView dimension does not match layout");
 
-                // Usage must include TEXTURE_BINDING.
+                // If the texture declares a textureBindingViewDimension, it must
+                // equal the view's dimension (compatibility / non-core feature).
+                if (tv->texture->textureBindingViewDimension !=
+                        WGPUTextureViewDimension_Undefined &&
+                    tv->texture->textureBindingViewDimension != tv->dimension)
+                    return makeInvalid(
+                        "textureView dimension does not match texture's "
+                        "textureBindingViewDimension");
+
                 if (!(tv->usage & WGPUTextureUsage_TextureBinding))
                     return makeInvalid("textureView missing TEXTURE_BINDING usage");
 
-                // Multisampled check.
                 if (le.texture.multisampled)
                 {
                     if (tv->texture->sampleCount <= 1)
@@ -1908,22 +2092,20 @@ extern "C"
                     return makeInvalid("storageTexture resource is null");
                 if (tv->texture->invalid)
                     return makeInvalid("storageTexture resource is invalid");
+                if (tv->texture->destroyed)
+                    return makeInvalid("storageTexture resource is destroyed");
                 if (tv->texture->device != device)
                     return makeInvalid("storageTexture resource device mismatch");
 
-                // viewDimension must match.
                 if (tv->dimension != le.storageTexture.viewDimension)
                     return makeInvalid("storageTexture view dimension does not match layout");
 
-                // Format must match.
                 if (tv->format != le.storageTexture.format)
                     return makeInvalid("storageTexture view format does not match layout");
 
-                // Usage must include STORAGE_BINDING.
                 if (!(tv->usage & WGPUTextureUsage_StorageBinding))
                     return makeInvalid("textureView missing STORAGE_BINDING usage");
 
-                // mipLevelCount must be 1.
                 if (tv->mipLevelCount != 1)
                     return makeInvalid("storageTexture view must have mipLevelCount = 1");
             }
@@ -1937,6 +2119,35 @@ extern "C"
             }
         }
 
+        // Compatibility mode (feature "core-features-and-limits" absent):
+        // every bound GPUTextureView must cover the full array range of its texture.
+        bool hasCoreFeaturesAndLimits = false;
+        for (auto f : device->features)
+        {
+            if (f == WGPUFeatureName_CoreFeaturesAndLimits)
+            {
+                hasCoreFeaturesAndLimits = true;
+                break;
+            }
+        }
+        if (!hasCoreFeaturesAndLimits)
+        {
+            for (size_t i = 0; i < descriptor->entryCount; ++i)
+            {
+                const WGPUBindGroupEntry &entry = descriptor->entries[i];
+                WGPUTextureViewImpl *tv = entry.textureView;
+                if (!tv || !tv->texture)
+                    continue;
+                if (tv->baseArrayLayer != 0)
+                    return makeInvalid(
+                        "compatibility mode requires textureView baseArrayLayer = 0");
+                if (tv->arrayLayerCount != tv->texture->size.depthOrArrayLayers)
+                    return makeInvalid(
+                        "compatibility mode requires textureView arrayLayerCount to "
+                        "equal texture's depthOrArrayLayers");
+            }
+        }
+
         // Create pe::Descriptor (VkDescriptorSet) if the layout has a VkDescriptorSetLayout.
         if (descriptor->layout->layout && !descriptor->layout->bindingInfos.empty())
         {
@@ -1946,7 +2157,6 @@ extern "C"
                 false,
                 bg->label.empty() ? "wgpu_bg" : bg->label);
 
-            // Bind the actual resources to each descriptor binding.
             for (size_t i = 0; i < descriptor->entryCount; ++i)
             {
                 const WGPUBindGroupEntry &entry = descriptor->entries[i];
@@ -2044,11 +2254,20 @@ extern "C"
 
         auto makeInvalid = [&](const char *msg) -> WGPUPipelineLayout
         {
-            std::string what = std::string("PhasmaWebGPU: createPipelineLayout: ") + msg;
-            device->reportError(WGPUErrorType_Validation, pwgpu::ToStringView(what));
+            if (msg)
+            {
+                std::string what = std::string("PhasmaWebGPU: createPipelineLayout: ") + msg;
+                device->reportError(WGPUErrorType_Validation, pwgpu::ToStringView(what));
+            }
             pl->invalid = true;
             return pl;
         };
+
+        if (!pwgpu::ValidateChainedStruct(
+                device, descriptor->nextInChain, {},
+                "wgpuDeviceCreatePipelineLayout",
+                "WGPUPipelineLayoutDescriptor"))
+            return makeInvalid(nullptr);
 
         if (descriptor->bindGroupLayoutCount > limits.maxBindGroups)
             return makeInvalid("bindGroupLayoutCount exceeds maxBindGroups");
@@ -2222,6 +2441,20 @@ extern "C"
         device->refCount.fetch_add(1, std::memory_order_relaxed);
         if (descriptor->label.data)
             sm->label = pwgpu::ToString(descriptor->label);
+
+        if (!pwgpu::ValidateChainedStruct(
+                device, descriptor->nextInChain,
+                {WGPUSType_ShaderSourceSPIRV, WGPUSType_ShaderSourceWGSL},
+                "wgpuDeviceCreateShaderModule",
+                "WGPUShaderModuleDescriptor"))
+        {
+            sm->invalid = true;
+            WGPUCompilationMessageStorage msg;
+            msg.type = WGPUCompilationMessageType_Error;
+            msg.message = "Unknown chained sType on WGPUShaderModuleDescriptor";
+            sm->compilationMessages.push_back(std::move(msg));
+            return sm;
+        }
 
         auto *spirvDesc = pwgpu::FindChained<WGPUShaderSourceSPIRV>(
             descriptor->nextInChain, WGPUSType_ShaderSourceSPIRV);
@@ -2577,6 +2810,18 @@ extern "C"
 
         const char *labelStr = descriptor->label.data ? descriptor->label.data : nullptr;
 
+        if (!pwgpu::ValidateChainedStruct(
+                device, descriptor->nextInChain, {},
+                "wgpuDeviceCreateComputePipeline",
+                "WGPUComputePipelineDescriptor"))
+            return MakeInvalidComputePipeline(device, labelStr);
+
+        if (!pwgpu::ValidateChainedStruct(
+                device, descriptor->compute.nextInChain, {},
+                "wgpuDeviceCreateComputePipeline",
+                "WGPUComputeState"))
+            return MakeInvalidComputePipeline(device, labelStr);
+
         auto *pipeLayout = reinterpret_cast<WGPUPipelineLayoutImpl *>(descriptor->layout);
         const bool autoLayout = (pipeLayout == nullptr);
         if (!autoLayout)
@@ -2881,6 +3126,34 @@ extern "C"
         const char *labelStr = descriptor->label.data ? descriptor->label.data : nullptr;
         auto vkDev = device->rhi->GetDevice();
         const auto &limits = device->limits;
+
+        if (!pwgpu::ValidateChainedStruct(
+                device, descriptor->nextInChain, {},
+                "wgpuDeviceCreateRenderPipeline",
+                "WGPURenderPipelineDescriptor"))
+            return MakeInvalidRenderPipeline(device, labelStr);
+        if (!pwgpu::ValidateChainedStruct(
+                device, descriptor->vertex.nextInChain, {},
+                "wgpuDeviceCreateRenderPipeline", "WGPUVertexState"))
+            return MakeInvalidRenderPipeline(device, labelStr);
+        if (!pwgpu::ValidateChainedStruct(
+                device, descriptor->primitive.nextInChain, {},
+                "wgpuDeviceCreateRenderPipeline", "WGPUPrimitiveState"))
+            return MakeInvalidRenderPipeline(device, labelStr);
+        if (!pwgpu::ValidateChainedStruct(
+                device, descriptor->multisample.nextInChain, {},
+                "wgpuDeviceCreateRenderPipeline", "WGPUMultisampleState"))
+            return MakeInvalidRenderPipeline(device, labelStr);
+        if (descriptor->depthStencil &&
+            !pwgpu::ValidateChainedStruct(
+                device, descriptor->depthStencil->nextInChain, {},
+                "wgpuDeviceCreateRenderPipeline", "WGPUDepthStencilState"))
+            return MakeInvalidRenderPipeline(device, labelStr);
+        if (descriptor->fragment &&
+            !pwgpu::ValidateChainedStruct(
+                device, descriptor->fragment->nextInChain, {},
+                "wgpuDeviceCreateRenderPipeline", "WGPUFragmentState"))
+            return MakeInvalidRenderPipeline(device, labelStr);
 
         auto *pipeLayout = reinterpret_cast<WGPUPipelineLayoutImpl *>(descriptor->layout);
         const bool autoLayout = (pipeLayout == nullptr);
@@ -3992,6 +4265,17 @@ extern "C"
     {
         if (!DeviceCanCreate(device, descriptor, "wgpuDeviceCreateCommandEncoder", false))
             return nullptr;
+        if (descriptor &&
+            !pwgpu::ValidateChainedStruct(
+                device, descriptor->nextInChain, {},
+                "wgpuDeviceCreateCommandEncoder",
+                "WGPUCommandEncoderDescriptor"))
+        {
+            auto *bad = new WGPUCommandEncoderImpl();
+            bad->device = device;
+            bad->invalid = true;
+            return bad;
+        }
         auto *enc = new WGPUCommandEncoderImpl();
         enc->device = device;
         if (descriptor && descriptor->label.data)
@@ -4019,6 +4303,12 @@ extern "C"
             device->refCount.fetch_add(1, std::memory_order_relaxed);
             return rbe;
         };
+
+        if (!pwgpu::ValidateChainedStruct(
+                device, descriptor->nextInChain, {},
+                "wgpuDeviceCreateRenderBundleEncoder",
+                "WGPURenderBundleEncoderDescriptor"))
+            return makeInvalid(nullptr);
 
         if (descriptor->colorFormatCount > 0 && !descriptor->colorFormats)
             return makeInvalid("createRenderBundleEncoder: colorFormatCount > 0 but colorFormats is null");
@@ -4090,7 +4380,8 @@ extern "C"
 
         auto makeInvalid = [&](const char *msg) -> WGPUQuerySet
         {
-            device->reportError(WGPUErrorType_Validation, pwgpu::ToStringView(msg));
+            if (msg)
+                device->reportError(WGPUErrorType_Validation, pwgpu::ToStringView(msg));
             auto *qs = new WGPUQuerySetImpl();
             qs->device = device;
             wgpuDeviceAddRef(device);
@@ -4101,6 +4392,11 @@ extern "C"
                 qs->label = pwgpu::ToString(descriptor->label);
             return qs;
         };
+
+        if (!pwgpu::ValidateChainedStruct(
+                device, descriptor->nextInChain, {},
+                "wgpuDeviceCreateQuerySet", "WGPUQuerySetDescriptor"))
+            return makeInvalid(nullptr);
 
         if (descriptor->count > 4096)
             return makeInvalid("createQuerySet: count exceeds maxQueryCount");

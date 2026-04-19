@@ -1,6 +1,7 @@
 #pragma once
 
 #include <webgpu/webgpu.h>
+#include <future>
 #include "ErrorScope.h"
 #include "WGPULimits.h"
 
@@ -12,6 +13,7 @@ namespace pe
 
 struct WGPUDeviceImpl;
 struct WGPUTextureImpl;
+struct WGPUBufferImpl;
 
 namespace pe
 {
@@ -83,6 +85,15 @@ struct WGPUDeviceImpl
     bool destroyed = false;
     bool suppressReportError = false;
 
+    // Tracked child buffers; destroy() walks this to unmap / mark them destroyed.
+    std::unordered_set<WGPUBufferImpl *> trackedBuffers;
+    std::mutex trackedBuffersMutex;
+
+    // Lost future: one shared_future handed out to every wgpuDeviceGetLostFuture
+    // call; fulfilled in wgpuDeviceDestroy.
+    std::promise<void> lostPromise;
+    std::shared_future<void> lostFuture;
+
     struct PendingTextureDeletion
     {
         WGPUTextureImpl *tex;
@@ -90,6 +101,8 @@ struct WGPUDeviceImpl
     };
     std::vector<PendingTextureDeletion> pendingTextureDeletions;
     std::mutex pendingTextureDeletionsMutex;
+
+    WGPUDeviceImpl() : lostFuture(lostPromise.get_future().share()) {}
 
     void reportError(WGPUErrorType type, WGPUStringView message);
     void ReclaimCompletedTextureDeletions();

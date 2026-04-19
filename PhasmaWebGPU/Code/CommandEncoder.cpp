@@ -335,6 +335,7 @@ extern "C"
         }
         if (enc->hasOpenPass)
         {
+            ReportEncoderValidation(enc, "beginRenderPass: a pass is already open on this encoder");
             enc->invalid = true;
             auto *rpe = new WGPURenderPassEncoderImpl();
             rpe->parent = enc;
@@ -345,6 +346,7 @@ extern "C"
         }
         if (!descriptor)
         {
+            ReportEncoderValidation(enc, "beginRenderPass: descriptor is null");
             enc->invalid = true;
             auto *rpe = new WGPURenderPassEncoderImpl();
             rpe->parent = enc;
@@ -353,9 +355,9 @@ extern "C"
             return rpe;
         }
 
-        auto makeInvalidPass = [&](const char *msg = "unknown") -> WGPURenderPassEncoder
+        auto makeInvalidPass = [&](const char *msg = "beginRenderPass: invalid descriptor") -> WGPURenderPassEncoder
         {
-            PE_WARN("[WebGPU] Invalid Pass: %s", msg);
+            ReportEncoderValidation(enc, msg);
             enc->invalid = true;
             auto *rpe = new WGPURenderPassEncoderImpl();
             rpe->parent = enc;
@@ -386,6 +388,8 @@ extern "C"
         uint32_t maxColorAttachments = enc->device ? enc->device->limits.maxColorAttachments : 8;
         if (colorCount > maxColorAttachments)
         {
+            ReportEncoderValidation(enc,
+                                    "beginRenderPass: colorAttachmentCount exceeds maxColorAttachments");
             enc->invalid = true;
             auto *rpe = new WGPURenderPassEncoderImpl();
             rpe->parent = enc;
@@ -406,6 +410,8 @@ extern "C"
             uint32_t bps = pwgpu::ComputeBytesPerSampleFromFormats(fmts.data(), fmts.size());
             if (bps > enc->device->limits.maxColorAttachmentBytesPerSample)
             {
+                ReportEncoderValidation(enc,
+                                        "beginRenderPass: attachments exceed maxColorAttachmentBytesPerSample");
                 enc->invalid = true;
                 auto *rpe = new WGPURenderPassEncoderImpl();
                 rpe->parent = enc;
@@ -445,7 +451,8 @@ extern "C"
                 return makeInvalidPass("view is invalid");
             if (view->texture->device != enc->device)
             {
-                PE_WARN("[WebGPU] View texture device != enc->device");
+                ReportEncoderValidation(enc,
+                                        "beginRenderPass: attachment texture belongs to a different device");
                 enc->invalid = true;
             }
             {
@@ -460,7 +467,8 @@ extern "C"
             }
             if (!(view->usage & WGPUTextureUsage_RenderAttachment))
             {
-                PE_WARN("[WebGPU] view usage != RenderAttachment");
+                ReportEncoderValidation(enc,
+                                        "beginRenderPass: attachment view usage must include RenderAttachment");
                 enc->invalid = true;
             }
             if (view->mipLevelCount != 1 || view->arrayLayerCount != 1)
@@ -472,42 +480,59 @@ extern "C"
                 attachH = view->renderExtent.height;
             }
             else if (view->renderExtent.width != attachW || view->renderExtent.height != attachH)
-                return makeInvalidPass("extent mismatch");
+                return makeInvalidPass(
+                    "beginRenderPass: color attachment renderExtent must match across attachments");
 
             uint32_t sc = view->texture->sampleCount;
             if (commonSampleCount == 0)
                 commonSampleCount = sc;
             else if (sc != commonSampleCount)
-                return makeInvalidPass();
+                return makeInvalidPass(
+                    "beginRenderPass: all attachments must have equal sampleCount");
 
             if (view->dimension == WGPUTextureViewDimension_3D)
             {
                 if (ca.depthSlice == WGPU_DEPTH_SLICE_UNDEFINED)
-                    return makeInvalidPass();
+                    return makeInvalidPass(
+                        "beginRenderPass: depthSlice must be provided for 3d attachment view");
                 uint32_t mipDepth =
                     std::max(view->texture->size.depthOrArrayLayers >> view->baseMipLevel, 1u);
                 if (ca.depthSlice >= mipDepth)
-                    return makeInvalidPass();
+                    return makeInvalidPass(
+                        "beginRenderPass: depthSlice must be < depth of attachment mip level");
             }
             else
             {
                 if (ca.depthSlice != WGPU_DEPTH_SLICE_UNDEFINED)
-                    return makeInvalidPass();
+                    return makeInvalidPass(
+                        "beginRenderPass: depthSlice must not be provided for non-3d attachment view");
             }
 
             if (ca.resolveTarget)
             {
                 auto *rt = ca.resolveTarget;
-                if (rt->texture && rt->texture->device != enc->device)
+                if (!rt->texture || !rt->view || rt->texture->invalid)
+                    return makeInvalidPass("beginRenderPass: resolveTarget is invalid");
+                if (rt->texture->device != enc->device)
+                {
+                    ReportEncoderValidation(
+                        enc, "beginRenderPass: resolveTarget belongs to a different device");
                     enc->invalid = true;
-                if (!rt->view || !rt->texture || rt->texture->invalid)
-                    return makeInvalidPass();
+                }
                 if (rt->texture->destroyed)
                     return makeDeferredPass(rt);
-                if (view->texture->sampleCount <= 1 || rt->texture->sampleCount != 1)
-                    return makeInvalidPass();
+                if (view->texture->sampleCount <= 1)
+                    return makeInvalidPass(
+                        "beginRenderPass: resolveTarget requires multisampled source view");
+                if (rt->texture->sampleCount != 1)
+                    return makeInvalidPass(
+                        "beginRenderPass: resolveTarget texture sampleCount must be 1");
                 if (rt->format != view->format)
-                    return makeInvalidPass();
+                    return makeInvalidPass(
+                        "beginRenderPass: resolveTarget format must equal source view format");
+                if (rt->texture->format != view->texture->format)
+                    return makeInvalidPass(
+                        "beginRenderPass: resolveTarget texture format must equal source texture format");
                 {
                     const bool tier1Rs =
                         enc->device && wgpuDeviceHasFeature(
@@ -515,23 +540,29 @@ extern "C"
                                            WGPU_TRUE;
                     if (!pwgpu::SupportsResolve(view->format) &&
                         !(tier1Rs && pwgpu::SupportsResolveTier1(view->format)))
-                        return makeInvalidPass();
+                        return makeInvalidPass(
+                            "beginRenderPass: resolveTarget format does not support resolve");
                 }
                 if (rt->renderExtent.width != view->renderExtent.width ||
                     rt->renderExtent.height != view->renderExtent.height)
-                    return makeInvalidPass();
+                    return makeInvalidPass(
+                        "beginRenderPass: resolveTarget extent must match source view extent");
                 if (!(rt->usage & WGPUTextureUsage_RenderAttachment))
-                    return makeInvalidPass();
+                    return makeInvalidPass(
+                        "beginRenderPass: resolveTarget usage must include RenderAttachment");
                 if (rt->dimension == WGPUTextureViewDimension_3D)
-                    return makeInvalidPass();
+                    return makeInvalidPass(
+                        "beginRenderPass: resolveTarget must be a non-3d texture view");
                 if (rt->mipLevelCount != 1 || rt->arrayLayerCount != 1)
-                    return makeInvalidPass();
+                    return makeInvalidPass(
+                        "beginRenderPass: resolveTarget mipLevelCount and arrayLayerCount must be 1");
             }
 
             if (ca.loadOp != WGPULoadOp_Clear && ca.loadOp != WGPULoadOp_Load)
-                return makeInvalidPass();
+                return makeInvalidPass("beginRenderPass: colorAttachment.loadOp must be clear or load");
             if (ca.storeOp != WGPUStoreOp_Store && ca.storeOp != WGPUStoreOp_Discard)
-                return makeInvalidPass();
+                return makeInvalidPass(
+                    "beginRenderPass: colorAttachment.storeOp must be store or discard");
         }
 
         // Color attachments must not alias; 3D compares depthSlice, 2D compares layer ranges.
@@ -553,14 +584,16 @@ extern "C"
                     b.view->dimension == WGPUTextureViewDimension_3D)
                 {
                     if (a.depthSlice == b.depthSlice)
-                        return makeInvalidPass();
+                        return makeInvalidPass(
+                            "beginRenderPass: color attachments must not alias (equal 3d depthSlice)");
                 }
                 else
                 {
                     uint32_t aEnd = a.view->baseArrayLayer + a.view->arrayLayerCount;
                     uint32_t bEnd = b.view->baseArrayLayer + b.view->arrayLayerCount;
                     if (!(aEnd <= b.view->baseArrayLayer || bEnd <= a.view->baseArrayLayer))
-                        return makeInvalidPass();
+                        return makeInvalidPass(
+                            "beginRenderPass: color attachments must not alias (overlapping array layers)");
                 }
             }
         }
@@ -569,21 +602,34 @@ extern "C"
         if (dsa)
         {
             if (!dsa->view || !dsa->view->texture)
-                return makeInvalidPass();
+                return makeInvalidPass(
+                    "beginRenderPass: depthStencilAttachment.view is invalid");
             if (dsa->view->texture->destroyed)
                 return makeDeferredPass(dsa->view);
             if (!dsa->view->view || dsa->view->texture->invalid)
-                return makeInvalidPass();
+                return makeInvalidPass(
+                    "beginRenderPass: depthStencilAttachment.view is invalid");
 
             auto *dsView = dsa->view;
             if (dsView->texture->device != enc->device)
+            {
+                ReportEncoderValidation(
+                    enc,
+                    "beginRenderPass: depthStencilAttachment belongs to a different device");
                 enc->invalid = true;
+            }
             if (!pwgpu::IsDepthStencilFormat(dsView->format))
-                return makeInvalidPass();
+                return makeInvalidPass(
+                    "beginRenderPass: depthStencilAttachment.view format must be depth-stencil");
             if (!(dsView->usage & WGPUTextureUsage_RenderAttachment))
-                return makeInvalidPass();
+                return makeInvalidPass(
+                    "beginRenderPass: depthStencilAttachment.view usage must include RenderAttachment");
             if (dsView->mipLevelCount != 1 || dsView->arrayLayerCount != 1)
-                return makeInvalidPass();
+                return makeInvalidPass(
+                    "beginRenderPass: depthStencilAttachment.view mipLevelCount and arrayLayerCount must be 1");
+            if (dsView->dimension == WGPUTextureViewDimension_3D)
+                return makeInvalidPass(
+                    "beginRenderPass: depthStencilAttachment.view dimension must not be 3d");
 
             if (attachW == 0)
             {
@@ -591,13 +637,15 @@ extern "C"
                 attachH = dsView->renderExtent.height;
             }
             else if (dsView->renderExtent.width != attachW || dsView->renderExtent.height != attachH)
-                return makeInvalidPass();
+                return makeInvalidPass(
+                    "beginRenderPass: depthStencilAttachment extent must match color attachment extent");
 
             uint32_t sc = dsView->texture->sampleCount;
             if (commonSampleCount == 0)
                 commonSampleCount = sc;
             else if (sc != commonSampleCount)
-                return makeInvalidPass();
+                return makeInvalidPass(
+                    "beginRenderPass: depthStencilAttachment sampleCount must equal color attachment sampleCount");
 
             bool hasDepth = pwgpu::HasDepthAspect(dsView->format);
             bool hasStencil = pwgpu::HasStencilAspect(dsView->format);
@@ -605,32 +653,57 @@ extern "C"
             if (hasDepth && !dsa->depthReadOnly)
             {
                 if (dsa->depthLoadOp != WGPULoadOp_Clear && dsa->depthLoadOp != WGPULoadOp_Load)
+                {
+                    ReportEncoderValidation(enc,
+                                            "beginRenderPass: depthLoadOp must be provided when format has a depth aspect and depthReadOnly is false");
                     enc->invalid = true;
+                }
                 if (dsa->depthStoreOp != WGPUStoreOp_Store && dsa->depthStoreOp != WGPUStoreOp_Discard)
+                {
+                    ReportEncoderValidation(enc,
+                                            "beginRenderPass: depthStoreOp must be provided when format has a depth aspect and depthReadOnly is false");
                     enc->invalid = true;
+                }
             }
             else
             {
-                // No depth aspect or read-only: ops must not be provided.
+                // No depth aspect or depthReadOnly==true: depthLoadOp/depthStoreOp must not be provided.
                 if (dsa->depthLoadOp != WGPULoadOp_Undefined || dsa->depthStoreOp != WGPUStoreOp_Undefined)
+                {
+                    ReportEncoderValidation(enc,
+                                            "beginRenderPass: depthLoadOp/depthStoreOp must not be provided when format has no depth aspect or depthReadOnly is true");
                     enc->invalid = true;
+                }
             }
             // If depthLoadOp==clear, depthClearValue must be in [0,1]. NaN (JS undefined sentinel) fails.
             if (hasDepth && dsa->depthLoadOp == WGPULoadOp_Clear &&
                 !(dsa->depthClearValue >= 0.0f && dsa->depthClearValue <= 1.0f))
-                return makeInvalidPass();
+                return makeInvalidPass(
+                    "beginRenderPass: depthClearValue must be in [0.0, 1.0] when depthLoadOp is clear");
 
             if (hasStencil && !dsa->stencilReadOnly)
             {
                 if (dsa->stencilLoadOp != WGPULoadOp_Clear && dsa->stencilLoadOp != WGPULoadOp_Load)
+                {
+                    ReportEncoderValidation(enc,
+                                            "beginRenderPass: stencilLoadOp must be provided when format has a stencil aspect and stencilReadOnly is false");
                     enc->invalid = true;
+                }
                 if (dsa->stencilStoreOp != WGPUStoreOp_Store && dsa->stencilStoreOp != WGPUStoreOp_Discard)
+                {
+                    ReportEncoderValidation(enc,
+                                            "beginRenderPass: stencilStoreOp must be provided when format has a stencil aspect and stencilReadOnly is false");
                     enc->invalid = true;
+                }
             }
             else
             {
                 if (dsa->stencilLoadOp != WGPULoadOp_Undefined || dsa->stencilStoreOp != WGPUStoreOp_Undefined)
+                {
+                    ReportEncoderValidation(enc,
+                                            "beginRenderPass: stencilLoadOp/stencilStoreOp must not be provided when format has no stencil aspect or stencilReadOnly is true");
                     enc->invalid = true;
+                }
             }
         }
 
@@ -638,41 +711,48 @@ extern "C"
         {
             auto *oqs = descriptor->occlusionQuerySet;
             if (oqs->device != enc->device)
-                enc->invalid = true;
-            if (oqs->invalid || oqs->destroyed || oqs->queryPool == VK_NULL_HANDLE)
-                return makeInvalidPass();
+                return makeInvalidPass("beginRenderPass: occlusionQuerySet belongs to a different device");
+            if (oqs->destroyed)
+                return makeInvalidPass("beginRenderPass: occlusionQuerySet is destroyed");
+            if (oqs->invalid || oqs->queryPool == VK_NULL_HANDLE)
+                return makeInvalidPass("beginRenderPass: occlusionQuerySet is invalid");
             if (oqs->type != WGPUQueryType_Occlusion)
-                return makeInvalidPass();
+                return makeInvalidPass("beginRenderPass: occlusionQuerySet.type must be occlusion");
         }
 
         if (descriptor->timestampWrites)
         {
             auto *tw = descriptor->timestampWrites;
-            bool tsValid = true;
+            const char *tsErr = nullptr;
             if (!enc->device ||
                 wgpuDeviceHasFeature(enc->device, WGPUFeatureName_TimestampQuery) != WGPU_TRUE)
-                tsValid = false;
-            else if (!tw->querySet || tw->querySet->invalid || tw->querySet->destroyed ||
-                     tw->querySet->queryPool == VK_NULL_HANDLE ||
-                     tw->querySet->type != WGPUQueryType_Timestamp ||
-                     tw->querySet->device != enc->device)
-                tsValid = false;
+                tsErr = "beginRenderPass: timestamp-query feature is not enabled";
+            else if (!tw->querySet)
+                tsErr = "beginRenderPass: timestampWrites.querySet is null";
+            else if (tw->querySet->destroyed)
+                tsErr = "beginRenderPass: timestampWrites.querySet is destroyed";
+            else if (tw->querySet->invalid || tw->querySet->queryPool == VK_NULL_HANDLE)
+                tsErr = "beginRenderPass: timestampWrites.querySet is invalid";
+            else if (tw->querySet->device != enc->device)
+                tsErr = "beginRenderPass: timestampWrites.querySet belongs to a different device";
+            else if (tw->querySet->type != WGPUQueryType_Timestamp)
+                tsErr = "beginRenderPass: timestampWrites.querySet.type must be timestamp";
             else
             {
                 bool hasBegin = (tw->beginningOfPassWriteIndex != WGPU_QUERY_SET_INDEX_UNDEFINED);
                 bool hasEnd = (tw->endOfPassWriteIndex != WGPU_QUERY_SET_INDEX_UNDEFINED);
                 if (!hasBegin && !hasEnd)
-                    tsValid = false;
-                if (hasBegin && tw->beginningOfPassWriteIndex >= tw->querySet->count)
-                    tsValid = false;
-                if (hasEnd && tw->endOfPassWriteIndex >= tw->querySet->count)
-                    tsValid = false;
-                if (hasBegin && hasEnd &&
-                    tw->beginningOfPassWriteIndex == tw->endOfPassWriteIndex)
-                    tsValid = false;
+                    tsErr = "beginRenderPass: timestampWrites requires at least one write index";
+                else if (hasBegin && tw->beginningOfPassWriteIndex >= tw->querySet->count)
+                    tsErr = "beginRenderPass: beginningOfPassWriteIndex >= querySet.count";
+                else if (hasEnd && tw->endOfPassWriteIndex >= tw->querySet->count)
+                    tsErr = "beginRenderPass: endOfPassWriteIndex >= querySet.count";
+                else if (hasBegin && hasEnd &&
+                         tw->beginningOfPassWriteIndex == tw->endOfPassWriteIndex)
+                    tsErr = "beginRenderPass: beginningOfPassWriteIndex equals endOfPassWriteIndex";
             }
-            if (!tsValid)
-                enc->invalid = true;
+            if (tsErr)
+                return makeInvalidPass(tsErr);
         }
 
         auto *rpe = new WGPURenderPassEncoderImpl();
@@ -716,27 +796,23 @@ extern "C"
             // requires unmodified slots to retain values across submissions.
         }
 
-        if (descriptor->timestampWrites && !enc->invalid)
+        if (descriptor->timestampWrites)
         {
             auto *tw = descriptor->timestampWrites;
-            if (tw->querySet && !tw->querySet->invalid && !tw->querySet->destroyed &&
-                tw->querySet->queryPool != VK_NULL_HANDLE)
-            {
-                rpe->timestampQuerySet = tw->querySet;
-                wgpuQuerySetAddRef(tw->querySet);
+            rpe->timestampQuerySet = tw->querySet;
+            wgpuQuerySetAddRef(tw->querySet);
 
-                if (tw->beginningOfPassWriteIndex != WGPU_QUERY_SET_INDEX_UNDEFINED &&
-                    tw->beginningOfPassWriteIndex < tw->querySet->count)
-                {
-                    rpe->beginTimestampIndex = tw->beginningOfPassWriteIndex;
-                    enc->cmd->ApiHandle().writeTimestamp2(
-                        vk::PipelineStageFlagBits2::eAllCommands,
-                        tw->querySet->queryPool, tw->beginningOfPassWriteIndex);
-                }
-                if (tw->endOfPassWriteIndex != WGPU_QUERY_SET_INDEX_UNDEFINED &&
-                    tw->endOfPassWriteIndex < tw->querySet->count)
-                    rpe->endTimestampIndex = tw->endOfPassWriteIndex;
+            if (tw->beginningOfPassWriteIndex != WGPU_QUERY_SET_INDEX_UNDEFINED &&
+                tw->beginningOfPassWriteIndex < tw->querySet->count)
+            {
+                rpe->beginTimestampIndex = tw->beginningOfPassWriteIndex;
+                enc->cmd->ApiHandle().writeTimestamp2(
+                    vk::PipelineStageFlagBits2::eAllCommands,
+                    tw->querySet->queryPool, tw->beginningOfPassWriteIndex);
             }
+            if (tw->endOfPassWriteIndex != WGPU_QUERY_SET_INDEX_UNDEFINED &&
+                tw->endOfPassWriteIndex < tw->querySet->count)
+                rpe->endTimestampIndex = tw->endOfPassWriteIndex;
         }
 
         std::vector<vk::RenderingAttachmentInfo> colorAttachments;
@@ -1035,6 +1111,7 @@ extern "C"
         }
         if (enc->hasOpenPass)
         {
+            ReportEncoderValidation(enc, "beginComputePass: a pass is already open on this encoder");
             enc->invalid = true;
             auto *cpe = new WGPUComputePassEncoderImpl();
             cpe->parent = enc;
@@ -1043,6 +1120,53 @@ extern "C"
             cpe->wasOpened = false;
             return cpe;
         }
+        auto makeInvalidComputePass = [&](const char *msg) -> WGPUComputePassEncoder
+        {
+            ReportEncoderValidation(enc, msg);
+            enc->invalid = true;
+            auto *cpe = new WGPUComputePassEncoderImpl();
+            cpe->parent = enc;
+            cpe->device = enc->device;
+            cpe->invalid = true;
+            enc->hasOpenPass = true;
+            return cpe;
+        };
+
+        if (descriptor && descriptor->timestampWrites)
+        {
+            auto *tw = descriptor->timestampWrites;
+            const char *tsErr = nullptr;
+            if (!enc->device ||
+                wgpuDeviceHasFeature(enc->device, WGPUFeatureName_TimestampQuery) != WGPU_TRUE)
+                tsErr = "beginComputePass: timestamp-query feature is not enabled";
+            else if (!tw->querySet)
+                tsErr = "beginComputePass: timestampWrites.querySet is null";
+            else if (tw->querySet->destroyed)
+                tsErr = "beginComputePass: timestampWrites.querySet is destroyed";
+            else if (tw->querySet->invalid || tw->querySet->queryPool == VK_NULL_HANDLE)
+                tsErr = "beginComputePass: timestampWrites.querySet is invalid";
+            else if (tw->querySet->device != enc->device)
+                tsErr = "beginComputePass: timestampWrites.querySet belongs to a different device";
+            else if (tw->querySet->type != WGPUQueryType_Timestamp)
+                tsErr = "beginComputePass: timestampWrites.querySet.type must be timestamp";
+            else
+            {
+                bool hasBegin = (tw->beginningOfPassWriteIndex != WGPU_QUERY_SET_INDEX_UNDEFINED);
+                bool hasEnd = (tw->endOfPassWriteIndex != WGPU_QUERY_SET_INDEX_UNDEFINED);
+                if (!hasBegin && !hasEnd)
+                    tsErr = "beginComputePass: timestampWrites requires at least one write index";
+                else if (hasBegin && tw->beginningOfPassWriteIndex >= tw->querySet->count)
+                    tsErr = "beginComputePass: beginningOfPassWriteIndex >= querySet.count";
+                else if (hasEnd && tw->endOfPassWriteIndex >= tw->querySet->count)
+                    tsErr = "beginComputePass: endOfPassWriteIndex >= querySet.count";
+                else if (hasBegin && hasEnd &&
+                         tw->beginningOfPassWriteIndex == tw->endOfPassWriteIndex)
+                    tsErr = "beginComputePass: beginningOfPassWriteIndex equals endOfPassWriteIndex";
+            }
+            if (tsErr)
+                return makeInvalidComputePass(tsErr);
+        }
+
         auto *cpe = new WGPUComputePassEncoderImpl();
         cpe->cmd = enc->cmd;
         cpe->parent = enc;
@@ -1055,52 +1179,19 @@ extern "C"
             if (descriptor->timestampWrites)
             {
                 auto *tw = descriptor->timestampWrites;
-                bool tsValid = true;
-                if (!enc->device ||
-                    wgpuDeviceHasFeature(enc->device, WGPUFeatureName_TimestampQuery) != WGPU_TRUE)
-                    tsValid = false;
-                else if (!tw->querySet || tw->querySet->invalid ||
-                         tw->querySet->destroyed ||
-                         tw->querySet->queryPool == VK_NULL_HANDLE)
-                    tsValid = false;
-                else if (tw->querySet->device != enc->device)
-                    tsValid = false;
-                else if (tw->querySet->type != WGPUQueryType_Timestamp)
-                    tsValid = false;
-                else
+                cpe->timestampQuerySet = tw->querySet;
+                wgpuQuerySetAddRef(tw->querySet);
+                if (tw->beginningOfPassWriteIndex != WGPU_QUERY_SET_INDEX_UNDEFINED &&
+                    tw->beginningOfPassWriteIndex < tw->querySet->count)
                 {
-                    bool hasBegin = (tw->beginningOfPassWriteIndex != WGPU_QUERY_SET_INDEX_UNDEFINED);
-                    bool hasEnd = (tw->endOfPassWriteIndex != WGPU_QUERY_SET_INDEX_UNDEFINED);
-                    if (!hasBegin && !hasEnd)
-                        tsValid = false;
-                    if (hasBegin && tw->beginningOfPassWriteIndex >= tw->querySet->count)
-                        tsValid = false;
-                    if (hasEnd && tw->endOfPassWriteIndex >= tw->querySet->count)
-                        tsValid = false;
-                    if (hasBegin && hasEnd &&
-                        tw->beginningOfPassWriteIndex == tw->endOfPassWriteIndex)
-                        tsValid = false;
+                    cpe->beginTimestampIndex = tw->beginningOfPassWriteIndex;
+                    enc->cmd->ApiHandle().writeTimestamp2(
+                        vk::PipelineStageFlagBits2::eAllCommands,
+                        tw->querySet->queryPool, tw->beginningOfPassWriteIndex);
                 }
-                if (!tsValid)
-                {
-                    cpe->invalid = true;
-                }
-                else if (tw->querySet)
-                {
-                    cpe->timestampQuerySet = tw->querySet;
-                    wgpuQuerySetAddRef(tw->querySet);
-                    if (tw->beginningOfPassWriteIndex != WGPU_QUERY_SET_INDEX_UNDEFINED &&
-                        tw->beginningOfPassWriteIndex < tw->querySet->count)
-                    {
-                        cpe->beginTimestampIndex = tw->beginningOfPassWriteIndex;
-                        enc->cmd->ApiHandle().writeTimestamp2(
-                            vk::PipelineStageFlagBits2::eAllCommands,
-                            tw->querySet->queryPool, tw->beginningOfPassWriteIndex);
-                    }
-                    if (tw->endOfPassWriteIndex != WGPU_QUERY_SET_INDEX_UNDEFINED &&
-                        tw->endOfPassWriteIndex < tw->querySet->count)
-                        cpe->endTimestampIndex = tw->endOfPassWriteIndex;
-                }
+                if (tw->endOfPassWriteIndex != WGPU_QUERY_SET_INDEX_UNDEFINED &&
+                    tw->endOfPassWriteIndex < tw->querySet->count)
+                    cpe->endTimestampIndex = tw->endOfPassWriteIndex;
             }
         }
         enc->hasOpenPass = true;
@@ -1121,9 +1212,11 @@ extern "C"
             ReportEncoderValidation(enc, "CommandEncoder.finish(): a pass is still open");
             enc->invalid = true;
         }
-        // W3C §17.1: debug group stack must be empty at finish().
         if (enc->debugGroupDepth != 0)
+        {
+            ReportEncoderValidation(enc, "CommandEncoder.finish(): debug group stack is not empty");
             enc->invalid = true;
+        }
         enc->finished = true;
 
         if (enc->cmd)
@@ -1156,7 +1249,8 @@ extern "C"
 
         auto fail = [&](const char *msg)
         {
-            (void)msg;
+            std::string full = std::string("copyBufferToBuffer: ") + msg;
+            ReportEncoderValidation(enc, full.c_str());
             enc->invalid = true;
         };
 
@@ -1168,6 +1262,12 @@ extern "C"
         if (src->invalid || dst->invalid)
         {
             fail("src or dst buffer is invalid");
+            return;
+        }
+        if (src->internalState == BufferInternalState::Destroyed ||
+            dst->internalState == BufferInternalState::Destroyed)
+        {
+            fail("src or dst buffer is destroyed");
             return;
         }
         if (src->device != enc->device || dst->device != enc->device)
@@ -1238,32 +1338,41 @@ extern "C"
     {
         if (!EncoderOpen(enc, "wgpuCommandEncoderClearBuffer"))
             return;
-        auto fail = [&]()
-        { enc->invalid = true; };
+        auto fail = [&](const char *msg)
+        {
+            std::string full = std::string("clearBuffer: ") + msg;
+            ReportEncoderValidation(enc, full.c_str());
+            enc->invalid = true;
+        };
         if (!buffer)
         {
-            fail();
+            fail("buffer is null");
             return;
         }
         if (buffer->invalid)
         {
-            fail();
+            fail("buffer is invalid");
+            return;
+        }
+        if (buffer->internalState == BufferInternalState::Destroyed)
+        {
+            fail("buffer is destroyed");
             return;
         }
         if (buffer->device != enc->device)
         {
-            fail();
+            fail("buffer belongs to a different device");
             return;
         }
         if (!(buffer->usage & WGPUBufferUsage_CopyDst))
         {
-            fail();
+            fail("buffer usage must include COPY_DST");
             return;
         }
 
         if (offset % 4 != 0)
         {
-            fail();
+            fail("offset must be a multiple of 4");
             return;
         }
 
@@ -1272,7 +1381,7 @@ extern "C"
         {
             if (offset > buffer->size)
             {
-                fail();
+                fail("offset exceeds buffer size");
                 return;
             }
             clearSize = buffer->size - offset;
@@ -1280,12 +1389,12 @@ extern "C"
 
         if (clearSize % 4 != 0)
         {
-            fail();
+            fail("size must be a multiple of 4");
             return;
         }
         if (clearSize > buffer->size || offset > buffer->size - clearSize)
         {
-            fail();
+            fail("range out of bounds");
             return;
         }
 
@@ -1313,31 +1422,43 @@ extern "C"
     {
         if (!EncoderOpen(enc, "wgpuCommandEncoderCopyBufferToTexture"))
             return;
-        auto fail = [&]()
-        { enc->invalid = true; };
+        auto fail = [&](const char *msg)
+        {
+            std::string full = std::string("copyBufferToTexture: ") + msg;
+            ReportEncoderValidation(enc, full.c_str());
+            enc->invalid = true;
+        };
         if (!src || !src->buffer || !copySize || !dst || !dst->texture)
         {
-            fail();
+            fail("null descriptor or missing src/dst");
             return;
         }
         if (src->buffer->invalid)
         {
-            fail();
+            fail("src buffer is invalid");
             return;
         }
         if (dst->texture->invalid)
         {
-            fail();
+            fail("dst texture is invalid");
+            return;
+        }
+        if (src->buffer->internalState == BufferInternalState::Destroyed)
+        {
+            fail("src buffer is destroyed");
+            return;
+        }
+        if (dst->texture->destroyed)
+        {
+            fail("dst texture is destroyed");
             return;
         }
         if (src->buffer->device != enc->device || dst->texture->device != enc->device)
         {
-            fail();
+            fail("src/dst belongs to a different device");
             return;
         }
-        if (dst->texture->destroyed || !dst->texture->image ||
-            src->buffer->internalState == BufferInternalState::Destroyed ||
-            !src->buffer->peBuffer)
+        if (!dst->texture->image || !src->buffer->peBuffer)
         {
             enc->retained.usedBuffers.push_back(src->buffer);
             enc->retained.usedTextures.push_back(dst->texture);
@@ -1345,12 +1466,12 @@ extern "C"
         }
         if (!(src->buffer->usage & WGPUBufferUsage_CopySrc))
         {
-            fail();
+            fail("src buffer usage must include COPY_SRC");
             return;
         }
         if (!(dst->texture->usage & WGPUTextureUsage_CopyDst))
         {
-            fail();
+            fail("dst texture usage must include COPY_DST");
             return;
         }
 
@@ -1365,41 +1486,41 @@ extern "C"
             {
                 if (bprRequired)
                 {
-                    fail();
+                    fail("bytesPerRow is required but not provided");
                     return;
                 }
             }
             else if (bpr % 256 != 0)
             {
-                fail();
+                fail("bytesPerRow must be a multiple of 256");
                 return;
             }
         }
         if (!ValidateCopyOffsetAlignment(src->layout.offset, dst->texture->format, dst->aspect))
         {
-            fail();
+            fail("layout.offset alignment is invalid for the texture format");
             return;
         }
         if (!ValidateDSCopyAspect(enc, dst->texture->format, dst->aspect, false,
                                   "wgpuCommandEncoderCopyBufferToTexture", "destination"))
         {
-            fail();
+            fail("dst aspect is not valid for depth/stencil copy");
             return;
         }
         if (dst->texture->sampleCount > 1)
         {
-            fail();
+            fail("dst texture must be single-sampled");
             return;
         }
         if (!ValidateDSFullMipForCopy(enc, dst->texture, dst->mipLevel, dst->origin, *copySize,
                                       "wgpuCommandEncoderCopyBufferToTexture", "destination"))
         {
-            fail();
+            fail("dst DS copy must span the entire mip");
             return;
         }
         if (!ValidateTextureCopyRange(dst->texture, dst->mipLevel, dst->origin, *copySize))
         {
-            fail();
+            fail("dst copy range out of bounds");
             return;
         }
 
@@ -1414,7 +1535,7 @@ extern "C"
                                       src->layout.bytesPerRow, src->layout.rowsPerImage,
                                       *copySize, footprint, blockW, blockH))
         {
-            fail();
+            fail("src buffer layout out of bounds");
             return;
         }
 
@@ -1481,31 +1602,43 @@ extern "C"
     {
         if (!EncoderOpen(enc, "wgpuCommandEncoderCopyTextureToBuffer"))
             return;
-        auto fail = [&]()
-        { enc->invalid = true; };
+        auto fail = [&](const char *msg)
+        {
+            std::string full = std::string("copyTextureToBuffer: ") + msg;
+            ReportEncoderValidation(enc, full.c_str());
+            enc->invalid = true;
+        };
         if (!src || !src->texture || !copySize || !dst || !dst->buffer)
         {
-            fail();
+            fail("null descriptor or missing src/dst");
             return;
         }
         if (src->texture->invalid)
         {
-            fail();
+            fail("src texture is invalid");
             return;
         }
         if (dst->buffer->invalid)
         {
-            fail();
+            fail("dst buffer is invalid");
+            return;
+        }
+        if (src->texture->destroyed)
+        {
+            fail("src texture is destroyed");
+            return;
+        }
+        if (dst->buffer->internalState == BufferInternalState::Destroyed)
+        {
+            fail("dst buffer is destroyed");
             return;
         }
         if (src->texture->device != enc->device || dst->buffer->device != enc->device)
         {
-            fail();
+            fail("src/dst belongs to a different device");
             return;
         }
-        if (src->texture->destroyed || !src->texture->image ||
-            dst->buffer->internalState == BufferInternalState::Destroyed ||
-            !dst->buffer->peBuffer)
+        if (!src->texture->image || !dst->buffer->peBuffer)
         {
             enc->retained.usedBuffers.push_back(dst->buffer);
             enc->retained.usedTextures.push_back(src->texture);
@@ -1513,12 +1646,12 @@ extern "C"
         }
         if (!(src->texture->usage & WGPUTextureUsage_CopySrc))
         {
-            fail();
+            fail("src texture usage must include COPY_SRC");
             return;
         }
         if (!(dst->buffer->usage & WGPUBufferUsage_CopyDst))
         {
-            fail();
+            fail("dst buffer usage must include COPY_DST");
             return;
         }
 
@@ -1533,42 +1666,42 @@ extern "C"
             {
                 if (bprRequired)
                 {
-                    fail();
+                    fail("bytesPerRow is required but not provided");
                     return;
                 }
             }
             else if (bpr % 256 != 0)
             {
-                fail();
+                fail("bytesPerRow must be a multiple of 256");
                 return;
             }
         }
         if (!ValidateCopyOffsetAlignment(dst->layout.offset, src->texture->format, src->aspect))
         {
-            fail();
+            fail("layout.offset alignment is invalid for the texture format");
             return;
         }
         if (!ValidateDSCopyAspect(enc, src->texture->format, src->aspect, true,
                                   "wgpuCommandEncoderCopyTextureToBuffer", "source"))
         {
-            fail();
+            fail("src aspect is not valid for depth/stencil copy");
             return;
         }
         if (src->texture->sampleCount > 1)
         {
-            fail();
+            fail("src texture must be single-sampled");
             return;
         }
 
         if (!ValidateDSFullMipForCopy(enc, src->texture, src->mipLevel, src->origin, *copySize,
                                       "wgpuCommandEncoderCopyTextureToBuffer", "source"))
         {
-            fail();
+            fail("src DS copy must span the entire mip");
             return;
         }
         if (!ValidateTextureCopyRange(src->texture, src->mipLevel, src->origin, *copySize))
         {
-            fail();
+            fail("src copy range out of bounds");
             return;
         }
 
@@ -1582,7 +1715,7 @@ extern "C"
                                       dst->layout.bytesPerRow, dst->layout.rowsPerImage,
                                       *copySize, footprint, blockW, blockH))
         {
-            fail();
+            fail("dst buffer layout out of bounds");
             return;
         }
 
@@ -1648,25 +1781,33 @@ extern "C"
     {
         if (!EncoderOpen(enc, "wgpuCommandEncoderCopyTextureToTexture"))
             return;
-        auto fail = [&]()
-        { enc->invalid = true; };
+        auto fail = [&](const char *msg)
+        {
+            std::string full = std::string("copyTextureToTexture: ") + msg;
+            ReportEncoderValidation(enc, full.c_str());
+            enc->invalid = true;
+        };
         if (!src || !src->texture || !dst || !dst->texture || !copySize)
         {
-            fail();
+            fail("null descriptor or missing src/dst");
             return;
         }
         if (src->texture->invalid || dst->texture->invalid)
         {
-            fail();
+            fail("src or dst texture is invalid");
+            return;
+        }
+        if (src->texture->destroyed || dst->texture->destroyed)
+        {
+            fail("src or dst texture is destroyed");
             return;
         }
         if (src->texture->device != enc->device || dst->texture->device != enc->device)
         {
-            fail();
+            fail("src/dst belongs to a different device");
             return;
         }
-        if (src->texture->destroyed || dst->texture->destroyed ||
-            !src->texture->image || !dst->texture->image)
+        if (!src->texture->image || !dst->texture->image)
         {
             enc->retained.usedTextures.push_back(src->texture);
             enc->retained.usedTextures.push_back(dst->texture);
@@ -1674,23 +1815,23 @@ extern "C"
         }
         if (!(src->texture->usage & WGPUTextureUsage_CopySrc))
         {
-            fail();
+            fail("src texture usage must include COPY_SRC");
             return;
         }
         if (!(dst->texture->usage & WGPUTextureUsage_CopyDst))
         {
-            fail();
+            fail("dst texture usage must include COPY_DST");
             return;
         }
 
         if (src->texture->sampleCount != dst->texture->sampleCount)
         {
-            fail();
+            fail("sampleCount mismatch between src and dst");
             return;
         }
         if (src->texture->dimension != dst->texture->dimension)
         {
-            fail();
+            fail("dimension mismatch between src and dst");
             return;
         }
 
@@ -1699,13 +1840,13 @@ extern "C"
         {
             if (src->texture->format != dst->texture->format)
             {
-                fail();
+                fail("depth/stencil copy requires identical formats");
                 return;
             }
         }
         else if (!pwgpu::AreViewFormatCompatible(src->texture->format, dst->texture->format))
         {
-            fail();
+            fail("src/dst formats are not view-compatible");
             return;
         }
 
@@ -1713,7 +1854,7 @@ extern "C"
                                             dst->texture->format, dst->aspect,
                                             "wgpuCommandEncoderCopyTextureToTexture"))
         {
-            fail();
+            fail("src/dst aspects must cover all aspects of the format");
             return;
         }
         {
@@ -1727,20 +1868,20 @@ extern "C"
             if (!selectsFullAspect(src->aspect, src->texture->format) ||
                 !selectsFullAspect(dst->aspect, dst->texture->format))
             {
-                fail();
+                fail("src/dst aspect must select all aspects of the format");
                 return;
             }
         }
         if (!ValidateDSFullMipForCopy(enc, src->texture, src->mipLevel, src->origin, *copySize,
                                       "wgpuCommandEncoderCopyTextureToTexture", "source"))
         {
-            fail();
+            fail("src DS copy must span the entire mip");
             return;
         }
         if (!ValidateDSFullMipForCopy(enc, dst->texture, dst->mipLevel, dst->origin, *copySize,
                                       "wgpuCommandEncoderCopyTextureToTexture", "destination"))
         {
-            fail();
+            fail("dst DS copy must span the entire mip");
             return;
         }
 
@@ -1753,19 +1894,19 @@ extern "C"
                 copySize->width != smip.width || copySize->height != smip.height ||
                 copySize->width != dmip.width || copySize->height != dmip.height)
             {
-                fail();
+                fail("multisampled copy must span the entire mip");
                 return;
             }
         }
 
         if (!ValidateTextureCopyRange(src->texture, src->mipLevel, src->origin, *copySize))
         {
-            fail();
+            fail("src copy range out of bounds");
             return;
         }
         if (!ValidateTextureCopyRange(dst->texture, dst->mipLevel, dst->origin, *copySize))
         {
-            fail();
+            fail("dst copy range out of bounds");
             return;
         }
 
@@ -1781,7 +1922,7 @@ extern "C"
                 bool disjoint = (srcEnd <= dstLayer0) || (dstEnd <= srcLayer0);
                 if (!disjoint)
                 {
-                    fail();
+                    fail("intra-texture copy subresources overlap");
                     return;
                 }
             }
@@ -1864,32 +2005,44 @@ extern "C"
 
         if (!querySet || querySet->invalid || querySet->device != enc->device)
         {
+            ReportEncoderValidation(enc, "resolveQuerySet: querySet is null/invalid/wrong-device");
+            enc->invalid = true;
+            return;
+        }
+        if (querySet->destroyed)
+        {
+            ReportEncoderValidation(enc, "resolveQuerySet: querySet is destroyed");
             enc->invalid = true;
             return;
         }
         if (!dst || dst->invalid || dst->device != enc->device)
         {
+            ReportEncoderValidation(enc, "resolveQuerySet: destination buffer is null/invalid/wrong-device");
             enc->invalid = true;
             return;
         }
         if (!(dst->usage & WGPUBufferUsage_QueryResolve))
         {
+            ReportEncoderValidation(enc, "resolveQuerySet: destination usage must include QUERY_RESOLVE");
             enc->invalid = true;
             return;
         }
         if (static_cast<uint64_t>(firstQuery) + static_cast<uint64_t>(queryCount) > querySet->count)
         {
+            ReportEncoderValidation(enc, "resolveQuerySet: firstQuery+queryCount exceeds querySet.count");
             enc->invalid = true;
             return;
         }
         if (dstOffset % 256 != 0)
         {
+            ReportEncoderValidation(enc, "resolveQuerySet: destinationOffset must be a multiple of 256");
             enc->invalid = true;
             return;
         }
         if (static_cast<uint64_t>(queryCount) * 8 > dst->size ||
             dstOffset > dst->size - static_cast<uint64_t>(queryCount) * 8)
         {
+            ReportEncoderValidation(enc, "resolveQuerySet: resolve range exceeds destination buffer size");
             enc->invalid = true;
             return;
         }
@@ -1946,17 +2099,26 @@ extern "C"
             return;
         if (!enc->device || wgpuDeviceHasFeature(enc->device, WGPUFeatureName_TimestampQuery) != WGPU_TRUE)
         {
+            ReportEncoderValidation(enc, "writeTimestamp: timestamp-query feature is not enabled");
             enc->invalid = true;
             return;
         }
         if (!querySet || querySet->invalid || querySet->device != enc->device ||
             querySet->type != WGPUQueryType_Timestamp)
         {
+            ReportEncoderValidation(enc, "writeTimestamp: querySet is null/invalid/not-timestamp/wrong-device");
+            enc->invalid = true;
+            return;
+        }
+        if (querySet->destroyed)
+        {
+            ReportEncoderValidation(enc, "writeTimestamp: querySet is destroyed");
             enc->invalid = true;
             return;
         }
         if (queryIndex >= querySet->count)
         {
+            ReportEncoderValidation(enc, "writeTimestamp: queryIndex exceeds querySet.count");
             enc->invalid = true;
             return;
         }
@@ -1992,6 +2154,7 @@ extern "C"
             return;
         if (enc->debugGroupDepth == 0)
         {
+            ReportEncoderValidation(enc, "popDebugGroup: debug group stack is empty");
             enc->invalid = true;
             return;
         }

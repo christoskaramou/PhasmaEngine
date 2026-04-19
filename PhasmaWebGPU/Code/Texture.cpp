@@ -94,7 +94,7 @@ extern "C"
 
         auto reportValidation = [&](const char *what) -> WGPUTextureView
         {
-            if (texture->device)
+            if (what && texture->device)
             {
                 std::string msg = std::string("wgpuTextureCreateView: ") + what;
                 texture->device->reportError(WGPUErrorType_Validation, pwgpu::ToStringView(msg));
@@ -106,6 +106,13 @@ extern "C"
                 bad->label = pwgpu::ToString(descriptor->label);
             return bad;
         };
+
+        if (descriptor &&
+            !pwgpu::ValidateChainedStruct(
+                texture->device, descriptor->nextInChain,
+                {WGPUSType_TextureComponentSwizzleDescriptor},
+                "wgpuTextureCreateView", "WGPUTextureViewDescriptor"))
+            return reportValidation(nullptr);
 
         if (texture->invalid)
             return reportValidation("texture is invalid");
@@ -332,6 +339,11 @@ extern "C"
                 return reportValidation("cube-array view arrayLayerCount must be a multiple of 6");
             if (texture->size.width != texture->size.height)
                 return reportValidation("cube-array view requires square texture");
+            if (!texture->device ||
+                wgpuDeviceHasFeature(texture->device,
+                                     WGPUFeatureName_CoreFeaturesAndLimits) != WGPU_TRUE)
+                return reportValidation(
+                    "cube-array view requires the core-features-and-limits feature");
             break;
         case WGPUTextureViewDimension_3D:
             if (texture->dimension != WGPUTextureDimension_3D)
