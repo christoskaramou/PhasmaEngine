@@ -164,11 +164,20 @@ extern "C"
         {
             if (static_cast<uint32_t>(dynamicOffsetCount) != group->layout->dynamicOffsetCount)
             {
+                char buf[160];
+                std::snprintf(buf, sizeof(buf),
+                              "wgpuComputePassEncoderSetBindGroup: dynamicOffsetCount (%zu) does not match "
+                              "bind group layout dynamicOffsetCount (%u)",
+                              dynamicOffsetCount, group->layout->dynamicOffsetCount);
+                ReportPassValidation(cpe, buf);
                 cpe->invalid = true;
                 return;
             }
             if (dynamicOffsetCount > 0 && !dynamicOffsets)
             {
+                ReportPassValidation(cpe,
+                                     "wgpuComputePassEncoderSetBindGroup: dynamicOffsets is null but "
+                                     "dynamicOffsetCount > 0");
                 cpe->invalid = true;
                 return;
             }
@@ -192,6 +201,15 @@ extern "C"
                                                : cpe->device->limits.minStorageBufferOffsetAlignment;
                     if (align > 0 && offset % align != 0)
                     {
+                        char buf[192];
+                        std::snprintf(buf, sizeof(buf),
+                                      "wgpuComputePassEncoderSetBindGroup: dynamicOffsets[%u]=%u is not a "
+                                      "multiple of %s (%u) for binding %u",
+                                      i, offset,
+                                      isUniform ? "minUniformBufferOffsetAlignment"
+                                                : "minStorageBufferOffsetAlignment",
+                                      align, dynLayoutEntries[i]->binding);
+                        ReportPassValidation(cpe, buf);
                         cpe->invalid = true;
                         return;
                     }
@@ -201,6 +219,16 @@ extern "C"
                         uint64_t effOffset = dyn.baseOffset + static_cast<uint64_t>(offset);
                         if (effOffset > bufSize || dyn.bindingSize > bufSize - effOffset)
                         {
+                            char buf[224];
+                            std::snprintf(buf, sizeof(buf),
+                                          "wgpuComputePassEncoderSetBindGroup: dynamicOffsets[%u]=%u "
+                                          "exceeds buffer bounds for binding %u "
+                                          "(baseOffset=%llu, bindingSize=%llu, bufferSize=%llu)",
+                                          i, offset, dyn.binding,
+                                          (unsigned long long)dyn.baseOffset,
+                                          (unsigned long long)dyn.bindingSize,
+                                          (unsigned long long)bufSize);
+                            ReportPassValidation(cpe, buf);
                             cpe->invalid = true;
                             return;
                         }
@@ -331,6 +359,26 @@ extern "C"
                 cpe->invalid = true;
                 return;
             }
+        }
+
+        constexpr uint64_t kU32Max = 0xFFFFFFFFull;
+        const uint64_t countProduct = (uint64_t)x * (uint64_t)y * (uint64_t)z;
+        if (countProduct > kU32Max)
+        {
+            cpe->invalid = true;
+            ReportPassValidation(
+                cpe,
+                "dispatchWorkgroups: workgroupCountX*Y*Z exceeds 2^32-1 (workgroup_index overflow)");
+            return;
+        }
+        const uint64_t invocations = cpe->pipeline->workgroupInvocations ? cpe->pipeline->workgroupInvocations : 1;
+        if (invocations != 0 && countProduct > kU32Max / invocations)
+        {
+            cpe->invalid = true;
+            ReportPassValidation(
+                cpe,
+                "dispatchWorkgroups: workgroupCount*workgroupSize exceeds 2^32-1 (global_invocation_index overflow)");
+            return;
         }
 
         if (!ValidateBindGroupCompat(cpe))

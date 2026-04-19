@@ -237,12 +237,22 @@ extern "C"
             if (!pwgpu::IsRenderableFormat(resolved.format) &&
                 !(tier1 && pwgpu::IsRenderableFormatTier1(resolved.format)))
                 return reportValidation("RENDER_ATTACHMENT requires a renderable view format");
+            if (resolved.format == WGPUTextureFormat_RG11B10Ufloat &&
+                wgpuDeviceHasFeature(texture->device,
+                                     WGPUFeatureName_RG11B10UfloatRenderable) != WGPU_TRUE)
+                return reportValidation(
+                    "RG11B10Ufloat + RENDER_ATTACHMENT requires RG11B10UfloatRenderable feature");
         }
         if (viewUsage & WGPUTextureUsage_StorageBinding)
         {
             if (!pwgpu::SupportsStorageBinding(resolved.format) &&
                 !(tier1 && pwgpu::SupportsStorageBindingTier1(resolved.format)))
                 return reportValidation("STORAGE_BINDING requires a storage-capable view format");
+            if (resolved.format == WGPUTextureFormat_BGRA8Unorm &&
+                wgpuDeviceHasFeature(texture->device,
+                                     WGPUFeatureName_BGRA8UnormStorage) != WGPU_TRUE)
+                return reportValidation(
+                    "BGRA8Unorm + STORAGE_BINDING requires BGRA8UnormStorage feature");
         }
 
         if (resolved.mipLevelCount == 0)
@@ -257,6 +267,37 @@ extern "C"
 
         if (texture->sampleCount > 1 && resolved.dimension != WGPUTextureViewDimension_2D)
             return reportValidation("multisampled texture view dimension must be 2d");
+
+        const WGPUTextureComponentSwizzleDescriptor *swizzleExt =
+            pwgpu::FindChained<WGPUTextureComponentSwizzleDescriptor>(
+                resolved.nextInChain, WGPUSType_TextureComponentSwizzleDescriptor);
+        WGPUComponentSwizzle sR = WGPUComponentSwizzle_R;
+        WGPUComponentSwizzle sG = WGPUComponentSwizzle_G;
+        WGPUComponentSwizzle sB = WGPUComponentSwizzle_B;
+        WGPUComponentSwizzle sA = WGPUComponentSwizzle_A;
+        if (swizzleExt)
+        {
+            auto resolveSwizzle = [](WGPUComponentSwizzle v, WGPUComponentSwizzle identity)
+            {
+                return (v == WGPUComponentSwizzle_Undefined) ? identity : v;
+            };
+            sR = resolveSwizzle(swizzleExt->swizzle.r, WGPUComponentSwizzle_R);
+            sG = resolveSwizzle(swizzleExt->swizzle.g, WGPUComponentSwizzle_G);
+            sB = resolveSwizzle(swizzleExt->swizzle.b, WGPUComponentSwizzle_B);
+            sA = resolveSwizzle(swizzleExt->swizzle.a, WGPUComponentSwizzle_A);
+
+            const bool isIdentity = sR == WGPUComponentSwizzle_R &&
+                                    sG == WGPUComponentSwizzle_G &&
+                                    sB == WGPUComponentSwizzle_B &&
+                                    sA == WGPUComponentSwizzle_A;
+            const bool featureEnabled =
+                texture->device &&
+                wgpuDeviceHasFeature(texture->device,
+                                     WGPUFeatureName_TextureComponentSwizzle) == WGPU_TRUE;
+            if (!isIdentity && !featureEnabled)
+                return reportValidation(
+                    "non-identity swizzle requires the texture-component-swizzle feature");
+        }
 
         switch (resolved.dimension)
         {
@@ -364,6 +405,31 @@ extern "C"
             ivci.subresourceRange.levelCount = resolved.mipLevelCount;
             ivci.subresourceRange.baseArrayLayer = resolved.baseArrayLayer;
             ivci.subresourceRange.layerCount = resolved.arrayLayerCount;
+
+            auto toVkSwizzle = [](WGPUComponentSwizzle s, vk::ComponentSwizzle identity)
+            {
+                switch (s)
+                {
+                case WGPUComponentSwizzle_Zero:
+                    return vk::ComponentSwizzle::eZero;
+                case WGPUComponentSwizzle_One:
+                    return vk::ComponentSwizzle::eOne;
+                case WGPUComponentSwizzle_R:
+                    return vk::ComponentSwizzle::eR;
+                case WGPUComponentSwizzle_G:
+                    return vk::ComponentSwizzle::eG;
+                case WGPUComponentSwizzle_B:
+                    return vk::ComponentSwizzle::eB;
+                case WGPUComponentSwizzle_A:
+                    return vk::ComponentSwizzle::eA;
+                default:
+                    return identity;
+                }
+            };
+            ivci.components.r = toVkSwizzle(sR, vk::ComponentSwizzle::eR);
+            ivci.components.g = toVkSwizzle(sG, vk::ComponentSwizzle::eG);
+            ivci.components.b = toVkSwizzle(sB, vk::ComponentSwizzle::eB);
+            ivci.components.a = toVkSwizzle(sA, vk::ComponentSwizzle::eA);
 
             const std::string viewName = view->label.empty()
                                              ? (texture->label + "_view")

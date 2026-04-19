@@ -760,11 +760,20 @@ namespace pe
         rayQueryFeatures.rayQuery = true;
         rayQueryFeatures.pNext = &rayTracingPipelineFeatures;
 
-        vk::PhysicalDeviceFeatures2 deviceFeatures2{};
-        deviceFeatures2.pNext = &rayQueryFeatures;
+        const bool depthClipExtAvailable = IsDeviceExtensionValid(VK_EXT_DEPTH_CLIP_ENABLE_EXTENSION_NAME);
+        vk::PhysicalDeviceDepthClipEnableFeaturesEXT depthClipFeatures{};
+        if (depthClipExtAvailable)
+            depthClipFeatures.pNext = &rayQueryFeatures;
 
-        // Supported features
+        vk::PhysicalDeviceFeatures2 deviceFeatures2{};
+        deviceFeatures2.pNext = depthClipExtAvailable
+                                    ? static_cast<void *>(&depthClipFeatures)
+                                    : static_cast<void *>(&rayQueryFeatures);
+
         m_gpu.getFeatures2(&deviceFeatures2);
+
+        if (depthClipExtAvailable && depthClipFeatures.depthClipEnable)
+            deviceExtensions.push_back(VK_EXT_DEPTH_CLIP_ENABLE_EXTENSION_NAME);
 
         Settings::Get<GlobalSettings>().dynamic_rendering &= static_cast<bool>(deviceFeatures13.dynamicRendering);
 

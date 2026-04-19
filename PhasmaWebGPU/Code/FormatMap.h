@@ -375,6 +375,16 @@ namespace pwgpu
         }
     }
 
+    inline bool IsStencilOnlyFormat(WGPUTextureFormat f)
+    {
+        return HasStencilAspect(f) && !HasDepthAspect(f);
+    }
+
+    inline bool IsDepthOnlyFormat(WGPUTextureFormat f)
+    {
+        return HasDepthAspect(f) && !HasStencilAspect(f);
+    }
+
     inline bool IsRenderableFormat(WGPUTextureFormat f)
     {
         if (IsDepthStencilFormat(f))
@@ -561,11 +571,36 @@ namespace pwgpu
         }
     }
 
+    inline bool SupportsReadWriteStorageTier2(WGPUTextureFormat f)
+    {
+        switch (f)
+        {
+        case WGPUTextureFormat_R8Unorm:
+        case WGPUTextureFormat_R8Uint:
+        case WGPUTextureFormat_R8Sint:
+        case WGPUTextureFormat_RGBA8Unorm:
+        case WGPUTextureFormat_RGBA8Uint:
+        case WGPUTextureFormat_RGBA8Sint:
+        case WGPUTextureFormat_R16Uint:
+        case WGPUTextureFormat_R16Sint:
+        case WGPUTextureFormat_R16Float:
+        case WGPUTextureFormat_RGBA16Uint:
+        case WGPUTextureFormat_RGBA16Sint:
+        case WGPUTextureFormat_RGBA16Float:
+        case WGPUTextureFormat_RGBA32Uint:
+        case WGPUTextureFormat_RGBA32Sint:
+        case WGPUTextureFormat_RGBA32Float:
+            return true;
+        default:
+            return false;
+        }
+    }
+
     inline bool Supports3DTexture(WGPUTextureFormat f)
     {
         if (IsDepthStencilFormat(f))
             return false;
-        if (IsCompressedFormat(f))
+        if (IsETC2Format(f))
             return false;
         return f != WGPUTextureFormat_Undefined;
     }
@@ -1393,9 +1428,9 @@ namespace pwgpu
         }
     }
 
-    inline bool IsBlendableFormat(WGPUTextureFormat f)
+    inline bool IsBlendableFormat(WGPUTextureFormat f, bool float32BlendableEnabled = false,
+                                  bool tier1Enabled = false)
     {
-        // Integer formats are not blendable
         switch (f)
         {
         case WGPUTextureFormat_R8Uint:
@@ -1417,13 +1452,13 @@ namespace pwgpu
         case WGPUTextureFormat_RGBA16Sint:
         case WGPUTextureFormat_RGBA32Uint:
         case WGPUTextureFormat_RGBA32Sint:
-        // 32-bit float formats require float32-blendable feature (we don't advertise it)
+            return false;
         case WGPUTextureFormat_R32Float:
         case WGPUTextureFormat_RG32Float:
         case WGPUTextureFormat_RGBA32Float:
-            return false;
+            return float32BlendableEnabled;
         default:
-            return IsRenderableFormat(f);
+            return IsRenderableFormat(f) || (tier1Enabled && IsRenderableFormatTier1(f));
         }
     }
 
@@ -1520,6 +1555,7 @@ namespace pwgpu
         switch (f)
         {
         case WGPUTextureFormat_R8Unorm:
+        case WGPUTextureFormat_R8Snorm:
         case WGPUTextureFormat_R8Uint:
         case WGPUTextureFormat_R8Sint:
             return {1, 1};
@@ -1530,6 +1566,7 @@ namespace pwgpu
         case WGPUTextureFormat_R16Snorm:
             return {2, 2};
         case WGPUTextureFormat_RG8Unorm:
+        case WGPUTextureFormat_RG8Snorm:
         case WGPUTextureFormat_RG8Uint:
         case WGPUTextureFormat_RG8Sint:
             return {2, 1};
@@ -1545,6 +1582,7 @@ namespace pwgpu
             return {4, 2};
         case WGPUTextureFormat_RGBA8Unorm:
         case WGPUTextureFormat_RGBA8UnormSrgb:
+        case WGPUTextureFormat_RGBA8Snorm:
         case WGPUTextureFormat_BGRA8Unorm:
         case WGPUTextureFormat_BGRA8UnormSrgb:
             return {8, 1};

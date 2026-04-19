@@ -293,100 +293,62 @@ extern "C"
                 deferredMode,
                 [cb, u1, u2, captured, bufferLifeGuard]()
                 {
-                    WGPUBufferImpl *buffer = bufferLifeGuard.get();
-                    {
-                        std::lock_guard<std::mutex> lock(buffer->stateMutex);
-                        if (buffer->mapState != WGPUBufferMapState_Pending ||
-                            buffer->pendingCallback.userdata1 != u1)
-                            return;
-                        buffer->mapState = WGPUBufferMapState_Unmapped;
-                        buffer->pendingCallback = {};
-                        buffer->pendingOffset = 0;
-                        buffer->pendingSize = 0;
-                        buffer->pendingMode = WGPUMapMode_None;
-                        if (!buffer->invalid &&
-                            buffer->internalState != BufferInternalState::Destroyed)
-                            buffer->internalState = BufferInternalState::Available;
-                    }
                     WGPUStringView sv{captured.c_str(), captured.size()};
                     cb(WGPUMapAsyncStatus_Error, sv, u1, u2);
                 });
         };
 
-        auto fireMapErrorNow = [&](const char *msg) -> WGPUFuture
-        {
-            WGPUFuture future = inst ? inst->futures.NextId() : WGPUFuture{0};
-            if (callbackInfo.callback)
-            {
-                WGPUStringView sv = pwgpu::ToStringView(msg);
-                callbackInfo.callback(WGPUMapAsyncStatus_Error, sv,
-                                      callbackInfo.userdata1, callbackInfo.userdata2);
-            }
-            return future;
-        };
-
         if (!buffer)
-            return fireMapErrorNow("Null buffer");
+            return trackMapErrorDeferred("Null buffer");
 
         uint64_t rangeSize = 0;
         const bool rangeOk = ResolveRange(buffer->size, offset, size, rangeSize);
 
         const char *errorText = nullptr;
-        bool earlyReject = false;
         {
             std::lock_guard<std::mutex> lock(buffer->stateMutex);
 
             if (buffer->mapState != WGPUBufferMapState_Unmapped)
-            {
-                errorText = "mapAsync requires buffer to be unmapped";
-                earlyReject = true;
-            }
+                errorText = "mapAsync called while a prior map is pending or active";
+            else if (buffer->invalid)
+                errorText = "mapAsync on invalid buffer";
+            else if (buffer->internalState != BufferInternalState::Available)
+                errorText = "mapAsync requires internal state 'available'";
+            else if (!rangeOk)
+                errorText = "mapAsync offset exceeds buffer size";
+            else if ((offset % 8) != 0)
+                errorText = "mapAsync offset must be a multiple of 8";
+            else if ((rangeSize % 4) != 0)
+                errorText = "mapAsync size must be a multiple of 4";
+            else if (offset + rangeSize > buffer->size)
+                errorText = "mapAsync range out of bounds";
+            else if (mode == WGPUMapMode_None ||
+                     (mode & ~(WGPUMapMode_Read | WGPUMapMode_Write)) != 0)
+                errorText = "mapAsync mode must be exactly READ or WRITE";
+            else if ((mode & WGPUMapMode_Read) && (mode & WGPUMapMode_Write))
+                errorText = "mapAsync mode must not combine READ and WRITE";
+            else if ((mode & WGPUMapMode_Read) &&
+                     (buffer->usage & WGPUBufferUsage_MapRead) == 0)
+                errorText = "mapAsync READ requires MAP_READ usage";
+            else if ((mode & WGPUMapMode_Write) &&
+                     (buffer->usage & WGPUBufferUsage_MapWrite) == 0)
+                errorText = "mapAsync WRITE requires MAP_WRITE usage";
 
             if (!errorText)
-            {
-                if (buffer->invalid)
-                    errorText = "mapAsync on invalid buffer";
-                else if (buffer->internalState != BufferInternalState::Available)
-                    errorText = "mapAsync requires internal state 'available'";
-                else if (!rangeOk)
-                    errorText = "mapAsync offset exceeds buffer size";
-                else if ((offset % 8) != 0)
-                    errorText = "mapAsync offset must be a multiple of 8";
-                else if ((rangeSize % 4) != 0)
-                    errorText = "mapAsync size must be a multiple of 4";
-                else if (offset + rangeSize > buffer->size)
-                    errorText = "mapAsync range out of bounds";
-                else if (mode == WGPUMapMode_None ||
-                         (mode & ~(WGPUMapMode_Read | WGPUMapMode_Write)) != 0)
-                    errorText = "mapAsync mode must be exactly READ or WRITE";
-                else if ((mode & WGPUMapMode_Read) && (mode & WGPUMapMode_Write))
-                    errorText = "mapAsync mode must not combine READ and WRITE";
-                else if ((mode & WGPUMapMode_Read) &&
-                         (buffer->usage & WGPUBufferUsage_MapRead) == 0)
-                    errorText = "mapAsync READ requires MAP_READ usage";
-                else if ((mode & WGPUMapMode_Write) &&
-                         (buffer->usage & WGPUBufferUsage_MapWrite) == 0)
-                    errorText = "mapAsync WRITE requires MAP_WRITE usage";
-            }
-
-            if (!earlyReject)
             {
                 buffer->mapState = WGPUBufferMapState_Pending;
                 buffer->internalState = BufferInternalState::Unavailable;
                 buffer->pendingCallback = callbackInfo;
                 buffer->pendingOffset = offset;
-                buffer->pendingSize = errorText ? 0 : rangeSize;
-                buffer->pendingMode = errorText ? WGPUMapMode_None : mode;
+                buffer->pendingSize = rangeSize;
+                buffer->pendingMode = mode;
             }
         }
 
         if (errorText)
         {
             ReportBufferValidationError(buffer, errorText);
-            if (earlyReject)
-                return fireMapErrorNow(errorText);
-            else
-                return trackMapErrorDeferred(errorText);
+            return trackMapErrorDeferred(errorText);
         }
 
         if (!inst || !callbackInfo.callback)

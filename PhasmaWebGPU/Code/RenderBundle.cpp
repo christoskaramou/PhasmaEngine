@@ -16,6 +16,12 @@ extern "C" void wgpuBufferRelease(WGPUBuffer);
 
 namespace
 {
+    void ReportEncoderValidation(WGPURenderBundleEncoder rbe, const char *msg)
+    {
+        if (rbe && rbe->device)
+            rbe->device->reportError(WGPUErrorType_Validation, pwgpu::ToStringView(msg));
+    }
+
     bool ValidateBindGroupCompat(WGPURenderBundleEncoder rbe)
     {
         if (!rbe || !rbe->pipeline || !rbe->pipeline->layout)
@@ -252,11 +258,20 @@ extern "C"
         {
             if (static_cast<uint32_t>(dynamicOffsetCount) != group->layout->dynamicOffsetCount)
             {
+                char buf[160];
+                std::snprintf(buf, sizeof(buf),
+                              "wgpuRenderBundleEncoderSetBindGroup: dynamicOffsetCount (%zu) does not "
+                              "match bind group layout dynamicOffsetCount (%u)",
+                              dynamicOffsetCount, group->layout->dynamicOffsetCount);
+                ReportEncoderValidation(rbe, buf);
                 rbe->invalid = true;
                 return;
             }
             if (dynamicOffsetCount > 0 && !dynamicOffsets)
             {
+                ReportEncoderValidation(rbe,
+                                        "wgpuRenderBundleEncoderSetBindGroup: dynamicOffsets is null but "
+                                        "dynamicOffsetCount > 0");
                 rbe->invalid = true;
                 return;
             }
@@ -280,6 +295,15 @@ extern "C"
                                                : rbe->device->limits.minStorageBufferOffsetAlignment;
                     if (align > 0 && offset % align != 0)
                     {
+                        char buf[192];
+                        std::snprintf(buf, sizeof(buf),
+                                      "wgpuRenderBundleEncoderSetBindGroup: dynamicOffsets[%u]=%u is not "
+                                      "a multiple of %s (%u) for binding %u",
+                                      i, offset,
+                                      isUniform ? "minUniformBufferOffsetAlignment"
+                                                : "minStorageBufferOffsetAlignment",
+                                      align, dynLayoutEntries[i]->binding);
+                        ReportEncoderValidation(rbe, buf);
                         rbe->invalid = true;
                         return;
                     }
@@ -289,6 +313,16 @@ extern "C"
                         uint64_t effOffset = dyn.baseOffset + static_cast<uint64_t>(offset);
                         if (effOffset > bufSize || dyn.bindingSize > bufSize - effOffset)
                         {
+                            char buf[224];
+                            std::snprintf(buf, sizeof(buf),
+                                          "wgpuRenderBundleEncoderSetBindGroup: dynamicOffsets[%u]=%u "
+                                          "exceeds buffer bounds for binding %u "
+                                          "(baseOffset=%llu, bindingSize=%llu, bufferSize=%llu)",
+                                          i, offset, dyn.binding,
+                                          (unsigned long long)dyn.baseOffset,
+                                          (unsigned long long)dyn.bindingSize,
+                                          (unsigned long long)bufSize);
+                            ReportEncoderValidation(rbe, buf);
                             rbe->invalid = true;
                             return;
                         }

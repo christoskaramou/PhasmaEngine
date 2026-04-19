@@ -105,6 +105,22 @@ namespace
         return pwgpu::ToVkAspect(aspect, fmt);
     }
 
+    bool IsFullMipRegion(const WGPUTextureImpl *tex, uint32_t mipLevel,
+                         const WGPUOrigin3D &origin, const WGPUExtent3D &copySize)
+    {
+        if (mipLevel >= tex->mipLevelCount)
+            return false;
+        WGPUExtent3D mip = MipExtent(tex, mipLevel);
+        if (origin.x != 0 || origin.y != 0 || origin.z != 0)
+            return false;
+        if (copySize.width != mip.width || copySize.height != mip.height)
+            return false;
+        uint32_t fullDepth = (tex->dimension == WGPUTextureDimension_3D)
+                                 ? mip.depthOrArrayLayers
+                                 : tex->size.depthOrArrayLayers;
+        return copySize.depthOrArrayLayers == fullDepth;
+    }
+
     bool ValidateTextureCopyRange(const WGPUTextureImpl *tex, uint32_t mipLevel,
                                   const WGPUOrigin3D &origin, const WGPUExtent3D &copySize)
     {
@@ -115,8 +131,7 @@ namespace
         pwgpu::GetTexelBlockSize(tex->format, blockW, blockH);
         if (pwgpu::HasDepthAspect(tex->format) || pwgpu::HasStencilAspect(tex->format))
         {
-            if (origin.x != 0 || origin.y != 0 ||
-                copySize.width != mip.width || copySize.height != mip.height)
+            if (!IsFullMipRegion(tex, mipLevel, origin, copySize))
                 return false;
         }
         if (origin.x + copySize.width > mip.width)
@@ -191,17 +206,16 @@ namespace
         bool hasS = pwgpu::HasStencilAspect(fmt);
         if (!hasD && !hasS)
             return true;
-        auto all = (aspect == WGPUTextureAspect_All);
         auto depth = (aspect == WGPUTextureAspect_DepthOnly);
         auto sten = (aspect == WGPUTextureAspect_StencilOnly);
         switch (fmt)
         {
         case WGPUTextureFormat_Stencil8:
-            return all || sten;
+            return sten;
         case WGPUTextureFormat_Depth16Unorm:
-            return all || depth;
+            return depth || aspect == WGPUTextureAspect_All;
         case WGPUTextureFormat_Depth32Float:
-            return isT2B && (all || depth);
+            return isT2B && (depth || aspect == WGPUTextureAspect_All);
         case WGPUTextureFormat_Depth24Plus:
             return false;
         case WGPUTextureFormat_Depth24PlusStencil8:
@@ -211,6 +225,61 @@ namespace
         default:
             return true;
         }
+    }
+
+    bool ValidateDSFullMipForCopy(WGPUCommandEncoder enc, const WGPUTextureImpl *tex, uint32_t mipLevel,
+                                  const WGPUOrigin3D &origin, const WGPUExtent3D &copySize,
+                                  const char *apiName, const char *sideName)
+    {
+        if (!tex)
+            return true;
+        if (!(pwgpu::HasDepthAspect(tex->format) || pwgpu::HasStencilAspect(tex->format)))
+            return true;
+        if (IsFullMipRegion(tex, mipLevel, origin, copySize))
+            return true;
+        std::string msg = std::string(apiName) + ": " + sideName +
+                          " depth-or-stencil copy must span the entire mip (origin==(0,0,0), "
+                          "size==mip extent)";
+        ReportEncoderValidation(enc, msg.c_str());
+        return false;
+    }
+
+    bool ValidateDSCopyAspect(WGPUCommandEncoder enc, WGPUTextureFormat fmt, WGPUTextureAspect aspect,
+                              bool isT2B, const char *apiName, const char *sideName)
+    {
+        if (IsDSCopyAspectMethodSupported(fmt, aspect, isT2B))
+            return true;
+        std::string msg = std::string(apiName) + ": " + sideName +
+                          " aspect is not valid for the depth-or-stencil format in this copy direction";
+        ReportEncoderValidation(enc, msg.c_str());
+        return false;
+    }
+
+    bool ValidateT2TDepthStencilAspects(WGPUCommandEncoder enc,
+                                        WGPUTextureFormat srcFmt, WGPUTextureAspect srcAspect,
+                                        WGPUTextureFormat dstFmt, WGPUTextureAspect dstAspect,
+                                        const char *apiName)
+    {
+        bool srcDS = pwgpu::HasDepthAspect(srcFmt) || pwgpu::HasStencilAspect(srcFmt);
+        bool dstDS = pwgpu::HasDepthAspect(dstFmt) || pwgpu::HasStencilAspect(dstFmt);
+        if (!srcDS && !dstDS)
+            return true;
+        auto refersToAllAspects = [](WGPUTextureFormat f, WGPUTextureAspect a) -> bool
+        {
+            if (!pwgpu::AspectPresentInFormat(a, f))
+                return false;
+            vk::ImageAspectFlags full = pwgpu::ToVkAspect(WGPUTextureAspect_All, f);
+            return pwgpu::ToVkAspect(a, f) == full;
+        };
+        if (!refersToAllAspects(srcFmt, srcAspect) || !refersToAllAspects(dstFmt, dstAspect))
+        {
+            std::string msg = std::string(apiName) +
+                              ": depth-or-stencil copyTextureToTexture requires source and "
+                              "destination aspect to refer to all aspects of the format";
+            ReportEncoderValidation(enc, msg.c_str());
+            return false;
+        }
+        return true;
     }
 
     bool ValidateCopyOffsetAlignment(uint64_t offset, WGPUTextureFormat fmt, WGPUTextureAspect aspect)
@@ -580,10 +649,13 @@ extern "C"
         {
             auto *tw = descriptor->timestampWrites;
             bool tsValid = true;
-            if (!tw->querySet || tw->querySet->invalid || tw->querySet->destroyed ||
-                tw->querySet->queryPool == VK_NULL_HANDLE ||
-                tw->querySet->type != WGPUQueryType_Timestamp ||
-                tw->querySet->device != enc->device)
+            if (!enc->device ||
+                wgpuDeviceHasFeature(enc->device, WGPUFeatureName_TimestampQuery) != WGPU_TRUE)
+                tsValid = false;
+            else if (!tw->querySet || tw->querySet->invalid || tw->querySet->destroyed ||
+                     tw->querySet->queryPool == VK_NULL_HANDLE ||
+                     tw->querySet->type != WGPUQueryType_Timestamp ||
+                     tw->querySet->device != enc->device)
                 tsValid = false;
             else
             {
@@ -929,9 +1001,8 @@ extern "C"
         enc->cmd->ApiHandle().beginRendering(renderingInfo);
         rpe->renderingActive = true;
 
-        // WebGPU y-up to Vulkan y-down via negative-height viewport (VK_KHR_maintenance1).
-        vk::Viewport defaultVp{0.0f, static_cast<float>(attachH),
-                               static_cast<float>(attachW), -static_cast<float>(attachH),
+        vk::Viewport defaultVp{0.0f, 0.0f,
+                               static_cast<float>(attachW), static_cast<float>(attachH),
                                0.0f, 1.0f};
         enc->cmd->ApiHandle().setViewport(0, 1, &defaultVp);
 
@@ -985,9 +1056,12 @@ extern "C"
             {
                 auto *tw = descriptor->timestampWrites;
                 bool tsValid = true;
-                if (!tw->querySet || tw->querySet->invalid ||
-                    tw->querySet->destroyed ||
-                    tw->querySet->queryPool == VK_NULL_HANDLE)
+                if (!enc->device ||
+                    wgpuDeviceHasFeature(enc->device, WGPUFeatureName_TimestampQuery) != WGPU_TRUE)
+                    tsValid = false;
+                else if (!tw->querySet || tw->querySet->invalid ||
+                         tw->querySet->destroyed ||
+                         tw->querySet->queryPool == VK_NULL_HANDLE)
                     tsValid = false;
                 else if (tw->querySet->device != enc->device)
                     tsValid = false;
@@ -1306,12 +1380,19 @@ extern "C"
             fail();
             return;
         }
-        if (!IsDSCopyAspectMethodSupported(dst->texture->format, dst->aspect, false))
+        if (!ValidateDSCopyAspect(enc, dst->texture->format, dst->aspect, false,
+                                  "wgpuCommandEncoderCopyBufferToTexture", "destination"))
         {
             fail();
             return;
         }
         if (dst->texture->sampleCount > 1)
+        {
+            fail();
+            return;
+        }
+        if (!ValidateDSFullMipForCopy(enc, dst->texture, dst->mipLevel, dst->origin, *copySize,
+                                      "wgpuCommandEncoderCopyBufferToTexture", "destination"))
         {
             fail();
             return;
@@ -1467,7 +1548,8 @@ extern "C"
             fail();
             return;
         }
-        if (!IsDSCopyAspectMethodSupported(src->texture->format, src->aspect, true))
+        if (!ValidateDSCopyAspect(enc, src->texture->format, src->aspect, true,
+                                  "wgpuCommandEncoderCopyTextureToBuffer", "source"))
         {
             fail();
             return;
@@ -1478,6 +1560,12 @@ extern "C"
             return;
         }
 
+        if (!ValidateDSFullMipForCopy(enc, src->texture, src->mipLevel, src->origin, *copySize,
+                                      "wgpuCommandEncoderCopyTextureToBuffer", "source"))
+        {
+            fail();
+            return;
+        }
         if (!ValidateTextureCopyRange(src->texture, src->mipLevel, src->origin, *copySize))
         {
             fail();
@@ -1621,15 +1709,36 @@ extern "C"
             return;
         }
 
-        auto selectsFullAspect = [](WGPUTextureAspect a, WGPUTextureFormat f) -> bool
+        if (!ValidateT2TDepthStencilAspects(enc, src->texture->format, src->aspect,
+                                            dst->texture->format, dst->aspect,
+                                            "wgpuCommandEncoderCopyTextureToTexture"))
         {
-            vk::ImageAspectFlags full = pwgpu::ToVkAspect(WGPUTextureAspect_All, f);
-            if (!pwgpu::AspectPresentInFormat(a, f))
-                return false;
-            return pwgpu::ToVkAspect(a, f) == full;
-        };
-        if (!selectsFullAspect(src->aspect, src->texture->format) ||
-            !selectsFullAspect(dst->aspect, dst->texture->format))
+            fail();
+            return;
+        }
+        {
+            auto selectsFullAspect = [](WGPUTextureAspect a, WGPUTextureFormat f) -> bool
+            {
+                vk::ImageAspectFlags full = pwgpu::ToVkAspect(WGPUTextureAspect_All, f);
+                if (!pwgpu::AspectPresentInFormat(a, f))
+                    return false;
+                return pwgpu::ToVkAspect(a, f) == full;
+            };
+            if (!selectsFullAspect(src->aspect, src->texture->format) ||
+                !selectsFullAspect(dst->aspect, dst->texture->format))
+            {
+                fail();
+                return;
+            }
+        }
+        if (!ValidateDSFullMipForCopy(enc, src->texture, src->mipLevel, src->origin, *copySize,
+                                      "wgpuCommandEncoderCopyTextureToTexture", "source"))
+        {
+            fail();
+            return;
+        }
+        if (!ValidateDSFullMipForCopy(enc, dst->texture, dst->mipLevel, dst->origin, *copySize,
+                                      "wgpuCommandEncoderCopyTextureToTexture", "destination"))
         {
             fail();
             return;
@@ -1835,13 +1944,28 @@ extern "C"
     {
         if (!EncoderOpen(enc, "wgpuCommandEncoderWriteTimestamp"))
             return;
-        if (!querySet || !querySet->queryPool)
+        if (!enc->device || wgpuDeviceHasFeature(enc->device, WGPUFeatureName_TimestampQuery) != WGPU_TRUE)
+        {
+            enc->invalid = true;
             return;
+        }
+        if (!querySet || querySet->invalid || querySet->device != enc->device ||
+            querySet->type != WGPUQueryType_Timestamp)
+        {
+            enc->invalid = true;
+            return;
+        }
         if (queryIndex >= querySet->count)
+        {
+            enc->invalid = true;
             return;
+        }
 
         wgpuQuerySetAddRef(querySet);
         enc->retained.querySets.push_back(querySet);
+
+        if (querySet->destroyed || !querySet->queryPool)
+            return;
 
         enc->cmd->ApiHandle().writeTimestamp2(vk::PipelineStageFlagBits2::eAllCommands,
                                               querySet->queryPool, queryIndex);

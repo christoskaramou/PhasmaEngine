@@ -309,6 +309,44 @@ extern "C"
         adapter->chainedCaps.shaderFloat16 = vk12Features.shaderFloat16 != 0;
         adapter->chainedCaps.depthClipEnable = depthClipFeatures.depthClipEnable != 0;
 
+        VkPhysicalDeviceVulkan11Properties vk11Props{};
+        vk11Props.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_1_PROPERTIES;
+        VkPhysicalDeviceVulkan13Properties vk13Props{};
+        vk13Props.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_3_PROPERTIES;
+        vk11Props.pNext = &vk13Props;
+        VkPhysicalDeviceProperties2 props2{};
+        props2.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROPERTIES_2;
+        props2.pNext = &vk11Props;
+        vkGetPhysicalDeviceProperties2(vkGpu, &props2);
+
+        constexpr VkSubgroupFeatureFlags kRequiredOps =
+            VK_SUBGROUP_FEATURE_BASIC_BIT |
+            VK_SUBGROUP_FEATURE_VOTE_BIT |
+            VK_SUBGROUP_FEATURE_BALLOT_BIT |
+            VK_SUBGROUP_FEATURE_ARITHMETIC_BIT |
+            VK_SUBGROUP_FEATURE_SHUFFLE_BIT |
+            VK_SUBGROUP_FEATURE_SHUFFLE_RELATIVE_BIT |
+            VK_SUBGROUP_FEATURE_QUAD_BIT;
+        const bool opsSupported =
+            (vk11Props.subgroupSupportedOperations & kRequiredOps) == kRequiredOps;
+        const bool computeStage =
+            (vk11Props.subgroupSupportedStages & VK_SHADER_STAGE_COMPUTE_BIT) != 0;
+        adapter->chainedCaps.subgroups = opsSupported && computeStage;
+
+        if (adapter->chainedCaps.subgroups)
+        {
+            if (vk13Props.minSubgroupSize != 0 && vk13Props.maxSubgroupSize != 0)
+            {
+                adapter->chainedCaps.subgroupMinSize = vk13Props.minSubgroupSize;
+                adapter->chainedCaps.subgroupMaxSize = vk13Props.maxSubgroupSize;
+            }
+            else if (vk11Props.subgroupSize != 0)
+            {
+                adapter->chainedCaps.subgroupMinSize = vk11Props.subgroupSize;
+                adapter->chainedCaps.subgroupMaxSize = vk11Props.subgroupSize;
+            }
+        }
+
         adapter->deviceName = adapter->vkProps.deviceName;
         adapter->vendorName = VendorIdToString(adapter->vkProps.vendorID);
         adapter->architecture = "";

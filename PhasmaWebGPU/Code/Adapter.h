@@ -6,8 +6,11 @@
 
 struct WGPUAdapterChainedCaps
 {
-    bool shaderFloat16 = false;   // WGPUFeatureName_ShaderF16
-    bool depthClipEnable = false; // WGPUFeatureName_DepthClipControl
+    bool shaderFloat16 = false;
+    bool depthClipEnable = false;
+    bool subgroups = false;
+    uint32_t subgroupMinSize = 4;
+    uint32_t subgroupMaxSize = 128;
 };
 
 struct WGPUInstanceImpl;
@@ -33,7 +36,14 @@ struct WGPUAdapterImpl
     bool float32Filterable = false;
     bool rg11b10UfloatRenderable = false;
     bool textureFormatsTier1 = false;
+    bool textureFormatsTier2 = false;
     bool textureCompressionBcFullySupported = false;
+    bool textureCompressionBCSliced3D = false;
+    bool textureCompressionASTCSliced3D = false;
+    bool depth32FloatStencil8 = false;
+    bool float32Blendable = false;
+    bool textureComponentSwizzle = true;
+    bool primitiveIndex = false;
 
     std::string deviceName;
     std::string vendorName;

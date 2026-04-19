@@ -11,19 +11,25 @@ namespace
     {
         switch (feature)
         {
+        case WGPUFeatureName_CoreFeaturesAndLimits:
+            return true;
         case WGPUFeatureName_TextureCompressionBC:
             return a.vkFeatures.textureCompressionBC != 0 &&
                    a.textureCompressionBcFullySupported;
+        case WGPUFeatureName_TextureCompressionBCSliced3D:
+            return a.textureCompressionBCSliced3D;
         case WGPUFeatureName_TextureCompressionETC2:
             return a.vkFeatures.textureCompressionETC2 != 0;
         case WGPUFeatureName_TextureCompressionASTC:
             return a.vkFeatures.textureCompressionASTC_LDR != 0;
+        case WGPUFeatureName_TextureCompressionASTCSliced3D:
+            return a.textureCompressionASTCSliced3D;
         case WGPUFeatureName_IndirectFirstInstance:
             return a.vkFeatures.drawIndirectFirstInstance != 0;
         case WGPUFeatureName_TimestampQuery:
             return a.vkProps.limits.timestampComputeAndGraphics != 0;
         case WGPUFeatureName_DualSourceBlending:
-            return false; // Naga WGSL compiler doesn't support dual-source syntax
+            return a.vkFeatures.dualSrcBlend != 0;
         case WGPUFeatureName_ClipDistances:
             return a.vkFeatures.shaderClipDistance != 0;
         case WGPUFeatureName_ShaderF16:
@@ -38,6 +44,18 @@ namespace
             return a.rg11b10UfloatRenderable;
         case WGPUFeatureName_TextureFormatsTier1:
             return a.textureFormatsTier1;
+        case WGPUFeatureName_TextureFormatsTier2:
+            return a.textureFormatsTier2;
+        case WGPUFeatureName_Depth32FloatStencil8:
+            return a.depth32FloatStencil8;
+        case WGPUFeatureName_Float32Blendable:
+            return a.float32Blendable;
+        case WGPUFeatureName_TextureComponentSwizzle:
+            return a.textureComponentSwizzle;
+        case WGPUFeatureName_PrimitiveIndex:
+            return a.primitiveIndex;
+        case WGPUFeatureName_Subgroups:
+            return a.chainedCaps.subgroups;
         default:
             return false;
         }
@@ -49,8 +67,10 @@ namespace
 
         static constexpr WGPUFeatureName kCandidates[] = {
             WGPUFeatureName_TextureCompressionBC,
+            WGPUFeatureName_TextureCompressionBCSliced3D,
             WGPUFeatureName_TextureCompressionETC2,
             WGPUFeatureName_TextureCompressionASTC,
+            WGPUFeatureName_TextureCompressionASTCSliced3D,
             WGPUFeatureName_IndirectFirstInstance,
             WGPUFeatureName_TimestampQuery,
             WGPUFeatureName_ShaderF16,
@@ -61,6 +81,12 @@ namespace
             WGPUFeatureName_Float32Filterable,
             WGPUFeatureName_RG11B10UfloatRenderable,
             WGPUFeatureName_TextureFormatsTier1,
+            WGPUFeatureName_TextureFormatsTier2,
+            WGPUFeatureName_Depth32FloatStencil8,
+            WGPUFeatureName_Float32Blendable,
+            WGPUFeatureName_TextureComponentSwizzle,
+            WGPUFeatureName_PrimitiveIndex,
+            WGPUFeatureName_Subgroups,
         };
         for (WGPUFeatureName f : kCandidates)
         {
@@ -91,6 +117,20 @@ void pwgpu_PopulateAdapterFeatureCache(WGPUAdapterImpl &a)
             a.resolvedDepth24PlusStencil8 = VK_FORMAT_D24_UNORM_S8_UINT;
         else
             a.resolvedDepth24PlusStencil8 = VK_FORMAT_D32_SFLOAT_S8_UINT;
+
+        a.depth32FloatStencil8 = fmtSupportsDepth(VK_FORMAT_D32_SFLOAT_S8_UINT);
+        a.primitiveIndex = a.vkFeatures.geometryShader != 0;
+
+        auto fmtBlendable = [&](VkFormat fmt) -> bool
+        {
+            VkFormatProperties props{};
+            vkGetPhysicalDeviceFormatProperties(a.gpu, fmt, &props);
+            return (props.optimalTilingFeatures & VK_FORMAT_FEATURE_COLOR_ATTACHMENT_BIT) &&
+                   (props.optimalTilingFeatures & VK_FORMAT_FEATURE_COLOR_ATTACHMENT_BLEND_BIT);
+        };
+        a.float32Blendable = fmtBlendable(VK_FORMAT_R32_SFLOAT) &&
+                             fmtBlendable(VK_FORMAT_R32G32_SFLOAT) &&
+                             fmtBlendable(VK_FORMAT_R32G32B32A32_SFLOAT);
 
         VkFormatProperties bgraProps{};
         vkGetPhysicalDeviceFormatProperties(a.gpu, VK_FORMAT_B8G8R8A8_UNORM, &bgraProps);
@@ -127,6 +167,15 @@ void pwgpu_PopulateAdapterFeatureCache(WGPUAdapterImpl &a)
             return (props.optimalTilingFeatures & VK_FORMAT_FEATURE_COLOR_ATTACHMENT_BIT) &&
                    (props.optimalTilingFeatures & VK_FORMAT_FEATURE_COLOR_ATTACHMENT_BLEND_BIT);
         };
+        auto fmtResolve = [&](VkFormat fmt) -> bool
+        {
+            VkImageFormatProperties props{};
+            VkResult r = vkGetPhysicalDeviceImageFormatProperties(
+                a.gpu, fmt, VK_IMAGE_TYPE_2D, VK_IMAGE_TILING_OPTIMAL,
+                VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT,
+                0, &props);
+            return r == VK_SUCCESS && (props.sampleCounts & VK_SAMPLE_COUNT_1_BIT);
+        };
         a.textureFormatsTier1 =
             fmtStorage(VK_FORMAT_R8_UNORM) && fmtStorage(VK_FORMAT_R8_SNORM) &&
             fmtStorage(VK_FORMAT_R8_UINT) && fmtStorage(VK_FORMAT_R8_SINT) &&
@@ -147,7 +196,23 @@ void pwgpu_PopulateAdapterFeatureCache(WGPUAdapterImpl &a)
             fmtRenderBlend(VK_FORMAT_R16_UNORM) && fmtRenderBlend(VK_FORMAT_R16_SNORM) &&
             fmtRenderBlend(VK_FORMAT_R16G16_UNORM) && fmtRenderBlend(VK_FORMAT_R16G16_SNORM) &&
             fmtRenderBlend(VK_FORMAT_R16G16B16A16_UNORM) &&
-            fmtRenderBlend(VK_FORMAT_R16G16B16A16_SNORM);
+            fmtRenderBlend(VK_FORMAT_R16G16B16A16_SNORM) &&
+            fmtResolve(VK_FORMAT_R8_SNORM) && fmtResolve(VK_FORMAT_R8G8_SNORM) &&
+            fmtResolve(VK_FORMAT_R8G8B8A8_SNORM);
+
+        a.textureFormatsTier2 =
+            a.textureFormatsTier1 &&
+            fmtStorage(VK_FORMAT_R8_UNORM) && fmtStorage(VK_FORMAT_R8_UINT) &&
+            fmtStorage(VK_FORMAT_R8_SINT) && fmtStorage(VK_FORMAT_R8G8B8A8_UNORM) &&
+            fmtStorage(VK_FORMAT_R8G8B8A8_UINT) && fmtStorage(VK_FORMAT_R8G8B8A8_SINT) &&
+            fmtStorage(VK_FORMAT_R16_UINT) && fmtStorage(VK_FORMAT_R16_SINT) &&
+            fmtStorage(VK_FORMAT_R16_SFLOAT) &&
+            fmtStorage(VK_FORMAT_R16G16B16A16_UINT) &&
+            fmtStorage(VK_FORMAT_R16G16B16A16_SINT) &&
+            fmtStorage(VK_FORMAT_R16G16B16A16_SFLOAT) &&
+            fmtStorage(VK_FORMAT_R32G32B32A32_UINT) &&
+            fmtStorage(VK_FORMAT_R32G32B32A32_SINT) &&
+            fmtStorage(VK_FORMAT_R32G32B32A32_SFLOAT);
 
         // W3C spec: texture-compression-bc must support every BC VkFormat; some
         // Vulkan drivers advertise textureCompressionBC without BC6H/BC7.
@@ -172,6 +237,22 @@ void pwgpu_PopulateAdapterFeatureCache(WGPUAdapterImpl &a)
             fmtSampled(VK_FORMAT_BC6H_SFLOAT_BLOCK) &&
             fmtSampled(VK_FORMAT_BC7_UNORM_BLOCK) &&
             fmtSampled(VK_FORMAT_BC7_SRGB_BLOCK);
+
+        auto supports3DSampled = [&](VkFormat fmt) -> bool
+        {
+            VkImageFormatProperties props{};
+            VkResult r = vkGetPhysicalDeviceImageFormatProperties(
+                a.gpu, fmt, VK_IMAGE_TYPE_3D, VK_IMAGE_TILING_OPTIMAL,
+                VK_IMAGE_USAGE_SAMPLED_BIT, 0, &props);
+            return r == VK_SUCCESS;
+        };
+        a.textureCompressionBCSliced3D =
+            a.vkFeatures.textureCompressionBC != 0 &&
+            a.textureCompressionBcFullySupported &&
+            supports3DSampled(VK_FORMAT_BC1_RGBA_UNORM_BLOCK);
+        a.textureCompressionASTCSliced3D =
+            a.vkFeatures.textureCompressionASTC_LDR != 0 &&
+            supports3DSampled(VK_FORMAT_ASTC_4x4_UNORM_BLOCK);
     }
 
     a.supportedFeatures.clear();
@@ -232,8 +313,8 @@ extern "C"
         info->adapterType = adapter->adapterType;
         info->vendorID = adapter->vkProps.vendorID;
         info->deviceID = adapter->vkProps.deviceID;
-        info->subgroupMinSize = 4;
-        info->subgroupMaxSize = 128;
+        info->subgroupMinSize = adapter->chainedCaps.subgroupMinSize;
+        info->subgroupMaxSize = adapter->chainedCaps.subgroupMaxSize;
 
         return WGPUStatus_Success;
     }
@@ -327,6 +408,18 @@ extern "C"
                 appendFeatureUnique(dev->features, descriptor->requiredFeatures[i]);
         }
         appendFeatureUnique(dev->features, WGPUFeatureName_CoreFeaturesAndLimits);
+
+        auto deviceHas = [&](WGPUFeatureName f)
+        {
+            for (WGPUFeatureName existing : dev->features)
+                if (existing == f)
+                    return true;
+            return false;
+        };
+        if (deviceHas(WGPUFeatureName_TextureFormatsTier2))
+            appendFeatureUnique(dev->features, WGPUFeatureName_TextureFormatsTier1);
+        if (deviceHas(WGPUFeatureName_TextureFormatsTier1))
+            appendFeatureUnique(dev->features, WGPUFeatureName_RG11B10UfloatRenderable);
 
         dev->limits = pwgpu::ResolveDeviceLimits(adapterLim,
                                                  descriptor ? descriptor->requiredLimits : nullptr);

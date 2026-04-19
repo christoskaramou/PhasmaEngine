@@ -17,4 +17,5 @@ struct WGPUComputePipelineImpl
     WGPUPipelineLayoutImpl *layout = nullptr;
 
     std::string entryPoint;
+    uint64_t workgroupInvocations = 1;
 };

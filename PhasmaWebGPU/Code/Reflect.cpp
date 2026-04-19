@@ -402,7 +402,9 @@ namespace pwgpu
                     if (ptrType.pointer && ptrType.parent_type != 0)
                     {
                         const auto &elemType = compiler.get_type(ptrType.parent_type);
-                        wgBytes += ComputeTypeSize(compiler, elemType);
+                        uint64_t sz = ComputeTypeSize(compiler, elemType);
+                        sz = (sz + 15ull) & ~15ull;
+                        wgBytes += sz;
                     }
                 }
             }

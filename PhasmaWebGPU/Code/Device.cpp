@@ -794,6 +794,12 @@ extern "C"
                 return makeInvalid("3D texture depthOrArrayLayers exceeds maxTextureDimension3D");
             if (samples != 1)
                 return makeInvalid("3D texture sampleCount must be 1");
+            if (pwgpu::IsBCFormat(fmt) &&
+                !DeviceHasFeature(device, WGPUFeatureName_TextureCompressionBCSliced3D))
+                return makeInvalid("BC format with dimension 3d requires TextureCompressionBCSliced3D feature");
+            if (pwgpu::IsASTCFormat(fmt) &&
+                !DeviceHasFeature(device, WGPUFeatureName_TextureCompressionASTCSliced3D))
+                return makeInvalid("ASTC format with dimension 3d requires TextureCompressionASTCSliced3D feature");
             if (!pwgpu::Supports3DTexture(fmt))
                 return makeInvalid("format does not support 3D textures");
         }
@@ -820,6 +826,10 @@ extern "C"
             if (!pwgpu::SupportsMultisampling(fmt) &&
                 !(tier1 && pwgpu::SupportsMultisamplingTier1(fmt)))
                 return makeInvalid("format does not support multisampling");
+            if (fmt == WGPUTextureFormat_RG11B10Ufloat &&
+                !DeviceHasFeature(device, WGPUFeatureName_RG11B10UfloatRenderable))
+                return makeInvalid(
+                    "multisampled RG11B10Ufloat requires RG11B10UfloatRenderable feature");
         }
 
         uint32_t maxMips = pwgpu::MaxMipLevelCount(dim, w, h, d);
@@ -831,6 +841,10 @@ extern "C"
             if (!pwgpu::IsRenderableFormat(fmt) &&
                 !(tier1 && pwgpu::IsRenderableFormatTier1(fmt)))
                 return makeInvalid("RENDER_ATTACHMENT requires a renderable format");
+            if (fmt == WGPUTextureFormat_RG11B10Ufloat &&
+                !DeviceHasFeature(device, WGPUFeatureName_RG11B10UfloatRenderable))
+                return makeInvalid(
+                    "RG11B10Ufloat + RENDER_ATTACHMENT requires RG11B10UfloatRenderable feature");
             if (dim != WGPUTextureDimension_2D && dim != WGPUTextureDimension_3D)
                 return makeInvalid("RENDER_ATTACHMENT requires dimension 2d or 3d");
         }
@@ -860,6 +874,9 @@ extern "C"
             return makeInvalid("ETC2/EAC format requires TextureCompressionETC2 feature");
         if (pwgpu::IsASTCFormat(fmt) && !DeviceHasFeature(device, WGPUFeatureName_TextureCompressionASTC))
             return makeInvalid("ASTC format requires TextureCompressionASTC feature");
+        if (fmt == WGPUTextureFormat_Depth32FloatStencil8 &&
+            !DeviceHasFeature(device, WGPUFeatureName_Depth32FloatStencil8))
+            return makeInvalid("Depth32FloatStencil8 format requires Depth32FloatStencil8 feature");
 
         if ((usage & WGPUTextureUsage_StorageBinding) && fmt == WGPUTextureFormat_BGRA8Unorm &&
             !DeviceHasFeature(device, WGPUFeatureName_BGRA8UnormStorage))
@@ -877,6 +894,9 @@ extern "C"
                 return makeInvalid("viewFormats ETC2/EAC format requires TextureCompressionETC2 feature");
             if (pwgpu::IsASTCFormat(vf) && !DeviceHasFeature(device, WGPUFeatureName_TextureCompressionASTC))
                 return makeInvalid("viewFormats ASTC format requires TextureCompressionASTC feature");
+            if (vf == WGPUTextureFormat_Depth32FloatStencil8 &&
+                !DeviceHasFeature(device, WGPUFeatureName_Depth32FloatStencil8))
+                return makeInvalid("viewFormats Depth32FloatStencil8 requires Depth32FloatStencil8 feature");
             if (!pwgpu::AreViewFormatCompatible(fmt, vf))
                 return makeInvalid("viewFormats entry is not compatible with texture format");
         }
@@ -1468,6 +1488,10 @@ extern "C"
                           pwgpu::SupportsStorageBindingTier1(resolved.storageTexture.format)))
                         return makeInvalid(
                             "storageTexture format does not support storage binding");
+                    if (resolved.storageTexture.format == WGPUTextureFormat_BGRA8Unorm &&
+                        !DeviceHasFeature(device, WGPUFeatureName_BGRA8UnormStorage))
+                        return makeInvalid(
+                            "bgra8unorm storage texture requires BGRA8UnormStorage feature");
                 }
 
                 if (resolved.storageTexture.format == WGPUTextureFormat_BGRA8Unorm &&
@@ -1477,8 +1501,12 @@ extern "C"
                 if (resolved.storageTexture.access == WGPUStorageTextureAccess_ReadWrite)
                 {
                     auto fmt = resolved.storageTexture.format;
-                    if (fmt != WGPUTextureFormat_R32Uint && fmt != WGPUTextureFormat_R32Sint &&
-                        fmt != WGPUTextureFormat_R32Float)
+                    const bool tier2Rw =
+                        DeviceHasFeature(device, WGPUFeatureName_TextureFormatsTier2);
+                    const bool coreRw = fmt == WGPUTextureFormat_R32Uint ||
+                                        fmt == WGPUTextureFormat_R32Sint ||
+                                        fmt == WGPUTextureFormat_R32Float;
+                    if (!coreRw && !(tier2Rw && pwgpu::SupportsReadWriteStorageTier2(fmt)))
                         return makeInvalid("storageTexture format does not support read-write access");
                 }
 
@@ -2703,6 +2731,7 @@ extern "C"
         }
 
         // Validate workgroup size limits from SPIR-V (§10.3 compute).
+        uint64_t pipelineWorkgroupInvocations = 1;
         {
             pwgpu::ComputeWorkgroupInfo wgInfo{};
             std::string wgErr;
@@ -2743,6 +2772,10 @@ extern "C"
                     device->reportError(WGPUErrorType_Validation, pwgpu::ToStringView(wgFailMsg));
                     return MakeInvalidComputePipeline(device, labelStr);
                 }
+                pipelineWorkgroupInvocations =
+                    (uint64_t)wgInfo.sizeX * (uint64_t)wgInfo.sizeY * (uint64_t)wgInfo.sizeZ;
+                if (pipelineWorkgroupInvocations == 0)
+                    pipelineWorkgroupInvocations = 1;
             }
         }
 
@@ -2799,6 +2832,7 @@ extern "C"
         cp->vkPipeline = vkPipeline;
         cp->layout = pipeLayout;
         cp->entryPoint = entryPointName;
+        cp->workgroupInvocations = pipelineWorkgroupInvocations;
         wgpuDeviceAddRef(device);
         // Auto-built layout already has refCount=1 owned by cp; only AddRef for user-supplied layout.
         if (!autoLayout)
@@ -3347,6 +3381,16 @@ extern "C"
                                 "createRenderPipeline: color target format is not renderable"));
                         return MakeInvalidRenderPipeline(device, labelStr);
                     }
+                    if (ct.format == WGPUTextureFormat_RG11B10Ufloat &&
+                        !DeviceHasFeature(device, WGPUFeatureName_RG11B10UfloatRenderable))
+                    {
+                        device->reportError(
+                            WGPUErrorType_Validation,
+                            pwgpu::ToStringView(
+                                "createRenderPipeline: RG11B10Ufloat color target requires "
+                                "RG11B10UfloatRenderable feature"));
+                        return MakeInvalidRenderPipeline(device, labelStr);
+                    }
                 }
 
                 {
@@ -3415,7 +3459,11 @@ extern "C"
 
                 if (ct.blend)
                 {
-                    if (!pwgpu::IsBlendableFormat(ct.format))
+                    const bool f32Blendable =
+                        DeviceHasFeature(device, WGPUFeatureName_Float32Blendable);
+                    const bool tier1Blend =
+                        DeviceHasFeature(device, WGPUFeatureName_TextureFormatsTier1);
+                    if (!pwgpu::IsBlendableFormat(ct.format, f32Blendable, tier1Blend))
                     {
                         device->reportError(WGPUErrorType_Validation,
                                             pwgpu::ToStringView("createRenderPipeline: blend set but format not blendable"));
@@ -3524,7 +3572,9 @@ extern "C"
                                         pwgpu::ToStringView("createRenderPipeline: alphaToCoverage requires non-null targets[0]"));
                     return MakeInvalidRenderPipeline(device, labelStr);
                 }
-                if (!pwgpu::IsBlendableFormat(descriptor->fragment->targets[0].format) ||
+                if (!pwgpu::IsBlendableFormat(descriptor->fragment->targets[0].format,
+                                              DeviceHasFeature(device, WGPUFeatureName_Float32Blendable),
+                                              DeviceHasFeature(device, WGPUFeatureName_TextureFormatsTier1)) ||
                     !pwgpu::FormatHasAlphaChannel(descriptor->fragment->targets[0].format))
                 {
                     device->reportError(WGPUErrorType_Validation,
@@ -3670,8 +3720,8 @@ extern "C"
         rasterState.polygonMode = vk::PolygonMode::eFill;
         rasterState.cullMode = pwgpu::ToVkCullMode(cullMode);
         rasterState.frontFace = (frontFace == WGPUFrontFace_CW)
-                                    ? vk::FrontFace::eCounterClockwise
-                                    : vk::FrontFace::eClockwise;
+                                    ? vk::FrontFace::eClockwise
+                                    : vk::FrontFace::eCounterClockwise;
         rasterState.lineWidth = 1.0f;
 
         if (hasDepthStencil)
@@ -3685,8 +3735,14 @@ extern "C"
             rasterState.depthBiasClamp = descriptor->depthStencil->depthBiasClamp;
         }
 
-        if (descriptor->primitive.unclippedDepth)
-            rasterState.depthClampEnable = VK_TRUE;
+        vk::PipelineRasterizationDepthClipStateCreateInfoEXT depthClipState{};
+        if (descriptor->primitive.unclippedDepth &&
+            DeviceHasFeature(device, WGPUFeatureName_DepthClipControl))
+        {
+            depthClipState.depthClipEnable = VK_FALSE;
+            depthClipState.pNext = rasterState.pNext;
+            rasterState.pNext = &depthClipState;
+        }
 
         vk::PipelineMultisampleStateCreateInfo multisampleState{};
         multisampleState.rasterizationSamples = pwgpu::ToVkSampleCount(msCount);
@@ -3986,6 +4042,11 @@ extern "C"
                      !(tier1Rbe && pwgpu::IsRenderableFormatTier1(cf))))
                     return makeInvalid(
                         "createRenderBundleEncoder: colorFormats[i] is not color-renderable");
+                if (cf == WGPUTextureFormat_RG11B10Ufloat &&
+                    !DeviceHasFeature(device, WGPUFeatureName_RG11B10UfloatRenderable))
+                    return makeInvalid(
+                        "createRenderBundleEncoder: RG11B10Ufloat colorFormat requires "
+                        "RG11B10UfloatRenderable feature");
             }
         }
 
@@ -4051,6 +4112,8 @@ extern "C"
             vkType = vk::QueryType::eOcclusion;
             break;
         case WGPUQueryType_Timestamp:
+            if (!DeviceHasFeature(device, WGPUFeatureName_TimestampQuery))
+                return makeInvalid("createQuerySet: 'timestamp-query' feature not enabled");
             vkType = vk::QueryType::eTimestamp;
             break;
         default:
