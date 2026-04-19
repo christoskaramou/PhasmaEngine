@@ -1094,6 +1094,94 @@ extern "C"
             }
         }
 
+        // §23.x lazy initialization: any attachment with loadOp=Load whose subresource
+        // is currently uninitialized must be cleared before the pass reads it. Convert
+        // those slots from Load to Clear(0) — clearValue stays whatever color we set,
+        // because the barrier transitions are unchanged and the pass overwrites anyway.
+        // Per-attachment, also mark post-pass state at JS-call time: storeOp=Store marks
+        // initialized; storeOp=Discard marks uninitialized; readOnly DS marks initialized.
+        for (size_t i = 0; i < colorCount; i++)
+        {
+            auto &ca = descriptor->colorAttachments[i];
+            if (!ca.view || !ca.view->texture || !ca.view->texture->image)
+                continue;
+            auto *view = ca.view;
+            uint32_t baseLayer = (view->dimension == WGPUTextureViewDimension_3D &&
+                                  ca.depthSlice != WGPU_DEPTH_SLICE_UNDEFINED)
+                                     ? ca.depthSlice
+                                     : view->baseArrayLayer;
+            uint32_t layerCount = (view->dimension == WGPUTextureViewDimension_3D &&
+                                   ca.depthSlice != WGPU_DEPTH_SLICE_UNDEFINED)
+                                      ? 1u
+                                      : view->arrayLayerCount;
+            std::vector<uint8_t> aspects = {pwgpu::kAspectColor};
+
+            // Pre-pass: convert loadOp=Load to Clear(0) when subresource is uninitialized
+            // so the discard-then-load test pattern reads zero per spec.
+            if (ca.loadOp == WGPULoadOp_Load &&
+                pwgpu::RangeHasAnyUninitialized(view->texture, view->baseMipLevel, 1,
+                                                baseLayer, layerCount, aspects))
+            {
+                colorAttachments[i].loadOp = vk::AttachmentLoadOp::eClear;
+                colorAttachments[i].clearValue.color.float32[0] = 0.0f;
+                colorAttachments[i].clearValue.color.float32[1] = 0.0f;
+                colorAttachments[i].clearValue.color.float32[2] = 0.0f;
+                colorAttachments[i].clearValue.color.float32[3] = 0.0f;
+            }
+
+            // Post-pass: storeOp=Store leaves the subresource initialized (rendering
+            // wrote it). storeOp=Discard semantically marks it uninitialized so the
+            // next read (sample/copy/load) lazy-clears to zero.
+            if (ca.storeOp == WGPUStoreOp_Store)
+                pwgpu::MarkRangeInitialized(view->texture, view->baseMipLevel, 1,
+                                            baseLayer, layerCount, aspects);
+            else if (ca.storeOp == WGPUStoreOp_Discard)
+                pwgpu::MarkRangeUninitialized(view->texture, view->baseMipLevel, 1,
+                                              baseLayer, layerCount, aspects);
+        }
+
+        if (dsa && dsa->view && dsa->view->texture && dsa->view->texture->image)
+        {
+            auto *dsView = dsa->view;
+            const bool hasDepth = pwgpu::HasDepthAspect(dsView->format);
+            const bool hasStencil = pwgpu::HasStencilAspect(dsView->format);
+            std::vector<uint8_t> dAspect = {pwgpu::kAspectDepth};
+            std::vector<uint8_t> sAspect = {pwgpu::kAspectStencil};
+            uint32_t bL = dsView->baseArrayLayer;
+            uint32_t lC = dsView->arrayLayerCount;
+            uint32_t bM = dsView->baseMipLevel;
+            uint32_t mC = dsView->mipLevelCount;
+
+            if (hasDepth)
+            {
+                if (!dsa->depthReadOnly && dsa->depthLoadOp == WGPULoadOp_Load &&
+                    pwgpu::RangeHasAnyUninitialized(dsView->texture, bM, mC, bL, lC, dAspect))
+                {
+                    depthAtt.loadOp = vk::AttachmentLoadOp::eClear;
+                    depthAtt.clearValue.depthStencil.depth = 0.0f;
+                }
+                if (dsa->depthReadOnly ||
+                    (dsa->depthStoreOp == WGPUStoreOp_Store && dsa->depthLoadOp != WGPULoadOp_Undefined))
+                    pwgpu::MarkRangeInitialized(dsView->texture, bM, mC, bL, lC, dAspect);
+                else if (dsa->depthStoreOp == WGPUStoreOp_Discard)
+                    pwgpu::MarkRangeUninitialized(dsView->texture, bM, mC, bL, lC, dAspect);
+            }
+            if (hasStencil)
+            {
+                if (!dsa->stencilReadOnly && dsa->stencilLoadOp == WGPULoadOp_Load &&
+                    pwgpu::RangeHasAnyUninitialized(dsView->texture, bM, mC, bL, lC, sAspect))
+                {
+                    stencilAtt.loadOp = vk::AttachmentLoadOp::eClear;
+                    stencilAtt.clearValue.depthStencil.stencil = 0u;
+                }
+                if (dsa->stencilReadOnly ||
+                    (dsa->stencilStoreOp == WGPUStoreOp_Store && dsa->stencilLoadOp != WGPULoadOp_Undefined))
+                    pwgpu::MarkRangeInitialized(dsView->texture, bM, mC, bL, lC, sAspect);
+                else if (dsa->stencilStoreOp == WGPUStoreOp_Discard)
+                    pwgpu::MarkRangeUninitialized(dsView->texture, bM, mC, bL, lC, sAspect);
+            }
+        }
+
         if (!barriers.empty())
             enc->cmd->ImageBarriers(barriers);
 
@@ -1614,6 +1702,20 @@ extern "C"
                                           (dst->texture->dimension == WGPUTextureDimension_3D) ? static_cast<int32_t>(dst->origin.z) : 0};
         region.imageExtent = vk::Extent3D{copySize->width, copySize->height,
                                           (dst->texture->dimension == WGPUTextureDimension_3D) ? copySize->depthOrArrayLayers : 1};
+
+        // §23.x: if dst subresource is uninitialized AND copy doesn't fully cover the
+        // mip, lazy-clear it before the partial write so unwritten texels read as zero.
+        // After the copy: if full coverage, mark dst initialized.
+        const bool dstFullCoverage = IsFullMipRegion(dst->texture, dst->mipLevel, dst->origin, *copySize);
+        auto dstAspects = pwgpu::AspectsForView(dst->texture->format, dst->aspect);
+        const uint32_t dstBaseLayer = (dst->texture->dimension == WGPUTextureDimension_3D) ? 0u : dst->origin.z;
+        const uint32_t dstLayerCount = (dst->texture->dimension == WGPUTextureDimension_3D) ? 1u : copySize->depthOrArrayLayers;
+        if (!dstFullCoverage &&
+            pwgpu::RangeHasAnyUninitialized(dst->texture, dst->mipLevel, 1, dstBaseLayer, dstLayerCount, dstAspects))
+        {
+            pwgpu::LazyInitViewRangeOnEncoder(enc->cmd, dst->texture, dst->mipLevel, 1,
+                                              dstBaseLayer, dstLayerCount, dstAspects);
+        }
 
         vk::MemoryBarrier2 mb{};
         mb.srcStageMask = vk::PipelineStageFlagBits2::eAllCommands;

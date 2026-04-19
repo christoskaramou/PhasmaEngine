@@ -4,6 +4,275 @@
 #include "FormatMap.h"
 #include "API/Queue.h"
 #include "API/Semaphore.h"
+#include "API/Command.h"
+
+namespace pwgpu
+{
+    // §23.x lazy initialization key packing.
+    static uint64_t MakeSubresourceKey(uint32_t mip, uint32_t layer, uint8_t aspect)
+    {
+        return (static_cast<uint64_t>(aspect) << 56) |
+               (static_cast<uint64_t>(mip & 0xFFFFFFu) << 32) |
+               static_cast<uint64_t>(layer);
+    }
+
+    // Aspects relevant to a subresource for a given format. For depth-stencil formats we
+    // track depth and stencil aspects independently because storeOp/loadOp + render-pass
+    // depthReadOnly/stencilReadOnly can diverge between aspects.
+    std::vector<uint8_t> AspectsForView(WGPUTextureFormat fmt, WGPUTextureAspect viewAspect)
+    {
+        std::vector<uint8_t> out;
+        const bool hasD = HasDepthAspect(fmt);
+        const bool hasS = HasStencilAspect(fmt);
+        if (!hasD && !hasS)
+        {
+            out.push_back(kAspectColor);
+            return out;
+        }
+        switch (viewAspect)
+        {
+        case WGPUTextureAspect_DepthOnly:
+            if (hasD)
+                out.push_back(kAspectDepth);
+            break;
+        case WGPUTextureAspect_StencilOnly:
+            if (hasS)
+                out.push_back(kAspectStencil);
+            break;
+        case WGPUTextureAspect_All:
+        default:
+            if (hasD)
+                out.push_back(kAspectDepth);
+            if (hasS)
+                out.push_back(kAspectStencil);
+            break;
+        }
+        return out;
+    }
+
+    bool IsSubresourceInitialized(WGPUTextureImpl *tex, uint32_t mip, uint32_t layer, uint8_t aspect)
+    {
+        if (!tex)
+            return true;
+        std::lock_guard<std::mutex> lk(tex->stateMutex);
+        return tex->uninitializedSubresources.find(MakeSubresourceKey(mip, layer, aspect)) ==
+               tex->uninitializedSubresources.end();
+    }
+
+    void MarkSubresourceInitialized(WGPUTextureImpl *tex, uint32_t mip, uint32_t layer, uint8_t aspect)
+    {
+        if (!tex)
+            return;
+        std::lock_guard<std::mutex> lk(tex->stateMutex);
+        tex->uninitializedSubresources.erase(MakeSubresourceKey(mip, layer, aspect));
+    }
+
+    void MarkSubresourceUninitialized(WGPUTextureImpl *tex, uint32_t mip, uint32_t layer, uint8_t aspect)
+    {
+        if (!tex)
+            return;
+        std::lock_guard<std::mutex> lk(tex->stateMutex);
+        tex->uninitializedSubresources.insert(MakeSubresourceKey(mip, layer, aspect));
+    }
+
+    // Range helpers — iterate every (mip,layer,aspect) tuple covered by a view.
+    void MarkRangeInitialized(WGPUTextureImpl *tex, uint32_t baseMip, uint32_t mipCount,
+                              uint32_t baseLayer, uint32_t layerCount,
+                              const std::vector<uint8_t> &aspects)
+    {
+        if (!tex)
+            return;
+        std::lock_guard<std::mutex> lk(tex->stateMutex);
+        for (uint32_t m = baseMip; m < baseMip + mipCount; ++m)
+            for (uint32_t l = baseLayer; l < baseLayer + layerCount; ++l)
+                for (uint8_t a : aspects)
+                    tex->uninitializedSubresources.erase(MakeSubresourceKey(m, l, a));
+    }
+
+    void MarkRangeUninitialized(WGPUTextureImpl *tex, uint32_t baseMip, uint32_t mipCount,
+                                uint32_t baseLayer, uint32_t layerCount,
+                                const std::vector<uint8_t> &aspects)
+    {
+        if (!tex)
+            return;
+        std::lock_guard<std::mutex> lk(tex->stateMutex);
+        for (uint32_t m = baseMip; m < baseMip + mipCount; ++m)
+            for (uint32_t l = baseLayer; l < baseLayer + layerCount; ++l)
+                for (uint8_t a : aspects)
+                    tex->uninitializedSubresources.insert(MakeSubresourceKey(m, l, a));
+    }
+
+    bool RangeHasAnyUninitialized(WGPUTextureImpl *tex,
+                                  uint32_t baseMip, uint32_t mipCount,
+                                  uint32_t baseLayer, uint32_t layerCount,
+                                  const std::vector<uint8_t> &aspects)
+    {
+        if (!tex)
+            return false;
+        std::lock_guard<std::mutex> lk(tex->stateMutex);
+        for (uint8_t a : aspects)
+            for (uint32_t m = baseMip; m < baseMip + mipCount; ++m)
+                for (uint32_t l = baseLayer; l < baseLayer + layerCount; ++l)
+                    if (tex->uninitializedSubresources.count(MakeSubresourceKey(m, l, a)))
+                        return true;
+        return false;
+    }
+
+    // Records clear-to-zero commands for the given subresource range into the supplied
+    // command buffer. Caller is responsible for marking the range initialized afterwards.
+    // Used at encoder-time as the "lazy init before first read" path (§23.x).
+    void RecordSubresourceClear(pe::CommandBuffer *cmd, WGPUTextureImpl *tex,
+                                uint32_t baseMip, uint32_t mipCount,
+                                uint32_t baseLayer, uint32_t layerCount,
+                                vk::ImageAspectFlags aspectMask)
+    {
+        if (!cmd || !tex || !tex->image || tex->sampleCount > 1)
+            return;
+
+        pe::ImageBarrierInfo toTransfer{};
+        toTransfer.image = tex->image;
+        toTransfer.layout = vk::ImageLayout::eTransferDstOptimal;
+        toTransfer.stageFlags = vk::PipelineStageFlagBits2::eTransfer;
+        toTransfer.accessMask = vk::AccessFlagBits2::eTransferWrite;
+        toTransfer.baseMipLevel = baseMip;
+        toTransfer.mipLevels = mipCount;
+        toTransfer.baseArrayLayer = baseLayer;
+        toTransfer.arrayLayers = layerCount;
+        cmd->ImageBarrier(toTransfer);
+
+        vk::ImageSubresourceRange range{};
+        range.aspectMask = aspectMask;
+        range.baseMipLevel = baseMip;
+        range.levelCount = mipCount;
+        range.baseArrayLayer = baseLayer;
+        range.layerCount = layerCount;
+
+        if (IsDepthStencilFormat(tex->format))
+        {
+            vk::ClearDepthStencilValue dsValue{0.0f, 0u};
+            cmd->ApiHandle().clearDepthStencilImage(tex->image->ApiHandle(),
+                                                    vk::ImageLayout::eTransferDstOptimal,
+                                                    &dsValue, 1, &range);
+        }
+        else
+        {
+            vk::ClearColorValue colorValue{};
+            colorValue.float32[0] = 0.0f;
+            colorValue.float32[1] = 0.0f;
+            colorValue.float32[2] = 0.0f;
+            colorValue.float32[3] = 0.0f;
+            cmd->ApiHandle().clearColorImage(tex->image->ApiHandle(),
+                                             vk::ImageLayout::eTransferDstOptimal,
+                                             &colorValue, 1, &range);
+        }
+    }
+
+    // Lazy-clear any uninitialized subresource within a view's range, recording into the
+    // encoder's command buffer. Marks them initialized afterwards. Returns true iff any
+    // clear was emitted (caller may want to know whether to insert a follow-up barrier).
+    bool LazyInitViewRangeOnEncoder(pe::CommandBuffer *cmd, WGPUTextureImpl *tex,
+                                    uint32_t baseMip, uint32_t mipCount,
+                                    uint32_t baseLayer, uint32_t layerCount,
+                                    const std::vector<uint8_t> &aspects)
+    {
+        if (!cmd || !tex || !tex->image || tex->sampleCount > 1)
+            return false;
+
+        // Collect contiguous (mip, layer, aspect) groups that are uninitialized.
+        // Simpler: per-aspect emit a fused clear over the whole range when ANY entry
+        // is uninitialized. Over-clears slightly but is correct and cheap given that
+        // the typical bad case is one storeOp=discard subresource. Mark all afterwards.
+        bool emittedAny = false;
+        {
+            std::lock_guard<std::mutex> lk(tex->stateMutex);
+            for (uint8_t a : aspects)
+            {
+                bool anyUninit = false;
+                for (uint32_t m = baseMip; m < baseMip + mipCount && !anyUninit; ++m)
+                    for (uint32_t l = baseLayer; l < baseLayer + layerCount && !anyUninit; ++l)
+                        if (tex->uninitializedSubresources.count(MakeSubresourceKey(m, l, a)))
+                            anyUninit = true;
+                if (!anyUninit)
+                    continue;
+
+                vk::ImageAspectFlags aspectMask{};
+                if (a == kAspectDepth)
+                    aspectMask = vk::ImageAspectFlagBits::eDepth;
+                else if (a == kAspectStencil)
+                    aspectMask = vk::ImageAspectFlagBits::eStencil;
+                else
+                    aspectMask = vk::ImageAspectFlagBits::eColor;
+
+                RecordSubresourceClear(cmd, tex, baseMip, mipCount, baseLayer, layerCount, aspectMask);
+                emittedAny = true;
+
+                for (uint32_t m = baseMip; m < baseMip + mipCount; ++m)
+                    for (uint32_t l = baseLayer; l < baseLayer + layerCount; ++l)
+                        tex->uninitializedSubresources.erase(MakeSubresourceKey(m, l, a));
+            }
+        }
+        return emittedAny;
+    }
+
+    // Eager clear via a fresh command-buffer submission (used from createView when there
+    // is no encoder context). Mirrors the buffer/texture eager-init pattern in Device.cpp.
+    void LazyInitViewRangeViaQueue(WGPUTextureImpl *tex,
+                                   uint32_t baseMip, uint32_t mipCount,
+                                   uint32_t baseLayer, uint32_t layerCount,
+                                   const std::vector<uint8_t> &aspects)
+    {
+        if (!tex || !tex->image || tex->sampleCount > 1 || !tex->device || !tex->device->queue ||
+            !tex->device->queue->peQueue)
+            return;
+
+        // Filter aspects to those that have any uninit entries; emit one CB per aspect that
+        // needs work. Mark entries as initialized inside the same lock.
+        std::vector<uint8_t> aspectsToClear;
+        {
+            std::lock_guard<std::mutex> lk(tex->stateMutex);
+            for (uint8_t a : aspects)
+            {
+                bool any = false;
+                for (uint32_t m = baseMip; m < baseMip + mipCount && !any; ++m)
+                    for (uint32_t l = baseLayer; l < baseLayer + layerCount && !any; ++l)
+                        if (tex->uninitializedSubresources.count(MakeSubresourceKey(m, l, a)))
+                            any = true;
+                if (any)
+                    aspectsToClear.push_back(a);
+            }
+            if (aspectsToClear.empty())
+                return;
+            for (uint8_t a : aspectsToClear)
+                for (uint32_t m = baseMip; m < baseMip + mipCount; ++m)
+                    for (uint32_t l = baseLayer; l < baseLayer + layerCount; ++l)
+                        tex->uninitializedSubresources.erase(MakeSubresourceKey(m, l, a));
+        }
+
+        WGPUQueueImpl *q = tex->device->queue;
+        pe::CommandBuffer *cmd = q->peQueue->AcquireCommandBuffer();
+        cmd->Begin();
+        for (uint8_t a : aspectsToClear)
+        {
+            vk::ImageAspectFlags aspectMask{};
+            if (a == kAspectDepth)
+                aspectMask = vk::ImageAspectFlagBits::eDepth;
+            else if (a == kAspectStencil)
+                aspectMask = vk::ImageAspectFlagBits::eStencil;
+            else
+                aspectMask = vk::ImageAspectFlagBits::eColor;
+            RecordSubresourceClear(cmd, tex, baseMip, mipCount, baseLayer, layerCount, aspectMask);
+        }
+        cmd->End();
+        q->peQueue->Submit(1, &cmd, nullptr, nullptr);
+        const uint64_t serial = q->peQueue->GetSubmissionCount();
+        {
+            std::lock_guard<std::mutex> lock(q->pendingMutex);
+            q->pendingSubmits.push_back({cmd, serial});
+        }
+        q->lastSubmissionSerial.store(serial, std::memory_order_release);
+        tex->lastUsageSerial.store(serial, std::memory_order_release);
+    }
+} // namespace pwgpu
 
 void TeardownTextureGpuResources(WGPUTextureImpl *texture)
 {
@@ -353,6 +622,22 @@ extern "C"
             break;
         default:
             break;
+        }
+
+        // §23.x: ensure any uninitialized subresources covered by this view become zero
+        // before the view is observable. Eager-init at create-time covers fresh textures;
+        // this path catches subresources that were marked uninitialized by storeOp=Discard.
+        // Skips RENDER_ATTACHMENT-only views (the next render pass with loadOp=Load will
+        // do its own pre-pass clear) and STORAGE_BINDING-only views (compute writes
+        // overwrite contents anyway).
+        if (texture->image && texture->sampleCount == 1 &&
+            (viewUsage & (WGPUTextureUsage_TextureBinding | WGPUTextureUsage_CopySrc)) != 0)
+        {
+            auto aspects = pwgpu::AspectsForView(texture->format, resolved.aspect);
+            pwgpu::LazyInitViewRangeViaQueue(texture,
+                                             resolved.baseMipLevel, resolved.mipLevelCount,
+                                             resolved.baseArrayLayer, resolved.arrayLayerCount,
+                                             aspects);
         }
 
         auto *view = new WGPUTextureViewImpl();

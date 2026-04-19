@@ -3831,11 +3831,19 @@ extern "C"
                         !ValidateBlendComponent(device, ct.blend->alpha))
                         return MakeInvalidRenderPipeline(device, labelStr);
 
+                    // §10.3.4 Fragment State (spec.txt:19978-19990): if
+                    // color.srcFactor or color.dstFactor uses the source alpha
+                    // ("src-alpha", "one-minus-src-alpha", "src-alpha-saturated",
+                    // "src1-alpha", or "one-minus-src1-alpha"), the fragment
+                    // output at this @location must have an alpha channel
+                    // (i.e., be a vec4).
                     auto readsSrcAlpha = [](WGPUBlendFactor f)
                     {
                         return f == WGPUBlendFactor_SrcAlpha ||
                                f == WGPUBlendFactor_OneMinusSrcAlpha ||
-                               f == WGPUBlendFactor_SrcAlphaSaturated;
+                               f == WGPUBlendFactor_SrcAlphaSaturated ||
+                               f == WGPUBlendFactor_Src1Alpha ||
+                               f == WGPUBlendFactor_OneMinusSrc1Alpha;
                     };
                     auto colorSrcF = ct.blend->color.srcFactor == WGPUBlendFactor(0)
                                          ? WGPUBlendFactor_One
