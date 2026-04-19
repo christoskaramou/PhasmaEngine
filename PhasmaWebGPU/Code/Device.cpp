@@ -460,7 +460,16 @@ extern "C"
             wgpuBufferUnmap(buf);
             {
                 std::lock_guard<std::mutex> lock(buf->stateMutex);
+                if (buf->internalState == BufferInternalState::Destroyed)
+                    continue;
                 buf->internalState = BufferInternalState::Destroyed;
+                if (buf->peBuffer)
+                {
+                    if (buf->hostVisible)
+                        buf->peBuffer->Unmap();
+                    pe::Buffer::Destroy(buf->peBuffer);
+                    buf->peBuffer = nullptr;
+                }
             }
         }
 
