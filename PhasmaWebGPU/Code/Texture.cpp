@@ -118,41 +118,65 @@ namespace pwgpu
         return false;
     }
 
-    // Records clear-to-zero commands for the given subresource range into the supplied
-    // command buffer. Caller is responsible for marking the range initialized afterwards.
-    // Used at encoder-time as the "lazy init before first read" path (§23.x).
-    void RecordSubresourceClear(pe::CommandBuffer *cmd, WGPUTextureImpl *tex,
-                                uint32_t baseMip, uint32_t mipCount,
-                                uint32_t baseLayer, uint32_t layerCount,
-                                vk::ImageAspectFlags aspectMask)
+    // Records a clear covering only the explicitly enumerated (mip, layer) subresources
+    // for a single aspect. A render-view may span mips 0..N and layers 0..M, but only a
+    // subset of those individual subresources may actually be uninitialized (e.g. after
+    // CTS writes canary to some mips and discards others). Clearing the full bounding
+    // range in that case would destroy the canary data in the still-initialized mips —
+    // the defect that caused ~148 resource_init fails. This helper issues a single
+    // clearColorImage/clearDepthStencilImage with one VkImageSubresourceRange per
+    // (mip, layer) so unrelated subresources are untouched.
+    static void RecordPerSubresourceClear(pe::CommandBuffer *cmd, WGPUTextureImpl *tex,
+                                          const std::vector<std::pair<uint32_t, uint32_t>> &mipLayerPairs,
+                                          vk::ImageAspectFlags aspectMask)
     {
-        if (!cmd || !tex || !tex->image || tex->sampleCount > 1)
+        if (!cmd || !tex || !tex->image || tex->sampleCount > 1 || mipLayerPairs.empty())
             return;
+
+        // Compute bounding box for the layout transition. A layout transition on
+        // already-initialized neighbors is safe (data is preserved); only the actual
+        // clear commands below are data-destructive, and they list exact subresources.
+        uint32_t minMip = UINT32_MAX, maxMip = 0, minLayer = UINT32_MAX, maxLayer = 0;
+        for (const auto &p : mipLayerPairs)
+        {
+            minMip = std::min(minMip, p.first);
+            maxMip = std::max(maxMip, p.first);
+            minLayer = std::min(minLayer, p.second);
+            maxLayer = std::max(maxLayer, p.second);
+        }
 
         pe::ImageBarrierInfo toTransfer{};
         toTransfer.image = tex->image;
         toTransfer.layout = vk::ImageLayout::eTransferDstOptimal;
         toTransfer.stageFlags = vk::PipelineStageFlagBits2::eTransfer;
         toTransfer.accessMask = vk::AccessFlagBits2::eTransferWrite;
-        toTransfer.baseMipLevel = baseMip;
-        toTransfer.mipLevels = mipCount;
-        toTransfer.baseArrayLayer = baseLayer;
-        toTransfer.arrayLayers = layerCount;
+        toTransfer.baseMipLevel = minMip;
+        toTransfer.mipLevels = maxMip - minMip + 1;
+        toTransfer.baseArrayLayer = minLayer;
+        toTransfer.arrayLayers = maxLayer - minLayer + 1;
         cmd->ImageBarrier(toTransfer);
 
-        vk::ImageSubresourceRange range{};
-        range.aspectMask = aspectMask;
-        range.baseMipLevel = baseMip;
-        range.levelCount = mipCount;
-        range.baseArrayLayer = baseLayer;
-        range.layerCount = layerCount;
+        std::vector<vk::ImageSubresourceRange> ranges;
+        ranges.reserve(mipLayerPairs.size());
+        for (const auto &p : mipLayerPairs)
+        {
+            vk::ImageSubresourceRange r{};
+            r.aspectMask = aspectMask;
+            r.baseMipLevel = p.first;
+            r.levelCount = 1;
+            r.baseArrayLayer = p.second;
+            r.layerCount = 1;
+            ranges.push_back(r);
+        }
 
         if (IsDepthStencilFormat(tex->format))
         {
             vk::ClearDepthStencilValue dsValue{0.0f, 0u};
             cmd->ApiHandle().clearDepthStencilImage(tex->image->ApiHandle(),
                                                     vk::ImageLayout::eTransferDstOptimal,
-                                                    &dsValue, 1, &range);
+                                                    &dsValue,
+                                                    static_cast<uint32_t>(ranges.size()),
+                                                    ranges.data());
         }
         else
         {
@@ -163,36 +187,44 @@ namespace pwgpu
             colorValue.float32[3] = 0.0f;
             cmd->ApiHandle().clearColorImage(tex->image->ApiHandle(),
                                              vk::ImageLayout::eTransferDstOptimal,
-                                             &colorValue, 1, &range);
+                                             &colorValue,
+                                             static_cast<uint32_t>(ranges.size()),
+                                             ranges.data());
         }
     }
 
     // Lazy-clear any uninitialized subresource within a view's range, recording into the
     // encoder's command buffer. Marks them initialized afterwards. Returns true iff any
     // clear was emitted (caller may want to know whether to insert a follow-up barrier).
+    //
+    // Only the individual (mip, layer) subresources that are currently tracked as
+    // uninitialized are cleared; untouched subresources in the same bounding range
+    // keep their data. Previously this function issued a fused clear over the full
+    // range, which destroyed canary data written by the user into subresources that
+    // happened to share a view with a storeOp=Discard'd sibling. That over-clear
+    // accounted for the bulk of the Sample/CopyToBuffer/CopyToTexture failures in
+    // `webgpu:api,operation,resource_init,*` when `mipLevelCount>1` and
+    // `uninitializeMethod="StoreOpClear"` (~148 subcase fails).
     bool LazyInitViewRangeOnEncoder(pe::CommandBuffer *cmd, WGPUTextureImpl *tex,
                                     uint32_t baseMip, uint32_t mipCount,
                                     uint32_t baseLayer, uint32_t layerCount,
                                     const std::vector<uint8_t> &aspects)
     {
-        if (!cmd || !tex || !tex->image || tex->sampleCount > 1)
+        if (!cmd || !tex || !tex->image)
             return false;
 
-        // Collect contiguous (mip, layer, aspect) groups that are uninitialized.
-        // Simpler: per-aspect emit a fused clear over the whole range when ANY entry
-        // is uninitialized. Over-clears slightly but is correct and cheap given that
-        // the typical bad case is one storeOp=discard subresource. Mark all afterwards.
         bool emittedAny = false;
+        std::vector<std::pair<uint32_t, uint32_t>> toClear;
         {
             std::lock_guard<std::mutex> lk(tex->stateMutex);
             for (uint8_t a : aspects)
             {
-                bool anyUninit = false;
-                for (uint32_t m = baseMip; m < baseMip + mipCount && !anyUninit; ++m)
-                    for (uint32_t l = baseLayer; l < baseLayer + layerCount && !anyUninit; ++l)
+                toClear.clear();
+                for (uint32_t m = baseMip; m < baseMip + mipCount; ++m)
+                    for (uint32_t l = baseLayer; l < baseLayer + layerCount; ++l)
                         if (tex->uninitializedSubresources.count(MakeSubresourceKey(m, l, a)))
-                            anyUninit = true;
-                if (!anyUninit)
+                            toClear.emplace_back(m, l);
+                if (toClear.empty())
                     continue;
 
                 vk::ImageAspectFlags aspectMask{};
@@ -203,12 +235,11 @@ namespace pwgpu
                 else
                     aspectMask = vk::ImageAspectFlagBits::eColor;
 
-                RecordSubresourceClear(cmd, tex, baseMip, mipCount, baseLayer, layerCount, aspectMask);
+                RecordPerSubresourceClear(cmd, tex, toClear, aspectMask);
                 emittedAny = true;
 
-                for (uint32_t m = baseMip; m < baseMip + mipCount; ++m)
-                    for (uint32_t l = baseLayer; l < baseLayer + layerCount; ++l)
-                        tex->uninitializedSubresources.erase(MakeSubresourceKey(m, l, a));
+                for (const auto &p : toClear)
+                    tex->uninitializedSubresources.erase(MakeSubresourceKey(p.first, p.second, a));
             }
         }
         return emittedAny;
@@ -216,51 +247,54 @@ namespace pwgpu
 
     // Eager clear via a fresh command-buffer submission (used from createView when there
     // is no encoder context). Mirrors the buffer/texture eager-init pattern in Device.cpp.
+    // Clears only the specific (mip, layer) subresources currently flagged uninitialized,
+    // leaving all other subresources in the view's bounding range untouched so canary
+    // data written by the user to initialized siblings survives.
     void LazyInitViewRangeViaQueue(WGPUTextureImpl *tex,
                                    uint32_t baseMip, uint32_t mipCount,
                                    uint32_t baseLayer, uint32_t layerCount,
                                    const std::vector<uint8_t> &aspects)
     {
-        if (!tex || !tex->image || tex->sampleCount > 1 || !tex->device || !tex->device->queue ||
+        if (!tex || !tex->image || !tex->device || !tex->device->queue ||
             !tex->device->queue->peQueue)
             return;
 
-        // Filter aspects to those that have any uninit entries; emit one CB per aspect that
-        // needs work. Mark entries as initialized inside the same lock.
-        std::vector<uint8_t> aspectsToClear;
+        // Under a single lock: snapshot exact (aspect -> list of (mip,layer)) pairs that
+        // need clearing, then mark them initialized so concurrent lookups see the state
+        // change immediately. The GPU work itself doesn't need the lock held.
+        std::vector<std::pair<uint8_t, std::vector<std::pair<uint32_t, uint32_t>>>> work;
         {
             std::lock_guard<std::mutex> lk(tex->stateMutex);
             for (uint8_t a : aspects)
             {
-                bool any = false;
-                for (uint32_t m = baseMip; m < baseMip + mipCount && !any; ++m)
-                    for (uint32_t l = baseLayer; l < baseLayer + layerCount && !any; ++l)
-                        if (tex->uninitializedSubresources.count(MakeSubresourceKey(m, l, a)))
-                            any = true;
-                if (any)
-                    aspectsToClear.push_back(a);
-            }
-            if (aspectsToClear.empty())
-                return;
-            for (uint8_t a : aspectsToClear)
+                std::vector<std::pair<uint32_t, uint32_t>> pairs;
                 for (uint32_t m = baseMip; m < baseMip + mipCount; ++m)
                     for (uint32_t l = baseLayer; l < baseLayer + layerCount; ++l)
-                        tex->uninitializedSubresources.erase(MakeSubresourceKey(m, l, a));
+                        if (tex->uninitializedSubresources.count(MakeSubresourceKey(m, l, a)))
+                            pairs.emplace_back(m, l);
+                if (pairs.empty())
+                    continue;
+                for (const auto &p : pairs)
+                    tex->uninitializedSubresources.erase(MakeSubresourceKey(p.first, p.second, a));
+                work.emplace_back(a, std::move(pairs));
+            }
+            if (work.empty())
+                return;
         }
 
         WGPUQueueImpl *q = tex->device->queue;
         pe::CommandBuffer *cmd = q->peQueue->AcquireCommandBuffer();
         cmd->Begin();
-        for (uint8_t a : aspectsToClear)
+        for (const auto &entry : work)
         {
             vk::ImageAspectFlags aspectMask{};
-            if (a == kAspectDepth)
+            if (entry.first == kAspectDepth)
                 aspectMask = vk::ImageAspectFlagBits::eDepth;
-            else if (a == kAspectStencil)
+            else if (entry.first == kAspectStencil)
                 aspectMask = vk::ImageAspectFlagBits::eStencil;
             else
                 aspectMask = vk::ImageAspectFlagBits::eColor;
-            RecordSubresourceClear(cmd, tex, baseMip, mipCount, baseLayer, layerCount, aspectMask);
+            RecordPerSubresourceClear(cmd, tex, entry.second, aspectMask);
         }
         cmd->End();
         q->peQueue->Submit(1, &cmd, nullptr, nullptr);

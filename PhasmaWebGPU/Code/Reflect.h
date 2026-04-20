@@ -106,6 +106,16 @@ namespace pwgpu
                                          uint32_t &outCount,
                                          std::string &errMsg);
 
+    // Returns the array size of the vertex shader's @builtin(clip_distances)
+    // output, or 0 if the entry point does not declare one. Used by
+    // createRenderPipeline to decrement the inter-stage / vertex-output
+    // budgets per W3C WebGPU spec §10.3.1 (clip_distances consumes
+    // ceil(N/4) locations from both maxInterStageShaderVariables-1 and
+    // maxVertexShaderOutputVariables).
+    uint32_t CountVertexClipDistancesArraySize(const std::vector<uint32_t> &spirv,
+                                               const std::string &entryPoint,
+                                               std::string &errMsg);
+
     struct FragmentOutputBuiltins
     {
         bool hasFragDepth = false;

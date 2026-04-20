@@ -1156,9 +1156,10 @@ extern "C"
         if (!vkUsage)
             vkUsage = vk::ImageUsageFlagBits::eTransferSrc;
 
-        // WebGPU §5.2 zero-init on first use; vkCmdClearColor/DepthStencilImage needs eTransferDst
-        // and does not support MSAA images.
-        const bool zeroInitViaClearImage = (samples == 1);
+        // WebGPU §5.2 zero-init on first use; vkCmdClearColor/DepthStencilImage needs eTransferDst.
+        // The Vulkan spec places no sample-count restriction on vkCmdClearColorImage, so MSAA
+        // images are cleared the same way.
+        const bool zeroInitViaClearImage = true;
         if (zeroInitViaClearImage)
             vkUsage |= vk::ImageUsageFlagBits::eTransferDst;
 
@@ -3612,10 +3613,28 @@ extern "C"
                 // maxInterStageShaderVariables limit checks (spec §10.3.1)
                 constexpr uint32_t kMaxInterStageVars = 16;
 
-                // Vertex: each output location must be ≤ maxInterStageShaderVariables - 1
+                // Spec §10.3.1: if the vertex shader declares @builtin(clip_distances)
+                // with array size N, decrement both maxVertexShaderOutputVariables and
+                // maxVertexShaderOutputLocation by ceil(N / 4). This effectively reduces
+                // the usable inter-stage ceiling from both sides (vertex output and
+                // fragment input) because clip_distances travels across the inter-stage
+                // interface even though it is not a user-defined varying.
+                uint32_t clipSlots = 0;
+                {
+                    std::string cdErr;
+                    uint32_t n = pwgpu::CountVertexClipDistancesArraySize(
+                        vertModule->spirv, vertEntry, cdErr);
+                    if (n > 0)
+                        clipSlots = (n + 3u) / 4u;
+                }
+                const uint32_t maxInterStageNow =
+                    (clipSlots < kMaxInterStageVars) ? (kMaxInterStageVars - clipSlots) : 0u;
+
+                // Vertex: each output location must be < maxInterStageShaderVariables
+                // (reduced by clip_distances slots if present).
                 for (const auto &[loc, _] : vertVaryingOuts)
                 {
-                    if (loc >= kMaxInterStageVars)
+                    if (loc >= maxInterStageNow)
                     {
                         device->reportError(
                             WGPUErrorType_Validation,
@@ -3627,10 +3646,14 @@ extern "C"
                 }
 
                 // Vertex: total user-defined output count ≤ maxInterStageShaderVariables
-                // (point-list topology implicitly uses 1 slot for point_size)
-                uint32_t maxVertOut = kMaxInterStageVars;
+                // (point-list topology implicitly uses 1 slot for point_size;
+                //  clip_distances consumes ceil(N/4) additional slots)
+                uint32_t maxVertOut = maxInterStageNow;
                 if (descriptor->primitive.topology == WGPUPrimitiveTopology_PointList)
-                    maxVertOut -= 1;
+                {
+                    if (maxVertOut > 0)
+                        maxVertOut -= 1;
+                }
                 if (vertVaryingOuts.size() > maxVertOut)
                 {
                     device->reportError(
@@ -3642,9 +3665,10 @@ extern "C"
                 }
 
                 // Fragment: each input location must be < maxInterStageShaderVariables
+                // (reduced by clip_distances slots if present).
                 for (const auto &[loc, _] : fragVaryingIns)
                 {
-                    if (loc >= kMaxInterStageVars)
+                    if (loc >= maxInterStageNow)
                     {
                         device->reportError(
                             WGPUErrorType_Validation,
@@ -3657,6 +3681,7 @@ extern "C"
 
                 // Fragment: user-defined input count ≤ maxInterStageShaderVariables
                 // minus inter-stage builtins (front_facing, sample_index, etc.)
+                // and minus clip_distances slots.
                 uint32_t interStageBuiltinCount = 0;
                 {
                     std::string bErr;
@@ -3664,8 +3689,8 @@ extern "C"
                                                            interStageBuiltinCount, bErr);
                 }
                 const uint32_t maxFragIn =
-                    (interStageBuiltinCount < kMaxInterStageVars)
-                        ? kMaxInterStageVars - interStageBuiltinCount
+                    (interStageBuiltinCount < maxInterStageNow)
+                        ? maxInterStageNow - interStageBuiltinCount
                         : 0;
                 if (fragVaryingIns.size() > maxFragIn)
                 {
@@ -4549,6 +4574,37 @@ extern "C"
         if (descriptor->label.data)
             qs->label = pwgpu::ToString(descriptor->label);
         return qs;
+    }
+
+    WGPU_EXPORT WGPUFeatureName wgpuTextureFormatRequiredFeature(WGPUTextureFormat format)
+    {
+        if (pwgpu::IsBCFormat(format))
+            return WGPUFeatureName_TextureCompressionBC;
+        if (pwgpu::IsETC2Format(format))
+            return WGPUFeatureName_TextureCompressionETC2;
+        if (pwgpu::IsASTCFormat(format))
+            return WGPUFeatureName_TextureCompressionASTC;
+        if (format == WGPUTextureFormat_Depth32FloatStencil8)
+            return WGPUFeatureName_Depth32FloatStencil8;
+        switch (format)
+        {
+        case WGPUTextureFormat_R16Unorm:
+        case WGPUTextureFormat_R16Snorm:
+        case WGPUTextureFormat_RG16Unorm:
+        case WGPUTextureFormat_RG16Snorm:
+        case WGPUTextureFormat_RGBA16Unorm:
+        case WGPUTextureFormat_RGBA16Snorm:
+            return WGPUFeatureName_TextureFormatsTier1;
+        default:
+            return (WGPUFeatureName)0;
+        }
+    }
+
+    WGPU_EXPORT WGPUDevice wgpuTextureGetDevice(WGPUTexture texture)
+    {
+        if (!texture)
+            return nullptr;
+        return texture->device;
     }
 
 } // extern "C"

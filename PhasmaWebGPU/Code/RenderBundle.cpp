@@ -817,6 +817,15 @@ extern "C"
                               rbe->debugGroupDepth);
                 ReportEncoderValidation(rbe, buf);
             }
+
+            if (rbe->device)
+            {
+                const std::string &msg = rbe->deferredErrorMessage.empty()
+                                             ? std::string("wgpuRenderBundleEncoderFinish: render bundle encoder is invalid")
+                                             : rbe->deferredErrorMessage;
+                rbe->device->reportError(WGPUErrorType_Validation, pwgpu::ToStringView(msg.c_str()));
+            }
+
             rb->deferredErrorMessage = std::move(rbe->deferredErrorMessage);
             return rb;
         }

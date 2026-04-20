@@ -66,6 +66,66 @@ void RetainedResources::ReleaseAll()
 
 namespace
 {
+    enum class PassBeginKind
+    {
+        Render,
+        Compute
+    };
+
+    const char *PassBeginLabel(PassBeginKind kind)
+    {
+        switch (kind)
+        {
+        case PassBeginKind::Render:
+            return "beginRenderPass";
+        case PassBeginKind::Compute:
+            return "beginComputePass";
+        default:
+            return "beginPass";
+        }
+    }
+
+    std::string MakePassBeginValidationMessage(PassBeginKind kind, const char *detail)
+    {
+        std::string message = PassBeginLabel(kind);
+        message += ": ";
+        message += detail;
+        return message;
+    }
+
+    std::string ValidatePassTimestampWrites(WGPUDevice device,
+                                            WGPUQuerySet querySet,
+                                            uint32_t beginningOfPassWriteIndex,
+                                            uint32_t endOfPassWriteIndex,
+                                            PassBeginKind kind)
+    {
+        if (!device || wgpuDeviceHasFeature(device, WGPUFeatureName_TimestampQuery) != WGPU_TRUE)
+            return MakePassBeginValidationMessage(kind, "timestamp-query feature is not enabled");
+        if (!querySet)
+            return MakePassBeginValidationMessage(kind, "timestampWrites.querySet is null");
+        // §19.2 checks query-set destruction when recorded work is submitted.
+        if (querySet->invalid || querySet->queryPool == VK_NULL_HANDLE)
+            return MakePassBeginValidationMessage(kind, "timestampWrites.querySet is invalid");
+        if (querySet->device != device)
+            return MakePassBeginValidationMessage(kind, "timestampWrites.querySet belongs to a different device");
+        if (querySet->type != WGPUQueryType_Timestamp)
+            return MakePassBeginValidationMessage(kind, "timestampWrites.querySet.type must be timestamp");
+
+        const bool hasBegin = (beginningOfPassWriteIndex != WGPU_QUERY_SET_INDEX_UNDEFINED);
+        const bool hasEnd = (endOfPassWriteIndex != WGPU_QUERY_SET_INDEX_UNDEFINED);
+        if (!hasBegin && !hasEnd)
+            return MakePassBeginValidationMessage(kind, "timestampWrites requires at least one write index");
+        if (hasBegin && beginningOfPassWriteIndex >= querySet->count)
+            return MakePassBeginValidationMessage(kind, "beginningOfPassWriteIndex >= querySet.count");
+        if (hasEnd && endOfPassWriteIndex >= querySet->count)
+            return MakePassBeginValidationMessage(kind, "endOfPassWriteIndex >= querySet.count");
+        if (hasBegin && hasEnd && beginningOfPassWriteIndex == endOfPassWriteIndex)
+            return MakePassBeginValidationMessage(kind,
+                                                  "beginningOfPassWriteIndex equals endOfPassWriteIndex");
+
+        return {};
+    }
+
     // §13.7: encoder errors fire at finish(), not at the call site (first wins).
     void ReportEncoderValidation(WGPUCommandEncoder enc, const char *msg)
     {
@@ -193,6 +253,12 @@ namespace
         return true;
     }
 
+    // Mirrors W3C "validating linear texture data" (§7.3.2) and CTS
+    // dataBytesForCopyOrOverestimate. Layout-parameter validity (bytesPerRow
+    // present when required, rowsPerImage >= heightInBlocks when provided) is
+    // checked even for zero-volume copies: the spec does not short-circuit on
+    // a zero-sized extent. Overflow is caught by using uint64 throughout and
+    // rejecting multiplications whose 128-bit product wouldn't fit.
     bool ValidateBufferCopyLayout(uint64_t bufferSize, uint64_t offset,
                                   uint32_t bytesPerRow, uint32_t rowsPerImage,
                                   const WGPUExtent3D &copySize,
@@ -200,36 +266,82 @@ namespace
     {
         if (footprint == 0)
             return false;
-        if (copySize.width == 0 || copySize.height == 0 || copySize.depthOrArrayLayers == 0)
-            return offset <= bufferSize;
 
         uint32_t widthInBlocks = (copySize.width + blockW - 1) / blockW;
         uint32_t heightInBlocks = (copySize.height + blockH - 1) / blockH;
-        uint32_t minBytesPerRow = widthInBlocks * footprint;
         uint32_t copyDepth = copySize.depthOrArrayLayers;
+        uint64_t bytesInLastRow = static_cast<uint64_t>(widthInBlocks) * footprint;
         bool bprProvided = (bytesPerRow != WGPU_COPY_STRIDE_UNDEFINED);
         bool rpiProvided = (rowsPerImage != WGPU_COPY_STRIDE_UNDEFINED);
-        bool bytesPerRowRequired = (heightInBlocks > 1) || (copyDepth > 1);
-        if (bytesPerRowRequired && !bprProvided)
+
+        // If bytesPerRow is required (heightInBlocks > 1 OR depth > 1), it must be provided.
+        if ((heightInBlocks > 1 || copyDepth > 1) && !bprProvided)
             return false;
-        if (bprProvided && bytesPerRow < minBytesPerRow)
-            return false;
+        // If rowsPerImage is required (depth > 1), it must be provided.
         if (copyDepth > 1 && !rpiProvided)
             return false;
+        // When provided, bytesPerRow must be >= bytesInLastRow.
+        if (bprProvided && static_cast<uint64_t>(bytesPerRow) < bytesInLastRow)
+            return false;
+        // When provided, rowsPerImage must be >= heightInBlocks.
         if (rpiProvided && rowsPerImage < heightInBlocks)
             return false;
-        uint64_t bpr = bprProvided ? bytesPerRow : minBytesPerRow;
-        uint64_t rpi = rpiProvided ? rowsPerImage : heightInBlocks;
-        uint64_t bytesPerImage = bpr * rpi;
-        uint64_t bytesInLastImage = (heightInBlocks > 0)
-                                        ? bpr * (heightInBlocks - 1) + minBytesPerRow
-                                        : 0;
+
+        // Offset alone must fit in the buffer even for empty copies.
+        if (offset > bufferSize)
+            return false;
+
+        // Compute requiredBytesInCopy, detecting overflow.
+        auto mulCheck = [](uint64_t a, uint64_t b, uint64_t &out) -> bool
+        {
+            if (a != 0 && b > (UINT64_MAX / a))
+                return false;
+            out = a * b;
+            return true;
+        };
+        auto addCheck = [](uint64_t a, uint64_t b, uint64_t &out) -> bool
+        {
+            if (b > UINT64_MAX - a)
+                return false;
+            out = a + b;
+            return true;
+        };
+
+        uint64_t bpr = bprProvided ? static_cast<uint64_t>(bytesPerRow) : bytesInLastRow;
+        uint64_t rpi = rpiProvided ? static_cast<uint64_t>(rowsPerImage) : static_cast<uint64_t>(heightInBlocks);
+
         uint64_t requiredBytesInCopy = 0;
         if (copyDepth > 1)
-            requiredBytesInCopy += bytesPerImage * (copyDepth - 1);
+        {
+            uint64_t bytesPerImage = 0;
+            if (!mulCheck(bpr, rpi, bytesPerImage))
+                return false;
+            uint64_t add = 0;
+            if (!mulCheck(bytesPerImage, static_cast<uint64_t>(copyDepth - 1), add))
+                return false;
+            if (!addCheck(requiredBytesInCopy, add, requiredBytesInCopy))
+                return false;
+        }
         if (copyDepth > 0)
-            requiredBytesInCopy += bytesInLastImage;
-        uint64_t required = offset + requiredBytesInCopy;
+        {
+            if (heightInBlocks > 1)
+            {
+                uint64_t add = 0;
+                if (!mulCheck(bpr, static_cast<uint64_t>(heightInBlocks - 1), add))
+                    return false;
+                if (!addCheck(requiredBytesInCopy, add, requiredBytesInCopy))
+                    return false;
+            }
+            if (heightInBlocks > 0)
+            {
+                if (!addCheck(requiredBytesInCopy, bytesInLastRow, requiredBytesInCopy))
+                    return false;
+            }
+        }
+
+        uint64_t required = 0;
+        if (!addCheck(offset, requiredBytesInCopy, required))
+            return false;
         return required <= bufferSize;
     }
 
@@ -244,7 +356,7 @@ namespace
         switch (fmt)
         {
         case WGPUTextureFormat_Stencil8:
-            return sten;
+            return sten || aspect == WGPUTextureAspect_All;
         case WGPUTextureFormat_Depth16Unorm:
             return depth || aspect == WGPUTextureAspect_All;
         case WGPUTextureFormat_Depth32Float:
@@ -745,8 +857,6 @@ extern "C"
             auto *oqs = descriptor->occlusionQuerySet;
             if (oqs->device != enc->device)
                 return makeInvalidPass("beginRenderPass: occlusionQuerySet belongs to a different device");
-            if (oqs->destroyed)
-                return makeInvalidPass("beginRenderPass: occlusionQuerySet is destroyed");
             if (oqs->invalid || oqs->queryPool == VK_NULL_HANDLE)
                 return makeInvalidPass("beginRenderPass: occlusionQuerySet is invalid");
             if (oqs->type != WGPUQueryType_Occlusion)
@@ -756,36 +866,13 @@ extern "C"
         if (descriptor->timestampWrites)
         {
             auto *tw = descriptor->timestampWrites;
-            const char *tsErr = nullptr;
-            if (!enc->device ||
-                wgpuDeviceHasFeature(enc->device, WGPUFeatureName_TimestampQuery) != WGPU_TRUE)
-                tsErr = "beginRenderPass: timestamp-query feature is not enabled";
-            else if (!tw->querySet)
-                tsErr = "beginRenderPass: timestampWrites.querySet is null";
-            else if (tw->querySet->destroyed)
-                tsErr = "beginRenderPass: timestampWrites.querySet is destroyed";
-            else if (tw->querySet->invalid || tw->querySet->queryPool == VK_NULL_HANDLE)
-                tsErr = "beginRenderPass: timestampWrites.querySet is invalid";
-            else if (tw->querySet->device != enc->device)
-                tsErr = "beginRenderPass: timestampWrites.querySet belongs to a different device";
-            else if (tw->querySet->type != WGPUQueryType_Timestamp)
-                tsErr = "beginRenderPass: timestampWrites.querySet.type must be timestamp";
-            else
-            {
-                bool hasBegin = (tw->beginningOfPassWriteIndex != WGPU_QUERY_SET_INDEX_UNDEFINED);
-                bool hasEnd = (tw->endOfPassWriteIndex != WGPU_QUERY_SET_INDEX_UNDEFINED);
-                if (!hasBegin && !hasEnd)
-                    tsErr = "beginRenderPass: timestampWrites requires at least one write index";
-                else if (hasBegin && tw->beginningOfPassWriteIndex >= tw->querySet->count)
-                    tsErr = "beginRenderPass: beginningOfPassWriteIndex >= querySet.count";
-                else if (hasEnd && tw->endOfPassWriteIndex >= tw->querySet->count)
-                    tsErr = "beginRenderPass: endOfPassWriteIndex >= querySet.count";
-                else if (hasBegin && hasEnd &&
-                         tw->beginningOfPassWriteIndex == tw->endOfPassWriteIndex)
-                    tsErr = "beginRenderPass: beginningOfPassWriteIndex equals endOfPassWriteIndex";
-            }
-            if (tsErr)
-                return makeInvalidPass(tsErr);
+            std::string tsErr = ValidatePassTimestampWrites(enc->device,
+                                                            tw->querySet,
+                                                            tw->beginningOfPassWriteIndex,
+                                                            tw->endOfPassWriteIndex,
+                                                            PassBeginKind::Render);
+            if (!tsErr.empty())
+                return makeInvalidPass(tsErr.c_str());
         }
 
         auto *rpe = new WGPURenderPassEncoderImpl();
@@ -1256,36 +1343,13 @@ extern "C"
         if (descriptor && descriptor->timestampWrites)
         {
             auto *tw = descriptor->timestampWrites;
-            const char *tsErr = nullptr;
-            if (!enc->device ||
-                wgpuDeviceHasFeature(enc->device, WGPUFeatureName_TimestampQuery) != WGPU_TRUE)
-                tsErr = "beginComputePass: timestamp-query feature is not enabled";
-            else if (!tw->querySet)
-                tsErr = "beginComputePass: timestampWrites.querySet is null";
-            else if (tw->querySet->destroyed)
-                tsErr = "beginComputePass: timestampWrites.querySet is destroyed";
-            else if (tw->querySet->invalid || tw->querySet->queryPool == VK_NULL_HANDLE)
-                tsErr = "beginComputePass: timestampWrites.querySet is invalid";
-            else if (tw->querySet->device != enc->device)
-                tsErr = "beginComputePass: timestampWrites.querySet belongs to a different device";
-            else if (tw->querySet->type != WGPUQueryType_Timestamp)
-                tsErr = "beginComputePass: timestampWrites.querySet.type must be timestamp";
-            else
-            {
-                bool hasBegin = (tw->beginningOfPassWriteIndex != WGPU_QUERY_SET_INDEX_UNDEFINED);
-                bool hasEnd = (tw->endOfPassWriteIndex != WGPU_QUERY_SET_INDEX_UNDEFINED);
-                if (!hasBegin && !hasEnd)
-                    tsErr = "beginComputePass: timestampWrites requires at least one write index";
-                else if (hasBegin && tw->beginningOfPassWriteIndex >= tw->querySet->count)
-                    tsErr = "beginComputePass: beginningOfPassWriteIndex >= querySet.count";
-                else if (hasEnd && tw->endOfPassWriteIndex >= tw->querySet->count)
-                    tsErr = "beginComputePass: endOfPassWriteIndex >= querySet.count";
-                else if (hasBegin && hasEnd &&
-                         tw->beginningOfPassWriteIndex == tw->endOfPassWriteIndex)
-                    tsErr = "beginComputePass: beginningOfPassWriteIndex equals endOfPassWriteIndex";
-            }
-            if (tsErr)
-                return makeInvalidComputePass(tsErr);
+            std::string tsErr = ValidatePassTimestampWrites(enc->device,
+                                                            tw->querySet,
+                                                            tw->beginningOfPassWriteIndex,
+                                                            tw->endOfPassWriteIndex,
+                                                            PassBeginKind::Compute);
+            if (!tsErr.empty())
+                return makeInvalidComputePass(tsErr.c_str());
         }
 
         auto *cpe = new WGPUComputePassEncoderImpl();
@@ -1884,6 +1948,17 @@ extern "C"
             return;
         }
 
+        // §23.x: lazy-init any uninitialized source subresources before reading via copy.
+        {
+            uint32_t srcBaseLayer =
+                (src->texture->dimension == WGPUTextureDimension_3D) ? 0u : src->origin.z;
+            uint32_t srcLayerCount =
+                (src->texture->dimension == WGPUTextureDimension_3D) ? 1u : copySize->depthOrArrayLayers;
+            auto srcAspects = pwgpu::AspectsForView(src->texture->format, src->aspect);
+            pwgpu::LazyInitViewRangeOnEncoder(enc->cmd, src->texture, src->mipLevel, 1,
+                                              srcBaseLayer, srcLayerCount, srcAspects);
+        }
+
         vk::BufferImageCopy2 region{};
         region.bufferOffset = dst->layout.offset;
         region.bufferRowLength = (footprint > 0 && dst->layout.bytesPerRow != WGPU_COPY_STRIDE_UNDEFINED)
@@ -2101,6 +2176,15 @@ extern "C"
 
         bool src3D = (src->texture->dimension == WGPUTextureDimension_3D);
         bool dst3D = (dst->texture->dimension == WGPUTextureDimension_3D);
+
+        // §23.x: lazy-init any uninitialized source subresources before reading via copy.
+        {
+            uint32_t srcBaseLayer = src3D ? 0u : src->origin.z;
+            uint32_t srcLayerCount = src3D ? 1u : copySize->depthOrArrayLayers;
+            auto srcAspects = pwgpu::AspectsForView(src->texture->format, src->aspect);
+            pwgpu::LazyInitViewRangeOnEncoder(enc->cmd, src->texture, src->mipLevel, 1,
+                                              srcBaseLayer, srcLayerCount, srcAspects);
+        }
 
         vk::ImageCopy2 region{};
         region.srcSubresource.aspectMask = srcAspect;

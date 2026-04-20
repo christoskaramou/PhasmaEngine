@@ -1141,6 +1141,235 @@ namespace pwgpu
         }
     }
 
+    uint32_t CountVertexClipDistancesArraySize(const std::vector<uint32_t> &spirv,
+                                               const std::string &entryPoint,
+                                               std::string &errMsg)
+    {
+        errMsg.clear();
+        if (spirv.size() < 5)
+            return 0;
+
+        const uint32_t *code = spirv.data();
+        const size_t numWords = spirv.size();
+
+        // First pass: find OpEntryPoint matching name + ExecutionModelVertex
+        // and collect its interface variable ids. Also gather OpDecorate /
+        // OpMemberDecorate BuiltIn ClipDistance, OpVariable (id -> pointer
+        // type id, storage class), OpTypePointer (ptr -> pointee), OpTypeArray
+        // (arr -> {element, lengthId}), OpTypeStruct (members), and OpConstant
+        // (id -> value).
+
+        std::set<uint32_t> entryInterface;
+        bool foundEntry = false;
+        std::set<uint32_t> clipDistVarIds;           // direct OpDecorate targets
+        std::map<uint32_t, uint32_t> clipDistMember; // struct typeId -> member idx
+        std::map<uint32_t, uint32_t> varPtrType;     // varId -> pointer typeId
+        std::map<uint32_t, uint32_t> varStorage;     // varId -> storage class
+        std::map<uint32_t, uint32_t> ptrPointee;     // ptr typeId -> pointee typeId
+        struct ArrInfo
+        {
+            uint32_t elemTypeId;
+            uint32_t lengthId;
+        };
+        std::map<uint32_t, ArrInfo> arrInfo;                     // array typeId -> {elem, len}
+        std::map<uint32_t, std::vector<uint32_t>> structMembers; // structId -> member type ids
+        std::map<uint32_t, uint32_t> constU32;                   // const id -> uint value
+
+        constexpr uint32_t kExecModelVertex = 0u;
+
+        for (size_t w = 5; w < numWords;)
+        {
+            uint32_t word0 = code[w];
+            uint32_t wc = word0 >> 16;
+            uint32_t op = word0 & 0xFFFFu;
+            if (wc == 0 || w + wc > numWords)
+                break;
+
+            switch (op)
+            {
+            case spv::OpEntryPoint:
+                // [op|wc] [execModel] [entryId] [name literal...] [iface ids...]
+                if (wc >= 4)
+                {
+                    uint32_t execModel = code[w + 1];
+                    // Parse inline null-terminated name starting at word w+3.
+                    size_t nameStart = w + 3;
+                    size_t k = nameStart;
+                    std::string name;
+                    bool nameDone = false;
+                    while (k < w + wc && !nameDone)
+                    {
+                        uint32_t word = code[k];
+                        for (int b = 0; b < 4; ++b)
+                        {
+                            char c = static_cast<char>((word >> (b * 8)) & 0xFFu);
+                            if (c == '\0')
+                            {
+                                nameDone = true;
+                                break;
+                            }
+                            name.push_back(c);
+                        }
+                        ++k;
+                    }
+                    // Interface ids start after the name literal words.
+                    if (execModel == kExecModelVertex &&
+                        (entryPoint.empty() || name == entryPoint))
+                    {
+                        foundEntry = true;
+                        for (size_t j = k; j < w + wc; ++j)
+                            entryInterface.insert(code[j]);
+                    }
+                }
+                break;
+
+            case spv::OpDecorate:
+                // [op|wc] [target] [decoration] [operands...]
+                if (wc >= 4)
+                {
+                    uint32_t target = code[w + 1];
+                    uint32_t dec = code[w + 2];
+                    if (dec == spv::DecorationBuiltIn &&
+                        code[w + 3] == spv::BuiltInClipDistance)
+                    {
+                        clipDistVarIds.insert(target);
+                    }
+                }
+                break;
+
+            case spv::OpMemberDecorate:
+                // [op|wc] [structType] [memberIdx] [decoration] [operands...]
+                if (wc >= 5)
+                {
+                    uint32_t structId = code[w + 1];
+                    uint32_t memberIdx = code[w + 2];
+                    uint32_t dec = code[w + 3];
+                    if (dec == spv::DecorationBuiltIn &&
+                        code[w + 4] == spv::BuiltInClipDistance)
+                    {
+                        clipDistMember[structId] = memberIdx;
+                    }
+                }
+                break;
+
+            case spv::OpVariable:
+                // [op|wc] [resultType] [resultId] [storageClass] [initializer?]
+                if (wc >= 4)
+                {
+                    uint32_t resultType = code[w + 1];
+                    uint32_t resultId = code[w + 2];
+                    uint32_t storage = code[w + 3];
+                    varPtrType[resultId] = resultType;
+                    varStorage[resultId] = storage;
+                }
+                break;
+
+            case spv::OpTypePointer:
+                // [op|wc] [resultId] [storageClass] [pointeeType]
+                if (wc >= 4)
+                {
+                    uint32_t resultId = code[w + 1];
+                    uint32_t pointee = code[w + 3];
+                    ptrPointee[resultId] = pointee;
+                }
+                break;
+
+            case spv::OpTypeArray:
+                // [op|wc] [resultId] [elementType] [lengthId]
+                if (wc >= 4)
+                {
+                    uint32_t resultId = code[w + 1];
+                    arrInfo[resultId] = {code[w + 2], code[w + 3]};
+                }
+                break;
+
+            case spv::OpTypeStruct:
+                // [op|wc] [resultId] [memberTypes...]
+                if (wc >= 2)
+                {
+                    uint32_t resultId = code[w + 1];
+                    std::vector<uint32_t> members;
+                    members.reserve(wc - 2);
+                    for (uint32_t j = 2; j < wc; ++j)
+                        members.push_back(code[w + j]);
+                    structMembers[resultId] = std::move(members);
+                }
+                break;
+
+            case spv::OpConstant:
+                // [op|wc] [resultType] [resultId] [valueWords...]
+                // We only care about 32-bit unsigned/signed literal values.
+                if (wc >= 4)
+                {
+                    uint32_t resultId = code[w + 2];
+                    constU32[resultId] = code[w + 3];
+                }
+                break;
+
+            default:
+                break;
+            }
+
+            w += wc;
+        }
+
+        if (!foundEntry)
+            return 0;
+
+        // Helper: given an interface variable id, if its pointee (or a struct
+        // member in its pointee) is the clip-distances array, return the
+        // array length; else 0.
+        auto resolveArrayLength = [&](uint32_t arrayTypeId) -> uint32_t
+        {
+            auto it = arrInfo.find(arrayTypeId);
+            if (it == arrInfo.end())
+                return 0;
+            auto cit = constU32.find(it->second.lengthId);
+            if (cit == constU32.end())
+                return 0;
+            return cit->second;
+        };
+
+        for (uint32_t varId : entryInterface)
+        {
+            auto ptrIt = varPtrType.find(varId);
+            if (ptrIt == varPtrType.end())
+                continue;
+            auto pointeeIt = ptrPointee.find(ptrIt->second);
+            if (pointeeIt == ptrPointee.end())
+                continue;
+            uint32_t pointee = pointeeIt->second;
+
+            // Case 1: direct OpDecorate BuiltIn ClipDistance on this variable.
+            // The pointee is OpTypeArray itself.
+            if (clipDistVarIds.count(varId))
+            {
+                uint32_t n = resolveArrayLength(pointee);
+                if (n != 0)
+                    return n;
+            }
+
+            // Case 2: variable is a block (e.g. gl_PerVertex) and one of its
+            // members is OpMemberDecorate BuiltIn ClipDistance. Pointee is a
+            // struct; the decorated member's type is the array.
+            auto cmIt = clipDistMember.find(pointee);
+            if (cmIt != clipDistMember.end())
+            {
+                auto smIt = structMembers.find(pointee);
+                if (smIt != structMembers.end() &&
+                    cmIt->second < smIt->second.size())
+                {
+                    uint32_t arrTypeId = smIt->second[cmIt->second];
+                    uint32_t n = resolveArrayLength(arrTypeId);
+                    if (n != 0)
+                        return n;
+                }
+            }
+        }
+
+        return 0;
+    }
+
     bool HasBlendSrc1Output(const std::vector<uint32_t> &spirv,
                             const std::string &entryPoint,
                             std::string &errMsg)
