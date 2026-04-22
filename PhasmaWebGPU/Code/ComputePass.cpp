@@ -6,6 +6,7 @@
 #include "Buffer.h"
 #include "QuerySet.h"
 #include "Device.h"
+#include "Texture.h"
 #include "Utils.h"
 
 extern "C" void wgpuComputePipelineAddRef(WGPUComputePipeline);
@@ -54,6 +55,122 @@ namespace
         if (cpe->invalid)
             return false;
         return true;
+    }
+
+    vk::AccessFlags2 BufferAccessForUsage(pwgpu::BufferUsageKind kind)
+    {
+        switch (kind)
+        {
+        case pwgpu::BufferUsageKind::Constant:
+            return vk::AccessFlagBits2::eUniformRead;
+        case pwgpu::BufferUsageKind::StorageRead:
+            return vk::AccessFlagBits2::eShaderStorageRead;
+        case pwgpu::BufferUsageKind::Storage:
+            return vk::AccessFlagBits2::eShaderStorageRead |
+                   vk::AccessFlagBits2::eShaderStorageWrite;
+        case pwgpu::BufferUsageKind::Input:
+            return vk::AccessFlagBits2::eIndirectCommandRead;
+        default:
+            return vk::AccessFlagBits2::eNone;
+        }
+    }
+
+    vk::PipelineStageFlags2 BufferStageForUsage(pwgpu::BufferUsageKind kind)
+    {
+        if (kind == pwgpu::BufferUsageKind::Input)
+            return vk::PipelineStageFlagBits2::eDrawIndirect;
+        return vk::PipelineStageFlagBits2::eComputeShader;
+    }
+
+    vk::AccessFlags2 TextureAccessForUsage(pwgpu::SubresourceUsageKind kind)
+    {
+        switch (kind)
+        {
+        case pwgpu::SubresourceUsageKind::Sampled:
+            return vk::AccessFlagBits2::eShaderSampledRead;
+        case pwgpu::SubresourceUsageKind::ReadOnlyStorage:
+            return vk::AccessFlagBits2::eShaderStorageRead;
+        case pwgpu::SubresourceUsageKind::WriteOnlyStorage:
+            return vk::AccessFlagBits2::eShaderStorageWrite;
+        case pwgpu::SubresourceUsageKind::ReadWriteStorage:
+            return vk::AccessFlagBits2::eShaderStorageRead |
+                   vk::AccessFlagBits2::eShaderStorageWrite;
+        default:
+            return vk::AccessFlagBits2::eNone;
+        }
+    }
+
+    vk::ImageLayout TextureLayoutForUsage(pwgpu::SubresourceUsageKind kind)
+    {
+        return kind == pwgpu::SubresourceUsageKind::Sampled
+                   ? vk::ImageLayout::eShaderReadOnlyOptimal
+                   : vk::ImageLayout::eGeneral;
+    }
+
+    void EmitDispatchResourceBarriers(WGPUComputePassEncoder cpe, WGPUBuffer indirectBuffer = nullptr)
+    {
+        if (!cpe || !cpe->pipeline || !cpe->pipeline->layout)
+            return;
+
+        std::vector<pe::ImageBarrierInfo> imageBarriers;
+        std::vector<pe::BufferBarrierInfo> bufferBarriers;
+
+        auto appendBindGroupBarriers = [&](WGPUBindGroupImpl *bg)
+        {
+            if (!bg || bg->invalid)
+                return;
+
+            for (const auto &use : bg->textureUses)
+            {
+                if (!use.view || !use.view->texture || !use.view->texture->image)
+                    continue;
+
+                pe::ImageBarrierInfo barrier{};
+                barrier.image = use.view->texture->image;
+                barrier.stageFlags = vk::PipelineStageFlagBits2::eComputeShader;
+                barrier.accessMask = TextureAccessForUsage(use.kind);
+                barrier.layout = TextureLayoutForUsage(use.kind);
+                barrier.baseMipLevel = use.view->baseMipLevel;
+                barrier.mipLevels = use.view->mipLevelCount;
+                barrier.baseArrayLayer = use.view->baseArrayLayer;
+                barrier.arrayLayers = use.view->arrayLayerCount;
+                imageBarriers.push_back(barrier);
+            }
+
+            for (const auto &use : bg->bufferUses)
+            {
+                if (!use.buffer || !use.buffer->peBuffer)
+                    continue;
+
+                pe::BufferBarrierInfo barrier{};
+                barrier.buffer = use.buffer->peBuffer;
+                barrier.stageMask = BufferStageForUsage(use.kind);
+                barrier.accessMask = BufferAccessForUsage(use.kind);
+                bufferBarriers.push_back(barrier);
+            }
+        };
+
+        auto &bgls = cpe->pipeline->layout->bindGroupLayouts;
+        for (size_t i = 0; i < cpe->currentBindGroups.size() && i < bgls.size(); ++i)
+        {
+            if (!bgls[i])
+                continue;
+            appendBindGroupBarriers(cpe->currentBindGroups[i]);
+        }
+
+        if (indirectBuffer && indirectBuffer->peBuffer)
+        {
+            pe::BufferBarrierInfo barrier{};
+            barrier.buffer = indirectBuffer->peBuffer;
+            barrier.stageMask = BufferStageForUsage(pwgpu::BufferUsageKind::Input);
+            barrier.accessMask = BufferAccessForUsage(pwgpu::BufferUsageKind::Input);
+            bufferBarriers.push_back(barrier);
+        }
+
+        if (!bufferBarriers.empty())
+            cpe->cmd->BufferBarriers(bufferBarriers);
+        if (!imageBarriers.empty())
+            cpe->cmd->ImageBarriers(imageBarriers);
     }
 } // namespace
 
@@ -440,6 +557,7 @@ extern "C"
             return;
 
         ValidateDispatchUsageScope(cpe);
+        EmitDispatchResourceBarriers(cpe);
 
         cpe->cmd->ApiHandle().dispatch(x, y, z);
     }
@@ -512,6 +630,7 @@ extern "C"
             return;
 
         ValidateDispatchUsageScope(cpe, buffer);
+        EmitDispatchResourceBarriers(cpe, buffer);
 
         cpe->cmd->ApiHandle().dispatchIndirect(buffer->peBuffer->ApiHandle(), offset);
         cpe->usedBuffers.push_back(buffer);

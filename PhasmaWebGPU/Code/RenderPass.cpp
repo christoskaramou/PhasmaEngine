@@ -114,15 +114,55 @@ namespace
         return true;
     }
 
+    void CollectBindGroupBarriers(WGPURenderPassEncoder rpe,
+                                  std::vector<pe::ImageBarrierInfo> &imageBarriers,
+                                  std::vector<pe::BufferBarrierInfo> &bufferBarriers);
+
+    // Deferred beginRendering: Vulkan dynamic rendering forbids image layout
+    // transitions inside the rendering scope. By deferring beginRendering until
+    // the first draw-scope command, we merge attachment barriers and bind-group
+    // barriers into a single vkCmdPipelineBarrier2 emitted just before
+    // beginRendering — the lazy-barrier pattern used in PhasmaCore.
+    void OpenRenderingIfNeeded(WGPURenderPassEncoder rpe)
+    {
+        if (!rpe || rpe->renderingActive)
+            return;
+
+        if (!rpe->bindGroupBarriersEmitted)
+        {
+            std::vector<pe::ImageBarrierInfo> imageBarriers =
+                std::move(rpe->deferredAttachmentBarriers);
+            std::vector<pe::BufferBarrierInfo> bufferBarriers;
+            CollectBindGroupBarriers(rpe, imageBarriers, bufferBarriers);
+
+            if (!bufferBarriers.empty())
+                rpe->cmd->BufferBarriers(bufferBarriers);
+            if (!imageBarriers.empty())
+                rpe->cmd->ImageBarriers(imageBarriers);
+
+            rpe->bindGroupBarriersEmitted = true;
+        }
+
+        vk::RenderingInfo renderingInfo{};
+        renderingInfo.renderArea = vk::Rect2D{{0, 0},
+                                              {rpe->deferredRenderWidth, rpe->deferredRenderHeight}};
+        renderingInfo.layerCount = 1;
+        renderingInfo.colorAttachmentCount =
+            static_cast<uint32_t>(rpe->deferredColorAttachments.size());
+        renderingInfo.pColorAttachments = rpe->deferredColorAttachments.data();
+        if (rpe->deferredHasDepth)
+            renderingInfo.pDepthAttachment = &rpe->deferredDepthAtt;
+        if (rpe->deferredHasStencil)
+            renderingInfo.pStencilAttachment = &rpe->deferredStencilAtt;
+
+        rpe->cmd->ApiHandle().beginRendering(renderingInfo);
+        rpe->renderingActive = true;
+    }
+
     bool RenderingActive(WGPURenderPassEncoder rpe, const char *apiName)
     {
         if (!PassOpen(rpe, apiName))
             return false;
-        if (!rpe->renderingActive)
-        {
-            PE_WARN("[WebGPU] %s: no active Vulkan render pass (beginRenderPass not fully wired yet)", apiName);
-            return false;
-        }
         return true;
     }
 
@@ -144,6 +184,95 @@ namespace
                 return false;
         }
         return true;
+    }
+
+    vk::AccessFlags2 BufferAccessForUsage(pwgpu::BufferUsageKind kind)
+    {
+        switch (kind)
+        {
+        case pwgpu::BufferUsageKind::Constant:
+            return vk::AccessFlagBits2::eUniformRead;
+        case pwgpu::BufferUsageKind::StorageRead:
+            return vk::AccessFlagBits2::eShaderStorageRead;
+        case pwgpu::BufferUsageKind::Storage:
+            return vk::AccessFlagBits2::eShaderStorageRead |
+                   vk::AccessFlagBits2::eShaderStorageWrite;
+        default:
+            return vk::AccessFlagBits2::eNone;
+        }
+    }
+
+    vk::AccessFlags2 TextureAccessForUsage(pwgpu::SubresourceUsageKind kind)
+    {
+        switch (kind)
+        {
+        case pwgpu::SubresourceUsageKind::Sampled:
+            return vk::AccessFlagBits2::eShaderSampledRead;
+        case pwgpu::SubresourceUsageKind::ReadOnlyStorage:
+            return vk::AccessFlagBits2::eShaderStorageRead;
+        case pwgpu::SubresourceUsageKind::WriteOnlyStorage:
+            return vk::AccessFlagBits2::eShaderStorageWrite;
+        case pwgpu::SubresourceUsageKind::ReadWriteStorage:
+            return vk::AccessFlagBits2::eShaderStorageRead |
+                   vk::AccessFlagBits2::eShaderStorageWrite;
+        default:
+            return vk::AccessFlagBits2::eNone;
+        }
+    }
+
+    vk::ImageLayout TextureLayoutForUsage(pwgpu::SubresourceUsageKind kind)
+    {
+        return kind == pwgpu::SubresourceUsageKind::Sampled
+                   ? vk::ImageLayout::eShaderReadOnlyOptimal
+                   : vk::ImageLayout::eGeneral;
+    }
+
+    void CollectBindGroupBarriers(WGPURenderPassEncoder rpe,
+                                  std::vector<pe::ImageBarrierInfo> &imageBarriers,
+                                  std::vector<pe::BufferBarrierInfo> &bufferBarriers)
+    {
+        if (!rpe || !rpe->pipeline || !rpe->pipeline->layout)
+            return;
+
+        auto &bgls = rpe->pipeline->layout->bindGroupLayouts;
+        for (size_t i = 0; i < rpe->currentBindGroups.size() && i < bgls.size(); ++i)
+        {
+            if (!bgls[i])
+                continue;
+
+            WGPUBindGroupImpl *bg = rpe->currentBindGroups[i];
+            if (!bg || bg->invalid)
+                continue;
+
+            for (const auto &use : bg->textureUses)
+            {
+                if (!use.view || !use.view->texture || !use.view->texture->image)
+                    continue;
+
+                pe::ImageBarrierInfo barrier{};
+                barrier.image = use.view->texture->image;
+                barrier.stageFlags = vk::PipelineStageFlagBits2::eAllGraphics;
+                barrier.accessMask = TextureAccessForUsage(use.kind);
+                barrier.layout = TextureLayoutForUsage(use.kind);
+                barrier.baseMipLevel = use.view->baseMipLevel;
+                barrier.mipLevels = use.view->mipLevelCount;
+                barrier.baseArrayLayer = use.view->baseArrayLayer;
+                barrier.arrayLayers = use.view->arrayLayerCount;
+                imageBarriers.push_back(barrier);
+            }
+
+            for (const auto &use : bg->bufferUses)
+            {
+                if (!use.buffer || !use.buffer->peBuffer)
+                    continue;
+
+                pe::BufferBarrierInfo barrier{};
+                barrier.buffer = use.buffer->peBuffer;
+                barrier.stageMask = vk::PipelineStageFlagBits2::eAllGraphics;
+                barrier.accessMask = BufferAccessForUsage(use.kind);
+                bufferBarriers.push_back(barrier);
+            }
+        }
     }
 } // namespace
 
@@ -606,6 +735,7 @@ extern "C"
             return;
         }
         rpe->drawCount++;
+        OpenRenderingIfNeeded(rpe);
         rpe->cmd->ApiHandle().draw(vertexCount, instanceCount, firstVertex, firstInstance);
     }
 
@@ -639,6 +769,7 @@ extern "C"
             return;
         }
         rpe->drawCount++;
+        OpenRenderingIfNeeded(rpe);
         rpe->cmd->ApiHandle().drawIndexed(indexCount, instanceCount, firstIndex, baseVertex, firstInstance);
     }
 
@@ -723,6 +854,7 @@ extern "C"
         }
 
         rpe->drawCount++;
+        OpenRenderingIfNeeded(rpe);
         rpe->cmd->ApiHandle().drawIndirect(buffer->peBuffer->ApiHandle(), offset, 1, sizeof(VkDrawIndirectCommand));
         rpe->usedBuffers.push_back(buffer);
     }
@@ -810,6 +942,7 @@ extern "C"
         }
 
         rpe->drawCount++;
+        OpenRenderingIfNeeded(rpe);
         rpe->cmd->ApiHandle().drawIndexedIndirect(buffer->peBuffer->ApiHandle(), offset, 1, sizeof(VkDrawIndexedIndirectCommand));
         rpe->usedBuffers.push_back(buffer);
     }
@@ -902,11 +1035,27 @@ extern "C"
             return;
         }
 
+        const bool isFirstQueryThisPass = rpe->usedOcclusionIndices.empty();
+
         rpe->occlusionQueryActive = true;
         rpe->activeOcclusionIndex = queryIndex;
         rpe->usedOcclusionIndices.insert(queryIndex);
         rpe->occlusionQuerySet->beganIndices.insert(queryIndex);
 
+        // Pool is host-reset at createQuerySet, but slots written by prior submits
+        // are left "available" and re-begin violates VUID-vkCmdBeginQuery-None-00807.
+        // Reset the full pool range once per pass on the first beginQuery, before
+        // vkCmdBeginRendering opens (vkCmdResetQueryPool is forbidden inside a pass).
+        // A pass that binds occlusionQuerySet but never calls beginQuery emits no
+        // reset, preserving prior-submission slot data (multi_resolve CTS semantics).
+        if (isFirstQueryThisPass && !rpe->renderingActive &&
+            rpe->occlusionQuerySet->queryPool && rpe->occlusionQuerySet->count > 0)
+        {
+            rpe->cmd->ApiHandle().resetQueryPool(
+                rpe->occlusionQuerySet->queryPool, 0, rpe->occlusionQuerySet->count);
+        }
+
+        OpenRenderingIfNeeded(rpe);
         if (rpe->occlusionQuerySet->queryPool)
             rpe->cmd->ApiHandle().beginQuery(
                 rpe->occlusionQuerySet->queryPool, queryIndex, vk::QueryControlFlags{});
@@ -1003,6 +1152,7 @@ extern "C"
             }
         }
 
+        OpenRenderingIfNeeded(rpe);
         for (size_t i = 0; i < bundleCount; i++)
         {
             auto *bundle = bundles[i];
@@ -1118,6 +1268,14 @@ extern "C"
             rpe->activeOcclusionIndex = UINT32_MAX;
         }
 
+        // Empty/valid passes still need begin/endRendering so loadOp/storeOp fire.
+        // Skip if the pass is invalid-for-encoder to avoid emitting work for
+        // never-meant-to-execute passes.
+        const bool passInvalidForEncoder =
+            (rpe->invalid && !rpe->deferredResourceError) ||
+            !rpe->usageScopeValid;
+        if (!rpe->renderingActive && !passInvalidForEncoder)
+            OpenRenderingIfNeeded(rpe);
         if (rpe->renderingActive)
         {
             rpe->cmd->ApiHandle().endRendering();

@@ -32,6 +32,21 @@ struct WGPURenderPassEncoderImpl
     bool renderingActive = false;
     bool bindingStateInvalidated = false;
 
+    // beginRendering is deferred until the first draw-scope command so bind-group
+    // barriers (including layout transitions) can be emitted outside the Vulkan
+    // dynamic-rendering scope, where they are forbidden.
+    std::vector<vk::RenderingAttachmentInfo> deferredColorAttachments;
+    vk::RenderingAttachmentInfo deferredDepthAtt{};
+    vk::RenderingAttachmentInfo deferredStencilAtt{};
+    bool deferredHasDepth = false;
+    bool deferredHasStencil = false;
+    uint32_t deferredRenderWidth = 0;
+    uint32_t deferredRenderHeight = 0;
+    bool bindGroupBarriersEmitted = false;
+    // Attachment barriers (color/depth/stencil/resolve) computed at BeginRenderPass
+    // but emitted lazily alongside bind-group barriers just before beginRendering.
+    std::vector<pe::ImageBarrierInfo> deferredAttachmentBarriers;
+
     uint32_t attachmentWidth = 0;
     uint32_t attachmentHeight = 0;
     bool depthReadOnly = false;

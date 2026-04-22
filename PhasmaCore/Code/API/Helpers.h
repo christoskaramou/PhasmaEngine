@@ -71,13 +71,20 @@ namespace pe::VulkanHelpers
 
     inline static bool IsReadOnlyAccess(vk::AccessFlags2 accessMask)
     {
+        // Includes sync2 write bits (eShaderStorageWrite, acceleration-structure
+        // write). A mask like eShaderStorageRead|eShaderStorageWrite must be
+        // classified as a write — otherwise the early-skip in Buffer::Barriers
+        // elides the barrier between two read-write storage passes and a RAW
+        // hazard slips through.
         constexpr vk::AccessFlags2 kWriteAccessMask =
             vk::AccessFlagBits2::eShaderWrite |
+            vk::AccessFlagBits2::eShaderStorageWrite |
             vk::AccessFlagBits2::eColorAttachmentWrite |
             vk::AccessFlagBits2::eDepthStencilAttachmentWrite |
             vk::AccessFlagBits2::eTransferWrite |
             vk::AccessFlagBits2::eHostWrite |
-            vk::AccessFlagBits2::eMemoryWrite;
+            vk::AccessFlagBits2::eMemoryWrite |
+            vk::AccessFlagBits2::eAccelerationStructureWriteKHR;
 
         if (accessMask == vk::AccessFlags2{})
             return false;

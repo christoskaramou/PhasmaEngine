@@ -2,7 +2,6 @@
 
 #include <webgpu/webgpu.h>
 #include "BindGroup.h"
-#include "API/RHI.h"
 
 struct WGPUPipelineLayoutImpl
 {

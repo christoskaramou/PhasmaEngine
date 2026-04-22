@@ -373,10 +373,20 @@ extern "C"
 
         if (submitInvalid || cmds.empty())
         {
+            // Submit failed — the cb will never execute, so return its backing
+            // pe::CommandBuffer to the RHI pool before marking submitted. Without
+            // this, wgpuCommandBufferRelease sees submitted=true and skips Return,
+            // leaking the CB + its cached GpuTimers + Event at RHI shutdown.
             for (size_t i = 0; i < commandCount; ++i)
             {
-                if (commands[i])
-                    commands[i]->submitted = true;
+                if (!commands[i])
+                    continue;
+                if (commands[i]->cmd)
+                {
+                    commands[i]->cmd->Return();
+                    commands[i]->cmd = nullptr;
+                }
+                commands[i]->submitted = true;
             }
             return;
         }

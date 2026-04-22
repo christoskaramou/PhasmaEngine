@@ -313,10 +313,11 @@ namespace pwgpu
     {
         if (!type.array.empty())
         {
+            // spirv-cross holds nested-array dims redundantly: the outer SPIRType
+            // lists all dims, and parent_type also carries the inner dims. Recurse
+            // into parent and multiply by only this level's outermost dim.
             uint64_t elem = ComputeTypeSize(compiler, compiler.get_type(type.parent_type));
-            uint64_t count = type.array[0]; // innermost dimension
-            for (size_t i = 1; i < type.array.size(); ++i)
-                count *= type.array[i];
+            uint64_t count = type.array.back();
             return elem * count;
         }
         switch (type.basetype)
@@ -481,11 +482,21 @@ namespace pwgpu
                 };
 
                 // Compatibility rules per WebGPU spec / CTS utils.ts::doResourcesMatch.
+                // Per WebGPU spec §10.1.2 "validating shader binding": when
+                // entry.texture.sampleType is "depth", the shader variable may
+                // be either texture_depth_* or a regular texture_*<f32>. HLSL
+                // has no depth texture type, so DXC emits Texture2D<float> as
+                // OpTypeImage Depth=2 (Unknown), which spirv-cross reports as
+                // non-depth. Accept the f32 form here.
                 auto matchSampleType = [](WGPUTextureSampleType api, WGPUTextureSampleType wgsl)
                 {
                     if (api == WGPUTextureSampleType_Float ||
                         api == WGPUTextureSampleType_UnfilterableFloat)
                         return wgsl == WGPUTextureSampleType_Float ||
+                               wgsl == WGPUTextureSampleType_UnfilterableFloat;
+                    if (api == WGPUTextureSampleType_Depth)
+                        return wgsl == WGPUTextureSampleType_Depth ||
+                               wgsl == WGPUTextureSampleType_Float ||
                                wgsl == WGPUTextureSampleType_UnfilterableFloat;
                     return api == wgsl;
                 };

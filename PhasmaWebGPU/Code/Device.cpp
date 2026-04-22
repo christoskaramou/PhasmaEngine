@@ -848,6 +848,25 @@ extern "C"
                 pe::CommandBuffer *cmd = device->queue->peQueue->AcquireCommandBuffer();
                 cmd->Begin();
                 cmd->FillBuffer(buf->peBuffer, 0, static_cast<size_t>(fillSize), 0);
+
+                // vkCmdFillBuffer writes at eClear/eTransferWrite. Without a trailing
+                // barrier, a later submit's vkCmdCopyBuffer2 (writeBuffer / staged copy)
+                // into the same VkBuffer trips a sync2 WAW hazard across submits.
+                vk::BufferMemoryBarrier2 bmb{};
+                bmb.srcStageMask = vk::PipelineStageFlagBits2::eClear;
+                bmb.srcAccessMask = vk::AccessFlagBits2::eTransferWrite;
+                bmb.dstStageMask = vk::PipelineStageFlagBits2::eAllCommands;
+                bmb.dstAccessMask = vk::AccessFlagBits2::eMemoryRead | vk::AccessFlagBits2::eMemoryWrite;
+                bmb.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+                bmb.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+                bmb.buffer = buf->peBuffer->ApiHandle();
+                bmb.offset = 0;
+                bmb.size = fillSize;
+                vk::DependencyInfo dep{};
+                dep.bufferMemoryBarrierCount = 1;
+                dep.pBufferMemoryBarriers = &bmb;
+                cmd->ApiHandle().pipelineBarrier2(dep);
+
                 cmd->End();
                 device->queue->peQueue->Submit(1, &cmd, nullptr, nullptr);
                 const uint64_t serial = device->queue->peQueue->GetSubmissionCount();
@@ -1853,10 +1872,12 @@ extern "C"
             else if (entry.texture.sampleType != WGPUTextureSampleType_BindingNotUsed)
             {
                 info.type = vk::DescriptorType::eSampledImage;
+                info.imageLayout = vk::ImageLayout::eShaderReadOnlyOptimal;
             }
             else if (entry.storageTexture.access != WGPUStorageTextureAccess_BindingNotUsed)
             {
                 info.type = vk::DescriptorType::eStorageImage;
+                info.imageLayout = vk::ImageLayout::eGeneral;
             }
             else if (entry.hasExternalTexture)
             {

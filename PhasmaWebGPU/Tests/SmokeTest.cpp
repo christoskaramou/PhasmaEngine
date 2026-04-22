@@ -227,7 +227,9 @@ int main(int /*argc*/, char * /*argv*/[])
     WGPUBindGroupLayoutEntry bglEntries[2] = {};
     bglEntries[0].binding = 0;
     bglEntries[0].visibility = WGPUShaderStage_Compute;
-    bglEntries[0].buffer.type = WGPUBufferBindingType_ReadOnlyStorage;
+    // SPIR-V variable at (set=0, binding=0) has no NonWritable decoration,
+    // so per W3C §17.2 it must be matched by a read-write storage entry.
+    bglEntries[0].buffer.type = WGPUBufferBindingType_Storage;
     bglEntries[0].buffer.minBindingSize = kBufSize;
 
     bglEntries[1].binding = 1;

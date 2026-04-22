@@ -1,21 +1,22 @@
 cmake_minimum_required(VERSION 3.15)
 project(PhasmaWebGPU CXX)
+
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 message(STATUS "PhasmaWebGPU = ${CMAKE_CURRENT_SOURCE_DIR}")
 
-# --- webgpu-native headers ---
 include(FetchContent)
-FetchContent_Declare(webgpu_headers
+FetchContent_Declare(
+    webgpu_headers
     GIT_REPOSITORY https://github.com/webgpu-native/webgpu-headers.git
-    GIT_TAG        main
-    GIT_PROGRESS   TRUE
+    GIT_TAG main
+    GIT_PROGRESS TRUE
 )
 FetchContent_MakeAvailable(webgpu_headers)
 
-# The webgpu-native headers repo ships webgpu.h at the repo root (no webgpu/ subdir).
-# Create a webgpu/ wrapper directory so code can include <webgpu/webgpu.h> as per spec.
+# The webgpu-native headers repo ships webgpu.h at the repo root (no webgpu/
+# subdir). Create a wrapper directory so code can include <webgpu/webgpu.h>.
 set(WEBGPU_INCLUDE_WRAP "${CMAKE_BINARY_DIR}/webgpu_include")
 file(MAKE_DIRECTORY "${WEBGPU_INCLUDE_WRAP}/webgpu")
 configure_file(
@@ -24,55 +25,339 @@ configure_file(
     COPYONLY
 )
 
-file(GLOB_RECURSE PWGPU_SOURCES CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/Code/*.cpp")
+file(GLOB_RECURSE PWGPU_SOURCES CONFIGURE_DEPENDS
+    "${CMAKE_CURRENT_SOURCE_DIR}/Code/*.cpp"
+)
 
 option(PE_WEBGPU_SHARED "Build PhasmaWebGPU as a shared library" OFF)
 
-if(PE_WEBGPU_SHARED)
+if (PE_WEBGPU_SHARED)
     add_library(PhasmaWebGPU SHARED ${PWGPU_SOURCES})
-    target_compile_definitions(PhasmaWebGPU
+    target_compile_definitions(
+        PhasmaWebGPU
         PRIVATE PWGPU_BUILDING PWGPU_SHARED_LIBRARY WGPU_SHARED_LIBRARY WGPU_IMPLEMENTATION
-        PUBLIC  PWGPU_SHARED_LIBRARY)
+        PUBLIC PWGPU_SHARED_LIBRARY
+    )
 else()
     add_library(PhasmaWebGPU STATIC ${PWGPU_SOURCES})
 endif()
 
 set_target_properties(PhasmaWebGPU PROPERTIES POSITION_INDEPENDENT_CODE ON)
-
-target_precompile_headers(PhasmaWebGPU PRIVATE
-    "${CMAKE_SOURCE_DIR}/PhasmaCore/pch/PhasmaPch.h"
-)
-
-target_include_directories(PhasmaWebGPU
-    PUBLIC  "${WEBGPU_INCLUDE_WRAP}"
+target_precompile_headers(PhasmaWebGPU PRIVATE "${CMAKE_SOURCE_DIR}/PhasmaCore/pch/PhasmaPch.h")
+target_include_directories(
+    PhasmaWebGPU
+    PUBLIC "${WEBGPU_INCLUDE_WRAP}"
     PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/Code"
 )
-
 target_link_libraries(PhasmaWebGPU PUBLIC PhasmaCore)
 
-if(MSVC)
+if (MSVC)
     target_compile_options(PhasmaWebGPU PRIVATE /W3)
 else()
     target_compile_options(PhasmaWebGPU PRIVATE -Wall -Wextra -Wno-unused-parameter)
 endif()
 
-# --- Smoke test executable ---
 option(PE_WEBGPU_TESTS "Build PhasmaWebGPU smoke tests" ON)
-if(PE_WEBGPU_TESTS)
+if (PE_WEBGPU_TESTS)
     add_executable(WebGPUSmokeTest "${CMAKE_CURRENT_SOURCE_DIR}/Tests/SmokeTest.cpp")
     target_link_libraries(WebGPUSmokeTest PRIVATE PhasmaWebGPU)
     target_precompile_headers(WebGPUSmokeTest REUSE_FROM PhasmaWebGPU)
-    target_include_directories(WebGPUSmokeTest PRIVATE
-        "${CMAKE_CURRENT_SOURCE_DIR}/Code"
-    )
-    set_target_properties(WebGPUSmokeTest PROPERTIES
-        RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin"
-    )
+    target_include_directories(WebGPUSmokeTest PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/Code")
+    set_target_properties(WebGPUSmokeTest PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin")
 
     add_executable(WebGPURenderTest "${CMAKE_CURRENT_SOURCE_DIR}/Tests/RenderTest.cpp")
     target_link_libraries(WebGPURenderTest PRIVATE PhasmaWebGPU)
     target_precompile_headers(WebGPURenderTest REUSE_FROM PhasmaWebGPU)
-    target_include_directories(WebGPURenderTest PRIVATE
-        "${CMAKE_CURRENT_SOURCE_DIR}/Code"
+    target_include_directories(WebGPURenderTest PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/Code")
+    set_target_properties(WebGPURenderTest PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin")
+
+    # pe_add_webgpu_sample(
+    #   TARGET <exe name, must start with WebGPU>
+    #   DIR <subfolder under Tests/>
+    #   SOURCE <cpp path, absolute or relative to Tests/<DIR>>
+    #   SHADERS <basenames without .hlsl, copied next to the exe>
+    #   ASSETS <list of "src|dstname" pairs copied next to the exe>
+    # )
+    function(pe_add_webgpu_sample)
+        cmake_parse_arguments(
+            S
+            "USE_COMMON_APP"
+            "TARGET;DIR;SOURCE"
+            "SHADERS;ASSETS"
+            ${ARGN}
+        )
+
+        string(REGEX REPLACE "^WebGPU" "" SHADER_FOLDER "${S_TARGET}")
+        set(SHADER_SRC "${CMAKE_CURRENT_SOURCE_DIR}/Tests/${S_DIR}/Shaders")
+
+        if (IS_ABSOLUTE "${S_SOURCE}")
+            set(SRC_PATH "${S_SOURCE}")
+        else()
+            set(SRC_PATH "${CMAKE_CURRENT_SOURCE_DIR}/Tests/${S_DIR}/${S_SOURCE}")
+        endif()
+
+        add_executable(${S_TARGET} "${SRC_PATH}")
+        target_link_libraries(${S_TARGET} PRIVATE PhasmaWebGPU)
+        if (S_USE_COMMON_APP)
+            target_link_libraries(${S_TARGET} PRIVATE WebGPUSampleCommon)
+        endif()
+        target_precompile_headers(${S_TARGET} REUSE_FROM PhasmaWebGPU)
+        target_include_directories(
+            ${S_TARGET}
+            PRIVATE
+                "${CMAKE_CURRENT_SOURCE_DIR}/Code"
+                "${CMAKE_SOURCE_DIR}/PhasmaCore"
+                "${CMAKE_CURRENT_SOURCE_DIR}/Tests"
+        )
+        set_target_properties(${S_TARGET} PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin")
+
+        file(GLOB_RECURSE SHADER_SOURCE_FILES CONFIGURE_DEPENDS "${SHADER_SRC}/*")
+        add_custom_command(
+            TARGET ${S_TARGET} POST_BUILD
+            COMMAND ${CMAKE_COMMAND} -E make_directory
+                "$<TARGET_FILE_DIR:${S_TARGET}>/Shaders/${SHADER_FOLDER}"
+            COMMAND ${CMAKE_COMMAND} -E copy_directory
+                "${SHADER_SRC}"
+                "$<TARGET_FILE_DIR:${S_TARGET}>/Shaders/${SHADER_FOLDER}"
+            COMMENT "Copying ${SHADER_FOLDER} shader sources next to ${S_TARGET}"
+        )
+
+        foreach (A IN LISTS S_ASSETS)
+            string(REPLACE "|" ";" PARTS "${A}")
+            list(GET PARTS 0 ASRC)
+            list(GET PARTS 1 ADST)
+            get_filename_component(ADST_DIR "${ADST}" DIRECTORY)
+            if (ADST_DIR)
+                add_custom_command(
+                    TARGET ${S_TARGET} POST_BUILD
+                    COMMAND ${CMAKE_COMMAND} -E make_directory
+                        "$<TARGET_FILE_DIR:${S_TARGET}>/${ADST_DIR}"
+                )
+            endif()
+
+            add_custom_command(
+                TARGET ${S_TARGET} POST_BUILD
+                COMMAND ${CMAKE_COMMAND} -E copy_if_different
+                    "${ASRC}"
+                    "$<TARGET_FILE_DIR:${S_TARGET}>/${ADST}"
+                COMMENT "Copying asset ${ADST} for ${S_TARGET}"
+            )
+        endforeach()
+    endfunction()
+
+    set(WEBGPU_SAMPLE_COMMON_SOURCES
+        "${CMAKE_CURRENT_SOURCE_DIR}/Tests/Common/SampleApp.cpp"
+        "${CMAKE_CURRENT_SOURCE_DIR}/Tests/Common/SampleBase.cpp"
+        "${CMAKE_CURRENT_SOURCE_DIR}/Tests/Common/SampleUtils.cpp"
+        "${CMAKE_CURRENT_SOURCE_DIR}/Tests/Common/FrameCapture.cpp"
+    )
+
+    add_library(WebGPUSampleCommon STATIC ${WEBGPU_SAMPLE_COMMON_SOURCES})
+    target_link_libraries(WebGPUSampleCommon PRIVATE PhasmaWebGPU)
+    target_precompile_headers(WebGPUSampleCommon REUSE_FROM PhasmaWebGPU)
+    target_include_directories(
+        WebGPUSampleCommon
+        PRIVATE
+            "${CMAKE_CURRENT_SOURCE_DIR}/Code"
+            "${CMAKE_CURRENT_SOURCE_DIR}/Tests"
+            "${CMAKE_SOURCE_DIR}/PhasmaCore"
+    )
+
+    set(WEBGPU_SAMPLES_ASSETS "${CMAKE_SOURCE_DIR}/../webgpu-samples/public/assets/img")
+
+    pe_add_webgpu_sample(
+        TARGET WebGPUDeferredTest
+        DIR DeferredRendering
+        SOURCE DeferredRenderingTest.cpp
+        USE_COMMON_APP
+        SHADERS gbuffer.vert gbuffer.pixel quad.vert deferred.pixel lights.comp
+        ASSETS "${CMAKE_CURRENT_SOURCE_DIR}/Tests/DeferredRendering/Assets/stanfordDragon.bin|Assets/stanfordDragon.bin"
+    )
+
+    pe_add_webgpu_sample(
+        TARGET WebGPUParticlesTest
+        DIR Particles
+        SOURCE ParticlesTest.cpp
+        USE_COMMON_APP
+        SHADERS particles.comp particles.vert particles.pixel
+        ASSETS "${WEBGPU_SAMPLES_ASSETS}/webgpu.png|webgpu.png"
+    )
+
+    pe_add_webgpu_sample(
+        TARGET WebGPURotatingCubeTest
+        DIR RotatingCube
+        SOURCE RotatingCubeTest.cpp
+        USE_COMMON_APP
+        SHADERS cube.vert cube.pixel
+    )
+
+    pe_add_webgpu_sample(
+        TARGET WebGPUTexturedCubeTest
+        DIR TexturedCube
+        SOURCE TexturedCubeTest.cpp
+        USE_COMMON_APP
+        SHADERS cube.vert cube.pixel
+        ASSETS "${WEBGPU_SAMPLES_ASSETS}/Di-3d.png|Di-3d.png"
+    )
+
+    pe_add_webgpu_sample(
+        TARGET WebGPUInstancedCubeTest
+        DIR InstancedCube
+        SOURCE InstancedCubeTest.cpp
+        USE_COMMON_APP
+        SHADERS cube.vert cube.pixel
+    )
+
+    pe_add_webgpu_sample(
+        TARGET WebGPUTwoCubesTest
+        DIR TwoCubes
+        SOURCE TwoCubesTest.cpp
+        USE_COMMON_APP
+        SHADERS cube.vert cube.pixel
+    )
+
+    pe_add_webgpu_sample(
+        TARGET WebGPUFractalCubeTest
+        DIR FractalCube
+        SOURCE FractalCubeTest.cpp
+        USE_COMMON_APP
+        SHADERS cube.vert cube.pixel
+    )
+
+    pe_add_webgpu_sample(
+        TARGET WebGPUGameOfLifeTest
+        DIR GameOfLife
+        SOURCE GameOfLifeTest.cpp
+        USE_COMMON_APP
+        SHADERS life.comp life.vert life.pixel
+    )
+
+    pe_add_webgpu_sample(
+        TARGET WebGPUCamerasTest
+        DIR Cameras
+        SOURCE CamerasTest.cpp
+        USE_COMMON_APP
+        SHADERS cube.vert cube.pixel
+        ASSETS "${WEBGPU_SAMPLES_ASSETS}/Di-3d.png|Di-3d.png"
+    )
+
+    pe_add_webgpu_sample(
+        TARGET WebGPUShadowMappingTest
+        DIR ShadowMapping
+        SOURCE ShadowMappingTest.cpp
+        USE_COMMON_APP
+        SHADERS shadow.vert lit.vert lit.pixel
+        ASSETS "${CMAKE_CURRENT_SOURCE_DIR}/Tests/ShadowMapping/Assets/stanfordDragon.bin|stanfordDragon.bin"
+    )
+
+    pe_add_webgpu_sample(
+        TARGET WebGPUHelloTriangleTest
+        DIR HelloTriangle
+        SOURCE HelloTriangleTest.cpp
+        USE_COMMON_APP
+        SHADERS triangle.vert triangle.pixel
+    )
+
+    pe_add_webgpu_sample(
+        TARGET WebGPUHelloTriangleMSAATest
+        DIR HelloTriangleMSAA
+        SOURCE HelloTriangleMSAATest.cpp
+        USE_COMMON_APP
+        SHADERS triangle.vert triangle.pixel
+    )
+
+    pe_add_webgpu_sample(
+        TARGET WebGPUCubemapTest
+        DIR Cubemap
+        SOURCE CubemapTest.cpp
+        USE_COMMON_APP
+        SHADERS cubemap.vert cubemap.pixel
+        ASSETS
+            "${WEBGPU_SAMPLES_ASSETS}/cubemap/posx.jpg|posx.jpg"
+            "${WEBGPU_SAMPLES_ASSETS}/cubemap/negx.jpg|negx.jpg"
+            "${WEBGPU_SAMPLES_ASSETS}/cubemap/posy.jpg|posy.jpg"
+            "${WEBGPU_SAMPLES_ASSETS}/cubemap/negy.jpg|negy.jpg"
+            "${WEBGPU_SAMPLES_ASSETS}/cubemap/posz.jpg|posz.jpg"
+            "${WEBGPU_SAMPLES_ASSETS}/cubemap/negz.jpg|negz.jpg"
+    )
+
+    pe_add_webgpu_sample(
+        TARGET WebGPUAnimometerTest
+        DIR Animometer
+        SOURCE AnimometerTest.cpp
+        USE_COMMON_APP
+        SHADERS animometer.vert animometer.pixel
+    )
+
+    pe_add_webgpu_sample(
+        TARGET WebGPUImageBlurTest
+        DIR ImageBlur
+        SOURCE ImageBlurTest.cpp
+        USE_COMMON_APP
+        SHADERS blur.comp quad.vert quad.pixel
+        ASSETS "${WEBGPU_SAMPLES_ASSETS}/Di-3d.png|Di-3d.png"
+    )
+
+    pe_add_webgpu_sample(
+        TARGET WebGPUComputeBoidsTest
+        DIR ComputeBoids
+        SOURCE ComputeBoidsTest.cpp
+        USE_COMMON_APP
+        SHADERS updateSprites.comp sprite.vert sprite.pixel
+    )
+
+    pe_add_webgpu_sample(
+        TARGET WebGPUResizeCanvasTest
+        DIR ResizeCanvas
+        SOURCE ResizeCanvasTest.cpp
+        USE_COMMON_APP
+        SHADERS triangle.vert triangle.pixel
+    )
+
+    pe_add_webgpu_sample(
+        TARGET WebGPUOcclusionQueryTest
+        DIR OcclusionQuery
+        SOURCE OcclusionQueryTest.cpp
+        USE_COMMON_APP
+        SHADERS solidColorLit.vert solidColorLit.pixel
+    )
+
+    pe_add_webgpu_sample(
+        TARGET WebGPURenderBundlesTest
+        DIR RenderBundles
+        SOURCE RenderBundlesTest.cpp
+        USE_COMMON_APP
+        SHADERS mesh.vert mesh.pixel
+        ASSETS
+            "${WEBGPU_SAMPLES_ASSETS}/saturn.jpg|saturn.jpg"
+            "${WEBGPU_SAMPLES_ASSETS}/moon.jpg|moon.jpg"
+    )
+
+    pe_add_webgpu_sample(
+        TARGET WebGPUBitonicSortTest
+        DIR BitonicSort
+        SOURCE BitonicSortTest.cpp
+        USE_COMMON_APP
+        SHADERS bitonic.comp display.vert display.pixel
+    )
+
+    pe_add_webgpu_sample(
+        TARGET WebGPUABufferTest
+        DIR ABuffer
+        SOURCE ABufferTest.cpp
+        USE_COMMON_APP
+        SHADERS opaque.vert opaque.pixel translucent.vert translucent.pixel composite.vert composite.pixel
+    )
+
+    pe_add_webgpu_sample(
+        TARGET WebGPUReversedZTest
+        DIR ReversedZ
+        SOURCE ReversedZTest.cpp
+        USE_COMMON_APP
+        SHADERS
+            vertex.vert fragment.pixel
+            vertexDepthPrePass.vert
+            vertexPrecisionErrorPass.vert fragmentPrecisionErrorPass.pixel
+            vertexTextureQuad.vert fragmentTextureQuad.pixel
     )
 endif()

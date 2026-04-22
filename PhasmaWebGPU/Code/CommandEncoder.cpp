@@ -1269,22 +1269,14 @@ extern "C"
             }
         }
 
-        if (!barriers.empty())
-            enc->cmd->ImageBarriers(barriers);
+        // Attachment barriers are deferred: they fire together with bind-group
+        // barriers just before beginRendering, so the whole pass's layout
+        // transitions collapse into one vkCmdPipelineBarrier2 call.
+        rpe->deferredAttachmentBarriers = std::move(barriers);
 
-        vk::RenderingInfo renderingInfo{};
-        renderingInfo.renderArea = vk::Rect2D{{0, 0}, {attachW, attachH}};
-        renderingInfo.layerCount = 1;
-        renderingInfo.colorAttachmentCount = static_cast<uint32_t>(colorAttachments.size());
-        renderingInfo.pColorAttachments = colorAttachments.data();
-        if (hasDepthAttachment)
-            renderingInfo.pDepthAttachment = &depthAtt;
-        if (hasStencilAttachment)
-            renderingInfo.pStencilAttachment = &stencilAtt;
-
-        enc->cmd->ApiHandle().beginRendering(renderingInfo);
-        rpe->renderingActive = true;
-
+        // Vulkan dynamic state persists across begin/endRendering; WebGPU §14 resets at pass start.
+        // These commands are valid outside dynamic-rendering scope, so set defaults now — user
+        // set* commands issued before the first draw will then override correctly.
         vk::Viewport defaultVp{0.0f, 0.0f,
                                static_cast<float>(attachW), static_cast<float>(attachH),
                                0.0f, 1.0f};
@@ -1293,10 +1285,19 @@ extern "C"
         vk::Rect2D defaultScissor{{0, 0}, {attachW, attachH}};
         enc->cmd->ApiHandle().setScissor(0, 1, &defaultScissor);
 
-        // Vulkan dynamic state persists across begin/endRendering; WebGPU §14 resets at pass start.
         const float zeroBlend[4] = {0.0f, 0.0f, 0.0f, 0.0f};
         enc->cmd->ApiHandle().setBlendConstants(zeroBlend);
         enc->cmd->ApiHandle().setStencilReference(vk::StencilFaceFlagBits::eFrontAndBack, 0);
+
+        // Defer beginRendering so bind-group barriers can be emitted outside
+        // the Vulkan dynamic-rendering scope on first draw-scope command.
+        rpe->deferredColorAttachments = std::move(colorAttachments);
+        rpe->deferredDepthAtt = depthAtt;
+        rpe->deferredStencilAtt = stencilAtt;
+        rpe->deferredHasDepth = hasDepthAttachment;
+        rpe->deferredHasStencil = hasStencilAttachment;
+        rpe->deferredRenderWidth = attachW;
+        rpe->deferredRenderHeight = attachH;
 
         enc->hasOpenPass = true;
         return rpe;
@@ -1524,6 +1525,20 @@ extern "C"
 
         enc->cmd->CopyBuffer(src->peBuffer, dst->peBuffer, static_cast<size_t>(copySize),
                              static_cast<size_t>(srcOffset), static_cast<size_t>(dstOffset));
+
+        // Record the transfer accesses so the next barrier against these buffers
+        // sources from {Copy, TransferRead/Write}. Without this, a subsequent
+        // render/compute pass read inherits stale src state and skips the RAW
+        // barrier that flushes this copy's write.
+        {
+            pe::BufferTrackInfo &srcTrack = src->peBuffer->GetTrackInfo();
+            srcTrack.stageMask = vk::PipelineStageFlagBits2::eCopy;
+            srcTrack.accessMask = vk::AccessFlagBits2::eTransferRead;
+            pe::BufferTrackInfo &dstTrack = dst->peBuffer->GetTrackInfo();
+            dstTrack.stageMask = vk::PipelineStageFlagBits2::eCopy;
+            dstTrack.accessMask = vk::AccessFlagBits2::eTransferWrite;
+        }
+
         enc->retained.usedBuffers.push_back(src);
         enc->retained.usedBuffers.push_back(dst);
     }

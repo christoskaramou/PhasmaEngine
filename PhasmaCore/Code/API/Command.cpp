@@ -777,6 +777,13 @@ namespace pe
     void CommandBuffer::FillBuffer(Buffer *buffer, size_t offset, size_t size, uint32_t data)
     {
         m_apiHandle.fillBuffer(buffer->ApiHandle(), offset, size, data);
+
+        // Record the transfer write so the next Buffer::Barrier emits srcStage=Clear,
+        // srcAccess=TransferWrite. Without this, subsequent barriers inherit a stale
+        // src state and readers at compute stage race with the fill.
+        BufferTrackInfo &trackInfo = buffer->GetTrackInfo();
+        trackInfo.stageMask = vk::PipelineStageFlagBits2::eClear;
+        trackInfo.accessMask = vk::AccessFlagBits2::eTransferWrite;
     }
 
     void CommandBuffer::TraceRays(uint32_t width, uint32_t height, uint32_t depth)

@@ -2,6 +2,7 @@
 #include "BindGroup.h"
 #include "Device.h"
 #include "Utils.h"
+#include "API/RHI.h"
 
 extern "C"
 {

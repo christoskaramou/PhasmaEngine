@@ -112,7 +112,8 @@ extern "C"
             default:
                 break;
             }
-            surface->surface->SetPresentMode(vkMode);
+            pe::RHII.ChangePresentMode(vkMode);
+            surface->swapchain = pe::RHII.GetSwapchain();
         }
 
         if (surface->currentTexture)
