@@ -506,4 +506,55 @@ if (PE_WEBGPU_TESTS)
         USE_COMMON_APP
         SHADERS pristineGrid.vert pristineGrid.pixel
     )
+
+    pe_add_webgpu_sample(
+        TARGET WebGPUAlphaToCoverageEmulatorTest
+        DIR AlphaToCoverageEmulator
+        SOURCE AlphaToCoverageEmulatorTest.cpp
+        USE_COMMON_APP
+        SHADERS
+            foliage.vert foliage.pixel
+            crossingGradients.vert crossingGradients.pixel
+            showMultisampleTexture.vert showMultisampleTexture.pixel
+    )
+
+    pe_add_webgpu_sample(
+        TARGET WebGPUBundleCullingTest
+        DIR BundleCulling
+        SOURCE BundleCullingTest.cpp
+        USE_COMMON_APP
+        SHADERS geometry.vert geometryCulled.vert geometry.pixel cull.comp
+    )
+
+    pe_add_webgpu_sample(
+        TARGET WebGPUParticleLifeTest
+        DIR ParticleLife
+        SOURCE ParticleLifeTest.cpp
+        USE_COMMON_APP
+        SHADERS render.vert render.pixel cell.comp prefix.comp sort.comp sim.comp
+    )
+
+    pe_add_webgpu_sample(
+        TARGET WebGPUWorkloadSimulatorTest
+        DIR WorkloadSimulator
+        SOURCE WorkloadSimulatorTest.cpp
+        USE_COMMON_APP
+        SHADERS workload.vert workload.pixel
+        ASSETS "${WEBGPU_SAMPLES_ASSETS}/webgpu.png|webgpu.png"
+    )
+
+    pe_add_webgpu_sample(
+        TARGET WebGPUMarchingCubesTest
+        DIR MarchingCubes
+        SOURCE MarchingCubesTest.cpp
+        USE_COMMON_APP
+        SHADERS generate.comp surface.vert surface.pixel
+        ASSETS
+            "${CMAKE_SOURCE_DIR}/../webgpu-marchingcubes/textures/coast_sand_rocks_02_diff_1k.jpg|coast_sand_rocks_02_diff_1k.jpg"
+            "${CMAKE_SOURCE_DIR}/../webgpu-marchingcubes/textures/mud_cracked_dry_03_diff_1k.jpg|mud_cracked_dry_03_diff_1k.jpg"
+            "${CMAKE_SOURCE_DIR}/../webgpu-marchingcubes/textures/rock_face_03_diff_1k.jpg|rock_face_03_diff_1k.jpg"
+            "${CMAKE_SOURCE_DIR}/../webgpu-marchingcubes/textures/coast_sand_rocks_02_nor_gl_1k.png|coast_sand_rocks_02_nor_gl_1k.png"
+            "${CMAKE_SOURCE_DIR}/../webgpu-marchingcubes/textures/mud_cracked_dry_03_nor_gl_1k.png|mud_cracked_dry_03_nor_gl_1k.png"
+            "${CMAKE_SOURCE_DIR}/../webgpu-marchingcubes/textures/rock_face_03_nor_gl_1k.png|rock_face_03_nor_gl_1k.png"
+    )
 endif()

@@ -1152,6 +1152,70 @@ extern "C"
             }
         }
 
+        if (!rpe->renderingActive)
+        {
+            std::vector<pe::BufferBarrierInfo> bundleBufBarriers;
+            for (size_t i = 0; i < bundleCount; i++)
+            {
+                auto *bundle = bundles[i];
+                if (!bundle)
+                    continue;
+                for (const auto &entry : bundle->usageScope.bufferMap)
+                {
+                    WGPUBufferImpl *buf = entry.first;
+                    if (!buf || !buf->peBuffer)
+                        continue;
+                    const uint8_t mask = entry.second;
+                    pe::BufferBarrierInfo barrier{};
+                    barrier.buffer = buf->peBuffer;
+                    barrier.stageMask = vk::PipelineStageFlags2{};
+                    barrier.accessMask = vk::AccessFlags2{};
+                    // Storage / uniform reads in the vertex/fragment stages.
+                    if (mask & static_cast<uint8_t>(pwgpu::BufferUsageKind::Storage))
+                    {
+                        barrier.stageMask |= vk::PipelineStageFlagBits2::eAllGraphics;
+                        barrier.accessMask |= vk::AccessFlagBits2::eShaderStorageRead |
+                                              vk::AccessFlagBits2::eShaderStorageWrite;
+                    }
+                    if (mask & static_cast<uint8_t>(pwgpu::BufferUsageKind::StorageRead))
+                    {
+                        barrier.stageMask |= vk::PipelineStageFlagBits2::eAllGraphics;
+                        barrier.accessMask |= vk::AccessFlagBits2::eShaderStorageRead;
+                    }
+                    if (mask & static_cast<uint8_t>(pwgpu::BufferUsageKind::Constant))
+                    {
+                        barrier.stageMask |= vk::PipelineStageFlagBits2::eAllGraphics;
+                        barrier.accessMask |= vk::AccessFlagBits2::eUniformRead;
+                    }
+                    // Vertex/index/indirect inputs have distinct stages
+                    // that must match their access bits (VUID-03900/01/other).
+                    if (mask & static_cast<uint8_t>(pwgpu::BufferUsageKind::Input))
+                    {
+                        if (buf->usage & WGPUBufferUsage_Indirect)
+                        {
+                            barrier.stageMask |= vk::PipelineStageFlagBits2::eDrawIndirect;
+                            barrier.accessMask |= vk::AccessFlagBits2::eIndirectCommandRead;
+                        }
+                        if (buf->usage & WGPUBufferUsage_Index)
+                        {
+                            barrier.stageMask |= vk::PipelineStageFlagBits2::eIndexInput;
+                            barrier.accessMask |= vk::AccessFlagBits2::eIndexRead;
+                        }
+                        if (buf->usage & WGPUBufferUsage_Vertex)
+                        {
+                            barrier.stageMask |= vk::PipelineStageFlagBits2::eVertexAttributeInput;
+                            barrier.accessMask |= vk::AccessFlagBits2::eVertexAttributeRead;
+                        }
+                    }
+                    if (!barrier.stageMask || !barrier.accessMask)
+                        continue;
+                    bundleBufBarriers.push_back(barrier);
+                }
+            }
+            if (!bundleBufBarriers.empty())
+                rpe->cmd->BufferBarriers(bundleBufBarriers);
+        }
+
         OpenRenderingIfNeeded(rpe);
         for (size_t i = 0; i < bundleCount; i++)
         {
