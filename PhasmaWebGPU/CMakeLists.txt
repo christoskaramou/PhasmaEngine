@@ -360,4 +360,53 @@ if (PE_WEBGPU_TESTS)
             vertexPrecisionErrorPass.vert fragmentPrecisionErrorPass.pixel
             vertexTextureQuad.vert fragmentTextureQuad.pixel
     )
+
+    pe_add_webgpu_sample(
+        TARGET WebGPUBlendingTest
+        DIR Blending
+        SOURCE BlendingTest.cpp
+        USE_COMMON_APP
+        SHADERS texturedQuad.vert texturedQuad.pixel
+    )
+
+    pe_add_webgpu_sample(
+        TARGET WebGPUSamplerParametersTest
+        DIR SamplerParameters
+        SOURCE SamplerParametersTest.cpp
+        USE_COMMON_APP
+        SHADERS texturedSquare.vert texturedSquare.pixel showTexture.vert showTexture.pixel
+    )
+
+    pe_add_webgpu_sample(
+        TARGET WebGPUGenerateMipmapTest
+        DIR GenerateMipmap
+        SOURCE GenerateMipmapTest.cpp
+        USE_COMMON_APP
+        SHADERS
+            generateMipmap.vert
+            generateMipmap2d.pixel
+            generateMipmap2dArray.pixel
+            generateMipmapCube.pixel
+            generateMipmapCubeArray.pixel
+            texturedGeometry2d.vert texturedGeometry2d.pixel
+            texturedGeometry2dArray.vert texturedGeometry2dArray.pixel
+            texturedGeometryCube.vert texturedGeometryCube.pixel
+            texturedGeometryCubeArray.vert texturedGeometryCubeArray.pixel
+    )
+
+    pe_add_webgpu_sample(
+        TARGET WebGPUStencilMaskTest
+        DIR StencilMask
+        SOURCE StencilMaskTest.cpp
+        USE_COMMON_APP
+        SHADERS simpleLighting.vert simpleLighting.pixel
+    )
+
+    pe_add_webgpu_sample(
+        TARGET WebGPUWireframeTest
+        DIR Wireframe
+        SOURCE WireframeTest.cpp
+        USE_COMMON_APP
+        SHADERS solidColorLit.vert solidColorLit.pixel wireframeLine.vert wireframeLine.pixel wireframeBary.vert wireframeBary.pixel
+    )
 endif()
