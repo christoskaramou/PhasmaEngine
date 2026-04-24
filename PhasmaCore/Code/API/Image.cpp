@@ -752,6 +752,8 @@ namespace pe
         barrier.dstAccessMask = info.accessMask;
         barrier.oldLayout = oldInfo.layout;
         barrier.newLayout = info.layout;
+        if (barrier.srcStageMask == vk::PipelineStageFlagBits2::eNone)
+            barrier.srcStageMask = vk::PipelineStageFlagBits2::eTopOfPipe;
         barrier.srcQueueFamilyIndex = oldInfo.queueFamilyId;
         barrier.dstQueueFamilyIndex = info.queueFamilyId;
         barrier.image = image.m_apiHandle;
@@ -811,6 +813,8 @@ namespace pe
             barrier.dstAccessMask = info.accessMask;
             barrier.oldLayout = oldInfo.layout;
             barrier.newLayout = info.layout;
+            if (barrier.srcStageMask == vk::PipelineStageFlagBits2::eNone)
+                barrier.srcStageMask = vk::PipelineStageFlagBits2::eTopOfPipe;
             barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
             barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
             barrier.image = image->m_apiHandle;

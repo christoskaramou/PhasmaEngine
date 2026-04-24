@@ -922,6 +922,25 @@ extern "C"
             rpe->timestampQuerySet = tw->querySet;
             wgpuQuerySetAddRef(tw->querySet);
 
+            // Per VUID-vkCmdWriteTimestamp2-None-03864, each query must be unavailable
+            // before a write. Host-reset at createQuerySet only covers first-frame;
+            // subsequent frames reuse the same slots and must reset between uses.
+            // Reset both slots here (outside any render pass) before the begin-write.
+            if (tw->beginningOfPassWriteIndex != WGPU_QUERY_SET_INDEX_UNDEFINED &&
+                tw->beginningOfPassWriteIndex < tw->querySet->count &&
+                tw->querySet->queryPool)
+            {
+                enc->cmd->ApiHandle().resetQueryPool(
+                    tw->querySet->queryPool, tw->beginningOfPassWriteIndex, 1);
+            }
+            if (tw->endOfPassWriteIndex != WGPU_QUERY_SET_INDEX_UNDEFINED &&
+                tw->endOfPassWriteIndex < tw->querySet->count &&
+                tw->querySet->queryPool)
+            {
+                enc->cmd->ApiHandle().resetQueryPool(
+                    tw->querySet->queryPool, tw->endOfPassWriteIndex, 1);
+            }
+
             if (tw->beginningOfPassWriteIndex != WGPU_QUERY_SET_INDEX_UNDEFINED &&
                 tw->beginningOfPassWriteIndex < tw->querySet->count)
             {
@@ -1367,6 +1386,24 @@ extern "C"
                 auto *tw = descriptor->timestampWrites;
                 cpe->timestampQuerySet = tw->querySet;
                 wgpuQuerySetAddRef(tw->querySet);
+
+                // Per VUID-vkCmdWriteTimestamp2-None-03864: each slot must be
+                // unavailable before write. Reset reused slots here.
+                if (tw->beginningOfPassWriteIndex != WGPU_QUERY_SET_INDEX_UNDEFINED &&
+                    tw->beginningOfPassWriteIndex < tw->querySet->count &&
+                    tw->querySet->queryPool)
+                {
+                    enc->cmd->ApiHandle().resetQueryPool(
+                        tw->querySet->queryPool, tw->beginningOfPassWriteIndex, 1);
+                }
+                if (tw->endOfPassWriteIndex != WGPU_QUERY_SET_INDEX_UNDEFINED &&
+                    tw->endOfPassWriteIndex < tw->querySet->count &&
+                    tw->querySet->queryPool)
+                {
+                    enc->cmd->ApiHandle().resetQueryPool(
+                        tw->querySet->queryPool, tw->endOfPassWriteIndex, 1);
+                }
+
                 if (tw->beginningOfPassWriteIndex != WGPU_QUERY_SET_INDEX_UNDEFINED &&
                     tw->beginningOfPassWriteIndex < tw->querySet->count)
                 {
@@ -2395,6 +2432,8 @@ extern "C"
         if (querySet->destroyed || !querySet->queryPool)
             return;
 
+        // Per VUID-vkCmdWriteTimestamp2-None-03864: reset the slot before reuse.
+        enc->cmd->ApiHandle().resetQueryPool(querySet->queryPool, queryIndex, 1);
         enc->cmd->ApiHandle().writeTimestamp2(vk::PipelineStageFlagBits2::eAllCommands,
                                               querySet->queryPool, queryIndex);
     }

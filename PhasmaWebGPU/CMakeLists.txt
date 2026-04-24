@@ -409,4 +409,101 @@ if (PE_WEBGPU_TESTS)
         USE_COMMON_APP
         SHADERS solidColorLit.vert solidColorLit.pixel wireframeLine.vert wireframeLine.pixel wireframeBary.vert wireframeBary.pixel
     )
+
+    pe_add_webgpu_sample(
+        TARGET WebGPUNormalMapTest
+        DIR NormalMap
+        SOURCE NormalMapTest.cpp
+        USE_COMMON_APP
+        SHADERS normalMap.vert normalMap.pixel
+        ASSETS "${WEBGPU_SAMPLES_ASSETS}/wood_albedo.png|wood_albedo.png"
+               "${WEBGPU_SAMPLES_ASSETS}/spiral_normal.png|spiral_normal.png"
+               "${WEBGPU_SAMPLES_ASSETS}/spiral_height.png|spiral_height.png"
+               "${WEBGPU_SAMPLES_ASSETS}/toybox_normal.png|toybox_normal.png"
+               "${WEBGPU_SAMPLES_ASSETS}/toybox_height.png|toybox_height.png"
+               "${WEBGPU_SAMPLES_ASSETS}/brickwall_albedo.png|brickwall_albedo.png"
+               "${WEBGPU_SAMPLES_ASSETS}/brickwall_normal.png|brickwall_normal.png"
+               "${WEBGPU_SAMPLES_ASSETS}/brickwall_height.png|brickwall_height.png"
+    )
+
+    pe_add_webgpu_sample(
+        TARGET WebGPUPointsTest
+        DIR Points
+        SOURCE PointsTest.cpp
+        USE_COMMON_APP
+        SHADERS distance-sized-points.vert fixed-size-points.vert orange.pixel textured.pixel
+    )
+
+    pe_add_webgpu_sample(
+        TARGET WebGPUPrimitivePickingTest
+        DIR PrimitivePicking
+        SOURCE PrimitivePickingTest.cpp
+        USE_COMMON_APP
+        SHADERS
+            vertexForwardRendering.vert
+            fragmentForwardRendering.pixel
+            vertexTextureQuad.vert
+            fragmentPrimitivesDebugView.pixel
+            computePickPrimitive.comp
+    )
+
+    pe_add_webgpu_sample(
+        TARGET WebGPUTransparentCanvasTest
+        DIR TransparentCanvas
+        SOURCE TransparentCanvasTest.cpp
+        USE_COMMON_APP
+        SHADERS cube.vert cube.pixel
+    )
+
+    pe_add_webgpu_sample(
+        TARGET WebGPUTimestampQueryTest
+        DIR TimestampQuery
+        SOURCE TimestampQueryTest.cpp
+        USE_COMMON_APP
+        SHADERS timestamp.vert timestamp.pixel
+    )
+
+    pe_add_webgpu_sample(
+        TARGET WebGPUVolumeRenderingTexture3DTest
+        DIR VolumeRenderingTexture3D
+        SOURCE VolumeRenderingTexture3DTest.cpp
+        USE_COMMON_APP
+        SHADERS volume.vert volume.pixel
+        ASSETS "${WEBGPU_SAMPLES_ASSETS}/volume/t1_icbm_normal_1mm_pn0_rf0_180x216x180_uint8_1x1.bin-gz|volume/t1_icbm_normal_1mm_pn0_rf0_180x216x180_uint8_1x1.bin-gz"
+    )
+
+    pe_add_webgpu_sample(
+        TARGET WebGPUTextRenderingMsdfTest
+        DIR TextRenderingMsdf
+        SOURCE TextRenderingMsdfTest.cpp
+        USE_COMMON_APP
+        SHADERS msdfText.vert msdfText.pixel cube.vert cube.pixel
+        ASSETS "${CMAKE_SOURCE_DIR}/../webgpu-samples/public/assets/font/ya-hei-ascii-msdf.json|font/ya-hei-ascii-msdf.json"
+               "${CMAKE_SOURCE_DIR}/../webgpu-samples/public/assets/font/ya-hei-ascii.png|font/ya-hei-ascii.png"
+    )
+
+    pe_add_webgpu_sample(
+        TARGET WebGPUCornellTest
+        DIR Cornell
+        SOURCE CornellTest.cpp
+        USE_COMMON_APP
+        SHADERS radiosity.comp accumulationToLightmap.comp rasterizer.vert rasterizer.pixel raytracer.comp tonemapper.vert tonemapper.pixel
+    )
+
+    pe_add_webgpu_sample(
+        TARGET WebGPUSkinnedMeshTest
+        DIR SkinnedMesh
+        SOURCE SkinnedMeshTest.cpp
+        USE_COMMON_APP
+        SHADERS gltf.vert gltf.pixel grid.vert grid.pixel
+        ASSETS "${CMAKE_SOURCE_DIR}/../webgpu-samples/public/assets/gltf/whale.glb|gltf/whale.glb"
+    )
+
+    pe_add_webgpu_sample(
+        TARGET WebGPUPristineGridTest
+        DIR PristineGrid
+        SOURCE PristineGridTest.cpp
+        USE_COMMON_APP
+        SHADERS pristineGrid.vert pristineGrid.pixel
+    )
 endif()
