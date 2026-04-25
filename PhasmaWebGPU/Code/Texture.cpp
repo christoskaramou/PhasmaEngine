@@ -2,9 +2,13 @@
 #include "Device.h"
 #include "Utils.h"
 #include "FormatMap.h"
+#include "API/Buffer.h"
 #include "API/Queue.h"
+#include "API/RHI.h"
 #include "API/Semaphore.h"
 #include "API/Command.h"
+#include "API/StagingManager.h"
+#include <cstring>
 
 namespace pwgpu
 {
@@ -118,24 +122,111 @@ namespace pwgpu
         return false;
     }
 
-    // Records a clear covering only the explicitly enumerated (mip, layer) subresources
-    // for a single aspect. A render-view may span mips 0..N and layers 0..M, but only a
-    // subset of those individual subresources may actually be uninitialized (e.g. after
-    // CTS writes canary to some mips and discards others). Clearing the full bounding
-    // range in that case would destroy the canary data in the still-initialized mips —
-    // the defect that caused ~148 resource_init fails. This helper issues a single
-    // clearColorImage/clearDepthStencilImage with one VkImageSubresourceRange per
-    // (mip, layer) so unrelated subresources are untouched.
-    static void RecordPerSubresourceClear(pe::CommandBuffer *cmd, WGPUTextureImpl *tex,
-                                          const std::vector<std::pair<uint32_t, uint32_t>> &mipLayerPairs,
-                                          vk::ImageAspectFlags aspectMask)
+    static uint32_t MipExtent(uint32_t base, uint32_t mip)
     {
-        if (!cmd || !tex || !tex->image || tex->sampleCount > 1 || mipLayerPairs.empty())
+        return std::max(1u, base >> mip);
+    }
+
+    static vk::DeviceSize CompressedSubresourceByteSize(WGPUTextureImpl *tex, uint32_t mip)
+    {
+        uint32_t blockW = 1;
+        uint32_t blockH = 1;
+        GetTexelBlockSize(tex->format, blockW, blockH);
+        const uint32_t footprint = TexelBlockCopyFootprint(tex->format);
+        const uint32_t mipW = MipExtent(tex->size.width, mip);
+        const uint32_t mipH = MipExtent(tex->size.height, mip);
+        const uint32_t mipD = (tex->dimension == WGPUTextureDimension_3D)
+                                  ? MipExtent(tex->size.depthOrArrayLayers, mip)
+                                  : 1u;
+        const uint64_t blocksX = (static_cast<uint64_t>(mipW) + blockW - 1u) / blockW;
+        const uint64_t blocksY = (static_cast<uint64_t>(mipH) + blockH - 1u) / blockH;
+        return static_cast<vk::DeviceSize>(blocksX * blocksY * mipD * footprint);
+    }
+
+    static bool RecordCompressedZeroCopy(pe::CommandBuffer *cmd, WGPUTextureImpl *tex,
+                                         const std::vector<std::pair<uint32_t, uint32_t>> &mipLayerPairs,
+                                         vk::ImageAspectFlags aspectMask)
+    {
+        if (!pwgpu::IsCompressedFormat(tex->format) ||
+            aspectMask != vk::ImageAspectFlagBits::eColor)
+            return false;
+
+        if (mipLayerPairs.empty())
+            return true;
+
+        // Vulkan forbids vkCmdClearColorImage on compressed images, so zeroing happens via
+        // copyBufferToImage from a host-visible buffer of zeros. Sizing that buffer to the
+        // sum of all touched subresources scales with the full mip chain. Allocate exactly
+        // the largest single subresource instead and replay it via bufferOffset=0 for every
+        // region — the GPU reads the same zero range N times. Worst-case host memory drops
+        // from O(mip0 * 4/3) to O(mip0), and StagingManager::Allocate failure now affects
+        // only the largest subresource's footprint.
+        vk::DeviceSize maxBytes = 0;
+        for (const auto &p : mipLayerPairs)
+        {
+            const vk::DeviceSize bytes = CompressedSubresourceByteSize(tex, p.first);
+            if (bytes > maxBytes)
+                maxBytes = bytes;
+        }
+        if (maxBytes == 0)
+            return true;
+
+        pe::StagingAllocation alloc =
+            pe::RHII.GetStagingManager()->Allocate(static_cast<size_t>(maxBytes));
+        std::memset(alloc.data, 0, static_cast<size_t>(maxBytes));
+        alloc.buffer->Flush(static_cast<size_t>(maxBytes), 0);
+
+        std::vector<vk::BufferImageCopy2> regions;
+        regions.reserve(mipLayerPairs.size());
+        for (const auto &p : mipLayerPairs)
+        {
+            const uint32_t mip = p.first;
+            const uint32_t mipW = MipExtent(tex->size.width, mip);
+            const uint32_t mipH = MipExtent(tex->size.height, mip);
+            const uint32_t mipD = (tex->dimension == WGPUTextureDimension_3D)
+                                      ? MipExtent(tex->size.depthOrArrayLayers, mip)
+                                      : 1u;
+
+            vk::BufferImageCopy2 region{};
+            region.bufferOffset = 0;
+            region.bufferRowLength = 0;
+            region.bufferImageHeight = 0;
+            region.imageSubresource.aspectMask = vk::ImageAspectFlagBits::eColor;
+            region.imageSubresource.mipLevel = mip;
+            region.imageSubresource.baseArrayLayer =
+                (tex->dimension == WGPUTextureDimension_3D) ? 0u : p.second;
+            region.imageSubresource.layerCount = 1;
+            region.imageOffset = vk::Offset3D{0, 0, 0};
+            region.imageExtent = vk::Extent3D{mipW, mipH, mipD};
+            regions.push_back(region);
+        }
+
+        vk::CopyBufferToImageInfo2 copyInfo{};
+        copyInfo.srcBuffer = alloc.buffer->ApiHandle();
+        copyInfo.dstImage = tex->image->ApiHandle();
+        copyInfo.dstImageLayout = vk::ImageLayout::eTransferDstOptimal;
+        copyInfo.regionCount = static_cast<uint32_t>(regions.size());
+        copyInfo.pRegions = regions.data();
+        cmd->ApiHandle().copyBufferToImage2(copyInfo);
+
+        cmd->AddAfterWaitCallback([alloc = std::move(alloc)]() mutable
+                                  { pe::RHII.GetStagingManager()->SetUnused(alloc); });
+        return true;
+    }
+
+    // Records zeroing covering only the explicitly enumerated (mip, layer) subresources
+    // for a single aspect. Clear commands handle ordinary formats; compressed color
+    // images use zero-buffer copies because Vulkan forbids clearing compressed images.
+    void RecordZeroInitTextureSubresources(pe::CommandBuffer *cmd, WGPUTextureImpl *tex,
+                                           const std::vector<std::pair<uint32_t, uint32_t>> &mipLayerPairs,
+                                           vk::ImageAspectFlags aspectMask)
+    {
+        if (!cmd || !tex || !tex->image || mipLayerPairs.empty())
             return;
 
         // Compute bounding box for the layout transition. A layout transition on
-        // already-initialized neighbors is safe (data is preserved); only the actual
-        // clear commands below are data-destructive, and they list exact subresources.
+        // already-initialized neighbors is safe (data is preserved); only the actual zero
+        // operations below are data-destructive, and they list exact subresources.
         uint32_t minMip = UINT32_MAX, maxMip = 0, minLayer = UINT32_MAX, maxLayer = 0;
         for (const auto &p : mipLayerPairs)
         {
@@ -155,6 +246,9 @@ namespace pwgpu
         toTransfer.baseArrayLayer = minLayer;
         toTransfer.arrayLayers = maxLayer - minLayer + 1;
         cmd->ImageBarrier(toTransfer);
+
+        if (RecordCompressedZeroCopy(cmd, tex, mipLayerPairs, aspectMask))
+            return;
 
         std::vector<vk::ImageSubresourceRange> ranges;
         ranges.reserve(mipLayerPairs.size());
@@ -235,7 +329,7 @@ namespace pwgpu
                 else
                     aspectMask = vk::ImageAspectFlagBits::eColor;
 
-                RecordPerSubresourceClear(cmd, tex, toClear, aspectMask);
+                RecordZeroInitTextureSubresources(cmd, tex, toClear, aspectMask);
                 emittedAny = true;
 
                 for (const auto &p : toClear)
@@ -294,7 +388,7 @@ namespace pwgpu
                 aspectMask = vk::ImageAspectFlagBits::eStencil;
             else
                 aspectMask = vk::ImageAspectFlagBits::eColor;
-            RecordPerSubresourceClear(cmd, tex, entry.second, aspectMask);
+            RecordZeroInitTextureSubresources(cmd, tex, entry.second, aspectMask);
         }
         cmd->End();
         q->peQueue->Submit(1, &cmd, nullptr, nullptr);
@@ -419,6 +513,12 @@ extern "C"
 
         if (texture->invalid)
             return reportValidation("texture is invalid");
+
+        // W3C: createView on a destroyed texture is a validation error. Returning an
+        // invalid view (rather than dereferencing texture->image which is now null)
+        // also prevents downstream segfaults when the bad view is bound to a render pass.
+        if (texture->destroyed)
+            return reportValidation("texture is destroyed");
 
         WGPUTextureViewDescriptor resolved{};
         resolved.format = WGPUTextureFormat_Undefined;

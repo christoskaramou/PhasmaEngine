@@ -742,8 +742,33 @@ extern "C"
 
         vk::ImageAspectFlags vkAspect = pwgpu::ToVkAspect(destination->aspect, fmt);
 
+        // §23.x lazy initialization: full-coverage write replaces the whole subresource;
+        // partial write to an uninitialized subresource needs a zero-clear first so
+        // unwritten texels read as zero.
+        const uint32_t dstMipW = std::max(1u, destination->texture->size.width >> destination->mipLevel);
+        const uint32_t dstMipH = std::max(1u, destination->texture->size.height >> destination->mipLevel);
+        const uint32_t dstMipD = is3D ? std::max(1u, destination->texture->size.depthOrArrayLayers >> destination->mipLevel)
+                                      : destination->texture->size.depthOrArrayLayers;
+        const bool dstFullCoverage =
+            destination->origin.x == 0 && destination->origin.y == 0 && destination->origin.z == 0 &&
+            writeSize->width == dstMipW && writeSize->height == dstMipH &&
+            writeSize->depthOrArrayLayers == dstMipD;
+        const uint32_t dstBaseLayer = is3D ? 0u : destination->origin.z;
+        const uint32_t dstLayerCount = is3D ? 1u : writeSize->depthOrArrayLayers;
+        auto dstAspects = pwgpu::AspectsForView(fmt, destination->aspect);
+
         pe::CommandBuffer *cmd = queue->peQueue->AcquireCommandBuffer();
         cmd->Begin();
+
+        bool didLazyInit = false;
+        if (!dstFullCoverage &&
+            pwgpu::RangeHasAnyUninitialized(destination->texture, destination->mipLevel, 1,
+                                            dstBaseLayer, dstLayerCount, dstAspects))
+        {
+            pwgpu::LazyInitViewRangeOnEncoder(cmd, destination->texture, destination->mipLevel, 1,
+                                              dstBaseLayer, dstLayerCount, dstAspects);
+            didLazyInit = true;
+        }
 
         pe::ImageBarrierInfo barrier{};
         barrier.image = image;
@@ -756,12 +781,32 @@ extern "C"
         barrier.arrayLayers = is3D ? 1 : writeSize->depthOrArrayLayers;
         cmd->ImageBarrier(barrier);
 
-        pe::StagingAllocation alloc = pe::RHII.GetStagingManager()->Allocate(dataSize);
-        std::memcpy(alloc.data, data, dataSize);
-        alloc.buffer->Flush(dataSize, 0);
+        // Order the lazy-clear's transferWrite before the upcoming copy's transferWrite.
+        if (didLazyInit)
+        {
+            vk::MemoryBarrier2 mb{};
+            mb.srcStageMask = vk::PipelineStageFlagBits2::eTransfer;
+            mb.srcAccessMask = vk::AccessFlagBits2::eTransferWrite;
+            mb.dstStageMask = vk::PipelineStageFlagBits2::eTransfer;
+            mb.dstAccessMask = vk::AccessFlagBits2::eTransferWrite;
+            cmd->MemoryBarrier(mb);
+        }
+
+        // §19.3: dataLayout.offset is into the user's CPU buffer, not the GPU staging buffer.
+        // Copy from data+offset into staging at 0 so region.bufferOffset can stay 0 — this
+        // avoids leaking the user offset's alignment requirements to Vulkan (depth/stencil
+        // formats require GPU bufferOffset to be a multiple of 4 per
+        // VUID-VkCopyBufferToImageInfo2-dstImage-07978; CTS expects writeTexture to succeed
+        // for any user offset regardless of format).
+        const size_t userOffset = static_cast<size_t>(dataLayout->offset);
+        const size_t copyBytes = (dataSize > userOffset) ? (dataSize - userOffset) : 0;
+        pe::StagingAllocation alloc = pe::RHII.GetStagingManager()->Allocate(copyBytes);
+        if (copyBytes > 0)
+            std::memcpy(alloc.data, static_cast<const uint8_t *>(data) + userOffset, copyBytes);
+        alloc.buffer->Flush(copyBytes, 0);
 
         vk::BufferImageCopy2 region{};
-        region.bufferOffset = dataLayout->offset;
+        region.bufferOffset = 0;
         region.bufferRowLength = (footprint > 0 && dataLayout->bytesPerRow != WGPU_COPY_STRIDE_UNDEFINED)
                                      ? (dataLayout->bytesPerRow / footprint) * blockW
                                      : 0;
@@ -786,6 +831,12 @@ extern "C"
         copyInfo.pRegions = &region;
 
         cmd->ApiHandle().copyBufferToImage2(copyInfo);
+
+        // §23.x: dst (mip, [baseLayer..baseLayer+layerCount)) is fully initialized after
+        // the write — full coverage overwrites everything; partial writes were preceded
+        // by a lazy-clear.
+        pwgpu::MarkRangeInitialized(destination->texture, destination->mipLevel, 1,
+                                    dstBaseLayer, dstLayerCount, dstAspects);
 
         cmd->AddAfterWaitCallback([alloc = std::move(alloc)]() mutable
                                   { pe::RHII.GetStagingManager()->SetUnused(alloc); });

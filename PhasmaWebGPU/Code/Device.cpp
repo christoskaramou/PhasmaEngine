@@ -1223,48 +1223,25 @@ extern "C"
             pe::CommandBuffer *cmd = device->queue->peQueue->AcquireCommandBuffer();
             cmd->Begin();
 
-            pe::ImageBarrierInfo toTransfer{};
-            toTransfer.image = tex->image;
-            toTransfer.layout = vk::ImageLayout::eTransferDstOptimal;
-            toTransfer.stageFlags = vk::PipelineStageFlagBits2::eTransfer;
-            toTransfer.accessMask = vk::AccessFlagBits2::eTransferWrite;
-            toTransfer.baseMipLevel = 0;
-            toTransfer.mipLevels = ci.mipLevels;
-            toTransfer.baseArrayLayer = 0;
-            toTransfer.arrayLayers = ci.arrayLayers;
-            cmd->ImageBarrier(toTransfer);
+            std::vector<std::pair<uint32_t, uint32_t>> subresources;
+            subresources.reserve(static_cast<size_t>(ci.mipLevels) * ci.arrayLayers);
+            for (uint32_t mip = 0; mip < ci.mipLevels; ++mip)
+                for (uint32_t layer = 0; layer < ci.arrayLayers; ++layer)
+                    subresources.emplace_back(mip, layer);
 
-            vk::ImageSubresourceRange range{};
-            range.baseMipLevel = 0;
-            range.levelCount = ci.mipLevels;
-            range.baseArrayLayer = 0;
-            range.layerCount = ci.arrayLayers;
-
+            vk::ImageAspectFlags aspect{};
             if (pwgpu::IsDepthStencilFormat(fmt))
             {
-                vk::ImageAspectFlags aspect{};
                 if (pwgpu::HasDepthAspect(fmt))
                     aspect |= vk::ImageAspectFlagBits::eDepth;
                 if (pwgpu::HasStencilAspect(fmt))
                     aspect |= vk::ImageAspectFlagBits::eStencil;
-                range.aspectMask = aspect;
-                vk::ClearDepthStencilValue dsValue{0.0f, 0u};
-                cmd->ApiHandle().clearDepthStencilImage(tex->image->ApiHandle(),
-                                                        vk::ImageLayout::eTransferDstOptimal,
-                                                        &dsValue, 1, &range);
             }
             else
             {
-                range.aspectMask = vk::ImageAspectFlagBits::eColor;
-                vk::ClearColorValue colorValue{};
-                colorValue.float32[0] = 0.0f;
-                colorValue.float32[1] = 0.0f;
-                colorValue.float32[2] = 0.0f;
-                colorValue.float32[3] = 0.0f;
-                cmd->ApiHandle().clearColorImage(tex->image->ApiHandle(),
-                                                 vk::ImageLayout::eTransferDstOptimal,
-                                                 &colorValue, 1, &range);
+                aspect = vk::ImageAspectFlagBits::eColor;
             }
+            pwgpu::RecordZeroInitTextureSubresources(cmd, tex, subresources, aspect);
 
             cmd->End();
             device->queue->peQueue->Submit(1, &cmd, nullptr, nullptr);
@@ -4168,9 +4145,15 @@ extern "C"
         if (descriptor->primitive.unclippedDepth &&
             DeviceHasFeature(device, WGPUFeatureName_DepthClipControl))
         {
+            // W3C: unclippedDepth=true disables clipping at the near/far planes and
+            // clamps the stored depth to the viewport [minDepth, maxDepth] range.
+            // Vulkan: depthClipEnable=false (via VK_EXT_depth_clip_enable) disables
+            // clipping; depthClampEnable=true clamps the rasterized depth to the
+            // viewport range. Both are required to match WebGPU semantics.
             depthClipState.depthClipEnable = VK_FALSE;
             depthClipState.pNext = rasterState.pNext;
             rasterState.pNext = &depthClipState;
+            rasterState.depthClampEnable = VK_TRUE;
         }
 
         vk::PipelineMultisampleStateCreateInfo multisampleState{};

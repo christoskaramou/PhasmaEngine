@@ -136,6 +136,9 @@ extern "C"
             return;
         sm->reflection = WGPUShaderReflectionMeta{};
         sm->reflection.present = true;
+        // Reflection is authoritative when present (custom WGSL entry-point names survive
+        // even if the naga-panic fallback substitutes a "main"-only placeholder SPIR-V).
+        // AddEntryPointUsed will repopulate sm->entryPoints from the reflection side-channel.
         sm->entryPoints.clear();
     }
 
@@ -173,7 +176,9 @@ extern "C"
         }
         sm->reflection.entryPoints.push_back(std::move(ep));
 
-        // SPIR-V ExecutionModel: Vertex=0, Fragment=4, GLCompute=5.
+        // Mirror to sm->entryPoints so pipeline creation can resolve custom WGSL entry
+        // names even when the SPIR-V parse only sees a "main" placeholder (naga panic
+        // fallback path). SPIR-V ExecutionModel: Vertex=0, Fragment=4, GLCompute=5.
         WGPUShaderModuleImpl::EntryPoint modEp;
         modEp.name = name;
         std::string stageStr(stage);

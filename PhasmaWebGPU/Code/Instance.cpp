@@ -295,18 +295,23 @@ extern "C"
         vkGetPhysicalDeviceProperties(vkGpu, &adapter->vkProps);
         vkGetPhysicalDeviceFeatures(vkGpu, &adapter->vkFeatures);
 
-        // Extended caps outside core VkPhysicalDeviceFeatures (shaderFloat16, depthClipEnable).
+        // Extended caps outside core VkPhysicalDeviceFeatures (shaderFloat16,
+        // 16-bit storage/input-output, depthClipEnable).
         // Safe to chain unsupported extension structs — the driver leaves the bool as 0.
+        VkPhysicalDeviceVulkan11Features vk11Features{};
+        vk11Features.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_1_FEATURES;
         VkPhysicalDeviceVulkan12Features vk12Features{};
         vk12Features.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_2_FEATURES;
         VkPhysicalDeviceDepthClipEnableFeaturesEXT depthClipFeatures{};
         depthClipFeatures.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DEPTH_CLIP_ENABLE_FEATURES_EXT;
+        vk11Features.pNext = &vk12Features;
         vk12Features.pNext = &depthClipFeatures;
         VkPhysicalDeviceFeatures2 features2{};
         features2.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2;
-        features2.pNext = &vk12Features;
+        features2.pNext = &vk11Features;
         vkGetPhysicalDeviceFeatures2(vkGpu, &features2);
         adapter->chainedCaps.shaderFloat16 = vk12Features.shaderFloat16 != 0;
+        adapter->chainedCaps.storageInputOutput16 = vk11Features.storageInputOutput16 != 0;
         adapter->chainedCaps.depthClipEnable = depthClipFeatures.depthClipEnable != 0;
 
         VkPhysicalDeviceVulkan11Properties vk11Props{};

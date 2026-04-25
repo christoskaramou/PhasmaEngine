@@ -218,7 +218,10 @@ namespace
         pwgpu::GetTexelBlockSize(tex->format, blockW, blockH);
         if (pwgpu::HasDepthAspect(tex->format) || pwgpu::HasStencilAspect(tex->format))
         {
-            if (!IsFullMipRegion(tex, mipLevel, origin, copySize))
+            // W3C: DS copies require the per-subresource 2D extent to fully cover the mip;
+            // origin.z and copySize.depthOrArrayLayers may be any in-bounds values.
+            if (origin.x != 0 || origin.y != 0 ||
+                copySize.width != mip.width || copySize.height != mip.height)
                 return false;
         }
         // Promote to uint64 before summing so that pathological inputs (e.g. a
@@ -380,11 +383,19 @@ namespace
             return true;
         if (!(pwgpu::HasDepthAspect(tex->format) || pwgpu::HasStencilAspect(tex->format)))
             return true;
-        if (IsFullMipRegion(tex, mipLevel, origin, copySize))
-            return true;
+        // W3C: depth-or-stencil copies require the per-subresource 2D extent to fully cover
+        // the mip. Layers/depth slices are independent subresources — origin.z and
+        // copySize.depthOrArrayLayers may be any in-bounds values (one or many layers).
+        if (mipLevel < tex->mipLevelCount)
+        {
+            WGPUExtent3D mip = MipExtent(tex, mipLevel);
+            if (origin.x == 0 && origin.y == 0 &&
+                copySize.width == mip.width && copySize.height == mip.height)
+                return true;
+        }
         std::string msg = std::string(apiName) + ": " + sideName +
-                          " depth-or-stencil copy must span the entire mip (origin==(0,0,0), "
-                          "size==mip extent)";
+                          " depth-or-stencil copy must span the entire 2D extent of the mip "
+                          "(origin.x==origin.y==0, copySize.width==mipWidth, copySize.height==mipHeight)";
         ReportEncoderValidation(enc, msg.c_str());
         return false;
     }
@@ -1819,9 +1830,9 @@ extern "C"
         region.imageExtent = vk::Extent3D{copySize->width, copySize->height,
                                           (dst->texture->dimension == WGPUTextureDimension_3D) ? copySize->depthOrArrayLayers : 1};
 
-        // §23.x: if dst subresource is uninitialized AND copy doesn't fully cover the
-        // mip, lazy-clear it before the partial write so unwritten texels read as zero.
-        // After the copy: if full coverage, mark dst initialized.
+        // §23.x lazy initialization: partial writes to an uninitialized subresource must
+        // first zero-clear it so unwritten texels read as zero. Full-coverage writes
+        // skip the clear because the copy itself overwrites everything.
         const bool dstFullCoverage = IsFullMipRegion(dst->texture, dst->mipLevel, dst->origin, *copySize);
         auto dstAspects = pwgpu::AspectsForView(dst->texture->format, dst->aspect);
         const uint32_t dstBaseLayer = (dst->texture->dimension == WGPUTextureDimension_3D) ? 0u : dst->origin.z;
@@ -1859,6 +1870,13 @@ extern "C"
         copyInfo.pRegions = &region;
 
         enc->cmd->ApiHandle().copyBufferToImage2(copyInfo);
+
+        // §23.x: post-copy the touched (mip, [baseLayer..baseLayer+layerCount)) range is
+        // fully initialized — full-coverage writes overwrite it; partial writes follow a
+        // lazy-clear that zeroed the rest.
+        pwgpu::MarkRangeInitialized(dst->texture, dst->mipLevel, 1,
+                                    dstBaseLayer, dstLayerCount, dstAspects);
+
         if (src->buffer)
             enc->retained.usedBuffers.push_back(src->buffer);
         if (dst->texture)
@@ -2238,6 +2256,19 @@ extern "C"
                                               srcBaseLayer, srcLayerCount, srcAspects);
         }
 
+        // §23.x: dst-side lazy init for partial writes. Full-coverage overwrites skip the
+        // clear; partial writes need a zero-clear first so unwritten texels read as zero.
+        const bool dstFullCoverage = IsFullMipRegion(dst->texture, dst->mipLevel, dst->origin, *copySize);
+        const uint32_t dstBaseLayer = dst3D ? 0u : dst->origin.z;
+        const uint32_t dstLayerCount = dst3D ? 1u : copySize->depthOrArrayLayers;
+        auto dstAspects = pwgpu::AspectsForView(dst->texture->format, dst->aspect);
+        if (!dstFullCoverage &&
+            pwgpu::RangeHasAnyUninitialized(dst->texture, dst->mipLevel, 1, dstBaseLayer, dstLayerCount, dstAspects))
+        {
+            pwgpu::LazyInitViewRangeOnEncoder(enc->cmd, dst->texture, dst->mipLevel, 1,
+                                              dstBaseLayer, dstLayerCount, dstAspects);
+        }
+
         vk::ImageCopy2 region{};
         region.srcSubresource.aspectMask = srcAspect;
         region.srcSubresource.mipLevel = src->mipLevel;
@@ -2284,6 +2315,13 @@ extern "C"
         copyInfo.pRegions = &region;
 
         enc->cmd->ApiHandle().copyImage2(copyInfo);
+
+        // §23.x: dst (mip, [baseLayer..baseLayer+layerCount)) is fully initialized after
+        // the copy — full coverage overwrites everything; partial writes were preceded by
+        // a lazy-clear.
+        pwgpu::MarkRangeInitialized(dst->texture, dst->mipLevel, 1,
+                                    dstBaseLayer, dstLayerCount, dstAspects);
+
         if (src->texture)
             enc->retained.usedTextures.push_back(src->texture);
         if (dst->texture)

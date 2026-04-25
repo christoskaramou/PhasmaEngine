@@ -34,6 +34,16 @@ namespace pe
 
     CommandBuffer::~CommandBuffer()
     {
+        // Pending after-wait callbacks here mean a recording was never submitted+waited
+        // (encoder dropped, pool teardown, validation rejection). The GPU never observed
+        // the work, so it's safe — and necessary — to run them now to release any
+        // captured staging allocations or refcounts.
+        if (!m_afterWaitCallbacks.IsEmpty())
+        {
+            m_afterWaitCallbacks.ReverseInvoke();
+            m_afterWaitCallbacks.Clear();
+        }
+
         Event::Destroy(m_event);
 
 #if PE_DEBUG_MODE
@@ -82,6 +92,17 @@ namespace pe
         m_boundVertexBufferBindingCount = UINT32_MAX;
         m_boundIndexBuffer = nullptr;
         m_boundIndexBufferOffset = -1;
+
+        // A buffer reaching Reset() with pending callbacks means the prior recording was
+        // abandoned without Wait() — never submitted, or submitted but never waited and
+        // now being recycled. Either way the GPU isn't using whatever those callbacks
+        // hold (staging allocations, refcounts), so run them before reuse to avoid
+        // leaking pinned resources into the next recording's lifetime.
+        if (!m_afterWaitCallbacks.IsEmpty())
+        {
+            m_afterWaitCallbacks.ReverseInvoke();
+            m_afterWaitCallbacks.Clear();
+        }
 
         PE_ERROR_IF(!(m_commandPool->GetFlags() & vk::CommandPoolCreateFlagBits::eResetCommandBuffer), "CommandBuffer::Reset: CommandPool does not have the reset flag!");
         m_apiHandle.reset();

@@ -7,6 +7,7 @@
 struct WGPUAdapterChainedCaps
 {
     bool shaderFloat16 = false;
+    bool storageInputOutput16 = false;
     bool depthClipEnable = false;
     bool subgroups = false;
     uint32_t subgroupMinSize = 4;

@@ -33,7 +33,7 @@ namespace
         case WGPUFeatureName_ClipDistances:
             return a.vkFeatures.shaderClipDistance != 0;
         case WGPUFeatureName_ShaderF16:
-            return a.chainedCaps.shaderFloat16;
+            return a.chainedCaps.shaderFloat16 && a.chainedCaps.storageInputOutput16;
         case WGPUFeatureName_DepthClipControl:
             return a.chainedCaps.depthClipEnable;
         case WGPUFeatureName_BGRA8UnormStorage:
