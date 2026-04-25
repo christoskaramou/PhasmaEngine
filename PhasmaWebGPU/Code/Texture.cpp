@@ -514,12 +514,6 @@ extern "C"
         if (texture->invalid)
             return reportValidation("texture is invalid");
 
-        // W3C: createView on a destroyed texture is a validation error. Returning an
-        // invalid view (rather than dereferencing texture->image which is now null)
-        // also prevents downstream segfaults when the bad view is bound to a render pass.
-        if (texture->destroyed)
-            return reportValidation("texture is destroyed");
-
         WGPUTextureViewDescriptor resolved{};
         resolved.format = WGPUTextureFormat_Undefined;
         resolved.dimension = WGPUTextureViewDimension_Undefined;
@@ -795,10 +789,21 @@ extern "C"
             view->renderExtent = {mipW, mipH, 1};
         }
 
-        if (texture->image)
+        // Vulkan rejects vkCreateImageView on an image whose usage has no view-usable bits
+        // (e.g. a copy-only WebGPU texture). The WebGPU view object is still legal — it just
+        // can't be bound to anything — so skip the native view creation in that case.
+        constexpr WGPUTextureUsage kVkViewableUsages =
+            WGPUTextureUsage_TextureBinding | WGPUTextureUsage_StorageBinding |
+            WGPUTextureUsage_RenderAttachment;
+        if (texture->image && (viewUsage & kVkViewableUsages) != 0)
         {
             VkFormat vkFmt;
-            if (resolved.format == texture->format)
+            // Combined depth-stencil VkImages aren't created with MUTABLE_FORMAT_BIT,
+            // so an aspect-only view (e.g. depth24plus over depth24plus-stencil8)
+            // must keep the image's format; aspectMask alone selects the plane.
+            const bool combinedDS =
+                pwgpu::HasDepthAspect(texture->format) && pwgpu::HasStencilAspect(texture->format);
+            if (resolved.format == texture->format || combinedDS)
                 vkFmt = static_cast<VkFormat>(texture->image->GetFormat());
             else
                 vkFmt = pwgpu::ToVkFormat(resolved.format);
