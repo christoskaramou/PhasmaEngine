@@ -254,6 +254,19 @@ namespace pe
         std::unordered_map<std::string, uint32_t> namedTextureIndices;
 
     private:
+        // Centralized dual-write: keeps the legacy std::optional override and the
+        // shader-driven m_paramOverrides map in sync, and flips dirty in one place.
+        template <typename T, typename U>
+        void SetScalarOverride(std::optional<T> &opt, const std::string &paramKey, const U &value);
+        template <typename T>
+        void ClearScalarOverride(std::optional<T> &opt, const std::string &paramKey);
+        // Resets the legacy optional that mirrors paramKey, if any. Called from
+        // ClearParam so the byte-address reset path also drops the legacy override.
+        void ResetOptionalForParamKey(const std::string &paramKey);
+        // Mirror of ResetOptionalForParamKey for SetParam: writes the variant value
+        // into the matching legacy optional when the type matches the expected one.
+        void SetOptionalForParamKey(const std::string &paramKey, const MaterialParamValue &value);
+
         Material *m_parent;
 
         std::optional<vec4> m_baseColorOverride;

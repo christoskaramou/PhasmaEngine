@@ -232,61 +232,146 @@ namespace pe
     {
     }
 
+    template <typename T, typename U>
+    void MaterialInstance::SetScalarOverride(std::optional<T> &opt, const std::string &paramKey, const U &value)
+    {
+        opt = value;
+        m_paramOverrides[paramKey] = value;
+        dirty = true;
+    }
+
+    template <typename T>
+    void MaterialInstance::ClearScalarOverride(std::optional<T> &opt, const std::string &paramKey)
+    {
+        opt.reset();
+        m_paramOverrides.erase(paramKey);
+        dirty = true;
+    }
+
+    void MaterialInstance::ResetOptionalForParamKey(const std::string &paramKey)
+    {
+        if (paramKey == "baseColorFactor")
+            m_baseColorOverride.reset();
+        else if (paramKey == "metallic")
+            m_metallicOverride.reset();
+        else if (paramKey == "roughness")
+            m_roughnessOverride.reset();
+        else if (paramKey == "alphaCutoff")
+            m_alphaCutoffOverride.reset();
+        else if (paramKey == "emissiveFactor")
+            m_emissiveOverride.reset();
+        else if (paramKey == "occlusionStrength")
+            m_occlusionStrengthOverride.reset();
+        else if (paramKey == "transmissionFactor")
+            m_transmissionFactorOverride.reset();
+        else if (paramKey == "thicknessFactor")
+            m_thicknessFactorOverride.reset();
+        else if (paramKey == "attenuationDistance")
+            m_attenuationDistanceOverride.reset();
+        else if (paramKey == "ior")
+            m_iorOverride.reset();
+        else if (paramKey == "attenuationColor")
+            m_attenuationColorOverride.reset();
+    }
+
+    void MaterialInstance::SetOptionalForParamKey(const std::string &paramKey, const MaterialParamValue &value)
+    {
+        if (auto *vp = std::get_if<vec4>(&value))
+        {
+            if (paramKey == "baseColorFactor")
+                m_baseColorOverride = *vp;
+        }
+        else if (auto *vp = std::get_if<vec3>(&value))
+        {
+            if (paramKey == "emissiveFactor")
+                m_emissiveOverride = *vp;
+            else if (paramKey == "attenuationColor")
+                m_attenuationColorOverride = *vp;
+        }
+        else if (auto *fp = std::get_if<float>(&value))
+        {
+            if (paramKey == "metallic")
+                m_metallicOverride = *fp;
+            else if (paramKey == "roughness")
+                m_roughnessOverride = *fp;
+            else if (paramKey == "alphaCutoff")
+                m_alphaCutoffOverride = *fp;
+            else if (paramKey == "occlusionStrength")
+                m_occlusionStrengthOverride = *fp;
+            else if (paramKey == "transmissionFactor")
+                m_transmissionFactorOverride = *fp;
+            else if (paramKey == "thicknessFactor")
+                m_thicknessFactorOverride = *fp;
+            else if (paramKey == "attenuationDistance")
+                m_attenuationDistanceOverride = *fp;
+            else if (paramKey == "ior")
+                m_iorOverride = *fp;
+        }
+    }
+
     void MaterialInstance::SetBaseColorFactor(const vec4 &v)
     {
-        m_baseColorOverride = v;
+        SetScalarOverride(m_baseColorOverride, "baseColorFactor", v);
     }
     void MaterialInstance::SetMetallic(float v)
     {
-        m_metallicOverride = v;
+        SetScalarOverride(m_metallicOverride, "metallic", v);
     }
     void MaterialInstance::SetRoughness(float v)
     {
-        m_roughnessOverride = v;
+        SetScalarOverride(m_roughnessOverride, "roughness", v);
     }
     void MaterialInstance::SetAlphaCutoff(float v)
     {
-        m_alphaCutoffOverride = v;
+        SetScalarOverride(m_alphaCutoffOverride, "alphaCutoff", v);
     }
     void MaterialInstance::SetEmissiveFactor(const vec3 &v)
     {
-        m_emissiveOverride = v;
+        SetScalarOverride(m_emissiveOverride, "emissiveFactor", v);
     }
     void MaterialInstance::SetOcclusionStrength(float v)
     {
-        m_occlusionStrengthOverride = v;
-    }
-    void MaterialInstance::SetNormalScale(float v)
-    {
-        m_normalScaleOverride = v;
+        SetScalarOverride(m_occlusionStrengthOverride, "occlusionStrength", v);
     }
     void MaterialInstance::SetTransmissionFactor(float v)
     {
-        m_transmissionFactorOverride = v;
+        SetScalarOverride(m_transmissionFactorOverride, "transmissionFactor", v);
     }
     void MaterialInstance::SetThicknessFactor(float v)
     {
-        m_thicknessFactorOverride = v;
+        SetScalarOverride(m_thicknessFactorOverride, "thicknessFactor", v);
     }
     void MaterialInstance::SetAttenuationDistance(float v)
     {
-        m_attenuationDistanceOverride = v;
+        SetScalarOverride(m_attenuationDistanceOverride, "attenuationDistance", v);
     }
     void MaterialInstance::SetIor(float v)
     {
-        m_iorOverride = v;
+        SetScalarOverride(m_iorOverride, "ior", v);
     }
     void MaterialInstance::SetAttenuationColor(const vec3 &v)
     {
-        m_attenuationColorOverride = v;
+        SetScalarOverride(m_attenuationColorOverride, "attenuationColor", v);
     }
+
+    // normalScale is packed into the legacy MaterialGpuData factors matrix
+    // (see Material::ToFactors) and is not a top-level scalar in any byte-address
+    // shader layout, so it has no m_paramOverrides key.
+    void MaterialInstance::SetNormalScale(float v)
+    {
+        m_normalScaleOverride = v;
+        dirty = true;
+    }
+    // RenderType / TextureMask drive render-path selection and aren't byte-buffer scalars.
     void MaterialInstance::SetRenderType(RenderType type)
     {
         m_renderTypeOverride = type;
+        dirty = true;
     }
     void MaterialInstance::SetTextureMask(uint32_t mask)
     {
         m_textureMaskOverride = mask;
+        dirty = true;
     }
 
     void MaterialInstance::SetTexture(TextureType slot, ResourceHandle<Image> img)
@@ -296,19 +381,20 @@ namespace pe
             return;
         m_textureOverrides[idx] = img;
         m_hasTextureOverride[idx] = true;
+        dirty = true;
     }
 
     void MaterialInstance::ClearBaseColorOverride()
     {
-        m_baseColorOverride.reset();
+        ClearScalarOverride(m_baseColorOverride, "baseColorFactor");
     }
     void MaterialInstance::ClearMetallicOverride()
     {
-        m_metallicOverride.reset();
+        ClearScalarOverride(m_metallicOverride, "metallic");
     }
     void MaterialInstance::ClearRoughnessOverride()
     {
-        m_roughnessOverride.reset();
+        ClearScalarOverride(m_roughnessOverride, "roughness");
     }
 
     void MaterialInstance::ClearTextureOverride(TextureType slot)
@@ -316,6 +402,7 @@ namespace pe
         int idx = static_cast<int>(slot);
         m_textureOverrides[idx] = ResourceHandle<Image>();
         m_hasTextureOverride[idx] = false;
+        dirty = true;
     }
 
     bool MaterialInstance::HasOverrides() const
@@ -440,11 +527,15 @@ namespace pe
     void MaterialInstance::SetParam(const std::string &name, const MaterialParamValue &value)
     {
         m_paramOverrides[name] = value;
+        SetOptionalForParamKey(name, value);
+        dirty = true;
     }
 
     void MaterialInstance::ClearParam(const std::string &name)
     {
         m_paramOverrides.erase(name);
+        ResetOptionalForParamKey(name);
+        dirty = true;
     }
 
     bool MaterialInstance::HasParamOverride(const std::string &name) const
@@ -468,11 +559,13 @@ namespace pe
     void MaterialInstance::SetNamedTexture(const std::string &name, ResourceHandle<Image> img)
     {
         m_namedTextureOverrides[name] = img;
+        dirty = true;
     }
 
     void MaterialInstance::ClearNamedTexture(const std::string &name)
     {
         m_namedTextureOverrides.erase(name);
+        dirty = true;
     }
 
     Image *MaterialInstance::GetNamedTexture(const std::string &name) const
