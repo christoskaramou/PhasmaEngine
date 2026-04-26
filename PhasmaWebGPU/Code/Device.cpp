@@ -22,9 +22,132 @@
 
 namespace
 {
+    WGPUTextureFormat TextureFormatFromReflectionString(const std::string &format)
+    {
+        if (format == "r8unorm")
+            return WGPUTextureFormat_R8Unorm;
+        if (format == "r8snorm")
+            return WGPUTextureFormat_R8Snorm;
+        if (format == "r8uint")
+            return WGPUTextureFormat_R8Uint;
+        if (format == "r8sint")
+            return WGPUTextureFormat_R8Sint;
+        if (format == "r16uint")
+            return WGPUTextureFormat_R16Uint;
+        if (format == "r16sint")
+            return WGPUTextureFormat_R16Sint;
+        if (format == "r16float")
+            return WGPUTextureFormat_R16Float;
+        if (format == "rg8unorm")
+            return WGPUTextureFormat_RG8Unorm;
+        if (format == "rg8snorm")
+            return WGPUTextureFormat_RG8Snorm;
+        if (format == "rg8uint")
+            return WGPUTextureFormat_RG8Uint;
+        if (format == "rg8sint")
+            return WGPUTextureFormat_RG8Sint;
+        if (format == "r32uint")
+            return WGPUTextureFormat_R32Uint;
+        if (format == "r32sint")
+            return WGPUTextureFormat_R32Sint;
+        if (format == "r32float")
+            return WGPUTextureFormat_R32Float;
+        if (format == "rg16uint")
+            return WGPUTextureFormat_RG16Uint;
+        if (format == "rg16sint")
+            return WGPUTextureFormat_RG16Sint;
+        if (format == "rg16float")
+            return WGPUTextureFormat_RG16Float;
+        if (format == "rgba8unorm")
+            return WGPUTextureFormat_RGBA8Unorm;
+        if (format == "rgba8snorm")
+            return WGPUTextureFormat_RGBA8Snorm;
+        if (format == "rgba8uint")
+            return WGPUTextureFormat_RGBA8Uint;
+        if (format == "rgba8sint")
+            return WGPUTextureFormat_RGBA8Sint;
+        if (format == "bgra8unorm")
+            return WGPUTextureFormat_BGRA8Unorm;
+        if (format == "rgb10a2uint")
+            return WGPUTextureFormat_RGB10A2Uint;
+        if (format == "rgb10a2unorm")
+            return WGPUTextureFormat_RGB10A2Unorm;
+        if (format == "rg11b10ufloat")
+            return WGPUTextureFormat_RG11B10Ufloat;
+        if (format == "rg32uint")
+            return WGPUTextureFormat_RG32Uint;
+        if (format == "rg32sint")
+            return WGPUTextureFormat_RG32Sint;
+        if (format == "rg32float")
+            return WGPUTextureFormat_RG32Float;
+        if (format == "rgba16uint")
+            return WGPUTextureFormat_RGBA16Uint;
+        if (format == "rgba16sint")
+            return WGPUTextureFormat_RGBA16Sint;
+        if (format == "rgba16float")
+            return WGPUTextureFormat_RGBA16Float;
+        if (format == "rgba32uint")
+            return WGPUTextureFormat_RGBA32Uint;
+        if (format == "rgba32sint")
+            return WGPUTextureFormat_RGBA32Sint;
+        if (format == "rgba32float")
+            return WGPUTextureFormat_RGBA32Float;
+        if (format == "r16unorm")
+            return WGPUTextureFormat_R16Unorm;
+        if (format == "r16snorm")
+            return WGPUTextureFormat_R16Snorm;
+        if (format == "rg16unorm")
+            return WGPUTextureFormat_RG16Unorm;
+        if (format == "rg16snorm")
+            return WGPUTextureFormat_RG16Snorm;
+        if (format == "rgba16unorm")
+            return WGPUTextureFormat_RGBA16Unorm;
+        if (format == "rgba16snorm")
+            return WGPUTextureFormat_RGBA16Snorm;
+        return WGPUTextureFormat_Undefined;
+    }
+
+    bool PopulateStaticallyUsed(const WGPUShaderModuleImpl *module,
+                                const std::string &entryPoint,
+                                std::set<pwgpu::BindingKey> &usedOut,
+                                std::set<std::string> *usedNamesOut = nullptr,
+                                std::set<pwgpu::BindingResourceKey> *usedResourcesOut = nullptr,
+                                pwgpu::BindingTextureFormatMap *storageTextureFormatsOut = nullptr)
+    {
+        if (!module || !module->reflection.present)
+            return false;
+        for (const auto &ep : module->reflection.entryPoints)
+        {
+            if (ep.name == entryPoint)
+            {
+                for (const auto &b : ep.staticallyUsed)
+                {
+                    usedOut.insert({b.group, b.binding});
+                    if (usedNamesOut && !b.name.empty())
+                        usedNamesOut->insert(b.name);
+                    if (usedResourcesOut && !b.kind.empty())
+                        usedResourcesOut->insert({b.group, b.binding, b.kind});
+                    if (storageTextureFormatsOut && b.kind == "storage-texture" &&
+                        !b.format.empty())
+                    {
+                        WGPUTextureFormat format =
+                            TextureFormatFromReflectionString(b.format);
+                        if (format != WGPUTextureFormat_Undefined)
+                            (*storageTextureFormatsOut)[{b.group, b.binding}] = format;
+                    }
+                }
+                return true;
+            }
+        }
+        return false;
+    }
+
     void AttachReflectionToStage(pwgpu::LayoutCompatStageInput &stage,
                                  const WGPUShaderModuleImpl *module,
                                  std::set<pwgpu::BindingKey> &usedOut,
+                                 std::set<std::string> &usedNamesOut,
+                                 std::set<pwgpu::BindingResourceKey> &usedResourcesOut,
+                                 pwgpu::BindingTextureFormatMap &storageTextureFormatsOut,
                                  std::set<pwgpu::BindingKey> &cmpOut,
                                  const std::string &entryPoint)
     {
@@ -32,17 +155,35 @@ namespace
             return;
         for (const auto &b : module->reflection.comparisonSamplers)
             cmpOut.insert({b.group, b.binding});
-        for (const auto &ep : module->reflection.entryPoints)
-        {
-            if (ep.name == entryPoint)
-            {
-                for (const auto &b : ep.staticallyUsed)
-                    usedOut.insert({b.group, b.binding});
-                break;
-            }
-        }
+        stage.staticallyUsedAuthoritative =
+            PopulateStaticallyUsed(module, entryPoint, usedOut, &usedNamesOut, &usedResourcesOut,
+                                   &storageTextureFormatsOut);
         stage.staticallyUsed = &usedOut;
+        stage.staticallyUsedNames = &usedNamesOut;
+        stage.staticallyUsedResources = &usedResourcesOut;
+        stage.storageTextureFormats = &storageTextureFormatsOut;
         stage.comparisonSamplers = &cmpOut;
+    }
+
+    // Same as the LayoutCompatStageInput variant but only sets
+    // staticallyUsed (auto-layout doesn't need comparisonSamplers).
+    void AttachReflectionToStage(pwgpu::AutoLayoutStageInput &stage,
+                                 const WGPUShaderModuleImpl *module,
+                                 std::set<pwgpu::BindingKey> &usedOut,
+                                 std::set<std::string> &usedNamesOut,
+                                 std::set<pwgpu::BindingResourceKey> &usedResourcesOut,
+                                 pwgpu::BindingTextureFormatMap &storageTextureFormatsOut,
+                                 const std::string &entryPoint)
+    {
+        if (!module || !module->reflection.present)
+            return;
+        stage.staticallyUsedAuthoritative =
+            PopulateStaticallyUsed(module, entryPoint, usedOut, &usedNamesOut, &usedResourcesOut,
+                                   &storageTextureFormatsOut);
+        stage.staticallyUsed = &usedOut;
+        stage.staticallyUsedNames = &usedNamesOut;
+        stage.staticallyUsedResources = &usedResourcesOut;
+        stage.storageTextureFormats = &storageTextureFormatsOut;
     }
 
     // §10.3.2.3 pipeline-overridable constants validation.
@@ -3015,6 +3156,12 @@ extern "C"
             stages[0].entryPoint = entryPointName;
             stages[0].executionModel = kExecCompute;
             stages[0].visibility = WGPUShaderStage_Compute;
+            std::set<pwgpu::BindingKey> csUsedAuto;
+            std::set<std::string> csUsedNamesAuto;
+            std::set<pwgpu::BindingResourceKey> csUsedResourcesAuto;
+            pwgpu::BindingTextureFormatMap csStorageFormatsAuto;
+            AttachReflectionToStage(stages[0], shaderModule, csUsedAuto, csUsedNamesAuto,
+                                    csUsedResourcesAuto, csStorageFormatsAuto, entryPointName);
             std::string errMsg;
             pipeLayout = pwgpu::BuildAutoPipelineLayout(device, stages, errMsg);
             if (!pipeLayout)
@@ -3033,7 +3180,11 @@ extern "C"
             compatStages[0].executionModel = kExecCompute;
             compatStages[0].stage = WGPUShaderStage_Compute;
             std::set<pwgpu::BindingKey> csUsed, csCmp;
-            AttachReflectionToStage(compatStages[0], shaderModule, csUsed, csCmp, entryPointName);
+            std::set<std::string> csUsedNames;
+            std::set<pwgpu::BindingResourceKey> csUsedResources;
+            pwgpu::BindingTextureFormatMap csStorageFormats;
+            AttachReflectionToStage(compatStages[0], shaderModule, csUsed, csUsedNames,
+                                    csUsedResources, csStorageFormats, csCmp, entryPointName);
             std::string compatErr = pwgpu::ValidateExplicitLayoutCompat(pipeLayout, compatStages);
             if (!compatErr.empty())
             {
@@ -3437,6 +3588,7 @@ extern "C"
         bool hasFragment = (descriptor->fragment != nullptr);
         WGPUShaderModuleImpl *fragModuleSrc = nullptr;
         std::string fragEntry;
+        pwgpu::FragmentOutputBuiltins fragBuiltins{};
         if (hasFragment)
         {
             fragModuleSrc = descriptor->fragment->module;
@@ -3467,7 +3619,6 @@ extern "C"
                 }
             }
 
-            pwgpu::FragmentOutputBuiltins fragBuiltins;
             {
                 std::string bErr;
                 pwgpu::GetFragmentOutputBuiltins(fragModuleSrc->spirv, fragEntry, fragBuiltins, bErr);
@@ -3507,6 +3658,16 @@ extern "C"
                 stageInputs.back().executionModel = kExecFragment;
                 stageInputs.back().visibility = WGPUShaderStage_Fragment;
             }
+            std::set<pwgpu::BindingKey> vsUsedAuto, fsUsedAuto;
+            std::set<std::string> vsUsedNamesAuto, fsUsedNamesAuto;
+            std::set<pwgpu::BindingResourceKey> vsUsedResourcesAuto, fsUsedResourcesAuto;
+            pwgpu::BindingTextureFormatMap vsStorageFormatsAuto, fsStorageFormatsAuto;
+            AttachReflectionToStage(stageInputs[0], vertModule, vsUsedAuto, vsUsedNamesAuto,
+                                    vsUsedResourcesAuto, vsStorageFormatsAuto, vertEntry);
+            if (hasFragment)
+                AttachReflectionToStage(stageInputs[1], fragModuleSrc, fsUsedAuto,
+                                        fsUsedNamesAuto, fsUsedResourcesAuto,
+                                        fsStorageFormatsAuto, fragEntry);
             std::string errMsg;
             pipeLayout = pwgpu::BuildAutoPipelineLayout(device, stageInputs, errMsg);
             if (!pipeLayout)
@@ -3525,9 +3686,14 @@ extern "C"
                 compatStages.push_back(
                     {&fragModuleSrc->spirv, fragEntry, kExecFragment, WGPUShaderStage_Fragment});
             std::set<pwgpu::BindingKey> vsUsed, vsCmp, fsUsed, fsCmp;
-            AttachReflectionToStage(compatStages[0], vertModule, vsUsed, vsCmp, vertEntry);
+            std::set<std::string> vsUsedNames, fsUsedNames;
+            std::set<pwgpu::BindingResourceKey> vsUsedResources, fsUsedResources;
+            pwgpu::BindingTextureFormatMap vsStorageFormats, fsStorageFormats;
+            AttachReflectionToStage(compatStages[0], vertModule, vsUsed, vsUsedNames,
+                                    vsUsedResources, vsStorageFormats, vsCmp, vertEntry);
             if (hasFragment)
-                AttachReflectionToStage(compatStages[1], fragModuleSrc, fsUsed, fsCmp, fragEntry);
+                AttachReflectionToStage(compatStages[1], fragModuleSrc, fsUsed, fsUsedNames,
+                                        fsUsedResources, fsStorageFormats, fsCmp, fragEntry);
             std::string compatErr = pwgpu::ValidateExplicitLayoutCompat(pipeLayout, compatStages);
             if (!compatErr.empty())
             {
@@ -4142,15 +4308,18 @@ extern "C"
         }
 
         vk::PipelineRasterizationDepthClipStateCreateInfoEXT depthClipState{};
-        if (descriptor->primitive.unclippedDepth &&
-            DeviceHasFeature(device, WGPUFeatureName_DepthClipControl))
+        const bool needsUnclippedDepth =
+            descriptor->primitive.unclippedDepth &&
+            DeviceHasFeature(device, WGPUFeatureName_DepthClipControl);
+        const bool needsFragDepthClamp =
+            fragBuiltins.hasFragDepth && device->supportsDepthClamp && device->supportsDepthClipEnable;
+        if (needsUnclippedDepth || needsFragDepthClamp)
         {
-            // W3C: unclippedDepth=true disables clipping at the near/far planes and
-            // clamps the stored depth to the viewport [minDepth, maxDepth] range.
-            // Vulkan: depthClipEnable=false (via VK_EXT_depth_clip_enable) disables
-            // clipping; depthClampEnable=true clamps the rasterized depth to the
-            // viewport range. Both are required to match WebGPU semantics.
-            depthClipState.depthClipEnable = VK_FALSE;
+            // WebGPU always clamps fragment-written depth to the viewport range.
+            // For unclippedDepth=true it also disables primitive near/far clipping.
+            // VK_EXT_depth_clip_enable lets us keep clipping enabled for the former
+            // while still using Vulkan depth clamp for fragment depth values.
+            depthClipState.depthClipEnable = needsUnclippedDepth ? VK_FALSE : VK_TRUE;
             depthClipState.pNext = rasterState.pNext;
             rasterState.pNext = &depthClipState;
             rasterState.depthClampEnable = VK_TRUE;

@@ -514,6 +514,12 @@ extern "C"
         if (texture->invalid)
             return reportValidation("texture is invalid");
 
+        // Destroyed texture use as an attachment is reported at queue.submit() (§3.3).
+        // Return a quiet stub view so encoders can retain it without touching a null
+        // native image/view.
+        if (texture->destroyed)
+            return reportValidation(nullptr);
+
         WGPUTextureViewDescriptor resolved{};
         resolved.format = WGPUTextureFormat_Undefined;
         resolved.dimension = WGPUTextureViewDimension_Undefined;
@@ -758,7 +764,7 @@ extern "C"
         // Skips RENDER_ATTACHMENT-only views (the next render pass with loadOp=Load will
         // do its own pre-pass clear) and STORAGE_BINDING-only views (compute writes
         // overwrite contents anyway).
-        if (texture->image && texture->sampleCount == 1 &&
+        if (texture->image &&
             (viewUsage & (WGPUTextureUsage_TextureBinding | WGPUTextureUsage_CopySrc)) != 0)
         {
             auto aspects = pwgpu::AspectsForView(texture->format, resolved.aspect);

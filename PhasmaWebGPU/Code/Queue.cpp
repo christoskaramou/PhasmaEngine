@@ -407,10 +407,35 @@ extern "C"
 
         for (auto *cb : validCBs)
         {
+            auto markBindGroupBuffers = [serial](WGPUBindGroupImpl *bg)
+            {
+                if (!bg)
+                    return;
+                for (auto &use : bg->bufferUses)
+                {
+                    if (use.buffer)
+                        use.buffer->lastUsageSerial.store(serial, std::memory_order_release);
+                }
+            };
+
             for (auto *buf : cb->retained.usedBuffers)
             {
                 if (buf)
                     buf->lastUsageSerial.store(serial, std::memory_order_release);
+            }
+            for (auto *bg : cb->retained.bindGroups)
+                markBindGroupBuffers(bg);
+            for (auto *rb : cb->retained.renderBundles)
+            {
+                if (!rb)
+                    continue;
+                for (auto *buf : rb->retainedBuffers)
+                {
+                    if (buf)
+                        buf->lastUsageSerial.store(serial, std::memory_order_release);
+                }
+                for (auto *bg : rb->retainedBindGroups)
+                    markBindGroupBuffers(bg);
             }
             for (auto *tv : cb->retained.textureViews)
             {
@@ -512,8 +537,20 @@ extern "C"
 
         if (buffer->hostVisible)
         {
+            const uint64_t lastUsage = buffer->lastUsageSerial.load(std::memory_order_acquire);
+            if (lastUsage != 0 && queue)
+            {
+                pe::Semaphore *sem = queue->GetSemaphore();
+                if (sem && sem->GetValue() < lastUsage)
+                    sem->WaitTimeout(lastUsage, UINT64_MAX);
+            }
+
             pe::BufferRange range{const_cast<void *>(data), size, static_cast<size_t>(bufferOffset)};
             backing->Copy(1, &range, false);
+
+            pe::BufferTrackInfo &trackInfo = backing->GetTrackInfo();
+            trackInfo.stageMask = vk::PipelineStageFlagBits2::eHost;
+            trackInfo.accessMask = vk::AccessFlagBits2::eHostWrite;
         }
         else if (queue && queue->peQueue)
         {
@@ -521,6 +558,30 @@ extern "C"
             cmd->Begin();
             cmd->CopyBufferStaged(backing, const_cast<void *>(data), size,
                                   static_cast<size_t>(bufferOffset));
+
+            if (size > 0)
+            {
+                vk::BufferMemoryBarrier2 bmb{};
+                bmb.srcStageMask = vk::PipelineStageFlagBits2::eTransfer;
+                bmb.srcAccessMask = vk::AccessFlagBits2::eTransferWrite;
+                bmb.dstStageMask = vk::PipelineStageFlagBits2::eAllCommands;
+                bmb.dstAccessMask = vk::AccessFlagBits2::eMemoryRead | vk::AccessFlagBits2::eMemoryWrite;
+                bmb.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+                bmb.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+                bmb.buffer = backing->ApiHandle();
+                bmb.offset = static_cast<vk::DeviceSize>(bufferOffset);
+                bmb.size = static_cast<vk::DeviceSize>(size);
+                vk::DependencyInfo dep{};
+                dep.bufferMemoryBarrierCount = 1;
+                dep.pBufferMemoryBarriers = &bmb;
+                cmd->ApiHandle().pipelineBarrier2(dep);
+
+                pe::BufferTrackInfo &trackInfo = backing->GetTrackInfo();
+                trackInfo.stageMask = vk::PipelineStageFlagBits2::eAllCommands;
+                trackInfo.accessMask =
+                    vk::AccessFlagBits2::eMemoryRead | vk::AccessFlagBits2::eMemoryWrite;
+            }
+
             cmd->End();
             queue->peQueue->Submit(1, &cmd, nullptr, nullptr);
 
@@ -636,11 +697,23 @@ extern "C"
             uint32_t mipD = (tex->dimension == WGPUTextureDimension_3D)
                                 ? std::max(1u, tex->size.depthOrArrayLayers >> destination->mipLevel)
                                 : tex->size.depthOrArrayLayers;
+            uint32_t bw, bh;
+            pwgpu::GetTexelBlockSize(tex->format, bw, bh);
+            // W3C §11.2.6 "validating texture copy range": the bounds check
+            // (origin + copySize ≤ subresourceSize) uses the *physical*
+            // miplevel-specific texture extent — logical extent rounded up to
+            // the texel block dimensions. For block-compressed formats whose
+            // logical mip is smaller than one block (e.g. BC1 mip with logical
+            // 1x1), the physical extent is one full block (4x4) and a
+            // block-aligned copy of that block is in-bounds. The depth axis is
+            // not block-rounded.
+            const uint32_t physW = ((mipW + bw - 1) / bw) * bw;
+            const uint32_t physH = ((mipH + bh - 1) / bh) * bh;
             uint64_t ox = destination->origin.x;
             uint64_t oy = destination->origin.y;
             uint64_t oz = destination->origin.z;
-            if (ox + writeSize->width > mipW ||
-                oy + writeSize->height > mipH ||
+            if (ox + writeSize->width > physW ||
+                oy + writeSize->height > physH ||
                 oz + writeSize->depthOrArrayLayers > mipD)
             {
                 fail("origin+writeSize exceeds mip extent");
@@ -655,8 +728,6 @@ extern "C"
                     return;
                 }
             }
-            uint32_t bw, bh;
-            pwgpu::GetTexelBlockSize(tex->format, bw, bh);
             if (bw > 1 || bh > 1)
             {
                 if (ox % bw != 0 || oy % bh != 0)
@@ -664,12 +735,12 @@ extern "C"
                     fail("origin is not block-aligned");
                     return;
                 }
-                if (ox + writeSize->width != mipW && writeSize->width % bw != 0)
+                if (ox + writeSize->width != physW && writeSize->width % bw != 0)
                 {
                     fail("writeSize.width is not block-aligned");
                     return;
                 }
-                if (oy + writeSize->height != mipH && writeSize->height % bh != 0)
+                if (oy + writeSize->height != physH && writeSize->height % bh != 0)
                 {
                     fail("writeSize.height is not block-aligned");
                     return;
@@ -793,26 +864,55 @@ extern "C"
         }
 
         // §19.3: dataLayout.offset is into the user's CPU buffer, not the GPU staging buffer.
-        // Copy from data+offset into staging at 0 so region.bufferOffset can stay 0 — this
-        // avoids leaking the user offset's alignment requirements to Vulkan (depth/stencil
-        // formats require GPU bufferOffset to be a multiple of 4 per
-        // VUID-VkCopyBufferToImageInfo2-dstImage-07978; CTS expects writeTexture to succeed
-        // for any user offset regardless of format).
-        const size_t userOffset = static_cast<size_t>(dataLayout->offset);
-        const size_t copyBytes = (dataSize > userOffset) ? (dataSize - userOffset) : 0;
-        pe::StagingAllocation alloc = pe::RHII.GetStagingManager()->Allocate(copyBytes);
-        if (copyBytes > 0)
-            std::memcpy(alloc.data, static_cast<const uint8_t *>(data) + userOffset, copyBytes);
-        alloc.buffer->Flush(copyBytes, 0);
+        // The user's bytesPerRow / rowsPerImage may not be representable as Vulkan's
+        // (bufferRowLength, bufferImageHeight): Vulkan addresses the source as a 3D grid
+        // of texels (or compressed blocks) where the byte stride between rows is exactly
+        // bufferRowLength * texelBlockSize / blockW. WebGPU writeTexture imposes no such
+        // constraint on bytesPerRow (e.g. CTS issues bytesPerRow = 31 for an rgba8unorm
+        // copy of width 4 → minBytesPerRow 16, padding 15 → 31, which has no integer
+        // bufferRowLength because 31 is not a multiple of footprint=4). Repack the source
+        // CPU data into a tightly-packed staging layout (widthInBlocks * footprint per row,
+        // heightInBlocks rows per layer) so we can leave bufferRowLength / bufferImageHeight
+        // unset and Vulkan derives them from imageExtent. This also avoids leaking user
+        // dataLayout.offset alignment to Vulkan (depth/stencil formats require GPU
+        // bufferOffset to be a multiple of 4 per VUID-VkCopyBufferToImageInfo2-dstImage-07978).
+        const uint32_t widthInBlocks = (writeSize->width + blockW - 1) / blockW;
+        const uint32_t heightInBlocks = (writeSize->height + blockH - 1) / blockH;
+        const uint32_t copyDepth = writeSize->depthOrArrayLayers;
+        const uint64_t tightBytesPerRow = static_cast<uint64_t>(widthInBlocks) * footprint;
+        const uint64_t tightRowsPerImage = heightInBlocks;
+        const uint64_t tightBytesPerImage = tightBytesPerRow * tightRowsPerImage;
+        const uint64_t stagingBytes = tightBytesPerImage * copyDepth;
+        pe::StagingAllocation alloc = pe::RHII.GetStagingManager()->Allocate(stagingBytes);
+        if (stagingBytes > 0 && data)
+        {
+            const bool bprProvided = (dataLayout->bytesPerRow != WGPU_COPY_STRIDE_UNDEFINED);
+            const bool rpiProvided = (dataLayout->rowsPerImage != WGPU_COPY_STRIDE_UNDEFINED);
+            const uint64_t srcBytesPerRow = bprProvided ? dataLayout->bytesPerRow : tightBytesPerRow;
+            const uint64_t srcRowsPerImage = rpiProvided ? dataLayout->rowsPerImage : heightInBlocks;
+            const uint64_t srcBytesPerImage = srcBytesPerRow * srcRowsPerImage;
+            const uint8_t *srcBase =
+                static_cast<const uint8_t *>(data) + static_cast<size_t>(dataLayout->offset);
+            uint8_t *dstBase = static_cast<uint8_t *>(alloc.data);
+            for (uint32_t z = 0; z < copyDepth; ++z)
+            {
+                for (uint32_t y = 0; y < heightInBlocks; ++y)
+                {
+                    const uint8_t *srcRow = srcBase + z * srcBytesPerImage + y * srcBytesPerRow;
+                    uint8_t *dstRow = dstBase + z * tightBytesPerImage + y * tightBytesPerRow;
+                    std::memcpy(dstRow, srcRow, static_cast<size_t>(tightBytesPerRow));
+                }
+            }
+        }
+        if (stagingBytes > 0)
+            alloc.buffer->Flush(stagingBytes, 0);
 
         vk::BufferImageCopy2 region{};
         region.bufferOffset = 0;
-        region.bufferRowLength = (footprint > 0 && dataLayout->bytesPerRow != WGPU_COPY_STRIDE_UNDEFINED)
-                                     ? (dataLayout->bytesPerRow / footprint) * blockW
-                                     : 0;
-        region.bufferImageHeight = (dataLayout->rowsPerImage != WGPU_COPY_STRIDE_UNDEFINED)
-                                       ? dataLayout->rowsPerImage * blockH
-                                       : 0;
+        // bufferRowLength = 0 / bufferImageHeight = 0 means "tightly packed, derived from
+        // imageExtent" — we pre-packed the staging buffer above to match exactly that.
+        region.bufferRowLength = 0;
+        region.bufferImageHeight = 0;
         region.imageSubresource.aspectMask = vkAspect;
         region.imageSubresource.mipLevel = destination->mipLevel;
         region.imageSubresource.baseArrayLayer = is3D ? 0 : destination->origin.z;

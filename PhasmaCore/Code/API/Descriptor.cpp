@@ -21,10 +21,13 @@ namespace pe
 
     DescriptorPool::DescriptorPool(const std::vector<vk::DescriptorPoolSize> &sizes,
                                    const std::string &name,
-                                   uint32_t maxSets)
+                                   uint32_t maxSets,
+                                   bool updateAfterBind)
     {
         vk::DescriptorPoolCreateInfo createInfo{};
-        createInfo.flags = vk::DescriptorPoolCreateFlagBits::eUpdateAfterBind | vk::DescriptorPoolCreateFlagBits::eFreeDescriptorSet;
+        createInfo.flags = vk::DescriptorPoolCreateFlagBits::eFreeDescriptorSet;
+        if (updateAfterBind)
+            createInfo.flags |= vk::DescriptorPoolCreateFlagBits::eUpdateAfterBind;
         createInfo.poolSizeCount = static_cast<uint32_t>(sizes.size());
         createInfo.pPoolSizes = sizes.data();
         createInfo.maxSets = std::max(1u, maxSets);
@@ -157,8 +160,20 @@ namespace pe
             i++;
         }
 
+        bool allowUpdateAfterBindPool = true;
+        for (const auto &binding : m_bindingInfos)
+        {
+            if (binding.type == vk::DescriptorType::eInputAttachment ||
+                binding.type == vk::DescriptorType::eUniformBufferDynamic ||
+                binding.type == vk::DescriptorType::eStorageBufferDynamic)
+            {
+                allowUpdateAfterBindPool = false;
+                break;
+            }
+        }
+
         // Create DescriptorPool and DescriptorLayout for this descriptor set
-        m_pool = DescriptorPool::Create(poolSizes, name + "_pool");
+        m_pool = DescriptorPool::Create(poolSizes, name + "_pool", 1, allowUpdateAfterBindPool);
         m_layout = DescriptorLayout::GetOrCreate(m_bindingInfos, m_stage, m_pushDescriptor);
 
         // DescriptorLayout calculates the variable count on creation

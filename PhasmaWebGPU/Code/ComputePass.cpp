@@ -644,24 +644,20 @@ extern "C"
             return;
         if (cpe->ended)
         {
-            if (cpe->device)
-                cpe->device->reportError(
-                    WGPUErrorType_Validation,
-                    pwgpu::ToStringView("ComputePassEncoder.end(): pass is already ended"));
+            pwgpu::FireSyncValidation(cpe->device, "ComputePassEncoder.end(): pass is already ended");
             return;
         }
         if (cpe->parent && cpe->parent->finished)
         {
-            if (cpe->device)
-                cpe->device->reportError(
-                    WGPUErrorType_Validation,
-                    pwgpu::ToStringView("ComputePassEncoder.end(): parent command encoder is already finished"));
+            pwgpu::FireSyncValidation(cpe->device,
+                                      "ComputePassEncoder.end(): parent command encoder is already finished");
             cpe->ended = true;
             return;
         }
         if (!cpe->wasOpened)
         {
-            ReportPassValidation(cpe, "ComputePassEncoder.end(): pass was never opened (invalid begin)");
+            pwgpu::FireSyncValidation(cpe->device,
+                                      "ComputePassEncoder.end(): pass was never opened (invalid begin)");
             if (cpe->parent)
                 cpe->parent->invalid = true;
             cpe->ended = true;

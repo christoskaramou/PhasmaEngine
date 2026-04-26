@@ -84,6 +84,7 @@ struct WGPURenderPassEncoderImpl
     uint64_t maxDrawCount = 50000000;
 
     std::vector<WGPUBindGroupImpl *> currentBindGroups;
+    std::vector<std::vector<uint32_t>> currentDynamicOffsets;
 
     std::vector<VertexBufferBinding> boundVertexBuffers;
 };

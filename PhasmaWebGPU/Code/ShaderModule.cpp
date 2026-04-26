@@ -157,11 +157,52 @@ extern "C"
         }
     }
 
+    PWGPU_EXT_EXPORT void pwgpuShaderModuleAddEntryPointUsedNamed(WGPUShaderModule sm,
+                                                                  const char *name,
+                                                                  const char *stage,
+                                                                  const uint32_t *pairs,
+                                                                  const char *const *resourceNames,
+                                                                  uint32_t pairCount);
+
+    PWGPU_EXT_EXPORT void pwgpuShaderModuleAddEntryPointUsedMeta(WGPUShaderModule sm,
+                                                                 const char *name,
+                                                                 const char *stage,
+                                                                 const uint32_t *pairs,
+                                                                 const char *const *resourceNames,
+                                                                 const char *const *resourceKinds,
+                                                                 const char *const *resourceFormats,
+                                                                 const char *const *resourceAccesses,
+                                                                 uint32_t pairCount);
+
     PWGPU_EXT_EXPORT void pwgpuShaderModuleAddEntryPointUsed(WGPUShaderModule sm,
                                                              const char *name,
                                                              const char *stage,
                                                              const uint32_t *pairs,
                                                              uint32_t pairCount)
+    {
+        pwgpuShaderModuleAddEntryPointUsedNamed(sm, name, stage, pairs, nullptr, pairCount);
+    }
+
+    PWGPU_EXT_EXPORT void pwgpuShaderModuleAddEntryPointUsedNamed(WGPUShaderModule sm,
+                                                                  const char *name,
+                                                                  const char *stage,
+                                                                  const uint32_t *pairs,
+                                                                  const char *const *resourceNames,
+                                                                  uint32_t pairCount)
+    {
+        pwgpuShaderModuleAddEntryPointUsedMeta(sm, name, stage, pairs, resourceNames, nullptr,
+                                               nullptr, nullptr, pairCount);
+    }
+
+    PWGPU_EXT_EXPORT void pwgpuShaderModuleAddEntryPointUsedMeta(WGPUShaderModule sm,
+                                                                 const char *name,
+                                                                 const char *stage,
+                                                                 const uint32_t *pairs,
+                                                                 const char *const *resourceNames,
+                                                                 const char *const *resourceKinds,
+                                                                 const char *const *resourceFormats,
+                                                                 const char *const *resourceAccesses,
+                                                                 uint32_t pairCount)
     {
         if (!sm || !name || !stage)
             return;
@@ -171,8 +212,18 @@ extern "C"
         ep.staticallyUsed.reserve(pairCount);
         for (uint32_t i = 0; i < pairCount; ++i)
         {
-            ep.staticallyUsed.push_back(
-                WGPUShaderReflectionMeta::Binding{pairs[2 * i], pairs[2 * i + 1]});
+            WGPUShaderReflectionMeta::Binding b{};
+            b.group = pairs ? pairs[2 * i] : 0;
+            b.binding = pairs ? pairs[2 * i + 1] : 0;
+            if (resourceNames && resourceNames[i])
+                b.name = resourceNames[i];
+            if (resourceKinds && resourceKinds[i])
+                b.kind = resourceKinds[i];
+            if (resourceFormats && resourceFormats[i])
+                b.format = resourceFormats[i];
+            if (resourceAccesses && resourceAccesses[i])
+                b.access = resourceAccesses[i];
+            ep.staticallyUsed.push_back(std::move(b));
         }
         sm->reflection.entryPoints.push_back(std::move(ep));
 

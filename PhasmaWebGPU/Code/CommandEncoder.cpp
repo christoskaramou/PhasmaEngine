@@ -135,6 +135,32 @@ namespace
             enc->deferredErrorMessage = msg ? msg : "";
     }
 
+    void SetColorClearValueForFormat(vk::ClearColorValue &dst, WGPUTextureFormat format,
+                                     const WGPUColor &src)
+    {
+        switch (pwgpu::GetColorFormatSampleType(format))
+        {
+        case pwgpu::ColorSampleType::Uint:
+            dst.uint32[0] = static_cast<uint32_t>(src.r);
+            dst.uint32[1] = static_cast<uint32_t>(src.g);
+            dst.uint32[2] = static_cast<uint32_t>(src.b);
+            dst.uint32[3] = static_cast<uint32_t>(src.a);
+            break;
+        case pwgpu::ColorSampleType::Sint:
+            dst.int32[0] = static_cast<int32_t>(src.r);
+            dst.int32[1] = static_cast<int32_t>(src.g);
+            dst.int32[2] = static_cast<int32_t>(src.b);
+            dst.int32[3] = static_cast<int32_t>(src.a);
+            break;
+        default:
+            dst.float32[0] = static_cast<float>(src.r);
+            dst.float32[1] = static_cast<float>(src.g);
+            dst.float32[2] = static_cast<float>(src.b);
+            dst.float32[3] = static_cast<float>(src.a);
+            break;
+        }
+    }
+
     bool EncoderOpen(WGPUCommandEncoder enc, const char *apiName)
     {
         if (!enc)
@@ -481,7 +507,7 @@ extern "C"
             return nullptr;
         if (enc->finished)
         {
-            ReportEncoderValidation(enc, "beginRenderPass: encoder is already finished");
+            pwgpu::FireSyncValidation(enc->device, "beginRenderPass: encoder is already finished");
             auto *rpe = new WGPURenderPassEncoderImpl();
             rpe->parent = enc;
             rpe->device = enc->device;
@@ -1062,12 +1088,7 @@ extern "C"
             att.storeOp = (ca.storeOp == WGPUStoreOp_Store) ? vk::AttachmentStoreOp::eStore : vk::AttachmentStoreOp::eDontCare;
 
             if (ca.loadOp == WGPULoadOp_Clear)
-            {
-                att.clearValue.color.float32[0] = static_cast<float>(ca.clearValue.r);
-                att.clearValue.color.float32[1] = static_cast<float>(ca.clearValue.g);
-                att.clearValue.color.float32[2] = static_cast<float>(ca.clearValue.b);
-                att.clearValue.color.float32[3] = static_cast<float>(ca.clearValue.a);
-            }
+                SetColorClearValueForFormat(att.clearValue.color, view->format, ca.clearValue);
 
             if (ca.resolveTarget)
             {
@@ -1340,7 +1361,7 @@ extern "C"
             return nullptr;
         if (enc->finished)
         {
-            ReportEncoderValidation(enc, "beginComputePass: encoder is already finished");
+            pwgpu::FireSyncValidation(enc->device, "beginComputePass: encoder is already finished");
             auto *cpe = new WGPUComputePassEncoderImpl();
             cpe->parent = enc;
             cpe->device = enc->device;

@@ -434,6 +434,8 @@ extern "C"
         dev->adapterDeviceID = adapter->vkProps.deviceID;
         dev->resolvedDepth24Plus = adapter->resolvedDepth24Plus;
         dev->resolvedDepth24PlusStencil8 = adapter->resolvedDepth24PlusStencil8;
+        dev->supportsDepthClamp = adapter->vkFeatures.depthClamp != 0;
+        dev->supportsDepthClipEnable = adapter->chainedCaps.depthClipEnable;
 
         if (descriptor)
         {

@@ -54,8 +54,12 @@ namespace pwgpu
             }
         }
 
+        // W3C §10.3.6 default pipeline layout: f32 sample type defaults to
+        // "unfilterable-float" unless the resource is statically used in a texture
+        // builtin call that also uses a sampler (paired via OpSampledImage).
         WGPUTextureSampleType SampleTypeFromSpirv(const spirv_cross::Compiler &c,
-                                                  const spirv_cross::SPIRType &t)
+                                                  const spirv_cross::SPIRType &t,
+                                                  bool samplerPaired = true)
         {
             if (t.image.depth)
                 return WGPUTextureSampleType_Depth;
@@ -73,8 +77,183 @@ namespace pwgpu
             case spirv_cross::SPIRType::UInt64:
                 return WGPUTextureSampleType_Uint;
             default:
-                return WGPUTextureSampleType_Float;
+                return samplerPaired ? WGPUTextureSampleType_Float
+                                     : WGPUTextureSampleType_UnfilterableFloat;
             }
+        }
+
+        // OpVariable IDs of images bound as the image operand of OpSampledImage,
+        // restricted to functions transitively reachable from the named
+        // entry point. Per W3C §10.3.6 the auto-layout sampleType is computed
+        // *per entry point*: only static uses by THIS entry point promote
+        // f32 textures from "unfilterable-float" to "float". A whole-module
+        // walk would leak sampler-pair facts from sibling entry points and
+        // wrongly classify load-only bindings as "float" in a stage that
+        // never samples them. Walk pattern mirrors ValidateTextureSamplerPairs.
+        std::set<uint32_t> CollectSampledImageVarIds(const std::vector<uint32_t> &spirv,
+                                                     const std::string &entryName,
+                                                     uint32_t executionModel)
+        {
+            std::set<uint32_t> result;
+            if (spirv.size() < 5)
+                return result;
+
+            const uint32_t *code = spirv.data();
+            const size_t numWords = spirv.size();
+
+            // Pass 1: locate OpEntryPoint matching (name, execModel) and
+            // record its function id.
+            uint32_t entryFnId = 0;
+            bool foundEntry = false;
+            for (size_t w = 5; w < numWords;)
+            {
+                uint32_t first = code[w];
+                uint32_t wc = first >> 16;
+                uint32_t op = first & 0xFFFF;
+                if (wc == 0 || w + wc > numWords)
+                    break;
+                if (op == spv::OpEntryPoint && wc >= 4)
+                {
+                    uint32_t mode = code[w + 1];
+                    uint32_t fnId = code[w + 2];
+                    // Decode inline name literal (4 chars/word, NUL-terminated).
+                    std::string name;
+                    for (size_t k = w + 3; k < w + wc; ++k)
+                    {
+                        uint32_t word = code[k];
+                        bool done = false;
+                        for (int b = 0; b < 4; ++b)
+                        {
+                            char c = static_cast<char>((word >> (b * 8)) & 0xFFu);
+                            if (c == '\0')
+                            {
+                                done = true;
+                                break;
+                            }
+                            name.push_back(c);
+                        }
+                        if (done)
+                            break;
+                    }
+                    if (mode == executionModel && (entryName.empty() || name == entryName))
+                    {
+                        entryFnId = fnId;
+                        foundEntry = true;
+                        break;
+                    }
+                }
+                w += wc;
+            }
+
+            // Pass 2: build call graph (caller fn id → set of callee fn ids)
+            // by tracking the current function via OpFunction/OpFunctionEnd and
+            // recording each OpFunctionCall target. Skipped when entry not
+            // found — fallback below treats every function as reachable.
+            std::set<uint32_t> reachable;
+            if (foundEntry)
+            {
+                std::map<uint32_t, std::set<uint32_t>> callGraph;
+                uint32_t currentFn = 0;
+                for (size_t w = 5; w < numWords;)
+                {
+                    uint32_t first = code[w];
+                    uint32_t wc = first >> 16;
+                    uint32_t op = first & 0xFFFF;
+                    if (wc == 0 || w + wc > numWords)
+                        break;
+                    if (op == spv::OpFunction && wc >= 5)
+                        currentFn = code[w + 2];
+                    else if (op == spv::OpFunctionEnd)
+                        currentFn = 0;
+                    else if (op == spv::OpFunctionCall && wc >= 4 && currentFn != 0)
+                        callGraph[currentFn].insert(code[w + 3]);
+                    w += wc;
+                }
+                // Pass 3: BFS from entry function id.
+                std::vector<uint32_t> stack{entryFnId};
+                while (!stack.empty())
+                {
+                    uint32_t fn = stack.back();
+                    stack.pop_back();
+                    if (!reachable.insert(fn).second)
+                        continue;
+                    auto it = callGraph.find(fn);
+                    if (it != callGraph.end())
+                    {
+                        for (uint32_t callee : it->second)
+                            stack.push_back(callee);
+                    }
+                }
+            }
+
+            // Pass 4: walk for OpSampledImage, but only inside reachable
+            // functions. When reachability lookup failed (no matching entry
+            // point in the module), fall back to whole-module walk to
+            // preserve correctness on direct-SPIR-V test paths and on
+            // shaders without a matching name.
+            std::map<uint32_t, uint32_t> chainBase;
+            std::map<uint32_t, uint32_t> loadedVar;
+            uint32_t currentFn = 0;
+            for (size_t w = 5; w < numWords;)
+            {
+                uint32_t first = code[w];
+                uint32_t wc = first >> 16;
+                uint32_t op = first & 0xFFFF;
+                if (wc == 0 || w + wc > numWords)
+                    break;
+
+                if (op == spv::OpFunction && wc >= 5)
+                {
+                    currentFn = code[w + 2];
+                }
+                else if (op == spv::OpFunctionEnd)
+                {
+                    currentFn = 0;
+                }
+                else
+                {
+                    const bool inReach = !foundEntry ||
+                                         (currentFn != 0 && reachable.count(currentFn) > 0);
+                    if (inReach)
+                    {
+                        switch (op)
+                        {
+                        case spv::OpAccessChain:
+                        case spv::OpInBoundsAccessChain:
+                            if (wc >= 4)
+                            {
+                                uint32_t resultId = code[w + 2];
+                                uint32_t baseId = code[w + 3];
+                                auto it = chainBase.find(baseId);
+                                chainBase[resultId] = (it != chainBase.end()) ? it->second : baseId;
+                            }
+                            break;
+                        case spv::OpLoad:
+                            if (wc >= 4)
+                            {
+                                uint32_t resultId = code[w + 2];
+                                uint32_t ptrId = code[w + 3];
+                                auto it = chainBase.find(ptrId);
+                                loadedVar[resultId] = (it != chainBase.end()) ? it->second : ptrId;
+                            }
+                            break;
+                        case spv::OpSampledImage:
+                            if (wc >= 5)
+                            {
+                                uint32_t imgId = code[w + 3];
+                                auto ii = loadedVar.find(imgId);
+                                if (ii != loadedVar.end())
+                                    result.insert(ii->second);
+                            }
+                            break;
+                        default:
+                            break;
+                        }
+                    }
+                }
+                w += wc;
+            }
+            return result;
         }
 
         WGPUTextureFormat StorageFormatFromSpirv(spv::ImageFormat fmt)
@@ -164,6 +343,22 @@ namespace pwgpu
             }
         }
 
+        template <typename StageInput>
+        WGPUTextureFormat StorageFormatForBinding(const StageInput &stage,
+                                                  uint32_t set,
+                                                  uint32_t binding,
+                                                  WGPUTextureFormat spirvFormat)
+        {
+            if (stage.storageTextureFormats)
+            {
+                auto it = stage.storageTextureFormats->find(BindingKey{set, binding});
+                if (it != stage.storageTextureFormats->end() &&
+                    it->second != WGPUTextureFormat_Undefined)
+                    return it->second;
+            }
+            return spirvFormat;
+        }
+
         bool ReflectOneStage(const AutoLayoutStageInput &stage,
                              std::map<uint32_t, std::map<uint32_t, ReflectedBinding>> &merged,
                              std::string &errMsg)
@@ -179,8 +374,49 @@ namespace pwgpu
                 compiler.set_entry_point(stage.entryPoint,
                                          static_cast<spv::ExecutionModel>(stage.executionModel));
             }
-            auto active = compiler.get_active_interface_variables();
-            spirv_cross::ShaderResources res = compiler.get_shader_resources(active);
+            // Per W3C §10.3.6 the auto-layout BGL contains exactly the
+            // resources *statically used by entryPoint*. Prefer the JS
+            // frontend's per-entry-point reflection (naga side-channel) when
+            // it provides usable data — naga compiles to SPIR-V 1.0/1.3
+            // where OpEntryPoint omits descriptor-bound globals, so
+            // spirv-cross's get_active_interface_variables() can miss
+            // fragment-stage storage buffers. Fall back to the active-
+            // interface walk when reflection isn't present or didn't supply
+            // any pairs for this entry point — that matches pre-2026-04-26
+            // behavior and avoids over-filtering shaders for which we have
+            // no authoritative use-set.
+            const bool useStaticallyUsed =
+                stage.staticallyUsedAuthoritative ||
+                (stage.staticallyUsed && !stage.staticallyUsed->empty()) ||
+                (stage.staticallyUsedNames && !stage.staticallyUsedNames->empty()) ||
+                (stage.staticallyUsedResources && !stage.staticallyUsedResources->empty());
+            spirv_cross::ShaderResources res =
+                useStaticallyUsed
+                    ? compiler.get_shader_resources()
+                    : compiler.get_shader_resources(
+                          compiler.get_active_interface_variables());
+            const std::set<uint32_t> sampledImageVarIds =
+                CollectSampledImageVarIds(*stage.spirv, stage.entryPoint, stage.executionModel);
+
+            auto isStaticallyUsed = [&](uint32_t resourceId, const char *resourceKind) -> bool
+            {
+                if (!useStaticallyUsed)
+                    return true;
+                uint32_t set = compiler.get_decoration(resourceId, spv::DecorationDescriptorSet);
+                uint32_t bind = compiler.get_decoration(resourceId, spv::DecorationBinding);
+                if (stage.staticallyUsedResources && !stage.staticallyUsedResources->empty())
+                {
+                    return stage.staticallyUsedResources->count(
+                               BindingResourceKey{set, bind, resourceKind ? resourceKind : ""}) > 0;
+                }
+                if (stage.staticallyUsedNames && !stage.staticallyUsedNames->empty())
+                {
+                    std::string resourceName = compiler.get_name(resourceId);
+                    if (!resourceName.empty())
+                        return stage.staticallyUsedNames->count(resourceName) > 0;
+                }
+                return stage.staticallyUsed && stage.staticallyUsed->count(BindingKey{set, bind}) > 0;
+            };
 
             auto mergeInto = [&](uint32_t set, uint32_t binding,
                                  const ReflectedBinding &incoming) -> bool
@@ -196,9 +432,103 @@ namespace pwgpu
                     slot.hasTexture != incoming.hasTexture ||
                     slot.hasStorageTexture != incoming.hasStorageTexture)
                 {
-                    errMsg = "auto-layout: binding type conflict across stages";
+                    errMsg = "auto-layout: binding type conflict across stages (different resource kind)";
                     return false;
                 }
+
+                // Per W3C §10.3.6 each entry point computes its own per-stage
+                // layout; the merged BGL must satisfy every stage that
+                // statically uses the binding. Where a strictly-less-permissive
+                // value would reject a valid stage, promote to the more
+                // permissive one. Otherwise, mismatches are unreconcilable
+                // and the user must supply an explicit layout.
+
+                if (slot.hasTexture)
+                {
+                    // sampleType: float and unfilterable-float are
+                    // sub-and-superset on the bind side — float requires a
+                    // filterable texture (and admits unfilterable behaviour
+                    // via a non-filtering sampler), unfilterable-float forbids
+                    // filterable bindings. If any stage statically samples
+                    // with a sampler we MUST be float, even if other stages
+                    // only textureLoad.
+                    const auto a = slot.texture.sampleType;
+                    const auto b = incoming.texture.sampleType;
+                    if (a != b)
+                    {
+                        const bool floatPair =
+                            (a == WGPUTextureSampleType_Float &&
+                             b == WGPUTextureSampleType_UnfilterableFloat) ||
+                            (a == WGPUTextureSampleType_UnfilterableFloat &&
+                             b == WGPUTextureSampleType_Float);
+                        if (floatPair)
+                        {
+                            slot.texture.sampleType = WGPUTextureSampleType_Float;
+                        }
+                        else
+                        {
+                            errMsg = "auto-layout: binding sampleType conflict across stages";
+                            return false;
+                        }
+                    }
+                    if (slot.texture.viewDimension != incoming.texture.viewDimension ||
+                        slot.texture.multisampled != incoming.texture.multisampled)
+                    {
+                        errMsg = "auto-layout: binding texture view-dimension or "
+                                 "multisampled conflict across stages";
+                        return false;
+                    }
+                }
+                if (slot.hasBuffer)
+                {
+                    // type: storage covers read-only-storage; uniform never mixes.
+                    const auto a = slot.buffer.type;
+                    const auto b = incoming.buffer.type;
+                    if (a != b)
+                    {
+                        const bool storagePair =
+                            (a == WGPUBufferBindingType_Storage &&
+                             b == WGPUBufferBindingType_ReadOnlyStorage) ||
+                            (a == WGPUBufferBindingType_ReadOnlyStorage &&
+                             b == WGPUBufferBindingType_Storage);
+                        if (storagePair)
+                        {
+                            slot.buffer.type = WGPUBufferBindingType_Storage;
+                        }
+                        else
+                        {
+                            errMsg = "auto-layout: binding buffer-type conflict across stages";
+                            return false;
+                        }
+                    }
+                }
+                if (slot.hasStorageTexture)
+                {
+                    // access: read-write covers read-only and write-only;
+                    // any mix promotes to read-write so both load and store
+                    // sides remain valid.
+                    const auto a = slot.storageTexture.access;
+                    const auto b = incoming.storageTexture.access;
+                    if (a != b)
+                        slot.storageTexture.access = WGPUStorageTextureAccess_ReadWrite;
+                    if (slot.storageTexture.format != incoming.storageTexture.format ||
+                        slot.storageTexture.viewDimension !=
+                            incoming.storageTexture.viewDimension)
+                    {
+                        errMsg = "auto-layout: binding storage-texture format or "
+                                 "view-dimension conflict across stages";
+                        return false;
+                    }
+                }
+                if (slot.hasSampler)
+                {
+                    if (slot.sampler.type != incoming.sampler.type)
+                    {
+                        errMsg = "auto-layout: binding sampler-type conflict across stages";
+                        return false;
+                    }
+                }
+
                 slot.visibility = static_cast<WGPUShaderStage>(slot.visibility | incoming.visibility);
                 return true;
             };
@@ -215,6 +545,8 @@ namespace pwgpu
             // Uniform buffers
             for (const auto &r : res.uniform_buffers)
             {
+                if (!isStaticallyUsed(r.id, "uniform-buffer"))
+                    continue;
                 uint32_t set = compiler.get_decoration(r.id, spv::DecorationDescriptorSet);
                 uint32_t bind = compiler.get_decoration(r.id, spv::DecorationBinding);
                 ReflectedBinding rb = buildBase(set, bind);
@@ -227,6 +559,8 @@ namespace pwgpu
             // Storage buffers (distinguish read-only via NonWritable decoration)
             for (const auto &r : res.storage_buffers)
             {
+                if (!isStaticallyUsed(r.id, "storage-buffer"))
+                    continue;
                 uint32_t set = compiler.get_decoration(r.id, spv::DecorationDescriptorSet);
                 uint32_t bind = compiler.get_decoration(r.id, spv::DecorationBinding);
                 spirv_cross::Bitset flags = compiler.get_buffer_block_flags(r.id);
@@ -242,12 +576,15 @@ namespace pwgpu
             // Sampled images (separate_images: SampledImage-type bindings without combined sampler)
             for (const auto &r : res.separate_images)
             {
+                if (!isStaticallyUsed(r.id, "texture"))
+                    continue;
                 uint32_t set = compiler.get_decoration(r.id, spv::DecorationDescriptorSet);
                 uint32_t bind = compiler.get_decoration(r.id, spv::DecorationBinding);
                 const auto &t = compiler.get_type(r.type_id);
                 ReflectedBinding rb = buildBase(set, bind);
                 rb.hasTexture = true;
-                rb.texture.sampleType = SampleTypeFromSpirv(compiler, t);
+                const bool paired = sampledImageVarIds.count(r.id) > 0;
+                rb.texture.sampleType = SampleTypeFromSpirv(compiler, t, paired);
                 rb.texture.viewDimension = DimensionFromSpirv(t);
                 rb.texture.multisampled = t.image.ms ? 1u : 0u;
                 if (!mergeInto(set, bind, rb))
@@ -255,14 +592,17 @@ namespace pwgpu
             }
 
             // Combined image samplers (HLSL->SPIR-V via DXC often emits these)
+            // — always sampler-paired by construction.
             for (const auto &r : res.sampled_images)
             {
+                if (!isStaticallyUsed(r.id, "texture"))
+                    continue;
                 uint32_t set = compiler.get_decoration(r.id, spv::DecorationDescriptorSet);
                 uint32_t bind = compiler.get_decoration(r.id, spv::DecorationBinding);
                 const auto &t = compiler.get_type(r.type_id);
                 ReflectedBinding rb = buildBase(set, bind);
                 rb.hasTexture = true;
-                rb.texture.sampleType = SampleTypeFromSpirv(compiler, t);
+                rb.texture.sampleType = SampleTypeFromSpirv(compiler, t, true);
                 rb.texture.viewDimension = DimensionFromSpirv(t);
                 rb.texture.multisampled = t.image.ms ? 1u : 0u;
                 if (!mergeInto(set, bind, rb))
@@ -272,6 +612,8 @@ namespace pwgpu
             // Separate samplers
             for (const auto &r : res.separate_samplers)
             {
+                if (!isStaticallyUsed(r.id, "sampler"))
+                    continue;
                 uint32_t set = compiler.get_decoration(r.id, spv::DecorationDescriptorSet);
                 uint32_t bind = compiler.get_decoration(r.id, spv::DecorationBinding);
                 ReflectedBinding rb = buildBase(set, bind);
@@ -284,6 +626,8 @@ namespace pwgpu
             // Storage images
             for (const auto &r : res.storage_images)
             {
+                if (!isStaticallyUsed(r.id, "storage-texture"))
+                    continue;
                 uint32_t set = compiler.get_decoration(r.id, spv::DecorationDescriptorSet);
                 uint32_t bind = compiler.get_decoration(r.id, spv::DecorationBinding);
                 const auto &t = compiler.get_type(r.type_id);
@@ -298,7 +642,9 @@ namespace pwgpu
                     rb.storageTexture.access = WGPUStorageTextureAccess_WriteOnly;
                 else
                     rb.storageTexture.access = WGPUStorageTextureAccess_ReadWrite;
-                rb.storageTexture.format = StorageFormatFromSpirv(t.image.format);
+                rb.storageTexture.format =
+                    StorageFormatForBinding(stage, set, bind,
+                                            StorageFormatFromSpirv(t.image.format));
                 rb.storageTexture.viewDimension = DimensionFromSpirv(t);
                 if (!mergeInto(set, bind, rb))
                     return false;
@@ -463,14 +809,27 @@ namespace pwgpu
                 };
 
                 auto checkList = [&](const spirv_cross::SmallVector<spirv_cross::Resource> &list,
+                                     const char *resourceKind,
                                      auto typeCheck) -> std::string
                 {
                     for (const auto &r : list)
                     {
                         uint32_t set = compiler.get_decoration(r.id, spv::DecorationDescriptorSet);
                         uint32_t binding = compiler.get_decoration(r.id, spv::DecorationBinding);
-                        if (stageIn.staticallyUsed &&
-                            stageIn.staticallyUsed->count(BindingKey{set, binding}) == 0)
+                        if (stageIn.staticallyUsedResources && !stageIn.staticallyUsedResources->empty() &&
+                            stageIn.staticallyUsedResources->count(
+                                BindingResourceKey{set, binding, resourceKind ? resourceKind : ""}) == 0)
+                            continue;
+                        if (stageIn.staticallyUsedNames && !stageIn.staticallyUsedNames->empty())
+                        {
+                            std::string resourceName = compiler.get_name(r.id);
+                            if (!resourceName.empty() &&
+                                stageIn.staticallyUsedNames->count(resourceName) == 0)
+                                continue;
+                        }
+                        if ((stageIn.staticallyUsedAuthoritative || stageIn.staticallyUsed) &&
+                            (!stageIn.staticallyUsed ||
+                             stageIn.staticallyUsed->count(BindingKey{set, binding}) == 0))
                             continue;
                         auto err = checkBinding(set, binding,
                                                 [&](const WGPUBindGroupLayoutEntryResolved &e)
@@ -482,21 +841,11 @@ namespace pwgpu
                 };
 
                 // Compatibility rules per WebGPU spec / CTS utils.ts::doResourcesMatch.
-                // Per WebGPU spec §10.1.2 "validating shader binding": when
-                // entry.texture.sampleType is "depth", the shader variable may
-                // be either texture_depth_* or a regular texture_*<f32>. HLSL
-                // has no depth texture type, so DXC emits Texture2D<float> as
-                // OpTypeImage Depth=2 (Unknown), which spirv-cross reports as
-                // non-depth. Accept the f32 form here.
                 auto matchSampleType = [](WGPUTextureSampleType api, WGPUTextureSampleType wgsl)
                 {
                     if (api == WGPUTextureSampleType_Float ||
                         api == WGPUTextureSampleType_UnfilterableFloat)
                         return wgsl == WGPUTextureSampleType_Float ||
-                               wgsl == WGPUTextureSampleType_UnfilterableFloat;
-                    if (api == WGPUTextureSampleType_Depth)
-                        return wgsl == WGPUTextureSampleType_Depth ||
-                               wgsl == WGPUTextureSampleType_Float ||
                                wgsl == WGPUTextureSampleType_UnfilterableFloat;
                     return api == wgsl;
                 };
@@ -578,7 +927,11 @@ namespace pwgpu
                         readOnly    ? WGPUStorageTextureAccess_ReadOnly
                         : writeOnly ? WGPUStorageTextureAccess_WriteOnly
                                     : WGPUStorageTextureAccess_ReadWrite;
-                    WGPUTextureFormat wgslFormat = StorageFormatFromSpirv(t.image.format);
+                    uint32_t set = compiler.get_decoration(r.id, spv::DecorationDescriptorSet);
+                    uint32_t binding = compiler.get_decoration(r.id, spv::DecorationBinding);
+                    WGPUTextureFormat wgslFormat =
+                        StorageFormatForBinding(stageIn, set, binding,
+                                                StorageFormatFromSpirv(t.image.format));
                     WGPUTextureViewDimension wgslDim = DimensionFromSpirv(t);
                     if (!matchStorageAccess(e.storageTexture.access, wgslAccess))
                         return "binding type mismatch: storage texture access differs between shader and layout";
@@ -590,17 +943,17 @@ namespace pwgpu
                 };
 
                 std::string err;
-                if (!(err = checkList(res.uniform_buffers, isUniformBuf)).empty())
+                if (!(err = checkList(res.uniform_buffers, "uniform-buffer", isUniformBuf)).empty())
                     return err;
-                if (!(err = checkList(res.storage_buffers, isStorageBuf)).empty())
+                if (!(err = checkList(res.storage_buffers, "storage-buffer", isStorageBuf)).empty())
                     return err;
-                if (!(err = checkList(res.separate_samplers, isSampler)).empty())
+                if (!(err = checkList(res.separate_samplers, "sampler", isSampler)).empty())
                     return err;
-                if (!(err = checkList(res.separate_images, isSampledTex)).empty())
+                if (!(err = checkList(res.separate_images, "texture", isSampledTex)).empty())
                     return err;
-                if (!(err = checkList(res.sampled_images, isSampledTex)).empty())
+                if (!(err = checkList(res.sampled_images, "texture", isSampledTex)).empty())
                     return err;
-                if (!(err = checkList(res.storage_images, isStorageTex)).empty())
+                if (!(err = checkList(res.storage_images, "storage-texture", isStorageTex)).empty())
                     return err;
             }
             catch (const std::exception &e)

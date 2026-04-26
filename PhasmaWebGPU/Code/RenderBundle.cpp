@@ -222,6 +222,34 @@ extern "C"
         VkPipeline vkp = pipeline->vkPipeline;
         rbe->commands.push_back([vkp](vk::CommandBuffer cmd)
                                 { cmd.bindPipeline(vk::PipelineBindPoint::eGraphics, vkp); });
+
+        if (pipeline->layout)
+        {
+            auto &bgls = pipeline->layout->bindGroupLayouts;
+            VkPipelineLayout vkLayout = pipeline->layout->vkLayout;
+            for (size_t i = 0; i < rbe->currentBindGroups.size() && i < bgls.size(); ++i)
+            {
+                auto *bg = rbe->currentBindGroups[i];
+                if (!bg || !bg->descriptor || !bgls[i])
+                    continue;
+                if (!BglGroupEquivalent(bg->layout, bgls[i]))
+                    continue;
+
+                vk::DescriptorSet ds = bg->descriptor->ApiHandle();
+                const uint32_t groupIndex = static_cast<uint32_t>(i);
+                std::vector<uint32_t> dynOffsets =
+                    (i < rbe->currentDynamicOffsets.size())
+                        ? rbe->currentDynamicOffsets[i]
+                        : std::vector<uint32_t>{};
+                rbe->commands.push_back([vkLayout, groupIndex, ds, dynOffsets](vk::CommandBuffer cmd)
+                                        { cmd.bindDescriptorSets(
+                                              vk::PipelineBindPoint::eGraphics,
+                                              vk::PipelineLayout(vkLayout), groupIndex,
+                                              1, &ds,
+                                              static_cast<uint32_t>(dynOffsets.size()),
+                                              dynOffsets.empty() ? nullptr : dynOffsets.data()); });
+            }
+        }
     }
 
     void wgpuRenderBundleEncoderSetBindGroup(WGPURenderBundleEncoder rbe, uint32_t groupIndex,
@@ -294,6 +322,13 @@ extern "C"
             if (rbe->currentBindGroups.size() <= groupIndex)
                 rbe->currentBindGroups.resize(groupIndex + 1, nullptr);
             rbe->currentBindGroups[groupIndex] = group;
+            if (rbe->currentDynamicOffsets.size() <= groupIndex)
+                rbe->currentDynamicOffsets.resize(groupIndex + 1);
+            if (dynamicOffsetCount > 0)
+                rbe->currentDynamicOffsets[groupIndex].assign(
+                    dynamicOffsets, dynamicOffsets + dynamicOffsetCount);
+            else
+                rbe->currentDynamicOffsets[groupIndex].clear();
         }
 
         if (group && group->layout)

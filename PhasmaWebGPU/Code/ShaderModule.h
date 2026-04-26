@@ -24,6 +24,10 @@ struct WGPUShaderReflectionMeta
     {
         uint32_t group = 0;
         uint32_t binding = 0;
+        std::string name;
+        std::string kind;
+        std::string format;
+        std::string access;
     };
     struct EntryPoint
     {

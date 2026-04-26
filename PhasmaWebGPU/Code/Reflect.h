@@ -12,15 +12,42 @@ struct WGPUPipelineLayoutImpl;
 
 namespace pwgpu
 {
+    using BindingKey = std::pair<uint32_t, uint32_t>; // (group, binding)
+    using BindingTextureFormatMap = std::map<BindingKey, WGPUTextureFormat>;
+    struct BindingResourceKey
+    {
+        uint32_t group = 0;
+        uint32_t binding = 0;
+        std::string kind;
+
+        bool operator<(const BindingResourceKey &other) const
+        {
+            if (group != other.group)
+                return group < other.group;
+            if (binding != other.binding)
+                return binding < other.binding;
+            return kind < other.kind;
+        }
+    };
+
     struct AutoLayoutStageInput
     {
         const std::vector<uint32_t> *spirv = nullptr;
         std::string entryPoint;
         uint32_t executionModel = 0;
         WGPUShaderStage visibility = WGPUShaderStage_None;
+        // Per W3C §10.3.6 the auto-layout BGL must contain only resources
+        // *statically used* by the entry point. SPIR-V from naga targets
+        // SPIR-V 1.0/1.3 where OpEntryPoint's interface section omits
+        // descriptor-bound globals, so spirv-cross's
+        // get_active_interface_variables() can't be used as the filter.
+        // Supply the JS frontend's reflection here when available.
+        const std::set<BindingKey> *staticallyUsed = nullptr;
+        const std::set<std::string> *staticallyUsedNames = nullptr;
+        const std::set<BindingResourceKey> *staticallyUsedResources = nullptr;
+        const BindingTextureFormatMap *storageTextureFormats = nullptr;
+        bool staticallyUsedAuthoritative = false;
     };
-
-    using BindingKey = std::pair<uint32_t, uint32_t>; // (group, binding)
 
     struct LayoutCompatStageInput
     {
@@ -29,6 +56,10 @@ namespace pwgpu
         uint32_t executionModel = 0;
         WGPUShaderStage stage = WGPUShaderStage_None;
         const std::set<BindingKey> *staticallyUsed = nullptr;
+        const std::set<std::string> *staticallyUsedNames = nullptr;
+        const std::set<BindingResourceKey> *staticallyUsedResources = nullptr;
+        const BindingTextureFormatMap *storageTextureFormats = nullptr;
+        bool staticallyUsedAuthoritative = false;
         const std::set<BindingKey> *comparisonSamplers = nullptr;
     };
     std::string ValidateExplicitLayoutCompat(const WGPUPipelineLayoutImpl *layout, const std::vector<LayoutCompatStageInput> &stages);

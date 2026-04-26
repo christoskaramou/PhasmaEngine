@@ -68,6 +68,8 @@ struct WGPUDeviceImpl
     WGPULimits limits{};
     VkFormat resolvedDepth24Plus = VK_FORMAT_D32_SFLOAT;
     VkFormat resolvedDepth24PlusStencil8 = VK_FORMAT_D32_SFLOAT_S8_UINT;
+    bool supportsDepthClamp = false;
+    bool supportsDepthClipEnable = false;
 
     std::string adapterVendor;
     std::string adapterArchitecture;
@@ -107,3 +109,18 @@ struct WGPUDeviceImpl
     void reportError(WGPUErrorType type, WGPUStringView message);
     void ReclaimCompletedTextureDeletions();
 };
+
+namespace pwgpu
+{
+    // Fires a Validation error directly through device->reportError, bypassing the
+    // deferredErrorMessage mechanism. Use ONLY for "no-future-fire-path" cases where
+    // no later finish() will surface a deferred message — e.g. a call on an already-
+    // finished encoder, or .end() on a phantom pass returned by a failed begin*Pass().
+    // See W3C §13.7.
+    inline void FireSyncValidation(WGPUDeviceImpl *device, const char *message)
+    {
+        if (!device || !message)
+            return;
+        device->reportError(WGPUErrorType_Validation, WGPUStringView{message, WGPU_STRLEN});
+    }
+} // namespace pwgpu

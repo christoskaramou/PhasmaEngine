@@ -21,6 +21,8 @@ extern "C" void wgpuRenderBundleRelease(WGPURenderBundle);
 
 namespace
 {
+    constexpr uint32_t kStencilReferenceMask = 0xffu;
+
     // §13.7: encoder errors fire at finish() (first wins, bubbled by pass.end).
     void ReportPassValidation(WGPURenderPassEncoder rpe, const char *msg)
     {
@@ -227,6 +229,86 @@ namespace
                    : vk::ImageLayout::eGeneral;
     }
 
+    void AppendBufferUsageBarrier(WGPUBufferImpl *buffer, uint8_t mask,
+                                  std::vector<pe::BufferBarrierInfo> &bufferBarriers)
+    {
+        if (!buffer || !buffer->peBuffer)
+            return;
+
+        pe::BufferBarrierInfo barrier{};
+        barrier.buffer = buffer->peBuffer;
+
+        if (mask & static_cast<uint8_t>(pwgpu::BufferUsageKind::Storage))
+        {
+            barrier.stageMask |= vk::PipelineStageFlagBits2::eAllGraphics;
+            barrier.accessMask |= vk::AccessFlagBits2::eShaderStorageRead |
+                                  vk::AccessFlagBits2::eShaderStorageWrite;
+        }
+        if (mask & static_cast<uint8_t>(pwgpu::BufferUsageKind::StorageRead))
+        {
+            barrier.stageMask |= vk::PipelineStageFlagBits2::eAllGraphics;
+            barrier.accessMask |= vk::AccessFlagBits2::eShaderStorageRead;
+        }
+        if (mask & static_cast<uint8_t>(pwgpu::BufferUsageKind::Constant))
+        {
+            barrier.stageMask |= vk::PipelineStageFlagBits2::eAllGraphics;
+            barrier.accessMask |= vk::AccessFlagBits2::eUniformRead;
+        }
+        if (mask & static_cast<uint8_t>(pwgpu::BufferUsageKind::Input))
+        {
+            if (buffer->usage & WGPUBufferUsage_Indirect)
+            {
+                barrier.stageMask |= vk::PipelineStageFlagBits2::eDrawIndirect;
+                barrier.accessMask |= vk::AccessFlagBits2::eIndirectCommandRead;
+            }
+            if (buffer->usage & WGPUBufferUsage_Index)
+            {
+                barrier.stageMask |= vk::PipelineStageFlagBits2::eIndexInput;
+                barrier.accessMask |= vk::AccessFlagBits2::eIndexRead;
+            }
+            if (buffer->usage & WGPUBufferUsage_Vertex)
+            {
+                barrier.stageMask |= vk::PipelineStageFlagBits2::eVertexAttributeInput;
+                barrier.accessMask |= vk::AccessFlagBits2::eVertexAttributeRead;
+            }
+        }
+
+        if (barrier.stageMask && barrier.accessMask)
+            bufferBarriers.push_back(barrier);
+    }
+
+    void AppendUsageScopeBarriers(const pwgpu::UsageScope &scope,
+                                  std::vector<pe::ImageBarrierInfo> &imageBarriers,
+                                  std::vector<pe::BufferBarrierInfo> &bufferBarriers)
+    {
+        for (const auto &entry : scope.map)
+        {
+            const auto &key = entry.first;
+            auto *texture = key.texture;
+            if (!texture || !texture->image)
+                continue;
+
+            const vk::AccessFlags2 access = TextureAccessForUsage(entry.second);
+            if (!access)
+                continue;
+
+            pe::ImageBarrierInfo barrier{};
+            barrier.image = texture->image;
+            barrier.stageFlags = vk::PipelineStageFlagBits2::eAllGraphics;
+            barrier.accessMask = access;
+            barrier.layout = TextureLayoutForUsage(entry.second);
+            barrier.baseMipLevel = key.mip;
+            barrier.mipLevels = 1;
+            barrier.baseArrayLayer =
+                (texture->dimension == WGPUTextureDimension_3D) ? 0u : key.layer;
+            barrier.arrayLayers = 1;
+            imageBarriers.push_back(barrier);
+        }
+
+        for (const auto &entry : scope.bufferMap)
+            AppendBufferUsageBarrier(entry.first, entry.second, bufferBarriers);
+    }
+
     void CollectBindGroupBarriers(WGPURenderPassEncoder rpe,
                                   std::vector<pe::ImageBarrierInfo> &imageBarriers,
                                   std::vector<pe::BufferBarrierInfo> &bufferBarriers)
@@ -376,9 +458,15 @@ extern "C"
                 if (!BglGroupEquivalent(bg->layout, bgls[i]))
                     continue;
                 vk::DescriptorSet ds = bg->descriptor->ApiHandle();
+                const std::vector<uint32_t> *dynOffsets =
+                    (i < rpe->currentDynamicOffsets.size())
+                        ? &rpe->currentDynamicOffsets[i]
+                        : nullptr;
                 rpe->cmd->ApiHandle().bindDescriptorSets(
                     vk::PipelineBindPoint::eGraphics, vkLayout,
-                    static_cast<uint32_t>(i), 1, &ds, 0, nullptr);
+                    static_cast<uint32_t>(i), 1, &ds,
+                    dynOffsets ? static_cast<uint32_t>(dynOffsets->size()) : 0u,
+                    (dynOffsets && !dynOffsets->empty()) ? dynOffsets->data() : nullptr);
             }
         }
     }
@@ -454,6 +542,13 @@ extern "C"
             if (rpe->currentBindGroups.size() <= groupIndex)
                 rpe->currentBindGroups.resize(groupIndex + 1, nullptr);
             rpe->currentBindGroups[groupIndex] = group;
+            if (rpe->currentDynamicOffsets.size() <= groupIndex)
+                rpe->currentDynamicOffsets.resize(groupIndex + 1);
+            if (dynamicOffsetCount > 0)
+                rpe->currentDynamicOffsets[groupIndex].assign(
+                    dynamicOffsets, dynamicOffsets + dynamicOffsetCount);
+            else
+                rpe->currentDynamicOffsets[groupIndex].clear();
         }
 
         if (group && group->layout)
@@ -1006,7 +1101,8 @@ extern "C"
         if (!RenderingActive(rpe, "wgpuRenderPassEncoderSetStencilReference"))
             return;
 
-        rpe->cmd->ApiHandle().setStencilReference(vk::StencilFaceFlagBits::eFrontAndBack, reference);
+        rpe->cmd->ApiHandle().setStencilReference(vk::StencilFaceFlagBits::eFrontAndBack,
+                                                  reference & kStencilReferenceMask);
     }
 
     void wgpuRenderPassEncoderBeginOcclusionQuery(WGPURenderPassEncoder rpe, uint32_t queryIndex)
@@ -1154,66 +1250,20 @@ extern "C"
 
         if (!rpe->renderingActive)
         {
-            std::vector<pe::BufferBarrierInfo> bundleBufBarriers;
+            std::vector<pe::ImageBarrierInfo> bundleImageBarriers;
+            std::vector<pe::BufferBarrierInfo> bundleBufferBarriers;
             for (size_t i = 0; i < bundleCount; i++)
             {
                 auto *bundle = bundles[i];
                 if (!bundle)
                     continue;
-                for (const auto &entry : bundle->usageScope.bufferMap)
-                {
-                    WGPUBufferImpl *buf = entry.first;
-                    if (!buf || !buf->peBuffer)
-                        continue;
-                    const uint8_t mask = entry.second;
-                    pe::BufferBarrierInfo barrier{};
-                    barrier.buffer = buf->peBuffer;
-                    barrier.stageMask = vk::PipelineStageFlags2{};
-                    barrier.accessMask = vk::AccessFlags2{};
-                    // Storage / uniform reads in the vertex/fragment stages.
-                    if (mask & static_cast<uint8_t>(pwgpu::BufferUsageKind::Storage))
-                    {
-                        barrier.stageMask |= vk::PipelineStageFlagBits2::eAllGraphics;
-                        barrier.accessMask |= vk::AccessFlagBits2::eShaderStorageRead |
-                                              vk::AccessFlagBits2::eShaderStorageWrite;
-                    }
-                    if (mask & static_cast<uint8_t>(pwgpu::BufferUsageKind::StorageRead))
-                    {
-                        barrier.stageMask |= vk::PipelineStageFlagBits2::eAllGraphics;
-                        barrier.accessMask |= vk::AccessFlagBits2::eShaderStorageRead;
-                    }
-                    if (mask & static_cast<uint8_t>(pwgpu::BufferUsageKind::Constant))
-                    {
-                        barrier.stageMask |= vk::PipelineStageFlagBits2::eAllGraphics;
-                        barrier.accessMask |= vk::AccessFlagBits2::eUniformRead;
-                    }
-                    // Vertex/index/indirect inputs have distinct stages
-                    // that must match their access bits (VUID-03900/01/other).
-                    if (mask & static_cast<uint8_t>(pwgpu::BufferUsageKind::Input))
-                    {
-                        if (buf->usage & WGPUBufferUsage_Indirect)
-                        {
-                            barrier.stageMask |= vk::PipelineStageFlagBits2::eDrawIndirect;
-                            barrier.accessMask |= vk::AccessFlagBits2::eIndirectCommandRead;
-                        }
-                        if (buf->usage & WGPUBufferUsage_Index)
-                        {
-                            barrier.stageMask |= vk::PipelineStageFlagBits2::eIndexInput;
-                            barrier.accessMask |= vk::AccessFlagBits2::eIndexRead;
-                        }
-                        if (buf->usage & WGPUBufferUsage_Vertex)
-                        {
-                            barrier.stageMask |= vk::PipelineStageFlagBits2::eVertexAttributeInput;
-                            barrier.accessMask |= vk::AccessFlagBits2::eVertexAttributeRead;
-                        }
-                    }
-                    if (!barrier.stageMask || !barrier.accessMask)
-                        continue;
-                    bundleBufBarriers.push_back(barrier);
-                }
+                AppendUsageScopeBarriers(bundle->usageScope, bundleImageBarriers,
+                                         bundleBufferBarriers);
             }
-            if (!bundleBufBarriers.empty())
-                rpe->cmd->BufferBarriers(bundleBufBarriers);
+            if (!bundleBufferBarriers.empty())
+                rpe->cmd->BufferBarriers(bundleBufferBarriers);
+            if (!bundleImageBarriers.empty())
+                rpe->cmd->ImageBarriers(bundleImageBarriers);
         }
 
         OpenRenderingIfNeeded(rpe);
@@ -1277,26 +1327,20 @@ extern "C"
             return;
         if (rpe->ended)
         {
-            // No future fire path: pass is already ended.
-            if (rpe->device)
-                rpe->device->reportError(
-                    WGPUErrorType_Validation,
-                    pwgpu::ToStringView("RenderPassEncoder.end(): pass is already ended"));
+            pwgpu::FireSyncValidation(rpe->device, "RenderPassEncoder.end(): pass is already ended");
             return;
         }
         if (rpe->parent && rpe->parent->finished)
         {
-            // Parent encoder already finished — its finish() can't surface this.
-            if (rpe->device)
-                rpe->device->reportError(
-                    WGPUErrorType_Validation,
-                    pwgpu::ToStringView("RenderPassEncoder.end(): parent command encoder is already finished"));
+            pwgpu::FireSyncValidation(rpe->device,
+                                      "RenderPassEncoder.end(): parent command encoder is already finished");
             rpe->ended = true;
             return;
         }
         if (!rpe->wasOpened)
         {
-            ReportPassValidation(rpe, "RenderPassEncoder.end(): pass was never opened (invalid begin)");
+            pwgpu::FireSyncValidation(rpe->device,
+                                      "RenderPassEncoder.end(): pass was never opened (invalid begin)");
             if (rpe->parent)
                 rpe->parent->invalid = true;
             rpe->ended = true;
@@ -1335,10 +1379,11 @@ extern "C"
         // Empty/valid passes still need begin/endRendering so loadOp/storeOp fire.
         // Skip if the pass is invalid-for-encoder to avoid emitting work for
         // never-meant-to-execute passes.
-        const bool passInvalidForEncoder =
+        const bool skipGpuWork =
+            rpe->deferredResourceError ||
             (rpe->invalid && !rpe->deferredResourceError) ||
             !rpe->usageScopeValid;
-        if (!rpe->renderingActive && !passInvalidForEncoder)
+        if (!rpe->renderingActive && !skipGpuWork)
             OpenRenderingIfNeeded(rpe);
         if (rpe->renderingActive)
         {
