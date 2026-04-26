@@ -546,7 +546,8 @@ extern "C"
             }
 
             pe::BufferRange range{const_cast<void *>(data), size, static_cast<size_t>(bufferOffset)};
-            backing->Copy(1, &range, false);
+            backing->Copy(1, &range, true);
+            backing->Flush(size, static_cast<size_t>(bufferOffset));
 
             pe::BufferTrackInfo &trackInfo = backing->GetTrackInfo();
             trackInfo.stageMask = vk::PipelineStageFlagBits2::eHost;

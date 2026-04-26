@@ -55,7 +55,8 @@ namespace
         case WGPUFeatureName_PrimitiveIndex:
             return a.primitiveIndex;
         case WGPUFeatureName_Subgroups:
-            return a.chainedCaps.subgroups;
+            // Do not expose until the WGSL frontend can lower `enable subgroups`.
+            return false;
         default:
             return false;
         }

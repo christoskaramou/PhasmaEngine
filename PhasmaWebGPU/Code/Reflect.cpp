@@ -389,283 +389,298 @@ namespace pwgpu
                 return false;
             }
             spirv_cross::Compiler &compiler = *compilerPtr;
-            // Per W3C §10.3.6 the auto-layout BGL contains exactly the
-            // resources *statically used by entryPoint*. Prefer the JS
-            // frontend's per-entry-point reflection (naga side-channel) when
-            // it provides usable data — naga compiles to SPIR-V 1.0/1.3
-            // where OpEntryPoint omits descriptor-bound globals, so
-            // spirv-cross's get_active_interface_variables() can miss
-            // fragment-stage storage buffers. Fall back to the active-
-            // interface walk when reflection isn't present or didn't supply
-            // any pairs for this entry point — that matches pre-2026-04-26
-            // behavior and avoids over-filtering shaders for which we have
-            // no authoritative use-set.
-            const bool useStaticallyUsed =
-                stage.staticallyUsedAuthoritative ||
-                (stage.staticallyUsed && !stage.staticallyUsed->empty()) ||
-                (stage.staticallyUsedNames && !stage.staticallyUsedNames->empty()) ||
-                (stage.staticallyUsedResources && !stage.staticallyUsedResources->empty());
-            spirv_cross::ShaderResources res =
-                useStaticallyUsed
-                    ? compiler.get_shader_resources()
-                    : compiler.get_shader_resources(
-                          compiler.get_active_interface_variables());
-            const std::set<uint32_t> sampledImageVarIds =
-                CollectSampledImageVarIds(*stage.spirv, stage.entryPoint, stage.executionModel);
-
-            auto isStaticallyUsed = [&](uint32_t resourceId, const char *resourceKind) -> bool
+            // get_decoration / get_type / get_buffer_block_flags can also throw
+            // on malformed SPIR-V; catch here so the unwind doesn't cross extern "C".
+            try
             {
-                if (!useStaticallyUsed)
-                    return true;
-                uint32_t set = compiler.get_decoration(resourceId, spv::DecorationDescriptorSet);
-                uint32_t bind = compiler.get_decoration(resourceId, spv::DecorationBinding);
-                if (stage.staticallyUsedResources && !stage.staticallyUsedResources->empty())
-                {
-                    return stage.staticallyUsedResources->count(
-                               BindingResourceKey{set, bind, resourceKind ? resourceKind : ""}) > 0;
-                }
-                if (stage.staticallyUsedNames && !stage.staticallyUsedNames->empty())
-                {
-                    std::string resourceName = compiler.get_name(resourceId);
-                    if (!resourceName.empty())
-                        return stage.staticallyUsedNames->count(resourceName) > 0;
-                }
-                return stage.staticallyUsed && stage.staticallyUsed->count(BindingKey{set, bind}) > 0;
-            };
+                // Per W3C §10.3.6 the auto-layout BGL contains exactly the
+                // resources *statically used by entryPoint*. Prefer the JS
+                // frontend's per-entry-point reflection (naga side-channel) when
+                // it provides usable data — naga compiles to SPIR-V 1.0/1.3
+                // where OpEntryPoint omits descriptor-bound globals, so
+                // spirv-cross's get_active_interface_variables() can miss
+                // fragment-stage storage buffers. Fall back to the active-
+                // interface walk when reflection isn't present or didn't supply
+                // any pairs for this entry point — that matches pre-2026-04-26
+                // behavior and avoids over-filtering shaders for which we have
+                // no authoritative use-set.
+                const bool useStaticallyUsed =
+                    stage.staticallyUsedAuthoritative ||
+                    (stage.staticallyUsed && !stage.staticallyUsed->empty()) ||
+                    (stage.staticallyUsedNames && !stage.staticallyUsedNames->empty()) ||
+                    (stage.staticallyUsedResources && !stage.staticallyUsedResources->empty());
+                spirv_cross::ShaderResources res =
+                    useStaticallyUsed
+                        ? compiler.get_shader_resources()
+                        : compiler.get_shader_resources(
+                              compiler.get_active_interface_variables());
+                const std::set<uint32_t> sampledImageVarIds =
+                    CollectSampledImageVarIds(*stage.spirv, stage.entryPoint, stage.executionModel);
 
-            auto mergeInto = [&](uint32_t set, uint32_t binding,
-                                 const ReflectedBinding &incoming) -> bool
-            {
-                auto &slot = merged[set][binding];
-                if (slot.visibility == WGPUShaderStage_None)
+                auto isStaticallyUsed = [&](uint32_t resourceId, const char *resourceKind) -> bool
                 {
-                    slot = incoming;
-                    return true;
-                }
-                if (slot.hasBuffer != incoming.hasBuffer ||
-                    slot.hasSampler != incoming.hasSampler ||
-                    slot.hasTexture != incoming.hasTexture ||
-                    slot.hasStorageTexture != incoming.hasStorageTexture)
-                {
-                    errMsg = "auto-layout: binding type conflict across stages (different resource kind)";
-                    return false;
-                }
-
-                // Per W3C §10.3.6 each entry point computes its own per-stage
-                // layout; the merged BGL must satisfy every stage that
-                // statically uses the binding. Where a strictly-less-permissive
-                // value would reject a valid stage, promote to the more
-                // permissive one. Otherwise, mismatches are unreconcilable
-                // and the user must supply an explicit layout.
-
-                if (slot.hasTexture)
-                {
-                    // sampleType: float and unfilterable-float are
-                    // sub-and-superset on the bind side — float requires a
-                    // filterable texture (and admits unfilterable behaviour
-                    // via a non-filtering sampler), unfilterable-float forbids
-                    // filterable bindings. If any stage statically samples
-                    // with a sampler we MUST be float, even if other stages
-                    // only textureLoad.
-                    const auto a = slot.texture.sampleType;
-                    const auto b = incoming.texture.sampleType;
-                    if (a != b)
+                    if (!useStaticallyUsed)
+                        return true;
+                    uint32_t set = compiler.get_decoration(resourceId, spv::DecorationDescriptorSet);
+                    uint32_t bind = compiler.get_decoration(resourceId, spv::DecorationBinding);
+                    if (stage.staticallyUsedResources && !stage.staticallyUsedResources->empty())
                     {
-                        const bool floatPair =
-                            (a == WGPUTextureSampleType_Float &&
-                             b == WGPUTextureSampleType_UnfilterableFloat) ||
-                            (a == WGPUTextureSampleType_UnfilterableFloat &&
-                             b == WGPUTextureSampleType_Float);
-                        if (floatPair)
+                        return stage.staticallyUsedResources->count(
+                                   BindingResourceKey{set, bind, resourceKind ? resourceKind : ""}) > 0;
+                    }
+                    if (stage.staticallyUsedNames && !stage.staticallyUsedNames->empty())
+                    {
+                        std::string resourceName = compiler.get_name(resourceId);
+                        if (!resourceName.empty())
+                            return stage.staticallyUsedNames->count(resourceName) > 0;
+                    }
+                    return stage.staticallyUsed && stage.staticallyUsed->count(BindingKey{set, bind}) > 0;
+                };
+
+                auto mergeInto = [&](uint32_t set, uint32_t binding,
+                                     const ReflectedBinding &incoming) -> bool
+                {
+                    auto &slot = merged[set][binding];
+                    if (slot.visibility == WGPUShaderStage_None)
+                    {
+                        slot = incoming;
+                        return true;
+                    }
+                    if (slot.hasBuffer != incoming.hasBuffer ||
+                        slot.hasSampler != incoming.hasSampler ||
+                        slot.hasTexture != incoming.hasTexture ||
+                        slot.hasStorageTexture != incoming.hasStorageTexture)
+                    {
+                        errMsg = "auto-layout: binding type conflict across stages (different resource kind)";
+                        return false;
+                    }
+
+                    // Per W3C §10.3.6 each entry point computes its own per-stage
+                    // layout; the merged BGL must satisfy every stage that
+                    // statically uses the binding. Where a strictly-less-permissive
+                    // value would reject a valid stage, promote to the more
+                    // permissive one. Otherwise, mismatches are unreconcilable
+                    // and the user must supply an explicit layout.
+
+                    if (slot.hasTexture)
+                    {
+                        // sampleType: float and unfilterable-float are
+                        // sub-and-superset on the bind side — float requires a
+                        // filterable texture (and admits unfilterable behaviour
+                        // via a non-filtering sampler), unfilterable-float forbids
+                        // filterable bindings. If any stage statically samples
+                        // with a sampler we MUST be float, even if other stages
+                        // only textureLoad.
+                        const auto a = slot.texture.sampleType;
+                        const auto b = incoming.texture.sampleType;
+                        if (a != b)
                         {
-                            slot.texture.sampleType = WGPUTextureSampleType_Float;
+                            const bool floatPair =
+                                (a == WGPUTextureSampleType_Float &&
+                                 b == WGPUTextureSampleType_UnfilterableFloat) ||
+                                (a == WGPUTextureSampleType_UnfilterableFloat &&
+                                 b == WGPUTextureSampleType_Float);
+                            if (floatPair)
+                            {
+                                slot.texture.sampleType = WGPUTextureSampleType_Float;
+                            }
+                            else
+                            {
+                                errMsg = "auto-layout: binding sampleType conflict across stages";
+                                return false;
+                            }
                         }
-                        else
+                        if (slot.texture.viewDimension != incoming.texture.viewDimension ||
+                            slot.texture.multisampled != incoming.texture.multisampled)
                         {
-                            errMsg = "auto-layout: binding sampleType conflict across stages";
+                            errMsg = "auto-layout: binding texture view-dimension or "
+                                     "multisampled conflict across stages";
                             return false;
                         }
                     }
-                    if (slot.texture.viewDimension != incoming.texture.viewDimension ||
-                        slot.texture.multisampled != incoming.texture.multisampled)
+                    if (slot.hasBuffer)
                     {
-                        errMsg = "auto-layout: binding texture view-dimension or "
-                                 "multisampled conflict across stages";
-                        return false;
-                    }
-                }
-                if (slot.hasBuffer)
-                {
-                    // type: storage covers read-only-storage; uniform never mixes.
-                    const auto a = slot.buffer.type;
-                    const auto b = incoming.buffer.type;
-                    if (a != b)
-                    {
-                        const bool storagePair =
-                            (a == WGPUBufferBindingType_Storage &&
-                             b == WGPUBufferBindingType_ReadOnlyStorage) ||
-                            (a == WGPUBufferBindingType_ReadOnlyStorage &&
-                             b == WGPUBufferBindingType_Storage);
-                        if (storagePair)
+                        // type: storage covers read-only-storage; uniform never mixes.
+                        const auto a = slot.buffer.type;
+                        const auto b = incoming.buffer.type;
+                        if (a != b)
                         {
-                            slot.buffer.type = WGPUBufferBindingType_Storage;
+                            const bool storagePair =
+                                (a == WGPUBufferBindingType_Storage &&
+                                 b == WGPUBufferBindingType_ReadOnlyStorage) ||
+                                (a == WGPUBufferBindingType_ReadOnlyStorage &&
+                                 b == WGPUBufferBindingType_Storage);
+                            if (storagePair)
+                            {
+                                slot.buffer.type = WGPUBufferBindingType_Storage;
+                            }
+                            else
+                            {
+                                errMsg = "auto-layout: binding buffer-type conflict across stages";
+                                return false;
+                            }
                         }
-                        else
+                    }
+                    if (slot.hasStorageTexture)
+                    {
+                        // access: read-write covers read-only and write-only;
+                        // any mix promotes to read-write so both load and store
+                        // sides remain valid.
+                        const auto a = slot.storageTexture.access;
+                        const auto b = incoming.storageTexture.access;
+                        if (a != b)
+                            slot.storageTexture.access = WGPUStorageTextureAccess_ReadWrite;
+                        if (slot.storageTexture.format != incoming.storageTexture.format ||
+                            slot.storageTexture.viewDimension !=
+                                incoming.storageTexture.viewDimension)
                         {
-                            errMsg = "auto-layout: binding buffer-type conflict across stages";
+                            errMsg = "auto-layout: binding storage-texture format or "
+                                     "view-dimension conflict across stages";
                             return false;
                         }
                     }
-                }
-                if (slot.hasStorageTexture)
-                {
-                    // access: read-write covers read-only and write-only;
-                    // any mix promotes to read-write so both load and store
-                    // sides remain valid.
-                    const auto a = slot.storageTexture.access;
-                    const auto b = incoming.storageTexture.access;
-                    if (a != b)
-                        slot.storageTexture.access = WGPUStorageTextureAccess_ReadWrite;
-                    if (slot.storageTexture.format != incoming.storageTexture.format ||
-                        slot.storageTexture.viewDimension !=
-                            incoming.storageTexture.viewDimension)
+                    if (slot.hasSampler)
                     {
-                        errMsg = "auto-layout: binding storage-texture format or "
-                                 "view-dimension conflict across stages";
-                        return false;
+                        if (slot.sampler.type != incoming.sampler.type)
+                        {
+                            errMsg = "auto-layout: binding sampler-type conflict across stages";
+                            return false;
+                        }
                     }
-                }
-                if (slot.hasSampler)
+
+                    slot.visibility = static_cast<WGPUShaderStage>(slot.visibility | incoming.visibility);
+                    return true;
+                };
+
+                auto buildBase = [&](uint32_t set, uint32_t binding) -> ReflectedBinding
                 {
-                    if (slot.sampler.type != incoming.sampler.type)
-                    {
-                        errMsg = "auto-layout: binding sampler-type conflict across stages";
+                    ReflectedBinding rb{};
+                    rb.set = set;
+                    rb.binding = binding;
+                    rb.visibility = stage.visibility;
+                    return rb;
+                };
+
+                // Uniform buffers
+                for (const auto &r : res.uniform_buffers)
+                {
+                    if (!isStaticallyUsed(r.id, "uniform-buffer"))
+                        continue;
+                    uint32_t set = compiler.get_decoration(r.id, spv::DecorationDescriptorSet);
+                    uint32_t bind = compiler.get_decoration(r.id, spv::DecorationBinding);
+                    ReflectedBinding rb = buildBase(set, bind);
+                    rb.hasBuffer = true;
+                    rb.buffer.type = WGPUBufferBindingType_Uniform;
+                    if (!mergeInto(set, bind, rb))
                         return false;
-                    }
                 }
 
-                slot.visibility = static_cast<WGPUShaderStage>(slot.visibility | incoming.visibility);
+                // Storage buffers (distinguish read-only via NonWritable decoration)
+                for (const auto &r : res.storage_buffers)
+                {
+                    if (!isStaticallyUsed(r.id, "storage-buffer"))
+                        continue;
+                    uint32_t set = compiler.get_decoration(r.id, spv::DecorationDescriptorSet);
+                    uint32_t bind = compiler.get_decoration(r.id, spv::DecorationBinding);
+                    spirv_cross::Bitset flags = compiler.get_buffer_block_flags(r.id);
+                    bool readOnly = flags.get(spv::DecorationNonWritable);
+                    ReflectedBinding rb = buildBase(set, bind);
+                    rb.hasBuffer = true;
+                    rb.buffer.type = readOnly ? WGPUBufferBindingType_ReadOnlyStorage
+                                              : WGPUBufferBindingType_Storage;
+                    if (!mergeInto(set, bind, rb))
+                        return false;
+                }
+
+                // Sampled images (separate_images: SampledImage-type bindings without combined sampler)
+                for (const auto &r : res.separate_images)
+                {
+                    if (!isStaticallyUsed(r.id, "texture"))
+                        continue;
+                    uint32_t set = compiler.get_decoration(r.id, spv::DecorationDescriptorSet);
+                    uint32_t bind = compiler.get_decoration(r.id, spv::DecorationBinding);
+                    const auto &t = compiler.get_type(r.type_id);
+                    ReflectedBinding rb = buildBase(set, bind);
+                    rb.hasTexture = true;
+                    const bool paired = sampledImageVarIds.count(r.id) > 0;
+                    rb.texture.sampleType = SampleTypeFromSpirv(compiler, t, paired);
+                    rb.texture.viewDimension = DimensionFromSpirv(t);
+                    rb.texture.multisampled = t.image.ms ? 1u : 0u;
+                    if (!mergeInto(set, bind, rb))
+                        return false;
+                }
+
+                // Combined image samplers (HLSL->SPIR-V via DXC often emits these)
+                // — always sampler-paired by construction.
+                for (const auto &r : res.sampled_images)
+                {
+                    if (!isStaticallyUsed(r.id, "texture"))
+                        continue;
+                    uint32_t set = compiler.get_decoration(r.id, spv::DecorationDescriptorSet);
+                    uint32_t bind = compiler.get_decoration(r.id, spv::DecorationBinding);
+                    const auto &t = compiler.get_type(r.type_id);
+                    ReflectedBinding rb = buildBase(set, bind);
+                    rb.hasTexture = true;
+                    rb.texture.sampleType = SampleTypeFromSpirv(compiler, t, true);
+                    rb.texture.viewDimension = DimensionFromSpirv(t);
+                    rb.texture.multisampled = t.image.ms ? 1u : 0u;
+                    if (!mergeInto(set, bind, rb))
+                        return false;
+                }
+
+                // Separate samplers
+                for (const auto &r : res.separate_samplers)
+                {
+                    if (!isStaticallyUsed(r.id, "sampler"))
+                        continue;
+                    uint32_t set = compiler.get_decoration(r.id, spv::DecorationDescriptorSet);
+                    uint32_t bind = compiler.get_decoration(r.id, spv::DecorationBinding);
+                    ReflectedBinding rb = buildBase(set, bind);
+                    rb.hasSampler = true;
+                    rb.sampler.type = WGPUSamplerBindingType_Filtering;
+                    if (!mergeInto(set, bind, rb))
+                        return false;
+                }
+
+                // Storage images
+                for (const auto &r : res.storage_images)
+                {
+                    if (!isStaticallyUsed(r.id, "storage-texture"))
+                        continue;
+                    uint32_t set = compiler.get_decoration(r.id, spv::DecorationDescriptorSet);
+                    uint32_t bind = compiler.get_decoration(r.id, spv::DecorationBinding);
+                    const auto &t = compiler.get_type(r.type_id);
+                    spirv_cross::Bitset flags = compiler.get_decoration_bitset(r.id);
+                    bool readOnly = flags.get(spv::DecorationNonWritable);
+                    bool writeOnly = flags.get(spv::DecorationNonReadable);
+                    ReflectedBinding rb = buildBase(set, bind);
+                    rb.hasStorageTexture = true;
+                    if (readOnly)
+                        rb.storageTexture.access = WGPUStorageTextureAccess_ReadOnly;
+                    else if (writeOnly)
+                        rb.storageTexture.access = WGPUStorageTextureAccess_WriteOnly;
+                    else
+                        rb.storageTexture.access = WGPUStorageTextureAccess_ReadWrite;
+                    rb.storageTexture.format =
+                        StorageFormatForBinding(stage, set, bind,
+                                                StorageFormatFromSpirv(t.image.format));
+                    rb.storageTexture.viewDimension = DimensionFromSpirv(t);
+                    if (!mergeInto(set, bind, rb))
+                        return false;
+                }
+
                 return true;
-            };
-
-            auto buildBase = [&](uint32_t set, uint32_t binding) -> ReflectedBinding
-            {
-                ReflectedBinding rb{};
-                rb.set = set;
-                rb.binding = binding;
-                rb.visibility = stage.visibility;
-                return rb;
-            };
-
-            // Uniform buffers
-            for (const auto &r : res.uniform_buffers)
-            {
-                if (!isStaticallyUsed(r.id, "uniform-buffer"))
-                    continue;
-                uint32_t set = compiler.get_decoration(r.id, spv::DecorationDescriptorSet);
-                uint32_t bind = compiler.get_decoration(r.id, spv::DecorationBinding);
-                ReflectedBinding rb = buildBase(set, bind);
-                rb.hasBuffer = true;
-                rb.buffer.type = WGPUBufferBindingType_Uniform;
-                if (!mergeInto(set, bind, rb))
-                    return false;
             }
-
-            // Storage buffers (distinguish read-only via NonWritable decoration)
-            for (const auto &r : res.storage_buffers)
+            catch (const std::exception &e)
             {
-                if (!isStaticallyUsed(r.id, "storage-buffer"))
-                    continue;
-                uint32_t set = compiler.get_decoration(r.id, spv::DecorationDescriptorSet);
-                uint32_t bind = compiler.get_decoration(r.id, spv::DecorationBinding);
-                spirv_cross::Bitset flags = compiler.get_buffer_block_flags(r.id);
-                bool readOnly = flags.get(spv::DecorationNonWritable);
-                ReflectedBinding rb = buildBase(set, bind);
-                rb.hasBuffer = true;
-                rb.buffer.type = readOnly ? WGPUBufferBindingType_ReadOnlyStorage
-                                          : WGPUBufferBindingType_Storage;
-                if (!mergeInto(set, bind, rb))
-                    return false;
+                errMsg = std::string("auto-layout: spirv-cross exception: ") + e.what();
+                return false;
             }
-
-            // Sampled images (separate_images: SampledImage-type bindings without combined sampler)
-            for (const auto &r : res.separate_images)
+            catch (...)
             {
-                if (!isStaticallyUsed(r.id, "texture"))
-                    continue;
-                uint32_t set = compiler.get_decoration(r.id, spv::DecorationDescriptorSet);
-                uint32_t bind = compiler.get_decoration(r.id, spv::DecorationBinding);
-                const auto &t = compiler.get_type(r.type_id);
-                ReflectedBinding rb = buildBase(set, bind);
-                rb.hasTexture = true;
-                const bool paired = sampledImageVarIds.count(r.id) > 0;
-                rb.texture.sampleType = SampleTypeFromSpirv(compiler, t, paired);
-                rb.texture.viewDimension = DimensionFromSpirv(t);
-                rb.texture.multisampled = t.image.ms ? 1u : 0u;
-                if (!mergeInto(set, bind, rb))
-                    return false;
+                errMsg = "auto-layout: unknown spirv-cross exception";
+                return false;
             }
-
-            // Combined image samplers (HLSL->SPIR-V via DXC often emits these)
-            // — always sampler-paired by construction.
-            for (const auto &r : res.sampled_images)
-            {
-                if (!isStaticallyUsed(r.id, "texture"))
-                    continue;
-                uint32_t set = compiler.get_decoration(r.id, spv::DecorationDescriptorSet);
-                uint32_t bind = compiler.get_decoration(r.id, spv::DecorationBinding);
-                const auto &t = compiler.get_type(r.type_id);
-                ReflectedBinding rb = buildBase(set, bind);
-                rb.hasTexture = true;
-                rb.texture.sampleType = SampleTypeFromSpirv(compiler, t, true);
-                rb.texture.viewDimension = DimensionFromSpirv(t);
-                rb.texture.multisampled = t.image.ms ? 1u : 0u;
-                if (!mergeInto(set, bind, rb))
-                    return false;
-            }
-
-            // Separate samplers
-            for (const auto &r : res.separate_samplers)
-            {
-                if (!isStaticallyUsed(r.id, "sampler"))
-                    continue;
-                uint32_t set = compiler.get_decoration(r.id, spv::DecorationDescriptorSet);
-                uint32_t bind = compiler.get_decoration(r.id, spv::DecorationBinding);
-                ReflectedBinding rb = buildBase(set, bind);
-                rb.hasSampler = true;
-                rb.sampler.type = WGPUSamplerBindingType_Filtering;
-                if (!mergeInto(set, bind, rb))
-                    return false;
-            }
-
-            // Storage images
-            for (const auto &r : res.storage_images)
-            {
-                if (!isStaticallyUsed(r.id, "storage-texture"))
-                    continue;
-                uint32_t set = compiler.get_decoration(r.id, spv::DecorationDescriptorSet);
-                uint32_t bind = compiler.get_decoration(r.id, spv::DecorationBinding);
-                const auto &t = compiler.get_type(r.type_id);
-                spirv_cross::Bitset flags = compiler.get_decoration_bitset(r.id);
-                bool readOnly = flags.get(spv::DecorationNonWritable);
-                bool writeOnly = flags.get(spv::DecorationNonReadable);
-                ReflectedBinding rb = buildBase(set, bind);
-                rb.hasStorageTexture = true;
-                if (readOnly)
-                    rb.storageTexture.access = WGPUStorageTextureAccess_ReadOnly;
-                else if (writeOnly)
-                    rb.storageTexture.access = WGPUStorageTextureAccess_WriteOnly;
-                else
-                    rb.storageTexture.access = WGPUStorageTextureAccess_ReadWrite;
-                rb.storageTexture.format =
-                    StorageFormatForBinding(stage, set, bind,
-                                            StorageFormatFromSpirv(t.image.format));
-                rb.storageTexture.viewDimension = DimensionFromSpirv(t);
-                if (!mergeInto(set, bind, rb))
-                    return false;
-            }
-
-            return true;
         }
     } // namespace
 
@@ -735,58 +750,73 @@ namespace pwgpu
             return false;
         }
         spirv_cross::Compiler &compiler = *compilerPtr;
+        // get_execution_mode_argument / get_type can also throw on malformed
+        // SPIR-V; catch here so the unwind doesn't cross extern "C".
+        try
+        {
 
-        // Workgroup size from LocalSize execution mode.
-        auto execModes = compiler.get_execution_mode_bitset();
-        if (execModes.get(spv::ExecutionModeLocalSize))
-        {
-            out.sizeX = compiler.get_execution_mode_argument(spv::ExecutionModeLocalSize, 0);
-            out.sizeY = compiler.get_execution_mode_argument(spv::ExecutionModeLocalSize, 1);
-            out.sizeZ = compiler.get_execution_mode_argument(spv::ExecutionModeLocalSize, 2);
-            if (out.sizeX == 0)
-                out.sizeX = 1;
-            if (out.sizeY == 0)
-                out.sizeY = 1;
-            if (out.sizeZ == 0)
-                out.sizeZ = 1;
-        }
-        else
-        {
-            out.sizeX = out.sizeY = out.sizeZ = 1;
-        }
-
-        // Workgroup storage: walk raw SPIR-V for OpVariable with StorageClass=Workgroup.
-        // Format: [wordCount|opcode] [resultTypeId] [resultId] [storageClass] ...
-        constexpr uint32_t kOpVariable = 59u;
-        constexpr uint32_t kWorkgroup = 4u;
-        uint64_t wgBytes = 0;
-        for (size_t i = 5; i < spirv.size();)
-        {
-            uint32_t word0 = spirv[i];
-            uint32_t wordCount = word0 >> 16;
-            uint32_t opcode = word0 & 0xFFFFu;
-            if (wordCount == 0)
-                break;
-            if (opcode == kOpVariable && wordCount >= 4)
+            // Workgroup size from LocalSize execution mode.
+            auto execModes = compiler.get_execution_mode_bitset();
+            if (execModes.get(spv::ExecutionModeLocalSize))
             {
-                uint32_t storageClass = spirv[i + 3];
-                if (storageClass == kWorkgroup)
+                out.sizeX = compiler.get_execution_mode_argument(spv::ExecutionModeLocalSize, 0);
+                out.sizeY = compiler.get_execution_mode_argument(spv::ExecutionModeLocalSize, 1);
+                out.sizeZ = compiler.get_execution_mode_argument(spv::ExecutionModeLocalSize, 2);
+                if (out.sizeX == 0)
+                    out.sizeX = 1;
+                if (out.sizeY == 0)
+                    out.sizeY = 1;
+                if (out.sizeZ == 0)
+                    out.sizeZ = 1;
+            }
+            else
+            {
+                out.sizeX = out.sizeY = out.sizeZ = 1;
+            }
+
+            // Workgroup storage: walk raw SPIR-V for OpVariable with StorageClass=Workgroup.
+            // Format: [wordCount|opcode] [resultTypeId] [resultId] [storageClass] ...
+            constexpr uint32_t kOpVariable = 59u;
+            constexpr uint32_t kWorkgroup = 4u;
+            uint64_t wgBytes = 0;
+            for (size_t i = 5; i < spirv.size();)
+            {
+                uint32_t word0 = spirv[i];
+                uint32_t wordCount = word0 >> 16;
+                uint32_t opcode = word0 & 0xFFFFu;
+                if (wordCount == 0)
+                    break;
+                if (opcode == kOpVariable && wordCount >= 4)
                 {
-                    uint32_t typeId = spirv[i + 1]; // pointer type ID
-                    const auto &ptrType = compiler.get_type(typeId);
-                    if (ptrType.pointer && ptrType.parent_type != 0)
+                    uint32_t storageClass = spirv[i + 3];
+                    if (storageClass == kWorkgroup)
                     {
-                        const auto &elemType = compiler.get_type(ptrType.parent_type);
-                        uint64_t sz = ComputeTypeSize(compiler, elemType);
-                        sz = (sz + 15ull) & ~15ull;
-                        wgBytes += sz;
+                        uint32_t typeId = spirv[i + 1]; // pointer type ID
+                        const auto &ptrType = compiler.get_type(typeId);
+                        if (ptrType.pointer && ptrType.parent_type != 0)
+                        {
+                            const auto &elemType = compiler.get_type(ptrType.parent_type);
+                            uint64_t sz = ComputeTypeSize(compiler, elemType);
+                            sz = (sz + 15ull) & ~15ull;
+                            wgBytes += sz;
+                        }
                     }
                 }
+                i += wordCount;
             }
-            i += wordCount;
+            out.workgroupStorageBytes = wgBytes;
+            return true;
         }
-        out.workgroupStorageBytes = wgBytes;
-        return true;
+        catch (const std::exception &e)
+        {
+            errMsg = std::string("GetComputeWorkgroupInfo: spirv-cross exception: ") + e.what();
+            return false;
+        }
+        catch (...)
+        {
+            errMsg = "GetComputeWorkgroupInfo: unknown spirv-cross exception";
+            return false;
+        }
     }
 
     std::string ValidateExplicitLayoutCompat(const WGPUPipelineLayoutImpl *layout,
