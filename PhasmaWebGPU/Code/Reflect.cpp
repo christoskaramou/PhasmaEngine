@@ -368,12 +368,27 @@ namespace pwgpu
                 errMsg = "auto-layout: shader module has no SPIR-V";
                 return false;
             }
-            spirv_cross::Compiler compiler{stage.spirv->data(), stage.spirv->size()};
-            if (!stage.entryPoint.empty())
+            // spirv-cross set_entry_point throws when the named entry point
+            // isn't in the SPIR-V (placeholder SPIR-V with mismatched JS
+            // reflection — texture_external, naga-panic fallback). Catch
+            // here; otherwise the exception unwinds through the extern "C"
+            // boundary in wgpuDeviceCreateRenderPipeline and aborts.
+            std::unique_ptr<spirv_cross::Compiler> compilerPtr;
+            try
             {
-                compiler.set_entry_point(stage.entryPoint,
-                                         static_cast<spv::ExecutionModel>(stage.executionModel));
+                compilerPtr = std::make_unique<spirv_cross::Compiler>(stage.spirv->data(),
+                                                                      stage.spirv->size());
+                if (!stage.entryPoint.empty())
+                    compilerPtr->set_entry_point(stage.entryPoint,
+                                                 static_cast<spv::ExecutionModel>(stage.executionModel));
             }
+            catch (const std::exception &e)
+            {
+                errMsg = std::string("auto-layout: spirv-cross rejected entry point '") +
+                         stage.entryPoint + "': " + e.what();
+                return false;
+            }
+            spirv_cross::Compiler &compiler = *compilerPtr;
             // Per W3C §10.3.6 the auto-layout BGL contains exactly the
             // resources *statically used by entryPoint*. Prefer the JS
             // frontend's per-entry-point reflection (naga side-channel) when
@@ -704,9 +719,22 @@ namespace pwgpu
             errMsg = "GetComputeWorkgroupInfo: empty SPIR-V";
             return false;
         }
-        spirv_cross::Compiler compiler{spirv.data(), spirv.size()};
-        if (!entryPoint.empty())
-            compiler.set_entry_point(entryPoint, spv::ExecutionModelGLCompute);
+        // Same crash class as ReflectOneStage — spirv-cross throws on
+        // missing entry point and unwinds through extern "C". Catch here.
+        std::unique_ptr<spirv_cross::Compiler> compilerPtr;
+        try
+        {
+            compilerPtr = std::make_unique<spirv_cross::Compiler>(spirv.data(), spirv.size());
+            if (!entryPoint.empty())
+                compilerPtr->set_entry_point(entryPoint, spv::ExecutionModelGLCompute);
+        }
+        catch (const std::exception &e)
+        {
+            errMsg = std::string("GetComputeWorkgroupInfo: spirv-cross rejected entry point '") +
+                     entryPoint + "': " + e.what();
+            return false;
+        }
+        spirv_cross::Compiler &compiler = *compilerPtr;
 
         // Workgroup size from LocalSize execution mode.
         auto execModes = compiler.get_execution_mode_bitset();
@@ -816,21 +844,27 @@ namespace pwgpu
                     {
                         uint32_t set = compiler.get_decoration(r.id, spv::DecorationDescriptorSet);
                         uint32_t binding = compiler.get_decoration(r.id, spv::DecorationBinding);
-                        if (stageIn.staticallyUsedResources && !stageIn.staticallyUsedResources->empty() &&
-                            stageIn.staticallyUsedResources->count(
-                                BindingResourceKey{set, binding, resourceKind ? resourceKind : ""}) == 0)
-                            continue;
-                        if (stageIn.staticallyUsedNames && !stageIn.staticallyUsedNames->empty())
+                        // Filter only when authoritative. Empty-as-fallback
+                        // here would silently skip every binding when the
+                        // per-EP set is missing/empty for an EP that does use
+                        // bindings — a false-positive validation success.
+                        if (stageIn.staticallyUsedAuthoritative)
                         {
-                            std::string resourceName = compiler.get_name(r.id);
-                            if (!resourceName.empty() &&
-                                stageIn.staticallyUsedNames->count(resourceName) == 0)
+                            if (stageIn.staticallyUsedResources &&
+                                stageIn.staticallyUsedResources->count(BindingResourceKey{
+                                    set, binding, resourceKind ? resourceKind : ""}) == 0)
+                                continue;
+                            if (stageIn.staticallyUsedNames)
+                            {
+                                std::string resourceName = compiler.get_name(r.id);
+                                if (!resourceName.empty() &&
+                                    stageIn.staticallyUsedNames->count(resourceName) == 0)
+                                    continue;
+                            }
+                            if (!stageIn.staticallyUsed ||
+                                stageIn.staticallyUsed->count(BindingKey{set, binding}) == 0)
                                 continue;
                         }
-                        if ((stageIn.staticallyUsedAuthoritative || stageIn.staticallyUsed) &&
-                            (!stageIn.staticallyUsed ||
-                             stageIn.staticallyUsed->count(BindingKey{set, binding}) == 0))
-                            continue;
                         auto err = checkBinding(set, binding,
                                                 [&](const WGPUBindGroupLayoutEntryResolved &e)
                                                 { return typeCheck(e, r); });
