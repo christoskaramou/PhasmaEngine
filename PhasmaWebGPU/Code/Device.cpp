@@ -4694,7 +4694,9 @@ extern "C"
             qs->device = device;
             wgpuDeviceAddRef(device);
             qs->type = descriptor->type;
-            qs->count = 0;
+            // W3C §20.1.1: q.count is set from descriptor.count on the content
+            // timeline before device-timeline validation may invalidate q.
+            qs->count = descriptor->count;
             qs->invalid = true;
             if (descriptor->label.data)
                 qs->label = pwgpu::ToString(descriptor->label);
