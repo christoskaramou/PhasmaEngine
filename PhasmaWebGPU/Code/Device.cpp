@@ -186,9 +186,12 @@ namespace
         stage.storageTextureFormats = &storageTextureFormatsOut;
     }
 
-    // §10.3.2.3 pipeline-overridable constants validation.
+    // §10.3.2.3 pipeline-overridable constants validation. entryPoint scopes
+    // the "missing required override" check; legacy module-wide bool is the
+    // fallback for shader modules without per-EP reflection.
     std::string ValidateStageConstants(const WGPUShaderModuleImpl *sm,
                                        const std::string &stageTag,
+                                       const std::string &entryPoint,
                                        size_t constantCount,
                                        const WGPUConstantEntry *constants)
     {
@@ -250,7 +253,14 @@ namespace
 
         for (const auto &ov : sm->reflection.overrides)
         {
-            if (!ov.staticallyUsed || ov.hasDefault)
+            if (ov.hasDefault)
+                continue;
+            // Non-authoritative per-EP set falls back to module-wide bool so
+            // producer skew still triggers a loud "missing override" reject.
+            bool used = ov.staticallyUsedByEntryPointAuthoritative
+                            ? ov.staticallyUsedByEntryPoint.count(entryPoint) > 0
+                            : ov.staticallyUsed;
+            if (!used)
                 continue;
             bool provided = false;
             for (size_t i = 0; i < constantCount; ++i)
@@ -3136,7 +3146,8 @@ extern "C"
 
         {
             std::string constErr = ValidateStageConstants(
-                shaderModule, "compute", descriptor->compute.constantCount,
+                shaderModule, "compute", entryPointName,
+                descriptor->compute.constantCount,
                 descriptor->compute.constants);
             if (!constErr.empty())
             {
@@ -3468,7 +3479,7 @@ extern "C"
 
         {
             std::string constErr = ValidateStageConstants(
-                vertModule, "vertex",
+                vertModule, "vertex", vertEntry,
                 descriptor->vertex.constantCount, descriptor->vertex.constants);
             if (!constErr.empty())
             {
@@ -3609,7 +3620,7 @@ extern "C"
 
             {
                 std::string constErr = ValidateStageConstants(
-                    fragModuleSrc, "fragment",
+                    fragModuleSrc, "fragment", fragEntry,
                     descriptor->fragment->constantCount, descriptor->fragment->constants);
                 if (!constErr.empty())
                 {

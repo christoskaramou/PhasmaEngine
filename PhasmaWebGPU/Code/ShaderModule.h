@@ -1,5 +1,8 @@
 #pragma once
 
+#include <set>
+#include <string>
+#include <vector>
 #include <webgpu/webgpu.h>
 #include "API/Shader.h"
 
@@ -43,6 +46,12 @@ struct WGPUShaderReflectionMeta
         std::string type;
         bool hasDefault = false;
         bool staticallyUsed = false;
+        // Disambiguates "no EP uses this override" from "no metadata supplied"
+        // (empty() alone is ambiguous; same pattern as
+        // staticallyUsedAuthoritative in Reflect.h). false → fall back to
+        // staticallyUsed bool. true → trust the set.
+        bool staticallyUsedByEntryPointAuthoritative = false;
+        std::set<std::string> staticallyUsedByEntryPoint;
     };
     std::vector<EntryPoint> entryPoints;
     std::vector<Binding> comparisonSamplers;

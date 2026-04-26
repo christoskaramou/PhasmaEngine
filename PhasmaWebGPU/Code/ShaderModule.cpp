@@ -262,6 +262,49 @@ extern "C"
         sm->reflection.overrides.push_back(std::move(ov));
     }
 
+    // W3C "missing required override" is entry-point-scoped. Replaces any
+    // prior set so re-emission is idempotent. Names are validated against
+    // sm->entryPoints + reflection.entryPoints; an unknown name marks the
+    // data non-authoritative so producer/version skew falls back to the
+    // module-wide bool (loud false-positive over silent over-acceptance).
+    PWGPU_EXT_EXPORT void pwgpuShaderModuleSetOverrideUsedByEntryPoints(
+        WGPUShaderModule sm, const char *identifier,
+        const char *const *epNames, uint32_t count)
+    {
+        if (!sm || !identifier)
+            return;
+        std::set<std::string> knownEps;
+        for (const auto &ep : sm->entryPoints)
+            knownEps.insert(ep.name);
+        for (const auto &ep : sm->reflection.entryPoints)
+            knownEps.insert(ep.name);
+        for (auto &ov : sm->reflection.overrides)
+        {
+            if (ov.identifier != identifier)
+                continue;
+            ov.staticallyUsedByEntryPoint.clear();
+            ov.staticallyUsedByEntryPointAuthoritative = false;
+            uint32_t supplied = 0;
+            uint32_t accepted = 0;
+            for (uint32_t i = 0; i < count; ++i)
+            {
+                if (!epNames || !epNames[i])
+                    continue;
+                ++supplied;
+                if (knownEps.count(epNames[i]))
+                {
+                    ov.staticallyUsedByEntryPoint.insert(epNames[i]);
+                    ++accepted;
+                }
+            }
+            // supplied==0 is the legitimate "no EP uses this override" case;
+            // accepted==supplied means producer matches the SPIR-V parse.
+            if (supplied == 0 || accepted == supplied)
+                ov.staticallyUsedByEntryPointAuthoritative = true;
+            return;
+        }
+    }
+
     PWGPU_EXT_EXPORT uint32_t pwgpuShaderModuleValidateOverrides(WGPUShaderModule sm)
     {
         if (!sm || !sm->device)
