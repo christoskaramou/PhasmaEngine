@@ -91,5 +91,10 @@ struct WGPUTextureViewImpl
     uint32_t baseArrayLayer = 0;
     uint32_t arrayLayerCount = 1;
     WGPUTextureAspect aspect = WGPUTextureAspect_All;
+    WGPUTextureComponentSwizzle swizzle = {WGPUComponentSwizzle_R,
+                                           WGPUComponentSwizzle_G,
+                                           WGPUComponentSwizzle_B,
+                                           WGPUComponentSwizzle_A};
+    bool hasNonIdentitySwizzle = false;
     WGPUExtent3D renderExtent = {0, 0, 0};
 };

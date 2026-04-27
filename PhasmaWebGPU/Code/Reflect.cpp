@@ -684,44 +684,141 @@ namespace pwgpu
         }
     } // namespace
 
-    static uint64_t ComputeTypeSize(const spirv_cross::Compiler &compiler,
-                                    const spirv_cross::SPIRType &type)
+    static uint64_t RoundUp(uint64_t alignment, uint64_t value)
     {
-        if (!type.array.empty())
-        {
-            // spirv-cross holds nested-array dims redundantly: the outer SPIRType
-            // lists all dims, and parent_type also carries the inner dims. Recurse
-            // into parent and multiply by only this level's outermost dim.
-            uint64_t elem = ComputeTypeSize(compiler, compiler.get_type(type.parent_type));
-            uint64_t count = type.array.back();
-            return elem * count;
-        }
+        if (alignment == 0)
+            return value;
+        return ((value + alignment - 1ull) / alignment) * alignment;
+    }
+
+    static uint64_t ComputeScalarByteSize(const spirv_cross::SPIRType &type)
+    {
         switch (type.basetype)
         {
-        case spirv_cross::SPIRType::Struct:
-            return static_cast<uint64_t>(compiler.get_declared_struct_size(type));
         case spirv_cross::SPIRType::Boolean:
-            return 4u * type.vecsize * type.columns;
+            return 4;
         case spirv_cross::SPIRType::Char:
-            return 1u * type.vecsize * type.columns;
         case spirv_cross::SPIRType::SByte:
         case spirv_cross::SPIRType::UByte:
-            return 1u * type.vecsize * type.columns;
+            return 1;
         case spirv_cross::SPIRType::Short:
         case spirv_cross::SPIRType::UShort:
         case spirv_cross::SPIRType::Half:
-            return 2u * type.vecsize * type.columns;
+            return 2;
         case spirv_cross::SPIRType::Int:
         case spirv_cross::SPIRType::UInt:
         case spirv_cross::SPIRType::Float:
-            return 4u * type.vecsize * type.columns;
+            return 4;
         case spirv_cross::SPIRType::Int64:
         case spirv_cross::SPIRType::UInt64:
         case spirv_cross::SPIRType::Double:
-            return 8u * type.vecsize * type.columns;
+            return 8;
         default:
             return 0;
         }
+    }
+
+    static uint64_t ComputeVectorAlignment(const spirv_cross::SPIRType &type)
+    {
+        uint64_t scalarAlign = ComputeScalarByteSize(type);
+        if (type.vecsize == 1)
+            return scalarAlign;
+        if (type.vecsize == 2)
+            return scalarAlign * 2ull;
+        return scalarAlign * 4ull;
+    }
+
+    static uint64_t ComputeTypeSize(const spirv_cross::Compiler &compiler, uint32_t typeId);
+    static uint64_t ComputeTypeAlignment(const spirv_cross::Compiler &compiler, uint32_t typeId);
+
+    static uint64_t ComputeNonArrayTypeAlignment(const spirv_cross::Compiler &compiler,
+                                                 const spirv_cross::SPIRType &type);
+
+    static uint64_t ComputeStructSize(const spirv_cross::Compiler &compiler,
+                                      uint32_t typeId,
+                                      const spirv_cross::SPIRType &type)
+    {
+        uint64_t structAlign = ComputeNonArrayTypeAlignment(compiler, type);
+        uint64_t structSize = 0;
+        for (uint32_t i = 0; i < type.member_types.size(); ++i)
+        {
+            uint64_t memberAlign = ComputeTypeAlignment(compiler, type.member_types[i]);
+            uint64_t memberOffset = RoundUp(memberAlign, structSize);
+            if (compiler.has_member_decoration(typeId, i, spv::DecorationOffset))
+                memberOffset = compiler.get_member_decoration(typeId, i, spv::DecorationOffset);
+
+            uint64_t memberSize = ComputeTypeSize(compiler, type.member_types[i]);
+            uint64_t memberEnd = memberOffset + memberSize;
+            if (memberEnd > structSize)
+                structSize = memberEnd;
+        }
+        return RoundUp(structAlign, structSize);
+    }
+
+    static uint64_t ComputeNonArrayTypeSize(const spirv_cross::Compiler &compiler,
+                                            uint32_t typeId,
+                                            const spirv_cross::SPIRType &type)
+    {
+        if (type.basetype == spirv_cross::SPIRType::Struct)
+            return ComputeStructSize(compiler, typeId, type);
+
+        uint64_t scalarOrVectorSize = ComputeScalarByteSize(type) * type.vecsize;
+        if (type.columns <= 1)
+            return scalarOrVectorSize;
+
+        uint64_t columnStride = RoundUp(ComputeVectorAlignment(type), scalarOrVectorSize);
+        return columnStride * type.columns;
+    }
+
+    static uint64_t ComputeNonArrayTypeAlignment(const spirv_cross::Compiler &compiler,
+                                                 const spirv_cross::SPIRType &type)
+    {
+        if (type.basetype == spirv_cross::SPIRType::Struct)
+        {
+            uint64_t align = 1;
+            for (uint32_t memberTypeId : type.member_types)
+            {
+                uint64_t memberAlign = ComputeTypeAlignment(compiler, memberTypeId);
+                if (memberAlign > align)
+                    align = memberAlign;
+            }
+            return align;
+        }
+
+        return ComputeVectorAlignment(type);
+    }
+
+    static uint64_t ComputeTypeSize(const spirv_cross::Compiler &compiler, uint32_t typeId)
+    {
+        const auto &type = compiler.get_type(typeId);
+        if (!type.array.empty())
+        {
+            uint64_t count = type.array.back();
+            if (compiler.has_decoration(typeId, spv::DecorationArrayStride))
+                return static_cast<uint64_t>(compiler.get_decoration(typeId, spv::DecorationArrayStride)) * count;
+            if (type.parent_type != 0)
+            {
+                uint64_t elementSize = ComputeTypeSize(compiler, type.parent_type);
+                uint64_t elementAlign = ComputeTypeAlignment(compiler, type.parent_type);
+                return RoundUp(elementAlign, elementSize) * count;
+            }
+            uint64_t elementSize = ComputeNonArrayTypeSize(compiler, typeId, type);
+            uint64_t elementAlign = ComputeNonArrayTypeAlignment(compiler, type);
+            return RoundUp(elementAlign, elementSize) * count;
+        }
+        return ComputeNonArrayTypeSize(compiler, typeId, type);
+    }
+
+    static uint64_t ComputeTypeAlignment(const spirv_cross::Compiler &compiler, uint32_t typeId)
+    {
+        const auto &type = compiler.get_type(typeId);
+        if (!type.array.empty())
+        {
+            if (type.parent_type != 0)
+                return ComputeTypeAlignment(compiler, type.parent_type);
+            return ComputeNonArrayTypeAlignment(compiler, type);
+        }
+        return ComputeNonArrayTypeAlignment(compiler, type);
     }
 
     bool GetComputeWorkgroupInfo(const std::vector<uint32_t> &spirv,
@@ -795,8 +892,7 @@ namespace pwgpu
                         const auto &ptrType = compiler.get_type(typeId);
                         if (ptrType.pointer && ptrType.parent_type != 0)
                         {
-                            const auto &elemType = compiler.get_type(ptrType.parent_type);
-                            uint64_t sz = ComputeTypeSize(compiler, elemType);
+                            uint64_t sz = ComputeTypeSize(compiler, ptrType.parent_type);
                             sz = (sz + 15ull) & ~15ull;
                             wgBytes += sz;
                         }
@@ -1210,6 +1306,103 @@ namespace pwgpu
         }
 
         const uint32_t numSets = merged.empty() ? 0u : (merged.rbegin()->first + 1u);
+
+        // Pre-pass: per-stage resource counters and per-binding-index check.
+        // Auto-layout still has to honor maxXxxPerShaderStage and
+        // maxBindingsPerBindGroup since the pipeline layout it produces is
+        // logically equivalent to an explicit one (W3C §3.6.2). Validate
+        // before allocating any Vulkan handles so failure leaks nothing.
+        {
+            struct StageCounters
+            {
+                uint32_t uniformBuffers = 0;
+                uint32_t storageBuffers = 0;
+                uint32_t samplers = 0;
+                uint32_t sampledTextures = 0;
+                uint32_t storageTextures = 0;
+            };
+            StageCounters vertexCounters{}, fragmentCounters{}, computeCounters{};
+            const auto &lim = device->limits;
+            for (const auto &setKv : merged)
+            {
+                if (setKv.first >= lim.maxBindGroups)
+                {
+                    errMsg = "auto-layout: bind group index >= maxBindGroups";
+                    return nullptr;
+                }
+                for (const auto &kv : setKv.second)
+                {
+                    const ReflectedBinding &rb = kv.second;
+                    if (rb.binding >= lim.maxBindingsPerBindGroup)
+                    {
+                        errMsg = "auto-layout: binding index >= maxBindingsPerBindGroup";
+                        return nullptr;
+                    }
+                    auto accumulate = [&](StageCounters &c)
+                    {
+                        if (rb.hasBuffer)
+                        {
+                            if (rb.buffer.type == WGPUBufferBindingType_Uniform)
+                                c.uniformBuffers++;
+                            else
+                                c.storageBuffers++;
+                        }
+                        else if (rb.hasSampler)
+                            c.samplers++;
+                        else if (rb.hasTexture)
+                            c.sampledTextures++;
+                        else if (rb.hasStorageTexture)
+                            c.storageTextures++;
+                    };
+                    if (rb.visibility & WGPUShaderStage_Vertex)
+                        accumulate(vertexCounters);
+                    if (rb.visibility & WGPUShaderStage_Fragment)
+                        accumulate(fragmentCounters);
+                    if (rb.visibility & WGPUShaderStage_Compute)
+                        accumulate(computeCounters);
+                }
+            }
+            auto checkStage = [&](const StageCounters &c, const char *stageName) -> bool
+            {
+                if (c.uniformBuffers > lim.maxUniformBuffersPerShaderStage)
+                {
+                    errMsg = std::string("auto-layout: combined ") + stageName +
+                             " stage exceeds maxUniformBuffersPerShaderStage";
+                    return false;
+                }
+                if (c.storageBuffers > lim.maxStorageBuffersPerShaderStage)
+                {
+                    errMsg = std::string("auto-layout: combined ") + stageName +
+                             " stage exceeds maxStorageBuffersPerShaderStage";
+                    return false;
+                }
+                if (c.samplers > lim.maxSamplersPerShaderStage)
+                {
+                    errMsg = std::string("auto-layout: combined ") + stageName +
+                             " stage exceeds maxSamplersPerShaderStage";
+                    return false;
+                }
+                if (c.sampledTextures > lim.maxSampledTexturesPerShaderStage)
+                {
+                    errMsg = std::string("auto-layout: combined ") + stageName +
+                             " stage exceeds maxSampledTexturesPerShaderStage";
+                    return false;
+                }
+                if (c.storageTextures > lim.maxStorageTexturesPerShaderStage)
+                {
+                    errMsg = std::string("auto-layout: combined ") + stageName +
+                             " stage exceeds maxStorageTexturesPerShaderStage";
+                    return false;
+                }
+                return true;
+            };
+            if (!checkStage(vertexCounters, "vertex") ||
+                !checkStage(fragmentCounters, "fragment") ||
+                !checkStage(computeCounters, "compute"))
+            {
+                return nullptr;
+            }
+        }
 
         auto *pl = new WGPUPipelineLayoutImpl();
         pl->device = device;

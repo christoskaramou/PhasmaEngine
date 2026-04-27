@@ -396,6 +396,12 @@ namespace pwgpu
         case WGPUTextureFormat_R8Snorm:
         case WGPUTextureFormat_RG8Snorm:
         case WGPUTextureFormat_RGBA8Snorm:
+        case WGPUTextureFormat_R16Unorm:
+        case WGPUTextureFormat_R16Snorm:
+        case WGPUTextureFormat_RG16Unorm:
+        case WGPUTextureFormat_RG16Snorm:
+        case WGPUTextureFormat_RGBA16Unorm:
+        case WGPUTextureFormat_RGBA16Snorm:
         case WGPUTextureFormat_RGB9E5Ufloat:
             return false;
         default:

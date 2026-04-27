@@ -685,6 +685,11 @@ extern "C"
         WGPUComponentSwizzle sG = WGPUComponentSwizzle_G;
         WGPUComponentSwizzle sB = WGPUComponentSwizzle_B;
         WGPUComponentSwizzle sA = WGPUComponentSwizzle_A;
+        auto isIdentitySwizzle = [&]()
+        {
+            return sR == WGPUComponentSwizzle_R && sG == WGPUComponentSwizzle_G &&
+                   sB == WGPUComponentSwizzle_B && sA == WGPUComponentSwizzle_A;
+        };
         if (swizzleExt)
         {
             auto resolveSwizzle = [](WGPUComponentSwizzle v, WGPUComponentSwizzle identity)
@@ -696,10 +701,7 @@ extern "C"
             sB = resolveSwizzle(swizzleExt->swizzle.b, WGPUComponentSwizzle_B);
             sA = resolveSwizzle(swizzleExt->swizzle.a, WGPUComponentSwizzle_A);
 
-            const bool isIdentity = sR == WGPUComponentSwizzle_R &&
-                                    sG == WGPUComponentSwizzle_G &&
-                                    sB == WGPUComponentSwizzle_B &&
-                                    sA == WGPUComponentSwizzle_A;
+            const bool isIdentity = isIdentitySwizzle();
             const bool featureEnabled =
                 texture->device &&
                 wgpuDeviceHasFeature(texture->device,
@@ -785,6 +787,8 @@ extern "C"
         view->baseArrayLayer = resolved.baseArrayLayer;
         view->arrayLayerCount = resolved.arrayLayerCount;
         view->aspect = resolved.aspect;
+        view->swizzle = {sR, sG, sB, sA};
+        view->hasNonIdentitySwizzle = !isIdentitySwizzle();
         if (descriptor && descriptor->label.data)
             view->label = pwgpu::ToString(descriptor->label);
 

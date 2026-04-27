@@ -653,6 +653,8 @@ extern "C"
                                         "beginRenderPass: attachment view usage must include RenderAttachment");
                 enc->invalid = true;
             }
+            if (view->hasNonIdentitySwizzle)
+                return makeInvalidPass("beginRenderPass: attachment view swizzle must be rgba");
             if (view->mipLevelCount != 1 || view->arrayLayerCount != 1)
                 return makeInvalidPass("mip/layer count != 1");
 
@@ -732,6 +734,9 @@ extern "C"
                 if (!(rt->usage & WGPUTextureUsage_RenderAttachment))
                     return makeInvalidPass(
                         "beginRenderPass: resolveTarget usage must include RenderAttachment");
+                if (rt->hasNonIdentitySwizzle)
+                    return makeInvalidPass(
+                        "beginRenderPass: resolveTarget swizzle must be rgba");
                 if (rt->dimension == WGPUTextureViewDimension_3D)
                     return makeInvalidPass(
                         "beginRenderPass: resolveTarget must be a non-3d texture view");
@@ -806,6 +811,9 @@ extern "C"
             if (!(dsView->usage & WGPUTextureUsage_RenderAttachment))
                 return makeInvalidPass(
                     "beginRenderPass: depthStencilAttachment.view usage must include RenderAttachment");
+            if (dsView->hasNonIdentitySwizzle)
+                return makeInvalidPass(
+                    "beginRenderPass: depthStencilAttachment.view swizzle must be rgba");
             if (dsView->mipLevelCount != 1 || dsView->arrayLayerCount != 1)
                 return makeInvalidPass(
                     "beginRenderPass: depthStencilAttachment.view mipLevelCount and arrayLayerCount must be 1");

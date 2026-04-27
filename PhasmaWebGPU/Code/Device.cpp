@@ -2339,6 +2339,9 @@ extern "C"
 
                 if (tv->mipLevelCount != 1)
                     return makeInvalid("storageTexture view must have mipLevelCount = 1");
+
+                if (tv->hasNonIdentitySwizzle)
+                    return makeInvalid("storageTexture view swizzle must be rgba");
             }
             else if (le.hasExternalTexture)
             {
