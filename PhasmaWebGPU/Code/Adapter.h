@@ -33,6 +33,7 @@ struct WGPUAdapterImpl
 
     VkFormat resolvedDepth24Plus = VK_FORMAT_D32_SFLOAT;
     VkFormat resolvedDepth24PlusStencil8 = VK_FORMAT_D32_SFLOAT_S8_UINT;
+    VkFormat resolvedStencil8 = VK_FORMAT_S8_UINT;
     bool bgra8UnormStorage = false;
     bool float32Filterable = false;
     bool rg11b10UfloatRenderable = false;

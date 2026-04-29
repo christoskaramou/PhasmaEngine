@@ -1327,6 +1327,8 @@ extern "C"
             vkFmt = device->resolvedDepth24Plus;
         else if (fmt == WGPUTextureFormat_Depth24PlusStencil8)
             vkFmt = device->resolvedDepth24PlusStencil8;
+        else if (fmt == WGPUTextureFormat_Stencil8)
+            vkFmt = device->resolvedStencil8;
 
         vk::ImageCreateInfo ci = pe::Image::CreateInfoInit();
         ci.format = static_cast<vk::Format>(vkFmt);
@@ -1412,6 +1414,13 @@ extern "C"
             tex->invalid = true;
             return tex;
         }
+
+        // Stencil8 backed by a combined depth-stencil VkFormat (Intel iGPU path):
+        // pin all engine barriers to stencil-only aspect so STENCIL_*_OPTIMAL
+        // layouts pass VVL with separateDepthStencilLayouts. The depth aspect is
+        // unused storage.
+        if (fmt == WGPUTextureFormat_Stencil8 && vkFmt != VK_FORMAT_S8_UINT)
+            tex->image->SetAspectMaskOverride(vk::ImageAspectFlagBits::eStencil);
 
         if (zeroInitViaClearImage && device->queue && device->queue->peQueue)
         {

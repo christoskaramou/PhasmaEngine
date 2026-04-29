@@ -62,7 +62,7 @@ if (PE_WEBGPU_WGSL)
     FetchContent_MakeAvailable(Corrosion)
 
     corrosion_import_crate(
-        MANIFEST_PATH "${CMAKE_CURRENT_SOURCE_DIR}/third_party/naga-bridge/Cargo.toml"
+        MANIFEST_PATH "${CMAKE_CURRENT_SOURCE_DIR}/WgslBridge/Cargo.toml"
         PROFILE release
         CRATE_TYPES staticlib
     )
@@ -70,7 +70,7 @@ if (PE_WEBGPU_WGSL)
     target_link_libraries(PhasmaWebGPU PRIVATE naga_bridge)
     target_include_directories(
         PhasmaWebGPU
-        PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/third_party/naga-bridge/include"
+        PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/WgslBridge/include"
     )
     target_compile_definitions(PhasmaWebGPU PRIVATE PE_WEBGPU_WGSL=1)
 endif()

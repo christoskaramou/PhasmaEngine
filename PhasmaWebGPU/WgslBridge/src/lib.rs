@@ -1457,6 +1457,304 @@ fn lower_short_circuit_source(source: &str, constants: Option<&HashMap<String, f
     }
 }
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum BinaryPrecedenceGroup {
+    Multiplicative,
+    Additive,
+    Shift,
+    Relational,
+    BinaryAnd,
+    BinaryXor,
+    BinaryOr,
+    Logical,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum BinaryPrecedenceOp {
+    Mul,
+    Div,
+    Rem,
+    Add,
+    Sub,
+    Shl,
+    Shr,
+    Lt,
+    Gt,
+    Le,
+    Ge,
+    Eq,
+    Ne,
+    BitAnd,
+    BitXor,
+    BitOr,
+    LogAnd,
+    LogOr,
+}
+
+impl BinaryPrecedenceOp {
+    fn group(self) -> BinaryPrecedenceGroup {
+        match self {
+            Self::Mul | Self::Div | Self::Rem => BinaryPrecedenceGroup::Multiplicative,
+            Self::Add | Self::Sub => BinaryPrecedenceGroup::Additive,
+            Self::Shl | Self::Shr => BinaryPrecedenceGroup::Shift,
+            Self::Lt | Self::Gt | Self::Le | Self::Ge | Self::Eq | Self::Ne => {
+                BinaryPrecedenceGroup::Relational
+            }
+            Self::BitAnd => BinaryPrecedenceGroup::BinaryAnd,
+            Self::BitXor => BinaryPrecedenceGroup::BinaryXor,
+            Self::BitOr => BinaryPrecedenceGroup::BinaryOr,
+            Self::LogAnd | Self::LogOr => BinaryPrecedenceGroup::Logical,
+        }
+    }
+}
+
+fn mask_comments_preserve_len(source: &str) -> String {
+    let bytes = source.as_bytes();
+    let mut out = String::with_capacity(source.len());
+    let mut i = 0usize;
+    while i < bytes.len() {
+        if i + 1 < bytes.len() && bytes[i] == b'/' && bytes[i + 1] == b'/' {
+            out.push(' ');
+            out.push(' ');
+            i += 2;
+            while i < bytes.len() && bytes[i] != b'\n' {
+                out.push(' ');
+                i += 1;
+            }
+            continue;
+        }
+        if i + 1 < bytes.len() && bytes[i] == b'/' && bytes[i + 1] == b'*' {
+            out.push(' ');
+            out.push(' ');
+            i += 2;
+            while i + 1 < bytes.len() && !(bytes[i] == b'*' && bytes[i + 1] == b'/') {
+                out.push(if bytes[i] == b'\n' || bytes[i] == b'\r' {
+                    bytes[i] as char
+                } else {
+                    ' '
+                });
+                i += 1;
+            }
+            if i + 1 < bytes.len() {
+                out.push(' ');
+                out.push(' ');
+                i += 2;
+            }
+            continue;
+        }
+        out.push(bytes[i] as char);
+        i += 1;
+    }
+    out
+}
+
+fn prev_non_ws(bytes: &[u8], mut i: usize) -> Option<u8> {
+    while i > 0 {
+        i -= 1;
+        if !bytes[i].is_ascii_whitespace() {
+            return Some(bytes[i]);
+        }
+    }
+    None
+}
+
+fn next_non_ws(bytes: &[u8], mut i: usize) -> Option<u8> {
+    while i < bytes.len() {
+        if !bytes[i].is_ascii_whitespace() {
+            return Some(bytes[i]);
+        }
+        i += 1;
+    }
+    None
+}
+
+fn has_binary_left_context(bytes: &[u8], i: usize) -> bool {
+    prev_non_ws(bytes, i).is_some_and(|c| {
+        !matches!(
+            c,
+            b'(' | b'['
+                | b'{'
+                | b','
+                | b':'
+                | b';'
+                | b'='
+                | b'!'
+                | b'<'
+                | b'>'
+                | b'&'
+                | b'|'
+                | b'^'
+                | b'+'
+                | b'-'
+                | b'*'
+                | b'/'
+                | b'%'
+        )
+    })
+}
+
+fn has_binary_right_context(bytes: &[u8], i: usize) -> bool {
+    next_non_ws(bytes, i).is_some_and(|c| !matches!(c, b')' | b']' | b'}' | b',' | b';'))
+}
+
+fn binary_precedence_op_at(expr: &str, i: usize) -> Option<(BinaryPrecedenceOp, usize)> {
+    let bytes = expr.as_bytes();
+    let two = |op, len| {
+        (has_binary_left_context(bytes, i) && has_binary_right_context(bytes, i + len))
+            .then_some((op, len))
+    };
+    if i + 1 < bytes.len() {
+        match &bytes[i..i + 2] {
+            b"&&" => return two(BinaryPrecedenceOp::LogAnd, 2),
+            b"||" => return two(BinaryPrecedenceOp::LogOr, 2),
+            b"<<" => return two(BinaryPrecedenceOp::Shl, 2),
+            b">>" => return two(BinaryPrecedenceOp::Shr, 2),
+            b"<=" => return two(BinaryPrecedenceOp::Le, 2),
+            b">=" => return two(BinaryPrecedenceOp::Ge, 2),
+            b"==" => return two(BinaryPrecedenceOp::Eq, 2),
+            b"!=" => return two(BinaryPrecedenceOp::Ne, 2),
+            _ => {}
+        }
+    }
+
+    let op = match bytes[i] {
+        b'*' => BinaryPrecedenceOp::Mul,
+        b'/' => BinaryPrecedenceOp::Div,
+        b'%' => BinaryPrecedenceOp::Rem,
+        b'+' => BinaryPrecedenceOp::Add,
+        b'-' => BinaryPrecedenceOp::Sub,
+        b'<' => BinaryPrecedenceOp::Lt,
+        b'>' => BinaryPrecedenceOp::Gt,
+        b'&' => BinaryPrecedenceOp::BitAnd,
+        b'^' => BinaryPrecedenceOp::BitXor,
+        b'|' => BinaryPrecedenceOp::BitOr,
+        _ => return None,
+    };
+    (has_binary_left_context(bytes, i) && has_binary_right_context(bytes, i + 1)).then_some((op, 1))
+}
+
+fn binary_op_can_precede(left: BinaryPrecedenceOp, right: BinaryPrecedenceOp) -> bool {
+    use BinaryPrecedenceGroup as Group;
+    use BinaryPrecedenceOp as Op;
+
+    if matches!(
+        (left, right),
+        (Op::LogAnd, Op::LogOr) | (Op::LogOr, Op::LogAnd)
+    ) {
+        return false;
+    }
+
+    let right_group = right.group();
+    match left.group() {
+        Group::Multiplicative => matches!(
+            right_group,
+            Group::Multiplicative | Group::Additive | Group::Relational
+        ),
+        Group::Additive => matches!(
+            right_group,
+            Group::Multiplicative | Group::Additive | Group::Relational
+        ),
+        Group::Shift => matches!(right_group, Group::Relational | Group::Logical),
+        Group::Relational => matches!(
+            right_group,
+            Group::Multiplicative | Group::Additive | Group::Shift | Group::Logical
+        ),
+        Group::BinaryAnd => matches!(right_group, Group::BinaryAnd),
+        Group::BinaryXor => matches!(right_group, Group::BinaryXor),
+        Group::BinaryOr => matches!(right_group, Group::BinaryOr),
+        Group::Logical => matches!(right_group, Group::Relational | Group::Logical),
+    }
+}
+
+fn expression_contains_angle_like_token(expr: &str) -> bool {
+    let bytes = expr.as_bytes();
+    let mut i = 0usize;
+    while i < bytes.len() {
+        match bytes[i] {
+            b'<' => {
+                let next = bytes.get(i + 1).copied();
+                if matches!(next, Some(b'<')) {
+                    i += 2;
+                    continue;
+                }
+                if !matches!(next, Some(b'<') | Some(b'=')) {
+                    return true;
+                }
+            }
+            b'>' => {
+                let prev = (i > 0).then_some(bytes[i - 1]);
+                let next = bytes.get(i + 1).copied();
+                if matches!(next, Some(b'>')) {
+                    i += 2;
+                    continue;
+                }
+                if !matches!(prev, Some(b'>')) && !matches!(next, Some(b'>') | Some(b'=')) {
+                    return true;
+                }
+            }
+            _ => {}
+        }
+        i += 1;
+    }
+    false
+}
+
+fn expression_has_invalid_binary_precedence(expr: &str) -> bool {
+    if expression_contains_angle_like_token(expr) {
+        return false;
+    }
+    let bytes = expr.as_bytes();
+    let mut ops: Vec<BinaryPrecedenceOp> = Vec::new();
+    let mut depth = 0i32;
+    let mut i = 0usize;
+    while i < bytes.len() {
+        match bytes[i] {
+            b'(' | b'[' | b'{' => {
+                depth += 1;
+                i += 1;
+                continue;
+            }
+            b')' | b']' | b'}' => {
+                depth -= 1;
+                i += 1;
+                continue;
+            }
+            _ => {}
+        }
+
+        if depth == 0 {
+            if let Some((op, len)) = binary_precedence_op_at(expr, i) {
+                if let Some(prev) = ops.last().copied() {
+                    if !binary_op_can_precede(prev, op) {
+                        return true;
+                    }
+                }
+                ops.push(op);
+                i += len;
+                continue;
+            }
+        }
+        i += 1;
+    }
+    false
+}
+
+fn validate_binary_precedence_source(source: &str, entry_point: Option<&str>) -> Vec<WgslMessage> {
+    let scan = mask_comments_preserve_len(&smoothstep_validation_source(source, entry_point));
+    let mut errors = Vec::new();
+    for stmt in scan.split(';') {
+        let Some(eq) = find_assignment_eq(stmt) else {
+            continue;
+        };
+        if expression_has_invalid_binary_precedence(&stmt[eq + 1..]) {
+            errors.push(wgsl_error(
+                "mixed binary operators require parentheses to disambiguate precedence",
+            ));
+        }
+    }
+    errors
+}
+
 #[derive(Clone)]
 pub struct BindingRef {
     pub group: u32,
@@ -4073,6 +4371,12 @@ pub fn compile_with_meta(source: &str) -> std::result::Result<WgslCompileResult,
         msgs.extend(ldexp_errors);
         return Err(msgs);
     }
+    let precedence_errors = validate_binary_precedence_source(&short_circuit_source, None);
+    if !precedence_errors.is_empty() {
+        let mut msgs = strip.messages;
+        msgs.extend(precedence_errors);
+        return Err(msgs);
+    }
     let parse_source = lower_ldexp_source(&lower_smoothstep_source(&short_circuit_source), None);
     let mut module = match wgsl::parse_str(&parse_source) {
         Ok(m) => m,
@@ -4364,6 +4668,9 @@ pub fn bake_wgsl_with_constants(
         return None;
     }
     if !validate_ldexp_source(&short_circuit_source, Some(&constants), entry_point).is_empty() {
+        return None;
+    }
+    if !validate_binary_precedence_source(&short_circuit_source, entry_point).is_empty() {
         return None;
     }
     let parse_source = lower_ldexp_source(

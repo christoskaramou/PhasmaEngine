@@ -119,6 +119,19 @@ void pwgpu_PopulateAdapterFeatureCache(WGPUAdapterImpl &a)
         else
             a.resolvedDepth24PlusStencil8 = VK_FORMAT_D32_SFLOAT_S8_UINT;
 
+        // §24.1.1 stencil8: prefer standalone S8_UINT when the driver advertises
+        // depth-stencil-attachment for it (NVIDIA / desktop AMD); otherwise fall
+        // back to a combined depth-stencil VkFormat (Intel iGPU does not advertise
+        // S8_UINT). The WebGPU layer keeps the texel size at 1 byte and uses
+        // stencil-aspect-only views/copies — the depth aspect of the combined
+        // VkImage is unused storage.
+        if (fmtSupportsDepth(VK_FORMAT_S8_UINT))
+            a.resolvedStencil8 = VK_FORMAT_S8_UINT;
+        else if (fmtSupportsDepth(VK_FORMAT_D24_UNORM_S8_UINT))
+            a.resolvedStencil8 = VK_FORMAT_D24_UNORM_S8_UINT;
+        else
+            a.resolvedStencil8 = VK_FORMAT_D32_SFLOAT_S8_UINT;
+
         a.depth32FloatStencil8 = fmtSupportsDepth(VK_FORMAT_D32_SFLOAT_S8_UINT);
         a.primitiveIndex = a.vkFeatures.geometryShader != 0;
 
@@ -435,6 +448,7 @@ extern "C"
         dev->adapterDeviceID = adapter->vkProps.deviceID;
         dev->resolvedDepth24Plus = adapter->resolvedDepth24Plus;
         dev->resolvedDepth24PlusStencil8 = adapter->resolvedDepth24PlusStencil8;
+        dev->resolvedStencil8 = adapter->resolvedStencil8;
         dev->supportsDepthClamp = adapter->vkFeatures.depthClamp != 0;
         dev->supportsDepthClipEnable = adapter->chainedCaps.depthClipEnable;
 

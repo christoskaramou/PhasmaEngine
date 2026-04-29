@@ -757,7 +757,9 @@ namespace pe
         barrier.srcQueueFamilyIndex = oldInfo.queueFamilyId;
         barrier.dstQueueFamilyIndex = info.queueFamilyId;
         barrier.image = image.m_apiHandle;
-        barrier.subresourceRange.aspectMask = VulkanHelpers::GetAspectMask(image.m_createInfo.format);
+        barrier.subresourceRange.aspectMask = image.m_aspectMaskOverride
+                                                  ? image.m_aspectMaskOverride
+                                                  : VulkanHelpers::GetAspectMask(image.m_createInfo.format);
         barrier.subresourceRange.baseMipLevel = info.baseMipLevel;
         barrier.subresourceRange.levelCount = mipLevels;
         barrier.subresourceRange.baseArrayLayer = info.baseArrayLayer;
@@ -818,7 +820,9 @@ namespace pe
             barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
             barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
             barrier.image = image->m_apiHandle;
-            barrier.subresourceRange.aspectMask = VulkanHelpers::GetAspectMask(imageInfo.format);
+            barrier.subresourceRange.aspectMask = image->m_aspectMaskOverride
+                                                      ? image->m_aspectMaskOverride
+                                                      : VulkanHelpers::GetAspectMask(imageInfo.format);
             barrier.subresourceRange.baseMipLevel = info.baseMipLevel;
             barrier.subresourceRange.levelCount = mipLevels;
             barrier.subresourceRange.baseArrayLayer = info.baseArrayLayer;
