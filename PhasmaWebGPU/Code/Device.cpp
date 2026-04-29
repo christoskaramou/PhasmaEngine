@@ -17,6 +17,7 @@
 #include "RenderBundle.h"
 #include "QuerySet.h"
 #include "WGPULimits.h"
+#include "Wgsl.h"
 #include "Utils.h"
 #include <cmath>
 
@@ -197,6 +198,8 @@ namespace
     {
         if (!sm || !sm->reflection.present)
             return {};
+        if (constantCount > 0 && !constants)
+            return stageTag + ".constants is null with nonzero constantCount";
 
         for (size_t i = 0; i < constantCount; ++i)
         {
@@ -277,6 +280,47 @@ namespace
         }
 
         return {};
+    }
+
+    bool BakeStageSpirvWithConstants(WGPUDeviceImpl *device,
+                                     const char *pipelineTag,
+                                     const char *stageTag,
+                                     const WGPUShaderModuleImpl *module,
+                                     const std::string &entryPoint,
+                                     size_t constantCount,
+                                     const WGPUConstantEntry *constants,
+                                     std::vector<uint32_t> &out)
+    {
+        if (!module || module->wgslSource.empty())
+            return true;
+        if (constantCount > 0 && !constants)
+        {
+            std::string msg = std::string(pipelineTag) + ": " +
+                              stageTag + ".constants is null with nonzero constantCount";
+            device->reportError(WGPUErrorType_Validation, pwgpu::ToStringView(msg));
+            return false;
+        }
+
+        // Rebake only when needed: user provided constants, OR module-level
+        // emit failed (sm->spirv empty) and we need EP-scoped substitution to
+        // skip divergent overrides outside the targeted EP's call closure
+        // per W3C §10.3.2.3. When sm->spirv is non-empty and no user constants,
+        // the cached SPIR-V is byte-identical to what a fresh bake would emit,
+        // so skipping the bake avoids per-pipeline WGSL compile overhead.
+        const bool needsRebake = constantCount > 0 || module->spirv.empty();
+        if (!needsRebake)
+            return true;
+
+        out = pwgpu::Wgsl::BakeWithConstants(
+            module->wgslSource, constantCount, constants, entryPoint);
+        if (!out.empty())
+            return true;
+
+        std::string msg = std::string(pipelineTag) +
+                          ": failed to bake WGSL constants for " +
+                          stageTag + " stage with entry point '" + entryPoint + "'";
+        device->reportError(WGPUErrorType_Validation, pwgpu::ToStringView(msg));
+        return false;
     }
 
     void RegisterTrackedBuffer(WGPUDeviceImpl *device, WGPUBufferImpl *buffer)
@@ -2720,16 +2764,63 @@ extern "C"
 
         if (wgslDesc)
         {
+#if defined(PE_WEBGPU_WGSL) && PE_WEBGPU_WGSL
+            auto compiled = pwgpu::Wgsl::Compile(wgslDesc->code);
+            const uint32_t *spirv = compiled.spirv();
+            const size_t spirvWordCount = compiled.spirvWordCount();
+
+            sm->wgslSource = pwgpu::ToString(wgslDesc->code);
+            pwgpu::Wgsl::PopulateReflectionMeta(sm, compiled);
+            // Surface naga's parse/validate warnings (e.g. unknown
+            // @diagnostic(...) rule names) on the success path so
+            // getCompilationInfo() returns them — the failure-only
+            // ConvertMessages call below handles the error case.
+            pwgpu::Wgsl::ConvertMessages(compiled, sm->compilationMessages);
+
+            if (spirv && spirvWordCount > 0)
+            {
+                sm->spirv.assign(spirv, spirv + spirvWordCount);
+            }
+            else if (!sm->reflection.entryPoints.empty())
+            {
+                // Module-level SPIR-V emit failed (typically a divergent
+                // override expression like `override cx: u32 = 1u/cu` with
+                // default cu=0u) but parse+validate succeeded. Per W3C
+                // §10.3.2.3 such overrides are only required when the
+                // targeted entry point actually reaches them, so accept the
+                // module: pipeline-create rebakes with EP scope, which
+                // skips overrides outside the EP's call closure. sm->spirv
+                // stays empty and is never used directly because
+                // BakeStageSpirvWithConstants always rebakes for WGSL-sourced
+                // modules.
+            }
+            else
+            {
+                if (sm->compilationMessages.empty())
+                {
+                    WGPUCompilationMessageStorage msg;
+                    msg.type = WGPUCompilationMessageType_Error;
+                    msg.message = "WGSL compilation failed";
+                    sm->compilationMessages.push_back(std::move(msg));
+                }
+                device->reportError(WGPUErrorType_Validation,
+                                    pwgpu::ToStringView("wgpuDeviceCreateShaderModule: "
+                                                        "WGSL compilation failed"));
+                sm->invalid = true;
+                return sm;
+            }
+            return sm;
+#else
             device->reportError(WGPUErrorType_Validation,
                                 pwgpu::ToStringView("wgpuDeviceCreateShaderModule: "
-                                                    "WGSL shader source is not supported; "
-                                                    "use WGPUShaderSourceSPIRV instead"));
+                                                    "WGSL not supported (PE_WEBGPU_WGSL=OFF)"));
             sm->invalid = true;
             WGPUCompilationMessageStorage msg;
             msg.type = WGPUCompilationMessageType_Error;
-            msg.message = "WGSL shader source is not supported by this implementation";
+            msg.message = "WGSL shader source not supported by this build";
             sm->compilationMessages.push_back(std::move(msg));
             return sm;
+#endif
         }
 
         if (!spirvDesc->code || spirvDesc->codeSize == 0)
@@ -3082,7 +3173,11 @@ extern "C"
                                 pwgpu::ToStringView("createComputePipeline: compute.module is invalid"));
             return MakeInvalidComputePipeline(device, labelStr);
         }
-        if (shaderModule->spirv.empty())
+        // WGSL modules whose initial module-level emit failed (divergent
+        // override default) carry empty sm->spirv but recoverable wgslSource.
+        // BakeStageSpirvWithConstants will rebake EP-scoped below; only fail
+        // here when there's no source at all to recover from.
+        if (shaderModule->spirv.empty() && shaderModule->wgslSource.empty())
         {
             device->reportError(WGPUErrorType_Validation,
                                 pwgpu::ToStringView("createComputePipeline: compute.module has no SPIR-V code"));
@@ -3161,12 +3256,23 @@ extern "C"
             }
         }
 
+        std::vector<uint32_t> computeBakedSpirv;
+        const std::vector<uint32_t> *computeSpirv = &shaderModule->spirv;
+        if (!BakeStageSpirvWithConstants(device, "createComputePipeline", "compute",
+                                         shaderModule, entryPointName,
+                                         descriptor->compute.constantCount,
+                                         descriptor->compute.constants,
+                                         computeBakedSpirv))
+            return MakeInvalidComputePipeline(device, labelStr);
+        if (!computeBakedSpirv.empty())
+            computeSpirv = &computeBakedSpirv;
+
         auto vkDev = device->rhi->GetDevice();
 
         if (autoLayout)
         {
             std::vector<pwgpu::AutoLayoutStageInput> stages(1);
-            stages[0].spirv = &shaderModule->spirv;
+            stages[0].spirv = computeSpirv;
             stages[0].entryPoint = entryPointName;
             stages[0].executionModel = kExecCompute;
             stages[0].visibility = WGPUShaderStage_Compute;
@@ -3189,7 +3295,7 @@ extern "C"
         {
             // Validate layout-shader binding compatibility (visibility, type, presence).
             std::vector<pwgpu::LayoutCompatStageInput> compatStages(1);
-            compatStages[0].spirv = &shaderModule->spirv;
+            compatStages[0].spirv = computeSpirv;
             compatStages[0].entryPoint = entryPointName;
             compatStages[0].executionModel = kExecCompute;
             compatStages[0].stage = WGPUShaderStage_Compute;
@@ -3206,7 +3312,7 @@ extern "C"
                                     pwgpu::ToStringView("createComputePipeline: " + compatErr));
                 return MakeInvalidComputePipeline(device, labelStr);
             }
-            std::string pairErr = pwgpu::ValidateTextureSamplerPairs(shaderModule->spirv, pipeLayout);
+            std::string pairErr = pwgpu::ValidateTextureSamplerPairs(*computeSpirv, pipeLayout);
             if (!pairErr.empty())
             {
                 device->reportError(WGPUErrorType_Validation,
@@ -3220,7 +3326,7 @@ extern "C"
         {
             pwgpu::ComputeWorkgroupInfo wgInfo{};
             std::string wgErr;
-            if (pwgpu::GetComputeWorkgroupInfo(shaderModule->spirv, entryPointName, wgInfo, wgErr))
+            if (pwgpu::GetComputeWorkgroupInfo(*computeSpirv, entryPointName, wgInfo, wgErr))
             {
                 const auto &lim = device->limits;
                 bool wgFail = false;
@@ -3265,8 +3371,8 @@ extern "C"
         }
 
         vk::ShaderModuleCreateInfo smci{};
-        smci.codeSize = shaderModule->spirv.size() * sizeof(uint32_t);
-        smci.pCode = shaderModule->spirv.data();
+        smci.codeSize = computeSpirv->size() * sizeof(uint32_t);
+        smci.pCode = computeSpirv->data();
         vk::ShaderModule vkShaderModule;
         try
         {
@@ -3414,7 +3520,8 @@ extern "C"
         }
 
         auto *vertModule = descriptor->vertex.module;
-        if (!vertModule || vertModule->invalid || vertModule->spirv.empty())
+        if (!vertModule || vertModule->invalid ||
+            (vertModule->spirv.empty() && vertModule->wgslSource.empty()))
         {
             device->reportError(WGPUErrorType_Validation,
                                 pwgpu::ToStringView("createRenderPipeline: vertex.module is null/invalid/empty"));
@@ -3491,6 +3598,17 @@ extern "C"
                 return MakeInvalidRenderPipeline(device, labelStr);
             }
         }
+
+        std::vector<uint32_t> vertBakedSpirv;
+        const std::vector<uint32_t> *vertSpirv = &vertModule->spirv;
+        if (!BakeStageSpirvWithConstants(device, "createRenderPipeline", "vertex",
+                                         vertModule, vertEntry,
+                                         descriptor->vertex.constantCount,
+                                         descriptor->vertex.constants,
+                                         vertBakedSpirv))
+            return MakeInvalidRenderPipeline(device, labelStr);
+        if (!vertBakedSpirv.empty())
+            vertSpirv = &vertBakedSpirv;
 
         auto primTopology = descriptor->primitive.topology;
         if (primTopology == WGPUPrimitiveTopology(0))
@@ -3573,7 +3691,7 @@ extern "C"
             };
             std::map<uint32_t, pwgpu::VertexInputInfo> vertInputs;
             std::string reflErr;
-            if (pwgpu::GetVertexInputTypes(vertModule->spirv, vertEntry, vertInputs, reflErr))
+            if (pwgpu::GetVertexInputTypes(*vertSpirv, vertEntry, vertInputs, reflErr))
             {
                 for (const auto &[loc, info] : vertInputs)
                 {
@@ -3601,12 +3719,15 @@ extern "C"
 
         bool hasFragment = (descriptor->fragment != nullptr);
         WGPUShaderModuleImpl *fragModuleSrc = nullptr;
+        std::vector<uint32_t> fragBakedSpirv;
+        const std::vector<uint32_t> *fragSpirv = nullptr;
         std::string fragEntry;
         pwgpu::FragmentOutputBuiltins fragBuiltins{};
         if (hasFragment)
         {
             fragModuleSrc = descriptor->fragment->module;
-            if (!fragModuleSrc || fragModuleSrc->invalid || fragModuleSrc->spirv.empty())
+            if (!fragModuleSrc || fragModuleSrc->invalid ||
+                (fragModuleSrc->spirv.empty() && fragModuleSrc->wgslSource.empty()))
             {
                 device->reportError(WGPUErrorType_Validation,
                                     pwgpu::ToStringView("createRenderPipeline: fragment.module is null/invalid/empty"));
@@ -3633,9 +3754,19 @@ extern "C"
                 }
             }
 
+            fragSpirv = &fragModuleSrc->spirv;
+            if (!BakeStageSpirvWithConstants(device, "createRenderPipeline", "fragment",
+                                             fragModuleSrc, fragEntry,
+                                             descriptor->fragment->constantCount,
+                                             descriptor->fragment->constants,
+                                             fragBakedSpirv))
+                return MakeInvalidRenderPipeline(device, labelStr);
+            if (!fragBakedSpirv.empty())
+                fragSpirv = &fragBakedSpirv;
+
             {
                 std::string bErr;
-                pwgpu::GetFragmentOutputBuiltins(fragModuleSrc->spirv, fragEntry, fragBuiltins, bErr);
+                pwgpu::GetFragmentOutputBuiltins(*fragSpirv, fragEntry, fragBuiltins, bErr);
             }
             if (fragBuiltins.hasFragDepth)
             {
@@ -3660,14 +3791,14 @@ extern "C"
         {
             std::vector<pwgpu::AutoLayoutStageInput> stageInputs;
             stageInputs.emplace_back();
-            stageInputs.back().spirv = &vertModule->spirv;
+            stageInputs.back().spirv = vertSpirv;
             stageInputs.back().entryPoint = vertEntry;
             stageInputs.back().executionModel = kExecVertex;
             stageInputs.back().visibility = WGPUShaderStage_Vertex;
             if (hasFragment)
             {
                 stageInputs.emplace_back();
-                stageInputs.back().spirv = &fragModuleSrc->spirv;
+                stageInputs.back().spirv = fragSpirv;
                 stageInputs.back().entryPoint = fragEntry;
                 stageInputs.back().executionModel = kExecFragment;
                 stageInputs.back().visibility = WGPUShaderStage_Fragment;
@@ -3695,10 +3826,10 @@ extern "C"
         {
             // Validate layout-shader binding compatibility (visibility, type, presence).
             std::vector<pwgpu::LayoutCompatStageInput> compatStages;
-            compatStages.push_back({&vertModule->spirv, vertEntry, kExecVertex, WGPUShaderStage_Vertex});
+            compatStages.push_back({vertSpirv, vertEntry, kExecVertex, WGPUShaderStage_Vertex});
             if (hasFragment)
                 compatStages.push_back(
-                    {&fragModuleSrc->spirv, fragEntry, kExecFragment, WGPUShaderStage_Fragment});
+                    {fragSpirv, fragEntry, kExecFragment, WGPUShaderStage_Fragment});
             std::set<pwgpu::BindingKey> vsUsed, vsCmp, fsUsed, fsCmp;
             std::set<std::string> vsUsedNames, fsUsedNames;
             std::set<pwgpu::BindingResourceKey> vsUsedResources, fsUsedResources;
@@ -3715,9 +3846,9 @@ extern "C"
                                     pwgpu::ToStringView("createRenderPipeline: " + compatErr));
                 return MakeInvalidRenderPipeline(device, labelStr);
             }
-            std::string pairErr = pwgpu::ValidateTextureSamplerPairs(vertModule->spirv, pipeLayout);
-            if (pairErr.empty() && hasFragment && fragModuleSrc != vertModule)
-                pairErr = pwgpu::ValidateTextureSamplerPairs(fragModuleSrc->spirv, pipeLayout);
+            std::string pairErr = pwgpu::ValidateTextureSamplerPairs(*vertSpirv, pipeLayout);
+            if (pairErr.empty() && hasFragment && fragSpirv != vertSpirv)
+                pairErr = pwgpu::ValidateTextureSamplerPairs(*fragSpirv, pipeLayout);
             if (!pairErr.empty())
             {
                 device->reportError(WGPUErrorType_Validation,
@@ -3732,9 +3863,9 @@ extern "C"
         {
             std::map<uint32_t, pwgpu::VaryingInfo> vertVaryingOuts, fragVaryingIns;
             std::string reflErr;
-            const bool gotVert = pwgpu::GetVaryingInfos(vertModule->spirv, vertEntry, kExecVertex,
+            const bool gotVert = pwgpu::GetVaryingInfos(*vertSpirv, vertEntry, kExecVertex,
                                                         false, vertVaryingOuts, reflErr);
-            const bool gotFrag = pwgpu::GetVaryingInfos(fragModuleSrc->spirv, fragEntry,
+            const bool gotFrag = pwgpu::GetVaryingInfos(*fragSpirv, fragEntry,
                                                         kExecFragment, true, fragVaryingIns, reflErr);
             if (gotVert && gotFrag)
             {
@@ -3801,7 +3932,7 @@ extern "C"
                 {
                     std::string cdErr;
                     uint32_t n = pwgpu::CountVertexClipDistancesArraySize(
-                        vertModule->spirv, vertEntry, cdErr);
+                        *vertSpirv, vertEntry, cdErr);
                     if (n > 0)
                         clipSlots = (n + 3u) / 4u;
                 }
@@ -3863,7 +3994,7 @@ extern "C"
                 uint32_t interStageBuiltinCount = 0;
                 {
                     std::string bErr;
-                    pwgpu::CountFragmentInterStageBuiltins(fragModuleSrc->spirv, fragEntry,
+                    pwgpu::CountFragmentInterStageBuiltins(*fragSpirv, fragEntry,
                                                            interStageBuiltinCount, bErr);
                 }
                 const uint32_t maxFragIn =
@@ -3899,7 +4030,7 @@ extern "C"
             std::map<uint32_t, pwgpu::FragmentOutputInfo> fragOutInfos;
             {
                 std::string reflErr;
-                pwgpu::GetFragmentOutputTypes(fragModuleSrc->spirv, fragEntry, fragOutInfos, reflErr);
+                pwgpu::GetFragmentOutputTypes(*fragSpirv, fragEntry, fragOutInfos, reflErr);
             }
 
             // §10.3.6: dual-source blend factors require the fragment shader to
@@ -3907,7 +4038,7 @@ extern "C"
             bool fragHasBlendSrc1 = false;
             {
                 std::string reflErr;
-                fragHasBlendSrc1 = pwgpu::HasBlendSrc1Output(fragModuleSrc->spirv, fragEntry, reflErr);
+                fragHasBlendSrc1 = pwgpu::HasBlendSrc1Output(*fragSpirv, fragEntry, reflErr);
             }
 
             for (size_t i = 0; i < descriptor->fragment->targetCount; ++i)
@@ -4211,7 +4342,7 @@ extern "C"
         vk::ShaderModule vkVertModule;
         try
         {
-            vkVertModule = createModule(vertModule->spirv);
+            vkVertModule = createModule(*vertSpirv);
         }
         catch (...)
         {
@@ -4232,7 +4363,7 @@ extern "C"
             vk::ShaderModule vkFragModule;
             try
             {
-                vkFragModule = createModule(fragModuleSrc->spirv);
+                vkFragModule = createModule(*fragSpirv);
             }
             catch (...)
             {

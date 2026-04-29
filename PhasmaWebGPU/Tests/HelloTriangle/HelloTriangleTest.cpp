@@ -6,15 +6,12 @@
 namespace
 {
     bool CreateTrianglePipeline(pwgpu::test::SampleContext &ctx,
-                                WGPUShaderModule &vertexShader,
-                                WGPUShaderModule &pixelShader,
+                                WGPUShaderModule &shader,
                                 WGPURenderPipeline &pipeline)
     {
-        vertexShader = pwgpu::test::MakeRuntimeShaderModule(
-            ctx.device, (ctx.shaderDir + "triangle.vert.hlsl").c_str(), "tri_vs");
-        pixelShader = pwgpu::test::MakeRuntimeShaderModule(
-            ctx.device, (ctx.shaderDir + "triangle.pixel.hlsl").c_str(), "tri_ps");
-        if (!vertexShader || !pixelShader)
+        shader = pwgpu::test::MakeWgslShaderModule(
+            ctx.device, (ctx.shaderDir + "triangle.wgsl").c_str(), "triangle_wgsl");
+        if (!shader)
             return false;
 
         WGPUColorTargetState colorTarget{};
@@ -22,15 +19,15 @@ namespace
         colorTarget.writeMask = WGPUColorWriteMask_All;
 
         WGPUFragmentState fragmentState{};
-        fragmentState.module = pixelShader;
-        fragmentState.entryPoint = {"PSMain", WGPU_STRLEN};
+        fragmentState.module = shader;
+        fragmentState.entryPoint = {"fs_main", WGPU_STRLEN};
         fragmentState.targetCount = 1;
         fragmentState.targets = &colorTarget;
 
         WGPURenderPipelineDescriptor pipelineDesc{};
         pipelineDesc.label = {"tri_pipe", WGPU_STRLEN};
-        pipelineDesc.vertex.module = vertexShader;
-        pipelineDesc.vertex.entryPoint = {"VSMain", WGPU_STRLEN};
+        pipelineDesc.vertex.module = shader;
+        pipelineDesc.vertex.entryPoint = {"vs_main", WGPU_STRLEN};
         pipelineDesc.primitive.topology = WGPUPrimitiveTopology_TriangleList;
         pipelineDesc.primitive.cullMode = WGPUCullMode_None;
         pipelineDesc.primitive.frontFace = WGPUFrontFace_CCW;
@@ -47,7 +44,7 @@ namespace
     public:
         bool Init(pwgpu::test::SampleContext &ctx) override
         {
-            return CreateTrianglePipeline(ctx, m_vertexShader, m_pixelShader, m_pipeline);
+            return CreateTrianglePipeline(ctx, m_shader, m_pipeline);
         }
 
         bool Execute(pwgpu::test::SampleContext &,
@@ -76,21 +73,14 @@ namespace
                 m_pipeline = nullptr;
             }
 
-            if (m_pixelShader)
+            if (m_shader)
             {
-                wgpuShaderModuleRelease(m_pixelShader);
-                m_pixelShader = nullptr;
-            }
-
-            if (m_vertexShader)
-            {
-                wgpuShaderModuleRelease(m_vertexShader);
-                m_vertexShader = nullptr;
+                wgpuShaderModuleRelease(m_shader);
+                m_shader = nullptr;
             }
         }
 
-        WGPUShaderModule m_vertexShader = nullptr;
-        WGPUShaderModule m_pixelShader = nullptr;
+        WGPUShaderModule m_shader = nullptr;
         WGPURenderPipeline m_pipeline = nullptr;
     };
 

@@ -30,6 +30,7 @@ file(GLOB_RECURSE PWGPU_SOURCES CONFIGURE_DEPENDS
 )
 
 option(PE_WEBGPU_SHARED "Build PhasmaWebGPU as a shared library" OFF)
+option(PE_WEBGPU_WGSL "Build in-engine WGSL to SPIR-V via naga (Rust)" ON)
 
 if (PE_WEBGPU_SHARED)
     add_library(PhasmaWebGPU SHARED ${PWGPU_SOURCES})
@@ -51,6 +52,29 @@ target_include_directories(
 )
 target_link_libraries(PhasmaWebGPU PUBLIC PhasmaCore)
 
+if (PE_WEBGPU_WGSL)
+    FetchContent_Declare(
+        Corrosion
+        GIT_REPOSITORY https://github.com/corrosion-rs/corrosion.git
+        GIT_TAG v0.5
+        GIT_PROGRESS TRUE
+    )
+    FetchContent_MakeAvailable(Corrosion)
+
+    corrosion_import_crate(
+        MANIFEST_PATH "${CMAKE_CURRENT_SOURCE_DIR}/third_party/naga-bridge/Cargo.toml"
+        PROFILE release
+        CRATE_TYPES staticlib
+    )
+
+    target_link_libraries(PhasmaWebGPU PRIVATE naga_bridge)
+    target_include_directories(
+        PhasmaWebGPU
+        PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/third_party/naga-bridge/include"
+    )
+    target_compile_definitions(PhasmaWebGPU PRIVATE PE_WEBGPU_WGSL=1)
+endif()
+
 if (MSVC)
     target_compile_options(PhasmaWebGPU PRIVATE /W3)
 else()
@@ -70,6 +94,15 @@ if (PE_WEBGPU_TESTS)
     target_precompile_headers(WebGPURenderTest REUSE_FROM PhasmaWebGPU)
     target_include_directories(WebGPURenderTest PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/Code")
     set_target_properties(WebGPURenderTest PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin")
+
+    add_executable(WebGPUWgslSmokeTest "${CMAKE_CURRENT_SOURCE_DIR}/Tests/WgslSmokeTest.cpp")
+    target_link_libraries(WebGPUWgslSmokeTest PRIVATE PhasmaWebGPU)
+    target_precompile_headers(WebGPUWgslSmokeTest REUSE_FROM PhasmaWebGPU)
+    target_include_directories(WebGPUWgslSmokeTest PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/Code")
+    if (PE_WEBGPU_WGSL)
+        target_compile_definitions(WebGPUWgslSmokeTest PRIVATE PE_WEBGPU_WGSL=1)
+    endif()
+    set_target_properties(WebGPUWgslSmokeTest PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin")
 
     # pe_add_webgpu_sample(
     #   TARGET <exe name, must start with WebGPU>
@@ -255,7 +288,7 @@ if (PE_WEBGPU_TESTS)
         DIR HelloTriangle
         SOURCE HelloTriangleTest.cpp
         USE_COMMON_APP
-        SHADERS triangle.vert triangle.pixel
+        SHADERS triangle.wgsl
     )
 
     pe_add_webgpu_sample(

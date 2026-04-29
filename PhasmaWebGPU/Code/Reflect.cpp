@@ -1,5 +1,6 @@
 #include "Reflect.h"
 #include "BindGroup.h"
+#include "FormatMap.h"
 #include "PipelineLayout.h"
 #include "Device.h"
 #include "API/RHI.h"
@@ -1401,6 +1402,60 @@ namespace pwgpu
                 !checkStage(computeCounters, "compute"))
             {
                 return nullptr;
+            }
+        }
+
+        // Storage-texture format vs device-feature gates. Mirrors the
+        // wgpuDeviceCreateBindGroupLayout path (Device.cpp:1881..1906) per
+        // W3C §22.3.7. Auto-layout builds the BGL directly below, bypassing
+        // wgpuDeviceCreateBindGroupLayout, so the same gates must run here
+        // or pipelines using feature-gated formats slip through unchecked.
+        {
+            const bool tier1Storage =
+                wgpuDeviceHasFeature(device, WGPUFeatureName_TextureFormatsTier1) == WGPU_TRUE;
+            const bool tier2Rw =
+                wgpuDeviceHasFeature(device, WGPUFeatureName_TextureFormatsTier2) == WGPU_TRUE;
+            const bool bgra8Storage =
+                wgpuDeviceHasFeature(device, WGPUFeatureName_BGRA8UnormStorage) == WGPU_TRUE;
+
+            for (const auto &setKv : merged)
+            {
+                for (const auto &kv : setKv.second)
+                {
+                    const ReflectedBinding &rb = kv.second;
+                    if (!rb.hasStorageTexture)
+                        continue;
+
+                    const auto fmt = rb.storageTexture.format;
+                    if (!pwgpu::SupportsStorageBinding(fmt) &&
+                        !(tier1Storage && pwgpu::SupportsStorageBindingTier1(fmt)))
+                    {
+                        errMsg = "auto-layout: storageTexture format does not support storage binding";
+                        return nullptr;
+                    }
+                    if (fmt == WGPUTextureFormat_BGRA8Unorm && !bgra8Storage)
+                    {
+                        errMsg = "auto-layout: bgra8unorm storage texture requires BGRA8UnormStorage feature";
+                        return nullptr;
+                    }
+                    if (fmt == WGPUTextureFormat_BGRA8Unorm &&
+                        rb.storageTexture.access != WGPUStorageTextureAccess_WriteOnly)
+                    {
+                        errMsg = "auto-layout: bgra8unorm storage texture requires write-only access";
+                        return nullptr;
+                    }
+                    if (rb.storageTexture.access == WGPUStorageTextureAccess_ReadWrite)
+                    {
+                        const bool coreRw = fmt == WGPUTextureFormat_R32Uint ||
+                                            fmt == WGPUTextureFormat_R32Sint ||
+                                            fmt == WGPUTextureFormat_R32Float;
+                        if (!coreRw && !(tier2Rw && pwgpu::SupportsReadWriteStorageTier2(fmt)))
+                        {
+                            errMsg = "auto-layout: storageTexture format does not support read-write access";
+                            return nullptr;
+                        }
+                    }
+                }
             }
         }
 

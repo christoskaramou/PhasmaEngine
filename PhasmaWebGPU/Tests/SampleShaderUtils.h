@@ -5,6 +5,7 @@
 
 #include <cstdio>
 #include <filesystem>
+#include <fstream>
 #include <string>
 #include <string_view>
 #include <webgpu/webgpu.h>
@@ -92,6 +93,49 @@ namespace pwgpu::test
         src.chain.sType = WGPUSType_ShaderSourceSPIRV;
         src.code = shader.GetSpriv();
         src.codeSize = static_cast<uint32_t>(shader.Size());
+
+        WGPUShaderModuleDescriptor desc{};
+        desc.label = {label, WGPU_STRLEN};
+        desc.nextInChain = &src.chain;
+        return wgpuDeviceCreateShaderModule(device, &desc);
+    }
+
+    inline WGPUShaderModule MakeWgslShaderModule(WGPUDevice device, const char *path, const char *label)
+    {
+        if (!device || !path)
+            return nullptr;
+
+        std::string sourcePath = path;
+        if (!detail::EnsureShaderIsWatched(sourcePath))
+            return nullptr;
+
+        std::ifstream file(sourcePath, std::ios::binary);
+        if (!file)
+        {
+            fprintf(stderr, "[Shader] Cannot open %s\n", path);
+            return nullptr;
+        }
+        file.seekg(0, std::ios::end);
+        const std::streampos fileSize = file.tellg();
+        file.seekg(0, std::ios::beg);
+        if (fileSize < 0)
+        {
+            fprintf(stderr, "[Shader] Cannot size %s\n", path);
+            return nullptr;
+        }
+
+        std::string source;
+        source.resize(static_cast<size_t>(fileSize));
+        file.read(source.data(), static_cast<std::streamsize>(source.size()));
+        if (file.gcount() != static_cast<std::streamsize>(source.size()))
+        {
+            fprintf(stderr, "[Shader] Cannot read %s\n", path);
+            return nullptr;
+        }
+
+        WGPUShaderSourceWGSL src{};
+        src.chain.sType = WGPUSType_ShaderSourceWGSL;
+        src.code = {source.data(), source.size()};
 
         WGPUShaderModuleDescriptor desc{};
         desc.label = {label, WGPU_STRLEN};

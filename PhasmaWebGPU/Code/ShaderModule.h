@@ -67,6 +67,7 @@ struct WGPUShaderModuleImpl
     bool invalid = false;
 
     std::vector<uint32_t> spirv;
+    std::string wgslSource;
     std::vector<WGPUCompilationMessageStorage> compilationMessages;
 
     struct EntryPoint
