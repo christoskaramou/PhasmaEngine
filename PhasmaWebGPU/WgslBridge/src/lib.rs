@@ -960,6 +960,9 @@ fn lower_shadow_builtin_abstract_args_call(
     args: &[String],
     constants: Option<&HashMap<String, f64>>,
 ) -> Option<String> {
+    if let Some(Ok(result)) = eval_const_matrix_builtin_call(name, args, constants) {
+        return format_source_matrix_values(&result);
+    }
     if let Some(Ok(result)) = eval_const_float_builtin_call(name, args, constants) {
         return format_source_float_values(&result);
     }
@@ -1051,6 +1054,7 @@ fn lower_shadow_builtin_abstract_args_source(
         "mix",
         "reflect",
         "refract",
+        "transpose",
     ];
     if !NAMES.iter().any(|name| source.contains(name)) {
         return source.to_string();
@@ -7633,6 +7637,35 @@ fn eval_const_float_builtin_call(
         "reflect" => eval_reflect_call(args, constants),
         "refract" => eval_refract_call(args, constants),
         "faceForward" => eval_face_forward_call(args, constants),
+        "determinant" => eval_determinant_call(args, constants),
+        _ => None,
+    }
+}
+
+fn eval_determinant_call(
+    args: &[String],
+    constants: Option<&HashMap<String, f64>>,
+) -> Option<Result<SourceFloatValues, &'static str>> {
+    if args.len() != 1 {
+        return None;
+    }
+    let m = resolve_math_matrix_values(&args[0], constants)?;
+    eval_determinant_matrix(m)
+}
+
+fn eval_const_matrix_builtin_call(
+    name: &str,
+    args: &[String],
+    constants: Option<&HashMap<String, f64>>,
+) -> Option<Result<SourceMatrixValues, &'static str>> {
+    match name {
+        "transpose" => {
+            if args.len() != 1 {
+                return None;
+            }
+            let m = resolve_math_matrix_values(&args[0], constants)?;
+            eval_transpose_matrix(m).map(Ok)
+        }
         _ => None,
     }
 }
@@ -8009,6 +8042,522 @@ fn format_source_float_values(values: &SourceFloatValues) -> Option<String> {
         .map(|v| format_source_float_component(values.kind, *v))
         .collect::<Option<Vec<_>>>()?;
     Some(format!("{}({})", ctor, components.join(", ")))
+}
+
+#[derive(Clone, Debug)]
+struct SourceMatrixValues {
+    kind: SourceFloatKind,
+    cols: usize,
+    rows: usize,
+    columns: Vec<Vec<f64>>,
+}
+
+fn matrix_constructor_dims(name: &str) -> Option<(usize, usize, Option<SourceFloatKind>)> {
+    let n = normalize_type_name(name).to_ascii_lowercase();
+    let rest = n.strip_prefix("mat")?;
+    let mut chars = rest.chars();
+    let c = chars.next()?.to_digit(10)? as usize;
+    if chars.next()? != 'x' {
+        return None;
+    }
+    let r = chars.next()?.to_digit(10)? as usize;
+    if !(2..=4).contains(&c) || !(2..=4).contains(&r) {
+        return None;
+    }
+    let tail: String = chars.collect();
+    let kind = if tail.is_empty() {
+        None
+    } else if tail == "f" {
+        Some(SourceFloatKind::F32)
+    } else if tail == "h" {
+        Some(SourceFloatKind::F16)
+    } else if tail.starts_with('<') && tail.ends_with('>') {
+        let inner = &tail[1..tail.len() - 1];
+        match inner {
+            "f32" | "f32_alias" => Some(SourceFloatKind::F32),
+            "f16" => Some(SourceFloatKind::F16),
+            "abstractfloat" | "abstract-float" => Some(SourceFloatKind::Abstract),
+            _ => return None,
+        }
+    } else {
+        return None;
+    };
+    Some((c, r, kind))
+}
+
+fn explicit_source_matrix_values(
+    kind: SourceFloatKind,
+    cols: usize,
+    rows: usize,
+    mut columns: Vec<Vec<f64>>,
+) -> Option<SourceMatrixValues> {
+    if columns.len() != cols {
+        return None;
+    }
+    for col in columns.iter_mut() {
+        if col.len() != rows {
+            return None;
+        }
+        for v in col.iter_mut() {
+            *v = checked_source_float(kind, *v)?;
+        }
+    }
+    Some(SourceMatrixValues {
+        kind,
+        cols,
+        rows,
+        columns,
+    })
+}
+
+fn resolve_math_matrix_values(
+    expr: &str,
+    constants: Option<&HashMap<String, f64>>,
+) -> Option<SourceMatrixValues> {
+    let s = trim_outer_parens(expr).trim();
+    if let Some(values) = resolve_source_matrix_binary_expr(s, constants) {
+        return Some(values);
+    }
+    let (callee, args) = parse_full_call(s)?;
+    let (cols, rows, explicit_kind) = matrix_constructor_dims(&callee)?;
+    if args.is_empty() {
+        let kind = explicit_kind.unwrap_or(SourceFloatKind::Abstract);
+        return Some(SourceMatrixValues {
+            kind,
+            cols,
+            rows,
+            columns: vec![vec![0.0; rows]; cols],
+        });
+    }
+    if args.len() == 1 {
+        if let Some(other) = resolve_math_matrix_values(&args[0], constants) {
+            if other.cols != cols || other.rows != rows {
+                return None;
+            }
+            let kind = explicit_kind.unwrap_or(other.kind);
+            return explicit_source_matrix_values(kind, cols, rows, other.columns);
+        }
+        return None;
+    }
+    if args.len() == cols {
+        let mut columns = Vec::with_capacity(cols);
+        let mut kind = explicit_kind.unwrap_or(SourceFloatKind::Abstract);
+        for a in &args {
+            let v = resolve_math_float_values(a, constants)?;
+            if v.values.len() != rows {
+                return None;
+            }
+            if explicit_kind.is_none() {
+                kind = combine_source_float_kind(kind, v.kind)?;
+            }
+            columns.push(v.values);
+        }
+        return explicit_source_matrix_values(kind, cols, rows, columns);
+    }
+    if args.len() == cols * rows {
+        let mut columns: Vec<Vec<f64>> = Vec::with_capacity(cols);
+        let mut kind = explicit_kind.unwrap_or(SourceFloatKind::Abstract);
+        for c in 0..cols {
+            let mut col = Vec::with_capacity(rows);
+            for r in 0..rows {
+                let v = resolve_math_float_values(&args[c * rows + r], constants)?;
+                if v.values.len() != 1 {
+                    return None;
+                }
+                if explicit_kind.is_none() {
+                    kind = combine_source_float_kind(kind, v.kind)?;
+                }
+                col.push(v.values[0]);
+            }
+            columns.push(col);
+        }
+        return explicit_source_matrix_values(kind, cols, rows, columns);
+    }
+    None
+}
+
+fn resolve_source_matrix_binary_expr(
+    s: &str,
+    constants: Option<&HashMap<String, f64>>,
+) -> Option<SourceMatrixValues> {
+    if let Some((idx, op)) = find_top_level_binary_operator(s, b"+-") {
+        let left = resolve_math_matrix_values(&s[..idx], constants)?;
+        let right = resolve_math_matrix_values(&s[idx + 1..], constants)?;
+        return match eval_matrix_componentwise_op(left, right, |a, b| {
+            if op == b'+' {
+                a + b
+            } else {
+                a - b
+            }
+        })? {
+            Ok(m) => Some(m),
+            Err(_) => None,
+        };
+    }
+    if let Some((idx, _op)) = find_top_level_binary_operator(s, b"*") {
+        let left_text = &s[..idx];
+        let right_text = &s[idx + 1..];
+        if let (Some(a), Some(b)) = (
+            resolve_math_matrix_values(left_text, constants),
+            resolve_math_matrix_values(right_text, constants),
+        ) {
+            return match eval_matrix_matrix_mul(a, b)? {
+                Ok(m) => Some(m),
+                Err(_) => None,
+            };
+        }
+        if let Some(m) = resolve_math_matrix_values(left_text, constants) {
+            if let Some(scalar) = resolve_math_float_values(right_text, constants) {
+                if scalar.values.len() == 1 {
+                    return match eval_matrix_scalar_mul(m, scalar)? {
+                        Ok(m) => Some(m),
+                        Err(_) => None,
+                    };
+                }
+            }
+        }
+        if let Some(m) = resolve_math_matrix_values(right_text, constants) {
+            if let Some(scalar) = resolve_math_float_values(left_text, constants) {
+                if scalar.values.len() == 1 {
+                    return match eval_matrix_scalar_mul(m, scalar)? {
+                        Ok(m) => Some(m),
+                        Err(_) => None,
+                    };
+                }
+            }
+        }
+    }
+    None
+}
+
+fn format_source_matrix_values(m: &SourceMatrixValues) -> Option<String> {
+    let ctor = match m.kind {
+        SourceFloatKind::Abstract => format!("mat{}x{}", m.cols, m.rows),
+        SourceFloatKind::F32 => format!("mat{}x{}<f32>", m.cols, m.rows),
+        SourceFloatKind::F16 => format!("mat{}x{}<f16>", m.cols, m.rows),
+    };
+    let vec_ctor = match m.kind {
+        SourceFloatKind::Abstract => format!("vec{}", m.rows),
+        SourceFloatKind::F32 => format!("vec{}<f32>", m.rows),
+        SourceFloatKind::F16 => format!("vec{}<f16>", m.rows),
+    };
+    let mut col_strings = Vec::with_capacity(m.cols);
+    for col in &m.columns {
+        let comps = col
+            .iter()
+            .map(|v| format_source_float_component(m.kind, *v))
+            .collect::<Option<Vec<_>>>()?;
+        col_strings.push(format!("{}({})", vec_ctor, comps.join(", ")));
+    }
+    Some(format!("{}({})", ctor, col_strings.join(", ")))
+}
+
+fn eval_transpose_matrix(m: SourceMatrixValues) -> Option<SourceMatrixValues> {
+    let SourceMatrixValues {
+        kind,
+        cols,
+        rows,
+        columns,
+    } = m;
+    // Result has rows columns, cols rows. result.columns[r][c] = m.columns[c][r].
+    let mut out = vec![vec![0.0f64; cols]; rows];
+    for c in 0..cols {
+        for r in 0..rows {
+            out[r][c] = columns[c][r];
+        }
+    }
+    Some(SourceMatrixValues {
+        kind,
+        cols: rows,
+        rows: cols,
+        columns: out,
+    })
+}
+
+fn eval_determinant_matrix(
+    m: SourceMatrixValues,
+) -> Option<Result<SourceFloatValues, &'static str>> {
+    if m.cols != m.rows {
+        return None;
+    }
+    let kind = m.kind;
+    // Build a row-major matrix view: row[r][c] = m.columns[c][r].
+    let n = m.cols;
+    let mut row_major: Vec<Vec<f64>> = (0..n)
+        .map(|r| (0..n).map(|c| m.columns[c][r]).collect())
+        .collect();
+    // Quantize per-step: the matrix elements are already representable by
+    // construction; the determinant computation produces sums and products
+    // that must each round to the kind's precision.
+    let value = match determinant_recursive(kind, &mut row_major) {
+        Ok(v) => v,
+        Err(message) => return Some(Err(message)),
+    };
+    let value = match checked_source_float(kind, value) {
+        Some(v) => v,
+        None => return Some(Err("determinant: result overflows the representable range")),
+    };
+    Some(Ok(SourceFloatValues {
+        kind,
+        values: vec![value],
+    }))
+}
+
+fn determinant_recursive(kind: SourceFloatKind, m: &[Vec<f64>]) -> Result<f64, &'static str> {
+    let n = m.len();
+    match n {
+        0 => Ok(1.0),
+        1 => Ok(m[0][0]),
+        2 => {
+            let p0 = checked_source_float(kind, m[0][0] * m[1][1])
+                .ok_or("determinant: intermediate product overflows")?;
+            let p1 = checked_source_float(kind, m[0][1] * m[1][0])
+                .ok_or("determinant: intermediate product overflows")?;
+            checked_source_float(kind, p0 - p1).ok_or("determinant: intermediate sum overflows")
+        }
+        _ => {
+            let mut sum = 0.0f64;
+            for c in 0..n {
+                let minor: Vec<Vec<f64>> = (1..n)
+                    .map(|r| {
+                        (0..n)
+                            .filter(|cc| *cc != c)
+                            .map(|cc| m[r][cc])
+                            .collect::<Vec<_>>()
+                    })
+                    .collect();
+                let sub = determinant_recursive(kind, &minor)?;
+                let term = checked_source_float(kind, m[0][c] * sub)
+                    .ok_or("determinant: intermediate product overflows")?;
+                let signed = if c % 2 == 0 { term } else { -term };
+                sum = checked_source_float(kind, sum + signed)
+                    .ok_or("determinant: intermediate sum overflows")?;
+            }
+            Ok(sum)
+        }
+    }
+}
+
+fn eval_matrix_matrix_mul(
+    a: SourceMatrixValues,
+    b: SourceMatrixValues,
+) -> Option<Result<SourceMatrixValues, &'static str>> {
+    if a.cols != b.rows {
+        return None;
+    }
+    let kind = combine_source_float_kind(a.kind, b.kind)?;
+    let out_cols = b.cols;
+    let out_rows = a.rows;
+    let mut columns = vec![vec![0.0f64; out_rows]; out_cols];
+    for i in 0..out_cols {
+        for j in 0..out_rows {
+            let row: Vec<f64> = (0..a.cols).map(|k| a.columns[k][j]).collect();
+            let col: Vec<f64> = b.columns[i].clone();
+            let dp = match eval_dot_terms(
+                kind,
+                &row,
+                &col,
+                "matrix multiplication: intermediate sum overflows",
+            ) {
+                Ok(v) => v,
+                Err("") => return None,
+                Err(m) => return Some(Err(m)),
+            };
+            columns[i][j] = dp;
+        }
+    }
+    Some(Ok(SourceMatrixValues {
+        kind,
+        cols: out_cols,
+        rows: out_rows,
+        columns,
+    }))
+}
+
+fn eval_matrix_vector_mul(
+    m: SourceMatrixValues,
+    v: SourceFloatValues,
+) -> Option<Result<SourceFloatValues, &'static str>> {
+    if m.cols != v.values.len() {
+        return None;
+    }
+    let kind = combine_source_float_kind(m.kind, v.kind)?;
+    let mut out = Vec::with_capacity(m.rows);
+    for j in 0..m.rows {
+        let row: Vec<f64> = (0..m.cols).map(|c| m.columns[c][j]).collect();
+        let dp = match eval_dot_terms(
+            kind,
+            &row,
+            &v.values,
+            "matrix-vector multiplication: intermediate sum overflows",
+        ) {
+            Ok(value) => value,
+            Err("") => return None,
+            Err(message) => return Some(Err(message)),
+        };
+        out.push(dp);
+    }
+    Some(Ok(SourceFloatValues { kind, values: out }))
+}
+
+fn eval_vector_matrix_mul(
+    v: SourceFloatValues,
+    m: SourceMatrixValues,
+) -> Option<Result<SourceFloatValues, &'static str>> {
+    if v.values.len() != m.rows {
+        return None;
+    }
+    let kind = combine_source_float_kind(v.kind, m.kind)?;
+    let mut out = Vec::with_capacity(m.cols);
+    for c in 0..m.cols {
+        let dp = match eval_dot_terms(
+            kind,
+            &v.values,
+            &m.columns[c],
+            "vector-matrix multiplication: intermediate sum overflows",
+        ) {
+            Ok(value) => value,
+            Err("") => return None,
+            Err(message) => return Some(Err(message)),
+        };
+        out.push(dp);
+    }
+    Some(Ok(SourceFloatValues { kind, values: out }))
+}
+
+fn eval_matrix_scalar_mul(
+    m: SourceMatrixValues,
+    s: SourceFloatValues,
+) -> Option<Result<SourceMatrixValues, &'static str>> {
+    if s.values.len() != 1 {
+        return None;
+    }
+    let kind = combine_source_float_kind(m.kind, s.kind)?;
+    let scalar = match checked_source_float(kind, s.values[0]) {
+        Some(v) => v,
+        None => {
+            return Some(Err(
+                "matrix-scalar multiplication: scalar is not representable",
+            ))
+        }
+    };
+    let mut columns = Vec::with_capacity(m.cols);
+    for col in m.columns.iter() {
+        let mut new_col = Vec::with_capacity(m.rows);
+        for value in col.iter() {
+            let r = checked_source_float(kind, *value * scalar);
+            match r {
+                Some(v) => new_col.push(v),
+                None => {
+                    return Some(Err(
+                        "matrix-scalar multiplication: result overflows the representable range",
+                    ))
+                }
+            }
+        }
+        columns.push(new_col);
+    }
+    Some(Ok(SourceMatrixValues {
+        kind,
+        cols: m.cols,
+        rows: m.rows,
+        columns,
+    }))
+}
+
+fn eval_matrix_componentwise_op(
+    a: SourceMatrixValues,
+    b: SourceMatrixValues,
+    op: impl Fn(f64, f64) -> f64,
+) -> Option<Result<SourceMatrixValues, &'static str>> {
+    if a.cols != b.cols || a.rows != b.rows {
+        return None;
+    }
+    let kind = combine_source_float_kind(a.kind, b.kind)?;
+    let mut columns = Vec::with_capacity(a.cols);
+    for (ac, bc) in a.columns.iter().zip(b.columns.iter()) {
+        let mut new_col = Vec::with_capacity(a.rows);
+        for (x, y) in ac.iter().zip(bc.iter()) {
+            match checked_source_float(kind, op(*x, *y)) {
+                Some(v) => new_col.push(v),
+                None => {
+                    return Some(Err(
+                        "matrix componentwise op: result overflows the representable range",
+                    ))
+                }
+            }
+        }
+        columns.push(new_col);
+    }
+    Some(Ok(SourceMatrixValues {
+        kind,
+        cols: a.cols,
+        rows: a.rows,
+        columns,
+    }))
+}
+
+fn lower_const_matrix_binary_source(
+    source: &str,
+    constants: Option<&HashMap<String, f64>>,
+) -> String {
+    if !source.contains("mat") {
+        return source.to_string();
+    }
+    let bytes = source.as_bytes();
+    let mut out = String::with_capacity(source.len());
+    let mut pos = 0usize;
+    let mut i = 0usize;
+    while i < bytes.len() {
+        if bytes[i] != b'(' {
+            i += 1;
+            continue;
+        }
+        let mut depth = 1i32;
+        let mut j = i + 1;
+        while j < bytes.len() {
+            match bytes[j] {
+                b'(' => depth += 1,
+                b')' => {
+                    depth -= 1;
+                    if depth == 0 {
+                        break;
+                    }
+                }
+                _ => {}
+            }
+            j += 1;
+        }
+        if depth != 0 {
+            i += 1;
+            continue;
+        }
+        let inner = &source[i + 1..j];
+        if !inner.contains("mat") || find_top_level_binary_operator(inner, b"+-*").is_none() {
+            i += 1;
+            continue;
+        }
+        let replacement = resolve_math_matrix_values(inner, constants)
+            .and_then(|m| format_source_matrix_values(&m))
+            .or_else(|| {
+                resolve_math_float_values(inner, constants)
+                    .and_then(|v| format_source_float_values(&v))
+            });
+        if let Some(r) = replacement {
+            out.push_str(&source[pos..i]);
+            out.push_str(&r);
+            pos = j + 1;
+            i = j + 1;
+            continue;
+        }
+        i += 1;
+    }
+    if pos == 0 {
+        source.to_string()
+    } else {
+        out.push_str(&source[pos..]);
+        out
+    }
 }
 
 fn pair_three_arg_values(a: &[f64], b: &[f64], c: &[f64]) -> Vec<(f64, f64, f64)> {
@@ -8775,6 +9324,28 @@ fn resolve_source_float_binary_expr(
         });
     }
     if let Some((idx, op)) = find_top_level_binary_operator(s, b"*/%") {
+        if op == b'*' {
+            let left_text = &s[..idx];
+            let right_text = &s[idx + 1..];
+            if let Some(m) = resolve_math_matrix_values(left_text, constants) {
+                if let Some(v) = resolve_math_float_values(right_text, constants) {
+                    if v.values.len() > 1 {
+                        if let Some(Ok(r)) = eval_matrix_vector_mul(m, v) {
+                            return Some(r);
+                        }
+                    }
+                }
+            }
+            if let Some(m) = resolve_math_matrix_values(right_text, constants) {
+                if let Some(v) = resolve_math_float_values(left_text, constants) {
+                    if v.values.len() > 1 {
+                        if let Some(Ok(r)) = eval_vector_matrix_mul(v, m) {
+                            return Some(r);
+                        }
+                    }
+                }
+            }
+        }
         let left = resolve_math_float_values(&s[..idx], constants)?;
         let right = resolve_math_float_values(&s[idx + 1..], constants)?;
         return source_float_componentwise_binary(left, right, |a, b| match op {
@@ -8805,6 +9376,15 @@ fn resolve_math_float_values(
 ) -> Option<SourceFloatValues> {
     let s = trim_outer_parens(expr).trim();
     if let Some((base, index)) = split_trailing_const_index(s) {
+        if let Some(m) = resolve_math_matrix_values(base, constants) {
+            if index < m.cols {
+                return Some(SourceFloatValues {
+                    kind: m.kind,
+                    values: m.columns[index].clone(),
+                });
+            }
+            return None;
+        }
         let values = resolve_math_float_values(base, constants)?;
         return values
             .values
@@ -11237,7 +11817,8 @@ pub fn compile_with_meta(source: &str) -> std::result::Result<WgslCompileResult,
     let size_lowered_source = lower_large_size_attribute_source(&normalized_source);
     let naga_source = lower_no_entry_workgroup_pointer_params_source(&size_lowered_source);
     let shadow_builtin_source = lower_shadow_builtin_abstract_args_source(&naga_source, None);
-    let bool_bitwise_source = lower_bool_bitwise_const_source(&shadow_builtin_source);
+    let matrix_binary_source = lower_const_matrix_binary_source(&shadow_builtin_source, None);
+    let bool_bitwise_source = lower_bool_bitwise_const_source(&matrix_binary_source);
     let float_math_source = lower_const_float_math_source(&bool_bitwise_source, None);
     let parse_source = lower_const_bitcasts_source(
         &lower_packed_builtins_source(
@@ -12062,6 +12643,243 @@ fn main() {
                 .contains("quantizeToF16(1h)")
         );
     }
+
+    #[test]
+    fn matrix_constructor_dims_parses_naked_and_typed() {
+        assert_eq!(matrix_constructor_dims("mat2x2"), Some((2, 2, None)));
+        assert_eq!(matrix_constructor_dims("mat3x4"), Some((3, 4, None)));
+        assert_eq!(
+            matrix_constructor_dims("mat4x4<f32>"),
+            Some((4, 4, Some(SourceFloatKind::F32)))
+        );
+        assert_eq!(
+            matrix_constructor_dims("mat3x2<f16>"),
+            Some((3, 2, Some(SourceFloatKind::F16)))
+        );
+        assert_eq!(
+            matrix_constructor_dims("mat2x3f"),
+            Some((2, 3, Some(SourceFloatKind::F32)))
+        );
+        assert_eq!(
+            matrix_constructor_dims("mat2x3h"),
+            Some((2, 3, Some(SourceFloatKind::F16)))
+        );
+        assert_eq!(matrix_constructor_dims("vec3"), None);
+        assert_eq!(matrix_constructor_dims("mat5x2"), None);
+    }
+
+    #[test]
+    fn resolve_matrix_handles_scalar_and_vector_constructors() {
+        let m = resolve_math_matrix_values("mat2x2(1.0, 2.0, 3.0, 4.0)", None).unwrap();
+        assert_eq!((m.cols, m.rows), (2, 2));
+        assert_eq!(m.columns, vec![vec![1.0, 2.0], vec![3.0, 4.0]]);
+
+        let m =
+            resolve_math_matrix_values("mat2x3(vec3(1.0, 2.0, 3.0), vec3(4.0, 5.0, 6.0))", None)
+                .unwrap();
+        assert_eq!((m.cols, m.rows), (2, 3));
+        assert_eq!(m.columns, vec![vec![1.0, 2.0, 3.0], vec![4.0, 5.0, 6.0]]);
+
+        let m = resolve_math_matrix_values("mat3x2(1.0, 2.0, 3.0, 4.0, 5.0, 6.0)", None).unwrap();
+        assert_eq!((m.cols, m.rows), (3, 2));
+        assert_eq!(
+            m.columns,
+            vec![vec![1.0, 2.0], vec![3.0, 4.0], vec![5.0, 6.0]]
+        );
+    }
+
+    #[test]
+    fn format_matrix_values_round_trips_through_resolve() {
+        let m = resolve_math_matrix_values("mat3x2(1.0, 2.0, 3.0, 4.0, 5.0, 6.0)", None).unwrap();
+        let s = format_source_matrix_values(&m).unwrap();
+        let m2 = resolve_math_matrix_values(&s, None).unwrap();
+        assert_eq!(m.columns, m2.columns);
+        assert_eq!((m.cols, m.rows), (m2.cols, m2.rows));
+    }
+
+    #[test]
+    fn eval_transpose_swaps_dimensions_and_indices() {
+        let m = resolve_math_matrix_values("mat3x2(1.0,2.0, 3.0,4.0, 5.0,6.0)", None).unwrap();
+        let t = eval_transpose_matrix(m).unwrap();
+        assert_eq!((t.cols, t.rows), (2, 3));
+        assert_eq!(t.columns, vec![vec![1.0, 3.0, 5.0], vec![2.0, 4.0, 6.0]]);
+    }
+
+    #[test]
+    fn eval_determinant_dim_2_3_4() {
+        let m = resolve_math_matrix_values("mat2x2(1.0, 2.0, 3.0, 4.0)", None).unwrap();
+        let r = eval_determinant_matrix(m).unwrap().unwrap();
+        assert_eq!(r.values, vec![-2.0]);
+
+        let m = resolve_math_matrix_values("mat3x3(1.0,4.0,7.0, 2.0,5.0,8.0, 3.0,6.0,9.0)", None)
+            .unwrap();
+        let r = eval_determinant_matrix(m).unwrap().unwrap();
+        assert_eq!(r.values, vec![0.0]);
+
+        let m = resolve_math_matrix_values("mat3x3(2.0,0.0,0.0, 0.0,3.0,0.0, 0.0,0.0,5.0)", None)
+            .unwrap();
+        let r = eval_determinant_matrix(m).unwrap().unwrap();
+        assert_eq!(r.values, vec![30.0]);
+
+        let m = resolve_math_matrix_values(
+            "mat4x4(1.0,0.0,0.0,0.0, 0.0,2.0,0.0,0.0, 0.0,0.0,3.0,0.0, 0.0,0.0,0.0,4.0)",
+            None,
+        )
+        .unwrap();
+        let r = eval_determinant_matrix(m).unwrap().unwrap();
+        assert_eq!(r.values, vec![24.0]);
+    }
+
+    #[test]
+    fn eval_matrix_matrix_mul_2x2() {
+        let a = resolve_math_matrix_values("mat2x2(1.0,2.0, 3.0,4.0)", None).unwrap();
+        let b = resolve_math_matrix_values("mat2x2(5.0,6.0, 7.0,8.0)", None).unwrap();
+        let r = eval_matrix_matrix_mul(a, b).unwrap().unwrap();
+        assert_eq!((r.cols, r.rows), (2, 2));
+        assert_eq!(r.columns, vec![vec![23.0, 34.0], vec![31.0, 46.0]]);
+    }
+
+    #[test]
+    fn eval_matrix_matrix_mul_2x3_times_3x2() {
+        let a = resolve_math_matrix_values("mat2x3(1.0,2.0,3.0, 4.0,5.0,6.0)", None).unwrap();
+        let b = resolve_math_matrix_values("mat3x2(7.0,8.0, 9.0,10.0, 11.0,12.0)", None).unwrap();
+        let r = eval_matrix_matrix_mul(a, b).unwrap().unwrap();
+        assert_eq!((r.cols, r.rows), (3, 3));
+        assert_eq!(
+            r.columns,
+            vec![
+                vec![39.0, 54.0, 69.0],
+                vec![49.0, 68.0, 87.0],
+                vec![59.0, 82.0, 105.0],
+            ]
+        );
+    }
+
+    #[test]
+    fn eval_matrix_vector_mul_2x3_times_vec2() {
+        let m = resolve_math_matrix_values("mat2x3(1.0,2.0,3.0, 4.0,5.0,6.0)", None).unwrap();
+        let v = resolve_math_float_values("vec2(7.0, 8.0)", None).unwrap();
+        let r = eval_matrix_vector_mul(m, v).unwrap().unwrap();
+        assert_eq!(r.values, vec![39.0, 54.0, 69.0]);
+    }
+
+    #[test]
+    fn eval_vector_matrix_mul_vec2_times_3x2() {
+        let v = resolve_math_float_values("vec2(7.0, 8.0)", None).unwrap();
+        let m = resolve_math_matrix_values("mat3x2(1.0,2.0, 3.0,4.0, 5.0,6.0)", None).unwrap();
+        let r = eval_vector_matrix_mul(v, m).unwrap().unwrap();
+        assert_eq!(r.values, vec![23.0, 53.0, 83.0]);
+    }
+
+    #[test]
+    fn eval_matrix_scalar_mul_componentwise() {
+        let m = resolve_math_matrix_values("mat2x2(1.0,2.0, 3.0,4.0)", None).unwrap();
+        let s = SourceFloatValues {
+            kind: SourceFloatKind::Abstract,
+            values: vec![3.0],
+        };
+        let r = eval_matrix_scalar_mul(m, s).unwrap().unwrap();
+        assert_eq!(r.columns, vec![vec![3.0, 6.0], vec![9.0, 12.0]]);
+    }
+
+    #[test]
+    fn eval_matrix_componentwise_add_sub() {
+        let a = resolve_math_matrix_values("mat2x2(1.0,2.0, 3.0,4.0)", None).unwrap();
+        let b = resolve_math_matrix_values("mat2x2(10.0,20.0, 30.0,40.0)", None).unwrap();
+        let add = eval_matrix_componentwise_op(a.clone(), b.clone(), |x, y| x + y)
+            .unwrap()
+            .unwrap();
+        assert_eq!(add.columns, vec![vec![11.0, 22.0], vec![33.0, 44.0]]);
+        let sub = eval_matrix_componentwise_op(a, b, |x, y| x - y)
+            .unwrap()
+            .unwrap();
+        assert_eq!(sub.columns, vec![vec![-9.0, -18.0], vec![-27.0, -36.0]]);
+    }
+
+    #[test]
+    fn lower_const_matrix_binary_source_handles_mat_mat_mul() {
+        let source =
+            "fn f() -> f32 { return ((mat2x2(1.0,2.0,3.0,4.0)) * (mat2x2(5.0,6.0,7.0,8.0)))[0][0]; }";
+        let lowered = lower_const_matrix_binary_source(source, None);
+        assert_ne!(lowered, source);
+        assert!(!lowered.contains("(mat2x2"));
+        assert!(lowered.contains("2.30000000000000000e1"));
+        assert!(compile_with_meta(&lowered).is_ok());
+    }
+
+    #[test]
+    fn lower_const_matrix_binary_source_handles_mat_vec_mul() {
+        let source =
+            "fn f() -> f32 { return ((mat2x3(1.0,2.0,3.0, 4.0,5.0,6.0)) * (vec2(7.0,8.0)))[0]; }";
+        let lowered = lower_const_matrix_binary_source(source, None);
+        assert_ne!(lowered, source);
+        assert!(lowered.contains("3.90000000000000000e1"));
+        assert!(compile_with_meta(&lowered).is_ok());
+    }
+
+    #[test]
+    fn lower_const_matrix_binary_source_handles_mat_add() {
+        let source = "fn f() -> f32 { return ((mat2x2(1.0,2.0,3.0,4.0)) + (mat2x2(10.0,20.0,30.0,40.0)))[0][0]; }";
+        let lowered = lower_const_matrix_binary_source(source, None);
+        assert_ne!(lowered, source);
+        assert!(lowered.contains("1.10000000000000000e1"));
+        assert!(compile_with_meta(&lowered).is_ok());
+    }
+
+    #[test]
+    fn lower_const_transpose_call_emits_literal_matrix() {
+        let source = "fn f() -> f32 { return transpose(mat2x3(1.0,2.0,3.0, 4.0,5.0,6.0))[0][0]; }";
+        let lowered = lower_shadow_builtin_abstract_args_source(source, None);
+        assert!(lowered.contains("mat3x2"));
+        assert!(compile_with_meta(&lowered).is_ok());
+    }
+
+    #[test]
+    fn lower_const_determinant_call_emits_scalar() {
+        let source = "fn f() -> f32 { return f32(determinant(mat2x2(1.0, 2.0, 3.0, 4.0))); }";
+        let lowered = lower_shadow_builtin_abstract_args_source(source, None);
+        assert!(lowered.contains("-2"));
+        assert!(compile_with_meta(&lowered).is_ok());
+    }
+
+    #[test]
+    fn cts_like_af_matrix_addition_compiles() {
+        // Mimics what abstractFloatShaderBuilder emits for af_matrix_addition
+        // with cols=2, rows=2. The expression `((MAT_A)+(MAT_B))[c][r]` is
+        // referenced four times across the snippet; each must lower cleanly.
+        let source = r#"
+struct AbstractFloat { high: u32, low: u32 };
+struct Output { value: array<array<AbstractFloat, 2>, 2> };
+@group(0) @binding(0) var<storage, read_write> outputs: array<Output, 1>;
+@compute @workgroup_size(1)
+fn main() {
+  {
+    const kExponentBias = 1022;
+    const subnormal_or_zero : bool = (((mat2x2(1.0, 2.0, 3.0, 4.0))+(mat2x2(5.0, 6.0, 7.0, 8.0)))[0][0] <= 2.2250738585072014e-308) && (((mat2x2(1.0, 2.0, 3.0, 4.0))+(mat2x2(5.0, 6.0, 7.0, 8.0)))[0][0] >= -2.2250738585072014e-308);
+    const sign_bit : u32 = select(0, 0x80000000, ((mat2x2(1.0, 2.0, 3.0, 4.0))+(mat2x2(5.0, 6.0, 7.0, 8.0)))[0][0] < 0);
+    const f = frexp(abs(((mat2x2(1.0, 2.0, 3.0, 4.0))+(mat2x2(5.0, 6.0, 7.0, 8.0)))[0][0]));
+    const f_fract = select(f.fract, 0, subnormal_or_zero);
+    const f_exp = select(f.exp, -kExponentBias, subnormal_or_zero);
+    const exponent_bits : u32 = u32(f_exp + kExponentBias) << 20;
+    const high_mantissa = ldexp(f_fract, 21);
+    const high_mantissa_bits : u32 = u32(ldexp(f_fract, 21)) & 0x000fffff;
+    const low_mantissa = f_fract - ldexp(floor(high_mantissa), -21);
+    const low_mantissa_bits = u32(ldexp(low_mantissa, 53));
+    outputs[0].value[0][0].high = sign_bit | exponent_bits | high_mantissa_bits;
+    outputs[0].value[0][0].low = low_mantissa_bits;
+  }
+}
+"#;
+        let r = compile_with_meta(source);
+        assert!(
+            r.is_ok(),
+            "compile failed: {:?}",
+            r.err().map(|msgs| msgs
+                .iter()
+                .map(|m| m.message.clone())
+                .collect::<Vec<_>>())
+        );
+    }
 }
 
 pub fn wgsl_to_spirv(source: &str) -> Result<Vec<u32>, String> {
@@ -12190,7 +13008,9 @@ pub fn bake_wgsl_with_constants(
     let naga_source = lower_no_entry_workgroup_pointer_params_source(&size_lowered_source);
     let shadow_builtin_source =
         lower_shadow_builtin_abstract_args_source(&naga_source, Some(&constants));
-    let bool_bitwise_source = lower_bool_bitwise_const_source(&shadow_builtin_source);
+    let matrix_binary_source =
+        lower_const_matrix_binary_source(&shadow_builtin_source, Some(&constants));
+    let bool_bitwise_source = lower_bool_bitwise_const_source(&matrix_binary_source);
     let float_math_source = lower_const_float_math_source(&bool_bitwise_source, Some(&constants));
     let parse_source = lower_const_bitcasts_source(
         &lower_packed_builtins_source(
