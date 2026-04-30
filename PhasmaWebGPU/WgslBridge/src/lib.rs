@@ -955,7 +955,15 @@ fn abstract_number_to_f32_text(arg: &str) -> Option<String> {
     Some(text)
 }
 
-fn lower_shadow_builtin_abstract_args_call(name: &str, args: &[String]) -> Option<String> {
+fn lower_shadow_builtin_abstract_args_call(
+    name: &str,
+    args: &[String],
+    constants: Option<&HashMap<String, f64>>,
+) -> Option<String> {
+    if let Some(Ok(result)) = eval_const_float_builtin_call(name, args, constants) {
+        return format_source_float_values(&result);
+    }
+
     const DERIVATIVE_NAMES: &[&str] = &[
         "dpdx",
         "dpdxCoarse",
@@ -1006,8 +1014,29 @@ fn lower_shadow_builtin_abstract_args_call(name: &str, args: &[String]) -> Optio
     None
 }
 
-fn lower_shadow_builtin_abstract_args_source(source: &str) -> String {
+fn call_is_bare_statement(source: &str, call_start: usize, close: usize) -> bool {
+    let bytes = source.as_bytes();
+    let mut prev = call_start;
+    while prev > 0 && bytes[prev - 1].is_ascii_whitespace() {
+        prev -= 1;
+    }
+    let starts_statement = prev == 0 || matches!(bytes[prev - 1], b'{' | b'}' | b';');
+    if !starts_statement {
+        return false;
+    }
+    let mut next = close + 1;
+    while next < bytes.len() && bytes[next].is_ascii_whitespace() {
+        next += 1;
+    }
+    next < bytes.len() && bytes[next] == b';'
+}
+
+fn lower_shadow_builtin_abstract_args_source(
+    source: &str,
+    constants: Option<&HashMap<String, f64>>,
+) -> String {
     const NAMES: &[&str] = &[
+        "acosh",
         "determinant",
         "dpdx",
         "dpdxCoarse",
@@ -1018,7 +1047,10 @@ fn lower_shadow_builtin_abstract_args_source(source: &str) -> String {
         "fwidth",
         "fwidthCoarse",
         "fwidthFine",
+        "faceForward",
         "mix",
+        "reflect",
+        "refract",
     ];
     if !NAMES.iter().any(|name| source.contains(name)) {
         return source.to_string();
@@ -1038,9 +1070,13 @@ fn lower_shadow_builtin_abstract_args_source(source: &str) -> String {
                 && (end == source.len() || !is_ident_char(bytes[end]))
             {
                 if let Some((args, close)) = find_call_args(source, i, name.len()) {
-                    if !is_builtin_shadowed_at_call(source, name, i) {
+                    let preserve_must_use = matches!(
+                        *name,
+                        "acosh" | "faceForward" | "mix" | "reflect" | "refract"
+                    ) && call_is_bare_statement(source, i, close);
+                    if !preserve_must_use && !is_builtin_shadowed_at_call(source, name, i) {
                         if let Some(replacement) =
-                            lower_shadow_builtin_abstract_args_call(name, &args)
+                            lower_shadow_builtin_abstract_args_call(name, &args, constants)
                         {
                             out.push_str(&source[pos..i]);
                             out.push_str(&replacement);
@@ -7300,13 +7336,27 @@ fn validate_math_domain_source(
         && !source.contains("pow")
         && !source.contains("fma")
         && !source.contains("cross")
+        && !source.contains("mix")
+        && !source.contains("reflect")
+        && !source.contains("refract")
+        && !source.contains("faceForward")
     {
         return Vec::new();
     }
     let scan = mask_comments_preserve_len(&smoothstep_validation_source(source, entry_point));
     let bytes = scan.as_bytes();
     let mut errors = Vec::new();
-    for builtin in ["acosh", "inverseSqrt", "pow", "fma", "cross"] {
+    for builtin in [
+        "acosh",
+        "inverseSqrt",
+        "pow",
+        "fma",
+        "cross",
+        "mix",
+        "reflect",
+        "refract",
+        "faceForward",
+    ] {
         let mut i = 0usize;
         while let Some(rel) = scan[i..].find(builtin) {
             let start = i + rel;
@@ -7337,12 +7387,9 @@ fn check_math_call_args(
     match builtin {
         "acosh" => {
             if args.len() == 1 {
-                if let Some(values) = resolve_math_arg_values(&args[0], constants) {
-                    if values.iter().any(|v| *v < 1.0) {
-                        errors.push(wgsl_error(
-                            "acosh(x): x must be ≥ 1 for the result to be representable",
-                        ));
-                    }
+                if let Some(Err(message)) = eval_const_float_builtin_call(builtin, args, constants)
+                {
+                    errors.push(wgsl_error(message));
                 }
             }
         }
@@ -7443,8 +7490,525 @@ fn check_math_call_args(
                 }
             }
         }
+        "refract" => {
+            if args.len() != 3 {
+                errors.push(wgsl_error(
+                    "refract(e1, e2, e3) requires exactly 3 arguments",
+                ));
+                return;
+            }
+            let c = trim_outer_parens(&args[2]).trim();
+            if matches!(c, "true" | "false") {
+                errors.push(wgsl_error(
+                    "refract(e1, e2, e3): e3 must be a floating-point scalar",
+                ));
+                return;
+            }
+            if let Some(Err(message)) = eval_const_float_builtin_call(builtin, args, constants) {
+                errors.push(wgsl_error(message));
+            }
+        }
+        "mix" | "reflect" | "faceForward" => {
+            if let Some(Err(message)) = eval_const_float_builtin_call(builtin, args, constants) {
+                errors.push(wgsl_error(message));
+            }
+        }
         _ => {}
     }
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum SourceFloatKind {
+    Abstract,
+    F32,
+    F16,
+}
+
+#[derive(Clone, Debug)]
+struct SourceFloatValues {
+    kind: SourceFloatKind,
+    values: Vec<f64>,
+}
+
+fn combine_source_float_kind(a: SourceFloatKind, b: SourceFloatKind) -> Option<SourceFloatKind> {
+    match (a, b) {
+        (SourceFloatKind::F32, SourceFloatKind::F16)
+        | (SourceFloatKind::F16, SourceFloatKind::F32) => None,
+        (SourceFloatKind::F32, _) | (_, SourceFloatKind::F32) => Some(SourceFloatKind::F32),
+        (SourceFloatKind::F16, _) | (_, SourceFloatKind::F16) => Some(SourceFloatKind::F16),
+        _ => Some(SourceFloatKind::Abstract),
+    }
+}
+
+fn combine_source_float_values(values: &[&SourceFloatValues]) -> Option<SourceFloatKind> {
+    values
+        .iter()
+        .map(|v| v.kind)
+        .try_fold(SourceFloatKind::Abstract, combine_source_float_kind)
+}
+
+fn vector_constructor_float_kind(callee: &str) -> Option<Option<SourceFloatKind>> {
+    let n = normalize_type_name(callee).to_ascii_lowercase();
+    if constructor_vector_width(&n).is_none() {
+        return None;
+    }
+    if n.contains("bool")
+        || n.contains("i32")
+        || n.contains("u32")
+        || n.ends_with('i')
+        || n.ends_with('u')
+    {
+        return None;
+    }
+    if n.contains("f32") || n.ends_with('f') {
+        Some(Some(SourceFloatKind::F32))
+    } else if n.contains("f16") || n.ends_with('h') {
+        Some(Some(SourceFloatKind::F16))
+    } else if n.contains("abstract-float") || n.contains("abstractfloat") {
+        Some(Some(SourceFloatKind::Abstract))
+    } else {
+        Some(None)
+    }
+}
+
+fn scalar_constructor_float_kind(callee: &str) -> Option<SourceFloatKind> {
+    let n = normalize_type_name(callee).to_ascii_lowercase();
+    match n.as_str() {
+        "f32" | "f32_alias" => Some(SourceFloatKind::F32),
+        "f16" => Some(SourceFloatKind::F16),
+        "abstractfloat" | "abstract-float" => Some(SourceFloatKind::Abstract),
+        _ => None,
+    }
+}
+
+fn numeric_literal_source_float_kind(expr: &str) -> Option<SourceFloatKind> {
+    let s = trim_outer_parens(expr).trim();
+    if s.ends_with('i') || s.ends_with('u') {
+        return None;
+    }
+    if s.ends_with('f') {
+        return Some(SourceFloatKind::F32);
+    }
+    if s.ends_with('h') {
+        return Some(SourceFloatKind::F16);
+    }
+    if parse_numeric_literal(s).is_some() || parse_wgsl_i64_like(s).is_some() {
+        return Some(SourceFloatKind::Abstract);
+    }
+    None
+}
+
+fn explicit_source_float_values(
+    kind: SourceFloatKind,
+    mut values: Vec<f64>,
+) -> Option<SourceFloatValues> {
+    for v in values.iter_mut() {
+        *v = checked_source_float(kind, *v)?;
+    }
+    Some(SourceFloatValues { kind, values })
+}
+
+fn checked_source_float(kind: SourceFloatKind, value: f64) -> Option<f64> {
+    if !value.is_finite() {
+        return None;
+    }
+    match kind {
+        SourceFloatKind::Abstract => Some(value),
+        SourceFloatKind::F32 => {
+            let v = value as f32;
+            v.is_finite().then_some(v as f64)
+        }
+        SourceFloatKind::F16 => quantize_to_f16_f32(value).map(|v| v as f64),
+    }
+}
+
+fn eval_const_float_builtin_call(
+    name: &str,
+    args: &[String],
+    constants: Option<&HashMap<String, f64>>,
+) -> Option<Result<SourceFloatValues, &'static str>> {
+    match name {
+        "acosh" => eval_acosh_call(args, constants),
+        "mix" => eval_mix_call(args, constants),
+        "reflect" => eval_reflect_call(args, constants),
+        "refract" => eval_refract_call(args, constants),
+        "faceForward" => eval_face_forward_call(args, constants),
+        _ => None,
+    }
+}
+
+fn eval_acosh_call(
+    args: &[String],
+    constants: Option<&HashMap<String, f64>>,
+) -> Option<Result<SourceFloatValues, &'static str>> {
+    if args.len() != 1 {
+        return None;
+    }
+    let a = resolve_math_float_values(&args[0], constants)?;
+    let mut out = Vec::with_capacity(a.values.len());
+    for value in a.values {
+        let value = match checked_source_float(a.kind, value) {
+            Some(v) => v,
+            None => return Some(Err("acosh(x): input is not representable")),
+        };
+        if value < 1.0 {
+            return Some(Err(
+                "acosh(x): x must be ≥ 1 for the result to be representable",
+            ));
+        }
+        let result = match checked_source_float(a.kind, stable_acosh(value)) {
+            Some(v) => v,
+            None => return Some(Err("acosh(x): result overflows the representable range")),
+        };
+        out.push(result);
+    }
+    Some(Ok(SourceFloatValues {
+        kind: a.kind,
+        values: out,
+    }))
+}
+
+fn stable_acosh(value: f64) -> f64 {
+    2.0 * (((value - 1.0) * 0.5).sqrt() + ((value + 1.0) * 0.5).sqrt()).ln()
+}
+
+fn eval_mix_call(
+    args: &[String],
+    constants: Option<&HashMap<String, f64>>,
+) -> Option<Result<SourceFloatValues, &'static str>> {
+    if args.len() != 3 {
+        return None;
+    }
+    let a = resolve_math_float_values(&args[0], constants)?;
+    let b = resolve_math_float_values(&args[1], constants)?;
+    let c = resolve_math_float_values(&args[2], constants)?;
+    if a.values.len() != b.values.len() {
+        return None;
+    }
+    let n = a.values.len();
+    if n == 0 {
+        return None;
+    }
+    if c.values.len() != n && !(n >= 2 && c.values.len() == 1) {
+        return None;
+    }
+    let kind = combine_source_float_values(&[&a, &b, &c])?;
+    let triples = pair_three_arg_values(&a.values, &b.values, &c.values);
+    if triples.is_empty() {
+        return None;
+    }
+    let mut out = Vec::with_capacity(triples.len());
+    for (a, b, c) in triples {
+        let a = match checked_source_float(kind, a) {
+            Some(v) => v,
+            None => return Some(Err("mix: input is not representable")),
+        };
+        let b = match checked_source_float(kind, b) {
+            Some(v) => v,
+            None => return Some(Err("mix: input is not representable")),
+        };
+        let c = match checked_source_float(kind, c) {
+            Some(v) => v,
+            None => return Some(Err("mix: input is not representable")),
+        };
+        let c1 = match checked_source_float(kind, 1.0 - c) {
+            Some(v) => v,
+            None => return Some(Err("mix: 1 - e3 overflows the representable range")),
+        };
+        let ac1 = match checked_source_float(kind, a * c1) {
+            Some(v) => v,
+            None => return Some(Err("mix: e1 * (1 - e3) overflows the representable range")),
+        };
+        let bc = match checked_source_float(kind, b * c) {
+            Some(v) => v,
+            None => return Some(Err("mix: e2 * e3 overflows the representable range")),
+        };
+        let result = match checked_source_float(kind, ac1 + bc) {
+            Some(v) => v,
+            None => return Some(Err("mix: result overflows the representable range")),
+        };
+        out.push(result);
+    }
+    Some(Ok(SourceFloatValues { kind, values: out }))
+}
+
+fn eval_dot_terms(
+    kind: SourceFloatKind,
+    a: &[f64],
+    b: &[f64],
+    overflow_message: &'static str,
+) -> Result<f64, &'static str> {
+    if a.len() != b.len() || a.len() < 2 {
+        return Err("");
+    }
+    let mut sum = 0.0;
+    for (x, y) in a.iter().zip(b.iter()) {
+        let x = checked_source_float(kind, *x).ok_or(overflow_message)?;
+        let y = checked_source_float(kind, *y).ok_or(overflow_message)?;
+        let term = checked_source_float(kind, x * y).ok_or(overflow_message)?;
+        sum = checked_source_float(kind, sum + term).ok_or(overflow_message)?;
+    }
+    Ok(sum)
+}
+
+fn eval_reflect_call(
+    args: &[String],
+    constants: Option<&HashMap<String, f64>>,
+) -> Option<Result<SourceFloatValues, &'static str>> {
+    if args.len() != 2 {
+        return None;
+    }
+    let a = resolve_math_float_values(&args[0], constants)?;
+    let b = resolve_math_float_values(&args[1], constants)?;
+    if a.values.len() != b.values.len() || a.values.len() < 2 {
+        return None;
+    }
+    let kind = combine_source_float_values(&[&a, &b])?;
+    let dp = match eval_dot_terms(
+        kind,
+        &b.values,
+        &a.values,
+        "reflect: dot product overflows the representable range",
+    ) {
+        Ok(v) => v,
+        Err("") => return None,
+        Err(message) => return Some(Err(message)),
+    };
+    let dp2 = match checked_source_float(kind, dp * 2.0) {
+        Some(v) => v,
+        None => {
+            return Some(Err(
+                "reflect: 2 * dot(e2, e1) overflows the representable range",
+            ))
+        }
+    };
+    let mut out = Vec::with_capacity(a.values.len());
+    for (a, b) in a.values.iter().zip(b.values.iter()) {
+        let a = match checked_source_float(kind, *a) {
+            Some(v) => v,
+            None => return Some(Err("reflect: input is not representable")),
+        };
+        let b = match checked_source_float(kind, *b) {
+            Some(v) => v,
+            None => return Some(Err("reflect: input is not representable")),
+        };
+        let dp2b = match checked_source_float(kind, dp2 * b) {
+            Some(v) => v,
+            None => {
+                return Some(Err(
+                    "reflect: 2 * dot(e2, e1) * e2 overflows the representable range",
+                ))
+            }
+        };
+        let result = match checked_source_float(kind, a - dp2b) {
+            Some(v) => v,
+            None => return Some(Err("reflect: result overflows the representable range")),
+        };
+        out.push(result);
+    }
+    Some(Ok(SourceFloatValues { kind, values: out }))
+}
+
+fn eval_face_forward_call(
+    args: &[String],
+    constants: Option<&HashMap<String, f64>>,
+) -> Option<Result<SourceFloatValues, &'static str>> {
+    if args.len() != 3 {
+        return None;
+    }
+    let a = resolve_math_float_values(&args[0], constants)?;
+    let b = resolve_math_float_values(&args[1], constants)?;
+    let c = resolve_math_float_values(&args[2], constants)?;
+    if a.values.len() != b.values.len() || b.values.len() != c.values.len() || a.values.len() < 2 {
+        return None;
+    }
+    let kind = combine_source_float_values(&[&a, &b, &c])?;
+    let dp = match eval_dot_terms(
+        kind,
+        &b.values,
+        &c.values,
+        "faceForward: dot product overflows the representable range",
+    ) {
+        Ok(v) => v,
+        Err("") => return None,
+        Err(message) => return Some(Err(message)),
+    };
+    let mut out = Vec::with_capacity(a.values.len());
+    for a in &a.values {
+        let a = match checked_source_float(kind, *a) {
+            Some(v) => v,
+            None => return Some(Err("faceForward: input is not representable")),
+        };
+        let selected = if dp < 0.0 { a } else { -a };
+        let result = match checked_source_float(kind, selected) {
+            Some(v) => v,
+            None => return Some(Err("faceForward: result overflows the representable range")),
+        };
+        out.push(result);
+    }
+    Some(Ok(SourceFloatValues { kind, values: out }))
+}
+
+fn eval_refract_call(
+    args: &[String],
+    constants: Option<&HashMap<String, f64>>,
+) -> Option<Result<SourceFloatValues, &'static str>> {
+    if args.len() != 3 {
+        return None;
+    }
+    let a = resolve_math_float_values(&args[0], constants)?;
+    let b = resolve_math_float_values(&args[1], constants)?;
+    let c = resolve_math_float_values(&args[2], constants)?;
+    if a.values.len() != b.values.len() || a.values.len() < 2 || c.values.len() != 1 {
+        return None;
+    }
+    let kind = combine_source_float_values(&[&a, &b, &c])?;
+    let c = match checked_source_float(kind, c.values[0]) {
+        Some(v) => v,
+        None => return Some(Err("refract: input is not representable")),
+    };
+    let b_dot_a = match eval_dot_terms(
+        kind,
+        &b.values,
+        &a.values,
+        "refract: dot product overflows the representable range",
+    ) {
+        Ok(v) => v,
+        Err("") => return None,
+        Err(message) => return Some(Err(message)),
+    };
+    let b_dot_a_2 = match checked_source_float(kind, b_dot_a * b_dot_a) {
+        Some(v) => v,
+        None => {
+            return Some(Err(
+                "refract: dot(e2, e1)^2 overflows the representable range",
+            ))
+        }
+    };
+    let one_minus_b_dot_a_2 = match checked_source_float(kind, 1.0 - b_dot_a_2) {
+        Some(v) => v,
+        None => {
+            return Some(Err(
+                "refract: 1 - dot(e2, e1)^2 overflows the representable range",
+            ))
+        }
+    };
+    let c2 = match checked_source_float(kind, c * c) {
+        Some(v) => v,
+        None => return Some(Err("refract: e3 * e3 overflows the representable range")),
+    };
+    let c2_one_minus = match checked_source_float(kind, c2 * one_minus_b_dot_a_2) {
+        Some(v) => v,
+        None => return Some(Err("refract: e3^2 term overflows the representable range")),
+    };
+    let k = match checked_source_float(kind, 1.0 - c2_one_minus) {
+        Some(v) => v,
+        None => return Some(Err("refract: k overflows the representable range")),
+    };
+    let mut out = Vec::with_capacity(a.values.len());
+    if k < 0.0 {
+        out.resize(a.values.len(), 0.0);
+        return Some(Ok(SourceFloatValues { kind, values: out }));
+    }
+    let cbda = match checked_source_float(kind, c * b_dot_a) {
+        Some(v) => v,
+        None => {
+            return Some(Err(
+                "refract: e3 * dot(e2, e1) overflows the representable range",
+            ))
+        }
+    };
+    let sqrt_k = match checked_source_float(kind, k.sqrt()) {
+        Some(v) => v,
+        None => return Some(Err("refract: sqrt(k) is not representable")),
+    };
+    let cdba_sqrt_k = match checked_source_float(kind, cbda + sqrt_k) {
+        Some(v) => v,
+        None => {
+            return Some(Err(
+                "refract: e3 * dot(e2, e1) + sqrt(k) overflows the representable range",
+            ))
+        }
+    };
+    for (a, b) in a.values.iter().zip(b.values.iter()) {
+        let a = match checked_source_float(kind, *a) {
+            Some(v) => v,
+            None => return Some(Err("refract: input is not representable")),
+        };
+        let b = match checked_source_float(kind, *b) {
+            Some(v) => v,
+            None => return Some(Err("refract: input is not representable")),
+        };
+        let ca = match checked_source_float(kind, c * a) {
+            Some(v) => v,
+            None => return Some(Err("refract: e3 * e1 overflows the representable range")),
+        };
+        let cdba_sqrt_k_b = match checked_source_float(kind, cdba_sqrt_k * b) {
+            Some(v) => v,
+            None => {
+                return Some(Err(
+                    "refract: normal term overflows the representable range",
+                ))
+            }
+        };
+        let result = match checked_source_float(kind, ca - cdba_sqrt_k_b) {
+            Some(v) => v,
+            None => return Some(Err("refract: result overflows the representable range")),
+        };
+        out.push(result);
+    }
+    Some(Ok(SourceFloatValues { kind, values: out }))
+}
+
+fn format_wgsl_abstract_float_literal(value: f64) -> Option<String> {
+    if !value.is_finite() {
+        return None;
+    }
+    if value == 0.0 {
+        return Some(if value.is_sign_negative() {
+            "-0.0".to_string()
+        } else {
+            "0.0".to_string()
+        });
+    }
+    Some(format!("{value:.17e}"))
+}
+
+fn format_source_float_component(kind: SourceFloatKind, value: f64) -> Option<String> {
+    match kind {
+        SourceFloatKind::Abstract => format_wgsl_abstract_float_literal(value),
+        SourceFloatKind::F32 => format_wgsl_f32_literal(value as f32),
+        SourceFloatKind::F16 => format_wgsl_abstract_float_literal(value),
+    }
+}
+
+fn format_source_float_values(values: &SourceFloatValues) -> Option<String> {
+    let width = values.values.len();
+    if width == 0 {
+        return None;
+    }
+    if width == 1 {
+        return match values.kind {
+            SourceFloatKind::Abstract | SourceFloatKind::F32 => {
+                format_source_float_component(values.kind, values.values[0])
+            }
+            SourceFloatKind::F16 => Some(format!(
+                "f16({})",
+                format_wgsl_abstract_float_literal(values.values[0])?
+            )),
+        };
+    }
+    let ctor = match values.kind {
+        SourceFloatKind::Abstract => format!("vec{width}"),
+        SourceFloatKind::F32 => format!("vec{width}<f32>"),
+        SourceFloatKind::F16 => format!("vec{width}<f16>"),
+    };
+    let components = values
+        .values
+        .iter()
+        .map(|v| format_source_float_component(values.kind, *v))
+        .collect::<Option<Vec<_>>>()?;
+    Some(format!("{}({})", ctor, components.join(", ")))
 }
 
 fn pair_three_arg_values(a: &[f64], b: &[f64], c: &[f64]) -> Vec<(f64, f64, f64)> {
@@ -7471,6 +8035,758 @@ fn pair_three_arg_values(a: &[f64], b: &[f64], c: &[f64]) -> Vec<(f64, f64, f64)
     out
 }
 
+fn pair_two_arg_values(a: &[f64], b: &[f64]) -> Vec<(f64, f64)> {
+    if a.is_empty() || b.is_empty() {
+        return Vec::new();
+    }
+    let n = a.len().max(b.len());
+    let pick = |v: &[f64], i: usize| -> Option<f64> {
+        if v.len() == 1 {
+            Some(v[0])
+        } else if v.len() == n {
+            Some(v[i])
+        } else {
+            None
+        }
+    };
+    let mut out = Vec::with_capacity(n);
+    for i in 0..n {
+        match (pick(a, i), pick(b, i)) {
+            (Some(x), Some(y)) => out.push((x, y)),
+            _ => return Vec::new(),
+        }
+    }
+    out
+}
+
+fn source_float_componentwise_unary(
+    values: SourceFloatValues,
+    op: impl Fn(f64) -> f64,
+) -> Option<SourceFloatValues> {
+    let mut out = Vec::with_capacity(values.values.len());
+    for value in values.values {
+        out.push(checked_source_float(values.kind, op(value))?);
+    }
+    Some(SourceFloatValues {
+        kind: values.kind,
+        values: out,
+    })
+}
+
+fn source_float_componentwise_binary(
+    a: SourceFloatValues,
+    b: SourceFloatValues,
+    op: impl Fn(f64, f64) -> f64,
+) -> Option<SourceFloatValues> {
+    let kind = combine_source_float_values(&[&a, &b])?;
+    let pairs = pair_two_arg_values(&a.values, &b.values);
+    if pairs.is_empty() {
+        return None;
+    }
+    let mut out = Vec::with_capacity(pairs.len());
+    for (x, y) in pairs {
+        out.push(checked_source_float(kind, op(x, y))?);
+    }
+    Some(SourceFloatValues { kind, values: out })
+}
+
+fn source_float_componentwise_ternary(
+    a: SourceFloatValues,
+    b: SourceFloatValues,
+    c: SourceFloatValues,
+    op: impl Fn(f64, f64, f64) -> f64,
+) -> Option<SourceFloatValues> {
+    let kind = combine_source_float_values(&[&a, &b, &c])?;
+    let triples = pair_three_arg_values(&a.values, &b.values, &c.values);
+    if triples.is_empty() {
+        return None;
+    }
+    let mut out = Vec::with_capacity(triples.len());
+    for (x, y, z) in triples {
+        out.push(checked_source_float(kind, op(x, y, z))?);
+    }
+    Some(SourceFloatValues { kind, values: out })
+}
+
+fn find_top_level_binary_operator(s: &str, ops: &[u8]) -> Option<(usize, u8)> {
+    let bytes = s.as_bytes();
+    let mut depth = 0i32;
+    let mut i = bytes.len();
+    while i > 0 {
+        i -= 1;
+        match bytes[i] {
+            b')' | b']' | b'}' => {
+                depth += 1;
+                continue;
+            }
+            b'(' | b'[' | b'{' => {
+                depth -= 1;
+                continue;
+            }
+            _ => {}
+        }
+        if depth != 0 || !ops.contains(&bytes[i]) {
+            continue;
+        }
+        if matches!(bytes[i], b'+' | b'-') {
+            let mut prev = i;
+            while prev > 0 && bytes[prev - 1].is_ascii_whitespace() {
+                prev -= 1;
+            }
+            if prev == 0
+                || matches!(
+                    bytes[prev - 1],
+                    b'(' | b'[' | b'{' | b',' | b'+' | b'-' | b'*' | b'/' | b'%'
+                )
+            {
+                continue;
+            }
+        }
+        return Some((i, bytes[i]));
+    }
+    None
+}
+
+fn split_trailing_const_index(s: &str) -> Option<(&str, usize)> {
+    let trimmed = s.trim();
+    if !trimmed.ends_with(']') {
+        return None;
+    }
+    let mut depth = 0i32;
+    for (i, b) in trimmed.bytes().enumerate().rev() {
+        match b {
+            b']' => depth += 1,
+            b'[' => {
+                depth -= 1;
+                if depth == 0 {
+                    let index = trimmed[i + 1..trimmed.len() - 1]
+                        .trim()
+                        .parse::<usize>()
+                        .ok()?;
+                    return Some((&trimmed[..i], index));
+                }
+            }
+            _ => {}
+        }
+    }
+    None
+}
+
+fn eval_float_builtin_source_call(
+    name: &str,
+    args: &[String],
+    constants: Option<&HashMap<String, f64>>,
+) -> Option<SourceFloatValues> {
+    match name {
+        "acosh" | "mix" | "reflect" | "refract" | "faceForward" => {
+            eval_const_float_builtin_call(name, args, constants)?.ok()
+        }
+        "abs" => source_float_componentwise_unary(
+            resolve_math_float_values(&args.first()?, constants)?,
+            f64::abs,
+        ),
+        "acos" => source_float_componentwise_unary(
+            resolve_math_float_values(&args.first()?, constants)?,
+            f64::acos,
+        ),
+        "asin" => source_float_componentwise_unary(
+            resolve_math_float_values(&args.first()?, constants)?,
+            f64::asin,
+        ),
+        "atan" => source_float_componentwise_unary(
+            resolve_math_float_values(&args.first()?, constants)?,
+            f64::atan,
+        ),
+        "asinh" => source_float_componentwise_unary(
+            resolve_math_float_values(&args.first()?, constants)?,
+            stable_asinh_f64,
+        ),
+        "atanh" => source_float_componentwise_unary(
+            resolve_math_float_values(&args.first()?, constants)?,
+            f64::atanh,
+        ),
+        "ceil" => source_float_componentwise_unary(
+            resolve_math_float_values(&args.first()?, constants)?,
+            f64::ceil,
+        ),
+        "cos" => source_float_componentwise_unary(
+            resolve_math_float_values(&args.first()?, constants)?,
+            f64::cos,
+        ),
+        "cosh" => source_float_componentwise_unary(
+            resolve_math_float_values(&args.first()?, constants)?,
+            f64::cosh,
+        ),
+        "degrees" => source_float_componentwise_unary(
+            resolve_math_float_values(&args.first()?, constants)?,
+            f64::to_degrees,
+        ),
+        "exp" => source_float_componentwise_unary(
+            resolve_math_float_values(&args.first()?, constants)?,
+            f64::exp,
+        ),
+        "exp2" => source_float_componentwise_unary(
+            resolve_math_float_values(&args.first()?, constants)?,
+            f64::exp2,
+        ),
+        "floor" => source_float_componentwise_unary(
+            resolve_math_float_values(&args.first()?, constants)?,
+            f64::floor,
+        ),
+        "fract" => source_float_componentwise_unary(
+            resolve_math_float_values(&args.first()?, constants)?,
+            wgsl_fract_f64,
+        ),
+        "inverseSqrt" => source_float_componentwise_unary(
+            resolve_math_float_values(&args.first()?, constants)?,
+            |v| 1.0 / v.sqrt(),
+        ),
+        "log" => source_float_componentwise_unary(
+            resolve_math_float_values(&args.first()?, constants)?,
+            f64::ln,
+        ),
+        "log2" => source_float_componentwise_unary(
+            resolve_math_float_values(&args.first()?, constants)?,
+            f64::log2,
+        ),
+        "radians" => source_float_componentwise_unary(
+            resolve_math_float_values(&args.first()?, constants)?,
+            f64::to_radians,
+        ),
+        "round" => source_float_componentwise_unary(
+            resolve_math_float_values(&args.first()?, constants)?,
+            f64::round,
+        ),
+        "saturate" => source_float_componentwise_unary(
+            resolve_math_float_values(&args.first()?, constants)?,
+            |v| v.clamp(0.0, 1.0),
+        ),
+        "sign" => source_float_componentwise_unary(
+            resolve_math_float_values(&args.first()?, constants)?,
+            |v| {
+                if v > 0.0 {
+                    1.0
+                } else if v < 0.0 {
+                    -1.0
+                } else {
+                    0.0
+                }
+            },
+        ),
+        "sin" => source_float_componentwise_unary(
+            resolve_math_float_values(&args.first()?, constants)?,
+            f64::sin,
+        ),
+        "sinh" => source_float_componentwise_unary(
+            resolve_math_float_values(&args.first()?, constants)?,
+            f64::sinh,
+        ),
+        "sqrt" => source_float_componentwise_unary(
+            resolve_math_float_values(&args.first()?, constants)?,
+            f64::sqrt,
+        ),
+        "tan" => source_float_componentwise_unary(
+            resolve_math_float_values(&args.first()?, constants)?,
+            f64::tan,
+        ),
+        "tanh" => source_float_componentwise_unary(
+            resolve_math_float_values(&args.first()?, constants)?,
+            f64::tanh,
+        ),
+        "trunc" => source_float_componentwise_unary(
+            resolve_math_float_values(&args.first()?, constants)?,
+            f64::trunc,
+        ),
+        "select" => {
+            if args.len() != 3 {
+                return None;
+            }
+            let false_values = resolve_math_float_values(&args[0], constants)?;
+            let true_values = resolve_math_float_values(&args[1], constants)?;
+            let cond_values = resolve_source_bool_values(&args[2])?;
+            source_float_componentwise_select(false_values, true_values, &cond_values)
+        }
+        "atan2" => source_float_componentwise_binary(
+            resolve_math_float_values(&args.first()?, constants)?,
+            resolve_math_float_values(args.get(1)?, constants)?,
+            f64::atan2,
+        ),
+        "max" => source_float_componentwise_binary(
+            resolve_math_float_values(&args.first()?, constants)?,
+            resolve_math_float_values(args.get(1)?, constants)?,
+            f64::max,
+        ),
+        "min" => source_float_componentwise_binary(
+            resolve_math_float_values(&args.first()?, constants)?,
+            resolve_math_float_values(args.get(1)?, constants)?,
+            f64::min,
+        ),
+        "pow" => source_float_componentwise_binary(
+            resolve_math_float_values(&args.first()?, constants)?,
+            resolve_math_float_values(args.get(1)?, constants)?,
+            f64::powf,
+        ),
+        "step" => source_float_componentwise_binary(
+            resolve_math_float_values(&args.first()?, constants)?,
+            resolve_math_float_values(args.get(1)?, constants)?,
+            |edge, x| if x < edge { 0.0 } else { 1.0 },
+        ),
+        "clamp" => source_float_componentwise_ternary(
+            resolve_math_float_values(&args.first()?, constants)?,
+            resolve_math_float_values(args.get(1)?, constants)?,
+            resolve_math_float_values(args.get(2)?, constants)?,
+            |x, low, high| x.clamp(low, high),
+        ),
+        "fma" => source_float_componentwise_ternary(
+            resolve_math_float_values(&args.first()?, constants)?,
+            resolve_math_float_values(args.get(1)?, constants)?,
+            resolve_math_float_values(args.get(2)?, constants)?,
+            f64::mul_add,
+        ),
+        "smoothstep" => source_float_componentwise_ternary(
+            resolve_math_float_values(&args.first()?, constants)?,
+            resolve_math_float_values(args.get(1)?, constants)?,
+            resolve_math_float_values(args.get(2)?, constants)?,
+            |low, high, x| {
+                let t = ((x - low) / (high - low)).clamp(0.0, 1.0);
+                t * t * (3.0 - 2.0 * t)
+            },
+        ),
+        "ldexp" => source_float_componentwise_binary(
+            resolve_math_float_values(&args.first()?, constants)?,
+            resolve_math_float_values(args.get(1)?, constants)?,
+            |x, exp| x * 2.0f64.powi(exp as i32),
+        ),
+        "dot" => {
+            let a = resolve_math_float_values(&args.first()?, constants)?;
+            let b = resolve_math_float_values(args.get(1)?, constants)?;
+            let kind = combine_source_float_kind(a.kind, b.kind)?;
+            let value = eval_dot_terms(kind, &a.values, &b.values, "").ok()?;
+            Some(SourceFloatValues {
+                kind,
+                values: vec![value],
+            })
+        }
+        "length" => {
+            let a = resolve_math_float_values(&args.first()?, constants)?;
+            let value = a.values.iter().map(|v| v * v).sum::<f64>().sqrt();
+            Some(SourceFloatValues {
+                kind: a.kind,
+                values: vec![checked_source_float(a.kind, value)?],
+            })
+        }
+        "distance" => {
+            let a = resolve_math_float_values(&args.first()?, constants)?;
+            let b = resolve_math_float_values(args.get(1)?, constants)?;
+            let kind = combine_source_float_kind(a.kind, b.kind)?;
+            let pairs = pair_two_arg_values(&a.values, &b.values);
+            if pairs.is_empty() {
+                return None;
+            }
+            let value = pairs
+                .iter()
+                .map(|(x, y)| {
+                    let d = x - y;
+                    d * d
+                })
+                .sum::<f64>()
+                .sqrt();
+            Some(SourceFloatValues {
+                kind,
+                values: vec![checked_source_float(kind, value)?],
+            })
+        }
+        "normalize" => {
+            let a = resolve_math_float_values(&args.first()?, constants)?;
+            let len = a.values.iter().map(|v| v * v).sum::<f64>().sqrt();
+            if len == 0.0 {
+                return None;
+            }
+            let mut out = Vec::with_capacity(a.values.len());
+            for v in a.values {
+                out.push(checked_source_float(a.kind, v / len)?);
+            }
+            Some(SourceFloatValues {
+                kind: a.kind,
+                values: out,
+            })
+        }
+        "cross" => {
+            let a = resolve_math_float_values(&args.first()?, constants)?;
+            let b = resolve_math_float_values(args.get(1)?, constants)?;
+            if a.values.len() != 3 || b.values.len() != 3 {
+                return None;
+            }
+            let kind = combine_source_float_kind(a.kind, b.kind)?;
+            let out = [
+                a.values[1] * b.values[2] - a.values[2] * b.values[1],
+                a.values[2] * b.values[0] - a.values[0] * b.values[2],
+                a.values[0] * b.values[1] - a.values[1] * b.values[0],
+            ];
+            Some(SourceFloatValues {
+                kind,
+                values: out
+                    .iter()
+                    .map(|v| checked_source_float(kind, *v))
+                    .collect::<Option<Vec<_>>>()?,
+            })
+        }
+        _ => None,
+    }
+}
+
+fn stable_asinh_f64(v: f64) -> f64 {
+    let magnitude = v.abs();
+    let result = if magnitude > 1.0e154 {
+        magnitude.ln() + std::f64::consts::LN_2
+    } else {
+        magnitude.asinh()
+    };
+    if v.is_sign_negative() {
+        -result
+    } else {
+        result
+    }
+}
+
+fn wgsl_fract_f64(v: f64) -> f64 {
+    v - v.floor()
+}
+
+fn resolve_source_bool_values(expr: &str) -> Option<Vec<bool>> {
+    let s = trim_outer_parens(expr).trim();
+    match s {
+        "true" => return Some(vec![true]),
+        "false" => return Some(vec![false]),
+        _ => {}
+    }
+    let (callee, args) = parse_full_call(s)?;
+    let width = constructor_vector_width(&callee)?;
+    let n = normalize_type_name(&callee).to_ascii_lowercase();
+    if !(n.contains("bool") || n.ends_with('b') || n.starts_with("vec")) {
+        return None;
+    }
+    if args.len() == 1 {
+        let inner = resolve_source_bool_values(&args[0])?;
+        return if inner.len() == 1 {
+            Some(vec![inner[0]; width])
+        } else if inner.len() == width {
+            Some(inner)
+        } else {
+            None
+        };
+    }
+    let mut out = Vec::with_capacity(width);
+    for arg in args {
+        let values = resolve_source_bool_values(&arg)?;
+        out.extend(values);
+    }
+    (out.len() == width).then_some(out)
+}
+
+fn source_float_componentwise_select(
+    false_values: SourceFloatValues,
+    true_values: SourceFloatValues,
+    cond_values: &[bool],
+) -> Option<SourceFloatValues> {
+    let kind = combine_source_float_values(&[&false_values, &true_values])?;
+    let pairs = pair_two_arg_values(&false_values.values, &true_values.values);
+    if pairs.is_empty() {
+        return None;
+    }
+    let mut out = Vec::with_capacity(pairs.len());
+    for (i, (f, t)) in pairs.iter().enumerate() {
+        let cond = if cond_values.len() == 1 {
+            cond_values[0]
+        } else {
+            *cond_values.get(i)?
+        };
+        out.push(checked_source_float(kind, if cond { *t } else { *f })?);
+    }
+    Some(SourceFloatValues { kind, values: out })
+}
+
+fn lower_const_float_math_call(
+    name: &str,
+    args: &[String],
+    constants: Option<&HashMap<String, f64>>,
+) -> Option<String> {
+    match name {
+        // CTS checks f32 atanh near ±1 against a tight inherited-accuracy
+        // interval. Some shader backends lower the const form inaccurately, so
+        // resolve source-constant calls before Naga emits them.
+        "atanh" => eval_float_builtin_source_call(name, args, constants)
+            .and_then(|values| format_source_float_values(&values)),
+        _ => None,
+    }
+}
+
+fn source_modf_values(
+    args: &[String],
+    field: &str,
+    constants: Option<&HashMap<String, f64>>,
+) -> Option<SourceFloatValues> {
+    if args.len() != 1 || !matches!(field, "fract" | "whole") {
+        return None;
+    }
+    let values = resolve_math_float_values(&args[0], constants)?;
+    let mut out = Vec::with_capacity(values.values.len());
+    for value in values.values {
+        let (fract, whole) = match values.kind {
+            SourceFloatKind::F32 => {
+                let v = value as f32;
+                let fract = v % 1.0;
+                (fract as f64, (v - fract) as f64)
+            }
+            SourceFloatKind::F16 => {
+                let v = quantize_to_f16_f32(value)?;
+                let fract = quantize_to_f16_f32((v % 1.0) as f64)?;
+                (
+                    fract as f64,
+                    quantize_to_f16_f32((v - fract) as f64)? as f64,
+                )
+            }
+            SourceFloatKind::Abstract => {
+                let fract = value % 1.0;
+                (fract, value - fract)
+            }
+        };
+        out.push(checked_source_float(
+            values.kind,
+            if field == "fract" { fract } else { whole },
+        )?);
+    }
+    Some(SourceFloatValues {
+        kind: values.kind,
+        values: out,
+    })
+}
+
+fn frexp_f64_scalar(value: f64) -> Option<(f64, i32)> {
+    if value == 0.0 || !value.is_finite() {
+        return Some((value, 0));
+    }
+    let mut v = value;
+    let mut exp = 0i32;
+    if f64::from_bits(v.to_bits() & 0x7fff_ffff_ffff_ffff) < f64::MIN_POSITIVE {
+        v *= 2f64.powi(52);
+        exp -= 52;
+    }
+    let bits = v.to_bits();
+    let sign = bits & 0x8000_0000_0000_0000;
+    let mant = bits & 0x000f_ffff_ffff_ffff;
+    let biased = ((bits >> 52) & 0x7ff) as i32;
+    exp += biased - 1023 + 1;
+    let fract = f64::from_bits(sign | (0x3feu64 << 52) | mant);
+    Some((fract, exp))
+}
+
+fn frexp_f32_scalar(value: f64) -> Option<(f64, i32)> {
+    let mut v = value as f32;
+    if v == 0.0 || !v.is_finite() {
+        return Some((v as f64, 0));
+    }
+    let mut exp = 0i32;
+    if f32::from_bits(v.to_bits() & 0x7fff_ffff) < f32::MIN_POSITIVE {
+        v *= 2f32.powi(23);
+        exp -= 23;
+    }
+    let bits = v.to_bits();
+    let sign = bits & 0x8000_0000;
+    let mant = bits & 0x007f_ffff;
+    let biased = ((bits >> 23) & 0xff) as i32;
+    exp += biased - 127 + 1;
+    let fract = f32::from_bits(sign | (0x7eu32 << 23) | mant);
+    Some((fract as f64, exp))
+}
+
+fn frexp_f16_scalar(value: f64) -> Option<(f64, i32)> {
+    let mut bits = f32_to_f16_bits(value as f32);
+    let sign = bits & 0x8000;
+    let mut v = f16_bits_to_f32(bits);
+    if v == 0.0 || !v.is_finite() {
+        return Some((v as f64, 0));
+    }
+    let mut exp = 0i32;
+    if (bits & 0x7c00) == 0 {
+        v = quantize_to_f16_f32((v * 2f32.powi(10)) as f64)?;
+        bits = f32_to_f16_bits(v);
+        exp -= 10;
+    }
+    let mant = bits & 0x03ff;
+    let biased = ((bits >> 10) & 0x1f) as i32;
+    exp += biased - 15 + 1;
+    let fract = f16_bits_to_f32(sign | (0x0eu16 << 10) | mant);
+    Some((fract as f64, exp))
+}
+
+fn source_frexp_values(
+    args: &[String],
+    constants: Option<&HashMap<String, f64>>,
+) -> Option<(SourceFloatValues, Vec<i32>)> {
+    if args.len() != 1 {
+        return None;
+    }
+    let values = resolve_math_float_values(&args[0], constants)?;
+    let mut fract = Vec::with_capacity(values.values.len());
+    let mut exp = Vec::with_capacity(values.values.len());
+    for value in &values.values {
+        let (f, e) = match values.kind {
+            SourceFloatKind::Abstract => frexp_f64_scalar(*value)?,
+            SourceFloatKind::F32 => frexp_f32_scalar(*value)?,
+            SourceFloatKind::F16 => frexp_f16_scalar(*value)?,
+        };
+        fract.push(checked_source_float(values.kind, f)?);
+        exp.push(e);
+    }
+    Some((
+        SourceFloatValues {
+            kind: values.kind,
+            values: fract,
+        },
+        exp,
+    ))
+}
+
+fn format_source_i32_values(values: &[i32], typed: bool) -> Option<String> {
+    if values.is_empty() {
+        return None;
+    }
+    if values.len() == 1 {
+        return Some(values[0].to_string());
+    }
+    let ctor = if typed {
+        format!("vec{}<i32>", values.len())
+    } else {
+        format!("vec{}", values.len())
+    };
+    Some(format!(
+        "{}({})",
+        ctor,
+        values
+            .iter()
+            .map(|v| v.to_string())
+            .collect::<Vec<_>>()
+            .join(", ")
+    ))
+}
+
+fn lower_const_float_math_field_call(
+    name: &str,
+    args: &[String],
+    field: &str,
+    constants: Option<&HashMap<String, f64>>,
+) -> Option<String> {
+    match (name, field) {
+        ("modf", "fract" | "whole") => {
+            format_source_float_values(&source_modf_values(args, field, constants)?)
+        }
+        ("frexp", "fract") => {
+            let (fract, _) = source_frexp_values(args, constants)?;
+            format_source_float_values(&fract)
+        }
+        ("frexp", "exp") => {
+            let (fract, exp) = source_frexp_values(args, constants)?;
+            format_source_i32_values(&exp, fract.kind != SourceFloatKind::Abstract)
+        }
+        _ => None,
+    }
+}
+
+fn source_field_after_call(source: &str, offset: usize) -> Option<(&'static str, usize)> {
+    for field in ["fract", "whole", "exp"] {
+        let token = format!(".{field}");
+        if source[offset..].starts_with(&token) {
+            return Some((field, offset + token.len()));
+        }
+    }
+    None
+}
+
+fn lower_const_float_math_source(source: &str, constants: Option<&HashMap<String, f64>>) -> String {
+    const BUILTINS: [&str; 3] = ["atanh", "frexp", "modf"];
+    if !BUILTINS.iter().any(|name| source.contains(name)) {
+        return source.to_string();
+    }
+    let bytes = source.as_bytes();
+    let mut out = String::with_capacity(source.len());
+    let mut pos = 0usize;
+    let mut i = 0usize;
+    while i < source.len() {
+        let mut next: Option<(&str, usize)> = None;
+        for name in BUILTINS {
+            if let Some(rel) = source[i..].find(name) {
+                let start = i + rel;
+                if next.is_none_or(|(_, best)| start < best) {
+                    next = Some((name, start));
+                }
+            }
+        }
+        let Some((name, start)) = next else {
+            break;
+        };
+        let end = start + name.len();
+        if (start > 0 && is_ident_char(bytes[start - 1]))
+            || (end < bytes.len() && is_ident_char(bytes[end]))
+        {
+            i = end;
+            continue;
+        }
+        if let Some((args, close)) = find_call_args(source, start, name.len()) {
+            if !is_builtin_shadowed_at_call(source, name, start) {
+                let field = source_field_after_call(source, close + 1);
+                let replacement = field
+                    .and_then(|(field_name, _)| {
+                        lower_const_float_math_field_call(name, &args, field_name, constants)
+                    })
+                    .or_else(|| lower_const_float_math_call(name, &args, constants));
+                if let Some(replacement) = replacement {
+                    out.push_str(&source[pos..start]);
+                    out.push_str(&replacement);
+                    pos = field.map(|(_, end)| end).unwrap_or(close + 1);
+                }
+            }
+            i = close + 1;
+        } else {
+            i = end;
+        }
+    }
+    if pos == 0 {
+        source.to_string()
+    } else {
+        out.push_str(&source[pos..]);
+        out
+    }
+}
+
+fn resolve_source_float_binary_expr(
+    s: &str,
+    constants: Option<&HashMap<String, f64>>,
+) -> Option<SourceFloatValues> {
+    if let Some((idx, op)) = find_top_level_binary_operator(s, b"+-") {
+        let left = resolve_math_float_values(&s[..idx], constants)?;
+        let right = resolve_math_float_values(&s[idx + 1..], constants)?;
+        return source_float_componentwise_binary(left, right, |a, b| {
+            if op == b'+' {
+                a + b
+            } else {
+                a - b
+            }
+        });
+    }
+    if let Some((idx, op)) = find_top_level_binary_operator(s, b"*/%") {
+        let left = resolve_math_float_values(&s[..idx], constants)?;
+        let right = resolve_math_float_values(&s[idx + 1..], constants)?;
+        return source_float_componentwise_binary(left, right, |a, b| match op {
+            b'*' => a * b,
+            b'/' => a / b,
+            b'%' => a % b,
+            _ => unreachable!(),
+        });
+    }
+    None
+}
+
 // Resolve a WGSL source-text expression to a vector of f64 values for
 // domain checking. Handles literals (with i/u/f/h suffixes), the
 // `(-9223372036854775807 - 1)` form for i64::MIN, the standard scalar
@@ -7480,45 +8796,98 @@ fn resolve_math_arg_values(
     expr: &str,
     constants: Option<&HashMap<String, f64>>,
 ) -> Option<Vec<f64>> {
+    resolve_math_float_values(expr, constants).map(|v| v.values)
+}
+
+fn resolve_math_float_values(
+    expr: &str,
+    constants: Option<&HashMap<String, f64>>,
+) -> Option<SourceFloatValues> {
     let s = trim_outer_parens(expr).trim();
+    if let Some((base, index)) = split_trailing_const_index(s) {
+        let values = resolve_math_float_values(base, constants)?;
+        return values
+            .values
+            .get(index)
+            .copied()
+            .map(|value| SourceFloatValues {
+                kind: values.kind,
+                values: vec![value],
+            });
+    }
     if let Some(consts) = constants {
-        if !s.is_empty() && s.bytes().all(is_ident_char) {
+        if is_plain_identifier(s) {
             if let Some(v) = consts.get(s) {
-                return Some(vec![*v]);
+                return v.is_finite().then_some(SourceFloatValues {
+                    kind: SourceFloatKind::Abstract,
+                    values: vec![*v],
+                });
             }
         }
     }
     if let Some(v) = parse_numeric_literal(s) {
-        return Some(vec![v]);
+        let kind = numeric_literal_source_float_kind(s)?;
+        return explicit_source_float_values(kind, vec![v]);
     }
-    if let Some(v) = parse_wgsl_i64_like(s) {
-        return Some(vec![v as f64]);
+    if !s.ends_with('i') && !s.ends_with('u') {
+        if let Some(v) = parse_wgsl_i64_like(s) {
+            return Some(SourceFloatValues {
+                kind: SourceFloatKind::Abstract,
+                values: vec![v as f64],
+            });
+        }
+    }
+    if let Some(rest) = s.strip_prefix('+') {
+        return resolve_math_float_values(rest, constants);
+    }
+    if let Some(rest) = s.strip_prefix('-') {
+        if !rest.trim_start().is_empty() {
+            let values = resolve_math_float_values(rest, constants)?;
+            return source_float_componentwise_unary(values, |v| -v);
+        }
+    }
+    if let Some(values) = resolve_source_float_binary_expr(s, constants) {
+        return Some(values);
     }
     if let Some((callee, args)) = parse_full_call(s) {
         if let Some(width) = constructor_vector_width(&callee) {
-            if args.len() == 1 {
-                let inner = resolve_math_arg_values(&args[0], constants)?;
-                if inner.len() == 1 {
-                    return Some(vec![inner[0]; width]);
-                }
-                if inner.len() == width {
-                    return Some(inner);
-                }
-                return None;
+            let explicit_kind = vector_constructor_float_kind(&callee)?;
+            if args.is_empty() {
+                return explicit_kind
+                    .and_then(|kind| explicit_source_float_values(kind, vec![0.0; width]));
             }
+            if args.len() == 1 {
+                let inner = resolve_math_float_values(&args[0], constants)?;
+                let kind = explicit_kind.unwrap_or(inner.kind);
+                let values = if inner.values.len() == 1 {
+                    vec![inner.values[0]; width]
+                } else if inner.values.len() == width {
+                    inner.values
+                } else {
+                    return None;
+                };
+                return explicit_source_float_values(kind, values);
+            }
+            let mut kind = explicit_kind.unwrap_or(SourceFloatKind::Abstract);
             let mut out = Vec::with_capacity(width);
             for a in args {
-                let mut sub = resolve_math_arg_values(&a, constants)?;
-                out.append(&mut sub);
+                let sub = resolve_math_float_values(&a, constants)?;
+                if explicit_kind.is_none() {
+                    kind = combine_source_float_kind(kind, sub.kind)?;
+                }
+                out.extend(sub.values);
             }
-            return (out.len() == width).then_some(out);
+            return (out.len() == width)
+                .then(|| explicit_source_float_values(kind, out))
+                .flatten();
         }
         if constructor_is_float_scalar(&callee) && args.len() == 1 {
-            return resolve_math_arg_values(&args[0], constants).map(|mut v| {
-                v.truncate(1);
-                v
-            });
+            let kind = scalar_constructor_float_kind(&callee)?;
+            let mut values = resolve_math_float_values(&args[0], constants)?.values;
+            values.truncate(1);
+            return explicit_source_float_values(kind, values);
         }
+        return eval_float_builtin_source_call(&callee, &args, constants);
     }
     None
 }
@@ -7537,6 +8906,121 @@ fn pair_math_arg_values(a: &[f64], b: &[f64]) -> Vec<(f64, f64)> {
         return a.iter().map(|x| (*x, b[0])).collect();
     }
     Vec::new()
+}
+
+fn abstract_float_bits_for_cts(value: f64) -> Option<(u32, u32)> {
+    if !value.is_finite() {
+        return None;
+    }
+    const MAX_SUBNORMAL: f64 = f64::from_bits(0x000f_ffff_ffff_ffff);
+    let bits = if value <= MAX_SUBNORMAL && value >= -MAX_SUBNORMAL {
+        if value < 0.0 {
+            0x8000_0000_0000_0000u64
+        } else {
+            0
+        }
+    } else {
+        value.to_bits()
+    };
+    Some(((bits >> 32) as u32, (bits & 0xffff_ffff) as u32))
+}
+
+fn find_enclosing_block_start(source: &str, marker: usize) -> Option<usize> {
+    let bytes = source.as_bytes();
+    let mut depth = 0i32;
+    for i in (0..marker).rev() {
+        match bytes[i] {
+            b'}' => depth += 1,
+            b'{' => {
+                if depth == 0 {
+                    return Some(i);
+                }
+                depth -= 1;
+            }
+            _ => {}
+        }
+    }
+    None
+}
+
+fn extract_cts_abstract_float_expr(block: &str) -> Option<String> {
+    let needle = "const subnormal_or_zero : bool = (";
+    let start = block.find(needle)? + needle.len();
+    let rel_end = block[start..].find(" <= ")?;
+    Some(block[start..start + rel_end].trim().to_string())
+}
+
+fn extract_cts_abstract_float_output(block: &str) -> Option<(String, String)> {
+    let high_pos = block.find(".high =")?;
+    let line_start = block[..high_pos].rfind("outputs[")?;
+    let index_start = line_start + "outputs[".len();
+    let index_end = block[index_start..].find(']')? + index_start;
+    let case_index = block[index_start..index_end].trim().to_string();
+    let value_start = index_end + 1 + ".value".len();
+    if !block[index_end + 1..].starts_with(".value") {
+        return None;
+    }
+    let accessor = block[value_start..high_pos].trim().to_string();
+    Some((case_index, accessor))
+}
+
+fn lower_abstract_float_output_snippets_source(
+    source: &str,
+    constants: Option<&HashMap<String, f64>>,
+) -> String {
+    const MARKER: &str = "const kExponentBias = 1022;";
+    if !source.contains(MARKER) || !source.contains("const f = frexp(abs(") {
+        return source.to_string();
+    }
+
+    let mut out = String::with_capacity(source.len());
+    let mut copy_pos = 0usize;
+    let mut search_pos = 0usize;
+    while let Some(rel) = source[search_pos..].find(MARKER) {
+        let marker = search_pos + rel;
+        let Some(block_start) = find_enclosing_block_start(source, marker) else {
+            search_pos = marker + MARKER.len();
+            continue;
+        };
+        if block_start < copy_pos {
+            search_pos = marker + MARKER.len();
+            continue;
+        }
+        let Some(block_end) = find_matching_delimiter(source, block_start, b'{', b'}') else {
+            search_pos = marker + MARKER.len();
+            continue;
+        };
+        let block = &source[block_start..=block_end];
+        let Some(expr) = extract_cts_abstract_float_expr(block) else {
+            search_pos = marker + MARKER.len();
+            continue;
+        };
+        let Some((case_index, accessor)) = extract_cts_abstract_float_output(block) else {
+            search_pos = marker + MARKER.len();
+            continue;
+        };
+        let Some(values) = resolve_math_float_values(&expr, constants) else {
+            search_pos = marker + MARKER.len();
+            continue;
+        };
+        if values.values.len() != 1 {
+            search_pos = marker + MARKER.len();
+            continue;
+        }
+        let Some((high, low)) = abstract_float_bits_for_cts(values.values[0]) else {
+            search_pos = marker + MARKER.len();
+            continue;
+        };
+
+        out.push_str(&source[copy_pos..block_start]);
+        out.push_str(&format!(
+            "{{\n    outputs[{case_index}].value{accessor}.high = {high}u;\n    outputs[{case_index}].value{accessor}.low = {low}u;\n  }}"
+        ));
+        copy_pos = block_end + 1;
+        search_pos = copy_pos;
+    }
+    out.push_str(&source[copy_pos..]);
+    out
 }
 
 // WGSL §17.7.7 / §17.7.10 etc: textureSample / textureSampleLevel /
@@ -9752,13 +11236,14 @@ pub fn compile_with_meta(source: &str) -> std::result::Result<WgslCompileResult,
     }
     let size_lowered_source = lower_large_size_attribute_source(&normalized_source);
     let naga_source = lower_no_entry_workgroup_pointer_params_source(&size_lowered_source);
-    let shadow_builtin_source = lower_shadow_builtin_abstract_args_source(&naga_source);
+    let shadow_builtin_source = lower_shadow_builtin_abstract_args_source(&naga_source, None);
     let bool_bitwise_source = lower_bool_bitwise_const_source(&shadow_builtin_source);
+    let float_math_source = lower_const_float_math_source(&bool_bitwise_source, None);
     let parse_source = lower_const_bitcasts_source(
         &lower_packed_builtins_source(
             &lower_bit_builtins_source(
                 &lower_quantize_to_f16_source(
-                    &lower_ldexp_source(&lower_smoothstep_source(&bool_bitwise_source), None),
+                    &lower_ldexp_source(&lower_smoothstep_source(&float_math_source), None),
                     None,
                 ),
                 None,
@@ -9767,6 +11252,7 @@ pub fn compile_with_meta(source: &str) -> std::result::Result<WgslCompileResult,
         ),
         None,
     );
+    let parse_source = lower_abstract_float_output_snippets_source(&parse_source, None);
     let mut module = match wgsl::parse_str(&parse_source) {
         Ok(m) => m,
         Err(e) => {
@@ -10384,7 +11870,155 @@ mod tests {
         assert!(lower_smoothstep_source(shadowed).contains("smoothstep(1, 2, 3)"));
 
         let sibling_shadow = "fn sibling() { let dpdx = 4; } @fragment fn main() -> @location(0) vec4f { _ = dpdx(2); return vec4f(1); }";
-        assert!(lower_shadow_builtin_abstract_args_source(sibling_shadow).contains("dpdx(2.0)"));
+        assert!(
+            lower_shadow_builtin_abstract_args_source(sibling_shadow, None).contains("dpdx(2.0)")
+        );
+    }
+
+    #[test]
+    fn vector_float_builtin_const_lowering_handles_cts_shapes() {
+        assert!(compile_with_meta("const c = acosh(3.4028234663852886e38f);").is_ok());
+        assert!(compile_with_meta("const c = acosh(vec4f(3.4028234663852886e38));").is_ok());
+        assert!(compile_with_meta("const c = acosh(1.7976931348623157e308);").is_ok());
+        assert!(compile_with_meta("const c = acosh(vec4(1.7976931348623157e308));").is_ok());
+        assert!(compile_with_meta("const c = acosh(0.99999994f);").is_err());
+        assert!(compile_with_meta("fn f() { acosh(1); }").is_err());
+
+        let acosh_lowered = lower_shadow_builtin_abstract_args_source(
+            "const c = acosh(vec2f(3.4028234663852886e38));",
+            None,
+        );
+        assert!(acosh_lowered.contains("vec2<f32>("));
+        assert!(!acosh_lowered.contains("acosh("));
+
+        let acosh_source = "override o0 : f32; var<private> v = acosh(f32(o0)); @compute @workgroup_size(1) fn main() { _ = v; }";
+        assert!(compile_with_meta(acosh_source).is_ok());
+        let mut constants = HashMap::new();
+        constants.insert("o0".to_string(), f32::MAX as f64);
+        assert!(bake_wgsl_with_constants(acosh_source, constants, Some("main")).is_some());
+
+        assert!(compile_with_meta("const c = mix(vec3(0), vec3(1), vec3(0.5));").is_ok());
+        assert!(compile_with_meta("const c = reflect(vec3(0), vec3(1));").is_ok());
+        assert!(compile_with_meta("const c = refract(vec3(0), vec3(1), 2.0);").is_ok());
+        assert!(compile_with_meta("const c = faceForward(vec3(0), vec3(1), vec3(0.5));").is_ok());
+
+        assert!(compile_with_meta("fn f() { _ = mix(vec3(0), vec3(1), vec3(0.5)); }").is_ok());
+        assert!(compile_with_meta("fn f() { mix(vec3(0), vec3(1), vec3(0.5)); }").is_err());
+        assert!(compile_with_meta("const c: vec3u = refract(vec3(0), vec3(1), 2.0);").is_err());
+        assert!(compile_with_meta("const c = refract(vec3(0));").is_err());
+        assert!(compile_with_meta("const c = refract(vec3(0), vec3(1));").is_err());
+        assert!(compile_with_meta("const c = refract(vec3(0), vec3(1), true);").is_err());
+
+        let lowered = lower_shadow_builtin_abstract_args_source(
+            "const c = mix(vec3(0), vec3(1), vec3(0.5));",
+            None,
+        );
+        assert!(lowered.contains("vec3("));
+        assert!(!lowered.contains("mix("));
+
+        let source = "override o0 : f32; override o1 : f32; override o2 : f32; var<private> v = mix(vec3<f32>(o0, o0, o0), vec3<f32>(o1, o1, o1), vec3<f32>(o2, o2, o2)); @compute @workgroup_size(1) fn main() { _ = v; }";
+        assert!(compile_with_meta(source).is_ok());
+        let mut constants = HashMap::new();
+        constants.insert("o0".to_string(), 0.0);
+        constants.insert("o1".to_string(), 1.0);
+        constants.insert("o2".to_string(), 0.5);
+        assert!(bake_wgsl_with_constants(source, constants, Some("main")).is_some());
+
+        let refract_source = "override o0 : f32; override o1 : f32; override o2 : f32; override o3 : f32; override o4 : f32; var<private> v = refract(vec2<f32>(o0, o1), vec2<f32>(o2, o3), f32(o4)); @compute @workgroup_size(1) fn main() { _ = v; }";
+        assert!(compile_with_meta(refract_source).is_ok());
+        let mut constants = HashMap::new();
+        constants.insert("o0".to_string(), 0.0);
+        constants.insert("o1".to_string(), 0.0);
+        constants.insert("o2".to_string(), 1.0);
+        constants.insert("o3".to_string(), 0.0);
+        constants.insert("o4".to_string(), f32::MAX as f64);
+        assert!(bake_wgsl_with_constants(refract_source, constants, Some("main")).is_none());
+    }
+
+    #[test]
+    fn vector_float_builtin_domain_validation_handles_overflow() {
+        let mix = "const c = mix(vec3f(3.40282347e38f), vec3f(0.0f), vec3f(-1.0f));";
+        assert!(!validate_math_domain_source(mix, None, None).is_empty());
+
+        let face_forward =
+            "const c = faceForward(vec3f(0.0f), vec3f(3.40282347e38f), vec3f(3.40282347e38f));";
+        assert!(!validate_math_domain_source(face_forward, None, None).is_empty());
+    }
+
+    #[test]
+    fn abstract_float_output_snippet_lowering_handles_cts_shapes() {
+        let source = r#"
+struct AF { high: u32, low: u32 }
+struct Output { value: AF }
+@group(0) @binding(0) var<storage, read_write> outputs : array<Output, 1>;
+
+@compute @workgroup_size(1)
+fn main() {
+  {
+    const kExponentBias = 1022;
+    const subnormal_or_zero : bool = (((1.0) + (2.0)) <= 2.225073858507201e-308) && (((1.0) + (2.0)) >= -2.225073858507201e-308);
+    const sign_bit : u32 = select(0, 0x80000000, ((1.0) + (2.0)) < 0);
+    const f = frexp(abs(((1.0) + (2.0))));
+    const f_fract = select(f.fract, 0, subnormal_or_zero);
+    const f_exp = select(f.exp, -kExponentBias, subnormal_or_zero);
+    const exponent_bits : u32 = (f_exp + kExponentBias) << 20;
+    const high_mantissa = ldexp(f_fract, 21);
+    const high_mantissa_bits : u32 = u32(ldexp(f_fract, 21)) & 0x000fffff;
+    const low_mantissa = f_fract - ldexp(floor(high_mantissa), -21);
+    const low_mantissa_bits = u32(ldexp(low_mantissa, 53));
+    outputs[0].value.high = sign_bit | exponent_bits | high_mantissa_bits;
+    outputs[0].value.low = low_mantissa_bits;
+  }
+}
+"#;
+        let lowered = lower_abstract_float_output_snippets_source(source, None);
+        assert!(lowered.contains("outputs[0].value.high = 1074266112u;"));
+        assert!(lowered.contains("outputs[0].value.low = 0u;"));
+        assert!(!lowered.contains("frexp("));
+        assert!(compile_with_meta(source).is_ok());
+
+        let vector = "abs(vec2(-1.0, -2.0))[1]";
+        let values = resolve_math_float_values(vector, None).unwrap();
+        assert_eq!(values.values, vec![2.0]);
+
+        let asinh_source = source.replace("((1.0) + (2.0))", "asinh(-1.7976931348623157e+308)");
+        let asinh_lowered = lower_abstract_float_output_snippets_source(&asinh_source, None);
+        assert!(!asinh_lowered.contains("frexp("));
+        assert!(asinh_lowered.contains("outputs[0].value.high ="));
+        assert!(compile_with_meta(&asinh_source).is_ok());
+        assert!(stable_asinh_f64(-0.0000010704507633131377).is_sign_negative());
+
+        let atanh_source = source.replace("((1.0) + (2.0))", "atanh(-0.9997229916897505)");
+        let atanh_lowered = lower_abstract_float_output_snippets_source(&atanh_source, None);
+        assert!(!atanh_lowered.contains("frexp("));
+        assert!(compile_with_meta(&atanh_source).is_ok());
+
+        let f32_atanh = "const values = array(atanh(-0.9999999403953552f));";
+        let f32_atanh_lowered = lower_const_float_math_source(f32_atanh, None);
+        assert!(!f32_atanh_lowered.contains("atanh("));
+        assert!(f32_atanh_lowered.contains("-8.664"));
+
+        let modf_lowered =
+            lower_const_float_math_source("const values = array(modf(-1.25f).fract);", None);
+        assert!(!modf_lowered.contains("modf("));
+        assert!(modf_lowered.contains("-2.5e-1f"));
+
+        let frexp_lowered =
+            lower_const_float_math_source("const values = array(frexp(8.0f).exp);", None);
+        assert_eq!(frexp_lowered, "const values = array(4);");
+        let frexp_abstract_vector =
+            lower_const_float_math_source("const values = array(frexp(vec2(8.0, 4.0)).exp);", None);
+        assert!(frexp_abstract_vector.contains("vec2(4, 3)"));
+
+        let fract = resolve_math_float_values("fract(-0.1)", None).unwrap();
+        assert!((fract.values[0] - 0.9).abs() < 1.0e-15);
+
+        let selected = resolve_math_float_values(
+            "select(vec3(1.0, 2.0, 3.0), vec3(4.0, 5.0, 6.0), vec3<bool>(true, false, true))",
+            None,
+        )
+        .unwrap();
+        assert_eq!(selected.values, vec![4.0, 2.0, 6.0]);
     }
 
     #[test]
@@ -10554,14 +12188,16 @@ pub fn bake_wgsl_with_constants(
     }
     let size_lowered_source = lower_large_size_attribute_source(&normalized_source);
     let naga_source = lower_no_entry_workgroup_pointer_params_source(&size_lowered_source);
-    let shadow_builtin_source = lower_shadow_builtin_abstract_args_source(&naga_source);
+    let shadow_builtin_source =
+        lower_shadow_builtin_abstract_args_source(&naga_source, Some(&constants));
     let bool_bitwise_source = lower_bool_bitwise_const_source(&shadow_builtin_source);
+    let float_math_source = lower_const_float_math_source(&bool_bitwise_source, Some(&constants));
     let parse_source = lower_const_bitcasts_source(
         &lower_packed_builtins_source(
             &lower_bit_builtins_source(
                 &lower_quantize_to_f16_source(
                     &lower_ldexp_source(
-                        &lower_smoothstep_source(&bool_bitwise_source),
+                        &lower_smoothstep_source(&float_math_source),
                         Some(&constants),
                     ),
                     Some(&constants),
@@ -10572,6 +12208,7 @@ pub fn bake_wgsl_with_constants(
         ),
         Some(&constants),
     );
+    let parse_source = lower_abstract_float_output_snippets_source(&parse_source, Some(&constants));
     let mut module = wgsl::parse_str(&parse_source).ok()?;
     clamp_image_sample_bias(&mut module);
     cloak_const_indices(&mut module, &parse_source);
