@@ -994,45 +994,17 @@ namespace pe
 
     void ScriptSystem::LoadScripts()
     {
-        const std::string scriptsDir = Path::Assets + "Scripts";
+        // Only auto-load scripts from Scripts/global
+        const std::string globalDir = Path::Assets + "Scripts/global";
 
-        if (!std::filesystem::exists(scriptsDir))
+        if (!std::filesystem::exists(globalDir))
             return;
 
-        // Collect normalized paths of scripts attached to scene nodes so we can
-        // skip loading them as shared file-level scripts.  Per-node scripts are
-        // loaded in their own isolated environment by CreateNodeInstance instead.
-        std::set<std::string> nodeScriptPaths;
-        if (auto *r = GetGlobalSystem<RendererSystem>())
-        {
-            Scene &scene = r->GetScene();
-            uint32_t nodeCount = scene.GetNodeCount();
-            for (uint32_t i = 0; i < nodeCount; i++)
-            {
-                NodeId *node = scene.GetNodeId(i);
-                if (scene.GetComponentFlags(node) & Component_Script)
-                {
-                    const std::string &sp = scene.GetNodeScriptPath(node);
-                    if (!sp.empty())
-                        nodeScriptPaths.insert(NormalizePath(sp));
-                }
-            }
-        }
-
-        for (auto &file : std::filesystem::recursive_directory_iterator(scriptsDir))
+        for (auto &file : std::filesystem::recursive_directory_iterator(globalDir))
         {
             if (file.path().extension() == ".lua")
             {
-                // Store canonical paths so per-node script bindings can compare scene paths
-                // against watcher/file-selector paths without separator or ".." mismatches.
                 std::string filePath = NormalizePath(file.path().string());
-
-                // Skip scripts that are attached to nodes — they are loaded per-node
-                if (nodeScriptPaths.count(filePath))
-                    continue;
-
-                if (IsTestScriptPath(filePath))
-                    continue;
 
                 // Each script gets its own environment that inherits globals
                 sol::environment env(m_lua, sol::create, m_lua.globals());
@@ -1085,21 +1057,19 @@ namespace pe
             return;
         m_scanTimer = 0.0;
 
-        const std::string scriptsDir = Path::Assets + "Scripts";
-        if (!std::filesystem::exists(scriptsDir))
+        const std::string globalDir = Path::Assets + "Scripts/global";
+        if (!std::filesystem::exists(globalDir))
             return;
 
         bool foundNew = false;
-        for (auto &file : std::filesystem::recursive_directory_iterator(scriptsDir))
+        for (auto &file : std::filesystem::recursive_directory_iterator(globalDir))
         {
             if (file.path().extension() != ".lua")
                 continue;
 
             std::string filePath = NormalizePath(file.path().string());
-            if (IsTestScriptPath(filePath))
-                continue;
 
-            // Check if already tracked (either as a file-level script or a per-node instance)
+            // Check if already tracked
             bool known = false;
             for (auto &existing : m_scripts)
             {
@@ -1109,8 +1079,6 @@ namespace pe
                     break;
                 }
             }
-            if (!known)
-                known = HasNodeInstanceForPath(m_nodeInstances, filePath);
 
             if (!known)
             {

@@ -7,6 +7,7 @@
 !/PhasmaCore/
 !/PhasmaEditor/
 !/PhasmaAgent/
+!/PhasmaWebGPU/
 !/CMakeLists.txt
 !/LICENCE
 !/README.md

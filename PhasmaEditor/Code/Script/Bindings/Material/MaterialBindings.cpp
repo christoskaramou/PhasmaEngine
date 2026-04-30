@@ -81,6 +81,7 @@ namespace pe
                     if (!inst) return;
                     if (prop == "base_color") inst->SetBaseColorFactor(value);
                     s->SetTexturesDirty();
+                    s->SetMaterialDirty();
                     s->MarkNodeDirty(nodeId);
                 };
                 auto setVec3 = [ensureInstance](Scene *s, NodeId *nodeId, int meshIdx, const std::string &prop, vec3 value) {
@@ -92,6 +93,7 @@ namespace pe
                     if (prop == "base_color") inst->SetBaseColorFactor(vec4(value, 1.f));
                     else if (prop == "emissive") inst->SetEmissiveFactor(value);
                     s->SetTexturesDirty();
+                    s->SetMaterialDirty();
                     s->MarkNodeDirty(nodeId);
                 };
                 auto setFloat = [ensureInstance](Scene *s, NodeId *nodeId, int meshIdx, const std::string &prop, float value) {
@@ -111,6 +113,7 @@ namespace pe
                     else if (prop == "attenuation_distance") inst->SetAttenuationDistance(value);
                     else return;
                     s->SetTexturesDirty();
+                    s->SetMaterialDirty();
                     s->MarkNodeDirty(nodeId);
                 };
 

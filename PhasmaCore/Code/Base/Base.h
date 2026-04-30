@@ -311,8 +311,10 @@ namespace pe
 
 #if defined(PE_TRACK_RESOURCES)
             PeTracker::Track(typeid(T), (void *)ptr);
+#if !defined(PE_TRACK_RESOURCES_NOSPAM)
             void *handle = (void *)detail::ToUintPtr(ptr->ApiHandle());
             PE_INFO("Object %s created (Handle: %p)", Demangle(typeid(API_HANDLE).name()).c_str(), handle);
+#endif
 #endif
 
             return ptr;
@@ -332,7 +334,9 @@ namespace pe
 
 #if defined(PE_TRACK_RESOURCES)
                 PeTracker::Untrack(typeid(T), (void *)ptr);
+#if !defined(PE_TRACK_RESOURCES_NOSPAM)
                 PE_INFO("Object %s destroyed (Handle: %p)", Demangle(typeid(API_HANDLE).name()).c_str(), handle);
+#endif
 #endif
             }
 

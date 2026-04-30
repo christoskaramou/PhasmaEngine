@@ -563,6 +563,7 @@ namespace pe
                                 if (renderTypeChanged)
                                     sc.SetGeometryDirty();
                                 sc.SetTexturesDirty();
+                                sc.SetMaterialDirty();
                                 sc.MarkNodeDirty(node);
                                 state->result = R"({"ok":true})";
                             }

@@ -1,0 +1,5 @@
+language = "C"
+pragma_once = true
+include_guard = "PHASMA_WEBGPU_NAGA_BRIDGE_H"
+style = "type"
+usize_is_size_t = true

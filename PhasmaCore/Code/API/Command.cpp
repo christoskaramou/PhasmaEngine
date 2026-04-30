@@ -34,6 +34,16 @@ namespace pe
 
     CommandBuffer::~CommandBuffer()
     {
+        // Pending after-wait callbacks here mean a recording was never submitted+waited
+        // (encoder dropped, pool teardown, validation rejection). The GPU never observed
+        // the work, so it's safe — and necessary — to run them now to release any
+        // captured staging allocations or refcounts.
+        if (!m_afterWaitCallbacks.IsEmpty())
+        {
+            m_afterWaitCallbacks.ReverseInvoke();
+            m_afterWaitCallbacks.Clear();
+        }
+
         Event::Destroy(m_event);
 
 #if PE_DEBUG_MODE
@@ -83,6 +93,17 @@ namespace pe
         m_boundIndexBuffer = nullptr;
         m_boundIndexBufferOffset = -1;
 
+        // A buffer reaching Reset() with pending callbacks means the prior recording was
+        // abandoned without Wait() — never submitted, or submitted but never waited and
+        // now being recycled. Either way the GPU isn't using whatever those callbacks
+        // hold (staging allocations, refcounts), so run them before reuse to avoid
+        // leaking pinned resources into the next recording's lifetime.
+        if (!m_afterWaitCallbacks.IsEmpty())
+        {
+            m_afterWaitCallbacks.ReverseInvoke();
+            m_afterWaitCallbacks.Clear();
+        }
+
         PE_ERROR_IF(!(m_commandPool->GetFlags() & vk::CommandPoolCreateFlagBits::eResetCommandBuffer), "CommandBuffer::Reset: CommandPool does not have the reset flag!");
         m_apiHandle.reset();
 
@@ -90,6 +111,10 @@ namespace pe
         m_gpuTimerInfosCount = 0;
         while (!m_gpuTimerIdsStack.empty())
             m_gpuTimerIdsStack.pop();
+        // Cached timers may carry m_inUse=true from an abandoned recording.
+        for (auto &info : m_gpuTimerInfos)
+            if (info.timer)
+                info.timer->ResetState();
 #endif
     }
 
@@ -773,6 +798,13 @@ namespace pe
     void CommandBuffer::FillBuffer(Buffer *buffer, size_t offset, size_t size, uint32_t data)
     {
         m_apiHandle.fillBuffer(buffer->ApiHandle(), offset, size, data);
+
+        // Record the transfer write so the next Buffer::Barrier emits srcStage=Clear,
+        // srcAccess=TransferWrite. Without this, subsequent barriers inherit a stale
+        // src state and readers at compute stage race with the fill.
+        BufferTrackInfo &trackInfo = buffer->GetTrackInfo();
+        trackInfo.stageMask = vk::PipelineStageFlagBits2::eClear;
+        trackInfo.accessMask = vk::AccessFlagBits2::eTransferWrite;
     }
 
     void CommandBuffer::TraceRays(uint32_t width, uint32_t height, uint32_t depth)

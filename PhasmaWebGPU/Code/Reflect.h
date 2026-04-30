@@ -1,0 +1,168 @@
+#pragma once
+
+#include <webgpu/webgpu.h>
+#include <cstdint>
+#include <map>
+#include <set>
+#include <string>
+#include <vector>
+
+struct WGPUDeviceImpl;
+struct WGPUPipelineLayoutImpl;
+
+namespace pwgpu
+{
+    using BindingKey = std::pair<uint32_t, uint32_t>; // (group, binding)
+    using BindingTextureFormatMap = std::map<BindingKey, WGPUTextureFormat>;
+    struct BindingResourceKey
+    {
+        uint32_t group = 0;
+        uint32_t binding = 0;
+        std::string kind;
+
+        bool operator<(const BindingResourceKey &other) const
+        {
+            if (group != other.group)
+                return group < other.group;
+            if (binding != other.binding)
+                return binding < other.binding;
+            return kind < other.kind;
+        }
+    };
+
+    struct AutoLayoutStageInput
+    {
+        const std::vector<uint32_t> *spirv = nullptr;
+        std::string entryPoint;
+        uint32_t executionModel = 0;
+        WGPUShaderStage visibility = WGPUShaderStage_None;
+        // Per W3C §10.3.6 the auto-layout BGL must contain only resources
+        // *statically used* by the entry point. SPIR-V from naga targets
+        // SPIR-V 1.0/1.3 where OpEntryPoint's interface section omits
+        // descriptor-bound globals, so spirv-cross's
+        // get_active_interface_variables() can't be used as the filter.
+        // Supply the JS frontend's reflection here when available.
+        const std::set<BindingKey> *staticallyUsed = nullptr;
+        const std::set<std::string> *staticallyUsedNames = nullptr;
+        const std::set<BindingResourceKey> *staticallyUsedResources = nullptr;
+        const BindingTextureFormatMap *storageTextureFormats = nullptr;
+        bool staticallyUsedAuthoritative = false;
+    };
+
+    struct LayoutCompatStageInput
+    {
+        const std::vector<uint32_t> *spirv = nullptr;
+        std::string entryPoint;
+        uint32_t executionModel = 0;
+        WGPUShaderStage stage = WGPUShaderStage_None;
+        const std::set<BindingKey> *staticallyUsed = nullptr;
+        const std::set<std::string> *staticallyUsedNames = nullptr;
+        const std::set<BindingResourceKey> *staticallyUsedResources = nullptr;
+        const BindingTextureFormatMap *storageTextureFormats = nullptr;
+        bool staticallyUsedAuthoritative = false;
+        const std::set<BindingKey> *comparisonSamplers = nullptr;
+    };
+    std::string ValidateExplicitLayoutCompat(const WGPUPipelineLayoutImpl *layout, const std::vector<LayoutCompatStageInput> &stages);
+
+    std::string ValidateTextureSamplerPairs(const std::vector<uint32_t> &spirv, const WGPUPipelineLayoutImpl *layout);
+
+    WGPUPipelineLayoutImpl *BuildAutoPipelineLayout(WGPUDeviceImpl *device,
+                                                    const std::vector<AutoLayoutStageInput> &stages,
+                                                    std::string &errMsg);
+
+    struct ComputeWorkgroupInfo
+    {
+        uint32_t sizeX = 1;
+        uint32_t sizeY = 1;
+        uint32_t sizeZ = 1;
+        uint64_t workgroupStorageBytes = 0;
+    };
+    bool GetComputeWorkgroupInfo(const std::vector<uint32_t> &spirv,
+                                 const std::string &entryPoint,
+                                 ComputeWorkgroupInfo &out,
+                                 std::string &errMsg);
+
+    bool GetUsedDescriptorSets(const std::vector<uint32_t> &spirv,
+                               const std::string &entryPoint,
+                               uint32_t executionModel,
+                               std::set<uint32_t> &outSets,
+                               std::string &errMsg);
+
+    enum class ShaderOutputBaseType
+    {
+        Float,
+        Uint,
+        Sint,
+        Unknown
+    };
+
+    struct FragmentOutputInfo
+    {
+        ShaderOutputBaseType baseType = ShaderOutputBaseType::Unknown;
+        uint32_t vecSize = 0;
+    };
+    bool GetFragmentOutputTypes(const std::vector<uint32_t> &spirv,
+                                const std::string &entryPoint,
+                                std::map<uint32_t, FragmentOutputInfo> &outInfos,
+                                std::string &errMsg);
+
+    struct VertexInputInfo
+    {
+        ShaderOutputBaseType baseType = ShaderOutputBaseType::Unknown;
+        uint32_t vecSize = 0;
+    };
+    bool GetVertexInputTypes(const std::vector<uint32_t> &spirv,
+                             const std::string &entryPoint,
+                             std::map<uint32_t, VertexInputInfo> &outInfos,
+                             std::string &errMsg);
+
+    struct VaryingInfo
+    {
+        ShaderOutputBaseType baseType = ShaderOutputBaseType::Unknown;
+        uint32_t vecSize = 0;
+        bool isFlat = false;
+        bool isNoPerspective = false;
+        bool isCentroid = false;
+        bool isSample = false;
+    };
+    bool GetVaryingInfos(const std::vector<uint32_t> &spirv,
+                         const std::string &entryPoint,
+                         uint32_t executionModel,
+                         bool getInputs,
+                         std::map<uint32_t, VaryingInfo> &outInfos,
+                         std::string &errMsg);
+
+    bool CountFragmentInterStageBuiltins(const std::vector<uint32_t> &spirv,
+                                         const std::string &entryPoint,
+                                         uint32_t &outCount,
+                                         std::string &errMsg);
+
+    // Returns the array size of the vertex shader's @builtin(clip_distances)
+    // output, or 0 if the entry point does not declare one. Used by
+    // createRenderPipeline to decrement the inter-stage / vertex-output
+    // budgets per W3C WebGPU spec §10.3.1 (clip_distances consumes
+    // ceil(N/4) locations from both maxInterStageShaderVariables-1 and
+    // maxVertexShaderOutputVariables).
+    uint32_t CountVertexClipDistancesArraySize(const std::vector<uint32_t> &spirv,
+                                               const std::string &entryPoint,
+                                               std::string &errMsg);
+
+    struct FragmentOutputBuiltins
+    {
+        bool hasFragDepth = false;
+        bool hasSampleMask = false;
+    };
+    bool GetFragmentOutputBuiltins(const std::vector<uint32_t> &spirv,
+                                   const std::string &entryPoint,
+                                   FragmentOutputBuiltins &out,
+                                   std::string &errMsg);
+
+    // Returns true if the fragment shader declares a @blend_src(1) output
+    // (SPIR-V: an OpVariable in stage_outputs decorated with both
+    //  DecorationLocation 0 and DecorationIndex 1, the WGSL @blend_src(1) lowering).
+    // Used by createRenderPipeline to validate dual-source blend factor usage
+    // (W3C WebGPU §10.3.6 GPUBlendComponent dual-source-blending requirements).
+    bool HasBlendSrc1Output(const std::vector<uint32_t> &spirv,
+                            const std::string &entryPoint,
+                            std::string &errMsg);
+} // namespace pwgpu

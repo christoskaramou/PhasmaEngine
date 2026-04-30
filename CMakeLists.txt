@@ -3,6 +3,9 @@ cmake_minimum_required(VERSION 3.10)
 if(POLICY CMP0091)
     cmake_policy(SET CMP0091 NEW)
 endif()
+if(POLICY CMP0184)
+    cmake_policy(SET CMP0184 NEW)
+endif()
 
 # Keep all MSVC targets, including fetched subprojects like Jolt, on the DLL CRT (/MD, /MDd)
 # so they match the rest of the editor build and imported Windows dependencies.
@@ -14,12 +17,11 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 message(STATUS "PhasmaEditor = ${CMAKE_CURRENT_SOURCE_DIR}")
 
 if(MSVC)
-    include(ProcessorCount)
-    ProcessorCount(N)
-    if(NOT N EQUAL 0)
-        set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} /MP${N}")
-        set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /MP${N}")
-    endif()
+    # /MP enables multi-threaded compilation *within* each cl.exe invocation.
+    # The build system (Ninja/MSBuild) already launches parallel jobs, so keep
+    # /MP low to avoid N_jobs × N_threads memory explosion with large PCHs.
+    set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} /MP4")
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /MP4")
     set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} /Oi /permissive-")
     set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /Oi /permissive-")
     # Add /bigobj to avoid MSVC "number of sections exceeded" (C1128) for large translation units
@@ -73,9 +75,10 @@ if(PE_PHYSICS)
     set(BUILD_SHARED_LIBS "${BUILD_SHARED_LIBS_SAVED}" CACHE BOOL "" FORCE)
 
     if(TARGET Jolt)
-        if(MSVC)
-            target_compile_options(Jolt PRIVATE $<$<CONFIG:Debug>:/O2 /Ob2>)
-        else()
+        # MSVC: Jolt's own CMakeLists.txt hard-codes /RTC1 in Debug, which is
+        # a fatal incompatibility with /O2 (D8016). Skip the optimization on
+        # MSVC Debug — /O2 is only applied on non-MSVC toolchains.
+        if(NOT MSVC)
             target_compile_options(Jolt PRIVATE $<$<CONFIG:Debug>:-O2>)
         endif()
     endif()
@@ -128,6 +131,12 @@ add_subdirectory(PhasmaCore)
 # Add PhasmaAgent subdirectory
 add_subdirectory(PhasmaAgent)
 
+# Add PhasmaWebGPU subdirectory (WebGPU C API layer over PhasmaCore)
+option(PE_WEBGPU "Build PhasmaWebGPU WebGPU abstraction layer" ON)
+if(PE_WEBGPU)
+    add_subdirectory(PhasmaWebGPU)
+endif()
+
 # === PhasmaEditorModule + thin launcher ===
 file(GLOB_RECURSE CODE_SRC_FILES CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/PhasmaEditor/Code/*.cpp")
 set(PE_EDITOR_THIRD_PARTY_DIR "${CMAKE_CURRENT_SOURCE_DIR}/PhasmaEditor/third_party")
@@ -159,6 +168,8 @@ if(CMAKE_SYSTEM_NAME STREQUAL "Windows")
 endif()
 
 if(MSVC)
+    # Optimized Debug builds cannot combine /O1 with MSVC runtime checks.
+    set_property(TARGET PhasmaEditorModule PROPERTY MSVC_RUNTIME_CHECKS "")
     target_compile_options(PhasmaEditorModule PRIVATE $<$<CONFIG:Debug>:/O1>)
 else()
     target_compile_options(PhasmaEditorModule PRIVATE $<$<CONFIG:Debug>:-O1>)

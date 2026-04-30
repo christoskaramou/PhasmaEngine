@@ -54,6 +54,28 @@ namespace pe
         }
     }
 
+    bool Semaphore::WaitTimeout(uint64_t value, uint64_t timeoutNS)
+    {
+        PE_ERROR_IF(!m_timeline, "Semaphore::WaitTimeout() called on non-timeline semaphore!");
+
+        if (value <= m_lastCompleted)
+            return true;
+
+        vk::SemaphoreWaitInfo swi{};
+        swi.semaphoreCount = 1;
+        swi.pSemaphores = &m_apiHandle;
+        swi.pValues = &value;
+
+        auto result = RHII.GetDevice().waitSemaphores(swi, timeoutNS);
+        if (result == vk::Result::eSuccess)
+        {
+            m_lastCompleted = value;
+            return true;
+        }
+
+        return false;
+    }
+
     void Semaphore::Signal(uint64_t value)
     {
         PE_ERROR_IF(!m_timeline, "Semaphore::Signal() called on non-timeline semaphore!");

@@ -680,7 +680,11 @@ namespace pe
             }
         }
 
-        m_createInfo.usage |= vk::ImageUsageFlagBits::eTransferSrc;
+        {
+            vk::FormatProperties fProps = RHII.GetGpu().getFormatProperties(info.format);
+            if (fProps.optimalTilingFeatures & vk::FormatFeatureFlagBits::eTransferSrc)
+                m_createInfo.usage |= vk::ImageUsageFlagBits::eTransferSrc;
+        }
 
         VkImageCreateInfo ci = static_cast<VkImageCreateInfo>(m_createInfo);
         VmaAllocationCreateInfo aci{};
@@ -748,10 +752,14 @@ namespace pe
         barrier.dstAccessMask = info.accessMask;
         barrier.oldLayout = oldInfo.layout;
         barrier.newLayout = info.layout;
+        if (barrier.srcStageMask == vk::PipelineStageFlagBits2::eNone)
+            barrier.srcStageMask = vk::PipelineStageFlagBits2::eTopOfPipe;
         barrier.srcQueueFamilyIndex = oldInfo.queueFamilyId;
         barrier.dstQueueFamilyIndex = info.queueFamilyId;
         barrier.image = image.m_apiHandle;
-        barrier.subresourceRange.aspectMask = VulkanHelpers::GetAspectMask(image.m_createInfo.format);
+        barrier.subresourceRange.aspectMask = image.m_aspectMaskOverride
+                                                  ? image.m_aspectMaskOverride
+                                                  : VulkanHelpers::GetAspectMask(image.m_createInfo.format);
         barrier.subresourceRange.baseMipLevel = info.baseMipLevel;
         barrier.subresourceRange.levelCount = mipLevels;
         barrier.subresourceRange.baseArrayLayer = info.baseArrayLayer;
@@ -807,10 +815,14 @@ namespace pe
             barrier.dstAccessMask = info.accessMask;
             barrier.oldLayout = oldInfo.layout;
             barrier.newLayout = info.layout;
+            if (barrier.srcStageMask == vk::PipelineStageFlagBits2::eNone)
+                barrier.srcStageMask = vk::PipelineStageFlagBits2::eTopOfPipe;
             barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
             barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
             barrier.image = image->m_apiHandle;
-            barrier.subresourceRange.aspectMask = VulkanHelpers::GetAspectMask(imageInfo.format);
+            barrier.subresourceRange.aspectMask = image->m_aspectMaskOverride
+                                                      ? image->m_aspectMaskOverride
+                                                      : VulkanHelpers::GetAspectMask(imageInfo.format);
             barrier.subresourceRange.baseMipLevel = info.baseMipLevel;
             barrier.subresourceRange.levelCount = mipLevels;
             barrier.subresourceRange.baseArrayLayer = info.baseArrayLayer;

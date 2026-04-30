@@ -43,7 +43,10 @@ namespace pe
         swapchainCreateInfo.imageColorSpace = surface->GetColorSpace();
         swapchainCreateInfo.imageExtent = chosenExtent;
         swapchainCreateInfo.imageArrayLayers = 1;
-        swapchainCreateInfo.imageUsage = vk::ImageUsageFlagBits::eColorAttachment | vk::ImageUsageFlagBits::eTransferDst;
+        vk::ImageUsageFlags swapchainUsage = vk::ImageUsageFlagBits::eColorAttachment | vk::ImageUsageFlagBits::eTransferDst;
+        if (capabilities.supportedUsageFlags & vk::ImageUsageFlagBits::eTransferSrc)
+            swapchainUsage |= vk::ImageUsageFlagBits::eTransferSrc;
+        swapchainCreateInfo.imageUsage = swapchainUsage;
         swapchainCreateInfo.preTransform = capabilities.currentTransform;
         swapchainCreateInfo.compositeAlpha = vk::CompositeAlphaFlagBitsKHR::eOpaque;
         swapchainCreateInfo.presentMode = surface->GetPresentMode();

@@ -10,6 +10,7 @@ namespace pe
 
         bool IsTimeline() { return m_timeline; }
         void Wait(uint64_t value);
+        bool WaitTimeout(uint64_t value, uint64_t timeoutNS);
         void Signal(uint64_t value);
         uint64_t GetValue();
         void SetStageFlags(vk::PipelineStageFlags2 flags) { m_stageFlags = flags; }

@@ -768,6 +768,31 @@ namespace pe
         uint32_t groupCount = (m_meshCount + 63) / 64;
         cmd->Dispatch(groupCount, 1, 1);
 
+        // Record the compute writes so subsequent Buffer::Barrier calls emit
+        // srcStage=Compute, srcAccess=ShaderWrite. Without this, the next barrier
+        // inherits whatever trackInfo was left from the prior frame (or {None,None}
+        // on first use) and the dispatch write is not in the src scope — readers
+        // at DrawIndirect stage race with the cull shader.
+        auto recordComputeWrite = [](Buffer *buffer)
+        {
+            BufferTrackInfo &ti = buffer->GetTrackInfo();
+            ti.stageMask = vk::PipelineStageFlagBits2::eComputeShader;
+            ti.accessMask = vk::AccessFlagBits2::eShaderWrite;
+        };
+        recordComputeWrite(m_cullingCountersBuffers[frame]);
+        recordComputeWrite(m_indirectOpaqueSS[frame]);
+        recordComputeWrite(m_indirectAlphaCutSS[frame]);
+        recordComputeWrite(m_indirectOpaqueDS[frame]);
+        recordComputeWrite(m_indirectAlphaCutDS[frame]);
+        recordComputeWrite(m_indirectSelected[frame]);
+        if (hasTransparentMeshes)
+        {
+            recordComputeWrite(m_indirectAlphaBlend[frame]);
+            recordComputeWrite(m_indirectTransmission[frame]);
+            recordComputeWrite(m_sortKeysAlphaBlend[frame]);
+            recordComputeWrite(m_sortKeysTransmission[frame]);
+        }
+
         auto addComputeBarrier = [&](Buffer *buffer, uint64_t size)
         {
             BufferBarrierInfo barrier{};

@@ -103,6 +103,8 @@ namespace pe
         bool HasGeneratedMips() { return m_mipmapsGenerated; }
         vec4 GetClearColor() { return m_clearColor; }
         void SetClearColor(const vec4 &color) { m_clearColor = color; }
+        void SetAspectMaskOverride(vk::ImageAspectFlags m) { m_aspectMaskOverride = m; }
+        vk::ImageAspectFlags GetAspectMaskOverride() const { return m_aspectMaskOverride; }
 
         static uint32_t CalculateMips(uint32_t width, uint32_t height);
         static Image *LoadRGBA(CommandBuffer *cmd, const std::string &path, vk::Format format, bool isFloat = false);
@@ -153,6 +155,7 @@ namespace pe
         std::vector<std::vector<ImageTrackInfo>> m_trackInfos{}; // Tracking image barrier info for each layer and mip level
         bool m_mipmapsGenerated = false;
         vec4 m_clearColor = vec4(0.0f, 0.0f, 0.0f, 1.0f);
+        vk::ImageAspectFlags m_aspectMaskOverride{};
         std::string m_name;
     };
 } // namespace pe

@@ -114,8 +114,21 @@ namespace pe
         si.pSignalSemaphoreInfos = signalSemaphoreSubmitInfos.data();
 
         auto result = m_apiHandle.submit2(1, &si, nullptr);
-        if (result != vk::Result::eSuccess)
-            PE_ERROR("[Queue] Failed to submit to queue!");
+        switch (result)
+        {
+        case vk::Result::eSuccess:
+            break;
+        case vk::Result::eErrorDeviceLost:
+            PE_WARN("[Queue] submit: device lost");
+            break;
+        case vk::Result::eErrorOutOfDeviceMemory:
+        case vk::Result::eErrorOutOfHostMemory:
+            PE_WARN("[Queue] submit: out of memory (%d)", static_cast<int>(result));
+            break;
+        default:
+            PE_WARN("[Queue] submit failed with VkResult=%d", static_cast<int>(result));
+            break;
+        }
     }
 
     void Queue::Present(Swapchain *swapchain, uint32_t imageIndex, Semaphore *wait)
