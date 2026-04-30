@@ -108,6 +108,16 @@ namespace
         return WGPUTextureFormat_Undefined;
     }
 
+    bool HasCompilationError(const std::vector<WGPUCompilationMessageStorage> &messages)
+    {
+        for (const auto &msg : messages)
+        {
+            if (msg.type == WGPUCompilationMessageType_Error)
+                return true;
+        }
+        return false;
+    }
+
     bool PopulateStaticallyUsed(const WGPUShaderModuleImpl *module,
                                 const std::string &entryPoint,
                                 std::set<pwgpu::BindingKey> &usedOut,
@@ -2785,23 +2795,21 @@ extern "C"
             // getCompilationInfo() returns them — the failure-only
             // ConvertMessages call below handles the error case.
             pwgpu::Wgsl::ConvertMessages(compiled, sm->compilationMessages);
+            const bool hasCompilationError = HasCompilationError(sm->compilationMessages);
 
             if (spirv && spirvWordCount > 0)
             {
                 sm->spirv.assign(spirv, spirv + spirvWordCount);
             }
-            else if (!sm->reflection.entryPoints.empty())
+            else if (!hasCompilationError && sm->reflection.present)
             {
                 // Module-level SPIR-V emit failed (typically a divergent
                 // override expression like `override cx: u32 = 1u/cu` with
-                // default cu=0u) but parse+validate succeeded. Per W3C
-                // §10.3.2.3 such overrides are only required when the
-                // targeted entry point actually reaches them, so accept the
-                // module: pipeline-create rebakes with EP scope, which
-                // skips overrides outside the EP's call closure. sm->spirv
-                // stays empty and is never used directly because
-                // BakeStageSpirvWithConstants always rebakes for WGSL-sourced
-                // modules.
+                // default cu=0u, or a valid no-entry-point validation module
+                // with declarations that Naga cannot lower to SPIR-V) but
+                // parse+validate succeeded. Accept the shader module: pipeline
+                // creation rebakes WGSL-sourced modules with EP scope before
+                // actual Vulkan shader-module creation.
             }
             else
             {

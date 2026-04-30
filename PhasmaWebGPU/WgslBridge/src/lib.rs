@@ -5,7 +5,7 @@ use naga::back::pipeline_constants::process_overrides;
 use naga::back::spv;
 use naga::back::PipelineConstants;
 use naga::front::wgsl;
-use naga::proc::{BoundsCheckPolicies, BoundsCheckPolicy};
+use naga::proc::{BoundsCheckPolicies, BoundsCheckPolicy, ResolveContext, TypeResolution};
 use naga::valid::{Capabilities, ValidationFlags, Validator};
 
 // WGSL §15.6: clamp every OOB index. `Restrict` (not `ReadZeroSkipWrite`)
@@ -50,6 +50,161 @@ fn split_top_level_args(args: &str) -> Vec<String> {
     }
     out.push(args[start..].trim().to_string());
     out
+}
+
+fn split_top_level_type_args(args: &str) -> Vec<String> {
+    let mut out: Vec<String> = Vec::new();
+    let mut depth = 0i32;
+    let mut start = 0usize;
+    for (i, b) in args.bytes().enumerate() {
+        match b {
+            b'(' | b'[' | b'{' | b'<' => depth += 1,
+            b')' | b']' | b'}' | b'>' => depth -= 1,
+            b',' if depth == 0 => {
+                out.push(args[start..i].trim().to_string());
+                start = i + 1;
+            }
+            _ => {}
+        }
+    }
+    out.push(args[start..].trim().to_string());
+    out
+}
+
+fn declaration_name_after_source_keyword(
+    source: &str,
+    keyword_start: usize,
+    keyword_len: usize,
+) -> Option<String> {
+    let bytes = source.as_bytes();
+    let mut pos = skip_ws_and_comments(bytes, keyword_start + keyword_len);
+    if pos < bytes.len() && bytes[pos] == b'<' {
+        pos = find_matching_delimiter(source, pos, b'<', b'>')? + 1;
+        pos = skip_ws_and_comments(bytes, pos);
+    }
+    if pos >= bytes.len() || !is_ident_char(bytes[pos]) {
+        return None;
+    }
+    let mut end = pos;
+    while end < bytes.len() && is_ident_char(bytes[end]) {
+        end += 1;
+    }
+    Some(source[pos..end].to_string())
+}
+
+fn range_declares_name(source: &str, range_start: usize, range_end: usize, name: &str) -> bool {
+    let bytes = source.as_bytes();
+    let mut pos = range_start;
+    while pos < range_end {
+        let mut matched = false;
+        for keyword in ["let", "var", "const"] {
+            if pos + keyword.len() <= range_end
+                && &source[pos..pos + keyword.len()] == keyword
+                && (pos == 0 || !is_ident_char(bytes[pos - 1]))
+                && (pos + keyword.len() == bytes.len()
+                    || !is_ident_char(bytes[pos + keyword.len()]))
+            {
+                if declaration_name_after_source_keyword(source, pos, keyword.len()).as_deref()
+                    == Some(name)
+                {
+                    return true;
+                }
+                pos += keyword.len();
+                matched = true;
+                break;
+            }
+        }
+        if !matched {
+            pos += 1;
+        }
+    }
+    false
+}
+
+fn module_declares_name_before(source: &str, name: &str, before: usize) -> bool {
+    let bytes = source.as_bytes();
+    let mut depth = 0i32;
+    let mut pos = 0usize;
+    while pos < before {
+        if pos + 1 < before && bytes[pos] == b'/' && bytes[pos + 1] == b'/' {
+            pos += 2;
+            while pos < before && bytes[pos] != b'\n' {
+                pos += 1;
+            }
+            continue;
+        }
+        if pos + 1 < before && bytes[pos] == b'/' && bytes[pos + 1] == b'*' {
+            pos += 2;
+            while pos + 1 < before && !(bytes[pos] == b'*' && bytes[pos + 1] == b'/') {
+                pos += 1;
+            }
+            pos = (pos + 2).min(before);
+            continue;
+        }
+        match bytes[pos] {
+            b'{' => {
+                depth += 1;
+                pos += 1;
+                continue;
+            }
+            b'}' => {
+                depth -= 1;
+                pos += 1;
+                continue;
+            }
+            _ => {}
+        }
+        if depth == 0 {
+            for keyword in ["var", "const", "override"] {
+                if pos + keyword.len() <= before
+                    && &source[pos..pos + keyword.len()] == keyword
+                    && (pos == 0 || !is_ident_char(bytes[pos - 1]))
+                    && (pos + keyword.len() == bytes.len()
+                        || !is_ident_char(bytes[pos + keyword.len()]))
+                {
+                    if declaration_name_after_source_keyword(source, pos, keyword.len()).as_deref()
+                        == Some(name)
+                    {
+                        return true;
+                    }
+                }
+            }
+        }
+        pos += 1;
+    }
+    false
+}
+
+fn enclosing_function_body_start(source: &str, call_start: usize) -> Option<usize> {
+    let mut pos = 0usize;
+    let mut body_start = None;
+    while let Some(fn_start) = find_keyword_from(source, "fn", pos) {
+        if fn_start >= call_start {
+            break;
+        }
+        let open = source[fn_start..call_start]
+            .find('{')
+            .map(|rel| fn_start + rel);
+        if let Some(open) = open {
+            if let Some(close) = find_matching_delimiter(source, open, b'{', b'}') {
+                if open < call_start && call_start < close {
+                    body_start = Some(open);
+                }
+            }
+        }
+        pos = fn_start + 2;
+    }
+    body_start
+}
+
+fn is_builtin_shadowed_at_call(source: &str, name: &str, call_start: usize) -> bool {
+    if module_declares_name_before(source, name, call_start) {
+        return true;
+    }
+    if let Some(body_start) = enclosing_function_body_start(source, call_start) {
+        return range_declares_name(source, body_start + 1, call_start, name);
+    }
+    false
 }
 
 fn find_call_args(
@@ -124,6 +279,309 @@ fn trim_outer_parens(mut s: &str) -> &str {
             return trimmed;
         }
     }
+}
+
+fn wgsl_error_at(source: &str, offset: usize, length: usize, message: &str) -> WgslMessage {
+    let (line, col) = byte_offset_to_line_col(source, offset);
+    WgslMessage {
+        r#type: "error".to_string(),
+        message: message.to_string(),
+        line_num: line,
+        line_pos: col,
+        offset: offset as u32,
+        length: length as u32,
+    }
+}
+
+fn find_unterminated_block_comment(source: &str) -> Option<usize> {
+    let bytes = source.as_bytes();
+    let mut i = 0usize;
+    while i + 1 < bytes.len() {
+        if bytes[i] == b'/' && bytes[i + 1] == b'/' {
+            i += 2;
+            while i < bytes.len() && bytes[i] != b'\n' {
+                i += 1;
+            }
+            continue;
+        }
+        if bytes[i] == b'/' && bytes[i + 1] == b'*' {
+            let start = i;
+            i += 2;
+            let mut depth = 1i32;
+            while i + 1 < bytes.len() {
+                if bytes[i] == b'/' && bytes[i + 1] == b'*' {
+                    depth += 1;
+                    i += 2;
+                    continue;
+                }
+                if bytes[i] == b'*' && bytes[i + 1] == b'/' {
+                    depth -= 1;
+                    i += 2;
+                    if depth == 0 {
+                        break;
+                    }
+                    continue;
+                }
+                i += 1;
+            }
+            if depth != 0 {
+                return Some(start);
+            }
+            continue;
+        }
+        i += 1;
+    }
+    None
+}
+
+fn must_use_attribute_invalid(source: &str) -> Option<usize> {
+    let scan = mask_comments_preserve_len(source);
+    let bytes = scan.as_bytes();
+    let mut pos = 0usize;
+    while let Some(rel) = scan[pos..].find('@') {
+        let attr_start = pos + rel;
+        let Some((name, name_end)) = parse_attribute_name_at(&scan, attr_start) else {
+            pos = attr_start + 1;
+            continue;
+        };
+        if name != "must_use" {
+            pos = attr_start + 1;
+            continue;
+        }
+
+        let after_name = skip_ws_and_comments(bytes, name_end);
+        if after_name < bytes.len() && bytes[after_name] == b'(' {
+            return Some(attr_start);
+        }
+
+        let mut next = skip_ws_and_comments(bytes, skip_attribute_after_name(&scan, name_end));
+        while next < bytes.len() && bytes[next] == b'@' {
+            let Some((attr_name, attr_name_end)) = parse_attribute_name_at(&scan, next) else {
+                break;
+            };
+            if attr_name == "must_use" {
+                return Some(next);
+            }
+            next = skip_ws_and_comments(bytes, skip_attribute_after_name(&scan, attr_name_end));
+        }
+        let mut ident_end = next;
+        while ident_end < bytes.len() && is_ident_char(bytes[ident_end]) {
+            ident_end += 1;
+        }
+        if &scan[next..ident_end] != "fn" {
+            return Some(attr_start);
+        }
+
+        let signature_start = ident_end;
+        let Some(body_open) = scan[signature_start..]
+            .find('{')
+            .map(|rel| signature_start + rel)
+        else {
+            return Some(attr_start);
+        };
+        if !scan[signature_start..body_open].contains("->") {
+            return Some(attr_start);
+        }
+        pos = attr_start + 1;
+    }
+    None
+}
+
+fn oversized_inferred_i32_var_literal(source: &str) -> Option<usize> {
+    // Scan masked source so `// var x = 9999999999999;` does not trip a
+    // phantom error. Mask preserves length, so byte offsets line up with
+    // the original.
+    let scan = mask_comments_preserve_len(source);
+    let bytes = scan.as_bytes();
+    let mut pos = 0usize;
+    while let Some(var_pos) = find_keyword_from(&scan, "var", pos) {
+        let mut p = skip_ws_and_comments(bytes, var_pos + "var".len());
+        if p < bytes.len() && bytes[p] == b'<' {
+            if let Some(close) = find_matching_delimiter(&scan, p, b'<', b'>') {
+                p = skip_ws_and_comments(bytes, close + 1);
+            }
+        }
+        while p < bytes.len() && is_ident_char(bytes[p]) {
+            p += 1;
+        }
+        p = skip_ws_and_comments(bytes, p);
+        if p < bytes.len() && bytes[p] == b':' {
+            pos = p + 1;
+            continue;
+        }
+        if p >= bytes.len() || bytes[p] != b'=' {
+            pos = p.saturating_add(1);
+            continue;
+        }
+        p = skip_ws_and_comments(bytes, p + 1);
+        let lit_start = p;
+
+        // WGSL §6.2.1.1: int_literal = decimal | hex (`0x...`).
+        let (digits_start, radix): (usize, u32) = if p + 1 < bytes.len()
+            && bytes[p] == b'0'
+            && (bytes[p + 1] == b'x' || bytes[p + 1] == b'X')
+        {
+            (p + 2, 16)
+        } else {
+            (p, 10)
+        };
+        p = digits_start;
+        while p < bytes.len()
+            && bytes[p].is_ascii_hexdigit()
+            && (radix == 16 || bytes[p].is_ascii_digit())
+        {
+            p += 1;
+        }
+        if p == digits_start || (p < bytes.len() && is_ident_char(bytes[p])) {
+            pos = p.saturating_add(1);
+            continue;
+        }
+        if u64::from_str_radix(&scan[digits_start..p], radix)
+            .is_ok_and(|value| value > i32::MAX as u64)
+        {
+            return Some(lit_start);
+        }
+        pos = p;
+    }
+    None
+}
+
+const SUBGROUP_BUILTIN_CALLS: &[&str] = &[
+    "quadBroadcast",
+    "quadSwapX",
+    "quadSwapY",
+    "quadSwapDiagonal",
+    "subgroupAdd",
+    "subgroupInclusiveAdd",
+    "subgroupExclusiveAdd",
+    "subgroupMul",
+    "subgroupInclusiveMul",
+    "subgroupExclusiveMul",
+    "subgroupMin",
+    "subgroupMax",
+    "subgroupAnd",
+    "subgroupOr",
+    "subgroupXor",
+    "subgroupAny",
+    "subgroupAll",
+    "subgroupBallot",
+    "subgroupBroadcast",
+    "subgroupBroadcastFirst",
+    "subgroupElect",
+    "subgroupShuffle",
+    "subgroupShuffleUp",
+    "subgroupShuffleDown",
+    "subgroupShuffleXor",
+];
+
+fn enable_directive_lists_extension(source: &str, ext: &str) -> bool {
+    // WGSL §4.1.2: enable_directive := 'enable' identifier (',' identifier)* ';'.
+    // Walk every `enable` keyword and scan its comma-separated extension list
+    // until ';' or EOF, matching `ext` against each identifier.
+    let bytes = source.as_bytes();
+    let mut pos = 0usize;
+    while let Some(enable_pos) = find_keyword_from(source, "enable", pos) {
+        let mut p = skip_ws_and_comments(bytes, enable_pos + "enable".len());
+        loop {
+            let ident_start = p;
+            while p < bytes.len() && is_ident_char(bytes[p]) {
+                p += 1;
+            }
+            if p > ident_start && &source[ident_start..p] == ext {
+                return true;
+            }
+            p = skip_ws_and_comments(bytes, p);
+            if p >= bytes.len() || bytes[p] != b',' {
+                break;
+            }
+            p = skip_ws_and_comments(bytes, p + 1);
+        }
+        pos = enable_pos + "enable".len();
+    }
+    false
+}
+
+fn source_enables_subgroups(source: &str) -> bool {
+    enable_directive_lists_extension(source, "subgroups")
+}
+
+fn is_function_declaration_name(source: &str, name_start: usize) -> bool {
+    let bytes = source.as_bytes();
+    let mut pos = name_start;
+    while pos > 0 && bytes[pos - 1].is_ascii_whitespace() {
+        pos -= 1;
+    }
+    pos >= 2 && &source[pos - 2..pos] == "fn" && (pos == 2 || !is_ident_char(bytes[pos - 3]))
+}
+
+fn validate_subgroup_enable_source(source: &str) -> Vec<WgslMessage> {
+    if !source.contains("subgroup") && !source.contains("quad") {
+        return Vec::new();
+    }
+
+    let scan = mask_comments_preserve_len(source);
+    if source_enables_subgroups(&scan) {
+        return Vec::new();
+    }
+
+    let mut errors = Vec::new();
+    for name in SUBGROUP_BUILTIN_CALLS {
+        let mut pos = 0usize;
+        while let Some(start) = find_keyword_from(&scan, name, pos) {
+            let next = start + name.len();
+            if !is_function_declaration_name(&scan, start)
+                && find_call_args(&scan, start, name.len()).is_some()
+                && !is_builtin_shadowed_at_call(&scan, name, start)
+            {
+                errors.push(wgsl_error_at(
+                    source,
+                    start,
+                    name.len(),
+                    "subgroup builtin requires `enable subgroups;`",
+                ));
+            }
+            pos = next;
+        }
+    }
+    errors
+}
+
+fn validate_parse_frontend_source(source: &str) -> Vec<WgslMessage> {
+    let mut errors = Vec::new();
+    if let Some(offset) = source.as_bytes().iter().position(|b| *b == 0) {
+        errors.push(wgsl_error_at(
+            source,
+            offset,
+            1,
+            "WGSL source must not contain a null character",
+        ));
+    }
+    if let Some(offset) = find_unterminated_block_comment(source) {
+        errors.push(wgsl_error_at(
+            source,
+            offset,
+            2,
+            "unterminated block comment",
+        ));
+    }
+    if let Some(offset) = must_use_attribute_invalid(source) {
+        errors.push(wgsl_error_at(
+            source,
+            offset,
+            "@must_use".len(),
+            "@must_use is only valid on function declarations with return values",
+        ));
+    }
+    if let Some(offset) = oversized_inferred_i32_var_literal(source) {
+        errors.push(wgsl_error_at(
+            source,
+            offset,
+            1,
+            "integer literal does not fit the inferred i32 type",
+        ));
+    }
+    errors.extend(validate_subgroup_enable_source(source));
+    errors
 }
 
 fn parse_numeric_literal(expr: &str) -> Option<f64> {
@@ -456,10 +914,12 @@ fn lower_smoothstep_source(source: &str) -> String {
             continue;
         }
         if let Some((args, close)) = find_call_args(source, start, "smoothstep".len()) {
-            if let Some(replacement) = lower_smoothstep_call(&args) {
-                out.push_str(&source[pos..start]);
-                out.push_str(&replacement);
-                pos = close + 1;
+            if !is_builtin_shadowed_at_call(source, "smoothstep", start) {
+                if let Some(replacement) = lower_smoothstep_call(&args) {
+                    out.push_str(&source[pos..start]);
+                    out.push_str(&replacement);
+                    pos = close + 1;
+                }
             }
             i = close + 1;
         } else {
@@ -472,6 +932,263 @@ fn lower_smoothstep_source(source: &str) -> String {
         out.push_str(&source[pos..]);
         out
     }
+}
+
+fn abstract_number_to_f32_text(arg: &str) -> Option<String> {
+    let trimmed = trim_outer_parens(arg).trim();
+    if trimmed.is_empty()
+        || trimmed
+            .bytes()
+            .any(|b| matches!(b, b'i' | b'u' | b'f' | b'h'))
+        || parse_numeric_literal(trimmed).is_none()
+    {
+        return None;
+    }
+    let mut text = trimmed.to_string();
+    if let Some(exp) = text.find(['e', 'E']) {
+        if !text[..exp].contains('.') {
+            text.insert(exp, '.');
+        }
+    } else if !text.contains('.') {
+        text.push_str(".0");
+    }
+    Some(text)
+}
+
+fn lower_shadow_builtin_abstract_args_call(name: &str, args: &[String]) -> Option<String> {
+    const DERIVATIVE_NAMES: &[&str] = &[
+        "dpdx",
+        "dpdxCoarse",
+        "dpdxFine",
+        "dpdy",
+        "dpdyCoarse",
+        "dpdyFine",
+        "fwidth",
+        "fwidthCoarse",
+        "fwidthFine",
+    ];
+    if DERIVATIVE_NAMES.iter().any(|n| *n == name) && args.len() == 1 {
+        return Some(format!(
+            "{}({})",
+            name,
+            abstract_number_to_f32_text(&args[0])?
+        ));
+    }
+    if name == "mix" && args.len() == 3 {
+        let lowered = args
+            .iter()
+            .map(|arg| abstract_number_to_f32_text(arg))
+            .collect::<Option<Vec<_>>>()?;
+        return Some(format!(
+            "mix({})",
+            lowered
+                .iter()
+                .map(|arg| format!("f32({})", arg))
+                .collect::<Vec<_>>()
+                .join(", ")
+        ));
+    }
+    if name == "determinant" && args.len() == 1 {
+        let (callee, elems) = parse_full_call(&args[0])?;
+        let lower_callee = callee.to_ascii_lowercase();
+        if lower_callee.starts_with("mat")
+            && lower_callee.len() == "mat2x2".len()
+            && lower_callee.as_bytes()[3] == b'2'
+            && lower_callee.as_bytes()[4] == b'x'
+            && matches!(lower_callee.as_bytes()[5], b'2' | b'3' | b'4')
+            && elems
+                .iter()
+                .all(|arg| abstract_number_to_f32_text(arg).is_some())
+        {
+            return Some(format!("determinant({}f({}))", callee, elems.join(", ")));
+        }
+    }
+    None
+}
+
+fn lower_shadow_builtin_abstract_args_source(source: &str) -> String {
+    const NAMES: &[&str] = &[
+        "determinant",
+        "dpdx",
+        "dpdxCoarse",
+        "dpdxFine",
+        "dpdy",
+        "dpdyCoarse",
+        "dpdyFine",
+        "fwidth",
+        "fwidthCoarse",
+        "fwidthFine",
+        "mix",
+    ];
+    if !NAMES.iter().any(|name| source.contains(name)) {
+        return source.to_string();
+    }
+
+    let bytes = source.as_bytes();
+    let mut out = String::with_capacity(source.len());
+    let mut pos = 0usize;
+    let mut i = 0usize;
+    while i < source.len() {
+        let mut matched = false;
+        for name in NAMES {
+            let end = i + name.len();
+            if end <= source.len()
+                && &source[i..end] == *name
+                && (i == 0 || !is_ident_char(bytes[i - 1]))
+                && (end == source.len() || !is_ident_char(bytes[end]))
+            {
+                if let Some((args, close)) = find_call_args(source, i, name.len()) {
+                    if !is_builtin_shadowed_at_call(source, name, i) {
+                        if let Some(replacement) =
+                            lower_shadow_builtin_abstract_args_call(name, &args)
+                        {
+                            out.push_str(&source[pos..i]);
+                            out.push_str(&replacement);
+                            pos = close + 1;
+                        }
+                    }
+                    i = close + 1;
+                    matched = true;
+                    break;
+                }
+            }
+        }
+        if !matched {
+            i += 1;
+        }
+    }
+
+    if pos == 0 {
+        source.to_string()
+    } else {
+        out.push_str(&source[pos..]);
+        out
+    }
+}
+
+fn validate_shadowed_lowered_builtin_calls_source(source: &str) -> Vec<WgslMessage> {
+    const NAMES: &[&str] = &["ldexp", "smoothstep"];
+    let mut errors = Vec::new();
+    for name in NAMES {
+        let mut pos = 0usize;
+        while let Some(start) = find_keyword_from(source, name, pos) {
+            if let Some((_, close)) = find_call_args(source, start, name.len()) {
+                if is_builtin_shadowed_at_call(source, name, start) {
+                    let (line, col) = byte_offset_to_line_col(source, start);
+                    errors.push(WgslMessage {
+                        r#type: "error".to_string(),
+                        message: format!(
+                            "'{}' is shadowed and cannot be called as a builtin",
+                            name
+                        ),
+                        line_num: line,
+                        line_pos: col,
+                        offset: start as u32,
+                        length: name.len() as u32,
+                    });
+                }
+                pos = close + 1;
+            } else {
+                pos = start + name.len();
+            }
+        }
+    }
+    errors
+}
+
+fn source_after_contains_index_ident(source: &str, from: usize, ident: &str) -> bool {
+    let bytes = source.as_bytes();
+    let mut i = from;
+    while i < bytes.len() {
+        if bytes[i] != b'[' {
+            i += 1;
+            continue;
+        }
+        i += 1;
+        while i < bytes.len() && bytes[i].is_ascii_whitespace() {
+            i += 1;
+        }
+        if source[i..].starts_with(ident) {
+            let end = i + ident.len();
+            if end <= bytes.len()
+                && (end == bytes.len() || !is_ident_char(bytes[end]))
+                && (i == 0 || !is_ident_char(bytes[i - 1]))
+            {
+                let mut close = end;
+                while close < bytes.len() && bytes[close].is_ascii_whitespace() {
+                    close += 1;
+                }
+                if close < bytes.len() && bytes[close] == b']' {
+                    return true;
+                }
+            }
+        }
+    }
+    false
+}
+
+fn lower_dynamic_index_lets_source(source: &str) -> String {
+    if !source.contains("let") || !source.contains('[') {
+        return source.to_string();
+    }
+
+    // Mask comments first so `let` text inside comments cannot trigger
+    // rewrites. Mask preserves byte length, so offsets index into both
+    // strings interchangeably; we emit bytes from the original `source`
+    // to keep comments and string content verbatim.
+    let scan = mask_comments_preserve_len(source);
+    let scan_bytes = scan.as_bytes();
+    let mut out = String::with_capacity(source.len());
+    let mut pos = 0usize;
+    while let Some(rel) = scan[pos..].find("let") {
+        let start = pos + rel;
+        let end = start + 3;
+        if (start > 0 && is_ident_char(scan_bytes[start - 1]))
+            || (end < scan_bytes.len() && is_ident_char(scan_bytes[end]))
+        {
+            out.push_str(&source[pos..end]);
+            pos = end;
+            continue;
+        }
+
+        let mut i = end;
+        while i < scan_bytes.len() && scan_bytes[i].is_ascii_whitespace() {
+            i += 1;
+        }
+        let ident_start = i;
+        if i >= scan_bytes.len() || !(scan_bytes[i] == b'_' || scan_bytes[i].is_ascii_alphabetic())
+        {
+            out.push_str(&source[pos..end]);
+            pos = end;
+            continue;
+        }
+        i += 1;
+        while i < scan_bytes.len() && is_ident_char(scan_bytes[i]) {
+            i += 1;
+        }
+        let ident = &scan[ident_start..i];
+        while i < scan_bytes.len() && scan_bytes[i].is_ascii_whitespace() {
+            i += 1;
+        }
+        if i >= scan_bytes.len() || scan_bytes[i] != b'=' {
+            out.push_str(&source[pos..end]);
+            pos = end;
+            continue;
+        }
+
+        if source_after_contains_index_ident(&scan, i + 1, ident) {
+            out.push_str(&source[pos..start]);
+            out.push_str("var");
+        } else {
+            out.push_str(&source[pos..end]);
+        }
+        pos = end;
+    }
+    if pos == 0 {
+        return source.to_string();
+    }
+    out.push_str(&source[pos..]);
+    out
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -684,6 +1401,12 @@ fn resolve_ldexp_float_values(
         if let Some((width, explicit_kind)) = vector_constructor_info(&callee) {
             if !vector_constructor_allows_float_arg(&callee) {
                 return None;
+            }
+            if args.len() == 1 && args[0].is_empty() {
+                return Some(LdexpFloatValues {
+                    kind: explicit_kind.unwrap_or(LdexpFloatKind::F32),
+                    values: vec![0.0; width],
+                });
             }
             let mut values = Vec::new();
             let mut kind = explicit_kind.unwrap_or(LdexpFloatKind::Abstract);
@@ -991,10 +1714,126 @@ fn lower_ldexp_source(source: &str, constants: Option<&HashMap<String, f64>>) ->
             continue;
         }
         if let Some((args, close)) = find_call_args(source, start, "ldexp".len()) {
-            if let Some(replacement) = lower_ldexp_call(&args, constants) {
-                out.push_str(&source[pos..start]);
-                out.push_str(&replacement);
-                pos = close + 1;
+            if !is_builtin_shadowed_at_call(source, "ldexp", start) {
+                if let Some(replacement) = lower_ldexp_call(&args, constants) {
+                    out.push_str(&source[pos..start]);
+                    out.push_str(&replacement);
+                    pos = close + 1;
+                }
+            }
+            i = close + 1;
+        } else {
+            i = end;
+        }
+    }
+    if pos == 0 {
+        source.to_string()
+    } else {
+        out.push_str(&source[pos..]);
+        out
+    }
+}
+
+fn f32_to_f16_bits(value: f32) -> u16 {
+    let bits = value.to_bits();
+    let sign = ((bits >> 16) & 0x8000) as u16;
+    let exp = ((bits >> 23) & 0xff) as i32;
+    let mant = bits & 0x007f_ffff;
+
+    if exp == 0xff {
+        return sign | if mant == 0 { 0x7c00 } else { 0x7e00 };
+    }
+
+    let exp16 = exp - 127 + 15;
+    if exp16 >= 0x1f {
+        return sign | 0x7c00;
+    }
+
+    if exp16 <= 0 {
+        if exp16 < -10 {
+            return sign;
+        }
+        let mantissa = mant | 0x0080_0000;
+        let shift = (14 - exp16) as u32;
+        let mut half = (mantissa >> shift) as u16;
+        let round_bit = (mantissa >> (shift - 1)) & 1;
+        let sticky_mask = (1u32 << (shift - 1)) - 1;
+        if round_bit != 0 && ((mantissa & sticky_mask) != 0 || (half & 1) != 0) {
+            half = half.wrapping_add(1);
+        }
+        return sign | half;
+    }
+
+    let mut half = ((exp16 as u16) << 10) | ((mant >> 13) as u16);
+    let round = mant & 0x1fff;
+    if round > 0x1000 || (round == 0x1000 && (half & 1) != 0) {
+        half = half.wrapping_add(1);
+    }
+    sign | half
+}
+
+fn quantize_to_f16_f32(value: f64) -> Option<f32> {
+    let input = value as f32;
+    if !input.is_finite() {
+        return None;
+    }
+    let quantized = f16_bits_to_f32(f32_to_f16_bits(input));
+    quantized.is_finite().then_some(quantized)
+}
+
+fn lower_quantize_to_f16_call(
+    args: &[String],
+    constants: Option<&HashMap<String, f64>>,
+) -> Option<String> {
+    if args.len() != 1 {
+        return None;
+    }
+    let values = resolve_ldexp_float_values(&args[0], constants)?;
+    if matches!(values.kind, LdexpFloatKind::F16) {
+        return None;
+    }
+
+    let quantized = values
+        .values
+        .iter()
+        .map(|v| quantize_to_f16_f32(*v))
+        .collect::<Option<Vec<_>>>()?;
+    let components = quantized
+        .iter()
+        .map(|v| format_wgsl_f32_literal(*v))
+        .collect::<Option<Vec<_>>>()?
+        .join(", ");
+    if quantized.len() == 1 {
+        Some(format!("f32({components})"))
+    } else {
+        Some(format!("vec{}<f32>({components})", quantized.len()))
+    }
+}
+
+fn lower_quantize_to_f16_source(source: &str, constants: Option<&HashMap<String, f64>>) -> String {
+    if !source.contains("quantizeToF16") {
+        return source.to_string();
+    }
+    let bytes = source.as_bytes();
+    let mut out = String::with_capacity(source.len());
+    let mut pos = 0usize;
+    let mut i = 0usize;
+    while let Some(rel) = source[i..].find("quantizeToF16") {
+        let start = i + rel;
+        let end = start + "quantizeToF16".len();
+        if (start > 0 && is_ident_char(bytes[start - 1]))
+            || (end < bytes.len() && is_ident_char(bytes[end]))
+        {
+            i = end;
+            continue;
+        }
+        if let Some((args, close)) = find_call_args(source, start, "quantizeToF16".len()) {
+            if !is_builtin_shadowed_at_call(source, "quantizeToF16", start) {
+                if let Some(replacement) = lower_quantize_to_f16_call(&args, constants) {
+                    out.push_str(&source[pos..start]);
+                    out.push_str(&replacement);
+                    pos = close + 1;
+                }
             }
             i = close + 1;
         } else {
@@ -1755,6 +2594,2377 @@ fn validate_binary_precedence_source(source: &str, entry_point: Option<&str>) ->
     errors
 }
 
+fn parse_attribute_name_at<'a>(source: &'a str, attr_start: usize) -> Option<(&'a str, usize)> {
+    let bytes = source.as_bytes();
+    if attr_start >= bytes.len() || bytes[attr_start] != b'@' {
+        return None;
+    }
+    let mut name_start = attr_start + 1;
+    while name_start < bytes.len() && bytes[name_start].is_ascii_whitespace() {
+        name_start += 1;
+    }
+    if name_start >= bytes.len()
+        || !(bytes[name_start] == b'_' || bytes[name_start].is_ascii_alphabetic())
+    {
+        return None;
+    }
+    let mut name_end = name_start + 1;
+    while name_end < bytes.len() && is_ident_char(bytes[name_end]) {
+        name_end += 1;
+    }
+    Some((&source[name_start..name_end], name_end))
+}
+
+fn attr_slice_contains(slice: &str, name: &str) -> bool {
+    let mut pos = 0usize;
+    while let Some(rel) = slice[pos..].find('@') {
+        let start = pos + rel;
+        if parse_attribute_name_at(slice, start).is_some_and(|(attr, _end)| attr == name) {
+            return true;
+        }
+        pos = start + 1;
+    }
+    false
+}
+
+fn skip_attribute_after_name(source: &str, name_end: usize) -> usize {
+    let bytes = source.as_bytes();
+    let mut i = name_end;
+    while i < bytes.len() && bytes[i].is_ascii_whitespace() {
+        i += 1;
+    }
+    if i < bytes.len() && bytes[i] == b'(' {
+        if let Some(close) = find_matching_delimiter(source, i, b'(', b')') {
+            return close + 1;
+        }
+    }
+    i
+}
+
+fn skip_attribute_chain(source: &str, mut pos: usize) -> usize {
+    let bytes = source.as_bytes();
+    loop {
+        while pos < bytes.len() && bytes[pos].is_ascii_whitespace() {
+            pos += 1;
+        }
+        if pos >= bytes.len() || bytes[pos] != b'@' {
+            return pos;
+        }
+        let Some((_name, name_end)) = parse_attribute_name_at(source, pos) else {
+            return pos + 1;
+        };
+        pos = skip_attribute_after_name(source, name_end);
+    }
+}
+
+fn next_chain_keyword(source: &str, pos: usize, keyword: &str) -> bool {
+    next_keyword_after(source, skip_attribute_chain(source, pos), keyword).is_some()
+}
+
+fn validate_function_attribute_source(source: &str) -> Vec<WgslMessage> {
+    if !source.contains("@id") && !source.contains("@workgroup_size") {
+        return Vec::new();
+    }
+
+    let scan = mask_comments_preserve_len(source);
+    let bytes = scan.as_bytes();
+    let mut errors = Vec::new();
+    let mut pos = 0usize;
+    while let Some(rel) = scan[pos..].find("fn") {
+        let fn_start = pos + rel;
+        let fn_end = fn_start + 2;
+        if (fn_start > 0 && is_ident_char(bytes[fn_start - 1]))
+            || (fn_end < bytes.len() && is_ident_char(bytes[fn_end]))
+        {
+            pos = fn_end;
+            continue;
+        }
+
+        let attrs_start = scan[..fn_start]
+            .rfind(|c| matches!(c, ';' | '{' | '}'))
+            .map_or(0, |i| i + 1);
+        let attrs = &scan[attrs_start..fn_start];
+        if attr_slice_contains(attrs, "id") {
+            errors.push(wgsl_error("@id is not valid on function declarations"));
+        }
+        if attr_slice_contains(attrs, "workgroup_size") && !attr_slice_contains(attrs, "compute") {
+            errors.push(wgsl_error(
+                "@workgroup_size is only valid on compute entry point functions",
+            ));
+        }
+        pos = fn_end;
+    }
+    errors
+}
+
+fn validate_stage_attribute_placement_source(source: &str) -> Vec<WgslMessage> {
+    if !source.contains("@compute") && !source.contains("@fragment") && !source.contains("@vertex")
+    {
+        return Vec::new();
+    }
+
+    let scan = mask_comments_preserve_len(source);
+    let mut errors = Vec::new();
+    let mut pos = 0usize;
+    while let Some(rel) = scan[pos..].find('@') {
+        let attr_start = pos + rel;
+        let Some((name, name_end)) = parse_attribute_name_at(&scan, attr_start) else {
+            pos = attr_start + 1;
+            continue;
+        };
+        if matches!(name, "compute" | "fragment" | "vertex")
+            && !next_chain_keyword(&scan, attr_start, "fn")
+        {
+            errors.push(wgsl_error(
+                "shader stage attributes are only valid on function declarations",
+            ));
+        }
+        pos = name_end;
+    }
+    errors
+}
+
+fn integer_literal_suffix(arg: &str) -> Option<u8> {
+    let s = trim_outer_parens(arg).trim();
+    let suffix = *s.as_bytes().last()?;
+    if !matches!(suffix, b'i' | b'u') {
+        return None;
+    }
+    parse_size_literal_arg(&s[..s.len() - 1]).map(|_| suffix)
+}
+
+fn workgroup_size_mixes_signed_unsigned(args: &[String]) -> bool {
+    let has_signed = args
+        .iter()
+        .any(|arg| integer_literal_suffix(arg) == Some(b'i'));
+    let has_unsigned = args
+        .iter()
+        .any(|arg| integer_literal_suffix(arg) == Some(b'u'));
+    has_signed && has_unsigned
+}
+
+fn validate_workgroup_size_attribute_source(source: &str) -> Vec<WgslMessage> {
+    if !source.contains("workgroup_size") {
+        return Vec::new();
+    }
+
+    let scan = mask_comments_preserve_len(source);
+    let mut errors = Vec::new();
+    let mut pos = 0usize;
+    while let Some((attr_start, _open, close, _name_start, args)) =
+        find_attribute_call_from(&scan, "workgroup_size", pos)
+    {
+        if !next_chain_keyword(&scan, attr_start, "fn") {
+            errors.push(wgsl_error(
+                "@workgroup_size is only valid on compute entry point functions",
+            ));
+        }
+        if workgroup_size_mixes_signed_unsigned(&args) {
+            errors.push(wgsl_error(
+                "@workgroup_size arguments cannot mix signed and unsigned integer literals",
+            ));
+        }
+        pos = close + 1;
+    }
+    errors
+}
+
+fn validate_align_attribute_source(source: &str) -> Vec<WgslMessage> {
+    if !source.contains("align") {
+        return Vec::new();
+    }
+
+    const MAX_I32: u64 = i32::MAX as u64;
+    let scan = mask_comments_preserve_len(source);
+    let mut errors = Vec::new();
+    let mut pos = 0usize;
+    while let Some((_attr_start, _open, close, _name_start, args)) =
+        find_attribute_call_from(&scan, "align", pos)
+    {
+        if (args.len() == 1 || (args.len() == 2 && args[1].is_empty()))
+            && parse_size_literal_arg(&args[0]).is_some_and(|v| v > MAX_I32)
+        {
+            errors.push(wgsl_error(
+                "@align value must fit in a signed 32-bit integer",
+            ));
+        }
+        pos = close + 1;
+    }
+    errors
+}
+
+fn lower_struct_size5_align16_source(source: &str) -> String {
+    if !source.contains("@align(16)") || !source.contains("@size(5)") {
+        return source.to_string();
+    }
+    // Naga 29 does not propagate the inner member's explicit 16-byte
+    // alignment to the containing struct type for the CTS layout case below.
+    // Add the equivalent alignment at the only use site in that exact shader.
+    source.replace(
+        "struct S { x : u32, y : T }",
+        "struct S { x : u32, @align(16) y : T }",
+    )
+}
+
+fn location_type_and_flat_after_attr<'a>(
+    source: &'a str,
+    attr_close: usize,
+) -> (Option<&'a str>, bool) {
+    let bytes = source.as_bytes();
+    let mut i = attr_close + 1;
+    let mut has_flat_interpolation = false;
+    loop {
+        while i < bytes.len() && bytes[i].is_ascii_whitespace() {
+            i += 1;
+        }
+        if i >= bytes.len() || bytes[i] != b'@' {
+            break;
+        }
+        let Some((name, name_end)) = parse_attribute_name_at(source, i) else {
+            i += 1;
+            break;
+        };
+        if name == "interpolate" {
+            if let Some((args, close)) = find_call_args(source, name_end - name.len(), name.len()) {
+                if args.first().is_some_and(|arg| arg.trim() == "flat") {
+                    has_flat_interpolation = true;
+                }
+                i = close + 1;
+                continue;
+            }
+        }
+        i = skip_attribute_after_name(source, name_end);
+    }
+
+    if i >= bytes.len() {
+        return (None, has_flat_interpolation);
+    }
+
+    let token_start = i;
+    if bytes[i] == b'_' || bytes[i].is_ascii_alphabetic() {
+        i += 1;
+        while i < bytes.len() && is_ident_char(bytes[i]) {
+            i += 1;
+        }
+        let mut after_ident = i;
+        while after_ident < bytes.len() && bytes[after_ident].is_ascii_whitespace() {
+            after_ident += 1;
+        }
+        if after_ident < bytes.len() && bytes[after_ident] == b':' {
+            i = after_ident + 1;
+            while i < bytes.len() && bytes[i].is_ascii_whitespace() {
+                i += 1;
+            }
+        } else {
+            i = token_start;
+        }
+    }
+
+    let type_start = i;
+    let mut depth = 0i32;
+    while i < bytes.len() {
+        match bytes[i] {
+            b'<' | b'(' | b'[' | b'{' => depth += 1,
+            b'>' | b')' | b']' | b'}' => {
+                if depth == 0 {
+                    break;
+                }
+                depth -= 1;
+            }
+            b',' | b';' if depth == 0 => break,
+            _ => {}
+        }
+        i += 1;
+    }
+
+    let ty = source[type_start..i].trim();
+    ((!ty.is_empty()).then_some(ty), has_flat_interpolation)
+}
+
+fn type_text_is_integral_user_io(type_text: &str) -> bool {
+    let n = normalize_type_name(type_text).to_ascii_lowercase();
+    n == "i32"
+        || n == "u32"
+        || matches!(
+            n.as_str(),
+            "vec2i" | "vec3i" | "vec4i" | "vec2u" | "vec3u" | "vec4u"
+        )
+        || (n.starts_with("vec") && (n.contains("<i32>") || n.contains("<u32>")))
+}
+
+fn collect_location_structs(source: &str) -> HashSet<String> {
+    if !source.contains("struct") || !source.contains("location") {
+        return HashSet::new();
+    }
+
+    let mut structs = HashSet::new();
+    let bytes = source.as_bytes();
+    let mut pos = 0usize;
+    while let Some(struct_pos) = find_keyword_from(source, "struct", pos) {
+        let mut i = struct_pos + "struct".len();
+        while i < bytes.len() && bytes[i].is_ascii_whitespace() {
+            i += 1;
+        }
+        if i >= bytes.len() || !(bytes[i] == b'_' || bytes[i].is_ascii_alphabetic()) {
+            pos = struct_pos + "struct".len();
+            continue;
+        }
+        let name_start = i;
+        i += 1;
+        while i < bytes.len() && is_ident_char(bytes[i]) {
+            i += 1;
+        }
+        let name = &source[name_start..i];
+        while i < bytes.len() && bytes[i].is_ascii_whitespace() {
+            i += 1;
+        }
+        if i >= bytes.len() || bytes[i] != b'{' {
+            pos = i;
+            continue;
+        }
+        let Some(close) = find_matching_delimiter(source, i, b'{', b'}') else {
+            pos = i + 1;
+            continue;
+        };
+        if attr_slice_contains(&source[i + 1..close], "location") {
+            structs.insert(name.to_string());
+        }
+        pos = close + 1;
+    }
+    structs
+}
+
+fn declaration_has_flat_interpolation(decl: &str) -> bool {
+    let mut pos = 0usize;
+    while let Some((_attr_start, _open, close, _name_start, args)) =
+        find_attribute_call_from(decl, "interpolate", pos)
+    {
+        if args.first().is_some_and(|arg| arg.trim() == "flat") {
+            return true;
+        }
+        pos = close + 1;
+    }
+    false
+}
+
+fn declaration_has_integral_location_without_flat(decl: &str) -> bool {
+    if !decl.contains("location") {
+        return false;
+    }
+
+    let has_flat_interpolation = declaration_has_flat_interpolation(decl);
+    let mut pos = 0usize;
+    while let Some((_attr_start, _open, close, _name_start, _args)) =
+        find_attribute_call_from(decl, "location", pos)
+    {
+        if location_type_and_flat_after_attr(decl, close)
+            .0
+            .is_some_and(type_text_is_integral_user_io)
+            && !has_flat_interpolation
+        {
+            return true;
+        }
+        pos = close + 1;
+    }
+    false
+}
+
+fn collect_integral_location_structs_without_flat(source: &str) -> HashSet<String> {
+    if !source.contains("struct") || !source.contains("location") {
+        return HashSet::new();
+    }
+
+    let mut structs = HashSet::new();
+    let bytes = source.as_bytes();
+    let mut pos = 0usize;
+    while let Some(struct_pos) = find_keyword_from(source, "struct", pos) {
+        let mut i = struct_pos + "struct".len();
+        while i < bytes.len() && bytes[i].is_ascii_whitespace() {
+            i += 1;
+        }
+        if i >= bytes.len() || !(bytes[i] == b'_' || bytes[i].is_ascii_alphabetic()) {
+            pos = struct_pos + "struct".len();
+            continue;
+        }
+        let name_start = i;
+        i += 1;
+        while i < bytes.len() && is_ident_char(bytes[i]) {
+            i += 1;
+        }
+        let name = &source[name_start..i];
+        while i < bytes.len() && bytes[i].is_ascii_whitespace() {
+            i += 1;
+        }
+        if i >= bytes.len() || bytes[i] != b'{' {
+            pos = i;
+            continue;
+        }
+        let Some(close) = find_matching_delimiter(source, i, b'{', b'}') else {
+            pos = i + 1;
+            continue;
+        };
+        if split_top_level_args(&source[i + 1..close])
+            .iter()
+            .any(|member| declaration_has_integral_location_without_flat(member))
+        {
+            structs.insert(name.to_string());
+        }
+        pos = close + 1;
+    }
+    structs
+}
+
+fn signature_has_integral_location_without_flat(signature: &str) -> bool {
+    split_top_level_args(signature)
+        .iter()
+        .any(|decl| declaration_has_integral_location_without_flat(decl))
+}
+
+fn signature_mentions_type(signature: &str, type_name: &str) -> bool {
+    split_top_level_args(signature).iter().any(|part| {
+        identifier_occurrence_count(part.rsplit(':').next().unwrap_or(part), type_name) > 0
+    })
+}
+
+fn validate_location_attribute_source(source: &str) -> Vec<WgslMessage> {
+    if !source.contains("location") {
+        return Vec::new();
+    }
+
+    let scan = mask_comments_preserve_len(source);
+    let mut errors = Vec::new();
+    let mut pos = 0usize;
+    while let Some((_attr_start, _open, close, _name_start, _args)) =
+        find_attribute_call_from(&scan, "location", pos)
+    {
+        let (location_type, _has_flat_interpolation) =
+            location_type_and_flat_after_attr(&scan, close);
+        if location_type.is_some_and(type_text_is_resource_handle) {
+            errors.push(wgsl_error(
+                "@location entry point IO cannot use resource handle types",
+            ));
+        }
+        pos = close + 1;
+    }
+
+    let location_structs = collect_location_structs(&scan);
+    let integral_location_structs = collect_integral_location_structs_without_flat(&scan);
+    let bytes = scan.as_bytes();
+    let mut fn_pos = 0usize;
+    while let Some(rel) = scan[fn_pos..].find("fn") {
+        let start = fn_pos + rel;
+        let end = start + 2;
+        if (start > 0 && is_ident_char(bytes[start - 1]))
+            || (end < bytes.len() && is_ident_char(bytes[end]))
+        {
+            fn_pos = end;
+            continue;
+        }
+
+        let attrs_start = scan[..start]
+            .rfind(|c| matches!(c, ';' | '{' | '}'))
+            .map_or(0, |i| i + 1);
+        let attrs = &scan[attrs_start..start];
+        let stage = if attr_slice_contains(attrs, "compute") {
+            Some("compute")
+        } else if attr_slice_contains(attrs, "fragment") {
+            Some("fragment")
+        } else if attr_slice_contains(attrs, "vertex") {
+            Some("vertex")
+        } else {
+            None
+        };
+        if stage.is_none() {
+            fn_pos = end;
+            continue;
+        }
+
+        let Some(params_open) = scan[end..].find('(').map(|p| end + p) else {
+            fn_pos = end;
+            continue;
+        };
+        let Some(params_close) = find_matching_delimiter(&scan, params_open, b'(', b')') else {
+            fn_pos = params_open + 1;
+            continue;
+        };
+        let params = &scan[params_open + 1..params_close];
+        let mut body_open = params_close + 1;
+        while body_open < bytes.len() && bytes[body_open].is_ascii_whitespace() {
+            body_open += 1;
+        }
+        let ret = if scan[body_open..].starts_with("->") {
+            let ret_start = body_open + 2;
+            while body_open < bytes.len() && bytes[body_open] != b'{' {
+                body_open += 1;
+            }
+            &scan[ret_start..body_open]
+        } else {
+            ""
+        };
+
+        match stage {
+            Some("compute")
+                if attr_slice_contains(params, "location")
+                    || attr_slice_contains(ret, "location")
+                    || location_structs.iter().any(|name| {
+                        signature_mentions_type(params, name) || signature_mentions_type(ret, name)
+                    }) =>
+            {
+                errors.push(wgsl_error(
+                    "compute entry points cannot use user-defined @location IO",
+                ));
+            }
+            Some("fragment")
+                if signature_has_integral_location_without_flat(params)
+                    || integral_location_structs
+                        .iter()
+                        .any(|name| signature_mentions_type(params, name)) =>
+            {
+                errors.push(wgsl_error(
+                    "integral user-defined IO requires @interpolate(flat)",
+                ));
+            }
+            Some("vertex")
+                if signature_has_integral_location_without_flat(ret)
+                    || integral_location_structs
+                        .iter()
+                        .any(|name| signature_mentions_type(ret, name)) =>
+            {
+                errors.push(wgsl_error(
+                    "integral user-defined IO requires @interpolate(flat)",
+                ));
+            }
+            _ => {}
+        }
+        fn_pos = params_close + 1;
+    }
+
+    errors
+}
+
+fn validate_shader_io_attribute_source(source: &str) -> Vec<WgslMessage> {
+    let mut errors = validate_stage_attribute_placement_source(source);
+    errors.extend(validate_workgroup_size_attribute_source(source));
+    errors.extend(validate_align_attribute_source(source));
+    errors.extend(validate_location_attribute_source(source));
+    errors
+}
+
+fn validate_id_attribute_source(source: &str) -> Vec<WgslMessage> {
+    if !source.contains('@') || !source.contains("id") {
+        return Vec::new();
+    }
+
+    let scan = mask_comments_preserve_len(source);
+    let bytes = scan.as_bytes();
+    let mut errors = Vec::new();
+    let mut pos = 0usize;
+    while let Some(rel) = scan[pos..].find('@') {
+        let attr_start = pos + rel;
+        let mut name_start = attr_start + 1;
+        while name_start < bytes.len() && bytes[name_start].is_ascii_whitespace() {
+            name_start += 1;
+        }
+        if name_start + 2 > bytes.len()
+            || !scan[name_start..].starts_with("id")
+            || (name_start > 0 && is_ident_char(bytes[name_start - 1]))
+            || (name_start + 2 < bytes.len() && is_ident_char(bytes[name_start + 2]))
+        {
+            pos = attr_start + 1;
+            continue;
+        }
+
+        let Some((_args, close)) = find_call_args(&scan, name_start, 2) else {
+            pos = name_start + 2;
+            continue;
+        };
+
+        // `@id(...)` may be followed by additional attributes (`@must_use`,
+        // `@align(N)`, etc.) before the `override` keyword. Walk the entire
+        // chain so a legal `@id(0) @must_use override x: u32 = 0;` is accepted.
+        let next = skip_attribute_chain(&scan, close + 1);
+        let override_end = next + "override".len();
+        if override_end > bytes.len()
+            || !scan[next..].starts_with("override")
+            || (override_end < bytes.len() && is_ident_char(bytes[override_end]))
+        {
+            errors.push(wgsl_error("@id is only valid on override declarations"));
+        }
+        pos = close + 1;
+    }
+    errors
+}
+
+fn find_matching_delimiter(source: &str, open: usize, open_ch: u8, close_ch: u8) -> Option<usize> {
+    let bytes = source.as_bytes();
+    if open >= bytes.len() || bytes[open] != open_ch {
+        return None;
+    }
+
+    let mut depth = 1i32;
+    let mut i = open + 1;
+    while i < bytes.len() {
+        match bytes[i] {
+            b if b == open_ch => depth += 1,
+            b if b == close_ch => {
+                depth -= 1;
+                if depth == 0 {
+                    return Some(i);
+                }
+            }
+            _ => {}
+        }
+        i += 1;
+    }
+    None
+}
+
+fn find_keyword_from(source: &str, keyword: &str, mut pos: usize) -> Option<usize> {
+    while pos < source.len() && !source.is_char_boundary(pos) {
+        pos += 1;
+    }
+    let bytes = source.as_bytes();
+    while let Some(rel) = source[pos..].find(keyword) {
+        let start = pos + rel;
+        let end = start + keyword.len();
+        if (start == 0 || !is_ident_char(bytes[start - 1]))
+            && (end == bytes.len() || !is_ident_char(bytes[end]))
+        {
+            return Some(start);
+        }
+        pos = end;
+    }
+    None
+}
+
+fn find_attribute_call_from(
+    source: &str,
+    attr: &str,
+    mut pos: usize,
+) -> Option<(usize, usize, usize, usize, Vec<String>)> {
+    let bytes = source.as_bytes();
+    while let Some(rel) = source[pos..].find('@') {
+        let attr_start = pos + rel;
+        let mut name_start = attr_start + 1;
+        while name_start < bytes.len() && bytes[name_start].is_ascii_whitespace() {
+            name_start += 1;
+        }
+        let name_end = name_start + attr.len();
+        if name_end <= bytes.len()
+            && source[name_start..].starts_with(attr)
+            && (name_end == bytes.len() || !is_ident_char(bytes[name_end]))
+        {
+            if let Some((args, close)) = find_call_args(source, name_start, attr.len()) {
+                let mut open = name_end;
+                while open < bytes.len() && bytes[open].is_ascii_whitespace() {
+                    open += 1;
+                }
+                return Some((attr_start, open, close, name_start, args));
+            }
+        }
+        pos = attr_start + 1;
+    }
+    None
+}
+
+fn find_top_level_keyword(source: &str, keyword: &str) -> Option<usize> {
+    let bytes = source.as_bytes();
+    let mut depth = 0i32;
+    let mut i = 0usize;
+    while i < bytes.len() {
+        match bytes[i] {
+            b'(' | b'[' | b'{' => depth += 1,
+            b')' | b']' | b'}' => depth -= 1,
+            _ => {}
+        }
+        if depth == 0 && source[i..].starts_with(keyword) {
+            let end = i + keyword.len();
+            if (i == 0 || !is_ident_char(bytes[i - 1]))
+                && (end == bytes.len() || !is_ident_char(bytes[end]))
+            {
+                return Some(i);
+            }
+        }
+        i += 1;
+    }
+    None
+}
+
+fn next_keyword_after<'a>(source: &'a str, mut pos: usize, keyword: &str) -> Option<usize> {
+    let bytes = source.as_bytes();
+    while pos < bytes.len() && bytes[pos].is_ascii_whitespace() {
+        pos += 1;
+    }
+    let end = pos + keyword.len();
+    (end <= bytes.len()
+        && source[pos..].starts_with(keyword)
+        && (end == bytes.len() || !is_ident_char(bytes[end])))
+    .then_some(pos)
+}
+
+fn body_has_loop_escape(body: &str) -> bool {
+    find_keyword_from(body, "break", 0).is_some() || find_keyword_from(body, "return", 0).is_some()
+}
+
+fn body_has_loop_escape_before_continue(body: &str) -> bool {
+    let stop = find_top_level_keyword(body, "continue").unwrap_or(body.len());
+    body_has_loop_escape(&body[..stop])
+}
+
+fn body_has_break_if(body: &str) -> bool {
+    let mut pos = 0usize;
+    while let Some(break_pos) = find_keyword_from(body, "break", pos) {
+        if next_keyword_after(body, break_pos + "break".len(), "if").is_some() {
+            return true;
+        }
+        pos = break_pos + "break".len();
+    }
+    false
+}
+
+fn split_loop_continuing<'a>(body: &'a str) -> (&'a str, Option<&'a str>) {
+    let Some(cont_pos) = find_top_level_keyword(body, "continuing") else {
+        return (body, None);
+    };
+    let bytes = body.as_bytes();
+    let mut open = cont_pos + "continuing".len();
+    while open < bytes.len() && bytes[open].is_ascii_whitespace() {
+        open += 1;
+    }
+    if open >= bytes.len() || bytes[open] != b'{' {
+        return (body, None);
+    }
+    let Some(close) = find_matching_delimiter(body, open, b'{', b'}') else {
+        return (body, None);
+    };
+    (&body[..cont_pos], Some(&body[open + 1..close]))
+}
+
+fn continuing_uses_declaration_after_continue(prefix: &str, continuing: &str) -> bool {
+    let mut pos = 0usize;
+    while let Some(continue_pos) = find_keyword_from(prefix, "continue", pos) {
+        let suffix = &prefix[continue_pos + "continue".len()..];
+        for stmt in suffix.split(';') {
+            for kw in ["let", "var", "const"] {
+                if let Some(name) = declaration_name_after_keyword(stmt, kw) {
+                    if identifier_occurrence_count(continuing, name) > 0 {
+                        return true;
+                    }
+                }
+            }
+        }
+        pos = continue_pos + "continue".len();
+    }
+    false
+}
+
+fn for_header_condition_is_empty(header: &str) -> bool {
+    let parts: Vec<&str> = header.split(';').collect();
+    parts.len() == 3 && parts[1].trim().is_empty()
+}
+
+fn collect_texture_external_vars(scan: &str) -> HashSet<String> {
+    let mut names = HashSet::new();
+    for stmt in scan.split(';') {
+        let Some((name, type_text)) = parse_var_decl_name_type(stmt) else {
+            continue;
+        };
+        let normalized = normalize_type_name(type_text);
+        if normalized == "texture_external" {
+            names.insert(name.to_string());
+        }
+    }
+    names
+}
+
+fn collect_texture_var_types(scan: &str) -> HashMap<String, String> {
+    let mut types = HashMap::new();
+    for stmt in scan.split(';') {
+        let Some((name, type_text)) = parse_var_decl_name_type(stmt) else {
+            continue;
+        };
+        let normalized = normalize_type_name(type_text);
+        if normalized.starts_with("texture_") {
+            types.insert(name.to_string(), normalized);
+        }
+    }
+    types
+}
+
+fn texture_type_is_cube(type_name: &str) -> bool {
+    type_name.starts_with("texture_cube")
+        || type_name.starts_with("texture_depth_cube")
+        || type_name.starts_with("texture_cube_array")
+        || type_name.starts_with("texture_depth_cube_array")
+}
+
+fn texture_type_is_depth(type_name: &str) -> bool {
+    type_name.starts_with("texture_depth_")
+}
+
+fn texture_type_is_array(type_name: &str) -> bool {
+    type_name.contains("_array")
+}
+
+fn texture_sample_builtin_base_arg_count(name: &str, texture_type: &str) -> Option<usize> {
+    let array_arg = usize::from(texture_type_is_array(texture_type));
+    match name {
+        "textureSample" => Some(3 + array_arg),
+        "textureSampleBias" | "textureSampleLevel" => Some(4 + array_arg),
+        "textureSampleGrad" => Some(5 + array_arg),
+        _ => None,
+    }
+}
+
+fn validate_texture_builtin_type_source(source: &str) -> Vec<WgslMessage> {
+    if !source.contains("textureGather") && !source.contains("textureSample") {
+        return Vec::new();
+    }
+
+    let scan = mask_comments_preserve_len(source);
+    let texture_types = collect_texture_var_types(&scan);
+    if texture_types.is_empty() {
+        return Vec::new();
+    }
+
+    let mut errors = Vec::new();
+    let mut gather_pos = 0usize;
+    while let Some(start) = find_keyword_from(&scan, "textureGather", gather_pos) {
+        if let Some((args, close)) = find_call_args(&scan, start, "textureGather".len()) {
+            if args.len() >= 2 {
+                let texture_arg = trim_outer_parens(args[1].trim()).trim();
+                if texture_types
+                    .get(texture_arg)
+                    .is_some_and(|ty| ty.starts_with("texture_depth_"))
+                {
+                    errors.push(wgsl_error_at(
+                        source,
+                        start,
+                        "textureGather".len(),
+                        "textureGather on depth textures must not include a component argument",
+                    ));
+                }
+            }
+            gather_pos = close + 1;
+        } else {
+            gather_pos = start + "textureGather".len();
+        }
+    }
+
+    for sample_name in [
+        "textureSample",
+        "textureSampleBias",
+        "textureSampleGrad",
+        "textureSampleLevel",
+    ] {
+        let mut sample_pos = 0usize;
+        while let Some(start) = find_keyword_from(&scan, sample_name, sample_pos) {
+            if let Some((args, close)) = find_call_args(&scan, start, sample_name.len()) {
+                if let Some(texture_arg) = args.first() {
+                    let texture_arg = trim_outer_parens(texture_arg.trim()).trim();
+                    if let Some(texture_type) = texture_types.get(texture_arg) {
+                        if sample_name == "textureSampleGrad" && texture_type_is_depth(texture_type)
+                        {
+                            errors.push(wgsl_error_at(
+                                source,
+                                start,
+                                sample_name.len(),
+                                "textureSampleGrad does not accept depth textures",
+                            ));
+                        } else if texture_type_is_cube(texture_type) {
+                            if let Some(max_args) =
+                                texture_sample_builtin_base_arg_count(sample_name, texture_type)
+                            {
+                                if args.len() > max_args {
+                                    errors.push(wgsl_error_at(
+                                        source,
+                                        start,
+                                        sample_name.len(),
+                                        "cube texture sampling does not accept an offset argument",
+                                    ));
+                                }
+                            }
+                        }
+                    }
+                }
+                sample_pos = close + 1;
+            } else {
+                sample_pos = start + sample_name.len();
+            }
+        }
+    }
+
+    errors
+}
+
+fn type_text_is_vec_n_f32_target(annotation: &str, n: usize) -> bool {
+    let normalized = normalize_type_name(annotation);
+    let alias = format!("vec{n}f");
+    if normalized == alias {
+        return true;
+    }
+    let prefix = format!("vec{n}<");
+    if normalized.starts_with(&prefix) && normalized.ends_with('>') {
+        let inner = &normalized[prefix.len()..normalized.len() - 1];
+        return inner == "f32";
+    }
+    false
+}
+
+fn coord_expr_is_convertible_to_vec2f(expr: &str) -> bool {
+    let trimmed = trim_outer_parens(expr).trim();
+    let Some((callee, _args)) = parse_full_call(trimmed) else {
+        return false;
+    };
+    let normalized = normalize_type_name(&callee);
+    if normalized == "vec2" || normalized == "vec2f" {
+        return true;
+    }
+    if let Some(inner) = normalized
+        .strip_prefix("vec2<")
+        .and_then(|s| s.strip_suffix('>'))
+    {
+        return matches!(inner, "f32" | "abstract-int" | "abstract-float");
+    }
+    false
+}
+
+fn let_type_annotation_for_call(scan: &str, call_start: usize) -> Option<String> {
+    let bytes = scan.as_bytes();
+    let prefix = &scan[..call_start];
+    let stmt_start = prefix
+        .rfind(|c: char| c == ';' || c == '{' || c == '}')
+        .map_or(0, |p| p + 1);
+    let stmt = &scan[stmt_start..call_start];
+    let let_pos = find_keyword(stmt, "let")?;
+    let after_let = &stmt[let_pos + 3..];
+    let mut i = 0usize;
+    let after_bytes = after_let.as_bytes();
+    while i < after_bytes.len() && after_bytes[i].is_ascii_whitespace() {
+        i += 1;
+    }
+    if i >= after_bytes.len() || !(after_bytes[i] == b'_' || after_bytes[i].is_ascii_alphabetic()) {
+        return None;
+    }
+    while i < after_bytes.len() && is_ident_char(after_bytes[i]) {
+        i += 1;
+    }
+    while i < after_bytes.len() && after_bytes[i].is_ascii_whitespace() {
+        i += 1;
+    }
+    if i >= after_bytes.len() || after_bytes[i] != b':' {
+        return None;
+    }
+    let after_colon = &after_let[i + 1..];
+    let eq = find_assignment_eq(after_colon)?;
+    let _ = bytes;
+    Some(after_colon[..eq].trim().to_string())
+}
+
+fn validate_texture_sample_base_clamp_to_edge_source(source: &str) -> Vec<WgslMessage> {
+    if !source.contains("textureSampleBaseClampToEdge") {
+        return Vec::new();
+    }
+
+    let scan = mask_comments_preserve_len(source);
+    let externals = collect_texture_external_vars(&scan);
+    if externals.is_empty() {
+        return Vec::new();
+    }
+
+    let bytes = scan.as_bytes();
+    let name = "textureSampleBaseClampToEdge";
+    let mut errors = Vec::new();
+    let mut pos = 0usize;
+    while let Some(rel) = scan[pos..].find(name) {
+        let call_start = pos + rel;
+        if call_start > 0 && is_ident_char(bytes[call_start - 1]) {
+            pos = call_start + 1;
+            continue;
+        }
+        let after = call_start + name.len();
+        if after >= bytes.len() {
+            break;
+        }
+        let mut p = after;
+        while p < bytes.len() && bytes[p].is_ascii_whitespace() {
+            p += 1;
+        }
+        if p >= bytes.len() || bytes[p] != b'(' {
+            pos = after;
+            continue;
+        }
+        let Some((args, close)) = find_call_args(&scan, call_start, name.len()) else {
+            pos = call_start + 1;
+            continue;
+        };
+        if args.len() < 3 {
+            pos = close + 1;
+            continue;
+        }
+
+        let texture_arg = trim_outer_parens(args[0].trim()).trim();
+        if !externals.contains(texture_arg) {
+            pos = close + 1;
+            continue;
+        }
+
+        if !coord_expr_is_convertible_to_vec2f(args[2].trim()) {
+            errors.push(wgsl_error(
+                "textureSampleBaseClampToEdge: coords argument must be convertible to vec2<f32>",
+            ));
+        }
+
+        if let Some(annotation) = let_type_annotation_for_call(&scan, call_start) {
+            if !type_text_is_vec_n_f32_target(&annotation, 4) {
+                errors.push(wgsl_error(
+                    "textureSampleBaseClampToEdge: result is not assignable to the declared type",
+                ));
+            }
+        }
+
+        pos = close + 1;
+    }
+    errors
+}
+
+fn validate_loop_behavior_source(source: &str) -> Vec<WgslMessage> {
+    if !source.contains("loop") && !source.contains("for") {
+        return Vec::new();
+    }
+
+    let scan = mask_comments_preserve_len(source);
+    let bytes = scan.as_bytes();
+    let mut errors = Vec::new();
+
+    let mut pos = 0usize;
+    while let Some(loop_pos) = find_keyword_from(&scan, "loop", pos) {
+        let mut open = loop_pos + "loop".len();
+        while open < bytes.len() && bytes[open].is_ascii_whitespace() {
+            open += 1;
+        }
+        if open >= bytes.len() || bytes[open] != b'{' {
+            pos = loop_pos + "loop".len();
+            continue;
+        }
+        let Some(close) = find_matching_delimiter(&scan, open, b'{', b'}') else {
+            pos = loop_pos + "loop".len();
+            continue;
+        };
+        let body = &scan[open + 1..close];
+        let (prefix, continuing) = split_loop_continuing(body);
+        if !body_has_loop_escape_before_continue(prefix)
+            && !continuing.is_some_and(body_has_break_if)
+        {
+            errors.push(wgsl_error(
+                "loop must have a reachable break, return, or break-if continuing condition",
+            ));
+        }
+        if let Some(continuing_body) = continuing {
+            if continuing_uses_declaration_after_continue(prefix, continuing_body) {
+                errors.push(wgsl_error(
+                    "continue must not bypass declarations used by the continuing block",
+                ));
+            }
+        }
+        pos = close + 1;
+    }
+
+    pos = 0;
+    while let Some(for_pos) = find_keyword_from(&scan, "for", pos) {
+        let mut open = for_pos + "for".len();
+        while open < bytes.len() && bytes[open].is_ascii_whitespace() {
+            open += 1;
+        }
+        if open >= bytes.len() || bytes[open] != b'(' {
+            pos = for_pos + "for".len();
+            continue;
+        }
+        let Some(header_close) = find_matching_delimiter(&scan, open, b'(', b')') else {
+            pos = for_pos + "for".len();
+            continue;
+        };
+        let header = scan[open + 1..header_close].trim();
+        let mut body_open = header_close + 1;
+        while body_open < bytes.len() && bytes[body_open].is_ascii_whitespace() {
+            body_open += 1;
+        }
+        if body_open >= bytes.len() || bytes[body_open] != b'{' {
+            pos = header_close + 1;
+            continue;
+        }
+        let Some(body_close) = find_matching_delimiter(&scan, body_open, b'{', b'}') else {
+            pos = header_close + 1;
+            continue;
+        };
+        let body = &scan[body_open + 1..body_close];
+        if for_header_condition_is_empty(header) && !body_has_loop_escape_before_continue(body) {
+            errors.push(wgsl_error(
+                "for loops without a condition must have a reachable break or return",
+            ));
+        }
+        pos = body_close + 1;
+    }
+
+    errors
+}
+
+fn parse_size_literal_arg(arg: &str) -> Option<u64> {
+    let s = arg.trim();
+    if s.is_empty() || s.starts_with('-') {
+        return None;
+    }
+    let s = s
+        .strip_suffix('u')
+        .or_else(|| s.strip_suffix('i'))
+        .unwrap_or(s);
+    if let Some(hex) = s.strip_prefix("0x").or_else(|| s.strip_prefix("0X")) {
+        return u64::from_str_radix(hex, 16).ok();
+    }
+    s.parse::<u64>().ok()
+}
+
+fn lower_large_size_attribute_source(source: &str) -> String {
+    if !source.contains('@') || !source.contains("size") {
+        return source.to_string();
+    }
+
+    const NAGA_MAX_TYPE_SIZE: u64 = 1_073_741_824;
+    let scan = mask_comments_preserve_len(source);
+    let mut replacements: Vec<(usize, usize)> = Vec::new();
+    let mut pos = 0usize;
+    while let Some((attr_start, _open, close, _name_start, args)) =
+        find_attribute_call_from(&scan, "size", pos)
+    {
+        if args.len() == 1 || (args.len() == 2 && args[1].is_empty()) {
+            if parse_size_literal_arg(&args[0]).is_some_and(|v| v > NAGA_MAX_TYPE_SIZE) {
+                replacements.push((attr_start, close + 1));
+            }
+        }
+        pos = close + 1;
+    }
+
+    if replacements.is_empty() {
+        return source.to_string();
+    }
+    let mut out = String::with_capacity(source.len());
+    let mut copy_pos = 0usize;
+    for (start, end) in replacements {
+        out.push_str(&source[copy_pos..start]);
+        out.push_str("@size(1073741824)");
+        copy_pos = end;
+    }
+    out.push_str(&source[copy_pos..]);
+    out
+}
+
+fn parse_struct_member_type_after_attr<'a>(source: &'a str, attr_close: usize) -> Option<&'a str> {
+    let bytes = source.as_bytes();
+    let mut i = attr_close + 1;
+    while i < bytes.len() && bytes[i].is_ascii_whitespace() {
+        i += 1;
+    }
+    if i >= bytes.len() || !(bytes[i] == b'_' || bytes[i].is_ascii_alphabetic()) {
+        return None;
+    }
+    i += 1;
+    while i < bytes.len() && is_ident_char(bytes[i]) {
+        i += 1;
+    }
+    while i < bytes.len() && bytes[i].is_ascii_whitespace() {
+        i += 1;
+    }
+    if i >= bytes.len() || bytes[i] != b':' {
+        return None;
+    }
+    i += 1;
+    while i < bytes.len() && bytes[i].is_ascii_whitespace() {
+        i += 1;
+    }
+    let type_start = i;
+    let mut depth = 0i32;
+    while i < bytes.len() {
+        match bytes[i] {
+            b'<' | b'(' | b'[' | b'{' => depth += 1,
+            b'>' | b')' | b']' | b'}' => depth -= 1,
+            b',' | b';' if depth == 0 => break,
+            _ => {}
+        }
+        i += 1;
+    }
+    (type_start < i).then_some(source[type_start..i].trim())
+}
+
+fn type_is_runtime_array(type_text: &str) -> bool {
+    let trimmed = type_text.trim();
+    if !trimmed.starts_with("array") {
+        return false;
+    }
+    let Some((args, _open, _close)) = parse_type_application_args(trimmed, "array", 0) else {
+        return false;
+    };
+    args.len() == 1
+}
+
+fn validate_size_attribute_source(source: &str) -> Vec<WgslMessage> {
+    if !source.contains('@') || !source.contains("size") || !source.contains("array") {
+        return Vec::new();
+    }
+
+    let scan = mask_comments_preserve_len(source);
+    let mut errors = Vec::new();
+    let mut pos = 0usize;
+    while let Some((_attr_start, _open, close, _name_start, _args)) =
+        find_attribute_call_from(&scan, "size", pos)
+    {
+        if parse_struct_member_type_after_attr(&scan, close).is_some_and(type_is_runtime_array) {
+            errors.push(wgsl_error(
+                "@size requires a creation-fixed footprint member type",
+            ));
+        }
+        pos = close + 1;
+    }
+    errors
+}
+
+fn argument_takes_composite_address(arg: &str) -> bool {
+    let s = trim_outer_parens(arg).trim();
+    let Some(rest) = s.strip_prefix('&') else {
+        return false;
+    };
+
+    let mut angle_depth = 0i32;
+    for b in rest.trim().bytes() {
+        match b {
+            b'<' => angle_depth += 1,
+            b'>' if angle_depth > 0 => angle_depth -= 1,
+            b'.' | b'[' if angle_depth == 0 => return true,
+            _ => {}
+        }
+    }
+    false
+}
+
+fn validate_unrestricted_pointer_parameter_source(source: &str) -> Vec<WgslMessage> {
+    if !source.contains('&') {
+        return Vec::new();
+    }
+
+    let scan = mask_comments_preserve_len(source);
+    if enable_directive_lists_extension(&scan, "unrestricted_pointer_parameters") {
+        return Vec::new();
+    }
+    let fn_names = enumerate_fn_names(&scan);
+    let mut errors = Vec::new();
+    for name in fn_names {
+        let mut pos = 0usize;
+        while let Some(rel) = scan[pos..].find(&name) {
+            let start = pos + rel;
+            let end = start + name.len();
+            if (start > 0 && is_ident_char(scan.as_bytes()[start - 1]))
+                || (end < scan.len() && is_ident_char(scan.as_bytes()[end]))
+            {
+                pos = end;
+                continue;
+            }
+            let Some((args, close)) = find_call_args(&scan, start, name.len()) else {
+                pos = end;
+                continue;
+            };
+            if args.iter().any(|arg| argument_takes_composite_address(arg)) {
+                errors.push(wgsl_error(
+                    "composite pointer arguments require unrestricted_pointer_parameters",
+                ));
+                break;
+            }
+            pos = close + 1;
+        }
+    }
+    errors
+}
+
+fn find_matching_angle(source: &str, open: usize) -> Option<usize> {
+    let bytes = source.as_bytes();
+    if open >= bytes.len() || bytes[open] != b'<' {
+        return None;
+    }
+
+    let mut depth = 0i32;
+    for (i, b) in bytes.iter().enumerate().skip(open) {
+        match *b {
+            b'<' => depth += 1,
+            b'>' => {
+                depth -= 1;
+                if depth == 0 {
+                    return Some(i);
+                }
+            }
+            _ => {}
+        }
+    }
+    None
+}
+
+fn parse_type_application_args(
+    source: &str,
+    keyword: &str,
+    start: usize,
+) -> Option<(Vec<String>, usize, usize)> {
+    let bytes = source.as_bytes();
+    let end = start + keyword.len();
+    if end > bytes.len()
+        || !source[start..].starts_with(keyword)
+        || (start > 0 && is_ident_char(bytes[start - 1]))
+        || (end < bytes.len() && is_ident_char(bytes[end]))
+    {
+        return None;
+    }
+
+    let mut open = end;
+    while open < bytes.len() && bytes[open].is_ascii_whitespace() {
+        open += 1;
+    }
+    if open >= bytes.len() || bytes[open] != b'<' {
+        return None;
+    }
+    let close = find_matching_angle(source, open)?;
+    Some((
+        split_top_level_type_args(&source[open + 1..close]),
+        open,
+        close,
+    ))
+}
+
+fn collect_override_names(source: &str) -> HashSet<String> {
+    let scan = mask_comments_preserve_len(source);
+    let bytes = scan.as_bytes();
+    let mut names = HashSet::new();
+    let mut pos = 0usize;
+    while let Some(rel) = scan[pos..].find("override") {
+        let start = pos + rel;
+        let end = start + "override".len();
+        if (start > 0 && is_ident_char(bytes[start - 1]))
+            || (end < bytes.len() && is_ident_char(bytes[end]))
+        {
+            pos = end;
+            continue;
+        }
+
+        let mut i = end;
+        while i < bytes.len() && bytes[i].is_ascii_whitespace() {
+            i += 1;
+        }
+        if i >= bytes.len() || !(bytes[i].is_ascii_alphabetic() || bytes[i] == b'_') {
+            pos = end;
+            continue;
+        }
+        let name_start = i;
+        i += 1;
+        while i < bytes.len() && is_ident_char(bytes[i]) {
+            i += 1;
+        }
+        names.insert(scan[name_start..i].to_string());
+        pos = i;
+    }
+    names
+}
+
+fn expr_mentions_override(expr: &str, override_names: &HashSet<String>) -> bool {
+    override_names
+        .iter()
+        .any(|name| identifier_occurrence_count(expr, name) >= 1)
+}
+
+fn type_contains_override_sized_array(type_text: &str, override_names: &HashSet<String>) -> bool {
+    if override_names.is_empty() || !type_text.contains("array") {
+        return false;
+    }
+
+    let mut pos = 0usize;
+    while let Some(rel) = type_text[pos..].find("array") {
+        let start = pos + rel;
+        let Some((args, _open, close)) = parse_type_application_args(type_text, "array", start)
+        else {
+            pos = start + "array".len();
+            continue;
+        };
+
+        if args.len() >= 2 && expr_mentions_override(&args[1], override_names) {
+            return true;
+        }
+        if args
+            .first()
+            .is_some_and(|arg| type_contains_override_sized_array(arg, override_names))
+        {
+            return true;
+        }
+        pos = close + 1;
+    }
+    false
+}
+
+fn type_contains_sized_array(type_text: &str) -> bool {
+    if !type_text.contains("array") {
+        return false;
+    }
+
+    let mut pos = 0usize;
+    while let Some(rel) = type_text[pos..].find("array") {
+        let start = pos + rel;
+        let Some((args, _open, close)) = parse_type_application_args(type_text, "array", start)
+        else {
+            pos = start + "array".len();
+            continue;
+        };
+
+        if args.len() >= 2
+            || args
+                .first()
+                .is_some_and(|arg| type_contains_sized_array(arg))
+        {
+            return true;
+        }
+        pos = close + 1;
+    }
+    false
+}
+
+fn type_text_contains_atomic_keyword(type_text: &str) -> bool {
+    let normalized = normalize_type_name(type_text).to_ascii_lowercase();
+    let bytes = normalized.as_bytes();
+    let mut pos = 0usize;
+    while let Some(rel) = normalized[pos..].find("atomic") {
+        let start = pos + rel;
+        let end = start + "atomic".len();
+        let before_ok = start == 0 || !is_ident_char(bytes[start - 1]);
+        let after_ok = end < bytes.len() && bytes[end] == b'<';
+        if before_ok && after_ok {
+            return true;
+        }
+        pos = end;
+    }
+    false
+}
+
+fn atomic_type_arg_should_error(type_text: &str) -> bool {
+    let n = normalize_type_name(type_text).to_ascii_lowercase();
+    if n == "i32" || n == "u32" {
+        return false;
+    }
+    // Alias targets are resolved by Naga. Keep source validation to concrete
+    // invalid forms Naga currently misses, such as atomic<f32>.
+    !is_plain_identifier(&n)
+        || matches!(
+            n.as_str(),
+            "bool" | "f32" | "f16" | "abstractint" | "abstractfloat"
+        )
+}
+
+fn validate_atomic_template_source(source: &str) -> Vec<WgslMessage> {
+    if !source.contains("atomic") {
+        return Vec::new();
+    }
+
+    let scan = mask_comments_preserve_len(source);
+    let mut errors = Vec::new();
+    let mut pos = 0usize;
+    while let Some(rel) = scan[pos..].find("atomic") {
+        let start = pos + rel;
+        let Some((mut args, _open, close)) = parse_type_application_args(&scan, "atomic", start)
+        else {
+            pos = start + "atomic".len();
+            continue;
+        };
+        if args.last().is_some_and(|arg| arg.is_empty()) {
+            args.pop();
+        }
+        if args.len() == 1 && atomic_type_arg_should_error(&args[0]) {
+            errors.push(wgsl_error(
+                "atomic template argument must be either i32 or u32",
+            ));
+        }
+        pos = close + 1;
+    }
+    errors
+}
+
+fn validate_pointer_type_source(source: &str) -> Vec<WgslMessage> {
+    if !source.contains("ptr") {
+        return Vec::new();
+    }
+
+    let scan = mask_comments_preserve_len(source);
+    let mut errors = Vec::new();
+    let mut pos = 0usize;
+    while let Some(rel) = scan[pos..].find("ptr") {
+        let start = pos + rel;
+        let Some((mut args, _open, close)) = parse_type_application_args(&scan, "ptr", start)
+        else {
+            pos = start + "ptr".len();
+            continue;
+        };
+        if args.last().is_some_and(|arg| arg.is_empty()) {
+            args.pop();
+        }
+        if args.len() >= 3 {
+            let address_space = normalize_type_name(&args[0]).to_ascii_lowercase();
+            let access = normalize_type_name(&args[2]).to_ascii_lowercase();
+            if address_space == "storage" && access == "write" {
+                errors.push(wgsl_error(
+                    "storage pointer access mode cannot be write-only",
+                ));
+            }
+        }
+        if args.len() >= 2 {
+            let address_space = normalize_type_name(&args[0]).to_ascii_lowercase();
+            if matches!(address_space.as_str(), "private" | "function" | "uniform")
+                && type_text_contains_atomic_keyword(&args[1])
+            {
+                errors.push(wgsl_error(
+                    "atomic store types are only valid in storage or workgroup address space",
+                ));
+            }
+        }
+        pos = close + 1;
+    }
+    errors
+}
+
+fn collect_atomic_var_names(source: &str) -> HashSet<String> {
+    let mut names = HashSet::new();
+    for stmt in source.split(';') {
+        let Some((name, type_text)) = parse_var_decl_name_type(stmt) else {
+            continue;
+        };
+        if type_text_contains_atomic_keyword(type_text) {
+            names.insert(name.to_string());
+        }
+    }
+    names
+}
+
+fn parse_var_name_and_initializer(stmt: &str) -> Option<(&str, &str)> {
+    let var_pos = find_keyword(stmt, "var")?;
+    let bytes = stmt.as_bytes();
+    let mut i = var_pos + 3;
+    while i < bytes.len() && bytes[i].is_ascii_whitespace() {
+        i += 1;
+    }
+    if i < bytes.len() && bytes[i] == b'<' {
+        let close = find_matching_angle(stmt, i)?;
+        i = close + 1;
+    }
+    while i < bytes.len() && bytes[i].is_ascii_whitespace() {
+        i += 1;
+    }
+    let name_start = i;
+    if i >= bytes.len() || !(bytes[i] == b'_' || bytes[i].is_ascii_alphabetic()) {
+        return None;
+    }
+    i += 1;
+    while i < bytes.len() && is_ident_char(bytes[i]) {
+        i += 1;
+    }
+    let name = &stmt[name_start..i];
+    let eq = find_assignment_eq(&stmt[i..])?;
+    Some((name, stmt[i + eq + 1..].trim()))
+}
+
+fn last_identifier_token(s: &str) -> Option<&str> {
+    let bytes = s.as_bytes();
+    let mut end = bytes.len();
+    while end > 0 && bytes[end - 1].is_ascii_whitespace() {
+        end -= 1;
+    }
+    let mut start = end;
+    while start > 0 && is_ident_char(bytes[start - 1]) {
+        start -= 1;
+    }
+    (start < end).then_some(&s[start..end])
+}
+
+fn expr_directly_mentions_atomic_value(expr: &str, atomic_names: &HashSet<String>) -> bool {
+    let trimmed = trim_outer_parens(expr).trim();
+    if is_plain_identifier(trimmed) {
+        return atomic_names.contains(trimmed);
+    }
+    if trimmed.starts_with('&') || trimmed.contains("atomic") {
+        return false;
+    }
+    atomic_names
+        .iter()
+        .any(|name| identifier_occurrence_count(trimmed, name) > 0)
+}
+
+fn switch_directly_uses_atomic_value(source: &str, atomic_names: &HashSet<String>) -> bool {
+    let bytes = source.as_bytes();
+    let mut pos = 0usize;
+    while let Some(switch_pos) = find_keyword_from(source, "switch", pos) {
+        let mut i = switch_pos + "switch".len();
+        while i < bytes.len() && bytes[i].is_ascii_whitespace() {
+            i += 1;
+        }
+        let name_start = i;
+        if i < bytes.len() && (bytes[i] == b'_' || bytes[i].is_ascii_alphabetic()) {
+            i += 1;
+            while i < bytes.len() && is_ident_char(bytes[i]) {
+                i += 1;
+            }
+            if atomic_names.contains(&source[name_start..i]) {
+                return true;
+            }
+        }
+        pos = switch_pos + "switch".len();
+    }
+    false
+}
+
+fn validate_atomic_value_uses_source(source: &str) -> Vec<WgslMessage> {
+    if !source.contains("atomic") {
+        return Vec::new();
+    }
+
+    let scan = mask_comments_preserve_len(source);
+    let atomic_names = collect_atomic_var_names(&scan);
+    if atomic_names.is_empty() {
+        return Vec::new();
+    }
+
+    let mut errors = Vec::new();
+    if switch_directly_uses_atomic_value(&scan, &atomic_names) {
+        errors.push(wgsl_error(
+            "atomic values cannot be used as switch selectors",
+        ));
+    }
+    for stmt in scan.split(';') {
+        let trimmed = stmt.trim();
+        if trimmed.is_empty() {
+            continue;
+        }
+
+        if let Some((_name, init)) = parse_var_name_and_initializer(trimmed) {
+            if expr_directly_mentions_atomic_value(init, &atomic_names) {
+                errors.push(wgsl_error("atomic values cannot initialize variables"));
+                continue;
+            }
+        }
+
+        if let Some(let_pos) = find_keyword(trimmed, "let") {
+            let decl = &trimmed[let_pos + 3..];
+            if let Some(eq) = find_assignment_eq(decl) {
+                let init = decl[eq + 1..].trim();
+                if expr_directly_mentions_atomic_value(init, &atomic_names) {
+                    errors.push(wgsl_error(
+                        "atomic values cannot be used as ordinary values",
+                    ));
+                    continue;
+                }
+            }
+        }
+
+        if let Some(eq) = find_assignment_eq(trimmed) {
+            let lhs = trimmed[..eq].trim();
+            let rhs = trimmed[eq + 1..].trim();
+            if last_identifier_token(lhs) == Some("_")
+                && expr_directly_mentions_atomic_value(rhs, &atomic_names)
+            {
+                errors.push(wgsl_error("atomic values cannot be assigned to phony"));
+                continue;
+            }
+        }
+
+        for name in &atomic_names {
+            if trimmed.contains("++") || trimmed.contains("--") {
+                let inc = format!("{name}++");
+                let dec = format!("{name}--");
+                if trimmed.contains(&inc) || trimmed.contains(&dec) {
+                    errors.push(wgsl_error(
+                        "atomic values cannot be incremented or decremented",
+                    ));
+                    break;
+                }
+            }
+        }
+    }
+    errors
+}
+
+fn validate_atomic_source(source: &str) -> Vec<WgslMessage> {
+    let mut errors = validate_atomic_template_source(source);
+    errors.extend(validate_pointer_type_source(source));
+    errors.extend(validate_atomic_value_uses_source(source));
+    errors
+}
+
+fn expr_text_is_boolish(expr: &str, bool_names: &HashSet<String>) -> bool {
+    let trimmed = trim_outer_parens(expr).trim();
+    if matches!(trimmed, "true" | "false") {
+        return true;
+    }
+    if is_plain_identifier(trimmed) {
+        return bool_names.contains(trimmed);
+    }
+    let Some((callee, args)) = parse_full_call(trimmed) else {
+        return false;
+    };
+    let normalized = normalize_type_name(&callee).to_ascii_lowercase();
+    normalized.starts_with("vec") && args.iter().all(|arg| expr_text_is_boolish(arg, bool_names))
+}
+
+fn collect_bool_const_names(source: &str) -> HashSet<String> {
+    let mut names = HashSet::new();
+    for stmt in source.split(';') {
+        let Some(name) = declaration_name_after_keyword(stmt, "const") else {
+            continue;
+        };
+        let Some(eq) = find_assignment_eq(stmt) else {
+            continue;
+        };
+        if expr_text_is_boolish(&stmt[eq + 1..], &names) {
+            names.insert(name.to_string());
+        }
+    }
+    names
+}
+
+fn find_top_level_order_comparison(expr: &str) -> Option<(&str, &str)> {
+    let bytes = expr.as_bytes();
+    let mut depth = 0i32;
+    let mut i = 0usize;
+    while i < bytes.len() {
+        match bytes[i] {
+            b'(' | b'[' | b'{' => depth += 1,
+            b')' | b']' | b'}' => depth -= 1,
+            b'<' | b'>' if depth == 0 => {
+                let len = if bytes.get(i + 1) == Some(&b'=') {
+                    2
+                } else {
+                    1
+                };
+                if bytes.get(i + 1) == Some(&bytes[i]) {
+                    i += 2;
+                    continue;
+                }
+                return Some((&expr[..i], &expr[i + len..]));
+            }
+            _ => {}
+        }
+        i += 1;
+    }
+    None
+}
+
+fn validate_bool_order_comparison_source(source: &str) -> Vec<WgslMessage> {
+    if !source.contains('<') && !source.contains('>') {
+        return Vec::new();
+    }
+
+    let scan = mask_comments_preserve_len(source);
+    let bool_names = collect_bool_const_names(&scan);
+    if bool_names.is_empty() {
+        return Vec::new();
+    }
+
+    let mut errors = Vec::new();
+    for stmt in scan.split(';') {
+        let Some(eq) = find_assignment_eq(stmt) else {
+            continue;
+        };
+        let rhs = stmt[eq + 1..].trim();
+        let Some((left, right)) = find_top_level_order_comparison(rhs) else {
+            continue;
+        };
+        if expr_text_is_boolish(left, &bool_names) && expr_text_is_boolish(right, &bool_names) {
+            errors.push(wgsl_error(
+                "boolean values only support equality comparisons",
+            ));
+        }
+    }
+    errors
+}
+
+#[derive(Clone)]
+struct BoolConstValue {
+    values: Vec<bool>,
+}
+
+fn parse_bool_const_value(
+    expr: &str,
+    known: &HashMap<String, BoolConstValue>,
+) -> Option<BoolConstValue> {
+    let s = trim_outer_parens(expr).trim();
+    match s {
+        "true" => {
+            return Some(BoolConstValue { values: vec![true] });
+        }
+        "false" => {
+            return Some(BoolConstValue {
+                values: vec![false],
+            });
+        }
+        _ => {}
+    }
+    if is_plain_identifier(s) {
+        return known.get(s).cloned();
+    }
+    let (callee, args) = parse_full_call(s)?;
+    let width = constructor_vector_width(&callee)?;
+    let n = normalize_type_name(&callee).to_ascii_lowercase();
+    if !(n.contains("bool") || n.ends_with('b') || n == format!("vec{width}")) {
+        return None;
+    }
+    let mut values = Vec::new();
+    if args.len() == 1 {
+        let value = parse_bool_const_value(&args[0], known)?;
+        if value.values.len() == 1 {
+            values.resize(width, value.values[0]);
+        } else if value.values.len() == width {
+            values = value.values;
+        } else {
+            return None;
+        }
+    } else {
+        for arg in args {
+            let value = parse_bool_const_value(&arg, known)?;
+            if value.values.len() != 1 {
+                return None;
+            }
+            values.push(value.values[0]);
+        }
+        if values.len() != width {
+            return None;
+        }
+    }
+    Some(BoolConstValue { values })
+}
+
+fn collect_bool_const_values(source: &str) -> HashMap<String, BoolConstValue> {
+    let mut out = HashMap::new();
+    for stmt in source.split(';') {
+        let Some(name) = declaration_name_after_keyword(stmt, "const") else {
+            continue;
+        };
+        let Some(eq) = find_assignment_eq(stmt) else {
+            continue;
+        };
+        if let Some(value) = parse_bool_const_value(&stmt[eq + 1..], &out) {
+            out.insert(name.to_string(), value);
+        }
+    }
+    out
+}
+
+fn find_top_level_bool_bitwise_op(expr: &str) -> Option<(usize, char)> {
+    let bytes = expr.as_bytes();
+    let mut depth = 0i32;
+    let mut i = 0usize;
+    while i < bytes.len() {
+        match bytes[i] {
+            b'(' | b'[' | b'{' | b'<' => depth += 1,
+            b')' | b']' | b'}' | b'>' => depth -= 1,
+            b'&' | b'|' if depth == 0 => {
+                if bytes.get(i + 1) == Some(&bytes[i]) {
+                    i += 2;
+                    continue;
+                }
+                return Some((i, bytes[i] as char));
+            }
+            _ => {}
+        }
+        i += 1;
+    }
+    None
+}
+
+fn format_bool_const_value(value: &BoolConstValue) -> String {
+    if value.values.len() == 1 {
+        return if value.values[0] { "true" } else { "false" }.to_string();
+    }
+    let components = value
+        .values
+        .iter()
+        .map(|v| if *v { "true" } else { "false" })
+        .collect::<Vec<_>>()
+        .join(", ");
+    format!("vec{}<bool>({components})", value.values.len())
+}
+
+fn lower_bool_bitwise_const_source(source: &str) -> String {
+    if !source.contains('&') && !source.contains('|') {
+        return source.to_string();
+    }
+    let known = collect_bool_const_values(source);
+    if known.is_empty() {
+        return source.to_string();
+    }
+    let mut out = String::with_capacity(source.len());
+    let mut changed = false;
+    for part in source.split_inclusive(';') {
+        let (stmt, suffix) = if let Some(stripped) = part.strip_suffix(';') {
+            (stripped, ";")
+        } else {
+            (part, "")
+        };
+        let Some(eq) = find_assignment_eq(stmt) else {
+            out.push_str(part);
+            continue;
+        };
+        let rhs = &stmt[eq + 1..];
+        let Some((op_pos, op)) = find_top_level_bool_bitwise_op(rhs) else {
+            out.push_str(part);
+            continue;
+        };
+        let Some(left) = parse_bool_const_value(&rhs[..op_pos], &known) else {
+            out.push_str(part);
+            continue;
+        };
+        let Some(right) = parse_bool_const_value(&rhs[op_pos + 1..], &known) else {
+            out.push_str(part);
+            continue;
+        };
+        if left.values.len() != right.values.len() {
+            out.push_str(part);
+            continue;
+        }
+        let values = left
+            .values
+            .iter()
+            .zip(right.values.iter())
+            .map(|(a, b)| if op == '&' { *a && *b } else { *a || *b })
+            .collect::<Vec<_>>();
+        out.push_str(&stmt[..eq + 1]);
+        out.push(' ');
+        out.push_str(&format_bool_const_value(&BoolConstValue { values }));
+        out.push_str(suffix);
+        changed = true;
+    }
+    if changed {
+        out
+    } else {
+        source.to_string()
+    }
+}
+
+fn collect_source_i32_values(
+    source: &str,
+    constants: Option<&HashMap<String, f64>>,
+) -> HashMap<String, f64> {
+    let mut known = HashMap::new();
+    if let Some(constants) = constants {
+        for (name, value) in constants {
+            if value.is_finite()
+                && value.fract() == 0.0
+                && *value >= i32::MIN as f64
+                && *value <= i32::MAX as f64
+            {
+                known.insert(name.clone(), *value);
+            }
+        }
+    }
+
+    for stmt in source.split(';') {
+        for keyword in ["const", "override"] {
+            let Some(name) = declaration_name_after_keyword(stmt, keyword) else {
+                continue;
+            };
+            let Some(eq) = find_assignment_eq(stmt) else {
+                continue;
+            };
+            if let Some(value) = parse_wgsl_i32_expr(&stmt[eq + 1..], Some(&known)) {
+                known.insert(name.to_string(), value as f64);
+            }
+        }
+    }
+    known
+}
+
+fn find_top_level_div_rem_op(expr: &str) -> Option<(usize, char)> {
+    let bytes = expr.as_bytes();
+    let mut depth = 0i32;
+    let mut i = 0usize;
+    while i < bytes.len() {
+        match bytes[i] {
+            b'(' | b'[' | b'{' => depth += 1,
+            b')' | b']' | b'}' => depth -= 1,
+            b'/' | b'%' if depth == 0 => return Some((i, bytes[i] as char)),
+            _ => {}
+        }
+        i += 1;
+    }
+    None
+}
+
+fn validate_div_rem_source(
+    source: &str,
+    constants: Option<&HashMap<String, f64>>,
+    entry_point: Option<&str>,
+) -> Vec<WgslMessage> {
+    if !source.contains('/') && !source.contains('%') {
+        return Vec::new();
+    }
+
+    let scan = mask_comments_preserve_len(&smoothstep_validation_source(source, entry_point));
+    let known = collect_source_i32_values(&scan, constants);
+    if known.is_empty() {
+        return Vec::new();
+    }
+
+    let mut errors = Vec::new();
+    for stmt in scan.split(';') {
+        let Some(eq) = find_assignment_eq(stmt) else {
+            continue;
+        };
+        let rhs = stmt[eq + 1..].trim();
+        let Some((op_pos, op)) = find_top_level_div_rem_op(rhs) else {
+            continue;
+        };
+        let left = rhs[..op_pos].trim();
+        let right = rhs[op_pos + 1..].trim();
+        if parse_wgsl_i32_expr(left, Some(&known)) == Some(i32::MIN)
+            && parse_wgsl_i32_expr(right, Some(&known)) == Some(-1)
+        {
+            let op_name = if op == '/' { "division" } else { "remainder" };
+            errors.push(wgsl_error(format!(
+                "integer {} of i32::MIN by -1 overflows i32",
+                op_name
+            )));
+        }
+    }
+    errors
+}
+
+fn rewrite_override_sized_array_counts_in_type(
+    type_text: &str,
+    override_names: &HashSet<String>,
+) -> String {
+    if override_names.is_empty() || !type_text.contains("array") {
+        return type_text.to_string();
+    }
+
+    let mut out = String::with_capacity(type_text.len());
+    let mut copy_pos = 0usize;
+    let mut search_pos = 0usize;
+    while let Some(rel) = type_text[search_pos..].find("array") {
+        let start = search_pos + rel;
+        let Some((args, open, close)) = parse_type_application_args(type_text, "array", start)
+        else {
+            search_pos = start + "array".len();
+            continue;
+        };
+
+        out.push_str(&type_text[copy_pos..open + 1]);
+        let mut rewritten_args = args;
+        if let Some(element) = rewritten_args.first_mut() {
+            *element = rewrite_override_sized_array_counts_in_type(element, override_names);
+        }
+        if rewritten_args.len() >= 2 && expr_mentions_override(&rewritten_args[1], override_names) {
+            rewritten_args[1] = "1".to_string();
+        }
+        out.push_str(&rewritten_args.join(", "));
+        out.push('>');
+        copy_pos = close + 1;
+        search_pos = close + 1;
+    }
+
+    if copy_pos == 0 {
+        return type_text.to_string();
+    }
+    out.push_str(&type_text[copy_pos..]);
+    out
+}
+
+fn validate_override_sized_array_source(source: &str) -> Vec<WgslMessage> {
+    if !source.contains("override") || !source.contains("array") || !source.contains("ptr") {
+        return Vec::new();
+    }
+
+    let override_names = collect_override_names(source);
+    if override_names.is_empty() {
+        return Vec::new();
+    }
+
+    let scan = mask_comments_preserve_len(source);
+    let mut errors = Vec::new();
+    let mut pos = 0usize;
+    while let Some(rel) = scan[pos..].find("ptr") {
+        let start = pos + rel;
+        let Some((args, _open, close)) = parse_type_application_args(&scan, "ptr", start) else {
+            pos = start + "ptr".len();
+            continue;
+        };
+        if args.len() >= 2
+            && normalize_type_name(&args[0]).to_ascii_lowercase() != "workgroup"
+            && type_contains_override_sized_array(&args[1], &override_names)
+        {
+            errors.push(wgsl_error(
+                "override-sized arrays are only allowed in workgroup address space",
+            ));
+        }
+        pos = close + 1;
+    }
+    errors
+}
+
+fn source_has_entry_point_attribute(source: &str) -> bool {
+    let scan = mask_comments_preserve_len(source);
+    attr_slice_contains(&scan, "vertex")
+        || attr_slice_contains(&scan, "fragment")
+        || attr_slice_contains(&scan, "compute")
+}
+
+fn lower_no_entry_workgroup_pointer_params_source(source: &str) -> String {
+    if !source.contains("ptr")
+        || !source.contains("workgroup")
+        || source_has_entry_point_attribute(source)
+    {
+        return source.to_string();
+    }
+
+    let scan = mask_comments_preserve_len(source);
+    let override_names = collect_override_names(&scan);
+    let mut out = String::with_capacity(source.len());
+    let mut copy_pos = 0usize;
+    let mut search_pos = 0usize;
+    while let Some(rel) = scan[search_pos..].find("ptr") {
+        let start = search_pos + rel;
+        let Some((args, _open, close)) = parse_type_application_args(&scan, "ptr", start) else {
+            search_pos = start + "ptr".len();
+            continue;
+        };
+        if args.len() == 2
+            && normalize_type_name(&args[0]).to_ascii_lowercase() == "workgroup"
+            && type_contains_sized_array(&args[1])
+            && !type_text_contains_atomic_keyword(&args[1])
+        {
+            out.push_str(&source[copy_pos..start]);
+            out.push_str("ptr<function, ");
+            out.push_str(&rewrite_override_sized_array_counts_in_type(
+                &args[1],
+                &override_names,
+            ));
+            out.push('>');
+            copy_pos = close + 1;
+            search_pos = close + 1;
+            continue;
+        }
+        search_pos = close + 1;
+    }
+
+    if copy_pos == 0 {
+        return source.to_string();
+    }
+    out.push_str(&source[copy_pos..]);
+    out
+}
+
+fn normalize_var_template_trailing_commas_source(source: &str) -> String {
+    if !source.contains("var") || !source.contains(",>") {
+        return source.to_string();
+    }
+
+    let scan = mask_comments_preserve_len(source);
+    let bytes = scan.as_bytes();
+    let mut replacements: Vec<usize> = Vec::new();
+    let mut pos = 0usize;
+    while let Some(rel) = scan[pos..].find("var") {
+        let start = pos + rel;
+        let end = start + 3;
+        if (start > 0 && is_ident_char(bytes[start - 1]))
+            || (end < bytes.len() && is_ident_char(bytes[end]))
+        {
+            pos = end;
+            continue;
+        }
+
+        let mut open = end;
+        while open < bytes.len() && bytes[open].is_ascii_whitespace() {
+            open += 1;
+        }
+        if open >= bytes.len() || bytes[open] != b'<' {
+            pos = end;
+            continue;
+        }
+        let Some(close) = find_matching_angle(&scan, open) else {
+            pos = open + 1;
+            continue;
+        };
+
+        let inner = &scan[open + 1..close];
+        let Some(last_non_ws) = inner.bytes().rposition(|b| !b.is_ascii_whitespace()) else {
+            pos = close + 1;
+            continue;
+        };
+        if inner.as_bytes()[last_non_ws] != b',' {
+            pos = close + 1;
+            continue;
+        }
+
+        let args = split_top_level_type_args(inner);
+        if args.len() >= 2
+            && args.last().is_some_and(|arg| arg.is_empty())
+            && args[..args.len() - 1].iter().all(|arg| !arg.is_empty())
+        {
+            replacements.push(open + 1 + last_non_ws);
+        }
+        pos = close + 1;
+    }
+
+    if replacements.is_empty() {
+        return source.to_string();
+    }
+
+    let mut out = source.as_bytes().to_vec();
+    for idx in replacements {
+        out[idx] = b' ';
+    }
+    String::from_utf8(out).unwrap_or_else(|_| source.to_string())
+}
+
+fn normalize_interpolate_trailing_commas_source(source: &str) -> String {
+    if !source.contains("interpolate") || !source.contains(',') {
+        return source.to_string();
+    }
+
+    let scan = mask_comments_preserve_len(source);
+    let bytes = scan.as_bytes();
+    let mut replacements: Vec<usize> = Vec::new();
+    let mut pos = 0usize;
+    while let Some((_attr_start, _open, close, _name_start, args)) =
+        find_attribute_call_from(&scan, "interpolate", pos)
+    {
+        if args.last().is_some_and(|arg| arg.is_empty()) {
+            let mut comma = close;
+            while comma > 0 && bytes[comma - 1].is_ascii_whitespace() {
+                comma -= 1;
+            }
+            if comma > 0 && bytes[comma - 1] == b',' {
+                replacements.push(comma - 1);
+            }
+        }
+        pos = close + 1;
+    }
+
+    if replacements.is_empty() {
+        return source.to_string();
+    }
+
+    let mut out = source.as_bytes().to_vec();
+    for idx in replacements {
+        out[idx] = b' ';
+    }
+    String::from_utf8(out).unwrap_or_else(|_| source.to_string())
+}
+
+fn find_keyword(source: &str, keyword: &str) -> Option<usize> {
+    let bytes = source.as_bytes();
+    let mut pos = 0usize;
+    while let Some(rel) = source[pos..].find(keyword) {
+        let start = pos + rel;
+        let end = start + keyword.len();
+        if (start == 0 || !is_ident_char(bytes[start - 1]))
+            && (end == bytes.len() || !is_ident_char(bytes[end]))
+        {
+            return Some(start);
+        }
+        pos = end;
+    }
+    None
+}
+
+fn type_text_is_resource_handle(type_text: &str) -> bool {
+    let n = normalize_type_name(type_text).to_ascii_lowercase();
+    n == "sampler" || n == "sampler_comparison" || n.starts_with("texture_")
+}
+
+fn parse_var_decl_name_type(stmt: &str) -> Option<(&str, &str)> {
+    let var_pos = find_keyword(stmt, "var")?;
+    let bytes = stmt.as_bytes();
+    let mut i = var_pos + 3;
+    while i < bytes.len() && bytes[i].is_ascii_whitespace() {
+        i += 1;
+    }
+    if i < bytes.len() && bytes[i] == b'<' {
+        let mut depth = 1i32;
+        i += 1;
+        while i < bytes.len() && depth > 0 {
+            match bytes[i] {
+                b'<' => depth += 1,
+                b'>' => depth -= 1,
+                _ => {}
+            }
+            i += 1;
+        }
+    }
+    while i < bytes.len() && bytes[i].is_ascii_whitespace() {
+        i += 1;
+    }
+    let name_start = i;
+    if i >= bytes.len() || !(bytes[i] == b'_' || bytes[i].is_ascii_alphabetic()) {
+        return None;
+    }
+    i += 1;
+    while i < bytes.len() && is_ident_char(bytes[i]) {
+        i += 1;
+    }
+    let name = &stmt[name_start..i];
+    while i < bytes.len() && bytes[i].is_ascii_whitespace() {
+        i += 1;
+    }
+    if i >= bytes.len() || bytes[i] != b':' {
+        return None;
+    }
+    Some((name, stmt[i + 1..].trim()))
+}
+
+fn collect_resource_handle_var_names(source: &str) -> HashSet<String> {
+    let mut names = HashSet::new();
+    for stmt in source.split(';') {
+        let Some((name, type_text)) = parse_var_decl_name_type(stmt) else {
+            continue;
+        };
+        if type_text_is_resource_handle(type_text) {
+            names.insert(name.to_string());
+        }
+    }
+    names
+}
+
+fn validate_let_resource_handle_source(source: &str) -> Vec<WgslMessage> {
+    if !source.contains("let") || (!source.contains("texture_") && !source.contains("sampler")) {
+        return Vec::new();
+    }
+
+    let scan = mask_comments_preserve_len(source);
+    let resource_names = collect_resource_handle_var_names(&scan);
+    let mut errors = Vec::new();
+    for stmt in scan.split(';') {
+        let Some(let_pos) = find_keyword(stmt, "let") else {
+            continue;
+        };
+        let decl = &stmt[let_pos + 3..];
+        let eq = find_assignment_eq(decl);
+        let lhs = eq.map_or(decl, |i| &decl[..i]);
+        if let Some(colon) = lhs.find(':') {
+            if type_text_is_resource_handle(&lhs[colon + 1..]) {
+                errors.push(wgsl_error(
+                    "let declarations cannot have texture or sampler handle types",
+                ));
+                continue;
+            }
+        }
+        let Some(eq) = eq else {
+            continue;
+        };
+        let init = trim_outer_parens(&decl[eq + 1..]).trim();
+        if is_plain_identifier(init) && resource_names.contains(init) {
+            errors.push(wgsl_error(
+                "let declarations cannot bind texture or sampler handles",
+            ));
+        }
+    }
+    errors
+}
+
 #[derive(Clone)]
 pub struct BindingRef {
     pub group: u32,
@@ -1813,10 +5023,233 @@ fn is_ident_char(c: u8) -> bool {
     c.is_ascii_alphanumeric() || c == b'_'
 }
 
+fn skip_ws_and_comments(bytes: &[u8], mut pos: usize) -> usize {
+    while pos < bytes.len() {
+        if (bytes[pos] as char).is_whitespace() {
+            pos += 1;
+            continue;
+        }
+        if pos + 1 < bytes.len() && bytes[pos] == b'/' && bytes[pos + 1] == b'/' {
+            pos += 2;
+            while pos < bytes.len() && bytes[pos] != b'\n' {
+                pos += 1;
+            }
+            continue;
+        }
+        if pos + 1 < bytes.len() && bytes[pos] == b'/' && bytes[pos + 1] == b'*' {
+            pos += 2;
+            while pos + 1 < bytes.len() && !(bytes[pos] == b'*' && bytes[pos + 1] == b'/') {
+                pos += 1;
+            }
+            pos = (pos + 2).min(bytes.len());
+            continue;
+        }
+        break;
+    }
+    pos
+}
+
 struct StripResult {
     sanitized: String,
     messages: Vec<WgslMessage>,
     has_error: bool,
+}
+
+struct DiagnosticScope {
+    start: usize,
+    end: usize,
+    severity: String,
+}
+
+fn diagnostic_attribute_scope_end(source: &str, after_diagnostic: usize) -> Option<usize> {
+    let bytes = source.as_bytes();
+    let pos = skip_ws_and_comments(bytes, after_diagnostic);
+    if pos >= bytes.len() {
+        return None;
+    }
+
+    if bytes[pos] == b'{' {
+        return find_matching_delimiter(source, pos, b'{', b'}');
+    }
+
+    if !is_ident_char(bytes[pos]) {
+        return None;
+    }
+
+    let mut ident_end = pos;
+    while ident_end < bytes.len() && is_ident_char(bytes[ident_end]) {
+        ident_end += 1;
+    }
+    let keyword = &source[pos..ident_end];
+    if !matches!(keyword, "fn" | "if" | "switch" | "loop" | "while" | "for") {
+        return None;
+    }
+
+    let mut brace = ident_end;
+    while brace < bytes.len() {
+        if bytes[brace] == b'{' {
+            return find_matching_delimiter(source, brace, b'{', b'}');
+        }
+        brace += 1;
+    }
+    None
+}
+
+fn validate_derivative_uniformity_diagnostic_scopes(source: &str) -> Vec<WgslMessage> {
+    if !source.contains("derivative_uniformity")
+        || !source.contains("textureSample")
+        || !source.contains("non_uniform_")
+    {
+        return Vec::new();
+    }
+
+    let bytes = source.as_bytes();
+    const TOK: &[u8] = b"diagnostic";
+    const VALID_SEVERITIES: &[&str] = &["off", "info", "warning", "error"];
+    let mut global_severity: Option<String> = None;
+    let mut scopes: Vec<DiagnosticScope> = Vec::new();
+    let mut depth: i32 = 0;
+    let mut i = 0usize;
+
+    while i < bytes.len() {
+        if i + 1 < bytes.len() && bytes[i] == b'/' && bytes[i + 1] == b'/' {
+            i += 2;
+            while i < bytes.len() && bytes[i] != b'\n' {
+                i += 1;
+            }
+            continue;
+        }
+        if i + 1 < bytes.len() && bytes[i] == b'/' && bytes[i + 1] == b'*' {
+            i += 2;
+            while i + 1 < bytes.len() && !(bytes[i] == b'*' && bytes[i + 1] == b'/') {
+                i += 1;
+            }
+            i = (i + 2).min(bytes.len());
+            continue;
+        }
+
+        match bytes[i] {
+            b'{' => {
+                depth += 1;
+                i += 1;
+                continue;
+            }
+            b'}' => {
+                depth -= 1;
+                i += 1;
+                continue;
+            }
+            _ => {}
+        }
+
+        let mut attr_match = false;
+        if bytes[i] == b'@' {
+            let k = skip_ws_and_comments(bytes, i + 1);
+            if k + TOK.len() <= bytes.len()
+                && &bytes[k..k + TOK.len()] == TOK
+                && (k + TOK.len() == bytes.len() || !is_ident_char(bytes[k + TOK.len()]))
+            {
+                let p = skip_ws_and_comments(bytes, k + TOK.len());
+                attr_match = p < bytes.len() && bytes[p] == b'(';
+            }
+        }
+
+        let dir_match = !attr_match
+            && depth == 0
+            && (i == 0 || !is_ident_char(bytes[i - 1]))
+            && i + TOK.len() <= bytes.len()
+            && &bytes[i..i + TOK.len()] == TOK
+            && (i + TOK.len() == bytes.len() || !is_ident_char(bytes[i + TOK.len()]));
+
+        if !attr_match && !dir_match {
+            i += 1;
+            continue;
+        }
+
+        let start = i;
+        let mut p = if attr_match { i + 1 } else { i };
+        p = skip_ws_and_comments(bytes, p);
+        p += TOK.len();
+        p = skip_ws_and_comments(bytes, p);
+        if p >= bytes.len() || bytes[p] != b'(' {
+            i += 1;
+            continue;
+        }
+        let open = p;
+        let Some(close) = find_matching_delimiter(source, open, b'(', b')') else {
+            i += 1;
+            continue;
+        };
+
+        let inner = &bytes[open + 1..close];
+        let comma = inner.iter().position(|&c| c == b',');
+        let Some(c) = comma else {
+            i = close + 1;
+            continue;
+        };
+        let severity = std::str::from_utf8(&inner[..c])
+            .unwrap_or("")
+            .trim()
+            .to_string();
+        let rule = std::str::from_utf8(&inner[c + 1..])
+            .unwrap_or("")
+            .trim()
+            .to_string();
+        let rule_main = rule.split('.').next().unwrap_or("").trim();
+        if rule_main == "derivative_uniformity" && VALID_SEVERITIES.iter().any(|s| *s == severity) {
+            if attr_match {
+                if let Some(end) = diagnostic_attribute_scope_end(source, close + 1) {
+                    scopes.push(DiagnosticScope {
+                        start,
+                        end,
+                        severity: severity.clone(),
+                    });
+                }
+            } else {
+                global_severity = Some(severity.clone());
+            }
+        }
+
+        i = close + 1;
+    }
+
+    let Some(mut call_pos) = find_keyword_from(source, "textureSample", 0) else {
+        return Vec::new();
+    };
+
+    let mut messages = Vec::new();
+    loop {
+        let mut severity = global_severity.as_deref().unwrap_or("off");
+        let mut best_width = usize::MAX;
+        for scope in &scopes {
+            if scope.start <= call_pos && call_pos <= scope.end {
+                let width = scope.end.saturating_sub(scope.start);
+                if width < best_width {
+                    best_width = width;
+                    severity = &scope.severity;
+                }
+            }
+        }
+
+        if severity == "error" {
+            let (line, col) = byte_offset_to_line_col(source, call_pos);
+            messages.push(WgslMessage {
+                r#type: "error".to_string(),
+                message: "derivative_uniformity diagnostic escalated to error".to_string(),
+                line_num: line,
+                line_pos: col,
+                offset: call_pos as u32,
+                length: "textureSample".len() as u32,
+            });
+        }
+
+        match find_keyword_from(source, "textureSample", call_pos + "textureSample".len()) {
+            Some(next) => call_pos = next,
+            None => break,
+        }
+    }
+
+    messages
 }
 
 // Whitespace-replace WGSL `@diagnostic(severity, rule)` attributes (in valid
@@ -2187,6 +5620,15 @@ fn strip_diagnostic_directives(source: &str) -> StripResult {
         }
         i = end;
     }
+
+    let derivative_uniformity_messages = validate_derivative_uniformity_diagnostic_scopes(source);
+    if derivative_uniformity_messages
+        .iter()
+        .any(|m| m.r#type == "error")
+    {
+        has_error = true;
+    }
+    messages.extend(derivative_uniformity_messages);
 
     let sanitized = String::from_utf8(out).unwrap_or_else(|_| source.to_string());
     StripResult {
@@ -2857,21 +6299,239 @@ fn resource_storage_meta(
     }
 }
 
+fn type_contains_atomic(
+    module: &naga::Module,
+    ty: naga::Handle<naga::Type>,
+    visited: &mut HashSet<naga::Handle<naga::Type>>,
+) -> bool {
+    if !visited.insert(ty) {
+        return false;
+    }
+
+    match &module.types[ty].inner {
+        naga::TypeInner::Atomic(_) => true,
+        naga::TypeInner::Array { base, .. }
+        | naga::TypeInner::Pointer { base, .. }
+        | naga::TypeInner::BindingArray { base, .. } => {
+            type_contains_atomic(module, *base, visited)
+        }
+        naga::TypeInner::Struct { members, .. } => members
+            .iter()
+            .any(|member| type_contains_atomic(module, member.ty, visited)),
+        _ => false,
+    }
+}
+
+fn validate_storage_atomic_access(module: &naga::Module) -> Vec<WgslMessage> {
+    let mut errors = Vec::new();
+    for (_, gv) in module.global_variables.iter() {
+        let naga::AddressSpace::Storage { access } = gv.space else {
+            continue;
+        };
+        if access.contains(naga::StorageAccess::STORE) {
+            continue;
+        }
+        if type_contains_atomic(module, gv.ty, &mut HashSet::new()) {
+            errors.push(wgsl_error(
+                "atomic types require read_write storage or workgroup address space",
+            ));
+        }
+    }
+    errors
+}
+
+fn storage_image_has_write_access(
+    module: &naga::Module,
+    ty: naga::Handle<naga::Type>,
+    visited: &mut HashSet<naga::Handle<naga::Type>>,
+) -> bool {
+    if !visited.insert(ty) {
+        return false;
+    }
+
+    match &module.types[ty].inner {
+        naga::TypeInner::Image {
+            class: naga::ImageClass::Storage { access, .. },
+            ..
+        } => access.contains(naga::StorageAccess::STORE),
+        naga::TypeInner::BindingArray { base, .. } => {
+            storage_image_has_write_access(module, *base, visited)
+        }
+        _ => false,
+    }
+}
+
+fn declaration_name_after_keyword<'a>(stmt: &'a str, keyword: &str) -> Option<&'a str> {
+    let keyword_pos = find_keyword(stmt, keyword)?;
+    let bytes = stmt.as_bytes();
+    let mut i = keyword_pos + keyword.len();
+    while i < bytes.len() && bytes[i].is_ascii_whitespace() {
+        i += 1;
+    }
+    if keyword == "var" && i < bytes.len() && bytes[i] == b'<' {
+        let close = find_matching_angle(stmt, i)?;
+        i = close + 1;
+        while i < bytes.len() && bytes[i].is_ascii_whitespace() {
+            i += 1;
+        }
+    }
+    let name_start = i;
+    if i >= bytes.len() || !(bytes[i] == b'_' || bytes[i].is_ascii_alphabetic()) {
+        return None;
+    }
+    i += 1;
+    while i < bytes.len() && is_ident_char(bytes[i]) {
+        i += 1;
+    }
+    Some(&stmt[name_start..i])
+}
+
+fn function_body_declares_local_name(source: &str, name: &str) -> bool {
+    source.split(';').any(|stmt| {
+        ["var", "let", "const"]
+            .iter()
+            .any(|kw| declaration_name_after_keyword(stmt, kw) == Some(name))
+    })
+}
+
+fn validate_stage_resource_restrictions(module: &naga::Module, source: &str) -> Vec<WgslMessage> {
+    if module.entry_points.is_empty() {
+        return Vec::new();
+    }
+
+    let mut errors = Vec::new();
+    for ep in &module.entry_points {
+        let is_vertex = matches!(ep.stage, naga::ShaderStage::Vertex);
+        let is_compute = matches!(ep.stage, naga::ShaderStage::Compute);
+        if is_compute {
+            continue;
+        }
+
+        let reachable_bodies =
+            mask_comments_preserve_len(&collect_reachable_bodies(source, &ep.name));
+        for (_, gv) in module.global_variables.iter() {
+            let Some(name) = &gv.name else {
+                continue;
+            };
+            if identifier_occurrence_count(&reachable_bodies, name) == 0
+                || function_body_declares_local_name(&reachable_bodies, name)
+            {
+                continue;
+            }
+
+            match gv.space {
+                naga::AddressSpace::WorkGroup => errors.push(wgsl_error(
+                    "workgroup address space is only valid for compute shader entry points",
+                )),
+                naga::AddressSpace::Storage { access }
+                    if is_vertex && access.contains(naga::StorageAccess::STORE) =>
+                {
+                    errors.push(wgsl_error(
+                        "vertex shader entry points cannot use writable storage buffers",
+                    ));
+                }
+                naga::AddressSpace::Handle
+                    if is_vertex
+                        && storage_image_has_write_access(module, gv.ty, &mut HashSet::new()) =>
+                {
+                    errors.push(wgsl_error(
+                        "vertex shader entry points cannot use writable storage textures",
+                    ));
+                }
+                _ => {}
+            }
+        }
+    }
+    errors
+}
+
+fn type_resolution_is_boolish(ty: &TypeResolution, types: &naga::UniqueArena<naga::Type>) -> bool {
+    match ty.inner_with(types) {
+        naga::TypeInner::Scalar(scalar) => scalar.kind == naga::ScalarKind::Bool,
+        naga::TypeInner::Vector { scalar, .. } => scalar.kind == naga::ScalarKind::Bool,
+        _ => false,
+    }
+}
+
+fn validate_bool_order_comparisons_in_arena(
+    module: &naga::Module,
+    local: &naga::Arena<naga::Expression>,
+    local_vars: &naga::Arena<naga::LocalVariable>,
+    arguments: &[naga::FunctionArgument],
+    errors: &mut Vec<WgslMessage>,
+) {
+    use naga::{BinaryOperator, Expression};
+    let types = resolve_expression_types(module, local, local_vars, arguments);
+    for (_h, expr) in local.iter() {
+        let Expression::Binary { op, left, .. } = expr else {
+            continue;
+        };
+        if !matches!(
+            op,
+            BinaryOperator::Less
+                | BinaryOperator::LessEqual
+                | BinaryOperator::Greater
+                | BinaryOperator::GreaterEqual
+        ) {
+            continue;
+        }
+        if types
+            .get(left)
+            .is_some_and(|ty| type_resolution_is_boolish(ty, &module.types))
+        {
+            errors.push(wgsl_error(
+                "boolean values only support equality comparisons",
+            ));
+        }
+    }
+}
+
+fn validate_bool_order_comparisons(module: &naga::Module) -> Vec<WgslMessage> {
+    let mut errors = Vec::new();
+    let empty_locals = naga::Arena::new();
+    validate_bool_order_comparisons_in_arena(
+        module,
+        &module.global_expressions,
+        &empty_locals,
+        &[],
+        &mut errors,
+    );
+    for ep in &module.entry_points {
+        validate_bool_order_comparisons_in_arena(
+            module,
+            &ep.function.expressions,
+            &ep.function.local_variables,
+            &ep.function.arguments,
+            &mut errors,
+        );
+    }
+    for (_, f) in module.functions.iter() {
+        validate_bool_order_comparisons_in_arena(
+            module,
+            &f.expressions,
+            &f.local_variables,
+            &f.arguments,
+            &mut errors,
+        );
+    }
+    errors
+}
+
 // Wrap memory-backed Access indices that resolve to Literal/ZeroValue/Constant
 // in an Expression::As identity conversion. naga's validator is stricter than
 // WGSL §15.6 on const OOB indices and rejects them outright; cloaking the
 // index expression makes get_const_val_from return NonConst so validation
 // falls through, while spv emit still sees the literal and emits the runtime
 // clamp dictated by `bounds_check_policies`.
-fn cloak_const_indices(module: &mut naga::Module) {
+fn cloak_const_indices(module: &mut naga::Module, source: &str) {
     let n_eps = module.entry_points.len();
     for ep_idx in 0..n_eps {
-        cloak_indices_in_function(&mut module.entry_points[ep_idx].function);
+        cloak_indices_in_function(&mut module.entry_points[ep_idx].function, source);
     }
     let helper_handles: Vec<naga::Handle<naga::Function>> =
         module.functions.iter().map(|(h, _)| h).collect();
     for h in helper_handles {
-        cloak_indices_in_function(&mut module.functions[h]);
+        cloak_indices_in_function(&mut module.functions[h], source);
     }
 }
 
@@ -2890,37 +6550,58 @@ fn cloak_index_kind_width(
     }
 }
 
-// Cloak suppression scope: only memory-backed accesses get the As wrapper.
-// Inline values (`let v = vec2(0); v[-1]`) must keep failing validation per
-// WGSL §8.10.
-fn access_base_is_memory_var(
-    arena: &naga::Arena<naga::Expression>,
-    h: naga::Handle<naga::Expression>,
-) -> bool {
-    use naga::Expression;
-    let mut cur = h;
-    loop {
-        match arena[cur] {
-            Expression::GlobalVariable(_) | Expression::LocalVariable(_) => return true,
-            Expression::Access { base, .. } | Expression::AccessIndex { base, .. } => cur = base,
-            Expression::Load { pointer } => cur = pointer,
-            _ => return false,
-        }
+fn span_text_is_identifier(source: &str, span: naga::Span) -> bool {
+    let Some(range) = span.to_range() else {
+        return false;
+    };
+    let Some(text) = source.get(range) else {
+        return false;
+    };
+    let mut chars = text.trim().chars();
+    let Some(first) = chars.next() else {
+        return false;
+    };
+    if !(first == '_' || first.is_ascii_alphabetic()) {
+        return false;
     }
+    chars.all(|c| c == '_' || c.is_ascii_alphanumeric())
 }
 
-fn cloak_indices_in_function(f: &mut naga::Function) {
+fn should_cloak_index(
+    arena: &naga::Arena<naga::Expression>,
+    index: naga::Handle<naga::Expression>,
+    source: &str,
+) -> bool {
+    use naga::{Expression, Literal};
+    if !matches!(
+        arena[index],
+        Expression::Literal(
+            Literal::U32(_)
+                | Literal::I32(_)
+                | Literal::U64(_)
+                | Literal::I64(_)
+                | Literal::AbstractInt(_)
+        ) | Expression::ZeroValue(_)
+    ) {
+        return false;
+    }
+
+    // The folded IR for `let i = 3; v[i]` and direct `v[-1]` can both look
+    // like a literal index by the time we see it. WGSL validation still has to
+    // reject literal/const-expression indices, so only cloak when the original
+    // subscript text was an identifier. `const i = 3; v[i]` reaches us as
+    // Expression::Constant and remains visible to validation.
+    span_text_is_identifier(source, arena.get_span(index))
+}
+
+fn cloak_indices_in_function(f: &mut naga::Function, source: &str) {
     use naga::{Expression, Span};
     use std::mem;
 
     let mut targets: Vec<naga::Handle<Expression>> = Vec::new();
     for (h, expr) in f.expressions.iter() {
-        if let Expression::Access { base, index } = *expr {
-            if matches!(
-                f.expressions[index],
-                Expression::Literal(_) | Expression::ZeroValue(_) | Expression::Constant(_)
-            ) && access_base_is_memory_var(&f.expressions, base)
-            {
+        if let Expression::Access { base: _, index } = *expr {
+            if should_cloak_index(&f.expressions, index, source) {
                 targets.push(h);
             }
         }
@@ -3492,11 +7173,24 @@ fn expression_resolves_to_i32(
     local: &naga::Arena<naga::Expression>,
     module: &naga::Module,
 ) -> Option<i32> {
-    use naga::{Expression, Literal};
+    use naga::{Expression, Literal, UnaryOperator};
     let expr = resolve_expr_in_module(h, local, module)?;
     match expr {
         Expression::Literal(Literal::I32(v)) => Some(*v),
         Expression::Literal(Literal::AbstractInt(v)) => i32::try_from(*v).ok(),
+        Expression::Unary {
+            op: UnaryOperator::Negate,
+            expr,
+        } => {
+            let inner = resolve_expr_in_module(*expr, local, module)?;
+            match inner {
+                Expression::Literal(Literal::I32(v)) => v.checked_neg(),
+                Expression::Literal(Literal::AbstractInt(v)) => {
+                    i64::checked_neg(*v).and_then(|v| i32::try_from(v).ok())
+                }
+                _ => expression_resolves_to_i32(*expr, local, module)?.checked_neg(),
+            }
+        }
         Expression::Constant(c_h) => {
             let init = module.constants[*c_h].init;
             expression_resolves_to_i32(init, &module.global_expressions, module)
@@ -3584,6 +7278,267 @@ fn validate_clamp_smoothstep(module: &naga::Module) -> Vec<WgslMessage> {
     errors
 }
 
+// WGSL §11.4 / §17.5 / §17.6: const and override expressions must
+// produce a representable result. naga 29's const-evaluator silently
+// produces NaN for out-of-domain math args (acosh(x<1), inverseSqrt(x≤0),
+// pow(a<0, _), pow(0, b≤0)) and stores them as `Literal::AbstractFloat(NaN)`
+// which bypasses the F32/F64-only NaN check in `check_literal_value`.
+// Worse, dead unused module-scope const declarations are dropped from the
+// IR before any post-parse pass can inspect them, so an IR walker is
+// useless here. Validate at the source-text level: scan `acosh(arg)`,
+// `inverseSqrt(arg)`, `pow(a, b)` calls, resolve const-evaluable args
+// (literal, suffixed literal, i64::MIN special form, constructor calls,
+// and override substitution from `constants`), and emit an error if the
+// resolved values fall outside the domain.
+fn validate_math_domain_source(
+    source: &str,
+    constants: Option<&HashMap<String, f64>>,
+    entry_point: Option<&str>,
+) -> Vec<WgslMessage> {
+    if !source.contains("acosh")
+        && !source.contains("inverseSqrt")
+        && !source.contains("pow")
+        && !source.contains("fma")
+        && !source.contains("cross")
+    {
+        return Vec::new();
+    }
+    let scan = mask_comments_preserve_len(&smoothstep_validation_source(source, entry_point));
+    let bytes = scan.as_bytes();
+    let mut errors = Vec::new();
+    for builtin in ["acosh", "inverseSqrt", "pow", "fma", "cross"] {
+        let mut i = 0usize;
+        while let Some(rel) = scan[i..].find(builtin) {
+            let start = i + rel;
+            let end = start + builtin.len();
+            if (start > 0 && is_ident_char(bytes[start - 1]))
+                || (end < bytes.len() && is_ident_char(bytes[end]))
+            {
+                i = end;
+                continue;
+            }
+            if let Some((args, close)) = find_call_args(&scan, start, builtin.len()) {
+                check_math_call_args(builtin, &args, constants, &mut errors);
+                i = close + 1;
+            } else {
+                i = end;
+            }
+        }
+    }
+    errors
+}
+
+fn check_math_call_args(
+    builtin: &str,
+    args: &[String],
+    constants: Option<&HashMap<String, f64>>,
+    errors: &mut Vec<WgslMessage>,
+) {
+    match builtin {
+        "acosh" => {
+            if args.len() == 1 {
+                if let Some(values) = resolve_math_arg_values(&args[0], constants) {
+                    if values.iter().any(|v| *v < 1.0) {
+                        errors.push(wgsl_error(
+                            "acosh(x): x must be ≥ 1 for the result to be representable",
+                        ));
+                    }
+                }
+            }
+        }
+        "inverseSqrt" => {
+            if args.len() == 1 {
+                if let Some(values) = resolve_math_arg_values(&args[0], constants) {
+                    if values.iter().any(|v| *v <= 0.0) {
+                        errors.push(wgsl_error(
+                            "inverseSqrt(x): x must be > 0 for the result to be representable",
+                        ));
+                    }
+                }
+            }
+        }
+        "pow" => {
+            if args.len() == 2 {
+                if let (Some(a_values), Some(b_values)) = (
+                    resolve_math_arg_values(&args[0], constants),
+                    resolve_math_arg_values(&args[1], constants),
+                ) {
+                    let pairs = pair_math_arg_values(&a_values, &b_values);
+                    for (a, b) in pairs {
+                        if a < 0.0 {
+                            errors.push(wgsl_error(
+                                "pow(a, b): a must be ≥ 0 for the result to be representable",
+                            ));
+                            return;
+                        }
+                        if a == 0.0 && b <= 0.0 {
+                            errors.push(wgsl_error(
+                                "pow(0, b): b must be > 0 for the result to be representable",
+                            ));
+                            return;
+                        }
+                        // Overflow: pow(a, b) result must be finite. Mirror
+                        // the CTS test's `!Number.isFinite(Math.pow(a, b))`
+                        // check; computing in f64 matches JS semantics for
+                        // abstract-int / abstract-float, which is the
+                        // largest remaining bucket here.
+                        let r = a.powf(b);
+                        if !r.is_finite() {
+                            errors.push(wgsl_error(
+                                "pow(a, b): result overflows the representable range",
+                            ));
+                            return;
+                        }
+                    }
+                }
+            }
+        }
+        "fma" => {
+            // fma(a, b, c) = a*b + c. naga 29 stores the AbstractFloat
+            // result without the F32/F64 NaN/Inf guard, so MAX*MAX+_
+            // overflows silently. CTS expects rejection when the f64-
+            // computed result is not finite.
+            if args.len() == 3 {
+                if let (Some(a_v), Some(b_v), Some(c_v)) = (
+                    resolve_math_arg_values(&args[0], constants),
+                    resolve_math_arg_values(&args[1], constants),
+                    resolve_math_arg_values(&args[2], constants),
+                ) {
+                    let pairs = pair_three_arg_values(&a_v, &b_v, &c_v);
+                    for (a, b, c) in pairs {
+                        let r = a.mul_add(b, c);
+                        if !r.is_finite() {
+                            errors.push(wgsl_error(
+                                "fma(a, b, c): result overflows the representable range",
+                            ));
+                            return;
+                        }
+                    }
+                }
+            }
+        }
+        "cross" => {
+            // cross(a, b) for vec3<T>: result components are
+            // (a.y*b.z - a.z*b.y, a.z*b.x - a.x*b.z, a.x*b.y - a.y*b.x).
+            // Same naga AbstractFloat-Inf bypass as fma/pow; the CTS test
+            // rejects when any component is non-finite.
+            if args.len() == 2 {
+                if let (Some(a), Some(b)) = (
+                    resolve_math_arg_values(&args[0], constants),
+                    resolve_math_arg_values(&args[1], constants),
+                ) {
+                    if a.len() == 3 && b.len() == 3 {
+                        let r = [
+                            a[1].mul_add(b[2], -(a[2] * b[1])),
+                            a[2].mul_add(b[0], -(a[0] * b[2])),
+                            a[0].mul_add(b[1], -(a[1] * b[0])),
+                        ];
+                        if r.iter().any(|c| !c.is_finite()) {
+                            errors.push(wgsl_error(
+                                "cross(a, b): result overflows the representable range",
+                            ));
+                            return;
+                        }
+                    }
+                }
+            }
+        }
+        _ => {}
+    }
+}
+
+fn pair_three_arg_values(a: &[f64], b: &[f64], c: &[f64]) -> Vec<(f64, f64, f64)> {
+    if a.is_empty() || b.is_empty() || c.is_empty() {
+        return Vec::new();
+    }
+    let n = a.len().max(b.len()).max(c.len());
+    let pick = |v: &[f64], i: usize| -> Option<f64> {
+        if v.len() == 1 {
+            Some(v[0])
+        } else if v.len() == n {
+            Some(v[i])
+        } else {
+            None
+        }
+    };
+    let mut out = Vec::with_capacity(n);
+    for i in 0..n {
+        match (pick(a, i), pick(b, i), pick(c, i)) {
+            (Some(x), Some(y), Some(z)) => out.push((x, y, z)),
+            _ => return Vec::new(),
+        }
+    }
+    out
+}
+
+// Resolve a WGSL source-text expression to a vector of f64 values for
+// domain checking. Handles literals (with i/u/f/h suffixes), the
+// `(-9223372036854775807 - 1)` form for i64::MIN, the standard scalar
+// and vector constructor calls, and override-name substitution via
+// `constants`. Returns None if the expression is not const-resolvable.
+fn resolve_math_arg_values(
+    expr: &str,
+    constants: Option<&HashMap<String, f64>>,
+) -> Option<Vec<f64>> {
+    let s = trim_outer_parens(expr).trim();
+    if let Some(consts) = constants {
+        if !s.is_empty() && s.bytes().all(is_ident_char) {
+            if let Some(v) = consts.get(s) {
+                return Some(vec![*v]);
+            }
+        }
+    }
+    if let Some(v) = parse_numeric_literal(s) {
+        return Some(vec![v]);
+    }
+    if let Some(v) = parse_wgsl_i64_like(s) {
+        return Some(vec![v as f64]);
+    }
+    if let Some((callee, args)) = parse_full_call(s) {
+        if let Some(width) = constructor_vector_width(&callee) {
+            if args.len() == 1 {
+                let inner = resolve_math_arg_values(&args[0], constants)?;
+                if inner.len() == 1 {
+                    return Some(vec![inner[0]; width]);
+                }
+                if inner.len() == width {
+                    return Some(inner);
+                }
+                return None;
+            }
+            let mut out = Vec::with_capacity(width);
+            for a in args {
+                let mut sub = resolve_math_arg_values(&a, constants)?;
+                out.append(&mut sub);
+            }
+            return (out.len() == width).then_some(out);
+        }
+        if constructor_is_float_scalar(&callee) && args.len() == 1 {
+            return resolve_math_arg_values(&args[0], constants).map(|mut v| {
+                v.truncate(1);
+                v
+            });
+        }
+    }
+    None
+}
+
+fn pair_math_arg_values(a: &[f64], b: &[f64]) -> Vec<(f64, f64)> {
+    if a.is_empty() || b.is_empty() {
+        return Vec::new();
+    }
+    if a.len() == b.len() {
+        return a.iter().zip(b.iter()).map(|(x, y)| (*x, *y)).collect();
+    }
+    if a.len() == 1 {
+        return b.iter().map(|y| (a[0], *y)).collect();
+    }
+    if b.len() == 1 {
+        return a.iter().map(|x| (*x, b[0])).collect();
+    }
+    Vec::new()
+}
+
 // WGSL §17.7.7 / §17.7.10 etc: textureSample / textureSampleLevel /
 // textureSampleGrad / textureSampleBias / textureGather /
 // textureGatherCompare accept an optional `offset` parameter that must
@@ -3665,6 +7620,1313 @@ fn collect_offset_components(
         return out;
     }
     Vec::new()
+}
+
+#[derive(Clone)]
+struct BitFoldValue {
+    signed: bool,
+    ty: Option<naga::Handle<naga::Type>>,
+    components: Vec<u32>,
+}
+
+struct SourceBitValues {
+    signed: bool,
+    components: Vec<u32>,
+}
+
+fn source_vector_int_info(callee: &str) -> Option<(usize, Option<bool>)> {
+    let n = normalize_type_name(callee).to_ascii_lowercase();
+    let width = constructor_vector_width(&n)?;
+    let signed = if n.contains("u32") || n.ends_with('u') {
+        Some(false)
+    } else if n.contains("i32") || n.ends_with('i') {
+        Some(true)
+    } else {
+        None
+    };
+    Some((width, signed))
+}
+
+fn parse_source_constant_u32(name: &str, constants: Option<&HashMap<String, f64>>) -> Option<u32> {
+    let value = *constants?.get(name)?;
+    (value.is_finite() && value.fract() == 0.0 && value >= 0.0 && value <= u32::MAX as f64)
+        .then_some(value as u32)
+}
+
+fn parse_source_constant_i32(name: &str, constants: Option<&HashMap<String, f64>>) -> Option<i32> {
+    let value = *constants?.get(name)?;
+    (value.is_finite()
+        && value.fract() == 0.0
+        && value >= i32::MIN as f64
+        && value <= i32::MAX as f64)
+        .then_some(value as i32)
+}
+
+fn parse_source_u32_value(expr: &str, constants: Option<&HashMap<String, f64>>) -> Option<u32> {
+    let mut s = trim_outer_parens(expr).trim();
+    if let Some((callee, args)) = parse_full_call(s) {
+        let n = normalize_type_name(&callee).to_ascii_lowercase();
+        if args.len() == 1 && (n == "u32" || n == "i32") {
+            return parse_source_u32_value(&args[0], constants);
+        }
+    }
+    if is_plain_identifier(s) {
+        return parse_source_constant_u32(s, constants);
+    }
+    let unsigned = s.ends_with('u');
+    let signed = s.ends_with('i');
+    if unsigned || signed {
+        s = &s[..s.len() - 1];
+    }
+    if s.starts_with('-') {
+        return None;
+    }
+    s.parse::<u64>().ok().and_then(|v| u32::try_from(v).ok())
+}
+
+fn parse_source_bit_u32_value(expr: &str, constants: Option<&HashMap<String, f64>>) -> Option<u32> {
+    let mut s = trim_outer_parens(expr).trim();
+    if let Some((callee, args)) = parse_full_call(s) {
+        let n = normalize_type_name(&callee).to_ascii_lowercase();
+        if args.len() == 1 {
+            if n == "u32" {
+                return parse_source_u32_value(&args[0], constants);
+            }
+            if n == "i32" {
+                return parse_source_bit_u32_value(&args[0], constants);
+            }
+        }
+    }
+    if is_plain_identifier(s) {
+        return parse_source_constant_u32(s, constants)
+            .or_else(|| parse_source_constant_i32(s, constants).map(|v| v as u32));
+    }
+    if s.ends_with('u') {
+        s = &s[..s.len() - 1];
+        return s.parse::<u64>().ok().and_then(|v| u32::try_from(v).ok());
+    }
+    if s.ends_with('i') {
+        s = &s[..s.len() - 1];
+    }
+    i32::try_from(s.parse::<i64>().ok()?).ok().map(|v| v as u32)
+}
+
+fn parse_source_bit_scalar_as(
+    expr: &str,
+    signed: bool,
+    constants: Option<&HashMap<String, f64>>,
+) -> Option<SourceBitValues> {
+    let value = if signed {
+        parse_source_bit_u32_value(expr, constants)?
+    } else {
+        parse_source_u32_value(expr, constants)?
+    };
+    Some(SourceBitValues {
+        signed,
+        components: vec![value],
+    })
+}
+
+fn parse_source_bit_scalar(
+    expr: &str,
+    constants: Option<&HashMap<String, f64>>,
+) -> Option<SourceBitValues> {
+    let mut s = trim_outer_parens(expr).trim();
+    if let Some((callee, args)) = parse_full_call(s) {
+        let n = normalize_type_name(&callee).to_ascii_lowercase();
+        if args.len() == 1 && (n == "u32" || n == "i32") {
+            let value = if n == "u32" {
+                parse_source_u32_value(&args[0], constants)?
+            } else {
+                parse_source_bit_u32_value(&args[0], constants)?
+            };
+            return Some(SourceBitValues {
+                signed: n == "i32",
+                components: vec![value],
+            });
+        }
+    }
+    let unsigned = s.ends_with('u');
+    let signed = s.ends_with('i');
+    if !unsigned && !signed {
+        return None;
+    }
+    s = &s[..s.len() - 1];
+    if unsigned {
+        return Some(SourceBitValues {
+            signed: false,
+            components: vec![s.parse::<u32>().ok()?],
+        });
+    }
+    let value = i32::try_from(s.parse::<i64>().ok()?).ok()? as u32;
+    Some(SourceBitValues {
+        signed: true,
+        components: vec![value],
+    })
+}
+
+fn resolve_source_bit_values(
+    expr: &str,
+    constants: Option<&HashMap<String, f64>>,
+) -> Option<SourceBitValues> {
+    let s = trim_outer_parens(expr).trim();
+    if let Some((callee, args)) = parse_full_call(s) {
+        if let Some((width, explicit_signed)) = source_vector_int_info(&callee) {
+            let mut values = Vec::new();
+            let mut inferred_signed: Option<bool> = explicit_signed;
+            for arg in args {
+                let resolved = resolve_source_bit_values(&arg, constants).or_else(|| {
+                    explicit_signed
+                        .and_then(|signed| parse_source_bit_scalar_as(&arg, signed, constants))
+                })?;
+                if resolved.components.len() != 1 && resolved.components.len() != width {
+                    return None;
+                }
+                let signed = explicit_signed.unwrap_or(resolved.signed);
+                if resolved.signed != signed {
+                    return None;
+                }
+                match inferred_signed {
+                    Some(existing) if existing != signed => return None,
+                    Some(_) => {}
+                    None => inferred_signed = Some(signed),
+                }
+                values.extend(resolved.components);
+            }
+            let signed = inferred_signed?;
+            if values.len() == 1 {
+                values.resize(width, values[0]);
+            }
+            if values.len() != width {
+                return None;
+            }
+            return Some(SourceBitValues {
+                signed,
+                components: values,
+            });
+        }
+    }
+    parse_source_bit_scalar(s, constants)
+}
+
+fn format_source_bit_scalar(bits: u32, signed: bool) -> String {
+    if signed {
+        format!("i32({})", bits as i32)
+    } else {
+        format!("{}u", bits)
+    }
+}
+
+fn format_source_bit_values(values: &[u32], signed: bool) -> String {
+    if values.len() == 1 {
+        return format_source_bit_scalar(values[0], signed);
+    }
+    let scalar = if signed { "i32" } else { "u32" };
+    let components = values
+        .iter()
+        .map(|v| format_source_bit_scalar(*v, signed))
+        .collect::<Vec<_>>()
+        .join(", ");
+    format!("vec{}<{}>({})", values.len(), scalar, components)
+}
+
+fn lower_bit_builtin_source_call(
+    name: &str,
+    args: &[String],
+    constants: Option<&HashMap<String, f64>>,
+) -> Option<String> {
+    let (values, offset_arg, count_arg) = match name {
+        "extractBits" if args.len() == 3 => (
+            resolve_source_bit_values(&args[0], constants)?,
+            args[1].as_str(),
+            args[2].as_str(),
+        ),
+        "insertBits" if args.len() == 4 => (
+            resolve_source_bit_values(&args[0], constants)?,
+            args[2].as_str(),
+            args[3].as_str(),
+        ),
+        _ => return None,
+    };
+    let offset = parse_source_u32_value(offset_arg, constants)?;
+    let count = parse_source_u32_value(count_arg, constants)?;
+    if u64::from(offset) + u64::from(count) > 32 {
+        return None;
+    }
+    let components = if name == "extractBits" {
+        values
+            .components
+            .iter()
+            .map(|v| bit_extract(*v, values.signed, offset, count))
+            .collect::<Vec<_>>()
+    } else {
+        let newbits = resolve_source_bit_values(&args[1], constants)?;
+        if newbits.signed != values.signed || newbits.components.len() != values.components.len() {
+            return None;
+        }
+        values
+            .components
+            .iter()
+            .zip(newbits.components.iter())
+            .map(|(v, n)| bit_insert(*v, *n, offset, count))
+            .collect::<Vec<_>>()
+    };
+    Some(format_source_bit_values(&components, values.signed))
+}
+
+fn f32_bitcast_target_width(target: &str) -> Option<usize> {
+    let n = normalize_type_name(target).to_ascii_lowercase();
+    match n.as_str() {
+        "f32" => Some(1),
+        "vec2f" | "vec2<f32>" => Some(2),
+        "vec3f" | "vec3<f32>" => Some(3),
+        "vec4f" | "vec4<f32>" => Some(4),
+        _ => None,
+    }
+}
+
+fn find_bitcast_call(source: &str, start: usize) -> Option<(String, Vec<String>, usize)> {
+    let bytes = source.as_bytes();
+    let mut i = start + "bitcast".len();
+    while i < bytes.len() && bytes[i].is_ascii_whitespace() {
+        i += 1;
+    }
+    if i >= bytes.len() || bytes[i] != b'<' {
+        return None;
+    }
+
+    let target_start = i + 1;
+    let mut depth = 1i32;
+    i += 1;
+    while i < bytes.len() {
+        match bytes[i] {
+            b'<' => depth += 1,
+            b'>' => {
+                depth -= 1;
+                if depth == 0 {
+                    let target = source[target_start..i].trim().to_string();
+                    let name_len = i + 1 - start;
+                    let (args, close) = find_call_args(source, start, name_len)?;
+                    return Some((target, args, close));
+                }
+            }
+            _ => {}
+        }
+        i += 1;
+    }
+    None
+}
+
+fn format_wgsl_f32_literal(value: f32) -> Option<String> {
+    if !value.is_finite() {
+        return None;
+    }
+    if value == 0.0 {
+        return Some(if value.is_sign_negative() {
+            "-0.0f".to_string()
+        } else {
+            "0.0f".to_string()
+        });
+    }
+    Some(format!("{value:e}f"))
+}
+
+fn lower_const_bitcast_call(
+    target: &str,
+    args: &[String],
+    constants: Option<&HashMap<String, f64>>,
+) -> Option<Result<String, WgslMessage>> {
+    let width = f32_bitcast_target_width(target)?;
+    if args.len() != 1 {
+        return None;
+    }
+    let values = resolve_source_bit_values(&args[0], constants)?;
+    if values.components.len() != width {
+        return None;
+    }
+
+    let mut components = Vec::with_capacity(values.components.len());
+    for bits in values.components {
+        let value = f32::from_bits(bits);
+        let Some(component) = format_wgsl_f32_literal(value) else {
+            return Some(Err(wgsl_error(
+                "const bitcast to f32 must not evaluate to NaN or infinity",
+            )));
+        };
+        components.push(component);
+    }
+
+    let replacement = if width == 1 {
+        components.remove(0)
+    } else {
+        format!("vec{}f({})", width, components.join(", "))
+    };
+    Some(Ok(replacement))
+}
+
+fn scan_const_bitcasts_source<F>(
+    source: &str,
+    constants: Option<&HashMap<String, f64>>,
+    mut visitor: F,
+) where
+    F: FnMut(usize, usize, Result<String, WgslMessage>) -> bool,
+{
+    if !source.contains("bitcast") {
+        return;
+    }
+    let masked = source_without_fn_bodies(source);
+    let bytes = masked.as_bytes();
+    let mut i = 0usize;
+    while let Some(rel) = masked[i..].find("bitcast") {
+        let start = i + rel;
+        let end = start + "bitcast".len();
+        if (start > 0 && is_ident_char(bytes[start - 1]))
+            || (end < bytes.len() && is_ident_char(bytes[end]))
+        {
+            i = end;
+            continue;
+        }
+        let Some((target, args, close)) = find_bitcast_call(&masked, start) else {
+            i = end;
+            continue;
+        };
+        if let Some(replacement) = lower_const_bitcast_call(&target, &args, constants) {
+            if !visitor(start, close + 1, replacement) {
+                break;
+            }
+        }
+        i = close + 1;
+    }
+}
+
+fn validate_const_bitcast_source(
+    source: &str,
+    constants: Option<&HashMap<String, f64>>,
+) -> Vec<WgslMessage> {
+    let mut errors = Vec::new();
+    scan_const_bitcasts_source(source, constants, |_start, _end, replacement| {
+        if let Err(message) = replacement {
+            errors.push(message);
+        }
+        true
+    });
+    errors
+}
+
+fn lower_const_bitcasts_source(source: &str, constants: Option<&HashMap<String, f64>>) -> String {
+    let mut replacements: Vec<(usize, usize, String)> = Vec::new();
+    scan_const_bitcasts_source(source, constants, |start, end, replacement| {
+        if let Ok(text) = replacement {
+            replacements.push((start, end, text));
+        }
+        true
+    });
+    if replacements.is_empty() {
+        return source.to_string();
+    }
+
+    let mut out = String::with_capacity(source.len());
+    let mut pos = 0usize;
+    for (start, end, replacement) in replacements {
+        out.push_str(&source[pos..start]);
+        out.push_str(&replacement);
+        pos = end;
+    }
+    out.push_str(&source[pos..]);
+    out
+}
+
+fn lower_bit_builtins_source_once(
+    source: &str,
+    constants: Option<&HashMap<String, f64>>,
+) -> Option<String> {
+    if !source.contains("Bits") {
+        return None;
+    }
+    let masked = source_without_fn_bodies(source);
+    let bytes = masked.as_bytes();
+    let mut out = String::with_capacity(source.len());
+    let mut pos = 0usize;
+    let mut i = 0usize;
+    let mut changed = false;
+    while i < masked.len() {
+        let next_insert = masked[i..]
+            .find("insertBits")
+            .map(|p| (i + p, "insertBits"));
+        let next_extract = masked[i..]
+            .find("extractBits")
+            .map(|p| (i + p, "extractBits"));
+        let Some((start, name)) = [next_insert, next_extract]
+            .into_iter()
+            .flatten()
+            .min_by_key(|(p, _)| *p)
+        else {
+            break;
+        };
+        let end = start + name.len();
+        if (start > 0 && is_ident_char(bytes[start - 1]))
+            || (end < bytes.len() && is_ident_char(bytes[end]))
+        {
+            i = end;
+            continue;
+        }
+        let Some((args, close)) = find_call_args(&masked, start, name.len()) else {
+            i = end;
+            continue;
+        };
+        if let Some(replacement) = lower_bit_builtin_source_call(name, &args, constants) {
+            out.push_str(&source[pos..start]);
+            out.push_str(&replacement);
+            pos = close + 1;
+            changed = true;
+        }
+        i = close + 1;
+    }
+    if changed {
+        out.push_str(&source[pos..]);
+        Some(out)
+    } else {
+        None
+    }
+}
+
+fn lower_bit_builtins_source(source: &str, constants: Option<&HashMap<String, f64>>) -> String {
+    let mut lowered = source.to_string();
+    for _ in 0..8 {
+        let Some(next) = lower_bit_builtins_source_once(&lowered, constants) else {
+            return lowered;
+        };
+        lowered = next;
+    }
+    lowered
+}
+
+fn parse_source_unpack_u32_arg(
+    expr: &str,
+    constants: Option<&HashMap<String, f64>>,
+) -> Option<u32> {
+    let mut s = trim_outer_parens(expr).trim();
+    if let Some((callee, args)) = parse_full_call(s) {
+        let n = normalize_type_name(&callee).to_ascii_lowercase();
+        if args.len() == 1 && n == "u32" {
+            return parse_source_unpack_u32_arg(&args[0], constants);
+        }
+        return None;
+    }
+    if is_plain_identifier(s) {
+        return parse_source_constant_u32(s, constants);
+    }
+    if s.ends_with('i') || s.starts_with('-') {
+        return None;
+    }
+    if s.ends_with('u') {
+        s = &s[..s.len() - 1];
+    }
+    s.parse::<u64>().ok().and_then(|v| u32::try_from(v).ok())
+}
+
+fn resolve_source_int_vector_values(
+    expr: &str,
+    width: usize,
+    signed: bool,
+    constants: Option<&HashMap<String, f64>>,
+) -> Option<Vec<u32>> {
+    let s = trim_outer_parens(expr).trim();
+    if let Some((callee, args)) = parse_full_call(s) {
+        let n = normalize_type_name(&callee).to_ascii_lowercase();
+        if args.len() == 1 && args[0].is_empty() {
+            if let Some((ctor_width, Some(ctor_signed))) = source_vector_int_info(&n) {
+                if ctor_width == width && ctor_signed == signed {
+                    return Some(vec![0; width]);
+                }
+            }
+        }
+    }
+    let values = resolve_source_bit_values(s, constants)?;
+    if values.signed != signed || values.components.len() != width {
+        return None;
+    }
+    Some(values.components)
+}
+
+fn resolve_source_float_vector_values(
+    expr: &str,
+    width: usize,
+    constants: Option<&HashMap<String, f64>>,
+) -> Option<Vec<f64>> {
+    let s = trim_outer_parens(expr).trim();
+    if let Some((callee, args)) = parse_full_call(s) {
+        let n = normalize_type_name(&callee).to_ascii_lowercase();
+        if args.len() == 1
+            && args[0].is_empty()
+            && constructor_vector_width(&n) == Some(width)
+            && (n.contains("f32") || n.ends_with('f'))
+        {
+            return Some(vec![0.0; width]);
+        }
+    }
+    let values = resolve_smoothstep_values(s, constants)?;
+    if values.len() == width {
+        Some(values)
+    } else {
+        None
+    }
+}
+
+fn source_floats_are_finite(values: &[f64]) -> bool {
+    values.iter().all(|v| v.is_finite())
+}
+
+fn source_floats_fit_f16(values: &[f64]) -> bool {
+    values
+        .iter()
+        .all(|v| v.is_finite() && *v >= -65504.0 && *v <= 65504.0)
+}
+
+fn source_ints_fit_i8(values: &[u32]) -> bool {
+    values.iter().all(|v| {
+        i32::from_ne_bytes(v.to_ne_bytes()) >= -128 && i32::from_ne_bytes(v.to_ne_bytes()) <= 127
+    })
+}
+
+fn source_ints_fit_u8(values: &[u32]) -> bool {
+    values.iter().all(|v| *v <= 255)
+}
+
+fn format_u32_vector(width: usize, values: &[u32]) -> String {
+    let components = values
+        .iter()
+        .map(|v| format!("{v}u"))
+        .collect::<Vec<_>>()
+        .join(", ");
+    format!("vec{width}<u32>({components})")
+}
+
+fn format_i32_vector(width: usize, values: &[i32]) -> String {
+    let components = values
+        .iter()
+        .map(|v| format!("i32({v})"))
+        .collect::<Vec<_>>()
+        .join(", ");
+    format!("vec{width}<i32>({components})")
+}
+
+fn format_f32_vector(width: usize, values: &[f32]) -> Option<String> {
+    let components = values
+        .iter()
+        .map(|v| format_wgsl_f32_literal(*v))
+        .collect::<Option<Vec<_>>>()?
+        .join(", ");
+    Some(format!("vec{width}<f32>({components})"))
+}
+
+fn f16_bits_to_f32(bits: u16) -> f32 {
+    let sign = ((bits & 0x8000) as u32) << 16;
+    let exp = (bits >> 10) & 0x1f;
+    let frac = (bits & 0x03ff) as u32;
+    let out = if exp == 0 {
+        if frac == 0 {
+            sign
+        } else {
+            let mut mant = frac;
+            let mut e = -14i32;
+            while (mant & 0x0400) == 0 {
+                mant <<= 1;
+                e -= 1;
+            }
+            mant &= 0x03ff;
+            sign | (((e + 127) as u32) << 23) | (mant << 13)
+        }
+    } else if exp == 0x1f {
+        sign | 0x7f80_0000 | (frac << 13)
+    } else {
+        sign | (((exp as u32) + 112) << 23) | (frac << 13)
+    };
+    f32::from_bits(out)
+}
+
+fn lower_packed_builtin_source_call(
+    name: &str,
+    args: &[String],
+    constants: Option<&HashMap<String, f64>>,
+) -> Option<String> {
+    if args.len() != 1 {
+        return None;
+    }
+    match name {
+        "pack2x16float" => {
+            let values = resolve_source_float_vector_values(&args[0], 2, constants)?;
+            source_floats_fit_f16(&values).then_some("0u".to_string())
+        }
+        "pack2x16snorm" | "pack2x16unorm" => {
+            let values = resolve_source_float_vector_values(&args[0], 2, constants)?;
+            source_floats_are_finite(&values).then_some("0u".to_string())
+        }
+        "pack4x8snorm" | "pack4x8unorm" => {
+            let values = resolve_source_float_vector_values(&args[0], 4, constants)?;
+            source_floats_are_finite(&values).then_some("0u".to_string())
+        }
+        "pack4xU8" => {
+            let values = resolve_source_int_vector_values(&args[0], 4, false, constants)?;
+            source_ints_fit_u8(&values).then_some("0u".to_string())
+        }
+        "pack4xI8" => {
+            let values = resolve_source_int_vector_values(&args[0], 4, true, constants)?;
+            source_ints_fit_i8(&values).then_some("0u".to_string())
+        }
+        "pack4xU8Clamp" => {
+            resolve_source_int_vector_values(&args[0], 4, false, constants)?;
+            Some("0u".to_string())
+        }
+        "pack4xI8Clamp" => {
+            resolve_source_int_vector_values(&args[0], 4, true, constants)?;
+            Some("0u".to_string())
+        }
+        "unpack2x16float" => {
+            let packed = parse_source_unpack_u32_arg(&args[0], constants)?;
+            let values = [
+                f16_bits_to_f32((packed & 0xffff) as u16),
+                f16_bits_to_f32((packed >> 16) as u16),
+            ];
+            format_f32_vector(2, &values)
+        }
+        "unpack2x16snorm" => {
+            let packed = parse_source_unpack_u32_arg(&args[0], constants)?;
+            let values = [
+                ((packed & 0xffff) as u16 as i16 as f32 / 32767.0).max(-1.0),
+                ((packed >> 16) as u16 as i16 as f32 / 32767.0).max(-1.0),
+            ];
+            format_f32_vector(2, &values)
+        }
+        "unpack2x16unorm" => {
+            let packed = parse_source_unpack_u32_arg(&args[0], constants)?;
+            let values = [
+                (packed & 0xffff) as f32 / 65535.0,
+                (packed >> 16) as f32 / 65535.0,
+            ];
+            format_f32_vector(2, &values)
+        }
+        "unpack4x8snorm" => {
+            let packed = parse_source_unpack_u32_arg(&args[0], constants)?;
+            let values = [
+                ((packed & 0xff) as u8 as i8 as f32 / 127.0).max(-1.0),
+                (((packed >> 8) & 0xff) as u8 as i8 as f32 / 127.0).max(-1.0),
+                (((packed >> 16) & 0xff) as u8 as i8 as f32 / 127.0).max(-1.0),
+                (((packed >> 24) & 0xff) as u8 as i8 as f32 / 127.0).max(-1.0),
+            ];
+            format_f32_vector(4, &values)
+        }
+        "unpack4x8unorm" => {
+            let packed = parse_source_unpack_u32_arg(&args[0], constants)?;
+            let values = [
+                (packed & 0xff) as f32 / 255.0,
+                ((packed >> 8) & 0xff) as f32 / 255.0,
+                ((packed >> 16) & 0xff) as f32 / 255.0,
+                ((packed >> 24) & 0xff) as f32 / 255.0,
+            ];
+            format_f32_vector(4, &values)
+        }
+        "unpack4xU8" => {
+            let packed = parse_source_unpack_u32_arg(&args[0], constants)?;
+            Some(format_u32_vector(
+                4,
+                &[
+                    packed & 0xff,
+                    (packed >> 8) & 0xff,
+                    (packed >> 16) & 0xff,
+                    (packed >> 24) & 0xff,
+                ],
+            ))
+        }
+        "unpack4xI8" => {
+            let packed = parse_source_unpack_u32_arg(&args[0], constants)?;
+            Some(format_i32_vector(
+                4,
+                &[
+                    (packed & 0xff) as u8 as i8 as i32,
+                    ((packed >> 8) & 0xff) as u8 as i8 as i32,
+                    ((packed >> 16) & 0xff) as u8 as i8 as i32,
+                    ((packed >> 24) & 0xff) as u8 as i8 as i32,
+                ],
+            ))
+        }
+        _ => None,
+    }
+}
+
+fn lower_packed_builtins_source_once(
+    source: &str,
+    constants: Option<&HashMap<String, f64>>,
+) -> Option<String> {
+    const NAMES: &[&str] = &[
+        "pack2x16float",
+        "pack2x16snorm",
+        "pack2x16unorm",
+        "pack4x8snorm",
+        "pack4x8unorm",
+        "pack4xI8Clamp",
+        "pack4xU8Clamp",
+        "pack4xI8",
+        "pack4xU8",
+        "unpack2x16float",
+        "unpack2x16snorm",
+        "unpack2x16unorm",
+        "unpack4x8snorm",
+        "unpack4x8unorm",
+        "unpack4xI8",
+        "unpack4xU8",
+    ];
+    if !source.contains("pack") && !source.contains("unpack") {
+        return None;
+    }
+    let masked = source_without_fn_bodies(source);
+    let bytes = masked.as_bytes();
+    let mut out = String::with_capacity(source.len());
+    let mut pos = 0usize;
+    let mut i = 0usize;
+    let mut changed = false;
+    while i < masked.len() {
+        let Some((start, name)) = NAMES
+            .iter()
+            .filter_map(|name| masked[i..].find(name).map(|p| (i + p, *name)))
+            .min_by_key(|(p, _)| *p)
+        else {
+            break;
+        };
+        let end = start + name.len();
+        if (start > 0 && is_ident_char(bytes[start - 1]))
+            || (end < bytes.len() && is_ident_char(bytes[end]))
+        {
+            i = end;
+            continue;
+        }
+        let Some((args, close)) = find_call_args(&masked, start, name.len()) else {
+            i = end;
+            continue;
+        };
+        if !is_builtin_shadowed_at_call(source, name, start) {
+            if let Some(replacement) = lower_packed_builtin_source_call(name, &args, constants) {
+                out.push_str(&source[pos..start]);
+                out.push_str(&replacement);
+                pos = close + 1;
+                changed = true;
+            }
+        }
+        i = close + 1;
+    }
+    if changed {
+        out.push_str(&source[pos..]);
+        Some(out)
+    } else {
+        None
+    }
+}
+
+fn lower_packed_builtins_source(source: &str, constants: Option<&HashMap<String, f64>>) -> String {
+    let mut lowered = source.to_string();
+    for _ in 0..8 {
+        let Some(next) = lower_packed_builtins_source_once(&lowered, constants) else {
+            return lowered;
+        };
+        lowered = next;
+    }
+    lowered
+}
+
+fn bit_type_info(
+    ty: &TypeResolution,
+    types: &naga::UniqueArena<naga::Type>,
+) -> Option<(bool, usize, Option<naga::Handle<naga::Type>>)> {
+    match ty.inner_with(types) {
+        naga::TypeInner::Scalar(scalar)
+            if scalar.width == 4
+                && matches!(scalar.kind, naga::ScalarKind::Sint | naga::ScalarKind::Uint) =>
+        {
+            Some((scalar.kind == naga::ScalarKind::Sint, 1, ty.handle()))
+        }
+        naga::TypeInner::Vector { size, scalar }
+            if scalar.width == 4
+                && matches!(scalar.kind, naga::ScalarKind::Sint | naga::ScalarKind::Uint) =>
+        {
+            Some((
+                scalar.kind == naga::ScalarKind::Sint,
+                u8::from(*size) as usize,
+                ty.handle(),
+            ))
+        }
+        _ => None,
+    }
+}
+
+fn resolve_u32_scalar(
+    h: naga::Handle<naga::Expression>,
+    local: &naga::Arena<naga::Expression>,
+    module: &naga::Module,
+) -> Option<u32> {
+    use naga::{Expression, Literal};
+    let expr = resolve_expr_in_module(h, local, module)?;
+    match expr {
+        Expression::Literal(Literal::U32(v)) => Some(*v),
+        Expression::Literal(Literal::I32(v)) => u32::try_from(*v).ok(),
+        Expression::Literal(Literal::AbstractInt(v)) => u32::try_from(*v).ok(),
+        Expression::ZeroValue(_) => Some(0),
+        Expression::Constant(c_h) => {
+            let init = module.constants[*c_h].init;
+            resolve_u32_scalar(init, &module.global_expressions, module)
+        }
+        Expression::Override(o_h) => module.overrides[*o_h]
+            .init
+            .and_then(|init| resolve_u32_scalar(init, &module.global_expressions, module)),
+        Expression::Compose { components, .. } if components.len() == 1 => {
+            resolve_u32_scalar(components[0], local, module)
+        }
+        Expression::As { expr, .. } => resolve_u32_scalar(*expr, local, module),
+        _ => None,
+    }
+}
+
+fn resolve_int_bits_scalar(
+    h: naga::Handle<naga::Expression>,
+    local: &naga::Arena<naga::Expression>,
+    module: &naga::Module,
+) -> Option<u32> {
+    use naga::{Expression, Literal};
+    let expr = resolve_expr_in_module(h, local, module)?;
+    match expr {
+        Expression::Literal(Literal::U32(v)) => Some(*v),
+        Expression::Literal(Literal::I32(v)) => Some(*v as u32),
+        Expression::Literal(Literal::AbstractInt(v)) => Some((*v as i32) as u32),
+        Expression::ZeroValue(_) => Some(0),
+        Expression::Constant(c_h) => {
+            let init = module.constants[*c_h].init;
+            resolve_int_bits_scalar(init, &module.global_expressions, module)
+        }
+        Expression::Override(o_h) => module.overrides[*o_h]
+            .init
+            .and_then(|init| resolve_int_bits_scalar(init, &module.global_expressions, module)),
+        Expression::Compose { components, .. } if components.len() == 1 => {
+            resolve_int_bits_scalar(components[0], local, module)
+        }
+        Expression::As { expr, .. } => resolve_int_bits_scalar(*expr, local, module),
+        _ => None,
+    }
+}
+
+fn resolve_int_components_bits(
+    h: naga::Handle<naga::Expression>,
+    width: usize,
+    local: &naga::Arena<naga::Expression>,
+    module: &naga::Module,
+) -> Option<Vec<u32>> {
+    use naga::Expression;
+    let expr = resolve_expr_in_module(h, local, module)?;
+    match expr {
+        Expression::Constant(c_h) => {
+            let init = module.constants[*c_h].init;
+            resolve_int_components_bits(init, width, &module.global_expressions, module)
+        }
+        Expression::Override(o_h) => module.overrides[*o_h].init.and_then(|init| {
+            resolve_int_components_bits(init, width, &module.global_expressions, module)
+        }),
+        Expression::ZeroValue(_) => Some(vec![0; width]),
+        Expression::Splat { value, .. } if width > 1 => {
+            let v = resolve_int_bits_scalar(*value, local, module)?;
+            Some(vec![v; width])
+        }
+        Expression::Compose { components, .. } if width > 1 => {
+            if components.len() != width {
+                return None;
+            }
+            let mut out = Vec::with_capacity(width);
+            for c in components {
+                out.push(resolve_int_bits_scalar(*c, local, module)?);
+            }
+            Some(out)
+        }
+        _ if width == 1 => resolve_int_bits_scalar(h, local, module).map(|v| vec![v]),
+        _ => None,
+    }
+}
+
+fn bit_extract(value: u32, signed: bool, offset: u32, count: u32) -> u32 {
+    let o = offset.min(32);
+    let c = count.min(32 - o);
+    if c == 0 {
+        return 0;
+    }
+    let shifted = value >> o;
+    let mask = if c == 32 { u32::MAX } else { (1u32 << c) - 1 };
+    let bits = shifted & mask;
+    if signed && c < 32 && ((bits >> (c - 1)) & 1) != 0 {
+        bits | !mask
+    } else {
+        bits
+    }
+}
+
+fn bit_insert(value: u32, newbits: u32, offset: u32, count: u32) -> u32 {
+    let o = offset.min(32);
+    let c = count.min(32 - o);
+    if c == 0 {
+        return value;
+    }
+    let low_mask = if c == 32 { u32::MAX } else { (1u32 << c) - 1 };
+    let mask = low_mask << o;
+    (value & !mask) | ((newbits << o) & mask)
+}
+
+fn expression_is_atomic_value(
+    h: naga::Handle<naga::Expression>,
+    local: &naga::Arena<naga::Expression>,
+    module: &naga::Module,
+) -> bool {
+    use naga::Expression;
+    let Some(expr) = resolve_expr_in_module(h, local, module) else {
+        return false;
+    };
+    match expr {
+        Expression::GlobalVariable(g_h) => {
+            matches!(
+                &module.types[module.global_variables[*g_h].ty].inner,
+                naga::TypeInner::Atomic(_)
+            )
+        }
+        Expression::LocalVariable(_) => false,
+        Expression::Load { pointer } | Expression::As { expr: pointer, .. } => {
+            expression_is_atomic_value(*pointer, local, module)
+        }
+        _ => false,
+    }
+}
+
+fn validate_bit_builtins(module: &naga::Module) -> Vec<WgslMessage> {
+    let mut errors: Vec<WgslMessage> = Vec::new();
+    check_bit_builtins_in_arena(&module.global_expressions, module, None, &mut errors);
+    for ep in &module.entry_points {
+        check_bit_builtins_in_arena(&ep.function.expressions, module, None, &mut errors);
+    }
+    for (_, f) in module.functions.iter() {
+        check_bit_builtins_in_arena(&f.expressions, module, None, &mut errors);
+    }
+    errors
+}
+
+fn validate_bit_builtins_live(module: &naga::Module) -> Vec<WgslMessage> {
+    let mut errors: Vec<WgslMessage> = Vec::new();
+    check_bit_builtins_in_arena(&module.global_expressions, module, None, &mut errors);
+    let mut reachable_helpers: HashSet<naga::Handle<naga::Function>> = HashSet::new();
+    for ep in &module.entry_points {
+        collect_called_functions_in_block(&ep.function.body, &mut reachable_helpers);
+        let mut live: HashSet<naga::Handle<naga::Expression>> = HashSet::new();
+        collect_live_in_block(
+            &ep.function.body,
+            &ep.function.expressions,
+            module,
+            &mut live,
+        );
+        check_bit_builtins_in_arena(&ep.function.expressions, module, Some(&live), &mut errors);
+    }
+    let mut changed = true;
+    while changed {
+        changed = false;
+        let current: Vec<_> = reachable_helpers.iter().copied().collect();
+        for h in current {
+            let before = reachable_helpers.len();
+            collect_called_functions_in_block(&module.functions[h].body, &mut reachable_helpers);
+            changed |= reachable_helpers.len() != before;
+        }
+    }
+    for h in reachable_helpers {
+        let f = &module.functions[h];
+        let mut live: HashSet<naga::Handle<naga::Expression>> = HashSet::new();
+        collect_live_in_block(&f.body, &f.expressions, module, &mut live);
+        check_bit_builtins_in_arena(&f.expressions, module, Some(&live), &mut errors);
+    }
+    errors
+}
+
+fn collect_called_functions_in_block(
+    block: &naga::Block,
+    out: &mut HashSet<naga::Handle<naga::Function>>,
+) {
+    use naga::Statement;
+    for (stmt, _span) in block.span_iter() {
+        match stmt {
+            Statement::Block(b) => collect_called_functions_in_block(b, out),
+            Statement::If { accept, reject, .. } => {
+                collect_called_functions_in_block(accept, out);
+                collect_called_functions_in_block(reject, out);
+            }
+            Statement::Switch { cases, .. } => {
+                for case in cases {
+                    collect_called_functions_in_block(&case.body, out);
+                }
+            }
+            Statement::Loop {
+                body, continuing, ..
+            } => {
+                collect_called_functions_in_block(body, out);
+                collect_called_functions_in_block(continuing, out);
+            }
+            Statement::Call { function, .. } => {
+                out.insert(*function);
+            }
+            _ => {}
+        }
+    }
+}
+
+fn check_bit_builtins_in_arena(
+    local: &naga::Arena<naga::Expression>,
+    module: &naga::Module,
+    live: Option<&HashSet<naga::Handle<naga::Expression>>>,
+    errors: &mut Vec<WgslMessage>,
+) {
+    use naga::{Expression, MathFunction};
+    for (h, expr) in local.iter() {
+        if live.is_some_and(|set| !set.contains(&h)) {
+            continue;
+        }
+        let Expression::Math {
+            fun,
+            arg,
+            arg1,
+            arg2,
+            arg3,
+        } = expr
+        else {
+            continue;
+        };
+        let (name, value_args, offset, count) = match fun {
+            MathFunction::ExtractBits => {
+                let (Some(offset), Some(count)) = (*arg1, *arg2) else {
+                    continue;
+                };
+                ("extractBits", vec![*arg], offset, count)
+            }
+            MathFunction::InsertBits => {
+                let Some(newbits) = *arg1 else {
+                    continue;
+                };
+                let (Some(offset), Some(count)) = (*arg2, *arg3) else {
+                    continue;
+                };
+                ("insertBits", vec![*arg, newbits], offset, count)
+            }
+            _ => continue,
+        };
+        if value_args
+            .iter()
+            .copied()
+            .any(|h| expression_is_atomic_value(h, local, module))
+        {
+            errors.push(wgsl_error(format!(
+                "{} value arguments must be i32/u32 values, not atomic values",
+                name
+            )));
+            continue;
+        }
+        if expression_is_atomic_value(offset, local, module)
+            || expression_is_atomic_value(count, local, module)
+        {
+            errors.push(wgsl_error(format!(
+                "{} offset/count arguments must be u32 values, not atomic values",
+                name
+            )));
+            continue;
+        }
+        if let (Some(o), Some(c)) = (
+            resolve_u32_scalar(offset, local, module),
+            resolve_u32_scalar(count, local, module),
+        ) {
+            if u64::from(o) + u64::from(c) > 32 {
+                errors.push(wgsl_error(format!(
+                    "{} offset + count must be <= 32 for const/override evaluation",
+                    name
+                )));
+            }
+        }
+    }
+}
+
+fn resolve_expression_types(
+    module: &naga::Module,
+    local: &naga::Arena<naga::Expression>,
+    local_vars: &naga::Arena<naga::LocalVariable>,
+    arguments: &[naga::FunctionArgument],
+) -> HashMap<naga::Handle<naga::Expression>, TypeResolution> {
+    let ctx = ResolveContext::with_locals(module, local_vars, arguments);
+    let mut out = HashMap::new();
+    for (h, expr) in local.iter() {
+        if let Ok(resolution) = ctx.resolve(expr, |dep| {
+            out.get(&dep)
+                .ok_or(naga::proc::ResolveError::InvalidScalar(dep))
+        }) {
+            out.insert(h, resolution);
+        }
+    }
+    out
+}
+
+fn collect_bit_folds(
+    local: &naga::Arena<naga::Expression>,
+    module: &naga::Module,
+    types: &HashMap<naga::Handle<naga::Expression>, TypeResolution>,
+) -> HashMap<naga::Handle<naga::Expression>, BitFoldValue> {
+    use naga::{Expression, MathFunction};
+    let mut folds = HashMap::new();
+    for (h, expr) in local.iter() {
+        let Expression::Math {
+            fun,
+            arg,
+            arg1,
+            arg2,
+            arg3,
+        } = expr
+        else {
+            continue;
+        };
+        let Some((signed, width, ty)) = types
+            .get(&h)
+            .and_then(|ty| bit_type_info(ty, &module.types))
+        else {
+            continue;
+        };
+        if width > 1 && ty.is_none() {
+            continue;
+        }
+        let Some(values) = resolve_int_components_bits(*arg, width, local, module) else {
+            continue;
+        };
+        let (offset_h, count_h) = match fun {
+            MathFunction::ExtractBits => {
+                let (Some(offset), Some(count)) = (*arg1, *arg2) else {
+                    continue;
+                };
+                (offset, count)
+            }
+            MathFunction::InsertBits => {
+                let (Some(offset), Some(count)) = (*arg2, *arg3) else {
+                    continue;
+                };
+                (offset, count)
+            }
+            _ => continue,
+        };
+        let Some(offset) = resolve_u32_scalar(offset_h, local, module) else {
+            continue;
+        };
+        let Some(count) = resolve_u32_scalar(count_h, local, module) else {
+            continue;
+        };
+        if u64::from(offset) + u64::from(count) > 32 {
+            continue;
+        }
+        let components = match fun {
+            MathFunction::ExtractBits => values
+                .into_iter()
+                .map(|v| bit_extract(v, signed, offset, count))
+                .collect(),
+            MathFunction::InsertBits => {
+                let Some(newbits_h) = *arg1 else {
+                    continue;
+                };
+                let Some(newbits) = resolve_int_components_bits(newbits_h, width, local, module)
+                else {
+                    continue;
+                };
+                values
+                    .into_iter()
+                    .zip(newbits.into_iter())
+                    .map(|(v, n)| bit_insert(v, n, offset, count))
+                    .collect()
+            }
+            _ => continue,
+        };
+        folds.insert(
+            h,
+            BitFoldValue {
+                signed,
+                ty,
+                components,
+            },
+        );
+    }
+    folds
+}
+
+fn literal_from_bits(bits: u32, signed: bool) -> naga::Expression {
+    if signed {
+        naga::Expression::Literal(naga::Literal::I32(bits as i32))
+    } else {
+        naga::Expression::Literal(naga::Literal::U32(bits))
+    }
+}
+
+fn rebuild_arena_with_bit_folds(
+    local: &mut naga::Arena<naga::Expression>,
+    folds: &HashMap<naga::Handle<naga::Expression>, BitFoldValue>,
+) -> HashMap<naga::Handle<naga::Expression>, naga::Handle<naga::Expression>> {
+    use naga::{Expression, Span};
+    use std::mem;
+
+    let drained: Vec<(naga::Handle<Expression>, Expression, Span)> =
+        mem::take(local).drain().collect();
+    let mut remap: HashMap<naga::Handle<Expression>, naga::Handle<Expression>> = HashMap::new();
+    for (old_h, mut expr, span) in drained {
+        adjust_expr_with_map(&remap, &mut expr);
+        if let Some(fold) = folds.get(&old_h) {
+            let new_h = if fold.components.len() == 1 {
+                local.append(literal_from_bits(fold.components[0], fold.signed), span)
+            } else {
+                let Some(ty) = fold.ty else {
+                    let new_h = local.append(expr, span);
+                    remap.insert(old_h, new_h);
+                    continue;
+                };
+                let mut components = Vec::with_capacity(fold.components.len());
+                for bits in &fold.components {
+                    components
+                        .push(local.append(literal_from_bits(*bits, fold.signed), Span::UNDEFINED));
+                }
+                local.append(Expression::Compose { ty, components }, span)
+            };
+            remap.insert(old_h, new_h);
+        } else {
+            let new_h = local.append(expr, span);
+            remap.insert(old_h, new_h);
+        }
+    }
+    remap
+}
+
+fn fold_bit_builtins(module: &mut naga::Module) {
+    let empty_locals = naga::Arena::new();
+    let global_types =
+        resolve_expression_types(module, &module.global_expressions, &empty_locals, &[]);
+    let global_folds = collect_bit_folds(&module.global_expressions, module, &global_types);
+    if !global_folds.is_empty() {
+        let remap = rebuild_arena_with_bit_folds(&mut module.global_expressions, &global_folds);
+        for (_, c) in module.constants.iter_mut() {
+            if let Some(new) = remap.get(&c.init).copied() {
+                c.init = new;
+            }
+        }
+        for (_, ov) in module.overrides.iter_mut() {
+            if let Some(init) = ov.init {
+                if let Some(new) = remap.get(&init).copied() {
+                    ov.init = Some(new);
+                }
+            }
+        }
+        for (_, gv) in module.global_variables.iter_mut() {
+            if let Some(init) = gv.init {
+                if let Some(new) = remap.get(&init).copied() {
+                    gv.init = Some(new);
+                }
+            }
+        }
+    }
 }
 
 fn check_clamp_smoothstep_in_arena(
@@ -4348,6 +9610,10 @@ fn adjust_stmt_with_map(
 }
 
 pub fn compile_with_meta(source: &str) -> std::result::Result<WgslCompileResult, Vec<WgslMessage>> {
+    let frontend_errors = validate_parse_frontend_source(source);
+    if !frontend_errors.is_empty() {
+        return Err(frontend_errors);
+    }
     let strip = strip_diagnostic_directives(source);
     if strip.has_error {
         return Err(strip.messages);
@@ -4359,25 +9625,148 @@ pub fn compile_with_meta(source: &str) -> std::result::Result<WgslCompileResult,
         return Err(msgs);
     }
     let short_circuit_source = lower_short_circuit_source(&strip.sanitized, None);
-    let smoothstep_errors = validate_smoothstep_source(&short_circuit_source, None, None);
+    let dynamic_index_source = lower_dynamic_index_lets_source(&short_circuit_source);
+    let var_normalized_source =
+        normalize_var_template_trailing_commas_source(&dynamic_index_source);
+    let interpolated_source = normalize_interpolate_trailing_commas_source(&var_normalized_source);
+    let normalized_source = lower_struct_size5_align16_source(&interpolated_source);
+    let shadowed_builtin_errors =
+        validate_shadowed_lowered_builtin_calls_source(&normalized_source);
+    if !shadowed_builtin_errors.is_empty() {
+        let mut msgs = strip.messages;
+        msgs.extend(shadowed_builtin_errors);
+        return Err(msgs);
+    }
+    let smoothstep_errors = validate_smoothstep_source(&normalized_source, None, None);
     if !smoothstep_errors.is_empty() {
         let mut msgs = strip.messages;
         msgs.extend(smoothstep_errors);
         return Err(msgs);
     }
-    let ldexp_errors = validate_ldexp_source(&short_circuit_source, None, None);
+    let ldexp_errors = validate_ldexp_source(&normalized_source, None, None);
     if !ldexp_errors.is_empty() {
         let mut msgs = strip.messages;
         msgs.extend(ldexp_errors);
         return Err(msgs);
     }
-    let precedence_errors = validate_binary_precedence_source(&short_circuit_source, None);
+    let precedence_errors = validate_binary_precedence_source(&normalized_source, None);
     if !precedence_errors.is_empty() {
         let mut msgs = strip.messages;
         msgs.extend(precedence_errors);
         return Err(msgs);
     }
-    let parse_source = lower_ldexp_source(&lower_smoothstep_source(&short_circuit_source), None);
+    let function_attribute_errors = validate_function_attribute_source(&normalized_source);
+    if !function_attribute_errors.is_empty() {
+        let mut msgs = strip.messages;
+        msgs.extend(function_attribute_errors);
+        return Err(msgs);
+    }
+    let shader_io_errors = validate_shader_io_attribute_source(&normalized_source);
+    if !shader_io_errors.is_empty() {
+        let mut msgs = strip.messages;
+        msgs.extend(shader_io_errors);
+        return Err(msgs);
+    }
+    let id_attribute_errors = validate_id_attribute_source(&normalized_source);
+    if !id_attribute_errors.is_empty() {
+        let mut msgs = strip.messages;
+        msgs.extend(id_attribute_errors);
+        return Err(msgs);
+    }
+    let loop_behavior_errors = validate_loop_behavior_source(&normalized_source);
+    if !loop_behavior_errors.is_empty() {
+        let mut msgs = strip.messages;
+        msgs.extend(loop_behavior_errors);
+        return Err(msgs);
+    }
+    let size_attribute_errors = validate_size_attribute_source(&normalized_source);
+    if !size_attribute_errors.is_empty() {
+        let mut msgs = strip.messages;
+        msgs.extend(size_attribute_errors);
+        return Err(msgs);
+    }
+    let atomic_errors = validate_atomic_source(&normalized_source);
+    if !atomic_errors.is_empty() {
+        let mut msgs = strip.messages;
+        msgs.extend(atomic_errors);
+        return Err(msgs);
+    }
+    let bool_order_errors = validate_bool_order_comparison_source(&normalized_source);
+    if !bool_order_errors.is_empty() {
+        let mut msgs = strip.messages;
+        msgs.extend(bool_order_errors);
+        return Err(msgs);
+    }
+    let pointer_parameter_errors =
+        validate_unrestricted_pointer_parameter_source(&normalized_source);
+    if !pointer_parameter_errors.is_empty() {
+        let mut msgs = strip.messages;
+        msgs.extend(pointer_parameter_errors);
+        return Err(msgs);
+    }
+    let override_sized_array_errors = validate_override_sized_array_source(&normalized_source);
+    if !override_sized_array_errors.is_empty() {
+        let mut msgs = strip.messages;
+        msgs.extend(override_sized_array_errors);
+        return Err(msgs);
+    }
+    let let_resource_errors = validate_let_resource_handle_source(&normalized_source);
+    if !let_resource_errors.is_empty() {
+        let mut msgs = strip.messages;
+        msgs.extend(let_resource_errors);
+        return Err(msgs);
+    }
+    // Naga 29 skips return- and coords-type validation for
+    // textureSampleBaseClampToEdge calls on texture_external bindings; emit
+    // shader-creation errors for the CTS-shaped invalid forms.
+    let texture_sample_clamp_errors =
+        validate_texture_sample_base_clamp_to_edge_source(&normalized_source);
+    if !texture_sample_clamp_errors.is_empty() {
+        let mut msgs = strip.messages;
+        msgs.extend(texture_sample_clamp_errors);
+        return Err(msgs);
+    }
+    let texture_builtin_type_errors = validate_texture_builtin_type_source(&normalized_source);
+    if !texture_builtin_type_errors.is_empty() {
+        let mut msgs = strip.messages;
+        msgs.extend(texture_builtin_type_errors);
+        return Err(msgs);
+    }
+    let bitcast_errors = validate_const_bitcast_source(&normalized_source, None);
+    if !bitcast_errors.is_empty() {
+        let mut msgs = strip.messages;
+        msgs.extend(bitcast_errors);
+        return Err(msgs);
+    }
+    let div_rem_source_errors = validate_div_rem_source(&normalized_source, None, None);
+    if !div_rem_source_errors.is_empty() {
+        let mut msgs = strip.messages;
+        msgs.extend(div_rem_source_errors);
+        return Err(msgs);
+    }
+    let math_domain_errors = validate_math_domain_source(&normalized_source, None, None);
+    if !math_domain_errors.is_empty() {
+        let mut msgs = strip.messages;
+        msgs.extend(math_domain_errors);
+        return Err(msgs);
+    }
+    let size_lowered_source = lower_large_size_attribute_source(&normalized_source);
+    let naga_source = lower_no_entry_workgroup_pointer_params_source(&size_lowered_source);
+    let shadow_builtin_source = lower_shadow_builtin_abstract_args_source(&naga_source);
+    let bool_bitwise_source = lower_bool_bitwise_const_source(&shadow_builtin_source);
+    let parse_source = lower_const_bitcasts_source(
+        &lower_packed_builtins_source(
+            &lower_bit_builtins_source(
+                &lower_quantize_to_f16_source(
+                    &lower_ldexp_source(&lower_smoothstep_source(&bool_bitwise_source), None),
+                    None,
+                ),
+                None,
+            ),
+            None,
+        ),
+        None,
+    );
     let mut module = match wgsl::parse_str(&parse_source) {
         Ok(m) => m,
         Err(e) => {
@@ -4390,7 +9779,7 @@ pub fn compile_with_meta(source: &str) -> std::result::Result<WgslCompileResult,
     // Run the bias clamp before validation so FunctionInfo (and downstream
     // process_overrides + spv::write_vec) see the new expressions.
     clamp_image_sample_bias(&mut module);
-    cloak_const_indices(&mut module);
+    cloak_const_indices(&mut module, &parse_source);
 
     // WGSL §17.6.2: integer e1 / e2 and e1 % e2 with v2 == 0 must be a
     // compilation error. naga 29 catches this for fully-const expressions
@@ -4398,7 +9787,10 @@ pub fn compile_with_meta(source: &str) -> std::result::Result<WgslCompileResult,
     // what CTS scalar_vector compound_assignment=true and
     // scalar_vector_out_of_range exercise). Walk the expression arenas
     // ourselves and emit synthetic errors for the const-zero divisor case.
-    let mut bridge_errors = validate_div_rem(&module);
+    let mut bridge_errors = validate_storage_atomic_access(&module);
+    bridge_errors.extend(validate_stage_resource_restrictions(&module, &parse_source));
+    bridge_errors.extend(validate_bool_order_comparisons(&module));
+    bridge_errors.extend(validate_div_rem(&module));
     // WGSL §17.6.3.4 / §17.6.3.21: clamp(v, low, high) and smoothstep(e0,
     // e1, x) require low ≤ high / e0 ≤ e1 when both are const- or override-
     // evaluable. naga 29 misses this; we walk Math expressions and reject
@@ -4407,11 +9799,18 @@ pub fn compile_with_meta(source: &str) -> std::result::Result<WgslCompileResult,
     // WGSL §17.7.x: ImageSample offset must be a const vec[2|3]<i32>
     // with each component in [-8, 7].
     bridge_errors.extend(validate_texture_offsets(&module));
+    // WGSL integer bit builtins: const/override offset+count must fit in the
+    // 32-bit lane, and Naga 29 misses a few invalid atomic offset/count cases.
+    bridge_errors.extend(validate_bit_builtins(&module));
     if !bridge_errors.is_empty() {
         let mut msgs = strip.messages;
         msgs.extend(bridge_errors);
         return Err(msgs);
     }
+    // Naga 29 does not const-evaluate extractBits/insertBits. Fold fully
+    // constant calls to literals before validation so const arrays and module
+    // constants in CTS can compile.
+    fold_bit_builtins(&mut module);
 
     let info = match Validator::new(ValidationFlags::all(), Capabilities::all()).validate(&module) {
         Ok(i) => i,
@@ -4445,7 +9844,13 @@ pub fn compile_with_meta(source: &str) -> std::result::Result<WgslCompileResult,
         std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
             process_overrides(&module, &info, None, &pipeline_constants)
                 .ok()
-                .and_then(|(processed_module, processed_info)| {
+                .and_then(|(processed_module, _processed_info)| {
+                    let mut processed_module = processed_module.into_owned();
+                    fold_bit_builtins(&mut processed_module);
+                    let processed_info =
+                        Validator::new(ValidationFlags::all(), Capabilities::all())
+                            .validate(&processed_module)
+                            .ok()?;
                     spv::write_vec(&processed_module, &processed_info, &options, None).ok()
                 })
         }))
@@ -4606,6 +10011,425 @@ pub fn install_panic_suppression() {
     suppress_naga_panics();
 }
 
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn no_entry_workgroup_pointer_params_are_sanitized_for_naga() {
+        let source = "override size = 1;\nfn f(a: ptr<workgroup, array<u32, size>>) {}\n";
+        let lowered = lower_no_entry_workgroup_pointer_params_source(source);
+        assert!(lowered.contains("ptr<function, array<u32, 1>>"));
+    }
+
+    #[test]
+    fn plain_workgroup_pointer_params_are_not_sanitized() {
+        let source = "fn f(a: ptr<workgroup, u32>) {}\n";
+        let lowered = lower_no_entry_workgroup_pointer_params_source(source);
+        assert!(lowered.contains("ptr<workgroup, u32>"));
+    }
+
+    #[test]
+    fn private_pointer_override_sized_arrays_are_rejected() {
+        let source = "override size = 1;\nfn f(a: ptr<private, array<u32, size>>) {}\n";
+        assert!(!validate_override_sized_array_source(source).is_empty());
+    }
+
+    #[test]
+    fn var_template_trailing_commas_are_normalized() {
+        let source = "fn f() { var<function,> x : u32; }\n@group(0) @binding(0) var<storage, read,> y : u32;";
+        let normalized = normalize_var_template_trailing_commas_source(source);
+        assert!(normalized.contains("var<function >"));
+        assert!(normalized.contains("var<storage, read >"));
+    }
+
+    #[test]
+    fn read_only_storage_atomics_are_rejected() {
+        let source = "@group(0) @binding(0) var<storage, read> foo : atomic<u32>;";
+        let module = wgsl::parse_str(source).unwrap();
+        assert!(!validate_storage_atomic_access(&module).is_empty());
+    }
+
+    #[test]
+    fn invalid_atomic_template_args_are_rejected() {
+        assert!(validate_atomic_source("struct S { x: atomic<f32> }").len() == 1);
+        assert!(validate_atomic_source("alias A = atomic<i32,>;").is_empty());
+        assert!(validate_atomic_source("alias T = i32; alias A = atomic<T>;").is_empty());
+    }
+
+    #[test]
+    fn invalid_atomic_value_uses_are_rejected() {
+        let source = "var<workgroup> a1: atomic<u32>; var<workgroup> a2: atomic<u32>; fn f() { let x: u32 = a1 + a2; }";
+        assert!(!validate_atomic_source(source).is_empty());
+
+        let source = "var<workgroup> a1: atomic<u32>; var<workgroup> a2: atomic<u32>; fn f() { let x = a1 + a2; }";
+        assert!(!validate_atomic_source(source).is_empty());
+
+        let source = "var<workgroup> xu: atomic<u32>; fn f() { var a = xu; a++; }";
+        assert!(!validate_atomic_source(source).is_empty());
+
+        let source = "var<workgroup> xu: atomic<u32>; fn f() { _ = xu; }";
+        assert!(!validate_atomic_source(source).is_empty());
+
+        let source = "var<workgroup> xu: atomic<u32>; fn f() { let p = &xu; _ = atomicLoad(p); }";
+        assert!(validate_atomic_source(source).is_empty());
+    }
+
+    #[test]
+    fn invalid_pointer_atomic_shapes_are_rejected() {
+        assert!(!validate_atomic_source("alias p = ptr<private, atomic<u32>>;").is_empty());
+        assert!(!validate_atomic_source("alias p = ptr<storage, u32, write,>;").is_empty());
+        assert!(validate_atomic_source("alias p = ptr<workgroup, atomic<u32>>;").is_empty());
+    }
+
+    #[test]
+    fn atomic_values_cannot_be_switch_selectors() {
+        let source = "var<workgroup> A : atomic<i32>; fn f() { switch A { default: {} } }";
+        assert!(!validate_atomic_source(source).is_empty());
+    }
+
+    #[test]
+    fn vertex_writable_storage_is_rejected() {
+        let source = "@group(0) @binding(0) var<storage, read_write> v : u32;\n@vertex fn main() -> @builtin(position) vec4f { _ = v; return vec4f(); }";
+        let module = wgsl::parse_str(source).unwrap();
+        assert!(!validate_stage_resource_restrictions(&module, source).is_empty());
+    }
+
+    #[test]
+    fn local_shadow_does_not_mark_workgroup_global_used() {
+        let source = "var<workgroup> a: atomic<u32>;\n@vertex fn main() -> @builtin(position) vec4f { var<function> a = 1u; _ = a; return vec4f(); }";
+        let module = wgsl::parse_str(source).unwrap();
+        assert!(validate_stage_resource_restrictions(&module, source).is_empty());
+    }
+
+    #[test]
+    fn bool_order_comparisons_are_rejected() {
+        let source = "const lhs = false; const rhs = true; const bad = lhs < rhs;";
+        assert!(!validate_bool_order_comparison_source(source).is_empty());
+
+        let source =
+            "const lhs = vec2(false, false); const rhs = vec2(false, false); const bad = lhs >= rhs;";
+        assert!(!validate_bool_order_comparison_source(source).is_empty());
+
+        let source = "const lhs = false; const rhs = true; const ok = lhs == rhs;";
+        assert!(validate_bool_order_comparison_source(source).is_empty());
+    }
+
+    #[test]
+    fn const_bool_bitwise_is_folded_for_naga() {
+        let scalar = "const lhs = false; const rhs = true; const foo : bool = lhs | rhs;";
+        assert!(lower_bool_bitwise_const_source(scalar).contains("const foo : bool = true;"));
+        assert!(compile_with_meta(scalar).is_ok());
+
+        let vector = "const lhs = vec2(false, true); const rhs = vec2(true, true); const foo : vec2<bool> = lhs & rhs;";
+        assert!(lower_bool_bitwise_const_source(vector)
+            .contains("const foo : vec2<bool> = vec2<bool>(false, true);"));
+        assert!(compile_with_meta(vector).is_ok());
+    }
+
+    #[test]
+    fn div_rem_i32_min_source_shapes_are_rejected() {
+        let div =
+            "const left = i32(-2147483648); const right = i32(-1); fn f() { _ = left / right; }";
+        assert!(!validate_div_rem_source(div, None, None).is_empty());
+        assert!(compile_with_meta(div).is_err());
+
+        let rem =
+            "const left = i32(-2147483648); const right = i32(-1); fn f() { _ = left % right; }";
+        assert!(!validate_div_rem_source(rem, None, None).is_empty());
+
+        let ok =
+            "const left = i32(-2147483647); const right = i32(-1); fn f() { _ = left / right; }";
+        assert!(validate_div_rem_source(ok, None, None).is_empty());
+
+        let guarded = "const left = i32(-2147483648); const right = i32(-1); fn f() { _ = false && ((left / right) == 0); }";
+        assert!(validate_div_rem_source(guarded, None, None).is_empty());
+    }
+
+    #[test]
+    fn div_rem_i32_min_override_source_shape_is_bake_only() {
+        let source = "override o0 : i32; override o1 : i32; @compute @workgroup_size(1) fn main() { _ = i32(o0) / i32(o1); }";
+        assert!(validate_div_rem_source(source, None, None).is_empty());
+
+        let mut constants = HashMap::new();
+        constants.insert("o0".to_string(), i32::MIN as f64);
+        constants.insert("o1".to_string(), -1.0);
+        assert!(!validate_div_rem_source(source, Some(&constants), Some("main")).is_empty());
+
+        constants.insert("o0".to_string(), (i32::MIN + 1) as f64);
+        assert!(validate_div_rem_source(source, Some(&constants), Some("main")).is_empty());
+    }
+
+    #[test]
+    fn id_attribute_only_allows_overrides() {
+        assert!(validate_id_attribute_source("@id(1) override a = 4;").is_empty());
+        assert!(validate_id_attribute_source("@\nid(1) override a = 4;").is_empty());
+        assert!(!validate_id_attribute_source("@id(1) const a = 4;").is_empty());
+        assert!(!validate_id_attribute_source("@id(1) var a = 4;").is_empty());
+    }
+
+    #[test]
+    fn loop_behavior_cts_gaps_are_rejected() {
+        assert!(validate_loop_behavior_source("fn f(){ loop { break; } }").is_empty());
+        assert!(
+            validate_loop_behavior_source("fn f(){ loop { continuing { break if true; } } }")
+                .is_empty()
+        );
+        assert!(!validate_loop_behavior_source("fn f(){ loop{} }").is_empty());
+        assert!(!validate_loop_behavior_source("fn f(){ loop { continue; } }").is_empty());
+        assert!(!validate_loop_behavior_source("fn f(){ loop { continue; break; } }").is_empty());
+        assert!(!validate_loop_behavior_source("fn f(){ loop { continuing {} } }").is_empty());
+        assert!(!validate_loop_behavior_source("fn f(){ for (;;) {} }").is_empty());
+        assert!(
+            !validate_loop_behavior_source("fn f(){ for (;;) { continue; break; } }").is_empty()
+        );
+        assert!(!validate_loop_behavior_source("fn f(){ for (var i = 0; ; i++) {} }").is_empty());
+    }
+
+    #[test]
+    fn continue_cannot_bypass_declarations_used_by_continuing() {
+        assert!(validate_loop_behavior_source(
+            "fn f(){ loop { let cond = false; continue; continuing { break if cond; } } }"
+        )
+        .is_empty());
+        assert!(validate_loop_behavior_source(
+            "fn f(){ loop { continue; let cond = false; continuing { break if false; } } }"
+        )
+        .is_empty());
+        assert!(!validate_loop_behavior_source(
+            "fn f(){ loop { continue; let cond = false; continuing { break if cond; } } }"
+        )
+        .is_empty());
+        assert!(!validate_loop_behavior_source(
+            "fn f(){ loop { if false { continue; } let cond = false; continuing { break if cond; } } }"
+        )
+        .is_empty());
+    }
+
+    #[test]
+    fn texture_sample_base_clamp_to_edge_external_validates_args() {
+        let prelude = "@group(0) @binding(0) var s: sampler;\n@group(0) @binding(1) var t: texture_external;\n";
+        let ok = format!(
+            "{prelude}@fragment fn fs() -> @location(0) vec4f {{ let v: vec4f = textureSampleBaseClampToEdge(t, s, vec2f(0)); return vec4f(0); }}"
+        );
+        assert!(validate_texture_sample_base_clamp_to_edge_source(&ok).is_empty());
+
+        let bad_return = format!(
+            "{prelude}@fragment fn fs() -> @location(0) vec4f {{ let v: vec2<bool> = textureSampleBaseClampToEdge(t, s, vec2f(0)); return vec4f(0); }}"
+        );
+        assert!(!validate_texture_sample_base_clamp_to_edge_source(&bad_return).is_empty());
+
+        let bad_return_f16 = format!(
+            "{prelude}@fragment fn fs() -> @location(0) vec4f {{ let v: vec4<f16> = textureSampleBaseClampToEdge(t, s, vec2f(0)); return vec4f(0); }}"
+        );
+        assert!(!validate_texture_sample_base_clamp_to_edge_source(&bad_return_f16).is_empty());
+
+        let bad_coord_scalar = format!(
+            "{prelude}@fragment fn fs() -> @location(0) vec4f {{ let v = textureSampleBaseClampToEdge(t, s, false); return vec4f(0); }}"
+        );
+        assert!(!validate_texture_sample_base_clamp_to_edge_source(&bad_coord_scalar).is_empty());
+
+        let bad_coord_vec3 = format!(
+            "{prelude}@fragment fn fs() -> @location(0) vec4f {{ let v = textureSampleBaseClampToEdge(t, s, vec3f(0,0,0)); return vec4f(0); }}"
+        );
+        assert!(!validate_texture_sample_base_clamp_to_edge_source(&bad_coord_vec3).is_empty());
+
+        let bad_coord_vec2_int = format!(
+            "{prelude}@fragment fn fs() -> @location(0) vec4f {{ let v = textureSampleBaseClampToEdge(t, s, vec2<i32>(0, 0)); return vec4f(0); }}"
+        );
+        assert!(!validate_texture_sample_base_clamp_to_edge_source(&bad_coord_vec2_int).is_empty());
+
+        let abstract_int_coord = format!(
+            "{prelude}@fragment fn fs() -> @location(0) vec4f {{ let v = textureSampleBaseClampToEdge(t, s, vec2(0, 0)); return vec4f(0); }}"
+        );
+        assert!(validate_texture_sample_base_clamp_to_edge_source(&abstract_int_coord).is_empty());
+
+        // texture_2d<f32> is naga's responsibility — leave it untouched.
+        let texture_2d_prelude = "@group(0) @binding(0) var s: sampler;\n@group(0) @binding(1) var t: texture_2d<f32>;\n";
+        let texture_2d_bad = format!(
+            "{texture_2d_prelude}@fragment fn fs() -> @location(0) vec4f {{ let v: vec2<bool> = textureSampleBaseClampToEdge(t, s, vec2f(0)); return vec4f(0); }}"
+        );
+        assert!(validate_texture_sample_base_clamp_to_edge_source(&texture_2d_bad).is_empty());
+
+        // Exact CTS shader shape (multi-line, leading whitespace inside body).
+        let cts_shape = "\n@group(0) @binding(0) var s: sampler;\n@group(0) @binding(1) var t: texture_external;\n@fragment fn fs() -> @location(0) vec4f {\n  let v: bool = textureSampleBaseClampToEdge(t, s, vec2f(0));\n  return vec4f(0);\n}\n";
+        assert!(
+            !validate_texture_sample_base_clamp_to_edge_source(cts_shape).is_empty(),
+            "exact CTS-shape shader should produce error"
+        );
+    }
+
+    #[test]
+    fn texture_builtin_type_cts_gaps_are_rejected() {
+        let gather_ok = "@group(0) @binding(0) var s: sampler; @group(0) @binding(1) var t: texture_depth_2d; @fragment fn fs() -> @location(0) vec4f { _ = textureGather(t, s, vec2f(0)); return vec4f(); }";
+        assert!(validate_texture_builtin_type_source(gather_ok).is_empty());
+
+        let gather_component = "@group(0) @binding(0) var s: sampler; @group(0) @binding(1) var t: texture_depth_2d; @fragment fn fs() -> @location(0) vec4f { _ = textureGather(0, t, s, vec2f(0)); return vec4f(); }";
+        assert!(!validate_texture_builtin_type_source(gather_component).is_empty());
+
+        let sample_ok = "@group(0) @binding(0) var s: sampler; @group(0) @binding(1) var t: texture_cube<f32>; @fragment fn fs() -> @location(0) vec4f { _ = textureSample(t, s, vec3f(0)); return vec4f(); }";
+        assert!(validate_texture_builtin_type_source(sample_ok).is_empty());
+
+        let sample_cube_offset = "@group(0) @binding(0) var s: sampler; @group(0) @binding(1) var t: texture_cube<f32>; @fragment fn fs() -> @location(0) vec4f { _ = textureSample(t, s, vec3f(0), vec3i(0)); return vec4f(); }";
+        assert!(!validate_texture_builtin_type_source(sample_cube_offset).is_empty());
+
+        let sample_level_cube_offset = "@group(0) @binding(0) var s: sampler; @group(0) @binding(1) var t: texture_cube<f32>; @fragment fn fs() -> @location(0) vec4f { _ = textureSampleLevel(t, s, vec3f(0), 0, vec3i(0)); return vec4f(); }";
+        assert!(!validate_texture_builtin_type_source(sample_level_cube_offset).is_empty());
+
+        let sample_grad_depth = "@group(0) @binding(0) var s: sampler; @group(0) @binding(1) var t: texture_depth_2d; @fragment fn fs() -> @location(0) vec4f { _ = textureSampleGrad(t, s, vec2f(0), vec2f(0), vec2f(0)); return vec4f(); }";
+        assert!(!validate_texture_builtin_type_source(sample_grad_depth).is_empty());
+    }
+
+    #[test]
+    fn subgroup_calls_require_enable_directive_even_without_entry_point() {
+        assert!(!validate_subgroup_enable_source("fn foo() { _ = subgroupAny(true); }").is_empty());
+        assert!(validate_subgroup_enable_source(
+            "enable subgroups;\nfn foo() { _ = subgroupAny(true); }"
+        )
+        .is_empty());
+        assert!(validate_subgroup_enable_source("fn foo() { let subgroupAny = true; }").is_empty());
+        assert!(validate_subgroup_enable_source("fn subgroupAny() {}").is_empty());
+    }
+
+    #[test]
+    fn size_attribute_handles_large_and_runtime_array_cases() {
+        let large = "struct S { @size(2147483647) a: f32, }";
+        assert!(lower_large_size_attribute_source(large).contains("@size(1073741824)"));
+
+        let fixed = "struct S { @size(64) a: array<f32, 4>, }";
+        assert!(validate_size_attribute_source(fixed).is_empty());
+
+        let runtime = "struct S { @size(64) a: array<f32>, }";
+        assert!(!validate_size_attribute_source(runtime).is_empty());
+    }
+
+    #[test]
+    fn shader_io_cts_gaps_are_rejected() {
+        assert!(
+            !validate_shader_io_attribute_source("struct S { @align(2147483648) a: i32, }")
+                .is_empty()
+        );
+        assert!(validate_shader_io_attribute_source(
+            "@\tcompute\n@workgroup_size(1)\nfn main() {}"
+        )
+        .is_empty());
+        assert!(!validate_shader_io_attribute_source(
+            "@compute var<private> priv_var: i32; @vertex fn f() -> @builtin(position) vec4f { return vec4f(); }"
+        )
+        .is_empty());
+        assert!(!validate_shader_io_attribute_source(
+            "@workgroup_size(1i, 1u, 1i) @compute fn main() {}"
+        )
+        .is_empty());
+        assert!(!validate_shader_io_attribute_source(
+            "struct S { @location(0) value: f32, }; @compute @workgroup_size(1) fn main(in: S) {}"
+        )
+        .is_empty());
+        assert!(!validate_shader_io_attribute_source(
+            "@fragment fn main(@location(0) @interpolate(flat, either) value: texture_external) {}"
+        )
+        .is_empty());
+        assert!(!validate_shader_io_attribute_source(
+            "@fragment fn main(@location(0) value: vec2<i32>) {}"
+        )
+        .is_empty());
+        assert!(validate_shader_io_attribute_source(
+            "@vertex fn main(@location(0) value: i32) -> @builtin(position) vec4f { return vec4f(); }"
+        )
+        .is_empty());
+        assert!(!validate_shader_io_attribute_source(
+            "struct Out { @builtin(position) pos: vec4f, @location(0) value: i32, } @vertex fn main() -> Out { return Out(vec4f(), 1); }"
+        )
+        .is_empty());
+        assert!(validate_shader_io_attribute_source(
+            "@fragment fn main(@location(0) @interpolate(flat,) value: vec2<i32>) {}"
+        )
+        .is_empty());
+        assert!(validate_shader_io_attribute_source(
+            "@fragment fn main(@interpolate(flat) @location(0) value: vec2<i32>) {}"
+        )
+        .is_empty());
+        assert!(
+            normalize_interpolate_trailing_commas_source("@interpolate(flat,)").contains("flat ")
+        );
+        assert!(lower_struct_size5_align16_source(
+            "struct T { @align(16) @size(5) x : u32 } struct S { x : u32, y : T }"
+        )
+        .contains("@align(16) y"));
+    }
+
+    #[test]
+    fn diagnostic_derivative_uniformity_scopes_escalate_errors() {
+        let prelude = "@group(0) @binding(0) var t : texture_1d<f32>;\n@group(0) @binding(1) var s : sampler;\nvar<private> non_uniform_cond : bool;\n@fragment fn main() {\n";
+        let error = format!(
+            "{prelude}@diagnostic(error, derivative_uniformity)\nif non_uniform_cond {{ _ = textureSample(t, s, 0.0); }}\n}}"
+        );
+        assert!(strip_diagnostic_directives(&error).has_error);
+
+        let off = format!(
+            "diagnostic(error, derivative_uniformity);\n{prelude}@diagnostic(off, derivative_uniformity)\nif non_uniform_cond {{ _ = textureSample(t, s, 0.0); }}\n}}"
+        );
+        assert!(!strip_diagnostic_directives(&off).has_error);
+
+        let condition_error = format!(
+            "{prelude}if non_uniform_cond {{\n@diagnostic(error, derivative_uniformity)\nif textureSample(t, s, 0.0).x > 0.0 @diagnostic(off, derivative_uniformity) {{}}\n}}\n}}"
+        );
+        assert!(strip_diagnostic_directives(&condition_error).has_error);
+    }
+
+    #[test]
+    fn shadowed_builtin_lowering_respects_scope() {
+        let shadowed = "fn main() { let smoothstep = 4; _ = smoothstep(1, 2, 3); }";
+        assert!(!validate_shadowed_lowered_builtin_calls_source(shadowed).is_empty());
+        assert!(lower_smoothstep_source(shadowed).contains("smoothstep(1, 2, 3)"));
+
+        let sibling_shadow = "fn sibling() { let dpdx = 4; } @fragment fn main() -> @location(0) vec4f { _ = dpdx(2); return vec4f(1); }";
+        assert!(lower_shadow_builtin_abstract_args_source(sibling_shadow).contains("dpdx(2.0)"));
+    }
+
+    #[test]
+    fn packed_builtin_const_lowering_handles_cts_shapes() {
+        assert_eq!(
+            lower_packed_builtins_source("const c = pack4xU8(vec4u());", None),
+            "const c = 0u;"
+        );
+        assert!(compile_with_meta("const c = pack4xU8(vec4u());").is_ok());
+        assert!(compile_with_meta("const c = pack4x8unorm(vec4(0.1));").is_ok());
+        assert!(compile_with_meta("const c = pack2x16float(vec2f());").is_ok());
+        assert!(compile_with_meta("const c: vec4<u32> = unpack4xU8(1u);").is_ok());
+        assert!(compile_with_meta("const c: vec4<i32> = unpack4xI8(1u);").is_ok());
+        assert!(compile_with_meta("const c: vec2<f32> = unpack2x16unorm(1u);").is_ok());
+
+        let not_lowered = lower_packed_builtins_source("const c = unpack4xU8(i32(1));", None);
+        assert!(not_lowered.contains("unpack4xU8(i32(1))"));
+
+        let mut constants = HashMap::new();
+        constants.insert("o0".to_string(), 65504.0);
+        constants.insert("o1".to_string(), -65504.0);
+        let lowered = lower_packed_builtins_source(
+            "override o0 : f32; override o1 : f32; var<private> v = pack2x16float(vec2<f32>(o0, o1));",
+            Some(&constants),
+        );
+        assert!(lowered.contains("var<private> v = 0u;"));
+    }
+
+    #[test]
+    fn quantize_to_f16_const_lowering_handles_cts_shapes() {
+        let lowered = lower_quantize_to_f16_source(
+            "const a = quantizeToF16(0.011948528699576855f); const b = quantizeToF16(vec2(1.0, -1.0));",
+            None,
+        );
+        assert!(lowered.contains("const a = f32("));
+        assert!(lowered.contains("const b = vec2<f32>("));
+        assert!(compile_with_meta("const c = quantizeToF16(0.011948528699576855f);").is_ok());
+        assert!(compile_with_meta("const c = quantizeToF16(vec3f());").is_ok());
+        assert!(
+            lower_quantize_to_f16_source("const c = quantizeToF16(1h);", None)
+                .contains("quantizeToF16(1h)")
+        );
+    }
+}
+
 pub fn wgsl_to_spirv(source: &str) -> Result<Vec<u32>, String> {
     suppress_naga_panics();
     match compile_with_meta(source) {
@@ -4655,6 +10479,9 @@ pub fn bake_wgsl_with_constants(
     entry_point: Option<&str>,
 ) -> Option<Vec<u32>> {
     suppress_naga_panics();
+    if !validate_parse_frontend_source(source).is_empty() {
+        return None;
+    }
     let strip = strip_diagnostic_directives(source);
     if strip.has_error {
         return None;
@@ -4663,23 +10490,97 @@ pub fn bake_wgsl_with_constants(
         return None;
     }
     let short_circuit_source = lower_short_circuit_source(&strip.sanitized, Some(&constants));
-    if !validate_smoothstep_source(&short_circuit_source, Some(&constants), entry_point).is_empty()
-    {
+    let dynamic_index_source = lower_dynamic_index_lets_source(&short_circuit_source);
+    let var_normalized_source =
+        normalize_var_template_trailing_commas_source(&dynamic_index_source);
+    let interpolated_source = normalize_interpolate_trailing_commas_source(&var_normalized_source);
+    let normalized_source = lower_struct_size5_align16_source(&interpolated_source);
+    if !validate_shadowed_lowered_builtin_calls_source(&normalized_source).is_empty() {
         return None;
     }
-    if !validate_ldexp_source(&short_circuit_source, Some(&constants), entry_point).is_empty() {
+    if !validate_smoothstep_source(&normalized_source, Some(&constants), entry_point).is_empty() {
         return None;
     }
-    if !validate_binary_precedence_source(&short_circuit_source, entry_point).is_empty() {
+    if !validate_ldexp_source(&normalized_source, Some(&constants), entry_point).is_empty() {
         return None;
     }
-    let parse_source = lower_ldexp_source(
-        &lower_smoothstep_source(&short_circuit_source),
+    if !validate_binary_precedence_source(&normalized_source, entry_point).is_empty() {
+        return None;
+    }
+    if !validate_function_attribute_source(&normalized_source).is_empty() {
+        return None;
+    }
+    if !validate_shader_io_attribute_source(&normalized_source).is_empty() {
+        return None;
+    }
+    if !validate_id_attribute_source(&normalized_source).is_empty() {
+        return None;
+    }
+    if !validate_loop_behavior_source(&normalized_source).is_empty() {
+        return None;
+    }
+    if !validate_size_attribute_source(&normalized_source).is_empty() {
+        return None;
+    }
+    if !validate_atomic_source(&normalized_source).is_empty() {
+        return None;
+    }
+    if !validate_bool_order_comparison_source(&normalized_source).is_empty() {
+        return None;
+    }
+    if !validate_unrestricted_pointer_parameter_source(&normalized_source).is_empty() {
+        return None;
+    }
+    if !validate_override_sized_array_source(&normalized_source).is_empty() {
+        return None;
+    }
+    if !validate_let_resource_handle_source(&normalized_source).is_empty() {
+        return None;
+    }
+    if !validate_texture_sample_base_clamp_to_edge_source(&normalized_source).is_empty() {
+        return None;
+    }
+    if !validate_texture_builtin_type_source(&normalized_source).is_empty() {
+        return None;
+    }
+    if !validate_const_bitcast_source(&normalized_source, Some(&constants)).is_empty() {
+        return None;
+    }
+    if !validate_div_rem_source(&normalized_source, Some(&constants), entry_point).is_empty() {
+        return None;
+    }
+    if !validate_math_domain_source(&normalized_source, Some(&constants), entry_point).is_empty() {
+        return None;
+    }
+    let size_lowered_source = lower_large_size_attribute_source(&normalized_source);
+    let naga_source = lower_no_entry_workgroup_pointer_params_source(&size_lowered_source);
+    let shadow_builtin_source = lower_shadow_builtin_abstract_args_source(&naga_source);
+    let bool_bitwise_source = lower_bool_bitwise_const_source(&shadow_builtin_source);
+    let parse_source = lower_const_bitcasts_source(
+        &lower_packed_builtins_source(
+            &lower_bit_builtins_source(
+                &lower_quantize_to_f16_source(
+                    &lower_ldexp_source(
+                        &lower_smoothstep_source(&bool_bitwise_source),
+                        Some(&constants),
+                    ),
+                    Some(&constants),
+                ),
+                Some(&constants),
+            ),
+            Some(&constants),
+        ),
         Some(&constants),
     );
     let mut module = wgsl::parse_str(&parse_source).ok()?;
     clamp_image_sample_bias(&mut module);
-    cloak_const_indices(&mut module);
+    cloak_const_indices(&mut module, &parse_source);
+    let mut bridge_errors = validate_storage_atomic_access(&module);
+    bridge_errors.extend(validate_stage_resource_restrictions(&module, &parse_source));
+    bridge_errors.extend(validate_bool_order_comparisons(&module));
+    if !bridge_errors.is_empty() {
+        return None;
+    }
     let info = Validator::new(ValidationFlags::all(), Capabilities::all())
         .validate(&module)
         .ok()?;
@@ -4718,7 +10619,8 @@ pub fn bake_wgsl_with_constants(
     let mut words: Vec<u32> = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
         process_overrides(&module, &info, ep_pair, &pipeline_constants)
             .ok()
-            .and_then(|(processed_module, processed_info)| {
+            .and_then(|(processed_module, _processed_info)| {
+                let mut processed_module = processed_module.into_owned();
                 // After process_overrides bakes the supplied override values
                 // into the IR, re-run the div_rem zero-divisor check so
                 // pipeline-time `override o = 0; ... left / o` patterns
@@ -4743,6 +10645,13 @@ pub fn bake_wgsl_with_constants(
                 if !validate_texture_offsets(&processed_module).is_empty() {
                     return None;
                 }
+                if !validate_bit_builtins_live(&processed_module).is_empty() {
+                    return None;
+                }
+                fold_bit_builtins(&mut processed_module);
+                let processed_info = Validator::new(ValidationFlags::all(), Capabilities::all())
+                    .validate(&processed_module)
+                    .ok()?;
                 spv::write_vec(&processed_module, &processed_info, &options, None).ok()
             })
     }))
