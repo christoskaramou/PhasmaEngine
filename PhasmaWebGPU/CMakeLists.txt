@@ -120,6 +120,15 @@ if (PE_WEBGPU_TESTS)
             ${ARGN}
         )
 
+        foreach (A IN LISTS S_ASSETS)
+            string(REPLACE "|" ";" PARTS "${A}")
+            list(GET PARTS 0 ASRC)
+            if (NOT EXISTS "${ASRC}")
+                message(STATUS "Skipping ${S_TARGET}: missing asset ${ASRC}")
+                return()
+            endif()
+        endforeach()
+
         string(REGEX REPLACE "^WebGPU" "" SHADER_FOLDER "${S_TARGET}")
         set(SHADER_SRC "${CMAKE_CURRENT_SOURCE_DIR}/Tests/${S_DIR}/Shaders")
 
