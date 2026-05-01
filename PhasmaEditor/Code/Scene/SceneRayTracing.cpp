@@ -108,18 +108,19 @@ namespace pe
         RHII.GetGpu().getProperties2(&props);
         auto scratchAlign = asProps.minAccelerationStructureScratchOffsetAlignment;
 
-        m_blasMergedBuffer = Buffer::Create(
-            totalBlasSize,
-            vk::BufferUsageFlagBits2::eAccelerationStructureStorageKHR |
-                vk::BufferUsageFlagBits2::eShaderDeviceAddress,
-            VMA_ALLOCATION_CREATE_DEDICATED_MEMORY_BIT,
-            "BLAS_Merged_Buffer");
+        m_blasMergedBuffer = Buffer::Create({
+            .size = totalBlasSize,
+            .usage = PE_BUFFER_USAGE_ACCELERATION_STRUCTURE_STORAGE_KHR | PE_BUFFER_USAGE_SHADER_DEVICE_ADDRESS,
+            .memoryUsage = PE_MEMORY_USAGE_GPU_ONLY_DEDICATED,
+            .name = "BLAS_Merged_Buffer",
+        });
 
-        m_scratchBuffer = Buffer::Create(
-            RHII.Align(maxScratchSize, scratchAlign),
-            vk::BufferUsageFlagBits2::eStorageBuffer | vk::BufferUsageFlagBits2::eShaderDeviceAddress,
-            VMA_ALLOCATION_CREATE_DEDICATED_MEMORY_BIT,
-            "AS_Scratch_Buffer");
+        m_scratchBuffer = Buffer::Create({
+            .size = RHII.Align(maxScratchSize, scratchAlign),
+            .usage = PE_BUFFER_USAGE_STORAGE_BUFFER | PE_BUFFER_USAGE_SHADER_DEVICE_ADDRESS,
+            .memoryUsage = PE_MEMORY_USAGE_GPU_ONLY_DEDICATED,
+            .name = "AS_Scratch_Buffer",
+        });
 
         // --- Pass 2: Build BLASes ---
         vk::MemoryBarrier2 barrier{};
@@ -242,21 +243,23 @@ namespace pe
         // Reallocate scratch buffer sized for TLAS (BLAS scratch was separate in BuildAllBLASes)
         RHII.AddToDeletionQueue([b = m_scratchBuffer]()
                                 { Buffer *buf = b; Buffer::Destroy(buf); });
-        m_scratchBuffer = Buffer::Create(
-            RHII.Align(tlasScratch, scratchAlign),
-            vk::BufferUsageFlagBits2::eStorageBuffer | vk::BufferUsageFlagBits2::eShaderDeviceAddress,
-            VMA_ALLOCATION_CREATE_DEDICATED_MEMORY_BIT,
-            "AS_Scratch_Buffer");
+        m_scratchBuffer = Buffer::Create({
+            .size = RHII.Align(tlasScratch, scratchAlign),
+            .usage = PE_BUFFER_USAGE_STORAGE_BUFFER | PE_BUFFER_USAGE_SHADER_DEVICE_ADDRESS,
+            .memoryUsage = PE_MEMORY_USAGE_GPU_ONLY_DEDICATED,
+            .name = "AS_Scratch_Buffer",
+        });
 
         // --- Build instance buffer ---
-        m_instanceBuffer = Buffer::Create(
-            std::max((size_t)1, (size_t)m_rtInstanceCount) *
-                sizeof(vk::AccelerationStructureInstanceKHR),
-            vk::BufferUsageFlagBits2::eAccelerationStructureBuildInputReadOnlyKHR |
-                vk::BufferUsageFlagBits2::eShaderDeviceAddress |
-                vk::BufferUsageFlagBits2::eTransferDst,
-            VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT,
-            "TLAS_Instance_Buffer");
+        m_instanceBuffer = Buffer::Create({
+            .size = std::max((size_t)1, (size_t)m_rtInstanceCount) *
+                    sizeof(vk::AccelerationStructureInstanceKHR),
+            .usage = PE_BUFFER_USAGE_ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_KHR |
+                     PE_BUFFER_USAGE_SHADER_DEVICE_ADDRESS |
+                     PE_BUFFER_USAGE_TRANSFER_DST,
+            .memoryUsage = PE_MEMORY_USAGE_CPU_TO_GPU,
+            .name = "TLAS_Instance_Buffer",
+        });
 
         m_instanceBuffer->Map();
         auto *gpuInstances = (vk::AccelerationStructureInstanceKHR *)m_instanceBuffer->Data();
@@ -315,11 +318,12 @@ namespace pe
 
         RHII.AddToDeletionQueue([b = m_meshInfoBuffer]()
                                 { Buffer *buf = b; Buffer::Destroy(buf); });
-        m_meshInfoBuffer = Buffer::Create(
-            std::max((size_t)1, (size_t)m_rtInstanceCount) * sizeof(MeshInfoGPU),
-            vk::BufferUsageFlagBits2::eStorageBuffer | vk::BufferUsageFlagBits2::eTransferDst,
-            VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT,
-            "MeshInfo_Buffer");
+        m_meshInfoBuffer = Buffer::Create({
+            .size = std::max((size_t)1, (size_t)m_rtInstanceCount) * sizeof(MeshInfoGPU),
+            .usage = PE_BUFFER_USAGE_STORAGE_BUFFER | PE_BUFFER_USAGE_TRANSFER_DST,
+            .memoryUsage = PE_MEMORY_USAGE_CPU_TO_GPU,
+            .name = "MeshInfo_Buffer",
+        });
 
         m_meshInfoBuffer->Map();
         auto *meshInfosGPU = (MeshInfoGPU *)m_meshInfoBuffer->Data();

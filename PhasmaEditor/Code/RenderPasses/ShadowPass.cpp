@@ -62,11 +62,12 @@ namespace pe
     {
         for (auto &uniform : m_uniforms)
         {
-            uniform = Buffer::Create(
-                RHII.AlignUniform(Settings::Get<GlobalSettings>().num_cascades * sizeof(mat4)),
-                vk::BufferUsageFlagBits2::eUniformBuffer,
-                VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT,
-                "Shadows_uniform_buffer");
+            uniform = Buffer::Create({
+                .size = RHII.AlignUniform(Settings::Get<GlobalSettings>().num_cascades * sizeof(mat4)),
+                .usage = PE_BUFFER_USAGE_UNIFORM_BUFFER,
+                .memoryUsage = PE_MEMORY_USAGE_CPU_TO_GPU,
+                .name = "Shadows_uniform_buffer",
+            });
             uniform->Map();
             uniform->Zero();
             uniform->Flush();

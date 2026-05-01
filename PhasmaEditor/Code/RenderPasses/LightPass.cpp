@@ -60,11 +60,12 @@ namespace pe
 
         for (auto &uniform : m_uniforms)
         {
-            uniform = Buffer::Create(
-                RHII.AlignUniform(sizeof(LightPassUBO)),
-                vk::BufferUsageFlagBits2::eUniformBuffer,
-                VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT,
-                "Gbuffer_uniform_buffer");
+            uniform = Buffer::Create({
+                .size = RHII.AlignUniform(sizeof(LightPassUBO)),
+                .usage = PE_BUFFER_USAGE_UNIFORM_BUFFER,
+                .memoryUsage = PE_MEMORY_USAGE_CPU_TO_GPU,
+                .name = "Gbuffer_uniform_buffer",
+            });
             uniform->Map();
             uniform->Zero();
             uniform->Flush();
@@ -246,11 +247,12 @@ namespace pe
     {
         for (auto &uniform : m_uniforms)
         {
-            uniform = Buffer::Create(
-                RHII.AlignUniform(sizeof(LightPassUBO)),
-                vk::BufferUsageFlagBits2::eUniformBuffer,
-                VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT,
-                "Gbuffer_uniform_buffer");
+            uniform = Buffer::Create({
+                .size = RHII.AlignUniform(sizeof(LightPassUBO)),
+                .usage = PE_BUFFER_USAGE_UNIFORM_BUFFER,
+                .memoryUsage = PE_MEMORY_USAGE_CPU_TO_GPU,
+                .name = "Gbuffer_uniform_buffer",
+            });
             uniform->Map();
             uniform->Zero();
             uniform->Flush();

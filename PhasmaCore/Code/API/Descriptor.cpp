@@ -2,6 +2,7 @@
 #include "API/Buffer.h"
 #include "API/Image.h"
 #include "API/RHI.h"
+#include "API/Vulkan/VulkanBufferImpl.h"
 
 namespace pe
 {
@@ -348,7 +349,7 @@ namespace pe
                 for (uint32_t j = 0; j < updateInfo.buffers.size(); j++)
                 {
                     infos[j] = vk::DescriptorBufferInfo{};
-                    infos[j].buffer = updateInfo.buffers[j]->ApiHandle();
+                    infos[j].buffer = pe::GetVulkanBuffer(updateInfo.buffers[j]);
                     infos[j].offset = updateInfo.offsets.size() > 0 ? updateInfo.offsets[j] : 0;
                     infos[j].range = updateInfo.ranges.size() > 0 ? (updateInfo.ranges[j] > 0 ? updateInfo.ranges[j] : vk::WholeSize) : vk::WholeSize;
                 }

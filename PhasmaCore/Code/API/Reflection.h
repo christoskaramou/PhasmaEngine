@@ -47,7 +47,7 @@ namespace pe
         int binding = INT32_MIN;
     };
 
-    struct BufferDesc : public BaseDesc
+    struct BufferReflection : public BaseDesc
     {
         int set = INT32_MIN;
         int binding = INT32_MIN;
@@ -83,8 +83,8 @@ namespace pe
         std::vector<Descriptor *> GetDescriptors();
         const PushConstantDesc &GetPushConstantDesc() { return m_pushConstants; }
 
-        const std::vector<BufferDesc> &GetStorageBuffers() const { return m_storageBuffers; }
-        const std::vector<BufferDesc> &GetUniformBuffers() const { return m_uniformBuffers; }
+        const std::vector<BufferReflection> &GetStorageBuffers() const { return m_storageBuffers; }
+        const std::vector<BufferReflection> &GetUniformBuffers() const { return m_uniformBuffers; }
         const std::vector<ImageDesc> &GetImages() const { return m_images; }
         const std::vector<ImageDesc> &GetStorageImages() const { return m_storageImages; }
         const std::vector<SamplerDesc> &GetSamplers() const { return m_samplers; }
@@ -102,8 +102,8 @@ namespace pe
         std::vector<SamplerDesc> m_samplers{};
         std::vector<ImageDesc> m_images{};
         std::vector<ImageDesc> m_storageImages{};
-        std::vector<BufferDesc> m_uniformBuffers{};
-        std::vector<BufferDesc> m_storageBuffers{};
+        std::vector<BufferReflection> m_uniformBuffers{};
+        std::vector<BufferReflection> m_storageBuffers{};
         std::vector<AccelerationStructureDesc> m_accelerationStructures{};
         PushConstantDesc m_pushConstants{};
         Shader *m_shader{};

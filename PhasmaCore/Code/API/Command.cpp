@@ -9,6 +9,7 @@
 #include "API/RHI.h"
 #include "API/RenderPass.h"
 #include "API/Semaphore.h"
+#include "API/Vulkan/VulkanBufferImpl.h"
 
 namespace pe
 {
@@ -551,7 +552,7 @@ namespace pe
         m_boundVertexBufferFirstBinding = firstBinding;
         m_boundVertexBufferBindingCount = bindingCount;
 
-        vk::Buffer &buff = buffer->ApiHandle();
+        vk::Buffer buff = pe::GetVulkanBuffer(buffer);
         m_apiHandle.bindVertexBuffers(firstBinding, bindingCount, &buff, &offset);
     }
 
@@ -561,7 +562,7 @@ namespace pe
             return;
 
         m_boundIndexBuffer = buffer;
-        m_apiHandle.bindIndexBuffer(buffer->ApiHandle(), offset, vk::IndexType::eUint32);
+        m_apiHandle.bindIndexBuffer(pe::GetVulkanBuffer(buffer), offset, vk::IndexType::eUint32);
     }
 
     void CommandBuffer::BatchBindDescriptors(vk::PipelineBindPoint point, uint32_t count, Descriptor *const *descriptors)
@@ -670,7 +671,7 @@ namespace pe
                 for (uint32_t j = 0; j < info[i].buffers.size(); j++)
                 {
                     bufferInfo[i][j] = vk::DescriptorBufferInfo{};
-                    bufferInfo[i][j].buffer = info[i].buffers[j]->ApiHandle();
+                    bufferInfo[i][j].buffer = pe::GetVulkanBuffer(info[i].buffers[j]);
                     bufferInfo[i][j].offset = info[i].offsets.size() > 0 ? info[i].offsets[j] : 0;
                     bufferInfo[i][j].range = info[i].ranges.size() > 0 ? info[i].ranges[j] : vk::WholeSize;
                 }
@@ -782,22 +783,22 @@ namespace pe
 
     void CommandBuffer::DrawIndirect(Buffer *indirectBuffer, size_t offset, uint32_t drawCount, uint32_t stride)
     {
-        m_apiHandle.drawIndirect(indirectBuffer->ApiHandle(), offset, drawCount, stride);
+        m_apiHandle.drawIndirect(pe::GetVulkanBuffer(indirectBuffer), offset, drawCount, stride);
     }
 
     void CommandBuffer::DrawIndexedIndirect(Buffer *indirectBuffer, size_t offset, uint32_t drawCount, uint32_t stride)
     {
-        m_apiHandle.drawIndexedIndirect(indirectBuffer->ApiHandle(), offset, drawCount, stride);
+        m_apiHandle.drawIndexedIndirect(pe::GetVulkanBuffer(indirectBuffer), offset, drawCount, stride);
     }
 
     void CommandBuffer::DrawIndexedIndirectCount(Buffer *indirectBuffer, size_t offset, Buffer *countBuffer, size_t countBufferOffset, uint32_t maxDrawCount, uint32_t stride)
     {
-        m_apiHandle.drawIndexedIndirectCount(indirectBuffer->ApiHandle(), offset, countBuffer->ApiHandle(), countBufferOffset, maxDrawCount, stride);
+        m_apiHandle.drawIndexedIndirectCount(pe::GetVulkanBuffer(indirectBuffer), offset, pe::GetVulkanBuffer(countBuffer), countBufferOffset, maxDrawCount, stride);
     }
 
     void CommandBuffer::FillBuffer(Buffer *buffer, size_t offset, size_t size, uint32_t data)
     {
-        m_apiHandle.fillBuffer(buffer->ApiHandle(), offset, size, data);
+        m_apiHandle.fillBuffer(pe::GetVulkanBuffer(buffer), offset, size, data);
 
         // Record the transfer write so the next Buffer::Barrier emits srcStage=Clear,
         // srcAccess=TransferWrite. Without this, subsequent barriers inherit a stale

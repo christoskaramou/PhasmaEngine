@@ -4,6 +4,7 @@
 #include "FormatMap.h"
 #include "API/Buffer.h"
 #include "API/Queue.h"
+#include "API/Vulkan/VulkanBufferImpl.h"
 #include "API/RHI.h"
 #include "API/Semaphore.h"
 #include "API/Command.h"
@@ -202,7 +203,7 @@ namespace pwgpu
         }
 
         vk::CopyBufferToImageInfo2 copyInfo{};
-        copyInfo.srcBuffer = alloc.buffer->ApiHandle();
+        copyInfo.srcBuffer = pe::GetVulkanBuffer(alloc.buffer);
         copyInfo.dstImage = tex->image->ApiHandle();
         copyInfo.dstImageLayout = vk::ImageLayout::eTransferDstOptimal;
         copyInfo.regionCount = static_cast<uint32_t>(regions.size());

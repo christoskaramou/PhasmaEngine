@@ -6501,11 +6501,12 @@ namespace pe
 
         for (uint32_t i = 0; i < MAX_DESCRIPTORS_PER_CMD; i++)
         {
-            s_atomicCounter[i] = Buffer::Create(
-                sizeof(s_counter),
-                vk::BufferUsageFlagBits2::eStorageBuffer,
-                VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT,
-                "Downsample_storage_buffer_" + std::to_string(i));
+            s_atomicCounter[i] = Buffer::Create({
+                .size = sizeof(s_counter),
+                .usage = PE_BUFFER_USAGE_STORAGE_BUFFER,
+                .memoryUsage = PE_MEMORY_USAGE_CPU_TO_GPU,
+                .name = "Downsample_storage_buffer_" + std::to_string(i),
+            });
 
             s_DSet[i] = Descriptor::Create(bindingInfos, vk::ShaderStageFlagBits::eCompute, false, "Downsample_descriptor_" + std::to_string(i));
         }

@@ -1,5 +1,7 @@
 #pragma once
 
+#include "API/RHITypes.h"
+
 namespace pe
 {
     struct BufferRange
@@ -9,7 +11,16 @@ namespace pe
         size_t offset; // offset to destination data in bytes
     };
 
+    struct BufferDesc
+    {
+        size_t size = 0;
+        PeBufferUsageFlags usage = PE_BUFFER_USAGE_NONE;
+        PeMemoryUsage memoryUsage = PE_MEMORY_USAGE_GPU_ONLY;
+        std::string name;
+    };
+
     class Buffer;
+    class CommandBuffer;
 
     struct BufferBarrierInfo
     {
@@ -22,27 +33,32 @@ namespace pe
     };
     using BufferTrackInfo = BufferBarrierInfo;
 
-    class Buffer : public PeHandle<Buffer, vk::Buffer>
+    class Buffer : public NoCopy
     {
     public:
-        Buffer(size_t size,
-               vk::BufferUsageFlags2 usage,
-               VmaAllocationCreateFlags vmaCreateFlags,
-               const std::string &name);
-        ~Buffer();
+        struct Impl; // forward — defined in Buffer_Internal.h, body is engine-private
+
+        static Buffer *Create(const BufferDesc &desc);
+        static void Destroy(Buffer *&buf);
+        static std::vector<Buffer *> GetHandles();
 
         void Map();
         void Unmap();
         void Flush(size_t size = 0, size_t offset = 0) const;
         void Zero() const;
         void Copy(uint32_t count, BufferRange *ranges, bool keepMapped);
-        size_t Size();
-        void *Data();
+        size_t Size() const { return m_size; }
+        void *Data() const { return m_data; }
+        PeBufferUsageFlags Usage() const { return m_usage; }
         uint64_t GetDeviceAddress() const;
         BufferTrackInfo &GetTrackInfo() { return m_trackInfo; }
 
     private:
         friend class CommandBuffer;
+        friend struct VulkanBufferImpl;
+
+        Buffer(const BufferDesc &desc);
+        ~Buffer();
 
         static void Barrier(CommandBuffer *cmd, const BufferBarrierInfo &info);
         static void Barriers(CommandBuffer *cmd, const std::vector<BufferBarrierInfo> &infos);
@@ -51,11 +67,11 @@ namespace pe
         void CopyBufferStaged(CommandBuffer *cmd, const void *data, size_t size, size_t dstOffset);
         void CopyDataRaw(const void *data, size_t size, size_t offset = 0);
 
-        size_t m_size;
-        void *m_data;
-        vk::BufferUsageFlags2 m_usage;
-        VmaAllocation m_allocation;
-        VmaAllocationInfo m_allocationInfo;
+        Impl *m_impl;
+        size_t m_size; // mirrored to avoid Impl hop on hot getters
+        void *m_data;  // mirrored mapped pointer (nullptr when unmapped)
+        PeBufferUsageFlags m_usage;
+        PeMemoryUsage m_memoryUsage;
         std::string m_name;
         BufferTrackInfo m_trackInfo{};
     };

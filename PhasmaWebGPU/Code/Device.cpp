@@ -3,6 +3,7 @@
 #include "Texture.h"
 #include "API/Semaphore.h"
 #include "API/Queue.h"
+#include "API/Vulkan/VulkanBufferImpl.h"
 #include "FormatMap.h"
 #include "Sampler.h"
 #include "BindGroup.h"
@@ -967,44 +968,44 @@ extern "C"
         if (mappedAtCreation && (size % 4 != 0))
             return reportValidation("mappedAtCreation requires size to be a multiple of 4");
 
-        vk::BufferUsageFlags2 vkUsage{};
+        PeBufferUsageFlags peUsage = 0;
         if (usage & WGPUBufferUsage_CopySrc)
-            vkUsage |= vk::BufferUsageFlagBits2::eTransferSrc;
+            peUsage |= PE_BUFFER_USAGE_TRANSFER_SRC;
         if (usage & WGPUBufferUsage_CopyDst)
-            vkUsage |= vk::BufferUsageFlagBits2::eTransferDst;
+            peUsage |= PE_BUFFER_USAGE_TRANSFER_DST;
         if (usage & WGPUBufferUsage_Index)
-            vkUsage |= vk::BufferUsageFlagBits2::eIndexBuffer;
+            peUsage |= PE_BUFFER_USAGE_INDEX_BUFFER;
         if (usage & WGPUBufferUsage_Vertex)
-            vkUsage |= vk::BufferUsageFlagBits2::eVertexBuffer;
+            peUsage |= PE_BUFFER_USAGE_VERTEX_BUFFER;
         if (usage & WGPUBufferUsage_Uniform)
-            vkUsage |= vk::BufferUsageFlagBits2::eUniformBuffer;
+            peUsage |= PE_BUFFER_USAGE_UNIFORM_BUFFER;
         if (usage & WGPUBufferUsage_Storage)
-            vkUsage |= vk::BufferUsageFlagBits2::eStorageBuffer;
+            peUsage |= PE_BUFFER_USAGE_STORAGE_BUFFER;
         if (usage & WGPUBufferUsage_Indirect)
-            vkUsage |= vk::BufferUsageFlagBits2::eIndirectBuffer;
+            peUsage |= PE_BUFFER_USAGE_INDIRECT_BUFFER;
         if (usage & WGPUBufferUsage_QueryResolve)
-            vkUsage |= vk::BufferUsageFlagBits2::eTransferDst;
+            peUsage |= PE_BUFFER_USAGE_TRANSFER_DST;
         if (usage & WGPUBufferUsage_MapRead)
-            vkUsage |= vk::BufferUsageFlagBits2::eTransferDst;
+            peUsage |= PE_BUFFER_USAGE_TRANSFER_DST;
         if (usage & WGPUBufferUsage_MapWrite)
-            vkUsage |= vk::BufferUsageFlagBits2::eTransferSrc;
+            peUsage |= PE_BUFFER_USAGE_TRANSFER_SRC;
 
-        if (!vkUsage)
-            vkUsage = vk::BufferUsageFlagBits2::eTransferSrc;
+        if (!peUsage)
+            peUsage = PE_BUFFER_USAGE_TRANSFER_SRC;
 
         const bool needsHostAccess =
             (usage & (WGPUBufferUsage_MapRead | WGPUBufferUsage_MapWrite)) != 0 || mappedAtCreation;
 
         if (!needsHostAccess)
-            vkUsage |= vk::BufferUsageFlagBits2::eTransferDst;
+            peUsage |= PE_BUFFER_USAGE_TRANSFER_DST;
 
-        VmaAllocationCreateFlags vmaFlags = 0;
+        PeMemoryUsage memoryUsage = PE_MEMORY_USAGE_GPU_ONLY;
         if (needsHostAccess)
         {
             if (usage & WGPUBufferUsage_MapRead)
-                vmaFlags = VMA_ALLOCATION_CREATE_HOST_ACCESS_RANDOM_BIT | VMA_ALLOCATION_CREATE_MAPPED_BIT;
+                memoryUsage = PE_MEMORY_USAGE_GPU_TO_CPU_PERSISTENT;
             else
-                vmaFlags = VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT | VMA_ALLOCATION_CREATE_MAPPED_BIT;
+                memoryUsage = PE_MEMORY_USAGE_CPU_TO_GPU_PERSISTENT;
         }
 
         auto *buf = new WGPUBufferImpl();
@@ -1020,7 +1021,12 @@ extern "C"
         const std::string peName = buf->label.empty() ? std::string("wgpu_buffer") : buf->label;
         try
         {
-            buf->peBuffer = pe::Buffer::Create(size ? size : 1, vkUsage, vmaFlags, peName);
+            buf->peBuffer = pe::Buffer::Create({
+                .size = size ? size : 1,
+                .usage = peUsage,
+                .memoryUsage = memoryUsage,
+                .name = peName,
+            });
         }
         catch (...)
         {
@@ -1064,7 +1070,7 @@ extern "C"
                 bmb.dstAccessMask = vk::AccessFlagBits2::eMemoryRead | vk::AccessFlagBits2::eMemoryWrite;
                 bmb.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
                 bmb.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-                bmb.buffer = buf->peBuffer->ApiHandle();
+                bmb.buffer = pe::GetVulkanBuffer(buf->peBuffer);
                 bmb.offset = 0;
                 bmb.size = fillSize;
                 vk::DependencyInfo dep{};

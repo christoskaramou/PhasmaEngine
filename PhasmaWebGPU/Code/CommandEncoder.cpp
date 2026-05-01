@@ -13,6 +13,7 @@
 #include "Utils.h"
 #include "API/Image.h"
 #include "API/Buffer.h"
+#include "API/Vulkan/VulkanBufferImpl.h"
 
 extern "C" void wgpuRenderPipelineRelease(WGPURenderPipeline);
 extern "C" void wgpuComputePipelineRelease(WGPUComputePipeline);
@@ -1892,7 +1893,7 @@ extern "C"
         enc->cmd->ImageBarrier(barrier);
 
         vk::CopyBufferToImageInfo2 copyInfo{};
-        copyInfo.srcBuffer = src->buffer->peBuffer->ApiHandle();
+        copyInfo.srcBuffer = pe::GetVulkanBuffer(src->buffer->peBuffer);
         copyInfo.dstImage = dst->texture->image->ApiHandle();
         copyInfo.dstImageLayout = vk::ImageLayout::eTransferDstOptimal;
         copyInfo.regionCount = 1;
@@ -2095,7 +2096,7 @@ extern "C"
         vk::CopyImageToBufferInfo2 copyInfo{};
         copyInfo.srcImage = src->texture->image->ApiHandle();
         copyInfo.srcImageLayout = vk::ImageLayout::eTransferSrcOptimal;
-        copyInfo.dstBuffer = dst->buffer->peBuffer->ApiHandle();
+        copyInfo.dstBuffer = pe::GetVulkanBuffer(dst->buffer->peBuffer);
         copyInfo.regionCount = 1;
         copyInfo.pRegions = &region;
 
@@ -2429,7 +2430,7 @@ extern "C"
         // eWait on an unbegun query stalls forever; zero-fill the range and eWait-copy
         // only begun indices so unused slots resolve to 0 per WebGPU §23.6.
         enc->cmd->ApiHandle().fillBuffer(
-            dst->peBuffer->ApiHandle(), dstOffset,
+            pe::GetVulkanBuffer(dst->peBuffer), dstOffset,
             static_cast<uint64_t>(queryCount) * sizeof(uint64_t), 0u);
 
         vk::MemoryBarrier2 fillToCopy{};
@@ -2457,7 +2458,7 @@ extern "C"
                                         static_cast<uint64_t>(idx - firstQuery) * sizeof(uint64_t);
             enc->cmd->ApiHandle().copyQueryPoolResults(
                 querySet->queryPool, idx, 1,
-                dst->peBuffer->ApiHandle(), slotOffset,
+                pe::GetVulkanBuffer(dst->peBuffer), slotOffset,
                 sizeof(uint64_t),
                 vk::QueryResultFlagBits::e64 | vk::QueryResultFlagBits::eWait);
         }

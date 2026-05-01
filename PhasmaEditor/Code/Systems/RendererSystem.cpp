@@ -414,11 +414,12 @@ namespace pe
             size_t bufferSize = static_cast<size_t>(w) * h * 4;
 
             Buffer::Destroy(m_screenshotBuffer);
-            m_screenshotBuffer = Buffer::Create(
-                bufferSize,
-                vk::BufferUsageFlagBits2::eTransferDst,
-                VMA_ALLOCATION_CREATE_HOST_ACCESS_RANDOM_BIT,
-                "ScreenshotStaging");
+            m_screenshotBuffer = Buffer::Create({
+                .size = bufferSize,
+                .usage = PE_BUFFER_USAGE_TRANSFER_DST,
+                .memoryUsage = PE_MEMORY_USAGE_GPU_TO_CPU,
+                .name = "ScreenshotStaging",
+            });
 
             cmd->CopyImageToBuffer(m_screenshotRT, m_screenshotBuffer);
             m_screenshotPending = true;

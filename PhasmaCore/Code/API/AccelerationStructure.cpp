@@ -2,6 +2,7 @@
 #include "API/Buffer.h"
 #include "API/Command.h"
 #include "API/RHI.h"
+#include "API/Vulkan/VulkanBufferImpl.h"
 
 namespace pe
 {
@@ -49,20 +50,22 @@ namespace pe
 
     void AccelerationStructure::CreateBuffer(size_t size)
     {
-        m_buffer = Buffer::Create(
-            size,
-            vk::BufferUsageFlagBits2::eAccelerationStructureStorageKHR | vk::BufferUsageFlagBits2::eShaderDeviceAddress,
-            VMA_ALLOCATION_CREATE_DEDICATED_MEMORY_BIT,
-            m_name + "_buffer");
+        m_buffer = Buffer::Create({
+            .size = size,
+            .usage = PE_BUFFER_USAGE_ACCELERATION_STRUCTURE_STORAGE_KHR | PE_BUFFER_USAGE_SHADER_DEVICE_ADDRESS,
+            .memoryUsage = PE_MEMORY_USAGE_GPU_ONLY_DEDICATED,
+            .name = m_name + "_buffer",
+        });
     }
 
     void AccelerationStructure::CreateScratchBuffer(size_t size)
     {
-        m_scratchBuffer = Buffer::Create(
-            size,
-            vk::BufferUsageFlagBits2::eStorageBuffer | vk::BufferUsageFlagBits2::eShaderDeviceAddress,
-            VMA_ALLOCATION_CREATE_DEDICATED_MEMORY_BIT,
-            m_name + "_scratch_buffer");
+        m_scratchBuffer = Buffer::Create({
+            .size = size,
+            .usage = PE_BUFFER_USAGE_STORAGE_BUFFER | PE_BUFFER_USAGE_SHADER_DEVICE_ADDRESS,
+            .memoryUsage = PE_MEMORY_USAGE_GPU_ONLY_DEDICATED,
+            .name = m_name + "_scratch_buffer",
+        });
     }
 
     void AccelerationStructure::BuildBLAS(CommandBuffer *cmd,
@@ -100,7 +103,7 @@ namespace pe
         }
 
         vk::AccelerationStructureCreateInfoKHR createInfo{};
-        createInfo.buffer = m_buffer->ApiHandle();
+        createInfo.buffer = GetVulkanBuffer(m_buffer);
         createInfo.offset = m_offset;
         createInfo.size = sizeInfo.accelerationStructureSize;
         createInfo.type = vk::AccelerationStructureTypeKHR::eBottomLevel;
@@ -169,7 +172,7 @@ namespace pe
         }
 
         vk::AccelerationStructureCreateInfoKHR createInfo{};
-        createInfo.buffer = m_buffer->ApiHandle();
+        createInfo.buffer = GetVulkanBuffer(m_buffer);
         createInfo.offset = m_offset;
         createInfo.size = sizeInfo.accelerationStructureSize;
         createInfo.type = vk::AccelerationStructureTypeKHR::eTopLevel;

@@ -24,11 +24,12 @@ namespace pe
         m_particleCount = 100; // Default particle count, can change at runtime
         size_t bufferSize = m_particleCount * sizeof(Particle);
 
-        m_particleBuffer = Buffer::Create(
-            bufferSize,
-            vk::BufferUsageFlagBits2::eStorageBuffer | vk::BufferUsageFlagBits2::eTransferDst | vk::BufferUsageFlagBits2::eVertexBuffer,
-            VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT,
-            "particle_buffer");
+        m_particleBuffer = Buffer::Create({
+            .size = bufferSize,
+            .usage = PE_BUFFER_USAGE_STORAGE_BUFFER | PE_BUFFER_USAGE_TRANSFER_DST | PE_BUFFER_USAGE_VERTEX_BUFFER,
+            .memoryUsage = PE_MEMORY_USAGE_CPU_TO_GPU,
+            .name = "particle_buffer",
+        });
 
         m_particleBuffer->Map();
         m_particleBuffer->Zero();
@@ -37,11 +38,12 @@ namespace pe
 
         // Create emitter buffer (start with space for 16 emitters, will resize if needed)
         size_t emitterBufferSize = 16 * sizeof(ParticleEmitter);
-        m_emitterBuffer = Buffer::Create(
-            emitterBufferSize,
-            vk::BufferUsageFlagBits2::eStorageBuffer | vk::BufferUsageFlagBits2::eTransferDst,
-            VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT,
-            "emitter_buffer");
+        m_emitterBuffer = Buffer::Create({
+            .size = emitterBufferSize,
+            .usage = PE_BUFFER_USAGE_STORAGE_BUFFER | PE_BUFFER_USAGE_TRANSFER_DST,
+            .memoryUsage = PE_MEMORY_USAGE_CPU_TO_GPU,
+            .name = "emitter_buffer",
+        });
 
         m_emitterBuffer->Map();
         m_emitterBuffer->Zero();
@@ -102,11 +104,12 @@ namespace pe
             if (m_gpuCapacity > 0)
             {
                 size_t bufferSize = m_gpuCapacity * sizeof(Particle);
-                m_particleBuffer = Buffer::Create(
-                    bufferSize,
-                    vk::BufferUsageFlagBits2::eStorageBuffer | vk::BufferUsageFlagBits2::eTransferDst | vk::BufferUsageFlagBits2::eVertexBuffer,
-                    VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT,
-                    "particle_buffer");
+                m_particleBuffer = Buffer::Create({
+                    .size = bufferSize,
+                    .usage = PE_BUFFER_USAGE_STORAGE_BUFFER | PE_BUFFER_USAGE_TRANSFER_DST | PE_BUFFER_USAGE_VERTEX_BUFFER,
+                    .memoryUsage = PE_MEMORY_USAGE_CPU_TO_GPU,
+                    .name = "particle_buffer",
+                });
 
                 m_particleBuffer->Map();
                 m_particleBuffer->Zero();
@@ -126,11 +129,12 @@ namespace pe
         {
             if (m_emitterBuffer)
                 Buffer::Destroy(m_emitterBuffer);
-            m_emitterBuffer = Buffer::Create(
-                requiredSize,
-                vk::BufferUsageFlagBits2::eStorageBuffer | vk::BufferUsageFlagBits2::eTransferDst,
-                VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT,
-                "emitter_buffer");
+            m_emitterBuffer = Buffer::Create({
+                .size = requiredSize,
+                .usage = PE_BUFFER_USAGE_STORAGE_BUFFER | PE_BUFFER_USAGE_TRANSFER_DST,
+                .memoryUsage = PE_MEMORY_USAGE_CPU_TO_GPU,
+                .name = "emitter_buffer",
+            });
         }
 
         if (m_emitters.empty())

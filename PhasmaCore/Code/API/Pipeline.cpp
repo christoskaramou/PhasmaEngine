@@ -974,10 +974,12 @@ namespace pe
 
         vk::DeviceSize totalSize = m_rgenRegion.size + m_missRegion.size + m_hitRegion.size + m_callRegion.size;
 
-        m_sbtBuffer = Buffer::Create(totalSize,
-                                     vk::BufferUsageFlagBits2::eShaderBindingTableKHR | vk::BufferUsageFlagBits2::eShaderDeviceAddress,
-                                     VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT,
-                                     m_info.name + "_SBT");
+        m_sbtBuffer = Buffer::Create({
+            .size = totalSize,
+            .usage = PE_BUFFER_USAGE_SHADER_BINDING_TABLE_KHR | PE_BUFFER_USAGE_SHADER_DEVICE_ADDRESS,
+            .memoryUsage = PE_MEMORY_USAGE_CPU_TO_GPU,
+            .name = m_info.name + "_SBT",
+        });
 
         m_rgenRegion.deviceAddress = m_sbtBuffer->GetDeviceAddress();
         m_missRegion.deviceAddress = m_rgenRegion.deviceAddress + m_rgenRegion.size;

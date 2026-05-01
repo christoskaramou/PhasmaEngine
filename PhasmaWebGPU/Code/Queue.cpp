@@ -13,6 +13,7 @@
 #include "API/Semaphore.h"
 #include "API/Image.h"
 #include "API/Buffer.h"
+#include "API/Vulkan/VulkanBufferImpl.h"
 #include "API/RHI.h"
 #include "API/StagingManager.h"
 
@@ -569,7 +570,7 @@ extern "C"
                 bmb.dstAccessMask = vk::AccessFlagBits2::eMemoryRead | vk::AccessFlagBits2::eMemoryWrite;
                 bmb.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
                 bmb.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-                bmb.buffer = backing->ApiHandle();
+                bmb.buffer = pe::GetVulkanBuffer(backing);
                 bmb.offset = static_cast<vk::DeviceSize>(bufferOffset);
                 bmb.size = static_cast<vk::DeviceSize>(size);
                 vk::DependencyInfo dep{};
@@ -925,7 +926,7 @@ extern "C"
                                           is3D ? writeSize->depthOrArrayLayers : 1};
 
         vk::CopyBufferToImageInfo2 copyInfo{};
-        copyInfo.srcBuffer = alloc.buffer->ApiHandle();
+        copyInfo.srcBuffer = pe::GetVulkanBuffer(alloc.buffer);
         copyInfo.dstImage = image->ApiHandle();
         copyInfo.dstImageLayout = vk::ImageLayout::eTransferDstOptimal;
         copyInfo.regionCount = 1;

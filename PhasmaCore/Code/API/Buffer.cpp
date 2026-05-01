@@ -1,75 +1,108 @@
-#include "API/Buffer.h"
+#include "API/Buffer_Internal.h"
 #include "API/Command.h"
-#include "API/Helpers.h"
 #include "API/RHI.h"
 #include "API/StagingManager.h"
 
 namespace pe
 {
-    Buffer::Buffer(size_t size, vk::BufferUsageFlags2 usage, VmaAllocationCreateFlags vmaCreateFlags, const std::string &name)
-        : m_size{size},
-          m_usage{usage},
-          m_name{name},
-          m_data{nullptr}
-
+    Buffer *Buffer::Create(const BufferDesc &desc)
     {
-        if (m_usage & vk::BufferUsageFlagBits2::eUniformBuffer)
+        Buffer *buf = new Buffer(desc);
+#if defined(PE_TRACK_RESOURCES)
+        PeTracker::Track(typeid(Buffer), reinterpret_cast<void *>(buf));
+#if !defined(PE_TRACK_RESOURCES_NOSPAM)
+        PE_INFO("Object Buffer created (Handle: %p)", reinterpret_cast<void *>(buf));
+#endif
+#endif
+        return buf;
+    }
+
+    void Buffer::Destroy(Buffer *&buf)
+    {
+        if (buf)
+        {
+#if defined(PE_TRACK_RESOURCES) && !defined(PE_TRACK_RESOURCES_NOSPAM)
+            PE_INFO("Object Buffer destroyed (Handle: %p)", reinterpret_cast<void *>(buf));
+#endif
+            delete buf;
+#if defined(PE_TRACK_RESOURCES)
+            PeTracker::Untrack(typeid(Buffer), reinterpret_cast<void *>(buf));
+#endif
+            buf = nullptr;
+        }
+    }
+
+    std::vector<Buffer *> Buffer::GetHandles()
+    {
+#if defined(PE_TRACK_RESOURCES)
+        auto ptrs = PeTracker::GetHandles(typeid(Buffer));
+        std::vector<Buffer *> out;
+        out.reserve(ptrs.size());
+        for (void *p : ptrs)
+            out.push_back(static_cast<Buffer *>(p));
+        return out;
+#else
+        return {};
+#endif
+    }
+
+    Buffer::Buffer(const BufferDesc &desc)
+        : m_size{desc.size},
+          m_data{nullptr},
+          m_usage{desc.usage},
+          m_memoryUsage{desc.memoryUsage},
+          m_name{desc.name}
+    {
+        if (m_usage & PE_BUFFER_USAGE_UNIFORM_BUFFER)
         {
             m_size = RHII.AlignUniform(m_size);
             PE_ERROR_IF(m_size > RHII.GetMaxUniformBufferSize(), "Uniform buffer size is too big");
         }
-        if (m_usage & vk::BufferUsageFlagBits2::eStorageBuffer)
+        if (m_usage & PE_BUFFER_USAGE_STORAGE_BUFFER)
         {
             m_size = RHII.AlignStorage(m_size);
             PE_ERROR_IF(m_size > RHII.GetMaxStorageBufferSize(), "Storage buffer size is too big");
         }
-        if (m_usage & vk::BufferUsageFlagBits2::eIndirectBuffer)
+        if (m_usage & PE_BUFFER_USAGE_INDIRECT_BUFFER)
         {
-            PE_ERROR_IF(m_size > RHII.GetMaxDrawIndirectCount() * sizeof(VkDrawIndexedIndirectCommand), "Indirect command buffer size is too big");
+            PE_ERROR_IF(m_size > RHII.GetMaxDrawIndirectCount() * sizeof(VkDrawIndexedIndirectCommand),
+                        "Indirect command buffer size is too big");
         }
-
         if (!m_size)
             m_size = 16;
 
-        vk::BufferUsageFlags2CreateInfo flags2{};
-        flags2.usage = m_usage;
-
-        vk::BufferCreateInfo bufferInfo{};
-        bufferInfo.pNext = &flags2;
-        bufferInfo.size = m_size;
-        bufferInfo.sharingMode = vk::SharingMode::eExclusive;
-
-        VmaAllocationCreateInfo allocationCreateInfo{};
-        allocationCreateInfo.usage = VMA_MEMORY_USAGE_AUTO;
-        allocationCreateInfo.flags = vmaCreateFlags;
-
-        VkBuffer vkBuffer = {};
-        PE_CHECK(vmaCreateBuffer(RHII.GetAllocator(), reinterpret_cast<const VkBufferCreateInfo *>(&bufferInfo), &allocationCreateInfo, &vkBuffer, &m_allocation, &m_allocationInfo));
-        m_apiHandle = vkBuffer;
-
-        vmaSetAllocationName(RHII.GetAllocator(), m_allocation, m_name.c_str());
-        Debug::SetObjectName(m_apiHandle, m_name);
+        m_impl = CreateBufferImpl(this, BufferDesc{m_size, m_usage, m_memoryUsage, m_name});
     }
 
     Buffer::~Buffer()
     {
-        Unmap();
-        vmaDestroyBuffer(RHII.GetAllocator(), m_apiHandle, m_allocation);
+        if (m_data)
+            Unmap();
+        delete m_impl;
     }
 
     void Buffer::Map()
     {
         if (m_data)
             return;
-        PE_CHECK(vmaMapMemory(RHII.GetAllocator(), m_allocation, &m_data));
+        m_data = m_impl->Map();
     }
 
     void Buffer::Unmap()
     {
         if (!m_data)
             return;
-        vmaUnmapMemory(RHII.GetAllocator(), m_allocation);
+        m_impl->Unmap();
         m_data = nullptr;
+    }
+
+    void Buffer::Flush(size_t size, size_t offset) const
+    {
+        if (!m_data)
+            return;
+        size = size ? size : m_size;
+        PE_ERROR_IF(offset + size > m_size, "Buffer::Flush: range overflow");
+        m_impl->Flush(size, offset);
     }
 
     void Buffer::Zero() const
@@ -89,13 +122,11 @@ namespace pe
 
     void Buffer::Copy(uint32_t count, BufferRange *ranges, bool keepMapped)
     {
-        // Map or check if the buffer is already mapped
         Map();
 
         for (uint32_t i = 0; i < count; i++)
             CopyDataRaw(ranges[i].data, ranges[i].size, ranges[i].offset);
 
-        // Keep the buffer mapped if it is persistent
         if (!keepMapped)
         {
             for (uint32_t i = 0; i < count; i++)
@@ -103,6 +134,13 @@ namespace pe
 
             Unmap();
         }
+    }
+
+    void Buffer::CopyBuffer(CommandBuffer *cmd, Buffer *src, size_t size, size_t srcOffset, size_t dstOffset)
+    {
+        if (!size)
+            return;
+        m_impl->CopyBuffer(cmd, src, size, srcOffset, dstOffset);
     }
 
     void Buffer::CopyBufferStaged(CommandBuffer *cmd, const void *data, size_t size, size_t dstOffset)
@@ -121,134 +159,18 @@ namespace pe
                                   { RHII.GetStagingManager()->SetUnused(alloc); });
     }
 
-    void Buffer::Flush(size_t size, size_t offset) const
+    uint64_t Buffer::GetDeviceAddress() const
     {
-        if (!m_data)
-            return;
-        size = size ? size : m_size;
-        PE_ERROR_IF(offset + size > m_size, "Buffer::Flush: range overflow");
-        PE_CHECK(vmaFlushAllocation(RHII.GetAllocator(), m_allocation, offset, size));
-    }
-
-    size_t Buffer::Size()
-    {
-        return m_size;
-    }
-
-    void *Buffer::Data()
-    {
-        return m_data;
-    }
-
-    void Buffer::CopyBuffer(CommandBuffer *cmd, Buffer *src, size_t size, size_t srcOffset, size_t dstOffset)
-    {
-        if (!size)
-            return;
-        PE_ERROR_IF(size + srcOffset > src->Size(), "Buffer::CopyBuffer: Source size is too big");
-        PE_ERROR_IF(size + dstOffset > m_size, "Buffer::CopyBuffer: Destination size is too small");
-
-        vk::BufferCopy2 region{};
-        region.srcOffset = srcOffset;
-        region.dstOffset = dstOffset;
-        region.size = size;
-
-        vk::CopyBufferInfo2 copyInfo{};
-        copyInfo.srcBuffer = src->ApiHandle();
-        copyInfo.dstBuffer = m_apiHandle;
-        copyInfo.regionCount = 1;
-        copyInfo.pRegions = &region;
-
-        cmd->ApiHandle().copyBuffer2(copyInfo);
+        return m_impl->GetDeviceAddress();
     }
 
     void Buffer::Barrier(CommandBuffer *cmd, const BufferBarrierInfo &info)
     {
-        PE_ERROR_IF(!info.buffer, "Buffer::Barrier: no buffer specified");
-
-        BufferTrackInfo &trackInfo = info.buffer->GetTrackInfo();
-
-        bool requestRead = VulkanHelpers::IsReadOnlyAccess(info.accessMask);
-        bool previousRead = VulkanHelpers::IsReadOnlyAccess(trackInfo.accessMask);
-        bool sameState = trackInfo.stageMask == info.stageMask &&
-                         trackInfo.accessMask == info.accessMask &&
-                         trackInfo.queueFamilyIndex == info.queueFamilyIndex;
-        if (requestRead && previousRead && sameState)
-            return;
-
-        vk::BufferMemoryBarrier2 barrier{};
-        barrier.buffer = info.buffer->ApiHandle();
-        barrier.srcStageMask = trackInfo.stageMask;
-        barrier.srcAccessMask = trackInfo.accessMask;
-        barrier.srcQueueFamilyIndex = trackInfo.queueFamilyIndex;
-        barrier.dstStageMask = info.stageMask;
-        barrier.dstAccessMask = info.accessMask;
-        barrier.dstQueueFamilyIndex = info.queueFamilyIndex;
-        barrier.offset = info.offset;
-        barrier.size = info.size;
-
-        vk::DependencyInfo dependencyInfo{};
-        dependencyInfo.bufferMemoryBarrierCount = 1;
-        dependencyInfo.pBufferMemoryBarriers = &barrier;
-
-        cmd->ApiHandle().pipelineBarrier2(dependencyInfo);
-
-        trackInfo.stageMask = info.stageMask;
-        trackInfo.accessMask = info.accessMask;
-        trackInfo.queueFamilyIndex = info.queueFamilyIndex;
+        Buffer_Barrier_Backend(cmd, info);
     }
 
     void Buffer::Barriers(CommandBuffer *cmd, const std::vector<BufferBarrierInfo> &infos)
     {
-        if (infos.empty())
-            return;
-
-        std::vector<vk::BufferMemoryBarrier2> barriers(infos.size());
-        uint32_t barrierIndex = 0;
-        for (uint32_t i = 0; i < infos.size(); i++)
-        {
-            const auto &info = infos[i];
-            PE_ERROR_IF(!info.buffer, "Buffer::Barriers: no buffer specified");
-
-            BufferTrackInfo &trackInfo = info.buffer->GetTrackInfo();
-
-            bool requestRead = VulkanHelpers::IsReadOnlyAccess(info.accessMask);
-            bool previousRead = VulkanHelpers::IsReadOnlyAccess(trackInfo.accessMask);
-            bool sameState = trackInfo.stageMask == info.stageMask &&
-                             trackInfo.accessMask == info.accessMask &&
-                             trackInfo.queueFamilyIndex == info.queueFamilyIndex;
-            if (requestRead && previousRead && sameState)
-                continue;
-
-            barriers[barrierIndex].buffer = info.buffer->ApiHandle();
-            barriers[barrierIndex].srcStageMask = trackInfo.stageMask;
-            barriers[barrierIndex].srcAccessMask = trackInfo.accessMask;
-            barriers[barrierIndex].srcQueueFamilyIndex = trackInfo.queueFamilyIndex;
-            barriers[barrierIndex].dstStageMask = info.stageMask;
-            barriers[barrierIndex].dstAccessMask = info.accessMask;
-            barriers[barrierIndex].dstQueueFamilyIndex = info.queueFamilyIndex;
-            barriers[barrierIndex].offset = info.offset;
-            barriers[barrierIndex].size = info.size;
-            barrierIndex++;
-
-            trackInfo.stageMask = info.stageMask;
-            trackInfo.accessMask = info.accessMask;
-            trackInfo.queueFamilyIndex = info.queueFamilyIndex;
-        }
-
-        if (!barrierIndex)
-            return;
-
-        vk::DependencyInfo dependencyInfo{};
-        dependencyInfo.bufferMemoryBarrierCount = barrierIndex;
-        dependencyInfo.pBufferMemoryBarriers = barriers.data();
-
-        cmd->ApiHandle().pipelineBarrier2(dependencyInfo);
-    }
-
-    uint64_t Buffer::GetDeviceAddress() const
-    {
-        vk::BufferDeviceAddressInfo info{};
-        info.buffer = m_apiHandle;
-        return RHII.GetDevice().getBufferAddress(info);
+        Buffer_Barriers_Backend(cmd, infos);
     }
 } // namespace pe

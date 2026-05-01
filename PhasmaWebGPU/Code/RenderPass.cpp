@@ -9,6 +9,7 @@
 #include "QuerySet.h"
 #include "Device.h"
 #include "Utils.h"
+#include "API/Vulkan/VulkanBufferImpl.h"
 
 extern "C" void wgpuRenderPipelineAddRef(WGPURenderPipeline);
 extern "C" void wgpuRenderPipelineRelease(WGPURenderPipeline);
@@ -729,7 +730,7 @@ extern "C"
             return;
         }
 
-        vk::Buffer vkBuf = buffer->peBuffer->ApiHandle();
+        vk::Buffer vkBuf = pe::GetVulkanBuffer(buffer->peBuffer);
         vk::DeviceSize vkOffset = static_cast<vk::DeviceSize>(offset);
         rpe->cmd->ApiHandle().bindVertexBuffers(slot, 1, &vkBuf, &vkOffset);
         rpe->usedBuffers.push_back(buffer);
@@ -810,7 +811,7 @@ extern "C"
         }
 
         vk::IndexType indexType = (format == WGPUIndexFormat_Uint16) ? vk::IndexType::eUint16 : vk::IndexType::eUint32;
-        rpe->cmd->ApiHandle().bindIndexBuffer(buffer->peBuffer->ApiHandle(), offset, indexType);
+        rpe->cmd->ApiHandle().bindIndexBuffer(pe::GetVulkanBuffer(buffer->peBuffer), offset, indexType);
         rpe->usedBuffers.push_back(buffer);
     }
 
@@ -950,7 +951,7 @@ extern "C"
 
         rpe->drawCount++;
         OpenRenderingIfNeeded(rpe);
-        rpe->cmd->ApiHandle().drawIndirect(buffer->peBuffer->ApiHandle(), offset, 1, sizeof(VkDrawIndirectCommand));
+        rpe->cmd->ApiHandle().drawIndirect(pe::GetVulkanBuffer(buffer->peBuffer), offset, 1, sizeof(VkDrawIndirectCommand));
         rpe->usedBuffers.push_back(buffer);
     }
 
@@ -1038,7 +1039,7 @@ extern "C"
 
         rpe->drawCount++;
         OpenRenderingIfNeeded(rpe);
-        rpe->cmd->ApiHandle().drawIndexedIndirect(buffer->peBuffer->ApiHandle(), offset, 1, sizeof(VkDrawIndexedIndirectCommand));
+        rpe->cmd->ApiHandle().drawIndexedIndirect(pe::GetVulkanBuffer(buffer->peBuffer), offset, 1, sizeof(VkDrawIndexedIndirectCommand));
         rpe->usedBuffers.push_back(buffer);
     }
 

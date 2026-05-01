@@ -36,11 +36,12 @@ namespace pe
         allocation.size = size;
         allocation.used = size;
 
-        allocation.buffer = Buffer::Create(
-            size,
-            vk::BufferUsageFlagBits2::eTransferSrc,
-            VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT | VMA_ALLOCATION_CREATE_MAPPED_BIT,
-            "StagingBuffer");
+        allocation.buffer = Buffer::Create({
+            .size = size,
+            .usage = PE_BUFFER_USAGE_TRANSFER_SRC,
+            .memoryUsage = PE_MEMORY_USAGE_CPU_TO_GPU_PERSISTENT,
+            .name = "StagingBuffer",
+        });
         PE_ERROR_IF(!allocation.buffer, "StagingManager::Allocate(): failed to create staging buffer.");
 
         allocation.buffer->Map();

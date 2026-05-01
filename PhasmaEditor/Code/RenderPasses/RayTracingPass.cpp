@@ -42,11 +42,12 @@ namespace pe
     {
         for (auto &uniform : m_uniforms)
         {
-            uniform = Buffer::Create(
-                RHII.AlignUniform(sizeof(RayTracingPassUBO)),
-                vk::BufferUsageFlagBits2::eUniformBuffer,
-                VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT,
-                "RayTracing_uniform_buffer");
+            uniform = Buffer::Create({
+                .size = RHII.AlignUniform(sizeof(RayTracingPassUBO)),
+                .usage = PE_BUFFER_USAGE_UNIFORM_BUFFER,
+                .memoryUsage = PE_MEMORY_USAGE_CPU_TO_GPU,
+                .name = "RayTracing_uniform_buffer",
+            });
             uniform->Map();
             uniform->Zero();
             uniform->Flush();

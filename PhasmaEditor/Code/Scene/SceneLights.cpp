@@ -21,21 +21,23 @@ namespace pe
 
         for (uint32_t i = 0; i < count; i++)
         {
-            m_lightUniforms[i] = Buffer::Create(
-                RHII.AlignUniform(sizeof(LightsUBO)),
-                vk::BufferUsageFlagBits2::eUniformBuffer,
-                VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT,
-                "lights_uniform_buffer");
+            m_lightUniforms[i] = Buffer::Create({
+                .size = RHII.AlignUniform(sizeof(LightsUBO)),
+                .usage = PE_BUFFER_USAGE_UNIFORM_BUFFER,
+                .memoryUsage = PE_MEMORY_USAGE_CPU_TO_GPU,
+                .name = "lights_uniform_buffer",
+            });
             m_lightUniforms[i]->Map();
             m_lightUniforms[i]->Zero();
             m_lightUniforms[i]->Flush();
             m_lightUniforms[i]->Unmap();
 
-            m_lightStorageBuffers[i] = Buffer::Create(
-                1024,
-                vk::BufferUsageFlagBits2::eStorageBuffer,
-                VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT,
-                "lights_storage_buffer");
+            m_lightStorageBuffers[i] = Buffer::Create({
+                .size = 1024,
+                .usage = PE_BUFFER_USAGE_STORAGE_BUFFER,
+                .memoryUsage = PE_MEMORY_USAGE_CPU_TO_GPU,
+                .name = "lights_storage_buffer",
+            });
             m_lightStorageBuffers[i]->Map();
             m_lightStorageBuffers[i]->Zero();
             m_lightStorageBuffers[i]->Flush();
@@ -178,11 +180,12 @@ namespace pe
         if (totalSize > 0 && sb->Size() < totalSize)
         {
             Buffer::Destroy(sb);
-            m_lightStorageBuffers[frameIndex] = Buffer::Create(
-                totalSize * 2,
-                vk::BufferUsageFlagBits2::eStorageBuffer,
-                VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT | VMA_ALLOCATION_CREATE_MAPPED_BIT,
-                "lights_storage_buffer");
+            m_lightStorageBuffers[frameIndex] = Buffer::Create({
+                .size = totalSize * 2,
+                .usage = PE_BUFFER_USAGE_STORAGE_BUFFER,
+                .memoryUsage = PE_MEMORY_USAGE_CPU_TO_GPU_PERSISTENT,
+                .name = "lights_storage_buffer",
+            });
             sb = m_lightStorageBuffers[frameIndex];
         }
 

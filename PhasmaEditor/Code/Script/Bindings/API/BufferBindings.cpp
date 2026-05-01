@@ -4,25 +4,28 @@
 
 namespace pe
 {
-    static const std::unordered_map<std::string_view, vk::BufferUsageFlags2> s_bufferUsageMap = {
-        {"uniform", vk::BufferUsageFlagBits2::eUniformBuffer},
-        {"storage", vk::BufferUsageFlagBits2::eStorageBuffer},
-        {"vertex", vk::BufferUsageFlagBits2::eVertexBuffer},
-        {"index", vk::BufferUsageFlagBits2::eIndexBuffer},
-        {"indirect", vk::BufferUsageFlagBits2::eIndirectBuffer},
-        {"transfer_src", vk::BufferUsageFlagBits2::eTransferSrc},
-        {"transfer_dst", vk::BufferUsageFlagBits2::eTransferDst},
-        {"device_address", vk::BufferUsageFlagBits2::eShaderDeviceAddress},
-        {"acceleration_structure_storage", vk::BufferUsageFlagBits2::eAccelerationStructureStorageKHR},
-        {"acceleration_structure_input", vk::BufferUsageFlagBits2::eAccelerationStructureBuildInputReadOnlyKHR},
-        {"shader_binding_table", vk::BufferUsageFlagBits2::eShaderBindingTableKHR},
+    static const std::unordered_map<std::string_view, PeBufferUsageFlags> s_bufferUsageMap = {
+        {"uniform", PE_BUFFER_USAGE_UNIFORM_BUFFER},
+        {"storage", PE_BUFFER_USAGE_STORAGE_BUFFER},
+        {"vertex", PE_BUFFER_USAGE_VERTEX_BUFFER},
+        {"index", PE_BUFFER_USAGE_INDEX_BUFFER},
+        {"indirect", PE_BUFFER_USAGE_INDIRECT_BUFFER},
+        {"transfer_src", PE_BUFFER_USAGE_TRANSFER_SRC},
+        {"transfer_dst", PE_BUFFER_USAGE_TRANSFER_DST},
+        {"device_address", PE_BUFFER_USAGE_SHADER_DEVICE_ADDRESS},
+        {"acceleration_structure_storage", PE_BUFFER_USAGE_ACCELERATION_STRUCTURE_STORAGE_KHR},
+        {"acceleration_structure_input", PE_BUFFER_USAGE_ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_KHR},
+        {"shader_binding_table", PE_BUFFER_USAGE_SHADER_BINDING_TABLE_KHR},
     };
 
-    static const std::unordered_map<std::string_view, VmaAllocationCreateFlags> s_vmaFlagsMap = {
-        {"host_write", VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT},
-        {"host_read", VMA_ALLOCATION_CREATE_HOST_ACCESS_RANDOM_BIT},
-        {"mapped", VMA_ALLOCATION_CREATE_MAPPED_BIT},
-        {"dedicated", VMA_ALLOCATION_CREATE_DEDICATED_MEMORY_BIT},
+    // Lua takes one memory-usage keyword. Pre-existing scripts that combined
+    // VMA flag strings should pick the closest match here.
+    static const std::unordered_map<std::string_view, PeMemoryUsage> s_memoryUsageMap = {
+        {"gpu_only", PE_MEMORY_USAGE_GPU_ONLY},
+        {"gpu_dedicated", PE_MEMORY_USAGE_GPU_ONLY_DEDICATED},
+        {"cpu_to_gpu", PE_MEMORY_USAGE_CPU_TO_GPU},
+        {"cpu_to_gpu_persistent", PE_MEMORY_USAGE_CPU_TO_GPU_PERSISTENT},
+        {"gpu_to_cpu", PE_MEMORY_USAGE_GPU_TO_CPU},
     };
 
     static struct BufferBindings
@@ -34,11 +37,15 @@ namespace pe
                 sol::usertype<Buffer> bufType = lua.new_usertype<Buffer>("Buffer", sol::no_constructor);
 
                 // Factory
-                lua.set_function("create_buffer", [](size_t size, const std::string &usage, const std::string &alloc, const std::string &name) -> Buffer * {
-                    return Buffer::Create(size,
-                        LookupFlags<vk::BufferUsageFlags2>(usage, s_bufferUsageMap),
-                        LookupFlags<VmaAllocationCreateFlags>(alloc, s_vmaFlagsMap),
-                        name);
+                lua.set_function("create_buffer", [](size_t size, const std::string &usage, const std::string &memoryUsage, const std::string &name) -> Buffer * {
+                    auto memIt = s_memoryUsageMap.find(std::string_view(memoryUsage));
+                    PeMemoryUsage mem = memIt == s_memoryUsageMap.end() ? PE_MEMORY_USAGE_GPU_ONLY : memIt->second;
+                    return Buffer::Create({
+                        .size = size,
+                        .usage = LookupFlags<PeBufferUsageFlags>(usage, s_bufferUsageMap),
+                        .memoryUsage = mem,
+                        .name = name,
+                    });
                 });
                 lua.set_function("destroy_buffer", [](Buffer *buf) {
                     Buffer::Destroy(buf);

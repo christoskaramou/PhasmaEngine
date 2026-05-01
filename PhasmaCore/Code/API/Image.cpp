@@ -5,6 +5,7 @@
 #include "API/Helpers.h"
 #include "API/RHI.h"
 #include "API/StagingManager.h"
+#include "API/Vulkan/VulkanBufferImpl.h"
 
 #define STB_IMAGE_IMPLEMENTATION
 #include "stb/stb_image.h"
@@ -308,7 +309,7 @@ namespace pe
             }
 
             vk::CopyBufferToImageInfo2 copyInfo{};
-            copyInfo.srcBuffer = alloc.buffer->ApiHandle();
+            copyInfo.srcBuffer = pe::GetVulkanBuffer(alloc.buffer);
             copyInfo.dstImage = image->ApiHandle();
             copyInfo.dstImageLayout = vk::ImageLayout::eTransferDstOptimal;
             copyInfo.regionCount = static_cast<uint32_t>(regions.size());
@@ -982,7 +983,7 @@ namespace pe
         region.imageExtent = vk::Extent3D{m_createInfo.extent.width, m_createInfo.extent.height, m_createInfo.extent.depth};
 
         vk::CopyBufferToImageInfo2 copyInfo{};
-        copyInfo.srcBuffer = alloc.buffer->ApiHandle();
+        copyInfo.srcBuffer = pe::GetVulkanBuffer(alloc.buffer);
         copyInfo.dstImage = m_apiHandle;
         copyInfo.dstImageLayout = vk::ImageLayout::eTransferDstOptimal;
         copyInfo.regionCount = 1;
@@ -1072,7 +1073,7 @@ namespace pe
         vk::CopyImageToBufferInfo2 copyInfo{};
         copyInfo.srcImage = m_apiHandle;
         copyInfo.srcImageLayout = vk::ImageLayout::eTransferSrcOptimal;
-        copyInfo.dstBuffer = dst->ApiHandle();
+        copyInfo.dstBuffer = pe::GetVulkanBuffer(dst);
         copyInfo.regionCount = 1;
         copyInfo.pRegions = &region;
 

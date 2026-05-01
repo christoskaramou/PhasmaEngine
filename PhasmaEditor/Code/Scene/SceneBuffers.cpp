@@ -55,11 +55,14 @@ namespace pe
         m_positionsOffset = m_verticesOffset + m_verticesCount * sizeof(Vertex);
         m_aabbVerticesOffset = m_positionsOffset + m_positionsCount * sizeof(PositionUvVertex);
 
-        m_buffer = Buffer::Create(
-            m_aabbVerticesOffset + sizeof(AabbVertex) * m_aabbVerticesCount,
-            vk::BufferUsageFlagBits2::eTransferDst | vk::BufferUsageFlagBits2::eIndexBuffer | vk::BufferUsageFlagBits2::eVertexBuffer | vk::BufferUsageFlagBits2::eStorageBuffer | vk::BufferUsageFlagBits2::eShaderDeviceAddress | vk::BufferUsageFlagBits2::eAccelerationStructureBuildInputReadOnlyKHR,
-            VMA_ALLOCATION_CREATE_DEDICATED_MEMORY_BIT,
-            "combined_Geometry_buffer");
+        m_buffer = Buffer::Create({
+            .size = m_aabbVerticesOffset + sizeof(AabbVertex) * m_aabbVerticesCount,
+            .usage = PE_BUFFER_USAGE_TRANSFER_DST | PE_BUFFER_USAGE_INDEX_BUFFER | PE_BUFFER_USAGE_VERTEX_BUFFER |
+                     PE_BUFFER_USAGE_STORAGE_BUFFER | PE_BUFFER_USAGE_SHADER_DEVICE_ADDRESS |
+                     PE_BUFFER_USAGE_ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_KHR,
+            .memoryUsage = PE_MEMORY_USAGE_GPU_ONLY_DEDICATED,
+            .name = "combined_Geometry_buffer",
+        });
     }
 
     void Scene::CopyIndices(CommandBuffer *cmd)
@@ -177,11 +180,12 @@ namespace pe
         uint32_t i = 0;
         for (auto &storage : m_storages)
         {
-            storage = Buffer::Create(
-                storageSize,
-                vk::BufferUsageFlagBits2::eStorageBuffer,
-                VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT | VMA_ALLOCATION_CREATE_MAPPED_BIT,
-                "storage_Geometry_buffer_" + std::to_string(i++));
+            storage = Buffer::Create({
+                .size = storageSize,
+                .usage = PE_BUFFER_USAGE_STORAGE_BUFFER,
+                .memoryUsage = PE_MEMORY_USAGE_CPU_TO_GPU_PERSISTENT,
+                .name = "storage_Geometry_buffer_" + std::to_string(i++),
+            });
         }
     }
 
@@ -236,11 +240,12 @@ namespace pe
             m_indirectCapacity <<= 1;
 
         const uint32_t indirectBufferCount = std::max(1u, indirectCount);
-        m_indirectAll = Buffer::Create(
-            indirectBufferCount * sizeof(vk::DrawIndexedIndirectCommand),
-            vk::BufferUsageFlagBits2::eIndirectBuffer | vk::BufferUsageFlagBits2::eStorageBuffer | vk::BufferUsageFlagBits2::eTransferDst,
-            VMA_ALLOCATION_CREATE_DEDICATED_MEMORY_BIT,
-            "indirect_Geometry_buffer_all");
+        m_indirectAll = Buffer::Create({
+            .size = indirectBufferCount * sizeof(vk::DrawIndexedIndirectCommand),
+            .usage = PE_BUFFER_USAGE_INDIRECT_BUFFER | PE_BUFFER_USAGE_STORAGE_BUFFER | PE_BUFFER_USAGE_TRANSFER_DST,
+            .memoryUsage = PE_MEMORY_USAGE_GPU_ONLY_DEDICATED,
+            .name = "indirect_Geometry_buffer_all",
+        });
         if (indirectCount > 0)
             cmd->CopyBufferStaged(m_indirectAll, indirectCommands.data(), indirectCommands.size() * sizeof(vk::DrawIndexedIndirectCommand), 0);
 
@@ -260,11 +265,12 @@ namespace pe
             std::vector<Buffer *> vec(RHII.GetSwapchainImageCount());
             for (uint32_t i = 0; i < vec.size(); ++i)
             {
-                vec[i] = Buffer::Create(
-                    m_indirectCapacity * sizeof(vk::DrawIndexedIndirectCommand),
-                    vk::BufferUsageFlagBits2::eIndirectBuffer | vk::BufferUsageFlagBits2::eStorageBuffer | vk::BufferUsageFlagBits2::eTransferDst,
-                    VMA_ALLOCATION_CREATE_DEDICATED_MEMORY_BIT,
-                    name + std::to_string(i));
+                vec[i] = Buffer::Create({
+                    .size = m_indirectCapacity * sizeof(vk::DrawIndexedIndirectCommand),
+                    .usage = PE_BUFFER_USAGE_INDIRECT_BUFFER | PE_BUFFER_USAGE_STORAGE_BUFFER | PE_BUFFER_USAGE_TRANSFER_DST,
+                    .memoryUsage = PE_MEMORY_USAGE_GPU_ONLY_DEDICATED,
+                    .name = name + std::to_string(i),
+                });
             }
             return vec;
         };
@@ -272,11 +278,12 @@ namespace pe
         m_cullingCountersBuffers.resize(RHII.GetSwapchainImageCount());
         for (uint32_t i = 0; i < m_cullingCountersBuffers.size(); ++i)
         {
-            m_cullingCountersBuffers[i] = Buffer::Create(
-                7 * sizeof(uint32_t),
-                vk::BufferUsageFlagBits2::eStorageBuffer | vk::BufferUsageFlagBits2::eIndirectBuffer | vk::BufferUsageFlagBits2::eTransferDst,
-                VMA_ALLOCATION_CREATE_DEDICATED_MEMORY_BIT,
-                "culling_counters_" + std::to_string(i));
+            m_cullingCountersBuffers[i] = Buffer::Create({
+                .size = 7 * sizeof(uint32_t),
+                .usage = PE_BUFFER_USAGE_STORAGE_BUFFER | PE_BUFFER_USAGE_INDIRECT_BUFFER | PE_BUFFER_USAGE_TRANSFER_DST,
+                .memoryUsage = PE_MEMORY_USAGE_GPU_ONLY_DEDICATED,
+                .name = "culling_counters_" + std::to_string(i),
+            });
         }
 
         m_indirectOpaqueSS = createFilteredIndirect("indirect_OpaqueSS_");
@@ -292,11 +299,12 @@ namespace pe
             std::vector<Buffer *> vec(RHII.GetSwapchainImageCount());
             for (uint32_t i = 0; i < vec.size(); ++i)
             {
-                vec[i] = Buffer::Create(
-                    m_indirectCapacity * sizeof(float),
-                    vk::BufferUsageFlagBits2::eStorageBuffer | vk::BufferUsageFlagBits2::eTransferDst,
-                    VMA_ALLOCATION_CREATE_DEDICATED_MEMORY_BIT,
-                    name + std::to_string(i));
+                vec[i] = Buffer::Create({
+                    .size = m_indirectCapacity * sizeof(float),
+                    .usage = PE_BUFFER_USAGE_STORAGE_BUFFER | PE_BUFFER_USAGE_TRANSFER_DST,
+                    .memoryUsage = PE_MEMORY_USAGE_GPU_ONLY_DEDICATED,
+                    .name = name + std::to_string(i),
+                });
             }
             return vec;
         };
@@ -471,11 +479,12 @@ namespace pe
             tableData.push_back(defaultMat);
         }
 
-        m_materialTable = Buffer::Create(
-            tableData.size() * sizeof(MaterialGpuData),
-            vk::BufferUsageFlagBits2::eStorageBuffer | vk::BufferUsageFlagBits2::eTransferDst,
-            VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT,
-            "Scene_materialTable");
+        m_materialTable = Buffer::Create({
+            .size = tableData.size() * sizeof(MaterialGpuData),
+            .usage = PE_BUFFER_USAGE_STORAGE_BUFFER | PE_BUFFER_USAGE_TRANSFER_DST,
+            .memoryUsage = PE_MEMORY_USAGE_CPU_TO_GPU,
+            .name = "Scene_materialTable",
+        });
 
         m_materialTable->Map();
         BufferRange range{};
@@ -569,11 +578,12 @@ namespace pe
         if (totalBytes == 0)
             totalBytes = 4;
 
-        m_materialByteBuffer = Buffer::Create(
-            totalBytes,
-            vk::BufferUsageFlagBits2::eStorageBuffer | vk::BufferUsageFlagBits2::eTransferDst,
-            VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT,
-            "Scene_materialByteBuffer");
+        m_materialByteBuffer = Buffer::Create({
+            .size = totalBytes,
+            .usage = PE_BUFFER_USAGE_STORAGE_BUFFER | PE_BUFFER_USAGE_TRANSFER_DST,
+            .memoryUsage = PE_MEMORY_USAGE_CPU_TO_GPU,
+            .name = "Scene_materialByteBuffer",
+        });
 
         if (!byteEntries.empty())
         {
@@ -712,11 +722,12 @@ namespace pe
     void Scene::CreateMeshConstants(CommandBuffer *cmd)
     {
         Buffer::Destroy(m_meshConstants);
-        m_meshConstants = Buffer::Create(
-            m_meshCount * sizeof(Mesh_Constants),
-            vk::BufferUsageFlagBits2::eStorageBuffer | vk::BufferUsageFlagBits2::eTransferDst,
-            VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT,
-            "Scene_meshConstants");
+        m_meshConstants = Buffer::Create({
+            .size = m_meshCount * sizeof(Mesh_Constants),
+            .usage = PE_BUFFER_USAGE_STORAGE_BUFFER | PE_BUFFER_USAGE_TRANSFER_DST,
+            .memoryUsage = PE_MEMORY_USAGE_CPU_TO_GPU,
+            .name = "Scene_meshConstants",
+        });
 
         size_t offset = 0;
         m_hasTransparentMeshes = false;

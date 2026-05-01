@@ -48,11 +48,12 @@ namespace pe
     {
         for (auto &uniform : m_reflectionUBs)
         {
-            uniform = Buffer::Create(
-                RHII.AlignUniform(4 * sizeof(mat4)),
-                vk::BufferUsageFlagBits2::eUniformBuffer,
-                VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT,
-                "SSR_UB_Reflection_buffer");
+            uniform = Buffer::Create({
+                .size = RHII.AlignUniform(4 * sizeof(mat4)),
+                .usage = PE_BUFFER_USAGE_UNIFORM_BUFFER,
+                .memoryUsage = PE_MEMORY_USAGE_CPU_TO_GPU,
+                .name = "SSR_UB_Reflection_buffer",
+            });
             uniform->Map();
             uniform->Zero();
             uniform->Flush();

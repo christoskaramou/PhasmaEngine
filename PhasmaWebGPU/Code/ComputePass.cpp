@@ -8,6 +8,7 @@
 #include "Device.h"
 #include "Texture.h"
 #include "Utils.h"
+#include "API/Vulkan/VulkanBufferImpl.h"
 
 extern "C" void wgpuComputePipelineAddRef(WGPUComputePipeline);
 extern "C" void wgpuComputePipelineRelease(WGPUComputePipeline);
@@ -632,7 +633,7 @@ extern "C"
         ValidateDispatchUsageScope(cpe, buffer);
         EmitDispatchResourceBarriers(cpe, buffer);
 
-        cpe->cmd->ApiHandle().dispatchIndirect(buffer->peBuffer->ApiHandle(), offset);
+        cpe->cmd->ApiHandle().dispatchIndirect(pe::GetVulkanBuffer(buffer->peBuffer), offset);
         cpe->usedBuffers.push_back(buffer);
     }
 

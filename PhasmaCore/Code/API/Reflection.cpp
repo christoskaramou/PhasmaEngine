@@ -186,7 +186,7 @@ namespace pe
         // Uniform Buffers
         for (const spirv_cross::Resource &resource : resources.uniform_buffers)
         {
-            BufferDesc desc{};
+            BufferReflection desc{};
             desc.name = GetResourceName(compiler, resource.id);
 
             desc.typeInfo = compiler.get_type(resource.type_id);
@@ -200,7 +200,7 @@ namespace pe
         // Storage Buffers
         for (const spirv_cross::Resource &resource : resources.storage_buffers)
         {
-            BufferDesc desc{};
+            BufferReflection desc{};
             desc.name = GetResourceName(compiler, resource.id);
 
             desc.typeInfo = compiler.get_type(resource.type_id);
@@ -423,9 +423,9 @@ namespace pe
             maxSet = std::max(maxSet, desc.set);
         for (const ImageDesc &desc : m_storageImages)
             maxSet = std::max(maxSet, desc.set);
-        for (const BufferDesc &desc : m_uniformBuffers)
+        for (const BufferReflection &desc : m_uniformBuffers)
             maxSet = std::max(maxSet, desc.set);
-        for (const BufferDesc &desc : m_storageBuffers)
+        for (const BufferReflection &desc : m_storageBuffers)
             maxSet = std::max(maxSet, desc.set);
         for (const AccelerationStructureDesc &desc : m_accelerationStructures)
             maxSet = std::max(maxSet, desc.set);
@@ -487,7 +487,7 @@ namespace pe
             setInfos[desc.set].push_back(info);
         }
 
-        for (const BufferDesc &desc : m_uniformBuffers)
+        for (const BufferReflection &desc : m_uniformBuffers)
         {
             DescriptorBindingInfo info{};
             info.binding = desc.binding;
@@ -498,7 +498,7 @@ namespace pe
             setInfos[desc.set].push_back(info);
         }
 
-        for (const BufferDesc &desc : m_storageBuffers)
+        for (const BufferReflection &desc : m_storageBuffers)
         {
             DescriptorBindingInfo info{};
             info.binding = desc.binding;

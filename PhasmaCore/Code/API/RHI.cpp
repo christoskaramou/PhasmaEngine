@@ -447,7 +447,10 @@ namespace pe
                 PE_WARN("[RHI] Leaked %s: %zu", name, resources.size());
                 for (const auto &res : resources)
                 {
-                    PE_WARN("[RHI]   Handle: %p", (void *)detail::ToUintPtr(res->ApiHandle()));
+                    if constexpr (requires { res->ApiHandle(); })
+                        PE_WARN("[RHI]   Handle: %p", (void *)detail::ToUintPtr(res->ApiHandle()));
+                    else
+                        PE_WARN("[RHI]   Object: %p", (void *)res);
                 }
             }
         };
