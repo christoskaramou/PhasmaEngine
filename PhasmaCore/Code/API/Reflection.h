@@ -1,110 +1,155 @@
 #pragma once
-#include "spirv_cross/spirv_common.hpp"
-#include "spirv_cross/spirv_cross.hpp"
+
+#include "API/RHITypes.h"
+#include "Base/Enums.h"
 
 namespace pe
 {
-    struct BaseDesc
+    class Shader;
+    class Descriptor;
+
+    enum class StructMemberBaseType : uint32_t
     {
-        std::string name;
-        spirv_cross::SPIRType typeInfo = spirv_cross::SPIRType(spv::Op::OpNop);
+        Unknown = 0,
+        Boolean,
+        SByte,
+        UByte,
+        Short,
+        UShort,
+        Int,
+        UInt,
+        Int64,
+        UInt64,
+        Half,
+        Float,
+        Double,
+        Struct,
     };
 
     struct StructMemberInfo
     {
         std::string name;
-        spirv_cross::SPIRType typeInfo = spirv_cross::SPIRType(spv::Op::OpNop);
         uint32_t offset = 0;
+        uint32_t size = 0;
+        StructMemberBaseType baseType = StructMemberBaseType::Unknown;
+        uint32_t vecSize = 1;
+        uint32_t columns = 1;
+    };
+
+    struct SpecializationConstantDesc
+    {
+        std::string name;
+        uint32_t constantId = 0;
+        StructMemberBaseType baseType = StructMemberBaseType::Unknown;
+        uint32_t vecSize = 1;
+        uint32_t columns = 1;
+    };
+
+    struct ShaderInOutDesc
+    {
+        std::string name;
+        int location = INT32_MIN;
+        int binding = INT32_MIN;
+        ::PeFormat format = ::PE_FORMAT_UNDEFINED;
         uint32_t size = 0;
     };
 
-    struct SpecializationConstantDesc : public BaseDesc
+    struct VertexInputBinding
     {
-        uint32_t constantId = 0;
+        uint32_t binding = 0;
+        uint32_t stride = 0;
     };
 
-    struct ShaderInOutDesc : public BaseDesc
+    struct VertexInputAttribute
     {
-        int binding = INT32_MIN;
-        int location = INT32_MIN;
+        uint32_t location = 0;
+        uint32_t binding = 0;
+        ::PeFormat format = ::PE_FORMAT_UNDEFINED;
+        uint32_t offset = 0;
     };
 
-    struct CombinedImageSamplerDesc : public BaseDesc
+    struct BufferReflection
     {
+        std::string name;
         int set = INT32_MIN;
         int binding = INT32_MIN;
-    };
-
-    struct SamplerReflection : public BaseDesc
-    {
-        int set = INT32_MIN;
-        int binding = INT32_MIN;
-    };
-
-    struct ImageReflection : public BaseDesc
-    {
-        int set = INT32_MIN;
-        int binding = INT32_MIN;
-    };
-
-    struct BufferReflection : public BaseDesc
-    {
-        int set = INT32_MIN;
-        int binding = INT32_MIN;
+        uint32_t count = 1;
         size_t bufferSize = 0;
     };
 
-    struct AccelerationStructureDesc : public BaseDesc
+    struct ImageReflection
     {
+        std::string name;
         int set = INT32_MIN;
         int binding = INT32_MIN;
+        uint32_t count = 1;
     };
 
-    struct PushConstantDesc : public BaseDesc
+    struct SamplerReflection
     {
-        bool operator==(const PushConstantDesc &other) const
-        {
-            return size == other.size;
-        }
+        std::string name;
+        int set = INT32_MIN;
+        int binding = INT32_MIN;
+        uint32_t count = 1;
+    };
 
+    struct CombinedImageSamplerReflection
+    {
+        std::string name;
+        int set = INT32_MIN;
+        int binding = INT32_MIN;
+        uint32_t count = 1;
+    };
+
+    struct AccelerationStructureReflection
+    {
+        std::string name;
+        int set = INT32_MIN;
+        int binding = INT32_MIN;
+        uint32_t count = 1;
+    };
+
+    struct PushConstantDesc
+    {
+        std::string name;
         std::string structName;
         size_t size = 0;
-    };
 
-    class Shader;
-    class Descriptor;
+        bool operator==(const PushConstantDesc &other) const { return size == other.size; }
+    };
 
     class Reflection
     {
     public:
         void Init(Shader *shader);
-        std::vector<vk::VertexInputBindingDescription> GetVertexBindings();
-        std::vector<vk::VertexInputAttributeDescription> GetVertexAttributes();
-        std::vector<Descriptor *> GetDescriptors();
-        const PushConstantDesc &GetPushConstantDesc() { return m_pushConstants; }
+        std::vector<VertexInputBinding> GetVertexBindings() const;
+        std::vector<VertexInputAttribute> GetVertexAttributes() const;
+        std::vector<Descriptor *> GetDescriptors() const;
+        const PushConstantDesc &GetPushConstantDesc() const { return m_pushConstants; }
 
         const std::vector<BufferReflection> &GetStorageBuffers() const { return m_storageBuffers; }
         const std::vector<BufferReflection> &GetUniformBuffers() const { return m_uniformBuffers; }
         const std::vector<ImageReflection> &GetImages() const { return m_images; }
         const std::vector<ImageReflection> &GetStorageImages() const { return m_storageImages; }
         const std::vector<SamplerReflection> &GetSamplers() const { return m_samplers; }
-        const std::vector<CombinedImageSamplerDesc> &GetCombinedImageSamplers() const { return m_combinedImageSamplers; }
+        const std::vector<CombinedImageSamplerReflection> &GetCombinedImageSamplers() const { return m_combinedImageSamplers; }
+        const std::vector<AccelerationStructureReflection> &GetAccelerationStructures() const { return m_accelerationStructures; }
 
-        static std::vector<StructMemberInfo> ReflectStructMembers(
-            const spirv_cross::Compiler &compiler,
-            const spirv_cross::SPIRType &structType);
+        Shader *GetShader() const { return m_shader; }
 
     private:
+        friend void PopulateReflectionFromSpirv(Reflection &refl, Shader *shader);
+
         std::vector<SpecializationConstantDesc> m_specializationConstants{};
         std::vector<ShaderInOutDesc> m_inputs{};
         std::vector<ShaderInOutDesc> m_outputs{};
-        std::vector<CombinedImageSamplerDesc> m_combinedImageSamplers{};
+        std::vector<CombinedImageSamplerReflection> m_combinedImageSamplers{};
         std::vector<SamplerReflection> m_samplers{};
         std::vector<ImageReflection> m_images{};
         std::vector<ImageReflection> m_storageImages{};
         std::vector<BufferReflection> m_uniformBuffers{};
         std::vector<BufferReflection> m_storageBuffers{};
-        std::vector<AccelerationStructureDesc> m_accelerationStructures{};
+        std::vector<AccelerationStructureReflection> m_accelerationStructures{};
         PushConstantDesc m_pushConstants{};
         Shader *m_shader{};
     };

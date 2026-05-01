@@ -2,7 +2,9 @@
 #include "Scene/PassInfoAsset.h"
 #include "API/Shader.h"
 #include "API/Reflection.h"
+#include "API/Vulkan/VulkanReflection.h"
 #include "Base/Path.h"
+#include "spirv_cross/spirv_cross.hpp"
 
 namespace pe
 {
@@ -80,7 +82,7 @@ namespace pe
                         structType = &memberType;
                 }
 
-                rawMembers = Reflection::ReflectStructMembers(compiler, *structType);
+                rawMembers = ReflectStructMembersFromSpirv(compiler, *structType);
                 rawTotalSize = static_cast<uint32_t>(compiler.get_declared_struct_size(*structType));
                 rawTotalSize = (rawTotalSize + 3u) & ~3u;
                 return true;
@@ -137,36 +139,36 @@ namespace pe
                 if (fh.component >= 0)
                 {
                     // Single component of a vec (e.g., pbrParams.x)
-                    field.baseType = raw.typeInfo.basetype;
+                    field.baseType = raw.baseType;
                     field.vecSize = 1;
                     field.offset = raw.offset + fh.component * 4;
                     field.size = 4;
 
-                    expanded.typeInfo = raw.typeInfo;
-                    expanded.typeInfo.vecsize = 1;
-                    expanded.typeInfo.columns = 1;
+                    expanded = raw;
+                    expanded.vecSize = 1;
+                    expanded.columns = 1;
                     expanded.offset = field.offset;
                     expanded.size = 4;
                 }
                 else if (fh.component == -2)
                 {
                     // .xyz / .rgb — first 3 components of a vec4
-                    field.baseType = raw.typeInfo.basetype;
+                    field.baseType = raw.baseType;
                     field.vecSize = 3;
                     field.offset = raw.offset;
                     field.size = 12;
 
-                    expanded.typeInfo = raw.typeInfo;
-                    expanded.typeInfo.vecsize = 3;
-                    expanded.typeInfo.columns = 1;
+                    expanded = raw;
+                    expanded.vecSize = 3;
+                    expanded.columns = 1;
                     expanded.offset = field.offset;
                     expanded.size = 12;
                 }
                 else
                 {
                     // Whole member (e.g., baseColorFactor = baseColorFactor)
-                    field.baseType = raw.typeInfo.basetype;
-                    field.vecSize = raw.typeInfo.vecsize;
+                    field.baseType = raw.baseType;
+                    field.vecSize = raw.vecSize;
                     field.offset = raw.offset;
                     field.size = raw.size;
 
@@ -187,12 +189,12 @@ namespace pe
             {
                 MaterialFieldDesc field;
                 field.name = member.name;
-                field.baseType = member.typeInfo.basetype;
-                field.vecSize = member.typeInfo.vecsize;
+                field.baseType = member.baseType;
+                field.vecSize = member.vecSize;
                 field.offset = member.offset;
                 field.size = member.size;
 
-                if (field.baseType == spirv_cross::SPIRType::Float)
+                if (field.baseType == StructMemberBaseType::Float)
                 {
                     if (field.vecSize == 4)
                         field.hint = MaterialWidgetHint::Color4;
@@ -231,7 +233,7 @@ namespace pe
                 std::string idxFieldName = name + "_idx";
                 for (const auto &field : layout.fields)
                 {
-                    if (field.name == idxFieldName && field.baseType == spirv_cross::SPIRType::UInt)
+                    if (field.name == idxFieldName && field.baseType == StructMemberBaseType::UInt)
                     {
                         slot.byteOffset = field.offset;
                         break;

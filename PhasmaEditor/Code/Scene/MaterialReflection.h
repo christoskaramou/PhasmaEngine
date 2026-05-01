@@ -18,7 +18,7 @@ namespace pe
     struct MaterialFieldDesc
     {
         std::string name;
-        spirv_cross::SPIRType::BaseType baseType = spirv_cross::SPIRType::Float;
+        StructMemberBaseType baseType = StructMemberBaseType::Float;
         uint32_t vecSize = 1;
         uint32_t offset = 0;
         uint32_t size = 0;

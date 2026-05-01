@@ -10,9 +10,9 @@ namespace pe
 {
     static MaterialParamValue MakeDefaultValue(const MaterialFieldDesc &field)
     {
-        if (field.baseType == spirv_cross::SPIRType::Int)
+        if (field.baseType == StructMemberBaseType::Int)
             return int32_t(0);
-        if (field.baseType == spirv_cross::SPIRType::UInt)
+        if (field.baseType == StructMemberBaseType::UInt)
             return uint32_t(0);
         if (field.vecSize == 1)
             return 0.f;

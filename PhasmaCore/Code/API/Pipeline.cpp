@@ -6,6 +6,7 @@
 #include "API/RenderPass.h"
 #include "API/Shader.h"
 #include "API/Vulkan/VulkanDescriptorImpl.h"
+#include "API/Vulkan/VulkanImageImpl.h"
 
 namespace pe
 {
@@ -646,8 +647,32 @@ namespace pe
         pipeinfo.pStages = stages.data();
 
         // Vertex Input state
-        std::vector<vk::VertexInputBindingDescription> vibds = m_info.pVertShader->GetReflection().GetVertexBindings();
-        std::vector<vk::VertexInputAttributeDescription> vidas = m_info.pVertShader->GetReflection().GetVertexAttributes();
+        const std::vector<VertexInputBinding> neutralBindings = m_info.pVertShader->GetReflection().GetVertexBindings();
+        const std::vector<VertexInputAttribute> neutralAttribs = m_info.pVertShader->GetReflection().GetVertexAttributes();
+
+        std::vector<vk::VertexInputBindingDescription> vibds;
+        vibds.reserve(neutralBindings.size());
+        for (const VertexInputBinding &b : neutralBindings)
+        {
+            vk::VertexInputBindingDescription d{};
+            d.binding = b.binding;
+            d.stride = b.stride;
+            d.inputRate = vk::VertexInputRate::eVertex;
+            vibds.push_back(d);
+        }
+
+        std::vector<vk::VertexInputAttributeDescription> vidas;
+        vidas.reserve(neutralAttribs.size());
+        for (const VertexInputAttribute &a : neutralAttribs)
+        {
+            vk::VertexInputAttributeDescription d{};
+            d.location = a.location;
+            d.binding = a.binding;
+            d.format = ToVkFormat(a.format);
+            d.offset = a.offset;
+            vidas.push_back(d);
+        }
+
         vk::PipelineVertexInputStateCreateInfo pvisci{};
         pvisci.vertexBindingDescriptionCount = static_cast<uint32_t>(vibds.size());
         pvisci.pVertexBindingDescriptions = vibds.data();
