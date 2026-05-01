@@ -121,22 +121,6 @@ namespace pe
         return shader;
     }
 
-    Shader *Shader::CreateFromSpirv(const uint32_t *spirv,
-                                    size_t sizeWords,
-                                    PeShaderStageFlags stage,
-                                    const std::string &entryName)
-    {
-        Shader *shader = new Shader();
-        shader->m_stage = stage;
-        shader->m_entryName = entryName;
-        shader->m_impl = CreateShaderImplFromSpirv(shader, spirv, sizeWords);
-        if (sizeWords > 0)
-            shader->m_reflection.Init(shader);
-
-        TrackedShaders().push_back(shader);
-        return shader;
-    }
-
     void Shader::Destroy(Shader *&shader)
     {
         if (!shader)

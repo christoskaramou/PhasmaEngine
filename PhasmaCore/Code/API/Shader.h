@@ -31,12 +31,6 @@ namespace pe
         struct Impl;
 
         static Shader *Create(const ShaderDesc &desc);
-        // Legacy SPIR-V path used by the embedded Downsampler — removed in sub-phase 0b commit 3 once the
-        // downsampler converts to HLSL+DXC. Do not introduce new callers.
-        static Shader *CreateFromSpirv(const uint32_t *spirv,
-                                       size_t sizeWords,
-                                       PeShaderStageFlags stage,
-                                       const std::string &entryName);
         static void Destroy(Shader *&shader);
         static std::vector<Shader *> GetHandles();
 

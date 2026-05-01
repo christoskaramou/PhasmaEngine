@@ -409,9 +409,4 @@ namespace pe
         std::vector<uint32_t> cached = owner->GetCache().ReadSpvFile();
         return new VulkanShaderImpl(owner, cached.data(), cached.size());
     }
-
-    Shader::Impl *CreateShaderImplFromSpirv(Shader *owner, const uint32_t *spirv, size_t sizeWords)
-    {
-        return new VulkanShaderImpl(owner, spirv, sizeWords);
-    }
 } // namespace pe
