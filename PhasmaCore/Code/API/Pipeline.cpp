@@ -7,6 +7,7 @@
 #include "API/Shader.h"
 #include "API/Vulkan/VulkanDescriptorImpl.h"
 #include "API/Vulkan/VulkanImageImpl.h"
+#include "API/Vulkan/VulkanRHITypeUtils.h"
 #include "API/Vulkan/VulkanShaderImpl.h"
 
 namespace pe
@@ -121,24 +122,23 @@ namespace pe
         : pVertShader{},
           pFragShader{},
           pCompShader{},
-          topology{vk::PrimitiveTopology::eTriangleList},
-          polygonMode{vk::PolygonMode::eFill},
-          cullMode{vk::CullModeFlagBits::eBack},
+          topology{PE_TOPOLOGY_TRIANGLE_LIST},
+          polygonMode{PE_POLYGON_MODE_FILL},
+          cullMode{PE_CULL_MODE_BACK},
           lineWidth{1.0f},
           blendEnable{false},
           colorBlendAttachments{},
           dynamicStates{},
           colorFormats{},
-          depthFormat{vk::Format::eUndefined},
+          depthFormat{PE_FORMAT_UNDEFINED},
           depthWriteEnable{true},
           depthTestEnable{true},
-          depthCompareOp{Settings::Get<GlobalSettings>().reverse_depth ? vk::CompareOp::eGreaterOrEqual : vk::CompareOp::eLessOrEqual},
-          pipelineCache{},
+          depthCompareOp{Settings::Get<GlobalSettings>().reverse_depth ? PE_COMPARE_OP_GREATER_OR_EQUAL : PE_COMPARE_OP_LESS_OR_EQUAL},
           stencilTestEnable{false},
-          stencilFailOp{vk::StencilOp::eKeep},
-          stencilPassOp{vk::StencilOp::eReplace},
-          stencilDepthFailOp{vk::StencilOp::eKeep},
-          stencilCompareOp{vk::CompareOp::eAlways},
+          stencilFailOp{PE_STENCIL_OP_KEEP},
+          stencilPassOp{PE_STENCIL_OP_REPLACE},
+          stencilDepthFailOp{PE_STENCIL_OP_KEEP},
+          stencilCompareOp{PE_COMPARE_OP_ALWAYS},
           stencilCompareMask{0x00u},
           stencilWriteMask{0x00u},
           stencilReference{0},
@@ -168,87 +168,87 @@ namespace pe
         }
     }
 
-    static vk::CullModeFlags ParseCullMode(const std::string &s)
+    static PeCullMode ParseCullMode(const std::string &s)
     {
         if (s == "front")
-            return vk::CullModeFlagBits::eFront;
+            return PE_CULL_MODE_FRONT;
         if (s == "back")
-            return vk::CullModeFlagBits::eBack;
+            return PE_CULL_MODE_BACK;
         if (s == "none")
-            return vk::CullModeFlagBits::eNone;
+            return PE_CULL_MODE_NONE;
         if (s == "frontAndBack")
-            return vk::CullModeFlagBits::eFrontAndBack;
-        return vk::CullModeFlagBits::eFront;
+            return PE_CULL_MODE_FRONT_AND_BACK;
+        return PE_CULL_MODE_FRONT;
     }
 
-    static vk::CompareOp ParseCompareOp(const std::string &s)
+    static PeCompareOp ParseCompareOp(const std::string &s)
     {
         if (s == "less")
-            return vk::CompareOp::eLess;
+            return PE_COMPARE_OP_LESS;
         if (s == "equal")
-            return vk::CompareOp::eEqual;
+            return PE_COMPARE_OP_EQUAL;
         if (s == "lessOrEqual")
-            return vk::CompareOp::eLessOrEqual;
+            return PE_COMPARE_OP_LESS_OR_EQUAL;
         if (s == "greater")
-            return vk::CompareOp::eGreater;
+            return PE_COMPARE_OP_GREATER;
         if (s == "greaterOrEqual")
-            return vk::CompareOp::eGreaterOrEqual;
+            return PE_COMPARE_OP_GREATER_OR_EQUAL;
         if (s == "always")
-            return vk::CompareOp::eAlways;
+            return PE_COMPARE_OP_ALWAYS;
         if (s == "never")
-            return vk::CompareOp::eNever;
+            return PE_COMPARE_OP_NEVER;
         if (s == "notEqual")
-            return vk::CompareOp::eNotEqual;
-        return vk::CompareOp::eLessOrEqual;
+            return PE_COMPARE_OP_NOT_EQUAL;
+        return PE_COMPARE_OP_LESS_OR_EQUAL;
     }
 
-    static vk::PrimitiveTopology ParseTopology(const std::string &s)
+    static PeTopology ParseTopology(const std::string &s)
     {
         if (s == "triangleList")
-            return vk::PrimitiveTopology::eTriangleList;
+            return PE_TOPOLOGY_TRIANGLE_LIST;
         if (s == "lineList")
-            return vk::PrimitiveTopology::eLineList;
+            return PE_TOPOLOGY_LINE_LIST;
         if (s == "lineStrip")
-            return vk::PrimitiveTopology::eLineStrip;
+            return PE_TOPOLOGY_LINE_STRIP;
         if (s == "pointList")
-            return vk::PrimitiveTopology::ePointList;
+            return PE_TOPOLOGY_POINT_LIST;
         if (s == "triangleStrip")
-            return vk::PrimitiveTopology::eTriangleStrip;
+            return PE_TOPOLOGY_TRIANGLE_STRIP;
         if (s == "triangleFan")
-            return vk::PrimitiveTopology::eTriangleFan;
-        return vk::PrimitiveTopology::eTriangleList;
+            return PE_TOPOLOGY_TRIANGLE_FAN;
+        return PE_TOPOLOGY_TRIANGLE_LIST;
     }
 
-    static vk::PolygonMode ParsePolygonMode(const std::string &s)
+    static PePolygonMode ParsePolygonMode(const std::string &s)
     {
         if (s == "fill")
-            return vk::PolygonMode::eFill;
+            return PE_POLYGON_MODE_FILL;
         if (s == "line")
-            return vk::PolygonMode::eLine;
+            return PE_POLYGON_MODE_LINE;
         if (s == "point")
-            return vk::PolygonMode::ePoint;
-        return vk::PolygonMode::eFill;
+            return PE_POLYGON_MODE_POINT;
+        return PE_POLYGON_MODE_FILL;
     }
 
-    static vk::StencilOp ParseStencilOp(const std::string &s)
+    static PeStencilOp ParseStencilOp(const std::string &s)
     {
         if (s == "keep")
-            return vk::StencilOp::eKeep;
+            return PE_STENCIL_OP_KEEP;
         if (s == "zero")
-            return vk::StencilOp::eZero;
+            return PE_STENCIL_OP_ZERO;
         if (s == "replace")
-            return vk::StencilOp::eReplace;
+            return PE_STENCIL_OP_REPLACE;
         if (s == "incrementAndClamp")
-            return vk::StencilOp::eIncrementAndClamp;
+            return PE_STENCIL_OP_INCREMENT_AND_CLAMP;
         if (s == "decrementAndClamp")
-            return vk::StencilOp::eDecrementAndClamp;
+            return PE_STENCIL_OP_DECREMENT_AND_CLAMP;
         if (s == "invert")
-            return vk::StencilOp::eInvert;
+            return PE_STENCIL_OP_INVERT;
         if (s == "incrementAndWrap")
-            return vk::StencilOp::eIncrementAndWrap;
+            return PE_STENCIL_OP_INCREMENT_AND_WRAP;
         if (s == "decrementAndWrap")
-            return vk::StencilOp::eDecrementAndWrap;
-        return vk::StencilOp::eKeep;
+            return PE_STENCIL_OP_DECREMENT_AND_WRAP;
+        return PE_STENCIL_OP_KEEP;
     }
 
     static BlendState ParseBlendAttachment(const std::string &s)
@@ -262,52 +262,52 @@ namespace pe
         return BlendState::Default;
     }
 
-    static vk::DynamicState ParseDynamicState(const std::string &s)
+    static PeDynamicState ParseDynamicState(const std::string &s)
     {
         if (s == "viewport")
-            return vk::DynamicState::eViewport;
+            return PE_DYNAMIC_STATE_VIEWPORT;
         if (s == "scissor")
-            return vk::DynamicState::eScissor;
+            return PE_DYNAMIC_STATE_SCISSOR;
         if (s == "lineWidth")
-            return vk::DynamicState::eLineWidth;
+            return PE_DYNAMIC_STATE_LINE_WIDTH;
         if (s == "depthBias")
-            return vk::DynamicState::eDepthBias;
+            return PE_DYNAMIC_STATE_DEPTH_BIAS;
         if (s == "blendConstants")
-            return vk::DynamicState::eBlendConstants;
+            return PE_DYNAMIC_STATE_BLEND_CONSTANTS;
         if (s == "stencilCompareMask")
-            return vk::DynamicState::eStencilCompareMask;
+            return PE_DYNAMIC_STATE_STENCIL_COMPARE_MASK;
         if (s == "stencilWriteMask")
-            return vk::DynamicState::eStencilWriteMask;
+            return PE_DYNAMIC_STATE_STENCIL_WRITE_MASK;
         if (s == "stencilReference")
-            return vk::DynamicState::eStencilReference;
-        return vk::DynamicState::eViewport;
+            return PE_DYNAMIC_STATE_STENCIL_REFERENCE;
+        return PE_DYNAMIC_STATE_VIEWPORT;
     }
 
-    static vk::Format ParseFormat(const std::string &s)
+    static ::PeFormat ParseFormat(const std::string &s)
     {
         if (s == "r8g8b8a8Unorm")
-            return vk::Format::eR8G8B8A8Unorm;
+            return PE_FORMAT_R8G8B8A8_UNORM;
         if (s == "r8g8b8a8Srgb")
-            return vk::Format::eR8G8B8A8Srgb;
+            return PE_FORMAT_R8G8B8A8_SRGB;
         if (s == "b8g8r8a8Unorm")
-            return vk::Format::eB8G8R8A8Unorm;
+            return PE_FORMAT_B8G8R8A8_UNORM;
         if (s == "r16g16b16a16Sfloat")
-            return vk::Format::eR16G16B16A16Sfloat;
+            return PE_FORMAT_R16G16B16A16_SFLOAT;
         if (s == "r16g16Sfloat")
-            return vk::Format::eR16G16Sfloat;
+            return PE_FORMAT_R16G16_SFLOAT;
         if (s == "r32g32b32a32Sfloat")
-            return vk::Format::eR32G32B32A32Sfloat;
+            return PE_FORMAT_R32G32B32A32_SFLOAT;
         if (s == "r32Sfloat")
-            return vk::Format::eR32Sfloat;
+            return PE_FORMAT_R32_SFLOAT;
         if (s == "r8Unorm")
-            return vk::Format::eR8Unorm;
+            return PE_FORMAT_R8_UNORM;
         if (s == "d32Sfloat")
-            return vk::Format::eD32Sfloat;
+            return PE_FORMAT_D32_SFLOAT;
         if (s == "d24UnormS8Uint")
-            return vk::Format::eD24UnormS8Uint;
+            return PE_FORMAT_D24_UNORM_S8_UINT;
         if (s == "d32SfloatS8Uint")
-            return vk::Format::eD32SfloatS8Uint;
-        return vk::Format::eUndefined;
+            return PE_FORMAT_D32_SFLOAT_S8_UINT;
+        return PE_FORMAT_UNDEFINED;
     }
 
     void PassInfo::Apply(const PassVariant &variant)
@@ -500,8 +500,6 @@ namespace pe
             m_hash.Combine(stencilCompareMask);
             m_hash.Combine(stencilWriteMask);
             m_hash.Combine(stencilReference);
-
-            m_hash.Combine(reinterpret_cast<intptr_t>(static_cast<VkPipelineCache>(pipelineCache)));
         }
     }
 
@@ -681,14 +679,18 @@ namespace pe
 
         // Input Assembly stage
         vk::PipelineInputAssemblyStateCreateInfo piasci{};
-        piasci.topology = m_info.topology;
+        piasci.topology = ToVkTopology(m_info.topology);
         piasci.primitiveRestartEnable = VK_FALSE;
         pipeinfo.pInputAssemblyState = &piasci;
 
         // Dynamic states
+        std::vector<vk::DynamicState> vkDynamicStates;
+        vkDynamicStates.reserve(m_info.dynamicStates.size());
+        for (PeDynamicState ds : m_info.dynamicStates)
+            vkDynamicStates.push_back(ToVkDynamicState(ds));
         vk::PipelineDynamicStateCreateInfo dsi{};
-        dsi.dynamicStateCount = static_cast<uint32_t>(m_info.dynamicStates.size());
-        dsi.pDynamicStates = m_info.dynamicStates.data();
+        dsi.dynamicStateCount = static_cast<uint32_t>(vkDynamicStates.size());
+        dsi.pDynamicStates = vkDynamicStates.data();
         pipeinfo.pDynamicState = &dsi;
 
         // Viewports and Scissors
@@ -701,8 +703,8 @@ namespace pe
         vk::PipelineRasterizationStateCreateInfo prsci{};
         prsci.depthClampEnable = VK_FALSE;
         prsci.rasterizerDiscardEnable = VK_FALSE;
-        prsci.polygonMode = m_info.polygonMode;
-        prsci.cullMode = m_info.cullMode;
+        prsci.polygonMode = ToVkPolygonMode(m_info.polygonMode);
+        prsci.cullMode = ToVkCullMode(m_info.cullMode);
         prsci.frontFace = vk::FrontFace::eClockwise;
         prsci.depthBiasEnable = VK_FALSE;
         prsci.depthBiasConstantFactor = 0.0f;
@@ -725,12 +727,12 @@ namespace pe
         vk::PipelineDepthStencilStateCreateInfo pdssci{};
         pdssci.depthTestEnable = m_info.depthTestEnable;
         pdssci.depthWriteEnable = m_info.depthWriteEnable;
-        pdssci.depthCompareOp = m_info.depthCompareOp;
+        pdssci.depthCompareOp = ToVkCompareOp(m_info.depthCompareOp);
         pdssci.stencilTestEnable = m_info.stencilTestEnable;
-        pdssci.front.failOp = m_info.stencilFailOp;
-        pdssci.front.passOp = m_info.stencilPassOp;
-        pdssci.front.depthFailOp = m_info.stencilDepthFailOp;
-        pdssci.front.compareOp = m_info.stencilCompareOp;
+        pdssci.front.failOp = ToVkStencilOp(m_info.stencilFailOp);
+        pdssci.front.passOp = ToVkStencilOp(m_info.stencilPassOp);
+        pdssci.front.depthFailOp = ToVkStencilOp(m_info.stencilDepthFailOp);
+        pdssci.front.compareOp = ToVkCompareOp(m_info.stencilCompareOp);
         pdssci.front.compareMask = m_info.stencilCompareMask;
         pdssci.front.writeMask = m_info.stencilWriteMask;
         pdssci.front.reference = m_info.stencilReference;
@@ -826,14 +828,21 @@ namespace pe
 
         // Render Pass
         vk::PipelineRenderingCreateInfo prci{};
+        std::vector<vk::Format> vkColorFormats;
         if (Settings::Get<GlobalSettings>().dynamic_rendering)
         {
+            vkColorFormats.reserve(m_info.colorFormats.size());
+            for (::PeFormat f : m_info.colorFormats)
+                vkColorFormats.push_back(ToVkFormat(f));
+
+            const vk::Format vkDepthFormat = ToVkFormat(m_info.depthFormat);
+
             prci.colorAttachmentCount = static_cast<uint32_t>(m_info.colorBlendAttachments.size());
-            prci.pColorAttachmentFormats = m_info.colorFormats.data();
-            if (VulkanHelpers::HasDepth(m_info.depthFormat))
-                prci.depthAttachmentFormat = m_info.depthFormat;
-            if (VulkanHelpers::HasStencil(m_info.depthFormat))
-                prci.stencilAttachmentFormat = m_info.depthFormat;
+            prci.pColorAttachmentFormats = vkColorFormats.data();
+            if (VulkanHelpers::HasDepth(vkDepthFormat))
+                prci.depthAttachmentFormat = vkDepthFormat;
+            if (VulkanHelpers::HasStencil(vkDepthFormat))
+                prci.stencilAttachmentFormat = vkDepthFormat;
 
             pipeinfo.pNext = &prci;
             pipeinfo.renderPass = nullptr;

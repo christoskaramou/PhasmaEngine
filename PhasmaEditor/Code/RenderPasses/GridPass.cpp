@@ -33,11 +33,11 @@ namespace pe
         m_passInfo->pFragShader = Shader::Create({.sourcePath = Path::Assets + "Shaders/Utilities/GridPS.hlsl", .entryPoint = "mainPS", .stage = PE_SHADER_STAGE_FRAGMENT, .defines = std::vector<Define>{}});
 
         // Dynamic States
-        m_passInfo->dynamicStates = {vk::DynamicState::eViewport, vk::DynamicState::eScissor, vk::DynamicState::eDepthTestEnable, vk::DynamicState::eDepthWriteEnable};
+        m_passInfo->dynamicStates = {PE_DYNAMIC_STATE_VIEWPORT, PE_DYNAMIC_STATE_SCISSOR, PE_DYNAMIC_STATE_DEPTH_TEST_ENABLE, PE_DYNAMIC_STATE_DEPTH_WRITE_ENABLE};
 
-        m_passInfo->topology = vk::PrimitiveTopology::eTriangleList; // Fullscreen triangle
-        m_passInfo->cullMode = vk::CullModeFlagBits::eNone;
-        m_passInfo->polygonMode = vk::PolygonMode::eFill;
+        m_passInfo->topology = PE_TOPOLOGY_TRIANGLE_LIST; // Fullscreen triangle
+        m_passInfo->cullMode = PE_CULL_MODE_NONE;
+        m_passInfo->polygonMode = PE_POLYGON_MODE_FILL;
 
         // Blending (Alpha Blend)
         m_passInfo->colorBlendAttachments = {BlendState::Default};
@@ -46,7 +46,7 @@ namespace pe
         m_passInfo->colorBlendAttachments[0].dstColorBlendFactor = PE_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA;
         m_passInfo->colorBlendAttachments[0].colorBlendOp = PE_BLEND_OP_ADD;
 
-        m_passInfo->colorFormats = {pe::ToVkFormat(m_viewportRT->GetFormat())};
+        m_passInfo->colorFormats = {m_viewportRT->GetFormat()};
 
         m_passInfo->Update();
     }

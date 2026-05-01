@@ -47,9 +47,9 @@ namespace pe
         m_passInfo->name = "lighting_opaque_pipeline";
         m_passInfo->pVertShader = Shader::Create({.sourcePath = Path::Assets + "Shaders/Common/Quad.hlsl", .entryPoint = "mainVS", .stage = PE_SHADER_STAGE_VERTEX, .defines = std::vector<Define>{}});
         m_passInfo->pFragShader = Shader::Create({.sourcePath = Path::Assets + "Shaders/Gbuffer/LightingPS.hlsl", .entryPoint = "mainPS", .stage = PE_SHADER_STAGE_FRAGMENT, .defines = definesFrag});
-        m_passInfo->dynamicStates = {vk::DynamicState::eViewport, vk::DynamicState::eScissor};
+        m_passInfo->dynamicStates = {PE_DYNAMIC_STATE_VIEWPORT, PE_DYNAMIC_STATE_SCISSOR};
         m_passInfo->colorBlendAttachments = {BlendState::Default};
-        m_passInfo->colorFormats = {pe::ToVkFormat(m_viewportRT->GetFormat())};
+        m_passInfo->colorFormats = {m_viewportRT->GetFormat()};
         m_passInfo->depthTestEnable = false;
         m_passInfo->depthWriteEnable = false;
         m_passInfo->stencilTestEnable = false;
@@ -235,10 +235,10 @@ namespace pe
         m_passInfo->name = "lighting_transparent_pipeline";
         m_passInfo->pVertShader = Shader::Create({.sourcePath = Path::Assets + "Shaders/Common/Quad.hlsl", .entryPoint = "mainVS", .stage = PE_SHADER_STAGE_VERTEX, .defines = std::vector<Define>{}});
         m_passInfo->pFragShader = Shader::Create({.sourcePath = Path::Assets + "Shaders/Gbuffer/LightingPS.hlsl", .entryPoint = "mainPS", .stage = PE_SHADER_STAGE_FRAGMENT, .defines = definesFrag});
-        m_passInfo->dynamicStates = {vk::DynamicState::eViewport, vk::DynamicState::eScissor};
+        m_passInfo->dynamicStates = {PE_DYNAMIC_STATE_VIEWPORT, PE_DYNAMIC_STATE_SCISSOR};
         m_passInfo->colorBlendAttachments = {BlendState::Default};
         m_passInfo->blendEnable = true;
-        m_passInfo->colorFormats = {pe::ToVkFormat(m_viewportRT->GetFormat())};
+        m_passInfo->colorFormats = {m_viewportRT->GetFormat()};
         m_passInfo->depthTestEnable = false;
         m_passInfo->depthWriteEnable = false;
         m_passInfo->Update();

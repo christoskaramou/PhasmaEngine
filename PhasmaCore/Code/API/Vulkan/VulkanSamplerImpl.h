@@ -41,7 +41,4 @@ namespace pe
 
     vk::BorderColor ToVkSamplerBorderColor(PeSamplerBorderColor color);
     PeSamplerBorderColor FromVkSamplerBorderColor(vk::BorderColor color);
-
-    vk::CompareOp ToVkCompareOp(PeCompareOp op);
-    PeCompareOp FromVkCompareOp(vk::CompareOp op);
 } // namespace pe

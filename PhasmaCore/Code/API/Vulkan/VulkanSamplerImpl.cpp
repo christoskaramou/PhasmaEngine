@@ -1,6 +1,7 @@
 #include "API/Vulkan/VulkanSamplerImpl.h"
 #include "API/Debug.h"
 #include "API/RHI.h"
+#include "API/Vulkan/VulkanRHITypeUtils.h"
 
 namespace pe
 {
@@ -117,56 +118,6 @@ namespace pe
             return PE_SAMPLER_BORDER_COLOR_FLOAT_OPAQUE_WHITE;
         default:
             return PE_SAMPLER_BORDER_COLOR_FLOAT_OPAQUE_BLACK;
-        }
-    }
-
-    vk::CompareOp ToVkCompareOp(PeCompareOp op)
-    {
-        switch (op)
-        {
-        case PE_COMPARE_OP_NEVER:
-            return vk::CompareOp::eNever;
-        case PE_COMPARE_OP_LESS:
-            return vk::CompareOp::eLess;
-        case PE_COMPARE_OP_EQUAL:
-            return vk::CompareOp::eEqual;
-        case PE_COMPARE_OP_LESS_OR_EQUAL:
-            return vk::CompareOp::eLessOrEqual;
-        case PE_COMPARE_OP_GREATER:
-            return vk::CompareOp::eGreater;
-        case PE_COMPARE_OP_NOT_EQUAL:
-            return vk::CompareOp::eNotEqual;
-        case PE_COMPARE_OP_GREATER_OR_EQUAL:
-            return vk::CompareOp::eGreaterOrEqual;
-        case PE_COMPARE_OP_ALWAYS:
-            return vk::CompareOp::eAlways;
-        default:
-            return vk::CompareOp::eLess;
-        }
-    }
-
-    PeCompareOp FromVkCompareOp(vk::CompareOp op)
-    {
-        switch (op)
-        {
-        case vk::CompareOp::eNever:
-            return PE_COMPARE_OP_NEVER;
-        case vk::CompareOp::eLess:
-            return PE_COMPARE_OP_LESS;
-        case vk::CompareOp::eEqual:
-            return PE_COMPARE_OP_EQUAL;
-        case vk::CompareOp::eLessOrEqual:
-            return PE_COMPARE_OP_LESS_OR_EQUAL;
-        case vk::CompareOp::eGreater:
-            return PE_COMPARE_OP_GREATER;
-        case vk::CompareOp::eNotEqual:
-            return PE_COMPARE_OP_NOT_EQUAL;
-        case vk::CompareOp::eGreaterOrEqual:
-            return PE_COMPARE_OP_GREATER_OR_EQUAL;
-        case vk::CompareOp::eAlways:
-            return PE_COMPARE_OP_ALWAYS;
-        default:
-            return PE_COMPARE_OP_LESS;
         }
     }
 

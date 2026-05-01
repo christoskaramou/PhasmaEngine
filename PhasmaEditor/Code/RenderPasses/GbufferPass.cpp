@@ -51,15 +51,15 @@ namespace pe
         if (!m_passAsset)
             m_passAsset = ResourceManager::Get().Load<PassInfoAsset>(Path::Assets + "PassInfo/standard_pbr.pass");
 
-        std::vector<vk::Format> colorformats{
-            pe::ToVkFormat(m_normalRT->GetFormat()),
-            pe::ToVkFormat(m_albedoRT->GetFormat()),
-            pe::ToVkFormat(m_srmRT->GetFormat()),
-            pe::ToVkFormat(m_velocityRT->GetFormat()),
-            pe::ToVkFormat(m_emissiveRT->GetFormat()),
-            pe::ToVkFormat(m_transparencyRT->GetFormat())};
+        std::vector<::PeFormat> colorformats{
+            m_normalRT->GetFormat(),
+            m_albedoRT->GetFormat(),
+            m_srmRT->GetFormat(),
+            m_velocityRT->GetFormat(),
+            m_emissiveRT->GetFormat(),
+            m_transparencyRT->GetFormat()};
 
-        vk::Format depthFormat = RHII.GetDepthFormat();
+        ::PeFormat depthFormat = FromVkFormat(RHII.GetDepthFormat());
 
         const PassVariant *surface = m_passAsset->GetVariant("surface");
         PE_ERROR_IF(!surface, "standard_pbr.pass missing 'surface' variant");
@@ -76,7 +76,7 @@ namespace pe
         try
         {
             m_passInfoDS->Apply(*surface);
-            m_passInfoDS->cullMode = vk::CullModeFlagBits::eNone;
+            m_passInfoDS->cullMode = PE_CULL_MODE_NONE;
             m_passInfoDS->colorFormats = colorformats;
             m_passInfoDS->depthFormat = depthFormat;
             m_passInfoDS->Update();
@@ -240,15 +240,15 @@ namespace pe
         if (!m_passAsset)
             m_passAsset = ResourceManager::Get().Load<PassInfoAsset>(Path::Assets + "PassInfo/standard_pbr.pass");
 
-        std::vector<vk::Format> colorformats{
-            pe::ToVkFormat(m_normalRT->GetFormat()),
-            pe::ToVkFormat(m_albedoRT->GetFormat()),
-            pe::ToVkFormat(m_srmRT->GetFormat()),
-            pe::ToVkFormat(m_velocityRT->GetFormat()),
-            pe::ToVkFormat(m_emissiveRT->GetFormat()),
-            pe::ToVkFormat(m_transparencyRT->GetFormat())};
+        std::vector<::PeFormat> colorformats{
+            m_normalRT->GetFormat(),
+            m_albedoRT->GetFormat(),
+            m_srmRT->GetFormat(),
+            m_velocityRT->GetFormat(),
+            m_emissiveRT->GetFormat(),
+            m_transparencyRT->GetFormat()};
 
-        vk::Format depthFormat = RHII.GetDepthFormat();
+        ::PeFormat depthFormat = FromVkFormat(RHII.GetDepthFormat());
 
         const PassVariant *transparent = m_passAsset->GetVariant("transparent");
         PE_ERROR_IF(!transparent, "standard_pbr.pass missing 'transparent' variant");
@@ -258,7 +258,7 @@ namespace pe
         m_passInfo->colorFormats = colorformats;
         m_passInfo->depthFormat = depthFormat;
         if (Settings::Get<GlobalSettings>().reverse_depth)
-            m_passInfo->depthCompareOp = vk::CompareOp::eGreaterOrEqual;
+            m_passInfo->depthCompareOp = PE_COMPARE_OP_GREATER_OR_EQUAL;
         m_passInfo->Update();
     }
 

@@ -27,10 +27,10 @@ namespace pe
         m_passInfo->name = "tonemap_pipeline";
         m_passInfo->pVertShader = Shader::Create({.sourcePath = Path::Assets + "Shaders/Common/Quad.hlsl", .entryPoint = "mainVS", .stage = PE_SHADER_STAGE_VERTEX, .defines = std::vector<Define>{}});
         m_passInfo->pFragShader = Shader::Create({.sourcePath = Path::Assets + "Shaders/Tonemap/TonemapPS.hlsl", .entryPoint = "mainPS", .stage = PE_SHADER_STAGE_FRAGMENT, .defines = std::vector<Define>{}});
-        m_passInfo->dynamicStates = {vk::DynamicState::eViewport, vk::DynamicState::eScissor};
-        m_passInfo->cullMode = vk::CullModeFlagBits::eBack;
+        m_passInfo->dynamicStates = {PE_DYNAMIC_STATE_VIEWPORT, PE_DYNAMIC_STATE_SCISSOR};
+        m_passInfo->cullMode = PE_CULL_MODE_BACK;
         m_passInfo->colorBlendAttachments = {BlendState::Default};
-        m_passInfo->colorFormats = {pe::ToVkFormat(m_displayRT->GetFormat())};
+        m_passInfo->colorFormats = {m_displayRT->GetFormat()};
         m_passInfo->Update();
     }
 

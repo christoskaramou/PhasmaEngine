@@ -9,72 +9,72 @@
 
 namespace pe
 {
-    static const std::unordered_map<std::string_view, vk::PrimitiveTopology> s_topologyMap = {
-        {"point_list", vk::PrimitiveTopology::ePointList},
-        {"line_list", vk::PrimitiveTopology::eLineList},
-        {"line_strip", vk::PrimitiveTopology::eLineStrip},
-        {"triangle_list", vk::PrimitiveTopology::eTriangleList},
-        {"triangle_strip", vk::PrimitiveTopology::eTriangleStrip},
-        {"triangle_fan", vk::PrimitiveTopology::eTriangleFan},
-        {"patch_list", vk::PrimitiveTopology::ePatchList},
+    static const std::unordered_map<std::string_view, PeTopology> s_topologyMap = {
+        {"point_list", PE_TOPOLOGY_POINT_LIST},
+        {"line_list", PE_TOPOLOGY_LINE_LIST},
+        {"line_strip", PE_TOPOLOGY_LINE_STRIP},
+        {"triangle_list", PE_TOPOLOGY_TRIANGLE_LIST},
+        {"triangle_strip", PE_TOPOLOGY_TRIANGLE_STRIP},
+        {"triangle_fan", PE_TOPOLOGY_TRIANGLE_FAN},
+        {"patch_list", PE_TOPOLOGY_PATCH_LIST},
     };
 
-    static const std::unordered_map<std::string_view, vk::PolygonMode> s_polygonModeMap = {
-        {"fill", vk::PolygonMode::eFill},
-        {"line", vk::PolygonMode::eLine},
-        {"point", vk::PolygonMode::ePoint},
+    static const std::unordered_map<std::string_view, PePolygonMode> s_polygonModeMap = {
+        {"fill", PE_POLYGON_MODE_FILL},
+        {"line", PE_POLYGON_MODE_LINE},
+        {"point", PE_POLYGON_MODE_POINT},
     };
 
-    static const std::unordered_map<std::string_view, vk::CullModeFlagBits> s_cullModeMap = {
-        {"none", vk::CullModeFlagBits::eNone},
-        {"front", vk::CullModeFlagBits::eFront},
-        {"back", vk::CullModeFlagBits::eBack},
-        {"front_and_back", vk::CullModeFlagBits::eFrontAndBack},
+    static const std::unordered_map<std::string_view, PeCullMode> s_cullModeMap = {
+        {"none", PE_CULL_MODE_NONE},
+        {"front", PE_CULL_MODE_FRONT},
+        {"back", PE_CULL_MODE_BACK},
+        {"front_and_back", PE_CULL_MODE_FRONT_AND_BACK},
     };
 
-    static const std::unordered_map<std::string_view, vk::CompareOp> s_compareOpMap = {
-        {"never", vk::CompareOp::eNever},
-        {"less", vk::CompareOp::eLess},
-        {"equal", vk::CompareOp::eEqual},
-        {"less_equal", vk::CompareOp::eLessOrEqual},
-        {"greater", vk::CompareOp::eGreater},
-        {"not_equal", vk::CompareOp::eNotEqual},
-        {"greater_equal", vk::CompareOp::eGreaterOrEqual},
-        {"always", vk::CompareOp::eAlways},
+    static const std::unordered_map<std::string_view, PeCompareOp> s_compareOpMap = {
+        {"never", PE_COMPARE_OP_NEVER},
+        {"less", PE_COMPARE_OP_LESS},
+        {"equal", PE_COMPARE_OP_EQUAL},
+        {"less_equal", PE_COMPARE_OP_LESS_OR_EQUAL},
+        {"greater", PE_COMPARE_OP_GREATER},
+        {"not_equal", PE_COMPARE_OP_NOT_EQUAL},
+        {"greater_equal", PE_COMPARE_OP_GREATER_OR_EQUAL},
+        {"always", PE_COMPARE_OP_ALWAYS},
     };
 
-    static const std::unordered_map<std::string_view, vk::StencilOp> s_stencilOpMap = {
-        {"keep", vk::StencilOp::eKeep},
-        {"zero", vk::StencilOp::eZero},
-        {"replace", vk::StencilOp::eReplace},
-        {"increment_clamp", vk::StencilOp::eIncrementAndClamp},
-        {"decrement_clamp", vk::StencilOp::eDecrementAndClamp},
-        {"invert", vk::StencilOp::eInvert},
-        {"increment_wrap", vk::StencilOp::eIncrementAndWrap},
-        {"decrement_wrap", vk::StencilOp::eDecrementAndWrap},
+    static const std::unordered_map<std::string_view, PeStencilOp> s_stencilOpMap = {
+        {"keep", PE_STENCIL_OP_KEEP},
+        {"zero", PE_STENCIL_OP_ZERO},
+        {"replace", PE_STENCIL_OP_REPLACE},
+        {"increment_clamp", PE_STENCIL_OP_INCREMENT_AND_CLAMP},
+        {"decrement_clamp", PE_STENCIL_OP_DECREMENT_AND_CLAMP},
+        {"invert", PE_STENCIL_OP_INVERT},
+        {"increment_wrap", PE_STENCIL_OP_INCREMENT_AND_WRAP},
+        {"decrement_wrap", PE_STENCIL_OP_DECREMENT_AND_WRAP},
     };
 
-    static const std::unordered_map<std::string_view, vk::DynamicState> s_dynamicStateMap = {
-        {"viewport", vk::DynamicState::eViewport},
-        {"scissor", vk::DynamicState::eScissor},
-        {"line_width", vk::DynamicState::eLineWidth},
-        {"depth_bias", vk::DynamicState::eDepthBias},
-        {"blend_constants", vk::DynamicState::eBlendConstants},
-        {"depth_bounds", vk::DynamicState::eDepthBounds},
-        {"stencil_compare_mask", vk::DynamicState::eStencilCompareMask},
-        {"stencil_write_mask", vk::DynamicState::eStencilWriteMask},
-        {"stencil_reference", vk::DynamicState::eStencilReference},
-        {"cull_mode", vk::DynamicState::eCullMode},
-        {"front_face", vk::DynamicState::eFrontFace},
-        {"primitive_topology", vk::DynamicState::ePrimitiveTopology},
-        {"depth_test_enable", vk::DynamicState::eDepthTestEnable},
-        {"depth_write_enable", vk::DynamicState::eDepthWriteEnable},
-        {"depth_compare_op", vk::DynamicState::eDepthCompareOp},
-        {"stencil_test_enable", vk::DynamicState::eStencilTestEnable},
+    static const std::unordered_map<std::string_view, PeDynamicState> s_dynamicStateMap = {
+        {"viewport", PE_DYNAMIC_STATE_VIEWPORT},
+        {"scissor", PE_DYNAMIC_STATE_SCISSOR},
+        {"line_width", PE_DYNAMIC_STATE_LINE_WIDTH},
+        {"depth_bias", PE_DYNAMIC_STATE_DEPTH_BIAS},
+        {"blend_constants", PE_DYNAMIC_STATE_BLEND_CONSTANTS},
+        {"depth_bounds", PE_DYNAMIC_STATE_DEPTH_BOUNDS},
+        {"stencil_compare_mask", PE_DYNAMIC_STATE_STENCIL_COMPARE_MASK},
+        {"stencil_write_mask", PE_DYNAMIC_STATE_STENCIL_WRITE_MASK},
+        {"stencil_reference", PE_DYNAMIC_STATE_STENCIL_REFERENCE},
+        {"cull_mode", PE_DYNAMIC_STATE_CULL_MODE},
+        {"front_face", PE_DYNAMIC_STATE_FRONT_FACE},
+        {"primitive_topology", PE_DYNAMIC_STATE_PRIMITIVE_TOPOLOGY},
+        {"depth_test_enable", PE_DYNAMIC_STATE_DEPTH_TEST_ENABLE},
+        {"depth_write_enable", PE_DYNAMIC_STATE_DEPTH_WRITE_ENABLE},
+        {"depth_compare_op", PE_DYNAMIC_STATE_DEPTH_COMPARE_OP},
+        {"stencil_test_enable", PE_DYNAMIC_STATE_STENCIL_TEST_ENABLE},
     };
 
     // Reverse lookups for getters
-    static std::string TopologyToString(vk::PrimitiveTopology t)
+    static std::string TopologyToString(PeTopology t)
     {
         for (auto &[k, v] : s_topologyMap)
             if (v == t)
@@ -82,7 +82,7 @@ namespace pe
         return "unknown";
     }
 
-    static std::string PolygonModeToString(vk::PolygonMode m)
+    static std::string PolygonModeToString(PePolygonMode m)
     {
         for (auto &[k, v] : s_polygonModeMap)
             if (v == m)
@@ -90,15 +90,15 @@ namespace pe
         return "unknown";
     }
 
-    static std::string CullModeToString(vk::CullModeFlags f)
+    static std::string CullModeToString(PeCullMode f)
     {
         for (auto &[k, v] : s_cullModeMap)
-            if (vk::CullModeFlags(v) == f)
+            if (v == f)
                 return std::string(k);
         return "unknown";
     }
 
-    static std::string CompareOpToString(vk::CompareOp o)
+    static std::string CompareOpToString(PeCompareOp o)
     {
         for (auto &[k, v] : s_compareOpMap)
             if (v == o)
@@ -106,7 +106,7 @@ namespace pe
         return "unknown";
     }
 
-    static std::string StencilOpToString(vk::StencilOp o)
+    static std::string StencilOpToString(PeStencilOp o)
     {
         for (auto &[k, v] : s_stencilOpMap)
             if (v == o)
@@ -212,19 +212,19 @@ namespace pe
                 // topology
                 piType["get_topology"] = [](PassInfo &pi) -> std::string { return TopologyToString(pi.topology); };
                 piType["set_topology"] = [](PassInfo &pi, const std::string &topo) {
-                    pi.topology = Lookup(topo, s_topologyMap, vk::PrimitiveTopology::eTriangleList);
+                    pi.topology = Lookup(topo, s_topologyMap, PE_TOPOLOGY_TRIANGLE_LIST);
                 };
 
                 // polygonMode
                 piType["get_polygon_mode"] = [](PassInfo &pi) -> std::string { return PolygonModeToString(pi.polygonMode); };
                 piType["set_polygon_mode"] = [](PassInfo &pi, const std::string &mode) {
-                    pi.polygonMode = Lookup(mode, s_polygonModeMap, vk::PolygonMode::eFill);
+                    pi.polygonMode = Lookup(mode, s_polygonModeMap, PE_POLYGON_MODE_FILL);
                 };
 
                 // cullMode
                 piType["get_cull_mode"] = [](PassInfo &pi) -> std::string { return CullModeToString(pi.cullMode); };
                 piType["set_cull_mode"] = [](PassInfo &pi, const std::string &mode) {
-                    pi.cullMode = Lookup(mode, s_cullModeMap, vk::CullModeFlagBits::eBack);
+                    pi.cullMode = Lookup(mode, s_cullModeMap, PE_CULL_MODE_BACK);
                 };
 
                 // lineWidth
@@ -277,7 +277,7 @@ namespace pe
                 piType["set_color_format"] = [](PassInfo &pi, std::shared_ptr<LuaImage> img) {
                     if (!img) return;
                     Image *p = img->Get();
-                    if (p) pi.colorFormats = {pe::ToVkFormat(p->GetFormat())};
+                    if (p) pi.colorFormats = {p->GetFormat()};
                 };
                 piType["set_color_formats"] = [](PassInfo &pi, const sol::table &images) {
                     pi.colorFormats.clear();
@@ -286,7 +286,7 @@ namespace pe
                         if (v.is<std::shared_ptr<LuaImage>>())
                         {
                             Image *p = v.as<std::shared_ptr<LuaImage>>()->Get();
-                            if (p) pi.colorFormats.push_back(pe::ToVkFormat(p->GetFormat()));
+                            if (p) pi.colorFormats.push_back(p->GetFormat());
                         }
                     }
                 };
@@ -295,7 +295,7 @@ namespace pe
                 piType["set_depth_format"] = [](PassInfo &pi, std::shared_ptr<LuaImage> img) {
                     if (!img) return;
                     Image *p = img->Get();
-                    if (p) pi.depthFormat = pe::ToVkFormat(p->GetFormat());
+                    if (p) pi.depthFormat = p->GetFormat();
                 };
 
                 // depthWriteEnable
@@ -309,7 +309,7 @@ namespace pe
                 // depthCompareOp
                 piType["get_depth_compare"] = [](PassInfo &pi) -> std::string { return CompareOpToString(pi.depthCompareOp); };
                 piType["set_depth_compare"] = [](PassInfo &pi, const std::string &op) {
-                    pi.depthCompareOp = Lookup(op, s_compareOpMap, vk::CompareOp::eLess);
+                    pi.depthCompareOp = Lookup(op, s_compareOpMap, PE_COMPARE_OP_LESS);
                 };
 
                 // stencilTestEnable
@@ -327,10 +327,10 @@ namespace pe
                     return t;
                 };
                 piType["set_stencil_ops"] = [](PassInfo &pi, const std::string &fail, const std::string &pass, const std::string &depthFail, const std::string &compare) {
-                    pi.stencilFailOp = Lookup(fail, s_stencilOpMap, vk::StencilOp::eKeep);
-                    pi.stencilPassOp = Lookup(pass, s_stencilOpMap, vk::StencilOp::eKeep);
-                    pi.stencilDepthFailOp = Lookup(depthFail, s_stencilOpMap, vk::StencilOp::eKeep);
-                    pi.stencilCompareOp = Lookup(compare, s_compareOpMap, vk::CompareOp::eAlways);
+                    pi.stencilFailOp = Lookup(fail, s_stencilOpMap, PE_STENCIL_OP_KEEP);
+                    pi.stencilPassOp = Lookup(pass, s_stencilOpMap, PE_STENCIL_OP_KEEP);
+                    pi.stencilDepthFailOp = Lookup(depthFail, s_stencilOpMap, PE_STENCIL_OP_KEEP);
+                    pi.stencilCompareOp = Lookup(compare, s_compareOpMap, PE_COMPARE_OP_ALWAYS);
                 };
 
                 // stencilCompareMask, stencilWriteMask, stencilReference

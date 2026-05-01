@@ -245,4 +245,304 @@ namespace pe
             flags |= PE_ACCESS_SHADER_STORAGE_WRITE;
         return flags;
     }
+
+    vk::PrimitiveTopology ToVkTopology(PeTopology topology)
+    {
+        switch (topology)
+        {
+        case PE_TOPOLOGY_POINT_LIST:
+            return vk::PrimitiveTopology::ePointList;
+        case PE_TOPOLOGY_LINE_LIST:
+            return vk::PrimitiveTopology::eLineList;
+        case PE_TOPOLOGY_LINE_STRIP:
+            return vk::PrimitiveTopology::eLineStrip;
+        case PE_TOPOLOGY_TRIANGLE_LIST:
+            return vk::PrimitiveTopology::eTriangleList;
+        case PE_TOPOLOGY_TRIANGLE_STRIP:
+            return vk::PrimitiveTopology::eTriangleStrip;
+        case PE_TOPOLOGY_TRIANGLE_FAN:
+            return vk::PrimitiveTopology::eTriangleFan;
+        case PE_TOPOLOGY_PATCH_LIST:
+            return vk::PrimitiveTopology::ePatchList;
+        default:
+            PE_ERROR("Unknown PeTopology: %u", static_cast<uint32_t>(topology));
+            return vk::PrimitiveTopology::eTriangleList;
+        }
+    }
+
+    PeTopology FromVkTopology(vk::PrimitiveTopology topology)
+    {
+        switch (topology)
+        {
+        case vk::PrimitiveTopology::ePointList:
+            return PE_TOPOLOGY_POINT_LIST;
+        case vk::PrimitiveTopology::eLineList:
+            return PE_TOPOLOGY_LINE_LIST;
+        case vk::PrimitiveTopology::eLineStrip:
+            return PE_TOPOLOGY_LINE_STRIP;
+        case vk::PrimitiveTopology::eTriangleList:
+            return PE_TOPOLOGY_TRIANGLE_LIST;
+        case vk::PrimitiveTopology::eTriangleStrip:
+            return PE_TOPOLOGY_TRIANGLE_STRIP;
+        case vk::PrimitiveTopology::eTriangleFan:
+            return PE_TOPOLOGY_TRIANGLE_FAN;
+        case vk::PrimitiveTopology::ePatchList:
+            return PE_TOPOLOGY_PATCH_LIST;
+        default:
+            PE_ERROR("Unknown vk::PrimitiveTopology: %u", static_cast<uint32_t>(topology));
+            return PE_TOPOLOGY_TRIANGLE_LIST;
+        }
+    }
+
+    vk::PolygonMode ToVkPolygonMode(PePolygonMode mode)
+    {
+        switch (mode)
+        {
+        case PE_POLYGON_MODE_FILL:
+            return vk::PolygonMode::eFill;
+        case PE_POLYGON_MODE_LINE:
+            return vk::PolygonMode::eLine;
+        case PE_POLYGON_MODE_POINT:
+            return vk::PolygonMode::ePoint;
+        default:
+            PE_ERROR("Unknown PePolygonMode: %u", static_cast<uint32_t>(mode));
+            return vk::PolygonMode::eFill;
+        }
+    }
+
+    PePolygonMode FromVkPolygonMode(vk::PolygonMode mode)
+    {
+        switch (mode)
+        {
+        case vk::PolygonMode::eFill:
+            return PE_POLYGON_MODE_FILL;
+        case vk::PolygonMode::eLine:
+            return PE_POLYGON_MODE_LINE;
+        case vk::PolygonMode::ePoint:
+            return PE_POLYGON_MODE_POINT;
+        default:
+            PE_ERROR("Unknown vk::PolygonMode: %u", static_cast<uint32_t>(mode));
+            return PE_POLYGON_MODE_FILL;
+        }
+    }
+
+    vk::CullModeFlags ToVkCullMode(PeCullMode mode)
+    {
+        switch (mode)
+        {
+        case PE_CULL_MODE_NONE:
+            return vk::CullModeFlagBits::eNone;
+        case PE_CULL_MODE_FRONT:
+            return vk::CullModeFlagBits::eFront;
+        case PE_CULL_MODE_BACK:
+            return vk::CullModeFlagBits::eBack;
+        case PE_CULL_MODE_FRONT_AND_BACK:
+            return vk::CullModeFlagBits::eFrontAndBack;
+        default:
+            PE_ERROR("Unknown PeCullMode: %u", static_cast<uint32_t>(mode));
+            return vk::CullModeFlagBits::eBack;
+        }
+    }
+
+    PeCullMode FromVkCullMode(vk::CullModeFlags mode)
+    {
+        if (mode == vk::CullModeFlagBits::eNone)
+            return PE_CULL_MODE_NONE;
+        if (mode == vk::CullModeFlagBits::eFront)
+            return PE_CULL_MODE_FRONT;
+        if (mode == vk::CullModeFlagBits::eBack)
+            return PE_CULL_MODE_BACK;
+        if (mode == vk::CullModeFlagBits::eFrontAndBack)
+            return PE_CULL_MODE_FRONT_AND_BACK;
+        PE_ERROR("Unknown vk::CullModeFlags: %u", static_cast<uint32_t>(VkCullModeFlags(mode)));
+        return PE_CULL_MODE_BACK;
+    }
+
+    vk::CompareOp ToVkCompareOp(PeCompareOp op)
+    {
+        switch (op)
+        {
+        case PE_COMPARE_OP_NEVER:
+            return vk::CompareOp::eNever;
+        case PE_COMPARE_OP_LESS:
+            return vk::CompareOp::eLess;
+        case PE_COMPARE_OP_EQUAL:
+            return vk::CompareOp::eEqual;
+        case PE_COMPARE_OP_LESS_OR_EQUAL:
+            return vk::CompareOp::eLessOrEqual;
+        case PE_COMPARE_OP_GREATER:
+            return vk::CompareOp::eGreater;
+        case PE_COMPARE_OP_NOT_EQUAL:
+            return vk::CompareOp::eNotEqual;
+        case PE_COMPARE_OP_GREATER_OR_EQUAL:
+            return vk::CompareOp::eGreaterOrEqual;
+        case PE_COMPARE_OP_ALWAYS:
+            return vk::CompareOp::eAlways;
+        default:
+            PE_ERROR("Unknown PeCompareOp: %u", static_cast<uint32_t>(op));
+            return vk::CompareOp::eAlways;
+        }
+    }
+
+    PeCompareOp FromVkCompareOp(vk::CompareOp op)
+    {
+        switch (op)
+        {
+        case vk::CompareOp::eNever:
+            return PE_COMPARE_OP_NEVER;
+        case vk::CompareOp::eLess:
+            return PE_COMPARE_OP_LESS;
+        case vk::CompareOp::eEqual:
+            return PE_COMPARE_OP_EQUAL;
+        case vk::CompareOp::eLessOrEqual:
+            return PE_COMPARE_OP_LESS_OR_EQUAL;
+        case vk::CompareOp::eGreater:
+            return PE_COMPARE_OP_GREATER;
+        case vk::CompareOp::eNotEqual:
+            return PE_COMPARE_OP_NOT_EQUAL;
+        case vk::CompareOp::eGreaterOrEqual:
+            return PE_COMPARE_OP_GREATER_OR_EQUAL;
+        case vk::CompareOp::eAlways:
+            return PE_COMPARE_OP_ALWAYS;
+        default:
+            PE_ERROR("Unknown vk::CompareOp: %u", static_cast<uint32_t>(op));
+            return PE_COMPARE_OP_ALWAYS;
+        }
+    }
+
+    vk::StencilOp ToVkStencilOp(PeStencilOp op)
+    {
+        switch (op)
+        {
+        case PE_STENCIL_OP_KEEP:
+            return vk::StencilOp::eKeep;
+        case PE_STENCIL_OP_ZERO:
+            return vk::StencilOp::eZero;
+        case PE_STENCIL_OP_REPLACE:
+            return vk::StencilOp::eReplace;
+        case PE_STENCIL_OP_INCREMENT_AND_CLAMP:
+            return vk::StencilOp::eIncrementAndClamp;
+        case PE_STENCIL_OP_DECREMENT_AND_CLAMP:
+            return vk::StencilOp::eDecrementAndClamp;
+        case PE_STENCIL_OP_INVERT:
+            return vk::StencilOp::eInvert;
+        case PE_STENCIL_OP_INCREMENT_AND_WRAP:
+            return vk::StencilOp::eIncrementAndWrap;
+        case PE_STENCIL_OP_DECREMENT_AND_WRAP:
+            return vk::StencilOp::eDecrementAndWrap;
+        default:
+            PE_ERROR("Unknown PeStencilOp: %u", static_cast<uint32_t>(op));
+            return vk::StencilOp::eKeep;
+        }
+    }
+
+    PeStencilOp FromVkStencilOp(vk::StencilOp op)
+    {
+        switch (op)
+        {
+        case vk::StencilOp::eKeep:
+            return PE_STENCIL_OP_KEEP;
+        case vk::StencilOp::eZero:
+            return PE_STENCIL_OP_ZERO;
+        case vk::StencilOp::eReplace:
+            return PE_STENCIL_OP_REPLACE;
+        case vk::StencilOp::eIncrementAndClamp:
+            return PE_STENCIL_OP_INCREMENT_AND_CLAMP;
+        case vk::StencilOp::eDecrementAndClamp:
+            return PE_STENCIL_OP_DECREMENT_AND_CLAMP;
+        case vk::StencilOp::eInvert:
+            return PE_STENCIL_OP_INVERT;
+        case vk::StencilOp::eIncrementAndWrap:
+            return PE_STENCIL_OP_INCREMENT_AND_WRAP;
+        case vk::StencilOp::eDecrementAndWrap:
+            return PE_STENCIL_OP_DECREMENT_AND_WRAP;
+        default:
+            PE_ERROR("Unknown vk::StencilOp: %u", static_cast<uint32_t>(op));
+            return PE_STENCIL_OP_KEEP;
+        }
+    }
+
+    vk::DynamicState ToVkDynamicState(PeDynamicState state)
+    {
+        switch (state)
+        {
+        case PE_DYNAMIC_STATE_VIEWPORT:
+            return vk::DynamicState::eViewport;
+        case PE_DYNAMIC_STATE_SCISSOR:
+            return vk::DynamicState::eScissor;
+        case PE_DYNAMIC_STATE_LINE_WIDTH:
+            return vk::DynamicState::eLineWidth;
+        case PE_DYNAMIC_STATE_DEPTH_BIAS:
+            return vk::DynamicState::eDepthBias;
+        case PE_DYNAMIC_STATE_BLEND_CONSTANTS:
+            return vk::DynamicState::eBlendConstants;
+        case PE_DYNAMIC_STATE_DEPTH_BOUNDS:
+            return vk::DynamicState::eDepthBounds;
+        case PE_DYNAMIC_STATE_STENCIL_COMPARE_MASK:
+            return vk::DynamicState::eStencilCompareMask;
+        case PE_DYNAMIC_STATE_STENCIL_WRITE_MASK:
+            return vk::DynamicState::eStencilWriteMask;
+        case PE_DYNAMIC_STATE_STENCIL_REFERENCE:
+            return vk::DynamicState::eStencilReference;
+        case PE_DYNAMIC_STATE_CULL_MODE:
+            return vk::DynamicState::eCullMode;
+        case PE_DYNAMIC_STATE_FRONT_FACE:
+            return vk::DynamicState::eFrontFace;
+        case PE_DYNAMIC_STATE_PRIMITIVE_TOPOLOGY:
+            return vk::DynamicState::ePrimitiveTopology;
+        case PE_DYNAMIC_STATE_DEPTH_TEST_ENABLE:
+            return vk::DynamicState::eDepthTestEnable;
+        case PE_DYNAMIC_STATE_DEPTH_WRITE_ENABLE:
+            return vk::DynamicState::eDepthWriteEnable;
+        case PE_DYNAMIC_STATE_DEPTH_COMPARE_OP:
+            return vk::DynamicState::eDepthCompareOp;
+        case PE_DYNAMIC_STATE_STENCIL_TEST_ENABLE:
+            return vk::DynamicState::eStencilTestEnable;
+        default:
+            PE_ERROR("Unknown PeDynamicState: %u", static_cast<uint32_t>(state));
+            return vk::DynamicState::eViewport;
+        }
+    }
+
+    PeDynamicState FromVkDynamicState(vk::DynamicState state)
+    {
+        switch (state)
+        {
+        case vk::DynamicState::eViewport:
+            return PE_DYNAMIC_STATE_VIEWPORT;
+        case vk::DynamicState::eScissor:
+            return PE_DYNAMIC_STATE_SCISSOR;
+        case vk::DynamicState::eLineWidth:
+            return PE_DYNAMIC_STATE_LINE_WIDTH;
+        case vk::DynamicState::eDepthBias:
+            return PE_DYNAMIC_STATE_DEPTH_BIAS;
+        case vk::DynamicState::eBlendConstants:
+            return PE_DYNAMIC_STATE_BLEND_CONSTANTS;
+        case vk::DynamicState::eDepthBounds:
+            return PE_DYNAMIC_STATE_DEPTH_BOUNDS;
+        case vk::DynamicState::eStencilCompareMask:
+            return PE_DYNAMIC_STATE_STENCIL_COMPARE_MASK;
+        case vk::DynamicState::eStencilWriteMask:
+            return PE_DYNAMIC_STATE_STENCIL_WRITE_MASK;
+        case vk::DynamicState::eStencilReference:
+            return PE_DYNAMIC_STATE_STENCIL_REFERENCE;
+        case vk::DynamicState::eCullMode:
+            return PE_DYNAMIC_STATE_CULL_MODE;
+        case vk::DynamicState::eFrontFace:
+            return PE_DYNAMIC_STATE_FRONT_FACE;
+        case vk::DynamicState::ePrimitiveTopology:
+            return PE_DYNAMIC_STATE_PRIMITIVE_TOPOLOGY;
+        case vk::DynamicState::eDepthTestEnable:
+            return PE_DYNAMIC_STATE_DEPTH_TEST_ENABLE;
+        case vk::DynamicState::eDepthWriteEnable:
+            return PE_DYNAMIC_STATE_DEPTH_WRITE_ENABLE;
+        case vk::DynamicState::eDepthCompareOp:
+            return PE_DYNAMIC_STATE_DEPTH_COMPARE_OP;
+        case vk::DynamicState::eStencilTestEnable:
+            return PE_DYNAMIC_STATE_STENCIL_TEST_ENABLE;
+        default:
+            PE_ERROR("Unknown vk::DynamicState: %u", static_cast<uint32_t>(state));
+            return PE_DYNAMIC_STATE_VIEWPORT;
+        }
+    }
 } // namespace pe

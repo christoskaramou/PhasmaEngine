@@ -55,9 +55,9 @@ namespace pe
     {
         m_passInfo->name = "shadows_pipeline";
         m_passInfo->pVertShader = Shader::Create({.sourcePath = Path::Assets + "Shaders/Shadows/ShadowsVS.hlsl", .entryPoint = "mainVS", .stage = PE_SHADER_STAGE_VERTEX, .defines = std::vector<Define>{}});
-        m_passInfo->dynamicStates = {vk::DynamicState::eViewport, vk::DynamicState::eScissor, vk::DynamicState::eDepthBias};
-        m_passInfo->cullMode = vk::CullModeFlagBits::eNone;
-        m_passInfo->depthFormat = RHII.GetDepthFormat();
+        m_passInfo->dynamicStates = {PE_DYNAMIC_STATE_VIEWPORT, PE_DYNAMIC_STATE_SCISSOR, PE_DYNAMIC_STATE_DEPTH_BIAS};
+        m_passInfo->cullMode = PE_CULL_MODE_NONE;
+        m_passInfo->depthFormat = FromVkFormat(RHII.GetDepthFormat());
         m_passInfo->Update();
     }
 

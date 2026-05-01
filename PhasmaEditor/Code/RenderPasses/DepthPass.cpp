@@ -5,6 +5,7 @@
 #include "API/Pipeline.h"
 #include "API/RHI.h"
 #include "API/Shader.h"
+#include "API/Vulkan/VulkanImageImpl.h"
 #include "Scene/Scene.h"
 #include "Systems/RendererSystem.h"
 
@@ -27,9 +28,9 @@ namespace pe
         m_passInfo->name = "DepthPrePass_pipeline";
         m_passInfo->pVertShader = Shader::Create({.sourcePath = Path::Assets + "Shaders/Depth/DepthVS.hlsl", .entryPoint = "mainVS", .stage = PE_SHADER_STAGE_VERTEX, .defines = std::vector<Define>{}});
         m_passInfo->pFragShader = Shader::Create({.sourcePath = Path::Assets + "Shaders/Depth/DepthPS.hlsl", .entryPoint = "mainPS", .stage = PE_SHADER_STAGE_FRAGMENT, .defines = std::vector<Define>{}});
-        m_passInfo->dynamicStates = {vk::DynamicState::eViewport, vk::DynamicState::eScissor};
-        m_passInfo->cullMode = vk::CullModeFlagBits::eFront;
-        m_passInfo->depthFormat = RHII.GetDepthFormat();
+        m_passInfo->dynamicStates = {PE_DYNAMIC_STATE_VIEWPORT, PE_DYNAMIC_STATE_SCISSOR};
+        m_passInfo->cullMode = PE_CULL_MODE_FRONT;
+        m_passInfo->depthFormat = FromVkFormat(RHII.GetDepthFormat());
         m_passInfo->depthTestEnable = true;
         m_passInfo->depthWriteEnable = true;
         m_passInfo->Update();

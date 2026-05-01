@@ -37,11 +37,11 @@ namespace pe
         m_passInfo->name = "AABBs_pipeline";
         m_passInfo->pVertShader = Shader::Create({.sourcePath = Path::Assets + "Shaders/Utilities/AABBsVS.hlsl", .entryPoint = "mainVS", .stage = PE_SHADER_STAGE_VERTEX, .defines = std::vector<Define>{}});
         m_passInfo->pFragShader = Shader::Create({.sourcePath = Path::Assets + "Shaders/Utilities/AABBsPS.hlsl", .entryPoint = "mainPS", .stage = PE_SHADER_STAGE_FRAGMENT, .defines = std::vector<Define>{}});
-        m_passInfo->dynamicStates = {vk::DynamicState::eViewport, vk::DynamicState::eScissor, vk::DynamicState::eLineWidth, vk::DynamicState::eDepthTestEnable, vk::DynamicState::eDepthWriteEnable};
-        m_passInfo->topology = vk::PrimitiveTopology::eLineList;
+        m_passInfo->dynamicStates = {PE_DYNAMIC_STATE_VIEWPORT, PE_DYNAMIC_STATE_SCISSOR, PE_DYNAMIC_STATE_LINE_WIDTH, PE_DYNAMIC_STATE_DEPTH_TEST_ENABLE, PE_DYNAMIC_STATE_DEPTH_WRITE_ENABLE};
+        m_passInfo->topology = PE_TOPOLOGY_LINE_LIST;
         m_passInfo->colorBlendAttachments = {BlendState::Default};
-        m_passInfo->colorFormats = {pe::ToVkFormat(m_viewportRT->GetFormat())};
-        m_passInfo->depthFormat = pe::ToVkFormat(m_depthRT->GetFormat());
+        m_passInfo->colorFormats = {m_viewportRT->GetFormat()};
+        m_passInfo->depthFormat = m_depthRT->GetFormat();
         m_passInfo->Update();
     }
 
