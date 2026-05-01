@@ -111,6 +111,7 @@ namespace pe
             definesHash.Combine(def.name);
             definesHash.Combine(def.value);
         }
+        definesHash.Combine(static_cast<uint32_t>(desc.stage));
 
         shader->m_cache.Init(path, shader->m_entryName, definesHash);
 
