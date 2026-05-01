@@ -5,6 +5,7 @@
 #include "API/Pipeline.h"
 #include "API/RHI.h"
 #include "API/Shader.h"
+#include "API/Vulkan/VulkanImageImpl.h"
 #include "Systems/RendererSystem.h"
 
 namespace pe
@@ -29,7 +30,7 @@ namespace pe
         m_passInfo->dynamicStates = {vk::DynamicState::eViewport, vk::DynamicState::eScissor};
         m_passInfo->cullMode = vk::CullModeFlagBits::eBack;
         m_passInfo->colorBlendAttachments = {PipelineColorBlendAttachmentState::Default};
-        m_passInfo->colorFormats = {m_displayRT->GetFormat()};
+        m_passInfo->colorFormats = {pe::ToVkFormat(m_displayRT->GetFormat())};
         m_passInfo->Update();
     }
 

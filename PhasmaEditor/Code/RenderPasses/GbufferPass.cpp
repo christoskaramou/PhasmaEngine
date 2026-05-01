@@ -5,6 +5,7 @@
 #include "API/Pipeline.h"
 #include "API/RHI.h"
 #include "API/Shader.h"
+#include "API/Vulkan/VulkanImageImpl.h"
 #include "Camera/Camera.h"
 #include "Scene/PassInfoAsset.h"
 #include "Scene/Scene.h"
@@ -51,12 +52,12 @@ namespace pe
             m_passAsset = ResourceManager::Get().Load<PassInfoAsset>(Path::Assets + "PassInfo/standard_pbr.pass");
 
         std::vector<vk::Format> colorformats{
-            m_normalRT->GetFormat(),
-            m_albedoRT->GetFormat(),
-            m_srmRT->GetFormat(),
-            m_velocityRT->GetFormat(),
-            m_emissiveRT->GetFormat(),
-            m_transparencyRT->GetFormat()};
+            pe::ToVkFormat(m_normalRT->GetFormat()),
+            pe::ToVkFormat(m_albedoRT->GetFormat()),
+            pe::ToVkFormat(m_srmRT->GetFormat()),
+            pe::ToVkFormat(m_velocityRT->GetFormat()),
+            pe::ToVkFormat(m_emissiveRT->GetFormat()),
+            pe::ToVkFormat(m_transparencyRT->GetFormat())};
 
         vk::Format depthFormat = RHII.GetDepthFormat();
 
@@ -240,12 +241,12 @@ namespace pe
             m_passAsset = ResourceManager::Get().Load<PassInfoAsset>(Path::Assets + "PassInfo/standard_pbr.pass");
 
         std::vector<vk::Format> colorformats{
-            m_normalRT->GetFormat(),
-            m_albedoRT->GetFormat(),
-            m_srmRT->GetFormat(),
-            m_velocityRT->GetFormat(),
-            m_emissiveRT->GetFormat(),
-            m_transparencyRT->GetFormat()};
+            pe::ToVkFormat(m_normalRT->GetFormat()),
+            pe::ToVkFormat(m_albedoRT->GetFormat()),
+            pe::ToVkFormat(m_srmRT->GetFormat()),
+            pe::ToVkFormat(m_velocityRT->GetFormat()),
+            pe::ToVkFormat(m_emissiveRT->GetFormat()),
+            pe::ToVkFormat(m_transparencyRT->GetFormat())};
 
         vk::Format depthFormat = RHII.GetDepthFormat();
 

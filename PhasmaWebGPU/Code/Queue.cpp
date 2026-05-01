@@ -14,6 +14,7 @@
 #include "API/Image.h"
 #include "API/Buffer.h"
 #include "API/Vulkan/VulkanBufferImpl.h"
+#include "API/Vulkan/VulkanImageImpl.h"
 #include "API/RHI.h"
 #include "API/StagingManager.h"
 
@@ -927,7 +928,7 @@ extern "C"
 
         vk::CopyBufferToImageInfo2 copyInfo{};
         copyInfo.srcBuffer = pe::GetVulkanBuffer(alloc.buffer);
-        copyInfo.dstImage = image->ApiHandle();
+        copyInfo.dstImage = pe::GetVulkanImage(image);
         copyInfo.dstImageLayout = vk::ImageLayout::eTransferDstOptimal;
         copyInfo.regionCount = 1;
         copyInfo.pRegions = &region;

@@ -10,6 +10,7 @@
 #include "API/RenderPass.h"
 #include "API/Semaphore.h"
 #include "API/Vulkan/VulkanBufferImpl.h"
+#include "API/Vulkan/VulkanImageImpl.h"
 
 namespace pe
 {
@@ -153,14 +154,14 @@ namespace pe
             clearValue.float32[3] = color[3];
 
             vk::ImageSubresourceRange range{};
-            range.aspectMask = VulkanHelpers::GetAspectMask(image->GetFormat());
+            range.aspectMask = VulkanHelpers::GetAspectMask(pe::ToVkFormat(image->GetFormat()));
             range.baseMipLevel = 0;
             range.levelCount = 1;
             range.baseArrayLayer = 0;
             range.layerCount = 1;
 
             BeginDebugRegion("Clear Color: " + image->m_name);
-            m_apiHandle.clearColorImage(image->ApiHandle(), vk::ImageLayout::eTransferDstOptimal, &clearValue, 1, &range);
+            m_apiHandle.clearColorImage(pe::GetVulkanImage(image), vk::ImageLayout::eTransferDstOptimal, &clearValue, 1, &range);
             EndDebugRegion();
         }
     }
@@ -186,14 +187,14 @@ namespace pe
             clearValue.stencil = static_cast<uint32_t>(image->m_clearColor[1]);
 
             vk::ImageSubresourceRange range{};
-            range.aspectMask = VulkanHelpers::GetAspectMask(image->GetFormat());
+            range.aspectMask = VulkanHelpers::GetAspectMask(pe::ToVkFormat(image->GetFormat()));
             range.baseMipLevel = 0;
             range.levelCount = 1;
             range.baseArrayLayer = 0;
             range.layerCount = 1;
 
             BeginDebugRegion("Clear Depth: " + image->m_name);
-            m_apiHandle.clearDepthStencilImage(image->ApiHandle(), vk::ImageLayout::eTransferDstOptimal, &clearValue, 1, &range);
+            m_apiHandle.clearDepthStencilImage(pe::GetVulkanImage(image), vk::ImageLayout::eTransferDstOptimal, &clearValue, 1, &range);
             EndDebugRegion();
         }
     }
@@ -207,7 +208,7 @@ namespace pe
         {
             const Attachment &attachment = attachments[i];
             hash.Combine(static_cast<uint32_t>(attachment.image->GetFormat()));
-            hash.Combine(static_cast<uint32_t>(attachment.image->m_createInfo.samples));
+            hash.Combine(static_cast<uint32_t>(attachment.image->GetSamples()));
             hash.Combine(static_cast<uint32_t>(attachment.loadOp));
             hash.Combine(static_cast<uint32_t>(attachment.storeOp));
             hash.Combine(static_cast<uint32_t>(attachment.stencilLoadOp));
@@ -256,8 +257,8 @@ namespace pe
             }
 
             std::string name = "Auto_Gen_Framebuffer_" + std::to_string(s_framebuffers.size());
-            Framebuffer *newFramebuffer = Framebuffer::Create(attachments[0].image->m_createInfo.extent.width,
-                                                              attachments[0].image->m_createInfo.extent.height,
+            Framebuffer *newFramebuffer = Framebuffer::Create(attachments[0].image->GetWidth(),
+                                                              attachments[0].image->GetHeight(),
                                                               views,
                                                               renderPass,
                                                               name);
@@ -293,10 +294,11 @@ namespace pe
                 barrier.image = attachment.image;
                 barrier.layout = vk::ImageLayout::eAttachmentOptimal;
 
-                if (VulkanHelpers::HasDepthOrStencil(attachment.image->GetFormat()))
+                const vk::Format attVkFormat = pe::ToVkFormat(attachment.image->GetFormat());
+                if (VulkanHelpers::HasDepthOrStencil(attVkFormat))
                 {
-                    hasDepth |= VulkanHelpers::HasDepth(attachment.image->GetFormat());
-                    hasStencil |= VulkanHelpers::HasStencil(attachment.image->GetFormat());
+                    hasDepth |= VulkanHelpers::HasDepth(attVkFormat);
+                    hasStencil |= VulkanHelpers::HasStencil(attVkFormat);
 
                     const vec4 &clearColor = attachment.image->m_clearColor;
                     const float clearDepth = clearColor[0];
@@ -357,7 +359,7 @@ namespace pe
             {
                 const Attachment &attachment = attachments[i];
                 Image *renderTarget = attachment.image;
-                if (VulkanHelpers::HasDepthOrStencil(renderTarget->GetFormat()) && (attachment.loadOp == vk::AttachmentLoadOp::eClear || attachment.stencilLoadOp == vk::AttachmentLoadOp::eClear))
+                if (VulkanHelpers::HasDepthOrStencil(pe::ToVkFormat(renderTarget->GetFormat())) && (attachment.loadOp == vk::AttachmentLoadOp::eClear || attachment.stencilLoadOp == vk::AttachmentLoadOp::eClear))
                 {
                     const float clearDepth = renderTarget->m_clearColor[0];
                     uint32_t clearStencil = static_cast<uint32_t>(renderTarget->m_clearColor[1]);
@@ -374,7 +376,7 @@ namespace pe
                 ImageBarrierInfo barrier{};
                 barrier.image = attachment.image;
                 barrier.layout = vk::ImageLayout::eAttachmentOptimal;
-                if (VulkanHelpers::HasDepthOrStencil(renderTarget->GetFormat()))
+                if (VulkanHelpers::HasDepthOrStencil(pe::ToVkFormat(renderTarget->GetFormat())))
                 {
                     barrier.stageFlags = vk::PipelineStageFlagBits2::eEarlyFragmentTests | vk::PipelineStageFlagBits2::eLateFragmentTests;
                     barrier.accessMask = vk::AccessFlagBits2::eDepthStencilAttachmentWrite;
@@ -418,7 +420,7 @@ namespace pe
             const Attachment &attachment = m_attachments[i];
             if (attachment.loadOp == vk::AttachmentLoadOp::eLoad)
             {
-                attachment.image->m_trackInfos[0][0].accessMask = VulkanHelpers::HasDepth(attachment.image->GetFormat())
+                attachment.image->m_trackInfos[0][0].accessMask = VulkanHelpers::HasDepth(pe::ToVkFormat(attachment.image->GetFormat()))
                                                                       ? vk::AccessFlagBits2::eDepthStencilAttachmentWrite
                                                                       : vk::AccessFlagBits2::eColorAttachmentWrite;
             }

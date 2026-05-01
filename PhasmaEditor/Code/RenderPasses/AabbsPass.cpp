@@ -5,6 +5,7 @@
 #include "API/Pipeline.h"
 #include "API/RHI.h"
 #include "API/Shader.h"
+#include "API/Vulkan/VulkanImageImpl.h"
 #include "Camera/Camera.h"
 #include "Scene/Scene.h"
 #include "ShadowPass.h"
@@ -39,8 +40,8 @@ namespace pe
         m_passInfo->dynamicStates = {vk::DynamicState::eViewport, vk::DynamicState::eScissor, vk::DynamicState::eLineWidth, vk::DynamicState::eDepthTestEnable, vk::DynamicState::eDepthWriteEnable};
         m_passInfo->topology = vk::PrimitiveTopology::eLineList;
         m_passInfo->colorBlendAttachments = {PipelineColorBlendAttachmentState::Default};
-        m_passInfo->colorFormats = {m_viewportRT->GetFormat()};
-        m_passInfo->depthFormat = m_depthRT->GetFormat();
+        m_passInfo->colorFormats = {pe::ToVkFormat(m_viewportRT->GetFormat())};
+        m_passInfo->depthFormat = pe::ToVkFormat(m_depthRT->GetFormat());
         m_passInfo->Update();
     }
 

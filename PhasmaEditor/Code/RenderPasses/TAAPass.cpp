@@ -36,13 +36,15 @@ namespace pe
         // Create history image if not exists
         if (!m_historyImage)
         {
-            vk::ImageCreateInfo info = Image::CreateInfoInit();
-            info.format = m_displayRT->GetFormat();
-            info.extent = vk::Extent3D{m_displayRT->GetWidth(), m_displayRT->GetHeight(), 1};
-            info.usage = vk::ImageUsageFlagBits::eSampled | vk::ImageUsageFlagBits::eStorage | vk::ImageUsageFlagBits::eTransferDst | vk::ImageUsageFlagBits::eTransferSrc | vk::ImageUsageFlagBits::eColorAttachment;
-            m_historyImage = Image::Create(info, "TAA_History");
+            ImageDesc desc{};
+            desc.format = m_displayRT->GetFormat();
+            desc.width = m_displayRT->GetWidth();
+            desc.height = m_displayRT->GetHeight();
+            desc.usage = PE_IMAGE_USAGE_SAMPLED | PE_IMAGE_USAGE_STORAGE | PE_IMAGE_USAGE_TRANSFER_DST | PE_IMAGE_USAGE_TRANSFER_SRC | PE_IMAGE_USAGE_COLOR_ATTACHMENT;
+            desc.name = "TAA_History";
+            m_historyImage = Image::Create(desc);
             m_historyImage->CreateRTV();
-            m_historyImage->CreateSRV(vk::ImageViewType::e2D);
+            m_historyImage->CreateSRV(PE_IMAGE_VIEW_TYPE_2D);
 
             // Linear sampler for history
             vk::SamplerCreateInfo samplerInfo = Sampler::CreateInfoInit();
@@ -56,14 +58,16 @@ namespace pe
 
         if (!m_taaResolved)
         {
-            vk::ImageCreateInfo info = Image::CreateInfoInit();
-            info.format = m_displayRT->GetFormat();
-            info.extent = vk::Extent3D{m_displayRT->GetWidth(), m_displayRT->GetHeight(), 1};
-            info.usage = vk::ImageUsageFlagBits::eSampled | vk::ImageUsageFlagBits::eStorage | vk::ImageUsageFlagBits::eTransferSrc | vk::ImageUsageFlagBits::eTransferDst | vk::ImageUsageFlagBits::eColorAttachment;
-            m_taaResolved = Image::Create(info, "TAA_Resolved");
+            ImageDesc desc{};
+            desc.format = m_displayRT->GetFormat();
+            desc.width = m_displayRT->GetWidth();
+            desc.height = m_displayRT->GetHeight();
+            desc.usage = PE_IMAGE_USAGE_SAMPLED | PE_IMAGE_USAGE_STORAGE | PE_IMAGE_USAGE_TRANSFER_SRC | PE_IMAGE_USAGE_TRANSFER_DST | PE_IMAGE_USAGE_COLOR_ATTACHMENT;
+            desc.name = "TAA_Resolved";
+            m_taaResolved = Image::Create(desc);
             m_taaResolved->CreateRTV();
-            m_taaResolved->CreateSRV(vk::ImageViewType::e2D);
-            m_taaResolved->CreateUAV(vk::ImageViewType::e2D, 0);
+            m_taaResolved->CreateSRV(PE_IMAGE_VIEW_TYPE_2D);
+            m_taaResolved->CreateUAV(PE_IMAGE_VIEW_TYPE_2D, 0);
         }
 
         m_jitterIndex = 0;

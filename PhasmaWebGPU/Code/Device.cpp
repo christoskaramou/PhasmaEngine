@@ -4,6 +4,7 @@
 #include "API/Semaphore.h"
 #include "API/Queue.h"
 #include "API/Vulkan/VulkanBufferImpl.h"
+#include "API/Vulkan/VulkanImageImpl.h"
 #include "FormatMap.h"
 #include "Sampler.h"
 #include "BindGroup.h"
@@ -1346,69 +1347,71 @@ extern "C"
         else if (fmt == WGPUTextureFormat_Stencil8)
             vkFmt = device->resolvedStencil8;
 
-        vk::ImageCreateInfo ci = pe::Image::CreateInfoInit();
-        ci.format = static_cast<vk::Format>(vkFmt);
-        ci.extent = vk::Extent3D{w, h, (dim == WGPUTextureDimension_3D) ? d : 1u};
-        ci.mipLevels = mips;
-        ci.arrayLayers = (dim == WGPUTextureDimension_2D) ? d : 1u;
-        ci.samples = static_cast<vk::SampleCountFlagBits>(samples);
+        pe::ImageDesc imageDesc{};
+        imageDesc.format = pe::FromVkFormat(static_cast<vk::Format>(vkFmt));
+        imageDesc.width = w;
+        imageDesc.height = h;
+        imageDesc.depth = (dim == WGPUTextureDimension_3D) ? d : 1u;
+        imageDesc.mipLevels = mips;
+        imageDesc.arrayLayers = (dim == WGPUTextureDimension_2D) ? d : 1u;
+        imageDesc.samples = pe::FromVkSampleCount(static_cast<vk::SampleCountFlagBits>(samples));
 
         switch (dim)
         {
         case WGPUTextureDimension_1D:
-            ci.imageType = vk::ImageType::e1D;
+            imageDesc.imageType = PE_IMAGE_TYPE_1D;
             break;
         case WGPUTextureDimension_3D:
-            ci.imageType = vk::ImageType::e3D;
+            imageDesc.imageType = PE_IMAGE_TYPE_3D;
             break;
         default:
-            ci.imageType = vk::ImageType::e2D;
+            imageDesc.imageType = PE_IMAGE_TYPE_2D;
             break;
         }
 
-        vk::ImageUsageFlags vkUsage{};
+        PeImageUsageFlags peUsage = PE_IMAGE_USAGE_NONE;
         if (usage & WGPUTextureUsage_CopySrc)
-            vkUsage |= vk::ImageUsageFlagBits::eTransferSrc;
+            peUsage |= PE_IMAGE_USAGE_TRANSFER_SRC;
         if (usage & WGPUTextureUsage_CopyDst)
-            vkUsage |= vk::ImageUsageFlagBits::eTransferDst;
+            peUsage |= PE_IMAGE_USAGE_TRANSFER_DST;
         if (usage & WGPUTextureUsage_TextureBinding)
-            vkUsage |= vk::ImageUsageFlagBits::eSampled;
+            peUsage |= PE_IMAGE_USAGE_SAMPLED;
         if (usage & WGPUTextureUsage_StorageBinding)
-            vkUsage |= vk::ImageUsageFlagBits::eStorage;
+            peUsage |= PE_IMAGE_USAGE_STORAGE;
         if (usage & WGPUTextureUsage_RenderAttachment)
         {
             if (pwgpu::IsDepthStencilFormat(fmt))
-                vkUsage |= vk::ImageUsageFlagBits::eDepthStencilAttachment;
+                peUsage |= PE_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT;
             else
-                vkUsage |= vk::ImageUsageFlagBits::eColorAttachment;
+                peUsage |= PE_IMAGE_USAGE_COLOR_ATTACHMENT;
         }
         if (usage & WGPUTextureUsage_TransientAttachment)
-            vkUsage |= vk::ImageUsageFlagBits::eTransientAttachment;
+            peUsage |= PE_IMAGE_USAGE_TRANSIENT_ATTACHMENT;
 
-        if (!vkUsage)
-            vkUsage = vk::ImageUsageFlagBits::eTransferSrc;
+        if (!peUsage)
+            peUsage = PE_IMAGE_USAGE_TRANSFER_SRC;
 
         // WebGPU §5.2 zero-init on first use; vkCmdClearColor/DepthStencilImage needs eTransferDst.
         // The Vulkan spec places no sample-count restriction on vkCmdClearColorImage, so MSAA
         // images are cleared the same way.
         const bool zeroInitViaClearImage = true;
         if (zeroInitViaClearImage)
-            vkUsage |= vk::ImageUsageFlagBits::eTransferDst;
+            peUsage |= PE_IMAGE_USAGE_TRANSFER_DST;
 
-        ci.usage = vkUsage;
+        imageDesc.usage = peUsage;
 
         if (dim == WGPUTextureDimension_2D && w == h && d >= 6 && (d % 6 == 0))
-            ci.flags |= vk::ImageCreateFlagBits::eCubeCompatible;
+            imageDesc.cubeCompatible = true;
         if (dim == WGPUTextureDimension_3D && (usage & WGPUTextureUsage_RenderAttachment))
-            ci.flags |= vk::ImageCreateFlagBits::e2DArrayCompatible;
+            imageDesc.array2DCompatible = true;
         if (descriptor->viewFormatCount > 0 && descriptor->viewFormats)
-            ci.flags |= vk::ImageCreateFlagBits::eMutableFormat;
+            imageDesc.mutableFormat = true;
 
-        const std::string peName = tex->label.empty() ? std::string("wgpu_texture") : tex->label;
+        imageDesc.name = tex->label.empty() ? std::string("wgpu_texture") : tex->label;
         std::string createError;
         try
         {
-            tex->image = pe::Image::Create(ci, peName);
+            tex->image = pe::Image::Create(imageDesc);
         }
         catch (const std::exception &e)
         {
@@ -1444,9 +1447,9 @@ extern "C"
             cmd->Begin();
 
             std::vector<std::pair<uint32_t, uint32_t>> subresources;
-            subresources.reserve(static_cast<size_t>(ci.mipLevels) * ci.arrayLayers);
-            for (uint32_t mip = 0; mip < ci.mipLevels; ++mip)
-                for (uint32_t layer = 0; layer < ci.arrayLayers; ++layer)
+            subresources.reserve(static_cast<size_t>(imageDesc.mipLevels) * imageDesc.arrayLayers);
+            for (uint32_t mip = 0; mip < imageDesc.mipLevels; ++mip)
+                for (uint32_t layer = 0; layer < imageDesc.arrayLayers; ++layer)
                     subresources.emplace_back(mip, layer);
 
             vk::ImageAspectFlags aspect{};

@@ -14,6 +14,7 @@
 #include "API/Image.h"
 #include "API/Buffer.h"
 #include "API/Vulkan/VulkanBufferImpl.h"
+#include "API/Vulkan/VulkanImageImpl.h"
 
 extern "C" void wgpuRenderPipelineRelease(WGPURenderPipeline);
 extern "C" void wgpuComputePipelineRelease(WGPUComputePipeline);
@@ -1031,7 +1032,7 @@ extern "C"
                 ca.depthSlice != WGPU_DEPTH_SLICE_UNDEFINED)
             {
                 vk::ImageViewCreateInfo sliceIvci = pe::ImageView::CreateInfoInit();
-                sliceIvci.image = view->texture->image->ApiHandle();
+                sliceIvci.image = pe::GetVulkanImage(view->texture->image);
                 sliceIvci.viewType = vk::ImageViewType::e2D;
                 sliceIvci.format = static_cast<vk::Format>(pwgpu::ToVkFormat(view->format));
                 sliceIvci.subresourceRange.aspectMask = vk::ImageAspectFlagBits::eColor;
@@ -1894,7 +1895,7 @@ extern "C"
 
         vk::CopyBufferToImageInfo2 copyInfo{};
         copyInfo.srcBuffer = pe::GetVulkanBuffer(src->buffer->peBuffer);
-        copyInfo.dstImage = dst->texture->image->ApiHandle();
+        copyInfo.dstImage = pe::GetVulkanImage(dst->texture->image);
         copyInfo.dstImageLayout = vk::ImageLayout::eTransferDstOptimal;
         copyInfo.regionCount = 1;
         copyInfo.pRegions = &region;
@@ -2094,7 +2095,7 @@ extern "C"
         enc->cmd->BufferBarrier(bufBarrier);
 
         vk::CopyImageToBufferInfo2 copyInfo{};
-        copyInfo.srcImage = src->texture->image->ApiHandle();
+        copyInfo.srcImage = pe::GetVulkanImage(src->texture->image);
         copyInfo.srcImageLayout = vk::ImageLayout::eTransferSrcOptimal;
         copyInfo.dstBuffer = pe::GetVulkanBuffer(dst->buffer->peBuffer);
         copyInfo.regionCount = 1;
@@ -2337,9 +2338,9 @@ extern "C"
         enc->cmd->ImageBarriers(barriers);
 
         vk::CopyImageInfo2 copyInfo{};
-        copyInfo.srcImage = src->texture->image->ApiHandle();
+        copyInfo.srcImage = pe::GetVulkanImage(src->texture->image);
         copyInfo.srcImageLayout = vk::ImageLayout::eTransferSrcOptimal;
-        copyInfo.dstImage = dst->texture->image->ApiHandle();
+        copyInfo.dstImage = pe::GetVulkanImage(dst->texture->image);
         copyInfo.dstImageLayout = vk::ImageLayout::eTransferDstOptimal;
         copyInfo.regionCount = 1;
         copyInfo.pRegions = &region;

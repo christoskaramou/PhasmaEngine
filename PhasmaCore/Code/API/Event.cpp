@@ -2,6 +2,7 @@
 #include "API/Command.h"
 #include "API/Image.h"
 #include "API/RHI.h"
+#include "API/Vulkan/VulkanImageImpl.h"
 
 namespace pe
 {
@@ -42,8 +43,8 @@ namespace pe
         barrier.newLayout = dstLayout;
         barrier.srcQueueFamilyIndex = cmd->GetFamilyId();
         barrier.dstQueueFamilyIndex = cmd->GetFamilyId();
-        barrier.image = image->ApiHandle();
-        barrier.subresourceRange.aspectMask = VulkanHelpers::GetAspectMask(image->GetFormat());
+        barrier.image = pe::GetVulkanImage(image);
+        barrier.subresourceRange.aspectMask = VulkanHelpers::GetAspectMask(pe::ToVkFormat(image->GetFormat()));
         barrier.subresourceRange.baseMipLevel = 0;
         barrier.subresourceRange.levelCount = image->GetMipLevels();
         barrier.subresourceRange.baseArrayLayer = 0;
@@ -69,8 +70,8 @@ namespace pe
         barrier.newLayout = m_infoImage.newLayout;
         barrier.srcQueueFamilyIndex = m_cmd->GetFamilyId();
         barrier.dstQueueFamilyIndex = m_cmd->GetFamilyId();
-        barrier.image = m_infoImage.image->ApiHandle();
-        barrier.subresourceRange.aspectMask = VulkanHelpers::GetAspectMask(m_infoImage.image->GetFormat());
+        barrier.image = pe::GetVulkanImage(m_infoImage.image);
+        barrier.subresourceRange.aspectMask = VulkanHelpers::GetAspectMask(pe::ToVkFormat(m_infoImage.image->GetFormat()));
         barrier.subresourceRange.baseMipLevel = 0;
         barrier.subresourceRange.levelCount = m_infoImage.image->GetMipLevels();
         barrier.subresourceRange.baseArrayLayer = 0;

@@ -41,7 +41,7 @@ namespace pe
         int binding = INT32_MIN;
     };
 
-    struct ImageDesc : public BaseDesc
+    struct ImageReflection : public BaseDesc
     {
         int set = INT32_MIN;
         int binding = INT32_MIN;
@@ -85,8 +85,8 @@ namespace pe
 
         const std::vector<BufferReflection> &GetStorageBuffers() const { return m_storageBuffers; }
         const std::vector<BufferReflection> &GetUniformBuffers() const { return m_uniformBuffers; }
-        const std::vector<ImageDesc> &GetImages() const { return m_images; }
-        const std::vector<ImageDesc> &GetStorageImages() const { return m_storageImages; }
+        const std::vector<ImageReflection> &GetImages() const { return m_images; }
+        const std::vector<ImageReflection> &GetStorageImages() const { return m_storageImages; }
         const std::vector<SamplerDesc> &GetSamplers() const { return m_samplers; }
         const std::vector<CombinedImageSamplerDesc> &GetCombinedImageSamplers() const { return m_combinedImageSamplers; }
 
@@ -100,8 +100,8 @@ namespace pe
         std::vector<ShaderInOutDesc> m_outputs{};
         std::vector<CombinedImageSamplerDesc> m_combinedImageSamplers{};
         std::vector<SamplerDesc> m_samplers{};
-        std::vector<ImageDesc> m_images{};
-        std::vector<ImageDesc> m_storageImages{};
+        std::vector<ImageReflection> m_images{};
+        std::vector<ImageReflection> m_storageImages{};
         std::vector<BufferReflection> m_uniformBuffers{};
         std::vector<BufferReflection> m_storageBuffers{};
         std::vector<AccelerationStructureDesc> m_accelerationStructures{};

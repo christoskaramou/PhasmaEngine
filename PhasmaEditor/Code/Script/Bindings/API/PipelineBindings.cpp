@@ -5,6 +5,7 @@
 #include "API/Pipeline.h"
 #include "API/RHI.h"
 #include "API/Shader.h"
+#include "API/Vulkan/VulkanImageImpl.h"
 
 namespace pe
 {
@@ -276,7 +277,7 @@ namespace pe
                 piType["set_color_format"] = [](PassInfo &pi, std::shared_ptr<LuaImage> img) {
                     if (!img) return;
                     Image *p = img->Get();
-                    if (p) pi.colorFormats = {p->GetFormat()};
+                    if (p) pi.colorFormats = {pe::ToVkFormat(p->GetFormat())};
                 };
                 piType["set_color_formats"] = [](PassInfo &pi, const sol::table &images) {
                     pi.colorFormats.clear();
@@ -285,7 +286,7 @@ namespace pe
                         if (v.is<std::shared_ptr<LuaImage>>())
                         {
                             Image *p = v.as<std::shared_ptr<LuaImage>>()->Get();
-                            if (p) pi.colorFormats.push_back(p->GetFormat());
+                            if (p) pi.colorFormats.push_back(pe::ToVkFormat(p->GetFormat()));
                         }
                     }
                 };
@@ -294,7 +295,7 @@ namespace pe
                 piType["set_depth_format"] = [](PassInfo &pi, std::shared_ptr<LuaImage> img) {
                     if (!img) return;
                     Image *p = img->Get();
-                    if (p) pi.depthFormat = p->GetFormat();
+                    if (p) pi.depthFormat = pe::ToVkFormat(p->GetFormat());
                 };
 
                 // depthWriteEnable

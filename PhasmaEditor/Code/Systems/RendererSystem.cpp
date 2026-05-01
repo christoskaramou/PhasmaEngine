@@ -7,6 +7,7 @@
 #include "API/Command.h"
 #include "API/Framebuffer.h"
 #include "API/Image.h"
+#include "API/Vulkan/VulkanImageImpl.h"
 #include "API/Queue.h"
 #include "API/RHI.h"
 #include "API/Semaphore.h"
@@ -41,7 +42,7 @@ namespace pe
         m_skyBoxDay.LoadSkyBox(cmd, Path::Assets + "Skyboxes/golden_gate_hills/golden_gate_hills_4k.hdr");
         m_skyBoxNight.LoadSkyBox(cmd, Path::Assets + "Skyboxes/rogland_clear_night/rogland_clear_night_4k.hdr");
 
-        Image::LoadRawParams loadImageParams = {256, 256, vk::Format::eR16G16Sfloat, false, true, 0.0f};
+        Image::LoadRawParams loadImageParams = {256, 256, PE_FORMAT_R16G16_SFLOAT, false, true, 0.0f};
         m_ibl_brdf_lut = Image::LoadRaw(cmd, Path::Assets + "Objects/ibl_brdf_lut_rg16f_256.bin", loadImageParams);
     }
 
@@ -588,11 +589,11 @@ namespace pe
         vk::ImageBlit region{};
         region.srcOffsets[0] = vk::Offset3D{0, 0, 0};
         region.srcOffsets[1] = vk::Offset3D{static_cast<int32_t>(m_viewportRT->GetWidth()), static_cast<int32_t>(m_viewportRT->GetHeight()), 1};
-        region.srcSubresource.aspectMask = VulkanHelpers::GetAspectMask(m_viewportRT->GetFormat());
+        region.srcSubresource.aspectMask = VulkanHelpers::GetAspectMask(pe::ToVkFormat(m_viewportRT->GetFormat()));
         region.srcSubresource.layerCount = 1;
         region.dstOffsets[0] = vk::Offset3D{0, 0, 0};
         region.dstOffsets[1] = vk::Offset3D{static_cast<int32_t>(m_displayRT->GetWidth()), static_cast<int32_t>(m_displayRT->GetHeight()), 1};
-        region.dstSubresource.aspectMask = VulkanHelpers::GetAspectMask(m_displayRT->GetFormat());
+        region.dstSubresource.aspectMask = VulkanHelpers::GetAspectMask(pe::ToVkFormat(m_displayRT->GetFormat()));
         region.dstSubresource.layerCount = 1;
 
         cmd->BlitImage(m_viewportRT, m_displayRT, region, filter);
@@ -611,18 +612,20 @@ namespace pe
         uint32_t width = static_cast<uint32_t>(RHII.GetWidthf() * rtScale);
         uint32_t heigth = static_cast<uint32_t>(RHII.GetHeightf() * rtScale);
 
-        vk::ImageCreateInfo info = Image::CreateInfoInit();
-        info.format = format;
-        info.extent = vk::Extent3D{width, heigth, 1u};
-        info.usage = usage | vk::ImageUsageFlagBits::eColorAttachment | vk::ImageUsageFlagBits::eSampled | vk::ImageUsageFlagBits::eStorage | vk::ImageUsageFlagBits::eTransferDst;
+        ImageDesc desc{};
+        desc.format = pe::FromVkFormat(format);
+        desc.width = width;
+        desc.height = heigth;
+        desc.usage = pe::FromVkImageUsage(usage | vk::ImageUsageFlagBits::eColorAttachment | vk::ImageUsageFlagBits::eSampled | vk::ImageUsageFlagBits::eStorage | vk::ImageUsageFlagBits::eTransferDst);
         if (useMips)
-            info.mipLevels = static_cast<uint32_t>(std::floor(std::log2(width > heigth ? width : heigth))) + 1;
-        Image *rt = Image::Create(info, name);
+            desc.mipLevels = static_cast<uint32_t>(std::floor(std::log2(width > heigth ? width : heigth))) + 1;
+        desc.name = name;
+        Image *rt = Image::Create(desc);
         rt->SetClearColor(clearColor);
 
         rt->CreateRTV();
-        rt->CreateSRV(vk::ImageViewType::e2D);
-        rt->CreateUAV(vk::ImageViewType::e2D, 0);
+        rt->CreateSRV(PE_IMAGE_VIEW_TYPE_2D);
+        rt->CreateUAV(PE_IMAGE_VIEW_TYPE_2D, 0);
 
         vk::SamplerCreateInfo samplerInfo = Sampler::CreateInfoInit();
         samplerInfo.anisotropyEnable = VK_FALSE;
@@ -645,15 +648,17 @@ namespace pe
         auto &gSettings = Settings::Get<GlobalSettings>();
         float rtScale = useRenderTergetScale ? gSettings.render_scale : 1.f;
 
-        vk::ImageCreateInfo info = Image::CreateInfoInit();
-        info.extent = vk::Extent3D{static_cast<uint32_t>(RHII.GetWidthf() * rtScale), static_cast<uint32_t>(RHII.GetHeightf() * rtScale), 1u};
-        info.usage = usage | vk::ImageUsageFlagBits::eDepthStencilAttachment | vk::ImageUsageFlagBits::eSampled | vk::ImageUsageFlagBits::eTransferDst;
-        info.format = format;
-        Image *depth = Image::Create(info, name);
+        ImageDesc desc{};
+        desc.width = static_cast<uint32_t>(RHII.GetWidthf() * rtScale);
+        desc.height = static_cast<uint32_t>(RHII.GetHeightf() * rtScale);
+        desc.usage = pe::FromVkImageUsage(usage | vk::ImageUsageFlagBits::eDepthStencilAttachment | vk::ImageUsageFlagBits::eSampled | vk::ImageUsageFlagBits::eTransferDst);
+        desc.format = pe::FromVkFormat(format);
+        desc.name = name;
+        Image *depth = Image::Create(desc);
         depth->SetClearColor(vec4(clearDepth, static_cast<float>(clearStencil), 0.f, 0.f));
 
         depth->CreateRTV();
-        depth->CreateSRV(vk::ImageViewType::e2D);
+        depth->CreateSRV(PE_IMAGE_VIEW_TYPE_2D);
 
         vk::SamplerCreateInfo samplerInfo = Sampler::CreateInfoInit();
         samplerInfo.addressModeU = vk::SamplerAddressMode::eClampToEdge;
@@ -708,13 +713,15 @@ namespace pe
         auto &gSettings = Settings::Get<GlobalSettings>();
         float rtScale = useRenderTergetScale ? gSettings.render_scale : 1.f;
 
-        vk::ImageCreateInfo info = Image::CreateInfoInit();
-        info.format = RHII.GetSurface()->GetFormat();
-        info.extent = vk::Extent3D{static_cast<uint32_t>(RHII.GetWidthf() * rtScale), static_cast<uint32_t>(RHII.GetHeightf() * rtScale), 1u};
-        info.usage = vk::ImageUsageFlagBits::eTransferDst | vk::ImageUsageFlagBits::eSampled;
-        Image *sampledImage = Image::Create(info, "FSSampledImage");
+        ImageDesc desc{};
+        desc.format = pe::FromVkFormat(RHII.GetSurface()->GetFormat());
+        desc.width = static_cast<uint32_t>(RHII.GetWidthf() * rtScale);
+        desc.height = static_cast<uint32_t>(RHII.GetHeightf() * rtScale);
+        desc.usage = PE_IMAGE_USAGE_TRANSFER_DST | PE_IMAGE_USAGE_SAMPLED;
+        desc.name = "FSSampledImage";
+        Image *sampledImage = Image::Create(desc);
 
-        sampledImage->CreateSRV(vk::ImageViewType::e2D);
+        sampledImage->CreateSRV(PE_IMAGE_VIEW_TYPE_2D);
 
         vk::SamplerCreateInfo samplerInfo = Sampler::CreateInfoInit();
         Sampler *sampler = Sampler::Create(samplerInfo, "FSSampledImage_sampler");
@@ -782,11 +789,11 @@ namespace pe
         vk::ImageBlit region{};
         region.srcOffsets[0] = vk::Offset3D{0, 0, 0};
         region.srcOffsets[1] = vk::Offset3D{static_cast<int32_t>(src->GetWidth()), static_cast<int32_t>(src->GetHeight()), 1};
-        region.srcSubresource.aspectMask = VulkanHelpers::GetAspectMask(src->GetFormat());
+        region.srcSubresource.aspectMask = VulkanHelpers::GetAspectMask(pe::ToVkFormat(src->GetFormat()));
         region.srcSubresource.layerCount = 1;
         region.dstOffsets[0] = vk::Offset3D{0, 0, 0};
         region.dstOffsets[1] = vk::Offset3D{(int32_t)src->GetWidth(), (int32_t)src->GetHeight(), 1};
-        region.dstSubresource.aspectMask = VulkanHelpers::GetAspectMask(swapchainImage->GetFormat());
+        region.dstSubresource.aspectMask = VulkanHelpers::GetAspectMask(pe::ToVkFormat(swapchainImage->GetFormat()));
         region.dstSubresource.layerCount = 1;
 
         ImageBarrierInfo barrier{};

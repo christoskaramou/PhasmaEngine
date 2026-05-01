@@ -18,15 +18,17 @@ namespace pe
         PE_ERROR_IF(!pixels, "No pixel data loaded");
         stbi_image_free(pixels);
 
-        vk::ImageCreateInfo info = Image::CreateInfoInit();
-        info.flags = vk::ImageCreateFlagBits::eCubeCompatible;
-        info.format = vk::Format::eR8G8B8A8Unorm;
-        info.extent = vk::Extent3D{static_cast<uint32_t>(texWidth), static_cast<uint32_t>(texHeight), 1};
-        info.arrayLayers = 6;
-        info.usage = vk::ImageUsageFlagBits::eTransferDst | vk::ImageUsageFlagBits::eSampled;
-        m_cubeMap = Image::Create(info, "Skybox_Cubemap_Legacy");
+        ImageDesc desc{};
+        desc.cubeCompatible = true;
+        desc.format = PE_FORMAT_R8G8B8A8_UNORM;
+        desc.width = static_cast<uint32_t>(texWidth);
+        desc.height = static_cast<uint32_t>(texHeight);
+        desc.arrayLayers = 6;
+        desc.usage = PE_IMAGE_USAGE_TRANSFER_DST | PE_IMAGE_USAGE_SAMPLED;
+        desc.name = "Skybox_Cubemap_Legacy";
+        m_cubeMap = Image::Create(desc);
 
-        m_cubeMap->CreateSRV(vk::ImageViewType::eCube);
+        m_cubeMap->CreateSRV(PE_IMAGE_VIEW_TYPE_CUBE);
 
         vk::SamplerCreateInfo samplerInfo = Sampler::CreateInfoInit();
         samplerInfo.addressModeU = vk::SamplerAddressMode::eClampToEdge;
@@ -61,17 +63,19 @@ namespace pe
         uint32_t cubemapSize = equiImage->GetWidth() / 4;
 
         // 2. Create Cubemap
-        vk::ImageCreateInfo info = Image::CreateInfoInit();
-        info.flags = vk::ImageCreateFlagBits::eCubeCompatible;
-        info.format = vk::Format::eR32G32B32A32Sfloat;
-        info.extent = vk::Extent3D{cubemapSize, cubemapSize, 1};
-        info.arrayLayers = 6;
-        info.mipLevels = Image::CalculateMips(cubemapSize, cubemapSize);
-        info.usage = vk::ImageUsageFlagBits::eSampled | vk::ImageUsageFlagBits::eStorage | vk::ImageUsageFlagBits::eTransferSrc | vk::ImageUsageFlagBits::eTransferDst;
-        m_cubeMap = Image::Create(info, "Skybox_Cubemap_Converted");
+        ImageDesc desc{};
+        desc.cubeCompatible = true;
+        desc.format = PE_FORMAT_R32G32B32A32_SFLOAT;
+        desc.width = cubemapSize;
+        desc.height = cubemapSize;
+        desc.arrayLayers = 6;
+        desc.mipLevels = Image::CalculateMips(cubemapSize, cubemapSize);
+        desc.usage = PE_IMAGE_USAGE_SAMPLED | PE_IMAGE_USAGE_STORAGE | PE_IMAGE_USAGE_TRANSFER_SRC | PE_IMAGE_USAGE_TRANSFER_DST;
+        desc.name = "Skybox_Cubemap_Converted";
+        m_cubeMap = Image::Create(desc);
 
-        m_cubeMap->CreateSRV(vk::ImageViewType::eCube);
-        m_cubeMap->CreateUAV(vk::ImageViewType::e2DArray, 0);
+        m_cubeMap->CreateSRV(PE_IMAGE_VIEW_TYPE_CUBE);
+        m_cubeMap->CreateUAV(PE_IMAGE_VIEW_TYPE_2D_ARRAY, 0);
 
         vk::SamplerCreateInfo samplerInfo = Sampler::CreateInfoInit();
         samplerInfo.addressModeU = vk::SamplerAddressMode::eClampToEdge;

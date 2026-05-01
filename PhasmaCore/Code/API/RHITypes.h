@@ -351,6 +351,26 @@ using PeBarrierSync = PePipelineStageFlags;
 using PeBarrierAccess = PeAccessFlags;
 using PeBindingType = PeDescriptorType;
 
+using PeImageUsageFlags = uint32_t;
+constexpr PeImageUsageFlags PE_IMAGE_USAGE_NONE = 0u;
+constexpr PeImageUsageFlags PE_IMAGE_USAGE_TRANSFER_SRC = 1u << 0;
+constexpr PeImageUsageFlags PE_IMAGE_USAGE_TRANSFER_DST = 1u << 1;
+constexpr PeImageUsageFlags PE_IMAGE_USAGE_SAMPLED = 1u << 2;
+constexpr PeImageUsageFlags PE_IMAGE_USAGE_STORAGE = 1u << 3;
+constexpr PeImageUsageFlags PE_IMAGE_USAGE_COLOR_ATTACHMENT = 1u << 4;
+constexpr PeImageUsageFlags PE_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT = 1u << 5;
+constexpr PeImageUsageFlags PE_IMAGE_USAGE_INPUT_ATTACHMENT = 1u << 6;
+constexpr PeImageUsageFlags PE_IMAGE_USAGE_TRANSIENT_ATTACHMENT = 1u << 7;
+constexpr uint32_t PE_IMAGE_USAGE_BIT_COUNT = 8;
+
+enum PeImageType : uint32_t
+{
+    PE_IMAGE_TYPE_1D = 0,
+    PE_IMAGE_TYPE_2D,
+    PE_IMAGE_TYPE_3D,
+    PE_IMAGE_TYPE_COUNT
+};
+
 using PeBufferUsageFlags = uint64_t;
 constexpr PeBufferUsageFlags PE_BUFFER_USAGE_NONE = 0ULL;
 constexpr PeBufferUsageFlags PE_BUFFER_USAGE_TRANSFER_SRC = 1ULL << 0;

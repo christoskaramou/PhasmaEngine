@@ -5,6 +5,7 @@
 #include "API/Pipeline.h"
 #include "API/RHI.h"
 #include "API/Shader.h"
+#include "API/Vulkan/VulkanImageImpl.h"
 #include "Scene/Scene.h"
 #include "Systems/RendererSystem.h"
 
@@ -45,7 +46,7 @@ namespace pe
         m_passInfo->colorBlendAttachments[0].dstColorBlendFactor = vk::BlendFactor::eOneMinusSrcAlpha;
         m_passInfo->colorBlendAttachments[0].colorBlendOp = vk::BlendOp::eAdd;
 
-        m_passInfo->colorFormats = {m_viewportRT->GetFormat()};
+        m_passInfo->colorFormats = {pe::ToVkFormat(m_viewportRT->GetFormat())};
 
         m_passInfo->Update();
     }

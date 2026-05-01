@@ -6,6 +6,7 @@
 #include "API/Pipeline.h"
 #include "API/RHI.h"
 #include "API/Shader.h"
+#include "API/Vulkan/VulkanImageImpl.h"
 #include "Camera/Camera.h"
 #include "Particles/ParticleManager.h"
 #include "Scene/Scene.h"
@@ -39,7 +40,7 @@ namespace pe
         m_passInfo->cullMode = vk::CullModeFlagBits::eNone;
         m_passInfo->blendEnable = true;
         m_passInfo->colorBlendAttachments = {PipelineColorBlendAttachmentState::ParticlesBlend};
-        m_passInfo->colorFormats = {m_attachments[0].image->GetFormat()};
+        m_passInfo->colorFormats = {pe::ToVkFormat(m_attachments[0].image->GetFormat())};
         m_passInfo->depthTestEnable = false;
         m_passInfo->depthWriteEnable = false;
         m_passInfo->dynamicStates = {vk::DynamicState::eViewport, vk::DynamicState::eScissor};

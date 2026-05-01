@@ -6521,7 +6521,7 @@ namespace pe
         for (uint32_t i = 0; i < mips; i++)
         {
             if (!image->HasUAV(i))
-                image->CreateUAV(vk::ImageViewType::e2DArray, i);
+                image->CreateUAV(PE_IMAGE_VIEW_TYPE_2D_ARRAY, i);
         }
 
         s_image = image;

@@ -2,6 +2,7 @@
 #include "API/Command.h"
 #include "API/Image.h"
 #include "API/RHI.h"
+#include "API/Vulkan/VulkanImageImpl.h"
 #include "CACAO/ffx_cacao_impl.h"
 #include "Camera/Camera.h"
 #include "Systems/RendererSystem.h"
@@ -33,7 +34,7 @@ namespace pe
             screenSizeInfo.height = m_ssaoRT->GetHeight();
             screenSizeInfo.depthView = m_depth->GetSRV()->ApiHandle();
             screenSizeInfo.normalsView = m_normalRT->GetSRV()->ApiHandle();
-            screenSizeInfo.output = m_ssaoRT->ApiHandle();
+            screenSizeInfo.output = pe::GetVulkanImage(m_ssaoRT);
             screenSizeInfo.outputView = m_ssaoRT->GetRTV()->ApiHandle();
             PE_CHECK(FFX_CACAO_VkInitScreenSizeDependentResources(m_context, &screenSizeInfo));
         }
@@ -142,7 +143,7 @@ namespace pe
         screenSizeInfo.height = m_ssaoRT->GetHeight();
         screenSizeInfo.depthView = m_depth->GetSRV()->ApiHandle();
         screenSizeInfo.normalsView = m_normalRT->GetSRV()->ApiHandle();
-        screenSizeInfo.output = m_ssaoRT->ApiHandle();
+        screenSizeInfo.output = pe::GetVulkanImage(m_ssaoRT);
         screenSizeInfo.outputView = m_ssaoRT->GetRTV()->ApiHandle();
         PE_CHECK(FFX_CACAO_VkInitScreenSizeDependentResources(m_context, &screenSizeInfo));
     }

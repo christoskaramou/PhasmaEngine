@@ -3,6 +3,7 @@
 #include "API/Image.h"
 #include "API/Queue.h"
 #include "API/RHI.h"
+#include "API/Vulkan/VulkanImageImpl.h"
 #include "FileSelector.h"
 #include "GUI/GUI.h"
 #include "Scene/Material.h"
@@ -472,7 +473,7 @@ namespace pe
                                 ImGui::BeginTooltip();
                                 ImGui::Text("%s", img->GetName().c_str());
                                 ImGui::Text("Resolution: %ux%u", img->GetWidth(), img->GetHeight());
-                                ImGui::Text("Format: %s", vk::to_string(img->GetFormat()).c_str());
+                                ImGui::Text("Format: %s", vk::to_string(pe::ToVkFormat(img->GetFormat())).c_str());
                                 ImGui::Text("Mips: %u", img->GetMipLevels());
                                 float aspect = img->GetWidth_f() / img->GetHeight_f();
                                 ImGui::Image((ImTextureID)desc, ImVec2(256 * aspect, 256));
@@ -582,7 +583,7 @@ namespace pe
         {
             if (!image->HasSRV())
             {
-                image->CreateSRV(vk::ImageViewType::e2D);
+                image->CreateSRV(PE_IMAGE_VIEW_TYPE_2D);
             }
 
             if (!image->GetSRV())

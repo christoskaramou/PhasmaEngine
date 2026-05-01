@@ -367,7 +367,7 @@ namespace pe
                     }
                     else
                     {
-                        rawImg = Image::LoadRawFromMemory(cmd, tex->pcData, tex->mWidth, tex->mHeight, vk::Format::eB8G8R8A8Unorm);
+                        rawImg = Image::LoadRawFromMemory(cmd, tex->pcData, tex->mWidth, tex->mHeight, PE_FORMAT_B8G8R8A8_UNORM);
                     }
 
                     if (rawImg)

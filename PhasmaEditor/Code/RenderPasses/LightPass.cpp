@@ -7,6 +7,7 @@
 #include "API/RHI.h"
 #include "API/RenderPass.h"
 #include "API/Shader.h"
+#include "API/Vulkan/VulkanImageImpl.h"
 #include "Camera/Camera.h"
 #include "ShadowPass.h"
 #include "Systems/RendererSystem.h"
@@ -48,7 +49,7 @@ namespace pe
         m_passInfo->pFragShader = Shader::Create(Path::Assets + "Shaders/Gbuffer/LightingPS.hlsl", vk::ShaderStageFlagBits::eFragment, "mainPS", definesFrag, ShaderCodeType::HLSL);
         m_passInfo->dynamicStates = {vk::DynamicState::eViewport, vk::DynamicState::eScissor};
         m_passInfo->colorBlendAttachments = {PipelineColorBlendAttachmentState::Default};
-        m_passInfo->colorFormats = {m_viewportRT->GetFormat()};
+        m_passInfo->colorFormats = {pe::ToVkFormat(m_viewportRT->GetFormat())};
         m_passInfo->depthTestEnable = false;
         m_passInfo->depthWriteEnable = false;
         m_passInfo->stencilTestEnable = false;
@@ -237,7 +238,7 @@ namespace pe
         m_passInfo->dynamicStates = {vk::DynamicState::eViewport, vk::DynamicState::eScissor};
         m_passInfo->colorBlendAttachments = {PipelineColorBlendAttachmentState::Default};
         m_passInfo->blendEnable = true;
-        m_passInfo->colorFormats = {m_viewportRT->GetFormat()};
+        m_passInfo->colorFormats = {pe::ToVkFormat(m_viewportRT->GetFormat())};
         m_passInfo->depthTestEnable = false;
         m_passInfo->depthWriteEnable = false;
         m_passInfo->Update();

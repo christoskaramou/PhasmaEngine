@@ -3,6 +3,7 @@
 #include "API/Helpers.h"
 #include "API/Pipeline.h"
 #include "API/RenderGraph.h"
+#include "API/Vulkan/VulkanImageImpl.h"
 
 namespace pe
 {
@@ -22,7 +23,7 @@ namespace pe
         {
             if (!att.image)
                 continue;
-            if (VulkanHelpers::HasDepth(att.image->GetFormat()))
+            if (VulkanHelpers::HasDepth(pe::ToVkFormat(att.image->GetFormat())))
                 builder.OutputDepth(att.image);
             else
                 builder.OutputColor(att.image);

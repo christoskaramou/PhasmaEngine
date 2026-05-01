@@ -1,8 +1,9 @@
 #include "API/Swapchain.h"
-#include "API/Image.h"
+#include "API/Image_Internal.h"
 #include "API/RHI.h"
 #include "API/Semaphore.h"
 #include "API/Surface.h"
+#include "API/Vulkan/VulkanImageImpl.h"
 
 namespace pe
 {
@@ -61,27 +62,29 @@ namespace pe
         m_images.resize(imagesVK.size());
         for (unsigned i = 0; i < m_images.size(); i++)
         {
-            m_images[i] = new Image();
-            m_images[i]->ApiHandle() = imagesVK[i];
-            m_images[i]->m_name = "Swapchain_image_" + std::to_string(i);
-            m_images[i]->m_createInfo = Image::CreateInfoInit();
-            m_images[i]->m_createInfo.format = surface->GetFormat();
-            m_images[i]->m_createInfo.extent.width = chosenExtent.width;
-            m_images[i]->m_createInfo.extent.height = chosenExtent.height;
-            m_images[i]->m_trackInfos.resize(1);
+            Image *img = new Image();
+            img->m_impl = CreateSwapchainImageImpl(img, imagesVK[i]);
+            VulkanImageImpl::From(img)->m_vkFormat = surface->GetFormat();
+            img->m_width = chosenExtent.width;
+            img->m_height = chosenExtent.height;
+            img->m_format = pe::FromVkFormat(surface->GetFormat());
+            img->m_usage = PE_IMAGE_USAGE_COLOR_ATTACHMENT | PE_IMAGE_USAGE_TRANSFER_DST;
+            img->m_name = "Swapchain_image_" + std::to_string(i);
+            img->m_trackInfos.resize(1);
             ImageTrackInfo info{};
-            info.image = m_images[i];
+            info.image = img;
             info.layout = vk::ImageLayout::eUndefined;
             info.stageFlags = vk::PipelineStageFlagBits2::eColorAttachmentOutput; // Acquire semaphore blocks this stage
             info.accessMask = vk::AccessFlagBits2::eNone;
-            m_images[i]->m_trackInfos[0].resize(1, info);
+            img->m_trackInfos[0].resize(1, info);
+            m_images[i] = img;
         }
 
         // create image views for each swapchain image
         for (int i = 0; i < m_images.size(); i++)
         {
             vk::ImageViewCreateInfo imageViewCreateInfo{};
-            imageViewCreateInfo.image = m_images[i]->ApiHandle();
+            imageViewCreateInfo.image = pe::GetVulkanImage(m_images[i]);
             imageViewCreateInfo.viewType = vk::ImageViewType::e2D;
             imageViewCreateInfo.format = surface->GetFormat();
             imageViewCreateInfo.subresourceRange = {vk::ImageAspectFlagBits::eColor, 0, 1, 0, 1};
@@ -89,7 +92,7 @@ namespace pe
             auto imageView = ImageView::Create(m_images[i], imageViewCreateInfo, "Swapchain_image_view" + std::to_string(i));
             m_images[i]->SetRTV(imageView);
 
-            Debug::SetObjectName(m_images[i]->ApiHandle(), "Swapchain_image" + std::to_string(i));
+            Debug::SetObjectName(pe::GetVulkanImage(m_images[i]), "Swapchain_image" + std::to_string(i));
             Debug::SetObjectName(m_images[i]->GetRTV()->ApiHandle(), "Swapchain_image_view" + std::to_string(i));
         }
 
@@ -107,8 +110,9 @@ namespace pe
     {
         for (auto *image : m_images)
         {
-            // Invalidate image handle first, destroySwapchainKHR will destroy it
-            image->ApiHandle() = vk::Image{};
+            // Image::Destroy is safe even though the underlying VkImage is
+            // owned by the swapchain — VulkanImageImpl marks externally-owned
+            // images and skips vmaDestroyImage in its destructor.
             Image::Destroy(image);
         }
 

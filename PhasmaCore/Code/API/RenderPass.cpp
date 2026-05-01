@@ -2,6 +2,7 @@
 #include "API/Command.h"
 #include "API/Image.h"
 #include "API/RHI.h"
+#include "API/Vulkan/VulkanImageImpl.h"
 
 namespace pe
 {
@@ -22,8 +23,8 @@ namespace pe
             const Attachment &attachment = attachments[i];
 
             vk::AttachmentDescription2 attachmentDescription{};
-            attachmentDescription.format = attachment.image->GetFormat();
-            attachmentDescription.samples = attachment.image->GetSamples();
+            attachmentDescription.format = pe::ToVkFormat(attachment.image->GetFormat());
+            attachmentDescription.samples = pe::ToVkSampleCount(attachment.image->GetSamples());
             attachmentDescription.loadOp = attachment.loadOp;
             attachmentDescription.storeOp = attachment.storeOp;
             attachmentDescription.stencilLoadOp = attachment.stencilLoadOp;
@@ -32,10 +33,11 @@ namespace pe
             attachmentDescription.finalLayout = vk::ImageLayout::eAttachmentOptimal;
             attachmentsVK.push_back(attachmentDescription);
 
-            if (VulkanHelpers::HasDepthOrStencil(attachment.image->GetFormat()))
+            const vk::Format vkFormat = pe::ToVkFormat(attachment.image->GetFormat());
+            if (VulkanHelpers::HasDepthOrStencil(vkFormat))
             {
                 depthStencilReferenceVK.attachment = attachmentIndex++;
-                depthStencilReferenceVK.aspectMask = VulkanHelpers::GetAspectMask(attachment.image->GetFormat());
+                depthStencilReferenceVK.aspectMask = VulkanHelpers::GetAspectMask(vkFormat);
                 depthStencilReferenceVK.layout = vk::ImageLayout::eAttachmentOptimal;
             }
             else
@@ -43,7 +45,7 @@ namespace pe
                 vk::AttachmentReference2 reference{};
                 reference.attachment = attachmentIndex++;
                 reference.layout = vk::ImageLayout::eAttachmentOptimal;
-                reference.aspectMask = VulkanHelpers::GetAspectMask(attachment.image->GetFormat());
+                reference.aspectMask = VulkanHelpers::GetAspectMask(vkFormat);
                 colorReferencesVK.push_back(reference);
             }
         }

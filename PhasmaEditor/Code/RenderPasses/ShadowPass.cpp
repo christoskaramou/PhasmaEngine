@@ -3,6 +3,7 @@
 #include "API/Command.h"
 #include "API/Descriptor.h"
 #include "API/Image.h"
+#include "API/Vulkan/VulkanImageImpl.h"
 #include "API/Pipeline.h"
 #include "API/RHI.h"
 #include "API/Shader.h"
@@ -19,15 +20,17 @@ namespace pe
         int i = 0;
         for (auto *&texture : m_textures)
         {
-            vk::ImageCreateInfo info = Image::CreateInfoInit();
-            info.format = RHII.GetDepthFormat();
-            info.extent = vk::Extent3D{Settings::Get<GlobalSettings>().shadow_map_size, Settings::Get<GlobalSettings>().shadow_map_size, 1};
-            info.usage = vk::ImageUsageFlagBits::eDepthStencilAttachment | vk::ImageUsageFlagBits::eSampled | vk::ImageUsageFlagBits::eTransferDst;
-            texture = Image::Create(info, "ShadowMap_" + std::to_string(i++));
+            ImageDesc desc{};
+            desc.format = pe::FromVkFormat(RHII.GetDepthFormat());
+            desc.width = Settings::Get<GlobalSettings>().shadow_map_size;
+            desc.height = Settings::Get<GlobalSettings>().shadow_map_size;
+            desc.usage = PE_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT | PE_IMAGE_USAGE_SAMPLED | PE_IMAGE_USAGE_TRANSFER_DST;
+            desc.name = "ShadowMap_" + std::to_string(i++);
+            texture = Image::Create(desc);
             texture->SetClearColor(vec4(Color::Depth, Color::Stencil, 0.0f, 1.0f));
 
             texture->CreateRTV();
-            texture->CreateSRV(vk::ImageViewType::e2D);
+            texture->CreateSRV(PE_IMAGE_VIEW_TYPE_2D);
         }
 
         vk::SamplerCreateInfo samplerInfo = Sampler::CreateInfoInit();

@@ -7,44 +7,44 @@
 
 namespace pe
 {
-    static const std::unordered_map<std::string_view, vk::Format> s_imageFormatMap = {
-        {"rgba8", vk::Format::eR8G8B8A8Unorm},
-        {"rgba8_srgb", vk::Format::eR8G8B8A8Srgb},
-        {"bgra8", vk::Format::eB8G8R8A8Unorm},
-        {"bgra8_srgb", vk::Format::eB8G8R8A8Srgb},
-        {"rgba16f", vk::Format::eR16G16B16A16Sfloat},
-        {"rgba32f", vk::Format::eR32G32B32A32Sfloat},
-        {"rg16f", vk::Format::eR16G16Sfloat},
-        {"rg32f", vk::Format::eR32G32Sfloat},
-        {"r8", vk::Format::eR8Unorm},
-        {"r16f", vk::Format::eR16Sfloat},
-        {"r32f", vk::Format::eR32Sfloat},
-        {"d32f", vk::Format::eD32Sfloat},
-        {"d24_s8", vk::Format::eD24UnormS8Uint},
-        {"d32f_s8", vk::Format::eD32SfloatS8Uint},
-        {"s8", vk::Format::eS8Uint},
-        {"rgb10a2", vk::Format::eA2B10G10R10UnormPack32},
-        {"rg11b10f", vk::Format::eB10G11R11UfloatPack32},
+    static const std::unordered_map<std::string_view, ::PeFormat> s_imageFormatMap = {
+        {"rgba8", PE_FORMAT_R8G8B8A8_UNORM},
+        {"rgba8_srgb", PE_FORMAT_R8G8B8A8_SRGB},
+        {"bgra8", PE_FORMAT_B8G8R8A8_UNORM},
+        {"bgra8_srgb", PE_FORMAT_B8G8R8A8_SRGB},
+        {"rgba16f", PE_FORMAT_R16G16B16A16_SFLOAT},
+        {"rgba32f", PE_FORMAT_R32G32B32A32_SFLOAT},
+        {"rg16f", PE_FORMAT_R16G16_SFLOAT},
+        {"rg32f", PE_FORMAT_R32G32_SFLOAT},
+        {"r8", PE_FORMAT_R8_UNORM},
+        {"r16f", PE_FORMAT_R16_SFLOAT},
+        {"r32f", PE_FORMAT_R32_SFLOAT},
+        {"d32f", PE_FORMAT_D32_SFLOAT},
+        {"d24_s8", PE_FORMAT_D24_UNORM_S8_UINT},
+        {"d32f_s8", PE_FORMAT_D32_SFLOAT_S8_UINT},
+        {"s8", PE_FORMAT_S8_UINT},
+        {"rgb10a2", PE_FORMAT_A2B10G10R10_UNORM_PACK32},
+        {"rg11b10f", PE_FORMAT_B10G11R11_UFLOAT_PACK32},
     };
 
-    static const std::unordered_map<std::string_view, vk::ImageUsageFlags> s_imageUsageMap = {
-        {"sampled", vk::ImageUsageFlagBits::eSampled},
-        {"storage", vk::ImageUsageFlagBits::eStorage},
-        {"color_attachment", vk::ImageUsageFlagBits::eColorAttachment},
-        {"depth_attachment", vk::ImageUsageFlagBits::eDepthStencilAttachment},
-        {"transfer_src", vk::ImageUsageFlagBits::eTransferSrc},
-        {"transfer_dst", vk::ImageUsageFlagBits::eTransferDst},
-        {"input_attachment", vk::ImageUsageFlagBits::eInputAttachment},
+    static const std::unordered_map<std::string_view, PeImageUsageFlags> s_imageUsageMap = {
+        {"sampled", PE_IMAGE_USAGE_SAMPLED},
+        {"storage", PE_IMAGE_USAGE_STORAGE},
+        {"color_attachment", PE_IMAGE_USAGE_COLOR_ATTACHMENT},
+        {"depth_attachment", PE_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT},
+        {"transfer_src", PE_IMAGE_USAGE_TRANSFER_SRC},
+        {"transfer_dst", PE_IMAGE_USAGE_TRANSFER_DST},
+        {"input_attachment", PE_IMAGE_USAGE_INPUT_ATTACHMENT},
     };
 
-    static const std::unordered_map<std::string_view, vk::ImageViewType> s_imageViewTypeMap = {
-        {"1d", vk::ImageViewType::e1D},
-        {"2d", vk::ImageViewType::e2D},
-        {"3d", vk::ImageViewType::e3D},
-        {"cube", vk::ImageViewType::eCube},
-        {"1d_array", vk::ImageViewType::e1DArray},
-        {"2d_array", vk::ImageViewType::e2DArray},
-        {"cube_array", vk::ImageViewType::eCubeArray},
+    static const std::unordered_map<std::string_view, PeImageViewType> s_imageViewTypeMap = {
+        {"1d", PE_IMAGE_VIEW_TYPE_1D},
+        {"2d", PE_IMAGE_VIEW_TYPE_2D},
+        {"3d", PE_IMAGE_VIEW_TYPE_3D},
+        {"cube", PE_IMAGE_VIEW_TYPE_CUBE},
+        {"1d_array", PE_IMAGE_VIEW_TYPE_1D_ARRAY},
+        {"2d_array", PE_IMAGE_VIEW_TYPE_2D_ARRAY},
+        {"cube_array", PE_IMAGE_VIEW_TYPE_CUBE_ARRAY},
     };
 
     static const std::unordered_map<std::string_view, vk::ImageLayout> s_imgLayoutMap = {
@@ -86,17 +86,17 @@ namespace pe
         {"memory_write", vk::AccessFlagBits2::eMemoryWrite},
     };
 
-    static vk::Format ToImageFormat(const std::string &s)
+    static ::PeFormat ToImageFormat(const std::string &s)
     {
-        return Lookup(s, s_imageFormatMap, vk::Format::eR8G8B8A8Unorm);
+        return Lookup(s, s_imageFormatMap, PE_FORMAT_R8G8B8A8_UNORM);
     }
-    static vk::ImageUsageFlags ToImageUsage(const std::string &s)
+    static PeImageUsageFlags ToImageUsage(const std::string &s)
     {
-        return LookupFlags<vk::ImageUsageFlags>(s, s_imageUsageMap);
+        return LookupFlags<PeImageUsageFlags>(s, s_imageUsageMap);
     }
 
-    // Reverse lookup: vk::Format -> string
-    static std::string FormatToString(vk::Format fmt)
+    // Reverse lookup: ::PeFormat -> string
+    static std::string FormatToString(::PeFormat fmt)
     {
         for (auto &[k, v] : s_imageFormatMap)
             if (v == fmt)
@@ -248,17 +248,17 @@ namespace pe
                 imageType["create_srv"] = sol::overload(
                     [](LuaImage &img, const std::string &viewType) {
                         Image *p = img.Get();
-                        if (p) p->CreateSRV(Lookup(viewType, s_imageViewTypeMap, vk::ImageViewType::e2D));
+                        if (p) p->CreateSRV(Lookup(viewType, s_imageViewTypeMap, PE_IMAGE_VIEW_TYPE_2D));
                     },
                     [](LuaImage &img, const std::string &viewType, int mip) {
                         Image *p = img.Get();
-                        if (p) p->CreateSRV(Lookup(viewType, s_imageViewTypeMap, vk::ImageViewType::e2D), mip);
+                        if (p) p->CreateSRV(Lookup(viewType, s_imageViewTypeMap, PE_IMAGE_VIEW_TYPE_2D), mip);
                     });
 
                 // CreateUAV
                 imageType["create_uav"] = [](LuaImage &img, const std::string &viewType, uint32_t mip) {
                     Image *p = img.Get();
-                    if (p) p->CreateUAV(Lookup(viewType, s_imageViewTypeMap, vk::ImageViewType::e2D), mip);
+                    if (p) p->CreateUAV(Lookup(viewType, s_imageViewTypeMap, PE_IMAGE_VIEW_TYPE_2D), mip);
                 };
 
                 // HasRTV
@@ -390,11 +390,13 @@ namespace pe
                 // Factory: create_image(width, height, format, usage, name [, mipLevels])
                 lua.set_function("create_image", sol::overload(
                     [](uint32_t width, uint32_t height, const std::string &format, const std::string &usage, const std::string &name) -> std::shared_ptr<LuaImage> {
-                        vk::ImageCreateInfo info = Image::CreateInfoInit();
-                        info.format = ToImageFormat(format);
-                        info.extent = vk::Extent3D{width, height, 1u};
-                        info.usage = ToImageUsage(usage);
-                        Image *img = Image::Create(info, name);
+                        ImageDesc desc{};
+                        desc.format = ToImageFormat(format);
+                        desc.width = width;
+                        desc.height = height;
+                        desc.usage = ToImageUsage(usage);
+                        desc.name = name;
+                        Image *img = Image::Create(desc);
                         if (!img) return nullptr;
                         auto luaImg = std::make_shared<LuaImage>();
                         luaImg->ptr = img;
@@ -402,12 +404,14 @@ namespace pe
                         return luaImg;
                     },
                     [](uint32_t width, uint32_t height, const std::string &format, const std::string &usage, const std::string &name, uint32_t mipLevels) -> std::shared_ptr<LuaImage> {
-                        vk::ImageCreateInfo info = Image::CreateInfoInit();
-                        info.format = ToImageFormat(format);
-                        info.extent = vk::Extent3D{width, height, 1u};
-                        info.usage = ToImageUsage(usage);
-                        info.mipLevels = mipLevels;
-                        Image *img = Image::Create(info, name);
+                        ImageDesc desc{};
+                        desc.format = ToImageFormat(format);
+                        desc.width = width;
+                        desc.height = height;
+                        desc.usage = ToImageUsage(usage);
+                        desc.mipLevels = mipLevels;
+                        desc.name = name;
+                        Image *img = Image::Create(desc);
                         if (!img) return nullptr;
                         auto luaImg = std::make_shared<LuaImage>();
                         luaImg->ptr = img;

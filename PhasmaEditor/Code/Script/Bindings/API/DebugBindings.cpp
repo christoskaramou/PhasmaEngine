@@ -12,6 +12,7 @@
 #include "API/Descriptor.h"
 #include "API/Queue.h"
 #include "API/Vulkan/VulkanBufferImpl.h"
+#include "API/Vulkan/VulkanImageImpl.h"
 
 namespace pe
 {
@@ -33,7 +34,7 @@ namespace pe
                 });
                 debug.set_function("set_image_name", [](std::shared_ptr<LuaImage> img, const std::string &name) {
                     Image *p = img ? img->Get() : nullptr;
-                    if (p) Debug::SetObjectName(p->ApiHandle(), name);
+                    if (p) Debug::SetObjectName(GetVulkanImage(p), name);
                 });
                 debug.set_function("set_command_buffer_name", [](CommandBuffer &cmd, const std::string &name) {
                     Debug::SetObjectName(cmd.ApiHandle(), name);

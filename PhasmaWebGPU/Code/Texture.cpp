@@ -5,6 +5,7 @@
 #include "API/Buffer.h"
 #include "API/Queue.h"
 #include "API/Vulkan/VulkanBufferImpl.h"
+#include "API/Vulkan/VulkanImageImpl.h"
 #include "API/RHI.h"
 #include "API/Semaphore.h"
 #include "API/Command.h"
@@ -204,7 +205,7 @@ namespace pwgpu
 
         vk::CopyBufferToImageInfo2 copyInfo{};
         copyInfo.srcBuffer = pe::GetVulkanBuffer(alloc.buffer);
-        copyInfo.dstImage = tex->image->ApiHandle();
+        copyInfo.dstImage = pe::GetVulkanImage(tex->image);
         copyInfo.dstImageLayout = vk::ImageLayout::eTransferDstOptimal;
         copyInfo.regionCount = static_cast<uint32_t>(regions.size());
         copyInfo.pRegions = regions.data();
@@ -267,7 +268,7 @@ namespace pwgpu
         if (IsDepthStencilFormat(tex->format))
         {
             vk::ClearDepthStencilValue dsValue{0.0f, 0u};
-            cmd->ApiHandle().clearDepthStencilImage(tex->image->ApiHandle(),
+            cmd->ApiHandle().clearDepthStencilImage(pe::GetVulkanImage(tex->image),
                                                     vk::ImageLayout::eTransferDstOptimal,
                                                     &dsValue,
                                                     static_cast<uint32_t>(ranges.size()),
@@ -280,7 +281,7 @@ namespace pwgpu
             colorValue.float32[1] = 0.0f;
             colorValue.float32[2] = 0.0f;
             colorValue.float32[3] = 0.0f;
-            cmd->ApiHandle().clearColorImage(tex->image->ApiHandle(),
+            cmd->ApiHandle().clearColorImage(pe::GetVulkanImage(tex->image),
                                              vk::ImageLayout::eTransferDstOptimal,
                                              &colorValue,
                                              static_cast<uint32_t>(ranges.size()),
@@ -815,7 +816,7 @@ extern "C"
             const bool combinedDS =
                 pwgpu::HasDepthAspect(texture->format) && pwgpu::HasStencilAspect(texture->format);
             if (resolved.format == texture->format || combinedDS)
-                vkFmt = static_cast<VkFormat>(texture->image->GetFormat());
+                vkFmt = static_cast<VkFormat>(pe::ToVkFormat(texture->image->GetFormat()));
             else
                 vkFmt = pwgpu::ToVkFormat(resolved.format);
             vk::ImageViewType vkViewType = vk::ImageViewType::e2D;
@@ -844,7 +845,7 @@ extern "C"
             }
 
             vk::ImageViewCreateInfo ivci = pe::ImageView::CreateInfoInit();
-            ivci.image = texture->image->ApiHandle();
+            ivci.image = pe::GetVulkanImage(texture->image);
             ivci.viewType = vkViewType;
             ivci.format = static_cast<vk::Format>(vkFmt);
             ivci.subresourceRange.aspectMask = pwgpu::ToVkAspect(resolved.aspect, resolved.format);
