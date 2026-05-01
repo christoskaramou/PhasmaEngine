@@ -3,7 +3,6 @@
 #include "Base/EventSystem.h"
 #include "Base/Path.h"
 #include "Base/Log.h"
-#include "GUI/AI/AICompletionService.h"
 #include "imgui/imgui.h"
 #include <fstream>
 #include <filesystem>
@@ -213,14 +212,8 @@ namespace pe
             {
                 if (m_selectedShader != i)
                 {
-                    // Cancel any in-flight completion for the previous file
-                    if (m_completionPending && m_completion)
-                        m_completion->RequestScriptCompletion("", CompletionLanguage::HLSL, [](std::string) {});
-                    m_editor.SetReadOnly(false);
                     m_selectedShader = i;
                     LoadShaderFile(m_shaderFiles[i]);
-                    m_ghostText.clear();
-                    m_completionPending = false;
                 }
             }
         }
@@ -237,53 +230,6 @@ namespace pe
         }
         ImGui::SetWindowFontScale(m_editorFontScale);
 
-        // Ghost text: intercept Tab/Esc before editor renders
-        if (!m_ghostText.empty())
-        {
-            if (ImGui::IsWindowFocused(ImGuiFocusedFlags_ChildWindows) &&
-                ImGui::IsKeyPressed(ImGuiKey_Tab, false))
-            {
-                m_editor.SetReadOnly(false);
-                m_editor.SetCursorPosition(m_savedCursor); // restore to where Ctrl+Space was pressed
-                m_editor.InsertText(m_ghostText);
-                m_ghostText.clear();
-                m_completionPending = false;
-            }
-            else if (ImGui::IsKeyPressed(ImGuiKey_Escape, false) ||
-                     ImGui::GetIO().InputQueueCharacters.Size > 0)
-            {
-                m_editor.SetReadOnly(false);
-                m_ghostText.clear();
-                m_completionPending = false;
-            }
-        }
-
-        // Ctrl+Space triggers completion
-        if (m_completion && m_completion->IsEnabled() && !m_completionPending &&
-            m_selectedShader >= 0 &&
-            ImGui::IsWindowFocused(ImGuiFocusedFlags_ChildWindows) &&
-            ImGui::GetIO().KeyCtrl && ImGui::IsKeyPressed(ImGuiKey_Space, false))
-        {
-            m_savedCursor = m_editor.GetCursorPosition();
-            std::string context = AICompletionService::BuildContext(
-                m_editor.GetText(), m_savedCursor.mLine);
-            m_completionPending = true;
-            m_editor.SetReadOnly(true);
-            m_completion->RequestScriptCompletion(
-                context, CompletionLanguage::HLSL,
-                [this](std::string suggestion)
-                {
-                    if (suggestion.empty())
-                    {
-                        m_completionPending = false;
-                        m_editor.SetReadOnly(false);
-                        return;
-                    }
-                    m_ghostText = std::move(suggestion);
-                    m_completionPending = false;
-                });
-        }
-
         if (m_selectedShader >= 0)
         {
             m_editor.Render("##src", {-1, availH});
@@ -292,52 +238,6 @@ namespace pe
             if (m_shaderModified && ImGui::IsWindowFocused(ImGuiFocusedFlags_ChildWindows) &&
                 ImGui::GetIO().KeyCtrl && ImGui::IsKeyPressed(ImGuiKey_S, false))
                 SaveAndRecompile();
-
-            // Inline ghost text overlay — uses cached TextEditor layout from Render()
-            if (!m_ghostText.empty())
-            {
-                auto cursor = m_editor.GetCursorPosition();
-                float textStart = m_editor.GetTextStart();
-                ImVec2 charAdv = m_editor.GetCharAdvance();
-                float cursorDist = m_editor.GetTextDistanceToLineStart(cursor);
-
-                ImVec2 origin = m_editor.GetContentScreenPos();
-                ImVec2 scroll = m_editor.GetContentScroll();
-
-                float ghostX = origin.x + textStart + cursorDist - scroll.x;
-                float ghostY = origin.y + cursor.mLine * charAdv.y - scroll.y;
-
-                ImVec2 clipMin = ImGui::GetItemRectMin();
-                ImVec2 clipMax = ImGui::GetItemRectMax();
-
-                ImDrawList *dl = ImGui::GetForegroundDrawList();
-                dl->PushClipRect(clipMin, clipMax, true);
-
-                ImU32 ghostColor = IM_COL32(150, 150, 150, 160);
-                float y = ghostY;
-                float indentX = origin.x + textStart - scroll.x;
-                const char *start = m_ghostText.c_str();
-                const char *end = start + m_ghostText.size();
-                const char *lineStart = start;
-                bool firstLine = true;
-                for (const char *p = start; p <= end; ++p)
-                {
-                    if (p == end || *p == '\n')
-                    {
-                        float x = firstLine ? ghostX : indentX;
-                        if (p > lineStart && y >= clipMin.y && y < clipMax.y)
-                            dl->AddText(ImVec2(x, y), ghostColor, lineStart, p);
-                        y += charAdv.y;
-                        firstLine = false;
-                        lineStart = p + 1;
-                    }
-                }
-                dl->PopClipRect();
-            }
-            else if (m_completionPending)
-            {
-                ImGui::TextDisabled("  Thinking...");
-            }
         }
         else
         {

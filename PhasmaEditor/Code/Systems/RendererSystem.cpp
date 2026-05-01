@@ -2,7 +2,7 @@
 #ifdef PE_TRACY
 #include <tracy/TracyVulkan.hpp>
 #endif
-#include "PhasmaAgent/AgentUtils.h"
+#include "PhasmaMCP/Utils.h"
 #include "API/Buffer.h"
 #include "API/Command.h"
 #include "API/Framebuffer.h"
@@ -520,7 +520,7 @@ namespace pe
             rgba[i * 4 + 3] = pixels[i * 4 + 3]; // A
         }
 
-        auto pngData = pagent::EncodeRGBA_PNG(rgba.data(), static_cast<int>(w), static_cast<int>(h));
+        auto pngData = pmcp::EncodeRGBA_PNG(rgba.data(), static_cast<int>(w), static_cast<int>(h));
 
         std::ofstream file(path, std::ios::binary);
         if (file.is_open())

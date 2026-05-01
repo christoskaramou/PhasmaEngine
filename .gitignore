@@ -6,9 +6,10 @@
 /*/
 !/PhasmaCore/
 !/PhasmaEditor/
-!/PhasmaAgent/
+!/PhasmaMCP/
 !/PhasmaWebGPU/
 !/CMakeLists.txt
+!/CMakePresets.json
 !/LICENCE
 !/README.md
 !/.gitignore
@@ -314,4 +315,8 @@ PhasmaEditor/Assets/Agent/agent_config.json
 
 # Rust/Cargo target dirs (e.g. PhasmaWebGPU/WgslBridge/target)
 **/target/
+
+# Shared FetchContent caches (per-generator, populated by CMake presets)
+.fetchcontent-ninja/
+.fetchcontent-vs/
 

@@ -1,0 +1,170 @@
+{
+    "version": 3,
+    "cmakeMinimumRequired": {
+        "major": 3,
+        "minor": 21,
+        "patch": 0
+    },
+    "configurePresets": [
+        {
+            "name": "_base",
+            "hidden": true,
+            "cacheVariables": {
+                "CMAKE_CONFIGURATION_TYPES": "Debug;Release;RelWithDebInfo;MinSizeRel",
+                "PE_WEBGPU": "OFF",
+                "PE_PHYSICS": "OFF",
+                "PE_TRACY": "OFF"
+            }
+        },
+        {
+            "name": "_ninja_base",
+            "hidden": true,
+            "inherits": "_base",
+            "generator": "Ninja Multi-Config",
+            "cacheVariables": {
+                "FETCHCONTENT_BASE_DIR": "${sourceDir}/.fetchcontent-ninja"
+            }
+        },
+        {
+            "name": "_vs_base",
+            "hidden": true,
+            "inherits": "_base",
+            "generator": "Visual Studio 17 2022",
+            "architecture": "x64",
+            "cacheVariables": {
+                "FETCHCONTENT_BASE_DIR": "${sourceDir}/.fetchcontent-vs"
+            }
+        },
+
+        {
+            "name": "ninja",
+            "displayName": "Ninja Minimal (no WebGPU, no Physics)",
+            "description": "Ninja Multi-Config. Editor + core only. Fastest configure and build.",
+            "inherits": "_ninja_base",
+            "binaryDir": "${sourceDir}/build-ninja"
+        },
+        {
+            "name": "ninja-physics",
+            "displayName": "Ninja + Physics",
+            "description": "Ninja Multi-Config. Minimal + Jolt Physics.",
+            "inherits": "ninja",
+            "binaryDir": "${sourceDir}/build-ninja-physics",
+            "cacheVariables": { "PE_PHYSICS": "ON" }
+        },
+        {
+            "name": "ninja-webgpu",
+            "displayName": "Ninja + WebGPU",
+            "description": "Ninja Multi-Config. Minimal + PhasmaWebGPU layer.",
+            "inherits": "ninja",
+            "binaryDir": "${sourceDir}/build-ninja-webgpu",
+            "cacheVariables": { "PE_WEBGPU": "ON" }
+        },
+        {
+            "name": "ninja-full",
+            "displayName": "Ninja Full (WebGPU + Physics)",
+            "description": "Ninja Multi-Config. Everything optional turned on except Tracy. Matches the historic default.",
+            "inherits": "ninja",
+            "binaryDir": "${sourceDir}/build-ninja-full",
+            "cacheVariables": { "PE_WEBGPU": "ON", "PE_PHYSICS": "ON" }
+        },
+        {
+            "name": "ninja-full-tracy",
+            "displayName": "Ninja Full + Tracy",
+            "description": "Ninja Multi-Config. Full feature set plus Tracy profiler integration. Use for perf sessions.",
+            "inherits": "ninja-full",
+            "binaryDir": "${sourceDir}/build-ninja-full-tracy",
+            "cacheVariables": { "PE_TRACY": "ON" }
+        },
+
+        {
+            "name": "vs",
+            "displayName": "VS Minimal (no WebGPU, no Physics)",
+            "description": "Visual Studio 2022 generator. Editor + core only.",
+            "inherits": "_vs_base",
+            "binaryDir": "${sourceDir}/build-vs"
+        },
+        {
+            "name": "vs-physics",
+            "displayName": "VS + Physics",
+            "description": "Visual Studio 2022 generator. Minimal + Jolt Physics.",
+            "inherits": "vs",
+            "binaryDir": "${sourceDir}/build-vs-physics",
+            "cacheVariables": { "PE_PHYSICS": "ON" }
+        },
+        {
+            "name": "vs-webgpu",
+            "displayName": "VS + WebGPU",
+            "description": "Visual Studio 2022 generator. Minimal + PhasmaWebGPU.",
+            "inherits": "vs",
+            "binaryDir": "${sourceDir}/build-vs-webgpu",
+            "cacheVariables": { "PE_WEBGPU": "ON" }
+        },
+        {
+            "name": "vs-full",
+            "displayName": "VS Full (WebGPU + Physics)",
+            "description": "Visual Studio 2022 generator. Full feature set without Tracy.",
+            "inherits": "vs",
+            "binaryDir": "${sourceDir}/build-vs-full",
+            "cacheVariables": { "PE_WEBGPU": "ON", "PE_PHYSICS": "ON" }
+        },
+        {
+            "name": "vs-full-tracy",
+            "displayName": "VS Full + Tracy",
+            "description": "Visual Studio 2022 generator. Full feature set plus Tracy.",
+            "inherits": "vs-full",
+            "binaryDir": "${sourceDir}/build-vs-full-tracy",
+            "cacheVariables": { "PE_TRACY": "ON" }
+        }
+    ],
+    "buildPresets": [
+        { "name": "ninja-debug",          "displayName": "Ninja Debug",          "configurePreset": "ninja", "configuration": "Debug" },
+        { "name": "ninja-release",        "displayName": "Ninja Release",        "configurePreset": "ninja", "configuration": "Release" },
+        { "name": "ninja-relwithdebinfo", "displayName": "Ninja RelWithDebInfo", "configurePreset": "ninja", "configuration": "RelWithDebInfo" },
+        { "name": "ninja-minsizerel",     "displayName": "Ninja MinSizeRel",     "configurePreset": "ninja", "configuration": "MinSizeRel" },
+
+        { "name": "ninja-physics-debug",          "displayName": "Ninja Physics Debug",          "configurePreset": "ninja-physics", "configuration": "Debug" },
+        { "name": "ninja-physics-release",        "displayName": "Ninja Physics Release",        "configurePreset": "ninja-physics", "configuration": "Release" },
+        { "name": "ninja-physics-relwithdebinfo", "displayName": "Ninja Physics RelWithDebInfo", "configurePreset": "ninja-physics", "configuration": "RelWithDebInfo" },
+        { "name": "ninja-physics-minsizerel",     "displayName": "Ninja Physics MinSizeRel",     "configurePreset": "ninja-physics", "configuration": "MinSizeRel" },
+
+        { "name": "ninja-webgpu-debug",          "displayName": "Ninja WebGPU Debug",          "configurePreset": "ninja-webgpu", "configuration": "Debug" },
+        { "name": "ninja-webgpu-release",        "displayName": "Ninja WebGPU Release",        "configurePreset": "ninja-webgpu", "configuration": "Release" },
+        { "name": "ninja-webgpu-relwithdebinfo", "displayName": "Ninja WebGPU RelWithDebInfo", "configurePreset": "ninja-webgpu", "configuration": "RelWithDebInfo" },
+        { "name": "ninja-webgpu-minsizerel",     "displayName": "Ninja WebGPU MinSizeRel",     "configurePreset": "ninja-webgpu", "configuration": "MinSizeRel" },
+
+        { "name": "ninja-full-debug",          "displayName": "Ninja Full Debug",          "configurePreset": "ninja-full", "configuration": "Debug" },
+        { "name": "ninja-full-release",        "displayName": "Ninja Full Release",        "configurePreset": "ninja-full", "configuration": "Release" },
+        { "name": "ninja-full-relwithdebinfo", "displayName": "Ninja Full RelWithDebInfo", "configurePreset": "ninja-full", "configuration": "RelWithDebInfo" },
+        { "name": "ninja-full-minsizerel",     "displayName": "Ninja Full MinSizeRel",     "configurePreset": "ninja-full", "configuration": "MinSizeRel" },
+
+        { "name": "ninja-full-tracy-debug",          "displayName": "Ninja Full+Tracy Debug",          "configurePreset": "ninja-full-tracy", "configuration": "Debug" },
+        { "name": "ninja-full-tracy-release",        "displayName": "Ninja Full+Tracy Release",        "configurePreset": "ninja-full-tracy", "configuration": "Release" },
+        { "name": "ninja-full-tracy-relwithdebinfo", "displayName": "Ninja Full+Tracy RelWithDebInfo", "configurePreset": "ninja-full-tracy", "configuration": "RelWithDebInfo" },
+        { "name": "ninja-full-tracy-minsizerel",     "displayName": "Ninja Full+Tracy MinSizeRel",     "configurePreset": "ninja-full-tracy", "configuration": "MinSizeRel" },
+
+        { "name": "vs-debug",          "displayName": "VS Debug",          "configurePreset": "vs", "configuration": "Debug" },
+        { "name": "vs-release",        "displayName": "VS Release",        "configurePreset": "vs", "configuration": "Release" },
+        { "name": "vs-relwithdebinfo", "displayName": "VS RelWithDebInfo", "configurePreset": "vs", "configuration": "RelWithDebInfo" },
+        { "name": "vs-minsizerel",     "displayName": "VS MinSizeRel",     "configurePreset": "vs", "configuration": "MinSizeRel" },
+
+        { "name": "vs-physics-debug",          "displayName": "VS Physics Debug",          "configurePreset": "vs-physics", "configuration": "Debug" },
+        { "name": "vs-physics-release",        "displayName": "VS Physics Release",        "configurePreset": "vs-physics", "configuration": "Release" },
+        { "name": "vs-physics-relwithdebinfo", "displayName": "VS Physics RelWithDebInfo", "configurePreset": "vs-physics", "configuration": "RelWithDebInfo" },
+        { "name": "vs-physics-minsizerel",     "displayName": "VS Physics MinSizeRel",     "configurePreset": "vs-physics", "configuration": "MinSizeRel" },
+
+        { "name": "vs-webgpu-debug",          "displayName": "VS WebGPU Debug",          "configurePreset": "vs-webgpu", "configuration": "Debug" },
+        { "name": "vs-webgpu-release",        "displayName": "VS WebGPU Release",        "configurePreset": "vs-webgpu", "configuration": "Release" },
+        { "name": "vs-webgpu-relwithdebinfo", "displayName": "VS WebGPU RelWithDebInfo", "configurePreset": "vs-webgpu", "configuration": "RelWithDebInfo" },
+        { "name": "vs-webgpu-minsizerel",     "displayName": "VS WebGPU MinSizeRel",     "configurePreset": "vs-webgpu", "configuration": "MinSizeRel" },
+
+        { "name": "vs-full-debug",          "displayName": "VS Full Debug",          "configurePreset": "vs-full", "configuration": "Debug" },
+        { "name": "vs-full-release",        "displayName": "VS Full Release",        "configurePreset": "vs-full", "configuration": "Release" },
+        { "name": "vs-full-relwithdebinfo", "displayName": "VS Full RelWithDebInfo", "configurePreset": "vs-full", "configuration": "RelWithDebInfo" },
+        { "name": "vs-full-minsizerel",     "displayName": "VS Full MinSizeRel",     "configurePreset": "vs-full", "configuration": "MinSizeRel" },
+
+        { "name": "vs-full-tracy-debug",          "displayName": "VS Full+Tracy Debug",          "configurePreset": "vs-full-tracy", "configuration": "Debug" },
+        { "name": "vs-full-tracy-release",        "displayName": "VS Full+Tracy Release",        "configurePreset": "vs-full-tracy", "configuration": "Release" },
+        { "name": "vs-full-tracy-relwithdebinfo", "displayName": "VS Full+Tracy RelWithDebInfo", "configurePreset": "vs-full-tracy", "configuration": "RelWithDebInfo" },
+        { "name": "vs-full-tracy-minsizerel",     "displayName": "VS Full+Tracy MinSizeRel",     "configurePreset": "vs-full-tracy", "configuration": "MinSizeRel" }
+    ]
+}

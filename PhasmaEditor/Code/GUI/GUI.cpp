@@ -1,6 +1,6 @@
 #include "GUI.h"
+#include "Agent/EditorMcp.h"
 #include "Agent/EditorToolCatalog.h"
-#include "Agent/EditorToolServer.h"
 #include "Agent/EditorToolRuntime.h"
 #include "API/Command.h"
 #include "API/Descriptor.h"
@@ -38,7 +38,7 @@
 #include "Widgets/ScriptEditor.h"
 #include "Widgets/ShaderEditor.h"
 #include "Widgets/AnimationTimeline.h"
-#include "PhasmaAgent/CodebaseIndexer.h"
+#include "PhasmaMCP/Codebase/CodebaseIndexer.h"
 #include "Widgets/TransformWidget.h"
 #ifdef PE_PHYSICS
 #include "Widgets/PhysicsWidget.h"
@@ -110,7 +110,7 @@ namespace pe
         }
 
         void ApplyDefaultCodebaseIndexingConfig(const std::filesystem::path &repoRoot,
-                                                pagent::CodebaseIndexingConfig &config)
+                                                pmcp::CodebaseIndexingConfig &config)
         {
             auto makePath = [&](const std::string &relative)
             { return (repoRoot / relative).string(); };
@@ -121,13 +121,13 @@ namespace pe
                     values.push_back(path);
             };
 
-            addIfExists(config.directories, makePath("PhasmaAgent"));
+            addIfExists(config.directories, makePath("PhasmaMCP"));
             addIfExists(config.directories, makePath("PhasmaCore"));
             addIfExists(config.directories, makePath("PhasmaEditor"));
 
             addIfExists(config.include_files, makePath("PhasmaEditor/Assets/Agent/START.md"));
 
-            addIfExists(config.skip_directories, makePath("PhasmaAgent/third_party"));
+            addIfExists(config.skip_directories, makePath("PhasmaMCP/third_party"));
             addIfExists(config.skip_directories, makePath("PhasmaCore/third_party"));
             addIfExists(config.skip_directories, makePath("PhasmaEditor/third_party"));
             addIfExists(config.skip_directories, makePath("PhasmaEditor/Assets/Agent"));
@@ -180,18 +180,11 @@ namespace pe
 
         nlohmann::json BuildDefaultAgentConfig(const std::filesystem::path &repoRoot)
         {
-            pagent::CodebaseIndexingConfig config;
+            pmcp::CodebaseIndexingConfig config;
             ApplyDefaultCodebaseIndexingConfig(repoRoot, config);
 
             return nlohmann::json{
                 {"mcp", false},
-                {"completion",
-                 {
-                     {"provider", "Anthropic"},
-                     {"api_key", ""},
-                     {"model", "claude-haiku-4-5-20251001"},
-                     {"base_url", ""},
-                 }},
                 {"indexing",
                  {
                      {"directories", config.directories},
@@ -266,7 +259,7 @@ namespace pe
 
         m_menuWindowWidgets.clear();
         m_widgets.clear();
-        m_editorToolServer.reset();
+        m_editorMcp.reset();
         m_editorToolRuntime.reset();
 
         Image::Destroy(GUIState::s_sceneViewImage);
@@ -301,23 +294,23 @@ namespace pe
 
     bool GUI::IsMcpServerRunning() const
     {
-        return m_editorToolServer && m_editorToolServer->IsRunning();
+        return m_editorMcp && m_editorMcp->IsRunning();
     }
 
     void GUI::SetMcpServerEnabled(bool enabled)
     {
         const bool running = IsMcpServerRunning();
-        if (enabled == running || !m_editorToolServer)
+        if (enabled == running || !m_editorMcp)
             return;
 
         if (enabled)
         {
-            m_editorToolServer->Start();
+            m_editorMcp->Start();
             return;
         }
 
         CancelCodebaseIndexing();
-        m_editorToolServer->Stop();
+        m_editorMcp->Stop();
     }
 
     static std::atomic_bool s_modelLoading = false;
@@ -744,10 +737,24 @@ namespace pe
             return;
         }
 
-        if (MergeJsonDefaults(j, defaultConfig))
+        bool changed = MergeJsonDefaults(j, defaultConfig);
+
+        // Migration: scrub the obsolete `completion` block written by builds prior to the
+        // PhasmaAgent → PhasmaMCP refactor. The in-engine AICompletionService was retired
+        // (see PhasmaEditor/Code/GUI/AI/ removal), so any provider api_key kept living in
+        // plaintext for no runtime use. Remove it on first load.
+        if (j.contains("completion"))
+        {
+            PE_WARN("[MCP] Removing obsolete `completion` block from agent_config.json "
+                    "(in-engine completion was retired; any stored api_key is being scrubbed).");
+            j.erase("completion");
+            changed = true;
+        }
+
+        if (changed)
         {
             WriteAgentConfigFile(configPath, j);
-            PE_INFO("[MCP] Filled missing defaults in agent_config.json");
+            PE_INFO("[MCP] Updated agent_config.json");
         }
 
         m_mcpStartEnabled = j.value("mcp", false);
@@ -776,16 +783,6 @@ namespace pe
             loadStrings("skip_files", config.skip_files);
             loadStrings("skip_extensions", config.skip_extensions);
             loadStrings("skip_regex", config.skip_regex);
-        }
-
-        if (j.contains("completion") && j["completion"].is_object())
-        {
-            const auto &comp = j["completion"];
-            m_completionService.Init(
-                comp.value("provider", "Anthropic"),
-                comp.value("api_key", ""),
-                comp.value("model", "claude-haiku-4-5-20251001"),
-                comp.value("base_url", ""));
         }
 
         PE_INFO("[MCP] Startup: %s", m_mcpStartEnabled ? "enabled" : "disabled");
@@ -1279,7 +1276,7 @@ namespace pe
 
         m_indexThread = std::thread([this, codebaseBM25, dirs, includeFiles, skipDirs, skipFiles, skipExts, skipRegex]()
                                     {
-            pagent::IndexerConfig config;
+            pmcp::IndexerConfig config;
             config.directories = dirs;
             config.include_files = includeFiles;
             config.skip_directories = skipDirs;
@@ -1290,7 +1287,7 @@ namespace pe
 
             PE_INFO("[Agent] Indexing started (%d directories)", static_cast<int>(config.directories.size()));
 
-            auto pIndexer = std::make_unique<pagent::CodebaseIndexer>(codebaseBM25.get(),
+            auto pIndexer = std::make_unique<pmcp::CodebaseIndexer>(codebaseBM25.get(),
                 [this](int done, int total, const std::string &file)
                 {
                     m_indexProgress.store(done);
@@ -1325,7 +1322,7 @@ namespace pe
         m_indexCancel.store(true);
         std::lock_guard lock(m_indexMutex);
         if (m_indexerPtr)
-            static_cast<pagent::CodebaseIndexer *>(m_indexerPtr)->Cancel();
+            static_cast<pmcp::CodebaseIndexer *>(m_indexerPtr)->Cancel();
     }
 
     bool GUI::HasCodebaseIndex() const
@@ -1550,10 +1547,10 @@ namespace pe
                 QueueMainThreadAction(std::move(fn));
             },
             RHII.GetWindow());
-        m_editorToolServer = std::make_unique<EditorToolServer>(m_editorToolRuntime.get(), this);
+        m_editorMcp = std::make_unique<EditorMcp>(m_editorToolRuntime.get(), this);
         LoadAgentConfig();
         if (m_mcpStartEnabled)
-            m_editorToolServer->Start();
+            m_editorMcp->Start();
 
         auto properties = std::make_shared<Properties>();
         auto profiler = std::make_shared<ProfilerWidget>();
@@ -1629,13 +1626,6 @@ namespace pe
         for (auto &widget : m_widgets)
             widget->Init(this);
 
-        if (auto *se = GetWidget<ScriptEditor>())
-            se->SetCompletionService(&m_completionService);
-        if (auto *she = GetWidget<ShaderEditor>())
-            she->SetCompletionService(&m_completionService);
-        if (auto *tw = GetWidget<TransformWidget>())
-            tw->SetCompletionService(&m_completionService);
-
         queue->WaitIdle();
     }
 
@@ -1707,8 +1697,6 @@ namespace pe
             for (auto &fn : mainThreadActions)
                 fn();
         }
-
-        m_completionService.Poll();
 
         if (!m_render)
             return;

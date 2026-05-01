@@ -128,8 +128,10 @@ endif()
 # Add PhasmaCore subdirectory
 add_subdirectory(PhasmaCore)
 
-# Add PhasmaAgent subdirectory
-add_subdirectory(PhasmaAgent)
+# Engine-agnostic MCP server library (protocol + transport + optional codebase indexer).
+# The codebase indexer (BM25 / CodebaseIndexer / CodebaseContext) is included by default
+# inside the same target; pass -DPE_PMCP_CODEBASE=OFF to strip it for minimal builds.
+add_subdirectory(PhasmaMCP)
 
 # Add PhasmaWebGPU subdirectory (WebGPU C API layer over PhasmaCore)
 option(PE_WEBGPU "Build PhasmaWebGPU WebGPU abstraction layer" ON)
@@ -189,7 +191,7 @@ target_precompile_headers(PhasmaEditorModule PRIVATE "${CMAKE_CURRENT_SOURCE_DIR
 target_include_directories(PhasmaEditorModule PRIVATE
     "${CMAKE_CURRENT_SOURCE_DIR}/PhasmaEditor"
     "${CMAKE_CURRENT_SOURCE_DIR}/PhasmaEditor/Code"
-    "${CMAKE_CURRENT_SOURCE_DIR}/PhasmaAgent/third_party"
+    "${CMAKE_CURRENT_SOURCE_DIR}/PhasmaMCP/third_party"
     "${PE_EDITOR_THIRD_PARTY_DIR}"
     "${PE_EDITOR_THIRD_PARTY_DIR}/imgui"
     "${PE_EDITOR_THIRD_PARTY_DIR}/sol2"
@@ -197,7 +199,7 @@ target_include_directories(PhasmaEditorModule PRIVATE
 
 target_link_libraries(PhasmaEditorModule PRIVATE
     PhasmaCore
-    PhasmaAgent
+    PhasmaMCP
     assimp
     meshoptimizer
     Lua

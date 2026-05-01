@@ -66,11 +66,11 @@ and scene/runtime GPU state lives in `Scene` SoA storage rather than on the asse
 
 The MCP server runs at `http://127.0.0.1:8765` (localhost only, no external access).
 
-### OAuth (required by Claude Code and MCP-spec-compliant clients)
+### OAuth shim (probe-satisfier for MCP-spec-compliant clients)
 
-Claude Code enforces OAuth for `"type": "http"` MCP servers. The editor implements minimal stub
-OAuth endpoints that return a static 10-year token — no real authentication, just enough to satisfy
-the spec:
+Claude Code refuses to attach to HTTP MCP servers without OAuth metadata. The editor opts in to
+`pmcp::HttpTransportConfig::enableLocalOauthShim`, which publishes minimal stub endpoints that
+return a static, non-secret bearer token:
 
 | Endpoint | Purpose |
 |---|---|
@@ -79,10 +79,21 @@ the spec:
 | `GET /oauth/authorize` | Auth code flow — immediate redirect with static code |
 | `POST /oauth/token` | Returns static bearer token, `expires_in: 315360000` |
 
-On first connect, the client completes the flow automatically (no browser/user interaction needed)
-and stores the token. Subsequent sessions connect without prompting.
+**The shim is not authentication.** The token is static and visible in the source. Real safety
+comes from two structural invariants enforced by the transport:
 
-These endpoints are implemented in `EditorToolServer::ConfigureRoutes()`.
+1. `Start()` refuses to bind to a non-loopback address while the shim is enabled. The phantom
+   auth surface can never be reached from off-host even if a host misconfigures `bindAddress`.
+2. `/mcp` and `/tool` reject requests with a non-local `Origin` header (browser-CSRF defense
+   against malicious pages targeting `127.0.0.1` from a user's browser).
+
+The shim defaults to **off** in `HttpTransportConfig` so reusable adopters of `PhasmaMCP` don't
+inherit a fake auth surface; the editor opts in explicitly in [EditorMcp.cpp](Code/GUI/Agent/EditorMcp.cpp).
+Hosts binding beyond loopback must keep the shim off and put the transport behind their own auth
+(reverse proxy, mTLS, etc.).
+
+On first connect, MCP clients complete the OAuth flow automatically (no browser/user interaction
+needed) and store the token. Subsequent sessions connect without prompting.
 
 ### Connecting from Claude Code (Windows)
 
@@ -120,32 +131,31 @@ are injected natively at session start, identical to how Claude Code connects.
 ### Tool Registration
 
 All editor/MCP tools are defined in `EditorToolCatalog.cpp` and served to external AI clients
-(Claude Code, Claude Desktop, Codex) via `EditorToolServer` at `http://127.0.0.1:8765/mcp`.
+(Claude Code, Claude Desktop, Codex) via `EditorMcp` (which wraps `pmcp::Server` + `pmcp::HttpTransport`) at `http://127.0.0.1:8765/mcp`.
 
 The `projectRoot` variable is the canonical repo root — all file paths are relative to it.
 
 Tool handler contract:
-- Runs on the **httplib worker thread** — must be thread-safe
-- Receives raw JSON args string
-- Returns raw JSON result string
-- Use helpers from `PhasmaAgent/include/PhasmaAgent/AgentUtils.h`:
-  `ExtractArgStr`, `ExtractArgInt`, `ExtractArgArray`, `JsonStr`, `JsonObj`, `IsPathSafe`
+- Runs on the **transport worker thread** — must be thread-safe
+- Receives `(const nlohmann::json& args, pmcp::Context& ctx)` — args is already parsed
+- Returns `pmcp::CallToolResult` (use `Json` / `Text` / `Error` / `ImageBase64` helpers)
+- For path safety use `pmcp::IsPathSafe` from `PhasmaMCP/Utils.h`
 - **Main-thread-only operations** (ImGui reads, scene mutation) must use `gui->QueueMainThreadAction(fn)` — never access GUI or engine state directly from the handler
 
 Example:
 ```cpp
-pagent::ToolDefinition tool;
-tool.name        = "my_tool";
+pmcp::ToolDefinition tool;
+tool.name = "my_tool";
 tool.description = "...";
-tool.properties  = {
-    {"path", "File path relative to project root", pagent::SchemaType::String, true},
-};
-tool.handler = [projectRoot](const std::string& args) -> std::string {
-    std::string path = pagent::JsonUnescape(pagent::ExtractArgStr(args, "path"));
-    if (!pagent::IsPathSafe(path, projectRoot))
-        return "{\"error\":\"path outside project\"}";
+tool.inputSchema = pmcp::schema::Object({
+    {"path", "File path relative to project root", pmcp::schema::String(), /*required=*/true},
+});
+tool.handler = [projectRoot](const nlohmann::json& args, pmcp::Context&) -> pmcp::CallToolResult {
+    std::string path = args.value("path", "");
+    if (!pmcp::IsPathSafe(path, projectRoot))
+        return pmcp::CallToolResult::Error("path outside project");
     // ...
-    return nlohmann::json{{"result", "ok"}}.dump();
+    return pmcp::CallToolResult::Json({{"result", "ok"}});
 };
 // Add to tools vector in the appropriate Append*Tools function:
 tools.push_back(std::move(tool));
@@ -174,7 +184,7 @@ Hot-reload: edit any `.hlsl` file while the editor runs → FileWatcher triggers
 
 ## GUI Rules (ImGui)
 
-- ImGui is linked only for PhasmaEditor, not PhasmaCore or PhasmaAgent
+- ImGui is linked only for PhasmaEditor, not PhasmaCore or PhasmaMCP
 
 ---
 

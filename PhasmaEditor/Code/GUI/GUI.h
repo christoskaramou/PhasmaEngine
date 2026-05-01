@@ -1,6 +1,5 @@
 #pragma once
-#include "PhasmaAgent/CodebaseContext.h"
-#include "GUI/AI/AICompletionService.h"
+#include "PhasmaMCP/Codebase/CodebaseContext.h"
 #include "Widget.h"
 
 struct ImGuiStyle;
@@ -10,7 +9,7 @@ namespace pe
     constexpr float TITLEBAR_HEIGHT = 19.f;
 
     class CommandBuffer;
-    class EditorToolServer;
+    class EditorMcp;
     class EditorToolRuntime;
     class Queue;
     class Image;
@@ -37,8 +36,8 @@ namespace pe
         void QueueMainThreadAction(std::function<void()> fn);
         EditorToolRuntime *GetEditorToolRuntime() const { return m_editorToolRuntime.get(); }
         bool IsMcpServerRunning() const;
-        pagent::CodebaseIndexStatus GetCodebaseStatus() const { return m_codebase.GetStatus(); }
-        std::shared_ptr<pagent::BM25Index> GetCodebaseBM25Shared() const { return m_codebase.GetCodebaseBM25Shared(); }
+        pmcp::CodebaseIndexStatus GetCodebaseStatus() const { return m_codebase.GetStatus(); }
+        std::shared_ptr<pmcp::BM25Index> GetCodebaseBM25Shared() const { return m_codebase.GetCodebaseBM25Shared(); }
         void SetMcpServerEnabled(bool enabled);
 
         // Called after the window is shown to apply the correct layout
@@ -134,9 +133,9 @@ namespace pe
         std::mutex m_mainThreadActionMutex;
         std::vector<std::function<void()>> m_pendingMainThreadActions;
         std::unique_ptr<EditorToolRuntime> m_editorToolRuntime;
-        std::unique_ptr<EditorToolServer> m_editorToolServer;
+        std::unique_ptr<EditorMcp> m_editorMcp;
         std::shared_ptr<std::atomic<bool>> m_codebaseAlive = std::make_shared<std::atomic<bool>>(true);
-        pagent::CodebaseContext m_codebase;
+        pmcp::CodebaseContext m_codebase;
         bool m_mcpStartEnabled = false;
 
         // Codebase indexing state
@@ -146,11 +145,10 @@ namespace pe
         std::string m_indexCurrentFile;
         mutable std::mutex m_indexMutex;
         std::atomic<bool> m_indexCancel{false};
-        void *m_indexerPtr = nullptr; // pagent::CodebaseIndexer*, guarded by m_indexMutex
+        void *m_indexerPtr = nullptr; // pmcp::CodebaseIndexer*, guarded by m_indexMutex
         std::thread m_indexThread;
         std::string m_playModeSnapshot;
 
         EventSystem::CallbackToken m_afterCommandWaitToken{0};
-        AICompletionService m_completionService;
     };
 } // namespace pe

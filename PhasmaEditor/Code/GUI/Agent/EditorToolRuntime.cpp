@@ -5,12 +5,12 @@
 #include "Scene/Primitives.h"
 #include "Script/ScriptSystem.h"
 #include "Systems/RendererSystem.h"
-#include "PhasmaAgent/AgentUtils.h"
+#include "PhasmaMCP/Utils.h"
 #include "imgui/imgui.h"
 #include "imgui/imgui_internal.h"
 #include "stb/stb_image.h"
 
-using namespace pagent;
+using namespace pmcp;
 
 namespace pe
 {
@@ -898,7 +898,7 @@ namespace pe
         for (int attempt = 0; attempt < 4; ++attempt)
         {
             const uint8_t *src = pixels ? pixels : resizedPixels.data();
-            pngData = pagent::EncodeRGBA_PNG(src, rw, rh);
+            pngData = pmcp::EncodeRGBA_PNG(src, rw, rh);
             if (pngData.empty() || pngData.size() <= kMaxBytes)
                 break;
 
@@ -918,7 +918,7 @@ namespace pe
         if (pngData.empty())
             return "{\"error\":\"failed to encode screenshot as PNG\"}";
 
-        std::string b64 = pagent::Base64Encode(pngData.data(), pngData.size());
+        std::string b64 = pmcp::Base64Encode(pngData.data(), pngData.size());
         return nlohmann::json{
             {"image_base64", b64},
             {"mime_type", "image/png"},

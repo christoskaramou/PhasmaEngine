@@ -44,18 +44,9 @@ PhasmaEngine is a Vulkan 3D engine for learning graphics techniques. Runs on Win
 * Lua scripting
 * Event system
 
-### AI Agent (PhasmaAgent)
-* Standalone, provider-agnostic AI agent library (C++20, no engine dependencies)
-* Supports Anthropic, OpenAI, Gemini, Ollama, and LM Studio (local)
-* Codebase RAG indexing with hybrid BM25 + semantic vector search
-* Streaming responses with thinking/reasoning display
-* Agentic tool-use loop with configurable round limits
-
-See [PhasmaAgent README](PhasmaAgent/README.md) for setup and provider configuration.
-
 ### MCP Integration
 
-PhasmaEditor runs an in-process MCP (Model Context Protocol) HTTP server at `http://127.0.0.1:8765/mcp`, letting external AI clients control the engine directly.
+PhasmaEngine has no in-engine LLM. Instead, PhasmaEditor runs an in-process MCP (Model Context Protocol) HTTP server at `http://127.0.0.1:8765/mcp`, letting **external** AI clients control the engine directly.
 
 **Supported clients:**
 - **Claude Code** — add `.claude/settings.json`:
@@ -67,9 +58,9 @@ PhasmaEditor runs an in-process MCP (Model Context Protocol) HTTP server at `htt
   "phasmaeditor": { "command": "npx", "args": ["-y", "mcp-remote", "http://127.0.0.1:8765/mcp"] }
   ```
 
-Toggle the server from **Connection → MCP Server** in the editor. The **Connection → RAG** submenu controls codebase indexing and embedding provider selection. Status bar shows live MCP and RAG state.
+Toggle the server from **Connection → MCP Server** in the editor. The **Connection → RAG** submenu controls codebase indexing. Status bar shows live MCP and indexing state.
 
-**Available MCP tools:** scene/model management, camera, lights, materials, shaders, Lua execution, screenshots, mouse injection, codebase search (BM25 + vector), file read/write, and more. See [PhasmaAgent README](PhasmaAgent/README.md) for the full tool list.
+**Available MCP tools:** scene/model management, camera, lights, materials, shaders, Lua execution, screenshots, mouse injection, codebase search (BM25), file read/write, and more. See [PhasmaMCP README](PhasmaMCP/README.md) for the underlying library.
 
 ## Building and Compiling
 

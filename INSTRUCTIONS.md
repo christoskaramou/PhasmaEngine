@@ -51,7 +51,7 @@ There is no automated test suite — testing is manual via the editor.
 |---|---|---|
 | `PhasmaCore` | static lib | Engine core — Vulkan, ECS, base utilities |
 | `PhasmaEditor` | executable | Desktop editor (Windows/Linux) |
-| `PhasmaAgent` | static lib | Standalone AI agent (no engine deps) |
+| `PhasmaMCP` | static lib | Engine-agnostic MCP server (protocol + transport + optional codebase indexer; vendored httplib/json) |
 
 ### Key Singletons
 
@@ -141,82 +141,47 @@ Always use the `FillVertex*` helpers — do not pack vertex data manually.
 
 ---
 
-## PhasmaAgent Library (`PhasmaAgent/`)
+## PhasmaMCP Library (`PhasmaMCP/`)
 
-Standalone AI agent library — **no Vulkan, no ImGui, no engine dependencies**.
-Namespace: `pagent`.
+Engine-agnostic MCP server — **no Vulkan, no ImGui, no engine dependencies**. Namespace: `pmcp`.
+
+One library, one target. The optional codebase indexer (BM25 + line-chunked file walker) lives
+under `PhasmaMCP/include/PhasmaMCP/Codebase/` and `PhasmaMCP/src/`. Toggle with the
+`PE_PMCP_CODEBASE` CMake option (default ON); set it OFF for builds that only need the protocol.
+
+The editor exposes an in-process MCP HTTP server (see [`PhasmaEditor/Code/GUI/Agent/EditorMcp.cpp`](PhasmaEditor/Code/GUI/Agent/EditorMcp.cpp) at `127.0.0.1:8765/mcp`) for external clients (Claude Code, Claude Desktop, OpenSpace, etc.). There is **no in-engine LLM chat or AI completion** — all AI assistance comes from external MCP clients.
 
 ### Key Classes
 
 | Class | Header | Purpose |
 |---|---|---|
-| `Agent` | `Agent.h` | Public API — history, tools, provider backends, RAG |
-| `IProviderBackend` | `Agent.h` | Implement to add a new LLM provider |
-| `BM25Index` | `BM25Index.h` | Keyword search index; camelCase/snake_case tokenization; thread-safe |
-| `VectorStore` | `VectorStore.h` | Embedding vector store; cosine similarity; thread-safe |
-| `IncludeGraph` | `IncludeGraph.h` | C++ include dependency graph for context expansion |
-| `CodebaseIndexer` | `CodebaseIndexer.h` | Indexes source files into BM25 + VectorStore |
-| `CodebaseContext` | `CodebaseContext.h` | Owns VectorStore + BM25Index + async status checks; used by GUI |
-| `RepoMap` | `RepoMap.h` | Compact codebase overview (~1K tokens) for system prompt |
-| `EmbeddingUtils` | `EmbeddingUtils.h` | Factory: `CreateEmbeddingProvider(kind, model, key)` |
-| `RagUtils` | `RagUtils.h` | Hybrid BM25 + vector retrieval helpers |
-
-### Search APIs
-
-```cpp
-// Single-query search
-bm25->Search(query, top_k);
-store->Search(embedding, top_k, min_score);
-
-// Multi-query parallel search (runs all queries in parallel, merges by max score)
-bm25->SearchMulti(queries, top_k);
-store->SearchMulti(embeddings, top_k, min_score);
-```
-
-### Agent Config
-
-```cpp
-AgentConfig config;
-config.provider             = Provider::Anthropic;    // Anthropic / OpenAI / Google / Ollama / GoogleVertex
-config.model                = "claude-sonnet-4-6";
-config.system_prompt        = "...";
-config.max_tokens           = 8192;
-config.max_tool_rounds      = 10;
-config.max_history_messages = 40;
-config.summarize_after_messages = 20;    // auto-compact old history
-config.summarize_tool_result_chars = 8000;
-config.routing.enabled      = true;      // cheap model for simple queries
-```
+| `Server` | `Server.h` | Transport-agnostic JSON-RPC dispatch (`initialize` / `tools/list` / `tools/call` / `ping`) |
+| `HttpTransport` | `HttpTransport.h` | httplib-backed HTTP transport, sends `MCP-Protocol-Version` header, rejects JSON-RPC batches |
+| `ToolDefinition` | `Tool.h` | Tool name + title + description + JSON Schema in/out + annotations + handler |
+| `CallToolResult` | `Tool.h` | Result with `content` array, optional `structuredContent`, `isError`. Helpers: `Text` / `Json` / `Error` / `ImageBase64` |
+| `Context` | `Tool.h` | Per-call context: cancellation hook, progress reporter, severity-tagged log callback |
+| `LogLevel` / `LogCallback` | `LogLevel.h` | `Debug` / `Info` / `Warn` / `Error` severities |
+| `BM25Index` | `PhasmaMCP/Codebase/BM25Index.h` | Thread-safe keyword index; camelCase/snake_case tokenization (optional, enabled by default via `PE_PMCP_CODEBASE`) |
+| `CodebaseIndexer` | `PhasmaMCP/Codebase/CodebaseIndexer.h` | Walks directories and feeds the BM25 index (line-based chunking) |
+| `CodebaseContext` | `PhasmaMCP/Codebase/CodebaseContext.h` | Owns the BM25 index + indexing config + status |
+| `Utils.h` | `PhasmaMCP/Utils.h` (header-only) | JSON helpers, Base64, UTF-8 sanitization, RGBA→PNG, path-safety check |
 
 ### Tool Handler Pattern
 
 ```cpp
-agent.RegisterTool({
-    .name = "my_tool",
-    .description = "...",
-    .properties = {
-        {"param", "description", pagent::SchemaType::String, /*required=*/true},
-    },
-    .handler = [captures](const std::string& args) -> std::string {
-        // Runs on WORKER THREAD — must be thread-safe.
-        // Use ExtractArgStr / ExtractArgInt / ExtractArgArray from AgentUtils.h.
-        // Return JSON string.
-    }
+pmcp::ToolDefinition tool;
+tool.name = "my_tool";
+tool.description = "...";
+tool.inputSchema = pmcp::schema::Object({
+    {"param", "description", pmcp::schema::String(), /*required=*/true},
 });
+tool.handler = [captures](const nlohmann::json& args, pmcp::Context& ctx) -> pmcp::CallToolResult {
+    // Runs on the transport thread — must be thread-safe.
+    // For main-thread-only ops queue back via the host (e.g. GUI::QueueMainThreadAction).
+    return pmcp::CallToolResult::Json({{"status", "ok"}});
+};
+server.SetTools({std::move(tool)});  // or SetToolProvider for dynamic catalogs
 ```
-
-### Agent Reasoning Loop
-
-The intended design principle for all tools and features:
-
-```
-edit → search → build → fix
-```
-
-1. **edit** — modify source files (`patch_project_file`, `write_project_file`)
-2. **search** — verify changes, find usages (`search_codebase`, `grep_project`, `find_symbol`)
-3. **build** — compile and get structured error output
-4. **fix** — use build errors to correct the edit and loop
 
 ### Registered Tools (EditorToolCatalog.cpp)
 
@@ -247,7 +212,7 @@ edit → search → build → fix
 
 ### Namespace
 - Engine code: `namespace pe`
-- Agent library: `namespace pagent`
+- MCP library: `namespace pmcp`
 
 ### Naming
 ```
@@ -294,8 +259,8 @@ and `PhasmaEditor/` via CMake `target_precompile_headers`. It covers virtually a
 `<functional>`, `<memory>`, `<filesystem>`, `<algorithm>`, `<optional>`, `<future>`,
 `<atomic>`, `<chrono>`, `<sstream>`, `<fstream>`, `<iostream>`, `<regex>`, etc.
 
-**Exception**: `PhasmaAgent/` has its own CMake target and does **not** use PhasmaPch.h.
-Add explicit includes to all files under `PhasmaAgent/src/`.
+**Exception**: `PhasmaMCP/` has its own CMake target and does **not** use PhasmaPch.h.
+Add explicit includes to all files under `PhasmaMCP/src/`.
 
 ### Code Quality Rules
 
@@ -332,8 +297,8 @@ Add explicit includes to all files under `PhasmaAgent/src/`.
 | Jolt Physics | v5.2.0 | PhasmaCore — physics simulation |
 | SDL2 | release-2.30.9 | PhasmaCore, PhasmaEditor |
 | SPIRV-Cross | sdk-1.3.296.0 | PhasmaCore |
-| nlohmann/json | (pinned) | PhasmaAgent |
-| cpp-httplib | v0.28.0 | PhasmaAgent — HTTP client |
+| nlohmann/json | (vendored) | PhasmaMCP — JSON encode/decode (no FetchContent) |
+| cpp-httplib | v0.28.0 (vendored) | PhasmaMCP — used by `pmcp::HttpTransport` for the MCP HTTP server |
 
 ---
 
@@ -499,65 +464,6 @@ Per-node Lua scripts are isolated: each `Component_Script` node gets its own `so
 - `get_exposed()` returns the live table (writes persist), or `nil` for nodes without scripts.
 - MCP/editor Lua execution uses the **main** `ScriptSystem` via `GetGlobalSystem<ScriptSystem>()`. Do not cache a `ScriptSystem*` in `EditorToolRuntime`.
 - Missing script files degrade to `PE_WARN` + early return — non-fatal; editor keeps running.
-
----
-
-## AI Autocomplete
-
-On-demand AI completions in three editor surfaces, powered by `AICompletionService` (backed by `pagent::Agent`).
-
-### Configuration
-
-`PhasmaEditor/Assets/Agent/agent_config.json` — `"completion"` block:
-
-```json
-"completion": {
-  "provider": "Anthropic",
-  "api_key": "",
-  "model": "claude-haiku-4-5-20251001",
-  "base_url": ""
-}
-```
-
-- `provider`: `"Anthropic"` | `"OpenAI"` | `"Google"` | `"Ollama"` | `"GoogleVertex"`
-- Empty `api_key` with a key-required provider silently disables all completions.
-- Ollama or any provider with `base_url` set does not require an API key.
-
-### Script Editor (Lua)
-
-- **Ctrl+Space**: triggers completion. Grabs ~50 lines around cursor, injects `<cursor>` marker, sends to the Lua agent.
-- Ghost text renders inline at cursor (gray overlay via `ImGui::GetForegroundDrawList`).
-- **Tab**: inserts ghost text at saved cursor position.
-- **Esc** or any keystroke: dismisses.
-- Editor is set read-only while waiting; restored on callback (success or error).
-- Switching scripts (`OpenScript`/`OpenNewScript`) cancels in-flight requests.
-
-### Shader Editor (HLSL)
-
-- Standalone widget extracted from ProfilerWidget (`Window > Shader Editor`).
-- Same Ctrl+Space/Tab/Esc flow as ScriptEditor, using the HLSL agent.
-- Switching shader files cancels pending requests.
-
-### Transform Widget (Properties)
-
-- Hover a position or scale field for 500ms to trigger a property suggestion.
-- Tooltip shows `"AI: x,y,z (Enter to apply)"`.
-- Enter applies the parsed value via `ApplyLocalTransform`.
-- Mouse leaving the field discards the suggestion.
-
-### Architecture
-
-`AICompletionService` (owned by `GUI`) holds three stateless `pagent::Agent` slots (Lua, HLSL, Property). Each request bumps a generation counter; stale callbacks are ignored. `Poll()` is called each frame from `GUI::Update()`. System prompts include PhasmaEngine-specific API (e.g. `transform:set_position(vec3(...))`, `engine.get_metrics().delta_ms`, hooks take no arguments).
-
-### Files
-
-| File | Role |
-|------|------|
-| `PhasmaEditor/Code/GUI/AI/AICompletionService.h/.cpp` | Service: 3 agents, Poll, BuildContext |
-| `PhasmaEditor/Code/GUI/Widgets/ShaderEditor.h/.cpp` | Extracted from ProfilerWidget |
-| `PhasmaEditor/Code/GUI/Widgets/ScriptEditor.h/.cpp` | Ghost text + Ctrl+Space |
-| `PhasmaEditor/Code/GUI/Widgets/TransformWidget.h/.cpp` | Hover tooltip suggestions |
-| `PhasmaEditor/third_party/imgui/TextEditor.h/.cpp` | Added GetTextStart/GetCharAdvance/GetContentScreenPos accessors |
 
 ---
 
