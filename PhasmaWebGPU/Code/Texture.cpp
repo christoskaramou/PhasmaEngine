@@ -6,6 +6,7 @@
 #include "API/Queue.h"
 #include "API/Vulkan/VulkanBufferImpl.h"
 #include "API/Vulkan/VulkanImageImpl.h"
+#include "API/Vulkan/VulkanImageViewImpl.h"
 #include "API/RHI.h"
 #include "API/Semaphore.h"
 #include "API/Command.h"
@@ -844,7 +845,7 @@ extern "C"
                 break;
             }
 
-            vk::ImageViewCreateInfo ivci = pe::ImageView::CreateInfoInit();
+            vk::ImageViewCreateInfo ivci{};
             ivci.image = pe::GetVulkanImage(texture->image);
             ivci.viewType = vkViewType;
             ivci.format = static_cast<vk::Format>(vkFmt);
@@ -884,7 +885,7 @@ extern "C"
                                              : view->label;
             try
             {
-                view->view = pe::ImageView::Create(texture->image, ivci, viewName);
+                view->view = pe::VulkanImageViewImpl::Create(texture->image, ivci, viewName);
             }
             catch (...)
             {

@@ -147,7 +147,7 @@ namespace pe
         // Samplers
         for (const spirv_cross::Resource &resource : resources.separate_samplers)
         {
-            SamplerDesc desc{};
+            SamplerReflection desc{};
             desc.name = GetResourceName(compiler, resource.id);
 
             desc.typeInfo = compiler.get_type(resource.type_id);
@@ -417,7 +417,7 @@ namespace pe
         int maxSet = INT32_MIN;
         for (const CombinedImageSamplerDesc &desc : m_combinedImageSamplers)
             maxSet = std::max(maxSet, desc.set);
-        for (const SamplerDesc &desc : m_samplers)
+        for (const SamplerReflection &desc : m_samplers)
             maxSet = std::max(maxSet, desc.set);
         for (const ImageReflection &desc : m_images)
             maxSet = std::max(maxSet, desc.set);
@@ -452,7 +452,7 @@ namespace pe
             setInfos[desc.set].push_back(info);
         }
 
-        for (const SamplerDesc &desc : m_samplers)
+        for (const SamplerReflection &desc : m_samplers)
         {
             DescriptorBindingInfo info{};
             info.binding = desc.binding;

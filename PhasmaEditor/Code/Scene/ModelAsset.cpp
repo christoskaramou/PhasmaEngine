@@ -93,7 +93,7 @@ namespace pe
 
         if (!sampler)
         {
-            vk::SamplerCreateInfo info = Sampler::CreateInfoInit();
+            SamplerDesc info = Sampler::CreateInfoInit();
             sampler = Sampler::Create(info, "Default Sampler");
         }
     }

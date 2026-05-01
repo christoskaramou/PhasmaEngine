@@ -1,5 +1,7 @@
 #include "Particles.h"
 #include "API/Image.h"
+#include "API/Vulkan/VulkanImageViewImpl.h"
+#include "API/Vulkan/VulkanSamplerImpl.h"
 #include "Camera/Camera.h"
 #include "GUI/GUI.h"
 #include "GUI/Helpers.h"
@@ -129,8 +131,8 @@ namespace pe
                 if (m_textureCache.find(imgPtr) == m_textureCache.end())
                 {
                     m_textureCache[imgPtr] = (void *)ImGui_ImplVulkan_AddTexture(
-                        img->GetSampler()->ApiHandle(),
-                        img->GetSRV()->ApiHandle(),
+                        pe::GetVulkanSampler(img->GetSampler()),
+                        pe::GetVulkanImageView(img->GetSRV()),
                         VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
                 }
                 textureID = m_textureCache[imgPtr];

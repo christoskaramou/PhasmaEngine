@@ -11,6 +11,7 @@
 #include "API/Semaphore.h"
 #include "API/Vulkan/VulkanBufferImpl.h"
 #include "API/Vulkan/VulkanImageImpl.h"
+#include "API/Vulkan/VulkanImageViewImpl.h"
 
 namespace pe
 {
@@ -304,7 +305,7 @@ namespace pe
                     const float clearDepth = clearColor[0];
                     uint32_t clearStencil = static_cast<uint32_t>(clearColor[1]);
 
-                    depthInfo.imageView = attachment.image->GetRTV()->ApiHandle();
+                    depthInfo.imageView = pe::GetVulkanImageView(attachment.image->GetRTV());
                     depthInfo.imageLayout = vk::ImageLayout::eAttachmentOptimal;
                     depthInfo.loadOp = attachment.loadOp;
                     depthInfo.storeOp = attachment.storeOp;
@@ -321,7 +322,7 @@ namespace pe
                     const vec4 &clearColor = attachment.image->m_clearColor;
 
                     vk::RenderingAttachmentInfo colorInfo{};
-                    colorInfo.imageView = attachment.image->GetRTV()->ApiHandle();
+                    colorInfo.imageView = pe::GetVulkanImageView(attachment.image->GetRTV());
                     colorInfo.imageLayout = vk::ImageLayout::eAttachmentOptimal;
                     colorInfo.loadOp = attachment.loadOp;
                     colorInfo.storeOp = attachment.storeOp;

@@ -1,6 +1,8 @@
 #include "SceneView.h"
 #include "API/Image.h"
 #include "API/RHI.h"
+#include "API/Vulkan/VulkanImageViewImpl.h"
+#include "API/Vulkan/VulkanSamplerImpl.h"
 #include "Base/ThreadPool.h"
 #include "Camera/Camera.h"
 #include "GUI/GUI.h"
@@ -101,8 +103,8 @@ namespace pe
         if (GUIState::s_viewportTextureId)
             return true;
 
-        VkSampler sampler = sceneTexture->GetSampler()->ApiHandle();
-        VkImageView view = sceneTexture->GetSRV()->ApiHandle();
+        VkSampler sampler = pe::GetVulkanSampler(sceneTexture->GetSampler());
+        VkImageView view = pe::GetVulkanImageView(sceneTexture->GetSRV());
         if (!sampler || !view)
             return false;
 

@@ -4,6 +4,8 @@
 #include "API/Queue.h"
 #include "API/RHI.h"
 #include "API/Vulkan/VulkanImageImpl.h"
+#include "API/Vulkan/VulkanImageViewImpl.h"
+#include "API/Vulkan/VulkanSamplerImpl.h"
 #include "FileSelector.h"
 #include "GUI/GUI.h"
 #include "Scene/Material.h"
@@ -591,7 +593,7 @@ namespace pe
 
             if (!image->GetSampler())
             {
-                vk::SamplerCreateInfo info = Sampler::CreateInfoInit();
+                SamplerDesc info = Sampler::CreateInfoInit();
                 image->SetSampler(Sampler::Create(info));
             }
 
@@ -599,8 +601,8 @@ namespace pe
                 return nullptr;
 
             m_textureDescriptors[image] = (void *)ImGui_ImplVulkan_AddTexture(
-                image->GetSampler()->ApiHandle(),
-                image->GetSRV()->ApiHandle(),
+                pe::GetVulkanSampler(image->GetSampler()),
+                pe::GetVulkanImageView(image->GetSRV()),
                 VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
         }
 

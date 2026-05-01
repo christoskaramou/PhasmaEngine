@@ -248,6 +248,14 @@ enum PeSamplerMipmapMode : uint32_t
     PE_SAMPLER_MIPMAP_MODE_COUNT
 };
 
+enum PeSamplerBorderColor : uint32_t
+{
+    PE_SAMPLER_BORDER_COLOR_FLOAT_TRANSPARENT_BLACK = 0,
+    PE_SAMPLER_BORDER_COLOR_FLOAT_OPAQUE_BLACK,
+    PE_SAMPLER_BORDER_COLOR_FLOAT_OPAQUE_WHITE,
+    PE_SAMPLER_BORDER_COLOR_COUNT
+};
+
 enum PeImageViewType : uint32_t
 {
     PE_IMAGE_VIEW_TYPE_1D = 0,
@@ -258,6 +266,24 @@ enum PeImageViewType : uint32_t
     PE_IMAGE_VIEW_TYPE_2D_ARRAY,
     PE_IMAGE_VIEW_TYPE_CUBE_ARRAY,
     PE_IMAGE_VIEW_TYPE_COUNT
+};
+
+using PeImageAspectFlags = uint32_t;
+constexpr PeImageAspectFlags PE_IMAGE_ASPECT_NONE = 0u;
+constexpr PeImageAspectFlags PE_IMAGE_ASPECT_COLOR = 1u << 0;
+constexpr PeImageAspectFlags PE_IMAGE_ASPECT_DEPTH = 1u << 1;
+constexpr PeImageAspectFlags PE_IMAGE_ASPECT_STENCIL = 1u << 2;
+
+enum PeComponentSwizzle : uint32_t
+{
+    PE_COMPONENT_SWIZZLE_IDENTITY = 0,
+    PE_COMPONENT_SWIZZLE_ZERO,
+    PE_COMPONENT_SWIZZLE_ONE,
+    PE_COMPONENT_SWIZZLE_R,
+    PE_COMPONENT_SWIZZLE_G,
+    PE_COMPONENT_SWIZZLE_B,
+    PE_COMPONENT_SWIZZLE_A,
+    PE_COMPONENT_SWIZZLE_COUNT
 };
 
 enum PeSampleCount : uint32_t

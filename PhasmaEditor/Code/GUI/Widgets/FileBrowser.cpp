@@ -3,6 +3,8 @@
 #include "API/Image.h"
 #include "API/Queue.h"
 #include "API/RHI.h"
+#include "API/Vulkan/VulkanImageViewImpl.h"
+#include "API/Vulkan/VulkanSamplerImpl.h"
 #include "GUI/GUI.h"
 #include "GUI/GUIState.h"
 #include "GUI/Helpers.h"
@@ -57,8 +59,8 @@ namespace pe
             if (outIcon && outIcon->GetSampler() && outIcon->GetSRV())
             {
                 return (void *)ImGui_ImplVulkan_AddTexture(
-                    outIcon->GetSampler()->ApiHandle(),
-                    outIcon->GetSRV()->ApiHandle(),
+                    pe::GetVulkanSampler(outIcon->GetSampler()),
+                    pe::GetVulkanImageView(outIcon->GetSRV()),
                     VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
             }
             return nullptr;
@@ -207,7 +209,7 @@ namespace pe
         cmd->Return();
 
         m_fileDropToken = EventSystem::RegisterCallbackWithToken(EventType::FileDrop, [this](const std::any &data)
-                                      {
+                                                                 {
             const auto &paths = std::any_cast<const std::vector<std::string> &>(data);
             std::lock_guard lock(m_pendingDropsMutex);
             for (const auto &p : paths)
@@ -299,8 +301,8 @@ namespace pe
                 if (pair.second->GetSampler() && pair.second->GetSRV())
                 {
                     ds = (void *)ImGui_ImplVulkan_AddTexture(
-                        pair.second->GetSampler()->ApiHandle(),
-                        pair.second->GetSRV()->ApiHandle(),
+                        pe::GetVulkanSampler(pair.second->GetSampler()),
+                        pe::GetVulkanImageView(pair.second->GetSRV()),
                         VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
                 }
 

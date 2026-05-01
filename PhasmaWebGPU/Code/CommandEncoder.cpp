@@ -15,6 +15,7 @@
 #include "API/Buffer.h"
 #include "API/Vulkan/VulkanBufferImpl.h"
 #include "API/Vulkan/VulkanImageImpl.h"
+#include "API/Vulkan/VulkanImageViewImpl.h"
 
 extern "C" void wgpuRenderPipelineRelease(WGPURenderPipeline);
 extern "C" void wgpuComputePipelineRelease(WGPUComputePipeline);
@@ -1024,14 +1025,14 @@ extern "C"
             // For 3D views, create a temporary 2D slice view targeting the specific depthSlice.
             // Vulkan dynamic rendering requires a 2D view; a 3D VkImageView is not valid as a
             // color attachment. The image must have VK_IMAGE_CREATE_2D_ARRAY_COMPATIBLE_BIT.
-            vk::ImageView attachmentImageView = view->view->ApiHandle();
+            vk::ImageView attachmentImageView = pe::GetVulkanImageView(view->view);
             pe::ImageView *sliceView = nullptr;
             uint32_t barrierBaseLayer = view->baseArrayLayer;
 
             if (view->dimension == WGPUTextureViewDimension_3D &&
                 ca.depthSlice != WGPU_DEPTH_SLICE_UNDEFINED)
             {
-                vk::ImageViewCreateInfo sliceIvci = pe::ImageView::CreateInfoInit();
+                vk::ImageViewCreateInfo sliceIvci{};
                 sliceIvci.image = pe::GetVulkanImage(view->texture->image);
                 sliceIvci.viewType = vk::ImageViewType::e2D;
                 sliceIvci.format = static_cast<vk::Format>(pwgpu::ToVkFormat(view->format));
@@ -1043,7 +1044,7 @@ extern "C"
 
                 try
                 {
-                    sliceView = pe::ImageView::Create(view->texture->image, sliceIvci, "wgpu_3d_slice");
+                    sliceView = pe::VulkanImageViewImpl::Create(view->texture->image, sliceIvci, "wgpu_3d_slice");
                 }
                 catch (...)
                 {
@@ -1052,7 +1053,7 @@ extern "C"
 
                 if (sliceView)
                 {
-                    attachmentImageView = sliceView->ApiHandle();
+                    attachmentImageView = pe::GetVulkanImageView(sliceView);
                     rpe->ownedSliceViews.push_back(sliceView);
                     // Vulkan 3D images have arrayLayers=1; barrier stays at layer 0.
                 }
@@ -1121,7 +1122,7 @@ extern "C"
                 att.resolveMode = pwgpu::IsBlendableFormat(view->format)
                                       ? vk::ResolveModeFlagBits::eAverage
                                       : vk::ResolveModeFlagBits::eSampleZero;
-                att.resolveImageView = rt->view->ApiHandle();
+                att.resolveImageView = pe::GetVulkanImageView(rt->view);
                 att.resolveImageLayout = vk::ImageLayout::eColorAttachmentOptimal;
             }
 
@@ -1202,7 +1203,7 @@ extern "C"
             if (hasDepth)
             {
                 hasDepthAttachment = true;
-                depthAtt.imageView = dsView->view->ApiHandle();
+                depthAtt.imageView = pe::GetVulkanImageView(dsView->view);
                 depthAtt.imageLayout = dsLayout;
 
                 if (!dsa->depthReadOnly)
@@ -1223,7 +1224,7 @@ extern "C"
             if (hasStencil)
             {
                 hasStencilAttachment = true;
-                stencilAtt.imageView = dsView->view->ApiHandle();
+                stencilAtt.imageView = pe::GetVulkanImageView(dsView->view);
                 stencilAtt.imageLayout = dsLayout;
 
                 if (!dsa->stencilReadOnly)

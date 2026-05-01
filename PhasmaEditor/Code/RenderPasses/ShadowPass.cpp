@@ -33,14 +33,14 @@ namespace pe
             texture->CreateSRV(PE_IMAGE_VIEW_TYPE_2D);
         }
 
-        vk::SamplerCreateInfo samplerInfo = Sampler::CreateInfoInit();
-        samplerInfo.addressModeU = vk::SamplerAddressMode::eClampToEdge;
-        samplerInfo.addressModeV = vk::SamplerAddressMode::eClampToEdge;
-        samplerInfo.addressModeW = vk::SamplerAddressMode::eClampToEdge;
+        SamplerDesc samplerInfo = Sampler::CreateInfoInit();
+        samplerInfo.addressModeU = PE_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
+        samplerInfo.addressModeV = PE_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
+        samplerInfo.addressModeW = PE_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
         samplerInfo.maxAnisotropy = 1.f;
-        samplerInfo.borderColor = vk::BorderColor::eFloatOpaqueWhite;
-        samplerInfo.compareEnable = VK_TRUE;
-        samplerInfo.compareOp = vk::CompareOp::eGreaterOrEqual;
+        samplerInfo.borderColor = PE_SAMPLER_BORDER_COLOR_FLOAT_OPAQUE_WHITE;
+        samplerInfo.compareEnable = true;
+        samplerInfo.compareOp = PE_COMPARE_OP_GREATER_OR_EQUAL;
         m_sampler = Sampler::Create(samplerInfo, "Sampler_ClampToEdge_GE_FOW");
 
         m_attachments.resize(1);

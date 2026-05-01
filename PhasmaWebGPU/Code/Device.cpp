@@ -463,13 +463,13 @@ namespace
                 return sampler;
         }
 
-        vk::SamplerCreateInfo samplerInfo = pe::Sampler::CreateInfoInit();
-        samplerInfo.magFilter = vk::Filter::eNearest;
-        samplerInfo.minFilter = vk::Filter::eNearest;
-        samplerInfo.mipmapMode = vk::SamplerMipmapMode::eNearest;
-        samplerInfo.addressModeU = vk::SamplerAddressMode::eClampToEdge;
-        samplerInfo.addressModeV = vk::SamplerAddressMode::eClampToEdge;
-        samplerInfo.addressModeW = vk::SamplerAddressMode::eClampToEdge;
+        pe::SamplerDesc samplerInfo = pe::Sampler::CreateInfoInit();
+        samplerInfo.magFilter = PE_FILTER_NEAREST;
+        samplerInfo.minFilter = PE_FILTER_NEAREST;
+        samplerInfo.mipmapMode = PE_SAMPLER_MIPMAP_MODE_NEAREST;
+        samplerInfo.addressModeU = PE_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
+        samplerInfo.addressModeV = PE_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
+        samplerInfo.addressModeW = PE_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
         samplerInfo.minLod = 0.0f;
         samplerInfo.maxLod = 0.0f;
 
@@ -1587,72 +1587,72 @@ extern "C"
         if (descriptor && descriptor->label.data)
             smp->label = pwgpu::ToString(descriptor->label);
 
-        auto toVkAddressMode = [](WGPUAddressMode m) -> vk::SamplerAddressMode
+        auto toPeAddressMode = [](WGPUAddressMode m) -> PeSamplerAddressMode
         {
             switch (m)
             {
             case WGPUAddressMode_Repeat:
-                return vk::SamplerAddressMode::eRepeat;
+                return PE_SAMPLER_ADDRESS_MODE_REPEAT;
             case WGPUAddressMode_MirrorRepeat:
-                return vk::SamplerAddressMode::eMirroredRepeat;
+                return PE_SAMPLER_ADDRESS_MODE_MIRRORED_REPEAT;
             case WGPUAddressMode_ClampToEdge:
             default:
-                return vk::SamplerAddressMode::eClampToEdge;
+                return PE_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
             }
         };
 
-        auto toVkFilter = [](WGPUFilterMode f) -> vk::Filter
+        auto toPeFilter = [](WGPUFilterMode f) -> PeFilter
         {
-            return (f == WGPUFilterMode_Linear) ? vk::Filter::eLinear : vk::Filter::eNearest;
+            return (f == WGPUFilterMode_Linear) ? PE_FILTER_LINEAR : PE_FILTER_NEAREST;
         };
 
-        auto toVkMipMode = [](WGPUMipmapFilterMode f) -> vk::SamplerMipmapMode
+        auto toPeMipMode = [](WGPUMipmapFilterMode f) -> PeSamplerMipmapMode
         {
-            return (f == WGPUMipmapFilterMode_Linear) ? vk::SamplerMipmapMode::eLinear
-                                                      : vk::SamplerMipmapMode::eNearest;
+            return (f == WGPUMipmapFilterMode_Linear) ? PE_SAMPLER_MIPMAP_MODE_LINEAR
+                                                      : PE_SAMPLER_MIPMAP_MODE_NEAREST;
         };
 
-        auto toVkCompareOp = [](WGPUCompareFunction c) -> vk::CompareOp
+        auto toPeCompareOp = [](WGPUCompareFunction c) -> PeCompareOp
         {
             switch (c)
             {
             case WGPUCompareFunction_Never:
-                return vk::CompareOp::eNever;
+                return PE_COMPARE_OP_NEVER;
             case WGPUCompareFunction_Less:
-                return vk::CompareOp::eLess;
+                return PE_COMPARE_OP_LESS;
             case WGPUCompareFunction_Equal:
-                return vk::CompareOp::eEqual;
+                return PE_COMPARE_OP_EQUAL;
             case WGPUCompareFunction_LessEqual:
-                return vk::CompareOp::eLessOrEqual;
+                return PE_COMPARE_OP_LESS_OR_EQUAL;
             case WGPUCompareFunction_Greater:
-                return vk::CompareOp::eGreater;
+                return PE_COMPARE_OP_GREATER;
             case WGPUCompareFunction_NotEqual:
-                return vk::CompareOp::eNotEqual;
+                return PE_COMPARE_OP_NOT_EQUAL;
             case WGPUCompareFunction_GreaterEqual:
-                return vk::CompareOp::eGreaterOrEqual;
+                return PE_COMPARE_OP_GREATER_OR_EQUAL;
             case WGPUCompareFunction_Always:
-                return vk::CompareOp::eAlways;
+                return PE_COMPARE_OP_ALWAYS;
             default:
-                return vk::CompareOp::eNever;
+                return PE_COMPARE_OP_NEVER;
             }
         };
 
         if (device->rhi && device->rhi->GetDevice())
         {
-            vk::SamplerCreateInfo sci{};
-            sci.magFilter = toVkFilter(magF);
-            sci.minFilter = toVkFilter(minF);
-            sci.mipmapMode = toVkMipMode(mipF);
-            sci.addressModeU = toVkAddressMode(addrU);
-            sci.addressModeV = toVkAddressMode(addrV);
-            sci.addressModeW = toVkAddressMode(addrW);
+            pe::SamplerDesc sci{};
+            sci.magFilter = toPeFilter(magF);
+            sci.minFilter = toPeFilter(minF);
+            sci.mipmapMode = toPeMipMode(mipF);
+            sci.addressModeU = toPeAddressMode(addrU);
+            sci.addressModeV = toPeAddressMode(addrV);
+            sci.addressModeW = toPeAddressMode(addrW);
             sci.mipLodBias = 0.0f;
             sci.minLod = lodMin;
             sci.maxLod = lodMax;
 
             if (maxAniso > 1)
             {
-                sci.anisotropyEnable = VK_TRUE;
+                sci.anisotropyEnable = true;
                 float clampedAniso = static_cast<float>(maxAniso);
                 VkPhysicalDeviceProperties gpuProps{};
                 vkGetPhysicalDeviceProperties(device->rhi->GetGpu(), &gpuProps);
@@ -1663,23 +1663,23 @@ extern "C"
             }
             else
             {
-                sci.anisotropyEnable = VK_FALSE;
+                sci.anisotropyEnable = false;
                 sci.maxAnisotropy = 1.0f;
             }
 
             if (isComparison)
             {
-                sci.compareEnable = VK_TRUE;
-                sci.compareOp = toVkCompareOp(cmp);
+                sci.compareEnable = true;
+                sci.compareOp = toPeCompareOp(cmp);
             }
             else
             {
-                sci.compareEnable = VK_FALSE;
-                sci.compareOp = vk::CompareOp::eNever;
+                sci.compareEnable = false;
+                sci.compareOp = PE_COMPARE_OP_NEVER;
             }
 
-            sci.borderColor = vk::BorderColor::eFloatTransparentBlack;
-            sci.unnormalizedCoordinates = VK_FALSE;
+            sci.borderColor = PE_SAMPLER_BORDER_COLOR_FLOAT_TRANSPARENT_BLACK;
+            sci.unnormalizedCoordinates = false;
 
             const std::string samplerName = smp->label.empty() ? "wgpu_sampler" : smp->label;
             try

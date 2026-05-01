@@ -6,6 +6,7 @@
 #include "API/RHI.h"
 #include "API/StagingManager.h"
 #include "API/Vulkan/VulkanBufferImpl.h"
+#include "API/Vulkan/VulkanImageViewImpl.h"
 
 namespace pe
 {
@@ -691,15 +692,14 @@ namespace pe
             ImageView::Destroy(image->m_rtv);
         }
 
-        vk::ImageViewCreateInfo viewInfo = ImageView::CreateInfoInit();
-        viewInfo.image = m_image;
-        viewInfo.viewType = vk::ImageViewType::e2D;
-        viewInfo.format = m_vkFormat;
-        viewInfo.subresourceRange.aspectMask = VulkanHelpers::GetAspectMask(m_vkFormat);
-        viewInfo.subresourceRange.baseMipLevel = 0;
-        viewInfo.subresourceRange.levelCount = image->GetMipLevels();
-        viewInfo.subresourceRange.baseArrayLayer = 0;
-        viewInfo.subresourceRange.layerCount = image->GetArrayLayers();
+        ImageViewDesc viewInfo{};
+        viewInfo.viewType = PE_IMAGE_VIEW_TYPE_2D;
+        viewInfo.format = image->GetFormat();
+        viewInfo.aspectMask = FromVkImageAspect(VulkanHelpers::GetAspectMask(m_vkFormat));
+        viewInfo.baseMipLevel = 0;
+        viewInfo.levelCount = image->GetMipLevels();
+        viewInfo.baseArrayLayer = 0;
+        viewInfo.layerCount = image->GetArrayLayers();
         image->m_rtv = ImageView::Create(image, viewInfo, image->GetName() + "_RTV");
     }
 
@@ -708,15 +708,14 @@ namespace pe
         Image *image = m_owner;
         PE_ERROR_IF(!(image->GetUsage() & PE_IMAGE_USAGE_SAMPLED), "Image was not created with Sampled usage for SRV");
 
-        vk::ImageViewCreateInfo viewInfo = ImageView::CreateInfoInit();
-        viewInfo.image = m_image;
-        viewInfo.viewType = ToVkImageViewType(type);
-        viewInfo.format = m_vkFormat;
-        viewInfo.subresourceRange.aspectMask = VulkanHelpers::GetAspectMask(m_vkFormat);
-        viewInfo.subresourceRange.baseMipLevel = mip == -1 ? 0 : mip;
-        viewInfo.subresourceRange.levelCount = mip == -1 ? image->GetMipLevels() : 1;
-        viewInfo.subresourceRange.baseArrayLayer = 0;
-        viewInfo.subresourceRange.layerCount = image->GetArrayLayers();
+        ImageViewDesc viewInfo{};
+        viewInfo.viewType = type;
+        viewInfo.format = image->GetFormat();
+        viewInfo.aspectMask = FromVkImageAspect(VulkanHelpers::GetAspectMask(m_vkFormat));
+        viewInfo.baseMipLevel = mip == -1 ? 0 : mip;
+        viewInfo.levelCount = mip == -1 ? image->GetMipLevels() : 1;
+        viewInfo.baseArrayLayer = 0;
+        viewInfo.layerCount = image->GetArrayLayers();
         ImageView *view = ImageView::Create(image, viewInfo, image->GetName() + "_SRV");
 
         if (mip == -1)
@@ -749,15 +748,14 @@ namespace pe
             ImageView::Destroy(image->m_uavs[mip]);
         }
 
-        vk::ImageViewCreateInfo viewInfo = ImageView::CreateInfoInit();
-        viewInfo.image = m_image;
-        viewInfo.viewType = ToVkImageViewType(type);
-        viewInfo.format = m_vkFormat;
-        viewInfo.subresourceRange.aspectMask = VulkanHelpers::GetAspectMask(m_vkFormat);
-        viewInfo.subresourceRange.baseMipLevel = mip;
-        viewInfo.subresourceRange.levelCount = 1;
-        viewInfo.subresourceRange.baseArrayLayer = 0;
-        viewInfo.subresourceRange.layerCount = image->GetArrayLayers();
+        ImageViewDesc viewInfo{};
+        viewInfo.viewType = type;
+        viewInfo.format = image->GetFormat();
+        viewInfo.aspectMask = FromVkImageAspect(VulkanHelpers::GetAspectMask(m_vkFormat));
+        viewInfo.baseMipLevel = mip;
+        viewInfo.levelCount = 1;
+        viewInfo.baseArrayLayer = 0;
+        viewInfo.layerCount = image->GetArrayLayers();
         image->m_uavs[mip] = ImageView::Create(image, viewInfo, image->GetName() + "_UAV");
     }
 

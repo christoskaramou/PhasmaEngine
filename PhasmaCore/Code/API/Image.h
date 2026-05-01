@@ -1,6 +1,8 @@
 #pragma once
 
+#include "API/ImageView.h"
 #include "API/RHITypes.h"
+#include "API/Sampler.h"
 
 namespace pe
 {
@@ -57,40 +59,6 @@ namespace pe
         }
     };
     using ImageTrackInfo = ImageBarrierInfo;
-
-    // Sampler and ImageView remain PeHandle classes in Phase 0 step 3. Sampler
-    // pImpl is Phase 0 step 4. ImageView migration tracks Sampler.
-    class Sampler : public PeHandle<Sampler, vk::Sampler>
-    {
-    public:
-        Sampler(const vk::SamplerCreateInfo &info, const std::string &name = "");
-        ~Sampler();
-
-        const vk::SamplerCreateInfo &GetInfo() { return m_info; }
-        static vk::SamplerCreateInfo CreateInfoInit();
-
-    private:
-        vk::SamplerCreateInfo m_info;
-        std::string m_name;
-    };
-
-    class ImageView : public PeHandle<ImageView, vk::ImageView>
-    {
-    public:
-        ImageView() {}
-        ImageView(Image *parent, const vk::ImageViewCreateInfo &info, const std::string &name = "");
-        ~ImageView();
-
-        Image *GetParent() { return m_parent; }
-        const vk::ImageViewCreateInfo &GetInfo() { return m_info; }
-
-        static vk::ImageViewCreateInfo CreateInfoInit();
-
-    private:
-        Image *m_parent{};
-        vk::ImageViewCreateInfo m_info;
-        std::string m_name;
-    };
 
     class Image : public Resource
     {

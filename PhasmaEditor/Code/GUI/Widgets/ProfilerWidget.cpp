@@ -2,6 +2,8 @@
 #include "API/Debug.h"
 #include "API/Image.h"
 #include "API/RHI.h"
+#include "API/Vulkan/VulkanImageViewImpl.h"
+#include "API/Vulkan/VulkanSamplerImpl.h"
 #include "Base/EventSystem.h"
 #include "Base/Path.h"
 #include "GUI/GUI.h"
@@ -147,8 +149,8 @@ namespace pe
             return it->second;
 
         void *ds = (void *)ImGui_ImplVulkan_AddTexture(
-            image->GetSampler()->ApiHandle(),
-            image->GetSRV()->ApiHandle(),
+            pe::GetVulkanSampler(image->GetSampler()),
+            pe::GetVulkanImageView(image->GetSRV()),
             VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
 
         m_rtDescriptorCache[image] = ds;

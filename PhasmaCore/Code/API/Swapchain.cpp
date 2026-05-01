@@ -4,6 +4,7 @@
 #include "API/Semaphore.h"
 #include "API/Surface.h"
 #include "API/Vulkan/VulkanImageImpl.h"
+#include "API/Vulkan/VulkanImageViewImpl.h"
 
 namespace pe
 {
@@ -83,17 +84,20 @@ namespace pe
         // create image views for each swapchain image
         for (int i = 0; i < m_images.size(); i++)
         {
-            vk::ImageViewCreateInfo imageViewCreateInfo{};
-            imageViewCreateInfo.image = pe::GetVulkanImage(m_images[i]);
-            imageViewCreateInfo.viewType = vk::ImageViewType::e2D;
-            imageViewCreateInfo.format = surface->GetFormat();
-            imageViewCreateInfo.subresourceRange = {vk::ImageAspectFlagBits::eColor, 0, 1, 0, 1};
+            ImageViewDesc imageViewCreateInfo{};
+            imageViewCreateInfo.viewType = PE_IMAGE_VIEW_TYPE_2D;
+            imageViewCreateInfo.format = pe::FromVkFormat(surface->GetFormat());
+            imageViewCreateInfo.aspectMask = PE_IMAGE_ASPECT_COLOR;
+            imageViewCreateInfo.baseMipLevel = 0;
+            imageViewCreateInfo.levelCount = 1;
+            imageViewCreateInfo.baseArrayLayer = 0;
+            imageViewCreateInfo.layerCount = 1;
 
             auto imageView = ImageView::Create(m_images[i], imageViewCreateInfo, "Swapchain_image_view" + std::to_string(i));
             m_images[i]->SetRTV(imageView);
 
             Debug::SetObjectName(pe::GetVulkanImage(m_images[i]), "Swapchain_image" + std::to_string(i));
-            Debug::SetObjectName(m_images[i]->GetRTV()->ApiHandle(), "Swapchain_image_view" + std::to_string(i));
+            Debug::SetObjectName(pe::GetVulkanImageView(m_images[i]->GetRTV()), "Swapchain_image_view" + std::to_string(i));
         }
 
         if (m_apiHandle)

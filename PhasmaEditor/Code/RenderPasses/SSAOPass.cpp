@@ -3,6 +3,7 @@
 #include "API/Image.h"
 #include "API/RHI.h"
 #include "API/Vulkan/VulkanImageImpl.h"
+#include "API/Vulkan/VulkanImageViewImpl.h"
 #include "CACAO/ffx_cacao_impl.h"
 #include "Camera/Camera.h"
 #include "Systems/RendererSystem.h"
@@ -32,10 +33,10 @@ namespace pe
             FFX_CACAO_VkScreenSizeInfo screenSizeInfo = {};
             screenSizeInfo.width = m_ssaoRT->GetWidth();
             screenSizeInfo.height = m_ssaoRT->GetHeight();
-            screenSizeInfo.depthView = m_depth->GetSRV()->ApiHandle();
-            screenSizeInfo.normalsView = m_normalRT->GetSRV()->ApiHandle();
+            screenSizeInfo.depthView = pe::GetVulkanImageView(m_depth->GetSRV());
+            screenSizeInfo.normalsView = pe::GetVulkanImageView(m_normalRT->GetSRV());
             screenSizeInfo.output = pe::GetVulkanImage(m_ssaoRT);
-            screenSizeInfo.outputView = m_ssaoRT->GetRTV()->ApiHandle();
+            screenSizeInfo.outputView = pe::GetVulkanImageView(m_ssaoRT->GetRTV());
             PE_CHECK(FFX_CACAO_VkInitScreenSizeDependentResources(m_context, &screenSizeInfo));
         }
     }
@@ -141,10 +142,10 @@ namespace pe
         FFX_CACAO_VkScreenSizeInfo screenSizeInfo = {};
         screenSizeInfo.width = m_ssaoRT->GetWidth();
         screenSizeInfo.height = m_ssaoRT->GetHeight();
-        screenSizeInfo.depthView = m_depth->GetSRV()->ApiHandle();
-        screenSizeInfo.normalsView = m_normalRT->GetSRV()->ApiHandle();
+        screenSizeInfo.depthView = pe::GetVulkanImageView(m_depth->GetSRV());
+        screenSizeInfo.normalsView = pe::GetVulkanImageView(m_normalRT->GetSRV());
         screenSizeInfo.output = pe::GetVulkanImage(m_ssaoRT);
-        screenSizeInfo.outputView = m_ssaoRT->GetRTV()->ApiHandle();
+        screenSizeInfo.outputView = pe::GetVulkanImageView(m_ssaoRT->GetRTV());
         PE_CHECK(FFX_CACAO_VkInitScreenSizeDependentResources(m_context, &screenSizeInfo));
     }
 

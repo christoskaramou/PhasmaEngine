@@ -166,10 +166,10 @@ namespace pe
         m_textures.push_back(Image::LoadRGBA8(cmd, Path::Assets + "Particles/particle_white_soft.png"));
         m_textureNames.push_back("Default Soft");
 
-        vk::SamplerCreateInfo samplerCI = Sampler::CreateInfoInit();
-        samplerCI.addressModeU = vk::SamplerAddressMode::eClampToEdge;
-        samplerCI.addressModeV = vk::SamplerAddressMode::eClampToEdge;
-        samplerCI.addressModeW = vk::SamplerAddressMode::eClampToEdge;
+        SamplerDesc samplerCI = Sampler::CreateInfoInit();
+        samplerCI.addressModeU = PE_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
+        samplerCI.addressModeV = PE_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
+        samplerCI.addressModeW = PE_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
         m_sampler = Sampler::Create(samplerCI, "ParticleSampler");
     }
 

@@ -47,11 +47,11 @@ namespace pe
             m_historyImage->CreateSRV(PE_IMAGE_VIEW_TYPE_2D);
 
             // Linear sampler for history
-            vk::SamplerCreateInfo samplerInfo = Sampler::CreateInfoInit();
-            samplerInfo.magFilter = vk::Filter::eLinear;
-            samplerInfo.minFilter = vk::Filter::eLinear;
-            samplerInfo.addressModeU = vk::SamplerAddressMode::eClampToEdge;
-            samplerInfo.addressModeV = vk::SamplerAddressMode::eClampToEdge;
+            SamplerDesc samplerInfo = Sampler::CreateInfoInit();
+            samplerInfo.magFilter = PE_FILTER_LINEAR;
+            samplerInfo.minFilter = PE_FILTER_LINEAR;
+            samplerInfo.addressModeU = PE_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
+            samplerInfo.addressModeV = PE_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
             Sampler *sampler = Sampler::Create(samplerInfo, "TAA_History_Linear");
             m_historyImage->SetSampler(sampler);
         }

@@ -2,6 +2,7 @@
 #include "API/Image.h"
 #include "API/RHI.h"
 #include "API/RenderPass.h"
+#include "API/Vulkan/VulkanImageViewImpl.h"
 
 namespace pe
 {
@@ -15,7 +16,7 @@ namespace pe
         std::vector<vk::ImageView> vkViews;
         vkViews.reserve(views.size());
         for (auto view : views)
-            vkViews.push_back(view->ApiHandle());
+            vkViews.push_back(pe::GetVulkanImageView(view));
 
         vk::FramebufferCreateInfo fbci{};
         fbci.renderPass = renderPass->ApiHandle();

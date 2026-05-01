@@ -265,10 +265,10 @@ namespace pe
             image->SetClearColor(Color::Transparent);
             image->CreateSRV(PE_IMAGE_VIEW_TYPE_2D);
 
-            vk::SamplerCreateInfo samplerInfo = Sampler::CreateInfoInit();
+            SamplerDesc samplerInfo = Sampler::CreateInfoInit();
             samplerInfo.mipLodBias = log2(Settings::Get<GlobalSettings>().render_scale) - 1.0f;
             samplerInfo.maxLod = static_cast<float>(dds.mipLevels);
-            samplerInfo.borderColor = vk::BorderColor::eFloatTransparentBlack;
+            samplerInfo.borderColor = PE_SAMPLER_BORDER_COLOR_FLOAT_TRANSPARENT_BLACK;
             image->SetSampler(Sampler::Create(samplerInfo));
 
             StagingAllocation alloc = RHII.GetStagingManager()->Allocate(dds.dataSize);
@@ -345,7 +345,7 @@ namespace pe
                                     ::PeFormat format,
                                     uint32_t mipLevels,
                                     PeImageUsageFlags usage,
-                                    const vk::SamplerCreateInfo &samplerInfo)
+                                    const SamplerDesc &samplerInfo)
         {
             ImageDesc desc{};
             desc.format = format;
@@ -376,58 +376,6 @@ namespace pe
             return image;
         }
     } // namespace
-
-    vk::SamplerCreateInfo Sampler::CreateInfoInit()
-    {
-        vk::SamplerCreateInfo info{};
-        info.magFilter = vk::Filter::eLinear;
-        info.minFilter = vk::Filter::eLinear;
-        info.mipmapMode = vk::SamplerMipmapMode::eLinear;
-        info.anisotropyEnable = VK_TRUE;
-        info.maxAnisotropy = 16.0f;
-        info.compareOp = vk::CompareOp::eLess;
-        info.minLod = -1000.f;
-        info.maxLod = 1000.f;
-        info.borderColor = vk::BorderColor::eFloatOpaqueBlack;
-        return info;
-    }
-
-    Sampler::Sampler(const vk::SamplerCreateInfo &info, const std::string &name)
-        : m_info{info}, m_name{name}
-    {
-        m_apiHandle = RHII.GetDevice().createSampler(info);
-        Debug::SetObjectName(m_apiHandle, name);
-    }
-
-    Sampler::~Sampler()
-    {
-        if (m_apiHandle)
-            RHII.GetDevice().destroySampler(m_apiHandle);
-    }
-
-    ImageView::ImageView(Image *parent, const vk::ImageViewCreateInfo &info, const std::string &name)
-        : m_parent{parent}, m_info{info}, m_name{name}
-    {
-        m_apiHandle = RHII.GetDevice().createImageView(info);
-        Debug::SetObjectName(m_apiHandle, name);
-    }
-
-    ImageView::~ImageView()
-    {
-        if (m_apiHandle)
-            RHII.GetDevice().destroyImageView(m_apiHandle);
-    }
-
-    vk::ImageViewCreateInfo ImageView::CreateInfoInit()
-    {
-        vk::ImageViewCreateInfo viewInfo{};
-        viewInfo.viewType = vk::ImageViewType::e2D;
-        viewInfo.subresourceRange.baseMipLevel = 0;
-        viewInfo.subresourceRange.levelCount = 1;
-        viewInfo.subresourceRange.baseArrayLayer = 0;
-        viewInfo.subresourceRange.layerCount = 1;
-        return viewInfo;
-    }
 
     Image *Image::Create(const ImageDesc &desc)
     {
@@ -649,10 +597,10 @@ namespace pe
         PeImageUsageFlags usage = PE_IMAGE_USAGE_TRANSFER_SRC | PE_IMAGE_USAGE_TRANSFER_DST |
                                   PE_IMAGE_USAGE_SAMPLED | PE_IMAGE_USAGE_STORAGE;
 
-        vk::SamplerCreateInfo samplerInfo = Sampler::CreateInfoInit();
+        SamplerDesc samplerInfo = Sampler::CreateInfoInit();
         samplerInfo.mipLodBias = log2(Settings::Get<GlobalSettings>().render_scale) - 1.0f;
         samplerInfo.maxLod = static_cast<float>(mipLevels);
-        samplerInfo.borderColor = vk::BorderColor::eFloatTransparentBlack;
+        samplerInfo.borderColor = PE_SAMPLER_BORDER_COLOR_FLOAT_TRANSPARENT_BLACK;
 
         Image *image = CreateImageAndUpload(cmd, path, pixels, texWidth * texHeight * (isFloat ? 16 : 4),
                                             texWidth, texHeight, format, mipLevels, usage, samplerInfo);
@@ -686,10 +634,10 @@ namespace pe
         static int embeddedCount = 0;
         std::string name = "Embedded_Texture_" + std::to_string(embeddedCount++);
 
-        vk::SamplerCreateInfo samplerInfo = Sampler::CreateInfoInit();
+        SamplerDesc samplerInfo = Sampler::CreateInfoInit();
         samplerInfo.mipLodBias = log2(Settings::Get<GlobalSettings>().render_scale) - 1.0f;
         samplerInfo.maxLod = static_cast<float>(mipLevels);
-        samplerInfo.borderColor = vk::BorderColor::eFloatTransparentBlack;
+        samplerInfo.borderColor = PE_SAMPLER_BORDER_COLOR_FLOAT_TRANSPARENT_BLACK;
 
         Image *image = CreateImageAndUpload(cmd, name, pixels, texWidth * texHeight * (isFloat ? 16 : 4),
                                             texWidth, texHeight, format, mipLevels, usage, samplerInfo);
@@ -714,10 +662,10 @@ namespace pe
         static int embeddedCount = 0;
         std::string n = name.empty() ? "Embedded_Raw_" + std::to_string(embeddedCount++) : name;
 
-        vk::SamplerCreateInfo samplerInfo = Sampler::CreateInfoInit();
+        SamplerDesc samplerInfo = Sampler::CreateInfoInit();
         samplerInfo.mipLodBias = log2(Settings::Get<GlobalSettings>().render_scale) - 1.0f;
         samplerInfo.maxLod = static_cast<float>(mipLevels);
-        samplerInfo.borderColor = vk::BorderColor::eFloatTransparentBlack;
+        samplerInfo.borderColor = PE_SAMPLER_BORDER_COLOR_FLOAT_TRANSPARENT_BLACK;
 
         // Assuming 4 bytes per pixel for raw load
         return CreateImageAndUpload(cmd, n, data, width * height * 4, width, height, format, mipLevels, usage, samplerInfo);
@@ -769,15 +717,15 @@ namespace pe
         if (params.generateMips)
             usage |= PE_IMAGE_USAGE_TRANSFER_SRC | PE_IMAGE_USAGE_STORAGE;
 
-        vk::SamplerCreateInfo samplerInfo = Sampler::CreateInfoInit();
-        samplerInfo.minFilter = vk::Filter::eLinear;
-        samplerInfo.magFilter = vk::Filter::eLinear;
-        samplerInfo.mipmapMode = params.generateMips ? vk::SamplerMipmapMode::eLinear : vk::SamplerMipmapMode::eNearest;
+        SamplerDesc samplerInfo = Sampler::CreateInfoInit();
+        samplerInfo.minFilter = PE_FILTER_LINEAR;
+        samplerInfo.magFilter = PE_FILTER_LINEAR;
+        samplerInfo.mipmapMode = params.generateMips ? PE_SAMPLER_MIPMAP_MODE_LINEAR : PE_SAMPLER_MIPMAP_MODE_NEAREST;
         if (params.clampToEdge)
         {
-            samplerInfo.addressModeU = vk::SamplerAddressMode::eClampToEdge;
-            samplerInfo.addressModeV = vk::SamplerAddressMode::eClampToEdge;
-            samplerInfo.addressModeW = vk::SamplerAddressMode::eClampToEdge;
+            samplerInfo.addressModeU = PE_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
+            samplerInfo.addressModeV = PE_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
+            samplerInfo.addressModeW = PE_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
         }
         samplerInfo.mipLodBias = params.mipLodBias;
         samplerInfo.minLod = 0.0f;

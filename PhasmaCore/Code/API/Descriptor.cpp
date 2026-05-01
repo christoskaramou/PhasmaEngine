@@ -3,6 +3,8 @@
 #include "API/Image.h"
 #include "API/RHI.h"
 #include "API/Vulkan/VulkanBufferImpl.h"
+#include "API/Vulkan/VulkanImageViewImpl.h"
+#include "API/Vulkan/VulkanSamplerImpl.h"
 
 namespace pe
 {
@@ -334,9 +336,9 @@ namespace pe
                 for (uint32_t j = 0; j < updateInfo.views.size(); j++)
                 {
                     infos[j] = vk::DescriptorImageInfo{};
-                    infos[j].imageView = updateInfo.views[j]->ApiHandle();
+                    infos[j].imageView = pe::GetVulkanImageView(updateInfo.views[j]);
                     infos[j].imageLayout = bindingInfo.imageLayout;
-                    infos[j].sampler = bindingInfo.type == vk::DescriptorType::eCombinedImageSampler ? updateInfo.samplers[j]->ApiHandle() : vk::Sampler{};
+                    infos[j].sampler = bindingInfo.type == vk::DescriptorType::eCombinedImageSampler ? pe::GetVulkanSampler(updateInfo.samplers[j]) : vk::Sampler{};
                 }
 
                 write.descriptorCount = static_cast<uint32_t>(infos.size());
@@ -366,7 +368,7 @@ namespace pe
                     infos[j] = vk::DescriptorImageInfo{};
                     infos[j].imageView = nullptr;
                     infos[j].imageLayout = vk::ImageLayout::eUndefined;
-                    infos[j].sampler = updateInfo.samplers[j]->ApiHandle();
+                    infos[j].sampler = pe::GetVulkanSampler(updateInfo.samplers[j]);
                 }
 
                 write.descriptorCount = static_cast<uint32_t>(infos.size());

@@ -627,8 +627,8 @@ namespace pe
         rt->CreateSRV(PE_IMAGE_VIEW_TYPE_2D);
         rt->CreateUAV(PE_IMAGE_VIEW_TYPE_2D, 0);
 
-        vk::SamplerCreateInfo samplerInfo = Sampler::CreateInfoInit();
-        samplerInfo.anisotropyEnable = VK_FALSE;
+        SamplerDesc samplerInfo = Sampler::CreateInfoInit();
+        samplerInfo.anisotropyEnable = false;
         Sampler *sampler = Sampler::Create(samplerInfo, name + "_sampler");
         rt->SetSampler(sampler);
 
@@ -660,13 +660,13 @@ namespace pe
         depth->CreateRTV();
         depth->CreateSRV(PE_IMAGE_VIEW_TYPE_2D);
 
-        vk::SamplerCreateInfo samplerInfo = Sampler::CreateInfoInit();
-        samplerInfo.addressModeU = vk::SamplerAddressMode::eClampToEdge;
-        samplerInfo.addressModeV = vk::SamplerAddressMode::eClampToEdge;
-        samplerInfo.addressModeW = vk::SamplerAddressMode::eClampToEdge;
-        samplerInfo.anisotropyEnable = VK_FALSE;
-        samplerInfo.borderColor = vk::BorderColor::eFloatOpaqueWhite;
-        samplerInfo.compareEnable = VK_TRUE;
+        SamplerDesc samplerInfo = Sampler::CreateInfoInit();
+        samplerInfo.addressModeU = PE_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
+        samplerInfo.addressModeV = PE_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
+        samplerInfo.addressModeW = PE_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
+        samplerInfo.anisotropyEnable = false;
+        samplerInfo.borderColor = PE_SAMPLER_BORDER_COLOR_FLOAT_OPAQUE_WHITE;
+        samplerInfo.compareEnable = true;
         Sampler *sampler = Sampler::Create(samplerInfo, name + "_sampler");
         depth->SetSampler(sampler);
 
@@ -723,7 +723,7 @@ namespace pe
 
         sampledImage->CreateSRV(PE_IMAGE_VIEW_TYPE_2D);
 
-        vk::SamplerCreateInfo samplerInfo = Sampler::CreateInfoInit();
+        SamplerDesc samplerInfo = Sampler::CreateInfoInit();
         Sampler *sampler = Sampler::Create(samplerInfo, "FSSampledImage_sampler");
         sampledImage->SetSampler(sampler);
 

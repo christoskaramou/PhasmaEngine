@@ -30,10 +30,10 @@ namespace pe
 
         m_cubeMap->CreateSRV(PE_IMAGE_VIEW_TYPE_CUBE);
 
-        vk::SamplerCreateInfo samplerInfo = Sampler::CreateInfoInit();
-        samplerInfo.addressModeU = vk::SamplerAddressMode::eClampToEdge;
-        samplerInfo.addressModeV = vk::SamplerAddressMode::eClampToEdge;
-        samplerInfo.addressModeW = vk::SamplerAddressMode::eClampToEdge;
+        SamplerDesc samplerInfo = Sampler::CreateInfoInit();
+        samplerInfo.addressModeU = PE_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
+        samplerInfo.addressModeV = PE_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
+        samplerInfo.addressModeW = PE_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
         m_cubeMap->SetSampler(Sampler::Create(samplerInfo));
 
         for (uint32_t i = 0; i < m_cubeMap->GetArrayLayers(); ++i)
@@ -77,10 +77,10 @@ namespace pe
         m_cubeMap->CreateSRV(PE_IMAGE_VIEW_TYPE_CUBE);
         m_cubeMap->CreateUAV(PE_IMAGE_VIEW_TYPE_2D_ARRAY, 0);
 
-        vk::SamplerCreateInfo samplerInfo = Sampler::CreateInfoInit();
-        samplerInfo.addressModeU = vk::SamplerAddressMode::eClampToEdge;
-        samplerInfo.addressModeV = vk::SamplerAddressMode::eClampToEdge;
-        samplerInfo.addressModeW = vk::SamplerAddressMode::eClampToEdge;
+        SamplerDesc samplerInfo = Sampler::CreateInfoInit();
+        samplerInfo.addressModeU = PE_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
+        samplerInfo.addressModeV = PE_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
+        samplerInfo.addressModeW = PE_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
         m_cubeMap->SetSampler(Sampler::Create(samplerInfo));
 
         // 3. Setup Compute Pass
