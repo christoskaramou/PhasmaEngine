@@ -25,10 +25,10 @@ namespace pe
         std::vector<Define> defines = {};
 
         // Shaders
-        Shader *rayGen = Shader::Create(Path::Assets + "Shaders/RayTracing/RayTrace.hlsl", vk::ShaderStageFlagBits::eRaygenKHR, "raygeneration", defines, ShaderCodeType::HLSL);
-        Shader *closestHit = Shader::Create(Path::Assets + "Shaders/RayTracing/RayTrace.hlsl", vk::ShaderStageFlagBits::eClosestHitKHR, "closesthit", defines, ShaderCodeType::HLSL);
-        Shader *anyHit = Shader::Create(Path::Assets + "Shaders/RayTracing/RayTrace.hlsl", vk::ShaderStageFlagBits::eAnyHitKHR, "anyhit", defines, ShaderCodeType::HLSL);
-        Shader *miss = Shader::Create(Path::Assets + "Shaders/RayTracing/RayTrace.hlsl", vk::ShaderStageFlagBits::eMissKHR, "miss", defines, ShaderCodeType::HLSL);
+        Shader *rayGen = Shader::Create({.sourcePath = Path::Assets + "Shaders/RayTracing/RayTrace.hlsl", .entryPoint = "raygeneration", .stage = PE_SHADER_STAGE_RAYGEN_KHR, .defines = defines});
+        Shader *closestHit = Shader::Create({.sourcePath = Path::Assets + "Shaders/RayTracing/RayTrace.hlsl", .entryPoint = "closesthit", .stage = PE_SHADER_STAGE_CLOSEST_HIT_KHR, .defines = defines});
+        Shader *anyHit = Shader::Create({.sourcePath = Path::Assets + "Shaders/RayTracing/RayTrace.hlsl", .entryPoint = "anyhit", .stage = PE_SHADER_STAGE_ANY_HIT_KHR, .defines = defines});
+        Shader *miss = Shader::Create({.sourcePath = Path::Assets + "Shaders/RayTracing/RayTrace.hlsl", .entryPoint = "miss", .stage = PE_SHADER_STAGE_MISS_KHR, .defines = defines});
 
         m_passInfo->name = "RayTracingPipeline";
         m_passInfo->acceleration.rayGen = rayGen;

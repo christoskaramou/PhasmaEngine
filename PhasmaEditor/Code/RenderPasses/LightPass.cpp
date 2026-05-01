@@ -45,8 +45,8 @@ namespace pe
 
         // Opaque light pass
         m_passInfo->name = "lighting_opaque_pipeline";
-        m_passInfo->pVertShader = Shader::Create(Path::Assets + "Shaders/Common/Quad.hlsl", vk::ShaderStageFlagBits::eVertex, "mainVS", std::vector<Define>{}, ShaderCodeType::HLSL);
-        m_passInfo->pFragShader = Shader::Create(Path::Assets + "Shaders/Gbuffer/LightingPS.hlsl", vk::ShaderStageFlagBits::eFragment, "mainPS", definesFrag, ShaderCodeType::HLSL);
+        m_passInfo->pVertShader = Shader::Create({.sourcePath = Path::Assets + "Shaders/Common/Quad.hlsl", .entryPoint = "mainVS", .stage = PE_SHADER_STAGE_VERTEX, .defines = std::vector<Define>{}});
+        m_passInfo->pFragShader = Shader::Create({.sourcePath = Path::Assets + "Shaders/Gbuffer/LightingPS.hlsl", .entryPoint = "mainPS", .stage = PE_SHADER_STAGE_FRAGMENT, .defines = definesFrag});
         m_passInfo->dynamicStates = {vk::DynamicState::eViewport, vk::DynamicState::eScissor};
         m_passInfo->colorBlendAttachments = {BlendState::Default};
         m_passInfo->colorFormats = {pe::ToVkFormat(m_viewportRT->GetFormat())};
@@ -233,8 +233,8 @@ namespace pe
             Define{"SHADOWMAP_TEXEL_SIZE", std::to_string(1.0f / (float)Settings::Get<GlobalSettings>().shadow_map_size)}};
 
         m_passInfo->name = "lighting_transparent_pipeline";
-        m_passInfo->pVertShader = Shader::Create(Path::Assets + "Shaders/Common/Quad.hlsl", vk::ShaderStageFlagBits::eVertex, "mainVS", std::vector<Define>{}, ShaderCodeType::HLSL);
-        m_passInfo->pFragShader = Shader::Create(Path::Assets + "Shaders/Gbuffer/LightingPS.hlsl", vk::ShaderStageFlagBits::eFragment, "mainPS", definesFrag, ShaderCodeType::HLSL);
+        m_passInfo->pVertShader = Shader::Create({.sourcePath = Path::Assets + "Shaders/Common/Quad.hlsl", .entryPoint = "mainVS", .stage = PE_SHADER_STAGE_VERTEX, .defines = std::vector<Define>{}});
+        m_passInfo->pFragShader = Shader::Create({.sourcePath = Path::Assets + "Shaders/Gbuffer/LightingPS.hlsl", .entryPoint = "mainPS", .stage = PE_SHADER_STAGE_FRAGMENT, .defines = definesFrag});
         m_passInfo->dynamicStates = {vk::DynamicState::eViewport, vk::DynamicState::eScissor};
         m_passInfo->colorBlendAttachments = {BlendState::Default};
         m_passInfo->blendEnable = true;

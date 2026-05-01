@@ -1,4 +1,5 @@
 #include "API/Vulkan/VulkanReflection.h"
+#include "API/Vulkan/VulkanShaderImpl.h"
 #include "API/Shader.h"
 
 namespace pe
@@ -146,36 +147,32 @@ namespace pe
             return ::PE_FORMAT_UNDEFINED;
         }
 
-        spv::ExecutionModel ToExecutionModel(vk::ShaderStageFlags stage)
+        spv::ExecutionModel ToExecutionModel(PeShaderStageFlags stage)
         {
-            switch (static_cast<vk::ShaderStageFlagBits>(static_cast<uint32_t>(stage)))
-            {
-            case vk::ShaderStageFlagBits::eVertex:
+            if (stage == PE_SHADER_STAGE_VERTEX)
                 return spv::ExecutionModelVertex;
-            case vk::ShaderStageFlagBits::eFragment:
+            if (stage == PE_SHADER_STAGE_FRAGMENT)
                 return spv::ExecutionModelFragment;
-            case vk::ShaderStageFlagBits::eCompute:
+            if (stage == PE_SHADER_STAGE_COMPUTE)
                 return spv::ExecutionModelGLCompute;
-            case vk::ShaderStageFlagBits::eRaygenKHR:
+            if (stage == PE_SHADER_STAGE_RAYGEN_KHR)
                 return spv::ExecutionModelRayGenerationKHR;
-            case vk::ShaderStageFlagBits::eAnyHitKHR:
+            if (stage == PE_SHADER_STAGE_ANY_HIT_KHR)
                 return spv::ExecutionModelAnyHitKHR;
-            case vk::ShaderStageFlagBits::eClosestHitKHR:
+            if (stage == PE_SHADER_STAGE_CLOSEST_HIT_KHR)
                 return spv::ExecutionModelClosestHitKHR;
-            case vk::ShaderStageFlagBits::eMissKHR:
+            if (stage == PE_SHADER_STAGE_MISS_KHR)
                 return spv::ExecutionModelMissKHR;
-            case vk::ShaderStageFlagBits::eIntersectionKHR:
+            if (stage == PE_SHADER_STAGE_INTERSECTION_KHR)
                 return spv::ExecutionModelIntersectionKHR;
-            case vk::ShaderStageFlagBits::eCallableKHR:
+            if (stage == PE_SHADER_STAGE_CALLABLE_KHR)
                 return spv::ExecutionModelCallableKHR;
-            case vk::ShaderStageFlagBits::eTaskEXT:
+            if (stage == PE_SHADER_STAGE_TASK_EXT)
                 return spv::ExecutionModelTaskEXT;
-            case vk::ShaderStageFlagBits::eMeshEXT:
+            if (stage == PE_SHADER_STAGE_MESH_EXT)
                 return spv::ExecutionModelMeshEXT;
-            default:
-                PE_ERROR("[Shader] Unsupported shader stage for reflection entry point selection");
-                return spv::ExecutionModelMax;
-            }
+            PE_ERROR("[Shader] Unsupported shader stage for reflection entry point selection");
+            return spv::ExecutionModelMax;
         }
     } // namespace
 
@@ -241,7 +238,12 @@ namespace pe
     {
         refl.m_shader = shader;
 
-        spirv_cross::Compiler compiler{shader->GetSpriv(), shader->Size()};
+        const uint32_t *spirvData = GetVulkanShaderSpirv(shader);
+        const size_t spirvWords = GetVulkanShaderSpirvSizeWords(shader);
+        if (!spirvData || spirvWords == 0)
+            return;
+
+        spirv_cross::Compiler compiler{spirvData, spirvWords};
 
         if (!shader->GetEntryName().empty())
         {

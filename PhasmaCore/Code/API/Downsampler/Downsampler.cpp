@@ -6479,7 +6479,7 @@ namespace pe
     void Downsampler::UpdatePassInfo()
     {
         s_passInfo = std::make_shared<PassInfo>();
-        s_passInfo->pCompShader = Shader::Create(c_downsamplerSPV, c_downsamplerSPVSize, vk::ShaderStageFlagBits::eCompute, "mainCS");
+        s_passInfo->pCompShader = Shader::CreateFromSpirv(c_downsamplerSPV, c_downsamplerSPVSize, PE_SHADER_STAGE_COMPUTE, "mainCS");
         s_passInfo->name = "Downsample_pipeline";
         s_passInfo->Update();
     }

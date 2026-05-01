@@ -35,8 +35,8 @@ namespace pe
     void AabbsPass::UpdatePassInfo()
     {
         m_passInfo->name = "AABBs_pipeline";
-        m_passInfo->pVertShader = Shader::Create(Path::Assets + "Shaders/Utilities/AABBsVS.hlsl", vk::ShaderStageFlagBits::eVertex, "mainVS", std::vector<Define>{}, ShaderCodeType::HLSL);
-        m_passInfo->pFragShader = Shader::Create(Path::Assets + "Shaders/Utilities/AABBsPS.hlsl", vk::ShaderStageFlagBits::eFragment, "mainPS", std::vector<Define>{}, ShaderCodeType::HLSL);
+        m_passInfo->pVertShader = Shader::Create({.sourcePath = Path::Assets + "Shaders/Utilities/AABBsVS.hlsl", .entryPoint = "mainVS", .stage = PE_SHADER_STAGE_VERTEX, .defines = std::vector<Define>{}});
+        m_passInfo->pFragShader = Shader::Create({.sourcePath = Path::Assets + "Shaders/Utilities/AABBsPS.hlsl", .entryPoint = "mainPS", .stage = PE_SHADER_STAGE_FRAGMENT, .defines = std::vector<Define>{}});
         m_passInfo->dynamicStates = {vk::DynamicState::eViewport, vk::DynamicState::eScissor, vk::DynamicState::eLineWidth, vk::DynamicState::eDepthTestEnable, vk::DynamicState::eDepthWriteEnable};
         m_passInfo->topology = vk::PrimitiveTopology::eLineList;
         m_passInfo->colorBlendAttachments = {BlendState::Default};

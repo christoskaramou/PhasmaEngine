@@ -2,29 +2,34 @@
 #include "Script/Bindings/BindingUtils.h"
 #include "API/Shader.h"
 
-namespace pe {
-static const std::unordered_map<std::string_view, vk::ShaderStageFlagBits>
-    s_shaderStageMap = {
-        {"vertex", vk::ShaderStageFlagBits::eVertex},
-        {"fragment", vk::ShaderStageFlagBits::eFragment},
-        {"compute", vk::ShaderStageFlagBits::eCompute},
-        {"raygen", vk::ShaderStageFlagBits::eRaygenKHR},
-        {"miss", vk::ShaderStageFlagBits::eMissKHR},
-        {"closest_hit", vk::ShaderStageFlagBits::eClosestHitKHR},
-        {"any_hit", vk::ShaderStageFlagBits::eAnyHitKHR},
-        {"intersection", vk::ShaderStageFlagBits::eIntersectionKHR},
-};
+namespace pe
+{
+    static const std::unordered_map<std::string_view, PeShaderStageFlags>
+        s_shaderStageMap = {
+            {"vertex", PE_SHADER_STAGE_VERTEX},
+            {"fragment", PE_SHADER_STAGE_FRAGMENT},
+            {"compute", PE_SHADER_STAGE_COMPUTE},
+            {"raygen", PE_SHADER_STAGE_RAYGEN_KHR},
+            {"miss", PE_SHADER_STAGE_MISS_KHR},
+            {"closest_hit", PE_SHADER_STAGE_CLOSEST_HIT_KHR},
+            {"any_hit", PE_SHADER_STAGE_ANY_HIT_KHR},
+            {"intersection", PE_SHADER_STAGE_INTERSECTION_KHR},
+    };
 
-static std::string ShaderStageToString(vk::ShaderStageFlags flags) {
-  for (auto &[k, v] : s_shaderStageMap)
-    if (vk::ShaderStageFlags(v) == flags)
-      return std::string(k);
-  return "unknown";
-}
+    static std::string ShaderStageToString(PeShaderStageFlags flags)
+    {
+        for (auto &[k, v] : s_shaderStageMap)
+            if (v == flags)
+                return std::string(k);
+        return "unknown";
+    }
 
-static struct ShaderBindings {
-  ShaderBindings() {
-    ScriptSystem::AddBindings([](sol::state &lua) {
+    static struct ShaderBindings
+    {
+        ShaderBindings()
+        {
+            ScriptSystem::AddBindings([](sol::state &lua)
+                                      {
       sol::usertype<Shader> shaderType =
           lua.new_usertype<Shader>("Shader", sol::no_constructor);
 
@@ -46,8 +51,9 @@ static struct ShaderBindings {
               PE_WARN("[Lua] Unknown shader stage: %s", stage.c_str());
               return nullptr;
             }
-            return Shader::Create(Path::Assets + path, it->second, entry,
-                                  std::vector<Define>{}, ShaderCodeType::HLSL);
+            return Shader::Create({.sourcePath = Path::Assets + path,
+                                   .entryPoint = entry,
+                                   .stage = it->second});
           });
       lua.set_function("destroy_shader", [](Shader *shader) {
         if (shader)
@@ -63,12 +69,6 @@ static struct ShaderBindings {
       shaderType["get_shader_stage"] = [](Shader &s) -> std::string {
         return ShaderStageToString(s.GetShaderStage());
       };
-
-      // Size (SPIR-V uint32 count)
-      shaderType["get_size"] = sol::property(&Shader::Size);
-
-      // BytesCount
-      shaderType["get_bytes_count"] = sol::property(&Shader::BytesCount);
 
       // GetPathID (as string to avoid integer overflow in Lua)
       shaderType["get_path_id"] = sol::property([](Shader &s) -> std::string {
@@ -88,8 +88,7 @@ static struct ShaderBindings {
           t[i + 1] = d;
         }
         return t;
-      };
-    });
-  }
-} s_shaderBindings;
+      }; });
+        }
+    } s_shaderBindings;
 } // namespace pe

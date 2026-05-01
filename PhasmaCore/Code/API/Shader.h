@@ -1,8 +1,8 @@
 #pragma once
 
+#include "API/RHITypes.h"
 #include "API/Reflection.h"
 #include "API/ShaderCache.h"
-#include "shaderc/shaderc.hpp"
 
 namespace pe
 {
@@ -12,62 +12,60 @@ namespace pe
         std::string value{};
     };
 
-    class FileIncluder : public shaderc::CompileOptions::IncluderInterface
+    struct ShaderDesc
     {
-    public:
-        shaderc_include_result *GetInclude(const char *requested_source, shaderc_include_type, const char *requesting_source, size_t) override;
-        void ReleaseInclude(shaderc_include_result *include_result) override;
-
-    private:
-        class FileInfo
-        {
-        public:
-            const std::string full_path;
-            std::string contents;
-        };
-        std::unordered_set<std::string> included_files;
+        std::string sourcePath;
+        std::string entryPoint = "main";
+        PeShaderStageFlags stage = 0;
+        std::vector<Define> defines;
+        ShaderCodeType type = ShaderCodeType::HLSL;
+        std::string debugName;
     };
 
-    class Reflection;
     class PassInfo;
     class Descriptor;
 
-    class Shader : public PeHandle<Shader, void *>
+    class Shader : public NoCopy
     {
     public:
+        struct Impl;
+
+        static Shader *Create(const ShaderDesc &desc);
+        // Legacy SPIR-V path used by the embedded Downsampler — removed in sub-phase 0b commit 3 once the
+        // downsampler converts to HLSL+DXC. Do not introduce new callers.
+        static Shader *CreateFromSpirv(const uint32_t *spirv,
+                                       size_t sizeWords,
+                                       PeShaderStageFlags stage,
+                                       const std::string &entryName);
+        static void Destroy(Shader *&shader);
+        static std::vector<Shader *> GetHandles();
+
         static void AddGlobalDefine(const std::string &name, const std::string &value);
         static std::vector<Descriptor *> ReflectPassDescriptors(const PassInfo &passInfo);
 
-        Shader(const uint32_t *spirv, size_t size, vk::ShaderStageFlags shaderStage, const std::string &entryName);
-        Shader(const std::string &spirvPath, vk::ShaderStageFlags shaderStage, const std::string &entryName);
-        Shader(const std::string &sourcePath, vk::ShaderStageFlags shaderStage, const std::string &entryName, const std::vector<Define> &localDefines, ShaderCodeType type = ShaderCodeType::HLSL);
-        ~Shader();
-
-        const std::string &GetEntryName() { return m_entryName; }
-        vk::ShaderStageFlags GetShaderStage() { return m_shaderStage; }
-        const uint32_t *GetSpriv() { return m_spirv.data(); }
-        size_t Size() { return m_spirv.size(); }
-        size_t BytesCount() { return m_spirv.size() * sizeof(uint32_t); }
+        const std::string &GetEntryName() const { return m_entryName; }
+        PeShaderStageFlags GetShaderStage() const { return m_stage; }
         Reflection &GetReflection() { return m_reflection; }
+        const Reflection &GetReflection() const { return m_reflection; }
         ShaderCache &GetCache() { return m_cache; }
-        size_t GetPathID() { return m_pathID; }
-        const PushConstantDesc &GetPushConstantDesc() { return m_reflection.GetPushConstantDesc(); }
+        size_t GetPathID() const { return m_pathID; }
+        const PushConstantDesc &GetPushConstantDesc() const { return m_reflection.GetPushConstantDesc(); }
         std::vector<Define> &GetLocalDefines() { return m_localDefines; }
 
     private:
-        bool CompileGlsl(const std::vector<Define> &localDefines);
-        void AddDefineGlsl(const Define &define, shaderc::CompileOptions &options);
-        bool CompileHlsl(const std::vector<Define> &localDefines);
+        friend struct VulkanShaderImpl;
 
-        std::vector<Define> m_localDefines;
-        ShaderCache m_cache;
-        Reflection m_reflection;
-        vk::ShaderStageFlags m_shaderStage;
-        shaderc::Compiler m_compiler;
-        std::vector<uint32_t> m_spirv{};
-        size_t m_pathID;
-        ShaderCodeType m_type;
-        std::string m_entryName;
+        Shader();
+        ~Shader();
+
+        Impl *m_impl{};
+        std::vector<Define> m_localDefines{};
+        ShaderCache m_cache{};
+        Reflection m_reflection{};
+        PeShaderStageFlags m_stage{};
+        size_t m_pathID{};
+        ShaderCodeType m_type{ShaderCodeType::HLSL};
+        std::string m_entryName{};
 
         inline static std::vector<Define> m_globalDefines{};
     };

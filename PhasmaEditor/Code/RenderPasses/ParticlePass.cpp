@@ -34,8 +34,8 @@ namespace pe
         // Depth test but no write (soft particles)
         // Need depth buffer?
         m_passInfo->name = "ParticleGraphicsPipeline";
-        m_passInfo->pVertShader = Shader::Create(Path::Assets + "Shaders/Particle/ParticleVS.hlsl", vk::ShaderStageFlagBits::eVertex, "mainVS", std::vector<Define>{}, ShaderCodeType::HLSL);
-        m_passInfo->pFragShader = Shader::Create(Path::Assets + "Shaders/Particle/ParticlePS.hlsl", vk::ShaderStageFlagBits::eFragment, "mainPS", std::vector<Define>{}, ShaderCodeType::HLSL);
+        m_passInfo->pVertShader = Shader::Create({.sourcePath = Path::Assets + "Shaders/Particle/ParticleVS.hlsl", .entryPoint = "mainVS", .stage = PE_SHADER_STAGE_VERTEX, .defines = std::vector<Define>{}});
+        m_passInfo->pFragShader = Shader::Create({.sourcePath = Path::Assets + "Shaders/Particle/ParticlePS.hlsl", .entryPoint = "mainPS", .stage = PE_SHADER_STAGE_FRAGMENT, .defines = std::vector<Define>{}});
         m_passInfo->topology = vk::PrimitiveTopology::eTriangleList;
         m_passInfo->cullMode = vk::CullModeFlagBits::eNone;
         m_passInfo->blendEnable = true;

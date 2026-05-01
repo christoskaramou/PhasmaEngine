@@ -182,9 +182,9 @@ namespace pe
                     [](PassInfo &pi, Shader *s) { pi.pVertShader = s; },
                     [](PassInfo &pi, const std::string &path, const std::string &entry) {
                         Shader::Destroy(pi.pVertShader);
-                        pi.pVertShader = Shader::Create(
-                            Path::Assets + path, vk::ShaderStageFlagBits::eVertex,
-                            entry, std::vector<Define>{}, ShaderCodeType::HLSL);
+                        pi.pVertShader = Shader::Create({.sourcePath = Path::Assets + path,
+                                                         .entryPoint = entry,
+                                                         .stage = PE_SHADER_STAGE_VERTEX});
                     });
 
                 // pFragShader
@@ -193,9 +193,9 @@ namespace pe
                     [](PassInfo &pi, Shader *s) { pi.pFragShader = s; },
                     [](PassInfo &pi, const std::string &path, const std::string &entry) {
                         Shader::Destroy(pi.pFragShader);
-                        pi.pFragShader = Shader::Create(
-                            Path::Assets + path, vk::ShaderStageFlagBits::eFragment,
-                            entry, std::vector<Define>{}, ShaderCodeType::HLSL);
+                        pi.pFragShader = Shader::Create({.sourcePath = Path::Assets + path,
+                                                         .entryPoint = entry,
+                                                         .stage = PE_SHADER_STAGE_FRAGMENT});
                     });
 
                 // pCompShader
@@ -204,9 +204,9 @@ namespace pe
                     [](PassInfo &pi, Shader *s) { pi.pCompShader = s; },
                     [](PassInfo &pi, const std::string &path, const std::string &entry) {
                         Shader::Destroy(pi.pCompShader);
-                        pi.pCompShader = Shader::Create(
-                            Path::Assets + path, vk::ShaderStageFlagBits::eCompute,
-                            entry, std::vector<Define>{}, ShaderCodeType::HLSL);
+                        pi.pCompShader = Shader::Create({.sourcePath = Path::Assets + path,
+                                                         .entryPoint = entry,
+                                                         .stage = PE_SHADER_STAGE_COMPUTE});
                     });
 
                 // topology

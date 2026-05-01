@@ -78,7 +78,7 @@ namespace pe
     void TAAPass::UpdatePassInfo()
     {
         m_passInfo->name = "TAA_pipeline";
-        m_passInfo->pCompShader = Shader::Create(Path::Assets + "Shaders/TAA/TAA.hlsl", vk::ShaderStageFlagBits::eCompute, "main", std::vector<Define>{}, ShaderCodeType::HLSL);
+        m_passInfo->pCompShader = Shader::Create({.sourcePath = Path::Assets + "Shaders/TAA/TAA.hlsl", .entryPoint = "main", .stage = PE_SHADER_STAGE_COMPUTE, .defines = std::vector<Define>{}});
         m_passInfo->Update();
     }
 

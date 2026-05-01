@@ -1,132 +1,169 @@
 #include "API/Shader.h"
+#include "API/Shader_Internal.h"
 #include "API/Descriptor.h"
 #include "API/Pipeline.h"
-#include "dxc/dxcapi.h"
 
 namespace pe
 {
-    shaderc_include_result *MakeErrorIncludeResult(const char *message)
+    namespace
     {
-        return new shaderc_include_result{"", 0, message, strlen(message)};
-    }
-
-    shaderc_include_result *FileIncluder::GetInclude(const char *requested_source, shaderc_include_type, const char *requesting_source, size_t)
-    {
-        std::filesystem::path requesting_source_path(requesting_source);
-
-        std::string full_path;
-        if (requesting_source_path.is_relative())
+        std::vector<Shader *> &TrackedShaders()
         {
-            full_path =
-                std::filesystem::current_path().string() + "\\" +
-                requesting_source_path.parent_path().string() + "\\" +
-                requested_source;
+            static std::vector<Shader *> s_tracked;
+            return s_tracked;
         }
-        else
-            full_path = requesting_source_path.parent_path().string() + "\\" + requested_source;
 
-        if (full_path.empty())
-            return MakeErrorIncludeResult("Cannot find or open include file.");
-
-        FileInfo *file_info = new FileInfo{
-            full_path,
-            FileSystem(full_path, std::ios_base::in | std::ios_base::ate | std::ios::binary).ReadAll()};
-
-        included_files.insert(full_path);
-
-        shaderc_include_result *inlc_result = new shaderc_include_result();
-        inlc_result->source_name = file_info->full_path.data();
-        inlc_result->source_name_length = file_info->full_path.length();
-        inlc_result->content = file_info->contents.data();
-        inlc_result->content_length = file_info->contents.size();
-        inlc_result->user_data = file_info;
-
-        return inlc_result;
-    }
-
-    void FileIncluder::ReleaseInclude(shaderc_include_result *include_result)
-    {
-        FileInfo *info = static_cast<FileInfo *>(include_result->user_data);
-        delete info;
-        delete include_result;
-    }
-
-    // Function to validate a single shader stage
-    void ValidateShaderStage(Shader *shader, vk::ShaderStageFlags expectedStage)
-    {
-        PE_ERROR_IF(shader->GetShaderStage() != expectedStage, "Invalid shader stage");
-    }
-
-    // Helper function to get a descriptor safely
-    Descriptor *GetDescriptorSafely(const std::vector<Descriptor *> &descriptors, size_t index)
-    {
-        return (index < descriptors.size()) ? descriptors[index] : nullptr;
-    }
-
-    // Function to merge two descriptors
-    Descriptor *MergeDescriptors(Descriptor *a, Descriptor *b)
-    {
-        if (!a)
-            return b;
-        if (!b)
-            return a;
-        if (a == b)
-            return a;
-
-        // Merge bindings
-        std::vector<DescriptorBindingInfo> mergedBindings = a->GetBindingInfos();
-        const auto &bBindings = b->GetBindingInfos();
-
-        for (const auto &bInfo : bBindings)
+        Descriptor *GetDescriptorSafely(const std::vector<Descriptor *> &descriptors, size_t index)
         {
-            bool found = false;
-            for (auto &aInfo : mergedBindings)
+            return (index < descriptors.size()) ? descriptors[index] : nullptr;
+        }
+
+        Descriptor *MergeDescriptors(Descriptor *a, Descriptor *b)
+        {
+            if (!a)
+                return b;
+            if (!b)
+                return a;
+            if (a == b)
+                return a;
+
+            std::vector<DescriptorBindingInfo> mergedBindings = a->GetBindingInfos();
+            const auto &bBindings = b->GetBindingInfos();
+            for (const auto &bInfo : bBindings)
             {
-                if (aInfo.binding == bInfo.binding)
+                bool found = false;
+                for (auto &aInfo : mergedBindings)
                 {
-                    found = true;
-                    PE_ERROR_IF(aInfo.type != bInfo.type, "Descriptor binding type mismatch during merge");
-                    aInfo.count = std::max(aInfo.count, bInfo.count);
-                    // Ensure bindless flag is preserved if either has it
-                    if (bInfo.bindless && !aInfo.bindless)
-                        aInfo.bindless = true;
-                    // Merge shader stage flags if necessary (Wait, DescriptorBindingInfo doesn't have stage flags, Descriptor does)
-                    // The binding info itself is just type/count.
-                    break;
+                    if (aInfo.binding == bInfo.binding)
+                    {
+                        found = true;
+                        PE_ERROR_IF(aInfo.type != bInfo.type, "Descriptor binding type mismatch during merge");
+                        aInfo.count = std::max(aInfo.count, bInfo.count);
+                        if (bInfo.bindless && !aInfo.bindless)
+                            aInfo.bindless = true;
+                        break;
+                    }
                 }
+                if (!found)
+                    mergedBindings.push_back(bInfo);
             }
-            if (!found)
-                mergedBindings.push_back(bInfo);
+
+            PeShaderStageFlags mergedStage = a->GetStage() | b->GetStage();
+            bool pushDesc = a->GetLayout()->IsPushDescriptor() || b->GetLayout()->IsPushDescriptor();
+            Descriptor *merged = Descriptor::Create(mergedBindings, mergedStage, pushDesc, "merged_descriptor");
+
+            Descriptor::Destroy(a);
+            Descriptor::Destroy(b);
+            return merged;
         }
 
-        PeShaderStageFlags mergedStage = a->GetStage() | b->GetStage();
-        bool pushDesc = a->GetLayout()->IsPushDescriptor() || b->GetLayout()->IsPushDescriptor();
-        std::string name = "merged_descriptor";
+        std::vector<Descriptor *> CombineDescriptors(const std::vector<Descriptor *> &a, const std::vector<Descriptor *> &b)
+        {
+            std::vector<Descriptor *> descriptors;
+            const size_t maxSize = std::max(a.size(), b.size());
+            descriptors.reserve(maxSize);
+            for (size_t i = 0; i < maxSize; ++i)
+            {
+                auto *descA = GetDescriptorSafely(a, i);
+                auto *descB = GetDescriptorSafely(b, i);
+                descriptors.push_back(MergeDescriptors(descA, descB));
+            }
+            return descriptors;
+        }
 
-        Descriptor *merged = Descriptor::Create(mergedBindings, mergedStage, pushDesc, name);
+        void ValidateShaderStage(Shader *shader, PeShaderStageFlags expectedStage)
+        {
+            PE_ERROR_IF(shader->GetShaderStage() != expectedStage, "Invalid shader stage");
+        }
+    } // namespace
 
-        // We can destroy the old descriptors as they are being replaced by the merged one
-        Descriptor::Destroy(a);
-        Descriptor::Destroy(b);
-
-        return merged;
+    Shader::Shader() = default;
+    Shader::~Shader()
+    {
+        delete m_impl;
+        m_impl = nullptr;
     }
 
-    // Function to combine descriptor sets from vertex and fragment shaders
-    std::vector<Descriptor *> CombineDescriptors(const std::vector<Descriptor *> &a, const std::vector<Descriptor *> &b)
+    Shader *Shader::Create(const ShaderDesc &desc)
     {
-        std::vector<Descriptor *> descriptors;
-        size_t maxSize = std::max(a.size(), b.size());
-        descriptors.reserve(maxSize);
+        Shader *shader = new Shader();
+        shader->m_entryName = desc.entryPoint;
+        shader->m_stage = desc.stage;
+        shader->m_localDefines = desc.defines;
+        shader->m_type = desc.type;
 
-        for (size_t i = 0; i < maxSize; ++i)
+        std::error_code ec;
+        const std::string path = std::filesystem::weakly_canonical(desc.sourcePath, ec).generic_string();
+
+        PE_ERROR_IF(!FileWatcher::Get(path), "Shader file does not exist in FileWatcher!");
+        shader->m_pathID = StringHash(path);
+        PE_INFO("[Shader] Init(hlsl) -> source='%s' | path='%s' | hash=%llu",
+                desc.sourcePath.c_str(), path.c_str(), static_cast<unsigned long long>(shader->m_pathID));
+
+        Hash definesHash;
+        for (const Define &def : m_globalDefines)
         {
-            auto *descA = GetDescriptorSafely(a, i);
-            auto *descB = GetDescriptorSafely(b, i);
-            descriptors.push_back(MergeDescriptors(descA, descB));
+            definesHash.Combine(def.name);
+            definesHash.Combine(def.value);
+        }
+        for (const Define &def : desc.defines)
+        {
+            definesHash.Combine(def.name);
+            definesHash.Combine(def.value);
         }
 
-        return descriptors;
+        shader->m_cache.Init(path, shader->m_entryName, definesHash);
+
+        shader->m_impl = CreateShaderImpl(shader, desc);
+        shader->m_reflection.Init(shader);
+
+        TrackedShaders().push_back(shader);
+        return shader;
+    }
+
+    Shader *Shader::CreateFromSpirv(const uint32_t *spirv,
+                                    size_t sizeWords,
+                                    PeShaderStageFlags stage,
+                                    const std::string &entryName)
+    {
+        Shader *shader = new Shader();
+        shader->m_stage = stage;
+        shader->m_entryName = entryName;
+        shader->m_impl = CreateShaderImplFromSpirv(shader, spirv, sizeWords);
+        if (sizeWords > 0)
+            shader->m_reflection.Init(shader);
+
+        TrackedShaders().push_back(shader);
+        return shader;
+    }
+
+    void Shader::Destroy(Shader *&shader)
+    {
+        if (!shader)
+            return;
+
+        auto &tracked = TrackedShaders();
+        tracked.erase(std::remove(tracked.begin(), tracked.end(), shader), tracked.end());
+        delete shader;
+        shader = nullptr;
+    }
+
+    std::vector<Shader *> Shader::GetHandles()
+    {
+        return TrackedShaders();
+    }
+
+    void Shader::AddGlobalDefine(const std::string &name, const std::string &value)
+    {
+        for (auto &def : m_globalDefines)
+        {
+            if (def.name == name)
+            {
+                def.value = value;
+                return;
+            }
+        }
+        m_globalDefines.push_back({name, value});
     }
 
     std::vector<Descriptor *> Shader::ReflectPassDescriptors(const PassInfo &passInfo)
@@ -135,8 +172,8 @@ namespace pe
         Shader *vert = passInfo.pVertShader;
         Shader *frag = passInfo.pFragShader;
         Shader *rayGen = passInfo.acceleration.rayGen;
-        auto &miss = passInfo.acceleration.miss;
-        auto &hitGroups = passInfo.acceleration.hitGroups;
+        const auto &miss = passInfo.acceleration.miss;
+        const auto &hitGroups = passInfo.acceleration.hitGroups;
 
         if (rayGen)
         {
@@ -170,425 +207,31 @@ namespace pe
             }
             return descriptors;
         }
-        else if (vert && frag)
+        if (vert && frag)
         {
-            ValidateShaderStage(vert, vk::ShaderStageFlagBits::eVertex);
-            ValidateShaderStage(frag, vk::ShaderStageFlagBits::eFragment);
+            ValidateShaderStage(vert, PE_SHADER_STAGE_VERTEX);
+            ValidateShaderStage(frag, PE_SHADER_STAGE_FRAGMENT);
             auto vertDesc = vert->GetReflection().GetDescriptors();
             auto fragDesc = frag->GetReflection().GetDescriptors();
             return CombineDescriptors(vertDesc, fragDesc);
         }
-        else if (vert)
+        if (vert)
         {
-            ValidateShaderStage(vert, vk::ShaderStageFlagBits::eVertex);
+            ValidateShaderStage(vert, PE_SHADER_STAGE_VERTEX);
             return vert->GetReflection().GetDescriptors();
         }
-        else if (frag)
+        if (frag)
         {
-            ValidateShaderStage(frag, vk::ShaderStageFlagBits::eFragment);
+            ValidateShaderStage(frag, PE_SHADER_STAGE_FRAGMENT);
             return frag->GetReflection().GetDescriptors();
         }
-        else if (comp)
+        if (comp)
         {
-            ValidateShaderStage(comp, vk::ShaderStageFlagBits::eCompute);
+            ValidateShaderStage(comp, PE_SHADER_STAGE_COMPUTE);
             return comp->GetReflection().GetDescriptors();
         }
-        else
-        {
-            PE_ERROR("[Shader] This state is not used in the current implementation");
-            return {};
-        }
-    }
 
-    Shader::Shader(const uint32_t *spirv, size_t size, vk::ShaderStageFlags shaderStage, const std::string &entryName)
-        : m_shaderStage{shaderStage},
-          m_entryName{entryName}
-    {
-        m_spirv.resize(size);
-        memcpy(m_spirv.data(), spirv, size * sizeof(uint32_t));
-
-        if (m_spirv.size() > 0)
-        {
-            m_reflection.Init(this);
-        }
-    }
-
-    Shader::Shader(const std::string &spirvPath, vk::ShaderStageFlags shaderStage, const std::string &entryName)
-        : m_shaderStage{shaderStage},
-          m_entryName{entryName}
-    {
-        std::error_code ec;
-        std::string path = std::filesystem::weakly_canonical(spirvPath, ec).generic_string();
-        m_pathID = StringHash(path);
-        PE_INFO("[Shader] Init(spirv) -> source='%s' | path='%s' | hash=%llu", spirvPath.c_str(), path.c_str(), static_cast<unsigned long long>(m_pathID));
-
-        // Read spirv file
-        {
-            FileSystem file(path, std::ios::in | std::ios::ate | std::ios::binary);
-            PE_ERROR_IF(!file.IsOpen(), "failed to open file!");
-
-            std::string buffer = file.ReadAll();
-            m_spirv.resize(file.Size() / sizeof(uint32_t));
-            memcpy(m_spirv.data(), buffer.data(), file.Size());
-        }
-
-        if (m_spirv.size() > 0)
-        {
-            m_reflection.Init(this);
-        }
-    }
-
-    Shader::Shader(const std::string &sourcePath, vk::ShaderStageFlags shaderStage, const std::string &entryName, const std::vector<Define> &localDefines, ShaderCodeType type)
-        : m_localDefines{localDefines},
-          m_shaderStage{shaderStage},
-          m_type{type},
-          m_entryName{entryName}
-    {
-        std::error_code ec;
-        std::string path = std::filesystem::weakly_canonical(sourcePath, ec).generic_string();
-
-        PE_ERROR_IF(!FileWatcher::Get(path), "Shader file does not exist in FileWatcher!");
-        m_pathID = StringHash(path);
-        PE_INFO("[Shader] Init(hlsl) -> source='%s' | path='%s' | hash=%llu", sourcePath.c_str(), path.c_str(), static_cast<unsigned long long>(m_pathID));
-
-        Hash definesHash;
-        for (const Define &def : m_globalDefines)
-        {
-            definesHash.Combine(def.name);
-            definesHash.Combine(def.value);
-        }
-        for (const Define &def : localDefines)
-        {
-            definesHash.Combine(def.name);
-            definesHash.Combine(def.value);
-        }
-
-        m_cache.Init(path, m_entryName, definesHash);
-
-        if (m_cache.ShaderNeedsCompile())
-        {
-            if (m_type == ShaderCodeType::HLSL)
-            {
-                PE_ERROR_IF(!CompileHlsl(localDefines), std::string("Failed to compile shader: " + path).c_str());
-            }
-            else
-            {
-                PE_ERROR_IF(!CompileGlsl(localDefines), std::string("Failed to compile shader: " + path).c_str());
-            }
-
-            m_cache.WriteSpvToFile(m_spirv);
-        }
-        else
-        {
-            m_spirv = m_cache.ReadSpvFile();
-        }
-
-        if (m_spirv.size() > 0)
-        {
-            m_reflection.Init(this);
-        }
-    }
-
-    Shader::~Shader()
-    {
-    }
-
-    void Shader::AddGlobalDefine(const std::string &name, const std::string &value)
-    {
-        for (auto &def : m_globalDefines)
-        {
-            if (def.name == name)
-            {
-                def.value = value;
-                return;
-            }
-        }
-
-        Define define{name, value};
-        m_globalDefines.push_back(define);
-    }
-
-    void Shader::AddDefineGlsl(const Define &def, shaderc::CompileOptions &options)
-    {
-        if (def.name.empty())
-            return;
-
-        if (def.value.empty())
-            options.AddMacroDefinition(def.name);
-        else
-            options.AddMacroDefinition(def.name, def.value);
-    }
-
-    bool Shader::CompileGlsl(const std::vector<Define> &localDefines)
-    {
-        shaderc::CompileOptions options;
-
-        options.SetIncluder(std::make_unique<FileIncluder>());
-        options.SetOptimizationLevel(shaderc_optimization_level_performance);
-
-        for (const Define &def : m_globalDefines)
-        {
-            AddDefineGlsl(def, options);
-        }
-
-        for (const Define &def : localDefines)
-        {
-            AddDefineGlsl(def, options);
-        }
-
-#if PE_DEBUG_MODE
-        // Useful for debugging shaders
-        options.SetGenerateDebugInfo();
-#endif
-
-        uint32_t shaderKindFlags = 0;
-        if (m_shaderStage == vk::ShaderStageFlagBits::eVertex)
-        {
-            shaderKindFlags |= shaderc_shader_kind::shaderc_vertex_shader;
-        }
-        else if (m_shaderStage == vk::ShaderStageFlagBits::eFragment)
-        {
-            shaderKindFlags |= shaderc_shader_kind::shaderc_fragment_shader;
-        }
-        else if (m_shaderStage == vk::ShaderStageFlagBits::eCompute)
-        {
-            shaderKindFlags |= shaderc_shader_kind::shaderc_compute_shader;
-        }
-        else if (m_shaderStage == vk::ShaderStageFlagBits::eRaygenKHR)
-        {
-            shaderKindFlags |= shaderc_shader_kind::shaderc_raygen_shader;
-        }
-        else if (m_shaderStage == vk::ShaderStageFlagBits::eAnyHitKHR)
-        {
-            shaderKindFlags |= shaderc_shader_kind::shaderc_anyhit_shader;
-        }
-        else if (m_shaderStage == vk::ShaderStageFlagBits::eClosestHitKHR)
-        {
-            shaderKindFlags |= shaderc_shader_kind::shaderc_closesthit_shader;
-        }
-        else if (m_shaderStage == vk::ShaderStageFlagBits::eMissKHR)
-        {
-            shaderKindFlags |= shaderc_shader_kind::shaderc_miss_shader;
-        }
-        else if (m_shaderStage == vk::ShaderStageFlagBits::eIntersectionKHR)
-        {
-            shaderKindFlags |= shaderc_shader_kind::shaderc_intersection_shader;
-        }
-        else if (m_shaderStage == vk::ShaderStageFlagBits::eCallableKHR)
-        {
-            shaderKindFlags |= shaderc_shader_kind::shaderc_callable_shader;
-        }
-        else
-        {
-            PE_ERROR("[Shader] Invalid shader stage!");
-        }
-
-        shaderc::SpvCompilationResult module = m_compiler.CompileGlslToSpv(
-            m_cache.GetShaderCode(), static_cast<shaderc_shader_kind>(shaderKindFlags), m_cache.GetSourcePath().c_str(), GetEntryName().c_str(), options);
-
-        if (module.GetCompilationStatus() != shaderc_compilation_status_success)
-        {
-            std::cerr << module.GetErrorMessage();
-            return false;
-        }
-
-        m_spirv = {module.cbegin(), module.cend()};
-
-        return true;
-    }
-
-    std::wstring ConvertUtf8ToWide(const std::string &str)
-    {
-#ifdef _WIN32
-        if (str.empty())
-            return std::wstring();
-
-        int size_needed = MultiByteToWideChar(CP_UTF8, 0, str.c_str(), -1, nullptr, 0);
-        if (size_needed <= 0)
-            return std::wstring();
-
-        std::wstring wide_str(size_needed - 1, 0); // -1 to remove null terminator
-        MultiByteToWideChar(CP_UTF8, 0, str.c_str(), -1, &wide_str[0], size_needed);
-
-        return wide_str;
-#else
-        if (str.empty())
-            return std::wstring();
-
-        std::mbstate_t state = std::mbstate_t();
-        const char *src = str.c_str();
-        std::size_t len = std::mbsrtowcs(nullptr, &src, 0, &state);
-        if (len == static_cast<std::size_t>(-1))
-            return std::wstring();
-
-        std::vector<wchar_t> buffer(len + 1);
-        std::mbsrtowcs(buffer.data(), &src, buffer.size(), &state);
-
-        return std::wstring(buffer.data());
-#endif
-    }
-
-    namespace
-    {
-        void PrintDxcError(IDxcResult *result)
-        {
-            // Error Handling
-            IDxcBlobUtf8 *pErrors = nullptr;
-            result->GetOutput(DXC_OUT_ERRORS, IID_PPV_ARGS(&pErrors), nullptr);
-            if (pErrors && pErrors->GetStringLength() > 0)
-                PE_INFO(pErrors->GetStringPointer());
-
-            pErrors->Release();
-        }
-    } // namespace
-
-    bool Shader::CompileHlsl(const std::vector<Define> &localDefines)
-    {
-        std::vector<LPCWSTR> args{};
-
-        args.push_back(L"-spirv");
-        args.push_back(L"-fspv-target-env=vulkan1.3");
-
-        // Shader stage
-        args.push_back(L"-T");
-        if (m_shaderStage == vk::ShaderStageFlagBits::eVertex)
-        {
-            args.push_back(L"vs_6_3");
-        }
-        else if (m_shaderStage == vk::ShaderStageFlagBits::eFragment)
-        {
-            args.push_back(L"ps_6_3");
-        }
-        else if (m_shaderStage == vk::ShaderStageFlagBits::eCompute)
-        {
-            args.push_back(L"cs_6_3");
-        }
-        else if (m_shaderStage & (vk::ShaderStageFlagBits::eRaygenKHR |
-                                  vk::ShaderStageFlagBits::eAnyHitKHR |
-                                  vk::ShaderStageFlagBits::eClosestHitKHR |
-                                  vk::ShaderStageFlagBits::eMissKHR |
-                                  vk::ShaderStageFlagBits::eIntersectionKHR |
-                                  vk::ShaderStageFlagBits::eCallableKHR))
-        {
-            args.push_back(L"lib_6_3");
-        }
-        else
-        {
-            PE_ERROR("[Shader] Invalid shader stage!");
-        }
-        args.push_back(L"-fspv-preserve-bindings");
-        args.push_back(L"-fspv-preserve-interface");
-        // args.push_back(L"-fspv-reflect");
-
-        // Entry point
-        args.push_back(L"-E");
-        std::wstring entryName = ConvertUtf8ToWide(GetEntryName());
-        args.push_back(entryName.c_str());
-
-        args.push_back(DXC_ARG_WARNINGS_ARE_ERRORS);   //-WX
-        args.push_back(DXC_ARG_PACK_MATRIX_ROW_MAJOR); //-Zpr
-
-#if PE_DEBUG_MODE
-        // Generate symbols
-        args.push_back(DXC_ARG_DEBUG); //-Zi
-#endif
-
-        // Defines
-        std::vector<std::wstring> wdefines(m_globalDefines.size() + localDefines.size());
-        uint32_t i = 0;
-
-        for (const Define &def : m_globalDefines)
-        {
-            wdefines[i] += ConvertUtf8ToWide(def.name);
-            if (!def.value.empty())
-                wdefines[i] += ConvertUtf8ToWide("=" + def.value);
-
-            args.push_back(L"-D");
-            args.push_back(wdefines[i++].c_str());
-        }
-
-        for (const Define &def : localDefines)
-        {
-            wdefines[i] += ConvertUtf8ToWide(def.name);
-            if (!def.value.empty())
-                wdefines[i] += ConvertUtf8ToWide("=" + def.value);
-
-            args.push_back(L"-D");
-            args.push_back(wdefines[i++].c_str());
-        }
-
-        IDxcUtils *dxc_utils = nullptr;
-        auto hr = DxcCreateInstance(CLSID_DxcUtils, IID_PPV_ARGS(&dxc_utils));
-        if (FAILED(hr))
-        {
-            PE_INFO("Failed to create IDxcUtils");
-            return false;
-        }
-
-        IDxcIncludeHandler *include_handler = nullptr;
-        hr = dxc_utils->CreateDefaultIncludeHandler(&include_handler);
-        if (FAILED(hr))
-        {
-            PE_INFO("Failed to create IDxcIncludeHandler");
-            return false;
-        }
-
-        IDxcCompiler3 *dxc_compiler = nullptr;
-        hr = DxcCreateInstance(CLSID_DxcCompiler, IID_PPV_ARGS(&dxc_compiler));
-        if (FAILED(hr))
-        {
-            PE_INFO("Failed to create IDxcCompiler3");
-            return false;
-        }
-
-        IDxcUtils *pUtils = nullptr;
-        DxcCreateInstance(CLSID_DxcUtils, IID_PPV_ARGS(&pUtils));
-        IDxcBlobEncoding *pSource = nullptr;
-        uint32_t size = static_cast<uint32_t>(m_cache.GetShaderCode().size());
-        pUtils->CreateBlob(m_cache.GetShaderCode().c_str(), size, CP_UTF8, &pSource);
-
-        DxcBuffer sourceBuffer;
-        sourceBuffer.Ptr = pSource->GetBufferPointer();
-        sourceBuffer.Size = pSource->GetBufferSize();
-        sourceBuffer.Encoding = 0;
-
-        IDxcResult *result = nullptr;
-        hr = dxc_compiler->Compile(
-            &sourceBuffer,
-            args.data(),
-            static_cast<uint32_t>(args.size()),
-            include_handler,
-            IID_PPV_ARGS(&result));
-
-        HRESULT compileStatus;
-        result->GetStatus(&compileStatus);
-
-        if (FAILED(compileStatus))
-        {
-            PrintDxcError(result);
-            return false;
-        }
-
-        // Get shader output
-        IDxcBlob *pObject = nullptr;
-        result->GetOutput(DXC_OUT_OBJECT, IID_PPV_ARGS(&pObject), nullptr);
-        if (!pObject)
-        {
-            PrintDxcError(result);
-            return false;
-        }
-
-        m_spirv.resize(pObject->GetBufferSize() / sizeof(uint32_t));
-        memcpy(m_spirv.data(), pObject->GetBufferPointer(), pObject->GetBufferSize());
-
-        dxc_utils->Release();
-        include_handler->Release();
-        dxc_compiler->Release();
-        pUtils->Release();
-        pSource->Release();
-        result->Release();
-        pObject->Release();
-
-        return true;
+        PE_ERROR("[Shader] This state is not used in the current implementation");
+        return {};
     }
 } // namespace pe

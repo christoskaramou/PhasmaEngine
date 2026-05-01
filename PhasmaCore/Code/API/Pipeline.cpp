@@ -7,6 +7,7 @@
 #include "API/Shader.h"
 #include "API/Vulkan/VulkanDescriptorImpl.h"
 #include "API/Vulkan/VulkanImageImpl.h"
+#include "API/Vulkan/VulkanShaderImpl.h"
 
 namespace pe
 {
@@ -313,21 +314,19 @@ namespace pe
     {
         if (!variant.vertexShader.empty())
         {
-            pVertShader = Shader::Create(
-                Path::Assets + variant.vertexShader,
-                vk::ShaderStageFlagBits::eVertex,
-                "mainVS",
-                std::vector<Define>{},
-                ShaderCodeType::HLSL);
+            ShaderDesc desc{};
+            desc.sourcePath = Path::Assets + variant.vertexShader;
+            desc.entryPoint = "mainVS";
+            desc.stage = PE_SHADER_STAGE_VERTEX;
+            pVertShader = Shader::Create(desc);
         }
         if (!variant.fragmentShader.empty())
         {
-            pFragShader = Shader::Create(
-                Path::Assets + variant.fragmentShader,
-                vk::ShaderStageFlagBits::eFragment,
-                "mainPS",
-                std::vector<Define>{},
-                ShaderCodeType::HLSL);
+            ShaderDesc desc{};
+            desc.sourcePath = Path::Assets + variant.fragmentShader;
+            desc.entryPoint = "mainPS";
+            desc.stage = PE_SHADER_STAGE_FRAGMENT;
+            pFragShader = Shader::Create(desc);
         }
 
         if (!variant.cullMode.empty())
@@ -556,8 +555,8 @@ namespace pe
         m_info.m_pushConstantSizes.clear();
 
         vk::ShaderModuleCreateInfo csmci{};
-        csmci.codeSize = m_info.pCompShader->BytesCount();
-        csmci.pCode = m_info.pCompShader->GetSpriv();
+        csmci.codeSize = GetVulkanShaderSpirvSizeBytes(m_info.pCompShader);
+        csmci.pCode = GetVulkanShaderSpirv(m_info.pCompShader);
 
         vk::PushConstantRange pcr{};
         const PushConstantDesc &pushConstantComp = m_info.pCompShader->GetPushConstantDesc();
@@ -619,8 +618,8 @@ namespace pe
         if (m_info.pVertShader)
         {
             vk::ShaderModuleCreateInfo smci{};
-            smci.codeSize = m_info.pVertShader->BytesCount();
-            smci.pCode = m_info.pVertShader->GetSpriv();
+            smci.codeSize = GetVulkanShaderSpirvSizeBytes(m_info.pVertShader);
+            smci.pCode = GetVulkanShaderSpirv(m_info.pVertShader);
             vertModule = RHII.GetDevice().createShaderModule(smci);
 
             vk::PipelineShaderStageCreateInfo pssci{};
@@ -632,8 +631,8 @@ namespace pe
         if (m_info.pFragShader)
         {
             vk::ShaderModuleCreateInfo smci{};
-            smci.codeSize = m_info.pFragShader->BytesCount();
-            smci.pCode = m_info.pFragShader->GetSpriv();
+            smci.codeSize = GetVulkanShaderSpirvSizeBytes(m_info.pFragShader);
+            smci.pCode = GetVulkanShaderSpirv(m_info.pFragShader);
             fragModule = RHII.GetDevice().createShaderModule(smci);
 
             vk::PipelineShaderStageCreateInfo pssci{};
@@ -888,7 +887,7 @@ namespace pe
         {
             vk::PipelineShaderStageCreateInfo stage{};
             stage.stage = vk::ShaderStageFlagBits::eRaygenKHR;
-            stage.module = RHII.GetDevice().createShaderModule({{}, m_info.acceleration.rayGen->BytesCount(), m_info.acceleration.rayGen->GetSpriv()});
+            stage.module = RHII.GetDevice().createShaderModule({{}, GetVulkanShaderSpirvSizeBytes(m_info.acceleration.rayGen), GetVulkanShaderSpirv(m_info.acceleration.rayGen)});
             stage.pName = m_info.acceleration.rayGen->GetEntryName().c_str();
             stages.push_back(stage);
             tempModules.push_back(stage.module);
@@ -907,7 +906,7 @@ namespace pe
         {
             vk::PipelineShaderStageCreateInfo stage{};
             stage.stage = vk::ShaderStageFlagBits::eMissKHR;
-            stage.module = RHII.GetDevice().createShaderModule({{}, shader->BytesCount(), shader->GetSpriv()});
+            stage.module = RHII.GetDevice().createShaderModule({{}, GetVulkanShaderSpirvSizeBytes(shader), GetVulkanShaderSpirv(shader)});
             stage.pName = shader->GetEntryName().c_str();
             stages.push_back(stage);
             tempModules.push_back(stage.module);
@@ -935,7 +934,7 @@ namespace pe
             {
                 vk::PipelineShaderStageCreateInfo stage{};
                 stage.stage = vk::ShaderStageFlagBits::eClosestHitKHR;
-                stage.module = RHII.GetDevice().createShaderModule({{}, hg.closestHit->BytesCount(), hg.closestHit->GetSpriv()});
+                stage.module = RHII.GetDevice().createShaderModule({{}, GetVulkanShaderSpirvSizeBytes(hg.closestHit), GetVulkanShaderSpirv(hg.closestHit)});
                 stage.pName = hg.closestHit->GetEntryName().c_str();
                 stages.push_back(stage);
                 tempModules.push_back(stage.module);
@@ -945,7 +944,7 @@ namespace pe
             {
                 vk::PipelineShaderStageCreateInfo stage{};
                 stage.stage = vk::ShaderStageFlagBits::eAnyHitKHR;
-                stage.module = RHII.GetDevice().createShaderModule({{}, hg.anyHit->BytesCount(), hg.anyHit->GetSpriv()});
+                stage.module = RHII.GetDevice().createShaderModule({{}, GetVulkanShaderSpirvSizeBytes(hg.anyHit), GetVulkanShaderSpirv(hg.anyHit)});
                 stage.pName = hg.anyHit->GetEntryName().c_str();
                 stages.push_back(stage);
                 tempModules.push_back(stage.module);

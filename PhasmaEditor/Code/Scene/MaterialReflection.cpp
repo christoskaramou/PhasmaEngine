@@ -3,6 +3,7 @@
 #include "API/Shader.h"
 #include "API/Reflection.h"
 #include "API/Vulkan/VulkanReflection.h"
+#include "API/Vulkan/VulkanShaderImpl.h"
 #include "Base/Path.h"
 #include "spirv_cross/spirv_cross.hpp"
 
@@ -34,23 +35,13 @@ namespace pe
 
         if (!surface->vertexShader.empty())
         {
-            Shader *vs = Shader::Create(
-                Path::Assets + surface->vertexShader,
-                vk::ShaderStageFlagBits::eVertex,
-                "mainVS",
-                std::vector<Define>{},
-                ShaderCodeType::HLSL);
+            Shader *vs = Shader::Create({.sourcePath = Path::Assets + surface->vertexShader, .entryPoint = "mainVS", .stage = PE_SHADER_STAGE_VERTEX, .defines = std::vector<Define>{}});
             if (vs)
                 stages.push_back({vs, &vs->GetReflection()});
         }
         if (!surface->fragmentShader.empty())
         {
-            Shader *fs = Shader::Create(
-                Path::Assets + surface->fragmentShader,
-                vk::ShaderStageFlagBits::eFragment,
-                "mainPS",
-                std::vector<Define>{},
-                ShaderCodeType::HLSL);
+            Shader *fs = Shader::Create({.sourcePath = Path::Assets + surface->fragmentShader, .entryPoint = "mainPS", .stage = PE_SHADER_STAGE_FRAGMENT, .defines = std::vector<Define>{}});
             if (fs)
                 stages.push_back({fs, &fs->GetReflection()});
         }
@@ -61,7 +52,7 @@ namespace pe
 
         auto reflectRawStruct = [&](Shader *shader, const std::string &bufferName)
         {
-            spirv_cross::Compiler compiler{shader->GetSpriv(), shader->Size()};
+            spirv_cross::Compiler compiler{GetVulkanShaderSpirv(shader), GetVulkanShaderSpirvSizeWords(shader)};
             auto resources = compiler.get_shader_resources();
 
             for (const auto &sbuf : resources.storage_buffers)
@@ -210,7 +201,7 @@ namespace pe
         // Scan for pe_tex_ prefixed separate images (bindless texture slots)
         for (const auto &[shader, refl] : stages)
         {
-            spirv_cross::Compiler compiler{shader->GetSpriv(), shader->Size()};
+            spirv_cross::Compiler compiler{GetVulkanShaderSpirv(shader), GetVulkanShaderSpirvSizeWords(shader)};
             auto resources = compiler.get_shader_resources();
 
             for (const auto &img : resources.separate_images)

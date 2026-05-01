@@ -16,7 +16,7 @@ namespace pe
         m_passInfo->name = "Culling_pipeline";
         try
         {
-            m_passInfo->pCompShader = Shader::Create(Path::Assets + "Shaders/Compute/CullingCS.hlsl", vk::ShaderStageFlagBits::eCompute, "mainCS", std::vector<Define>{}, ShaderCodeType::HLSL);
+            m_passInfo->pCompShader = Shader::Create({.sourcePath = Path::Assets + "Shaders/Compute/CullingCS.hlsl", .entryPoint = "mainCS", .stage = PE_SHADER_STAGE_COMPUTE, .defines = std::vector<Define>{}});
             m_passInfo->Update();
             if (oldComp != m_passInfo->pCompShader)
                 Shader::Destroy(oldComp);
@@ -33,7 +33,7 @@ namespace pe
         m_sortPassInfo->name = "BitonicSort_pipeline";
         try
         {
-            m_sortPassInfo->pCompShader = Shader::Create(Path::Assets + "Shaders/Compute/BitonicSortCS.hlsl", vk::ShaderStageFlagBits::eCompute, "mainCS", std::vector<Define>{}, ShaderCodeType::HLSL);
+            m_sortPassInfo->pCompShader = Shader::Create({.sourcePath = Path::Assets + "Shaders/Compute/BitonicSortCS.hlsl", .entryPoint = "mainCS", .stage = PE_SHADER_STAGE_COMPUTE, .defines = std::vector<Define>{}});
             m_sortPassInfo->Update();
             if (oldSortComp != m_sortPassInfo->pCompShader)
                 Shader::Destroy(oldSortComp);

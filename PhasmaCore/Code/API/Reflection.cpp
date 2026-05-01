@@ -13,7 +13,7 @@ namespace pe
 
     std::vector<VertexInputBinding> Reflection::GetVertexBindings() const
     {
-        PE_ERROR_IF(m_shader->GetShaderStage() != vk::ShaderStageFlagBits::eVertex,
+        PE_ERROR_IF(m_shader->GetShaderStage() != PE_SHADER_STAGE_VERTEX,
                     "Vertex bindings are only available for vertex shaders");
 
         std::unordered_map<uint32_t, std::vector<const ShaderInOutDesc *>> bindingsMap{};
@@ -46,7 +46,7 @@ namespace pe
 
     std::vector<VertexInputAttribute> Reflection::GetVertexAttributes() const
     {
-        PE_ERROR_IF(m_shader->GetShaderStage() != vk::ShaderStageFlagBits::eVertex,
+        PE_ERROR_IF(m_shader->GetShaderStage() != PE_SHADER_STAGE_VERTEX,
                     "Vertex attributes are only available for vertex shaders");
 
         std::unordered_map<uint32_t, uint32_t> bindingOffsets{};
@@ -216,7 +216,7 @@ namespace pe
                     i++;
                 }
 
-                descriptor = Descriptor::Create(setInfo, FromVkShaderStageFlags(m_shader->GetShaderStage()), false, "auto_descriptor");
+                descriptor = Descriptor::Create(setInfo, m_shader->GetShaderStage(), false, "auto_descriptor");
             }
 
             descriptors.push_back(descriptor);

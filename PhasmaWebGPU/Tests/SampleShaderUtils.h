@@ -1,6 +1,7 @@
 #pragma once
 
 #include "API/Shader.h"
+#include "API/Vulkan/VulkanShaderImpl.h"
 #include "Base/FileWatcher.h"
 
 #include <cstdio>
@@ -16,7 +17,7 @@ namespace pwgpu::test
     {
         struct ShaderCompileInfo
         {
-            vk::ShaderStageFlags stage{};
+            ::PeShaderStageFlags stage = 0;
             const char *entry = nullptr;
         };
 
@@ -30,19 +31,19 @@ namespace pwgpu::test
         {
             if (EndsWith(path, ".vert.hlsl"))
             {
-                info.stage = vk::ShaderStageFlagBits::eVertex;
+                info.stage = ::PE_SHADER_STAGE_VERTEX;
                 info.entry = "VSMain";
                 return true;
             }
             if (EndsWith(path, ".pixel.hlsl"))
             {
-                info.stage = vk::ShaderStageFlagBits::eFragment;
+                info.stage = ::PE_SHADER_STAGE_FRAGMENT;
                 info.entry = "PSMain";
                 return true;
             }
             if (EndsWith(path, ".comp.hlsl"))
             {
-                info.stage = vk::ShaderStageFlagBits::eCompute;
+                info.stage = ::PE_SHADER_STAGE_COMPUTE;
                 info.entry = "CSMain";
                 return true;
             }
@@ -82,22 +83,29 @@ namespace pwgpu::test
         if (!detail::EnsureShaderIsWatched(sourcePath))
             return nullptr;
 
-        pe::Shader shader(sourcePath, info.stage, info.entry, {}, pe::ShaderCodeType::HLSL);
-        if (!shader.GetSpriv() || shader.Size() == 0)
+        pe::Shader *shader = pe::Shader::Create({.sourcePath = sourcePath,
+                                                 .entryPoint = info.entry,
+                                                 .stage = info.stage});
+        const uint32_t *spirv = pe::GetVulkanShaderSpirv(shader);
+        const size_t spirvWords = pe::GetVulkanShaderSpirvSizeWords(shader);
+        if (!spirv || spirvWords == 0)
         {
             fprintf(stderr, "[Shader] Failed to compile %s\n", path);
+            pe::Shader::Destroy(shader);
             return nullptr;
         }
 
         WGPUShaderSourceSPIRV src{};
         src.chain.sType = WGPUSType_ShaderSourceSPIRV;
-        src.code = shader.GetSpriv();
-        src.codeSize = static_cast<uint32_t>(shader.Size());
+        src.code = spirv;
+        src.codeSize = static_cast<uint32_t>(spirvWords);
 
         WGPUShaderModuleDescriptor desc{};
         desc.label = {label, WGPU_STRLEN};
         desc.nextInChain = &src.chain;
-        return wgpuDeviceCreateShaderModule(device, &desc);
+        WGPUShaderModule mod = wgpuDeviceCreateShaderModule(device, &desc);
+        pe::Shader::Destroy(shader);
+        return mod;
     }
 
     inline WGPUShaderModule MakeWgslShaderModule(WGPUDevice device, const char *path, const char *label)
