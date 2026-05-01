@@ -241,9 +241,9 @@ namespace pwgpu
 
         pe::ImageBarrierInfo toTransfer{};
         toTransfer.image = tex->image;
-        toTransfer.layout = vk::ImageLayout::eTransferDstOptimal;
-        toTransfer.stageFlags = vk::PipelineStageFlagBits2::eTransfer;
-        toTransfer.accessMask = vk::AccessFlagBits2::eTransferWrite;
+        toTransfer.layout = PE_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+        toTransfer.stageFlags = PE_STAGE_TRANSFER;
+        toTransfer.accessMask = PE_ACCESS_TRANSFER_WRITE;
         toTransfer.baseMipLevel = minMip;
         toTransfer.mipLevels = maxMip - minMip + 1;
         toTransfer.baseArrayLayer = minLayer;

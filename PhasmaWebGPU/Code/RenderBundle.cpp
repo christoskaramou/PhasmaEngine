@@ -6,6 +6,7 @@
 #include "Device.h"
 #include "Utils.h"
 #include "API/Vulkan/VulkanBufferImpl.h"
+#include "API/Vulkan/VulkanDescriptorImpl.h"
 
 extern "C" void wgpuDeviceRelease(WGPUDevice);
 extern "C" void wgpuRenderPipelineAddRef(WGPURenderPipeline);
@@ -236,7 +237,7 @@ extern "C"
                 if (!BglGroupEquivalent(bg->layout, bgls[i]))
                     continue;
 
-                vk::DescriptorSet ds = bg->descriptor->ApiHandle();
+                vk::DescriptorSet ds = pe::GetVulkanDescriptorSet(bg->descriptor);
                 const uint32_t groupIndex = static_cast<uint32_t>(i);
                 std::vector<uint32_t> dynOffsets =
                     (i < rbe->currentDynamicOffsets.size())
@@ -422,7 +423,7 @@ extern "C"
             return;
 
         VkPipelineLayout vkLayout = rbe->pipeline->layout->vkLayout;
-        vk::DescriptorSet ds = group->descriptor->ApiHandle();
+        vk::DescriptorSet ds = pe::GetVulkanDescriptorSet(group->descriptor);
         std::vector<uint32_t> dynOffsets(dynamicOffsets, dynamicOffsets + dynamicOffsetCount);
 
         rbe->commands.push_back([vkLayout, groupIndex, ds, dynOffsets](vk::CommandBuffer cmd)

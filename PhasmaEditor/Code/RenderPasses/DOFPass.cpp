@@ -31,7 +31,7 @@ namespace pe
         m_passInfo->pFragShader = Shader::Create(Path::Assets + "Shaders/DepthOfField/DOFPS.hlsl", vk::ShaderStageFlagBits::eFragment, "mainPS", std::vector<Define>{}, ShaderCodeType::HLSL);
         m_passInfo->dynamicStates = {vk::DynamicState::eViewport, vk::DynamicState::eScissor};
         m_passInfo->cullMode = vk::CullModeFlagBits::eBack;
-        m_passInfo->colorBlendAttachments = {PipelineColorBlendAttachmentState::Default};
+        m_passInfo->colorBlendAttachments = {BlendState::Default};
         m_passInfo->colorFormats = {pe::ToVkFormat(m_displayRT->GetFormat())};
         m_passInfo->Update();
     }
@@ -63,9 +63,9 @@ namespace pe
 
         ImageBarrierInfo frameBarrier{};
         frameBarrier.image = m_frameImage;
-        frameBarrier.layout = vk::ImageLayout::eShaderReadOnlyOptimal;
-        frameBarrier.stageFlags = vk::PipelineStageFlagBits2::eFragmentShader;
-        frameBarrier.accessMask = vk::AccessFlagBits2::eShaderRead;
+        frameBarrier.layout = PE_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+        frameBarrier.stageFlags = PE_STAGE_FRAGMENT_SHADER;
+        frameBarrier.accessMask = PE_ACCESS_SHADER_READ;
 
         cmd->BeginDebugRegion("DOFPass");
         cmd->CopyImage(m_displayRT, m_frameImage); // Copy RT to image

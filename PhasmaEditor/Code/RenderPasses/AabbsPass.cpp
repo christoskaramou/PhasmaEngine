@@ -24,12 +24,12 @@ namespace pe
         m_attachments.resize(2);
         m_attachments[0] = {};
         m_attachments[0].image = m_viewportRT;
-        m_attachments[0].loadOp = vk::AttachmentLoadOp::eLoad;
-        m_attachments[0].storeOp = vk::AttachmentStoreOp::eStore;
+        m_attachments[0].loadOp = PE_LOAD_OP_LOAD;
+        m_attachments[0].storeOp = PE_STORE_OP_STORE;
         m_attachments[1] = {};
         m_attachments[1].image = m_depthRT;
-        m_attachments[1].loadOp = vk::AttachmentLoadOp::eLoad;
-        m_attachments[1].storeOp = vk::AttachmentStoreOp::eStore;
+        m_attachments[1].loadOp = PE_LOAD_OP_LOAD;
+        m_attachments[1].storeOp = PE_STORE_OP_STORE;
     }
 
     void AabbsPass::UpdatePassInfo()
@@ -39,7 +39,7 @@ namespace pe
         m_passInfo->pFragShader = Shader::Create(Path::Assets + "Shaders/Utilities/AABBsPS.hlsl", vk::ShaderStageFlagBits::eFragment, "mainPS", std::vector<Define>{}, ShaderCodeType::HLSL);
         m_passInfo->dynamicStates = {vk::DynamicState::eViewport, vk::DynamicState::eScissor, vk::DynamicState::eLineWidth, vk::DynamicState::eDepthTestEnable, vk::DynamicState::eDepthWriteEnable};
         m_passInfo->topology = vk::PrimitiveTopology::eLineList;
-        m_passInfo->colorBlendAttachments = {PipelineColorBlendAttachmentState::Default};
+        m_passInfo->colorBlendAttachments = {BlendState::Default};
         m_passInfo->colorFormats = {pe::ToVkFormat(m_viewportRT->GetFormat())};
         m_passInfo->depthFormat = pe::ToVkFormat(m_depthRT->GetFormat());
         m_passInfo->Update();

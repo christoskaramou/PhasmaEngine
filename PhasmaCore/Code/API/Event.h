@@ -1,5 +1,7 @@
 #pragma once
 
+#include "API/RHITypes.h"
+
 namespace pe
 {
     class CommandBuffer;
@@ -7,12 +9,12 @@ namespace pe
     struct EventSetInfoImage
     {
         Image *image;
-        vk::ImageLayout oldLayout;
-        vk::ImageLayout newLayout;
-        vk::PipelineStageFlags2 srcStage;
-        vk::AccessFlags2 srcAccess;
-        vk::PipelineStageFlags2 dstStage;
-        vk::AccessFlags2 dstAccess;
+        PeImageLayout oldLayout;
+        PeImageLayout newLayout;
+        PeBarrierSync srcStage;
+        PeBarrierAccess srcAccess;
+        PeBarrierSync dstStage;
+        PeBarrierAccess dstAccess;
     };
 
     class Event : public PeHandle<Event, vk::Event>
@@ -22,11 +24,11 @@ namespace pe
         ~Event();
 
         void Set(CommandBuffer *cmd, Image *image,
-                 vk::ImageLayout srcLayout, vk::ImageLayout dstLayout,
-                 vk::PipelineStageFlags2 srcStage, vk::PipelineStageFlags2 dstStage,
-                 vk::AccessFlags2 srcAccess, vk::AccessFlags2 dstAccess);
+                 PeImageLayout srcLayout, PeImageLayout dstLayout,
+                 PeBarrierSync srcStage, PeBarrierSync dstStage,
+                 PeBarrierAccess srcAccess, PeBarrierAccess dstAccess);
         void Wait();
-        void Reset(vk::PipelineStageFlags2 resetStage);
+        void Reset(PeBarrierSync resetStage);
         bool IsSet() const { return m_set; }
 
     private:

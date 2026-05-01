@@ -47,43 +47,61 @@ namespace pe
         {"cube_array", PE_IMAGE_VIEW_TYPE_CUBE_ARRAY},
     };
 
-    static const std::unordered_map<std::string_view, vk::ImageLayout> s_imgLayoutMap = {
-        {"undefined", vk::ImageLayout::eUndefined},
-        {"general", vk::ImageLayout::eGeneral},
-        {"color_attachment", vk::ImageLayout::eColorAttachmentOptimal},
-        {"depth_attachment", vk::ImageLayout::eDepthStencilAttachmentOptimal},
-        {"shader_read", vk::ImageLayout::eShaderReadOnlyOptimal},
-        {"transfer_src", vk::ImageLayout::eTransferSrcOptimal},
-        {"transfer_dst", vk::ImageLayout::eTransferDstOptimal},
-        {"present", vk::ImageLayout::ePresentSrcKHR},
-        {"attachment", vk::ImageLayout::eAttachmentOptimal},
+    static const std::unordered_map<std::string_view, PeImageLayout> s_imgLayoutMap = {
+        {"undefined", PE_IMAGE_LAYOUT_UNDEFINED},
+        {"general", PE_IMAGE_LAYOUT_GENERAL},
+        {"color_attachment", PE_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL},
+        {"depth_attachment", PE_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL},
+        {"shader_read", PE_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL},
+        {"transfer_src", PE_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL},
+        {"transfer_dst", PE_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL},
+        {"present", PE_IMAGE_LAYOUT_PRESENT_SRC},
+        {"attachment", PE_IMAGE_LAYOUT_ATTACHMENT_OPTIMAL},
+        {"depth_stencil_read_only", PE_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL},
+        {"depth_attachment_stencil_read_only", PE_IMAGE_LAYOUT_DEPTH_ATTACHMENT_STENCIL_READ_ONLY_OPTIMAL},
+        {"depth_read_only_stencil_attachment", PE_IMAGE_LAYOUT_DEPTH_READ_ONLY_STENCIL_ATTACHMENT_OPTIMAL},
+        {"depth_read_only", PE_IMAGE_LAYOUT_DEPTH_READ_ONLY_OPTIMAL},
+        {"depth_attachment_only", PE_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL},
+        {"stencil_read_only", PE_IMAGE_LAYOUT_STENCIL_READ_ONLY_OPTIMAL},
+        {"stencil_attachment", PE_IMAGE_LAYOUT_STENCIL_ATTACHMENT_OPTIMAL},
     };
 
-    static const std::unordered_map<std::string_view, vk::PipelineStageFlags2> s_imgStageMap = {
-        {"none", vk::PipelineStageFlagBits2::eNone},
-        {"vertex", vk::PipelineStageFlagBits2::eVertexShader},
-        {"fragment", vk::PipelineStageFlagBits2::eFragmentShader},
-        {"early_fragment", vk::PipelineStageFlagBits2::eEarlyFragmentTests},
-        {"late_fragment", vk::PipelineStageFlagBits2::eLateFragmentTests},
-        {"color_output", vk::PipelineStageFlagBits2::eColorAttachmentOutput},
-        {"compute", vk::PipelineStageFlagBits2::eComputeShader},
-        {"transfer", vk::PipelineStageFlagBits2::eTransfer},
-        {"all_graphics", vk::PipelineStageFlagBits2::eAllGraphics},
-        {"all_commands", vk::PipelineStageFlagBits2::eAllCommands},
+    static const std::unordered_map<std::string_view, PeBarrierSync> s_imgStageMap = {
+        {"none", PE_STAGE_NONE},
+        {"top_of_pipe", PE_STAGE_TOP_OF_PIPE},
+        {"vertex", PE_STAGE_VERTEX_SHADER},
+        {"fragment", PE_STAGE_FRAGMENT_SHADER},
+        {"early_fragment", PE_STAGE_EARLY_FRAGMENT_TESTS},
+        {"late_fragment", PE_STAGE_LATE_FRAGMENT_TESTS},
+        {"color_output", PE_STAGE_COLOR_ATTACHMENT_OUTPUT},
+        {"compute", PE_STAGE_COMPUTE_SHADER},
+        {"transfer", PE_STAGE_TRANSFER},
+        {"clear", PE_STAGE_CLEAR},
+        {"copy", PE_STAGE_COPY},
+        {"host", PE_STAGE_HOST},
+        {"draw_indirect", PE_STAGE_DRAW_INDIRECT},
+        {"index_input", PE_STAGE_INDEX_INPUT},
+        {"vertex_attribute_input", PE_STAGE_VERTEX_ATTRIBUTE_INPUT},
+        {"all_graphics", PE_STAGE_ALL_GRAPHICS},
+        {"all_commands", PE_STAGE_ALL_COMMANDS},
     };
 
-    static const std::unordered_map<std::string_view, vk::AccessFlags2> s_imgAccessMap = {
-        {"none", vk::AccessFlagBits2::eNone},
-        {"shader_read", vk::AccessFlagBits2::eShaderRead},
-        {"shader_write", vk::AccessFlagBits2::eShaderWrite},
-        {"color_read", vk::AccessFlagBits2::eColorAttachmentRead},
-        {"color_write", vk::AccessFlagBits2::eColorAttachmentWrite},
-        {"depth_read", vk::AccessFlagBits2::eDepthStencilAttachmentRead},
-        {"depth_write", vk::AccessFlagBits2::eDepthStencilAttachmentWrite},
-        {"transfer_read", vk::AccessFlagBits2::eTransferRead},
-        {"transfer_write", vk::AccessFlagBits2::eTransferWrite},
-        {"memory_read", vk::AccessFlagBits2::eMemoryRead},
-        {"memory_write", vk::AccessFlagBits2::eMemoryWrite},
+    static const std::unordered_map<std::string_view, PeBarrierAccess> s_imgAccessMap = {
+        {"none", PE_ACCESS_NONE},
+        {"shader_read", PE_ACCESS_SHADER_READ},
+        {"shader_write", PE_ACCESS_SHADER_WRITE},
+        {"sampled_read", PE_ACCESS_SHADER_SAMPLED_READ},
+        {"uniform_read", PE_ACCESS_UNIFORM_READ},
+        {"storage_read", PE_ACCESS_SHADER_STORAGE_READ},
+        {"storage_write", PE_ACCESS_SHADER_STORAGE_WRITE},
+        {"color_read", PE_ACCESS_COLOR_ATTACHMENT_READ},
+        {"color_write", PE_ACCESS_COLOR_ATTACHMENT_WRITE},
+        {"depth_read", PE_ACCESS_DEPTH_STENCIL_ATTACHMENT_READ},
+        {"depth_write", PE_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE},
+        {"transfer_read", PE_ACCESS_TRANSFER_READ},
+        {"transfer_write", PE_ACCESS_TRANSFER_WRITE},
+        {"memory_read", PE_ACCESS_MEMORY_READ},
+        {"memory_write", PE_ACCESS_MEMORY_WRITE},
     };
 
     static ::PeFormat ToImageFormat(const std::string &s)
@@ -194,8 +212,8 @@ namespace pe
                     if (!p) return t;
                     auto &info = p->GetCurrentInfo(layer.value_or(0), mip.value_or(0));
                     t["layout"] = static_cast<int>(info.layout);
-                    t["stage_flags"] = static_cast<uint64_t>(static_cast<vk::PipelineStageFlags2::MaskType>(info.stageFlags));
-                    t["access_mask"] = static_cast<uint64_t>(static_cast<vk::AccessFlags2::MaskType>(info.accessMask));
+                    t["stage_flags"] = static_cast<uint64_t>(info.stageFlags);
+                    t["access_mask"] = static_cast<uint64_t>(info.accessMask);
                     t["base_array_layer"] = info.baseArrayLayer;
                     t["array_layers"] = info.arrayLayers;
                     t["base_mip_level"] = info.baseMipLevel;
@@ -210,14 +228,14 @@ namespace pe
                     if (!p) return;
                     ImageTrackInfo info{};
                     info.image = p;
-                    info.layout = Lookup(t.get_or<std::string>("layout", "undefined"), s_imgLayoutMap, vk::ImageLayout::eUndefined);
-                    info.stageFlags = LookupFlags<vk::PipelineStageFlags2>(t.get_or<std::string>("stage_flags", "none"), s_imgStageMap);
-                    info.accessMask = LookupFlags<vk::AccessFlags2>(t.get_or<std::string>("access_mask", "none"), s_imgAccessMap);
+                    info.layout = Lookup(t.get_or<std::string>("layout", "undefined"), s_imgLayoutMap, PE_IMAGE_LAYOUT_UNDEFINED);
+                    info.stageFlags = LookupFlags<PeBarrierSync>(t.get_or<std::string>("stage_flags", "none"), s_imgStageMap);
+                    info.accessMask = LookupFlags<PeBarrierAccess>(t.get_or<std::string>("access_mask", "none"), s_imgAccessMap);
                     info.baseArrayLayer = t.get_or<uint32_t>("base_array_layer", 0);
                     info.arrayLayers = t.get_or<uint32_t>("array_layers", 0);
                     info.baseMipLevel = t.get_or<uint32_t>("base_mip_level", 0);
                     info.mipLevels = t.get_or<uint32_t>("mip_levels", 0);
-                    info.queueFamilyId = t.get_or("queue_family_id", static_cast<uint32_t>(VK_QUEUE_FAMILY_IGNORED));
+                    info.queueFamilyId = t.get_or("queue_family_id", PE_QUEUE_FAMILY_IGNORED);
                     p->SetCurrentInfo(info, layer.value_or(0), mip.value_or(0));
                 };
 
@@ -227,14 +245,14 @@ namespace pe
                     if (!p) return;
                     ImageTrackInfo info{};
                     info.image = p;
-                    info.layout = Lookup(t.get_or<std::string>("layout", "undefined"), s_imgLayoutMap, vk::ImageLayout::eUndefined);
-                    info.stageFlags = LookupFlags<vk::PipelineStageFlags2>(t.get_or<std::string>("stage_flags", "none"), s_imgStageMap);
-                    info.accessMask = LookupFlags<vk::AccessFlags2>(t.get_or<std::string>("access_mask", "none"), s_imgAccessMap);
+                    info.layout = Lookup(t.get_or<std::string>("layout", "undefined"), s_imgLayoutMap, PE_IMAGE_LAYOUT_UNDEFINED);
+                    info.stageFlags = LookupFlags<PeBarrierSync>(t.get_or<std::string>("stage_flags", "none"), s_imgStageMap);
+                    info.accessMask = LookupFlags<PeBarrierAccess>(t.get_or<std::string>("access_mask", "none"), s_imgAccessMap);
                     info.baseArrayLayer = t.get_or<uint32_t>("base_array_layer", 0);
                     info.arrayLayers = t.get_or<uint32_t>("array_layers", 0);
                     info.baseMipLevel = t.get_or<uint32_t>("base_mip_level", 0);
                     info.mipLevels = t.get_or<uint32_t>("mip_levels", 0);
-                    info.queueFamilyId = t.get_or("queue_family_id", static_cast<uint32_t>(VK_QUEUE_FAMILY_IGNORED));
+                    info.queueFamilyId = t.get_or("queue_family_id", PE_QUEUE_FAMILY_IGNORED);
                     p->SetCurrentInfoAll(info);
                 };
 

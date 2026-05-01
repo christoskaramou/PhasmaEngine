@@ -28,7 +28,7 @@ namespace pe
         m_passInfo->pFragShader = Shader::Create(Path::Assets + "Shaders/Bloom/BrightFilterPS.hlsl", vk::ShaderStageFlagBits::eFragment, "mainPS", std::vector<Define>{}, ShaderCodeType::HLSL);
         m_passInfo->dynamicStates = {vk::DynamicState::eViewport, vk::DynamicState::eScissor};
         m_passInfo->cullMode = vk::CullModeFlagBits::eBack;
-        m_passInfo->colorBlendAttachments = {PipelineColorBlendAttachmentState::Default};
+        m_passInfo->colorBlendAttachments = {BlendState::Default};
         m_passInfo->colorFormats = {pe::ToVkFormat(m_brightFilterRT->GetFormat())};
         m_passInfo->Update();
     }
@@ -87,7 +87,7 @@ namespace pe
         m_passInfo->pFragShader = Shader::Create(Path::Assets + "Shaders/Bloom/GaussianBlurHPS.hlsl", vk::ShaderStageFlagBits::eFragment, "mainPS", std::vector<Define>{}, ShaderCodeType::HLSL);
         m_passInfo->dynamicStates = {vk::DynamicState::eViewport, vk::DynamicState::eScissor};
         m_passInfo->cullMode = vk::CullModeFlagBits::eBack;
-        m_passInfo->colorBlendAttachments = {PipelineColorBlendAttachmentState::Default};
+        m_passInfo->colorBlendAttachments = {BlendState::Default};
         m_passInfo->colorFormats = {pe::ToVkFormat(m_gaussianBlurHorizontalRT->GetFormat())};
         m_passInfo->Update();
     }
@@ -142,7 +142,7 @@ namespace pe
         m_attachments.resize(1);
         m_attachments[0] = {};
         m_attachments[0].image = m_displayRT;
-        m_attachments[0].loadOp = vk::AttachmentLoadOp::eLoad;
+        m_attachments[0].loadOp = PE_LOAD_OP_LOAD;
     }
 
     void BloomGaussianBlurVerticalPass::UpdatePassInfo()
@@ -153,7 +153,7 @@ namespace pe
         m_passInfo->dynamicStates = {vk::DynamicState::eViewport, vk::DynamicState::eScissor};
         m_passInfo->cullMode = vk::CullModeFlagBits::eBack;
         m_passInfo->blendEnable = true;
-        m_passInfo->colorBlendAttachments = {PipelineColorBlendAttachmentState::AdditiveColor};
+        m_passInfo->colorBlendAttachments = {BlendState::AdditiveColor};
         m_passInfo->colorFormats = {pe::ToVkFormat(m_displayRT->GetFormat())};
         m_passInfo->Update();
     }

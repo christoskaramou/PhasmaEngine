@@ -1,5 +1,7 @@
 #pragma once
 
+#include "API/RHITypes.h"
+
 #undef MemoryBarrier
 
 #ifdef PE_TRACY
@@ -17,6 +19,8 @@ namespace pe
     class Compute;
     class Buffer;
     class Image;
+    class ImageView;
+    class Sampler;
     class Descriptor;
     class Semaphore;
     class Queue;
@@ -39,24 +43,32 @@ namespace pe
     struct Attachment
     {
         Image *image = nullptr;
-        vk::AttachmentLoadOp loadOp = vk::AttachmentLoadOp::eClear;
-        vk::AttachmentStoreOp storeOp = vk::AttachmentStoreOp::eStore;
-        vk::AttachmentLoadOp stencilLoadOp = vk::AttachmentLoadOp::eDontCare;
-        vk::AttachmentStoreOp stencilStoreOp = vk::AttachmentStoreOp::eDontCare;
+        PeLoadOp loadOp = PE_LOAD_OP_CLEAR;
+        PeStoreOp storeOp = PE_STORE_OP_STORE;
+        PeLoadOp stencilLoadOp = PE_LOAD_OP_DONT_CARE;
+        PeStoreOp stencilStoreOp = PE_STORE_OP_DONT_CARE;
     };
 
     struct PushDescriptorInfo
     {
-        vk::DescriptorType type = vk::DescriptorType::eCombinedImageSampler;
+        PeBindingType type = PE_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
         uint32_t binding = (uint32_t)-1;
 
         std::vector<Buffer *> buffers{};
         std::vector<size_t> offsets{};
         std::vector<size_t> ranges{}; // range of the buffers in bytes to use
 
-        std::vector<vk::ImageLayout> layouts{};
-        std::vector<vk::ImageView> views{};
-        std::vector<vk::Sampler> samplers{}; // if type == DescriptorType::CombinedImageSampler, these are the samplers for each view
+        PeImageLayout imageLayout = PE_IMAGE_LAYOUT_UNDEFINED;
+        std::vector<ImageView *> views{};
+        std::vector<Sampler *> samplers{}; // if type == CombinedImageSampler, these are the samplers for each view
+    };
+
+    struct MemoryBarrierInfo
+    {
+        PeBarrierSync srcStageMask = PE_STAGE_NONE;
+        PeBarrierAccess srcAccessMask = PE_ACCESS_NONE;
+        PeBarrierSync dstStageMask = PE_STAGE_NONE;
+        PeBarrierAccess dstAccessMask = PE_ACCESS_NONE;
     };
 
     template <uint16_t N>
@@ -123,8 +135,8 @@ namespace pe
         void BufferBarriers(const std::vector<BufferBarrierInfo> &infos);
         void ImageBarrier(const ImageBarrierInfo &info);
         void ImageBarriers(const std::vector<ImageBarrierInfo> &infos);
-        void MemoryBarrier(const vk::MemoryBarrier2 &info);
-        void MemoryBarriers(const std::vector<vk::MemoryBarrier2> &infos);
+        void MemoryBarrier(const MemoryBarrierInfo &info);
+        void MemoryBarriers(const std::vector<MemoryBarrierInfo> &infos);
         void CopyBuffer(Buffer *src, Buffer *dst, const size_t size, size_t srcOffset, size_t dstOffset);
         void CopyBufferStaged(Buffer *buffer, void *data, size_t size, size_t dstOffset);
         void CopyDataToImageStaged(Image *image,
@@ -137,11 +149,11 @@ namespace pe
         void CopyImageToBuffer(Image *src, Buffer *dst);
         void GenerateMipMaps(Image *image);
         void SetEvent(Image *image,
-                      vk::ImageLayout srcLayout, vk::ImageLayout dstLayout,
-                      vk::PipelineStageFlags2 srcStage, vk::PipelineStageFlags2 dstStage,
-                      vk::AccessFlags2 srcAccess, vk::AccessFlags2 dstAccess);
+                      PeImageLayout srcLayout, PeImageLayout dstLayout,
+                      PeBarrierSync srcStage, PeBarrierSync dstStage,
+                      PeBarrierAccess srcAccess, PeBarrierAccess dstAccess);
         void WaitEvent();
-        void ResetEvent(vk::PipelineStageFlags2 resetStage);
+        void ResetEvent(PeBarrierSync resetStage);
         bool IsRecording() const { return m_recording; }
         void BeginDebugRegion(const std::string &name);
         void InsertDebugLabel(const std::string &name);

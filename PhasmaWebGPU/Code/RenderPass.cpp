@@ -10,6 +10,7 @@
 #include "Device.h"
 #include "Utils.h"
 #include "API/Vulkan/VulkanBufferImpl.h"
+#include "API/Vulkan/VulkanDescriptorImpl.h"
 
 extern "C" void wgpuRenderPipelineAddRef(WGPURenderPipeline);
 extern "C" void wgpuRenderPipelineRelease(WGPURenderPipeline);
@@ -189,45 +190,43 @@ namespace
         return true;
     }
 
-    vk::AccessFlags2 BufferAccessForUsage(pwgpu::BufferUsageKind kind)
+    PeBarrierAccess BufferAccessForUsage(pwgpu::BufferUsageKind kind)
     {
         switch (kind)
         {
         case pwgpu::BufferUsageKind::Constant:
-            return vk::AccessFlagBits2::eUniformRead;
+            return PE_ACCESS_UNIFORM_READ;
         case pwgpu::BufferUsageKind::StorageRead:
-            return vk::AccessFlagBits2::eShaderStorageRead;
+            return PE_ACCESS_SHADER_STORAGE_READ;
         case pwgpu::BufferUsageKind::Storage:
-            return vk::AccessFlagBits2::eShaderStorageRead |
-                   vk::AccessFlagBits2::eShaderStorageWrite;
+            return PE_ACCESS_SHADER_STORAGE_READ | PE_ACCESS_SHADER_STORAGE_WRITE;
         default:
-            return vk::AccessFlagBits2::eNone;
+            return PE_ACCESS_NONE;
         }
     }
 
-    vk::AccessFlags2 TextureAccessForUsage(pwgpu::SubresourceUsageKind kind)
+    PeBarrierAccess TextureAccessForUsage(pwgpu::SubresourceUsageKind kind)
     {
         switch (kind)
         {
         case pwgpu::SubresourceUsageKind::Sampled:
-            return vk::AccessFlagBits2::eShaderSampledRead;
+            return PE_ACCESS_SHADER_SAMPLED_READ;
         case pwgpu::SubresourceUsageKind::ReadOnlyStorage:
-            return vk::AccessFlagBits2::eShaderStorageRead;
+            return PE_ACCESS_SHADER_STORAGE_READ;
         case pwgpu::SubresourceUsageKind::WriteOnlyStorage:
-            return vk::AccessFlagBits2::eShaderStorageWrite;
+            return PE_ACCESS_SHADER_STORAGE_WRITE;
         case pwgpu::SubresourceUsageKind::ReadWriteStorage:
-            return vk::AccessFlagBits2::eShaderStorageRead |
-                   vk::AccessFlagBits2::eShaderStorageWrite;
+            return PE_ACCESS_SHADER_STORAGE_READ | PE_ACCESS_SHADER_STORAGE_WRITE;
         default:
-            return vk::AccessFlagBits2::eNone;
+            return PE_ACCESS_NONE;
         }
     }
 
-    vk::ImageLayout TextureLayoutForUsage(pwgpu::SubresourceUsageKind kind)
+    PeImageLayout TextureLayoutForUsage(pwgpu::SubresourceUsageKind kind)
     {
         return kind == pwgpu::SubresourceUsageKind::Sampled
-                   ? vk::ImageLayout::eShaderReadOnlyOptimal
-                   : vk::ImageLayout::eGeneral;
+                   ? PE_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL
+                   : PE_IMAGE_LAYOUT_GENERAL;
     }
 
     void AppendBufferUsageBarrier(WGPUBufferImpl *buffer, uint8_t mask,
@@ -241,36 +240,35 @@ namespace
 
         if (mask & static_cast<uint8_t>(pwgpu::BufferUsageKind::Storage))
         {
-            barrier.stageMask |= vk::PipelineStageFlagBits2::eAllGraphics;
-            barrier.accessMask |= vk::AccessFlagBits2::eShaderStorageRead |
-                                  vk::AccessFlagBits2::eShaderStorageWrite;
+            barrier.stageMask |= PE_STAGE_ALL_GRAPHICS;
+            barrier.accessMask |= PE_ACCESS_SHADER_STORAGE_READ | PE_ACCESS_SHADER_STORAGE_WRITE;
         }
         if (mask & static_cast<uint8_t>(pwgpu::BufferUsageKind::StorageRead))
         {
-            barrier.stageMask |= vk::PipelineStageFlagBits2::eAllGraphics;
-            barrier.accessMask |= vk::AccessFlagBits2::eShaderStorageRead;
+            barrier.stageMask |= PE_STAGE_ALL_GRAPHICS;
+            barrier.accessMask |= PE_ACCESS_SHADER_STORAGE_READ;
         }
         if (mask & static_cast<uint8_t>(pwgpu::BufferUsageKind::Constant))
         {
-            barrier.stageMask |= vk::PipelineStageFlagBits2::eAllGraphics;
-            barrier.accessMask |= vk::AccessFlagBits2::eUniformRead;
+            barrier.stageMask |= PE_STAGE_ALL_GRAPHICS;
+            barrier.accessMask |= PE_ACCESS_UNIFORM_READ;
         }
         if (mask & static_cast<uint8_t>(pwgpu::BufferUsageKind::Input))
         {
             if (buffer->usage & WGPUBufferUsage_Indirect)
             {
-                barrier.stageMask |= vk::PipelineStageFlagBits2::eDrawIndirect;
-                barrier.accessMask |= vk::AccessFlagBits2::eIndirectCommandRead;
+                barrier.stageMask |= PE_STAGE_DRAW_INDIRECT;
+                barrier.accessMask |= PE_ACCESS_INDIRECT_COMMAND_READ;
             }
             if (buffer->usage & WGPUBufferUsage_Index)
             {
-                barrier.stageMask |= vk::PipelineStageFlagBits2::eIndexInput;
-                barrier.accessMask |= vk::AccessFlagBits2::eIndexRead;
+                barrier.stageMask |= PE_STAGE_INDEX_INPUT;
+                barrier.accessMask |= PE_ACCESS_INDEX_READ;
             }
             if (buffer->usage & WGPUBufferUsage_Vertex)
             {
-                barrier.stageMask |= vk::PipelineStageFlagBits2::eVertexAttributeInput;
-                barrier.accessMask |= vk::AccessFlagBits2::eVertexAttributeRead;
+                barrier.stageMask |= PE_STAGE_VERTEX_ATTRIBUTE_INPUT;
+                barrier.accessMask |= PE_ACCESS_VERTEX_ATTRIBUTE_READ;
             }
         }
 
@@ -289,13 +287,13 @@ namespace
             if (!texture || !texture->image)
                 continue;
 
-            const vk::AccessFlags2 access = TextureAccessForUsage(entry.second);
+            const PeBarrierAccess access = TextureAccessForUsage(entry.second);
             if (!access)
                 continue;
 
             pe::ImageBarrierInfo barrier{};
             barrier.image = texture->image;
-            barrier.stageFlags = vk::PipelineStageFlagBits2::eAllGraphics;
+            barrier.stageFlags = PE_STAGE_ALL_GRAPHICS;
             barrier.accessMask = access;
             barrier.layout = TextureLayoutForUsage(entry.second);
             barrier.baseMipLevel = key.mip;
@@ -334,7 +332,7 @@ namespace
 
                 pe::ImageBarrierInfo barrier{};
                 barrier.image = use.view->texture->image;
-                barrier.stageFlags = vk::PipelineStageFlagBits2::eAllGraphics;
+                barrier.stageFlags = PE_STAGE_ALL_GRAPHICS;
                 barrier.accessMask = TextureAccessForUsage(use.kind);
                 barrier.layout = TextureLayoutForUsage(use.kind);
                 barrier.baseMipLevel = use.view->baseMipLevel;
@@ -351,7 +349,7 @@ namespace
 
                 pe::BufferBarrierInfo barrier{};
                 barrier.buffer = use.buffer->peBuffer;
-                barrier.stageMask = vk::PipelineStageFlagBits2::eAllGraphics;
+                barrier.stageMask = PE_STAGE_ALL_GRAPHICS;
                 barrier.accessMask = BufferAccessForUsage(use.kind);
                 bufferBarriers.push_back(barrier);
             }
@@ -458,7 +456,7 @@ extern "C"
                     continue;
                 if (!BglGroupEquivalent(bg->layout, bgls[i]))
                     continue;
-                vk::DescriptorSet ds = bg->descriptor->ApiHandle();
+                vk::DescriptorSet ds = pe::GetVulkanDescriptorSet(bg->descriptor);
                 const std::vector<uint32_t> *dynOffsets =
                     (i < rpe->currentDynamicOffsets.size())
                         ? &rpe->currentDynamicOffsets[i]
@@ -642,7 +640,7 @@ extern "C"
             return;
 
         vk::PipelineLayout vkLayout(rpe->pipeline->layout->vkLayout);
-        vk::DescriptorSet ds = group->descriptor->ApiHandle();
+        vk::DescriptorSet ds = pe::GetVulkanDescriptorSet(group->descriptor);
 
         rpe->cmd->ApiHandle().bindDescriptorSets(
             vk::PipelineBindPoint::eGraphics,

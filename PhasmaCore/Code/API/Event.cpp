@@ -3,6 +3,7 @@
 #include "API/Image.h"
 #include "API/RHI.h"
 #include "API/Vulkan/VulkanImageImpl.h"
+#include "API/Vulkan/VulkanRHITypeUtils.h"
 
 namespace pe
 {
@@ -21,9 +22,9 @@ namespace pe
     }
 
     void Event::Set(CommandBuffer *cmd, Image *image,
-                    vk::ImageLayout srcLayout, vk::ImageLayout dstLayout,
-                    vk::PipelineStageFlags2 srcStage, vk::PipelineStageFlags2 dstStage,
-                    vk::AccessFlags2 srcAccess, vk::AccessFlags2 dstAccess)
+                    PeImageLayout srcLayout, PeImageLayout dstLayout,
+                    PeBarrierSync srcStage, PeBarrierSync dstStage,
+                    PeBarrierAccess srcAccess, PeBarrierAccess dstAccess)
     {
         m_cmd = cmd;
         m_infoImage.image = image;
@@ -35,12 +36,12 @@ namespace pe
         m_infoImage.dstAccess = dstAccess;
 
         vk::ImageMemoryBarrier2 barrier{};
-        barrier.srcStageMask = srcStage;
-        barrier.srcAccessMask = srcAccess;
-        barrier.dstStageMask = dstStage;
-        barrier.dstAccessMask = dstAccess;
-        barrier.oldLayout = srcLayout;
-        barrier.newLayout = dstLayout;
+        barrier.srcStageMask = ToVkPipelineStageFlags(srcStage);
+        barrier.srcAccessMask = ToVkAccessFlags(srcAccess);
+        barrier.dstStageMask = ToVkPipelineStageFlags(dstStage);
+        barrier.dstAccessMask = ToVkAccessFlags(dstAccess);
+        barrier.oldLayout = ToVkImageLayout(srcLayout);
+        barrier.newLayout = ToVkImageLayout(dstLayout);
         barrier.srcQueueFamilyIndex = cmd->GetFamilyId();
         barrier.dstQueueFamilyIndex = cmd->GetFamilyId();
         barrier.image = pe::GetVulkanImage(image);
@@ -62,12 +63,12 @@ namespace pe
     void Event::Wait()
     {
         vk::ImageMemoryBarrier2 barrier{};
-        barrier.srcStageMask = m_infoImage.srcStage;
-        barrier.srcAccessMask = m_infoImage.srcAccess;
-        barrier.dstStageMask = m_infoImage.dstStage;
-        barrier.dstAccessMask = m_infoImage.dstAccess;
-        barrier.oldLayout = m_infoImage.oldLayout;
-        barrier.newLayout = m_infoImage.newLayout;
+        barrier.srcStageMask = ToVkPipelineStageFlags(m_infoImage.srcStage);
+        barrier.srcAccessMask = ToVkAccessFlags(m_infoImage.srcAccess);
+        barrier.dstStageMask = ToVkPipelineStageFlags(m_infoImage.dstStage);
+        barrier.dstAccessMask = ToVkAccessFlags(m_infoImage.dstAccess);
+        barrier.oldLayout = ToVkImageLayout(m_infoImage.oldLayout);
+        barrier.newLayout = ToVkImageLayout(m_infoImage.newLayout);
         barrier.srcQueueFamilyIndex = m_cmd->GetFamilyId();
         barrier.dstQueueFamilyIndex = m_cmd->GetFamilyId();
         barrier.image = pe::GetVulkanImage(m_infoImage.image);
@@ -91,9 +92,9 @@ namespace pe
         m_cmd->ApiHandle().waitEvents2(1, &m_apiHandle, &depInfo);
     }
 
-    void Event::Reset(vk::PipelineStageFlags2 resetStage)
+    void Event::Reset(PeBarrierSync resetStage)
     {
-        m_cmd->ApiHandle().resetEvent2(m_apiHandle, resetStage);
+        m_cmd->ApiHandle().resetEvent2(m_apiHandle, ToVkPipelineStageFlags(resetStage));
         m_cmd = nullptr;
         m_infoImage = {};
         m_set = false;

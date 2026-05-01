@@ -3,6 +3,7 @@
 #include "API/Image.h"
 #include "API/RHI.h"
 #include "API/Vulkan/VulkanImageImpl.h"
+#include "API/Vulkan/VulkanRHITypeUtils.h"
 
 namespace pe
 {
@@ -25,10 +26,10 @@ namespace pe
             vk::AttachmentDescription2 attachmentDescription{};
             attachmentDescription.format = pe::ToVkFormat(attachment.image->GetFormat());
             attachmentDescription.samples = pe::ToVkSampleCount(attachment.image->GetSamples());
-            attachmentDescription.loadOp = attachment.loadOp;
-            attachmentDescription.storeOp = attachment.storeOp;
-            attachmentDescription.stencilLoadOp = attachment.stencilLoadOp;
-            attachmentDescription.stencilStoreOp = attachment.stencilStoreOp;
+            attachmentDescription.loadOp = ToVkLoadOp(attachment.loadOp);
+            attachmentDescription.storeOp = ToVkStoreOp(attachment.storeOp);
+            attachmentDescription.stencilLoadOp = ToVkLoadOp(attachment.stencilLoadOp);
+            attachmentDescription.stencilStoreOp = ToVkStoreOp(attachment.stencilStoreOp);
             attachmentDescription.initialLayout = vk::ImageLayout::eAttachmentOptimal;
             attachmentDescription.finalLayout = vk::ImageLayout::eAttachmentOptimal;
             attachmentsVK.push_back(attachmentDescription);

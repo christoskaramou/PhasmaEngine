@@ -135,13 +135,13 @@ namespace pe
         // ExecutePass transitions taaOutput/history for the copy operation and leaves
         // them in transfer layouts, so declare those as the final tracked states.
         builder.OutputCustom(taaOutput,
-                             vk::ImageLayout::eTransferSrcOptimal,
-                             vk::PipelineStageFlagBits2::eTransfer,
-                             vk::AccessFlagBits2::eTransferRead);
+                             PE_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+                             PE_STAGE_TRANSFER,
+                             PE_ACCESS_TRANSFER_READ);
         builder.OutputCustom(m_historyImage,
-                             vk::ImageLayout::eTransferDstOptimal,
-                             vk::PipelineStageFlagBits2::eTransfer,
-                             vk::AccessFlagBits2::eTransferWrite);
+                             PE_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+                             PE_STAGE_TRANSFER,
+                             PE_ACCESS_TRANSFER_WRITE);
     }
 
     void TAAPass::ExecutePass(CommandBuffer *cmd)
@@ -173,9 +173,9 @@ namespace pe
             // back to shader-read so the TAA compute shader can sample it.
             ImageBarrierInfo shaderRead{};
             shaderRead.image = m_historyImage;
-            shaderRead.layout = vk::ImageLayout::eShaderReadOnlyOptimal;
-            shaderRead.stageFlags = vk::PipelineStageFlagBits2::eComputeShader;
-            shaderRead.accessMask = vk::AccessFlagBits2::eShaderSampledRead;
+            shaderRead.layout = PE_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+            shaderRead.stageFlags = PE_STAGE_COMPUTE_SHADER;
+            shaderRead.accessMask = PE_ACCESS_SHADER_SAMPLED_READ;
             cmd->ImageBarrier(shaderRead);
         }
 
@@ -194,15 +194,15 @@ namespace pe
         // Copy Display -> History
         ImageBarrierInfo copyBarrierSrc{};
         copyBarrierSrc.image = taaOutput;
-        copyBarrierSrc.layout = vk::ImageLayout::eTransferSrcOptimal;
-        copyBarrierSrc.stageFlags = vk::PipelineStageFlagBits2::eTransfer;
-        copyBarrierSrc.accessMask = vk::AccessFlagBits2::eTransferRead;
+        copyBarrierSrc.layout = PE_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
+        copyBarrierSrc.stageFlags = PE_STAGE_TRANSFER;
+        copyBarrierSrc.accessMask = PE_ACCESS_TRANSFER_READ;
 
         ImageBarrierInfo copyBarrierDst{};
         copyBarrierDst.image = m_historyImage;
-        copyBarrierDst.layout = vk::ImageLayout::eTransferDstOptimal;
-        copyBarrierDst.stageFlags = vk::PipelineStageFlagBits2::eTransfer;
-        copyBarrierDst.accessMask = vk::AccessFlagBits2::eTransferWrite;
+        copyBarrierDst.layout = PE_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+        copyBarrierDst.stageFlags = PE_STAGE_TRANSFER;
+        copyBarrierDst.accessMask = PE_ACCESS_TRANSFER_WRITE;
 
         cmd->ImageBarrier(copyBarrierSrc);
         cmd->ImageBarrier(copyBarrierDst);

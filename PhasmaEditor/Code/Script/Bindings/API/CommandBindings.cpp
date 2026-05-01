@@ -11,66 +11,83 @@
 
 namespace pe
 {
-    static const std::unordered_map<std::string_view, vk::ImageLayout> s_imageLayoutMap = {
-        {"undefined", vk::ImageLayout::eUndefined},
-        {"general", vk::ImageLayout::eGeneral},
-        {"color_attachment", vk::ImageLayout::eColorAttachmentOptimal},
-        {"depth_attachment", vk::ImageLayout::eDepthStencilAttachmentOptimal},
-        {"shader_read", vk::ImageLayout::eShaderReadOnlyOptimal},
-        {"transfer_src", vk::ImageLayout::eTransferSrcOptimal},
-        {"transfer_dst", vk::ImageLayout::eTransferDstOptimal},
-        {"present", vk::ImageLayout::ePresentSrcKHR},
-        {"attachment", vk::ImageLayout::eAttachmentOptimal},
+    static const std::unordered_map<std::string_view, PeImageLayout> s_imageLayoutMap = {
+        {"undefined", PE_IMAGE_LAYOUT_UNDEFINED},
+        {"general", PE_IMAGE_LAYOUT_GENERAL},
+        {"color_attachment", PE_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL},
+        {"depth_attachment", PE_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL},
+        {"shader_read", PE_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL},
+        {"transfer_src", PE_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL},
+        {"transfer_dst", PE_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL},
+        {"present", PE_IMAGE_LAYOUT_PRESENT_SRC},
+        {"attachment", PE_IMAGE_LAYOUT_ATTACHMENT_OPTIMAL},
+        {"depth_stencil_read_only", PE_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL},
+        {"depth_attachment_stencil_read_only", PE_IMAGE_LAYOUT_DEPTH_ATTACHMENT_STENCIL_READ_ONLY_OPTIMAL},
+        {"depth_read_only_stencil_attachment", PE_IMAGE_LAYOUT_DEPTH_READ_ONLY_STENCIL_ATTACHMENT_OPTIMAL},
+        {"depth_read_only", PE_IMAGE_LAYOUT_DEPTH_READ_ONLY_OPTIMAL},
+        {"depth_attachment_only", PE_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL},
+        {"stencil_read_only", PE_IMAGE_LAYOUT_STENCIL_READ_ONLY_OPTIMAL},
+        {"stencil_attachment", PE_IMAGE_LAYOUT_STENCIL_ATTACHMENT_OPTIMAL},
     };
 
-    static const std::unordered_map<std::string_view, vk::PipelineStageFlags2> s_pipelineStageMap = {
-        {"none", vk::PipelineStageFlagBits2::eNone},
-        {"vertex_input", vk::PipelineStageFlagBits2::eVertexInput},
-        {"vertex", vk::PipelineStageFlagBits2::eVertexShader},
-        {"fragment", vk::PipelineStageFlagBits2::eFragmentShader},
-        {"early_fragment", vk::PipelineStageFlagBits2::eEarlyFragmentTests},
-        {"late_fragment", vk::PipelineStageFlagBits2::eLateFragmentTests},
-        {"color_output", vk::PipelineStageFlagBits2::eColorAttachmentOutput},
-        {"compute", vk::PipelineStageFlagBits2::eComputeShader},
-        {"transfer", vk::PipelineStageFlagBits2::eTransfer},
-        {"draw_indirect", vk::PipelineStageFlagBits2::eDrawIndirect},
-        {"ray_tracing", vk::PipelineStageFlagBits2::eRayTracingShaderKHR},
-        {"acceleration_structure_build", vk::PipelineStageFlagBits2::eAccelerationStructureBuildKHR},
-        {"bottom_of_pipe", vk::PipelineStageFlagBits2::eBottomOfPipe},
-        {"all_graphics", vk::PipelineStageFlagBits2::eAllGraphics},
-        {"all_commands", vk::PipelineStageFlagBits2::eAllCommands},
+    static const std::unordered_map<std::string_view, PeBarrierSync> s_pipelineStageMap = {
+        {"none", PE_STAGE_NONE},
+        {"top_of_pipe", PE_STAGE_TOP_OF_PIPE},
+        {"vertex_input", PE_STAGE_VERTEX_INPUT},
+        {"vertex", PE_STAGE_VERTEX_SHADER},
+        {"fragment", PE_STAGE_FRAGMENT_SHADER},
+        {"early_fragment", PE_STAGE_EARLY_FRAGMENT_TESTS},
+        {"late_fragment", PE_STAGE_LATE_FRAGMENT_TESTS},
+        {"color_output", PE_STAGE_COLOR_ATTACHMENT_OUTPUT},
+        {"compute", PE_STAGE_COMPUTE_SHADER},
+        {"transfer", PE_STAGE_TRANSFER},
+        {"clear", PE_STAGE_CLEAR},
+        {"copy", PE_STAGE_COPY},
+        {"host", PE_STAGE_HOST},
+        {"draw_indirect", PE_STAGE_DRAW_INDIRECT},
+        {"index_input", PE_STAGE_INDEX_INPUT},
+        {"vertex_attribute_input", PE_STAGE_VERTEX_ATTRIBUTE_INPUT},
+        {"ray_tracing", PE_STAGE_RAY_TRACING_SHADER_KHR},
+        {"acceleration_structure_build", PE_STAGE_ACCELERATION_STRUCTURE_BUILD_KHR},
+        {"bottom_of_pipe", PE_STAGE_BOTTOM_OF_PIPE},
+        {"all_graphics", PE_STAGE_ALL_GRAPHICS},
+        {"all_commands", PE_STAGE_ALL_COMMANDS},
     };
 
-    static const std::unordered_map<std::string_view, vk::AccessFlags2> s_accessFlagsMap = {
-        {"none", vk::AccessFlagBits2::eNone},
-        {"shader_read", vk::AccessFlagBits2::eShaderRead},
-        {"shader_write", vk::AccessFlagBits2::eShaderWrite},
-        {"shader_read_write", vk::AccessFlagBits2::eShaderRead | vk::AccessFlagBits2::eShaderWrite},
-        {"color_read", vk::AccessFlagBits2::eColorAttachmentRead},
-        {"color_write", vk::AccessFlagBits2::eColorAttachmentWrite},
-        {"depth_read", vk::AccessFlagBits2::eDepthStencilAttachmentRead},
-        {"depth_write", vk::AccessFlagBits2::eDepthStencilAttachmentWrite},
-        {"transfer_read", vk::AccessFlagBits2::eTransferRead},
-        {"transfer_write", vk::AccessFlagBits2::eTransferWrite},
-        {"host_write", vk::AccessFlagBits2::eHostWrite},
-        {"memory_read", vk::AccessFlagBits2::eMemoryRead},
-        {"memory_write", vk::AccessFlagBits2::eMemoryWrite},
-        {"index_read", vk::AccessFlagBits2::eIndexRead},
-        {"vertex_read", vk::AccessFlagBits2::eVertexAttributeRead},
-        {"indirect_read", vk::AccessFlagBits2::eIndirectCommandRead},
-        {"acceleration_structure_read", vk::AccessFlagBits2::eAccelerationStructureReadKHR},
-        {"acceleration_structure_write", vk::AccessFlagBits2::eAccelerationStructureWriteKHR},
+    static const std::unordered_map<std::string_view, PeBarrierAccess> s_accessFlagsMap = {
+        {"none", PE_ACCESS_NONE},
+        {"shader_read", PE_ACCESS_SHADER_READ},
+        {"shader_write", PE_ACCESS_SHADER_WRITE},
+        {"shader_read_write", PE_ACCESS_SHADER_READ | PE_ACCESS_SHADER_WRITE},
+        {"sampled_read", PE_ACCESS_SHADER_SAMPLED_READ},
+        {"uniform_read", PE_ACCESS_UNIFORM_READ},
+        {"storage_read", PE_ACCESS_SHADER_STORAGE_READ},
+        {"storage_write", PE_ACCESS_SHADER_STORAGE_WRITE},
+        {"color_read", PE_ACCESS_COLOR_ATTACHMENT_READ},
+        {"color_write", PE_ACCESS_COLOR_ATTACHMENT_WRITE},
+        {"depth_read", PE_ACCESS_DEPTH_STENCIL_ATTACHMENT_READ},
+        {"depth_write", PE_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE},
+        {"transfer_read", PE_ACCESS_TRANSFER_READ},
+        {"transfer_write", PE_ACCESS_TRANSFER_WRITE},
+        {"host_write", PE_ACCESS_HOST_WRITE},
+        {"memory_read", PE_ACCESS_MEMORY_READ},
+        {"memory_write", PE_ACCESS_MEMORY_WRITE},
+        {"index_read", PE_ACCESS_INDEX_READ},
+        {"vertex_read", PE_ACCESS_VERTEX_ATTRIBUTE_READ},
+        {"indirect_read", PE_ACCESS_INDIRECT_COMMAND_READ},
+        {"acceleration_structure_read", PE_ACCESS_ACCELERATION_STRUCTURE_READ_KHR},
+        {"acceleration_structure_write", PE_ACCESS_ACCELERATION_STRUCTURE_WRITE_KHR},
     };
 
-    static const std::unordered_map<std::string_view, vk::AttachmentLoadOp> s_loadOpMap = {
-        {"load", vk::AttachmentLoadOp::eLoad},
-        {"clear", vk::AttachmentLoadOp::eClear},
-        {"dont_care", vk::AttachmentLoadOp::eDontCare},
+    static const std::unordered_map<std::string_view, PeLoadOp> s_loadOpMap = {
+        {"load", PE_LOAD_OP_LOAD},
+        {"clear", PE_LOAD_OP_CLEAR},
+        {"dont_care", PE_LOAD_OP_DONT_CARE},
     };
 
-    static const std::unordered_map<std::string_view, vk::AttachmentStoreOp> s_storeOpMap = {
-        {"store", vk::AttachmentStoreOp::eStore},
-        {"dont_care", vk::AttachmentStoreOp::eDontCare},
+    static const std::unordered_map<std::string_view, PeStoreOp> s_storeOpMap = {
+        {"store", PE_STORE_OP_STORE},
+        {"dont_care", PE_STORE_OP_DONT_CARE},
     };
 
     static const std::unordered_map<std::string_view, vk::ImageAspectFlags> s_aspectMaskMap = {
@@ -80,15 +97,15 @@ namespace pe
         {"depth_stencil", vk::ImageAspectFlagBits::eDepth | vk::ImageAspectFlagBits::eStencil},
     };
 
-    static vk::ImageLayout ToImageLayout(const std::string &s)
+    static PeImageLayout ToImageLayout(const std::string &s)
     {
-        return Lookup(s, s_imageLayoutMap, vk::ImageLayout::eUndefined);
+        return Lookup(s, s_imageLayoutMap, PE_IMAGE_LAYOUT_UNDEFINED);
     }
-    static vk::PipelineStageFlags2 ToPipelineStage(const std::string &s)
+    static PeBarrierSync ToPipelineStage(const std::string &s)
     {
         return Lookup(s, s_pipelineStageMap);
     }
-    static vk::AccessFlags2 ToAccessFlags(const std::string &s)
+    static PeBarrierAccess ToAccessFlags(const std::string &s)
     {
         return Lookup(s, s_accessFlagsMap);
     }
@@ -175,13 +192,13 @@ namespace pe
                         att.image = img ? img->Get() : nullptr;
                         if (!att.image) continue;
                         if (entry.size() >= 2)
-                            att.loadOp = Lookup(entry.get<std::string>(2), s_loadOpMap, vk::AttachmentLoadOp::eClear);
+                            att.loadOp = Lookup(entry.get<std::string>(2), s_loadOpMap, PE_LOAD_OP_CLEAR);
                         if (entry.size() >= 3)
-                            att.storeOp = Lookup(entry.get<std::string>(3), s_storeOpMap, vk::AttachmentStoreOp::eStore);
+                            att.storeOp = Lookup(entry.get<std::string>(3), s_storeOpMap, PE_STORE_OP_STORE);
                         if (entry.size() >= 4)
-                            att.stencilLoadOp = Lookup(entry.get<std::string>(4), s_loadOpMap, vk::AttachmentLoadOp::eDontCare);
+                            att.stencilLoadOp = Lookup(entry.get<std::string>(4), s_loadOpMap, PE_LOAD_OP_DONT_CARE);
                         if (entry.size() >= 5)
-                            att.stencilStoreOp = Lookup(entry.get<std::string>(5), s_storeOpMap, vk::AttachmentStoreOp::eDontCare);
+                            att.stencilStoreOp = Lookup(entry.get<std::string>(5), s_storeOpMap, PE_STORE_OP_DONT_CARE);
                         atts.push_back(att);
                     }
                     if (!atts.empty())
@@ -290,7 +307,7 @@ namespace pe
                 cmdType["memory_barrier"] = [](CommandBuffer &cmd,
                                                 const std::string &srcStage, const std::string &srcAccess,
                                                 const std::string &dstStage, const std::string &dstAccess) {
-                    vk::MemoryBarrier2 barrier{};
+                    MemoryBarrierInfo barrier{};
                     barrier.srcStageMask = ToPipelineStage(srcStage);
                     barrier.srcAccessMask = ToAccessFlags(srcAccess);
                     barrier.dstStageMask = ToPipelineStage(dstStage);
@@ -338,13 +355,13 @@ namespace pe
                         cmd.ImageBarriers(barriers);
                 };
                 cmdType["memory_barriers"] = [](CommandBuffer &cmd, sol::table entries) {
-                    std::vector<vk::MemoryBarrier2> barriers;
+                    std::vector<MemoryBarrierInfo> barriers;
                     barriers.reserve(entries.size());
                     for (auto &[k, v] : entries)
                     {
                         if (!v.is<sol::table>()) continue;
                         sol::table entry = v.as<sol::table>();
-                        vk::MemoryBarrier2 b{};
+                        MemoryBarrierInfo b{};
                         b.srcStageMask = ToPipelineStage(entry.get<std::string>(1));
                         b.srcAccessMask = ToAccessFlags(entry.get<std::string>(2));
                         b.dstStageMask = ToPipelineStage(entry.get<std::string>(3));
@@ -448,13 +465,13 @@ namespace pe
                         att.image = img ? img->Get() : nullptr;
                         if (!att.image) continue;
                         if (entry.size() >= 2)
-                            att.loadOp = Lookup(entry.get<std::string>(2), s_loadOpMap, vk::AttachmentLoadOp::eClear);
+                            att.loadOp = Lookup(entry.get<std::string>(2), s_loadOpMap, PE_LOAD_OP_CLEAR);
                         if (entry.size() >= 3)
-                            att.storeOp = Lookup(entry.get<std::string>(3), s_storeOpMap, vk::AttachmentStoreOp::eStore);
+                            att.storeOp = Lookup(entry.get<std::string>(3), s_storeOpMap, PE_STORE_OP_STORE);
                         if (entry.size() >= 4)
-                            att.stencilLoadOp = Lookup(entry.get<std::string>(4), s_loadOpMap, vk::AttachmentLoadOp::eDontCare);
+                            att.stencilLoadOp = Lookup(entry.get<std::string>(4), s_loadOpMap, PE_LOAD_OP_DONT_CARE);
                         if (entry.size() >= 5)
-                            att.stencilStoreOp = Lookup(entry.get<std::string>(5), s_storeOpMap, vk::AttachmentStoreOp::eDontCare);
+                            att.stencilStoreOp = Lookup(entry.get<std::string>(5), s_storeOpMap, PE_STORE_OP_DONT_CARE);
                         atts.push_back(att);
                     }
                     if (atts.empty()) return nullptr;
@@ -472,9 +489,9 @@ namespace pe
                         att.image = img ? img->Get() : nullptr;
                         if (!att.image) continue;
                         if (entry.size() >= 2)
-                            att.loadOp = Lookup(entry.get<std::string>(2), s_loadOpMap, vk::AttachmentLoadOp::eClear);
+                            att.loadOp = Lookup(entry.get<std::string>(2), s_loadOpMap, PE_LOAD_OP_CLEAR);
                         if (entry.size() >= 3)
-                            att.storeOp = Lookup(entry.get<std::string>(3), s_storeOpMap, vk::AttachmentStoreOp::eStore);
+                            att.storeOp = Lookup(entry.get<std::string>(3), s_storeOpMap, PE_STORE_OP_STORE);
                         atts.push_back(att);
                     }
                     if (atts.empty()) return nullptr;

@@ -99,7 +99,7 @@ namespace pe
                 mergedBindings.push_back(bInfo);
         }
 
-        vk::ShaderStageFlags mergedStage = a->GetStage() | b->GetStage();
+        PeShaderStageFlags mergedStage = a->GetStage() | b->GetStage();
         bool pushDesc = a->GetLayout()->IsPushDescriptor() || b->GetLayout()->IsPushDescriptor();
         std::string name = "merged_descriptor";
 

@@ -275,9 +275,9 @@ extern "C"
 
             pe::ImageBarrierInfo barrier{};
             barrier.image = swapImage;
-            barrier.layout = vk::ImageLayout::eColorAttachmentOptimal;
-            barrier.stageFlags = vk::PipelineStageFlagBits2::eColorAttachmentOutput;
-            barrier.accessMask = vk::AccessFlagBits2::eColorAttachmentWrite;
+            barrier.layout = PE_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+            barrier.stageFlags = PE_STAGE_COLOR_ATTACHMENT_OUTPUT;
+            barrier.accessMask = PE_ACCESS_COLOR_ATTACHMENT_WRITE;
             barrier.baseMipLevel = 0;
             barrier.mipLevels = 1;
             barrier.baseArrayLayer = 0;
@@ -344,9 +344,9 @@ extern "C"
 
                 pe::ImageBarrierInfo barrier{};
                 barrier.image = swapImage;
-                barrier.layout = vk::ImageLayout::ePresentSrcKHR;
-                barrier.stageFlags = vk::PipelineStageFlagBits2::eBottomOfPipe;
-                barrier.accessMask = vk::AccessFlagBits2::eNone;
+                barrier.layout = PE_IMAGE_LAYOUT_PRESENT_SRC;
+                barrier.stageFlags = PE_STAGE_BOTTOM_OF_PIPE;
+                barrier.accessMask = PE_ACCESS_NONE;
                 barrier.baseMipLevel = 0;
                 barrier.mipLevels = 1;
                 barrier.baseArrayLayer = 0;

@@ -692,8 +692,8 @@ namespace pe
         {
             BufferBarrierInfo barrier{};
             barrier.buffer = buffer;
-            barrier.stageMask = vk::PipelineStageFlagBits2::eTransfer | vk::PipelineStageFlagBits2::eComputeShader;
-            barrier.accessMask = vk::AccessFlagBits2::eTransferWrite | vk::AccessFlagBits2::eShaderRead | vk::AccessFlagBits2::eShaderWrite;
+            barrier.stageMask = PE_STAGE_TRANSFER | PE_STAGE_COMPUTE_SHADER;
+            barrier.accessMask = PE_ACCESS_TRANSFER_WRITE | PE_ACCESS_SHADER_READ | PE_ACCESS_SHADER_WRITE;
             barrier.size = size;
             barrier.offset = 0;
             cmd->BufferBarrier(barrier);
@@ -701,8 +701,8 @@ namespace pe
 
         BufferBarrierInfo countersBarrier{};
         countersBarrier.buffer = m_cullingCountersBuffers[frame];
-        countersBarrier.stageMask = vk::PipelineStageFlagBits2::eTransfer | vk::PipelineStageFlagBits2::eComputeShader;
-        countersBarrier.accessMask = vk::AccessFlagBits2::eTransferWrite | vk::AccessFlagBits2::eShaderRead | vk::AccessFlagBits2::eShaderWrite;
+        countersBarrier.stageMask = PE_STAGE_TRANSFER | PE_STAGE_COMPUTE_SHADER;
+        countersBarrier.accessMask = PE_ACCESS_TRANSFER_WRITE | PE_ACCESS_SHADER_READ | PE_ACCESS_SHADER_WRITE;
         countersBarrier.size = 7 * sizeof(uint32_t);
         countersBarrier.offset = 0;
         cmd->BufferBarrier(countersBarrier);
@@ -776,8 +776,8 @@ namespace pe
         auto recordComputeWrite = [](Buffer *buffer)
         {
             BufferTrackInfo &ti = buffer->GetTrackInfo();
-            ti.stageMask = vk::PipelineStageFlagBits2::eComputeShader;
-            ti.accessMask = vk::AccessFlagBits2::eShaderWrite;
+            ti.stageMask = PE_STAGE_COMPUTE_SHADER;
+            ti.accessMask = PE_ACCESS_SHADER_WRITE;
         };
         recordComputeWrite(m_cullingCountersBuffers[frame]);
         recordComputeWrite(m_indirectOpaqueSS[frame]);
@@ -797,8 +797,8 @@ namespace pe
         {
             BufferBarrierInfo barrier{};
             barrier.buffer = buffer;
-            barrier.stageMask = vk::PipelineStageFlagBits2::eComputeShader;
-            barrier.accessMask = vk::AccessFlagBits2::eShaderWrite | vk::AccessFlagBits2::eShaderRead;
+            barrier.stageMask = PE_STAGE_COMPUTE_SHADER;
+            barrier.accessMask = PE_ACCESS_SHADER_WRITE | PE_ACCESS_SHADER_READ;
             barrier.size = size;
             barrier.offset = 0;
             cmd->BufferBarrier(barrier);
@@ -811,8 +811,8 @@ namespace pe
             addComputeBarrier(m_sortKeysAlphaBlend[frame], sortKeySize);
             addComputeBarrier(m_sortKeysTransmission[frame], sortKeySize);
 
-            countersBarrier.stageMask = vk::PipelineStageFlagBits2::eComputeShader;
-            countersBarrier.accessMask = vk::AccessFlagBits2::eShaderWrite | vk::AccessFlagBits2::eShaderRead;
+            countersBarrier.stageMask = PE_STAGE_COMPUTE_SHADER;
+            countersBarrier.accessMask = PE_ACCESS_SHADER_WRITE | PE_ACCESS_SHADER_READ;
             cmd->BufferBarrier(countersBarrier);
 
             auto dispatchBitonicSort = [&](Buffer *indirectBuffer, Buffer *sortKeyBuffer)
@@ -863,8 +863,8 @@ namespace pe
         {
             BufferBarrierInfo barrier{};
             barrier.buffer = buffer;
-            barrier.stageMask = vk::PipelineStageFlagBits2::eComputeShader | vk::PipelineStageFlagBits2::eDrawIndirect;
-            barrier.accessMask = vk::AccessFlagBits2::eShaderWrite | vk::AccessFlagBits2::eIndirectCommandRead;
+            barrier.stageMask = PE_STAGE_COMPUTE_SHADER | PE_STAGE_DRAW_INDIRECT;
+            barrier.accessMask = PE_ACCESS_SHADER_WRITE | PE_ACCESS_INDIRECT_COMMAND_READ;
             barrier.size = static_cast<uint64_t>(m_indirectCapacity) * sizeof(vk::DrawIndexedIndirectCommand);
             barrier.offset = 0;
             cmd->BufferBarrier(barrier);
@@ -880,8 +880,8 @@ namespace pe
         }
         addIndirectBarrier(m_indirectSelected[frame]);
 
-        countersBarrier.stageMask = vk::PipelineStageFlagBits2::eComputeShader | vk::PipelineStageFlagBits2::eDrawIndirect;
-        countersBarrier.accessMask = vk::AccessFlagBits2::eShaderWrite | vk::AccessFlagBits2::eIndirectCommandRead;
+        countersBarrier.stageMask = PE_STAGE_COMPUTE_SHADER | PE_STAGE_DRAW_INDIRECT;
+        countersBarrier.accessMask = PE_ACCESS_SHADER_WRITE | PE_ACCESS_INDIRECT_COMMAND_READ;
         cmd->BufferBarrier(countersBarrier);
     }
 

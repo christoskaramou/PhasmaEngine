@@ -111,18 +111,18 @@ namespace pe
     void SSAOPass::DeclareOutputs(RGBuilder &builder)
     {
         builder.OutputCustom(m_ssaoRT,
-                             vk::ImageLayout::eShaderReadOnlyOptimal,
-                             vk::PipelineStageFlagBits2::eComputeShader,
-                             vk::AccessFlagBits2::eShaderRead);
+                             PE_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+                             PE_STAGE_COMPUTE_SHADER,
+                             PE_ACCESS_SHADER_READ);
     }
 
     void SSAOPass::ExecutePass(CommandBuffer *cmd)
     {
-        vk::MemoryBarrier2 barrier{};
-        barrier.srcAccessMask = vk::AccessFlagBits2::eShaderWrite;
-        barrier.dstAccessMask = vk::AccessFlagBits2::eNone;
-        barrier.srcStageMask = vk::PipelineStageFlagBits2::eComputeShader;
-        barrier.dstStageMask = vk::PipelineStageFlagBits2::eAllCommands;
+        MemoryBarrierInfo barrier{};
+        barrier.srcAccessMask = PE_ACCESS_SHADER_WRITE;
+        barrier.dstAccessMask = PE_ACCESS_NONE;
+        barrier.srcStageMask = PE_STAGE_COMPUTE_SHADER;
+        barrier.dstStageMask = PE_STAGE_ALL_COMMANDS;
 
         cmd->BeginDebugRegion("SSAOPass");
         cmd->MemoryBarrier(barrier);

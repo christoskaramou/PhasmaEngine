@@ -10,8 +10,11 @@
 #include "API/RenderPass.h"
 #include "API/Semaphore.h"
 #include "API/Vulkan/VulkanBufferImpl.h"
+#include "API/Vulkan/VulkanDescriptorImpl.h"
 #include "API/Vulkan/VulkanImageImpl.h"
 #include "API/Vulkan/VulkanImageViewImpl.h"
+#include "API/Vulkan/VulkanRHITypeUtils.h"
+#include "API/Vulkan/VulkanSamplerImpl.h"
 
 namespace pe
 {
@@ -137,9 +140,9 @@ namespace pe
         for (uint32_t i = 0; i < images.size(); i++)
         {
             barriers[i].image = images[i];
-            barriers[i].layout = vk::ImageLayout::eTransferDstOptimal;
-            barriers[i].stageFlags = vk::PipelineStageFlagBits2::eTransfer;
-            barriers[i].accessMask = vk::AccessFlagBits2::eTransferWrite;
+            barriers[i].layout = PE_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+            barriers[i].stageFlags = PE_STAGE_TRANSFER;
+            barriers[i].accessMask = PE_ACCESS_TRANSFER_WRITE;
         }
         Image::Barriers(this, barriers);
 
@@ -173,9 +176,9 @@ namespace pe
         for (uint32_t i = 0; i < images.size(); i++)
         {
             barriers[i].image = images[i];
-            barriers[i].layout = vk::ImageLayout::eTransferDstOptimal;
-            barriers[i].stageFlags = vk::PipelineStageFlagBits2::eTransfer;
-            barriers[i].accessMask = vk::AccessFlagBits2::eTransferWrite;
+            barriers[i].layout = PE_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+            barriers[i].stageFlags = PE_STAGE_TRANSFER;
+            barriers[i].accessMask = PE_ACCESS_TRANSFER_WRITE;
         }
         Image::Barriers(this, barriers);
 
@@ -293,7 +296,7 @@ namespace pe
 
                 ImageBarrierInfo barrier{};
                 barrier.image = attachment.image;
-                barrier.layout = vk::ImageLayout::eAttachmentOptimal;
+                barrier.layout = PE_IMAGE_LAYOUT_ATTACHMENT_OPTIMAL;
 
                 const vk::Format attVkFormat = pe::ToVkFormat(attachment.image->GetFormat());
                 if (VulkanHelpers::HasDepthOrStencil(attVkFormat))
@@ -307,15 +310,15 @@ namespace pe
 
                     depthInfo.imageView = pe::GetVulkanImageView(attachment.image->GetRTV());
                     depthInfo.imageLayout = vk::ImageLayout::eAttachmentOptimal;
-                    depthInfo.loadOp = attachment.loadOp;
-                    depthInfo.storeOp = attachment.storeOp;
+                    depthInfo.loadOp = ToVkLoadOp(attachment.loadOp);
+                    depthInfo.storeOp = ToVkStoreOp(attachment.storeOp);
                     depthInfo.clearValue.depthStencil = vk::ClearDepthStencilValue{clearDepth, clearStencil};
 
-                    barrier.stageFlags = vk::PipelineStageFlagBits2::eEarlyFragmentTests | vk::PipelineStageFlagBits2::eLateFragmentTests;
-                    if (attachment.loadOp == vk::AttachmentLoadOp::eLoad)
-                        barrier.accessMask = vk::AccessFlagBits2::eDepthStencilAttachmentRead;
+                    barrier.stageFlags = PE_STAGE_EARLY_FRAGMENT_TESTS | PE_STAGE_LATE_FRAGMENT_TESTS;
+                    if (attachment.loadOp == PE_LOAD_OP_LOAD)
+                        barrier.accessMask = PE_ACCESS_DEPTH_STENCIL_ATTACHMENT_READ;
                     else
-                        barrier.accessMask = vk::AccessFlagBits2::eDepthStencilAttachmentWrite;
+                        barrier.accessMask = PE_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE;
                 }
                 else
                 {
@@ -324,16 +327,16 @@ namespace pe
                     vk::RenderingAttachmentInfo colorInfo{};
                     colorInfo.imageView = pe::GetVulkanImageView(attachment.image->GetRTV());
                     colorInfo.imageLayout = vk::ImageLayout::eAttachmentOptimal;
-                    colorInfo.loadOp = attachment.loadOp;
-                    colorInfo.storeOp = attachment.storeOp;
+                    colorInfo.loadOp = ToVkLoadOp(attachment.loadOp);
+                    colorInfo.storeOp = ToVkStoreOp(attachment.storeOp);
                     colorInfo.clearValue.color = {clearColor[0], clearColor[1], clearColor[2], clearColor[3]};
                     colorInfos.push_back(colorInfo);
 
-                    barrier.stageFlags = vk::PipelineStageFlagBits2::eColorAttachmentOutput;
-                    if (attachment.loadOp == vk::AttachmentLoadOp::eLoad)
-                        barrier.accessMask = vk::AccessFlagBits2::eColorAttachmentRead;
+                    barrier.stageFlags = PE_STAGE_COLOR_ATTACHMENT_OUTPUT;
+                    if (attachment.loadOp == PE_LOAD_OP_LOAD)
+                        barrier.accessMask = PE_ACCESS_COLOR_ATTACHMENT_READ;
                     else
-                        barrier.accessMask = vk::AccessFlagBits2::eColorAttachmentWrite;
+                        barrier.accessMask = PE_ACCESS_COLOR_ATTACHMENT_WRITE;
                 }
 
                 attachmentBarriers.push_back(barrier);
@@ -360,14 +363,14 @@ namespace pe
             {
                 const Attachment &attachment = attachments[i];
                 Image *renderTarget = attachment.image;
-                if (VulkanHelpers::HasDepthOrStencil(pe::ToVkFormat(renderTarget->GetFormat())) && (attachment.loadOp == vk::AttachmentLoadOp::eClear || attachment.stencilLoadOp == vk::AttachmentLoadOp::eClear))
+                if (VulkanHelpers::HasDepthOrStencil(pe::ToVkFormat(renderTarget->GetFormat())) && (attachment.loadOp == PE_LOAD_OP_CLEAR || attachment.stencilLoadOp == PE_LOAD_OP_CLEAR))
                 {
                     const float clearDepth = renderTarget->m_clearColor[0];
                     uint32_t clearStencil = static_cast<uint32_t>(renderTarget->m_clearColor[1]);
                     clearValues[clearOps].depthStencil = vk::ClearDepthStencilValue{clearDepth, clearStencil};
                     clearOps++;
                 }
-                else if (attachment.loadOp == vk::AttachmentLoadOp::eClear)
+                else if (attachment.loadOp == PE_LOAD_OP_CLEAR)
                 {
                     const vec4 &clearColor = renderTarget->m_clearColor;
                     clearValues[clearOps].color = {clearColor[0], clearColor[1], clearColor[2], clearColor[3]};
@@ -376,16 +379,16 @@ namespace pe
 
                 ImageBarrierInfo barrier{};
                 barrier.image = attachment.image;
-                barrier.layout = vk::ImageLayout::eAttachmentOptimal;
+                barrier.layout = PE_IMAGE_LAYOUT_ATTACHMENT_OPTIMAL;
                 if (VulkanHelpers::HasDepthOrStencil(pe::ToVkFormat(renderTarget->GetFormat())))
                 {
-                    barrier.stageFlags = vk::PipelineStageFlagBits2::eEarlyFragmentTests | vk::PipelineStageFlagBits2::eLateFragmentTests;
-                    barrier.accessMask = vk::AccessFlagBits2::eDepthStencilAttachmentWrite;
+                    barrier.stageFlags = PE_STAGE_EARLY_FRAGMENT_TESTS | PE_STAGE_LATE_FRAGMENT_TESTS;
+                    barrier.accessMask = PE_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE;
                 }
                 else
                 {
-                    barrier.stageFlags = vk::PipelineStageFlagBits2::eColorAttachmentOutput;
-                    barrier.accessMask = vk::AccessFlagBits2::eColorAttachmentWrite;
+                    barrier.stageFlags = PE_STAGE_COLOR_ATTACHMENT_OUTPUT;
+                    barrier.accessMask = PE_ACCESS_COLOR_ATTACHMENT_WRITE;
                 }
                 attachmentBarriers.push_back(barrier);
             }
@@ -419,11 +422,11 @@ namespace pe
         for (uint32_t i = 0; i < m_attachmentCount; i++)
         {
             const Attachment &attachment = m_attachments[i];
-            if (attachment.loadOp == vk::AttachmentLoadOp::eLoad)
+            if (attachment.loadOp == PE_LOAD_OP_LOAD)
             {
                 attachment.image->m_trackInfos[0][0].accessMask = VulkanHelpers::HasDepth(pe::ToVkFormat(attachment.image->GetFormat()))
-                                                                      ? vk::AccessFlagBits2::eDepthStencilAttachmentWrite
-                                                                      : vk::AccessFlagBits2::eColorAttachmentWrite;
+                                                                      ? PE_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE
+                                                                      : PE_ACCESS_COLOR_ATTACHMENT_WRITE;
             }
         }
 
@@ -588,7 +591,7 @@ namespace pe
             uint32_t end = start;
             while (end < count && descriptors[end])
             {
-                dsets.push_back(descriptors[end]->ApiHandle());
+                dsets.push_back(pe::GetVulkanDescriptorSet(descriptors[end]));
                 ++end;
             }
 
@@ -653,16 +656,16 @@ namespace pe
             writes[i] = vk::WriteDescriptorSet{};
             writes[i].dstBinding = info[i].binding;
             writes[i].dstArrayElement = 0;
-            writes[i].descriptorType = info[i].type;
+            writes[i].descriptorType = ToVkDescriptorType(info[i].type);
             if (info[i].views.size() > 0)
             {
                 imageInfo[i].resize(info[i].views.size());
                 for (uint32_t j = 0; j < info[i].views.size(); j++)
                 {
                     imageInfo[i][j] = vk::DescriptorImageInfo{};
-                    imageInfo[i][j].imageView = info[i].views[j];
-                    imageInfo[i][j].imageLayout = info[i].layouts[j];
-                    imageInfo[i][j].sampler = info[i].type == vk::DescriptorType::eCombinedImageSampler ? info[i].samplers[j] : vk::Sampler{};
+                    imageInfo[i][j].imageView = pe::GetVulkanImageView(info[i].views[j]);
+                    imageInfo[i][j].imageLayout = ToVkImageLayout(info[i].imageLayout);
+                    imageInfo[i][j].sampler = info[i].type == PE_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER ? pe::GetVulkanSampler(info[i].samplers[j]) : vk::Sampler{};
                 }
 
                 writes[i].descriptorCount = static_cast<uint32_t>(imageInfo[i].size());
@@ -682,7 +685,7 @@ namespace pe
                 writes[i].descriptorCount = static_cast<uint32_t>(bufferInfo[i].size());
                 writes[i].pBufferInfo = bufferInfo[i].data();
             }
-            else if (info[i].samplers.size() > 0 && info[i].type != vk::DescriptorType::eCombinedImageSampler)
+            else if (info[i].samplers.size() > 0 && info[i].type != PE_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER)
             {
                 imageInfo[i].resize(info[i].samplers.size());
                 for (uint32_t j = 0; j < info[i].samplers.size(); j++)
@@ -690,7 +693,7 @@ namespace pe
                     imageInfo[i][j] = vk::DescriptorImageInfo{};
                     imageInfo[i][j].imageView = nullptr;
                     imageInfo[i][j].imageLayout = vk::ImageLayout::eUndefined;
-                    imageInfo[i][j].sampler = info[i].samplers[j];
+                    imageInfo[i][j].sampler = pe::GetVulkanSampler(info[i].samplers[j]);
                 }
 
                 writes[i].descriptorCount = static_cast<uint32_t>(imageInfo[i].size());
@@ -807,8 +810,8 @@ namespace pe
         // srcAccess=TransferWrite. Without this, subsequent barriers inherit a stale
         // src state and readers at compute stage race with the fill.
         BufferTrackInfo &trackInfo = buffer->GetTrackInfo();
-        trackInfo.stageMask = vk::PipelineStageFlagBits2::eClear;
-        trackInfo.accessMask = vk::AccessFlagBits2::eTransferWrite;
+        trackInfo.stageMask = PE_STAGE_CLEAR;
+        trackInfo.accessMask = PE_ACCESS_TRANSFER_WRITE;
     }
 
     void CommandBuffer::TraceRays(uint32_t width, uint32_t height, uint32_t depth)
@@ -846,20 +849,35 @@ namespace pe
         Image::Barriers(this, infos);
     }
 
-    void CommandBuffer::MemoryBarrier(const vk::MemoryBarrier2 &info)
+    void CommandBuffer::MemoryBarrier(const MemoryBarrierInfo &info)
     {
+        vk::MemoryBarrier2 barrier{};
+        barrier.srcStageMask = ToVkPipelineStageFlags(info.srcStageMask);
+        barrier.srcAccessMask = ToVkAccessFlags(info.srcAccessMask);
+        barrier.dstStageMask = ToVkPipelineStageFlags(info.dstStageMask);
+        barrier.dstAccessMask = ToVkAccessFlags(info.dstAccessMask);
+
         vk::DependencyInfo dependencyInfo{};
         dependencyInfo.memoryBarrierCount = 1;
-        dependencyInfo.pMemoryBarriers = &info;
+        dependencyInfo.pMemoryBarriers = &barrier;
 
         m_apiHandle.pipelineBarrier2(dependencyInfo);
     }
 
-    void CommandBuffer::MemoryBarriers(const std::vector<vk::MemoryBarrier2> &infos)
+    void CommandBuffer::MemoryBarriers(const std::vector<MemoryBarrierInfo> &infos)
     {
+        std::vector<vk::MemoryBarrier2> barriers(infos.size());
+        for (size_t i = 0; i < infos.size(); ++i)
+        {
+            barriers[i].srcStageMask = ToVkPipelineStageFlags(infos[i].srcStageMask);
+            barriers[i].srcAccessMask = ToVkAccessFlags(infos[i].srcAccessMask);
+            barriers[i].dstStageMask = ToVkPipelineStageFlags(infos[i].dstStageMask);
+            barriers[i].dstAccessMask = ToVkAccessFlags(infos[i].dstAccessMask);
+        }
+
         vk::DependencyInfo dependencyInfo{};
-        dependencyInfo.memoryBarrierCount = static_cast<uint32_t>(infos.size());
-        dependencyInfo.pMemoryBarriers = infos.data();
+        dependencyInfo.memoryBarrierCount = static_cast<uint32_t>(barriers.size());
+        dependencyInfo.pMemoryBarriers = barriers.data();
 
         m_apiHandle.pipelineBarrier2(dependencyInfo);
     }
@@ -900,9 +918,9 @@ namespace pe
     }
 
     void CommandBuffer::SetEvent(Image *image,
-                                 vk::ImageLayout srcLayout, vk::ImageLayout dstLayout,
-                                 vk::PipelineStageFlags2 srcStage, vk::PipelineStageFlags2 dstStage,
-                                 vk::AccessFlags2 srcAccess, vk::AccessFlags2 dstAccess)
+                                 PeImageLayout srcLayout, PeImageLayout dstLayout,
+                                 PeBarrierSync srcStage, PeBarrierSync dstStage,
+                                 PeBarrierAccess srcAccess, PeBarrierAccess dstAccess)
     {
         m_event->Set(this, image, srcLayout, dstLayout, srcStage, dstStage, srcAccess, dstAccess);
     }
@@ -912,7 +930,7 @@ namespace pe
         m_event->Wait();
     }
 
-    void CommandBuffer::ResetEvent(vk::PipelineStageFlags2 resetStage)
+    void CommandBuffer::ResetEvent(PeBarrierSync resetStage)
     {
         m_event->Reset(resetStage);
     }

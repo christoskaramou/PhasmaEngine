@@ -119,11 +119,11 @@ namespace pe
         cmd->BuildAccelerationStructures(1, &buildInfo, &pBuildRanges);
 
         // Add barrier for subsequent use
-        vk::MemoryBarrier2 barrier{};
-        barrier.srcStageMask = vk::PipelineStageFlagBits2::eAccelerationStructureBuildKHR;
-        barrier.srcAccessMask = vk::AccessFlagBits2::eAccelerationStructureWriteKHR;
-        barrier.dstStageMask = vk::PipelineStageFlagBits2::eAccelerationStructureBuildKHR; // Block next build if using same scratch
-        barrier.dstAccessMask = vk::AccessFlagBits2::eAccelerationStructureReadKHR | vk::AccessFlagBits2::eAccelerationStructureWriteKHR;
+        MemoryBarrierInfo barrier{};
+        barrier.srcStageMask = PE_STAGE_ACCELERATION_STRUCTURE_BUILD_KHR;
+        barrier.srcAccessMask = PE_ACCESS_ACCELERATION_STRUCTURE_WRITE_KHR;
+        barrier.dstStageMask = PE_STAGE_ACCELERATION_STRUCTURE_BUILD_KHR; // Block next build if using same scratch
+        barrier.dstAccessMask = PE_ACCESS_ACCELERATION_STRUCTURE_READ_KHR | PE_ACCESS_ACCELERATION_STRUCTURE_WRITE_KHR;
         cmd->MemoryBarrier(barrier);
     }
 
@@ -194,11 +194,11 @@ namespace pe
         cmd->BuildAccelerationStructures(1, &buildInfo, &pBuildRanges);
 
         // Add barrier for subsequent use
-        vk::MemoryBarrier2 barrier{};
-        barrier.srcStageMask = vk::PipelineStageFlagBits2::eAccelerationStructureBuildKHR;
-        barrier.srcAccessMask = vk::AccessFlagBits2::eAccelerationStructureWriteKHR;
-        barrier.dstStageMask = vk::PipelineStageFlagBits2::eRayTracingShaderKHR | vk::PipelineStageFlagBits2::eAccelerationStructureBuildKHR;
-        barrier.dstAccessMask = vk::AccessFlagBits2::eAccelerationStructureReadKHR | vk::AccessFlagBits2::eAccelerationStructureWriteKHR;
+        MemoryBarrierInfo barrier{};
+        barrier.srcStageMask = PE_STAGE_ACCELERATION_STRUCTURE_BUILD_KHR;
+        barrier.srcAccessMask = PE_ACCESS_ACCELERATION_STRUCTURE_WRITE_KHR;
+        barrier.dstStageMask = PE_STAGE_RAY_TRACING_SHADER_KHR | PE_STAGE_ACCELERATION_STRUCTURE_BUILD_KHR;
+        barrier.dstAccessMask = PE_ACCESS_ACCELERATION_STRUCTURE_READ_KHR | PE_ACCESS_ACCELERATION_STRUCTURE_WRITE_KHR;
         cmd->MemoryBarrier(barrier);
     }
 
@@ -241,11 +241,11 @@ namespace pe
         cmd->BuildAccelerationStructures(1, &buildInfo, &pBuildRanges);
 
         // Add barrier for subsequent use
-        vk::MemoryBarrier2 barrier{};
-        barrier.srcStageMask = vk::PipelineStageFlagBits2::eAccelerationStructureBuildKHR;
-        barrier.srcAccessMask = vk::AccessFlagBits2::eAccelerationStructureWriteKHR;
-        barrier.dstStageMask = vk::PipelineStageFlagBits2::eRayTracingShaderKHR | vk::PipelineStageFlagBits2::eAccelerationStructureBuildKHR;
-        barrier.dstAccessMask = vk::AccessFlagBits2::eAccelerationStructureReadKHR | vk::AccessFlagBits2::eAccelerationStructureWriteKHR;
+        MemoryBarrierInfo barrier{};
+        barrier.srcStageMask = PE_STAGE_ACCELERATION_STRUCTURE_BUILD_KHR;
+        barrier.srcAccessMask = PE_ACCESS_ACCELERATION_STRUCTURE_WRITE_KHR;
+        barrier.dstStageMask = PE_STAGE_RAY_TRACING_SHADER_KHR | PE_STAGE_ACCELERATION_STRUCTURE_BUILD_KHR;
+        barrier.dstAccessMask = PE_ACCESS_ACCELERATION_STRUCTURE_READ_KHR | PE_ACCESS_ACCELERATION_STRUCTURE_WRITE_KHR;
         cmd->MemoryBarrier(barrier);
     }
 

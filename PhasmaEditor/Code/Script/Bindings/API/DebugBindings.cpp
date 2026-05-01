@@ -12,6 +12,7 @@
 #include "API/Descriptor.h"
 #include "API/Queue.h"
 #include "API/Vulkan/VulkanBufferImpl.h"
+#include "API/Vulkan/VulkanDescriptorImpl.h"
 #include "API/Vulkan/VulkanImageImpl.h"
 
 namespace pe
@@ -55,7 +56,7 @@ namespace pe
                     Debug::SetObjectName(fb.ApiHandle(), name);
                 });
                 debug.set_function("set_descriptor_name", [](Descriptor &desc, const std::string &name) {
-                    Debug::SetObjectName(desc.ApiHandle(), name);
+                    Debug::SetObjectName(pe::GetVulkanDescriptorSet(&desc), name);
                 });
                 debug.set_function("set_queue_name", [](Queue &q, const std::string &name) {
                     Debug::SetObjectName(q.ApiHandle(), name);

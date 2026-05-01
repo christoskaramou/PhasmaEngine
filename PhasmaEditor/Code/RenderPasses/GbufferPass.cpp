@@ -39,7 +39,7 @@ namespace pe
         m_attachments[5].image = m_transparencyRT;
 
         m_attachments[6].image = m_depthStencilRT;
-        m_attachments[6].loadOp = vk::AttachmentLoadOp::eLoad;
+        m_attachments[6].loadOp = PE_LOAD_OP_LOAD;
 
         if (!m_passInfoDS)
             m_passInfoDS = std::make_shared<PassInfo>();
@@ -222,7 +222,7 @@ namespace pe
         for (int i = 0; i < 7; i++)
         {
             m_attachments[i] = {};
-            m_attachments[i].loadOp = vk::AttachmentLoadOp::eLoad;
+            m_attachments[i].loadOp = PE_LOAD_OP_LOAD;
         }
         m_attachments[0].image = m_normalRT;
         m_attachments[1].image = m_albedoRT;

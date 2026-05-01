@@ -74,7 +74,7 @@ namespace pe
                 bool day = Settings::Get<GlobalSettings>().day;
                 auto *skybox = day ? rs->GetSkyBoxDay().GetCubeMap() : rs->GetSkyBoxNight().GetCubeMap();
                 auto *desc = descriptors[0];
-                desc->SetAccelerationStructure(0, scene.GetTLAS()->ApiHandle());
+                desc->SetAccelerationStructure(0, scene.GetTLAS());
                 desc->SetImageView(1, m_display->GetUAV(0));
                 desc->SetBuffer(2, scene.GetUniforms(i));
                 desc->SetBuffer(3, scene.GetMeshConstants());

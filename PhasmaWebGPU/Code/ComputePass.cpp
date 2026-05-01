@@ -9,6 +9,7 @@
 #include "Texture.h"
 #include "Utils.h"
 #include "API/Vulkan/VulkanBufferImpl.h"
+#include "API/Vulkan/VulkanDescriptorImpl.h"
 
 extern "C" void wgpuComputePipelineAddRef(WGPUComputePipeline);
 extern "C" void wgpuComputePipelineRelease(WGPUComputePipeline);
@@ -58,54 +59,52 @@ namespace
         return true;
     }
 
-    vk::AccessFlags2 BufferAccessForUsage(pwgpu::BufferUsageKind kind)
+    PeBarrierAccess BufferAccessForUsage(pwgpu::BufferUsageKind kind)
     {
         switch (kind)
         {
         case pwgpu::BufferUsageKind::Constant:
-            return vk::AccessFlagBits2::eUniformRead;
+            return PE_ACCESS_UNIFORM_READ;
         case pwgpu::BufferUsageKind::StorageRead:
-            return vk::AccessFlagBits2::eShaderStorageRead;
+            return PE_ACCESS_SHADER_STORAGE_READ;
         case pwgpu::BufferUsageKind::Storage:
-            return vk::AccessFlagBits2::eShaderStorageRead |
-                   vk::AccessFlagBits2::eShaderStorageWrite;
+            return PE_ACCESS_SHADER_STORAGE_READ | PE_ACCESS_SHADER_STORAGE_WRITE;
         case pwgpu::BufferUsageKind::Input:
-            return vk::AccessFlagBits2::eIndirectCommandRead;
+            return PE_ACCESS_INDIRECT_COMMAND_READ;
         default:
-            return vk::AccessFlagBits2::eNone;
+            return PE_ACCESS_NONE;
         }
     }
 
-    vk::PipelineStageFlags2 BufferStageForUsage(pwgpu::BufferUsageKind kind)
+    PeBarrierSync BufferStageForUsage(pwgpu::BufferUsageKind kind)
     {
         if (kind == pwgpu::BufferUsageKind::Input)
-            return vk::PipelineStageFlagBits2::eDrawIndirect;
-        return vk::PipelineStageFlagBits2::eComputeShader;
+            return PE_STAGE_DRAW_INDIRECT;
+        return PE_STAGE_COMPUTE_SHADER;
     }
 
-    vk::AccessFlags2 TextureAccessForUsage(pwgpu::SubresourceUsageKind kind)
+    PeBarrierAccess TextureAccessForUsage(pwgpu::SubresourceUsageKind kind)
     {
         switch (kind)
         {
         case pwgpu::SubresourceUsageKind::Sampled:
-            return vk::AccessFlagBits2::eShaderSampledRead;
+            return PE_ACCESS_SHADER_SAMPLED_READ;
         case pwgpu::SubresourceUsageKind::ReadOnlyStorage:
-            return vk::AccessFlagBits2::eShaderStorageRead;
+            return PE_ACCESS_SHADER_STORAGE_READ;
         case pwgpu::SubresourceUsageKind::WriteOnlyStorage:
-            return vk::AccessFlagBits2::eShaderStorageWrite;
+            return PE_ACCESS_SHADER_STORAGE_WRITE;
         case pwgpu::SubresourceUsageKind::ReadWriteStorage:
-            return vk::AccessFlagBits2::eShaderStorageRead |
-                   vk::AccessFlagBits2::eShaderStorageWrite;
+            return PE_ACCESS_SHADER_STORAGE_READ | PE_ACCESS_SHADER_STORAGE_WRITE;
         default:
-            return vk::AccessFlagBits2::eNone;
+            return PE_ACCESS_NONE;
         }
     }
 
-    vk::ImageLayout TextureLayoutForUsage(pwgpu::SubresourceUsageKind kind)
+    PeImageLayout TextureLayoutForUsage(pwgpu::SubresourceUsageKind kind)
     {
         return kind == pwgpu::SubresourceUsageKind::Sampled
-                   ? vk::ImageLayout::eShaderReadOnlyOptimal
-                   : vk::ImageLayout::eGeneral;
+                   ? PE_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL
+                   : PE_IMAGE_LAYOUT_GENERAL;
     }
 
     void EmitDispatchResourceBarriers(WGPUComputePassEncoder cpe, WGPUBuffer indirectBuffer = nullptr)
@@ -128,7 +127,7 @@ namespace
 
                 pe::ImageBarrierInfo barrier{};
                 barrier.image = use.view->texture->image;
-                barrier.stageFlags = vk::PipelineStageFlagBits2::eComputeShader;
+                barrier.stageFlags = PE_STAGE_COMPUTE_SHADER;
                 barrier.accessMask = TextureAccessForUsage(use.kind);
                 barrier.layout = TextureLayoutForUsage(use.kind);
                 barrier.baseMipLevel = use.view->baseMipLevel;
@@ -240,7 +239,7 @@ extern "C"
                     continue;
                 if (!BglGroupEquivalent(bg->layout, bgls[i]))
                     continue;
-                vk::DescriptorSet ds = bg->descriptor->ApiHandle();
+                vk::DescriptorSet ds = pe::GetVulkanDescriptorSet(bg->descriptor);
                 cpe->cmd->ApiHandle().bindDescriptorSets(
                     vk::PipelineBindPoint::eCompute, vkLayout,
                     static_cast<uint32_t>(i), 1, &ds, 0, nullptr);
@@ -404,7 +403,7 @@ extern "C"
         }
 
         vk::PipelineLayout vkLayout(cpe->pipeline->layout->vkLayout);
-        vk::DescriptorSet ds = group->descriptor->ApiHandle();
+        vk::DescriptorSet ds = pe::GetVulkanDescriptorSet(group->descriptor);
 
         cpe->cmd->ApiHandle().bindDescriptorSets(
             vk::PipelineBindPoint::eCompute,

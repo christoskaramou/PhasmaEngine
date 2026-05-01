@@ -25,8 +25,8 @@ namespace pe
 
         m_attachments.resize(1);
         m_attachments[0].image = rs->GetRenderTarget("display");
-        m_attachments[0].loadOp = vk::AttachmentLoadOp::eLoad;
-        m_attachments[0].storeOp = vk::AttachmentStoreOp::eStore;
+        m_attachments[0].loadOp = PE_LOAD_OP_LOAD;
+        m_attachments[0].storeOp = PE_STORE_OP_STORE;
     }
 
     void ParticlePass::UpdatePassInfo()
@@ -39,7 +39,7 @@ namespace pe
         m_passInfo->topology = vk::PrimitiveTopology::eTriangleList;
         m_passInfo->cullMode = vk::CullModeFlagBits::eNone;
         m_passInfo->blendEnable = true;
-        m_passInfo->colorBlendAttachments = {PipelineColorBlendAttachmentState::ParticlesBlend};
+        m_passInfo->colorBlendAttachments = {BlendState::ParticlesBlend};
         m_passInfo->colorFormats = {pe::ToVkFormat(m_attachments[0].image->GetFormat())};
         m_passInfo->depthTestEnable = false;
         m_passInfo->depthWriteEnable = false;
@@ -127,10 +127,10 @@ namespace pe
 
         // 1. Barrier: Wait for Compute Write to finish before Vertex Read
         BufferBarrierInfo barrier{};
-        barrier.stageMask = vk::PipelineStageFlagBits2::eVertexShader;
-        barrier.accessMask = vk::AccessFlagBits2::eShaderRead;
+        barrier.stageMask = PE_STAGE_VERTEX_SHADER;
+        barrier.accessMask = PE_ACCESS_SHADER_READ;
         barrier.buffer = particleBuffer;
-        barrier.size = VK_WHOLE_SIZE;
+        barrier.size = PE_WHOLE_SIZE;
         cmd->BufferBarrier(barrier);
 
         struct PushConstants

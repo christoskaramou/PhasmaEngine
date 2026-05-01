@@ -10,6 +10,7 @@
 #include "API/RenderPass.h"
 #include "API/Surface.h"
 #include "API/Swapchain.h"
+#include "API/Vulkan/VulkanDescriptorImpl.h"
 #include "GUIState.h"
 #include "Helpers.h"
 #include "Particles/ParticleManager.h"
@@ -1382,7 +1383,7 @@ namespace pe
 
         RendererSystem *renderer = GetGlobalSystem<RendererSystem>();
         m_attachment->image = renderer->GetDisplayRT();
-        m_attachment->loadOp = vk::AttachmentLoadOp::eLoad;
+        m_attachment->loadOp = PE_LOAD_OP_LOAD;
         VkFormat format = static_cast<VkFormat>(RHII.GetSurface()->GetFormat());
         Queue *queue = RHII.GetMainQueue();
 
@@ -1393,7 +1394,7 @@ namespace pe
         init_info.QueueFamily = queue->GetFamilyId();
         init_info.Queue = queue->ApiHandle();
         init_info.PipelineCache = nullptr;
-        init_info.DescriptorPool = RHII.GetDescriptorPool()->ApiHandle();
+        init_info.DescriptorPool = pe::GetVulkanDescriptorPool(RHII.GetDescriptorPool());
         init_info.Subpass = 0;
         init_info.MinImageCount = RHII.GetSwapchainImageCount();
         init_info.ImageCount = RHII.GetSwapchainImageCount();
@@ -1666,9 +1667,9 @@ namespace pe
 
             ImageBarrierInfo sceneViewBarrier{};
             sceneViewBarrier.image = GUIState::s_sceneViewImage;
-            sceneViewBarrier.layout = vk::ImageLayout::eShaderReadOnlyOptimal;
-            sceneViewBarrier.stageFlags = vk::PipelineStageFlagBits2::eFragmentShader;
-            sceneViewBarrier.accessMask = vk::AccessFlagBits2::eShaderRead;
+            sceneViewBarrier.layout = PE_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+            sceneViewBarrier.stageFlags = PE_STAGE_FRAGMENT_SHADER;
+            sceneViewBarrier.accessMask = PE_ACCESS_SHADER_READ;
             cmd->ImageBarrier(sceneViewBarrier);
         }
 

@@ -81,6 +81,13 @@ enum PeImageLayout : uint32_t
     PE_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
     PE_IMAGE_LAYOUT_PRESENT_SRC,
     PE_IMAGE_LAYOUT_ATTACHMENT_OPTIMAL, // Vulkan 1.3 unified (color or depth)
+    PE_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL,
+    PE_IMAGE_LAYOUT_DEPTH_ATTACHMENT_STENCIL_READ_ONLY_OPTIMAL,
+    PE_IMAGE_LAYOUT_DEPTH_READ_ONLY_STENCIL_ATTACHMENT_OPTIMAL,
+    PE_IMAGE_LAYOUT_DEPTH_READ_ONLY_OPTIMAL,
+    PE_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL,
+    PE_IMAGE_LAYOUT_STENCIL_READ_ONLY_OPTIMAL,
+    PE_IMAGE_LAYOUT_STENCIL_ATTACHMENT_OPTIMAL,
     PE_IMAGE_LAYOUT_COUNT
 };
 
@@ -332,21 +339,27 @@ constexpr uint32_t PE_SHADER_STAGE_BIT_COUNT = 14;
 
 using PePipelineStageFlags = uint64_t;
 constexpr PePipelineStageFlags PE_STAGE_NONE = 0ULL;
-constexpr PePipelineStageFlags PE_STAGE_VERTEX_SHADER = 1ULL << 0;
-constexpr PePipelineStageFlags PE_STAGE_FRAGMENT_SHADER = 1ULL << 1;
-constexpr PePipelineStageFlags PE_STAGE_COMPUTE_SHADER = 1ULL << 2;
-constexpr PePipelineStageFlags PE_STAGE_TRANSFER = 1ULL << 3;
-constexpr PePipelineStageFlags PE_STAGE_COLOR_ATTACHMENT_OUTPUT = 1ULL << 4;
-constexpr PePipelineStageFlags PE_STAGE_EARLY_FRAGMENT_TESTS = 1ULL << 5;
-constexpr PePipelineStageFlags PE_STAGE_LATE_FRAGMENT_TESTS = 1ULL << 6;
-constexpr PePipelineStageFlags PE_STAGE_VERTEX_INPUT = 1ULL << 7;
-constexpr PePipelineStageFlags PE_STAGE_DRAW_INDIRECT = 1ULL << 8;
-constexpr PePipelineStageFlags PE_STAGE_ALL_GRAPHICS = 1ULL << 9;
-constexpr PePipelineStageFlags PE_STAGE_ALL_COMMANDS = 1ULL << 10;
-constexpr PePipelineStageFlags PE_STAGE_BOTTOM_OF_PIPE = 1ULL << 11;
-constexpr PePipelineStageFlags PE_STAGE_RAY_TRACING_SHADER_KHR = 1ULL << 12;
-constexpr PePipelineStageFlags PE_STAGE_ACCELERATION_STRUCTURE_BUILD_KHR = 1ULL << 13;
-constexpr uint32_t PE_STAGE_BIT_COUNT = 14;
+constexpr PePipelineStageFlags PE_STAGE_TOP_OF_PIPE = 1ULL << 0;
+constexpr PePipelineStageFlags PE_STAGE_VERTEX_SHADER = 1ULL << 1;
+constexpr PePipelineStageFlags PE_STAGE_FRAGMENT_SHADER = 1ULL << 2;
+constexpr PePipelineStageFlags PE_STAGE_COMPUTE_SHADER = 1ULL << 3;
+constexpr PePipelineStageFlags PE_STAGE_TRANSFER = 1ULL << 4;
+constexpr PePipelineStageFlags PE_STAGE_COLOR_ATTACHMENT_OUTPUT = 1ULL << 5;
+constexpr PePipelineStageFlags PE_STAGE_EARLY_FRAGMENT_TESTS = 1ULL << 6;
+constexpr PePipelineStageFlags PE_STAGE_LATE_FRAGMENT_TESTS = 1ULL << 7;
+constexpr PePipelineStageFlags PE_STAGE_VERTEX_INPUT = 1ULL << 8;
+constexpr PePipelineStageFlags PE_STAGE_DRAW_INDIRECT = 1ULL << 9;
+constexpr PePipelineStageFlags PE_STAGE_ALL_GRAPHICS = 1ULL << 10;
+constexpr PePipelineStageFlags PE_STAGE_ALL_COMMANDS = 1ULL << 11;
+constexpr PePipelineStageFlags PE_STAGE_BOTTOM_OF_PIPE = 1ULL << 12;
+constexpr PePipelineStageFlags PE_STAGE_RAY_TRACING_SHADER_KHR = 1ULL << 13;
+constexpr PePipelineStageFlags PE_STAGE_ACCELERATION_STRUCTURE_BUILD_KHR = 1ULL << 14;
+constexpr PePipelineStageFlags PE_STAGE_CLEAR = 1ULL << 15;
+constexpr PePipelineStageFlags PE_STAGE_COPY = 1ULL << 16;
+constexpr PePipelineStageFlags PE_STAGE_HOST = 1ULL << 17;
+constexpr PePipelineStageFlags PE_STAGE_INDEX_INPUT = 1ULL << 18;
+constexpr PePipelineStageFlags PE_STAGE_VERTEX_ATTRIBUTE_INPUT = 1ULL << 19;
+constexpr uint32_t PE_STAGE_BIT_COUNT = 20;
 
 using PeAccessFlags = uint64_t;
 constexpr PeAccessFlags PE_ACCESS_NONE = 0ULL;
@@ -367,7 +380,10 @@ constexpr PeAccessFlags PE_ACCESS_MEMORY_WRITE = 1ULL << 13;
 constexpr PeAccessFlags PE_ACCESS_HOST_WRITE = 1ULL << 14;
 constexpr PeAccessFlags PE_ACCESS_ACCELERATION_STRUCTURE_READ_KHR = 1ULL << 15;
 constexpr PeAccessFlags PE_ACCESS_ACCELERATION_STRUCTURE_WRITE_KHR = 1ULL << 16;
-constexpr uint32_t PE_ACCESS_BIT_COUNT = 17;
+constexpr PeAccessFlags PE_ACCESS_UNIFORM_READ = 1ULL << 17;
+constexpr PeAccessFlags PE_ACCESS_SHADER_STORAGE_READ = 1ULL << 18;
+constexpr PeAccessFlags PE_ACCESS_SHADER_STORAGE_WRITE = 1ULL << 19;
+constexpr uint32_t PE_ACCESS_BIT_COUNT = 20;
 
 // Spec-named aliases (Phase 0 additive). The cherry-picked names above are
 // Vulkan-flavored; the Phase 0 design spec refers to these flag groups by
@@ -376,6 +392,24 @@ constexpr uint32_t PE_ACCESS_BIT_COUNT = 17;
 using PeBarrierSync = PePipelineStageFlags;
 using PeBarrierAccess = PeAccessFlags;
 using PeBindingType = PeDescriptorType;
+
+inline bool IsReadOnlyAccess(PeAccessFlags accessMask)
+{
+    constexpr PeAccessFlags kWriteAccessMask =
+        PE_ACCESS_SHADER_WRITE |
+        PE_ACCESS_SHADER_STORAGE_WRITE |
+        PE_ACCESS_COLOR_ATTACHMENT_WRITE |
+        PE_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE |
+        PE_ACCESS_TRANSFER_WRITE |
+        PE_ACCESS_HOST_WRITE |
+        PE_ACCESS_MEMORY_WRITE |
+        PE_ACCESS_ACCELERATION_STRUCTURE_WRITE_KHR;
+
+    if (accessMask == PE_ACCESS_NONE)
+        return false;
+
+    return (accessMask & kWriteAccessMask) == PE_ACCESS_NONE;
+}
 
 using PeImageUsageFlags = uint32_t;
 constexpr PeImageUsageFlags PE_IMAGE_USAGE_NONE = 0u;

@@ -29,7 +29,7 @@ namespace pe
         m_passInfo->pFragShader = Shader::Create(Path::Assets + "Shaders/Tonemap/TonemapPS.hlsl", vk::ShaderStageFlagBits::eFragment, "mainPS", std::vector<Define>{}, ShaderCodeType::HLSL);
         m_passInfo->dynamicStates = {vk::DynamicState::eViewport, vk::DynamicState::eScissor};
         m_passInfo->cullMode = vk::CullModeFlagBits::eBack;
-        m_passInfo->colorBlendAttachments = {PipelineColorBlendAttachmentState::Default};
+        m_passInfo->colorBlendAttachments = {BlendState::Default};
         m_passInfo->colorFormats = {pe::ToVkFormat(m_displayRT->GetFormat())};
         m_passInfo->Update();
     }
@@ -53,9 +53,9 @@ namespace pe
     {
         ImageBarrierInfo barrier{};
         barrier.image = m_frameImage;
-        barrier.layout = vk::ImageLayout::eShaderReadOnlyOptimal;
-        barrier.stageFlags = vk::PipelineStageFlagBits2::eFragmentShader;
-        barrier.accessMask = vk::AccessFlagBits2::eShaderRead;
+        barrier.layout = PE_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+        barrier.stageFlags = PE_STAGE_FRAGMENT_SHADER;
+        barrier.accessMask = PE_ACCESS_SHADER_READ;
 
         cmd->BeginDebugRegion("TonemapPass");
         cmd->CopyImage(m_displayRT, m_frameImage); // Copy RT to image

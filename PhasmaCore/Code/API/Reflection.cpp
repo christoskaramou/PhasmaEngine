@@ -1,6 +1,7 @@
 #include "API/Reflection.h"
 #include "API/Descriptor.h"
 #include "API/Shader.h"
+#include "API/Vulkan/VulkanDescriptorImpl.h"
 #include "spirv_cross/spirv_cross.hpp"
 
 namespace pe
@@ -445,8 +446,8 @@ namespace pe
             DescriptorBindingInfo info{};
             info.binding = desc.binding;
             info.count = GetResourceArrayCount(desc.typeInfo);
-            info.imageLayout = vk::ImageLayout::eShaderReadOnlyOptimal;
-            info.type = vk::DescriptorType::eCombinedImageSampler;
+            info.imageLayout = PE_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+            info.type = PE_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
             info.name = desc.name;
 
             setInfos[desc.set].push_back(info);
@@ -457,7 +458,7 @@ namespace pe
             DescriptorBindingInfo info{};
             info.binding = desc.binding;
             info.count = GetResourceArrayCount(desc.typeInfo);
-            info.type = vk::DescriptorType::eSampler;
+            info.type = PE_DESCRIPTOR_TYPE_SAMPLER;
             info.name = desc.name;
 
             setInfos[desc.set].push_back(info);
@@ -468,8 +469,8 @@ namespace pe
             DescriptorBindingInfo info{};
             info.binding = desc.binding;
             info.count = GetResourceArrayCount(desc.typeInfo);
-            info.imageLayout = vk::ImageLayout::eShaderReadOnlyOptimal;
-            info.type = vk::DescriptorType::eSampledImage;
+            info.imageLayout = PE_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+            info.type = PE_DESCRIPTOR_TYPE_SAMPLED_IMAGE;
             info.name = desc.name;
 
             setInfos[desc.set].push_back(info);
@@ -480,8 +481,8 @@ namespace pe
             DescriptorBindingInfo info{};
             info.binding = desc.binding;
             info.count = GetResourceArrayCount(desc.typeInfo);
-            info.imageLayout = vk::ImageLayout::eGeneral;
-            info.type = vk::DescriptorType::eStorageImage;
+            info.imageLayout = PE_IMAGE_LAYOUT_GENERAL;
+            info.type = PE_DESCRIPTOR_TYPE_STORAGE_IMAGE;
             info.name = desc.name;
 
             setInfos[desc.set].push_back(info);
@@ -492,7 +493,7 @@ namespace pe
             DescriptorBindingInfo info{};
             info.binding = desc.binding;
             info.count = GetResourceArrayCount(desc.typeInfo);
-            info.type = vk::DescriptorType::eUniformBuffer;
+            info.type = PE_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
             info.name = desc.name;
 
             setInfos[desc.set].push_back(info);
@@ -503,7 +504,7 @@ namespace pe
             DescriptorBindingInfo info{};
             info.binding = desc.binding;
             info.count = GetResourceArrayCount(desc.typeInfo);
-            info.type = vk::DescriptorType::eStorageBuffer;
+            info.type = PE_DESCRIPTOR_TYPE_STORAGE_BUFFER;
             info.name = desc.name;
 
             setInfos[desc.set].push_back(info);
@@ -514,7 +515,7 @@ namespace pe
             DescriptorBindingInfo info{};
             info.binding = desc.binding;
             info.count = GetResourceArrayCount(desc.typeInfo);
-            info.type = vk::DescriptorType::eAccelerationStructureKHR;
+            info.type = PE_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE;
             info.name = desc.name;
 
             setInfos[desc.set].push_back(info);
@@ -539,22 +540,22 @@ namespace pe
                         auto &a = setInfo[i];
                         auto &b = setInfo[i + 1];
 
-                        if (a.type == vk::DescriptorType::eCombinedImageSampler && b.type == vk::DescriptorType::eSampler)
+                        if (a.type == PE_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER && b.type == PE_DESCRIPTOR_TYPE_SAMPLER)
                         {
                             setInfo.erase(setInfo.begin() + i + 1);
                             continue;
                         }
-                        if (a.type == vk::DescriptorType::eSampler && b.type == vk::DescriptorType::eCombinedImageSampler)
+                        if (a.type == PE_DESCRIPTOR_TYPE_SAMPLER && b.type == PE_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER)
                         {
                             setInfo.erase(setInfo.begin() + i);
                             continue;
                         }
 
-                        if ((a.type == vk::DescriptorType::eSampledImage && b.type == vk::DescriptorType::eSampler) ||
-                            (a.type == vk::DescriptorType::eSampler && b.type == vk::DescriptorType::eSampledImage))
+                        if ((a.type == PE_DESCRIPTOR_TYPE_SAMPLED_IMAGE && b.type == PE_DESCRIPTOR_TYPE_SAMPLER) ||
+                            (a.type == PE_DESCRIPTOR_TYPE_SAMPLER && b.type == PE_DESCRIPTOR_TYPE_SAMPLED_IMAGE))
                         {
-                            a.type = vk::DescriptorType::eCombinedImageSampler;
-                            a.imageLayout = vk::ImageLayout::eShaderReadOnlyOptimal;
+                            a.type = PE_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+                            a.imageLayout = PE_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
                             setInfo.erase(setInfo.begin() + i + 1);
                             continue;
                         }
@@ -562,7 +563,7 @@ namespace pe
                     i++;
                 }
 
-                descriptor = Descriptor::Create(setInfo, m_shader->GetShaderStage(), false, "auto_descriptor");
+                descriptor = Descriptor::Create(setInfo, FromVkShaderStageFlags(m_shader->GetShaderStage()), false, "auto_descriptor");
             }
 
             descriptors.push_back(descriptor);

@@ -552,8 +552,8 @@ extern "C"
             backing->Flush(size, static_cast<size_t>(bufferOffset));
 
             pe::BufferTrackInfo &trackInfo = backing->GetTrackInfo();
-            trackInfo.stageMask = vk::PipelineStageFlagBits2::eHost;
-            trackInfo.accessMask = vk::AccessFlagBits2::eHostWrite;
+            trackInfo.stageMask = PE_STAGE_HOST;
+            trackInfo.accessMask = PE_ACCESS_HOST_WRITE;
         }
         else if (queue && queue->peQueue)
         {
@@ -580,9 +580,8 @@ extern "C"
                 cmd->ApiHandle().pipelineBarrier2(dep);
 
                 pe::BufferTrackInfo &trackInfo = backing->GetTrackInfo();
-                trackInfo.stageMask = vk::PipelineStageFlagBits2::eAllCommands;
-                trackInfo.accessMask =
-                    vk::AccessFlagBits2::eMemoryRead | vk::AccessFlagBits2::eMemoryWrite;
+                trackInfo.stageMask = PE_STAGE_ALL_COMMANDS;
+                trackInfo.accessMask = PE_ACCESS_MEMORY_READ | PE_ACCESS_MEMORY_WRITE;
             }
 
             cmd->End();
@@ -846,9 +845,9 @@ extern "C"
 
         pe::ImageBarrierInfo barrier{};
         barrier.image = image;
-        barrier.stageFlags = vk::PipelineStageFlagBits2::eTransfer;
-        barrier.accessMask = vk::AccessFlagBits2::eTransferWrite;
-        barrier.layout = vk::ImageLayout::eTransferDstOptimal;
+        barrier.stageFlags = PE_STAGE_TRANSFER;
+        barrier.accessMask = PE_ACCESS_TRANSFER_WRITE;
+        barrier.layout = PE_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
         barrier.baseMipLevel = destination->mipLevel;
         barrier.mipLevels = 1;
         barrier.baseArrayLayer = is3D ? 0 : destination->origin.z;
@@ -858,11 +857,11 @@ extern "C"
         // Order the lazy-clear's transferWrite before the upcoming copy's transferWrite.
         if (didLazyInit)
         {
-            vk::MemoryBarrier2 mb{};
-            mb.srcStageMask = vk::PipelineStageFlagBits2::eTransfer;
-            mb.srcAccessMask = vk::AccessFlagBits2::eTransferWrite;
-            mb.dstStageMask = vk::PipelineStageFlagBits2::eTransfer;
-            mb.dstAccessMask = vk::AccessFlagBits2::eTransferWrite;
+            pe::MemoryBarrierInfo mb{};
+            mb.srcStageMask = PE_STAGE_TRANSFER;
+            mb.srcAccessMask = PE_ACCESS_TRANSFER_WRITE;
+            mb.dstStageMask = PE_STAGE_TRANSFER;
+            mb.dstAccessMask = PE_ACCESS_TRANSFER_WRITE;
             cmd->MemoryBarrier(mb);
         }
 

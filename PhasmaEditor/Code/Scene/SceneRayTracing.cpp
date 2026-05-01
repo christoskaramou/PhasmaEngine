@@ -123,13 +123,13 @@ namespace pe
         });
 
         // --- Pass 2: Build BLASes ---
-        vk::MemoryBarrier2 barrier{};
-        barrier.srcStageMask = vk::PipelineStageFlagBits2::eTransfer;
-        barrier.srcAccessMask = vk::AccessFlagBits2::eTransferWrite;
-        barrier.dstStageMask = vk::PipelineStageFlagBits2::eAccelerationStructureBuildKHR |
-                               vk::PipelineStageFlagBits2::eTransfer;
-        barrier.dstAccessMask = vk::AccessFlagBits2::eAccelerationStructureReadKHR |
-                                vk::AccessFlagBits2::eShaderRead | vk::AccessFlagBits2::eTransferRead;
+        MemoryBarrierInfo barrier{};
+        barrier.srcStageMask = PE_STAGE_TRANSFER;
+        barrier.srcAccessMask = PE_ACCESS_TRANSFER_WRITE;
+        barrier.dstStageMask = PE_STAGE_ACCELERATION_STRUCTURE_BUILD_KHR |
+                               PE_STAGE_TRANSFER;
+        barrier.dstAccessMask = PE_ACCESS_ACCELERATION_STRUCTURE_READ_KHR |
+                                PE_ACCESS_SHADER_READ | PE_ACCESS_TRANSFER_READ;
         cmd->MemoryBarrier(barrier);
 
         vk::DeviceSize currentOffset = 0;
@@ -362,11 +362,11 @@ namespace pe
         CommandBuffer *cmd = RHII.GetMainQueue()->AcquireCommandBuffer();
         cmd->Begin();
 
-        vk::MemoryBarrier2 barrier{};
-        barrier.srcStageMask = vk::PipelineStageFlagBits2::eTransfer;
-        barrier.srcAccessMask = vk::AccessFlagBits2::eTransferWrite;
-        barrier.dstStageMask = vk::PipelineStageFlagBits2::eAccelerationStructureBuildKHR;
-        barrier.dstAccessMask = vk::AccessFlagBits2::eAccelerationStructureReadKHR;
+        MemoryBarrierInfo barrier{};
+        barrier.srcStageMask = PE_STAGE_TRANSFER;
+        barrier.srcAccessMask = PE_ACCESS_TRANSFER_WRITE;
+        barrier.dstStageMask = PE_STAGE_ACCELERATION_STRUCTURE_BUILD_KHR;
+        barrier.dstAccessMask = PE_ACCESS_ACCELERATION_STRUCTURE_READ_KHR;
         cmd->MemoryBarrier(barrier);
 
         BuildTLASFromInstances(cmd);

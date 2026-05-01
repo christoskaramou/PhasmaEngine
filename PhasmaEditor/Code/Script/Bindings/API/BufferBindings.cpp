@@ -134,7 +134,7 @@ namespace pe
                     sol::table t = lua.create_table();
                     t["queue_family_index"] = info.queueFamilyIndex;
                     t["offset"] = static_cast<uint32_t>(info.offset);
-                    t["size"] = static_cast<uint32_t>(info.size == VK_WHOLE_SIZE ? buf.Size() : info.size);
+                    t["size"] = static_cast<uint32_t>(info.size == PE_WHOLE_SIZE ? buf.Size() : info.size);
                     return t;
                 }; });
         }

@@ -25,11 +25,11 @@ namespace pe
     struct BufferBarrierInfo
     {
         Buffer *buffer = nullptr;
-        vk::PipelineStageFlags2 stageMask = vk::PipelineStageFlagBits2::eNone;
-        vk::AccessFlags2 accessMask = vk::AccessFlagBits2::eNone;
-        uint32_t queueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+        PeBarrierSync stageMask = PE_STAGE_NONE;
+        PeBarrierAccess accessMask = PE_ACCESS_NONE;
+        uint32_t queueFamilyIndex = PE_QUEUE_FAMILY_IGNORED;
         size_t offset = 0;
-        size_t size = VK_WHOLE_SIZE;
+        size_t size = PE_WHOLE_SIZE;
     };
     using BufferTrackInfo = BufferBarrierInfo;
 

@@ -277,9 +277,9 @@ namespace pe
 
             ImageBarrierInfo toTransfer{};
             toTransfer.image = image;
-            toTransfer.layout = vk::ImageLayout::eTransferDstOptimal;
-            toTransfer.stageFlags = vk::PipelineStageFlagBits2::eTransfer;
-            toTransfer.accessMask = vk::AccessFlagBits2::eTransferWrite;
+            toTransfer.layout = PE_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+            toTransfer.stageFlags = PE_STAGE_TRANSFER;
+            toTransfer.accessMask = PE_ACCESS_TRANSFER_WRITE;
             toTransfer.baseMipLevel = 0;
             toTransfer.mipLevels = dds.mipLevels;
             cmd->ImageBarrier(toTransfer);
@@ -324,11 +324,11 @@ namespace pe
 
             ImageBarrierInfo toRead{};
             toRead.image = image;
-            toRead.layout = vk::ImageLayout::eShaderReadOnlyOptimal;
-            toRead.stageFlags = vk::PipelineStageFlagBits2::eFragmentShader |
-                                vk::PipelineStageFlagBits2::eComputeShader |
-                                vk::PipelineStageFlagBits2::eRayTracingShaderKHR;
-            toRead.accessMask = vk::AccessFlagBits2::eShaderRead;
+            toRead.layout = PE_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+            toRead.stageFlags = PE_STAGE_FRAGMENT_SHADER |
+                                PE_STAGE_COMPUTE_SHADER |
+                                PE_STAGE_RAY_TRACING_SHADER_KHR;
+            toRead.accessMask = PE_ACCESS_SHADER_READ;
             toRead.baseMipLevel = 0;
             toRead.mipLevels = dds.mipLevels;
             cmd->ImageBarrier(toRead);
@@ -366,11 +366,11 @@ namespace pe
 
             ImageBarrierInfo barrier{};
             barrier.image = image;
-            barrier.layout = vk::ImageLayout::eShaderReadOnlyOptimal;
-            barrier.stageFlags = vk::PipelineStageFlagBits2::eFragmentShader |
-                                 vk::PipelineStageFlagBits2::eComputeShader |
-                                 vk::PipelineStageFlagBits2::eRayTracingShaderKHR;
-            barrier.accessMask = vk::AccessFlagBits2::eShaderRead;
+            barrier.layout = PE_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+            barrier.stageFlags = PE_STAGE_FRAGMENT_SHADER |
+                                 PE_STAGE_COMPUTE_SHADER |
+                                 PE_STAGE_RAY_TRACING_SHADER_KHR;
+            barrier.accessMask = PE_ACCESS_SHADER_READ;
             cmd->ImageBarrier(barrier);
 
             return image;
@@ -443,7 +443,7 @@ namespace pe
             {
                 ImageTrackInfo info{};
                 info.image = this;
-                info.layout = ToVkImageLayout(desc.initialLayout);
+                info.layout = desc.initialLayout;
                 m_trackInfos[i][j] = info;
             }
         }

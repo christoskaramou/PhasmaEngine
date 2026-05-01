@@ -31,7 +31,7 @@ namespace pe
         m_attachments.resize(1);
         m_attachments[0] = {};
         m_attachments[0].image = m_viewportRT;
-        m_attachments[0].loadOp = vk::AttachmentLoadOp::eClear;
+        m_attachments[0].loadOp = PE_LOAD_OP_CLEAR;
 
         m_uniforms.resize(RHII.GetSwapchainImageCount());
     }
@@ -48,7 +48,7 @@ namespace pe
         m_passInfo->pVertShader = Shader::Create(Path::Assets + "Shaders/Common/Quad.hlsl", vk::ShaderStageFlagBits::eVertex, "mainVS", std::vector<Define>{}, ShaderCodeType::HLSL);
         m_passInfo->pFragShader = Shader::Create(Path::Assets + "Shaders/Gbuffer/LightingPS.hlsl", vk::ShaderStageFlagBits::eFragment, "mainPS", definesFrag, ShaderCodeType::HLSL);
         m_passInfo->dynamicStates = {vk::DynamicState::eViewport, vk::DynamicState::eScissor};
-        m_passInfo->colorBlendAttachments = {PipelineColorBlendAttachmentState::Default};
+        m_passInfo->colorBlendAttachments = {BlendState::Default};
         m_passInfo->colorFormats = {pe::ToVkFormat(m_viewportRT->GetFormat())};
         m_passInfo->depthTestEnable = false;
         m_passInfo->depthWriteEnable = false;
@@ -220,7 +220,7 @@ namespace pe
         m_attachments.resize(1);
         m_attachments[0] = {};
         m_attachments[0].image = m_viewportRT;
-        m_attachments[0].loadOp = vk::AttachmentLoadOp::eLoad;
+        m_attachments[0].loadOp = PE_LOAD_OP_LOAD;
 
         m_uniforms.resize(RHII.GetSwapchainImageCount());
     }
@@ -236,7 +236,7 @@ namespace pe
         m_passInfo->pVertShader = Shader::Create(Path::Assets + "Shaders/Common/Quad.hlsl", vk::ShaderStageFlagBits::eVertex, "mainVS", std::vector<Define>{}, ShaderCodeType::HLSL);
         m_passInfo->pFragShader = Shader::Create(Path::Assets + "Shaders/Gbuffer/LightingPS.hlsl", vk::ShaderStageFlagBits::eFragment, "mainPS", definesFrag, ShaderCodeType::HLSL);
         m_passInfo->dynamicStates = {vk::DynamicState::eViewport, vk::DynamicState::eScissor};
-        m_passInfo->colorBlendAttachments = {PipelineColorBlendAttachmentState::Default};
+        m_passInfo->colorBlendAttachments = {BlendState::Default};
         m_passInfo->blendEnable = true;
         m_passInfo->colorFormats = {pe::ToVkFormat(m_viewportRT->GetFormat())};
         m_passInfo->depthTestEnable = false;

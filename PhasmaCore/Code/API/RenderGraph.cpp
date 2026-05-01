@@ -1,6 +1,8 @@
 #include "RenderGraph.h"
 #include "API/Command.h"
 #include "API/Helpers.h"
+#include "API/Vulkan/VulkanImageImpl.h"
+#include "API/Vulkan/VulkanRHITypeUtils.h"
 
 namespace pe
 {
@@ -20,9 +22,9 @@ namespace pe
 
         InputInfo info{};
         info.image = image;
-        info.layout = layout;
-        info.stageFlags = stageFlags;
-        info.accessMask = accessMask;
+        info.layout = FromVkImageLayout(layout);
+        info.stageFlags = FromVkPipelineStageFlags(stageFlags);
+        info.accessMask = FromVkAccessFlags(accessMask);
         m_inputs.push_back(info);
     }
 
@@ -58,9 +60,9 @@ namespace pe
 
         OutputInfo info{};
         info.image = image;
-        info.finalLayout = vk::ImageLayout::eAttachmentOptimal;
-        info.stageFlags = vk::PipelineStageFlagBits2::eColorAttachmentOutput;
-        info.accessMask = vk::AccessFlagBits2::eColorAttachmentWrite;
+        info.finalLayout = PE_IMAGE_LAYOUT_ATTACHMENT_OPTIMAL;
+        info.stageFlags = PE_STAGE_COLOR_ATTACHMENT_OUTPUT;
+        info.accessMask = PE_ACCESS_COLOR_ATTACHMENT_WRITE;
         m_outputs.push_back(info);
     }
 
@@ -71,13 +73,13 @@ namespace pe
 
         OutputInfo info{};
         info.image = image;
-        info.finalLayout = vk::ImageLayout::eAttachmentOptimal;
-        info.stageFlags = vk::PipelineStageFlagBits2::eEarlyFragmentTests | vk::PipelineStageFlagBits2::eLateFragmentTests;
-        info.accessMask = vk::AccessFlagBits2::eDepthStencilAttachmentWrite;
+        info.finalLayout = PE_IMAGE_LAYOUT_ATTACHMENT_OPTIMAL;
+        info.stageFlags = PE_STAGE_EARLY_FRAGMENT_TESTS | PE_STAGE_LATE_FRAGMENT_TESTS;
+        info.accessMask = PE_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE;
         m_outputs.push_back(info);
     }
 
-    void RGBuilder::OutputCustom(Image *image, vk::ImageLayout layout, vk::PipelineStageFlags2 stage, vk::AccessFlags2 access)
+    void RGBuilder::OutputCustom(Image *image, PeImageLayout layout, PeBarrierSync stage, PeBarrierAccess access)
     {
         if (!image)
             return;
@@ -88,6 +90,11 @@ namespace pe
         info.stageFlags = stage;
         info.accessMask = access;
         m_outputs.push_back(info);
+    }
+
+    void RGBuilder::OutputCustom(Image *image, vk::ImageLayout layout, vk::PipelineStageFlags2 stage, vk::AccessFlags2 access)
+    {
+        OutputCustom(image, FromVkImageLayout(layout), FromVkPipelineStageFlags(stage), FromVkAccessFlags(access));
     }
 
     void RGBuilder::Reset()
@@ -147,7 +154,7 @@ namespace pe
 
             for (auto &input : m_builderScratch.m_inputs)
             {
-                if (input.image && !VulkanHelpers::IsReadOnlyAccess(input.accessMask))
+                if (input.image && !IsReadOnlyAccess(input.accessMask))
                 {
                     if (seen.insert(input.image).second)
                         io.outputs.push_back(input.image);
@@ -159,7 +166,7 @@ namespace pe
             seen.clear();
             for (auto &input : m_builderScratch.m_inputs)
             {
-                if (input.image && VulkanHelpers::IsReadOnlyAccess(input.accessMask))
+                if (input.image && IsReadOnlyAccess(input.accessMask))
                 {
                     if (seen.insert(input.image).second)
                         io.inputs.push_back(input.image);
@@ -217,7 +224,7 @@ namespace pe
         // Attachment barriers and tracking are handled by BeginPass/EndPass.
         for (auto &output : builder.m_outputs)
         {
-            if (!output.image || output.finalLayout == vk::ImageLayout::eAttachmentOptimal)
+            if (!output.image || output.finalLayout == PE_IMAGE_LAYOUT_ATTACHMENT_OPTIMAL)
                 continue;
 
             ImageTrackInfo fixup{};

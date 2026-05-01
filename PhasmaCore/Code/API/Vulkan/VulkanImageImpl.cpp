@@ -7,6 +7,7 @@
 #include "API/StagingManager.h"
 #include "API/Vulkan/VulkanBufferImpl.h"
 #include "API/Vulkan/VulkanImageViewImpl.h"
+#include "API/Vulkan/VulkanRHITypeUtils.h"
 
 namespace pe
 {
@@ -356,6 +357,20 @@ namespace pe
             return vk::ImageLayout::ePresentSrcKHR;
         case PE_IMAGE_LAYOUT_ATTACHMENT_OPTIMAL:
             return vk::ImageLayout::eAttachmentOptimal;
+        case PE_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL:
+            return vk::ImageLayout::eDepthStencilReadOnlyOptimal;
+        case PE_IMAGE_LAYOUT_DEPTH_ATTACHMENT_STENCIL_READ_ONLY_OPTIMAL:
+            return vk::ImageLayout::eDepthAttachmentStencilReadOnlyOptimal;
+        case PE_IMAGE_LAYOUT_DEPTH_READ_ONLY_STENCIL_ATTACHMENT_OPTIMAL:
+            return vk::ImageLayout::eDepthReadOnlyStencilAttachmentOptimal;
+        case PE_IMAGE_LAYOUT_DEPTH_READ_ONLY_OPTIMAL:
+            return vk::ImageLayout::eDepthReadOnlyOptimal;
+        case PE_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL:
+            return vk::ImageLayout::eDepthAttachmentOptimal;
+        case PE_IMAGE_LAYOUT_STENCIL_READ_ONLY_OPTIMAL:
+            return vk::ImageLayout::eStencilReadOnlyOptimal;
+        case PE_IMAGE_LAYOUT_STENCIL_ATTACHMENT_OPTIMAL:
+            return vk::ImageLayout::eStencilAttachmentOptimal;
         default:
             return vk::ImageLayout::eUndefined;
         }
@@ -383,6 +398,20 @@ namespace pe
             return PE_IMAGE_LAYOUT_PRESENT_SRC;
         case vk::ImageLayout::eAttachmentOptimal:
             return PE_IMAGE_LAYOUT_ATTACHMENT_OPTIMAL;
+        case vk::ImageLayout::eDepthStencilReadOnlyOptimal:
+            return PE_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL;
+        case vk::ImageLayout::eDepthAttachmentStencilReadOnlyOptimal:
+            return PE_IMAGE_LAYOUT_DEPTH_ATTACHMENT_STENCIL_READ_ONLY_OPTIMAL;
+        case vk::ImageLayout::eDepthReadOnlyStencilAttachmentOptimal:
+            return PE_IMAGE_LAYOUT_DEPTH_READ_ONLY_STENCIL_ATTACHMENT_OPTIMAL;
+        case vk::ImageLayout::eDepthReadOnlyOptimal:
+            return PE_IMAGE_LAYOUT_DEPTH_READ_ONLY_OPTIMAL;
+        case vk::ImageLayout::eDepthAttachmentOptimal:
+            return PE_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL;
+        case vk::ImageLayout::eStencilReadOnlyOptimal:
+            return PE_IMAGE_LAYOUT_STENCIL_READ_ONLY_OPTIMAL;
+        case vk::ImageLayout::eStencilAttachmentOptimal:
+            return PE_IMAGE_LAYOUT_STENCIL_ATTACHMENT_OPTIMAL;
         default:
             return PE_IMAGE_LAYOUT_UNDEFINED;
         }
@@ -518,13 +547,13 @@ namespace pe
 
         std::vector<ImageBarrierInfo> barriers(2);
         barriers[0].image = src;
-        barriers[0].stageFlags = vk::PipelineStageFlagBits2::eTransfer;
-        barriers[0].accessMask = vk::AccessFlagBits2::eTransferRead;
-        barriers[0].layout = vk::ImageLayout::eTransferSrcOptimal;
+        barriers[0].stageFlags = PE_STAGE_TRANSFER;
+        barriers[0].accessMask = PE_ACCESS_TRANSFER_READ;
+        barriers[0].layout = PE_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
         barriers[1].image = dst;
-        barriers[1].stageFlags = vk::PipelineStageFlagBits2::eTransfer;
-        barriers[1].accessMask = vk::AccessFlagBits2::eTransferWrite;
-        barriers[1].layout = vk::ImageLayout::eTransferDstOptimal;
+        barriers[1].stageFlags = PE_STAGE_TRANSFER;
+        barriers[1].accessMask = PE_ACCESS_TRANSFER_WRITE;
+        barriers[1].layout = PE_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
         Image::Barriers(cmd, barriers);
 
         vk::ImageCopy2 region{};
@@ -562,15 +591,15 @@ namespace pe
 
         ImageBarrierInfo barrier{};
         barrier.image = src;
-        barrier.stageFlags = vk::PipelineStageFlagBits2::eTransfer;
-        barrier.accessMask = vk::AccessFlagBits2::eTransferRead;
-        barrier.layout = vk::ImageLayout::eTransferSrcOptimal;
+        barrier.stageFlags = PE_STAGE_TRANSFER;
+        barrier.accessMask = PE_ACCESS_TRANSFER_READ;
+        barrier.layout = PE_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
         Image::Barrier(cmd, barrier);
 
         BufferBarrierInfo bufBarrier{};
         bufBarrier.buffer = dst;
-        bufBarrier.stageMask = vk::PipelineStageFlagBits2::eTransfer;
-        bufBarrier.accessMask = vk::AccessFlagBits2::eTransferWrite;
+        bufBarrier.stageMask = PE_STAGE_TRANSFER;
+        bufBarrier.accessMask = PE_ACCESS_TRANSFER_WRITE;
         cmd->BufferBarrier(bufBarrier);
 
         vk::BufferImageCopy2 region{};
@@ -602,18 +631,18 @@ namespace pe
 
         std::vector<ImageBarrierInfo> barriers(2);
         barriers[0].image = dst;
-        barriers[0].stageFlags = vk::PipelineStageFlagBits2::eTransfer;
-        barriers[0].accessMask = vk::AccessFlagBits2::eTransferWrite;
-        barriers[0].layout = vk::ImageLayout::eTransferDstOptimal;
+        barriers[0].stageFlags = PE_STAGE_TRANSFER;
+        barriers[0].accessMask = PE_ACCESS_TRANSFER_WRITE;
+        barriers[0].layout = PE_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
         barriers[0].baseArrayLayer = region.srcSubresource.baseArrayLayer;
         barriers[0].arrayLayers = region.srcSubresource.layerCount;
         barriers[0].baseMipLevel = region.srcSubresource.mipLevel;
         barriers[0].mipLevels = 1;
 
         barriers[1].image = src;
-        barriers[1].stageFlags = vk::PipelineStageFlagBits2::eTransfer;
-        barriers[1].accessMask = vk::AccessFlagBits2::eTransferRead;
-        barriers[1].layout = vk::ImageLayout::eTransferSrcOptimal;
+        barriers[1].stageFlags = PE_STAGE_TRANSFER;
+        barriers[1].accessMask = PE_ACCESS_TRANSFER_READ;
+        barriers[1].layout = PE_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
         barriers[1].baseArrayLayer = region.dstSubresource.baseArrayLayer;
         barriers[1].arrayLayers = region.dstSubresource.layerCount;
         barriers[1].baseMipLevel = region.dstSubresource.mipLevel;
@@ -646,9 +675,9 @@ namespace pe
 
         ImageBarrierInfo barrier{};
         barrier.image = image;
-        barrier.stageFlags = vk::PipelineStageFlagBits2::eTransfer;
-        barrier.accessMask = vk::AccessFlagBits2::eTransferWrite;
-        barrier.layout = vk::ImageLayout::eTransferDstOptimal;
+        barrier.stageFlags = PE_STAGE_TRANSFER;
+        barrier.accessMask = PE_ACCESS_TRANSFER_WRITE;
+        barrier.layout = PE_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
         barrier.baseArrayLayer = baseArrayLayer;
         barrier.arrayLayers = layerCount ? layerCount : image->GetArrayLayers();
         barrier.baseMipLevel = mipLevel;
@@ -779,8 +808,8 @@ namespace pe
         uint32_t arrayLayers = info.arrayLayers ? info.arrayLayers : image.GetArrayLayers();
         const ImageTrackInfo &oldInfo = image.GetCurrentInfo(info.baseArrayLayer, info.baseMipLevel);
 
-        bool requestRead = VulkanHelpers::IsReadOnlyAccess(info.accessMask);
-        bool previousRead = VulkanHelpers::IsReadOnlyAccess(oldInfo.accessMask);
+        bool requestRead = IsReadOnlyAccess(info.accessMask);
+        bool previousRead = IsReadOnlyAccess(oldInfo.accessMask);
         bool sameState = oldInfo.layout == info.layout &&
                          oldInfo.stageFlags == info.stageFlags &&
                          oldInfo.accessMask == info.accessMask &&
@@ -789,19 +818,19 @@ namespace pe
             return;
 
         vk::ImageMemoryBarrier2 barrier{};
-        barrier.srcStageMask = oldInfo.stageFlags;
-        barrier.dstStageMask = info.stageFlags;
-        barrier.srcAccessMask = oldInfo.accessMask;
-        barrier.dstAccessMask = info.accessMask;
-        barrier.oldLayout = oldInfo.layout;
-        barrier.newLayout = info.layout;
+        barrier.srcStageMask = ToVkPipelineStageFlags(oldInfo.stageFlags);
+        barrier.dstStageMask = ToVkPipelineStageFlags(info.stageFlags);
+        barrier.srcAccessMask = ToVkAccessFlags(oldInfo.accessMask);
+        barrier.dstAccessMask = ToVkAccessFlags(info.accessMask);
+        barrier.oldLayout = ToVkImageLayout(oldInfo.layout);
+        barrier.newLayout = ToVkImageLayout(info.layout);
         if (barrier.srcStageMask == vk::PipelineStageFlagBits2::eNone)
             barrier.srcStageMask = vk::PipelineStageFlagBits2::eTopOfPipe;
         barrier.srcQueueFamilyIndex = oldInfo.queueFamilyId;
         barrier.dstQueueFamilyIndex = info.queueFamilyId;
         barrier.image = impl->m_image;
         barrier.subresourceRange.aspectMask = image.GetAspectMaskOverride()
-                                                  ? image.GetAspectMaskOverride()
+                                                  ? ToVkImageAspect(image.GetAspectMaskOverride())
                                                   : VulkanHelpers::GetAspectMask(impl->m_vkFormat);
         barrier.subresourceRange.baseMipLevel = info.baseMipLevel;
         barrier.subresourceRange.levelCount = mipLevels;
@@ -841,8 +870,8 @@ namespace pe
 
             const ImageTrackInfo &oldInfo = image->GetCurrentInfo(info.baseArrayLayer, info.baseMipLevel);
 
-            bool requestRead = VulkanHelpers::IsReadOnlyAccess(info.accessMask);
-            bool previousRead = VulkanHelpers::IsReadOnlyAccess(oldInfo.accessMask);
+            bool requestRead = IsReadOnlyAccess(info.accessMask);
+            bool previousRead = IsReadOnlyAccess(oldInfo.accessMask);
             bool sameState = oldInfo.layout == info.layout &&
                              oldInfo.stageFlags == info.stageFlags &&
                              oldInfo.accessMask == info.accessMask &&
@@ -851,19 +880,19 @@ namespace pe
                 continue;
 
             vk::ImageMemoryBarrier2 barrier{};
-            barrier.srcStageMask = oldInfo.stageFlags;
-            barrier.dstStageMask = info.stageFlags;
-            barrier.srcAccessMask = oldInfo.accessMask;
-            barrier.dstAccessMask = info.accessMask;
-            barrier.oldLayout = oldInfo.layout;
-            barrier.newLayout = info.layout;
+            barrier.srcStageMask = ToVkPipelineStageFlags(oldInfo.stageFlags);
+            barrier.dstStageMask = ToVkPipelineStageFlags(info.stageFlags);
+            barrier.srcAccessMask = ToVkAccessFlags(oldInfo.accessMask);
+            barrier.dstAccessMask = ToVkAccessFlags(info.accessMask);
+            barrier.oldLayout = ToVkImageLayout(oldInfo.layout);
+            barrier.newLayout = ToVkImageLayout(info.layout);
             if (barrier.srcStageMask == vk::PipelineStageFlagBits2::eNone)
                 barrier.srcStageMask = vk::PipelineStageFlagBits2::eTopOfPipe;
             barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
             barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
             barrier.image = impl->m_image;
             barrier.subresourceRange.aspectMask = image->GetAspectMaskOverride()
-                                                      ? image->GetAspectMaskOverride()
+                                                      ? ToVkImageAspect(image->GetAspectMaskOverride())
                                                       : VulkanHelpers::GetAspectMask(impl->m_vkFormat);
             barrier.subresourceRange.baseMipLevel = info.baseMipLevel;
             barrier.subresourceRange.levelCount = mipLevels;

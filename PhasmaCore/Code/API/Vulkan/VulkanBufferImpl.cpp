@@ -3,6 +3,7 @@
 #include "API/Debug.h"
 #include "API/Helpers.h"
 #include "API/RHI.h"
+#include "API/Vulkan/VulkanRHITypeUtils.h"
 
 namespace pe
 {
@@ -151,8 +152,8 @@ namespace pe
 
         BufferTrackInfo &trackInfo = info.buffer->GetTrackInfo();
 
-        bool requestRead = VulkanHelpers::IsReadOnlyAccess(info.accessMask);
-        bool previousRead = VulkanHelpers::IsReadOnlyAccess(trackInfo.accessMask);
+        bool requestRead = IsReadOnlyAccess(info.accessMask);
+        bool previousRead = IsReadOnlyAccess(trackInfo.accessMask);
         bool sameState = trackInfo.stageMask == info.stageMask &&
                          trackInfo.accessMask == info.accessMask &&
                          trackInfo.queueFamilyIndex == info.queueFamilyIndex;
@@ -161,11 +162,11 @@ namespace pe
 
         vk::BufferMemoryBarrier2 barrier{};
         barrier.buffer = VulkanBufferImpl::From(info.buffer)->m_buffer;
-        barrier.srcStageMask = trackInfo.stageMask;
-        barrier.srcAccessMask = trackInfo.accessMask;
+        barrier.srcStageMask = ToVkPipelineStageFlags(trackInfo.stageMask);
+        barrier.srcAccessMask = ToVkAccessFlags(trackInfo.accessMask);
         barrier.srcQueueFamilyIndex = trackInfo.queueFamilyIndex;
-        barrier.dstStageMask = info.stageMask;
-        barrier.dstAccessMask = info.accessMask;
+        barrier.dstStageMask = ToVkPipelineStageFlags(info.stageMask);
+        barrier.dstAccessMask = ToVkAccessFlags(info.accessMask);
         barrier.dstQueueFamilyIndex = info.queueFamilyIndex;
         barrier.offset = info.offset;
         barrier.size = info.size;
@@ -195,8 +196,8 @@ namespace pe
 
             BufferTrackInfo &trackInfo = info.buffer->GetTrackInfo();
 
-            bool requestRead = VulkanHelpers::IsReadOnlyAccess(info.accessMask);
-            bool previousRead = VulkanHelpers::IsReadOnlyAccess(trackInfo.accessMask);
+            bool requestRead = IsReadOnlyAccess(info.accessMask);
+            bool previousRead = IsReadOnlyAccess(trackInfo.accessMask);
             bool sameState = trackInfo.stageMask == info.stageMask &&
                              trackInfo.accessMask == info.accessMask &&
                              trackInfo.queueFamilyIndex == info.queueFamilyIndex;
@@ -204,11 +205,11 @@ namespace pe
                 continue;
 
             barriers[barrierIndex].buffer = VulkanBufferImpl::From(info.buffer)->m_buffer;
-            barriers[barrierIndex].srcStageMask = trackInfo.stageMask;
-            barriers[barrierIndex].srcAccessMask = trackInfo.accessMask;
+            barriers[barrierIndex].srcStageMask = ToVkPipelineStageFlags(trackInfo.stageMask);
+            barriers[barrierIndex].srcAccessMask = ToVkAccessFlags(trackInfo.accessMask);
             barriers[barrierIndex].srcQueueFamilyIndex = trackInfo.queueFamilyIndex;
-            barriers[barrierIndex].dstStageMask = info.stageMask;
-            barriers[barrierIndex].dstAccessMask = info.accessMask;
+            barriers[barrierIndex].dstStageMask = ToVkPipelineStageFlags(info.stageMask);
+            barriers[barrierIndex].dstAccessMask = ToVkAccessFlags(info.accessMask);
             barriers[barrierIndex].dstQueueFamilyIndex = info.queueFamilyIndex;
             barriers[barrierIndex].offset = info.offset;
             barriers[barrierIndex].size = info.size;

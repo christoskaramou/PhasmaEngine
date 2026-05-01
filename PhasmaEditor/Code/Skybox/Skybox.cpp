@@ -49,9 +49,9 @@ namespace pe
 
         ImageBarrierInfo barrier{};
         barrier.image = m_cubeMap;
-        barrier.layout = vk::ImageLayout::eShaderReadOnlyOptimal;
-        barrier.stageFlags = vk::PipelineStageFlagBits2::eFragmentShader;
-        barrier.accessMask = vk::AccessFlagBits2::eShaderRead;
+        barrier.layout = PE_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+        barrier.stageFlags = PE_STAGE_FRAGMENT_SHADER;
+        barrier.accessMask = PE_ACCESS_SHADER_READ;
         cmd->ImageBarrier(barrier);
     }
 
@@ -91,15 +91,15 @@ namespace pe
         // 4. Barriers
         ImageBarrierInfo barrier{};
         barrier.image = m_cubeMap;
-        barrier.layout = vk::ImageLayout::eGeneral;
-        barrier.stageFlags = vk::PipelineStageFlagBits2::eComputeShader;
-        barrier.accessMask = vk::AccessFlagBits2::eShaderWrite;
+        barrier.layout = PE_IMAGE_LAYOUT_GENERAL;
+        barrier.stageFlags = PE_STAGE_COMPUTE_SHADER;
+        barrier.accessMask = PE_ACCESS_SHADER_WRITE;
         cmd->ImageBarrier(barrier);
         ImageBarrierInfo barrierInput{};
         barrierInput.image = equiImage;
-        barrierInput.layout = vk::ImageLayout::eShaderReadOnlyOptimal;
-        barrierInput.stageFlags = vk::PipelineStageFlagBits2::eComputeShader;
-        barrierInput.accessMask = vk::AccessFlagBits2::eShaderRead;
+        barrierInput.layout = PE_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+        barrierInput.stageFlags = PE_STAGE_COMPUTE_SHADER;
+        barrierInput.accessMask = PE_ACCESS_SHADER_READ;
         cmd->ImageBarrier(barrierInput);
 
         // 5. Update Descriptors
@@ -119,9 +119,9 @@ namespace pe
         cmd->GenerateMipMaps(m_cubeMap);
 
         // 8. Final Barrier
-        barrier.layout = vk::ImageLayout::eShaderReadOnlyOptimal;
-        barrier.stageFlags = vk::PipelineStageFlagBits2::eFragmentShader;
-        barrier.accessMask = vk::AccessFlagBits2::eShaderRead;
+        barrier.layout = PE_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+        barrier.stageFlags = PE_STAGE_FRAGMENT_SHADER;
+        barrier.accessMask = PE_ACCESS_SHADER_READ;
         barrier.mipLevels = m_cubeMap->GetMipLevels();
         cmd->ImageBarrier(barrier);
 

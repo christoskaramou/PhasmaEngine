@@ -103,9 +103,9 @@ namespace pe
         {
             ImageBarrierInfo barrierInfo{};
             barrierInfo.image = RHII.GetSwapchain()->GetImage(i);
-            barrierInfo.layout = vk::ImageLayout::ePresentSrcKHR;
-            barrierInfo.stageFlags = vk::PipelineStageFlagBits2::eAllCommands;
-            barrierInfo.accessMask = vk::AccessFlagBits2::eNone;
+            barrierInfo.layout = PE_IMAGE_LAYOUT_PRESENT_SRC;
+            barrierInfo.stageFlags = PE_STAGE_ALL_COMMANDS;
+            barrierInfo.accessMask = PE_ACCESS_NONE;
             cmd->ImageBarrier(barrierInfo); // transition from undefined to present
         }
 
@@ -798,9 +798,9 @@ namespace pe
 
         ImageBarrierInfo barrier{};
         barrier.image = swapchainImage;
-        barrier.layout = vk::ImageLayout::ePresentSrcKHR;
-        barrier.stageFlags = vk::PipelineStageFlagBits2::eAllCommands;
-        barrier.accessMask = vk::AccessFlagBits2::eNone;
+        barrier.layout = PE_IMAGE_LAYOUT_PRESENT_SRC;
+        barrier.stageFlags = PE_STAGE_ALL_COMMANDS;
+        barrier.accessMask = PE_ACCESS_NONE;
 
         // with 1:1 ratio we can use nearest filter
         vk::Filter filter = src->GetWidth() == swapchainImage->GetWidth() && src->GetHeight() == swapchainImage->GetHeight() ? vk::Filter::eNearest : vk::Filter::eLinear;

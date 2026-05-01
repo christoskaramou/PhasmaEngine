@@ -835,16 +835,16 @@ namespace pe
 
     void RHI::CreateDescriptorPool(uint32_t maxDescriptorSets)
     {
-        std::vector<vk::DescriptorPoolSize> descPoolsizes(5);
-        descPoolsizes[0].type = vk::DescriptorType::eUniformBuffer;
+        std::vector<DescriptorPoolSize> descPoolsizes(5);
+        descPoolsizes[0].type = PE_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
         descPoolsizes[0].descriptorCount = maxDescriptorSets;
-        descPoolsizes[1].type = vk::DescriptorType::eStorageBuffer;
+        descPoolsizes[1].type = PE_DESCRIPTOR_TYPE_STORAGE_BUFFER;
         descPoolsizes[1].descriptorCount = maxDescriptorSets;
-        descPoolsizes[2].type = vk::DescriptorType::eStorageTexelBuffer;
+        descPoolsizes[2].type = PE_DESCRIPTOR_TYPE_STORAGE_TEXEL_BUFFER;
         descPoolsizes[2].descriptorCount = maxDescriptorSets;
-        descPoolsizes[3].type = vk::DescriptorType::eCombinedImageSampler;
+        descPoolsizes[3].type = PE_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
         descPoolsizes[3].descriptorCount = maxDescriptorSets;
-        descPoolsizes[4].type = vk::DescriptorType::eUniformBufferDynamic;
+        descPoolsizes[4].type = PE_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC;
         descPoolsizes[4].descriptorCount = maxDescriptorSets;
         m_descriptorPool = DescriptorPool::Create(descPoolsizes, "RHI_descriptor_pool", maxDescriptorSets);
     }

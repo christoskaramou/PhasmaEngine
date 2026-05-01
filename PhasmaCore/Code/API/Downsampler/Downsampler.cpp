@@ -6448,9 +6448,9 @@ namespace pe
 
         ImageBarrierInfo barrier{};
         barrier.image = s_image;
-        barrier.layout = vk::ImageLayout::eGeneral;
-        barrier.stageFlags = vk::PipelineStageFlagBits2::eComputeShader;
-        barrier.accessMask = vk::AccessFlagBits2::eShaderWrite;
+        barrier.layout = PE_IMAGE_LAYOUT_GENERAL;
+        barrier.stageFlags = PE_STAGE_COMPUTE_SHADER;
+        barrier.accessMask = PE_ACCESS_SHADER_WRITE;
 
         cmd->BeginDebugRegion("Downsampler::Dispatch Command_" + std::to_string(s_currentIndex));
         cmd->ImageBarrier(barrier);
@@ -6488,16 +6488,16 @@ namespace pe
     {
         std::vector<DescriptorBindingInfo> bindingInfos(3);
         bindingInfos[0].binding = 0;
-        bindingInfos[0].type = vk::DescriptorType::eStorageImage;
-        bindingInfos[0].imageLayout = vk::ImageLayout::eGeneral;
+        bindingInfos[0].type = PE_DESCRIPTOR_TYPE_STORAGE_IMAGE;
+        bindingInfos[0].imageLayout = PE_IMAGE_LAYOUT_GENERAL;
         bindingInfos[0].count = 13;
 
         bindingInfos[1].binding = 1;
-        bindingInfos[1].type = vk::DescriptorType::eStorageImage;
-        bindingInfos[1].imageLayout = vk::ImageLayout::eGeneral;
+        bindingInfos[1].type = PE_DESCRIPTOR_TYPE_STORAGE_IMAGE;
+        bindingInfos[1].imageLayout = PE_IMAGE_LAYOUT_GENERAL;
 
         bindingInfos[2].binding = 2;
-        bindingInfos[2].type = vk::DescriptorType::eStorageBuffer;
+        bindingInfos[2].type = PE_DESCRIPTOR_TYPE_STORAGE_BUFFER;
 
         for (uint32_t i = 0; i < MAX_DESCRIPTORS_PER_CMD; i++)
         {
@@ -6508,7 +6508,7 @@ namespace pe
                 .name = "Downsample_storage_buffer_" + std::to_string(i),
             });
 
-            s_DSet[i] = Descriptor::Create(bindingInfos, vk::ShaderStageFlagBits::eCompute, false, "Downsample_descriptor_" + std::to_string(i));
+            s_DSet[i] = Descriptor::Create(bindingInfos, PE_SHADER_STAGE_COMPUTE, false, "Downsample_descriptor_" + std::to_string(i));
         }
     }
 

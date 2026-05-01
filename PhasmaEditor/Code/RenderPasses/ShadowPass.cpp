@@ -45,8 +45,8 @@ namespace pe
 
         m_attachments.resize(1);
         m_attachments[0] = {};
-        m_attachments[0].loadOp = vk::AttachmentLoadOp::eClear;
-        m_attachments[0].storeOp = vk::AttachmentStoreOp::eStore;
+        m_attachments[0].loadOp = PE_LOAD_OP_CLEAR;
+        m_attachments[0].storeOp = PE_STORE_OP_STORE;
 
         m_uniforms.resize(RHII.GetSwapchainImageCount());
     }

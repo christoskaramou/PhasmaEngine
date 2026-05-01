@@ -74,9 +74,9 @@ namespace pe
             img->m_trackInfos.resize(1);
             ImageTrackInfo info{};
             info.image = img;
-            info.layout = vk::ImageLayout::eUndefined;
-            info.stageFlags = vk::PipelineStageFlagBits2::eColorAttachmentOutput; // Acquire semaphore blocks this stage
-            info.accessMask = vk::AccessFlagBits2::eNone;
+            info.layout = PE_IMAGE_LAYOUT_UNDEFINED;
+            info.stageFlags = PE_STAGE_COLOR_ATTACHMENT_OUTPUT; // Acquire semaphore blocks this stage
+            info.accessMask = PE_ACCESS_NONE;
             img->m_trackInfos[0].resize(1, info);
             m_images[i] = img;
         }

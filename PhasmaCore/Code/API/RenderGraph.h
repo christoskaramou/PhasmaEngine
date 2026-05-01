@@ -12,9 +12,9 @@ namespace pe
     struct OutputInfo
     {
         Image *image = nullptr;
-        vk::ImageLayout finalLayout = vk::ImageLayout::eUndefined;
-        vk::PipelineStageFlags2 stageFlags = vk::PipelineStageFlagBits2::eNone;
-        vk::AccessFlags2 accessMask = vk::AccessFlagBits2::eNone;
+        PeImageLayout finalLayout = PE_IMAGE_LAYOUT_UNDEFINED;
+        PeBarrierSync stageFlags = PE_STAGE_NONE;
+        PeBarrierAccess accessMask = PE_ACCESS_NONE;
     };
 
     class RGBuilder
@@ -35,6 +35,7 @@ namespace pe
 
         void OutputColor(Image *image);
         void OutputDepth(Image *image);
+        void OutputCustom(Image *image, PeImageLayout layout, PeBarrierSync stage, PeBarrierAccess access);
         void OutputCustom(Image *image, vk::ImageLayout layout, vk::PipelineStageFlags2 stage, vk::AccessFlags2 access);
 
         void Reset();

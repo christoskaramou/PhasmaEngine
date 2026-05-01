@@ -109,10 +109,10 @@ namespace pe
         cmd->BeginDebugRegion("ParticleComputePass");
 
         BufferBarrierInfo barrier{};
-        barrier.stageMask = vk::PipelineStageFlagBits2::eComputeShader;
-        barrier.accessMask = vk::AccessFlagBits2::eShaderWrite;
+        barrier.stageMask = PE_STAGE_COMPUTE_SHADER;
+        barrier.accessMask = PE_ACCESS_SHADER_WRITE;
         barrier.buffer = particleBuffer;
-        barrier.size = VK_WHOLE_SIZE;
+        barrier.size = PE_WHOLE_SIZE;
         cmd->BufferBarrier(barrier);
 
         cmd->BindPipeline(*m_passInfo);

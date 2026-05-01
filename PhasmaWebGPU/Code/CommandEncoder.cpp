@@ -1061,9 +1061,9 @@ extern "C"
 
             pe::ImageBarrierInfo barrier{};
             barrier.image = view->texture->image;
-            barrier.stageFlags = vk::PipelineStageFlagBits2::eColorAttachmentOutput;
-            barrier.accessMask = vk::AccessFlagBits2::eColorAttachmentWrite | vk::AccessFlagBits2::eColorAttachmentRead;
-            barrier.layout = vk::ImageLayout::eColorAttachmentOptimal;
+            barrier.stageFlags = PE_STAGE_COLOR_ATTACHMENT_OUTPUT;
+            barrier.accessMask = PE_ACCESS_COLOR_ATTACHMENT_WRITE | PE_ACCESS_COLOR_ATTACHMENT_READ;
+            barrier.layout = PE_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
             barrier.baseMipLevel = view->baseMipLevel;
             barrier.mipLevels = 1;
             barrier.baseArrayLayer = barrierBaseLayer;
@@ -1107,9 +1107,9 @@ extern "C"
 
                 pe::ImageBarrierInfo resolveBarrier{};
                 resolveBarrier.image = rt->texture->image;
-                resolveBarrier.stageFlags = vk::PipelineStageFlagBits2::eColorAttachmentOutput;
-                resolveBarrier.accessMask = vk::AccessFlagBits2::eColorAttachmentWrite;
-                resolveBarrier.layout = vk::ImageLayout::eColorAttachmentOptimal;
+                resolveBarrier.stageFlags = PE_STAGE_COLOR_ATTACHMENT_OUTPUT;
+                resolveBarrier.accessMask = PE_ACCESS_COLOR_ATTACHMENT_WRITE;
+                resolveBarrier.layout = PE_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
                 resolveBarrier.baseMipLevel = rt->baseMipLevel;
                 resolveBarrier.mipLevels = 1;
                 resolveBarrier.baseArrayLayer = rt->baseArrayLayer;
@@ -1139,30 +1139,32 @@ extern "C"
             bool hasDepth = pwgpu::HasDepthAspect(dsView->format);
             bool hasStencil = pwgpu::HasStencilAspect(dsView->format);
 
-            vk::ImageLayout dsLayout = (dsa->depthReadOnly && dsa->stencilReadOnly)
-                                           ? vk::ImageLayout::eDepthStencilReadOnlyOptimal
-                                       : (dsa->depthReadOnly && hasStencil)
-                                           ? vk::ImageLayout::eDepthReadOnlyStencilAttachmentOptimal
-                                       : (dsa->stencilReadOnly && hasDepth)
-                                           ? vk::ImageLayout::eDepthAttachmentStencilReadOnlyOptimal
-                                           : vk::ImageLayout::eDepthStencilAttachmentOptimal;
+            PeImageLayout dsBarrierLayout = (dsa->depthReadOnly && dsa->stencilReadOnly)
+                                                ? PE_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL
+                                            : (dsa->depthReadOnly && hasStencil)
+                                                ? PE_IMAGE_LAYOUT_DEPTH_READ_ONLY_STENCIL_ATTACHMENT_OPTIMAL
+                                            : (dsa->stencilReadOnly && hasDepth)
+                                                ? PE_IMAGE_LAYOUT_DEPTH_ATTACHMENT_STENCIL_READ_ONLY_OPTIMAL
+                                                : PE_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
 
             if (hasDepth && !hasStencil)
-                dsLayout = dsa->depthReadOnly ? vk::ImageLayout::eDepthReadOnlyOptimal
-                                              : vk::ImageLayout::eDepthAttachmentOptimal;
+                dsBarrierLayout = dsa->depthReadOnly ? PE_IMAGE_LAYOUT_DEPTH_READ_ONLY_OPTIMAL
+                                                     : PE_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL;
             else if (hasStencil && !hasDepth)
-                dsLayout = dsa->stencilReadOnly ? vk::ImageLayout::eStencilReadOnlyOptimal
-                                                : vk::ImageLayout::eStencilAttachmentOptimal;
+                dsBarrierLayout = dsa->stencilReadOnly ? PE_IMAGE_LAYOUT_STENCIL_READ_ONLY_OPTIMAL
+                                                       : PE_IMAGE_LAYOUT_STENCIL_ATTACHMENT_OPTIMAL;
+
+            vk::ImageLayout dsLayout = pe::ToVkImageLayout(dsBarrierLayout);
 
             pe::ImageBarrierInfo dsBarrier{};
             dsBarrier.image = dsView->texture->image;
-            dsBarrier.stageFlags = vk::PipelineStageFlagBits2::eEarlyFragmentTests | vk::PipelineStageFlagBits2::eLateFragmentTests;
-            dsBarrier.accessMask = vk::AccessFlagBits2::eDepthStencilAttachmentRead;
+            dsBarrier.stageFlags = PE_STAGE_EARLY_FRAGMENT_TESTS | PE_STAGE_LATE_FRAGMENT_TESTS;
+            dsBarrier.accessMask = PE_ACCESS_DEPTH_STENCIL_ATTACHMENT_READ;
             if (!dsa->depthReadOnly)
-                dsBarrier.accessMask |= vk::AccessFlagBits2::eDepthStencilAttachmentWrite;
+                dsBarrier.accessMask |= PE_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE;
             if (!dsa->stencilReadOnly)
-                dsBarrier.accessMask |= vk::AccessFlagBits2::eDepthStencilAttachmentWrite;
-            dsBarrier.layout = dsLayout;
+                dsBarrier.accessMask |= PE_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE;
+            dsBarrier.layout = dsBarrierLayout;
             dsBarrier.baseMipLevel = dsView->baseMipLevel;
             dsBarrier.mipLevels = 1;
             dsBarrier.baseArrayLayer = dsView->baseArrayLayer;
@@ -1596,11 +1598,11 @@ extern "C"
             return;
         }
 
-        vk::MemoryBarrier2 mb{};
-        mb.srcStageMask = vk::PipelineStageFlagBits2::eAllCommands;
-        mb.srcAccessMask = vk::AccessFlagBits2::eMemoryWrite;
-        mb.dstStageMask = vk::PipelineStageFlagBits2::eTransfer;
-        mb.dstAccessMask = vk::AccessFlagBits2::eTransferRead | vk::AccessFlagBits2::eTransferWrite;
+        pe::MemoryBarrierInfo mb{};
+        mb.srcStageMask = PE_STAGE_ALL_COMMANDS;
+        mb.srcAccessMask = PE_ACCESS_MEMORY_WRITE;
+        mb.dstStageMask = PE_STAGE_TRANSFER;
+        mb.dstAccessMask = PE_ACCESS_TRANSFER_READ | PE_ACCESS_TRANSFER_WRITE;
         enc->cmd->MemoryBarrier(mb);
 
         enc->cmd->CopyBuffer(src->peBuffer, dst->peBuffer, static_cast<size_t>(copySize),
@@ -1612,11 +1614,11 @@ extern "C"
         // barrier that flushes this copy's write.
         {
             pe::BufferTrackInfo &srcTrack = src->peBuffer->GetTrackInfo();
-            srcTrack.stageMask = vk::PipelineStageFlagBits2::eCopy;
-            srcTrack.accessMask = vk::AccessFlagBits2::eTransferRead;
+            srcTrack.stageMask = PE_STAGE_COPY;
+            srcTrack.accessMask = PE_ACCESS_TRANSFER_READ;
             pe::BufferTrackInfo &dstTrack = dst->peBuffer->GetTrackInfo();
-            dstTrack.stageMask = vk::PipelineStageFlagBits2::eCopy;
-            dstTrack.accessMask = vk::AccessFlagBits2::eTransferWrite;
+            dstTrack.stageMask = PE_STAGE_COPY;
+            dstTrack.accessMask = PE_ACCESS_TRANSFER_WRITE;
         }
 
         enc->retained.usedBuffers.push_back(src);
@@ -1876,18 +1878,18 @@ extern "C"
                                               dstBaseLayer, dstLayerCount, dstAspects);
         }
 
-        vk::MemoryBarrier2 mb{};
-        mb.srcStageMask = vk::PipelineStageFlagBits2::eAllCommands;
-        mb.srcAccessMask = vk::AccessFlagBits2::eMemoryWrite;
-        mb.dstStageMask = vk::PipelineStageFlagBits2::eTransfer;
-        mb.dstAccessMask = vk::AccessFlagBits2::eTransferRead | vk::AccessFlagBits2::eTransferWrite;
+        pe::MemoryBarrierInfo mb{};
+        mb.srcStageMask = PE_STAGE_ALL_COMMANDS;
+        mb.srcAccessMask = PE_ACCESS_MEMORY_WRITE;
+        mb.dstStageMask = PE_STAGE_TRANSFER;
+        mb.dstAccessMask = PE_ACCESS_TRANSFER_READ | PE_ACCESS_TRANSFER_WRITE;
         enc->cmd->MemoryBarrier(mb);
 
         pe::ImageBarrierInfo barrier{};
         barrier.image = dst->texture->image;
-        barrier.stageFlags = vk::PipelineStageFlagBits2::eTransfer;
-        barrier.accessMask = vk::AccessFlagBits2::eTransferWrite;
-        barrier.layout = vk::ImageLayout::eTransferDstOptimal;
+        barrier.stageFlags = PE_STAGE_TRANSFER;
+        barrier.accessMask = PE_ACCESS_TRANSFER_WRITE;
+        barrier.layout = PE_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
         barrier.baseMipLevel = dst->mipLevel;
         barrier.mipLevels = 1;
         barrier.baseArrayLayer = region.imageSubresource.baseArrayLayer;
@@ -2080,9 +2082,9 @@ extern "C"
 
         pe::ImageBarrierInfo imgBarrier{};
         imgBarrier.image = src->texture->image;
-        imgBarrier.stageFlags = vk::PipelineStageFlagBits2::eTransfer;
-        imgBarrier.accessMask = vk::AccessFlagBits2::eTransferRead;
-        imgBarrier.layout = vk::ImageLayout::eTransferSrcOptimal;
+        imgBarrier.stageFlags = PE_STAGE_TRANSFER;
+        imgBarrier.accessMask = PE_ACCESS_TRANSFER_READ;
+        imgBarrier.layout = PE_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
         imgBarrier.baseMipLevel = src->mipLevel;
         imgBarrier.mipLevels = 1;
         imgBarrier.baseArrayLayer = region.imageSubresource.baseArrayLayer;
@@ -2091,8 +2093,8 @@ extern "C"
 
         pe::BufferBarrierInfo bufBarrier{};
         bufBarrier.buffer = dst->buffer->peBuffer;
-        bufBarrier.stageMask = vk::PipelineStageFlagBits2::eTransfer;
-        bufBarrier.accessMask = vk::AccessFlagBits2::eTransferWrite;
+        bufBarrier.stageMask = PE_STAGE_TRANSFER;
+        bufBarrier.accessMask = PE_ACCESS_TRANSFER_WRITE;
         enc->cmd->BufferBarrier(bufBarrier);
 
         vk::CopyImageToBufferInfo2 copyInfo{};
@@ -2319,18 +2321,18 @@ extern "C"
 
         std::vector<pe::ImageBarrierInfo> barriers(2);
         barriers[0].image = src->texture->image;
-        barriers[0].stageFlags = vk::PipelineStageFlagBits2::eTransfer;
-        barriers[0].accessMask = vk::AccessFlagBits2::eTransferRead;
-        barriers[0].layout = vk::ImageLayout::eTransferSrcOptimal;
+        barriers[0].stageFlags = PE_STAGE_TRANSFER;
+        barriers[0].accessMask = PE_ACCESS_TRANSFER_READ;
+        barriers[0].layout = PE_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
         barriers[0].baseMipLevel = src->mipLevel;
         barriers[0].mipLevels = 1;
         barriers[0].baseArrayLayer = region.srcSubresource.baseArrayLayer;
         barriers[0].arrayLayers = region.srcSubresource.layerCount;
 
         barriers[1].image = dst->texture->image;
-        barriers[1].stageFlags = vk::PipelineStageFlagBits2::eTransfer;
-        barriers[1].accessMask = vk::AccessFlagBits2::eTransferWrite;
-        barriers[1].layout = vk::ImageLayout::eTransferDstOptimal;
+        barriers[1].stageFlags = PE_STAGE_TRANSFER;
+        barriers[1].accessMask = PE_ACCESS_TRANSFER_WRITE;
+        barriers[1].layout = PE_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
         barriers[1].baseMipLevel = dst->mipLevel;
         barriers[1].mipLevels = 1;
         barriers[1].baseArrayLayer = region.dstSubresource.baseArrayLayer;

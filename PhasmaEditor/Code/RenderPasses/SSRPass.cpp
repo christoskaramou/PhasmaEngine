@@ -27,8 +27,8 @@ namespace pe
         m_attachments.resize(1);
         m_attachments[0] = {};
         m_attachments[0].image = m_viewportRT;
-        m_attachments[0].loadOp = vk::AttachmentLoadOp::eLoad;
-        m_attachments[0].storeOp = vk::AttachmentStoreOp::eStore;
+        m_attachments[0].loadOp = PE_LOAD_OP_LOAD;
+        m_attachments[0].storeOp = PE_STORE_OP_STORE;
 
         m_reflectionUBs.resize(RHII.GetSwapchainImageCount());
     }
@@ -40,7 +40,7 @@ namespace pe
         m_passInfo->pFragShader = Shader::Create(Path::Assets + "Shaders/SSR/SSRPS.hlsl", vk::ShaderStageFlagBits::eFragment, "mainPS", std::vector<Define>{}, ShaderCodeType::HLSL);
         m_passInfo->dynamicStates = {vk::DynamicState::eViewport, vk::DynamicState::eScissor};
         m_passInfo->cullMode = vk::CullModeFlagBits::eBack;
-        m_passInfo->colorBlendAttachments = {PipelineColorBlendAttachmentState::Default};
+        m_passInfo->colorBlendAttachments = {BlendState::Default};
         m_passInfo->colorFormats = {pe::ToVkFormat(m_ssrRT->GetFormat())};
         m_passInfo->Update();
     }
@@ -113,9 +113,9 @@ namespace pe
     {
         ImageBarrierInfo frameBarrier{};
         frameBarrier.image = m_frameImage;
-        frameBarrier.layout = vk::ImageLayout::eShaderReadOnlyOptimal;
-        frameBarrier.stageFlags = vk::PipelineStageFlagBits2::eFragmentShader;
-        frameBarrier.accessMask = vk::AccessFlagBits2::eShaderRead;
+        frameBarrier.layout = PE_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+        frameBarrier.stageFlags = PE_STAGE_FRAGMENT_SHADER;
+        frameBarrier.accessMask = PE_ACCESS_SHADER_READ;
 
         cmd->BeginDebugRegion("SSRPass");
         cmd->CopyImage(m_viewportRT, m_frameImage);

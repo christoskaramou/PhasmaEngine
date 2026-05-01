@@ -30,20 +30,17 @@ namespace pe
         std::string name;
     };
 
-    // Vulkan-flavored barrier descriptor — retype to PeBarrierSync /
-    // PeBarrierAccess / PeImageLayout is deferred to Phase 0 step 7
-    // (Command.h barrier retype), mirroring BufferBarrierInfo.
     struct ImageBarrierInfo
     {
         Image *image = nullptr;
-        vk::ImageLayout layout = vk::ImageLayout::eUndefined;
-        vk::PipelineStageFlags2 stageFlags = vk::PipelineStageFlagBits2::eNone;
-        vk::AccessFlags2 accessMask = vk::AccessFlagBits2::eNone;
+        PeImageLayout layout = PE_IMAGE_LAYOUT_UNDEFINED;
+        PeBarrierSync stageFlags = PE_STAGE_NONE;
+        PeBarrierAccess accessMask = PE_ACCESS_NONE;
         uint32_t baseArrayLayer = 0;
         uint32_t arrayLayers = 0;
         uint32_t baseMipLevel = 0;
         uint32_t mipLevels = 0;
-        uint32_t queueFamilyId = VK_QUEUE_FAMILY_IGNORED;
+        uint32_t queueFamilyId = PE_QUEUE_FAMILY_IGNORED;
 
         bool operator!=(const ImageBarrierInfo &other) const
         {
@@ -105,11 +102,8 @@ namespace pe
         vec4 GetClearColor() { return m_clearColor; }
         void SetClearColor(const vec4 &color) { m_clearColor = color; }
 
-        // Vulkan-flavored aspect override — deferred to Phase 0 step 7 alongside
-        // ImageBarrierInfo retype. Sole consumer is PhasmaWebGPU stencil-aspect
-        // view forwarding in Texture.cpp.
-        void SetAspectMaskOverride(vk::ImageAspectFlags m) { m_aspectMaskOverride = m; }
-        vk::ImageAspectFlags GetAspectMaskOverride() const { return m_aspectMaskOverride; }
+        void SetAspectMaskOverride(PeImageAspectFlags m) { m_aspectMaskOverride = m; }
+        PeImageAspectFlags GetAspectMaskOverride() const { return m_aspectMaskOverride; }
 
         static uint32_t CalculateMips(uint32_t width, uint32_t height);
 
@@ -173,7 +167,7 @@ namespace pe
         std::vector<std::vector<ImageTrackInfo>> m_trackInfos{};
         bool m_mipmapsGenerated = false;
         vec4 m_clearColor = vec4(0.0f, 0.0f, 0.0f, 1.0f);
-        vk::ImageAspectFlags m_aspectMaskOverride{};
+        PeImageAspectFlags m_aspectMaskOverride{PE_IMAGE_ASPECT_NONE};
         std::string m_name;
     };
 } // namespace pe
