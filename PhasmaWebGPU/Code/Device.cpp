@@ -4,6 +4,7 @@
 #include "API/Semaphore.h"
 #include "API/Queue.h"
 #include "API/Vulkan/VulkanBufferImpl.h"
+#include "API/Vulkan/VulkanDescriptorImpl.h"
 #include "API/Vulkan/VulkanImageImpl.h"
 #include "FormatMap.h"
 #include "Sampler.h"
@@ -1439,7 +1440,7 @@ extern "C"
         // layouts pass VVL with separateDepthStencilLayouts. The depth aspect is
         // unused storage.
         if (fmt == WGPUTextureFormat_Stencil8 && vkFmt != VK_FORMAT_S8_UINT)
-            tex->image->SetAspectMaskOverride(vk::ImageAspectFlagBits::eStencil);
+            tex->image->SetAspectMaskOverride(PE_IMAGE_ASPECT_STENCIL);
 
         if (zeroInitViaClearImage && device->queue && device->queue->peQueue)
         {
@@ -2019,28 +2020,28 @@ extern "C"
 
         bgl->dynamicOffsetCount = dynamicUniformBuffers + dynamicStorageBuffers;
 
-        auto wgpuVisToVk = [](WGPUShaderStage vis) -> vk::ShaderStageFlags
+        auto wgpuVisToStage = [](WGPUShaderStage vis) -> PeShaderStageFlags
         {
-            vk::ShaderStageFlags f{};
+            PeShaderStageFlags f{};
             if (vis & WGPUShaderStage_Vertex)
-                f |= vk::ShaderStageFlagBits::eVertex;
+                f |= PE_SHADER_STAGE_VERTEX;
             if (vis & WGPUShaderStage_Fragment)
-                f |= vk::ShaderStageFlagBits::eFragment;
+                f |= PE_SHADER_STAGE_FRAGMENT;
             if (vis & WGPUShaderStage_Compute)
-                f |= vk::ShaderStageFlagBits::eCompute;
+                f |= PE_SHADER_STAGE_COMPUTE;
             return f;
         };
 
-        vk::ShaderStageFlags combinedStages{};
-        std::vector<pe::DescriptorBindingInfo> vkBindings;
-        vkBindings.reserve(bgl->entries.size());
+        PeShaderStageFlags combinedStages{};
+        std::vector<pe::DescriptorBindingInfo> bindings;
+        bindings.reserve(bgl->entries.size());
 
         for (const auto &entry : bgl->entries)
         {
             pe::DescriptorBindingInfo info{};
             info.binding = entry.binding;
             info.count = 1;
-            combinedStages |= wgpuVisToVk(entry.visibility);
+            combinedStages |= wgpuVisToStage(entry.visibility);
 
             if (entry.buffer.type != WGPUBufferBindingType_BindingNotUsed)
             {
@@ -2048,18 +2049,18 @@ extern "C"
                 {
                 case WGPUBufferBindingType_Uniform:
                     info.type = entry.buffer.hasDynamicOffset
-                                    ? vk::DescriptorType::eUniformBufferDynamic
-                                    : vk::DescriptorType::eUniformBuffer;
+                                    ? PE_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC
+                                    : PE_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
                     break;
                 case WGPUBufferBindingType_Storage:
                     info.type = entry.buffer.hasDynamicOffset
-                                    ? vk::DescriptorType::eStorageBufferDynamic
-                                    : vk::DescriptorType::eStorageBuffer;
+                                    ? PE_DESCRIPTOR_TYPE_STORAGE_BUFFER_DYNAMIC
+                                    : PE_DESCRIPTOR_TYPE_STORAGE_BUFFER;
                     break;
                 case WGPUBufferBindingType_ReadOnlyStorage:
                     info.type = entry.buffer.hasDynamicOffset
-                                    ? vk::DescriptorType::eStorageBufferDynamic
-                                    : vk::DescriptorType::eStorageBuffer;
+                                    ? PE_DESCRIPTOR_TYPE_STORAGE_BUFFER_DYNAMIC
+                                    : PE_DESCRIPTOR_TYPE_STORAGE_BUFFER;
                     break;
                 default:
                     break;
@@ -2067,33 +2068,33 @@ extern "C"
             }
             else if (entry.sampler.type != WGPUSamplerBindingType_BindingNotUsed)
             {
-                info.type = vk::DescriptorType::eSampler;
+                info.type = PE_DESCRIPTOR_TYPE_SAMPLER;
             }
             else if (entry.texture.sampleType != WGPUTextureSampleType_BindingNotUsed)
             {
-                info.type = vk::DescriptorType::eSampledImage;
-                info.imageLayout = vk::ImageLayout::eShaderReadOnlyOptimal;
+                info.type = PE_DESCRIPTOR_TYPE_SAMPLED_IMAGE;
+                info.imageLayout = PE_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
             }
             else if (entry.storageTexture.access != WGPUStorageTextureAccess_BindingNotUsed)
             {
-                info.type = vk::DescriptorType::eStorageImage;
-                info.imageLayout = vk::ImageLayout::eGeneral;
+                info.type = PE_DESCRIPTOR_TYPE_STORAGE_IMAGE;
+                info.imageLayout = PE_IMAGE_LAYOUT_GENERAL;
             }
             else if (entry.hasExternalTexture)
             {
-                info.type = vk::DescriptorType::eCombinedImageSampler;
+                info.type = PE_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
             }
 
-            vkBindings.push_back(info);
+            bindings.push_back(info);
         }
 
-        bgl->bindingInfos = vkBindings;
+        bgl->bindingInfos = bindings;
         bgl->stage = combinedStages;
 
-        if (!vkBindings.empty())
+        if (!bindings.empty())
         {
             bgl->layout = pe::DescriptorLayout::Create(
-                vkBindings, combinedStages,
+                bindings, combinedStages,
                 bgl->label.empty() ? "wgpu_bgl" : bgl->label);
         }
 
@@ -2711,7 +2712,7 @@ extern "C"
         {
             if (bglPtr && bglPtr->layout)
             {
-                vkSetLayouts.push_back(bglPtr->layout->ApiHandle());
+                vkSetLayouts.push_back(pe::GetVulkanDescriptorLayout(bglPtr->layout));
             }
             else
             {

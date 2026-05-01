@@ -1,10 +1,4 @@
-#include "API/Descriptor.h"
-#include "API/Buffer.h"
-#include "API/Image.h"
-#include "API/RHI.h"
-#include "API/Vulkan/VulkanBufferImpl.h"
-#include "API/Vulkan/VulkanImageViewImpl.h"
-#include "API/Vulkan/VulkanSamplerImpl.h"
+#include "API/Descriptor_Internal.h"
 
 namespace pe
 {
@@ -20,116 +14,257 @@ namespace pe
             PE_WARN("[Descriptor] Binding %u not found", binding);
             return -1;
         }
+
+        bool IsUpdateAfterBindCompatible(PeBindingType type)
+        {
+            return type != PE_DESCRIPTOR_TYPE_INPUT_ATTACHMENT &&
+                   type != PE_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC &&
+                   type != PE_DESCRIPTOR_TYPE_STORAGE_BUFFER_DYNAMIC;
+        }
+
+        bool HasDescriptorUpdate(const DescriptorUpdateInfo &info)
+        {
+            return !info.views.empty() ||
+                   !info.buffers.empty() ||
+                   !info.samplers.empty() ||
+                   !info.accelerationStructures.empty();
+        }
     } // namespace
 
-    DescriptorPool::DescriptorPool(const std::vector<vk::DescriptorPoolSize> &sizes,
-                                   const std::string &name,
-                                   uint32_t maxSets,
-                                   bool updateAfterBind)
+    DescriptorPool *DescriptorPool::Create(const DescriptorPoolDesc &desc, const std::string &name)
     {
-        vk::DescriptorPoolCreateInfo createInfo{};
-        createInfo.flags = vk::DescriptorPoolCreateFlagBits::eFreeDescriptorSet;
-        if (updateAfterBind)
-            createInfo.flags |= vk::DescriptorPoolCreateFlagBits::eUpdateAfterBind;
-        createInfo.poolSizeCount = static_cast<uint32_t>(sizes.size());
-        createInfo.pPoolSizes = sizes.data();
-        createInfo.maxSets = std::max(1u, maxSets);
+        DescriptorPool *pool = new DescriptorPool(desc, name);
+#if defined(PE_TRACK_RESOURCES)
+        PeTracker::Track(typeid(DescriptorPool), reinterpret_cast<void *>(pool));
+#if !defined(PE_TRACK_RESOURCES_NOSPAM)
+        PE_INFO("Object DescriptorPool created (Handle: %p)", reinterpret_cast<void *>(pool));
+#endif
+#endif
+        return pool;
+    }
 
-        m_apiHandle = RHII.GetDevice().createDescriptorPool(createInfo);
+    DescriptorPool *DescriptorPool::Create(const std::vector<DescriptorPoolSize> &sizes,
+                                           const std::string &name,
+                                           uint32_t maxSets,
+                                           bool updateAfterBind)
+    {
+        DescriptorPoolDesc desc{};
+        desc.sizes = sizes;
+        desc.maxSets = maxSets;
+        desc.updateAfterBind = updateAfterBind;
+        return Create(desc, name);
+    }
 
-        Debug::SetObjectName(m_apiHandle, name);
+    void DescriptorPool::Destroy(DescriptorPool *&pool)
+    {
+        if (pool)
+        {
+#if defined(PE_TRACK_RESOURCES) && !defined(PE_TRACK_RESOURCES_NOSPAM)
+            PE_INFO("Object DescriptorPool destroyed (Handle: %p)", reinterpret_cast<void *>(pool));
+#endif
+            delete pool;
+#if defined(PE_TRACK_RESOURCES)
+            PeTracker::Untrack(typeid(DescriptorPool), reinterpret_cast<void *>(pool));
+#endif
+            pool = nullptr;
+        }
+    }
+
+    std::vector<DescriptorPool *> DescriptorPool::GetHandles()
+    {
+#if defined(PE_TRACK_RESOURCES)
+        auto ptrs = PeTracker::GetHandles(typeid(DescriptorPool));
+        std::vector<DescriptorPool *> out;
+        out.reserve(ptrs.size());
+        for (void *p : ptrs)
+            out.push_back(static_cast<DescriptorPool *>(p));
+        return out;
+#else
+        return {};
+#endif
+    }
+
+    DescriptorPool::DescriptorPool(const DescriptorPoolDesc &desc, const std::string &name)
+        : m_desc{desc}, m_name{name}
+    {
+        m_impl = CreateDescriptorPoolImpl(this, desc);
     }
 
     DescriptorPool::~DescriptorPool()
     {
-        if (m_apiHandle)
-            RHII.GetDevice().destroyDescriptorPool(m_apiHandle);
+        delete m_impl;
+    }
+
+    DescriptorLayout *DescriptorLayout::Create(const std::vector<DescriptorBindingInfo> &bindingInfos,
+                                               PeShaderStageFlags stage,
+                                               const std::string &name,
+                                               bool pushDescriptor)
+    {
+        DescriptorLayout *layout = new DescriptorLayout(bindingInfos, stage, name, pushDescriptor);
+#if defined(PE_TRACK_RESOURCES)
+        PeTracker::Track(typeid(DescriptorLayout), reinterpret_cast<void *>(layout));
+#if !defined(PE_TRACK_RESOURCES_NOSPAM)
+        PE_INFO("Object DescriptorLayout created (Handle: %p)", reinterpret_cast<void *>(layout));
+#endif
+#endif
+        return layout;
+    }
+
+    void DescriptorLayout::Destroy(DescriptorLayout *&layout)
+    {
+        if (layout)
+        {
+#if defined(PE_TRACK_RESOURCES) && !defined(PE_TRACK_RESOURCES_NOSPAM)
+            PE_INFO("Object DescriptorLayout destroyed (Handle: %p)", reinterpret_cast<void *>(layout));
+#endif
+            delete layout;
+#if defined(PE_TRACK_RESOURCES)
+            PeTracker::Untrack(typeid(DescriptorLayout), reinterpret_cast<void *>(layout));
+#endif
+            layout = nullptr;
+        }
+    }
+
+    std::vector<DescriptorLayout *> DescriptorLayout::GetHandles()
+    {
+#if defined(PE_TRACK_RESOURCES)
+        auto ptrs = PeTracker::GetHandles(typeid(DescriptorLayout));
+        std::vector<DescriptorLayout *> out;
+        out.reserve(ptrs.size());
+        for (void *p : ptrs)
+            out.push_back(static_cast<DescriptorLayout *>(p));
+        return out;
+#else
+        return {};
+#endif
     }
 
     DescriptorLayout::DescriptorLayout(const std::vector<DescriptorBindingInfo> &bindingInfos,
-                                       vk::ShaderStageFlags stage,
+                                       PeShaderStageFlags stage,
                                        const std::string &name,
                                        bool pushDescriptor)
+        : m_bindingInfos{bindingInfos},
+          m_stage{stage},
+          m_name{name},
+          m_variableCount{1},
+          m_pushDescriptor{pushDescriptor},
+          m_allowUpdateAfterBind{true}
     {
-        m_pushDescriptor = pushDescriptor;
-        m_variableCount = 1;
-
-        // Bindings
-        std::vector<vk::DescriptorSetLayoutBinding> bindings{};
-        for (auto const &bindingInfo : bindingInfos)
+        for (int i = 0; i < m_bindingInfos.size(); i++)
         {
-            vk::DescriptorSetLayoutBinding layoutBinding{};
-            layoutBinding.binding = bindingInfo.binding;
-            layoutBinding.descriptorType = bindingInfo.type;
-            layoutBinding.descriptorCount = bindingInfo.count;
-            layoutBinding.stageFlags = stage;
-            layoutBinding.pImmutableSamplers = nullptr;
-
-            bindings.push_back(layoutBinding);
-        }
-
-        m_allowUpdateAfterBind = true;
-        for (int i = 0; i < bindings.size(); i++)
-        {
-            if (bindings[i].descriptorType == vk::DescriptorType::eInputAttachment ||
-                bindings[i].descriptorType == vk::DescriptorType::eUniformBufferDynamic ||
-                bindings[i].descriptorType == vk::DescriptorType::eStorageBufferDynamic)
+            if (!IsUpdateAfterBindCompatible(m_bindingInfos[i].type))
             {
                 m_allowUpdateAfterBind = false;
                 break;
             }
         }
 
-        // Bindings flags
-        std::vector<vk::DescriptorBindingFlags> bindingFlags(bindings.size());
-        for (int i = 0; i < bindings.size(); i++)
+        for (int i = 0; i < m_bindingInfos.size(); i++)
         {
-
-            if (m_allowUpdateAfterBind && !pushDescriptor)
-                bindingFlags[i] |= vk::DescriptorBindingFlagBits::eUpdateAfterBind | vk::DescriptorBindingFlagBits::ePartiallyBound;
-
-            if (bindingInfos[i].bindless)
+            if (m_bindingInfos[i].bindless)
             {
                 // Note: As for now, it can be only one unbound array in a descriptor set and it must be the last binding
                 // Vulkan limitation?
-                PE_ERROR_IF(i != bindingInfos.size() - 1, "DescriptorLayout: An unbound array must be the last binding");
-
-                bindingFlags[i] |= vk::DescriptorBindingFlagBits::eVariableDescriptorCount;
-                m_variableCount = bindings[i].descriptorCount;
+                PE_ERROR_IF(i != m_bindingInfos.size() - 1, "DescriptorLayout: An unbound array must be the last binding");
+                m_variableCount = m_bindingInfos[i].count;
             }
         }
 
-        // Set flags to bindings
-        vk::DescriptorSetLayoutBindingFlagsCreateInfo layoutBindingFlags{};
-        layoutBindingFlags.bindingCount = static_cast<uint32_t>(bindingFlags.size());
-        layoutBindingFlags.pBindingFlags = bindingFlags.data();
-
-        // Layout create info
-        vk::DescriptorSetLayoutCreateInfo dslci{};
-        dslci.bindingCount = static_cast<uint32_t>(bindings.size());
-        dslci.pBindings = bindings.data();
-        dslci.pNext = &layoutBindingFlags;
-        if (pushDescriptor)
-            dslci.flags |= vk::DescriptorSetLayoutCreateFlagBits::ePushDescriptor;
-        else if (m_allowUpdateAfterBind)
-            dslci.flags |= vk::DescriptorSetLayoutCreateFlagBits::eUpdateAfterBindPool;
-
-        m_apiHandle = RHII.GetDevice().createDescriptorSetLayout(dslci);
-
-        Debug::SetObjectName(m_apiHandle, name);
+        m_impl = CreateDescriptorLayoutImpl(this);
     }
 
     DescriptorLayout::~DescriptorLayout()
     {
-        if (m_apiHandle)
+        delete m_impl;
+    }
+
+    DescriptorLayoutBuilder &DescriptorLayoutBuilder::AddBinding(uint32_t binding,
+                                                                 PeBindingType type,
+                                                                 uint32_t count,
+                                                                 PeImageLayout imageLayout,
+                                                                 bool bindless,
+                                                                 const std::string &name)
+    {
+        DescriptorBindingInfo info{};
+        info.binding = binding;
+        info.count = count;
+        info.type = type;
+        info.imageLayout = imageLayout;
+        info.bindless = bindless;
+        info.name = name;
+        m_bindingInfos.push_back(info);
+        return *this;
+    }
+
+    DescriptorLayoutBuilder &DescriptorLayoutBuilder::SetStage(PeShaderStageFlags stage)
+    {
+        m_stage = stage;
+        return *this;
+    }
+
+    DescriptorLayoutBuilder &DescriptorLayoutBuilder::SetPushDescriptor(bool pushDescriptor)
+    {
+        m_pushDescriptor = pushDescriptor;
+        return *this;
+    }
+
+    DescriptorLayoutBuilder &DescriptorLayoutBuilder::SetName(const std::string &name)
+    {
+        m_name = name;
+        return *this;
+    }
+
+    DescriptorLayout *DescriptorLayoutBuilder::Build() const
+    {
+        return DescriptorLayout::Create(m_bindingInfos, m_stage, m_name, m_pushDescriptor);
+    }
+
+    Descriptor *Descriptor::Create(const std::vector<DescriptorBindingInfo> &bindingInfos,
+                                   PeShaderStageFlags stage,
+                                   bool pushDescriptor,
+                                   const std::string &name)
+    {
+        Descriptor *descriptor = new Descriptor(bindingInfos, stage, pushDescriptor, name);
+#if defined(PE_TRACK_RESOURCES)
+        PeTracker::Track(typeid(Descriptor), reinterpret_cast<void *>(descriptor));
+#if !defined(PE_TRACK_RESOURCES_NOSPAM)
+        PE_INFO("Object Descriptor created (Handle: %p)", reinterpret_cast<void *>(descriptor));
+#endif
+#endif
+        return descriptor;
+    }
+
+    void Descriptor::Destroy(Descriptor *&descriptor)
+    {
+        if (descriptor)
         {
-            RHII.GetDevice().destroyDescriptorSetLayout(m_apiHandle);
-            m_apiHandle = vk::DescriptorSetLayout{};
+#if defined(PE_TRACK_RESOURCES) && !defined(PE_TRACK_RESOURCES_NOSPAM)
+            PE_INFO("Object Descriptor destroyed (Handle: %p)", reinterpret_cast<void *>(descriptor));
+#endif
+            delete descriptor;
+#if defined(PE_TRACK_RESOURCES)
+            PeTracker::Untrack(typeid(Descriptor), reinterpret_cast<void *>(descriptor));
+#endif
+            descriptor = nullptr;
         }
     }
 
+    std::vector<Descriptor *> Descriptor::GetHandles()
+    {
+#if defined(PE_TRACK_RESOURCES)
+        auto ptrs = PeTracker::GetHandles(typeid(Descriptor));
+        std::vector<Descriptor *> out;
+        out.reserve(ptrs.size());
+        for (void *p : ptrs)
+            out.push_back(static_cast<Descriptor *>(p));
+        return out;
+#else
+        return {};
+#endif
+    }
+
     Descriptor::Descriptor(const std::vector<DescriptorBindingInfo> &bindingInfos,
-                           vk::ShaderStageFlags stage,
+                           PeShaderStageFlags stage,
                            bool pushDescriptor,
                            const std::string &name)
         : m_pushDescriptor{pushDescriptor},
@@ -137,13 +272,14 @@ namespace pe
           m_updateInfos(bindingInfos.size()),
           m_boundResources(bindingInfos.size()),
           m_stage{stage},
+          m_name{name},
           m_dynamicOffsets{}
     {
         std::sort(m_bindingInfos.begin(), m_bindingInfos.end(), [](const DescriptorBindingInfo &a, const DescriptorBindingInfo &b)
                   { return a.binding < b.binding; });
 
         // Get the count per descriptor type
-        std::unordered_map<vk::DescriptorType, uint32_t> typeCounts{};
+        std::unordered_map<PeBindingType, uint32_t> typeCounts{};
         for (auto i = 0; i < m_bindingInfos.size(); i++)
         {
             auto it = typeCounts.find(m_bindingInfos[i].type);
@@ -154,7 +290,7 @@ namespace pe
         }
 
         // Create pool sizes from typeCounts above
-        std::vector<vk::DescriptorPoolSize> poolSizes(typeCounts.size());
+        std::vector<DescriptorPoolSize> poolSizes(typeCounts.size());
         uint32_t i = 0;
         for (auto const &[type, count] : typeCounts)
         {
@@ -166,9 +302,7 @@ namespace pe
         bool allowUpdateAfterBindPool = true;
         for (const auto &binding : m_bindingInfos)
         {
-            if (binding.type == vk::DescriptorType::eInputAttachment ||
-                binding.type == vk::DescriptorType::eUniformBufferDynamic ||
-                binding.type == vk::DescriptorType::eStorageBufferDynamic)
+            if (!IsUpdateAfterBindCompatible(binding.type))
             {
                 allowUpdateAfterBindPool = false;
                 break;
@@ -178,28 +312,12 @@ namespace pe
         // Create DescriptorPool and DescriptorLayout for this descriptor set
         m_pool = DescriptorPool::Create(poolSizes, name + "_pool", 1, allowUpdateAfterBindPool);
         m_layout = DescriptorLayout::GetOrCreate(m_bindingInfos, m_stage, m_pushDescriptor);
-
-        // DescriptorLayout calculates the variable count on creation
-        uint32_t variableDescCounts[] = {m_layout->GetVariableCount()};
-
-        vk::DescriptorSetVariableDescriptorCountAllocateInfo variableDescriptorCountAllocInfo = {};
-        variableDescriptorCountAllocInfo.descriptorSetCount = 1;
-        variableDescriptorCountAllocInfo.pDescriptorCounts = variableDescCounts;
-
-        vk::DescriptorSetLayout dsetLayout = m_layout->ApiHandle();
-        vk::DescriptorSetAllocateInfo allocateInfo{};
-        allocateInfo.descriptorPool = m_pool->ApiHandle();
-        allocateInfo.descriptorSetCount = 1;
-        allocateInfo.pSetLayouts = &dsetLayout;
-        allocateInfo.pNext = &variableDescriptorCountAllocInfo; // If the flag was not set in the layout, this will be ignored
-
-        m_apiHandle = RHII.GetDevice().allocateDescriptorSets(allocateInfo)[0];
-
-        Debug::SetObjectName(m_apiHandle, name);
+        m_impl = CreateDescriptorImpl(this);
     }
 
     Descriptor::~Descriptor()
     {
+        delete m_impl;
         DescriptorPool::Destroy(m_pool);
     }
 
@@ -212,10 +330,10 @@ namespace pe
             return;
 
         const auto type = m_bindingInfos[bindingIndex].type;
-        if (type != vk::DescriptorType::eSampledImage &&
-            type != vk::DescriptorType::eStorageImage &&
-            type != vk::DescriptorType::eCombinedImageSampler &&
-            type != vk::DescriptorType::eInputAttachment)
+        if (type != PE_DESCRIPTOR_TYPE_SAMPLED_IMAGE &&
+            type != PE_DESCRIPTOR_TYPE_STORAGE_IMAGE &&
+            type != PE_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER &&
+            type != PE_DESCRIPTOR_TYPE_INPUT_ATTACHMENT)
         {
             PE_WARN("[Descriptor] Type mismatch: Binding %u is not an image type!", binding);
             return;
@@ -243,10 +361,10 @@ namespace pe
             return;
 
         const auto type = m_bindingInfos[bindingIndex].type;
-        if (type != vk::DescriptorType::eUniformBuffer &&
-            type != vk::DescriptorType::eStorageBuffer &&
-            type != vk::DescriptorType::eUniformBufferDynamic &&
-            type != vk::DescriptorType::eStorageBufferDynamic)
+        if (type != PE_DESCRIPTOR_TYPE_UNIFORM_BUFFER &&
+            type != PE_DESCRIPTOR_TYPE_STORAGE_BUFFER &&
+            type != PE_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC &&
+            type != PE_DESCRIPTOR_TYPE_STORAGE_BUFFER_DYNAMIC)
         {
             PE_WARN("[Descriptor] Type mismatch: Binding %u is not a buffer type!", binding);
             return;
@@ -272,7 +390,7 @@ namespace pe
             return;
 
         const auto type = m_bindingInfos[bindingIndex].type;
-        if (type != vk::DescriptorType::eSampler && type != vk::DescriptorType::eCombinedImageSampler)
+        if (type != PE_DESCRIPTOR_TYPE_SAMPLER && type != PE_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER)
         {
             PE_WARN("[Descriptor] Type mismatch: Binding %u is not a sampler type!", binding);
             return;
@@ -289,14 +407,14 @@ namespace pe
         SetSamplers(binding, {sampler});
     }
 
-    void Descriptor::SetAccelerationStructure(uint32_t binding, vk::AccelerationStructureKHR tlas)
+    void Descriptor::SetAccelerationStructure(uint32_t binding, AccelerationStructure *tlas)
     {
         int32_t bindingIndex = GetBindingIndex(binding, m_bindingInfos);
         if (bindingIndex == -1)
             return;
 
         const auto type = m_bindingInfos[bindingIndex].type;
-        if (type != vk::DescriptorType::eAccelerationStructureKHR)
+        if (type != PE_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE)
         {
             PE_WARN("[Descriptor] Type mismatch: Binding %u is not an acceleration structure type!", binding);
             return;
@@ -310,89 +428,13 @@ namespace pe
 
     void Descriptor::Update()
     {
-        std::vector<vk::WriteDescriptorSet> writes{};
-        std::vector<std::vector<vk::DescriptorImageInfo>> imageInfos{};
-        std::vector<std::vector<vk::DescriptorBufferInfo>> bufferInfos{};
-        std::vector<vk::WriteDescriptorSetAccelerationStructureKHR> accelerationWrites{};
-        imageInfos.reserve(m_updateInfos.size());
-        bufferInfos.reserve(m_updateInfos.size());
-        accelerationWrites.reserve(m_updateInfos.size());
-        writes.reserve(m_updateInfos.size());
+        m_impl->Update(m_bindingInfos, m_updateInfos);
 
         for (uint32_t i = 0; i < m_updateInfos.size(); i++)
         {
-            auto &updateInfo = m_updateInfos[i];
-            auto &bindingInfo = m_bindingInfos[i];
-
-            vk::WriteDescriptorSet write{};
-            write.dstSet = m_apiHandle;
-            write.dstBinding = updateInfo.binding;
-            write.dstArrayElement = 0;
-            write.descriptorType = bindingInfo.type;
-            if (updateInfo.views.size())
-            {
-                auto &infos = imageInfos.emplace_back(std::vector<vk::DescriptorImageInfo>{});
-                infos.resize(updateInfo.views.size());
-                for (uint32_t j = 0; j < updateInfo.views.size(); j++)
-                {
-                    infos[j] = vk::DescriptorImageInfo{};
-                    infos[j].imageView = pe::GetVulkanImageView(updateInfo.views[j]);
-                    infos[j].imageLayout = bindingInfo.imageLayout;
-                    infos[j].sampler = bindingInfo.type == vk::DescriptorType::eCombinedImageSampler ? pe::GetVulkanSampler(updateInfo.samplers[j]) : vk::Sampler{};
-                }
-
-                write.descriptorCount = static_cast<uint32_t>(infos.size());
-                write.pImageInfo = infos.data();
-            }
-            else if (updateInfo.buffers.size())
-            {
-                auto &infos = bufferInfos.emplace_back(std::vector<vk::DescriptorBufferInfo>{});
-                infos.resize(updateInfo.buffers.size());
-                for (uint32_t j = 0; j < updateInfo.buffers.size(); j++)
-                {
-                    infos[j] = vk::DescriptorBufferInfo{};
-                    infos[j].buffer = pe::GetVulkanBuffer(updateInfo.buffers[j]);
-                    infos[j].offset = updateInfo.offsets.size() > 0 ? updateInfo.offsets[j] : 0;
-                    infos[j].range = updateInfo.ranges.size() > 0 ? (updateInfo.ranges[j] > 0 ? updateInfo.ranges[j] : vk::WholeSize) : vk::WholeSize;
-                }
-
-                write.descriptorCount = static_cast<uint32_t>(infos.size());
-                write.pBufferInfo = infos.data();
-            }
-            else if (updateInfo.samplers.size() && bindingInfo.type != vk::DescriptorType::eCombinedImageSampler)
-            {
-                auto &infos = imageInfos.emplace_back(std::vector<vk::DescriptorImageInfo>{});
-                infos.resize(updateInfo.samplers.size());
-                for (uint32_t j = 0; j < updateInfo.samplers.size(); j++)
-                {
-                    infos[j] = vk::DescriptorImageInfo{};
-                    infos[j].imageView = nullptr;
-                    infos[j].imageLayout = vk::ImageLayout::eUndefined;
-                    infos[j].sampler = pe::GetVulkanSampler(updateInfo.samplers[j]);
-                }
-
-                write.descriptorCount = static_cast<uint32_t>(infos.size());
-                write.pImageInfo = infos.data();
-            }
-            else if (updateInfo.accelerationStructures.size())
-            {
-                auto &accelerationWrite = accelerationWrites.emplace_back();
-                accelerationWrite.accelerationStructureCount = static_cast<uint32_t>(updateInfo.accelerationStructures.size());
-                accelerationWrite.pAccelerationStructures = updateInfo.accelerationStructures.data();
-
-                write.pNext = &accelerationWrite;
-                write.descriptorCount = accelerationWrite.accelerationStructureCount;
-            }
-            else
-            {
-                continue; // We are allowing this since all bindings can be partially bound
-            }
-
-            m_boundResources[i] = updateInfo;
-            writes.push_back(write);
+            if (HasDescriptorUpdate(m_updateInfos[i]))
+                m_boundResources[i] = m_updateInfos[i];
         }
-
-        RHII.GetDevice().updateDescriptorSets(static_cast<uint32_t>(writes.size()), writes.data(), 0, nullptr);
 
         m_updateInfos.clear();
         m_updateInfos.resize(m_bindingInfos.size());

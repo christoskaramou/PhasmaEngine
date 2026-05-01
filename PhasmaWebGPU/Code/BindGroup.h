@@ -27,7 +27,7 @@ struct WGPUBindGroupLayoutImpl
 
     pe::DescriptorLayout *layout = nullptr;
     std::vector<pe::DescriptorBindingInfo> bindingInfos;
-    vk::ShaderStageFlags stage = vk::ShaderStageFlags{};
+    PeShaderStageFlags stage = {};
 
     std::vector<WGPUBindGroupLayoutEntryResolved> entries;
     uint32_t dynamicOffsetCount = 0;

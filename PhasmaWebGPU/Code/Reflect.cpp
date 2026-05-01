@@ -5,6 +5,7 @@
 #include "Device.h"
 #include "API/RHI.h"
 #include "API/Descriptor.h"
+#include "API/Vulkan/VulkanDescriptorImpl.h"
 
 #include "spirv_cross/spirv_cross.hpp"
 
@@ -1486,7 +1487,7 @@ namespace pwgpu
             }
 
             std::vector<pe::DescriptorBindingInfo> infos;
-            vk::ShaderStageFlags stageMask{};
+            PeShaderStageFlags stageMask{};
             bgl->entries.reserve(it->second.size());
             for (const auto &kv : it->second)
             {
@@ -1506,30 +1507,30 @@ namespace pwgpu
                 if (rb.hasBuffer)
                 {
                     info.type = (rb.buffer.type == WGPUBufferBindingType_Uniform)
-                                    ? vk::DescriptorType::eUniformBuffer
-                                    : vk::DescriptorType::eStorageBuffer;
+                                    ? PE_DESCRIPTOR_TYPE_UNIFORM_BUFFER
+                                    : PE_DESCRIPTOR_TYPE_STORAGE_BUFFER;
                 }
                 else if (rb.hasSampler)
                 {
-                    info.type = vk::DescriptorType::eSampler;
+                    info.type = PE_DESCRIPTOR_TYPE_SAMPLER;
                 }
                 else if (rb.hasTexture)
                 {
-                    info.type = vk::DescriptorType::eSampledImage;
-                    info.imageLayout = vk::ImageLayout::eShaderReadOnlyOptimal;
+                    info.type = PE_DESCRIPTOR_TYPE_SAMPLED_IMAGE;
+                    info.imageLayout = PE_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
                 }
                 else if (rb.hasStorageTexture)
                 {
-                    info.type = vk::DescriptorType::eStorageImage;
-                    info.imageLayout = vk::ImageLayout::eGeneral;
+                    info.type = PE_DESCRIPTOR_TYPE_STORAGE_IMAGE;
+                    info.imageLayout = PE_IMAGE_LAYOUT_GENERAL;
                 }
-                vk::ShaderStageFlags entryStages{};
+                PeShaderStageFlags entryStages{};
                 if (rb.visibility & WGPUShaderStage_Vertex)
-                    entryStages |= vk::ShaderStageFlagBits::eVertex;
+                    entryStages |= PE_SHADER_STAGE_VERTEX;
                 if (rb.visibility & WGPUShaderStage_Fragment)
-                    entryStages |= vk::ShaderStageFlagBits::eFragment;
+                    entryStages |= PE_SHADER_STAGE_FRAGMENT;
                 if (rb.visibility & WGPUShaderStage_Compute)
-                    entryStages |= vk::ShaderStageFlagBits::eCompute;
+                    entryStages |= PE_SHADER_STAGE_COMPUTE;
                 stageMask |= entryStages;
                 infos.push_back(info);
             }
@@ -1538,7 +1539,7 @@ namespace pwgpu
             if (!infos.empty())
             {
                 bgl->layout = pe::DescriptorLayout::Create(infos, stageMask, "auto_bgl");
-                vkSetLayouts[s] = bgl->layout->ApiHandle();
+                vkSetLayouts[s] = pe::GetVulkanDescriptorLayout(bgl->layout);
             }
             else
             {

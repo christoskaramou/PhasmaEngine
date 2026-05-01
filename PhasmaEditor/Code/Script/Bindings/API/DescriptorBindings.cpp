@@ -7,40 +7,40 @@
 
 namespace pe
 {
-    static const std::unordered_map<std::string_view, vk::DescriptorType> s_descriptorTypeMap = {
-        {"sampler", vk::DescriptorType::eSampler},
-        {"combined_image_sampler", vk::DescriptorType::eCombinedImageSampler},
-        {"sampled_image", vk::DescriptorType::eSampledImage},
-        {"storage_image", vk::DescriptorType::eStorageImage},
-        {"uniform_buffer", vk::DescriptorType::eUniformBuffer},
-        {"storage_buffer", vk::DescriptorType::eStorageBuffer},
-        {"uniform_buffer_dynamic", vk::DescriptorType::eUniformBufferDynamic},
-        {"storage_buffer_dynamic", vk::DescriptorType::eStorageBufferDynamic},
-        {"input_attachment", vk::DescriptorType::eInputAttachment},
-        {"acceleration_structure", vk::DescriptorType::eAccelerationStructureKHR},
+    static const std::unordered_map<std::string_view, PeBindingType> s_descriptorTypeMap = {
+        {"sampler", PE_DESCRIPTOR_TYPE_SAMPLER},
+        {"combined_image_sampler", PE_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER},
+        {"sampled_image", PE_DESCRIPTOR_TYPE_SAMPLED_IMAGE},
+        {"storage_image", PE_DESCRIPTOR_TYPE_STORAGE_IMAGE},
+        {"uniform_buffer", PE_DESCRIPTOR_TYPE_UNIFORM_BUFFER},
+        {"storage_buffer", PE_DESCRIPTOR_TYPE_STORAGE_BUFFER},
+        {"uniform_buffer_dynamic", PE_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC},
+        {"storage_buffer_dynamic", PE_DESCRIPTOR_TYPE_STORAGE_BUFFER_DYNAMIC},
+        {"input_attachment", PE_DESCRIPTOR_TYPE_INPUT_ATTACHMENT},
+        {"acceleration_structure", PE_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE},
     };
 
-    static const std::unordered_map<std::string_view, vk::ShaderStageFlagBits> s_shaderStageMap = {
-        {"vertex", vk::ShaderStageFlagBits::eVertex},
-        {"fragment", vk::ShaderStageFlagBits::eFragment},
-        {"compute", vk::ShaderStageFlagBits::eCompute},
-        {"geometry", vk::ShaderStageFlagBits::eGeometry},
-        {"tessellation_control", vk::ShaderStageFlagBits::eTessellationControl},
-        {"tessellation_evaluation", vk::ShaderStageFlagBits::eTessellationEvaluation},
-        {"raygen", vk::ShaderStageFlagBits::eRaygenKHR},
-        {"any_hit", vk::ShaderStageFlagBits::eAnyHitKHR},
-        {"closest_hit", vk::ShaderStageFlagBits::eClosestHitKHR},
-        {"miss", vk::ShaderStageFlagBits::eMissKHR},
-        {"intersection", vk::ShaderStageFlagBits::eIntersectionKHR},
-        {"all", vk::ShaderStageFlagBits::eAll},
+    static const std::unordered_map<std::string_view, PeShaderStageFlags> s_shaderStageMap = {
+        {"vertex", PE_SHADER_STAGE_VERTEX},
+        {"fragment", PE_SHADER_STAGE_FRAGMENT},
+        {"compute", PE_SHADER_STAGE_COMPUTE},
+        {"geometry", PE_SHADER_STAGE_GEOMETRY},
+        {"tessellation_control", PE_SHADER_STAGE_TESS_CONTROL},
+        {"tessellation_evaluation", PE_SHADER_STAGE_TESS_EVALUATION},
+        {"raygen", PE_SHADER_STAGE_RAYGEN_KHR},
+        {"any_hit", PE_SHADER_STAGE_ANY_HIT_KHR},
+        {"closest_hit", PE_SHADER_STAGE_CLOSEST_HIT_KHR},
+        {"miss", PE_SHADER_STAGE_MISS_KHR},
+        {"intersection", PE_SHADER_STAGE_INTERSECTION_KHR},
+        {"all", PE_SHADER_STAGE_ALL},
     };
 
-    static const std::unordered_map<std::string_view, vk::ImageLayout> s_descImageLayoutMap = {
-        {"undefined", vk::ImageLayout::eUndefined},
-        {"general", vk::ImageLayout::eGeneral},
-        {"shader_read", vk::ImageLayout::eShaderReadOnlyOptimal},
-        {"color_attachment", vk::ImageLayout::eColorAttachmentOptimal},
-        {"depth_attachment", vk::ImageLayout::eDepthStencilAttachmentOptimal},
+    static const std::unordered_map<std::string_view, PeImageLayout> s_descImageLayoutMap = {
+        {"undefined", PE_IMAGE_LAYOUT_UNDEFINED},
+        {"general", PE_IMAGE_LAYOUT_GENERAL},
+        {"shader_read", PE_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL},
+        {"color_attachment", PE_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL},
+        {"depth_attachment", PE_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL},
     };
 
     static struct DescriptorBindings
@@ -67,13 +67,13 @@ namespace pe
                         DescriptorBindingInfo info{};
                         info.binding = entry.get<uint32_t>("binding");
                         info.count = entry.get_or<uint32_t>("count", 1);
-                        info.type = Lookup(entry.get_or<std::string>("type", "combined_image_sampler"), s_descriptorTypeMap, vk::DescriptorType::eCombinedImageSampler);
-                        info.imageLayout = Lookup(entry.get_or<std::string>("layout", "undefined"), s_descImageLayoutMap, vk::ImageLayout::eUndefined);
+                        info.type = Lookup(entry.get_or<std::string>("type", "combined_image_sampler"), s_descriptorTypeMap, PE_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER);
+                        info.imageLayout = Lookup(entry.get_or<std::string>("layout", "undefined"), s_descImageLayoutMap, PE_IMAGE_LAYOUT_UNDEFINED);
                         info.bindless = entry.get_or("bindless", false);
                         info.name = entry.get_or<std::string>("name", "");
                         bindingInfos.push_back(info);
                     }
-                    vk::ShaderStageFlags stageFlags = LookupFlags<vk::ShaderStageFlags>(stage, s_shaderStageMap);
+                    PeShaderStageFlags stageFlags = LookupFlags<PeShaderStageFlags>(stage, s_shaderStageMap);
                     return DescriptorLayout::GetOrCreate(bindingInfos, stageFlags, pushDescriptor.value_or(false));
                 });
                 lua.set_function("descriptor_layout_clear_cache", []() { DescriptorLayout::ClearCache(); });
@@ -91,13 +91,13 @@ namespace pe
                         DescriptorBindingInfo info{};
                         info.binding = entry.get<uint32_t>("binding");
                         info.count = entry.get_or<uint32_t>("count", 1);
-                        info.type = Lookup(entry.get_or<std::string>("type", "combined_image_sampler"), s_descriptorTypeMap, vk::DescriptorType::eCombinedImageSampler);
-                        info.imageLayout = Lookup(entry.get_or<std::string>("layout", "undefined"), s_descImageLayoutMap, vk::ImageLayout::eUndefined);
+                        info.type = Lookup(entry.get_or<std::string>("type", "combined_image_sampler"), s_descriptorTypeMap, PE_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER);
+                        info.imageLayout = Lookup(entry.get_or<std::string>("layout", "undefined"), s_descImageLayoutMap, PE_IMAGE_LAYOUT_UNDEFINED);
                         info.bindless = entry.get_or("bindless", false);
                         info.name = entry.get_or<std::string>("name", "");
                         bindingInfos.push_back(info);
                     }
-                    vk::ShaderStageFlags stageFlags = LookupFlags<vk::ShaderStageFlags>(stage, s_shaderStageMap);
+                    PeShaderStageFlags stageFlags = LookupFlags<PeShaderStageFlags>(stage, s_shaderStageMap);
                     return Descriptor::Create(bindingInfos, stageFlags, pushDescriptor.value_or(false), name);
                 });
                 lua.set_function("destroy_descriptor", [](Descriptor *desc) { Descriptor::Destroy(desc); });
@@ -179,7 +179,7 @@ namespace pe
                 };
                 // SetAccelerationStructure
                 descType["set_acceleration_structure"] = [](Descriptor &desc, uint32_t binding, AccelerationStructure &as) {
-                    desc.SetAccelerationStructure(binding, as.ApiHandle());
+                    desc.SetAccelerationStructure(binding, &as);
                 };
                 // Update
                 descType["update"] = &Descriptor::Update;
@@ -189,7 +189,7 @@ namespace pe
                 descType["get_layout"] = &Descriptor::GetLayout;
                 // GetStage
                 descType["get_stage"] = [](Descriptor &d) -> uint32_t {
-                    return static_cast<uint32_t>(static_cast<VkShaderStageFlags>(d.GetStage()));
+                    return static_cast<uint32_t>(d.GetStage());
                 };
                 // GetBoundResources
                 descType["get_bound_resources"] = [](Descriptor &d, sol::this_state ts) -> sol::table {
