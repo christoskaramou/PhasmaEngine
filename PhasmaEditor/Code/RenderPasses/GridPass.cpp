@@ -22,8 +22,8 @@ namespace pe
         m_attachments.resize(1);
         m_attachments[0] = {};
         m_attachments[0].image = m_viewportRT;
-        m_attachments[0].loadOp = vk::AttachmentLoadOp::eLoad;
-        m_attachments[0].storeOp = vk::AttachmentStoreOp::eStore;
+        m_attachments[0].loadOp = PE_LOAD_OP_LOAD;
+        m_attachments[0].storeOp = PE_STORE_OP_STORE;
     }
 
     void GridPass::UpdatePassInfo()
@@ -40,11 +40,11 @@ namespace pe
         m_passInfo->polygonMode = vk::PolygonMode::eFill;
 
         // Blending (Alpha Blend)
-        m_passInfo->colorBlendAttachments = {PipelineColorBlendAttachmentState::Default};
-        m_passInfo->colorBlendAttachments[0].blendEnable = VK_TRUE;
-        m_passInfo->colorBlendAttachments[0].srcColorBlendFactor = vk::BlendFactor::eSrcAlpha;
-        m_passInfo->colorBlendAttachments[0].dstColorBlendFactor = vk::BlendFactor::eOneMinusSrcAlpha;
-        m_passInfo->colorBlendAttachments[0].colorBlendOp = vk::BlendOp::eAdd;
+        m_passInfo->colorBlendAttachments = {BlendState::Default};
+        m_passInfo->colorBlendAttachments[0].blendEnable = true;
+        m_passInfo->colorBlendAttachments[0].srcColorBlendFactor = PE_BLEND_FACTOR_SRC_ALPHA;
+        m_passInfo->colorBlendAttachments[0].dstColorBlendFactor = PE_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA;
+        m_passInfo->colorBlendAttachments[0].colorBlendOp = PE_BLEND_OP_ADD;
 
         m_passInfo->colorFormats = {pe::ToVkFormat(m_viewportRT->GetFormat())};
 

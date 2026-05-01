@@ -5,48 +5,115 @@
 #include "API/RHI.h"
 #include "API/RenderPass.h"
 #include "API/Shader.h"
+#include "API/Vulkan/VulkanDescriptorImpl.h"
 
 namespace pe
 {
-    PE_API vk::PipelineColorBlendAttachmentState PipelineColorBlendAttachmentState::Default = vk::PipelineColorBlendAttachmentState(
-        /*.blendEnable            =*/VK_TRUE,
-        /*.srcColorBlendFactor    =*/vk::BlendFactor::eSrcAlpha,
-        /*.dstColorBlendFactor    =*/vk::BlendFactor::eOneMinusSrcAlpha,
-        /*.colorBlendOp           =*/vk::BlendOp::eAdd,
-        /*.srcAlphaBlendFactor    =*/vk::BlendFactor::eOne,
-        /*.dstAlphaBlendFactor    =*/vk::BlendFactor::eZero,
-        /*.alphaBlendOp           =*/vk::BlendOp::eAdd,
-        /*.colorWriteMask         =*/vk::ColorComponentFlagBits::eR | vk::ColorComponentFlagBits::eG | vk::ColorComponentFlagBits::eB | vk::ColorComponentFlagBits::eA);
+    PE_API const BlendState BlendState::Default = BlendState(
+        /*blendEnable*/ true,
+        /*srcColorBlendFactor*/ PE_BLEND_FACTOR_SRC_ALPHA,
+        /*dstColorBlendFactor*/ PE_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA,
+        /*colorBlendOp*/ PE_BLEND_OP_ADD,
+        /*srcAlphaBlendFactor*/ PE_BLEND_FACTOR_ONE,
+        /*dstAlphaBlendFactor*/ PE_BLEND_FACTOR_ZERO,
+        /*alphaBlendOp*/ PE_BLEND_OP_ADD,
+        /*colorWriteMask*/ PE_COLOR_COMPONENT_RGBA);
 
-    PE_API vk::PipelineColorBlendAttachmentState PipelineColorBlendAttachmentState::AdditiveColor = vk::PipelineColorBlendAttachmentState(
-        /*.blendEnable            =*/VK_TRUE,
-        /*.srcColorBlendFactor    =*/vk::BlendFactor::eOne,
-        /*.dstColorBlendFactor    =*/vk::BlendFactor::eOne,
-        /*.colorBlendOp           =*/vk::BlendOp::eAdd,
-        /*.srcAlphaBlendFactor    =*/vk::BlendFactor::eOne,
-        /*.dstAlphaBlendFactor    =*/vk::BlendFactor::eOne,
-        /*.alphaBlendOp           =*/vk::BlendOp::eAdd,
-        /*.colorWriteMask         =*/vk::ColorComponentFlagBits::eR | vk::ColorComponentFlagBits::eG | vk::ColorComponentFlagBits::eB | vk::ColorComponentFlagBits::eA);
+    PE_API const BlendState BlendState::AdditiveColor = BlendState(
+        /*blendEnable*/ true,
+        /*srcColorBlendFactor*/ PE_BLEND_FACTOR_ONE,
+        /*dstColorBlendFactor*/ PE_BLEND_FACTOR_ONE,
+        /*colorBlendOp*/ PE_BLEND_OP_ADD,
+        /*srcAlphaBlendFactor*/ PE_BLEND_FACTOR_ONE,
+        /*dstAlphaBlendFactor*/ PE_BLEND_FACTOR_ONE,
+        /*alphaBlendOp*/ PE_BLEND_OP_ADD,
+        /*colorWriteMask*/ PE_COLOR_COMPONENT_RGBA);
 
-    PE_API vk::PipelineColorBlendAttachmentState PipelineColorBlendAttachmentState::TransparencyBlend = vk::PipelineColorBlendAttachmentState(
-        /*.blendEnable            =*/VK_TRUE,
-        /*.srcColorBlendFactor    =*/vk::BlendFactor::eOne,
-        /*.dstColorBlendFactor    =*/vk::BlendFactor::eOneMinusSrcColor,
-        /*.colorBlendOp           =*/vk::BlendOp::eAdd,
-        /*.srcAlphaBlendFactor    =*/vk::BlendFactor::eOne,
-        /*.dstAlphaBlendFactor    =*/vk::BlendFactor::eOne,
-        /*.alphaBlendOp           =*/vk::BlendOp::eAdd,
-        /*.colorWriteMask         =*/vk::ColorComponentFlagBits::eR);
+    PE_API const BlendState BlendState::TransparencyBlend = BlendState(
+        /*blendEnable*/ true,
+        /*srcColorBlendFactor*/ PE_BLEND_FACTOR_ONE,
+        /*dstColorBlendFactor*/ PE_BLEND_FACTOR_ONE_MINUS_SRC_COLOR,
+        /*colorBlendOp*/ PE_BLEND_OP_ADD,
+        /*srcAlphaBlendFactor*/ PE_BLEND_FACTOR_ONE,
+        /*dstAlphaBlendFactor*/ PE_BLEND_FACTOR_ONE,
+        /*alphaBlendOp*/ PE_BLEND_OP_ADD,
+        /*colorWriteMask*/ PE_COLOR_COMPONENT_R);
 
-    PE_API vk::PipelineColorBlendAttachmentState PipelineColorBlendAttachmentState::ParticlesBlend = vk::PipelineColorBlendAttachmentState(
-        /*.blendEnable            =*/VK_TRUE,
-        /*.srcColorBlendFactor    =*/vk::BlendFactor::eOne,
-        /*.dstColorBlendFactor    =*/vk::BlendFactor::eOneMinusSrcColor,
-        /*.colorBlendOp           =*/vk::BlendOp::eAdd,
-        /*.srcAlphaBlendFactor    =*/vk::BlendFactor::eOne,
-        /*.dstAlphaBlendFactor    =*/vk::BlendFactor::eOne,
-        /*.alphaBlendOp           =*/vk::BlendOp::eAdd,
-        /*.colorWriteMask         =*/vk::ColorComponentFlagBits::eR | vk::ColorComponentFlagBits::eG | vk::ColorComponentFlagBits::eB | vk::ColorComponentFlagBits::eA);
+    PE_API const BlendState BlendState::ParticlesBlend = BlendState(
+        /*blendEnable*/ true,
+        /*srcColorBlendFactor*/ PE_BLEND_FACTOR_ONE,
+        /*dstColorBlendFactor*/ PE_BLEND_FACTOR_ONE_MINUS_SRC_COLOR,
+        /*colorBlendOp*/ PE_BLEND_OP_ADD,
+        /*srcAlphaBlendFactor*/ PE_BLEND_FACTOR_ONE,
+        /*dstAlphaBlendFactor*/ PE_BLEND_FACTOR_ONE,
+        /*alphaBlendOp*/ PE_BLEND_OP_ADD,
+        /*colorWriteMask*/ PE_COLOR_COMPONENT_RGBA);
+
+    static vk::BlendFactor ToVulkanBlendFactor(PeBlendFactor factor)
+    {
+        switch (factor)
+        {
+        case PE_BLEND_FACTOR_ZERO:
+            return vk::BlendFactor::eZero;
+        case PE_BLEND_FACTOR_ONE:
+            return vk::BlendFactor::eOne;
+        case PE_BLEND_FACTOR_SRC_ALPHA:
+            return vk::BlendFactor::eSrcAlpha;
+        case PE_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA:
+            return vk::BlendFactor::eOneMinusSrcAlpha;
+        case PE_BLEND_FACTOR_ONE_MINUS_SRC_COLOR:
+            return vk::BlendFactor::eOneMinusSrcColor;
+        default:
+            return vk::BlendFactor::eOne;
+        }
+    }
+
+    static vk::BlendOp ToVulkanBlendOp(PeBlendOp op)
+    {
+        switch (op)
+        {
+        case PE_BLEND_OP_ADD:
+            return vk::BlendOp::eAdd;
+        case PE_BLEND_OP_SUBTRACT:
+            return vk::BlendOp::eSubtract;
+        case PE_BLEND_OP_REVERSE_SUBTRACT:
+            return vk::BlendOp::eReverseSubtract;
+        case PE_BLEND_OP_MIN:
+            return vk::BlendOp::eMin;
+        case PE_BLEND_OP_MAX:
+            return vk::BlendOp::eMax;
+        default:
+            return vk::BlendOp::eAdd;
+        }
+    }
+
+    static vk::ColorComponentFlags ToVulkanColorWriteMask(PeColorComponentFlags mask)
+    {
+        vk::ColorComponentFlags result{};
+        if (mask & PE_COLOR_COMPONENT_R)
+            result |= vk::ColorComponentFlagBits::eR;
+        if (mask & PE_COLOR_COMPONENT_G)
+            result |= vk::ColorComponentFlagBits::eG;
+        if (mask & PE_COLOR_COMPONENT_B)
+            result |= vk::ColorComponentFlagBits::eB;
+        if (mask & PE_COLOR_COMPONENT_A)
+            result |= vk::ColorComponentFlagBits::eA;
+        return result;
+    }
+
+    static vk::PipelineColorBlendAttachmentState ToVulkanBlendAttachment(const BlendState &state, bool globalBlendEnable)
+    {
+        vk::PipelineColorBlendAttachmentState attachment{};
+        attachment.blendEnable = state.blendEnable && globalBlendEnable ? VK_TRUE : VK_FALSE;
+        attachment.srcColorBlendFactor = ToVulkanBlendFactor(state.srcColorBlendFactor);
+        attachment.dstColorBlendFactor = ToVulkanBlendFactor(state.dstColorBlendFactor);
+        attachment.colorBlendOp = ToVulkanBlendOp(state.colorBlendOp);
+        attachment.srcAlphaBlendFactor = ToVulkanBlendFactor(state.srcAlphaBlendFactor);
+        attachment.dstAlphaBlendFactor = ToVulkanBlendFactor(state.dstAlphaBlendFactor);
+        attachment.alphaBlendOp = ToVulkanBlendOp(state.alphaBlendOp);
+        attachment.colorWriteMask = ToVulkanColorWriteMask(state.colorWriteMask);
+        return attachment;
+    }
 
     PassInfo::PassInfo()
         : pVertShader{},
@@ -182,15 +249,15 @@ namespace pe
         return vk::StencilOp::eKeep;
     }
 
-    static vk::PipelineColorBlendAttachmentState ParseBlendAttachment(const std::string &s)
+    static BlendState ParseBlendAttachment(const std::string &s)
     {
         if (s == "additive")
-            return PipelineColorBlendAttachmentState::AdditiveColor;
+            return BlendState::AdditiveColor;
         if (s == "transparency")
-            return PipelineColorBlendAttachmentState::TransparencyBlend;
+            return BlendState::TransparencyBlend;
         if (s == "particles")
-            return PipelineColorBlendAttachmentState::ParticlesBlend;
-        return PipelineColorBlendAttachmentState::Default;
+            return BlendState::ParticlesBlend;
+        return BlendState::Default;
     }
 
     static vk::DynamicState ParseDynamicState(const std::string &s)
@@ -507,7 +574,7 @@ namespace pe
         std::vector<vk::DescriptorSetLayout> layouts{};
         const auto &descriptors = m_info.GetDescriptors(0);
         for (uint32_t i = 0; i < descriptors.size(); i++)
-            layouts.push_back(descriptors[i]->GetLayout()->ApiHandle());
+            layouts.push_back(pe::GetVulkanDescriptorLayout(descriptors[i]->GetLayout()));
 
         vk::PipelineLayoutCreateInfo plci{};
         plci.setLayoutCount = static_cast<uint32_t>(layouts.size());
@@ -650,14 +717,16 @@ namespace pe
         pipeinfo.pDepthStencilState = &pdssci;
 
         // Color Blending state
-        for (uint32_t i = 0; i < m_info.colorBlendAttachments.size(); i++)
-            m_info.colorBlendAttachments[i].blendEnable &= static_cast<vk::Bool32>(m_info.blendEnable);
+        std::vector<vk::PipelineColorBlendAttachmentState> colorBlendAttachments;
+        colorBlendAttachments.reserve(m_info.colorBlendAttachments.size());
+        for (const auto &attachment : m_info.colorBlendAttachments)
+            colorBlendAttachments.push_back(ToVulkanBlendAttachment(attachment, m_info.blendEnable));
 
         vk::PipelineColorBlendStateCreateInfo pcbsci{};
         pcbsci.logicOpEnable = VK_FALSE;
         pcbsci.logicOp = vk::LogicOp::eAnd;
-        pcbsci.attachmentCount = static_cast<uint32_t>(m_info.colorBlendAttachments.size());
-        pcbsci.pAttachments = m_info.colorBlendAttachments.data();
+        pcbsci.attachmentCount = static_cast<uint32_t>(colorBlendAttachments.size());
+        pcbsci.pAttachments = colorBlendAttachments.data();
         pcbsci.blendConstants[0] = 0.0f;
         pcbsci.blendConstants[1] = 0.0f;
         pcbsci.blendConstants[2] = 0.0f;
@@ -718,9 +787,9 @@ namespace pe
         for (uint32_t i = 0; i < descriptors.size(); i++)
         {
             if (descriptors[i])
-                layouts.push_back(descriptors[i]->GetLayout()->ApiHandle());
+                layouts.push_back(pe::GetVulkanDescriptorLayout(descriptors[i]->GetLayout()));
             else
-                layouts.push_back(DescriptorLayout::GetOrCreate({}, vk::ShaderStageFlagBits::eAll)->ApiHandle());
+                layouts.push_back(pe::GetVulkanDescriptorLayout(DescriptorLayout::GetOrCreate({}, PE_SHADER_STAGE_ALL)));
         }
 
         vk::PipelineLayoutCreateInfo plci{};
@@ -865,7 +934,7 @@ namespace pe
         std::vector<vk::DescriptorSetLayout> layouts;
         const auto &descriptors = m_info.GetDescriptors(0);
         for (auto *desc : descriptors)
-            layouts.push_back(desc->GetLayout()->ApiHandle());
+            layouts.push_back(pe::GetVulkanDescriptorLayout(desc->GetLayout()));
 
         // Push Constants
         std::vector<vk::PushConstantRange> pcrs{};

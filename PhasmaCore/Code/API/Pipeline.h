@@ -1,5 +1,7 @@
 #pragma once
 
+#include "API/RHITypes.h"
+
 namespace pe
 {
     class RenderPass;
@@ -7,12 +9,34 @@ namespace pe
     class Shader;
     class Buffer;
 
-    struct PE_API PipelineColorBlendAttachmentState
+    struct PE_API BlendState : PeBlendAttachmentState
     {
-        static vk::PipelineColorBlendAttachmentState Default;
-        static vk::PipelineColorBlendAttachmentState AdditiveColor;
-        static vk::PipelineColorBlendAttachmentState TransparencyBlend;
-        static vk::PipelineColorBlendAttachmentState ParticlesBlend;
+        constexpr BlendState() = default;
+        constexpr BlendState(
+            bool blendEnable,
+            PeBlendFactor srcColorBlendFactor,
+            PeBlendFactor dstColorBlendFactor,
+            PeBlendOp colorBlendOp,
+            PeBlendFactor srcAlphaBlendFactor,
+            PeBlendFactor dstAlphaBlendFactor,
+            PeBlendOp alphaBlendOp,
+            PeColorComponentFlags colorWriteMask)
+            : PeBlendAttachmentState{
+                  blendEnable,
+                  srcColorBlendFactor,
+                  dstColorBlendFactor,
+                  colorBlendOp,
+                  srcAlphaBlendFactor,
+                  dstAlphaBlendFactor,
+                  alphaBlendOp,
+                  colorWriteMask}
+        {
+        }
+
+        static const BlendState Default;
+        static const BlendState AdditiveColor;
+        static const BlendState TransparencyBlend;
+        static const BlendState ParticlesBlend;
     };
 
     struct PassVariant
@@ -83,7 +107,7 @@ namespace pe
         vk::CullModeFlags cullMode;
         float lineWidth;
         bool blendEnable;
-        std::vector<vk::PipelineColorBlendAttachmentState> colorBlendAttachments;
+        std::vector<BlendState> colorBlendAttachments;
         std::vector<vk::DynamicState> dynamicStates;
         std::vector<vk::Format> colorFormats;
         vk::Format depthFormat;

@@ -237,10 +237,10 @@ namespace pe
 
                 // colorBlendAttachments (via preset modes)
                 piType["set_blend_mode"] = [](PassInfo &pi, const std::string &mode) {
-                    if (mode == "additive") pi.colorBlendAttachments = {PipelineColorBlendAttachmentState::AdditiveColor};
-                    else if (mode == "alpha") pi.colorBlendAttachments = {PipelineColorBlendAttachmentState::TransparencyBlend};
-                    else if (mode == "particles") pi.colorBlendAttachments = {PipelineColorBlendAttachmentState::ParticlesBlend};
-                    else pi.colorBlendAttachments = {PipelineColorBlendAttachmentState::Default};
+                    if (mode == "additive") pi.colorBlendAttachments = {BlendState::AdditiveColor};
+                    else if (mode == "alpha") pi.colorBlendAttachments = {BlendState::TransparencyBlend};
+                    else if (mode == "particles") pi.colorBlendAttachments = {BlendState::ParticlesBlend};
+                    else pi.colorBlendAttachments = {BlendState::Default};
                 };
 
                 // dynamicStates
