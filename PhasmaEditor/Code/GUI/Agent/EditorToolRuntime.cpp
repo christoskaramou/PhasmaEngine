@@ -918,12 +918,20 @@ namespace pe
         if (pngData.empty())
             return "{\"error\":\"failed to encode screenshot as PNG\"}";
 
-        std::string b64 = pmcp::Base64Encode(pngData.data(), pngData.size());
+        std::ofstream out(screenshotPath, std::ios::binary | std::ios::trunc);
+        if (!out)
+            return "{\"error\":\"failed to open screenshot path for write\"}";
+        out.write(reinterpret_cast<const char *>(pngData.data()), static_cast<std::streamsize>(pngData.size()));
+        out.close();
+        if (!out)
+            return "{\"error\":\"failed to write screenshot bytes\"}";
+
         return nlohmann::json{
-            {"image_base64", b64},
+            {"path", screenshotPath},
             {"mime_type", "image/png"},
             {"width", rw},
             {"height", rh},
+            {"bytes", pngData.size()},
             {"cursor_x", mouseX},
             {"cursor_y", mouseY},
         }
