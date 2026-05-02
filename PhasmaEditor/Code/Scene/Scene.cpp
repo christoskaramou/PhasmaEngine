@@ -4,7 +4,7 @@
 #include "Scene/SelectionManager.h"
 #include "Camera/Camera.h"
 #include "Systems/AnimationSystem.h"
-#include "API/AccelerationStructure.h"
+#include "API/Vulkan/AccelerationStructure.h"
 #include "API/Buffer.h"
 #include "API/Pipeline.h"
 #include "API/Descriptor.h"

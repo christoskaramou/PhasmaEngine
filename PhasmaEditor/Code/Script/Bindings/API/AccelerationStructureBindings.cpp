@@ -1,6 +1,6 @@
 #include "Script/ScriptSystem.h"
 #include "Script/Bindings/BindingUtils.h"
-#include "API/AccelerationStructure.h"
+#include "API/Vulkan/AccelerationStructure.h"
 #include "API/Buffer.h"
 #include "API/Command.h"
 

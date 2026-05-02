@@ -4,7 +4,8 @@
 
 namespace pe
 {
-    // Vulkan-only seam: anything including this header is, by definition, not cross-backend.
+    class AccelerationStructure;
+
     struct VulkanRhi
     {
         static vk::Instance Instance() { return RHII.m_instance; }

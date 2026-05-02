@@ -1,5 +1,5 @@
 #include "API/Vulkan/VulkanDescriptorImpl.h"
-#include "API/AccelerationStructure.h"
+#include "API/Vulkan/AccelerationStructure.h"
 #include "API/Debug.h"
 #include "API/RHI.h"
 #include "API/Vulkan/RHI_Vulkan.h"
