@@ -1,0 +1,92 @@
+#include "API/DX12/Dx12SwapchainImpl.h"
+#include "API/DX12/Dx12RhiImpl.h"
+#include "API/RHI.h"
+
+namespace pe
+{
+    using Microsoft::WRL::ComPtr;
+
+    static HWND HwndFromSdlWindow(SDL_Window *window)
+    {
+        if (!window)
+            return nullptr;
+        SDL_SysWMinfo info{};
+        SDL_VERSION(&info.version);
+        if (!SDL_GetWindowWMInfo(window, &info))
+            return nullptr;
+        return info.info.win.window;
+    }
+
+    Dx12SwapchainImpl::Dx12SwapchainImpl(Swapchain *owner, const SwapchainDesc &desc)
+        : m_owner{owner}
+    {
+        auto *rhi = static_cast<Dx12RhiImpl *>(RHII.GetImpl());
+        PE_ERROR_IF(!rhi, "Dx12SwapchainImpl requires DX12 RHI to be initialized");
+
+        IDXGIFactory6 *factory = rhi->GetFactory();
+        ID3D12Device *device = rhi->GetDevice();
+        ID3D12CommandQueue *queue = rhi->GetGraphicsQueue();
+        PE_ERROR_IF(!factory || !device || !queue, "Dx12SwapchainImpl: missing factory/device/queue");
+
+        HWND hwnd = HwndFromSdlWindow(desc.window);
+        PE_ERROR_IF(!hwnd, "Dx12SwapchainImpl: SDL window has no HWND");
+
+        BOOL tearing = FALSE;
+        if (SUCCEEDED(factory->CheckFeatureSupport(DXGI_FEATURE_PRESENT_ALLOW_TEARING,
+                                                   &tearing, sizeof(tearing))))
+        {
+            m_allowTearing = (tearing != FALSE);
+        }
+
+        const uint32_t bbCount = desc.backbufferCount < 2 ? 2 : desc.backbufferCount;
+
+        DXGI_SWAP_CHAIN_DESC1 sc{};
+        sc.Width = desc.width;
+        sc.Height = desc.height;
+        sc.Format = m_format;
+        sc.Stereo = FALSE;
+        sc.SampleDesc.Count = 1;
+        sc.SampleDesc.Quality = 0;
+        sc.BufferUsage = DXGI_USAGE_RENDER_TARGET_OUTPUT;
+        sc.BufferCount = bbCount;
+        sc.Scaling = DXGI_SCALING_STRETCH;
+        sc.SwapEffect = DXGI_SWAP_EFFECT_FLIP_DISCARD;
+        sc.AlphaMode = DXGI_ALPHA_MODE_UNSPECIFIED;
+        sc.Flags = m_allowTearing ? DXGI_SWAP_CHAIN_FLAG_ALLOW_TEARING : 0;
+
+        ComPtr<IDXGISwapChain1> sc1;
+        HRESULT hr = factory->CreateSwapChainForHwnd(queue, hwnd, &sc, nullptr, nullptr, &sc1);
+        PE_ERROR_IF(FAILED(hr), "Dx12SwapchainImpl: CreateSwapChainForHwnd failed");
+
+        // Disable Alt+Enter fullscreen toggle; the engine drives present mode explicitly.
+        factory->MakeWindowAssociation(hwnd, DXGI_MWA_NO_ALT_ENTER);
+
+        hr = sc1.As(&m_swapchain);
+        PE_ERROR_IF(FAILED(hr), "Dx12SwapchainImpl: IDXGISwapChain3 not available");
+
+        m_currentBackbuffer = m_swapchain->GetCurrentBackBufferIndex();
+
+        m_backbuffers.resize(bbCount);
+        for (uint32_t i = 0; i < bbCount; ++i)
+        {
+            hr = m_swapchain->GetBuffer(i, IID_PPV_ARGS(&m_backbuffers[i]));
+            PE_ERROR_IF(FAILED(hr), "Dx12SwapchainImpl: GetBuffer failed");
+        }
+
+        m_owner->m_width = desc.width;
+        m_owner->m_height = desc.height;
+        m_owner->m_images.assign(bbCount, nullptr);
+    }
+
+    Dx12SwapchainImpl::~Dx12SwapchainImpl()
+    {
+        m_backbuffers.clear();
+        m_swapchain.Reset();
+    }
+
+    uint32_t Dx12SwapchainImpl::AquireNextImage(Semaphore * /*semaphore*/)
+    {
+        m_currentBackbuffer = m_swapchain->GetCurrentBackBufferIndex();
+        return m_currentBackbuffer;
+    }
+} // namespace pe

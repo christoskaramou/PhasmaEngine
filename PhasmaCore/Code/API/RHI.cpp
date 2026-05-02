@@ -376,7 +376,20 @@ namespace pe
             }
             m_caps = dx->GetCaps();
             m_gpuName = dx->GetAdapterName();
-            PE_ERROR("RHI::Init: DX12 device + queue + fence ready (Phase 1 step 1); swapchain pending in step 2");
+
+            int sdlW = 0, sdlH = 0;
+            SDL_GetWindowSize(window, &sdlW, &sdlH);
+            SwapchainDesc scDesc{};
+            scDesc.window = window;
+            scDesc.surface = nullptr;
+            scDesc.width = static_cast<uint32_t>(sdlW);
+            scDesc.height = static_cast<uint32_t>(sdlH);
+            scDesc.presentMode = PE_PRESENT_MODE_FIFO;
+            scDesc.backbufferCount = 2;
+            scDesc.name = "RHI_swapchain";
+            m_swapchain = Swapchain::Create(scDesc);
+
+            PE_ERROR("RHI::Init: DX12 swapchain ready (Phase 1 step 2); descriptor pool pending in step 3");
             return;
 #else
             PE_ERROR("RHI::Init: DX12 backend is Windows-only");
@@ -886,7 +899,13 @@ namespace pe
 
     void RHI::CreateSwapchain(Surface *surface)
     {
-        m_swapchain = Swapchain::Create(surface, "RHI_swapchain");
+        SwapchainDesc desc{};
+        desc.window = m_window;
+        desc.surface = surface;
+        desc.presentMode = surface ? surface->GetPresentMode() : PE_PRESENT_MODE_FIFO;
+        desc.backbufferCount = 2;
+        desc.name = "RHI_swapchain";
+        m_swapchain = Swapchain::Create(desc);
     }
 
     void RHI::CreateDescriptorPool(uint32_t maxDescriptorSets)

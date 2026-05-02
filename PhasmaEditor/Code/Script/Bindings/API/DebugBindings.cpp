@@ -14,6 +14,7 @@
 #include "API/Vulkan/VulkanBufferImpl.h"
 #include "API/Vulkan/VulkanDescriptorImpl.h"
 #include "API/Vulkan/VulkanImageImpl.h"
+#include "API/Vulkan/VulkanSwapchainImpl.h"
 
 namespace pe
 {
@@ -62,7 +63,7 @@ namespace pe
                     Debug::SetObjectName(q.ApiHandle(), name);
                 });
                 debug.set_function("set_swapchain_name", [](Swapchain &sw, const std::string &name) {
-                    Debug::SetObjectName(sw.ApiHandle(), name);
+                    Debug::SetObjectName(pe::GetVulkanSwapchain(&sw), name);
                 });
                 debug.set_function("set_command_pool_name", [](CommandPool &cp, const std::string &name) {
                     Debug::SetObjectName(cp.ApiHandle(), name);

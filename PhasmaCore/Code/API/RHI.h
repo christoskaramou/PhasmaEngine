@@ -97,6 +97,7 @@ namespace pe
 
         void Init(SDL_Window *window, PeGraphicsApi api = PE_GRAPHICS_API_VULKAN);
         PeGraphicsApi GetApi() const { return m_api; }
+        Impl *GetImpl() const { return m_impl; }
         void Destroy();
         void CreateInstance(SDL_Window *window);
         void CreateSurface();

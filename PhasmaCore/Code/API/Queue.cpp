@@ -4,6 +4,7 @@
 #include "API/Vulkan/RHI_Vulkan.h"
 #include "API/Semaphore.h"
 #include "API/Swapchain.h"
+#include "API/Vulkan/VulkanSwapchainImpl.h"
 
 namespace pe
 {
@@ -136,11 +137,12 @@ namespace pe
     {
         std::lock_guard<std::mutex> lock(s_submitMutex);
 
+        vk::SwapchainKHR vkSwap = pe::GetVulkanSwapchain(swapchain);
         vk::PresentInfoKHR pi{};
         pi.waitSemaphoreCount = wait ? 1 : 0;
         pi.pWaitSemaphores = wait ? &wait->ApiHandle() : nullptr;
         pi.swapchainCount = 1;
-        pi.pSwapchains = &swapchain->ApiHandle();
+        pi.pSwapchains = &vkSwap;
         pi.pImageIndices = &imageIndex;
 
         try

@@ -1,137 +1,91 @@
-#include "API/Swapchain.h"
-#include "API/Image_Internal.h"
+#include "API/Swapchain_Internal.h"
+#include "API/Image.h"
 #include "API/RHI.h"
-#include "API/Vulkan/RHI_Vulkan.h"
-#include "API/Semaphore.h"
-#include "API/Surface.h"
-#include "API/Vulkan/VulkanImageImpl.h"
-#include "API/Vulkan/VulkanImageViewImpl.h"
-#include "API/Vulkan/VulkanRHITypeUtils.h"
+#include "API/Vulkan/VulkanSwapchainImpl.h"
+#if defined(PE_WIN32)
+#include "API/DX12/Dx12SwapchainImpl.h"
+#endif
 
 namespace pe
 {
-    Swapchain::Swapchain(Surface *surface, const std::string &name)
-        : m_images{}
+    Swapchain::Impl *CreateSwapchainImpl(Swapchain *owner, const SwapchainDesc &desc)
     {
-        auto capabilities = VulkanRhi::Gpu().getSurfaceCapabilitiesKHR(surface->ApiHandle());
-
-        // Per Vulkan spec: use currentExtent when it is defined (not UINT32_MAX).
-        // Only clamp to [min,max] when the surface lets us choose freely (Wayland etc.).
-        vk::Extent2D chosenExtent;
-        if (capabilities.currentExtent.width != UINT32_MAX)
+        if (RHII.GetApi() == PE_GRAPHICS_API_DX12)
         {
-            chosenExtent = capabilities.currentExtent;
+#if defined(PE_WIN32)
+            return new Dx12SwapchainImpl(owner, desc);
+#else
+            PE_ERROR("CreateSwapchainImpl: DX12 backend is Windows-only");
+            return nullptr;
+#endif
         }
-        else
+        return new VulkanSwapchainImpl(owner, desc);
+    }
+
+    Swapchain *Swapchain::Create(const SwapchainDesc &desc)
+    {
+        Swapchain *sc = new Swapchain(desc);
+#if defined(PE_TRACK_RESOURCES)
+        PeTracker::Track(typeid(Swapchain), reinterpret_cast<void *>(sc));
+#if !defined(PE_TRACK_RESOURCES_NOSPAM)
+        PE_INFO("Object Swapchain created (Handle: %p)", reinterpret_cast<void *>(sc));
+#endif
+#endif
+        return sc;
+    }
+
+    void Swapchain::Destroy(Swapchain *&sc)
+    {
+        if (sc)
         {
-            const Rect2Du &actualExtent = surface->GetActualExtent();
-            chosenExtent.width = std::clamp(actualExtent.width,
-                                            capabilities.minImageExtent.width,
-                                            capabilities.maxImageExtent.width);
-            chosenExtent.height = std::clamp(actualExtent.height,
-                                             capabilities.minImageExtent.height,
-                                             capabilities.maxImageExtent.height);
+#if defined(PE_TRACK_RESOURCES) && !defined(PE_TRACK_RESOURCES_NOSPAM)
+            PE_INFO("Object Swapchain destroyed (Handle: %p)", reinterpret_cast<void *>(sc));
+#endif
+            delete sc;
+#if defined(PE_TRACK_RESOURCES)
+            PeTracker::Untrack(typeid(Swapchain), reinterpret_cast<void *>(sc));
+#endif
+            sc = nullptr;
         }
+    }
 
-        // Keep surface and swapchain extents in sync.
-        surface->SetActualExtent({0, 0, chosenExtent.width, chosenExtent.height});
-        m_extent.x = 0;
-        m_extent.y = 0;
-        m_extent.width = chosenExtent.width;
-        m_extent.height = chosenExtent.height;
+    std::vector<Swapchain *> Swapchain::GetHandles()
+    {
+#if defined(PE_TRACK_RESOURCES)
+        auto ptrs = PeTracker::GetHandles(typeid(Swapchain));
+        std::vector<Swapchain *> out;
+        out.reserve(ptrs.size());
+        for (void *p : ptrs)
+            out.push_back(static_cast<Swapchain *>(p));
+        return out;
+#else
+        return {};
+#endif
+    }
 
-        vk::SwapchainCreateInfoKHR swapchainCreateInfo{};
-        swapchainCreateInfo.surface = surface->ApiHandle();
-        swapchainCreateInfo.minImageCount = capabilities.minImageCount + 1;
-        swapchainCreateInfo.imageFormat = surface->GetFormat();
-        swapchainCreateInfo.imageColorSpace = surface->GetColorSpace();
-        swapchainCreateInfo.imageExtent = chosenExtent;
-        swapchainCreateInfo.imageArrayLayers = 1;
-        vk::ImageUsageFlags swapchainUsage = vk::ImageUsageFlagBits::eColorAttachment | vk::ImageUsageFlagBits::eTransferDst;
-        if (capabilities.supportedUsageFlags & vk::ImageUsageFlagBits::eTransferSrc)
-            swapchainUsage |= vk::ImageUsageFlagBits::eTransferSrc;
-        swapchainCreateInfo.imageUsage = swapchainUsage;
-        swapchainCreateInfo.preTransform = capabilities.currentTransform;
-        swapchainCreateInfo.compositeAlpha = vk::CompositeAlphaFlagBitsKHR::eOpaque;
-        swapchainCreateInfo.presentMode = ToVkPresentMode(surface->GetPresentMode());
-        swapchainCreateInfo.clipped = VK_TRUE;
-        if (m_apiHandle)
-            swapchainCreateInfo.oldSwapchain = m_apiHandle;
-
-        // new swapchain with old create info
-        auto swapchain = VulkanRhi::Device().createSwapchainKHR(swapchainCreateInfo);
-        auto imagesVK = VulkanRhi::Device().getSwapchainImagesKHR(swapchain);
-
-        m_images.resize(imagesVK.size());
-        for (unsigned i = 0; i < m_images.size(); i++)
-        {
-            Image *img = new Image();
-            img->m_impl = CreateSwapchainImageImpl(img, imagesVK[i]);
-            VulkanImageImpl::From(img)->m_vkFormat = surface->GetFormat();
-            img->m_width = chosenExtent.width;
-            img->m_height = chosenExtent.height;
-            img->m_format = pe::FromVkFormat(surface->GetFormat());
-            img->m_usage = PE_IMAGE_USAGE_COLOR_ATTACHMENT | PE_IMAGE_USAGE_TRANSFER_DST;
-            img->m_name = "Swapchain_image_" + std::to_string(i);
-            img->m_trackInfos.resize(1);
-            ImageTrackInfo info{};
-            info.image = img;
-            info.layout = PE_IMAGE_LAYOUT_UNDEFINED;
-            info.stageFlags = PE_STAGE_COLOR_ATTACHMENT_OUTPUT; // Acquire semaphore blocks this stage
-            info.accessMask = PE_ACCESS_NONE;
-            img->m_trackInfos[0].resize(1, info);
-            m_images[i] = img;
-        }
-
-        // create image views for each swapchain image
-        for (int i = 0; i < m_images.size(); i++)
-        {
-            ImageViewDesc imageViewCreateInfo{};
-            imageViewCreateInfo.viewType = PE_IMAGE_VIEW_TYPE_2D;
-            imageViewCreateInfo.format = pe::FromVkFormat(surface->GetFormat());
-            imageViewCreateInfo.aspectMask = PE_IMAGE_ASPECT_COLOR;
-            imageViewCreateInfo.baseMipLevel = 0;
-            imageViewCreateInfo.levelCount = 1;
-            imageViewCreateInfo.baseArrayLayer = 0;
-            imageViewCreateInfo.layerCount = 1;
-
-            auto imageView = ImageView::Create(m_images[i], imageViewCreateInfo, "Swapchain_image_view" + std::to_string(i));
-            m_images[i]->SetRTV(imageView);
-
-            Debug::SetObjectName(pe::GetVulkanImage(m_images[i]), "Swapchain_image" + std::to_string(i));
-            Debug::SetObjectName(pe::GetVulkanImageView(m_images[i]->GetRTV()), "Swapchain_image_view" + std::to_string(i));
-        }
-
-        if (m_apiHandle)
-        {
-            VulkanRhi::Device().destroySwapchainKHR(m_apiHandle);
-        }
-
-        m_apiHandle = swapchain;
-
-        Debug::SetObjectName(m_apiHandle, name);
+    Swapchain::Swapchain(const SwapchainDesc &desc)
+        : m_presentMode{desc.presentMode},
+          m_width{desc.width},
+          m_height{desc.height},
+          m_name{desc.name}
+    {
+        m_impl = CreateSwapchainImpl(this, desc);
     }
 
     Swapchain::~Swapchain()
     {
-        for (auto *image : m_images)
+        for (Image *image : m_images)
         {
-            // Image::Destroy is safe even though the underlying VkImage is
-            // owned by the swapchain — VulkanImageImpl marks externally-owned
-            // images and skips vmaDestroyImage in its destructor.
-            Image::Destroy(image);
+            if (image)
+                Image::Destroy(image);
         }
-
-        if (m_apiHandle)
-            VulkanRhi::Device().destroySwapchainKHR(m_apiHandle);
+        m_images.clear();
+        delete m_impl;
+        m_impl = nullptr;
     }
 
     uint32_t Swapchain::AquireNextImage(Semaphore *semaphore)
     {
-        auto result = VulkanRhi::Device().acquireNextImageKHR(m_apiHandle, UINT64_MAX, semaphore->ApiHandle(), nullptr);
-        PE_ERROR_IF(result.result != vk::Result::eSuccess && result.result != vk::Result::eSuboptimalKHR,
-                    "Failed to acquire swapchain image");
-
-        return result.value;
+        return m_impl->AquireNextImage(semaphore);
     }
 } // namespace pe
