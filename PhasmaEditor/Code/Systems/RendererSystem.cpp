@@ -5,6 +5,9 @@
 #include "PhasmaMCP/Utils.h"
 #include "API/Buffer.h"
 #include "API/Command.h"
+#if defined(PE_WIN32)
+#include "API/DX12/Dx12RhiImpl.h"
+#endif
 #include "API/Framebuffer.h"
 #include "API/Image.h"
 #include "API/Vulkan/VulkanImageImpl.h"
@@ -442,6 +445,14 @@ namespace pe
     {
         try
         {
+#if defined(PE_WIN32)
+            if (RHII.GetApi() == PE_GRAPHICS_API_DX12)
+            {
+                auto *dx = static_cast<Dx12RhiImpl *>(RHII.GetImpl());
+                dx->DrawClearScreen(RHII.GetSwapchain());
+                return;
+            }
+#endif
             uint32_t frame = RHII.GetFrameIndex();
 
             Semaphore *acquireSemaphore = m_acquireSemaphores[frame];

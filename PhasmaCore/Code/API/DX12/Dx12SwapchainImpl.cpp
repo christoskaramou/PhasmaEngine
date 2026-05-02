@@ -67,10 +67,25 @@ namespace pe
         m_currentBackbuffer = m_swapchain->GetCurrentBackBufferIndex();
 
         m_backbuffers.resize(bbCount);
+        m_rtvHandles.resize(bbCount);
+
+        D3D12_DESCRIPTOR_HEAP_DESC rtvHeapDesc{};
+        rtvHeapDesc.Type = D3D12_DESCRIPTOR_HEAP_TYPE_RTV;
+        rtvHeapDesc.NumDescriptors = bbCount;
+        rtvHeapDesc.Flags = D3D12_DESCRIPTOR_HEAP_FLAG_NONE;
+        rtvHeapDesc.NodeMask = 0;
+        hr = device->CreateDescriptorHeap(&rtvHeapDesc, IID_PPV_ARGS(&m_rtvHeap));
+        PE_ERROR_IF(FAILED(hr), "Dx12SwapchainImpl: CreateDescriptorHeap(RTV) failed");
+
+        D3D12_CPU_DESCRIPTOR_HANDLE rtv = m_rtvHeap->GetCPUDescriptorHandleForHeapStart();
+        const uint32_t rtvStride = device->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_RTV);
         for (uint32_t i = 0; i < bbCount; ++i)
         {
             hr = m_swapchain->GetBuffer(i, IID_PPV_ARGS(&m_backbuffers[i]));
             PE_ERROR_IF(FAILED(hr), "Dx12SwapchainImpl: GetBuffer failed");
+            m_rtvHandles[i] = rtv;
+            device->CreateRenderTargetView(m_backbuffers[i].Get(), nullptr, rtv);
+            rtv.ptr += rtvStride;
         }
 
         m_owner->m_width = desc.width;
@@ -81,6 +96,8 @@ namespace pe
     Dx12SwapchainImpl::~Dx12SwapchainImpl()
     {
         m_backbuffers.clear();
+        m_rtvHandles.clear();
+        m_rtvHeap.Reset();
         m_swapchain.Reset();
     }
 
@@ -88,5 +105,12 @@ namespace pe
     {
         m_currentBackbuffer = m_swapchain->GetCurrentBackBufferIndex();
         return m_currentBackbuffer;
+    }
+
+    void Dx12SwapchainImpl::Present()
+    {
+        const HRESULT hr = m_swapchain->Present(1, 0);
+        PE_ERROR_IF(FAILED(hr), "Dx12SwapchainImpl: Present failed");
+        m_currentBackbuffer = m_swapchain->GetCurrentBackBufferIndex();
     }
 } // namespace pe

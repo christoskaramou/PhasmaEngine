@@ -7,6 +7,9 @@ namespace pe
     class Image;
     class Semaphore;
     class Surface;
+#if defined(PE_WIN32)
+    class Dx12RhiImpl;
+#endif
 
     struct SwapchainDesc
     {
@@ -29,6 +32,7 @@ namespace pe
         static std::vector<Swapchain *> GetHandles();
 
         uint32_t AquireNextImage(Semaphore *semaphore);
+        void Present();
         Image *GetImage(uint32_t index) { return m_images[index]; }
         uint32_t GetImageCount() const { return static_cast<uint32_t>(m_images.size()); }
         PePresentMode GetPresentMode() const { return m_presentMode; }
@@ -39,6 +43,7 @@ namespace pe
     private:
         friend struct VulkanSwapchainImpl;
 #if defined(PE_WIN32)
+        friend class Dx12RhiImpl;
         friend class Dx12SwapchainImpl;
 #endif
 

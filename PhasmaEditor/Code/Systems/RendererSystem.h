@@ -140,10 +140,10 @@ namespace pe
         void CreateRenderTargets();
         RenderGraph m_renderGraph;
 
-        Image *m_displayRT;
-        Image *m_viewportRT;
-        Image *m_depthStencil;
-        Image *m_screenshotRT;
+        Image *m_displayRT = nullptr;
+        Image *m_viewportRT = nullptr;
+        Image *m_depthStencil = nullptr;
+        Image *m_screenshotRT = nullptr;
         bool m_screenshotPending = false;
         std::string m_screenshotPath;
         std::string m_screenshotSavedPath;
@@ -186,7 +186,7 @@ namespace pe
         SkyBox m_skyBoxDay;
         SkyBox m_skyBoxNight;
         SkyBox m_skyBoxWhite;
-        Image *m_ibl_brdf_lut;
+        Image *m_ibl_brdf_lut = nullptr;
         GUI m_gui;
     };
 } // namespace pe

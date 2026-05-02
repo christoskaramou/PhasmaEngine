@@ -388,8 +388,6 @@ namespace pe
             scDesc.backbufferCount = 2;
             scDesc.name = "RHI_swapchain";
             m_swapchain = Swapchain::Create(scDesc);
-
-            PE_ERROR("RHI::Init: DX12 swapchain ready (Phase 1 step 2); descriptor pool pending in step 3");
             return;
 #else
             PE_ERROR("RHI::Init: DX12 backend is Windows-only");
@@ -440,6 +438,16 @@ namespace pe
     void RHI::Destroy()
     {
         WaitDeviceIdle();
+
+        if (m_api == PE_GRAPHICS_API_DX12)
+        {
+            Swapchain::Destroy(m_swapchain);
+            if (m_impl)
+                m_impl->Shutdown();
+            delete m_impl;
+            m_impl = nullptr;
+            return;
+        }
 
         auto *vk = static_cast<VulkanRhiImpl *>(m_impl);
 

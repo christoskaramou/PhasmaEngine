@@ -1,6 +1,9 @@
 #include "Code/App/App.h"
 #include "API/Command.h"
 #include "API/Debug.h"
+#if defined(PE_WIN32)
+#include "API/DX12/Dx12RhiImpl.h"
+#endif
 #include "API/Queue.h"
 #include "API/RHI.h"
 #include "Base/Log.h"
@@ -73,12 +76,19 @@ namespace pe
         // On hot-reload reload_state.json already exists — skip splash screen.
         const bool isHotReload = std::filesystem::exists(Path::Executable + "reload_state.json");
 #ifdef NDEBUG
-        if (!isHotReload)
+        if (!isHotReload && RHII.GetApi() != PE_GRAPHICS_API_DX12)
             m_splashScreen = SplashScreen::Create(SDL_WINDOW_SHOWN | SDL_WINDOW_BORDERLESS);
 #endif
 
         // Adopt the SDL window that was created by the launcher.
         m_window = Window::Adopt(RHII.GetWindow());
+
+        if (RHII.GetApi() == PE_GRAPHICS_API_DX12)
+        {
+            m_window->Show();
+            m_window->Maximize();
+            return;
+        }
 
         Queue *queue = RHII.GetMainQueue();
         CommandBuffer *cmd = queue->AcquireCommandBuffer();
@@ -181,7 +191,7 @@ namespace pe
         std::string flagPath = Path::Executable + "reload.flag";
         const bool isReload = std::filesystem::exists(flagPath);
 
-        if (isReload)
+        if (isReload && RHII.GetApi() != PE_GRAPHICS_API_DX12)
         {
             if (auto *rs = GetGlobalSystem<RendererSystem>())
             {
@@ -261,6 +271,39 @@ namespace pe
         RHII.NextFrame();
 
         m_frameTimer.Tick();
+
+        if (RHII.GetApi() == PE_GRAPHICS_API_DX12)
+        {
+            SDL_Event sdlEvent;
+            while (SDL_PollEvent(&sdlEvent))
+            {
+                if (sdlEvent.type == SDL_QUIT)
+                    return false;
+            }
+
+            EventSystem::QueuedEvent event;
+            while (EventSystem::PollEvent(event))
+            {
+                if (auto eventType = std::get_if<pe::EventType>(&event.key);
+                    eventType && (*eventType == EventType::Quit || *eventType == EventType::RequestExit))
+                {
+                    return false;
+                }
+            }
+
+            if (!m_window->isMinimized())
+            {
+#if defined(PE_WIN32)
+                auto *dx = static_cast<Dx12RhiImpl *>(RHII.GetImpl());
+                dx->DrawClearScreen(RHII.GetSwapchain());
+#endif
+            }
+
+            m_frameTimer.CountCpuTotalStamp();
+            Profiler::EndFrame();
+            PE_FRAME_MARK;
+            return true;
+        }
 
         auto rendererSystem = GetGlobalSystem<RendererSystem>();
         {

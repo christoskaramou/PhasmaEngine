@@ -1,6 +1,8 @@
 #include "API/DX12/Dx12RhiImpl.h"
 
+#include "API/DX12/Dx12SwapchainImpl.h"
 #include "API/DX12/Dx12Translate.h"
+#include "API/Swapchain.h"
 
 namespace pe
 {
@@ -166,7 +168,67 @@ namespace pe
             return false;
         }
 
+        for (auto &alloc : m_clearAllocators)
+        {
+            if (FAILED(m_device->CreateCommandAllocator(D3D12_COMMAND_LIST_TYPE_DIRECT,
+                                                        IID_PPV_ARGS(&alloc))))
+            {
+                PE_ERROR("Dx12RhiImpl::Init: CreateCommandAllocator(clear) failed");
+                return false;
+            }
+        }
+
+        if (FAILED(m_device->CreateCommandList(0, D3D12_COMMAND_LIST_TYPE_DIRECT,
+                                               m_clearAllocators[0].Get(), nullptr,
+                                               IID_PPV_ARGS(&m_clearCmdList))))
+        {
+            PE_ERROR("Dx12RhiImpl::Init: CreateCommandList(clear) failed");
+            return false;
+        }
+        PE_CHECK(m_clearCmdList->Close());
+
         return true;
+    }
+
+    void Dx12RhiImpl::DrawClearScreen(Swapchain *sc)
+    {
+        PE_ERROR_IF(!sc, "Dx12RhiImpl::DrawClearScreen requires a swapchain");
+        auto *scImpl = static_cast<Dx12SwapchainImpl *>(sc->m_impl);
+        const uint32_t bb = sc->AquireNextImage(nullptr);
+
+        if (m_frameFence->GetCompletedValue() < m_frameFenceValues[m_clearFrameIndex])
+        {
+            PE_CHECK(m_frameFence->SetEventOnCompletion(m_frameFenceValues[m_clearFrameIndex], m_fenceEvent));
+            WaitForSingleObject(m_fenceEvent, INFINITE);
+        }
+
+        PE_CHECK(m_clearAllocators[m_clearFrameIndex]->Reset());
+        PE_CHECK(m_clearCmdList->Reset(m_clearAllocators[m_clearFrameIndex].Get(), nullptr));
+
+        D3D12_RESOURCE_BARRIER toRt{};
+        toRt.Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
+        toRt.Transition.pResource = scImpl->GetBackbuffer(bb);
+        toRt.Transition.Subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES;
+        toRt.Transition.StateBefore = D3D12_RESOURCE_STATE_PRESENT;
+        toRt.Transition.StateAfter = D3D12_RESOURCE_STATE_RENDER_TARGET;
+        m_clearCmdList->ResourceBarrier(1, &toRt);
+
+        m_clearCmdList->ClearRenderTargetView(scImpl->GetRtv(bb), m_clearColor, 0, nullptr);
+
+        D3D12_RESOURCE_BARRIER toPresent = toRt;
+        std::swap(toPresent.Transition.StateBefore, toPresent.Transition.StateAfter);
+        m_clearCmdList->ResourceBarrier(1, &toPresent);
+
+        PE_CHECK(m_clearCmdList->Close());
+        ID3D12CommandList *lists[] = {m_clearCmdList.Get()};
+        m_graphicsQueue->ExecuteCommandLists(1, lists);
+
+        sc->Present();
+
+        const uint64_t signalValue = ++m_fenceValue;
+        PE_CHECK(m_graphicsQueue->Signal(m_frameFence.Get(), signalValue));
+        m_frameFenceValues[m_clearFrameIndex] = signalValue;
+        m_clearFrameIndex = (m_clearFrameIndex + 1) % static_cast<uint32_t>(m_clearAllocators.size());
     }
 
     void Dx12RhiImpl::WaitDeviceIdle()

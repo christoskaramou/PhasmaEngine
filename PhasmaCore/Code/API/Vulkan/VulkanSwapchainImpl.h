@@ -12,6 +12,7 @@ namespace pe
         ~VulkanSwapchainImpl() override;
 
         uint32_t AquireNextImage(Semaphore *semaphore) override;
+        void Present() override {}
 
         static VulkanSwapchainImpl *From(Swapchain *sc) { return static_cast<VulkanSwapchainImpl *>(sc->m_impl); }
         static const VulkanSwapchainImpl *From(const Swapchain *sc) { return static_cast<const VulkanSwapchainImpl *>(sc->m_impl); }

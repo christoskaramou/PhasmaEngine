@@ -88,4 +88,9 @@ namespace pe
     {
         return m_impl->AquireNextImage(semaphore);
     }
+
+    void Swapchain::Present()
+    {
+        m_impl->Present();
+    }
 } // namespace pe

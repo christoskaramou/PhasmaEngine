@@ -13,6 +13,6 @@ namespace pe
         Image *GetCubeMap() const { return m_cubeMap; }
 
     private:
-        Image *m_cubeMap;
+        Image *m_cubeMap = nullptr;
     };
 } // namespace pe

@@ -139,7 +139,9 @@ int main(int argc, char *argv[])
 
     SDL_DisplayMode dm;
     SDL_GetDesktopDisplayMode(0, &dm);
-    uint32_t windowFlags = SDL_WINDOW_HIDDEN | SDL_WINDOW_RESIZABLE | SDL_WINDOW_ALLOW_HIGHDPI | SDL_WINDOW_VULKAN;
+    uint32_t windowFlags = SDL_WINDOW_HIDDEN | SDL_WINDOW_RESIZABLE | SDL_WINDOW_ALLOW_HIGHDPI;
+    if (api == PE_GRAPHICS_API_VULKAN)
+        windowFlags |= SDL_WINDOW_VULKAN;
     SDL_Window *sdlWindow = SDL_CreateWindow("PhasmaEditor", 100, 100, dm.w - 100, dm.h - 100, windowFlags);
     if (!sdlWindow)
     {
