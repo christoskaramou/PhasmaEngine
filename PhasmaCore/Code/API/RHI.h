@@ -63,6 +63,10 @@ namespace pe
     };
 
     struct VulkanRhi;
+    struct VulkanRhiImpl;
+#if defined(PE_WIN32)
+    struct Dx12RhiImpl;
+#endif
 
     class RHI : public NoCopy, public NoMove
     {
@@ -150,12 +154,8 @@ namespace pe
         friend struct VulkanRhi;
         vk::Format GetDepthFormatVk();
 
-        vk::Instance m_instance;
-        vk::PhysicalDevice m_gpu;
         std::string m_gpuName;
-        vk::Device m_device;
         DescriptorPool *m_descriptorPool;
-        VmaAllocator m_allocator;
         Queue *m_mainQueue;
         SDL_Window *m_window;
         Surface *m_surface;
@@ -175,10 +175,6 @@ namespace pe
         Caps m_caps;
         PeGraphicsApi m_api = PE_GRAPHICS_API_VULKAN;
         Impl *m_impl = nullptr;
-
-#ifdef PE_TRACY
-        TracyVkCtx m_tracyVkCtx = nullptr;
-#endif
     };
 
     extern PE_API RHI &RHII;

@@ -1,5 +1,8 @@
 #include "API/RHI.h"
 #include "API/RHI_Internal.h"
+#if defined(PE_WIN32)
+#include "API/DX12/Dx12RhiImpl.h"
+#endif
 #include "API/Vulkan/VulkanImageImpl.h"
 #include "API/Vulkan/VulkanRhiImpl.h"
 #ifdef PE_TRACY
@@ -357,16 +360,32 @@ namespace pe
 
     void RHI::Init(SDL_Window *window, PeGraphicsApi api)
     {
-        if (api == PE_GRAPHICS_API_DX12)
-        {
-            PE_ERROR("RHI::Init: DX12 backend not yet implemented (Phase 1 in progress)");
-            return;
-        }
-        PE_ERROR_IF(api != PE_GRAPHICS_API_VULKAN, "RHI::Init: unsupported graphics api enum %u", static_cast<uint32_t>(api));
         m_api = api;
-        m_impl = new VulkanRhiImpl();
         m_window = window;
         m_frameCounter = 0;
+
+        if (api == PE_GRAPHICS_API_DX12)
+        {
+#if defined(PE_WIN32)
+            auto *dx = new Dx12RhiImpl();
+            m_impl = dx;
+            if (!m_impl->Init(window))
+            {
+                PE_ERROR("RHI::Init: Dx12RhiImpl::Init failed");
+                return;
+            }
+            m_caps = dx->GetCaps();
+            m_gpuName = dx->GetAdapterName();
+            PE_ERROR("RHI::Init: DX12 device + queue + fence ready (Phase 1 step 1); swapchain pending in step 2");
+            return;
+#else
+            PE_ERROR("RHI::Init: DX12 backend is Windows-only");
+            return;
+#endif
+        }
+        PE_ERROR_IF(api != PE_GRAPHICS_API_VULKAN, "RHI::Init: unsupported graphics api enum %u", static_cast<uint32_t>(api));
+        m_impl = new VulkanRhiImpl();
+        auto *vk = static_cast<VulkanRhiImpl *>(m_impl);
 
         Debug::InitCaptureApi();
 
@@ -389,17 +408,19 @@ namespace pe
         {
             CommandBuffer *cmd = m_mainQueue->AcquireCommandBuffer();
             auto &d = VULKAN_HPP_DEFAULT_DISPATCHER;
-            m_tracyVkCtx = TracyVkContext(
-                static_cast<VkInstance>(m_instance),
-                static_cast<VkPhysicalDevice>(m_gpu),
-                static_cast<VkDevice>(m_device),
+            vk->m_tracyVkCtx = TracyVkContext(
+                static_cast<VkInstance>(vk->m_instance),
+                static_cast<VkPhysicalDevice>(vk->m_gpu),
+                static_cast<VkDevice>(vk->m_device),
                 static_cast<VkQueue>(m_mainQueue->ApiHandle()),
                 static_cast<VkCommandBuffer>(cmd->ApiHandle()),
                 d.vkGetInstanceProcAddr,
                 d.vkGetDeviceProcAddr);
-            TracyVkContextName(m_tracyVkCtx, "Main Queue", 10);
+            TracyVkContextName(vk->m_tracyVkCtx, "Main Queue", 10);
             cmd->Return();
         }
+#else
+        (void)vk;
 #endif
     }
 
@@ -407,11 +428,13 @@ namespace pe
     {
         WaitDeviceIdle();
 
+        auto *vk = static_cast<VulkanRhiImpl *>(m_impl);
+
 #ifdef PE_TRACY
-        if (m_tracyVkCtx)
+        if (vk && vk->m_tracyVkCtx)
         {
-            TracyVkDestroy(m_tracyVkCtx);
-            m_tracyVkCtx = nullptr;
+            TracyVkDestroy(vk->m_tracyVkCtx);
+            vk->m_tracyVkCtx = nullptr;
         }
 #endif
 
@@ -486,13 +509,16 @@ namespace pe
         logLeaks("GpuTimers", gpuTimers);
 #endif
 
-        vmaDestroyAllocator(m_allocator);
-        if (m_device)
-            m_device.destroy();
+        if (vk)
+        {
+            vmaDestroyAllocator(vk->m_allocator);
+            if (vk->m_device)
+                vk->m_device.destroy();
+        }
         Debug::DestroyDebugMessenger();
         Debug::DestroyCaptureApi();
-        if (m_instance)
-            m_instance.destroy();
+        if (vk && vk->m_instance)
+            vk->m_instance.destroy();
 
         delete m_impl;
         m_impl = nullptr;
@@ -500,6 +526,8 @@ namespace pe
 
     void RHI::CreateInstance(SDL_Window *window)
     {
+        auto *vk = static_cast<VulkanRhiImpl *>(m_impl);
+
         // Initialize the DynamicLoader
         static vk::detail::DynamicLoader dl;
         PFN_vkGetInstanceProcAddr vkGetInstanceProcAddr = dl.getProcAddress<PFN_vkGetInstanceProcAddr>("vkGetInstanceProcAddr");
@@ -561,11 +589,11 @@ namespace pe
             instanceCI.enabledLayerCount = static_cast<uint32_t>(instanceLayers.size());
             instanceCI.ppEnabledLayerNames = instanceLayers.data();
 
-            m_instance = vk::createInstance(instanceCI);
+            vk->m_instance = ::vk::createInstance(instanceCI);
 
-            VULKAN_HPP_DEFAULT_DISPATCHER.init(m_instance);
+            VULKAN_HPP_DEFAULT_DISPATCHER.init(vk->m_instance);
         }
-        Debug::Init(m_instance);
+        Debug::Init(vk->m_instance);
         Debug::CreateDebugMessenger();
     }
 
@@ -582,7 +610,8 @@ namespace pe
 
     void RHI::FindGpu()
     {
-        auto gpuList = m_instance.enumeratePhysicalDevices();
+        auto *vk = static_cast<VulkanRhiImpl *>(m_impl);
+        auto gpuList = vk->m_instance.enumeratePhysicalDevices();
         std::vector<GPUScore> gpuScores{};
 
         for (auto &gpu : gpuList)
@@ -627,13 +656,13 @@ namespace pe
         PE_ERROR_IF(gpuScores.empty(), "No suitable GPU found!");
         std::sort(gpuScores.begin(), gpuScores.end(), [](const GPUScore &a, const GPUScore &b)
                   { return a.score > b.score; });
-        m_gpu = gpuScores.front().gpu;
+        vk->m_gpu = gpuScores.front().gpu;
 
-        vk::PhysicalDevicePushDescriptorPropertiesKHR pushDescriptorProperties{};
+        ::vk::PhysicalDevicePushDescriptorPropertiesKHR pushDescriptorProperties{};
 
-        vk::PhysicalDeviceProperties2 gpuPropertiesVK{};
+        ::vk::PhysicalDeviceProperties2 gpuPropertiesVK{};
         gpuPropertiesVK.pNext = &pushDescriptorProperties;
-        m_gpu.getProperties2(&gpuPropertiesVK);
+        vk->m_gpu.getProperties2(&gpuPropertiesVK);
 
         m_gpuName = gpuPropertiesVK.properties.deviceName.data();
         m_maxUniformBufferSize = gpuPropertiesVK.properties.limits.maxUniformBufferRange;
@@ -673,9 +702,10 @@ namespace pe
 
     bool RHI::IsDeviceExtensionValid(const char *name)
     {
-        PE_ERROR_IF(!m_gpu, "Must find gpu before checking device extensions!");
+        auto *vk = static_cast<VulkanRhiImpl *>(m_impl);
+        PE_ERROR_IF(!vk->m_gpu, "Must find gpu before checking device extensions!");
 
-        auto extensions = m_gpu.enumerateDeviceExtensionProperties();
+        auto extensions = vk->m_gpu.enumerateDeviceExtensionProperties();
         for (auto &extension : extensions)
             if (std::string(extension.extensionName.data()) == name)
                 return true;
@@ -685,6 +715,7 @@ namespace pe
 
     void RHI::CreateDevice()
     {
+        auto *vk = static_cast<VulkanRhiImpl *>(m_impl);
         PE_ERROR_IF(!IsDeviceExtensionValid(VK_KHR_SWAPCHAIN_EXTENSION_NAME), "Swapchain extension not supported!");
         PE_ERROR_IF(!IsDeviceExtensionValid(VK_KHR_SYNCHRONIZATION_2_EXTENSION_NAME), "Synchronization2 extension not supported!");
         PE_ERROR_IF(!IsDeviceExtensionValid(VK_KHR_PUSH_DESCRIPTOR_EXTENSION_NAME), "Push descriptor extension not supported!");
@@ -728,7 +759,7 @@ namespace pe
         // Indirect-count is core in Vulkan 1.2; the engine pins apiVersion to 1.4.
         m_caps.indirectCount = true;
 
-        auto queueFamilyProperties = m_gpu.getQueueFamilyProperties();
+        auto queueFamilyProperties = vk->m_gpu.getQueueFamilyProperties();
         float priority = 1.f;
         vk::DeviceQueueCreateInfo queueCreateInfo{};
         for (uint32_t i = 0; i < queueFamilyProperties.size(); i++)
@@ -796,7 +827,7 @@ namespace pe
                                     ? static_cast<void *>(&depthClipFeatures)
                                     : static_cast<void *>(&rayQueryFeatures);
 
-        m_gpu.getFeatures2(&deviceFeatures2);
+        vk->m_gpu.getFeatures2(&deviceFeatures2);
 
         if (depthClipExtAvailable && depthClipFeatures.depthClipEnable)
             deviceExtensions.push_back(VK_EXT_DEPTH_CLIP_ENABLE_EXTENSION_NAME);
@@ -825,29 +856,30 @@ namespace pe
         deviceCreateInfo.ppEnabledExtensionNames = deviceExtensions.data();
         deviceCreateInfo.pNext = &deviceFeatures2;
 
-        m_device = m_gpu.createDevice(deviceCreateInfo);
-        VULKAN_HPP_DEFAULT_DISPATCHER.init(m_device);
+        vk->m_device = vk->m_gpu.createDevice(deviceCreateInfo);
+        VULKAN_HPP_DEFAULT_DISPATCHER.init(vk->m_device);
 
         // Debug naming
         Debug::SetObjectName(m_surface->ApiHandle(), "RHI_surface");
-        Debug::SetObjectName(m_gpu, "RHI_gpu");
-        Debug::SetObjectName(m_device, "RHI_device");
+        Debug::SetObjectName(vk->m_gpu, "RHI_gpu");
+        Debug::SetObjectName(vk->m_device, "RHI_device");
 
-        m_mainQueue = Queue::Create(m_device, queueCreateInfo.queueFamilyIndex, "Main_queue");
+        m_mainQueue = Queue::Create(vk->m_device, queueCreateInfo.queueFamilyIndex, "Main_queue");
     }
 
     void RHI::CreateAllocator()
     {
-        uint32_t apiVersion = vk::enumerateInstanceVersion();
+        auto *vk = static_cast<VulkanRhiImpl *>(m_impl);
+        uint32_t apiVersion = ::vk::enumerateInstanceVersion();
 
         VmaAllocatorCreateInfo allocator_info = {};
         allocator_info.flags = VMA_ALLOCATOR_CREATE_KHR_MAINTENANCE5_BIT | VMA_ALLOCATOR_CREATE_BUFFER_DEVICE_ADDRESS_BIT;
-        allocator_info.physicalDevice = m_gpu;
-        allocator_info.device = m_device;
-        allocator_info.instance = m_instance;
+        allocator_info.physicalDevice = vk->m_gpu;
+        allocator_info.device = vk->m_device;
+        allocator_info.instance = vk->m_instance;
         allocator_info.vulkanApiVersion = apiVersion;
 
-        PE_CHECK(vmaCreateAllocator(&allocator_info, &m_allocator));
+        PE_CHECK(vmaCreateAllocator(&allocator_info, &vk->m_allocator));
 
         m_stagingManager = new StagingManager();
     }
@@ -880,28 +912,29 @@ namespace pe
 
     vk::Format RHI::GetDepthFormatVk()
     {
-        static vk::Format depthFormat = vk::Format::eUndefined;
+        static ::vk::Format depthFormat = ::vk::Format::eUndefined;
 
-        if (depthFormat == vk::Format::eUndefined)
+        if (depthFormat == ::vk::Format::eUndefined)
         {
-            std::vector<vk::Format> candidates = {
-                vk::Format::eD32Sfloat,
-                vk::Format::eD32SfloatS8Uint,
-                vk::Format::eD24UnormS8Uint,
+            auto *vk = static_cast<VulkanRhiImpl *>(m_impl);
+            std::vector<::vk::Format> candidates = {
+                ::vk::Format::eD32Sfloat,
+                ::vk::Format::eD32SfloatS8Uint,
+                ::vk::Format::eD24UnormS8Uint,
             };
 
             for (auto &df : candidates)
             {
-                auto props = m_gpu.getFormatProperties(df);
-                if ((props.optimalTilingFeatures & vk::FormatFeatureFlagBits::eDepthStencilAttachment) ==
-                    vk::FormatFeatureFlagBits::eDepthStencilAttachment)
+                auto props = vk->m_gpu.getFormatProperties(df);
+                if ((props.optimalTilingFeatures & ::vk::FormatFeatureFlagBits::eDepthStencilAttachment) ==
+                    ::vk::FormatFeatureFlagBits::eDepthStencilAttachment)
                 {
                     depthFormat = df;
                     break;
                 }
             }
 
-            PE_ERROR_IF(depthFormat == vk::Format::eUndefined, "Depth format is undefined");
+            PE_ERROR_IF(depthFormat == ::vk::Format::eUndefined, "Depth format is undefined");
         }
 
         return depthFormat;
@@ -1053,31 +1086,33 @@ namespace pe
         if (!s_extMemoryBudgetAvailable)
             return snap;
 
+        auto *vk = static_cast<VulkanRhiImpl *>(m_impl);
+
         // --- Vulkan heaps/budgets baseline ---
-        vk::PhysicalDeviceMemoryBudgetPropertiesEXT memBudget{};
-        vk::PhysicalDeviceMemoryProperties2 props{};
+        ::vk::PhysicalDeviceMemoryBudgetPropertiesEXT memBudget{};
+        ::vk::PhysicalDeviceMemoryProperties2 props{};
         props.pNext = &memBudget;
-        m_gpu.getMemoryProperties2(&props);
+        vk->m_gpu.getMemoryProperties2(&props);
 
         const auto &heaps = props.memoryProperties.memoryHeaps;
         const uint32_t heapCount = props.memoryProperties.memoryHeapCount;
 
         // Our VMA per-heap committed memory
         std::vector<VmaBudget> vmaBudgets(heapCount);
-        if (m_allocator)
-            vmaGetHeapBudgets(m_allocator, vmaBudgets.data());
+        if (vk->m_allocator)
+            vmaGetHeapBudgets(vk->m_allocator, vmaBudgets.data());
 
         for (uint32_t i = 0; i < heapCount; ++i)
         {
             const bool deviceLocal =
-                (heaps[i].flags & vk::MemoryHeapFlagBits::eDeviceLocal) == vk::MemoryHeapFlagBits::eDeviceLocal;
+                (heaps[i].flags & ::vk::MemoryHeapFlagBits::eDeviceLocal) == ::vk::MemoryHeapFlagBits::eDeviceLocal;
 
             MemoryInfo &sec = deviceLocal ? snap.vram : snap.host;
 
             const uint64_t heapSize = heaps[i].size;
             const uint64_t heapBudget = std::min<uint64_t>(memBudget.heapBudget[i], heapSize);
             const uint64_t heapUsed = memBudget.heapUsage[i]; // ALL Vulkan apps
-            const uint64_t ourCommit = m_allocator ? vmaBudgets[i].statistics.blockBytes : 0;
+            const uint64_t ourCommit = vk->m_allocator ? vmaBudgets[i].statistics.blockBytes : 0;
 
             sec.size += heapSize;
             sec.budget += heapBudget;
@@ -1096,9 +1131,9 @@ namespace pe
 
         // ---- Try to override VRAM.used with cross-API global used ----
         uint32_t dom = 0, bus = 0, dev = 0, fn = 0;
-        if (GetVkPciBusId(m_gpu, dom, bus, dev, fn))
+        if (GetVkPciBusId(vk->m_gpu, dom, bus, dev, fn))
         {
-            const uint32_t vendor = VkVendorID(m_gpu);
+            const uint32_t vendor = VkVendorID(vk->m_gpu);
             uint64_t gUsed = 0, gTotal = 0;
             bool ok = false;
 
