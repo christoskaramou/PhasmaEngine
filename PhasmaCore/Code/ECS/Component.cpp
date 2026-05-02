@@ -1,6 +1,6 @@
 #include "ECS/Component.h"
 #include "API/Command.h"
-#include "API/Helpers.h"
+#include "API/Vulkan/Helpers_Vulkan.h"
 #include "API/Pipeline.h"
 #include "API/RenderGraph.h"
 #include "API/Vulkan/VulkanImageImpl.h"

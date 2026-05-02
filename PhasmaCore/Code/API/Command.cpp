@@ -8,6 +8,7 @@
 #include "API/Queue.h"
 #include "API/RHI.h"
 #include "API/Vulkan/RHI_Vulkan.h"
+#include "API/Vulkan/Helpers_Vulkan.h"
 #include "API/RenderPass.h"
 #include "API/Semaphore.h"
 #include "API/Vulkan/VulkanBufferImpl.h"

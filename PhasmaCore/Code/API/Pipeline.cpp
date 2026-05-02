@@ -4,6 +4,7 @@
 #include "API/Descriptor.h"
 #include "API/RHI.h"
 #include "API/Vulkan/RHI_Vulkan.h"
+#include "API/Vulkan/Helpers_Vulkan.h"
 #include "API/RenderPass.h"
 #include "API/Shader.h"
 #include "API/Vulkan/VulkanDescriptorImpl.h"

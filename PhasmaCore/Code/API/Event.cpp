@@ -3,6 +3,7 @@
 #include "API/Image.h"
 #include "API/RHI.h"
 #include "API/Vulkan/RHI_Vulkan.h"
+#include "API/Vulkan/Helpers_Vulkan.h"
 #include "API/Vulkan/VulkanImageImpl.h"
 #include "API/Vulkan/VulkanRHITypeUtils.h"
 

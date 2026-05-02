@@ -2,7 +2,7 @@
 #include "API/Buffer.h"
 #include "API/Command.h"
 #include "API/Downsampler/Downsampler.h"
-#include "API/Helpers.h"
+#include "API/Vulkan/Helpers_Vulkan.h"
 #include "API/RHI.h"
 #include "API/StagingManager.h"
 #include "API/Vulkan/VulkanBufferImpl.h"

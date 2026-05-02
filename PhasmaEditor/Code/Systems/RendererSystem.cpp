@@ -8,6 +8,7 @@
 #include "API/Framebuffer.h"
 #include "API/Image.h"
 #include "API/Vulkan/VulkanImageImpl.h"
+#include "API/Vulkan/Helpers_Vulkan.h"
 #include "API/Vulkan/VulkanSamplerImpl.h"
 #include "API/Queue.h"
 #include "API/RHI.h"
