@@ -65,7 +65,7 @@ namespace pe
     struct VulkanRhi;
     struct VulkanRhiImpl;
 #if defined(PE_WIN32)
-    struct Dx12RhiImpl;
+    class Dx12RhiImpl;
 #endif
 
     class RHI : public NoCopy, public NoMove

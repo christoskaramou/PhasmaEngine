@@ -4,8 +4,14 @@
 
 #include <wrl/client.h>
 
+namespace D3D12MA
+{
+    class Allocator;
+}
+
 namespace pe
 {
+    class Buffer;
     class Swapchain;
 
     class Dx12RhiImpl final : public RHI::Impl
@@ -21,13 +27,17 @@ namespace pe
         ID3D12CommandQueue *GetGraphicsQueue() const { return m_graphicsQueue.Get(); }
         IDXGIFactory6 *GetFactory() const { return m_factory.Get(); }
         IDXGIAdapter4 *GetAdapter() const { return m_adapter.Get(); }
+        D3D12MA::Allocator *GetAllocator() const { return m_d3d12Allocator; }
         const RHI::Caps &GetCaps() const { return m_caps; }
         const std::string &GetAdapterName() const { return m_adapterName; }
 
     private:
+        void EnsureClearTriangleBuffer();
+
         Microsoft::WRL::ComPtr<IDXGIFactory6> m_factory;
         Microsoft::WRL::ComPtr<IDXGIAdapter4> m_adapter;
         Microsoft::WRL::ComPtr<ID3D12Device> m_device;
+        D3D12MA::Allocator *m_d3d12Allocator = nullptr;
         Microsoft::WRL::ComPtr<ID3D12CommandQueue> m_graphicsQueue;
         Microsoft::WRL::ComPtr<ID3D12Fence> m_frameFence;
         std::array<Microsoft::WRL::ComPtr<ID3D12CommandAllocator>, 2> m_clearAllocators;
@@ -37,6 +47,7 @@ namespace pe
         uint64_t m_fenceValue = 0;
         uint32_t m_clearFrameIndex = 0;
         float m_clearColor[4] = {0.10f, 0.12f, 0.16f, 1.0f};
+        Buffer *m_clearTriangleBuffer = nullptr;
         std::string m_adapterName;
         RHI::Caps m_caps{};
     };

@@ -1,8 +1,11 @@
 #include "API/DX12/Dx12RhiImpl.h"
 
+#include "API/Buffer.h"
 #include "API/DX12/Dx12SwapchainImpl.h"
 #include "API/DX12/Dx12Translate.h"
 #include "API/Swapchain.h"
+
+#include <D3D12MemAlloc.h>
 
 namespace pe
 {
@@ -98,6 +101,16 @@ namespace pe
 
         PE_INFO("DX12 device created on '%s'", m_adapterName.c_str());
 
+        D3D12MA::ALLOCATOR_DESC allocatorDesc{};
+        allocatorDesc.pDevice = m_device.Get();
+        allocatorDesc.pAdapter = m_adapter.Get();
+        HRESULT hr = D3D12MA::CreateAllocator(&allocatorDesc, &m_d3d12Allocator);
+        if (FAILED(hr))
+        {
+            PE_ERROR("Dx12RhiImpl::Init: D3D12MA::CreateAllocator failed");
+            return false;
+        }
+
         D3D12_FEATURE_DATA_D3D12_OPTIONS opts{};
         m_device->CheckFeatureSupport(D3D12_FEATURE_D3D12_OPTIONS, &opts, sizeof(opts));
         if (opts.ResourceBindingTier < D3D12_RESOURCE_BINDING_TIER_3)
@@ -190,11 +203,37 @@ namespace pe
         return true;
     }
 
+    void Dx12RhiImpl::EnsureClearTriangleBuffer()
+    {
+        if (m_clearTriangleBuffer)
+            return;
+
+        std::array<vec4, 3> vertices = {
+            vec4{-0.5f, -0.5f, 0.0f, 1.0f},
+            vec4{0.0f, 0.5f, 0.0f, 1.0f},
+            vec4{0.5f, -0.5f, 0.0f, 1.0f},
+        };
+
+        BufferDesc desc{};
+        desc.size = vertices.size() * sizeof(vec4);
+        desc.usage = PE_BUFFER_USAGE_VERTEX_BUFFER;
+        desc.memoryUsage = PE_MEMORY_USAGE_CPU_TO_GPU;
+        desc.name = "DX12_clear_triangle_vb";
+        m_clearTriangleBuffer = Buffer::Create(desc);
+
+        BufferRange range{};
+        range.data = vertices.data();
+        range.size = desc.size;
+        range.offset = 0;
+        m_clearTriangleBuffer->Copy(1, &range, false);
+    }
+
     void Dx12RhiImpl::DrawClearScreen(Swapchain *sc)
     {
         PE_ERROR_IF(!sc, "Dx12RhiImpl::DrawClearScreen requires a swapchain");
         auto *scImpl = static_cast<Dx12SwapchainImpl *>(sc->m_impl);
         const uint32_t bb = sc->AquireNextImage(nullptr);
+        EnsureClearTriangleBuffer();
 
         if (m_frameFence->GetCompletedValue() < m_frameFenceValues[m_clearFrameIndex])
         {
@@ -204,6 +243,13 @@ namespace pe
 
         PE_CHECK(m_clearAllocators[m_clearFrameIndex]->Reset());
         PE_CHECK(m_clearCmdList->Reset(m_clearAllocators[m_clearFrameIndex].Get(), nullptr));
+
+        D3D12_VERTEX_BUFFER_VIEW vbv{};
+        vbv.BufferLocation = m_clearTriangleBuffer->GetDeviceAddress();
+        vbv.SizeInBytes = static_cast<UINT>(m_clearTriangleBuffer->Size());
+        vbv.StrideInBytes = sizeof(vec4);
+        m_clearCmdList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+        m_clearCmdList->IASetVertexBuffers(0, 1, &vbv);
 
         D3D12_RESOURCE_BARRIER toRt{};
         toRt.Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
@@ -248,10 +294,16 @@ namespace pe
     void Dx12RhiImpl::Shutdown()
     {
         WaitDeviceIdle();
+        Buffer::Destroy(m_clearTriangleBuffer);
         if (m_fenceEvent)
         {
             CloseHandle(m_fenceEvent);
             m_fenceEvent = nullptr;
+        }
+        if (m_d3d12Allocator)
+        {
+            m_d3d12Allocator->Release();
+            m_d3d12Allocator = nullptr;
         }
     }
 
