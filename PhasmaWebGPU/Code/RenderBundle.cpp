@@ -5,8 +5,7 @@
 #include "Buffer.h"
 #include "Device.h"
 #include "Utils.h"
-#include "API/Vulkan/VulkanBufferImpl.h"
-#include "API/Vulkan/VulkanDescriptorImpl.h"
+#include "API/Vulkan/RHI_Vulkan.h"
 
 extern "C" void wgpuDeviceRelease(WGPUDevice);
 extern "C" void wgpuRenderPipelineAddRef(WGPURenderPipeline);

@@ -13,8 +13,7 @@
 #include "API/Semaphore.h"
 #include "API/Image.h"
 #include "API/Buffer.h"
-#include "API/Vulkan/VulkanBufferImpl.h"
-#include "API/Vulkan/VulkanImageImpl.h"
+#include "API/Vulkan/RHI_Vulkan.h"
 #include "API/RHI.h"
 #include "API/StagingManager.h"
 

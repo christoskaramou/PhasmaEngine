@@ -1,6 +1,12 @@
 #pragma once
 
 #include "API/RHI.h"
+#include "API/Vulkan/VulkanBufferImpl.h"
+#include "API/Vulkan/VulkanDescriptorImpl.h"
+#include "API/Vulkan/VulkanImageImpl.h"
+#include "API/Vulkan/VulkanImageViewImpl.h"
+#include "API/Vulkan/VulkanSamplerImpl.h"
+#include "API/Vulkan/VulkanShaderImpl.h"
 
 namespace pe
 {

@@ -8,8 +8,7 @@
 #include "Device.h"
 #include "Texture.h"
 #include "Utils.h"
-#include "API/Vulkan/VulkanBufferImpl.h"
-#include "API/Vulkan/VulkanDescriptorImpl.h"
+#include "API/Vulkan/RHI_Vulkan.h"
 
 extern "C" void wgpuComputePipelineAddRef(WGPUComputePipeline);
 extern "C" void wgpuComputePipelineRelease(WGPUComputePipeline);

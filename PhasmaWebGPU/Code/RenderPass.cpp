@@ -9,8 +9,7 @@
 #include "QuerySet.h"
 #include "Device.h"
 #include "Utils.h"
-#include "API/Vulkan/VulkanBufferImpl.h"
-#include "API/Vulkan/VulkanDescriptorImpl.h"
+#include "API/Vulkan/RHI_Vulkan.h"
 
 extern "C" void wgpuRenderPipelineAddRef(WGPURenderPipeline);
 extern "C" void wgpuRenderPipelineRelease(WGPURenderPipeline);

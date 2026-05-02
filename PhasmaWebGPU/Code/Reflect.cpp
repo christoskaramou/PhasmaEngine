@@ -6,7 +6,6 @@
 #include "Device.h"
 #include "API/RHI.h"
 #include "API/Descriptor.h"
-#include "API/Vulkan/VulkanDescriptorImpl.h"
 
 #include "spirv_cross/spirv_cross.hpp"
 
