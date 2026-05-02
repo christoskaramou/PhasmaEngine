@@ -23,9 +23,9 @@ namespace pe
         RGBuilder();
 
         void Barrier(Image *image,
-                     vk::ImageLayout layout,
-                     vk::PipelineStageFlags2 stageFlags,
-                     vk::AccessFlags2 accessMask);
+                     PeImageLayout layout,
+                     PeBarrierSync stageFlags,
+                     PeBarrierAccess accessMask);
 
         void Read(Image *image);
         void ReadCompute(Image *image);
@@ -36,7 +36,6 @@ namespace pe
         void OutputColor(Image *image);
         void OutputDepth(Image *image);
         void OutputCustom(Image *image, PeImageLayout layout, PeBarrierSync stage, PeBarrierAccess access);
-        void OutputCustom(Image *image, vk::ImageLayout layout, vk::PipelineStageFlags2 stage, vk::AccessFlags2 access);
 
         void Reset();
 

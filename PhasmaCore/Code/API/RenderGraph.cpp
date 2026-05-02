@@ -1,8 +1,6 @@
 #include "RenderGraph.h"
 #include "API/Command.h"
 #include "API/Helpers.h"
-#include "API/Vulkan/VulkanImageImpl.h"
-#include "API/Vulkan/VulkanRHITypeUtils.h"
 
 namespace pe
 {
@@ -13,44 +11,44 @@ namespace pe
     }
 
     void RGBuilder::Barrier(Image *image,
-                            vk::ImageLayout layout,
-                            vk::PipelineStageFlags2 stageFlags,
-                            vk::AccessFlags2 accessMask)
+                            PeImageLayout layout,
+                            PeBarrierSync stageFlags,
+                            PeBarrierAccess accessMask)
     {
         if (!image)
             return;
 
         InputInfo info{};
         info.image = image;
-        info.layout = FromVkImageLayout(layout);
-        info.stageFlags = FromVkPipelineStageFlags(stageFlags);
-        info.accessMask = FromVkAccessFlags(accessMask);
+        info.layout = layout;
+        info.stageFlags = stageFlags;
+        info.accessMask = accessMask;
         m_inputs.push_back(info);
     }
 
     void RGBuilder::Read(Image *image)
     {
-        Barrier(image, vk::ImageLayout::eShaderReadOnlyOptimal, vk::PipelineStageFlagBits2::eFragmentShader, vk::AccessFlagBits2::eShaderRead);
+        Barrier(image, PE_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, PE_STAGE_FRAGMENT_SHADER, PE_ACCESS_SHADER_READ);
     }
 
     void RGBuilder::ReadCompute(Image *image)
     {
-        Barrier(image, vk::ImageLayout::eShaderReadOnlyOptimal, vk::PipelineStageFlagBits2::eComputeShader, vk::AccessFlagBits2::eShaderRead);
+        Barrier(image, PE_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, PE_STAGE_COMPUTE_SHADER, PE_ACCESS_SHADER_READ);
     }
 
     void RGBuilder::WriteCompute(Image *image)
     {
-        Barrier(image, vk::ImageLayout::eGeneral, vk::PipelineStageFlagBits2::eComputeShader, vk::AccessFlagBits2::eShaderWrite);
+        Barrier(image, PE_IMAGE_LAYOUT_GENERAL, PE_STAGE_COMPUTE_SHADER, PE_ACCESS_SHADER_WRITE);
     }
 
     void RGBuilder::ReadRayTracing(Image *image)
     {
-        Barrier(image, vk::ImageLayout::eShaderReadOnlyOptimal, vk::PipelineStageFlagBits2::eRayTracingShaderKHR, vk::AccessFlagBits2::eShaderRead);
+        Barrier(image, PE_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, PE_STAGE_RAY_TRACING_SHADER_KHR, PE_ACCESS_SHADER_READ);
     }
 
     void RGBuilder::WriteRayTracing(Image *image)
     {
-        Barrier(image, vk::ImageLayout::eGeneral, vk::PipelineStageFlagBits2::eRayTracingShaderKHR, vk::AccessFlagBits2::eShaderWrite);
+        Barrier(image, PE_IMAGE_LAYOUT_GENERAL, PE_STAGE_RAY_TRACING_SHADER_KHR, PE_ACCESS_SHADER_WRITE);
     }
 
     void RGBuilder::OutputColor(Image *image)
@@ -90,11 +88,6 @@ namespace pe
         info.stageFlags = stage;
         info.accessMask = access;
         m_outputs.push_back(info);
-    }
-
-    void RGBuilder::OutputCustom(Image *image, vk::ImageLayout layout, vk::PipelineStageFlags2 stage, vk::AccessFlags2 access)
-    {
-        OutputCustom(image, FromVkImageLayout(layout), FromVkPipelineStageFlags(stage), FromVkAccessFlags(access));
     }
 
     void RGBuilder::Reset()

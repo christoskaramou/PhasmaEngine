@@ -178,9 +178,9 @@ namespace pe
         if (!m_scene || !m_scene->GetTLAS())
             return;
 
-        builder.OutputCustom(m_display, vk::ImageLayout::eGeneral,
-                             vk::PipelineStageFlagBits2::eRayTracingShaderKHR,
-                             vk::AccessFlagBits2::eShaderWrite);
+        builder.OutputCustom(m_display, PE_IMAGE_LAYOUT_GENERAL,
+                             PE_STAGE_RAY_TRACING_SHADER_KHR,
+                             PE_ACCESS_SHADER_WRITE);
     }
 
     void RayTracingPass::ExecutePass(CommandBuffer *cmd)
