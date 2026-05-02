@@ -136,6 +136,7 @@ namespace pe
                     field.size = 4;
 
                     expanded = raw;
+                    expanded.name = fh.fieldName;
                     expanded.vecSize = 1;
                     expanded.columns = 1;
                     expanded.offset = field.offset;
@@ -150,6 +151,7 @@ namespace pe
                     field.size = 12;
 
                     expanded = raw;
+                    expanded.name = fh.fieldName;
                     expanded.vecSize = 3;
                     expanded.columns = 1;
                     expanded.offset = field.offset;
