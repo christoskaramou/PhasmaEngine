@@ -1,6 +1,7 @@
 #pragma once
 
 #include "Base/PhasmaExport.h"
+#include "API/RHITypes.h"
 
 namespace pe
 {
@@ -93,7 +94,7 @@ namespace pe
         bool ray_tracing_support = false;
         RenderMode render_mode = RenderMode::Hybrid;
         bool use_Disney_PBR = true;
-        vk::PresentModeKHR preferred_present_mode = vk::PresentModeKHR::eMailbox;
+        PePresentMode preferred_present_mode = PE_PRESENT_MODE_MAILBOX;
     };
 
     // Suppress per-TU instantiation — PhasmaCore.dll provides the one canonical instance.

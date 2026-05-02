@@ -3,6 +3,7 @@
 #include "Instance.h"
 #include "WGPULimits.h"
 #include "Utils.h"
+#include "API/Vulkan/RHI_Vulkan.h"
 
 namespace
 {
@@ -400,7 +401,7 @@ extern "C"
             }
         }
 
-        const bool canFulfill = adapter->rhi && adapter->rhi->GetDevice();
+        const bool canFulfill = adapter->rhi && pe::VulkanRhi::Device();
 
         auto *dev = new WGPUDeviceImpl();
         dev->instance = inst;

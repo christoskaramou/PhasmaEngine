@@ -2,6 +2,7 @@
 #include "API/Debug.h"
 #include "API/Image.h"
 #include "API/RHI.h"
+#include "API/Vulkan/RHI_Vulkan.h"
 #include "API/Vulkan/VulkanImageImpl.h"
 
 namespace pe
@@ -97,21 +98,21 @@ namespace pe
         info.subresourceRange.baseArrayLayer = desc.baseArrayLayer;
         info.subresourceRange.layerCount = desc.layerCount;
 
-        m_imageView = RHII.GetDevice().createImageView(info);
+        m_imageView = VulkanRhi::Device().createImageView(info);
         Debug::SetObjectName(m_imageView, owner->m_name);
     }
 
     VulkanImageViewImpl::VulkanImageViewImpl(ImageView *owner, const vk::ImageViewCreateInfo &info)
         : m_owner{owner}
     {
-        m_imageView = RHII.GetDevice().createImageView(info);
+        m_imageView = VulkanRhi::Device().createImageView(info);
         Debug::SetObjectName(m_imageView, owner->m_name);
     }
 
     VulkanImageViewImpl::~VulkanImageViewImpl()
     {
         if (m_imageView)
-            RHII.GetDevice().destroyImageView(m_imageView);
+            VulkanRhi::Device().destroyImageView(m_imageView);
     }
 
     ImageView *VulkanImageViewImpl::Create(Image *parent, const vk::ImageViewCreateInfo &info, const std::string &name)

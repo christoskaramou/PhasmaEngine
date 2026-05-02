@@ -1,5 +1,7 @@
 #pragma once
 
+#include "API/RHITypes.h"
+
 #ifdef PE_TRACY
 namespace tracy
 {
@@ -60,9 +62,23 @@ namespace pe
         void Flush();
     };
 
+    struct VulkanRhi;
+
     class RHI : public NoCopy, public NoMove
     {
     public:
+        struct Impl;
+
+        struct Caps
+        {
+            bool rayTracing = false;
+            bool dynamicRendering = false;
+            bool indirectCount = false;
+            bool meshShaders = false;
+            uint32_t maxPushConstantsBytes = 0;
+            uint32_t maxBindlessTextures = 0;
+        };
+
         static RHI *Get()
         {
             static RHI *rhi = new RHI();
@@ -75,7 +91,8 @@ namespace pe
                 delete Get();
         }
 
-        void Init(SDL_Window *window);
+        void Init(SDL_Window *window, PeGraphicsApi api = PE_GRAPHICS_API_VULKAN);
+        PeGraphicsApi GetApi() const { return m_api; }
         void Destroy();
         void CreateInstance(SDL_Window *window);
         void CreateSurface();
@@ -92,7 +109,6 @@ namespace pe
         void CreateDescriptorPool(uint32_t maxDescriptorSets);
         void CreateGlobalDescriptors();
         void CreateSemaphores(uint32_t semaphoresCount);
-        vk::Format GetDepthFormat();
         void WaitDeviceIdle();
         void NextFrame() { m_frameCounter++; }
         uint32_t GetFrameCounter() { return m_frameCounter; }
@@ -105,12 +121,9 @@ namespace pe
         size_t AlignStorage(size_t size) { return Align(size, m_minStorageBufferOffsetAlignment); }
         size_t AlignStorageAs(size_t size, size_t alignment) { return AlignStorage(Align(size, alignment)); } // Aligned also to min storage alignment
         uint32_t GetMaxPushConstantsSize() { return m_maxPushConstantsSize; }
-        vk::Instance GetInstance() { return m_instance; }
-        vk::PhysicalDevice GetGpu() { return m_gpu; }
+        const Caps &GetCaps() const { return m_caps; }
         const std::string &GetGpuName() { return m_gpuName; }
-        vk::Device GetDevice() { return m_device; }
         DescriptorPool *GetDescriptorPool() { return m_descriptorPool; }
-        VmaAllocator GetAllocator() { return m_allocator; }
         Queue *GetMainQueue() { return m_mainQueue; }
         SDL_Window *GetWindow() { return m_window; }
         Surface *GetSurface() { return m_surface; }
@@ -118,8 +131,8 @@ namespace pe
         uint32_t GetSwapchainImageCount();
         SystemProcMem GetSystemAndProcessMemory();
         GpuMemorySnapshot GetGpuMemorySnapshot();
-        void ChangePresentMode(vk::PresentModeKHR mode);
-        const char *PresentModeToString(vk::PresentModeKHR presentMode);
+        void ChangePresentMode(PePresentMode mode);
+        const char *PresentModeToString(PePresentMode presentMode);
         StagingManager *GetStagingManager() { return m_stagingManager; }
         void AddToDeletionQueue(std::function<void()> &&deletor);
         void FlushDeletionQueue(uint32_t frameIndex);
@@ -129,12 +142,11 @@ namespace pe
         float GetWidthf() const;
         float GetHeightf() const;
 
-#ifdef PE_TRACY
-        TracyVkCtx GetTracyVkCtx() { return m_tracyVkCtx; }
-#endif
-
     private:
         RHI() = default;
+
+        friend struct VulkanRhi;
+        vk::Format GetDepthFormat();
 
         vk::Instance m_instance;
         vk::PhysicalDevice m_gpu;
@@ -157,6 +169,10 @@ namespace pe
         uint64_t m_minStorageBufferOffsetAlignment;
         uint32_t m_maxPushConstantsSize;
         uint32_t m_maxDrawIndirectCount;
+
+        Caps m_caps;
+        PeGraphicsApi m_api = PE_GRAPHICS_API_VULKAN;
+        Impl *m_impl = nullptr;
 
 #ifdef PE_TRACY
         TracyVkCtx m_tracyVkCtx = nullptr;

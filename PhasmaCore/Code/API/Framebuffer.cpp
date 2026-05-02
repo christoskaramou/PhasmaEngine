@@ -1,6 +1,7 @@
 #include "API/Framebuffer.h"
 #include "API/Image.h"
 #include "API/RHI.h"
+#include "API/Vulkan/RHI_Vulkan.h"
 #include "API/RenderPass.h"
 #include "API/Vulkan/VulkanImageViewImpl.h"
 
@@ -26,7 +27,7 @@ namespace pe
         fbci.height = height;
         fbci.layers = 1;
 
-        m_apiHandle = RHII.GetDevice().createFramebuffer(fbci);
+        m_apiHandle = VulkanRhi::Device().createFramebuffer(fbci);
 
         Debug::SetObjectName(m_apiHandle, name);
     }
@@ -34,6 +35,6 @@ namespace pe
     Framebuffer::~Framebuffer()
     {
         if (m_apiHandle)
-            RHII.GetDevice().destroyFramebuffer(m_apiHandle);
+            VulkanRhi::Device().destroyFramebuffer(m_apiHandle);
     }
 } // namespace pe

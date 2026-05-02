@@ -33,4 +33,7 @@ namespace pe
 
     vk::DynamicState ToVkDynamicState(PeDynamicState state);
     PeDynamicState FromVkDynamicState(vk::DynamicState state);
+
+    vk::PresentModeKHR ToVkPresentMode(PePresentMode mode);
+    PePresentMode FromVkPresentMode(vk::PresentModeKHR mode);
 } // namespace pe

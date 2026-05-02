@@ -1,6 +1,7 @@
 #include "Base/Timer.h"
 #include "API/Command.h"
 #include "API/RHI.h"
+#include "API/Vulkan/RHI_Vulkan.h"
 
 namespace pe
 {
@@ -84,7 +85,7 @@ namespace pe
           m_inUse{false}
     {
         VkPhysicalDeviceProperties gpuProps;
-        vkGetPhysicalDeviceProperties(RHII.GetGpu(), &gpuProps);
+        vkGetPhysicalDeviceProperties(VulkanRhi::Gpu(), &gpuProps);
         PE_ERROR_IF(!gpuProps.limits.timestampComputeAndGraphics, "Timestamps not supported");
 
         m_timestampPeriod = gpuProps.limits.timestampPeriod;
@@ -95,7 +96,7 @@ namespace pe
         qpci.queryCount = 2;
 
         VkQueryPool pool;
-        PE_CHECK(vkCreateQueryPool(RHII.GetDevice(), &qpci, nullptr, &pool));
+        PE_CHECK(vkCreateQueryPool(VulkanRhi::Device(), &qpci, nullptr, &pool));
         m_apiHandle = pool;
 
         Debug::SetObjectName(m_apiHandle, name);
@@ -104,7 +105,7 @@ namespace pe
     GpuTimer::~GpuTimer()
     {
         if (m_apiHandle)
-            vkDestroyQueryPool(RHII.GetDevice(), m_apiHandle, nullptr);
+            vkDestroyQueryPool(VulkanRhi::Device(), m_apiHandle, nullptr);
     }
 
     void GpuTimer::Start(CommandBuffer *cmd)
@@ -133,7 +134,7 @@ namespace pe
 
         if (!m_resultsReady)
         {
-            VkResult res = vkGetQueryPoolResults(RHII.GetDevice(),
+            VkResult res = vkGetQueryPoolResults(VulkanRhi::Device(),
                                                  m_apiHandle,
                                                  0,
                                                  2,

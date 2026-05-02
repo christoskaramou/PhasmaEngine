@@ -2,6 +2,7 @@
 #include "API/Buffer.h"
 #include "API/Command.h"
 #include "API/RHI.h"
+#include "API/Vulkan/RHI_Vulkan.h"
 #include "API/Vulkan/VulkanBufferImpl.h"
 
 namespace pe
@@ -21,7 +22,7 @@ namespace pe
         buildInfo.pGeometries = geometries.data();
 
         vk::AccelerationStructureBuildSizesInfoKHR sizeInfo;
-        RHII.GetDevice().getAccelerationStructureBuildSizesKHR(
+        VulkanRhi::Device().getAccelerationStructureBuildSizesKHR(
             type,
             &buildInfo,
             maxPrimitiveCounts.data(),
@@ -40,7 +41,7 @@ namespace pe
     {
         if (m_apiHandle)
         {
-            RHII.GetDevice().destroyAccelerationStructureKHR(m_apiHandle);
+            VulkanRhi::Device().destroyAccelerationStructureKHR(m_apiHandle);
         }
 
         if (!m_externalBuffer)
@@ -83,7 +84,7 @@ namespace pe
         buildInfo.pGeometries = geometries.data();
 
         vk::AccelerationStructureBuildSizesInfoKHR sizeInfo{};
-        RHII.GetDevice().getAccelerationStructureBuildSizesKHR(
+        VulkanRhi::Device().getAccelerationStructureBuildSizesKHR(
             vk::AccelerationStructureBuildTypeKHR::eDevice,
             &buildInfo,
             maxPrimitiveCounts.data(),
@@ -107,11 +108,11 @@ namespace pe
         createInfo.offset = m_offset;
         createInfo.size = sizeInfo.accelerationStructureSize;
         createInfo.type = vk::AccelerationStructureTypeKHR::eBottomLevel;
-        m_apiHandle = RHII.GetDevice().createAccelerationStructureKHR(createInfo);
+        m_apiHandle = VulkanRhi::Device().createAccelerationStructureKHR(createInfo);
 
         vk::AccelerationStructureDeviceAddressInfoKHR addressInfo{};
         addressInfo.accelerationStructure = m_apiHandle;
-        m_deviceAddress = RHII.GetDevice().getAccelerationStructureAddressKHR(&addressInfo);
+        m_deviceAddress = VulkanRhi::Device().getAccelerationStructureAddressKHR(&addressInfo);
 
         buildInfo.dstAccelerationStructure = m_apiHandle;
 
@@ -152,7 +153,7 @@ namespace pe
 
         vk::AccelerationStructureBuildSizesInfoKHR sizeInfo{};
         uint32_t count = instanceCount;
-        RHII.GetDevice().getAccelerationStructureBuildSizesKHR(
+        VulkanRhi::Device().getAccelerationStructureBuildSizesKHR(
             vk::AccelerationStructureBuildTypeKHR::eDevice,
             &buildInfo,
             &count,
@@ -176,11 +177,11 @@ namespace pe
         createInfo.offset = m_offset;
         createInfo.size = sizeInfo.accelerationStructureSize;
         createInfo.type = vk::AccelerationStructureTypeKHR::eTopLevel;
-        m_apiHandle = RHII.GetDevice().createAccelerationStructureKHR(createInfo);
+        m_apiHandle = VulkanRhi::Device().createAccelerationStructureKHR(createInfo);
 
         vk::AccelerationStructureDeviceAddressInfoKHR addressInfo{};
         addressInfo.accelerationStructure = m_apiHandle;
-        m_deviceAddress = RHII.GetDevice().getAccelerationStructureAddressKHR(&addressInfo);
+        m_deviceAddress = VulkanRhi::Device().getAccelerationStructureAddressKHR(&addressInfo);
 
         buildInfo.dstAccelerationStructure = m_apiHandle;
 

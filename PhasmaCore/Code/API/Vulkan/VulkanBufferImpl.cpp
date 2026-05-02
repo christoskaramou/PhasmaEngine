@@ -3,6 +3,7 @@
 #include "API/Debug.h"
 #include "API/Helpers.h"
 #include "API/RHI.h"
+#include "API/Vulkan/RHI_Vulkan.h"
 #include "API/Vulkan/VulkanRHITypeUtils.h"
 
 namespace pe
@@ -79,7 +80,7 @@ namespace pe
         allocationCreateInfo.flags = vmaFlags;
 
         VkBuffer vkBuffer = {};
-        PE_CHECK(vmaCreateBuffer(RHII.GetAllocator(),
+        PE_CHECK(vmaCreateBuffer(VulkanRhi::Allocator(),
                                  reinterpret_cast<const VkBufferCreateInfo *>(&bufferInfo),
                                  &allocationCreateInfo,
                                  &vkBuffer,
@@ -87,7 +88,7 @@ namespace pe
                                  &m_allocationInfo));
         m_buffer = vkBuffer;
 
-        vmaSetAllocationName(RHII.GetAllocator(), m_allocation, owner->m_name.c_str());
+        vmaSetAllocationName(VulkanRhi::Allocator(), m_allocation, owner->m_name.c_str());
         Debug::SetObjectName(m_buffer, owner->m_name);
     }
 
@@ -95,31 +96,31 @@ namespace pe
     {
         if (m_owner && m_owner->Data())
             Unmap();
-        vmaDestroyBuffer(RHII.GetAllocator(), m_buffer, m_allocation);
+        vmaDestroyBuffer(VulkanRhi::Allocator(), m_buffer, m_allocation);
     }
 
     void *VulkanBufferImpl::Map()
     {
         void *data = nullptr;
-        PE_CHECK(vmaMapMemory(RHII.GetAllocator(), m_allocation, &data));
+        PE_CHECK(vmaMapMemory(VulkanRhi::Allocator(), m_allocation, &data));
         return data;
     }
 
     void VulkanBufferImpl::Unmap()
     {
-        vmaUnmapMemory(RHII.GetAllocator(), m_allocation);
+        vmaUnmapMemory(VulkanRhi::Allocator(), m_allocation);
     }
 
     void VulkanBufferImpl::Flush(size_t size, size_t offset) const
     {
-        PE_CHECK(vmaFlushAllocation(RHII.GetAllocator(), m_allocation, offset, size));
+        PE_CHECK(vmaFlushAllocation(VulkanRhi::Allocator(), m_allocation, offset, size));
     }
 
     uint64_t VulkanBufferImpl::GetDeviceAddress() const
     {
         vk::BufferDeviceAddressInfo info{};
         info.buffer = m_buffer;
-        return RHII.GetDevice().getBufferAddress(info);
+        return VulkanRhi::Device().getBufferAddress(info);
     }
 
     void VulkanBufferImpl::CopyBuffer(CommandBuffer *cmd, Buffer *src, size_t size, size_t srcOffset, size_t dstOffset)

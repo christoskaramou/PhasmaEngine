@@ -1,4 +1,5 @@
 #include "Device.h"
+#include "API/Vulkan/RHI_Vulkan.h"
 #include "Buffer.h"
 #include "Texture.h"
 #include "API/Semaphore.h"
@@ -1638,7 +1639,7 @@ extern "C"
             }
         };
 
-        if (device->rhi && device->rhi->GetDevice())
+        if (device->rhi && pe::VulkanRhi::Device())
         {
             pe::SamplerDesc sci{};
             sci.magFilter = toPeFilter(magF);
@@ -1656,7 +1657,7 @@ extern "C"
                 sci.anisotropyEnable = true;
                 float clampedAniso = static_cast<float>(maxAniso);
                 VkPhysicalDeviceProperties gpuProps{};
-                vkGetPhysicalDeviceProperties(device->rhi->GetGpu(), &gpuProps);
+                vkGetPhysicalDeviceProperties(pe::VulkanRhi::Gpu(), &gpuProps);
                 float hwMax = gpuProps.limits.maxSamplerAnisotropy;
                 if (clampedAniso > hwMax)
                     clampedAniso = hwMax;
@@ -2717,7 +2718,7 @@ extern "C"
             else
             {
                 vk::DescriptorSetLayoutCreateInfo emptyCI{};
-                auto emptyLayout = device->rhi->GetDevice().createDescriptorSetLayout(emptyCI);
+                auto emptyLayout = pe::VulkanRhi::Device().createDescriptorSetLayout(emptyCI);
                 pl->ownedEmptySetLayouts.push_back(emptyLayout);
                 vkSetLayouts.push_back(emptyLayout);
             }
@@ -2727,7 +2728,7 @@ extern "C"
             vk::PipelineLayoutCreateInfo ci{};
             ci.setLayoutCount = static_cast<uint32_t>(vkSetLayouts.size());
             ci.pSetLayouts = vkSetLayouts.empty() ? nullptr : vkSetLayouts.data();
-            pl->vkLayout = device->rhi->GetDevice().createPipelineLayout(ci);
+            pl->vkLayout = pe::VulkanRhi::Device().createPipelineLayout(ci);
         }
 
         return pl;
@@ -3294,7 +3295,7 @@ extern "C"
         if (!computeBakedSpirv.empty())
             computeSpirv = &computeBakedSpirv;
 
-        auto vkDev = device->rhi->GetDevice();
+        auto vkDev = pe::VulkanRhi::Device();
 
         if (autoLayout)
         {
@@ -3497,7 +3498,7 @@ extern "C"
             return nullptr;
 
         const char *labelStr = descriptor->label.data ? descriptor->label.data : nullptr;
-        auto vkDev = device->rhi->GetDevice();
+        auto vkDev = pe::VulkanRhi::Device();
         const auto &limits = device->limits;
 
         if (!pwgpu::ValidateChainedStruct(
@@ -4905,11 +4906,11 @@ extern "C"
             ci.queryType = vkType;
             ci.queryCount = descriptor->count;
 
-            pool = device->rhi->GetDevice().createQueryPool(ci);
+            pool = pe::VulkanRhi::Device().createQueryPool(ci);
             if (!pool)
                 return makeInvalid("createQuerySet: VkQueryPool creation failed");
 
-            device->rhi->GetDevice().resetQueryPool(pool, 0, descriptor->count);
+            pe::VulkanRhi::Device().resetQueryPool(pool, 0, descriptor->count);
         }
 
         auto *qs = new WGPUQuerySetImpl();

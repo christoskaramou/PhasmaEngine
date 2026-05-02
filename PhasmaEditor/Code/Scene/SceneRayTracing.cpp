@@ -4,6 +4,7 @@
 #include "API/Command.h"
 #include "API/Queue.h"
 #include "API/RHI.h"
+#include "API/Vulkan/RHI_Vulkan.h"
 #include "API/Vertex.h"
 
 namespace pe
@@ -105,7 +106,7 @@ namespace pe
         vk::PhysicalDeviceAccelerationStructurePropertiesKHR asProps{};
         vk::PhysicalDeviceProperties2 props{};
         props.pNext = &asProps;
-        RHII.GetGpu().getProperties2(&props);
+        VulkanRhi::Gpu().getProperties2(&props);
         auto scratchAlign = asProps.minAccelerationStructureScratchOffsetAlignment;
 
         m_blasMergedBuffer = Buffer::Create({
@@ -235,7 +236,7 @@ namespace pe
         vk::PhysicalDeviceAccelerationStructurePropertiesKHR asProps{};
         vk::PhysicalDeviceProperties2 props{};
         props.pNext = &asProps;
-        RHII.GetGpu().getProperties2(&props);
+        VulkanRhi::Gpu().getProperties2(&props);
         auto scratchAlign = asProps.minAccelerationStructureScratchOffsetAlignment;
         vk::DeviceSize tlasScratch =
             std::max(tlasSizes.buildScratchSize, tlasSizes.updateScratchSize);

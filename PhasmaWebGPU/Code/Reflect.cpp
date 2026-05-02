@@ -1,4 +1,5 @@
 #include "Reflect.h"
+#include "API/Vulkan/RHI_Vulkan.h"
 #include "BindGroup.h"
 #include "FormatMap.h"
 #include "PipelineLayout.h"
@@ -1465,7 +1466,7 @@ namespace pwgpu
         device->refCount.fetch_add(1, std::memory_order_relaxed);
         pl->bindGroupLayouts.resize(numSets, nullptr);
 
-        auto vkDev = device->rhi->GetDevice();
+        auto vkDev = pe::VulkanRhi::Device();
         std::vector<vk::DescriptorSetLayout> vkSetLayouts(numSets, VK_NULL_HANDLE);
 
         for (uint32_t s = 0; s < numSets; ++s)

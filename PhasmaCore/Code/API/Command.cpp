@@ -7,6 +7,7 @@
 #include "API/Pipeline.h"
 #include "API/Queue.h"
 #include "API/RHI.h"
+#include "API/Vulkan/RHI_Vulkan.h"
 #include "API/RenderPass.h"
 #include "API/Semaphore.h"
 #include "API/Vulkan/VulkanBufferImpl.h"
@@ -33,7 +34,7 @@ namespace pe
         cbai.level = vk::CommandBufferLevel::ePrimary;
         cbai.commandBufferCount = 1;
 
-        m_apiHandle = RHII.GetDevice().allocateCommandBuffers(cbai)[0];
+        m_apiHandle = VulkanRhi::Device().allocateCommandBuffers(cbai)[0];
 
         Debug::SetObjectName(m_apiHandle, name);
     }
@@ -706,7 +707,7 @@ namespace pe
         }
 
         // vkCmdPushDescriptorSetKHR is part of VK_KHR_push_descriptor extension, has to be loaded
-        static auto vkCmdPushDescriptorSetKHR = (PFN_vkCmdPushDescriptorSetKHR)vkGetDeviceProcAddr(RHII.GetDevice(), "vkCmdPushDescriptorSetKHR");
+        static auto vkCmdPushDescriptorSetKHR = (PFN_vkCmdPushDescriptorSetKHR)vkGetDeviceProcAddr(VulkanRhi::Device(), "vkCmdPushDescriptorSetKHR");
         PE_ERROR_IF(!vkCmdPushDescriptorSetKHR, "CommandBuffer::PushDescriptor: vkCmdPushDescriptorSetKHR not found!");
 
         vkCmdPushDescriptorSetKHR(m_apiHandle,

@@ -1,5 +1,6 @@
 #include "API/Semaphore.h"
 #include "API/RHI.h"
+#include "API/Vulkan/RHI_Vulkan.h"
 
 namespace pe
 {
@@ -17,7 +18,7 @@ namespace pe
             si.pNext = &ti;
         }
 
-        m_apiHandle = RHII.GetDevice().createSemaphore(si);
+        m_apiHandle = VulkanRhi::Device().createSemaphore(si);
 
         Debug::SetObjectName(m_apiHandle, name);
     }
@@ -25,7 +26,7 @@ namespace pe
     Semaphore::~Semaphore()
     {
         if (m_apiHandle)
-            RHII.GetDevice().destroySemaphore(m_apiHandle);
+            VulkanRhi::Device().destroySemaphore(m_apiHandle);
     }
 
     void Semaphore::Wait(uint64_t value)
@@ -40,7 +41,7 @@ namespace pe
         swi.pSemaphores = &m_apiHandle;
         swi.pValues = &value;
 
-        auto result = RHII.GetDevice().waitSemaphores(swi, UINT64_MAX);
+        auto result = VulkanRhi::Device().waitSemaphores(swi, UINT64_MAX);
         if (result != vk::Result::eSuccess)
         {
             if (result == vk::Result::eTimeout)
@@ -66,7 +67,7 @@ namespace pe
         swi.pSemaphores = &m_apiHandle;
         swi.pValues = &value;
 
-        auto result = RHII.GetDevice().waitSemaphores(swi, timeoutNS);
+        auto result = VulkanRhi::Device().waitSemaphores(swi, timeoutNS);
         if (result == vk::Result::eSuccess)
         {
             m_lastCompleted = value;
@@ -84,7 +85,7 @@ namespace pe
         ssi.semaphore = m_apiHandle;
         ssi.value = value;
 
-        RHII.GetDevice().signalSemaphore(ssi);
+        VulkanRhi::Device().signalSemaphore(ssi);
     }
 
     uint64_t Semaphore::GetValue()
@@ -92,6 +93,6 @@ namespace pe
         if (!m_timeline)
             return 0;
 
-        return RHII.GetDevice().getSemaphoreCounterValue(m_apiHandle);
+        return VulkanRhi::Device().getSemaphoreCounterValue(m_apiHandle);
     }
 } // namespace pe

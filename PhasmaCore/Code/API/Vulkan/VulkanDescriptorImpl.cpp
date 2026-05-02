@@ -2,6 +2,7 @@
 #include "API/AccelerationStructure.h"
 #include "API/Debug.h"
 #include "API/RHI.h"
+#include "API/Vulkan/RHI_Vulkan.h"
 #include "API/Vulkan/VulkanBufferImpl.h"
 #include "API/Vulkan/VulkanImageImpl.h"
 #include "API/Vulkan/VulkanImageViewImpl.h"
@@ -164,7 +165,7 @@ namespace pe
         createInfo.pPoolSizes = sizes.data();
         createInfo.maxSets = std::max(1u, desc.maxSets);
 
-        m_pool = RHII.GetDevice().createDescriptorPool(createInfo);
+        m_pool = VulkanRhi::Device().createDescriptorPool(createInfo);
 
         Debug::SetObjectName(m_pool, owner->m_name);
     }
@@ -172,7 +173,7 @@ namespace pe
     VulkanDescriptorPoolImpl::~VulkanDescriptorPoolImpl()
     {
         if (m_pool)
-            RHII.GetDevice().destroyDescriptorPool(m_pool);
+            VulkanRhi::Device().destroyDescriptorPool(m_pool);
     }
 
     VulkanDescriptorLayoutImpl::VulkanDescriptorLayoutImpl(DescriptorLayout *owner)
@@ -214,7 +215,7 @@ namespace pe
         else if (owner->m_allowUpdateAfterBind)
             dslci.flags |= vk::DescriptorSetLayoutCreateFlagBits::eUpdateAfterBindPool;
 
-        m_layout = RHII.GetDevice().createDescriptorSetLayout(dslci);
+        m_layout = VulkanRhi::Device().createDescriptorSetLayout(dslci);
 
         Debug::SetObjectName(m_layout, owner->m_name);
     }
@@ -222,7 +223,7 @@ namespace pe
     VulkanDescriptorLayoutImpl::~VulkanDescriptorLayoutImpl()
     {
         if (m_layout)
-            RHII.GetDevice().destroyDescriptorSetLayout(m_layout);
+            VulkanRhi::Device().destroyDescriptorSetLayout(m_layout);
     }
 
     VulkanDescriptorImpl::VulkanDescriptorImpl(Descriptor *owner)
@@ -241,7 +242,7 @@ namespace pe
         allocateInfo.pSetLayouts = &dsetLayout;
         allocateInfo.pNext = &variableDescriptorCountAllocInfo; // If the flag was not set in the layout, this will be ignored
 
-        m_set = RHII.GetDevice().allocateDescriptorSets(allocateInfo)[0];
+        m_set = VulkanRhi::Device().allocateDescriptorSets(allocateInfo)[0];
 
         Debug::SetObjectName(m_set, owner->m_name);
     }
@@ -337,7 +338,7 @@ namespace pe
             writes.push_back(write);
         }
 
-        RHII.GetDevice().updateDescriptorSets(static_cast<uint32_t>(writes.size()), writes.data(), 0, nullptr);
+        VulkanRhi::Device().updateDescriptorSets(static_cast<uint32_t>(writes.size()), writes.data(), 0, nullptr);
     }
 
     DescriptorPool::Impl *CreateDescriptorPoolImpl(DescriptorPool *owner, const DescriptorPoolDesc &desc)

@@ -1,6 +1,7 @@
 #include "API/Queue.h"
 #include "API/Command.h"
 #include "API/RHI.h"
+#include "API/Vulkan/RHI_Vulkan.h"
 #include "API/Semaphore.h"
 #include "API/Swapchain.h"
 
@@ -13,14 +14,14 @@ namespace pe
         cpci.queueFamilyIndex = m_queue->GetFamilyId();
         cpci.flags = flags;
 
-        m_apiHandle = RHII.GetDevice().createCommandPool(cpci);
+        m_apiHandle = VulkanRhi::Device().createCommandPool(cpci);
         Debug::SetObjectName(m_apiHandle, name);
     }
 
     CommandPool::~CommandPool()
     {
         if (m_apiHandle)
-            RHII.GetDevice().destroyCommandPool(m_apiHandle);
+            VulkanRhi::Device().destroyCommandPool(m_apiHandle);
 
         while (!m_freeCmdStack.empty())
         {
@@ -31,7 +32,7 @@ namespace pe
 
     void CommandPool::Reset()
     {
-        RHII.GetDevice().resetCommandPool(m_apiHandle);
+        VulkanRhi::Device().resetCommandPool(m_apiHandle);
     }
 
     Queue::Queue(vk::Device device,
@@ -41,7 +42,7 @@ namespace pe
           m_name{name},
           m_submissionsSemaphore{Semaphore::Create(true, name + "_submissionsSemaphore")}
     {
-        m_apiHandle = RHII.GetDevice().getQueue(m_familyId, 0);
+        m_apiHandle = VulkanRhi::Device().getQueue(m_familyId, 0);
         Debug::SetObjectName(m_apiHandle, m_name);
     }
 

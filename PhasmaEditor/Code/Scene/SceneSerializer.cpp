@@ -1158,7 +1158,7 @@ namespace pe
                 gSettings.render_mode = static_cast<RenderMode>(settings["render_mode"].GetInt());
             if (settings.HasMember("present_mode"))
             {
-                gSettings.preferred_present_mode = static_cast<vk::PresentModeKHR>(settings["present_mode"].GetInt());
+                gSettings.preferred_present_mode = static_cast<PePresentMode>(settings["present_mode"].GetInt());
                 EventSystem::PushEvent(EventType::PresentMode);
             }
 
@@ -2792,7 +2792,7 @@ namespace pe
                 gSettings.render_mode = static_cast<RenderMode>(settings["render_mode"].GetInt());
             if (settings.HasMember("present_mode"))
             {
-                gSettings.preferred_present_mode = static_cast<vk::PresentModeKHR>(settings["present_mode"].GetInt());
+                gSettings.preferred_present_mode = static_cast<PePresentMode>(settings["present_mode"].GetInt());
                 EventSystem::PushEvent(EventType::PresentMode);
             }
             MarkUniformsDirty();

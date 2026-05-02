@@ -5,6 +5,7 @@
 #include "Utils.h"
 #include "WGPULimits.h"
 #include "API/RHI.h"
+#include "API/Vulkan/RHI_Vulkan.h"
 #include "Base/Log.h"
 #include "Base/EventSystem.h"
 #include <SDL.h>
@@ -18,7 +19,7 @@ namespace
 
     static bool EnsureRhiInitialized()
     {
-        if (pe::RHII.GetGpu())
+        if (pe::VulkanRhi::Gpu())
             return true; // Already initialized (e.g. by PhasmaEditor).
 
         bool ok = false;
@@ -282,14 +283,14 @@ extern "C"
         }
 
         pe::RHI *rhi = instance ? instance->rhi : &pe::RHII;
-        if (!rhi || !rhi->GetGpu())
+        if (!rhi || !pe::VulkanRhi::Gpu())
             return trackError("PhasmaWebGPU: pe::RHI is not initialized");
 
         auto *adapter = new WGPUAdapterImpl();
         adapter->rhi = rhi;
         adapter->instance = instance;
         wgpuInstanceAddRef(instance);
-        adapter->gpu = rhi->GetGpu();
+        adapter->gpu = pe::VulkanRhi::Gpu();
 
         VkPhysicalDevice vkGpu = static_cast<VkPhysicalDevice>(adapter->gpu);
         vkGetPhysicalDeviceProperties(vkGpu, &adapter->vkProps);

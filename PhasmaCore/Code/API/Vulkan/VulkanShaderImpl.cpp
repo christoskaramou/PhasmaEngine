@@ -1,5 +1,6 @@
 #include "API/Vulkan/VulkanShaderImpl.h"
 #include "API/RHI.h"
+#include "API/Vulkan/RHI_Vulkan.h"
 #include "shaderc/shaderc.hpp"
 #include "dxc/dxcapi.h"
 
@@ -386,7 +387,7 @@ namespace pe
         vk::ShaderModuleCreateInfo info{};
         info.codeSize = m_spirv.size() * sizeof(uint32_t);
         info.pCode = m_spirv.data();
-        m_module = RHII.GetDevice().createShaderModule(info);
+        m_module = VulkanRhi::Device().createShaderModule(info);
         return m_module;
     }
 
@@ -394,7 +395,7 @@ namespace pe
     {
         if (m_module)
         {
-            RHII.GetDevice().destroyShaderModule(m_module);
+            VulkanRhi::Device().destroyShaderModule(m_module);
             m_module = vk::ShaderModule{};
         }
     }

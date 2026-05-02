@@ -7,6 +7,7 @@
 #include "API/Image.h"
 #include "API/Queue.h"
 #include "API/RHI.h"
+#include "API/Vulkan/RHI_Vulkan.h"
 #include "API/RenderPass.h"
 #include "API/Surface.h"
 #include "API/Swapchain.h"
@@ -1388,9 +1389,9 @@ namespace pe
         Queue *queue = RHII.GetMainQueue();
 
         ImGui_ImplVulkan_InitInfo init_info{};
-        init_info.Instance = RHII.GetInstance();
-        init_info.PhysicalDevice = RHII.GetGpu();
-        init_info.Device = RHII.GetDevice();
+        init_info.Instance = VulkanRhi::Instance();
+        init_info.PhysicalDevice = VulkanRhi::Gpu();
+        init_info.Device = VulkanRhi::Device();
         init_info.QueueFamily = queue->GetFamilyId();
         init_info.Queue = queue->ApiHandle();
         init_info.PipelineCache = nullptr;

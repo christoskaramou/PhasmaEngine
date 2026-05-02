@@ -1,5 +1,12 @@
 #pragma once
 
+enum PeGraphicsApi : uint32_t
+{
+    PE_GRAPHICS_API_VULKAN = 0,
+    PE_GRAPHICS_API_DX12,
+    PE_GRAPHICS_API_COUNT
+};
+
 enum PeFormat : uint32_t
 {
     PE_FORMAT_UNDEFINED = 0,

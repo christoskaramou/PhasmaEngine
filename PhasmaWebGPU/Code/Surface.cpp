@@ -14,17 +14,17 @@ extern "C" void wgpuTextureRelease(WGPUTexture);
 
 namespace
 {
-    WGPUPresentMode VkPresentModeToWGPU(vk::PresentModeKHR mode)
+    WGPUPresentMode PePresentModeToWGPU(PePresentMode mode)
     {
         switch (mode)
         {
-        case vk::PresentModeKHR::eImmediate:
+        case PE_PRESENT_MODE_IMMEDIATE:
             return WGPUPresentMode_Immediate;
-        case vk::PresentModeKHR::eMailbox:
+        case PE_PRESENT_MODE_MAILBOX:
             return WGPUPresentMode_Mailbox;
-        case vk::PresentModeKHR::eFifo:
+        case PE_PRESENT_MODE_FIFO:
             return WGPUPresentMode_Fifo;
-        case vk::PresentModeKHR::eFifoRelaxed:
+        case PE_PRESENT_MODE_FIFO_RELAXED:
             return WGPUPresentMode_FifoRelaxed;
         default:
             return WGPUPresentMode_Fifo;
@@ -97,22 +97,22 @@ extern "C"
 
         if (surface->surface && config->presentMode != WGPUPresentMode_Fifo)
         {
-            vk::PresentModeKHR vkMode = vk::PresentModeKHR::eFifo;
+            PePresentMode peMode = PE_PRESENT_MODE_FIFO;
             switch (config->presentMode)
             {
             case WGPUPresentMode_Immediate:
-                vkMode = vk::PresentModeKHR::eImmediate;
+                peMode = PE_PRESENT_MODE_IMMEDIATE;
                 break;
             case WGPUPresentMode_Mailbox:
-                vkMode = vk::PresentModeKHR::eMailbox;
+                peMode = PE_PRESENT_MODE_MAILBOX;
                 break;
             case WGPUPresentMode_FifoRelaxed:
-                vkMode = vk::PresentModeKHR::eFifoRelaxed;
+                peMode = PE_PRESENT_MODE_FIFO_RELAXED;
                 break;
             default:
                 break;
             }
-            pe::RHII.ChangePresentMode(vkMode);
+            pe::RHII.ChangePresentMode(peMode);
             surface->swapchain = pe::RHII.GetSwapchain();
         }
 
@@ -171,10 +171,10 @@ extern "C"
 
         if (surface->surface)
         {
-            auto vkModes = surface->surface->GetSupportedPresentModes();
-            for (auto &m : vkModes)
+            auto peModes = surface->surface->GetSupportedPresentModes();
+            for (auto &m : peModes)
             {
-                WGPUPresentMode wm = VkPresentModeToWGPU(m);
+                WGPUPresentMode wm = PePresentModeToWGPU(m);
                 bool dup = false;
                 for (auto &existing : presentModes)
                 {

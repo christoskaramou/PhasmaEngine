@@ -2,6 +2,7 @@
 #include "API/Command.h"
 #include "API/Image.h"
 #include "API/RHI.h"
+#include "API/Vulkan/RHI_Vulkan.h"
 #include "API/Vulkan/VulkanImageImpl.h"
 #include "API/Vulkan/VulkanRHITypeUtils.h"
 
@@ -103,7 +104,7 @@ namespace pe
         renderPassInfo.dependencyCount = 2;
         renderPassInfo.pDependencies = subpassDependencies;
 
-        m_apiHandle = RHII.GetDevice().createRenderPass2(renderPassInfo);
+        m_apiHandle = VulkanRhi::Device().createRenderPass2(renderPassInfo);
 
         Debug::SetObjectName(m_apiHandle, name);
     }
@@ -111,6 +112,6 @@ namespace pe
     RenderPass::~RenderPass()
     {
         if (m_apiHandle)
-            RHII.GetDevice().destroyRenderPass(m_apiHandle);
+            VulkanRhi::Device().destroyRenderPass(m_apiHandle);
     }
 } // namespace pe

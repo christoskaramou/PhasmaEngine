@@ -1,4 +1,6 @@
 #include "API/RHI.h"
+#include "API/RHI_Internal.h"
+#include "API/Vulkan/VulkanRhiImpl.h"
 #ifdef PE_TRACY
 #include <tracy/TracyVulkan.hpp>
 #endif
@@ -352,8 +354,11 @@ namespace pe
     }
 #endif
 
-    void RHI::Init(SDL_Window *window)
+    void RHI::Init(SDL_Window *window, PeGraphicsApi api)
     {
+        PE_ERROR_IF(api != PE_GRAPHICS_API_VULKAN, "RHI::Init: only PE_GRAPHICS_API_VULKAN is implemented in Phase 0");
+        m_api = api;
+        m_impl = new VulkanRhiImpl();
         m_window = window;
         m_frameCounter = 0;
 
@@ -482,6 +487,9 @@ namespace pe
         Debug::DestroyCaptureApi();
         if (m_instance)
             m_instance.destroy();
+
+        delete m_impl;
+        m_impl = nullptr;
     }
 
     void RHI::CreateInstance(SDL_Window *window)
@@ -628,6 +636,9 @@ namespace pe
         m_minStorageBufferOffsetAlignment = gpuPropertiesVK.properties.limits.minStorageBufferOffsetAlignment;
         m_maxPushConstantsSize = gpuPropertiesVK.properties.limits.maxPushConstantsSize;
         m_maxDrawIndirectCount = gpuPropertiesVK.properties.limits.maxDrawIndirectCount;
+
+        m_caps.maxPushConstantsBytes = m_maxPushConstantsSize;
+        m_caps.maxBindlessTextures = gpuPropertiesVK.properties.limits.maxPerStageDescriptorSampledImages;
     }
 
     bool RHI::IsInstanceExtensionValid(const char *name)
@@ -699,11 +710,17 @@ namespace pe
             deviceExtensions.push_back(VK_KHR_SHADER_FLOAT_CONTROLS_EXTENSION_NAME);
             deviceExtensions.push_back(VK_KHR_RAY_QUERY_EXTENSION_NAME);
             Settings::Get<GlobalSettings>().ray_tracing_support = true;
+            m_caps.rayTracing = true;
         }
         else
         {
             Settings::Get<GlobalSettings>().ray_tracing_support = false;
+            m_caps.rayTracing = false;
         }
+
+        m_caps.meshShaders = IsDeviceExtensionValid(VK_EXT_MESH_SHADER_EXTENSION_NAME);
+        // Indirect-count is core in Vulkan 1.2; the engine pins apiVersion to 1.4.
+        m_caps.indirectCount = true;
 
         auto queueFamilyProperties = m_gpu.getQueueFamilyProperties();
         float priority = 1.f;
@@ -779,6 +796,7 @@ namespace pe
             deviceExtensions.push_back(VK_EXT_DEPTH_CLIP_ENABLE_EXTENSION_NAME);
 
         Settings::Get<GlobalSettings>().dynamic_rendering &= static_cast<bool>(deviceFeatures13.dynamicRendering);
+        m_caps.dynamicRendering = static_cast<bool>(deviceFeatures13.dynamicRendering);
 
         // Check needed features
         PE_ERROR_IF(!deviceFeatures12.descriptorBindingPartiallyBound, "Partially bound descriptors are not supported on this device!");
@@ -880,7 +898,7 @@ namespace pe
 
     void RHI::WaitDeviceIdle()
     {
-        m_device.waitIdle();
+        m_impl->WaitDeviceIdle();
     }
 
     uint32_t RHI::GetSwapchainImageCount()
@@ -1105,7 +1123,7 @@ namespace pe
         return snap;
     }
 
-    void RHI::ChangePresentMode(vk::PresentModeKHR mode)
+    void RHI::ChangePresentMode(PePresentMode mode)
     {
         WaitDeviceIdle();
 
@@ -1131,33 +1149,18 @@ namespace pe
         EventSystem::DispatchEvent(EventType::SetWindowTitle, title);
     }
 
-    const char *RHI::PresentModeToString(vk::PresentModeKHR presentMode)
+    const char *RHI::PresentModeToString(PePresentMode presentMode)
     {
-        static const char *presentModeNames[] = {
-            "Immediate",
-            "Mailbox",
-            "Fifo",
-            "Fifo Relaxed",
-            "Shared Demand Refresh",
-            "Shared Continuous Refresh",
-            "Fifo Latest Ready"};
-
         switch (presentMode)
         {
-        case vk::PresentModeKHR::eImmediate:
-            return presentModeNames[0];
-        case vk::PresentModeKHR::eMailbox:
-            return presentModeNames[1];
-        case vk::PresentModeKHR::eFifo:
-            return presentModeNames[2];
-        case vk::PresentModeKHR::eFifoRelaxed:
-            return presentModeNames[3];
-        case vk::PresentModeKHR::eSharedDemandRefresh:
-            return presentModeNames[4];
-        case vk::PresentModeKHR::eSharedContinuousRefresh:
-            return presentModeNames[5];
-        case vk::PresentModeKHR::eFifoLatestReady:
-            return presentModeNames[6];
+        case PE_PRESENT_MODE_IMMEDIATE:
+            return "Immediate";
+        case PE_PRESENT_MODE_MAILBOX:
+            return "Mailbox";
+        case PE_PRESENT_MODE_FIFO:
+            return "Fifo";
+        case PE_PRESENT_MODE_FIFO_RELAXED:
+            return "Fifo Relaxed";
         default:
             PE_ERROR("Unknown PresentMode");
             return "Unknown";

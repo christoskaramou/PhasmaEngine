@@ -4,6 +4,7 @@
 #include "API/Image.h"
 #include "API/Pipeline.h"
 #include "API/RHI.h"
+#include "API/Vulkan/RHI_Vulkan.h"
 #include "API/Shader.h"
 #include "API/Vulkan/VulkanImageImpl.h"
 #include "Camera/Camera.h"
@@ -59,7 +60,7 @@ namespace pe
             m_emissiveRT->GetFormat(),
             m_transparencyRT->GetFormat()};
 
-        ::PeFormat depthFormat = FromVkFormat(RHII.GetDepthFormat());
+        ::PeFormat depthFormat = FromVkFormat(VulkanRhi::DepthFormat());
 
         const PassVariant *surface = m_passAsset->GetVariant("surface");
         PE_ERROR_IF(!surface, "standard_pbr.pass missing 'surface' variant");
@@ -248,7 +249,7 @@ namespace pe
             m_emissiveRT->GetFormat(),
             m_transparencyRT->GetFormat()};
 
-        ::PeFormat depthFormat = FromVkFormat(RHII.GetDepthFormat());
+        ::PeFormat depthFormat = FromVkFormat(VulkanRhi::DepthFormat());
 
         const PassVariant *transparent = m_passAsset->GetVariant("transparent");
         PE_ERROR_IF(!transparent, "standard_pbr.pass missing 'transparent' variant");

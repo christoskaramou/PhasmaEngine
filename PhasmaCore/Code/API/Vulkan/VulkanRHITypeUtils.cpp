@@ -545,4 +545,39 @@ namespace pe
             return PE_DYNAMIC_STATE_VIEWPORT;
         }
     }
+
+    vk::PresentModeKHR ToVkPresentMode(PePresentMode mode)
+    {
+        switch (mode)
+        {
+        case PE_PRESENT_MODE_IMMEDIATE:
+            return vk::PresentModeKHR::eImmediate;
+        case PE_PRESENT_MODE_MAILBOX:
+            return vk::PresentModeKHR::eMailbox;
+        case PE_PRESENT_MODE_FIFO:
+            return vk::PresentModeKHR::eFifo;
+        case PE_PRESENT_MODE_FIFO_RELAXED:
+            return vk::PresentModeKHR::eFifoRelaxed;
+        default:
+            PE_ERROR("Unknown PePresentMode: %u", static_cast<uint32_t>(mode));
+            return vk::PresentModeKHR::eFifo;
+        }
+    }
+
+    PePresentMode FromVkPresentMode(vk::PresentModeKHR mode)
+    {
+        switch (mode)
+        {
+        case vk::PresentModeKHR::eImmediate:
+            return PE_PRESENT_MODE_IMMEDIATE;
+        case vk::PresentModeKHR::eMailbox:
+            return PE_PRESENT_MODE_MAILBOX;
+        case vk::PresentModeKHR::eFifo:
+            return PE_PRESENT_MODE_FIFO;
+        case vk::PresentModeKHR::eFifoRelaxed:
+            return PE_PRESENT_MODE_FIFO_RELAXED;
+        default:
+            return PE_PRESENT_MODE_FIFO;
+        }
+    }
 } // namespace pe

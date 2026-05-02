@@ -4,14 +4,14 @@
 
 namespace pe
 {
-    static const std::unordered_map<std::string_view, vk::PresentModeKHR> s_surfPresentModeMap = {
-        {"immediate", vk::PresentModeKHR::eImmediate},
-        {"mailbox", vk::PresentModeKHR::eMailbox},
-        {"fifo", vk::PresentModeKHR::eFifo},
-        {"fifo_relaxed", vk::PresentModeKHR::eFifoRelaxed},
+    static const std::unordered_map<std::string_view, PePresentMode> s_surfPresentModeMap = {
+        {"immediate", PE_PRESENT_MODE_IMMEDIATE},
+        {"mailbox", PE_PRESENT_MODE_MAILBOX},
+        {"fifo", PE_PRESENT_MODE_FIFO},
+        {"fifo_relaxed", PE_PRESENT_MODE_FIFO_RELAXED},
     };
 
-    static std::string PresentModeStr(vk::PresentModeKHR mode)
+    static std::string PresentModeStr(PePresentMode mode)
     {
         for (auto &[k, v] : s_surfPresentModeMap)
             if (v == mode)

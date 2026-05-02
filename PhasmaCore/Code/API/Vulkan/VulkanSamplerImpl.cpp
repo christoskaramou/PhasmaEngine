@@ -1,6 +1,7 @@
 #include "API/Vulkan/VulkanSamplerImpl.h"
 #include "API/Debug.h"
 #include "API/RHI.h"
+#include "API/Vulkan/RHI_Vulkan.h"
 #include "API/Vulkan/VulkanRHITypeUtils.h"
 
 namespace pe
@@ -141,14 +142,14 @@ namespace pe
         info.borderColor = ToVkSamplerBorderColor(desc.borderColor);
         info.unnormalizedCoordinates = desc.unnormalizedCoordinates ? VK_TRUE : VK_FALSE;
 
-        m_sampler = RHII.GetDevice().createSampler(info);
+        m_sampler = VulkanRhi::Device().createSampler(info);
         Debug::SetObjectName(m_sampler, owner->m_name);
     }
 
     VulkanSamplerImpl::~VulkanSamplerImpl()
     {
         if (m_sampler)
-            RHII.GetDevice().destroySampler(m_sampler);
+            VulkanRhi::Device().destroySampler(m_sampler);
     }
 
     Sampler::Impl *CreateSamplerImpl(Sampler *owner, const SamplerDesc &desc)

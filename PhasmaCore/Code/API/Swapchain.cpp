@@ -1,17 +1,19 @@
 #include "API/Swapchain.h"
 #include "API/Image_Internal.h"
 #include "API/RHI.h"
+#include "API/Vulkan/RHI_Vulkan.h"
 #include "API/Semaphore.h"
 #include "API/Surface.h"
 #include "API/Vulkan/VulkanImageImpl.h"
 #include "API/Vulkan/VulkanImageViewImpl.h"
+#include "API/Vulkan/VulkanRHITypeUtils.h"
 
 namespace pe
 {
     Swapchain::Swapchain(Surface *surface, const std::string &name)
         : m_images{}
     {
-        auto capabilities = RHII.GetGpu().getSurfaceCapabilitiesKHR(surface->ApiHandle());
+        auto capabilities = VulkanRhi::Gpu().getSurfaceCapabilitiesKHR(surface->ApiHandle());
 
         // Per Vulkan spec: use currentExtent when it is defined (not UINT32_MAX).
         // Only clamp to [min,max] when the surface lets us choose freely (Wayland etc.).
@@ -51,14 +53,14 @@ namespace pe
         swapchainCreateInfo.imageUsage = swapchainUsage;
         swapchainCreateInfo.preTransform = capabilities.currentTransform;
         swapchainCreateInfo.compositeAlpha = vk::CompositeAlphaFlagBitsKHR::eOpaque;
-        swapchainCreateInfo.presentMode = surface->GetPresentMode();
+        swapchainCreateInfo.presentMode = ToVkPresentMode(surface->GetPresentMode());
         swapchainCreateInfo.clipped = VK_TRUE;
         if (m_apiHandle)
             swapchainCreateInfo.oldSwapchain = m_apiHandle;
 
         // new swapchain with old create info
-        auto swapchain = RHII.GetDevice().createSwapchainKHR(swapchainCreateInfo);
-        auto imagesVK = RHII.GetDevice().getSwapchainImagesKHR(swapchain);
+        auto swapchain = VulkanRhi::Device().createSwapchainKHR(swapchainCreateInfo);
+        auto imagesVK = VulkanRhi::Device().getSwapchainImagesKHR(swapchain);
 
         m_images.resize(imagesVK.size());
         for (unsigned i = 0; i < m_images.size(); i++)
@@ -102,7 +104,7 @@ namespace pe
 
         if (m_apiHandle)
         {
-            RHII.GetDevice().destroySwapchainKHR(m_apiHandle);
+            VulkanRhi::Device().destroySwapchainKHR(m_apiHandle);
         }
 
         m_apiHandle = swapchain;
@@ -121,12 +123,12 @@ namespace pe
         }
 
         if (m_apiHandle)
-            RHII.GetDevice().destroySwapchainKHR(m_apiHandle);
+            VulkanRhi::Device().destroySwapchainKHR(m_apiHandle);
     }
 
     uint32_t Swapchain::AquireNextImage(Semaphore *semaphore)
     {
-        auto result = RHII.GetDevice().acquireNextImageKHR(m_apiHandle, UINT64_MAX, semaphore->ApiHandle(), nullptr);
+        auto result = VulkanRhi::Device().acquireNextImageKHR(m_apiHandle, UINT64_MAX, semaphore->ApiHandle(), nullptr);
         PE_ERROR_IF(result.result != vk::Result::eSuccess && result.result != vk::Result::eSuboptimalKHR,
                     "Failed to acquire swapchain image");
 

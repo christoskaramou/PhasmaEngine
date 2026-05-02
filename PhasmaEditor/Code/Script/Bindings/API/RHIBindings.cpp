@@ -2,19 +2,20 @@
 #include "API/Descriptor.h"
 #include "API/Queue.h"
 #include "API/RHI.h"
+#include "API/Vulkan/RHI_Vulkan.h"
 #include "API/Surface.h"
 #include "API/Swapchain.h"
 
 namespace pe
 {
-    static const std::unordered_map<std::string_view, vk::PresentModeKHR> s_presentModeMap = {
-        {"immediate", vk::PresentModeKHR::eImmediate},
-        {"mailbox", vk::PresentModeKHR::eMailbox},
-        {"fifo", vk::PresentModeKHR::eFifo},
-        {"fifo_relaxed", vk::PresentModeKHR::eFifoRelaxed},
+    static const std::unordered_map<std::string_view, PePresentMode> s_presentModeMap = {
+        {"immediate", PE_PRESENT_MODE_IMMEDIATE},
+        {"mailbox", PE_PRESENT_MODE_MAILBOX},
+        {"fifo", PE_PRESENT_MODE_FIFO},
+        {"fifo_relaxed", PE_PRESENT_MODE_FIFO_RELAXED},
     };
 
-    static std::string PresentModeToString(vk::PresentModeKHR mode)
+    static std::string PresentModeToString(PePresentMode mode)
     {
         for (auto &[k, v] : s_presentModeMap)
             if (v == mode)
@@ -49,7 +50,7 @@ namespace pe
 
                 // GetDepthFormat
                 rhi.set_function("get_depth_format", []() -> int {
-                    return static_cast<int>(RHII.GetDepthFormat());
+                    return static_cast<int>(VulkanRhi::DepthFormat());
                 });
 
                 // WaitDeviceIdle

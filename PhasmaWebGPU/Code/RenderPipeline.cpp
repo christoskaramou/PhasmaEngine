@@ -1,4 +1,5 @@
 #include "RenderPipeline.h"
+#include "API/Vulkan/RHI_Vulkan.h"
 #include "PipelineLayout.h"
 #include "BindGroup.h"
 #include "Device.h"
@@ -21,7 +22,7 @@ extern "C"
         if (rp->refCount.fetch_sub(1, std::memory_order_acq_rel) == 1)
         {
             if (rp->device && rp->device->rhi && rp->vkPipeline != VK_NULL_HANDLE)
-                rp->device->rhi->GetDevice().destroyPipeline(rp->vkPipeline);
+                pe::VulkanRhi::Device().destroyPipeline(rp->vkPipeline);
             if (rp->layout)
                 wgpuPipelineLayoutRelease(rp->layout);
             WGPUDeviceImpl *dev = rp->device;

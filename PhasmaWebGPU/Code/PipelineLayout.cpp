@@ -1,4 +1,5 @@
 #include "PipelineLayout.h"
+#include "API/Vulkan/RHI_Vulkan.h"
 #include "BindGroup.h"
 #include "Device.h"
 #include "Utils.h"
@@ -26,7 +27,7 @@ extern "C"
             }
             if (pl->device && pl->device->rhi)
             {
-                auto vkDev = pl->device->rhi->GetDevice();
+                auto vkDev = pe::VulkanRhi::Device();
                 if (pl->vkLayout != VK_NULL_HANDLE)
                     vkDev.destroyPipelineLayout(pl->vkLayout);
                 for (auto emptyLayout : pl->ownedEmptySetLayouts)

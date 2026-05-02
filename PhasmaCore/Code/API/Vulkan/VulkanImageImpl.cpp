@@ -4,6 +4,7 @@
 #include "API/Debug.h"
 #include "API/Helpers.h"
 #include "API/RHI.h"
+#include "API/Vulkan/RHI_Vulkan.h"
 #include "API/StagingManager.h"
 #include "API/Vulkan/VulkanBufferImpl.h"
 #include "API/Vulkan/VulkanImageViewImpl.h"
@@ -465,7 +466,7 @@ namespace pe
     {
         bool ImageTilingSupportedForFormat(vk::Format format, vk::ImageTiling tiling)
         {
-            vk::FormatProperties fProps = RHII.GetGpu().getFormatProperties(format);
+            vk::FormatProperties fProps = VulkanRhi::Gpu().getFormatProperties(format);
             if (tiling == vk::ImageTiling::eOptimal)
                 return !!fProps.optimalTilingFeatures;
             if (tiling == vk::ImageTiling::eLinear)
@@ -487,7 +488,7 @@ namespace pe
         // Auto-add eTransferSrc if the format supports it (matches legacy
         // Image.cpp behavior — used by Downsampler/blit paths).
         {
-            vk::FormatProperties fProps = RHII.GetGpu().getFormatProperties(vkFormat);
+            vk::FormatProperties fProps = VulkanRhi::Gpu().getFormatProperties(vkFormat);
             if (fProps.optimalTilingFeatures & vk::FormatFeatureFlagBits::eTransferSrc)
                 vkUsage |= vk::ImageUsageFlagBits::eTransferSrc;
         }
@@ -516,11 +517,11 @@ namespace pe
 
         VkImage imageVK = VK_NULL_HANDLE;
         VmaAllocationInfo allocInfo{};
-        VkResult vr = vmaCreateImage(RHII.GetAllocator(), &ci, &aci, &imageVK, &m_allocation, &allocInfo);
+        VkResult vr = vmaCreateImage(VulkanRhi::Allocator(), &ci, &aci, &imageVK, &m_allocation, &allocInfo);
         PE_CHECK(vr);
         m_image = imageVK;
 
-        vmaSetAllocationName(RHII.GetAllocator(), m_allocation, owner->m_name.c_str());
+        vmaSetAllocationName(VulkanRhi::Allocator(), m_allocation, owner->m_name.c_str());
         Debug::SetObjectName(m_image, owner->m_name);
     }
 
@@ -534,7 +535,7 @@ namespace pe
         if (m_externallyOwned)
             return;
         if (m_image)
-            vmaDestroyImage(RHII.GetAllocator(), m_image, m_allocation);
+            vmaDestroyImage(VulkanRhi::Allocator(), m_image, m_allocation);
     }
 
     void VulkanImageImpl::CopyImage(CommandBuffer *cmd, Image *src)

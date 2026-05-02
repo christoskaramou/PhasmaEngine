@@ -2,6 +2,7 @@
 #include "API/Command.h"
 #include "API/Image.h"
 #include "API/RHI.h"
+#include "API/Vulkan/RHI_Vulkan.h"
 #include "API/Vulkan/VulkanImageImpl.h"
 #include "API/Vulkan/VulkanRHITypeUtils.h"
 
@@ -10,7 +11,7 @@ namespace pe
     Event::Event(const std::string &name)
     {
         vk::EventCreateInfo ci{};
-        m_apiHandle = RHII.GetDevice().createEvent(ci);
+        m_apiHandle = VulkanRhi::Device().createEvent(ci);
 
         Debug::SetObjectName(m_apiHandle, name);
     }
@@ -18,7 +19,7 @@ namespace pe
     Event::~Event()
     {
         if (m_apiHandle)
-            RHII.GetDevice().destroyEvent(m_apiHandle);
+            VulkanRhi::Device().destroyEvent(m_apiHandle);
     }
 
     void Event::Set(CommandBuffer *cmd, Image *image,

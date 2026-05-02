@@ -2,6 +2,7 @@
 #include "API/Command.h"
 #include "API/Queue.h"
 #include "API/RHI.h"
+#include "API/Vulkan/RHI_Vulkan.h"
 #ifdef PE_TRACY
 #include <tracy/TracyVulkan.hpp>
 #endif
@@ -368,7 +369,7 @@ namespace pe
             PE_INFO("Name %s set (Handle: %p)", info.pObjectName, info.objectHandle);
 #endif
 
-        vkSetDebugUtilsObjectNameEXT(RHII.GetDevice(), &info);
+        vkSetDebugUtilsObjectNameEXT(VulkanRhi::Device(), &info);
     }
 
     void Debug::BeginQueueRegion(Queue *queue, const std::string &name)
@@ -447,7 +448,7 @@ namespace pe
 
 #ifdef PE_TRACY
         auto *scope = new tracy::VkCtxScope(
-            RHII.GetTracyVkCtx(),
+            VulkanRhi::TracyContext(),
             __LINE__, __FILE__, strlen(__FILE__),
             __FUNCTION__, strlen(__FUNCTION__),
             name.c_str(), name.size(),

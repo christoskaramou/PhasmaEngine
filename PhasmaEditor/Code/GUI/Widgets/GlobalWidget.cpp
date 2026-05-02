@@ -52,7 +52,7 @@ namespace pe
         ImGui::Separator();
 
         ImGui::Text("Present Mode");
-        vk::PresentModeKHR currentPresentMode = RHII.GetSurface()->GetPresentMode();
+        PePresentMode currentPresentMode = RHII.GetSurface()->GetPresentMode();
 
         if (ImGui::BeginCombo("##present_mode", RHII.PresentModeToString(currentPresentMode)))
         {

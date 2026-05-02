@@ -6,6 +6,7 @@
 #include "API/Vulkan/VulkanImageImpl.h"
 #include "API/Pipeline.h"
 #include "API/RHI.h"
+#include "API/Vulkan/RHI_Vulkan.h"
 #include "API/Shader.h"
 #include "Camera/Camera.h"
 #include "GbufferPass.h"
@@ -21,7 +22,7 @@ namespace pe
         for (auto *&texture : m_textures)
         {
             ImageDesc desc{};
-            desc.format = pe::FromVkFormat(RHII.GetDepthFormat());
+            desc.format = pe::FromVkFormat(VulkanRhi::DepthFormat());
             desc.width = Settings::Get<GlobalSettings>().shadow_map_size;
             desc.height = Settings::Get<GlobalSettings>().shadow_map_size;
             desc.usage = PE_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT | PE_IMAGE_USAGE_SAMPLED | PE_IMAGE_USAGE_TRANSFER_DST;
@@ -57,7 +58,7 @@ namespace pe
         m_passInfo->pVertShader = Shader::Create({.sourcePath = Path::Assets + "Shaders/Shadows/ShadowsVS.hlsl", .entryPoint = "mainVS", .stage = PE_SHADER_STAGE_VERTEX, .defines = std::vector<Define>{}});
         m_passInfo->dynamicStates = {PE_DYNAMIC_STATE_VIEWPORT, PE_DYNAMIC_STATE_SCISSOR, PE_DYNAMIC_STATE_DEPTH_BIAS};
         m_passInfo->cullMode = PE_CULL_MODE_NONE;
-        m_passInfo->depthFormat = FromVkFormat(RHII.GetDepthFormat());
+        m_passInfo->depthFormat = FromVkFormat(VulkanRhi::DepthFormat());
         m_passInfo->Update();
     }
 

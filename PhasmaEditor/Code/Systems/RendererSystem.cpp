@@ -10,6 +10,7 @@
 #include "API/Vulkan/VulkanImageImpl.h"
 #include "API/Queue.h"
 #include "API/RHI.h"
+#include "API/Vulkan/RHI_Vulkan.h"
 #include "API/Semaphore.h"
 #include "API/Shader.h"
 #include "API/StagingManager.h"
@@ -427,7 +428,7 @@ namespace pe
         }
 
 #ifdef PE_TRACY
-        TracyVkCollect(RHII.GetTracyVkCtx(), static_cast<VkCommandBuffer>(cmd->ApiHandle()));
+        TracyVkCollect(VulkanRhi::TracyContext(), static_cast<VkCommandBuffer>(cmd->ApiHandle()));
 #endif
 
         cmd->End();
@@ -747,7 +748,7 @@ namespace pe
         Settings::Get<GlobalSettings>().rendering_images.clear();
 
         vk::Format surfaceFormat = RHII.GetSurface()->GetFormat();
-        m_depthStencil = CreateDepthStencilTarget("depthStencil", RHII.GetDepthFormat(), vk::ImageUsageFlagBits::eTransferDst);
+        m_depthStencil = CreateDepthStencilTarget("depthStencil", VulkanRhi::DepthFormat(), vk::ImageUsageFlagBits::eTransferDst);
         m_viewportRT = CreateRenderTarget("viewport", surfaceFormat, vk::ImageUsageFlagBits::eTransferSrc | vk::ImageUsageFlagBits::eTransferDst);
         m_displayRT = CreateRenderTarget("display", surfaceFormat, vk::ImageUsageFlagBits::eTransferSrc | vk::ImageUsageFlagBits::eTransferDst, false);
         m_screenshotRT = CreateRenderTarget("screenshot", surfaceFormat, vk::ImageUsageFlagBits::eTransferSrc | vk::ImageUsageFlagBits::eTransferDst, false);

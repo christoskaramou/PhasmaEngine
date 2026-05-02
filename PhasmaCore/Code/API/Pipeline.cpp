@@ -3,6 +3,7 @@
 #include "API/Command.h"
 #include "API/Descriptor.h"
 #include "API/RHI.h"
+#include "API/Vulkan/RHI_Vulkan.h"
 #include "API/RenderPass.h"
 #include "API/Shader.h"
 #include "API/Vulkan/VulkanDescriptorImpl.h"
@@ -523,19 +524,19 @@ namespace pe
     {
         if (m_layout)
         {
-            RHII.GetDevice().destroyPipelineLayout(m_layout);
+            VulkanRhi::Device().destroyPipelineLayout(m_layout);
             m_layout = vk::PipelineLayout{};
         }
 
         if (m_apiHandle)
         {
-            RHII.GetDevice().destroyPipeline(m_apiHandle);
+            VulkanRhi::Device().destroyPipeline(m_apiHandle);
             m_apiHandle = vk::Pipeline{};
         }
 
         if (m_cache)
         {
-            RHII.GetDevice().destroyPipelineCache(m_cache);
+            VulkanRhi::Device().destroyPipelineCache(m_cache);
             m_cache = vk::PipelineCache{};
         }
 
@@ -580,20 +581,20 @@ namespace pe
         plci.pushConstantRangeCount = pcr.size ? 1 : 0;
         plci.pPushConstantRanges = pcr.size ? &pcr : nullptr;
 
-        vk::ShaderModule module = RHII.GetDevice().createShaderModule(csmci);
+        vk::ShaderModule module = VulkanRhi::Device().createShaderModule(csmci);
         vk::ComputePipelineCreateInfo compinfo{};
         compinfo.stage.module = module;
         compinfo.stage.pName = m_info.pCompShader->GetEntryName().c_str();
         compinfo.stage.stage = vk::ShaderStageFlagBits::eCompute;
 
-        m_layout = RHII.GetDevice().createPipelineLayout(plci);
+        m_layout = VulkanRhi::Device().createPipelineLayout(plci);
         compinfo.layout = m_layout;
 
-        auto result = RHII.GetDevice().createComputePipeline(m_cache, compinfo);
+        auto result = VulkanRhi::Device().createComputePipeline(m_cache, compinfo);
         PE_ERROR_IF(result.result != vk::Result::eSuccess, "Failed to create compute pipeline!");
         m_apiHandle = result.value;
 
-        RHII.GetDevice().destroyShaderModule(module);
+        VulkanRhi::Device().destroyShaderModule(module);
 
         Debug::SetObjectName(m_apiHandle, m_info.name);
     }
@@ -618,7 +619,7 @@ namespace pe
             vk::ShaderModuleCreateInfo smci{};
             smci.codeSize = GetVulkanShaderSpirvSizeBytes(m_info.pVertShader);
             smci.pCode = GetVulkanShaderSpirv(m_info.pVertShader);
-            vertModule = RHII.GetDevice().createShaderModule(smci);
+            vertModule = VulkanRhi::Device().createShaderModule(smci);
 
             vk::PipelineShaderStageCreateInfo pssci{};
             pssci.stage = vk::ShaderStageFlagBits::eVertex;
@@ -631,7 +632,7 @@ namespace pe
             vk::ShaderModuleCreateInfo smci{};
             smci.codeSize = GetVulkanShaderSpirvSizeBytes(m_info.pFragShader);
             smci.pCode = GetVulkanShaderSpirv(m_info.pFragShader);
-            fragModule = RHII.GetDevice().createShaderModule(smci);
+            fragModule = VulkanRhi::Device().createShaderModule(smci);
 
             vk::PipelineShaderStageCreateInfo pssci{};
             pssci.stage = vk::ShaderStageFlagBits::eFragment;
@@ -823,7 +824,7 @@ namespace pe
         plci.pSetLayouts = layouts.data();
         plci.pushConstantRangeCount = static_cast<uint32_t>(pcrs.size());
         plci.pPushConstantRanges = pcrs.data();
-        pipeinfo.layout = RHII.GetDevice().createPipelineLayout(plci);
+        pipeinfo.layout = VulkanRhi::Device().createPipelineLayout(plci);
         m_layout = pipeinfo.layout;
 
         // Render Pass
@@ -865,16 +866,16 @@ namespace pe
         vk::PipelineCacheCreateInfo cacheInfo{};
         cacheInfo.pInitialData = nullptr;
         cacheInfo.initialDataSize = 0;
-        m_cache = RHII.GetDevice().createPipelineCache(cacheInfo);
+        m_cache = VulkanRhi::Device().createPipelineCache(cacheInfo);
 
-        auto result = RHII.GetDevice().createGraphicsPipeline(m_cache, pipeinfo);
+        auto result = VulkanRhi::Device().createGraphicsPipeline(m_cache, pipeinfo);
         PE_ERROR_IF(result.result != vk::Result::eSuccess, "Failed to create graphics pipeline!");
         m_apiHandle = result.value;
 
         if (vertModule)
-            RHII.GetDevice().destroyShaderModule(vertModule);
+            VulkanRhi::Device().destroyShaderModule(vertModule);
         if (fragModule)
-            RHII.GetDevice().destroyShaderModule(fragModule);
+            VulkanRhi::Device().destroyShaderModule(fragModule);
 
         Debug::SetObjectName(m_apiHandle, m_info.name);
     }
@@ -896,7 +897,7 @@ namespace pe
         {
             vk::PipelineShaderStageCreateInfo stage{};
             stage.stage = vk::ShaderStageFlagBits::eRaygenKHR;
-            stage.module = RHII.GetDevice().createShaderModule({{}, GetVulkanShaderSpirvSizeBytes(m_info.acceleration.rayGen), GetVulkanShaderSpirv(m_info.acceleration.rayGen)});
+            stage.module = VulkanRhi::Device().createShaderModule({{}, GetVulkanShaderSpirvSizeBytes(m_info.acceleration.rayGen), GetVulkanShaderSpirv(m_info.acceleration.rayGen)});
             stage.pName = m_info.acceleration.rayGen->GetEntryName().c_str();
             stages.push_back(stage);
             tempModules.push_back(stage.module);
@@ -915,7 +916,7 @@ namespace pe
         {
             vk::PipelineShaderStageCreateInfo stage{};
             stage.stage = vk::ShaderStageFlagBits::eMissKHR;
-            stage.module = RHII.GetDevice().createShaderModule({{}, GetVulkanShaderSpirvSizeBytes(shader), GetVulkanShaderSpirv(shader)});
+            stage.module = VulkanRhi::Device().createShaderModule({{}, GetVulkanShaderSpirvSizeBytes(shader), GetVulkanShaderSpirv(shader)});
             stage.pName = shader->GetEntryName().c_str();
             stages.push_back(stage);
             tempModules.push_back(stage.module);
@@ -943,7 +944,7 @@ namespace pe
             {
                 vk::PipelineShaderStageCreateInfo stage{};
                 stage.stage = vk::ShaderStageFlagBits::eClosestHitKHR;
-                stage.module = RHII.GetDevice().createShaderModule({{}, GetVulkanShaderSpirvSizeBytes(hg.closestHit), GetVulkanShaderSpirv(hg.closestHit)});
+                stage.module = VulkanRhi::Device().createShaderModule({{}, GetVulkanShaderSpirvSizeBytes(hg.closestHit), GetVulkanShaderSpirv(hg.closestHit)});
                 stage.pName = hg.closestHit->GetEntryName().c_str();
                 stages.push_back(stage);
                 tempModules.push_back(stage.module);
@@ -953,7 +954,7 @@ namespace pe
             {
                 vk::PipelineShaderStageCreateInfo stage{};
                 stage.stage = vk::ShaderStageFlagBits::eAnyHitKHR;
-                stage.module = RHII.GetDevice().createShaderModule({{}, GetVulkanShaderSpirvSizeBytes(hg.anyHit), GetVulkanShaderSpirv(hg.anyHit)});
+                stage.module = VulkanRhi::Device().createShaderModule({{}, GetVulkanShaderSpirvSizeBytes(hg.anyHit), GetVulkanShaderSpirv(hg.anyHit)});
                 stage.pName = hg.anyHit->GetEntryName().c_str();
                 stages.push_back(stage);
                 tempModules.push_back(stage.module);
@@ -1016,7 +1017,7 @@ namespace pe
         layoutInfo.pSetLayouts = layouts.data();
         layoutInfo.pushConstantRangeCount = static_cast<uint32_t>(pcrs.size());
         layoutInfo.pPushConstantRanges = pcrs.data();
-        m_layout = RHII.GetDevice().createPipelineLayout(layoutInfo);
+        m_layout = VulkanRhi::Device().createPipelineLayout(layoutInfo);
 
         vk::RayTracingPipelineCreateInfoKHR pipelineInfo{};
         pipelineInfo.stageCount = static_cast<uint32_t>(stages.size());
@@ -1026,7 +1027,7 @@ namespace pe
         pipelineInfo.maxPipelineRayRecursionDepth = m_info.acceleration.maxRecursionDepth;
         pipelineInfo.layout = m_layout;
 
-        auto result = RHII.GetDevice().createRayTracingPipelineKHR(nullptr, nullptr, pipelineInfo);
+        auto result = VulkanRhi::Device().createRayTracingPipelineKHR(nullptr, nullptr, pipelineInfo);
         PE_ERROR_IF(result.result != vk::Result::eSuccess, "Failed to create Ray Tracing pipeline!");
         m_apiHandle = result.value;
 
@@ -1037,7 +1038,7 @@ namespace pe
         CreateSBT();
 
         for (auto &m : tempModules)
-            RHII.GetDevice().destroyShaderModule(m);
+            VulkanRhi::Device().destroyShaderModule(m);
 
         Debug::SetObjectName(m_apiHandle, m_info.name);
     }
@@ -1047,7 +1048,7 @@ namespace pe
         vk::PhysicalDeviceRayTracingPipelinePropertiesKHR rtProps{};
         vk::PhysicalDeviceProperties2 props2{};
         props2.pNext = &rtProps;
-        RHII.GetGpu().getProperties2(&props2);
+        VulkanRhi::Gpu().getProperties2(&props2);
 
         uint32_t handleSize = rtProps.shaderGroupHandleSize;
         uint32_t handleAlignment = rtProps.shaderGroupHandleAlignment;
@@ -1087,7 +1088,7 @@ namespace pe
         m_missRegion.deviceAddress = m_rgenRegion.deviceAddress + m_rgenRegion.size;
         m_hitRegion.deviceAddress = m_missRegion.deviceAddress + m_missRegion.size;
 
-        std::vector<uint8_t> handles = RHII.GetDevice().getRayTracingShaderGroupHandlesKHR<uint8_t>(m_apiHandle, 0, groupCount, groupCount * handleSize);
+        std::vector<uint8_t> handles = VulkanRhi::Device().getRayTracingShaderGroupHandlesKHR<uint8_t>(m_apiHandle, 0, groupCount, groupCount * handleSize);
 
         m_sbtBuffer->Map();
         auto *data = static_cast<uint8_t *>(m_sbtBuffer->Data());

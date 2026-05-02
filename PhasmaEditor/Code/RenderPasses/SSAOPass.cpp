@@ -2,6 +2,7 @@
 #include "API/Command.h"
 #include "API/Image.h"
 #include "API/RHI.h"
+#include "API/Vulkan/RHI_Vulkan.h"
 #include "API/Vulkan/VulkanImageImpl.h"
 #include "API/Vulkan/VulkanImageViewImpl.h"
 #include "CACAO/ffx_cacao_impl.h"
@@ -25,8 +26,8 @@ namespace pe
             m_context = (FFX_CACAO_VkContext *)malloc(ffxCacaoContextSize);
             assert(m_context);
             FFX_CACAO_VkCreateInfo info = {};
-            info.physicalDevice = RHII.GetGpu();
-            info.device = RHII.GetDevice();
+            info.physicalDevice = VulkanRhi::Gpu();
+            info.device = VulkanRhi::Device();
             info.flags = FFX_CACAO_VK_CREATE_USE_DEBUG_MARKERS | FFX_CACAO_VK_CREATE_NAME_OBJECTS; // | FFX_CACAO_VK_CREATE_USE_16_BIT;
             PE_CHECK(FFX_CACAO_VkInitContext(m_context, &info));
 
