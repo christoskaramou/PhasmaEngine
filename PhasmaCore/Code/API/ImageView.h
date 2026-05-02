@@ -36,6 +36,7 @@ namespace pe
 
     private:
         friend struct VulkanImageViewImpl;
+        friend struct Dx12ImageViewImpl;
 
         ImageView(Image *parent, const ImageViewDesc &desc, const std::string &name);
         ImageView(Image *parent, const ImageViewDesc &desc, const std::string &name, bool deferImpl);

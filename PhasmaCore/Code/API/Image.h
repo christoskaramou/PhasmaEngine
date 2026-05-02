@@ -132,6 +132,7 @@ namespace pe
         friend class Swapchain;
         friend struct VulkanImageImpl;
         friend struct VulkanSwapchainImpl;
+        friend struct Dx12ImageImpl;
 
         Image(const ImageDesc &desc);
         static void Barrier(CommandBuffer *cmd, const ImageBarrierInfo &info);

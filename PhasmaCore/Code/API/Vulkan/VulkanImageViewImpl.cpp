@@ -4,6 +4,9 @@
 #include "API/RHI.h"
 #include "API/Vulkan/RHI_Vulkan.h"
 #include "API/Vulkan/VulkanImageImpl.h"
+#if defined(PE_WIN32)
+#include "API/DX12/Dx12ImageViewImpl.h"
+#endif
 
 namespace pe
 {
@@ -143,6 +146,10 @@ namespace pe
 
     ImageView::Impl *CreateImageViewImpl(ImageView *owner, const ImageViewDesc &desc)
     {
+#if defined(PE_WIN32)
+        if (RHII.GetApi() == PE_GRAPHICS_API_DX12)
+            return new Dx12ImageViewImpl(owner, desc, Dx12ImageViewKind::Srv);
+#endif
         return new VulkanImageViewImpl(owner, desc);
     }
 } // namespace pe

@@ -9,6 +9,9 @@
 #include "API/Vulkan/VulkanBufferImpl.h"
 #include "API/Vulkan/VulkanImageViewImpl.h"
 #include "API/Vulkan/VulkanRHITypeUtils.h"
+#if defined(PE_WIN32)
+#include "API/DX12/Dx12ImageImpl.h"
+#endif
 
 namespace pe
 {
@@ -791,6 +794,10 @@ namespace pe
 
     Image::Impl *CreateImageImpl(Image *owner, const ImageDesc &desc)
     {
+#if defined(PE_WIN32)
+        if (RHII.GetApi() == PE_GRAPHICS_API_DX12)
+            return new Dx12ImageImpl(owner, desc);
+#endif
         return new VulkanImageImpl(owner, desc);
     }
 
@@ -801,6 +808,13 @@ namespace pe
 
     void Image_Barrier_Backend(CommandBuffer *cmd, const ImageBarrierInfo &info)
     {
+#if defined(PE_WIN32)
+        if (RHII.GetApi() == PE_GRAPHICS_API_DX12)
+        {
+            PE_ERROR("Image::Barrier waits for the DX12 CommandBuffer slice");
+            return;
+        }
+#endif
         PE_ERROR_IF(!info.image, "Image::Barrier: no image specified.");
         Image &image = *info.image;
         VulkanImageImpl *impl = VulkanImageImpl::From(&image);
@@ -853,6 +867,13 @@ namespace pe
 
     void Image_Barriers_Backend(CommandBuffer *cmd, const std::vector<ImageBarrierInfo> &infos)
     {
+#if defined(PE_WIN32)
+        if (RHII.GetApi() == PE_GRAPHICS_API_DX12)
+        {
+            PE_ERROR("Image::Barriers waits for the DX12 CommandBuffer slice");
+            return;
+        }
+#endif
         if (infos.empty())
             return;
 
