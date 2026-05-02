@@ -1,5 +1,6 @@
 #include "API/RHI.h"
 #include "API/RHI_Internal.h"
+#include "API/Vulkan/VulkanImageImpl.h"
 #include "API/Vulkan/VulkanRhiImpl.h"
 #ifdef PE_TRACY
 #include <tracy/TracyVulkan.hpp>
@@ -867,7 +868,12 @@ namespace pe
         m_descriptorPool = DescriptorPool::Create(descPoolsizes, "RHI_descriptor_pool", maxDescriptorSets);
     }
 
-    vk::Format RHI::GetDepthFormat()
+    ::PeFormat RHI::GetDepthFormat()
+    {
+        return FromVkFormat(GetDepthFormatVk());
+    }
+
+    vk::Format RHI::GetDepthFormatVk()
     {
         static vk::Format depthFormat = vk::Format::eUndefined;
 

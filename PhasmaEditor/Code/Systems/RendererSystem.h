@@ -96,16 +96,16 @@ namespace pe
         void ToggleGUI() { m_gui.ToggleRender(); }
 
         Image *CreateRenderTarget(const std::string &name,
-                                  vk::Format format,
-                                  vk::ImageUsageFlags usage = {},
+                                  ::PeFormat format,
+                                  PeImageUsageFlags usage = PE_IMAGE_USAGE_NONE,
                                   bool useRenderTergetScale = true,
                                   bool useMips = false,
                                   vec4 clearColor = Color::Transparent);
         Image *GetRenderTarget(const std::string &name);
         Image *GetRenderTarget(size_t hash);
         Image *CreateDepthStencilTarget(const std::string &name,
-                                        vk::Format format,
-                                        vk::ImageUsageFlags usage = {},
+                                        ::PeFormat format,
+                                        PeImageUsageFlags usage = PE_IMAGE_USAGE_NONE,
                                         bool useRenderTergetScale = true,
                                         float clearDepth = Color::Depth,
                                         uint32_t clearStencil = Color::Stencil);
@@ -136,7 +136,7 @@ namespace pe
     protected:
         void LoadResources(CommandBuffer *cmd);
         CommandBuffer *RecordPasses(uint32_t imageIndex);
-        void Upsample(CommandBuffer *cmd, vk::Filter filter);
+        void Upsample(CommandBuffer *cmd, PeFilter filter);
         void CreateRenderTargets();
         RenderGraph m_renderGraph;
 

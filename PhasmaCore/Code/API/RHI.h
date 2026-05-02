@@ -142,11 +142,13 @@ namespace pe
         float GetWidthf() const;
         float GetHeightf() const;
 
+        ::PeFormat GetDepthFormat();
+
     private:
         RHI() = default;
 
         friend struct VulkanRhi;
-        vk::Format GetDepthFormat();
+        vk::Format GetDepthFormatVk();
 
         vk::Instance m_instance;
         vk::PhysicalDevice m_gpu;

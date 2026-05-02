@@ -2,7 +2,6 @@
 #include "API/Descriptor.h"
 #include "API/Queue.h"
 #include "API/RHI.h"
-#include "API/Vulkan/RHI_Vulkan.h"
 #include "API/Surface.h"
 #include "API/Swapchain.h"
 
@@ -48,9 +47,9 @@ namespace pe
                     return RHII.IsDeviceExtensionValid(name.c_str());
                 });
 
-                // GetDepthFormat
+                // GetDepthFormat (returns neutral PeFormat enum value)
                 rhi.set_function("get_depth_format", []() -> int {
-                    return static_cast<int>(VulkanRhi::DepthFormat());
+                    return static_cast<int>(RHII.GetDepthFormat());
                 });
 
                 // WaitDeviceIdle

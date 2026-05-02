@@ -8,6 +8,7 @@
 #include "API/Framebuffer.h"
 #include "API/Image.h"
 #include "API/Vulkan/VulkanImageImpl.h"
+#include "API/Vulkan/VulkanSamplerImpl.h"
 #include "API/Queue.h"
 #include "API/RHI.h"
 #include "API/Vulkan/RHI_Vulkan.h"
@@ -356,7 +357,7 @@ namespace pe
         addPass(RenderGraphPassId::Sharpen, 1400, "Sharpen", m_sharpenPass);
         m_renderGraph.AddPass(static_cast<RenderGraph::PassID>(RenderGraphPassId::Upsample), 1500, "Upsample", isPassEnabled(RenderGraphPassId::Upsample),
                               [this](CommandBuffer *cmd)
-                              { Upsample(cmd, vk::Filter::eLinear); });
+                              { Upsample(cmd, PE_FILTER_LINEAR); });
         addPass(RenderGraphPassId::Tonemap, 1600, "Tonemap", m_tonemapPass);
         addPass(RenderGraphPassId::BloomBF, 1700, "BloomBF", m_bloomBrightFilterPass);
         addPass(RenderGraphPassId::BloomH, 1800, "BloomH", m_bloomGaussianBlurHorizontalPass);
@@ -585,7 +586,7 @@ namespace pe
         Buffer::Destroy(m_screenshotBuffer);
     }
 
-    void RendererSystem::Upsample(CommandBuffer *cmd, vk::Filter filter)
+    void RendererSystem::Upsample(CommandBuffer *cmd, PeFilter filter)
     {
         vk::ImageBlit region{};
         region.srcOffsets[0] = vk::Offset3D{0, 0, 0};
@@ -597,12 +598,12 @@ namespace pe
         region.dstSubresource.aspectMask = VulkanHelpers::GetAspectMask(pe::ToVkFormat(m_displayRT->GetFormat()));
         region.dstSubresource.layerCount = 1;
 
-        cmd->BlitImage(m_viewportRT, m_displayRT, region, filter);
+        cmd->BlitImage(m_viewportRT, m_displayRT, region, pe::ToVkFilter(filter));
     }
 
     Image *RendererSystem::CreateRenderTarget(const std::string &name,
-                                              vk::Format format,
-                                              vk::ImageUsageFlags usage,
+                                              ::PeFormat format,
+                                              PeImageUsageFlags usage,
                                               bool useRenderTergetScale,
                                               bool useMips,
                                               vec4 clearColor)
@@ -614,10 +615,10 @@ namespace pe
         uint32_t heigth = static_cast<uint32_t>(RHII.GetHeightf() * rtScale);
 
         ImageDesc desc{};
-        desc.format = pe::FromVkFormat(format);
+        desc.format = format;
         desc.width = width;
         desc.height = heigth;
-        desc.usage = pe::FromVkImageUsage(usage | vk::ImageUsageFlagBits::eColorAttachment | vk::ImageUsageFlagBits::eSampled | vk::ImageUsageFlagBits::eStorage | vk::ImageUsageFlagBits::eTransferDst);
+        desc.usage = usage | PE_IMAGE_USAGE_COLOR_ATTACHMENT | PE_IMAGE_USAGE_SAMPLED | PE_IMAGE_USAGE_STORAGE | PE_IMAGE_USAGE_TRANSFER_DST;
         if (useMips)
             desc.mipLevels = static_cast<uint32_t>(std::floor(std::log2(width > heigth ? width : heigth))) + 1;
         desc.name = name;
@@ -640,8 +641,8 @@ namespace pe
     }
 
     Image *RendererSystem::CreateDepthStencilTarget(const std::string &name,
-                                                    vk::Format format,
-                                                    vk::ImageUsageFlags usage,
+                                                    ::PeFormat format,
+                                                    PeImageUsageFlags usage,
                                                     bool useRenderTergetScale,
                                                     float clearDepth,
                                                     uint32_t clearStencil)
@@ -652,8 +653,8 @@ namespace pe
         ImageDesc desc{};
         desc.width = static_cast<uint32_t>(RHII.GetWidthf() * rtScale);
         desc.height = static_cast<uint32_t>(RHII.GetHeightf() * rtScale);
-        desc.usage = pe::FromVkImageUsage(usage | vk::ImageUsageFlagBits::eDepthStencilAttachment | vk::ImageUsageFlagBits::eSampled | vk::ImageUsageFlagBits::eTransferDst);
-        desc.format = pe::FromVkFormat(format);
+        desc.usage = usage | PE_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT | PE_IMAGE_USAGE_SAMPLED | PE_IMAGE_USAGE_TRANSFER_DST;
+        desc.format = format;
         desc.name = name;
         Image *depth = Image::Create(desc);
         depth->SetClearColor(vec4(clearDepth, static_cast<float>(clearStencil), 0.f, 0.f));
@@ -747,22 +748,22 @@ namespace pe
 
         Settings::Get<GlobalSettings>().rendering_images.clear();
 
-        vk::Format surfaceFormat = RHII.GetSurface()->GetFormat();
-        m_depthStencil = CreateDepthStencilTarget("depthStencil", VulkanRhi::DepthFormat(), vk::ImageUsageFlagBits::eTransferDst);
-        m_viewportRT = CreateRenderTarget("viewport", surfaceFormat, vk::ImageUsageFlagBits::eTransferSrc | vk::ImageUsageFlagBits::eTransferDst);
-        m_displayRT = CreateRenderTarget("display", surfaceFormat, vk::ImageUsageFlagBits::eTransferSrc | vk::ImageUsageFlagBits::eTransferDst, false);
-        m_screenshotRT = CreateRenderTarget("screenshot", surfaceFormat, vk::ImageUsageFlagBits::eTransferSrc | vk::ImageUsageFlagBits::eTransferDst, false);
-        CreateRenderTarget("normal", vk::Format::eR16G16B16A16Sfloat);
+        ::PeFormat surfaceFormat = pe::FromVkFormat(RHII.GetSurface()->GetFormat());
+        m_depthStencil = CreateDepthStencilTarget("depthStencil", RHII.GetDepthFormat(), PE_IMAGE_USAGE_TRANSFER_DST);
+        m_viewportRT = CreateRenderTarget("viewport", surfaceFormat, PE_IMAGE_USAGE_TRANSFER_SRC | PE_IMAGE_USAGE_TRANSFER_DST);
+        m_displayRT = CreateRenderTarget("display", surfaceFormat, PE_IMAGE_USAGE_TRANSFER_SRC | PE_IMAGE_USAGE_TRANSFER_DST, false);
+        m_screenshotRT = CreateRenderTarget("screenshot", surfaceFormat, PE_IMAGE_USAGE_TRANSFER_SRC | PE_IMAGE_USAGE_TRANSFER_DST, false);
+        CreateRenderTarget("normal", PE_FORMAT_R16G16B16A16_SFLOAT);
         CreateRenderTarget("albedo", surfaceFormat);
         CreateRenderTarget("srm", surfaceFormat); // Specular Roughness Metallic
-        CreateRenderTarget("ssao", vk::Format::eR8Unorm);
+        CreateRenderTarget("ssao", PE_FORMAT_R8_UNORM);
         CreateRenderTarget("ssr", surfaceFormat);
-        CreateRenderTarget("velocity", vk::Format::eR16G16Sfloat);
+        CreateRenderTarget("velocity", PE_FORMAT_R16G16_SFLOAT);
         CreateRenderTarget("emissive", surfaceFormat);
-        CreateRenderTarget("brightFilter", surfaceFormat, {}, false);
-        CreateRenderTarget("gaussianBlurHorizontal", surfaceFormat, {}, false);
-        CreateRenderTarget("gaussianBlurVertical", surfaceFormat, {}, false);
-        CreateRenderTarget("transparency", vk::Format::eR8Unorm, {}, true, false, Color::Black);
+        CreateRenderTarget("brightFilter", surfaceFormat, PE_IMAGE_USAGE_NONE, false);
+        CreateRenderTarget("gaussianBlurHorizontal", surfaceFormat, PE_IMAGE_USAGE_NONE, false);
+        CreateRenderTarget("gaussianBlurVertical", surfaceFormat, PE_IMAGE_USAGE_NONE, false);
+        CreateRenderTarget("transparency", PE_FORMAT_R8_UNORM, PE_IMAGE_USAGE_NONE, true, false, Color::Black);
     }
 
     void RendererSystem::Resize(uint32_t width, uint32_t height)
@@ -804,8 +805,8 @@ namespace pe
         barrier.accessMask = PE_ACCESS_NONE;
 
         // with 1:1 ratio we can use nearest filter
-        vk::Filter filter = src->GetWidth() == swapchainImage->GetWidth() && src->GetHeight() == swapchainImage->GetHeight() ? vk::Filter::eNearest : vk::Filter::eLinear;
-        cmd->BlitImage(src, swapchainImage, region, filter);
+        PeFilter filter = src->GetWidth() == swapchainImage->GetWidth() && src->GetHeight() == swapchainImage->GetHeight() ? PE_FILTER_NEAREST : PE_FILTER_LINEAR;
+        cmd->BlitImage(src, swapchainImage, region, pe::ToVkFilter(filter));
         cmd->ImageBarrier(barrier);
     }
 

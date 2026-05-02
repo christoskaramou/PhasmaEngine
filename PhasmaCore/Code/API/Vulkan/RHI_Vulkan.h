@@ -12,7 +12,7 @@ namespace pe
         static vk::PhysicalDevice Gpu() { return RHII.m_gpu; }
         static vk::Device Device() { return RHII.m_device; }
         static VmaAllocator Allocator() { return RHII.m_allocator; }
-        static vk::Format DepthFormat() { return RHII.GetDepthFormat(); }
+        static vk::Format DepthFormat() { return RHII.GetDepthFormatVk(); }
 #ifdef PE_TRACY
         static TracyVkCtx TracyContext() { return RHII.m_tracyVkCtx; }
 #endif
