@@ -103,6 +103,33 @@ int main(int argc, char *argv[])
 {
     pe::Log::Init();
 
+    PeGraphicsApi api = PE_GRAPHICS_API_VULKAN;
+    for (int i = 1; i < argc; ++i)
+    {
+        if (std::strcmp(argv[i], "--api") == 0 && i + 1 < argc)
+        {
+            const char *apiArg = argv[++i];
+            if (std::strcmp(apiArg, "vulkan") == 0)
+            {
+                api = PE_GRAPHICS_API_VULKAN;
+            }
+            else if (std::strcmp(apiArg, "dx12") == 0)
+            {
+#if defined(PE_WIN32)
+                api = PE_GRAPHICS_API_DX12;
+#else
+                PE_ERROR("DX12 backend is Windows-only; use --api vulkan");
+                return 1;
+#endif
+            }
+            else
+            {
+                PE_ERROR("Unknown --api value: %s (expected: vulkan, dx12)", apiArg);
+                return 1;
+            }
+        }
+    }
+
     // SDL and Vulkan device live here — they survive module reloads.
     if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_EVENTS) < 0)
     {
@@ -121,7 +148,7 @@ int main(int argc, char *argv[])
         return 1;
     }
 
-    pe::RHII.Init(sdlWindow);
+    pe::RHII.Init(sdlWindow, api);
 
     ModuleHandle mod = LoadModule();
     if (!mod.lib)

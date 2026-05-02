@@ -357,7 +357,12 @@ namespace pe
 
     void RHI::Init(SDL_Window *window, PeGraphicsApi api)
     {
-        PE_ERROR_IF(api != PE_GRAPHICS_API_VULKAN, "RHI::Init: only PE_GRAPHICS_API_VULKAN is implemented in Phase 0");
+        if (api == PE_GRAPHICS_API_DX12)
+        {
+            PE_ERROR("RHI::Init: DX12 backend not yet implemented (Phase 1 in progress)");
+            return;
+        }
+        PE_ERROR_IF(api != PE_GRAPHICS_API_VULKAN, "RHI::Init: unsupported graphics api enum %u", static_cast<uint32_t>(api));
         m_api = api;
         m_impl = new VulkanRhiImpl();
         m_window = window;

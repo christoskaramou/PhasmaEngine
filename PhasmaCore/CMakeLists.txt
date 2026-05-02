@@ -38,6 +38,7 @@ endif()
 file(GLOB_RECURSE BASE_SOURCES CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/Code/Base/*.cpp")
 file(GLOB_RECURSE ECS_SOURCES CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/Code/ECS/*.cpp")
 file(GLOB_RECURSE API_SOURCES CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/Code/API/*.cpp")
+list(FILTER API_SOURCES EXCLUDE REGEX "/Code/API/DX12/") # Windows-only — added below under if(WIN32)
 file(GLOB_RECURSE VMA_SOURCES CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/third_party/vma/*.cpp")
 
 # Build PhasmaCore as a shared library for runtime loading from PhasmaEditor.
@@ -91,6 +92,23 @@ target_include_directories(PhasmaCore PUBLIC
     ${CMAKE_CURRENT_SOURCE_DIR}/third_party/meshoptimizer
     ${CMAKE_CURRENT_SOURCE_DIR}/third_party/zlib
 )
+
+# DX12 backend (Windows-only). PRIVATE include scope on D3D12MA — DX12 SDK headers must not leak to consumers.
+if(WIN32)
+    target_include_directories(PhasmaCore PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}/third_party/D3D12MA
+    )
+
+    file(GLOB_RECURSE PHASMACORE_DX12_SOURCES CONFIGURE_DEPENDS
+        ${CMAKE_CURRENT_SOURCE_DIR}/Code/API/DX12/*.cpp
+        ${CMAKE_CURRENT_SOURCE_DIR}/Code/API/DX12/*.h
+    )
+    target_sources(PhasmaCore PRIVATE
+        ${PHASMACORE_DX12_SOURCES}
+        ${CMAKE_CURRENT_SOURCE_DIR}/third_party/D3D12MA/D3D12MemAlloc.cpp
+    )
+    target_link_libraries(PhasmaCore PUBLIC d3d12.lib dxgi.lib dxguid.lib)
+endif()
 
 # Link directories
 # cannot find this when running from main CMakeLists.txt
