@@ -103,93 +103,105 @@ int main(int argc, char *argv[])
 {
     pe::Log::Init();
 
-    PeGraphicsApi api = PE_GRAPHICS_API_VULKAN;
-    for (int i = 1; i < argc; ++i)
+    try
     {
-        if (std::strcmp(argv[i], "--api") == 0 && i + 1 < argc)
+        PeGraphicsApi api = PE_GRAPHICS_API_VULKAN;
+        for (int i = 1; i < argc; ++i)
         {
-            const char *apiArg = argv[++i];
-            if (std::strcmp(apiArg, "vulkan") == 0)
+            if (std::strcmp(argv[i], "--api") == 0 && i + 1 < argc)
             {
-                api = PE_GRAPHICS_API_VULKAN;
-            }
-            else if (std::strcmp(apiArg, "dx12") == 0)
-            {
+                const char *apiArg = argv[++i];
+                if (std::strcmp(apiArg, "vulkan") == 0)
+                {
+                    api = PE_GRAPHICS_API_VULKAN;
+                }
+                else if (std::strcmp(apiArg, "dx12") == 0)
+                {
 #if defined(PE_WIN32)
-                api = PE_GRAPHICS_API_DX12;
+                    api = PE_GRAPHICS_API_DX12;
 #else
-                PE_ERROR("DX12 backend is Windows-only; use --api vulkan");
-                return 1;
+                    PE_ERROR("DX12 backend is Windows-only; use --api vulkan");
+                    return 1;
 #endif
-            }
-            else
-            {
-                PE_ERROR("Unknown --api value: %s (expected: vulkan, dx12)", apiArg);
-                return 1;
+                }
+                else
+                {
+                    PE_ERROR("Unknown --api value: %s (expected: vulkan, dx12)", apiArg);
+                    return 1;
+                }
             }
         }
-    }
 
-    // SDL and Vulkan device live here — they survive module reloads.
-    if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_EVENTS) < 0)
-    {
-        PE_ERROR("[SDL] %s", SDL_GetError());
-        return 1;
-    }
+        // SDL and graphics device live here — they survive module reloads.
+        if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_EVENTS) < 0)
+        {
+            PE_ERROR("[SDL] %s", SDL_GetError());
+            return 1;
+        }
 
-    SDL_DisplayMode dm;
-    SDL_GetDesktopDisplayMode(0, &dm);
-    uint32_t windowFlags = SDL_WINDOW_HIDDEN | SDL_WINDOW_RESIZABLE | SDL_WINDOW_ALLOW_HIGHDPI;
-    if (api == PE_GRAPHICS_API_VULKAN)
-        windowFlags |= SDL_WINDOW_VULKAN;
-    SDL_Window *sdlWindow = SDL_CreateWindow("PhasmaEditor", 100, 100, dm.w - 100, dm.h - 100, windowFlags);
-    if (!sdlWindow)
-    {
-        PE_ERROR("[SDL] %s", SDL_GetError());
-        SDL_Quit();
-        return 1;
-    }
+        SDL_DisplayMode dm;
+        SDL_GetDesktopDisplayMode(0, &dm);
+        uint32_t windowFlags = SDL_WINDOW_HIDDEN | SDL_WINDOW_RESIZABLE | SDL_WINDOW_ALLOW_HIGHDPI;
+        if (api == PE_GRAPHICS_API_VULKAN)
+            windowFlags |= SDL_WINDOW_VULKAN;
+        SDL_Window *sdlWindow = SDL_CreateWindow("PhasmaEditor", 100, 100, dm.w - 100, dm.h - 100, windowFlags);
+        if (!sdlWindow)
+        {
+            PE_ERROR("[SDL] %s", SDL_GetError());
+            SDL_Quit();
+            return 1;
+        }
 
-    pe::RHII.Init(sdlWindow, api);
+        pe::RHII.Init(sdlWindow, api);
 
-    ModuleHandle mod = LoadModule();
-    if (!mod.lib)
-    {
+        ModuleHandle mod = LoadModule();
+        if (!mod.lib)
+        {
+            pe::RHII.Destroy();
+            SDL_DestroyWindow(sdlWindow);
+            SDL_Quit();
+            return 1;
+        }
+
+        while (true)
+        {
+            if (!mod.tick())
+            {
+                mod.destroy();
+                break;
+            }
+
+            pe::EventSystem::QueuedEvent ev;
+            if (pe::EventSystem::PeekAndPop(pe::EventType::ReloadModule, ev))
+            {
+                mod.renderReload(); // drain in-flight frames and show "Reloading..." overlay
+                std::ofstream(pe::Path::Executable + "reload.flag").close();
+                mod.destroy();
+                pe::ThreadPool::FW.WaitIdle();
+                UnloadModule(mod);
+                mod = LoadModule();
+                if (!mod.lib)
+                {
+                    PE_ERROR("Reload failed");
+                    break;
+                }
+            }
+        }
+
+        UnloadModule(mod);
+
         pe::RHII.Destroy();
         SDL_DestroyWindow(sdlWindow);
         SDL_Quit();
-        return 1;
+        return 0;
     }
-
-    while (true)
+    catch (const std::exception &e)
     {
-        if (!mod.tick())
-        {
-            mod.destroy();
-            break;
-        }
-
-        pe::EventSystem::QueuedEvent ev;
-        if (pe::EventSystem::PeekAndPop(pe::EventType::ReloadModule, ev))
-        {
-            mod.renderReload(); // drain in-flight frames and show "Reloading..." overlay
-            std::ofstream(pe::Path::Executable + "reload.flag").close();
-            mod.destroy();
-            pe::ThreadPool::FW.WaitIdle();
-            UnloadModule(mod);
-            mod = LoadModule();
-            if (!mod.lib)
-            {
-                PE_ERROR("Reload failed");
-                break;
-            }
-        }
+        pe::Log::Error(std::string("Unhandled exception in launcher: ") + e.what());
     }
-
-    UnloadModule(mod);
-
-    pe::RHII.Destroy();
-    SDL_DestroyWindow(sdlWindow);
-    SDL_Quit();
-    return 0;
+    catch (...)
+    {
+        pe::Log::Error("Unhandled non-standard exception in launcher");
+    }
+    return 1;
 }

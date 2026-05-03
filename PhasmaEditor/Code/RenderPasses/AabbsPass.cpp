@@ -5,7 +5,6 @@
 #include "API/Pipeline.h"
 #include "API/RHI.h"
 #include "API/Shader.h"
-#include "API/Vulkan/VulkanImageImpl.h"
 #include "Camera/Camera.h"
 #include "Scene/Scene.h"
 #include "ShadowPass.h"
@@ -42,6 +41,8 @@ namespace pe
         m_passInfo->colorBlendAttachments = {BlendState::Default};
         m_passInfo->colorFormats = {m_viewportRT->GetFormat()};
         m_passInfo->depthFormat = m_depthRT->GetFormat();
+        m_passInfo->depthTestEnable = Settings::Get<GlobalSettings>().aabbs_depth_aware;
+        m_passInfo->depthWriteEnable = false;
         m_passInfo->Update();
     }
 

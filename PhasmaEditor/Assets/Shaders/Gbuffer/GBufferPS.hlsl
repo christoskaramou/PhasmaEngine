@@ -4,10 +4,10 @@
 
 [[vk::push_constant]] PushConstants_GBuffer pc;
 [[vk::binding(0, 1)]] StructuredBuffer<Mesh_Constants> constants : register(t0, space1);
-[[vk::binding(1, 1)]] SamplerState material_sampler : register(s0, space1);
-[[vk::binding(3, 1)]] StructuredBuffer<MaterialGpuData> materialTable : register(t1, space1);
-[[vk::binding(4, 1)]] ByteAddressBuffer materialBytes : register(t2, space1);
-[[vk::binding(2, 1)]] Texture2D textures[] : register(t3, space1);
+[[vk::binding(1, 1)]] SamplerState material_sampler : register(s1, space1);
+[[vk::binding(2, 1)]] StructuredBuffer<MaterialGpuData> materialTable : register(t2, space1);
+[[vk::binding(3, 1)]] ByteAddressBuffer materialBytes : register(t3, space1);
+[[vk::binding(4, 1)]] Texture2D textures[] : register(t4, space1);
 
 MaterialGpuData LoadMaterialFromBytes(uint byteOffset)
 {

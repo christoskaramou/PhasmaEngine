@@ -33,7 +33,12 @@ namespace pe
         {
             D3D12_BLEND_DESC desc{};
             desc.AlphaToCoverageEnable = FALSE;
-            desc.IndependentBlendEnable = TRUE;
+            desc.IndependentBlendEnable = info.colorBlendAttachments.size() > 1 ? TRUE : FALSE;
+
+            const D3D12_RENDER_TARGET_BLEND_DESC defaultAttachment =
+                pe_dx12::BlendAttachment(PeBlendAttachmentState{});
+            for (uint32_t i = 0; i < D3D12_SIMULTANEOUS_RENDER_TARGET_COUNT; ++i)
+                desc.RenderTarget[i] = defaultAttachment;
 
             const uint32_t count = std::min<uint32_t>(
                 static_cast<uint32_t>(info.colorBlendAttachments.size()),
@@ -43,10 +48,6 @@ namespace pe
                 BlendState attachment = info.colorBlendAttachments[i];
                 attachment.blendEnable = attachment.blendEnable && info.blendEnable;
                 desc.RenderTarget[i] = pe_dx12::BlendAttachment(attachment);
-            }
-            for (uint32_t i = count; i < D3D12_SIMULTANEOUS_RENDER_TARGET_COUNT; ++i)
-            {
-                desc.RenderTarget[i].RenderTargetWriteMask = D3D12_COLOR_WRITE_ENABLE_ALL;
             }
             return desc;
         }
@@ -147,7 +148,7 @@ namespace pe
         desc.SampleMask = UINT_MAX;
         desc.RasterizerState = MakeRasterizerDesc(info);
         desc.DepthStencilState = MakeDepthStencilDesc(info);
-        desc.InputLayout = {inputElements.data(), static_cast<UINT>(inputElements.size())};
+        desc.InputLayout = {inputElements.empty() ? nullptr : inputElements.data(), static_cast<UINT>(inputElements.size())};
         desc.PrimitiveTopologyType = pe_dx12::TopologyType(info.topology);
         desc.NumRenderTargets = std::min<UINT>(static_cast<UINT>(info.colorFormats.size()), D3D12_SIMULTANEOUS_RENDER_TARGET_COUNT);
         for (UINT i = 0; i < desc.NumRenderTargets; ++i)

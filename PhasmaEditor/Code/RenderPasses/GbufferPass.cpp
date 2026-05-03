@@ -114,9 +114,9 @@ namespace pe
                 Descriptor *setTextures = sets[1];
                 setTextures->SetBuffer(0, scene.GetMeshConstants());
                 setTextures->SetSampler(1, scene.GetDefaultSampler());
-                setTextures->SetImageViews(2, scene.GetImageViews());
-                setTextures->SetBuffer(3, scene.GetMaterialTable());
-                setTextures->SetBuffer(4, scene.GetMaterialByteBuffer());
+                setTextures->SetBuffer(2, scene.GetMaterialTable());
+                setTextures->SetBuffer(3, scene.GetMaterialByteBuffer());
+                setTextures->SetImageViews(4, scene.GetImageViews());
                 setTextures->Update();
             }
         }
@@ -278,9 +278,9 @@ namespace pe
                 Descriptor *setTextures = sets[1];
                 setTextures->SetBuffer(0, scene.GetMeshConstants());
                 setTextures->SetSampler(1, scene.GetDefaultSampler());
-                setTextures->SetImageViews(2, scene.GetImageViews());
-                setTextures->SetBuffer(3, scene.GetMaterialTable());
-                setTextures->SetBuffer(4, scene.GetMaterialByteBuffer());
+                setTextures->SetBuffer(2, scene.GetMaterialTable());
+                setTextures->SetBuffer(3, scene.GetMaterialByteBuffer());
+                setTextures->SetImageViews(4, scene.GetImageViews());
                 setTextures->Update();
             }
         }

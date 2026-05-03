@@ -2,12 +2,25 @@
 #include "../Common/Common.hlsl"
 
 static const int MAX_DATA_SIZE = 2048;
-[[vk::binding(0)]] tbuffer UBO { float4x4 data[MAX_DATA_SIZE]; };
+static const uint MATRIX_SIZE = 64u;
+
+[[vk::binding(0)]] ByteAddressBuffer data;
 TexSamplerDecl(1, 0, Depth)
 
-float4x4 GetViewProjection() { return data[0]; }
-float4x4 GetInvView()        { return data[2]; }
-float4x4 GetInvProjection()  { return data[3]; }
+float4x4 LoadMatrix(uint matrixIndex)
+{
+    uint offset = matrixIndex * MATRIX_SIZE;
+    float4x4 result;
+    result[0] = asfloat(data.Load4(offset + 0 * 16));
+    result[1] = asfloat(data.Load4(offset + 1 * 16));
+    result[2] = asfloat(data.Load4(offset + 2 * 16));
+    result[3] = asfloat(data.Load4(offset + 3 * 16));
+    return result;
+}
+
+float4x4 GetViewProjection() { return LoadMatrix(0); }
+float4x4 GetInvView()        { return LoadMatrix(2); }
+float4x4 GetInvProjection()  { return LoadMatrix(3); }
 
 PS_OUTPUT_Color mainPS(PS_INPUT_UV input)
 {

@@ -5,7 +5,6 @@
 #include "API/Pipeline.h"
 #include "API/RHI.h"
 #include "API/Shader.h"
-#include "API/Vulkan/VulkanImageImpl.h"
 #include "Scene/Scene.h"
 #include "Systems/RendererSystem.h"
 
@@ -22,7 +21,7 @@ namespace pe
         m_attachments.resize(1);
         m_attachments[0] = {};
         m_attachments[0].image = m_viewportRT;
-        m_attachments[0].loadOp = PE_LOAD_OP_LOAD;
+        m_attachments[0].loadOp = RHII.GetApi() == PE_GRAPHICS_API_DX12 ? PE_LOAD_OP_CLEAR : PE_LOAD_OP_LOAD;
         m_attachments[0].storeOp = PE_STORE_OP_STORE;
     }
 
@@ -47,6 +46,8 @@ namespace pe
         m_passInfo->colorBlendAttachments[0].colorBlendOp = PE_BLEND_OP_ADD;
 
         m_passInfo->colorFormats = {m_viewportRT->GetFormat()};
+        m_passInfo->depthTestEnable = false;
+        m_passInfo->depthWriteEnable = false;
 
         m_passInfo->Update();
     }
@@ -60,7 +61,9 @@ namespace pe
     {
         for (uint32_t i = 0; i < RHII.GetSwapchainImageCount(); ++i)
         {
-            auto *DSet = m_passInfo->GetDescriptors(i)[0];
+            const auto &sets = m_passInfo->GetDescriptors(i);
+            PE_ERROR_IF(sets.empty() || !sets[0], "GridPass: descriptor set 0 was not reflected");
+            auto *DSet = sets[0];
             DSet->SetImageView(1, m_depthRT->GetSRV(), m_depthRT->GetSampler());
             DSet->Update();
         }

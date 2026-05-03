@@ -6,7 +6,19 @@ struct VS_OUTPUT_GRID
 };
 
 static const int MAX_DATA_SIZE = 2048;
-[[vk::binding(0)]] tbuffer UBO { float4x4 data[MAX_DATA_SIZE]; };
+static const uint MATRIX_SIZE = 64u;
+[[vk::binding(0)]] ByteAddressBuffer data;
+
+float4x4 LoadMatrix(uint matrixIndex)
+{
+    uint offset = matrixIndex * MATRIX_SIZE;
+    float4x4 result;
+    result[0] = asfloat(data.Load4(offset + 0 * 16));
+    result[1] = asfloat(data.Load4(offset + 1 * 16));
+    result[2] = asfloat(data.Load4(offset + 2 * 16));
+    result[3] = asfloat(data.Load4(offset + 3 * 16));
+    return result;
+}
 
 static const int GRID_HALF_SIZE = 500; // Number of lines in each direction
 static const int GRID_SPACING = 1;     // Units between lines
@@ -18,7 +30,7 @@ VS_OUTPUT_GRID mainVS(uint VertexIndex : SV_VertexID)
     uint linesPerAxis = 2 * GRID_HALF_SIZE + 1;
     uint verticesPerAxis = linesPerAxis * 2;
     
-    float4x4 invView = data[2];
+    float4x4 invView = LoadMatrix(2);
     float3 cameraPos = float3(invView[3][0], invView[3][1], invView[3][2]);
     
     // Snap camera to grid spacing to prevent swimming
@@ -69,7 +81,7 @@ VS_OUTPUT_GRID mainVS(uint VertexIndex : SV_VertexID)
     output.worldPos = pos;
     output.color = color;
     
-    float4x4 viewProj = data[0];
+    float4x4 viewProj = LoadMatrix(0);
     output.position = mul(float4(pos, 1.0), viewProj);
     
     return output;

@@ -137,7 +137,7 @@ namespace pe
         void LoadResources(CommandBuffer *cmd);
         CommandBuffer *RecordPasses(uint32_t imageIndex);
         void Upsample(CommandBuffer *cmd, PeFilter filter);
-        void CreateRenderTargets(bool dx12Task14aOnly = false);
+        void CreateRenderTargets();
         RenderGraph m_renderGraph;
 
         Image *m_displayRT = nullptr;

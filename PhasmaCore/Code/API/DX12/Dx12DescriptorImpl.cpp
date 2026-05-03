@@ -326,8 +326,9 @@ namespace pe
             {
                 for (uint32_t j = 0; j < updateInfo.views.size(); j++)
                 {
-                    const auto *view = Dx12ImageViewImpl::From(updateInfo.views[j]);
+                    PE_ERROR_IF(!updateInfo.views[j], "Dx12DescriptorImpl: null image view for binding %u", updateInfo.binding);
                     PE_ERROR_IF(j >= slots->cbvSrvUavSlots.size(), "Dx12DescriptorImpl: image descriptor array exceeds reflected count");
+                    const auto *view = Dx12ImageViewImpl::From(updateInfo.views[j]);
                     const uint32_t slot = slots->cbvSrvUavSlots[j];
                     device->CopyDescriptorsSimple(1,
                                                   cbvSrvUavHeap->GetCpuHandle(slot),
@@ -357,6 +358,7 @@ namespace pe
                 {
                     PE_ERROR_IF(j >= slots->cbvSrvUavSlots.size(), "Dx12DescriptorImpl: buffer descriptor array exceeds reflected count");
                     Buffer *buffer = updateInfo.buffers[j];
+                    PE_ERROR_IF(!buffer, "Dx12DescriptorImpl: null buffer for binding %u", updateInfo.binding);
                     const Dx12BufferImpl *bufferImpl = Dx12BufferImpl::From(buffer);
                     const uint64_t offset = j < updateInfo.offsets.size() ? updateInfo.offsets[j] : 0;
                     const uint64_t rangeBytes = BufferRangeBytes(buffer, updateInfo, j);
