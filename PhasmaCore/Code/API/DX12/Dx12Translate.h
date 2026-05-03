@@ -398,6 +398,33 @@ namespace pe_dx12
         return ImageLayouts[l];
     }
 
+    // Legacy resource-state mapping for ID3D12GraphicsCommandList::ResourceBarrier (transition barriers).
+    // Used by the conservative T10b path until the enhanced-barrier path lands; mirrors the layout
+    // intent of each PeImageLayout. Order MUST match the PeImageLayout enum.
+    static constexpr D3D12_RESOURCE_STATES ResourceStates[PE_IMAGE_LAYOUT_COUNT] = {
+        /* PE_IMAGE_LAYOUT_UNDEFINED                                  */ D3D12_RESOURCE_STATE_COMMON,
+        /* PE_IMAGE_LAYOUT_GENERAL                                    */ D3D12_RESOURCE_STATE_COMMON,
+        /* PE_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL                   */ D3D12_RESOURCE_STATE_RENDER_TARGET,
+        /* PE_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL           */ D3D12_RESOURCE_STATE_DEPTH_WRITE,
+        /* PE_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL                   */ D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE | D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE,
+        /* PE_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL                       */ D3D12_RESOURCE_STATE_COPY_SOURCE,
+        /* PE_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL                       */ D3D12_RESOURCE_STATE_COPY_DEST,
+        /* PE_IMAGE_LAYOUT_PRESENT_SRC                                */ D3D12_RESOURCE_STATE_PRESENT,
+        /* PE_IMAGE_LAYOUT_ATTACHMENT_OPTIMAL                         */ D3D12_RESOURCE_STATE_RENDER_TARGET,
+        /* PE_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL            */ D3D12_RESOURCE_STATE_DEPTH_READ,
+        /* PE_IMAGE_LAYOUT_DEPTH_ATTACHMENT_STENCIL_READ_ONLY_OPTIMAL */ D3D12_RESOURCE_STATE_DEPTH_WRITE, // depth-write + stencil-read; collapse to write
+        /* PE_IMAGE_LAYOUT_DEPTH_READ_ONLY_STENCIL_ATTACHMENT_OPTIMAL */ D3D12_RESOURCE_STATE_DEPTH_WRITE, // depth-read + stencil-write; same reasoning
+        /* PE_IMAGE_LAYOUT_DEPTH_READ_ONLY_OPTIMAL                    */ D3D12_RESOURCE_STATE_DEPTH_READ,
+        /* PE_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL                   */ D3D12_RESOURCE_STATE_DEPTH_WRITE,
+        /* PE_IMAGE_LAYOUT_STENCIL_READ_ONLY_OPTIMAL                  */ D3D12_RESOURCE_STATE_DEPTH_READ,
+        /* PE_IMAGE_LAYOUT_STENCIL_ATTACHMENT_OPTIMAL                 */ D3D12_RESOURCE_STATE_DEPTH_WRITE,
+    };
+
+    inline D3D12_RESOURCE_STATES ToD3D12ResourceState(PeImageLayout l)
+    {
+        return ResourceStates[l];
+    }
+
     static constexpr D3D12_RENDER_PASS_BEGINNING_ACCESS_TYPE LoadOps[PE_LOAD_OP_COUNT] = {
         /* PE_LOAD_OP_LOAD      */ D3D12_RENDER_PASS_BEGINNING_ACCESS_TYPE_PRESERVE,
         /* PE_LOAD_OP_CLEAR     */ D3D12_RENDER_PASS_BEGINNING_ACCESS_TYPE_CLEAR,

@@ -8,6 +8,10 @@
 #include "API/RHI.h"
 #include "API/RenderPass.h"
 #include "API/Semaphore.h"
+#include "API/Vulkan/VulkanCommandBufferImpl.h"
+#if defined(PE_WIN32)
+#include "API/DX12/Dx12CommandBufferImpl.h"
+#endif
 
 namespace pe
 {
@@ -22,7 +26,7 @@ namespace pe
           m_threadId{std::this_thread::get_id()}
     {
         m_impl = CreateCommandBufferImpl(this, commandPool, name);
-        PE_ERROR_IF(!m_impl, "CommandBuffer: backend has no command-buffer implementation (DX12 raw bypass should never reach here pre-T10b)");
+        PE_ERROR_IF(!m_impl, "CommandBuffer: backend returned null Impl from CreateCommandBufferImpl");
     }
 
     CommandBuffer::~CommandBuffer()
@@ -478,5 +482,20 @@ namespace pe
     void CommandBuffer::AddAfterWaitCallback(Delegate<>::FunctionType &&func)
     {
         m_afterWaitCallbacks += std::forward<Delegate<>::FunctionType>(func);
+    }
+
+    CommandBuffer::Impl *CreateCommandBufferImpl(CommandBuffer *owner, CommandPool *commandPool, const std::string &name)
+    {
+        if (RHII.GetApi() == PE_GRAPHICS_API_DX12)
+        {
+#if defined(PE_WIN32)
+            return new Dx12CommandBufferImpl(owner, commandPool, name);
+#else
+            PE_ERROR("[CommandBuffer] DX12 command-buffer creation is Windows-only");
+            return nullptr;
+#endif
+        }
+
+        return new VulkanCommandBufferImpl(owner, commandPool, name);
     }
 } // namespace pe

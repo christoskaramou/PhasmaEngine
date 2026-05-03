@@ -761,11 +761,4 @@ namespace pe
         Debug::EndCmdRegion(m_owner);
     }
 
-    CommandBuffer::Impl *CreateCommandBufferImpl(CommandBuffer *owner, CommandPool *commandPool, const std::string &name)
-    {
-        if (RHII.GetApi() == PE_GRAPHICS_API_DX12)
-            return nullptr; // T10b will introduce Dx12CommandBufferImpl; raw bypass continues meanwhile
-
-        return new VulkanCommandBufferImpl(owner, commandPool, name);
-    }
 } // namespace pe

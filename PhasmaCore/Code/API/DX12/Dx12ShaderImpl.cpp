@@ -446,6 +446,19 @@ namespace pe
         template <typename T>
         void FillBindingMetadata(T &desc, const SourceBinding &sourceBinding, const D3D12_SHADER_INPUT_BIND_DESC &dxBinding)
         {
+            const std::string name = dxBinding.Name ? dxBinding.Name : "";
+            PE_ERROR_IF(static_cast<int>(dxBinding.Space) != sourceBinding.set,
+                        "DX12 reflection: resource '%s' DXIL space %u disagrees with source set %d "
+                        "(per-space root signature requires Space == set)",
+                        name.c_str(),
+                        dxBinding.Space,
+                        sourceBinding.set);
+            PE_ERROR_IF(static_cast<int>(dxBinding.BindPoint) != sourceBinding.binding,
+                        "DX12 reflection: resource '%s' DXIL BindPoint %u disagrees with source binding %d "
+                        "(table-offset invariant requires BindPoint == binding)",
+                        name.c_str(),
+                        dxBinding.BindPoint,
+                        sourceBinding.binding);
             desc.set = sourceBinding.set;
             desc.binding = sourceBinding.binding;
             desc.dxRegister = static_cast<int>(dxBinding.BindPoint);

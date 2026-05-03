@@ -180,6 +180,7 @@ namespace pe
     private:
         friend class Queue;
         friend struct VulkanCommandBufferImpl;
+        friend struct Dx12CommandBufferImpl;
 
         // Resources
         inline static std::unordered_map<size_t, RenderPass *> s_renderPasses{};
