@@ -2,15 +2,64 @@
 
 #if defined(PE_WIN32)
 
+#include "API/Buffer.h"
+#include "API/DX12/Dx12BufferImpl.h"
+#include "API/DX12/Dx12DescriptorHeap.h"
+#include "API/DX12/Dx12DescriptorImpl.h"
 #include "API/DX12/Dx12ImageImpl.h"
+#include "API/DX12/Dx12ImageViewImpl.h"
+#include "API/DX12/Dx12PipelineImpl.h"
 #include "API/DX12/Dx12RhiImpl.h"
+#include "API/DX12/Dx12RootSignature.h"
 #include "API/DX12/Dx12Translate.h"
+#include "API/Descriptor.h"
 #include "API/Image.h"
+#include "API/Pipeline.h"
 #include "API/RHI.h"
 
 namespace pe
 {
     using namespace pe_dx12;
+
+    namespace
+    {
+        bool IsComputePipeline(const Pipeline *pipeline)
+        {
+            return pipeline && pipeline->GetInfo().pCompShader != nullptr;
+        }
+
+        bool IsDepthStencilFormat(::PeFormat fmt)
+        {
+            return fmt == PE_FORMAT_D32_SFLOAT ||
+                   fmt == PE_FORMAT_D24_UNORM_S8_UINT ||
+                   fmt == PE_FORMAT_D32_SFLOAT_S8_UINT ||
+                   fmt == PE_FORMAT_S8_UINT;
+        }
+
+        bool HasStencilComponent(::PeFormat fmt)
+        {
+            return fmt == PE_FORMAT_D24_UNORM_S8_UINT ||
+                   fmt == PE_FORMAT_D32_SFLOAT_S8_UINT ||
+                   fmt == PE_FORMAT_S8_UINT;
+        }
+
+        D3D12_CPU_DESCRIPTOR_HANDLE GetAttachmentCpuHandle(Image *image, bool depthStencil, const char *what)
+        {
+            PE_ERROR_IF(!image, "Dx12CommandBufferImpl::%s: null attachment image", what);
+            if (!image->HasRTV())
+                image->CreateRTV();
+
+            ImageView *view = image->GetRTV();
+            PE_ERROR_IF(!view, "Dx12CommandBufferImpl::%s: image '%s' has no RTV/DSV view",
+                        what, image->GetName().c_str());
+            const Dx12ImageViewImpl *impl = Dx12ImageViewImpl::From(view);
+            PE_ERROR_IF(depthStencil && impl->GetKind() != Dx12ImageViewKind::Dsv,
+                        "Dx12CommandBufferImpl::%s: image '%s' needs a DSV view", what, image->GetName().c_str());
+            PE_ERROR_IF(!depthStencil && impl->GetKind() != Dx12ImageViewKind::Rtv,
+                        "Dx12CommandBufferImpl::%s: image '%s' needs an RTV view", what, image->GetName().c_str());
+            return impl->GetCpuHandle();
+        }
+    } // namespace
 
     Dx12CommandBufferImpl::Dx12CommandBufferImpl(CommandBuffer *owner, CommandPool *commandPool, const std::string &name)
         : m_owner{owner}
@@ -47,6 +96,10 @@ namespace pe
         PE_CHECK(m_allocator->Reset());
         PE_CHECK(m_cmdList->Reset(m_allocator.Get(), nullptr));
 
+        m_heapsBound = false;
+        m_lastTopology = D3D_PRIMITIVE_TOPOLOGY_UNDEFINED;
+        BindShaderVisibleHeaps();
+
         m_owner->m_recording = true;
     }
 
@@ -82,6 +135,30 @@ namespace pe
         }
 
         m_barrierBatch.clear();
+        m_heapsBound = false;
+        m_lastTopology = D3D_PRIMITIVE_TOPOLOGY_UNDEFINED;
+    }
+
+    void Dx12CommandBufferImpl::BindShaderVisibleHeaps()
+    {
+        if (m_heapsBound)
+            return;
+
+        Dx12RhiImpl *rhi = static_cast<Dx12RhiImpl *>(RHII.GetImpl());
+        if (!rhi)
+            return;
+
+        ID3D12DescriptorHeap *heaps[2] = {};
+        UINT count = 0;
+        if (rhi->GetCbvSrvUavHeap())
+            heaps[count++] = rhi->GetCbvSrvUavHeap()->Get();
+        if (rhi->GetSamplerHeap())
+            heaps[count++] = rhi->GetSamplerHeap()->Get();
+
+        if (count > 0)
+            m_cmdList->SetDescriptorHeaps(count, heaps);
+
+        m_heapsBound = true;
     }
 
     void Dx12CommandBufferImpl::FlushBarriers()
@@ -94,11 +171,14 @@ namespace pe
     }
 
     // ----------------------------------------------------------------------
-    // Conservative T10b slice: every recording surface below is a stub. The
-    // DX12 raw bypass (Dx12RhiImpl::DrawClearScreen) still drives all on-screen
-    // work; Dx12CommandBufferImpl is wired but never instantiated by production
-    // paths because PhasmaEditor's App early-returns under PE_GRAPHICS_API_DX12.
-    // Each method gets a real implementation in subsequent T10b slices.
+    // T10b in progress. Pipeline/descriptor binding, push constants, viewport,
+    // scissor, vertex/index input, basic non-indirect draws, compute dispatch,
+    // transfer copies, staged uploads, and the legacy image/buffer barrier batch
+    // are implemented below. The DX12 raw bypass (Dx12RhiImpl::DrawClearScreen)
+    // still drives all on-screen work; this command-buffer impl is wired into
+    // the factory but is not yet exercised by the editor frame loop. Surfaces
+    // still gated by DX12_CMD_NOT_IMPLEMENTED (blits, indirect draws, ray
+    // tracing, push descriptors, events) wait for their own dedicated slices.
     // ----------------------------------------------------------------------
 
 #define DX12_CMD_NOT_IMPLEMENTED(name) PE_ERROR("Dx12CommandBufferImpl::" name " not implemented (T10b in progress)")
@@ -107,86 +187,435 @@ namespace pe
     {
         DX12_CMD_NOT_IMPLEMENTED("BlitImage");
     }
-    void Dx12CommandBufferImpl::ClearColors(std::vector<Image *>)
+    void Dx12CommandBufferImpl::ClearColors(std::vector<Image *> images)
     {
-        DX12_CMD_NOT_IMPLEMENTED("ClearColors");
-    }
-    void Dx12CommandBufferImpl::ClearDepthStencils(std::vector<Image *>)
-    {
-        DX12_CMD_NOT_IMPLEMENTED("ClearDepthStencils");
+        // DX12 ClearRenderTargetView requires the resource in RENDER_TARGET state, so
+        // we route through the engine's barrier tracker with the attachment layout
+        // (PE_IMAGE_LAYOUT_ATTACHMENT_OPTIMAL maps to D3D12_RESOURCE_STATE_RENDER_TARGET).
+        // The Vulkan path uses TRANSFER_DST_OPTIMAL because vkCmdClearColorImage is a
+        // transfer command - different verb, same intent.
+        std::vector<ImageBarrierInfo> barriers(images.size());
+        for (size_t i = 0; i < images.size(); ++i)
+        {
+            PE_ERROR_IF(!images[i], "Dx12CommandBufferImpl::ClearColors: image %zu is null", i);
+            PE_ERROR_IF(IsDepthStencilFormat(images[i]->GetFormat()),
+                        "Dx12CommandBufferImpl::ClearColors: image '%s' is depth/stencil",
+                        images[i]->GetName().c_str());
+            barriers[i].image = images[i];
+            barriers[i].layout = PE_IMAGE_LAYOUT_ATTACHMENT_OPTIMAL;
+            barriers[i].stageFlags = PE_STAGE_COLOR_ATTACHMENT_OUTPUT;
+            barriers[i].accessMask = PE_ACCESS_COLOR_ATTACHMENT_WRITE;
+        }
+        Image::Barriers(m_owner, barriers);
+        FlushBarriers();
+
+        for (Image *image : images)
+        {
+            const vec4 &c = image->m_clearColor;
+            const float color[4] = {c[0], c[1], c[2], c[3]};
+            const D3D12_CPU_DESCRIPTOR_HANDLE rtv = GetAttachmentCpuHandle(image, false, "ClearColors");
+            m_cmdList->ClearRenderTargetView(rtv, color, 0, nullptr);
+        }
     }
 
-    void Dx12CommandBufferImpl::BeginPass(uint32_t, Attachment *, const std::string &, bool)
+    void Dx12CommandBufferImpl::ClearDepthStencils(std::vector<Image *> images)
     {
-        DX12_CMD_NOT_IMPLEMENTED("BeginPass");
+        std::vector<ImageBarrierInfo> barriers(images.size());
+        for (size_t i = 0; i < images.size(); ++i)
+        {
+            PE_ERROR_IF(!images[i], "Dx12CommandBufferImpl::ClearDepthStencils: image %zu is null", i);
+            PE_ERROR_IF(!IsDepthStencilFormat(images[i]->GetFormat()),
+                        "Dx12CommandBufferImpl::ClearDepthStencils: image '%s' is not depth/stencil",
+                        images[i]->GetName().c_str());
+            barriers[i].image = images[i];
+            barriers[i].layout = PE_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
+            barriers[i].stageFlags = PE_STAGE_EARLY_FRAGMENT_TESTS | PE_STAGE_LATE_FRAGMENT_TESTS;
+            barriers[i].accessMask = PE_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE;
+        }
+        Image::Barriers(m_owner, barriers);
+        FlushBarriers();
+
+        for (Image *image : images)
+        {
+            const float depth = image->m_clearColor[0];
+            const uint8_t stencil = static_cast<uint8_t>(image->m_clearColor[1]);
+            D3D12_CLEAR_FLAGS flags = D3D12_CLEAR_FLAG_DEPTH;
+            if (HasStencilComponent(image->GetFormat()))
+                flags |= D3D12_CLEAR_FLAG_STENCIL;
+            const D3D12_CPU_DESCRIPTOR_HANDLE dsv = GetAttachmentCpuHandle(image, true, "ClearDepthStencils");
+            m_cmdList->ClearDepthStencilView(dsv, flags, depth, stencil, 0, nullptr);
+        }
     }
+
+    void Dx12CommandBufferImpl::BeginPass(uint32_t count, Attachment *attachments, const std::string &name, bool /*skipDynamicPass*/)
+    {
+        PE_ERROR_IF(count > 0 && !attachments, "Dx12CommandBufferImpl::BeginPass: null attachments");
+
+        // DX12 has no separate "render pass / framebuffer" object in the legacy
+        // command-list path; we record clears + OMSetRenderTargets directly. The
+        // skipDynamicPass flag is a Vulkan-only switch (force vk::beginRenderPass2
+        // over beginRendering) and has no analog here, so it is intentionally
+        // ignored. The engine still consults m_dynamicPass elsewhere; set it to
+        // true so DX12 follows the dynamic-rendering control flow.
+        BeginDebugRegion(name + "_pass");
+
+        m_owner->m_dynamicPass = true;
+        m_owner->m_attachmentCount = count;
+        m_owner->m_attachments = attachments;
+
+        std::vector<ImageBarrierInfo> attachmentBarriers;
+        attachmentBarriers.reserve(count);
+
+        D3D12_CPU_DESCRIPTOR_HANDLE rtvHandles[D3D12_SIMULTANEOUS_RENDER_TARGET_COUNT] = {};
+        uint32_t rtvCount = 0;
+        D3D12_CPU_DESCRIPTOR_HANDLE dsvHandle{};
+        bool hasDsv = false;
+
+        for (uint32_t i = 0; i < count; ++i)
+        {
+            const Attachment &att = attachments[i];
+            PE_ERROR_IF(!att.image, "Dx12CommandBufferImpl::BeginPass: attachment %u has null image", i);
+
+            const ::PeFormat fmt = att.image->GetFormat();
+            const bool isDepthStencil = IsDepthStencilFormat(fmt);
+
+            ImageBarrierInfo barrier{};
+            barrier.image = att.image;
+
+            if (isDepthStencil)
+            {
+                PE_ERROR_IF(hasDsv, "Dx12CommandBufferImpl::BeginPass: more than one depth/stencil attachment");
+                barrier.layout = PE_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
+                barrier.stageFlags = PE_STAGE_EARLY_FRAGMENT_TESTS | PE_STAGE_LATE_FRAGMENT_TESTS;
+                barrier.accessMask = (att.loadOp == PE_LOAD_OP_LOAD)
+                                         ? PE_ACCESS_DEPTH_STENCIL_ATTACHMENT_READ
+                                         : PE_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE;
+                dsvHandle = GetAttachmentCpuHandle(att.image, true, "BeginPass");
+                hasDsv = true;
+            }
+            else
+            {
+                PE_ERROR_IF(rtvCount >= D3D12_SIMULTANEOUS_RENDER_TARGET_COUNT,
+                            "Dx12CommandBufferImpl::BeginPass: more than %u color attachments",
+                            D3D12_SIMULTANEOUS_RENDER_TARGET_COUNT);
+                barrier.layout = PE_IMAGE_LAYOUT_ATTACHMENT_OPTIMAL;
+                barrier.stageFlags = PE_STAGE_COLOR_ATTACHMENT_OUTPUT;
+                barrier.accessMask = (att.loadOp == PE_LOAD_OP_LOAD)
+                                         ? PE_ACCESS_COLOR_ATTACHMENT_READ
+                                         : PE_ACCESS_COLOR_ATTACHMENT_WRITE;
+                rtvHandles[rtvCount++] = GetAttachmentCpuHandle(att.image, false, "BeginPass");
+            }
+
+            attachmentBarriers.push_back(barrier);
+        }
+
+        Image::Barriers(m_owner, attachmentBarriers);
+        FlushBarriers();
+
+        m_cmdList->OMSetRenderTargets(rtvCount,
+                                      rtvCount > 0 ? rtvHandles : nullptr,
+                                      FALSE,
+                                      hasDsv ? &dsvHandle : nullptr);
+
+        for (uint32_t i = 0; i < count; ++i)
+        {
+            const Attachment &att = attachments[i];
+            const ::PeFormat fmt = att.image->GetFormat();
+
+            if (IsDepthStencilFormat(fmt))
+            {
+                D3D12_CLEAR_FLAGS flags = static_cast<D3D12_CLEAR_FLAGS>(0);
+                if (att.loadOp == PE_LOAD_OP_CLEAR)
+                    flags |= D3D12_CLEAR_FLAG_DEPTH;
+                if (HasStencilComponent(fmt) && att.stencilLoadOp == PE_LOAD_OP_CLEAR)
+                    flags |= D3D12_CLEAR_FLAG_STENCIL;
+                if (flags == 0)
+                    continue;
+
+                const float depth = att.image->m_clearColor[0];
+                const uint8_t stencil = static_cast<uint8_t>(att.image->m_clearColor[1]);
+                m_cmdList->ClearDepthStencilView(GetAttachmentCpuHandle(att.image, true, "BeginPass"),
+                                                 flags, depth, stencil, 0, nullptr);
+            }
+            else if (att.loadOp == PE_LOAD_OP_CLEAR)
+            {
+                const vec4 &c = att.image->m_clearColor;
+                const float color[4] = {c[0], c[1], c[2], c[3]};
+                m_cmdList->ClearRenderTargetView(GetAttachmentCpuHandle(att.image, false, "BeginPass"),
+                                                 color, 0, nullptr);
+            }
+        }
+    }
+
     void Dx12CommandBufferImpl::EndPass()
     {
-        DX12_CMD_NOT_IMPLEMENTED("EndPass");
+        // Mirror the Vulkan EndPass tracker fix-up: attachments entered the pass with
+        // an *_ATTACHMENT_READ mask (LOAD_OP_LOAD) but the pass executes writes, so the
+        // final access mask must be *_ATTACHMENT_WRITE before the next barrier query.
+        for (uint32_t i = 0; i < m_owner->m_attachmentCount; ++i)
+        {
+            const Attachment &att = m_owner->m_attachments[i];
+            if (att.loadOp == PE_LOAD_OP_LOAD && att.image)
+            {
+                const ::PeFormat fmt = att.image->GetFormat();
+                att.image->m_trackInfos[0][0].accessMask = IsDepthStencilFormat(fmt)
+                                                               ? PE_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE
+                                                               : PE_ACCESS_COLOR_ATTACHMENT_WRITE;
+            }
+        }
+
+        // DX12 has no end-render-pass call in the legacy command-list path; just
+        // unbind so the next non-pass command (e.g. a copy) doesn't trip over a
+        // stale RTV/DSV binding.
+        m_cmdList->OMSetRenderTargets(0, nullptr, FALSE, nullptr);
+
+        EndDebugRegion();
+
+        m_owner->m_attachmentCount = 0;
+        m_owner->m_attachments = nullptr;
+        m_owner->m_renderPass = nullptr;
+        m_owner->m_framebuffer = nullptr;
+        m_owner->m_dynamicPass = false;
+        m_owner->m_boundPipeline = nullptr;
+        m_owner->m_boundVertexBuffer = nullptr;
+        m_owner->m_boundVertexBufferOffset = -1;
+        m_owner->m_boundVertexBufferFirstBinding = UINT32_MAX;
+        m_owner->m_boundVertexBufferBindingCount = UINT32_MAX;
+        m_owner->m_boundIndexBuffer = nullptr;
+        m_owner->m_boundIndexBufferOffset = -1;
     }
 
-    void Dx12CommandBufferImpl::BindPipeline(PassInfo &, bool)
+    void Dx12CommandBufferImpl::BindPipeline(PassInfo &passInfo, bool bindDescriptors)
     {
-        DX12_CMD_NOT_IMPLEMENTED("BindPipeline");
+        Pipeline *pipeline = CommandBuffer::GetPipeline(m_owner->m_renderPass, passInfo);
+        PE_ERROR_IF(!pipeline, "Dx12CommandBufferImpl::BindPipeline: pipeline creation failed");
+
+        if (pipeline != m_owner->m_boundPipeline)
+        {
+            m_owner->m_boundPipeline = pipeline;
+
+            Dx12RhiImpl *rhi = static_cast<Dx12RhiImpl *>(RHII.GetImpl());
+            PE_ERROR_IF(!rhi || !rhi->GetSharedRootSig(), "Dx12CommandBufferImpl::BindPipeline: shared root signature unavailable");
+
+            ID3D12RootSignature *rootSig = rhi->GetSharedRootSig()->Get();
+            ID3D12PipelineState *pso = GetDx12Pipeline(pipeline);
+            PE_ERROR_IF(!pso, "Dx12CommandBufferImpl::BindPipeline: pipeline has no PSO");
+
+            BindShaderVisibleHeaps();
+            m_cmdList->SetPipelineState(pso);
+
+            if (IsComputePipeline(pipeline))
+            {
+                m_cmdList->SetComputeRootSignature(rootSig);
+            }
+            else
+            {
+                m_cmdList->SetGraphicsRootSignature(rootSig);
+                const D3D12_PRIMITIVE_TOPOLOGY topology = Topology(passInfo.topology);
+                if (topology != m_lastTopology)
+                {
+                    m_cmdList->IASetPrimitiveTopology(topology);
+                    m_lastTopology = topology;
+                }
+            }
+        }
+
+        if (bindDescriptors)
+        {
+            const auto &descriptors = passInfo.GetDescriptors(RHII.GetFrameIndex());
+            const uint32_t count = static_cast<uint32_t>(descriptors.size());
+            BindDescriptors(count, descriptors.data());
+        }
     }
-    void Dx12CommandBufferImpl::BindVertexBuffer(Buffer *, size_t, uint32_t, uint32_t)
+
+    void Dx12CommandBufferImpl::BindVertexBuffer(Buffer *buffer, size_t offset, uint32_t firstBinding, uint32_t bindingCount)
     {
-        DX12_CMD_NOT_IMPLEMENTED("BindVertexBuffer");
+        PE_ERROR_IF(bindingCount == 0, "Dx12CommandBufferImpl::BindVertexBuffer: bindingCount is zero");
+        if (m_owner->m_boundVertexBuffer == buffer &&
+            m_owner->m_boundVertexBufferOffset == offset &&
+            m_owner->m_boundVertexBufferFirstBinding == firstBinding &&
+            m_owner->m_boundVertexBufferBindingCount == bindingCount)
+            return;
+
+        PE_ERROR_IF(!buffer, "Dx12CommandBufferImpl::BindVertexBuffer: null buffer");
+        PE_ERROR_IF(!m_owner->m_boundPipeline, "Dx12CommandBufferImpl::BindVertexBuffer: no bound pipeline (DX12 needs stride from PSO reflection)");
+        PE_ERROR_IF(offset > buffer->Size(), "Dx12CommandBufferImpl::BindVertexBuffer: offset exceeds buffer size");
+
+        m_owner->m_boundVertexBuffer = buffer;
+        m_owner->m_boundVertexBufferOffset = offset;
+        m_owner->m_boundVertexBufferFirstBinding = firstBinding;
+        m_owner->m_boundVertexBufferBindingCount = bindingCount;
+
+        const Dx12PipelineImpl *pipelineImpl = Dx12PipelineImpl::From(m_owner->m_boundPipeline);
+        const Dx12BufferImpl *bufImpl = Dx12BufferImpl::From(buffer);
+
+        std::vector<D3D12_VERTEX_BUFFER_VIEW> views(bindingCount);
+        for (uint32_t i = 0; i < bindingCount; ++i)
+        {
+            const uint32_t binding = firstBinding + i;
+            D3D12_VERTEX_BUFFER_VIEW &view = views[i];
+            view.BufferLocation = bufImpl->GetResource()->GetGPUVirtualAddress() + offset;
+            view.SizeInBytes = static_cast<UINT>(buffer->Size() - offset);
+            view.StrideInBytes = pipelineImpl->GetVertexBindingStride(binding);
+            PE_ERROR_IF(view.StrideInBytes == 0,
+                        "Dx12CommandBufferImpl::BindVertexBuffer: stride for binding %u is zero (pipeline reflection produced no input)",
+                        binding);
+        }
+
+        m_cmdList->IASetVertexBuffers(firstBinding, bindingCount, views.data());
     }
-    void Dx12CommandBufferImpl::BindIndexBuffer(Buffer *, size_t)
+
+    void Dx12CommandBufferImpl::BindIndexBuffer(Buffer *buffer, size_t offset)
     {
-        DX12_CMD_NOT_IMPLEMENTED("BindIndexBuffer");
+        if (m_owner->m_boundIndexBuffer == buffer && m_owner->m_boundIndexBufferOffset == offset)
+            return;
+
+        PE_ERROR_IF(!buffer, "Dx12CommandBufferImpl::BindIndexBuffer: null buffer");
+        PE_ERROR_IF(offset > buffer->Size(), "Dx12CommandBufferImpl::BindIndexBuffer: offset exceeds buffer size");
+
+        m_owner->m_boundIndexBuffer = buffer;
+        m_owner->m_boundIndexBufferOffset = offset;
+
+        const Dx12BufferImpl *bufImpl = Dx12BufferImpl::From(buffer);
+
+        D3D12_INDEX_BUFFER_VIEW view{};
+        view.BufferLocation = bufImpl->GetResource()->GetGPUVirtualAddress() + offset;
+        view.SizeInBytes = static_cast<UINT>(buffer->Size() - offset);
+        view.Format = DXGI_FORMAT_R32_UINT;
+
+        m_cmdList->IASetIndexBuffer(&view);
     }
-    void Dx12CommandBufferImpl::BindDescriptors(uint32_t, Descriptor *const *)
+
+    void Dx12CommandBufferImpl::BindDescriptors(uint32_t count, Descriptor *const *descriptors)
     {
-        DX12_CMD_NOT_IMPLEMENTED("BindDescriptors");
+        PE_ERROR_IF(!m_owner->m_boundPipeline, "Dx12CommandBufferImpl::BindDescriptors: No bound pipeline found!");
+        PE_ERROR_IF(count > 0 && !descriptors, "Dx12CommandBufferImpl::BindDescriptors: null descriptor array");
+
+        BindShaderVisibleHeaps();
+
+        const bool compute = IsComputePipeline(m_owner->m_boundPipeline);
+
+        for (uint32_t i = 0; i < count; ++i)
+        {
+            Descriptor *descriptor = descriptors[i];
+            PE_ERROR_IF(!descriptor, "Dx12CommandBufferImpl::BindDescriptors: descriptor %u is null", i);
+            const Dx12DescriptorImpl *impl = Dx12DescriptorImpl::From(descriptor);
+
+            // A single Descriptor may carry tables for one or more dxSpaces; bind
+            // both CBV/SRV/UAV and sampler tables for every space it reports. The
+            // table accessors return a zero-pointer handle when the descriptor
+            // does not occupy that space, so the inner check stays cheap.
+            for (uint32_t space = 0; space < DX12_DESCRIPTOR_SPACE_COUNT; ++space)
+            {
+                const D3D12_GPU_DESCRIPTOR_HANDLE cbvSrvUavTable = impl->GetCbvSrvUavTableGpuHandle(space);
+                if (cbvSrvUavTable.ptr != 0)
+                {
+                    const uint32_t rootIdx = Dx12CbvSrvUavRootIndex(space);
+                    if (compute)
+                        m_cmdList->SetComputeRootDescriptorTable(rootIdx, cbvSrvUavTable);
+                    else
+                        m_cmdList->SetGraphicsRootDescriptorTable(rootIdx, cbvSrvUavTable);
+                }
+
+                const D3D12_GPU_DESCRIPTOR_HANDLE samplerTable = impl->GetSamplerTableGpuHandle(space);
+                if (samplerTable.ptr != 0)
+                {
+                    const uint32_t rootIdx = Dx12SamplerRootIndex(space);
+                    if (compute)
+                        m_cmdList->SetComputeRootDescriptorTable(rootIdx, samplerTable);
+                    else
+                        m_cmdList->SetGraphicsRootDescriptorTable(rootIdx, samplerTable);
+                }
+            }
+        }
     }
     void Dx12CommandBufferImpl::PushDescriptor(uint32_t, const std::vector<PushDescriptorInfo> &)
     {
         DX12_CMD_NOT_IMPLEMENTED("PushDescriptor");
     }
 
-    void Dx12CommandBufferImpl::SetViewport(float, float, float, float)
+    void Dx12CommandBufferImpl::SetViewport(float x, float y, float width, float height)
     {
-        DX12_CMD_NOT_IMPLEMENTED("SetViewport");
+        D3D12_VIEWPORT vp{};
+        vp.TopLeftX = x;
+        vp.TopLeftY = y;
+        vp.Width = width;
+        vp.Height = height;
+        vp.MinDepth = 0.0f;
+        vp.MaxDepth = 1.0f;
+        m_cmdList->RSSetViewports(1, &vp);
     }
-    void Dx12CommandBufferImpl::SetScissor(int, int, uint32_t, uint32_t)
+    void Dx12CommandBufferImpl::SetScissor(int x, int y, uint32_t width, uint32_t height)
     {
-        DX12_CMD_NOT_IMPLEMENTED("SetScissor");
+        D3D12_RECT rect{};
+        rect.left = x;
+        rect.top = y;
+        rect.right = x + static_cast<LONG>(width);
+        rect.bottom = y + static_cast<LONG>(height);
+        m_cmdList->RSSetScissorRects(1, &rect);
     }
     void Dx12CommandBufferImpl::SetLineWidth(float)
     {
-        DX12_CMD_NOT_IMPLEMENTED("SetLineWidth");
+        // DX12 has no concept of dynamic line width; lines are 1px and the
+        // raster state is baked into the PSO. The Vulkan path keeps it dynamic,
+        // so this surface stays callable but is a no-op on DX12.
     }
     void Dx12CommandBufferImpl::SetDepthBias(float, float, float)
     {
-        DX12_CMD_NOT_IMPLEMENTED("SetDepthBias");
+        // DX12 bakes depth bias into the PSO rasterizer state. Until the
+        // pipeline-binding slice rebuilds PSO variants on demand, we accept the
+        // call but rely on the bound PSO to provide the configured values.
     }
     void Dx12CommandBufferImpl::SetDepthTestEnable(uint32_t)
     {
-        DX12_CMD_NOT_IMPLEMENTED("SetDepthTestEnable");
+        // DX12 bakes depth test enable into the PSO depth-stencil state.
     }
     void Dx12CommandBufferImpl::SetDepthWriteEnable(uint32_t)
     {
-        DX12_CMD_NOT_IMPLEMENTED("SetDepthWriteEnable");
+        // DX12 bakes depth write enable into the PSO depth-stencil state.
     }
 
-    void Dx12CommandBufferImpl::Dispatch(uint32_t, uint32_t, uint32_t)
+    void Dx12CommandBufferImpl::Dispatch(uint32_t groupCountX, uint32_t groupCountY, uint32_t groupCountZ)
     {
-        DX12_CMD_NOT_IMPLEMENTED("Dispatch");
+        PE_ERROR_IF(!m_owner->m_boundPipeline, "Dx12CommandBufferImpl::Dispatch: No bound pipeline found!");
+        PE_ERROR_IF(!IsComputePipeline(m_owner->m_boundPipeline), "Dx12CommandBufferImpl::Dispatch: bound pipeline is not compute");
+        FlushBarriers();
+        m_cmdList->Dispatch(groupCountX, groupCountY, groupCountZ);
     }
-    void Dx12CommandBufferImpl::PushConstants(const PushConstantsBlock<128> &)
+    void Dx12CommandBufferImpl::PushConstants(const PushConstantsBlock<128> &constants)
     {
-        DX12_CMD_NOT_IMPLEMENTED("PushConstants");
+        PE_ERROR_IF(!m_owner->m_boundPipeline, "Dx12CommandBufferImpl::PushConstants: No bound pipeline found!");
+
+        const auto &sizes = m_owner->m_boundPipeline->GetInfo().m_pushConstantSizes;
+        if (sizes.empty() || sizes[0] == 0)
+            return;
+
+        // Dx12PipelineImpl collapses vert+frag push ranges into a single 0-based
+        // entry sized to the larger of the two. Root constants live at b0/space0
+        // (DX12_ROOT_CONSTANTS_INDEX) per the shared root signature layout.
+        const uint32_t numDwords = (sizes[0] + 3u) / 4u;
+        PE_ERROR_IF(numDwords > 32, "Dx12CommandBufferImpl::PushConstants: push constants exceed shared root constant budget");
+        const bool compute = IsComputePipeline(m_owner->m_boundPipeline);
+
+        if (compute)
+            m_cmdList->SetComputeRoot32BitConstants(DX12_ROOT_CONSTANTS_INDEX, numDwords, constants.Data(), 0);
+        else
+            m_cmdList->SetGraphicsRoot32BitConstants(DX12_ROOT_CONSTANTS_INDEX, numDwords, constants.Data(), 0);
     }
 
-    void Dx12CommandBufferImpl::Draw(uint32_t, uint32_t, uint32_t, uint32_t)
+    void Dx12CommandBufferImpl::Draw(uint32_t vertexCount, uint32_t instanceCount, uint32_t firstVertex, uint32_t firstInstance)
     {
-        DX12_CMD_NOT_IMPLEMENTED("Draw");
+        PE_ERROR_IF(!m_owner->m_boundPipeline, "Dx12CommandBufferImpl::Draw: No bound pipeline found!");
+        PE_ERROR_IF(IsComputePipeline(m_owner->m_boundPipeline), "Dx12CommandBufferImpl::Draw: bound pipeline is compute");
+        FlushBarriers();
+        m_cmdList->DrawInstanced(vertexCount, instanceCount, firstVertex, firstInstance);
     }
-    void Dx12CommandBufferImpl::DrawIndexed(uint32_t, uint32_t, uint32_t, int32_t, uint32_t)
+    void Dx12CommandBufferImpl::DrawIndexed(uint32_t indexCount, uint32_t instanceCount, uint32_t firstIndex, int32_t vertexOffset, uint32_t firstInstance)
     {
-        DX12_CMD_NOT_IMPLEMENTED("DrawIndexed");
+        PE_ERROR_IF(!m_owner->m_boundPipeline, "Dx12CommandBufferImpl::DrawIndexed: No bound pipeline found!");
+        PE_ERROR_IF(IsComputePipeline(m_owner->m_boundPipeline), "Dx12CommandBufferImpl::DrawIndexed: bound pipeline is compute");
+        FlushBarriers();
+        m_cmdList->DrawIndexedInstanced(indexCount, instanceCount, firstIndex, vertexOffset, firstInstance);
     }
     void Dx12CommandBufferImpl::DrawIndirect(Buffer *, size_t, uint32_t, uint32_t)
     {
@@ -201,29 +630,63 @@ namespace pe
         DX12_CMD_NOT_IMPLEMENTED("DrawIndexedIndirectCount");
     }
 
-    void Dx12CommandBufferImpl::FillBuffer(Buffer *, size_t, size_t, uint32_t)
+    void Dx12CommandBufferImpl::FillBuffer(Buffer *buffer, size_t offset, size_t size, uint32_t data)
     {
-        DX12_CMD_NOT_IMPLEMENTED("FillBuffer");
+        PE_ERROR_IF(!buffer, "Dx12CommandBufferImpl::FillBuffer: null buffer");
+        PE_ERROR_IF(offset + size > buffer->Size(), "Dx12CommandBufferImpl::FillBuffer: range overflow");
+        if (!size)
+            return;
+
+        std::vector<uint32_t> words((size + sizeof(uint32_t) - 1) / sizeof(uint32_t), data);
+        CopyBufferStaged(buffer, words.data(), size, offset);
+
+        BufferTrackInfo &trackInfo = buffer->GetTrackInfo();
+        trackInfo.stageMask = PE_STAGE_CLEAR;
+        trackInfo.accessMask = PE_ACCESS_TRANSFER_WRITE;
     }
-    void Dx12CommandBufferImpl::CopyBuffer(Buffer *, Buffer *, size_t, size_t, size_t)
+
+    void Dx12CommandBufferImpl::CopyBuffer(Buffer *src, Buffer *dst, size_t size, size_t srcOffset, size_t dstOffset)
     {
-        DX12_CMD_NOT_IMPLEMENTED("CopyBuffer");
+        PE_ERROR_IF(!src || !dst, "Dx12CommandBufferImpl::CopyBuffer: null buffer");
+        PE_ERROR_IF(srcOffset + size > src->Size(), "Dx12CommandBufferImpl::CopyBuffer: source range overflow");
+        PE_ERROR_IF(dstOffset + size > dst->Size(), "Dx12CommandBufferImpl::CopyBuffer: destination range overflow");
+        if (!size)
+            return;
+
+        FlushBarriers();
+        m_cmdList->CopyBufferRegion(Dx12BufferImpl::From(dst)->GetResource(),
+                                    static_cast<UINT64>(dstOffset),
+                                    Dx12BufferImpl::From(src)->GetResource(),
+                                    static_cast<UINT64>(srcOffset),
+                                    static_cast<UINT64>(size));
+
+        BufferTrackInfo &trackInfo = dst->GetTrackInfo();
+        trackInfo.stageMask = PE_STAGE_TRANSFER;
+        trackInfo.accessMask = PE_ACCESS_TRANSFER_WRITE;
     }
-    void Dx12CommandBufferImpl::CopyBufferStaged(Buffer *, void *, size_t, size_t)
+
+    void Dx12CommandBufferImpl::CopyBufferStaged(Buffer *buffer, void *data, size_t size, size_t dstOffset)
     {
-        DX12_CMD_NOT_IMPLEMENTED("CopyBufferStaged");
+        PE_ERROR_IF(!buffer, "Dx12CommandBufferImpl::CopyBufferStaged: null buffer");
+        buffer->CopyBufferStaged(m_owner, data, size, dstOffset);
     }
-    void Dx12CommandBufferImpl::CopyDataToImageStaged(Image *, void *, size_t, uint32_t, uint32_t, uint32_t)
+
+    void Dx12CommandBufferImpl::CopyDataToImageStaged(Image *image, void *data, size_t size, uint32_t baseArrayLayer, uint32_t layerCount, uint32_t mipLevel)
     {
-        DX12_CMD_NOT_IMPLEMENTED("CopyDataToImageStaged");
+        PE_ERROR_IF(!image, "Dx12CommandBufferImpl::CopyDataToImageStaged: null image");
+        image->CopyDataToImageStaged(m_owner, data, size, baseArrayLayer, layerCount, mipLevel);
     }
-    void Dx12CommandBufferImpl::CopyImage(Image *, Image *)
+
+    void Dx12CommandBufferImpl::CopyImage(Image *src, Image *dst)
     {
-        DX12_CMD_NOT_IMPLEMENTED("CopyImage");
+        PE_ERROR_IF(!src || !dst, "Dx12CommandBufferImpl::CopyImage: null image");
+        dst->CopyImage(m_owner, src);
     }
-    void Dx12CommandBufferImpl::CopyImageToBuffer(Image *, Buffer *)
+
+    void Dx12CommandBufferImpl::CopyImageToBuffer(Image *src, Buffer *dst)
     {
-        DX12_CMD_NOT_IMPLEMENTED("CopyImageToBuffer");
+        PE_ERROR_IF(!src || !dst, "Dx12CommandBufferImpl::CopyImageToBuffer: null resource");
+        src->CopyToBuffer(m_owner, dst);
     }
     void Dx12CommandBufferImpl::GenerateMipMaps(Image *)
     {
@@ -235,29 +698,103 @@ namespace pe
         DX12_CMD_NOT_IMPLEMENTED("TraceRays");
     }
 
-    void Dx12CommandBufferImpl::BufferBarrier(const BufferBarrierInfo &)
+    namespace
     {
-        DX12_CMD_NOT_IMPLEMENTED("BufferBarrier");
+        // Push a transition barrier for a single image into the batch.
+        // No-op when the source and destination states already match; DX12
+        // rejects no-op transitions with a debug-layer error.
+        void PushImageTransition(std::vector<D3D12_RESOURCE_BARRIER> &batch,
+                                 Dx12ImageImpl *img,
+                                 PeImageLayout newLayout)
+        {
+            const D3D12_RESOURCE_STATES before = img->m_state;
+            const D3D12_RESOURCE_STATES after = pe_dx12::ToD3D12ResourceState(newLayout);
+            if (before == after)
+                return;
+
+            D3D12_RESOURCE_BARRIER rb{};
+            rb.Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
+            rb.Flags = D3D12_RESOURCE_BARRIER_FLAG_NONE;
+            rb.Transition.pResource = img->GetResource();
+            rb.Transition.StateBefore = before;
+            rb.Transition.StateAfter = after;
+            rb.Transition.Subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES;
+            batch.push_back(rb);
+
+            img->m_state = after;
+        }
+
+        // Push a UAV barrier for a buffer. We use this whenever the engine
+        // requests a buffer-memory barrier; the legacy DX12 model can only
+        // synchronize UAV-to-UAV access; transfer/upload sync is implicit on the
+        // copy queue. Non-UAV buffers receive the barrier as a no-op-effective
+        // hazard guard until the enhanced-barrier path lands.
+        void PushBufferUAV(std::vector<D3D12_RESOURCE_BARRIER> &batch,
+                           Dx12BufferImpl *buf)
+        {
+            D3D12_RESOURCE_BARRIER rb{};
+            rb.Type = D3D12_RESOURCE_BARRIER_TYPE_UAV;
+            rb.Flags = D3D12_RESOURCE_BARRIER_FLAG_NONE;
+            rb.UAV.pResource = buf->GetResource();
+            batch.push_back(rb);
+        }
+    } // namespace
+
+    void Dx12CommandBufferImpl::BufferBarrier(const BufferBarrierInfo &info)
+    {
+        if (!info.buffer)
+            return;
+        PushBufferUAV(m_barrierBatch, Dx12BufferImpl::From(info.buffer));
     }
-    void Dx12CommandBufferImpl::BufferBarriers(const std::vector<BufferBarrierInfo> &)
+    void Dx12CommandBufferImpl::BufferBarriers(const std::vector<BufferBarrierInfo> &infos)
     {
-        DX12_CMD_NOT_IMPLEMENTED("BufferBarriers");
+        m_barrierBatch.reserve(m_barrierBatch.size() + infos.size());
+        for (const auto &info : infos)
+        {
+            if (!info.buffer)
+                continue;
+            PushBufferUAV(m_barrierBatch, Dx12BufferImpl::From(info.buffer));
+        }
     }
-    void Dx12CommandBufferImpl::ImageBarrier(const ImageBarrierInfo &)
+    void Dx12CommandBufferImpl::ImageBarrier(const ImageBarrierInfo &info)
     {
-        DX12_CMD_NOT_IMPLEMENTED("ImageBarrier");
+        if (!info.image)
+            return;
+        PushImageTransition(m_barrierBatch, Dx12ImageImpl::From(info.image), info.layout);
     }
-    void Dx12CommandBufferImpl::ImageBarriers(const std::vector<ImageBarrierInfo> &)
+    void Dx12CommandBufferImpl::ImageBarriers(const std::vector<ImageBarrierInfo> &infos)
     {
-        DX12_CMD_NOT_IMPLEMENTED("ImageBarriers");
+        m_barrierBatch.reserve(m_barrierBatch.size() + infos.size());
+        for (const auto &info : infos)
+        {
+            if (!info.image)
+                continue;
+            PushImageTransition(m_barrierBatch, Dx12ImageImpl::From(info.image), info.layout);
+        }
     }
     void Dx12CommandBufferImpl::MemoryBarrier(const MemoryBarrierInfo &)
     {
-        DX12_CMD_NOT_IMPLEMENTED("MemoryBarrier");
+        // Global UAV barrier: pResource = nullptr instructs the GPU to flush
+        // every preceding UAV write before any subsequent UAV read/write.
+        // Stage/access masks are ignored in the legacy model; they will be
+        // honored once the enhanced-barrier (D3D12_BARRIER) path is wired.
+        D3D12_RESOURCE_BARRIER rb{};
+        rb.Type = D3D12_RESOURCE_BARRIER_TYPE_UAV;
+        rb.Flags = D3D12_RESOURCE_BARRIER_FLAG_NONE;
+        rb.UAV.pResource = nullptr;
+        m_barrierBatch.push_back(rb);
     }
-    void Dx12CommandBufferImpl::MemoryBarriers(const std::vector<MemoryBarrierInfo> &)
+    void Dx12CommandBufferImpl::MemoryBarriers(const std::vector<MemoryBarrierInfo> &infos)
     {
-        DX12_CMD_NOT_IMPLEMENTED("MemoryBarriers");
+        if (infos.empty())
+            return;
+        // One global UAV barrier flushes everything regardless of how many
+        // logical Vulkan-style memory barriers were requested.
+        D3D12_RESOURCE_BARRIER rb{};
+        rb.Type = D3D12_RESOURCE_BARRIER_TYPE_UAV;
+        rb.Flags = D3D12_RESOURCE_BARRIER_FLAG_NONE;
+        rb.UAV.pResource = nullptr;
+        m_barrierBatch.push_back(rb);
     }
 
     void Dx12CommandBufferImpl::SetEvent(Event *, Image *,

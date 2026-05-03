@@ -130,6 +130,13 @@ namespace pe
                 inputElements.push_back(element);
                 offset += input.size;
             }
+
+            for (const auto &[binding, stride] : bindingOffsets)
+            {
+                if (binding >= m_vertexBindingStrides.size())
+                    m_vertexBindingStrides.resize(binding + 1, 0u);
+                m_vertexBindingStrides[binding] = stride;
+            }
         }
 
         D3D12_GRAPHICS_PIPELINE_STATE_DESC desc{};

@@ -1,9 +1,14 @@
 #include "API/DX12/Dx12ImageImpl.h"
 
+#include "API/Buffer.h"
+#include "API/Command.h"
+#include "API/DX12/Dx12BufferImpl.h"
+#include "API/DX12/Dx12CommandBufferImpl.h"
 #include "API/DX12/Dx12ImageViewImpl.h"
 #include "API/DX12/Dx12RhiImpl.h"
 #include "API/DX12/Dx12Translate.h"
 #include "API/RHI.h"
+#include "API/StagingManager.h"
 
 namespace pe
 {
@@ -144,6 +149,59 @@ namespace pe
                 return PE_IMAGE_ASPECT_DEPTH | PE_IMAGE_ASPECT_STENCIL;
             return PE_IMAGE_ASPECT_DEPTH;
         }
+
+        UINT SubresourceIndex(const Image *image, uint32_t arrayLayer, uint32_t mipLevel)
+        {
+            return mipLevel + arrayLayer * image->GetMipLevels();
+        }
+
+        void CopyTightlyPackedToFootprints(uint8_t *dst,
+                                           const uint8_t *src,
+                                           size_t srcSize,
+                                           size_t dstSize,
+                                           const D3D12_PLACED_SUBRESOURCE_FOOTPRINT *layouts,
+                                           const UINT *rowCounts,
+                                           const UINT64 *rowSizes,
+                                           UINT subresourceCount)
+        {
+            size_t srcOffset = 0;
+            for (UINT subresource = 0; subresource < subresourceCount; ++subresource)
+            {
+                const auto &layout = layouts[subresource];
+                const UINT rows = rowCounts[subresource];
+                const UINT64 rowSize = rowSizes[subresource];
+                const UINT depth = std::max<UINT>(layout.Footprint.Depth, 1u);
+
+                for (UINT z = 0; z < depth; ++z)
+                {
+                    for (UINT row = 0; row < rows; ++row)
+                    {
+                        PE_ERROR_IF(srcOffset + rowSize > srcSize, "Dx12ImageImpl::CopyDataToImageStaged: source data is smaller than the copy footprint");
+                        PE_ERROR_IF(layout.Offset +
+                                            static_cast<UINT64>(z) * layout.Footprint.RowPitch * layout.Footprint.Height +
+                                            static_cast<UINT64>(row) * layout.Footprint.RowPitch + rowSize >
+                                        dstSize,
+                                    "Dx12ImageImpl::CopyDataToImageStaged: destination footprint exceeds staging allocation");
+                        uint8_t *dstRow = dst + layout.Offset +
+                                          static_cast<size_t>(z) * layout.Footprint.RowPitch * layout.Footprint.Height +
+                                          static_cast<size_t>(row) * layout.Footprint.RowPitch;
+                        std::memcpy(dstRow, src + srcOffset, static_cast<size_t>(rowSize));
+                        srcOffset += static_cast<size_t>(rowSize);
+                    }
+                }
+            }
+        }
+
+        void TransitionForCopy(CommandBuffer *cmd, Image *image, PeImageLayout layout)
+        {
+            ImageBarrierInfo barrier{};
+            barrier.image = image;
+            barrier.layout = layout;
+            barrier.stageFlags = PE_STAGE_TRANSFER;
+            barrier.accessMask = layout == PE_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL ? PE_ACCESS_TRANSFER_READ : PE_ACCESS_TRANSFER_WRITE;
+            cmd->ImageBarrier(barrier);
+            Dx12CommandBufferImpl::From(cmd)->FlushBarriers();
+        }
     } // namespace
 
     Dx12ImageImpl::Dx12ImageImpl(Image *owner, const ImageDesc &desc)
@@ -186,14 +244,75 @@ namespace pe
         m_allocation.Reset();
     }
 
-    void Dx12ImageImpl::CopyImage(CommandBuffer * /*cmd*/, Image * /*src*/)
+    void Dx12ImageImpl::CopyImage(CommandBuffer *cmd, Image *src)
     {
-        PE_ERROR("Dx12ImageImpl::CopyImage waits for the DX12 CommandBuffer slice");
+        Image *dst = m_owner;
+        PE_ERROR_IF(!cmd, "Dx12ImageImpl::CopyImage: no command buffer specified");
+        PE_ERROR_IF(!src, "Dx12ImageImpl::CopyImage: null source image");
+        PE_ERROR_IF(dst->GetWidth() != src->GetWidth() || dst->GetHeight() != src->GetHeight() ||
+                        dst->GetMipLevels() != src->GetMipLevels() || dst->GetArrayLayers() != src->GetArrayLayers(),
+                    "Dx12ImageImpl::CopyImage: image shapes differ");
+
+        TransitionForCopy(cmd, src, PE_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL);
+        TransitionForCopy(cmd, dst, PE_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
+
+        ID3D12GraphicsCommandList *list = GetDx12CommandList(cmd);
+        const uint32_t mipLevels = dst->GetMipLevels();
+        const uint32_t arrayLayers = dst->GetArrayLayers();
+        for (uint32_t layer = 0; layer < arrayLayers; ++layer)
+        {
+            for (uint32_t mip = 0; mip < mipLevels; ++mip)
+            {
+                D3D12_TEXTURE_COPY_LOCATION source{};
+                source.pResource = Dx12ImageImpl::From(src)->GetResource();
+                source.Type = D3D12_TEXTURE_COPY_TYPE_SUBRESOURCE_INDEX;
+                source.SubresourceIndex = SubresourceIndex(src, layer, mip);
+
+                D3D12_TEXTURE_COPY_LOCATION dest{};
+                dest.pResource = m_resource.Get();
+                dest.Type = D3D12_TEXTURE_COPY_TYPE_SUBRESOURCE_INDEX;
+                dest.SubresourceIndex = SubresourceIndex(dst, layer, mip);
+
+                list->CopyTextureRegion(&dest, 0, 0, 0, &source, nullptr);
+            }
+        }
     }
 
-    void Dx12ImageImpl::CopyToBuffer(CommandBuffer * /*cmd*/, Buffer * /*dst*/)
+    void Dx12ImageImpl::CopyToBuffer(CommandBuffer *cmd, Buffer *dst)
     {
-        PE_ERROR("Dx12ImageImpl::CopyToBuffer waits for the DX12 CommandBuffer slice");
+        Image *src = m_owner;
+        PE_ERROR_IF(!cmd, "Dx12ImageImpl::CopyToBuffer: no command buffer specified");
+        PE_ERROR_IF(!dst, "Dx12ImageImpl::CopyToBuffer: null destination buffer");
+        PE_ERROR_IF(src->GetSamples() != PE_SAMPLE_COUNT_1, "Dx12ImageImpl::CopyToBuffer: multisampled image readback is not supported yet");
+        PE_ERROR_IF(IsDepthStencilFormat(m_viewFormat), "Dx12ImageImpl::CopyToBuffer: depth/stencil image readback is not supported yet");
+
+        TransitionForCopy(cmd, src, PE_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL);
+
+        ID3D12Device *device = static_cast<Dx12RhiImpl *>(RHII.GetImpl())->GetDevice();
+        const D3D12_RESOURCE_DESC desc = m_resource->GetDesc();
+
+        D3D12_PLACED_SUBRESOURCE_FOOTPRINT layout{};
+        UINT rowCount = 0;
+        UINT64 rowSize = 0;
+        UINT64 totalBytes = 0;
+        device->GetCopyableFootprints(&desc, 0, 1, 0, &layout, &rowCount, &rowSize, &totalBytes);
+        PE_ERROR_IF(totalBytes > dst->Size(), "Dx12ImageImpl::CopyToBuffer: destination buffer is too small");
+
+        D3D12_TEXTURE_COPY_LOCATION source{};
+        source.pResource = m_resource.Get();
+        source.Type = D3D12_TEXTURE_COPY_TYPE_SUBRESOURCE_INDEX;
+        source.SubresourceIndex = 0;
+
+        D3D12_TEXTURE_COPY_LOCATION dest{};
+        dest.pResource = Dx12BufferImpl::From(dst)->GetResource();
+        dest.Type = D3D12_TEXTURE_COPY_TYPE_PLACED_FOOTPRINT;
+        dest.PlacedFootprint = layout;
+
+        GetDx12CommandList(cmd)->CopyTextureRegion(&dest, 0, 0, 0, &source, nullptr);
+
+        BufferTrackInfo &trackInfo = dst->GetTrackInfo();
+        trackInfo.stageMask = PE_STAGE_TRANSFER;
+        trackInfo.accessMask = PE_ACCESS_TRANSFER_WRITE;
     }
 
     void Dx12ImageImpl::Blit(CommandBuffer * /*cmd*/, Image * /*src*/, const ImageBlit & /*region*/, PeFilter /*filter*/)
@@ -201,14 +320,79 @@ namespace pe
         PE_ERROR("Dx12ImageImpl::Blit is Vulkan-specific and waits for the DX12 mip-generation path");
     }
 
-    void Dx12ImageImpl::CopyDataToImageStaged(CommandBuffer * /*cmd*/,
-                                              void * /*data*/,
-                                              size_t /*size*/,
-                                              uint32_t /*baseArrayLayer*/,
-                                              uint32_t /*layerCount*/,
-                                              uint32_t /*mipLevel*/)
+    void Dx12ImageImpl::CopyDataToImageStaged(CommandBuffer *cmd,
+                                              void *data,
+                                              size_t size,
+                                              uint32_t baseArrayLayer,
+                                              uint32_t layerCount,
+                                              uint32_t mipLevel)
     {
-        PE_ERROR("Dx12ImageImpl::CopyDataToImageStaged waits for the DX12 CommandBuffer slice");
+        Image *image = m_owner;
+        PE_ERROR_IF(!cmd, "Dx12ImageImpl::CopyDataToImageStaged: no command buffer specified");
+        PE_ERROR_IF(!data, "Dx12ImageImpl::CopyDataToImageStaged: null source data");
+        PE_ERROR_IF(image->GetSamples() != PE_SAMPLE_COUNT_1, "Dx12ImageImpl::CopyDataToImageStaged: multisampled image upload is not supported yet");
+        PE_ERROR_IF(IsDepthStencilFormat(m_viewFormat), "Dx12ImageImpl::CopyDataToImageStaged: depth/stencil image upload is not supported yet");
+
+        const uint32_t layers = layerCount ? layerCount : image->GetArrayLayers();
+        PE_ERROR_IF(baseArrayLayer + layers > image->GetArrayLayers(), "Dx12ImageImpl::CopyDataToImageStaged: array layer range overflow");
+        PE_ERROR_IF(mipLevel >= image->GetMipLevels(), "Dx12ImageImpl::CopyDataToImageStaged: mip level out of range");
+
+        ID3D12Device *device = static_cast<Dx12RhiImpl *>(RHII.GetImpl())->GetDevice();
+        const D3D12_RESOURCE_DESC desc = m_resource->GetDesc();
+
+        std::vector<D3D12_PLACED_SUBRESOURCE_FOOTPRINT> layouts(layers);
+        std::vector<UINT> rowCounts(layers);
+        std::vector<UINT64> rowSizes(layers);
+        UINT64 nextOffset = 0;
+        for (uint32_t i = 0; i < layers; ++i)
+        {
+            const UINT subresource = SubresourceIndex(image, baseArrayLayer + i, mipLevel);
+            UINT64 requiredBytes = 0;
+            device->GetCopyableFootprints(&desc,
+                                          subresource,
+                                          1,
+                                          nextOffset,
+                                          &layouts[i],
+                                          &rowCounts[i],
+                                          &rowSizes[i],
+                                          &requiredBytes);
+            const UINT64 footprintEnd = layouts[i].Offset +
+                                        static_cast<UINT64>(std::max<UINT>(layouts[i].Footprint.Depth, 1u)) *
+                                            layouts[i].Footprint.RowPitch * layouts[i].Footprint.Height;
+            nextOffset = std::max(requiredBytes, footprintEnd);
+        }
+
+        StagingAllocation alloc = RHII.GetStagingManager()->Allocate(static_cast<size_t>(nextOffset));
+        CopyTightlyPackedToFootprints(static_cast<uint8_t *>(alloc.data),
+                                      static_cast<const uint8_t *>(data),
+                                      size,
+                                      static_cast<size_t>(nextOffset),
+                                      layouts.data(),
+                                      rowCounts.data(),
+                                      rowSizes.data(),
+                                      layers);
+        alloc.buffer->Flush(static_cast<size_t>(nextOffset), 0);
+
+        TransitionForCopy(cmd, image, PE_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
+
+        ID3D12GraphicsCommandList *list = GetDx12CommandList(cmd);
+        for (uint32_t i = 0; i < layers; ++i)
+        {
+            D3D12_TEXTURE_COPY_LOCATION source{};
+            source.pResource = Dx12BufferImpl::From(alloc.buffer)->GetResource();
+            source.Type = D3D12_TEXTURE_COPY_TYPE_PLACED_FOOTPRINT;
+            source.PlacedFootprint = layouts[i];
+
+            D3D12_TEXTURE_COPY_LOCATION dest{};
+            dest.pResource = m_resource.Get();
+            dest.Type = D3D12_TEXTURE_COPY_TYPE_SUBRESOURCE_INDEX;
+            dest.SubresourceIndex = SubresourceIndex(image, baseArrayLayer + i, mipLevel);
+
+            list->CopyTextureRegion(&dest, 0, 0, 0, &source, nullptr);
+        }
+
+        cmd->AddAfterWaitCallback([alloc = std::move(alloc)]()
+                                  { RHII.GetStagingManager()->SetUnused(alloc); });
     }
 
     void Dx12ImageImpl::CreateRTV()

@@ -18,10 +18,15 @@ namespace pe
         static const Dx12PipelineImpl *From(const Pipeline *pipeline) { return static_cast<const Dx12PipelineImpl *>(pipeline->m_impl); }
 
         ID3D12PipelineState *Get() const { return m_pso.Get(); }
+        uint32_t GetVertexBindingStride(uint32_t binding) const
+        {
+            return binding < m_vertexBindingStrides.size() ? m_vertexBindingStrides[binding] : 0u;
+        }
 
         Pipeline *m_owner{};
         PassInfo &m_info;
         Microsoft::WRL::ComPtr<ID3D12PipelineState> m_pso;
+        std::vector<uint32_t> m_vertexBindingStrides{};
     };
 
     inline ID3D12PipelineState *GetDx12Pipeline(Pipeline *pipeline)

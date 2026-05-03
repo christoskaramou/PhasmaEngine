@@ -1,6 +1,7 @@
 #include "API/Vulkan/VulkanBufferImpl.h"
 #if defined(PE_WIN32)
 #include "API/DX12/Dx12BufferImpl.h"
+#include "API/DX12/Dx12CommandBufferImpl.h"
 #endif
 #include "API/Command.h"
 #include "API/Debug.h"
@@ -163,11 +164,17 @@ namespace pe
 
     void Buffer_Barrier_Backend(CommandBuffer *cmd, const BufferBarrierInfo &info)
     {
-        if (RHII.GetApi() != PE_GRAPHICS_API_VULKAN)
+#if defined(PE_WIN32)
+        if (RHII.GetApi() == PE_GRAPHICS_API_DX12)
         {
-            PE_ERROR("Buffer barriers wait for the DX12 CommandBuffer slice");
+            PE_ERROR_IF(!cmd, "Buffer::Barrier: no command buffer specified");
+            Dx12CommandBufferImpl::From(cmd)->BufferBarrier(info);
             return;
         }
+#endif
+        PE_ERROR_IF(RHII.GetApi() != PE_GRAPHICS_API_VULKAN,
+                    "Buffer_Barrier_Backend: unsupported graphics api %u",
+                    static_cast<uint32_t>(RHII.GetApi()));
 
         PE_ERROR_IF(!info.buffer, "Buffer::Barrier: no buffer specified");
 
@@ -205,11 +212,17 @@ namespace pe
 
     void Buffer_Barriers_Backend(CommandBuffer *cmd, const std::vector<BufferBarrierInfo> &infos)
     {
-        if (RHII.GetApi() != PE_GRAPHICS_API_VULKAN)
+#if defined(PE_WIN32)
+        if (RHII.GetApi() == PE_GRAPHICS_API_DX12)
         {
-            PE_ERROR("Buffer barriers wait for the DX12 CommandBuffer slice");
+            PE_ERROR_IF(!cmd, "Buffer::Barriers: no command buffer specified");
+            Dx12CommandBufferImpl::From(cmd)->BufferBarriers(infos);
             return;
         }
+#endif
+        PE_ERROR_IF(RHII.GetApi() != PE_GRAPHICS_API_VULKAN,
+                    "Buffer_Barriers_Backend: unsupported graphics api %u",
+                    static_cast<uint32_t>(RHII.GetApi()));
 
         if (infos.empty())
             return;

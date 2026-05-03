@@ -57,6 +57,7 @@ namespace pe
         friend class CommandBuffer;
         friend struct VulkanCommandBufferImpl;
         friend struct VulkanBufferImpl;
+        friend struct Dx12CommandBufferImpl;
         friend struct Dx12BufferImpl;
 
         Buffer(const BufferDesc &desc);

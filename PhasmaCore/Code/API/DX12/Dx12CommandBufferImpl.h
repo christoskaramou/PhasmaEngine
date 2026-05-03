@@ -84,6 +84,12 @@ namespace pe
         Microsoft::WRL::ComPtr<ID3D12CommandAllocator> m_allocator;
         Microsoft::WRL::ComPtr<ID3D12GraphicsCommandList> m_cmdList;
         std::vector<D3D12_RESOURCE_BARRIER> m_barrierBatch;
+
+    private:
+        void BindShaderVisibleHeaps();
+
+        bool m_heapsBound = false;
+        D3D12_PRIMITIVE_TOPOLOGY m_lastTopology = D3D_PRIMITIVE_TOPOLOGY_UNDEFINED;
     };
 
     inline ID3D12GraphicsCommandList *GetDx12CommandList(CommandBuffer *cmd)

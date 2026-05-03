@@ -131,6 +131,7 @@ namespace pe
         friend class Shader;
         friend struct VulkanCommandBufferImpl;
         friend struct VulkanPipelineImpl;
+        friend struct Dx12CommandBufferImpl;
         friend struct Dx12PipelineImpl;
 
         void ReflectDescriptors();

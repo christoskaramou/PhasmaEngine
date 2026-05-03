@@ -133,6 +133,7 @@ namespace pe
         friend struct VulkanCommandBufferImpl;
         friend struct VulkanImageImpl;
         friend struct VulkanSwapchainImpl;
+        friend struct Dx12CommandBufferImpl;
         friend struct Dx12ImageImpl;
 
         Image(const ImageDesc &desc);

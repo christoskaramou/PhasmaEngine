@@ -1,5 +1,6 @@
 #include "API/DX12/Dx12BufferImpl.h"
 
+#include "API/DX12/Dx12CommandBufferImpl.h"
 #include "API/DX12/Dx12RhiImpl.h"
 #include "API/RHI.h"
 
@@ -135,12 +136,13 @@ namespace pe
         return m_resource ? m_resource->GetGPUVirtualAddress() : 0;
     }
 
-    void Dx12BufferImpl::CopyBuffer(CommandBuffer * /*cmd*/,
-                                    Buffer * /*src*/,
-                                    size_t /*size*/,
-                                    size_t /*srcOffset*/,
-                                    size_t /*dstOffset*/)
+    void Dx12BufferImpl::CopyBuffer(CommandBuffer *cmd,
+                                    Buffer *src,
+                                    size_t size,
+                                    size_t srcOffset,
+                                    size_t dstOffset)
     {
-        PE_ERROR("Dx12BufferImpl::CopyBuffer waits for the DX12 CommandBuffer slice");
+        PE_ERROR_IF(!cmd, "Dx12BufferImpl::CopyBuffer: no command buffer specified");
+        Dx12CommandBufferImpl::From(cmd)->CopyBuffer(src, m_owner, size, srcOffset, dstOffset);
     }
 } // namespace pe

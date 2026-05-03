@@ -11,6 +11,7 @@
 #include "API/Vulkan/VulkanRHITypeUtils.h"
 #include "API/Vulkan/VulkanSamplerImpl.h"
 #if defined(PE_WIN32)
+#include "API/DX12/Dx12CommandBufferImpl.h"
 #include "API/DX12/Dx12ImageImpl.h"
 #endif
 
@@ -813,7 +814,8 @@ namespace pe
 #if defined(PE_WIN32)
         if (RHII.GetApi() == PE_GRAPHICS_API_DX12)
         {
-            PE_ERROR("Image::Barrier waits for the DX12 CommandBuffer slice");
+            PE_ERROR_IF(!cmd, "Image::Barrier: no command buffer specified");
+            Dx12CommandBufferImpl::From(cmd)->ImageBarrier(info);
             return;
         }
 #endif
@@ -872,7 +874,8 @@ namespace pe
 #if defined(PE_WIN32)
         if (RHII.GetApi() == PE_GRAPHICS_API_DX12)
         {
-            PE_ERROR("Image::Barriers waits for the DX12 CommandBuffer slice");
+            PE_ERROR_IF(!cmd, "Image::Barriers: no command buffer specified");
+            Dx12CommandBufferImpl::From(cmd)->ImageBarriers(infos);
             return;
         }
 #endif
