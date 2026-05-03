@@ -1,85 +1,88 @@
-#include "API/Surface.h"
+#include "API/Surface_Internal.h"
 #include "API/RHI.h"
-#include "API/Vulkan/RHI_Vulkan.h"
-#include "API/Vulkan/VulkanRHITypeUtils.h"
+#include "API/Vulkan/VulkanSurfaceImpl.h"
+#if defined(PE_WIN32)
+#include "API/DX12/Dx12SurfaceImpl.h"
+#endif
 
 namespace pe
 {
-    Surface::Surface(SDL_Window *window)
-        : m_format{},
-          m_colorSpace{},
-          m_presentMode{PE_PRESENT_MODE_FIFO}
+    Surface::Impl *CreateSurfaceImpl(Surface *owner, SDL_Window *window)
     {
-        VkSurfaceKHR surfaceVK;
-        SDL_bool res = SDL_Vulkan_CreateSurface(window, VulkanRhi::Instance(), &surfaceVK);
-        PE_ERROR_IF(!res, SDL_GetError());
-
-        m_apiHandle = surfaceVK;
-
-        int w, h;
-        SDL_Vulkan_GetDrawableSize(window, &w, &h);
-        m_actualExtent = Rect2Du{0, 0, static_cast<uint32_t>(w), static_cast<uint32_t>(h)};
-
-        // Check transfer support
-        auto capabilities = VulkanRhi::Gpu().getSurfaceCapabilitiesKHR(m_apiHandle);
-        // Ensure blit operations
-        vk::ImageUsageFlags flags = vk::ImageUsageFlagBits::eTransferSrc | vk::ImageUsageFlagBits::eTransferDst | vk::ImageUsageFlagBits::eSampled;
-        PE_ERROR_IF(!(capabilities.supportedUsageFlags & flags), "Surface doesnt support nessesary operations");
-
-        // Find format
-        auto formats = VulkanRhi::Gpu().getSurfaceFormatsKHR(m_apiHandle);
-        m_format = vk::Format::eUndefined;
-        for (const auto &format : formats)
+        if (RHII.GetApi() == PE_GRAPHICS_API_DX12)
         {
-            if ((format.format == vk::Format::eB8G8R8A8Unorm || format.format == vk::Format::eR8G8B8A8Unorm) &&
-                format.colorSpace == vk::ColorSpaceKHR::eSrgbNonlinear)
-            {
-                m_format = format.format;
-                m_colorSpace = format.colorSpace;
-                break;
-            }
+#if defined(PE_WIN32)
+            return new Dx12SurfaceImpl(owner, window);
+#else
+            PE_ERROR("CreateSurfaceImpl: DX12 backend is Windows-only");
+            return nullptr;
+#endif
         }
-        PE_ERROR_IF(m_format == vk::Format::eUndefined, "Surface format not found");
+        return new VulkanSurfaceImpl(owner, window);
+    }
 
+    Surface *Surface::Create(SDL_Window *window)
+    {
+        Surface *s = new Surface(window);
+#if defined(PE_TRACK_RESOURCES)
+        PeTracker::Track(typeid(Surface), reinterpret_cast<void *>(s));
+#endif
+        return s;
+    }
+
+    void Surface::Destroy(Surface *&s)
+    {
+        if (s)
+        {
+#if defined(PE_TRACK_RESOURCES)
+            PeTracker::Untrack(typeid(Surface), reinterpret_cast<void *>(s));
+#endif
+            delete s;
+            s = nullptr;
+        }
+    }
+
+    std::vector<Surface *> Surface::GetHandles()
+    {
+#if defined(PE_TRACK_RESOURCES)
+        auto ptrs = PeTracker::GetHandles(typeid(Surface));
+        std::vector<Surface *> out;
+        out.reserve(ptrs.size());
+        for (void *p : ptrs)
+            out.push_back(static_cast<Surface *>(p));
+        return out;
+#else
+        return {};
+#endif
+    }
+
+    Surface::Surface(SDL_Window *window)
+    {
+        m_impl = CreateSurfaceImpl(this, window);
         SetPresentMode(PE_PRESENT_MODE_FIFO);
     }
 
     Surface::~Surface()
     {
-        if (m_apiHandle)
-            VulkanRhi::Instance().destroySurfaceKHR(m_apiHandle);
+        delete m_impl;
+        m_impl = nullptr;
     }
 
     std::vector<PePresentMode> Surface::GetSupportedPresentModes() const
     {
-        const auto vkModes = VulkanRhi::Gpu().getSurfacePresentModesKHR(m_apiHandle);
-        std::vector<PePresentMode> out;
-        out.reserve(vkModes.size());
-        for (auto vkMode : vkModes)
-        {
-            // Skip modes outside the neutral set; FromVkPresentMode would collapse them to FIFO and dup it.
-            switch (vkMode)
-            {
-            case vk::PresentModeKHR::eImmediate:
-            case vk::PresentModeKHR::eMailbox:
-            case vk::PresentModeKHR::eFifo:
-            case vk::PresentModeKHR::eFifoRelaxed:
-                out.push_back(FromVkPresentMode(vkMode));
-                break;
-            default:
-                break;
-            }
-        }
-        return out;
+        return m_impl ? m_impl->GetSupportedPresentModes() : std::vector<PePresentMode>{};
     }
 
     void Surface::SetPresentMode(PePresentMode preferredMode)
     {
-        const auto &presentModes = GetSupportedPresentModes();
+        const auto presentModes = GetSupportedPresentModes();
         for (const auto &presentMode : presentModes)
         {
             if (presentMode == preferredMode)
-                return void(m_presentMode = presentMode);
+            {
+                m_presentMode = presentMode;
+                return;
+            }
         }
 
         m_presentMode = PE_PRESENT_MODE_FIFO;

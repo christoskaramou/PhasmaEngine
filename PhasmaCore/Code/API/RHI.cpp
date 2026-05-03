@@ -3,8 +3,11 @@
 #if defined(PE_WIN32)
 #include "API/DX12/Dx12RhiImpl.h"
 #endif
+#include "API/Vulkan/VulkanCommandBufferImpl.h"
 #include "API/Vulkan/VulkanImageImpl.h"
+#include "API/Vulkan/VulkanQueueImpl.h"
 #include "API/Vulkan/VulkanRhiImpl.h"
+#include "API/Vulkan/VulkanSurfaceImpl.h"
 #ifdef PE_TRACY
 #include <tracy/TracyVulkan.hpp>
 #endif
@@ -424,8 +427,8 @@ namespace pe
                 static_cast<VkInstance>(vk->m_instance),
                 static_cast<VkPhysicalDevice>(vk->m_gpu),
                 static_cast<VkDevice>(vk->m_device),
-                static_cast<VkQueue>(m_mainQueue->ApiHandle()),
-                static_cast<VkCommandBuffer>(cmd->ApiHandle()),
+                static_cast<VkQueue>(pe::GetVulkanQueue(m_mainQueue)),
+                static_cast<VkCommandBuffer>(GetVulkanCommandBuffer(cmd)),
                 d.vkGetInstanceProcAddr,
                 d.vkGetDeviceProcAddr);
             TracyVkContextName(vk->m_tracyVkCtx, "Main Queue", 10);
@@ -882,11 +885,11 @@ namespace pe
         VULKAN_HPP_DEFAULT_DISPATCHER.init(vk->m_device);
 
         // Debug naming
-        Debug::SetObjectName(m_surface->ApiHandle(), "RHI_surface");
+        Debug::SetObjectName(pe::GetVulkanSurface(m_surface), "RHI_surface");
         Debug::SetObjectName(vk->m_gpu, "RHI_gpu");
         Debug::SetObjectName(vk->m_device, "RHI_device");
 
-        m_mainQueue = Queue::Create(vk->m_device, queueCreateInfo.queueFamilyIndex, "Main_queue");
+        m_mainQueue = Queue::Create(queueCreateInfo.queueFamilyIndex, "Main_queue");
     }
 
     void RHI::CreateAllocator()

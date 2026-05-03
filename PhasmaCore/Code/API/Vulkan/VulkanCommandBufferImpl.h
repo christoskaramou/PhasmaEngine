@@ -74,4 +74,14 @@ namespace pe
         CommandBuffer *m_owner{};
         vk::CommandBuffer m_apiHandle{};
     };
+
+    inline vk::CommandBuffer GetVulkanCommandBuffer(CommandBuffer *cmd)
+    {
+        return cmd ? VulkanCommandBufferImpl::From(cmd)->m_apiHandle : vk::CommandBuffer{};
+    }
+
+    inline vk::CommandBuffer GetVulkanCommandBuffer(const CommandBuffer *cmd)
+    {
+        return cmd ? VulkanCommandBufferImpl::From(cmd)->m_apiHandle : vk::CommandBuffer{};
+    }
 } // namespace pe

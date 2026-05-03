@@ -6,9 +6,15 @@ namespace pe
 {
     class Context;
 
-    class Surface : public PeHandle<Surface, vk::SurfaceKHR>
+    class Surface : public NoCopy
     {
     public:
+        struct Impl;
+
+        static Surface *Create(SDL_Window *window);
+        static void Destroy(Surface *&s);
+        static std::vector<Surface *> GetHandles();
+
         Surface(SDL_Window *window);
         ~Surface();
 
@@ -21,9 +27,15 @@ namespace pe
         std::vector<PePresentMode> GetSupportedPresentModes() const;
 
     private:
-        Rect2Du m_actualExtent;
-        vk::Format m_format;
-        vk::ColorSpaceKHR m_colorSpace;
-        PePresentMode m_presentMode;
+        friend struct VulkanSurfaceImpl;
+#if defined(PE_WIN32)
+        friend struct Dx12SurfaceImpl;
+#endif
+
+        Impl *m_impl{};
+        Rect2Du m_actualExtent{};
+        vk::Format m_format{vk::Format::eUndefined};
+        vk::ColorSpaceKHR m_colorSpace{};
+        PePresentMode m_presentMode{PE_PRESENT_MODE_FIFO};
     };
 } // namespace pe

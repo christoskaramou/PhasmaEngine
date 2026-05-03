@@ -11,7 +11,9 @@
 #include "API/RenderPass.h"
 #include "API/Surface.h"
 #include "API/Swapchain.h"
+#include "API/Vulkan/VulkanCommandBufferImpl.h"
 #include "API/Vulkan/VulkanDescriptorImpl.h"
+#include "API/Vulkan/VulkanQueueImpl.h"
 #include "GUIState.h"
 #include "Helpers.h"
 #include "Particles/ParticleManager.h"
@@ -1393,7 +1395,7 @@ namespace pe
         init_info.PhysicalDevice = VulkanRhi::Gpu();
         init_info.Device = VulkanRhi::Device();
         init_info.QueueFamily = queue->GetFamilyId();
-        init_info.Queue = queue->ApiHandle();
+        init_info.Queue = pe::GetVulkanQueue(queue);
         init_info.PipelineCache = nullptr;
         init_info.DescriptorPool = pe::GetVulkanDescriptorPool(RHII.GetDescriptorPool());
         init_info.Subpass = 0;
@@ -1675,7 +1677,7 @@ namespace pe
         }
 
         cmd->BeginPass(1, m_attachment.get(), "GUI", true);
-        ImGui_ImplVulkan_RenderDrawData(ImGui::GetDrawData(), cmd->ApiHandle());
+        ImGui_ImplVulkan_RenderDrawData(ImGui::GetDrawData(), GetVulkanCommandBuffer(cmd));
         cmd->EndPass();
     }
 

@@ -7,6 +7,8 @@
 #include "API/Vulkan/VulkanImageImpl.h"
 #include "API/Vulkan/VulkanImageViewImpl.h"
 #include "API/Vulkan/VulkanRHITypeUtils.h"
+#include "API/Vulkan/VulkanSemaphoreImpl.h"
+#include "API/Vulkan/VulkanSurfaceImpl.h"
 
 namespace pe
 {
@@ -16,7 +18,7 @@ namespace pe
         Surface *surface = desc.surface;
         PE_ERROR_IF(!surface, "VulkanSwapchainImpl requires a non-null Surface");
 
-        auto capabilities = VulkanRhi::Gpu().getSurfaceCapabilitiesKHR(surface->ApiHandle());
+        auto capabilities = VulkanRhi::Gpu().getSurfaceCapabilitiesKHR(pe::GetVulkanSurface(surface));
 
         // Per Vulkan spec: use currentExtent when it is defined (not UINT32_MAX).
         // Only clamp to [min,max] when the surface lets us choose freely (Wayland etc.).
@@ -41,7 +43,7 @@ namespace pe
         m_owner->m_height = chosenExtent.height;
 
         vk::SwapchainCreateInfoKHR swapchainCreateInfo{};
-        swapchainCreateInfo.surface = surface->ApiHandle();
+        swapchainCreateInfo.surface = pe::GetVulkanSurface(surface);
         swapchainCreateInfo.minImageCount = capabilities.minImageCount + 1;
         swapchainCreateInfo.imageFormat = surface->GetFormat();
         swapchainCreateInfo.imageColorSpace = surface->GetColorSpace();
@@ -111,7 +113,7 @@ namespace pe
 
     uint32_t VulkanSwapchainImpl::AquireNextImage(Semaphore *semaphore)
     {
-        auto result = VulkanRhi::Device().acquireNextImageKHR(m_swapchain, UINT64_MAX, semaphore->ApiHandle(), nullptr);
+        auto result = VulkanRhi::Device().acquireNextImageKHR(m_swapchain, UINT64_MAX, pe::GetVulkanSemaphore(semaphore), nullptr);
         PE_ERROR_IF(result.result != vk::Result::eSuccess && result.result != vk::Result::eSuboptimalKHR,
                     "Failed to acquire swapchain image");
         return result.value;

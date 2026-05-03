@@ -1,28 +1,58 @@
 #include "API/Queue.h"
 #include "API/Command.h"
+#include "API/CommandPool_Internal.h"
+#include "API/Debug.h"
+#include "API/Queue_Internal.h"
 #include "API/RHI.h"
-#include "API/Vulkan/RHI_Vulkan.h"
 #include "API/Semaphore.h"
 #include "API/Swapchain.h"
-#include "API/Vulkan/VulkanSwapchainImpl.h"
+#include "API/Vulkan/VulkanCommandPoolImpl.h"
+#include "API/Vulkan/VulkanQueueImpl.h"
+#if defined(PE_WIN32)
+#include "API/DX12/Dx12CommandPoolImpl.h"
+#include "API/DX12/Dx12QueueImpl.h"
+#endif
 
 namespace pe
 {
+    CommandPool::Impl *CreateCommandPoolImpl(CommandPool *owner, Queue *queue, vk::CommandPoolCreateFlags flags, const std::string &name)
+    {
+        if (RHII.GetApi() == PE_GRAPHICS_API_DX12)
+        {
+#if defined(PE_WIN32)
+            return new Dx12CommandPoolImpl(owner, queue, flags, name);
+#else
+            PE_ERROR("CreateCommandPoolImpl: DX12 backend is Windows-only");
+            return nullptr;
+#endif
+        }
+        return new VulkanCommandPoolImpl(owner, queue, flags, name);
+    }
+
+    Queue::Impl *CreateQueueImpl(Queue *owner, uint32_t familyId, const std::string &name)
+    {
+        if (RHII.GetApi() == PE_GRAPHICS_API_DX12)
+        {
+#if defined(PE_WIN32)
+            return new Dx12QueueImpl(owner, familyId, name);
+#else
+            PE_ERROR("CreateQueueImpl: DX12 backend is Windows-only");
+            return nullptr;
+#endif
+        }
+        return new VulkanQueueImpl(owner, familyId, name);
+    }
+
     CommandPool::CommandPool(Queue *queue, vk::CommandPoolCreateFlags flags, const std::string &name)
         : m_queue(queue), m_flags(flags)
     {
-        vk::CommandPoolCreateInfo cpci{};
-        cpci.queueFamilyIndex = m_queue->GetFamilyId();
-        cpci.flags = flags;
-
-        m_apiHandle = VulkanRhi::Device().createCommandPool(cpci);
-        Debug::SetObjectName(m_apiHandle, name);
+        m_impl = CreateCommandPoolImpl(this, queue, flags, name);
     }
 
     CommandPool::~CommandPool()
     {
-        if (m_apiHandle)
-            VulkanRhi::Device().destroyCommandPool(m_apiHandle);
+        delete m_impl;
+        m_impl = nullptr;
 
         while (!m_freeCmdStack.empty())
         {
@@ -33,18 +63,15 @@ namespace pe
 
     void CommandPool::Reset()
     {
-        VulkanRhi::Device().resetCommandPool(m_apiHandle);
+        m_impl->Reset();
     }
 
-    Queue::Queue(vk::Device device,
-                 uint32_t familyId,
-                 const std::string &name)
+    Queue::Queue(uint32_t familyId, const std::string &name)
         : m_familyId{familyId},
           m_name{name},
           m_submissionsSemaphore{Semaphore::Create(true, name + "_submissionsSemaphore")}
     {
-        m_apiHandle = VulkanRhi::Device().getQueue(m_familyId, 0);
-        Debug::SetObjectName(m_apiHandle, m_name);
+        m_impl = CreateQueueImpl(this, familyId, name);
     }
 
     Queue::~Queue()
@@ -56,109 +83,20 @@ namespace pe
             for (CommandPool *pool : pair.second)
                 CommandPool::Destroy(pool);
         }
+
+        delete m_impl;
+        m_impl = nullptr;
     }
 
     void Queue::Submit(uint32_t commandBuffersCount, CommandBuffer *const *commandBuffers, Semaphore *wait, Semaphore *signal)
     {
-        std::lock_guard<std::mutex> lock(s_submitMutex);
-
-        vk::SemaphoreSubmitInfo waitSemaphoreSubmitInfo{};
-        std::vector<vk::SemaphoreSubmitInfo> signalSemaphoreSubmitInfos{};
-        std::vector<vk::CommandBufferSubmitInfo> commandBufferSubmitInfos{};
-
-        signalSemaphoreSubmitInfos.reserve(2);
-        commandBufferSubmitInfos.reserve(commandBuffersCount);
-
-        // wait semaphore
-        if (wait)
-        {
-            waitSemaphoreSubmitInfo.semaphore = wait->ApiHandle();
-            waitSemaphoreSubmitInfo.stageMask = wait->GetStageFlags();
-        }
-
-        // signal semaphores
-        if (signal)
-        {
-            vk::SemaphoreSubmitInfo info{};
-            info.semaphore = signal->ApiHandle();
-            info.stageMask = signal->GetStageFlags();
-            signalSemaphoreSubmitInfos.push_back(info);
-        }
-
-        // signal semaphore for the command buffers
-        {
-            vk::SemaphoreSubmitInfo info{};
-            info.semaphore = m_submissionsSemaphore->ApiHandle();
-            info.stageMask = vk::PipelineStageFlagBits2::eBottomOfPipe;
-            info.value = ++m_submission;
-            signalSemaphoreSubmitInfos.push_back(info);
-        }
-
-        // command buffers
-        for (uint32_t i = 0; i < commandBuffersCount; i++)
-        {
-            CommandBuffer *cmd = commandBuffers[i];
-            if (cmd)
-            {
-                vk::CommandBufferSubmitInfo cbInfo{};
-                cbInfo.commandBuffer = cmd->ApiHandle();
-                commandBufferSubmitInfos.push_back(cbInfo);
-                cmd->SetSubmission(m_submission);
-            }
-        }
-
-        vk::SubmitInfo2 si{};
-        si.waitSemaphoreInfoCount = wait ? 1 : 0;
-        si.pWaitSemaphoreInfos = &waitSemaphoreSubmitInfo;
-        si.commandBufferInfoCount = static_cast<uint32_t>(commandBufferSubmitInfos.size());
-        si.pCommandBufferInfos = commandBufferSubmitInfos.data();
-        si.signalSemaphoreInfoCount = static_cast<uint32_t>(signalSemaphoreSubmitInfos.size());
-        si.pSignalSemaphoreInfos = signalSemaphoreSubmitInfos.data();
-
-        auto result = m_apiHandle.submit2(1, &si, nullptr);
-        switch (result)
-        {
-        case vk::Result::eSuccess:
-            break;
-        case vk::Result::eErrorDeviceLost:
-            PE_WARN("[Queue] submit: device lost");
-            break;
-        case vk::Result::eErrorOutOfDeviceMemory:
-        case vk::Result::eErrorOutOfHostMemory:
-            PE_WARN("[Queue] submit: out of memory (%d)", static_cast<int>(result));
-            break;
-        default:
-            PE_WARN("[Queue] submit failed with VkResult=%d", static_cast<int>(result));
-            break;
-        }
+        const uint64_t value = ++m_submission;
+        m_impl->Submit(commandBuffersCount, commandBuffers, wait, signal, m_submissionsSemaphore, value);
     }
 
     void Queue::Present(Swapchain *swapchain, uint32_t imageIndex, Semaphore *wait)
     {
-        std::lock_guard<std::mutex> lock(s_submitMutex);
-
-        vk::SwapchainKHR vkSwap = pe::GetVulkanSwapchain(swapchain);
-        vk::PresentInfoKHR pi{};
-        pi.waitSemaphoreCount = wait ? 1 : 0;
-        pi.pWaitSemaphores = wait ? &wait->ApiHandle() : nullptr;
-        pi.swapchainCount = 1;
-        pi.pSwapchains = &vkSwap;
-        pi.pImageIndices = &imageIndex;
-
-        try
-        {
-            auto result = m_apiHandle.presentKHR(pi);
-            if (result != vk::Result::eSuccess && result != vk::Result::eSuboptimalKHR)
-                PE_ERROR("[Queue] Failed to present swapchain image!");
-        }
-        catch (vk::OutOfDateKHRError &)
-        {
-            // Just ignore and try again
-        }
-        catch (vk::SystemError &e)
-        {
-            PE_ERROR("[Queue] Failed to present swapchain image: %s", e.what());
-        }
+        m_impl->Present(swapchain, imageIndex, wait);
     }
 
     void Queue::Wait()
@@ -168,7 +106,7 @@ namespace pe
 
     void Queue::WaitIdle()
     {
-        m_apiHandle.waitIdle();
+        m_impl->WaitIdle();
     }
 
     void Queue::BeginDebugRegion(const std::string &name)

@@ -12,6 +12,7 @@
 #include "API/Vulkan/Helpers_Vulkan.h"
 #include "API/Vulkan/RHI_Vulkan.h"
 #include "API/Vulkan/VulkanBufferImpl.h"
+#include "API/Vulkan/VulkanCommandPoolImpl.h"
 #include "API/Vulkan/VulkanDescriptorImpl.h"
 #include "API/Vulkan/VulkanImageImpl.h"
 #include "API/Vulkan/VulkanImageViewImpl.h"
@@ -25,7 +26,7 @@ namespace pe
         : m_owner{owner}
     {
         vk::CommandBufferAllocateInfo cbai{};
-        cbai.commandPool = commandPool->ApiHandle();
+        cbai.commandPool = pe::GetVulkanCommandPool(commandPool);
         cbai.level = vk::CommandBufferLevel::ePrimary;
         cbai.commandBufferCount = 1;
 

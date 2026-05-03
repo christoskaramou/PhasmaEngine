@@ -10,6 +10,8 @@ namespace pe
     class CommandPool : public PeHandle<CommandPool, vk::CommandPool>
     {
     public:
+        struct Impl;
+
         CommandPool(Queue *queue, vk::CommandPoolCreateFlags flags, const std::string &name);
         ~CommandPool();
 
@@ -19,7 +21,12 @@ namespace pe
 
     private:
         friend class Queue;
+        friend struct VulkanCommandPoolImpl;
+#if defined(PE_WIN32)
+        friend struct Dx12CommandPoolImpl;
+#endif
 
+        Impl *m_impl{};
         Queue *m_queue;
         vk::CommandPoolCreateFlags m_flags;
         std::stack<CommandBuffer *> m_freeCmdStack{};
@@ -28,9 +35,9 @@ namespace pe
     class Queue : public PeHandle<Queue, vk::Queue>
     {
     public:
-        Queue(vk::Device device,
-              uint32_t familyId,
-              const std::string &name);
+        struct Impl;
+
+        Queue(uint32_t familyId, const std::string &name);
         ~Queue();
 
         void Submit(uint32_t commandBuffersCount, CommandBuffer *const *commandBuffers, Semaphore *wait, Semaphore *signal);
@@ -47,8 +54,12 @@ namespace pe
         uint64_t GetSubmissionCount() const { return m_submission.load(std::memory_order_acquire); }
 
     private:
-        inline static std::mutex s_submitMutex{};
+        friend struct VulkanQueueImpl;
+#if defined(PE_WIN32)
+        friend struct Dx12QueueImpl;
+#endif
 
+        Impl *m_impl{};
         uint32_t m_familyId;
         std::string m_name;
         std::atomic_uint64_t m_submission{0};

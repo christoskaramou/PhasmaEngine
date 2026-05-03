@@ -5,6 +5,8 @@ namespace pe
     class Semaphore : public PeHandle<Semaphore, vk::Semaphore>
     {
     public:
+        struct Impl;
+
         Semaphore(bool timeline, const std::string &name);
         ~Semaphore();
 
@@ -18,8 +20,13 @@ namespace pe
         vk::PipelineStageFlags2 GetStageFlags() { return m_stageFlags; }
 
     private:
+        friend struct VulkanSemaphoreImpl;
+#if defined(PE_WIN32)
+        friend struct Dx12SemaphoreImpl;
+#endif
+
+        Impl *m_impl{};
         const bool m_timeline;
         vk::PipelineStageFlags2 m_stageFlags;
-        uint64_t m_lastCompleted{0};
     };
 } // namespace pe

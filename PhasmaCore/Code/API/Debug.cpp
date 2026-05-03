@@ -3,6 +3,8 @@
 #include "API/Queue.h"
 #include "API/RHI.h"
 #include "API/Vulkan/RHI_Vulkan.h"
+#include "API/Vulkan/VulkanCommandBufferImpl.h"
+#include "API/Vulkan/VulkanQueueImpl.h"
 #ifdef PE_TRACY
 #include <tracy/TracyVulkan.hpp>
 #endif
@@ -386,7 +388,7 @@ namespace pe
         label.color[2] = color.z;
         label.color[3] = color.w;
 
-        vkQueueBeginDebugUtilsLabelEXT(queue->ApiHandle(), &label);
+        vkQueueBeginDebugUtilsLabelEXT(pe::GetVulkanQueue(queue), &label);
     }
 
     void Debug::InsertQueueLabel(Queue *queue, const std::string &name)
@@ -403,7 +405,7 @@ namespace pe
         label.color[2] = color.z;
         label.color[3] = color.w;
 
-        vkQueueInsertDebugUtilsLabelEXT(queue->ApiHandle(), &label);
+        vkQueueInsertDebugUtilsLabelEXT(pe::GetVulkanQueue(queue), &label);
     }
 
     void Debug::EndQueueRegion(Queue *queue)
@@ -411,7 +413,7 @@ namespace pe
         if (!vkQueueEndDebugUtilsLabelEXT)
             return;
 
-        vkQueueEndDebugUtilsLabelEXT(queue->ApiHandle());
+        vkQueueEndDebugUtilsLabelEXT(pe::GetVulkanQueue(queue));
     }
 
     void Debug::BeginCmdRegion(CommandBuffer *cmd, const std::string &name)
@@ -427,7 +429,7 @@ namespace pe
         label.color[1] = color.y;
         label.color[2] = color.z;
         label.color[3] = color.w;
-        vkCmdBeginDebugUtilsLabelEXT(cmd->ApiHandle(), &label);
+        vkCmdBeginDebugUtilsLabelEXT(GetVulkanCommandBuffer(cmd), &label);
 
         if (cmd->m_gpuTimerInfos.size() < cmd->m_gpuTimerInfosCount + 1)
         {
@@ -452,7 +454,7 @@ namespace pe
             __LINE__, __FILE__, strlen(__FILE__),
             __FUNCTION__, strlen(__FUNCTION__),
             name.c_str(), name.size(),
-            static_cast<VkCommandBuffer>(cmd->ApiHandle()), true);
+            static_cast<VkCommandBuffer>(GetVulkanCommandBuffer(cmd)), true);
         cmd->m_tracyGpuScopes.push_back(scope);
 #endif
     }
@@ -471,7 +473,7 @@ namespace pe
         label.color[2] = color.z;
         label.color[3] = color.w;
 
-        vkCmdInsertDebugUtilsLabelEXT(cmd->ApiHandle(), &label);
+        vkCmdInsertDebugUtilsLabelEXT(GetVulkanCommandBuffer(cmd), &label);
     }
 
     void Debug::EndCmdRegion(CommandBuffer *cmd)
@@ -479,7 +481,7 @@ namespace pe
         if (!vkCmdEndDebugUtilsLabelEXT)
             return;
 
-        vkCmdEndDebugUtilsLabelEXT(cmd->ApiHandle());
+        vkCmdEndDebugUtilsLabelEXT(GetVulkanCommandBuffer(cmd));
 
         cmd->m_gpuTimerInfos[cmd->m_gpuTimerIdsStack.top()].timer->End();
         cmd->m_gpuTimerIdsStack.pop();
