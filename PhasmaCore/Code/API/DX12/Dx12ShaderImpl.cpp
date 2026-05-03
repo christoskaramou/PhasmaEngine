@@ -263,6 +263,7 @@ namespace pe
             ShaderInOutDesc desc{};
             desc.name = param.SemanticName ? param.SemanticName : "";
             desc.location = static_cast<int>(param.Register);
+            desc.semanticIndex = param.SemanticIndex;
             desc.size = totalSize;
             if (totalSize > 0 && reflectionType != ReflectionVariableType::None)
                 desc.format = GetAttributeFormat(totalSize, reflectionType);

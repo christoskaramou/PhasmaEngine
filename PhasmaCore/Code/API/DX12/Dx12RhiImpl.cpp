@@ -1,9 +1,14 @@
 #include "API/DX12/Dx12RhiImpl.h"
 
 #include "API/Buffer.h"
+#include "API/DX12/Dx12BufferImpl.h"
+#include "API/DX12/Dx12PipelineImpl.h"
 #include "API/DX12/Dx12SwapchainImpl.h"
 #include "API/DX12/Dx12Translate.h"
+#include "API/Pipeline.h"
+#include "API/Shader.h"
 #include "API/Swapchain.h"
+#include "Base/FileWatcher.h"
 
 #include <D3D12MemAlloc.h>
 
@@ -237,12 +242,52 @@ namespace pe
         m_clearTriangleBuffer->Copy(1, &range, false);
     }
 
+    void Dx12RhiImpl::EnsureClearTrianglePipeline()
+    {
+        if (m_clearTrianglePipeline)
+            return;
+
+        const std::string shaderPath = Path::Assets + "Shaders/DX12/ClearTriangle.hlsl";
+        if (!FileWatcher::Get(shaderPath))
+            FileWatcher::Add(shaderPath, [](size_t) {});
+
+        ShaderDesc vsDesc{};
+        vsDesc.sourcePath = shaderPath;
+        vsDesc.entryPoint = "mainVS";
+        vsDesc.stage = PE_SHADER_STAGE_VERTEX;
+        vsDesc.debugName = "DX12_clear_triangle_vs";
+
+        ShaderDesc psDesc{};
+        psDesc.sourcePath = shaderPath;
+        psDesc.entryPoint = "mainPS";
+        psDesc.stage = PE_SHADER_STAGE_FRAGMENT;
+        psDesc.debugName = "DX12_clear_triangle_ps";
+
+        m_clearTrianglePassInfo = new PassInfo();
+        m_clearTrianglePassInfo->name = "DX12_clear_triangle_pipeline";
+        m_clearTrianglePassInfo->pVertShader = Shader::Create(vsDesc);
+        m_clearTrianglePassInfo->pFragShader = Shader::Create(psDesc);
+        m_clearTrianglePassInfo->topology = PE_TOPOLOGY_TRIANGLE_LIST;
+        m_clearTrianglePassInfo->polygonMode = PE_POLYGON_MODE_FILL;
+        m_clearTrianglePassInfo->cullMode = PE_CULL_MODE_NONE;
+        m_clearTrianglePassInfo->blendEnable = false;
+        m_clearTrianglePassInfo->colorBlendAttachments = {BlendState::Default};
+        m_clearTrianglePassInfo->colorFormats = {PE_FORMAT_R8G8B8A8_UNORM};
+        m_clearTrianglePassInfo->depthFormat = PE_FORMAT_UNDEFINED;
+        m_clearTrianglePassInfo->depthTestEnable = false;
+        m_clearTrianglePassInfo->depthWriteEnable = false;
+        m_clearTrianglePassInfo->Update();
+
+        m_clearTrianglePipeline = Pipeline::Create(nullptr, *m_clearTrianglePassInfo);
+    }
+
     void Dx12RhiImpl::DrawClearScreen(Swapchain *sc)
     {
         PE_ERROR_IF(!sc, "Dx12RhiImpl::DrawClearScreen requires a swapchain");
         auto *scImpl = static_cast<Dx12SwapchainImpl *>(sc->m_impl);
         const uint32_t bb = sc->AquireNextImage(nullptr);
         EnsureClearTriangleBuffer();
+        EnsureClearTrianglePipeline();
 
         if (m_frameFence->GetCompletedValue() < m_frameFenceValues[m_clearFrameIndex])
         {
@@ -257,6 +302,13 @@ namespace pe
         vbv.BufferLocation = m_clearTriangleBuffer->GetDeviceAddress();
         vbv.SizeInBytes = static_cast<UINT>(m_clearTriangleBuffer->Size());
         vbv.StrideInBytes = sizeof(vec4);
+        m_clearCmdList->SetPipelineState(GetDx12Pipeline(m_clearTrianglePipeline));
+        m_clearCmdList->SetGraphicsRootSignature(m_sharedRootSignature->Get());
+        ID3D12DescriptorHeap *heaps[] = {m_cbvSrvUavHeap->Get(), m_samplerHeap->Get()};
+        m_clearCmdList->SetDescriptorHeaps(static_cast<UINT>(std::size(heaps)), heaps);
+        m_clearCmdList->SetGraphicsRootDescriptorTable(3, m_cbvSrvUavHeap->GetGpuHandle(0));
+        m_clearCmdList->SetGraphicsRootDescriptorTable(4, m_cbvSrvUavHeap->GetGpuHandle(0));
+        m_clearCmdList->SetGraphicsRootDescriptorTable(5, m_samplerHeap->GetGpuHandle(0));
         m_clearCmdList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
         m_clearCmdList->IASetVertexBuffers(0, 1, &vbv);
 
@@ -269,6 +321,19 @@ namespace pe
         m_clearCmdList->ResourceBarrier(1, &toRt);
 
         m_clearCmdList->ClearRenderTargetView(scImpl->GetRtv(bb), m_clearColor, 0, nullptr);
+        D3D12_VIEWPORT viewport{};
+        viewport.Width = static_cast<float>(sc->GetWidth());
+        viewport.Height = static_cast<float>(sc->GetHeight());
+        viewport.MinDepth = 0.0f;
+        viewport.MaxDepth = 1.0f;
+        D3D12_RECT scissor{};
+        scissor.right = static_cast<LONG>(sc->GetWidth());
+        scissor.bottom = static_cast<LONG>(sc->GetHeight());
+        m_clearCmdList->RSSetViewports(1, &viewport);
+        m_clearCmdList->RSSetScissorRects(1, &scissor);
+        D3D12_CPU_DESCRIPTOR_HANDLE rtv = scImpl->GetRtv(bb);
+        m_clearCmdList->OMSetRenderTargets(1, &rtv, FALSE, nullptr);
+        m_clearCmdList->DrawInstanced(3, 1, 0, 0);
 
         D3D12_RESOURCE_BARRIER toPresent = toRt;
         std::swap(toPresent.Transition.StateBefore, toPresent.Transition.StateAfter);
@@ -303,6 +368,9 @@ namespace pe
     void Dx12RhiImpl::Shutdown()
     {
         WaitDeviceIdle();
+        Pipeline::Destroy(m_clearTrianglePipeline);
+        delete m_clearTrianglePassInfo;
+        m_clearTrianglePassInfo = nullptr;
         Buffer::Destroy(m_clearTriangleBuffer);
         if (m_fenceEvent)
         {

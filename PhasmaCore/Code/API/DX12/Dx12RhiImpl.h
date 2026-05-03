@@ -15,6 +15,8 @@ namespace D3D12MA
 namespace pe
 {
     class Buffer;
+    class PassInfo;
+    class Pipeline;
     class Swapchain;
 
     class Dx12RhiImpl final : public RHI::Impl
@@ -42,6 +44,7 @@ namespace pe
 
     private:
         void EnsureClearTriangleBuffer();
+        void EnsureClearTrianglePipeline();
 
         Microsoft::WRL::ComPtr<IDXGIFactory6> m_factory;
         Microsoft::WRL::ComPtr<IDXGIAdapter4> m_adapter;
@@ -63,6 +66,8 @@ namespace pe
         uint32_t m_clearFrameIndex = 0;
         float m_clearColor[4] = {0.10f, 0.12f, 0.16f, 1.0f};
         Buffer *m_clearTriangleBuffer = nullptr;
+        PassInfo *m_clearTrianglePassInfo = nullptr;
+        Pipeline *m_clearTrianglePipeline = nullptr;
         std::string m_adapterName;
         RHI::Caps m_caps{};
     };

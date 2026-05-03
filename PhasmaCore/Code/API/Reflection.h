@@ -50,6 +50,7 @@ namespace pe
         std::string name;
         int location = INT32_MIN;
         int binding = INT32_MIN;
+        uint32_t semanticIndex = 0;
         ::PeFormat format = ::PE_FORMAT_UNDEFINED;
         uint32_t size = 0;
     };
@@ -130,6 +131,7 @@ namespace pe
         const std::vector<BufferReflection> &GetStorageBuffers() const { return m_storageBuffers; }
         const std::vector<BufferReflection> &GetUniformBuffers() const { return m_uniformBuffers; }
         const std::vector<ImageReflection> &GetImages() const { return m_images; }
+        const std::vector<ShaderInOutDesc> &GetInputs() const { return m_inputs; }
         const std::vector<ImageReflection> &GetStorageImages() const { return m_storageImages; }
         const std::vector<SamplerReflection> &GetSamplers() const { return m_samplers; }
         const std::vector<CombinedImageSamplerReflection> &GetCombinedImageSamplers() const { return m_combinedImageSamplers; }

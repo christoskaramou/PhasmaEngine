@@ -129,6 +129,8 @@ namespace pe
         friend class CommandBuffer;
         friend class Pipeline;
         friend class Shader;
+        friend struct VulkanPipelineImpl;
+        friend struct Dx12PipelineImpl;
 
         void ReflectDescriptors();
         void UpdateHash() override;
@@ -139,31 +141,27 @@ namespace pe
         std::vector<std::vector<Descriptor *>> m_descriptorsPF;
     };
 
-    class Pipeline : public PeHandle<Pipeline, vk::Pipeline>
+    class Pipeline : public NoCopy
     {
     public:
+        struct Impl;
+
+        static Pipeline *Create(RenderPass *renderPass, PassInfo &info);
+        static void Destroy(Pipeline *&pipeline);
+        static std::vector<Pipeline *> GetHandles();
+
         Pipeline(RenderPass *renderPass, PassInfo &info);
         ~Pipeline();
 
         PassInfo &GetInfo() { return m_info; }
+        const PassInfo &GetInfo() const { return m_info; }
 
     private:
         friend class CommandBuffer;
+        friend struct VulkanPipelineImpl;
+        friend struct Dx12PipelineImpl;
 
-        void CreateRayTracingPipeline();
-        void CreateComputePipeline();
-        void CreateGraphicsPipeline(RenderPass *renderPass);
-        void CreateSBT();
-
+        Impl *m_impl{};
         PassInfo &m_info;
-        vk::PipelineLayout m_layout;
-        vk::PipelineCache m_cache;
-
-        // Ray Tracing
-        Buffer *m_sbtBuffer = nullptr;
-        vk::StridedDeviceAddressRegionKHR m_rgenRegion{};
-        vk::StridedDeviceAddressRegionKHR m_missRegion{};
-        vk::StridedDeviceAddressRegionKHR m_hitRegion{};
-        vk::StridedDeviceAddressRegionKHR m_callRegion{};
     };
 } // namespace pe

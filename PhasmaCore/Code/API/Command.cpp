@@ -15,6 +15,7 @@
 #include "API/Vulkan/VulkanDescriptorImpl.h"
 #include "API/Vulkan/VulkanImageImpl.h"
 #include "API/Vulkan/VulkanImageViewImpl.h"
+#include "API/Vulkan/VulkanPipelineImpl.h"
 #include "API/Vulkan/VulkanRHITypeUtils.h"
 #include "API/Vulkan/VulkanSamplerImpl.h"
 
@@ -504,17 +505,17 @@ namespace pe
 
     void CommandBuffer::BindGraphicsPipeline()
     {
-        m_apiHandle.bindPipeline(vk::PipelineBindPoint::eGraphics, m_boundPipeline->ApiHandle());
+        m_apiHandle.bindPipeline(vk::PipelineBindPoint::eGraphics, GetVulkanPipeline(m_boundPipeline));
     }
 
     void CommandBuffer::BindComputePipeline()
     {
-        m_apiHandle.bindPipeline(vk::PipelineBindPoint::eCompute, m_boundPipeline->ApiHandle());
+        m_apiHandle.bindPipeline(vk::PipelineBindPoint::eCompute, GetVulkanPipeline(m_boundPipeline));
     }
 
     void CommandBuffer::BindRayTracingPipeline()
     {
-        m_apiHandle.bindPipeline(vk::PipelineBindPoint::eRayTracingKHR, m_boundPipeline->ApiHandle());
+        m_apiHandle.bindPipeline(vk::PipelineBindPoint::eRayTracingKHR, GetVulkanPipeline(m_boundPipeline));
     }
 
     void CommandBuffer::BindPipeline(PassInfo &passInfo, bool bindDescriptors)
@@ -599,7 +600,7 @@ namespace pe
 
             m_apiHandle.bindDescriptorSets(
                 point,
-                m_boundPipeline->m_layout,
+                GetVulkanPipelineLayout(m_boundPipeline),
                 start,
                 static_cast<uint32_t>(dsets.size()),
                 dsets.data(),
@@ -713,7 +714,7 @@ namespace pe
 
         vkCmdPushDescriptorSetKHR(m_apiHandle,
                                   m_boundPipeline->m_info.pCompShader ? VK_PIPELINE_BIND_POINT_COMPUTE : VK_PIPELINE_BIND_POINT_GRAPHICS,
-                                  m_boundPipeline->m_layout,
+                                  GetVulkanPipelineLayout(m_boundPipeline),
                                   set,
                                   static_cast<uint32_t>(writes.size()),
                                   reinterpret_cast<const VkWriteDescriptorSet *>(writes.data()));
@@ -771,7 +772,7 @@ namespace pe
 
         for (size_t i = 0; i < stages.size(); i++)
         {
-            m_apiHandle.pushConstants(m_boundPipeline->m_layout,
+            m_apiHandle.pushConstants(GetVulkanPipelineLayout(m_boundPipeline),
                                       stages[i],
                                       offsets[i],
                                       sizes[i],
@@ -819,10 +820,10 @@ namespace pe
     void CommandBuffer::TraceRays(uint32_t width, uint32_t height, uint32_t depth)
     {
         PE_ERROR_IF(!m_boundPipeline, "CommandBuffer::TraceRays: No bound pipeline found!");
-        m_apiHandle.traceRaysKHR(m_boundPipeline->m_rgenRegion,
-                                 m_boundPipeline->m_missRegion,
-                                 m_boundPipeline->m_hitRegion,
-                                 m_boundPipeline->m_callRegion,
+        m_apiHandle.traceRaysKHR(GetVulkanRgenRegion(m_boundPipeline),
+                                 GetVulkanMissRegion(m_boundPipeline),
+                                 GetVulkanHitRegion(m_boundPipeline),
+                                 GetVulkanCallRegion(m_boundPipeline),
                                  width, height, depth);
     }
 
