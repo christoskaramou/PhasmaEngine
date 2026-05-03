@@ -155,6 +155,11 @@ namespace pe
             return mipLevel + arrayLayer * image->GetMipLevels();
         }
 
+        uint32_t MipExtent(uint32_t extent, uint32_t mipLevel)
+        {
+            return std::max(extent >> mipLevel, 1u);
+        }
+
         void CopyTightlyPackedToFootprints(uint8_t *dst,
                                            const uint8_t *src,
                                            size_t srcSize,
@@ -333,9 +338,133 @@ namespace pe
         trackInfo.accessMask = PE_ACCESS_TRANSFER_WRITE;
     }
 
-    void Dx12ImageImpl::Blit(CommandBuffer * /*cmd*/, Image * /*src*/, const ImageBlit & /*region*/, PeFilter /*filter*/)
+    void Dx12ImageImpl::Blit(CommandBuffer *cmd, Image *src, const ImageBlit &region, PeFilter /*filter*/)
     {
-        PE_ERROR("Dx12ImageImpl::Blit is Vulkan-specific and waits for the DX12 mip-generation path");
+        Image *dst = m_owner;
+        PE_ERROR_IF(!cmd, "Dx12ImageImpl::Blit: no command buffer specified");
+        PE_ERROR_IF(!src, "Dx12ImageImpl::Blit: null source image");
+        PE_ERROR_IF(src->GetSamples() != PE_SAMPLE_COUNT_1 || dst->GetSamples() != PE_SAMPLE_COUNT_1,
+                    "Dx12ImageImpl::Blit: multisampled blits are not supported");
+
+        const uint32_t srcMip = region.srcSubresource.mipLevel;
+        const uint32_t dstMip = region.dstSubresource.mipLevel;
+        PE_ERROR_IF(srcMip >= src->GetMipLevels() || dstMip >= dst->GetMipLevels(),
+                    "Dx12ImageImpl::Blit: mip level out of range (src %u/%u, dst %u/%u)",
+                    srcMip, src->GetMipLevels(), dstMip, dst->GetMipLevels());
+
+        const uint32_t srcLayerCount = region.srcSubresource.layerCount ? region.srcSubresource.layerCount : 1u;
+        const uint32_t dstLayerCount = region.dstSubresource.layerCount ? region.dstSubresource.layerCount : 1u;
+        PE_ERROR_IF(srcLayerCount != dstLayerCount,
+                    "Dx12ImageImpl::Blit: layer count mismatch (src %u, dst %u)",
+                    srcLayerCount, dstLayerCount);
+        PE_ERROR_IF(srcLayerCount > src->GetArrayLayers() ||
+                        dstLayerCount > dst->GetArrayLayers() ||
+                        region.srcSubresource.baseArrayLayer > src->GetArrayLayers() - srcLayerCount ||
+                        region.dstSubresource.baseArrayLayer > dst->GetArrayLayers() - dstLayerCount,
+                    "Dx12ImageImpl::Blit: array layer range overflow");
+
+        const Offset3D &srcMin = region.srcOffsets[0];
+        const Offset3D &srcMax = region.srcOffsets[1];
+        const Offset3D &dstMin = region.dstOffsets[0];
+        const Offset3D &dstMax = region.dstOffsets[1];
+
+        const int32_t srcW = srcMax.x - srcMin.x;
+        const int32_t srcH = srcMax.y - srcMin.y;
+        const int32_t srcBack = std::max(srcMax.z, srcMin.z + 1);
+        const int32_t dstBack = std::max(dstMax.z, dstMin.z + 1);
+        const int32_t srcD = srcBack - srcMin.z;
+        const int32_t dstW = dstMax.x - dstMin.x;
+        const int32_t dstH = dstMax.y - dstMin.y;
+        const int32_t dstD = dstBack - dstMin.z;
+
+        PE_ERROR_IF(srcMin.x < 0 || srcMin.y < 0 || srcMin.z < 0 ||
+                        dstMin.x < 0 || dstMin.y < 0 || dstMin.z < 0,
+                    "Dx12ImageImpl::Blit: negative offsets are not supported");
+        PE_ERROR_IF(srcW <= 0 || srcH <= 0 || dstW <= 0 || dstH <= 0,
+                    "Dx12ImageImpl::Blit: degenerate region (src %dx%d, dst %dx%d)",
+                    srcW, srcH, dstW, dstH);
+        PE_ERROR_IF(srcMax.z < srcMin.z || dstMax.z < dstMin.z,
+                    "Dx12ImageImpl::Blit: invalid depth range");
+        PE_ERROR_IF(srcW != dstW || srcH != dstH || srcD != dstD,
+                    "Dx12ImageImpl::Blit: scaling blits are not supported on DX12 yet "
+                    "(src %dx%dx%d, dst %dx%dx%d) - needs the shader-blit slice",
+                    srcW, srcH, srcD, dstW, dstH, dstD);
+
+        const Dx12ImageImpl *srcImpl = Dx12ImageImpl::From(src);
+        PE_ERROR_IF(IsDepthStencilFormat(srcImpl->m_viewFormat) || IsDepthStencilFormat(m_viewFormat),
+                    "Dx12ImageImpl::Blit: depth/stencil blits are not supported on DX12 yet");
+        PE_ERROR_IF(static_cast<uint32_t>(srcMax.x) > MipExtent(src->GetWidth(), srcMip) ||
+                        static_cast<uint32_t>(srcMax.y) > MipExtent(src->GetHeight(), srcMip) ||
+                        static_cast<uint32_t>(srcBack) > MipExtent(src->m_depth, srcMip) ||
+                        static_cast<uint32_t>(dstMax.x) > MipExtent(dst->GetWidth(), dstMip) ||
+                        static_cast<uint32_t>(dstMax.y) > MipExtent(dst->GetHeight(), dstMip) ||
+                        static_cast<uint32_t>(dstBack) > MipExtent(dst->m_depth, dstMip),
+                    "Dx12ImageImpl::Blit: region exceeds source or destination mip extent");
+        PE_ERROR_IF(srcImpl->m_resourceFormat != m_resourceFormat,
+                    "Dx12ImageImpl::Blit: format-converting blit not supported on DX12 yet "
+                    "(src '%s' fmt=%u, dst '%s' fmt=%u) - needs the shader-blit slice",
+                    src->GetName().c_str(), static_cast<uint32_t>(srcImpl->m_resourceFormat),
+                    dst->GetName().c_str(), static_cast<uint32_t>(m_resourceFormat));
+
+        cmd->BeginDebugRegion("BlitImage");
+
+        std::vector<ImageBarrierInfo> barriers(2);
+        barriers[0].image = dst;
+        barriers[0].stageFlags = PE_STAGE_TRANSFER;
+        barriers[0].accessMask = PE_ACCESS_TRANSFER_WRITE;
+        barriers[0].layout = PE_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+        barriers[0].baseArrayLayer = region.dstSubresource.baseArrayLayer;
+        barriers[0].arrayLayers = dstLayerCount;
+        barriers[0].baseMipLevel = dstMip;
+        barriers[0].mipLevels = 1;
+
+        barriers[1].image = src;
+        barriers[1].stageFlags = PE_STAGE_TRANSFER;
+        barriers[1].accessMask = PE_ACCESS_TRANSFER_READ;
+        barriers[1].layout = PE_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
+        barriers[1].baseArrayLayer = region.srcSubresource.baseArrayLayer;
+        barriers[1].arrayLayers = srcLayerCount;
+        barriers[1].baseMipLevel = srcMip;
+        barriers[1].mipLevels = 1;
+
+        Image::Barriers(cmd, barriers);
+        Dx12CommandBufferImpl::From(cmd)->FlushBarriers();
+
+        ID3D12GraphicsCommandList *list = GetDx12CommandList(cmd);
+
+        D3D12_BOX srcBox{};
+        srcBox.left = static_cast<UINT>(srcMin.x);
+        srcBox.top = static_cast<UINT>(srcMin.y);
+        srcBox.front = static_cast<UINT>(srcMin.z);
+        srcBox.right = static_cast<UINT>(srcMax.x);
+        srcBox.bottom = static_cast<UINT>(srcMax.y);
+        srcBox.back = static_cast<UINT>(srcBack);
+
+        for (uint32_t i = 0; i < srcLayerCount; ++i)
+        {
+            D3D12_TEXTURE_COPY_LOCATION source{};
+            source.pResource = srcImpl->GetResource();
+            source.Type = D3D12_TEXTURE_COPY_TYPE_SUBRESOURCE_INDEX;
+            source.SubresourceIndex = SubresourceIndex(src,
+                                                       region.srcSubresource.baseArrayLayer + i,
+                                                       srcMip);
+
+            D3D12_TEXTURE_COPY_LOCATION dest{};
+            dest.pResource = m_resource.Get();
+            dest.Type = D3D12_TEXTURE_COPY_TYPE_SUBRESOURCE_INDEX;
+            dest.SubresourceIndex = SubresourceIndex(dst,
+                                                     region.dstSubresource.baseArrayLayer + i,
+                                                     dstMip);
+
+            list->CopyTextureRegion(&dest,
+                                    static_cast<UINT>(dstMin.x),
+                                    static_cast<UINT>(dstMin.y),
+                                    static_cast<UINT>(dstMin.z),
+                                    &source,
+                                    &srcBox);
+        }
+
+        cmd->EndDebugRegion();
     }
 
     void Dx12ImageImpl::CopyDataToImageStaged(CommandBuffer *cmd,

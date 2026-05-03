@@ -402,6 +402,7 @@ namespace pe
             scDesc.backbufferCount = 2;
             scDesc.name = "RHI_swapchain";
             m_swapchain = Swapchain::Create(scDesc);
+            Downsampler::Init();
             m_deletionQueues.resize(GetSwapchainImageCount());
             for (auto &queue : m_deletionQueues)
                 queue = new DeletionQueue();
@@ -459,7 +460,25 @@ namespace pe
 
         if (m_api == PE_GRAPHICS_API_DX12)
         {
+            for (auto &queue : m_deletionQueues)
+            {
+                if (queue)
+                {
+                    queue->Flush();
+                    delete queue;
+                }
+            }
+            m_deletionQueues.clear();
+
+            Downsampler::Destroy();
+            DescriptorLayout::ClearCache();
             Swapchain::Destroy(m_swapchain);
+            Queue::Destroy(m_mainQueue);
+            CommandBuffer::ClearCache();
+            delete m_stagingManager;
+            m_stagingManager = nullptr;
+            DescriptorPool::Destroy(m_descriptorPool);
+
             if (m_impl)
                 m_impl->Shutdown();
             delete m_impl;

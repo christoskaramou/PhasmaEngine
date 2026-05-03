@@ -33,7 +33,7 @@ ConstantBuffer<SpdConstants> spdConstants;
 // Texture definitions
 //--------------------------------------------------------------------------------------
 [[vk::binding(0)]] RWTexture2DArray<float4> imgDst[13] : register(u0); // don't access mip [6]
-[[vk::binding(1)]] globallycoherent RWTexture2DArray<float4> imgDst6 : register(u13);
+[[vk::binding(13)]] globallycoherent RWTexture2DArray<float4> imgDst6 : register(u13);
 
 //--------------------------------------------------------------------------------------
 // Buffer definitions - global atomic counter
@@ -42,7 +42,7 @@ struct SpdGlobalAtomicBuffer
 {
     uint counter[6];
 };
-[[vk::binding(2)]] globallycoherent RWStructuredBuffer<SpdGlobalAtomicBuffer> spdGlobalAtomic : register(u14);
+[[vk::binding(14)]] globallycoherent RWStructuredBuffer<SpdGlobalAtomicBuffer> spdGlobalAtomic : register(u14);
 
 #define A_GPU
 #define A_HLSL

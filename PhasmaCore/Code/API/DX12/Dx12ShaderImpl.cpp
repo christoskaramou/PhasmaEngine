@@ -383,6 +383,10 @@ namespace pe
 
             while (std::getline(stream, line))
             {
+                const size_t commentPos = line.find("//");
+                if (commentPos != std::string::npos)
+                    line = line.substr(0, commentPos);
+
                 const bool hasPushConstantAttribute = line.find("[[vk::push_constant]]") != std::string::npos;
                 if (hasPushConstantAttribute)
                 {

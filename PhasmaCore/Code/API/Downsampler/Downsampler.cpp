@@ -80,11 +80,11 @@ namespace pe
         bindingInfos[0].imageLayout = PE_IMAGE_LAYOUT_GENERAL;
         bindingInfos[0].count = 13;
 
-        bindingInfos[1].binding = 1;
+        bindingInfos[1].binding = 13;
         bindingInfos[1].type = PE_DESCRIPTOR_TYPE_STORAGE_IMAGE;
         bindingInfos[1].imageLayout = PE_IMAGE_LAYOUT_GENERAL;
 
-        bindingInfos[2].binding = 2;
+        bindingInfos[2].binding = 14;
         bindingInfos[2].type = PE_DESCRIPTOR_TYPE_STORAGE_BUFFER;
 
         for (uint32_t i = 0; i < MAX_DESCRIPTORS_PER_CMD; i++)
@@ -125,8 +125,8 @@ namespace pe
         Descriptor &dSet = *s_DSet[s_currentIndex];
         dSet.SetImageViews(0, views);
         if (mips >= 7)
-            dSet.SetImageView(1, s_image->GetUAV(6));
-        dSet.SetBuffer(2, s_atomicCounter[s_currentIndex]);
+            dSet.SetImageView(13, s_image->GetUAV(6));
+        dSet.SetBuffer(14, s_atomicCounter[s_currentIndex]);
 
         dSet.Update();
     }

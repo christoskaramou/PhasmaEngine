@@ -246,9 +246,10 @@ namespace pe
 
 #define DX12_CMD_NOT_IMPLEMENTED(name) PE_ERROR("Dx12CommandBufferImpl::" name " not implemented (T10b in progress)")
 
-    void Dx12CommandBufferImpl::BlitImage(Image *, Image *, const ImageBlit &, PeFilter)
+    void Dx12CommandBufferImpl::BlitImage(Image *src, Image *dst, const ImageBlit &region, PeFilter filter)
     {
-        DX12_CMD_NOT_IMPLEMENTED("BlitImage");
+        PE_ERROR_IF(!dst, "Dx12CommandBufferImpl::BlitImage: null destination image");
+        dst->Blit(m_owner, src, region, filter);
     }
     void Dx12CommandBufferImpl::ClearColors(std::vector<Image *> images)
     {
@@ -805,9 +806,10 @@ namespace pe
         PE_ERROR_IF(!src || !dst, "Dx12CommandBufferImpl::CopyImageToBuffer: null resource");
         src->CopyToBuffer(m_owner, dst);
     }
-    void Dx12CommandBufferImpl::GenerateMipMaps(Image *)
+    void Dx12CommandBufferImpl::GenerateMipMaps(Image *image)
     {
-        DX12_CMD_NOT_IMPLEMENTED("GenerateMipMaps");
+        PE_ERROR_IF(!image, "Dx12CommandBufferImpl::GenerateMipMaps: null image");
+        image->GenerateMipMaps(m_owner);
     }
 
     void Dx12CommandBufferImpl::TraceRays(uint32_t, uint32_t, uint32_t)
