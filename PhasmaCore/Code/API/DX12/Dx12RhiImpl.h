@@ -1,6 +1,7 @@
 #pragma once
 
 #include "API/DX12/Dx12DescriptorHeap.h"
+#include "API/DX12/Dx12RootSignature.h"
 #include "API/RHI_Internal.h"
 
 #include <memory>
@@ -35,6 +36,7 @@ namespace pe
         Dx12DescriptorHeap *GetCbvSrvUavStagingHeap() const { return m_cbvSrvUavStagingHeap.get(); }
         Dx12DescriptorHeap *GetRtvStagingHeap() const { return m_rtvStagingHeap.get(); }
         Dx12DescriptorHeap *GetDsvStagingHeap() const { return m_dsvStagingHeap.get(); }
+        Dx12RootSignature *GetSharedRootSig() const { return m_sharedRootSignature.get(); }
         const RHI::Caps &GetCaps() const { return m_caps; }
         const std::string &GetAdapterName() const { return m_adapterName; }
 
@@ -50,6 +52,7 @@ namespace pe
         std::unique_ptr<Dx12DescriptorHeap> m_cbvSrvUavStagingHeap;
         std::unique_ptr<Dx12DescriptorHeap> m_rtvStagingHeap;
         std::unique_ptr<Dx12DescriptorHeap> m_dsvStagingHeap;
+        std::unique_ptr<Dx12RootSignature> m_sharedRootSignature;
         Microsoft::WRL::ComPtr<ID3D12CommandQueue> m_graphicsQueue;
         Microsoft::WRL::ComPtr<ID3D12Fence> m_frameFence;
         std::array<Microsoft::WRL::ComPtr<ID3D12CommandAllocator>, 2> m_clearAllocators;
