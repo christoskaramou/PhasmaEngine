@@ -39,6 +39,9 @@ namespace pe
 
     private:
         friend struct VulkanSamplerImpl;
+#if defined(PE_WIN32)
+        friend struct Dx12SamplerImpl;
+#endif
 
         Sampler(const SamplerDesc &desc, const std::string &name);
         ~Sampler();
