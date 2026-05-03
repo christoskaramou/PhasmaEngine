@@ -109,6 +109,7 @@ namespace pe
             args.push_back(ownedStrings.back().c_str());
 
             args.push_back(DXC_ARG_WARNINGS_ARE_ERRORS);
+            args.push_back(L"-Wno-ignored-attributes");
             args.push_back(DXC_ARG_PACK_MATRIX_ROW_MAJOR);
 
 #if PE_DEBUG_MODE
@@ -281,6 +282,38 @@ namespace pe
             if (SUCCEEDED(constantBuffer->GetDesc(&bufferDesc)))
                 desc.bufferSize = bufferDesc.Size;
         }
+
+        std::unordered_map<std::string, std::pair<int, int>> ExtractVkBindings(const std::string &shaderCode)
+        {
+            std::unordered_map<std::string, std::pair<int, int>> bindings;
+
+            std::stringstream stream(shaderCode);
+            std::string line;
+            const std::regex bindingRegex(R"(\[\[vk::binding\(\s*(\d+)\s*(?:,\s*(\d+))?\s*\)\]\])");
+            const std::regex bufferNameRegex(R"(\b[ct]buffer\s+([A-Za-z_][A-Za-z0-9_]*))");
+            const std::regex resourceNameRegex(
+                R"(\b(?:globallycoherent\s+)?(?:RW)?(?:Texture\w*|StructuredBuffer|ByteAddressBuffer|RaytracingAccelerationStructure|SamplerState|SamplerComparisonState|ConstantBuffer)(?:\s*<[^>]*>)?\s+([A-Za-z_][A-Za-z0-9_]*))");
+
+            while (std::getline(stream, line))
+            {
+                std::smatch bindingMatch;
+                if (!std::regex_search(line, bindingMatch, bindingRegex))
+                    continue;
+
+                const int bindPoint = std::stoi(bindingMatch[1].str());
+                const int set = bindingMatch[2].matched ? std::stoi(bindingMatch[2].str()) : 0;
+
+                const std::string afterBinding = bindingMatch.suffix().str();
+                std::smatch nameMatch;
+                if (std::regex_search(afterBinding, nameMatch, bufferNameRegex) ||
+                    std::regex_search(afterBinding, nameMatch, resourceNameRegex))
+                {
+                    bindings[nameMatch[1].str()] = {set, bindPoint};
+                }
+            }
+
+            return bindings;
+        }
     } // namespace
 
     Dx12ShaderImpl::Dx12ShaderImpl(Shader *owner, const ShaderDesc &desc)
@@ -340,6 +373,9 @@ namespace pe
         if (FAILED(reflection->GetDesc(&shaderDesc)))
             return;
 
+        const std::unordered_map<std::string, std::pair<int, int>> vkBindings =
+            ExtractVkBindings(shader->GetCache().GetShaderCode());
+
         for (uint32_t i = 0; i < shaderDesc.InputParameters; ++i)
         {
             D3D12_SIGNATURE_PARAMETER_DESC param{};
@@ -377,9 +413,15 @@ namespace pe
                 continue;
 
             const std::string name = binding.Name ? binding.Name : "";
-            const int set = static_cast<int>(binding.Space);
-            const int bindPoint = static_cast<int>(binding.BindPoint);
+            int set = static_cast<int>(binding.Space);
+            int bindPoint = static_cast<int>(binding.BindPoint);
             const uint32_t count = GetBindingCount(binding.BindCount);
+
+            if (const auto vkBinding = vkBindings.find(name); vkBinding != vkBindings.end())
+            {
+                set = vkBinding->second.first;
+                bindPoint = vkBinding->second.second;
+            }
 
             if (IsPushConstantBinding(binding))
             {
