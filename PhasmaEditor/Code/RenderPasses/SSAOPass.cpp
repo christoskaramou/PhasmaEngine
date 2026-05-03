@@ -3,6 +3,7 @@
 #include "API/Image.h"
 #include "API/RHI.h"
 #include "API/Vulkan/RHI_Vulkan.h"
+#include "API/Vulkan/VulkanCommandBufferImpl.h"
 #include "API/Vulkan/VulkanImageImpl.h"
 #include "API/Vulkan/VulkanImageViewImpl.h"
 #include "CACAO/ffx_cacao_impl.h"
@@ -127,7 +128,7 @@ namespace pe
 
         cmd->BeginDebugRegion("SSAOPass");
         cmd->MemoryBarrier(barrier);
-        PE_CHECK(FFX_CACAO_VkDraw(m_context, cmd->ApiHandle(), &m_proj, &m_normalsToView));
+        PE_CHECK(FFX_CACAO_VkDraw(m_context, GetVulkanCommandBuffer(cmd), &m_proj, &m_normalsToView));
         cmd->EndDebugRegion();
     }
 

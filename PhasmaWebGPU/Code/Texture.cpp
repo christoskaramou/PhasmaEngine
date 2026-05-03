@@ -5,6 +5,7 @@
 #include "API/Buffer.h"
 #include "API/Queue.h"
 #include "API/Vulkan/RHI_Vulkan.h"
+#include "API/Vulkan/VulkanCommandBufferImpl.h"
 #include "API/RHI.h"
 #include "API/Semaphore.h"
 #include "API/Command.h"
@@ -208,7 +209,7 @@ namespace pwgpu
         copyInfo.dstImageLayout = vk::ImageLayout::eTransferDstOptimal;
         copyInfo.regionCount = static_cast<uint32_t>(regions.size());
         copyInfo.pRegions = regions.data();
-        cmd->ApiHandle().copyBufferToImage2(copyInfo);
+        pe::GetVulkanCommandBuffer(cmd).copyBufferToImage2(copyInfo);
 
         cmd->AddAfterWaitCallback([alloc = std::move(alloc)]() mutable
                                   { pe::RHII.GetStagingManager()->SetUnused(alloc); });
@@ -267,11 +268,11 @@ namespace pwgpu
         if (IsDepthStencilFormat(tex->format))
         {
             vk::ClearDepthStencilValue dsValue{0.0f, 0u};
-            cmd->ApiHandle().clearDepthStencilImage(pe::GetVulkanImage(tex->image),
-                                                    vk::ImageLayout::eTransferDstOptimal,
-                                                    &dsValue,
-                                                    static_cast<uint32_t>(ranges.size()),
-                                                    ranges.data());
+            pe::GetVulkanCommandBuffer(cmd).clearDepthStencilImage(pe::GetVulkanImage(tex->image),
+                                                                   vk::ImageLayout::eTransferDstOptimal,
+                                                                   &dsValue,
+                                                                   static_cast<uint32_t>(ranges.size()),
+                                                                   ranges.data());
         }
         else
         {
@@ -280,11 +281,11 @@ namespace pwgpu
             colorValue.float32[1] = 0.0f;
             colorValue.float32[2] = 0.0f;
             colorValue.float32[3] = 0.0f;
-            cmd->ApiHandle().clearColorImage(pe::GetVulkanImage(tex->image),
-                                             vk::ImageLayout::eTransferDstOptimal,
-                                             &colorValue,
-                                             static_cast<uint32_t>(ranges.size()),
-                                             ranges.data());
+            pe::GetVulkanCommandBuffer(cmd).clearColorImage(pe::GetVulkanImage(tex->image),
+                                                            vk::ImageLayout::eTransferDstOptimal,
+                                                            &colorValue,
+                                                            static_cast<uint32_t>(ranges.size()),
+                                                            ranges.data());
         }
     }
 

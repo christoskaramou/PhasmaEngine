@@ -14,6 +14,7 @@
 #include "API/Image.h"
 #include "API/Buffer.h"
 #include "API/Vulkan/RHI_Vulkan.h"
+#include "API/Vulkan/VulkanCommandBufferImpl.h"
 #include "API/RHI.h"
 #include "API/StagingManager.h"
 
@@ -576,7 +577,7 @@ extern "C"
                 vk::DependencyInfo dep{};
                 dep.bufferMemoryBarrierCount = 1;
                 dep.pBufferMemoryBarriers = &bmb;
-                cmd->ApiHandle().pipelineBarrier2(dep);
+                pe::GetVulkanCommandBuffer(cmd).pipelineBarrier2(dep);
 
                 pe::BufferTrackInfo &trackInfo = backing->GetTrackInfo();
                 trackInfo.stageMask = PE_STAGE_ALL_COMMANDS;
@@ -931,7 +932,7 @@ extern "C"
         copyInfo.regionCount = 1;
         copyInfo.pRegions = &region;
 
-        cmd->ApiHandle().copyBufferToImage2(copyInfo);
+        pe::GetVulkanCommandBuffer(cmd).copyBufferToImage2(copyInfo);
 
         // §23.x: dst (mip, [baseLayer..baseLayer+layerCount)) is fully initialized after
         // the write — full coverage overwrites everything; partial writes were preceded

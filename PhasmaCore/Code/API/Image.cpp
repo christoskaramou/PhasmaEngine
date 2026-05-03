@@ -6,6 +6,7 @@
 #include "API/RHI.h"
 #include "API/StagingManager.h"
 #include "API/Vulkan/VulkanBufferImpl.h"
+#include "API/Vulkan/VulkanCommandBufferImpl.h"
 #include "API/Vulkan/VulkanImageImpl.h"
 
 #define STB_IMAGE_IMPLEMENTATION
@@ -317,7 +318,7 @@ namespace pe
             copyInfo.dstImageLayout = vk::ImageLayout::eTransferDstOptimal;
             copyInfo.regionCount = static_cast<uint32_t>(regions.size());
             copyInfo.pRegions = regions.data();
-            cmd->ApiHandle().copyBufferToImage2(copyInfo);
+            GetVulkanCommandBuffer(cmd).copyBufferToImage2(copyInfo);
 
             cmd->AddAfterWaitCallback([alloc = std::move(alloc)]() mutable
                                       { RHII.GetStagingManager()->SetUnused(alloc); });

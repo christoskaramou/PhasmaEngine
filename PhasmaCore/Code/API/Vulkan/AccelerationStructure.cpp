@@ -5,6 +5,7 @@
 #include "API/RHI.h"
 #include "API/Vulkan/RHI_Vulkan.h"
 #include "API/Vulkan/VulkanBufferImpl.h"
+#include "API/Vulkan/VulkanCommandBufferImpl.h"
 
 namespace pe
 {
@@ -13,7 +14,7 @@ namespace pe
                                      const vk::AccelerationStructureBuildGeometryInfoKHR *pInfos,
                                      const vk::AccelerationStructureBuildRangeInfoKHR *const *ppBuildRangeInfos)
     {
-        cmd->ApiHandle().buildAccelerationStructuresKHR(infoCount, pInfos, ppBuildRangeInfos);
+        GetVulkanCommandBuffer(cmd).buildAccelerationStructuresKHR(infoCount, pInfos, ppBuildRangeInfos);
     }
 
     vk::AccelerationStructureBuildSizesInfoKHR AccelerationStructure::GetBuildSizes(

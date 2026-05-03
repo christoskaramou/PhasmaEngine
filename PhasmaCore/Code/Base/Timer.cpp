@@ -2,6 +2,7 @@
 #include "API/Command.h"
 #include "API/RHI.h"
 #include "API/Vulkan/RHI_Vulkan.h"
+#include "API/Vulkan/VulkanCommandBufferImpl.h"
 
 namespace pe
 {
@@ -113,8 +114,8 @@ namespace pe
         PE_ERROR_IF(m_inUse, "GpuTimer::Start() called before End()");
 
         m_cmd = cmd;
-        vkCmdResetQueryPool(m_cmd->ApiHandle(), m_apiHandle, 0, 2);
-        vkCmdWriteTimestamp(m_cmd->ApiHandle(), VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, m_apiHandle, 0);
+        vkCmdResetQueryPool(GetVulkanCommandBuffer(m_cmd), m_apiHandle, 0, 2);
+        vkCmdWriteTimestamp(GetVulkanCommandBuffer(m_cmd), VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, m_apiHandle, 0);
         m_resultsReady = false;
         m_inUse = true;
     }
@@ -123,7 +124,7 @@ namespace pe
     {
         PE_ERROR_IF(!m_inUse, "GpuTimer::End() called before Start()");
 
-        vkCmdWriteTimestamp(m_cmd->ApiHandle(), VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT, m_apiHandle, 1);
+        vkCmdWriteTimestamp(GetVulkanCommandBuffer(m_cmd), VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT, m_apiHandle, 1);
         m_resultsReady = false;
         m_inUse = false;
     }

@@ -14,6 +14,7 @@
 #include "API/Image.h"
 #include "API/Buffer.h"
 #include "API/Vulkan/RHI_Vulkan.h"
+#include "API/Vulkan/VulkanCommandBufferImpl.h"
 
 extern "C" void wgpuRenderPipelineRelease(WGPURenderPipeline);
 extern "C" void wgpuComputePipelineRelease(WGPUComputePipeline);
@@ -976,14 +977,14 @@ extern "C"
                 tw->beginningOfPassWriteIndex < tw->querySet->count &&
                 tw->querySet->queryPool)
             {
-                enc->cmd->ApiHandle().resetQueryPool(
+                pe::GetVulkanCommandBuffer(enc->cmd).resetQueryPool(
                     tw->querySet->queryPool, tw->beginningOfPassWriteIndex, 1);
             }
             if (tw->endOfPassWriteIndex != WGPU_QUERY_SET_INDEX_UNDEFINED &&
                 tw->endOfPassWriteIndex < tw->querySet->count &&
                 tw->querySet->queryPool)
             {
-                enc->cmd->ApiHandle().resetQueryPool(
+                pe::GetVulkanCommandBuffer(enc->cmd).resetQueryPool(
                     tw->querySet->queryPool, tw->endOfPassWriteIndex, 1);
             }
 
@@ -991,7 +992,7 @@ extern "C"
                 tw->beginningOfPassWriteIndex < tw->querySet->count)
             {
                 rpe->beginTimestampIndex = tw->beginningOfPassWriteIndex;
-                enc->cmd->ApiHandle().writeTimestamp2(
+                pe::GetVulkanCommandBuffer(enc->cmd).writeTimestamp2(
                     vk::PipelineStageFlagBits2::eAllCommands,
                     tw->querySet->queryPool, tw->beginningOfPassWriteIndex);
             }
@@ -1342,14 +1343,14 @@ extern "C"
         vk::Viewport defaultVp{0.0f, 0.0f,
                                static_cast<float>(attachW), static_cast<float>(attachH),
                                0.0f, 1.0f};
-        enc->cmd->ApiHandle().setViewport(0, 1, &defaultVp);
+        pe::GetVulkanCommandBuffer(enc->cmd).setViewport(0, 1, &defaultVp);
 
         vk::Rect2D defaultScissor{{0, 0}, {attachW, attachH}};
-        enc->cmd->ApiHandle().setScissor(0, 1, &defaultScissor);
+        pe::GetVulkanCommandBuffer(enc->cmd).setScissor(0, 1, &defaultScissor);
 
         const float zeroBlend[4] = {0.0f, 0.0f, 0.0f, 0.0f};
-        enc->cmd->ApiHandle().setBlendConstants(zeroBlend);
-        enc->cmd->ApiHandle().setStencilReference(vk::StencilFaceFlagBits::eFrontAndBack, 0);
+        pe::GetVulkanCommandBuffer(enc->cmd).setBlendConstants(zeroBlend);
+        pe::GetVulkanCommandBuffer(enc->cmd).setStencilReference(vk::StencilFaceFlagBits::eFrontAndBack, 0);
 
         // Defer beginRendering so bind-group barriers can be emitted outside
         // the Vulkan dynamic-rendering scope on first draw-scope command.
@@ -1436,14 +1437,14 @@ extern "C"
                     tw->beginningOfPassWriteIndex < tw->querySet->count &&
                     tw->querySet->queryPool)
                 {
-                    enc->cmd->ApiHandle().resetQueryPool(
+                    pe::GetVulkanCommandBuffer(enc->cmd).resetQueryPool(
                         tw->querySet->queryPool, tw->beginningOfPassWriteIndex, 1);
                 }
                 if (tw->endOfPassWriteIndex != WGPU_QUERY_SET_INDEX_UNDEFINED &&
                     tw->endOfPassWriteIndex < tw->querySet->count &&
                     tw->querySet->queryPool)
                 {
-                    enc->cmd->ApiHandle().resetQueryPool(
+                    pe::GetVulkanCommandBuffer(enc->cmd).resetQueryPool(
                         tw->querySet->queryPool, tw->endOfPassWriteIndex, 1);
                 }
 
@@ -1451,7 +1452,7 @@ extern "C"
                     tw->beginningOfPassWriteIndex < tw->querySet->count)
                 {
                     cpe->beginTimestampIndex = tw->beginningOfPassWriteIndex;
-                    enc->cmd->ApiHandle().writeTimestamp2(
+                    pe::GetVulkanCommandBuffer(enc->cmd).writeTimestamp2(
                         vk::PipelineStageFlagBits2::eAllCommands,
                         tw->querySet->queryPool, tw->beginningOfPassWriteIndex);
                 }
@@ -1901,7 +1902,7 @@ extern "C"
         copyInfo.regionCount = 1;
         copyInfo.pRegions = &region;
 
-        enc->cmd->ApiHandle().copyBufferToImage2(copyInfo);
+        pe::GetVulkanCommandBuffer(enc->cmd).copyBufferToImage2(copyInfo);
 
         // §23.x: post-copy the touched (mip, [baseLayer..baseLayer+layerCount)) range is
         // fully initialized — full-coverage writes overwrite it; partial writes follow a
@@ -2102,7 +2103,7 @@ extern "C"
         copyInfo.regionCount = 1;
         copyInfo.pRegions = &region;
 
-        enc->cmd->ApiHandle().copyImageToBuffer2(copyInfo);
+        pe::GetVulkanCommandBuffer(enc->cmd).copyImageToBuffer2(copyInfo);
         if (dst->buffer)
             enc->retained.usedBuffers.push_back(dst->buffer);
         if (src->texture)
@@ -2346,7 +2347,7 @@ extern "C"
         copyInfo.regionCount = 1;
         copyInfo.pRegions = &region;
 
-        enc->cmd->ApiHandle().copyImage2(copyInfo);
+        pe::GetVulkanCommandBuffer(enc->cmd).copyImage2(copyInfo);
 
         // §23.x: dst (mip, [baseLayer..baseLayer+layerCount)) is fully initialized after
         // the copy — full coverage overwrites everything; partial writes were preceded by
@@ -2431,7 +2432,7 @@ extern "C"
 
         // eWait on an unbegun query stalls forever; zero-fill the range and eWait-copy
         // only begun indices so unused slots resolve to 0 per WebGPU §23.6.
-        enc->cmd->ApiHandle().fillBuffer(
+        pe::GetVulkanCommandBuffer(enc->cmd).fillBuffer(
             pe::GetVulkanBuffer(dst->peBuffer), dstOffset,
             static_cast<uint64_t>(queryCount) * sizeof(uint64_t), 0u);
 
@@ -2449,7 +2450,7 @@ extern "C"
         vk::DependencyInfo dep{};
         dep.memoryBarrierCount = 2;
         dep.pMemoryBarriers = mbs;
-        enc->cmd->ApiHandle().pipelineBarrier2(dep);
+        pe::GetVulkanCommandBuffer(enc->cmd).pipelineBarrier2(dep);
 
         const uint32_t rangeEnd = firstQuery + queryCount;
         for (uint32_t idx : querySet->beganIndices)
@@ -2458,7 +2459,7 @@ extern "C"
                 continue;
             const uint64_t slotOffset = dstOffset +
                                         static_cast<uint64_t>(idx - firstQuery) * sizeof(uint64_t);
-            enc->cmd->ApiHandle().copyQueryPoolResults(
+            pe::GetVulkanCommandBuffer(enc->cmd).copyQueryPoolResults(
                 querySet->queryPool, idx, 1,
                 pe::GetVulkanBuffer(dst->peBuffer), slotOffset,
                 sizeof(uint64_t),
@@ -2503,9 +2504,9 @@ extern "C"
             return;
 
         // Per VUID-vkCmdWriteTimestamp2-None-03864: reset the slot before reuse.
-        enc->cmd->ApiHandle().resetQueryPool(querySet->queryPool, queryIndex, 1);
-        enc->cmd->ApiHandle().writeTimestamp2(vk::PipelineStageFlagBits2::eAllCommands,
-                                              querySet->queryPool, queryIndex);
+        pe::GetVulkanCommandBuffer(enc->cmd).resetQueryPool(querySet->queryPool, queryIndex, 1);
+        pe::GetVulkanCommandBuffer(enc->cmd).writeTimestamp2(vk::PipelineStageFlagBits2::eAllCommands,
+                                                             querySet->queryPool, queryIndex);
     }
 
     void wgpuCommandEncoderInsertDebugMarker(WGPUCommandEncoder enc, WGPUStringView markerLabel)

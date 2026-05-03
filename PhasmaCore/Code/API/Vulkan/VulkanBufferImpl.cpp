@@ -8,6 +8,7 @@
 #include "API/Vulkan/Helpers_Vulkan.h"
 #include "API/RHI.h"
 #include "API/Vulkan/RHI_Vulkan.h"
+#include "API/Vulkan/VulkanCommandBufferImpl.h"
 #include "API/Vulkan/VulkanRHITypeUtils.h"
 
 namespace pe
@@ -143,7 +144,7 @@ namespace pe
         copyInfo.regionCount = 1;
         copyInfo.pRegions = &region;
 
-        cmd->ApiHandle().copyBuffer2(copyInfo);
+        GetVulkanCommandBuffer(cmd).copyBuffer2(copyInfo);
     }
 
     Buffer::Impl *CreateBufferImpl(Buffer *owner, const BufferDesc &desc)
@@ -203,7 +204,7 @@ namespace pe
         dependencyInfo.bufferMemoryBarrierCount = 1;
         dependencyInfo.pBufferMemoryBarriers = &barrier;
 
-        cmd->ApiHandle().pipelineBarrier2(dependencyInfo);
+        GetVulkanCommandBuffer(cmd).pipelineBarrier2(dependencyInfo);
 
         trackInfo.stageMask = info.stageMask;
         trackInfo.accessMask = info.accessMask;
@@ -267,6 +268,6 @@ namespace pe
         dependencyInfo.bufferMemoryBarrierCount = barrierIndex;
         dependencyInfo.pBufferMemoryBarriers = barriers.data();
 
-        cmd->ApiHandle().pipelineBarrier2(dependencyInfo);
+        GetVulkanCommandBuffer(cmd).pipelineBarrier2(dependencyInfo);
     }
 } // namespace pe

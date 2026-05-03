@@ -1,5 +1,6 @@
 #include "Device.h"
 #include "API/Vulkan/RHI_Vulkan.h"
+#include "API/Vulkan/VulkanCommandBufferImpl.h"
 #include "Buffer.h"
 #include "Texture.h"
 #include "API/Semaphore.h"
@@ -1076,7 +1077,7 @@ extern "C"
                 vk::DependencyInfo dep{};
                 dep.bufferMemoryBarrierCount = 1;
                 dep.pBufferMemoryBarriers = &bmb;
-                cmd->ApiHandle().pipelineBarrier2(dep);
+                pe::GetVulkanCommandBuffer(cmd).pipelineBarrier2(dep);
 
                 cmd->End();
                 device->queue->peQueue->Submit(1, &cmd, nullptr, nullptr);

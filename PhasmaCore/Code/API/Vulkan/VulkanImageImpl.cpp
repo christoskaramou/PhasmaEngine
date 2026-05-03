@@ -7,6 +7,7 @@
 #include "API/Vulkan/RHI_Vulkan.h"
 #include "API/StagingManager.h"
 #include "API/Vulkan/VulkanBufferImpl.h"
+#include "API/Vulkan/VulkanCommandBufferImpl.h"
 #include "API/Vulkan/VulkanImageViewImpl.h"
 #include "API/Vulkan/VulkanRHITypeUtils.h"
 #include "API/Vulkan/VulkanSamplerImpl.h"
@@ -584,7 +585,7 @@ namespace pe
         copyInfo.pRegions = &region;
 
         cmd->BeginDebugRegion(src->GetName() + " -> " + dst->GetName());
-        cmd->ApiHandle().copyImage2(copyInfo);
+        GetVulkanCommandBuffer(cmd).copyImage2(copyInfo);
         cmd->EndDebugRegion();
 
         cmd->EndDebugRegion();
@@ -626,7 +627,7 @@ namespace pe
         copyInfo.regionCount = 1;
         copyInfo.pRegions = &region;
 
-        cmd->ApiHandle().copyImageToBuffer2(copyInfo);
+        GetVulkanCommandBuffer(cmd).copyImageToBuffer2(copyInfo);
         cmd->EndDebugRegion();
     }
 
@@ -658,9 +659,9 @@ namespace pe
 
         const vk::ImageBlit vkRegion = ToVkImageBlit(region);
         cmd->BeginDebugRegion(src->GetName() + " -> " + dst->GetName());
-        cmd->ApiHandle().blitImage(From(src)->m_image, vk::ImageLayout::eTransferSrcOptimal,
-                                   m_image, vk::ImageLayout::eTransferDstOptimal,
-                                   1, &vkRegion, ToVkFilter(filter));
+        GetVulkanCommandBuffer(cmd).blitImage(From(src)->m_image, vk::ImageLayout::eTransferSrcOptimal,
+                                              m_image, vk::ImageLayout::eTransferDstOptimal,
+                                              1, &vkRegion, ToVkFilter(filter));
         cmd->EndDebugRegion();
 
         cmd->EndDebugRegion();
@@ -709,7 +710,7 @@ namespace pe
         copyInfo.regionCount = 1;
         copyInfo.pRegions = &region;
 
-        cmd->ApiHandle().copyBufferToImage2(copyInfo);
+        GetVulkanCommandBuffer(cmd).copyBufferToImage2(copyInfo);
 
         cmd->AddAfterWaitCallback([alloc = std::move(alloc)]()
                                   { RHII.GetStagingManager()->SetUnused(alloc); });
@@ -861,7 +862,7 @@ namespace pe
         depInfo.pImageMemoryBarriers = &barrier;
 
         cmd->BeginDebugRegion("ImageBarrier");
-        cmd->ApiHandle().pipelineBarrier2(depInfo);
+        GetVulkanCommandBuffer(cmd).pipelineBarrier2(depInfo);
         cmd->EndDebugRegion();
 
         for (uint32_t i = 0; i < arrayLayers; i++)
@@ -940,7 +941,7 @@ namespace pe
         depInfo.pImageMemoryBarriers = barriers.data();
 
         cmd->BeginDebugRegion("ImageGroupBarrier");
-        cmd->ApiHandle().pipelineBarrier2(depInfo);
+        GetVulkanCommandBuffer(cmd).pipelineBarrier2(depInfo);
         cmd->EndDebugRegion();
     }
 } // namespace pe

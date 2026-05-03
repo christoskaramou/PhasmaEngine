@@ -9,6 +9,7 @@
 #include "Texture.h"
 #include "Utils.h"
 #include "API/Vulkan/RHI_Vulkan.h"
+#include "API/Vulkan/VulkanCommandBufferImpl.h"
 
 extern "C" void wgpuComputePipelineAddRef(WGPUComputePipeline);
 extern "C" void wgpuComputePipelineRelease(WGPUComputePipeline);
@@ -225,7 +226,7 @@ extern "C"
         wgpuComputePipelineAddRef(pipeline);
         cpe->retainedPipelines.push_back(pipeline);
 
-        cpe->cmd->ApiHandle().bindPipeline(vk::PipelineBindPoint::eCompute, pipeline->vkPipeline);
+        pe::GetVulkanCommandBuffer(cpe->cmd).bindPipeline(vk::PipelineBindPoint::eCompute, pipeline->vkPipeline);
 
         if (pipeline->layout)
         {
@@ -239,7 +240,7 @@ extern "C"
                 if (!BglGroupEquivalent(bg->layout, bgls[i]))
                     continue;
                 vk::DescriptorSet ds = pe::GetVulkanDescriptorSet(bg->descriptor);
-                cpe->cmd->ApiHandle().bindDescriptorSets(
+                pe::GetVulkanCommandBuffer(cpe->cmd).bindDescriptorSets(
                     vk::PipelineBindPoint::eCompute, vkLayout,
                     static_cast<uint32_t>(i), 1, &ds, 0, nullptr);
             }
@@ -404,7 +405,7 @@ extern "C"
         vk::PipelineLayout vkLayout(cpe->pipeline->layout->vkLayout);
         vk::DescriptorSet ds = pe::GetVulkanDescriptorSet(group->descriptor);
 
-        cpe->cmd->ApiHandle().bindDescriptorSets(
+        pe::GetVulkanCommandBuffer(cpe->cmd).bindDescriptorSets(
             vk::PipelineBindPoint::eCompute,
             vkLayout, groupIndex,
             1, &ds,
@@ -558,7 +559,7 @@ extern "C"
         ValidateDispatchUsageScope(cpe);
         EmitDispatchResourceBarriers(cpe);
 
-        cpe->cmd->ApiHandle().dispatch(x, y, z);
+        pe::GetVulkanCommandBuffer(cpe->cmd).dispatch(x, y, z);
     }
 
     void wgpuComputePassEncoderDispatchWorkgroupsIndirect(WGPUComputePassEncoder cpe,
@@ -631,7 +632,7 @@ extern "C"
         ValidateDispatchUsageScope(cpe, buffer);
         EmitDispatchResourceBarriers(cpe, buffer);
 
-        cpe->cmd->ApiHandle().dispatchIndirect(pe::GetVulkanBuffer(buffer->peBuffer), offset);
+        pe::GetVulkanCommandBuffer(cpe->cmd).dispatchIndirect(pe::GetVulkanBuffer(buffer->peBuffer), offset);
         cpe->usedBuffers.push_back(buffer);
     }
 
@@ -679,7 +680,7 @@ extern "C"
         if (cpe->timestampQuerySet && cpe->endTimestampIndex != UINT32_MAX &&
             cpe->timestampQuerySet->queryPool != VK_NULL_HANDLE)
         {
-            cpe->cmd->ApiHandle().writeTimestamp2(
+            pe::GetVulkanCommandBuffer(cpe->cmd).writeTimestamp2(
                 vk::PipelineStageFlagBits2::eAllCommands,
                 cpe->timestampQuerySet->queryPool, cpe->endTimestampIndex);
         }

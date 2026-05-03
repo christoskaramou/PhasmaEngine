@@ -4,6 +4,7 @@
 #include "API/RHI.h"
 #include "API/Vulkan/RHI_Vulkan.h"
 #include "API/Vulkan/Helpers_Vulkan.h"
+#include "API/Vulkan/VulkanCommandBufferImpl.h"
 #include "API/Vulkan/VulkanImageImpl.h"
 #include "API/Vulkan/VulkanRHITypeUtils.h"
 
@@ -57,7 +58,7 @@ namespace pe
         depInfo.imageMemoryBarrierCount = 1;
         depInfo.pImageMemoryBarriers = &barrier;
 
-        cmd->ApiHandle().setEvent2(m_apiHandle, &depInfo);
+        GetVulkanCommandBuffer(cmd).setEvent2(m_apiHandle, &depInfo);
 
         m_set = true;
     }
@@ -91,12 +92,12 @@ namespace pe
         info.accessMask = m_infoImage.dstAccess;
         m_infoImage.image->SetCurrentInfoAll(info);
 
-        m_cmd->ApiHandle().waitEvents2(1, &m_apiHandle, &depInfo);
+        GetVulkanCommandBuffer(m_cmd).waitEvents2(1, &m_apiHandle, &depInfo);
     }
 
     void Event::Reset(PeBarrierSync resetStage)
     {
-        m_cmd->ApiHandle().resetEvent2(m_apiHandle, ToVkPipelineStageFlags(resetStage));
+        GetVulkanCommandBuffer(m_cmd).resetEvent2(m_apiHandle, ToVkPipelineStageFlags(resetStage));
         m_cmd = nullptr;
         m_infoImage = {};
         m_set = false;

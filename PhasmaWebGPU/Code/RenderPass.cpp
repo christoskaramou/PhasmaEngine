@@ -10,6 +10,7 @@
 #include "Device.h"
 #include "Utils.h"
 #include "API/Vulkan/RHI_Vulkan.h"
+#include "API/Vulkan/VulkanCommandBufferImpl.h"
 
 extern "C" void wgpuRenderPipelineAddRef(WGPURenderPipeline);
 extern "C" void wgpuRenderPipelineRelease(WGPURenderPipeline);
@@ -158,7 +159,7 @@ namespace
         if (rpe->deferredHasStencil)
             renderingInfo.pStencilAttachment = &rpe->deferredStencilAtt;
 
-        rpe->cmd->ApiHandle().beginRendering(renderingInfo);
+        pe::GetVulkanCommandBuffer(rpe->cmd).beginRendering(renderingInfo);
         rpe->renderingActive = true;
     }
 
@@ -442,7 +443,7 @@ extern "C"
         wgpuRenderPipelineAddRef(pipeline);
         rpe->retainedPipelines.push_back(pipeline);
 
-        rpe->cmd->ApiHandle().bindPipeline(vk::PipelineBindPoint::eGraphics, pipeline->vkPipeline);
+        pe::GetVulkanCommandBuffer(rpe->cmd).bindPipeline(vk::PipelineBindPoint::eGraphics, pipeline->vkPipeline);
 
         if (pipeline->layout)
         {
@@ -460,7 +461,7 @@ extern "C"
                     (i < rpe->currentDynamicOffsets.size())
                         ? &rpe->currentDynamicOffsets[i]
                         : nullptr;
-                rpe->cmd->ApiHandle().bindDescriptorSets(
+                pe::GetVulkanCommandBuffer(rpe->cmd).bindDescriptorSets(
                     vk::PipelineBindPoint::eGraphics, vkLayout,
                     static_cast<uint32_t>(i), 1, &ds,
                     dynOffsets ? static_cast<uint32_t>(dynOffsets->size()) : 0u,
@@ -641,7 +642,7 @@ extern "C"
         vk::PipelineLayout vkLayout(rpe->pipeline->layout->vkLayout);
         vk::DescriptorSet ds = pe::GetVulkanDescriptorSet(group->descriptor);
 
-        rpe->cmd->ApiHandle().bindDescriptorSets(
+        pe::GetVulkanCommandBuffer(rpe->cmd).bindDescriptorSets(
             vk::PipelineBindPoint::eGraphics,
             vkLayout, groupIndex,
             1, &ds,
@@ -729,7 +730,7 @@ extern "C"
 
         vk::Buffer vkBuf = pe::GetVulkanBuffer(buffer->peBuffer);
         vk::DeviceSize vkOffset = static_cast<vk::DeviceSize>(offset);
-        rpe->cmd->ApiHandle().bindVertexBuffers(slot, 1, &vkBuf, &vkOffset);
+        pe::GetVulkanCommandBuffer(rpe->cmd).bindVertexBuffers(slot, 1, &vkBuf, &vkOffset);
         rpe->usedBuffers.push_back(buffer);
     }
 
@@ -808,7 +809,7 @@ extern "C"
         }
 
         vk::IndexType indexType = (format == WGPUIndexFormat_Uint16) ? vk::IndexType::eUint16 : vk::IndexType::eUint32;
-        rpe->cmd->ApiHandle().bindIndexBuffer(pe::GetVulkanBuffer(buffer->peBuffer), offset, indexType);
+        pe::GetVulkanCommandBuffer(rpe->cmd).bindIndexBuffer(pe::GetVulkanBuffer(buffer->peBuffer), offset, indexType);
         rpe->usedBuffers.push_back(buffer);
     }
 
@@ -829,7 +830,7 @@ extern "C"
         }
         rpe->drawCount++;
         OpenRenderingIfNeeded(rpe);
-        rpe->cmd->ApiHandle().draw(vertexCount, instanceCount, firstVertex, firstInstance);
+        pe::GetVulkanCommandBuffer(rpe->cmd).draw(vertexCount, instanceCount, firstVertex, firstInstance);
     }
 
     void wgpuRenderPassEncoderDrawIndexed(WGPURenderPassEncoder rpe, uint32_t indexCount,
@@ -863,7 +864,7 @@ extern "C"
         }
         rpe->drawCount++;
         OpenRenderingIfNeeded(rpe);
-        rpe->cmd->ApiHandle().drawIndexed(indexCount, instanceCount, firstIndex, baseVertex, firstInstance);
+        pe::GetVulkanCommandBuffer(rpe->cmd).drawIndexed(indexCount, instanceCount, firstIndex, baseVertex, firstInstance);
     }
 
     void wgpuRenderPassEncoderDrawIndirect(WGPURenderPassEncoder rpe, WGPUBuffer buffer, uint64_t offset)
@@ -948,7 +949,7 @@ extern "C"
 
         rpe->drawCount++;
         OpenRenderingIfNeeded(rpe);
-        rpe->cmd->ApiHandle().drawIndirect(pe::GetVulkanBuffer(buffer->peBuffer), offset, 1, sizeof(VkDrawIndirectCommand));
+        pe::GetVulkanCommandBuffer(rpe->cmd).drawIndirect(pe::GetVulkanBuffer(buffer->peBuffer), offset, 1, sizeof(VkDrawIndirectCommand));
         rpe->usedBuffers.push_back(buffer);
     }
 
@@ -1036,7 +1037,7 @@ extern "C"
 
         rpe->drawCount++;
         OpenRenderingIfNeeded(rpe);
-        rpe->cmd->ApiHandle().drawIndexedIndirect(pe::GetVulkanBuffer(buffer->peBuffer), offset, 1, sizeof(VkDrawIndexedIndirectCommand));
+        pe::GetVulkanCommandBuffer(rpe->cmd).drawIndexedIndirect(pe::GetVulkanBuffer(buffer->peBuffer), offset, 1, sizeof(VkDrawIndexedIndirectCommand));
         rpe->usedBuffers.push_back(buffer);
     }
 
@@ -1062,7 +1063,7 @@ extern "C"
         }
 
         vk::Viewport vp{x, y, width, height, minDepth, maxDepth};
-        rpe->cmd->ApiHandle().setViewport(0, 1, &vp);
+        pe::GetVulkanCommandBuffer(rpe->cmd).setViewport(0, 1, &vp);
     }
 
     void wgpuRenderPassEncoderSetScissorRect(WGPURenderPassEncoder rpe,
@@ -1079,7 +1080,7 @@ extern "C"
         }
 
         vk::Rect2D scissor{{static_cast<int32_t>(x), static_cast<int32_t>(y)}, {width, height}};
-        rpe->cmd->ApiHandle().setScissor(0, 1, &scissor);
+        pe::GetVulkanCommandBuffer(rpe->cmd).setScissor(0, 1, &scissor);
     }
 
     void wgpuRenderPassEncoderSetBlendConstant(WGPURenderPassEncoder rpe, WGPUColor const *color)
@@ -1091,7 +1092,7 @@ extern "C"
 
         float constants[4] = {static_cast<float>(color->r), static_cast<float>(color->g),
                               static_cast<float>(color->b), static_cast<float>(color->a)};
-        rpe->cmd->ApiHandle().setBlendConstants(constants);
+        pe::GetVulkanCommandBuffer(rpe->cmd).setBlendConstants(constants);
     }
 
     void wgpuRenderPassEncoderSetStencilReference(WGPURenderPassEncoder rpe, uint32_t reference)
@@ -1099,8 +1100,8 @@ extern "C"
         if (!RenderingActive(rpe, "wgpuRenderPassEncoderSetStencilReference"))
             return;
 
-        rpe->cmd->ApiHandle().setStencilReference(vk::StencilFaceFlagBits::eFrontAndBack,
-                                                  reference & kStencilReferenceMask);
+        pe::GetVulkanCommandBuffer(rpe->cmd).setStencilReference(vk::StencilFaceFlagBits::eFrontAndBack,
+                                                                 reference & kStencilReferenceMask);
     }
 
     void wgpuRenderPassEncoderBeginOcclusionQuery(WGPURenderPassEncoder rpe, uint32_t queryIndex)
@@ -1145,13 +1146,13 @@ extern "C"
         if (isFirstQueryThisPass && !rpe->renderingActive &&
             rpe->occlusionQuerySet->queryPool && rpe->occlusionQuerySet->count > 0)
         {
-            rpe->cmd->ApiHandle().resetQueryPool(
+            pe::GetVulkanCommandBuffer(rpe->cmd).resetQueryPool(
                 rpe->occlusionQuerySet->queryPool, 0, rpe->occlusionQuerySet->count);
         }
 
         OpenRenderingIfNeeded(rpe);
         if (rpe->occlusionQuerySet->queryPool)
-            rpe->cmd->ApiHandle().beginQuery(
+            pe::GetVulkanCommandBuffer(rpe->cmd).beginQuery(
                 rpe->occlusionQuerySet->queryPool, queryIndex, vk::QueryControlFlags{});
     }
 
@@ -1171,7 +1172,7 @@ extern "C"
         uint32_t lastIndex = rpe->activeOcclusionIndex;
         rpe->activeOcclusionIndex = UINT32_MAX;
         if (rpe->occlusionQuerySet && rpe->occlusionQuerySet->queryPool)
-            rpe->cmd->ApiHandle().endQuery(
+            pe::GetVulkanCommandBuffer(rpe->cmd).endQuery(
                 rpe->occlusionQuerySet->queryPool, lastIndex);
     }
 
@@ -1282,7 +1283,7 @@ extern "C"
 
             rpe->drawCount += bundle->drawCount;
 
-            vk::CommandBuffer vkCmd = rpe->cmd->ApiHandle();
+            vk::CommandBuffer vkCmd = pe::GetVulkanCommandBuffer(rpe->cmd);
             for (auto &command : bundle->commands)
                 command(vkCmd);
         }
@@ -1369,7 +1370,7 @@ extern "C"
         {
             PE_WARN("[WebGPU] wgpuRenderPassEncoderEnd: auto-closing active occlusion query");
             uint32_t lastIndex = rpe->activeOcclusionIndex;
-            rpe->cmd->ApiHandle().endQuery(rpe->occlusionQuerySet->queryPool, lastIndex);
+            pe::GetVulkanCommandBuffer(rpe->cmd).endQuery(rpe->occlusionQuerySet->queryPool, lastIndex);
             rpe->occlusionQueryActive = false;
             rpe->activeOcclusionIndex = UINT32_MAX;
         }
@@ -1385,14 +1386,14 @@ extern "C"
             OpenRenderingIfNeeded(rpe);
         if (rpe->renderingActive)
         {
-            rpe->cmd->ApiHandle().endRendering();
+            pe::GetVulkanCommandBuffer(rpe->cmd).endRendering();
             rpe->renderingActive = false;
         }
 
         if (rpe->timestampQuerySet && rpe->endTimestampIndex != UINT32_MAX &&
             rpe->endTimestampIndex < rpe->timestampQuerySet->count)
         {
-            rpe->cmd->ApiHandle().writeTimestamp2(
+            pe::GetVulkanCommandBuffer(rpe->cmd).writeTimestamp2(
                 vk::PipelineStageFlagBits2::eAllCommands,
                 rpe->timestampQuerySet->queryPool, rpe->endTimestampIndex);
         }

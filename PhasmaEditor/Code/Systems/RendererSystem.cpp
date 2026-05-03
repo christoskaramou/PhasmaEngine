@@ -10,6 +10,7 @@
 #endif
 #include "API/Framebuffer.h"
 #include "API/Image.h"
+#include "API/Vulkan/VulkanCommandBufferImpl.h"
 #include "API/Vulkan/VulkanImageImpl.h"
 #include "API/Vulkan/Helpers_Vulkan.h"
 #include "API/Vulkan/VulkanSamplerImpl.h"
@@ -434,7 +435,7 @@ namespace pe
 
 #ifdef PE_TRACY
         if (RHII.GetApi() == PE_GRAPHICS_API_VULKAN)
-            TracyVkCollect(VulkanRhi::TracyContext(), static_cast<VkCommandBuffer>(cmd->ApiHandle()));
+            TracyVkCollect(VulkanRhi::TracyContext(), static_cast<VkCommandBuffer>(GetVulkanCommandBuffer(cmd)));
 #endif
 
         cmd->End();
