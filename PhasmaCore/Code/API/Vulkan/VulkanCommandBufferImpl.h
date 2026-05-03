@@ -16,7 +16,7 @@ namespace pe
         void End() override;
         void Reset() override;
 
-        void BlitImage(Image *src, Image *dst, const vk::ImageBlit &region, vk::Filter filter) override;
+        void BlitImage(Image *src, Image *dst, const ImageBlit &region, PeFilter filter) override;
         void ClearColors(std::vector<Image *> images) override;
         void ClearDepthStencils(std::vector<Image *> images) override;
 
@@ -54,7 +54,6 @@ namespace pe
         void GenerateMipMaps(Image *image) override;
 
         void TraceRays(uint32_t width, uint32_t height, uint32_t depth) override;
-        void BuildAccelerationStructures(uint32_t infoCount, const vk::AccelerationStructureBuildGeometryInfoKHR *pInfos, const vk::AccelerationStructureBuildRangeInfoKHR **ppBuildRangeInfos) override;
 
         void BufferBarrier(const BufferBarrierInfo &info) override;
         void BufferBarriers(const std::vector<BufferBarrierInfo> &infos) override;

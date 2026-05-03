@@ -38,6 +38,64 @@ namespace pe
             uav.Flags = D3D12_BUFFER_UAV_FLAG_RAW;
             return uav;
         }
+
+        D3D12_BUFFER_SRV BufferSrv(const DescriptorUpdateInfo &updateInfo, uint32_t index, uint64_t rangeBytes)
+        {
+            const uint64_t offset = index < updateInfo.offsets.size() ? updateInfo.offsets[index] : 0;
+            D3D12_BUFFER_SRV srv{};
+            srv.FirstElement = offset / sizeof(uint32_t);
+            srv.NumElements = static_cast<UINT>(rangeBytes / sizeof(uint32_t));
+            srv.StructureByteStride = 0;
+            srv.Flags = D3D12_BUFFER_SRV_FLAG_RAW;
+            return srv;
+        }
+
+        bool IsCbvSrvUavDescriptor(PeBindingType type)
+        {
+            return type != PE_DESCRIPTOR_TYPE_SAMPLER;
+        }
+
+        bool IsSamplerDescriptor(PeBindingType type)
+        {
+            return type == PE_DESCRIPTOR_TYPE_SAMPLER || type == PE_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+        }
+
+        uint32_t CbvSrvUavTableOffset(const DescriptorBindingInfo &info)
+        {
+            switch (info.type)
+            {
+            case PE_DESCRIPTOR_TYPE_UNIFORM_BUFFER:
+            case PE_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC:
+            {
+                const uint32_t cbvBase = Dx12CbvBaseRegister(info.dxSpace);
+                PE_ERROR_IF(info.dxSpace == 0 && info.dxRegister == 0,
+                            "DX12 CBV b0/space0 is reserved for push constants");
+                PE_ERROR_IF(info.dxRegister < cbvBase, "DX12 CBV register is below the table base");
+                return DX12_CBV_TABLE_OFFSET + (info.dxRegister - cbvBase);
+            }
+            case PE_DESCRIPTOR_TYPE_STORAGE_IMAGE:
+            case PE_DESCRIPTOR_TYPE_STORAGE_TEXEL_BUFFER:
+            case PE_DESCRIPTOR_TYPE_STORAGE_BUFFER:
+            case PE_DESCRIPTOR_TYPE_STORAGE_BUFFER_DYNAMIC:
+                return DX12_UAV_TABLE_OFFSET + info.dxRegister;
+            default:
+                return DX12_SRV_TABLE_OFFSET + info.dxRegister;
+            }
+        }
+
+        uint32_t CbvSrvUavTableEnd(const DescriptorBindingInfo &info)
+        {
+            if (!IsCbvSrvUavDescriptor(info.type))
+                return 0;
+            return CbvSrvUavTableOffset(info) + std::max(1u, info.count);
+        }
+
+        uint32_t SamplerTableEnd(const DescriptorBindingInfo &info)
+        {
+            if (!IsSamplerDescriptor(info.type))
+                return 0;
+            return info.dxRegister + std::max(1u, info.count);
+        }
     } // namespace
 
     Dx12DescriptorPoolImpl::Dx12DescriptorPoolImpl(DescriptorPool *owner, const DescriptorPoolDesc &desc)
@@ -53,11 +111,12 @@ namespace pe
     Dx12DescriptorImpl::Dx12DescriptorImpl(Descriptor *owner)
         : m_owner{owner}
     {
+        AllocateTables();
     }
 
     Dx12DescriptorImpl::~Dx12DescriptorImpl()
     {
-        FreeCbvSrvUavSlots();
+        FreeTables();
     }
 
     Dx12DescriptorImpl::BindingSlots *Dx12DescriptorImpl::FindSlots(uint32_t binding)
@@ -80,47 +139,112 @@ namespace pe
         return nullptr;
     }
 
-    Dx12DescriptorImpl::BindingSlots &Dx12DescriptorImpl::EnsureSlots(uint32_t binding)
+    Dx12DescriptorImpl::TableSlots *Dx12DescriptorImpl::FindTable(uint32_t dxSpace)
     {
-        if (BindingSlots *slots = FindSlots(binding))
-            return *slots;
-
-        BindingSlots slots{};
-        slots.binding = binding;
-        m_slots.push_back(std::move(slots));
-        return m_slots.back();
+        for (TableSlots &table : m_tables)
+        {
+            if (table.dxSpace == dxSpace)
+                return &table;
+        }
+        return nullptr;
     }
 
-    void Dx12DescriptorImpl::EnsureCbvSrvUavSlots(BindingSlots &slots, uint32_t count)
+    const Dx12DescriptorImpl::TableSlots *Dx12DescriptorImpl::FindTable(uint32_t dxSpace) const
+    {
+        for (const TableSlots &table : m_tables)
+        {
+            if (table.dxSpace == dxSpace)
+                return &table;
+        }
+        return nullptr;
+    }
+
+    void Dx12DescriptorImpl::AllocateTables()
     {
         auto *rhi = static_cast<Dx12RhiImpl *>(RHII.GetImpl());
-        PE_ERROR_IF(!rhi || !rhi->GetCbvSrvUavHeap(), "Dx12DescriptorImpl requires the DX12 CBV/SRV/UAV heap");
+        PE_ERROR_IF(!rhi || !rhi->GetCbvSrvUavHeap() || !rhi->GetSamplerHeap(), "Dx12DescriptorImpl requires DX12 descriptor heaps");
 
-        while (slots.cbvSrvUavSlots.size() < count)
-            slots.cbvSrvUavSlots.push_back(rhi->GetCbvSrvUavHeap()->Allocate());
+        struct Required
+        {
+            uint32_t cbvSrvUavCount = 0;
+            uint32_t samplerCount = 0;
+        };
+        std::unordered_map<uint32_t, Required> requiredBySpace;
+
+        for (const DescriptorBindingInfo &info : m_owner->GetBindingInfos())
+        {
+            PE_ERROR_IF(info.dxSpace >= DX12_DESCRIPTOR_SPACE_COUNT,
+                        "DX12 descriptor space %u exceeds supported count %u",
+                        info.dxSpace,
+                        DX12_DESCRIPTOR_SPACE_COUNT);
+            PE_ERROR_IF(info.dxRegister >= DX12_DESCRIPTORS_PER_TYPE,
+                        "DX12 descriptor register %u exceeds supported count %u",
+                        info.dxRegister,
+                        DX12_DESCRIPTORS_PER_TYPE);
+
+            Required &required = requiredBySpace[info.dxSpace];
+            required.cbvSrvUavCount = std::max(required.cbvSrvUavCount, CbvSrvUavTableEnd(info));
+            required.samplerCount = std::max(required.samplerCount, SamplerTableEnd(info));
+        }
+
+        for (const auto &[space, required] : requiredBySpace)
+        {
+            TableSlots table{};
+            table.dxSpace = space;
+            if (required.cbvSrvUavCount > 0)
+            {
+                table.cbvSrvUavBaseSlot = rhi->GetCbvSrvUavHeap()->AllocateRange(required.cbvSrvUavCount);
+                table.cbvSrvUavCount = required.cbvSrvUavCount;
+            }
+            if (required.samplerCount > 0)
+            {
+                table.samplerBaseSlot = rhi->GetSamplerHeap()->AllocateRange(required.samplerCount);
+                table.samplerCount = required.samplerCount;
+            }
+            m_tables.push_back(table);
+        }
+
+        for (const DescriptorBindingInfo &info : m_owner->GetBindingInfos())
+        {
+            TableSlots *table = FindTable(info.dxSpace);
+            PE_ERROR_IF(!table, "DX12 descriptor table was not allocated");
+
+            BindingSlots slots{};
+            slots.binding = info.binding;
+            slots.dxRegister = info.dxRegister;
+            slots.dxSpace = info.dxSpace;
+            if (IsCbvSrvUavDescriptor(info.type))
+            {
+                const uint32_t offset = CbvSrvUavTableOffset(info);
+                slots.cbvSrvUavSlots.resize(std::max(1u, info.count));
+                for (uint32_t i = 0; i < slots.cbvSrvUavSlots.size(); ++i)
+                    slots.cbvSrvUavSlots[i] = table->cbvSrvUavBaseSlot + offset + i;
+            }
+            if (IsSamplerDescriptor(info.type))
+            {
+                slots.samplerSlots.resize(std::max(1u, info.count));
+                for (uint32_t i = 0; i < slots.samplerSlots.size(); ++i)
+                    slots.samplerSlots[i] = table->samplerBaseSlot + info.dxRegister + i;
+            }
+            m_slots.push_back(std::move(slots));
+        }
     }
 
-    void Dx12DescriptorImpl::EnsureSamplerSlotCount(BindingSlots &slots, uint32_t count)
-    {
-        slots.samplerSlots.resize(count, InvalidSlot);
-    }
-
-    void Dx12DescriptorImpl::FreeCbvSrvUavSlots()
+    void Dx12DescriptorImpl::FreeTables()
     {
         auto *rhi = static_cast<Dx12RhiImpl *>(RHII.GetImpl());
-        Dx12DescriptorHeap *heap = rhi ? rhi->GetCbvSrvUavHeap() : nullptr;
-        if (!heap)
+        if (!rhi)
             return;
 
-        for (BindingSlots &slots : m_slots)
+        for (TableSlots &table : m_tables)
         {
-            for (uint32_t slot : slots.cbvSrvUavSlots)
-            {
-                if (slot != InvalidSlot)
-                    heap->Free(slot);
-            }
-            slots.cbvSrvUavSlots.clear();
+            if (table.cbvSrvUavBaseSlot != InvalidSlot && table.cbvSrvUavCount > 0 && rhi->GetCbvSrvUavHeap())
+                rhi->GetCbvSrvUavHeap()->FreeRange(table.cbvSrvUavBaseSlot, table.cbvSrvUavCount);
+            if (table.samplerBaseSlot != InvalidSlot && table.samplerCount > 0 && rhi->GetSamplerHeap())
+                rhi->GetSamplerHeap()->FreeRange(table.samplerBaseSlot, table.samplerCount);
         }
+        m_tables.clear();
+        m_slots.clear();
     }
 
     uint32_t Dx12DescriptorImpl::GetCbvSrvUavSlot(uint32_t binding, uint32_t arrayIndex) const
@@ -157,6 +281,24 @@ namespace pe
         return rhi->GetSamplerHeap()->GetGpuHandle(slot);
     }
 
+    D3D12_GPU_DESCRIPTOR_HANDLE Dx12DescriptorImpl::GetCbvSrvUavTableGpuHandle(uint32_t dxSpace) const
+    {
+        auto *rhi = static_cast<Dx12RhiImpl *>(RHII.GetImpl());
+        const TableSlots *table = FindTable(dxSpace);
+        if (!rhi || !rhi->GetCbvSrvUavHeap() || !table || table->cbvSrvUavBaseSlot == InvalidSlot)
+            return {};
+        return rhi->GetCbvSrvUavHeap()->GetGpuHandle(table->cbvSrvUavBaseSlot);
+    }
+
+    D3D12_GPU_DESCRIPTOR_HANDLE Dx12DescriptorImpl::GetSamplerTableGpuHandle(uint32_t dxSpace) const
+    {
+        auto *rhi = static_cast<Dx12RhiImpl *>(RHII.GetImpl());
+        const TableSlots *table = FindTable(dxSpace);
+        if (!rhi || !rhi->GetSamplerHeap() || !table || table->samplerBaseSlot == InvalidSlot)
+            return {};
+        return rhi->GetSamplerHeap()->GetGpuHandle(table->samplerBaseSlot);
+    }
+
     void Dx12DescriptorImpl::Update(const std::vector<DescriptorBindingInfo> &bindingInfos,
                                     const std::vector<DescriptorUpdateInfo> &updateInfos)
     {
@@ -177,15 +319,16 @@ namespace pe
                 continue;
             }
 
-            BindingSlots &slots = EnsureSlots(updateInfo.binding);
+            BindingSlots *slots = FindSlots(updateInfo.binding);
+            PE_ERROR_IF(!slots, "Dx12DescriptorImpl: update binding has no allocated DX12 slots");
 
             if (!updateInfo.views.empty())
             {
-                EnsureCbvSrvUavSlots(slots, static_cast<uint32_t>(updateInfo.views.size()));
                 for (uint32_t j = 0; j < updateInfo.views.size(); j++)
                 {
                     const auto *view = Dx12ImageViewImpl::From(updateInfo.views[j]);
-                    const uint32_t slot = slots.cbvSrvUavSlots[j];
+                    PE_ERROR_IF(j >= slots->cbvSrvUavSlots.size(), "Dx12DescriptorImpl: image descriptor array exceeds reflected count");
+                    const uint32_t slot = slots->cbvSrvUavSlots[j];
                     device->CopyDescriptorsSimple(1,
                                                   cbvSrvUavHeap->GetCpuHandle(slot),
                                                   view->GetCpuHandle(),
@@ -194,24 +337,30 @@ namespace pe
 
                 if (bindingInfo.type == PE_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER)
                 {
-                    EnsureSamplerSlotCount(slots, static_cast<uint32_t>(updateInfo.samplers.size()));
                     for (uint32_t j = 0; j < updateInfo.samplers.size(); j++)
                     {
+                        PE_ERROR_IF(j >= slots->samplerSlots.size(), "Dx12DescriptorImpl: sampler descriptor array exceeds reflected count");
                         const Dx12SamplerImpl *sampler = Dx12SamplerImpl::TryFrom(updateInfo.samplers[j]);
-                        slots.samplerSlots[j] = sampler ? sampler->GetShaderVisibleSlot() : InvalidSlot;
+                        if (sampler)
+                        {
+                            device->CopyDescriptorsSimple(1,
+                                                          rhi->GetSamplerHeap()->GetCpuHandle(slots->samplerSlots[j]),
+                                                          sampler->GetCpuHandle(),
+                                                          D3D12_DESCRIPTOR_HEAP_TYPE_SAMPLER);
+                        }
                     }
                 }
             }
             else if (!updateInfo.buffers.empty())
             {
-                EnsureCbvSrvUavSlots(slots, static_cast<uint32_t>(updateInfo.buffers.size()));
                 for (uint32_t j = 0; j < updateInfo.buffers.size(); j++)
                 {
+                    PE_ERROR_IF(j >= slots->cbvSrvUavSlots.size(), "Dx12DescriptorImpl: buffer descriptor array exceeds reflected count");
                     Buffer *buffer = updateInfo.buffers[j];
                     const Dx12BufferImpl *bufferImpl = Dx12BufferImpl::From(buffer);
                     const uint64_t offset = j < updateInfo.offsets.size() ? updateInfo.offsets[j] : 0;
                     const uint64_t rangeBytes = BufferRangeBytes(buffer, updateInfo, j);
-                    const D3D12_CPU_DESCRIPTOR_HANDLE dst = cbvSrvUavHeap->GetCpuHandle(slots.cbvSrvUavSlots[j]);
+                    const D3D12_CPU_DESCRIPTOR_HANDLE dst = cbvSrvUavHeap->GetCpuHandle(slots->cbvSrvUavSlots[j]);
 
                     if (bindingInfo.type == PE_DESCRIPTOR_TYPE_UNIFORM_BUFFER ||
                         bindingInfo.type == PE_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC)
@@ -220,6 +369,16 @@ namespace pe
                         cbv.BufferLocation = bufferImpl->GetResource()->GetGPUVirtualAddress() + offset;
                         cbv.SizeInBytes = AlignCbvSize(rangeBytes);
                         device->CreateConstantBufferView(&cbv, dst);
+                    }
+                    else if (bindingInfo.type == PE_DESCRIPTOR_TYPE_STRUCTURED_BUFFER ||
+                             bindingInfo.type == PE_DESCRIPTOR_TYPE_BYTE_ADDRESS_BUFFER)
+                    {
+                        D3D12_SHADER_RESOURCE_VIEW_DESC srv{};
+                        srv.Format = DXGI_FORMAT_R32_TYPELESS;
+                        srv.ViewDimension = D3D12_SRV_DIMENSION_BUFFER;
+                        srv.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
+                        srv.Buffer = BufferSrv(updateInfo, j, rangeBytes);
+                        device->CreateShaderResourceView(bufferImpl->GetResource(), &srv, dst);
                     }
                     else
                     {
@@ -233,11 +392,17 @@ namespace pe
             }
             else if (!updateInfo.samplers.empty() && bindingInfo.type != PE_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER)
             {
-                EnsureSamplerSlotCount(slots, static_cast<uint32_t>(updateInfo.samplers.size()));
                 for (uint32_t j = 0; j < updateInfo.samplers.size(); j++)
                 {
+                    PE_ERROR_IF(j >= slots->samplerSlots.size(), "Dx12DescriptorImpl: sampler descriptor array exceeds reflected count");
                     const Dx12SamplerImpl *sampler = Dx12SamplerImpl::TryFrom(updateInfo.samplers[j]);
-                    slots.samplerSlots[j] = sampler ? sampler->GetShaderVisibleSlot() : InvalidSlot;
+                    if (sampler)
+                    {
+                        device->CopyDescriptorsSimple(1,
+                                                      rhi->GetSamplerHeap()->GetCpuHandle(slots->samplerSlots[j]),
+                                                      sampler->GetCpuHandle(),
+                                                      D3D12_DESCRIPTOR_HEAP_TYPE_SAMPLER);
+                    }
                 }
             }
             else if (!updateInfo.accelerationStructures.empty())

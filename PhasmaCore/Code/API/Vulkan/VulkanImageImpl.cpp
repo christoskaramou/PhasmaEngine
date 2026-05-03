@@ -9,6 +9,7 @@
 #include "API/Vulkan/VulkanBufferImpl.h"
 #include "API/Vulkan/VulkanImageViewImpl.h"
 #include "API/Vulkan/VulkanRHITypeUtils.h"
+#include "API/Vulkan/VulkanSamplerImpl.h"
 #if defined(PE_WIN32)
 #include "API/DX12/Dx12ImageImpl.h"
 #endif
@@ -628,7 +629,7 @@ namespace pe
         cmd->EndDebugRegion();
     }
 
-    void VulkanImageImpl::Blit(CommandBuffer *cmd, Image *src, const vk::ImageBlit &region, vk::Filter filter)
+    void VulkanImageImpl::Blit(CommandBuffer *cmd, Image *src, const ImageBlit &region, PeFilter filter)
     {
         Image *dst = m_owner;
         cmd->BeginDebugRegion("BlitImage");
@@ -654,10 +655,11 @@ namespace pe
 
         Image::Barriers(cmd, barriers);
 
+        const vk::ImageBlit vkRegion = ToVkImageBlit(region);
         cmd->BeginDebugRegion(src->GetName() + " -> " + dst->GetName());
         cmd->ApiHandle().blitImage(From(src)->m_image, vk::ImageLayout::eTransferSrcOptimal,
                                    m_image, vk::ImageLayout::eTransferDstOptimal,
-                                   1, &region, filter);
+                                   1, &vkRegion, ToVkFilter(filter));
         cmd->EndDebugRegion();
 
         cmd->EndDebugRegion();

@@ -13,7 +13,9 @@ namespace pe
         Dx12DescriptorHeap(ID3D12Device *device, D3D12_DESCRIPTOR_HEAP_TYPE type, uint32_t capacity, bool shaderVisible);
 
         uint32_t Allocate();
+        uint32_t AllocateRange(uint32_t count);
         void Free(uint32_t slot);
+        void FreeRange(uint32_t firstSlot, uint32_t count);
 
         D3D12_CPU_DESCRIPTOR_HANDLE GetCpuHandle(uint32_t slot) const;
         D3D12_GPU_DESCRIPTOR_HANDLE GetGpuHandle(uint32_t slot) const;

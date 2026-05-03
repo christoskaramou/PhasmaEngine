@@ -30,6 +30,8 @@ namespace pe
         case PE_DESCRIPTOR_TYPE_UNIFORM_BUFFER:
             return vk::DescriptorType::eUniformBuffer;
         case PE_DESCRIPTOR_TYPE_STORAGE_BUFFER:
+        case PE_DESCRIPTOR_TYPE_STRUCTURED_BUFFER: // Vulkan does not split RO from RW at the descriptor layer
+        case PE_DESCRIPTOR_TYPE_BYTE_ADDRESS_BUFFER:
             return vk::DescriptorType::eStorageBuffer;
         case PE_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC:
             return vk::DescriptorType::eUniformBufferDynamic;

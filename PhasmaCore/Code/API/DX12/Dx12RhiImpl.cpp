@@ -306,9 +306,11 @@ namespace pe
         m_clearCmdList->SetGraphicsRootSignature(m_sharedRootSignature->Get());
         ID3D12DescriptorHeap *heaps[] = {m_cbvSrvUavHeap->Get(), m_samplerHeap->Get()};
         m_clearCmdList->SetDescriptorHeaps(static_cast<UINT>(std::size(heaps)), heaps);
-        m_clearCmdList->SetGraphicsRootDescriptorTable(3, m_cbvSrvUavHeap->GetGpuHandle(0));
-        m_clearCmdList->SetGraphicsRootDescriptorTable(4, m_cbvSrvUavHeap->GetGpuHandle(0));
-        m_clearCmdList->SetGraphicsRootDescriptorTable(5, m_samplerHeap->GetGpuHandle(0));
+        for (uint32_t space = 0; space < DX12_DESCRIPTOR_SPACE_COUNT; ++space)
+        {
+            m_clearCmdList->SetGraphicsRootDescriptorTable(Dx12CbvSrvUavRootIndex(space), m_cbvSrvUavHeap->GetGpuHandle(0));
+            m_clearCmdList->SetGraphicsRootDescriptorTable(Dx12SamplerRootIndex(space), m_samplerHeap->GetGpuHandle(0));
+        }
         m_clearCmdList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
         m_clearCmdList->IASetVertexBuffers(0, 1, &vbv);
 

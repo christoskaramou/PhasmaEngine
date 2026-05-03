@@ -14,7 +14,7 @@ namespace pe
         virtual void Reset() = 0;
 
         // Clears + blits
-        virtual void BlitImage(Image *src, Image *dst, const vk::ImageBlit &region, vk::Filter filter) = 0;
+        virtual void BlitImage(Image *src, Image *dst, const ImageBlit &region, PeFilter filter) = 0;
         virtual void ClearColors(std::vector<Image *> images) = 0;
         virtual void ClearDepthStencils(std::vector<Image *> images) = 0;
 
@@ -59,7 +59,8 @@ namespace pe
 
         // Ray tracing
         virtual void TraceRays(uint32_t width, uint32_t height, uint32_t depth) = 0;
-        virtual void BuildAccelerationStructures(uint32_t infoCount, const vk::AccelerationStructureBuildGeometryInfoKHR *pInfos, const vk::AccelerationStructureBuildRangeInfoKHR **ppBuildRangeInfos) = 0;
+        // BuildAccelerationStructures is Vulkan-private; declared in Vulkan/AccelerationStructure.h
+        // and called by Vulkan-private RT code only. Not part of the neutral CommandBuffer surface.
 
         // Barriers
         virtual void BufferBarrier(const BufferBarrierInfo &info) = 0;

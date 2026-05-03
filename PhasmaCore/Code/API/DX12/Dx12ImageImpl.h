@@ -14,7 +14,7 @@ namespace pe
 
         void CopyImage(CommandBuffer *cmd, Image *src) override;
         void CopyToBuffer(CommandBuffer *cmd, Buffer *dst) override;
-        void Blit(CommandBuffer *cmd, Image *src, const vk::ImageBlit &region, vk::Filter filter) override;
+        void Blit(CommandBuffer *cmd, Image *src, const ImageBlit &region, PeFilter filter) override;
         void CopyDataToImageStaged(CommandBuffer *cmd,
                                    void *data,
                                    size_t size,

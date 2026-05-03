@@ -11,7 +11,7 @@ namespace pe
         virtual ~Impl() = default;
         virtual void CopyImage(CommandBuffer *cmd, Image *src) = 0;
         virtual void CopyToBuffer(CommandBuffer *cmd, Buffer *dst) = 0;
-        virtual void Blit(CommandBuffer *cmd, Image *src, const vk::ImageBlit &region, vk::Filter filter) = 0;
+        virtual void Blit(CommandBuffer *cmd, Image *src, const ImageBlit &region, PeFilter filter) = 0;
         virtual void CopyDataToImageStaged(CommandBuffer *cmd,
                                            void *data,
                                            size_t size,
@@ -28,7 +28,7 @@ namespace pe
     // active RHI backend selected at RHI::Init(). Defined in the active backend's
     // translation unit (currently Vulkan/VulkanImageImpl.cpp).
     Image::Impl *CreateImageImpl(Image *owner, const ImageDesc &desc);
-    Image::Impl *CreateSwapchainImageImpl(Image *owner, vk::Image externalImage);
+    // CreateSwapchainImageImpl(vk::Image) is Vulkan-private — declared in Vulkan/VulkanImageImpl.h.
     void Image_Barrier_Backend(CommandBuffer *cmd, const ImageBarrierInfo &info);
     void Image_Barriers_Backend(CommandBuffer *cmd, const std::vector<ImageBarrierInfo> &infos);
 } // namespace pe

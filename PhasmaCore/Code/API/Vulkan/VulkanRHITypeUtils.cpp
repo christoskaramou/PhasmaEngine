@@ -1,4 +1,5 @@
 #include "API/Vulkan/VulkanRHITypeUtils.h"
+#include "API/Vulkan/VulkanImageViewImpl.h"
 
 namespace pe
 {
@@ -579,5 +580,23 @@ namespace pe
         default:
             return PE_PRESENT_MODE_FIFO;
         }
+    }
+
+    vk::ImageBlit ToVkImageBlit(const ImageBlit &region)
+    {
+        vk::ImageBlit out{};
+        out.srcSubresource.aspectMask = ToVkImageAspect(region.srcSubresource.aspectMask);
+        out.srcSubresource.mipLevel = region.srcSubresource.mipLevel;
+        out.srcSubresource.baseArrayLayer = region.srcSubresource.baseArrayLayer;
+        out.srcSubresource.layerCount = region.srcSubresource.layerCount;
+        out.srcOffsets[0] = vk::Offset3D{region.srcOffsets[0].x, region.srcOffsets[0].y, region.srcOffsets[0].z};
+        out.srcOffsets[1] = vk::Offset3D{region.srcOffsets[1].x, region.srcOffsets[1].y, region.srcOffsets[1].z};
+        out.dstSubresource.aspectMask = ToVkImageAspect(region.dstSubresource.aspectMask);
+        out.dstSubresource.mipLevel = region.dstSubresource.mipLevel;
+        out.dstSubresource.baseArrayLayer = region.dstSubresource.baseArrayLayer;
+        out.dstSubresource.layerCount = region.dstSubresource.layerCount;
+        out.dstOffsets[0] = vk::Offset3D{region.dstOffsets[0].x, region.dstOffsets[0].y, region.dstOffsets[0].z};
+        out.dstOffsets[1] = vk::Offset3D{region.dstOffsets[1].x, region.dstOffsets[1].y, region.dstOffsets[1].z};
+        return out;
     }
 } // namespace pe

@@ -246,6 +246,12 @@ enum PeFilter : uint32_t
     PE_FILTER_COUNT
 };
 
+// Indirect-draw command sizes are fixed by both Vulkan and D3D12 specs:
+// VkDrawIndirectCommand / D3D12_DRAW_ARGUMENTS = 4 * uint32 = 16 bytes
+// VkDrawIndexedIndirectCommand / D3D12_DRAW_INDEXED_ARGUMENTS = 5 * uint32 = 20 bytes
+constexpr uint32_t PE_DRAW_INDIRECT_COMMAND_SIZE = 16u;
+constexpr uint32_t PE_DRAW_INDEXED_INDIRECT_COMMAND_SIZE = 20u;
+
 enum PeSamplerAddressMode : uint32_t
 {
     PE_SAMPLER_ADDRESS_MODE_REPEAT = 0,
@@ -288,6 +294,32 @@ constexpr PeImageAspectFlags PE_IMAGE_ASPECT_COLOR = 1u << 0;
 constexpr PeImageAspectFlags PE_IMAGE_ASPECT_DEPTH = 1u << 1;
 constexpr PeImageAspectFlags PE_IMAGE_ASPECT_STENCIL = 1u << 2;
 
+namespace pe
+{
+    struct Offset3D
+    {
+        int32_t x = 0;
+        int32_t y = 0;
+        int32_t z = 0;
+    };
+
+    struct ImageSubresourceLayers
+    {
+        PeImageAspectFlags aspectMask = PE_IMAGE_ASPECT_NONE;
+        uint32_t mipLevel = 0;
+        uint32_t baseArrayLayer = 0;
+        uint32_t layerCount = 1;
+    };
+
+    struct ImageBlit
+    {
+        ImageSubresourceLayers srcSubresource{};
+        Offset3D srcOffsets[2]{};
+        ImageSubresourceLayers dstSubresource{};
+        Offset3D dstOffsets[2]{};
+    };
+} // namespace pe
+
 enum PeComponentSwizzle : uint32_t
 {
     PE_COMPONENT_SWIZZLE_IDENTITY = 0,
@@ -318,11 +350,13 @@ enum PeDescriptorType : uint32_t
     PE_DESCRIPTOR_TYPE_STORAGE_IMAGE,
     PE_DESCRIPTOR_TYPE_STORAGE_TEXEL_BUFFER,
     PE_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
-    PE_DESCRIPTOR_TYPE_STORAGE_BUFFER,
+    PE_DESCRIPTOR_TYPE_STORAGE_BUFFER, // RW (UAV on DX12, eStorageBuffer on Vulkan)
     PE_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC,
     PE_DESCRIPTOR_TYPE_STORAGE_BUFFER_DYNAMIC,
     PE_DESCRIPTOR_TYPE_INPUT_ATTACHMENT,
     PE_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE,
+    PE_DESCRIPTOR_TYPE_STRUCTURED_BUFFER,   // read-only StructuredBuffer<T> (SRV on DX12, eStorageBuffer on Vulkan)
+    PE_DESCRIPTOR_TYPE_BYTE_ADDRESS_BUFFER, // read-only ByteAddressBuffer (SRV on DX12, eStorageBuffer on Vulkan)
     PE_DESCRIPTOR_TYPE_COUNT
 };
 

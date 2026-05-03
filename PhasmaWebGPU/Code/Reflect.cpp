@@ -1506,9 +1506,9 @@ namespace pwgpu
                 info.count = 1;
                 if (rb.hasBuffer)
                 {
-                    info.type = (rb.buffer.type == WGPUBufferBindingType_Uniform)
-                                    ? PE_DESCRIPTOR_TYPE_UNIFORM_BUFFER
-                                    : PE_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+                    info.type = rb.buffer.type == WGPUBufferBindingType_Uniform           ? PE_DESCRIPTOR_TYPE_UNIFORM_BUFFER
+                                : rb.buffer.type == WGPUBufferBindingType_ReadOnlyStorage ? PE_DESCRIPTOR_TYPE_STRUCTURED_BUFFER
+                                                                                          : PE_DESCRIPTOR_TYPE_STORAGE_BUFFER;
                 }
                 else if (rb.hasSampler)
                 {

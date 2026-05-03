@@ -196,7 +196,7 @@ namespace pe
         PE_ERROR("Dx12ImageImpl::CopyToBuffer waits for the DX12 CommandBuffer slice");
     }
 
-    void Dx12ImageImpl::Blit(CommandBuffer * /*cmd*/, Image * /*src*/, const vk::ImageBlit & /*region*/, vk::Filter /*filter*/)
+    void Dx12ImageImpl::Blit(CommandBuffer * /*cmd*/, Image * /*src*/, const ImageBlit & /*region*/, PeFilter /*filter*/)
     {
         PE_ERROR("Dx12ImageImpl::Blit is Vulkan-specific and waits for the DX12 mip-generation path");
     }

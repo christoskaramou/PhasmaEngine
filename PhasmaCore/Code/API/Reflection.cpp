@@ -10,6 +10,16 @@
 
 namespace pe
 {
+    namespace
+    {
+        template <typename T>
+        void FillDxRegisterInfo(DescriptorBindingInfo &info, const T &desc)
+        {
+            info.dxRegister = desc.dxRegister == INT32_MIN ? static_cast<uint32_t>(desc.binding) : static_cast<uint32_t>(desc.dxRegister);
+            info.dxSpace = desc.dxSpace == INT32_MIN ? static_cast<uint32_t>(desc.set) : static_cast<uint32_t>(desc.dxSpace);
+        }
+    } // namespace
+
     void Reflection::Init(Shader *shader)
     {
         if (RHII.GetApi() == PE_GRAPHICS_API_DX12)
@@ -122,6 +132,7 @@ namespace pe
             info.imageLayout = PE_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
             info.type = PE_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
             info.name = desc.name;
+            FillDxRegisterInfo(info, desc);
             setInfos[desc.set].push_back(info);
         }
 
@@ -132,6 +143,7 @@ namespace pe
             info.count = desc.count;
             info.type = PE_DESCRIPTOR_TYPE_SAMPLER;
             info.name = desc.name;
+            FillDxRegisterInfo(info, desc);
             setInfos[desc.set].push_back(info);
         }
 
@@ -143,6 +155,7 @@ namespace pe
             info.imageLayout = PE_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
             info.type = PE_DESCRIPTOR_TYPE_SAMPLED_IMAGE;
             info.name = desc.name;
+            FillDxRegisterInfo(info, desc);
             setInfos[desc.set].push_back(info);
         }
 
@@ -154,6 +167,7 @@ namespace pe
             info.imageLayout = PE_IMAGE_LAYOUT_GENERAL;
             info.type = PE_DESCRIPTOR_TYPE_STORAGE_IMAGE;
             info.name = desc.name;
+            FillDxRegisterInfo(info, desc);
             setInfos[desc.set].push_back(info);
         }
 
@@ -164,6 +178,7 @@ namespace pe
             info.count = desc.count;
             info.type = PE_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
             info.name = desc.name;
+            FillDxRegisterInfo(info, desc);
             setInfos[desc.set].push_back(info);
         }
 
@@ -172,8 +187,21 @@ namespace pe
             DescriptorBindingInfo info{};
             info.binding = desc.binding;
             info.count = desc.count;
-            info.type = PE_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+            switch (desc.kind)
+            {
+            case PeBufferKind::Structured:
+                info.type = PE_DESCRIPTOR_TYPE_STRUCTURED_BUFFER;
+                break;
+            case PeBufferKind::ByteAddress:
+                info.type = PE_DESCRIPTOR_TYPE_BYTE_ADDRESS_BUFFER;
+                break;
+            case PeBufferKind::StorageRW:
+            default:
+                info.type = PE_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+                break;
+            }
             info.name = desc.name;
+            FillDxRegisterInfo(info, desc);
             setInfos[desc.set].push_back(info);
         }
 
@@ -184,6 +212,7 @@ namespace pe
             info.count = desc.count;
             info.type = PE_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE;
             info.name = desc.name;
+            FillDxRegisterInfo(info, desc);
             setInfos[desc.set].push_back(info);
         }
 
@@ -221,6 +250,8 @@ namespace pe
                         if ((a.type == PE_DESCRIPTOR_TYPE_SAMPLED_IMAGE && b.type == PE_DESCRIPTOR_TYPE_SAMPLER) ||
                             (a.type == PE_DESCRIPTOR_TYPE_SAMPLER && b.type == PE_DESCRIPTOR_TYPE_SAMPLED_IMAGE))
                         {
+                            PE_ERROR_IF(a.dxRegister != b.dxRegister || a.dxSpace != b.dxSpace,
+                                        "Combined image/sampler binding has mismatched DX12 registers");
                             a.type = PE_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
                             a.imageLayout = PE_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
                             setInfo.erase(setInfo.begin() + i + 1);

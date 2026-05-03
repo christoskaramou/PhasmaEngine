@@ -8,6 +8,14 @@
 
 namespace pe
 {
+    void BuildAccelerationStructures(CommandBuffer *cmd,
+                                     uint32_t infoCount,
+                                     const vk::AccelerationStructureBuildGeometryInfoKHR *pInfos,
+                                     const vk::AccelerationStructureBuildRangeInfoKHR *const *ppBuildRangeInfos)
+    {
+        cmd->ApiHandle().buildAccelerationStructuresKHR(infoCount, pInfos, ppBuildRangeInfos);
+    }
+
     vk::AccelerationStructureBuildSizesInfoKHR AccelerationStructure::GetBuildSizes(
         const std::vector<vk::AccelerationStructureGeometryKHR> &geometries,
         const std::vector<uint32_t> &maxPrimitiveCounts,
@@ -118,7 +126,7 @@ namespace pe
         buildInfo.dstAccelerationStructure = m_apiHandle;
 
         const vk::AccelerationStructureBuildRangeInfoKHR *pBuildRanges = buildRanges.data();
-        cmd->BuildAccelerationStructures(1, &buildInfo, &pBuildRanges);
+        BuildAccelerationStructures(cmd, 1, &buildInfo, &pBuildRanges);
 
         // Add barrier for subsequent use
         MemoryBarrierInfo barrier{};
@@ -193,7 +201,7 @@ namespace pe
         buildRange.transformOffset = 0;
 
         const vk::AccelerationStructureBuildRangeInfoKHR *pBuildRanges = &buildRange;
-        cmd->BuildAccelerationStructures(1, &buildInfo, &pBuildRanges);
+        BuildAccelerationStructures(cmd, 1, &buildInfo, &pBuildRanges);
 
         // Add barrier for subsequent use
         MemoryBarrierInfo barrier{};
@@ -240,7 +248,7 @@ namespace pe
         buildRange.transformOffset = 0;
 
         const vk::AccelerationStructureBuildRangeInfoKHR *pBuildRanges = &buildRange;
-        cmd->BuildAccelerationStructures(1, &buildInfo, &pBuildRanges);
+        BuildAccelerationStructures(cmd, 1, &buildInfo, &pBuildRanges);
 
         // Add barrier for subsequent use
         MemoryBarrierInfo barrier{};

@@ -10,6 +10,18 @@ namespace pe
     {
         constexpr uint32_t MAX_COUNT_PER_BINDING = 500;
 
+        struct SourceBinding
+        {
+            int set = INT32_MIN;
+            int binding = INT32_MIN;
+        };
+
+        struct SourceBindings
+        {
+            std::unordered_map<std::string, SourceBinding> resources;
+            std::unordered_set<std::string> pushConstants;
+        };
+
         std::wstring ConvertUtf8ToWide(const std::string &str)
         {
             if (str.empty())
@@ -79,8 +91,75 @@ namespace pe
                 return false;
             }
 
+            auto prepareDx12ShaderCode = [](const std::string &shaderCode)
+            {
+                auto withMacroRegisters = shaderCode;
+                auto replaceAll = [](std::string &text, const std::string &from, const std::string &to)
+                {
+                    size_t pos = 0;
+                    while ((pos = text.find(from, pos)) != std::string::npos)
+                    {
+                        text.replace(pos, from.size(), to);
+                        pos += to.size();
+                    }
+                };
+
+                replaceAll(withMacroRegisters,
+                           "Texture2D tex; \\",
+                           "Texture2D tex : register(t##bind, space##set); \\");
+                replaceAll(withMacroRegisters,
+                           "TextureCube tex; \\",
+                           "TextureCube tex : register(t##bind, space##set); \\");
+                replaceAll(withMacroRegisters,
+                           "SamplerState sampler_##tex;",
+                           "SamplerState sampler_##tex : register(s##bind, space##set);");
+
+                std::stringstream in(withMacroRegisters);
+                std::string out;
+                std::string line;
+                const std::regex bindingRegex(R"(\[\[vk::binding\(\s*(\d+)\s*(?:,\s*(\d+))?\s*\)\]\])");
+
+                while (std::getline(in, line))
+                {
+                    std::smatch match;
+                    if (std::regex_search(line, match, bindingRegex) && line.find(": register(") == std::string::npos)
+                    {
+                        const std::string binding = match[1].str();
+                        const std::string set = match[2].matched ? match[2].str() : "0";
+                        const std::string suffix = match.suffix().str();
+                        std::string regType;
+
+                        if (std::regex_search(suffix, std::regex(R"(\b(?:cbuffer|ConstantBuffer)\b)")))
+                            regType = "b";
+                        else if (std::regex_search(suffix, std::regex(R"(\btbuffer\b)")))
+                            regType = "t";
+                        else if (std::regex_search(suffix, std::regex(R"(\bSampler(?:State|ComparisonState)\b)")))
+                            regType = "s";
+                        else if (std::regex_search(suffix, std::regex(R"(\b(?:globallycoherent\s+)?RW(?:Texture\w*|StructuredBuffer|ByteAddressBuffer|Buffer)\b)")))
+                            regType = "u";
+                        else if (std::regex_search(suffix, std::regex(R"(\b(?:Texture\w*|StructuredBuffer|ByteAddressBuffer|RaytracingAccelerationStructure|ConstantBuffer)\b)")))
+                            regType = "t";
+
+                        if (!regType.empty())
+                        {
+                            const std::string annotation = " : register(" + regType + binding + ", space" + set + ")";
+                            size_t insertPos = line.find('{', match.position() + match.length());
+                            if (insertPos == std::string::npos)
+                                insertPos = line.find(';', match.position() + match.length());
+                            if (insertPos != std::string::npos)
+                                line.insert(insertPos, annotation);
+                        }
+                    }
+
+                    out += line;
+                    out += '\n';
+                }
+
+                return out;
+            };
+
             Microsoft::WRL::ComPtr<IDxcBlobEncoding> source;
-            const std::string &shaderCode = owner->GetCache().GetShaderCode();
+            const std::string shaderCode = prepareDx12ShaderCode(owner->GetCache().GetShaderCode());
             hr = utils->CreateBlob(shaderCode.data(), static_cast<uint32_t>(shaderCode.size()), CP_UTF8, &source);
             if (FAILED(hr))
             {
@@ -172,9 +251,13 @@ namespace pe
             return bindCount == 0 ? MAX_COUNT_PER_BINDING : bindCount;
         }
 
-        bool IsPushConstantBinding(const D3D12_SHADER_INPUT_BIND_DESC &binding)
+        bool IsPushConstantBinding(const D3D12_SHADER_INPUT_BIND_DESC &binding, const SourceBindings &sourceBindings)
         {
-            return binding.Type == D3D_SIT_CBUFFER && binding.BindPoint == 0 && binding.Space == 0;
+            const std::string name = binding.Name ? binding.Name : "";
+            return binding.Type == D3D_SIT_CBUFFER &&
+                   binding.BindPoint == 0 &&
+                   binding.Space == 0 &&
+                   sourceBindings.pushConstants.find(name) != sourceBindings.pushConstants.end();
         }
 
         uint32_t CountMaskComponents(BYTE mask)
@@ -284,36 +367,89 @@ namespace pe
                 desc.bufferSize = bufferDesc.Size;
         }
 
-        std::unordered_map<std::string, std::pair<int, int>> ExtractVkBindings(const std::string &shaderCode)
+        SourceBindings ExtractSourceBindings(const std::string &shaderCode)
         {
-            std::unordered_map<std::string, std::pair<int, int>> bindings;
+            SourceBindings bindings;
 
             std::stringstream stream(shaderCode);
             std::string line;
+            bool pendingPushConstant = false;
             const std::regex bindingRegex(R"(\[\[vk::binding\(\s*(\d+)\s*(?:,\s*(\d+))?\s*\)\]\])");
             const std::regex bufferNameRegex(R"(\b[ct]buffer\s+([A-Za-z_][A-Za-z0-9_]*))");
             const std::regex resourceNameRegex(
                 R"(\b(?:globallycoherent\s+)?(?:RW)?(?:Texture\w*|StructuredBuffer|ByteAddressBuffer|RaytracingAccelerationStructure|SamplerState|SamplerComparisonState|ConstantBuffer)(?:\s*<[^>]*>)?\s+([A-Za-z_][A-Za-z0-9_]*))");
+            const std::regex macroRegex(R"(\b(?:TexSamplerDecl|CubeSamplerDecl)\s*\(\s*(\d+)\s*,\s*(\d+)\s*,\s*([A-Za-z_][A-Za-z0-9_]*)\s*\))");
+            const std::regex pushConstantRegex(R"((?:(?:ConstantBuffer\s*<\s*([A-Za-z_][A-Za-z0-9_]*)\s*>)|([A-Za-z_][A-Za-z0-9_]*))\s+([A-Za-z_][A-Za-z0-9_]*))");
 
             while (std::getline(stream, line))
             {
+                const bool hasPushConstantAttribute = line.find("[[vk::push_constant]]") != std::string::npos;
+                if (hasPushConstantAttribute)
+                {
+                    pendingPushConstant = true;
+                    line = line.substr(line.find("[[vk::push_constant]]") + std::strlen("[[vk::push_constant]]"));
+                }
+                if (pendingPushConstant)
+                {
+                    std::smatch pushMatch;
+                    if (std::regex_search(line, pushMatch, pushConstantRegex))
+                    {
+                        bindings.pushConstants.insert(pushMatch[3].str());
+                        pendingPushConstant = false;
+                    }
+                    if (!line.empty() && line.find_first_not_of(" \t\r") != std::string::npos && !hasPushConstantAttribute)
+                        pendingPushConstant = false;
+                }
+
+                std::smatch macroMatch;
+                if (std::regex_search(line, macroMatch, macroRegex))
+                {
+                    SourceBinding binding{};
+                    binding.binding = std::stoi(macroMatch[1].str());
+                    binding.set = std::stoi(macroMatch[2].str());
+                    const std::string texName = macroMatch[3].str();
+                    bindings.resources[texName] = binding;
+                    bindings.resources["sampler_" + texName] = binding;
+                    continue;
+                }
+
                 std::smatch bindingMatch;
                 if (!std::regex_search(line, bindingMatch, bindingRegex))
                     continue;
 
-                const int bindPoint = std::stoi(bindingMatch[1].str());
-                const int set = bindingMatch[2].matched ? std::stoi(bindingMatch[2].str()) : 0;
+                SourceBinding binding{};
+                binding.binding = std::stoi(bindingMatch[1].str());
+                binding.set = bindingMatch[2].matched ? std::stoi(bindingMatch[2].str()) : 0;
 
                 const std::string afterBinding = bindingMatch.suffix().str();
                 std::smatch nameMatch;
                 if (std::regex_search(afterBinding, nameMatch, bufferNameRegex) ||
                     std::regex_search(afterBinding, nameMatch, resourceNameRegex))
                 {
-                    bindings[nameMatch[1].str()] = {set, bindPoint};
+                    bindings.resources[nameMatch[1].str()] = binding;
                 }
             }
 
             return bindings;
+        }
+
+        SourceBinding RequireSourceBinding(const SourceBindings &bindings, const D3D12_SHADER_INPUT_BIND_DESC &binding)
+        {
+            const std::string name = binding.Name ? binding.Name : "";
+            auto it = bindings.resources.find(name);
+            PE_ERROR_IF(it == bindings.resources.end(),
+                        "DX12 reflection: resource '%s' is missing a recoverable [[vk::binding]] annotation",
+                        name.c_str());
+            return it->second;
+        }
+
+        template <typename T>
+        void FillBindingMetadata(T &desc, const SourceBinding &sourceBinding, const D3D12_SHADER_INPUT_BIND_DESC &dxBinding)
+        {
+            desc.set = sourceBinding.set;
+            desc.binding = sourceBinding.binding;
+            desc.dxRegister = static_cast<int>(dxBinding.BindPoint);
+            desc.dxSpace = static_cast<int>(dxBinding.Space);
         }
     } // namespace
 
@@ -374,8 +510,7 @@ namespace pe
         if (FAILED(reflection->GetDesc(&shaderDesc)))
             return;
 
-        const std::unordered_map<std::string, std::pair<int, int>> vkBindings =
-            ExtractVkBindings(shader->GetCache().GetShaderCode());
+        const SourceBindings sourceBindings = ExtractSourceBindings(shader->GetCache().GetShaderCode());
 
         for (uint32_t i = 0; i < shaderDesc.InputParameters; ++i)
         {
@@ -414,17 +549,9 @@ namespace pe
                 continue;
 
             const std::string name = binding.Name ? binding.Name : "";
-            int set = static_cast<int>(binding.Space);
-            int bindPoint = static_cast<int>(binding.BindPoint);
             const uint32_t count = GetBindingCount(binding.BindCount);
 
-            if (const auto vkBinding = vkBindings.find(name); vkBinding != vkBindings.end())
-            {
-                set = vkBinding->second.first;
-                bindPoint = vkBinding->second.second;
-            }
-
-            if (IsPushConstantBinding(binding))
+            if (IsPushConstantBinding(binding, sourceBindings))
             {
                 BufferReflection buffer{};
                 FillConstantBufferSize(reflection.Get(), binding, buffer);
@@ -437,55 +564,72 @@ namespace pe
             switch (binding.Type)
             {
             case D3D_SIT_CBUFFER:
-            case D3D_SIT_TBUFFER:
             {
+                SourceBinding sourceBinding = RequireSourceBinding(sourceBindings, binding);
+                PE_ERROR_IF(binding.Space == 0 && binding.BindPoint == 0,
+                            "DX12 reflection: ordinary cbuffer '%s' compiled to b0/space0 reserved for push constants",
+                            name.c_str());
                 BufferReflection desc{};
                 desc.name = name;
-                desc.set = set;
-                desc.binding = bindPoint;
                 desc.count = count;
+                FillBindingMetadata(desc, sourceBinding, binding);
                 FillConstantBufferSize(reflection.Get(), binding, desc);
                 refl.m_uniformBuffers.push_back(desc);
                 break;
             }
+            case D3D_SIT_TBUFFER:
+            {
+                SourceBinding sourceBinding = RequireSourceBinding(sourceBindings, binding);
+                BufferReflection desc{};
+                desc.name = name;
+                desc.count = count;
+                FillBindingMetadata(desc, sourceBinding, binding);
+                desc.kind = PeBufferKind::Structured;
+                FillConstantBufferSize(reflection.Get(), binding, desc);
+                refl.m_storageBuffers.push_back(desc);
+                break;
+            }
             case D3D_SIT_TEXTURE:
             {
+                SourceBinding sourceBinding = RequireSourceBinding(sourceBindings, binding);
                 ImageReflection desc{};
                 desc.name = name;
-                desc.set = set;
-                desc.binding = bindPoint;
                 desc.count = count;
+                FillBindingMetadata(desc, sourceBinding, binding);
                 refl.m_images.push_back(desc);
                 break;
             }
             case D3D_SIT_SAMPLER:
             {
+                SourceBinding sourceBinding = RequireSourceBinding(sourceBindings, binding);
                 SamplerReflection desc{};
                 desc.name = name;
-                desc.set = set;
-                desc.binding = bindPoint;
                 desc.count = count;
+                FillBindingMetadata(desc, sourceBinding, binding);
                 refl.m_samplers.push_back(desc);
                 break;
             }
             case D3D_SIT_STRUCTURED:
             case D3D_SIT_BYTEADDRESS:
             {
+                SourceBinding sourceBinding = RequireSourceBinding(sourceBindings, binding);
                 BufferReflection desc{};
                 desc.name = name;
-                desc.set = set;
-                desc.binding = bindPoint;
                 desc.count = count;
+                FillBindingMetadata(desc, sourceBinding, binding);
+                desc.kind = (binding.Type == D3D_SIT_BYTEADDRESS)
+                                ? PeBufferKind::ByteAddress
+                                : PeBufferKind::Structured;
                 refl.m_storageBuffers.push_back(desc);
                 break;
             }
             case D3D_SIT_UAV_RWTYPED:
             {
+                SourceBinding sourceBinding = RequireSourceBinding(sourceBindings, binding);
                 ImageReflection desc{};
                 desc.name = name;
-                desc.set = set;
-                desc.binding = bindPoint;
                 desc.count = count;
+                FillBindingMetadata(desc, sourceBinding, binding);
                 refl.m_storageImages.push_back(desc);
                 break;
             }
@@ -495,21 +639,22 @@ namespace pe
             case D3D_SIT_UAV_CONSUME_STRUCTURED:
             case D3D_SIT_UAV_RWSTRUCTURED_WITH_COUNTER:
             {
+                SourceBinding sourceBinding = RequireSourceBinding(sourceBindings, binding);
                 BufferReflection desc{};
                 desc.name = name;
-                desc.set = set;
-                desc.binding = bindPoint;
                 desc.count = count;
+                FillBindingMetadata(desc, sourceBinding, binding);
+                desc.kind = PeBufferKind::StorageRW;
                 refl.m_storageBuffers.push_back(desc);
                 break;
             }
             case D3D_SIT_RTACCELERATIONSTRUCTURE:
             {
+                SourceBinding sourceBinding = RequireSourceBinding(sourceBindings, binding);
                 AccelerationStructureReflection desc{};
                 desc.name = name;
-                desc.set = set;
-                desc.binding = bindPoint;
                 desc.count = count;
+                FillBindingMetadata(desc, sourceBinding, binding);
                 refl.m_accelerationStructures.push_back(desc);
                 break;
             }

@@ -148,7 +148,7 @@ namespace pe
         void CopyImage(CommandBuffer *cmd, Image *src);
         void CopyToBuffer(CommandBuffer *cmd, Buffer *dst);
         void GenerateMipMaps(CommandBuffer *cmd);
-        void Blit(CommandBuffer *cmd, Image *src, const vk::ImageBlit &region, vk::Filter filter);
+        void Blit(CommandBuffer *cmd, Image *src, const ImageBlit &region, PeFilter filter);
 
         Impl *m_impl{};
         // Mirrored cheap data so getters skip the Impl hop.

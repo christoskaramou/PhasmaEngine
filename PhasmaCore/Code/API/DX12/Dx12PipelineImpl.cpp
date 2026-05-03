@@ -99,7 +99,7 @@ namespace pe
         if (pushConstantSize > 0)
         {
             PE_ERROR_IF(pushConstantSize > RHII.GetMaxPushConstantsSize(), "DX12 push constant size is greater than maxPushConstantsSize");
-            info.m_pushConstantStages.push_back(vk::ShaderStageFlagBits::eVertex | vk::ShaderStageFlagBits::eFragment);
+            info.m_pushConstantStages.push_back(PE_SHADER_STAGE_VERTEX | PE_SHADER_STAGE_FRAGMENT);
             info.m_pushConstantOffsets.push_back(0);
             info.m_pushConstantSizes.push_back(pushConstantSize);
         }

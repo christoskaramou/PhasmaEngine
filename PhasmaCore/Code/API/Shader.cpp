@@ -43,6 +43,8 @@ namespace pe
                     {
                         found = true;
                         PE_ERROR_IF(aInfo.type != bInfo.type, "Descriptor binding type mismatch during merge");
+                        PE_ERROR_IF(aInfo.dxRegister != bInfo.dxRegister || aInfo.dxSpace != bInfo.dxSpace,
+                                    "Descriptor binding DX12 register mismatch during merge");
                         aInfo.count = std::max(aInfo.count, bInfo.count);
                         if (bInfo.bindless && !aInfo.bindless)
                             aInfo.bindless = true;

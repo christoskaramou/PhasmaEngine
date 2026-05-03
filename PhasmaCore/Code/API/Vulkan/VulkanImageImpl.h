@@ -15,7 +15,7 @@ namespace pe
 
         void CopyImage(CommandBuffer *cmd, Image *src) override;
         void CopyToBuffer(CommandBuffer *cmd, Buffer *dst) override;
-        void Blit(CommandBuffer *cmd, Image *src, const vk::ImageBlit &region, vk::Filter filter) override;
+        void Blit(CommandBuffer *cmd, Image *src, const ImageBlit &region, PeFilter filter) override;
         void CopyDataToImageStaged(CommandBuffer *cmd,
                                    void *data,
                                    size_t size,
@@ -80,4 +80,9 @@ namespace pe
 
     vk::ImageUsageFlags ToVkImageUsage(PeImageUsageFlags usage);
     PeImageUsageFlags FromVkImageUsage(vk::ImageUsageFlags usage);
+
+    // Vulkan-private factory used by VulkanSwapchainImpl to wrap externally-owned
+    // VkImage handles. Lives here (not Image_Internal.h) so the neutral header
+    // does not leak vk::Image.
+    Image::Impl *CreateSwapchainImageImpl(Image *owner, vk::Image externalImage);
 } // namespace pe

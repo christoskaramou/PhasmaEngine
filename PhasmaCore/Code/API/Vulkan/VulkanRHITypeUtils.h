@@ -36,4 +36,7 @@ namespace pe
 
     vk::PresentModeKHR ToVkPresentMode(PePresentMode mode);
     PePresentMode FromVkPresentMode(vk::PresentModeKHR mode);
+
+    // ToVkImageAspect lives in Vulkan/VulkanImageViewImpl.h
+    vk::ImageBlit ToVkImageBlit(const ImageBlit &region);
 } // namespace pe

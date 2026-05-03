@@ -60,12 +60,19 @@ namespace pe
     uint32_t Dx12DescriptorHeap::Allocate()
     {
         uint32_t slot = 0;
-        if (!m_freeList.empty())
+        bool foundFreeSlot = false;
+        while (!m_freeList.empty())
         {
             slot = m_freeList.back();
             m_freeList.pop_back();
+            if (m_allocated[slot] == 0)
+            {
+                foundFreeSlot = true;
+                break;
+            }
         }
-        else
+
+        if (!foundFreeSlot)
         {
             PE_ERROR_IF(m_nextSlot >= m_capacity,
                         "Dx12DescriptorHeap(%s) exhausted (%u descriptors)",
@@ -79,12 +86,72 @@ namespace pe
         return slot;
     }
 
+    uint32_t Dx12DescriptorHeap::AllocateRange(uint32_t count)
+    {
+        PE_ERROR_IF(count == 0, "Dx12DescriptorHeap(%s): cannot allocate an empty range", HeapTypeName(m_type));
+        if (count == 1)
+            return Allocate();
+
+        for (uint32_t first = 0; first + count <= m_nextSlot; ++first)
+        {
+            bool free = true;
+            for (uint32_t i = 0; i < count; ++i)
+            {
+                if (m_allocated[first + i])
+                {
+                    free = false;
+                    first += i;
+                    break;
+                }
+            }
+
+            if (!free)
+                continue;
+
+            for (uint32_t i = 0; i < count; ++i)
+                m_allocated[first + i] = 1;
+            return first;
+        }
+
+        PE_ERROR_IF(m_nextSlot + count > m_capacity,
+                    "Dx12DescriptorHeap(%s) exhausted (%u descriptors, requested range %u)",
+                    HeapTypeName(m_type),
+                    m_capacity,
+                    count);
+
+        const uint32_t first = m_nextSlot;
+        m_nextSlot += count;
+        for (uint32_t i = 0; i < count; ++i)
+            m_allocated[first + i] = 1;
+        return first;
+    }
+
     void Dx12DescriptorHeap::Free(uint32_t slot)
     {
         ValidateSlot(slot);
         PE_ERROR_IF(m_allocated[slot] == 0, "Dx12DescriptorHeap(%s): slot %u is already free", HeapTypeName(m_type), slot);
         m_allocated[slot] = 0;
         m_freeList.push_back(slot);
+    }
+
+    void Dx12DescriptorHeap::FreeRange(uint32_t firstSlot, uint32_t count)
+    {
+        PE_ERROR_IF(count == 0, "Dx12DescriptorHeap(%s): cannot free an empty range", HeapTypeName(m_type));
+        if (count == 1)
+        {
+            Free(firstSlot);
+            return;
+        }
+
+        ValidateSlot(firstSlot);
+        ValidateSlot(firstSlot + count - 1);
+
+        for (uint32_t i = 0; i < count; ++i)
+        {
+            const uint32_t slot = firstSlot + i;
+            PE_ERROR_IF(m_allocated[slot] == 0, "Dx12DescriptorHeap(%s): slot %u is already free", HeapTypeName(m_type), slot);
+            m_allocated[slot] = 0;
+        }
     }
 
     D3D12_CPU_DESCRIPTOR_HANDLE Dx12DescriptorHeap::GetCpuHandle(uint32_t slot) const

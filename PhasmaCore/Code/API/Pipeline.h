@@ -136,7 +136,7 @@ namespace pe
         void ReflectDescriptors();
         void UpdateHash() override;
 
-        std::vector<vk::ShaderStageFlags> m_pushConstantStages;
+        std::vector<PeShaderStageFlags> m_pushConstantStages;
         std::vector<uint32_t> m_pushConstantOffsets;
         std::vector<uint32_t> m_pushConstantSizes;
         std::vector<std::vector<Descriptor *>> m_descriptorsPF;

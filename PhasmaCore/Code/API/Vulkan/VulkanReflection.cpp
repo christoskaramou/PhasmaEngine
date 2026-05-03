@@ -363,6 +363,13 @@ namespace pe
             desc.binding = compiler.get_decoration(resource.id, spv::DecorationBinding);
             desc.count = GetResourceArrayCount(type);
             desc.bufferSize = compiler.get_declared_struct_size(type);
+            // SPIR-V doesn't preserve the StructuredBuffer-vs-ByteAddressBuffer source distinction;
+            // both surface as a NonWritable buffer block. Vulkan collapses them to eStorageBuffer
+            // anyway, so any RO kind is correct here. The DX12 reflection path resolves the
+            // precise variant from D3D_SIT_*.
+            const auto blockFlags = compiler.get_buffer_block_flags(resource.id);
+            desc.kind = blockFlags.get(spv::DecorationNonWritable) ? PeBufferKind::Structured
+                                                                   : PeBufferKind::StorageRW;
             refl.m_storageBuffers.push_back(desc);
         }
 

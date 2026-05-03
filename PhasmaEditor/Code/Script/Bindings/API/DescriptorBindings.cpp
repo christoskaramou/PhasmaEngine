@@ -14,6 +14,8 @@ namespace pe
         {"storage_image", PE_DESCRIPTOR_TYPE_STORAGE_IMAGE},
         {"uniform_buffer", PE_DESCRIPTOR_TYPE_UNIFORM_BUFFER},
         {"storage_buffer", PE_DESCRIPTOR_TYPE_STORAGE_BUFFER},
+        {"structured_buffer", PE_DESCRIPTOR_TYPE_STRUCTURED_BUFFER},
+        {"byte_address_buffer", PE_DESCRIPTOR_TYPE_BYTE_ADDRESS_BUFFER},
         {"uniform_buffer_dynamic", PE_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC},
         {"storage_buffer_dynamic", PE_DESCRIPTOR_TYPE_STORAGE_BUFFER_DYNAMIC},
         {"input_attachment", PE_DESCRIPTOR_TYPE_INPUT_ATTACHMENT},
@@ -71,6 +73,8 @@ namespace pe
                         info.imageLayout = Lookup(entry.get_or<std::string>("layout", "undefined"), s_descImageLayoutMap, PE_IMAGE_LAYOUT_UNDEFINED);
                         info.bindless = entry.get_or("bindless", false);
                         info.name = entry.get_or<std::string>("name", "");
+                        info.dxRegister = entry.get_or("dx_register", static_cast<uint32_t>(-1));
+                        info.dxSpace = entry.get_or("dx_space", uint32_t{0});
                         bindingInfos.push_back(info);
                     }
                     PeShaderStageFlags stageFlags = LookupFlags<PeShaderStageFlags>(stage, s_shaderStageMap);
@@ -95,6 +99,8 @@ namespace pe
                         info.imageLayout = Lookup(entry.get_or<std::string>("layout", "undefined"), s_descImageLayoutMap, PE_IMAGE_LAYOUT_UNDEFINED);
                         info.bindless = entry.get_or("bindless", false);
                         info.name = entry.get_or<std::string>("name", "");
+                        info.dxRegister = entry.get_or("dx_register", static_cast<uint32_t>(-1));
+                        info.dxSpace = entry.get_or("dx_space", uint32_t{0});
                         bindingInfos.push_back(info);
                     }
                     PeShaderStageFlags stageFlags = LookupFlags<PeShaderStageFlags>(stage, s_shaderStageMap);

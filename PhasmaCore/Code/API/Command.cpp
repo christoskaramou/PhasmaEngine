@@ -68,7 +68,7 @@ namespace pe
         m_impl->SetDepthBias(constantFactor, clamp, slopeFactor);
     }
 
-    void CommandBuffer::BlitImage(Image *src, Image *dst, const vk::ImageBlit &region, vk::Filter filter)
+    void CommandBuffer::BlitImage(Image *src, Image *dst, const ImageBlit &region, PeFilter filter)
     {
         m_impl->BlitImage(src, dst, region, filter);
     }
@@ -304,11 +304,6 @@ namespace pe
     void CommandBuffer::TraceRays(uint32_t width, uint32_t height, uint32_t depth)
     {
         m_impl->TraceRays(width, height, depth);
-    }
-
-    void CommandBuffer::BuildAccelerationStructures(uint32_t infoCount, const vk::AccelerationStructureBuildGeometryInfoKHR *pInfos, const vk::AccelerationStructureBuildRangeInfoKHR **ppBuildRangeInfos)
-    {
-        m_impl->BuildAccelerationStructures(infoCount, pInfos, ppBuildRangeInfos);
     }
 
     void CommandBuffer::BufferBarrier(const BufferBarrierInfo &info)

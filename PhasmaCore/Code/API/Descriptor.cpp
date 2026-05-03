@@ -187,6 +187,8 @@ namespace pe
     {
         DescriptorBindingInfo info{};
         info.binding = binding;
+        info.dxRegister = binding;
+        info.dxSpace = 0;
         info.count = count;
         info.type = type;
         info.imageLayout = imageLayout;
@@ -277,6 +279,11 @@ namespace pe
     {
         std::sort(m_bindingInfos.begin(), m_bindingInfos.end(), [](const DescriptorBindingInfo &a, const DescriptorBindingInfo &b)
                   { return a.binding < b.binding; });
+        for (DescriptorBindingInfo &bindingInfo : m_bindingInfos)
+        {
+            if (bindingInfo.dxRegister == static_cast<uint32_t>(-1))
+                bindingInfo.dxRegister = bindingInfo.binding;
+        }
 
         // Get the count per descriptor type
         std::unordered_map<PeBindingType, uint32_t> typeCounts{};
@@ -364,7 +371,9 @@ namespace pe
         if (type != PE_DESCRIPTOR_TYPE_UNIFORM_BUFFER &&
             type != PE_DESCRIPTOR_TYPE_STORAGE_BUFFER &&
             type != PE_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC &&
-            type != PE_DESCRIPTOR_TYPE_STORAGE_BUFFER_DYNAMIC)
+            type != PE_DESCRIPTOR_TYPE_STORAGE_BUFFER_DYNAMIC &&
+            type != PE_DESCRIPTOR_TYPE_STRUCTURED_BUFFER &&
+            type != PE_DESCRIPTOR_TYPE_BYTE_ADDRESS_BUFFER)
         {
             PE_WARN("[Descriptor] Type mismatch: Binding %u is not a buffer type!", binding);
             return;

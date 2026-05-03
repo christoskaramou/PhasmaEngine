@@ -52,6 +52,8 @@ namespace pe
         uint32_t GetSamplerSlot(uint32_t binding, uint32_t arrayIndex = 0) const;
         D3D12_GPU_DESCRIPTOR_HANDLE GetCbvSrvUavGpuHandle(uint32_t binding, uint32_t arrayIndex = 0) const;
         D3D12_GPU_DESCRIPTOR_HANDLE GetSamplerGpuHandle(uint32_t binding, uint32_t arrayIndex = 0) const;
+        D3D12_GPU_DESCRIPTOR_HANDLE GetCbvSrvUavTableGpuHandle(uint32_t dxSpace) const;
+        D3D12_GPU_DESCRIPTOR_HANDLE GetSamplerTableGpuHandle(uint32_t dxSpace) const;
 
         Descriptor *m_owner{};
 
@@ -59,18 +61,30 @@ namespace pe
         struct BindingSlots
         {
             uint32_t binding = InvalidSlot;
+            uint32_t dxRegister = InvalidSlot;
+            uint32_t dxSpace = 0;
             std::vector<uint32_t> cbvSrvUavSlots{};
             std::vector<uint32_t> samplerSlots{};
         };
 
+        struct TableSlots
+        {
+            uint32_t dxSpace = InvalidSlot;
+            uint32_t cbvSrvUavBaseSlot = InvalidSlot;
+            uint32_t cbvSrvUavCount = 0;
+            uint32_t samplerBaseSlot = InvalidSlot;
+            uint32_t samplerCount = 0;
+        };
+
         BindingSlots *FindSlots(uint32_t binding);
         const BindingSlots *FindSlots(uint32_t binding) const;
-        BindingSlots &EnsureSlots(uint32_t binding);
-        void EnsureCbvSrvUavSlots(BindingSlots &slots, uint32_t count);
-        void EnsureSamplerSlotCount(BindingSlots &slots, uint32_t count);
-        void FreeCbvSrvUavSlots();
+        TableSlots *FindTable(uint32_t dxSpace);
+        const TableSlots *FindTable(uint32_t dxSpace) const;
+        void AllocateTables();
+        void FreeTables();
 
         std::vector<BindingSlots> m_slots{};
+        std::vector<TableSlots> m_tables{};
     };
 
     inline uint32_t GetDx12CbvSrvUavDescriptorSlot(const Descriptor *descriptor, uint32_t binding, uint32_t arrayIndex = 0)
@@ -83,5 +97,17 @@ namespace pe
     {
         const Dx12DescriptorImpl *impl = Dx12DescriptorImpl::TryFrom(descriptor);
         return impl ? impl->GetSamplerSlot(binding, arrayIndex) : Dx12DescriptorImpl::InvalidSlot;
+    }
+
+    inline D3D12_GPU_DESCRIPTOR_HANDLE GetDx12CbvSrvUavTableGpuHandle(const Descriptor *descriptor, uint32_t dxSpace)
+    {
+        const Dx12DescriptorImpl *impl = Dx12DescriptorImpl::TryFrom(descriptor);
+        return impl ? impl->GetCbvSrvUavTableGpuHandle(dxSpace) : D3D12_GPU_DESCRIPTOR_HANDLE{};
+    }
+
+    inline D3D12_GPU_DESCRIPTOR_HANDLE GetDx12SamplerTableGpuHandle(const Descriptor *descriptor, uint32_t dxSpace)
+    {
+        const Dx12DescriptorImpl *impl = Dx12DescriptorImpl::TryFrom(descriptor);
+        return impl ? impl->GetSamplerTableGpuHandle(dxSpace) : D3D12_GPU_DESCRIPTOR_HANDLE{};
     }
 } // namespace pe

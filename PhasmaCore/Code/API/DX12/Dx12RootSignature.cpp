@@ -6,69 +6,69 @@ namespace pe
     {
         PE_ERROR_IF(!device, "Dx12RootSignature requires a valid D3D12 device");
 
-        D3D12_ROOT_PARAMETER1 parameters[6]{};
+        std::array<D3D12_ROOT_PARAMETER1, 1 + DX12_DESCRIPTOR_SPACE_COUNT * 2> parameters{};
 
-        parameters[0].ParameterType = D3D12_ROOT_PARAMETER_TYPE_32BIT_CONSTANTS;
-        parameters[0].ShaderVisibility = D3D12_SHADER_VISIBILITY_ALL;
-        parameters[0].Constants.ShaderRegister = 0;
-        parameters[0].Constants.RegisterSpace = 0;
-        parameters[0].Constants.Num32BitValues = 32;
+        parameters[DX12_ROOT_CONSTANTS_INDEX].ParameterType = D3D12_ROOT_PARAMETER_TYPE_32BIT_CONSTANTS;
+        parameters[DX12_ROOT_CONSTANTS_INDEX].ShaderVisibility = D3D12_SHADER_VISIBILITY_ALL;
+        parameters[DX12_ROOT_CONSTANTS_INDEX].Constants.ShaderRegister = 0;
+        parameters[DX12_ROOT_CONSTANTS_INDEX].Constants.RegisterSpace = 0;
+        parameters[DX12_ROOT_CONSTANTS_INDEX].Constants.Num32BitValues = 32;
 
-        parameters[1].ParameterType = D3D12_ROOT_PARAMETER_TYPE_CBV;
-        parameters[1].ShaderVisibility = D3D12_SHADER_VISIBILITY_ALL;
-        parameters[1].Descriptor.ShaderRegister = 1;
-        parameters[1].Descriptor.RegisterSpace = 0;
-        parameters[1].Descriptor.Flags = D3D12_ROOT_DESCRIPTOR_FLAG_DATA_VOLATILE;
+        std::array<std::array<D3D12_DESCRIPTOR_RANGE1, 3>, DX12_DESCRIPTOR_SPACE_COUNT> resourceRanges{};
+        std::array<D3D12_DESCRIPTOR_RANGE1, DX12_DESCRIPTOR_SPACE_COUNT> samplerRanges{};
 
-        parameters[2].ParameterType = D3D12_ROOT_PARAMETER_TYPE_CBV;
-        parameters[2].ShaderVisibility = D3D12_SHADER_VISIBILITY_ALL;
-        parameters[2].Descriptor.ShaderRegister = 2;
-        parameters[2].Descriptor.RegisterSpace = 0;
-        parameters[2].Descriptor.Flags = D3D12_ROOT_DESCRIPTOR_FLAG_DATA_VOLATILE;
+        for (uint32_t space = 0; space < DX12_DESCRIPTOR_SPACE_COUNT; ++space)
+        {
+            const uint32_t cbvBase = Dx12CbvBaseRegister(space);
+            auto &cbvRange = resourceRanges[space][0];
+            cbvRange.RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_CBV;
+            cbvRange.NumDescriptors = DX12_DESCRIPTORS_PER_TYPE - cbvBase;
+            cbvRange.BaseShaderRegister = cbvBase;
+            cbvRange.RegisterSpace = space;
+            cbvRange.Flags = D3D12_DESCRIPTOR_RANGE_FLAG_DESCRIPTORS_VOLATILE;
+            cbvRange.OffsetInDescriptorsFromTableStart = DX12_CBV_TABLE_OFFSET;
 
-        D3D12_DESCRIPTOR_RANGE1 srvRange{};
-        srvRange.RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_SRV;
-        srvRange.NumDescriptors = UINT_MAX;
-        srvRange.BaseShaderRegister = 0;
-        srvRange.RegisterSpace = 0;
-        srvRange.Flags = D3D12_DESCRIPTOR_RANGE_FLAG_DESCRIPTORS_VOLATILE;
-        srvRange.OffsetInDescriptorsFromTableStart = D3D12_DESCRIPTOR_RANGE_OFFSET_APPEND;
+            auto &srvRange = resourceRanges[space][1];
+            srvRange.RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_SRV;
+            srvRange.NumDescriptors = DX12_DESCRIPTORS_PER_TYPE;
+            srvRange.BaseShaderRegister = 0;
+            srvRange.RegisterSpace = space;
+            srvRange.Flags = D3D12_DESCRIPTOR_RANGE_FLAG_DESCRIPTORS_VOLATILE;
+            srvRange.OffsetInDescriptorsFromTableStart = DX12_SRV_TABLE_OFFSET;
 
-        parameters[3].ParameterType = D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE;
-        parameters[3].ShaderVisibility = D3D12_SHADER_VISIBILITY_ALL;
-        parameters[3].DescriptorTable.NumDescriptorRanges = 1;
-        parameters[3].DescriptorTable.pDescriptorRanges = &srvRange;
+            auto &uavRange = resourceRanges[space][2];
+            uavRange.RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_UAV;
+            uavRange.NumDescriptors = DX12_DESCRIPTORS_PER_TYPE;
+            uavRange.BaseShaderRegister = 0;
+            uavRange.RegisterSpace = space;
+            uavRange.Flags = D3D12_DESCRIPTOR_RANGE_FLAG_DESCRIPTORS_VOLATILE;
+            uavRange.OffsetInDescriptorsFromTableStart = DX12_UAV_TABLE_OFFSET;
 
-        D3D12_DESCRIPTOR_RANGE1 uavRange{};
-        uavRange.RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_UAV;
-        uavRange.NumDescriptors = 2;
-        uavRange.BaseShaderRegister = 0;
-        uavRange.RegisterSpace = 0;
-        uavRange.Flags = D3D12_DESCRIPTOR_RANGE_FLAG_DESCRIPTORS_VOLATILE;
-        uavRange.OffsetInDescriptorsFromTableStart = D3D12_DESCRIPTOR_RANGE_OFFSET_APPEND;
+            const uint32_t resourceRoot = Dx12CbvSrvUavRootIndex(space);
+            parameters[resourceRoot].ParameterType = D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE;
+            parameters[resourceRoot].ShaderVisibility = D3D12_SHADER_VISIBILITY_ALL;
+            parameters[resourceRoot].DescriptorTable.NumDescriptorRanges = static_cast<UINT>(resourceRanges[space].size());
+            parameters[resourceRoot].DescriptorTable.pDescriptorRanges = resourceRanges[space].data();
 
-        parameters[4].ParameterType = D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE;
-        parameters[4].ShaderVisibility = D3D12_SHADER_VISIBILITY_ALL;
-        parameters[4].DescriptorTable.NumDescriptorRanges = 1;
-        parameters[4].DescriptorTable.pDescriptorRanges = &uavRange;
+            auto &samplerRange = samplerRanges[space];
+            samplerRange.RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_SAMPLER;
+            samplerRange.NumDescriptors = DX12_DESCRIPTORS_PER_TYPE;
+            samplerRange.BaseShaderRegister = 0;
+            samplerRange.RegisterSpace = space;
+            samplerRange.Flags = D3D12_DESCRIPTOR_RANGE_FLAG_DESCRIPTORS_VOLATILE;
+            samplerRange.OffsetInDescriptorsFromTableStart = 0;
 
-        D3D12_DESCRIPTOR_RANGE1 samplerRange{};
-        samplerRange.RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_SAMPLER;
-        samplerRange.NumDescriptors = UINT_MAX;
-        samplerRange.BaseShaderRegister = 0;
-        samplerRange.RegisterSpace = 0;
-        samplerRange.Flags = D3D12_DESCRIPTOR_RANGE_FLAG_DESCRIPTORS_VOLATILE;
-        samplerRange.OffsetInDescriptorsFromTableStart = D3D12_DESCRIPTOR_RANGE_OFFSET_APPEND;
-
-        parameters[5].ParameterType = D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE;
-        parameters[5].ShaderVisibility = D3D12_SHADER_VISIBILITY_ALL;
-        parameters[5].DescriptorTable.NumDescriptorRanges = 1;
-        parameters[5].DescriptorTable.pDescriptorRanges = &samplerRange;
+            const uint32_t samplerRoot = Dx12SamplerRootIndex(space);
+            parameters[samplerRoot].ParameterType = D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE;
+            parameters[samplerRoot].ShaderVisibility = D3D12_SHADER_VISIBILITY_ALL;
+            parameters[samplerRoot].DescriptorTable.NumDescriptorRanges = 1;
+            parameters[samplerRoot].DescriptorTable.pDescriptorRanges = &samplerRange;
+        }
 
         D3D12_VERSIONED_ROOT_SIGNATURE_DESC desc{};
         desc.Version = D3D_ROOT_SIGNATURE_VERSION_1_1;
         desc.Desc_1_1.NumParameters = static_cast<UINT>(std::size(parameters));
-        desc.Desc_1_1.pParameters = parameters;
+        desc.Desc_1_1.pParameters = parameters.data();
         desc.Desc_1_1.NumStaticSamplers = 0;
         desc.Desc_1_1.pStaticSamplers = nullptr;
         desc.Desc_1_1.Flags = D3D12_ROOT_SIGNATURE_FLAG_ALLOW_INPUT_ASSEMBLER_INPUT_LAYOUT |

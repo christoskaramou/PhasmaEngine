@@ -140,7 +140,7 @@ namespace pe
             pcr.offset = 0;
             pcr.stageFlags = vk::ShaderStageFlagBits::eCompute;
             PE_ERROR_IF(pcr.size > 128, "Compute push constant size is greater than 128 bytes");
-            m_info.m_pushConstantStages.push_back(vk::ShaderStageFlagBits::eCompute);
+            m_info.m_pushConstantStages.push_back(PE_SHADER_STAGE_COMPUTE);
             m_info.m_pushConstantOffsets.push_back(pcr.offset);
             m_info.m_pushConstantSizes.push_back(pcr.size);
         }
@@ -349,7 +349,7 @@ namespace pe
             pcrs.push_back(vertPcr);
             PE_ERROR_IF(vertPcr.size > RHII.GetMaxPushConstantsSize(), "Push constant size is greater than maxPushConstantsSize");
 
-            m_info.m_pushConstantStages.push_back(vk::ShaderStageFlagBits::eVertex | vk::ShaderStageFlagBits::eFragment);
+            m_info.m_pushConstantStages.push_back(PE_SHADER_STAGE_VERTEX | PE_SHADER_STAGE_FRAGMENT);
             m_info.m_pushConstantOffsets.push_back(vertPcr.offset);
             m_info.m_pushConstantSizes.push_back(vertPcr.size);
         }
@@ -365,7 +365,7 @@ namespace pe
                 pcrs.push_back(vertPcr);
                 PE_ERROR_IF(vertPcr.size > RHII.GetMaxPushConstantsSize(), "Vertex push constant size is greater than maxPushConstantsSize");
 
-                m_info.m_pushConstantStages.push_back(vk::ShaderStageFlagBits::eVertex);
+                m_info.m_pushConstantStages.push_back(PE_SHADER_STAGE_VERTEX);
                 m_info.m_pushConstantOffsets.push_back(vertPcr.offset);
                 m_info.m_pushConstantSizes.push_back(vertPcr.size);
             }
@@ -377,7 +377,7 @@ namespace pe
                 pcrs.push_back(fragPcr);
                 PE_ERROR_IF(fragPcr.offset + fragPcr.size > RHII.GetMaxPushConstantsSize(), "Fragment push constant size is greater than maxPushConstantsSize");
 
-                m_info.m_pushConstantStages.push_back(vk::ShaderStageFlagBits::eFragment);
+                m_info.m_pushConstantStages.push_back(PE_SHADER_STAGE_FRAGMENT);
                 m_info.m_pushConstantOffsets.push_back(fragPcr.offset);
                 m_info.m_pushConstantSizes.push_back(fragPcr.size);
             }
@@ -582,7 +582,7 @@ namespace pe
             pcrs.push_back(pcr);
 
             PE_ERROR_IF(pcr.size > RHII.GetMaxPushConstantsSize(), "RayTracing push constant size is greater than maxPushConstantsSize");
-            m_info.m_pushConstantStages.push_back(pushConstantStages);
+            m_info.m_pushConstantStages.push_back(FromVkShaderStageFlags(pushConstantStages));
             m_info.m_pushConstantOffsets.push_back(pcr.offset);
             m_info.m_pushConstantSizes.push_back(pcr.size);
         }

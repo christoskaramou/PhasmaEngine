@@ -2058,7 +2058,7 @@ extern "C"
                 case WGPUBufferBindingType_ReadOnlyStorage:
                     info.type = entry.buffer.hasDynamicOffset
                                     ? PE_DESCRIPTOR_TYPE_STORAGE_BUFFER_DYNAMIC
-                                    : PE_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+                                    : PE_DESCRIPTOR_TYPE_STRUCTURED_BUFFER;
                     break;
                 default:
                     break;

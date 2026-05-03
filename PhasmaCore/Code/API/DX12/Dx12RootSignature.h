@@ -5,6 +5,28 @@
 
 namespace pe
 {
+    constexpr uint32_t DX12_DESCRIPTOR_SPACE_COUNT = 4;
+    constexpr uint32_t DX12_DESCRIPTORS_PER_TYPE = 1024;
+    constexpr uint32_t DX12_CBV_TABLE_OFFSET = 0;
+    constexpr uint32_t DX12_SRV_TABLE_OFFSET = DX12_DESCRIPTORS_PER_TYPE;
+    constexpr uint32_t DX12_UAV_TABLE_OFFSET = DX12_DESCRIPTORS_PER_TYPE * 2;
+    constexpr uint32_t DX12_ROOT_CONSTANTS_INDEX = 0;
+
+    inline uint32_t Dx12CbvBaseRegister(uint32_t space)
+    {
+        return space == 0 ? 1u : 0u;
+    }
+
+    inline uint32_t Dx12CbvSrvUavRootIndex(uint32_t space)
+    {
+        return 1u + space * 2u;
+    }
+
+    inline uint32_t Dx12SamplerRootIndex(uint32_t space)
+    {
+        return Dx12CbvSrvUavRootIndex(space) + 1u;
+    }
+
     class Dx12RootSignature
     {
     public:

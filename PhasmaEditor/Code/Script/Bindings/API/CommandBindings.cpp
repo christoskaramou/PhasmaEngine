@@ -90,11 +90,11 @@ namespace pe
         {"dont_care", PE_STORE_OP_DONT_CARE},
     };
 
-    static const std::unordered_map<std::string_view, vk::ImageAspectFlags> s_aspectMaskMap = {
-        {"color", vk::ImageAspectFlags(vk::ImageAspectFlagBits::eColor)},
-        {"depth", vk::ImageAspectFlags(vk::ImageAspectFlagBits::eDepth)},
-        {"stencil", vk::ImageAspectFlags(vk::ImageAspectFlagBits::eStencil)},
-        {"depth_stencil", vk::ImageAspectFlagBits::eDepth | vk::ImageAspectFlagBits::eStencil},
+    static const std::unordered_map<std::string_view, PeImageAspectFlags> s_aspectMaskMap = {
+        {"color", PE_IMAGE_ASPECT_COLOR},
+        {"depth", PE_IMAGE_ASPECT_DEPTH},
+        {"stencil", PE_IMAGE_ASPECT_STENCIL},
+        {"depth_stencil", PE_IMAGE_ASPECT_DEPTH | PE_IMAGE_ASPECT_STENCIL},
     };
 
     static PeImageLayout ToImageLayout(const std::string &s)
@@ -109,9 +109,9 @@ namespace pe
     {
         return Lookup(s, s_accessFlagsMap);
     }
-    static vk::ImageAspectFlags ToAspectMask(const std::string &s)
+    static PeImageAspectFlags ToAspectMask(const std::string &s)
     {
-        return Lookup(s, s_aspectMaskMap, vk::ImageAspectFlags(vk::ImageAspectFlagBits::eColor));
+        return Lookup(s, s_aspectMaskMap, PE_IMAGE_ASPECT_COLOR);
     }
 
     static struct CommandBindings
@@ -134,17 +134,15 @@ namespace pe
                     Image *s = src->Get();
                     Image *d = dst->Get();
                     if (!s || !d) return;
-                    vk::ImageAspectFlags aspectMask = aspect ? ToAspectMask(*aspect) : vk::ImageAspectFlagBits::eColor;
-                    vk::ImageBlit region{};
-                    region.srcOffsets[0] = vk::Offset3D{0, 0, 0};
-                    region.srcOffsets[1] = vk::Offset3D{static_cast<int32_t>(s->GetWidth()), static_cast<int32_t>(s->GetHeight()), 1};
+                    PeImageAspectFlags aspectMask = aspect ? ToAspectMask(*aspect) : PE_IMAGE_ASPECT_COLOR;
+                    ImageBlit region{};
+                    region.srcOffsets[1] = {static_cast<int32_t>(s->GetWidth()), static_cast<int32_t>(s->GetHeight()), 1};
                     region.srcSubresource.aspectMask = aspectMask;
                     region.srcSubresource.layerCount = 1;
-                    region.dstOffsets[0] = vk::Offset3D{0, 0, 0};
-                    region.dstOffsets[1] = vk::Offset3D{static_cast<int32_t>(d->GetWidth()), static_cast<int32_t>(d->GetHeight()), 1};
+                    region.dstOffsets[1] = {static_cast<int32_t>(d->GetWidth()), static_cast<int32_t>(d->GetHeight()), 1};
                     region.dstSubresource.aspectMask = aspectMask;
                     region.dstSubresource.layerCount = 1;
-                    cmd.BlitImage(s, d, region, filter == "nearest" ? vk::Filter::eNearest : vk::Filter::eLinear);
+                    cmd.BlitImage(s, d, region, filter == "nearest" ? PE_FILTER_NEAREST : PE_FILTER_LINEAR);
                 };
 
                 // Clear

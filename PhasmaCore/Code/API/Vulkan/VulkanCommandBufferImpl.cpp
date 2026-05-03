@@ -111,7 +111,7 @@ namespace pe
         m_apiHandle.setDepthBias(constantFactor, clamp, slopeFactor);
     }
 
-    void VulkanCommandBufferImpl::BlitImage(Image *src, Image *dst, const vk::ImageBlit &region, vk::Filter filter)
+    void VulkanCommandBufferImpl::BlitImage(Image *src, Image *dst, const ImageBlit &region, PeFilter filter)
     {
         dst->Blit(m_owner, src, region, filter);
     }
@@ -601,7 +601,7 @@ namespace pe
         for (size_t i = 0; i < stages.size(); i++)
         {
             m_apiHandle.pushConstants(GetVulkanPipelineLayout(m_owner->m_boundPipeline),
-                                      stages[i],
+                                      ToVkShaderStageFlags(stages[i]),
                                       offsets[i],
                                       sizes[i],
                                       constants.Data());
@@ -653,11 +653,6 @@ namespace pe
                                  GetVulkanHitRegion(m_owner->m_boundPipeline),
                                  GetVulkanCallRegion(m_owner->m_boundPipeline),
                                  width, height, depth);
-    }
-
-    void VulkanCommandBufferImpl::BuildAccelerationStructures(uint32_t infoCount, const vk::AccelerationStructureBuildGeometryInfoKHR *pInfos, const vk::AccelerationStructureBuildRangeInfoKHR **ppBuildRangeInfos)
-    {
-        m_apiHandle.buildAccelerationStructuresKHR(infoCount, pInfos, ppBuildRangeInfos);
     }
 
     void VulkanCommandBufferImpl::BufferBarrier(const BufferBarrierInfo &info)

@@ -103,7 +103,7 @@ namespace pe
         void Begin();
         void End();
         void Reset();
-        void BlitImage(Image *src, Image *dst, const vk::ImageBlit &region, vk::Filter filter);
+        void BlitImage(Image *src, Image *dst, const ImageBlit &region, PeFilter filter);
         void ClearColors(std::vector<Image *> images);
         void ClearDepthStencils(std::vector<Image *> images);
         void BeginPass(uint32_t count, Attachment *attachments, const std::string &name, bool skipDynamicPass = false);
@@ -127,12 +127,13 @@ namespace pe
         void PushConstants();
         void Draw(uint32_t vertexCount, uint32_t instanceCount, uint32_t firstVertex, uint32_t firstInstance);
         void DrawIndexed(uint32_t indexCount, uint32_t instanceCount, uint32_t firstIndex, int32_t vertexOffset, uint32_t firstInstance);
-        void DrawIndirect(Buffer *indirectBuffer, size_t offset, uint32_t drawCount, uint32_t stride = sizeof(vk::DrawIndirectCommand));
-        void DrawIndexedIndirect(Buffer *indirectBuffer, size_t offset, uint32_t drawCount, uint32_t stride = sizeof(vk::DrawIndexedIndirectCommand));
-        void DrawIndexedIndirectCount(Buffer *indirectBuffer, size_t offset, Buffer *countBuffer, size_t countBufferOffset, uint32_t maxDrawCount, uint32_t stride = sizeof(vk::DrawIndexedIndirectCommand));
+        void DrawIndirect(Buffer *indirectBuffer, size_t offset, uint32_t drawCount, uint32_t stride = PE_DRAW_INDIRECT_COMMAND_SIZE);
+        void DrawIndexedIndirect(Buffer *indirectBuffer, size_t offset, uint32_t drawCount, uint32_t stride = PE_DRAW_INDEXED_INDIRECT_COMMAND_SIZE);
+        void DrawIndexedIndirectCount(Buffer *indirectBuffer, size_t offset, Buffer *countBuffer, size_t countBufferOffset, uint32_t maxDrawCount, uint32_t stride = PE_DRAW_INDEXED_INDIRECT_COMMAND_SIZE);
         void FillBuffer(Buffer *buffer, size_t offset, size_t size, uint32_t data);
         void TraceRays(uint32_t width, uint32_t height, uint32_t depth);
-        void BuildAccelerationStructures(uint32_t infoCount, const vk::AccelerationStructureBuildGeometryInfoKHR *pInfos, const vk::AccelerationStructureBuildRangeInfoKHR **ppBuildRangeInfos);
+        // BuildAccelerationStructures lives in Vulkan/AccelerationStructure.h as a
+        // Vulkan-private free function. The neutral CommandBuffer does not expose RT.
         void BufferBarrier(const BufferBarrierInfo &info);
         void BufferBarriers(const std::vector<BufferBarrierInfo> &infos);
         void ImageBarrier(const ImageBarrierInfo &info);

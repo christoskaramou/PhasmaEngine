@@ -69,13 +69,27 @@ namespace pe
         uint32_t offset = 0;
     };
 
+    // Disambiguates buffer-shaped resources. RW (UAV on DX12) is the default; the read-only
+    // variants matter only on DX12 — Vulkan collapses both to eStorageBuffer at the descriptor
+    // layer. Splitting at the reflection layer is necessary because emitting a UAV view for a
+    // read-only StructuredBuffer/ByteAddressBuffer on DX12 is a validation failure.
+    enum class PeBufferKind : uint32_t
+    {
+        StorageRW = 0, // RWStructuredBuffer / RWByteAddressBuffer / Append/Consume / RWBuffer
+        Structured,    // read-only StructuredBuffer<T>
+        ByteAddress,   // read-only ByteAddressBuffer
+    };
+
     struct BufferReflection
     {
         std::string name;
         int set = INT32_MIN;
         int binding = INT32_MIN;
+        int dxRegister = INT32_MIN;
+        int dxSpace = INT32_MIN;
         uint32_t count = 1;
         size_t bufferSize = 0;
+        PeBufferKind kind = PeBufferKind::StorageRW;
     };
 
     struct ImageReflection
@@ -83,6 +97,8 @@ namespace pe
         std::string name;
         int set = INT32_MIN;
         int binding = INT32_MIN;
+        int dxRegister = INT32_MIN;
+        int dxSpace = INT32_MIN;
         uint32_t count = 1;
     };
 
@@ -91,6 +107,8 @@ namespace pe
         std::string name;
         int set = INT32_MIN;
         int binding = INT32_MIN;
+        int dxRegister = INT32_MIN;
+        int dxSpace = INT32_MIN;
         uint32_t count = 1;
     };
 
@@ -99,6 +117,8 @@ namespace pe
         std::string name;
         int set = INT32_MIN;
         int binding = INT32_MIN;
+        int dxRegister = INT32_MIN;
+        int dxSpace = INT32_MIN;
         uint32_t count = 1;
     };
 
@@ -107,6 +127,8 @@ namespace pe
         std::string name;
         int set = INT32_MIN;
         int binding = INT32_MIN;
+        int dxRegister = INT32_MIN;
+        int dxSpace = INT32_MIN;
         uint32_t count = 1;
     };
 

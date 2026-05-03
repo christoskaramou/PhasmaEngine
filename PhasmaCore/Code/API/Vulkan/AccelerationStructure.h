@@ -51,4 +51,11 @@ namespace pe
         std::string m_name;
         uint64_t m_deviceAddress = 0;
     };
+
+    // Vulkan-private RT-build entry. Called by AccelerationStructure::Build*; not part
+    // of the neutral CommandBuffer surface (DXR, when added, will get its own entry).
+    void BuildAccelerationStructures(CommandBuffer *cmd,
+                                     uint32_t infoCount,
+                                     const vk::AccelerationStructureBuildGeometryInfoKHR *pInfos,
+                                     const vk::AccelerationStructureBuildRangeInfoKHR *const *ppBuildRangeInfos);
 } // namespace pe

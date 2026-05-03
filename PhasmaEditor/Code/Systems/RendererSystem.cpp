@@ -433,7 +433,8 @@ namespace pe
         }
 
 #ifdef PE_TRACY
-        TracyVkCollect(VulkanRhi::TracyContext(), static_cast<VkCommandBuffer>(cmd->ApiHandle()));
+        if (RHII.GetApi() == PE_GRAPHICS_API_VULKAN)
+            TracyVkCollect(VulkanRhi::TracyContext(), static_cast<VkCommandBuffer>(cmd->ApiHandle()));
 #endif
 
         cmd->End();
@@ -600,17 +601,15 @@ namespace pe
 
     void RendererSystem::Upsample(CommandBuffer *cmd, PeFilter filter)
     {
-        vk::ImageBlit region{};
-        region.srcOffsets[0] = vk::Offset3D{0, 0, 0};
-        region.srcOffsets[1] = vk::Offset3D{static_cast<int32_t>(m_viewportRT->GetWidth()), static_cast<int32_t>(m_viewportRT->GetHeight()), 1};
-        region.srcSubresource.aspectMask = VulkanHelpers::GetAspectMask(pe::ToVkFormat(m_viewportRT->GetFormat()));
+        ImageBlit region{};
+        region.srcOffsets[1] = {static_cast<int32_t>(m_viewportRT->GetWidth()), static_cast<int32_t>(m_viewportRT->GetHeight()), 1};
+        region.srcSubresource.aspectMask = PE_IMAGE_ASPECT_COLOR;
         region.srcSubresource.layerCount = 1;
-        region.dstOffsets[0] = vk::Offset3D{0, 0, 0};
-        region.dstOffsets[1] = vk::Offset3D{static_cast<int32_t>(m_displayRT->GetWidth()), static_cast<int32_t>(m_displayRT->GetHeight()), 1};
-        region.dstSubresource.aspectMask = VulkanHelpers::GetAspectMask(pe::ToVkFormat(m_displayRT->GetFormat()));
+        region.dstOffsets[1] = {static_cast<int32_t>(m_displayRT->GetWidth()), static_cast<int32_t>(m_displayRT->GetHeight()), 1};
+        region.dstSubresource.aspectMask = PE_IMAGE_ASPECT_COLOR;
         region.dstSubresource.layerCount = 1;
 
-        cmd->BlitImage(m_viewportRT, m_displayRT, region, pe::ToVkFilter(filter));
+        cmd->BlitImage(m_viewportRT, m_displayRT, region, filter);
     }
 
     Image *RendererSystem::CreateRenderTarget(const std::string &name,
@@ -800,14 +799,12 @@ namespace pe
     {
         Image *swapchainImage = RHII.GetSwapchain()->GetImage(imageIndex);
 
-        vk::ImageBlit region{};
-        region.srcOffsets[0] = vk::Offset3D{0, 0, 0};
-        region.srcOffsets[1] = vk::Offset3D{static_cast<int32_t>(src->GetWidth()), static_cast<int32_t>(src->GetHeight()), 1};
-        region.srcSubresource.aspectMask = VulkanHelpers::GetAspectMask(pe::ToVkFormat(src->GetFormat()));
+        ImageBlit region{};
+        region.srcOffsets[1] = {static_cast<int32_t>(src->GetWidth()), static_cast<int32_t>(src->GetHeight()), 1};
+        region.srcSubresource.aspectMask = PE_IMAGE_ASPECT_COLOR;
         region.srcSubresource.layerCount = 1;
-        region.dstOffsets[0] = vk::Offset3D{0, 0, 0};
-        region.dstOffsets[1] = vk::Offset3D{(int32_t)src->GetWidth(), (int32_t)src->GetHeight(), 1};
-        region.dstSubresource.aspectMask = VulkanHelpers::GetAspectMask(pe::ToVkFormat(swapchainImage->GetFormat()));
+        region.dstOffsets[1] = {static_cast<int32_t>(src->GetWidth()), static_cast<int32_t>(src->GetHeight()), 1};
+        region.dstSubresource.aspectMask = PE_IMAGE_ASPECT_COLOR;
         region.dstSubresource.layerCount = 1;
 
         ImageBarrierInfo barrier{};
@@ -818,7 +815,7 @@ namespace pe
 
         // with 1:1 ratio we can use nearest filter
         PeFilter filter = src->GetWidth() == swapchainImage->GetWidth() && src->GetHeight() == swapchainImage->GetHeight() ? PE_FILTER_NEAREST : PE_FILTER_LINEAR;
-        cmd->BlitImage(src, swapchainImage, region, pe::ToVkFilter(filter));
+        cmd->BlitImage(src, swapchainImage, region, filter);
         cmd->ImageBarrier(barrier);
     }
 

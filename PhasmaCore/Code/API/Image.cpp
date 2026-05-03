@@ -551,7 +551,7 @@ namespace pe
         m_mipmapsGenerated = true;
     }
 
-    void Image::Blit(CommandBuffer *cmd, Image *src, const vk::ImageBlit &region, vk::Filter filter)
+    void Image::Blit(CommandBuffer *cmd, Image *src, const ImageBlit &region, PeFilter filter)
     {
         m_impl->Blit(cmd, src, region, filter);
     }
