@@ -400,14 +400,4 @@ namespace pe
         }
     }
 
-    Shader::Impl *CreateShaderImpl(Shader *owner, const ShaderDesc &desc)
-    {
-        if (owner->GetCache().ShaderNeedsCompile())
-        {
-            return new VulkanShaderImpl(owner, desc);
-        }
-
-        std::vector<uint32_t> cached = owner->GetCache().ReadSpvFile();
-        return new VulkanShaderImpl(owner, cached.data(), cached.size());
-    }
 } // namespace pe

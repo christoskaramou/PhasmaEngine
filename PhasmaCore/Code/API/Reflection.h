@@ -139,6 +139,9 @@ namespace pe
 
     private:
         friend void PopulateReflectionFromSpirv(Reflection &refl, Shader *shader);
+#if defined(PE_WIN32)
+        friend void PopulateReflectionFromDxil(Reflection &refl, Shader *shader);
+#endif
 
         std::vector<SpecializationConstantDesc> m_specializationConstants{};
         std::vector<ShaderInOutDesc> m_inputs{};

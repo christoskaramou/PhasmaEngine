@@ -48,6 +48,7 @@ namespace pe
 
     private:
         friend struct VulkanShaderImpl;
+        friend struct Dx12ShaderImpl;
 
         Shader();
         ~Shader();

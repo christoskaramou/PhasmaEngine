@@ -15,6 +15,8 @@ namespace pe
         inline const std::string &GetSourcePath() { return m_sourcePath; }
         inline const std::string &GetShaderCode() { return m_code; }
         size_t GetHash() { return m_hash; }
+        std::vector<uint8_t> ReadBytecodeFile();
+        void WriteBytecodeToFile(const std::vector<uint8_t> &bytecode);
         std::vector<uint32_t> ReadSpvFile();
         std::string ParseShader(const std::string &sourcePath);
         void WriteSpvToFile(const std::vector<uint32_t> &spirv);

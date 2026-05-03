@@ -1,13 +1,27 @@
 #include "API/Reflection.h"
 #include "API/Descriptor.h"
+#include "API/RHI.h"
 #include "API/Shader.h"
 #include "API/Vulkan/VulkanDescriptorImpl.h"
 #include "API/Vulkan/VulkanReflection.h"
+#if defined(PE_WIN32)
+#include "API/DX12/Dx12ShaderImpl.h"
+#endif
 
 namespace pe
 {
     void Reflection::Init(Shader *shader)
     {
+        if (RHII.GetApi() == PE_GRAPHICS_API_DX12)
+        {
+#if defined(PE_WIN32)
+            PopulateReflectionFromDxil(*this, shader);
+#else
+            PE_ERROR("[Shader] DX12 reflection is Windows-only");
+#endif
+            return;
+        }
+
         PopulateReflectionFromSpirv(*this, shader);
     }
 

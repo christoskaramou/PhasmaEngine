@@ -2,6 +2,11 @@
 #include "API/Shader_Internal.h"
 #include "API/Descriptor.h"
 #include "API/Pipeline.h"
+#include "API/RHI.h"
+#include "API/Vulkan/VulkanShaderImpl.h"
+#if defined(PE_WIN32)
+#include "API/DX12/Dx12ShaderImpl.h"
+#endif
 
 namespace pe
 {
@@ -76,6 +81,29 @@ namespace pe
             PE_ERROR_IF(shader->GetShaderStage() != expectedStage, "Invalid shader stage");
         }
     } // namespace
+
+    Shader::Impl *CreateShaderImpl(Shader *owner, const ShaderDesc &desc)
+    {
+        if (RHII.GetApi() == PE_GRAPHICS_API_DX12)
+        {
+#if defined(PE_WIN32)
+            if (owner->GetCache().ShaderNeedsCompile())
+                return new Dx12ShaderImpl(owner, desc);
+
+            std::vector<uint8_t> cached = owner->GetCache().ReadBytecodeFile();
+            return new Dx12ShaderImpl(owner, cached);
+#else
+            PE_ERROR("[Shader] DX12 shader creation is Windows-only");
+            return nullptr;
+#endif
+        }
+
+        if (owner->GetCache().ShaderNeedsCompile())
+            return new VulkanShaderImpl(owner, desc);
+
+        std::vector<uint32_t> cached = owner->GetCache().ReadSpvFile();
+        return new VulkanShaderImpl(owner, cached.data(), cached.size());
+    }
 
     Shader::Shader() = default;
     Shader::~Shader()

@@ -1,4 +1,5 @@
 #include "API/ShaderCache.h"
+#include "API/RHI.h"
 
 namespace pe
 {
@@ -59,6 +60,7 @@ namespace pe
 
         m_tempFilePath = Path::Executable;
         m_tempFilePath += "ShaderCache/";
+        m_tempFilePath += (RHII.GetApi() == PE_GRAPHICS_API_DX12) ? "_dxil/" : "_spv/";
         m_tempFilePath += std::to_string(m_hash);
     }
 
@@ -67,21 +69,21 @@ namespace pe
         return !std::filesystem::exists(m_tempFilePath);
     }
 
-    std::vector<uint32_t> ShaderCache::ReadSpvFile()
+    std::vector<uint8_t> ShaderCache::ReadBytecodeFile()
     {
         FileSystem file(m_tempFilePath, std::ios::in | std::ios::ate | std::ios::binary);
         PE_ERROR_IF(!file.IsOpen(), "failed to open file!");
 
         std::string buffer = file.ReadAll();
 
-        std::vector<uint32_t> spirv;
-        spirv.resize(file.Size() / sizeof(uint32_t));
-        memcpy(spirv.data(), buffer.data(), file.Size());
-
-        return spirv;
+        std::vector<uint8_t> bytecode;
+        bytecode.resize(file.Size());
+        if (!bytecode.empty())
+            memcpy(bytecode.data(), buffer.data(), file.Size());
+        return bytecode;
     }
 
-    void ShaderCache::WriteSpvToFile(const std::vector<uint32_t> &spirv)
+    void ShaderCache::WriteBytecodeToFile(const std::vector<uint8_t> &bytecode)
     {
         std::filesystem::path path(m_tempFilePath);
         if (!std::filesystem::exists(path.parent_path()))
@@ -90,6 +92,27 @@ namespace pe
         FileSystem file(m_tempFilePath, std::ios::out | std::ios::trunc | std::ios::binary);
         PE_ERROR_IF(!file.IsOpen(), "failed to open file!");
 
-        file.Write(reinterpret_cast<const char *>(spirv.data()), spirv.size() * sizeof(uint32_t));
+        if (!bytecode.empty())
+            file.Write(reinterpret_cast<const char *>(bytecode.data()), bytecode.size());
+    }
+
+    std::vector<uint32_t> ShaderCache::ReadSpvFile()
+    {
+        std::vector<uint8_t> buffer = ReadBytecodeFile();
+
+        std::vector<uint32_t> spirv;
+        spirv.resize(buffer.size() / sizeof(uint32_t));
+        if (!spirv.empty())
+            memcpy(spirv.data(), buffer.data(), spirv.size() * sizeof(uint32_t));
+
+        return spirv;
+    }
+
+    void ShaderCache::WriteSpvToFile(const std::vector<uint32_t> &spirv)
+    {
+        std::vector<uint8_t> bytecode(spirv.size() * sizeof(uint32_t));
+        if (!bytecode.empty())
+            memcpy(bytecode.data(), spirv.data(), bytecode.size());
+        WriteBytecodeToFile(bytecode);
     }
 } // namespace pe
