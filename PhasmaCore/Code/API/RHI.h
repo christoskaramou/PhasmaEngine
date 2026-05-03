@@ -121,7 +121,7 @@ namespace pe
         uint32_t GetMaxUniformBufferSize() { return m_maxUniformBufferSize; }
         uint32_t GetMaxStorageBufferSize() { return m_maxStorageBufferSize; }
         uint32_t GetMaxDrawIndirectCount() { return m_maxDrawIndirectCount; }
-        size_t Align(size_t size, size_t alignment) { return (size + (alignment - 1)) & ~(alignment - 1); }
+        size_t Align(size_t size, size_t alignment) { return alignment > 1 ? (size + (alignment - 1)) & ~(alignment - 1) : size; }
         size_t AlignUniform(size_t size) { return Align(size, m_minUniformBufferOffsetAlignment); }
         size_t AlignStorage(size_t size) { return Align(size, m_minStorageBufferOffsetAlignment); }
         size_t AlignStorageAs(size_t size, size_t alignment) { return AlignStorage(Align(size, alignment)); } // Aligned also to min storage alignment

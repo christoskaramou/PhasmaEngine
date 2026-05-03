@@ -14,9 +14,11 @@
 #include "API/Vulkan/VulkanBufferImpl.h"
 #include "API/Vulkan/VulkanCommandPoolImpl.h"
 #include "API/Vulkan/VulkanDescriptorImpl.h"
+#include "API/Vulkan/VulkanFramebufferImpl.h"
 #include "API/Vulkan/VulkanImageImpl.h"
 #include "API/Vulkan/VulkanImageViewImpl.h"
 #include "API/Vulkan/VulkanPipelineImpl.h"
+#include "API/Vulkan/VulkanRenderPassImpl.h"
 #include "API/Vulkan/VulkanRHITypeUtils.h"
 #include "API/Vulkan/VulkanSamplerImpl.h"
 
@@ -313,8 +315,8 @@ namespace pe
             m_owner->m_framebuffer = CommandBuffer::GetFramebuffer(m_owner->m_renderPass, count, attachments);
 
             vk::RenderPassBeginInfo rpi{};
-            rpi.renderPass = m_owner->m_renderPass->ApiHandle();
-            rpi.framebuffer = m_owner->m_framebuffer->ApiHandle();
+            rpi.renderPass = pe::GetVulkanRenderPass(m_owner->m_renderPass);
+            rpi.framebuffer = pe::GetVulkanFramebuffer(m_owner->m_framebuffer);
             rpi.renderArea.offset = vk::Offset2D{0, 0};
             rpi.renderArea.extent = vk::Extent2D{m_owner->m_framebuffer->GetWidth(), m_owner->m_framebuffer->GetHeight()};
             rpi.clearValueCount = static_cast<uint32_t>(clearValues.size());

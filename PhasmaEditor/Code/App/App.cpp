@@ -1,9 +1,6 @@
 #include "Code/App/App.h"
 #include "API/Command.h"
 #include "API/Debug.h"
-#if defined(PE_WIN32)
-#include "API/DX12/Dx12RhiImpl.h"
-#endif
 #include "API/Queue.h"
 #include "API/RHI.h"
 #include "Base/Log.h"
@@ -83,8 +80,10 @@ namespace pe
         // Adopt the SDL window that was created by the launcher.
         m_window = Window::Adopt(RHII.GetWindow());
 
-        if (RHII.GetApi() == PE_GRAPHICS_API_DX12)
+        const bool isDx12 = RHII.GetApi() == PE_GRAPHICS_API_DX12;
+        if (isDx12)
         {
+            CreateGlobalSystem<RendererSystem>()->Init(nullptr);
             m_window->Show();
             m_window->Maximize();
             return;
@@ -164,7 +163,8 @@ namespace pe
 
         m_window->Show();
         m_window->Maximize();
-        GetGlobalSystem<RendererSystem>()->GetGUI().ApplyStartupLayout(!shouldRestoreHotReloadSnapshot);
+        if (RHII.GetApi() == PE_GRAPHICS_API_VULKAN)
+            GetGlobalSystem<RendererSystem>()->GetGUI().ApplyStartupLayout(!shouldRestoreHotReloadSnapshot);
 
         if (hasHotReloadSnapshot)
         {
@@ -235,6 +235,15 @@ namespace pe
         if (!rendererSystem)
             return;
 
+        if (RHII.GetApi() == PE_GRAPHICS_API_DX12)
+        {
+            RHII.NextFrame();
+            rendererSystem->WaitPreviousFrameCommands();
+            rendererSystem->Draw();
+            rendererSystem->WaitAllFramesCommands();
+            return;
+        }
+
         // The last normal Frame() submitted GPU work that may still be in-flight.
         // Drain everything before touching the same semaphores/images again.
         rendererSystem->WaitAllFramesCommands();
@@ -272,38 +281,7 @@ namespace pe
 
         m_frameTimer.Tick();
 
-        if (RHII.GetApi() == PE_GRAPHICS_API_DX12)
-        {
-            SDL_Event sdlEvent;
-            while (SDL_PollEvent(&sdlEvent))
-            {
-                if (sdlEvent.type == SDL_QUIT)
-                    return false;
-            }
-
-            EventSystem::QueuedEvent event;
-            while (EventSystem::PollEvent(event))
-            {
-                if (auto eventType = std::get_if<pe::EventType>(&event.key);
-                    eventType && (*eventType == EventType::Quit || *eventType == EventType::RequestExit))
-                {
-                    return false;
-                }
-            }
-
-            if (!m_window->isMinimized())
-            {
-#if defined(PE_WIN32)
-                auto *dx = static_cast<Dx12RhiImpl *>(RHII.GetImpl());
-                dx->DrawClearScreen(RHII.GetSwapchain());
-#endif
-            }
-
-            m_frameTimer.CountCpuTotalStamp();
-            Profiler::EndFrame();
-            PE_FRAME_MARK;
-            return true;
-        }
+        const bool isVulkan = RHII.GetApi() == PE_GRAPHICS_API_VULKAN;
 
         auto rendererSystem = GetGlobalSystem<RendererSystem>();
         {
@@ -312,6 +290,7 @@ namespace pe
         }
 
         // Start ImGui frame
+        if (isVulkan)
         {
             PE_PROFILE_SCOPE("ImGui New Frame");
             ImGui_ImplSDL2_NewFrame();
@@ -331,12 +310,14 @@ namespace pe
             PE_PROFILE_SCOPE("Update Systems");
             UpdateGlobalSystems();
 
-            if (auto *ss = GetGlobalSystem<ScriptSystem>())
-                ss->Update();
+            if (HasGlobalSystem<ScriptSystem>())
+                if (auto *ss = GetGlobalSystem<ScriptSystem>())
+                    ss->Update();
         }
 
         // Get ImGui render data ready
-        ImGui::Render();
+        if (isVulkan)
+            ImGui::Render();
         m_frameTimer.CountUpdatesStamp();
 
         if (!m_window->isMinimized())
@@ -345,6 +326,7 @@ namespace pe
                 PE_PROFILE_SCOPE("Draw");
                 rendererSystem->Draw();
             }
+            if (isVulkan)
             {
                 PE_PROFILE_SCOPE("ImGui Draw Platform Windows");
                 rendererSystem->DrawPlatformWindows();

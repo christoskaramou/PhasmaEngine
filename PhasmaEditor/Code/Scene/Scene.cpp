@@ -407,13 +407,14 @@ namespace pe
 
         if (m_autoplayAnimations && model->HasAnimations())
         {
-            if (auto *animSys = GetGlobalSystem<AnimationSystem>())
+            if (HasGlobalSystem<AnimationSystem>())
             {
-                for (NodeId *node : nodeMap)
-                {
-                    if (node && NodeHasSkinnedMesh(node))
-                        animSys->PlayAnimation(*this, node, 0, true);
-                }
+                if (auto *animSys = GetGlobalSystem<AnimationSystem>())
+                    for (NodeId *node : nodeMap)
+                    {
+                        if (node && NodeHasSkinnedMesh(node))
+                            animSys->PlayAnimation(*this, node, 0, true);
+                    }
             }
         }
     }

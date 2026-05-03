@@ -14,11 +14,6 @@ namespace D3D12MA
 
 namespace pe
 {
-    class Buffer;
-    class PassInfo;
-    class Pipeline;
-    class Swapchain;
-
     class Dx12RhiImpl final : public RHI::Impl
     {
     public:
@@ -26,7 +21,6 @@ namespace pe
         void Shutdown() override;
         void WaitDeviceIdle() override;
         void NextFrame() override;
-        void DrawClearScreen(Swapchain *sc);
 
         ID3D12Device *GetDevice() const { return m_device.Get(); }
         ID3D12CommandQueue *GetGraphicsQueue() const { return m_graphicsQueue.Get(); }
@@ -43,9 +37,6 @@ namespace pe
         const std::string &GetAdapterName() const { return m_adapterName; }
 
     private:
-        void EnsureClearTriangleBuffer();
-        void EnsureClearTrianglePipeline();
-
         Microsoft::WRL::ComPtr<IDXGIFactory6> m_factory;
         Microsoft::WRL::ComPtr<IDXGIAdapter4> m_adapter;
         Microsoft::WRL::ComPtr<ID3D12Device> m_device;
@@ -58,16 +49,8 @@ namespace pe
         std::unique_ptr<Dx12RootSignature> m_sharedRootSignature;
         Microsoft::WRL::ComPtr<ID3D12CommandQueue> m_graphicsQueue;
         Microsoft::WRL::ComPtr<ID3D12Fence> m_frameFence;
-        std::array<Microsoft::WRL::ComPtr<ID3D12CommandAllocator>, 2> m_clearAllocators;
-        Microsoft::WRL::ComPtr<ID3D12GraphicsCommandList> m_clearCmdList;
-        std::array<uint64_t, 2> m_frameFenceValues = {0, 0};
         HANDLE m_fenceEvent = nullptr;
         uint64_t m_fenceValue = 0;
-        uint32_t m_clearFrameIndex = 0;
-        float m_clearColor[4] = {0.10f, 0.12f, 0.16f, 1.0f};
-        Buffer *m_clearTriangleBuffer = nullptr;
-        PassInfo *m_clearTrianglePassInfo = nullptr;
-        Pipeline *m_clearTrianglePipeline = nullptr;
         std::string m_adapterName;
         RHI::Caps m_caps{};
     };

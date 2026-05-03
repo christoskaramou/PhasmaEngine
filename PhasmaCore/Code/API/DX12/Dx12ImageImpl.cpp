@@ -238,10 +238,28 @@ namespace pe
         }
     }
 
+    Dx12ImageImpl::Dx12ImageImpl(Image *owner,
+                                 ID3D12Resource *externalResource,
+                                 DXGI_FORMAT format,
+                                 D3D12_RESOURCE_STATES initialState)
+        : m_owner{owner},
+          m_resource{externalResource},
+          m_resourceFormat{format},
+          m_viewFormat{format},
+          m_state{initialState}
+    {
+        PE_ERROR_IF(!externalResource, "Dx12ImageImpl: external swapchain resource is null");
+    }
+
     Dx12ImageImpl::~Dx12ImageImpl()
     {
         m_resource.Reset();
         m_allocation.Reset();
+    }
+
+    Image::Impl *CreateDx12SwapchainImageImpl(Image *owner, ID3D12Resource *externalResource, DXGI_FORMAT format)
+    {
+        return new Dx12ImageImpl(owner, externalResource, format, D3D12_RESOURCE_STATE_PRESENT);
     }
 
     void Dx12ImageImpl::CopyImage(CommandBuffer *cmd, Image *src)

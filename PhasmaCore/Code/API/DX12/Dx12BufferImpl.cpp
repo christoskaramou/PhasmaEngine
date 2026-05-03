@@ -39,19 +39,24 @@ namespace pe
             }
         }
 
-        D3D12_RESOURCE_FLAGS ToD3D12ResourceFlags(PeBufferUsageFlags usage)
+        bool NeedsUnorderedAccess(PeBufferUsageFlags usage)
+        {
+            return usage & (PE_BUFFER_USAGE_STORAGE_BUFFER |
+                            PE_BUFFER_USAGE_ACCELERATION_STRUCTURE_STORAGE_KHR |
+                            PE_BUFFER_USAGE_SHADER_BINDING_TABLE_KHR);
+        }
+
+        D3D12_RESOURCE_FLAGS ToD3D12ResourceFlags(PeBufferUsageFlags usage, D3D12_HEAP_TYPE heapType)
         {
             D3D12_RESOURCE_FLAGS flags = D3D12_RESOURCE_FLAG_NONE;
-            if (usage & (PE_BUFFER_USAGE_STORAGE_BUFFER |
-                         PE_BUFFER_USAGE_ACCELERATION_STRUCTURE_STORAGE_KHR |
-                         PE_BUFFER_USAGE_SHADER_BINDING_TABLE_KHR))
+            if (NeedsUnorderedAccess(usage) && heapType == D3D12_HEAP_TYPE_DEFAULT)
             {
                 flags |= D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS;
             }
             return flags;
         }
 
-        D3D12_RESOURCE_DESC BufferResourceDesc(size_t size, PeBufferUsageFlags usage)
+        D3D12_RESOURCE_DESC BufferResourceDesc(size_t size, PeBufferUsageFlags usage, D3D12_HEAP_TYPE heapType)
         {
             D3D12_RESOURCE_DESC desc{};
             desc.Dimension = D3D12_RESOURCE_DIMENSION_BUFFER;
@@ -64,7 +69,7 @@ namespace pe
             desc.SampleDesc.Count = 1;
             desc.SampleDesc.Quality = 0;
             desc.Layout = D3D12_TEXTURE_LAYOUT_ROW_MAJOR;
-            desc.Flags = ToD3D12ResourceFlags(usage);
+            desc.Flags = ToD3D12ResourceFlags(usage, heapType);
             return desc;
         }
     } // namespace
@@ -81,14 +86,23 @@ namespace pe
         if (desc.memoryUsage == PE_MEMORY_USAGE_GPU_ONLY_DEDICATED)
             allocationDesc.Flags = D3D12MA::ALLOCATION_FLAG_COMMITTED;
 
-        D3D12_RESOURCE_DESC resourceDesc = BufferResourceDesc(owner->m_size, desc.usage);
+        D3D12_RESOURCE_DESC resourceDesc = BufferResourceDesc(owner->m_size, desc.usage, m_heapType);
+        m_allowsUnorderedAccess = (resourceDesc.Flags & D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS) != 0;
         HRESULT hr = rhi->GetAllocator()->CreateResource(&allocationDesc,
                                                          &resourceDesc,
                                                          InitialStateForHeap(m_heapType),
                                                          nullptr,
                                                          &m_allocation,
                                                          IID_PPV_ARGS(&m_resource));
-        PE_ERROR_IF(FAILED(hr), "Dx12BufferImpl: CreateResource failed (0x%08X)", static_cast<unsigned>(hr));
+        PE_ERROR_IF(FAILED(hr),
+                    "Dx12BufferImpl: CreateResource failed (0x%08X), size=%zu, usage=0x%llX, memoryUsage=%u, heapType=%u, flags=0x%X, name=%s",
+                    static_cast<unsigned>(hr),
+                    owner->m_size,
+                    static_cast<unsigned long long>(desc.usage),
+                    static_cast<unsigned>(desc.memoryUsage),
+                    static_cast<unsigned>(m_heapType),
+                    static_cast<unsigned>(resourceDesc.Flags),
+                    desc.name.c_str());
 
         if (!desc.name.empty())
         {

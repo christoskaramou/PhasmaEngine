@@ -10,6 +10,7 @@ namespace pe
     struct Dx12ImageImpl final : public Image::Impl
     {
         Dx12ImageImpl(Image *owner, const ImageDesc &desc);
+        Dx12ImageImpl(Image *owner, ID3D12Resource *externalResource, DXGI_FORMAT format, D3D12_RESOURCE_STATES initialState);
         ~Dx12ImageImpl() override;
 
         void CopyImage(CommandBuffer *cmd, Image *src) override;
@@ -41,4 +42,6 @@ namespace pe
         DXGI_FORMAT m_viewFormat = DXGI_FORMAT_UNKNOWN;
         D3D12_RESOURCE_STATES m_state = D3D12_RESOURCE_STATE_COMMON;
     };
+
+    Image::Impl *CreateDx12SwapchainImageImpl(Image *owner, ID3D12Resource *externalResource, DXGI_FORMAT format);
 } // namespace pe

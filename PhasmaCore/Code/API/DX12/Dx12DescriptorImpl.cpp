@@ -382,6 +382,9 @@ namespace pe
                     }
                     else
                     {
+                        PE_ERROR_IF(!bufferImpl->AllowsUnorderedAccess(),
+                                    "Dx12DescriptorImpl: buffer '%s' is bound as a UAV but was not created with ALLOW_UNORDERED_ACCESS. Use GPU-only memory for DX12 writable storage buffers.",
+                                    buffer ? buffer->GetName().c_str() : "<null>");
                         D3D12_UNORDERED_ACCESS_VIEW_DESC uav{};
                         uav.Format = DXGI_FORMAT_R32_TYPELESS;
                         uav.ViewDimension = D3D12_UAV_DIMENSION_BUFFER;

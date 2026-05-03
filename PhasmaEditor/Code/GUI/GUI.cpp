@@ -14,6 +14,7 @@
 #include "API/Vulkan/VulkanCommandBufferImpl.h"
 #include "API/Vulkan/VulkanDescriptorImpl.h"
 #include "API/Vulkan/VulkanQueueImpl.h"
+#include "API/Vulkan/VulkanRenderPassImpl.h"
 #include "GUIState.h"
 #include "Helpers.h"
 #include "Particles/ParticleManager.h"
@@ -257,7 +258,8 @@ namespace pe
 
         if (GUIState::s_viewportTextureId)
         {
-            ImGui_ImplVulkan_RemoveTexture((VkDescriptorSet)GUIState::s_viewportTextureId);
+            if (m_initialized)
+                ImGui_ImplVulkan_RemoveTexture((VkDescriptorSet)GUIState::s_viewportTextureId);
             GUIState::s_viewportTextureId = nullptr;
         }
 
@@ -267,9 +269,12 @@ namespace pe
         m_editorToolRuntime.reset();
 
         Image::Destroy(GUIState::s_sceneViewImage);
-        ImGui_ImplVulkan_Shutdown();
-        ImGui_ImplSDL2_Shutdown();
-        ImGui::DestroyContext();
+        if (m_initialized)
+        {
+            ImGui_ImplVulkan_Shutdown();
+            ImGui_ImplSDL2_Shutdown();
+            ImGui::DestroyContext();
+        }
     }
 
     std::string GUI::TakeUISnapshot() const
@@ -1343,6 +1348,9 @@ namespace pe
 
     void GUI::Init()
     {
+        if (RHII.GetApi() != PE_GRAPHICS_API_VULKAN)
+            return;
+
         auto &gSettings = Settings::Get<GlobalSettings>();
 
         gSettings.model_list.clear();
@@ -1415,7 +1423,7 @@ namespace pe
         {
             RenderPass *renderPass = CommandBuffer::GetRenderPass(1, m_attachment.get());
             init_info.UseDynamicRendering = false;
-            init_info.RenderPass = renderPass->ApiHandle();
+            init_info.RenderPass = pe::GetVulkanRenderPass(renderPass);
         }
 
         ImGui_ImplVulkan_Init(&init_info);
@@ -1631,6 +1639,7 @@ namespace pe
             widget->Init(this);
 
         queue->WaitIdle();
+        m_initialized = true;
     }
 
     void GUI::ApplyStartupLayout(bool restoreLastScene)
@@ -1652,6 +1661,9 @@ namespace pe
 
     void GUI::ExecutePass(CommandBuffer *cmd)
     {
+        if (!m_initialized)
+            return;
+
         if (!m_render || ImGui::GetDrawData()->TotalVtxCount <= 0)
             return;
 
@@ -1683,12 +1695,18 @@ namespace pe
 
     void GUI::DrawPlatformWindows()
     {
+        if (!m_initialized)
+            return;
+
         ImGui::UpdatePlatformWindows();
         ImGui::RenderPlatformWindowsDefault();
     }
 
     void GUI::Update()
     {
+        if (!m_initialized)
+            return;
+
         // Drain the MCP/tool action queue before the render-state guard so that
         // queued tool calls (screenshot, Lua exec, mouse input) are never starved
         // when the editor window is minimised or rendering is paused.

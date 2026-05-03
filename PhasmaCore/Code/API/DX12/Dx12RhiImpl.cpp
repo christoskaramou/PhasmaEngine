@@ -1,15 +1,5 @@
 #include "API/DX12/Dx12RhiImpl.h"
 
-#include "API/Buffer.h"
-#include "API/DX12/Dx12BufferImpl.h"
-#include "API/DX12/Dx12PipelineImpl.h"
-#include "API/DX12/Dx12SwapchainImpl.h"
-#include "API/DX12/Dx12Translate.h"
-#include "API/Pipeline.h"
-#include "API/Shader.h"
-#include "API/Swapchain.h"
-#include "Base/FileWatcher.h"
-
 #include <D3D12MemAlloc.h>
 
 namespace pe
@@ -195,162 +185,7 @@ namespace pe
             return false;
         }
 
-        for (auto &alloc : m_clearAllocators)
-        {
-            if (FAILED(m_device->CreateCommandAllocator(D3D12_COMMAND_LIST_TYPE_DIRECT,
-                                                        IID_PPV_ARGS(&alloc))))
-            {
-                PE_ERROR("Dx12RhiImpl::Init: CreateCommandAllocator(clear) failed");
-                return false;
-            }
-        }
-
-        if (FAILED(m_device->CreateCommandList(0, D3D12_COMMAND_LIST_TYPE_DIRECT,
-                                               m_clearAllocators[0].Get(), nullptr,
-                                               IID_PPV_ARGS(&m_clearCmdList))))
-        {
-            PE_ERROR("Dx12RhiImpl::Init: CreateCommandList(clear) failed");
-            return false;
-        }
-        PE_CHECK(m_clearCmdList->Close());
-
         return true;
-    }
-
-    void Dx12RhiImpl::EnsureClearTriangleBuffer()
-    {
-        if (m_clearTriangleBuffer)
-            return;
-
-        std::array<vec4, 3> vertices = {
-            vec4{-0.5f, -0.5f, 0.0f, 1.0f},
-            vec4{0.0f, 0.5f, 0.0f, 1.0f},
-            vec4{0.5f, -0.5f, 0.0f, 1.0f},
-        };
-
-        BufferDesc desc{};
-        desc.size = vertices.size() * sizeof(vec4);
-        desc.usage = PE_BUFFER_USAGE_VERTEX_BUFFER;
-        desc.memoryUsage = PE_MEMORY_USAGE_CPU_TO_GPU;
-        desc.name = "DX12_clear_triangle_vb";
-        m_clearTriangleBuffer = Buffer::Create(desc);
-
-        BufferRange range{};
-        range.data = vertices.data();
-        range.size = desc.size;
-        range.offset = 0;
-        m_clearTriangleBuffer->Copy(1, &range, false);
-    }
-
-    void Dx12RhiImpl::EnsureClearTrianglePipeline()
-    {
-        if (m_clearTrianglePipeline)
-            return;
-
-        const std::string shaderPath = Path::Assets + "Shaders/DX12/ClearTriangle.hlsl";
-        if (!FileWatcher::Get(shaderPath))
-            FileWatcher::Add(shaderPath, [](size_t) {});
-
-        ShaderDesc vsDesc{};
-        vsDesc.sourcePath = shaderPath;
-        vsDesc.entryPoint = "mainVS";
-        vsDesc.stage = PE_SHADER_STAGE_VERTEX;
-        vsDesc.debugName = "DX12_clear_triangle_vs";
-
-        ShaderDesc psDesc{};
-        psDesc.sourcePath = shaderPath;
-        psDesc.entryPoint = "mainPS";
-        psDesc.stage = PE_SHADER_STAGE_FRAGMENT;
-        psDesc.debugName = "DX12_clear_triangle_ps";
-
-        m_clearTrianglePassInfo = new PassInfo();
-        m_clearTrianglePassInfo->name = "DX12_clear_triangle_pipeline";
-        m_clearTrianglePassInfo->pVertShader = Shader::Create(vsDesc);
-        m_clearTrianglePassInfo->pFragShader = Shader::Create(psDesc);
-        m_clearTrianglePassInfo->topology = PE_TOPOLOGY_TRIANGLE_LIST;
-        m_clearTrianglePassInfo->polygonMode = PE_POLYGON_MODE_FILL;
-        m_clearTrianglePassInfo->cullMode = PE_CULL_MODE_NONE;
-        m_clearTrianglePassInfo->blendEnable = false;
-        m_clearTrianglePassInfo->colorBlendAttachments = {BlendState::Default};
-        m_clearTrianglePassInfo->colorFormats = {PE_FORMAT_R8G8B8A8_UNORM};
-        m_clearTrianglePassInfo->depthFormat = PE_FORMAT_UNDEFINED;
-        m_clearTrianglePassInfo->depthTestEnable = false;
-        m_clearTrianglePassInfo->depthWriteEnable = false;
-        m_clearTrianglePassInfo->Update();
-
-        m_clearTrianglePipeline = Pipeline::Create(nullptr, *m_clearTrianglePassInfo);
-    }
-
-    void Dx12RhiImpl::DrawClearScreen(Swapchain *sc)
-    {
-        PE_ERROR_IF(!sc, "Dx12RhiImpl::DrawClearScreen requires a swapchain");
-        auto *scImpl = static_cast<Dx12SwapchainImpl *>(sc->m_impl);
-        const uint32_t bb = sc->AquireNextImage(nullptr);
-        EnsureClearTriangleBuffer();
-        EnsureClearTrianglePipeline();
-
-        if (m_frameFence->GetCompletedValue() < m_frameFenceValues[m_clearFrameIndex])
-        {
-            PE_CHECK(m_frameFence->SetEventOnCompletion(m_frameFenceValues[m_clearFrameIndex], m_fenceEvent));
-            WaitForSingleObject(m_fenceEvent, INFINITE);
-        }
-
-        PE_CHECK(m_clearAllocators[m_clearFrameIndex]->Reset());
-        PE_CHECK(m_clearCmdList->Reset(m_clearAllocators[m_clearFrameIndex].Get(), nullptr));
-
-        D3D12_VERTEX_BUFFER_VIEW vbv{};
-        vbv.BufferLocation = m_clearTriangleBuffer->GetDeviceAddress();
-        vbv.SizeInBytes = static_cast<UINT>(m_clearTriangleBuffer->Size());
-        vbv.StrideInBytes = sizeof(vec4);
-        m_clearCmdList->SetPipelineState(GetDx12Pipeline(m_clearTrianglePipeline));
-        m_clearCmdList->SetGraphicsRootSignature(m_sharedRootSignature->Get());
-        ID3D12DescriptorHeap *heaps[] = {m_cbvSrvUavHeap->Get(), m_samplerHeap->Get()};
-        m_clearCmdList->SetDescriptorHeaps(static_cast<UINT>(std::size(heaps)), heaps);
-        for (uint32_t space = 0; space < DX12_DESCRIPTOR_SPACE_COUNT; ++space)
-        {
-            m_clearCmdList->SetGraphicsRootDescriptorTable(Dx12CbvSrvUavRootIndex(space), m_cbvSrvUavHeap->GetGpuHandle(0));
-            m_clearCmdList->SetGraphicsRootDescriptorTable(Dx12SamplerRootIndex(space), m_samplerHeap->GetGpuHandle(0));
-        }
-        m_clearCmdList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
-        m_clearCmdList->IASetVertexBuffers(0, 1, &vbv);
-
-        D3D12_RESOURCE_BARRIER toRt{};
-        toRt.Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
-        toRt.Transition.pResource = scImpl->GetBackbuffer(bb);
-        toRt.Transition.Subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES;
-        toRt.Transition.StateBefore = D3D12_RESOURCE_STATE_PRESENT;
-        toRt.Transition.StateAfter = D3D12_RESOURCE_STATE_RENDER_TARGET;
-        m_clearCmdList->ResourceBarrier(1, &toRt);
-
-        m_clearCmdList->ClearRenderTargetView(scImpl->GetRtv(bb), m_clearColor, 0, nullptr);
-        D3D12_VIEWPORT viewport{};
-        viewport.Width = static_cast<float>(sc->GetWidth());
-        viewport.Height = static_cast<float>(sc->GetHeight());
-        viewport.MinDepth = 0.0f;
-        viewport.MaxDepth = 1.0f;
-        D3D12_RECT scissor{};
-        scissor.right = static_cast<LONG>(sc->GetWidth());
-        scissor.bottom = static_cast<LONG>(sc->GetHeight());
-        m_clearCmdList->RSSetViewports(1, &viewport);
-        m_clearCmdList->RSSetScissorRects(1, &scissor);
-        D3D12_CPU_DESCRIPTOR_HANDLE rtv = scImpl->GetRtv(bb);
-        m_clearCmdList->OMSetRenderTargets(1, &rtv, FALSE, nullptr);
-        m_clearCmdList->DrawInstanced(3, 1, 0, 0);
-
-        D3D12_RESOURCE_BARRIER toPresent = toRt;
-        std::swap(toPresent.Transition.StateBefore, toPresent.Transition.StateAfter);
-        m_clearCmdList->ResourceBarrier(1, &toPresent);
-
-        PE_CHECK(m_clearCmdList->Close());
-        ID3D12CommandList *lists[] = {m_clearCmdList.Get()};
-        m_graphicsQueue->ExecuteCommandLists(1, lists);
-
-        sc->Present();
-
-        const uint64_t signalValue = ++m_fenceValue;
-        PE_CHECK(m_graphicsQueue->Signal(m_frameFence.Get(), signalValue));
-        m_frameFenceValues[m_clearFrameIndex] = signalValue;
-        m_clearFrameIndex = (m_clearFrameIndex + 1) % static_cast<uint32_t>(m_clearAllocators.size());
     }
 
     void Dx12RhiImpl::WaitDeviceIdle()
@@ -370,10 +205,6 @@ namespace pe
     void Dx12RhiImpl::Shutdown()
     {
         WaitDeviceIdle();
-        Pipeline::Destroy(m_clearTrianglePipeline);
-        delete m_clearTrianglePassInfo;
-        m_clearTrianglePassInfo = nullptr;
-        Buffer::Destroy(m_clearTriangleBuffer);
         if (m_fenceEvent)
         {
             CloseHandle(m_fenceEvent);

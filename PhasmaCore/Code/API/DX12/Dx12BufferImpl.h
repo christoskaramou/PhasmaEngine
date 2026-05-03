@@ -24,11 +24,13 @@ namespace pe
         static const Dx12BufferImpl *From(const Buffer *buf) { return static_cast<const Dx12BufferImpl *>(buf->m_impl); }
 
         ID3D12Resource *GetResource() const { return m_resource.Get(); }
+        bool AllowsUnorderedAccess() const { return m_allowsUnorderedAccess; }
 
         Buffer *m_owner = nullptr;
         Microsoft::WRL::ComPtr<D3D12MA::Allocation> m_allocation;
         Microsoft::WRL::ComPtr<ID3D12Resource> m_resource;
         D3D12_HEAP_TYPE m_heapType = D3D12_HEAP_TYPE_DEFAULT;
+        bool m_allowsUnorderedAccess = false;
         void *m_mapped = nullptr;
     };
 } // namespace pe

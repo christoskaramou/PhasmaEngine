@@ -9,6 +9,7 @@
 #include "API/Shader.h"
 #include "API/Vulkan/VulkanDescriptorImpl.h"
 #include "API/Vulkan/VulkanImageImpl.h"
+#include "API/Vulkan/VulkanRenderPassImpl.h"
 #include "API/Vulkan/VulkanRHITypeUtils.h"
 #include "API/Vulkan/VulkanShaderImpl.h"
 
@@ -426,7 +427,7 @@ namespace pe
         else
         {
             PE_ERROR_IF(!renderPass, "RenderPass is null");
-            pipeinfo.renderPass = renderPass->ApiHandle();
+            pipeinfo.renderPass = pe::GetVulkanRenderPass(renderPass);
         }
 
         // Subpass (Index of renderpass subpass this pipeline will be used in)

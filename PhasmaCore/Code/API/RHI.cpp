@@ -27,6 +27,8 @@
 #include "API/Surface.h"
 #include "API/Swapchain.h"
 
+#include <limits>
+
 // System + Process RAM (Windows)
 #if defined(PE_WIN32)
 #pragma comment(lib, "psapi.lib")
@@ -379,6 +381,15 @@ namespace pe
             }
             m_caps = dx->GetCaps();
             m_gpuName = dx->GetAdapterName();
+            m_maxUniformBufferSize = D3D12_REQ_CONSTANT_BUFFER_ELEMENT_COUNT * 16u;
+            m_maxStorageBufferSize = std::numeric_limits<uint32_t>::max();
+            m_minUniformBufferOffsetAlignment = D3D12_CONSTANT_BUFFER_DATA_PLACEMENT_ALIGNMENT;
+            m_minStorageBufferOffsetAlignment = D3D12_RAW_UAV_SRV_BYTE_ALIGNMENT;
+            m_maxPushConstantsSize = m_caps.maxPushConstantsBytes;
+            m_maxDrawIndirectCount = std::numeric_limits<uint32_t>::max();
+            m_mainQueue = Queue::Create(0, "Main_queue");
+            m_stagingManager = new StagingManager();
+            CreateDescriptorPool(150);
 
             int sdlW = 0, sdlH = 0;
             SDL_GetWindowSize(window, &sdlW, &sdlH);
@@ -391,6 +402,9 @@ namespace pe
             scDesc.backbufferCount = 2;
             scDesc.name = "RHI_swapchain";
             m_swapchain = Swapchain::Create(scDesc);
+            m_deletionQueues.resize(GetSwapchainImageCount());
+            for (auto &queue : m_deletionQueues)
+                queue = new DeletionQueue();
             return;
 #else
             PE_ERROR("RHI::Init: DX12 backend is Windows-only");

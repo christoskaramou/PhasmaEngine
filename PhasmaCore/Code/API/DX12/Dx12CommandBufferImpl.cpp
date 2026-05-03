@@ -239,11 +239,9 @@ namespace pe
     // T10b in progress. Pipeline/descriptor binding, push constants, viewport,
     // scissor, vertex/index input, basic non-indirect draws, compute dispatch,
     // transfer copies, staged uploads, and the legacy image/buffer barrier batch
-    // are implemented below. The DX12 raw bypass (Dx12RhiImpl::DrawClearScreen)
-    // still drives all on-screen work; this command-buffer impl is wired into
-    // the factory but is not yet exercised by the editor frame loop. Surfaces
-    // still gated by DX12_CMD_NOT_IMPLEMENTED (blits, indirect draws, ray
-    // tracing, push descriptors, events) wait for their own dedicated slices.
+    // are implemented below. Surfaces still gated by DX12_CMD_NOT_IMPLEMENTED
+    // (blits, ray tracing, push descriptors, events) wait for their own
+    // dedicated slices.
     // ----------------------------------------------------------------------
 
 #define DX12_CMD_NOT_IMPLEMENTED(name) PE_ERROR("Dx12CommandBufferImpl::" name " not implemented (T10b in progress)")

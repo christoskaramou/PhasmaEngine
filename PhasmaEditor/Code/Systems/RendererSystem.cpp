@@ -5,9 +5,6 @@
 #include "PhasmaMCP/Utils.h"
 #include "API/Buffer.h"
 #include "API/Command.h"
-#if defined(PE_WIN32)
-#include "API/DX12/Dx12RhiImpl.h"
-#endif
 #include "API/Framebuffer.h"
 #include "API/Image.h"
 #include "API/Vulkan/VulkanCommandBufferImpl.h"
@@ -55,11 +52,13 @@ namespace pe
 
     void RendererSystem::Init(CommandBuffer *cmd)
     {
+        const bool isDx12 = RHII.GetApi() == PE_GRAPHICS_API_DX12;
+
         // Set Window Title
         std::string title = "PhasmaEngine";
         title += " - Device: " + RHII.GetGpuName();
-        title += " - API: Vulkan";
-        title += " - Present Mode: " + std::string(RHII.PresentModeToString(RHII.GetSurface()->GetPresentMode()));
+        title += isDx12 ? " - API: DX12" : " - API: Vulkan";
+        title += " - Present Mode: " + std::string(RHII.PresentModeToString(RHII.GetSwapchain()->GetPresentMode()));
 #if PE_DEBUG
         title += " - Debug";
 #elif PE_RELEASE
@@ -71,6 +70,20 @@ namespace pe
 #endif
 
         EventSystem::DispatchEvent(EventType::SetWindowTitle, title);
+
+        if (isDx12)
+        {
+            const uint32_t imageCount = RHII.GetSwapchainImageCount();
+            m_cmds.resize(imageCount, nullptr);
+            m_acquireSemaphores.reserve(imageCount);
+            m_submitSemaphores.reserve(imageCount);
+            for (uint32_t i = 0; i < imageCount; i++)
+            {
+                m_acquireSemaphores.push_back(Semaphore::Create(false, "AcquireSemaphore_" + std::to_string(i)));
+                m_submitSemaphores.push_back(Semaphore::Create(false, "SubmitSemaphore_" + std::to_string(i)));
+            }
+            return;
+        }
 
         // Create all render targets
         CreateRenderTargets();
@@ -102,7 +115,8 @@ namespace pe
         }
 
         // Init GUI
-        m_gui.Init();
+        if (RHII.GetApi() == PE_GRAPHICS_API_VULKAN)
+            m_gui.Init();
 
         uint32_t imageCount = RHII.GetSwapchainImageCount();
         m_cmds.resize(imageCount, nullptr);
@@ -164,6 +178,9 @@ namespace pe
     void RendererSystem::Update()
     {
         // GUI
+        if (RHII.GetApi() != PE_GRAPHICS_API_VULKAN)
+            return;
+
         {
             PE_PROFILE_SCOPE("GUI");
             m_gui.Update();
@@ -280,7 +297,7 @@ namespace pe
         m_renderGraphPassEnabled[static_cast<size_t>(RenderGraphPassId::DOF)] = gs.dof;
         m_renderGraphPassEnabled[static_cast<size_t>(RenderGraphPassId::MotionBlur)] = gs.motion_blur;
         m_renderGraphPassEnabled[static_cast<size_t>(RenderGraphPassId::Grid)] = gs.draw_grid;
-        m_renderGraphPassEnabled[static_cast<size_t>(RenderGraphPassId::GUI)] = m_gui.Render();
+        m_renderGraphPassEnabled[static_cast<size_t>(RenderGraphPassId::GUI)] = RHII.GetApi() == PE_GRAPHICS_API_VULKAN && m_gui.Render();
     }
 
     void RendererSystem::WaitPreviousFrameCommands()
@@ -447,14 +464,11 @@ namespace pe
     {
         try
         {
-#if defined(PE_WIN32)
             if (RHII.GetApi() == PE_GRAPHICS_API_DX12)
             {
-                auto *dx = static_cast<Dx12RhiImpl *>(RHII.GetImpl());
-                dx->DrawClearScreen(RHII.GetSwapchain());
+                DrawDx12Clear();
                 return;
             }
-#endif
             uint32_t frame = RHII.GetFrameIndex();
 
             Semaphore *acquireSemaphore = m_acquireSemaphores[frame];
@@ -494,6 +508,39 @@ namespace pe
         {
             // Just ignore and try again
         }
+    }
+
+    void RendererSystem::DrawDx12Clear()
+    {
+        const uint32_t frame = RHII.GetFrameIndex();
+        Swapchain *swapchain = RHII.GetSwapchain();
+        Semaphore *acquireSemaphore = m_acquireSemaphores[frame];
+        const uint32_t imageIndex = swapchain->AquireNextImage(acquireSemaphore);
+        Image *swapchainImage = swapchain->GetImage(imageIndex);
+
+        CommandBuffer *cmd = RHII.GetMainQueue()->AcquireCommandBuffer();
+        cmd->Begin();
+
+        Attachment attachment{};
+        attachment.image = swapchainImage;
+        attachment.loadOp = PE_LOAD_OP_CLEAR;
+        attachment.storeOp = PE_STORE_OP_STORE;
+        cmd->BeginPass(1, &attachment, "DX12BootstrapClear");
+        cmd->EndPass();
+
+        ImageBarrierInfo presentBarrier{};
+        presentBarrier.image = swapchainImage;
+        presentBarrier.layout = PE_IMAGE_LAYOUT_PRESENT_SRC;
+        presentBarrier.stageFlags = PE_STAGE_ALL_COMMANDS;
+        presentBarrier.accessMask = PE_ACCESS_NONE;
+        cmd->ImageBarrier(presentBarrier);
+        cmd->End();
+
+        m_cmds[frame] = cmd;
+        Semaphore *submitSemaphore = m_submitSemaphores[imageIndex];
+        Queue *queue = RHII.GetMainQueue();
+        queue->Submit(1, &cmd, acquireSemaphore, submitSemaphore);
+        queue->Present(swapchain, imageIndex, submitSemaphore);
     }
 
     void RendererSystem::SaveScreenshot()

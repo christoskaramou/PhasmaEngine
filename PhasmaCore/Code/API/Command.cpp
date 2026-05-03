@@ -21,7 +21,7 @@ namespace pe
           m_renderPass{nullptr},
           m_boundPipeline{nullptr},
           m_commandPool{commandPool},
-          m_event{Event::Create(name + "_event")},
+          m_event{RHII.GetApi() == PE_GRAPHICS_API_VULKAN ? Event::Create(name + "_event") : nullptr},
           m_name{name},
           m_threadId{std::this_thread::get_id()}
     {
@@ -380,16 +380,19 @@ namespace pe
                                  PeBarrierSync srcStage, PeBarrierSync dstStage,
                                  PeBarrierAccess srcAccess, PeBarrierAccess dstAccess)
     {
+        PE_ERROR_IF(!m_event, "CommandBuffer::SetEvent: events are not implemented for this backend");
         m_impl->SetEvent(m_event, image, srcLayout, dstLayout, srcStage, dstStage, srcAccess, dstAccess);
     }
 
     void CommandBuffer::WaitEvent()
     {
+        PE_ERROR_IF(!m_event, "CommandBuffer::WaitEvent: events are not implemented for this backend");
         m_event->Wait();
     }
 
     void CommandBuffer::ResetEvent(PeBarrierSync resetStage)
     {
+        PE_ERROR_IF(!m_event, "CommandBuffer::ResetEvent: events are not implemented for this backend");
         m_event->Reset(resetStage);
     }
 

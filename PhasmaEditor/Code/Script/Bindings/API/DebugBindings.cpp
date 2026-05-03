@@ -13,8 +13,10 @@
 #include "API/Queue.h"
 #include "API/Vulkan/VulkanBufferImpl.h"
 #include "API/Vulkan/VulkanDescriptorImpl.h"
+#include "API/Vulkan/VulkanFramebufferImpl.h"
 #include "API/Vulkan/VulkanImageImpl.h"
 #include "API/Vulkan/VulkanPipelineImpl.h"
+#include "API/Vulkan/VulkanRenderPassImpl.h"
 #include "API/Vulkan/VulkanSwapchainImpl.h"
 
 namespace pe
@@ -46,7 +48,7 @@ namespace pe
                     Debug::SetObjectName(GetVulkanPipeline(&pipe), name);
                 });
                 debug.set_function("set_render_pass_name", [](RenderPass &rp, const std::string &name) {
-                    Debug::SetObjectName(rp.ApiHandle(), name);
+                    Debug::SetObjectName(pe::GetVulkanRenderPass(&rp), name);
                 });
                 debug.set_function("set_semaphore_name", [](Semaphore &sem, const std::string &name) {
                     Debug::SetObjectName(sem.ApiHandle(), name);
@@ -55,7 +57,7 @@ namespace pe
                     Debug::SetObjectName(ev.ApiHandle(), name);
                 });
                 debug.set_function("set_framebuffer_name", [](Framebuffer &fb, const std::string &name) {
-                    Debug::SetObjectName(fb.ApiHandle(), name);
+                    Debug::SetObjectName(pe::GetVulkanFramebuffer(&fb), name);
                 });
                 debug.set_function("set_descriptor_name", [](Descriptor &desc, const std::string &name) {
                     Debug::SetObjectName(pe::GetVulkanDescriptorSet(&desc), name);

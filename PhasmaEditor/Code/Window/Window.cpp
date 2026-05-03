@@ -108,11 +108,10 @@ namespace pe
 
     bool Window::ProcessEvents()
     {
+        const bool isVulkan = RHII.GetApi() == PE_GRAPHICS_API_VULKAN;
         RendererSystem *rendererSystem = GetGlobalSystem<RendererSystem>();
-        PostProcessSystem *postProcessSystem = GetGlobalSystem<PostProcessSystem>();
-        Camera *camera = rendererSystem->GetScene().GetActiveCamera();
-
-        ImGuiIO &io = ImGui::GetIO();
+        PostProcessSystem *postProcessSystem =
+            HasGlobalSystem<PostProcessSystem>() ? GetGlobalSystem<PostProcessSystem>() : nullptr;
 
         SDL_Event sdlEvent;
         std::vector<std::string> dropAccum;
@@ -121,7 +120,8 @@ namespace pe
             if (sdlEvent.type == SDL_QUIT)
                 EventSystem::PushEvent(EventType::RequestExit);
 
-            ImGui_ImplSDL2_ProcessEvent(&sdlEvent);
+            if (isVulkan)
+                ImGui_ImplSDL2_ProcessEvent(&sdlEvent);
 
             if (sdlEvent.type == SDL_WINDOWEVENT && sdlEvent.window.event == SDL_WINDOWEVENT_SIZE_CHANGED)
                 EventSystem::PushEvent(EventType::Resize);
@@ -157,7 +157,10 @@ namespace pe
                 }
                 case EventType::RequestExit:
                 {
-                    rendererSystem->GetGUI().TriggerExitConfirmation();
+                    if (isVulkan)
+                        rendererSystem->GetGUI().TriggerExitConfirmation();
+                    else
+                        return false;
                     break;
                 }
                 case EventType::CompileShaders:
@@ -167,19 +170,21 @@ namespace pe
                         hash = std::any_cast<size_t>(event.payload);
 
                     rendererSystem->PollShaders(hash);
-                    postProcessSystem->PollShaders(hash);
+                    if (postProcessSystem)
+                        postProcessSystem->PollShaders(hash);
                     CommandBuffer::ClearCache(); // force fresh pipeline rebuild with new shaders
                     break;
                 }
                 case EventType::CompileScripts:
                 {
-                    if (auto *ss = GetGlobalSystem<ScriptSystem>())
-                        ss->Reload();
+                    if (HasGlobalSystem<ScriptSystem>())
+                        if (auto *ss = GetGlobalSystem<ScriptSystem>())
+                            ss->Reload();
                     break;
                 }
                 case EventType::RunCommand:
                 {
-                    auto *ss = GetGlobalSystem<ScriptSystem>();
+                    ScriptSystem *ss = HasGlobalSystem<ScriptSystem>() ? GetGlobalSystem<ScriptSystem>() : nullptr;
                     if (!ss || !ss->IsInitialized())
                         break;
 
@@ -206,12 +211,16 @@ namespace pe
                 }
                 case EventType::Resize:
                 {
+                    if (!isVulkan)
+                        break;
+
                     if (!isMinimized())
                     {
                         int w, h;
                         SDL_Vulkan_GetDrawableSize(m_apiHandle, &w, &h);
                         rendererSystem->Resize(static_cast<uint32_t>(w), static_cast<uint32_t>(h));
-                        postProcessSystem->Resize(static_cast<uint32_t>(w), static_cast<uint32_t>(h));
+                        if (postProcessSystem)
+                            postProcessSystem->Resize(static_cast<uint32_t>(w), static_cast<uint32_t>(h));
                     }
                     break;
                 }

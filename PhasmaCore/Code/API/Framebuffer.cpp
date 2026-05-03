@@ -1,40 +1,84 @@
-#include "API/Framebuffer.h"
-#include "API/Image.h"
+#include "API/Framebuffer_Internal.h"
 #include "API/RHI.h"
-#include "API/Vulkan/RHI_Vulkan.h"
-#include "API/RenderPass.h"
-#include "API/Vulkan/VulkanImageViewImpl.h"
+#include "API/Vulkan/VulkanFramebufferImpl.h"
+#if defined(PE_WIN32)
+#include "API/DX12/Dx12FramebufferImpl.h"
+#endif
 
 namespace pe
 {
+    Framebuffer::Impl *CreateFramebufferImpl(Framebuffer *owner,
+                                             uint32_t width,
+                                             uint32_t height,
+                                             const std::vector<ImageView *> &views,
+                                             RenderPass *renderPass,
+                                             const std::string &name)
+    {
+        if (RHII.GetApi() == PE_GRAPHICS_API_DX12)
+        {
+#if defined(PE_WIN32)
+            return new Dx12FramebufferImpl(owner, width, height, views, renderPass, name);
+#else
+            PE_ERROR("CreateFramebufferImpl: DX12 backend is Windows-only");
+            return nullptr;
+#endif
+        }
+        return new VulkanFramebufferImpl(owner, width, height, views, renderPass, name);
+    }
+
+    Framebuffer *Framebuffer::Create(uint32_t width,
+                                     uint32_t height,
+                                     const std::vector<ImageView *> &views,
+                                     RenderPass *renderPass,
+                                     const std::string &name)
+    {
+        Framebuffer *fb = new Framebuffer(width, height, views, renderPass, name);
+#if defined(PE_TRACK_RESOURCES)
+        PeTracker::Track(typeid(Framebuffer), reinterpret_cast<void *>(fb));
+#endif
+        return fb;
+    }
+
+    void Framebuffer::Destroy(Framebuffer *&fb)
+    {
+        if (fb)
+        {
+#if defined(PE_TRACK_RESOURCES)
+            PeTracker::Untrack(typeid(Framebuffer), reinterpret_cast<void *>(fb));
+#endif
+            delete fb;
+            fb = nullptr;
+        }
+    }
+
+    std::vector<Framebuffer *> Framebuffer::GetHandles()
+    {
+#if defined(PE_TRACK_RESOURCES)
+        auto ptrs = PeTracker::GetHandles(typeid(Framebuffer));
+        std::vector<Framebuffer *> out;
+        out.reserve(ptrs.size());
+        for (void *p : ptrs)
+            out.push_back(static_cast<Framebuffer *>(p));
+        return out;
+#else
+        return {};
+#endif
+    }
+
     Framebuffer::Framebuffer(uint32_t width,
                              uint32_t height,
                              const std::vector<ImageView *> &views,
                              RenderPass *renderPass,
                              const std::string &name)
-        : m_size{width, height}
+        : m_size{width, height},
+          m_name{name}
     {
-        std::vector<vk::ImageView> vkViews;
-        vkViews.reserve(views.size());
-        for (auto view : views)
-            vkViews.push_back(pe::GetVulkanImageView(view));
-
-        vk::FramebufferCreateInfo fbci{};
-        fbci.renderPass = renderPass->ApiHandle();
-        fbci.attachmentCount = static_cast<uint32_t>(views.size());
-        fbci.pAttachments = vkViews.data();
-        fbci.width = width;
-        fbci.height = height;
-        fbci.layers = 1;
-
-        m_apiHandle = VulkanRhi::Device().createFramebuffer(fbci);
-
-        Debug::SetObjectName(m_apiHandle, name);
+        m_impl = CreateFramebufferImpl(this, width, height, views, renderPass, name);
     }
 
     Framebuffer::~Framebuffer()
     {
-        if (m_apiHandle)
-            VulkanRhi::Device().destroyFramebuffer(m_apiHandle);
+        delete m_impl;
+        m_impl = nullptr;
     }
 } // namespace pe

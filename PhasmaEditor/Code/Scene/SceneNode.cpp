@@ -196,19 +196,22 @@ namespace pe
 #ifdef PE_PHYSICS
         if (cache.physics)
         {
-            if (auto *ps = GetGlobalSystem<PhysicsSystem>())
-                ps->RemoveBody(node);
+            if (HasGlobalSystem<PhysicsSystem>())
+                if (auto *ps = GetGlobalSystem<PhysicsSystem>())
+                    ps->RemoveBody(node);
         }
 #endif
 #ifdef PE_AUDIO
         if (cache.audio)
         {
-            if (auto *as = GetGlobalSystem<AudioSystem>())
-                as->RemoveSource(node);
+            if (HasGlobalSystem<AudioSystem>())
+                if (auto *as = GetGlobalSystem<AudioSystem>())
+                    as->RemoveSource(node);
         }
 #endif
-        if (auto *animSys = GetGlobalSystem<AnimationSystem>())
-            animSys->RemoveAnimation(node);
+        if (HasGlobalSystem<AnimationSystem>())
+            if (auto *animSys = GetGlobalSystem<AnimationSystem>())
+                animSys->RemoveAnimation(node);
 
         NodeId *parent = cache.hierarchy->parent;
         if (parent)

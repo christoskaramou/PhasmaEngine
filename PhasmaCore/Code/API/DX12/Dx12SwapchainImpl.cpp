@@ -1,5 +1,9 @@
 #include "API/DX12/Dx12SwapchainImpl.h"
+#include "API/DX12/Dx12ImageImpl.h"
+#include "API/DX12/Dx12ImageViewImpl.h"
 #include "API/DX12/Dx12RhiImpl.h"
+#include "API/Image.h"
+#include "API/ImageView.h"
 #include "API/RHI.h"
 
 namespace pe
@@ -90,11 +94,51 @@ namespace pe
 
         m_owner->m_width = desc.width;
         m_owner->m_height = desc.height;
-        m_owner->m_images.assign(bbCount, nullptr);
+        m_owner->m_images.resize(bbCount);
+        for (uint32_t i = 0; i < bbCount; ++i)
+        {
+            Image *img = new Image();
+            img->m_impl = CreateDx12SwapchainImageImpl(img, m_backbuffers[i].Get(), m_format);
+            img->m_width = desc.width;
+            img->m_height = desc.height;
+            img->m_depth = 1;
+            img->m_mipLevels = 1;
+            img->m_arrayLayers = 1;
+            img->m_format = PE_FORMAT_R8G8B8A8_UNORM;
+            img->m_usage = PE_IMAGE_USAGE_COLOR_ATTACHMENT | PE_IMAGE_USAGE_TRANSFER_DST;
+            img->m_samples = PE_SAMPLE_COUNT_1;
+            img->m_imageType = PE_IMAGE_TYPE_2D;
+            img->m_name = "Swapchain_image_" + std::to_string(i);
+            img->m_trackInfos.resize(1);
+
+            ImageTrackInfo info{};
+            info.image = img;
+            info.layout = PE_IMAGE_LAYOUT_PRESENT_SRC;
+            info.stageFlags = PE_STAGE_ALL_COMMANDS;
+            info.accessMask = PE_ACCESS_NONE;
+            img->m_trackInfos[0].resize(1, info);
+            m_owner->m_images[i] = img;
+
+            ImageViewDesc viewDesc{};
+            viewDesc.viewType = PE_IMAGE_VIEW_TYPE_2D;
+            viewDesc.format = img->GetFormat();
+            viewDesc.aspectMask = PE_IMAGE_ASPECT_COLOR;
+            viewDesc.baseMipLevel = 0;
+            viewDesc.levelCount = 1;
+            viewDesc.baseArrayLayer = 0;
+            viewDesc.layerCount = 1;
+            img->SetRTV(Dx12ImageViewImpl::Create(img,
+                                                  viewDesc,
+                                                  Dx12ImageViewKind::Rtv,
+                                                  "Swapchain_image_view" + std::to_string(i)));
+        }
     }
 
     Dx12SwapchainImpl::~Dx12SwapchainImpl()
     {
+        for (Image *image : m_owner->m_images)
+            Image::Destroy(image);
+        m_owner->m_images.clear();
         m_backbuffers.clear();
         m_rtvHandles.clear();
         m_rtvHeap.Reset();

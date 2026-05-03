@@ -24,7 +24,7 @@ namespace pe
         void Update();
         void ExecutePass(CommandBuffer *cmd);
         void DrawPlatformWindows();
-        bool Render() const { return m_render; }
+        bool Render() const { return m_initialized && m_render; }
         void ToggleRender() { m_render = !m_render; }
         void TriggerExitConfirmation();
         void RequestDockReset() { m_requestDockReset = true; }
@@ -114,6 +114,7 @@ namespace pe
         void ResetDockspaceLayout(uint32_t dockspaceId);
 
         bool m_render;
+        bool m_initialized = false;
         std::unique_ptr<Attachment> m_attachment;
         bool m_show_demo_window;
         uint32_t m_dockspaceId;
